@@ -21,19 +21,27 @@
 |-------|--------|-----------|
 | Framework | Next.js App Router | Familiar from pre-auth-v1, SSR + API routes |
 | Database | Supabase (Postgres) | Managed, realtime upgrade path |
-| ORM | Prisma | Type-safe queries for booking logic |
+| ORM | Drizzle | Edge/CF Workers compatible, type-safe, lightweight |
 | Auth | Supabase Auth | Email/password + Google + Apple OAuth |
 | Storage | Supabase Storage | Vehicle photos |
 | Translation | Google Cloud Translation | Widest N-to-N language coverage |
 | UI | Tailwind + shadcn/ui | Fast, consistent design system |
 | Validation | Zod | Runtime + TypeScript type inference |
 | i18n | next-intl | Proven in pre-auth-v1 |
-| Deployment | Vercel | Already familiar |
+| Deployment | Cloudflare Workers/Pages | $5/mo vs Vercel $100+/mo at scale, near-unlimited concurrency |
+| Connection pooling | Cloudflare Hyperdrive | Prevents connection exhaustion from serverless |
 | Project init | Clean create-next-app | No template baggage |
 
 **Division of responsibility:**
 - Supabase handles: auth, file storage, realtime (future upgrade path)
-- Prisma handles: all data access (vehicles, bookings, messages, users)
+- Drizzle handles: all data access (vehicles, bookings, messages, users)
+- Hyperdrive handles: connection pooling between CF Workers and Supabase Postgres
+
+**Cloudflare-specific patterns:**
+- Per-request DB instances via `cache()` (no global singletons)
+- Env vars accessed via `getCloudflareContext().env` for Hyperdrive bindings
+- Supabase direct connection (port 5432), not pooler (port 6543)
+- SSL disabled for Hyperdrive connections (internal CF network)
 
 ---
 
@@ -250,7 +258,7 @@ Why on-demand vs. auto-translate:
 - Translation: Google Cloud Translation, on-demand with per-message caching
 - Business dashboard: calendar view (month/week/day), booking management, fleet CRUD, customer list
 - i18n: EN, JA, ZH for UI strings
-- Deployment: Vercel + Supabase
+- Deployment: Cloudflare Workers/Pages + Supabase + Hyperdrive
 
 ### Out (post-MVP)
 - Payment / pre-auth integration
@@ -272,5 +280,15 @@ Why on-demand vs. auto-translate:
 
 ---
 
+## Workflow
+
+- **Task tracking:** GitHub Issues (vertical slices, not horizontal layers)
+- **Issue format:** Durable descriptions (behaviors/contracts, not file paths), acceptance criteria
+- **Issue labels:** AFK (agent can do autonomously) / HITL (needs human input)
+- **Execution:** Subagent-driven, one issue at a time
+
+---
+
 *Spec created: 2026-04-02*
-*Status: Design approved, ready for implementation planning*
+*Updated: 2026-04-03 — switched from Vercel/Prisma to Cloudflare/Drizzle for cost efficiency*
+*Status: Design approved, ready for vertical slice issue creation*
