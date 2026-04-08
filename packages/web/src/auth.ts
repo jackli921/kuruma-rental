@@ -1,6 +1,6 @@
 import { DrizzleAdapter } from '@auth/drizzle-adapter'
 import { getDb } from '@kuruma/shared/db'
-import { accounts, sessions, users, verificationTokens } from '@kuruma/shared/db/schema'
+import { accounts, users } from '@kuruma/shared/db/schema'
 import NextAuth from 'next-auth'
 import authConfig from './auth.config'
 
@@ -10,8 +10,6 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
   adapter: DrizzleAdapter(db, {
     usersTable: users,
     accountsTable: accounts,
-    sessionsTable: sessions,
-    verificationTokensTable: verificationTokens,
   }),
   session: { strategy: 'jwt' },
   pages: {

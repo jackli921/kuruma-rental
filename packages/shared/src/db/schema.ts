@@ -40,20 +40,3 @@ export const accounts = pgTable(
   (account) => [primaryKey({ columns: [account.provider, account.providerAccountId] })],
 )
 
-export const sessions = pgTable('sessions', {
-  sessionToken: text('sessionToken').primaryKey(),
-  userId: text('userId')
-    .notNull()
-    .references(() => users.id, { onDelete: 'cascade' }),
-  expires: timestamp('expires', { mode: 'date' }).notNull(),
-})
-
-export const verificationTokens = pgTable(
-  'verification_tokens',
-  {
-    identifier: text('identifier').notNull(),
-    token: text('token').notNull(),
-    expires: timestamp('expires', { mode: 'date' }).notNull(),
-  },
-  (vt) => [primaryKey({ columns: [vt.identifier, vt.token] })],
-)

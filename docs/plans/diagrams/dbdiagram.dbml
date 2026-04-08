@@ -1,0 +1,157 @@
+// Kuruma Rental — Database Schema (post architect review)
+// Paste into https://dbdiagram.io/d
+
+// ===== Auth.js Tables =====
+
+Table users {
+  id text [pk, note: 'crypto.randomUUID() — Auth.js managed']
+  email text [unique, not null]
+  name text
+  emailVerified timestamp
+  image text
+  role role_enum [not null, default: 'RENTER']
+  language text [not null, default: 'en']
+  country text
+  createdAt timestamptz [not null, default: `now()`]
+  updatedAt timestamptz [not null, default: `now()`]
+}
+
+Table accounts {
+  userId text [not null, ref: > users.id]
+  type text [not null]
+  provider text [not null]
+  providerAccountId text [not null]
+  refresh_token text
+  access_token text
+  expires_at int
+  token_type text
+  scope text
+  id_token text
+  session_state text
+
+  indexes {
+    (provider, providerAccountId) [pk]
+  }
+}
+
+// ===== Phase 1: Core Booking =====
+
+Table vehicles {
+  id text [pk, note: 'UUIDv7']
+  name text [not null, note: 'e.g. Toyota Prius 2022']
+  description text
+  photos text[] [note: 'CF R2 storage URLs']
+  seats int [not null]
+  transmission transmission_enum [not null]
+  fuelType text
+  status vehicle_status_enum [not null, default: 'AVAILABLE']
+  bufferMinutes int [not null, default: 60, note: 'turnaround time between bookings']
+  minRentalHours int
+  maxRentalHours int
+  advanceBookingHours int
+  createdAt timestamptz [not null, default: `now()`]
+  updatedAt timestamptz [not null, default: `now()`]
+}
+
+Table bookings {
+  id text [pk, note: 'UUIDv7']
+  idempotencyKey text [unique, not null, note: 'UUIDv7 — prevents duplicate creation']
+  renterId text [not null, ref: > users.id]
+  vehicleId text [not null, ref: > vehicles.id]
+  startAt timestamptz [not null, note: 'stored UTC, displayed JST']
+  endAt timestamptz [not null, note: 'stored UTC, displayed JST']
+  effectiveEndAt timestamptz [not null, note: 'endAt + bufferMinutes — used in exclusion constraint']
+  status booking_status_enum [not null, default: 'CONFIRMED']
+  source booking_source_enum [not null, default: 'DIRECT']
+  externalId text [note: '3rd-party booking reference']
+  notes text
+  createdAt timestamptz [not null, default: `now()`]
+  updatedAt timestamptz [not null, default: `now()`]
+
+  indexes {
+    (renterId) [name: 'idx_bookings_renter']
+    (vehicleId, status) [name: 'idx_bookings_vehicle_status']
+    (status) [name: 'idx_bookings_status']
+  }
+
+  Note: '''
+    Exclusion constraint (buffer time baked in):
+    EXCLUDE USING gist (
+      "vehicleId" WITH =,
+      tstzrange("startAt", "effectiveEndAt") WITH &&
+    ) WHERE (status IN ('CONFIRMED', 'ACTIVE'))
+
+    Unique partial index for 3rd-party dedup:
+    UNIQUE (source, externalId) WHERE externalId IS NOT NULL
+  '''
+}
+
+// ===== Phase 2: Communication =====
+
+Table threads {
+  id text [pk, note: 'UUIDv7']
+  bookingId text [ref: - bookings.id, note: 'optional — DMs can exist without booking']
+  renterId text [not null, ref: > users.id]
+  staffId text [not null, ref: > users.id]
+  renterUnreadCount int [not null, default: 0, note: 'atomic increment only']
+  staffUnreadCount int [not null, default: 0, note: 'atomic increment only']
+  createdAt timestamptz [not null, default: `now()`]
+  updatedAt timestamptz [not null, default: `now()`]
+
+  indexes {
+    (renterId) [name: 'idx_threads_renter']
+    (staffId) [name: 'idx_threads_staff']
+  }
+
+  Note: '''
+    1:1 threads only (renter + staff). No group chat.
+    Unique partial index: bookingId WHERE bookingId IS NOT NULL
+  '''
+}
+
+Table messages {
+  id text [pk, note: 'UUIDv7']
+  threadId text [not null, ref: > threads.id]
+  senderId text [not null, ref: > users.id]
+  content text [not null]
+  sourceLanguage text [note: 'sender language preference, not auto-detected']
+  translations jsonb [note: 'cached translations keyed by lang code']
+  createdAt timestamptz [not null, default: `now()`]
+
+  indexes {
+    (threadId, createdAt) [name: 'idx_messages_thread_time']
+  }
+}
+
+// ===== Enums =====
+
+Enum role_enum {
+  RENTER
+  STAFF
+  ADMIN
+}
+
+Enum transmission_enum {
+  AUTO
+  MANUAL
+}
+
+Enum vehicle_status_enum {
+  AVAILABLE
+  MAINTENANCE
+  RETIRED
+}
+
+Enum booking_status_enum {
+  CONFIRMED
+  ACTIVE
+  COMPLETED
+  CANCELLED
+}
+
+Enum booking_source_enum {
+  DIRECT
+  TRIP_COM
+  MANUAL
+  OTHER
+}
