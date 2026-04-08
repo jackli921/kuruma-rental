@@ -1,9 +1,9 @@
 import { describe, expect, it, beforeEach } from 'vitest'
-import { setupDbMocks, resetAllTables } from '../helpers/mock-db'
+import { Hono } from 'hono'
+import { createVehicleRoutes } from '../../src/routes/vehicles'
+import { InMemoryVehicleRepository } from '../../src/repositories/in-memory'
 
-setupDbMocks()
-
-import app from '../../src/index'
+let app: Hono
 
 function validVehicleInput() {
   return {
@@ -24,7 +24,9 @@ async function createVehicle(input = validVehicleInput()) {
 
 describe('Vehicle CRUD Routes', () => {
   beforeEach(() => {
-    resetAllTables()
+    const repo = new InMemoryVehicleRepository()
+    app = new Hono()
+    app.route('/', createVehicleRoutes(repo))
   })
 
   describe('GET /vehicles', () => {

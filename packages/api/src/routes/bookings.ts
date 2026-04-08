@@ -1,152 +1,118 @@
-import { eq, and } from 'drizzle-orm'
 import { Hono } from 'hono'
-import { getDb } from '@kuruma/shared/db'
-import { bookings as bookingsTable } from '@kuruma/shared/db/schema'
 import { createBookingSchema } from '@kuruma/shared/validators/booking'
 import { VALID_BOOKING_TRANSITIONS } from '@kuruma/shared/db/schema'
+import type { BookingRepository } from '../repositories/types'
 
-const bookings = new Hono()
+export function createBookingRoutes(repo: BookingRepository): Hono {
+  const bookings = new Hono()
 
-bookings.get('/bookings', async (c) => {
-  const db = getDb()
-  const statusFilter = c.req.query('status')
-  const vehicleIdFilter = c.req.query('vehicleId')
+  bookings.get('/bookings', async (c) => {
+    const statusFilter = c.req.query('status')
+    const vehicleIdFilter = c.req.query('vehicleId')
 
-  const conditions = []
+    const filters: { status?: string; vehicleId?: string } = {}
+    if (statusFilter) filters.status = statusFilter
+    if (vehicleIdFilter) filters.vehicleId = vehicleIdFilter
 
-  if (statusFilter) {
-    conditions.push(eq(bookingsTable.status, statusFilter as 'CONFIRMED' | 'ACTIVE' | 'COMPLETED' | 'CANCELLED'))
-  }
-
-  if (vehicleIdFilter) {
-    conditions.push(eq(bookingsTable.vehicleId, vehicleIdFilter))
-  }
-
-  const where = conditions.length > 0 ? and(...conditions) : undefined
-
-  const rows = await db
-    .select()
-    .from(bookingsTable)
-    .where(where)
-
-  return c.json({ success: true, data: rows })
-})
-
-bookings.get('/bookings/:id', async (c) => {
-  const db = getDb()
-  const rows = await db
-    .select()
-    .from(bookingsTable)
-    .where(eq(bookingsTable.id, c.req.param('id')))
-  const booking = rows[0]
-  if (!booking) {
-    return c.json({ success: false, error: 'Booking not found' }, 404)
-  }
-  return c.json({ success: true, data: booking })
-})
-
-bookings.post('/bookings', async (c) => {
-  const db = getDb()
-  const body = await c.req.json()
-  const result = createBookingSchema.safeParse(body)
-
-  if (!result.success) {
-    return c.json(
-      { success: false, error: result.error.flatten().fieldErrors },
-      400,
+    const results = await repo.findAll(
+      Object.keys(filters).length > 0 ? filters : undefined,
     )
-  }
 
-  const renterId = body.renterId as string | undefined
-  if (!renterId) {
-    return c.json(
-      { success: false, error: { renterId: ['Renter ID is required'] } },
-      400,
-    )
-  }
+    return c.json({ success: true, data: results })
+  })
 
-  const rows = await db
-    .insert(bookingsTable)
-    .values({
+  bookings.get('/bookings/:id', async (c) => {
+    const booking = await repo.findById(c.req.param('id'))
+    if (!booking) {
+      return c.json({ success: false, error: 'Booking not found' }, 404)
+    }
+    return c.json({ success: true, data: booking })
+  })
+
+  bookings.post('/bookings', async (c) => {
+    const body = await c.req.json()
+    const result = createBookingSchema.safeParse(body)
+
+    if (!result.success) {
+      return c.json(
+        { success: false, error: result.error.flatten().fieldErrors },
+        400,
+      )
+    }
+
+    const renterId = body.renterId as string | undefined
+    if (!renterId) {
+      return c.json(
+        { success: false, error: { renterId: ['Renter ID is required'] } },
+        400,
+      )
+    }
+
+    const endAt = new Date(result.data.endAt)
+    const defaultBufferMs = 60 * 60 * 1000 // 60 minutes default
+    const effectiveEndAt = new Date(endAt.getTime() + defaultBufferMs)
+
+    const booking = await repo.create({
       renterId,
       vehicleId: result.data.vehicleId,
       startAt: new Date(result.data.startAt),
-      endAt: new Date(result.data.endAt),
+      endAt,
+      effectiveEndAt,
       status: 'CONFIRMED',
       source: result.data.source,
       externalId: result.data.externalId ?? null,
       notes: result.data.notes ?? null,
     })
-    .returning()
 
-  return c.json({ success: true, data: rows[0] }, 201)
-})
+    return c.json({ success: true, data: booking }, 201)
+  })
 
-bookings.patch('/bookings/:id/status', async (c) => {
-  const db = getDb()
-  const rows = await db
-    .select()
-    .from(bookingsTable)
-    .where(eq(bookingsTable.id, c.req.param('id')))
-  const booking = rows[0]
+  bookings.patch('/bookings/:id/status', async (c) => {
+    const booking = await repo.findById(c.req.param('id'))
+    if (!booking) {
+      return c.json({ success: false, error: 'Booking not found' }, 404)
+    }
 
-  if (!booking) {
-    return c.json({ success: false, error: 'Booking not found' }, 404)
-  }
+    const body = await c.req.json()
+    const requestedStatus = body.status as string
 
-  const body = await c.req.json()
-  const requestedStatus = body.status as string
+    const allowedTransitions =
+      VALID_BOOKING_TRANSITIONS[booking.status as keyof typeof VALID_BOOKING_TRANSITIONS] ?? []
+    if (!allowedTransitions.includes(requestedStatus)) {
+      return c.json(
+        {
+          success: false,
+          error: `Invalid status transition from ${booking.status} to ${requestedStatus}`,
+        },
+        400,
+      )
+    }
 
-  const allowedTransitions = VALID_BOOKING_TRANSITIONS[booking.status] ?? []
-  if (!allowedTransitions.includes(requestedStatus)) {
-    return c.json(
-      {
-        success: false,
-        error: `Invalid status transition from ${booking.status} to ${requestedStatus}`,
-      },
-      400,
-    )
-  }
+    const updated = await repo.updateStatus(booking.id, requestedStatus)
+    return c.json({ success: true, data: updated })
+  })
 
-  const updated = await db
-    .update(bookingsTable)
-    .set({ status: requestedStatus as 'CONFIRMED' | 'ACTIVE' | 'COMPLETED' | 'CANCELLED', updatedAt: new Date() })
-    .where(eq(bookingsTable.id, booking.id))
-    .returning()
+  bookings.post('/bookings/:id/cancel', async (c) => {
+    const booking = await repo.findById(c.req.param('id'))
+    if (!booking) {
+      return c.json({ success: false, error: 'Booking not found' }, 404)
+    }
 
-  return c.json({ success: true, data: updated[0] })
-})
+    const allowedTransitions =
+      VALID_BOOKING_TRANSITIONS[booking.status as keyof typeof VALID_BOOKING_TRANSITIONS] ?? []
+    if (!allowedTransitions.includes('CANCELLED')) {
+      return c.json(
+        {
+          success: false,
+          error: `Invalid status transition from ${booking.status} to CANCELLED`,
+        },
+        400,
+      )
+    }
 
-bookings.post('/bookings/:id/cancel', async (c) => {
-  const db = getDb()
-  const rows = await db
-    .select()
-    .from(bookingsTable)
-    .where(eq(bookingsTable.id, c.req.param('id')))
-  const booking = rows[0]
+    const updated = await repo.updateStatus(booking.id, 'CANCELLED')
+    return c.json({ success: true, data: updated })
+  })
 
-  if (!booking) {
-    return c.json({ success: false, error: 'Booking not found' }, 404)
-  }
-
-  const allowedTransitions = VALID_BOOKING_TRANSITIONS[booking.status] ?? []
-  if (!allowedTransitions.includes('CANCELLED')) {
-    return c.json(
-      {
-        success: false,
-        error: `Invalid status transition from ${booking.status} to CANCELLED`,
-      },
-      400,
-    )
-  }
-
-  const updated = await db
-    .update(bookingsTable)
-    .set({ status: 'CANCELLED', updatedAt: new Date() })
-    .where(eq(bookingsTable.id, booking.id))
-    .returning()
-
-  return c.json({ success: true, data: updated[0] })
-})
-
-export default bookings
+  return bookings
+}

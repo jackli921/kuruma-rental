@@ -1,27 +1,71 @@
 import { describe, expect, it, beforeEach } from 'vitest'
-import { setupDbMocks, resetAllTables, seedTable } from '../helpers/mock-db'
-
-setupDbMocks()
-
-import app from '../../src/index'
+import { Hono } from 'hono'
+import { createAvailabilityRoutes } from '../../src/routes/availability'
 import {
-  bookings as bookingsTable,
-  vehicles as vehiclesTable,
-} from '@kuruma/shared/db/schema'
+  InMemoryVehicleRepository,
+  InMemoryBookingRepository,
+  InMemoryAvailabilityRepository,
+} from '../../src/repositories/in-memory'
+import type { Vehicle, Booking } from '../../src/repositories/types'
+
+let app: Hono
+let vehicleRepo: InMemoryVehicleRepository
+let bookingRepo: InMemoryBookingRepository
+
+async function createTestVehicle(
+  overrides: Partial<Omit<Vehicle, 'id' | 'createdAt' | 'updatedAt'>> = {},
+): Promise<Vehicle> {
+  return vehicleRepo.create({
+    name: 'Toyota Corolla',
+    description: null,
+    seats: 5,
+    transmission: 'AUTO',
+    fuelType: null,
+    status: 'AVAILABLE',
+    bufferMinutes: 30,
+    minRentalHours: null,
+    maxRentalHours: null,
+    advanceBookingHours: null,
+    ...overrides,
+  })
+}
+
+async function createTestBooking(
+  overrides: Partial<Omit<Booking, 'id' | 'createdAt' | 'updatedAt'>> = {},
+  bufferMinutes = 30,
+): Promise<Booking> {
+  const endAt = overrides.endAt ?? new Date('2026-06-01T14:00:00Z')
+  const effectiveEndAt = overrides.effectiveEndAt ?? new Date(endAt.getTime() + bufferMinutes * 60 * 1000)
+  return bookingRepo.create({
+    renterId: 'user1',
+    vehicleId: 'v1',
+    startAt: new Date('2026-06-01T10:00:00Z'),
+    endAt,
+    effectiveEndAt,
+    status: 'CONFIRMED',
+    source: 'DIRECT',
+    externalId: null,
+    notes: null,
+    ...overrides,
+  })
+}
 
 describe('Availability Routes', () => {
   beforeEach(() => {
-    resetAllTables()
+    vehicleRepo = new InMemoryVehicleRepository()
+    bookingRepo = new InMemoryBookingRepository()
+    const availabilityRepo = new InMemoryAvailabilityRepository(
+      vehicleRepo,
+      bookingRepo,
+    )
+    app = new Hono()
+    app.route('/', createAvailabilityRoutes(availabilityRepo))
   })
 
   describe('GET /availability', () => {
     it('returns all available vehicles when no bookings exist', async () => {
-      const v1Id = crypto.randomUUID()
-      const v2Id = crypto.randomUUID()
-      seedTable(vehiclesTable, [
-        { ...makeVehicle({ id: v1Id, name: 'Car A' }) },
-        { ...makeVehicle({ id: v2Id, name: 'Car B' }) },
-      ])
+      const v1 = await createTestVehicle({ name: 'Car A' })
+      const v2 = await createTestVehicle({ name: 'Car B' })
 
       const res = await app.request(
         '/availability?from=2026-06-01T10:00:00Z&to=2026-06-01T14:00:00Z',
@@ -34,21 +78,18 @@ describe('Availability Routes', () => {
       expect(body.data).toHaveLength(2)
 
       const ids = body.data.map((v: { id: string }) => v.id)
-      expect(ids).toContain(v1Id)
-      expect(ids).toContain(v2Id)
+      expect(ids).toContain(v1.id)
+      expect(ids).toContain(v2.id)
     })
 
     it('excludes vehicles with overlapping bookings', async () => {
-      const vehicleId = crypto.randomUUID()
-      seedTable(vehiclesTable, [makeVehicle({ id: vehicleId })])
-      seedTable(bookingsTable, [
-        makeBooking({
-          vehicleId,
-          startAt: new Date('2026-06-01T10:00:00Z'),
-          endAt: new Date('2026-06-01T14:00:00Z'),
-          status: 'CONFIRMED',
-        }),
-      ])
+      const vehicle = await createTestVehicle()
+      await createTestBooking({
+        vehicleId: vehicle.id,
+        startAt: new Date('2026-06-01T10:00:00Z'),
+        endAt: new Date('2026-06-01T14:00:00Z'),
+        status: 'CONFIRMED',
+      })
 
       const res = await app.request(
         '/availability?from=2026-06-01T12:00:00Z&to=2026-06-01T16:00:00Z',
@@ -62,16 +103,13 @@ describe('Availability Routes', () => {
     })
 
     it('includes vehicles when no overlap exists', async () => {
-      const vehicleId = crypto.randomUUID()
-      seedTable(vehiclesTable, [makeVehicle({ id: vehicleId })])
-      seedTable(bookingsTable, [
-        makeBooking({
-          vehicleId,
-          startAt: new Date('2026-06-01T10:00:00Z'),
-          endAt: new Date('2026-06-01T14:00:00Z'),
-          status: 'CONFIRMED',
-        }),
-      ])
+      const vehicle = await createTestVehicle()
+      await createTestBooking({
+        vehicleId: vehicle.id,
+        startAt: new Date('2026-06-01T10:00:00Z'),
+        endAt: new Date('2026-06-01T14:00:00Z'),
+        status: 'CONFIRMED',
+      })
 
       // Query well after the booking ends (buffer is 30min default)
       const res = await app.request(
@@ -83,20 +121,17 @@ describe('Availability Routes', () => {
       const body = await res.json()
       expect(body.success).toBe(true)
       expect(body.data).toHaveLength(1)
-      expect(body.data[0].id).toBe(vehicleId)
+      expect(body.data[0].id).toBe(vehicle.id)
     })
 
     it('accounts for buffer time after bookings', async () => {
-      const vehicleId = crypto.randomUUID()
-      seedTable(vehiclesTable, [makeVehicle({ id: vehicleId, bufferMinutes: 60 })])
-      seedTable(bookingsTable, [
-        makeBooking({
-          vehicleId,
-          startAt: new Date('2026-06-01T10:00:00Z'),
-          endAt: new Date('2026-06-01T14:00:00Z'),
-          status: 'CONFIRMED',
-        }),
-      ])
+      const vehicle = await createTestVehicle({ bufferMinutes: 60 })
+      await createTestBooking({
+        vehicleId: vehicle.id,
+        startAt: new Date('2026-06-01T10:00:00Z'),
+        endAt: new Date('2026-06-01T14:00:00Z'),
+        status: 'CONFIRMED',
+      }, 60)
 
       // 14:30 is within the buffer (14:00 + 60min = 15:00)
       const res1 = await app.request(
@@ -113,26 +148,23 @@ describe('Availability Routes', () => {
       const body2 = await res2.json()
       expect(body2.success).toBe(true)
       expect(body2.data).toHaveLength(1)
-      expect(body2.data[0].id).toBe(vehicleId)
+      expect(body2.data[0].id).toBe(vehicle.id)
     })
 
     it('ignores CANCELLED and COMPLETED bookings', async () => {
-      const vehicleId = crypto.randomUUID()
-      seedTable(vehiclesTable, [makeVehicle({ id: vehicleId })])
-      seedTable(bookingsTable, [
-        makeBooking({
-          vehicleId,
-          startAt: new Date('2026-06-01T10:00:00Z'),
-          endAt: new Date('2026-06-01T14:00:00Z'),
-          status: 'CANCELLED',
-        }),
-        makeBooking({
-          vehicleId,
-          startAt: new Date('2026-06-01T10:00:00Z'),
-          endAt: new Date('2026-06-01T14:00:00Z'),
-          status: 'COMPLETED',
-        }),
-      ])
+      const vehicle = await createTestVehicle()
+      await createTestBooking({
+        vehicleId: vehicle.id,
+        startAt: new Date('2026-06-01T10:00:00Z'),
+        endAt: new Date('2026-06-01T14:00:00Z'),
+        status: 'CANCELLED',
+      })
+      await createTestBooking({
+        vehicleId: vehicle.id,
+        startAt: new Date('2026-06-01T10:00:00Z'),
+        endAt: new Date('2026-06-01T14:00:00Z'),
+        status: 'COMPLETED',
+      })
 
       const res = await app.request(
         '/availability?from=2026-06-01T12:00:00Z&to=2026-06-01T16:00:00Z',
@@ -143,16 +175,13 @@ describe('Availability Routes', () => {
       const body = await res.json()
       expect(body.success).toBe(true)
       expect(body.data).toHaveLength(1)
-      expect(body.data[0].id).toBe(vehicleId)
+      expect(body.data[0].id).toBe(vehicle.id)
     })
 
     it('excludes MAINTENANCE and RETIRED vehicles', async () => {
-      const availableId = crypto.randomUUID()
-      seedTable(vehiclesTable, [
-        makeVehicle({ status: 'MAINTENANCE' }),
-        makeVehicle({ status: 'RETIRED' }),
-        makeVehicle({ id: availableId, status: 'AVAILABLE' }),
-      ])
+      await createTestVehicle({ status: 'MAINTENANCE' })
+      await createTestVehicle({ status: 'RETIRED' })
+      const available = await createTestVehicle({ status: 'AVAILABLE' })
 
       const res = await app.request(
         '/availability?from=2026-06-01T10:00:00Z&to=2026-06-01T14:00:00Z',
@@ -163,7 +192,7 @@ describe('Availability Routes', () => {
       const body = await res.json()
       expect(body.success).toBe(true)
       expect(body.data).toHaveLength(1)
-      expect(body.data[0].id).toBe(availableId)
+      expect(body.data[0].id).toBe(available.id)
     })
 
     it('returns 400 for missing query params', async () => {
@@ -196,11 +225,10 @@ describe('Availability Routes', () => {
 
   describe('GET /availability/:vehicleId', () => {
     it('returns available=true when vehicle is free', async () => {
-      const vehicleId = crypto.randomUUID()
-      seedTable(vehiclesTable, [makeVehicle({ id: vehicleId })])
+      const vehicle = await createTestVehicle()
 
       const res = await app.request(
-        `/availability/${vehicleId}?from=2026-06-01T10:00:00Z&to=2026-06-01T14:00:00Z`,
+        `/availability/${vehicle.id}?from=2026-06-01T10:00:00Z&to=2026-06-01T14:00:00Z`,
       )
 
       expect(res.status).toBe(200)
@@ -208,25 +236,20 @@ describe('Availability Routes', () => {
       const body = await res.json()
       expect(body.success).toBe(true)
       expect(body.data.available).toBe(true)
-      expect(body.data.vehicle.id).toBe(vehicleId)
+      expect(body.data.vehicle.id).toBe(vehicle.id)
     })
 
     it('returns available=false with conflicts when booked', async () => {
-      const vehicleId = crypto.randomUUID()
-      const bookingId = crypto.randomUUID()
-      seedTable(vehiclesTable, [makeVehicle({ id: vehicleId })])
-      seedTable(bookingsTable, [
-        makeBooking({
-          id: bookingId,
-          vehicleId,
-          startAt: new Date('2026-06-01T10:00:00Z'),
-          endAt: new Date('2026-06-01T14:00:00Z'),
-          status: 'CONFIRMED',
-        }),
-      ])
+      const vehicle = await createTestVehicle()
+      const booking = await createTestBooking({
+        vehicleId: vehicle.id,
+        startAt: new Date('2026-06-01T10:00:00Z'),
+        endAt: new Date('2026-06-01T14:00:00Z'),
+        status: 'CONFIRMED',
+      })
 
       const res = await app.request(
-        `/availability/${vehicleId}?from=2026-06-01T12:00:00Z&to=2026-06-01T16:00:00Z`,
+        `/availability/${vehicle.id}?from=2026-06-01T12:00:00Z&to=2026-06-01T16:00:00Z`,
       )
 
       expect(res.status).toBe(200)
@@ -234,9 +257,9 @@ describe('Availability Routes', () => {
       const body = await res.json()
       expect(body.success).toBe(true)
       expect(body.data.available).toBe(false)
-      expect(body.data.vehicle.id).toBe(vehicleId)
+      expect(body.data.vehicle.id).toBe(vehicle.id)
       expect(body.data.conflicts).toHaveLength(1)
-      expect(body.data.conflicts[0].id).toBe(bookingId)
+      expect(body.data.conflicts[0].id).toBe(booking.id)
     })
 
     it('returns 404 for nonexistent vehicle', async () => {
@@ -252,44 +275,3 @@ describe('Availability Routes', () => {
     })
   })
 })
-
-// ---------- Test data factories ----------
-
-function makeVehicle(overrides: Record<string, unknown> = {}) {
-  const now = new Date().toISOString()
-  return {
-    id: crypto.randomUUID(),
-    name: 'Toyota Corolla',
-    description: null,
-    photos: [],
-    seats: 5,
-    transmission: 'AUTO',
-    fuelType: null,
-    status: 'AVAILABLE',
-    bufferMinutes: 30,
-    minRentalHours: null,
-    maxRentalHours: null,
-    advanceBookingHours: null,
-    createdAt: now,
-    updatedAt: now,
-    ...overrides,
-  }
-}
-
-function makeBooking(overrides: Record<string, unknown> = {}) {
-  const now = new Date().toISOString()
-  return {
-    id: crypto.randomUUID(),
-    renterId: 'user1',
-    vehicleId: 'v1',
-    startAt: new Date('2026-06-01T10:00:00Z'),
-    endAt: new Date('2026-06-01T14:00:00Z'),
-    status: 'CONFIRMED',
-    source: 'DIRECT',
-    externalId: null,
-    notes: null,
-    createdAt: now,
-    updatedAt: now,
-    ...overrides,
-  }
-}

@@ -1,10 +1,9 @@
 import { describe, expect, it, beforeEach } from 'vitest'
-import { setupDbMocks, resetAllTables } from '../helpers/mock-db'
+import { Hono } from 'hono'
+import { createBookingRoutes } from '../../src/routes/bookings'
+import { InMemoryBookingRepository } from '../../src/repositories/in-memory'
 
-// Must call setupDbMocks before importing app (which imports routes)
-setupDbMocks()
-
-import app from '../../src/index'
+let app: Hono
 
 function futureDate(hoursFromNow: number): string {
   const d = new Date()
@@ -32,7 +31,9 @@ async function createBooking(input = validBookingInput()) {
 
 describe('Booking Routes', () => {
   beforeEach(() => {
-    resetAllTables()
+    const repo = new InMemoryBookingRepository()
+    app = new Hono()
+    app.route('/', createBookingRoutes(repo))
   })
 
   describe('GET /bookings', () => {
