@@ -139,6 +139,57 @@ export function createMockOperators() {
   return { eq, and, or, gt, gte, lt, lte, inArray }
 }
 
+// ---------- Column defaults ----------
+
+interface ColumnMeta {
+  name: string
+  hasDefault: boolean
+  notNull: boolean
+  default: unknown
+  defaultFn?: () => unknown
+}
+
+/**
+ * Extract column metadata from a Drizzle table object to apply defaults
+ * on insert, just like a real database would.
+ */
+function getColumns(tableRef: unknown): ColumnMeta[] {
+  if (typeof tableRef !== 'object' || tableRef === null) return []
+
+  const colsSymbol = Object.getOwnPropertySymbols(tableRef).find(
+    (s) => s.toString() === 'Symbol(drizzle:Columns)',
+  )
+  if (!colsSymbol) return []
+
+  const cols = (tableRef as Record<symbol, Record<string, ColumnMeta>>)[colsSymbol]
+  return Object.values(cols)
+}
+
+function applyDefaults(tableRef: unknown, row: Row): Row {
+  const columns = getColumns(tableRef)
+  const result = { ...row }
+
+  for (const col of columns) {
+    if (result[col.name] !== undefined) continue
+
+    if (col.hasDefault) {
+      if (typeof col.defaultFn === 'function') {
+        result[col.name] = col.defaultFn()
+      } else if (col.default !== undefined) {
+        result[col.name] = col.default
+      }
+    } else if (!col.notNull) {
+      // Nullable columns without a value default to null (like a real DB)
+      result[col.name] = null
+    }
+  }
+
+  return result
+}
+
+// We store the original table refs so insert/update can apply defaults
+const tableRefRegistry = new Map<string, unknown>()
+
 // ---------- Mock DB builder ----------
 
 function createMockDb() {
@@ -150,6 +201,8 @@ function createMockDb() {
       const chain = {
         from(table: unknown) {
           targetTable = resolveTableName(table)
+          // Register table ref for future default lookups
+          tableRefRegistry.set(targetTable, table)
           return chain
         },
         where(condition: unknown) {
@@ -170,6 +223,7 @@ function createMockDb() {
 
     insert(table: unknown) {
       const tableName = resolveTableName(table)
+      tableRefRegistry.set(tableName, table)
       let rowsToInsert: Row[] = []
 
       return {
@@ -179,16 +233,7 @@ function createMockDb() {
             returning() {
               const tableData = getTable(tableName)
               const inserted = rowsToInsert.map((row) => {
-                const newRow = { ...row }
-                if (!newRow.id) {
-                  newRow.id = crypto.randomUUID()
-                }
-                if (!newRow.createdAt) {
-                  newRow.createdAt = new Date().toISOString()
-                }
-                if (!newRow.updatedAt) {
-                  newRow.updatedAt = new Date().toISOString()
-                }
+                const newRow = applyDefaults(table, row)
                 tableData.push(newRow)
                 return newRow
               })
@@ -208,8 +253,7 @@ function createMockDb() {
             ) {
               const tableData = getTable(tableName)
               for (const row of rowsToInsert) {
-                const newRow = { ...row }
-                if (!newRow.id) newRow.id = crypto.randomUUID()
+                const newRow = applyDefaults(table, row)
                 tableData.push(newRow)
               }
               resolve(undefined)
