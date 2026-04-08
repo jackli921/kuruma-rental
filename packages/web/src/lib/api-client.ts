@@ -1,5 +1,7 @@
-import type { AppType } from '@kuruma/api'
+import type { createApp } from '@kuruma/api'
 import { hc } from 'hono/client'
+
+type AppType = ReturnType<typeof createApp>
 
 const DEFAULT_API_URL = 'http://localhost:8787'
 

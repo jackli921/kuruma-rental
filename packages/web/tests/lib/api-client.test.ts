@@ -13,7 +13,7 @@ describe('getApiBaseUrl', () => {
 
   test('returns localhost fallback when env var is not set', () => {
     const original = process.env.NEXT_PUBLIC_API_URL
-    process.env.NEXT_PUBLIC_API_URL = undefined as unknown as string
+    Reflect.deleteProperty(process.env, 'NEXT_PUBLIC_API_URL')
 
     expect(getApiBaseUrl()).toBe('http://localhost:8787')
 
