@@ -1,5 +1,5 @@
-import { describe, expect, test } from 'vitest'
 import { getApiBaseUrl } from '@/lib/api-client'
+import { describe, expect, test } from 'vitest'
 
 describe('getApiBaseUrl', () => {
   test('returns NEXT_PUBLIC_API_URL when set', () => {
@@ -13,7 +13,7 @@ describe('getApiBaseUrl', () => {
 
   test('returns localhost fallback when env var is not set', () => {
     const original = process.env.NEXT_PUBLIC_API_URL
-    delete process.env.NEXT_PUBLIC_API_URL
+    process.env.NEXT_PUBLIC_API_URL = undefined as unknown as string
 
     expect(getApiBaseUrl()).toBe('http://localhost:8787')
 
