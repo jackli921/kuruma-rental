@@ -1,8 +1,5 @@
-import { buttonVariants } from '@/components/ui/button'
-import { Link } from '@/i18n/routing'
-import { cn } from '@/lib/utils'
-import { Calendar, MapPin, Search } from 'lucide-react'
 import { useTranslations } from 'next-intl'
+import { SearchWidget } from './SearchWidget'
 
 export function Hero() {
   const t = useTranslations('landing.hero')
@@ -24,41 +21,9 @@ export function Hero() {
           {t('title')}
         </h1>
 
-        <p className="mt-4 text-lg sm:text-xl text-white/80 max-w-xl">
-          {t('subtitle')}
-        </p>
+        <p className="mt-4 text-lg sm:text-xl text-white/80 max-w-xl">{t('subtitle')}</p>
 
-        {/* Search widget -- Airbnb-style action bar */}
-        <div className="mt-10 bg-white rounded-2xl shadow-xl p-2 flex flex-col sm:flex-row items-stretch sm:items-center gap-2 max-w-2xl">
-          <div className="flex-1 flex items-center gap-3 px-4 py-3 rounded-xl hover:bg-muted/50 transition-colors">
-            <MapPin className="size-5 text-muted-foreground shrink-0" />
-            <div>
-              <p className="text-xs font-medium text-muted-foreground">{t('search.location')}</p>
-              <p className="text-sm font-semibold text-foreground">{t('search.locationValue')}</p>
-            </div>
-          </div>
-
-          <div className="hidden sm:block w-px h-8 bg-border" />
-
-          <div className="flex-1 flex items-center gap-3 px-4 py-3 rounded-xl hover:bg-muted/50 transition-colors">
-            <Calendar className="size-5 text-muted-foreground shrink-0" />
-            <div>
-              <p className="text-xs font-medium text-muted-foreground">{t('search.dates')}</p>
-              <p className="text-sm text-muted-foreground">{t('search.datesPlaceholder')}</p>
-            </div>
-          </div>
-
-          <Link
-            href="/vehicles"
-            className={cn(
-              buttonVariants({ size: 'lg' }),
-              'bg-red-600 hover:bg-red-700 text-white rounded-xl px-6 h-12 text-base font-semibold shrink-0',
-            )}
-          >
-            <Search className="size-4 mr-2" />
-            {t('search.button')}
-          </Link>
-        </div>
+        <SearchWidget />
       </div>
     </section>
   )

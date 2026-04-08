@@ -59,19 +59,9 @@
     "auto": "オートマ",
     "manual": "マニュアル",
     "empty": "現在利用可能な車両はありません。",
-    "detail": {
-      "specs": "仕様",
-      "seats": "{count}席",
-      "transmission": "トランスミッション",
-      "fuelType": "燃料タイプ",
-      "auto": "オートマチック",
-      "manual": "マニュアル",
-      "bookCta": "この車を予約する",
-      "backToList": "車両一覧に戻る",
-      "photos": "写真",
-      "description": "この車について",
-      "notFound": "車両が見つかりません",
-      "notFoundDescription": "お探しの車両は存在しないか、削除されました。"
+    "filters": {
+      "from": "開始日",
+      "to": "終了日"
     }
   },
   "business": {
@@ -115,6 +105,8 @@
         "locationValue": "大阪",
         "dates": "日程",
         "datesPlaceholder": "日程を追加",
+        "pickupDate": "乗車日",
+        "returnDate": "返却日",
         "button": "検索"
       }
     },

@@ -47,9 +47,7 @@ export function FeaturedVehicles() {
       <div className="max-w-6xl mx-auto">
         <div className="flex items-end justify-between mb-10">
           <div>
-            <h2 className="text-3xl sm:text-4xl font-bold tracking-tight">
-              {t('heading')}
-            </h2>
+            <h2 className="text-3xl sm:text-4xl font-bold tracking-tight">{t('heading')}</h2>
             <p className="mt-2 text-lg text-muted-foreground">{t('subheading')}</p>
           </div>
           <Link
@@ -89,7 +87,9 @@ export function FeaturedVehicles() {
                 <p className="text-sm text-muted-foreground mt-0.5">{vehicle.type}</p>
                 <div className="flex items-center justify-between mt-3">
                   <p className="text-sm">
-                    <span className="font-semibold">{t('currency', { price: vehicle.price.toLocaleString() })}</span>
+                    <span className="font-semibold">
+                      {t('currency', { price: vehicle.price.toLocaleString() })}
+                    </span>
                     <span className="text-muted-foreground"> / {t('perDay')}</span>
                   </p>
                   <div className="flex items-center gap-1 text-sm text-muted-foreground">
@@ -105,10 +105,7 @@ export function FeaturedVehicles() {
         <div className="mt-8 text-center sm:hidden">
           <Link
             href="/vehicles"
-            className={cn(
-              buttonVariants({ variant: 'outline', size: 'lg' }),
-              'w-full',
-            )}
+            className={cn(buttonVariants({ variant: 'outline', size: 'lg' }), 'w-full')}
           >
             {t('viewAll')}
             <ArrowRight className="size-4 ml-1" />

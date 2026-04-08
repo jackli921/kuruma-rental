@@ -24,9 +24,7 @@ export function CallToAction() {
           <h2 className="text-3xl sm:text-4xl font-bold tracking-tight text-white">
             {t('heading')}
           </h2>
-          <p className="mt-4 text-lg text-white/80">
-            {t('description')}
-          </p>
+          <p className="mt-4 text-lg text-white/80">{t('description')}</p>
           <div className="mt-8">
             <Link
               href="/vehicles"

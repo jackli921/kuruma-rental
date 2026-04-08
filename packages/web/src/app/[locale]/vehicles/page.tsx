@@ -1,10 +1,34 @@
-import { Link } from '@/i18n/routing'
-import { getAvailableVehicles } from '@/lib/vehicles'
+import { ActiveFilters } from '@/components/vehicles/ActiveFilters'
+import { getDb } from '@kuruma/shared/db'
+import { vehicles as vehiclesTable } from '@kuruma/shared/db/schema'
+import { eq } from 'drizzle-orm'
 import { Car, Fuel, Settings2, Users } from 'lucide-react'
 import { getTranslations } from 'next-intl/server'
 
-export default async function VehiclesPage() {
-  const [vehicles, t] = await Promise.all([getAvailableVehicles(), getTranslations('vehicles')])
+// TODO: Replace with API call via hono/client once API uses a CF-compatible DB driver
+async function getVehicles() {
+  const db = getDb()
+  return db.select().from(vehiclesTable).where(eq(vehiclesTable.status, 'AVAILABLE'))
+}
+
+function asString(value: string | string[] | undefined): string | undefined {
+  if (Array.isArray(value)) return value[0]
+  return value
+}
+
+export default async function VehiclesPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ [key: string]: string | string[] | undefined }>
+}) {
+  const [vehicles, t, resolvedParams] = await Promise.all([
+    getVehicles(),
+    getTranslations('vehicles'),
+    searchParams,
+  ])
+
+  const from = asString(resolvedParams.from)
+  const to = asString(resolvedParams.to)
 
   return (
     <main className="flex-1 py-10 px-4 sm:px-6 lg:px-8">
@@ -14,13 +38,14 @@ export default async function VehiclesPage() {
           <p className="mt-2 text-lg text-muted-foreground">{t('subtitle')}</p>
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+        <ActiveFilters from={from} to={to} />
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 mt-6">
           {vehicles.map((vehicle) => {
             const photo = vehicle.photos?.[0]
             return (
-              <Link
+              <div
                 key={vehicle.id}
-                href={`/vehicles/${vehicle.id}`}
                 className="group rounded-xl overflow-hidden bg-card border border-border shadow-sm hover:shadow-md transition-shadow"
               >
                 <div className="aspect-[4/3] overflow-hidden bg-muted">
@@ -60,7 +85,7 @@ export default async function VehiclesPage() {
                     )}
                   </div>
                 </div>
-              </Link>
+              </div>
             )
           })}
         </div>
