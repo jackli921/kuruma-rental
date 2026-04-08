@@ -1,5 +1,6 @@
 'use client'
 
+import { useLayoutPreference } from '@/components/providers/LayoutPreferenceProvider'
 import { Link, usePathname } from '@/i18n/routing'
 import { cn } from '@/lib/utils'
 import { Calendar, Car, LayoutDashboard, MessageSquare, Users } from 'lucide-react'
@@ -16,6 +17,9 @@ const SIDEBAR_ITEMS = [
 export function BusinessSidebar() {
   const t = useTranslations('nav')
   const pathname = usePathname()
+  const { preference } = useLayoutPreference()
+
+  if (preference === 'topnav') return null
 
   return (
     <aside
