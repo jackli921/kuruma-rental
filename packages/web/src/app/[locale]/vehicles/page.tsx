@@ -1,3 +1,4 @@
+import { Link } from '@/i18n/routing'
 import { getAvailableVehicles } from '@/lib/vehicles'
 import { Car, Fuel, Settings2, Users } from 'lucide-react'
 import { getTranslations } from 'next-intl/server'
@@ -17,8 +18,9 @@ export default async function VehiclesPage() {
           {vehicles.map((vehicle) => {
             const photo = vehicle.photos?.[0]
             return (
-              <div
+              <Link
                 key={vehicle.id}
+                href={`/vehicles/${vehicle.id}`}
                 className="group rounded-xl overflow-hidden bg-card border border-border shadow-sm hover:shadow-md transition-shadow"
               >
                 <div className="aspect-[4/3] overflow-hidden bg-muted">
@@ -58,7 +60,7 @@ export default async function VehiclesPage() {
                     )}
                   </div>
                 </div>
-              </div>
+              </Link>
             )
           })}
         </div>
