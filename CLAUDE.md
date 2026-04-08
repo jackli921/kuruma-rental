@@ -52,7 +52,9 @@ Airbnb-style car rental platform for a Japan-based company (Osaka) serving inter
   <DropdownMenuTrigger render={<Button variant="ghost">Open</Button>} />
   ```
 
-- **Next.js 16 uses `proxy.ts`, not `middleware.ts`.** The file lives at `src/proxy.ts`. Same API, just renamed. If you see a "middleware is deprecated" warning, you're using the wrong filename.
+- **Use `middleware.ts`, NOT `proxy.ts`.** Next.js 16 deprecated middleware in favor of proxy, BUT `proxy.ts` forces Node.js runtime and `@opennextjs/cloudflare` does NOT support Node.js middleware. Stay on `middleware.ts` (Edge runtime by default) until opennextjs-cloudflare adds proxy support. The deprecation warning is cosmetic.
+
+- **Middleware must use edge-safe auth.** Import `authConfig` from `auth.config.ts` (providers only, no DB), NOT `auth` from `auth.ts` (imports Drizzle/postgres-js which is Node.js only). The proxy/middleware runs on Edge, so any Node.js import chain kills the Cloudflare build.
 
 - **`noUncheckedIndexedAccess` is on.** Array indexing like `segments[1]` returns `T | undefined`. Always guard with a variable check before returning.
 
@@ -101,11 +103,13 @@ Airbnb-style car rental platform for a Japan-based company (Osaka) serving inter
 
 ---
 
-# Vertical Slice Development (MANDATORY)
+# Vertical Slice TDD (MANDATORY -- NO EXCEPTIONS)
 
-**Every feature must be delivered as a vertical slice — from database to UI in one shippable unit.**
+**Every feature must be a vertical slice with strict TDD. This is non-negotiable.**
 
-Do NOT build horizontal layers (all schema first, then all API, then all UI). Each slice should be a working user-facing feature that can be demo'd.
+## What is a vertical slice?
+
+A single user-facing feature delivered end-to-end: schema + API + UI in one shippable unit.
 
 ```
 WRONG (horizontal layers):
@@ -119,13 +123,42 @@ RIGHT (vertical slices):
   Slice 3: Calendar dashboard → API + calendar UI (end-to-end)
 ```
 
-**Rules:**
+## TDD cycle (RED-GREEN-REFACTOR)
+
+Every implementation step follows this cycle. No exceptions.
+
+```
+RED:     Write ONE failing test for ONE behavior
+GREEN:   Write MINIMAL code to make it pass
+REFACTOR: Clean up while tests stay green
+REPEAT
+```
+
+**Vertical, not horizontal:**
+```
+WRONG: test1, test2, test3, test4 → impl1, impl2, impl3, impl4
+RIGHT: test1 → impl1 → test2 → impl2 → test3 → impl3
+```
+
+## Martin Fowler refactoring techniques
+
+Apply during REFACTOR phase:
+- **Extract Method** — pull reusable logic into named functions
+- **Move Function** — relocate logic to where it belongs (e.g., DB queries → `lib/` module)
+- **Replace Conditional with Polymorphism** — when if/switch grows unwieldy
+- **Parallel Change** — expand interface, migrate callers, contract interface
+- **Remove Dead Code** — delete unused code immediately, git has history
+
+## Rules
+
 1. Each slice touches shared + api + web as needed — one feature, all layers
 2. Each slice ends with a working UI that a user can interact with
 3. Each slice has tests at every layer (unit + integration + component)
 4. Each slice is committed and mergeable independently
-5. If a slice requires schema changes, the migration is part of that slice — not a separate "schema task"
-6. Plan slices by user story ("renter can browse available cars"), not by technical layer ("add vehicle table")
+5. Schema migrations are part of the feature slice — never a separate task
+6. Plan by user story ("renter can book a car"), not by technical layer ("add bookings table")
+7. Subagents dispatched for implementation MUST also follow TDD — include this in agent prompts
+8. Tests must be mutation-resistant — assert specific values, not truthiness
 
 **Why:** Horizontal layers produce fully built backends with zero user-facing value. Vertical slices deliver working features incrementally, catch integration issues early, and let the owner see progress.
 

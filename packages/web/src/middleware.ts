@@ -1,8 +1,14 @@
-import { auth } from '@/auth'
 import { classifyRoute, getLocaleFromPath, stripLocale } from '@/lib/route-helpers'
+import NextAuth from 'next-auth'
 import createIntlMiddleware from 'next-intl/middleware'
 import { NextResponse } from 'next/server'
+import authConfig from './auth.config'
 import { routing } from './i18n/routing'
+
+// Use edge-safe auth config (no Drizzle/DB imports).
+// The full auth() from auth.ts imports postgres-js which is Node.js only.
+// Cloudflare Workers require Edge runtime for middleware/proxy.
+const { auth } = NextAuth(authConfig)
 
 const intlMiddleware = createIntlMiddleware(routing)
 
