@@ -1,24 +1,31 @@
+import { eq } from 'drizzle-orm'
 import { Hono } from 'hono'
+import { getDb } from '@kuruma/shared/db'
+import { vehicles as vehiclesTable } from '@kuruma/shared/db/schema'
 import {
   createVehicleSchema,
   updateVehicleSchema,
 } from '@kuruma/shared/validators/vehicle'
-import type { Vehicle } from '../stores'
-import { getVehicleStore } from '../stores'
-
-// Re-export for backward compatibility with existing tests
-export { resetVehicleStore } from '../stores'
 
 const vehicles = new Hono()
 
-vehicles.get('/vehicles', (c) => {
+vehicles.get('/vehicles', async (c) => {
+  const db = getDb()
   const status = c.req.query('status') ?? 'AVAILABLE'
-  const filtered = [...getVehicleStore().values()].filter((v) => v.status === status)
-  return c.json({ success: true, data: filtered })
+  const rows = await db
+    .select()
+    .from(vehiclesTable)
+    .where(eq(vehiclesTable.status, status as 'AVAILABLE' | 'MAINTENANCE' | 'RETIRED'))
+  return c.json({ success: true, data: rows })
 })
 
-vehicles.get('/vehicles/:id', (c) => {
-  const vehicle = getVehicleStore().get(c.req.param('id'))
+vehicles.get('/vehicles/:id', async (c) => {
+  const db = getDb()
+  const rows = await db
+    .select()
+    .from(vehiclesTable)
+    .where(eq(vehiclesTable.id, c.req.param('id')))
+  const vehicle = rows[0]
   if (!vehicle) {
     return c.json({ success: false, error: 'Vehicle not found' }, 404)
   }
@@ -26,6 +33,7 @@ vehicles.get('/vehicles/:id', (c) => {
 })
 
 vehicles.post('/vehicles', async (c) => {
+  const db = getDb()
   const body = await c.req.json()
   const result = createVehicleSchema.safeParse(body)
 
@@ -36,30 +44,22 @@ vehicles.post('/vehicles', async (c) => {
     )
   }
 
-  const now = new Date()
-  const vehicle: Vehicle = {
-    id: crypto.randomUUID(),
-    name: result.data.name,
-    description: result.data.description ?? null,
-    seats: result.data.seats,
-    transmission: result.data.transmission,
-    fuelType: result.data.fuelType ?? null,
-    status: 'AVAILABLE',
-    bufferMinutes: result.data.bufferMinutes,
-    minRentalHours: result.data.minRentalHours ?? null,
-    maxRentalHours: result.data.maxRentalHours ?? null,
-    advanceBookingHours: result.data.advanceBookingHours ?? null,
-    createdAt: now,
-    updatedAt: now,
-  }
-
-  getVehicleStore().set(vehicle.id, vehicle)
-  return c.json({ success: true, data: vehicle }, 201)
+  const rows = await db
+    .insert(vehiclesTable)
+    .values(result.data)
+    .returning()
+  return c.json({ success: true, data: rows[0] }, 201)
 })
 
 vehicles.patch('/vehicles/:id', async (c) => {
-  const vehicle = getVehicleStore().get(c.req.param('id'))
-  if (!vehicle) {
+  const db = getDb()
+  const id = c.req.param('id')
+
+  const existing = await db
+    .select()
+    .from(vehiclesTable)
+    .where(eq(vehiclesTable.id, id))
+  if (!existing[0]) {
     return c.json({ success: false, error: 'Vehicle not found' }, 404)
   }
 
@@ -73,36 +73,32 @@ vehicles.patch('/vehicles/:id', async (c) => {
     )
   }
 
-  const updated: Vehicle = {
-    ...vehicle,
-    ...result.data,
-    description: result.data.description ?? vehicle.description,
-    fuelType: result.data.fuelType ?? vehicle.fuelType,
-    minRentalHours: result.data.minRentalHours ?? vehicle.minRentalHours,
-    maxRentalHours: result.data.maxRentalHours ?? vehicle.maxRentalHours,
-    advanceBookingHours:
-      result.data.advanceBookingHours ?? vehicle.advanceBookingHours,
-    updatedAt: new Date(),
-  }
-
-  getVehicleStore().set(updated.id, updated)
-  return c.json({ success: true, data: updated })
+  const rows = await db
+    .update(vehiclesTable)
+    .set({ ...result.data, updatedAt: new Date() })
+    .where(eq(vehiclesTable.id, id))
+    .returning()
+  return c.json({ success: true, data: rows[0] })
 })
 
-vehicles.delete('/vehicles/:id', (c) => {
-  const vehicle = getVehicleStore().get(c.req.param('id'))
-  if (!vehicle) {
+vehicles.delete('/vehicles/:id', async (c) => {
+  const db = getDb()
+  const id = c.req.param('id')
+
+  const existing = await db
+    .select()
+    .from(vehiclesTable)
+    .where(eq(vehiclesTable.id, id))
+  if (!existing[0]) {
     return c.json({ success: false, error: 'Vehicle not found' }, 404)
   }
 
-  const retired: Vehicle = {
-    ...vehicle,
-    status: 'RETIRED',
-    updatedAt: new Date(),
-  }
-
-  getVehicleStore().set(retired.id, retired)
-  return c.json({ success: true, data: retired })
+  const rows = await db
+    .update(vehiclesTable)
+    .set({ status: 'RETIRED', updatedAt: new Date() })
+    .where(eq(vehiclesTable.id, id))
+    .returning()
+  return c.json({ success: true, data: rows[0] })
 })
 
 export default vehicles
