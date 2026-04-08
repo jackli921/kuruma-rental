@@ -1,26 +1,11 @@
 import { Hono } from 'hono'
 import { createBookingSchema } from '@kuruma/shared/validators/booking'
 import { VALID_BOOKING_TRANSITIONS } from '@kuruma/shared/db/schema'
+import type { Booking } from '../stores'
+import { getBookingStore } from '../stores'
 
-interface Booking {
-  id: string
-  renterId: string
-  vehicleId: string
-  startAt: Date
-  endAt: Date
-  status: 'CONFIRMED' | 'ACTIVE' | 'COMPLETED' | 'CANCELLED'
-  source: 'DIRECT' | 'TRIP_COM' | 'MANUAL' | 'OTHER'
-  externalId: string | null
-  notes: string | null
-  createdAt: Date
-  updatedAt: Date
-}
-
-let store = new Map<string, Booking>()
-
-export function resetBookingStore(): void {
-  store = new Map()
-}
+// Re-export for backward compatibility with existing tests
+export { resetBookingStore } from '../stores'
 
 const bookings = new Hono()
 
@@ -28,7 +13,7 @@ bookings.get('/bookings', (c) => {
   const statusFilter = c.req.query('status')
   const vehicleIdFilter = c.req.query('vehicleId')
 
-  let results = [...store.values()]
+  let results = [...getBookingStore().values()]
 
   if (statusFilter) {
     results = results.filter((b) => b.status === statusFilter)
@@ -42,7 +27,7 @@ bookings.get('/bookings', (c) => {
 })
 
 bookings.get('/bookings/:id', (c) => {
-  const booking = store.get(c.req.param('id'))
+  const booking = getBookingStore().get(c.req.param('id'))
   if (!booking) {
     return c.json({ success: false, error: 'Booking not found' }, 404)
   }
@@ -83,12 +68,12 @@ bookings.post('/bookings', async (c) => {
     updatedAt: now,
   }
 
-  store.set(booking.id, booking)
+  getBookingStore().set(booking.id, booking)
   return c.json({ success: true, data: booking }, 201)
 })
 
 bookings.patch('/bookings/:id/status', async (c) => {
-  const booking = store.get(c.req.param('id'))
+  const booking = getBookingStore().get(c.req.param('id'))
   if (!booking) {
     return c.json({ success: false, error: 'Booking not found' }, 404)
   }
@@ -113,12 +98,12 @@ bookings.patch('/bookings/:id/status', async (c) => {
     updatedAt: new Date(),
   }
 
-  store.set(updated.id, updated)
+  getBookingStore().set(updated.id, updated)
   return c.json({ success: true, data: updated })
 })
 
 bookings.post('/bookings/:id/cancel', (c) => {
-  const booking = store.get(c.req.param('id'))
+  const booking = getBookingStore().get(c.req.param('id'))
   if (!booking) {
     return c.json({ success: false, error: 'Booking not found' }, 404)
   }
@@ -140,7 +125,7 @@ bookings.post('/bookings/:id/cancel', (c) => {
     updatedAt: new Date(),
   }
 
-  store.set(updated.id, updated)
+  getBookingStore().set(updated.id, updated)
   return c.json({ success: true, data: updated })
 })
 

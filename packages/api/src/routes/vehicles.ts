@@ -3,40 +3,22 @@ import {
   createVehicleSchema,
   updateVehicleSchema,
 } from '@kuruma/shared/validators/vehicle'
+import type { Vehicle } from '../stores'
+import { getVehicleStore } from '../stores'
 
-interface Vehicle {
-  id: string
-  name: string
-  description: string | null
-  seats: number
-  transmission: 'AUTO' | 'MANUAL'
-  fuelType: string | null
-  status: 'AVAILABLE' | 'MAINTENANCE' | 'RETIRED'
-  bufferMinutes: number
-  minRentalHours: number | null
-  maxRentalHours: number | null
-  advanceBookingHours: number | null
-  createdAt: Date
-  updatedAt: Date
-}
-
-// In-memory store (will be replaced by Drizzle repository later)
-let store = new Map<string, Vehicle>()
-
-export function resetVehicleStore(): void {
-  store = new Map()
-}
+// Re-export for backward compatibility with existing tests
+export { resetVehicleStore } from '../stores'
 
 const vehicles = new Hono()
 
 vehicles.get('/vehicles', (c) => {
   const status = c.req.query('status') ?? 'AVAILABLE'
-  const filtered = [...store.values()].filter((v) => v.status === status)
+  const filtered = [...getVehicleStore().values()].filter((v) => v.status === status)
   return c.json({ success: true, data: filtered })
 })
 
 vehicles.get('/vehicles/:id', (c) => {
-  const vehicle = store.get(c.req.param('id'))
+  const vehicle = getVehicleStore().get(c.req.param('id'))
   if (!vehicle) {
     return c.json({ success: false, error: 'Vehicle not found' }, 404)
   }
@@ -71,12 +53,12 @@ vehicles.post('/vehicles', async (c) => {
     updatedAt: now,
   }
 
-  store.set(vehicle.id, vehicle)
+  getVehicleStore().set(vehicle.id, vehicle)
   return c.json({ success: true, data: vehicle }, 201)
 })
 
 vehicles.patch('/vehicles/:id', async (c) => {
-  const vehicle = store.get(c.req.param('id'))
+  const vehicle = getVehicleStore().get(c.req.param('id'))
   if (!vehicle) {
     return c.json({ success: false, error: 'Vehicle not found' }, 404)
   }
@@ -103,12 +85,12 @@ vehicles.patch('/vehicles/:id', async (c) => {
     updatedAt: new Date(),
   }
 
-  store.set(updated.id, updated)
+  getVehicleStore().set(updated.id, updated)
   return c.json({ success: true, data: updated })
 })
 
 vehicles.delete('/vehicles/:id', (c) => {
-  const vehicle = store.get(c.req.param('id'))
+  const vehicle = getVehicleStore().get(c.req.param('id'))
   if (!vehicle) {
     return c.json({ success: false, error: 'Vehicle not found' }, 404)
   }
@@ -119,7 +101,7 @@ vehicles.delete('/vehicles/:id', (c) => {
     updatedAt: new Date(),
   }
 
-  store.set(retired.id, retired)
+  getVehicleStore().set(retired.id, retired)
   return c.json({ success: true, data: retired })
 })
 
