@@ -9,8 +9,18 @@ import { LocaleSwitcher } from './LocaleSwitcher'
 import { MobileMenu } from './MobileMenu'
 import { NavbarClient } from './NavbarClient'
 
+async function getSession() {
+  try {
+    return await auth()
+  } catch {
+    // Auth may fail on CF Workers if DB is unreachable.
+    // Treat as unauthenticated rather than crashing the page.
+    return null
+  }
+}
+
 export async function Navbar() {
-  const [session, t] = await Promise.all([auth(), getTranslations('nav')])
+  const [session, t] = await Promise.all([getSession(), getTranslations('nav')])
 
   const role = session?.user?.role
   const canSwitchView = isBusiness(role)
