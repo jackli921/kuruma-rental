@@ -52,35 +52,57 @@
     "menu": "Menu",
     "close": "Close menu"
   },
+  "vehicles": {
+    "title": "Browse vehicles",
+    "subtitle": "Find the perfect car for your trip around Japan.",
+    "seats": "{count} seats",
+    "auto": "Auto",
+    "manual": "Manual",
+    "empty": "No vehicles available right now."
+  },
   "landing": {
     "hero": {
       "title": "Explore Japan at your own pace",
-      "subtitle": "Rent a car in Osaka and discover Japan freely. Instant booking, flexible hours, multilingual support.",
-      "cta": "Browse vehicles",
-      "secondaryCta": "Learn more"
+      "subtitle": "Pick up a car in Osaka and drive anywhere. No approval wait, no hidden fees.",
+      "search": {
+        "location": "Location",
+        "locationValue": "Osaka, Japan",
+        "dates": "Dates",
+        "datesPlaceholder": "Add dates",
+        "button": "Search"
+      }
+    },
+    "featured": {
+      "heading": "Popular vehicles",
+      "subheading": "Hand-picked cars loved by travelers",
+      "viewAll": "View all",
+      "currency": "\u00a5{price}",
+      "perDay": "day"
     },
     "features": {
-      "heading": "Why rent with us",
+      "eyebrow": "Why Kuruma",
+      "heading": "Everything you need for the road",
+      "subheading": "We handle the details so you can focus on the journey.",
       "instantBooking": {
         "title": "Instant booking",
-        "description": "No waiting for approval. Pick your dates, choose your car, and you're confirmed immediately."
+        "description": "Pick your dates, choose your car, confirmed immediately. No waiting for approval."
       },
       "flexibleHours": {
         "title": "Flexible hours",
-        "description": "Rent by the hour or the week. Our scheduling adapts to your travel plans, not the other way around."
+        "description": "Rent by the hour or the week. Our scheduling adapts to your travel plans."
       },
       "multilingualSupport": {
         "title": "Multilingual support",
-        "description": "Browse in English, Japanese, or Chinese. Message our team in your language -- we'll understand."
+        "description": "Browse in English, Japanese, or Chinese. Message us in your language."
       },
       "localFleet": {
         "title": "Curated fleet",
-        "description": "40+ well-maintained vehicles based in Osaka. From compact kei cars to spacious family vans."
+        "description": "40+ well-maintained vehicles in Osaka. Kei cars to family vans."
       }
     },
     "cta": {
-      "heading": "Ready to hit the road?",
-      "description": "Browse available vehicles and book in minutes.",
+      "heading": "Ready to explore Japan?",
+      "description": "Browse our fleet and book your car in minutes. Free cancellation up to 72 hours before pickup.",
       "button": "Find your car"
     },
     "footer": {

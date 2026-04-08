@@ -52,35 +52,57 @@
     "menu": "菜单",
     "close": "关闭菜单"
   },
+  "vehicles": {
+    "title": "浏览车辆",
+    "subtitle": "找到适合您日本之旅的完美座驾。",
+    "seats": "{count}座",
+    "auto": "自动挡",
+    "manual": "手动挡",
+    "empty": "目前没有可用车辆。"
+  },
   "landing": {
     "hero": {
       "title": "按自己的节奏探索日本",
-      "subtitle": "在大阪租车，自由发现日本。即时预订，灵活时间，多语言支持。",
-      "cta": "浏览车辆",
-      "secondaryCta": "了解更多"
+      "subtitle": "在大阪取车，随心驾驶。无需等待审批，无隐藏费用。",
+      "search": {
+        "location": "地点",
+        "locationValue": "大阪",
+        "dates": "日期",
+        "datesPlaceholder": "添加日期",
+        "button": "搜索"
+      }
+    },
+    "featured": {
+      "heading": "热门车辆",
+      "subheading": "旅行者的热门之选",
+      "viewAll": "查看全部",
+      "currency": "\u00a5{price}",
+      "perDay": "天"
     },
     "features": {
-      "heading": "为什么选择我们",
+      "eyebrow": "为什么选择Kuruma",
+      "heading": "上路所需的一切",
+      "subheading": "我们处理细节，您专注旅程。",
       "instantBooking": {
         "title": "即时预订",
-        "description": "无需等待审批。选择日期，挑选车辆，立即确认预订。"
+        "description": "选择日期，挑选车辆，立即确认。无需等待审批。"
       },
       "flexibleHours": {
         "title": "灵活时间",
-        "description": "按小时或按周租赁。我们的排程适应您的旅行计划，而非相反。"
+        "description": "按小时或按周租赁。我们适应您的旅行计划。"
       },
       "multilingualSupport": {
         "title": "多语言支持",
-        "description": "支持英语、日语和中文浏览。用您的语言联系我们的团队。"
+        "description": "支持英语、日语和中文浏览。用您的语言联系我们。"
       },
       "localFleet": {
         "title": "精选车队",
-        "description": "40多辆保养良好的车辆，基地位于大阪。从紧凑型轻自动车到宽敞的家用面包车。"
+        "description": "大阪40多辆精心维护的车辆。从轻自动车到家用面包车。"
       }
     },
     "cta": {
-      "heading": "准备上路了吗？",
-      "description": "浏览可用车辆，几分钟内即可预订。",
+      "heading": "准备探索日本了吗？",
+      "description": "浏览车队，几分钟内预订。取车前72小时免费取消。",
       "button": "找到您的车"
     },
     "footer": {

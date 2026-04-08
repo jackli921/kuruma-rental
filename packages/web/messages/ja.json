@@ -52,35 +52,57 @@
     "menu": "メニュー",
     "close": "メニューを閉じる"
   },
+  "vehicles": {
+    "title": "車両を探す",
+    "subtitle": "日本旅行にぴったりの車を見つけましょう。",
+    "seats": "{count}席",
+    "auto": "オートマ",
+    "manual": "マニュアル",
+    "empty": "現在利用可能な車両はありません。"
+  },
   "landing": {
     "hero": {
       "title": "自分のペースで日本を探索",
-      "subtitle": "大阪でレンタカーを借りて、自由に日本を発見しましょう。即時予約、柔軟な時間設定、多言語対応。",
-      "cta": "車両を見る",
-      "secondaryCta": "詳しく見る"
+      "subtitle": "大阪で車を借りて、どこへでも。承認待ちなし、隠れた料金なし。",
+      "search": {
+        "location": "場所",
+        "locationValue": "大阪",
+        "dates": "日程",
+        "datesPlaceholder": "日程を追加",
+        "button": "検索"
+      }
+    },
+    "featured": {
+      "heading": "人気の車両",
+      "subheading": "旅行者に選ばれている車",
+      "viewAll": "すべて見る",
+      "currency": "\u00a5{price}",
+      "perDay": "日"
     },
     "features": {
-      "heading": "選ばれる理由",
+      "eyebrow": "クルマの特徴",
+      "heading": "ドライブに必要なすべてを",
+      "subheading": "細かいことは私たちにお任せ。旅を楽しんでください。",
       "instantBooking": {
         "title": "即時予約",
-        "description": "承認待ちは不要。日程を選んで車を選べば、すぐに予約確定です。"
+        "description": "日程を選んで車を選べば、すぐに確定。承認待ちは不要です。"
       },
       "flexibleHours": {
         "title": "柔軟な時間設定",
-        "description": "時間単位でも週単位でもレンタル可能。あなたの旅行プランに合わせたスケジュール。"
+        "description": "時間単位でも週単位でも。あなたの旅行プランに合わせます。"
       },
       "multilingualSupport": {
         "title": "多言語対応",
-        "description": "英語、日本語、中国語で閲覧可能。お好きな言語でチームにメッセージを送れます。"
+        "description": "英語・日本語・中国語で閲覧可能。お好きな言語でご連絡ください。"
       },
       "localFleet": {
         "title": "厳選された車両",
-        "description": "大阪を拠点に40台以上の整備された車両。コンパクトな軽自動車から広々としたファミリーバンまで。"
+        "description": "大阪に40台以上。軽自動車からファミリーバンまで。"
       }
     },
     "cta": {
-      "heading": "ドライブに出かけませんか？",
-      "description": "利用可能な車両を閲覧して、数分で予約できます。",
+      "heading": "日本を探索する準備はできましたか？",
+      "description": "車両を閲覧して数分で予約。ピックアップの72時間前まで無料キャンセル。",
       "button": "車を見つける"
     },
     "footer": {

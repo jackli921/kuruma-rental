@@ -8,34 +8,37 @@ export function CallToAction() {
   const t = useTranslations('landing.cta')
 
   return (
-    <section className="py-24 sm:py-32 px-4">
-      <div
-        className="max-w-3xl mx-auto text-center rounded-2xl p-12 sm:p-16 relative overflow-hidden"
-        style={{
-          background: 'linear-gradient(135deg, #1a1a1a 0%, #2d2d2d 50%, #1a1a1a 100%)',
-        }}
-      >
-        {/* Subtle red glow */}
+    <section className="py-20 sm:py-28 px-4 sm:px-6 lg:px-8">
+      <div className="max-w-5xl mx-auto relative overflow-hidden rounded-3xl px-8 py-16 sm:px-16 sm:py-24">
+        {/* Background image with overlay */}
         <div
-          className="absolute top-0 right-0 w-64 h-64 -z-0 opacity-20 blur-3xl"
-          style={{ background: 'radial-gradient(circle, #dc2626, transparent)' }}
+          className="absolute inset-0 -z-10 bg-cover bg-center"
+          style={{
+            backgroundImage:
+              'url("https://images.unsplash.com/photo-1493976040374-85c8e12f0c0e?w=1920&q=80")',
+          }}
         />
+        <div className="absolute inset-0 -z-10 bg-black/60" />
 
-        <h2 className="relative text-2xl sm:text-3xl font-semibold tracking-tight text-white">
-          {t('heading')}
-        </h2>
-        <p className="relative mt-4 text-base text-white/70 max-w-md mx-auto">{t('description')}</p>
-        <div className="relative mt-8">
-          <Link
-            href="/vehicles"
-            className={cn(
-              buttonVariants({ size: 'lg' }),
-              'bg-red-600 hover:bg-red-700 text-white px-8',
-            )}
-          >
-            {t('button')}
-            <ArrowRight className="size-4 ml-2" />
-          </Link>
+        <div className="max-w-lg">
+          <h2 className="text-3xl sm:text-4xl font-bold tracking-tight text-white">
+            {t('heading')}
+          </h2>
+          <p className="mt-4 text-lg text-white/80">
+            {t('description')}
+          </p>
+          <div className="mt-8">
+            <Link
+              href="/vehicles"
+              className={cn(
+                buttonVariants({ size: 'lg' }),
+                'bg-white text-foreground hover:bg-white/90 rounded-xl px-8 h-12 text-base font-semibold',
+              )}
+            >
+              {t('button')}
+              <ArrowRight className="size-4 ml-2" />
+            </Link>
+          </div>
         </div>
       </div>
     </section>
