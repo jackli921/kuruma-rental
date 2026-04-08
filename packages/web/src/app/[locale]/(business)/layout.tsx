@@ -17,7 +17,7 @@ export default async function BusinessLayout({
     ? locale
     : routing.defaultLocale
 
-  if (!session) {
+  if (!session?.user) {
     redirect(`/${safeLocale}/login`)
   }
 

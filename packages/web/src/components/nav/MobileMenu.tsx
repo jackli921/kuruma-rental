@@ -51,7 +51,7 @@ export function MobileMenu({ session, navItems }: MobileMenuProps) {
             </Link>
           ))}
         </nav>
-        {session ? (
+        {session?.user ? (
           <>
             <Separator className="my-4" />
             <div className="px-3">
