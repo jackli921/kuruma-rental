@@ -1,17 +1,9 @@
-import { getDb } from '@kuruma/shared/db'
-import { vehicles as vehiclesTable } from '@kuruma/shared/db/schema'
-import { eq } from 'drizzle-orm'
+import { getAvailableVehicles } from '@/lib/vehicles'
 import { Car, Fuel, Settings2, Users } from 'lucide-react'
 import { getTranslations } from 'next-intl/server'
 
-// TODO: Replace with API call via hono/client once API uses a CF-compatible DB driver
-async function getVehicles() {
-  const db = getDb()
-  return db.select().from(vehiclesTable).where(eq(vehiclesTable.status, 'AVAILABLE'))
-}
-
 export default async function VehiclesPage() {
-  const [vehicles, t] = await Promise.all([getVehicles(), getTranslations('vehicles')])
+  const [vehicles, t] = await Promise.all([getAvailableVehicles(), getTranslations('vehicles')])
 
   return (
     <main className="flex-1 py-10 px-4 sm:px-6 lg:px-8">
