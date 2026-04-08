@@ -1,10 +1,7 @@
 import type { NextAuthConfig } from 'next-auth'
-import Google from 'next-auth/providers/google'
 import Apple from 'next-auth/providers/apple'
+import Google from 'next-auth/providers/google'
 
 export default {
-  providers: [
-    Google,
-    Apple,
-  ],
+  providers: [Google, Apple],
 } satisfies NextAuthConfig

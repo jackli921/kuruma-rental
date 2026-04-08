@@ -1,8 +1,8 @@
-import { notFound } from 'next/navigation'
+import { routing } from '@/i18n/routing'
 import { NextIntlClientProvider, hasLocale } from 'next-intl'
 import { getMessages } from 'next-intl/server'
 import { Geist, Geist_Mono } from 'next/font/google'
-import { routing } from '@/i18n/routing'
+import { notFound } from 'next/navigation'
 
 const geistSans = Geist({
   variable: '--font-geist-sans',
@@ -35,9 +35,7 @@ export default async function LocaleLayout({
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
       <body className="min-h-full flex flex-col">
-        <NextIntlClientProvider messages={messages}>
-          {children}
-        </NextIntlClientProvider>
+        <NextIntlClientProvider messages={messages}>{children}</NextIntlClientProvider>
       </body>
     </html>
   )

@@ -20,5 +20,8 @@ export async function register(_input: {
   email: string
   password: string
 }): Promise<{ success: false; error: string; errors?: Record<string, string[]> }> {
-  return { success: false, error: 'Email registration is not available. Please use Google or Apple sign-in.' }
+  return {
+    success: false,
+    error: 'Email registration is not available. Please use Google or Apple sign-in.',
+  }
 }

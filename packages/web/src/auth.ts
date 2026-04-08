@@ -1,7 +1,7 @@
-import NextAuth from 'next-auth'
 import { DrizzleAdapter } from '@auth/drizzle-adapter'
 import { getDb } from '@kuruma/shared/db'
-import { users, accounts, sessions, verificationTokens } from '@kuruma/shared/db/schema'
+import { accounts, sessions, users, verificationTokens } from '@kuruma/shared/db/schema'
+import NextAuth from 'next-auth'
 import authConfig from './auth.config'
 
 const db = getDb()

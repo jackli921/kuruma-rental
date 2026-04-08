@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { users, accounts, sessions, verificationTokens, roleEnum } from '../../src/db/schema'
+import { accounts, roleEnum, sessions, users, verificationTokens } from '../../src/db/schema'
 
 describe('schema exports', () => {
   it('exports all table definitions', () => {

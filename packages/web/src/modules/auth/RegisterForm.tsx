@@ -1,11 +1,11 @@
 'use client'
 
-import { useState } from 'react'
-import { useTranslations } from 'next-intl'
 import { Button } from '@/components/ui/button'
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { useTranslations } from 'next-intl'
+import { useState } from 'react'
 import { register } from './actions'
 
 export function RegisterForm() {
@@ -46,15 +46,15 @@ export function RegisterForm() {
       </CardHeader>
       <CardContent>
         <form onSubmit={handleSubmit} className="flex flex-col gap-4">
-          {globalError && (
-            <p className="text-sm text-red-600">{globalError}</p>
-          )}
+          {globalError && <p className="text-sm text-red-600">{globalError}</p>}
 
           <div className="flex flex-col gap-2">
             <Label htmlFor="name">{t('name')}</Label>
             <Input id="name" name="name" type="text" required />
             {errors.name?.map((msg) => (
-              <p key={msg} className="text-sm text-red-600">{msg}</p>
+              <p key={msg} className="text-sm text-red-600">
+                {msg}
+              </p>
             ))}
           </div>
 
@@ -62,7 +62,9 @@ export function RegisterForm() {
             <Label htmlFor="email">{t('email')}</Label>
             <Input id="email" name="email" type="email" required />
             {errors.email?.map((msg) => (
-              <p key={msg} className="text-sm text-red-600">{msg}</p>
+              <p key={msg} className="text-sm text-red-600">
+                {msg}
+              </p>
             ))}
           </div>
 
@@ -70,7 +72,9 @@ export function RegisterForm() {
             <Label htmlFor="password">{t('password')}</Label>
             <Input id="password" name="password" type="password" required />
             {errors.password?.map((msg) => (
-              <p key={msg} className="text-sm text-red-600">{msg}</p>
+              <p key={msg} className="text-sm text-red-600">
+                {msg}
+              </p>
             ))}
           </div>
 

@@ -9,9 +9,7 @@ export default function Home() {
         <h1 className="text-3xl font-semibold tracking-tight text-black dark:text-zinc-50">
           {t('appName')}
         </h1>
-        <p className="text-lg text-zinc-600 dark:text-zinc-400">
-          {t('loading')}
-        </p>
+        <p className="text-lg text-zinc-600 dark:text-zinc-400">{t('loading')}</p>
       </main>
     </div>
   )

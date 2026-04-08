@@ -20,8 +20,5 @@
     "drizzle-kit": "^0.31.10",
     "typescript": "^5"
   },
-  "trustedDependencies": [
-    "sharp",
-    "unrs-resolver"
-  ]
+  "trustedDependencies": ["sharp", "unrs-resolver"]
 }
