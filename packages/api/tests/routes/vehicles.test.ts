@@ -1,4 +1,8 @@
 import { describe, expect, it, beforeEach } from 'vitest'
+import { setupDbMocks, resetAllTables } from '../helpers/mock-db'
+
+setupDbMocks()
+
 import app from '../../src/index'
 
 function validVehicleInput() {
@@ -19,10 +23,8 @@ async function createVehicle(input = validVehicleInput()) {
 }
 
 describe('Vehicle CRUD Routes', () => {
-  beforeEach(async () => {
-    // Reset store between tests via the exported helper
-    const { resetVehicleStore } = await import('../../src/routes/vehicles')
-    resetVehicleStore()
+  beforeEach(() => {
+    resetAllTables()
   })
 
   describe('GET /vehicles', () => {

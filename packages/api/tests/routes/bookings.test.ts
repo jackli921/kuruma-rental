@@ -1,4 +1,9 @@
 import { describe, expect, it, beforeEach } from 'vitest'
+import { setupDbMocks, resetAllTables } from '../helpers/mock-db'
+
+// Must call setupDbMocks before importing app (which imports routes)
+setupDbMocks()
+
 import app from '../../src/index'
 
 function futureDate(hoursFromNow: number): string {
@@ -26,9 +31,8 @@ async function createBooking(input = validBookingInput()) {
 }
 
 describe('Booking Routes', () => {
-  beforeEach(async () => {
-    const { resetBookingStore } = await import('../../src/routes/bookings')
-    resetBookingStore()
+  beforeEach(() => {
+    resetAllTables()
   })
 
   describe('GET /bookings', () => {
