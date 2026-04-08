@@ -98,6 +98,36 @@
       "empty": "メッセージはまだありません"
     }
   },
+  "bookings": {
+    "new": {
+      "title": "車両を予約",
+      "vehicleNotFound": "車両が見つかりません。",
+      "pickupDate": "乗車日時",
+      "returnDate": "返却日時",
+      "checkAvailability": "空き状況を確認",
+      "available": "選択した日程で利用可能です",
+      "notAvailable": "選択した日程では利用できません",
+      "selectDates": "日程を選択して空き状況を確認",
+      "confirmBooking": "予約を確定",
+      "submitting": "予約中...",
+      "vehicleInfo": "車両情報",
+      "seats": "{count}席",
+      "auto": "オートマ",
+      "manual": "マニュアル"
+    },
+    "confirmation": {
+      "title": "予約が確定しました",
+      "subtitle": "ご予約が正常に作成されました。",
+      "bookingId": "予約ID",
+      "vehicle": "車両",
+      "pickupDate": "乗車日",
+      "returnDate": "返却日",
+      "status": "ステータス",
+      "confirmed": "確定済み",
+      "viewBookings": "予約一覧を見る",
+      "backToVehicles": "他の車両を見る"
+    }
+  },
   "business": {
     "dashboard": {
       "title": "ダッシュボード",

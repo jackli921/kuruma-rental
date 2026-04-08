@@ -98,6 +98,36 @@
       "empty": "暂无消息"
     }
   },
+  "bookings": {
+    "new": {
+      "title": "预订车辆",
+      "vehicleNotFound": "未找到车辆。",
+      "pickupDate": "取车日期和时间",
+      "returnDate": "还车日期和时间",
+      "checkAvailability": "查看可用性",
+      "available": "所选日期可用",
+      "notAvailable": "所选日期不可用",
+      "selectDates": "选择日期以查看可用性",
+      "confirmBooking": "确认预订",
+      "submitting": "预订中...",
+      "vehicleInfo": "车辆信息",
+      "seats": "{count}座",
+      "auto": "自动挡",
+      "manual": "手动挡"
+    },
+    "confirmation": {
+      "title": "预订已确认",
+      "subtitle": "您的预订已成功创建。",
+      "bookingId": "预订编号",
+      "vehicle": "车辆",
+      "pickupDate": "取车",
+      "returnDate": "还车",
+      "status": "状态",
+      "confirmed": "已确认",
+      "viewBookings": "查看我的预订",
+      "backToVehicles": "浏览更多车辆"
+    }
+  },
   "business": {
     "dashboard": {
       "title": "仪表盘",
