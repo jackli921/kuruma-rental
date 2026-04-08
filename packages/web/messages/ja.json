@@ -96,6 +96,38 @@
       "empty": "メッセージはまだありません"
     }
   },
+  "business": {
+    "dashboard": {
+      "title": "ダッシュボード",
+      "subtitle": "レンタル事業の概要"
+    },
+    "stats": {
+      "totalBookings": "予約総数",
+      "activeVehicles": "稼働中の車両",
+      "totalCustomers": "顧客総数",
+      "unreadMessages": "未読メッセージ"
+    },
+    "bookings": {
+      "title": "予約管理",
+      "subtitle": "予約とスケジュールの管理",
+      "empty": "予約はまだありません"
+    },
+    "vehicles": {
+      "title": "車両管理",
+      "subtitle": "車両の管理",
+      "empty": "車両はまだ追加されていません"
+    },
+    "customers": {
+      "title": "お客様",
+      "subtitle": "お客様の表示と管理",
+      "empty": "お客様はまだいません"
+    },
+    "messages": {
+      "title": "メッセージ",
+      "subtitle": "お客様との会話",
+      "empty": "メッセージはまだありません"
+    }
+  },
   "landing": {
     "hero": {
       "title": "自分のペースで日本を探索",

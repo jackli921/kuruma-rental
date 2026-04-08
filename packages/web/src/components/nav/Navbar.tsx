@@ -62,7 +62,7 @@ export async function Navbar() {
           {/* Right side: locale switcher + auth + mobile menu */}
           <div className="flex items-center gap-1">
             <LocaleSwitcher />
-            <NavbarClient session={session} />
+            <NavbarClient session={session} isBusiness={isBusiness} />
             <MobileMenu session={session} navItems={navItems} />
           </div>
         </div>
