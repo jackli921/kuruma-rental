@@ -75,7 +75,12 @@ Airbnb-style car rental platform for a Japan-based company (Osaka) serving inter
 ## i18n (next-intl v4)
 
 - Navigation helpers (`Link`, `useRouter`, `usePathname`, `redirect`) come from `createNavigation(routing)` in `src/i18n/routing.ts`. Import from `@/i18n/routing`, not from `next/link` or `next/navigation`.
-- Route groups `(renter)` and `(business)` don't create URL segments. Paths like `/bookings` and `/messages` exist under both groups in the spec -- this will collide. Resolve by prefixing business routes (e.g. `/manage/...`) when those pages are built.
+- Route groups `(renter)` and `(business)` don't create URL segments. Business routes use `/manage/` prefix (`/manage/bookings`, `/manage/vehicles`, `/manage/customers`, `/manage/messages`) to avoid collision with renter routes (`/bookings`, `/messages`). `/dashboard` has no prefix (it's unique to business).
+
+## Worktree Dependency Drift
+
+- When working in a git worktree, dependencies may be missing if they were added in the main worktree but never committed to `package.json`. Example: `@tanstack/react-query` and `react-hook-form` were installed in the main tree but not in `package.json`, causing `tsc --noEmit` to fail in a fresh worktree.
+- Always run `bun install` in a new worktree and verify `tsc --noEmit` passes before starting work. If a dependency is missing, add it explicitly with `bun add <package>`.
 
 ## Monorepo
 
