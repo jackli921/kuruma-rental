@@ -13,6 +13,19 @@
     "search": "検索",
     "noResults": "結果が見つかりません"
   },
+  "errors": {
+    "notFound": {
+      "title": "ページが見つかりません",
+      "description": "お探しのページは存在しないか、移動されました。",
+      "backHome": "ホームに戻る"
+    },
+    "generic": {
+      "title": "エラーが発生しました",
+      "description": "予期しないエラーが発生しました。もう一度お試しください。",
+      "retry": "再試行",
+      "backHome": "ホームに戻る"
+    }
+  },
   "auth": {
     "login": "ログイン",
     "register": "アカウント作成",
