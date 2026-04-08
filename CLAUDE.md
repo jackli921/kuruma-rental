@@ -70,7 +70,19 @@ Airbnb-style car rental platform for a Japan-based company (Osaka) serving inter
 
 ## Build without DATABASE_URL
 
-- `bun run build` for the web package will fail at the static generation phase if `DATABASE_URL` is not set (Auth.js Drizzle adapter eagerly connects). TypeScript type-checking still passes. Use `bunx tsc --noEmit` for a CI-friendly type check without DB.
+- `getDb()` in `packages/shared/src/db/index.ts` uses a placeholder URL when `DATABASE_URL` is not set. This is safe because `postgres-js` only connects on first query, not at instantiation. The real URL is provided at runtime by Cloudflare env bindings.
+- TypeScript type-checking works without DB: `bunx tsc --noEmit`
+
+## Cloudflare Deployment
+
+- **Build command**: `bun install && cd packages/web && bun run build && bun run build:worker`
+- **Deploy command**: `cd packages/web && npx wrangler deploy`
+- **Path**: `/` (root -- full monorepo must be available for workspace resolution)
+- `next build` runs first, then `opennextjs-cloudflare build` converts the output to `.open-next/worker.js` for wrangler.
+- `open-next.config.ts` MUST exist in `packages/web/` or the CLI will hang waiting for interactive input.
+- `typescript.ignoreBuildErrors: true` in `next.config.ts` -- tsc is checked locally and in CI, not during `next build` (saves ~10s, prevents CF build timeouts).
+- **Required env vars on Cloudflare**: `DATABASE_URL`, `AUTH_SECRET`, `AUTH_GOOGLE_ID`, `AUTH_GOOGLE_SECRET`
+- **Worker name mismatch warning**: The wrangler config says `kuruma-api` but CF expects `kuruma-rental`. Non-blocking, CF overrides it.
 
 ## i18n (next-intl v4)
 
@@ -86,6 +98,36 @@ Airbnb-style car rental platform for a Japan-based company (Osaka) serving inter
 
 - shadcn components must be added with `-c packages/web` flag: `bunx shadcn@latest add <component> -c packages/web`
 - Lint covers all packages. Run `bunx biome check ./packages/web/src` to lint just web.
+
+---
+
+# Vertical Slice Development (MANDATORY)
+
+**Every feature must be delivered as a vertical slice — from database to UI in one shippable unit.**
+
+Do NOT build horizontal layers (all schema first, then all API, then all UI). Each slice should be a working user-facing feature that can be demo'd.
+
+```
+WRONG (horizontal layers):
+  Step 1: Build all DB tables
+  Step 2: Build all API routes
+  Step 3: Build all UI pages
+
+RIGHT (vertical slices):
+  Slice 1: Vehicle browsing  → schema + API + web page (end-to-end)
+  Slice 2: Instant booking   → schema + API + booking UI (end-to-end)
+  Slice 3: Calendar dashboard → API + calendar UI (end-to-end)
+```
+
+**Rules:**
+1. Each slice touches shared + api + web as needed — one feature, all layers
+2. Each slice ends with a working UI that a user can interact with
+3. Each slice has tests at every layer (unit + integration + component)
+4. Each slice is committed and mergeable independently
+5. If a slice requires schema changes, the migration is part of that slice — not a separate "schema task"
+6. Plan slices by user story ("renter can browse available cars"), not by technical layer ("add vehicle table")
+
+**Why:** Horizontal layers produce fully built backends with zero user-facing value. Vertical slices deliver working features incrementally, catch integration issues early, and let the owner see progress.
 
 ---
 
