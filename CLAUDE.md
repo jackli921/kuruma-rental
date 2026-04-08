@@ -52,7 +52,7 @@ Airbnb-style car rental platform for a Japan-based company (Osaka) serving inter
   <DropdownMenuTrigger render={<Button variant="ghost">Open</Button>} />
   ```
 
-- **Middleware is deprecated in Next.js 16.** Use "proxy" instead. Current `middleware.ts` still works but shows a deprecation warning. Migration needed before Next.js 17.
+- **Next.js 16 uses `proxy.ts`, not `middleware.ts`.** The file lives at `src/proxy.ts`. Same API, just renamed. If you see a "middleware is deprecated" warning, you're using the wrong filename.
 
 - **`noUncheckedIndexedAccess` is on.** Array indexing like `segments[1]` returns `T | undefined`. Always guard with a variable check before returning.
 
