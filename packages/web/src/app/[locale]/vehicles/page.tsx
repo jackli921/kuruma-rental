@@ -1,3 +1,4 @@
+import { ActiveFilters } from '@/components/vehicles/ActiveFilters'
 import { getDb } from '@kuruma/shared/db'
 import { vehicles as vehiclesTable } from '@kuruma/shared/db/schema'
 import { eq } from 'drizzle-orm'
@@ -10,8 +11,24 @@ async function getVehicles() {
   return db.select().from(vehiclesTable).where(eq(vehiclesTable.status, 'AVAILABLE'))
 }
 
-export default async function VehiclesPage() {
-  const [vehicles, t] = await Promise.all([getVehicles(), getTranslations('vehicles')])
+function asString(value: string | string[] | undefined): string | undefined {
+  if (Array.isArray(value)) return value[0]
+  return value
+}
+
+export default async function VehiclesPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ [key: string]: string | string[] | undefined }>
+}) {
+  const [vehicles, t, resolvedParams] = await Promise.all([
+    getVehicles(),
+    getTranslations('vehicles'),
+    searchParams,
+  ])
+
+  const from = asString(resolvedParams.from)
+  const to = asString(resolvedParams.to)
 
   return (
     <main className="flex-1 py-10 px-4 sm:px-6 lg:px-8">
@@ -21,7 +38,9 @@ export default async function VehiclesPage() {
           <p className="mt-2 text-lg text-muted-foreground">{t('subtitle')}</p>
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+        <ActiveFilters from={from} to={to} />
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 mt-6">
           {vehicles.map((vehicle) => {
             const photo = vehicle.photos?.[0]
             return (
