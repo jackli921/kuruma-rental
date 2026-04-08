@@ -8,7 +8,7 @@ import { useRouter } from '@/i18n/routing'
 import { createBooking } from '@/lib/bookings'
 import { Car, Fuel, Settings2, Users, XCircle } from 'lucide-react'
 import { useTranslations } from 'next-intl'
-import { useActionState, useState } from 'react'
+import { useActionState, useEffect, useState } from 'react'
 
 interface VehicleInfo {
   id: string
@@ -51,9 +51,11 @@ export function BookingForm({ vehicle, isAuthenticated }: BookingFormProps) {
   const transmissionLabel = vehicle.transmission === 'AUTO' ? t('auto') : t('manual')
 
   // Redirect to confirmation page on success
-  if (state.success && state.bookingId) {
-    router.push(`/bookings/confirmation?bookingId=${state.bookingId}&vehicleId=${vehicle.id}`)
-  }
+  useEffect(() => {
+    if (state.success && state.bookingId) {
+      router.push(`/bookings/confirmation?bookingId=${state.bookingId}&vehicleId=${vehicle.id}`)
+    }
+  }, [state.success, state.bookingId, router, vehicle.id])
 
   return (
     <div className="space-y-6">
