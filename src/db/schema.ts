@@ -4,25 +4,25 @@ import type { AdapterAccountType } from 'next-auth/adapters'
 export const roleEnum = pgEnum('role', ['RENTER', 'STAFF', 'ADMIN'])
 
 // Auth.js required fields + app profile fields
+// Column names must be camelCase to match @auth/drizzle-adapter expectations
 export const users = pgTable('users', {
   id: text('id').primaryKey().$defaultFn(() => crypto.randomUUID()),
   name: text('name'),
   email: text('email').unique().notNull(),
-  emailVerified: timestamp('email_verified', { mode: 'date' }),
+  emailVerified: timestamp('emailVerified', { mode: 'date' }),
   image: text('image'),
-  // App-specific profile fields
   role: roleEnum('role').notNull().default('RENTER'),
   language: text('language').notNull().default('en'),
   country: text('country'),
-  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
-  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  createdAt: timestamp('createdAt', { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp('updatedAt', { withTimezone: true }).notNull().defaultNow(),
 })
 
 export const accounts = pgTable('accounts', {
-  userId: text('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  userId: text('userId').notNull().references(() => users.id, { onDelete: 'cascade' }),
   type: text('type').$type<AdapterAccountType>().notNull(),
   provider: text('provider').notNull(),
-  providerAccountId: text('provider_account_id').notNull(),
+  providerAccountId: text('providerAccountId').notNull(),
   refresh_token: text('refresh_token'),
   access_token: text('access_token'),
   expires_at: integer('expires_at'),
@@ -35,8 +35,8 @@ export const accounts = pgTable('accounts', {
 ])
 
 export const sessions = pgTable('sessions', {
-  sessionToken: text('session_token').primaryKey(),
-  userId: text('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  sessionToken: text('sessionToken').primaryKey(),
+  userId: text('userId').notNull().references(() => users.id, { onDelete: 'cascade' }),
   expires: timestamp('expires', { mode: 'date' }).notNull(),
 })
 

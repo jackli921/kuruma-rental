@@ -2,6 +2,16 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
+> **NOTE:** This plan was written before the monorepo split decision (2026-04-07). File paths reference the flat `src/` structure. When executing, map paths to the new monorepo layout:
+> - `src/auth.ts`, `src/auth.config.ts`, `src/middleware.ts` → `packages/web/src/`
+> - `src/db/schema.ts` → `packages/shared/src/db/schema.ts`
+> - `src/modules/auth/` → `packages/web/src/modules/auth/`
+> - `src/app/` → `packages/web/src/app/`
+> - `src/lib/supabase/` → DELETE (no monorepo equivalent)
+> - `tests/` → `packages/web/tests/`
+>
+> See `docs/2026-04-02-kuruma-mvp-design.md` for the full monorepo structure.
+
 **Goal:** Replace Supabase Auth + Supabase Postgres with Auth.js v5 (NextAuth) + Neon Postgres, keeping Drizzle ORM and all existing functionality (Google/Apple OAuth, user profile creation).
 
 **Architecture:** Auth.js v5 handles OAuth flows, session management, and stores auth data (users, accounts, sessions) via its Drizzle adapter directly in our Neon Postgres database. This eliminates the Supabase dependency entirely. The `users` table is extended to serve both Auth.js and our app's profile data. Middleware checks the Auth.js session instead of refreshing a Supabase session.
