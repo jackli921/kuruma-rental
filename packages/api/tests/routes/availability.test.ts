@@ -1,12 +1,12 @@
-import { describe, expect, it, beforeEach } from 'vitest'
 import { Hono } from 'hono'
-import { createAvailabilityRoutes } from '../../src/routes/availability'
+import { beforeEach, describe, expect, it } from 'vitest'
 import {
-  InMemoryVehicleRepository,
-  InMemoryBookingRepository,
   InMemoryAvailabilityRepository,
+  InMemoryBookingRepository,
+  InMemoryVehicleRepository,
 } from '../../src/repositories/in-memory'
-import type { Vehicle, Booking } from '../../src/repositories/types'
+import type { Booking, Vehicle } from '../../src/repositories/types'
+import { createAvailabilityRoutes } from '../../src/routes/availability'
 
 let app: Hono
 let vehicleRepo: InMemoryVehicleRepository
@@ -35,7 +35,8 @@ async function createTestBooking(
   bufferMinutes = 30,
 ): Promise<Booking> {
   const endAt = overrides.endAt ?? new Date('2026-06-01T14:00:00Z')
-  const effectiveEndAt = overrides.effectiveEndAt ?? new Date(endAt.getTime() + bufferMinutes * 60 * 1000)
+  const effectiveEndAt =
+    overrides.effectiveEndAt ?? new Date(endAt.getTime() + bufferMinutes * 60 * 1000)
   return bookingRepo.create({
     renterId: 'user1',
     vehicleId: 'v1',
@@ -54,10 +55,7 @@ describe('Availability Routes', () => {
   beforeEach(() => {
     vehicleRepo = new InMemoryVehicleRepository()
     bookingRepo = new InMemoryBookingRepository()
-    const availabilityRepo = new InMemoryAvailabilityRepository(
-      vehicleRepo,
-      bookingRepo,
-    )
+    const availabilityRepo = new InMemoryAvailabilityRepository(vehicleRepo, bookingRepo)
     app = new Hono()
     app.route('/', createAvailabilityRoutes(availabilityRepo))
   })
@@ -126,12 +124,15 @@ describe('Availability Routes', () => {
 
     it('accounts for buffer time after bookings', async () => {
       const vehicle = await createTestVehicle({ bufferMinutes: 60 })
-      await createTestBooking({
-        vehicleId: vehicle.id,
-        startAt: new Date('2026-06-01T10:00:00Z'),
-        endAt: new Date('2026-06-01T14:00:00Z'),
-        status: 'CONFIRMED',
-      }, 60)
+      await createTestBooking(
+        {
+          vehicleId: vehicle.id,
+          startAt: new Date('2026-06-01T10:00:00Z'),
+          endAt: new Date('2026-06-01T14:00:00Z'),
+          status: 'CONFIRMED',
+        },
+        60,
+      )
 
       // 14:30 is within the buffer (14:00 + 60min = 15:00)
       const res1 = await app.request(

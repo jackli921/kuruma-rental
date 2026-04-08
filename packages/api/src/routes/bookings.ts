@@ -1,6 +1,6 @@
-import { Hono } from 'hono'
-import { createBookingSchema } from '@kuruma/shared/validators/booking'
 import { VALID_BOOKING_TRANSITIONS } from '@kuruma/shared/db/schema'
+import { createBookingSchema } from '@kuruma/shared/validators/booking'
+import { Hono } from 'hono'
 import type { BookingRepository } from '../repositories/types'
 
 export function createBookingRoutes(repo: BookingRepository): Hono {
@@ -14,9 +14,7 @@ export function createBookingRoutes(repo: BookingRepository): Hono {
     if (statusFilter) filters.status = statusFilter
     if (vehicleIdFilter) filters.vehicleId = vehicleIdFilter
 
-    const results = await repo.findAll(
-      Object.keys(filters).length > 0 ? filters : undefined,
-    )
+    const results = await repo.findAll(Object.keys(filters).length > 0 ? filters : undefined)
 
     return c.json({ success: true, data: results })
   })
@@ -34,18 +32,12 @@ export function createBookingRoutes(repo: BookingRepository): Hono {
     const result = createBookingSchema.safeParse(body)
 
     if (!result.success) {
-      return c.json(
-        { success: false, error: result.error.flatten().fieldErrors },
-        400,
-      )
+      return c.json({ success: false, error: result.error.flatten().fieldErrors }, 400)
     }
 
     const renterId = body.renterId as string | undefined
     if (!renterId) {
-      return c.json(
-        { success: false, error: { renterId: ['Renter ID is required'] } },
-        400,
-      )
+      return c.json({ success: false, error: { renterId: ['Renter ID is required'] } }, 400)
     }
 
     const endAt = new Date(result.data.endAt)

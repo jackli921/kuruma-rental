@@ -1,8 +1,12 @@
-import { describe, it, expect, beforeAll, afterAll, afterEach } from 'vitest'
-import { DrizzleVehicleRepository, DrizzleBookingRepository, DrizzleAvailabilityRepository } from '../../src/repositories/drizzle'
-import { db, cleanupBookings, cleanupUsers, cleanupVehicles } from './setup'
 import { users } from '@kuruma/shared/db/schema'
+import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest'
+import {
+  DrizzleAvailabilityRepository,
+  DrizzleBookingRepository,
+  DrizzleVehicleRepository,
+} from '../../src/repositories/drizzle'
 import type { Vehicle } from '../../src/stores'
+import { cleanupBookings, cleanupUsers, cleanupVehicles, db } from './setup'
 
 const vehicleRepo = new DrizzleVehicleRepository(db)
 const bookingRepo = new DrizzleBookingRepository(db)
@@ -35,7 +39,9 @@ afterAll(async () => {
   await cleanupUsers([testUser.id])
 })
 
-function createTestVehicle(overrides: Partial<Omit<Vehicle, 'id' | 'createdAt' | 'updatedAt'>> = {}): Promise<Vehicle> {
+function createTestVehicle(
+  overrides: Partial<Omit<Vehicle, 'id' | 'createdAt' | 'updatedAt'>> = {},
+): Promise<Vehicle> {
   return vehicleRepo.create({
     name: overrides.name ?? 'Avail Test Car',
     description: overrides.description ?? null,
@@ -218,7 +224,10 @@ describe('DrizzleAvailabilityRepository', () => {
     })
 
     it('excludes MAINTENANCE and RETIRED vehicles', async () => {
-      const maintenanceVehicle = await createTestVehicle({ name: 'Maintenance Car', status: 'MAINTENANCE' })
+      const maintenanceVehicle = await createTestVehicle({
+        name: 'Maintenance Car',
+        status: 'MAINTENANCE',
+      })
       createdVehicleIds.push(maintenanceVehicle.id)
       const retiredVehicle = await createTestVehicle({ name: 'Retired Car', status: 'RETIRED' })
       createdVehicleIds.push(retiredVehicle.id)

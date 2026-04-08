@@ -1,9 +1,5 @@
+import { classifyRoute, getLocaleFromPath, stripLocale } from '@/lib/route-helpers'
 import { describe, expect, test } from 'vitest'
-import {
-  classifyRoute,
-  getLocaleFromPath,
-  stripLocale,
-} from '@/lib/route-helpers'
 
 describe('stripLocale', () => {
   test('strips known locale prefix from path', () => {

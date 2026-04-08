@@ -1,8 +1,5 @@
+import { createVehicleSchema, updateVehicleSchema } from '@kuruma/shared/validators/vehicle'
 import { Hono } from 'hono'
-import {
-  createVehicleSchema,
-  updateVehicleSchema,
-} from '@kuruma/shared/validators/vehicle'
 import type { VehicleRepository } from '../repositories/types'
 
 export function createVehicleRoutes(repo: VehicleRepository): Hono {
@@ -27,10 +24,7 @@ export function createVehicleRoutes(repo: VehicleRepository): Hono {
     const result = createVehicleSchema.safeParse(body)
 
     if (!result.success) {
-      return c.json(
-        { success: false, error: result.error.flatten().fieldErrors },
-        400,
-      )
+      return c.json({ success: false, error: result.error.flatten().fieldErrors }, 400)
     }
 
     const vehicle = await repo.create({
@@ -59,10 +53,7 @@ export function createVehicleRoutes(repo: VehicleRepository): Hono {
     const result = updateVehicleSchema.safeParse(body)
 
     if (!result.success) {
-      return c.json(
-        { success: false, error: result.error.flatten().fieldErrors },
-        400,
-      )
+      return c.json({ success: false, error: result.error.flatten().fieldErrors }, 400)
     }
 
     const updated = await repo.update(existing.id, {
@@ -71,8 +62,7 @@ export function createVehicleRoutes(repo: VehicleRepository): Hono {
       fuelType: result.data.fuelType ?? existing.fuelType,
       minRentalHours: result.data.minRentalHours ?? existing.minRentalHours,
       maxRentalHours: result.data.maxRentalHours ?? existing.maxRentalHours,
-      advanceBookingHours:
-        result.data.advanceBookingHours ?? existing.advanceBookingHours,
+      advanceBookingHours: result.data.advanceBookingHours ?? existing.advanceBookingHours,
     })
 
     return c.json({ success: true, data: updated })

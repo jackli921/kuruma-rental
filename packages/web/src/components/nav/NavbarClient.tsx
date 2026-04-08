@@ -4,6 +4,7 @@ import { useLayoutPreference } from '@/components/providers/LayoutPreferenceProv
 import { buttonVariants } from '@/components/ui/button'
 import { Link } from '@/i18n/routing'
 import { cn } from '@/lib/utils'
+import type { ViewMode } from '@/lib/view-mode'
 import { PanelLeft } from 'lucide-react'
 import type { Session } from 'next-auth'
 import { useTranslations } from 'next-intl'
@@ -11,7 +12,8 @@ import { UserMenu } from './UserMenu'
 
 interface NavbarClientProps {
   readonly session: Session | null
-  readonly isBusiness?: boolean
+  readonly canSwitchView: boolean
+  readonly viewMode: ViewMode
 }
 
 function LayoutToggle() {
@@ -29,14 +31,14 @@ function LayoutToggle() {
   )
 }
 
-export function NavbarClient({ session, isBusiness }: NavbarClientProps) {
+export function NavbarClient({ session, canSwitchView, viewMode }: NavbarClientProps) {
   const t = useTranslations('auth')
 
-  if (session) {
+  if (session?.user) {
     return (
       <div className="flex items-center gap-1">
-        {isBusiness && <LayoutToggle />}
-        <UserMenu session={session} />
+        {viewMode === 'business' && <LayoutToggle />}
+        <UserMenu session={session} canSwitchView={canSwitchView} viewMode={viewMode} />
       </div>
     )
   }

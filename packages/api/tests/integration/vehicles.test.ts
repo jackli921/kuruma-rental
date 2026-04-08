@@ -1,6 +1,6 @@
-import { describe, it, expect, afterEach } from 'vitest'
+import { afterEach, describe, expect, it } from 'vitest'
 import { DrizzleVehicleRepository } from '../../src/repositories/drizzle'
-import { db, cleanupVehicles } from './setup'
+import { cleanupVehicles, db } from './setup'
 
 const repo = new DrizzleVehicleRepository(db)
 const createdIds: string[] = []

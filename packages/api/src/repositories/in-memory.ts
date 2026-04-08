@@ -1,9 +1,5 @@
-import type { Vehicle, Booking } from '../stores'
-import type {
-  VehicleRepository,
-  BookingRepository,
-  AvailabilityRepository,
-} from './types'
+import type { Booking, Vehicle } from '../stores'
+import type { AvailabilityRepository, BookingRepository, VehicleRepository } from './types'
 
 export class InMemoryVehicleRepository implements VehicleRepository {
   private readonly store: Map<string, Vehicle>
@@ -22,9 +18,7 @@ export class InMemoryVehicleRepository implements VehicleRepository {
     return this.store.get(id)
   }
 
-  async create(
-    data: Omit<Vehicle, 'id' | 'createdAt' | 'updatedAt'>,
-  ): Promise<Vehicle> {
+  async create(data: Omit<Vehicle, 'id' | 'createdAt' | 'updatedAt'>): Promise<Vehicle> {
     const now = new Date()
     const vehicle: Vehicle = {
       ...data,
@@ -36,10 +30,7 @@ export class InMemoryVehicleRepository implements VehicleRepository {
     return vehicle
   }
 
-  async update(
-    id: string,
-    data: Partial<Vehicle>,
-  ): Promise<Vehicle | undefined> {
+  async update(id: string, data: Partial<Vehicle>): Promise<Vehicle | undefined> {
     const existing = this.store.get(id)
     if (!existing) return undefined
 
@@ -95,9 +86,7 @@ export class InMemoryBookingRepository implements BookingRepository {
     return this.store.get(id)
   }
 
-  async create(
-    data: Omit<Booking, 'id' | 'createdAt' | 'updatedAt'>,
-  ): Promise<Booking> {
+  async create(data: Omit<Booking, 'id' | 'createdAt' | 'updatedAt'>): Promise<Booking> {
     const now = new Date()
     const booking: Booking = {
       ...data,
@@ -109,10 +98,7 @@ export class InMemoryBookingRepository implements BookingRepository {
     return booking
   }
 
-  async updateStatus(
-    id: string,
-    status: string,
-  ): Promise<Booking | undefined> {
+  async updateStatus(id: string, status: string): Promise<Booking | undefined> {
     const existing = this.store.get(id)
     if (!existing) return undefined
 
@@ -126,10 +112,7 @@ export class InMemoryBookingRepository implements BookingRepository {
   }
 }
 
-const BLOCKING_STATUSES: ReadonlySet<Booking['status']> = new Set([
-  'CONFIRMED',
-  'ACTIVE',
-])
+const BLOCKING_STATUSES: ReadonlySet<Booking['status']> = new Set(['CONFIRMED', 'ACTIVE'])
 
 export class InMemoryAvailabilityRepository implements AvailabilityRepository {
   constructor(

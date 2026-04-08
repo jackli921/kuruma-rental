@@ -50,7 +50,9 @@
     "customers": "お客様",
     "fleet": "車両管理",
     "menu": "メニュー",
-    "close": "メニューを閉じる"
+    "close": "メニューを閉じる",
+    "switchToRenter": "利用者ビューに切替",
+    "switchToBusiness": "管理者ビューに切替"
   },
   "vehicles": {
     "title": "車両を探す",

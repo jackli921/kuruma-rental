@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { createBookingSchema, cancelBookingSchema } from '../../src/validators/booking'
+import { cancelBookingSchema, createBookingSchema } from '../../src/validators/booking'
 
 describe('createBookingSchema', () => {
   const validInput = {

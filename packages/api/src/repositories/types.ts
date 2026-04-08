@@ -1,6 +1,6 @@
 export type { Vehicle, Booking } from '../stores'
 
-import type { Vehicle, Booking } from '../stores'
+import type { Booking, Vehicle } from '../stores'
 
 export interface VehicleRepository {
   findAll(filters?: { status?: string }): Promise<Vehicle[]>

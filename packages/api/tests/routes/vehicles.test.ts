@@ -1,7 +1,7 @@
-import { describe, expect, it, beforeEach } from 'vitest'
 import { Hono } from 'hono'
-import { createVehicleRoutes } from '../../src/routes/vehicles'
+import { beforeEach, describe, expect, it } from 'vitest'
 import { InMemoryVehicleRepository } from '../../src/repositories/in-memory'
+import { createVehicleRoutes } from '../../src/routes/vehicles'
 
 let app: Hono
 
@@ -112,9 +112,7 @@ describe('Vehicle CRUD Routes', () => {
       expect(body.data.minRentalHours).toBeNull()
       expect(body.data.maxRentalHours).toBeNull()
       expect(body.data.advanceBookingHours).toBeNull()
-      expect(body.data.id).toMatch(
-        /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/,
-      )
+      expect(body.data.id).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/)
       expect(body.data.createdAt).toBeDefined()
       expect(body.data.updatedAt).toBeDefined()
     })

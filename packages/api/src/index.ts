@@ -1,20 +1,24 @@
-import { Hono } from 'hono'
 import { getDb } from '@kuruma/shared/db'
+import { Hono } from 'hono'
+import {
+  DrizzleAvailabilityRepository,
+  DrizzleBookingRepository,
+  DrizzleVehicleRepository,
+} from './repositories/drizzle'
+import {
+  InMemoryAvailabilityRepository,
+  InMemoryBookingRepository,
+  InMemoryVehicleRepository,
+} from './repositories/in-memory'
+import type {
+  AvailabilityRepository,
+  BookingRepository,
+  VehicleRepository,
+} from './repositories/types'
+import { createAvailabilityRoutes } from './routes/availability'
+import { createBookingRoutes } from './routes/bookings'
 import health from './routes/health'
 import { createVehicleRoutes } from './routes/vehicles'
-import { createBookingRoutes } from './routes/bookings'
-import { createAvailabilityRoutes } from './routes/availability'
-import {
-  InMemoryVehicleRepository,
-  InMemoryBookingRepository,
-  InMemoryAvailabilityRepository,
-} from './repositories/in-memory'
-import {
-  DrizzleVehicleRepository,
-  DrizzleBookingRepository,
-  DrizzleAvailabilityRepository,
-} from './repositories/drizzle'
-import type { VehicleRepository, BookingRepository, AvailabilityRepository } from './repositories/types'
 
 export function createApp(overrides?: {
   vehicleRepo: VehicleRepository
@@ -26,7 +30,7 @@ export function createApp(overrides?: {
   let availabilityRepo: AvailabilityRepository
 
   if (overrides) {
-    ({ vehicleRepo, bookingRepo, availabilityRepo } = overrides)
+    ;({ vehicleRepo, bookingRepo, availabilityRepo } = overrides)
   } else if (process.env.DATABASE_URL) {
     const db = getDb()
     vehicleRepo = new DrizzleVehicleRepository(db)
@@ -35,7 +39,10 @@ export function createApp(overrides?: {
   } else {
     vehicleRepo = new InMemoryVehicleRepository()
     bookingRepo = new InMemoryBookingRepository()
-    availabilityRepo = new InMemoryAvailabilityRepository(vehicleRepo as InMemoryVehicleRepository, bookingRepo as InMemoryBookingRepository)
+    availabilityRepo = new InMemoryAvailabilityRepository(
+      vehicleRepo as InMemoryVehicleRepository,
+      bookingRepo as InMemoryBookingRepository,
+    )
   }
 
   const app = new Hono()

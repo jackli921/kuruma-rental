@@ -50,7 +50,9 @@
     "customers": "客户",
     "fleet": "车队管理",
     "menu": "菜单",
-    "close": "关闭菜单"
+    "close": "关闭菜单",
+    "switchToRenter": "切换到租客视图",
+    "switchToBusiness": "切换到管理视图"
   },
   "vehicles": {
     "title": "浏览车辆",

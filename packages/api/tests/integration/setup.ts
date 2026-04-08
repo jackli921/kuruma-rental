@@ -1,6 +1,6 @@
-import { eq } from 'drizzle-orm'
 import { getDb } from '@kuruma/shared/db'
-import { vehicles, bookings, users } from '@kuruma/shared/db/schema'
+import { bookings, users, vehicles } from '@kuruma/shared/db/schema'
+import { eq } from 'drizzle-orm'
 
 const db = getDb()
 

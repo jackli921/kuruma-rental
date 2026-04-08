@@ -5,9 +5,9 @@ vi.mock('@kuruma/shared/db', () => ({
   getDb: vi.fn(),
 }))
 
+import { getVehicleById } from '@/lib/vehicles'
 // Must import after mocking
 import { getDb } from '@kuruma/shared/db'
-import { getVehicleById } from '@/lib/vehicles'
 
 const MOCK_VEHICLE = {
   id: 'vehicle-001',

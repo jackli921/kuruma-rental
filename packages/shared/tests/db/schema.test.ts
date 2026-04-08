@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
+  VALID_BOOKING_TRANSITIONS,
   accounts,
   bookingSourceEnum,
   bookingStatusEnum,
@@ -7,7 +8,6 @@ import {
   roleEnum,
   transmissionEnum,
   users,
-  VALID_BOOKING_TRANSITIONS,
   vehicles,
 } from '../../src/db/schema'
 

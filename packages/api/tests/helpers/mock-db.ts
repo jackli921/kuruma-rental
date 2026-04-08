@@ -101,14 +101,12 @@ export function createMockOperators() {
 
   const and = (...filters: unknown[]): MockFilter => ({
     [MOCK_FILTER]: true,
-    predicate: (row) =>
-      filters.filter((f) => f != null).every((f) => toFilter(f)(row)),
+    predicate: (row) => filters.filter((f) => f != null).every((f) => toFilter(f)(row)),
   })
 
   const or = (...filters: unknown[]): MockFilter => ({
     [MOCK_FILTER]: true,
-    predicate: (row) =>
-      filters.filter((f) => f != null).some((f) => toFilter(f)(row)),
+    predicate: (row) => filters.filter((f) => f != null).some((f) => toFilter(f)(row)),
   })
 
   const gt = (col: unknown, value: unknown): MockFilter => ({
@@ -209,10 +207,7 @@ function createMockDb() {
           filter = toFilter(condition)
           return chain
         },
-        then(
-          resolve: (val: Row[]) => void,
-          _reject?: (err: unknown) => void,
-        ) {
+        then(resolve: (val: Row[]) => void, _reject?: (err: unknown) => void) {
           const rows = targetTable ? getTable(targetTable) : []
           resolve(rows.filter(filter))
         },
@@ -239,18 +234,12 @@ function createMockDb() {
               })
 
               return {
-                then(
-                  resolve: (val: Row[]) => void,
-                  _reject?: (err: unknown) => void,
-                ) {
+                then(resolve: (val: Row[]) => void, _reject?: (err: unknown) => void) {
                   resolve(inserted)
                 },
               }
             },
-            then(
-              resolve: (val: undefined) => void,
-              _reject?: (err: unknown) => void,
-            ) {
+            then(resolve: (val: undefined) => void, _reject?: (err: unknown) => void) {
               const tableData = getTable(tableName)
               for (const row of rowsToInsert) {
                 const newRow = applyDefaults(table, row)
@@ -275,10 +264,7 @@ function createMockDb() {
               return {
                 returning() {
                   return {
-                    then(
-                      resolve: (val: Row[]) => void,
-                      _reject?: (err: unknown) => void,
-                    ) {
+                    then(resolve: (val: Row[]) => void, _reject?: (err: unknown) => void) {
                       const tableData = getTable(tableName)
                       const updated: Row[] = []
                       for (let i = 0; i < tableData.length; i++) {
@@ -291,10 +277,7 @@ function createMockDb() {
                     },
                   }
                 },
-                then(
-                  resolve: (val: undefined) => void,
-                  _reject?: (err: unknown) => void,
-                ) {
+                then(resolve: (val: undefined) => void, _reject?: (err: unknown) => void) {
                   const tableData = getTable(tableName)
                   for (let i = 0; i < tableData.length; i++) {
                     if (filter(tableData[i])) {
@@ -319,10 +302,7 @@ function createMockDb() {
           return {
             returning() {
               return {
-                then(
-                  resolve: (val: Row[]) => void,
-                  _reject?: (err: unknown) => void,
-                ) {
+                then(resolve: (val: Row[]) => void, _reject?: (err: unknown) => void) {
                   const tableData = getTable(tableName)
                   const deleted: Row[] = []
                   const remaining: Row[] = []
@@ -338,10 +318,7 @@ function createMockDb() {
                 },
               }
             },
-            then(
-              resolve: (val: undefined) => void,
-              _reject?: (err: unknown) => void,
-            ) {
+            then(resolve: (val: undefined) => void, _reject?: (err: unknown) => void) {
               const tableData = getTable(tableName)
               tables.set(
                 tableName,

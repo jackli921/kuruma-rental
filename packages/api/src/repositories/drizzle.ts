@@ -1,8 +1,8 @@
-import { eq, and, sql } from 'drizzle-orm'
 import type { getDb } from '@kuruma/shared/db'
-import { vehicles, bookings } from '@kuruma/shared/db/schema'
-import type { VehicleRepository, BookingRepository, AvailabilityRepository } from './types'
-import type { Vehicle, Booking } from '../stores'
+import { bookings, vehicles } from '@kuruma/shared/db/schema'
+import { and, eq, sql } from 'drizzle-orm'
+import type { Booking, Vehicle } from '../stores'
+import type { AvailabilityRepository, BookingRepository, VehicleRepository } from './types'
 
 type Db = ReturnType<typeof getDb>
 
@@ -20,10 +20,7 @@ export class DrizzleVehicleRepository implements VehicleRepository {
   }
 
   async findById(id: string): Promise<Vehicle | undefined> {
-    const [row] = await this.db
-      .select()
-      .from(vehicles)
-      .where(eq(vehicles.id, id))
+    const [row] = await this.db.select().from(vehicles).where(eq(vehicles.id, id))
 
     return (row as Vehicle) ?? undefined
   }
@@ -88,8 +85,8 @@ export class DrizzleAvailabilityRepository implements AvailabilityRepository {
             WHERE b."vehicleId" = ${vehicles.id}
             AND b.status IN ('CONFIRMED', 'ACTIVE')
             AND tstzrange(b."startAt", b."effectiveEndAt") && tstzrange(${fromIso}::timestamptz, ${toIso}::timestamptz)
-          )`
-        )
+          )`,
+        ),
       )
     return rows as Vehicle[]
   }
@@ -98,14 +95,8 @@ export class DrizzleAvailabilityRepository implements AvailabilityRepository {
     vehicleId: string,
     from: Date,
     to: Date,
-  ): Promise<
-    | { available: boolean; vehicle: Vehicle; conflicts: Booking[] }
-    | undefined
-  > {
-    const [vehicle] = await this.db
-      .select()
-      .from(vehicles)
-      .where(eq(vehicles.id, vehicleId))
+  ): Promise<{ available: boolean; vehicle: Vehicle; conflicts: Booking[] } | undefined> {
+    const [vehicle] = await this.db.select().from(vehicles).where(eq(vehicles.id, vehicleId))
 
     if (!vehicle) return undefined
 
@@ -119,8 +110,8 @@ export class DrizzleAvailabilityRepository implements AvailabilityRepository {
         and(
           eq(bookings.vehicleId, vehicleId),
           sql`status IN ('CONFIRMED', 'ACTIVE')`,
-          sql`tstzrange("startAt", "effectiveEndAt") && tstzrange(${fromIso}::timestamptz, ${toIso}::timestamptz)`
-        )
+          sql`tstzrange("startAt", "effectiveEndAt") && tstzrange(${fromIso}::timestamptz, ${toIso}::timestamptz)`,
+        ),
       )
 
     return {
@@ -146,17 +137,13 @@ export class DrizzleBookingRepository implements BookingRepository {
 
     const query = this.db.select().from(bookings)
 
-    const rows =
-      conditions.length > 0 ? await query.where(and(...conditions)) : await query
+    const rows = conditions.length > 0 ? await query.where(and(...conditions)) : await query
 
     return rows as Booking[]
   }
 
   async findById(id: string): Promise<Booking | undefined> {
-    const [row] = await this.db
-      .select()
-      .from(bookings)
-      .where(eq(bookings.id, id))
+    const [row] = await this.db.select().from(bookings).where(eq(bookings.id, id))
 
     return (row as Booking) ?? undefined
   }

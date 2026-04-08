@@ -1,11 +1,9 @@
-import { describe, expect, test } from 'vitest'
 import { getErrorMessage, isNotFoundError } from '@/lib/error-helpers'
+import { describe, expect, test } from 'vitest'
 
 describe('getErrorMessage', () => {
   test('extracts message from Error instance', () => {
-    expect(getErrorMessage(new Error('Something failed'))).toBe(
-      'Something failed',
-    )
+    expect(getErrorMessage(new Error('Something failed'))).toBe('Something failed')
   })
 
   test('returns string errors as-is', () => {

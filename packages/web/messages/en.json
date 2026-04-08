@@ -50,7 +50,9 @@
     "customers": "Customers",
     "fleet": "Fleet",
     "menu": "Menu",
-    "close": "Close menu"
+    "close": "Close menu",
+    "switchToRenter": "Switch to renter view",
+    "switchToBusiness": "Switch to business view"
   },
   "vehicles": {
     "title": "Browse vehicles",

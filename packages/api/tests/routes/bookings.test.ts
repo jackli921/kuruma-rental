@@ -1,7 +1,7 @@
-import { describe, expect, it, beforeEach } from 'vitest'
 import { Hono } from 'hono'
-import { createBookingRoutes } from '../../src/routes/bookings'
+import { beforeEach, describe, expect, it } from 'vitest'
 import { InMemoryBookingRepository } from '../../src/repositories/in-memory'
+import { createBookingRoutes } from '../../src/routes/bookings'
 
 let app: Hono
 
@@ -112,9 +112,7 @@ describe('Booking Routes', () => {
       expect(body.data.source).toBe('DIRECT')
       expect(body.data.externalId).toBeNull()
       expect(body.data.notes).toBeNull()
-      expect(body.data.id).toMatch(
-        /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/,
-      )
+      expect(body.data.id).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/)
       expect(body.data.createdAt).toBeDefined()
       expect(body.data.updatedAt).toBeDefined()
     })
