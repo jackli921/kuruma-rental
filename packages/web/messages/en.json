@@ -96,6 +96,36 @@
       "empty": "No messages yet"
     }
   },
+  "bookings": {
+    "new": {
+      "title": "Book a vehicle",
+      "vehicleNotFound": "Vehicle not found.",
+      "pickupDate": "Pickup date and time",
+      "returnDate": "Return date and time",
+      "checkAvailability": "Check availability",
+      "available": "Available for selected dates",
+      "notAvailable": "Not available for selected dates",
+      "selectDates": "Select dates to check availability",
+      "confirmBooking": "Confirm booking",
+      "submitting": "Booking...",
+      "vehicleInfo": "Vehicle details",
+      "seats": "{count} seats",
+      "auto": "Auto",
+      "manual": "Manual"
+    },
+    "confirmation": {
+      "title": "Booking confirmed",
+      "subtitle": "Your reservation has been created successfully.",
+      "bookingId": "Booking ID",
+      "vehicle": "Vehicle",
+      "pickupDate": "Pickup",
+      "returnDate": "Return",
+      "status": "Status",
+      "confirmed": "Confirmed",
+      "viewBookings": "View my bookings",
+      "backToVehicles": "Browse more vehicles"
+    }
+  },
   "landing": {
     "hero": {
       "title": "Explore Japan at your own pace",
