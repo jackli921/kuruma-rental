@@ -1,7 +1,12 @@
-import createMiddleware from 'next-intl/middleware'
+import createIntlMiddleware from 'next-intl/middleware'
+import { auth } from '@/auth'
 import { routing } from './i18n/routing'
 
-export default createMiddleware(routing)
+const intlMiddleware = createIntlMiddleware(routing)
+
+export default auth((req) => {
+  return intlMiddleware(req)
+})
 
 export const config = {
   matcher: ['/', '/(en|ja|zh)/:path*'],
