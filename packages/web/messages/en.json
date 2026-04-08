@@ -96,6 +96,38 @@
       "empty": "No messages yet"
     }
   },
+  "business": {
+    "dashboard": {
+      "title": "Dashboard",
+      "subtitle": "Overview of your rental business"
+    },
+    "stats": {
+      "totalBookings": "Total Bookings",
+      "activeVehicles": "Active Vehicles",
+      "totalCustomers": "Total Customers",
+      "unreadMessages": "Unread Messages"
+    },
+    "bookings": {
+      "title": "Bookings",
+      "subtitle": "Manage reservations and scheduling",
+      "empty": "No bookings yet"
+    },
+    "vehicles": {
+      "title": "Fleet",
+      "subtitle": "Manage your vehicles",
+      "empty": "No vehicles added yet"
+    },
+    "customers": {
+      "title": "Customers",
+      "subtitle": "View and manage your customers",
+      "empty": "No customers yet"
+    },
+    "messages": {
+      "title": "Messages",
+      "subtitle": "Customer conversations",
+      "empty": "No messages yet"
+    }
+  },
   "landing": {
     "hero": {
       "title": "Explore Japan at your own pace",
