@@ -1,54 +1,15 @@
 import { describe, expect, it, beforeEach } from 'vitest'
-import { setupDbMocks, resetAllTables, seedTable } from '../helpers/mock-db'
+import { setupDbMocks, resetAllTables } from '../helpers/mock-db'
 
 // Must call setupDbMocks before importing app (which imports routes)
 setupDbMocks()
 
 import app from '../../src/index'
-import { bookings as bookingsTable, vehicles as vehiclesTable, users as usersTable } from '@kuruma/shared/db/schema'
 
 function futureDate(hoursFromNow: number): string {
   const d = new Date()
   d.setHours(d.getHours() + hoursFromNow)
   return d.toISOString()
-}
-
-function seedUser(id = 'user1') {
-  seedTable(usersTable, [
-    {
-      id,
-      name: 'Test User',
-      email: `${id}@test.com`,
-      emailVerified: null,
-      image: null,
-      role: 'RENTER',
-      language: 'en',
-      country: null,
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-    },
-  ])
-}
-
-function seedVehicle(id = 'v1') {
-  seedTable(vehiclesTable, [
-    {
-      id,
-      name: 'Toyota Corolla',
-      description: null,
-      photos: [],
-      seats: 5,
-      transmission: 'AUTO',
-      fuelType: null,
-      status: 'AVAILABLE',
-      bufferMinutes: 60,
-      minRentalHours: null,
-      maxRentalHours: null,
-      advanceBookingHours: null,
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-    },
-  ])
 }
 
 function validBookingInput() {
