@@ -5,14 +5,14 @@ import NextAuth from 'next-auth'
 import type { NextAuthResult } from 'next-auth'
 import authConfig from './auth.config'
 
-// Lazy initialization: NextAuth + DrizzleAdapter must be created during
-// request handling on CF Workers, because getDb() needs getCloudflareContext()
-// which is only available at request time, not at module load time.
-let _authResult: NextAuthResult | undefined
+// Lazy singleton: NextAuth is initialized on first use, not at module scope.
+// CF Workers require this because getDb() needs getCloudflareContext()
+// which is only available during request handling.
+let _auth: NextAuthResult | undefined
 
-function getAuth(): NextAuthResult {
-  if (!_authResult) {
-    _authResult = NextAuth({
+function getAuthResult(): NextAuthResult {
+  if (!_auth) {
+    _auth = NextAuth({
       adapter: DrizzleAdapter(getDb(), {
         usersTable: users,
         accountsTable: accounts,
@@ -39,23 +39,24 @@ function getAuth(): NextAuthResult {
       ...authConfig,
     })
   }
-  return _authResult
+  return _auth
 }
 
-export const handlers = new Proxy({} as NextAuthResult['handlers'], {
-  get(_, prop) {
-    return Reflect.get(getAuth().handlers, prop)
-  },
-})
+export const handlers = {
+  GET: (...args: Parameters<NextAuthResult['handlers']['GET']>) =>
+    getAuthResult().handlers.GET(...args),
+  POST: (...args: Parameters<NextAuthResult['handlers']['POST']>) =>
+    getAuthResult().handlers.POST(...args),
+}
 
 export function auth(...args: Parameters<NextAuthResult['auth']>) {
-  return getAuth().auth(...args)
+  return getAuthResult().auth(...args)
 }
 
 export function signIn(...args: Parameters<NextAuthResult['signIn']>) {
-  return getAuth().signIn(...args)
+  return getAuthResult().signIn(...args)
 }
 
 export function signOut(...args: Parameters<NextAuthResult['signOut']>) {
-  return getAuth().signOut(...args)
+  return getAuthResult().signOut(...args)
 }
