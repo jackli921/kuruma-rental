@@ -58,7 +58,11 @@
     "seats": "{count}座",
     "auto": "自动挡",
     "manual": "手动挡",
-    "empty": "目前没有可用车辆。"
+    "empty": "目前没有可用车辆。",
+    "filters": {
+      "from": "从",
+      "to": "到"
+    }
   },
   "business": {
     "dashboard": {
@@ -101,6 +105,8 @@
         "locationValue": "大阪",
         "dates": "日期",
         "datesPlaceholder": "添加日期",
+        "pickupDate": "取车日期",
+        "returnDate": "还车日期",
         "button": "搜索"
       }
     },

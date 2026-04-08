@@ -58,7 +58,11 @@
     "seats": "{count}席",
     "auto": "オートマ",
     "manual": "マニュアル",
-    "empty": "現在利用可能な車両はありません。"
+    "empty": "現在利用可能な車両はありません。",
+    "filters": {
+      "from": "開始日",
+      "to": "終了日"
+    }
   },
   "business": {
     "dashboard": {
@@ -101,6 +105,8 @@
         "locationValue": "大阪",
         "dates": "日程",
         "datesPlaceholder": "日程を追加",
+        "pickupDate": "乗車日",
+        "returnDate": "返却日",
         "button": "検索"
       }
     },

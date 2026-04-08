@@ -58,7 +58,11 @@
     "seats": "{count} seats",
     "auto": "Auto",
     "manual": "Manual",
-    "empty": "No vehicles available right now."
+    "empty": "No vehicles available right now.",
+    "filters": {
+      "from": "From",
+      "to": "To"
+    }
   },
   "business": {
     "dashboard": {
@@ -101,6 +105,8 @@
         "locationValue": "Osaka, Japan",
         "dates": "Dates",
         "datesPlaceholder": "Add dates",
+        "pickupDate": "Pickup date",
+        "returnDate": "Return date",
         "button": "Search"
       }
     },
