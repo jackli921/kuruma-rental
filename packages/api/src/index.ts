@@ -1,16 +1,50 @@
 import { Hono } from 'hono'
-import availability from './routes/availability'
-import bookings from './routes/bookings'
+import { getDb } from '@kuruma/shared/db'
 import health from './routes/health'
-import vehicles from './routes/vehicles'
+import { createVehicleRoutes } from './routes/vehicles'
+import { createBookingRoutes } from './routes/bookings'
+import { createAvailabilityRoutes } from './routes/availability'
+import {
+  InMemoryVehicleRepository,
+  InMemoryBookingRepository,
+  InMemoryAvailabilityRepository,
+} from './repositories/in-memory'
+import {
+  DrizzleVehicleRepository,
+  DrizzleBookingRepository,
+  DrizzleAvailabilityRepository,
+} from './repositories/drizzle'
+import type { VehicleRepository, BookingRepository, AvailabilityRepository } from './repositories/types'
 
-const app = new Hono()
+export function createApp(overrides?: {
+  vehicleRepo: VehicleRepository
+  bookingRepo: BookingRepository
+  availabilityRepo: AvailabilityRepository
+}) {
+  let vehicleRepo: VehicleRepository
+  let bookingRepo: BookingRepository
+  let availabilityRepo: AvailabilityRepository
 
-app.route('/', health)
-app.route('/', vehicles)
-app.route('/', bookings)
-app.route('/', availability)
+  if (overrides) {
+    ({ vehicleRepo, bookingRepo, availabilityRepo } = overrides)
+  } else if (process.env.DATABASE_URL) {
+    const db = getDb()
+    vehicleRepo = new DrizzleVehicleRepository(db)
+    bookingRepo = new DrizzleBookingRepository(db)
+    availabilityRepo = new DrizzleAvailabilityRepository(db)
+  } else {
+    vehicleRepo = new InMemoryVehicleRepository()
+    bookingRepo = new InMemoryBookingRepository()
+    availabilityRepo = new InMemoryAvailabilityRepository(vehicleRepo as InMemoryVehicleRepository, bookingRepo as InMemoryBookingRepository)
+  }
 
-export type AppType = typeof app
+  const app = new Hono()
+  app.route('/', health)
+  app.route('/', createVehicleRoutes(vehicleRepo))
+  app.route('/', createBookingRoutes(bookingRepo))
+  app.route('/', createAvailabilityRoutes(availabilityRepo))
 
-export default app
+  return app
+}
+
+export default createApp()
