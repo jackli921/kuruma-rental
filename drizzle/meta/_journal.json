@@ -29,6 +29,13 @@
       "when": 1775615290490,
       "tag": "0003_curved_shard",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1775617911064,
+      "tag": "0004_nifty_night_thrasher",
+      "breakpoints": true
     }
   ]
 }

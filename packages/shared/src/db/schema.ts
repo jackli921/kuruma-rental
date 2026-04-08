@@ -56,6 +56,7 @@ export const vehicles = pgTable('vehicles', {
     .$defaultFn(() => crypto.randomUUID()),
   name: text('name').notNull(),
   description: text('description'),
+  photos: text('photos').array().notNull().default([]),
   seats: integer('seats').notNull(),
   transmission: transmissionEnum('transmission').notNull(),
   fuelType: text('fuelType'),

@@ -3,6 +3,7 @@ import { z } from 'zod'
 export const createVehicleSchema = z.object({
   name: z.string().trim().min(1, 'Name is required'),
   description: z.string().optional(),
+  photos: z.array(z.string().url()).default([]),
   seats: z.number().int().min(1, 'Must have at least 1 seat').max(50),
   transmission: z.enum(['AUTO', 'MANUAL']),
   fuelType: z.string().optional(),
