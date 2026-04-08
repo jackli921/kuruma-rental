@@ -29,4 +29,7 @@ This is a Bun workspace monorepo with three packages:
 | Dev server (API) | `bun run dev:api` |
 | Lint | `bun run lint` |
 | Format | `bun run format` |
-| DB migrations | `bun run db:generate && bun run db:migrate` |
+| DB generate migration | `bun run db:generate` |
+| DB apply migrations | `bun run db:migrate` |
+| DB seed | `bun run db:seed` |
+| DB browser | `bun run db:studio` |
