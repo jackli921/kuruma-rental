@@ -33,6 +33,46 @@
     "vehicles": "车辆",
     "bookings": "预订",
     "messages": "消息",
-    "dashboard": "仪表盘"
+    "dashboard": "仪表盘",
+    "customers": "客户",
+    "fleet": "车队管理",
+    "menu": "菜单",
+    "close": "关闭菜单"
+  },
+  "landing": {
+    "hero": {
+      "title": "按自己的节奏探索日本",
+      "subtitle": "在大阪租车，自由发现日本。即时预订，灵活时间，多语言支持。",
+      "cta": "浏览车辆",
+      "secondaryCta": "了解更多"
+    },
+    "features": {
+      "heading": "为什么选择我们",
+      "instantBooking": {
+        "title": "即时预订",
+        "description": "无需等待审批。选择日期，挑选车辆，立即确认预订。"
+      },
+      "flexibleHours": {
+        "title": "灵活时间",
+        "description": "按小时或按周租赁。我们的排程适应您的旅行计划，而非相反。"
+      },
+      "multilingualSupport": {
+        "title": "多语言支持",
+        "description": "支持英语、日语和中文浏览。用您的语言联系我们的团队。"
+      },
+      "localFleet": {
+        "title": "精选车队",
+        "description": "40多辆保养良好的车辆，基地位于大阪。从紧凑型轻自动车到宽敞的家用面包车。"
+      }
+    },
+    "cta": {
+      "heading": "准备上路了吗？",
+      "description": "浏览可用车辆，几分钟内即可预订。",
+      "button": "找到您的车"
+    },
+    "footer": {
+      "copyright": "库鲁马租车 版权所有。",
+      "tagline": "日本大阪租车服务"
+    }
   }
 }

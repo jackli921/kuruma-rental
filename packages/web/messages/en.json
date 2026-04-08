@@ -33,6 +33,46 @@
     "vehicles": "Vehicles",
     "bookings": "Bookings",
     "messages": "Messages",
-    "dashboard": "Dashboard"
+    "dashboard": "Dashboard",
+    "customers": "Customers",
+    "fleet": "Fleet",
+    "menu": "Menu",
+    "close": "Close menu"
+  },
+  "landing": {
+    "hero": {
+      "title": "Explore Japan at your own pace",
+      "subtitle": "Rent a car in Osaka and discover Japan freely. Instant booking, flexible hours, multilingual support.",
+      "cta": "Browse vehicles",
+      "secondaryCta": "Learn more"
+    },
+    "features": {
+      "heading": "Why rent with us",
+      "instantBooking": {
+        "title": "Instant booking",
+        "description": "No waiting for approval. Pick your dates, choose your car, and you're confirmed immediately."
+      },
+      "flexibleHours": {
+        "title": "Flexible hours",
+        "description": "Rent by the hour or the week. Our scheduling adapts to your travel plans, not the other way around."
+      },
+      "multilingualSupport": {
+        "title": "Multilingual support",
+        "description": "Browse in English, Japanese, or Chinese. Message our team in your language -- we'll understand."
+      },
+      "localFleet": {
+        "title": "Curated fleet",
+        "description": "40+ well-maintained vehicles based in Osaka. From compact kei cars to spacious family vans."
+      }
+    },
+    "cta": {
+      "heading": "Ready to hit the road?",
+      "description": "Browse available vehicles and book in minutes.",
+      "button": "Find your car"
+    },
+    "footer": {
+      "copyright": "Kuruma Rental. All rights reserved.",
+      "tagline": "Car rental in Osaka, Japan"
+    }
   }
 }

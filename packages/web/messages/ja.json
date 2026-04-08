@@ -33,6 +33,46 @@
     "vehicles": "車両",
     "bookings": "予約",
     "messages": "メッセージ",
-    "dashboard": "ダッシュボード"
+    "dashboard": "ダッシュボード",
+    "customers": "お客様",
+    "fleet": "車両管理",
+    "menu": "メニュー",
+    "close": "メニューを閉じる"
+  },
+  "landing": {
+    "hero": {
+      "title": "自分のペースで日本を探索",
+      "subtitle": "大阪でレンタカーを借りて、自由に日本を発見しましょう。即時予約、柔軟な時間設定、多言語対応。",
+      "cta": "車両を見る",
+      "secondaryCta": "詳しく見る"
+    },
+    "features": {
+      "heading": "選ばれる理由",
+      "instantBooking": {
+        "title": "即時予約",
+        "description": "承認待ちは不要。日程を選んで車を選べば、すぐに予約確定です。"
+      },
+      "flexibleHours": {
+        "title": "柔軟な時間設定",
+        "description": "時間単位でも週単位でもレンタル可能。あなたの旅行プランに合わせたスケジュール。"
+      },
+      "multilingualSupport": {
+        "title": "多言語対応",
+        "description": "英語、日本語、中国語で閲覧可能。お好きな言語でチームにメッセージを送れます。"
+      },
+      "localFleet": {
+        "title": "厳選された車両",
+        "description": "大阪を拠点に40台以上の整備された車両。コンパクトな軽自動車から広々としたファミリーバンまで。"
+      }
+    },
+    "cta": {
+      "heading": "ドライブに出かけませんか？",
+      "description": "利用可能な車両を閲覧して、数分で予約できます。",
+      "button": "車を見つける"
+    },
+    "footer": {
+      "copyright": "クルマレンタル 全著作権所有。",
+      "tagline": "大阪のレンタカーサービス"
+    }
   }
 }
