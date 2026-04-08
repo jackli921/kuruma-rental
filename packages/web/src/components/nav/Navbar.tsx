@@ -25,10 +25,10 @@ export async function Navbar() {
 
   const businessItems = [
     { href: '/dashboard' as const, label: t('dashboard') },
-    { href: '/bookings' as const, label: t('bookings') },
-    { href: '/vehicles' as const, label: t('fleet') },
-    { href: '/customers' as const, label: t('customers') },
-    { href: '/messages' as const, label: t('messages') },
+    { href: '/manage/bookings' as const, label: t('bookings') },
+    { href: '/manage/vehicles' as const, label: t('fleet') },
+    { href: '/manage/customers' as const, label: t('customers') },
+    { href: '/manage/messages' as const, label: t('messages') },
   ]
 
   const navItems = isBusiness ? businessItems : [...publicItems, ...(session ? renterItems : [])]
