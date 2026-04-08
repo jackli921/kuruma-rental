@@ -147,14 +147,26 @@ kuruma-rental/
 ## Current State & Next Steps
 
 ### Branch status
-- `main` — flat Next.js app with Supabase Auth (working)
-- `refactor/authjs-neon` — Auth.js + Neon migration (in progress)
+- `main` — flat Next.js app with Auth.js + Neon (working, Google OAuth verified)
+
+### What's done (as of 2026-04-07)
+- [x] 0a. Auth.js + Neon migration (merged to main, OAuth working)
+- [x] CI/CD — GitHub Actions running test + build on push/PR
+- [x] Drizzle schema with Auth.js tables (users, accounts, sessions, verification_tokens)
+- [x] next-intl configured (EN/JA/ZH)
+- [x] vitest configured with smoke + validation + auth tests (13 passing)
+- [x] Cloudflare Workers target configured (@opennextjs/cloudflare)
+
+### Remaining GitHub issues
+- Slice 2 (email/password login) — deferred, OAuth-first
+- Slice 4 (role-based routing + landing page) — blocked by monorepo split decision
+- Slice 5 (deploy to Cloudflare) — blocked by monorepo split
 
 ### Recommended execution order
 ```
 Phase 0: Foundation
-  0a. Finish Auth.js + Neon migration              ← current branch
-  0b. Monorepo split (Bun workspace)
+  0a. Finish Auth.js + Neon migration              ✅ DONE
+  0b. Monorepo split (Bun workspace)               ← NEXT
   0c. Hono API skeleton + hono/client in web
   0d. Biome setup
 
