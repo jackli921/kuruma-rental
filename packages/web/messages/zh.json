@@ -58,7 +58,21 @@
     "seats": "{count}座",
     "auto": "自动挡",
     "manual": "手动挡",
-    "empty": "目前没有可用车辆。"
+    "empty": "目前没有可用车辆。",
+    "detail": {
+      "specs": "规格参数",
+      "seats": "{count}座",
+      "transmission": "变速箱",
+      "fuelType": "燃料类型",
+      "auto": "自动挡",
+      "manual": "手动挡",
+      "bookCta": "预订此车",
+      "backToList": "返回车辆列表",
+      "photos": "照片",
+      "description": "关于此车",
+      "notFound": "车辆未找到",
+      "notFoundDescription": "您查找的车辆不存在或已被删除。"
+    }
   },
   "business": {
     "dashboard": {
