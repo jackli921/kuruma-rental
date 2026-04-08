@@ -35,7 +35,7 @@ export default async function LocaleLayout({
   return (
     <div
       lang={locale}
-      className={`${geistSans.variable} ${geistMono.variable} h-full antialiased font-sans`}
+      className={`${geistSans.variable} ${geistMono.variable} min-h-dvh flex flex-col antialiased font-sans`}
     >
       <NextIntlClientProvider messages={messages}>
         <Providers>

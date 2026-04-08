@@ -128,3 +128,8 @@
     @apply font-sans;
   }
 }
+
+/* Hide duplicate business nav links in Navbar when sidebar is present */
+:root:has([data-business-sidebar]) [data-business-nav] {
+  display: none;
+}

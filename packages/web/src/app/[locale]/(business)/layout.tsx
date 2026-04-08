@@ -1,4 +1,5 @@
 import { auth } from '@/auth'
+import { BusinessSidebar } from '@/components/nav/BusinessSidebar'
 import { routing } from '@/i18n/routing'
 import { redirect } from 'next/navigation'
 
@@ -25,5 +26,10 @@ export default async function BusinessLayout({
     redirect(`/${safeLocale}`)
   }
 
-  return <>{children}</>
+  return (
+    <div className="flex flex-1">
+      <BusinessSidebar />
+      <main className="flex-1 min-w-0">{children}</main>
+    </div>
+  )
 }

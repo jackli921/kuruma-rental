@@ -43,8 +43,11 @@ export async function Navbar() {
             <span className="hidden sm:inline">Kuruma</span>
           </Link>
 
-          {/* Desktop nav */}
-          <nav className="hidden md:flex items-center gap-1">
+          {/* Desktop nav -- hidden for business users when sidebar is present (CSS :has() rule) */}
+          <nav
+            className="hidden md:flex items-center gap-1"
+            {...(isBusiness && { 'data-business-nav': '' })}
+          >
             {navItems.map((item) => (
               <Link
                 key={item.href}

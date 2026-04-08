@@ -60,6 +60,38 @@
     "manual": "手动挡",
     "empty": "目前没有可用车辆。"
   },
+  "business": {
+    "dashboard": {
+      "title": "仪表盘",
+      "subtitle": "租车业务概览"
+    },
+    "stats": {
+      "totalBookings": "总预订数",
+      "activeVehicles": "运营中车辆",
+      "totalCustomers": "总客户数",
+      "unreadMessages": "未读消息"
+    },
+    "bookings": {
+      "title": "预订管理",
+      "subtitle": "管理预订和排程",
+      "empty": "暂无预订"
+    },
+    "vehicles": {
+      "title": "车队管理",
+      "subtitle": "管理您的车辆",
+      "empty": "尚未添加车辆"
+    },
+    "customers": {
+      "title": "客户",
+      "subtitle": "查看和管理客户",
+      "empty": "暂无客户"
+    },
+    "messages": {
+      "title": "消息",
+      "subtitle": "客户对话",
+      "empty": "暂无消息"
+    }
+  },
   "landing": {
     "hero": {
       "title": "按自己的节奏探索日本",
