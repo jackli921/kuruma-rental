@@ -1,3 +1,4 @@
+import '@/app/globals.css'
 import { Navbar } from '@/components/nav/Navbar'
 import { Providers } from '@/components/providers'
 import { routing } from '@/i18n/routing'
@@ -32,18 +33,16 @@ export default async function LocaleLayout({
   const messages = await getMessages()
 
   return (
-    <html
+    <div
       lang={locale}
-      className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
+      className={`${geistSans.variable} ${geistMono.variable} h-full antialiased font-sans`}
     >
-      <body className="min-h-full flex flex-col">
-        <NextIntlClientProvider messages={messages}>
-          <Providers>
-            <Navbar />
-            {children}
-          </Providers>
-        </NextIntlClientProvider>
-      </body>
-    </html>
+      <NextIntlClientProvider messages={messages}>
+        <Providers>
+          <Navbar />
+          {children}
+        </Providers>
+      </NextIntlClientProvider>
+    </div>
   )
 }
