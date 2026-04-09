@@ -7,7 +7,8 @@
     ".": "./src/index.ts",
     "./db": "./src/db/index.ts",
     "./db/schema": "./src/db/schema.ts",
-    "./validators/auth": "./src/validators/auth.ts"
+    "./validators/auth": "./src/validators/auth.ts",
+    "./types/stats": "./src/types/stats.ts"
   },
   "scripts": {
     "test": "vitest run",
