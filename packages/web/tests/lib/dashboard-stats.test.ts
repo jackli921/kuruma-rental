@@ -1,14 +1,38 @@
-import { afterEach, describe, expect, test, vi } from 'vitest'
+import { afterEach, beforeAll, describe, expect, test, vi } from 'vitest'
 import { fetchDashboardStats } from '@/lib/dashboard-stats'
 
 const mockFetch = vi.fn()
 vi.stubGlobal('fetch', mockFetch)
+
+beforeAll(() => {
+  process.env.STATS_API_KEY = 'test-key'
+})
 
 afterEach(() => {
   mockFetch.mockReset()
 })
 
 describe('fetchDashboardStats', () => {
+  test('sends X-API-Key header', async () => {
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      json: () =>
+        Promise.resolve({
+          success: true,
+          data: { totalBookings: 0, activeVehicles: 0, totalCustomers: 0, unreadMessages: 0 },
+        }),
+    })
+
+    await fetchDashboardStats()
+
+    expect(mockFetch).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.objectContaining({
+        headers: { 'X-API-Key': 'test-key' },
+      }),
+    )
+  })
+
   test('returns parsed stats on success', async () => {
     mockFetch.mockResolvedValueOnce({
       ok: true,

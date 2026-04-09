@@ -1,15 +1,15 @@
+import type { DashboardStats } from '@kuruma/shared/types/stats'
 import { getApiBaseUrl } from './api-client'
 
-export interface DashboardStats {
-  totalBookings: number
-  activeVehicles: number
-  totalCustomers: number
-  unreadMessages: number
-}
+export type { DashboardStats } from '@kuruma/shared/types/stats'
 
 export async function fetchDashboardStats(): Promise<DashboardStats | null> {
   try {
-    const res = await fetch(`${getApiBaseUrl()}/stats`)
+    const res = await fetch(`${getApiBaseUrl()}/stats`, {
+      headers: {
+        'X-API-Key': process.env.STATS_API_KEY ?? '',
+      },
+    })
     if (!res.ok) return null
 
     const body = await res.json()

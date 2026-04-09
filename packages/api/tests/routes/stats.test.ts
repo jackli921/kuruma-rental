@@ -1,8 +1,13 @@
-import { describe, expect, it } from 'vitest'
+import { beforeAll, describe, expect, it } from 'vitest'
 import { createApp } from '../../src/index'
-import { InMemoryBookingRepository, InMemoryVehicleRepository } from '../../src/repositories/in-memory'
-import { InMemoryStatsRepository } from '../../src/repositories/in-memory'
-import { InMemoryAvailabilityRepository } from '../../src/repositories/in-memory'
+import {
+  InMemoryAvailabilityRepository,
+  InMemoryBookingRepository,
+  InMemoryStatsRepository,
+  InMemoryVehicleRepository,
+} from '../../src/repositories/in-memory'
+
+const TEST_API_KEY = 'test-stats-key'
 
 function createTestApp() {
   const vehicleRepo = new InMemoryVehicleRepository()
@@ -22,10 +27,34 @@ function createTestApp() {
   }
 }
 
+beforeAll(() => {
+  process.env.STATS_API_KEY = TEST_API_KEY
+})
+
 describe('GET /stats', () => {
-  it('returns 200 with all zeros for empty stores', async () => {
+  it('returns 401 without API key', async () => {
     const { app } = createTestApp()
     const res = await app.request('/stats')
+
+    expect(res.status).toBe(401)
+    const body = await res.json()
+    expect(body).toEqual({ success: false, error: 'Unauthorized' })
+  })
+
+  it('returns 401 with wrong API key', async () => {
+    const { app } = createTestApp()
+    const res = await app.request('/stats', {
+      headers: { 'X-API-Key': 'wrong-key' },
+    })
+
+    expect(res.status).toBe(401)
+  })
+
+  it('returns 200 with all zeros for empty stores', async () => {
+    const { app } = createTestApp()
+    const res = await app.request('/stats', {
+      headers: { 'X-API-Key': TEST_API_KEY },
+    })
 
     expect(res.status).toBe(200)
 
@@ -44,7 +73,7 @@ describe('GET /stats', () => {
   it('returns correct counts after creating vehicles and bookings', async () => {
     const { app } = createTestApp()
 
-    // Create 3 vehicles (2 AVAILABLE, 1 MAINTENANCE)
+    // Create 3 vehicles (2 AVAILABLE, 1 will be soft-deleted)
     await app.request('/vehicles', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -79,7 +108,6 @@ describe('GET /stats', () => {
       }),
     })
     const maintenanceBody = await maintenanceRes.json()
-    // soft-delete → RETIRED (removes from AVAILABLE count)
     await app.request(`/vehicles/${maintenanceBody.data.id}`, {
       method: 'DELETE',
     })
@@ -114,7 +142,9 @@ describe('GET /stats', () => {
       }),
     })
 
-    const res = await app.request('/stats')
+    const res = await app.request('/stats', {
+      headers: { 'X-API-Key': TEST_API_KEY },
+    })
     expect(res.status).toBe(200)
 
     const body = await res.json()
@@ -123,7 +153,7 @@ describe('GET /stats', () => {
       data: {
         totalBookings: 2,
         activeVehicles: 2,
-        totalCustomers: 0, // InMemory has no users table
+        totalCustomers: 0,
         unreadMessages: 0,
       },
     })

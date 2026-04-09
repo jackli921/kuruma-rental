@@ -1,5 +1,7 @@
 export type { Vehicle, Booking } from '../stores'
+export type { DashboardStats } from '@kuruma/shared/types/stats'
 
+import type { DashboardStats } from '@kuruma/shared/types/stats'
 import type { Booking, Vehicle } from '../stores'
 
 export interface VehicleRepository {
@@ -15,13 +17,6 @@ export interface BookingRepository {
   findById(id: string): Promise<Booking | undefined>
   create(data: Omit<Booking, 'id' | 'createdAt' | 'updatedAt'>): Promise<Booking>
   updateStatus(id: string, status: string): Promise<Booking | undefined>
-}
-
-export interface DashboardStats {
-  totalBookings: number
-  activeVehicles: number
-  totalCustomers: number
-  unreadMessages: number
 }
 
 export interface StatsRepository {

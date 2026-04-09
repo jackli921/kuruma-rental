@@ -3,6 +3,7 @@ import { Hono } from 'hono'
 import {
   DrizzleAvailabilityRepository,
   DrizzleBookingRepository,
+  DrizzleStatsRepository,
   DrizzleVehicleRepository,
 } from './repositories/drizzle'
 import {
@@ -42,7 +43,7 @@ export function createApp(overrides?: {
     vehicleRepo = new DrizzleVehicleRepository(db)
     bookingRepo = new DrizzleBookingRepository(db)
     availabilityRepo = new DrizzleAvailabilityRepository(db)
-    statsRepo = new InMemoryStatsRepository(vehicleRepo, bookingRepo)
+    statsRepo = new DrizzleStatsRepository(db)
   } else {
     vehicleRepo = new InMemoryVehicleRepository()
     bookingRepo = new InMemoryBookingRepository()
