@@ -55,7 +55,7 @@ describe('Vehicle CRUD Routes', () => {
       expect(body.data[1].name).toBe('Honda Civic')
     })
 
-    it('filters by status, defaulting to AVAILABLE', async () => {
+    it('returns all vehicles when no status filter is provided', async () => {
       await createVehicle()
       const createRes = await createVehicle({
         ...validVehicleInput(),
@@ -70,8 +70,11 @@ describe('Vehicle CRUD Routes', () => {
       const body = await res.json()
 
       expect(body.success).toBe(true)
-      expect(body.data).toHaveLength(1)
-      expect(body.data[0].name).toBe('Toyota Corolla')
+      expect(body.data).toHaveLength(2)
+      expect(body.data.map((v: { name: string }) => v.name)).toEqual([
+        'Toyota Corolla',
+        'Retired Car',
+      ])
     })
 
     it('filters by explicit status query param', async () => {

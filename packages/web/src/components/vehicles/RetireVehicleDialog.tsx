@@ -24,14 +24,18 @@ export function RetireVehicleDialog({ vehicle, onOpenChange }: RetireVehicleDial
   const t = useTranslations('business.vehicles')
   const queryClient = useQueryClient()
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [error, setError] = useState<string | null>(null)
 
   const handleRetire = async () => {
     if (!vehicle) return
     setIsSubmitting(true)
+    setError(null)
     try {
       await retireVehicle(vehicle.id)
       await queryClient.invalidateQueries({ queryKey: ['vehicles'] })
       onOpenChange(false)
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'An error occurred')
     } finally {
       setIsSubmitting(false)
     }
@@ -44,6 +48,7 @@ export function RetireVehicleDialog({ vehicle, onOpenChange }: RetireVehicleDial
           <DialogTitle>{t('retireConfirm', { name: vehicle?.name })}</DialogTitle>
           <DialogDescription>{t('retireConfirmMessage')}</DialogDescription>
         </DialogHeader>
+        {error && <p className="text-sm text-destructive px-1">{error}</p>}
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)}>
             {t('form.cancel')}

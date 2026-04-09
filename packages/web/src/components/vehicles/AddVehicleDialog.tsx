@@ -23,13 +23,17 @@ export function AddVehicleDialog({ open, onOpenChange }: AddVehicleDialogProps) 
   const t = useTranslations('business.vehicles')
   const queryClient = useQueryClient()
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [error, setError] = useState<string | null>(null)
 
   const handleSubmit = async (data: CreateVehicleInput) => {
     setIsSubmitting(true)
+    setError(null)
     try {
-      await createVehicle(data as unknown as Record<string, unknown>)
+      await createVehicle(data)
       await queryClient.invalidateQueries({ queryKey: ['vehicles'] })
       onOpenChange(false)
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'An error occurred')
     } finally {
       setIsSubmitting(false)
     }
@@ -42,6 +46,7 @@ export function AddVehicleDialog({ open, onOpenChange }: AddVehicleDialogProps) 
           <DialogTitle>{t('addVehicle')}</DialogTitle>
           <DialogDescription>{t('subtitle')}</DialogDescription>
         </DialogHeader>
+        {error && <p className="text-sm text-destructive px-1">{error}</p>}
         <VehicleForm
           onSubmit={handleSubmit}
           onCancel={() => onOpenChange(false)}

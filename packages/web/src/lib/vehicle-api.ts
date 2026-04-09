@@ -1,4 +1,5 @@
 import { getApiBaseUrl } from '@/lib/api-client'
+import type { CreateVehicleInput } from '@kuruma/shared/validators/vehicle'
 
 interface ApiResponse<T> {
   success: boolean
@@ -27,7 +28,6 @@ async function apiRequest<T>(url: string, init?: RequestInit): Promise<T> {
   const res = await fetch(url, init)
 
   if (!res.ok) {
-    if (res.status === 404) return null as T
     const body = await res.json().catch(() => ({ error: 'Unknown error' }))
     throw new Error((body as ApiResponse<never>).error ?? `HTTP ${res.status}`)
   }
@@ -44,10 +44,15 @@ export async function fetchVehicles(status?: string): Promise<VehicleData[]> {
 
 export async function fetchVehicleById(id: string): Promise<VehicleData | null> {
   const base = getApiBaseUrl()
-  return apiRequest<VehicleData | null>(`${base}/vehicles/${id}`)
+  try {
+    return await apiRequest<VehicleData>(`${base}/vehicles/${id}`)
+  } catch (e) {
+    if (e instanceof Error && e.message === 'Vehicle not found') return null
+    throw e
+  }
 }
 
-export async function createVehicle(data: Record<string, unknown>): Promise<VehicleData> {
+export async function createVehicle(data: CreateVehicleInput): Promise<VehicleData> {
   const base = getApiBaseUrl()
   return apiRequest<VehicleData>(`${base}/vehicles`, {
     method: 'POST',
@@ -56,7 +61,7 @@ export async function createVehicle(data: Record<string, unknown>): Promise<Vehi
   })
 }
 
-export async function updateVehicle(id: string, data: Record<string, unknown>): Promise<VehicleData> {
+export async function updateVehicle(id: string, data: Partial<CreateVehicleInput>): Promise<VehicleData> {
   const base = getApiBaseUrl()
   return apiRequest<VehicleData>(`${base}/vehicles/${id}`, {
     method: 'PATCH',

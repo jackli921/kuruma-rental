@@ -24,14 +24,18 @@ export function EditVehicleDialog({ vehicle, onOpenChange }: EditVehicleDialogPr
   const t = useTranslations('business.vehicles')
   const queryClient = useQueryClient()
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [error, setError] = useState<string | null>(null)
 
   const handleSubmit = async (data: CreateVehicleInput) => {
     if (!vehicle) return
     setIsSubmitting(true)
+    setError(null)
     try {
-      await updateVehicle(vehicle.id, data as unknown as Record<string, unknown>)
+      await updateVehicle(vehicle.id, data)
       await queryClient.invalidateQueries({ queryKey: ['vehicles'] })
       onOpenChange(false)
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'An error occurred')
     } finally {
       setIsSubmitting(false)
     }
@@ -44,6 +48,7 @@ export function EditVehicleDialog({ vehicle, onOpenChange }: EditVehicleDialogPr
           <DialogTitle>{t('editVehicle')}</DialogTitle>
           <DialogDescription>{vehicle?.name}</DialogDescription>
         </DialogHeader>
+        {error && <p className="text-sm text-destructive px-1">{error}</p>}
         {vehicle && (
           <VehicleForm
             key={vehicle.id}
