@@ -7,6 +7,11 @@ const nextConfig: NextConfig = {
   // TypeScript is checked locally and in CI via `tsc --noEmit`.
   // Skipping during `next build` saves ~10s on Cloudflare deploys.
   typescript: { ignoreBuildErrors: true },
+  images: {
+    remotePatterns: [
+      { protocol: 'https', hostname: 'images.unsplash.com' },
+    ],
+  },
 }
 
 export default withNextIntl(nextConfig)

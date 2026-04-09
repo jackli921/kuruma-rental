@@ -4,6 +4,7 @@ type BookingStatus = 'CONFIRMED' | 'ACTIVE' | 'COMPLETED' | 'CANCELLED'
 
 interface BookingStatusBadgeProps {
   readonly status: BookingStatus
+  readonly label?: string
 }
 
 const STATUS_CONFIG: Record<BookingStatus, { label: string; className: string }> = {
@@ -25,7 +26,7 @@ const STATUS_CONFIG: Record<BookingStatus, { label: string; className: string }>
   },
 }
 
-export function BookingStatusBadge({ status }: BookingStatusBadgeProps) {
+export function BookingStatusBadge({ status, label }: BookingStatusBadgeProps) {
   const config = STATUS_CONFIG[status]
 
   return (
@@ -35,7 +36,7 @@ export function BookingStatusBadge({ status }: BookingStatusBadgeProps) {
         config.className,
       )}
     >
-      {config.label}
+      {label ?? config.label}
     </span>
   )
 }

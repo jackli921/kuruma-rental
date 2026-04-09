@@ -39,4 +39,12 @@ describe('BookingStatusBadge', () => {
     expect(badge).toBeInTheDocument()
     expect(badge.className).toContain('red')
   })
+
+  it('renders custom label when provided', () => {
+    render(<BookingStatusBadge status="CONFIRMED" label="確定済み" />)
+
+    const badge = screen.getByText('確定済み')
+    expect(badge).toBeInTheDocument()
+    expect(badge.className).toContain('green')
+  })
 })

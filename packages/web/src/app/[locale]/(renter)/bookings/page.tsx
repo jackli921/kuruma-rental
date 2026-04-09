@@ -3,16 +3,20 @@ import { EmptyState } from '@/components/EmptyState'
 import { BookingStatusBadge } from '@/components/bookings/BookingStatusBadge'
 import { buttonVariants } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
-import { Link } from '@/i18n/routing'
+import { Link, redirect } from '@/i18n/routing'
 import { getBookingsByRenterId } from '@/lib/bookings'
+import { formatDateTime } from '@/lib/format'
 import { cn } from '@/lib/utils'
 import { Calendar, Car } from 'lucide-react'
-import { getTranslations } from 'next-intl/server'
+import { getLocale, getTranslations } from 'next-intl/server'
 import Image from 'next/image'
-import { redirect } from 'next/navigation'
 
 export default async function BookingsListPage() {
-  const [session, t] = await Promise.all([auth(), getTranslations('bookings.list')])
+  const [session, t, locale] = await Promise.all([
+    auth(),
+    getTranslations('bookings.list'),
+    getLocale(),
+  ])
 
   if (!session?.user?.id) {
     redirect('/login')
@@ -55,15 +59,18 @@ export default async function BookingsListPage() {
                     <div className="flex-1 min-w-0">
                       <div className="flex items-start justify-between gap-2">
                         <h2 className="font-medium truncate">{booking.vehicleName}</h2>
-                        <BookingStatusBadge status={booking.status} />
+                        <BookingStatusBadge
+                          status={booking.status}
+                          label={t(booking.status.toLowerCase())}
+                        />
                       </div>
 
                       <div className="mt-2 space-y-1 text-sm text-muted-foreground">
                         <p>
-                          {t('pickup')}: {booking.startAt.toLocaleDateString()}
+                          {t('pickup')}: {formatDateTime(booking.startAt, locale)}
                         </p>
                         <p>
-                          {t('return')}: {booking.endAt.toLocaleDateString()}
+                          {t('return')}: {formatDateTime(booking.endAt, locale)}
                         </p>
                       </div>
 

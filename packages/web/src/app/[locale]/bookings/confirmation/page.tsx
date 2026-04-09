@@ -2,10 +2,11 @@ import { buttonVariants } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Link } from '@/i18n/routing'
 import { getBookingById } from '@/lib/bookings'
+import { formatDateTime } from '@/lib/format'
 import { cn } from '@/lib/utils'
 import { getVehicleById } from '@/lib/vehicles'
 import { CheckCircle } from 'lucide-react'
-import { getTranslations } from 'next-intl/server'
+import { getLocale, getTranslations } from 'next-intl/server'
 import { notFound } from 'next/navigation'
 
 interface ConfirmationPageProps {
@@ -14,7 +15,10 @@ interface ConfirmationPageProps {
 
 export default async function BookingConfirmationPage({ searchParams }: ConfirmationPageProps) {
   const { bookingId, vehicleId } = await searchParams
-  const t = await getTranslations('bookings.confirmation')
+  const [t, locale] = await Promise.all([
+    getTranslations('bookings.confirmation'),
+    getLocale(),
+  ])
 
   if (!bookingId) {
     notFound()
@@ -27,8 +31,8 @@ export default async function BookingConfirmationPage({ searchParams }: Confirma
 
   const vehicle = vehicleId ? await getVehicleById(vehicleId) : null
 
-  const startDate = new Date(booking.startAt).toLocaleString()
-  const endDate = new Date(booking.endAt).toLocaleString()
+  const startDate = formatDateTime(new Date(booking.startAt), locale)
+  const endDate = formatDateTime(new Date(booking.endAt), locale)
 
   return (
     <main className="flex-1 py-10 px-4 sm:px-6 lg:px-8">
