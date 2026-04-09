@@ -31,6 +31,7 @@ Airbnb-style car rental platform for a Japan-based company (Osaka) serving inter
 | `docs/plans/2026-04-07-architecture-redesign.md` | Architecture decisions, current state, execution order |
 | `docs/plans/2026-04-07-schema-api-design.md` | Schema + API contract (architect-reviewed) |
 | `packages/web/DESIGN.md` | Web design system (colors, typography, spacing, components) |
+| `docs/plans/2026-04-09-cloudflare-deployment-lessons.md` | CF Workers deployment post-mortem (10 lessons, correct patterns) |
 
 ---
 
@@ -70,21 +71,40 @@ Airbnb-style car rental platform for a Japan-based company (Osaka) serving inter
 - Role is set in the JWT callback (`auth.ts`), defaults to `'RENTER'` if not present.
 - In middleware, `req.auth` gives the session. Cast `session.user` to access role until type augmentation is loaded.
 
-## Build without DATABASE_URL
+## Cloudflare Workers Deployment (CRITICAL -- read before touching deploy)
 
-- `getDb()` in `packages/shared/src/db/index.ts` uses a placeholder URL when `DATABASE_URL` is not set. This is safe because `postgres-js` only connects on first query, not at instantiation. The real URL is provided at runtime by Cloudflare env bindings.
-- TypeScript type-checking works without DB: `bunx tsc --noEmit`
+> Full post-mortem: `docs/plans/2026-04-09-cloudflare-deployment-lessons.md`
 
-## Cloudflare Deployment
+### Build pipeline (must pass locally before pushing)
+```bash
+cd packages/web
+bun run build          # Next.js
+bun run build:worker   # opennextjs-cloudflare → .open-next/worker.js
+npx wrangler deploy --dry-run  # Verify wrangler packaging
+```
 
+### CF dashboard config
 - **Build command**: `bun install && cd packages/web && bun run build && bun run build:worker`
 - **Deploy command**: `cd packages/web && npx wrangler deploy`
-- **Path**: `/` (root -- full monorepo must be available for workspace resolution)
-- `next build` runs first, then `opennextjs-cloudflare build` converts the output to `.open-next/worker.js` for wrangler.
-- `open-next.config.ts` MUST exist in `packages/web/` or the CLI will hang waiting for interactive input.
-- `typescript.ignoreBuildErrors: true` in `next.config.ts` -- tsc is checked locally and in CI, not during `next build` (saves ~10s, prevents CF build timeouts).
-- **Required env vars on Cloudflare**: `DATABASE_URL`, `AUTH_SECRET`, `AUTH_GOOGLE_ID`, `AUTH_GOOGLE_SECRET`
-- **Worker name mismatch warning**: The wrangler config says `kuruma-api` but CF expects `kuruma-rental`. Non-blocking, CF overrides it.
+- **Path**: `/`
+
+### Secrets (set via CLI, persist across deploys)
+```bash
+npx wrangler secret put DATABASE_URL -c packages/web/wrangler.jsonc
+npx wrangler secret put AUTH_SECRET -c packages/web/wrangler.jsonc
+npx wrangler secret put AUTH_GOOGLE_ID -c packages/web/wrangler.jsonc
+npx wrangler secret put AUTH_GOOGLE_SECRET -c packages/web/wrangler.jsonc
+```
+Do NOT rely on the CF dashboard for secrets -- they get wiped on redeploy.
+
+### Critical rules
+1. **Lazy singleton for DB + auth.** Never call `getDb()` or `NextAuth()` at module scope. Use lazy initialization on first request. Build-time static generation imports these modules but must not trigger DB connections.
+2. **Use `middleware.ts`, NOT `proxy.ts`.** Next.js 16 `proxy.ts` forces Node.js runtime, incompatible with @opennextjs/cloudflare (Edge only). The deprecation warning is cosmetic.
+3. **Middleware must use `auth.config.ts`** (providers only, no DB imports). The full `auth.ts` imports Drizzle/postgres-js which are Node.js-only and break Edge middleware.
+4. **Guard `session?.user` everywhere.** On CF Workers, `auth()` can return a session where `user` is undefined. Always use `session?.user` not just `session`.
+5. **`open-next.config.ts` must exist** or the CLI hangs waiting for interactive input.
+6. **`opennextjs-cloudflare build`** -- always include the `build` subcommand.
+7. **`typescript.ignoreBuildErrors: true`** in `next.config.ts` -- tsc runs locally/CI, not during `next build` (prevents CF build timeout).
 
 ## i18n (next-intl v4)
 
