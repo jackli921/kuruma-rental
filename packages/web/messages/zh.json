@@ -99,7 +99,44 @@
     "vehicles": {
       "title": "车队管理",
       "subtitle": "管理您的车辆",
-      "empty": "尚未添加车辆"
+      "empty": "尚未添加车辆",
+      "addVehicle": "添加车辆",
+      "editVehicle": "编辑车辆",
+      "retireVehicle": "停用车辆",
+      "retireConfirm": "确定停用{name}？",
+      "retireConfirmMessage": "此车辆将对租客隐藏。您可以稍后恢复。",
+      "noPhoto": "无照片",
+      "status": {
+        "AVAILABLE": "可用",
+        "MAINTENANCE": "维护中",
+        "RETIRED": "已停用"
+      },
+      "form": {
+        "name": "车辆名称",
+        "namePlaceholder": "例如：丰田卡罗拉 2024",
+        "description": "描述",
+        "descriptionPlaceholder": "面向租客的简要描述",
+        "seats": "座位数",
+        "transmission": "变速箱",
+        "transmissionAuto": "自动挡",
+        "transmissionManual": "手动挡",
+        "fuelType": "燃料类型",
+        "fuelTypePlaceholder": "例如：汽油、混动、电动",
+        "bufferMinutes": "缓冲时间（分钟）",
+        "photos": "照片URL",
+        "photosPlaceholder": "https://example.com/photo.jpg",
+        "addPhoto": "添加照片URL",
+        "removePhoto": "删除",
+        "save": "保存车辆",
+        "saving": "保存中...",
+        "cancel": "取消"
+      },
+      "filter": {
+        "all": "全部",
+        "available": "可用",
+        "maintenance": "维护中",
+        "retired": "已停用"
+      }
     },
     "customers": {
       "title": "客户",
@@ -140,38 +177,6 @@
       "confirmed": "已确认",
       "viewBookings": "查看我的预订",
       "backToVehicles": "浏览更多车辆"
-    }
-  },
-  "business": {
-    "dashboard": {
-      "title": "仪表盘",
-      "subtitle": "租车业务概览"
-    },
-    "stats": {
-      "totalBookings": "总预订数",
-      "activeVehicles": "运营中车辆",
-      "totalCustomers": "总客户数",
-      "unreadMessages": "未读消息"
-    },
-    "bookings": {
-      "title": "预订管理",
-      "subtitle": "管理预订和排程",
-      "empty": "暂无预订"
-    },
-    "vehicles": {
-      "title": "车队管理",
-      "subtitle": "管理您的车辆",
-      "empty": "尚未添加车辆"
-    },
-    "customers": {
-      "title": "客户",
-      "subtitle": "查看和管理客户",
-      "empty": "暂无客户"
-    },
-    "messages": {
-      "title": "消息",
-      "subtitle": "客户对话",
-      "empty": "暂无消息"
     }
   },
   "landing": {

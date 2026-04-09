@@ -99,7 +99,44 @@
     "vehicles": {
       "title": "Fleet",
       "subtitle": "Manage your vehicles",
-      "empty": "No vehicles added yet"
+      "empty": "No vehicles added yet",
+      "addVehicle": "Add vehicle",
+      "editVehicle": "Edit vehicle",
+      "retireVehicle": "Retire vehicle",
+      "retireConfirm": "Retire {name}?",
+      "retireConfirmMessage": "This will hide the vehicle from renters. You can restore it later.",
+      "noPhoto": "No photo",
+      "status": {
+        "AVAILABLE": "Available",
+        "MAINTENANCE": "Maintenance",
+        "RETIRED": "Retired"
+      },
+      "form": {
+        "name": "Vehicle name",
+        "namePlaceholder": "e.g. Toyota Corolla 2024",
+        "description": "Description",
+        "descriptionPlaceholder": "Brief description for renters",
+        "seats": "Seats",
+        "transmission": "Transmission",
+        "transmissionAuto": "Automatic",
+        "transmissionManual": "Manual",
+        "fuelType": "Fuel type",
+        "fuelTypePlaceholder": "e.g. Gasoline, Hybrid, EV",
+        "bufferMinutes": "Buffer time (minutes)",
+        "photos": "Photo URLs",
+        "photosPlaceholder": "https://example.com/photo.jpg",
+        "addPhoto": "Add photo URL",
+        "removePhoto": "Remove",
+        "save": "Save vehicle",
+        "saving": "Saving...",
+        "cancel": "Cancel"
+      },
+      "filter": {
+        "all": "All",
+        "available": "Available",
+        "maintenance": "Maintenance",
+        "retired": "Retired"
+      }
     },
     "customers": {
       "title": "Customers",
@@ -140,38 +177,6 @@
       "confirmed": "Confirmed",
       "viewBookings": "View my bookings",
       "backToVehicles": "Browse more vehicles"
-    }
-  },
-  "business": {
-    "dashboard": {
-      "title": "Dashboard",
-      "subtitle": "Overview of your rental business"
-    },
-    "stats": {
-      "totalBookings": "Total Bookings",
-      "activeVehicles": "Active Vehicles",
-      "totalCustomers": "Total Customers",
-      "unreadMessages": "Unread Messages"
-    },
-    "bookings": {
-      "title": "Bookings",
-      "subtitle": "Manage reservations and scheduling",
-      "empty": "No bookings yet"
-    },
-    "vehicles": {
-      "title": "Fleet",
-      "subtitle": "Manage your vehicles",
-      "empty": "No vehicles added yet"
-    },
-    "customers": {
-      "title": "Customers",
-      "subtitle": "View and manage your customers",
-      "empty": "No customers yet"
-    },
-    "messages": {
-      "title": "Messages",
-      "subtitle": "Customer conversations",
-      "empty": "No messages yet"
     }
   },
   "landing": {

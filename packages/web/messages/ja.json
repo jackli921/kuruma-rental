@@ -99,7 +99,44 @@
     "vehicles": {
       "title": "車両管理",
       "subtitle": "車両の管理",
-      "empty": "車両はまだ追加されていません"
+      "empty": "車両はまだ追加されていません",
+      "addVehicle": "車両を追加",
+      "editVehicle": "車両を編集",
+      "retireVehicle": "車両を廃止",
+      "retireConfirm": "{name}を廃止しますか？",
+      "retireConfirmMessage": "この車両は利用者に表示されなくなります。後で復元できます。",
+      "noPhoto": "写真なし",
+      "status": {
+        "AVAILABLE": "利用可能",
+        "MAINTENANCE": "メンテナンス中",
+        "RETIRED": "廃止"
+      },
+      "form": {
+        "name": "車両名",
+        "namePlaceholder": "例：トヨタ カローラ 2024",
+        "description": "説明",
+        "descriptionPlaceholder": "利用者向けの簡単な説明",
+        "seats": "座席数",
+        "transmission": "トランスミッション",
+        "transmissionAuto": "オートマチック",
+        "transmissionManual": "マニュアル",
+        "fuelType": "燃料タイプ",
+        "fuelTypePlaceholder": "例：ガソリン、ハイブリッド、EV",
+        "bufferMinutes": "バッファ時間（分）",
+        "photos": "写真URL",
+        "photosPlaceholder": "https://example.com/photo.jpg",
+        "addPhoto": "写真URLを追加",
+        "removePhoto": "削除",
+        "save": "車両を保存",
+        "saving": "保存中...",
+        "cancel": "キャンセル"
+      },
+      "filter": {
+        "all": "すべて",
+        "available": "利用可能",
+        "maintenance": "メンテナンス中",
+        "retired": "廃止"
+      }
     },
     "customers": {
       "title": "お客様",
@@ -140,38 +177,6 @@
       "confirmed": "確定済み",
       "viewBookings": "予約一覧を見る",
       "backToVehicles": "他の車両を見る"
-    }
-  },
-  "business": {
-    "dashboard": {
-      "title": "ダッシュボード",
-      "subtitle": "レンタル事業の概要"
-    },
-    "stats": {
-      "totalBookings": "予約総数",
-      "activeVehicles": "稼働中の車両",
-      "totalCustomers": "顧客総数",
-      "unreadMessages": "未読メッセージ"
-    },
-    "bookings": {
-      "title": "予約管理",
-      "subtitle": "予約とスケジュールの管理",
-      "empty": "予約はまだありません"
-    },
-    "vehicles": {
-      "title": "車両管理",
-      "subtitle": "車両の管理",
-      "empty": "車両はまだ追加されていません"
-    },
-    "customers": {
-      "title": "お客様",
-      "subtitle": "お客様の表示と管理",
-      "empty": "お客様はまだいません"
-    },
-    "messages": {
-      "title": "メッセージ",
-      "subtitle": "お客様との会話",
-      "empty": "メッセージはまだありません"
     }
   },
   "landing": {
