@@ -1,4 +1,5 @@
 import { DrizzleAdapter } from '@auth/drizzle-adapter'
+import { eq } from 'drizzle-orm'
 import { getDb } from '@/lib/db'
 import { accounts, users } from '@kuruma/shared/db/schema'
 import NextAuth from 'next-auth'
@@ -22,9 +23,20 @@ function getAuthResult(): NextAuthResult {
         signIn: '/en/login',
       },
       callbacks: {
-        jwt({ token, user }) {
+        async jwt({ token, user }) {
           if (user) {
             token.role = (user as { role?: string }).role ?? 'RENTER'
+          } else if (token.sub) {
+            // Re-fetch role from DB on every token refresh so role changes take effect
+            const db = getDb()
+            const [dbUser] = await db
+              .select({ role: users.role })
+              .from(users)
+              .where(eq(users.id, token.sub))
+              .limit(1)
+            if (dbUser) {
+              token.role = dbUser.role
+            }
           }
           return token
         },
