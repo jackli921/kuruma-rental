@@ -175,6 +175,18 @@ Root directory: / (full repo needed for Bun workspace resolution)
 
 ---
 
+## Google OAuth Setup for CF Workers
+
+Your Google OAuth credentials need the production callback URL:
+
+1. Go to Google Cloud Console → APIs & Services → Credentials
+2. Under **Authorized JavaScript origins**, add: `https://kuruma-rental.kanata-studio-dev.workers.dev`
+3. Under **Authorized redirect URIs**, add: `https://kuruma-rental.kanata-studio-dev.workers.dev/api/auth/callback/google`
+
+Both localhost (dev) and production URLs can coexist in the same credential.
+
+---
+
 ## Debugging on Cloudflare
 
 Cloudflare Workers logs are minimal. Auth.js swallows errors. When something breaks in production:
