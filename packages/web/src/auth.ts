@@ -1,7 +1,7 @@
-import { DrizzleAdapter } from '@auth/drizzle-adapter'
-import { eq } from 'drizzle-orm'
 import { getDb } from '@/lib/db'
+import { DrizzleAdapter } from '@auth/drizzle-adapter'
 import { accounts, users } from '@kuruma/shared/db/schema'
+import { eq } from 'drizzle-orm'
 import NextAuth from 'next-auth'
 import type { NextAuthResult } from 'next-auth'
 import authConfig from './auth.config'
@@ -14,6 +14,7 @@ let _auth: NextAuthResult | undefined
 function getAuthResult(): NextAuthResult {
   if (!_auth) {
     _auth = NextAuth({
+      ...authConfig,
       adapter: DrizzleAdapter(getDb(), {
         usersTable: users,
         accountsTable: accounts,
@@ -27,7 +28,6 @@ function getAuthResult(): NextAuthResult {
           if (user) {
             token.role = (user as { role?: string }).role ?? 'RENTER'
           } else if (token.sub) {
-            // Re-fetch role from DB on every token refresh so role changes take effect
             const db = getDb()
             const [dbUser] = await db
               .select({ role: users.role })
@@ -48,7 +48,6 @@ function getAuthResult(): NextAuthResult {
           return session
         },
       },
-      ...authConfig,
     })
   }
   return _auth
@@ -61,8 +60,11 @@ export const handlers = {
     getAuthResult().handlers.POST(...args),
 }
 
-export function auth(...args: Parameters<NextAuthResult['auth']>) {
-  return getAuthResult().auth(...args)
+export async function auth(): Promise<import('next-auth').Session | null> {
+  const result = getAuthResult()
+  // Auth.js auth() is overloaded: 0 args = get session, 1+ args = middleware.
+  // We only use the 0-arg form in server components.
+  return (result.auth as () => Promise<import('next-auth').Session | null>)()
 }
 
 export function signIn(...args: Parameters<NextAuthResult['signIn']>) {

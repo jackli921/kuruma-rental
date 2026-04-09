@@ -3,13 +3,14 @@ import { EmptyState } from '@/components/EmptyState'
 import { BookingStatusBadge } from '@/components/bookings/BookingStatusBadge'
 import { buttonVariants } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
-import { Link, redirect } from '@/i18n/routing'
+import { Link } from '@/i18n/routing'
 import { getBookingsByRenterId } from '@/lib/bookings'
 import { formatDateTime } from '@/lib/format'
 import { cn } from '@/lib/utils'
 import { Calendar, Car } from 'lucide-react'
 import { getLocale, getTranslations } from 'next-intl/server'
 import Image from 'next/image'
+import { redirect } from 'next/navigation'
 
 export default async function BookingsListPage() {
   const [session, t, locale] = await Promise.all([
@@ -19,7 +20,7 @@ export default async function BookingsListPage() {
   ])
 
   if (!session?.user?.id) {
-    redirect('/login')
+    redirect(`/${locale}/login`)
   }
 
   const bookings = await getBookingsByRenterId(session.user.id)
