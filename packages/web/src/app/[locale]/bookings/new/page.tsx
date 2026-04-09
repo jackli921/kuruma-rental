@@ -31,7 +31,7 @@ export default async function NewBookingPage({ searchParams }: NewBookingPagePro
           vehicle={{
             id: vehicle.id,
             name: vehicle.name,
-            photos: vehicle.photos,
+            photos: vehicle.photos ?? [],
             seats: vehicle.seats,
             transmission: vehicle.transmission,
             fuelType: vehicle.fuelType,

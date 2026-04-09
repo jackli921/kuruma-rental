@@ -20,7 +20,8 @@ export default async function VehicleDetailPage({ params }: VehicleDetailPagePro
   }
 
   const transmissionLabel = vehicle.transmission === 'AUTO' ? t('auto') : t('manual')
-  const primaryPhoto = vehicle.photos[0]
+  const photos = vehicle.photos ?? []
+  const primaryPhoto = photos[0]
 
   return (
     <main className="flex-1 py-10 px-4 sm:px-6 lg:px-8">
@@ -50,9 +51,9 @@ export default async function VehicleDetailPage({ params }: VehicleDetailPagePro
                     className="w-full h-full object-cover"
                   />
                 </div>
-                {vehicle.photos.length > 1 && (
+                {photos.length > 1 && (
                   <div className="grid grid-cols-3 gap-3">
-                    {vehicle.photos.slice(1, 4).map((photo) => (
+                    {photos.slice(1, 4).map((photo) => (
                       <div key={photo} className="aspect-[4/3] overflow-hidden rounded-lg bg-muted">
                         <img
                           src={photo}
