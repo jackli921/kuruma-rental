@@ -68,7 +68,7 @@ Airbnb-style car rental platform for a Japan-based company (Osaka) serving inter
 ## Auth.js v5
 
 - Session type doesn't include `role` by default. Type augmentation lives in `packages/web/src/types/next-auth.d.ts`.
-- Role is set in the JWT callback (`auth.ts`), defaults to `'RENTER'` if not present.
+- **JWT callback `user` is only present on first sign-in.** On subsequent token refreshes, `user` is `undefined`. Any DB field stored in the JWT (like `role`) must be re-fetched from DB in the `else` branch, or changes will never take effect. See `docs/2026-04-08-lessons-learned.md` #1.
 - In middleware, `req.auth` gives the session. Cast `session.user` to access role until type augmentation is loaded.
 
 ## Cloudflare Workers Deployment (CRITICAL -- read before touching deploy)
@@ -110,16 +110,35 @@ Do NOT rely on the CF dashboard for secrets -- they get wiped on redeploy.
 
 - Navigation helpers (`Link`, `useRouter`, `usePathname`, `redirect`) come from `createNavigation(routing)` in `src/i18n/routing.ts`. Import from `@/i18n/routing`, not from `next/link` or `next/navigation`.
 - Route groups `(renter)` and `(business)` don't create URL segments. Business routes use `/manage/` prefix (`/manage/bookings`, `/manage/vehicles`, `/manage/customers`, `/manage/messages`) to avoid collision with renter routes (`/bookings`, `/messages`). `/dashboard` has no prefix (it's unique to business).
+- **Adding new top-level i18n namespaces requires a dev server restart.** Turbopack caches message JSON via dynamic import. Run `rm -rf packages/web/.next && bun run dev` after adding new namespaces. Editing existing keys within an existing namespace usually hot-reloads fine.
+- **After merging branches that modify i18n files, verify all keys exist.** Merge conflict resolution can silently drop keys. Always re-read the merged JSON and check for missing namespaces.
+
+## Dev Server Crash Loops
+
+- If the dev server shows repeated `next dev -p 3001` restarts and `Failed to fetch RSC payload` errors, check for zombie processes: `lsof -ti:3001 | xargs kill -9`. Multiple `next dev` processes fighting over the same port cause this.
+- When CSS or i18n changes aren't reflected, clear the Turbopack cache: `rm -rf packages/web/.next && bun run dev`.
 
 ## Worktree Dependency Drift
 
 - When working in a git worktree, dependencies may be missing if they were added in the main worktree but never committed to `package.json`. Example: `@tanstack/react-query` and `react-hook-form` were installed in the main tree but not in `package.json`, causing `tsc --noEmit` to fail in a fresh worktree.
 - Always run `bun install` in a new worktree and verify `tsc --noEmit` passes before starting work. If a dependency is missing, add it explicitly with `bun add <package>`.
 
+## CSS / Tailwind v4
+
+- **Check CSS variable references aren't circular.** `--font-sans: var(--font-sans)` silently falls back to serif. The correct reference is `--font-sans: var(--font-geist-sans)` (the variable set by `next/font/google`). Always verify `@theme inline` right-hand sides point to actual source variables.
+- **`globals.css` must be imported in the layout that renders the HTML shell.** If CSS doesn't load, check the import chain first.
+
+## Merge Hygiene
+
+- **Multi-branch merges can silently lose features.** When two branches modify the same component (e.g., one adds `<Link>` wrapping, another adds `searchParams`), the merge may keep only one side's changes. After resolving conflicts, read the full merged file and verify ALL features from ALL branches are present.
+- **i18n JSON is especially fragile in merges.** See the i18n section above. Always `grep` for expected keys after merge.
+
 ## Monorepo
 
 - shadcn components must be added with `-c packages/web` flag: `bunx shadcn@latest add <component> -c packages/web`
 - Lint covers all packages. Run `bunx biome check ./packages/web/src` to lint just web.
+- **`.env` lives at repo root; Next.js reads from its package dir.** Symlink: `packages/web/.env` -> `../../.env`. Without this, `DATABASE_URL` won't be found at runtime.
+- **Always `db:migrate` before `db:seed`.** Tables must exist before inserting data. Order: `db:generate` -> `db:migrate` -> `db:seed`.
 
 ---
 
