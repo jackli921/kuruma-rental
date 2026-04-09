@@ -14,14 +14,12 @@ export default async function VehiclesPage({
 }: {
   searchParams: Promise<{ [key: string]: string | string[] | undefined }>
 }) {
-  const [vehicles, t, resolvedParams] = await Promise.all([
-    getAvailableVehicles(),
-    getTranslations('vehicles'),
-    searchParams,
-  ])
+  const [t, resolvedParams] = await Promise.all([getTranslations('vehicles'), searchParams])
 
   const from = asString(resolvedParams.from)
   const to = asString(resolvedParams.to)
+
+  const vehicles = await getAvailableVehicles(from, to)
 
   return (
     <main className="flex-1 py-10 px-4 sm:px-6 lg:px-8">
