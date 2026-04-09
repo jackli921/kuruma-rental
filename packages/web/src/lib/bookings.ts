@@ -2,8 +2,8 @@
 
 import { auth } from '@/auth'
 import { getDb } from '@kuruma/shared/db'
-import { bookings } from '@kuruma/shared/db/schema'
-import { and, eq, gt, lt } from 'drizzle-orm'
+import { bookings, vehicles } from '@kuruma/shared/db/schema'
+import { and, desc, eq, gt, lt } from 'drizzle-orm'
 
 interface CreateBookingInput {
   vehicleId: string
@@ -82,6 +82,51 @@ export async function createBooking(input: CreateBookingInput): Promise<CreateBo
   }
 
   return { success: true, bookingId: booking.id }
+}
+
+export type BookingWithVehicle = {
+  id: string
+  vehicleId: string
+  vehicleName: string
+  vehiclePhoto: string | null
+  startAt: Date
+  endAt: Date
+  status: 'CONFIRMED' | 'ACTIVE' | 'COMPLETED' | 'CANCELLED'
+  createdAt: Date
+}
+
+export async function getBookingsByRenterId(userId: string): Promise<BookingWithVehicle[]> {
+  const db = getDb()
+  const rows = await db
+    .select({
+      bookings: {
+        id: bookings.id,
+        vehicleId: bookings.vehicleId,
+        startAt: bookings.startAt,
+        endAt: bookings.endAt,
+        status: bookings.status,
+        createdAt: bookings.createdAt,
+      },
+      vehicles: {
+        name: vehicles.name,
+        photos: vehicles.photos,
+      },
+    })
+    .from(bookings)
+    .innerJoin(vehicles, eq(bookings.vehicleId, vehicles.id))
+    .where(eq(bookings.renterId, userId))
+    .orderBy(desc(bookings.startAt))
+
+  return rows.map((row) => ({
+    id: row.bookings.id,
+    vehicleId: row.bookings.vehicleId,
+    vehicleName: row.vehicles.name,
+    vehiclePhoto: row.vehicles.photos[0] ?? null,
+    startAt: row.bookings.startAt,
+    endAt: row.bookings.endAt,
+    status: row.bookings.status,
+    createdAt: row.bookings.createdAt,
+  }))
 }
 
 export async function getBookingById(id: string) {
