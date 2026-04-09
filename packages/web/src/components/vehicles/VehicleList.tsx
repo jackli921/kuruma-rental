@@ -3,7 +3,9 @@
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
 import { AddVehicleDialog } from '@/components/vehicles/AddVehicleDialog'
+import { EditVehicleDialog } from '@/components/vehicles/EditVehicleDialog'
 import { FleetVehicleCard } from '@/components/vehicles/FleetVehicleCard'
+import { RetireVehicleDialog } from '@/components/vehicles/RetireVehicleDialog'
 import type { VehicleData } from '@/lib/vehicle-api'
 import { fetchVehicles } from '@/lib/vehicle-api'
 import { useQuery } from '@tanstack/react-query'
@@ -76,6 +78,8 @@ export function VehicleList() {
       )}
 
       <AddVehicleDialog open={showAddDialog} onOpenChange={setShowAddDialog} />
+      <EditVehicleDialog vehicle={editingVehicle} onOpenChange={() => setEditingVehicle(null)} />
+      <RetireVehicleDialog vehicle={retiringVehicle} onOpenChange={() => setRetiringVehicle(null)} />
     </div>
   )
 }
