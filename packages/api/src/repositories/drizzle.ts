@@ -31,6 +31,7 @@ export class DrizzleVehicleRepository implements VehicleRepository {
       .values({
         name: data.name,
         description: data.description,
+        photos: data.photos,
         seats: data.seats,
         transmission: data.transmission,
         fuelType: data.fuelType,

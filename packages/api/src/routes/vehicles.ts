@@ -30,6 +30,7 @@ export function createVehicleRoutes(repo: VehicleRepository): Hono {
     const vehicle = await repo.create({
       name: result.data.name,
       description: result.data.description ?? null,
+      photos: result.data.photos,
       seats: result.data.seats,
       transmission: result.data.transmission,
       fuelType: result.data.fuelType ?? null,

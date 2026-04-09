@@ -2,6 +2,7 @@ export interface Vehicle {
   id: string
   name: string
   description: string | null
+  photos: string[]
   seats: number
   transmission: 'AUTO' | 'MANUAL'
   fuelType: string | null

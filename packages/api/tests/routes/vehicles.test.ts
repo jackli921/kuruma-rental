@@ -134,6 +134,23 @@ describe('Vehicle CRUD Routes', () => {
       expect(body.error).toBeDefined()
     })
 
+    it('creates a vehicle with photos and returns them', async () => {
+      const photos = ['https://example.com/car1.jpg', 'https://example.com/car2.jpg']
+      const res = await createVehicle({ ...validVehicleInput(), photos })
+
+      expect(res.status).toBe(201)
+
+      const body = await res.json()
+      expect(body.data.photos).toEqual(photos)
+    })
+
+    it('defaults photos to empty array when not provided', async () => {
+      const res = await createVehicle()
+
+      const body = await res.json()
+      expect(body.data.photos).toEqual([])
+    })
+
     it('rejects invalid transmission value', async () => {
       const res = await app.request('/vehicles', {
         method: 'POST',
@@ -210,6 +227,25 @@ describe('Vehicle CRUD Routes', () => {
       const body = await res.json()
       expect(body.success).toBe(false)
       expect(body.error).toBe('Vehicle not found')
+    })
+
+    it('updates photos on an existing vehicle', async () => {
+      const createRes = await createVehicle({
+        ...validVehicleInput(),
+        photos: ['https://example.com/old.jpg'],
+      })
+      const created = await createRes.json()
+
+      const res = await app.request(`/vehicles/${created.data.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ photos: ['https://example.com/new1.jpg', 'https://example.com/new2.jpg'] }),
+      })
+
+      expect(res.status).toBe(200)
+
+      const body = await res.json()
+      expect(body.data.photos).toEqual(['https://example.com/new1.jpg', 'https://example.com/new2.jpg'])
     })
 
     it('rejects invalid update data', async () => {
