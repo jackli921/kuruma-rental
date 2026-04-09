@@ -70,6 +70,7 @@ Airbnb-style car rental platform for a Japan-based company (Osaka) serving inter
 - Session type doesn't include `role` by default. Type augmentation lives in `packages/web/src/types/next-auth.d.ts`.
 - **JWT callback `user` is only present on first sign-in.** On subsequent token refreshes, `user` is `undefined`. Any DB field stored in the JWT (like `role`) must be re-fetched from DB in the `else` branch, or changes will never take effect. See `docs/2026-04-08-lessons-learned.md` #1.
 - In middleware, `req.auth` gives the session. Cast `session.user` to access role until type augmentation is loaded.
+- **Split auth config: `auth.config.ts` must mirror callbacks from `auth.ts`.** Middleware uses `auth.config.ts` (edge-safe, no DB). If it has no JWT/session callbacks, `session.user.role` is undefined and business route checks redirect to home. Any field middleware needs must have callbacks in BOTH configs. The edge config passes token fields through; the full config adds DB re-fetching on top.
 
 ## Cloudflare Workers Deployment (CRITICAL -- read before touching deploy)
 

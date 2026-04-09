@@ -226,3 +226,36 @@ bun run dev
 **Fix (future):** Enable Neon connection pooling or switch to `@neondatabase/serverless` HTTP driver. For dev, keep DB warm with `db:studio` running.
 
 **Rule:** Not a code issue -- infrastructure latency. Will resolve with connection pooling in production.
+
+---
+
+## 16. Edge-Safe Auth Config Missing JWT Callbacks — Business Nav Redirects to Home
+
+**Symptom:** Logged in as ADMIN, but clicking any business nav link (Dashboard, Bookings, Fleet, etc.) redirected back to `/en`. Network tab showed 307 redirects on every nav click.
+
+**Root cause:** Middleware uses `auth.config.ts` (edge-safe, no DB imports) for route protection. This config had providers only — no `callbacks`. The full `auth.ts` has JWT + session callbacks that set `session.user.role`, but middleware never sees those. So `session.user.role` was always `undefined` in middleware, and the business route check `!role || !BUSINESS_ROLES.has(role)` redirected to home.
+
+**Fix:** Added JWT and session callbacks to `auth.config.ts` that pass role from token to session — without any DB imports:
+
+```ts
+// auth.config.ts (edge-safe)
+callbacks: {
+  jwt({ token, user }) {
+    if (user) {
+      token.role = (user as { role?: string }).role ?? 'RENTER'
+    }
+    return token
+  },
+  session({ session, token }) {
+    if (session.user) {
+      session.user.id = token.sub!
+      ;(session.user as { role?: string }).role = (token.role as string) ?? 'RENTER'
+    }
+    return session
+  },
+}
+```
+
+The full `auth.ts` still re-fetches role from DB on token refresh (for role changes). The edge config just passes through what's already in the token.
+
+**Rule:** When using split auth configs (edge-safe `auth.config.ts` + full `auth.ts`), any field the middleware needs to read from `session.user` must have callbacks in BOTH configs. The edge config can't query the DB, but it must still pass token fields through to the session.
