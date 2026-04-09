@@ -140,6 +140,18 @@
       "confirmed": "確定済み",
       "viewBookings": "予約一覧を見る",
       "backToVehicles": "他の車両を見る"
+    },
+    "list": {
+      "title": "予約一覧",
+      "subtitle": "今後の予約と過去の予約",
+      "empty": "まだ予約がありません。",
+      "pickup": "乗車",
+      "return": "返却",
+      "viewDetails": "詳細を見る",
+      "confirmed": "確定済み",
+      "active": "利用中",
+      "completed": "完了",
+      "cancelled": "キャンセル済み"
     }
   },
   "business": {

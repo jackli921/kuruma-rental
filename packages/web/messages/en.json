@@ -140,6 +140,18 @@
       "confirmed": "Confirmed",
       "viewBookings": "View my bookings",
       "backToVehicles": "Browse more vehicles"
+    },
+    "list": {
+      "title": "My bookings",
+      "subtitle": "Your upcoming and past reservations",
+      "empty": "You haven't made any bookings yet.",
+      "pickup": "Pickup",
+      "return": "Return",
+      "viewDetails": "View details",
+      "confirmed": "Confirmed",
+      "active": "Active",
+      "completed": "Completed",
+      "cancelled": "Cancelled"
     }
   },
   "business": {

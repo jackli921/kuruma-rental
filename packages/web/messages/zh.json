@@ -140,6 +140,18 @@
       "confirmed": "已确认",
       "viewBookings": "查看我的预订",
       "backToVehicles": "浏览更多车辆"
+    },
+    "list": {
+      "title": "我的预订",
+      "subtitle": "您的即将到来和过去的预订",
+      "empty": "您还没有任何预订。",
+      "pickup": "取车",
+      "return": "还车",
+      "viewDetails": "查看详情",
+      "confirmed": "已确认",
+      "active": "进行中",
+      "completed": "已完成",
+      "cancelled": "已取消"
     }
   },
   "business": {
