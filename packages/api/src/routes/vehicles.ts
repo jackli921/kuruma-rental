@@ -6,8 +6,10 @@ export function createVehicleRoutes(repo: VehicleRepository): Hono {
   const vehicles = new Hono()
 
   vehicles.get('/vehicles', async (c) => {
-    const status = c.req.query('status') ?? 'AVAILABLE'
-    const filtered = await repo.findAll({ status })
+    const status = c.req.query('status')
+    const filtered = status
+      ? await repo.findAll({ status })
+      : await repo.findAll()
     return c.json({ success: true, data: filtered })
   })
 
@@ -30,6 +32,7 @@ export function createVehicleRoutes(repo: VehicleRepository): Hono {
     const vehicle = await repo.create({
       name: result.data.name,
       description: result.data.description ?? null,
+      photos: result.data.photos,
       seats: result.data.seats,
       transmission: result.data.transmission,
       fuelType: result.data.fuelType ?? null,

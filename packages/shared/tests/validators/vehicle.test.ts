@@ -44,6 +44,36 @@ describe('createVehicleSchema', () => {
     expect(result.success).toBe(false)
   })
 
+  it('accepts valid photo URLs', () => {
+    const result = createVehicleSchema.safeParse({
+      ...validInput,
+      photos: ['https://example.com/car.jpg', 'https://cdn.kuruma.jp/photo.png'],
+    })
+    expect(result.success).toBe(true)
+    if (result.success) {
+      expect(result.data.photos).toEqual([
+        'https://example.com/car.jpg',
+        'https://cdn.kuruma.jp/photo.png',
+      ])
+    }
+  })
+
+  it('defaults photos to empty array when omitted', () => {
+    const result = createVehicleSchema.safeParse(validInput)
+    expect(result.success).toBe(true)
+    if (result.success) {
+      expect(result.data.photos).toEqual([])
+    }
+  })
+
+  it('rejects non-URL strings in photos array', () => {
+    const result = createVehicleSchema.safeParse({
+      ...validInput,
+      photos: ['not-a-url'],
+    })
+    expect(result.success).toBe(false)
+  })
+
   it('rejects negative bufferMinutes', () => {
     const result = createVehicleSchema.safeParse({ ...validInput, bufferMinutes: -10 })
     expect(result.success).toBe(false)
