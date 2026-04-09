@@ -1,5 +1,5 @@
 import { DrizzleAdapter } from '@auth/drizzle-adapter'
-import { getDb } from '@kuruma/shared/db'
+import { getDb } from '@/lib/db'
 import { accounts, users } from '@kuruma/shared/db/schema'
 import NextAuth from 'next-auth'
 import type { NextAuthResult } from 'next-auth'
