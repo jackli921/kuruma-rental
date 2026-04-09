@@ -204,11 +204,43 @@ Apply during REFACTOR phase:
 
 ---
 
+# Issue Tracking & Session Protocol
+
+## Source of truth: GitHub Issues
+
+All work is tracked as GitHub Issues. Use `gh` CLI to query and update.
+
+```bash
+gh issue list                                    # all open issues
+gh issue list --label slice                      # vertical slices
+gh issue list --milestone "Phase 1: Core Booking" # milestone view
+gh issue view <number>                           # issue detail
+```
+
+## Session handoff: `docs/STATUS.md`
+
+Quick snapshot of active work, blockers, and priorities. Updated by each session.
+
+## Session protocol (MANDATORY)
+
+### On start:
+1. Read `docs/STATUS.md` for current state
+2. Run `gh issue list` to see open issues
+3. Pick an issue to work on and add `in-progress` label: `gh issue edit <N> --add-label in-progress`
+
+### On end:
+1. Remove `in-progress` label from completed issues: `gh issue edit <N> --remove-label in-progress`
+2. Close completed issues: `gh issue close <N>`
+3. Create new issues for anything discovered: `gh issue create --title "..." --label <label>`
+4. Update `docs/STATUS.md` with what you did, what's blocked, and what's next
+
+---
+
 # Parallel Work Protocol
 
 Multiple sessions may work on this repo simultaneously (e.g., API in a worktree, web on the main branch). Follow these rules:
 
-1. **Check branch status** before starting. Read `docs/plans/2026-04-07-architecture-redesign.md` "Branch status" section.
+1. **Check `docs/STATUS.md` and `gh issue list`** before starting. Avoid claiming work another session is doing.
 2. **Don't touch other packages** unless explicitly asked. If you're on web, don't modify `packages/api` or `packages/shared`.
 3. **Use worktrees** for isolated work: `git worktree add ../kuruma-<feature> -b feat/<feature>`
 4. **Commit frequently** with conventional commits (`feat:`, `fix:`, `refactor:`, etc.).
