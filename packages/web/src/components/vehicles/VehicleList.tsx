@@ -2,6 +2,7 @@
 
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
+import { AddVehicleDialog } from '@/components/vehicles/AddVehicleDialog'
 import { FleetVehicleCard } from '@/components/vehicles/FleetVehicleCard'
 import type { VehicleData } from '@/lib/vehicle-api'
 import { fetchVehicles } from '@/lib/vehicle-api'
@@ -73,6 +74,8 @@ export function VehicleList() {
           <p className="text-lg text-muted-foreground">{t('empty')}</p>
         </div>
       )}
+
+      <AddVehicleDialog open={showAddDialog} onOpenChange={setShowAddDialog} />
     </div>
   )
 }
