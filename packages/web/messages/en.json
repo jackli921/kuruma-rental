@@ -61,6 +61,20 @@
     "auto": "Auto",
     "manual": "Manual",
     "empty": "No vehicles available right now.",
+    "detail": {
+      "specs": "Specifications",
+      "seats": "{count} seats",
+      "transmission": "Transmission",
+      "fuelType": "Fuel type",
+      "auto": "Automatic",
+      "manual": "Manual",
+      "bookCta": "Book this car",
+      "backToList": "Back to vehicles",
+      "photos": "Photos",
+      "description": "About this vehicle",
+      "notFound": "Vehicle not found",
+      "notFoundDescription": "The vehicle you are looking for does not exist or has been removed."
+    },
     "filters": {
       "from": "From",
       "to": "To"

@@ -1,15 +1,8 @@
 import { ActiveFilters } from '@/components/vehicles/ActiveFilters'
-import { getDb } from '@kuruma/shared/db'
-import { vehicles as vehiclesTable } from '@kuruma/shared/db/schema'
-import { eq } from 'drizzle-orm'
+import { Link } from '@/i18n/routing'
+import { getAvailableVehicles } from '@/lib/vehicles'
 import { Car, Fuel, Settings2, Users } from 'lucide-react'
 import { getTranslations } from 'next-intl/server'
-
-// TODO: Replace with API call via hono/client once API uses a CF-compatible DB driver
-async function getVehicles() {
-  const db = getDb()
-  return db.select().from(vehiclesTable).where(eq(vehiclesTable.status, 'AVAILABLE'))
-}
 
 function asString(value: string | string[] | undefined): string | undefined {
   if (Array.isArray(value)) return value[0]
@@ -22,7 +15,7 @@ export default async function VehiclesPage({
   searchParams: Promise<{ [key: string]: string | string[] | undefined }>
 }) {
   const [vehicles, t, resolvedParams] = await Promise.all([
-    getVehicles(),
+    getAvailableVehicles(),
     getTranslations('vehicles'),
     searchParams,
   ])
@@ -44,8 +37,9 @@ export default async function VehiclesPage({
           {vehicles.map((vehicle) => {
             const photo = vehicle.photos?.[0]
             return (
-              <div
+              <Link
                 key={vehicle.id}
+                href={`/vehicles/${vehicle.id}`}
                 className="group rounded-xl overflow-hidden bg-card border border-border shadow-sm hover:shadow-md transition-shadow"
               >
                 <div className="aspect-[4/3] overflow-hidden bg-muted">
@@ -85,7 +79,7 @@ export default async function VehiclesPage({
                     )}
                   </div>
                 </div>
-              </div>
+              </Link>
             )
           })}
         </div>
