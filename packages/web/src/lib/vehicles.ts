@@ -1,15 +1,50 @@
-import { getDb } from '@kuruma/shared/db'
-import { vehicles } from '@kuruma/shared/db/schema'
-import { eq } from 'drizzle-orm'
+import { getApiBaseUrl } from '@/lib/api-client'
 
-export async function getAvailableVehicles() {
-  const db = getDb()
-  return db.select().from(vehicles).where(eq(vehicles.status, 'AVAILABLE'))
+interface Vehicle {
+  id: string
+  name: string
+  description: string | null
+  photos?: string[]
+  seats: number
+  transmission: 'AUTO' | 'MANUAL'
+  fuelType: string | null
+  status: string
+  bufferMinutes: number
+  minRentalHours: number | null
+  maxRentalHours: number | null
+  advanceBookingHours: number | null
+  createdAt: string
+  updatedAt: string
 }
 
-export async function getVehicleById(id: string) {
-  const db = getDb()
-  const rows = await db.select().from(vehicles).where(eq(vehicles.id, id))
-  const vehicle = rows[0]
-  return vehicle ?? null
+interface ApiResponse<T> {
+  success: boolean
+  data?: T
+  error?: string
+}
+
+export async function getAvailableVehicles(from?: string, to?: string): Promise<Vehicle[]> {
+  const base = getApiBaseUrl()
+
+  const url =
+    from && to
+      ? `${base}/availability?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`
+      : `${base}/vehicles?status=AVAILABLE`
+
+  const res = await fetch(url)
+  const json: ApiResponse<Vehicle[]> = await res.json()
+
+  if (!json.success || !json.data) return []
+
+  return json.data
+}
+
+export async function getVehicleById(id: string): Promise<Vehicle | null> {
+  const base = getApiBaseUrl()
+  const res = await fetch(`${base}/vehicles/${encodeURIComponent(id)}`)
+  const json: ApiResponse<Vehicle> = await res.json()
+
+  if (!json.success || !json.data) return null
+
+  return json.data
 }
