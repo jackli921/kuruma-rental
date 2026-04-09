@@ -17,6 +17,17 @@ export interface BookingRepository {
   updateStatus(id: string, status: string): Promise<Booking | undefined>
 }
 
+export interface DashboardStats {
+  totalBookings: number
+  activeVehicles: number
+  totalCustomers: number
+  unreadMessages: number
+}
+
+export interface StatsRepository {
+  getDashboardStats(): Promise<DashboardStats>
+}
+
 export interface AvailabilityRepository {
   findAvailableVehicles(from: Date, to: Date): Promise<Vehicle[]>
   checkVehicleAvailability(
