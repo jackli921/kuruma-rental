@@ -166,7 +166,9 @@ export class DrizzleAvailabilityRepository implements AvailabilityRepository {
 export class DrizzleBookingRepository implements BookingRepository {
   constructor(private readonly db: Db) {}
 
-  async findAll(filters?: { status?: string; vehicleId?: string }): Promise<Booking[]> {
+  async findAll(filters?: { status?: string; vehicleId?: string; renterId?: string }): Promise<
+    Booking[]
+  > {
     const conditions = []
 
     if (filters?.status) {
@@ -174,6 +176,9 @@ export class DrizzleBookingRepository implements BookingRepository {
     }
     if (filters?.vehicleId) {
       conditions.push(eq(bookings.vehicleId, filters.vehicleId))
+    }
+    if (filters?.renterId) {
+      conditions.push(eq(bookings.renterId, filters.renterId))
     }
 
     const query = this.db.select(bookingColumns).from(bookings)

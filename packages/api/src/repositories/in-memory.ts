@@ -75,6 +75,7 @@ export class InMemoryBookingRepository implements BookingRepository {
   async findAll(filters?: {
     status?: string
     vehicleId?: string
+    renterId?: string
   }): Promise<Booking[]> {
     let results = [...this.store.values()]
 
@@ -83,6 +84,9 @@ export class InMemoryBookingRepository implements BookingRepository {
     }
     if (filters?.vehicleId) {
       results = results.filter((b) => b.vehicleId === filters.vehicleId)
+    }
+    if (filters?.renterId) {
+      results = results.filter((b) => b.renterId === filters.renterId)
     }
 
     return results

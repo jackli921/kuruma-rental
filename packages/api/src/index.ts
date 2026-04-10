@@ -57,7 +57,7 @@ export function createApp(overrides?: {
   const app = new Hono()
   app.route('/', health)
   app.route('/', createVehicleRoutes(vehicleRepo))
-  app.route('/', createBookingRoutes(bookingRepo))
+  app.route('/', createBookingRoutes(bookingRepo, vehicleRepo))
   app.route('/', createAvailabilityRoutes(availabilityRepo))
   app.route('/', createStatsRoutes(statsRepo))
 

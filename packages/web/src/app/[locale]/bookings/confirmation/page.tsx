@@ -15,10 +15,7 @@ interface ConfirmationPageProps {
 
 export default async function BookingConfirmationPage({ searchParams }: ConfirmationPageProps) {
   const { bookingId, vehicleId } = await searchParams
-  const [t, locale] = await Promise.all([
-    getTranslations('bookings.confirmation'),
-    getLocale(),
-  ])
+  const [t, locale] = await Promise.all([getTranslations('bookings.confirmation'), getLocale()])
 
   if (!bookingId) {
     notFound()
@@ -31,8 +28,8 @@ export default async function BookingConfirmationPage({ searchParams }: Confirma
 
   const vehicle = vehicleId ? await getVehicleById(vehicleId) : null
 
-  const startDate = formatDateTime(new Date(booking.startAt), locale)
-  const endDate = formatDateTime(new Date(booking.endAt), locale)
+  const startDate = formatDateTime(booking.startAt, locale)
+  const endDate = formatDateTime(booking.endAt, locale)
 
   return (
     <main className="flex-1 py-10 px-4 sm:px-6 lg:px-8">

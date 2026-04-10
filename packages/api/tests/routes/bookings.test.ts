@@ -1,9 +1,10 @@
 import { Hono } from 'hono'
 import { beforeEach, describe, expect, it } from 'vitest'
-import { InMemoryBookingRepository } from '../../src/repositories/in-memory'
+import { InMemoryBookingRepository, InMemoryVehicleRepository } from '../../src/repositories/in-memory'
 import { createBookingRoutes } from '../../src/routes/bookings'
 
 let app: Hono
+let vehicleRepo: InMemoryVehicleRepository
 
 function futureDate(hoursFromNow: number): string {
   const d = new Date()
@@ -31,9 +32,10 @@ async function createBooking(input = validBookingInput()) {
 
 describe('Booking Routes', () => {
   beforeEach(() => {
+    vehicleRepo = new InMemoryVehicleRepository()
     const repo = new InMemoryBookingRepository()
     app = new Hono()
-    app.route('/', createBookingRoutes(repo))
+    app.route('/', createBookingRoutes(repo, vehicleRepo))
   })
 
   describe('GET /bookings', () => {
@@ -94,6 +96,76 @@ describe('Booking Routes', () => {
       expect(body.success).toBe(true)
       expect(body.data).toHaveLength(1)
       expect(body.data[0].vehicleId).toBe('v1')
+    })
+
+    it('filters by renterId', async () => {
+      await createBooking()
+      await createBooking({
+        ...validBookingInput(),
+        renterId: 'user2',
+        vehicleId: 'v2',
+      })
+
+      const res = await app.request('/bookings?renterId=user1')
+      const body = await res.json()
+
+      expect(body.success).toBe(true)
+      expect(body.data).toHaveLength(1)
+      expect(body.data[0].renterId).toBe('user1')
+    })
+
+    it('filters by renterId returning empty when no match', async () => {
+      await createBooking()
+
+      const res = await app.request('/bookings?renterId=nonexistent')
+      const body = await res.json()
+
+      expect(body.success).toBe(true)
+      expect(body.data).toHaveLength(0)
+    })
+
+    it('returns bookings with vehicle data when expand=vehicle', async () => {
+      await vehicleRepo.create({
+        name: 'Toyota Corolla',
+        description: 'A reliable sedan',
+        photos: ['photo1.jpg', 'photo2.jpg'],
+        seats: 5,
+        transmission: 'AUTO',
+        fuelType: 'Gasoline',
+        status: 'AVAILABLE',
+        bufferMinutes: 60,
+        minRentalHours: 4,
+        maxRentalHours: 168,
+        advanceBookingHours: 24,
+      })
+
+      const allVehicles = await vehicleRepo.findAll()
+      const vehicleId = allVehicles[0]!.id
+
+      await createBooking({
+        ...validBookingInput(),
+        vehicleId,
+      })
+
+      const res = await app.request('/bookings?expand=vehicle')
+      const body = await res.json()
+
+      expect(body.success).toBe(true)
+      expect(body.data).toHaveLength(1)
+      expect(body.data[0].vehicle).toBeDefined()
+      expect(body.data[0].vehicle.name).toBe('Toyota Corolla')
+      expect(body.data[0].vehicle.photos).toEqual(['photo1.jpg', 'photo2.jpg'])
+    })
+
+    it('returns bookings without vehicle data when expand is not set', async () => {
+      await createBooking()
+
+      const res = await app.request('/bookings')
+      const body = await res.json()
+
+      expect(body.success).toBe(true)
+      expect(body.data).toHaveLength(1)
+      expect(body.data[0].vehicle).toBeUndefined()
     })
   })
 
