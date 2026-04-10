@@ -45,7 +45,7 @@ export function RetireVehicleDialog({ vehicle, onOpenChange }: RetireVehicleDial
     <Dialog open={vehicle !== null} onOpenChange={onOpenChange}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>{t('retireConfirm', { name: vehicle?.name })}</DialogTitle>
+          <DialogTitle>{t('retireConfirm', { name: vehicle?.name ?? '' })}</DialogTitle>
           <DialogDescription>{t('retireConfirmMessage')}</DialogDescription>
         </DialogHeader>
         {error && <p className="text-sm text-destructive px-1">{error}</p>}

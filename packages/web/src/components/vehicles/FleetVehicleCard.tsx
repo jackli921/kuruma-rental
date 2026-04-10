@@ -15,7 +15,7 @@ interface FleetVehicleCardProps {
 
 export function FleetVehicleCard({ vehicle, onEdit, onRetire }: FleetVehicleCardProps) {
   const t = useTranslations('business.vehicles')
-  const photo = vehicle.photos[0]
+  const photo = vehicle.photos?.[0]
 
   return (
     <Card>
