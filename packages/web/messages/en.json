@@ -94,7 +94,19 @@
     "bookings": {
       "title": "Bookings",
       "subtitle": "Manage reservations and scheduling",
-      "empty": "No bookings yet"
+      "empty": "No bookings yet",
+      "calendar": {
+        "vehicle": "Vehicle",
+        "today": "Today",
+        "noVehicles": "No vehicles found",
+        "bookingDetails": "Booking Details",
+        "status": "Status",
+        "start": "Start",
+        "end": "End",
+        "source": "Source",
+        "notes": "Notes",
+        "close": "Close"
+      }
     },
     "vehicles": {
       "title": "Fleet",

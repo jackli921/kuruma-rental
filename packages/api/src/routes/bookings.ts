@@ -9,10 +9,25 @@ export function createBookingRoutes(repo: BookingRepository): Hono {
   bookings.get('/bookings', async (c) => {
     const statusFilter = c.req.query('status')
     const vehicleIdFilter = c.req.query('vehicleId')
+    const fromParam = c.req.query('from')
+    const toParam = c.req.query('to')
 
-    const filters: { status?: string; vehicleId?: string } = {}
+    if ((fromParam && !toParam) || (!fromParam && toParam)) {
+      return c.json({ success: false, error: 'Both "from" and "to" are required for date range filtering' }, 400)
+    }
+
+    const filters: { status?: string; vehicleId?: string; from?: Date; to?: Date } = {}
     if (statusFilter) filters.status = statusFilter
     if (vehicleIdFilter) filters.vehicleId = vehicleIdFilter
+    if (fromParam && toParam) {
+      const from = new Date(fromParam)
+      const to = new Date(toParam)
+      if (to <= from) {
+        return c.json({ success: false, error: '"to" must be after "from"' }, 400)
+      }
+      filters.from = from
+      filters.to = to
+    }
 
     const results = await repo.findAll(Object.keys(filters).length > 0 ? filters : undefined)
 

@@ -95,6 +95,80 @@ describe('Booking Routes', () => {
       expect(body.data).toHaveLength(1)
       expect(body.data[0].vehicleId).toBe('v1')
     })
+
+    it('filters by date range returning bookings that overlap', async () => {
+      // Booking from hour 24 to hour 48
+      await createBooking()
+
+      // Query range that overlaps (hour 30 to hour 60)
+      const from = futureDate(30)
+      const to = futureDate(60)
+      const res = await app.request(`/bookings?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`)
+      const body = await res.json()
+
+      expect(body.success).toBe(true)
+      expect(body.data).toHaveLength(1)
+    })
+
+    it('filters by date range excluding non-overlapping bookings', async () => {
+      // Booking from hour 24 to hour 48
+      await createBooking()
+
+      // Query range that does NOT overlap (hour 72 to hour 96)
+      const from = futureDate(72)
+      const to = futureDate(96)
+      const res = await app.request(`/bookings?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`)
+      const body = await res.json()
+
+      expect(body.success).toBe(true)
+      expect(body.data).toHaveLength(0)
+    })
+
+    it('combines date range with status filter', async () => {
+      // Create two bookings in the same range
+      await createBooking()
+      await createBooking({
+        ...validBookingInput(),
+        vehicleId: 'v2',
+      })
+
+      // Cancel one
+      const listRes = await app.request('/bookings')
+      const allBookings = await listRes.json()
+      await app.request(`/bookings/${allBookings.data[0].id}/cancel`, { method: 'POST' })
+
+      // Query overlapping range with status=CONFIRMED
+      const from = futureDate(20)
+      const to = futureDate(50)
+      const res = await app.request(`/bookings?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}&status=CONFIRMED`)
+      const body = await res.json()
+
+      expect(body.success).toBe(true)
+      expect(body.data).toHaveLength(1)
+      expect(body.data[0].status).toBe('CONFIRMED')
+    })
+
+    it('returns 400 when from is provided without to', async () => {
+      const res = await app.request(`/bookings?from=${encodeURIComponent(futureDate(1))}`)
+      const body = await res.json()
+
+      expect(res.status).toBe(400)
+      expect(body.success).toBe(false)
+      expect(body.error).toContain('"to"')
+    })
+
+    it('returns 400 when to is before from', async () => {
+      const from = futureDate(48)
+      const to = futureDate(24)
+      const res = await app.request(
+        `/bookings?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`,
+      )
+      const body = await res.json()
+
+      expect(res.status).toBe(400)
+      expect(body.success).toBe(false)
+      expect(body.error).toContain('"to" must be after "from"')
+    })
   })
 
   describe('POST /bookings', () => {
