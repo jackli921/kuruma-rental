@@ -35,6 +35,7 @@ const bookingColumns = {
   vehicleId: bookings.vehicleId,
   startAt: bookings.startAt,
   endAt: bookings.endAt,
+  effectiveEndAt: bookings.effectiveEndAt,
   status: bookings.status,
   source: bookings.source,
   externalId: bookings.externalId,
@@ -169,7 +170,13 @@ export class DrizzleAvailabilityRepository implements AvailabilityRepository {
 export class DrizzleBookingRepository implements BookingRepository {
   constructor(private readonly db: Db) {}
 
-  async findAll(filters?: { status?: string; vehicleId?: string; renterId?: string; from?: Date; to?: Date }): Promise<Booking[]> {
+  async findAll(filters?: {
+    status?: string
+    vehicleId?: string
+    renterId?: string
+    from?: Date
+    to?: Date
+  }): Promise<Booking[]> {
     const conditions = []
 
     if (filters?.status) {
