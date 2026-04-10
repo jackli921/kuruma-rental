@@ -1,4 +1,9 @@
-import { classifyRoute, getLocaleFromPath, stripLocale } from '@/lib/route-helpers'
+import {
+  classifyRoute,
+  extractSessionRole,
+  getLocaleFromPath,
+  stripLocale,
+} from '@/lib/route-helpers'
 import NextAuth from 'next-auth'
 import createIntlMiddleware from 'next-intl/middleware'
 import { NextResponse } from 'next/server'
@@ -28,9 +33,11 @@ export default auth((req) => {
     return NextResponse.redirect(loginUrl)
   }
 
-  // Redirect non-business users away from business paths
+  // Redirect non-business users away from business paths.
+  // extractSessionRole guards against session.user being undefined, which
+  // can happen on CF Workers when auth() fails silently.
   if (route.type === 'business' && session) {
-    const role = (session.user as { role?: string }).role
+    const role = extractSessionRole(session as { user?: { role?: unknown } | null })
     if (!role || !BUSINESS_ROLES.has(role)) {
       return NextResponse.redirect(new URL(`/${locale}`, req.url))
     }

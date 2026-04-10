@@ -34,3 +34,15 @@ export function classifyRoute(path: string): RouteClassification {
   }
   return { type: 'public' }
 }
+
+/**
+ * Safely extract the role from an auth session. Returns `null` when the session
+ * is missing, has no `user` (can happen on CF Workers when auth fails silently),
+ * or has no `role` field. Never throws.
+ */
+export function extractSessionRole(
+  session: { user?: { role?: unknown } | null } | null | undefined,
+): string | null {
+  const role = session?.user?.role
+  return typeof role === 'string' && role.length > 0 ? role : null
+}

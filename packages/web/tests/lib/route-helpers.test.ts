@@ -1,4 +1,9 @@
-import { classifyRoute, getLocaleFromPath, stripLocale } from '@/lib/route-helpers'
+import {
+  classifyRoute,
+  extractSessionRole,
+  getLocaleFromPath,
+  stripLocale,
+} from '@/lib/route-helpers'
 import { describe, expect, test } from 'vitest'
 
 describe('stripLocale', () => {
@@ -70,5 +75,48 @@ describe('classifyRoute', () => {
     expect(classifyRoute('/vehicles/123')).toEqual({ type: 'public' })
     expect(classifyRoute('/login')).toEqual({ type: 'public' })
     expect(classifyRoute('/register')).toEqual({ type: 'public' })
+  })
+})
+
+describe('extractSessionRole', () => {
+  // Regression guard for issue #22: middleware crashed with
+  // "Cannot read properties of undefined (reading 'role')" when visiting
+  // business routes like /manage/messages because session.user was undefined.
+
+  test('returns role when session.user.role is a non-empty string', () => {
+    expect(extractSessionRole({ user: { role: 'ADMIN' } })).toBe('ADMIN')
+    expect(extractSessionRole({ user: { role: 'STAFF' } })).toBe('STAFF')
+    expect(extractSessionRole({ user: { role: 'RENTER' } })).toBe('RENTER')
+  })
+
+  test('returns null when session is null or undefined', () => {
+    expect(extractSessionRole(null)).toBeNull()
+    expect(extractSessionRole(undefined)).toBeNull()
+  })
+
+  test('returns null when session.user is undefined (CF Workers case)', () => {
+    // On CF Workers, auth() can return a session where user is undefined.
+    // This was the crash cause in #22.
+    expect(extractSessionRole({ user: undefined })).toBeNull()
+    expect(extractSessionRole({})).toBeNull()
+  })
+
+  test('returns null when session.user is null', () => {
+    expect(extractSessionRole({ user: null })).toBeNull()
+  })
+
+  test('returns null when role is missing', () => {
+    expect(extractSessionRole({ user: {} })).toBeNull()
+    expect(extractSessionRole({ user: { role: undefined } })).toBeNull()
+  })
+
+  test('returns null when role is not a string', () => {
+    expect(extractSessionRole({ user: { role: 123 } })).toBeNull()
+    expect(extractSessionRole({ user: { role: null } })).toBeNull()
+    expect(extractSessionRole({ user: { role: {} } })).toBeNull()
+  })
+
+  test('returns null when role is an empty string', () => {
+    expect(extractSessionRole({ user: { role: '' } })).toBeNull()
   })
 })
