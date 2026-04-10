@@ -1,9 +1,10 @@
 'use server'
 
 import { auth } from '@/auth'
+import { getApiBaseUrl } from '@/lib/api-client'
 import { getDb } from '@kuruma/shared/db'
 import { bookings, vehicles } from '@kuruma/shared/db/schema'
-import { and, desc, eq, gt, lt } from 'drizzle-orm'
+import { desc, eq } from 'drizzle-orm'
 
 interface CreateBookingInput {
   vehicleId: string
@@ -14,24 +15,28 @@ interface CreateBookingInput {
 
 type CreateBookingResult = { success: true; bookingId: string } | { success: false; error: string }
 
+interface ApiResponse<T> {
+  success: boolean
+  data?: T
+  error?: string
+}
+
 export async function checkAvailability(
   vehicleId: string,
   startAt: Date,
   endAt: Date,
 ): Promise<boolean> {
-  const db = getDb()
-  const conflicts = await db
-    .select()
-    .from(bookings)
-    .where(
-      and(
-        eq(bookings.vehicleId, vehicleId),
-        lt(bookings.startAt, endAt),
-        gt(bookings.endAt, startAt),
-      ),
-    )
+  const base = getApiBaseUrl()
+  const from = encodeURIComponent(startAt.toISOString())
+  const to = encodeURIComponent(endAt.toISOString())
+  const res = await fetch(
+    `${base}/availability/${encodeURIComponent(vehicleId)}?from=${from}&to=${to}`,
+  )
+  const json: ApiResponse<{ available: boolean }> = await res.json()
 
-  return conflicts.length === 0
+  if (!json.success || !json.data) return false
+
+  return json.data.available
 }
 
 export async function createBooking(input: CreateBookingInput): Promise<CreateBookingResult> {
@@ -130,8 +135,11 @@ export async function getBookingsByRenterId(userId: string): Promise<BookingWith
 }
 
 export async function getBookingById(id: string) {
-  const db = getDb()
-  const rows = await db.select().from(bookings).where(eq(bookings.id, id))
-  const booking = rows[0]
-  return booking ?? null
+  const base = getApiBaseUrl()
+  const res = await fetch(`${base}/bookings/${encodeURIComponent(id)}`)
+  const json: ApiResponse<Record<string, unknown>> = await res.json()
+
+  if (!json.success || !json.data) return null
+
+  return json.data
 }
