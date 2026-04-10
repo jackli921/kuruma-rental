@@ -1,20 +1,47 @@
 import { VALID_BOOKING_TRANSITIONS } from '@kuruma/shared/db/schema'
 import { createBookingSchema } from '@kuruma/shared/validators/booking'
 import { Hono } from 'hono'
-import type { BookingRepository } from '../repositories/types'
+import type { BookingRepository, VehicleRepository } from '../repositories/types'
 
-export function createBookingRoutes(repo: BookingRepository): Hono {
+export function createBookingRoutes(
+  repo: BookingRepository,
+  vehicleRepo?: VehicleRepository,
+): Hono {
   const bookings = new Hono()
 
   bookings.get('/bookings', async (c) => {
     const statusFilter = c.req.query('status')
     const vehicleIdFilter = c.req.query('vehicleId')
+    const renterIdFilter = c.req.query('renterId')
+    const expand = c.req.query('expand')
 
-    const filters: { status?: string; vehicleId?: string } = {}
+    const filters: { status?: string; vehicleId?: string; renterId?: string } = {}
     if (statusFilter) filters.status = statusFilter
     if (vehicleIdFilter) filters.vehicleId = vehicleIdFilter
+    if (renterIdFilter) filters.renterId = renterIdFilter
 
     const results = await repo.findAll(Object.keys(filters).length > 0 ? filters : undefined)
+
+    if (expand === 'vehicle' && vehicleRepo) {
+      const vehicleIds = [...new Set(results.map((b) => b.vehicleId))]
+      const vehicleMap = new Map<string, { name: string; photos: string[] }>()
+
+      await Promise.all(
+        vehicleIds.map(async (vid) => {
+          const vehicle = await vehicleRepo.findById(vid)
+          if (vehicle) {
+            vehicleMap.set(vid, { name: vehicle.name, photos: vehicle.photos })
+          }
+        }),
+      )
+
+      const expanded = results.map((booking) => ({
+        ...booking,
+        vehicle: vehicleMap.get(booking.vehicleId),
+      }))
+
+      return c.json({ success: true, data: expanded })
+    }
 
     return c.json({ success: true, data: results })
   })
