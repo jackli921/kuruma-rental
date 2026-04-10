@@ -43,6 +43,9 @@ const BOOKING_FIELDS = [
   'source',
   'externalId',
   'notes',
+  'totalPrice',
+  'cancellationFee',
+  'cancelledAt',
   'createdAt',
   'updatedAt',
 ] as const

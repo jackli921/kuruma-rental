@@ -127,6 +127,25 @@ export class InMemoryBookingRepository implements BookingRepository {
     this.store.set(updated.id, updated)
     return updated
   }
+
+  async cancel(
+    id: string,
+    cancellationFee: number,
+    cancelledAt: Date,
+  ): Promise<Booking | undefined> {
+    const existing = this.store.get(id)
+    if (!existing) return undefined
+
+    const cancelled: Booking = {
+      ...existing,
+      status: 'CANCELLED',
+      cancellationFee,
+      cancelledAt,
+      updatedAt: new Date(),
+    }
+    this.store.set(cancelled.id, cancelled)
+    return cancelled
+  }
 }
 
 const BLOCKING_STATUSES: ReadonlySet<Booking['status']> = new Set(['CONFIRMED', 'ACTIVE'])

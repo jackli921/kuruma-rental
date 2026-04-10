@@ -421,7 +421,7 @@ describe('Booking Routes', () => {
       expect(body.data.id).toBe(created.data.id)
     })
 
-    it('rejects cancelling an already COMPLETED booking', async () => {
+    it('rejects cancelling an already COMPLETED booking with 409', async () => {
       const createRes = await createBooking()
       const created = await createRes.json()
 
@@ -441,11 +441,11 @@ describe('Booking Routes', () => {
         method: 'POST',
       })
 
-      expect(res.status).toBe(400)
+      expect(res.status).toBe(409)
 
       const body = await res.json()
       expect(body.success).toBe(false)
-      expect(body.error).toContain('Invalid status transition')
+      expect(body.error).toContain('Only CONFIRMED bookings can be cancelled')
     })
 
     it('returns 404 for nonexistent booking', async () => {
@@ -458,6 +458,85 @@ describe('Booking Routes', () => {
       const body = await res.json()
       expect(body.success).toBe(false)
       expect(body.error).toBe('Booking not found')
+    })
+
+    it('returns FREE tier and 0 fee when cancelling 72h+ before pickup', async () => {
+      const createRes = await createBooking({
+        ...validBookingInput(),
+        startAt: futureDate(96), // 96h from now
+        endAt: futureDate(120),
+        totalPrice: 10000,
+      })
+      const created = await createRes.json()
+
+      const res = await app.request(`/bookings/${created.data.id}/cancel`, {
+        method: 'POST',
+      })
+
+      expect(res.status).toBe(200)
+      const body = await res.json()
+      expect(body.data.status).toBe('CANCELLED')
+      expect(body.data.cancellationFee).toBe(0)
+      expect(body.data.cancelledAt).toBeTruthy()
+      expect(body.cancellation.tier).toBe('FREE')
+      expect(body.cancellation.feePercentage).toBe(0)
+      expect(body.cancellation.refundAmount).toBe(10000)
+    })
+
+    it('returns LOW tier and 30% fee when cancelling 48-72h before pickup', async () => {
+      const createRes = await createBooking({
+        ...validBookingInput(),
+        startAt: futureDate(60), // 60h from now (between 48-72)
+        endAt: futureDate(84),
+        totalPrice: 10000,
+      })
+      const created = await createRes.json()
+
+      const res = await app.request(`/bookings/${created.data.id}/cancel`, {
+        method: 'POST',
+      })
+
+      expect(res.status).toBe(200)
+      const body = await res.json()
+      expect(body.data.cancellationFee).toBe(3000)
+      expect(body.cancellation.tier).toBe('LOW')
+      expect(body.cancellation.feePercentage).toBe(0.3)
+    })
+
+    it('returns FULL tier and 100% fee when cancelling < 24h before pickup', async () => {
+      const createRes = await createBooking({
+        ...validBookingInput(),
+        startAt: futureDate(12), // 12h from now
+        endAt: futureDate(36),
+        totalPrice: 10000,
+      })
+      const created = await createRes.json()
+
+      const res = await app.request(`/bookings/${created.data.id}/cancel`, {
+        method: 'POST',
+      })
+
+      expect(res.status).toBe(200)
+      const body = await res.json()
+      expect(body.data.cancellationFee).toBe(10000)
+      expect(body.cancellation.tier).toBe('FULL')
+      expect(body.cancellation.feePercentage).toBe(1)
+      expect(body.cancellation.refundAmount).toBe(0)
+    })
+
+    it('handles booking without totalPrice (legacy) gracefully', async () => {
+      const createRes = await createBooking() // no totalPrice
+      const created = await createRes.json()
+
+      const res = await app.request(`/bookings/${created.data.id}/cancel`, {
+        method: 'POST',
+      })
+
+      expect(res.status).toBe(200)
+      const body = await res.json()
+      expect(body.data.status).toBe('CANCELLED')
+      expect(body.data.cancellationFee).toBe(0) // no price = no fee
+      expect(body.cancellation.feeAmount).toBe(0)
     })
   })
 })

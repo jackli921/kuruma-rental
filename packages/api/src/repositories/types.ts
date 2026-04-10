@@ -17,6 +17,7 @@ export interface BookingRepository {
   findById(id: string): Promise<Booking | undefined>
   create(data: Omit<Booking, 'id' | 'createdAt' | 'updatedAt'>): Promise<Booking>
   updateStatus(id: string, status: string): Promise<Booking | undefined>
+  cancel(id: string, cancellationFee: number, cancelledAt: Date): Promise<Booking | undefined>
 }
 
 export interface StatsRepository {
