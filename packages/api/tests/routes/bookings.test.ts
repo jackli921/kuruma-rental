@@ -157,6 +157,15 @@ describe('Booking Routes', () => {
       expect(body.error).toContain('"to"')
     })
 
+    it('returns 400 for invalid date strings', async () => {
+      const res = await app.request('/bookings?from=not-a-date&to=also-bad')
+      const body = await res.json()
+
+      expect(res.status).toBe(400)
+      expect(body.success).toBe(false)
+      expect(body.error).toContain('valid ISO dates')
+    })
+
     it('returns 400 when to is before from', async () => {
       const from = futureDate(48)
       const to = futureDate(24)

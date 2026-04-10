@@ -22,6 +22,9 @@ export function createBookingRoutes(repo: BookingRepository): Hono {
     if (fromParam && toParam) {
       const from = new Date(fromParam)
       const to = new Date(toParam)
+      if (Number.isNaN(from.getTime()) || Number.isNaN(to.getTime())) {
+        return c.json({ success: false, error: '"from" and "to" must be valid ISO dates' }, 400)
+      }
       if (to <= from) {
         return c.json({ success: false, error: '"to" must be after "from"' }, 400)
       }
