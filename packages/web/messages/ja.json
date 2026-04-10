@@ -147,7 +147,24 @@
         "all": "すべて",
         "available": "利用可能",
         "maintenance": "メンテナンス中",
-        "retired": "廃止"
+        "retired": "廃止",
+        "searchPlaceholder": "名前で検索...",
+        "statusHeading": "ステータス",
+        "transmissionHeading": "トランスミッション",
+        "transmissionAuto": "オートマ",
+        "transmissionManual": "マニュアル",
+        "capacityHeading": "定員",
+        "seatsLabel": "{min}〜{max}人乗り",
+        "sortHeading": "並び替え",
+        "sortNameAsc": "名前 (A-Z)",
+        "sortNameDesc": "名前 (Z-A)",
+        "sortSeatsAsc": "定員 (少ない順)",
+        "sortSeatsDesc": "定員 (多い順)"
+      },
+      "actions": {
+        "setMaintenance": "メンテナンス中にする",
+        "setAvailable": "利用可能にする",
+        "restore": "車両を復元する"
       }
     },
     "customers": {

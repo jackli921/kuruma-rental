@@ -147,7 +147,24 @@
         "all": "All",
         "available": "Available",
         "maintenance": "Maintenance",
-        "retired": "Retired"
+        "retired": "Retired",
+        "searchPlaceholder": "Search by name...",
+        "statusHeading": "Status",
+        "transmissionHeading": "Transmission",
+        "transmissionAuto": "Auto",
+        "transmissionManual": "Manual",
+        "capacityHeading": "Capacity",
+        "seatsLabel": "{min}-{max} seats",
+        "sortHeading": "Sort by",
+        "sortNameAsc": "Name A-Z",
+        "sortNameDesc": "Name Z-A",
+        "sortSeatsAsc": "Seats: fewest first",
+        "sortSeatsDesc": "Seats: most first"
+      },
+      "actions": {
+        "setMaintenance": "Set to Maintenance",
+        "setAvailable": "Mark Available",
+        "restore": "Restore vehicle"
       }
     },
     "customers": {
