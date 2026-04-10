@@ -4,18 +4,7 @@ import { Providers } from '@/components/providers'
 import { routing } from '@/i18n/routing'
 import { NextIntlClientProvider, hasLocale } from 'next-intl'
 import { getMessages } from 'next-intl/server'
-import { Geist, Geist_Mono } from 'next/font/google'
 import { notFound } from 'next/navigation'
-
-const geistSans = Geist({
-  variable: '--font-geist-sans',
-  subsets: ['latin'],
-})
-
-const geistMono = Geist_Mono({
-  variable: '--font-geist-mono',
-  subsets: ['latin'],
-})
 
 export default async function LocaleLayout({
   children,
@@ -33,10 +22,7 @@ export default async function LocaleLayout({
   const messages = await getMessages()
 
   return (
-    <div
-      lang={locale}
-      className={`${geistSans.variable} ${geistMono.variable} min-h-dvh flex flex-col antialiased font-sans`}
-    >
+    <div lang={locale} className="min-h-dvh flex flex-col">
       <NextIntlClientProvider messages={messages}>
         <Providers>
           <Navbar />
