@@ -158,7 +158,26 @@
     "messages": {
       "title": "メッセージ",
       "subtitle": "お客様との会話",
-      "empty": "メッセージはまだありません"
+      "empty": "まだ会話はありません。お客様からの連絡があるとここに表示されます。"
+    }
+  },
+  "messaging": {
+    "threadList": {
+      "title": "メッセージ",
+      "subtitle": "会話一覧",
+      "empty": "メッセージはまだありません",
+      "emptyDescription": "会話を始めるか、返信をお待ちください。",
+      "unread": "未読 {count} 件"
+    },
+    "thread": {
+      "sendPlaceholder": "メッセージを入力...",
+      "send": "送信",
+      "translate": "翻訳",
+      "showOriginal": "原文を表示",
+      "noMessages": "この会話にはまだメッセージがありません。",
+      "you": "自分",
+      "today": "今日",
+      "yesterday": "昨日"
     }
   },
   "bookings": {
