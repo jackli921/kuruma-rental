@@ -21,7 +21,7 @@ export async function checkAvailability(
 ): Promise<boolean> {
   const db = getDb()
   const conflicts = await db
-    .select()
+    .select({ id: bookings.id })
     .from(bookings)
     .where(
       and(
@@ -131,7 +131,22 @@ export async function getBookingsByRenterId(userId: string): Promise<BookingWith
 
 export async function getBookingById(id: string) {
   const db = getDb()
-  const rows = await db.select().from(bookings).where(eq(bookings.id, id))
+  const rows = await db
+    .select({
+      id: bookings.id,
+      renterId: bookings.renterId,
+      vehicleId: bookings.vehicleId,
+      startAt: bookings.startAt,
+      endAt: bookings.endAt,
+      status: bookings.status,
+      source: bookings.source,
+      externalId: bookings.externalId,
+      notes: bookings.notes,
+      createdAt: bookings.createdAt,
+      updatedAt: bookings.updatedAt,
+    })
+    .from(bookings)
+    .where(eq(bookings.id, id))
   const booking = rows[0]
   return booking ?? null
 }

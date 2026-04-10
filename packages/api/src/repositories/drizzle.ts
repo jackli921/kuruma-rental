@@ -12,11 +12,42 @@ import type {
 
 type Db = ReturnType<typeof getDb>
 
+const vehicleColumns = {
+  id: vehicles.id,
+  name: vehicles.name,
+  description: vehicles.description,
+  photos: vehicles.photos,
+  seats: vehicles.seats,
+  transmission: vehicles.transmission,
+  fuelType: vehicles.fuelType,
+  status: vehicles.status,
+  bufferMinutes: vehicles.bufferMinutes,
+  minRentalHours: vehicles.minRentalHours,
+  maxRentalHours: vehicles.maxRentalHours,
+  advanceBookingHours: vehicles.advanceBookingHours,
+  createdAt: vehicles.createdAt,
+  updatedAt: vehicles.updatedAt,
+}
+
+const bookingColumns = {
+  id: bookings.id,
+  renterId: bookings.renterId,
+  vehicleId: bookings.vehicleId,
+  startAt: bookings.startAt,
+  endAt: bookings.endAt,
+  status: bookings.status,
+  source: bookings.source,
+  externalId: bookings.externalId,
+  notes: bookings.notes,
+  createdAt: bookings.createdAt,
+  updatedAt: bookings.updatedAt,
+}
+
 export class DrizzleVehicleRepository implements VehicleRepository {
   constructor(private readonly db: Db) {}
 
   async findAll(filters?: { status?: string }): Promise<Vehicle[]> {
-    const query = this.db.select().from(vehicles)
+    const query = this.db.select(vehicleColumns).from(vehicles)
 
     const rows = filters?.status
       ? await query.where(eq(vehicles.status, filters.status as Vehicle['status']))
@@ -26,7 +57,7 @@ export class DrizzleVehicleRepository implements VehicleRepository {
   }
 
   async findById(id: string): Promise<Vehicle | undefined> {
-    const [row] = await this.db.select().from(vehicles).where(eq(vehicles.id, id))
+    const [row] = await this.db.select(vehicleColumns).from(vehicles).where(eq(vehicles.id, id))
 
     return (row as Vehicle) ?? undefined
   }
@@ -82,7 +113,7 @@ export class DrizzleAvailabilityRepository implements AvailabilityRepository {
     const toIso = to.toISOString()
 
     const rows = await this.db
-      .select()
+      .select(vehicleColumns)
       .from(vehicles)
       .where(
         and(
@@ -103,7 +134,10 @@ export class DrizzleAvailabilityRepository implements AvailabilityRepository {
     from: Date,
     to: Date,
   ): Promise<{ available: boolean; vehicle: Vehicle; conflicts: Booking[] } | undefined> {
-    const [vehicle] = await this.db.select().from(vehicles).where(eq(vehicles.id, vehicleId))
+    const [vehicle] = await this.db
+      .select(vehicleColumns)
+      .from(vehicles)
+      .where(eq(vehicles.id, vehicleId))
 
     if (!vehicle) return undefined
 
@@ -111,7 +145,7 @@ export class DrizzleAvailabilityRepository implements AvailabilityRepository {
     const toIso = to.toISOString()
 
     const conflicts = await this.db
-      .select()
+      .select(bookingColumns)
       .from(bookings)
       .where(
         and(
@@ -142,7 +176,7 @@ export class DrizzleBookingRepository implements BookingRepository {
       conditions.push(eq(bookings.vehicleId, filters.vehicleId))
     }
 
-    const query = this.db.select().from(bookings)
+    const query = this.db.select(bookingColumns).from(bookings)
 
     const rows = conditions.length > 0 ? await query.where(and(...conditions)) : await query
 
@@ -150,7 +184,7 @@ export class DrizzleBookingRepository implements BookingRepository {
   }
 
   async findById(id: string): Promise<Booking | undefined> {
-    const [row] = await this.db.select().from(bookings).where(eq(bookings.id, id))
+    const [row] = await this.db.select(bookingColumns).from(bookings).where(eq(bookings.id, id))
 
     return (row as Booking) ?? undefined
   }
