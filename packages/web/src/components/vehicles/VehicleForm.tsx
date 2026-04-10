@@ -5,9 +5,12 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { zodResolver } from '@hookform/resolvers/zod'
-import { createVehicleSchema, type CreateVehicleInput } from '@kuruma/shared/validators/vehicle'
+import { type CreateVehicleInput, createVehicleSchema } from '@kuruma/shared/validators/vehicle'
 import { useTranslations } from 'next-intl'
 import { useForm } from 'react-hook-form'
+import type { z } from 'zod'
+
+type VehicleFormValues = z.input<typeof createVehicleSchema>
 
 interface VehicleFormProps {
   onSubmit: (data: CreateVehicleInput) => Promise<void>
@@ -23,7 +26,7 @@ export function VehicleForm({ onSubmit, onCancel, defaultValues, isSubmitting }:
     register,
     handleSubmit,
     formState: { errors },
-  } = useForm<CreateVehicleInput>({
+  } = useForm<VehicleFormValues>({
     resolver: zodResolver(createVehicleSchema),
     defaultValues: {
       name: '',
@@ -38,17 +41,14 @@ export function VehicleForm({ onSubmit, onCancel, defaultValues, isSubmitting }:
   })
 
   return (
-    <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
+    <form
+      onSubmit={handleSubmit((data) => onSubmit(data as CreateVehicleInput))}
+      className="space-y-4"
+    >
       <div>
         <Label htmlFor="name">{t('form.name')}</Label>
-        <Input
-          id="name"
-          placeholder={t('form.namePlaceholder')}
-          {...register('name')}
-        />
-        {errors.name && (
-          <p className="text-sm text-destructive mt-1">{errors.name.message}</p>
-        )}
+        <Input id="name" placeholder={t('form.namePlaceholder')} {...register('name')} />
+        {errors.name && <p className="text-sm text-destructive mt-1">{errors.name.message}</p>}
       </div>
 
       <div>
@@ -63,14 +63,8 @@ export function VehicleForm({ onSubmit, onCancel, defaultValues, isSubmitting }:
       <div className="grid grid-cols-2 gap-4">
         <div>
           <Label htmlFor="seats">{t('form.seats')}</Label>
-          <Input
-            id="seats"
-            type="number"
-            {...register('seats', { valueAsNumber: true })}
-          />
-          {errors.seats && (
-            <p className="text-sm text-destructive mt-1">{errors.seats.message}</p>
-          )}
+          <Input id="seats" type="number" {...register('seats', { valueAsNumber: true })} />
+          {errors.seats && <p className="text-sm text-destructive mt-1">{errors.seats.message}</p>}
         </div>
 
         <div>
