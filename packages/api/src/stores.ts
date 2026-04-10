@@ -26,6 +26,9 @@ export interface Booking {
   source: 'DIRECT' | 'TRIP_COM' | 'MANUAL' | 'OTHER'
   externalId: string | null
   notes: string | null
+  totalPrice: number | null
+  cancellationFee: number | null
+  cancelledAt: Date | null
   createdAt: Date
   updatedAt: Date
 }

@@ -39,6 +39,9 @@ const bookingColumns = {
   source: bookings.source,
   externalId: bookings.externalId,
   notes: bookings.notes,
+  totalPrice: bookings.totalPrice,
+  cancellationFee: bookings.cancellationFee,
+  cancelledAt: bookings.cancelledAt,
   createdAt: bookings.createdAt,
   updatedAt: bookings.updatedAt,
 }
@@ -216,6 +219,25 @@ export class DrizzleBookingRepository implements BookingRepository {
       .returning()
 
     return (updated as Booking) ?? undefined
+  }
+
+  async cancel(
+    id: string,
+    cancellationFee: number,
+    cancelledAt: Date,
+  ): Promise<Booking | undefined> {
+    const [cancelled] = await this.db
+      .update(bookings)
+      .set({
+        status: 'CANCELLED',
+        cancellationFee,
+        cancelledAt,
+        updatedAt: sql`now()`,
+      })
+      .where(eq(bookings.id, id))
+      .returning()
+
+    return (cancelled as Booking) ?? undefined
   }
 }
 

@@ -1,4 +1,5 @@
 import { VALID_BOOKING_TRANSITIONS } from '@kuruma/shared/db/schema'
+import { calculateCancellationFee } from '@kuruma/shared/lib/cancellation-policy'
 import { createBookingSchema } from '@kuruma/shared/validators/booking'
 import { Hono } from 'hono'
 import type { BookingRepository } from '../repositories/types'
@@ -54,6 +55,9 @@ export function createBookingRoutes(repo: BookingRepository): Hono {
       source: result.data.source,
       externalId: result.data.externalId ?? null,
       notes: result.data.notes ?? null,
+      totalPrice: result.data.totalPrice ?? null,
+      cancellationFee: null,
+      cancelledAt: null,
     })
 
     return c.json({ success: true, data: booking }, 201)
@@ -90,20 +94,21 @@ export function createBookingRoutes(repo: BookingRepository): Hono {
       return c.json({ success: false, error: 'Booking not found' }, 404)
     }
 
-    const allowedTransitions =
-      VALID_BOOKING_TRANSITIONS[booking.status as keyof typeof VALID_BOOKING_TRANSITIONS] ?? []
-    if (!allowedTransitions.includes('CANCELLED')) {
+    if (booking.status !== 'CONFIRMED') {
       return c.json(
         {
           success: false,
-          error: `Invalid status transition from ${booking.status} to CANCELLED`,
+          error: `Cannot cancel booking with status ${booking.status}. Only CONFIRMED bookings can be cancelled.`,
         },
-        400,
+        409,
       )
     }
 
-    const updated = await repo.updateStatus(booking.id, 'CANCELLED')
-    return c.json({ success: true, data: updated })
+    const now = new Date()
+    const cancellation = calculateCancellationFee(booking.startAt, now, booking.totalPrice ?? 0)
+
+    const updated = await repo.cancel(booking.id, cancellation.feeAmount, now)
+    return c.json({ success: true, data: updated, cancellation })
   })
 
   return bookings
