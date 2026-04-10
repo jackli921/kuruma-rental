@@ -147,7 +147,24 @@
         "all": "全部",
         "available": "可用",
         "maintenance": "维护中",
-        "retired": "已停用"
+        "retired": "已停用",
+        "searchPlaceholder": "按名称搜索...",
+        "statusHeading": "状态",
+        "transmissionHeading": "变速箱",
+        "transmissionAuto": "自动",
+        "transmissionManual": "手动",
+        "capacityHeading": "座位数",
+        "seatsLabel": "{min}-{max} 座",
+        "sortHeading": "排序",
+        "sortNameAsc": "名称 A-Z",
+        "sortNameDesc": "名称 Z-A",
+        "sortSeatsAsc": "座位由少到多",
+        "sortSeatsDesc": "座位由多到少"
+      },
+      "actions": {
+        "setMaintenance": "设为维护中",
+        "setAvailable": "标记为可用",
+        "restore": "恢复车辆"
       }
     },
     "customers": {
