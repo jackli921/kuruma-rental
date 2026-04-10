@@ -1,61 +1,69 @@
-import { describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
-vi.mock('@kuruma/shared/db', () => ({
-  getDb: vi.fn(),
+vi.mock('@/lib/api-client', () => ({
+  getApiBaseUrl: () => 'http://localhost:8787',
 }))
 
 vi.mock('@/auth', () => ({
   auth: vi.fn(),
 }))
 
-import { getDb } from '@kuruma/shared/db'
 import { getBookingsByRenterId } from '@/lib/bookings'
 
-const MOCK_JOINED_ROW = {
-  bookings: {
-    id: 'booking-001',
-    vehicleId: 'vehicle-001',
-    startAt: new Date('2026-04-10T09:00:00Z'),
-    endAt: new Date('2026-04-12T09:00:00Z'),
-    status: 'CONFIRMED' as const,
-    createdAt: new Date('2026-04-01T00:00:00Z'),
-  },
-  vehicles: {
+const MOCK_BOOKING_WITH_VEHICLE_1 = {
+  id: 'booking-001',
+  vehicleId: 'vehicle-001',
+  renterId: 'user-001',
+  startAt: '2026-04-10T09:00:00.000Z',
+  endAt: '2026-04-12T09:00:00.000Z',
+  status: 'CONFIRMED',
+  createdAt: '2026-04-01T00:00:00.000Z',
+  vehicle: {
     name: 'Toyota Corolla',
     photos: ['https://example.com/photo1.jpg', 'https://example.com/photo2.jpg'],
   },
 }
 
-const MOCK_JOINED_ROW_2 = {
-  bookings: {
-    id: 'booking-002',
-    vehicleId: 'vehicle-002',
-    startAt: new Date('2026-04-15T10:00:00Z'),
-    endAt: new Date('2026-04-17T10:00:00Z'),
-    status: 'ACTIVE' as const,
-    createdAt: new Date('2026-04-05T00:00:00Z'),
-  },
-  vehicles: {
+const MOCK_BOOKING_WITH_VEHICLE_2 = {
+  id: 'booking-002',
+  vehicleId: 'vehicle-002',
+  renterId: 'user-001',
+  startAt: '2026-04-15T10:00:00.000Z',
+  endAt: '2026-04-17T10:00:00.000Z',
+  status: 'ACTIVE',
+  createdAt: '2026-04-05T00:00:00.000Z',
+  vehicle: {
     name: 'Honda Fit',
     photos: [],
   },
 }
 
-function mockDbJoinChain(rows: unknown[]) {
-  const mockOrderBy = vi.fn().mockResolvedValue(rows)
-  const mockWhere = vi.fn().mockReturnValue({ orderBy: mockOrderBy })
-  const mockInnerJoin = vi.fn().mockReturnValue({ where: mockWhere })
-  const mockFrom = vi.fn().mockReturnValue({ innerJoin: mockInnerJoin })
-  const mockSelect = vi.fn().mockReturnValue({ from: mockFrom })
-  vi.mocked(getDb).mockReturnValue({ select: mockSelect } as ReturnType<typeof getDb>)
-  return { mockSelect, mockFrom, mockInnerJoin, mockWhere, mockOrderBy }
-}
-
 describe('getBookingsByRenterId', () => {
-  it('returns bookings with joined vehicle name and photo', async () => {
-    mockDbJoinChain([MOCK_JOINED_ROW, MOCK_JOINED_ROW_2])
+  beforeEach(() => {
+    vi.stubGlobal('fetch', vi.fn())
+  })
+
+  afterEach(() => {
+    vi.restoreAllMocks()
+  })
+
+  it('calls GET /bookings?renterId=X&expand=vehicle and maps response', async () => {
+    vi.mocked(fetch).mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          success: true,
+          data: [MOCK_BOOKING_WITH_VEHICLE_1, MOCK_BOOKING_WITH_VEHICLE_2],
+        }),
+      ),
+    )
 
     const result = await getBookingsByRenterId('user-001')
+
+    expect(fetch).toHaveBeenCalledTimes(1)
+    const calledUrl = vi.mocked(fetch).mock.calls[0]?.[0]?.toString() ?? ''
+    expect(calledUrl).toBe(
+      'http://localhost:8787/bookings?renterId=user-001&expand=vehicle',
+    )
 
     expect(result).toHaveLength(2)
 
@@ -63,10 +71,10 @@ describe('getBookingsByRenterId', () => {
     expect(result[0]?.vehicleId).toBe('vehicle-001')
     expect(result[0]?.vehicleName).toBe('Toyota Corolla')
     expect(result[0]?.vehiclePhoto).toBe('https://example.com/photo1.jpg')
-    expect(result[0]?.startAt).toEqual(new Date('2026-04-10T09:00:00Z'))
-    expect(result[0]?.endAt).toEqual(new Date('2026-04-12T09:00:00Z'))
+    expect(result[0]?.startAt).toBe('2026-04-10T09:00:00.000Z')
+    expect(result[0]?.endAt).toBe('2026-04-12T09:00:00.000Z')
     expect(result[0]?.status).toBe('CONFIRMED')
-    expect(result[0]?.createdAt).toEqual(new Date('2026-04-01T00:00:00Z'))
+    expect(result[0]?.createdAt).toBe('2026-04-01T00:00:00.000Z')
 
     expect(result[1]?.id).toBe('booking-002')
     expect(result[1]?.vehicleName).toBe('Honda Fit')
@@ -75,9 +83,21 @@ describe('getBookingsByRenterId', () => {
   })
 
   it('returns empty array for unknown renter', async () => {
-    mockDbJoinChain([])
+    vi.mocked(fetch).mockResolvedValue(
+      new Response(JSON.stringify({ success: true, data: [] })),
+    )
 
     const result = await getBookingsByRenterId('nonexistent-user')
+
+    expect(result).toEqual([])
+  })
+
+  it('returns empty array when API returns error', async () => {
+    vi.mocked(fetch).mockResolvedValue(
+      new Response(JSON.stringify({ success: false, error: 'Server error' }), { status: 500 }),
+    )
+
+    const result = await getBookingsByRenterId('user-001')
 
     expect(result).toEqual([])
   })

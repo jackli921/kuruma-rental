@@ -2,9 +2,6 @@
 
 import { auth } from '@/auth'
 import { getApiBaseUrl } from '@/lib/api-client'
-import { getDb } from '@kuruma/shared/db'
-import { bookings, vehicles } from '@kuruma/shared/db/schema'
-import { desc, eq } from 'drizzle-orm'
 
 interface CreateBookingInput {
   vehicleId: string
@@ -68,25 +65,26 @@ export async function createBooking(input: CreateBookingInput): Promise<CreateBo
     }
   }
 
-  const db = getDb()
-  const rows = await db
-    .insert(bookings)
-    .values({
-      renterId: session.user.id,
+  const base = getApiBaseUrl()
+  const res = await fetch(`${base}/bookings`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
       vehicleId: input.vehicleId,
-      startAt,
-      endAt,
-      status: 'CONFIRMED',
+      renterId: session.user.id,
+      startAt: input.startAt,
+      endAt: input.endAt,
       source: 'DIRECT',
-    })
-    .returning()
+      ...(input.notes ? { notes: input.notes } : {}),
+    }),
+  })
+  const json: ApiResponse<{ id: string }> = await res.json()
 
-  const booking = rows[0]
-  if (!booking) {
+  if (!json.success || !json.data) {
     return { success: false, error: 'Failed to create booking.' }
   }
 
-  return { success: true, bookingId: booking.id }
+  return { success: true, bookingId: json.data.id }
 }
 
 export type BookingWithVehicle = {
@@ -94,50 +92,63 @@ export type BookingWithVehicle = {
   vehicleId: string
   vehicleName: string
   vehiclePhoto: string | null
-  startAt: Date
-  endAt: Date
+  startAt: string
+  endAt: string
   status: 'CONFIRMED' | 'ACTIVE' | 'COMPLETED' | 'CANCELLED'
-  createdAt: Date
+  createdAt: string
+}
+
+interface BookingWithVehicleResponse {
+  id: string
+  vehicleId: string
+  startAt: string
+  endAt: string
+  status: 'CONFIRMED' | 'ACTIVE' | 'COMPLETED' | 'CANCELLED'
+  createdAt: string
+  vehicle?: {
+    name: string
+    photos: string[]
+  }
 }
 
 export async function getBookingsByRenterId(userId: string): Promise<BookingWithVehicle[]> {
-  const db = getDb()
-  const rows = await db
-    .select({
-      bookings: {
-        id: bookings.id,
-        vehicleId: bookings.vehicleId,
-        startAt: bookings.startAt,
-        endAt: bookings.endAt,
-        status: bookings.status,
-        createdAt: bookings.createdAt,
-      },
-      vehicles: {
-        name: vehicles.name,
-        photos: vehicles.photos,
-      },
-    })
-    .from(bookings)
-    .innerJoin(vehicles, eq(bookings.vehicleId, vehicles.id))
-    .where(eq(bookings.renterId, userId))
-    .orderBy(desc(bookings.startAt))
+  const base = getApiBaseUrl()
+  const res = await fetch(`${base}/bookings?renterId=${encodeURIComponent(userId)}&expand=vehicle`)
+  const json: ApiResponse<BookingWithVehicleResponse[]> = await res.json()
 
-  return rows.map((row) => ({
-    id: row.bookings.id,
-    vehicleId: row.bookings.vehicleId,
-    vehicleName: row.vehicles.name,
-    vehiclePhoto: row.vehicles.photos[0] ?? null,
-    startAt: row.bookings.startAt,
-    endAt: row.bookings.endAt,
-    status: row.bookings.status,
-    createdAt: row.bookings.createdAt,
+  if (!json.success || !json.data) return []
+
+  return json.data.map((booking) => ({
+    id: booking.id,
+    vehicleId: booking.vehicleId,
+    vehicleName: booking.vehicle?.name ?? '',
+    vehiclePhoto: booking.vehicle?.photos[0] ?? null,
+    startAt: booking.startAt,
+    endAt: booking.endAt,
+    status: booking.status,
+    createdAt: booking.createdAt,
   }))
 }
 
-export async function getBookingById(id: string) {
+interface Booking {
+  id: string
+  renterId: string
+  vehicleId: string
+  startAt: string
+  endAt: string
+  effectiveEndAt: string
+  status: 'CONFIRMED' | 'ACTIVE' | 'COMPLETED' | 'CANCELLED'
+  source: string
+  externalId: string | null
+  notes: string | null
+  createdAt: string
+  updatedAt: string
+}
+
+export async function getBookingById(id: string): Promise<Booking | null> {
   const base = getApiBaseUrl()
   const res = await fetch(`${base}/bookings/${encodeURIComponent(id)}`)
-  const json: ApiResponse<Record<string, unknown>> = await res.json()
+  const json: ApiResponse<Booking> = await res.json()
 
   if (!json.success || !json.data) return null
 
