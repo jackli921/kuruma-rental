@@ -166,9 +166,7 @@ export class DrizzleAvailabilityRepository implements AvailabilityRepository {
 export class DrizzleBookingRepository implements BookingRepository {
   constructor(private readonly db: Db) {}
 
-  async findAll(filters?: { status?: string; vehicleId?: string; renterId?: string }): Promise<
-    Booking[]
-  > {
+  async findAll(filters?: { status?: string; vehicleId?: string; renterId?: string; from?: Date; to?: Date }): Promise<Booking[]> {
     const conditions = []
 
     if (filters?.status) {
@@ -179,6 +177,13 @@ export class DrizzleBookingRepository implements BookingRepository {
     }
     if (filters?.renterId) {
       conditions.push(eq(bookings.renterId, filters.renterId))
+    }
+    if (filters?.from && filters?.to) {
+      const fromIso = filters.from.toISOString()
+      const toIso = filters.to.toISOString()
+      conditions.push(
+        sql`tstzrange("startAt", "effectiveEndAt") && tstzrange(${fromIso}::timestamptz, ${toIso}::timestamptz)`,
+      )
     }
 
     const query = this.db.select(bookingColumns).from(bookings)

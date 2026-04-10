@@ -76,6 +76,8 @@ export class InMemoryBookingRepository implements BookingRepository {
     status?: string
     vehicleId?: string
     renterId?: string
+    from?: Date
+    to?: Date
   }): Promise<Booking[]> {
     let results = [...this.store.values()]
 
@@ -87,6 +89,11 @@ export class InMemoryBookingRepository implements BookingRepository {
     }
     if (filters?.renterId) {
       results = results.filter((b) => b.renterId === filters.renterId)
+    }
+    if (filters?.from && filters?.to) {
+      const from = filters.from
+      const to = filters.to
+      results = results.filter((b) => b.startAt < to && b.effectiveEndAt > from)
     }
 
     return results

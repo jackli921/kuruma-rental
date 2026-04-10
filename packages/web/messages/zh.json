@@ -94,7 +94,19 @@
     "bookings": {
       "title": "预订管理",
       "subtitle": "管理预订和排程",
-      "empty": "暂无预订"
+      "empty": "暂无预订",
+      "calendar": {
+        "vehicle": "车辆",
+        "today": "今天",
+        "noVehicles": "未找到车辆",
+        "bookingDetails": "预订详情",
+        "status": "状态",
+        "start": "开始",
+        "end": "结束",
+        "source": "来源",
+        "notes": "备注",
+        "close": "关闭"
+      }
     },
     "vehicles": {
       "title": "车队管理",

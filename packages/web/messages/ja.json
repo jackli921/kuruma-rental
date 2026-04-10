@@ -94,7 +94,19 @@
     "bookings": {
       "title": "予約管理",
       "subtitle": "予約とスケジュールの管理",
-      "empty": "予約はまだありません"
+      "empty": "予約はまだありません",
+      "calendar": {
+        "vehicle": "車両",
+        "today": "今日",
+        "noVehicles": "車両が見つかりません",
+        "bookingDetails": "予約詳細",
+        "status": "ステータス",
+        "start": "開始",
+        "end": "終了",
+        "source": "予約元",
+        "notes": "備考",
+        "close": "閉じる"
+      }
     },
     "vehicles": {
       "title": "車両管理",

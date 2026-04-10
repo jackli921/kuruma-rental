@@ -13,12 +13,30 @@ export function createBookingRoutes(
     const statusFilter = c.req.query('status')
     const vehicleIdFilter = c.req.query('vehicleId')
     const renterIdFilter = c.req.query('renterId')
+    const fromParam = c.req.query('from')
+    const toParam = c.req.query('to')
     const expand = c.req.query('expand')
 
-    const filters: { status?: string; vehicleId?: string; renterId?: string } = {}
+    if ((fromParam && !toParam) || (!fromParam && toParam)) {
+      return c.json({ success: false, error: 'Both "from" and "to" are required for date range filtering' }, 400)
+    }
+
+    const filters: { status?: string; vehicleId?: string; renterId?: string; from?: Date; to?: Date } = {}
     if (statusFilter) filters.status = statusFilter
     if (vehicleIdFilter) filters.vehicleId = vehicleIdFilter
     if (renterIdFilter) filters.renterId = renterIdFilter
+    if (fromParam && toParam) {
+      const from = new Date(fromParam)
+      const to = new Date(toParam)
+      if (Number.isNaN(from.getTime()) || Number.isNaN(to.getTime())) {
+        return c.json({ success: false, error: '"from" and "to" must be valid ISO dates' }, 400)
+      }
+      if (to <= from) {
+        return c.json({ success: false, error: '"to" must be after "from"' }, 400)
+      }
+      filters.from = from
+      filters.to = to
+    }
 
     const results = await repo.findAll(Object.keys(filters).length > 0 ? filters : undefined)
 
