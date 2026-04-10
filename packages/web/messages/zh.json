@@ -158,7 +158,26 @@
     "messages": {
       "title": "消息",
       "subtitle": "客户对话",
-      "empty": "暂无消息"
+      "empty": "暂无对话。客户联系您时消息会显示在这里。"
+    }
+  },
+  "messaging": {
+    "threadList": {
+      "title": "消息",
+      "subtitle": "您的对话",
+      "empty": "暂无消息",
+      "emptyDescription": "开始对话或等待回复。",
+      "unread": "{count} 条未读"
+    },
+    "thread": {
+      "sendPlaceholder": "输入消息...",
+      "send": "发送",
+      "translate": "翻译",
+      "showOriginal": "显示原文",
+      "noMessages": "此对话中暂无消息。",
+      "you": "我",
+      "today": "今天",
+      "yesterday": "昨天"
     }
   },
   "bookings": {

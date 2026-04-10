@@ -1,8 +1,8 @@
-export type { Vehicle, Booking } from '../stores'
+export type { Vehicle, Booking, Thread, ThreadParticipant, Message } from '../stores'
 export type { DashboardStats } from '@kuruma/shared/types/stats'
 
 import type { DashboardStats } from '@kuruma/shared/types/stats'
-import type { Booking, Vehicle } from '../stores'
+import type { Booking, Message, Thread, ThreadParticipant, Vehicle } from '../stores'
 
 export interface VehicleRepository {
   findAll(filters?: { status?: string }): Promise<Vehicle[]>
@@ -13,7 +13,13 @@ export interface VehicleRepository {
 }
 
 export interface BookingRepository {
-  findAll(filters?: { status?: string; vehicleId?: string; renterId?: string; from?: Date; to?: Date }): Promise<Booking[]>
+  findAll(filters?: {
+    status?: string
+    vehicleId?: string
+    renterId?: string
+    from?: Date
+    to?: Date
+  }): Promise<Booking[]>
   findById(id: string): Promise<Booking | undefined>
   create(data: Omit<Booking, 'id' | 'createdAt' | 'updatedAt'>): Promise<Booking>
   updateStatus(id: string, status: string): Promise<Booking | undefined>
@@ -38,4 +44,20 @@ export interface AvailabilityRepository {
       }
     | undefined
   >
+}
+
+export interface ThreadRepository {
+  findAll(
+    userId: string,
+  ): Promise<Array<Thread & { participants: ThreadParticipant[]; lastMessage: Message | null }>>
+  findById(
+    id: string,
+  ): Promise<(Thread & { participants: ThreadParticipant[]; messages: Message[] }) | undefined>
+  create(bookingId: string | null, participantIds: string[]): Promise<Thread>
+  markAsRead(threadId: string, userId: string): Promise<void>
+}
+
+export interface MessageRepository {
+  create(threadId: string, senderId: string, content: string): Promise<Message>
+  findByThreadId(threadId: string): Promise<Message[]>
 }

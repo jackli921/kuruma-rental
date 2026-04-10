@@ -33,5 +33,29 @@ export interface Booking {
   updatedAt: Date
 }
 
+export interface Thread {
+  id: string
+  bookingId: string | null
+  createdAt: Date
+  updatedAt: Date
+}
+
+export interface ThreadParticipant {
+  id: string
+  threadId: string
+  userId: string
+  unreadCount: number
+}
+
+export interface Message {
+  id: string
+  threadId: string
+  senderId: string
+  content: string
+  sourceLanguage: string | null
+  translations: string
+  createdAt: Date
+}
+
 // Map stores removed — repositories handle data access now.
 // Types remain here as the shared contract between repositories and routes.

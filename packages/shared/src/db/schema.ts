@@ -93,6 +93,44 @@ export const bookings = pgTable('bookings', {
   updatedAt: timestamp('updatedAt', { withTimezone: true }).notNull().defaultNow(),
 })
 
+export const threads = pgTable('threads', {
+  id: text('id')
+    .primaryKey()
+    .$defaultFn(() => crypto.randomUUID()),
+  bookingId: text('bookingId').references(() => bookings.id),
+  createdAt: timestamp('createdAt', { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp('updatedAt', { withTimezone: true }).notNull().defaultNow(),
+})
+
+export const threadParticipants = pgTable('thread_participants', {
+  id: text('id')
+    .primaryKey()
+    .$defaultFn(() => crypto.randomUUID()),
+  threadId: text('threadId')
+    .notNull()
+    .references(() => threads.id, { onDelete: 'cascade' }),
+  userId: text('userId')
+    .notNull()
+    .references(() => users.id),
+  unreadCount: integer('unreadCount').notNull().default(0),
+})
+
+export const messages = pgTable('messages', {
+  id: text('id')
+    .primaryKey()
+    .$defaultFn(() => crypto.randomUUID()),
+  threadId: text('threadId')
+    .notNull()
+    .references(() => threads.id, { onDelete: 'cascade' }),
+  senderId: text('senderId')
+    .notNull()
+    .references(() => users.id),
+  content: text('content').notNull(),
+  sourceLanguage: text('sourceLanguage'),
+  translations: text('translations').default('{}'),
+  createdAt: timestamp('createdAt', { withTimezone: true }).notNull().defaultNow(),
+})
+
 export const VALID_BOOKING_TRANSITIONS: Record<string, string[]> = {
   CONFIRMED: ['ACTIVE', 'CANCELLED'],
   ACTIVE: ['COMPLETED', 'CANCELLED'],

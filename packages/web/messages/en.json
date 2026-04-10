@@ -158,7 +158,26 @@
     "messages": {
       "title": "Messages",
       "subtitle": "Customer conversations",
-      "empty": "No messages yet"
+      "empty": "No conversations yet. Messages will appear when customers contact you."
+    }
+  },
+  "messaging": {
+    "threadList": {
+      "title": "Messages",
+      "subtitle": "Your conversations",
+      "empty": "No messages yet",
+      "emptyDescription": "Start a conversation or wait for a reply.",
+      "unread": "{count} unread"
+    },
+    "thread": {
+      "sendPlaceholder": "Type a message...",
+      "send": "Send",
+      "translate": "Translate",
+      "showOriginal": "Show original",
+      "noMessages": "No messages in this conversation yet.",
+      "you": "You",
+      "today": "Today",
+      "yesterday": "Yesterday"
     }
   },
   "bookings": {
