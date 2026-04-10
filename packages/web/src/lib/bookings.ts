@@ -122,7 +122,7 @@ export async function getBookingsByRenterId(userId: string): Promise<BookingWith
     id: booking.id,
     vehicleId: booking.vehicleId,
     vehicleName: booking.vehicle?.name ?? '',
-    vehiclePhoto: booking.vehicle?.photos[0] ?? null,
+    vehiclePhoto: booking.vehicle?.photos?.[0] ?? null,
     startAt: booking.startAt,
     endAt: booking.endAt,
     status: booking.status,

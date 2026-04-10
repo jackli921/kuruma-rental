@@ -11,7 +11,7 @@ export interface VehicleData {
   id: string
   name: string
   description: string | null
-  photos: string[]
+  photos?: string[]
   seats: number
   transmission: 'AUTO' | 'MANUAL'
   fuelType: string | null
@@ -61,7 +61,10 @@ export async function createVehicle(data: CreateVehicleInput): Promise<VehicleDa
   })
 }
 
-export async function updateVehicle(id: string, data: Partial<CreateVehicleInput>): Promise<VehicleData> {
+export async function updateVehicle(
+  id: string,
+  data: Partial<CreateVehicleInput>,
+): Promise<VehicleData> {
   const base = getApiBaseUrl()
   return apiRequest<VehicleData>(`${base}/vehicles/${id}`, {
     method: 'PATCH',

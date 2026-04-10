@@ -13,7 +13,7 @@ import { useActionState, useEffect, useState } from 'react'
 interface VehicleInfo {
   id: string
   name: string
-  photos: string[]
+  photos?: string[]
   seats: number
   transmission: string
   fuelType: string | null
@@ -47,7 +47,7 @@ export function BookingForm({ vehicle, isAuthenticated }: BookingFormProps) {
   const [state, formAction, isPending] = useActionState(bookingAction, {})
 
   const hasDates = startAt !== '' && endAt !== ''
-  const primaryPhoto = vehicle.photos[0]
+  const primaryPhoto = vehicle.photos?.[0]
   const transmissionLabel = vehicle.transmission === 'AUTO' ? t('auto') : t('manual')
 
   // Redirect to confirmation page on success
