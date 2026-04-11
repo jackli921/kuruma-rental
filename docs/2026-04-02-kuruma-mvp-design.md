@@ -302,7 +302,7 @@ kuruma-rental/
 - Click event -> booking detail (view/cancel/message)
 - Staff can drag-to-create manual blocks (maintenance, holds)
 - Booking source badge on each event (direct, Trip.com, manual)
-- Built with react-big-calendar or @schedule-x/react
+- Built with react-big-calendar (locked after 2026-04-11 bake-off; see `docs/2026-04-11-calendar-library-spike.md` — schedule-x disqualified due to paywalled resource/drag features)
 
 ### Navigation
 - Dashboard (calendar)
