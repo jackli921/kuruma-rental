@@ -95,10 +95,12 @@
       "title": "预订管理",
       "subtitle": "管理预订和排程",
       "empty": "暂无预订",
+      "placeholder": {
+        "title": "日历正在重建",
+        "body": "预订日历正在使用新的组件库重建，日、周、月视图即将上线。",
+        "trackingLink": "在 GitHub 上查看进度"
+      },
       "calendar": {
-        "vehicle": "车辆",
-        "today": "今天",
-        "noVehicles": "未找到车辆",
         "bookingDetails": "预订详情",
         "status": "状态",
         "start": "开始",

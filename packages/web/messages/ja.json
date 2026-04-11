@@ -95,10 +95,12 @@
       "title": "予約管理",
       "subtitle": "予約とスケジュールの管理",
       "empty": "予約はまだありません",
+      "placeholder": {
+        "title": "カレンダーは準備中です",
+        "body": "予約カレンダーを新しいライブラリで作り直しています。日・週・月ビューを近日中に公開します。",
+        "trackingLink": "GitHub で進捗を確認"
+      },
       "calendar": {
-        "vehicle": "車両",
-        "today": "今日",
-        "noVehicles": "車両が見つかりません",
         "bookingDetails": "予約詳細",
         "status": "ステータス",
         "start": "開始",

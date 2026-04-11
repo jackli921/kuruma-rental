@@ -95,10 +95,12 @@
       "title": "Bookings",
       "subtitle": "Manage reservations and scheduling",
       "empty": "No bookings yet",
+      "placeholder": {
+        "title": "Calendar under construction",
+        "body": "The bookings calendar is being rebuilt with a new library. Day, week, and month views are on the way.",
+        "trackingLink": "Track progress on GitHub"
+      },
       "calendar": {
-        "vehicle": "Vehicle",
-        "today": "Today",
-        "noVehicles": "No vehicles found",
         "bookingDetails": "Booking Details",
         "status": "Status",
         "start": "Start",
