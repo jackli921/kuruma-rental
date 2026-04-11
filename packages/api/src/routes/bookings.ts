@@ -1,5 +1,6 @@
 import { VALID_BOOKING_TRANSITIONS } from '@kuruma/shared/db/schema'
 import { calculateCancellationFee } from '@kuruma/shared/lib/cancellation-policy'
+import { checkRentalRules } from '@kuruma/shared/lib/rental-rules'
 import { createBookingSchema } from '@kuruma/shared/validators/booking'
 import { Hono } from 'hono'
 import type { BookingRepository, VehicleRepository } from '../repositories/types'
@@ -95,15 +96,48 @@ export function createBookingRoutes(
       return c.json({ success: false, error: { renterId: ['Renter ID is required'] } }, 400)
     }
 
+    const startAt = new Date(result.data.startAt)
     const endAt = new Date(result.data.endAt)
     const defaultBufferMs = 60 * 60 * 1000 // 60 minutes default
     const effectiveEndAt = new Date(endAt.getTime() + defaultBufferMs)
+
+    // Issue #65: per-vehicle rental rules (min/max duration, advance booking
+    // window). Looked up here because the rules live on the vehicle and the
+    // server clock is the authoritative "now". We only enforce when the
+    // vehicle is actually present in the repo — production bookings always
+    // carry a real FK, so in practice this runs on every booking.
+    if (vehicleRepo) {
+      const vehicle = await vehicleRepo.findById(result.data.vehicleId)
+      if (vehicle) {
+        const check = checkRentalRules(
+          {
+            minRentalHours: vehicle.minRentalHours,
+            maxRentalHours: vehicle.maxRentalHours,
+            advanceBookingHours: vehicle.advanceBookingHours,
+          },
+          startAt,
+          endAt,
+          new Date(),
+        )
+        if (!check.ok) {
+          return c.json(
+            {
+              success: false,
+              error: 'Booking violates a rental rule on this vehicle',
+              code: check.code,
+              details: { required: check.required, actual: check.actual },
+            },
+            400,
+          )
+        }
+      }
+    }
 
     try {
       const booking = await repo.create({
         renterId,
         vehicleId: result.data.vehicleId,
-        startAt: new Date(result.data.startAt),
+        startAt,
         endAt,
         effectiveEndAt,
         status: 'CONFIRMED',

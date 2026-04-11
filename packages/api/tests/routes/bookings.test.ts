@@ -226,9 +226,12 @@ describe('Booking Routes', () => {
         fuelType: 'Gasoline',
         status: 'AVAILABLE',
         bufferMinutes: 60,
-        minRentalHours: 4,
-        maxRentalHours: 168,
-        advanceBookingHours: 24,
+        // No rental rules — this test verifies expand projection, not
+        // rental-rules enforcement. Keep them null so the 24h booking from
+        // validBookingInput doesn't flirt with the advance-booking boundary.
+        minRentalHours: null,
+        maxRentalHours: null,
+        advanceBookingHours: null,
       })
 
       const allVehicles = await vehicleRepo.findAll()
@@ -345,6 +348,116 @@ describe('Booking Routes', () => {
 
       const res = await createBooking()
       expect(res.status).toBe(201)
+    })
+
+    // Issue #65: per-vehicle rental rules. Shared helper logic is unit-tested
+    // in packages/shared/tests/lib/rental-rules.test.ts — these tests verify
+    // the API route wires the helper correctly and returns the structured
+    // error envelope the web client depends on.
+    describe('rental rules enforcement', () => {
+      async function seedVehicleWithRules(rules: {
+        minRentalHours?: number | null
+        maxRentalHours?: number | null
+        advanceBookingHours?: number | null
+      }) {
+        const vehicle = await vehicleRepo.create({
+          name: 'Toyota Alphard',
+          description: null,
+          photos: [],
+          seats: 7,
+          transmission: 'AUTO',
+          fuelType: 'Hybrid',
+          status: 'AVAILABLE',
+          bufferMinutes: 60,
+          minRentalHours: rules.minRentalHours ?? null,
+          maxRentalHours: rules.maxRentalHours ?? null,
+          advanceBookingHours: rules.advanceBookingHours ?? null,
+          dailyRateJpy: 18000,
+          hourlyRateJpy: 2500,
+        })
+        return vehicle.id
+      }
+
+      it('rejects a 2h booking on a vehicle with min 6h', async () => {
+        const vehicleId = await seedVehicleWithRules({ minRentalHours: 6 })
+
+        const res = await createBooking({
+          ...validBookingInput(),
+          vehicleId,
+          startAt: futureDate(48),
+          endAt: futureDate(50),
+        })
+
+        expect(res.status).toBe(400)
+        const body = await res.json()
+        expect(body.success).toBe(false)
+        expect(body.code).toBe('RENTAL_RULE_MIN_DURATION')
+        expect(body.details).toMatchObject({ required: 6 })
+      })
+
+      it('rejects a 100h booking on a vehicle with max 72h', async () => {
+        const vehicleId = await seedVehicleWithRules({ maxRentalHours: 72 })
+
+        const res = await createBooking({
+          ...validBookingInput(),
+          vehicleId,
+          startAt: futureDate(48),
+          endAt: futureDate(148),
+        })
+
+        expect(res.status).toBe(400)
+        const body = await res.json()
+        expect(body.success).toBe(false)
+        expect(body.code).toBe('RENTAL_RULE_MAX_DURATION')
+        expect(body.details).toMatchObject({ required: 72 })
+      })
+
+      it('rejects a same-day booking on a vehicle requiring 24h advance', async () => {
+        const vehicleId = await seedVehicleWithRules({ advanceBookingHours: 24 })
+
+        const res = await createBooking({
+          ...validBookingInput(),
+          vehicleId,
+          startAt: futureDate(2),
+          endAt: futureDate(26),
+        })
+
+        expect(res.status).toBe(400)
+        const body = await res.json()
+        expect(body.success).toBe(false)
+        expect(body.code).toBe('RENTAL_RULE_ADVANCE_BOOKING')
+        expect(body.details).toMatchObject({ required: 24 })
+      })
+
+      it('accepts a compliant booking on a vehicle with all three rules', async () => {
+        const vehicleId = await seedVehicleWithRules({
+          minRentalHours: 6,
+          maxRentalHours: 240,
+          advanceBookingHours: 24,
+        })
+
+        const res = await createBooking({
+          ...validBookingInput(),
+          vehicleId,
+          startAt: futureDate(48),
+          endAt: futureDate(96),
+        })
+
+        expect(res.status).toBe(201)
+      })
+
+      it('accepts a booking on a vehicle with no rules set', async () => {
+        const vehicleId = await seedVehicleWithRules({})
+
+        const res = await createBooking({
+          ...validBookingInput(),
+          vehicleId,
+          startAt: futureDate(2),
+          endAt: futureDate(3),
+        })
+
+        expect(res.status).toBe(201)
+      })
     })
   })
 

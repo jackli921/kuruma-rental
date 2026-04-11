@@ -10,7 +10,18 @@ interface CreateBookingInput {
   notes?: string
 }
 
-type CreateBookingResult = { success: true; bookingId: string } | { success: false; error: string }
+// Structured rental-rule failure surfaced from the API. The form needs the
+// exact `code` + `required` hours so it can render the same translated
+// message as the inline client-side check (#65).
+export type RentalRuleFailure = {
+  code: 'RENTAL_RULE_ADVANCE_BOOKING' | 'RENTAL_RULE_MIN_DURATION' | 'RENTAL_RULE_MAX_DURATION'
+  required: number
+  actual: number
+}
+
+type CreateBookingResult =
+  | { success: true; bookingId: string }
+  | { success: false; error: string; rentalRule?: RentalRuleFailure }
 
 interface ApiResponse<T> {
   success: boolean
@@ -78,13 +89,39 @@ export async function createBooking(input: CreateBookingInput): Promise<CreateBo
       ...(input.notes ? { notes: input.notes } : {}),
     }),
   })
-  const json: ApiResponse<{ id: string }> = await res.json()
+  // Parse as unknown so we can detect rental-rule error envelopes without
+  // pretending every non-success response has the same shape.
+  const json: {
+    success: boolean
+    data?: { id: string }
+    error?: string
+    code?: string
+    details?: { required?: number; actual?: number }
+  } = await res.json()
 
-  if (!json.success || !json.data) {
-    return { success: false, error: 'Failed to create booking.' }
+  if (json.success && json.data) {
+    return { success: true, bookingId: json.data.id }
   }
 
-  return { success: true, bookingId: json.data.id }
+  // Rental-rule rejections carry a known code so the client can translate.
+  // Everything else gets a generic error string.
+  if (
+    json.code === 'RENTAL_RULE_ADVANCE_BOOKING' ||
+    json.code === 'RENTAL_RULE_MIN_DURATION' ||
+    json.code === 'RENTAL_RULE_MAX_DURATION'
+  ) {
+    return {
+      success: false,
+      error: json.error ?? 'Booking violates a rental rule',
+      rentalRule: {
+        code: json.code,
+        required: json.details?.required ?? 0,
+        actual: json.details?.actual ?? 0,
+      },
+    }
+  }
+
+  return { success: false, error: 'Failed to create booking.' }
 }
 
 export type BookingWithVehicle = {

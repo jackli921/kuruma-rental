@@ -1,4 +1,5 @@
 import { ActiveFilters } from '@/components/vehicles/ActiveFilters'
+import { RentalRulesBadge } from '@/components/vehicles/RentalRulesBadge'
 import { Link } from '@/i18n/routing'
 import { getAvailableVehicles } from '@/lib/vehicles'
 import { Car, Fuel, Settings2, Users } from 'lucide-react'
@@ -54,7 +55,18 @@ export default async function VehiclesPage({
                   )}
                 </div>
                 <div className="p-5">
-                  <h2 className="text-lg font-semibold">{vehicle.name}</h2>
+                  <div className="flex items-start justify-between gap-2">
+                    <h2 className="text-lg font-semibold">{vehicle.name}</h2>
+                    {/* Rental-rules hint (#65). Only shows when at least one
+                        rule is set — most cars won't have any. */}
+                    <RentalRulesBadge
+                      rules={{
+                        minRentalHours: vehicle.minRentalHours,
+                        maxRentalHours: vehicle.maxRentalHours,
+                        advanceBookingHours: vehicle.advanceBookingHours,
+                      }}
+                    />
+                  </div>
                   {vehicle.description && (
                     <p className="mt-1 text-sm text-muted-foreground line-clamp-2">
                       {vehicle.description}

@@ -73,7 +73,22 @@
       "photos": "写真",
       "description": "この車について",
       "notFound": "車両が見つかりません",
-      "notFoundDescription": "お探しの車両は存在しないか、削除されました。"
+      "notFoundDescription": "お探しの車両は存在しないか、削除されました。",
+      "rentalRules": {
+        "heading": "レンタルルール",
+        "hours": "{count, plural, other {#時間}}",
+        "days": "{count, plural, other {#日}}",
+        "minDuration": "最短レンタル：{duration}",
+        "maxDuration": "最長レンタル：{duration}",
+        "advanceBooking": "{duration}前までに予約してください"
+      }
+    },
+    "card": {
+      "rentalRule": {
+        "advance": "{duration}前に予約",
+        "min": "最短{duration}",
+        "max": "最長{duration}"
+      }
     },
     "filters": {
       "from": "開始日",
@@ -235,7 +250,12 @@
       "vehicleInfo": "車両情報",
       "seats": "{count}席",
       "auto": "オートマ",
-      "manual": "マニュアル"
+      "manual": "マニュアル",
+      "rentalRuleViolation": {
+        "advance": "この車両は{duration}前までに予約する必要があります。",
+        "min": "この車両は最短{duration}のレンタルが必要です。",
+        "max": "この車両は最長{duration}までレンタルできます。"
+      }
     },
     "confirmation": {
       "title": "予約が確定しました",
