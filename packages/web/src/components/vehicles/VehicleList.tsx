@@ -16,7 +16,7 @@ import {
 import type { VehicleData } from '@/lib/vehicle-api'
 import { fetchVehicles } from '@/lib/vehicle-api'
 import { useQuery } from '@tanstack/react-query'
-import { Car, Plus } from 'lucide-react'
+import { AlertCircle, Car, Plus } from 'lucide-react'
 import { useTranslations } from 'next-intl'
 import { useMemo, useState } from 'react'
 
@@ -34,7 +34,13 @@ export function VehicleList() {
   const [retiringVehicle, setRetiringVehicle] = useState<VehicleData | null>(null)
   const [showAddDialog, setShowAddDialog] = useState(false)
 
-  const { data: vehicles, isLoading } = useQuery({
+  const {
+    data: vehicles,
+    isLoading,
+    isError,
+    error,
+    refetch,
+  } = useQuery({
     queryKey: ['vehicles'],
     queryFn: () => fetchVehicles(),
   })
@@ -83,7 +89,20 @@ export function VehicleList() {
           </div>
         )}
 
-        {!isLoading && displayed.length > 0 && (
+        {!isLoading && isError && (
+          <div className="border border-destructive/30 bg-destructive/5 rounded-xl p-6 text-center">
+            <AlertCircle className="size-8 text-destructive mx-auto mb-3" />
+            <p className="text-sm font-medium text-foreground">{t('loadError')}</p>
+            <p className="mt-1 text-xs text-muted-foreground break-words">
+              {error instanceof Error ? error.message : String(error)}
+            </p>
+            <Button variant="outline" size="sm" className="mt-4" onClick={() => refetch()}>
+              {t('retry')}
+            </Button>
+          </div>
+        )}
+
+        {!isLoading && !isError && displayed.length > 0 && (
           <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-6">
             {displayed.map((vehicle) => (
               <FleetVehicleCard
@@ -96,7 +115,7 @@ export function VehicleList() {
           </div>
         )}
 
-        {!isLoading && displayed.length === 0 && (
+        {!isLoading && !isError && displayed.length === 0 && (
           <div className="text-center py-20">
             <Car className="size-12 text-muted-foreground/30 mx-auto mb-4" />
             <p className="text-lg text-muted-foreground">{t('empty')}</p>

@@ -112,6 +112,8 @@
       "title": "車両管理",
       "subtitle": "車両の管理",
       "empty": "車両はまだ追加されていません",
+      "loadError": "車両情報を読み込めませんでした",
+      "retry": "再試行",
       "addVehicle": "車両を追加",
       "editVehicle": "車両を編集",
       "retireVehicle": "車両を廃止",
