@@ -63,6 +63,12 @@ export function EditVehicleDialog({ vehicle, onOpenChange }: EditVehicleDialogPr
               transmission: vehicle.transmission,
               fuelType: vehicle.fuelType ?? undefined,
               bufferMinutes: vehicle.bufferMinutes,
+              // Issue #60: the rate inputs were added in #48 but this
+              // whitelist forgot to forward them, so the edit form
+              // rendered them empty and every save attempt failed the
+              // "at least one rate is required" validator.
+              dailyRateJpy: vehicle.dailyRateJpy,
+              hourlyRateJpy: vehicle.hourlyRateJpy,
             }}
           />
         )}
