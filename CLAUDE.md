@@ -292,9 +292,101 @@ gh issue view <number>                           # issue detail
 
 # Parallel Work Protocol
 
-Multiple sessions may work on this repo simultaneously (e.g., API in a worktree, web on the main branch). Follow these rules:
+Multiple agents / sessions may work on this repo simultaneously. These rules
+exist so two sessions don't clobber each other's work, ship half-migrations,
+or land changes that collide on merge. Read this before claiming an issue.
 
-1. **Check `gh issue list`** before starting. Avoid claiming work another session is doing.
-2. **Don't touch other packages** unless explicitly asked. If you're on web, don't modify `packages/api` or `packages/shared`.
-3. **Use worktrees** for isolated work: `git worktree add ../kuruma-<feature> -b feat/<feature>`
-4. **Commit frequently** with conventional commits (`feat:`, `fix:`, `refactor:`, etc.).
+## Before you start
+
+1. **Check what's already in flight.** You must know both what's claimed and what's running:
+   ```bash
+   gh issue list --label in-progress   # who has claimed what
+   gh pr list --state open             # what's already up for review
+   git worktree list                   # what other worktrees exist on this machine
+   git branch -r                       # what feature branches exist on origin
+   ```
+   If the issue you want is `in-progress`, pick something else or ask. If a PR is open that touches the same files you'd touch, rebase on top of it later or wait.
+2. **Claim the issue.** `gh issue edit <N> --add-label in-progress`. The label is the coordination token; if it's not set, another session may race you.
+3. **Create a fresh worktree off `origin/main`.**
+   ```bash
+   git fetch origin main
+   git worktree add ../kuruma-<slug> -b <type>/<slug> origin/main
+   cd ../kuruma-<slug>
+   bun install    # worktrees share node_modules with the main checkout but lockfile drift happens
+   ```
+   `<type>` is `feat`, `fix`, `refactor`, `docs`, etc.
+
+## While you work
+
+1. **Stay inside your slice's scope.** If the issue is "add pricing fields", don't also rename types, don't fix unrelated bugs, don't reformat other files. Out-of-scope edits create merge collisions with other sessions and bloat the review surface.
+2. **Respect file-collision risk.** Before editing any shared file, think about which other open issues also touch it. If two sessions both need `FleetVehicleCard.tsx`, try to stake out distinct regions (one owns the image area, another owns the status area) so rebases resolve cleanly. If the collision is unavoidable, coordinate — don't both push and hope.
+3. **Don't touch other packages** unless the issue explicitly requires it. Web-only slice? Leave `packages/api` and `packages/shared` alone. Architecture boundaries (see top of this file) are not negotiable per-session.
+4. **Never touch another session's branch.** If you see a branch in `git worktree list` or `gh pr list` that you didn't create, leave it alone. No rebases, no force-pushes, no "helpful" formatting commits. If the other session merges first, you rebase; never the other way around.
+5. **Commit frequently** with conventional commits (`feat:`, `fix:`, `refactor:`, `docs:`, `test:`, `chore:`, `perf:`, `ci:`). One logical change per commit.
+
+## Before committing a schema change
+
+Any edit to `packages/shared/src/db/schema.ts` or `drizzle/` is a multi-step dance. Follow the workflow in the "Database Migrations" section above exactly. Minimum checklist:
+
+1. Run `bun run db:generate --name <describe_change>` to generate the migration file. Never hand-write a `.sql` into `drizzle/` without `--custom`.
+2. Spin up a local docker postgres (see `packages/api/tests/integration/pg-test-client.ts` for the exact command) and apply the migration: `DATABASE_URL=postgres://kuruma:kuruma@localhost:5432/kuruma_test bun run db:migrate`.
+3. Run `bun run db:verify` — it must print all three green checks. If it fails, fix the drift; never bypass it.
+4. Run `bun run --filter @kuruma/api test:integration` against the same docker postgres — any repo or API change that touches the schema gets exercised end-to-end.
+5. If the migration adds a NOT NULL column or a CHECK constraint to an existing table, backfill existing rows **in the same migration** before the constraint lands. Without the backfill, the migration will fail on any DB that has pre-existing rows.
+
+## Before pushing
+
+1. **Rebase onto `origin/main` first** — always:
+   ```bash
+   git fetch origin main
+   git rebase origin/main
+   ```
+   Another session may have merged something while you worked. If the rebase produces conflicts, resolve them BEFORE you push. Never push conflicts for the reviewer (or CI) to untangle.
+2. **Run the full test suite**: `bun run test` — all packages, must be green.
+3. **Run lint + typecheck**: `bun run lint && bun run --filter '*' typecheck`.
+4. **Run integration tests** if you touched repo, API, or schema code: `DATABASE_URL=... bun run --filter @kuruma/api test:integration`.
+5. **Run the relevant build**:
+   - Web changes: `bun run --filter @kuruma/web build` and `bun run --filter @kuruma/web build:worker`
+   - API changes: `bun run --filter @kuruma/api build` (wrangler dry-run)
+6. **Run `bun run db:verify`** if you touched `drizzle/` or `schema.ts`.
+
+If any of these fail, fix the failure before pushing. Do not push red.
+
+## When you open a PR
+
+1. **Conventional commit title** — `feat:`, `fix:`, `refactor:`, `docs:`, `test:`, `chore:`, `perf:`, `ci:`.
+2. **Body must include** a summary, what changed per-area, a test-plan checklist, and what's out of scope.
+3. **Always include `Closes #<issue-number>`** in the body so the issue auto-closes on merge.
+4. **Don't merge until CI is green** — specifically `db-drift` and `test-and-build` must pass. The Cloudflare Workers deploy check is allowed to fail on PR branches; that's expected and not a blocker.
+5. **Don't merge a PR you didn't open** unless the author explicitly hands it off to you.
+
+## On session end
+
+1. **Remove the `in-progress` label** from merged or abandoned issues: `gh issue edit <N> --remove-label in-progress`.
+2. **Close completed issues** — auto-closed if your PR body had `Closes #N`; otherwise `gh issue close <N>`.
+3. **Create follow-up issues** for anything you discovered during the slice: `gh issue create --title "..." --label <label>`. Write them while the context is fresh.
+4. **Clean up your worktree**:
+   ```bash
+   git worktree remove ../kuruma-<slug>
+   git branch -D <branch>   # the remote branch is already deleted if you used gh pr merge --delete-branch
+   ```
+5. **Stop any local services you spun up** (docker postgres, dev servers on non-default ports).
+
+## Danger zones — never touch unless the issue is explicitly about this
+
+- **`drizzle/**`** — migrations are append-only and hash-locked via `_journal.json`. Never delete, rename, or edit an already-merged migration. Never hand-write a `.sql` file without `drizzle-kit generate --custom`. The CI `db-drift` job rejects drift.
+- **`.github/workflows/ci.yml` `db-drift` job** — the non-bypassable safety gate. Adding steps is fine; removing checks is not.
+- **`packages/shared/src/db/schema.ts`** — any change is a multi-step coordination (generate → migrate → verify → possibly reseed). Follow the migration workflow exactly.
+- **`packages/shared/src/validators/**`** — changes affect both `api` and `web`; make sure both still type-check and both test suites still pass.
+- **Another session's active branch** — never rebase, force-push, or commit to a branch you don't own.
+- **Production secrets** (Cloudflare bindings, Neon connection strings, AUTH_SECRET) — never hard-code, never log, never commit. These live in CF Worker env vars and the repo-root `.env` file only.
+
+## When a collision is unavoidable
+
+Sometimes two slices genuinely need to touch the same file in the same region. Options, in order of preference:
+
+1. **Sequence them** — land the smaller one first, rebase the bigger one on top, move on.
+2. **Split one slice** — pull the shared-file edit into its own tiny PR, land it first, then both sessions rebase.
+3. **Merge one session's branch into the other** — only if both sessions agree and the resulting PR clearly calls out the combined scope. Avoid.
+
+Never run both to completion in parallel and hope the rebase works. It won't.
