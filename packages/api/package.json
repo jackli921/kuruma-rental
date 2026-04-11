@@ -10,6 +10,7 @@
     "deploy": "wrangler deploy",
     "test": "vitest run",
     "test:watch": "vitest",
+    "test:integration": "vitest run --config vitest.integration.config.ts tests/integration/messages.test.ts",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
@@ -18,6 +19,7 @@
   },
   "devDependencies": {
     "@cloudflare/workers-types": "^4.20260410.1",
+    "postgres": "^3.4.8",
     "vitest": "^2",
     "wrangler": "^4.80.0"
   }

@@ -76,3 +76,12 @@ jobs:
         # journal entries match on-disk .sql files, and DB migration count
         # matches the journal. See scripts/db-verify.ts.
         run: bun run db:verify
+
+      - name: Run repository integration tests against fresh Postgres
+        # Exercises the Drizzle repos that talk to real tables. Right now
+        # only the messaging repo tests run here (issue #28); the other
+        # integration test files under packages/api/tests/integration/ still
+        # go through the neon-http driver and can't connect to a local
+        # postgres — issue #29 tracks migrating them. As more repo tests
+        # land, expand the `test:integration` script to include them.
+        run: bun run --filter @kuruma/api test:integration
