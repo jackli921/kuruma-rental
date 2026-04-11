@@ -36,9 +36,23 @@ export function VehicleForm({ onSubmit, onCancel, defaultValues, isSubmitting }:
       fuelType: '',
       bufferMinutes: 60,
       photos: [],
+      // Issue #50: sensible defaults owner-side so create mode is pre-filled
+      // with typical shop rules. Edit mode overrides via ...defaultValues
+      // (even with null — spread preserves explicit nulls).
+      minRentalHours: 4,
+      maxRentalHours: 72,
+      advanceBookingHours: null,
       ...defaultValues,
     },
   })
+
+  // Numeric fields that must submit `null` (not NaN or undefined) when blank.
+  // Matches the pricing pattern from #48.
+  const nullableNumber = (v: unknown) => {
+    if (v === '' || v == null) return null
+    const n = Number(v)
+    return Number.isNaN(n) ? null : n
+  }
 
   return (
     <form
@@ -137,6 +151,58 @@ export function VehicleForm({ onSubmit, onCancel, defaultValues, isSubmitting }:
             />
             {errors.hourlyRateJpy && (
               <p className="text-sm text-destructive mt-1">{errors.hourlyRateJpy.message}</p>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* Rental rules (#50). All optional; each controls a different booking
+          constraint and is enforced at booking-creation time in a follow-up
+          issue. If both min and max are set, validator requires min <= max. */}
+      <div>
+        <div className="text-sm font-medium mb-2">{t('form.rentalRulesHeading')}</div>
+        <p className="text-xs text-muted-foreground mb-3">{t('form.rentalRulesHint')}</p>
+        <div className="grid grid-cols-3 gap-4">
+          <div>
+            <Label htmlFor="minRentalHours">{t('form.minRentalHours')}</Label>
+            <Input
+              id="minRentalHours"
+              type="number"
+              inputMode="numeric"
+              min={1}
+              placeholder={t('form.minRentalHoursPlaceholder')}
+              {...register('minRentalHours', { setValueAs: nullableNumber })}
+            />
+            {errors.minRentalHours && (
+              <p className="text-sm text-destructive mt-1">{errors.minRentalHours.message}</p>
+            )}
+          </div>
+          <div>
+            <Label htmlFor="maxRentalHours">{t('form.maxRentalHours')}</Label>
+            <Input
+              id="maxRentalHours"
+              type="number"
+              inputMode="numeric"
+              min={1}
+              placeholder={t('form.maxRentalHoursPlaceholder')}
+              {...register('maxRentalHours', { setValueAs: nullableNumber })}
+            />
+            {errors.maxRentalHours && (
+              <p className="text-sm text-destructive mt-1">{errors.maxRentalHours.message}</p>
+            )}
+          </div>
+          <div>
+            <Label htmlFor="advanceBookingHours">{t('form.advanceBookingHours')}</Label>
+            <Input
+              id="advanceBookingHours"
+              type="number"
+              inputMode="numeric"
+              min={0}
+              placeholder={t('form.advanceBookingHoursPlaceholder')}
+              {...register('advanceBookingHours', { setValueAs: nullableNumber })}
+            />
+            {errors.advanceBookingHours && (
+              <p className="text-sm text-destructive mt-1">{errors.advanceBookingHours.message}</p>
             )}
           </div>
         </div>

@@ -69,6 +69,13 @@ export function EditVehicleDialog({ vehicle, onOpenChange }: EditVehicleDialogPr
               // "at least one rate is required" validator.
               dailyRateJpy: vehicle.dailyRateJpy,
               hourlyRateJpy: vehicle.hourlyRateJpy,
+              // Issue #50: forward rental rules so edit mode shows the
+              // saved values instead of the form's create-mode defaults.
+              // Same whitelist trap as #60 — forgetting a new field silently
+              // falls back to `minRentalHours: 4, maxRentalHours: 72`.
+              minRentalHours: vehicle.minRentalHours,
+              maxRentalHours: vehicle.maxRentalHours,
+              advanceBookingHours: vehicle.advanceBookingHours,
             }}
           />
         )}
