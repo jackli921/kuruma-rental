@@ -81,7 +81,7 @@ export const bookings = pgTable('bookings', {
     .references(() => vehicles.id),
   startAt: timestamp('startAt', { withTimezone: true, mode: 'date' }).notNull(),
   endAt: timestamp('endAt', { withTimezone: true, mode: 'date' }).notNull(),
-  effectiveEndAt: timestamp('effectiveEndAt', { withTimezone: true, mode: 'date' }),
+  effectiveEndAt: timestamp('effectiveEndAt', { withTimezone: true, mode: 'date' }).notNull(),
   status: bookingStatusEnum('status').notNull().default('CONFIRMED'),
   source: bookingSourceEnum('source').notNull().default('DIRECT'),
   externalId: text('externalId'),

@@ -1,0 +1,1 @@
+ALTER TABLE "bookings" ALTER COLUMN "effectiveEndAt" SET NOT NULL;
