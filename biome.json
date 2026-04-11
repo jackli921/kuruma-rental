@@ -32,6 +32,14 @@
     }
   },
   "files": {
-    "ignore": ["node_modules", ".next", ".open-next", ".wrangler", "drizzle", "bun.lock"]
+    "ignore": [
+      "node_modules",
+      ".next",
+      ".open-next",
+      ".wrangler",
+      "drizzle",
+      "bun.lock",
+      "next-env.d.ts"
+    ]
   }
 }
