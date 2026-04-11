@@ -1,43 +1,13 @@
-// Standalone Postgres test client for the messaging integration tests.
-//
-// The production code in `packages/shared/src/db/index.ts` uses
-// `@neondatabase/serverless` (HTTP). That driver only speaks Neon's HTTPS
-// wire protocol and cannot connect to a vanilla Postgres on localhost, so
-// it is unusable for tests against the docker `postgres:16` container that
-// CI's `db-drift` job spins up. We use `postgres-js` here instead — same
-// `drizzle-orm` query API surface as neon-http, but speaks raw Postgres TCP.
-//
-// The repo classes in `src/repositories/drizzle.ts` are typed against the
-// neon-http return type. At runtime drizzle's select/insert/update/delete
-// API is identical across drivers, so we cast the postgres-js drizzle
-// instance to the same type when constructing the repos under test.
-//
-// Existing integration tests under `tests/integration/` (vehicles, bookings,
-// availability) still go through `getDb()` and remain unrunnable until
-// issue #29 migrates them to the same pattern. Out of scope for #28.
+// Cleanup helpers for the messaging integration tests. The actual
+// drizzle/postgres-js client lives in `pg-test-client.ts` so it can be
+// shared across domain-specific setup files (messaging, vehicles pricing,
+// …). See issue #28 and #48.
 
-import * as schema from '@kuruma/shared/db/schema'
 import { messages, threadParticipants, threads, users } from '@kuruma/shared/db/schema'
 import { inArray } from 'drizzle-orm'
-import { drizzle } from 'drizzle-orm/postgres-js'
-import postgres from 'postgres'
+import { testDb } from './pg-test-client'
 
-const TEST_DATABASE_URL = process.env.DATABASE_URL
-
-if (!TEST_DATABASE_URL) {
-  throw new Error(
-    'DATABASE_URL is required for integration tests. ' +
-      'CI sets this via the postgres service container; locally run ' +
-      '`docker run -d --rm --name kuruma-test-pg -e POSTGRES_USER=kuruma ' +
-      '-e POSTGRES_PASSWORD=kuruma -e POSTGRES_DB=kuruma_test -p 5432:5432 postgres:16` ' +
-      'and `DATABASE_URL=postgres://kuruma:kuruma@localhost:5432/kuruma_test bun run db:migrate` first.',
-  )
-}
-
-// Single client per process; vitest reuses the module across files.
-const client = postgres(TEST_DATABASE_URL, { max: 4 })
-
-export const testDb = drizzle(client, { schema })
+export { testDb }
 
 /**
  * Create real users for FK satisfaction. `thread_participants.userId` and

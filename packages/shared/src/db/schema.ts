@@ -1,4 +1,5 @@
-import { integer, pgEnum, pgTable, primaryKey, text, timestamp } from 'drizzle-orm/pg-core'
+import { sql } from 'drizzle-orm'
+import { check, integer, pgEnum, pgTable, primaryKey, text, timestamp } from 'drizzle-orm/pg-core'
 import type { AdapterAccountType } from 'next-auth/adapters'
 
 export const roleEnum = pgEnum('role', ['RENTER', 'STAFF', 'ADMIN'])
@@ -50,24 +51,50 @@ export const bookingStatusEnum = pgEnum('booking_status', [
 ])
 export const bookingSourceEnum = pgEnum('booking_source', ['DIRECT', 'TRIP_COM', 'MANUAL', 'OTHER'])
 
-export const vehicles = pgTable('vehicles', {
-  id: text('id')
-    .primaryKey()
-    .$defaultFn(() => crypto.randomUUID()),
-  name: text('name').notNull(),
-  description: text('description'),
-  photos: text('photos').array().notNull().default([]),
-  seats: integer('seats').notNull(),
-  transmission: transmissionEnum('transmission').notNull(),
-  fuelType: text('fuelType'),
-  status: vehicleStatusEnum('status').notNull().default('AVAILABLE'),
-  bufferMinutes: integer('bufferMinutes').notNull().default(60),
-  minRentalHours: integer('minRentalHours'),
-  maxRentalHours: integer('maxRentalHours'),
-  advanceBookingHours: integer('advanceBookingHours'),
-  createdAt: timestamp('createdAt', { withTimezone: true }).notNull().defaultNow(),
-  updatedAt: timestamp('updatedAt', { withTimezone: true }).notNull().defaultNow(),
-})
+export const vehicles = pgTable(
+  'vehicles',
+  {
+    id: text('id')
+      .primaryKey()
+      .$defaultFn(() => crypto.randomUUID()),
+    name: text('name').notNull(),
+    description: text('description'),
+    photos: text('photos').array().notNull().default([]),
+    seats: integer('seats').notNull(),
+    transmission: transmissionEnum('transmission').notNull(),
+    fuelType: text('fuelType'),
+    status: vehicleStatusEnum('status').notNull().default('AVAILABLE'),
+    bufferMinutes: integer('bufferMinutes').notNull().default(60),
+    minRentalHours: integer('minRentalHours'),
+    maxRentalHours: integer('maxRentalHours'),
+    advanceBookingHours: integer('advanceBookingHours'),
+    // JPY, whole yen (no minor unit). At least one must be set — enforced
+    // by the CHECK constraint below and mirrored in createVehicleSchema.
+    // See issue #48.
+    dailyRateJpy: integer('dailyRateJpy'),
+    hourlyRateJpy: integer('hourlyRateJpy'),
+    createdAt: timestamp('createdAt', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updatedAt', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    // A vehicle with no price is not rentable. Writers that violate this
+    // will get a 23514 check_violation at the DB boundary — the validator
+    // rejects the same payloads earlier with a friendlier error.
+    check(
+      'vehicles_pricing_at_least_one',
+      sql`${table.dailyRateJpy} IS NOT NULL OR ${table.hourlyRateJpy} IS NOT NULL`,
+    ),
+    // Rates must be non-negative when set. Zero is allowed (free promo).
+    check(
+      'vehicles_daily_rate_non_negative',
+      sql`${table.dailyRateJpy} IS NULL OR ${table.dailyRateJpy} >= 0`,
+    ),
+    check(
+      'vehicles_hourly_rate_non_negative',
+      sql`${table.hourlyRateJpy} IS NULL OR ${table.hourlyRateJpy} >= 0`,
+    ),
+  ],
+)
 
 export const bookings = pgTable('bookings', {
   id: text('id')

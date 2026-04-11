@@ -141,6 +141,12 @@
         "photosPlaceholder": "https://example.com/photo.jpg",
         "addPhoto": "添加照片URL",
         "removePhoto": "删除",
+        "pricingHeading": "价格（日元）",
+        "pricingHint": "至少需要设置一个价格。",
+        "dailyRate": "每日价格",
+        "hourlyRate": "每小时价格",
+        "perDaySuffix": "/天",
+        "perHourSuffix": "/小时",
         "save": "保存车辆",
         "saving": "保存中...",
         "cancel": "取消"

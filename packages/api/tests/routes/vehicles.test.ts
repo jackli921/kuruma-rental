@@ -11,6 +11,9 @@ function validVehicleInput() {
     seats: 5,
     transmission: 'AUTO' as const,
     bufferMinutes: 60,
+    // #48: at least one rate is required by the validator and the
+    // vehicles_pricing_at_least_one DB CHECK.
+    dailyRateJpy: 8000,
   }
 }
 
@@ -115,6 +118,8 @@ describe('Vehicle CRUD Routes', () => {
       expect(body.data.minRentalHours).toBeNull()
       expect(body.data.maxRentalHours).toBeNull()
       expect(body.data.advanceBookingHours).toBeNull()
+      expect(body.data.dailyRateJpy).toBe(8000)
+      expect(body.data.hourlyRateJpy).toBeNull()
       expect(body.data.id).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/)
       expect(body.data.createdAt).toBeDefined()
       expect(body.data.updatedAt).toBeDefined()

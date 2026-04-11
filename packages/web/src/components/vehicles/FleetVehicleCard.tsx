@@ -3,6 +3,7 @@
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { VehicleStatusBadge } from '@/components/vehicles/VehicleStatusBadge'
+import { formatVehicleRate } from '@/lib/format'
 import type { VehicleData } from '@/lib/vehicle-api'
 import { Car, Fuel, Pencil, Settings2, Trash2, Users } from 'lucide-react'
 import { useTranslations } from 'next-intl'
@@ -16,6 +17,10 @@ interface FleetVehicleCardProps {
 export function FleetVehicleCard({ vehicle, onEdit, onRetire }: FleetVehicleCardProps) {
   const t = useTranslations('business.vehicles')
   const photo = vehicle.photos?.[0]
+  const price = formatVehicleRate(vehicle.dailyRateJpy, vehicle.hourlyRateJpy, {
+    perDay: t('form.perDaySuffix'),
+    perHour: t('form.perHourSuffix'),
+  })
 
   return (
     <Card>
@@ -51,6 +56,7 @@ export function FleetVehicleCard({ vehicle, onEdit, onRetire }: FleetVehicleCard
             </span>
           )}
         </div>
+        {price && <p className="mt-3 text-sm font-medium text-foreground">{price}</p>}
         <div className="flex gap-2 mt-4">
           <Button variant="outline" size="sm" onClick={() => onEdit(vehicle)}>
             <Pencil className="size-3.5 mr-1.5" />

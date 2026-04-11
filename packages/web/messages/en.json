@@ -141,6 +141,12 @@
         "photosPlaceholder": "https://example.com/photo.jpg",
         "addPhoto": "Add photo URL",
         "removePhoto": "Remove",
+        "pricingHeading": "Pricing (JPY)",
+        "pricingHint": "At least one rate is required.",
+        "dailyRate": "Daily rate",
+        "hourlyRate": "Hourly rate",
+        "perDaySuffix": "/day",
+        "perHourSuffix": "/hr",
         "save": "Save vehicle",
         "saving": "Saving...",
         "cancel": "Cancel"

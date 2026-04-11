@@ -64,6 +64,13 @@
       "when": 1775865003591,
       "tag": "0008_bookings_effective_end_at_not_null",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1775914831111,
+      "tag": "0009_add_vehicle_pricing",
+      "breakpoints": true
     }
   ]
 }

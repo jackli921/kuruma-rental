@@ -20,6 +20,8 @@ export interface VehicleData {
   minRentalHours: number | null
   maxRentalHours: number | null
   advanceBookingHours: number | null
+  dailyRateJpy: number | null
+  hourlyRateJpy: number | null
   createdAt: string
   updatedAt: string
 }
