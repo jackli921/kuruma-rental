@@ -21,10 +21,13 @@ interface ApiResponse<T> {
 export async function fetchCalendarBookings(from: string, to: string): Promise<CalendarBooking[]> {
   const base = getApiBaseUrl()
   const params = new URLSearchParams({ from, to })
-  const res = await fetch(`${base}/bookings?${params.toString()}`)
+  const url = `${base}/bookings?${params.toString()}`
+  console.log(`[calendar] fetchCalendarBookings url=${url} base=${base}`)
+  const res = await fetch(url)
+  console.log(`[calendar] fetchCalendarBookings status=${res.status}`)
 
   if (!res.ok) {
-    throw new Error(`Failed to fetch bookings: HTTP ${res.status}`)
+    throw new Error(`Failed to fetch bookings: HTTP ${res.status} url=${url}`)
   }
 
   const body: ApiResponse<CalendarBooking[]> = await res.json()
