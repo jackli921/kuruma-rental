@@ -69,9 +69,7 @@ describe('getAvailableVehicles', () => {
   })
 
   it('returns empty array when API returns no vehicles', async () => {
-    vi.mocked(fetch).mockResolvedValue(
-      new Response(JSON.stringify({ success: true, data: [] })),
-    )
+    vi.mocked(fetch).mockResolvedValue(new Response(JSON.stringify({ success: true, data: [] })))
 
     const result = await getAvailableVehicles()
 

@@ -7,9 +7,9 @@ export async function GET() {
   }
 
   try {
-    const ctx = (globalThis as Record<symbol, unknown>)[
-      Symbol.for('__cloudflare-context__')
-    ] as Record<string, unknown> | undefined
+    const ctx = (globalThis as Record<symbol, unknown>)[Symbol.for('__cloudflare-context__')] as
+      | Record<string, unknown>
+      | undefined
     diagnostics.cfContextExists = !!ctx
     const env = (ctx?.env ?? {}) as Record<string, string>
     diagnostics.hasDatabaseUrl = !!env.DATABASE_URL || !!process.env.DATABASE_URL

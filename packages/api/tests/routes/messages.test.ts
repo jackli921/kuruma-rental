@@ -1,6 +1,9 @@
 import { Hono } from 'hono'
 import { beforeEach, describe, expect, it } from 'vitest'
-import { InMemoryMessageRepository, InMemoryThreadRepository } from '../../src/repositories/in-memory'
+import {
+  InMemoryMessageRepository,
+  InMemoryThreadRepository,
+} from '../../src/repositories/in-memory'
 import { createMessageRoutes } from '../../src/routes/messages'
 
 let app: Hono
@@ -95,9 +98,7 @@ describe('Message Routes', () => {
 
       const body = await res.json()
       expect(body.success).toBe(true)
-      expect(body.data.id).toMatch(
-        /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/,
-      )
+      expect(body.data.id).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/)
       expect(body.data.bookingId).toBeNull()
       expect(body.data.createdAt).toBeDefined()
       expect(body.data.updatedAt).toBeDefined()
@@ -128,9 +129,7 @@ describe('Message Routes', () => {
       expect(body.data.threadId).toBe(threadId)
       expect(body.data.senderId).toBe('user1')
       expect(body.data.content).toBe('Hello!')
-      expect(body.data.id).toMatch(
-        /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/,
-      )
+      expect(body.data.id).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/)
       expect(body.data.createdAt).toBeDefined()
     })
   })

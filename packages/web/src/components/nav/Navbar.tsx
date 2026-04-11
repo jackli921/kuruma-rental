@@ -73,11 +73,7 @@ export async function Navbar() {
 
           <div className="flex items-center gap-1">
             <LocaleSwitcher />
-            <NavbarClient
-              session={session}
-              canSwitchView={canSwitchView}
-              viewMode={viewMode}
-            />
+            <NavbarClient session={session} canSwitchView={canSwitchView} viewMode={viewMode} />
             <MobileMenu session={session} navItems={navItems} />
           </div>
         </div>

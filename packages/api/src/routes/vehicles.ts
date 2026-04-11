@@ -7,9 +7,7 @@ export function createVehicleRoutes(repo: VehicleRepository): Hono {
 
   vehicles.get('/vehicles', async (c) => {
     const status = c.req.query('status')
-    const filtered = status
-      ? await repo.findAll({ status })
-      : await repo.findAll()
+    const filtered = status ? await repo.findAll({ status }) : await repo.findAll()
     return c.json({ success: true, data: filtered })
   })
 

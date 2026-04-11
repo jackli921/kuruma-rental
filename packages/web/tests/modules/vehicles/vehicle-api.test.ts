@@ -105,7 +105,12 @@ describe('vehicle-api', () => {
 
   describe('createVehicle', () => {
     it('sends POST /vehicles with body and returns created vehicle', async () => {
-      const input = { name: 'Honda Fit', seats: 5, transmission: 'AUTO' as const, bufferMinutes: 60 }
+      const input = {
+        name: 'Honda Fit',
+        seats: 5,
+        transmission: 'AUTO' as const,
+        bufferMinutes: 60,
+      }
       const spy = vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(
         new Response(JSON.stringify({ success: true, data: { ...mockVehicle, ...input } }), {
           status: 201,
@@ -150,10 +155,13 @@ describe('vehicle-api', () => {
   describe('retireVehicle', () => {
     it('sends DELETE /vehicles/:id and returns retired vehicle', async () => {
       const spy = vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(
-        new Response(JSON.stringify({ success: true, data: { ...mockVehicle, status: 'RETIRED' } }), {
-          status: 200,
-          headers: { 'Content-Type': 'application/json' },
-        }),
+        new Response(
+          JSON.stringify({ success: true, data: { ...mockVehicle, status: 'RETIRED' } }),
+          {
+            status: 200,
+            headers: { 'Content-Type': 'application/json' },
+          },
+        ),
       )
 
       const { retireVehicle } = await import('@/lib/vehicle-api')

@@ -1,5 +1,5 @@
-import { afterEach, describe, expect, test, vi } from 'vitest'
 import { fetchThread, fetchThreads, sendMessage } from '@/lib/messaging'
+import { afterEach, describe, expect, test, vi } from 'vitest'
 
 const mockFetch = vi.fn()
 vi.stubGlobal('fetch', mockFetch)

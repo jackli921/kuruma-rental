@@ -242,13 +242,18 @@ describe('Vehicle CRUD Routes', () => {
       const res = await app.request(`/vehicles/${created.data.id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ photos: ['https://example.com/new1.jpg', 'https://example.com/new2.jpg'] }),
+        body: JSON.stringify({
+          photos: ['https://example.com/new1.jpg', 'https://example.com/new2.jpg'],
+        }),
       })
 
       expect(res.status).toBe(200)
 
       const body = await res.json()
-      expect(body.data.photos).toEqual(['https://example.com/new1.jpg', 'https://example.com/new2.jpg'])
+      expect(body.data.photos).toEqual([
+        'https://example.com/new1.jpg',
+        'https://example.com/new2.jpg',
+      ])
     })
 
     it('rejects invalid update data', async () => {

@@ -12,9 +12,7 @@ let cachedUrl: string | undefined
 // may not carry secrets at module scope. Caller resolves the URL.
 export function getDb(url?: string): NeonHttpDb {
   const connectionUrl =
-    url ??
-    process.env.DATABASE_URL ??
-    'postgresql://placeholder:5432/placeholder'
+    url ?? process.env.DATABASE_URL ?? 'postgresql://placeholder:5432/placeholder'
 
   // Reuse singleton if URL hasn't changed
   if (db && cachedUrl === connectionUrl) return db

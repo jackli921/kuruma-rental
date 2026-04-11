@@ -1,7 +1,7 @@
 'use server'
 
-import { cookies } from 'next/headers'
 import type { ViewMode } from '@/lib/view-mode'
+import { cookies } from 'next/headers'
 
 const COOKIE_NAME = 'kuruma-view'
 

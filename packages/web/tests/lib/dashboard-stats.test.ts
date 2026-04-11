@@ -1,5 +1,5 @@
-import { afterEach, beforeAll, describe, expect, test, vi } from 'vitest'
 import { fetchDashboardStats } from '@/lib/dashboard-stats'
+import { afterEach, beforeAll, describe, expect, test, vi } from 'vitest'
 
 const mockFetch = vi.fn()
 vi.stubGlobal('fetch', mockFetch)

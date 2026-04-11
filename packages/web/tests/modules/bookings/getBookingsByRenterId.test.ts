@@ -61,9 +61,7 @@ describe('getBookingsByRenterId', () => {
 
     expect(fetch).toHaveBeenCalledTimes(1)
     const calledUrl = vi.mocked(fetch).mock.calls[0]?.[0]?.toString() ?? ''
-    expect(calledUrl).toBe(
-      'http://localhost:8787/bookings?renterId=user-001&expand=vehicle',
-    )
+    expect(calledUrl).toBe('http://localhost:8787/bookings?renterId=user-001&expand=vehicle')
 
     expect(result).toHaveLength(2)
 
@@ -83,9 +81,7 @@ describe('getBookingsByRenterId', () => {
   })
 
   it('returns empty array for unknown renter', async () => {
-    vi.mocked(fetch).mockResolvedValue(
-      new Response(JSON.stringify({ success: true, data: [] })),
-    )
+    vi.mocked(fetch).mockResolvedValue(new Response(JSON.stringify({ success: true, data: [] })))
 
     const result = await getBookingsByRenterId('nonexistent-user')
 

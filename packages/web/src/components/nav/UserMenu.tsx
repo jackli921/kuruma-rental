@@ -10,12 +10,12 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
+import { useRouter } from '@/i18n/routing'
 import type { ViewMode } from '@/lib/view-mode'
 import { ArrowLeftRight, LogOut } from 'lucide-react'
 import type { Session } from 'next-auth'
 import { signOut } from 'next-auth/react'
 import { useTranslations } from 'next-intl'
-import { useRouter } from '@/i18n/routing'
 
 function getInitials(name: string | null | undefined): string {
   if (!name) return '?'
@@ -40,8 +40,7 @@ export function UserMenu({ session, canSwitchView, viewMode }: UserMenuProps) {
   const { user } = session
 
   const targetMode: ViewMode = viewMode === 'business' ? 'renter' : 'business'
-  const switchLabel =
-    viewMode === 'business' ? t('nav.switchToRenter') : t('nav.switchToBusiness')
+  const switchLabel = viewMode === 'business' ? t('nav.switchToRenter') : t('nav.switchToBusiness')
 
   async function handleSwitchView() {
     await setViewMode(targetMode)
