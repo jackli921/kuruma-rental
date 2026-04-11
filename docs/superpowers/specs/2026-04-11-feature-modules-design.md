@@ -172,15 +172,26 @@ Acceptance: same gates as PR-2.
 
 ### Grandfather — messaging, dashboard, misc
 
-- Messaging, dashboard stats, and anything else not under `modules/<feature>/` remain in place.
-- `CLAUDE.md` gains a short note: *"When you next make a non-trivial change to messaging, dashboard, or any feature still under `lib/` or `components/<feature>/`, migrate it into `modules/<feature>/` in the same PR. Do not open a standalone migration PR."*
+- Messaging, dashboard stats, and anything else not under `modules/<feature>/` remain in place for now.
+- `CLAUDE.md` gains a short note: *"Before making any non-trivial change to a feature that still lives under `lib/` or `components/<feature>/`, land a separate migration PR that moves it into `modules/<feature>/`. The feature-change PR builds on top of the clean migrated layout. Never mix a migration with a feature change in the same PR — it makes review impossible."*
 - R8 (file-size cap) applies globally — no grandfather exemption for size. R2/R3/R4/R7 only apply to code inside `modules/`.
 
 ## Grandfather Policy
 
 Legacy files are exempt from R2/R3/R4/R7 via a Biome `overrides` block that targets everything outside `**/modules/**`. R8 (file size) applies globally with no exemption, because size discipline is independent of modularization and applies to every file.
 
-When a grandfathered feature is touched for any non-trivial change, the touching PR migrates it to `modules/<feature>/` in the same commit. The `CLAUDE.md` note above is the trigger for future sessions.
+**Migrate before you modify.** Before making any non-trivial change to a grandfathered feature, land a standalone migration PR that moves the feature into `modules/<feature>/`. The feature-change PR builds on top of the migrated layout. Migrations and feature changes never share a PR.
+
+Rationale:
+
+- Migrations are pure mechanical moves — small diff review, easy to verify nothing changed semantically.
+- Feature-change diffs stay clean — no file moves muddying the review.
+- If a migration introduces a subtle regression, it surfaces independently of the feature work, which makes bisecting and reverting trivial.
+- It prevents the "I'll migrate as I go" anti-pattern, which produces unreviewable PRs where real logic changes hide inside rename noise.
+
+Exception: truly trivial changes (typo fix, one-line string tweak, dependency bump) can land against grandfathered code without a migration PR. The threshold is "would I want to review this with file moves mixed in?" — if the answer is no, migrate first.
+
+The `CLAUDE.md` note above is the trigger for future sessions.
 
 ## Success Criteria
 
