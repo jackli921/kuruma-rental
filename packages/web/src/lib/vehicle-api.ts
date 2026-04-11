@@ -1,5 +1,5 @@
 import { getApiBaseUrl } from '@/lib/api-client'
-import type { CreateVehicleInput } from '@kuruma/shared/validators/vehicle'
+import type { CreateVehicleInput, VehicleStatus } from '@kuruma/shared/validators/vehicle'
 
 interface ApiResponse<T> {
   success: boolean
@@ -72,6 +72,18 @@ export async function updateVehicle(
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(data),
+  })
+}
+
+// Issue #51: one-shot status mutation for the fleet list inline toggle.
+// Kept separate from updateVehicle() so callers don't accidentally ship a
+// partial vehicle payload when they only mean to flip a status.
+export async function updateVehicleStatus(id: string, status: VehicleStatus): Promise<VehicleData> {
+  const base = getApiBaseUrl()
+  return apiRequest<VehicleData>(`${base}/vehicles/${id}/status`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ status }),
   })
 }
 

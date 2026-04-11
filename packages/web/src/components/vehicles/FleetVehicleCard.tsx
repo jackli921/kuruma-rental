@@ -2,7 +2,7 @@
 
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { VehicleStatusBadge } from '@/components/vehicles/VehicleStatusBadge'
+import { VehicleStatusToggle } from '@/components/vehicles/VehicleStatusToggle'
 import { formatVehicleRate } from '@/lib/format'
 import type { VehicleData } from '@/lib/vehicle-api'
 import { Car, Fuel, Pencil, Settings2, Trash2, Users } from 'lucide-react'
@@ -36,7 +36,7 @@ export function FleetVehicleCard({ vehicle, onEdit, onRetire }: FleetVehicleCard
       <CardHeader>
         <div className="flex items-center justify-between">
           <CardTitle>{vehicle.name}</CardTitle>
-          <VehicleStatusBadge status={vehicle.status} />
+          <VehicleStatusToggle vehicle={vehicle} />
         </div>
       </CardHeader>
       <CardContent>

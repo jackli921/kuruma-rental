@@ -1,4 +1,8 @@
-import { createVehicleSchema, updateVehicleSchema } from '@kuruma/shared/validators/vehicle'
+import {
+  createVehicleSchema,
+  updateVehicleSchema,
+  updateVehicleStatusSchema,
+} from '@kuruma/shared/validators/vehicle'
 import { Hono } from 'hono'
 import type { VehicleRepository } from '../repositories/types'
 
@@ -70,6 +74,26 @@ export function createVehicleRoutes(repo: VehicleRepository): Hono {
       hourlyRateJpy: result.data.hourlyRateJpy ?? existing.hourlyRateJpy,
     })
 
+    return c.json({ success: true, data: updated })
+  })
+
+  // Issue #51: one-shot status toggle. Kept separate from PATCH /vehicles/:id
+  // so the fleet list UI can bind a tiny optimistic mutation without sending
+  // the full vehicle payload. Any transition is allowed (owner needs to be
+  // able to flip a car back out of RETIRED if they soft-deleted by mistake).
+  vehicles.patch('/vehicles/:id/status', async (c) => {
+    const existing = await repo.findById(c.req.param('id'))
+    if (!existing) {
+      return c.json({ success: false, error: 'Vehicle not found' }, 404)
+    }
+
+    const body = await c.req.json()
+    const result = updateVehicleStatusSchema.safeParse(body)
+    if (!result.success) {
+      return c.json({ success: false, error: result.error.flatten().fieldErrors }, 400)
+    }
+
+    const updated = await repo.update(existing.id, { status: result.data.status })
     return c.json({ success: true, data: updated })
   })
 

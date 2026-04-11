@@ -127,6 +127,11 @@
         "MAINTENANCE": "Maintenance",
         "RETIRED": "Retired"
       },
+      "statusToggle": {
+        "ariaLabel": "Change status",
+        "restore": "Restore",
+        "error": "Could not update status. Please try again."
+      },
       "form": {
         "name": "Vehicle name",
         "namePlaceholder": "e.g. Toyota Corolla 2024",

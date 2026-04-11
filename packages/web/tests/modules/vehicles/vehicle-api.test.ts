@@ -152,6 +152,41 @@ describe('vehicle-api', () => {
     })
   })
 
+  describe('updateVehicleStatus (issue #51)', () => {
+    it('sends PATCH /vehicles/:id/status with { status } and returns updated vehicle', async () => {
+      const spy = vi
+        .spyOn(globalThis, 'fetch')
+        .mockResolvedValueOnce(
+          new Response(
+            JSON.stringify({ success: true, data: { ...mockVehicle, status: 'MAINTENANCE' } }),
+            { status: 200, headers: { 'Content-Type': 'application/json' } },
+          ),
+        )
+
+      const { updateVehicleStatus } = await import('@/lib/vehicle-api')
+      const result = await updateVehicleStatus('v1', 'MAINTENANCE')
+
+      expect(spy).toHaveBeenCalledWith(`${API_BASE}/vehicles/v1/status`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: 'MAINTENANCE' }),
+      })
+      expect(result.status).toBe('MAINTENANCE')
+    })
+
+    it('surfaces server errors as thrown Error', async () => {
+      vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(
+        new Response(JSON.stringify({ success: false, error: 'Vehicle not found' }), {
+          status: 404,
+          headers: { 'Content-Type': 'application/json' },
+        }),
+      )
+
+      const { updateVehicleStatus } = await import('@/lib/vehicle-api')
+      await expect(updateVehicleStatus('nope', 'AVAILABLE')).rejects.toThrow('Vehicle not found')
+    })
+  })
+
   describe('retireVehicle', () => {
     it('sends DELETE /vehicles/:id and returns retired vehicle', async () => {
       const spy = vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(
