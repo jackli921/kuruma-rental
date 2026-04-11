@@ -28,6 +28,8 @@ const VEHICLE_FIELDS = [
   'minRentalHours',
   'maxRentalHours',
   'advanceBookingHours',
+  'dailyRateJpy',
+  'hourlyRateJpy',
   'createdAt',
   'updatedAt',
 ] as const
@@ -62,6 +64,7 @@ describe('API responses contain only expected fields', () => {
         description: 'Test',
         seats: 5,
         transmission: 'AUTO',
+        dailyRateJpy: 8000,
       }),
     })
 
@@ -87,6 +90,7 @@ describe('API responses contain only expected fields', () => {
         description: 'Test',
         seats: 5,
         transmission: 'AUTO',
+        dailyRateJpy: 8000,
       }),
     })
     const created = await createRes.json()
@@ -112,6 +116,7 @@ describe('API responses contain only expected fields', () => {
         description: 'Test',
         seats: 5,
         transmission: 'AUTO',
+        dailyRateJpy: 8000,
       }),
     })
     const vehicle = await vRes.json()

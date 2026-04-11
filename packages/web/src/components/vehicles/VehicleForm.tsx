@@ -100,6 +100,48 @@ export function VehicleForm({ onSubmit, onCancel, defaultValues, isSubmitting }:
         </div>
       </div>
 
+      {/* Pricing (#48). At least one rate is required — enforced server-side
+          by the createVehicleSchema superRefine and DB CHECK constraint. */}
+      <div>
+        <div className="text-sm font-medium mb-2">{t('form.pricingHeading')}</div>
+        <p className="text-xs text-muted-foreground mb-3">{t('form.pricingHint')}</p>
+        <div className="grid grid-cols-2 gap-4">
+          <div>
+            <Label htmlFor="dailyRateJpy">{t('form.dailyRate')}</Label>
+            <Input
+              id="dailyRateJpy"
+              type="number"
+              inputMode="numeric"
+              min={0}
+              placeholder="8000"
+              {...register('dailyRateJpy', {
+                setValueAs: (v) => (v === '' || v == null ? null : Number(v)),
+              })}
+            />
+            {errors.dailyRateJpy && (
+              <p className="text-sm text-destructive mt-1">{errors.dailyRateJpy.message}</p>
+            )}
+          </div>
+
+          <div>
+            <Label htmlFor="hourlyRateJpy">{t('form.hourlyRate')}</Label>
+            <Input
+              id="hourlyRateJpy"
+              type="number"
+              inputMode="numeric"
+              min={0}
+              placeholder="1200"
+              {...register('hourlyRateJpy', {
+                setValueAs: (v) => (v === '' || v == null ? null : Number(v)),
+              })}
+            />
+            {errors.hourlyRateJpy && (
+              <p className="text-sm text-destructive mt-1">{errors.hourlyRateJpy.message}</p>
+            )}
+          </div>
+        </div>
+      </div>
+
       <div className="flex justify-end gap-2 pt-4">
         {onCancel && (
           <Button type="button" variant="outline" onClick={onCancel}>

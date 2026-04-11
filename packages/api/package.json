@@ -10,7 +10,7 @@
     "deploy": "wrangler deploy",
     "test": "vitest run",
     "test:watch": "vitest",
-    "test:integration": "vitest run --config vitest.integration.config.ts tests/integration/messages.test.ts",
+    "test:integration": "vitest run --config vitest.integration.config.ts tests/integration/messages.test.ts tests/integration/vehicles-pricing.test.ts",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {

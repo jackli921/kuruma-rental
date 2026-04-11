@@ -2,8 +2,12 @@ import { sql } from 'drizzle-orm'
 import { getDb } from './index'
 import { vehicles } from './schema'
 
+// Realistic JPY day-rates loosely anchored to Osaka/Kansai rental shop
+// price lists in 2025-26. Hourly rate is roughly (daily / 8) rounded to a
+// friendly number. The owner will override these via the form as real
+// pricing decisions land — seed data is just so the app shows a number.
 const SEED_VEHICLES = [
-  // Kei cars
+  // Kei cars — cheapest bucket
   {
     name: 'Honda N-BOX',
     description:
@@ -14,6 +18,8 @@ const SEED_VEHICLES = [
     fuelType: 'Gasoline',
     bufferMinutes: 60,
     minRentalHours: 3,
+    dailyRateJpy: 6500,
+    hourlyRateJpy: 900,
   },
   {
     name: 'Suzuki Hustler',
@@ -25,6 +31,8 @@ const SEED_VEHICLES = [
     fuelType: 'Hybrid',
     bufferMinutes: 60,
     minRentalHours: 3,
+    dailyRateJpy: 6500,
+    hourlyRateJpy: 900,
   },
   {
     name: 'Daihatsu Tanto',
@@ -36,8 +44,10 @@ const SEED_VEHICLES = [
     fuelType: 'Gasoline',
     bufferMinutes: 60,
     minRentalHours: 3,
+    dailyRateJpy: 6500,
+    hourlyRateJpy: 900,
   },
-  // Compact
+  // Compact — mid bucket
   {
     name: 'Toyota Aqua',
     description:
@@ -48,6 +58,8 @@ const SEED_VEHICLES = [
     fuelType: 'Hybrid',
     bufferMinutes: 60,
     minRentalHours: 3,
+    dailyRateJpy: 8000,
+    hourlyRateJpy: 1100,
   },
   {
     name: 'Toyota Yaris',
@@ -59,6 +71,8 @@ const SEED_VEHICLES = [
     fuelType: 'Hybrid',
     bufferMinutes: 60,
     minRentalHours: 3,
+    dailyRateJpy: 8000,
+    hourlyRateJpy: 1100,
   },
   {
     name: 'Honda Fit',
@@ -70,8 +84,10 @@ const SEED_VEHICLES = [
     fuelType: 'Hybrid',
     bufferMinutes: 60,
     minRentalHours: 3,
+    dailyRateJpy: 8000,
+    hourlyRateJpy: 1100,
   },
-  // Sedan
+  // Sedan — mid-high bucket
   {
     name: 'Toyota Corolla',
     description:
@@ -82,6 +98,8 @@ const SEED_VEHICLES = [
     fuelType: 'Hybrid',
     bufferMinutes: 60,
     minRentalHours: 4,
+    dailyRateJpy: 9500,
+    hourlyRateJpy: 1300,
   },
   {
     name: 'Toyota Camry',
@@ -93,8 +111,10 @@ const SEED_VEHICLES = [
     fuelType: 'Hybrid',
     bufferMinutes: 60,
     minRentalHours: 4,
+    dailyRateJpy: 12000,
+    hourlyRateJpy: 1700,
   },
-  // SUV
+  // SUV — high bucket
   {
     name: 'Mazda CX-5',
     description:
@@ -105,6 +125,8 @@ const SEED_VEHICLES = [
     fuelType: 'Gasoline',
     bufferMinutes: 60,
     minRentalHours: 4,
+    dailyRateJpy: 11500,
+    hourlyRateJpy: 1600,
   },
   {
     name: 'Toyota RAV4',
@@ -116,6 +138,8 @@ const SEED_VEHICLES = [
     fuelType: 'Hybrid',
     bufferMinutes: 60,
     minRentalHours: 4,
+    dailyRateJpy: 12500,
+    hourlyRateJpy: 1700,
   },
   {
     name: 'Toyota Harrier',
@@ -127,6 +151,8 @@ const SEED_VEHICLES = [
     fuelType: 'Hybrid',
     bufferMinutes: 60,
     minRentalHours: 4,
+    dailyRateJpy: 14000,
+    hourlyRateJpy: 1900,
   },
   {
     name: 'Suzuki Jimny',
@@ -138,8 +164,10 @@ const SEED_VEHICLES = [
     fuelType: 'Gasoline',
     bufferMinutes: 60,
     minRentalHours: 3,
+    dailyRateJpy: 9000,
+    hourlyRateJpy: 1300,
   },
-  // Van / MPV
+  // Van / MPV — highest bucket (7+ seats)
   {
     name: 'Toyota Alphard',
     description:
@@ -150,6 +178,8 @@ const SEED_VEHICLES = [
     fuelType: 'Hybrid',
     bufferMinutes: 90,
     minRentalHours: 6,
+    dailyRateJpy: 18000,
+    hourlyRateJpy: 2500,
   },
   {
     name: 'Toyota Sienta',
@@ -161,6 +191,8 @@ const SEED_VEHICLES = [
     fuelType: 'Hybrid',
     bufferMinutes: 60,
     minRentalHours: 4,
+    dailyRateJpy: 11000,
+    hourlyRateJpy: 1500,
   },
   {
     name: 'Honda Freed',
@@ -172,6 +204,8 @@ const SEED_VEHICLES = [
     fuelType: 'Hybrid',
     bufferMinutes: 60,
     minRentalHours: 4,
+    dailyRateJpy: 11000,
+    hourlyRateJpy: 1500,
   },
 ]
 

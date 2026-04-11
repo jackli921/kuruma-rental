@@ -39,6 +39,8 @@ export function createVehicleRoutes(repo: VehicleRepository): Hono {
       minRentalHours: result.data.minRentalHours ?? null,
       maxRentalHours: result.data.maxRentalHours ?? null,
       advanceBookingHours: result.data.advanceBookingHours ?? null,
+      dailyRateJpy: result.data.dailyRateJpy ?? null,
+      hourlyRateJpy: result.data.hourlyRateJpy ?? null,
     })
 
     return c.json({ success: true, data: vehicle }, 201)
@@ -64,6 +66,8 @@ export function createVehicleRoutes(repo: VehicleRepository): Hono {
       minRentalHours: result.data.minRentalHours ?? existing.minRentalHours,
       maxRentalHours: result.data.maxRentalHours ?? existing.maxRentalHours,
       advanceBookingHours: result.data.advanceBookingHours ?? existing.advanceBookingHours,
+      dailyRateJpy: result.data.dailyRateJpy ?? existing.dailyRateJpy,
+      hourlyRateJpy: result.data.hourlyRateJpy ?? existing.hourlyRateJpy,
     })
 
     return c.json({ success: true, data: updated })

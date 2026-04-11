@@ -141,6 +141,12 @@
         "photosPlaceholder": "https://example.com/photo.jpg",
         "addPhoto": "写真URLを追加",
         "removePhoto": "削除",
+        "pricingHeading": "料金（円）",
+        "pricingHint": "少なくとも1つの料金が必要です。",
+        "dailyRate": "1日あたりの料金",
+        "hourlyRate": "1時間あたりの料金",
+        "perDaySuffix": "/日",
+        "perHourSuffix": "/時間",
         "save": "車両を保存",
         "saving": "保存中...",
         "cancel": "キャンセル"

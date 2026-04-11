@@ -34,6 +34,8 @@ const vehicleColumns = {
   minRentalHours: vehicles.minRentalHours,
   maxRentalHours: vehicles.maxRentalHours,
   advanceBookingHours: vehicles.advanceBookingHours,
+  dailyRateJpy: vehicles.dailyRateJpy,
+  hourlyRateJpy: vehicles.hourlyRateJpy,
   createdAt: vehicles.createdAt,
   updatedAt: vehicles.updatedAt,
 }
@@ -90,6 +92,8 @@ export class DrizzleVehicleRepository implements VehicleRepository {
         minRentalHours: data.minRentalHours,
         maxRentalHours: data.maxRentalHours,
         advanceBookingHours: data.advanceBookingHours,
+        dailyRateJpy: data.dailyRateJpy,
+        hourlyRateJpy: data.hourlyRateJpy,
       })
       .returning()
 

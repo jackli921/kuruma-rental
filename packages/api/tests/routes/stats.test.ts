@@ -83,6 +83,7 @@ describe('GET /stats', () => {
         seats: 5,
         transmission: 'AUTO',
         fuelType: 'Hybrid',
+        dailyRateJpy: 9000,
       }),
     })
     await app.request('/vehicles', {
@@ -94,6 +95,7 @@ describe('GET /stats', () => {
         seats: 5,
         transmission: 'AUTO',
         fuelType: 'Gasoline',
+        dailyRateJpy: 7500,
       }),
     })
     const maintenanceRes = await app.request('/vehicles', {
@@ -105,6 +107,7 @@ describe('GET /stats', () => {
         seats: 5,
         transmission: 'MANUAL',
         fuelType: 'Gasoline',
+        dailyRateJpy: 6500,
       }),
     })
     const maintenanceBody = await maintenanceRes.json()
