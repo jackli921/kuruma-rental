@@ -3,7 +3,15 @@
   "name": "kuruma-rental",
   "main": ".open-next/worker.js",
   "compatibility_date": "2025-04-01",
-  "compatibility_flags": ["nodejs_compat"],
+  // `global_fetch_strictly_public` forces `fetch()` calls inside the Worker
+  // to go over the public internet, even when the target URL matches another
+  // Worker on the same Cloudflare account. Without this, CF short-circuits
+  // inter-Worker fetches via *.workers.dev subdomains and routes them
+  // INTERNALLY, which in our case returns 404 because it never reaches the
+  // kuruma-api Worker. Diagnosis: wrangler tail on kuruma-api showed zero
+  // incoming requests while the web Worker's fetch was returning HTTP 404.
+  // See: https://developers.cloudflare.com/workers/configuration/compatibility-flags/#global-fetch-strictly-public
+  "compatibility_flags": ["nodejs_compat", "global_fetch_strictly_public"],
   "assets": {
     "directory": ".open-next/assets",
     "binding": "ASSETS"
