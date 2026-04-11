@@ -10,6 +10,7 @@
     "./validators/auth": "./src/validators/auth.ts",
     "./validators/message": "./src/validators/message.ts",
     "./types/stats": "./src/types/stats.ts",
+    "./types/fleet": "./src/types/fleet.ts",
     "./lib/cancellation-policy": "./src/lib/cancellation-policy.ts"
   },
   "scripts": {
