@@ -30,3 +30,49 @@ jobs:
         env:
           AUTH_SECRET: ci-placeholder-secret-not-real
           DATABASE_URL: postgresql://placeholder:placeholder@localhost:5432/placeholder
+
+  # Non-bypassable drift gate. See scripts/db-verify.ts and the "Database
+  # Migrations" section of CLAUDE.md for why this exists. Two production
+  # incidents (see issue #27) traced to schema changes that shipped without
+  # matching migrations. Running every PR against a fresh Postgres proves
+  # migrations apply cleanly from scratch AND catches schema drift.
+  db-drift:
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: kuruma
+          POSTGRES_PASSWORD: kuruma
+          POSTGRES_DB: kuruma_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U kuruma -d kuruma_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 5
+
+    env:
+      DATABASE_URL: postgresql://kuruma:kuruma@localhost:5432/kuruma_test
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - run: bun install --frozen-lockfile
+
+      - name: Apply all migrations against fresh Postgres
+        # Proves every committed migration applies cleanly from scratch.
+        # Broken SQL, missing extensions, or ordering issues fail here.
+        run: bun run db:migrate
+
+      - name: Verify no schema drift
+        # Proves schema.ts matches the latest snapshot (no pending migrations),
+        # journal entries match on-disk .sql files, and DB migration count
+        # matches the journal. See scripts/db-verify.ts.
+        run: bun run db:verify

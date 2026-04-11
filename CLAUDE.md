@@ -147,6 +147,60 @@ Do NOT rely on the CF dashboard for secrets -- they get wiped on redeploy.
 - **`.env` lives at repo root; Next.js reads from its package dir.** Symlink: `packages/web/.env` -> `../../.env`. Without this, `DATABASE_URL` won't be found at runtime.
 - **Always `db:migrate` before `db:seed`.** Tables must exist before inserting data. Order: `db:generate` -> `db:migrate` -> `db:seed`.
 
+## Database Migrations (drizzle) -- READ BEFORE TOUCHING SCHEMA
+
+> Two production-like incidents (issue #27) were caused by schema changes that shipped without a matching migration, or migrations that were committed without being applied. Both crashed the bookings page at runtime. The rules below exist because of those incidents -- follow them exactly.
+
+### The anti-pattern: "Pending Migration"
+
+Any of these states is a loaded gun:
+
+1. `packages/shared/src/db/schema.ts` has a change, but `drizzle/` has no new `.sql` file for it -- the code references columns/tables the DB doesn't have.
+2. `drizzle/` has a new `.sql` file in the journal, but `drizzle.__drizzle_migrations` in the live DB hasn't applied it yet -- same runtime crash.
+3. `drizzle/` has a hand-written `.sql` file that is NOT registered in `drizzle/meta/_journal.json` -- it will never be applied by `db:migrate` and future `db:generate` runs will collide with its idx number.
+
+Every one of these produces the same symptom: `PostgresError: column "X" does not exist` or `relation "Y" does not exist`, surfacing as a 500 and a blank page for the user.
+
+### Mandatory workflow
+
+When you change `packages/shared/src/db/schema.ts`:
+
+```bash
+bun run db:generate --name <describe_change>  # create the migration file
+bun run db:migrate                              # apply it to your local DB
+bun run db:verify                               # confirm schema + journal + DB all in sync
+```
+
+When you need a hand-written migration (extension install, constraint, etc.):
+
+```bash
+bun run db:generate --custom --name <describe_change>  # drizzle creates an empty file + journal entry
+# ...edit the generated 0NNN_*.sql to add your raw SQL...
+bun run db:migrate
+bun run db:verify
+```
+
+**Never** drop a hand-written `.sql` into `drizzle/` without `--custom` -- it won't be in the journal and `db:migrate` will silently skip it.
+
+### The verify gate
+
+`bun run db:verify` (`scripts/db-verify.ts`) runs three checks:
+
+1. **schema.ts ↔ snapshot**: invokes `drizzle-kit generate` in dry-run mode; any pending schema change fails the check (and rolls back the accidental file so your tree stays clean).
+2. **journal ↔ disk**: every `_journal.json` entry must have a corresponding `.sql` file and vice versa. Catches orphan hand-written files and journal-file-deleted drift.
+3. **journal ↔ DB**: `drizzle.__drizzle_migrations` count must equal `_journal.json` entry count. Only runs when `DATABASE_URL` is set (cleanly skipped otherwise).
+
+Run it before every commit that touches `packages/shared/src/db/schema.ts` or `drizzle/`. CI enforces the same gate against a fresh Postgres service container (see `.github/workflows/ci.yml` `db-drift` job), so drift cannot merge -- but catching it locally is faster than round-tripping through CI.
+
+### If verify fails
+
+Fix the underlying drift, never bypass the check:
+
+- "schema.ts ↔ snapshot drift detected" -> you edited `schema.ts` but forgot to generate. Run `bun run db:generate --name <describe_change>`.
+- "orphan .sql files not in journal" -> hand-written SQL. Delete the loose file and use `bun run db:generate --custom --name <same_thing>` instead.
+- "journal references missing files" -> someone deleted a migration file after it was journaled. Restore it from git or remove the journal entry (only safe if the DB has NOT applied it yet).
+- "journal ↔ DB sync" mismatch -> pending migrations. Run `bun run db:migrate`. If migration fails, fix the SQL and retry -- do NOT edit `__drizzle_migrations` directly to "skip" the problem.
+
 ---
 
 # Vertical Slice TDD (MANDATORY -- NO EXCEPTIONS)
