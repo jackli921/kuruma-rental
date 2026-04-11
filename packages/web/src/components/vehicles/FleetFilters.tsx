@@ -36,10 +36,13 @@ const TRANSMISSION_LABEL_KEYS: Record<Transmission, string> = {
 }
 
 const SORT_OPTIONS: readonly { value: SortOrder; labelKey: string }[] = [
+  { value: 'utilization-desc', labelKey: 'sortUtilizationDesc' },
   { value: 'name-asc', labelKey: 'sortNameAsc' },
   { value: 'name-desc', labelKey: 'sortNameDesc' },
   { value: 'seats-asc', labelKey: 'sortSeatsAsc' },
   { value: 'seats-desc', labelKey: 'sortSeatsDesc' },
+  { value: 'price-asc', labelKey: 'sortPriceAsc' },
+  { value: 'price-desc', labelKey: 'sortPriceDesc' },
 ]
 
 function toggleInArray<T>(items: readonly T[] | undefined, value: T): T[] {

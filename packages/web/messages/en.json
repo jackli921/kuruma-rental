@@ -179,15 +179,33 @@
         "capacityHeading": "Capacity",
         "seatsLabel": "{min}-{max} seats",
         "sortHeading": "Sort by",
+        "sortUtilizationDesc": "Utilization: most booked first",
         "sortNameAsc": "Name A-Z",
         "sortNameDesc": "Name Z-A",
         "sortSeatsAsc": "Seats: fewest first",
-        "sortSeatsDesc": "Seats: most first"
+        "sortSeatsDesc": "Seats: most first",
+        "sortPriceAsc": "Price: low to high",
+        "sortPriceDesc": "Price: high to low"
       },
       "actions": {
         "setMaintenance": "Set to Maintenance",
         "setAvailable": "Mark Available",
         "restore": "Restore vehicle"
+      },
+      "fleet": {
+        "rowView": "Row view",
+        "gridView": "Grid view",
+        "moreActions": "More actions",
+        "onRentalUntil": "On rental until {time}",
+        "nextBooking": "Next: {time}",
+        "noBookings": "No upcoming bookings",
+        "utilizationLabel": "{percent}% · {count} bookings this month",
+        "summary": {
+          "total": "{n} cars",
+          "onRental": "{n} on rental",
+          "available": "{n} available",
+          "maintenance": "{n} maintenance"
+        }
       }
     },
     "customers": {

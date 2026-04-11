@@ -179,15 +179,33 @@
         "capacityHeading": "定員",
         "seatsLabel": "{min}〜{max}人乗り",
         "sortHeading": "並び替え",
+        "sortUtilizationDesc": "稼働率 (高い順)",
         "sortNameAsc": "名前 (A-Z)",
         "sortNameDesc": "名前 (Z-A)",
         "sortSeatsAsc": "定員 (少ない順)",
-        "sortSeatsDesc": "定員 (多い順)"
+        "sortSeatsDesc": "定員 (多い順)",
+        "sortPriceAsc": "料金 (安い順)",
+        "sortPriceDesc": "料金 (高い順)"
       },
       "actions": {
         "setMaintenance": "メンテナンス中にする",
         "setAvailable": "利用可能にする",
         "restore": "車両を復元する"
+      },
+      "fleet": {
+        "rowView": "リスト表示",
+        "gridView": "グリッド表示",
+        "moreActions": "その他の操作",
+        "onRentalUntil": "{time} まで貸出中",
+        "nextBooking": "次回: {time}",
+        "noBookings": "予約なし",
+        "utilizationLabel": "{percent}% · 今月 {count}件",
+        "summary": {
+          "total": "全{n}台",
+          "onRental": "貸出中 {n}台",
+          "available": "利用可能 {n}台",
+          "maintenance": "メンテナンス中 {n}台"
+        }
       }
     },
     "customers": {

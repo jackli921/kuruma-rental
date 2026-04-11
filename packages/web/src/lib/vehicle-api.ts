@@ -26,6 +26,23 @@ export interface VehicleData {
   updatedAt: string
 }
 
+// Enriched row returned by GET /vehicles/fleet-overview. Dates are ISO
+// strings (JSON-serialized from the API) rather than Date objects.
+// Mirrors @kuruma/shared/types/fleet.FleetVehicleOverview — if you add
+// a field there, add it here too. See issue #52.
+export interface FleetBookingSummaryData {
+  startAt: string
+  endAt: string
+  renterName: string | null
+}
+
+export interface FleetVehicleOverviewData extends VehicleData {
+  utilization: number
+  bookingCountLast30Days: number
+  currentBooking: FleetBookingSummaryData | null
+  nextBooking: FleetBookingSummaryData | null
+}
+
 async function apiRequest<T>(url: string, init?: RequestInit): Promise<T> {
   const res = await fetch(url, init)
 
@@ -90,4 +107,9 @@ export async function updateVehicleStatus(id: string, status: VehicleStatus): Pr
 export async function retireVehicle(id: string): Promise<VehicleData> {
   const base = getApiBaseUrl()
   return apiRequest<VehicleData>(`${base}/vehicles/${id}`, { method: 'DELETE' })
+}
+
+export async function fetchFleetOverview(): Promise<FleetVehicleOverviewData[]> {
+  const base = getApiBaseUrl()
+  return apiRequest<FleetVehicleOverviewData[]>(`${base}/vehicles/fleet-overview`)
 }

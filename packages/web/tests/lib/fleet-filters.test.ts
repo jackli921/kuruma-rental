@@ -201,4 +201,46 @@ describe('sortVehicles', () => {
 
     expect(vehicles.map((v) => v.name)).toEqual(originalOrder)
   })
+
+  // Utilization + price sort orders were added for the owner-facing
+  // fleet overview list (#52). They operate on FleetVehicleOverviewData
+  // (utilization) or on VehicleData's pricing columns (price).
+  it('sorts by utilization descending, treating missing utilization as 0', () => {
+    const a = { ...makeVehicle({ name: 'A' }), utilization: 10 }
+    const b = { ...makeVehicle({ name: 'B' }), utilization: 72 }
+    const c = { ...makeVehicle({ name: 'C' }), utilization: 42 }
+
+    const result = sortVehicles([a, b, c], 'utilization-desc')
+
+    expect(result.map((v) => v.name)).toEqual(['B', 'C', 'A'])
+  })
+
+  it('sorts by price ascending, using dailyRateJpy when present', () => {
+    const a = makeVehicle({ name: 'Cheap', dailyRateJpy: 5000 })
+    const b = makeVehicle({ name: 'Expensive', dailyRateJpy: 12000 })
+    const c = makeVehicle({ name: 'Mid', dailyRateJpy: 8000 })
+
+    const result = sortVehicles([a, b, c], 'price-asc')
+
+    expect(result.map((v) => v.name)).toEqual(['Cheap', 'Mid', 'Expensive'])
+  })
+
+  it('sorts by price descending', () => {
+    const a = makeVehicle({ name: 'Cheap', dailyRateJpy: 5000 })
+    const b = makeVehicle({ name: 'Expensive', dailyRateJpy: 12000 })
+
+    const result = sortVehicles([a, b], 'price-desc')
+
+    expect(result.map((v) => v.name)).toEqual(['Expensive', 'Cheap'])
+  })
+
+  it('falls back to hourlyRateJpy for price sorting when dailyRateJpy is null', () => {
+    const a = makeVehicle({ name: 'HourlyOnly', dailyRateJpy: null, hourlyRateJpy: 1500 })
+    const b = makeVehicle({ name: 'BothSet', dailyRateJpy: 6000, hourlyRateJpy: 800 })
+
+    const result = sortVehicles([a, b], 'price-asc')
+
+    // BothSet uses 6000 (daily), HourlyOnly uses 1500 (hourly) — so HourlyOnly first.
+    expect(result.map((v) => v.name)).toEqual(['HourlyOnly', 'BothSet'])
+  })
 })
