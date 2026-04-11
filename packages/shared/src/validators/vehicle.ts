@@ -18,9 +18,13 @@ const vehicleObjectSchema = z.object({
   transmission: z.enum(['AUTO', 'MANUAL']),
   fuelType: z.string().optional(),
   bufferMinutes: z.number().int().min(0).default(60),
-  minRentalHours: z.number().int().min(1).optional(),
-  maxRentalHours: z.number().int().min(1).optional(),
-  advanceBookingHours: z.number().int().min(0).optional(),
+  // Issue #50: rental rules. All three are nullish so the form can submit
+  // `null` when a field is blank (same pattern as pricing #48). `.optional()`
+  // alone would reject explicit null which react-hook-form emits when a
+  // numeric input is cleared.
+  minRentalHours: z.number().int().min(1, 'Minimum rental must be at least 1 hour').nullish(),
+  maxRentalHours: z.number().int().min(1, 'Maximum rental must be at least 1 hour').nullish(),
+  advanceBookingHours: z.number().int().min(0, 'Advance booking cannot be negative').nullish(),
   dailyRateJpy: jpyRate.nullish(),
   hourlyRateJpy: jpyRate.nullish(),
 })
@@ -31,6 +35,20 @@ export const createVehicleSchema = vehicleObjectSchema.superRefine((data, ctx) =
       code: z.ZodIssueCode.custom,
       path: ['dailyRateJpy'],
       message: 'At least one rate (daily or hourly) is required',
+    })
+  }
+
+  // Issue #50: if both rental bounds are set, min must be <= max. Otherwise
+  // the owner could create a vehicle nobody can book ("min 10h, max 5h").
+  // Enforced here rather than on the column so each field can still be
+  // optional independently.
+  const min = data.minRentalHours
+  const max = data.maxRentalHours
+  if (min != null && max != null && min > max) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ['maxRentalHours'],
+      message: 'Maximum rental hours must be greater than or equal to minimum',
     })
   }
 })

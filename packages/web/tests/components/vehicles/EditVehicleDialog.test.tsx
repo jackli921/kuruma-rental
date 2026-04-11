@@ -27,6 +27,14 @@ vi.mock('next-intl', () => ({
       'form.pricingHint': 'At least one rate is required.',
       'form.dailyRate': 'Daily rate',
       'form.hourlyRate': 'Hourly rate',
+      'form.rentalRulesHeading': 'Rental rules',
+      'form.rentalRulesHint': 'Optional limits on how customers can book.',
+      'form.minRentalHours': 'Minimum rental (hours)',
+      'form.minRentalHoursPlaceholder': '4',
+      'form.maxRentalHours': 'Maximum rental (hours)',
+      'form.maxRentalHoursPlaceholder': '72',
+      'form.advanceBookingHours': 'Advance booking (hours)',
+      'form.advanceBookingHoursPlaceholder': '24',
       'form.save': 'Save vehicle',
       'form.saving': 'Saving...',
       'form.cancel': 'Cancel',
@@ -121,5 +129,37 @@ describe('EditVehicleDialog', () => {
   it('renders nothing when vehicle is null', () => {
     render(<EditVehicleDialog vehicle={null} onOpenChange={vi.fn()} />)
     expect(screen.queryByLabelText('Daily rate')).not.toBeInTheDocument()
+  })
+
+  // Issue #50: pre-populate rental-rules fields. Same whitelist trap as #60:
+  // if the dialog forgets to forward a new field, it silently shows the
+  // form's baked-in default instead of the saved value.
+  it('pre-populates minRentalHours, maxRentalHours, and advanceBookingHours from the vehicle', () => {
+    const vehicle = makeVehicle({
+      minRentalHours: 6,
+      maxRentalHours: 48,
+      advanceBookingHours: 12,
+    })
+    render(<EditVehicleDialog vehicle={vehicle} onOpenChange={vi.fn()} />)
+
+    expect(screen.getByLabelText('Minimum rental (hours)')).toHaveValue(6)
+    expect(screen.getByLabelText('Maximum rental (hours)')).toHaveValue(48)
+    expect(screen.getByLabelText('Advance booking (hours)')).toHaveValue(12)
+  })
+
+  it('renders empty rental-rules inputs when the vehicle has null values', () => {
+    const vehicle = makeVehicle({
+      minRentalHours: null,
+      maxRentalHours: null,
+      advanceBookingHours: null,
+    })
+    render(<EditVehicleDialog vehicle={vehicle} onOpenChange={vi.fn()} />)
+
+    // Edit mode: an unset rule on the vehicle should render blank, not the
+    // form's create-mode default. Owner needs to distinguish "no rule" from
+    // "using the suggested default".
+    expect(screen.getByLabelText('Minimum rental (hours)')).not.toHaveValue()
+    expect(screen.getByLabelText('Maximum rental (hours)')).not.toHaveValue()
+    expect(screen.getByLabelText('Advance booking (hours)')).not.toHaveValue()
   })
 })

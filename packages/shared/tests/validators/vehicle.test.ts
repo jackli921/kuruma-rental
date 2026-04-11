@@ -157,19 +157,78 @@ describe('createVehicleSchema', () => {
     })
   })
 
-  describe('rental rules', () => {
-    // Not part of #48, but verifies the new validation doesn't break existing
-    // rules. Actual rental-rules slice (#50) will add more coverage.
+  // Issue #50: rental rules.
+  describe('rental rules (minRentalHours / maxRentalHours / advanceBookingHours)', () => {
+    it('accepts when all three are unset', () => {
+      const result = createVehicleSchema.safeParse(validInput)
+      expect(result.success).toBe(true)
+    })
+
+    it('accepts minRentalHours set without maxRentalHours', () => {
+      const result = createVehicleSchema.safeParse({ ...validInput, minRentalHours: 4 })
+      expect(result.success).toBe(true)
+    })
+
+    it('accepts maxRentalHours set without minRentalHours', () => {
+      const result = createVehicleSchema.safeParse({ ...validInput, maxRentalHours: 72 })
+      expect(result.success).toBe(true)
+    })
+
+    it('accepts advanceBookingHours set alone', () => {
+      const result = createVehicleSchema.safeParse({ ...validInput, advanceBookingHours: 24 })
+      expect(result.success).toBe(true)
+    })
+
+    it('accepts when min <= max', () => {
+      const result = createVehicleSchema.safeParse({
+        ...validInput,
+        minRentalHours: 4,
+        maxRentalHours: 72,
+      })
+      expect(result.success).toBe(true)
+    })
+
+    it('accepts when min equals max (exact boundary)', () => {
+      const result = createVehicleSchema.safeParse({
+        ...validInput,
+        minRentalHours: 24,
+        maxRentalHours: 24,
+      })
+      expect(result.success).toBe(true)
+    })
+
     it('rejects when minRentalHours > maxRentalHours', () => {
       const result = createVehicleSchema.safeParse({
         ...validInput,
-        minRentalHours: 48,
-        maxRentalHours: 12,
+        minRentalHours: 10,
+        maxRentalHours: 5,
       })
-      // This rule is enforced in issue #50; keeping the test here as a
-      // placeholder means slice 50 has one less test to write.
-      // For now, just assert we don't crash on the input.
-      expect(result).toBeDefined()
+      expect(result.success).toBe(false)
+      if (!result.success) {
+        const messages = result.error.issues.map((i) => i.message).join(' ')
+        expect(messages).toMatch(/minimum/i)
+        expect(messages).toMatch(/maximum/i)
+        // Error should be attached to a rental-rules field, not a pricing field.
+        const paths = result.error.issues.map((i) => i.path.join('.'))
+        expect(
+          paths.some((p) => p.includes('minRentalHours') || p.includes('maxRentalHours')),
+        ).toBe(true)
+      }
+    })
+
+    it('rejects zero minRentalHours (must be at least 1 hour)', () => {
+      const result = createVehicleSchema.safeParse({ ...validInput, minRentalHours: 0 })
+      expect(result.success).toBe(false)
+    })
+
+    it('rejects negative advanceBookingHours', () => {
+      const result = createVehicleSchema.safeParse({ ...validInput, advanceBookingHours: -1 })
+      expect(result.success).toBe(false)
+    })
+
+    it('rejects non-integer minRentalHours', () => {
+      const result = createVehicleSchema.safeParse({ ...validInput, minRentalHours: 4.5 })
+      expect(result.success).toBe(false)
     })
   })
 })

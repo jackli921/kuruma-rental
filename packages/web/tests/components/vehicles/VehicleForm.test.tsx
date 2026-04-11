@@ -20,6 +20,14 @@ vi.mock('next-intl', () => ({
       'form.pricingHint': 'At least one rate is required.',
       'form.dailyRate': 'Daily rate',
       'form.hourlyRate': 'Hourly rate',
+      'form.rentalRulesHeading': 'Rental rules',
+      'form.rentalRulesHint': 'Optional limits on how customers can book.',
+      'form.minRentalHours': 'Minimum rental (hours)',
+      'form.minRentalHoursPlaceholder': '4',
+      'form.maxRentalHours': 'Maximum rental (hours)',
+      'form.maxRentalHoursPlaceholder': '72',
+      'form.advanceBookingHours': 'Advance booking (hours)',
+      'form.advanceBookingHoursPlaceholder': '24',
       'form.save': 'Save vehicle',
       'form.saving': 'Saving...',
       'form.cancel': 'Cancel',
@@ -121,5 +129,130 @@ describe('VehicleForm', () => {
     expect(screen.getByLabelText('Buffer time (minutes)')).toHaveValue(90)
     expect(screen.getByLabelText('Daily rate')).toHaveValue(7500)
     expect(screen.getByLabelText('Hourly rate')).toHaveValue(1100)
+  })
+
+  // Issue #50: rental rules (min / max / advance booking).
+  describe('rental rules', () => {
+    it('renders all three rental-rules inputs with a section heading', () => {
+      render(<VehicleForm onSubmit={vi.fn()} />)
+
+      expect(screen.getByText('Rental rules')).toBeInTheDocument()
+      expect(screen.getByText('Optional limits on how customers can book.')).toBeInTheDocument()
+      expect(screen.getByLabelText('Minimum rental (hours)')).toBeInTheDocument()
+      expect(screen.getByLabelText('Maximum rental (hours)')).toBeInTheDocument()
+      expect(screen.getByLabelText('Advance booking (hours)')).toBeInTheDocument()
+    })
+
+    it('pre-fills sensible defaults: min=4, max=72, advance blank', () => {
+      render(<VehicleForm onSubmit={vi.fn()} />)
+
+      expect(screen.getByLabelText('Minimum rental (hours)')).toHaveValue(4)
+      expect(screen.getByLabelText('Maximum rental (hours)')).toHaveValue(72)
+      expect(screen.getByLabelText('Advance booking (hours)')).not.toHaveValue()
+    })
+
+    it('respects defaultValues override over the baked-in defaults (edit mode)', () => {
+      render(
+        <VehicleForm
+          onSubmit={vi.fn()}
+          defaultValues={{
+            name: 'Honda N-BOX',
+            seats: 4,
+            transmission: 'AUTO',
+            dailyRateJpy: 6500,
+            minRentalHours: 6,
+            maxRentalHours: 48,
+            advanceBookingHours: 12,
+          }}
+        />,
+      )
+
+      expect(screen.getByLabelText('Minimum rental (hours)')).toHaveValue(6)
+      expect(screen.getByLabelText('Maximum rental (hours)')).toHaveValue(48)
+      expect(screen.getByLabelText('Advance booking (hours)')).toHaveValue(12)
+    })
+
+    it('blocks submit and surfaces an error when min > max', async () => {
+      const user = userEvent.setup()
+      const onSubmit = vi.fn().mockResolvedValue(undefined)
+      render(
+        <VehicleForm
+          onSubmit={onSubmit}
+          defaultValues={{
+            name: 'Honda N-BOX',
+            seats: 4,
+            transmission: 'AUTO',
+            dailyRateJpy: 6500,
+          }}
+        />,
+      )
+
+      const minInput = screen.getByLabelText('Minimum rental (hours)')
+      const maxInput = screen.getByLabelText('Maximum rental (hours)')
+
+      await user.clear(minInput)
+      await user.type(minInput, '48')
+      await user.clear(maxInput)
+      await user.type(maxInput, '12')
+      await user.click(screen.getByRole('button', { name: 'Save vehicle' }))
+
+      await waitFor(() => {
+        expect(onSubmit).not.toHaveBeenCalled()
+      })
+    })
+
+    it('submits successfully with valid rental rules', async () => {
+      const user = userEvent.setup()
+      const onSubmit = vi.fn().mockResolvedValue(undefined)
+      render(
+        <VehicleForm
+          onSubmit={onSubmit}
+          defaultValues={{
+            name: 'Honda N-BOX',
+            seats: 4,
+            transmission: 'AUTO',
+            dailyRateJpy: 6500,
+            minRentalHours: 4,
+            maxRentalHours: 72,
+            advanceBookingHours: 24,
+          }}
+        />,
+      )
+
+      await user.click(screen.getByRole('button', { name: 'Save vehicle' }))
+
+      await waitFor(() => {
+        expect(onSubmit).toHaveBeenCalledTimes(1)
+      })
+      expect(onSubmit.mock.calls[0][0]).toMatchObject({
+        minRentalHours: 4,
+        maxRentalHours: 72,
+        advanceBookingHours: 24,
+      })
+    })
+
+    it('submits null when advance booking is left blank', async () => {
+      const user = userEvent.setup()
+      const onSubmit = vi.fn().mockResolvedValue(undefined)
+      render(
+        <VehicleForm
+          onSubmit={onSubmit}
+          defaultValues={{
+            name: 'Honda N-BOX',
+            seats: 4,
+            transmission: 'AUTO',
+            dailyRateJpy: 6500,
+          }}
+        />,
+      )
+
+      // advance booking is blank by default; leave it alone.
+      await user.click(screen.getByRole('button', { name: 'Save vehicle' }))
+
+      await waitFor(() => {
+        expect(onSubmit).toHaveBeenCalledTimes(1)
+      })
+      expect(onSubmit.mock.calls[0][0].advanceBookingHours).toBeNull()
+    })
   })
 })
