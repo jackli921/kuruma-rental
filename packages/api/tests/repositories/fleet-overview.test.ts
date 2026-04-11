@@ -238,6 +238,60 @@ describe('InMemoryFleetOverviewRepository', () => {
     expect(overview!.currentBooking!.renterName).toBe('Alice Smith')
   })
 
+  it('clips utilization to the 30-day window when a booking started earlier', async () => {
+    // Booking spans 40 days ago → 20 days ago. 20 days fall inside the
+    // [now - 30d, now] window; 10 days are before it and must NOT be
+    // counted. Naïve `sum(endAt - startAt)` would return 20 * 24 = 480
+    // hours and inflate utilization by 50%.
+    //
+    // FIXED_NOW = 2026-04-11T12:00:00Z, so windowStart = 2026-03-12T12:00Z.
+    //   startAt = 2026-03-02T12:00:00Z (40 days before now)
+    //   endAt   = 2026-03-22T12:00:00Z (20 days before now)
+    //   clipped = [2026-03-12T12:00, 2026-03-22T12:00] = 10 days = 240h
+    const vehicle = await vehicleRepo.create(baseVehicleInput({ name: 'Long Window' }))
+    await bookingRepo.create(
+      baseBookingInput({
+        vehicleId: vehicle.id,
+        startAt: new Date('2026-03-02T12:00:00Z'),
+        endAt: new Date('2026-03-22T12:00:00Z'),
+        effectiveEndAt: new Date('2026-03-22T13:00:00Z'),
+        status: 'COMPLETED',
+      }),
+    )
+
+    const [overview] = await fleetRepo.findFleetOverview()
+
+    expect(overview!.bookingCountLast30Days).toBe(1)
+    expect(overview!.utilization).toBeCloseTo((240 / (30 * 24)) * 100, 5)
+  })
+
+  it('clips utilization at `now` when a currently-active booking extends into the future', async () => {
+    // Booking started 2 hours ago and ends 10 hours from now. Only the
+    // 2 elapsed hours count toward utilization — the 10 future hours
+    // are not yet "booked time" against the window. A naïve impl that
+    // counts the whole window would report 12 hours.
+    //
+    // FIXED_NOW = 2026-04-11T12:00:00Z
+    //   startAt = 2026-04-11T10:00:00Z (2h ago)
+    //   endAt   = 2026-04-11T22:00:00Z (10h future)
+    //   clipped = [startAt, now] = 2h
+    const vehicle = await vehicleRepo.create(baseVehicleInput({ name: 'Currently Active' }))
+    await bookingRepo.create(
+      baseBookingInput({
+        vehicleId: vehicle.id,
+        startAt: new Date('2026-04-11T10:00:00Z'),
+        endAt: new Date('2026-04-11T22:00:00Z'),
+        effectiveEndAt: new Date('2026-04-11T23:00:00Z'),
+        status: 'ACTIVE',
+      }),
+    )
+
+    const [overview] = await fleetRepo.findFleetOverview()
+
+    expect(overview!.bookingCountLast30Days).toBe(1)
+    expect(overview!.utilization).toBeCloseTo((2 / (30 * 24)) * 100, 5)
+  })
+
   it('returns one overview row per vehicle and preserves all Vehicle columns', async () => {
     const v1 = await vehicleRepo.create(
       baseVehicleInput({ name: 'First', dailyRateJpy: 7500, hourlyRateJpy: 900 }),
