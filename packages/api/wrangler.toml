@@ -2,3 +2,12 @@ name = "kuruma-api"
 main = "src/index.ts"
 compatibility_date = "2025-04-01"
 compatibility_flags = ["nodejs_compat"]
+
+# CORS allowed origins for browser calls from the web Worker.
+# The dev origins (localhost:3001, 127.0.0.1:3001) are always included in
+# code (see packages/api/src/index.ts resolveAllowedOrigins); this var adds
+# the deployed web origin. Without it, the deployed React Query calls from
+# /manage/vehicles, /manage/customers, etc. fail with "Failed to fetch"
+# because the browser rejects the response for missing Access-Control-Allow-Origin.
+[vars]
+WEB_ORIGIN = "https://kuruma-rental.kanata-studio-dev.workers.dev"
