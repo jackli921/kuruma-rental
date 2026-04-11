@@ -4,6 +4,7 @@ import { cors } from 'hono/cors'
 import {
   DrizzleAvailabilityRepository,
   DrizzleBookingRepository,
+  DrizzleFleetOverviewRepository,
   DrizzleMessageRepository,
   DrizzleStatsRepository,
   DrizzleThreadRepository,
@@ -12,6 +13,7 @@ import {
 import {
   InMemoryAvailabilityRepository,
   InMemoryBookingRepository,
+  InMemoryFleetOverviewRepository,
   InMemoryMessageRepository,
   InMemoryStatsRepository,
   InMemoryThreadRepository,
@@ -20,6 +22,7 @@ import {
 import type {
   AvailabilityRepository,
   BookingRepository,
+  FleetOverviewRepository,
   MessageRepository,
   StatsRepository,
   ThreadRepository,
@@ -27,6 +30,7 @@ import type {
 } from './repositories/types'
 import { createAvailabilityRoutes } from './routes/availability'
 import { createBookingRoutes } from './routes/bookings'
+import { createFleetOverviewRoutes } from './routes/fleet-overview'
 import health from './routes/health'
 import { createMessageRoutes } from './routes/messages'
 import { createStatsRoutes } from './routes/stats'
@@ -36,6 +40,7 @@ export function createApp(overrides?: {
   vehicleRepo: VehicleRepository
   bookingRepo: BookingRepository
   availabilityRepo: AvailabilityRepository
+  fleetOverviewRepo?: FleetOverviewRepository
   statsRepo?: StatsRepository
   threadRepo?: ThreadRepository
   messageRepo?: MessageRepository
@@ -43,12 +48,15 @@ export function createApp(overrides?: {
   let vehicleRepo: VehicleRepository
   let bookingRepo: BookingRepository
   let availabilityRepo: AvailabilityRepository
+  let fleetOverviewRepo: FleetOverviewRepository
   let statsRepo: StatsRepository
   let threadRepo: ThreadRepository
   let messageRepo: MessageRepository
 
   if (overrides) {
     ;({ vehicleRepo, bookingRepo, availabilityRepo } = overrides)
+    fleetOverviewRepo =
+      overrides.fleetOverviewRepo ?? new InMemoryFleetOverviewRepository(vehicleRepo, bookingRepo)
     statsRepo = overrides.statsRepo ?? new InMemoryStatsRepository(vehicleRepo, bookingRepo)
     threadRepo = overrides.threadRepo ?? new InMemoryThreadRepository()
     messageRepo =
@@ -58,6 +66,7 @@ export function createApp(overrides?: {
     vehicleRepo = new DrizzleVehicleRepository(db)
     bookingRepo = new DrizzleBookingRepository(db)
     availabilityRepo = new DrizzleAvailabilityRepository(db)
+    fleetOverviewRepo = new DrizzleFleetOverviewRepository(db)
     statsRepo = new DrizzleStatsRepository(db)
     threadRepo = new DrizzleThreadRepository(db)
     messageRepo = new DrizzleMessageRepository(db)
@@ -68,6 +77,7 @@ export function createApp(overrides?: {
       vehicleRepo as InMemoryVehicleRepository,
       bookingRepo as InMemoryBookingRepository,
     )
+    fleetOverviewRepo = new InMemoryFleetOverviewRepository(vehicleRepo, bookingRepo)
     statsRepo = new InMemoryStatsRepository(vehicleRepo, bookingRepo)
     threadRepo = new InMemoryThreadRepository()
     messageRepo = new InMemoryMessageRepository(threadRepo as InMemoryThreadRepository)
@@ -94,6 +104,7 @@ export function createApp(overrides?: {
   )
 
   app.route('/', health)
+  app.route('/', createFleetOverviewRoutes(fleetOverviewRepo))
   app.route('/', createVehicleRoutes(vehicleRepo))
   app.route('/', createBookingRoutes(bookingRepo, vehicleRepo))
   app.route('/', createAvailabilityRoutes(availabilityRepo))

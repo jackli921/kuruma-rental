@@ -5,7 +5,10 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { AddVehicleDialog } from '@/components/vehicles/AddVehicleDialog'
 import { EditVehicleDialog } from '@/components/vehicles/EditVehicleDialog'
 import { FleetFilters } from '@/components/vehicles/FleetFilters'
+import { FleetSummaryBar } from '@/components/vehicles/FleetSummaryBar'
 import { FleetVehicleCard } from '@/components/vehicles/FleetVehicleCard'
+import { FleetVehicleRow } from '@/components/vehicles/FleetVehicleRow'
+import { FleetViewToggle, useFleetViewMode } from '@/components/vehicles/FleetViewToggle'
 import { RetireVehicleDialog } from '@/components/vehicles/RetireVehicleDialog'
 import {
   type FleetFilterState,
@@ -14,7 +17,7 @@ import {
   sortVehicles,
 } from '@/lib/fleet-filters'
 import type { VehicleData } from '@/lib/vehicle-api'
-import { fetchVehicles } from '@/lib/vehicle-api'
+import { fetchFleetOverview } from '@/lib/vehicle-api'
 import { useQuery } from '@tanstack/react-query'
 import { AlertCircle, Car, Plus } from 'lucide-react'
 import { useTranslations } from 'next-intl'
@@ -29,36 +32,39 @@ export function VehicleList() {
   const [filters, setFilters] = useState<FleetFilterState>({
     statuses: ['AVAILABLE', 'MAINTENANCE'],
   })
-  const [sort, setSort] = useState<SortOrder>('name-asc')
+  // Default sort is utilization-desc — the owner wants to see which
+  // cars are earning the most first. See issue #52.
+  const [sort, setSort] = useState<SortOrder>('utilization-desc')
+  const [viewMode, setViewMode] = useFleetViewMode()
   const [editingVehicle, setEditingVehicle] = useState<VehicleData | null>(null)
   const [retiringVehicle, setRetiringVehicle] = useState<VehicleData | null>(null)
   const [showAddDialog, setShowAddDialog] = useState(false)
 
   const {
-    data: vehicles,
+    data: overviews,
     isLoading,
     isError,
     error,
     refetch,
   } = useQuery({
-    queryKey: ['vehicles'],
-    queryFn: () => fetchVehicles(),
+    queryKey: ['vehicles', 'fleet-overview'],
+    queryFn: () => fetchFleetOverview(),
   })
 
   const seatsBounds = useMemo(() => {
-    if (!vehicles || vehicles.length === 0) {
+    if (!overviews || overviews.length === 0) {
       return DEFAULT_SEATS_BOUNDS
     }
-    const seats = vehicles.map((v) => v.seats)
+    const seats = overviews.map((v) => v.seats)
     return {
       min: Math.min(...seats),
       max: Math.max(...seats),
     }
-  }, [vehicles])
+  }, [overviews])
 
   const displayed = useMemo(
-    () => sortVehicles(filterVehicles(vehicles ?? [], filters), sort),
-    [vehicles, filters, sort],
+    () => sortVehicles(filterVehicles(overviews ?? [], filters), sort),
+    [overviews, filters, sort],
   )
 
   return (
@@ -74,7 +80,10 @@ export function VehicleList() {
       </aside>
 
       <div className="flex-1 space-y-6">
-        <div className="flex items-center justify-end">
+        {!isLoading && !isError && overviews && <FleetSummaryBar overviews={overviews} />}
+
+        <div className="flex items-center justify-between gap-4">
+          <FleetViewToggle value={viewMode} onChange={setViewMode} />
           <Button onClick={() => setShowAddDialog(true)}>
             <Plus className="size-4 mr-1.5" />
             {t('addVehicle')}
@@ -82,9 +91,9 @@ export function VehicleList() {
         </div>
 
         {isLoading && (
-          <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-6">
+          <div className="space-y-3">
             {SKELETON_KEYS.map((key) => (
-              <Skeleton key={key} className="h-80 rounded-xl" />
+              <Skeleton key={key} className="h-20 rounded-lg" />
             ))}
           </div>
         )}
@@ -102,12 +111,25 @@ export function VehicleList() {
           </div>
         )}
 
-        {!isLoading && !isError && displayed.length > 0 && (
+        {!isLoading && !isError && displayed.length > 0 && viewMode === 'row' && (
+          <div className="space-y-2">
+            {displayed.map((overview) => (
+              <FleetVehicleRow
+                key={overview.id}
+                overview={overview}
+                onEdit={setEditingVehicle}
+                onRetire={setRetiringVehicle}
+              />
+            ))}
+          </div>
+        )}
+
+        {!isLoading && !isError && displayed.length > 0 && viewMode === 'grid' && (
           <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-6">
-            {displayed.map((vehicle) => (
+            {displayed.map((overview) => (
               <FleetVehicleCard
-                key={vehicle.id}
-                vehicle={vehicle}
+                key={overview.id}
+                vehicle={overview}
                 onEdit={setEditingVehicle}
                 onRetire={setRetiringVehicle}
               />

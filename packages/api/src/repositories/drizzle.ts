@@ -7,12 +7,14 @@ import {
   users,
   vehicles,
 } from '@kuruma/shared/db/schema'
-import { and, asc, count, eq, inArray, sql } from 'drizzle-orm'
+import type { FleetVehicleOverview } from '@kuruma/shared/types/fleet'
+import { and, asc, count, eq, inArray, ne, sql } from 'drizzle-orm'
 import type { Booking, Message, Thread, ThreadParticipant, Vehicle } from '../stores'
 import type {
   AvailabilityRepository,
   BookingRepository,
   DashboardStats,
+  FleetOverviewRepository,
   MessageRepository,
   StatsRepository,
   ThreadRepository,
@@ -119,6 +121,95 @@ export class DrizzleVehicleRepository implements VehicleRepository {
       .returning()
 
     return (retired as Vehicle) ?? undefined
+  }
+}
+
+// Fleet overview: owner-facing aggregated read. Two round-trips instead
+// of N+1 — one SELECT for all vehicles, one SELECT for all relevant
+// bookings (last 30 days + any future) joined to users for renter name.
+// JS does the per-vehicle aggregation. 40-50 cars × maybe 200 bookings
+// is trivially fast and much clearer than a window-function CTE. See
+// issue #52.
+const UTILIZATION_WINDOW_MS = 30 * 24 * 60 * 60 * 1000
+
+function overlapHours(
+  bookingStart: Date,
+  bookingEnd: Date,
+  windowStart: Date,
+  windowEnd: Date,
+): number {
+  const start = bookingStart < windowStart ? windowStart : bookingStart
+  const end = bookingEnd > windowEnd ? windowEnd : bookingEnd
+  if (end <= start) return 0
+  return (end.getTime() - start.getTime()) / (1000 * 60 * 60)
+}
+
+export class DrizzleFleetOverviewRepository implements FleetOverviewRepository {
+  constructor(private readonly db: Db) {}
+
+  async findFleetOverview(): Promise<FleetVehicleOverview[]> {
+    const now = new Date()
+    const windowStart = new Date(now.getTime() - UTILIZATION_WINDOW_MS)
+
+    // Round-trip 1: all vehicles.
+    const vehicleRows = (await this.db.select(vehicleColumns).from(vehicles)) as Vehicle[]
+
+    // Round-trip 2: bookings we care about — non-CANCELLED, and either
+    // overlapping the last-30-day window OR starting in the future.
+    // LEFT JOIN users for the renter name.
+    const bookingRows = await this.db
+      .select({
+        id: bookings.id,
+        vehicleId: bookings.vehicleId,
+        renterId: bookings.renterId,
+        startAt: bookings.startAt,
+        endAt: bookings.endAt,
+        status: bookings.status,
+        renterName: users.name,
+      })
+      .from(bookings)
+      .leftJoin(users, eq(bookings.renterId, users.id))
+      .where(
+        and(
+          ne(bookings.status, 'CANCELLED'),
+          sql`(${bookings.endAt} > ${windowStart.toISOString()} OR ${bookings.startAt} > ${now.toISOString()})`,
+        ),
+      )
+
+    const bookingsByVehicleId = new Map<string, typeof bookingRows>()
+    for (const row of bookingRows) {
+      const list = bookingsByVehicleId.get(row.vehicleId) ?? []
+      list.push(row)
+      bookingsByVehicleId.set(row.vehicleId, list)
+    }
+
+    return vehicleRows.map((vehicle) => {
+      const vb = bookingsByVehicleId.get(vehicle.id) ?? []
+
+      const recent = vb.filter((b) => b.endAt > windowStart && b.startAt < now)
+      const bookedHours = recent.reduce(
+        (sum, b) => sum + overlapHours(b.startAt, b.endAt, windowStart, now),
+        0,
+      )
+
+      const current = vb.find((b) => b.startAt <= now && b.endAt > now) ?? null
+      const futures = vb
+        .filter((b) => b.startAt > now)
+        .sort((a, b) => a.startAt.getTime() - b.startAt.getTime())
+      const next = futures[0] ?? null
+
+      return {
+        ...vehicle,
+        utilization: (bookedHours / (30 * 24)) * 100,
+        bookingCountLast30Days: recent.length,
+        currentBooking: current
+          ? { startAt: current.startAt, endAt: current.endAt, renterName: current.renterName }
+          : null,
+        nextBooking: next
+          ? { startAt: next.startAt, endAt: next.endAt, renterName: next.renterName }
+          : null,
+      }
+    })
   }
 }
 

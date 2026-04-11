@@ -194,15 +194,33 @@
         "capacityHeading": "座位数",
         "seatsLabel": "{min}-{max} 座",
         "sortHeading": "排序",
+        "sortUtilizationDesc": "使用率由高到低",
         "sortNameAsc": "名称 A-Z",
         "sortNameDesc": "名称 Z-A",
         "sortSeatsAsc": "座位由少到多",
-        "sortSeatsDesc": "座位由多到少"
+        "sortSeatsDesc": "座位由多到少",
+        "sortPriceAsc": "价格由低到高",
+        "sortPriceDesc": "价格由高到低"
       },
       "actions": {
         "setMaintenance": "设为维护中",
         "setAvailable": "标记为可用",
         "restore": "恢复车辆"
+      },
+      "fleet": {
+        "rowView": "列表视图",
+        "gridView": "网格视图",
+        "moreActions": "更多操作",
+        "onRentalUntil": "出租中，至 {time}",
+        "nextBooking": "下次: {time}",
+        "noBookings": "暂无预订",
+        "utilizationLabel": "{percent}% · 本月 {count} 次预订",
+        "summary": {
+          "total": "{n} 辆车",
+          "onRental": "{n} 辆出租中",
+          "available": "{n} 辆可用",
+          "maintenance": "{n} 辆维护中"
+        }
       }
     },
     "customers": {

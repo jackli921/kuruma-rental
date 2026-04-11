@@ -1,6 +1,8 @@
 export type { Vehicle, Booking, Thread, ThreadParticipant, Message } from '../stores'
 export type { DashboardStats } from '@kuruma/shared/types/stats'
+export type { FleetVehicleOverview, FleetBookingSummary } from '@kuruma/shared/types/fleet'
 
+import type { FleetVehicleOverview } from '@kuruma/shared/types/fleet'
 import type { DashboardStats } from '@kuruma/shared/types/stats'
 import type { Booking, Message, Thread, ThreadParticipant, Vehicle } from '../stores'
 
@@ -10,6 +12,18 @@ export interface VehicleRepository {
   create(data: Omit<Vehicle, 'id' | 'createdAt' | 'updatedAt'>): Promise<Vehicle>
   update(id: string, data: Partial<Vehicle>): Promise<Vehicle | undefined>
   softDelete(id: string): Promise<Vehicle | undefined>
+}
+
+// Aggregated read for the owner-facing /manage/vehicles list. Enriches
+// each vehicle with utilization %, booking count, and current/next
+// booking state. Computed per-request — NOT denormalized into the
+// vehicles table. See issue #52 and @kuruma/shared/types/fleet.
+//
+// Split from VehicleRepository because it reads across multiple tables
+// (vehicles + bookings + users.name) — following the same boundary as
+// AvailabilityRepository, which also reads vehicles + bookings.
+export interface FleetOverviewRepository {
+  findFleetOverview(): Promise<FleetVehicleOverview[]>
 }
 
 export interface BookingRepository {
