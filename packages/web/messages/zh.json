@@ -73,7 +73,22 @@
       "photos": "照片",
       "description": "关于此车",
       "notFound": "车辆未找到",
-      "notFoundDescription": "您查找的车辆不存在或已被删除。"
+      "notFoundDescription": "您查找的车辆不存在或已被删除。",
+      "rentalRules": {
+        "heading": "租赁规则",
+        "hours": "{count, plural, other {# 小时}}",
+        "days": "{count, plural, other {# 天}}",
+        "minDuration": "最短租赁：{duration}",
+        "maxDuration": "最长租赁：{duration}",
+        "advanceBooking": "请至少提前 {duration} 预订"
+      }
+    },
+    "card": {
+      "rentalRule": {
+        "advance": "需提前 {duration}",
+        "min": "最短 {duration}",
+        "max": "最长 {duration}"
+      }
     },
     "filters": {
       "from": "从",
@@ -230,7 +245,12 @@
       "vehicleInfo": "车辆信息",
       "seats": "{count}座",
       "auto": "自动挡",
-      "manual": "手动挡"
+      "manual": "手动挡",
+      "rentalRuleViolation": {
+        "advance": "此车辆须至少提前 {duration} 预订。",
+        "min": "此车辆最短租赁时长为 {duration}。",
+        "max": "此车辆最长租赁时长为 {duration}。"
+      }
     },
     "confirmation": {
       "title": "预订已确认",

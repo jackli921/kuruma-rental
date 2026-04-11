@@ -35,6 +35,12 @@ export default async function NewBookingPage({ searchParams }: NewBookingPagePro
             seats: vehicle.seats,
             transmission: vehicle.transmission,
             fuelType: vehicle.fuelType,
+            // Issue #65: per-vehicle rental rules. Forwarded so the form's
+            // inline validation can disable submit before the renter hits
+            // the API wall.
+            minRentalHours: vehicle.minRentalHours,
+            maxRentalHours: vehicle.maxRentalHours,
+            advanceBookingHours: vehicle.advanceBookingHours,
           }}
           isAuthenticated={isAuthenticated}
         />

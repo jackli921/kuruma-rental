@@ -1,5 +1,6 @@
 import { buttonVariants } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
+import { RentalRulesCard } from '@/components/vehicles/RentalRulesCard'
 import { Link } from '@/i18n/routing'
 import { cn } from '@/lib/utils'
 import { getVehicleById } from '@/lib/vehicles'
@@ -113,6 +114,18 @@ export default async function VehicleDetailPage({ params }: VehicleDetailPagePro
                 </div>
               </CardContent>
             </Card>
+
+            {/* Rental rules (#65) — rendered only when the vehicle has at
+                least one rule set. The same helper powers the booking
+                form's inline validation so renters see the same numbers
+                before and during booking. */}
+            <RentalRulesCard
+              rules={{
+                minRentalHours: vehicle.minRentalHours,
+                maxRentalHours: vehicle.maxRentalHours,
+                advanceBookingHours: vehicle.advanceBookingHours,
+              }}
+            />
 
             {/* Book CTA */}
             <Link

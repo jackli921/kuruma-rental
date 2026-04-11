@@ -73,7 +73,22 @@
       "photos": "Photos",
       "description": "About this vehicle",
       "notFound": "Vehicle not found",
-      "notFoundDescription": "The vehicle you are looking for does not exist or has been removed."
+      "notFoundDescription": "The vehicle you are looking for does not exist or has been removed.",
+      "rentalRules": {
+        "heading": "Rental rules",
+        "hours": "{count, plural, one {# hour} other {# hours}}",
+        "days": "{count, plural, one {# day} other {# days}}",
+        "minDuration": "Minimum rental: {duration}",
+        "maxDuration": "Maximum rental: {duration}",
+        "advanceBooking": "Book at least {duration} in advance"
+      }
+    },
+    "card": {
+      "rentalRule": {
+        "advance": "{duration} advance",
+        "min": "Min {duration}",
+        "max": "Max {duration}"
+      }
     },
     "filters": {
       "from": "From",
@@ -230,7 +245,12 @@
       "vehicleInfo": "Vehicle details",
       "seats": "{count} seats",
       "auto": "Auto",
-      "manual": "Manual"
+      "manual": "Manual",
+      "rentalRuleViolation": {
+        "advance": "This car must be booked at least {duration} in advance.",
+        "min": "This car requires a minimum rental of {duration}.",
+        "max": "This car allows a maximum rental of {duration}."
+      }
     },
     "confirmation": {
       "title": "Booking confirmed",
