@@ -127,6 +127,11 @@
         "MAINTENANCE": "メンテナンス中",
         "RETIRED": "廃止"
       },
+      "statusToggle": {
+        "ariaLabel": "ステータスを変更",
+        "restore": "復元",
+        "error": "ステータスを更新できませんでした。もう一度お試しください。"
+      },
       "form": {
         "name": "車両名",
         "namePlaceholder": "例：トヨタ カローラ 2024",

@@ -127,6 +127,11 @@
         "MAINTENANCE": "维护中",
         "RETIRED": "已停用"
       },
+      "statusToggle": {
+        "ariaLabel": "更改状态",
+        "restore": "恢复",
+        "error": "无法更新状态，请重试。"
+      },
       "form": {
         "name": "车辆名称",
         "namePlaceholder": "例如：丰田卡罗拉 2024",

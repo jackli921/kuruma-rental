@@ -335,9 +335,7 @@ describe('Vehicle CRUD Routes', () => {
       const res = await patchStatus(created.data.id, 'MAINTENANCE')
       const body = await res.json()
 
-      expect(new Date(body.data.updatedAt).getTime()).toBeGreaterThan(
-        new Date(before).getTime(),
-      )
+      expect(new Date(body.data.updatedAt).getTime()).toBeGreaterThan(new Date(before).getTime())
     })
 
     it('returns 404 for nonexistent vehicle', async () => {
