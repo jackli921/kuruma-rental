@@ -64,10 +64,15 @@ jobs:
       # 4. Smoke test the API before we point web traffic at it.
       # /health must return 200 and /bookings must not 500 (catches
       # the exact schema-drift class of bug that issue #27 tracks).
+      # Retry with backoff: on first-time Worker deploys, the workers.dev
+      # subdomain can take several seconds to become routable even after
+      # `wrangler deploy` exits successfully. `--retry-all-errors` makes
+      # curl retry on HTTP errors (404 during propagation), not just
+      # network-level errors.
       - name: Smoke test API
         run: |
-          curl -fsS "$API_WORKER_URL/health"
-          curl -fsS "$API_WORKER_URL/bookings?from=2026-01-01T00:00:00Z&to=2026-12-31T00:00:00Z" > /dev/null
+          curl -fsS --retry 10 --retry-delay 3 --retry-all-errors "$API_WORKER_URL/health"
+          curl -fsS --retry 10 --retry-delay 3 --retry-all-errors "$API_WORKER_URL/bookings?from=2026-01-01T00:00:00Z&to=2026-12-31T00:00:00Z" > /dev/null
           echo "API smoke tests passed"
 
       # 5. Set Web Worker secrets (same idempotent pattern).
@@ -99,7 +104,8 @@ jobs:
         run: npx wrangler deploy
 
       # 7. Smoke test the web landing page (public, no auth required).
+      # Same retry rationale as the API smoke test.
       - name: Smoke test Web
         run: |
-          curl -fsS "$WEB_WORKER_URL/en" > /dev/null
+          curl -fsS --retry 10 --retry-delay 3 --retry-all-errors "$WEB_WORKER_URL/en" > /dev/null
           echo "Web landing OK"
