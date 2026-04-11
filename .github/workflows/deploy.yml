@@ -91,8 +91,16 @@ jobs:
       # http://localhost:8787.
       - name: Build Web Worker
         working-directory: packages/web
+        # NEXT_PUBLIC_API_URL must be a literal here, not `${{ env.X }}`.
+        # GitHub Actions does not reliably propagate workflow-level env
+        # into a step's `env:` block -- the reference resolves to an
+        # empty string, and Next.js then bakes the fallback
+        # `http://localhost:8787` into the server bundle. Symptom of the
+        # bug this comment exists to prevent: deployed pages that fetch
+        # from the API throw `Failed to fetch bookings: HTTP 404` because
+        # they hit the web Worker's own URL instead of the API Worker.
         env:
-          NEXT_PUBLIC_API_URL: ${{ env.API_WORKER_URL }}
+          NEXT_PUBLIC_API_URL: https://kuruma-api.kanata-studio-dev.workers.dev
           DATABASE_URL: ${{ secrets.PROD_DATABASE_URL }}
           AUTH_SECRET: ${{ secrets.AUTH_SECRET }}
         run: |
