@@ -59,6 +59,12 @@ Airbnb-style car rental platform for a Japan-based company (Osaka) serving inter
 
 - **`noUncheckedIndexedAccess` is on.** Array indexing like `segments[1]` returns `T | undefined`. Always guard with a variable check before returning.
 
+- **Active-link className conditionals are a hydration trap (issue #25).** When a `'use client'` nav component computes a conditional className from `usePathname()` (e.g. `cn('base', isActive ? 'on' : 'off')`), Next.js 16 + Turbopack can produce a server/client className mismatch on the rendered `<a>`. The visible symptom is a hydration error pointing at the `<Link>` line with a className diff. Fix pattern:
+  1. Make the className a single static string (no `cn()` conditional).
+  2. Express active state via `aria-current="page"` and Tailwind `aria-[current=page]:*` variants.
+  3. Defer the active calculation behind a `mounted` flag (`const [mounted,setMounted]=useState(false); useEffect(()=>setMounted(true),[])`) so the SSR pass and the first client render emit identical DOM, and only after hydration does any item gain `aria-current`. The 1-frame flicker is invisible and the mismatch becomes structurally impossible.
+  See `packages/web/src/components/nav/BusinessSidebar.tsx` for the canonical pattern.
+
 ## Biome Linter
 
 - Biome auto-sorts imports and reformats on save/check. If you write a file and it gets reformatted, re-read before editing again or the Edit tool will fail on stale `old_string`.
