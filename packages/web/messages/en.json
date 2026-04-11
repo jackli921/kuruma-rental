@@ -112,6 +112,8 @@
       "title": "Fleet",
       "subtitle": "Manage your vehicles",
       "empty": "No vehicles added yet",
+      "loadError": "Couldn't load your fleet",
+      "retry": "Try again",
       "addVehicle": "Add vehicle",
       "editVehicle": "Edit vehicle",
       "retireVehicle": "Retire vehicle",

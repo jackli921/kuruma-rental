@@ -112,6 +112,8 @@
       "title": "车队管理",
       "subtitle": "管理您的车辆",
       "empty": "尚未添加车辆",
+      "loadError": "无法加载车队信息",
+      "retry": "重试",
       "addVehicle": "添加车辆",
       "editVehicle": "编辑车辆",
       "retireVehicle": "停用车辆",
