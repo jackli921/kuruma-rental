@@ -1,6 +1,9 @@
 import { Hono } from 'hono'
 import { beforeEach, describe, expect, it } from 'vitest'
-import { InMemoryBookingRepository, InMemoryVehicleRepository } from '../../src/repositories/in-memory'
+import {
+  InMemoryBookingRepository,
+  InMemoryVehicleRepository,
+} from '../../src/repositories/in-memory'
 import { createBookingRoutes } from '../../src/routes/bookings'
 
 let app: Hono
@@ -131,7 +134,9 @@ describe('Booking Routes', () => {
       // Query range that overlaps (hour 30 to hour 60)
       const from = futureDate(30)
       const to = futureDate(60)
-      const res = await app.request(`/bookings?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`)
+      const res = await app.request(
+        `/bookings?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`,
+      )
       const body = await res.json()
 
       expect(body.success).toBe(true)
@@ -145,7 +150,9 @@ describe('Booking Routes', () => {
       // Query range that does NOT overlap (hour 72 to hour 96)
       const from = futureDate(72)
       const to = futureDate(96)
-      const res = await app.request(`/bookings?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`)
+      const res = await app.request(
+        `/bookings?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`,
+      )
       const body = await res.json()
 
       expect(body.success).toBe(true)
@@ -168,7 +175,9 @@ describe('Booking Routes', () => {
       // Query overlapping range with status=CONFIRMED
       const from = futureDate(20)
       const to = futureDate(50)
-      const res = await app.request(`/bookings?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}&status=CONFIRMED`)
+      const res = await app.request(
+        `/bookings?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}&status=CONFIRMED`,
+      )
       const body = await res.json()
 
       expect(body.success).toBe(true)
@@ -301,6 +310,41 @@ describe('Booking Routes', () => {
 
       const body = await res.json()
       expect(body.success).toBe(false)
+    })
+
+    it('returns 409 when the new booking overlaps an existing CONFIRMED booking on the same vehicle', async () => {
+      const first = await createBooking()
+      expect(first.status).toBe(201)
+
+      const second = await createBooking({
+        ...validBookingInput(),
+        startAt: futureDate(36),
+        endAt: futureDate(60),
+      })
+
+      expect(second.status).toBe(409)
+
+      const body = await second.json()
+      expect(body.success).toBe(false)
+      expect(body.error).toMatch(/already booked/i)
+    })
+
+    it('allows overlapping booking on a different vehicle', async () => {
+      const first = await createBooking()
+      expect(first.status).toBe(201)
+
+      const res = await createBooking({ ...validBookingInput(), vehicleId: 'v2' })
+      expect(res.status).toBe(201)
+    })
+
+    it('allows a new booking once the conflicting one is CANCELLED', async () => {
+      const first = await createBooking()
+      const created = await first.json()
+
+      await app.request(`/bookings/${created.data.id}/cancel`, { method: 'POST' })
+
+      const res = await createBooking()
+      expect(res.status).toBe(201)
     })
   })
 

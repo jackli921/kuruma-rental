@@ -9,6 +9,8 @@ import type {
   VehicleRepository,
 } from './types'
 
+const BLOCKING_STATUSES: ReadonlySet<Booking['status']> = new Set(['CONFIRMED', 'ACTIVE'])
+
 export class InMemoryVehicleRepository implements VehicleRepository {
   private readonly store: Map<string, Vehicle>
 
@@ -106,6 +108,22 @@ export class InMemoryBookingRepository implements BookingRepository {
   }
 
   async create(data: Omit<Booking, 'id' | 'createdAt' | 'updatedAt'>): Promise<Booking> {
+    // Mirror the DB-level `bookings_no_overlap` exclusion constraint so in-memory
+    // tests exercise the same conflict behavior as real Postgres.
+    if (BLOCKING_STATUSES.has(data.status)) {
+      for (const existing of this.store.values()) {
+        if (existing.vehicleId !== data.vehicleId) continue
+        if (!BLOCKING_STATUSES.has(existing.status)) continue
+        const overlaps =
+          data.startAt < existing.effectiveEndAt && existing.startAt < data.effectiveEndAt
+        if (overlaps) {
+          const err = new Error('bookings_no_overlap violation') as Error & { code: string }
+          err.code = '23P01'
+          throw err
+        }
+      }
+    }
+
     const now = new Date()
     const booking: Booking = {
       ...data,
@@ -149,8 +167,6 @@ export class InMemoryBookingRepository implements BookingRepository {
     return cancelled
   }
 }
-
-const BLOCKING_STATUSES: ReadonlySet<Booking['status']> = new Set(['CONFIRMED', 'ACTIVE'])
 
 export class InMemoryAvailabilityRepository implements AvailabilityRepository {
   constructor(

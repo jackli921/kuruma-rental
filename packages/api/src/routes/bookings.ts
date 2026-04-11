@@ -19,10 +19,19 @@ export function createBookingRoutes(
     const expand = c.req.query('expand')
 
     if ((fromParam && !toParam) || (!fromParam && toParam)) {
-      return c.json({ success: false, error: 'Both "from" and "to" are required for date range filtering' }, 400)
+      return c.json(
+        { success: false, error: 'Both "from" and "to" are required for date range filtering' },
+        400,
+      )
     }
 
-    const filters: { status?: string; vehicleId?: string; renterId?: string; from?: Date; to?: Date } = {}
+    const filters: {
+      status?: string
+      vehicleId?: string
+      renterId?: string
+      from?: Date
+      to?: Date
+    } = {}
     if (statusFilter) filters.status = statusFilter
     if (vehicleIdFilter) filters.vehicleId = vehicleIdFilter
     if (renterIdFilter) filters.renterId = renterIdFilter
@@ -90,22 +99,40 @@ export function createBookingRoutes(
     const defaultBufferMs = 60 * 60 * 1000 // 60 minutes default
     const effectiveEndAt = new Date(endAt.getTime() + defaultBufferMs)
 
-    const booking = await repo.create({
-      renterId,
-      vehicleId: result.data.vehicleId,
-      startAt: new Date(result.data.startAt),
-      endAt,
-      effectiveEndAt,
-      status: 'CONFIRMED',
-      source: result.data.source,
-      externalId: result.data.externalId ?? null,
-      notes: result.data.notes ?? null,
-      totalPrice: result.data.totalPrice ?? null,
-      cancellationFee: null,
-      cancelledAt: null,
-    })
+    try {
+      const booking = await repo.create({
+        renterId,
+        vehicleId: result.data.vehicleId,
+        startAt: new Date(result.data.startAt),
+        endAt,
+        effectiveEndAt,
+        status: 'CONFIRMED',
+        source: result.data.source,
+        externalId: result.data.externalId ?? null,
+        notes: result.data.notes ?? null,
+        totalPrice: result.data.totalPrice ?? null,
+        cancellationFee: null,
+        cancelledAt: null,
+      })
 
-    return c.json({ success: true, data: booking }, 201)
+      return c.json({ success: true, data: booking }, 201)
+    } catch (err) {
+      // Postgres exclusion_violation (23P01) — bookings_no_overlap constraint.
+      // The DB (and the in-memory repo's mirror check) reject overlapping bookings
+      // for the same vehicle. Surface as 409 Conflict instead of a bare 500.
+      if (
+        err &&
+        typeof err === 'object' &&
+        'code' in err &&
+        (err as { code: unknown }).code === '23P01'
+      ) {
+        return c.json(
+          { success: false, error: 'Vehicle is already booked for the requested time range' },
+          409,
+        )
+      }
+      throw err
+    }
   })
 
   bookings.patch('/bookings/:id/status', async (c) => {
