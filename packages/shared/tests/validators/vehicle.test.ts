@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest'
-import { createVehicleSchema, updateVehicleSchema } from '../../src/validators/vehicle'
+import {
+  createVehicleSchema,
+  updateVehicleSchema,
+  updateVehicleStatusSchema,
+} from '../../src/validators/vehicle'
 
 describe('createVehicleSchema', () => {
   const validInput = {
@@ -242,5 +246,40 @@ describe('updateVehicleSchema', () => {
   it('accepts empty object', () => {
     const result = updateVehicleSchema.safeParse({})
     expect(result.success).toBe(true)
+  })
+})
+
+describe('updateVehicleStatusSchema', () => {
+  it('accepts AVAILABLE', () => {
+    const result = updateVehicleStatusSchema.safeParse({ status: 'AVAILABLE' })
+    expect(result.success).toBe(true)
+    if (result.success) {
+      expect(result.data.status).toBe('AVAILABLE')
+    }
+  })
+
+  it('accepts MAINTENANCE', () => {
+    const result = updateVehicleStatusSchema.safeParse({ status: 'MAINTENANCE' })
+    expect(result.success).toBe(true)
+  })
+
+  it('accepts RETIRED', () => {
+    const result = updateVehicleStatusSchema.safeParse({ status: 'RETIRED' })
+    expect(result.success).toBe(true)
+  })
+
+  it('rejects unknown status value', () => {
+    const result = updateVehicleStatusSchema.safeParse({ status: 'BROKEN' })
+    expect(result.success).toBe(false)
+  })
+
+  it('rejects missing status', () => {
+    const result = updateVehicleStatusSchema.safeParse({})
+    expect(result.success).toBe(false)
+  })
+
+  it('rejects lowercase status', () => {
+    const result = updateVehicleStatusSchema.safeParse({ status: 'available' })
+    expect(result.success).toBe(false)
   })
 })

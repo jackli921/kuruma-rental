@@ -278,6 +278,121 @@ describe('Vehicle CRUD Routes', () => {
     })
   })
 
+  describe('PATCH /vehicles/:id/status (issue #51)', () => {
+    async function patchStatus(id: string, status: string) {
+      return app.request(`/vehicles/${id}/status`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status }),
+      })
+    }
+
+    it('flips AVAILABLE → MAINTENANCE and returns the updated vehicle', async () => {
+      const createRes = await createVehicle()
+      const created = await createRes.json()
+
+      const res = await patchStatus(created.data.id, 'MAINTENANCE')
+
+      expect(res.status).toBe(200)
+      const body = await res.json()
+      expect(body.success).toBe(true)
+      expect(body.data.status).toBe('MAINTENANCE')
+      expect(body.data.id).toBe(created.data.id)
+    })
+
+    it('round-trips MAINTENANCE → AVAILABLE', async () => {
+      const createRes = await createVehicle()
+      const created = await createRes.json()
+
+      await patchStatus(created.data.id, 'MAINTENANCE')
+      const res = await patchStatus(created.data.id, 'AVAILABLE')
+
+      expect(res.status).toBe(200)
+      const body = await res.json()
+      expect(body.data.status).toBe('AVAILABLE')
+    })
+
+    it('allows un-retiring: RETIRED → AVAILABLE', async () => {
+      const createRes = await createVehicle()
+      const created = await createRes.json()
+
+      await patchStatus(created.data.id, 'RETIRED')
+      const res = await patchStatus(created.data.id, 'AVAILABLE')
+
+      expect(res.status).toBe(200)
+      const body = await res.json()
+      expect(body.data.status).toBe('AVAILABLE')
+    })
+
+    it('advances updatedAt on a status change', async () => {
+      const createRes = await createVehicle()
+      const created = await createRes.json()
+      const before = created.data.updatedAt
+
+      // Ensure at least 1 ms delta so the InMemoryVehicleRepository
+      // timestamp is guaranteed to advance on systems with 1 ms clock resolution.
+      await new Promise((r) => setTimeout(r, 2))
+      const res = await patchStatus(created.data.id, 'MAINTENANCE')
+      const body = await res.json()
+
+      expect(new Date(body.data.updatedAt).getTime()).toBeGreaterThan(
+        new Date(before).getTime(),
+      )
+    })
+
+    it('returns 404 for nonexistent vehicle', async () => {
+      const res = await patchStatus('nonexistent-id', 'MAINTENANCE')
+
+      expect(res.status).toBe(404)
+      const body = await res.json()
+      expect(body.success).toBe(false)
+      expect(body.error).toBe('Vehicle not found')
+    })
+
+    it('rejects unknown status with 400', async () => {
+      const createRes = await createVehicle()
+      const created = await createRes.json()
+
+      const res = await patchStatus(created.data.id, 'BROKEN')
+
+      expect(res.status).toBe(400)
+      const body = await res.json()
+      expect(body.success).toBe(false)
+    })
+
+    it('rejects missing status body with 400', async () => {
+      const createRes = await createVehicle()
+      const created = await createRes.json()
+
+      const res = await app.request(`/vehicles/${created.data.id}/status`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({}),
+      })
+
+      expect(res.status).toBe(400)
+      const body = await res.json()
+      expect(body.success).toBe(false)
+    })
+
+    it('does not touch fields other than status', async () => {
+      const createRes = await createVehicle({
+        ...validVehicleInput(),
+        name: 'Keep Me',
+        dailyRateJpy: 12345,
+      })
+      const created = await createRes.json()
+
+      await patchStatus(created.data.id, 'MAINTENANCE')
+
+      const getRes = await app.request(`/vehicles/${created.data.id}`)
+      const getBody = await getRes.json()
+      expect(getBody.data.name).toBe('Keep Me')
+      expect(getBody.data.dailyRateJpy).toBe(12345)
+      expect(getBody.data.status).toBe('MAINTENANCE')
+    })
+  })
+
   describe('DELETE /vehicles/:id', () => {
     it('soft deletes by setting status to RETIRED', async () => {
       const createRes = await createVehicle()

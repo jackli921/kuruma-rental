@@ -55,6 +55,16 @@ export const createVehicleSchema = vehicleObjectSchema.superRefine((data, ctx) =
 
 export const updateVehicleSchema = vehicleObjectSchema.partial()
 
+// Issue #51: inline status toggle. Kept as its own tiny schema so the
+// fleet list can bind a one-field mutation without sending the full
+// update payload. Mirrors the `vehicle_status` pgEnum in schema.ts.
+export const vehicleStatusEnum = z.enum(['AVAILABLE', 'MAINTENANCE', 'RETIRED'])
+export const updateVehicleStatusSchema = z.object({
+  status: vehicleStatusEnum,
+})
+
 export type CreateVehicleInput = z.infer<typeof createVehicleSchema>
 export type CreateVehicleFormInput = z.input<typeof createVehicleSchema>
 export type UpdateVehicleInput = z.infer<typeof updateVehicleSchema>
+export type UpdateVehicleStatusInput = z.infer<typeof updateVehicleStatusSchema>
+export type VehicleStatus = z.infer<typeof vehicleStatusEnum>
