@@ -1,0 +1,28 @@
+{
+  "$schema": "https://unpkg.com/knip@6/schema.json",
+  "workspaces": {
+    ".": {
+      "entry": ["scripts/*.ts"],
+      "ignore": ["scripts/__fixtures__/**"],
+      "ignoreDependencies": ["postgres"]
+    },
+    "packages/api": {
+      "ignore": ["tests/**"],
+      "ignoreDependencies": ["jose", "drizzle-orm", "zod"]
+    },
+    "packages/web": {
+      "entry": [
+        "src/app/**/page.tsx",
+        "src/app/**/layout.tsx",
+        "src/app/**/loading.tsx",
+        "src/app/**/error.tsx",
+        "src/app/**/not-found.tsx",
+        "src/i18n/**/*.ts"
+      ],
+      "ignore": ["src/components/ui/**"],
+      "ignoreDependencies": ["postcss", "@kuruma/api", "drizzle-orm", "zod"]
+    },
+    "packages/shared": {}
+  },
+  "ignore": ["packages/web/open-next.config.ts", "packages/shared/postcss.config.mjs"]
+}
