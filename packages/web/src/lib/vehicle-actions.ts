@@ -1,15 +1,54 @@
 'use server'
 
-import { auth } from '@/auth'
-import { signApiToken } from '@/lib/api-client'
-import { fetchFleetOverview } from '@/lib/vehicle-api'
-import type { FleetVehicleOverviewData } from '@/lib/vehicle-api'
+import { getApiToken } from '@/lib/api-token'
+import {
+  type FleetVehicleOverviewData,
+  type VehicleData,
+  createVehicle,
+  fetchFleetOverview,
+  retireVehicle,
+  updateVehicle,
+  updateVehicleStatus,
+} from '@/lib/vehicle-api'
+import type { CreateVehicleInput, VehicleStatus } from '@kuruma/shared/validators/vehicle'
 
-export async function fetchFleetOverviewAuthenticated(): Promise<FleetVehicleOverviewData[]> {
-  const session = await auth()
-  const user = session?.user as { id?: string; role?: string } | undefined
-  if (!user?.id) throw new Error('Not authenticated')
+export type ActionResult<T> = { success: true; data: T } | { success: false; error: string }
 
-  const token = await signApiToken({ id: user.id, role: user.role ?? 'RENTER' })
-  return fetchFleetOverview({ Authorization: `Bearer ${token}` })
+async function withAuth<T>(fn: (token: string) => Promise<T>): Promise<ActionResult<T>> {
+  const token = await getApiToken()
+  if (!token) {
+    return { success: false, error: 'Authentication required' }
+  }
+  try {
+    const data = await fn(token)
+    return { success: true, data }
+  } catch (e) {
+    return { success: false, error: e instanceof Error ? e.message : 'An error occurred' }
+  }
+}
+
+export function fetchFleetOverviewAction(): Promise<ActionResult<FleetVehicleOverviewData[]>> {
+  return withAuth((token) => fetchFleetOverview(token))
+}
+
+export function createVehicleAction(data: CreateVehicleInput): Promise<ActionResult<VehicleData>> {
+  return withAuth((token) => createVehicle(data, token))
+}
+
+export function updateVehicleAction(
+  id: string,
+  data: Partial<CreateVehicleInput>,
+): Promise<ActionResult<VehicleData>> {
+  return withAuth((token) => updateVehicle(id, data, token))
+}
+
+export function updateVehicleStatusAction(
+  id: string,
+  status: VehicleStatus,
+): Promise<ActionResult<VehicleData>> {
+  return withAuth((token) => updateVehicleStatus(id, status, token))
+}
+
+export function retireVehicleAction(id: string): Promise<ActionResult<VehicleData>> {
+  return withAuth((token) => retireVehicle(id, token))
 }

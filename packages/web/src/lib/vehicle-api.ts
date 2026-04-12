@@ -51,16 +51,16 @@ async function unwrap<T>(res: Response): Promise<T> {
   return body.data
 }
 
-export async function fetchVehicles(status?: string): Promise<VehicleData[]> {
-  const client = createApiClient()
+export async function fetchVehicles(status?: string, token?: string): Promise<VehicleData[]> {
+  const client = createApiClient(token)
   const res = status
     ? await client.vehicles.$get({ query: { status } })
     : await client.vehicles.$get()
   return unwrap<VehicleData[]>(res)
 }
 
-export async function fetchVehicleById(id: string): Promise<VehicleData | null> {
-  const client = createApiClient()
+export async function fetchVehicleById(id: string, token?: string): Promise<VehicleData | null> {
+  const client = createApiClient(token)
   try {
     const res = await client.vehicles[':id'].$get({ param: { id } })
     return await unwrap<VehicleData>(res)
@@ -70,8 +70,11 @@ export async function fetchVehicleById(id: string): Promise<VehicleData | null> 
   }
 }
 
-export async function createVehicle(data: CreateVehicleInput): Promise<VehicleData> {
-  const client = createApiClient()
+export async function createVehicle(
+  data: CreateVehicleInput,
+  token?: string,
+): Promise<VehicleData> {
+  const client = createApiClient(token)
   const res = await client.vehicles.$post({ json: data })
   return unwrap<VehicleData>(res)
 }
@@ -79,12 +82,17 @@ export async function createVehicle(data: CreateVehicleInput): Promise<VehicleDa
 export async function updateVehicle(
   id: string,
   data: Partial<CreateVehicleInput>,
+  token?: string,
 ): Promise<VehicleData> {
-  const client = createApiClient()
+  const client = createApiClient(token)
   const url = client.vehicles[':id'].$url({ param: { id } })
+  const headers: Record<string, string> = { 'Content-Type': 'application/json' }
+  if (token) {
+    headers.Authorization = `Bearer ${token}`
+  }
   const res = await fetch(url, {
     method: 'PATCH',
-    headers: { 'Content-Type': 'application/json' },
+    headers,
     body: JSON.stringify(data),
   })
   return unwrap<VehicleData>(res)
@@ -93,19 +101,27 @@ export async function updateVehicle(
 // Issue #51: one-shot status mutation for the fleet list inline toggle.
 // Kept separate from updateVehicle() so callers don't accidentally ship a
 // partial vehicle payload when they only mean to flip a status.
-export async function updateVehicleStatus(id: string, status: VehicleStatus): Promise<VehicleData> {
-  const client = createApiClient()
+export async function updateVehicleStatus(
+  id: string,
+  status: VehicleStatus,
+  token?: string,
+): Promise<VehicleData> {
+  const client = createApiClient(token)
   const url = client.vehicles[':id'].status.$url({ param: { id } })
+  const headers: Record<string, string> = { 'Content-Type': 'application/json' }
+  if (token) {
+    headers.Authorization = `Bearer ${token}`
+  }
   const res = await fetch(url, {
     method: 'PATCH',
-    headers: { 'Content-Type': 'application/json' },
+    headers,
     body: JSON.stringify({ status }),
   })
   return unwrap<VehicleData>(res)
 }
 
-export async function retireVehicle(id: string): Promise<VehicleData> {
-  const client = createApiClient()
+export async function retireVehicle(id: string, token?: string): Promise<VehicleData> {
+  const client = createApiClient(token)
   const res = await client.vehicles[':id'].$delete({ param: { id } })
   return unwrap<VehicleData>(res)
 }
@@ -134,8 +150,11 @@ export interface VehicleDetailData extends VehicleData {
   utilizationLast30Days: DailyUtilizationData[]
 }
 
-export async function fetchVehicleDetail(id: string): Promise<VehicleDetailData | null> {
-  const client = createApiClient()
+export async function fetchVehicleDetail(
+  id: string,
+  token?: string,
+): Promise<VehicleDetailData | null> {
+  const client = createApiClient(token)
   try {
     const res = await client.vehicles[':id'].detail.$get({ param: { id } })
     return await unwrap<VehicleDetailData>(res)
@@ -145,10 +164,8 @@ export async function fetchVehicleDetail(id: string): Promise<VehicleDetailData 
   }
 }
 
-export async function fetchFleetOverview(
-  headers?: Record<string, string>,
-): Promise<FleetVehicleOverviewData[]> {
-  const client = createApiClient(headers)
+export async function fetchFleetOverview(token?: string): Promise<FleetVehicleOverviewData[]> {
+  const client = createApiClient(token)
   const res = await client.vehicles['fleet-overview'].$get()
   return unwrap<FleetVehicleOverviewData[]>(res)
 }
