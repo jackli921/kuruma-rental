@@ -1,6 +1,7 @@
 import { getDb } from '@kuruma/shared/db'
 import { Hono } from 'hono'
 import { cors } from 'hono/cors'
+import { setupGlobalHandlers } from './error-handlers'
 import {
   DrizzleAvailabilityRepository,
   DrizzleBookingRepository,
@@ -94,6 +95,9 @@ export function createApp(overrides?: {
   }
 
   const app = new Hono()
+
+  // Global error handlers — prevent stack traces leaking to clients.
+  setupGlobalHandlers(app)
 
   // CORS. Browser calls from the web package (localhost:3001 in dev, the
   // deployed origin in prod) are same-intent but cross-origin, so without
