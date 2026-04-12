@@ -6,7 +6,7 @@ import {
   DrizzleVehicleRepository,
 } from '../../src/repositories/drizzle'
 import type { Vehicle } from '../../src/stores'
-import { cleanupBookings, cleanupUsers, cleanupVehicles, db } from './setup'
+import { DEFAULT_DAILY_RATE_JPY, cleanupBookings, cleanupUsers, cleanupVehicles, db } from './setup'
 
 const vehicleRepo = new DrizzleVehicleRepository(db)
 const bookingRepo = new DrizzleBookingRepository(db)
@@ -53,6 +53,7 @@ function createTestVehicle(
     minRentalHours: overrides.minRentalHours ?? null,
     maxRentalHours: overrides.maxRentalHours ?? null,
     advanceBookingHours: overrides.advanceBookingHours ?? null,
+    dailyRateJpy: overrides.dailyRateJpy ?? DEFAULT_DAILY_RATE_JPY,
   })
 }
 

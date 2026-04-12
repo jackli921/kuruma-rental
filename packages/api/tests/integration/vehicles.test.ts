@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it } from 'vitest'
 import { DrizzleVehicleRepository } from '../../src/repositories/drizzle'
-import { cleanupVehicles, db } from './setup'
+import { DEFAULT_DAILY_RATE_JPY, cleanupVehicles, db } from './setup'
 
 const repo = new DrizzleVehicleRepository(db)
 const createdIds: string[] = []
@@ -23,6 +23,7 @@ describe('DrizzleVehicleRepository', () => {
       minRentalHours: 4,
       maxRentalHours: 72,
       advanceBookingHours: 24,
+      dailyRateJpy: 8000,
     }
 
     const vehicle = await repo.create(input)
@@ -39,6 +40,7 @@ describe('DrizzleVehicleRepository', () => {
     expect(vehicle.minRentalHours).toBe(4)
     expect(vehicle.maxRentalHours).toBe(72)
     expect(vehicle.advanceBookingHours).toBe(24)
+    expect(vehicle.dailyRateJpy).toBe(8000)
     expect(vehicle.createdAt).toBeInstanceOf(Date)
     expect(vehicle.updatedAt).toBeInstanceOf(Date)
   })
@@ -55,6 +57,7 @@ describe('DrizzleVehicleRepository', () => {
       minRentalHours: null,
       maxRentalHours: null,
       advanceBookingHours: null,
+      dailyRateJpy: DEFAULT_DAILY_RATE_JPY,
     })
     createdIds.push(created.id)
 
@@ -88,6 +91,7 @@ describe('DrizzleVehicleRepository', () => {
       minRentalHours: null,
       maxRentalHours: null,
       advanceBookingHours: null,
+      dailyRateJpy: DEFAULT_DAILY_RATE_JPY,
     })
     createdIds.push(available.id)
 
@@ -102,6 +106,7 @@ describe('DrizzleVehicleRepository', () => {
       minRentalHours: null,
       maxRentalHours: null,
       advanceBookingHours: null,
+      dailyRateJpy: DEFAULT_DAILY_RATE_JPY,
     })
     createdIds.push(maintenance.id)
 
@@ -130,6 +135,7 @@ describe('DrizzleVehicleRepository', () => {
       minRentalHours: null,
       maxRentalHours: null,
       advanceBookingHours: null,
+      dailyRateJpy: DEFAULT_DAILY_RATE_JPY,
     })
     createdIds.push(created.id)
 
@@ -170,6 +176,7 @@ describe('DrizzleVehicleRepository', () => {
       minRentalHours: null,
       maxRentalHours: null,
       advanceBookingHours: null,
+      dailyRateJpy: DEFAULT_DAILY_RATE_JPY,
     })
     createdIds.push(created.id)
 

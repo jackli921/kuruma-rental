@@ -1,5 +1,4 @@
-import { bookings, users, vehicles } from '@kuruma/shared/db/schema'
-import { inArray } from 'drizzle-orm'
+import { users } from '@kuruma/shared/db/schema'
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest'
 import { createApp } from '../../src/index'
 import { pgErrorCode } from '../../src/pg-errors'
@@ -8,36 +7,9 @@ import {
   DrizzleBookingRepository,
   DrizzleVehicleRepository,
 } from '../../src/repositories/drizzle'
-import type { Db } from '../../src/repositories/drizzle/shared'
 import type { Vehicle } from '../../src/stores'
 import { authHeaders, setupAuthEnv } from '../helpers/auth'
-import { testDb } from './pg-test-client'
-
-// Cast once: postgres-js and neon-http share the drizzle query API surface,
-// but the Drizzle repos are typed for neon-http. See pg-test-client.ts.
-const db = testDb as unknown as Db
-
-const bookingRepo = new DrizzleBookingRepository(db)
-const vehicleRepo = new DrizzleVehicleRepository(db)
-
-// --- Cleanup helpers (use testDb to avoid Neon HTTP driver) ---
-
-async function cleanupBookings(ids: string[]): Promise<void> {
-  if (ids.length === 0) return
-  await testDb.delete(bookings).where(inArray(bookings.id, ids))
-}
-
-async function cleanupVehicles(vehicleIds: string[]): Promise<void> {
-  if (vehicleIds.length === 0) return
-  await testDb.delete(bookings).where(inArray(bookings.vehicleId, vehicleIds))
-  await testDb.delete(vehicles).where(inArray(vehicles.id, vehicleIds))
-}
-
-async function cleanupUsers(userIds: string[]): Promise<void> {
-  if (userIds.length === 0) return
-  await testDb.delete(bookings).where(inArray(bookings.renterId, userIds))
-  await testDb.delete(users).where(inArray(users.id, userIds))
-}
+import { DEFAULT_DAILY_RATE_JPY, cleanupBookings, cleanupUsers, cleanupVehicles, db } from './setup'
 
 // --- Test data ---
 
@@ -47,7 +19,7 @@ const createdBookingIds: string[] = []
 const createdVehicleIds: string[] = []
 
 beforeAll(async () => {
-  const [user] = await testDb
+  const [user] = await db
     .insert(users)
     .values({
       id: crypto.randomUUID(),
@@ -69,8 +41,7 @@ beforeAll(async () => {
     minRentalHours: null,
     maxRentalHours: null,
     advanceBookingHours: null,
-    dailyRateJpy: 8000,
-    hourlyRateJpy: null,
+    dailyRateJpy: DEFAULT_DAILY_RATE_JPY,
   })
   createdVehicleIds.push(testVehicle.id)
 })
@@ -200,8 +171,7 @@ describe('DrizzleBookingRepository', () => {
       minRentalHours: null,
       maxRentalHours: null,
       advanceBookingHours: null,
-      dailyRateJpy: 8000,
-      hourlyRateJpy: null,
+      dailyRateJpy: DEFAULT_DAILY_RATE_JPY,
     })
     createdVehicleIds.push(otherVehicle.id)
 
@@ -435,7 +405,7 @@ describe('POST /bookings overlap via HTTP (real Postgres)', () => {
   beforeAll(async () => {
     setupAuthEnv()
 
-    const [user] = await testDb
+    const [user] = await db
       .insert(users)
       .values({
         id: crypto.randomUUID(),
