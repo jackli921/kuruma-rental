@@ -6,10 +6,12 @@ import {
   InMemoryStatsRepository,
   InMemoryVehicleRepository,
 } from '../../src/repositories/in-memory'
+import { authHeaders, setupAuthEnv } from '../helpers/auth'
 
 const TEST_API_KEY = 'test-stats-key'
 
 function createTestApp() {
+  setupAuthEnv()
   const vehicleRepo = new InMemoryVehicleRepository()
   const bookingRepo = new InMemoryBookingRepository()
   const availabilityRepo = new InMemoryAvailabilityRepository(vehicleRepo, bookingRepo)
@@ -72,11 +74,12 @@ describe('GET /stats', () => {
 
   it('returns correct counts after creating vehicles and bookings', async () => {
     const { app } = createTestApp()
+    const headers = await authHeaders()
 
     // Create 3 vehicles (2 AVAILABLE, 1 will be soft-deleted)
     await app.request('/vehicles', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', ...headers },
       body: JSON.stringify({
         name: 'Toyota Prius',
         description: 'Hybrid',
@@ -88,7 +91,7 @@ describe('GET /stats', () => {
     })
     await app.request('/vehicles', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', ...headers },
       body: JSON.stringify({
         name: 'Honda Fit',
         description: 'Compact',
@@ -100,7 +103,7 @@ describe('GET /stats', () => {
     })
     const maintenanceRes = await app.request('/vehicles', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', ...headers },
       body: JSON.stringify({
         name: 'Suzuki Swift',
         description: 'Under repair',
@@ -113,10 +116,11 @@ describe('GET /stats', () => {
     const maintenanceBody = await maintenanceRes.json()
     await app.request(`/vehicles/${maintenanceBody.data.id}`, {
       method: 'DELETE',
+      headers,
     })
 
     // Create 2 bookings
-    const vehiclesRes = await app.request('/vehicles')
+    const vehiclesRes = await app.request('/vehicles', { headers })
     const vehiclesBody = await vehiclesRes.json()
     const availableVehicle = vehiclesBody.data.find(
       (v: { status: string }) => v.status === 'AVAILABLE',
@@ -124,7 +128,7 @@ describe('GET /stats', () => {
 
     await app.request('/bookings', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', ...headers },
       body: JSON.stringify({
         renterId: 'user-1',
         vehicleId: availableVehicle.id,
@@ -135,7 +139,7 @@ describe('GET /stats', () => {
     })
     await app.request('/bookings', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', ...headers },
       body: JSON.stringify({
         renterId: 'user-2',
         vehicleId: availableVehicle.id,
