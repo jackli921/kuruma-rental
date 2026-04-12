@@ -29,7 +29,8 @@ describe('Message Routes', () => {
       expect(res.status).toBe(200)
 
       const body = await res.json()
-      expect(body).toEqual({ success: true, data: [] })
+      expect(body.success).toBe(true)
+      expect(body.data).toEqual([])
     })
 
     it('returns created thread with participant info', async () => {

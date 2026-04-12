@@ -19,8 +19,21 @@ export function createMessageRoutes(
       return fail(c, 'userId query parameter is required', 400)
     }
 
-    const threads = await threadRepo.findAll(userId)
-    return ok(c, threads)
+    const limitParam = c.req.query('limit')
+    const offsetParam = c.req.query('offset')
+
+    const limit = limitParam ? Number.parseInt(limitParam, 10) : 25
+    if (Number.isNaN(limit) || limit < 1 || limit > 100) {
+      return fail(c, 'limit must be between 1 and 100', 400)
+    }
+    const offset = offsetParam ? Number.parseInt(offsetParam, 10) : 0
+    if (Number.isNaN(offset) || offset < 0) {
+      return fail(c, 'offset must be a non-negative integer', 400)
+    }
+
+    const all = await threadRepo.findAll(userId)
+    const page = all.slice(offset, offset + limit)
+    return ok(c, page, 200, { total: all.length, limit, offset })
   })
 
   app.get('/threads/:id', async (c) => {
