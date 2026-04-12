@@ -247,6 +247,57 @@ describe('updateVehicleSchema', () => {
     const result = updateVehicleSchema.safeParse({})
     expect(result.success).toBe(true)
   })
+
+  it('rejects when both rates are explicitly set to null', () => {
+    const result = updateVehicleSchema.safeParse({
+      dailyRateJpy: null,
+      hourlyRateJpy: null,
+    })
+    expect(result.success).toBe(false)
+    if (!result.success) {
+      const messages = result.error.issues.map((i) => i.message).join(' ')
+      expect(messages).toMatch(/rate/i)
+    }
+  })
+
+  it('allows setting one rate to null when the other is set', () => {
+    const result = updateVehicleSchema.safeParse({
+      dailyRateJpy: null,
+      hourlyRateJpy: 1200,
+    })
+    expect(result.success).toBe(true)
+  })
+
+  it('allows setting a single rate without the other', () => {
+    const result = updateVehicleSchema.safeParse({ dailyRateJpy: 8000 })
+    expect(result.success).toBe(true)
+  })
+
+  it('rejects when minRentalHours > maxRentalHours', () => {
+    const result = updateVehicleSchema.safeParse({
+      minRentalHours: 10,
+      maxRentalHours: 5,
+    })
+    expect(result.success).toBe(false)
+    if (!result.success) {
+      const messages = result.error.issues.map((i) => i.message).join(' ')
+      expect(messages).toMatch(/minimum/i)
+      expect(messages).toMatch(/maximum/i)
+    }
+  })
+
+  it('accepts when minRentalHours <= maxRentalHours', () => {
+    const result = updateVehicleSchema.safeParse({
+      minRentalHours: 4,
+      maxRentalHours: 72,
+    })
+    expect(result.success).toBe(true)
+  })
+
+  it('allows updating minRentalHours alone', () => {
+    const result = updateVehicleSchema.safeParse({ minRentalHours: 4 })
+    expect(result.success).toBe(true)
+  })
 })
 
 describe('updateVehicleStatusSchema', () => {
