@@ -1,7 +1,7 @@
 'use server'
 
 import { auth } from '@/auth'
-import { getApiBaseUrl } from '@/lib/api-client'
+import { authedFetch, getApiBaseUrl } from '@/lib/api-client'
 
 interface CreateBookingInput {
   vehicleId: string
@@ -37,7 +37,7 @@ export async function checkAvailability(
   const base = getApiBaseUrl()
   const from = encodeURIComponent(startAt.toISOString())
   const to = encodeURIComponent(endAt.toISOString())
-  const res = await fetch(
+  const res = await authedFetch(
     `${base}/availability/${encodeURIComponent(vehicleId)}?from=${from}&to=${to}`,
   )
   const json: ApiResponse<{ available: boolean }> = await res.json()
@@ -75,12 +75,11 @@ export async function createBooking(input: CreateBookingInput): Promise<CreateBo
   // (constraint violation) with a user-friendly message instead.
   const base = getApiBaseUrl()
   const idempotencyKey = crypto.randomUUID()
-  const res = await fetch(`${base}/bookings`, {
+  const res = await authedFetch(`${base}/bookings`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
       vehicleId: input.vehicleId,
-      renterId: session.user.id,
       startAt: input.startAt,
       endAt: input.endAt,
       source: 'DIRECT',
@@ -155,7 +154,9 @@ interface BookingWithVehicleResponse {
 
 export async function getBookingsByRenterId(userId: string): Promise<BookingWithVehicle[]> {
   const base = getApiBaseUrl()
-  const res = await fetch(`${base}/bookings?renterId=${encodeURIComponent(userId)}&expand=vehicle`)
+  const res = await authedFetch(
+    `${base}/bookings?renterId=${encodeURIComponent(userId)}&expand=vehicle`,
+  )
   const json: ApiResponse<BookingWithVehicleResponse[]> = await res.json()
 
   if (!json.success || !json.data) return []
@@ -189,7 +190,7 @@ interface Booking {
 
 export async function getBookingById(id: string): Promise<Booking | null> {
   const base = getApiBaseUrl()
-  const res = await fetch(`${base}/bookings/${encodeURIComponent(id)}`)
+  const res = await authedFetch(`${base}/bookings/${encodeURIComponent(id)}`)
   const json: ApiResponse<Booking> = await res.json()
 
   if (!json.success || !json.data) return null

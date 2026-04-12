@@ -1,4 +1,4 @@
-import { getApiBaseUrl } from '@/lib/api-client'
+import { authedFetch, getApiBaseUrl } from '@/lib/api-client'
 
 interface Vehicle {
   id: string
@@ -31,7 +31,7 @@ export async function getAvailableVehicles(from?: string, to?: string): Promise<
       ? `${base}/availability?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`
       : `${base}/vehicles?status=AVAILABLE`
 
-  const res = await fetch(url)
+  const res = await authedFetch(url)
   const json: ApiResponse<Vehicle[]> = await res.json()
 
   if (!json.success || !json.data) return []
@@ -41,7 +41,7 @@ export async function getAvailableVehicles(from?: string, to?: string): Promise<
 
 export async function getVehicleById(id: string): Promise<Vehicle | null> {
   const base = getApiBaseUrl()
-  const res = await fetch(`${base}/vehicles/${encodeURIComponent(id)}`)
+  const res = await authedFetch(`${base}/vehicles/${encodeURIComponent(id)}`)
   const json: ApiResponse<Vehicle> = await res.json()
 
   if (!json.success || !json.data) return null
