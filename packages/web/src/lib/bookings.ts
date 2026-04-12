@@ -77,6 +77,7 @@ export async function createBooking(input: CreateBookingInput): Promise<CreateBo
   }
 
   const base = getApiBaseUrl()
+  const idempotencyKey = crypto.randomUUID()
   const res = await fetch(`${base}/bookings`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -86,6 +87,7 @@ export async function createBooking(input: CreateBookingInput): Promise<CreateBo
       startAt: input.startAt,
       endAt: input.endAt,
       source: 'DIRECT',
+      idempotencyKey,
       ...(input.notes ? { notes: input.notes } : {}),
     }),
   })
