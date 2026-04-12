@@ -12,6 +12,7 @@ import { and, asc, count, eq, inArray, ne, sql } from 'drizzle-orm'
 import type { Booking, Message, Thread, ThreadParticipant, Vehicle } from '../stores'
 import type {
   AvailabilityRepository,
+  BookingFilters,
   BookingRepository,
   DashboardStats,
   FleetOverviewRepository,
@@ -274,13 +275,7 @@ export class DrizzleAvailabilityRepository implements AvailabilityRepository {
 export class DrizzleBookingRepository implements BookingRepository {
   constructor(private readonly db: Db) {}
 
-  async findAll(filters?: {
-    status?: string
-    vehicleId?: string
-    renterId?: string
-    from?: Date
-    to?: Date
-  }): Promise<Booking[]> {
+  async findAll(filters?: BookingFilters): Promise<Booking[]> {
     const conditions = []
 
     if (filters?.status) {
@@ -408,10 +403,9 @@ const messageColumns = {
   createdAt: messages.createdAt,
 }
 
-// `messages.translations` is a nullable text column with a default of '{}'.
-// The shared `Message` type declares it as `string` (non-null), so we
-// normalise NULL → '{}' at the boundary rather than leak the DB nuance.
-function normaliseMessage(row: {
+// Raw row shape returned by message queries. Extracted because it appears in
+// normaliseMessage, the DISTINCT ON raw-SQL result, and the neon-http coercion.
+type RawMessageRow = {
   id: string
   threadId: string
   senderId: string
@@ -419,7 +413,12 @@ function normaliseMessage(row: {
   sourceLanguage: string | null
   translations: string | null
   createdAt: Date
-}): Message {
+}
+
+// `messages.translations` is a nullable text column with a default of '{}'.
+// The shared `Message` type declares it as `string` (non-null), so we
+// normalise NULL → '{}' at the boundary rather than leak the DB nuance.
+function normaliseMessage(row: RawMessageRow): Message {
   return {
     id: row.id,
     threadId: row.threadId,
@@ -461,15 +460,7 @@ export class DrizzleThreadRepository implements ThreadRepository {
     // Step 4: fetch only the latest message per thread. The DISTINCT ON
     // pattern keeps this O(threads) instead of O(messages) — important once
     // any single conversation grows beyond a few dozen messages.
-    const lastMessageRows = await this.db.execute<{
-      id: string
-      threadId: string
-      senderId: string
-      content: string
-      sourceLanguage: string | null
-      translations: string | null
-      createdAt: Date
-    }>(sql`
+    const lastMessageRows = await this.db.execute<RawMessageRow>(sql`
       SELECT DISTINCT ON ("threadId")
         "id", "threadId", "senderId", "content", "sourceLanguage", "translations", "createdAt"
       FROM "messages"
@@ -486,15 +477,7 @@ export class DrizzleThreadRepository implements ThreadRepository {
       Array.isArray(lastMessageRows)
         ? lastMessageRows
         : ((lastMessageRows as { rows?: unknown[] }).rows ?? [])
-    ) as Array<{
-      id: string
-      threadId: string
-      senderId: string
-      content: string
-      sourceLanguage: string | null
-      translations: string | null
-      createdAt: Date
-    }>
+    ) as Array<RawMessageRow>
 
     const lastMessageByThreadId = new Map<string, Message>()
     for (const row of lastMessageList) {
