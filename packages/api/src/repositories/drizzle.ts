@@ -57,6 +57,7 @@ const bookingColumns = {
   totalPrice: bookings.totalPrice,
   cancellationFee: bookings.cancellationFee,
   cancelledAt: bookings.cancelledAt,
+  idempotencyKey: bookings.idempotencyKey,
   createdAt: bookings.createdAt,
   updatedAt: bookings.updatedAt,
 }
@@ -308,6 +309,15 @@ export class DrizzleBookingRepository implements BookingRepository {
     return (row as Booking) ?? undefined
   }
 
+  async findByIdempotencyKey(key: string): Promise<Booking | undefined> {
+    const [row] = await this.db
+      .select(bookingColumns)
+      .from(bookings)
+      .where(eq(bookings.idempotencyKey, key))
+
+    return (row as Booking) ?? undefined
+  }
+
   async create(data: Omit<Booking, 'id' | 'createdAt' | 'updatedAt'>): Promise<Booking> {
     const [inserted] = await this.db
       .insert(bookings)
@@ -324,6 +334,7 @@ export class DrizzleBookingRepository implements BookingRepository {
         totalPrice: data.totalPrice,
         cancellationFee: data.cancellationFee,
         cancelledAt: data.cancelledAt,
+        idempotencyKey: data.idempotencyKey,
       })
       .returning()
 

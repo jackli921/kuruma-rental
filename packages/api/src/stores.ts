@@ -33,6 +33,7 @@ export interface Booking {
   totalPrice: number | null
   cancellationFee: number | null
   cancelledAt: Date | null
+  idempotencyKey: string | null
   createdAt: Date
   updatedAt: Date
 }

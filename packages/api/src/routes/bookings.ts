@@ -65,6 +65,7 @@ export function createBookingRoutes(service: BookingService): Hono {
       source: result.data.source,
       externalId: result.data.externalId ?? null,
       notes: result.data.notes ?? null,
+      idempotencyKey: result.data.idempotencyKey ?? null,
     })
 
     if (!createResult.ok) {
@@ -74,7 +75,7 @@ export function createBookingRoutes(service: BookingService): Hono {
       })
     }
 
-    return ok(c, createResult.booking, 201)
+    return ok(c, createResult.booking, createResult.status ?? 201)
   })
 
   bookings.patch('/bookings/:id/status', async (c) => {
