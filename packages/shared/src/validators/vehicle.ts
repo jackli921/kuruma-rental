@@ -29,19 +29,13 @@ const vehicleObjectSchema = z.object({
   hourlyRateJpy: jpyRate.nullish(),
 })
 
-export const createVehicleSchema = vehicleObjectSchema.superRefine((data, ctx) => {
-  if (data.dailyRateJpy == null && data.hourlyRateJpy == null) {
-    ctx.addIssue({
-      code: z.ZodIssueCode.custom,
-      path: ['dailyRateJpy'],
-      message: 'At least one rate (daily or hourly) is required',
-    })
-  }
-
-  // Issue #50: if both rental bounds are set, min must be <= max. Otherwise
-  // the owner could create a vehicle nobody can book ("min 10h, max 5h").
-  // Enforced here rather than on the column so each field can still be
-  // optional independently.
+// Issue #50: shared cross-field check — if both rental bounds are present,
+// min must be <= max. Enforced in the validator (not the column) so each
+// field can still be optional independently.
+function rejectMinExceedsMax(
+  data: { minRentalHours?: number | null | undefined; maxRentalHours?: number | null | undefined },
+  ctx: z.RefinementCtx,
+): void {
   const min = data.minRentalHours
   const max = data.maxRentalHours
   if (min != null && max != null && min > max) {
@@ -51,6 +45,17 @@ export const createVehicleSchema = vehicleObjectSchema.superRefine((data, ctx) =
       message: 'Maximum rental hours must be greater than or equal to minimum',
     })
   }
+}
+
+export const createVehicleSchema = vehicleObjectSchema.superRefine((data, ctx) => {
+  if (data.dailyRateJpy == null && data.hourlyRateJpy == null) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ['dailyRateJpy'],
+      message: 'At least one rate (daily or hourly) is required',
+    })
+  }
+  rejectMinExceedsMax(data, ctx)
 })
 
 export const updateVehicleSchema = vehicleObjectSchema.partial().superRefine((data, ctx) => {
@@ -68,16 +73,7 @@ export const updateVehicleSchema = vehicleObjectSchema.partial().superRefine((da
       message: 'At least one rate (daily or hourly) is required',
     })
   }
-
-  const min = data.minRentalHours
-  const max = data.maxRentalHours
-  if (min != null && max != null && min > max) {
-    ctx.addIssue({
-      code: z.ZodIssueCode.custom,
-      path: ['maxRentalHours'],
-      message: 'Maximum rental hours must be greater than or equal to minimum',
-    })
-  }
+  rejectMinExceedsMax(data, ctx)
 })
 
 // Issue #51: inline status toggle. Kept as its own tiny schema so the
