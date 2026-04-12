@@ -106,32 +106,28 @@ export class DrizzleThreadRepository implements ThreadRepository {
   }
 
   async create(bookingId: string | null, participantIds: string[]): Promise<Thread> {
-    // Two-statement sequence: insert the thread row, then insert all
-    // participants in one batch. Cleaner than a transaction for this case;
-    // if the participant insert fails, the thread row is orphaned but
-    // harmless and can be GC'd later. (postgres-js + neon-http both support
-    // .transaction() but the behaviour differs slightly across drivers and
-    // we don't need atomicity here for correctness.)
-    const [insertedThread] = (await this.db
-      .insert(threads)
-      .values({ bookingId })
-      .returning(threadColumns)).map(toThread)
+    return this.db.transaction(async (tx) => {
+      const [insertedThread] = (await tx
+        .insert(threads)
+        .values({ bookingId })
+        .returning(threadColumns)).map(toThread)
 
-    if (!insertedThread) {
-      throw new Error('Failed to insert thread')
-    }
+      if (!insertedThread) {
+        throw new Error('Failed to insert thread')
+      }
 
-    if (participantIds.length > 0) {
-      await this.db.insert(threadParticipants).values(
-        participantIds.map((userId) => ({
-          threadId: insertedThread.id,
-          userId,
-          unreadCount: 0,
-        })),
-      )
-    }
+      if (participantIds.length > 0) {
+        await tx.insert(threadParticipants).values(
+          participantIds.map((userId) => ({
+            threadId: insertedThread.id,
+            userId,
+            unreadCount: 0,
+          })),
+        )
+      }
 
-    return insertedThread
+      return insertedThread
+    })
   }
 
   async markAsRead(threadId: string, userId: string): Promise<void> {
