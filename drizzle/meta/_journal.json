@@ -71,6 +71,13 @@
       "when": 1775914831111,
       "tag": "0009_add_vehicle_pricing",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1776007624986,
+      "tag": "0010_add-fk-indexes",
+      "breakpoints": true
     }
   ]
 }
