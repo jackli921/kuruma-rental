@@ -18,8 +18,12 @@ interface Vehicle {
   updatedAt: string
 }
 
-export async function getAvailableVehicles(from?: string, to?: string): Promise<Vehicle[]> {
-  const client = createApiClient()
+export async function getAvailableVehicles(
+  from?: string,
+  to?: string,
+  token?: string,
+): Promise<Vehicle[]> {
+  const client = createApiClient(token)
 
   const res =
     from && to
@@ -33,8 +37,8 @@ export async function getAvailableVehicles(from?: string, to?: string): Promise<
   return json.data
 }
 
-export async function getVehicleById(id: string): Promise<Vehicle | null> {
-  const client = createApiClient()
+export async function getVehicleById(id: string, token?: string): Promise<Vehicle | null> {
+  const client = createApiClient(token)
   const res = await client.vehicles[':id'].$get({ param: { id } })
   const json = (await res.json()) as ApiResponse<Vehicle>
 

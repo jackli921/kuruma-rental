@@ -34,7 +34,7 @@ describe('getApiToken', () => {
   })
 
   it('returns undefined when AUTH_SECRET is missing', async () => {
-    process.env.AUTH_SECRET = undefined
+    Reflect.deleteProperty(process.env, 'AUTH_SECRET')
     const { auth } = await import('@/auth')
     vi.mocked(auth).mockResolvedValueOnce({
       user: { id: 'user-1', role: 'STAFF' },

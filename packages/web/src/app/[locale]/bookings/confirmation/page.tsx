@@ -2,6 +2,7 @@ import { auth } from '@/auth'
 import { buttonVariants } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Link } from '@/i18n/routing'
+import { getApiToken } from '@/lib/api-token'
 import { getBookingById } from '@/lib/bookings'
 import { formatDateTime } from '@/lib/format'
 import { cn } from '@/lib/utils'
@@ -35,7 +36,8 @@ export default async function BookingConfirmationPage({ searchParams }: Confirma
     notFound()
   }
 
-  const vehicle = vehicleId ? await getVehicleById(vehicleId) : null
+  const token = await getApiToken()
+  const vehicle = vehicleId ? await getVehicleById(vehicleId, token) : null
 
   const startDate = formatDateTime(booking.startAt, locale)
   const endDate = formatDateTime(booking.endAt, locale)

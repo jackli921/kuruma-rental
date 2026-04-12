@@ -2,6 +2,7 @@ import { buttonVariants } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { RentalRulesCard } from '@/components/vehicles/RentalRulesCard'
 import { Link } from '@/i18n/routing'
+import { getApiToken } from '@/lib/api-token'
 import { cn } from '@/lib/utils'
 import { getVehicleById } from '@/lib/vehicles'
 import { ArrowLeft, Calendar, Car, Fuel, Settings2, Users } from 'lucide-react'
@@ -14,7 +15,11 @@ interface VehicleDetailPageProps {
 
 export default async function VehicleDetailPage({ params }: VehicleDetailPageProps) {
   const { id } = await params
-  const [vehicle, t] = await Promise.all([getVehicleById(id), getTranslations('vehicles.detail')])
+  const token = await getApiToken()
+  const [vehicle, t] = await Promise.all([
+    getVehicleById(id, token),
+    getTranslations('vehicles.detail'),
+  ])
 
   if (!vehicle) {
     notFound()

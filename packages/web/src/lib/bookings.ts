@@ -2,6 +2,7 @@
 
 import { auth } from '@/auth'
 import { createApiClient } from '@/lib/api-client'
+import { getApiToken } from '@/lib/api-token'
 import type { ApiResponse } from '@kuruma/shared/types/api-response'
 
 interface CreateBookingInput {
@@ -29,13 +30,18 @@ export async function checkAvailability(
   startAt: Date,
   endAt: Date,
 ): Promise<boolean> {
-  const client = createApiClient()
+  const token = await getApiToken()
+  const client = createApiClient(token)
   // Query params read manually by parseDateRange() — not in Hono's type sig,
   // so we use $url() for typed path construction + fetch for query params.
   const url = client.availability[':vehicleId'].$url({ param: { vehicleId } })
   url.searchParams.set('from', startAt.toISOString())
   url.searchParams.set('to', endAt.toISOString())
-  const res = await fetch(url)
+  const headers: Record<string, string> = {}
+  if (token) {
+    headers.Authorization = `Bearer ${token}`
+  }
+  const res = await fetch(url, { headers })
   const json = (await res.json()) as ApiResponse<{ available: boolean }>
 
   if (!json.success) return false
@@ -69,7 +75,8 @@ export async function createBooking(input: CreateBookingInput): Promise<CreateBo
   // round-trip adds latency and creates a race window where two users both
   // pass the check but only one succeeds at insert time. Handle the 409
   // (constraint violation) with a user-friendly message instead.
-  const client = createApiClient()
+  const token = await getApiToken()
+  const client = createApiClient(token)
   const idempotencyKey = crypto.randomUUID()
   const res = await client.bookings.$post({
     json: {
@@ -148,7 +155,8 @@ interface BookingWithVehicleResponse {
 }
 
 export async function getBookingsByRenterId(userId: string): Promise<BookingWithVehicle[]> {
-  const client = createApiClient()
+  const token = await getApiToken()
+  const client = createApiClient(token)
   const res = await client.bookings.$get({
     query: { renterId: userId, expand: 'vehicle' },
   })
@@ -184,7 +192,8 @@ interface Booking {
 }
 
 export async function getBookingById(id: string): Promise<Booking | null> {
-  const client = createApiClient()
+  const token = await getApiToken()
+  const client = createApiClient(token)
   const res = await client.bookings[':id'].$get({ param: { id } })
   const json = (await res.json()) as ApiResponse<Booking>
 
