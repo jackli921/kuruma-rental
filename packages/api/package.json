@@ -15,6 +15,7 @@
     "lint:boundaries": "bun run scripts/check-import-boundaries.ts"
   },
   "dependencies": {
+    "@elithrar/workers-hono-rate-limit": "^0.5.1",
     "@kuruma/shared": "workspace:*",
     "hono": "^4"
   },

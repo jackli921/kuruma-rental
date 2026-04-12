@@ -1,3 +1,4 @@
+import { type RateLimitBinding, rateLimit } from '@elithrar/workers-hono-rate-limit'
 import { getDb } from '@kuruma/shared/db'
 import { Hono } from 'hono'
 import { cors } from 'hono/cors'
@@ -116,6 +117,18 @@ export function createApp(overrides?: {
       maxAge: 86400,
     }),
   )
+
+  // Rate limiting via Cloudflare's native rate limit binding. Atomic counters
+  // with sub-ms latency, no KV race conditions. Gracefully skipped in local
+  // dev (binding absent → key returns "" → bypass).
+  const rateLimiter = (globalThis as Record<string, unknown>).RATE_LIMITER as
+    | RateLimitBinding
+    | undefined
+  if (rateLimiter) {
+    app.use('*', (c, next) =>
+      rateLimit(rateLimiter, (c) => c.req.header('cf-connecting-ip') ?? '')(c, next),
+    )
+  }
 
   app.route('/', health)
   const bookingService = new BookingService(bookingRepo, vehicleRepo)
