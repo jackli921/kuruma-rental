@@ -28,6 +28,9 @@ jobs:
       - name: Check import boundaries
         run: bun run --filter @kuruma/api lint:boundaries
 
+      - name: Check shared export drift
+        run: bun run scripts/lint-export-drift.ts
+
       - name: Test (all packages)
         run: bun run test
 
