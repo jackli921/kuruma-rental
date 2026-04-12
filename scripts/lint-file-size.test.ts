@@ -17,4 +17,13 @@ describe('lint-file-size', () => {
     const report = checkFiles([`${FIXTURES}/small-file.ts`])
     expect(report).toHaveLength(0)
   })
+
+  test('reports a soft warning for a file between 400 and 800 lines', () => {
+    const report = checkFiles([`${FIXTURES}/medium-file.ts`])
+    const warnings = report.filter((r) => r.level === 'warn')
+    expect(warnings).toHaveLength(1)
+    expect(warnings[0]!.file).toBe(`${FIXTURES}/medium-file.ts`)
+    expect(warnings[0]!.lines).toBe(500)
+    expect(warnings[0]!.cap).toBe(400)
+  })
 })
