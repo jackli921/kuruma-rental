@@ -53,7 +53,13 @@ export function checkFiles(files: string[]): Issue[] {
     try {
       content = readFileSync(file, 'utf8')
     } catch (err) {
-      issues.push({ file, lines: 0, cap: 0, level: 'error', message: `unreadable: ${(err as Error).message}` })
+      issues.push({
+        file,
+        lines: 0,
+        cap: 0,
+        level: 'error',
+        message: `unreadable: ${(err as Error).message}`,
+      })
       continue
     }
     // Use trimEnd to match `wc -l` semantics: trailing newline doesn't count as an extra line.
@@ -105,7 +111,9 @@ function main(): number {
   for (const issue of issues) {
     const tag = issue.level === 'error' ? 'ERROR' : 'WARN'
     const stream = issue.level === 'error' ? process.stderr : process.stdout
-    const suffix = issue.message ? ` — ${issue.message}` : `: ${issue.lines} lines (cap ${issue.cap})`
+    const suffix = issue.message
+      ? ` — ${issue.message}`
+      : `: ${issue.lines} lines (cap ${issue.cap})`
     stream.write(`[lint-file-size] ${tag} ${issue.file}${suffix}\n`)
     if (issue.level === 'error') errors++
     else warnings++
