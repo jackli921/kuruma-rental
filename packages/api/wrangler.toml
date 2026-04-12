@@ -9,5 +9,9 @@ compatibility_flags = ["nodejs_compat"]
 # the deployed web origin. Without it, the deployed React Query calls from
 # /manage/vehicles, /manage/customers, etc. fail with "Failed to fetch"
 # because the browser rejects the response for missing Access-Control-Allow-Origin.
+[[kv_namespaces]]
+binding = "RATE_LIMIT"
+id = "placeholder-create-via-wrangler-kv-namespace-create"
+
 [vars]
 WEB_ORIGIN = "https://kuruma-rental.kanata-studio-dev.workers.dev"

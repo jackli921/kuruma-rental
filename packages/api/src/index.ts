@@ -1,6 +1,7 @@
 import { getDb } from '@kuruma/shared/db'
 import { Hono } from 'hono'
 import { cors } from 'hono/cors'
+import { type KVStore, rateLimit } from './middleware/rate-limit'
 import {
   DrizzleAvailabilityRepository,
   DrizzleBookingRepository,
@@ -110,6 +111,21 @@ export function createApp(overrides?: {
       allowMethods: ['GET', 'POST', 'PATCH', 'PUT', 'DELETE', 'OPTIONS'],
       allowHeaders: ['Content-Type', 'Authorization'],
       maxAge: 86400,
+    }),
+  )
+
+  // Rate limiting via Cloudflare KV. Gracefully skipped when KV binding is
+  // absent (local dev without wrangler). Health endpoint is exempt so uptime
+  // monitors are never throttled.
+  const kvBinding = (globalThis as Record<string, unknown>).RATE_LIMIT as KVStore | undefined
+  app.use(
+    '*',
+    rateLimit({
+      kv: kvBinding,
+      readLimit: 120,
+      writeLimit: 30,
+      windowSeconds: 60,
+      exemptPaths: ['/health'],
     }),
   )
 
