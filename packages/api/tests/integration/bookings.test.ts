@@ -241,6 +241,7 @@ describe('DrizzleBookingRepository', () => {
       totalPrice: 15000,
       cancellationFee: null,
       cancelledAt: null,
+      idempotencyKey: null,
     })
     createdBookingIds.push(booking.id)
 

@@ -112,6 +112,7 @@ describe('GET /vehicles/fleet-overview', () => {
       totalPrice: null,
       cancellationFee: null,
       cancelledAt: null,
+      idempotencyKey: null,
     })
 
     const res = await app.request('/vehicles/fleet-overview')

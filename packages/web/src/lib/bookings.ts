@@ -83,6 +83,7 @@ export async function createBooking(input: CreateBookingInput): Promise<CreateBo
       startAt: input.startAt,
       endAt: input.endAt,
       source: 'DIRECT',
+      idempotencyKey: crypto.randomUUID(),
       ...(input.notes ? { notes: input.notes } : {}),
     }),
   })

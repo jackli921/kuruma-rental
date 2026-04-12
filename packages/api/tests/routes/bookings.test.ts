@@ -784,4 +784,48 @@ describe('Booking Routes', () => {
       expect(body.cancellation.refundAmount).toBe(0)
     })
   })
+
+  describe('Idempotency', () => {
+    it('returns 200 with same booking when duplicate idempotencyKey sent', async () => {
+      const idempotencyKey = crypto.randomUUID()
+      const input = { ...validBookingInput(), idempotencyKey }
+
+      const res1 = await createBooking(input)
+      expect(res1.status).toBe(201)
+      const body1 = await res1.json()
+
+      const res2 = await createBooking(input)
+      expect(res2.status).toBe(200)
+      const body2 = await res2.json()
+
+      expect(body2.data.id).toBe(body1.data.id)
+    })
+
+    it('creates separate bookings for different idempotencyKeys', async () => {
+      const input1 = { ...validBookingInput(), idempotencyKey: crypto.randomUUID() }
+      const input2 = {
+        ...validBookingInput(),
+        vehicleId: 'v2',
+        idempotencyKey: crypto.randomUUID(),
+      }
+
+      const res1 = await createBooking(input1)
+      const res2 = await createBooking(input2)
+
+      expect(res1.status).toBe(201)
+      expect(res2.status).toBe(201)
+
+      const body1 = await res1.json()
+      const body2 = await res2.json()
+      expect(body1.data.id).not.toBe(body2.data.id)
+    })
+
+    it('creates booking without idempotencyKey (backward compat)', async () => {
+      const res = await createBooking(validBookingInput())
+      expect(res.status).toBe(201)
+
+      const body = await res.json()
+      expect(body.data.idempotencyKey).toBeNull()
+    })
+  })
 })

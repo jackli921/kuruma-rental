@@ -43,6 +43,7 @@ export const bookingColumns = {
   totalPrice: bookings.totalPrice,
   cancellationFee: bookings.cancellationFee,
   cancelledAt: bookings.cancelledAt,
+  idempotencyKey: bookings.idempotencyKey,
   createdAt: bookings.createdAt,
   updatedAt: bookings.updatedAt,
 }

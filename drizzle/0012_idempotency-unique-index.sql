@@ -1,0 +1,1 @@
+CREATE UNIQUE INDEX "bookings_idempotency_key_unique" ON "bookings" ("idempotencyKey") WHERE "idempotencyKey" IS NOT NULL;
