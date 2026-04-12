@@ -342,6 +342,47 @@ describe('Vehicle CRUD Routes', () => {
       expect(body.data.maxRentalHours).toBe(5)
     })
 
+    it('rejects PATCH that nullifies the only rate on a vehicle', async () => {
+      // Vehicle created with only dailyRateJpy — nullifying it leaves no rate.
+      const createRes = await createVehicle({
+        ...validVehicleInput(),
+        dailyRateJpy: 8000,
+        hourlyRateJpy: null,
+      })
+      const created = await createRes.json()
+
+      const res = await app.request(`/vehicles/${created.data.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ dailyRateJpy: null }),
+      })
+
+      expect(res.status).toBe(400)
+      const body = await res.json()
+      expect(body.success).toBe(false)
+      expect(body.error).toMatch(/rate/i)
+    })
+
+    it('allows nullifying one rate when the other remains set', async () => {
+      const createRes = await createVehicle({
+        ...validVehicleInput(),
+        dailyRateJpy: 8000,
+        hourlyRateJpy: 1200,
+      })
+      const created = await createRes.json()
+
+      const res = await app.request(`/vehicles/${created.data.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ dailyRateJpy: null }),
+      })
+
+      expect(res.status).toBe(200)
+      const body = await res.json()
+      expect(body.data.dailyRateJpy).toBeNull()
+      expect(body.data.hourlyRateJpy).toBe(1200)
+    })
+
     it('rejects invalid update data', async () => {
       const createRes = await createVehicle()
       const created = await createRes.json()
