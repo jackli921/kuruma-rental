@@ -2,7 +2,7 @@ import { VALID_BOOKING_TRANSITIONS } from '@kuruma/shared/db/schema'
 import { calculateCancellationFee } from '@kuruma/shared/lib/cancellation-policy'
 import { calculateBookingPrice } from '@kuruma/shared/lib/pricing'
 import { checkRentalRules } from '@kuruma/shared/lib/rental-rules'
-import type { BookingRepository, VehicleRepository } from '../repositories/types'
+import type { BookingFilters, BookingRepository, VehicleRepository } from '../repositories/types'
 import type { Booking } from '../stores'
 
 const DEFAULT_BUFFER_MS = 60 * 60 * 1000 // 60 minutes
@@ -46,27 +46,31 @@ export class BookingService {
     private readonly vehicleRepo?: VehicleRepository,
   ) {}
 
-  async findAll(filters?: {
-    status?: string
-    vehicleId?: string
-    renterId?: string
-    from?: Date
-    to?: Date
-  }): Promise<Booking[]> {
+  async findAll(filters?: BookingFilters): Promise<Booking[]> {
     return this.bookingRepo.findAll(filters)
   }
 
-  async findAllWithVehicles(filters?: {
-    status?: string
-    vehicleId?: string
-    renterId?: string
-    from?: Date
-    to?: Date
-  }): Promise<(Booking & { vehicle?: { name: string; photos: string[] } | undefined })[]> {
-    const results = await this.bookingRepo.findAll(filters)
-    if (!this.vehicleRepo) return results
+  async findAllPaginated(
+    filters: BookingFilters,
+  ): Promise<{ data: Booking[]; nextCursor: string | null }> {
+    const limit = filters.limit ?? 20
+    // Overfetch by 1 to detect if more pages exist
+    const rows = await this.bookingRepo.findAll({ ...filters, limit: limit + 1 })
+    const hasMore = rows.length > limit
+    const data = hasMore ? rows.slice(0, limit) : rows
+    const last = data[data.length - 1]
+    const nextCursor = hasMore && last ? `${last.createdAt.toISOString()}_${last.id}` : null
+    return { data, nextCursor }
+  }
 
-    const vehicleIds = [...new Set(results.map((b) => b.vehicleId))]
+  async findAllWithVehiclesPaginated(filters: BookingFilters): Promise<{
+    data: (Booking & { vehicle?: { name: string; photos: string[] } | undefined })[]
+    nextCursor: string | null
+  }> {
+    const { data, nextCursor } = await this.findAllPaginated(filters)
+    if (!this.vehicleRepo) return { data, nextCursor }
+
+    const vehicleIds = [...new Set(data.map((b) => b.vehicleId))]
     const vehicleMap = new Map<string, { name: string; photos: string[] }>()
 
     await Promise.all(
@@ -78,10 +82,13 @@ export class BookingService {
       }),
     )
 
-    return results.map((booking) => ({
-      ...booking,
-      vehicle: vehicleMap.get(booking.vehicleId),
-    }))
+    return {
+      data: data.map((booking) => ({
+        ...booking,
+        vehicle: vehicleMap.get(booking.vehicleId),
+      })),
+      nextCursor,
+    }
   }
 
   async findById(id: string): Promise<Booking | undefined> {

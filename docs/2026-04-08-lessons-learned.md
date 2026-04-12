@@ -289,3 +289,15 @@ The in-memory repo used `...data` spread and kept all fields, so every route-lev
 **Rule:** When a unique/exclusion constraint in the DB enforces a business rule, don't pre-check in application code. Attempt the write and handle the constraint violation gracefully. This is optimistic concurrency control — it eliminates both the race window and the extra round-trip.
 
 **The general pattern:** check-then-act is only safe when you can hold a lock between the check and the act. HTTP requests can't hold locks. The DB constraint IS the lock.
+
+---
+
+## 19. Unbounded List Endpoints Are Time Bombs (issue #91)
+
+**Symptom:** None yet — this is a latent problem. GET /bookings returns all rows. At 200 bookings/month, after 1 year that's 2400+ rows serialized on every request.
+
+**Root cause:** List endpoints had no pagination. Nobody notices gradual degradation — 50ms at launch, 200ms at 6 months, 800ms at 1 year.
+
+**Fix:** Added cursor-based pagination to GET /bookings using `createdAt + id` keyset. The service overfetches by 1 row to detect hasMore and computes `nextCursor`. Vehicles (bounded at 40-50) and threads (placeholder, unused) left unpaginated.
+
+**Rule:** If data grows with time or user activity, paginate from day one. If bounded by business constraint, pagination is optional. Use cursor (keyset) over offset — offset is O(n) at depth, cursor is O(1).

@@ -47,6 +47,30 @@ export class InMemoryBookingRepository implements BookingRepository {
       results = results.filter((b) => b.startAt < to && b.effectiveEndAt > from)
     }
 
+    // Sort by createdAt DESC, id DESC (matches Drizzle ORDER BY)
+    results.sort((a, b) => {
+      const timeDiff = b.createdAt.getTime() - a.createdAt.getTime()
+      if (timeDiff !== 0) return timeDiff
+      return b.id < a.id ? -1 : 1
+    })
+
+    // Cursor: skip past the cursor position
+    if (filters?.cursor) {
+      const sep = filters.cursor.indexOf('_')
+      const cursorTime = new Date(filters.cursor.slice(0, sep))
+      const cursorId = filters.cursor.slice(sep + 1)
+      results = results.filter((b) => {
+        if (b.createdAt.getTime() < cursorTime.getTime()) return true
+        if (b.createdAt.getTime() === cursorTime.getTime() && b.id < cursorId) return true
+        return false
+      })
+    }
+
+    // Apply limit
+    if (filters?.limit) {
+      results = results.slice(0, filters.limit)
+    }
+
     return results
   }
 

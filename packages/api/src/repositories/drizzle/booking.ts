@@ -1,5 +1,5 @@
 import { bookings } from '@kuruma/shared/db/schema'
-import { and, eq, sql } from 'drizzle-orm'
+import { and, desc, eq, lt, or, sql } from 'drizzle-orm'
 import type { Booking } from '../../stores'
 import type { BookingFilters, BookingRepository } from '../types'
 import { type Db, bookingColumns } from './shared'
@@ -27,10 +27,36 @@ export class DrizzleBookingRepository implements BookingRepository {
       )
     }
 
-    const query = this.db.select(bookingColumns).from(bookings)
+    // Cursor-based pagination: skip past the cursor position
+    if (filters?.cursor) {
+      const sep = filters.cursor.indexOf('_')
+      const cursorTime = filters.cursor.slice(0, sep)
+      const cursorId = filters.cursor.slice(sep + 1)
+      conditions.push(
+        or(
+          lt(bookings.createdAt, sql`${cursorTime}::timestamptz`),
+          and(
+            eq(bookings.createdAt, sql`${cursorTime}::timestamptz`),
+            lt(bookings.id, cursorId),
+          ),
+        )!,
+      )
+    }
 
-    const rows = conditions.length > 0 ? await query.where(and(...conditions)) : await query
+    let query = this.db
+      .select(bookingColumns)
+      .from(bookings)
+      .orderBy(desc(bookings.createdAt), desc(bookings.id))
 
+    if (conditions.length > 0) {
+      query = query.where(and(...conditions)) as typeof query
+    }
+
+    if (filters?.limit) {
+      query = query.limit(filters.limit) as typeof query
+    }
+
+    const rows = await query
     return rows as Booking[]
   }
 
