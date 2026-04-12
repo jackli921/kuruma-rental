@@ -1,0 +1,23 @@
+#!/bin/sh
+
+# Reject any force push (--force or --force-with-lease)
+if echo "$*" | grep -qE -- '--force|--force-with-lease|-f\b'; then
+  echo "ERROR: Force push is forbidden. Rebase on top of remote instead."
+  exit 1
+fi
+
+# Also catch force push via git push refspec (+refs/...)
+while read local_ref local_sha remote_ref remote_sha; do
+  if [ "$local_sha" = "0000000000000000000000000000000000000000" ]; then
+    continue # branch deletion, allowed
+  fi
+  if [ "$remote_sha" != "0000000000000000000000000000000000000000" ]; then
+    # Remote ref exists — verify local is a fast-forward of remote
+    merge_base=$(git merge-base "$local_sha" "$remote_sha" 2>/dev/null)
+    if [ "$merge_base" != "$remote_sha" ]; then
+      echo "ERROR: Non-fast-forward push to $remote_ref detected."
+      echo "       Rebase on top of remote: git pull --rebase origin <branch>"
+      exit 1
+    fi
+  fi
+done
