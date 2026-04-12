@@ -175,7 +175,7 @@ describe('Message Routes', () => {
       const res = await appAs(U3).request(`/threads/${threadId}/messages`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ content: 'Snooping!', senderId: U3 }),
+        body: JSON.stringify({ content: 'Snooping!' }),
       })
       expect(res.status).toBe(404)
     })
@@ -208,11 +208,11 @@ describe('Message Routes', () => {
       const created = await createRes.json()
       const threadId = created.data.id
 
-      // senderId derived from JWT (U1), body.senderId ignored
+      // senderId derived from JWT (U1)
       const res = await app.request(`/threads/${threadId}/messages`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ content: 'Hello!', senderId: U1 }),
+        body: JSON.stringify({ content: 'Hello!' }),
       })
 
       expect(res.status).toBe(201)
@@ -242,13 +242,13 @@ describe('Message Routes', () => {
       await appAs(U1).request(`/threads/${threadId}/messages`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ content: 'Hello!', senderId: U1 }),
+        body: JSON.stringify({ content: 'Hello!' }),
       })
       // U2 replies
       await appAs(U2).request(`/threads/${threadId}/messages`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ content: 'Hi there!', senderId: U2 }),
+        body: JSON.stringify({ content: 'Hi there!' }),
       })
 
       const res = await app.request(`/threads/${threadId}`)
@@ -292,12 +292,12 @@ describe('Message Routes', () => {
       await appAs(U1).request(`/threads/${threadId}/messages`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ content: 'Hello!', senderId: U1 }),
+        body: JSON.stringify({ content: 'Hello!' }),
       })
       await appAs(U1).request(`/threads/${threadId}/messages`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ content: 'Are you there?', senderId: U1 }),
+        body: JSON.stringify({ content: 'Are you there?' }),
       })
 
       // Verify user2 has unread messages via thread list
