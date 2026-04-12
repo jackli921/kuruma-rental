@@ -213,7 +213,7 @@ describe('DrizzleBookingRepository', () => {
     })
     createdBookingIds.push(created.id)
 
-    const updated = await bookingRepo.updateStatus(created.id, 'ACTIVE')
+    const updated = await bookingRepo.updateStatus(created.id, { from: 'CONFIRMED', to: 'ACTIVE' })
 
     expect(updated).toBeDefined()
     expect(updated!.id).toBe(created.id)

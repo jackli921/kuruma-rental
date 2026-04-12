@@ -91,15 +91,14 @@ export class InMemoryBookingRepository implements BookingRepository {
 
   async updateStatus(
     id: string,
-    expectedStatus: Booking['status'],
-    newStatus: Booking['status'],
+    transition: { from: Booking['status']; to: Booking['status'] },
   ): Promise<Booking | undefined> {
     const existing = this.store.get(id)
-    if (!existing || existing.status !== expectedStatus) return undefined
+    if (!existing || existing.status !== transition.from) return undefined
 
     const updated: Booking = {
       ...existing,
-      status: newStatus,
+      status: transition.to,
       updatedAt: new Date(),
     }
     this.store.set(updated.id, updated)
@@ -108,18 +107,16 @@ export class InMemoryBookingRepository implements BookingRepository {
 
   async cancel(
     id: string,
-    expectedStatus: Booking['status'],
-    cancellationFee: number,
-    cancelledAt: Date,
+    opts: { from: Booking['status']; fee: number; cancelledAt: Date },
   ): Promise<Booking | undefined> {
     const existing = this.store.get(id)
-    if (!existing || existing.status !== expectedStatus) return undefined
+    if (!existing || existing.status !== opts.from) return undefined
 
     const cancelled: Booking = {
       ...existing,
       status: 'CANCELLED',
-      cancellationFee,
-      cancelledAt,
+      cancellationFee: opts.fee,
+      cancelledAt: opts.cancelledAt,
       updatedAt: new Date(),
     }
     this.store.set(cancelled.id, cancelled)
