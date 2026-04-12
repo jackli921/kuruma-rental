@@ -1,4 +1,8 @@
-import { createThreadSchema, sendMessageSchema } from '@kuruma/shared/validators/message'
+import {
+  createThreadSchema,
+  markReadSchema,
+  sendMessageSchema,
+} from '@kuruma/shared/validators/message'
 import { Hono } from 'hono'
 import type { MessageRepository, ThreadRepository } from '../repositories/types'
 import { fail, ok, parseBody } from './helpers'
@@ -39,41 +43,24 @@ export function createMessageRoutes(
   })
 
   app.post('/threads/:id/messages', async (c) => {
-    const threadId = c.req.param('id')
-    const thread = await threadRepo.findById(threadId)
-    if (!thread) {
-      return fail(c, 'Thread not found', 404)
-    }
+    const thread = await threadRepo.findById(c.req.param('id'))
+    if (!thread) return fail(c, 'Thread not found', 404)
 
-    const body = await c.req.json()
-    const parsed = sendMessageSchema.safeParse(body)
-    if (!parsed.success) {
-      return fail(c, parsed.error.flatten().fieldErrors, 400)
-    }
+    const parsed = await parseBody(c, sendMessageSchema)
+    if (!parsed.ok) return parsed.response
 
-    const senderId = body.senderId as string | undefined
-    if (!senderId) {
-      return fail(c, 'senderId is required', 400)
-    }
-
-    const message = await messageRepo.create(threadId, senderId, parsed.data.content)
+    const message = await messageRepo.create(thread.id, parsed.data.senderId, parsed.data.content)
     return ok(c, message, 201)
   })
 
   app.post('/threads/:id/read', async (c) => {
-    const threadId = c.req.param('id')
-    const thread = await threadRepo.findById(threadId)
-    if (!thread) {
-      return fail(c, 'Thread not found', 404)
-    }
+    const thread = await threadRepo.findById(c.req.param('id'))
+    if (!thread) return fail(c, 'Thread not found', 404)
 
-    const body = await c.req.json()
-    const userId = body.userId as string | undefined
-    if (!userId) {
-      return fail(c, 'userId is required', 400)
-    }
+    const parsed = await parseBody(c, markReadSchema)
+    if (!parsed.ok) return parsed.response
 
-    await threadRepo.markAsRead(threadId, userId)
+    await threadRepo.markAsRead(thread.id, parsed.data.userId)
     return ok(c, null)
   })
 
