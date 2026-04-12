@@ -40,9 +40,7 @@ vi.mock('next-intl', () => ({
 import { FleetVehicleRow } from '@/components/vehicles/FleetVehicleRow'
 import type { FleetVehicleOverviewData } from '@/lib/vehicle-api'
 
-function makeOverview(
-  overrides: Partial<FleetVehicleOverviewData> = {},
-): FleetVehicleOverviewData {
+function makeOverview(overrides: Partial<FleetVehicleOverviewData> = {}): FleetVehicleOverviewData {
   return {
     id: 'v_1',
     name: 'Toyota Corolla',
@@ -76,9 +74,7 @@ describe('FleetVehicleRow', () => {
   it('renders the vehicle name and its first photo as a thumbnail', () => {
     const overview = makeOverview()
 
-    render(
-      <FleetVehicleRow overview={overview} onEdit={vi.fn()} onRetire={vi.fn()} />,
-    )
+    render(<FleetVehicleRow overview={overview} onEdit={vi.fn()} onRetire={vi.fn()} />)
 
     expect(screen.getByText('Toyota Corolla')).toBeInTheDocument()
     const img = screen.getByRole('img', { name: 'Toyota Corolla' })
@@ -88,9 +84,7 @@ describe('FleetVehicleRow', () => {
   it('renders the placeholder icon when the vehicle has no photos', () => {
     const overview = makeOverview({ photos: [] })
 
-    render(
-      <FleetVehicleRow overview={overview} onEdit={vi.fn()} onRetire={vi.fn()} />,
-    )
+    render(<FleetVehicleRow overview={overview} onEdit={vi.fn()} onRetire={vi.fn()} />)
 
     expect(screen.queryByRole('img')).not.toBeInTheDocument()
     // Placeholder uses data-testid so screen readers don't see a redundant icon.
@@ -100,9 +94,7 @@ describe('FleetVehicleRow', () => {
   it('renders seats, transmission, and fuel type as a subtitle', () => {
     const overview = makeOverview({ seats: 4, transmission: 'MANUAL', fuelType: 'Diesel' })
 
-    render(
-      <FleetVehicleRow overview={overview} onEdit={vi.fn()} onRetire={vi.fn()} />,
-    )
+    render(<FleetVehicleRow overview={overview} onEdit={vi.fn()} onRetire={vi.fn()} />)
 
     // Subtitle format: "4 · MT · Diesel" (seats · transmission · fuel)
     const subtitle = screen.getByTestId('fleet-row-subtitle')
@@ -114,9 +106,7 @@ describe('FleetVehicleRow', () => {
   it('renders the daily rate when only daily is set', () => {
     const overview = makeOverview({ dailyRateJpy: 8000, hourlyRateJpy: null })
 
-    render(
-      <FleetVehicleRow overview={overview} onEdit={vi.fn()} onRetire={vi.fn()} />,
-    )
+    render(<FleetVehicleRow overview={overview} onEdit={vi.fn()} onRetire={vi.fn()} />)
 
     expect(screen.getByText(/8,000\/day/)).toBeInTheDocument()
   })
@@ -124,9 +114,7 @@ describe('FleetVehicleRow', () => {
   it('renders the status badge', () => {
     const overview = makeOverview({ status: 'MAINTENANCE' })
 
-    render(
-      <FleetVehicleRow overview={overview} onEdit={vi.fn()} onRetire={vi.fn()} />,
-    )
+    render(<FleetVehicleRow overview={overview} onEdit={vi.fn()} onRetire={vi.fn()} />)
 
     expect(screen.getByText('Maintenance')).toBeInTheDocument()
   })
@@ -140,15 +128,11 @@ describe('FleetVehicleRow', () => {
       },
     })
 
-    render(
-      <FleetVehicleRow overview={overview} onEdit={vi.fn()} onRetire={vi.fn()} />,
-    )
+    render(<FleetVehicleRow overview={overview} onEdit={vi.fn()} onRetire={vi.fn()} />)
 
     // The row should mention rental-in-progress. We assert the label text
     // without pinning exact locale formatting, which lives in a helper.
-    expect(screen.getByTestId('fleet-row-booking-indicator')).toHaveTextContent(
-      /On rental until/,
-    )
+    expect(screen.getByTestId('fleet-row-booking-indicator')).toHaveTextContent(/On rental until/)
   })
 
   it('renders "Next: ..." when only nextBooking is set', () => {
@@ -160,9 +144,7 @@ describe('FleetVehicleRow', () => {
       },
     })
 
-    render(
-      <FleetVehicleRow overview={overview} onEdit={vi.fn()} onRetire={vi.fn()} />,
-    )
+    render(<FleetVehicleRow overview={overview} onEdit={vi.fn()} onRetire={vi.fn()} />)
 
     expect(screen.getByTestId('fleet-row-booking-indicator')).toHaveTextContent(/Next:/)
   })
@@ -170,9 +152,7 @@ describe('FleetVehicleRow', () => {
   it('renders "No upcoming bookings" when neither current nor next is set', () => {
     const overview = makeOverview({ currentBooking: null, nextBooking: null })
 
-    render(
-      <FleetVehicleRow overview={overview} onEdit={vi.fn()} onRetire={vi.fn()} />,
-    )
+    render(<FleetVehicleRow overview={overview} onEdit={vi.fn()} onRetire={vi.fn()} />)
 
     expect(screen.getByTestId('fleet-row-booking-indicator')).toHaveTextContent(
       /No upcoming bookings/,
@@ -182,9 +162,7 @@ describe('FleetVehicleRow', () => {
   it('renders utilization percentage rounded to whole number with booking count', () => {
     const overview = makeOverview({ utilization: 72.4, bookingCountLast30Days: 3 })
 
-    render(
-      <FleetVehicleRow overview={overview} onEdit={vi.fn()} onRetire={vi.fn()} />,
-    )
+    render(<FleetVehicleRow overview={overview} onEdit={vi.fn()} onRetire={vi.fn()} />)
 
     const util = screen.getByTestId('fleet-row-utilization')
     expect(util).toHaveTextContent(/72%/)
