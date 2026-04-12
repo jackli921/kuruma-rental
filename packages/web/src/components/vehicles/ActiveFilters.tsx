@@ -2,8 +2,8 @@ import { Calendar } from 'lucide-react'
 import { useTranslations } from 'next-intl'
 
 interface ActiveFiltersProps {
-  readonly from?: string
-  readonly to?: string
+  readonly from?: string | undefined
+  readonly to?: string | undefined
 }
 
 export function ActiveFilters({ from, to }: ActiveFiltersProps) {

@@ -57,11 +57,11 @@ export function EditVehicleDialog({ vehicle, onOpenChange }: EditVehicleDialogPr
             isSubmitting={isSubmitting}
             defaultValues={{
               name: vehicle.name,
-              description: vehicle.description ?? undefined,
-              photos: vehicle.photos,
+              ...(vehicle.description != null && { description: vehicle.description }),
+              photos: vehicle.photos ?? [],
               seats: vehicle.seats,
               transmission: vehicle.transmission,
-              fuelType: vehicle.fuelType ?? undefined,
+              ...(vehicle.fuelType != null && { fuelType: vehicle.fuelType }),
               bufferMinutes: vehicle.bufferMinutes,
               // Issue #60: the rate inputs were added in #48 but this
               // whitelist forgot to forward them, so the edit form

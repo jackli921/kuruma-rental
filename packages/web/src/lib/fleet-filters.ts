@@ -4,7 +4,7 @@ export type VehicleStatus = VehicleData['status']
 export type Transmission = VehicleData['transmission']
 
 export interface FleetFilterState {
-  search?: string
+  search?: string | undefined
   statuses?: VehicleStatus[]
   transmissions?: Transmission[]
   seatsMin?: number
