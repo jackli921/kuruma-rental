@@ -15,10 +15,11 @@ export interface CreateBookingInput {
   source: Booking['source']
   externalId?: string | null
   notes?: string | null
+  idempotencyKey?: string | null
 }
 
 export type CreateBookingResult =
-  | { ok: true; booking: Booking }
+  | { ok: true; booking: Booking; status?: 200 }
   | {
       ok: false
       status: 400 | 409
@@ -88,6 +89,14 @@ export class BookingService {
   }
 
   async create(input: CreateBookingInput): Promise<CreateBookingResult> {
+    // Idempotency: if a key was provided, check for an existing booking first.
+    if (input.idempotencyKey) {
+      const existing = await this.bookingRepo.findByIdempotencyKey(input.idempotencyKey)
+      if (existing) {
+        return { ok: true, booking: existing, status: 200 }
+      }
+    }
+
     const effectiveEndAt = new Date(input.endAt.getTime() + DEFAULT_BUFFER_MS)
 
     // Issue #65: rental rules + Issue #74: server-side pricing.
@@ -151,6 +160,7 @@ export class BookingService {
         totalPrice,
         cancellationFee: null,
         cancelledAt: null,
+        idempotencyKey: input.idempotencyKey ?? null,
       })
 
       return { ok: true, booking }

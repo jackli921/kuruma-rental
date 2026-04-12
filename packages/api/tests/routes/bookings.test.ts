@@ -465,6 +465,51 @@ describe('Booking Routes', () => {
       })
     })
 
+    describe('idempotency key', () => {
+      it('returns 200 with the same booking when duplicate key is sent', async () => {
+        const idempotencyKey = crypto.randomUUID()
+        const input = { ...validBookingInput(), idempotencyKey }
+
+        const first = await createBooking(input)
+        expect(first.status).toBe(201)
+        const firstBody = await first.json()
+
+        const second = await createBooking(input)
+        expect(second.status).toBe(200)
+        const secondBody = await second.json()
+
+        expect(secondBody.data.id).toBe(firstBody.data.id)
+      })
+
+      it('creates distinct bookings when different keys are sent', async () => {
+        const first = await createBooking({
+          ...validBookingInput(),
+          idempotencyKey: crypto.randomUUID(),
+          vehicleId: 'v1',
+        })
+        expect(first.status).toBe(201)
+        const firstBody = await first.json()
+
+        const second = await createBooking({
+          ...validBookingInput(),
+          idempotencyKey: crypto.randomUUID(),
+          vehicleId: 'v2',
+        })
+        expect(second.status).toBe(201)
+        const secondBody = await second.json()
+
+        expect(secondBody.data.id).not.toBe(firstBody.data.id)
+      })
+
+      it('creates booking without idempotency key for backward compatibility', async () => {
+        const res = await createBooking(validBookingInput())
+        expect(res.status).toBe(201)
+
+        const body = await res.json()
+        expect(body.data.idempotencyKey).toBeNull()
+      })
+    })
+
     // Issue #74: server-side pricing. Clients must not be able to propose a
     // totalPrice — the route always computes it from the vehicle's rates.
     // Without this, a renter could submit {totalPrice: 1} and pay a 1 JPY
