@@ -6,9 +6,11 @@ import {
 } from '../../src/repositories/in-memory'
 import { createBookingRoutes } from '../../src/routes/bookings'
 import { BookingService } from '../../src/services/booking'
+import { fakeAuth } from '../helpers/auth'
 
 let app: Hono
 let vehicleRepo: InMemoryVehicleRepository
+let bookingRepo: InMemoryBookingRepository
 
 function futureDate(hoursFromNow: number): string {
   return new Date(Date.now() + hoursFromNow * 60 * 60 * 1000).toISOString()
@@ -40,9 +42,10 @@ async function createBooking(input = validBookingInput()) {
 describe('Booking Routes', () => {
   beforeEach(() => {
     vehicleRepo = new InMemoryVehicleRepository()
-    const repo = new InMemoryBookingRepository()
-    const service = new BookingService(repo, vehicleRepo)
+    bookingRepo = new InMemoryBookingRepository()
+    const service = new BookingService(bookingRepo, vehicleRepo)
     app = new Hono()
+    app.use('*', fakeAuth({ id: USER1, role: 'ADMIN' }))
     app.route('/', createBookingRoutes(service))
   })
 
@@ -107,11 +110,26 @@ describe('Booking Routes', () => {
     })
 
     it('filters by renterId', async () => {
+      // First booking via route — renterId derived from JWT (USER1)
       await createBooking()
-      await createBooking({
-        ...validBookingInput(),
+      // Second booking seeded directly in repo with USER2 as renter,
+      // since POST /bookings now derives renterId from JWT user.id.
+      const startAt = new Date(Date.now() + 24 * 60 * 60 * 1000)
+      const endAt = new Date(Date.now() + 48 * 60 * 60 * 1000)
+      await bookingRepo.create({
         renterId: USER2,
         vehicleId: V2,
+        startAt,
+        endAt,
+        effectiveEndAt: endAt,
+        status: 'CONFIRMED',
+        source: 'DIRECT',
+        externalId: null,
+        notes: null,
+        totalPrice: null,
+        cancellationFee: null,
+        cancelledAt: null,
+        idempotencyKey: null,
       })
 
       const res = await app.request(`/bookings?renterId=${USER1}`)

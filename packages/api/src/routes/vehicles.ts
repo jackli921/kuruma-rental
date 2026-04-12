@@ -4,12 +4,14 @@ import {
   updateVehicleStatusSchema,
 } from '@kuruma/shared/validators/vehicle'
 import { Hono } from 'hono'
+import { STAFF_ROLES, requireUser } from '../middleware/auth'
 import type { Vehicle, VehicleRepository } from '../repositories/types'
 import { fail, ok, parseBody, stripUndefined } from './helpers'
 
 export function createVehicleRoutes(repo: VehicleRepository): Hono {
   const vehicles = new Hono()
 
+  // Read endpoints — any authenticated user
   vehicles.get('/vehicles', async (c) => {
     const status = c.req.query('status')
     const filtered = status ? await repo.findAll({ status }) : await repo.findAll()
@@ -18,13 +20,16 @@ export function createVehicleRoutes(repo: VehicleRepository): Hono {
 
   vehicles.get('/vehicles/:id', async (c) => {
     const vehicle = await repo.findById(c.req.param('id'))
-    if (!vehicle) {
-      return fail(c, 'Vehicle not found', 404)
-    }
+    if (!vehicle) return fail(c, 'Vehicle not found', 404)
     return ok(c, vehicle)
   })
 
+  // Write endpoints — STAFF/ADMIN only
   vehicles.post('/vehicles', async (c) => {
+    const user = requireUser(c)
+    if (!user) return fail(c, 'Unauthorized', 401)
+    if (!STAFF_ROLES.has(user.role)) return fail(c, 'Forbidden: requires STAFF or ADMIN role', 403)
+
     const parsed = await parseBody(c, createVehicleSchema)
     if (!parsed.ok) return parsed.response
 
@@ -48,16 +53,16 @@ export function createVehicleRoutes(repo: VehicleRepository): Hono {
   })
 
   vehicles.patch('/vehicles/:id', async (c) => {
+    const user = requireUser(c)
+    if (!user) return fail(c, 'Unauthorized', 401)
+    if (!STAFF_ROLES.has(user.role)) return fail(c, 'Forbidden: requires STAFF or ADMIN role', 403)
+
     const existing = await repo.findById(c.req.param('id'))
-    if (!existing) {
-      return fail(c, 'Vehicle not found', 404)
-    }
+    if (!existing) return fail(c, 'Vehicle not found', 404)
 
     const parsed = await parseBody(c, updateVehicleSchema)
     if (!parsed.ok) return parsed.response
 
-    // Strip keys the partial schema left as `undefined` — Partial<Vehicle>
-    // under exactOptionalPropertyTypes forbids explicit undefined values.
     const changes = {
       ...parsed.data,
       description: parsed.data.description ?? existing.description,
@@ -74,10 +79,12 @@ export function createVehicleRoutes(repo: VehicleRepository): Hono {
   })
 
   vehicles.patch('/vehicles/:id/status', async (c) => {
+    const user = requireUser(c)
+    if (!user) return fail(c, 'Unauthorized', 401)
+    if (!STAFF_ROLES.has(user.role)) return fail(c, 'Forbidden: requires STAFF or ADMIN role', 403)
+
     const existing = await repo.findById(c.req.param('id'))
-    if (!existing) {
-      return fail(c, 'Vehicle not found', 404)
-    }
+    if (!existing) return fail(c, 'Vehicle not found', 404)
 
     const parsed = await parseBody(c, updateVehicleStatusSchema)
     if (!parsed.ok) return parsed.response
@@ -87,10 +94,12 @@ export function createVehicleRoutes(repo: VehicleRepository): Hono {
   })
 
   vehicles.delete('/vehicles/:id', async (c) => {
+    const user = requireUser(c)
+    if (!user) return fail(c, 'Unauthorized', 401)
+    if (!STAFF_ROLES.has(user.role)) return fail(c, 'Forbidden: requires STAFF or ADMIN role', 403)
+
     const existing = await repo.findById(c.req.param('id'))
-    if (!existing) {
-      return fail(c, 'Vehicle not found', 404)
-    }
+    if (!existing) return fail(c, 'Vehicle not found', 404)
 
     const retired = await repo.softDelete(existing.id)
     return ok(c, retired)

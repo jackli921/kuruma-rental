@@ -1,6 +1,27 @@
+import type { MiddlewareHandler } from 'hono'
 import { SignJWT } from 'jose'
+import type { AuthUser } from '../../src/middleware/auth'
 
 export const TEST_AUTH_SECRET = 'test-auth-secret-at-least-32-chars-long'
+
+/** Middleware that injects a fake authenticated user into context.
+ *  Use in isolation tests that mount routes without the real auth middleware.
+ *  Override per-request via X-Test-User-Id / X-Test-User-Role headers. */
+export function fakeAuth(
+  defaultUser: AuthUser = { id: 'test-user-id', role: 'ADMIN' },
+): MiddlewareHandler {
+  return async (c, next) => {
+    const overrideId = c.req.header('X-Test-User-Id')
+    const user: AuthUser = overrideId
+      ? {
+          id: overrideId,
+          role: (c.req.header('X-Test-User-Role') as AuthUser['role']) ?? defaultUser.role,
+        }
+      : defaultUser
+    c.set('user', user)
+    await next()
+  }
+}
 
 export async function signTestJwt(
   payload: { sub: string; role?: string } = { sub: 'test-user-id', role: 'ADMIN' },

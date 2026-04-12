@@ -5,6 +5,7 @@ import {
   InMemoryThreadRepository,
 } from '../../src/repositories/in-memory'
 import { createMessageRoutes } from '../../src/routes/messages'
+import { fakeAuth } from '../helpers/auth'
 
 const U1 = '00000000-0000-4000-8000-0000000000a1'
 const U2 = '00000000-0000-4000-8000-0000000000a2'
@@ -19,12 +20,21 @@ describe('Message Routes', () => {
     threadRepo = new InMemoryThreadRepository()
     messageRepo = new InMemoryMessageRepository(threadRepo)
     app = new Hono()
+    app.use('*', fakeAuth({ id: U1, role: 'ADMIN' }))
     app.route('/', createMessageRoutes(threadRepo, messageRepo))
   })
 
+  /** Create a separate Hono app authenticated as a different user. */
+  function appAs(userId: string): Hono {
+    const a = new Hono()
+    a.use('*', fakeAuth({ id: userId, role: 'ADMIN' }))
+    a.route('/', createMessageRoutes(threadRepo, messageRepo))
+    return a
+  }
+
   describe('GET /threads', () => {
     it('returns empty list when no threads exist for user', async () => {
-      const res = await app.request(`/threads?userId=${U1}`)
+      const res = await app.request('/threads')
 
       expect(res.status).toBe(200)
 
@@ -40,7 +50,7 @@ describe('Message Routes', () => {
         body: JSON.stringify({ participantIds: [U1, U2] }),
       })
 
-      const res = await app.request(`/threads?userId=${U1}`)
+      const res = await app.request('/threads')
       const body = await res.json()
 
       expect(body.success).toBe(true)
@@ -53,7 +63,7 @@ describe('Message Routes', () => {
       expect(body.data[0].lastMessage).toBeNull()
     })
 
-    it('filters by userId and only shows threads user participates in', async () => {
+    it('filters by authenticated user and only shows threads user participates in', async () => {
       // Thread between user1 and user2
       await app.request('/threads', {
         method: 'POST',
@@ -68,20 +78,22 @@ describe('Message Routes', () => {
         body: JSON.stringify({ participantIds: [U2, U3] }),
       })
 
-      // user1 should only see 1 thread
-      const res1 = await app.request(`/threads?userId=${U1}`)
+      // user1 (fakeAuth default) should only see 1 thread
+      const res1 = await app.request('/threads')
       const body1 = await res1.json()
       expect(body1.success).toBe(true)
       expect(body1.data).toHaveLength(1)
 
       // user2 should see both threads
-      const res2 = await app.request(`/threads?userId=${U2}`)
+      const app2 = appAs(U2)
+      const res2 = await app2.request('/threads')
       const body2 = await res2.json()
       expect(body2.success).toBe(true)
       expect(body2.data).toHaveLength(2)
 
       // user3 should see only 1 thread
-      const res3 = await app.request(`/threads?userId=${U3}`)
+      const app3 = appAs(U3)
+      const res3 = await app3.request('/threads')
       const body3 = await res3.json()
       expect(body3.success).toBe(true)
       expect(body3.data).toHaveLength(1)
@@ -123,7 +135,7 @@ describe('Message Routes', () => {
       const res = await app.request(`/threads/${threadId}/messages`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ content: 'Hello!', senderId: U1 }),
+        body: JSON.stringify({ content: 'Hello!' }),
       })
 
       expect(res.status).toBe(201)
@@ -149,16 +161,19 @@ describe('Message Routes', () => {
       const created = await createRes.json()
       const threadId = created.data.id
 
-      // Send two messages
+      // U1 sends a message (via default fakeAuth)
       await app.request(`/threads/${threadId}/messages`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ content: 'Hello!', senderId: U1 }),
+        body: JSON.stringify({ content: 'Hello!' }),
       })
-      await app.request(`/threads/${threadId}/messages`, {
+
+      // U2 sends a message (via separate app instance)
+      const app2 = appAs(U2)
+      await app2.request(`/threads/${threadId}/messages`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ content: 'Hi there!', senderId: U2 }),
+        body: JSON.stringify({ content: 'Hi there!' }),
       })
 
       const res = await app.request(`/threads/${threadId}`)
@@ -202,16 +217,17 @@ describe('Message Routes', () => {
       await app.request(`/threads/${threadId}/messages`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ content: 'Hello!', senderId: U1 }),
+        body: JSON.stringify({ content: 'Hello!' }),
       })
       await app.request(`/threads/${threadId}/messages`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ content: 'Are you there?', senderId: U1 }),
+        body: JSON.stringify({ content: 'Are you there?' }),
       })
 
-      // Verify user2 has unread messages via thread list
-      const beforeRes = await app.request(`/threads?userId=${U2}`)
+      // Verify user2 has unread messages via repo (GET /threads uses JWT user)
+      const app2 = appAs(U2)
+      const beforeRes = await app2.request('/threads')
       const beforeBody = await beforeRes.json()
       const user2Participant = beforeBody.data[0].participants.find(
         (p: { userId: string }) => p.userId === U2,
@@ -219,10 +235,8 @@ describe('Message Routes', () => {
       expect(user2Participant.unreadCount).toBe(2)
 
       // user2 marks as read
-      const readRes = await app.request(`/threads/${threadId}/read`, {
+      const readRes = await app2.request(`/threads/${threadId}/read`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ userId: U2 }),
       })
 
       expect(readRes.status).toBe(200)
@@ -230,7 +244,7 @@ describe('Message Routes', () => {
       expect(readBody.success).toBe(true)
 
       // Verify unread count is now 0
-      const afterRes = await app.request(`/threads?userId=${U2}`)
+      const afterRes = await app2.request('/threads')
       const afterBody = await afterRes.json()
       const user2After = afterBody.data[0].participants.find(
         (p: { userId: string }) => p.userId === U2,

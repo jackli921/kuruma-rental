@@ -15,6 +15,8 @@ export interface AuthEnv {
   }
 }
 
+const ALL_ROLES: ReadonlySet<UserRole> = new Set(['RENTER', 'STAFF', 'ADMIN', 'PARTNER'])
+
 /** Roles that can manage bookings across all users */
 export const PRIVILEGED_ROLES: ReadonlySet<UserRole> = new Set(['STAFF', 'ADMIN', 'PARTNER'])
 
@@ -67,10 +69,9 @@ async function verifyJwt(token: string): Promise<AuthUser | null> {
     const id = payload.sub
     if (!id) return null
 
-    const VALID_ROLES = new Set<UserRole>(['RENTER', 'STAFF', 'ADMIN', 'PARTNER'])
-    const rawRole = payload.role as string | undefined
+    const rawRole = typeof payload.role === 'string' ? payload.role : undefined
     const role: UserRole =
-      rawRole && VALID_ROLES.has(rawRole as UserRole) ? (rawRole as UserRole) : 'RENTER'
+      rawRole && ALL_ROLES.has(rawRole as UserRole) ? (rawRole as UserRole) : 'RENTER'
     return { id, role }
   } catch {
     return null

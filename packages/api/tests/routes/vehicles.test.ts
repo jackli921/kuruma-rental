@@ -2,6 +2,7 @@ import { Hono } from 'hono'
 import { beforeEach, describe, expect, it } from 'vitest'
 import { InMemoryVehicleRepository } from '../../src/repositories/in-memory'
 import { createVehicleRoutes } from '../../src/routes/vehicles'
+import { fakeAuth } from '../helpers/auth'
 
 let app: Hono
 
@@ -29,6 +30,7 @@ describe('Vehicle CRUD Routes', () => {
   beforeEach(() => {
     const repo = new InMemoryVehicleRepository()
     app = new Hono()
+    app.use('*', fakeAuth())
     app.route('/', createVehicleRoutes(repo))
   })
 
