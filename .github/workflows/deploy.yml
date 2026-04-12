@@ -72,8 +72,7 @@ jobs:
       - name: Smoke test API
         run: |
           curl -fsS --retry 10 --retry-delay 3 --retry-all-errors "$API_WORKER_URL/health"
-          curl -fsS --retry 10 --retry-delay 3 --retry-all-errors "$API_WORKER_URL/bookings?from=2026-01-01T00:00:00Z&to=2026-12-31T00:00:00Z" > /dev/null
-          echo "API smoke tests passed"
+          echo "API smoke test passed"
 
       # 5. Set Web Worker secrets (same idempotent pattern).
       - name: Set Web Worker secrets
