@@ -30,6 +30,7 @@ const mockVehicle = {
 describe('vehicle-api', () => {
   beforeEach(() => {
     vi.restoreAllMocks()
+    vi.resetModules()
   })
 
   describe('fetchVehicles', () => {
