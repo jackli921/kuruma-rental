@@ -22,6 +22,7 @@ const PAGE_EXEMPT: ReadonlySet<string> = new Set([
   'packages/web/src/app/[locale]/vehicles/page.tsx',
   'packages/web/src/app/[locale]/(renter)/bookings/page.tsx',
   'packages/web/src/app/[locale]/bookings/confirmation/page.tsx',
+  'packages/web/src/app/[locale]/(business)/manage/vehicles/[id]/page.tsx',
 ])
 
 export type Issue = {

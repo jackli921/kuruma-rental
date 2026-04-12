@@ -61,7 +61,7 @@ export class BookingService {
     renterId?: string
     from?: Date
     to?: Date
-  }): Promise<(Booking & { vehicle?: { name: string; photos: string[] } })[]> {
+  }): Promise<(Booking & { vehicle?: { name: string; photos: string[] } | undefined })[]> {
     const results = await this.bookingRepo.findAll(filters)
     if (!this.vehicleRepo) return results
 

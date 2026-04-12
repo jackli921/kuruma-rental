@@ -63,8 +63,8 @@ export function createBookingRoutes(service: BookingService): Hono {
       startAt: new Date(result.data.startAt),
       endAt: new Date(result.data.endAt),
       source: result.data.source,
-      externalId: result.data.externalId,
-      notes: result.data.notes,
+      externalId: result.data.externalId ?? null,
+      notes: result.data.notes ?? null,
     })
 
     if (!createResult.ok) {
