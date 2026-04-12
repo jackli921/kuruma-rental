@@ -271,6 +271,119 @@ describe('Vehicle CRUD Routes', () => {
       ])
     })
 
+    it('rejects update where minRentalHours exceeds maxRentalHours', async () => {
+      const createRes = await createVehicle()
+      const created = await createRes.json()
+
+      const res = await app.request(`/vehicles/${created.data.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ minRentalHours: 10, maxRentalHours: 5 }),
+      })
+
+      expect(res.status).toBe(400)
+      const body = await res.json()
+      expect(body.success).toBe(false)
+      expect(body.error.maxRentalHours[0]).toContain('greater than or equal')
+    })
+
+    it('rejects PATCH with only minRentalHours exceeding existing maxRentalHours', async () => {
+      const createRes = await createVehicle({
+        ...validVehicleInput(),
+        minRentalHours: 2,
+        maxRentalHours: 10,
+      })
+      const created = await createRes.json()
+
+      const res = await app.request(`/vehicles/${created.data.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ minRentalHours: 20 }),
+      })
+
+      expect(res.status).toBe(400)
+      const body = await res.json()
+      expect(body.success).toBe(false)
+      expect(body.error.maxRentalHours[0]).toContain('greater than or equal')
+    })
+
+    it('accepts PATCH with only maxRentalHours still valid against existing min', async () => {
+      const createRes = await createVehicle({
+        ...validVehicleInput(),
+        minRentalHours: 2,
+        maxRentalHours: 10,
+      })
+      const created = await createRes.json()
+
+      const res = await app.request(`/vehicles/${created.data.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ maxRentalHours: 15 }),
+      })
+
+      expect(res.status).toBe(200)
+      const body = await res.json()
+      expect(body.data.maxRentalHours).toBe(15)
+      expect(body.data.minRentalHours).toBe(2)
+    })
+
+    it('accepts PATCH with equal minRentalHours and maxRentalHours', async () => {
+      const createRes = await createVehicle()
+      const created = await createRes.json()
+
+      const res = await app.request(`/vehicles/${created.data.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ minRentalHours: 5, maxRentalHours: 5 }),
+      })
+
+      expect(res.status).toBe(200)
+      const body = await res.json()
+      expect(body.data.minRentalHours).toBe(5)
+      expect(body.data.maxRentalHours).toBe(5)
+    })
+
+    it('rejects PATCH that nullifies the only rate on a vehicle', async () => {
+      // Vehicle created with only dailyRateJpy — nullifying it leaves no rate.
+      const createRes = await createVehicle({
+        ...validVehicleInput(),
+        dailyRateJpy: 8000,
+        hourlyRateJpy: null,
+      })
+      const created = await createRes.json()
+
+      const res = await app.request(`/vehicles/${created.data.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ dailyRateJpy: null }),
+      })
+
+      expect(res.status).toBe(400)
+      const body = await res.json()
+      expect(body.success).toBe(false)
+      expect(body.error).toMatch(/rate/i)
+    })
+
+    it('allows nullifying one rate when the other remains set', async () => {
+      const createRes = await createVehicle({
+        ...validVehicleInput(),
+        dailyRateJpy: 8000,
+        hourlyRateJpy: 1200,
+      })
+      const created = await createRes.json()
+
+      const res = await app.request(`/vehicles/${created.data.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ dailyRateJpy: null }),
+      })
+
+      expect(res.status).toBe(200)
+      const body = await res.json()
+      expect(body.data.dailyRateJpy).toBeNull()
+      expect(body.data.hourlyRateJpy).toBe(1200)
+    })
+
     it('rejects invalid update data', async () => {
       const createRes = await createVehicle()
       const created = await createRes.json()

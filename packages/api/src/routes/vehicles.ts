@@ -69,18 +69,37 @@ export function createVehicleRoutes(repo: VehicleRepository): Hono {
     const parsed = await parseBody(c, updateVehicleSchema)
     if (!parsed.ok) return parsed.response
 
-    // Strip keys the partial schema left as `undefined` — Partial<Vehicle>
-    // under exactOptionalPropertyTypes forbids explicit undefined values.
+    // Merge patch with existing: use patch value if key was sent (even null),
+    // otherwise keep existing. `??` would swallow explicit nulls.
+    const d = parsed.data
+    const merge = <T>(key: string, fallback: T): T =>
+      key in d ? ((d as Record<string, unknown>)[key] as T) : fallback
+
     const changes = {
-      ...parsed.data,
-      description: parsed.data.description ?? existing.description,
-      fuelType: parsed.data.fuelType ?? existing.fuelType,
-      minRentalHours: parsed.data.minRentalHours ?? existing.minRentalHours,
-      maxRentalHours: parsed.data.maxRentalHours ?? existing.maxRentalHours,
-      advanceBookingHours: parsed.data.advanceBookingHours ?? existing.advanceBookingHours,
-      dailyRateJpy: parsed.data.dailyRateJpy ?? existing.dailyRateJpy,
-      hourlyRateJpy: parsed.data.hourlyRateJpy ?? existing.hourlyRateJpy,
+      ...d,
+      description: merge('description', existing.description),
+      fuelType: merge('fuelType', existing.fuelType),
+      minRentalHours: merge('minRentalHours', existing.minRentalHours),
+      maxRentalHours: merge('maxRentalHours', existing.maxRentalHours),
+      advanceBookingHours: merge('advanceBookingHours', existing.advanceBookingHours),
+      dailyRateJpy: merge('dailyRateJpy', existing.dailyRateJpy),
+      hourlyRateJpy: merge('hourlyRateJpy', existing.hourlyRateJpy),
     }
+
+    if (changes.dailyRateJpy == null && changes.hourlyRateJpy == null) {
+      return fail(c, 'At least one rate (daily or hourly) is required', 400)
+    }
+
+    const mergedMin = changes.minRentalHours
+    const mergedMax = changes.maxRentalHours
+    if (mergedMin != null && mergedMax != null && mergedMin > mergedMax) {
+      return fail(
+        c,
+        { maxRentalHours: ['Maximum rental hours must be greater than or equal to minimum'] },
+        400,
+      )
+    }
+
     const updated = await repo.update(existing.id, stripUndefined(changes) as Partial<Vehicle>)
 
     return ok(c, updated)
