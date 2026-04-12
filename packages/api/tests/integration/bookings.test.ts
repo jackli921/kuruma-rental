@@ -11,6 +11,9 @@ import type { Vehicle } from '../../src/stores'
 import { authHeaders, setupAuthEnv } from '../helpers/auth'
 import { DEFAULT_DAILY_RATE_JPY, cleanupBookings, cleanupUsers, cleanupVehicles, db } from './setup'
 
+const bookingRepo = new DrizzleBookingRepository(db)
+const vehicleRepo = new DrizzleVehicleRepository(db)
+
 // --- Test data ---
 
 let testUser: { id: string; email: string }
