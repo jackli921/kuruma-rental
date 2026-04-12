@@ -4,12 +4,18 @@
 
 -- 1. Trigger function: compute effectiveEndAt from vehicle's bufferMinutes
 CREATE OR REPLACE FUNCTION compute_effective_end_at() RETURNS trigger AS $$
+DECLARE
+  _buffer int;
 BEGIN
-  NEW."effectiveEndAt" := NEW."endAt" + (
-    SELECT COALESCE("bufferMinutes", 60) * interval '1 minute'
+  SELECT "bufferMinutes" INTO _buffer
     FROM vehicles
-    WHERE id = NEW."vehicleId"
-  );
+    WHERE id = NEW."vehicleId";
+
+  IF _buffer IS NULL THEN
+    RAISE EXCEPTION 'Vehicle % not found or has NULL bufferMinutes', NEW."vehicleId";
+  END IF;
+
+  NEW."effectiveEndAt" := NEW."endAt" + _buffer * interval '1 minute';
   RETURN NEW;
 END;
 $$ LANGUAGE plpgsql;
@@ -19,6 +25,6 @@ CREATE TRIGGER bookings_set_effective_end_at
   BEFORE INSERT OR UPDATE OF "endAt", "vehicleId" ON bookings
   FOR EACH ROW EXECUTE FUNCTION compute_effective_end_at();
 
--- 3. CHECK: effectiveEndAt must always be after endAt
+-- 3. CHECK: effectiveEndAt must be at or after endAt (>= allows zero-buffer vehicles)
 ALTER TABLE bookings ADD CONSTRAINT effective_end_at_after_end_at
-  CHECK ("effectiveEndAt" > "endAt");
+  CHECK ("effectiveEndAt" >= "endAt");

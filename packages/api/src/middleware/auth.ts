@@ -44,9 +44,11 @@ export function getUser(c: { get: (key: string) => unknown }): AuthUser | undefi
   return isAuthUser(raw) ? raw : undefined
 }
 
-export function requireUser(c: { get: (key: string) => unknown }): AuthUser | null {
+/** Fail-closed: throws if no authenticated user in context. */
+export function requireUser(c: { get: (key: string) => unknown }): AuthUser {
   const user = getUser(c)
-  return user?.id ? user : null
+  if (!user) throw new Error('requireUser: no authenticated user in context')
+  return user
 }
 
 export function requireAuth(): MiddlewareHandler {

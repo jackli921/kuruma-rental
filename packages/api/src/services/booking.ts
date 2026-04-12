@@ -101,52 +101,11 @@ export class BookingService {
     // Issue #65: rental rules + Issue #74: server-side pricing.
     // Both depend on the vehicle lookup. totalPrice is never accepted
     // from the client — always computed server-side.
-    let totalPrice: number | null = null
-    let bufferMinutes = DEFAULT_BUFFER_MINUTES
-    if (this.vehicleRepo) {
-      const vehicle = await this.vehicleRepo.findById(input.vehicleId)
-      if (vehicle) {
-        bufferMinutes = vehicle.bufferMinutes
-        const check = checkRentalRules(
-          {
-            minRentalHours: vehicle.minRentalHours,
-            maxRentalHours: vehicle.maxRentalHours,
-            advanceBookingHours: vehicle.advanceBookingHours,
-          },
-          input.startAt,
-          input.endAt,
-          now,
-        )
-        if (!check.ok) {
-          return {
-            ok: false,
-            status: 400,
-            error: 'Booking violates a rental rule on this vehicle',
-            code: check.code,
-            details: { required: check.required, actual: check.actual },
-          }
-        }
+    const vehicleLookup = await this.resolveVehicle(input, now)
+    if (vehicleLookup && !vehicleLookup.ok) return vehicleLookup
 
-        const pricing = calculateBookingPrice(
-          { dailyRateJpy: vehicle.dailyRateJpy, hourlyRateJpy: vehicle.hourlyRateJpy },
-          input.startAt,
-          input.endAt,
-        )
-        if (!pricing.ok) {
-          return {
-            ok: false,
-            status: 400,
-            error:
-              pricing.code === 'NO_RATES_SET'
-                ? 'Vehicle has no daily or hourly rate configured'
-                : 'Invalid booking duration',
-            code: pricing.code,
-          }
-        }
-        totalPrice = pricing.totalPriceJpy
-      }
-    }
-
+    const bufferMinutes = vehicleLookup?.bufferMinutes ?? DEFAULT_BUFFER_MINUTES
+    const totalPrice = vehicleLookup?.totalPrice ?? null
     const effectiveEndAt = new Date(input.endAt.getTime() + bufferMinutes * MS_PER_MINUTE)
 
     try {
@@ -249,5 +208,57 @@ export class BookingService {
       }
     }
     return { ok: true, booking: updated, cancellation }
+  }
+
+  private async resolveVehicle(
+    input: CreateBookingInput,
+    now: Date,
+  ): Promise<
+    | (CreateBookingResult & { ok: false })
+    | { ok: true; bufferMinutes: number; totalPrice: number }
+    | null
+  > {
+    if (!this.vehicleRepo) return null
+    const vehicle = await this.vehicleRepo.findById(input.vehicleId)
+    if (!vehicle) return null
+
+    const check = checkRentalRules(
+      {
+        minRentalHours: vehicle.minRentalHours,
+        maxRentalHours: vehicle.maxRentalHours,
+        advanceBookingHours: vehicle.advanceBookingHours,
+      },
+      input.startAt,
+      input.endAt,
+      now,
+    )
+    if (!check.ok) {
+      return {
+        ok: false,
+        status: 400,
+        error: 'Booking violates a rental rule on this vehicle',
+        code: check.code,
+        details: { required: check.required, actual: check.actual },
+      }
+    }
+
+    const pricing = calculateBookingPrice(
+      { dailyRateJpy: vehicle.dailyRateJpy, hourlyRateJpy: vehicle.hourlyRateJpy },
+      input.startAt,
+      input.endAt,
+    )
+    if (!pricing.ok) {
+      return {
+        ok: false,
+        status: 400,
+        error:
+          pricing.code === 'NO_RATES_SET'
+            ? 'Vehicle has no daily or hourly rate configured'
+            : 'Invalid booking duration',
+        code: pricing.code,
+      }
+    }
+
+    return { ok: true, bufferMinutes: vehicle.bufferMinutes, totalPrice: pricing.totalPriceJpy }
   }
 }
