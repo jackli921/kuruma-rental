@@ -15,6 +15,23 @@ export interface AuthEnv {
   }
 }
 
+const ALL_ROLES: ReadonlySet<string> = new Set<string>(['RENTER', 'STAFF', 'ADMIN', 'PARTNER'])
+
+function isValidRole(value: string): value is UserRole {
+  return ALL_ROLES.has(value)
+}
+
+function isAuthUser(v: unknown): v is AuthUser {
+  return (
+    typeof v === 'object' &&
+    v !== null &&
+    'id' in v &&
+    typeof (v as AuthUser).id === 'string' &&
+    'role' in v &&
+    isValidRole((v as AuthUser).role)
+  )
+}
+
 /** Roles that can manage bookings across all users */
 export const PRIVILEGED_ROLES: ReadonlySet<UserRole> = new Set(['STAFF', 'ADMIN', 'PARTNER'])
 
@@ -22,7 +39,8 @@ export const PRIVILEGED_ROLES: ReadonlySet<UserRole> = new Set(['STAFF', 'ADMIN'
 export const STAFF_ROLES: ReadonlySet<UserRole> = new Set(['STAFF', 'ADMIN'])
 
 export function getUser(c: { get: (key: string) => unknown }): AuthUser | undefined {
-  return c.get('user') as AuthUser | undefined
+  const raw = c.get('user')
+  return isAuthUser(raw) ? raw : undefined
 }
 
 export function requireUser(c: { get: (key: string) => unknown }): AuthUser | null {
@@ -67,10 +85,8 @@ async function verifyJwt(token: string): Promise<AuthUser | null> {
     const id = payload.sub
     if (!id) return null
 
-    const VALID_ROLES = new Set<UserRole>(['RENTER', 'STAFF', 'ADMIN', 'PARTNER'])
-    const rawRole = payload.role as string | undefined
-    const role: UserRole =
-      rawRole && VALID_ROLES.has(rawRole as UserRole) ? (rawRole as UserRole) : 'RENTER'
+    const rawRole = typeof payload.role === 'string' ? payload.role : undefined
+    const role: UserRole = rawRole && isValidRole(rawRole) ? rawRole : 'RENTER'
     return { id, role }
   } catch {
     return null
@@ -88,5 +104,5 @@ function verifyApiKey(key: string): AuthUser | null {
   }
 
   if (mismatch !== 0) return null
-  return { id: 'partner:api-key', role: 'PARTNER' as const }
+  return { id: 'partner:api-key', role: 'PARTNER' }
 }
