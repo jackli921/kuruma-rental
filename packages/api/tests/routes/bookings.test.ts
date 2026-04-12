@@ -7,6 +7,8 @@ import {
 import { createBookingRoutes } from '../../src/routes/bookings'
 import { BookingService } from '../../src/services/booking'
 
+const TEST_USER = { id: 'user1', role: 'ADMIN' }
+
 let app: Hono
 let vehicleRepo: InMemoryVehicleRepository
 
@@ -17,7 +19,6 @@ function futureDate(hoursFromNow: number): string {
 function validBookingInput() {
   return {
     vehicleId: 'v1',
-    renterId: 'user1',
     startAt: futureDate(24),
     endAt: futureDate(48),
     source: 'DIRECT' as const,
@@ -38,6 +39,11 @@ describe('Booking Routes', () => {
     const repo = new InMemoryBookingRepository()
     const service = new BookingService(repo, vehicleRepo)
     app = new Hono()
+    // Fake auth middleware: set user context for all requests
+    app.use('*', async (c, next) => {
+      c.set('user', TEST_USER)
+      await next()
+    })
     app.route('/', createBookingRoutes(service))
   })
 
@@ -105,7 +111,6 @@ describe('Booking Routes', () => {
       await createBooking()
       await createBooking({
         ...validBookingInput(),
-        renterId: 'user2',
         vehicleId: 'v2',
       })
 
@@ -113,7 +118,7 @@ describe('Booking Routes', () => {
       const body = await res.json()
 
       expect(body.success).toBe(true)
-      expect(body.data).toHaveLength(1)
+      expect(body.data).toHaveLength(2)
       expect(body.data[0].renterId).toBe('user1')
     })
 

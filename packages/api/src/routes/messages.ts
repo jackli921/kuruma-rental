@@ -4,8 +4,13 @@ import {
   sendMessageSchema,
 } from '@kuruma/shared/validators/message'
 import { Hono } from 'hono'
+import type { AuthUser } from '../middleware/auth'
 import type { MessageRepository, ThreadRepository } from '../repositories/types'
 import { fail, ok, parseBody } from './helpers'
+
+function getUser(c: { get: (key: string) => unknown }): AuthUser | undefined {
+  return c.get('user') as AuthUser | undefined
+}
 
 export function createMessageRoutes(
   threadRepo: ThreadRepository,
@@ -14,7 +19,9 @@ export function createMessageRoutes(
   const app = new Hono()
 
   app.get('/threads', async (c) => {
-    const userId = c.req.query('userId')
+    // Actor derivation: use JWT sub instead of query param
+    const user = getUser(c)
+    const userId = user?.id ?? c.req.query('userId')
     if (!userId) {
       return fail(c, 'userId query parameter is required', 400)
     }
@@ -49,7 +56,10 @@ export function createMessageRoutes(
     const parsed = await parseBody(c, sendMessageSchema)
     if (!parsed.ok) return parsed.response
 
-    const message = await messageRepo.create(thread.id, parsed.data.senderId, parsed.data.content)
+    // Actor derivation: use JWT sub as senderId
+    const user = getUser(c)
+    const senderId = user?.id ?? parsed.data.senderId
+    const message = await messageRepo.create(thread.id, senderId, parsed.data.content)
     return ok(c, message, 201)
   })
 
@@ -60,7 +70,10 @@ export function createMessageRoutes(
     const parsed = await parseBody(c, markReadSchema)
     if (!parsed.ok) return parsed.response
 
-    await threadRepo.markAsRead(thread.id, parsed.data.userId)
+    // Actor derivation: use JWT sub as userId
+    const user = getUser(c)
+    const userId = user?.id ?? parsed.data.userId
+    await threadRepo.markAsRead(thread.id, userId)
     return ok(c, null)
   })
 
