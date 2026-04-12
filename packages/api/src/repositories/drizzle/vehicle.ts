@@ -1,0 +1,69 @@
+import { vehicles } from '@kuruma/shared/db/schema'
+import { eq, sql } from 'drizzle-orm'
+import type { Vehicle } from '../../stores'
+import type { VehicleRepository } from '../types'
+import { type Db, vehicleColumns } from './shared'
+
+export class DrizzleVehicleRepository implements VehicleRepository {
+  constructor(private readonly db: Db) {}
+
+  async findAll(filters?: { status?: string }): Promise<Vehicle[]> {
+    const query = this.db.select(vehicleColumns).from(vehicles)
+
+    const rows = filters?.status
+      ? await query.where(eq(vehicles.status, filters.status as Vehicle['status']))
+      : await query
+
+    return rows as Vehicle[]
+  }
+
+  async findById(id: string): Promise<Vehicle | undefined> {
+    const [row] = await this.db.select(vehicleColumns).from(vehicles).where(eq(vehicles.id, id))
+
+    return (row as Vehicle) ?? undefined
+  }
+
+  async create(data: Omit<Vehicle, 'id' | 'createdAt' | 'updatedAt'>): Promise<Vehicle> {
+    const [inserted] = await this.db
+      .insert(vehicles)
+      .values({
+        name: data.name,
+        description: data.description,
+        photos: data.photos,
+        seats: data.seats,
+        transmission: data.transmission,
+        fuelType: data.fuelType,
+        status: data.status,
+        bufferMinutes: data.bufferMinutes,
+        minRentalHours: data.minRentalHours,
+        maxRentalHours: data.maxRentalHours,
+        advanceBookingHours: data.advanceBookingHours,
+        dailyRateJpy: data.dailyRateJpy,
+        hourlyRateJpy: data.hourlyRateJpy,
+      })
+      .returning()
+
+    return inserted as Vehicle
+  }
+
+  async update(id: string, data: Partial<Vehicle>): Promise<Vehicle | undefined> {
+    const { id: _id, createdAt: _createdAt, ...fields } = data
+    const [updated] = await this.db
+      .update(vehicles)
+      .set({ ...fields, updatedAt: sql`now()` })
+      .where(eq(vehicles.id, id))
+      .returning()
+
+    return (updated as Vehicle) ?? undefined
+  }
+
+  async softDelete(id: string): Promise<Vehicle | undefined> {
+    const [retired] = await this.db
+      .update(vehicles)
+      .set({ status: 'RETIRED', updatedAt: sql`now()` })
+      .where(eq(vehicles.id, id))
+      .returning()
+
+    return (retired as Vehicle) ?? undefined
+  }
+}
