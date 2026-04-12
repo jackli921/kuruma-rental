@@ -71,7 +71,7 @@ export class BookingService {
     if (!this.vehicleRepo) return { data, nextCursor }
 
     const vehicleIds = [...new Set(data.map((b) => b.vehicleId))]
-    const vehicleList = await this.vehicleRepo!.findByIds(vehicleIds)
+    const vehicleList = await this.vehicleRepo.findByIds(vehicleIds)
     const vehicleMap = new Map(vehicleList.map((v) => [v.id, { name: v.name, photos: v.photos }]))
 
     return {
