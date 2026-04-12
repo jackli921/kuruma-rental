@@ -1,4 +1,4 @@
-import { createBookingSchema } from '@kuruma/shared/validators/booking'
+import { createBookingSchema, updateBookingStatusSchema } from '@kuruma/shared/validators/booking'
 import { Hono } from 'hono'
 import type { BookingFilters } from '../repositories/types'
 import type { BookingService } from '../services/booking'
@@ -79,9 +79,12 @@ export function createBookingRoutes(service: BookingService): Hono {
 
   bookings.patch('/bookings/:id/status', async (c) => {
     const body = await c.req.json()
-    const requestedStatus = body.status as string
+    const parsed = updateBookingStatusSchema.safeParse(body)
+    if (!parsed.success) {
+      return fail(c, parsed.error.flatten().fieldErrors, 400)
+    }
 
-    const result = await service.updateStatus(c.req.param('id'), requestedStatus)
+    const result = await service.updateStatus(c.req.param('id'), parsed.data.status)
     if (!result.ok) {
       return fail(c, result.error, result.status)
     }

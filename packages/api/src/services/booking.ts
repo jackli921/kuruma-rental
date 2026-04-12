@@ -188,7 +188,10 @@ export class BookingService {
     }
 
     const updated = await this.bookingRepo.updateStatus(booking.id, newStatus)
-    return { ok: true, booking: updated! }
+    if (!updated) {
+      return { ok: false, status: 404 as const, error: 'Booking disappeared during status update' }
+    }
+    return { ok: true, booking: updated }
   }
 
   async cancel(bookingId: string): Promise<CancelResult> {
@@ -209,6 +212,9 @@ export class BookingService {
     const cancellation = calculateCancellationFee(booking.startAt, now, booking.totalPrice ?? 0)
 
     const updated = await this.bookingRepo.cancel(booking.id, cancellation.feeAmount, now)
-    return { ok: true, booking: updated!, cancellation }
+    if (!updated) {
+      return { ok: false, status: 404 as const, error: 'Booking disappeared during cancellation' }
+    }
+    return { ok: true, booking: updated, cancellation }
   }
 }

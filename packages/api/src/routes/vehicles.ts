@@ -5,7 +5,7 @@ import {
 } from '@kuruma/shared/validators/vehicle'
 import { Hono } from 'hono'
 import type { Vehicle, VehicleRepository } from '../repositories/types'
-import { fail, ok, parseBody } from './helpers'
+import { fail, ok, parseBody, stripUndefined } from './helpers'
 
 export function createVehicleRoutes(repo: VehicleRepository): Hono {
   const vehicles = new Hono()
@@ -58,21 +58,17 @@ export function createVehicleRoutes(repo: VehicleRepository): Hono {
 
     // Strip keys the partial schema left as `undefined` — Partial<Vehicle>
     // under exactOptionalPropertyTypes forbids explicit undefined values.
-    const updated = await repo.update(
-      existing.id,
-      Object.fromEntries(
-        Object.entries({
-          ...parsed.data,
-          description: parsed.data.description ?? existing.description,
-          fuelType: parsed.data.fuelType ?? existing.fuelType,
-          minRentalHours: parsed.data.minRentalHours ?? existing.minRentalHours,
-          maxRentalHours: parsed.data.maxRentalHours ?? existing.maxRentalHours,
-          advanceBookingHours: parsed.data.advanceBookingHours ?? existing.advanceBookingHours,
-          dailyRateJpy: parsed.data.dailyRateJpy ?? existing.dailyRateJpy,
-          hourlyRateJpy: parsed.data.hourlyRateJpy ?? existing.hourlyRateJpy,
-        }).filter(([, v]) => v !== undefined),
-      ) as Partial<Vehicle>,
-    )
+    const changes = {
+      ...parsed.data,
+      description: parsed.data.description ?? existing.description,
+      fuelType: parsed.data.fuelType ?? existing.fuelType,
+      minRentalHours: parsed.data.minRentalHours ?? existing.minRentalHours,
+      maxRentalHours: parsed.data.maxRentalHours ?? existing.maxRentalHours,
+      advanceBookingHours: parsed.data.advanceBookingHours ?? existing.advanceBookingHours,
+      dailyRateJpy: parsed.data.dailyRateJpy ?? existing.dailyRateJpy,
+      hourlyRateJpy: parsed.data.hourlyRateJpy ?? existing.hourlyRateJpy,
+    }
+    const updated = await repo.update(existing.id, stripUndefined(changes) as Partial<Vehicle>)
 
     return ok(c, updated)
   })

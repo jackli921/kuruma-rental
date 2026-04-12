@@ -5,10 +5,10 @@ export type Transmission = VehicleData['transmission']
 
 export interface FleetFilterState {
   search?: string | undefined
-  statuses?: VehicleStatus[]
-  transmissions?: Transmission[]
-  seatsMin?: number
-  seatsMax?: number
+  statuses?: VehicleStatus[] | undefined
+  transmissions?: Transmission[] | undefined
+  seatsMin?: number | undefined
+  seatsMax?: number | undefined
 }
 
 // Generic in T so the owner list (FleetVehicleOverviewData) and any

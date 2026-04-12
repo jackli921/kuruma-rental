@@ -21,6 +21,18 @@ export function fail(
   return c.json({ success: false, error, ...extras }, status as 400)
 }
 
+// --- Object helpers ---
+
+/** Remove entries with `undefined` values. Isolates the single type assertion
+ *  needed for exactOptionalPropertyTypes compliance so call sites stay clean. */
+export function stripUndefined<T extends Record<string, unknown>>(obj: T): Partial<T> {
+  const result: Record<string, unknown> = {}
+  for (const [k, v] of Object.entries(obj)) {
+    if (v !== undefined) result[k] = v
+  }
+  return result as Partial<T>
+}
+
 // --- Request parsing helpers ---
 
 type ParseBodySuccess<T> = { ok: true; data: T }
