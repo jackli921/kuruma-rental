@@ -3,6 +3,8 @@ import { getDb } from '@kuruma/shared/db'
 import { Hono } from 'hono'
 import { cors } from 'hono/cors'
 import { setupGlobalHandlers } from './error-handlers'
+import { structuredLogger } from './middleware/logger'
+import { requestId } from './middleware/request-id'
 import {
   DrizzleAvailabilityRepository,
   DrizzleBookingRepository,
@@ -99,6 +101,11 @@ export function createApp(overrides?: {
 
   // Global error handlers — prevent stack traces leaking to clients.
   setupGlobalHandlers(app)
+
+  // Request ID + structured logging — must be before all other middleware
+  // so every request gets a correlation ID and timing.
+  app.use('*', requestId())
+  app.use('*', structuredLogger())
 
   // CORS. Browser calls from the web package (localhost:3001 in dev, the
   // deployed origin in prod) are same-intent but cross-origin, so without
