@@ -1,5 +1,6 @@
 import { VALID_BOOKING_TRANSITIONS } from '@kuruma/shared/db/schema'
 import { calculateCancellationFee } from '@kuruma/shared/lib/cancellation-policy'
+import { calculateBookingPrice } from '@kuruma/shared/lib/pricing'
 import { checkRentalRules } from '@kuruma/shared/lib/rental-rules'
 import type { BookingRepository, VehicleRepository } from '../repositories/types'
 import type { Booking } from '../stores'
@@ -14,7 +15,6 @@ export interface CreateBookingInput {
   source: Booking['source']
   externalId?: string | null
   notes?: string | null
-  totalPrice?: number | null
 }
 
 export type CreateBookingResult =
@@ -90,6 +90,10 @@ export class BookingService {
   async create(input: CreateBookingInput): Promise<CreateBookingResult> {
     const effectiveEndAt = new Date(input.endAt.getTime() + DEFAULT_BUFFER_MS)
 
+    // Issue #65: rental rules + Issue #74: server-side pricing.
+    // Both depend on the vehicle lookup. totalPrice is never accepted
+    // from the client — always computed server-side.
+    let totalPrice: number | null = null
     if (this.vehicleRepo) {
       const vehicle = await this.vehicleRepo.findById(input.vehicleId)
       if (vehicle) {
@@ -112,6 +116,24 @@ export class BookingService {
             details: { required: check.required, actual: check.actual },
           }
         }
+
+        const pricing = calculateBookingPrice(
+          { dailyRateJpy: vehicle.dailyRateJpy, hourlyRateJpy: vehicle.hourlyRateJpy },
+          input.startAt,
+          input.endAt,
+        )
+        if (!pricing.ok) {
+          return {
+            ok: false,
+            status: 400,
+            error:
+              pricing.code === 'NO_RATES_SET'
+                ? 'Vehicle has no daily or hourly rate configured'
+                : 'Invalid booking duration',
+            code: pricing.code,
+          }
+        }
+        totalPrice = pricing.totalPriceJpy
       }
     }
 
@@ -126,7 +148,7 @@ export class BookingService {
         source: input.source,
         externalId: input.externalId ?? null,
         notes: input.notes ?? null,
-        totalPrice: input.totalPrice ?? null,
+        totalPrice,
         cancellationFee: null,
         cancelledAt: null,
       })

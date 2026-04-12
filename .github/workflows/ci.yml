@@ -31,6 +31,9 @@ jobs:
       - name: Typecheck
         run: bun run --filter '*' typecheck
 
+      - name: Check import boundaries
+        run: bun run --filter @kuruma/api lint:boundaries
+
       - name: Test (all packages)
         run: bun run test
 

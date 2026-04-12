@@ -11,7 +11,8 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:integration": "vitest run --config vitest.integration.config.ts tests/integration/messages.test.ts tests/integration/vehicles-pricing.test.ts",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "lint:boundaries": "bun run scripts/check-import-boundaries.ts"
   },
   "dependencies": {
     "@kuruma/shared": "workspace:*",

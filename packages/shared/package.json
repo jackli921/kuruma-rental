@@ -13,7 +13,8 @@
     "./types/api-response": "./src/types/api-response.ts",
     "./types/fleet": "./src/types/fleet.ts",
     "./types/vehicle-detail": "./src/types/vehicle-detail.ts",
-    "./lib/cancellation-policy": "./src/lib/cancellation-policy.ts"
+    "./lib/cancellation-policy": "./src/lib/cancellation-policy.ts",
+    "./lib/pricing": "./src/lib/pricing.ts"
   },
   "scripts": {
     "test": "vitest run",

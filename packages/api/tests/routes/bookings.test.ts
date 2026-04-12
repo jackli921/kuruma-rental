@@ -5,6 +5,7 @@ import {
   InMemoryVehicleRepository,
 } from '../../src/repositories/in-memory'
 import { createBookingRoutes } from '../../src/routes/bookings'
+import { BookingService } from '../../src/services/booking'
 
 let app: Hono
 let vehicleRepo: InMemoryVehicleRepository
@@ -37,8 +38,9 @@ describe('Booking Routes', () => {
   beforeEach(() => {
     vehicleRepo = new InMemoryVehicleRepository()
     const repo = new InMemoryBookingRepository()
+    const service = new BookingService(repo, vehicleRepo)
     app = new Hono()
-    app.route('/', createBookingRoutes(repo, vehicleRepo))
+    app.route('/', createBookingRoutes(service))
   })
 
   describe('GET /bookings', () => {
