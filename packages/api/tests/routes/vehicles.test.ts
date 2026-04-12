@@ -1,9 +1,12 @@
 import { Hono } from 'hono'
 import { beforeEach, describe, expect, it } from 'vitest'
+import { requireAuth } from '../../src/middleware/auth'
 import { InMemoryVehicleRepository } from '../../src/repositories/in-memory'
 import { createVehicleRoutes } from '../../src/routes/vehicles'
+import { authHeaders, setupAuthEnv } from '../helpers/auth'
 
 let app: Hono
+let headers: Record<string, string>
 
 function validVehicleInput() {
   return {
@@ -20,21 +23,24 @@ function validVehicleInput() {
 async function createVehicle(input = validVehicleInput()) {
   return app.request('/vehicles', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', ...headers },
     body: JSON.stringify(input),
   })
 }
 
 describe('Vehicle CRUD Routes', () => {
-  beforeEach(() => {
+  beforeEach(async () => {
+    setupAuthEnv()
+    headers = await authHeaders({ sub: 'test-user', role: 'ADMIN' })
     const repo = new InMemoryVehicleRepository()
     app = new Hono()
+    app.use('*', requireAuth())
     app.route('/', createVehicleRoutes(repo))
   })
 
   describe('GET /vehicles', () => {
     it('returns empty list initially', async () => {
-      const res = await app.request('/vehicles')
+      const res = await app.request('/vehicles', { headers })
 
       expect(res.status).toBe(200)
 
@@ -49,7 +55,7 @@ describe('Vehicle CRUD Routes', () => {
         name: 'Honda Civic',
       })
 
-      const res = await app.request('/vehicles')
+      const res = await app.request('/vehicles', { headers })
       const body = await res.json()
 
       expect(body.success).toBe(true)
@@ -66,9 +72,9 @@ describe('Vehicle CRUD Routes', () => {
       })
       const created = await createRes.json()
 
-      await app.request(`/vehicles/${created.data.id}`, { method: 'DELETE' })
+      await app.request(`/vehicles/${created.data.id}`, { method: 'DELETE', headers })
 
-      const res = await app.request('/vehicles')
+      const res = await app.request('/vehicles', { headers })
       const body = await res.json()
 
       expect(body.success).toBe(true)
@@ -79,9 +85,9 @@ describe('Vehicle CRUD Routes', () => {
     it('returns RETIRED vehicles when filtered by status=RETIRED', async () => {
       const createRes = await createVehicle()
       const created = await createRes.json()
-      await app.request(`/vehicles/${created.data.id}`, { method: 'DELETE' })
+      await app.request(`/vehicles/${created.data.id}`, { method: 'DELETE', headers })
 
-      const res = await app.request('/vehicles?status=RETIRED')
+      const res = await app.request('/vehicles?status=RETIRED', { headers })
       const body = await res.json()
 
       expect(body.success).toBe(true)
@@ -97,9 +103,9 @@ describe('Vehicle CRUD Routes', () => {
       })
       const created = await createRes.json()
 
-      await app.request(`/vehicles/${created.data.id}`, { method: 'DELETE' })
+      await app.request(`/vehicles/${created.data.id}`, { method: 'DELETE', headers })
 
-      const res = await app.request('/vehicles?status=RETIRED')
+      const res = await app.request('/vehicles?status=RETIRED', { headers })
       const body = await res.json()
 
       expect(body.success).toBe(true)
@@ -137,7 +143,7 @@ describe('Vehicle CRUD Routes', () => {
     it('rejects invalid input with missing name and returns 400', async () => {
       const res = await app.request('/vehicles', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...headers },
         body: JSON.stringify({
           seats: 5,
           transmission: 'AUTO',
@@ -171,7 +177,7 @@ describe('Vehicle CRUD Routes', () => {
     it('rejects invalid transmission value', async () => {
       const res = await app.request('/vehicles', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...headers },
         body: JSON.stringify({
           ...validVehicleInput(),
           transmission: 'CVT',
@@ -190,7 +196,7 @@ describe('Vehicle CRUD Routes', () => {
       const createRes = await createVehicle()
       const created = await createRes.json()
 
-      const res = await app.request(`/vehicles/${created.data.id}`)
+      const res = await app.request(`/vehicles/${created.data.id}`, { headers })
 
       expect(res.status).toBe(200)
 
@@ -201,7 +207,7 @@ describe('Vehicle CRUD Routes', () => {
     })
 
     it('returns 404 for nonexistent vehicle', async () => {
-      const res = await app.request('/vehicles/nonexistent-id')
+      const res = await app.request('/vehicles/nonexistent-id', { headers })
 
       expect(res.status).toBe(404)
 
@@ -218,7 +224,7 @@ describe('Vehicle CRUD Routes', () => {
 
       const res = await app.request(`/vehicles/${created.data.id}`, {
         method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...headers },
         body: JSON.stringify({ name: 'Updated Name', seats: 7 }),
       })
 
@@ -235,7 +241,7 @@ describe('Vehicle CRUD Routes', () => {
     it('returns 404 for nonexistent vehicle', async () => {
       const res = await app.request('/vehicles/nonexistent-id', {
         method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...headers },
         body: JSON.stringify({ name: 'Updated' }),
       })
 
@@ -255,7 +261,7 @@ describe('Vehicle CRUD Routes', () => {
 
       const res = await app.request(`/vehicles/${created.data.id}`, {
         method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...headers },
         body: JSON.stringify({
           photos: ['https://example.com/new1.jpg', 'https://example.com/new2.jpg'],
         }),
@@ -276,7 +282,7 @@ describe('Vehicle CRUD Routes', () => {
 
       const res = await app.request(`/vehicles/${created.data.id}`, {
         method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...headers },
         body: JSON.stringify({ seats: -5 }),
       })
 
@@ -291,7 +297,7 @@ describe('Vehicle CRUD Routes', () => {
     async function patchStatus(id: string, status: string) {
       return app.request(`/vehicles/${id}/status`, {
         method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...headers },
         body: JSON.stringify({ status }),
       })
     }
@@ -373,7 +379,7 @@ describe('Vehicle CRUD Routes', () => {
 
       const res = await app.request(`/vehicles/${created.data.id}/status`, {
         method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...headers },
         body: JSON.stringify({}),
       })
 
@@ -392,7 +398,7 @@ describe('Vehicle CRUD Routes', () => {
 
       await patchStatus(created.data.id, 'MAINTENANCE')
 
-      const getRes = await app.request(`/vehicles/${created.data.id}`)
+      const getRes = await app.request(`/vehicles/${created.data.id}`, { headers })
       const getBody = await getRes.json()
       expect(getBody.data.name).toBe('Keep Me')
       expect(getBody.data.dailyRateJpy).toBe(12345)
@@ -407,6 +413,7 @@ describe('Vehicle CRUD Routes', () => {
 
       const res = await app.request(`/vehicles/${created.data.id}`, {
         method: 'DELETE',
+        headers,
       })
 
       expect(res.status).toBe(200)
@@ -416,7 +423,7 @@ describe('Vehicle CRUD Routes', () => {
       expect(body.data.status).toBe('RETIRED')
 
       // Verify via GET that the vehicle is now RETIRED
-      const getRes = await app.request(`/vehicles/${created.data.id}`)
+      const getRes = await app.request(`/vehicles/${created.data.id}`, { headers })
       const getBody = await getRes.json()
       expect(getBody.data.status).toBe('RETIRED')
     })
@@ -424,6 +431,7 @@ describe('Vehicle CRUD Routes', () => {
     it('returns 404 for nonexistent vehicle', async () => {
       const res = await app.request('/vehicles/nonexistent-id', {
         method: 'DELETE',
+        headers,
       })
 
       expect(res.status).toBe(404)

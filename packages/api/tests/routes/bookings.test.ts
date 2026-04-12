@@ -1,11 +1,13 @@
 import { Hono } from 'hono'
 import { beforeEach, describe, expect, it } from 'vitest'
+import { requireAuth } from '../../src/middleware/auth'
 import {
   InMemoryBookingRepository,
   InMemoryVehicleRepository,
 } from '../../src/repositories/in-memory'
 import { createBookingRoutes } from '../../src/routes/bookings'
 import { BookingService } from '../../src/services/booking'
+import { authHeaders, setupAuthEnv } from '../helpers/auth'
 
 let app: Hono
 let vehicleRepo: InMemoryVehicleRepository
@@ -19,6 +21,11 @@ const V2 = '00000000-0000-4000-8000-000000000002'
 const USER1 = '00000000-0000-4000-8000-0000000000a1'
 const USER2 = '00000000-0000-4000-8000-0000000000a2'
 
+/** Default auth: ADMIN role with USER1 as sub — matches validBookingInput's expected renterId */
+async function adminHeaders(sub = USER1) {
+  return authHeaders({ sub, role: 'ADMIN' })
+}
+
 function validBookingInput() {
   return {
     vehicleId: V1,
@@ -29,26 +36,30 @@ function validBookingInput() {
   }
 }
 
-async function createBooking(input = validBookingInput()) {
+async function createBooking(input = validBookingInput(), sub = USER1) {
+  const headers = await adminHeaders(sub)
   return app.request('/bookings', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', ...headers },
     body: JSON.stringify(input),
   })
 }
 
 describe('Booking Routes', () => {
   beforeEach(() => {
+    setupAuthEnv()
     vehicleRepo = new InMemoryVehicleRepository()
     const repo = new InMemoryBookingRepository()
     const service = new BookingService(repo, vehicleRepo)
     app = new Hono()
+    app.use('*', requireAuth())
     app.route('/', createBookingRoutes(service))
   })
 
   describe('GET /bookings', () => {
     it('returns empty list initially', async () => {
-      const res = await app.request('/bookings')
+      const headers = await adminHeaders()
+      const res = await app.request('/bookings', { headers })
 
       expect(res.status).toBe(200)
 
@@ -63,7 +74,8 @@ describe('Booking Routes', () => {
         vehicleId: V2,
       })
 
-      const res = await app.request('/bookings')
+      const headers = await adminHeaders()
+      const res = await app.request('/bookings', { headers })
       const body = await res.json()
 
       expect(body.success).toBe(true)
@@ -73,7 +85,8 @@ describe('Booking Routes', () => {
     it('filters by status', async () => {
       await createBooking()
 
-      const res = await app.request('/bookings?status=CONFIRMED')
+      const headers = await adminHeaders()
+      const res = await app.request('/bookings?status=CONFIRMED', { headers })
       const body = await res.json()
 
       expect(body.success).toBe(true)
@@ -84,7 +97,8 @@ describe('Booking Routes', () => {
     it('filters by status returning empty when no match', async () => {
       await createBooking()
 
-      const res = await app.request('/bookings?status=ACTIVE')
+      const headers = await adminHeaders()
+      const res = await app.request('/bookings?status=ACTIVE', { headers })
       const body = await res.json()
 
       expect(body.success).toBe(true)
@@ -98,7 +112,8 @@ describe('Booking Routes', () => {
         vehicleId: V2,
       })
 
-      const res = await app.request(`/bookings?vehicleId=${V1}`)
+      const headers = await adminHeaders()
+      const res = await app.request(`/bookings?vehicleId=${V1}`, { headers })
       const body = await res.json()
 
       expect(body.success).toBe(true)
@@ -108,13 +123,17 @@ describe('Booking Routes', () => {
 
     it('filters by renterId', async () => {
       await createBooking()
-      await createBooking({
-        ...validBookingInput(),
-        renterId: USER2,
-        vehicleId: V2,
-      })
+      await createBooking(
+        {
+          ...validBookingInput(),
+          renterId: USER2,
+          vehicleId: V2,
+        },
+        USER2,
+      )
 
-      const res = await app.request(`/bookings?renterId=${USER1}`)
+      const headers = await adminHeaders()
+      const res = await app.request(`/bookings?renterId=${USER1}`, { headers })
       const body = await res.json()
 
       expect(body.success).toBe(true)
@@ -125,7 +144,8 @@ describe('Booking Routes', () => {
     it('filters by renterId returning empty when no match', async () => {
       await createBooking()
 
-      const res = await app.request('/bookings?renterId=nonexistent')
+      const headers = await adminHeaders()
+      const res = await app.request('/bookings?renterId=nonexistent', { headers })
       const body = await res.json()
 
       expect(body.success).toBe(true)
@@ -139,8 +159,10 @@ describe('Booking Routes', () => {
       // Query range that overlaps (hour 30 to hour 60)
       const from = futureDate(30)
       const to = futureDate(60)
+      const headers = await adminHeaders()
       const res = await app.request(
         `/bookings?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`,
+        { headers },
       )
       const body = await res.json()
 
@@ -155,8 +177,10 @@ describe('Booking Routes', () => {
       // Query range that does NOT overlap (hour 72 to hour 96)
       const from = futureDate(72)
       const to = futureDate(96)
+      const headers = await adminHeaders()
       const res = await app.request(
         `/bookings?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`,
+        { headers },
       )
       const body = await res.json()
 
@@ -165,6 +189,8 @@ describe('Booking Routes', () => {
     })
 
     it('combines date range with status filter', async () => {
+      const headers = await adminHeaders()
+
       // Create two bookings in the same range
       await createBooking()
       await createBooking({
@@ -173,15 +199,19 @@ describe('Booking Routes', () => {
       })
 
       // Cancel one
-      const listRes = await app.request('/bookings')
+      const listRes = await app.request('/bookings', { headers })
       const allBookings = await listRes.json()
-      await app.request(`/bookings/${allBookings.data[0].id}/cancel`, { method: 'POST' })
+      await app.request(`/bookings/${allBookings.data[0].id}/cancel`, {
+        method: 'POST',
+        headers,
+      })
 
       // Query overlapping range with status=CONFIRMED
       const from = futureDate(20)
       const to = futureDate(50)
       const res = await app.request(
         `/bookings?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}&status=CONFIRMED`,
+        { headers },
       )
       const body = await res.json()
 
@@ -191,7 +221,10 @@ describe('Booking Routes', () => {
     })
 
     it('returns 400 when from is provided without to', async () => {
-      const res = await app.request(`/bookings?from=${encodeURIComponent(futureDate(1))}`)
+      const headers = await adminHeaders()
+      const res = await app.request(`/bookings?from=${encodeURIComponent(futureDate(1))}`, {
+        headers,
+      })
       const body = await res.json()
 
       expect(res.status).toBe(400)
@@ -200,7 +233,8 @@ describe('Booking Routes', () => {
     })
 
     it('returns 400 for invalid date strings', async () => {
-      const res = await app.request('/bookings?from=not-a-date&to=also-bad')
+      const headers = await adminHeaders()
+      const res = await app.request('/bookings?from=not-a-date&to=also-bad', { headers })
       const body = await res.json()
 
       expect(res.status).toBe(400)
@@ -209,10 +243,12 @@ describe('Booking Routes', () => {
     })
 
     it('returns 400 when to is before from', async () => {
+      const headers = await adminHeaders()
       const from = futureDate(48)
       const to = futureDate(24)
       const res = await app.request(
         `/bookings?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`,
+        { headers },
       )
       const body = await res.json()
 
@@ -250,7 +286,8 @@ describe('Booking Routes', () => {
         vehicleId,
       })
 
-      const res = await app.request('/bookings?expand=vehicle')
+      const headers = await adminHeaders()
+      const res = await app.request('/bookings?expand=vehicle', { headers })
       const body = await res.json()
 
       expect(body.success).toBe(true)
@@ -263,7 +300,8 @@ describe('Booking Routes', () => {
     it('returns bookings without vehicle data when expand is not set', async () => {
       await createBooking()
 
-      const res = await app.request('/bookings')
+      const headers = await adminHeaders()
+      const res = await app.request('/bookings', { headers })
       const body = await res.json()
 
       expect(body.success).toBe(true)
@@ -274,11 +312,12 @@ describe('Booking Routes', () => {
 
   describe('GET /bookings — cursor pagination', () => {
     async function createNBookings(n: number) {
+      const headers = await adminHeaders()
       const ids: string[] = []
       for (let i = 0; i < n; i++) {
         const res = await app.request('/bookings', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: { 'Content-Type': 'application/json', ...headers },
           body: JSON.stringify({
             vehicleId: `00000000-0000-4000-8000-00000000${String(i).padStart(4, '0')}`,
             renterId: USER1,
@@ -296,7 +335,8 @@ describe('Booking Routes', () => {
     it('returns at most limit items and a nextCursor when more exist', async () => {
       await createNBookings(5)
 
-      const res = await app.request('/bookings?limit=2')
+      const headers = await adminHeaders()
+      const res = await app.request('/bookings?limit=2', { headers })
       const body = await res.json()
 
       expect(body.success).toBe(true)
@@ -308,7 +348,8 @@ describe('Booking Routes', () => {
     it('returns nextCursor null when no more results', async () => {
       await createNBookings(2)
 
-      const res = await app.request('/bookings?limit=10')
+      const headers = await adminHeaders()
+      const res = await app.request('/bookings?limit=10', { headers })
       const body = await res.json()
 
       expect(body.success).toBe(true)
@@ -319,20 +360,22 @@ describe('Booking Routes', () => {
     it('pages through all results using nextCursor', async () => {
       await createNBookings(5)
 
+      const headers = await adminHeaders()
+
       // Page 1
-      const res1 = await app.request('/bookings?limit=2')
+      const res1 = await app.request('/bookings?limit=2', { headers })
       const body1 = await res1.json()
       expect(body1.data).toHaveLength(2)
       expect(body1.nextCursor).toBeDefined()
 
       // Page 2
-      const res2 = await app.request(`/bookings?limit=2&cursor=${body1.nextCursor}`)
+      const res2 = await app.request(`/bookings?limit=2&cursor=${body1.nextCursor}`, { headers })
       const body2 = await res2.json()
       expect(body2.data).toHaveLength(2)
       expect(body2.nextCursor).toBeDefined()
 
       // Page 3 (last item)
-      const res3 = await app.request(`/bookings?limit=2&cursor=${body2.nextCursor}`)
+      const res3 = await app.request(`/bookings?limit=2&cursor=${body2.nextCursor}`, { headers })
       const body3 = await res3.json()
       expect(body3.data).toHaveLength(1)
       expect(body3.nextCursor).toBeNull()
@@ -347,14 +390,15 @@ describe('Booking Routes', () => {
     })
 
     it('combines pagination with status filter', async () => {
+      const headers = await adminHeaders()
       await createNBookings(3)
       // Cancel the first one
-      const allRes = await app.request('/bookings')
+      const allRes = await app.request('/bookings', { headers })
       const allBody = await allRes.json()
       const firstId = allBody.data[0].id
-      await app.request(`/bookings/${firstId}/cancel`, { method: 'POST' })
+      await app.request(`/bookings/${firstId}/cancel`, { method: 'POST', headers })
 
-      const res = await app.request('/bookings?status=CONFIRMED&limit=10')
+      const res = await app.request('/bookings?status=CONFIRMED&limit=10', { headers })
       const body = await res.json()
 
       expect(body.data).toHaveLength(2)
@@ -363,7 +407,8 @@ describe('Booking Routes', () => {
     })
 
     it('defaults to 20 items when no limit specified', async () => {
-      const res = await app.request('/bookings')
+      const headers = await adminHeaders()
+      const res = await app.request('/bookings', { headers })
       const body = await res.json()
 
       // Existing behavior: returns all (empty here), with nextCursor null
@@ -371,12 +416,14 @@ describe('Booking Routes', () => {
     })
 
     it('rejects limit > 100', async () => {
-      const res = await app.request('/bookings?limit=200')
+      const headers = await adminHeaders()
+      const res = await app.request('/bookings?limit=200', { headers })
       expect(res.status).toBe(400)
     })
 
     it('rejects limit < 1', async () => {
-      const res = await app.request('/bookings?limit=0')
+      const headers = await adminHeaders()
+      const res = await app.request('/bookings?limit=0', { headers })
       expect(res.status).toBe(400)
     })
   })
@@ -402,9 +449,10 @@ describe('Booking Routes', () => {
     })
 
     it('rejects invalid input with missing vehicleId and returns 400', async () => {
+      const headers = await adminHeaders()
       const res = await app.request('/bookings', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...headers },
         body: JSON.stringify({
           renterId: USER1,
           startAt: futureDate(24),
@@ -435,9 +483,10 @@ describe('Booking Routes', () => {
       const createRes = await createBooking()
       const created = await createRes.json()
 
+      const headers = await adminHeaders()
       const res = await app.request(`/bookings/${created.data.id}/status`, {
         method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...headers },
         body: JSON.stringify({ status: 'BANANA' }),
       })
 
@@ -488,7 +537,8 @@ describe('Booking Routes', () => {
       const first = await createBooking()
       const created = await first.json()
 
-      await app.request(`/bookings/${created.data.id}/cancel`, { method: 'POST' })
+      const headers = await adminHeaders()
+      await app.request(`/bookings/${created.data.id}/cancel`, { method: 'POST', headers })
 
       const res = await createBooking()
       expect(res.status).toBe(201)
@@ -703,9 +753,10 @@ describe('Booking Routes', () => {
           hourlyRateJpy: null,
         })
 
+        const headers = await adminHeaders()
         const res = await app.request('/bookings', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: { 'Content-Type': 'application/json', ...headers },
           body: JSON.stringify({
             vehicleId,
             renterId: USER1,
@@ -746,7 +797,8 @@ describe('Booking Routes', () => {
       const createRes = await createBooking()
       const created = await createRes.json()
 
-      const res = await app.request(`/bookings/${created.data.id}`)
+      const headers = await adminHeaders()
+      const res = await app.request(`/bookings/${created.data.id}`, { headers })
 
       expect(res.status).toBe(200)
 
@@ -757,7 +809,8 @@ describe('Booking Routes', () => {
     })
 
     it('returns 404 for nonexistent booking', async () => {
-      const res = await app.request('/bookings/nonexistent-id')
+      const headers = await adminHeaders()
+      const res = await app.request('/bookings/nonexistent-id', { headers })
 
       expect(res.status).toBe(404)
 
@@ -772,9 +825,10 @@ describe('Booking Routes', () => {
       const createRes = await createBooking()
       const created = await createRes.json()
 
+      const headers = await adminHeaders()
       const res = await app.request(`/bookings/${created.data.id}/status`, {
         method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...headers },
         body: JSON.stringify({ status: 'ACTIVE' }),
       })
 
@@ -790,9 +844,10 @@ describe('Booking Routes', () => {
       const createRes = await createBooking()
       const created = await createRes.json()
 
+      const headers = await adminHeaders()
       const res = await app.request(`/bookings/${created.data.id}/status`, {
         method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...headers },
         body: JSON.stringify({ status: 'COMPLETED' }),
       })
 
@@ -807,15 +862,18 @@ describe('Booking Routes', () => {
       const createRes = await createBooking()
       const created = await createRes.json()
 
+      const headers = await adminHeaders()
+
       // First cancel the booking
       await app.request(`/bookings/${created.data.id}/cancel`, {
         method: 'POST',
+        headers,
       })
 
       // Then try to transition from CANCELLED
       const res = await app.request(`/bookings/${created.data.id}/status`, {
         method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...headers },
         body: JSON.stringify({ status: 'ACTIVE' }),
       })
 
@@ -827,9 +885,10 @@ describe('Booking Routes', () => {
     })
 
     it('returns 404 for nonexistent booking', async () => {
+      const headers = await adminHeaders()
       const res = await app.request('/bookings/nonexistent-id/status', {
         method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...headers },
         body: JSON.stringify({ status: 'ACTIVE' }),
       })
 
@@ -846,8 +905,10 @@ describe('Booking Routes', () => {
       const createRes = await createBooking()
       const created = await createRes.json()
 
+      const headers = await adminHeaders()
       const res = await app.request(`/bookings/${created.data.id}/cancel`, {
         method: 'POST',
+        headers,
       })
 
       expect(res.status).toBe(200)
@@ -862,20 +923,23 @@ describe('Booking Routes', () => {
       const createRes = await createBooking()
       const created = await createRes.json()
 
+      const headers = await adminHeaders()
+
       // Transition to ACTIVE then COMPLETED
       await app.request(`/bookings/${created.data.id}/status`, {
         method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...headers },
         body: JSON.stringify({ status: 'ACTIVE' }),
       })
       await app.request(`/bookings/${created.data.id}/status`, {
         method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...headers },
         body: JSON.stringify({ status: 'COMPLETED' }),
       })
 
       const res = await app.request(`/bookings/${created.data.id}/cancel`, {
         method: 'POST',
+        headers,
       })
 
       expect(res.status).toBe(409)
@@ -886,8 +950,10 @@ describe('Booking Routes', () => {
     })
 
     it('returns 404 for nonexistent booking', async () => {
+      const headers = await adminHeaders()
       const res = await app.request('/bookings/nonexistent-id/cancel', {
         method: 'POST',
+        headers,
       })
 
       expect(res.status).toBe(404)
@@ -930,8 +996,10 @@ describe('Booking Routes', () => {
       })
       const created = await createRes.json()
 
+      const headers = await adminHeaders()
       const res = await app.request(`/bookings/${created.data.id}/cancel`, {
         method: 'POST',
+        headers,
       })
 
       expect(res.status).toBe(200)
@@ -954,8 +1022,10 @@ describe('Booking Routes', () => {
       })
       const created = await createRes.json()
 
+      const headers = await adminHeaders()
       const res = await app.request(`/bookings/${created.data.id}/cancel`, {
         method: 'POST',
+        headers,
       })
 
       expect(res.status).toBe(200)
@@ -975,8 +1045,10 @@ describe('Booking Routes', () => {
       })
       const created = await createRes.json()
 
+      const headers = await adminHeaders()
       const res = await app.request(`/bookings/${created.data.id}/cancel`, {
         method: 'POST',
+        headers,
       })
 
       expect(res.status).toBe(200)

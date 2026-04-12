@@ -1,5 +1,10 @@
-import { describe, expect, it } from 'vitest'
+import { beforeAll, describe, expect, it } from 'vitest'
 import { createApp } from '../../src/index'
+import { authHeaders, setupAuthEnv } from '../helpers/auth'
+
+beforeAll(() => {
+  setupAuthEnv()
+})
 
 describe('rate limiting wiring', () => {
   it('app starts without rate limit binding (local dev)', async () => {
@@ -10,8 +15,9 @@ describe('rate limiting wiring', () => {
 
   it('all endpoints respond when no rate limit binding is present', async () => {
     const app = createApp()
+    const headers = await authHeaders({ sub: 'test-user', role: 'ADMIN' })
 
-    const vehicles = await app.request('/vehicles')
+    const vehicles = await app.request('/vehicles', { headers })
     expect(vehicles.status).toBe(200)
 
     const health = await app.request('/health')

@@ -67,9 +67,9 @@ describe('sendMessageSchema', () => {
     expect(result.success).toBe(false)
   })
 
-  it('rejects missing senderId', () => {
+  it('accepts missing senderId (derived from JWT in routes)', () => {
     const result = sendMessageSchema.safeParse({ content: 'Hello!' })
-    expect(result.success).toBe(false)
+    expect(result.success).toBe(true)
   })
 
   it('rejects empty string content', () => {
@@ -120,8 +120,8 @@ describe('markReadSchema', () => {
     expect(result.success).toBe(false)
   })
 
-  it('rejects missing userId', () => {
+  it('accepts missing userId (derived from JWT in routes)', () => {
     const result = markReadSchema.safeParse({})
-    expect(result.success).toBe(false)
+    expect(result.success).toBe(true)
   })
 })
