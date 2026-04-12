@@ -1,6 +1,6 @@
 import { createThreadSchema, sendMessageSchema } from '@kuruma/shared/validators/message'
 import { Hono } from 'hono'
-import { getUser } from '../middleware/auth'
+import { PRIVILEGED_ROLES, getUser } from '../middleware/auth'
 import type { MessageRepository, ThreadRepository } from '../repositories/types'
 import { fail, ok, parseBody } from './helpers'
 
@@ -32,16 +32,30 @@ export function createMessageRoutes(
   })
 
   app.get('/threads/:id', async (c) => {
+    const user = getUser(c)
+    if (!user) return fail(c, 'Unauthorized', 401)
+
     const thread = await threadRepo.findById(c.req.param('id'))
-    if (!thread) {
-      return fail(c, 'Thread not found', 404)
+    if (!thread) return fail(c, 'Thread not found', 404)
+
+    if (!PRIVILEGED_ROLES.has(user.role)) {
+      const isParticipant = thread.participants.some((p) => p.userId === user.id)
+      if (!isParticipant) return fail(c, 'Thread not found', 404)
     }
+
     return ok(c, thread)
   })
 
   app.post('/threads', async (c) => {
+    const user = getUser(c)
+    if (!user) return fail(c, 'Unauthorized', 401)
+
     const parsed = await parseBody(c, createThreadSchema)
     if (!parsed.ok) return parsed.response
+
+    if (!PRIVILEGED_ROLES.has(user.role) && !parsed.data.participantIds.includes(user.id)) {
+      return fail(c, 'Caller must be a participant', 400)
+    }
 
     const thread = await threadRepo.create(
       parsed.data.bookingId ?? null,
@@ -51,11 +65,16 @@ export function createMessageRoutes(
   })
 
   app.post('/threads/:id/messages', async (c) => {
+    const user = getUser(c)
+    if (!user) return fail(c, 'Unauthorized', 401)
+
     const thread = await threadRepo.findById(c.req.param('id'))
     if (!thread) return fail(c, 'Thread not found', 404)
 
-    const user = getUser(c)
-    if (!user) return fail(c, 'Unauthorized', 401)
+    if (!PRIVILEGED_ROLES.has(user.role)) {
+      const isParticipant = thread.participants.some((p) => p.userId === user.id)
+      if (!isParticipant) return fail(c, 'Thread not found', 404)
+    }
 
     const parsed = await parseBody(c, sendMessageSchema)
     if (!parsed.ok) return parsed.response
@@ -65,11 +84,16 @@ export function createMessageRoutes(
   })
 
   app.post('/threads/:id/read', async (c) => {
+    const user = getUser(c)
+    if (!user) return fail(c, 'Unauthorized', 401)
+
     const thread = await threadRepo.findById(c.req.param('id'))
     if (!thread) return fail(c, 'Thread not found', 404)
 
-    const user = getUser(c)
-    if (!user) return fail(c, 'Unauthorized', 401)
+    if (!PRIVILEGED_ROLES.has(user.role)) {
+      const isParticipant = thread.participants.some((p) => p.userId === user.id)
+      if (!isParticipant) return fail(c, 'Thread not found', 404)
+    }
 
     await threadRepo.markAsRead(thread.id, user.id)
     return ok(c, null)
