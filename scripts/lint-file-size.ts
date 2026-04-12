@@ -29,6 +29,7 @@ export type Issue = {
   lines: number
   cap: number
   level: 'warn' | 'error'
+  message?: string
 }
 
 type CapRule = { cap: number; soft: number | null }
@@ -48,7 +49,13 @@ function capForFile(path: string): CapRule {
 export function checkFiles(files: string[]): Issue[] {
   const issues: Issue[] = []
   for (const file of files) {
-    const content = readFileSync(file, 'utf8')
+    let content: string
+    try {
+      content = readFileSync(file, 'utf8')
+    } catch (err) {
+      issues.push({ file, lines: 0, cap: 0, level: 'error', message: `unreadable: ${(err as Error).message}` })
+      continue
+    }
     // Use trimEnd to match `wc -l` semantics: trailing newline doesn't count as an extra line.
     const lines = content.trimEnd().split('\n').length
     const rule = capForFile(file)
@@ -100,7 +107,8 @@ function main(): number {
   for (const issue of issues) {
     const tag = issue.level === 'error' ? 'ERROR' : 'WARN'
     const stream = issue.level === 'error' ? process.stderr : process.stdout
-    stream.write(`[lint-file-size] ${tag} ${issue.file}: ${issue.lines} lines (cap ${issue.cap})\n`)
+    const suffix = issue.message ? ` — ${issue.message}` : `: ${issue.lines} lines (cap ${issue.cap})`
+    stream.write(`[lint-file-size] ${tag} ${issue.file}${suffix}\n`)
     if (issue.level === 'error') errors++
     else warnings++
   }

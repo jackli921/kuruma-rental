@@ -51,6 +51,16 @@ describe('lint-file-size', () => {
     // general files means zero errors and zero warnings.
     expect(errors).toHaveLength(0)
   })
+
+  test('reports an error for an unreadable file without crashing', () => {
+    // A path that definitely does not exist — readFileSync will throw ENOENT.
+    const ghost = 'scripts/__fixtures__/lint/does-not-exist.ts'
+    const report = checkFiles([ghost])
+    expect(report).toHaveLength(1)
+    expect(report[0]!.level).toBe('error')
+    expect(report[0]!.file).toBe(ghost)
+    expect(report[0]!.message).toMatch(/unreadable/i)
+  })
 })
 
 describe('lint-file-size discovery', () => {
