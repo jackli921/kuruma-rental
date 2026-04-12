@@ -26,4 +26,29 @@ describe('lint-file-size', () => {
     expect(warnings[0]!.lines).toBe(500)
     expect(warnings[0]!.cap).toBe(400)
   })
+
+  test('enforces 150-line cap on modules/*/routes.ts', () => {
+    const report = checkFiles([`${FIXTURES}/modules/demo/routes.ts`])
+    const errors = report.filter((r) => r.level === 'error')
+    expect(errors).toHaveLength(1)
+    expect(errors[0]!.cap).toBe(150)
+    expect(errors[0]!.lines).toBe(200)
+  })
+
+  test('enforces 80-line cap on app/**/page.tsx', () => {
+    const report = checkFiles([`${FIXTURES}/app/locale/demo/page.tsx`])
+    const errors = report.filter((r) => r.level === 'error')
+    expect(errors).toHaveLength(1)
+    expect(errors[0]!.cap).toBe(80)
+    expect(errors[0]!.lines).toBe(100)
+  })
+
+  test('exempts allowlisted legacy pages from the 80-line cap', () => {
+    const legacyFixture = 'packages/web/src/app/[locale]/vehicles/page.tsx'
+    const report = checkFiles([legacyFixture])
+    const errors = report.filter((r) => r.level === 'error')
+    // File is 106 lines; not over 800 hard cap and not over 400 soft warn for
+    // general files means zero errors and zero warnings.
+    expect(errors).toHaveLength(0)
+  })
 })
