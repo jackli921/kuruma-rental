@@ -68,6 +68,16 @@ export function createVehicleRoutes(repo: VehicleRepository): Hono {
       dailyRateJpy: parsed.data.dailyRateJpy ?? existing.dailyRateJpy,
       hourlyRateJpy: parsed.data.hourlyRateJpy ?? existing.hourlyRateJpy,
     }
+    const mergedMin = changes.minRentalHours
+    const mergedMax = changes.maxRentalHours
+    if (mergedMin != null && mergedMax != null && mergedMin > mergedMax) {
+      return fail(
+        c,
+        { maxRentalHours: ['Maximum rental hours must be greater than or equal to minimum'] },
+        400,
+      )
+    }
+
     const updated = await repo.update(existing.id, stripUndefined(changes) as Partial<Vehicle>)
 
     return ok(c, updated)
