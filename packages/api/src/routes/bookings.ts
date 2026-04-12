@@ -1,5 +1,6 @@
 import { createBookingSchema, updateBookingStatusSchema } from '@kuruma/shared/validators/booking'
 import { Hono } from 'hono'
+import { PRIVILEGED_ROLES, STAFF_ROLES, getUser } from '../middleware/auth'
 import type { BookingFilters } from '../repositories/types'
 import type { BookingService } from '../services/booking'
 import { fail, ok, parseDateRange } from './helpers'
@@ -52,6 +53,9 @@ export function createBookingRoutes(service: BookingService): Hono {
   })
 
   bookings.post('/bookings', async (c) => {
+    const user = getUser(c)
+    if (!user) return fail(c, 'Unauthorized', 401)
+
     const body = await c.req.json()
     const result = createBookingSchema.safeParse(body)
 
@@ -59,14 +63,10 @@ export function createBookingRoutes(service: BookingService): Hono {
       return fail(c, result.error.flatten().fieldErrors, 400)
     }
 
-    const renterId = body.renterId as string | undefined
-    if (!renterId) {
-      return fail(c, { renterId: ['Renter ID is required'] }, 400)
-    }
-
+    // Actor derivation: renterId comes from JWT, never from body
     const createResult = await service.create({
       vehicleId: result.data.vehicleId,
-      renterId,
+      renterId: user.id,
       startAt: new Date(result.data.startAt),
       endAt: new Date(result.data.endAt),
       source: result.data.source,
@@ -86,6 +86,10 @@ export function createBookingRoutes(service: BookingService): Hono {
   })
 
   bookings.patch('/bookings/:id/status', async (c) => {
+    const user = getUser(c)
+    if (!user) return fail(c, 'Unauthorized', 401)
+    if (!STAFF_ROLES.has(user.role)) return fail(c, 'Forbidden', 403)
+
     const body = await c.req.json()
     const parsed = updateBookingStatusSchema.safeParse(body)
     if (!parsed.success) {
@@ -101,6 +105,17 @@ export function createBookingRoutes(service: BookingService): Hono {
   })
 
   bookings.post('/bookings/:id/cancel', async (c) => {
+    const user = getUser(c)
+    if (!user) return fail(c, 'Unauthorized', 401)
+
+    // Ownership: RENTER can only cancel own bookings; STAFF/ADMIN/PARTNER bypass
+    if (!PRIVILEGED_ROLES.has(user.role)) {
+      const booking = await service.findById(c.req.param('id'))
+      if (!booking || booking.renterId !== user.id) {
+        return fail(c, 'Forbidden', 403)
+      }
+    }
+
     const result = await service.cancel(c.req.param('id'))
     if (!result.ok) {
       return fail(c, result.error, result.status)

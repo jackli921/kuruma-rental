@@ -1,9 +1,6 @@
-import {
-  createThreadSchema,
-  markReadSchema,
-  sendMessageSchema,
-} from '@kuruma/shared/validators/message'
+import { createThreadSchema, sendMessageSchema } from '@kuruma/shared/validators/message'
 import { Hono } from 'hono'
+import { getUser } from '../middleware/auth'
 import type { MessageRepository, ThreadRepository } from '../repositories/types'
 import { fail, ok, parseBody } from './helpers'
 
@@ -14,10 +11,8 @@ export function createMessageRoutes(
   const app = new Hono()
 
   app.get('/threads', async (c) => {
-    const userId = c.req.query('userId')
-    if (!userId) {
-      return fail(c, 'userId query parameter is required', 400)
-    }
+    const user = getUser(c)
+    if (!user) return fail(c, 'Unauthorized', 401)
 
     const limitParam = c.req.query('limit')
     const offsetParam = c.req.query('offset')
@@ -31,7 +26,7 @@ export function createMessageRoutes(
       return fail(c, 'offset must be a non-negative integer', 400)
     }
 
-    const all = await threadRepo.findAll(userId)
+    const all = await threadRepo.findAll(user.id)
     const page = all.slice(offset, offset + limit)
     return ok(c, page, 200, { total: all.length, limit, offset })
   })
@@ -59,10 +54,13 @@ export function createMessageRoutes(
     const thread = await threadRepo.findById(c.req.param('id'))
     if (!thread) return fail(c, 'Thread not found', 404)
 
+    const user = getUser(c)
+    if (!user) return fail(c, 'Unauthorized', 401)
+
     const parsed = await parseBody(c, sendMessageSchema)
     if (!parsed.ok) return parsed.response
 
-    const message = await messageRepo.create(thread.id, parsed.data.senderId, parsed.data.content)
+    const message = await messageRepo.create(thread.id, user.id, parsed.data.content)
     return ok(c, message, 201)
   })
 
@@ -70,10 +68,10 @@ export function createMessageRoutes(
     const thread = await threadRepo.findById(c.req.param('id'))
     if (!thread) return fail(c, 'Thread not found', 404)
 
-    const parsed = await parseBody(c, markReadSchema)
-    if (!parsed.ok) return parsed.response
+    const user = getUser(c)
+    if (!user) return fail(c, 'Unauthorized', 401)
 
-    await threadRepo.markAsRead(thread.id, parsed.data.userId)
+    await threadRepo.markAsRead(thread.id, user.id)
     return ok(c, null)
   })
 
