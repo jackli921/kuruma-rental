@@ -1,11 +1,20 @@
 import { users } from '@kuruma/shared/db/schema'
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest'
-import { DrizzleBookingRepository, DrizzleVehicleRepository } from '../../src/repositories/drizzle'
+import { createApp } from '../../src/index'
+import { pgErrorCode } from '../../src/pg-errors'
+import {
+  DrizzleAvailabilityRepository,
+  DrizzleBookingRepository,
+  DrizzleVehicleRepository,
+} from '../../src/repositories/drizzle'
 import type { Vehicle } from '../../src/stores'
+import { authHeaders, setupAuthEnv } from '../helpers/auth'
 import { DEFAULT_DAILY_RATE_JPY, cleanupBookings, cleanupUsers, cleanupVehicles, db } from './setup'
 
 const bookingRepo = new DrizzleBookingRepository(db)
 const vehicleRepo = new DrizzleVehicleRepository(db)
+
+// --- Test data ---
 
 let testUser: { id: string; email: string }
 let testVehicle: Vehicle
@@ -251,7 +260,7 @@ describe('DrizzleBookingRepository', () => {
     expect(fromDb!.totalPrice).toBe(15000)
   })
 
-  it('rejects overlapping bookings via exclusion constraint', async () => {
+  it('rejects overlapping bookings with PG error code 23P01', async () => {
     const firstBooking = await bookingRepo.create({
       renterId: testUser.id,
       vehicleId: testVehicle.id,
@@ -265,8 +274,8 @@ describe('DrizzleBookingRepository', () => {
     })
     createdBookingIds.push(firstBooking.id)
 
-    await expect(
-      bookingRepo.create({
+    try {
+      const second = await bookingRepo.create({
         renterId: testUser.id,
         vehicleId: testVehicle.id,
         startAt: new Date('2027-01-01T13:00:00Z'),
@@ -276,8 +285,90 @@ describe('DrizzleBookingRepository', () => {
         source: 'DIRECT',
         externalId: null,
         notes: null,
-      }),
-    ).rejects.toThrow()
+      })
+      // If we get here, the constraint didn't fire
+      createdBookingIds.push(second.id)
+      expect.unreachable('Expected exclusion constraint violation')
+    } catch (err) {
+      // Validate through the same abstraction the production code uses
+      expect(pgErrorCode(err)).toBe('23P01')
+    }
+  })
+
+  it('allows overlapping booking after first is cancelled', async () => {
+    const firstBooking = await bookingRepo.create({
+      renterId: testUser.id,
+      vehicleId: testVehicle.id,
+      startAt: new Date('2027-02-01T10:00:00Z'),
+      endAt: new Date('2027-02-01T14:00:00Z'),
+      effectiveEndAt: new Date('2027-02-01T15:00:00Z'),
+      status: 'CONFIRMED',
+      source: 'DIRECT',
+      externalId: null,
+      notes: null,
+    })
+    createdBookingIds.push(firstBooking.id)
+
+    // Cancel the first booking
+    const cancelled = await bookingRepo.cancel(firstBooking.id, {
+      from: 'CONFIRMED',
+      fee: 0,
+      cancelledAt: new Date(),
+    })
+    expect(cancelled).toBeDefined()
+    expect(cancelled!.status).toBe('CANCELLED')
+
+    // Overlapping booking should now succeed — exclusion constraint
+    // only applies to CONFIRMED/ACTIVE
+    const secondBooking = await bookingRepo.create({
+      renterId: testUser.id,
+      vehicleId: testVehicle.id,
+      startAt: new Date('2027-02-01T12:00:00Z'),
+      endAt: new Date('2027-02-01T16:00:00Z'),
+      effectiveEndAt: new Date('2027-02-01T17:00:00Z'),
+      status: 'CONFIRMED',
+      source: 'DIRECT',
+      externalId: null,
+      notes: null,
+    })
+    createdBookingIds.push(secondBooking.id)
+
+    expect(secondBooking.status).toBe('CONFIRMED')
+    expect(secondBooking.vehicleId).toBe(testVehicle.id)
+  })
+
+  it('allows adjacent (non-overlapping) bookings on same vehicle', async () => {
+    // First booking: 10:00-14:00, effectiveEnd 15:00 (buffer)
+    const first = await bookingRepo.create({
+      renterId: testUser.id,
+      vehicleId: testVehicle.id,
+      startAt: new Date('2027-04-01T10:00:00Z'),
+      endAt: new Date('2027-04-01T14:00:00Z'),
+      effectiveEndAt: new Date('2027-04-01T15:00:00Z'),
+      status: 'CONFIRMED',
+      source: 'DIRECT',
+      externalId: null,
+      notes: null,
+    })
+    createdBookingIds.push(first.id)
+
+    // Second booking starts exactly at first's effectiveEndAt (boundary)
+    // tstzrange is [closed, open) so startAt === effectiveEndAt does NOT overlap
+    const second = await bookingRepo.create({
+      renterId: testUser.id,
+      vehicleId: testVehicle.id,
+      startAt: new Date('2027-04-01T15:00:00Z'),
+      endAt: new Date('2027-04-01T19:00:00Z'),
+      effectiveEndAt: new Date('2027-04-01T20:00:00Z'),
+      status: 'CONFIRMED',
+      source: 'DIRECT',
+      externalId: null,
+      notes: null,
+    })
+    createdBookingIds.push(second.id)
+
+    expect(second.status).toBe('CONFIRMED')
+    expect(second.startAt).toEqual(new Date('2027-04-01T15:00:00Z'))
   })
 
   it('concurrent overlapping bookings: exactly one succeeds', async () => {
@@ -304,5 +395,98 @@ describe('DrizzleBookingRepository', () => {
     // Clean up the one that succeeded
     const winner = (fulfilled[0] as PromiseFulfilledResult<{ id: string }>).value
     createdBookingIds.push(winner.id)
+  })
+})
+
+describe('POST /bookings overlap via HTTP (real Postgres)', () => {
+  const httpBookingIds: string[] = []
+  let httpUser: { id: string; email: string }
+  let httpVehicle: Vehicle
+  let app: ReturnType<typeof createApp>
+  let headers: Record<string, string>
+
+  beforeAll(async () => {
+    setupAuthEnv()
+
+    const [user] = await db
+      .insert(users)
+      .values({
+        id: crypto.randomUUID(),
+        email: `http-overlap-${Date.now()}@kuruma-test.com`,
+        role: 'RENTER',
+        language: 'en',
+      })
+      .returning()
+    httpUser = user
+
+    const httpVehicleRepo = new DrizzleVehicleRepository(db)
+    const httpBookingRepo = new DrizzleBookingRepository(db)
+    const httpAvailabilityRepo = new DrizzleAvailabilityRepository(db)
+
+    httpVehicle = await httpVehicleRepo.create({
+      name: 'HTTP Overlap Test Car',
+      description: null,
+      seats: 4,
+      transmission: 'AUTO',
+      fuelType: null,
+      status: 'AVAILABLE',
+      bufferMinutes: 60,
+      minRentalHours: null,
+      maxRentalHours: null,
+      advanceBookingHours: null,
+      dailyRateJpy: 8000,
+      hourlyRateJpy: null,
+    })
+
+    app = createApp({
+      vehicleRepo: httpVehicleRepo,
+      bookingRepo: httpBookingRepo,
+      availabilityRepo: httpAvailabilityRepo,
+    })
+    headers = await authHeaders({ sub: httpUser.id, role: 'RENTER' })
+  })
+
+  afterEach(async () => {
+    await cleanupBookings(httpBookingIds)
+    httpBookingIds.length = 0
+  })
+
+  afterAll(async () => {
+    if (httpVehicle) await cleanupVehicles([httpVehicle.id])
+    if (httpUser) await cleanupUsers([httpUser.id])
+  })
+
+  it('returns 409 when second booking overlaps an existing CONFIRMED booking', async () => {
+    const bookingBody = {
+      vehicleId: httpVehicle.id,
+      startAt: '2027-03-01T10:00:00Z',
+      endAt: '2027-03-01T14:00:00Z',
+      source: 'DIRECT',
+    }
+
+    const first = await app.request('/bookings', {
+      method: 'POST',
+      headers: { ...headers, 'Content-Type': 'application/json' },
+      body: JSON.stringify(bookingBody),
+    })
+    expect(first.status).toBe(201)
+    const firstBody = await first.json()
+    httpBookingIds.push(firstBody.data.id)
+
+    // Second request with overlapping time range
+    const second = await app.request('/bookings', {
+      method: 'POST',
+      headers: { ...headers, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        ...bookingBody,
+        startAt: '2027-03-01T13:00:00Z',
+        endAt: '2027-03-01T17:00:00Z',
+      }),
+    })
+
+    expect(second.status).toBe(409)
+    const secondBody = await second.json()
+    expect(secondBody.success).toBe(false)
+    expect(secondBody.error).toMatch(/already booked/i)
   })
 })
