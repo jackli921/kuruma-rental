@@ -1,9 +1,11 @@
 export type { Vehicle, Booking, Thread, ThreadParticipant, Message } from '../stores'
 export type { DashboardStats } from '@kuruma/shared/types/stats'
 export type { FleetVehicleOverview, FleetBookingSummary } from '@kuruma/shared/types/fleet'
+export type { VehicleDetail } from '@kuruma/shared/types/vehicle-detail'
 
 import type { FleetVehicleOverview } from '@kuruma/shared/types/fleet'
 import type { DashboardStats } from '@kuruma/shared/types/stats'
+import type { VehicleDetail } from '@kuruma/shared/types/vehicle-detail'
 import type { Booking, Message, Thread, ThreadParticipant, Vehicle } from '../stores'
 
 export interface VehicleRepository {
@@ -58,6 +60,13 @@ export interface AvailabilityRepository {
       }
     | undefined
   >
+}
+
+// Enriched read for the owner-facing /manage/vehicles/[id] detail page.
+// Returns a single vehicle with upcoming bookings, revenue, and utilization.
+// See issue #53.
+export interface VehicleDetailRepository {
+  findVehicleDetail(vehicleId: string): Promise<VehicleDetail | undefined>
 }
 
 export interface ThreadRepository {

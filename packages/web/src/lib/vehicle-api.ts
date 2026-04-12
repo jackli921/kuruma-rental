@@ -109,6 +109,40 @@ export async function retireVehicle(id: string): Promise<VehicleData> {
   return apiRequest<VehicleData>(`${base}/vehicles/${id}`, { method: 'DELETE' })
 }
 
+// Issue #53: enriched detail for /manage/vehicles/[id]. Dates are ISO
+// strings. Mirrors @kuruma/shared/types/vehicle-detail.VehicleDetail.
+export interface VehicleDetailBookingData {
+  id: string
+  startAt: string
+  endAt: string
+  renterName: string | null
+  source: 'DIRECT' | 'TRIP_COM' | 'MANUAL' | 'OTHER'
+  status: 'CONFIRMED' | 'ACTIVE'
+}
+
+export interface DailyUtilizationData {
+  date: string
+  bookedHours: number
+}
+
+export interface VehicleDetailData extends VehicleData {
+  upcomingBookings: VehicleDetailBookingData[]
+  revenueLast7d: number
+  revenueLast30d: number
+  revenueAllTime: number
+  utilizationLast30Days: DailyUtilizationData[]
+}
+
+export async function fetchVehicleDetail(id: string): Promise<VehicleDetailData | null> {
+  const base = getApiBaseUrl()
+  try {
+    return await apiRequest<VehicleDetailData>(`${base}/vehicles/${id}/detail`)
+  } catch (e) {
+    if (e instanceof Error && e.message === 'Vehicle not found') return null
+    throw e
+  }
+}
+
 export async function fetchFleetOverview(): Promise<FleetVehicleOverviewData[]> {
   const base = getApiBaseUrl()
   return apiRequest<FleetVehicleOverviewData[]>(`${base}/vehicles/fleet-overview`)

@@ -12,6 +12,7 @@
     "./types/stats": "./src/types/stats.ts",
     "./types/api-response": "./src/types/api-response.ts",
     "./types/fleet": "./src/types/fleet.ts",
+    "./types/vehicle-detail": "./src/types/vehicle-detail.ts",
     "./lib/cancellation-policy": "./src/lib/cancellation-policy.ts"
   },
   "scripts": {
