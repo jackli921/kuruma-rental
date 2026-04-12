@@ -1,3 +1,4 @@
+import { auth } from '@/auth'
 import { buttonVariants } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Link } from '@/i18n/routing'
@@ -7,7 +8,7 @@ import { cn } from '@/lib/utils'
 import { getVehicleById } from '@/lib/vehicles'
 import { CheckCircle } from 'lucide-react'
 import { getLocale, getTranslations } from 'next-intl/server'
-import { notFound } from 'next/navigation'
+import { notFound, redirect } from 'next/navigation'
 
 interface ConfirmationPageProps {
   searchParams: Promise<{ bookingId?: string; vehicleId?: string }>
@@ -15,14 +16,22 @@ interface ConfirmationPageProps {
 
 export default async function BookingConfirmationPage({ searchParams }: ConfirmationPageProps) {
   const { bookingId, vehicleId } = await searchParams
-  const [t, locale] = await Promise.all([getTranslations('bookings.confirmation'), getLocale()])
+  const [session, t, locale] = await Promise.all([
+    auth(),
+    getTranslations('bookings.confirmation'),
+    getLocale(),
+  ])
+
+  if (!session?.user?.id) {
+    redirect(`/${locale}/login`)
+  }
 
   if (!bookingId) {
     notFound()
   }
 
   const booking = await getBookingById(bookingId)
-  if (!booking) {
+  if (!booking || booking.renterId !== session.user.id) {
     notFound()
   }
 
