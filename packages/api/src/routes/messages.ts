@@ -4,12 +4,7 @@ import { PRIVILEGED_ROLES, STAFF_ROLES, requireUser } from '../middleware/auth'
 import type { MessageRepository, ThreadRepository } from '../repositories/types'
 import { fail, ok, parseBody } from './helpers'
 
-export function createMessageRoutes(
-  threadRepo: ThreadRepository,
-  messageRepo: MessageRepository,
-): Hono {
-  const app = new Hono()
-
+export function createMessageRoutes(threadRepo: ThreadRepository, messageRepo: MessageRepository) {
   function isParticipant(
     thread: { participants: Array<{ userId: string }> },
     userId: string,
@@ -17,86 +12,81 @@ export function createMessageRoutes(
     return thread.participants.some((p) => p.userId === userId)
   }
 
-  app.get('/threads', async (c) => {
-    const user = requireUser(c)
+  return new Hono()
+    .get('/threads', async (c) => {
+      const user = requireUser(c)
 
-    const limitParam = c.req.query('limit')
-    const offsetParam = c.req.query('offset')
+      const limitParam = c.req.query('limit')
+      const offsetParam = c.req.query('offset')
 
-    const limit = limitParam ? Number.parseInt(limitParam, 10) : 25
-    if (Number.isNaN(limit) || limit < 1 || limit > 100) {
-      return fail(c, 'limit must be between 1 and 100', 400)
-    }
-    const offset = offsetParam ? Number.parseInt(offsetParam, 10) : 0
-    if (Number.isNaN(offset) || offset < 0) {
-      return fail(c, 'offset must be a non-negative integer', 400)
-    }
+      const limit = limitParam ? Number.parseInt(limitParam, 10) : 25
+      if (Number.isNaN(limit) || limit < 1 || limit > 100) {
+        return fail(c, 'limit must be between 1 and 100', 400)
+      }
+      const offset = offsetParam ? Number.parseInt(offsetParam, 10) : 0
+      if (Number.isNaN(offset) || offset < 0) {
+        return fail(c, 'offset must be a non-negative integer', 400)
+      }
 
-    const all = await threadRepo.findAll(user.id)
-    const page = all.slice(offset, offset + limit)
-    return ok(c, page, 200, { total: all.length, limit, offset })
-  })
+      const all = await threadRepo.findAll(user.id)
+      const page = all.slice(offset, offset + limit)
+      return ok(c, page, 200, { total: all.length, limit, offset })
+    })
+    .get('/threads/:id', async (c) => {
+      const user = requireUser(c)
 
-  app.get('/threads/:id', async (c) => {
-    const user = requireUser(c)
+      const thread = await threadRepo.findById(c.req.param('id'))
+      if (!thread) return fail(c, 'Thread not found', 404)
 
-    const thread = await threadRepo.findById(c.req.param('id'))
-    if (!thread) return fail(c, 'Thread not found', 404)
+      if (!isParticipant(thread, user.id) && !STAFF_ROLES.has(user.role)) {
+        return fail(c, 'Thread not found', 404)
+      }
 
-    if (!isParticipant(thread, user.id) && !STAFF_ROLES.has(user.role)) {
-      return fail(c, 'Thread not found', 404)
-    }
+      return ok(c, thread)
+    })
+    .post('/threads', async (c) => {
+      const user = requireUser(c)
 
-    return ok(c, thread)
-  })
+      const parsed = await parseBody(c, createThreadSchema)
+      if (!parsed.ok) return parsed.response
 
-  app.post('/threads', async (c) => {
-    const user = requireUser(c)
+      if (!PRIVILEGED_ROLES.has(user.role) && !parsed.data.participantIds.includes(user.id)) {
+        return fail(c, 'Caller must be a participant', 400)
+      }
 
-    const parsed = await parseBody(c, createThreadSchema)
-    if (!parsed.ok) return parsed.response
+      const thread = await threadRepo.create(
+        parsed.data.bookingId ?? null,
+        parsed.data.participantIds,
+      )
+      return ok(c, thread, 201)
+    })
+    .post('/threads/:id/messages', async (c) => {
+      const user = requireUser(c)
 
-    if (!PRIVILEGED_ROLES.has(user.role) && !parsed.data.participantIds.includes(user.id)) {
-      return fail(c, 'Caller must be a participant', 400)
-    }
+      const thread = await threadRepo.findById(c.req.param('id'))
+      if (!thread) return fail(c, 'Thread not found', 404)
 
-    const thread = await threadRepo.create(
-      parsed.data.bookingId ?? null,
-      parsed.data.participantIds,
-    )
-    return ok(c, thread, 201)
-  })
+      if (!isParticipant(thread, user.id)) {
+        return fail(c, 'Thread not found', 404)
+      }
 
-  app.post('/threads/:id/messages', async (c) => {
-    const user = requireUser(c)
+      const parsed = await parseBody(c, sendMessageSchema)
+      if (!parsed.ok) return parsed.response
 
-    const thread = await threadRepo.findById(c.req.param('id'))
-    if (!thread) return fail(c, 'Thread not found', 404)
+      const message = await messageRepo.create(thread.id, user.id, parsed.data.content)
+      return ok(c, message, 201)
+    })
+    .post('/threads/:id/read', async (c) => {
+      const user = requireUser(c)
 
-    if (!isParticipant(thread, user.id)) {
-      return fail(c, 'Thread not found', 404)
-    }
+      const thread = await threadRepo.findById(c.req.param('id'))
+      if (!thread) return fail(c, 'Thread not found', 404)
 
-    const parsed = await parseBody(c, sendMessageSchema)
-    if (!parsed.ok) return parsed.response
+      if (!isParticipant(thread, user.id)) {
+        return fail(c, 'Thread not found', 404)
+      }
 
-    const message = await messageRepo.create(thread.id, user.id, parsed.data.content)
-    return ok(c, message, 201)
-  })
-
-  app.post('/threads/:id/read', async (c) => {
-    const user = requireUser(c)
-
-    const thread = await threadRepo.findById(c.req.param('id'))
-    if (!thread) return fail(c, 'Thread not found', 404)
-
-    if (!isParticipant(thread, user.id)) {
-      return fail(c, 'Thread not found', 404)
-    }
-
-    await threadRepo.markAsRead(thread.id, user.id)
-    return ok(c, null)
-  })
-
-  return app
+      await threadRepo.markAsRead(thread.id, user.id)
+      return ok(c, null)
+    })
 }
