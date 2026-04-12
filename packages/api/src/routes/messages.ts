@@ -1,6 +1,6 @@
 import { createThreadSchema, sendMessageSchema } from '@kuruma/shared/validators/message'
 import { Hono } from 'hono'
-import { getUser } from '../middleware/auth'
+import { PRIVILEGED_ROLES, getUser } from '../middleware/auth'
 import type { MessageRepository, ThreadRepository } from '../repositories/types'
 import { fail, ok, parseBody } from './helpers'
 
@@ -20,8 +20,15 @@ export function createMessageRoutes(
   })
 
   app.get('/threads/:id', async (c) => {
+    const user = getUser(c)
+    if (!user) return fail(c, 'Unauthorized', 401)
+
     const thread = await threadRepo.findById(c.req.param('id'))
-    if (!thread) {
+    if (!thread) return fail(c, 'Thread not found', 404)
+
+    // Non-participants cannot view thread (return 404 to avoid leaking existence)
+    const isParticipant = thread.participants.some((p) => p.userId === user.id)
+    if (!isParticipant && !PRIVILEGED_ROLES.has(user.role)) {
       return fail(c, 'Thread not found', 404)
     }
     return ok(c, thread)

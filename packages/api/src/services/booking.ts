@@ -2,6 +2,8 @@ import { VALID_BOOKING_TRANSITIONS } from '@kuruma/shared/db/schema'
 import { calculateCancellationFee } from '@kuruma/shared/lib/cancellation-policy'
 import { calculateBookingPrice } from '@kuruma/shared/lib/pricing'
 import { checkRentalRules } from '@kuruma/shared/lib/rental-rules'
+import { PRIVILEGED_ROLES } from '../middleware/auth'
+import type { AuthUser } from '../middleware/auth'
 import { PG_ERROR, pgErrorCode } from '../pg-errors'
 import type { BookingFilters, BookingRepository, VehicleRepository } from '../repositories/types'
 import type { Booking } from '../stores'
@@ -39,7 +41,7 @@ export type CancelResult =
       booking: Booking
       cancellation: ReturnType<typeof calculateCancellationFee>
     }
-  | { ok: false; status: 404 | 409; error: string }
+  | { ok: false; status: 403 | 404 | 409; error: string }
 
 export class BookingService {
   constructor(
@@ -218,10 +220,15 @@ export class BookingService {
     return { ok: true, booking: updated }
   }
 
-  async cancel(bookingId: string): Promise<CancelResult> {
+  async cancel(bookingId: string, actor?: AuthUser): Promise<CancelResult> {
     const booking = await this.bookingRepo.findById(bookingId)
     if (!booking) {
       return { ok: false, status: 404, error: 'Booking not found' }
+    }
+
+    // Ownership check: only the booking owner or privileged roles can cancel
+    if (actor && booking.renterId !== actor.id && !PRIVILEGED_ROLES.has(actor.role)) {
+      return { ok: false, status: 403, error: 'Forbidden' }
     }
 
     if (booking.status !== 'CONFIRMED') {

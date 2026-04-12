@@ -21,13 +21,11 @@ export const PRIVILEGED_ROLES: ReadonlySet<UserRole> = new Set(['STAFF', 'ADMIN'
 /** Roles that can manage vehicles */
 export const STAFF_ROLES: ReadonlySet<UserRole> = new Set(['STAFF', 'ADMIN'])
 
+/** All valid roles for JWT parsing */
+const VALID_ROLES: ReadonlySet<UserRole> = new Set(['RENTER', 'STAFF', 'ADMIN', 'PARTNER'])
+
 export function getUser(c: { get: (key: string) => unknown }): AuthUser | undefined {
   return c.get('user') as AuthUser | undefined
-}
-
-export function requireUser(c: { get: (key: string) => unknown }): AuthUser | null {
-  const user = getUser(c)
-  return user?.id ? user : null
 }
 
 export function requireAuth(): MiddlewareHandler {
@@ -67,7 +65,6 @@ async function verifyJwt(token: string): Promise<AuthUser | null> {
     const id = payload.sub
     if (!id) return null
 
-    const VALID_ROLES = new Set<UserRole>(['RENTER', 'STAFF', 'ADMIN', 'PARTNER'])
     const rawRole = payload.role as string | undefined
     const role: UserRole =
       rawRole && VALID_ROLES.has(rawRole as UserRole) ? (rawRole as UserRole) : 'RENTER'
