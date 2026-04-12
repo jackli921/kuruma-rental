@@ -1,5 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
+const API_BASE = 'http://localhost:8787'
+
 vi.mock('@/lib/api-client', () => ({
   createApiClient: () => {
     const { hc } = require('hono/client')
@@ -49,8 +51,7 @@ describe('getAvailableVehicles', () => {
 
     expect(fetch).toHaveBeenCalledTimes(1)
     const calledUrl = vi.mocked(fetch).mock.calls[0]?.[0]?.toString() ?? ''
-    expect(calledUrl).toContain('/vehicles')
-    expect(calledUrl).not.toContain('/availability')
+    expect(calledUrl).toBe(`${API_BASE}/vehicles?status=AVAILABLE`)
     expect(result).toHaveLength(2)
     expect(result[0]?.name).toBe('Toyota Corolla')
   })
@@ -64,9 +65,7 @@ describe('getAvailableVehicles', () => {
 
     expect(fetch).toHaveBeenCalledTimes(1)
     const calledUrl = vi.mocked(fetch).mock.calls[0]?.[0]?.toString() ?? ''
-    expect(calledUrl).toContain('/availability')
-    expect(calledUrl).toContain('from=2026-04-10')
-    expect(calledUrl).toContain('to=2026-04-12')
+    expect(calledUrl).toBe(`${API_BASE}/availability?from=2026-04-10&to=2026-04-12`)
     expect(result).toHaveLength(1)
     expect(result[0]?.name).toBe('Toyota Corolla')
   })
@@ -108,7 +107,7 @@ describe('getVehicleById', () => {
 
     expect(fetch).toHaveBeenCalledTimes(1)
     const calledUrl = vi.mocked(fetch).mock.calls[0]?.[0]?.toString() ?? ''
-    expect(calledUrl).toContain('/vehicles/vehicle-001')
+    expect(calledUrl).toBe(`${API_BASE}/vehicles/vehicle-001`)
     expect(result).not.toBeNull()
     expect(result?.id).toBe('vehicle-001')
     expect(result?.name).toBe('Toyota Corolla')
