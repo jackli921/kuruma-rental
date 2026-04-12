@@ -264,6 +264,28 @@ Apply during REFACTOR phase:
 
 ---
 
+# Architecture Rules (Feature Modules)
+
+Feature code lives under `src/modules/<feature>/` in each package. Thin
+controllers, deep services, single-responsibility repos, single public surface
+via `index.ts`. File-size caps enforced by `bun run lint`.
+
+**Canonical rules doc:** `docs/architecture/modules.md` — read this before
+adding new features or editing existing ones.
+
+**Grandfather policy (strict):** before any non-trivial change to a feature
+that still lives under `lib/` or `components/<feature>/`, land a standalone
+migration PR that moves it into `modules/<feature>/`. The feature-change PR
+builds on top. Migrations and feature changes never share a PR. Trivial
+exceptions: typo fixes, one-line string tweaks, dependency bumps.
+
+Enforcement:
+- `bun run lint:size` — file-size caps (R4, R7, R8)
+- `bun run lint:modules` — cross-module internal-import detection (R2, R3)
+- `.husky/pre-commit` runs both via `lint-staged` on staged files before every commit
+
+---
+
 # Issue Tracking & Session Protocol
 
 ## Source of truth: GitHub Issues
