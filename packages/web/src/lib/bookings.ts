@@ -68,14 +68,11 @@ export async function createBooking(input: CreateBookingInput): Promise<CreateBo
     return { success: false, error: 'End date must be after start date.' }
   }
 
-  const isAvailable = await checkAvailability(input.vehicleId, startAt, endAt)
-  if (!isAvailable) {
-    return {
-      success: false,
-      error: 'This vehicle is not available for the selected dates.',
-    }
-  }
-
+  // Optimistic concurrency: skip the availability pre-check and let the DB
+  // exclusion constraint be the authoritative guard. A separate check-then-act
+  // round-trip adds latency and creates a race window where two users both
+  // pass the check but only one succeeds at insert time. Handle the 409
+  // (constraint violation) with a user-friendly message instead.
   const base = getApiBaseUrl()
   const res = await fetch(`${base}/bookings`, {
     method: 'POST',
@@ -89,8 +86,7 @@ export async function createBooking(input: CreateBookingInput): Promise<CreateBo
       ...(input.notes ? { notes: input.notes } : {}),
     }),
   })
-  // Parse as unknown so we can detect rental-rule error envelopes without
-  // pretending every non-success response has the same shape.
+
   const json: {
     success: boolean
     data?: { id: string }
@@ -103,8 +99,15 @@ export async function createBooking(input: CreateBookingInput): Promise<CreateBo
     return { success: true, bookingId: json.data.id }
   }
 
+  // 409 Conflict — DB exclusion constraint rejected overlapping booking.
+  if (res.status === 409) {
+    return {
+      success: false,
+      error: 'This vehicle was just booked by another renter. Please choose different dates.',
+    }
+  }
+
   // Rental-rule rejections carry a known code so the client can translate.
-  // Everything else gets a generic error string.
   if (
     json.code === 'RENTAL_RULE_ADVANCE_BOOKING' ||
     json.code === 'RENTAL_RULE_MIN_DURATION' ||

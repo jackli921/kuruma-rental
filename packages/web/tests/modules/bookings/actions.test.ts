@@ -82,34 +82,23 @@ describe('createBooking', () => {
     })
   })
 
-  it('creates booking via API and returns success with booking id', async () => {
+  it('posts directly to /bookings without a separate availability check', async () => {
     mockAuth.mockResolvedValue({ user: { id: 'user-001' } })
 
-    // First fetch: checkAvailability -> available
-    // Second fetch: POST /bookings -> created booking
-    vi.mocked(fetch)
-      .mockResolvedValueOnce(
-        new Response(
-          JSON.stringify({
-            success: true,
-            data: { available: true, vehicle: {}, conflicts: [] },
-          }),
-        ),
-      )
-      .mockResolvedValueOnce(
-        new Response(
-          JSON.stringify({
-            success: true,
-            data: {
-              id: 'booking-new',
-              renterId: 'user-001',
-              vehicleId: 'vehicle-001',
-              status: 'CONFIRMED',
-            },
-          }),
-          { status: 201 },
-        ),
-      )
+    vi.mocked(fetch).mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({
+          success: true,
+          data: {
+            id: 'booking-new',
+            renterId: 'user-001',
+            vehicleId: 'vehicle-001',
+            status: 'CONFIRMED',
+          },
+        }),
+        { status: 201 },
+      ),
+    )
 
     const result = await createBooking({
       vehicleId: 'vehicle-001',
@@ -122,9 +111,9 @@ describe('createBooking', () => {
       bookingId: 'booking-new',
     })
 
-    // Verify POST was called with correct body
-    expect(fetch).toHaveBeenCalledTimes(2)
-    const postCall = vi.mocked(fetch).mock.calls[1]
+    // Only 1 fetch — POST /bookings. No separate availability check.
+    expect(fetch).toHaveBeenCalledTimes(1)
+    const postCall = vi.mocked(fetch).mock.calls[0]
     const postUrl = postCall?.[0]?.toString() ?? ''
     expect(postUrl).toBe('http://localhost:8787/bookings')
     const postInit = postCall?.[1] as RequestInit
@@ -135,19 +124,16 @@ describe('createBooking', () => {
     expect(body.source).toBe('DIRECT')
   })
 
-  it('returns error when vehicle is not available', async () => {
+  it('returns user-friendly message on 409 conflict (slot just booked)', async () => {
     mockAuth.mockResolvedValue({ user: { id: 'user-001' } })
 
     vi.mocked(fetch).mockResolvedValueOnce(
       new Response(
         JSON.stringify({
-          success: true,
-          data: {
-            available: false,
-            vehicle: {},
-            conflicts: [{ id: 'booking-existing' }],
-          },
+          success: false,
+          error: 'Vehicle is already booked for the requested time range',
         }),
+        { status: 409 },
       ),
     )
 
@@ -159,31 +145,22 @@ describe('createBooking', () => {
 
     expect(result).toEqual({
       success: false,
-      error: 'This vehicle is not available for the selected dates.',
+      error: 'This vehicle was just booked by another renter. Please choose different dates.',
     })
   })
 
-  it('returns error when API POST fails', async () => {
+  it('returns error when API POST fails with 400', async () => {
     mockAuth.mockResolvedValue({ user: { id: 'user-001' } })
 
-    vi.mocked(fetch)
-      .mockResolvedValueOnce(
-        new Response(
-          JSON.stringify({
-            success: true,
-            data: { available: true, vehicle: {}, conflicts: [] },
-          }),
-        ),
-      )
-      .mockResolvedValueOnce(
-        new Response(
-          JSON.stringify({
-            success: false,
-            error: { vehicleId: ['Vehicle not found'] },
-          }),
-          { status: 400 },
-        ),
-      )
+    vi.mocked(fetch).mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({
+          success: false,
+          error: { vehicleId: ['Vehicle not found'] },
+        }),
+        { status: 400 },
+      ),
+    )
 
     const result = await createBooking({
       vehicleId: 'vehicle-001',

@@ -275,3 +275,17 @@ The in-memory repo used `...data` spread and kept all fields, so every route-lev
 **Rule:** After adding a column to `schema.ts`, grep for every `.insert(tableName).values(` and `.update(tableName).set(` on that table. If the column should be included, add it. If not, add a comment explaining why.
 
 **Deeper lesson:** When your test suite uses a different implementation (in-memory) than production (Drizzle), behavioral drift between them is invisible to tests. Always write at least one integration test per repo method that round-trips through the real DB.
+
+---
+
+## 18. Check-Then-Act Race Condition in Booking Flow (issue #90)
+
+**Symptom:** Two users browse the same car at the same time. Both click "Book". One gets a generic "Failed to create booking" error instead of a clear explanation.
+
+**Root cause:** `createBooking()` called `checkAvailability()` as a separate request before `POST /bookings`. Between the two requests, another user could book the same slot. The DB exclusion constraint caught the conflict and returned 409, but the web code had no handler for 409 — it fell through to a generic error message.
+
+**Fix:** Removed the `checkAvailability()` pre-check from `createBooking()`. The DB constraint is the authoritative guard — trying to pre-check is redundant and creates the race window. Added explicit 409 handling that returns "This vehicle was just booked by another renter. Please choose different dates."
+
+**Rule:** When a unique/exclusion constraint in the DB enforces a business rule, don't pre-check in application code. Attempt the write and handle the constraint violation gracefully. This is optimistic concurrency control — it eliminates both the race window and the extra round-trip.
+
+**The general pattern:** check-then-act is only safe when you can hold a lock between the check and the act. HTTP requests can't hold locks. The DB constraint IS the lock.
