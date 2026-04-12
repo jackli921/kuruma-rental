@@ -1,17 +1,16 @@
-import { describe, expect, test } from 'bun:test'
 import { SignJWT } from 'jose'
+import { describe, expect, test } from 'vitest'
 import { createApp } from '../../src/index'
-
-const TEST_SECRET = 'test-auth-secret-at-least-32-chars-long'
+import { TEST_AUTH_SECRET, setupAuthEnv } from '../helpers/auth'
 
 function createTestApp() {
-  process.env.AUTH_SECRET = TEST_SECRET
+  setupAuthEnv()
   return createApp()
 }
 
 async function signJwt(
   payload: Record<string, unknown>,
-  secret = TEST_SECRET,
+  secret = TEST_AUTH_SECRET,
   expiresIn = '1h',
 ): Promise<string> {
   const key = new TextEncoder().encode(secret)
@@ -59,9 +58,14 @@ describe('auth middleware', () => {
 
   test('returns 401 with expired JWT', async () => {
     const app = createTestApp()
-    const token = await signJwt({ sub: 'user_123', role: 'RENTER' }, TEST_SECRET, '0s')
-    // Small delay to ensure expiry
-    await new Promise((r) => setTimeout(r, 50))
+    // Create a JWT that expired 10 seconds ago
+    const key = new TextEncoder().encode(TEST_AUTH_SECRET)
+    const now = Math.floor(Date.now() / 1000)
+    const token = await new SignJWT({ sub: 'user_123', role: 'RENTER' })
+      .setProtectedHeader({ alg: 'HS256' })
+      .setIssuedAt(now - 60)
+      .setExpirationTime(now - 10)
+      .sign(key)
     const res = await app.request('/vehicles', {
       headers: { Authorization: `Bearer ${token}` },
     })

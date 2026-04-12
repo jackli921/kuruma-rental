@@ -4,12 +4,28 @@ import {
   updateVehicleStatusSchema,
 } from '@kuruma/shared/validators/vehicle'
 import { Hono } from 'hono'
+import type { AuthUser } from '../middleware/auth'
 import type { Vehicle, VehicleRepository } from '../repositories/types'
 import { fail, ok, parseBody, stripUndefined } from './helpers'
+
+const STAFF_ROLES = new Set(['STAFF', 'ADMIN'])
+
+function getUser(c: { get: (key: string) => unknown }): AuthUser | undefined {
+  return c.get('user') as AuthUser | undefined
+}
+
+function requireStaff(c: { get: (key: string) => unknown }): Response | null {
+  const user = getUser(c)
+  if (user && !STAFF_ROLES.has(user.role)) {
+    return fail(c as Parameters<typeof fail>[0], 'Forbidden: requires STAFF or ADMIN role', 403)
+  }
+  return null
+}
 
 export function createVehicleRoutes(repo: VehicleRepository): Hono {
   const vehicles = new Hono()
 
+  // Read endpoints — any authenticated user
   vehicles.get('/vehicles', async (c) => {
     const status = c.req.query('status')
     const filtered = status ? await repo.findAll({ status }) : await repo.findAll()
@@ -24,7 +40,11 @@ export function createVehicleRoutes(repo: VehicleRepository): Hono {
     return ok(c, vehicle)
   })
 
+  // Write endpoints — STAFF/ADMIN only
   vehicles.post('/vehicles', async (c) => {
+    const denied = requireStaff(c)
+    if (denied) return denied
+
     const parsed = await parseBody(c, createVehicleSchema)
     if (!parsed.ok) return parsed.response
 
@@ -48,6 +68,9 @@ export function createVehicleRoutes(repo: VehicleRepository): Hono {
   })
 
   vehicles.patch('/vehicles/:id', async (c) => {
+    const denied = requireStaff(c)
+    if (denied) return denied
+
     const existing = await repo.findById(c.req.param('id'))
     if (!existing) {
       return fail(c, 'Vehicle not found', 404)
@@ -56,8 +79,6 @@ export function createVehicleRoutes(repo: VehicleRepository): Hono {
     const parsed = await parseBody(c, updateVehicleSchema)
     if (!parsed.ok) return parsed.response
 
-    // Strip keys the partial schema left as `undefined` — Partial<Vehicle>
-    // under exactOptionalPropertyTypes forbids explicit undefined values.
     const changes = {
       ...parsed.data,
       description: parsed.data.description ?? existing.description,
@@ -74,6 +95,9 @@ export function createVehicleRoutes(repo: VehicleRepository): Hono {
   })
 
   vehicles.patch('/vehicles/:id/status', async (c) => {
+    const denied = requireStaff(c)
+    if (denied) return denied
+
     const existing = await repo.findById(c.req.param('id'))
     if (!existing) {
       return fail(c, 'Vehicle not found', 404)
@@ -87,6 +111,9 @@ export function createVehicleRoutes(repo: VehicleRepository): Hono {
   })
 
   vehicles.delete('/vehicles/:id', async (c) => {
+    const denied = requireStaff(c)
+    if (denied) return denied
+
     const existing = await repo.findById(c.req.param('id'))
     if (!existing) {
       return fail(c, 'Vehicle not found', 404)
