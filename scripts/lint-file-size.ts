@@ -34,13 +34,13 @@ export type Issue = {
 
 type CapRule = { cap: number; soft: number | null }
 
-function capForFile(path: string): CapRule {
+export function capForFile(path: string, exemptPages: ReadonlySet<string> = PAGE_EXEMPT): CapRule {
   // Normalize path separators for cross-platform matching.
   const p = path.replaceAll('\\', '/')
   if (/\/modules\/[^/]+\/routes\.ts$/.test(p)) {
     return { cap: ROUTES_CAP, soft: null }
   }
-  if (/\/app\/.+\/page\.tsx$/.test(p) && !PAGE_EXEMPT.has(p)) {
+  if (/\/app\/.+\/page\.tsx$/.test(p) && !exemptPages.has(p)) {
     return { cap: PAGE_CAP, soft: null }
   }
   return { cap: HARD_FAIL, soft: SOFT_WARN }

@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test'
-import { checkFiles, discoverFiles } from './lint-file-size'
+import { capForFile, checkFiles, discoverFiles } from './lint-file-size'
 
 const FIXTURES = 'scripts/__fixtures__/lint'
 
@@ -43,15 +43,6 @@ describe('lint-file-size', () => {
     expect(errors[0]!.lines).toBe(100)
   })
 
-  test('exempts allowlisted legacy pages from the 80-line cap', () => {
-    const legacyFixture = 'packages/web/src/app/[locale]/vehicles/page.tsx'
-    const report = checkFiles([legacyFixture])
-    const errors = report.filter((r) => r.level === 'error')
-    // File is 106 lines; not over 800 hard cap and not over 400 soft warn for
-    // general files means zero errors and zero warnings.
-    expect(errors).toHaveLength(0)
-  })
-
   test('reports an error for an unreadable file without crashing', () => {
     // A path that definitely does not exist — readFileSync will throw ENOENT.
     const ghost = 'scripts/__fixtures__/lint/does-not-exist.ts'
@@ -75,5 +66,34 @@ describe('lint-file-size discovery', () => {
     expect(files.some((f) => f.includes('.test.'))).toBe(false)
     expect(files.some((f) => f.includes('node_modules'))).toBe(false)
     expect(files.some((f) => f.includes('/.next/'))).toBe(false)
+  })
+})
+
+describe('capForFile', () => {
+  test('assigns 80-line cap to app pages by default', () => {
+    const rule = capForFile('packages/web/src/app/[locale]/something/page.tsx')
+    expect(rule.cap).toBe(80)
+    expect(rule.soft).toBeNull()
+  })
+
+  test('assigns 150-line cap to routes.ts under modules', () => {
+    const rule = capForFile('packages/api/src/modules/vehicles/routes.ts')
+    expect(rule.cap).toBe(150)
+    expect(rule.soft).toBeNull()
+  })
+
+  test('exempts pages in the allowlist, falling back to general caps', () => {
+    const rule = capForFile(
+      'packages/web/src/app/[locale]/test/page.tsx',
+      new Set(['packages/web/src/app/[locale]/test/page.tsx']),
+    )
+    expect(rule.cap).toBe(800)
+    expect(rule.soft).toBe(400)
+  })
+
+  test('general source files get the 800/400 rule', () => {
+    const rule = capForFile('packages/api/src/modules/vehicles/service.ts')
+    expect(rule.cap).toBe(800)
+    expect(rule.soft).toBe(400)
   })
 })
