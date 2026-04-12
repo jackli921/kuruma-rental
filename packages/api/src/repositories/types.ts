@@ -8,8 +8,13 @@ import type { DashboardStats } from '@kuruma/shared/types/stats'
 import type { VehicleDetail } from '@kuruma/shared/types/vehicle-detail'
 import type { Booking, Message, Thread, ThreadParticipant, Vehicle } from '../stores'
 
+export interface VehicleFilters {
+  status?: string
+  includeRetired?: boolean
+}
+
 export interface VehicleRepository {
-  findAll(filters?: { status?: string }): Promise<Vehicle[]>
+  findAll(filters?: VehicleFilters): Promise<Vehicle[]>
   findById(id: string): Promise<Vehicle | undefined>
   findByIds(ids: string[]): Promise<Vehicle[]>
   create(data: Omit<Vehicle, 'id' | 'createdAt' | 'updatedAt'>): Promise<Vehicle>

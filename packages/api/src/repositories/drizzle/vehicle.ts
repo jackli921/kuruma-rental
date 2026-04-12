@@ -1,18 +1,23 @@
 import { vehicles } from '@kuruma/shared/db/schema'
-import { eq, inArray, sql } from 'drizzle-orm'
+import { eq, inArray, ne, sql } from 'drizzle-orm'
 import type { Vehicle } from '../../stores'
-import type { VehicleRepository } from '../types'
+import type { VehicleFilters, VehicleRepository } from '../types'
 import { type Db, toVehicle, vehicleColumns } from './shared'
 
 export class DrizzleVehicleRepository implements VehicleRepository {
   constructor(private readonly db: Db) {}
 
-  async findAll(filters?: { status?: string }): Promise<Vehicle[]> {
+  async findAll(filters?: VehicleFilters): Promise<Vehicle[]> {
     const query = this.db.select(vehicleColumns).from(vehicles)
 
-    const rows = filters?.status
-      ? await query.where(eq(vehicles.status, filters.status as Vehicle['status']))
-      : await query
+    if (filters?.status) {
+      const rows = await query.where(eq(vehicles.status, filters.status as Vehicle['status']))
+      return rows.map(toVehicle)
+    }
+
+    const rows = filters?.includeRetired
+      ? await query
+      : await query.where(ne(vehicles.status, 'RETIRED'))
 
     return rows.map(toVehicle)
   }
