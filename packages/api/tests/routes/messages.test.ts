@@ -71,8 +71,9 @@ describe('Message Routes', () => {
         body: JSON.stringify({ participantIds: [U1, U2] }),
       })
 
-      // Thread between user2 and user3 (user1 is NOT a participant)
-      await app.request('/threads', {
+      // Thread between user2 and user3 (user1 is NOT a participant).
+      // Use appAs(U2) so U1 isn't auto-added as creator.
+      await appAs(U2).request('/threads', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ participantIds: [U2, U3] }),
@@ -248,6 +249,51 @@ describe('Message Routes', () => {
         (p: { userId: string }) => p.userId === U2,
       )
       expect(user2After.unreadCount).toBe(0)
+    })
+  })
+
+  describe('thread ownership checks', () => {
+    it('non-participant RENTER cannot read a thread (returns 404)', async () => {
+      const createRes = await app.request('/threads', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ participantIds: [U1, U2] }),
+      })
+      const threadId = (await createRes.json()).data.id
+
+      const res = await appAs(U3).request(`/threads/${threadId}`)
+      expect(res.status).toBe(404)
+    })
+
+    it('non-participant RENTER cannot send messages to a thread', async () => {
+      const createRes = await app.request('/threads', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ participantIds: [U1, U2] }),
+      })
+      const threadId = (await createRes.json()).data.id
+
+      const res = await appAs(U3).request(`/threads/${threadId}/messages`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ content: 'Snooping!' }),
+      })
+      expect(res.status).toBe(404)
+    })
+
+    it('POST /threads always includes creator as participant', async () => {
+      // U1 creates a thread listing only U2
+      const createRes = await app.request('/threads', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ participantIds: [U2] }),
+      })
+      expect((await createRes.json()).success).toBe(true)
+
+      // U1 should see it (auto-added as participant)
+      const res = await app.request('/threads')
+      const body = await res.json()
+      expect(body.data).toHaveLength(1)
     })
   })
 })
