@@ -1,7 +1,8 @@
 'use client'
 
 import { cn } from '@/lib/utils'
-import { type VehicleData, updateVehicleStatus } from '@/lib/vehicle-api'
+import { updateVehicleStatusAction } from '@/lib/vehicle-actions'
+import type { VehicleData } from '@/lib/vehicle-api'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { useTranslations } from 'next-intl'
 
@@ -22,7 +23,11 @@ export function VehicleStatusToggle({ vehicle }: VehicleStatusToggleProps) {
   const queryClient = useQueryClient()
 
   const mutation = useMutation<VehicleData, Error, TogglableStatus, OptimisticContext>({
-    mutationFn: (next) => updateVehicleStatus(vehicle.id, next),
+    mutationFn: async (next) => {
+      const result = await updateVehicleStatusAction(vehicle.id, next)
+      if (!result.success) throw new Error(result.error)
+      return result.data
+    },
     onMutate: async (next) => {
       await queryClient.cancelQueries({ queryKey: VEHICLES_KEY })
       const previous = queryClient.getQueryData<VehicleData[]>(VEHICLES_KEY)

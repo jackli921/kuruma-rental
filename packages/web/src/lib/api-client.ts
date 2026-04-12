@@ -13,6 +13,10 @@ function getApiBaseUrl(): string {
 // Response body types require `as ApiResponse<T>` casts because the API's
 // ok()/fail() helpers return plain Response, not Hono's TypedResponse.
 // Full end-to-end inference requires removing `: Response` from those helpers.
-export function createApiClient() {
-  return hc<AppType>(getApiBaseUrl())
+export function createApiClient(token?: string) {
+  const headers: Record<string, string> = {}
+  if (token) {
+    headers.Authorization = `Bearer ${token}`
+  }
+  return hc<AppType>(getApiBaseUrl(), { headers })
 }

@@ -8,7 +8,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import { VehicleForm } from '@/components/vehicles/VehicleForm'
-import { createVehicle } from '@/lib/vehicle-api'
+import { createVehicleAction } from '@/lib/vehicle-actions'
 import type { CreateVehicleInput } from '@kuruma/shared/validators/vehicle'
 import { useQueryClient } from '@tanstack/react-query'
 import { useTranslations } from 'next-intl'
@@ -29,7 +29,11 @@ export function AddVehicleDialog({ open, onOpenChange }: AddVehicleDialogProps) 
     setIsSubmitting(true)
     setError(null)
     try {
-      await createVehicle(data)
+      const result = await createVehicleAction(data)
+      if (!result.success) {
+        setError(result.error)
+        return
+      }
       await queryClient.invalidateQueries({ queryKey: ['vehicles'] })
       onOpenChange(false)
     } catch (e) {
