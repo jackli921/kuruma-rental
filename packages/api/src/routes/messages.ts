@@ -74,7 +74,7 @@ export function createMessageRoutes(
     }
 
     await threadRepo.markAsRead(threadId, userId)
-    return c.json({ success: true })
+    return ok(c, null)
   })
 
   return app

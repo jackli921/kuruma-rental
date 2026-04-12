@@ -3,8 +3,13 @@ import type { z } from 'zod'
 
 // --- Response helpers ---
 
-export function ok<T>(c: Context, data: T, status = 200): Response {
-  return c.json({ success: true, data }, status as 200)
+export function ok<T>(
+  c: Context,
+  data: T,
+  status = 200,
+  extras?: Record<string, unknown>,
+): Response {
+  return c.json({ success: true, data, ...extras }, status as 200)
 }
 
 export function fail(
