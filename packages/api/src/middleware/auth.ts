@@ -15,7 +15,11 @@ export interface AuthEnv {
   }
 }
 
-const ALL_ROLES: ReadonlySet<UserRole> = new Set(['RENTER', 'STAFF', 'ADMIN', 'PARTNER'])
+const ALL_ROLES: ReadonlySet<string> = new Set<string>(['RENTER', 'STAFF', 'ADMIN', 'PARTNER'])
+
+function isValidRole(value: string): value is UserRole {
+  return ALL_ROLES.has(value)
+}
 
 /** Roles that can manage bookings across all users */
 export const PRIVILEGED_ROLES: ReadonlySet<UserRole> = new Set(['STAFF', 'ADMIN', 'PARTNER'])
@@ -70,8 +74,7 @@ async function verifyJwt(token: string): Promise<AuthUser | null> {
     if (!id) return null
 
     const rawRole = typeof payload.role === 'string' ? payload.role : undefined
-    const role: UserRole =
-      rawRole && ALL_ROLES.has(rawRole as UserRole) ? (rawRole as UserRole) : 'RENTER'
+    const role: UserRole = rawRole && isValidRole(rawRole) ? rawRole : 'RENTER'
     return { id, role }
   } catch {
     return null
@@ -89,5 +92,5 @@ function verifyApiKey(key: string): AuthUser | null {
   }
 
   if (mismatch !== 0) return null
-  return { id: 'partner:api-key', role: 'PARTNER' as const }
+  return { id: 'partner:api-key', role: 'PARTNER' }
 }

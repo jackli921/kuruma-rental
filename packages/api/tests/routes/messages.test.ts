@@ -71,8 +71,10 @@ describe('Message Routes', () => {
         body: JSON.stringify({ participantIds: [U1, U2] }),
       })
 
-      // Thread between user2 and user3 (user1 is NOT a participant)
-      await app.request('/threads', {
+      // Thread between user2 and user3 (user1 is NOT a participant).
+      // Use appAs(U2) so U1 isn't auto-added as creator.
+      const app2Creator = appAs(U2)
+      await app2Creator.request('/threads', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ participantIds: [U2, U3] }),
@@ -250,6 +252,64 @@ describe('Message Routes', () => {
         (p: { userId: string }) => p.userId === U2,
       )
       expect(user2After.unreadCount).toBe(0)
+    })
+  })
+
+  describe('thread ownership checks', () => {
+    it('non-participant RENTER cannot read a thread (returns 404)', async () => {
+      // U1 (ADMIN) creates a thread with U1 and U2
+      const createRes = await app.request('/threads', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ participantIds: [U1, U2] }),
+      })
+      const created = await createRes.json()
+      const threadId = created.data.id
+
+      // U3 as RENTER tries to read it
+      const outsider = new Hono()
+      outsider.use('*', fakeAuth({ id: U3, role: 'RENTER' }))
+      outsider.route('/', createMessageRoutes(threadRepo, messageRepo))
+
+      const res = await outsider.request(`/threads/${threadId}`)
+      expect(res.status).toBe(404)
+    })
+
+    it('non-participant RENTER cannot send messages to a thread', async () => {
+      const createRes = await app.request('/threads', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ participantIds: [U1, U2] }),
+      })
+      const created = await createRes.json()
+      const threadId = created.data.id
+
+      const outsider = new Hono()
+      outsider.use('*', fakeAuth({ id: U3, role: 'RENTER' }))
+      outsider.route('/', createMessageRoutes(threadRepo, messageRepo))
+
+      const res = await outsider.request(`/threads/${threadId}/messages`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ content: 'Snooping!' }),
+      })
+      expect(res.status).toBe(404)
+    })
+
+    it('POST /threads always includes creator as participant', async () => {
+      // U1 creates a thread listing only U2, not themselves
+      const createRes = await app.request('/threads', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ participantIds: [U2] }),
+      })
+      const created = await createRes.json()
+      expect(created.success).toBe(true)
+
+      // Verify U1 can see it (they were auto-added)
+      const threads = await app.request('/threads')
+      const body = await threads.json()
+      expect(body.data).toHaveLength(1)
     })
   })
 })

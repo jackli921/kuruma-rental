@@ -1,8 +1,12 @@
 import { createThreadSchema, sendMessageSchema } from '@kuruma/shared/validators/message'
 import { Hono } from 'hono'
-import { requireUser } from '../middleware/auth'
+import { PRIVILEGED_ROLES, requireUser } from '../middleware/auth'
 import type { MessageRepository, ThreadRepository } from '../repositories/types'
 import { fail, ok, parseBody } from './helpers'
+
+function isParticipant(participants: ReadonlyArray<{ userId: string }>, userId: string): boolean {
+  return participants.some((p) => p.userId === userId)
+}
 
 export function createMessageRoutes(
   threadRepo: ThreadRepository,
@@ -24,6 +28,12 @@ export function createMessageRoutes(
 
     const thread = await threadRepo.findById(c.req.param('id'))
     if (!thread) return fail(c, 'Thread not found', 404)
+
+    // Ownership: only participants or privileged users can read
+    if (!PRIVILEGED_ROLES.has(user.role) && !isParticipant(thread.participants, user.id)) {
+      return fail(c, 'Thread not found', 404)
+    }
+
     return ok(c, thread)
   })
 
@@ -34,10 +44,12 @@ export function createMessageRoutes(
     const parsed = await parseBody(c, createThreadSchema)
     if (!parsed.ok) return parsed.response
 
-    const thread = await threadRepo.create(
-      parsed.data.bookingId ?? null,
-      parsed.data.participantIds,
-    )
+    // Ensure the creator is always a participant
+    const participantIds = parsed.data.participantIds.includes(user.id)
+      ? parsed.data.participantIds
+      : [user.id, ...parsed.data.participantIds]
+
+    const thread = await threadRepo.create(parsed.data.bookingId ?? null, participantIds)
     return ok(c, thread, 201)
   })
 
@@ -48,10 +60,14 @@ export function createMessageRoutes(
     const thread = await threadRepo.findById(c.req.param('id'))
     if (!thread) return fail(c, 'Thread not found', 404)
 
+    // Only participants or privileged users can send messages
+    if (!PRIVILEGED_ROLES.has(user.role) && !isParticipant(thread.participants, user.id)) {
+      return fail(c, 'Thread not found', 404)
+    }
+
     const parsed = await parseBody(c, sendMessageSchema)
     if (!parsed.ok) return parsed.response
 
-    // Actor derivation: use JWT sub as senderId, never the body field
     const message = await messageRepo.create(thread.id, user.id, parsed.data.content)
     return ok(c, message, 201)
   })
@@ -63,7 +79,11 @@ export function createMessageRoutes(
     const thread = await threadRepo.findById(c.req.param('id'))
     if (!thread) return fail(c, 'Thread not found', 404)
 
-    // Actor derivation: use JWT sub
+    // Only participants can mark-read
+    if (!isParticipant(thread.participants, user.id)) {
+      return fail(c, 'Thread not found', 404)
+    }
+
     await threadRepo.markAsRead(thread.id, user.id)
     return ok(c, null)
   })

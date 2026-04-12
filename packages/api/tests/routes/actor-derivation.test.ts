@@ -175,4 +175,16 @@ describe('actor derivation from JWT', () => {
     })
     expect(cancelRes.status).toBe(200)
   })
+
+  it('unauthenticated request to protected route returns 401', async () => {
+    const { app } = createTestApp()
+    const res = await app.request('/bookings')
+    expect(res.status).toBe(401)
+  })
+
+  it('GET /health is public (no auth needed)', async () => {
+    const { app } = createTestApp()
+    const res = await app.request('/health')
+    expect(res.status).toBe(200)
+  })
 })
