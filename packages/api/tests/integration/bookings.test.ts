@@ -277,4 +277,33 @@ describe('DrizzleBookingRepository', () => {
       }),
     ).rejects.toThrow()
   })
+
+  it('concurrent overlapping bookings: exactly one succeeds', async () => {
+    const input = {
+      renterId: testUser.id,
+      vehicleId: testVehicle.id,
+      startAt: new Date('2027-06-01T10:00:00Z'),
+      endAt: new Date('2027-06-01T14:00:00Z'),
+      effectiveEndAt: new Date('2027-06-01T15:00:00Z'),
+      status: 'CONFIRMED' as const,
+      source: 'DIRECT' as const,
+      externalId: null,
+      notes: null,
+    }
+
+    const results = await Promise.allSettled([
+      bookingRepo.create(input),
+      bookingRepo.create(input),
+    ])
+
+    const fulfilled = results.filter((r) => r.status === 'fulfilled')
+    const rejected = results.filter((r) => r.status === 'rejected')
+
+    expect(fulfilled).toHaveLength(1)
+    expect(rejected).toHaveLength(1)
+
+    // Clean up the one that succeeded
+    const winner = (fulfilled[0] as PromiseFulfilledResult<{ id: string }>).value
+    createdBookingIds.push(winner.id)
+  })
 })
