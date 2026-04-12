@@ -1,3 +1,4 @@
+import { timingSafeEqual } from 'node:crypto'
 import type { Context, MiddlewareHandler } from 'hono'
 import { jwtVerify } from 'jose'
 import { fail } from '../routes/helpers'
@@ -17,8 +18,19 @@ export interface AuthEnv {
 
 const ALL_ROLES: ReadonlySet<string> = new Set<string>(['RENTER', 'STAFF', 'ADMIN', 'PARTNER'])
 
-function isValidRole(value: string): value is UserRole {
+export function isValidRole(value: string): value is UserRole {
   return ALL_ROLES.has(value)
+}
+
+function isAuthUser(v: unknown): v is AuthUser {
+  return (
+    typeof v === 'object' &&
+    v !== null &&
+    'id' in v &&
+    typeof (v as AuthUser).id === 'string' &&
+    'role' in v &&
+    isValidRole((v as AuthUser).role)
+  )
 }
 
 /** Roles that can manage bookings across all users */
@@ -28,12 +40,16 @@ export const PRIVILEGED_ROLES: ReadonlySet<UserRole> = new Set(['STAFF', 'ADMIN'
 export const STAFF_ROLES: ReadonlySet<UserRole> = new Set(['STAFF', 'ADMIN'])
 
 export function getUser(c: { get: (key: string) => unknown }): AuthUser | undefined {
-  return c.get('user') as AuthUser | undefined
+  const raw = c.get('user')
+  return isAuthUser(raw) ? raw : undefined
 }
 
-export function requireUser(c: { get: (key: string) => unknown }): AuthUser | null {
+/** Assert the user is present. Throws if middleware didn't set it —
+ *  safe to call in any route registered after requireAuth(). */
+export function requireUser(c: { get: (key: string) => unknown }): AuthUser {
   const user = getUser(c)
-  return user?.id ? user : null
+  if (!user) throw new Error('requireUser: no authenticated user in context')
+  return user
 }
 
 export function requireAuth(): MiddlewareHandler {
@@ -83,14 +99,11 @@ async function verifyJwt(token: string): Promise<AuthUser | null> {
 
 function verifyApiKey(key: string): AuthUser | null {
   const expected = process.env.PARTNER_API_KEY
-  if (!expected || key.length !== expected.length) return null
+  if (!expected) return null
 
-  // Constant-time comparison
-  let mismatch = 0
-  for (let i = 0; i < key.length; i++) {
-    mismatch |= key.charCodeAt(i) ^ expected.charCodeAt(i)
-  }
+  const a = Buffer.from(key)
+  const b = Buffer.from(expected)
+  if (a.length !== b.length || !timingSafeEqual(a, b)) return null
 
-  if (mismatch !== 0) return null
   return { id: 'partner:api-key', role: 'PARTNER' }
 }

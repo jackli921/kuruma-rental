@@ -295,5 +295,38 @@ describe('Message Routes', () => {
       const body = await res.json()
       expect(body.data).toHaveLength(1)
     })
+
+    it('STAFF can read a thread they are not a participant of', async () => {
+      const createRes = await app.request('/threads', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ participantIds: [U1, U2] }),
+      })
+      const threadId = (await createRes.json()).data.id
+
+      // U3 as STAFF (not a participant) should bypass the check
+      const staffApp = new Hono()
+      staffApp.use('*', testAuthMiddleware(U3, 'STAFF'))
+      staffApp.route('/', createMessageRoutes(threadRepo, messageRepo))
+
+      const res = await staffApp.request(`/threads/${threadId}`)
+      expect(res.status).toBe(200)
+    })
+
+    it('non-participant cannot mark-as-read (returns 404)', async () => {
+      const createRes = await app.request('/threads', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ participantIds: [U1, U2] }),
+      })
+      const threadId = (await createRes.json()).data.id
+
+      const res = await appAs(U3).request(`/threads/${threadId}/read`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({}),
+      })
+      expect(res.status).toBe(404)
+    })
   })
 })
