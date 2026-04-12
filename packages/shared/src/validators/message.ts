@@ -8,14 +8,8 @@ export const createThreadSchema = z.object({
 })
 
 export const sendMessageSchema = z.object({
-  senderId: z.string().uuid('senderId must be a valid UUID'),
   content: z.string().trim().min(1, 'Message cannot be empty').max(5000),
-})
-
-export const markReadSchema = z.object({
-  userId: z.string().uuid('userId must be a valid UUID'),
 })
 
 export type CreateThreadInput = z.infer<typeof createThreadSchema>
 export type SendMessageInput = z.infer<typeof sendMessageSchema>
-export type MarkReadInput = z.infer<typeof markReadSchema>

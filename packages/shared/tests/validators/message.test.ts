@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { createThreadSchema, markReadSchema, sendMessageSchema } from '../../src/validators/message'
+import { createThreadSchema, sendMessageSchema } from '../../src/validators/message'
 
 const UUID1 = '550e8400-e29b-41d4-a716-446655440001'
 const UUID2 = '550e8400-e29b-41d4-a716-446655440002'
@@ -51,49 +51,36 @@ describe('createThreadSchema', () => {
 })
 
 describe('sendMessageSchema', () => {
-  const valid = { senderId: UUID1, content: 'Hello!' }
-
-  it('accepts valid input', () => {
-    const result = sendMessageSchema.safeParse(valid)
+  it('accepts content-only (senderId derived from JWT)', () => {
+    const result = sendMessageSchema.safeParse({ content: 'Hello!' })
     expect(result.success).toBe(true)
     if (result.success) {
-      expect(result.data.senderId).toBe(UUID1)
       expect(result.data.content).toBe('Hello!')
     }
   })
 
-  it('rejects non-UUID senderId', () => {
-    const result = sendMessageSchema.safeParse({ senderId: 'user-1', content: 'Hello!' })
-    expect(result.success).toBe(false)
-  })
-
-  it('rejects missing senderId', () => {
-    const result = sendMessageSchema.safeParse({ content: 'Hello!' })
-    expect(result.success).toBe(false)
-  })
-
   it('rejects empty string content', () => {
-    const result = sendMessageSchema.safeParse({ ...valid, content: '' })
+    const result = sendMessageSchema.safeParse({ content: '' })
     expect(result.success).toBe(false)
   })
 
   it('rejects whitespace-only content', () => {
-    const result = sendMessageSchema.safeParse({ ...valid, content: '   ' })
+    const result = sendMessageSchema.safeParse({ content: '   ' })
     expect(result.success).toBe(false)
   })
 
   it('rejects content over 5000 characters', () => {
-    const result = sendMessageSchema.safeParse({ ...valid, content: 'a'.repeat(5001) })
+    const result = sendMessageSchema.safeParse({ content: 'a'.repeat(5001) })
     expect(result.success).toBe(false)
   })
 
   it('accepts content of exactly 5000 characters', () => {
-    const result = sendMessageSchema.safeParse({ ...valid, content: 'a'.repeat(5000) })
+    const result = sendMessageSchema.safeParse({ content: 'a'.repeat(5000) })
     expect(result.success).toBe(true)
   })
 
   it('trims whitespace from content', () => {
-    const result = sendMessageSchema.safeParse({ ...valid, content: '  Hello!  ' })
+    const result = sendMessageSchema.safeParse({ content: '  Hello!  ' })
     expect(result.success).toBe(true)
     if (result.success) {
       expect(result.data.content).toBe('Hello!')
@@ -101,27 +88,7 @@ describe('sendMessageSchema', () => {
   })
 
   it('rejects missing content', () => {
-    const result = sendMessageSchema.safeParse({ senderId: UUID1 })
-    expect(result.success).toBe(false)
-  })
-})
-
-describe('markReadSchema', () => {
-  it('accepts valid UUID userId', () => {
-    const result = markReadSchema.safeParse({ userId: UUID1 })
-    expect(result.success).toBe(true)
-    if (result.success) {
-      expect(result.data.userId).toBe(UUID1)
-    }
-  })
-
-  it('rejects non-UUID userId', () => {
-    const result = markReadSchema.safeParse({ userId: 'user-1' })
-    expect(result.success).toBe(false)
-  })
-
-  it('rejects missing userId', () => {
-    const result = markReadSchema.safeParse({})
+    const result = sendMessageSchema.safeParse({})
     expect(result.success).toBe(false)
   })
 })
