@@ -26,14 +26,16 @@ export interface FleetOverviewRepository {
   findFleetOverview(): Promise<FleetVehicleOverview[]>
 }
 
+export interface BookingFilters {
+  status?: string
+  vehicleId?: string
+  renterId?: string
+  from?: Date
+  to?: Date
+}
+
 export interface BookingRepository {
-  findAll(filters?: {
-    status?: string
-    vehicleId?: string
-    renterId?: string
-    from?: Date
-    to?: Date
-  }): Promise<Booking[]>
+  findAll(filters?: BookingFilters): Promise<Booking[]>
   findById(id: string): Promise<Booking | undefined>
   create(data: Omit<Booking, 'id' | 'createdAt' | 'updatedAt'>): Promise<Booking>
   updateStatus(id: string, status: string): Promise<Booking | undefined>

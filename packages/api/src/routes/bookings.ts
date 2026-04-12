@@ -4,7 +4,7 @@ import { calculateBookingPrice } from '@kuruma/shared/lib/pricing'
 import { checkRentalRules } from '@kuruma/shared/lib/rental-rules'
 import { createBookingSchema } from '@kuruma/shared/validators/booking'
 import { Hono } from 'hono'
-import type { BookingRepository, VehicleRepository } from '../repositories/types'
+import type { BookingFilters, BookingRepository, VehicleRepository } from '../repositories/types'
 
 export function createBookingRoutes(
   repo: BookingRepository,
@@ -27,13 +27,7 @@ export function createBookingRoutes(
       )
     }
 
-    const filters: {
-      status?: string
-      vehicleId?: string
-      renterId?: string
-      from?: Date
-      to?: Date
-    } = {}
+    const filters: BookingFilters = {}
     if (statusFilter) filters.status = statusFilter
     if (vehicleIdFilter) filters.vehicleId = vehicleIdFilter
     if (renterIdFilter) filters.renterId = renterIdFilter
