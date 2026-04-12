@@ -2,7 +2,7 @@ import { vehicles } from '@kuruma/shared/db/schema'
 import { eq, sql } from 'drizzle-orm'
 import type { Vehicle } from '../../stores'
 import type { VehicleRepository } from '../types'
-import { type Db, vehicleColumns } from './shared'
+import { type Db, toVehicle, vehicleColumns } from './shared'
 
 export class DrizzleVehicleRepository implements VehicleRepository {
   constructor(private readonly db: Db) {}
@@ -14,13 +14,13 @@ export class DrizzleVehicleRepository implements VehicleRepository {
       ? await query.where(eq(vehicles.status, filters.status as Vehicle['status']))
       : await query
 
-    return rows as Vehicle[]
+    return rows.map(toVehicle)
   }
 
   async findById(id: string): Promise<Vehicle | undefined> {
     const [row] = await this.db.select(vehicleColumns).from(vehicles).where(eq(vehicles.id, id))
 
-    return (row as Vehicle) ?? undefined
+    return row ? toVehicle(row) : undefined
   }
 
   async create(data: Omit<Vehicle, 'id' | 'createdAt' | 'updatedAt'>): Promise<Vehicle> {
@@ -43,7 +43,8 @@ export class DrizzleVehicleRepository implements VehicleRepository {
       })
       .returning()
 
-    return inserted as Vehicle
+    if (!inserted) throw new Error('Failed to insert vehicle')
+    return toVehicle(inserted)
   }
 
   async update(id: string, data: Partial<Vehicle>): Promise<Vehicle | undefined> {
@@ -54,7 +55,7 @@ export class DrizzleVehicleRepository implements VehicleRepository {
       .where(eq(vehicles.id, id))
       .returning()
 
-    return (updated as Vehicle) ?? undefined
+    return updated ? toVehicle(updated) : undefined
   }
 
   async softDelete(id: string): Promise<Vehicle | undefined> {
@@ -64,6 +65,6 @@ export class DrizzleVehicleRepository implements VehicleRepository {
       .where(eq(vehicles.id, id))
       .returning()
 
-    return (retired as Vehicle) ?? undefined
+    return retired ? toVehicle(retired) : undefined
   }
 }

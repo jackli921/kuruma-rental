@@ -2,7 +2,7 @@ import { bookings, vehicles } from '@kuruma/shared/db/schema'
 import { and, eq, sql } from 'drizzle-orm'
 import type { Booking, Vehicle } from '../../stores'
 import type { AvailabilityRepository } from '../types'
-import { type Db, bookingColumns, vehicleColumns } from './shared'
+import { type Db, bookingColumns, toBooking, toVehicle, vehicleColumns } from './shared'
 
 export class DrizzleAvailabilityRepository implements AvailabilityRepository {
   constructor(private readonly db: Db) {}
@@ -25,7 +25,7 @@ export class DrizzleAvailabilityRepository implements AvailabilityRepository {
           )`,
         ),
       )
-    return rows as Vehicle[]
+    return rows.map(toVehicle)
   }
 
   async checkVehicleAvailability(
@@ -56,8 +56,8 @@ export class DrizzleAvailabilityRepository implements AvailabilityRepository {
 
     return {
       available: conflicts.length === 0,
-      vehicle: vehicle as Vehicle,
-      conflicts: conflicts as Booking[],
+      vehicle: toVehicle(vehicle),
+      conflicts: conflicts.map(toBooking),
     }
   }
 }

@@ -9,6 +9,8 @@ import {
   normaliseMessage,
   participantColumns,
   threadColumns,
+  toThread,
+  toThreadParticipant,
 } from './shared'
 
 export class DrizzleThreadRepository implements ThreadRepository {
@@ -30,13 +32,13 @@ export class DrizzleThreadRepository implements ThreadRepository {
     const threadRows = (await this.db
       .select(threadColumns)
       .from(threads)
-      .where(inArray(threads.id, threadIds))) as Thread[]
+      .where(inArray(threads.id, threadIds))).map(toThread)
 
     // Step 3: fetch all participants for those threads in one round-trip.
     const participantRows = (await this.db
       .select(participantColumns)
       .from(threadParticipants)
-      .where(inArray(threadParticipants.threadId, threadIds))) as ThreadParticipant[]
+      .where(inArray(threadParticipants.threadId, threadIds))).map(toThreadParticipant)
 
     // Step 4: fetch only the latest message per thread. The DISTINCT ON
     // pattern keeps this O(threads) instead of O(messages) -- important once
@@ -78,7 +80,7 @@ export class DrizzleThreadRepository implements ThreadRepository {
     const [thread] = (await this.db
       .select(threadColumns)
       .from(threads)
-      .where(eq(threads.id, id))) as Thread[]
+      .where(eq(threads.id, id))).map(toThread)
 
     if (!thread) return undefined
 
@@ -96,7 +98,7 @@ export class DrizzleThreadRepository implements ThreadRepository {
 
     return {
       ...thread,
-      participants: participantRows as ThreadParticipant[],
+      participants: participantRows.map(toThreadParticipant),
       messages: (messageRows as Array<Parameters<typeof normaliseMessage>[0]>).map(
         normaliseMessage,
       ),
@@ -113,7 +115,7 @@ export class DrizzleThreadRepository implements ThreadRepository {
     const [insertedThread] = (await this.db
       .insert(threads)
       .values({ bookingId })
-      .returning(threadColumns)) as Thread[]
+      .returning(threadColumns)).map(toThread)
 
     if (!insertedThread) {
       throw new Error('Failed to insert thread')

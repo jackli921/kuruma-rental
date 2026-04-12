@@ -6,7 +6,7 @@ import {
   threads,
   vehicles,
 } from '@kuruma/shared/db/schema'
-import type { Message } from '../../stores'
+import type { Booking, Message, Thread, ThreadParticipant, Vehicle } from '../../stores'
 
 export type Db = ReturnType<typeof getDb>
 
@@ -73,6 +73,75 @@ export const messageColumns = {
   sourceLanguage: messages.sourceLanguage,
   translations: messages.translations,
   createdAt: messages.createdAt,
+}
+
+// --- Row-to-domain mappers ---
+// Drizzle infers wider types than our domain interfaces (e.g. `string`
+// instead of `'AUTO' | 'MANUAL'`). These mappers verify every field at
+// the boundary. If a schema column is added to the domain type, the
+// mapper fails to compile — unlike `as Type` which silently allows it.
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any -- Drizzle row types vary
+type AnyRow = Record<string, any>
+
+export function toVehicle(r: AnyRow): Vehicle {
+  return {
+    id: r.id,
+    name: r.name,
+    description: r.description,
+    photos: r.photos,
+    seats: r.seats,
+    transmission: r.transmission,
+    fuelType: r.fuelType,
+    status: r.status,
+    bufferMinutes: r.bufferMinutes,
+    minRentalHours: r.minRentalHours,
+    maxRentalHours: r.maxRentalHours,
+    advanceBookingHours: r.advanceBookingHours,
+    dailyRateJpy: r.dailyRateJpy,
+    hourlyRateJpy: r.hourlyRateJpy,
+    createdAt: r.createdAt,
+    updatedAt: r.updatedAt,
+  }
+}
+
+export function toBooking(r: AnyRow): Booking {
+  return {
+    id: r.id,
+    renterId: r.renterId,
+    vehicleId: r.vehicleId,
+    startAt: r.startAt,
+    endAt: r.endAt,
+    effectiveEndAt: r.effectiveEndAt,
+    status: r.status,
+    source: r.source,
+    externalId: r.externalId,
+    notes: r.notes,
+    totalPrice: r.totalPrice,
+    cancellationFee: r.cancellationFee,
+    cancelledAt: r.cancelledAt,
+    idempotencyKey: r.idempotencyKey,
+    createdAt: r.createdAt,
+    updatedAt: r.updatedAt,
+  }
+}
+
+export function toThread(r: AnyRow): Thread {
+  return {
+    id: r.id,
+    bookingId: r.bookingId,
+    createdAt: r.createdAt,
+    updatedAt: r.updatedAt,
+  }
+}
+
+export function toThreadParticipant(r: AnyRow): ThreadParticipant {
+  return {
+    id: r.id,
+    threadId: r.threadId,
+    userId: r.userId,
+    unreadCount: r.unreadCount,
+  }
 }
 
 // Raw row shape returned by message queries. Extracted because it appears in
