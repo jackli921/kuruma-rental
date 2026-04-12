@@ -1,4 +1,5 @@
 import { getApiBaseUrl } from '@/lib/api-client'
+import type { ApiResponse } from '@kuruma/shared/types/api-response'
 
 export interface CalendarBooking {
   id: string
@@ -12,12 +13,6 @@ export interface CalendarBooking {
   notes: string | null
 }
 
-interface ApiResponse<T> {
-  success: boolean
-  data: T
-  error?: string
-}
-
 export async function fetchCalendarBookings(from: string, to: string): Promise<CalendarBooking[]> {
   const base = getApiBaseUrl()
   const params = new URLSearchParams({ from, to })
@@ -28,7 +23,7 @@ export async function fetchCalendarBookings(from: string, to: string): Promise<C
   }
 
   const body: ApiResponse<CalendarBooking[]> = await res.json()
-  if (!body.success || !Array.isArray(body.data)) {
+  if (!body.success) {
     throw new Error(body.error ?? 'Invalid bookings response')
   }
 

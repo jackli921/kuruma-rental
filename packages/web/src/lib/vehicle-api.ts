@@ -1,11 +1,6 @@
 import { getApiBaseUrl } from '@/lib/api-client'
+import type { ApiResponse } from '@kuruma/shared/types/api-response'
 import type { CreateVehicleInput, VehicleStatus } from '@kuruma/shared/validators/vehicle'
-
-interface ApiResponse<T> {
-  success: boolean
-  data: T
-  error?: string
-}
 
 export interface VehicleData {
   id: string
@@ -45,13 +40,15 @@ export interface FleetVehicleOverviewData extends VehicleData {
 
 async function apiRequest<T>(url: string, init?: RequestInit): Promise<T> {
   const res = await fetch(url, init)
+  const body: ApiResponse<T> = await res.json().catch(() => ({
+    success: false as const,
+    error: 'Unknown error',
+  }))
 
-  if (!res.ok) {
-    const body = await res.json().catch(() => ({ error: 'Unknown error' }))
-    throw new Error((body as ApiResponse<never>).error ?? `HTTP ${res.status}`)
+  if (!body.success) {
+    throw new Error(body.error ?? `HTTP ${res.status}`)
   }
 
-  const body: ApiResponse<T> = await res.json()
   return body.data
 }
 
