@@ -1,5 +1,6 @@
 #!/usr/bin/env bun
 import { readFileSync } from 'node:fs'
+import { Glob } from 'bun'
 
 export type Violation = {
   file: string
@@ -49,4 +50,51 @@ export function checkImports(files: string[]): Violation[] {
     }
   }
   return violations
+}
+
+const ROOTS = ['packages/api/src', 'packages/web/src', 'packages/shared/src']
+const INCLUDE_PATTERN = '**/*.{ts,tsx}'
+const EXCLUDE_PATTERNS = [
+  /\.test\.tsx?$/,
+  /\/__fixtures__\//,
+  /\/node_modules\//,
+  /\/\.next\//,
+  /\/\.open-next\//,
+  /\/\.wrangler\//,
+  /\/dist\//,
+  /\/drizzle\//,
+]
+
+function discover(): string[] {
+  const out: string[] = []
+  const glob = new Glob(INCLUDE_PATTERN)
+  for (const root of ROOTS) {
+    for (const rel of glob.scanSync({ cwd: root, onlyFiles: true })) {
+      const full = `${root}/${rel}`
+      if (EXCLUDE_PATTERNS.some((r) => r.test(full))) continue
+      out.push(full)
+    }
+  }
+  return out
+}
+
+function main(): number {
+  const files = discover()
+  const violations = checkImports(files)
+  for (const v of violations) {
+    process.stderr.write(
+      `[lint-module-boundaries] ERROR ${v.file}: imports "${v.importPath}" (cross-module internal import)\n`,
+    )
+  }
+  if (violations.length > 0) {
+    process.stderr.write(
+      `[lint-module-boundaries] ${violations.length} violation(s). Import from '@/modules/<name>' (the barrel) instead.\n`,
+    )
+    return 1
+  }
+  return 0
+}
+
+if (import.meta.main) {
+  process.exit(main())
 }
