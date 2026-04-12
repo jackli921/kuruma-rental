@@ -2,7 +2,7 @@ import { bookings } from '@kuruma/shared/db/schema'
 import { and, desc, eq, lt, or, sql } from 'drizzle-orm'
 import type { Booking } from '../../stores'
 import type { BookingFilters, BookingRepository } from '../types'
-import { type Db, bookingColumns } from './shared'
+import { type Db, bookingColumns, toBooking } from './shared'
 
 export class DrizzleBookingRepository implements BookingRepository {
   constructor(private readonly db: Db) {}
@@ -57,13 +57,13 @@ export class DrizzleBookingRepository implements BookingRepository {
     }
 
     const rows = await query
-    return rows as Booking[]
+    return rows.map(toBooking)
   }
 
   async findById(id: string): Promise<Booking | undefined> {
     const [row] = await this.db.select(bookingColumns).from(bookings).where(eq(bookings.id, id))
 
-    return (row as Booking) ?? undefined
+    return row ? toBooking(row) : undefined
   }
 
   async findByIdempotencyKey(key: string): Promise<Booking | undefined> {
@@ -72,7 +72,7 @@ export class DrizzleBookingRepository implements BookingRepository {
       .from(bookings)
       .where(eq(bookings.idempotencyKey, key))
 
-    return (row as Booking) ?? undefined
+    return row ? toBooking(row) : undefined
   }
 
   async create(data: Omit<Booking, 'id' | 'createdAt' | 'updatedAt'>): Promise<Booking> {
@@ -95,7 +95,8 @@ export class DrizzleBookingRepository implements BookingRepository {
       })
       .returning()
 
-    return inserted as Booking
+    if (!inserted) throw new Error('Failed to insert booking')
+    return toBooking(inserted)
   }
 
   async updateStatus(
@@ -108,7 +109,7 @@ export class DrizzleBookingRepository implements BookingRepository {
       .where(and(eq(bookings.id, id), eq(bookings.status, transition.from)))
       .returning()
 
-    return (updated as Booking) ?? undefined
+    return updated ? toBooking(updated) : undefined
   }
 
   async cancel(
@@ -126,6 +127,6 @@ export class DrizzleBookingRepository implements BookingRepository {
       .where(and(eq(bookings.id, id), eq(bookings.status, opts.from)))
       .returning()
 
-    return (cancelled as Booking) ?? undefined
+    return cancelled ? toBooking(cancelled) : undefined
   }
 }

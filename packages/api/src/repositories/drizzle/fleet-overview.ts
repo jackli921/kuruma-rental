@@ -4,7 +4,7 @@ import { and, ne, sql } from 'drizzle-orm'
 import { eq } from 'drizzle-orm'
 import type { Vehicle } from '../../stores'
 import type { FleetOverviewRepository } from '../types'
-import { type Db, vehicleColumns } from './shared'
+import { type Db, toVehicle, vehicleColumns } from './shared'
 
 // Fleet overview: owner-facing aggregated read. Two round-trips instead
 // of N+1 -- one SELECT for all vehicles, one SELECT for all relevant
@@ -34,7 +34,7 @@ export class DrizzleFleetOverviewRepository implements FleetOverviewRepository {
     const windowStart = new Date(now.getTime() - UTILIZATION_WINDOW_MS)
 
     // Round-trip 1: all vehicles.
-    const vehicleRows = (await this.db.select(vehicleColumns).from(vehicles)) as Vehicle[]
+    const vehicleRows = (await this.db.select(vehicleColumns).from(vehicles)).map(toVehicle)
 
     // Round-trip 2: bookings we care about -- non-CANCELLED, and either
     // overlapping the last-30-day window OR starting in the future.
