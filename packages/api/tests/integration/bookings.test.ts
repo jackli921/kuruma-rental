@@ -291,10 +291,7 @@ describe('DrizzleBookingRepository', () => {
       notes: null,
     }
 
-    const results = await Promise.allSettled([
-      bookingRepo.create(input),
-      bookingRepo.create(input),
-    ])
+    const results = await Promise.allSettled([bookingRepo.create(input), bookingRepo.create(input)])
 
     const fulfilled = results.filter((r) => r.status === 'fulfilled')
     const rejected = results.filter((r) => r.status === 'rejected')
