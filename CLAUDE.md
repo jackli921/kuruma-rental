@@ -358,6 +358,8 @@ Any edit to `packages/shared/src/db/schema.ts` or `drizzle/` is a multi-step dan
 
 ## Before pushing
 
+**NEVER force push** (`--force`, `--force-with-lease`, `-f`). If push is rejected as non-fast-forward, run `git pull --rebase` and push again. Enforced by `.husky/pre-push` hook.
+
 1. **Rebase onto `origin/main` first** — always:
    ```bash
    git fetch origin main
