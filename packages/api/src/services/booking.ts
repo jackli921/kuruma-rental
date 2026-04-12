@@ -2,6 +2,7 @@ import { VALID_BOOKING_TRANSITIONS } from '@kuruma/shared/db/schema'
 import { calculateCancellationFee } from '@kuruma/shared/lib/cancellation-policy'
 import { calculateBookingPrice } from '@kuruma/shared/lib/pricing'
 import { checkRentalRules } from '@kuruma/shared/lib/rental-rules'
+import { PG_ERROR, pgErrorCode } from '../pg-errors'
 import type { BookingFilters, BookingRepository, VehicleRepository } from '../repositories/types'
 import type { Booking } from '../stores'
 
@@ -172,11 +173,10 @@ export class BookingService {
 
       return { ok: true, booking }
     } catch (err) {
-      const code =
-        err && typeof err === 'object' && 'code' in err ? (err as { code: unknown }).code : null
+      const code = pgErrorCode(err)
 
       // Overlap exclusion constraint
-      if (code === '23P01') {
+      if (code === PG_ERROR.EXCLUSION_VIOLATION) {
         return {
           ok: false,
           status: 409,
@@ -185,7 +185,7 @@ export class BookingService {
       }
 
       // Idempotency key unique constraint race: re-fetch and return existing
-      if (code === '23505' && input.idempotencyKey) {
+      if (code === PG_ERROR.UNIQUE_VIOLATION && input.idempotencyKey) {
         const existing = await this.bookingRepo.findByIdempotencyKey(input.idempotencyKey)
         if (existing) {
           return { ok: true, booking: existing, status: 200 }
