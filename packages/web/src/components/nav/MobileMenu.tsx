@@ -78,13 +78,6 @@ export function MobileMenu({ session, navItems }: MobileMenuProps) {
               >
                 {t('auth.login')}
               </Link>
-              <Link
-                href="/register"
-                onClick={() => setOpen(false)}
-                className={cn(buttonVariants({ variant: 'outline', size: 'sm' }), 'w-full')}
-              >
-                {t('auth.register')}
-              </Link>
             </div>
           </>
         )}
