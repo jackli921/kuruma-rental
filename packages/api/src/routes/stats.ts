@@ -1,5 +1,6 @@
 import { Hono } from 'hono'
 import type { StatsRepository } from '../repositories/types'
+import { fail, ok } from './helpers'
 
 export function createStatsRoutes(statsRepo: StatsRepository) {
   const app = new Hono()
@@ -9,11 +10,11 @@ export function createStatsRoutes(statsRepo: StatsRepository) {
     const expectedKey = process.env.STATS_API_KEY
 
     if (!expectedKey || apiKey !== expectedKey) {
-      return c.json({ success: false, error: 'Unauthorized' }, 401)
+      return fail(c, 'Unauthorized', 401)
     }
 
     const data = await statsRepo.getDashboardStats()
-    return c.json({ success: true, data })
+    return ok(c, data)
   })
 
   return app

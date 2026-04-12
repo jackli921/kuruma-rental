@@ -19,6 +19,7 @@ import {
   InMemoryThreadRepository,
   InMemoryVehicleRepository,
 } from './repositories/in-memory'
+import { InMemoryVehicleDetailRepository } from './repositories/in-memory-vehicle-detail'
 import type {
   AvailabilityRepository,
   BookingRepository,
@@ -26,6 +27,7 @@ import type {
   MessageRepository,
   StatsRepository,
   ThreadRepository,
+  VehicleDetailRepository,
   VehicleRepository,
 } from './repositories/types'
 import { createAvailabilityRoutes } from './routes/availability'
@@ -34,13 +36,16 @@ import { createFleetOverviewRoutes } from './routes/fleet-overview'
 import health from './routes/health'
 import { createMessageRoutes } from './routes/messages'
 import { createStatsRoutes } from './routes/stats'
+import { createVehicleDetailRoutes } from './routes/vehicle-detail'
 import { createVehicleRoutes } from './routes/vehicles'
+import { BookingService } from './services/booking'
 
 export function createApp(overrides?: {
   vehicleRepo: VehicleRepository
   bookingRepo: BookingRepository
   availabilityRepo: AvailabilityRepository
   fleetOverviewRepo?: FleetOverviewRepository
+  vehicleDetailRepo?: VehicleDetailRepository
   statsRepo?: StatsRepository
   threadRepo?: ThreadRepository
   messageRepo?: MessageRepository
@@ -49,6 +54,7 @@ export function createApp(overrides?: {
   let bookingRepo: BookingRepository
   let availabilityRepo: AvailabilityRepository
   let fleetOverviewRepo: FleetOverviewRepository
+  let vehicleDetailRepo: VehicleDetailRepository
   let statsRepo: StatsRepository
   let threadRepo: ThreadRepository
   let messageRepo: MessageRepository
@@ -57,6 +63,8 @@ export function createApp(overrides?: {
     ;({ vehicleRepo, bookingRepo, availabilityRepo } = overrides)
     fleetOverviewRepo =
       overrides.fleetOverviewRepo ?? new InMemoryFleetOverviewRepository(vehicleRepo, bookingRepo)
+    vehicleDetailRepo =
+      overrides.vehicleDetailRepo ?? new InMemoryVehicleDetailRepository(vehicleRepo, bookingRepo)
     statsRepo = overrides.statsRepo ?? new InMemoryStatsRepository(vehicleRepo, bookingRepo)
     threadRepo = overrides.threadRepo ?? new InMemoryThreadRepository()
     messageRepo =
@@ -67,6 +75,7 @@ export function createApp(overrides?: {
     bookingRepo = new DrizzleBookingRepository(db)
     availabilityRepo = new DrizzleAvailabilityRepository(db)
     fleetOverviewRepo = new DrizzleFleetOverviewRepository(db)
+    vehicleDetailRepo = new InMemoryVehicleDetailRepository(vehicleRepo, bookingRepo)
     statsRepo = new DrizzleStatsRepository(db)
     threadRepo = new DrizzleThreadRepository(db)
     messageRepo = new DrizzleMessageRepository(db)
@@ -78,6 +87,7 @@ export function createApp(overrides?: {
       bookingRepo as InMemoryBookingRepository,
     )
     fleetOverviewRepo = new InMemoryFleetOverviewRepository(vehicleRepo, bookingRepo)
+    vehicleDetailRepo = new InMemoryVehicleDetailRepository(vehicleRepo, bookingRepo)
     statsRepo = new InMemoryStatsRepository(vehicleRepo, bookingRepo)
     threadRepo = new InMemoryThreadRepository()
     messageRepo = new InMemoryMessageRepository(threadRepo as InMemoryThreadRepository)
@@ -104,9 +114,12 @@ export function createApp(overrides?: {
   )
 
   app.route('/', health)
+  const bookingService = new BookingService(bookingRepo, vehicleRepo)
+
   app.route('/', createFleetOverviewRoutes(fleetOverviewRepo))
+  app.route('/', createVehicleDetailRoutes(vehicleDetailRepo))
   app.route('/', createVehicleRoutes(vehicleRepo))
-  app.route('/', createBookingRoutes(bookingRepo, vehicleRepo))
+  app.route('/', createBookingRoutes(bookingService))
   app.route('/', createAvailabilityRoutes(availabilityRepo))
   app.route('/', createStatsRoutes(statsRepo))
   app.route('/', createMessageRoutes(threadRepo, messageRepo))

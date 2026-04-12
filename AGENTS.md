@@ -19,6 +19,31 @@ This is a Bun workspace monorepo with three packages:
 - DB imports use `@kuruma/shared/db` and `@kuruma/shared/db/schema`.
 - Validator imports use `@kuruma/shared/validators/auth` (etc.).
 
+## API Layer Architecture (MVC + Dependency Injection)
+
+`packages/api` follows a three-layer architecture with function injection:
+
+```
+routes/        → Controller layer (HTTP in/out only)
+services/      → Service layer (business logic, validation, orchestration)
+repositories/  → Data access layer (DB queries, in-memory stores)
+index.ts       → Composition root (constructs concretes, wires DI)
+```
+
+**Import direction: routes → services → repositories. Never backwards.**
+
+| Rule | Why |
+|------|-----|
+| Routes import services and `routes/helpers.ts` only. Never repositories. | Routes handle HTTP concerns; business logic belongs in services. |
+| Services import repository *interfaces* (`types.ts`) only. Never concrete classes. | Enables swapping InMemory ↔ Drizzle without touching business logic. |
+| Only `index.ts` imports concrete classes (`DrizzleBookingRepository`, `InMemoryBookingRepository`, etc.) | Single place to change wiring; the rest of the code is implementation-agnostic. |
+| No `new ConcreteRepository()` outside `index.ts`. | Prevents hidden coupling that breaks testability. |
+
+Shared helpers live in `routes/helpers.ts`: `ok()`, `fail()`, `parseBody()`, `parseDateRange()`.
+Use them instead of manual `c.json({ success: true/false, ... })` construction.
+
+Enforced by `bun run --filter @kuruma/api lint:boundaries` (CI step).
+
 ## Commands
 
 | Task | Command |
