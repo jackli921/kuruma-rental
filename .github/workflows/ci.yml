@@ -3,8 +3,14 @@ name: CI
 on:
   push:
     branches: [main]
+    paths-ignore:
+      - '**.md'
+      - 'docs/**'
   pull_request:
     branches: [main]
+    paths-ignore:
+      - '**.md'
+      - 'docs/**'
 
 jobs:
   test-and-build:
@@ -21,6 +27,9 @@ jobs:
 
       - name: Lint
         run: bun run lint
+
+      - name: Typecheck
+        run: bun run --filter '*' typecheck
 
       - name: Test (all packages)
         run: bun run test
