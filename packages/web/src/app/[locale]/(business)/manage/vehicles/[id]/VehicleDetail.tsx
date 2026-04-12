@@ -7,6 +7,7 @@ import { cn } from '@/lib/utils'
 import type { VehicleDetailData } from '@/lib/vehicle-api'
 import { ArrowLeft, Calendar, Car, Clock, Fuel, Settings2, Users } from 'lucide-react'
 import type { getTranslations } from 'next-intl/server'
+import Image from 'next/image'
 import type { ComponentType } from 'react'
 import { UtilizationChart } from './UtilizationChart'
 
@@ -198,14 +199,29 @@ function PhotoGallery({
     <section aria-label={placeholder}>
       {primaryPhoto ? (
         <div className="space-y-3">
-          <div className="aspect-[16/9] overflow-hidden rounded-xl bg-muted">
-            <img src={primaryPhoto} alt={name} className="w-full h-full object-cover" />
+          <div className="relative aspect-[16/9] overflow-hidden rounded-xl bg-muted">
+            <Image
+              src={primaryPhoto}
+              alt={name}
+              fill
+              className="object-cover"
+              sizes="(max-width: 768px) 100vw, 66vw"
+            />
           </div>
           {photos.length > 1 && (
             <div className="grid grid-cols-4 gap-3">
               {photos.slice(1, 5).map((photo) => (
-                <div key={photo} className="aspect-[4/3] overflow-hidden rounded-lg bg-muted">
-                  <img src={photo} alt={name} className="w-full h-full object-cover" />
+                <div
+                  key={photo}
+                  className="relative aspect-[4/3] overflow-hidden rounded-lg bg-muted"
+                >
+                  <Image
+                    src={photo}
+                    alt={name}
+                    fill
+                    className="object-cover"
+                    sizes="(max-width: 768px) 25vw, 16vw"
+                  />
                 </div>
               ))}
             </div>

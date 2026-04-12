@@ -12,6 +12,7 @@ import { formatVehicleRate } from '@/lib/format'
 import type { FleetBookingSummaryData, FleetVehicleOverviewData } from '@/lib/vehicle-api'
 import { Car, MoreHorizontal } from 'lucide-react'
 import { useTranslations } from 'next-intl'
+import Image from 'next/image'
 
 interface FleetVehicleRowProps {
   overview: FleetVehicleOverviewData
@@ -81,9 +82,9 @@ export function FleetVehicleRow({ overview, onEdit, onRetire }: FleetVehicleRowP
   return (
     <div className="flex items-center gap-4 rounded-lg border bg-card p-3">
       {/* Thumbnail: 80x60 per issue spec */}
-      <div className="flex-shrink-0 h-[60px] w-[80px] overflow-hidden rounded bg-muted">
+      <div className="relative flex-shrink-0 h-[60px] w-[80px] overflow-hidden rounded bg-muted">
         {photo ? (
-          <img src={photo} alt={overview.name} className="h-full w-full object-cover" />
+          <Image src={photo} alt={overview.name} fill className="object-cover" sizes="80px" />
         ) : (
           <div
             data-testid="fleet-row-thumbnail-placeholder"

@@ -7,6 +7,7 @@ import { formatVehicleRate } from '@/lib/format'
 import type { VehicleData } from '@/lib/vehicle-api'
 import { Car, Fuel, Pencil, Settings2, Trash2, Users } from 'lucide-react'
 import { useTranslations } from 'next-intl'
+import Image from 'next/image'
 
 interface FleetVehicleCardProps {
   vehicle: VehicleData
@@ -24,9 +25,15 @@ export function FleetVehicleCard({ vehicle, onEdit, onRetire }: FleetVehicleCard
 
   return (
     <Card>
-      <div className="aspect-[4/3] overflow-hidden bg-muted">
+      <div className="relative aspect-[4/3] overflow-hidden bg-muted">
         {photo ? (
-          <img src={photo} alt={vehicle.name} className="w-full h-full object-cover" />
+          <Image
+            src={photo}
+            alt={vehicle.name}
+            fill
+            className="object-cover"
+            sizes="(max-width: 768px) 100vw, 33vw"
+          />
         ) : (
           <div className="w-full h-full flex items-center justify-center">
             <Car className="size-12 text-muted-foreground/30" />
