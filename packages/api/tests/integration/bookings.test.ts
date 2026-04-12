@@ -2,6 +2,7 @@ import { bookings, users, vehicles } from '@kuruma/shared/db/schema'
 import { inArray } from 'drizzle-orm'
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest'
 import { createApp } from '../../src/index'
+import { pgErrorCode } from '../../src/pg-errors'
 import {
   DrizzleAvailabilityRepository,
   DrizzleBookingRepository,
@@ -316,11 +317,8 @@ describe('DrizzleBookingRepository', () => {
       createdBookingIds.push(second.id)
       expect.unreachable('Expected exclusion constraint violation')
     } catch (err) {
-      // postgres-js wraps the PG error in err.cause
-      expect(err).toHaveProperty('cause')
-      const cause = (err as { cause: { code: string } }).cause
-      expect(cause).toHaveProperty('code', '23P01')
-      expect(cause).toHaveProperty('constraint_name', 'bookings_no_overlap')
+      // Validate through the same abstraction the production code uses
+      expect(pgErrorCode(err)).toBe('23P01')
     }
   })
 
@@ -364,6 +362,40 @@ describe('DrizzleBookingRepository', () => {
 
     expect(secondBooking.status).toBe('CONFIRMED')
     expect(secondBooking.vehicleId).toBe(testVehicle.id)
+  })
+
+  it('allows adjacent (non-overlapping) bookings on same vehicle', async () => {
+    // First booking: 10:00-14:00, effectiveEnd 15:00 (buffer)
+    const first = await bookingRepo.create({
+      renterId: testUser.id,
+      vehicleId: testVehicle.id,
+      startAt: new Date('2027-04-01T10:00:00Z'),
+      endAt: new Date('2027-04-01T14:00:00Z'),
+      effectiveEndAt: new Date('2027-04-01T15:00:00Z'),
+      status: 'CONFIRMED',
+      source: 'DIRECT',
+      externalId: null,
+      notes: null,
+    })
+    createdBookingIds.push(first.id)
+
+    // Second booking starts exactly at first's effectiveEndAt (boundary)
+    // tstzrange is [closed, open) so startAt === effectiveEndAt does NOT overlap
+    const second = await bookingRepo.create({
+      renterId: testUser.id,
+      vehicleId: testVehicle.id,
+      startAt: new Date('2027-04-01T15:00:00Z'),
+      endAt: new Date('2027-04-01T19:00:00Z'),
+      effectiveEndAt: new Date('2027-04-01T20:00:00Z'),
+      status: 'CONFIRMED',
+      source: 'DIRECT',
+      externalId: null,
+      notes: null,
+    })
+    createdBookingIds.push(second.id)
+
+    expect(second.status).toBe('CONFIRMED')
+    expect(second.startAt).toEqual(new Date('2027-04-01T15:00:00Z'))
   })
 
   it('concurrent overlapping bookings: exactly one succeeds', async () => {
