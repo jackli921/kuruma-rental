@@ -1,5 +1,6 @@
 import { VALID_BOOKING_TRANSITIONS } from '@kuruma/shared/db/schema'
 import { calculateCancellationFee } from '@kuruma/shared/lib/cancellation-policy'
+import { calculateBookingPrice } from '@kuruma/shared/lib/pricing'
 import { checkRentalRules } from '@kuruma/shared/lib/rental-rules'
 import { createBookingSchema } from '@kuruma/shared/validators/booking'
 import { Hono } from 'hono'
@@ -106,6 +107,12 @@ export function createBookingRoutes(
     // server clock is the authoritative "now". We only enforce when the
     // vehicle is actually present in the repo — production bookings always
     // carry a real FK, so in practice this runs on every booking.
+    //
+    // Issue #74: the SAME vehicle lookup drives server-side pricing too.
+    // `totalPrice` is never accepted from the client body — a renter who
+    // sends {totalPrice: 1} on a 200k JPY booking would otherwise walk off
+    // with a 1 JPY cancellation penalty.
+    let totalPrice: number | null = null
     if (vehicleRepo) {
       const vehicle = await vehicleRepo.findById(result.data.vehicleId)
       if (vehicle) {
@@ -130,6 +137,26 @@ export function createBookingRoutes(
             400,
           )
         }
+
+        const pricing = calculateBookingPrice(
+          { dailyRateJpy: vehicle.dailyRateJpy, hourlyRateJpy: vehicle.hourlyRateJpy },
+          startAt,
+          endAt,
+        )
+        if (!pricing.ok) {
+          return c.json(
+            {
+              success: false,
+              error:
+                pricing.code === 'NO_RATES_SET'
+                  ? 'Vehicle has no daily or hourly rate configured'
+                  : 'Invalid booking duration',
+              code: pricing.code,
+            },
+            400,
+          )
+        }
+        totalPrice = pricing.totalPriceJpy
       }
     }
 
@@ -144,7 +171,7 @@ export function createBookingRoutes(
         source: result.data.source,
         externalId: result.data.externalId ?? null,
         notes: result.data.notes ?? null,
-        totalPrice: result.data.totalPrice ?? null,
+        totalPrice,
         cancellationFee: null,
         cancelledAt: null,
       })

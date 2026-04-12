@@ -232,6 +232,9 @@ describe('Booking Routes', () => {
         minRentalHours: null,
         maxRentalHours: null,
         advanceBookingHours: null,
+        // Rates required for server-side pricing (issue #74).
+        dailyRateJpy: 10000,
+        hourlyRateJpy: null,
       })
 
       const allVehicles = await vehicleRepo.findAll()
@@ -459,6 +462,78 @@ describe('Booking Routes', () => {
         expect(res.status).toBe(201)
       })
     })
+
+    // Issue #74: server-side pricing. Clients must not be able to propose a
+    // totalPrice — the route always computes it from the vehicle's rates.
+    // Without this, a renter could submit {totalPrice: 1} and pay a 1 JPY
+    // cancellation penalty on a 200,000 JPY booking.
+    describe('server-side pricing', () => {
+      async function seedVehicleWithRates(rates: {
+        dailyRateJpy: number | null
+        hourlyRateJpy: number | null
+      }) {
+        const vehicle = await vehicleRepo.create({
+          name: 'Test Vehicle',
+          description: null,
+          photos: [],
+          seats: 5,
+          transmission: 'AUTO',
+          fuelType: null,
+          status: 'AVAILABLE',
+          bufferMinutes: 60,
+          minRentalHours: null,
+          maxRentalHours: null,
+          advanceBookingHours: null,
+          dailyRateJpy: rates.dailyRateJpy,
+          hourlyRateJpy: rates.hourlyRateJpy,
+        })
+        return vehicle.id
+      }
+
+      it('ignores client-supplied totalPrice and persists server calculation', async () => {
+        // Vehicle: 10,000 JPY/day. 24h booking → server should compute 10,000.
+        // Client tries to inject totalPrice: 1 — must be ignored.
+        const vehicleId = await seedVehicleWithRates({
+          dailyRateJpy: 10000,
+          hourlyRateJpy: null,
+        })
+
+        const res = await app.request('/bookings', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            vehicleId,
+            renterId: 'user1',
+            startAt: futureDate(48),
+            endAt: futureDate(72),
+            source: 'DIRECT',
+            totalPrice: 1, // attacker-controlled — must be ignored
+          }),
+        })
+
+        expect(res.status).toBe(201)
+        const body = await res.json()
+        expect(body.success).toBe(true)
+        expect(body.data.totalPrice).toBe(10000)
+      })
+
+      it('rejects booking when vehicle has no rates set with 400 NO_RATES_SET', async () => {
+        const vehicleId = await seedVehicleWithRates({
+          dailyRateJpy: null,
+          hourlyRateJpy: null,
+        })
+
+        const res = await createBooking({
+          ...validBookingInput(),
+          vehicleId,
+        })
+
+        expect(res.status).toBe(400)
+        const body = await res.json()
+        expect(body.success).toBe(false)
+        expect(body.code).toBe('NO_RATES_SET')
+      })
+    })
   })
 
   describe('GET /bookings/:id', () => {
@@ -617,12 +692,36 @@ describe('Booking Routes', () => {
       expect(body.error).toBe('Booking not found')
     })
 
+    // Issue #74: cancellation fee tests seed a vehicle with known rates so
+    // the server-side pricing code produces a deterministic totalPrice for
+    // the 24h booking (10,000 JPY/day × 1 day = 10,000). Clients can no
+    // longer propose totalPrice on the request body.
+    async function seedPricedVehicle() {
+      const vehicle = await vehicleRepo.create({
+        name: 'Priced Vehicle',
+        description: null,
+        photos: [],
+        seats: 5,
+        transmission: 'AUTO',
+        fuelType: null,
+        status: 'AVAILABLE',
+        bufferMinutes: 60,
+        minRentalHours: null,
+        maxRentalHours: null,
+        advanceBookingHours: null,
+        dailyRateJpy: 10000,
+        hourlyRateJpy: null,
+      })
+      return vehicle.id
+    }
+
     it('returns FREE tier and 0 fee when cancelling 72h+ before pickup', async () => {
+      const vehicleId = await seedPricedVehicle()
       const createRes = await createBooking({
         ...validBookingInput(),
+        vehicleId,
         startAt: futureDate(96), // 96h from now
         endAt: futureDate(120),
-        totalPrice: 10000,
       })
       const created = await createRes.json()
 
@@ -641,11 +740,12 @@ describe('Booking Routes', () => {
     })
 
     it('returns LOW tier and 30% fee when cancelling 48-72h before pickup', async () => {
+      const vehicleId = await seedPricedVehicle()
       const createRes = await createBooking({
         ...validBookingInput(),
+        vehicleId,
         startAt: futureDate(60), // 60h from now (between 48-72)
         endAt: futureDate(84),
-        totalPrice: 10000,
       })
       const created = await createRes.json()
 
@@ -661,11 +761,12 @@ describe('Booking Routes', () => {
     })
 
     it('returns FULL tier and 100% fee when cancelling < 24h before pickup', async () => {
+      const vehicleId = await seedPricedVehicle()
       const createRes = await createBooking({
         ...validBookingInput(),
+        vehicleId,
         startAt: futureDate(12), // 12h from now
         endAt: futureDate(36),
-        totalPrice: 10000,
       })
       const created = await createRes.json()
 
@@ -679,21 +780,6 @@ describe('Booking Routes', () => {
       expect(body.cancellation.tier).toBe('FULL')
       expect(body.cancellation.feePercentage).toBe(1)
       expect(body.cancellation.refundAmount).toBe(0)
-    })
-
-    it('handles booking without totalPrice (legacy) gracefully', async () => {
-      const createRes = await createBooking() // no totalPrice
-      const created = await createRes.json()
-
-      const res = await app.request(`/bookings/${created.data.id}/cancel`, {
-        method: 'POST',
-      })
-
-      expect(res.status).toBe(200)
-      const body = await res.json()
-      expect(body.data.status).toBe('CANCELLED')
-      expect(body.data.cancellationFee).toBe(0) // no price = no fee
-      expect(body.cancellation.feeAmount).toBe(0)
     })
   })
 })
