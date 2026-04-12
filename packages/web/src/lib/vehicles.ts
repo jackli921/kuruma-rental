@@ -1,4 +1,5 @@
 import { getApiBaseUrl } from '@/lib/api-client'
+import type { ApiResponse } from '@kuruma/shared/types/api-response'
 
 interface Vehicle {
   id: string
@@ -17,12 +18,6 @@ interface Vehicle {
   updatedAt: string
 }
 
-interface ApiResponse<T> {
-  success: boolean
-  data?: T
-  error?: string
-}
-
 export async function getAvailableVehicles(from?: string, to?: string): Promise<Vehicle[]> {
   const base = getApiBaseUrl()
 
@@ -34,7 +29,7 @@ export async function getAvailableVehicles(from?: string, to?: string): Promise<
   const res = await fetch(url)
   const json: ApiResponse<Vehicle[]> = await res.json()
 
-  if (!json.success || !json.data) return []
+  if (!json.success) return []
 
   return json.data
 }
@@ -44,7 +39,7 @@ export async function getVehicleById(id: string): Promise<Vehicle | null> {
   const res = await fetch(`${base}/vehicles/${encodeURIComponent(id)}`)
   const json: ApiResponse<Vehicle> = await res.json()
 
-  if (!json.success || !json.data) return null
+  if (!json.success) return null
 
   return json.data
 }

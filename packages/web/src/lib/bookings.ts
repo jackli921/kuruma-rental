@@ -2,6 +2,7 @@
 
 import { auth } from '@/auth'
 import { getApiBaseUrl } from '@/lib/api-client'
+import type { ApiResponse } from '@kuruma/shared/types/api-response'
 
 interface CreateBookingInput {
   vehicleId: string
@@ -23,12 +24,6 @@ type CreateBookingResult =
   | { success: true; bookingId: string }
   | { success: false; error: string; rentalRule?: RentalRuleFailure }
 
-interface ApiResponse<T> {
-  success: boolean
-  data?: T
-  error?: string
-}
-
 export async function checkAvailability(
   vehicleId: string,
   startAt: Date,
@@ -42,7 +37,7 @@ export async function checkAvailability(
   )
   const json: ApiResponse<{ available: boolean }> = await res.json()
 
-  if (!json.success || !json.data) return false
+  if (!json.success) return false
 
   return json.data.available
 }
@@ -158,7 +153,7 @@ export async function getBookingsByRenterId(userId: string): Promise<BookingWith
   const res = await fetch(`${base}/bookings?renterId=${encodeURIComponent(userId)}&expand=vehicle`)
   const json: ApiResponse<BookingWithVehicleResponse[]> = await res.json()
 
-  if (!json.success || !json.data) return []
+  if (!json.success) return []
 
   return json.data.map((booking) => ({
     id: booking.id,
@@ -192,7 +187,7 @@ export async function getBookingById(id: string): Promise<Booking | null> {
   const res = await fetch(`${base}/bookings/${encodeURIComponent(id)}`)
   const json: ApiResponse<Booking> = await res.json()
 
-  if (!json.success || !json.data) return null
+  if (!json.success) return null
 
   return json.data
 }
