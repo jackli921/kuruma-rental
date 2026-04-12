@@ -25,7 +25,14 @@ export function rateLimit(options: RateLimitOptions): MiddlewareHandler {
       return next()
     }
 
-    const ip = c.req.header('cf-connecting-ip') ?? c.req.header('x-forwarded-for') ?? 'unknown'
+    // Only trust cf-connecting-ip (set by Cloudflare, cannot be spoofed).
+    // If absent (local dev, server-to-server without CF), skip rate limiting
+    // rather than sharing a single "unknown" bucket across all clients.
+    const ip = c.req.header('cf-connecting-ip')
+    if (!ip) {
+      return next()
+    }
+
     const isWrite = WRITE_METHODS.has(c.req.method)
     const limit = isWrite ? writeLimit : readLimit
     const windowKey = Math.floor(Date.now() / (windowSeconds * 1000))

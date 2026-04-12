@@ -17,6 +17,9 @@ function createTestApp(kv: KVStore) {
   app.use('*', rateLimit({ kv, readLimit: 5, writeLimit: 2, windowSeconds: 60 }))
   app.get('/vehicles', (c) => c.json({ success: true, data: [] }))
   app.post('/vehicles', (c) => c.json({ success: true, data: {} }))
+  app.put('/vehicles', (c) => c.json({ success: true, data: {} }))
+  app.delete('/vehicles', (c) => c.json({ success: true }))
+  app.patch('/vehicles', (c) => c.json({ success: true, data: {} }))
   app.get('/health', (c) => c.json({ status: 'ok' }))
   return app
 }
@@ -121,16 +124,44 @@ describe('rate-limit middleware', () => {
     app.get('/health', (c) => c.json({ status: 'ok' }))
     app.get('/vehicles', (c) => c.json({ data: [] }))
 
+    const headers = { 'cf-connecting-ip': '1.2.3.4' }
+
     // Health should always pass regardless of limit
-    const h1 = await app.request('/health')
-    const h2 = await app.request('/health')
+    const h1 = await app.request('/health', { headers })
+    const h2 = await app.request('/health', { headers })
     expect(h1.status).toBe(200)
     expect(h2.status).toBe(200)
     expect(h1.headers.get('X-RateLimit-Limit')).toBeNull()
 
     // But /vehicles should still be limited
-    await app.request('/vehicles')
-    const v2 = await app.request('/vehicles')
+    await app.request('/vehicles', { headers: { 'cf-connecting-ip': '1.2.3.4' } })
+    const v2 = await app.request('/vehicles', { headers: { 'cf-connecting-ip': '1.2.3.4' } })
     expect(v2.status).toBe(429)
+  })
+
+  it('skips rate limiting when cf-connecting-ip is absent', async () => {
+    const kv = createMockKV()
+    const app = createTestApp(kv)
+
+    // No cf-connecting-ip header — should pass unlimited
+    const res1 = await app.request('/vehicles')
+    const res2 = await app.request('/vehicles')
+    expect(res1.status).toBe(200)
+    expect(res2.status).toBe(200)
+    expect(res1.headers.get('X-RateLimit-Limit')).toBeNull()
+  })
+
+  it.each(['PUT', 'DELETE', 'PATCH'] as const)('%s counts as a write method', async (method) => {
+    const kv = createMockKV()
+    const app = createTestApp(kv)
+    const headers = { 'cf-connecting-ip': '1.2.3.4' }
+
+    // Exhaust 2-request write limit
+    for (let i = 0; i < 2; i++) {
+      await app.request('/vehicles', { method, headers })
+    }
+    const res = await app.request('/vehicles', { method, headers })
+    expect(res.status).toBe(429)
+    expect(res.headers.get('X-RateLimit-Limit')).toBe('2')
   })
 })
