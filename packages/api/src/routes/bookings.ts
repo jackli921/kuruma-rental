@@ -12,11 +12,20 @@ export function createBookingRoutes(service: BookingService): Hono {
     const vehicleIdFilter = c.req.query('vehicleId')
     const renterIdFilter = c.req.query('renterId')
     const expand = c.req.query('expand')
+    const limitParam = c.req.query('limit')
+    const cursor = c.req.query('cursor')
 
     const dateRange = parseDateRange(c, false)
     if (!dateRange.ok) return dateRange.response
 
-    const filters: BookingFilters = {}
+    // Validate limit: 1–100, default 20
+    const limit = limitParam ? Number.parseInt(limitParam, 10) : 20
+    if (Number.isNaN(limit) || limit < 1 || limit > 100) {
+      return fail(c, 'limit must be between 1 and 100', 400)
+    }
+
+    const filters: BookingFilters = { limit }
+    if (cursor) filters.cursor = cursor
     if (statusFilter) filters.status = statusFilter
     if (vehicleIdFilter) filters.vehicleId = vehicleIdFilter
     if (renterIdFilter) filters.renterId = renterIdFilter
@@ -25,15 +34,13 @@ export function createBookingRoutes(service: BookingService): Hono {
       filters.to = dateRange.to
     }
 
-    const active = Object.keys(filters).length > 0 ? filters : undefined
-
     if (expand === 'vehicle') {
-      const expanded = await service.findAllWithVehicles(active)
-      return ok(c, expanded)
+      const result = await service.findAllWithVehiclesPaginated(filters)
+      return ok(c, result.data, 200, { nextCursor: result.nextCursor })
     }
 
-    const results = await service.findAll(active)
-    return ok(c, results)
+    const result = await service.findAllPaginated(filters)
+    return ok(c, result.data, 200, { nextCursor: result.nextCursor })
   })
 
   bookings.get('/bookings/:id', async (c) => {

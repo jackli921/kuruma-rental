@@ -34,6 +34,8 @@ export interface BookingFilters {
   renterId?: string
   from?: Date
   to?: Date
+  limit?: number
+  cursor?: string
 }
 
 export interface BookingRepository {

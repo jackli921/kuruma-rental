@@ -48,7 +48,7 @@ describe('Booking Routes', () => {
       expect(res.status).toBe(200)
 
       const body = await res.json()
-      expect(body).toEqual({ success: true, data: [] })
+      expect(body).toEqual({ success: true, data: [], nextCursor: null })
     })
 
     it('returns created bookings', async () => {
@@ -264,6 +264,115 @@ describe('Booking Routes', () => {
       expect(body.success).toBe(true)
       expect(body.data).toHaveLength(1)
       expect(body.data[0].vehicle).toBeUndefined()
+    })
+  })
+
+  describe('GET /bookings — cursor pagination', () => {
+    async function createNBookings(n: number) {
+      const ids: string[] = []
+      for (let i = 0; i < n; i++) {
+        const res = await app.request('/bookings', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            vehicleId: `v-page-${i}`,
+            renterId: 'user1',
+            startAt: futureDate(24),
+            endAt: futureDate(48),
+            source: 'DIRECT',
+          }),
+        })
+        const body = await res.json()
+        ids.push(body.data.id)
+      }
+      return ids
+    }
+
+    it('returns at most limit items and a nextCursor when more exist', async () => {
+      await createNBookings(5)
+
+      const res = await app.request('/bookings?limit=2')
+      const body = await res.json()
+
+      expect(body.success).toBe(true)
+      expect(body.data).toHaveLength(2)
+      expect(body.nextCursor).toBeDefined()
+      expect(typeof body.nextCursor).toBe('string')
+    })
+
+    it('returns nextCursor null when no more results', async () => {
+      await createNBookings(2)
+
+      const res = await app.request('/bookings?limit=10')
+      const body = await res.json()
+
+      expect(body.success).toBe(true)
+      expect(body.data).toHaveLength(2)
+      expect(body.nextCursor).toBeNull()
+    })
+
+    it('pages through all results using nextCursor', async () => {
+      await createNBookings(5)
+
+      // Page 1
+      const res1 = await app.request('/bookings?limit=2')
+      const body1 = await res1.json()
+      expect(body1.data).toHaveLength(2)
+      expect(body1.nextCursor).toBeDefined()
+
+      // Page 2
+      const res2 = await app.request(`/bookings?limit=2&cursor=${body1.nextCursor}`)
+      const body2 = await res2.json()
+      expect(body2.data).toHaveLength(2)
+      expect(body2.nextCursor).toBeDefined()
+
+      // Page 3 (last item)
+      const res3 = await app.request(`/bookings?limit=2&cursor=${body2.nextCursor}`)
+      const body3 = await res3.json()
+      expect(body3.data).toHaveLength(1)
+      expect(body3.nextCursor).toBeNull()
+
+      // No duplicates across pages
+      const allIds = [
+        ...body1.data.map((b: { id: string }) => b.id),
+        ...body2.data.map((b: { id: string }) => b.id),
+        ...body3.data.map((b: { id: string }) => b.id),
+      ]
+      expect(new Set(allIds).size).toBe(5)
+    })
+
+    it('combines pagination with status filter', async () => {
+      await createNBookings(3)
+      // Cancel the first one
+      const allRes = await app.request('/bookings')
+      const allBody = await allRes.json()
+      const firstId = allBody.data[0].id
+      await app.request(`/bookings/${firstId}/cancel`, { method: 'POST' })
+
+      const res = await app.request('/bookings?status=CONFIRMED&limit=10')
+      const body = await res.json()
+
+      expect(body.data).toHaveLength(2)
+      expect(body.data.every((b: { status: string }) => b.status === 'CONFIRMED')).toBe(true)
+      expect(body.nextCursor).toBeNull()
+    })
+
+    it('defaults to 20 items when no limit specified', async () => {
+      const res = await app.request('/bookings')
+      const body = await res.json()
+
+      // Existing behavior: returns all (empty here), with nextCursor null
+      expect(body.nextCursor).toBeNull()
+    })
+
+    it('rejects limit > 100', async () => {
+      const res = await app.request('/bookings?limit=200')
+      expect(res.status).toBe(400)
+    })
+
+    it('rejects limit < 1', async () => {
+      const res = await app.request('/bookings?limit=0')
+      expect(res.status).toBe(400)
     })
   })
 
