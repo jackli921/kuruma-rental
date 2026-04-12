@@ -1,9 +1,11 @@
 import { describe, expect, it } from 'vitest'
-import { cancelBookingSchema, createBookingSchema } from '../../src/validators/booking'
+import { createBookingSchema, updateBookingStatusSchema } from '../../src/validators/booking'
+
+const VALID_UUID = '550e8400-e29b-41d4-a716-446655440000'
 
 describe('createBookingSchema', () => {
   const validInput = {
-    vehicleId: 'vehicle-123',
+    vehicleId: VALID_UUID,
     startAt: '2026-04-10T09:00:00Z',
     endAt: '2026-04-10T17:00:00Z',
   }
@@ -12,7 +14,7 @@ describe('createBookingSchema', () => {
     const result = createBookingSchema.safeParse(validInput)
     expect(result.success).toBe(true)
     if (result.success) {
-      expect(result.data.source).toBe('DIRECT') // default
+      expect(result.data.source).toBe('DIRECT')
     }
   })
 
@@ -24,6 +26,11 @@ describe('createBookingSchema', () => {
       externalId: 'TC-12345',
     })
     expect(result.success).toBe(true)
+  })
+
+  it('rejects non-UUID vehicleId', () => {
+    const result = createBookingSchema.safeParse({ ...validInput, vehicleId: 'vehicle-123' })
+    expect(result.success).toBe(false)
   })
 
   it('rejects missing vehicleId', () => {
@@ -52,17 +59,29 @@ describe('createBookingSchema', () => {
   })
 })
 
-describe('cancelBookingSchema', () => {
-  it('accepts empty object', () => {
-    const result = cancelBookingSchema.safeParse({})
-    expect(result.success).toBe(true)
-  })
-
-  it('accepts reason', () => {
-    const result = cancelBookingSchema.safeParse({ reason: 'Flight cancelled' })
+describe('updateBookingStatusSchema', () => {
+  it('accepts valid status', () => {
+    const result = updateBookingStatusSchema.safeParse({ status: 'ACTIVE' })
     expect(result.success).toBe(true)
     if (result.success) {
-      expect(result.data.reason).toBe('Flight cancelled')
+      expect(result.data.status).toBe('ACTIVE')
     }
+  })
+
+  it('accepts all valid statuses', () => {
+    for (const status of ['CONFIRMED', 'ACTIVE', 'COMPLETED', 'CANCELLED']) {
+      const result = updateBookingStatusSchema.safeParse({ status })
+      expect(result.success).toBe(true)
+    }
+  })
+
+  it('rejects invalid status', () => {
+    const result = updateBookingStatusSchema.safeParse({ status: 'BANANA' })
+    expect(result.success).toBe(false)
+  })
+
+  it('rejects empty status', () => {
+    const result = updateBookingStatusSchema.safeParse({ status: '' })
+    expect(result.success).toBe(false)
   })
 })
