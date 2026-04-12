@@ -1,4 +1,4 @@
-import { getApiBaseUrl } from '@/lib/api-client'
+import { createApiClient } from '@/lib/api-client'
 import type { ApiResponse } from '@kuruma/shared/types/api-response'
 
 export interface CalendarBooking {
@@ -14,15 +14,14 @@ export interface CalendarBooking {
 }
 
 export async function fetchCalendarBookings(from: string, to: string): Promise<CalendarBooking[]> {
-  const base = getApiBaseUrl()
-  const params = new URLSearchParams({ from, to })
-  const res = await fetch(`${base}/bookings?${params.toString()}`)
+  const client = createApiClient()
+  const res = await client.bookings.$get({ query: { from, to } })
 
   if (!res.ok) {
     throw new Error(`Failed to fetch bookings: HTTP ${res.status}`)
   }
 
-  const body: ApiResponse<CalendarBooking[]> = await res.json()
+  const body = (await res.json()) as ApiResponse<CalendarBooking[]>
   if (!body.success) {
     throw new Error(body.error ?? 'Invalid bookings response')
   }
