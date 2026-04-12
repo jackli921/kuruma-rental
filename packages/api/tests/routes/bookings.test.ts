@@ -11,9 +11,7 @@ let app: Hono
 let vehicleRepo: InMemoryVehicleRepository
 
 function futureDate(hoursFromNow: number): string {
-  const d = new Date()
-  d.setHours(d.getHours() + hoursFromNow)
-  return d.toISOString()
+  return new Date(Date.now() + hoursFromNow * 60 * 60 * 1000).toISOString()
 }
 
 function validBookingInput() {

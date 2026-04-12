@@ -14,15 +14,11 @@ let bookingRepo: InMemoryBookingRepository
 let renterNames: Map<string, string>
 
 function futureDate(hoursFromNow: number): Date {
-  const d = new Date()
-  d.setHours(d.getHours() + hoursFromNow)
-  return d
+  return new Date(Date.now() + hoursFromNow * 60 * 60 * 1000)
 }
 
 function pastDate(hoursAgo: number): Date {
-  const d = new Date()
-  d.setHours(d.getHours() - hoursAgo)
-  return d
+  return new Date(Date.now() - hoursAgo * 60 * 60 * 1000)
 }
 
 const DEFAULT_BUFFER_MS = 60 * 60 * 1000
@@ -176,22 +172,22 @@ describe('GET /vehicles/:id/detail', () => {
     const b1 = await seedBooking(vehicle.id, pastDate(72), pastDate(48), {
       totalPrice: 5000,
     })
-    await bookingRepo.updateStatus(b1.id, 'ACTIVE')
-    await bookingRepo.updateStatus(b1.id, 'COMPLETED')
+    await bookingRepo.updateStatus(b1.id, 'CONFIRMED', 'ACTIVE')
+    await bookingRepo.updateStatus(b1.id, 'ACTIVE', 'COMPLETED')
 
     // Completed booking 10 days ago
     const b2 = await seedBooking(vehicle.id, pastDate(240), pastDate(216), {
       totalPrice: 8000,
     })
-    await bookingRepo.updateStatus(b2.id, 'ACTIVE')
-    await bookingRepo.updateStatus(b2.id, 'COMPLETED')
+    await bookingRepo.updateStatus(b2.id, 'CONFIRMED', 'ACTIVE')
+    await bookingRepo.updateStatus(b2.id, 'ACTIVE', 'COMPLETED')
 
     // Completed booking 60 days ago
     const b3 = await seedBooking(vehicle.id, pastDate(1440), pastDate(1416), {
       totalPrice: 12000,
     })
-    await bookingRepo.updateStatus(b3.id, 'ACTIVE')
-    await bookingRepo.updateStatus(b3.id, 'COMPLETED')
+    await bookingRepo.updateStatus(b3.id, 'CONFIRMED', 'ACTIVE')
+    await bookingRepo.updateStatus(b3.id, 'ACTIVE', 'COMPLETED')
 
     const res = await app.request(`/vehicles/${vehicle.id}/detail`)
     const body = await res.json()
@@ -207,8 +203,8 @@ describe('GET /vehicles/:id/detail', () => {
     const b1 = await seedBooking(vehicle.id, pastDate(72), pastDate(48), {
       totalPrice: null,
     })
-    await bookingRepo.updateStatus(b1.id, 'ACTIVE')
-    await bookingRepo.updateStatus(b1.id, 'COMPLETED')
+    await bookingRepo.updateStatus(b1.id, 'CONFIRMED', 'ACTIVE')
+    await bookingRepo.updateStatus(b1.id, 'ACTIVE', 'COMPLETED')
 
     const res = await app.request(`/vehicles/${vehicle.id}/detail`)
     const body = await res.json()
@@ -237,8 +233,8 @@ describe('GET /vehicles/:id/detail', () => {
     const b = await seedBooking(vehicle.id, pastDate(48), pastDate(24), {
       totalPrice: 5000,
     })
-    await bookingRepo.updateStatus(b.id, 'ACTIVE')
-    await bookingRepo.updateStatus(b.id, 'COMPLETED')
+    await bookingRepo.updateStatus(b.id, 'CONFIRMED', 'ACTIVE')
+    await bookingRepo.updateStatus(b.id, 'ACTIVE', 'COMPLETED')
 
     const res = await app.request(`/vehicles/${vehicle.id}/detail`)
     const body = await res.json()
