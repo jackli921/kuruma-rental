@@ -1,5 +1,5 @@
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { OAuthButtons } from '@/modules/auth/OAuthButtons'
+import { OAuthButtons } from '@/modules/auth'
 import { useTranslations } from 'next-intl'
 
 export default function LoginPage() {

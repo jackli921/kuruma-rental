@@ -8,18 +8,24 @@
     "dev:api": "bun run --filter @kuruma/api dev",
     "build": "bun run --filter '*' build",
     "test": "bun run --filter '*' test",
-    "lint": "bunx biome check .",
+    "lint": "bunx biome check . && bun run lint:size && bun run lint:modules",
     "lint:fix": "bunx biome check --write .",
+    "lint:size": "bun run scripts/lint-file-size.ts",
+    "lint:modules": "bun run scripts/lint-module-boundaries.ts",
     "format": "bunx biome format --write .",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
     "db:studio": "drizzle-kit studio",
     "db:seed": "bun run packages/shared/src/db/seed.ts",
-    "db:verify": "bun run scripts/db-verify.ts"
+    "db:verify": "bun run scripts/db-verify.ts",
+    "prepare": "husky"
   },
   "devDependencies": {
     "@biomejs/biome": "^1.9.4",
     "drizzle-kit": "^0.31.10",
+    "husky": "^9.1.7",
+    "knip": "^6.3.1",
+    "lint-staged": "^16.4.0",
     "typescript": "^5"
   },
   "trustedDependencies": ["sharp", "unrs-resolver"]
