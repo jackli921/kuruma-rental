@@ -10,6 +10,7 @@ import { formatDurationHours } from '@/lib/rental-rules-format'
 import { checkRentalRules } from '@kuruma/shared/lib/rental-rules'
 import { Car, Fuel, Settings2, Users, XCircle } from 'lucide-react'
 import { useTranslations } from 'next-intl'
+import Image from 'next/image'
 import { useActionState, useEffect, useMemo, useState } from 'react'
 
 interface VehicleInfo {
@@ -130,8 +131,14 @@ export function BookingForm({ vehicle, isAuthenticated }: BookingFormProps) {
           <h2 className="text-lg font-medium mb-4">{t('vehicleInfo')}</h2>
           <div className="flex gap-4">
             {primaryPhoto ? (
-              <div className="w-32 h-24 overflow-hidden rounded-lg bg-muted shrink-0">
-                <img src={primaryPhoto} alt={vehicle.name} className="w-full h-full object-cover" />
+              <div className="relative w-32 h-24 overflow-hidden rounded-lg bg-muted shrink-0">
+                <Image
+                  src={primaryPhoto}
+                  alt={vehicle.name}
+                  fill
+                  className="object-cover"
+                  sizes="128px"
+                />
               </div>
             ) : (
               <div className="w-32 h-24 overflow-hidden rounded-lg bg-muted flex items-center justify-center shrink-0">
