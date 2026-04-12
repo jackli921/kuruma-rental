@@ -122,8 +122,8 @@ export const bookings = pgTable('bookings', {
   source: bookingSourceEnum('source').notNull().default('DIRECT'),
   externalId: text('externalId'),
   notes: text('notes'),
-  totalPrice: integer('totalPrice'), // cents, nullable for legacy bookings
-  cancellationFee: integer('cancellationFee'), // cents, set on cancellation
+  totalPrice: integer('totalPrice'), // whole JPY, nullable for legacy bookings
+  cancellationFee: integer('cancellationFee'), // whole JPY, set on cancellation
   cancelledAt: timestamp('cancelledAt', { withTimezone: true, mode: 'date' }),
   idempotencyKey: text('idempotencyKey'),
   createdAt: timestamp('createdAt', { withTimezone: true }).notNull().defaultNow(),

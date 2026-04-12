@@ -1,5 +1,6 @@
 import { buttonVariants } from '@/components/ui/button'
 import { Link } from '@/i18n/routing'
+import { formatJpy } from '@/lib/format'
 import { cn } from '@/lib/utils'
 import { ArrowRight, Star, Users } from 'lucide-react'
 import { useTranslations } from 'next-intl'
@@ -87,9 +88,7 @@ export function FeaturedVehicles() {
                 <p className="text-sm text-muted-foreground mt-0.5">{vehicle.type}</p>
                 <div className="flex items-center justify-between mt-3">
                   <p className="text-sm">
-                    <span className="font-semibold">
-                      {t('currency', { price: vehicle.price.toLocaleString() })}
-                    </span>
+                    <span className="font-semibold">{formatJpy(vehicle.price)}</span>
                     <span className="text-muted-foreground"> / {t('perDay')}</span>
                   </p>
                   <div className="flex items-center gap-1 text-sm text-muted-foreground">
