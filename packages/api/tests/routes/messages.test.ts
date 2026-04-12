@@ -179,6 +179,22 @@ describe('Message Routes', () => {
       })
       expect(res.status).toBe(404)
     })
+
+    it('non-participant cannot mark thread as read', async () => {
+      const createRes = await appAs(U1).request('/threads', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ participantIds: [U1, U2] }),
+      })
+      const threadId = (await createRes.json()).data.id
+
+      const res = await appAs(U3).request(`/threads/${threadId}/read`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId: U3 }),
+      })
+      expect(res.status).toBe(404)
+    })
   })
 
   describe('POST /threads/:id/messages', () => {

@@ -84,11 +84,16 @@ export function createMessageRoutes(
   })
 
   app.post('/threads/:id/read', async (c) => {
+    const user = getUser(c)
+    if (!user) return fail(c, 'Unauthorized', 401)
+
     const thread = await threadRepo.findById(c.req.param('id'))
     if (!thread) return fail(c, 'Thread not found', 404)
 
-    const user = getUser(c)
-    if (!user) return fail(c, 'Unauthorized', 401)
+    if (!PRIVILEGED_ROLES.has(user.role)) {
+      const isParticipant = thread.participants.some((p) => p.userId === user.id)
+      if (!isParticipant) return fail(c, 'Thread not found', 404)
+    }
 
     await threadRepo.markAsRead(thread.id, user.id)
     return ok(c, null)
