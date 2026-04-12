@@ -72,6 +72,7 @@ async function seedBooking(
     totalPrice: overrides?.totalPrice ?? null,
     cancellationFee: null,
     cancelledAt: null,
+    idempotencyKey: null,
   })
 }
 
