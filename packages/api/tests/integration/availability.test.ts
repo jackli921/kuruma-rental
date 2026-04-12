@@ -53,6 +53,7 @@ function createTestVehicle(
     minRentalHours: overrides.minRentalHours ?? null,
     maxRentalHours: overrides.maxRentalHours ?? null,
     advanceBookingHours: overrides.advanceBookingHours ?? null,
+    dailyRateJpy: overrides.dailyRateJpy ?? 5000,
   })
 }
 

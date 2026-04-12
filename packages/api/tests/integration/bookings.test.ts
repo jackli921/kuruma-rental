@@ -35,6 +35,7 @@ beforeAll(async () => {
     minRentalHours: null,
     maxRentalHours: null,
     advanceBookingHours: null,
+    dailyRateJpy: 5000,
   })
   createdVehicleIds.push(testVehicle.id)
 })
@@ -164,6 +165,7 @@ describe('DrizzleBookingRepository', () => {
       minRentalHours: null,
       maxRentalHours: null,
       advanceBookingHours: null,
+      dailyRateJpy: 5000,
     })
     createdVehicleIds.push(otherVehicle.id)
 

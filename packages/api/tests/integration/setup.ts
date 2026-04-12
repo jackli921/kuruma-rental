@@ -1,9 +1,9 @@
-import { getDb } from '@kuruma/shared/db'
 import { bookings, users, vehicles } from '@kuruma/shared/db/schema'
 import { eq } from 'drizzle-orm'
+import { testDb } from './pg-test-client'
 
-const db = getDb()
-
+// Re-export as `db` so existing test files keep their import unchanged.
+const db = testDb
 export { db }
 
 export async function cleanupVehicles(ids: string[]): Promise<void> {
