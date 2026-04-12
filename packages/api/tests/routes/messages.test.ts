@@ -6,6 +6,10 @@ import {
 } from '../../src/repositories/in-memory'
 import { createMessageRoutes } from '../../src/routes/messages'
 
+const U1 = '00000000-0000-4000-8000-0000000000a1'
+const U2 = '00000000-0000-4000-8000-0000000000a2'
+const U3 = '00000000-0000-4000-8000-0000000000a3'
+
 let app: Hono
 let threadRepo: InMemoryThreadRepository
 let messageRepo: InMemoryMessageRepository
@@ -20,7 +24,7 @@ describe('Message Routes', () => {
 
   describe('GET /threads', () => {
     it('returns empty list when no threads exist for user', async () => {
-      const res = await app.request('/threads?userId=user1')
+      const res = await app.request(`/threads?userId=${U1}`)
 
       expect(res.status).toBe(200)
 
@@ -33,18 +37,18 @@ describe('Message Routes', () => {
       await app.request('/threads', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ participantIds: ['user1', 'user2'] }),
+        body: JSON.stringify({ participantIds: [U1, U2] }),
       })
 
-      const res = await app.request('/threads?userId=user1')
+      const res = await app.request(`/threads?userId=${U1}`)
       const body = await res.json()
 
       expect(body.success).toBe(true)
       expect(body.data).toHaveLength(1)
       expect(body.data[0].participants).toHaveLength(2)
       expect(body.data[0].participants.map((p: { userId: string }) => p.userId).sort()).toEqual([
-        'user1',
-        'user2',
+        U1,
+        U2,
       ])
       expect(body.data[0].lastMessage).toBeNull()
     })
@@ -54,30 +58,30 @@ describe('Message Routes', () => {
       await app.request('/threads', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ participantIds: ['user1', 'user2'] }),
+        body: JSON.stringify({ participantIds: [U1, U2] }),
       })
 
       // Thread between user2 and user3 (user1 is NOT a participant)
       await app.request('/threads', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ participantIds: ['user2', 'user3'] }),
+        body: JSON.stringify({ participantIds: [U2, U3] }),
       })
 
       // user1 should only see 1 thread
-      const res1 = await app.request('/threads?userId=user1')
+      const res1 = await app.request(`/threads?userId=${U1}`)
       const body1 = await res1.json()
       expect(body1.success).toBe(true)
       expect(body1.data).toHaveLength(1)
 
       // user2 should see both threads
-      const res2 = await app.request('/threads?userId=user2')
+      const res2 = await app.request(`/threads?userId=${U2}`)
       const body2 = await res2.json()
       expect(body2.success).toBe(true)
       expect(body2.data).toHaveLength(2)
 
       // user3 should see only 1 thread
-      const res3 = await app.request('/threads?userId=user3')
+      const res3 = await app.request(`/threads?userId=${U3}`)
       const body3 = await res3.json()
       expect(body3.success).toBe(true)
       expect(body3.data).toHaveLength(1)
@@ -90,7 +94,7 @@ describe('Message Routes', () => {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          participantIds: ['user1', 'user2'],
+          participantIds: [U1, U2],
         }),
       })
 
@@ -111,7 +115,7 @@ describe('Message Routes', () => {
       const createRes = await app.request('/threads', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ participantIds: ['user1', 'user2'] }),
+        body: JSON.stringify({ participantIds: [U1, U2] }),
       })
       const created = await createRes.json()
       const threadId = created.data.id
@@ -119,7 +123,7 @@ describe('Message Routes', () => {
       const res = await app.request(`/threads/${threadId}/messages`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ content: 'Hello!', senderId: 'user1' }),
+        body: JSON.stringify({ content: 'Hello!', senderId: U1 }),
       })
 
       expect(res.status).toBe(201)
@@ -127,7 +131,7 @@ describe('Message Routes', () => {
       const body = await res.json()
       expect(body.success).toBe(true)
       expect(body.data.threadId).toBe(threadId)
-      expect(body.data.senderId).toBe('user1')
+      expect(body.data.senderId).toBe(U1)
       expect(body.data.content).toBe('Hello!')
       expect(body.data.id).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/)
       expect(body.data.createdAt).toBeDefined()
@@ -140,7 +144,7 @@ describe('Message Routes', () => {
       const createRes = await app.request('/threads', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ participantIds: ['user1', 'user2'] }),
+        body: JSON.stringify({ participantIds: [U1, U2] }),
       })
       const created = await createRes.json()
       const threadId = created.data.id
@@ -149,12 +153,12 @@ describe('Message Routes', () => {
       await app.request(`/threads/${threadId}/messages`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ content: 'Hello!', senderId: 'user1' }),
+        body: JSON.stringify({ content: 'Hello!', senderId: U1 }),
       })
       await app.request(`/threads/${threadId}/messages`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ content: 'Hi there!', senderId: 'user2' }),
+        body: JSON.stringify({ content: 'Hi there!', senderId: U2 }),
       })
 
       const res = await app.request(`/threads/${threadId}`)
@@ -167,9 +171,9 @@ describe('Message Routes', () => {
       expect(body.data.participants).toHaveLength(2)
       expect(body.data.messages).toHaveLength(2)
       expect(body.data.messages[0].content).toBe('Hello!')
-      expect(body.data.messages[0].senderId).toBe('user1')
+      expect(body.data.messages[0].senderId).toBe(U1)
       expect(body.data.messages[1].content).toBe('Hi there!')
-      expect(body.data.messages[1].senderId).toBe('user2')
+      expect(body.data.messages[1].senderId).toBe(U2)
     })
 
     it('returns 404 for nonexistent thread', async () => {
@@ -189,7 +193,7 @@ describe('Message Routes', () => {
       const createRes = await app.request('/threads', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ participantIds: ['user1', 'user2'] }),
+        body: JSON.stringify({ participantIds: [U1, U2] }),
       })
       const created = await createRes.json()
       const threadId = created.data.id
@@ -198,19 +202,19 @@ describe('Message Routes', () => {
       await app.request(`/threads/${threadId}/messages`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ content: 'Hello!', senderId: 'user1' }),
+        body: JSON.stringify({ content: 'Hello!', senderId: U1 }),
       })
       await app.request(`/threads/${threadId}/messages`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ content: 'Are you there?', senderId: 'user1' }),
+        body: JSON.stringify({ content: 'Are you there?', senderId: U1 }),
       })
 
       // Verify user2 has unread messages via thread list
-      const beforeRes = await app.request('/threads?userId=user2')
+      const beforeRes = await app.request(`/threads?userId=${U2}`)
       const beforeBody = await beforeRes.json()
       const user2Participant = beforeBody.data[0].participants.find(
-        (p: { userId: string }) => p.userId === 'user2',
+        (p: { userId: string }) => p.userId === U2,
       )
       expect(user2Participant.unreadCount).toBe(2)
 
@@ -218,7 +222,7 @@ describe('Message Routes', () => {
       const readRes = await app.request(`/threads/${threadId}/read`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ userId: 'user2' }),
+        body: JSON.stringify({ userId: U2 }),
       })
 
       expect(readRes.status).toBe(200)
@@ -226,10 +230,10 @@ describe('Message Routes', () => {
       expect(readBody.success).toBe(true)
 
       // Verify unread count is now 0
-      const afterRes = await app.request('/threads?userId=user2')
+      const afterRes = await app.request(`/threads?userId=${U2}`)
       const afterBody = await afterRes.json()
       const user2After = afterBody.data[0].participants.find(
-        (p: { userId: string }) => p.userId === 'user2',
+        (p: { userId: string }) => p.userId === U2,
       )
       expect(user2After.unreadCount).toBe(0)
     })

@@ -6,7 +6,7 @@ import { z } from 'zod'
 // dropped by Zod, and the server writes its own computed value.
 export const createBookingSchema = z
   .object({
-    vehicleId: z.string().min(1, 'Vehicle ID is required'),
+    vehicleId: z.string().uuid('Vehicle ID must be a valid UUID'),
     startAt: z.string().datetime({ message: 'Must be ISO datetime' }),
     endAt: z.string().datetime({ message: 'Must be ISO datetime' }),
     notes: z.string().optional(),
@@ -20,12 +20,10 @@ export const createBookingSchema = z
   })
 
 export const updateBookingStatusSchema = z.object({
-  status: z.string().min(1, 'Status is required'),
-})
-
-export const cancelBookingSchema = z.object({
-  reason: z.string().optional(),
+  status: z.enum(['CONFIRMED', 'ACTIVE', 'COMPLETED', 'CANCELLED'], {
+    message: 'Status must be CONFIRMED, ACTIVE, COMPLETED, or CANCELLED',
+  }),
 })
 
 export type CreateBookingInput = z.infer<typeof createBookingSchema>
-export type CancelBookingInput = z.infer<typeof cancelBookingSchema>
+export type UpdateBookingStatusInput = z.infer<typeof updateBookingStatusSchema>

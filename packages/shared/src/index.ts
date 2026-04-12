@@ -9,7 +9,7 @@ export {
 } from './validators/vehicle'
 export {
   createBookingSchema,
-  cancelBookingSchema,
+  updateBookingStatusSchema,
   type CreateBookingInput,
-  type CancelBookingInput,
+  type UpdateBookingStatusInput,
 } from './validators/booking'

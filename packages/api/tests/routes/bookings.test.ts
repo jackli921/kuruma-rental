@@ -14,10 +14,15 @@ function futureDate(hoursFromNow: number): string {
   return new Date(Date.now() + hoursFromNow * 60 * 60 * 1000).toISOString()
 }
 
+const V1 = '00000000-0000-4000-8000-000000000001'
+const V2 = '00000000-0000-4000-8000-000000000002'
+const USER1 = '00000000-0000-4000-8000-0000000000a1'
+const USER2 = '00000000-0000-4000-8000-0000000000a2'
+
 function validBookingInput() {
   return {
-    vehicleId: 'v1',
-    renterId: 'user1',
+    vehicleId: V1,
+    renterId: USER1,
     startAt: futureDate(24),
     endAt: futureDate(48),
     source: 'DIRECT' as const,
@@ -55,7 +60,7 @@ describe('Booking Routes', () => {
       await createBooking()
       await createBooking({
         ...validBookingInput(),
-        vehicleId: 'v2',
+        vehicleId: V2,
       })
 
       const res = await app.request('/bookings')
@@ -90,31 +95,31 @@ describe('Booking Routes', () => {
       await createBooking()
       await createBooking({
         ...validBookingInput(),
-        vehicleId: 'v2',
+        vehicleId: V2,
       })
 
-      const res = await app.request('/bookings?vehicleId=v1')
+      const res = await app.request(`/bookings?vehicleId=${V1}`)
       const body = await res.json()
 
       expect(body.success).toBe(true)
       expect(body.data).toHaveLength(1)
-      expect(body.data[0].vehicleId).toBe('v1')
+      expect(body.data[0].vehicleId).toBe(V1)
     })
 
     it('filters by renterId', async () => {
       await createBooking()
       await createBooking({
         ...validBookingInput(),
-        renterId: 'user2',
-        vehicleId: 'v2',
+        renterId: USER2,
+        vehicleId: V2,
       })
 
-      const res = await app.request('/bookings?renterId=user1')
+      const res = await app.request(`/bookings?renterId=${USER1}`)
       const body = await res.json()
 
       expect(body.success).toBe(true)
       expect(body.data).toHaveLength(1)
-      expect(body.data[0].renterId).toBe('user1')
+      expect(body.data[0].renterId).toBe(USER1)
     })
 
     it('filters by renterId returning empty when no match', async () => {
@@ -164,7 +169,7 @@ describe('Booking Routes', () => {
       await createBooking()
       await createBooking({
         ...validBookingInput(),
-        vehicleId: 'v2',
+        vehicleId: V2,
       })
 
       // Cancel one
@@ -275,8 +280,8 @@ describe('Booking Routes', () => {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            vehicleId: `v-page-${i}`,
-            renterId: 'user1',
+            vehicleId: `00000000-0000-4000-8000-00000000${String(i).padStart(4, '0')}`,
+            renterId: USER1,
             startAt: futureDate(24),
             endAt: futureDate(48),
             source: 'DIRECT',
@@ -385,8 +390,8 @@ describe('Booking Routes', () => {
 
       const body = await res.json()
       expect(body.success).toBe(true)
-      expect(body.data.vehicleId).toBe('v1')
-      expect(body.data.renterId).toBe('user1')
+      expect(body.data.vehicleId).toBe(V1)
+      expect(body.data.renterId).toBe(USER1)
       expect(body.data.status).toBe('CONFIRMED')
       expect(body.data.source).toBe('DIRECT')
       expect(body.data.externalId).toBeNull()
@@ -401,7 +406,7 @@ describe('Booking Routes', () => {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          renterId: 'user1',
+          renterId: USER1,
           startAt: futureDate(24),
           endAt: futureDate(48),
         }),
@@ -412,6 +417,33 @@ describe('Booking Routes', () => {
       const body = await res.json()
       expect(body.success).toBe(false)
       expect(body.error).toBeDefined()
+    })
+
+    it('rejects non-UUID vehicleId with 400', async () => {
+      const res = await createBooking({
+        ...validBookingInput(),
+        vehicleId: 'not-a-uuid',
+      })
+
+      expect(res.status).toBe(400)
+      const body = await res.json()
+      expect(body.success).toBe(false)
+      expect(body.error.vehicleId[0]).toContain('UUID')
+    })
+
+    it('rejects invalid status string in PATCH /bookings/:id/status', async () => {
+      const createRes = await createBooking()
+      const created = await createRes.json()
+
+      const res = await app.request(`/bookings/${created.data.id}/status`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: 'BANANA' }),
+      })
+
+      expect(res.status).toBe(400)
+      const body = await res.json()
+      expect(body.success).toBe(false)
     })
 
     it('rejects endAt before startAt and returns 400', async () => {
@@ -448,7 +480,7 @@ describe('Booking Routes', () => {
       const first = await createBooking()
       expect(first.status).toBe(201)
 
-      const res = await createBooking({ ...validBookingInput(), vehicleId: 'v2' })
+      const res = await createBooking({ ...validBookingInput(), vehicleId: V2 })
       expect(res.status).toBe(201)
     })
 
@@ -592,7 +624,7 @@ describe('Booking Routes', () => {
         const first = await createBooking({
           ...validBookingInput(),
           idempotencyKey: crypto.randomUUID(),
-          vehicleId: 'v1',
+          vehicleId: V1,
         })
         expect(first.status).toBe(201)
         const firstBody = await first.json()
@@ -600,7 +632,7 @@ describe('Booking Routes', () => {
         const second = await createBooking({
           ...validBookingInput(),
           idempotencyKey: crypto.randomUUID(),
-          vehicleId: 'v2',
+          vehicleId: V2,
         })
         expect(second.status).toBe(201)
         const secondBody = await second.json()
@@ -624,7 +656,7 @@ describe('Booking Routes', () => {
         // then both attempt create. Second one hits the unique constraint.
         const [r1, r2] = await Promise.all([
           createBooking(input),
-          createBooking({ ...input, vehicleId: 'v2' }),
+          createBooking({ ...input, vehicleId: V2 }),
         ])
 
         const statuses = [r1.status, r2.status].sort()
@@ -676,7 +708,7 @@ describe('Booking Routes', () => {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             vehicleId,
-            renterId: 'user1',
+            renterId: USER1,
             startAt: futureDate(48),
             endAt: futureDate(72),
             source: 'DIRECT',
@@ -721,7 +753,7 @@ describe('Booking Routes', () => {
       const body = await res.json()
       expect(body.success).toBe(true)
       expect(body.data.id).toBe(created.data.id)
-      expect(body.data.vehicleId).toBe('v1')
+      expect(body.data.vehicleId).toBe(V1)
     })
 
     it('returns 404 for nonexistent booking', async () => {

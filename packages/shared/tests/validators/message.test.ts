@@ -1,10 +1,12 @@
 import { describe, expect, it } from 'vitest'
 import { createThreadSchema, markReadSchema, sendMessageSchema } from '../../src/validators/message'
 
+const UUID1 = '550e8400-e29b-41d4-a716-446655440001'
+const UUID2 = '550e8400-e29b-41d4-a716-446655440002'
+const UUID_BOOKING = '550e8400-e29b-41d4-a716-446655440099'
+
 describe('createThreadSchema', () => {
-  const validInput = {
-    participantIds: ['user-1', 'user-2'],
-  }
+  const validInput = { participantIds: [UUID1, UUID2] }
 
   it('accepts valid input with participantIds only', () => {
     const result = createThreadSchema.safeParse(validInput)
@@ -12,14 +14,21 @@ describe('createThreadSchema', () => {
   })
 
   it('accepts valid input with bookingId', () => {
-    const result = createThreadSchema.safeParse({
-      ...validInput,
-      bookingId: 'booking-1',
-    })
+    const result = createThreadSchema.safeParse({ ...validInput, bookingId: UUID_BOOKING })
     expect(result.success).toBe(true)
     if (result.success) {
-      expect(result.data.bookingId).toBe('booking-1')
+      expect(result.data.bookingId).toBe(UUID_BOOKING)
     }
+  })
+
+  it('rejects non-UUID bookingId', () => {
+    const result = createThreadSchema.safeParse({ ...validInput, bookingId: 'booking-1' })
+    expect(result.success).toBe(false)
+  })
+
+  it('rejects non-UUID participantIds', () => {
+    const result = createThreadSchema.safeParse({ participantIds: ['not-a-uuid'] })
+    expect(result.success).toBe(false)
   })
 
   it('rejects missing participantIds', () => {
@@ -29,11 +38,6 @@ describe('createThreadSchema', () => {
 
   it('rejects empty participantIds array', () => {
     const result = createThreadSchema.safeParse({ participantIds: [] })
-    expect(result.success).toBe(false)
-  })
-
-  it('rejects participantIds with empty string', () => {
-    const result = createThreadSchema.safeParse({ participantIds: [''] })
     expect(result.success).toBe(false)
   })
 
@@ -47,24 +51,24 @@ describe('createThreadSchema', () => {
 })
 
 describe('sendMessageSchema', () => {
-  const valid = { senderId: 'user-1', content: 'Hello!' }
+  const valid = { senderId: UUID1, content: 'Hello!' }
 
   it('accepts valid input', () => {
     const result = sendMessageSchema.safeParse(valid)
     expect(result.success).toBe(true)
     if (result.success) {
-      expect(result.data.senderId).toBe('user-1')
+      expect(result.data.senderId).toBe(UUID1)
       expect(result.data.content).toBe('Hello!')
     }
   })
 
-  it('rejects missing senderId', () => {
-    const result = sendMessageSchema.safeParse({ content: 'Hello!' })
+  it('rejects non-UUID senderId', () => {
+    const result = sendMessageSchema.safeParse({ senderId: 'user-1', content: 'Hello!' })
     expect(result.success).toBe(false)
   })
 
-  it('rejects empty senderId', () => {
-    const result = sendMessageSchema.safeParse({ senderId: '', content: 'Hello!' })
+  it('rejects missing senderId', () => {
+    const result = sendMessageSchema.safeParse({ content: 'Hello!' })
     expect(result.success).toBe(false)
   })
 
@@ -97,27 +101,27 @@ describe('sendMessageSchema', () => {
   })
 
   it('rejects missing content', () => {
-    const result = sendMessageSchema.safeParse({ senderId: 'user-1' })
+    const result = sendMessageSchema.safeParse({ senderId: UUID1 })
     expect(result.success).toBe(false)
   })
 })
 
 describe('markReadSchema', () => {
-  it('accepts valid userId', () => {
-    const result = markReadSchema.safeParse({ userId: 'user-1' })
+  it('accepts valid UUID userId', () => {
+    const result = markReadSchema.safeParse({ userId: UUID1 })
     expect(result.success).toBe(true)
     if (result.success) {
-      expect(result.data.userId).toBe('user-1')
+      expect(result.data.userId).toBe(UUID1)
     }
+  })
+
+  it('rejects non-UUID userId', () => {
+    const result = markReadSchema.safeParse({ userId: 'user-1' })
+    expect(result.success).toBe(false)
   })
 
   it('rejects missing userId', () => {
     const result = markReadSchema.safeParse({})
-    expect(result.success).toBe(false)
-  })
-
-  it('rejects empty userId', () => {
-    const result = markReadSchema.safeParse({ userId: '' })
     expect(result.success).toBe(false)
   })
 })

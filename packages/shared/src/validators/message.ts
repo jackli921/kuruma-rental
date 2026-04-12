@@ -1,17 +1,19 @@
 import { z } from 'zod'
 
 export const createThreadSchema = z.object({
-  bookingId: z.string().optional(),
-  participantIds: z.array(z.string().min(1)).min(1, 'At least one participant required'),
+  bookingId: z.string().uuid('Must be a valid UUID').optional(),
+  participantIds: z
+    .array(z.string().uuid('Each participant ID must be a valid UUID'))
+    .min(1, 'At least one participant required'),
 })
 
 export const sendMessageSchema = z.object({
-  senderId: z.string().min(1, 'senderId is required'),
+  senderId: z.string().uuid('senderId must be a valid UUID'),
   content: z.string().trim().min(1, 'Message cannot be empty').max(5000),
 })
 
 export const markReadSchema = z.object({
-  userId: z.string().min(1, 'userId is required'),
+  userId: z.string().uuid('userId must be a valid UUID'),
 })
 
 export type CreateThreadInput = z.infer<typeof createThreadSchema>
