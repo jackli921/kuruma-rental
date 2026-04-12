@@ -30,11 +30,12 @@ export async function checkAvailability(
   endAt: Date,
 ): Promise<boolean> {
   const client = createApiClient()
-  // query params read manually by parseDateRange() -- not in Hono's type sig
-  const res = await client.availability[':vehicleId'].$get({
-    param: { vehicleId },
-    query: { from: startAt.toISOString(), to: endAt.toISOString() },
-  } as { param: { vehicleId: string } })
+  // Query params read manually by parseDateRange() — not in Hono's type sig,
+  // so we use $url() for typed path construction + fetch for query params.
+  const url = client.availability[':vehicleId'].$url({ param: { vehicleId } })
+  url.searchParams.set('from', startAt.toISOString())
+  url.searchParams.set('to', endAt.toISOString())
+  const res = await fetch(url)
   const json = (await res.json()) as ApiResponse<{ available: boolean }>
 
   if (!json.success) return false

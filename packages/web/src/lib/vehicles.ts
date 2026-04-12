@@ -1,7 +1,7 @@
 import { createApiClient } from '@/lib/api-client'
 import type { ApiResponse } from '@kuruma/shared/types/api-response'
 
-export interface Vehicle {
+interface Vehicle {
   id: string
   name: string
   description: string | null
