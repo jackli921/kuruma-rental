@@ -64,6 +64,6 @@ describe('lint-file-size discovery', () => {
     const files = discoverFiles(['packages/web/src'])
     expect(files.some((f) => f.includes('.test.'))).toBe(false)
     expect(files.some((f) => f.includes('node_modules'))).toBe(false)
-    expect(files.some((f) => f.includes('.next'))).toBe(false)
+    expect(files.some((f) => f.includes('/.next/'))).toBe(false)
   })
 })

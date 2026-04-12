@@ -74,10 +74,6 @@ const EXCLUDE_PATTERNS = [
   /\/\.wrangler\//,
   /\/dist\//,
   /\/drizzle\//,
-  // Exclude Next.js catch-all segment folders (e.g. [...nextauth]) — boilerplate,
-  // not subject to file-size rules, and their paths contain ".next" as a substring
-  // which confuses the .next build directory exclusion check.
-  /\/\[\.\.\.next/,
 ]
 
 export function discoverFiles(roots: string[] = ROOTS): string[] {
