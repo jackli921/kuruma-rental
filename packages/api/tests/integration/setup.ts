@@ -1,10 +1,13 @@
-import { getDb } from '@kuruma/shared/db'
 import { bookings, users, vehicles } from '@kuruma/shared/db/schema'
 import { eq } from 'drizzle-orm'
+import { testDb } from './pg-test-client'
 
-const db = getDb()
-
+// Re-export as `db` so existing test files keep their import unchanged.
+const db = testDb
 export { db }
+
+/** Satisfies the vehicles_pricing_at_least_one CHECK constraint. */
+export const DEFAULT_DAILY_RATE_JPY = 5000
 
 export async function cleanupVehicles(ids: string[]): Promise<void> {
   if (ids.length === 0) return
