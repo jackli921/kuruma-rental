@@ -8,8 +8,8 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import { VehicleForm } from '@/components/vehicles/VehicleForm'
+import { updateVehicleAction } from '@/lib/vehicle-actions'
 import type { VehicleData } from '@/lib/vehicle-api'
-import { updateVehicle } from '@/lib/vehicle-api'
 import type { CreateVehicleInput } from '@kuruma/shared/validators/vehicle'
 import { useQueryClient } from '@tanstack/react-query'
 import { useTranslations } from 'next-intl'
@@ -31,7 +31,11 @@ export function EditVehicleDialog({ vehicle, onOpenChange }: EditVehicleDialogPr
     setIsSubmitting(true)
     setError(null)
     try {
-      await updateVehicle(vehicle.id, data)
+      const result = await updateVehicleAction(vehicle.id, data)
+      if (!result.success) {
+        setError(result.error)
+        return
+      }
       await queryClient.invalidateQueries({ queryKey: ['vehicles'] })
       onOpenChange(false)
     } catch (e) {

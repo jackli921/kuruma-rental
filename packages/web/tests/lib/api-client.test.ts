@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, test } from 'vitest'
+import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
 
 import { createApiClient } from '@/lib/api-client'
 
@@ -39,5 +39,40 @@ describe('createApiClient', () => {
     expect(url.origin).toBe('https://api.example.com')
     // Ensure no double-slash in path
     expect(url.pathname).toBe('/vehicles')
+  })
+
+  test('sets Authorization header when token is provided', async () => {
+    const spy = vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(
+      new Response(JSON.stringify({ success: true, data: [] }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      }),
+    )
+
+    const client = createApiClient('my-jwt-token')
+    await client.vehicles.$get()
+
+    // hc passes (Input, RequestInit) — headers may be Headers object or plain
+    const init = spy.mock.calls[0]?.[1] as RequestInit | undefined
+    const headers = new Headers(init?.headers as HeadersInit)
+    expect(headers.get('Authorization')).toBe('Bearer my-jwt-token')
+    spy.mockRestore()
+  })
+
+  test('omits Authorization header when no token is provided', async () => {
+    const spy = vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(
+      new Response(JSON.stringify({ success: true, data: [] }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      }),
+    )
+
+    const client = createApiClient()
+    await client.vehicles.$get()
+
+    const init = spy.mock.calls[0]?.[1] as RequestInit | undefined
+    const headers = new Headers(init?.headers as HeadersInit)
+    expect(headers.get('Authorization')).toBeNull()
+    spy.mockRestore()
   })
 })
