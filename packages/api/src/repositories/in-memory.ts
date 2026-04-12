@@ -2,6 +2,7 @@ import type { FleetVehicleOverview } from '@kuruma/shared/types/fleet'
 import type { Booking, Message, Thread, ThreadParticipant, Vehicle } from '../stores'
 import type {
   AvailabilityRepository,
+  BookingFilters,
   BookingRepository,
   DashboardStats,
   FleetOverviewRepository,
@@ -78,13 +79,7 @@ export class InMemoryBookingRepository implements BookingRepository {
     this.store = store ?? new Map()
   }
 
-  async findAll(filters?: {
-    status?: string
-    vehicleId?: string
-    renterId?: string
-    from?: Date
-    to?: Date
-  }): Promise<Booking[]> {
+  async findAll(filters?: BookingFilters): Promise<Booking[]> {
     let results = [...this.store.values()]
 
     if (filters?.status) {
