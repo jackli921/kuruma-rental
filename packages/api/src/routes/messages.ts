@@ -63,7 +63,10 @@ export function createMessageRoutes(
       return fail(c, 'Caller must be a participant', 400)
     }
 
-    const thread = await threadRepo.create(parsed.data.bookingId ?? null, parsed.data.participantIds)
+    const thread = await threadRepo.create(
+      parsed.data.bookingId ?? null,
+      parsed.data.participantIds,
+    )
     return ok(c, thread, 201)
   })
 
