@@ -4,15 +4,9 @@ import {
   updateVehicleStatusSchema,
 } from '@kuruma/shared/validators/vehicle'
 import { Hono } from 'hono'
-import type { AuthUser } from '../middleware/auth'
+import { STAFF_ROLES, getUser } from '../middleware/auth'
 import type { Vehicle, VehicleRepository } from '../repositories/types'
 import { fail, ok, parseBody, stripUndefined } from './helpers'
-
-const STAFF_ROLES = new Set(['STAFF', 'ADMIN'])
-
-function getUser(c: { get: (key: string) => unknown }): AuthUser | undefined {
-  return c.get('user') as AuthUser | undefined
-}
 
 function requireStaff(c: { get: (key: string) => unknown }): Response | null {
   const user = getUser(c)
