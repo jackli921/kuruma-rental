@@ -15,9 +15,9 @@ let threadRepo: InMemoryThreadRepository
 let messageRepo: InMemoryMessageRepository
 
 /** Create a Hono app authenticated as the given user. */
-function appAs(userId: string): Hono {
+function appAs(userId: string, role: 'RENTER' | 'STAFF' | 'ADMIN' = 'RENTER'): Hono {
   const a = new Hono()
-  a.use('*', testAuthMiddleware(userId, 'RENTER'))
+  a.use('*', testAuthMiddleware(userId, role))
   a.route('/', createMessageRoutes(threadRepo, messageRepo))
   return a
 }
@@ -72,7 +72,7 @@ describe('Message Routes', () => {
       })
 
       // Thread between user2 and user3 (user1 is NOT a participant)
-      await app.request('/threads', {
+      await appAs(U2).request('/threads', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ participantIds: [U2, U3] }),
@@ -116,6 +116,68 @@ describe('Message Routes', () => {
       expect(body.data.bookingId).toBeNull()
       expect(body.data.createdAt).toBeDefined()
       expect(body.data.updatedAt).toBeDefined()
+    })
+  })
+
+  describe('access control', () => {
+    it('POST /threads rejects when caller is not in participantIds', async () => {
+      const res = await appAs(U1).request('/threads', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ participantIds: [U2, U3] }),
+      })
+      expect(res.status).toBe(400)
+      const body = await res.json()
+      expect(body.error).toBe('Caller must be a participant')
+    })
+
+    it('STAFF can create thread between arbitrary users', async () => {
+      const res = await appAs(U1, 'STAFF').request('/threads', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ participantIds: [U2, U3] }),
+      })
+      expect(res.status).toBe(201)
+    })
+
+    it('GET /threads/:id returns 404 for non-participant', async () => {
+      const createRes = await appAs(U1).request('/threads', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ participantIds: [U1, U2] }),
+      })
+      const threadId = (await createRes.json()).data.id
+
+      const res = await appAs(U3).request(`/threads/${threadId}`)
+      expect(res.status).toBe(404)
+    })
+
+    it('STAFF can read any thread regardless of participation', async () => {
+      const createRes = await appAs(U1).request('/threads', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ participantIds: [U1, U2] }),
+      })
+      const threadId = (await createRes.json()).data.id
+
+      const res = await appAs(U3, 'STAFF').request(`/threads/${threadId}`)
+      expect(res.status).toBe(200)
+    })
+
+    it('non-participant cannot send messages to thread', async () => {
+      const createRes = await appAs(U1).request('/threads', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ participantIds: [U1, U2] }),
+      })
+      const threadId = (await createRes.json()).data.id
+
+      const res = await appAs(U3).request(`/threads/${threadId}/messages`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ content: 'Snooping!', senderId: U3 }),
+      })
+      expect(res.status).toBe(404)
     })
   })
 
