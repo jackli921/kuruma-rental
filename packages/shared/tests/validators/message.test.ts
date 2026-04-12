@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { createThreadSchema, sendMessageSchema } from '../../src/validators/message'
+import { createThreadSchema, markReadSchema, sendMessageSchema } from '../../src/validators/message'
 
 describe('createThreadSchema', () => {
   const validInput = {
@@ -47,36 +47,49 @@ describe('createThreadSchema', () => {
 })
 
 describe('sendMessageSchema', () => {
-  it('accepts valid content', () => {
-    const result = sendMessageSchema.safeParse({ content: 'Hello!' })
+  const valid = { senderId: 'user-1', content: 'Hello!' }
+
+  it('accepts valid input', () => {
+    const result = sendMessageSchema.safeParse(valid)
     expect(result.success).toBe(true)
     if (result.success) {
+      expect(result.data.senderId).toBe('user-1')
       expect(result.data.content).toBe('Hello!')
     }
   })
 
+  it('rejects missing senderId', () => {
+    const result = sendMessageSchema.safeParse({ content: 'Hello!' })
+    expect(result.success).toBe(false)
+  })
+
+  it('rejects empty senderId', () => {
+    const result = sendMessageSchema.safeParse({ senderId: '', content: 'Hello!' })
+    expect(result.success).toBe(false)
+  })
+
   it('rejects empty string content', () => {
-    const result = sendMessageSchema.safeParse({ content: '' })
+    const result = sendMessageSchema.safeParse({ ...valid, content: '' })
     expect(result.success).toBe(false)
   })
 
   it('rejects whitespace-only content', () => {
-    const result = sendMessageSchema.safeParse({ content: '   ' })
+    const result = sendMessageSchema.safeParse({ ...valid, content: '   ' })
     expect(result.success).toBe(false)
   })
 
   it('rejects content over 5000 characters', () => {
-    const result = sendMessageSchema.safeParse({ content: 'a'.repeat(5001) })
+    const result = sendMessageSchema.safeParse({ ...valid, content: 'a'.repeat(5001) })
     expect(result.success).toBe(false)
   })
 
   it('accepts content of exactly 5000 characters', () => {
-    const result = sendMessageSchema.safeParse({ content: 'a'.repeat(5000) })
+    const result = sendMessageSchema.safeParse({ ...valid, content: 'a'.repeat(5000) })
     expect(result.success).toBe(true)
   })
 
   it('trims whitespace from content', () => {
-    const result = sendMessageSchema.safeParse({ content: '  Hello!  ' })
+    const result = sendMessageSchema.safeParse({ ...valid, content: '  Hello!  ' })
     expect(result.success).toBe(true)
     if (result.success) {
       expect(result.data.content).toBe('Hello!')
@@ -84,7 +97,27 @@ describe('sendMessageSchema', () => {
   })
 
   it('rejects missing content', () => {
-    const result = sendMessageSchema.safeParse({})
+    const result = sendMessageSchema.safeParse({ senderId: 'user-1' })
+    expect(result.success).toBe(false)
+  })
+})
+
+describe('markReadSchema', () => {
+  it('accepts valid userId', () => {
+    const result = markReadSchema.safeParse({ userId: 'user-1' })
+    expect(result.success).toBe(true)
+    if (result.success) {
+      expect(result.data.userId).toBe('user-1')
+    }
+  })
+
+  it('rejects missing userId', () => {
+    const result = markReadSchema.safeParse({})
+    expect(result.success).toBe(false)
+  })
+
+  it('rejects empty userId', () => {
+    const result = markReadSchema.safeParse({ userId: '' })
     expect(result.success).toBe(false)
   })
 })
