@@ -76,6 +76,11 @@ export async function createBooking(input: CreateBookingInput): Promise<CreateBo
     }
   }
 
+  // Issue #84: generate a unique key per booking intent so network retries
+  // don't create duplicate bookings. The server returns the original booking
+  // if it sees the same key twice.
+  const idempotencyKey = crypto.randomUUID()
+
   const base = getApiBaseUrl()
   const res = await fetch(`${base}/bookings`, {
     method: 'POST',
@@ -86,6 +91,7 @@ export async function createBooking(input: CreateBookingInput): Promise<CreateBo
       startAt: input.startAt,
       endAt: input.endAt,
       source: 'DIRECT',
+      idempotencyKey,
       ...(input.notes ? { notes: input.notes } : {}),
     }),
   })

@@ -71,6 +71,20 @@
       "when": 1775914831111,
       "tag": "0009_add_vehicle_pricing",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1775998416512,
+      "tag": "0010_add-idempotency-key",
+      "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1775998430771,
+      "tag": "0011_idempotency-unique-index",
+      "breakpoints": true
     }
   ]
 }

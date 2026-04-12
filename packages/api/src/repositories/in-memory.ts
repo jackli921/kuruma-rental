@@ -109,6 +109,13 @@ export class InMemoryBookingRepository implements BookingRepository {
     return this.store.get(id)
   }
 
+  async findByIdempotencyKey(key: string): Promise<Booking | undefined> {
+    for (const booking of this.store.values()) {
+      if (booking.idempotencyKey === key) return booking
+    }
+    return undefined
+  }
+
   async create(data: Omit<Booking, 'id' | 'createdAt' | 'updatedAt'>): Promise<Booking> {
     // Mirror the DB-level `bookings_no_overlap` exclusion constraint so in-memory
     // tests exercise the same conflict behavior as real Postgres.

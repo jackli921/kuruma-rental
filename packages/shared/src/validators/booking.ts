@@ -12,6 +12,7 @@ export const createBookingSchema = z
     notes: z.string().optional(),
     source: z.enum(['DIRECT', 'TRIP_COM', 'MANUAL', 'OTHER']).default('DIRECT'),
     externalId: z.string().optional(),
+    idempotencyKey: z.string().uuid('Must be a valid UUID').optional(),
   })
   .refine((data) => new Date(data.endAt) > new Date(data.startAt), {
     message: 'End time must be after start time',

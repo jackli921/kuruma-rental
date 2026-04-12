@@ -48,6 +48,7 @@ const BOOKING_FIELDS = [
   'totalPrice',
   'cancellationFee',
   'cancelledAt',
+  'idempotencyKey',
   'createdAt',
   'updatedAt',
 ] as const

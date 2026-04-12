@@ -116,6 +116,7 @@ export const bookings = pgTable('bookings', {
   totalPrice: integer('totalPrice'), // cents, nullable for legacy bookings
   cancellationFee: integer('cancellationFee'), // cents, set on cancellation
   cancelledAt: timestamp('cancelledAt', { withTimezone: true, mode: 'date' }),
+  idempotencyKey: text('idempotencyKey'),
   createdAt: timestamp('createdAt', { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp('updatedAt', { withTimezone: true }).notNull().defaultNow(),
 })

@@ -92,6 +92,17 @@ export function createBookingRoutes(
       return c.json({ success: false, error: result.error.flatten().fieldErrors }, 400)
     }
 
+    // Issue #84: idempotency key. If the client sends a key we've seen before,
+    // return the original booking instead of creating a duplicate. This prevents
+    // double-bookings caused by network retries.
+    const idempotencyKey = result.data.idempotencyKey ?? null
+    if (idempotencyKey && repo.findByIdempotencyKey) {
+      const existing = await repo.findByIdempotencyKey(idempotencyKey)
+      if (existing) {
+        return c.json({ success: true, data: existing }, 200)
+      }
+    }
+
     const renterId = body.renterId as string | undefined
     if (!renterId) {
       return c.json({ success: false, error: { renterId: ['Renter ID is required'] } }, 400)
@@ -174,6 +185,7 @@ export function createBookingRoutes(
         totalPrice,
         cancellationFee: null,
         cancelledAt: null,
+        idempotencyKey,
       })
 
       return c.json({ success: true, data: booking }, 201)

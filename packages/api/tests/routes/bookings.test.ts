@@ -534,6 +534,53 @@ describe('Booking Routes', () => {
         expect(body.code).toBe('NO_RATES_SET')
       })
     })
+
+    // Issue #84: idempotency key. If a client retries a POST with the same
+    // idempotencyKey, the server returns the original booking (200) instead
+    // of creating a duplicate (201).
+    describe('idempotency key', () => {
+      it('returns the existing booking on duplicate idempotencyKey (200, not 201)', async () => {
+        const key = crypto.randomUUID()
+        const input = {
+          ...validBookingInput(),
+          idempotencyKey: key,
+        }
+
+        const first = await createBooking(input)
+        expect(first.status).toBe(201)
+        const firstBody = await first.json()
+
+        const second = await createBooking(input)
+        expect(second.status).toBe(200)
+        const secondBody = await second.json()
+
+        expect(secondBody.data.id).toBe(firstBody.data.id)
+      })
+
+      it('creates separate bookings with different idempotencyKeys', async () => {
+        const first = await createBooking({
+          ...validBookingInput(),
+          idempotencyKey: crypto.randomUUID(),
+        })
+        const second = await createBooking({
+          ...validBookingInput(),
+          vehicleId: 'v2',
+          idempotencyKey: crypto.randomUUID(),
+        })
+
+        expect(first.status).toBe(201)
+        expect(second.status).toBe(201)
+
+        const firstBody = await first.json()
+        const secondBody = await second.json()
+        expect(firstBody.data.id).not.toBe(secondBody.data.id)
+      })
+
+      it('still creates booking when idempotencyKey is omitted (backward compat)', async () => {
+        const res = await createBooking(validBookingInput())
+        expect(res.status).toBe(201)
+      })
+    })
   })
 
   describe('GET /bookings/:id', () => {
