@@ -88,7 +88,7 @@ export class BookingService {
     return this.bookingRepo.findById(id)
   }
 
-  async create(input: CreateBookingInput): Promise<CreateBookingResult> {
+  async create(input: CreateBookingInput, now: Date = new Date()): Promise<CreateBookingResult> {
     // Idempotency: if a key was provided, check for an existing booking first.
     if (input.idempotencyKey) {
       const existing = await this.bookingRepo.findByIdempotencyKey(input.idempotencyKey)
@@ -114,7 +114,7 @@ export class BookingService {
           },
           input.startAt,
           input.endAt,
-          new Date(),
+          now,
         )
         if (!check.ok) {
           return {
@@ -217,7 +217,7 @@ export class BookingService {
     return { ok: true, booking: updated }
   }
 
-  async cancel(bookingId: string): Promise<CancelResult> {
+  async cancel(bookingId: string, now: Date = new Date()): Promise<CancelResult> {
     const booking = await this.bookingRepo.findById(bookingId)
     if (!booking) {
       return { ok: false, status: 404, error: 'Booking not found' }
@@ -231,7 +231,6 @@ export class BookingService {
       }
     }
 
-    const now = new Date()
     const cancellation = calculateCancellationFee(booking.startAt, now, booking.totalPrice ?? 0)
 
     const updated = await this.bookingRepo.cancel(booking.id, {
