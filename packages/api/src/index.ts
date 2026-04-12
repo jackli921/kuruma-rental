@@ -3,6 +3,7 @@ import { getDb } from '@kuruma/shared/db'
 import { Hono } from 'hono'
 import { cors } from 'hono/cors'
 import { setupGlobalHandlers } from './error-handlers'
+import { requireAuth } from './middleware/auth'
 import {
   DrizzleAvailabilityRepository,
   DrizzleBookingRepository,
@@ -131,6 +132,11 @@ export function createApp(overrides?: {
   }
 
   app.route('/', health)
+
+  // Auth middleware: everything below this point requires a valid JWT or API key.
+  // Health check is mounted above so it stays public.
+  app.use('*', requireAuth())
+
   const bookingService = new BookingService(bookingRepo, vehicleRepo)
 
   app.route('/', createFleetOverviewRoutes(fleetOverviewRepo))

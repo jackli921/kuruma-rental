@@ -1,5 +1,6 @@
 import { createBookingSchema, updateBookingStatusSchema } from '@kuruma/shared/validators/booking'
 import { Hono } from 'hono'
+import { PRIVILEGED_ROLES, getUser } from '../middleware/auth'
 import type { BookingFilters } from '../repositories/types'
 import type { BookingService } from '../services/booking'
 import { fail, ok, parseDateRange } from './helpers'
@@ -8,6 +9,9 @@ export function createBookingRoutes(service: BookingService): Hono {
   const bookings = new Hono()
 
   bookings.get('/bookings', async (c) => {
+    const user = getUser(c)
+    if (!user) return fail(c, 'Unauthorized', 401)
+
     const statusFilter = c.req.query('status')
     const vehicleIdFilter = c.req.query('vehicleId')
     const renterIdFilter = c.req.query('renterId')
@@ -24,11 +28,14 @@ export function createBookingRoutes(service: BookingService): Hono {
       return fail(c, 'limit must be between 1 and 100', 400)
     }
 
+    // Non-privileged users can only see their own bookings
+    const effectiveRenterId = PRIVILEGED_ROLES.has(user.role) ? renterIdFilter : user.id
+
     const filters: BookingFilters = { limit }
     if (cursor) filters.cursor = cursor
     if (statusFilter) filters.status = statusFilter
     if (vehicleIdFilter) filters.vehicleId = vehicleIdFilter
-    if (renterIdFilter) filters.renterId = renterIdFilter
+    if (effectiveRenterId) filters.renterId = effectiveRenterId
     if (dateRange.from && dateRange.to) {
       filters.from = dateRange.from
       filters.to = dateRange.to
@@ -52,6 +59,9 @@ export function createBookingRoutes(service: BookingService): Hono {
   })
 
   bookings.post('/bookings', async (c) => {
+    const user = getUser(c)
+    if (!user) return fail(c, 'Unauthorized', 401)
+
     const body = await c.req.json()
     const result = createBookingSchema.safeParse(body)
 
@@ -59,10 +69,8 @@ export function createBookingRoutes(service: BookingService): Hono {
       return fail(c, result.error.flatten().fieldErrors, 400)
     }
 
-    const renterId = body.renterId as string | undefined
-    if (!renterId) {
-      return fail(c, { renterId: ['Renter ID is required'] }, 400)
-    }
+    // Actor derivation: always use JWT sub, never trust body.renterId
+    const renterId = user.id
 
     const createResult = await service.create({
       vehicleId: result.data.vehicleId,
@@ -101,6 +109,16 @@ export function createBookingRoutes(service: BookingService): Hono {
   })
 
   bookings.post('/bookings/:id/cancel', async (c) => {
+    const user = getUser(c)
+    if (!user) return fail(c, 'Unauthorized', 401)
+
+    // Ownership check: only the booking owner or privileged roles can cancel
+    const booking = await service.findById(c.req.param('id'))
+    if (!booking) return fail(c, 'Booking not found', 404)
+    if (booking.renterId !== user.id && !PRIVILEGED_ROLES.has(user.role)) {
+      return fail(c, 'Forbidden', 403)
+    }
+
     const result = await service.cancel(c.req.param('id'))
     if (!result.ok) {
       return fail(c, result.error, result.status)

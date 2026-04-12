@@ -4,6 +4,7 @@ import {
   updateVehicleStatusSchema,
 } from '@kuruma/shared/validators/vehicle'
 import { Hono } from 'hono'
+import { STAFF_ROLES, getUser } from '../middleware/auth'
 import type { Vehicle, VehicleRepository } from '../repositories/types'
 import { fail, ok, parseBody, stripUndefined } from './helpers'
 
@@ -25,6 +26,9 @@ export function createVehicleRoutes(repo: VehicleRepository): Hono {
   })
 
   vehicles.post('/vehicles', async (c) => {
+    const user = getUser(c)
+    if (!user || !STAFF_ROLES.has(user.role)) return fail(c, 'Forbidden', 403)
+
     const parsed = await parseBody(c, createVehicleSchema)
     if (!parsed.ok) return parsed.response
 
@@ -48,6 +52,9 @@ export function createVehicleRoutes(repo: VehicleRepository): Hono {
   })
 
   vehicles.patch('/vehicles/:id', async (c) => {
+    const user = getUser(c)
+    if (!user || !STAFF_ROLES.has(user.role)) return fail(c, 'Forbidden', 403)
+
     const existing = await repo.findById(c.req.param('id'))
     if (!existing) {
       return fail(c, 'Vehicle not found', 404)
@@ -74,6 +81,9 @@ export function createVehicleRoutes(repo: VehicleRepository): Hono {
   })
 
   vehicles.patch('/vehicles/:id/status', async (c) => {
+    const user = getUser(c)
+    if (!user || !STAFF_ROLES.has(user.role)) return fail(c, 'Forbidden', 403)
+
     const existing = await repo.findById(c.req.param('id'))
     if (!existing) {
       return fail(c, 'Vehicle not found', 404)
@@ -87,6 +97,9 @@ export function createVehicleRoutes(repo: VehicleRepository): Hono {
   })
 
   vehicles.delete('/vehicles/:id', async (c) => {
+    const user = getUser(c)
+    if (!user || !STAFF_ROLES.has(user.role)) return fail(c, 'Forbidden', 403)
+
     const existing = await repo.findById(c.req.param('id'))
     if (!existing) {
       return fail(c, 'Vehicle not found', 404)
