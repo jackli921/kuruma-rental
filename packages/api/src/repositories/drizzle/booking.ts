@@ -62,11 +62,15 @@ export class DrizzleBookingRepository implements BookingRepository {
     return inserted as Booking
   }
 
-  async updateStatus(id: string, status: string): Promise<Booking | undefined> {
+  async updateStatus(
+    id: string,
+    expectedStatus: Booking['status'],
+    newStatus: Booking['status'],
+  ): Promise<Booking | undefined> {
     const [updated] = await this.db
       .update(bookings)
-      .set({ status: status as Booking['status'], updatedAt: sql`now()` })
-      .where(eq(bookings.id, id))
+      .set({ status: newStatus, updatedAt: sql`now()` })
+      .where(and(eq(bookings.id, id), eq(bookings.status, expectedStatus)))
       .returning()
 
     return (updated as Booking) ?? undefined
@@ -74,6 +78,7 @@ export class DrizzleBookingRepository implements BookingRepository {
 
   async cancel(
     id: string,
+    expectedStatus: Booking['status'],
     cancellationFee: number,
     cancelledAt: Date,
   ): Promise<Booking | undefined> {
@@ -85,7 +90,7 @@ export class DrizzleBookingRepository implements BookingRepository {
         cancelledAt,
         updatedAt: sql`now()`,
       })
-      .where(eq(bookings.id, id))
+      .where(and(eq(bookings.id, id), eq(bookings.status, expectedStatus)))
       .returning()
 
     return (cancelled as Booking) ?? undefined
