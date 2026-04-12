@@ -65,6 +65,33 @@ describe('DrizzleThreadRepository', () => {
     })
   })
 
+  describe('unique participant constraint', () => {
+    it('rejects duplicate (threadId, userId) pairs', async () => {
+      const [alice, bob] = await createTestUsers(2)
+      createdUserIds.push(alice!, bob!)
+
+      const thread = await threadRepo.create(null, [alice!, bob!])
+
+      // Attempt to insert alice as a participant again via raw DB insert.
+      // Drizzle wraps the PG error so we check the cause for the constraint name.
+      const { threadParticipants } = await import('@kuruma/shared/db/schema')
+      const db = testDb as unknown as {
+        insert: (t: unknown) => { values: (v: unknown) => Promise<unknown> }
+      }
+      const insertDuplicate = db
+        .insert(threadParticipants)
+        .values({ threadId: thread.id, userId: alice, unreadCount: 0 })
+
+      try {
+        await insertDuplicate
+        expect.unreachable('duplicate insert should have thrown')
+      } catch (err: unknown) {
+        const msg = String(err) + String(err instanceof Error && err.cause ? String(err.cause) : '')
+        expect(msg).toMatch(/duplicate key|unique/i)
+      }
+    })
+  })
+
   describe('findAll', () => {
     it('returns only threads the user participates in', async () => {
       const [alice, bob, carol] = await createTestUsers(3)

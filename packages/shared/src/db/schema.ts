@@ -1,5 +1,14 @@
 import { sql } from 'drizzle-orm'
-import { check, integer, pgEnum, pgTable, primaryKey, text, timestamp } from 'drizzle-orm/pg-core'
+import {
+  check,
+  integer,
+  pgEnum,
+  pgTable,
+  primaryKey,
+  text,
+  timestamp,
+  unique,
+} from 'drizzle-orm/pg-core'
 import type { AdapterAccountType } from 'next-auth/adapters'
 
 export const roleEnum = pgEnum('role', ['RENTER', 'STAFF', 'ADMIN'])
@@ -130,18 +139,22 @@ export const threads = pgTable('threads', {
   updatedAt: timestamp('updatedAt', { withTimezone: true }).notNull().defaultNow(),
 })
 
-export const threadParticipants = pgTable('thread_participants', {
-  id: text('id')
-    .primaryKey()
-    .$defaultFn(() => crypto.randomUUID()),
-  threadId: text('threadId')
-    .notNull()
-    .references(() => threads.id, { onDelete: 'cascade' }),
-  userId: text('userId')
-    .notNull()
-    .references(() => users.id),
-  unreadCount: integer('unreadCount').notNull().default(0),
-})
+export const threadParticipants = pgTable(
+  'thread_participants',
+  {
+    id: text('id')
+      .primaryKey()
+      .$defaultFn(() => crypto.randomUUID()),
+    threadId: text('threadId')
+      .notNull()
+      .references(() => threads.id, { onDelete: 'cascade' }),
+    userId: text('userId')
+      .notNull()
+      .references(() => users.id),
+    unreadCount: integer('unreadCount').notNull().default(0),
+  },
+  (t) => [unique().on(t.threadId, t.userId)],
+)
 
 export const messages = pgTable('messages', {
   id: text('id')

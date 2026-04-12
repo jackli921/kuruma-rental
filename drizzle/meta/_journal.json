@@ -92,6 +92,13 @@
       "when": 1776012823406,
       "tag": "0012_idempotency-unique-index",
       "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "7",
+      "when": 1776016174453,
+      "tag": "0013_add-unique-thread-participant",
+      "breakpoints": true
     }
   ]
 }

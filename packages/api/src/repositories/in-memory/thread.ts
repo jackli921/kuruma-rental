@@ -52,6 +52,12 @@ export class InMemoryThreadRepository implements ThreadRepository {
     this.threads.set(thread.id, thread)
 
     for (const userId of participantIds) {
+      const isDuplicate = [...this.participants.values()].some(
+        (p) => p.threadId === thread.id && p.userId === userId,
+      )
+      if (isDuplicate) {
+        throw new Error(`duplicate key: (threadId=${thread.id}, userId=${userId})`)
+      }
       const participant: ThreadParticipant = {
         id: crypto.randomUUID(),
         threadId: thread.id,

@@ -1,0 +1,1 @@
+ALTER TABLE "thread_participants" ADD CONSTRAINT "thread_participants_threadId_userId_unique" UNIQUE("threadId","userId");
