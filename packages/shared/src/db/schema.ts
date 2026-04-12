@@ -172,7 +172,9 @@ export const messages = pgTable('messages', {
   createdAt: timestamp('createdAt', { withTimezone: true }).notNull().defaultNow(),
 })
 
-export const VALID_BOOKING_TRANSITIONS: Record<string, string[]> = {
+export type BookingStatus = (typeof bookingStatusEnum.enumValues)[number]
+
+export const VALID_BOOKING_TRANSITIONS: Record<BookingStatus, BookingStatus[]> = {
   CONFIRMED: ['ACTIVE', 'CANCELLED'],
   ACTIVE: ['COMPLETED', 'CANCELLED'],
   COMPLETED: [],

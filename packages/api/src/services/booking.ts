@@ -1,4 +1,4 @@
-import { VALID_BOOKING_TRANSITIONS } from '@kuruma/shared/db/schema'
+import { type BookingStatus, VALID_BOOKING_TRANSITIONS } from '@kuruma/shared/db/schema'
 import { calculateCancellationFee } from '@kuruma/shared/lib/cancellation-policy'
 import { calculateBookingPrice } from '@kuruma/shared/lib/pricing'
 import { checkRentalRules } from '@kuruma/shared/lib/rental-rules'
@@ -188,14 +188,13 @@ export class BookingService {
     }
   }
 
-  async updateStatus(bookingId: string, newStatus: string): Promise<StatusTransitionResult> {
+  async updateStatus(bookingId: string, newStatus: BookingStatus): Promise<StatusTransitionResult> {
     const booking = await this.bookingRepo.findById(bookingId)
     if (!booking) {
       return { ok: false, status: 404, error: 'Booking not found' }
     }
 
-    const allowedTransitions =
-      VALID_BOOKING_TRANSITIONS[booking.status as keyof typeof VALID_BOOKING_TRANSITIONS] ?? []
+    const allowedTransitions = VALID_BOOKING_TRANSITIONS[booking.status] ?? []
     if (!allowedTransitions.includes(newStatus)) {
       return {
         ok: false,
