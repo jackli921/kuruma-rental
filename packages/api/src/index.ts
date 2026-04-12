@@ -152,10 +152,10 @@ function resolveAllowedOrigins(envValue: string | undefined): string[] {
     .map((s) => s.trim())
     .filter((s) => s.length > 0)
 
-  // Always include the dev origins so `bun run dev` + `bun run dev:api`
-  // works out of the box. Deduped because the user may also list them in
-  // WEB_ORIGIN explicitly.
-  return [...new Set([...DEV_WEB_ORIGINS, ...fromEnv])]
+  // Only include dev origins outside production so `bun run dev` works
+  // out of the box without leaking localhost to prod.
+  const devOrigins = process.env.NODE_ENV === 'production' ? [] : DEV_WEB_ORIGINS
+  return [...new Set([...devOrigins, ...fromEnv])]
 }
 
 export default createApp()
