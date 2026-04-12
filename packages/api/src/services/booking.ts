@@ -172,18 +172,26 @@ export class BookingService {
 
       return { ok: true, booking }
     } catch (err) {
-      if (
-        err &&
-        typeof err === 'object' &&
-        'code' in err &&
-        (err as { code: unknown }).code === '23P01'
-      ) {
+      const code =
+        err && typeof err === 'object' && 'code' in err ? (err as { code: unknown }).code : null
+
+      // Overlap exclusion constraint
+      if (code === '23P01') {
         return {
           ok: false,
           status: 409,
           error: 'Vehicle is already booked for the requested time range',
         }
       }
+
+      // Idempotency key unique constraint race: re-fetch and return existing
+      if (code === '23505' && input.idempotencyKey) {
+        const existing = await this.bookingRepo.findByIdempotencyKey(input.idempotencyKey)
+        if (existing) {
+          return { ok: true, booking: existing, status: 200 }
+        }
+      }
+
       throw err
     }
   }

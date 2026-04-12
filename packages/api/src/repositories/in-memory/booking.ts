@@ -102,6 +102,17 @@ export class InMemoryBookingRepository implements BookingRepository {
       }
     }
 
+    // Mirror the DB-level partial unique index on idempotencyKey
+    if (data.idempotencyKey) {
+      for (const existing of this.store.values()) {
+        if (existing.idempotencyKey === data.idempotencyKey) {
+          const err = new Error('unique_idempotency_key violation') as Error & { code: string }
+          err.code = '23505'
+          throw err
+        }
+      }
+    }
+
     const now = new Date()
     const booking: Booking = {
       ...data,
