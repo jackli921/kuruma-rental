@@ -11,6 +11,7 @@ import type { Booking, Message, Thread, ThreadParticipant, Vehicle } from '../st
 export interface VehicleRepository {
   findAll(filters?: { status?: string }): Promise<Vehicle[]>
   findById(id: string): Promise<Vehicle | undefined>
+  findByIds(ids: string[]): Promise<Vehicle[]>
   create(data: Omit<Vehicle, 'id' | 'createdAt' | 'updatedAt'>): Promise<Vehicle>
   update(id: string, data: Partial<Vehicle>): Promise<Vehicle | undefined>
   softDelete(id: string): Promise<Vehicle | undefined>

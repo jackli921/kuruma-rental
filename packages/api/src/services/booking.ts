@@ -72,16 +72,8 @@ export class BookingService {
     if (!this.vehicleRepo) return { data, nextCursor }
 
     const vehicleIds = [...new Set(data.map((b) => b.vehicleId))]
-    const vehicleMap = new Map<string, { name: string; photos: string[] }>()
-
-    await Promise.all(
-      vehicleIds.map(async (vid) => {
-        const vehicle = await this.vehicleRepo!.findById(vid)
-        if (vehicle) {
-          vehicleMap.set(vid, { name: vehicle.name, photos: vehicle.photos })
-        }
-      }),
-    )
+    const vehicleList = await this.vehicleRepo.findByIds(vehicleIds)
+    const vehicleMap = new Map(vehicleList.map((v) => [v.id, { name: v.name, photos: v.photos }]))
 
     return {
       data: data.map((booking) => ({

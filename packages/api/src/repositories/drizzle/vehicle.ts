@@ -1,5 +1,5 @@
 import { vehicles } from '@kuruma/shared/db/schema'
-import { eq, sql } from 'drizzle-orm'
+import { eq, inArray, sql } from 'drizzle-orm'
 import type { Vehicle } from '../../stores'
 import type { VehicleRepository } from '../types'
 import { type Db, toVehicle, vehicleColumns } from './shared'
@@ -21,6 +21,15 @@ export class DrizzleVehicleRepository implements VehicleRepository {
     const [row] = await this.db.select(vehicleColumns).from(vehicles).where(eq(vehicles.id, id))
 
     return row ? toVehicle(row) : undefined
+  }
+
+  async findByIds(ids: string[]): Promise<Vehicle[]> {
+    if (ids.length === 0) return []
+    const rows = await this.db
+      .select(vehicleColumns)
+      .from(vehicles)
+      .where(inArray(vehicles.id, ids))
+    return rows as Vehicle[]
   }
 
   async create(data: Omit<Vehicle, 'id' | 'createdAt' | 'updatedAt'>): Promise<Vehicle> {

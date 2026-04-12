@@ -18,6 +18,13 @@ export class InMemoryVehicleRepository implements VehicleRepository {
     return this.store.get(id)
   }
 
+  async findByIds(ids: string[]): Promise<Vehicle[]> {
+    return ids.flatMap((id) => {
+      const v = this.store.get(id)
+      return v ? [v] : []
+    })
+  }
+
   async create(data: Omit<Vehicle, 'id' | 'createdAt' | 'updatedAt'>): Promise<Vehicle> {
     const now = new Date()
     const vehicle: Vehicle = {
