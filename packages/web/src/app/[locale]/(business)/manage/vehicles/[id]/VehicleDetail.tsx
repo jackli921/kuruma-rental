@@ -2,6 +2,7 @@ import { Badge } from '@/components/ui/badge'
 import { buttonVariants } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Link } from '@/i18n/routing'
+import { formatJpy } from '@/lib/format'
 import { cn } from '@/lib/utils'
 import type { VehicleDetailData } from '@/lib/vehicle-api'
 import { ArrowLeft, Calendar, Car, Clock, Fuel, Settings2, Users } from 'lucide-react'
@@ -14,10 +15,6 @@ type Translator = Awaited<ReturnType<typeof getTranslations>>
 interface VehicleDetailProps {
   vehicle: VehicleDetailData
   t: Translator
-}
-
-function formatJpy(amount: number): string {
-  return `\u00a5${amount.toLocaleString('en-US')}`
 }
 
 function formatDateRange(startAt: string, endAt: string): string {
