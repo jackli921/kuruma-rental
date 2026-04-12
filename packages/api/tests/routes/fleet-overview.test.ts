@@ -12,6 +12,7 @@ import {
   InMemoryVehicleRepository,
 } from '../../src/repositories/in-memory'
 import { createFleetOverviewRoutes } from '../../src/routes/fleet-overview'
+import { testAuthMiddleware } from '../helpers/auth'
 
 const FIXED_NOW = new Date('2026-04-11T12:00:00Z')
 
@@ -26,6 +27,7 @@ beforeEach(() => {
   bookingRepo = new InMemoryBookingRepository()
   const fleetRepo = new InMemoryFleetOverviewRepository(vehicleRepo, bookingRepo)
   app = new Hono()
+  app.use('*', testAuthMiddleware('staff-user', 'STAFF'))
   app.route('/', createFleetOverviewRoutes(fleetRepo))
 })
 

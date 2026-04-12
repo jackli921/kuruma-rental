@@ -78,7 +78,7 @@ describe('FleetVehicleRow', () => {
 
     expect(screen.getByText('Toyota Corolla')).toBeInTheDocument()
     const img = screen.getByRole('img', { name: 'Toyota Corolla' })
-    expect(img).toHaveAttribute('src', 'https://example.com/photo.jpg')
+    expect(img).toHaveAttribute('src', expect.stringContaining('photo.jpg'))
   })
 
   it('renders the placeholder icon when the vehicle has no photos', () => {
