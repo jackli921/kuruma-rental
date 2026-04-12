@@ -1,3 +1,4 @@
+import { PG_ERROR } from '../../pg-errors'
 import type { Booking } from '../../stores'
 import type { BookingFilters, BookingRepository } from '../types'
 
@@ -96,7 +97,18 @@ export class InMemoryBookingRepository implements BookingRepository {
           data.startAt < existing.effectiveEndAt && existing.startAt < data.effectiveEndAt
         if (overlaps) {
           const err = new Error('bookings_no_overlap violation') as Error & { code: string }
-          err.code = '23P01'
+          err.code = PG_ERROR.EXCLUSION_VIOLATION
+          throw err
+        }
+      }
+    }
+
+    // Mirror the DB-level partial unique index on idempotencyKey
+    if (data.idempotencyKey) {
+      for (const existing of this.store.values()) {
+        if (existing.idempotencyKey === data.idempotencyKey) {
+          const err = new Error('unique_idempotency_key violation') as Error & { code: string }
+          err.code = PG_ERROR.UNIQUE_VIOLATION
           throw err
         }
       }

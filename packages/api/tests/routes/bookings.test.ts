@@ -615,6 +615,25 @@ describe('Booking Routes', () => {
         const body = await res.json()
         expect(body.data.idempotencyKey).toBeNull()
       })
+
+      it('returns 200 when concurrent duplicate key hits unique constraint', async () => {
+        const idempotencyKey = crypto.randomUUID()
+        const input = { ...validBookingInput(), idempotencyKey }
+
+        // Simulate race: both requests pass findByIdempotencyKey check,
+        // then both attempt create. Second one hits the unique constraint.
+        const [r1, r2] = await Promise.all([
+          createBooking(input),
+          createBooking({ ...input, vehicleId: 'v2' }),
+        ])
+
+        const statuses = [r1.status, r2.status].sort()
+        expect(statuses).toEqual([200, 201])
+
+        const b1 = await r1.json()
+        const b2 = await r2.json()
+        expect(b1.data.id).toBe(b2.data.id)
+      })
     })
 
     // Issue #74: server-side pricing. Clients must not be able to propose a
