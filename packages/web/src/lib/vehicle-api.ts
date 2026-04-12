@@ -1,4 +1,4 @@
-import { getApiBaseUrl } from '@/lib/api-client'
+import { authedFetch, getApiBaseUrl } from '@/lib/api-client'
 import type { ApiResponse } from '@kuruma/shared/types/api-response'
 import type { CreateVehicleInput, VehicleStatus } from '@kuruma/shared/validators/vehicle'
 
@@ -39,7 +39,7 @@ export interface FleetVehicleOverviewData extends VehicleData {
 }
 
 async function apiRequest<T>(url: string, init?: RequestInit): Promise<T> {
-  const res = await fetch(url, init)
+  const res = await authedFetch(url, init)
   const body: ApiResponse<T> = await res.json().catch(() => ({
     success: false as const,
     error: 'Unknown error',
