@@ -6,9 +6,11 @@ import {
 } from '../../src/repositories/in-memory'
 import { createBookingRoutes } from '../../src/routes/bookings'
 import { BookingService } from '../../src/services/booking'
+import { testAuthMiddleware } from '../helpers/auth'
 
 let app: Hono
 let vehicleRepo: InMemoryVehicleRepository
+let bookingRepo: InMemoryBookingRepository
 
 function futureDate(hoursFromNow: number): string {
   return new Date(Date.now() + hoursFromNow * 60 * 60 * 1000).toISOString()
@@ -40,9 +42,11 @@ async function createBooking(input = validBookingInput()) {
 describe('Booking Routes', () => {
   beforeEach(() => {
     vehicleRepo = new InMemoryVehicleRepository()
-    const repo = new InMemoryBookingRepository()
-    const service = new BookingService(repo, vehicleRepo)
+    bookingRepo = new InMemoryBookingRepository()
+    const service = new BookingService(bookingRepo, vehicleRepo)
     app = new Hono()
+    // ADMIN with USER1 identity — mirrors pre-auth test data
+    app.use('*', testAuthMiddleware(USER1, 'ADMIN'))
     app.route('/', createBookingRoutes(service))
   })
 
@@ -107,11 +111,19 @@ describe('Booking Routes', () => {
     })
 
     it('filters by renterId', async () => {
+      // Create one booking via route (gets USER1 from JWT context)
       await createBooking()
-      await createBooking({
-        ...validBookingInput(),
-        renterId: USER2,
+      // Create second booking directly in repo with USER2 (bypasses JWT)
+      await bookingRepo.create({
         vehicleId: V2,
+        renterId: USER2,
+        startAt: new Date(Date.now() + 24 * 60 * 60 * 1000),
+        endAt: new Date(Date.now() + 48 * 60 * 60 * 1000),
+        effectiveEndAt: new Date(Date.now() + 49 * 60 * 60 * 1000),
+        status: 'CONFIRMED',
+        source: 'DIRECT',
+        externalId: null,
+        notes: null,
       })
 
       const res = await app.request(`/bookings?renterId=${USER1}`)

@@ -6,8 +6,10 @@ import {
   InMemoryStatsRepository,
   InMemoryVehicleRepository,
 } from '../../src/repositories/in-memory'
+import { authHeaders, setupAuthEnv } from '../helpers/auth'
 
 function createTestApp() {
+  setupAuthEnv()
   const vehicleRepo = new InMemoryVehicleRepository()
   const bookingRepo = new InMemoryBookingRepository()
   const availabilityRepo = new InMemoryAvailabilityRepository(vehicleRepo, bookingRepo)
@@ -56,10 +58,11 @@ const BOOKING_FIELDS = [
 describe('API responses contain only expected fields', () => {
   it('GET /vehicles returns vehicles with exact field set', async () => {
     const app = createTestApp()
+    const staffHeaders = await authHeaders({ sub: 'staff-user', role: 'STAFF' })
 
     await app.request('/vehicles', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', ...staffHeaders },
       body: JSON.stringify({
         name: 'Test Car',
         description: 'Test',
@@ -69,7 +72,7 @@ describe('API responses contain only expected fields', () => {
       }),
     })
 
-    const res = await app.request('/vehicles')
+    const res = await app.request('/vehicles', { headers: staffHeaders })
     const body = await res.json()
     const vehicle = body.data[0]
 
@@ -82,10 +85,11 @@ describe('API responses contain only expected fields', () => {
 
   it('GET /vehicles/:id returns vehicle with exact field set', async () => {
     const app = createTestApp()
+    const staffHeaders = await authHeaders({ sub: 'staff-user', role: 'STAFF' })
 
     const createRes = await app.request('/vehicles', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', ...staffHeaders },
       body: JSON.stringify({
         name: 'Test Car',
         description: 'Test',
@@ -96,7 +100,7 @@ describe('API responses contain only expected fields', () => {
     })
     const created = await createRes.json()
 
-    const res = await app.request(`/vehicles/${created.data.id}`)
+    const res = await app.request(`/vehicles/${created.data.id}`, { headers: staffHeaders })
     const body = await res.json()
 
     for (const field of VEHICLE_FIELDS) {
@@ -107,11 +111,13 @@ describe('API responses contain only expected fields', () => {
 
   it('GET /bookings returns bookings with exact field set', async () => {
     const app = createTestApp()
+    const staffHeaders = await authHeaders({ sub: 'staff-user', role: 'STAFF' })
+    const renterHeaders = await authHeaders({ sub: 'renter-user', role: 'RENTER' })
 
-    // Create a vehicle first
+    // Create a vehicle first (STAFF)
     const vRes = await app.request('/vehicles', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', ...staffHeaders },
       body: JSON.stringify({
         name: 'Test Car',
         description: 'Test',
@@ -122,11 +128,11 @@ describe('API responses contain only expected fields', () => {
     })
     const vehicle = await vRes.json()
 
+    // Create a booking (RENTER — renterId derived from JWT sub)
     await app.request('/bookings', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', ...renterHeaders },
       body: JSON.stringify({
-        renterId: 'user-1',
         vehicleId: vehicle.data.id,
         startAt: '2026-05-01T10:00:00Z',
         endAt: '2026-05-03T10:00:00Z',
@@ -134,7 +140,7 @@ describe('API responses contain only expected fields', () => {
       }),
     })
 
-    const res = await app.request('/bookings')
+    const res = await app.request('/bookings', { headers: staffHeaders })
     const body = await res.json()
     const booking = body.data[0]
 

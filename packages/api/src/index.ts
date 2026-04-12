@@ -3,6 +3,7 @@ import { getDb } from '@kuruma/shared/db'
 import { Hono } from 'hono'
 import { cors } from 'hono/cors'
 import { setupGlobalHandlers } from './error-handlers'
+import { requireAuth } from './middleware/auth'
 import { structuredLogger } from './middleware/logger'
 import { requestId } from './middleware/request-id'
 import {
@@ -137,7 +138,15 @@ export function createApp(overrides?: {
     )
   }
 
+  // Public routes (no auth required)
   app.route('/', health)
+
+  // Auth middleware on all protected paths
+  app.use('/vehicles/*', requireAuth())
+  app.use('/bookings/*', requireAuth())
+  app.use('/availability/*', requireAuth())
+  app.use('/threads/*', requireAuth())
+
   const bookingService = new BookingService(bookingRepo, vehicleRepo)
 
   app.route('/', createFleetOverviewRoutes(fleetOverviewRepo))

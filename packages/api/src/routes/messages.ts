@@ -4,6 +4,7 @@ import {
   sendMessageSchema,
 } from '@kuruma/shared/validators/message'
 import { Hono } from 'hono'
+import { getUser } from '../middleware/auth'
 import type { MessageRepository, ThreadRepository } from '../repositories/types'
 import { fail, ok, parseBody } from './helpers'
 
@@ -14,7 +15,9 @@ export function createMessageRoutes(
   const app = new Hono()
 
   app.get('/threads', async (c) => {
-    const userId = c.req.query('userId')
+    const user = getUser(c)
+    // Use JWT sub as userId; fall back to query param for backward compat
+    const userId = user?.id ?? c.req.query('userId')
     if (!userId) {
       return fail(c, 'userId query parameter is required', 400)
     }
@@ -59,10 +62,13 @@ export function createMessageRoutes(
     const thread = await threadRepo.findById(c.req.param('id'))
     if (!thread) return fail(c, 'Thread not found', 404)
 
+    const user = getUser(c)
     const parsed = await parseBody(c, sendMessageSchema)
     if (!parsed.ok) return parsed.response
 
-    const message = await messageRepo.create(thread.id, parsed.data.senderId, parsed.data.content)
+    // Actor derivation: use JWT sub as senderId when available
+    const senderId = user?.id ?? parsed.data.senderId
+    const message = await messageRepo.create(thread.id, senderId, parsed.data.content)
     return ok(c, message, 201)
   })
 
@@ -70,10 +76,13 @@ export function createMessageRoutes(
     const thread = await threadRepo.findById(c.req.param('id'))
     if (!thread) return fail(c, 'Thread not found', 404)
 
+    const user = getUser(c)
     const parsed = await parseBody(c, markReadSchema)
     if (!parsed.ok) return parsed.response
 
-    await threadRepo.markAsRead(thread.id, parsed.data.userId)
+    // Actor derivation: use JWT sub as userId when available
+    const userId = user?.id ?? parsed.data.userId
+    await threadRepo.markAsRead(thread.id, userId)
     return ok(c, null)
   })
 
