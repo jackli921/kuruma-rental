@@ -1,5 +1,5 @@
 import type { Vehicle } from '../../stores'
-import type { VehicleRepository } from '../types'
+import type { VehicleFilters, VehicleRepository } from '../types'
 
 export class InMemoryVehicleRepository implements VehicleRepository {
   private readonly store: Map<string, Vehicle>
@@ -8,10 +8,11 @@ export class InMemoryVehicleRepository implements VehicleRepository {
     this.store = store ?? new Map()
   }
 
-  async findAll(filters?: { status?: string }): Promise<Vehicle[]> {
-    const vehicles = [...this.store.values()]
-    if (!filters?.status) return vehicles
-    return vehicles.filter((v) => v.status === filters.status)
+  async findAll(filters?: VehicleFilters): Promise<Vehicle[]> {
+    const all = [...this.store.values()]
+    if (filters?.status) return all.filter((v) => v.status === filters.status)
+    if (filters?.includeRetired) return all
+    return all.filter((v) => v.status !== 'RETIRED')
   }
 
   async findById(id: string): Promise<Vehicle | undefined> {

@@ -58,7 +58,7 @@ describe('Vehicle CRUD Routes', () => {
       expect(body.data[1].name).toBe('Honda Civic')
     })
 
-    it('returns all vehicles when no status filter is provided', async () => {
+    it('excludes RETIRED vehicles by default', async () => {
       await createVehicle()
       const createRes = await createVehicle({
         ...validVehicleInput(),
@@ -66,18 +66,27 @@ describe('Vehicle CRUD Routes', () => {
       })
       const created = await createRes.json()
 
-      // Soft-delete the second vehicle to make it RETIRED
       await app.request(`/vehicles/${created.data.id}`, { method: 'DELETE' })
 
       const res = await app.request('/vehicles')
       const body = await res.json()
 
       expect(body.success).toBe(true)
-      expect(body.data).toHaveLength(2)
-      expect(body.data.map((v: { name: string }) => v.name)).toEqual([
-        'Toyota Corolla',
-        'Retired Car',
-      ])
+      expect(body.data).toHaveLength(1)
+      expect(body.data[0].name).toBe('Toyota Corolla')
+    })
+
+    it('returns RETIRED vehicles when filtered by status=RETIRED', async () => {
+      const createRes = await createVehicle()
+      const created = await createRes.json()
+      await app.request(`/vehicles/${created.data.id}`, { method: 'DELETE' })
+
+      const res = await app.request('/vehicles?status=RETIRED')
+      const body = await res.json()
+
+      expect(body.success).toBe(true)
+      expect(body.data).toHaveLength(1)
+      expect(body.data[0].status).toBe('RETIRED')
     })
 
     it('filters by explicit status query param', async () => {
