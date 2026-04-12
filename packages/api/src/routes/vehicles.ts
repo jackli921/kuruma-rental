@@ -12,8 +12,21 @@ export function createVehicleRoutes(repo: VehicleRepository): Hono {
 
   vehicles.get('/vehicles', async (c) => {
     const status = c.req.query('status')
-    const filtered = status ? await repo.findAll({ status }) : await repo.findAll()
-    return ok(c, filtered)
+    const limitParam = c.req.query('limit')
+    const offsetParam = c.req.query('offset')
+
+    const limit = limitParam ? Number.parseInt(limitParam, 10) : 50
+    if (Number.isNaN(limit) || limit < 1 || limit > 100) {
+      return fail(c, 'limit must be between 1 and 100', 400)
+    }
+    const offset = offsetParam ? Number.parseInt(offsetParam, 10) : 0
+    if (Number.isNaN(offset) || offset < 0) {
+      return fail(c, 'offset must be a non-negative integer', 400)
+    }
+
+    const all = status ? await repo.findAll({ status }) : await repo.findAll()
+    const page = all.slice(offset, offset + limit)
+    return ok(c, page, 200, { total: all.length, limit, offset })
   })
 
   vehicles.get('/vehicles/:id', async (c) => {
