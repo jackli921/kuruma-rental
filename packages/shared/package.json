@@ -14,7 +14,10 @@
     "./types/fleet": "./src/types/fleet.ts",
     "./types/vehicle-detail": "./src/types/vehicle-detail.ts",
     "./lib/cancellation-policy": "./src/lib/cancellation-policy.ts",
-    "./lib/pricing": "./src/lib/pricing.ts"
+    "./lib/pricing": "./src/lib/pricing.ts",
+    "./lib/rental-rules": "./src/lib/rental-rules.ts",
+    "./validators/booking": "./src/validators/booking.ts",
+    "./validators/vehicle": "./src/validators/vehicle.ts"
   },
   "scripts": {
     "test": "vitest run",
