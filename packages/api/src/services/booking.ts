@@ -6,7 +6,8 @@ import { PG_ERROR, pgErrorCode } from '../pg-errors'
 import type { BookingFilters, BookingRepository, VehicleRepository } from '../repositories/types'
 import type { Booking } from '../stores'
 
-const DEFAULT_BUFFER_MS = 60 * 60 * 1000 // 60 minutes
+const DEFAULT_BUFFER_MINUTES = 60
+const MS_PER_MINUTE = 60 * 1000
 
 export interface CreateBookingInput {
   vehicleId: string
@@ -97,15 +98,15 @@ export class BookingService {
       }
     }
 
-    const effectiveEndAt = new Date(input.endAt.getTime() + DEFAULT_BUFFER_MS)
-
     // Issue #65: rental rules + Issue #74: server-side pricing.
     // Both depend on the vehicle lookup. totalPrice is never accepted
     // from the client — always computed server-side.
     let totalPrice: number | null = null
+    let bufferMinutes = DEFAULT_BUFFER_MINUTES
     if (this.vehicleRepo) {
       const vehicle = await this.vehicleRepo.findById(input.vehicleId)
       if (vehicle) {
+        bufferMinutes = vehicle.bufferMinutes
         const check = checkRentalRules(
           {
             minRentalHours: vehicle.minRentalHours,
@@ -145,6 +146,8 @@ export class BookingService {
         totalPrice = pricing.totalPriceJpy
       }
     }
+
+    const effectiveEndAt = new Date(input.endAt.getTime() + bufferMinutes * MS_PER_MINUTE)
 
     try {
       const booking = await this.bookingRepo.create({
