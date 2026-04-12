@@ -1,4 +1,4 @@
-import { getApiBaseUrl } from '@/lib/api-client'
+import { createApiClient } from '@/lib/api-client'
 import type { ApiResponse } from '@kuruma/shared/types/api-response'
 
 interface Vehicle {
@@ -19,15 +19,14 @@ interface Vehicle {
 }
 
 export async function getAvailableVehicles(from?: string, to?: string): Promise<Vehicle[]> {
-  const base = getApiBaseUrl()
+  const client = createApiClient()
 
-  const url =
+  const res =
     from && to
-      ? `${base}/availability?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`
-      : `${base}/vehicles?status=AVAILABLE`
+      ? await client.availability.$get({ query: { from, to } })
+      : await client.vehicles.$get({ query: { status: 'AVAILABLE' } })
 
-  const res = await fetch(url)
-  const json: ApiResponse<Vehicle[]> = await res.json()
+  const json = (await res.json()) as ApiResponse<Vehicle[]>
 
   if (!json.success) return []
 
@@ -35,9 +34,9 @@ export async function getAvailableVehicles(from?: string, to?: string): Promise<
 }
 
 export async function getVehicleById(id: string): Promise<Vehicle | null> {
-  const base = getApiBaseUrl()
-  const res = await fetch(`${base}/vehicles/${encodeURIComponent(id)}`)
-  const json: ApiResponse<Vehicle> = await res.json()
+  const client = createApiClient()
+  const res = await client.vehicles[':id'].$get({ param: { id } })
+  const json = (await res.json()) as ApiResponse<Vehicle>
 
   if (!json.success) return null
 

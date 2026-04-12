@@ -1,7 +1,7 @@
 'use server'
 
 import { auth } from '@/auth'
-import { getApiBaseUrl } from '@/lib/api-client'
+import { createApiClient } from '@/lib/api-client'
 import type { ApiResponse } from '@kuruma/shared/types/api-response'
 
 interface CreateBookingInput {
@@ -29,13 +29,14 @@ export async function checkAvailability(
   startAt: Date,
   endAt: Date,
 ): Promise<boolean> {
-  const base = getApiBaseUrl()
-  const from = encodeURIComponent(startAt.toISOString())
-  const to = encodeURIComponent(endAt.toISOString())
-  const res = await fetch(
-    `${base}/availability/${encodeURIComponent(vehicleId)}?from=${from}&to=${to}`,
-  )
-  const json: ApiResponse<{ available: boolean }> = await res.json()
+  const client = createApiClient()
+  // Query params read manually by parseDateRange() — not in Hono's type sig,
+  // so we use $url() for typed path construction + fetch for query params.
+  const url = client.availability[':vehicleId'].$url({ param: { vehicleId } })
+  url.searchParams.set('from', startAt.toISOString())
+  url.searchParams.set('to', endAt.toISOString())
+  const res = await fetch(url)
+  const json = (await res.json()) as ApiResponse<{ available: boolean }>
 
   if (!json.success) return false
 
@@ -68,12 +69,10 @@ export async function createBooking(input: CreateBookingInput): Promise<CreateBo
   // round-trip adds latency and creates a race window where two users both
   // pass the check but only one succeeds at insert time. Handle the 409
   // (constraint violation) with a user-friendly message instead.
-  const base = getApiBaseUrl()
+  const client = createApiClient()
   const idempotencyKey = crypto.randomUUID()
-  const res = await fetch(`${base}/bookings`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
+  const res = await client.bookings.$post({
+    json: {
       vehicleId: input.vehicleId,
       renterId: session.user.id,
       startAt: input.startAt,
@@ -81,16 +80,16 @@ export async function createBooking(input: CreateBookingInput): Promise<CreateBo
       source: 'DIRECT',
       idempotencyKey,
       ...(input.notes ? { notes: input.notes } : {}),
-    }),
+    },
   })
 
-  const json: {
+  const json = (await res.json()) as {
     success: boolean
     data?: { id: string }
     error?: string
     code?: string
     details?: { required?: number; actual?: number }
-  } = await res.json()
+  }
 
   if (json.success && json.data) {
     return { success: true, bookingId: json.data.id }
@@ -149,9 +148,11 @@ interface BookingWithVehicleResponse {
 }
 
 export async function getBookingsByRenterId(userId: string): Promise<BookingWithVehicle[]> {
-  const base = getApiBaseUrl()
-  const res = await fetch(`${base}/bookings?renterId=${encodeURIComponent(userId)}&expand=vehicle`)
-  const json: ApiResponse<BookingWithVehicleResponse[]> = await res.json()
+  const client = createApiClient()
+  const res = await client.bookings.$get({
+    query: { renterId: userId, expand: 'vehicle' },
+  })
+  const json = (await res.json()) as ApiResponse<BookingWithVehicleResponse[]>
 
   if (!json.success) return []
 
@@ -183,9 +184,9 @@ interface Booking {
 }
 
 export async function getBookingById(id: string): Promise<Booking | null> {
-  const base = getApiBaseUrl()
-  const res = await fetch(`${base}/bookings/${encodeURIComponent(id)}`)
-  const json: ApiResponse<Booking> = await res.json()
+  const client = createApiClient()
+  const res = await client.bookings[':id'].$get({ param: { id } })
+  const json = (await res.json()) as ApiResponse<Booking>
 
   if (!json.success) return null
 

@@ -1,4 +1,4 @@
-import { getApiBaseUrl } from '@/lib/api-client'
+import { createApiClient } from '@/lib/api-client'
 import type { ApiResponse } from '@kuruma/shared/types/api-response'
 import type { CreateVehicleInput, VehicleStatus } from '@kuruma/shared/validators/vehicle'
 
@@ -38,12 +38,11 @@ export interface FleetVehicleOverviewData extends VehicleData {
   nextBooking: FleetBookingSummaryData | null
 }
 
-async function apiRequest<T>(url: string, init?: RequestInit): Promise<T> {
-  const res = await fetch(url, init)
-  const body: ApiResponse<T> = await res.json().catch(() => ({
+async function unwrap<T>(res: Response): Promise<T> {
+  const body = (await res.json().catch(() => ({
     success: false as const,
-    error: 'Unknown error',
-  }))
+    error: `Non-JSON response (HTTP ${res.status})`,
+  }))) as ApiResponse<T>
 
   if (!body.success) {
     throw new Error(body.error ?? `HTTP ${res.status}`)
@@ -53,15 +52,18 @@ async function apiRequest<T>(url: string, init?: RequestInit): Promise<T> {
 }
 
 export async function fetchVehicles(status?: string): Promise<VehicleData[]> {
-  const base = getApiBaseUrl()
-  const params = status ? `?status=${status}` : ''
-  return apiRequest<VehicleData[]>(`${base}/vehicles${params}`)
+  const client = createApiClient()
+  const res = status
+    ? await client.vehicles.$get({ query: { status } })
+    : await client.vehicles.$get()
+  return unwrap<VehicleData[]>(res)
 }
 
 export async function fetchVehicleById(id: string): Promise<VehicleData | null> {
-  const base = getApiBaseUrl()
+  const client = createApiClient()
   try {
-    return await apiRequest<VehicleData>(`${base}/vehicles/${id}`)
+    const res = await client.vehicles[':id'].$get({ param: { id } })
+    return await unwrap<VehicleData>(res)
   } catch (e) {
     if (e instanceof Error && e.message === 'Vehicle not found') return null
     throw e
@@ -69,41 +71,43 @@ export async function fetchVehicleById(id: string): Promise<VehicleData | null> 
 }
 
 export async function createVehicle(data: CreateVehicleInput): Promise<VehicleData> {
-  const base = getApiBaseUrl()
-  return apiRequest<VehicleData>(`${base}/vehicles`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(data),
-  })
+  const client = createApiClient()
+  const res = await client.vehicles.$post({ json: data })
+  return unwrap<VehicleData>(res)
 }
 
 export async function updateVehicle(
   id: string,
   data: Partial<CreateVehicleInput>,
 ): Promise<VehicleData> {
-  const base = getApiBaseUrl()
-  return apiRequest<VehicleData>(`${base}/vehicles/${id}`, {
+  const client = createApiClient()
+  const url = client.vehicles[':id'].$url({ param: { id } })
+  const res = await fetch(url, {
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(data),
   })
+  return unwrap<VehicleData>(res)
 }
 
 // Issue #51: one-shot status mutation for the fleet list inline toggle.
 // Kept separate from updateVehicle() so callers don't accidentally ship a
 // partial vehicle payload when they only mean to flip a status.
 export async function updateVehicleStatus(id: string, status: VehicleStatus): Promise<VehicleData> {
-  const base = getApiBaseUrl()
-  return apiRequest<VehicleData>(`${base}/vehicles/${id}/status`, {
+  const client = createApiClient()
+  const url = client.vehicles[':id'].status.$url({ param: { id } })
+  const res = await fetch(url, {
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ status }),
   })
+  return unwrap<VehicleData>(res)
 }
 
 export async function retireVehicle(id: string): Promise<VehicleData> {
-  const base = getApiBaseUrl()
-  return apiRequest<VehicleData>(`${base}/vehicles/${id}`, { method: 'DELETE' })
+  const client = createApiClient()
+  const res = await client.vehicles[':id'].$delete({ param: { id } })
+  return unwrap<VehicleData>(res)
 }
 
 // Issue #53: enriched detail for /manage/vehicles/[id]. Dates are ISO
@@ -131,9 +135,10 @@ export interface VehicleDetailData extends VehicleData {
 }
 
 export async function fetchVehicleDetail(id: string): Promise<VehicleDetailData | null> {
-  const base = getApiBaseUrl()
+  const client = createApiClient()
   try {
-    return await apiRequest<VehicleDetailData>(`${base}/vehicles/${id}/detail`)
+    const res = await client.vehicles[':id'].detail.$get({ param: { id } })
+    return await unwrap<VehicleDetailData>(res)
   } catch (e) {
     if (e instanceof Error && e.message === 'Vehicle not found') return null
     throw e
@@ -141,6 +146,7 @@ export async function fetchVehicleDetail(id: string): Promise<VehicleDetailData 
 }
 
 export async function fetchFleetOverview(): Promise<FleetVehicleOverviewData[]> {
-  const base = getApiBaseUrl()
-  return apiRequest<FleetVehicleOverviewData[]>(`${base}/vehicles/fleet-overview`)
+  const client = createApiClient()
+  const res = await client.vehicles['fleet-overview'].$get()
+  return unwrap<FleetVehicleOverviewData[]>(res)
 }

@@ -138,9 +138,6 @@ export function createApp(overrides?: {
     )
   }
 
-  // Public routes (no auth required)
-  app.route('/', health)
-
   // Auth middleware on all protected paths
   app.use('/vehicles/*', requireAuth())
   app.use('/bookings/*', requireAuth())
@@ -149,15 +146,17 @@ export function createApp(overrides?: {
 
   const bookingService = new BookingService(bookingRepo, vehicleRepo)
 
-  app.route('/', createFleetOverviewRoutes(fleetOverviewRepo))
-  app.route('/', createVehicleDetailRoutes(vehicleDetailRepo))
-  app.route('/', createVehicleRoutes(vehicleRepo))
-  app.route('/', createBookingRoutes(bookingService))
-  app.route('/', createAvailabilityRoutes(availabilityRepo))
-  app.route('/', createStatsRoutes(statsRepo))
-  app.route('/', createMessageRoutes(threadRepo, messageRepo))
-
+  // Chain .route() calls so TypeScript infers the full route type tree.
+  // hc<AppType> needs this to produce typed client methods.
   return app
+    .route('/', health)
+    .route('/', createFleetOverviewRoutes(fleetOverviewRepo))
+    .route('/', createVehicleDetailRoutes(vehicleDetailRepo))
+    .route('/', createVehicleRoutes(vehicleRepo))
+    .route('/', createBookingRoutes(bookingService))
+    .route('/', createAvailabilityRoutes(availabilityRepo))
+    .route('/', createStatsRoutes(statsRepo))
+    .route('/', createMessageRoutes(threadRepo, messageRepo))
 }
 
 const DEV_WEB_ORIGINS = ['http://localhost:3001', 'http://127.0.0.1:3001']

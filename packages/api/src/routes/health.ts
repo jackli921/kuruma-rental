@@ -1,9 +1,5 @@
 import { Hono } from 'hono'
 
-const health = new Hono()
-
-health.get('/health', (c) => {
+export default new Hono().get('/health', (c) => {
   return c.json({ status: 'ok' })
 })
-
-export default health

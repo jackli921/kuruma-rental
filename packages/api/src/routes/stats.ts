@@ -11,9 +11,7 @@ function safeKeyCompare(a: string, b: string): boolean {
 }
 
 export function createStatsRoutes(statsRepo: StatsRepository) {
-  const app = new Hono()
-
-  app.get('/stats', async (c) => {
+  return new Hono().get('/stats', async (c) => {
     const apiKey = c.req.header('X-API-Key')
     const expectedKey = process.env.STATS_API_KEY
 
@@ -24,6 +22,4 @@ export function createStatsRoutes(statsRepo: StatsRepository) {
     const data = await statsRepo.getDashboardStats()
     return ok(c, data)
   })
-
-  return app
 }
