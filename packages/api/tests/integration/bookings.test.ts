@@ -1,11 +1,44 @@
-import { users } from '@kuruma/shared/db/schema'
+import { bookings, users, vehicles } from '@kuruma/shared/db/schema'
+import { inArray } from 'drizzle-orm'
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest'
-import { DrizzleBookingRepository, DrizzleVehicleRepository } from '../../src/repositories/drizzle'
+import { createApp } from '../../src/index'
+import {
+  DrizzleAvailabilityRepository,
+  DrizzleBookingRepository,
+  DrizzleVehicleRepository,
+} from '../../src/repositories/drizzle'
+import type { Db } from '../../src/repositories/drizzle/shared'
 import type { Vehicle } from '../../src/stores'
-import { cleanupBookings, cleanupUsers, cleanupVehicles, db } from './setup'
+import { authHeaders, setupAuthEnv } from '../helpers/auth'
+import { testDb } from './pg-test-client'
+
+// Cast once: postgres-js and neon-http share the drizzle query API surface,
+// but the Drizzle repos are typed for neon-http. See pg-test-client.ts.
+const db = testDb as unknown as Db
 
 const bookingRepo = new DrizzleBookingRepository(db)
 const vehicleRepo = new DrizzleVehicleRepository(db)
+
+// --- Cleanup helpers (use testDb to avoid Neon HTTP driver) ---
+
+async function cleanupBookings(ids: string[]): Promise<void> {
+  if (ids.length === 0) return
+  await testDb.delete(bookings).where(inArray(bookings.id, ids))
+}
+
+async function cleanupVehicles(vehicleIds: string[]): Promise<void> {
+  if (vehicleIds.length === 0) return
+  await testDb.delete(bookings).where(inArray(bookings.vehicleId, vehicleIds))
+  await testDb.delete(vehicles).where(inArray(vehicles.id, vehicleIds))
+}
+
+async function cleanupUsers(userIds: string[]): Promise<void> {
+  if (userIds.length === 0) return
+  await testDb.delete(bookings).where(inArray(bookings.renterId, userIds))
+  await testDb.delete(users).where(inArray(users.id, userIds))
+}
+
+// --- Test data ---
 
 let testUser: { id: string; email: string }
 let testVehicle: Vehicle
@@ -13,7 +46,7 @@ const createdBookingIds: string[] = []
 const createdVehicleIds: string[] = []
 
 beforeAll(async () => {
-  const [user] = await db
+  const [user] = await testDb
     .insert(users)
     .values({
       id: crypto.randomUUID(),
@@ -35,6 +68,8 @@ beforeAll(async () => {
     minRentalHours: null,
     maxRentalHours: null,
     advanceBookingHours: null,
+    dailyRateJpy: 8000,
+    hourlyRateJpy: null,
   })
   createdVehicleIds.push(testVehicle.id)
 })
@@ -164,6 +199,8 @@ describe('DrizzleBookingRepository', () => {
       minRentalHours: null,
       maxRentalHours: null,
       advanceBookingHours: null,
+      dailyRateJpy: 8000,
+      hourlyRateJpy: null,
     })
     createdVehicleIds.push(otherVehicle.id)
 
@@ -249,7 +286,7 @@ describe('DrizzleBookingRepository', () => {
     expect(fromDb!.totalPrice).toBe(15000)
   })
 
-  it('rejects overlapping bookings via exclusion constraint', async () => {
+  it('rejects overlapping bookings with PG error code 23P01', async () => {
     const firstBooking = await bookingRepo.create({
       renterId: testUser.id,
       vehicleId: testVehicle.id,
@@ -263,8 +300,8 @@ describe('DrizzleBookingRepository', () => {
     })
     createdBookingIds.push(firstBooking.id)
 
-    await expect(
-      bookingRepo.create({
+    try {
+      const second = await bookingRepo.create({
         renterId: testUser.id,
         vehicleId: testVehicle.id,
         startAt: new Date('2027-01-01T13:00:00Z'),
@@ -274,8 +311,59 @@ describe('DrizzleBookingRepository', () => {
         source: 'DIRECT',
         externalId: null,
         notes: null,
-      }),
-    ).rejects.toThrow()
+      })
+      // If we get here, the constraint didn't fire
+      createdBookingIds.push(second.id)
+      expect.unreachable('Expected exclusion constraint violation')
+    } catch (err) {
+      // postgres-js wraps the PG error in err.cause
+      expect(err).toHaveProperty('cause')
+      const cause = (err as { cause: { code: string } }).cause
+      expect(cause).toHaveProperty('code', '23P01')
+      expect(cause).toHaveProperty('constraint_name', 'bookings_no_overlap')
+    }
+  })
+
+  it('allows overlapping booking after first is cancelled', async () => {
+    const firstBooking = await bookingRepo.create({
+      renterId: testUser.id,
+      vehicleId: testVehicle.id,
+      startAt: new Date('2027-02-01T10:00:00Z'),
+      endAt: new Date('2027-02-01T14:00:00Z'),
+      effectiveEndAt: new Date('2027-02-01T15:00:00Z'),
+      status: 'CONFIRMED',
+      source: 'DIRECT',
+      externalId: null,
+      notes: null,
+    })
+    createdBookingIds.push(firstBooking.id)
+
+    // Cancel the first booking
+    const cancelled = await bookingRepo.cancel(firstBooking.id, {
+      from: 'CONFIRMED',
+      fee: 0,
+      cancelledAt: new Date(),
+    })
+    expect(cancelled).toBeDefined()
+    expect(cancelled!.status).toBe('CANCELLED')
+
+    // Overlapping booking should now succeed — exclusion constraint
+    // only applies to CONFIRMED/ACTIVE
+    const secondBooking = await bookingRepo.create({
+      renterId: testUser.id,
+      vehicleId: testVehicle.id,
+      startAt: new Date('2027-02-01T12:00:00Z'),
+      endAt: new Date('2027-02-01T16:00:00Z'),
+      effectiveEndAt: new Date('2027-02-01T17:00:00Z'),
+      status: 'CONFIRMED',
+      source: 'DIRECT',
+      externalId: null,
+      notes: null,
+    })
+    createdBookingIds.push(secondBooking.id)
+
+    expect(secondBooking.status).toBe('CONFIRMED')
+    expect(secondBooking.vehicleId).toBe(testVehicle.id)
   })
 
   it('concurrent overlapping bookings: exactly one succeeds', async () => {
@@ -302,5 +390,98 @@ describe('DrizzleBookingRepository', () => {
     // Clean up the one that succeeded
     const winner = (fulfilled[0] as PromiseFulfilledResult<{ id: string }>).value
     createdBookingIds.push(winner.id)
+  })
+})
+
+describe('POST /bookings overlap via HTTP (real Postgres)', () => {
+  const httpBookingIds: string[] = []
+  let httpUser: { id: string; email: string }
+  let httpVehicle: Vehicle
+  let app: ReturnType<typeof createApp>
+  let headers: Record<string, string>
+
+  beforeAll(async () => {
+    setupAuthEnv()
+
+    const [user] = await testDb
+      .insert(users)
+      .values({
+        id: crypto.randomUUID(),
+        email: `http-overlap-${Date.now()}@kuruma-test.com`,
+        role: 'RENTER',
+        language: 'en',
+      })
+      .returning()
+    httpUser = user
+
+    const httpVehicleRepo = new DrizzleVehicleRepository(db)
+    const httpBookingRepo = new DrizzleBookingRepository(db)
+    const httpAvailabilityRepo = new DrizzleAvailabilityRepository(db)
+
+    httpVehicle = await httpVehicleRepo.create({
+      name: 'HTTP Overlap Test Car',
+      description: null,
+      seats: 4,
+      transmission: 'AUTO',
+      fuelType: null,
+      status: 'AVAILABLE',
+      bufferMinutes: 60,
+      minRentalHours: null,
+      maxRentalHours: null,
+      advanceBookingHours: null,
+      dailyRateJpy: 8000,
+      hourlyRateJpy: null,
+    })
+
+    app = createApp({
+      vehicleRepo: httpVehicleRepo,
+      bookingRepo: httpBookingRepo,
+      availabilityRepo: httpAvailabilityRepo,
+    })
+    headers = await authHeaders({ sub: httpUser.id, role: 'RENTER' })
+  })
+
+  afterEach(async () => {
+    await cleanupBookings(httpBookingIds)
+    httpBookingIds.length = 0
+  })
+
+  afterAll(async () => {
+    if (httpVehicle) await cleanupVehicles([httpVehicle.id])
+    if (httpUser) await cleanupUsers([httpUser.id])
+  })
+
+  it('returns 409 when second booking overlaps an existing CONFIRMED booking', async () => {
+    const bookingBody = {
+      vehicleId: httpVehicle.id,
+      startAt: '2027-03-01T10:00:00Z',
+      endAt: '2027-03-01T14:00:00Z',
+      source: 'DIRECT',
+    }
+
+    const first = await app.request('/bookings', {
+      method: 'POST',
+      headers: { ...headers, 'Content-Type': 'application/json' },
+      body: JSON.stringify(bookingBody),
+    })
+    expect(first.status).toBe(201)
+    const firstBody = await first.json()
+    httpBookingIds.push(firstBody.data.id)
+
+    // Second request with overlapping time range
+    const second = await app.request('/bookings', {
+      method: 'POST',
+      headers: { ...headers, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        ...bookingBody,
+        startAt: '2027-03-01T13:00:00Z',
+        endAt: '2027-03-01T17:00:00Z',
+      }),
+    })
+
+    expect(second.status).toBe(409)
+    const secondBody = await second.json()
+    expect(secondBody.success).toBe(false)
+    expect(secondBody.error).toMatch(/already booked/i)
   })
 })

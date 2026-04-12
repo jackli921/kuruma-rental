@@ -10,7 +10,7 @@
     "deploy": "wrangler deploy",
     "test": "vitest run",
     "test:watch": "vitest",
-    "test:integration": "vitest run --config vitest.integration.config.ts tests/integration/messages.test.ts tests/integration/vehicles-pricing.test.ts",
+    "test:integration": "vitest run --config vitest.integration.config.ts tests/integration/messages.test.ts tests/integration/vehicles-pricing.test.ts tests/integration/bookings.test.ts",
     "typecheck": "tsc --noEmit",
     "lint:boundaries": "bun run scripts/check-import-boundaries.ts"
   },
