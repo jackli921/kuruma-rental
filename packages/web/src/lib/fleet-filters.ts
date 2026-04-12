@@ -7,8 +7,7 @@ export interface FleetFilterState {
   search?: string | undefined
   statuses?: VehicleStatus[] | undefined
   transmissions?: Transmission[] | undefined
-  seatsMin?: number | undefined
-  seatsMax?: number | undefined
+  seats?: number[] | undefined
 }
 
 // Generic in T so the owner list (FleetVehicleOverviewData) and any
@@ -37,14 +36,9 @@ export function filterVehicles<T extends FilterableVehicle>(
     result = result.filter((v) => allowed.has(v.transmission))
   }
 
-  if (filters.seatsMin !== undefined) {
-    const min = filters.seatsMin
-    result = result.filter((v) => v.seats >= min)
-  }
-
-  if (filters.seatsMax !== undefined) {
-    const max = filters.seatsMax
-    result = result.filter((v) => v.seats <= max)
+  if (filters.seats && filters.seats.length > 0) {
+    const allowed = new Set(filters.seats)
+    result = result.filter((v) => allowed.has(v.seats))
   }
 
   return result

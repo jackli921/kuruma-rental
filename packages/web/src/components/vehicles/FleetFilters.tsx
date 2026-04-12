@@ -68,9 +68,11 @@ export function FleetFilters({
   const t = useTranslations('business.vehicles.filter')
   const tStatus = useTranslations('business.vehicles')
 
-  const seatsMin = filters.seatsMin ?? seatsBounds.min
-  const seatsMax = filters.seatsMax ?? seatsBounds.max
   const hasCapacityRange = seatsBounds.min < seatsBounds.max
+
+  const seatOptions: number[] = hasCapacityRange
+    ? Array.from({ length: seatsBounds.max - seatsBounds.min + 1 }, (_, i) => seatsBounds.min + i)
+    : []
 
   const statusLabel = (status: VehicleStatus): string => tStatus(STATUS_LABEL_KEYS[status])
 
@@ -93,23 +95,10 @@ export function FleetFilters({
     })
   }
 
-  const handleSeatsMinChange = (event: React.ChangeEvent<HTMLInputElement>) => {
-    const nextMin = Number(event.target.value)
-    const clampedMax = Math.max(nextMin, seatsMax)
+  const handleSeatsToggle = (seats: number) => {
     onFiltersChange({
       ...filters,
-      seatsMin: nextMin,
-      seatsMax: clampedMax,
-    })
-  }
-
-  const handleSeatsMaxChange = (event: React.ChangeEvent<HTMLInputElement>) => {
-    const nextMax = Number(event.target.value)
-    const clampedMin = Math.min(seatsMin, nextMax)
-    onFiltersChange({
-      ...filters,
-      seatsMin: clampedMin,
-      seatsMax: nextMax,
+      seats: toggleInArray(filters.seats, seats),
     })
   }
 
@@ -190,28 +179,27 @@ export function FleetFilters({
           <Separator />
           <div className="space-y-2">
             <SectionHeading>{t('capacityHeading')}</SectionHeading>
-            <p className="text-sm text-foreground">
-              {t('seatsLabel', { min: seatsMin, max: seatsMax })}
-            </p>
-            <div className="space-y-2">
-              <input
-                type="range"
-                aria-label={t('capacityHeading')}
-                min={seatsBounds.min}
-                max={seatsBounds.max}
-                value={seatsMin}
-                onChange={handleSeatsMinChange}
-                className="w-full accent-primary"
-              />
-              <input
-                type="range"
-                aria-label={t('capacityHeading')}
-                min={seatsBounds.min}
-                max={seatsBounds.max}
-                value={seatsMax}
-                onChange={handleSeatsMaxChange}
-                className="w-full accent-primary"
-              />
+            <div className="flex flex-wrap gap-1.5">
+              {seatOptions.map((seats) => {
+                const isSelected = filters.seats?.includes(seats) ?? false
+                const label = String(seats)
+                return (
+                  <Badge
+                    key={seats}
+                    variant={isSelected ? 'default' : 'outline'}
+                    render={
+                      <button
+                        type="button"
+                        aria-pressed={isSelected}
+                        aria-label={label}
+                        onClick={() => handleSeatsToggle(seats)}
+                      />
+                    }
+                  >
+                    {label}
+                  </Badge>
+                )
+              })}
             </div>
           </div>
         </>
