@@ -19,6 +19,7 @@
         "@elithrar/workers-hono-rate-limit": "^0.5.1",
         "@kuruma/shared": "workspace:*",
         "hono": "^4",
+        "jose": "^6.2.2",
       },
       "devDependencies": {
         "@cloudflare/workers-types": "^4.20260410.1",
