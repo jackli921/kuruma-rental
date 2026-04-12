@@ -87,7 +87,7 @@ describe('DrizzleThreadRepository', () => {
         expect.unreachable('duplicate insert should have thrown')
       } catch (err: unknown) {
         const msg = String(err) + String(err instanceof Error && err.cause ? String(err.cause) : '')
-        expect(msg).toMatch(/duplicate key|unique/i)
+        expect(msg).toContain('thread_participants_threadId_userId_unique')
       }
     })
   })
