@@ -2,7 +2,7 @@ import { users } from '@kuruma/shared/db/schema'
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest'
 import { DrizzleBookingRepository, DrizzleVehicleRepository } from '../../src/repositories/drizzle'
 import type { Vehicle } from '../../src/stores'
-import { cleanupBookings, cleanupUsers, cleanupVehicles, db } from './setup'
+import { DEFAULT_DAILY_RATE_JPY, cleanupBookings, cleanupUsers, cleanupVehicles, db } from './setup'
 
 const bookingRepo = new DrizzleBookingRepository(db)
 const vehicleRepo = new DrizzleVehicleRepository(db)
@@ -35,7 +35,7 @@ beforeAll(async () => {
     minRentalHours: null,
     maxRentalHours: null,
     advanceBookingHours: null,
-    dailyRateJpy: 5000,
+    dailyRateJpy: DEFAULT_DAILY_RATE_JPY,
   })
   createdVehicleIds.push(testVehicle.id)
 })
@@ -165,7 +165,7 @@ describe('DrizzleBookingRepository', () => {
       minRentalHours: null,
       maxRentalHours: null,
       advanceBookingHours: null,
-      dailyRateJpy: 5000,
+      dailyRateJpy: DEFAULT_DAILY_RATE_JPY,
     })
     createdVehicleIds.push(otherVehicle.id)
 

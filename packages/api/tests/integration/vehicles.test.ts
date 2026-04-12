@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it } from 'vitest'
 import { DrizzleVehicleRepository } from '../../src/repositories/drizzle'
-import { cleanupVehicles, db } from './setup'
+import { DEFAULT_DAILY_RATE_JPY, cleanupVehicles, db } from './setup'
 
 const repo = new DrizzleVehicleRepository(db)
 const createdIds: string[] = []
@@ -57,7 +57,7 @@ describe('DrizzleVehicleRepository', () => {
       minRentalHours: null,
       maxRentalHours: null,
       advanceBookingHours: null,
-      dailyRateJpy: 5000,
+      dailyRateJpy: DEFAULT_DAILY_RATE_JPY,
     })
     createdIds.push(created.id)
 
@@ -91,7 +91,7 @@ describe('DrizzleVehicleRepository', () => {
       minRentalHours: null,
       maxRentalHours: null,
       advanceBookingHours: null,
-      dailyRateJpy: 5000,
+      dailyRateJpy: DEFAULT_DAILY_RATE_JPY,
     })
     createdIds.push(available.id)
 
@@ -106,7 +106,7 @@ describe('DrizzleVehicleRepository', () => {
       minRentalHours: null,
       maxRentalHours: null,
       advanceBookingHours: null,
-      dailyRateJpy: 5000,
+      dailyRateJpy: DEFAULT_DAILY_RATE_JPY,
     })
     createdIds.push(maintenance.id)
 
@@ -135,7 +135,7 @@ describe('DrizzleVehicleRepository', () => {
       minRentalHours: null,
       maxRentalHours: null,
       advanceBookingHours: null,
-      dailyRateJpy: 5000,
+      dailyRateJpy: DEFAULT_DAILY_RATE_JPY,
     })
     createdIds.push(created.id)
 
@@ -176,7 +176,7 @@ describe('DrizzleVehicleRepository', () => {
       minRentalHours: null,
       maxRentalHours: null,
       advanceBookingHours: null,
-      dailyRateJpy: 5000,
+      dailyRateJpy: DEFAULT_DAILY_RATE_JPY,
     })
     createdIds.push(created.id)
 
