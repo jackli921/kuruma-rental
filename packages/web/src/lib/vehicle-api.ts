@@ -41,7 +41,7 @@ export interface FleetVehicleOverviewData extends VehicleData {
 async function unwrap<T>(res: Response): Promise<T> {
   const body = (await res.json().catch(() => ({
     success: false as const,
-    error: 'Unknown error',
+    error: `Non-JSON response (HTTP ${res.status})`,
   }))) as ApiResponse<T>
 
   if (!body.success) {
@@ -53,7 +53,9 @@ async function unwrap<T>(res: Response): Promise<T> {
 
 export async function fetchVehicles(status?: string): Promise<VehicleData[]> {
   const client = createApiClient()
-  const res = await client.vehicles.$get(status ? { query: { status } } : (undefined as never))
+  const res = status
+    ? await client.vehicles.$get({ query: { status } })
+    : await client.vehicles.$get()
   return unwrap<VehicleData[]>(res)
 }
 

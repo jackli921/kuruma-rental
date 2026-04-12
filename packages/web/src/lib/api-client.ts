@@ -10,8 +10,9 @@ function getApiBaseUrl(): string {
   return url.replace(/\/$/, '')
 }
 
+// Response body types require `as ApiResponse<T>` casts because the API's
+// ok()/fail() helpers return plain Response, not Hono's TypedResponse.
+// Full end-to-end inference requires removing `: Response` from those helpers.
 export function createApiClient() {
   return hc<AppType>(getApiBaseUrl())
 }
-
-export type ApiClient = ReturnType<typeof createApiClient>
