@@ -145,8 +145,10 @@ export async function fetchVehicleDetail(id: string): Promise<VehicleDetailData 
   }
 }
 
-export async function fetchFleetOverview(): Promise<FleetVehicleOverviewData[]> {
-  const client = createApiClient()
+export async function fetchFleetOverview(
+  headers?: Record<string, string>,
+): Promise<FleetVehicleOverviewData[]> {
+  const client = createApiClient(headers)
   const res = await client.vehicles['fleet-overview'].$get()
   return unwrap<FleetVehicleOverviewData[]>(res)
 }
