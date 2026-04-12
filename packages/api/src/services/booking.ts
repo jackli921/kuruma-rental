@@ -204,11 +204,10 @@ export class BookingService {
       }
     }
 
-    const updated = await this.bookingRepo.updateStatus(
-      booking.id,
-      booking.status,
-      newStatus as Booking['status'],
-    )
+    const updated = await this.bookingRepo.updateStatus(booking.id, {
+      from: booking.status,
+      to: newStatus as Booking['status'],
+    })
     if (!updated) {
       return {
         ok: false,
@@ -236,12 +235,11 @@ export class BookingService {
     const now = new Date()
     const cancellation = calculateCancellationFee(booking.startAt, now, booking.totalPrice ?? 0)
 
-    const updated = await this.bookingRepo.cancel(
-      booking.id,
-      booking.status,
-      cancellation.feeAmount,
-      now,
-    )
+    const updated = await this.bookingRepo.cancel(booking.id, {
+      from: booking.status,
+      fee: cancellation.feeAmount,
+      cancelledAt: now,
+    })
     if (!updated) {
       return {
         ok: false,

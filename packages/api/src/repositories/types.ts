@@ -45,14 +45,11 @@ export interface BookingRepository {
   create(data: Omit<Booking, 'id' | 'createdAt' | 'updatedAt'>): Promise<Booking>
   updateStatus(
     id: string,
-    expectedStatus: Booking['status'],
-    newStatus: Booking['status'],
+    transition: { from: Booking['status']; to: Booking['status'] },
   ): Promise<Booking | undefined>
   cancel(
     id: string,
-    expectedStatus: Booking['status'],
-    cancellationFee: number,
-    cancelledAt: Date,
+    opts: { from: Booking['status']; fee: number; cancelledAt: Date },
   ): Promise<Booking | undefined>
 }
 
