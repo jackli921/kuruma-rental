@@ -2,7 +2,7 @@ import { describe, expect, test } from 'vitest'
 import { calculateCancellationFee } from '../../src/lib/cancellation-policy'
 
 describe('calculateCancellationFee', () => {
-  const totalPrice = 10000 // ¥10,000 in cents
+  const totalPrice = 10000 // ¥10,000
 
   test('72h+ before pickup → FREE tier, 0% fee', () => {
     const pickupAt = new Date('2026-05-10T10:00:00Z')
