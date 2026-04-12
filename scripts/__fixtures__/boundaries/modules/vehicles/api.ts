@@ -1,1 +1,3 @@
-export function fetchVehicles(): string[] { return [] }
+export function fetchVehicles(): string[] {
+  return []
+}
