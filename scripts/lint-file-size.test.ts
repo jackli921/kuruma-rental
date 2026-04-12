@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test'
-import { checkFiles } from './lint-file-size'
+import { checkFiles, discoverFiles } from './lint-file-size'
 
 const FIXTURES = 'scripts/__fixtures__/lint'
 
@@ -50,5 +50,20 @@ describe('lint-file-size', () => {
     // File is 106 lines; not over 800 hard cap and not over 400 soft warn for
     // general files means zero errors and zero warnings.
     expect(errors).toHaveLength(0)
+  })
+})
+
+describe('lint-file-size discovery', () => {
+  test('includes source files under packages/*/src', () => {
+    const files = discoverFiles(['packages/web/src'])
+    expect(files.length).toBeGreaterThan(0)
+    expect(files.every((f) => f.endsWith('.ts') || f.endsWith('.tsx'))).toBe(true)
+  })
+
+  test('excludes .test.ts, .test.tsx, node_modules, .next, dist', () => {
+    const files = discoverFiles(['packages/web/src'])
+    expect(files.some((f) => f.includes('.test.'))).toBe(false)
+    expect(files.some((f) => f.includes('node_modules'))).toBe(false)
+    expect(files.some((f) => f.includes('.next'))).toBe(false)
   })
 })

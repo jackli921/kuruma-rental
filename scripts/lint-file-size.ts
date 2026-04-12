@@ -1,5 +1,6 @@
 #!/usr/bin/env bun
 import { readFileSync } from 'node:fs'
+import { Glob } from 'bun'
 
 const HARD_FAIL = 800
 const SOFT_WARN = 400
@@ -58,4 +59,66 @@ export function checkFiles(files: string[]): Issue[] {
     }
   }
   return issues
+}
+
+const ROOTS = ['packages/api/src', 'packages/web/src', 'packages/shared/src']
+
+const INCLUDE_PATTERNS = ['**/*.ts', '**/*.tsx']
+const EXCLUDE_PATTERNS = [
+  /\.test\.tsx?$/,
+  /\/tests\//,
+  /\/__fixtures__\//,
+  /\/node_modules\//,
+  /\/\.next\//,
+  /\/\.open-next\//,
+  /\/\.wrangler\//,
+  /\/dist\//,
+  /\/drizzle\//,
+  // Exclude Next.js catch-all segment folders (e.g. [...nextauth]) — boilerplate,
+  // not subject to file-size rules, and their paths contain ".next" as a substring
+  // which confuses the .next build directory exclusion check.
+  /\/\[\.\.\.next/,
+]
+
+export function discoverFiles(roots: string[] = ROOTS): string[] {
+  const out: string[] = []
+  for (const root of roots) {
+    for (const pattern of INCLUDE_PATTERNS) {
+      const glob = new Glob(pattern)
+      for (const rel of glob.scanSync({ cwd: root, onlyFiles: true })) {
+        const full = `${root}/${rel}`
+        if (EXCLUDE_PATTERNS.some((r) => r.test(full))) continue
+        out.push(full)
+      }
+    }
+  }
+  return out
+}
+
+function main(): number {
+  const files = discoverFiles()
+  const issues = checkFiles(files)
+
+  let errors = 0
+  let warnings = 0
+  for (const issue of issues) {
+    const tag = issue.level === 'error' ? 'ERROR' : 'WARN'
+    const stream = issue.level === 'error' ? process.stderr : process.stdout
+    stream.write(`[lint-file-size] ${tag} ${issue.file}: ${issue.lines} lines (cap ${issue.cap})\n`)
+    if (issue.level === 'error') errors++
+    else warnings++
+  }
+
+  if (errors > 0) {
+    process.stderr.write(`[lint-file-size] ${errors} error(s), ${warnings} warning(s)\n`)
+    return 1
+  }
+  if (warnings > 0) {
+    process.stdout.write(`[lint-file-size] ${warnings} warning(s)\n`)
+  }
+  return 0
+}
+
+if (import.meta.main) {
+  process.exit(main())
 }
