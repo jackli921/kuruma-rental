@@ -12,6 +12,7 @@
     "lint:fix": "bunx biome check --write .",
     "lint:size": "bun run scripts/lint-file-size.ts",
     "lint:modules": "bun run scripts/lint-module-boundaries.ts",
+    "lint:deps": "bun node_modules/.bin/knip",
     "format": "bunx biome format --write .",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",

@@ -15,7 +15,7 @@ jobs:
 
       - uses: oven-sh/setup-bun@v2
         with:
-          bun-version: latest
+          bun-version: "1.2.13"
 
       - run: bun install --frozen-lockfile
 
@@ -30,6 +30,9 @@ jobs:
 
       - name: Check shared export drift
         run: bun run scripts/lint-export-drift.ts
+
+      - name: Check unused deps and exports (informational)
+        run: bun run lint:deps || true
 
       - name: Test (all packages)
         run: bun run test
@@ -71,7 +74,7 @@ jobs:
 
       - uses: oven-sh/setup-bun@v2
         with:
-          bun-version: latest
+          bun-version: "1.2.13"
 
       - run: bun install --frozen-lockfile
 
