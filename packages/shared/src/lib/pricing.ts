@@ -36,7 +36,8 @@ export function calculateBookingPrice(
   const hours = Math.ceil(durationMs / HOUR_MS)
 
   if (daily == null) {
-    const h = hourly ?? 0
+    // After the both-null guard above, hourly is guaranteed non-null here.
+    const h = hourly as number
     return {
       ok: true,
       totalPriceJpy: hours * h,
