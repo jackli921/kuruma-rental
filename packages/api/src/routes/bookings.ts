@@ -1,15 +1,9 @@
 import { createBookingSchema, updateBookingStatusSchema } from '@kuruma/shared/validators/booking'
 import { Hono } from 'hono'
-import type { AuthUser } from '../middleware/auth'
+import { type AuthUser, PRIVILEGED_ROLES, getUser } from '../middleware/auth'
 import type { BookingFilters } from '../repositories/types'
 import type { BookingService } from '../services/booking'
 import { fail, ok, parseDateRange } from './helpers'
-
-const PRIVILEGED_ROLES = new Set(['STAFF', 'ADMIN', 'PARTNER'])
-
-function getUser(c: { get: (key: string) => unknown }): AuthUser | undefined {
-  return c.get('user') as AuthUser | undefined
-}
 
 function isPrivileged(user: AuthUser): boolean {
   return PRIVILEGED_ROLES.has(user.role)
@@ -63,9 +57,13 @@ export function createBookingRoutes(service: BookingService): Hono {
   })
 
   bookings.get('/bookings/:id', async (c) => {
+    const user = getUser(c)
     const booking = await service.findById(c.req.param('id'))
     if (!booking) {
       return fail(c, 'Booking not found', 404)
+    }
+    if (user && !isPrivileged(user) && booking.renterId !== user.id) {
+      return fail(c, 'Forbidden', 403)
     }
     return ok(c, booking)
   })

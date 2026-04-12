@@ -2,15 +2,32 @@ import type { Context, MiddlewareHandler } from 'hono'
 import { jwtVerify } from 'jose'
 import { fail } from '../routes/helpers'
 
+export type UserRole = 'RENTER' | 'STAFF' | 'ADMIN' | 'PARTNER'
+
 export interface AuthUser {
   id: string
-  role: string
+  role: UserRole
 }
 
 export interface AuthEnv {
   Variables: {
     user: AuthUser
   }
+}
+
+/** Roles that can manage bookings across all users */
+export const PRIVILEGED_ROLES: ReadonlySet<UserRole> = new Set(['STAFF', 'ADMIN', 'PARTNER'])
+
+/** Roles that can manage vehicles */
+export const STAFF_ROLES: ReadonlySet<UserRole> = new Set(['STAFF', 'ADMIN'])
+
+export function getUser(c: { get: (key: string) => unknown }): AuthUser | undefined {
+  return c.get('user') as AuthUser | undefined
+}
+
+export function requireUser(c: { get: (key: string) => unknown }): AuthUser | null {
+  const user = getUser(c)
+  return user?.id ? user : null
 }
 
 export function requireAuth(): MiddlewareHandler {
@@ -50,7 +67,10 @@ async function verifyJwt(token: string): Promise<AuthUser | null> {
     const id = payload.sub
     if (!id) return null
 
-    const role = (payload.role as string) ?? 'RENTER'
+    const VALID_ROLES = new Set<UserRole>(['RENTER', 'STAFF', 'ADMIN', 'PARTNER'])
+    const rawRole = payload.role as string | undefined
+    const role: UserRole =
+      rawRole && VALID_ROLES.has(rawRole as UserRole) ? (rawRole as UserRole) : 'RENTER'
     return { id, role }
   } catch {
     return null
@@ -68,5 +88,5 @@ function verifyApiKey(key: string): AuthUser | null {
   }
 
   if (mismatch !== 0) return null
-  return { id: 'partner:api-key', role: 'PARTNER' }
+  return { id: 'partner:api-key', role: 'PARTNER' as const }
 }
