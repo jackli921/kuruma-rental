@@ -29,7 +29,7 @@ export type CreateBookingResult =
 
 export type StatusTransitionResult =
   | { ok: true; booking: Booking }
-  | { ok: false; status: 404 | 400; error: string }
+  | { ok: false; status: 400 | 404 | 409; error: string }
 
 export type CancelResult =
   | {
@@ -187,9 +187,17 @@ export class BookingService {
       }
     }
 
-    const updated = await this.bookingRepo.updateStatus(booking.id, newStatus)
+    const updated = await this.bookingRepo.updateStatus(
+      booking.id,
+      booking.status,
+      newStatus as Booking['status'],
+    )
     if (!updated) {
-      return { ok: false, status: 404 as const, error: 'Booking disappeared during status update' }
+      return {
+        ok: false,
+        status: 409,
+        error: 'Booking status was modified by another request. Please retry.',
+      }
     }
     return { ok: true, booking: updated }
   }
@@ -211,9 +219,18 @@ export class BookingService {
     const now = new Date()
     const cancellation = calculateCancellationFee(booking.startAt, now, booking.totalPrice ?? 0)
 
-    const updated = await this.bookingRepo.cancel(booking.id, cancellation.feeAmount, now)
+    const updated = await this.bookingRepo.cancel(
+      booking.id,
+      booking.status,
+      cancellation.feeAmount,
+      now,
+    )
     if (!updated) {
-      return { ok: false, status: 404 as const, error: 'Booking disappeared during cancellation' }
+      return {
+        ok: false,
+        status: 409,
+        error: 'Booking status was modified by another request. Please retry.',
+      }
     }
     return { ok: true, booking: updated, cancellation }
   }

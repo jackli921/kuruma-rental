@@ -40,8 +40,17 @@ export interface BookingRepository {
   findAll(filters?: BookingFilters): Promise<Booking[]>
   findById(id: string): Promise<Booking | undefined>
   create(data: Omit<Booking, 'id' | 'createdAt' | 'updatedAt'>): Promise<Booking>
-  updateStatus(id: string, status: string): Promise<Booking | undefined>
-  cancel(id: string, cancellationFee: number, cancelledAt: Date): Promise<Booking | undefined>
+  updateStatus(
+    id: string,
+    expectedStatus: Booking['status'],
+    newStatus: Booking['status'],
+  ): Promise<Booking | undefined>
+  cancel(
+    id: string,
+    expectedStatus: Booking['status'],
+    cancellationFee: number,
+    cancelledAt: Date,
+  ): Promise<Booking | undefined>
 }
 
 export interface StatsRepository {
