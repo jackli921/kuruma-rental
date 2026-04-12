@@ -53,7 +53,32 @@ export const createVehicleSchema = vehicleObjectSchema.superRefine((data, ctx) =
   }
 })
 
-export const updateVehicleSchema = vehicleObjectSchema.partial()
+export const updateVehicleSchema = vehicleObjectSchema.partial().superRefine((data, ctx) => {
+  // Only reject when both rates are explicitly present and both null.
+  // A partial update sending only one rate is fine — the other stays unchanged in DB.
+  if (
+    'dailyRateJpy' in data &&
+    'hourlyRateJpy' in data &&
+    data.dailyRateJpy == null &&
+    data.hourlyRateJpy == null
+  ) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ['dailyRateJpy'],
+      message: 'At least one rate (daily or hourly) is required',
+    })
+  }
+
+  const min = data.minRentalHours
+  const max = data.maxRentalHours
+  if (min != null && max != null && min > max) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ['maxRentalHours'],
+      message: 'Maximum rental hours must be greater than or equal to minimum',
+    })
+  }
+})
 
 // Issue #51: inline status toggle. Kept as its own tiny schema so the
 // fleet list can bind a one-field mutation without sending the full

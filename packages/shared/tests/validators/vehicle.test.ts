@@ -247,6 +247,48 @@ describe('updateVehicleSchema', () => {
     const result = updateVehicleSchema.safeParse({})
     expect(result.success).toBe(true)
   })
+
+  it('rejects when both rates are explicitly set to null', () => {
+    const result = updateVehicleSchema.safeParse({
+      dailyRateJpy: null,
+      hourlyRateJpy: null,
+    })
+    expect(result.success).toBe(false)
+    if (!result.success) {
+      const messages = result.error.issues.map((i) => i.message).join(' ')
+      expect(messages).toMatch(/rate/i)
+    }
+  })
+
+  it('rejects when minRentalHours > maxRentalHours', () => {
+    const result = updateVehicleSchema.safeParse({
+      minRentalHours: 10,
+      maxRentalHours: 5,
+    })
+    expect(result.success).toBe(false)
+    if (!result.success) {
+      const paths = result.error.issues.map((i) => i.path.join('.'))
+      expect(paths.some((p) => p.includes('maxRentalHours'))).toBe(true)
+    }
+  })
+
+  it('allows setting one rate to null (other rate not in payload)', () => {
+    const result = updateVehicleSchema.safeParse({ dailyRateJpy: null })
+    expect(result.success).toBe(true)
+  })
+
+  it('allows setting one rate when other is null', () => {
+    const result = updateVehicleSchema.safeParse({
+      dailyRateJpy: null,
+      hourlyRateJpy: 1200,
+    })
+    expect(result.success).toBe(true)
+  })
+
+  it('allows min without max in partial update', () => {
+    const result = updateVehicleSchema.safeParse({ minRentalHours: 4 })
+    expect(result.success).toBe(true)
+  })
 })
 
 describe('updateVehicleStatusSchema', () => {
