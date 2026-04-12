@@ -13,8 +13,12 @@ export interface CalendarBooking {
   notes: string | null
 }
 
-export async function fetchCalendarBookings(from: string, to: string): Promise<CalendarBooking[]> {
-  const client = createApiClient()
+export async function fetchCalendarBookings(
+  from: string,
+  to: string,
+  token?: string,
+): Promise<CalendarBooking[]> {
+  const client = createApiClient(token)
   const res = await client.bookings.$get({ query: { from, to } })
 
   if (!res.ok) {

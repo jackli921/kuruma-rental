@@ -49,13 +49,9 @@ vi.mock('@tanstack/react-query', () => ({
   }),
 }))
 
-vi.mock('@/lib/vehicle-api', async () => {
-  const actual = await vi.importActual<typeof import('@/lib/vehicle-api')>('@/lib/vehicle-api')
-  return {
-    ...actual,
-    updateVehicle: vi.fn().mockResolvedValue(undefined),
-  }
-})
+vi.mock('@/lib/vehicle-actions', () => ({
+  updateVehicleAction: vi.fn().mockResolvedValue({ success: true, data: undefined }),
+}))
 
 import { EditVehicleDialog } from '@/components/vehicles/EditVehicleDialog'
 import type { VehicleData } from '@/lib/vehicle-api'

@@ -21,14 +21,10 @@ vi.mock('next-intl', () => ({
   },
 }))
 
-const updateVehicleStatusMock = vi.fn()
-vi.mock('@/lib/vehicle-api', async () => {
-  const actual = await vi.importActual<typeof import('@/lib/vehicle-api')>('@/lib/vehicle-api')
-  return {
-    ...actual,
-    updateVehicleStatus: (...args: unknown[]) => updateVehicleStatusMock(...args),
-  }
-})
+const updateVehicleStatusActionMock = vi.fn()
+vi.mock('@/lib/vehicle-actions', () => ({
+  updateVehicleStatusAction: (...args: unknown[]) => updateVehicleStatusActionMock(...args),
+}))
 
 import { VehicleStatusToggle } from '@/components/vehicles/VehicleStatusToggle'
 import type { VehicleData } from '@/lib/vehicle-api'
@@ -82,7 +78,7 @@ function renderWithClient(
 
 describe('VehicleStatusToggle', () => {
   beforeEach(() => {
-    updateVehicleStatusMock.mockReset()
+    updateVehicleStatusActionMock.mockReset()
   })
   afterEach(() => {
     cleanup()
@@ -100,9 +96,9 @@ describe('VehicleStatusToggle', () => {
   })
 
   it('calls updateVehicleStatus when the user clicks a non-active option', async () => {
-    updateVehicleStatusMock.mockResolvedValueOnce({
-      ...makeVehicle(),
-      status: 'MAINTENANCE',
+    updateVehicleStatusActionMock.mockResolvedValueOnce({
+      success: true,
+      data: { ...makeVehicle(), status: 'MAINTENANCE' },
     })
     const vehicle = makeVehicle({ status: 'AVAILABLE' })
     renderWithClient(<VehicleStatusToggle vehicle={vehicle} />)
@@ -110,7 +106,7 @@ describe('VehicleStatusToggle', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Maintenance' }))
 
     await waitFor(() => {
-      expect(updateVehicleStatusMock).toHaveBeenCalledWith('v_1', 'MAINTENANCE')
+      expect(updateVehicleStatusActionMock).toHaveBeenCalledWith('v_1', 'MAINTENANCE')
     })
   })
 
@@ -120,15 +116,15 @@ describe('VehicleStatusToggle', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Available' }))
 
-    expect(updateVehicleStatusMock).not.toHaveBeenCalled()
+    expect(updateVehicleStatusActionMock).not.toHaveBeenCalled()
   })
 
   it('optimistically patches the vehicles cache before the server responds', async () => {
     // Keep the mutation pending so we can observe the optimistic state.
-    let resolveMutation: (v: VehicleData) => void = () => {}
-    updateVehicleStatusMock.mockImplementationOnce(
+    let resolveMutation: (v: { success: true; data: VehicleData }) => void = () => {}
+    updateVehicleStatusActionMock.mockImplementationOnce(
       () =>
-        new Promise<VehicleData>((res) => {
+        new Promise<{ success: true; data: VehicleData }>((res) => {
           resolveMutation = res
         }),
     )
@@ -146,11 +142,14 @@ describe('VehicleStatusToggle', () => {
     })
 
     // Let the mutation resolve so React Query doesn't complain.
-    resolveMutation({ ...vehicle, status: 'MAINTENANCE' })
+    resolveMutation({ success: true, data: { ...vehicle, status: 'MAINTENANCE' } })
   })
 
   it('rolls back the optimistic cache update and shows an error when the mutation fails', async () => {
-    updateVehicleStatusMock.mockRejectedValueOnce(new Error('network boom'))
+    updateVehicleStatusActionMock.mockResolvedValueOnce({
+      success: false,
+      error: 'network boom',
+    })
 
     const vehicle = makeVehicle({ status: 'AVAILABLE' })
     const { client } = renderWithClient(<VehicleStatusToggle vehicle={vehicle} />, {
@@ -168,9 +167,9 @@ describe('VehicleStatusToggle', () => {
   })
 
   it('renders a Restore control when status is RETIRED and flips to AVAILABLE on click', async () => {
-    updateVehicleStatusMock.mockResolvedValueOnce({
-      ...makeVehicle(),
-      status: 'AVAILABLE',
+    updateVehicleStatusActionMock.mockResolvedValueOnce({
+      success: true,
+      data: { ...makeVehicle(), status: 'AVAILABLE' },
     })
     const vehicle = makeVehicle({ status: 'RETIRED' })
     renderWithClient(<VehicleStatusToggle vehicle={vehicle} />)
@@ -184,7 +183,7 @@ describe('VehicleStatusToggle', () => {
     fireEvent.click(restore)
 
     await waitFor(() => {
-      expect(updateVehicleStatusMock).toHaveBeenCalledWith('v_1', 'AVAILABLE')
+      expect(updateVehicleStatusActionMock).toHaveBeenCalledWith('v_1', 'AVAILABLE')
     })
   })
 })
