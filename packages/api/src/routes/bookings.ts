@@ -10,7 +10,6 @@ export function createBookingRoutes(service: BookingService): Hono {
 
   bookings.get('/bookings', async (c) => {
     const user = requireUser(c)
-    if (!user) return fail(c, 'Unauthorized', 401)
 
     const statusFilter = c.req.query('status')
     const vehicleIdFilter = c.req.query('vehicleId')
@@ -54,7 +53,6 @@ export function createBookingRoutes(service: BookingService): Hono {
 
   bookings.get('/bookings/:id', async (c) => {
     const user = requireUser(c)
-    if (!user) return fail(c, 'Unauthorized', 401)
 
     const booking = await service.findById(c.req.param('id'))
     if (!booking) {
@@ -71,7 +69,6 @@ export function createBookingRoutes(service: BookingService): Hono {
 
   bookings.post('/bookings', async (c) => {
     const user = requireUser(c)
-    if (!user) return fail(c, 'Unauthorized', 401)
 
     const body = await c.req.json()
     const result = createBookingSchema.safeParse(body)
@@ -104,7 +101,6 @@ export function createBookingRoutes(service: BookingService): Hono {
 
   bookings.patch('/bookings/:id/status', async (c) => {
     const user = requireUser(c)
-    if (!user) return fail(c, 'Unauthorized', 401)
 
     const booking = await service.findById(c.req.param('id'))
     if (!booking) {
@@ -132,7 +128,6 @@ export function createBookingRoutes(service: BookingService): Hono {
 
   bookings.post('/bookings/:id/cancel', async (c) => {
     const user = requireUser(c)
-    if (!user) return fail(c, 'Unauthorized', 401)
 
     const booking = await service.findById(c.req.param('id'))
     if (!booking) {
