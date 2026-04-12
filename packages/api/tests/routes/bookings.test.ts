@@ -11,6 +11,7 @@ import { testAuthMiddleware } from '../helpers/auth'
 let app: Hono
 let vehicleRepo: InMemoryVehicleRepository
 let bookingRepo: InMemoryBookingRepository
+let service: BookingService
 
 function futureDate(hoursFromNow: number): string {
   return new Date(Date.now() + hoursFromNow * 60 * 60 * 1000).toISOString()
@@ -43,7 +44,7 @@ describe('Booking Routes', () => {
   beforeEach(() => {
     vehicleRepo = new InMemoryVehicleRepository()
     bookingRepo = new InMemoryBookingRepository()
-    const service = new BookingService(bookingRepo, vehicleRepo)
+    service = new BookingService(bookingRepo, vehicleRepo)
     app = new Hono()
     // ADMIN with USER1 identity — mirrors pre-auth test data
     app.use('*', testAuthMiddleware(USER1, 'ADMIN'))
@@ -142,6 +143,33 @@ describe('Booking Routes', () => {
 
       expect(body.success).toBe(true)
       expect(body.data).toHaveLength(0)
+    })
+
+    it('RENTER only sees own bookings, not other users', async () => {
+      // USER1 creates a booking (default app user)
+      await createBooking()
+
+      // USER2 creates a booking via a separate app instance
+      const app2 = new Hono()
+      app2.use('*', testAuthMiddleware(USER2, 'ADMIN'))
+      app2.route('/', createBookingRoutes(service))
+      await app2.request('/bookings', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ...validBookingInput(), vehicleId: V2 }),
+      })
+
+      // Query as RENTER — should only see own bookings
+      const renterApp = new Hono()
+      renterApp.use('*', testAuthMiddleware(USER1, 'RENTER'))
+      renterApp.route('/', createBookingRoutes(service))
+
+      const res = await renterApp.request('/bookings')
+      const body = await res.json()
+
+      expect(body.success).toBe(true)
+      expect(body.data).toHaveLength(1)
+      expect(body.data[0].renterId).toBe(USER1)
     })
 
     it('filters by date range returning bookings that overlap', async () => {
