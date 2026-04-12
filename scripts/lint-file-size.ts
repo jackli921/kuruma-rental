@@ -70,7 +70,7 @@ export function checkFiles(files: string[]): Issue[] {
 
 const ROOTS = ['packages/api/src', 'packages/web/src', 'packages/shared/src']
 
-const INCLUDE_PATTERNS = ['**/*.ts', '**/*.tsx']
+const INCLUDE_PATTERN = '**/*.{ts,tsx}'
 const EXCLUDE_PATTERNS = [
   /\.test\.tsx?$/,
   /\/tests\//,
@@ -85,14 +85,12 @@ const EXCLUDE_PATTERNS = [
 
 export function discoverFiles(roots: string[] = ROOTS): string[] {
   const out: string[] = []
+  const glob = new Glob(INCLUDE_PATTERN)
   for (const root of roots) {
-    for (const pattern of INCLUDE_PATTERNS) {
-      const glob = new Glob(pattern)
-      for (const rel of glob.scanSync({ cwd: root, onlyFiles: true })) {
-        const full = `${root}/${rel}`
-        if (EXCLUDE_PATTERNS.some((r) => r.test(full))) continue
-        out.push(full)
-      }
+    for (const rel of glob.scanSync({ cwd: root, onlyFiles: true })) {
+      const full = `${root}/${rel}`
+      if (EXCLUDE_PATTERNS.some((r) => r.test(full))) continue
+      out.push(full)
     }
   }
   return out
