@@ -111,7 +111,7 @@ export function createBookingRoutes(service: BookingService): Hono {
     // Ownership: RENTER can only cancel own bookings; STAFF/ADMIN/PARTNER bypass
     if (!PRIVILEGED_ROLES.has(user.role)) {
       const booking = await service.findById(c.req.param('id'))
-      if (booking && booking.renterId !== user.id) {
+      if (!booking || booking.renterId !== user.id) {
         return fail(c, 'Forbidden', 403)
       }
     }

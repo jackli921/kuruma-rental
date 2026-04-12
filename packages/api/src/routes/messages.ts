@@ -1,8 +1,4 @@
-import {
-  createThreadSchema,
-  markReadSchema,
-  sendMessageSchema,
-} from '@kuruma/shared/validators/message'
+import { createThreadSchema, sendMessageSchema } from '@kuruma/shared/validators/message'
 import { Hono } from 'hono'
 import { getUser } from '../middleware/auth'
 import type { MessageRepository, ThreadRepository } from '../repositories/types'
@@ -16,11 +12,7 @@ export function createMessageRoutes(
 
   app.get('/threads', async (c) => {
     const user = getUser(c)
-    // Use JWT sub as userId; fall back to query param for backward compat
-    const userId = user?.id ?? c.req.query('userId')
-    if (!userId) {
-      return fail(c, 'userId query parameter is required', 400)
-    }
+    if (!user) return fail(c, 'Unauthorized', 401)
 
     const limitParam = c.req.query('limit')
     const offsetParam = c.req.query('offset')
@@ -34,7 +26,7 @@ export function createMessageRoutes(
       return fail(c, 'offset must be a non-negative integer', 400)
     }
 
-    const all = await threadRepo.findAll(userId)
+    const all = await threadRepo.findAll(user.id)
     const page = all.slice(offset, offset + limit)
     return ok(c, page, 200, { total: all.length, limit, offset })
   })
@@ -63,12 +55,12 @@ export function createMessageRoutes(
     if (!thread) return fail(c, 'Thread not found', 404)
 
     const user = getUser(c)
+    if (!user) return fail(c, 'Unauthorized', 401)
+
     const parsed = await parseBody(c, sendMessageSchema)
     if (!parsed.ok) return parsed.response
 
-    // Actor derivation: use JWT sub as senderId when available
-    const senderId = user?.id ?? parsed.data.senderId
-    const message = await messageRepo.create(thread.id, senderId, parsed.data.content)
+    const message = await messageRepo.create(thread.id, user.id, parsed.data.content)
     return ok(c, message, 201)
   })
 
@@ -77,12 +69,9 @@ export function createMessageRoutes(
     if (!thread) return fail(c, 'Thread not found', 404)
 
     const user = getUser(c)
-    const parsed = await parseBody(c, markReadSchema)
-    if (!parsed.ok) return parsed.response
+    if (!user) return fail(c, 'Unauthorized', 401)
 
-    // Actor derivation: use JWT sub as userId when available
-    const userId = user?.id ?? parsed.data.userId
-    await threadRepo.markAsRead(thread.id, userId)
+    await threadRepo.markAsRead(thread.id, user.id)
     return ok(c, null)
   })
 
