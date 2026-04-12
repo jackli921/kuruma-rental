@@ -13,15 +13,3 @@ export async function loginWithApple() {
 export async function logout() {
   await signOut({ redirectTo: '/en/login' })
 }
-
-// Email/password registration — disabled for now (OAuth-first)
-export async function register(_input: {
-  name: string
-  email: string
-  password: string
-}): Promise<{ success: false; error: string; errors?: Record<string, string[]> }> {
-  return {
-    success: false,
-    error: 'Email registration is not available. Please use Google or Apple sign-in.',
-  }
-}
