@@ -35,17 +35,15 @@ export function calculateBookingPrice(
 
   const hours = Math.ceil(durationMs / HOUR_MS)
 
-  if (daily == null) {
-    // After the both-null guard above, hourly is guaranteed non-null here.
-    const h = hourly as number
+  if (daily == null && hourly != null) {
     return {
       ok: true,
-      totalPriceJpy: hours * h,
-      breakdown: { days: 0, remainderHours: hours, dailyRateJpy: 0, hourlyRateJpy: h },
+      totalPriceJpy: hours * hourly,
+      breakdown: { days: 0, remainderHours: hours, dailyRateJpy: 0, hourlyRateJpy: hourly },
     }
   }
 
-  if (hourly == null) {
+  if (hourly == null && daily != null) {
     // daily-only path — round partial days up
     const days = Math.ceil(hours / HOURS_PER_DAY)
     return {
@@ -55,8 +53,14 @@ export function calculateBookingPrice(
     }
   }
 
-  // both rates set — whole days at daily rate, remainder at hourly rate,
+  // Both rates set — whole days at daily rate, remainder at hourly rate,
   // but a partial-day remainder is never more expensive than the daily rate.
+  // Guard narrows both to non-null (the both-null + single-null branches
+  // above already returned, but TS can't see through compound guards).
+  if (daily == null || hourly == null) {
+    return { ok: false, code: 'NO_RATES_SET' }
+  }
+
   const days = Math.floor(hours / HOURS_PER_DAY)
   const remainderHours = hours - days * HOURS_PER_DAY
   const remainderPrice = Math.min(remainderHours * hourly, daily)

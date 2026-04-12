@@ -18,6 +18,10 @@ export const createBookingSchema = z
     path: ['endAt'],
   })
 
+export const updateBookingStatusSchema = z.object({
+  status: z.string().min(1, 'Status is required'),
+})
+
 export const cancelBookingSchema = z.object({
   reason: z.string().optional(),
 })
