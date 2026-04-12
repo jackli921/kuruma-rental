@@ -4,7 +4,7 @@ import {
   updateVehicleStatusSchema,
 } from '@kuruma/shared/validators/vehicle'
 import { Hono } from 'hono'
-import type { VehicleRepository } from '../repositories/types'
+import type { Vehicle, VehicleRepository } from '../repositories/types'
 
 export function createVehicleRoutes(repo: VehicleRepository): Hono {
   const vehicles = new Hono()
@@ -63,16 +63,23 @@ export function createVehicleRoutes(repo: VehicleRepository): Hono {
       return c.json({ success: false, error: result.error.flatten().fieldErrors }, 400)
     }
 
-    const updated = await repo.update(existing.id, {
-      ...result.data,
-      description: result.data.description ?? existing.description,
-      fuelType: result.data.fuelType ?? existing.fuelType,
-      minRentalHours: result.data.minRentalHours ?? existing.minRentalHours,
-      maxRentalHours: result.data.maxRentalHours ?? existing.maxRentalHours,
-      advanceBookingHours: result.data.advanceBookingHours ?? existing.advanceBookingHours,
-      dailyRateJpy: result.data.dailyRateJpy ?? existing.dailyRateJpy,
-      hourlyRateJpy: result.data.hourlyRateJpy ?? existing.hourlyRateJpy,
-    })
+    // Strip keys the partial schema left as `undefined` — Partial<Vehicle>
+    // under exactOptionalPropertyTypes forbids explicit undefined values.
+    const updated = await repo.update(
+      existing.id,
+      Object.fromEntries(
+        Object.entries({
+          ...result.data,
+          description: result.data.description ?? existing.description,
+          fuelType: result.data.fuelType ?? existing.fuelType,
+          minRentalHours: result.data.minRentalHours ?? existing.minRentalHours,
+          maxRentalHours: result.data.maxRentalHours ?? existing.maxRentalHours,
+          advanceBookingHours: result.data.advanceBookingHours ?? existing.advanceBookingHours,
+          dailyRateJpy: result.data.dailyRateJpy ?? existing.dailyRateJpy,
+          hourlyRateJpy: result.data.hourlyRateJpy ?? existing.hourlyRateJpy,
+        }).filter(([, v]) => v !== undefined),
+      ) as Partial<Vehicle>,
+    )
 
     return c.json({ success: true, data: updated })
   })
