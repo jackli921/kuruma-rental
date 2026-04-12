@@ -17,7 +17,7 @@ vi.mock('next-intl', () => ({
   },
 }))
 
-import { FleetViewToggle, type FleetViewMode } from '@/components/vehicles/FleetViewToggle'
+import { type FleetViewMode, FleetViewToggle } from '@/components/vehicles/FleetViewToggle'
 
 describe('FleetViewToggle', () => {
   afterEach(() => {
@@ -34,10 +34,7 @@ describe('FleetViewToggle', () => {
   it('marks the active mode with aria-pressed=true and the inactive one false', () => {
     render(<FleetViewToggle value="row" onChange={vi.fn()} />)
 
-    expect(screen.getByRole('button', { name: 'Row view' })).toHaveAttribute(
-      'aria-pressed',
-      'true',
-    )
+    expect(screen.getByRole('button', { name: 'Row view' })).toHaveAttribute('aria-pressed', 'true')
     expect(screen.getByRole('button', { name: 'Grid view' })).toHaveAttribute(
       'aria-pressed',
       'false',
@@ -73,12 +70,12 @@ describe('FleetViewToggle', () => {
   })
 })
 
+import { useFleetViewMode } from '@/components/vehicles/FleetViewToggle'
 // localStorage-backed persistence is a separate concern from the pure
 // toggle UI. It lives in a hook tested here. We write a couple of
 // behavior-level tests that mutate window.localStorage directly and
 // assert the hook's state.
-import { renderHook, act } from '@testing-library/react'
-import { useFleetViewMode } from '@/components/vehicles/FleetViewToggle'
+import { act, renderHook } from '@testing-library/react'
 
 describe('useFleetViewMode', () => {
   beforeEach(() => {

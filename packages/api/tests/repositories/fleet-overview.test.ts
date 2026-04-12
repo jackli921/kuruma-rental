@@ -215,11 +215,7 @@ describe('InMemoryFleetOverviewRepository', () => {
 
   it('resolves renterName from the injected renter map for current/next bookings', async () => {
     const renterNameByUserId = new Map<string, string>([['user_alice', 'Alice Smith']])
-    fleetRepo = new InMemoryFleetOverviewRepository(
-      vehicleRepo,
-      bookingRepo,
-      renterNameByUserId,
-    )
+    fleetRepo = new InMemoryFleetOverviewRepository(vehicleRepo, bookingRepo, renterNameByUserId)
 
     const vehicle = await vehicleRepo.create(baseVehicleInput({ name: 'Alice Rental' }))
     await bookingRepo.create(
