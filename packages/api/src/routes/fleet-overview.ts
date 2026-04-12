@@ -8,7 +8,6 @@ export function createFleetOverviewRoutes(repo: FleetOverviewRepository): Hono {
 
   routes.get('/vehicles/fleet-overview', async (c) => {
     const user = requireUser(c)
-    if (!user) return fail(c, 'Unauthorized', 401)
     if (!STAFF_ROLES.has(user.role)) return fail(c, 'Forbidden', 403)
 
     const data = await repo.findFleetOverview()

@@ -19,7 +19,6 @@ export function createMessageRoutes(
 
   app.get('/threads', async (c) => {
     const user = requireUser(c)
-    if (!user) return fail(c, 'Unauthorized', 401)
 
     const limitParam = c.req.query('limit')
     const offsetParam = c.req.query('offset')
@@ -40,7 +39,6 @@ export function createMessageRoutes(
 
   app.get('/threads/:id', async (c) => {
     const user = requireUser(c)
-    if (!user) return fail(c, 'Unauthorized', 401)
 
     const thread = await threadRepo.findById(c.req.param('id'))
     if (!thread) return fail(c, 'Thread not found', 404)
@@ -54,7 +52,6 @@ export function createMessageRoutes(
 
   app.post('/threads', async (c) => {
     const user = requireUser(c)
-    if (!user) return fail(c, 'Unauthorized', 401)
 
     const parsed = await parseBody(c, createThreadSchema)
     if (!parsed.ok) return parsed.response
@@ -72,7 +69,6 @@ export function createMessageRoutes(
 
   app.post('/threads/:id/messages', async (c) => {
     const user = requireUser(c)
-    if (!user) return fail(c, 'Unauthorized', 401)
 
     const thread = await threadRepo.findById(c.req.param('id'))
     if (!thread) return fail(c, 'Thread not found', 404)
@@ -90,7 +86,6 @@ export function createMessageRoutes(
 
   app.post('/threads/:id/read', async (c) => {
     const user = requireUser(c)
-    if (!user) return fail(c, 'Unauthorized', 401)
 
     const thread = await threadRepo.findById(c.req.param('id'))
     if (!thread) return fail(c, 'Thread not found', 404)
