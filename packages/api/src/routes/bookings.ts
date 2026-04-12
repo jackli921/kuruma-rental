@@ -1,5 +1,6 @@
 import { createBookingSchema } from '@kuruma/shared/validators/booking'
 import { Hono } from 'hono'
+import type { BookingFilters } from '../repositories/types'
 import type { BookingService } from '../services/booking'
 import { fail, ok, parseDateRange } from './helpers'
 
@@ -15,13 +16,7 @@ export function createBookingRoutes(service: BookingService): Hono {
     const dateRange = parseDateRange(c, false)
     if (!dateRange.ok) return dateRange.response
 
-    const filters: {
-      status?: string
-      vehicleId?: string
-      renterId?: string
-      from?: Date
-      to?: Date
-    } = {}
+    const filters: BookingFilters = {}
     if (statusFilter) filters.status = statusFilter
     if (vehicleIdFilter) filters.vehicleId = vehicleIdFilter
     if (renterIdFilter) filters.renterId = renterIdFilter
