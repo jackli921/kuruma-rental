@@ -259,3 +259,19 @@ callbacks: {
 The full `auth.ts` still re-fetches role from DB on token refresh (for role changes). The edge config just passes through what's already in the token.
 
 **Rule:** When using split auth configs (edge-safe `auth.config.ts` + full `auth.ts`), any field the middleware needs to read from `session.user` must have callbacks in BOTH configs. The edge config can't query the DB, but it must still pass token fields through to the session.
+
+---
+
+## 17. Explicit Column List Trap — totalPrice Silently Dropped (issue #89)
+
+**Symptom:** Every production cancellation computed the fee against totalPrice = 0, giving free cancellations regardless of the tier.
+
+**Root cause:** `DrizzleBookingRepository.create()` used an explicit column list in `.values({...})` for security (prevents accidental injection of fields a caller shouldn't set). When `totalPrice` was added to the schema, it was NOT added to the Drizzle insert values list. Because the column is nullable, Drizzle accepted the omission — it silently defaulted to NULL. The cancellation path then read `booking.totalPrice ?? 0` = 0, and `30% of 0 = 0`.
+
+The in-memory repo used `...data` spread and kept all fields, so every route-level test passed. Only an integration test against real Postgres would have caught it.
+
+**Fix:** Added `totalPrice: data.totalPrice`, `cancellationFee: data.cancellationFee`, `cancelledAt: data.cancelledAt` to the Drizzle insert values.
+
+**Rule:** After adding a column to `schema.ts`, grep for every `.insert(tableName).values(` and `.update(tableName).set(` on that table. If the column should be included, add it. If not, add a comment explaining why.
+
+**Deeper lesson:** When your test suite uses a different implementation (in-memory) than production (Drizzle), behavioral drift between them is invisible to tests. Always write at least one integration test per repo method that round-trips through the real DB.

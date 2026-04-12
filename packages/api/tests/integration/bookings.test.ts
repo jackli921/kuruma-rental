@@ -227,6 +227,28 @@ describe('DrizzleBookingRepository', () => {
     expect(fromDb!.status).toBe('ACTIVE')
   })
 
+  it('create persists totalPrice through Drizzle insert (issue #89)', async () => {
+    const booking = await bookingRepo.create({
+      renterId: testUser.id,
+      vehicleId: testVehicle.id,
+      startAt: new Date('2026-07-15T10:00:00Z'),
+      endAt: new Date('2026-07-15T14:00:00Z'),
+      effectiveEndAt: new Date('2026-07-15T15:00:00Z'),
+      status: 'CONFIRMED',
+      source: 'DIRECT',
+      externalId: null,
+      notes: null,
+      totalPrice: 15000,
+      cancellationFee: null,
+      cancelledAt: null,
+    })
+    createdBookingIds.push(booking.id)
+
+    // Round-trip: read back from DB and verify totalPrice persisted
+    const fromDb = await bookingRepo.findById(booking.id)
+    expect(fromDb!.totalPrice).toBe(15000)
+  })
+
   it('rejects overlapping bookings via exclusion constraint', async () => {
     const firstBooking = await bookingRepo.create({
       renterId: testUser.id,

@@ -321,6 +321,9 @@ export class DrizzleBookingRepository implements BookingRepository {
         source: data.source,
         externalId: data.externalId,
         notes: data.notes,
+        totalPrice: data.totalPrice,
+        cancellationFee: data.cancellationFee,
+        cancelledAt: data.cancelledAt,
       })
       .returning()
 
