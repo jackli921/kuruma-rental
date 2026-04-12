@@ -1,6 +1,6 @@
 import { createBookingSchema, updateBookingStatusSchema } from '@kuruma/shared/validators/booking'
 import { Hono } from 'hono'
-import { PRIVILEGED_ROLES, STAFF_ROLES, getUser } from '../middleware/auth'
+import { PRIVILEGED_ROLES, requireUser } from '../middleware/auth'
 import type { BookingFilters } from '../repositories/types'
 import type { BookingService } from '../services/booking'
 import { fail, ok, parseDateRange } from './helpers'
@@ -9,6 +9,9 @@ export function createBookingRoutes(service: BookingService): Hono {
   const bookings = new Hono()
 
   bookings.get('/bookings', async (c) => {
+    const user = requireUser(c)
+    if (!user) return fail(c, 'Unauthorized', 401)
+
     const statusFilter = c.req.query('status')
     const vehicleIdFilter = c.req.query('vehicleId')
     const renterIdFilter = c.req.query('renterId')
@@ -35,6 +38,11 @@ export function createBookingRoutes(service: BookingService): Hono {
       filters.to = dateRange.to
     }
 
+    // Ownership: non-privileged users can only see their own bookings
+    if (!PRIVILEGED_ROLES.has(user.role)) {
+      filters.renterId = user.id
+    }
+
     if (expand === 'vehicle') {
       const result = await service.findAllWithVehiclesPaginated(filters)
       return ok(c, result.data, 200, { nextCursor: result.nextCursor })
@@ -45,15 +53,24 @@ export function createBookingRoutes(service: BookingService): Hono {
   })
 
   bookings.get('/bookings/:id', async (c) => {
+    const user = requireUser(c)
+    if (!user) return fail(c, 'Unauthorized', 401)
+
     const booking = await service.findById(c.req.param('id'))
     if (!booking) {
       return fail(c, 'Booking not found', 404)
     }
+
+    // Ownership: non-privileged users can only view their own bookings (404 to avoid info leak)
+    if (!PRIVILEGED_ROLES.has(user.role) && booking.renterId !== user.id) {
+      return fail(c, 'Booking not found', 404)
+    }
+
     return ok(c, booking)
   })
 
   bookings.post('/bookings', async (c) => {
-    const user = getUser(c)
+    const user = requireUser(c)
     if (!user) return fail(c, 'Unauthorized', 401)
 
     const body = await c.req.json()
@@ -86,9 +103,18 @@ export function createBookingRoutes(service: BookingService): Hono {
   })
 
   bookings.patch('/bookings/:id/status', async (c) => {
-    const user = getUser(c)
+    const user = requireUser(c)
     if (!user) return fail(c, 'Unauthorized', 401)
-    if (!STAFF_ROLES.has(user.role)) return fail(c, 'Forbidden', 403)
+
+    const booking = await service.findById(c.req.param('id'))
+    if (!booking) {
+      return fail(c, 'Booking not found', 404)
+    }
+
+    // Ownership: allow privileged roles or the booking owner (404 to avoid info leak)
+    if (!PRIVILEGED_ROLES.has(user.role) && booking.renterId !== user.id) {
+      return fail(c, 'Booking not found', 404)
+    }
 
     const body = await c.req.json()
     const parsed = updateBookingStatusSchema.safeParse(body)
@@ -105,15 +131,17 @@ export function createBookingRoutes(service: BookingService): Hono {
   })
 
   bookings.post('/bookings/:id/cancel', async (c) => {
-    const user = getUser(c)
+    const user = requireUser(c)
     if (!user) return fail(c, 'Unauthorized', 401)
 
-    // Ownership: RENTER can only cancel own bookings; STAFF/ADMIN/PARTNER bypass
-    if (!PRIVILEGED_ROLES.has(user.role)) {
-      const booking = await service.findById(c.req.param('id'))
-      if (!booking || booking.renterId !== user.id) {
-        return fail(c, 'Forbidden', 403)
-      }
+    const booking = await service.findById(c.req.param('id'))
+    if (!booking) {
+      return fail(c, 'Booking not found', 404)
+    }
+
+    // Ownership: non-privileged users can only cancel their own bookings (404 to avoid info leak)
+    if (!PRIVILEGED_ROLES.has(user.role) && booking.renterId !== user.id) {
+      return fail(c, 'Booking not found', 404)
     }
 
     const result = await service.cancel(c.req.param('id'))

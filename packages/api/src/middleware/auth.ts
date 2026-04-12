@@ -1,3 +1,4 @@
+import { timingSafeEqual } from 'node:crypto'
 import type { Context, MiddlewareHandler } from 'hono'
 import { jwtVerify } from 'jose'
 import { fail } from '../routes/helpers'
@@ -13,6 +14,12 @@ export interface AuthEnv {
   Variables: {
     user: AuthUser
   }
+}
+
+const ALL_ROLES: ReadonlySet<string> = new Set<string>(['RENTER', 'STAFF', 'ADMIN', 'PARTNER'])
+
+function isValidRole(value: string): value is UserRole {
+  return ALL_ROLES.has(value)
 }
 
 /** Roles that can manage bookings across all users */
@@ -62,15 +69,13 @@ async function verifyJwt(token: string): Promise<AuthUser | null> {
 
   try {
     const key = new TextEncoder().encode(secret)
-    const { payload } = await jwtVerify(token, key)
+    const { payload } = await jwtVerify(token, key, { algorithms: ['HS256'] })
 
     const id = payload.sub
     if (!id) return null
 
-    const VALID_ROLES = new Set<UserRole>(['RENTER', 'STAFF', 'ADMIN', 'PARTNER'])
     const rawRole = payload.role as string | undefined
-    const role: UserRole =
-      rawRole && VALID_ROLES.has(rawRole as UserRole) ? (rawRole as UserRole) : 'RENTER'
+    const role: UserRole = rawRole && isValidRole(rawRole) ? rawRole : 'RENTER'
     return { id, role }
   } catch {
     return null
@@ -79,14 +84,11 @@ async function verifyJwt(token: string): Promise<AuthUser | null> {
 
 function verifyApiKey(key: string): AuthUser | null {
   const expected = process.env.PARTNER_API_KEY
-  if (!expected || key.length !== expected.length) return null
+  if (!expected) return null
 
-  // Constant-time comparison
-  let mismatch = 0
-  for (let i = 0; i < key.length; i++) {
-    mismatch |= key.charCodeAt(i) ^ expected.charCodeAt(i)
-  }
+  const a = Buffer.from(key)
+  const b = Buffer.from(expected)
+  if (a.length !== b.length || !timingSafeEqual(a, b)) return null
 
-  if (mismatch !== 0) return null
   return { id: 'partner:api-key', role: 'PARTNER' as const }
 }

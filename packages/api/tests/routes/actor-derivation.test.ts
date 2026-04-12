@@ -99,7 +99,7 @@ describe('actor derivation from JWT', () => {
       method: 'POST',
       headers: attackerHeaders,
     })
-    expect(cancelRes.status).toBe(403)
+    expect(cancelRes.status).toBe(404)
   })
 
   it('RENTER cannot create vehicles (role gate)', async () => {

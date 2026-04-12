@@ -72,7 +72,8 @@ describe('Message Routes', () => {
       })
 
       // Thread between user2 and user3 (user1 is NOT a participant)
-      await app.request('/threads', {
+      // Use appAs(U2) so U2 is the caller — U1 won't be forced in
+      await appAs(U2).request('/threads', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ participantIds: [U2, U3] }),
