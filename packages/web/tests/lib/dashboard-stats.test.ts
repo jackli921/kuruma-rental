@@ -25,12 +25,11 @@ describe('fetchDashboardStats', () => {
 
     await fetchDashboardStats()
 
-    expect(mockFetch).toHaveBeenCalledWith(
-      expect.any(String),
-      expect.objectContaining({
-        headers: { 'X-API-Key': 'test-key' },
-      }),
-    )
+    const calledUrl = mockFetch.mock.calls[0]?.[0]?.toString() ?? ''
+    expect(calledUrl).toContain('/stats')
+    const init = mockFetch.mock.calls[0]?.[1] as RequestInit
+    const headers = new Headers(init.headers)
+    expect(headers.get('X-API-Key')).toBe('test-key')
   })
 
   test('returns parsed stats on success', async () => {

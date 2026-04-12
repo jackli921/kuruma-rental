@@ -1,7 +1,8 @@
-import { getApiBaseUrl } from '@/lib/api-client'
 import { afterEach, beforeEach, describe, expect, test } from 'vitest'
 
-describe('getApiBaseUrl', () => {
+import { createApiClient } from '@/lib/api-client'
+
+describe('createApiClient', () => {
   let originalUrl: string | undefined
 
   beforeEach(() => {
@@ -16,18 +17,27 @@ describe('getApiBaseUrl', () => {
     }
   })
 
-  test('returns NEXT_PUBLIC_API_URL when set', () => {
+  test('returns an hc client targeting NEXT_PUBLIC_API_URL when set', () => {
     process.env.NEXT_PUBLIC_API_URL = 'https://api.kuruma.example.com'
-    expect(getApiBaseUrl()).toBe('https://api.kuruma.example.com')
+    const client = createApiClient()
+    // hc client exposes $url() on route segments — verify the base URL is correct
+    const url = client.vehicles.$url()
+    expect(url.origin).toBe('https://api.kuruma.example.com')
   })
 
-  test('returns localhost fallback when env var is not set', () => {
+  test('returns an hc client targeting localhost fallback when env var is not set', () => {
     Reflect.deleteProperty(process.env, 'NEXT_PUBLIC_API_URL')
-    expect(getApiBaseUrl()).toBe('http://localhost:8787')
+    const client = createApiClient()
+    const url = client.vehicles.$url()
+    expect(url.origin).toBe('http://localhost:8787')
   })
 
   test('strips trailing slash from URL', () => {
     process.env.NEXT_PUBLIC_API_URL = 'https://api.example.com/'
-    expect(getApiBaseUrl()).toBe('https://api.example.com')
+    const client = createApiClient()
+    const url = client.vehicles.$url()
+    expect(url.origin).toBe('https://api.example.com')
+    // Ensure no double-slash in path
+    expect(url.pathname).toBe('/vehicles')
   })
 })
