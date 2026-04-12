@@ -28,18 +28,9 @@
   },
   "auth": {
     "login": "ログイン",
-    "register": "アカウント作成",
     "logout": "ログアウト",
-    "email": "メールアドレス",
-    "password": "パスワード",
-    "confirmPassword": "パスワード確認",
-    "name": "氏名",
-    "forgotPassword": "パスワードをお忘れですか？",
-    "orContinueWith": "または以下でログイン",
     "google": "Google",
-    "apple": "Apple",
-    "alreadyHaveAccount": "すでにアカウントをお持ちですか？",
-    "dontHaveAccount": "アカウントをお持ちでないですか？"
+    "apple": "Apple"
   },
   "nav": {
     "home": "ホーム",

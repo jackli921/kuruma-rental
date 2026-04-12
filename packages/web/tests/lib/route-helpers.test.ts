@@ -74,7 +74,6 @@ describe('classifyRoute', () => {
     expect(classifyRoute('/vehicles')).toEqual({ type: 'public' })
     expect(classifyRoute('/vehicles/123')).toEqual({ type: 'public' })
     expect(classifyRoute('/login')).toEqual({ type: 'public' })
-    expect(classifyRoute('/register')).toEqual({ type: 'public' })
   })
 })
 

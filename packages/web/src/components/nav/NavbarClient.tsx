@@ -45,11 +45,8 @@ export function NavbarClient({ session, canSwitchView, viewMode }: NavbarClientP
 
   return (
     <div className="hidden md:flex items-center gap-2">
-      <Link href="/login" className={cn(buttonVariants({ variant: 'ghost', size: 'sm' }))}>
+      <Link href="/login" className={cn(buttonVariants({ size: 'sm' }))}>
         {t('login')}
-      </Link>
-      <Link href="/register" className={cn(buttonVariants({ size: 'sm' }))}>
-        {t('register')}
       </Link>
     </div>
   )
