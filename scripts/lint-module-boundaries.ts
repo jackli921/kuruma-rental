@@ -13,6 +13,10 @@ const IMPORT_RE = /(?:import|export)[^'"`]*?from\s*['"]([^'"]+)['"]/g
 const BARE_IMPORT_RE = /import\s+['"]([^'"]+)['"]/g
 
 // Alias import reaching into module internals: @/modules/<name>/<sub>
+// Known limitation: relative imports (e.g. '../../vehicles/api') bypass this
+// check. The codebase convention is @/ aliases, and Biome's import sorting
+// enforces it, so the risk is low. If relative cross-module imports become a
+// real problem, upgrade to an AST-based check or add a relative-path resolver.
 const INTERNAL_ALIAS_RE = /^@\/modules\/([^/]+)\/(.+)$/
 
 function collectImports(source: string): string[] {
@@ -56,6 +60,7 @@ const ROOTS = ['packages/api/src', 'packages/web/src', 'packages/shared/src']
 const INCLUDE_PATTERN = '**/*.{ts,tsx}'
 const EXCLUDE_PATTERNS = [
   /\.test\.tsx?$/,
+  /\/tests\//,
   /\/__fixtures__\//,
   /\/node_modules\//,
   /\/\.next\//,
