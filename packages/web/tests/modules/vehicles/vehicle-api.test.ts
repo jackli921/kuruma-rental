@@ -2,9 +2,12 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const API_BASE = 'http://localhost:8787'
 
-// Mock getApiBaseUrl before importing the module under test
+// Mock createApiClient before importing the module under test
 vi.mock('@/lib/api-client', () => ({
-  getApiBaseUrl: () => API_BASE,
+  createApiClient: () => {
+    const { hc } = require('hono/client')
+    return hc('http://localhost:8787')
+  },
 }))
 
 const mockVehicle = {
@@ -41,7 +44,8 @@ describe('vehicle-api', () => {
       const { fetchVehicles } = await import('@/lib/vehicle-api')
       const result = await fetchVehicles()
 
-      expect(spy).toHaveBeenCalledWith(`${API_BASE}/vehicles`, undefined)
+      const calledUrl = spy.mock.calls[0]?.[0]?.toString() ?? ''
+      expect(calledUrl).toBe(`${API_BASE}/vehicles`)
       expect(result).toEqual([mockVehicle])
     })
 
@@ -56,7 +60,8 @@ describe('vehicle-api', () => {
       const { fetchVehicles } = await import('@/lib/vehicle-api')
       await fetchVehicles('RETIRED')
 
-      expect(spy).toHaveBeenCalledWith(`${API_BASE}/vehicles?status=RETIRED`, undefined)
+      const calledUrl = spy.mock.calls[0]?.[0]?.toString() ?? ''
+      expect(calledUrl).toBe(`${API_BASE}/vehicles?status=RETIRED`)
     })
 
     it('throws on API error response', async () => {
@@ -84,7 +89,8 @@ describe('vehicle-api', () => {
       const { fetchVehicleById } = await import('@/lib/vehicle-api')
       const result = await fetchVehicleById('v1')
 
-      expect(spy).toHaveBeenCalledWith(`${API_BASE}/vehicles/v1`, undefined)
+      const calledUrl = spy.mock.calls[0]?.[0]?.toString() ?? ''
+      expect(calledUrl).toBe(`${API_BASE}/vehicles/v1`)
       expect(result).toEqual(mockVehicle)
     })
 
@@ -121,11 +127,11 @@ describe('vehicle-api', () => {
       const { createVehicle } = await import('@/lib/vehicle-api')
       const result = await createVehicle(input)
 
-      expect(spy).toHaveBeenCalledWith(`${API_BASE}/vehicles`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(input),
-      })
+      const calledUrl = spy.mock.calls[0]?.[0]?.toString() ?? ''
+      expect(calledUrl).toBe(`${API_BASE}/vehicles`)
+      const init = spy.mock.calls[0]?.[1] as RequestInit
+      expect(init.method).toBe('POST')
+      expect(JSON.parse(init.body as string)).toEqual(input)
       expect(result.name).toBe('Honda Fit')
     })
   })
@@ -143,11 +149,11 @@ describe('vehicle-api', () => {
       const { updateVehicle } = await import('@/lib/vehicle-api')
       const result = await updateVehicle('v1', updates)
 
-      expect(spy).toHaveBeenCalledWith(`${API_BASE}/vehicles/v1`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(updates),
-      })
+      const calledUrl = spy.mock.calls[0]?.[0]?.toString() ?? ''
+      expect(calledUrl).toBe(`${API_BASE}/vehicles/v1`)
+      const init = spy.mock.calls[0]?.[1] as RequestInit
+      expect(init.method).toBe('PATCH')
+      expect(JSON.parse(init.body as string)).toEqual(updates)
       expect(result.name).toBe('Updated Corolla')
     })
   })
@@ -166,11 +172,11 @@ describe('vehicle-api', () => {
       const { updateVehicleStatus } = await import('@/lib/vehicle-api')
       const result = await updateVehicleStatus('v1', 'MAINTENANCE')
 
-      expect(spy).toHaveBeenCalledWith(`${API_BASE}/vehicles/v1/status`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ status: 'MAINTENANCE' }),
-      })
+      const calledUrl = spy.mock.calls[0]?.[0]?.toString() ?? ''
+      expect(calledUrl).toBe(`${API_BASE}/vehicles/v1/status`)
+      const init = spy.mock.calls[0]?.[1] as RequestInit
+      expect(init.method).toBe('PATCH')
+      expect(JSON.parse(init.body as string)).toEqual({ status: 'MAINTENANCE' })
       expect(result.status).toBe('MAINTENANCE')
     })
 
@@ -202,7 +208,10 @@ describe('vehicle-api', () => {
       const { retireVehicle } = await import('@/lib/vehicle-api')
       const result = await retireVehicle('v1')
 
-      expect(spy).toHaveBeenCalledWith(`${API_BASE}/vehicles/v1`, { method: 'DELETE' })
+      const calledUrl = spy.mock.calls[0]?.[0]?.toString() ?? ''
+      expect(calledUrl).toBe(`${API_BASE}/vehicles/v1`)
+      const init = spy.mock.calls[0]?.[1] as RequestInit
+      expect(init.method).toBe('DELETE')
       expect(result.status).toBe('RETIRED')
     })
   })

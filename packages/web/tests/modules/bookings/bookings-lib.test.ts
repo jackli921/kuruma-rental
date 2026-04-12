@@ -1,7 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 vi.mock('@/lib/api-client', () => ({
-  getApiBaseUrl: () => 'http://localhost:8787',
+  createApiClient: () => {
+    const { hc } = require('hono/client')
+    return hc('http://localhost:8787')
+  },
 }))
 
 vi.mock('@/auth', () => ({

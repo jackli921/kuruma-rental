@@ -7,7 +7,10 @@ vi.mock('@/auth', () => ({
 }))
 
 vi.mock('@/lib/api-client', () => ({
-  getApiBaseUrl: () => 'http://localhost:8787',
+  createApiClient: () => {
+    const { hc } = require('hono/client')
+    return hc('http://localhost:8787')
+  },
 }))
 
 import { createBooking } from '@/lib/bookings'
