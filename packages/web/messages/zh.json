@@ -28,18 +28,9 @@
   },
   "auth": {
     "login": "登录",
-    "register": "创建账户",
     "logout": "退出",
-    "email": "邮箱",
-    "password": "密码",
-    "confirmPassword": "确认密码",
-    "name": "姓名",
-    "forgotPassword": "忘记密码？",
-    "orContinueWith": "或通过以下方式继续",
     "google": "Google",
-    "apple": "Apple",
-    "alreadyHaveAccount": "已有账户？",
-    "dontHaveAccount": "没有账户？"
+    "apple": "Apple"
   },
   "nav": {
     "home": "首页",

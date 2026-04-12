@@ -48,9 +48,6 @@ export function NavbarClient({ session, canSwitchView, viewMode }: NavbarClientP
       <Link href="/login" className={cn(buttonVariants({ variant: 'ghost', size: 'sm' }))}>
         {t('login')}
       </Link>
-      <Link href="/register" className={cn(buttonVariants({ size: 'sm' }))}>
-        {t('register')}
-      </Link>
     </div>
   )
 }
