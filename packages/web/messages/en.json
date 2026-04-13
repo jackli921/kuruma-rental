@@ -172,7 +172,8 @@
         "advanceBookingHoursPlaceholder": "24",
         "save": "Save vehicle",
         "saving": "Saving...",
-        "cancel": "Cancel"
+        "cancel": "Cancel",
+        "confirm": "Confirm"
       },
       "filter": {
         "all": "All",

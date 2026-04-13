@@ -20,7 +20,7 @@ export interface VehicleRepository {
   create(data: Omit<Vehicle, 'id' | 'createdAt' | 'updatedAt'>): Promise<Vehicle>
   update(id: string, data: Partial<Vehicle>): Promise<Vehicle | undefined>
   softDelete(id: string): Promise<Vehicle | undefined>
-  bulkUpdateStatus(ids: string[], status: Vehicle['status']): Promise<Vehicle[]>
+  bulkUpdateStatus(ids: string[], status: 'AVAILABLE' | 'MAINTENANCE'): Promise<Vehicle[]>
 }
 
 // Aggregated read for the owner-facing /manage/vehicles list. Enriches

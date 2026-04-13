@@ -172,7 +172,8 @@
         "advanceBookingHoursPlaceholder": "24",
         "save": "保存车辆",
         "saving": "保存中...",
-        "cancel": "取消"
+        "cancel": "取消",
+        "confirm": "确认"
       },
       "filter": {
         "all": "全部",

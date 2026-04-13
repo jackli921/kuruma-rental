@@ -172,7 +172,8 @@
         "advanceBookingHoursPlaceholder": "24",
         "save": "車両を保存",
         "saving": "保存中...",
-        "cancel": "キャンセル"
+        "cancel": "キャンセル",
+        "confirm": "確認"
       },
       "filter": {
         "all": "すべて",

@@ -84,7 +84,7 @@ export function BulkActionBar({ selectedIds, onClearSelection }: BulkActionBarPr
               {t('form.cancel')}
             </Button>
             <Button onClick={handleConfirm} disabled={isSubmitting}>
-              {isSubmitting ? '...' : t('bulk.confirmTitle')}
+              {isSubmitting ? '...' : t('form.confirm')}
             </Button>
           </DialogFooter>
         </DialogContent>
