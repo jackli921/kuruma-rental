@@ -79,6 +79,11 @@ export const vehicles = pgTable(
     minRentalHours: integer('minRentalHours'),
     maxRentalHours: integer('maxRentalHours'),
     advanceBookingHours: integer('advanceBookingHours'),
+    // Issue #228: vehicle detail fields for filtering.
+    make: text('make'),
+    model: text('model'),
+    year: integer('year'),
+    color: text('color'),
     // JPY, whole yen (no minor unit). At least one must be set — enforced
     // by the CHECK constraint below and mirrored in createVehicleSchema.
     // See issue #48.
