@@ -48,6 +48,7 @@ function createTestVehicle(
     seats: overrides.seats ?? 5,
     transmission: overrides.transmission ?? 'AUTO',
     fuelType: overrides.fuelType ?? null,
+    licensePlate: overrides.licensePlate ?? null,
     status: overrides.status ?? 'AVAILABLE',
     bufferMinutes: overrides.bufferMinutes ?? 60,
     minRentalHours: overrides.minRentalHours ?? null,

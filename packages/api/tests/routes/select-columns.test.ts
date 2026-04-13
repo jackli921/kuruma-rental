@@ -25,6 +25,7 @@ const VEHICLE_FIELDS = [
   'seats',
   'transmission',
   'fuelType',
+  'licensePlate',
   'status',
   'bufferMinutes',
   'minRentalHours',

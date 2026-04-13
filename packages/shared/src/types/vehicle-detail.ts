@@ -24,6 +24,7 @@ export interface VehicleDetail {
   seats: number
   transmission: 'AUTO' | 'MANUAL'
   fuelType: string | null
+  licensePlate: string | null
   status: 'AVAILABLE' | 'MAINTENANCE' | 'RETIRED'
   bufferMinutes: number
   minRentalHours: number | null

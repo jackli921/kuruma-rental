@@ -10,6 +10,7 @@ function vehicleInput(overrides?: Partial<Vehicle>) {
     seats: 4,
     transmission: 'AUTOMATIC' as const,
     fuelType: 'GASOLINE' as const,
+    licensePlate: null,
     status: 'ACTIVE' as const,
     bufferMinutes: 60,
     minRentalHours: 1,

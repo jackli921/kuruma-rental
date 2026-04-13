@@ -17,6 +17,7 @@ const vehicleObjectSchema = z.object({
   seats: z.number().int().min(1, 'Must have at least 1 seat').max(50),
   transmission: z.enum(['AUTO', 'MANUAL']),
   fuelType: z.string().optional(),
+  licensePlate: z.string().trim().nullish(),
   bufferMinutes: z.number().int().min(0).default(60),
   // Issue #50: rental rules. All three are nullish so the form can submit
   // `null` when a field is blank (same pattern as pricing #48). `.optional()`

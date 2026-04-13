@@ -12,6 +12,7 @@ function validVehicleInput() {
     seats: 5,
     transmission: 'AUTO' as const,
     bufferMinutes: 60,
+    licensePlate: null,
     // #48: at least one rate is required by the validator and the
     // vehicles_pricing_at_least_one DB CHECK.
     dailyRateJpy: 8000,
@@ -127,6 +128,7 @@ describe('Vehicle CRUD Routes', () => {
       expect(body.data.status).toBe('AVAILABLE')
       expect(body.data.description).toBeNull()
       expect(body.data.fuelType).toBeNull()
+      expect(body.data.licensePlate).toBeNull()
       expect(body.data.minRentalHours).toBeNull()
       expect(body.data.maxRentalHours).toBeNull()
       expect(body.data.advanceBookingHours).toBeNull()
@@ -186,6 +188,30 @@ describe('Vehicle CRUD Routes', () => {
       const body = await res.json()
       expect(body.success).toBe(false)
     })
+
+    it('creates a vehicle with licensePlate', async () => {
+      const res = await createVehicle({
+        ...validVehicleInput(),
+        licensePlate: '品川 500 あ 1234',
+      })
+
+      expect(res.status).toBe(201)
+
+      const body = await res.json()
+      expect(body.success).toBe(true)
+      expect(body.data.licensePlate).toBe('品川 500 あ 1234')
+    })
+
+    it('defaults licensePlate to null when not provided', async () => {
+      const { licensePlate: _, ...inputWithoutPlate } = validVehicleInput()
+      const res = await createVehicle(inputWithoutPlate)
+
+      expect(res.status).toBe(201)
+
+      const body = await res.json()
+      expect(body.success).toBe(true)
+      expect(body.data.licensePlate).toBeNull()
+    })
   })
 
   describe('GET /vehicles/:id', () => {
@@ -233,6 +259,43 @@ describe('Vehicle CRUD Routes', () => {
       expect(body.data.seats).toBe(7)
       // Unchanged fields preserved
       expect(body.data.transmission).toBe('AUTO')
+    })
+
+    it('updates licensePlate via PATCH', async () => {
+      const createRes = await createVehicle()
+      const created = await createRes.json()
+
+      const res = await app.request(`/vehicles/${created.data.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ licensePlate: 'ABC-1234' }),
+      })
+
+      expect(res.status).toBe(200)
+
+      const body = await res.json()
+      expect(body.success).toBe(true)
+      expect(body.data.licensePlate).toBe('ABC-1234')
+    })
+
+    it('clears licensePlate to null via PATCH', async () => {
+      const createRes = await createVehicle({
+        ...validVehicleInput(),
+        licensePlate: '品川 500 あ 1234',
+      })
+      const created = await createRes.json()
+
+      const res = await app.request(`/vehicles/${created.data.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ licensePlate: null }),
+      })
+
+      expect(res.status).toBe(200)
+
+      const body = await res.json()
+      expect(body.success).toBe(true)
+      expect(body.data.licensePlate).toBeNull()
     })
 
     it('returns 404 for nonexistent vehicle', async () => {
