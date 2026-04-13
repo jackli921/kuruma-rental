@@ -191,7 +191,15 @@
         "save": "保存车辆",
         "saving": "保存中...",
         "cancel": "取消",
-        "confirm": "确认"
+        "confirm": "确认",
+        "make": "品牌",
+        "makePlaceholder": "例如 丰田",
+        "model": "车型",
+        "modelPlaceholder": "例如 Aqua",
+        "year": "年份",
+        "yearPlaceholder": "例如 2022",
+        "color": "颜色",
+        "colorPlaceholder": "例如 白色"
       },
       "filter": {
         "all": "全部",
@@ -214,7 +222,11 @@
         "sortPriceAsc": "价格由低到高",
         "sortPriceDesc": "价格由高到低",
         "complianceHeading": "合规",
-        "expiringSoonLabel": "即将到期"
+        "expiringSoonLabel": "即将到期",
+        "makeHeading": "品牌",
+        "modelHeading": "车型",
+        "yearHeading": "年份",
+        "colorHeading": "颜色"
       },
       "actions": {
         "setMaintenance": "设为维护中",
