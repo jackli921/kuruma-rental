@@ -55,6 +55,7 @@ jobs:
         working-directory: packages/api
         run: |
           echo "${{ secrets.PROD_DATABASE_URL }}" | npx wrangler secret put DATABASE_URL
+          echo "${{ secrets.AUTH_SECRET }}" | npx wrangler secret put AUTH_SECRET
 
       # 3. Deploy API Worker. First-time run creates the Worker.
       - name: Deploy API Worker
