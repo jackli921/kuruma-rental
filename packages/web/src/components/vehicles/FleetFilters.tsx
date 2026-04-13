@@ -118,6 +118,22 @@ export function FleetFilters({
     })
   }
 
+  const handleMakeToggle = (make: string) => {
+    onFiltersChange({ ...filters, makes: toggleInArray(filters.makes, make) })
+  }
+
+  const handleModelToggle = (model: string) => {
+    onFiltersChange({ ...filters, models: toggleInArray(filters.models, model) })
+  }
+
+  const handleYearToggle = (year: number) => {
+    onFiltersChange({ ...filters, years: toggleInArray(filters.years, year) })
+  }
+
+  const handleColorToggle = (color: string) => {
+    onFiltersChange({ ...filters, colors: toggleInArray(filters.colors, color) })
+  }
+
   const handleSortChange = (value: SortOrder | null) => {
     if (value) {
       onSortChange(value)
@@ -237,9 +253,7 @@ export function FleetFilters({
                         type="button"
                         aria-pressed={isSelected}
                         aria-label={make}
-                        onClick={() =>
-                          onFiltersChange({ ...filters, makes: toggleInArray(filters.makes, make) })
-                        }
+                        onClick={() => handleMakeToggle(make)}
                       />
                     }
                   >
@@ -269,12 +283,7 @@ export function FleetFilters({
                         type="button"
                         aria-pressed={isSelected}
                         aria-label={model}
-                        onClick={() =>
-                          onFiltersChange({
-                            ...filters,
-                            models: toggleInArray(filters.models, model),
-                          })
-                        }
+                        onClick={() => handleModelToggle(model)}
                       />
                     }
                   >
@@ -304,12 +313,7 @@ export function FleetFilters({
                         type="button"
                         aria-pressed={isSelected}
                         aria-label={String(year)}
-                        onClick={() =>
-                          onFiltersChange({
-                            ...filters,
-                            years: toggleInArray(filters.years, year),
-                          })
-                        }
+                        onClick={() => handleYearToggle(year)}
                       />
                     }
                   >
@@ -339,12 +343,7 @@ export function FleetFilters({
                         type="button"
                         aria-pressed={isSelected}
                         aria-label={color}
-                        onClick={() =>
-                          onFiltersChange({
-                            ...filters,
-                            colors: toggleInArray(filters.colors, color),
-                          })
-                        }
+                        onClick={() => handleColorToggle(color)}
                       />
                     }
                   >

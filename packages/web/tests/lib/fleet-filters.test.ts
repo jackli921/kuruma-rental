@@ -299,6 +299,19 @@ describe('filterVehicles', () => {
       const result = filterVehicles(vehicles, { models: ['Aqua'] })
 
       expect(result).toHaveLength(2)
+      expect(result.map((v) => v.name).sort()).toEqual(['A', 'C'])
+    })
+
+    it('excludes vehicles with null model when filter is active', () => {
+      const vehicles = [
+        makeVehicle({ name: 'A', model: 'Aqua' }),
+        makeVehicle({ name: 'B', model: null }),
+      ]
+
+      const result = filterVehicles(vehicles, { models: ['Aqua'] })
+
+      expect(result).toHaveLength(1)
+      expect(result[0]?.name).toBe('A')
     })
   })
 
@@ -315,6 +328,18 @@ describe('filterVehicles', () => {
       expect(result).toHaveLength(2)
       expect(result.map((v) => v.name).sort()).toEqual(['A', 'C'])
     })
+
+    it('excludes vehicles with null year when filter is active', () => {
+      const vehicles = [
+        makeVehicle({ name: 'A', year: 2022 }),
+        makeVehicle({ name: 'B', year: null }),
+      ]
+
+      const result = filterVehicles(vehicles, { years: [2022] })
+
+      expect(result).toHaveLength(1)
+      expect(result[0]?.name).toBe('A')
+    })
   })
 
   describe('color filter', () => {
@@ -328,7 +353,19 @@ describe('filterVehicles', () => {
       const result = filterVehicles(vehicles, { colors: ['White'] })
 
       expect(result).toHaveLength(2)
-      expect(result.every((v) => v.color === 'White')).toBe(true)
+      expect(result.map((v) => v.name).sort()).toEqual(['A', 'C'])
+    })
+
+    it('excludes vehicles with null color when filter is active', () => {
+      const vehicles = [
+        makeVehicle({ name: 'A', color: 'White' }),
+        makeVehicle({ name: 'B', color: null }),
+      ]
+
+      const result = filterVehicles(vehicles, { colors: ['White'] })
+
+      expect(result).toHaveLength(1)
+      expect(result[0]?.name).toBe('A')
     })
   })
 
