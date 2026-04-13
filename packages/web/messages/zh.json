@@ -172,7 +172,8 @@
         "advanceBookingHoursPlaceholder": "24",
         "save": "保存车辆",
         "saving": "保存中...",
-        "cancel": "取消"
+        "cancel": "取消",
+        "confirm": "确认"
       },
       "filter": {
         "all": "全部",
@@ -244,6 +245,16 @@
           "available": "{n} 辆可用",
           "maintenance": "{n} 辆维护中"
         }
+      },
+      "bulk": {
+        "selectAll": "全选",
+        "deselectAll": "取消全选",
+        "selectedCount": "已选择{count}辆车",
+        "setAvailable": "设为可用",
+        "setMaintenance": "设为维护中",
+        "confirmTitle": "确认批量状态更改",
+        "confirmMessage": "将{count}辆车更改为{status}？",
+        "success": "已成功更新{count}辆车"
       }
     },
     "customers": {

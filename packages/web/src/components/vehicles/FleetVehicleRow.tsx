@@ -16,6 +16,8 @@ import Image from 'next/image'
 
 interface FleetVehicleRowProps {
   overview: FleetVehicleOverviewData
+  selected: boolean
+  onToggleSelect: (id: string) => void
   onEdit: (overview: FleetVehicleOverviewData) => void
   onRetire: (overview: FleetVehicleOverviewData) => void
 }
@@ -65,7 +67,13 @@ function BookingIndicator({
   )
 }
 
-export function FleetVehicleRow({ overview, onEdit, onRetire }: FleetVehicleRowProps) {
+export function FleetVehicleRow({
+  overview,
+  selected,
+  onToggleSelect,
+  onEdit,
+  onRetire,
+}: FleetVehicleRowProps) {
   const t = useTranslations('business.vehicles')
   const photo = overview.photos?.[0]
   const price = formatVehicleRate(overview.dailyRateJpy, overview.hourlyRateJpy, {
@@ -82,6 +90,18 @@ export function FleetVehicleRow({ overview, onEdit, onRetire }: FleetVehicleRowP
 
   return (
     <div className="flex items-center gap-4 rounded-lg border bg-card p-3">
+      {/* Selection checkbox — hidden for RETIRED vehicles */}
+      {overview.status !== 'RETIRED' ? (
+        <input
+          type="checkbox"
+          checked={selected}
+          onChange={() => onToggleSelect(overview.id)}
+          className="size-4 shrink-0 rounded border-border accent-primary"
+          aria-label={`Select ${overview.name}`}
+        />
+      ) : (
+        <div className="size-4 shrink-0" />
+      )}
       {/* Thumbnail: 80x60 per issue spec */}
       <div className="relative flex-shrink-0 h-[60px] w-[80px] overflow-hidden rounded bg-muted">
         {photo ? (

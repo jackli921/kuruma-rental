@@ -1,4 +1,5 @@
 import {
+  bulkUpdateVehicleStatusSchema,
   createVehicleSchema,
   updateVehicleSchema,
   updateVehicleStatusSchema,
@@ -6,7 +7,8 @@ import {
 import { Hono } from 'hono'
 import { STAFF_ROLES, requireUser } from '../middleware/auth'
 import { PG_ERROR, pgErrorCode } from '../pg-errors'
-import type { Vehicle, VehicleRepository } from '../repositories/types'
+import type { VehicleRepository } from '../repositories/types'
+import type { Vehicle } from '../stores'
 import { fail, ok, parseBody, stripUndefined } from './helpers'
 
 export function createVehicleRoutes(repo: VehicleRepository) {
@@ -68,6 +70,29 @@ export function createVehicleRoutes(repo: VehicleRepository) {
         }
         throw err
       }
+    })
+    .patch('/vehicles/bulk-status', async (c) => {
+      const user = requireUser(c)
+      if (!STAFF_ROLES.has(user.role)) return fail(c, 'Forbidden', 403)
+
+      const parsed = await parseBody(c, bulkUpdateVehicleStatusSchema)
+      if (!parsed.ok) return parsed.response
+
+      const { vehicleIds, status } = parsed.data
+      const uniqueIds = [...new Set(vehicleIds)]
+
+      // Pre-check: all IDs must exist and not be RETIRED.
+      const existing = await repo.findByIds(uniqueIds)
+      if (existing.length !== uniqueIds.length) {
+        return fail(c, 'One or more vehicles not found', 404)
+      }
+      const retiredIds = existing.filter((v) => v.status === 'RETIRED').map((v) => v.id)
+      if (retiredIds.length > 0) {
+        return fail(c, 'Cannot bulk-update retired vehicles', 400)
+      }
+
+      const updated = await repo.bulkUpdateStatus(uniqueIds, status)
+      return ok(c, updated)
     })
     .patch('/vehicles/:id', async (c) => {
       const user = requireUser(c)

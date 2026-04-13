@@ -11,11 +11,19 @@ import Image from 'next/image'
 
 interface FleetVehicleCardProps {
   vehicle: VehicleData
+  selected: boolean
+  onToggleSelect: (id: string) => void
   onEdit: (vehicle: VehicleData) => void
   onRetire: (vehicle: VehicleData) => void
 }
 
-export function FleetVehicleCard({ vehicle, onEdit, onRetire }: FleetVehicleCardProps) {
+export function FleetVehicleCard({
+  vehicle,
+  selected,
+  onToggleSelect,
+  onEdit,
+  onRetire,
+}: FleetVehicleCardProps) {
   const t = useTranslations('business.vehicles')
   const photo = vehicle.photos?.[0]
   const price = formatVehicleRate(vehicle.dailyRateJpy, vehicle.hourlyRateJpy, {
@@ -26,6 +34,15 @@ export function FleetVehicleCard({ vehicle, onEdit, onRetire }: FleetVehicleCard
   return (
     <Card>
       <div className="relative aspect-[4/3] overflow-hidden bg-muted">
+        {vehicle.status !== 'RETIRED' && (
+          <input
+            type="checkbox"
+            checked={selected}
+            onChange={() => onToggleSelect(vehicle.id)}
+            className="absolute top-2 left-2 z-10 size-4 rounded border-border accent-primary"
+            aria-label={`Select ${vehicle.name}`}
+          />
+        )}
         {photo ? (
           <Image
             src={photo}
