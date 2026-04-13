@@ -136,6 +136,25 @@ describe('Maintenance Logs', () => {
     })
   })
 
+  describe('MAINTENANCE → MAINTENANCE re-entry', () => {
+    it('resolves the old log and creates a new one', async () => {
+      const vehicle = await createVehicle()
+      await patchStatus(vehicle.id, 'MAINTENANCE', 'Oil change')
+      await patchStatus(vehicle.id, 'MAINTENANCE', 'New reason: brake pads')
+
+      const logsRes = await app.request(`/vehicles/${vehicle.id}/maintenance-logs`)
+      const logsBody = await logsRes.json()
+
+      expect(logsBody.data).toHaveLength(2)
+      // Most recent first
+      expect(logsBody.data[0].reason).toBe('New reason: brake pads')
+      expect(logsBody.data[0].resolvedAt).toBeNull()
+      // Old one is resolved
+      expect(logsBody.data[1].reason).toBe('Oil change')
+      expect(logsBody.data[1].resolvedAt).not.toBeNull()
+    })
+  })
+
   describe('auth', () => {
     it('rejects RENTER role with 403', async () => {
       const renterApp = new Hono()

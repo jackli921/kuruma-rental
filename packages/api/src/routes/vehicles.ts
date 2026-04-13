@@ -13,7 +13,7 @@ import { fail, ok, parseBody, stripUndefined } from './helpers'
 
 export function createVehicleRoutes(
   repo: VehicleRepository,
-  maintenanceService?: MaintenanceService,
+  maintenanceService: MaintenanceService,
 ) {
   return new Hono()
     .get('/vehicles', async (c) => {
@@ -162,21 +162,13 @@ export function createVehicleRoutes(
       const parsed = await parseBody(c, updateVehicleStatusWithReasonSchema)
       if (!parsed.ok) return parsed.response
 
-      if (maintenanceService) {
-        const result = await maintenanceService.toggleStatus(
-          c.req.param('id'),
-          parsed.data.status,
-          parsed.data.reason,
-        )
-        if (!result.ok) return fail(c, result.error, result.status)
-        return ok(c, result.vehicle)
-      }
-
-      // Fallback: no maintenance service wired (backward compat)
-      const existing = await repo.findById(c.req.param('id'))
-      if (!existing) return fail(c, 'Vehicle not found', 404)
-      const updated = await repo.update(existing.id, { status: parsed.data.status })
-      return ok(c, updated)
+      const result = await maintenanceService.toggleStatus(
+        c.req.param('id'),
+        parsed.data.status,
+        parsed.data.reason,
+      )
+      if (!result.ok) return fail(c, result.error, result.status)
+      return ok(c, result.vehicle)
     })
     .delete('/vehicles/:id', async (c) => {
       const user = requireUser(c)

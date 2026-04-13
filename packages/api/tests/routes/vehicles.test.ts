@@ -1,7 +1,11 @@
 import { Hono } from 'hono'
 import { beforeEach, describe, expect, it } from 'vitest'
-import { InMemoryVehicleRepository } from '../../src/repositories/in-memory'
+import {
+  InMemoryMaintenanceLogRepository,
+  InMemoryVehicleRepository,
+} from '../../src/repositories/in-memory'
 import { createVehicleRoutes } from '../../src/routes/vehicles'
+import { MaintenanceService } from '../../src/services/maintenance'
 import { testAuthMiddleware } from '../helpers/auth'
 
 let app: Hono
@@ -30,9 +34,11 @@ async function createVehicle(input = validVehicleInput()) {
 describe('Vehicle CRUD Routes', () => {
   beforeEach(() => {
     const repo = new InMemoryVehicleRepository()
+    const maintenanceLogRepo = new InMemoryMaintenanceLogRepository()
+    const maintenanceService = new MaintenanceService(repo, maintenanceLogRepo)
     app = new Hono()
     app.use('*', testAuthMiddleware('staff-user', 'STAFF'))
-    app.route('/', createVehicleRoutes(repo))
+    app.route('/', createVehicleRoutes(repo, maintenanceService))
   })
 
   describe('GET /vehicles', () => {

@@ -165,7 +165,7 @@ export function VehicleDetail({ vehicle, t }: VehicleDetailProps) {
         <div className="space-y-6">
           <RevenueCard vehicle={vehicle} t={t} hasRevenue={hasRevenue} />
           <UpcomingBookingsCard bookings={vehicle.upcomingBookings} t={t} />
-          <MaintenanceHistoryCard logs={vehicle.maintenanceLogs ?? []} t={t} />
+          <MaintenanceHistoryCard logs={vehicle.maintenanceLogs} t={t} />
         </div>
       </div>
     </div>

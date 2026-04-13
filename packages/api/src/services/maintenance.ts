@@ -19,6 +19,7 @@ export class MaintenanceService {
     vehicleId: string,
     status: Vehicle['status'],
     reason?: string,
+    now: Date = new Date(),
   ): Promise<ToggleStatusResult> {
     const existing = await this.vehicleRepo.findById(vehicleId)
     if (!existing) {
@@ -33,11 +34,12 @@ export class MaintenanceService {
       }
     }
 
-    // Resolve any active log when leaving MAINTENANCE
-    if (existing.status === 'MAINTENANCE' && status !== 'MAINTENANCE') {
+    // Always resolve any active log before creating a new one.
+    // Handles both MAINTENANCE→AVAILABLE and MAINTENANCE→MAINTENANCE (H3 fix).
+    if (existing.status === 'MAINTENANCE') {
       const activeLog = await this.maintenanceLogRepo.findActiveByVehicleId(vehicleId)
       if (activeLog) {
-        await this.maintenanceLogRepo.resolve(activeLog.id, new Date())
+        await this.maintenanceLogRepo.resolve(activeLog.id, now)
       }
     }
 
@@ -53,7 +55,7 @@ export class MaintenanceService {
         reason: reason.trim(),
         notes: null,
         costJpy: null,
-        startedAt: new Date(),
+        startedAt: now,
         resolvedAt: null,
       })
       return { ok: true, vehicle: updated, log }
