@@ -1,6 +1,6 @@
 {
-  "id": "07492935-aaab-4a57-afb6-d2a7c4e18584",
-  "prevId": "0e0d25c8-8bce-4dce-87d6-8ff061ca3616",
+  "id": "fb98135c-f6ef-429e-882c-c201eaa7a394",
+  "prevId": "07492935-aaab-4a57-afb6-d2a7c4e18584",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -640,6 +640,18 @@
         "hourlyRateJpy": {
           "name": "hourlyRateJpy",
           "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "shakenExpiryDate": {
+          "name": "shakenExpiryDate",
+          "type": "date",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "insuranceExpiryDate": {
+          "name": "insuranceExpiryDate",
+          "type": "date",
           "primaryKey": false,
           "notNull": false
         },
