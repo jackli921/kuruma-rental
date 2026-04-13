@@ -51,6 +51,8 @@ jobs:
       # 2. Set API Worker secrets (idempotent — wrangler secret put is a
       # full replace, so running every deploy keeps the Worker in sync
       # with whatever is in GitHub Secrets).
+      # IMPORTANT: AUTH_SECRET must match between API and Web workers.
+      # If you add a shared secret, add it to BOTH worker sections.
       - name: Set API Worker secrets
         working-directory: packages/api
         run: |

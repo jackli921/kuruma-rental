@@ -67,6 +67,7 @@ Critical rules:
 3. **`open-next.config.ts` must exist** or the CLI hangs.
 4. **`typescript.ignoreBuildErrors: true`** in `next.config.ts` (tsc runs locally/CI, not during `next build`).
 5. Secrets set via `npx wrangler secret put` — CF dashboard wipes them on redeploy.
+6. **Shared secrets (AUTH_SECRET) must be set on BOTH workers.** `deploy.yml` is the single source of truth — never set secrets manually via `wrangler secret put` in production. If they drift, JWT verification fails silently ("Unauthorized").
 
 ## i18n (next-intl v4)
 
