@@ -28,6 +28,11 @@ const vehicleObjectSchema = z.object({
   advanceBookingHours: z.number().int().min(0, 'Advance booking cannot be negative').nullish(),
   dailyRateJpy: jpyRate.nullish(),
   hourlyRateJpy: jpyRate.nullish(),
+  // Issue #228: vehicle detail fields for filtering.
+  make: z.string().trim().optional(),
+  model: z.string().trim().optional(),
+  year: z.number().int().min(1900).max(2100).optional(),
+  color: z.string().trim().optional(),
 })
 
 export const createVehicleSchema = vehicleObjectSchema.superRefine((data, ctx) => {
