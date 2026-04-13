@@ -1,5 +1,8 @@
 import { z } from 'zod'
 
+const MIN_VEHICLE_YEAR = 1900
+const MAX_VEHICLE_YEAR = 2100
+
 // JPY rates are whole-yen integers. Zero is a valid value (free promo),
 // but at least one of daily or hourly must be set on a vehicle — a car
 // with no price is not rentable. Mirrored in the `vehicles_pricing_at_
@@ -42,7 +45,7 @@ const vehicleObjectSchema = z.object({
   // can submit `null` when a field is blank (same pattern as pricing #48).
   make: z.string().trim().nullish(),
   model: z.string().trim().nullish(),
-  year: z.number().int().min(1900).max(2100).nullish(),
+  year: z.number().int().min(MIN_VEHICLE_YEAR).max(MAX_VEHICLE_YEAR).nullish(),
   color: z.string().trim().nullish(),
 })
 
