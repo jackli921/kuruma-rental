@@ -84,7 +84,14 @@ export function FleetVehicleRow({ overview, onEdit, onRetire }: FleetVehicleRowP
       {/* Thumbnail: 80x60 per issue spec */}
       <div className="relative flex-shrink-0 h-[60px] w-[80px] overflow-hidden rounded bg-muted">
         {photo ? (
-          <Image src={photo} alt={overview.name} fill className="object-cover" sizes="80px" />
+          <Image
+            src={photo}
+            alt={overview.name}
+            fill
+            className="object-cover"
+            sizes="80px"
+            loading="lazy"
+          />
         ) : (
           <div
             data-testid="fleet-row-thumbnail-placeholder"

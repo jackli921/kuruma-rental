@@ -33,6 +33,7 @@ export function FleetVehicleCard({ vehicle, onEdit, onRetire }: FleetVehicleCard
             fill
             className="object-cover"
             sizes="(max-width: 768px) 100vw, 33vw"
+            loading="lazy"
           />
         ) : (
           <div className="w-full h-full flex items-center justify-center">
