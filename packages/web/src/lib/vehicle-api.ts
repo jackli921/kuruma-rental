@@ -167,6 +167,50 @@ export async function fetchVehicleDetail(
   }
 }
 
+export interface PhotoUploadResult {
+  uploaded: string[]
+  total: number
+}
+
+export interface PhotoDeleteResult {
+  deleted: string
+  remaining: number
+}
+
+export async function uploadVehiclePhotos(
+  vehicleId: string,
+  files: File[],
+  token?: string,
+): Promise<PhotoUploadResult> {
+  const formData = new FormData()
+  for (const file of files) {
+    formData.append('file', file)
+  }
+  const client = createApiClient()
+  const url = `${client.vehicles[':id'].$url({ param: { id: vehicleId } }).toString()}/photos`
+  const headers: Record<string, string> = {}
+  if (token) {
+    headers.Authorization = `Bearer ${token}`
+  }
+  const res = await fetch(url, { method: 'POST', headers, body: formData })
+  return unwrap<PhotoUploadResult>(res)
+}
+
+export async function deleteVehiclePhoto(
+  vehicleId: string,
+  photoIdx: number,
+  token?: string,
+): Promise<PhotoDeleteResult> {
+  const client = createApiClient()
+  const url = `${client.vehicles[':id'].$url({ param: { id: vehicleId } }).toString()}/photos/${photoIdx}`
+  const headers: Record<string, string> = {}
+  if (token) {
+    headers.Authorization = `Bearer ${token}`
+  }
+  const res = await fetch(url, { method: 'DELETE', headers })
+  return unwrap<PhotoDeleteResult>(res)
+}
+
 export async function fetchFleetOverview(token?: string): Promise<FleetVehicleOverviewData[]> {
   const client = createApiClient(token)
   const res = await client.vehicles['fleet-overview'].$get()

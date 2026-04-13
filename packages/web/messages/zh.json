@@ -174,6 +174,17 @@
         "saving": "保存中...",
         "cancel": "取消"
       },
+      "photos": {
+        "heading": "照片",
+        "hint": "拖放或点击上传。最多{max}张照片，每张最大{maxSize}MB。",
+        "uploadPhotos": "将图片拖放到此处或点击浏览",
+        "uploading": "上传中...",
+        "deletePhoto": "删除照片",
+        "photoAlt": "车辆照片 {index}",
+        "photoLimit": "最多允许{max}张照片",
+        "sizeLimit": "每张照片不超过{max}MB",
+        "typeError": "仅允许上传图片文件"
+      },
       "filter": {
         "all": "全部",
         "available": "可用",
