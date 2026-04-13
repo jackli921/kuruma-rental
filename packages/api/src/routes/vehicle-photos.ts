@@ -4,6 +4,18 @@ import type { PhotoStorage, VehicleRepository } from '../repositories/types'
 import { fail, ok } from './helpers'
 
 const MAX_PHOTOS_PER_VEHICLE = 10
+const MAX_FILE_SIZE = 5 * 1024 * 1024
+const ALLOWED_MIME_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp', 'image/avif'])
+
+function validateFile(file: File): string | null {
+  if (!ALLOWED_MIME_TYPES.has(file.type)) {
+    return 'Only image files are allowed (JPEG, PNG, WebP, AVIF)'
+  }
+  if (file.size > MAX_FILE_SIZE) {
+    return 'File must be under 5MB'
+  }
+  return null
+}
 
 export function createVehiclePhotoRoutes(repo: VehicleRepository, storage: PhotoStorage) {
   return new Hono()
@@ -27,15 +39,13 @@ export function createVehiclePhotoRoutes(repo: VehicleRepository, storage: Photo
         return fail(c, `Maximum ${MAX_PHOTOS_PER_VEHICLE} photos per vehicle`, 400)
       }
 
-      const uploaded: string[] = []
       for (const file of files) {
-        try {
-          const result = await storage.put(vehicle.id, file)
-          uploaded.push(result.url)
-        } catch (e) {
-          return fail(c, e instanceof Error ? e.message : 'Upload failed', 400)
-        }
+        const error = validateFile(file)
+        if (error) return fail(c, error, 400)
       }
+
+      const results = await Promise.all(files.map((f) => storage.put(vehicle.id, f)))
+      const uploaded = results.map((r) => r.url)
 
       await repo.update(vehicle.id, { photos: [...vehicle.photos, ...uploaded] })
 
@@ -56,7 +66,8 @@ export function createVehiclePhotoRoutes(repo: VehicleRepository, storage: Photo
       const deletedUrl = vehicle.photos[idx]!
       const photos = vehicle.photos.filter((_, i) => i !== idx)
 
-      // Best-effort R2 cleanup — don't fail the request if storage delete fails.
+      // Best-effort R2 cleanup. Pass the full URL — storage.delete()
+      // handles stripping the base URL prefix to derive the R2 key.
       try {
         await storage.delete(deletedUrl)
       } catch {

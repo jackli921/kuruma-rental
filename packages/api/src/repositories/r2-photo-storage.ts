@@ -10,7 +10,12 @@ export interface R2BucketLike {
   delete(key: string | string[]): Promise<void>
 }
 
-const MAX_FILE_SIZE = 5 * 1024 * 1024
+const EXT_MAP: Record<string, string> = {
+  'image/jpeg': 'jpg',
+  'image/png': 'png',
+  'image/webp': 'webp',
+  'image/avif': 'avif',
+}
 
 export class R2PhotoStorage implements PhotoStorage {
   constructor(
@@ -19,14 +24,7 @@ export class R2PhotoStorage implements PhotoStorage {
   ) {}
 
   async put(vehicleId: string, file: File): Promise<{ key: string; url: string }> {
-    if (!file.type.startsWith('image/')) {
-      throw new Error('Only image files are allowed')
-    }
-    if (file.size > MAX_FILE_SIZE) {
-      throw new Error('File must be under 5MB')
-    }
-
-    const ext = file.name.split('.').pop() ?? 'bin'
+    const ext = EXT_MAP[file.type] ?? file.name.split('.').pop() ?? 'bin'
     const id = crypto.randomUUID()
     const key = `vehicles/${vehicleId}/${id}.${ext}`
 
@@ -34,11 +32,13 @@ export class R2PhotoStorage implements PhotoStorage {
       httpMetadata: { contentType: file.type },
     })
 
-    const url = `${this.publicBaseUrl}/${key}`
-    return { key, url }
+    return { key, url: `${this.publicBaseUrl}/${key}` }
   }
 
-  async delete(key: string): Promise<void> {
+  async delete(keyOrUrl: string): Promise<void> {
+    const key = keyOrUrl.startsWith(this.publicBaseUrl)
+      ? keyOrUrl.slice(this.publicBaseUrl.length + 1)
+      : keyOrUrl
     await this.bucket.delete(key)
   }
 }

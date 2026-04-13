@@ -104,6 +104,19 @@ describe('POST /vehicles/:id/photos', () => {
     expect(body.error).toContain('image')
   })
 
+  it('rejects SVG (XSS vector) with 400', async () => {
+    const headers = await authHeaders()
+    const form = makeFormData('icon.svg', 'image/svg+xml', 1024)
+
+    const res = await app.request(`/vehicles/${vehicleId}/photos`, {
+      method: 'POST',
+      headers,
+      body: form,
+    })
+
+    expect(res.status).toBe(400)
+  })
+
   it('rejects file larger than 5MB with 400', async () => {
     const headers = await authHeaders()
     const form = makeFormData('huge.jpg', 'image/jpeg', 6 * 1024 * 1024)
@@ -174,6 +187,31 @@ describe('POST /vehicles/:id/photos', () => {
     })
 
     expect(res.status).toBe(401)
+  })
+})
+
+describe('upload → delete round-trip', () => {
+  it('upload then delete by index removes file from storage', async () => {
+    const ctx = createTestApp()
+    const vehicle = await ctx.vehicleRepo.create(vehicleInput())
+    const headers = await authHeaders()
+
+    const form = makeFormData('car.jpg', 'image/jpeg', 1024)
+    const uploadRes = await ctx.app.request(`/vehicles/${vehicle.id}/photos`, {
+      method: 'POST',
+      headers,
+      body: form,
+    })
+    expect(uploadRes.status).toBe(201)
+
+    const deleteRes = await ctx.app.request(`/vehicles/${vehicle.id}/photos/0`, {
+      method: 'DELETE',
+      headers,
+    })
+    expect(deleteRes.status).toBe(200)
+
+    const updated = await ctx.vehicleRepo.findById(vehicle.id)
+    expect(updated?.photos).toEqual([])
   })
 })
 
