@@ -84,7 +84,8 @@ export async function updateVehicle(
   data: Partial<CreateVehicleInput>,
   token?: string,
 ): Promise<VehicleData> {
-  const client = createApiClient(token)
+  // Raw fetch for PATCH — hc client used only for typed URL construction.
+  const client = createApiClient()
   const url = client.vehicles[':id'].$url({ param: { id } })
   const headers: Record<string, string> = { 'Content-Type': 'application/json' }
   if (token) {
@@ -106,7 +107,8 @@ export async function updateVehicleStatus(
   status: VehicleStatus,
   token?: string,
 ): Promise<VehicleData> {
-  const client = createApiClient(token)
+  // Raw fetch for PATCH — hc client used only for typed URL construction.
+  const client = createApiClient()
   const url = client.vehicles[':id'].status.$url({ param: { id } })
   const headers: Record<string, string> = { 'Content-Type': 'application/json' }
   if (token) {

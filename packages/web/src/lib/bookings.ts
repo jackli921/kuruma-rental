@@ -31,9 +31,8 @@ export async function checkAvailability(
   endAt: Date,
 ): Promise<boolean> {
   const token = await getApiToken()
-  const client = createApiClient(token)
-  // Query params read manually by parseDateRange() — not in Hono's type sig,
-  // so we use $url() for typed path construction + fetch for query params.
+  // Raw fetch — hc client used only for typed URL construction.
+  const client = createApiClient()
   const url = client.availability[':vehicleId'].$url({ param: { vehicleId } })
   url.searchParams.set('from', startAt.toISOString())
   url.searchParams.set('to', endAt.toISOString())
@@ -75,6 +74,7 @@ export async function createBooking(input: CreateBookingInput): Promise<CreateBo
   // round-trip adds latency and creates a race window where two users both
   // pass the check but only one succeeds at insert time. Handle the 409
   // (constraint violation) with a user-friendly message instead.
+  // getApiToken() calls auth() internally — Next.js deduplicates within a request.
   const token = await getApiToken()
   const client = createApiClient(token)
   const idempotencyKey = crypto.randomUUID()

@@ -11,12 +11,14 @@ export async function getApiToken(): Promise<string | undefined> {
   const secret = process.env.AUTH_SECRET
   if (!secret) return undefined
 
-  const role = (session.user as { role?: string }).role ?? 'RENTER'
+  const role = session.user.role ?? 'RENTER'
   const key = new TextEncoder().encode(secret)
 
   return new SignJWT({ role })
     .setProtectedHeader({ alg: 'HS256' })
     .setSubject(userId)
+    .setIssuer('kuruma-web')
+    .setAudience('kuruma-api')
     .setExpirationTime(TOKEN_TTL)
     .sign(key)
 }

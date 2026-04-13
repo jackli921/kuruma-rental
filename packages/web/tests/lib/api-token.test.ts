@@ -60,10 +60,16 @@ describe('getApiToken', () => {
     expect(token).toBeDefined()
 
     const key = new TextEncoder().encode(TEST_SECRET)
-    const { payload } = await jwtVerify(token!, key, { algorithms: ['HS256'] })
+    const { payload } = await jwtVerify(token!, key, {
+      algorithms: ['HS256'],
+      issuer: 'kuruma-web',
+      audience: 'kuruma-api',
+    })
     expect(payload.sub).toBe('user-42')
     expect(payload.role).toBe('ADMIN')
     expect(payload.exp).toBeDefined()
+    expect(payload.iss).toBe('kuruma-web')
+    expect(payload.aud).toBe('kuruma-api')
   })
 
   it('defaults role to RENTER when session.user has no role', async () => {
