@@ -74,9 +74,11 @@ export function createApp(overrides?: {
     ;({ vehicleRepo, bookingRepo, availabilityRepo } = overrides)
     maintenanceLogRepo = overrides.maintenanceLogRepo ?? new InMemoryMaintenanceLogRepository()
     fleetOverviewRepo =
-      overrides.fleetOverviewRepo ?? new InMemoryFleetOverviewRepository(vehicleRepo, bookingRepo)
+      overrides.fleetOverviewRepo ??
+      new InMemoryFleetOverviewRepository(vehicleRepo, bookingRepo, new Map(), maintenanceLogRepo)
     vehicleDetailRepo =
-      overrides.vehicleDetailRepo ?? new InMemoryVehicleDetailRepository(vehicleRepo, bookingRepo)
+      overrides.vehicleDetailRepo ??
+      new InMemoryVehicleDetailRepository(vehicleRepo, bookingRepo, new Map(), maintenanceLogRepo)
     statsRepo = overrides.statsRepo ?? new InMemoryStatsRepository(vehicleRepo, bookingRepo)
     threadRepo = overrides.threadRepo ?? new InMemoryThreadRepository()
     messageRepo =
@@ -86,12 +88,17 @@ export function createApp(overrides?: {
     vehicleRepo = new DrizzleVehicleRepository(db)
     bookingRepo = new DrizzleBookingRepository(db)
     availabilityRepo = new DrizzleAvailabilityRepository(db)
+    maintenanceLogRepo = new InMemoryMaintenanceLogRepository()
     fleetOverviewRepo = new DrizzleFleetOverviewRepository(db)
-    vehicleDetailRepo = new InMemoryVehicleDetailRepository(vehicleRepo, bookingRepo)
+    vehicleDetailRepo = new InMemoryVehicleDetailRepository(
+      vehicleRepo,
+      bookingRepo,
+      new Map(),
+      maintenanceLogRepo,
+    )
     statsRepo = new DrizzleStatsRepository(db)
     threadRepo = new DrizzleThreadRepository(db)
     messageRepo = new DrizzleMessageRepository(db)
-    maintenanceLogRepo = new InMemoryMaintenanceLogRepository()
   } else {
     vehicleRepo = new InMemoryVehicleRepository()
     bookingRepo = new InMemoryBookingRepository()
@@ -99,8 +106,19 @@ export function createApp(overrides?: {
       vehicleRepo as InMemoryVehicleRepository,
       bookingRepo as InMemoryBookingRepository,
     )
-    fleetOverviewRepo = new InMemoryFleetOverviewRepository(vehicleRepo, bookingRepo)
-    vehicleDetailRepo = new InMemoryVehicleDetailRepository(vehicleRepo, bookingRepo)
+    maintenanceLogRepo = new InMemoryMaintenanceLogRepository()
+    fleetOverviewRepo = new InMemoryFleetOverviewRepository(
+      vehicleRepo,
+      bookingRepo,
+      new Map(),
+      maintenanceLogRepo,
+    )
+    vehicleDetailRepo = new InMemoryVehicleDetailRepository(
+      vehicleRepo,
+      bookingRepo,
+      new Map(),
+      maintenanceLogRepo,
+    )
     statsRepo = new InMemoryStatsRepository(vehicleRepo, bookingRepo)
     threadRepo = new InMemoryThreadRepository()
     messageRepo = new InMemoryMessageRepository(threadRepo as InMemoryThreadRepository)

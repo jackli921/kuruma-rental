@@ -9,6 +9,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   InMemoryBookingRepository,
   InMemoryFleetOverviewRepository,
+  InMemoryMaintenanceLogRepository,
   InMemoryVehicleRepository,
 } from '../../src/repositories/in-memory'
 import { createFleetOverviewRoutes } from '../../src/routes/fleet-overview'
@@ -19,13 +20,20 @@ const FIXED_NOW = new Date('2026-04-11T12:00:00Z')
 let app: Hono
 let vehicleRepo: InMemoryVehicleRepository
 let bookingRepo: InMemoryBookingRepository
+let maintenanceLogRepo: InMemoryMaintenanceLogRepository
 
 beforeEach(() => {
   vi.useFakeTimers()
   vi.setSystemTime(FIXED_NOW)
   vehicleRepo = new InMemoryVehicleRepository()
   bookingRepo = new InMemoryBookingRepository()
-  const fleetRepo = new InMemoryFleetOverviewRepository(vehicleRepo, bookingRepo)
+  maintenanceLogRepo = new InMemoryMaintenanceLogRepository()
+  const fleetRepo = new InMemoryFleetOverviewRepository(
+    vehicleRepo,
+    bookingRepo,
+    new Map(),
+    maintenanceLogRepo,
+  )
   app = new Hono()
   app.use('*', testAuthMiddleware('staff-user', 'STAFF'))
   app.route('/', createFleetOverviewRoutes(fleetRepo))
@@ -133,5 +141,59 @@ describe('GET /vehicles/fleet-overview', () => {
     expect(body.data[0]!.currentBooking!.startAt).toBe('2026-04-11T09:00:00.000Z')
     expect(body.data[0]!.currentBooking!.endAt).toBe('2026-04-11T18:00:00.000Z')
     expect(body.data[0]!.currentBooking!.renterName).toBeNull()
+  })
+
+  it('includes activeMaintenanceReason when vehicle is in MAINTENANCE', async () => {
+    const vehicle = await vehicleRepo.create({
+      name: 'Under Repair',
+      description: null,
+      photos: [],
+      seats: 5,
+      transmission: 'AUTO',
+      fuelType: null,
+      status: 'MAINTENANCE',
+      bufferMinutes: 60,
+      minRentalHours: null,
+      maxRentalHours: null,
+      advanceBookingHours: null,
+      dailyRateJpy: 8000,
+      hourlyRateJpy: null,
+    })
+    await maintenanceLogRepo.create({
+      vehicleId: vehicle.id,
+      reason: 'Engine overhaul',
+      notes: null,
+      costJpy: null,
+      startedAt: new Date(),
+      resolvedAt: null,
+    })
+
+    const res = await app.request('/vehicles/fleet-overview')
+    const body = await res.json()
+
+    expect(body.data[0].activeMaintenanceReason).toBe('Engine overhaul')
+  })
+
+  it('returns null activeMaintenanceReason for AVAILABLE vehicles', async () => {
+    await vehicleRepo.create({
+      name: 'Ready Car',
+      description: null,
+      photos: [],
+      seats: 5,
+      transmission: 'AUTO',
+      fuelType: null,
+      status: 'AVAILABLE',
+      bufferMinutes: 60,
+      minRentalHours: null,
+      maxRentalHours: null,
+      advanceBookingHours: null,
+      dailyRateJpy: 8000,
+      hourlyRateJpy: null,
+    })
+
+    const res = await app.request('/vehicles/fleet-overview')
+    const body = await res.json()
+
+    expect(body.data[0].activeMaintenanceReason).toBeNull()
   })
 })

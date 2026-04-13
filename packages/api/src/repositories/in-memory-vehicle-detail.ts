@@ -4,7 +4,12 @@ import type {
   VehicleDetailBooking,
 } from '@kuruma/shared/types/vehicle-detail'
 import type { Booking } from '../stores'
-import type { BookingRepository, VehicleDetailRepository, VehicleRepository } from './types'
+import type {
+  BookingRepository,
+  MaintenanceLogRepository,
+  VehicleDetailRepository,
+  VehicleRepository,
+} from './types'
 
 const UPCOMING_LIMIT = 10
 const _UTILIZATION_DAYS = 30
@@ -31,6 +36,7 @@ export class InMemoryVehicleDetailRepository implements VehicleDetailRepository 
     private readonly vehicleRepo: VehicleRepository,
     private readonly bookingRepo: BookingRepository,
     private readonly renterNameByUserId: Map<string, string> = new Map(),
+    private readonly maintenanceLogRepo?: MaintenanceLogRepository,
   ) {}
 
   async findVehicleDetail(vehicleId: string): Promise<VehicleDetail | undefined> {
@@ -40,8 +46,22 @@ export class InMemoryVehicleDetailRepository implements VehicleDetailRepository 
     const allBookings = await this.bookingRepo.findAll({ vehicleId })
     const now = new Date()
 
+    const maintenanceLogs = this.maintenanceLogRepo
+      ? (await this.maintenanceLogRepo.findByVehicleId(vehicleId)).map((log) => ({
+          id: log.id,
+          vehicleId: log.vehicleId,
+          reason: log.reason,
+          notes: log.notes,
+          costJpy: log.costJpy,
+          startedAt: log.startedAt,
+          resolvedAt: log.resolvedAt,
+          createdAt: log.createdAt,
+        }))
+      : []
+
     return {
       ...vehicle,
+      maintenanceLogs,
       upcomingBookings: this.computeUpcoming(allBookings, now),
       ...this.computeRevenue(allBookings, now),
       utilizationLast30Days: this.computeUtilization(allBookings, now),
