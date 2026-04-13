@@ -203,7 +203,7 @@ export function FleetFilters({
                       />
                     }
                   >
-                    {seats}
+                    {t('seatsBadgeLabel', { count: seats })}
                   </Badge>
                 )
               })}
