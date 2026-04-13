@@ -173,7 +173,15 @@
         "save": "Save vehicle",
         "saving": "Saving...",
         "cancel": "Cancel",
-        "confirm": "Confirm"
+        "confirm": "Confirm",
+        "make": "Make",
+        "makePlaceholder": "e.g. Toyota",
+        "model": "Model",
+        "modelPlaceholder": "e.g. Aqua",
+        "year": "Year",
+        "yearPlaceholder": "e.g. 2022",
+        "color": "Color",
+        "colorPlaceholder": "e.g. White"
       },
       "filter": {
         "all": "All",
@@ -194,7 +202,11 @@
         "sortSeatsAsc": "Seats: fewest first",
         "sortSeatsDesc": "Seats: most first",
         "sortPriceAsc": "Price: low to high",
-        "sortPriceDesc": "Price: high to low"
+        "sortPriceDesc": "Price: high to low",
+        "makeHeading": "Make",
+        "modelHeading": "Model",
+        "yearHeading": "Year",
+        "colorHeading": "Color"
       },
       "actions": {
         "setMaintenance": "Set to Maintenance",
@@ -352,7 +364,7 @@
       "heading": "Popular vehicles",
       "subheading": "Hand-picked cars loved by travelers",
       "viewAll": "View all",
-      "currency": "\u00a5{price}",
+      "currency": "¥{price}",
       "perDay": "day"
     },
     "features": {

@@ -28,11 +28,12 @@ const vehicleObjectSchema = z.object({
   advanceBookingHours: z.number().int().min(0, 'Advance booking cannot be negative').nullish(),
   dailyRateJpy: jpyRate.nullish(),
   hourlyRateJpy: jpyRate.nullish(),
-  // Issue #228: vehicle detail fields for filtering.
-  make: z.string().trim().optional(),
-  model: z.string().trim().optional(),
-  year: z.number().int().min(1900).max(2100).optional(),
-  color: z.string().trim().optional(),
+  // Issue #228: vehicle detail fields for filtering. Nullish so the form
+  // can submit `null` when a field is blank (same pattern as pricing #48).
+  make: z.string().trim().nullish(),
+  model: z.string().trim().nullish(),
+  year: z.number().int().min(1900).max(2100).nullish(),
+  color: z.string().trim().nullish(),
 })
 
 export const createVehicleSchema = vehicleObjectSchema.superRefine((data, ctx) => {

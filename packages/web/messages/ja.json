@@ -173,7 +173,15 @@
         "save": "車両を保存",
         "saving": "保存中...",
         "cancel": "キャンセル",
-        "confirm": "確認"
+        "confirm": "確認",
+        "make": "メーカー",
+        "makePlaceholder": "例: トヨタ",
+        "model": "車種",
+        "modelPlaceholder": "例: アクア",
+        "year": "年式",
+        "yearPlaceholder": "例: 2022",
+        "color": "色",
+        "colorPlaceholder": "例: ホワイト"
       },
       "filter": {
         "all": "すべて",
@@ -194,7 +202,11 @@
         "sortSeatsAsc": "定員 (少ない順)",
         "sortSeatsDesc": "定員 (多い順)",
         "sortPriceAsc": "料金 (安い順)",
-        "sortPriceDesc": "料金 (高い順)"
+        "sortPriceDesc": "料金 (高い順)",
+        "makeHeading": "メーカー",
+        "modelHeading": "車種",
+        "yearHeading": "年式",
+        "colorHeading": "色"
       },
       "actions": {
         "setMaintenance": "メンテナンス中にする",
@@ -352,7 +364,7 @@
       "heading": "人気の車両",
       "subheading": "旅行者に選ばれている車",
       "viewAll": "すべて見る",
-      "currency": "\u00a5{price}",
+      "currency": "¥{price}",
       "perDay": "日"
     },
     "features": {
