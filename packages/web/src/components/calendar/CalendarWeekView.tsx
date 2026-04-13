@@ -23,6 +23,8 @@ function getDayColumns(weekStart: Date): Date[] {
   return Array.from({ length: 7 }, (_, i) => addDays(monday, i))
 }
 
+const HOUR_SLOTS = getHourSlots()
+
 interface PositionedBooking {
   booking: CalendarBooking
   top: number
@@ -30,7 +32,6 @@ interface PositionedBooking {
 }
 
 export function CalendarWeekView({ bookings, weekStart, onBookingClick }: CalendarWeekViewProps) {
-  const hours = getHourSlots()
   const days = useMemo(() => getDayColumns(weekStart), [weekStart])
 
   const rangeStart = days[0]!
@@ -53,7 +54,7 @@ export function CalendarWeekView({ bookings, weekStart, onBookingClick }: Calend
         const { top, height } = bookingToWeekPosition(booking.startAt, booking.endAt, day)
         if (height <= 0) continue
 
-        map.get(dayIdx)!.push({ booking, top, height })
+        map.set(dayIdx, [...(map.get(dayIdx) ?? []), { booking, top, height }])
       }
     }
 
@@ -93,7 +94,7 @@ export function CalendarWeekView({ bookings, weekStart, onBookingClick }: Calend
         <div className="grid grid-cols-[60px_repeat(7,1fr)]" style={{ height: totalHeight }}>
           {/* Hour labels */}
           <div className="relative">
-            {hours.map((hour, idx) => (
+            {HOUR_SLOTS.map((hour, idx) => (
               <div
                 key={hour}
                 className="absolute right-2 text-[10px] text-muted-foreground -translate-y-1/2"
@@ -108,7 +109,7 @@ export function CalendarWeekView({ bookings, weekStart, onBookingClick }: Calend
           {days.map((day, dayIdx) => (
             <div key={day.toISOString()} className="relative border-l">
               {/* Hour grid lines */}
-              {hours.map((hour, hourIdx) => (
+              {HOUR_SLOTS.map((hour, hourIdx) => (
                 <div
                   key={hour}
                   className="absolute inset-x-0 border-t border-border/50"

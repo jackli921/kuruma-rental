@@ -18,8 +18,9 @@ export async function fetchCalendarBookings(
   from: string,
   to: string,
   vehicleId?: string,
+  headers?: Record<string, string>,
 ): Promise<CalendarBooking[]> {
-  const client = createApiClient()
+  const client = createApiClient(headers)
   const query: Record<string, string> = { from, to }
   if (vehicleId) query.vehicleId = vehicleId
   const res = await client.bookings.$get({ query })
