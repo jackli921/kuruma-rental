@@ -16,6 +16,10 @@ export interface VehicleData {
   minRentalHours: number | null
   maxRentalHours: number | null
   advanceBookingHours: number | null
+  make: string | null
+  model: string | null
+  year: number | null
+  color: string | null
   dailyRateJpy: number | null
   hourlyRateJpy: number | null
   createdAt: string

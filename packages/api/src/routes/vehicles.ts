@@ -59,6 +59,10 @@ export function createVehicleRoutes(repo: VehicleRepository) {
           minRentalHours: parsed.data.minRentalHours ?? null,
           maxRentalHours: parsed.data.maxRentalHours ?? null,
           advanceBookingHours: parsed.data.advanceBookingHours ?? null,
+          make: parsed.data.make ?? null,
+          model: parsed.data.model ?? null,
+          year: parsed.data.year ?? null,
+          color: parsed.data.color ?? null,
           dailyRateJpy: parsed.data.dailyRateJpy ?? null,
           hourlyRateJpy: parsed.data.hourlyRateJpy ?? null,
         })
@@ -120,6 +124,10 @@ export function createVehicleRoutes(repo: VehicleRepository) {
         minRentalHours: merge('minRentalHours', existing.minRentalHours),
         maxRentalHours: merge('maxRentalHours', existing.maxRentalHours),
         advanceBookingHours: merge('advanceBookingHours', existing.advanceBookingHours),
+        make: merge('make', existing.make),
+        model: merge('model', existing.model),
+        year: merge('year', existing.year),
+        color: merge('color', existing.color),
         dailyRateJpy: merge('dailyRateJpy', existing.dailyRateJpy),
         hourlyRateJpy: merge('hourlyRateJpy', existing.hourlyRateJpy),
       }
