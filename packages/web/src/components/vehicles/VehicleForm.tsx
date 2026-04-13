@@ -77,6 +77,34 @@ export function VehicleForm({ onSubmit, onCancel, defaultValues, isSubmitting }:
 
       <div className="grid grid-cols-2 gap-4">
         <div>
+          <Label htmlFor="make">{t('form.make')}</Label>
+          <Input id="make" placeholder={t('form.makePlaceholder')} {...register('make')} />
+        </div>
+        <div>
+          <Label htmlFor="model">{t('form.model')}</Label>
+          <Input id="model" placeholder={t('form.modelPlaceholder')} {...register('model')} />
+        </div>
+      </div>
+
+      <div className="grid grid-cols-2 gap-4">
+        <div>
+          <Label htmlFor="year">{t('form.year')}</Label>
+          <Input
+            id="year"
+            type="number"
+            placeholder={t('form.yearPlaceholder')}
+            {...register('year', { setValueAs: nullableNumber })}
+          />
+          {errors.year && <p className="text-sm text-destructive mt-1">{errors.year.message}</p>}
+        </div>
+        <div>
+          <Label htmlFor="color">{t('form.color')}</Label>
+          <Input id="color" placeholder={t('form.colorPlaceholder')} {...register('color')} />
+        </div>
+      </div>
+
+      <div className="grid grid-cols-2 gap-4">
+        <div>
           <Label htmlFor="seats">{t('form.seats')}</Label>
           <Input id="seats" type="number" {...register('seats', { valueAsNumber: true })} />
           {errors.seats && <p className="text-sm text-destructive mt-1">{errors.seats.message}</p>}

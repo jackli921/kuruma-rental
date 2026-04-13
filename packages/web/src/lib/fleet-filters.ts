@@ -10,6 +10,10 @@ export interface FleetFilterState {
   transmissions?: Transmission[] | undefined
   seats?: number[] | undefined
   expiringSoon?: boolean | undefined
+  makes?: string[] | undefined
+  models?: string[] | undefined
+  years?: number[] | undefined
+  colors?: string[] | undefined
 }
 
 // Generic in T so the owner list (FleetVehicleOverviewData) and any
@@ -17,7 +21,17 @@ export interface FleetFilterState {
 // keeps its concrete type through the filter. See #52.
 type FilterableVehicle = Pick<
   VehicleData,
-  'name' | 'licensePlate' | 'status' | 'transmission' | 'seats' | 'shakenExpiryDate' | 'insuranceExpiryDate'
+  | 'name'
+  | 'licensePlate'
+  | 'status'
+  | 'transmission'
+  | 'seats'
+  | 'shakenExpiryDate'
+  | 'insuranceExpiryDate'
+  | 'make'
+  | 'model'
+  | 'year'
+  | 'color'
 >
 
 export function filterVehicles<T extends FilterableVehicle>(
@@ -62,6 +76,26 @@ export function filterVehicles<T extends FilterableVehicle>(
         insurance === 'EXPIRED'
       )
     })
+  }
+
+  if (filters.makes && filters.makes.length > 0) {
+    const allowed = new Set(filters.makes)
+    result = result.filter((v) => v.make != null && allowed.has(v.make))
+  }
+
+  if (filters.models && filters.models.length > 0) {
+    const allowed = new Set(filters.models)
+    result = result.filter((v) => v.model != null && allowed.has(v.model))
+  }
+
+  if (filters.years && filters.years.length > 0) {
+    const allowed = new Set(filters.years)
+    result = result.filter((v) => v.year != null && allowed.has(v.year))
+  }
+
+  if (filters.colors && filters.colors.length > 0) {
+    const allowed = new Set(filters.colors)
+    result = result.filter((v) => v.color != null && allowed.has(v.color))
   }
 
   return result
