@@ -126,5 +126,6 @@ export interface MaintenanceLogRepository {
 
 export interface PhotoStorage {
   put(vehicleId: string, file: File): Promise<{ key: string; url: string }>
-  delete(key: string): Promise<void>
+  /** Accepts either a key or full URL — implementations strip the base URL prefix. */
+  delete(keyOrUrl: string): Promise<void>
 }

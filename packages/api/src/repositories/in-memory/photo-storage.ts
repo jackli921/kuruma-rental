@@ -1,18 +1,11 @@
 import type { PhotoStorage } from '../types'
 
-const MAX_FILE_SIZE = 5 * 1024 * 1024
+const BASE_URL = 'https://test-photos.example.com'
 
 export class InMemoryPhotoStorage implements PhotoStorage {
   private readonly store = new Map<string, ArrayBuffer>()
 
   async put(vehicleId: string, file: File): Promise<{ key: string; url: string }> {
-    if (!file.type.startsWith('image/')) {
-      throw new Error('Only image files are allowed')
-    }
-    if (file.size > MAX_FILE_SIZE) {
-      throw new Error('File must be under 5MB')
-    }
-
     const ext = file.name.split('.').pop() ?? 'bin'
     const id = crypto.randomUUID()
     const key = `vehicles/${vehicleId}/${id}.${ext}`
@@ -20,10 +13,11 @@ export class InMemoryPhotoStorage implements PhotoStorage {
     const buffer = await file.arrayBuffer()
     this.store.set(key, buffer)
 
-    return { key, url: `https://test-photos.example.com/${key}` }
+    return { key, url: `${BASE_URL}/${key}` }
   }
 
-  async delete(key: string): Promise<void> {
+  async delete(keyOrUrl: string): Promise<void> {
+    const key = keyOrUrl.startsWith(BASE_URL) ? keyOrUrl.slice(BASE_URL.length + 1) : keyOrUrl
     this.store.delete(key)
   }
 
