@@ -1,6 +1,6 @@
 {
-  "id": "d8475ed7-7983-4afe-a839-79cda7feed56",
-  "prevId": "ed6567e5-e28a-4000-b674-2de079f86e43",
+  "id": "133fcc47-94d9-415d-a1cb-8187a9954a3b",
+  "prevId": "07492935-aaab-4a57-afb6-d2a7c4e18584",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -717,6 +717,30 @@
         "advanceBookingHours": {
           "name": "advanceBookingHours",
           "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "make": {
+          "name": "make",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "model": {
+          "name": "model",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "year": {
+          "name": "year",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "color": {
+          "name": "color",
+          "type": "text",
           "primaryKey": false,
           "notNull": false
         },
