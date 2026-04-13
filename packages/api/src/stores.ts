@@ -65,5 +65,17 @@ export interface Message {
   createdAt: Date
 }
 
+export interface MaintenanceLog {
+  id: string
+  vehicleId: string
+  reason: string
+  notes: string | null
+  costJpy: number | null
+  startedAt: Date
+  resolvedAt: Date | null
+  createdAt: Date
+  updatedAt: Date
+}
+
 // Map stores removed — repositories handle data access now.
 // Types remain here as the shared contract between repositories and routes.

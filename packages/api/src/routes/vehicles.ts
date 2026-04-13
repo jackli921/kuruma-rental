@@ -2,16 +2,19 @@ import {
   bulkUpdateVehicleStatusSchema,
   createVehicleSchema,
   updateVehicleSchema,
-  updateVehicleStatusSchema,
+  updateVehicleStatusWithReasonSchema,
 } from '@kuruma/shared/validators/vehicle'
 import { Hono } from 'hono'
 import { STAFF_ROLES, requireUser } from '../middleware/auth'
 import { PG_ERROR, pgErrorCode } from '../pg-errors'
-import type { VehicleRepository } from '../repositories/types'
-import type { Vehicle } from '../stores'
+import type { Vehicle, VehicleRepository } from '../repositories/types'
+import type { MaintenanceService } from '../services/maintenance'
 import { fail, ok, parseBody, stripUndefined } from './helpers'
 
-export function createVehicleRoutes(repo: VehicleRepository) {
+export function createVehicleRoutes(
+  repo: VehicleRepository,
+  maintenanceService?: MaintenanceService,
+) {
   return new Hono()
     .get('/vehicles', async (c) => {
       const status = c.req.query('status')
@@ -156,14 +159,22 @@ export function createVehicleRoutes(repo: VehicleRepository) {
       const user = requireUser(c)
       if (!STAFF_ROLES.has(user.role)) return fail(c, 'Forbidden', 403)
 
-      const existing = await repo.findById(c.req.param('id'))
-      if (!existing) {
-        return fail(c, 'Vehicle not found', 404)
-      }
-
-      const parsed = await parseBody(c, updateVehicleStatusSchema)
+      const parsed = await parseBody(c, updateVehicleStatusWithReasonSchema)
       if (!parsed.ok) return parsed.response
 
+      if (maintenanceService) {
+        const result = await maintenanceService.toggleStatus(
+          c.req.param('id'),
+          parsed.data.status,
+          parsed.data.reason,
+        )
+        if (!result.ok) return fail(c, result.error, result.status)
+        return ok(c, result.vehicle)
+      }
+
+      // Fallback: no maintenance service wired (backward compat)
+      const existing = await repo.findById(c.req.param('id'))
+      if (!existing) return fail(c, 'Vehicle not found', 404)
       const updated = await repo.update(existing.id, { status: parsed.data.status })
       return ok(c, updated)
     })

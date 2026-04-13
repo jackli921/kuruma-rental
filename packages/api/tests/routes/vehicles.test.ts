@@ -467,11 +467,11 @@ describe('Vehicle CRUD Routes', () => {
   })
 
   describe('PATCH /vehicles/:id/status (issue #51)', () => {
-    async function patchStatus(id: string, status: string) {
+    async function patchStatus(id: string, status: string, reason?: string) {
       return app.request(`/vehicles/${id}/status`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ status }),
+        body: JSON.stringify({ status, ...(reason != null ? { reason } : {}) }),
       })
     }
 
@@ -479,7 +479,7 @@ describe('Vehicle CRUD Routes', () => {
       const createRes = await createVehicle()
       const created = await createRes.json()
 
-      const res = await patchStatus(created.data.id, 'MAINTENANCE')
+      const res = await patchStatus(created.data.id, 'MAINTENANCE', 'Scheduled service')
 
       expect(res.status).toBe(200)
       const body = await res.json()
@@ -492,7 +492,7 @@ describe('Vehicle CRUD Routes', () => {
       const createRes = await createVehicle()
       const created = await createRes.json()
 
-      await patchStatus(created.data.id, 'MAINTENANCE')
+      await patchStatus(created.data.id, 'MAINTENANCE', 'Quick check')
       const res = await patchStatus(created.data.id, 'AVAILABLE')
 
       expect(res.status).toBe(200)
@@ -520,14 +520,14 @@ describe('Vehicle CRUD Routes', () => {
       // Ensure at least 1 ms delta so the InMemoryVehicleRepository
       // timestamp is guaranteed to advance on systems with 1 ms clock resolution.
       await new Promise((r) => setTimeout(r, 2))
-      const res = await patchStatus(created.data.id, 'MAINTENANCE')
+      const res = await patchStatus(created.data.id, 'MAINTENANCE', 'Timing test')
       const body = await res.json()
 
       expect(new Date(body.data.updatedAt).getTime()).toBeGreaterThan(new Date(before).getTime())
     })
 
     it('returns 404 for nonexistent vehicle', async () => {
-      const res = await patchStatus('nonexistent-id', 'MAINTENANCE')
+      const res = await patchStatus('nonexistent-id', 'MAINTENANCE', 'Does not matter')
 
       expect(res.status).toBe(404)
       const body = await res.json()
@@ -569,7 +569,7 @@ describe('Vehicle CRUD Routes', () => {
       })
       const created = await createRes.json()
 
-      await patchStatus(created.data.id, 'MAINTENANCE')
+      await patchStatus(created.data.id, 'MAINTENANCE', 'Field preservation test')
 
       const getRes = await app.request(`/vehicles/${created.data.id}`)
       const getBody = await getRes.json()

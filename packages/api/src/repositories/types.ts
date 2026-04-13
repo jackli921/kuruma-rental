@@ -1,4 +1,11 @@
-export type { Vehicle, Booking, Thread, ThreadParticipant, Message } from '../stores'
+export type {
+  Vehicle,
+  Booking,
+  Thread,
+  ThreadParticipant,
+  Message,
+  MaintenanceLog,
+} from '../stores'
 export type { DashboardStats } from '@kuruma/shared/types/stats'
 export type { FleetVehicleOverview, FleetBookingSummary } from '@kuruma/shared/types/fleet'
 export type { VehicleDetail } from '@kuruma/shared/types/vehicle-detail'
@@ -6,7 +13,14 @@ export type { VehicleDetail } from '@kuruma/shared/types/vehicle-detail'
 import type { FleetVehicleOverview } from '@kuruma/shared/types/fleet'
 import type { DashboardStats } from '@kuruma/shared/types/stats'
 import type { VehicleDetail } from '@kuruma/shared/types/vehicle-detail'
-import type { Booking, Message, Thread, ThreadParticipant, Vehicle } from '../stores'
+import type {
+  Booking,
+  MaintenanceLog,
+  Message,
+  Thread,
+  ThreadParticipant,
+  Vehicle,
+} from '../stores'
 
 export interface VehicleFilters {
   status?: string
@@ -101,4 +115,11 @@ export interface ThreadRepository {
 export interface MessageRepository {
   create(threadId: string, senderId: string, content: string): Promise<Message>
   findByThreadId(threadId: string): Promise<Message[]>
+}
+
+export interface MaintenanceLogRepository {
+  findByVehicleId(vehicleId: string): Promise<MaintenanceLog[]>
+  findActiveByVehicleId(vehicleId: string): Promise<MaintenanceLog | undefined>
+  create(data: Omit<MaintenanceLog, 'id' | 'createdAt' | 'updatedAt'>): Promise<MaintenanceLog>
+  resolve(id: string, resolvedAt: Date): Promise<MaintenanceLog | undefined>
 }
