@@ -29,6 +29,7 @@ function baseVehicleInput(
     seats: 5,
     transmission: 'AUTO',
     fuelType: 'Gasoline',
+    licensePlate: null,
     status: 'AVAILABLE',
     bufferMinutes: 60,
     minRentalHours: null,

@@ -21,6 +21,7 @@ async function createTestVehicle(
     seats: 5,
     transmission: 'AUTO',
     fuelType: null,
+    licensePlate: null,
     status: 'AVAILABLE',
     bufferMinutes: 30,
     minRentalHours: null,

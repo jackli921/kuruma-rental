@@ -72,6 +72,7 @@ export const vehicles = pgTable(
     seats: integer('seats').notNull(),
     transmission: transmissionEnum('transmission').notNull(),
     fuelType: text('fuelType'),
+    licensePlate: text('licensePlate').unique(),
     status: vehicleStatusEnum('status').notNull().default('AVAILABLE'),
     bufferMinutes: integer('bufferMinutes').notNull().default(60),
     minRentalHours: integer('minRentalHours'),

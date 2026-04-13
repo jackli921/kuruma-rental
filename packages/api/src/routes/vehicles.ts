@@ -5,6 +5,7 @@ import {
 } from '@kuruma/shared/validators/vehicle'
 import { Hono } from 'hono'
 import { STAFF_ROLES, requireUser } from '../middleware/auth'
+import { PG_ERROR, pgErrorCode } from '../pg-errors'
 import type { Vehicle, VehicleRepository } from '../repositories/types'
 import { fail, ok, parseBody, stripUndefined } from './helpers'
 
@@ -42,23 +43,31 @@ export function createVehicleRoutes(repo: VehicleRepository) {
       const parsed = await parseBody(c, createVehicleSchema)
       if (!parsed.ok) return parsed.response
 
-      const vehicle = await repo.create({
-        name: parsed.data.name,
-        description: parsed.data.description ?? null,
-        photos: parsed.data.photos,
-        seats: parsed.data.seats,
-        transmission: parsed.data.transmission,
-        fuelType: parsed.data.fuelType ?? null,
-        status: 'AVAILABLE',
-        bufferMinutes: parsed.data.bufferMinutes,
-        minRentalHours: parsed.data.minRentalHours ?? null,
-        maxRentalHours: parsed.data.maxRentalHours ?? null,
-        advanceBookingHours: parsed.data.advanceBookingHours ?? null,
-        dailyRateJpy: parsed.data.dailyRateJpy ?? null,
-        hourlyRateJpy: parsed.data.hourlyRateJpy ?? null,
-      })
+      try {
+        const vehicle = await repo.create({
+          name: parsed.data.name,
+          description: parsed.data.description ?? null,
+          photos: parsed.data.photos,
+          seats: parsed.data.seats,
+          transmission: parsed.data.transmission,
+          fuelType: parsed.data.fuelType ?? null,
+          licensePlate: parsed.data.licensePlate ?? null,
+          status: 'AVAILABLE',
+          bufferMinutes: parsed.data.bufferMinutes,
+          minRentalHours: parsed.data.minRentalHours ?? null,
+          maxRentalHours: parsed.data.maxRentalHours ?? null,
+          advanceBookingHours: parsed.data.advanceBookingHours ?? null,
+          dailyRateJpy: parsed.data.dailyRateJpy ?? null,
+          hourlyRateJpy: parsed.data.hourlyRateJpy ?? null,
+        })
 
-      return ok(c, vehicle, 201)
+        return ok(c, vehicle, 201)
+      } catch (err) {
+        if (pgErrorCode(err) === PG_ERROR.UNIQUE_VIOLATION) {
+          return fail(c, 'License plate already in use', 409)
+        }
+        throw err
+      }
     })
     .patch('/vehicles/:id', async (c) => {
       const user = requireUser(c)
@@ -82,6 +91,7 @@ export function createVehicleRoutes(repo: VehicleRepository) {
         ...d,
         description: merge('description', existing.description),
         fuelType: merge('fuelType', existing.fuelType),
+        licensePlate: merge('licensePlate', existing.licensePlate),
         minRentalHours: merge('minRentalHours', existing.minRentalHours),
         maxRentalHours: merge('maxRentalHours', existing.maxRentalHours),
         advanceBookingHours: merge('advanceBookingHours', existing.advanceBookingHours),
@@ -103,9 +113,15 @@ export function createVehicleRoutes(repo: VehicleRepository) {
         )
       }
 
-      const updated = await repo.update(existing.id, stripUndefined(changes) as Partial<Vehicle>)
-
-      return ok(c, updated)
+      try {
+        const updated = await repo.update(existing.id, stripUndefined(changes) as Partial<Vehicle>)
+        return ok(c, updated)
+      } catch (err) {
+        if (pgErrorCode(err) === PG_ERROR.UNIQUE_VIOLATION) {
+          return fail(c, 'License plate already in use', 409)
+        }
+        throw err
+      }
     })
     .patch('/vehicles/:id/status', async (c) => {
       const user = requireUser(c)

@@ -11,6 +11,7 @@ function makeVehicle(overrides: Partial<VehicleData> = {}): VehicleData {
     seats: 5,
     transmission: 'AUTO',
     fuelType: null,
+    licensePlate: null,
     status: 'AVAILABLE',
     bufferMinutes: 60,
     minRentalHours: null,
@@ -61,6 +62,43 @@ describe('filterVehicles', () => {
 
       expect(result).toHaveLength(1)
       expect(result[0]?.name).toBe('丰田普锐斯')
+    })
+
+    it('matches substring in licensePlate field', () => {
+      const vehicles = [
+        makeVehicle({ name: 'Toyota Prius', licensePlate: '品川 500 あ 1234' }),
+        makeVehicle({ name: 'Honda Civic', licensePlate: '大阪 300 い 5678' }),
+      ]
+
+      const result = filterVehicles(vehicles, { search: '品川' })
+
+      expect(result).toHaveLength(1)
+      expect(result[0]?.name).toBe('Toyota Prius')
+    })
+
+    it('matches licensePlate case-insensitively', () => {
+      const vehicles = [makeVehicle({ name: 'Test Car', licensePlate: 'ABC-1234' })]
+
+      const result = filterVehicles(vehicles, { search: 'abc' })
+
+      expect(result).toHaveLength(1)
+    })
+
+    it('skips licensePlate search when plate is null', () => {
+      const vehicles = [makeVehicle({ name: 'Toyota Prius', licensePlate: null })]
+
+      const result = filterVehicles(vehicles, { search: 'ABC' })
+
+      expect(result).toHaveLength(0)
+    })
+
+    it('matches when name does not match but plate does', () => {
+      const vehicles = [makeVehicle({ name: 'Toyota Prius', licensePlate: '品川 500 あ 1234' })]
+
+      const result = filterVehicles(vehicles, { search: '500' })
+
+      expect(result).toHaveLength(1)
+      expect(result[0]?.name).toBe('Toyota Prius')
     })
 
     it('returns all vehicles when search is empty', () => {

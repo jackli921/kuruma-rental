@@ -34,6 +34,7 @@ export function VehicleForm({ onSubmit, onCancel, defaultValues, isSubmitting }:
       seats: 5,
       transmission: 'AUTO',
       fuelType: '',
+      licensePlate: '',
       bufferMinutes: 60,
       photos: [],
       // Issue #50: sensible defaults owner-side so create mode is pre-filled
@@ -105,13 +106,22 @@ export function VehicleForm({ onSubmit, onCancel, defaultValues, isSubmitting }:
         </div>
 
         <div>
-          <Label htmlFor="bufferMinutes">{t('form.bufferMinutes')}</Label>
+          <Label htmlFor="licensePlate">{t('form.licensePlate')}</Label>
           <Input
-            id="bufferMinutes"
-            type="number"
-            {...register('bufferMinutes', { valueAsNumber: true })}
+            id="licensePlate"
+            placeholder={t('form.licensePlatePlaceholder')}
+            {...register('licensePlate')}
           />
         </div>
+      </div>
+
+      <div>
+        <Label htmlFor="bufferMinutes">{t('form.bufferMinutes')}</Label>
+        <Input
+          id="bufferMinutes"
+          type="number"
+          {...register('bufferMinutes', { valueAsNumber: true })}
+        />
       </div>
 
       {/* Pricing (#48). At least one rate is required — enforced server-side

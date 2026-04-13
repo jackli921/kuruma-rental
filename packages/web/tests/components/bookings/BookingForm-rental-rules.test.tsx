@@ -69,6 +69,7 @@ function makeVehicle(
     seats: 7,
     transmission: 'AUTO',
     fuelType: 'Hybrid',
+    licensePlate: null,
     minRentalHours: rules.minRentalHours ?? null,
     maxRentalHours: rules.maxRentalHours ?? null,
     advanceBookingHours: rules.advanceBookingHours ?? null,

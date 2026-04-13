@@ -33,6 +33,7 @@ async function seedVehicle(
     seats: 7,
     transmission: 'AUTO',
     fuelType: 'Hybrid',
+    licensePlate: null,
     status: 'AVAILABLE',
     bufferMinutes: 60,
     minRentalHours: null,
