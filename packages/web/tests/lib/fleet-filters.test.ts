@@ -17,6 +17,10 @@ function makeVehicle(overrides: Partial<VehicleData> = {}): VehicleData {
     minRentalHours: null,
     maxRentalHours: null,
     advanceBookingHours: null,
+    make: null,
+    model: null,
+    year: null,
+    color: null,
     dailyRateJpy: null,
     hourlyRateJpy: null,
     shakenExpiryDate: null,
@@ -254,6 +258,114 @@ describe('filterVehicles', () => {
 
       expect(result).toHaveLength(1)
       expect(result[0]?.name).toBe('Expired Insurance')
+    })
+  })
+
+  describe('make filter', () => {
+    it('returns only vehicles whose make is in the selected set', () => {
+      const vehicles = [
+        makeVehicle({ name: 'A', make: 'Toyota' }),
+        makeVehicle({ name: 'B', make: 'Honda' }),
+        makeVehicle({ name: 'C', make: 'Suzuki' }),
+      ]
+
+      const result = filterVehicles(vehicles, { makes: ['Toyota', 'Suzuki'] })
+
+      expect(result).toHaveLength(2)
+      expect(result.map((v) => v.name).sort()).toEqual(['A', 'C'])
+    })
+
+    it('excludes vehicles with null make when filter is active', () => {
+      const vehicles = [
+        makeVehicle({ name: 'A', make: 'Toyota' }),
+        makeVehicle({ name: 'B', make: null }),
+      ]
+
+      const result = filterVehicles(vehicles, { makes: ['Toyota'] })
+
+      expect(result).toHaveLength(1)
+      expect(result[0]?.name).toBe('A')
+    })
+  })
+
+  describe('model filter', () => {
+    it('returns only vehicles whose model is in the selected set', () => {
+      const vehicles = [
+        makeVehicle({ name: 'A', model: 'Aqua' }),
+        makeVehicle({ name: 'B', model: 'Fit' }),
+        makeVehicle({ name: 'C', model: 'Aqua' }),
+      ]
+
+      const result = filterVehicles(vehicles, { models: ['Aqua'] })
+
+      expect(result).toHaveLength(2)
+      expect(result.map((v) => v.name).sort()).toEqual(['A', 'C'])
+    })
+
+    it('excludes vehicles with null model when filter is active', () => {
+      const vehicles = [
+        makeVehicle({ name: 'A', model: 'Aqua' }),
+        makeVehicle({ name: 'B', model: null }),
+      ]
+
+      const result = filterVehicles(vehicles, { models: ['Aqua'] })
+
+      expect(result).toHaveLength(1)
+      expect(result[0]?.name).toBe('A')
+    })
+  })
+
+  describe('year filter', () => {
+    it('returns only vehicles whose year is in the selected set', () => {
+      const vehicles = [
+        makeVehicle({ name: 'A', year: 2020 }),
+        makeVehicle({ name: 'B', year: 2022 }),
+        makeVehicle({ name: 'C', year: 2024 }),
+      ]
+
+      const result = filterVehicles(vehicles, { years: [2020, 2024] })
+
+      expect(result).toHaveLength(2)
+      expect(result.map((v) => v.name).sort()).toEqual(['A', 'C'])
+    })
+
+    it('excludes vehicles with null year when filter is active', () => {
+      const vehicles = [
+        makeVehicle({ name: 'A', year: 2022 }),
+        makeVehicle({ name: 'B', year: null }),
+      ]
+
+      const result = filterVehicles(vehicles, { years: [2022] })
+
+      expect(result).toHaveLength(1)
+      expect(result[0]?.name).toBe('A')
+    })
+  })
+
+  describe('color filter', () => {
+    it('returns only vehicles whose color is in the selected set', () => {
+      const vehicles = [
+        makeVehicle({ name: 'A', color: 'White' }),
+        makeVehicle({ name: 'B', color: 'Black' }),
+        makeVehicle({ name: 'C', color: 'White' }),
+      ]
+
+      const result = filterVehicles(vehicles, { colors: ['White'] })
+
+      expect(result).toHaveLength(2)
+      expect(result.map((v) => v.name).sort()).toEqual(['A', 'C'])
+    })
+
+    it('excludes vehicles with null color when filter is active', () => {
+      const vehicles = [
+        makeVehicle({ name: 'A', color: 'White' }),
+        makeVehicle({ name: 'B', color: null }),
+      ]
+
+      const result = filterVehicles(vehicles, { colors: ['White'] })
+
+      expect(result).toHaveLength(1)
+      expect(result[0]?.name).toBe('A')
     })
   })
 

@@ -1,5 +1,8 @@
 import { z } from 'zod'
 
+const MIN_VEHICLE_YEAR = 1900
+const MAX_VEHICLE_YEAR = 2100
+
 // JPY rates are whole-yen integers. Zero is a valid value (free promo),
 // but at least one of daily or hourly must be set on a vehicle — a car
 // with no price is not rentable. Mirrored in the `vehicles_pricing_at_
@@ -38,6 +41,12 @@ const vehicleObjectSchema = z.object({
     .regex(/^\d{4}-\d{2}-\d{2}$/, 'Must be YYYY-MM-DD')
     .refine((s) => !Number.isNaN(Date.parse(s)), 'Invalid calendar date')
     .nullish(),
+  // Issue #228: vehicle detail fields for filtering. Nullish so the form
+  // can submit `null` when a field is blank (same pattern as pricing #48).
+  make: z.string().trim().nullish(),
+  model: z.string().trim().nullish(),
+  year: z.number().int().min(MIN_VEHICLE_YEAR).max(MAX_VEHICLE_YEAR).nullish(),
+  color: z.string().trim().nullish(),
 })
 
 export const createVehicleSchema = vehicleObjectSchema.superRefine((data, ctx) => {

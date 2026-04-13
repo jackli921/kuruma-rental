@@ -22,6 +22,10 @@ const defaultProps = {
   onFiltersChange: vi.fn(),
   onSortChange: vi.fn(),
   seatsBounds: { min: 2, max: 8 },
+  availableMakes: ['Honda', 'Toyota'],
+  availableModels: ['Aqua', 'Fit'],
+  availableYears: [2024, 2023, 2022],
+  availableColors: ['Black', 'White'],
 }
 
 describe('FleetFilters', () => {

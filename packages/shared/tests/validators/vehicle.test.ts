@@ -161,6 +161,53 @@ describe('createVehicleSchema', () => {
     })
   })
 
+  describe('vehicle detail fields (make, model, year, color)', () => {
+    it('accepts all four optional fields', () => {
+      const result = createVehicleSchema.safeParse({
+        ...validInput,
+        make: 'Toyota',
+        model: 'Prius',
+        year: 2022,
+        color: 'White',
+      })
+      expect(result.success).toBe(true)
+      if (result.success) {
+        expect(result.data.make).toBe('Toyota')
+        expect(result.data.model).toBe('Prius')
+        expect(result.data.year).toBe(2022)
+        expect(result.data.color).toBe('White')
+      }
+    })
+
+    it('accepts when all four are omitted', () => {
+      const result = createVehicleSchema.safeParse(validInput)
+      expect(result.success).toBe(true)
+    })
+
+    it('rejects non-integer year', () => {
+      const result = createVehicleSchema.safeParse({ ...validInput, year: 2022.5 })
+      expect(result.success).toBe(false)
+    })
+
+    it('rejects year before 1900', () => {
+      const result = createVehicleSchema.safeParse({ ...validInput, year: 1899 })
+      expect(result.success).toBe(false)
+    })
+
+    it('rejects year after 2100', () => {
+      const result = createVehicleSchema.safeParse({ ...validInput, year: 2101 })
+      expect(result.success).toBe(false)
+    })
+
+    it('trims whitespace from make', () => {
+      const result = createVehicleSchema.safeParse({ ...validInput, make: '  Toyota  ' })
+      expect(result.success).toBe(true)
+      if (result.success) {
+        expect(result.data.make).toBe('Toyota')
+      }
+    })
+  })
+
   // Issue #50: rental rules.
   describe('rental rules (minRentalHours / maxRentalHours / advanceBookingHours)', () => {
     it('accepts when all three are unset', () => {

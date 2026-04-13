@@ -191,7 +191,15 @@
         "save": "Save vehicle",
         "saving": "Saving...",
         "cancel": "Cancel",
-        "confirm": "Confirm"
+        "confirm": "Confirm",
+        "make": "Make",
+        "makePlaceholder": "e.g. Toyota",
+        "model": "Model",
+        "modelPlaceholder": "e.g. Aqua",
+        "year": "Year",
+        "yearPlaceholder": "e.g. 2022",
+        "color": "Color",
+        "colorPlaceholder": "e.g. White"
       },
       "filter": {
         "all": "All",
@@ -214,7 +222,11 @@
         "sortPriceAsc": "Price: low to high",
         "sortPriceDesc": "Price: high to low",
         "complianceHeading": "Compliance",
-        "expiringSoonLabel": "Expiring soon"
+        "expiringSoonLabel": "Expiring soon",
+        "makeHeading": "Make",
+        "modelHeading": "Model",
+        "yearHeading": "Year",
+        "colorHeading": "Color"
       },
       "actions": {
         "setMaintenance": "Set to Maintenance",

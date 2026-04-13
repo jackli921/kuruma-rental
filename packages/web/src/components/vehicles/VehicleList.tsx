@@ -79,6 +79,28 @@ export function VehicleList() {
     }
   }, [overviews])
 
+  const availableMakes = useMemo(() => {
+    if (!overviews) return []
+    return [...new Set(overviews.map((v) => v.make).filter((m): m is string => m != null))].sort()
+  }, [overviews])
+
+  const availableModels = useMemo(() => {
+    if (!overviews) return []
+    return [...new Set(overviews.map((v) => v.model).filter((m): m is string => m != null))].sort()
+  }, [overviews])
+
+  const availableYears = useMemo(() => {
+    if (!overviews) return []
+    return [...new Set(overviews.map((v) => v.year).filter((y): y is number => y != null))].sort(
+      (a, b) => b - a,
+    )
+  }, [overviews])
+
+  const availableColors = useMemo(() => {
+    if (!overviews) return []
+    return [...new Set(overviews.map((v) => v.color).filter((c): c is string => c != null))].sort()
+  }, [overviews])
+
   const displayed = useMemo(
     () => sortVehicles(filterVehicles(overviews ?? [], filters), sort),
     [overviews, filters, sort],
@@ -108,6 +130,10 @@ export function VehicleList() {
           onFiltersChange={setFilters}
           onSortChange={setSort}
           seatsBounds={seatsBounds}
+          availableMakes={availableMakes}
+          availableModels={availableModels}
+          availableYears={availableYears}
+          availableColors={availableColors}
         />
       </aside>
 

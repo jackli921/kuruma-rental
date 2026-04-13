@@ -134,6 +134,13 @@
       "when": 1776044879455,
       "tag": "0018_add-maintenance-logs",
       "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1776045901701,
+      "tag": "0019_add-vehicle-detail-fields",
+      "breakpoints": true
     }
   ]
 }
