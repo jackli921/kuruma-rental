@@ -1,3 +1,4 @@
+import { VehicleBookingCalendar } from '@/components/calendar/VehicleBookingCalendar'
 import { Badge } from '@/components/ui/badge'
 import { buttonVariants } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
@@ -154,6 +155,9 @@ export function VehicleDetail({ vehicle, t }: VehicleDetailProps) {
               <UtilizationChart data={vehicle.utilizationLast30Days} />
             </CardContent>
           </Card>
+
+          {/* Booking calendar */}
+          <VehicleBookingCalendar vehicleId={vehicle.id} />
         </div>
 
         {/* Right column: revenue + upcoming bookings */}

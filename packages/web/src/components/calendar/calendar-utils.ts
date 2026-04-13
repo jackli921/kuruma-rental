@@ -14,7 +14,7 @@ import {
   startOfWeek,
 } from 'date-fns'
 
-const PIXELS_PER_HOUR = 48
+export const PIXELS_PER_HOUR = 48
 
 export function getWeekRange(date: Date): { from: string; to: string } {
   const from = startOfWeek(date, { weekStartsOn: 1 })
