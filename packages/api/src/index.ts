@@ -26,6 +26,7 @@ import {
 } from './repositories/in-memory'
 import { InMemoryVehicleDetailRepository } from './repositories/in-memory-vehicle-detail'
 import { InMemoryPhotoStorage } from './repositories/in-memory/photo-storage'
+import { type R2BucketLike, R2PhotoStorage } from './repositories/r2-photo-storage'
 import type {
   AvailabilityRepository,
   BookingRepository,
@@ -90,7 +91,14 @@ export function createApp(overrides?: {
     statsRepo = new DrizzleStatsRepository(db)
     threadRepo = new DrizzleThreadRepository(db)
     messageRepo = new DrizzleMessageRepository(db)
-    photoStorage = new InMemoryPhotoStorage()
+    const vehiclePhotosBucket = (globalThis as Record<string, unknown>).VEHICLE_PHOTOS as
+      | R2BucketLike
+      | undefined
+    const photosPublicUrl = process.env.VEHICLE_PHOTOS_PUBLIC_URL ?? ''
+    photoStorage =
+      vehiclePhotosBucket && photosPublicUrl
+        ? new R2PhotoStorage(vehiclePhotosBucket, photosPublicUrl)
+        : new InMemoryPhotoStorage()
   } else {
     vehicleRepo = new InMemoryVehicleRepository()
     bookingRepo = new InMemoryBookingRepository()
