@@ -241,7 +241,7 @@ describe('FleetVehicleRow', () => {
     expect(screen.getByText('Insured')).toBeInTheDocument()
   })
 
-  it('shows "No shaken" and "No insurance" when dates are null', () => {
+  it('hides expiry badges when dates are null', () => {
     const overview = makeOverview({
       shakenExpiryDate: null,
       insuranceExpiryDate: null,
@@ -249,7 +249,6 @@ describe('FleetVehicleRow', () => {
 
     render(<FleetVehicleRow overview={overview} onEdit={vi.fn()} onRetire={vi.fn()} />)
 
-    expect(screen.getByText('No shaken')).toBeInTheDocument()
-    expect(screen.getByText('No insurance')).toBeInTheDocument()
+    expect(screen.queryByTestId('expiry-badge')).not.toBeInTheDocument()
   })
 })

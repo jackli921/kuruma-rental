@@ -139,16 +139,20 @@ export function FleetVehicleRow({
         <VehicleStatusBadge status={overview.status} />
       </div>
 
-      {/* Expiry badges */}
+      {/* Expiry badges — hidden when date is unknown to reduce clutter */}
       <div className="flex-shrink-0 flex gap-1">
-        <ExpiryBadge
-          status={computeExpiryStatus(overview.shakenExpiryDate, todayIso)}
-          label="shaken"
-        />
-        <ExpiryBadge
-          status={computeExpiryStatus(overview.insuranceExpiryDate, todayIso)}
-          label="insurance"
-        />
+        {overview.shakenExpiryDate != null && (
+          <ExpiryBadge
+            status={computeExpiryStatus(overview.shakenExpiryDate, todayIso)}
+            label="shaken"
+          />
+        )}
+        {overview.insuranceExpiryDate != null && (
+          <ExpiryBadge
+            status={computeExpiryStatus(overview.insuranceExpiryDate, todayIso)}
+            label="insurance"
+          />
+        )}
       </div>
 
       {/* Booking indicator */}

@@ -1,5 +1,5 @@
 {
-  "id": "07492935-aaab-4a57-afb6-d2a7c4e18584",
+  "id": "23fde620-7e5c-4d28-9e05-48b730dab2cc",
   "prevId": "0e0d25c8-8bce-4dce-87d6-8ff061ca3616",
   "version": "7",
   "dialect": "postgresql",
@@ -592,12 +592,6 @@
           "primaryKey": false,
           "notNull": false
         },
-        "licensePlate": {
-          "name": "licensePlate",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
         "status": {
           "name": "status",
           "type": "vehicle_status",
@@ -643,6 +637,18 @@
           "primaryKey": false,
           "notNull": false
         },
+        "shakenExpiryDate": {
+          "name": "shakenExpiryDate",
+          "type": "date",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "insuranceExpiryDate": {
+          "name": "insuranceExpiryDate",
+          "type": "date",
+          "primaryKey": false,
+          "notNull": false
+        },
         "createdAt": {
           "name": "createdAt",
           "type": "timestamp with time zone",
@@ -661,15 +667,7 @@
       "indexes": {},
       "foreignKeys": {},
       "compositePrimaryKeys": {},
-      "uniqueConstraints": {
-        "vehicles_licensePlate_unique": {
-          "name": "vehicles_licensePlate_unique",
-          "nullsNotDistinct": false,
-          "columns": [
-            "licensePlate"
-          ]
-        }
-      },
+      "uniqueConstraints": {},
       "policies": {},
       "checkConstraints": {
         "vehicles_pricing_at_least_one": {

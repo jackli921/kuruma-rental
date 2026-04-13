@@ -31,10 +31,12 @@ const vehicleObjectSchema = z.object({
   shakenExpiryDate: z
     .string()
     .regex(/^\d{4}-\d{2}-\d{2}$/, 'Must be YYYY-MM-DD')
+    .refine((s) => !Number.isNaN(Date.parse(s)), 'Invalid calendar date')
     .nullish(),
   insuranceExpiryDate: z
     .string()
     .regex(/^\d{4}-\d{2}-\d{2}$/, 'Must be YYYY-MM-DD')
+    .refine((s) => !Number.isNaN(Date.parse(s)), 'Invalid calendar date')
     .nullish(),
 })
 

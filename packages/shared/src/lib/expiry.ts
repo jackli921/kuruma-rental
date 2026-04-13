@@ -8,7 +8,7 @@ export function computeExpiryStatus(expiryDate: string | null, todayIso: string)
   if (expiryDate < todayIso) return 'EXPIRED'
 
   const threshold = new Date(todayIso)
-  threshold.setDate(threshold.getDate() + EXPIRY_SOON_DAYS)
+  threshold.setUTCDate(threshold.getUTCDate() + EXPIRY_SOON_DAYS)
   const thresholdIso = threshold.toISOString().slice(0, 10)
 
   if (expiryDate <= thresholdIso) return 'EXPIRING_SOON'
