@@ -16,6 +16,8 @@ export interface Vehicle {
   // `vehicles_pricing_at_least_one` and by createVehicleSchema). See #48.
   dailyRateJpy: number | null
   hourlyRateJpy: number | null
+  shakenExpiryDate: string | null
+  insuranceExpiryDate: string | null
   createdAt: Date
   updatedAt: Date
 }

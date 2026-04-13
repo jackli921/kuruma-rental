@@ -41,6 +41,8 @@ async function seedVehicle(
     advanceBookingHours: null,
     dailyRateJpy: 18000,
     hourlyRateJpy: 2500,
+    shakenExpiryDate: null,
+    insuranceExpiryDate: null,
     ...overrides,
   })
 }

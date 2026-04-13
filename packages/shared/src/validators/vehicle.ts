@@ -28,6 +28,14 @@ const vehicleObjectSchema = z.object({
   advanceBookingHours: z.number().int().min(0, 'Advance booking cannot be negative').nullish(),
   dailyRateJpy: jpyRate.nullish(),
   hourlyRateJpy: jpyRate.nullish(),
+  shakenExpiryDate: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/, 'Must be YYYY-MM-DD')
+    .nullish(),
+  insuranceExpiryDate: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/, 'Must be YYYY-MM-DD')
+    .nullish(),
 })
 
 export const createVehicleSchema = vehicleObjectSchema.superRefine((data, ctx) => {

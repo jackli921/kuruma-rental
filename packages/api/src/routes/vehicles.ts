@@ -61,6 +61,8 @@ export function createVehicleRoutes(repo: VehicleRepository) {
           advanceBookingHours: parsed.data.advanceBookingHours ?? null,
           dailyRateJpy: parsed.data.dailyRateJpy ?? null,
           hourlyRateJpy: parsed.data.hourlyRateJpy ?? null,
+          shakenExpiryDate: parsed.data.shakenExpiryDate ?? null,
+          insuranceExpiryDate: parsed.data.insuranceExpiryDate ?? null,
         })
 
         return ok(c, vehicle, 201)
@@ -122,6 +124,8 @@ export function createVehicleRoutes(repo: VehicleRepository) {
         advanceBookingHours: merge('advanceBookingHours', existing.advanceBookingHours),
         dailyRateJpy: merge('dailyRateJpy', existing.dailyRateJpy),
         hourlyRateJpy: merge('hourlyRateJpy', existing.hourlyRateJpy),
+        shakenExpiryDate: merge('shakenExpiryDate', existing.shakenExpiryDate),
+        insuranceExpiryDate: merge('insuranceExpiryDate', existing.insuranceExpiryDate),
       }
 
       if (changes.dailyRateJpy == null && changes.hourlyRateJpy == null) {

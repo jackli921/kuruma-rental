@@ -57,6 +57,8 @@ function makeOverview(overrides: Partial<FleetVehicleOverviewData> = {}): FleetV
     advanceBookingHours: null,
     dailyRateJpy: 8000,
     hourlyRateJpy: null,
+    shakenExpiryDate: null,
+    insuranceExpiryDate: null,
     createdAt: '2026-01-01T00:00:00Z',
     updatedAt: '2026-01-01T00:00:00Z',
     utilization: 72,

@@ -26,6 +26,8 @@ export const vehicleColumns = {
   advanceBookingHours: vehicles.advanceBookingHours,
   dailyRateJpy: vehicles.dailyRateJpy,
   hourlyRateJpy: vehicles.hourlyRateJpy,
+  shakenExpiryDate: vehicles.shakenExpiryDate,
+  insuranceExpiryDate: vehicles.insuranceExpiryDate,
   createdAt: vehicles.createdAt,
   updatedAt: vehicles.updatedAt,
 }
@@ -102,6 +104,8 @@ export function toVehicle(r: AnyRow): Vehicle {
     advanceBookingHours: r.advanceBookingHours,
     dailyRateJpy: r.dailyRateJpy,
     hourlyRateJpy: r.hourlyRateJpy,
+    shakenExpiryDate: r.shakenExpiryDate,
+    insuranceExpiryDate: r.insuranceExpiryDate,
     createdAt: r.createdAt,
     updatedAt: r.updatedAt,
   }

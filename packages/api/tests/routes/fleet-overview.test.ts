@@ -59,6 +59,8 @@ describe('GET /vehicles/fleet-overview', () => {
       advanceBookingHours: null,
       dailyRateJpy: 8000,
       hourlyRateJpy: null,
+      shakenExpiryDate: null,
+      insuranceExpiryDate: null,
     })
 
     const res = await app.request('/vehicles/fleet-overview')
@@ -102,6 +104,8 @@ describe('GET /vehicles/fleet-overview', () => {
       advanceBookingHours: null,
       dailyRateJpy: 8000,
       hourlyRateJpy: null,
+      shakenExpiryDate: null,
+      insuranceExpiryDate: null,
     })
     await bookingRepo.create({
       renterId: 'user_1',

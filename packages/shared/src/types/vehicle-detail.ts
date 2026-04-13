@@ -32,6 +32,8 @@ export interface VehicleDetail {
   advanceBookingHours: number | null
   dailyRateJpy: number | null
   hourlyRateJpy: number | null
+  shakenExpiryDate: string | null
+  insuranceExpiryDate: string | null
   createdAt: Date
   updatedAt: Date
 

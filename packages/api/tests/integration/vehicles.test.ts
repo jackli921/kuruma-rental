@@ -25,6 +25,8 @@ describe('DrizzleVehicleRepository', () => {
       maxRentalHours: 72,
       advanceBookingHours: 24,
       dailyRateJpy: 8000,
+      shakenExpiryDate: null,
+      insuranceExpiryDate: null,
     }
 
     const vehicle = await repo.create(input)
@@ -60,6 +62,8 @@ describe('DrizzleVehicleRepository', () => {
       maxRentalHours: null,
       advanceBookingHours: null,
       dailyRateJpy: DEFAULT_DAILY_RATE_JPY,
+      shakenExpiryDate: null,
+      insuranceExpiryDate: null,
     })
     createdIds.push(created.id)
 
@@ -95,6 +99,8 @@ describe('DrizzleVehicleRepository', () => {
       maxRentalHours: null,
       advanceBookingHours: null,
       dailyRateJpy: DEFAULT_DAILY_RATE_JPY,
+      shakenExpiryDate: null,
+      insuranceExpiryDate: null,
     })
     createdIds.push(available.id)
 
@@ -111,6 +117,8 @@ describe('DrizzleVehicleRepository', () => {
       maxRentalHours: null,
       advanceBookingHours: null,
       dailyRateJpy: DEFAULT_DAILY_RATE_JPY,
+      shakenExpiryDate: null,
+      insuranceExpiryDate: null,
     })
     createdIds.push(maintenance.id)
 
@@ -141,6 +149,8 @@ describe('DrizzleVehicleRepository', () => {
       maxRentalHours: null,
       advanceBookingHours: null,
       dailyRateJpy: DEFAULT_DAILY_RATE_JPY,
+      shakenExpiryDate: null,
+      insuranceExpiryDate: null,
     })
     createdIds.push(created.id)
 
@@ -183,6 +193,8 @@ describe('DrizzleVehicleRepository', () => {
       maxRentalHours: null,
       advanceBookingHours: null,
       dailyRateJpy: DEFAULT_DAILY_RATE_JPY,
+      shakenExpiryDate: null,
+      insuranceExpiryDate: null,
     })
     createdIds.push(created.id)
 

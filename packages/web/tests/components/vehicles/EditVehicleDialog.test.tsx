@@ -73,6 +73,8 @@ function makeVehicle(overrides: Partial<VehicleData> = {}): VehicleData {
     advanceBookingHours: null,
     dailyRateJpy: 6500,
     hourlyRateJpy: 900,
+    shakenExpiryDate: null,
+    insuranceExpiryDate: null,
     createdAt: '2026-01-01T00:00:00Z',
     updatedAt: '2026-01-01T00:00:00Z',
     ...overrides,
