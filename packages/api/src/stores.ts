@@ -12,6 +12,10 @@ export interface Vehicle {
   minRentalHours: number | null
   maxRentalHours: number | null
   advanceBookingHours: number | null
+  make: string | null
+  model: string | null
+  year: number | null
+  color: string | null
   // JPY rates. At least one is non-null (enforced by DB CHECK constraint
   // `vehicles_pricing_at_least_one` and by createVehicleSchema). See #48.
   dailyRateJpy: number | null

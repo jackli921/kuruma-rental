@@ -38,6 +38,11 @@ const vehicleObjectSchema = z.object({
     .regex(/^\d{4}-\d{2}-\d{2}$/, 'Must be YYYY-MM-DD')
     .refine((s) => !Number.isNaN(Date.parse(s)), 'Invalid calendar date')
     .nullish(),
+  // Issue #228: vehicle detail fields for filtering.
+  make: z.string().trim().optional(),
+  model: z.string().trim().optional(),
+  year: z.number().int().min(1900).max(2100).optional(),
+  color: z.string().trim().optional(),
 })
 
 export const createVehicleSchema = vehicleObjectSchema.superRefine((data, ctx) => {
