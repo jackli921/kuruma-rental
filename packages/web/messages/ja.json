@@ -249,7 +249,11 @@
         "maxDuration": "最長レンタル: {duration}",
         "advanceBooking": "最低{duration}前に予約",
         "photos": "写真",
-        "notFound": "車両が見つかりません"
+        "notFound": "車両が見つかりません",
+        "maintenanceHistory": "メンテナンス履歴",
+        "ongoing": "進行中",
+        "resolved": "解決済み",
+        "noMaintenanceHistory": "メンテナンス記録なし"
       },
       "fleet": {
         "rowView": "リスト表示",
@@ -276,6 +280,14 @@
         "confirmTitle": "一括ステータス変更の確認",
         "confirmMessage": "{count}台の車両を{status}に変更しますか？",
         "success": "{count}台の車両を更新しました"
+      },
+      "maintenance": {
+        "dialogTitle": "メンテナンスに設定",
+        "dialogDescription": "この車両をメンテナンスにする理由を入力してください。",
+        "reasonLabel": "理由",
+        "reasonPlaceholder": "例: オイル交換、ブレーキ点検...",
+        "submit": "確認",
+        "cancel": "キャンセル"
       }
     },
     "customers": {
@@ -373,7 +385,7 @@
       "heading": "人気の車両",
       "subheading": "旅行者に選ばれている車",
       "viewAll": "すべて見る",
-      "currency": "\u00a5{price}",
+      "currency": "¥{price}",
       "perDay": "日"
     },
     "features": {

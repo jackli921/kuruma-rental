@@ -249,7 +249,11 @@
         "maxDuration": "最长租期: {duration}",
         "advanceBooking": "至少提前{duration}预订",
         "photos": "照片",
-        "notFound": "未找到车辆"
+        "notFound": "未找到车辆",
+        "maintenanceHistory": "维修历史",
+        "ongoing": "进行中",
+        "resolved": "已解决",
+        "noMaintenanceHistory": "还没有维修记录"
       },
       "fleet": {
         "rowView": "列表视图",
@@ -276,6 +280,14 @@
         "confirmTitle": "确认批量状态更改",
         "confirmMessage": "将{count}辆车更改为{status}？",
         "success": "已成功更新{count}辆车"
+      },
+      "maintenance": {
+        "dialogTitle": "设置为维修",
+        "dialogDescription": "请提供将此车辆设为维修的原因。",
+        "reasonLabel": "原因",
+        "reasonPlaceholder": "例如: 换油、制动检查...",
+        "submit": "确认",
+        "cancel": "取消"
       }
     },
     "customers": {
@@ -373,7 +385,7 @@
       "heading": "热门车辆",
       "subheading": "旅行者的热门之选",
       "viewAll": "查看全部",
-      "currency": "\u00a5{price}",
+      "currency": "¥{price}",
       "perDay": "天"
     },
     "features": {

@@ -39,6 +39,7 @@ export interface FleetVehicleOverviewData extends VehicleData {
   bookingCountLast30Days: number
   currentBooking: FleetBookingSummaryData | null
   nextBooking: FleetBookingSummaryData | null
+  activeMaintenanceReason: string | null
 }
 
 async function unwrap<T>(res: Response): Promise<T> {
@@ -105,12 +106,13 @@ export async function updateVehicle(
 // Issue #51: one-shot status mutation for the fleet list inline toggle.
 // Kept separate from updateVehicle() so callers don't accidentally ship a
 // partial vehicle payload when they only mean to flip a status.
+// Issue #225: extended to accept optional reason when setting MAINTENANCE.
 export async function updateVehicleStatus(
   id: string,
   status: VehicleStatus,
+  reason?: string,
   token?: string,
 ): Promise<VehicleData> {
-  // Raw fetch for PATCH — hc client used only for typed URL construction.
   const client = createApiClient()
   const url = client.vehicles[':id'].status.$url({ param: { id } })
   const headers: Record<string, string> = { 'Content-Type': 'application/json' }
@@ -120,7 +122,7 @@ export async function updateVehicleStatus(
   const res = await fetch(url, {
     method: 'PATCH',
     headers,
-    body: JSON.stringify({ status }),
+    body: JSON.stringify({ status, ...(reason != null ? { reason } : {}) }),
   })
   return unwrap<VehicleData>(res)
 }
@@ -167,7 +169,20 @@ export interface DailyUtilizationData {
   bookedHours: number
 }
 
+// Issue #225: maintenance log entry for vehicle detail page.
+export interface MaintenanceLogData {
+  id: string
+  vehicleId: string
+  reason: string
+  notes: string | null
+  costJpy: number | null
+  startedAt: string
+  resolvedAt: string | null
+  createdAt: string
+}
+
 export interface VehicleDetailData extends VehicleData {
+  maintenanceLogs: MaintenanceLogData[]
   upcomingBookings: VehicleDetailBookingData[]
   revenueLast7d: number
   revenueLast30d: number

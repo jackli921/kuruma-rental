@@ -7,12 +7,12 @@ import { VehicleStatusToggle } from '@/components/vehicles/VehicleStatusToggle'
 import { formatVehicleRate } from '@/lib/format'
 import type { VehicleData } from '@/lib/vehicle-api'
 import { computeExpiryStatus } from '@kuruma/shared/lib/expiry'
-import { Car, Fuel, Pencil, RectangleHorizontal, Settings2, Trash2, Users } from 'lucide-react'
+import { Car, Fuel, Pencil, RectangleHorizontal, Settings2, Trash2, Users, Wrench } from 'lucide-react'
 import { useTranslations } from 'next-intl'
 import Image from 'next/image'
 
 interface FleetVehicleCardProps {
-  vehicle: VehicleData
+  vehicle: VehicleData & { activeMaintenanceReason?: string | null }
   selected: boolean
   onToggleSelect: (id: string) => void
   onEdit: (vehicle: VehicleData) => void
@@ -66,6 +66,12 @@ export function FleetVehicleCard({
           <CardTitle>{vehicle.name}</CardTitle>
           <VehicleStatusToggle vehicle={vehicle} />
         </div>
+        {vehicle.status === 'MAINTENANCE' && vehicle.activeMaintenanceReason && (
+          <p className="mt-1.5 flex items-center gap-1 text-xs text-amber-700">
+            <Wrench className="size-3 shrink-0" />
+            {vehicle.activeMaintenanceReason}
+          </p>
+        )}
       </CardHeader>
       <CardContent>
         <div className="flex items-center gap-4 text-sm text-muted-foreground">
