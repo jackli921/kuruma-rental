@@ -64,8 +64,8 @@ export function FleetVehicleCard({ vehicle, onEdit, onRetire }: FleetVehicleCard
             </span>
           )}
           {vehicle.licensePlate && (
-            <span className="flex items-center gap-1.5">
-              <RectangleHorizontal className="size-4" />
+            <span className="flex items-center gap-1.5" aria-label={t('form.licensePlate')}>
+              <RectangleHorizontal className="size-4" aria-hidden="true" />
               {vehicle.licensePlate}
             </span>
           )}
