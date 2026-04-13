@@ -25,11 +25,13 @@ import {
   InMemoryVehicleRepository,
 } from './repositories/in-memory'
 import { InMemoryVehicleDetailRepository } from './repositories/in-memory-vehicle-detail'
+import { InMemoryPhotoStorage } from './repositories/in-memory/photo-storage'
 import type {
   AvailabilityRepository,
   BookingRepository,
   FleetOverviewRepository,
   MessageRepository,
+  PhotoStorage,
   StatsRepository,
   ThreadRepository,
   VehicleDetailRepository,
@@ -42,6 +44,7 @@ import health from './routes/health'
 import { createMessageRoutes } from './routes/messages'
 import { createStatsRoutes } from './routes/stats'
 import { createVehicleDetailRoutes } from './routes/vehicle-detail'
+import { createVehiclePhotoRoutes } from './routes/vehicle-photos'
 import { createVehicleRoutes } from './routes/vehicles'
 import { BookingService } from './services/booking'
 
@@ -54,6 +57,7 @@ export function createApp(overrides?: {
   statsRepo?: StatsRepository
   threadRepo?: ThreadRepository
   messageRepo?: MessageRepository
+  photoStorage?: PhotoStorage
 }) {
   let vehicleRepo: VehicleRepository
   let bookingRepo: BookingRepository
@@ -63,6 +67,7 @@ export function createApp(overrides?: {
   let statsRepo: StatsRepository
   let threadRepo: ThreadRepository
   let messageRepo: MessageRepository
+  let photoStorage: PhotoStorage
 
   if (overrides) {
     ;({ vehicleRepo, bookingRepo, availabilityRepo } = overrides)
@@ -74,6 +79,7 @@ export function createApp(overrides?: {
     threadRepo = overrides.threadRepo ?? new InMemoryThreadRepository()
     messageRepo =
       overrides.messageRepo ?? new InMemoryMessageRepository(threadRepo as InMemoryThreadRepository)
+    photoStorage = overrides.photoStorage ?? new InMemoryPhotoStorage()
   } else if (process.env.DATABASE_URL) {
     const db = getDb()
     vehicleRepo = new DrizzleVehicleRepository(db)
@@ -84,6 +90,7 @@ export function createApp(overrides?: {
     statsRepo = new DrizzleStatsRepository(db)
     threadRepo = new DrizzleThreadRepository(db)
     messageRepo = new DrizzleMessageRepository(db)
+    photoStorage = new InMemoryPhotoStorage()
   } else {
     vehicleRepo = new InMemoryVehicleRepository()
     bookingRepo = new InMemoryBookingRepository()
@@ -96,6 +103,7 @@ export function createApp(overrides?: {
     statsRepo = new InMemoryStatsRepository(vehicleRepo, bookingRepo)
     threadRepo = new InMemoryThreadRepository()
     messageRepo = new InMemoryMessageRepository(threadRepo as InMemoryThreadRepository)
+    photoStorage = new InMemoryPhotoStorage()
   }
 
   const app = new Hono()
@@ -153,6 +161,7 @@ export function createApp(overrides?: {
     .route('/', createFleetOverviewRoutes(fleetOverviewRepo))
     .route('/', createVehicleDetailRoutes(vehicleDetailRepo))
     .route('/', createVehicleRoutes(vehicleRepo))
+    .route('/', createVehiclePhotoRoutes(vehicleRepo, photoStorage))
     .route('/', createBookingRoutes(bookingService))
     .route('/', createAvailabilityRoutes(availabilityRepo))
     .route('/', createStatsRoutes(statsRepo))
