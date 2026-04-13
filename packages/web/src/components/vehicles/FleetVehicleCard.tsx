@@ -2,9 +2,11 @@
 
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { ExpiryBadge } from '@/components/vehicles/ExpiryBadge'
 import { VehicleStatusToggle } from '@/components/vehicles/VehicleStatusToggle'
 import { formatVehicleRate } from '@/lib/format'
 import type { VehicleData } from '@/lib/vehicle-api'
+import { computeExpiryStatus } from '@kuruma/shared/lib/expiry'
 import { Car, Fuel, Pencil, RectangleHorizontal, Settings2, Trash2, Users } from 'lucide-react'
 import { useTranslations } from 'next-intl'
 import Image from 'next/image'
@@ -25,6 +27,7 @@ export function FleetVehicleCard({
   onRetire,
 }: FleetVehicleCardProps) {
   const t = useTranslations('business.vehicles')
+  const todayIso = new Date().toISOString().slice(0, 10)
   const photo = vehicle.photos?.[0]
   const price = formatVehicleRate(vehicle.dailyRateJpy, vehicle.hourlyRateJpy, {
     perDay: t('form.perDaySuffix'),
@@ -88,6 +91,16 @@ export function FleetVehicleCard({
           )}
         </div>
         {price && <p className="mt-3 text-sm font-medium text-foreground">{price}</p>}
+        <div className="mt-2 flex gap-1">
+          <ExpiryBadge
+            status={computeExpiryStatus(vehicle.shakenExpiryDate, todayIso)}
+            label="shaken"
+          />
+          <ExpiryBadge
+            status={computeExpiryStatus(vehicle.insuranceExpiryDate, todayIso)}
+            label="insurance"
+          />
+        </div>
         <div className="flex gap-2 mt-4">
           <Button variant="outline" size="sm" onClick={() => onEdit(vehicle)}>
             <Pencil className="size-3.5 mr-1.5" />

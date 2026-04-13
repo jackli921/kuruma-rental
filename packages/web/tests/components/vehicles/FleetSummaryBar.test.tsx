@@ -14,6 +14,7 @@ vi.mock('next-intl', () => ({
       'fleet.summary.onRental': '{n} on rental',
       'fleet.summary.available': '{n} available',
       'fleet.summary.maintenance': '{n} maintenance',
+      'fleet.summary.expiring': '{n} expiring',
     }
     const template = messages[key] ?? key
     if (!values) return template
@@ -127,5 +128,28 @@ describe('FleetSummaryBar', () => {
     render(<FleetSummaryBar overviews={overviews} />)
 
     expect(screen.getByText('2 maintenance')).toBeInTheDocument()
+  })
+
+  it('shows expiring count when vehicles have expired or expiring dates', () => {
+    const overviews = [
+      makeOverview({ shakenExpiryDate: '2020-01-01', insuranceExpiryDate: '2028-01-01' }),
+      makeOverview({ shakenExpiryDate: '2028-01-01', insuranceExpiryDate: '2020-01-01' }),
+      makeOverview({ shakenExpiryDate: '2028-01-01', insuranceExpiryDate: '2028-01-01' }),
+    ]
+
+    render(<FleetSummaryBar overviews={overviews} />)
+
+    expect(screen.getByText('2 expiring')).toBeInTheDocument()
+  })
+
+  it('hides expiring count when all vehicles are compliant', () => {
+    const overviews = [
+      makeOverview({ shakenExpiryDate: '2028-01-01', insuranceExpiryDate: '2028-01-01' }),
+      makeOverview({ shakenExpiryDate: '2028-01-01', insuranceExpiryDate: '2028-01-01' }),
+    ]
+
+    render(<FleetSummaryBar overviews={overviews} />)
+
+    expect(screen.queryByText(/expiring/)).not.toBeInTheDocument()
   })
 })

@@ -28,6 +28,10 @@ vi.mock('next-intl', () => ({
       'form.maxRentalHoursPlaceholder': '72',
       'form.advanceBookingHours': 'Advance booking (hours)',
       'form.advanceBookingHoursPlaceholder': '24',
+      'form.complianceHeading': 'Compliance',
+      'form.complianceHint': 'Track vehicle inspection (shaken) and insurance expiry dates.',
+      'form.shakenExpiryDate': 'Shaken expiry date',
+      'form.insuranceExpiryDate': 'Insurance expiry date',
       'form.save': 'Save vehicle',
       'form.saving': 'Saving...',
       'form.cancel': 'Cancel',
@@ -231,6 +235,30 @@ describe('VehicleForm', () => {
       })
     })
 
+    it('submits null when date fields are empty', async () => {
+      const user = userEvent.setup()
+      const onSubmit = vi.fn().mockResolvedValue(undefined)
+      render(
+        <VehicleForm
+          onSubmit={onSubmit}
+          defaultValues={{
+            name: 'Honda N-BOX',
+            seats: 4,
+            transmission: 'AUTO',
+            dailyRateJpy: 6500,
+          }}
+        />,
+      )
+
+      await user.click(screen.getByRole('button', { name: 'Save vehicle' }))
+
+      await waitFor(() => {
+        expect(onSubmit).toHaveBeenCalledTimes(1)
+      })
+      expect(onSubmit.mock.calls[0][0].shakenExpiryDate).toBeNull()
+      expect(onSubmit.mock.calls[0][0].insuranceExpiryDate).toBeNull()
+    })
+
     it('submits null when advance booking is left blank', async () => {
       const user = userEvent.setup()
       const onSubmit = vi.fn().mockResolvedValue(undefined)
@@ -253,6 +281,20 @@ describe('VehicleForm', () => {
         expect(onSubmit).toHaveBeenCalledTimes(1)
       })
       expect(onSubmit.mock.calls[0][0].advanceBookingHours).toBeNull()
+    })
+  })
+
+  // Issue #226: compliance expiry date fields
+  describe('compliance (shaken & insurance expiry)', () => {
+    it('renders shaken and insurance date inputs with a section heading', () => {
+      render(<VehicleForm onSubmit={vi.fn()} />)
+
+      expect(screen.getByText('Compliance')).toBeInTheDocument()
+      expect(
+        screen.getByText('Track vehicle inspection (shaken) and insurance expiry dates.'),
+      ).toBeInTheDocument()
+      expect(screen.getByLabelText('Shaken expiry date')).toBeInTheDocument()
+      expect(screen.getByLabelText('Insurance expiry date')).toBeInTheDocument()
     })
   })
 })

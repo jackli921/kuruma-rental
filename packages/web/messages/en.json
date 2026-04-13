@@ -128,6 +128,20 @@
       "retireConfirm": "Retire {name}?",
       "retireConfirmMessage": "This will hide the vehicle from renters. You can restore it later.",
       "noPhoto": "No photo",
+      "expiry": {
+        "shaken": {
+          "OK": "Shaken OK",
+          "EXPIRING_SOON": "Shaken expiring",
+          "EXPIRED": "Shaken expired",
+          "UNKNOWN": "No shaken"
+        },
+        "insurance": {
+          "OK": "Insured",
+          "EXPIRING_SOON": "Insurance expiring",
+          "EXPIRED": "Insurance expired",
+          "UNKNOWN": "No insurance"
+        }
+      },
       "status": {
         "AVAILABLE": "Available",
         "MAINTENANCE": "Maintenance",
@@ -170,6 +184,10 @@
         "maxRentalHoursPlaceholder": "72",
         "advanceBookingHours": "Advance booking (hours)",
         "advanceBookingHoursPlaceholder": "24",
+        "complianceHeading": "Compliance",
+        "complianceHint": "Track vehicle inspection (shaken) and insurance expiry dates.",
+        "shakenExpiryDate": "Shaken expiry date",
+        "insuranceExpiryDate": "Insurance expiry date",
         "save": "Save vehicle",
         "saving": "Saving...",
         "cancel": "Cancel",
@@ -194,7 +212,9 @@
         "sortSeatsAsc": "Seats: fewest first",
         "sortSeatsDesc": "Seats: most first",
         "sortPriceAsc": "Price: low to high",
-        "sortPriceDesc": "Price: high to low"
+        "sortPriceDesc": "Price: high to low",
+        "complianceHeading": "Compliance",
+        "expiringSoonLabel": "Expiring soon"
       },
       "actions": {
         "setMaintenance": "Set to Maintenance",
@@ -243,7 +263,8 @@
           "total": "{n} cars",
           "onRental": "{n} on rental",
           "available": "{n} available",
-          "maintenance": "{n} maintenance"
+          "maintenance": "{n} maintenance",
+          "expiring": "{n} expiring"
         }
       },
       "bulk": {

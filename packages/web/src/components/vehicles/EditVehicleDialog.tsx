@@ -80,6 +80,8 @@ export function EditVehicleDialog({ vehicle, onOpenChange }: EditVehicleDialogPr
               minRentalHours: vehicle.minRentalHours,
               maxRentalHours: vehicle.maxRentalHours,
               advanceBookingHours: vehicle.advanceBookingHours,
+              shakenExpiryDate: vehicle.shakenExpiryDate,
+              insuranceExpiryDate: vehicle.insuranceExpiryDate,
             }}
           />
         )}

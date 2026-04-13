@@ -7,9 +7,11 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
+import { ExpiryBadge } from '@/components/vehicles/ExpiryBadge'
 import { VehicleStatusBadge } from '@/components/vehicles/VehicleStatusBadge'
 import { formatVehicleRate } from '@/lib/format'
 import type { FleetBookingSummaryData, FleetVehicleOverviewData } from '@/lib/vehicle-api'
+import { computeExpiryStatus } from '@kuruma/shared/lib/expiry'
 import { Car, MoreHorizontal } from 'lucide-react'
 import { useTranslations } from 'next-intl'
 import Image from 'next/image'
@@ -75,6 +77,7 @@ export function FleetVehicleRow({
   onRetire,
 }: FleetVehicleRowProps) {
   const t = useTranslations('business.vehicles')
+  const todayIso = new Date().toISOString().slice(0, 10)
   const photo = overview.photos?.[0]
   const price = formatVehicleRate(overview.dailyRateJpy, overview.hourlyRateJpy, {
     perDay: t('form.perDaySuffix'),
@@ -134,6 +137,18 @@ export function FleetVehicleRow({
       {/* Status */}
       <div className="flex-shrink-0">
         <VehicleStatusBadge status={overview.status} />
+      </div>
+
+      {/* Expiry badges */}
+      <div className="flex-shrink-0 flex gap-1">
+        <ExpiryBadge
+          status={computeExpiryStatus(overview.shakenExpiryDate, todayIso)}
+          label="shaken"
+        />
+        <ExpiryBadge
+          status={computeExpiryStatus(overview.insuranceExpiryDate, todayIso)}
+          label="insurance"
+        />
       </div>
 
       {/* Booking indicator */}
