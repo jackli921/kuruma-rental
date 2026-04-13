@@ -3,6 +3,7 @@
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
 import { AddVehicleDialog } from '@/components/vehicles/AddVehicleDialog'
+import { BulkActionBar } from '@/components/vehicles/BulkActionBar'
 import { EditVehicleDialog } from '@/components/vehicles/EditVehicleDialog'
 import { FleetFilters } from '@/components/vehicles/FleetFilters'
 import { FleetSummaryBar } from '@/components/vehicles/FleetSummaryBar'
@@ -21,7 +22,7 @@ import type { VehicleData } from '@/lib/vehicle-api'
 import { useQuery } from '@tanstack/react-query'
 import { AlertCircle, Car, Plus } from 'lucide-react'
 import { useTranslations } from 'next-intl'
-import { useMemo, useState } from 'react'
+import { useCallback, useMemo, useState } from 'react'
 
 const DEFAULT_SEATS_BOUNDS = { min: 2, max: 10 } as const
 
@@ -39,6 +40,18 @@ export function VehicleList() {
   const [editingVehicle, setEditingVehicle] = useState<VehicleData | null>(null)
   const [retiringVehicle, setRetiringVehicle] = useState<VehicleData | null>(null)
   const [showAddDialog, setShowAddDialog] = useState(false)
+  const [selectedIds, setSelectedIds] = useState<ReadonlySet<string>>(new Set())
+
+  const toggleSelect = useCallback((id: string) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }, [])
+
+  const clearSelection = useCallback(() => setSelectedIds(new Set()), [])
 
   const {
     data: overviews,
@@ -70,6 +83,21 @@ export function VehicleList() {
     () => sortVehicles(filterVehicles(overviews ?? [], filters), sort),
     [overviews, filters, sort],
   )
+
+  // Only non-RETIRED vehicles in the current filtered view are selectable
+  const selectableIds = useMemo(
+    () => displayed.filter((v) => v.status !== 'RETIRED').map((v) => v.id),
+    [displayed],
+  )
+
+  const allSelected = selectableIds.length > 0 && selectableIds.every((id) => selectedIds.has(id))
+
+  const toggleSelectAll = useCallback(() => {
+    setSelectedIds((prev) => {
+      if (selectableIds.every((id) => prev.has(id))) return new Set()
+      return new Set(selectableIds)
+    })
+  }, [selectableIds])
 
   return (
     <div className="flex flex-col lg:flex-row gap-6">
@@ -115,12 +143,29 @@ export function VehicleList() {
           </div>
         )}
 
+        {!isLoading && !isError && displayed.length > 0 && (
+          <div className="flex items-center gap-2 px-1">
+            <input
+              type="checkbox"
+              checked={allSelected}
+              onChange={toggleSelectAll}
+              className="size-4 rounded border-border accent-primary"
+              aria-label={allSelected ? t('bulk.deselectAll') : t('bulk.selectAll')}
+            />
+            <span className="text-sm text-muted-foreground">
+              {allSelected ? t('bulk.deselectAll') : t('bulk.selectAll')}
+            </span>
+          </div>
+        )}
+
         {!isLoading && !isError && displayed.length > 0 && viewMode === 'row' && (
           <div className="space-y-2">
             {displayed.map((overview) => (
               <FleetVehicleRow
                 key={overview.id}
                 overview={overview}
+                selected={selectedIds.has(overview.id)}
+                onToggleSelect={toggleSelect}
                 onEdit={setEditingVehicle}
                 onRetire={setRetiringVehicle}
               />
@@ -134,6 +179,8 @@ export function VehicleList() {
               <FleetVehicleCard
                 key={overview.id}
                 vehicle={overview}
+                selected={selectedIds.has(overview.id)}
+                onToggleSelect={toggleSelect}
                 onEdit={setEditingVehicle}
                 onRetire={setRetiringVehicle}
               />
@@ -154,6 +201,8 @@ export function VehicleList() {
           vehicle={retiringVehicle}
           onOpenChange={() => setRetiringVehicle(null)}
         />
+
+        <BulkActionBar selectedIds={selectedIds} onClearSelection={clearSelection} />
       </div>
     </div>
   )
