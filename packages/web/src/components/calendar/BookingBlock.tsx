@@ -11,8 +11,13 @@ interface BookingBlockProps {
   readonly onClick: () => void
 }
 
+const FALLBACK_COLORS = {
+  bg: 'bg-gray-100 dark:bg-gray-900',
+  text: 'text-gray-800 dark:text-gray-200',
+} as const
+
 function getSourceColor(source: string): { bg: string; text: string } {
-  return SOURCE_COLORS[source] ?? SOURCE_COLORS.OTHER!
+  return SOURCE_COLORS[source] ?? FALLBACK_COLORS
 }
 
 export function BookingBlock({ booking, variant, onClick }: BookingBlockProps) {

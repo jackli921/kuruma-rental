@@ -49,12 +49,7 @@ function groupBookingsByDate(bookings: readonly CalendarBooking[]): Map<string, 
 
     while (current <= endDay) {
       const key = format(current, 'yyyy-MM-dd')
-      const existing = map.get(key)
-      if (existing) {
-        existing.push(booking)
-      } else {
-        map.set(key, [booking])
-      }
+      map.set(key, [...(map.get(key) ?? []), booking])
       current = new Date(current.getFullYear(), current.getMonth(), current.getDate() + 1)
     }
   }
