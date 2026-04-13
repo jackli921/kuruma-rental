@@ -65,4 +65,17 @@ export class InMemoryVehicleRepository implements VehicleRepository {
     this.store.set(retired.id, retired)
     return retired
   }
+
+  async bulkUpdateStatus(ids: string[], status: Vehicle['status']): Promise<Vehicle[]> {
+    const now = new Date()
+    const updated: Vehicle[] = []
+    for (const id of ids) {
+      const existing = this.store.get(id)
+      if (!existing) continue
+      const vehicle: Vehicle = { ...existing, status, updatedAt: now }
+      this.store.set(vehicle.id, vehicle)
+      updated.push(vehicle)
+    }
+    return updated
+  }
 }

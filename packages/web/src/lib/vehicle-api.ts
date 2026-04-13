@@ -123,6 +123,26 @@ export async function updateVehicleStatus(
   return unwrap<VehicleData>(res)
 }
 
+// Issue #224: bulk status toggle for fleet list multi-select.
+export async function bulkUpdateVehicleStatus(
+  vehicleIds: string[],
+  status: 'AVAILABLE' | 'MAINTENANCE',
+  token?: string,
+): Promise<VehicleData[]> {
+  const client = createApiClient()
+  const url = client.vehicles['bulk-status'].$url()
+  const headers: Record<string, string> = { 'Content-Type': 'application/json' }
+  if (token) {
+    headers.Authorization = `Bearer ${token}`
+  }
+  const res = await fetch(url, {
+    method: 'PATCH',
+    headers,
+    body: JSON.stringify({ vehicleIds, status }),
+  })
+  return unwrap<VehicleData[]>(res)
+}
+
 export async function retireVehicle(id: string, token?: string): Promise<VehicleData> {
   const client = createApiClient(token)
   const res = await client.vehicles[':id'].$delete({ param: { id } })

@@ -244,6 +244,16 @@
           "available": "{n} available",
           "maintenance": "{n} maintenance"
         }
+      },
+      "bulk": {
+        "selectAll": "Select all",
+        "deselectAll": "Deselect all",
+        "selectedCount": "{count, plural, one {# vehicle selected} other {# vehicles selected}}",
+        "setAvailable": "Set Available",
+        "setMaintenance": "Set Maintenance",
+        "confirmTitle": "Confirm bulk status change",
+        "confirmMessage": "Change {count, plural, one {# vehicle} other {# vehicles}} to {status}?",
+        "success": "Updated {count, plural, one {# vehicle} other {# vehicles}} successfully"
       }
     },
     "customers": {

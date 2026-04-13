@@ -82,4 +82,14 @@ export class DrizzleVehicleRepository implements VehicleRepository {
 
     return retired ? toVehicle(retired) : undefined
   }
+
+  async bulkUpdateStatus(ids: string[], status: Vehicle['status']): Promise<Vehicle[]> {
+    if (ids.length === 0) return []
+    const rows = await this.db
+      .update(vehicles)
+      .set({ status, updatedAt: sql`now()` })
+      .where(inArray(vehicles.id, ids))
+      .returning()
+    return rows.map(toVehicle)
+  }
 }

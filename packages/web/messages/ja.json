@@ -244,6 +244,16 @@
           "available": "利用可能 {n}台",
           "maintenance": "メンテナンス中 {n}台"
         }
+      },
+      "bulk": {
+        "selectAll": "すべて選択",
+        "deselectAll": "選択解除",
+        "selectedCount": "{count}台選択中",
+        "setAvailable": "利用可能にする",
+        "setMaintenance": "メンテナンス中にする",
+        "confirmTitle": "一括ステータス変更の確認",
+        "confirmMessage": "{count}台の車両を{status}に変更しますか？",
+        "success": "{count}台の車両を更新しました"
       }
     },
     "customers": {

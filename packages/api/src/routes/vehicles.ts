@@ -1,4 +1,5 @@
 import {
+  bulkUpdateVehicleStatusSchema,
   createVehicleSchema,
   updateVehicleSchema,
   updateVehicleStatusSchema,
@@ -68,6 +69,24 @@ export function createVehicleRoutes(repo: VehicleRepository) {
         }
         throw err
       }
+    })
+    .patch('/vehicles/bulk-status', async (c) => {
+      const user = requireUser(c)
+      if (!STAFF_ROLES.has(user.role)) return fail(c, 'Forbidden', 403)
+
+      const parsed = await parseBody(c, bulkUpdateVehicleStatusSchema)
+      if (!parsed.ok) return parsed.response
+
+      const { vehicleIds, status } = parsed.data
+
+      // Pre-check: all IDs must exist before mutating anything.
+      const existing = await repo.findByIds(vehicleIds)
+      if (existing.length !== vehicleIds.length) {
+        return fail(c, 'One or more vehicles not found', 404)
+      }
+
+      const updated = await repo.bulkUpdateStatus(vehicleIds, status)
+      return ok(c, updated)
     })
     .patch('/vehicles/:id', async (c) => {
       const user = requireUser(c)

@@ -86,6 +86,19 @@ export const updateVehicleStatusSchema = z.object({
   status: vehicleStatusEnum,
 })
 
+// Issue #224: bulk status toggle for fleet list multi-select. RETIRED is
+// intentionally excluded — bulk retire is a destructive action that requires
+// individual confirmation per the issue spec.
+export const bulkUpdateVehicleStatusSchema = z.object({
+  vehicleIds: z
+    .array(z.string().uuid())
+    .min(1, 'At least one vehicle ID is required')
+    .max(50, 'Maximum 50 vehicles per request'),
+  status: z.enum(['AVAILABLE', 'MAINTENANCE']),
+})
+
+export type BulkUpdateVehicleStatusInput = z.infer<typeof bulkUpdateVehicleStatusSchema>
+
 export type CreateVehicleInput = z.infer<typeof createVehicleSchema>
 export type CreateVehicleFormInput = z.input<typeof createVehicleSchema>
 export type UpdateVehicleInput = z.infer<typeof updateVehicleSchema>
