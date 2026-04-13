@@ -123,3 +123,8 @@ export interface MaintenanceLogRepository {
   create(data: Omit<MaintenanceLog, 'id' | 'createdAt' | 'updatedAt'>): Promise<MaintenanceLog>
   resolve(id: string, resolvedAt: Date): Promise<MaintenanceLog | undefined>
 }
+
+export interface PhotoStorage {
+  put(vehicleId: string, file: File): Promise<{ key: string; url: string }>
+  delete(key: string): Promise<void>
+}
