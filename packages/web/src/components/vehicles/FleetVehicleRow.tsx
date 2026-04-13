@@ -77,6 +77,7 @@ export function FleetVehicleRow({ overview, onEdit, onRetire }: FleetVehicleRowP
     `${overview.seats}`,
     overview.transmission === 'AUTO' ? 'AT' : 'MT',
     overview.fuelType,
+    overview.licensePlate,
   ].filter((p): p is string => Boolean(p))
 
   return (

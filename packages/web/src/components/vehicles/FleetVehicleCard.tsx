@@ -5,7 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { VehicleStatusToggle } from '@/components/vehicles/VehicleStatusToggle'
 import { formatVehicleRate } from '@/lib/format'
 import type { VehicleData } from '@/lib/vehicle-api'
-import { Car, Fuel, Pencil, Settings2, Trash2, Users } from 'lucide-react'
+import { Car, Fuel, Pencil, RectangleHorizontal, Settings2, Trash2, Users } from 'lucide-react'
 import { useTranslations } from 'next-intl'
 import Image from 'next/image'
 
@@ -61,6 +61,12 @@ export function FleetVehicleCard({ vehicle, onEdit, onRetire }: FleetVehicleCard
             <span className="flex items-center gap-1.5">
               <Fuel className="size-4" />
               {vehicle.fuelType}
+            </span>
+          )}
+          {vehicle.licensePlate && (
+            <span className="flex items-center gap-1.5">
+              <RectangleHorizontal className="size-4" />
+              {vehicle.licensePlate}
             </span>
           )}
         </div>

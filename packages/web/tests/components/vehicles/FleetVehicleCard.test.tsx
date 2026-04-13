@@ -53,6 +53,7 @@ function makeVehicle(overrides: Partial<VehicleData> = {}): VehicleData {
     seats: 5,
     transmission: 'AUTO',
     fuelType: 'Gasoline',
+    licensePlate: null,
     status: 'AVAILABLE',
     bufferMinutes: 60,
     minRentalHours: null,

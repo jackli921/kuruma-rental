@@ -13,7 +13,10 @@ export interface FleetFilterState {
 // Generic in T so the owner list (FleetVehicleOverviewData) and any
 // other caller that wants to narrow a list of vehicle-shaped items
 // keeps its concrete type through the filter. See #52.
-type FilterableVehicle = Pick<VehicleData, 'name' | 'status' | 'transmission' | 'seats'>
+type FilterableVehicle = Pick<
+  VehicleData,
+  'name' | 'licensePlate' | 'status' | 'transmission' | 'seats'
+>
 
 export function filterVehicles<T extends FilterableVehicle>(
   vehicles: T[],
@@ -23,7 +26,11 @@ export function filterVehicles<T extends FilterableVehicle>(
 
   if (filters.search) {
     const needle = filters.search.toLocaleLowerCase()
-    result = result.filter((v) => v.name.toLocaleLowerCase().includes(needle))
+    result = result.filter(
+      (v) =>
+        v.name.toLocaleLowerCase().includes(needle) ||
+        v.licensePlate?.toLocaleLowerCase().includes(needle),
+    )
   }
 
   if (filters.statuses && filters.statuses.length > 0) {

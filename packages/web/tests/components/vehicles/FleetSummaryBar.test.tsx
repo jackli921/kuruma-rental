@@ -36,6 +36,7 @@ function makeOverview(overrides: Partial<FleetVehicleOverviewData> = {}): FleetV
     seats: 5,
     transmission: 'AUTO',
     fuelType: null,
+    licensePlate: null,
     status: 'AVAILABLE',
     bufferMinutes: 60,
     minRentalHours: null,
