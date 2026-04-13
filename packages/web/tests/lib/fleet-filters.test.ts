@@ -17,6 +17,10 @@ function makeVehicle(overrides: Partial<VehicleData> = {}): VehicleData {
     minRentalHours: null,
     maxRentalHours: null,
     advanceBookingHours: null,
+    dailyRateJpy: null,
+    hourlyRateJpy: null,
+    shakenExpiryDate: null,
+    insuranceExpiryDate: null,
     createdAt: '2026-01-01T00:00:00Z',
     updatedAt: '2026-01-01T00:00:00Z',
     ...overrides,
@@ -169,6 +173,87 @@ describe('filterVehicles', () => {
       const result = filterVehicles(vehicles, { seats: [] })
 
       expect(result).toHaveLength(2)
+    })
+  })
+
+  describe('expiringSoon filter', () => {
+    it('returns only vehicles with expiring or expired dates when enabled', () => {
+      const vehicles = [
+        makeVehicle({
+          name: 'OK Car',
+          shakenExpiryDate: '2028-01-01',
+          insuranceExpiryDate: '2028-01-01',
+        }),
+        makeVehicle({
+          name: 'Expired Shaken',
+          shakenExpiryDate: '2020-01-01',
+          insuranceExpiryDate: '2028-01-01',
+        }),
+        makeVehicle({ name: 'No Dates', shakenExpiryDate: null, insuranceExpiryDate: null }),
+      ]
+
+      const result = filterVehicles(vehicles, { expiringSoon: true })
+
+      expect(result).toHaveLength(1)
+      expect(result[0]?.name).toBe('Expired Shaken')
+    })
+
+    it('returns all vehicles when expiringSoon is false', () => {
+      const vehicles = [
+        makeVehicle({
+          name: 'OK Car',
+          shakenExpiryDate: '2028-01-01',
+          insuranceExpiryDate: '2028-01-01',
+        }),
+        makeVehicle({
+          name: 'Expired Shaken',
+          shakenExpiryDate: '2020-01-01',
+          insuranceExpiryDate: '2028-01-01',
+        }),
+      ]
+
+      const result = filterVehicles(vehicles, { expiringSoon: false })
+
+      expect(result).toHaveLength(2)
+    })
+
+    it('returns all vehicles when expiringSoon is undefined', () => {
+      const vehicles = [
+        makeVehicle({
+          name: 'OK Car',
+          shakenExpiryDate: '2028-01-01',
+          insuranceExpiryDate: '2028-01-01',
+        }),
+        makeVehicle({
+          name: 'Expired Shaken',
+          shakenExpiryDate: '2020-01-01',
+          insuranceExpiryDate: '2028-01-01',
+        }),
+      ]
+
+      const result = filterVehicles(vehicles, {})
+
+      expect(result).toHaveLength(2)
+    })
+
+    it('includes vehicles with expiring insurance even if shaken is OK', () => {
+      const vehicles = [
+        makeVehicle({
+          name: 'Expired Insurance',
+          shakenExpiryDate: '2028-01-01',
+          insuranceExpiryDate: '2020-01-01',
+        }),
+        makeVehicle({
+          name: 'All Good',
+          shakenExpiryDate: '2028-01-01',
+          insuranceExpiryDate: '2028-01-01',
+        }),
+      ]
+
+      const result = filterVehicles(vehicles, { expiringSoon: true })
+
+      expect(result).toHaveLength(1)
+      expect(result[0]?.name).toBe('Expired Insurance')
     })
   })
 

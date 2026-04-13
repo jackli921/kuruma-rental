@@ -46,6 +46,8 @@ beforeAll(async () => {
     maxRentalHours: null,
     advanceBookingHours: null,
     dailyRateJpy: DEFAULT_DAILY_RATE_JPY,
+    shakenExpiryDate: null,
+    insuranceExpiryDate: null,
   })
   createdVehicleIds.push(testVehicle.id)
 })
@@ -177,6 +179,8 @@ describe('DrizzleBookingRepository', () => {
       maxRentalHours: null,
       advanceBookingHours: null,
       dailyRateJpy: DEFAULT_DAILY_RATE_JPY,
+      shakenExpiryDate: null,
+      insuranceExpiryDate: null,
     })
     createdVehicleIds.push(otherVehicle.id)
 
@@ -439,6 +443,8 @@ describe('POST /bookings overlap via HTTP (real Postgres)', () => {
       advanceBookingHours: null,
       dailyRateJpy: 8000,
       hourlyRateJpy: null,
+      shakenExpiryDate: null,
+      insuranceExpiryDate: null,
     })
 
     app = createApp({

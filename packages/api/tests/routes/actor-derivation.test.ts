@@ -41,6 +41,8 @@ describe('actor derivation from JWT', () => {
       advanceBookingHours: null,
       dailyRateJpy: 8000,
       hourlyRateJpy: null,
+      shakenExpiryDate: null,
+      insuranceExpiryDate: null,
     })
 
     const res = await app.request('/bookings', {
@@ -81,6 +83,8 @@ describe('actor derivation from JWT', () => {
       advanceBookingHours: null,
       dailyRateJpy: 8000,
       hourlyRateJpy: null,
+      shakenExpiryDate: null,
+      insuranceExpiryDate: null,
     })
 
     // Create booking as owner
@@ -158,6 +162,8 @@ describe('actor derivation from JWT', () => {
       advanceBookingHours: null,
       dailyRateJpy: 8000,
       hourlyRateJpy: null,
+      shakenExpiryDate: null,
+      insuranceExpiryDate: null,
     })
 
     const createRes = await app.request('/bookings', {

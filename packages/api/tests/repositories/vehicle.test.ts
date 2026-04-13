@@ -18,6 +18,8 @@ function vehicleInput(overrides?: Partial<Vehicle>) {
     advanceBookingHours: 24,
     dailyRateJpy: 5000,
     hourlyRateJpy: 1000,
+    shakenExpiryDate: null,
+    insuranceExpiryDate: null,
     ...overrides,
   }
 }

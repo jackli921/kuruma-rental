@@ -1,4 +1,5 @@
 import type { VehicleData } from '@/lib/vehicle-api'
+import { computeExpiryStatus } from '@kuruma/shared/lib/expiry'
 
 export type VehicleStatus = VehicleData['status']
 export type Transmission = VehicleData['transmission']
@@ -8,6 +9,7 @@ export interface FleetFilterState {
   statuses?: VehicleStatus[] | undefined
   transmissions?: Transmission[] | undefined
   seats?: number[] | undefined
+  expiringSoon?: boolean | undefined
 }
 
 // Generic in T so the owner list (FleetVehicleOverviewData) and any
@@ -15,7 +17,7 @@ export interface FleetFilterState {
 // keeps its concrete type through the filter. See #52.
 type FilterableVehicle = Pick<
   VehicleData,
-  'name' | 'licensePlate' | 'status' | 'transmission' | 'seats'
+  'name' | 'licensePlate' | 'status' | 'transmission' | 'seats' | 'shakenExpiryDate' | 'insuranceExpiryDate'
 >
 
 export function filterVehicles<T extends FilterableVehicle>(
@@ -46,6 +48,20 @@ export function filterVehicles<T extends FilterableVehicle>(
   if (filters.seats && filters.seats.length > 0) {
     const allowedSeats = new Set(filters.seats)
     result = result.filter((v) => allowedSeats.has(v.seats))
+  }
+
+  if (filters.expiringSoon) {
+    const todayIso = new Date().toISOString().slice(0, 10)
+    result = result.filter((v) => {
+      const shaken = computeExpiryStatus(v.shakenExpiryDate, todayIso)
+      const insurance = computeExpiryStatus(v.insuranceExpiryDate, todayIso)
+      return (
+        shaken === 'EXPIRING_SOON' ||
+        shaken === 'EXPIRED' ||
+        insurance === 'EXPIRING_SOON' ||
+        insurance === 'EXPIRED'
+      )
+    })
   }
 
   return result

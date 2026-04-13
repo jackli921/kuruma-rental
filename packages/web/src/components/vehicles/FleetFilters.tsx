@@ -215,6 +215,26 @@ export function FleetFilters({
       <Separator />
 
       <div className="space-y-2">
+        <SectionHeading>{t('complianceHeading')}</SectionHeading>
+        <div className="flex flex-wrap gap-1.5">
+          <Badge
+            variant={filters.expiringSoon ? 'default' : 'outline'}
+            render={
+              <button
+                type="button"
+                aria-pressed={filters.expiringSoon ?? false}
+                onClick={() => onFiltersChange({ ...filters, expiringSoon: !filters.expiringSoon })}
+              />
+            }
+          >
+            {t('expiringSoonLabel')}
+          </Badge>
+        </div>
+      </div>
+
+      <Separator />
+
+      <div className="space-y-2">
         <SectionHeading>{t('sortHeading')}</SectionHeading>
         <Select value={sort} onValueChange={handleSortChange}>
           <SelectTrigger className="w-full">

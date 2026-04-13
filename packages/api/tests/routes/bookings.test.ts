@@ -281,6 +281,8 @@ describe('Booking Routes', () => {
         // Rates required for server-side pricing (issue #74).
         dailyRateJpy: 10000,
         hourlyRateJpy: null,
+        shakenExpiryDate: null,
+        insuranceExpiryDate: null,
       })
 
       const allVehicles = await vehicleRepo.findAll()
@@ -560,6 +562,8 @@ describe('Booking Routes', () => {
           advanceBookingHours: rules.advanceBookingHours ?? null,
           dailyRateJpy: 18000,
           hourlyRateJpy: 2500,
+          shakenExpiryDate: null,
+          insuranceExpiryDate: null,
         })
         return vehicle.id
       }
@@ -734,6 +738,8 @@ describe('Booking Routes', () => {
           advanceBookingHours: null,
           dailyRateJpy: rates.dailyRateJpy,
           hourlyRateJpy: rates.hourlyRateJpy,
+          shakenExpiryDate: null,
+          insuranceExpiryDate: null,
         })
         return vehicle.id
       }
@@ -960,6 +966,8 @@ describe('Booking Routes', () => {
         advanceBookingHours: null,
         dailyRateJpy: 10000,
         hourlyRateJpy: null,
+        shakenExpiryDate: null,
+        insuranceExpiryDate: null,
       })
       return vehicle.id
     }

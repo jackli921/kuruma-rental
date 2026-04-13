@@ -82,6 +82,8 @@ function baseVehicle(
     advanceBookingHours: null,
     dailyRateJpy: 8000,
     hourlyRateJpy: null,
+    shakenExpiryDate: null,
+    insuranceExpiryDate: null,
     ...overrides,
   }
 }

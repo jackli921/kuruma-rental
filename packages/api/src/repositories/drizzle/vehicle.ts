@@ -55,6 +55,8 @@ export class DrizzleVehicleRepository implements VehicleRepository {
         advanceBookingHours: data.advanceBookingHours,
         dailyRateJpy: data.dailyRateJpy,
         hourlyRateJpy: data.hourlyRateJpy,
+        shakenExpiryDate: data.shakenExpiryDate,
+        insuranceExpiryDate: data.insuranceExpiryDate,
       })
       .returning()
 

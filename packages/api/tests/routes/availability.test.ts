@@ -27,6 +27,10 @@ async function createTestVehicle(
     minRentalHours: null,
     maxRentalHours: null,
     advanceBookingHours: null,
+    dailyRateJpy: 8000,
+    hourlyRateJpy: null,
+    shakenExpiryDate: null,
+    insuranceExpiryDate: null,
     ...overrides,
   })
 }

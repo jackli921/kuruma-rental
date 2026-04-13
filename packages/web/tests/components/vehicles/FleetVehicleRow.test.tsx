@@ -27,6 +27,14 @@ vi.mock('next-intl', () => ({
       'fleet.utilizationLabel': '{percent}% · {count} bookings this month',
       'fleet.noBookings': 'No upcoming bookings',
       'fleet.moreActions': 'More actions',
+      'expiry.shaken.OK': 'Shaken OK',
+      'expiry.shaken.EXPIRING_SOON': 'Shaken expiring',
+      'expiry.shaken.EXPIRED': 'Shaken expired',
+      'expiry.shaken.UNKNOWN': 'No shaken',
+      'expiry.insurance.OK': 'Insured',
+      'expiry.insurance.EXPIRING_SOON': 'Insurance expiring',
+      'expiry.insurance.EXPIRED': 'Insurance expired',
+      'expiry.insurance.UNKNOWN': 'No insurance',
     }
     const template = messages[key] ?? key
     if (!values) return template
@@ -57,6 +65,8 @@ function makeOverview(overrides: Partial<FleetVehicleOverviewData> = {}): FleetV
     advanceBookingHours: null,
     dailyRateJpy: 8000,
     hourlyRateJpy: null,
+    shakenExpiryDate: null,
+    insuranceExpiryDate: null,
     createdAt: '2026-01-01T00:00:00Z',
     updatedAt: '2026-01-01T00:00:00Z',
     utilization: 72,
@@ -204,5 +214,41 @@ describe('FleetVehicleRow', () => {
     await userEvent.click(screen.getByRole('button', { name: 'More actions' }))
 
     expect(screen.queryByRole('menuitem', { name: 'Retire' })).not.toBeInTheDocument()
+  })
+
+  it('renders expiry badges when vehicle has shaken and insurance dates', () => {
+    // Use dates far in the future so they show as OK
+    const overview = makeOverview({
+      shakenExpiryDate: '2028-01-01',
+      insuranceExpiryDate: '2028-06-01',
+    })
+
+    render(<FleetVehicleRow overview={overview} onEdit={vi.fn()} onRetire={vi.fn()} />)
+
+    expect(screen.getByText('Shaken OK')).toBeInTheDocument()
+    expect(screen.getByText('Insured')).toBeInTheDocument()
+  })
+
+  it('shows "Shaken expired" when shaken date is in the past', () => {
+    const overview = makeOverview({
+      shakenExpiryDate: '2020-01-01',
+      insuranceExpiryDate: '2028-06-01',
+    })
+
+    render(<FleetVehicleRow overview={overview} onEdit={vi.fn()} onRetire={vi.fn()} />)
+
+    expect(screen.getByText('Shaken expired')).toBeInTheDocument()
+    expect(screen.getByText('Insured')).toBeInTheDocument()
+  })
+
+  it('hides expiry badges when dates are null', () => {
+    const overview = makeOverview({
+      shakenExpiryDate: null,
+      insuranceExpiryDate: null,
+    })
+
+    render(<FleetVehicleRow overview={overview} onEdit={vi.fn()} onRetire={vi.fn()} />)
+
+    expect(screen.queryByTestId('expiry-badge')).not.toBeInTheDocument()
   })
 })

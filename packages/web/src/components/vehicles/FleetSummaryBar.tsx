@@ -1,6 +1,7 @@
 'use client'
 
 import type { FleetVehicleOverviewData } from '@/lib/vehicle-api'
+import { computeExpiryStatus } from '@kuruma/shared/lib/expiry'
 import { useTranslations } from 'next-intl'
 
 interface FleetSummaryBarProps {
@@ -18,6 +19,13 @@ export function FleetSummaryBar({ overviews }: FleetSummaryBarProps) {
   const available = overviews.filter((v) => v.status === 'AVAILABLE').length
   const maintenance = overviews.filter((v) => v.status === 'MAINTENANCE').length
 
+  const todayIso = new Date().toISOString().slice(0, 10)
+  const expiring = overviews.filter((v) => {
+    const s = computeExpiryStatus(v.shakenExpiryDate, todayIso)
+    const i = computeExpiryStatus(v.insuranceExpiryDate, todayIso)
+    return s === 'EXPIRING_SOON' || s === 'EXPIRED' || i === 'EXPIRING_SOON' || i === 'EXPIRED'
+  }).length
+
   return (
     <div className="flex flex-wrap items-center gap-x-4 gap-y-1 rounded-lg border bg-card px-4 py-3 text-sm">
       <span className="font-medium text-foreground">{t('fleet.summary.total', { n: total })}</span>
@@ -33,6 +41,14 @@ export function FleetSummaryBar({ overviews }: FleetSummaryBarProps) {
         ·
       </span>
       <span className="text-foreground">{t('fleet.summary.maintenance', { n: maintenance })}</span>
+      {expiring > 0 && (
+        <>
+          <span className="text-muted-foreground" aria-hidden>
+            ·
+          </span>
+          <span className="text-destructive">{t('fleet.summary.expiring', { n: expiring })}</span>
+        </>
+      )}
     </div>
   )
 }

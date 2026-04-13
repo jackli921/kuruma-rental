@@ -33,6 +33,8 @@ const VEHICLE_FIELDS = [
   'advanceBookingHours',
   'dailyRateJpy',
   'hourlyRateJpy',
+  'shakenExpiryDate',
+  'insuranceExpiryDate',
   'createdAt',
   'updatedAt',
 ] as const

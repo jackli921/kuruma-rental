@@ -1,6 +1,7 @@
 import { sql } from 'drizzle-orm'
 import {
   check,
+  date,
   integer,
   pgEnum,
   pgTable,
@@ -83,6 +84,8 @@ export const vehicles = pgTable(
     // See issue #48.
     dailyRateJpy: integer('dailyRateJpy'),
     hourlyRateJpy: integer('hourlyRateJpy'),
+    shakenExpiryDate: date('shakenExpiryDate', { mode: 'string' }),
+    insuranceExpiryDate: date('insuranceExpiryDate', { mode: 'string' }),
     createdAt: timestamp('createdAt', { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp('updatedAt', { withTimezone: true }).notNull().defaultNow(),
   },

@@ -128,6 +128,20 @@
       "retireConfirm": "{name}を廃止しますか？",
       "retireConfirmMessage": "この車両は利用者に表示されなくなります。後で復元できます。",
       "noPhoto": "写真なし",
+      "expiry": {
+        "shaken": {
+          "OK": "車検OK",
+          "EXPIRING_SOON": "車検期限間近",
+          "EXPIRED": "車検切れ",
+          "UNKNOWN": "車検未登録"
+        },
+        "insurance": {
+          "OK": "保険有効",
+          "EXPIRING_SOON": "保険期限間近",
+          "EXPIRED": "保険切れ",
+          "UNKNOWN": "保険未登録"
+        }
+      },
       "status": {
         "AVAILABLE": "利用可能",
         "MAINTENANCE": "メンテナンス中",
@@ -170,6 +184,10 @@
         "maxRentalHoursPlaceholder": "72",
         "advanceBookingHours": "事前予約時間（時間）",
         "advanceBookingHoursPlaceholder": "24",
+        "complianceHeading": "コンプライアンス",
+        "complianceHint": "車検と保険の有効期限を管理します。",
+        "shakenExpiryDate": "車検有効期限",
+        "insuranceExpiryDate": "保険有効期限",
         "save": "車両を保存",
         "saving": "保存中...",
         "cancel": "キャンセル",
@@ -194,7 +212,9 @@
         "sortSeatsAsc": "定員 (少ない順)",
         "sortSeatsDesc": "定員 (多い順)",
         "sortPriceAsc": "料金 (安い順)",
-        "sortPriceDesc": "料金 (高い順)"
+        "sortPriceDesc": "料金 (高い順)",
+        "complianceHeading": "コンプライアンス",
+        "expiringSoonLabel": "期限間近"
       },
       "actions": {
         "setMaintenance": "メンテナンス中にする",
@@ -243,7 +263,8 @@
           "total": "全{n}台",
           "onRental": "貸出中 {n}台",
           "available": "利用可能 {n}台",
-          "maintenance": "メンテナンス中 {n}台"
+          "maintenance": "メンテナンス中 {n}台",
+          "expiring": "{n}台期限間近"
         }
       },
       "bulk": {

@@ -218,6 +218,40 @@ export function VehicleForm({ onSubmit, onCancel, defaultValues, isSubmitting }:
         </div>
       </div>
 
+      {/* Compliance: shaken and insurance expiry tracking (#226) */}
+      <div>
+        <div className="text-sm font-medium mb-2">{t('form.complianceHeading')}</div>
+        <p className="text-xs text-muted-foreground mb-3">{t('form.complianceHint')}</p>
+        <div className="grid grid-cols-2 gap-4">
+          <div>
+            <Label htmlFor="shakenExpiryDate">{t('form.shakenExpiryDate')}</Label>
+            <Input
+              id="shakenExpiryDate"
+              type="date"
+              {...register('shakenExpiryDate', {
+                setValueAs: (v) => (v === '' || v == null ? null : v),
+              })}
+            />
+            {errors.shakenExpiryDate && (
+              <p className="text-sm text-destructive mt-1">{errors.shakenExpiryDate.message}</p>
+            )}
+          </div>
+          <div>
+            <Label htmlFor="insuranceExpiryDate">{t('form.insuranceExpiryDate')}</Label>
+            <Input
+              id="insuranceExpiryDate"
+              type="date"
+              {...register('insuranceExpiryDate', {
+                setValueAs: (v) => (v === '' || v == null ? null : v),
+              })}
+            />
+            {errors.insuranceExpiryDate && (
+              <p className="text-sm text-destructive mt-1">{errors.insuranceExpiryDate.message}</p>
+            )}
+          </div>
+        </div>
+      </div>
+
       <div className="flex justify-end gap-2 pt-4">
         {onCancel && (
           <Button type="button" variant="outline" onClick={onCancel}>

@@ -35,6 +35,10 @@ vi.mock('next-intl', () => ({
       'form.maxRentalHoursPlaceholder': '72',
       'form.advanceBookingHours': 'Advance booking (hours)',
       'form.advanceBookingHoursPlaceholder': '24',
+      'form.complianceHeading': 'Compliance',
+      'form.complianceHint': 'Track vehicle inspection (shaken) and insurance expiry dates.',
+      'form.shakenExpiryDate': 'Shaken expiry date',
+      'form.insuranceExpiryDate': 'Insurance expiry date',
       'form.save': 'Save vehicle',
       'form.saving': 'Saving...',
       'form.cancel': 'Cancel',
@@ -73,6 +77,8 @@ function makeVehicle(overrides: Partial<VehicleData> = {}): VehicleData {
     advanceBookingHours: null,
     dailyRateJpy: 6500,
     hourlyRateJpy: 900,
+    shakenExpiryDate: null,
+    insuranceExpiryDate: null,
     createdAt: '2026-01-01T00:00:00Z',
     updatedAt: '2026-01-01T00:00:00Z',
     ...overrides,
@@ -142,6 +148,29 @@ describe('EditVehicleDialog', () => {
     expect(screen.getByLabelText('Minimum rental (hours)')).toHaveValue(6)
     expect(screen.getByLabelText('Maximum rental (hours)')).toHaveValue(48)
     expect(screen.getByLabelText('Advance booking (hours)')).toHaveValue(12)
+  })
+
+  // Issue #226: pre-populate shaken and insurance expiry dates.
+  it('pre-fills shaken expiry date from existing vehicle', () => {
+    const vehicle = makeVehicle({ shakenExpiryDate: '2027-03-15' })
+    render(<EditVehicleDialog vehicle={vehicle} onOpenChange={vi.fn()} />)
+
+    expect(screen.getByLabelText('Shaken expiry date')).toHaveValue('2027-03-15')
+  })
+
+  it('pre-fills insurance expiry date from existing vehicle', () => {
+    const vehicle = makeVehicle({ insuranceExpiryDate: '2027-06-30' })
+    render(<EditVehicleDialog vehicle={vehicle} onOpenChange={vi.fn()} />)
+
+    expect(screen.getByLabelText('Insurance expiry date')).toHaveValue('2027-06-30')
+  })
+
+  it('renders empty date inputs when vehicle has null expiry dates', () => {
+    const vehicle = makeVehicle({ shakenExpiryDate: null, insuranceExpiryDate: null })
+    render(<EditVehicleDialog vehicle={vehicle} onOpenChange={vi.fn()} />)
+
+    expect(screen.getByLabelText('Shaken expiry date')).not.toHaveValue()
+    expect(screen.getByLabelText('Insurance expiry date')).not.toHaveValue()
   })
 
   it('renders empty rental-rules inputs when the vehicle has null values', () => {

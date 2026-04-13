@@ -128,6 +128,20 @@
       "retireConfirm": "确定停用{name}？",
       "retireConfirmMessage": "此车辆将对租客隐藏。您可以稍后恢复。",
       "noPhoto": "无照片",
+      "expiry": {
+        "shaken": {
+          "OK": "年检OK",
+          "EXPIRING_SOON": "年检即将到期",
+          "EXPIRED": "年检已过期",
+          "UNKNOWN": "无年检"
+        },
+        "insurance": {
+          "OK": "已投保",
+          "EXPIRING_SOON": "保险即将到期",
+          "EXPIRED": "保险已过期",
+          "UNKNOWN": "无保险"
+        }
+      },
       "status": {
         "AVAILABLE": "可用",
         "MAINTENANCE": "维护中",
@@ -170,6 +184,10 @@
         "maxRentalHoursPlaceholder": "72",
         "advanceBookingHours": "提前预订时长（小时）",
         "advanceBookingHoursPlaceholder": "24",
+        "complianceHeading": "合规",
+        "complianceHint": "跟踪车检和保险到期日期。",
+        "shakenExpiryDate": "年检到期日",
+        "insuranceExpiryDate": "保险到期日",
         "save": "保存车辆",
         "saving": "保存中...",
         "cancel": "取消",
@@ -194,7 +212,9 @@
         "sortSeatsAsc": "座位由少到多",
         "sortSeatsDesc": "座位由多到少",
         "sortPriceAsc": "价格由低到高",
-        "sortPriceDesc": "价格由高到低"
+        "sortPriceDesc": "价格由高到低",
+        "complianceHeading": "合规",
+        "expiringSoonLabel": "即将到期"
       },
       "actions": {
         "setMaintenance": "设为维护中",
@@ -243,7 +263,8 @@
           "total": "{n} 辆车",
           "onRental": "{n} 辆出租中",
           "available": "{n} 辆可用",
-          "maintenance": "{n} 辆维护中"
+          "maintenance": "{n} 辆维护中",
+          "expiring": "{n}即将到期"
         }
       },
       "bulk": {
