@@ -1,10 +1,12 @@
 'use client'
 
+import { MaintenanceReasonDialog } from '@/components/vehicles/MaintenanceReasonDialog'
 import { cn } from '@/lib/utils'
 import { updateVehicleStatusAction } from '@/lib/vehicle-actions'
 import type { VehicleData } from '@/lib/vehicle-api'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { useTranslations } from 'next-intl'
+import { useState } from 'react'
 
 interface VehicleStatusToggleProps {
   vehicle: VehicleData
@@ -21,20 +23,26 @@ interface OptimisticContext {
 export function VehicleStatusToggle({ vehicle }: VehicleStatusToggleProps) {
   const t = useTranslations('business.vehicles')
   const queryClient = useQueryClient()
+  const [dialogOpen, setDialogOpen] = useState(false)
 
-  const mutation = useMutation<VehicleData, Error, TogglableStatus, OptimisticContext>({
-    mutationFn: async (next) => {
-      const result = await updateVehicleStatusAction(vehicle.id, next)
+  const mutation = useMutation<
+    VehicleData,
+    Error,
+    { status: TogglableStatus; reason?: string },
+    OptimisticContext
+  >({
+    mutationFn: async ({ status, reason }) => {
+      const result = await updateVehicleStatusAction(vehicle.id, status, reason)
       if (!result.success) throw new Error(result.error)
       return result.data
     },
-    onMutate: async (next) => {
+    onMutate: async ({ status }) => {
       await queryClient.cancelQueries({ queryKey: VEHICLES_KEY })
       const previous = queryClient.getQueryData<VehicleData[]>(VEHICLES_KEY)
       if (previous) {
         queryClient.setQueryData<VehicleData[]>(
           VEHICLES_KEY,
-          previous.map((v) => (v.id === vehicle.id ? { ...v, status: next } : v)),
+          previous.map((v) => (v.id === vehicle.id ? { ...v, status } : v)),
         )
       }
       return { previous }
@@ -51,13 +59,20 @@ export function VehicleStatusToggle({ vehicle }: VehicleStatusToggleProps) {
 
   function handleClick(next: TogglableStatus) {
     if (next === vehicle.status) return
-    mutation.mutate(next)
+    if (next === 'MAINTENANCE') {
+      setDialogOpen(true)
+      return
+    }
+    mutation.mutate({ status: next })
+  }
+
+  function handleMaintenanceSubmit(reason: string) {
+    setDialogOpen(false)
+    mutation.mutate({ status: 'MAINTENANCE', reason })
   }
 
   // RETIRED cars surface a single "Restore" affordance instead of the
-  // segmented control. Active rental operations (AVAILABLE ↔ MAINTENANCE)
-  // are the 95% case and get the fast path; un-retiring is rare and
-  // deserves its own obvious control.
+  // segmented control.
   if (vehicle.status === 'RETIRED') {
     return (
       <div className="inline-flex flex-col items-end gap-1">
@@ -65,7 +80,7 @@ export function VehicleStatusToggle({ vehicle }: VehicleStatusToggleProps) {
           <span className="text-xs font-medium text-muted-foreground">{t('status.RETIRED')}</span>
           <button
             type="button"
-            onClick={() => mutation.mutate('AVAILABLE')}
+            onClick={() => mutation.mutate({ status: 'AVAILABLE' })}
             disabled={mutation.isPending}
             className="rounded px-1.5 py-0.5 text-[11px] font-medium text-emerald-700 hover:bg-emerald-500/10 disabled:opacity-60"
           >
@@ -111,6 +126,12 @@ export function VehicleStatusToggle({ vehicle }: VehicleStatusToggleProps) {
       {mutation.isError && (
         <output className="text-[11px] text-destructive">{t('statusToggle.error')}</output>
       )}
+      <MaintenanceReasonDialog
+        open={dialogOpen}
+        onOpenChange={setDialogOpen}
+        onSubmit={handleMaintenanceSubmit}
+        isPending={mutation.isPending}
+      />
     </div>
   )
 }

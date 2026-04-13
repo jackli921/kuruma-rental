@@ -2,6 +2,7 @@ import { VehicleBookingCalendar } from '@/components/calendar/VehicleBookingCale
 import { Badge } from '@/components/ui/badge'
 import { buttonVariants } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
+import { MaintenanceHistoryCard } from '@/components/vehicles/MaintenanceHistoryCard'
 import { Link } from '@/i18n/routing'
 import { formatJpy } from '@/lib/format'
 import { cn } from '@/lib/utils'
@@ -164,6 +165,7 @@ export function VehicleDetail({ vehicle, t }: VehicleDetailProps) {
         <div className="space-y-6">
           <RevenueCard vehicle={vehicle} t={t} hasRevenue={hasRevenue} />
           <UpcomingBookingsCard bookings={vehicle.upcomingBookings} t={t} />
+          <MaintenanceHistoryCard logs={vehicle.maintenanceLogs} t={t} />
         </div>
       </div>
     </div>

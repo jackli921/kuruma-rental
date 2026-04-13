@@ -49,8 +49,9 @@ export async function updateVehicleAction(
 export async function updateVehicleStatusAction(
   id: string,
   status: VehicleStatus,
+  reason?: string,
 ): Promise<ActionResult<VehicleData>> {
-  return withAuth((token) => updateVehicleStatus(id, status, token))
+  return withAuth((token) => updateVehicleStatus(id, status, reason, token))
 }
 
 export async function retireVehicleAction(id: string): Promise<ActionResult<VehicleData>> {

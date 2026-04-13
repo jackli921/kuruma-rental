@@ -249,7 +249,11 @@
         "maxDuration": "Maximum rental: {duration}",
         "advanceBooking": "Book at least {duration} in advance",
         "photos": "Photos",
-        "notFound": "Vehicle not found"
+        "notFound": "Vehicle not found",
+        "maintenanceHistory": "Maintenance History",
+        "ongoing": "Ongoing",
+        "resolved": "Resolved",
+        "noMaintenanceHistory": "No maintenance records yet"
       },
       "fleet": {
         "rowView": "Row view",
@@ -276,6 +280,14 @@
         "confirmTitle": "Confirm bulk status change",
         "confirmMessage": "Change {count, plural, one {# vehicle} other {# vehicles}} to {status}?",
         "success": "Updated {count, plural, one {# vehicle} other {# vehicles}} successfully"
+      },
+      "maintenance": {
+        "dialogTitle": "Set to maintenance",
+        "dialogDescription": "Please provide a reason for putting this vehicle into maintenance.",
+        "reasonLabel": "Reason",
+        "reasonPlaceholder": "e.g. Oil change, brake inspection...",
+        "submit": "Confirm",
+        "cancel": "Cancel"
       }
     },
     "customers": {
@@ -373,7 +385,7 @@
       "heading": "Popular vehicles",
       "subheading": "Hand-picked cars loved by travelers",
       "viewAll": "View all",
-      "currency": "\u00a5{price}",
+      "currency": "¥{price}",
       "perDay": "day"
     },
     "features": {

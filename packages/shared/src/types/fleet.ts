@@ -49,4 +49,7 @@ export interface FleetVehicleOverview {
   // The next non-CANCELLED booking whose startAt is in the future,
   // excluding any currentBooking.
   nextBooking: FleetBookingSummary | null
+
+  // Issue #225: active maintenance reason (null when not in MAINTENANCE).
+  activeMaintenanceReason: string | null
 }

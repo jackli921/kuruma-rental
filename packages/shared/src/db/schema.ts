@@ -134,6 +134,30 @@ export const bookings = pgTable('bookings', {
   updatedAt: timestamp('updatedAt', { withTimezone: true }).notNull().defaultNow(),
 })
 
+// Issue #225: maintenance log and notes per vehicle. Tracks why a vehicle
+// entered MAINTENANCE, with optional cost tracking and resolution timestamp.
+export const maintenanceLogs = pgTable(
+  'maintenance_logs',
+  {
+    id: text('id')
+      .primaryKey()
+      .$defaultFn(() => crypto.randomUUID()),
+    vehicleId: text('vehicleId')
+      .notNull()
+      .references(() => vehicles.id),
+    reason: text('reason').notNull(),
+    notes: text('notes'),
+    costJpy: integer('costJpy'),
+    startedAt: timestamp('startedAt', { withTimezone: true, mode: 'date' }).notNull().defaultNow(),
+    resolvedAt: timestamp('resolvedAt', { withTimezone: true, mode: 'date' }),
+    createdAt: timestamp('createdAt', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updatedAt', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    check('maintenance_cost_non_negative', sql`${table.costJpy} IS NULL OR ${table.costJpy} >= 0`),
+  ],
+)
+
 export const threads = pgTable('threads', {
   id: text('id')
     .primaryKey()

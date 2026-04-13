@@ -127,6 +127,13 @@
       "when": 1776044190239,
       "tag": "0017_add-shaken-insurance-expiry",
       "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "7",
+      "when": 1776044879455,
+      "tag": "0018_add-maintenance-logs",
+      "breakpoints": true
     }
   ]
 }

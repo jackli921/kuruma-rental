@@ -114,8 +114,27 @@ export const bulkUpdateVehicleStatusSchema = z.object({
 
 export type BulkUpdateVehicleStatusInput = z.infer<typeof bulkUpdateVehicleStatusSchema>
 
+// Issue #225: extended status toggle that accepts a reason when
+// transitioning to MAINTENANCE. Reason is required for MAINTENANCE,
+// ignored for other statuses.
+export const updateVehicleStatusWithReasonSchema = z
+  .object({
+    status: vehicleStatusEnum,
+    reason: z.string().trim().min(1).optional(),
+  })
+  .superRefine((data, ctx) => {
+    if (data.status === 'MAINTENANCE' && !data.reason) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['reason'],
+        message: 'Reason is required when setting status to MAINTENANCE',
+      })
+    }
+  })
+
 export type CreateVehicleInput = z.infer<typeof createVehicleSchema>
 export type CreateVehicleFormInput = z.input<typeof createVehicleSchema>
 export type UpdateVehicleInput = z.infer<typeof updateVehicleSchema>
 export type UpdateVehicleStatusInput = z.infer<typeof updateVehicleStatusSchema>
+export type UpdateVehicleStatusWithReasonInput = z.infer<typeof updateVehicleStatusWithReasonSchema>
 export type VehicleStatus = z.infer<typeof vehicleStatusEnum>

@@ -90,6 +90,8 @@ export class DrizzleFleetOverviewRepository implements FleetOverviewRepository {
         nextBooking: next
           ? { startAt: next.startAt, endAt: next.endAt, renterName: next.renterName }
           : null,
+        // TODO(#225): query maintenance_logs table when DrizzleMaintenanceLogRepository exists
+        activeMaintenanceReason: null,
       }
     })
   }

@@ -1,12 +1,13 @@
 import type { getDb } from '@kuruma/shared/db'
 import {
   bookings,
+  maintenanceLogs,
   messages,
   threadParticipants,
   threads,
   vehicles,
 } from '@kuruma/shared/db/schema'
-import type { Booking, Message, Thread, ThreadParticipant, Vehicle } from '../../stores'
+import type { Booking, MaintenanceLog, Message, Thread, ThreadParticipant, Vehicle } from '../../stores'
 
 export type Db = ReturnType<typeof getDb>
 
@@ -78,6 +79,18 @@ export const messageColumns = {
   createdAt: messages.createdAt,
 }
 
+export const maintenanceLogColumns = {
+  id: maintenanceLogs.id,
+  vehicleId: maintenanceLogs.vehicleId,
+  reason: maintenanceLogs.reason,
+  notes: maintenanceLogs.notes,
+  costJpy: maintenanceLogs.costJpy,
+  startedAt: maintenanceLogs.startedAt,
+  resolvedAt: maintenanceLogs.resolvedAt,
+  createdAt: maintenanceLogs.createdAt,
+  updatedAt: maintenanceLogs.updatedAt,
+}
+
 // --- Row-to-domain mappers ---
 // Drizzle infers wider types than our domain interfaces (e.g. `string`
 // instead of `'AUTO' | 'MANUAL'`). These mappers verify every field at
@@ -147,6 +160,20 @@ export function toThreadParticipant(r: AnyRow): ThreadParticipant {
     threadId: r.threadId,
     userId: r.userId,
     unreadCount: r.unreadCount,
+  }
+}
+
+export function toMaintenanceLog(r: AnyRow): MaintenanceLog {
+  return {
+    id: r.id,
+    vehicleId: r.vehicleId,
+    reason: r.reason,
+    notes: r.notes,
+    costJpy: r.costJpy,
+    startedAt: r.startedAt,
+    resolvedAt: r.resolvedAt,
+    createdAt: r.createdAt,
+    updatedAt: r.updatedAt,
   }
 }
 

@@ -1,6 +1,6 @@
 {
-  "id": "ed6567e5-e28a-4000-b674-2de079f86e43",
-  "prevId": "07492935-aaab-4a57-afb6-d2a7c4e18584",
+  "id": "d8475ed7-7983-4afe-a839-79cda7feed56",
+  "prevId": "ed6567e5-e28a-4000-b674-2de079f86e43",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -245,6 +245,95 @@
       "uniqueConstraints": {},
       "policies": {},
       "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.maintenance_logs": {
+      "name": "maintenance_logs",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "vehicleId": {
+          "name": "vehicleId",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "reason": {
+          "name": "reason",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "notes": {
+          "name": "notes",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "costJpy": {
+          "name": "costJpy",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "startedAt": {
+          "name": "startedAt",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "resolvedAt": {
+          "name": "resolvedAt",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "createdAt": {
+          "name": "createdAt",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updatedAt": {
+          "name": "updatedAt",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "maintenance_logs_vehicleId_vehicles_id_fk": {
+          "name": "maintenance_logs_vehicleId_vehicles_id_fk",
+          "tableFrom": "maintenance_logs",
+          "tableTo": "vehicles",
+          "columnsFrom": [
+            "vehicleId"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "maintenance_cost_non_negative": {
+          "name": "maintenance_cost_non_negative",
+          "value": "\"maintenance_logs\".\"costJpy\" IS NULL OR \"maintenance_logs\".\"costJpy\" >= 0"
+        }
+      },
       "isRLSEnabled": false
     },
     "public.messages": {
@@ -643,6 +732,18 @@
           "primaryKey": false,
           "notNull": false
         },
+        "shakenExpiryDate": {
+          "name": "shakenExpiryDate",
+          "type": "date",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "insuranceExpiryDate": {
+          "name": "insuranceExpiryDate",
+          "type": "date",
+          "primaryKey": false,
+          "notNull": false
+        },
         "createdAt": {
           "name": "createdAt",
           "type": "timestamp with time zone",
@@ -683,95 +784,6 @@
         "vehicles_hourly_rate_non_negative": {
           "name": "vehicles_hourly_rate_non_negative",
           "value": "\"vehicles\".\"hourlyRateJpy\" IS NULL OR \"vehicles\".\"hourlyRateJpy\" >= 0"
-        }
-      },
-      "isRLSEnabled": false
-    },
-    "public.maintenance_logs": {
-      "name": "maintenance_logs",
-      "schema": "",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "text",
-          "primaryKey": true,
-          "notNull": true
-        },
-        "vehicleId": {
-          "name": "vehicleId",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "reason": {
-          "name": "reason",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "notes": {
-          "name": "notes",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "costJpy": {
-          "name": "costJpy",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "startedAt": {
-          "name": "startedAt",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        },
-        "resolvedAt": {
-          "name": "resolvedAt",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "createdAt": {
-          "name": "createdAt",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        },
-        "updatedAt": {
-          "name": "updatedAt",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        }
-      },
-      "indexes": {},
-      "foreignKeys": {
-        "maintenance_logs_vehicleId_vehicles_id_fk": {
-          "name": "maintenance_logs_vehicleId_vehicles_id_fk",
-          "tableFrom": "maintenance_logs",
-          "tableTo": "vehicles",
-          "columnsFrom": [
-            "vehicleId"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "policies": {},
-      "checkConstraints": {
-        "maintenance_cost_non_negative": {
-          "name": "maintenance_cost_non_negative",
-          "value": "\"maintenance_logs\".\"costJpy\" IS NULL OR \"maintenance_logs\".\"costJpy\" >= 0"
         }
       },
       "isRLSEnabled": false

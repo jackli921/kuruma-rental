@@ -2,6 +2,8 @@
 // utilization data for the owner-facing /manage/vehicles/[id] page.
 // Computed per-request by the repository. See issue #53.
 
+import type { MaintenanceLogSummary } from './maintenance-log'
+
 export interface VehicleDetailBooking {
   id: string
   startAt: Date
@@ -36,6 +38,9 @@ export interface VehicleDetail {
   insuranceExpiryDate: string | null
   createdAt: Date
   updatedAt: Date
+
+  // Issue #225: full maintenance history for the vehicle.
+  maintenanceLogs: MaintenanceLogSummary[]
 
   upcomingBookings: VehicleDetailBooking[]
   revenueLast7d: number
