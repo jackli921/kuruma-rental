@@ -11,15 +11,19 @@ export interface CalendarBooking {
   status: 'CONFIRMED' | 'ACTIVE' | 'COMPLETED' | 'CANCELLED'
   source: 'DIRECT' | 'TRIP_COM' | 'MANUAL' | 'OTHER'
   notes: string | null
+  renterName?: string | null
 }
 
 export async function fetchCalendarBookings(
   from: string,
   to: string,
+  vehicleId?: string,
   token?: string,
 ): Promise<CalendarBooking[]> {
   const client = createApiClient(token)
-  const res = await client.bookings.$get({ query: { from, to } })
+  const query: Record<string, string> = { from, to }
+  if (vehicleId) query.vehicleId = vehicleId
+  const res = await client.bookings.$get({ query })
 
   if (!res.ok) {
     throw new Error(`Failed to fetch bookings: HTTP ${res.status}`)
