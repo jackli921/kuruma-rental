@@ -1,4 +1,5 @@
 import { auth } from '@/auth'
+import { getApiToken } from '@/lib/api-token'
 import { getVehicleById } from '@/lib/vehicles'
 import { getTranslations } from 'next-intl/server'
 import { notFound } from 'next/navigation'
@@ -16,7 +17,8 @@ export default async function NewBookingPage({ searchParams }: NewBookingPagePro
     notFound()
   }
 
-  const vehicle = await getVehicleById(vehicleId)
+  const token = await getApiToken()
+  const vehicle = await getVehicleById(vehicleId, token)
   if (!vehicle) {
     notFound()
   }

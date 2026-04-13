@@ -4,7 +4,7 @@ const API_BASE = 'http://localhost:8787'
 
 // Mock createApiClient before importing the module under test
 vi.mock('@/lib/api-client', () => ({
-  createApiClient: () => {
+  createApiClient: (token?: string) => {
     const { hc } = require('hono/client')
     return hc('http://localhost:8787')
   },
@@ -157,6 +157,24 @@ describe('vehicle-api', () => {
       expect(JSON.parse(init.body as string)).toEqual(updates)
       expect(result.name).toBe('Updated Corolla')
     })
+
+    it('passes Authorization header in raw fetch when token is provided', async () => {
+      const updates = { name: 'Updated Corolla' }
+      const spy = vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(
+        new Response(JSON.stringify({ success: true, data: { ...mockVehicle, ...updates } }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        }),
+      )
+
+      const { updateVehicle } = await import('@/lib/vehicle-api')
+      await updateVehicle('v1', updates, 'test-jwt-token')
+
+      const init = spy.mock.calls[0]?.[1] as RequestInit
+      const headers = init.headers as Record<string, string>
+      expect(headers.Authorization).toBe('Bearer test-jwt-token')
+      expect(headers['Content-Type']).toBe('application/json')
+    })
   })
 
   describe('updateVehicleStatus (issue #51)', () => {
@@ -179,6 +197,25 @@ describe('vehicle-api', () => {
       expect(init.method).toBe('PATCH')
       expect(JSON.parse(init.body as string)).toEqual({ status: 'MAINTENANCE' })
       expect(result.status).toBe('MAINTENANCE')
+    })
+
+    it('passes Authorization header in raw fetch when token is provided', async () => {
+      const spy = vi
+        .spyOn(globalThis, 'fetch')
+        .mockResolvedValueOnce(
+          new Response(
+            JSON.stringify({ success: true, data: { ...mockVehicle, status: 'MAINTENANCE' } }),
+            { status: 200, headers: { 'Content-Type': 'application/json' } },
+          ),
+        )
+
+      const { updateVehicleStatus } = await import('@/lib/vehicle-api')
+      await updateVehicleStatus('v1', 'MAINTENANCE', 'test-jwt-token')
+
+      const init = spy.mock.calls[0]?.[1] as RequestInit
+      const headers = init.headers as Record<string, string>
+      expect(headers.Authorization).toBe('Bearer test-jwt-token')
+      expect(headers['Content-Type']).toBe('application/json')
     })
 
     it('surfaces server errors as thrown Error', async () => {

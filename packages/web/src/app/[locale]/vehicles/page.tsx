@@ -1,6 +1,7 @@
 import { ActiveFilters } from '@/components/vehicles/ActiveFilters'
 import { RentalRulesBadge } from '@/components/vehicles/RentalRulesBadge'
 import { Link } from '@/i18n/routing'
+import { getApiToken } from '@/lib/api-token'
 import { getAvailableVehicles } from '@/lib/vehicles'
 import { Car, Fuel, Settings2, Users } from 'lucide-react'
 import { getTranslations } from 'next-intl/server'
@@ -20,7 +21,8 @@ export default async function VehiclesPage({
   const from = asString(resolvedParams.from)
   const to = asString(resolvedParams.to)
 
-  const vehicles = await getAvailableVehicles(from, to)
+  const token = await getApiToken()
+  const vehicles = await getAvailableVehicles(from, to, token)
 
   return (
     <main className="flex-1 py-10 px-4 sm:px-6 lg:px-8">

@@ -3,6 +3,10 @@ import { cleanup, render, screen } from '@testing-library/react'
 import type { ReactNode } from 'react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
+vi.mock('@/lib/vehicle-actions', () => ({
+  updateVehicleStatusAction: vi.fn().mockResolvedValue({ success: true, data: {} }),
+}))
+
 vi.mock('next-intl', () => ({
   useTranslations: () => (key: string) => {
     const messages: Record<string, string> = {

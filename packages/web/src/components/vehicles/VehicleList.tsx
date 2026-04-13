@@ -16,7 +16,7 @@ import {
   filterVehicles,
   sortVehicles,
 } from '@/lib/fleet-filters'
-import { fetchFleetOverviewAuthenticated } from '@/lib/vehicle-actions'
+import { fetchFleetOverviewAction } from '@/lib/vehicle-actions'
 import type { VehicleData } from '@/lib/vehicle-api'
 import { useQuery } from '@tanstack/react-query'
 import { AlertCircle, Car, Plus } from 'lucide-react'
@@ -48,7 +48,11 @@ export function VehicleList() {
     refetch,
   } = useQuery({
     queryKey: ['vehicles', 'fleet-overview'],
-    queryFn: () => fetchFleetOverviewAuthenticated(),
+    queryFn: async () => {
+      const result = await fetchFleetOverviewAction()
+      if (!result.success) throw new Error(result.error)
+      return result.data
+    },
   })
 
   const seatsBounds = useMemo(() => {
