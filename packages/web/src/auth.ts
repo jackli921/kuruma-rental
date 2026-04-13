@@ -34,16 +34,21 @@ function getAuthResult(): NextAuthResult {
             const ROLE_REFRESH_MS = 5 * 60 * 1000
             const lastRefresh = (token.roleRefreshedAt as number) ?? 0
             if (!token.role || Date.now() - lastRefresh > ROLE_REFRESH_MS) {
-              const db = getDb()
-              const [dbUser] = await db
-                .select({ role: users.role })
-                .from(users)
-                .where(eq(users.id, token.sub))
-                .limit(1)
-              if (dbUser) {
-                token.role = dbUser.role
+              try {
+                const db = getDb()
+                const [dbUser] = await db
+                  .select({ role: users.role })
+                  .from(users)
+                  .where(eq(users.id, token.sub))
+                  .limit(1)
+                if (dbUser) {
+                  token.role = dbUser.role
+                }
+                token.roleRefreshedAt = Date.now()
+              } catch {
+                // DB timeout (Neon cold start) — keep cached role, retry next request
+                if (!token.role) token.role = 'RENTER'
               }
-              token.roleRefreshedAt = Date.now()
             }
           }
           return token
