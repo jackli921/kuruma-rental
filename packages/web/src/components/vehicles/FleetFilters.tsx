@@ -20,6 +20,10 @@ interface FleetFiltersProps {
   readonly onFiltersChange: (filters: FleetFilterState) => void
   readonly onSortChange: (sort: SortOrder) => void
   readonly seatsBounds: { min: number; max: number }
+  readonly availableMakes: readonly string[]
+  readonly availableModels: readonly string[]
+  readonly availableYears: readonly number[]
+  readonly availableColors: readonly string[]
 }
 
 const STATUS_OPTIONS: readonly VehicleStatus[] = ['AVAILABLE', 'MAINTENANCE', 'RETIRED']
@@ -65,6 +69,10 @@ export function FleetFilters({
   onFiltersChange,
   onSortChange,
   seatsBounds,
+  availableMakes,
+  availableModels,
+  availableYears,
+  availableColors,
 }: FleetFiltersProps) {
   const t = useTranslations('business.vehicles.filter')
   const tStatus = useTranslations('business.vehicles')
@@ -204,6 +212,143 @@ export function FleetFilters({
                     }
                   >
                     {t('seatsBadgeLabel', { count: seats })}
+                  </Badge>
+                )
+              })}
+            </div>
+          </div>
+        </>
+      )}
+
+      {availableMakes.length > 1 && (
+        <>
+          <Separator />
+          <div className="space-y-2">
+            <SectionHeading>{t('makeHeading')}</SectionHeading>
+            <div className="flex flex-wrap gap-1.5">
+              {availableMakes.map((make) => {
+                const isSelected = filters.makes?.includes(make) ?? false
+                return (
+                  <Badge
+                    key={make}
+                    variant={isSelected ? 'default' : 'outline'}
+                    render={
+                      <button
+                        type="button"
+                        aria-pressed={isSelected}
+                        aria-label={make}
+                        onClick={() =>
+                          onFiltersChange({ ...filters, makes: toggleInArray(filters.makes, make) })
+                        }
+                      />
+                    }
+                  >
+                    {make}
+                  </Badge>
+                )
+              })}
+            </div>
+          </div>
+        </>
+      )}
+
+      {availableModels.length > 1 && (
+        <>
+          <Separator />
+          <div className="space-y-2">
+            <SectionHeading>{t('modelHeading')}</SectionHeading>
+            <div className="flex flex-wrap gap-1.5">
+              {availableModels.map((model) => {
+                const isSelected = filters.models?.includes(model) ?? false
+                return (
+                  <Badge
+                    key={model}
+                    variant={isSelected ? 'default' : 'outline'}
+                    render={
+                      <button
+                        type="button"
+                        aria-pressed={isSelected}
+                        aria-label={model}
+                        onClick={() =>
+                          onFiltersChange({
+                            ...filters,
+                            models: toggleInArray(filters.models, model),
+                          })
+                        }
+                      />
+                    }
+                  >
+                    {model}
+                  </Badge>
+                )
+              })}
+            </div>
+          </div>
+        </>
+      )}
+
+      {availableYears.length > 1 && (
+        <>
+          <Separator />
+          <div className="space-y-2">
+            <SectionHeading>{t('yearHeading')}</SectionHeading>
+            <div className="flex flex-wrap gap-1.5">
+              {availableYears.map((year) => {
+                const isSelected = filters.years?.includes(year) ?? false
+                return (
+                  <Badge
+                    key={year}
+                    variant={isSelected ? 'default' : 'outline'}
+                    render={
+                      <button
+                        type="button"
+                        aria-pressed={isSelected}
+                        aria-label={String(year)}
+                        onClick={() =>
+                          onFiltersChange({
+                            ...filters,
+                            years: toggleInArray(filters.years, year),
+                          })
+                        }
+                      />
+                    }
+                  >
+                    {year}
+                  </Badge>
+                )
+              })}
+            </div>
+          </div>
+        </>
+      )}
+
+      {availableColors.length > 1 && (
+        <>
+          <Separator />
+          <div className="space-y-2">
+            <SectionHeading>{t('colorHeading')}</SectionHeading>
+            <div className="flex flex-wrap gap-1.5">
+              {availableColors.map((color) => {
+                const isSelected = filters.colors?.includes(color) ?? false
+                return (
+                  <Badge
+                    key={color}
+                    variant={isSelected ? 'default' : 'outline'}
+                    render={
+                      <button
+                        type="button"
+                        aria-pressed={isSelected}
+                        aria-label={color}
+                        onClick={() =>
+                          onFiltersChange({
+                            ...filters,
+                            colors: toggleInArray(filters.colors, color),
+                          })
+                        }
+                      />
+                    }
+                  >
+                    {color}
                   </Badge>
                 )
               })}

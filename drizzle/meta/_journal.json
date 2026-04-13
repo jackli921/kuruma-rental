@@ -120,6 +120,13 @@
       "when": 1776039749174,
       "tag": "0016_add-license-plate",
       "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "7",
+      "when": 1776043312140,
+      "tag": "0017_add-vehicle-detail-fields",
+      "breakpoints": true
     }
   ]
 }
