@@ -183,6 +183,7 @@
         "transmissionAuto": "Auto",
         "transmissionManual": "Manual",
         "capacityHeading": "Capacity",
+        "seatsBadgeLabel": "{count} seats",
         "sortHeading": "Sort by",
         "sortUtilizationDesc": "Utilization: most booked first",
         "sortNameAsc": "Name A-Z",

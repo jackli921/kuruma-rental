@@ -3,9 +3,14 @@ import userEvent from '@testing-library/user-event'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 // Mock next-intl so tests don't depend on translation content.
-// t(key) returns the key verbatim, so queries use keys (not English strings).
+// t(key) returns the key verbatim; t(key, params) appends param values
+// so badges with different counts get distinguishable accessible names.
 vi.mock('next-intl', () => ({
-  useTranslations: () => (key: string) => key,
+  useTranslations: () => (key: string, params?: Record<string, unknown>) => {
+    if (!params) return key
+    const suffix = Object.values(params).join(',')
+    return `${key}(${suffix})`
+  },
 }))
 
 import { FleetFilters } from '@/components/vehicles/FleetFilters'
@@ -113,7 +118,7 @@ describe('FleetFilters', () => {
       />,
     )
 
-    await user.click(screen.getByRole('button', { name: '4' }))
+    await user.click(screen.getByRole('button', { name: 'seatsBadgeLabel(4)' }))
 
     expect(onFiltersChange).toHaveBeenCalledWith(expect.objectContaining({ seats: [4] }))
   })
@@ -131,7 +136,7 @@ describe('FleetFilters', () => {
       />,
     )
 
-    await user.click(screen.getByRole('button', { name: '4' }))
+    await user.click(screen.getByRole('button', { name: 'seatsBadgeLabel(4)' }))
 
     expect(onFiltersChange).toHaveBeenCalledWith(expect.objectContaining({ seats: [5] }))
   })

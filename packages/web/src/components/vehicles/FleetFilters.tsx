@@ -12,6 +12,7 @@ import {
 import { Separator } from '@/components/ui/separator'
 import type { FleetFilterState, SortOrder, Transmission, VehicleStatus } from '@/lib/fleet-filters'
 import { useTranslations } from 'next-intl'
+import { useMemo } from 'react'
 
 interface FleetFiltersProps {
   readonly filters: FleetFilterState
@@ -70,9 +71,16 @@ export function FleetFilters({
 
   const hasCapacityRange = seatsBounds.min < seatsBounds.max
 
-  const seatOptions: number[] = hasCapacityRange
-    ? Array.from({ length: seatsBounds.max - seatsBounds.min + 1 }, (_, i) => seatsBounds.min + i)
-    : []
+  const seatOptions = useMemo(
+    () =>
+      hasCapacityRange
+        ? Array.from(
+            { length: seatsBounds.max - seatsBounds.min + 1 },
+            (_, i) => seatsBounds.min + i,
+          )
+        : [],
+    [hasCapacityRange, seatsBounds.min, seatsBounds.max],
+  )
 
   const statusLabel = (status: VehicleStatus): string => tStatus(STATUS_LABEL_KEYS[status])
 
@@ -182,7 +190,6 @@ export function FleetFilters({
             <div className="flex flex-wrap gap-1.5">
               {seatOptions.map((seats) => {
                 const isSelected = filters.seats?.includes(seats) ?? false
-                const label = String(seats)
                 return (
                   <Badge
                     key={seats}
@@ -191,12 +198,12 @@ export function FleetFilters({
                       <button
                         type="button"
                         aria-pressed={isSelected}
-                        aria-label={label}
+                        aria-label={t('seatsBadgeLabel', { count: seats })}
                         onClick={() => handleSeatsToggle(seats)}
                       />
                     }
                   >
-                    {label}
+                    {seats}
                   </Badge>
                 )
               })}
