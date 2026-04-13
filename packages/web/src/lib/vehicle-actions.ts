@@ -27,28 +27,32 @@ async function withAuth<T>(fn: (token: string) => Promise<T>): Promise<ActionRes
   }
 }
 
-export function fetchFleetOverviewAction(): Promise<ActionResult<FleetVehicleOverviewData[]>> {
+export async function fetchFleetOverviewAction(): Promise<
+  ActionResult<FleetVehicleOverviewData[]>
+> {
   return withAuth((token) => fetchFleetOverview(token))
 }
 
-export function createVehicleAction(data: CreateVehicleInput): Promise<ActionResult<VehicleData>> {
+export async function createVehicleAction(
+  data: CreateVehicleInput,
+): Promise<ActionResult<VehicleData>> {
   return withAuth((token) => createVehicle(data, token))
 }
 
-export function updateVehicleAction(
+export async function updateVehicleAction(
   id: string,
   data: Partial<CreateVehicleInput>,
 ): Promise<ActionResult<VehicleData>> {
   return withAuth((token) => updateVehicle(id, data, token))
 }
 
-export function updateVehicleStatusAction(
+export async function updateVehicleStatusAction(
   id: string,
   status: VehicleStatus,
 ): Promise<ActionResult<VehicleData>> {
   return withAuth((token) => updateVehicleStatus(id, status, token))
 }
 
-export function retireVehicleAction(id: string): Promise<ActionResult<VehicleData>> {
+export async function retireVehicleAction(id: string): Promise<ActionResult<VehicleData>> {
   return withAuth((token) => retireVehicle(id, token))
 }
