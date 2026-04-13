@@ -3,9 +3,14 @@ import userEvent from '@testing-library/user-event'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 // Mock next-intl so tests don't depend on translation content.
-// t(key) returns the key verbatim, so queries use keys (not English strings).
+// t(key) returns the key verbatim; t(key, params) appends param values
+// so badges with different counts get distinguishable accessible names.
 vi.mock('next-intl', () => ({
-  useTranslations: () => (key: string) => key,
+  useTranslations: () => (key: string, params?: Record<string, unknown>) => {
+    if (!params) return key
+    const suffix = Object.values(params).join(',')
+    return `${key}(${suffix})`
+  },
 }))
 
 import { FleetFilters } from '@/components/vehicles/FleetFilters'
@@ -94,10 +99,45 @@ describe('FleetFilters', () => {
     expect(onSortChange).toHaveBeenCalledWith('seats-desc')
   })
 
-  it('hides the capacity slider section when all vehicles have the same seat count', () => {
+  it('hides the capacity section when all vehicles have the same seat count', () => {
     render(<FleetFilters {...defaultProps} seatsBounds={{ min: 5, max: 5 }} />)
 
-    // The seats section heading should not be rendered when there is no range to pick from
-    expect(screen.queryByRole('slider')).toBeNull()
+    expect(screen.queryByText('capacityHeading')).toBeNull()
+  })
+
+  it('toggles a seat count badge on when clicked', async () => {
+    const onFiltersChange = vi.fn()
+    const user = userEvent.setup()
+
+    render(
+      <FleetFilters
+        {...defaultProps}
+        filters={{}}
+        onFiltersChange={onFiltersChange}
+        seatsBounds={{ min: 2, max: 5 }}
+      />,
+    )
+
+    await user.click(screen.getByRole('button', { name: 'seatsBadgeLabel(4)' }))
+
+    expect(onFiltersChange).toHaveBeenCalledWith(expect.objectContaining({ seats: [4] }))
+  })
+
+  it('toggles a seat count badge off when already selected', async () => {
+    const onFiltersChange = vi.fn()
+    const user = userEvent.setup()
+
+    render(
+      <FleetFilters
+        {...defaultProps}
+        filters={{ seats: [4, 5] }}
+        onFiltersChange={onFiltersChange}
+        seatsBounds={{ min: 2, max: 5 }}
+      />,
+    )
+
+    await user.click(screen.getByRole('button', { name: 'seatsBadgeLabel(4)' }))
+
+    expect(onFiltersChange).toHaveBeenCalledWith(expect.objectContaining({ seats: [5] }))
   })
 })

@@ -111,18 +111,26 @@ describe('filterVehicles', () => {
     })
   })
 
-  describe('seats range filter', () => {
-    it('returns only vehicles within the seats range (inclusive)', () => {
+  describe('seats filter', () => {
+    it('returns only vehicles whose seat count is in the selected set', () => {
       const vehicles = [
         makeVehicle({ name: 'Kei', seats: 4 }),
         makeVehicle({ name: 'Sedan', seats: 5 }),
         makeVehicle({ name: 'Van', seats: 8 }),
       ]
 
-      const result = filterVehicles(vehicles, { seatsMin: 5, seatsMax: 7 })
+      const result = filterVehicles(vehicles, { seats: [5, 8] })
 
-      expect(result).toHaveLength(1)
-      expect(result[0]?.name).toBe('Sedan')
+      expect(result).toHaveLength(2)
+      expect(result.map((v) => v.name).sort()).toEqual(['Sedan', 'Van'])
+    })
+
+    it('returns all vehicles when seats filter is empty', () => {
+      const vehicles = [makeVehicle({ seats: 4 }), makeVehicle({ seats: 5 })]
+
+      const result = filterVehicles(vehicles, { seats: [] })
+
+      expect(result).toHaveLength(2)
     })
   })
 
@@ -139,8 +147,7 @@ describe('filterVehicles', () => {
         search: 'toyota',
         statuses: ['AVAILABLE'],
         transmissions: ['AUTO'],
-        seatsMin: 4,
-        seatsMax: 6,
+        seats: [4, 5, 6],
       })
 
       expect(result).toHaveLength(1)
