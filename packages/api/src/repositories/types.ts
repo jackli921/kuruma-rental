@@ -101,3 +101,8 @@ export interface MessageRepository {
   create(threadId: string, senderId: string, content: string): Promise<Message>
   findByThreadId(threadId: string): Promise<Message[]>
 }
+
+export interface PhotoStorage {
+  put(vehicleId: string, file: File): Promise<{ key: string; url: string }>
+  delete(key: string): Promise<void>
+}
