@@ -19,6 +19,13 @@ export async function fetchVehicleCalendarBookings(
 
 export type ActionResult = { success: true } | { success: false; error: string }
 
+function extractError(body: ApiResponse<unknown>, fallback: string): string {
+  if (!body.success) {
+    return typeof body.error === 'string' ? body.error : fallback
+  }
+  return fallback
+}
+
 export async function updateBookingStatus(
   bookingId: string,
   status: 'ACTIVE' | 'COMPLETED',
@@ -26,6 +33,7 @@ export async function updateBookingStatus(
   const token = await getApiToken()
   if (!token) return { success: false, error: 'Authentication required' }
 
+  // Raw fetch for PATCH — hc client only used for typed URL construction.
   const client = createApiClient()
   const url = client.bookings[':id'].status.$url({ param: { id: bookingId } })
   const res = await fetch(url, {
@@ -39,7 +47,7 @@ export async function updateBookingStatus(
 
   const body = (await res.json()) as ApiResponse<unknown>
   if (!body.success) {
-    return { success: false, error: body.error ?? 'Failed to update booking status' }
+    return { success: false, error: extractError(body, 'Failed to update booking status') }
   }
   return { success: true }
 }
@@ -55,7 +63,7 @@ export async function cancelBooking(bookingId: string): Promise<ActionResult> {
 
   const body = (await res.json()) as ApiResponse<unknown>
   if (!body.success) {
-    return { success: false, error: body.error ?? 'Failed to cancel booking' }
+    return { success: false, error: extractError(body, 'Failed to cancel booking') }
   }
   return { success: true }
 }
