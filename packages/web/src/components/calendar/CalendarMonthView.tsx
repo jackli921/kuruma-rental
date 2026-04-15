@@ -70,62 +70,67 @@ export function CalendarMonthView({
   const referenceDate = new Date(year, month, 1)
 
   return (
-    <div className="rounded-lg border">
-      {/* Day headers */}
-      <div className="grid grid-cols-7 border-b">
-        {DAY_HEADERS.map((day) => (
-          <div key={day} className="p-2 text-center text-xs font-medium text-muted-foreground">
-            {day}
-          </div>
-        ))}
-      </div>
-
-      {/* Day cells */}
-      <div className="grid grid-cols-7">
-        {/* Leading blank cells (static count per month, never reorder) */}
-        {Array.from({ length: leadingBlanks }, (_, i) => (
-          // biome-ignore lint/suspicious/noArrayIndexKey: blank spacer cells have no stable ID
-          <div key={`blank-${i}`} className="min-h-[80px] border-b border-r p-1.5 opacity-40" />
-        ))}
-
-        {/* Actual days */}
-        {days.map((day) => {
-          const key = format(day, 'yyyy-MM-dd')
-          const dayBookings = bookingsByDate.get(key) ?? []
-          const overflowCount = dayBookings.length - MAX_VISIBLE_CHIPS
-          const inMonth = isSameMonth(day, referenceDate)
-
-          return (
-            <div
-              key={key}
-              className={cn(
-                'min-h-[80px] border-b border-r p-1.5',
-                !inMonth && 'opacity-40',
-                isToday(day) && 'bg-primary/10',
-              )}
-            >
-              <div className={cn('mb-1 text-xs', isToday(day) && 'font-semibold text-primary')}>
-                {format(day, 'd')}
-              </div>
-              <div className="flex flex-col gap-0.5">
-                {dayBookings.slice(0, MAX_VISIBLE_CHIPS).map((booking) => (
-                  <BookingBlock
-                    key={booking.id}
-                    booking={booking}
-                    variant="chip"
-                    onClick={() => onBookingClick(booking)}
-                  />
-                ))}
-                {overflowCount > 0 && (
-                  <span className="text-[10px] text-muted-foreground pl-1.5">
-                    +{overflowCount} more
-                  </span>
-                )}
-              </div>
+    <section className="overflow-x-auto rounded-lg border" aria-label="Month calendar">
+      <div className="min-w-[500px]">
+        {/* Day headers */}
+        <div className="grid grid-cols-7 border-b">
+          {DAY_HEADERS.map((day) => (
+            <div key={day} className="p-2 text-center text-xs font-medium text-muted-foreground">
+              {day}
             </div>
-          )
-        })}
+          ))}
+        </div>
+
+        {/* Day cells */}
+        <div className="grid grid-cols-7">
+          {/* Leading blank cells (static count per month, never reorder) */}
+          {Array.from({ length: leadingBlanks }, (_, i) => (
+            <div
+              // biome-ignore lint/suspicious/noArrayIndexKey: blank spacer cells have no stable ID
+              key={`blank-${i}`}
+              className="min-h-[60px] sm:min-h-[80px] border-b border-r p-1.5 opacity-40"
+            />
+          ))}
+
+          {/* Actual days */}
+          {days.map((day) => {
+            const key = format(day, 'yyyy-MM-dd')
+            const dayBookings = bookingsByDate.get(key) ?? []
+            const overflowCount = dayBookings.length - MAX_VISIBLE_CHIPS
+            const inMonth = isSameMonth(day, referenceDate)
+
+            return (
+              <div
+                key={key}
+                className={cn(
+                  'min-h-[60px] sm:min-h-[80px] border-b border-r p-1.5',
+                  !inMonth && 'opacity-40',
+                  isToday(day) && 'bg-primary/10',
+                )}
+              >
+                <div className={cn('mb-1 text-xs', isToday(day) && 'font-semibold text-primary')}>
+                  {format(day, 'd')}
+                </div>
+                <div className="flex flex-col gap-0.5">
+                  {dayBookings.slice(0, MAX_VISIBLE_CHIPS).map((booking) => (
+                    <BookingBlock
+                      key={booking.id}
+                      booking={booking}
+                      variant="chip"
+                      onClick={() => onBookingClick(booking)}
+                    />
+                  ))}
+                  {overflowCount > 0 && (
+                    <span className="text-[10px] text-muted-foreground pl-1.5">
+                      +{overflowCount} more
+                    </span>
+                  )}
+                </div>
+              </div>
+            )
+          })}
+        </div>
       </div>
-    </div>
+    </section>
   )
 }

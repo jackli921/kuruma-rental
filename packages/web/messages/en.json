@@ -217,6 +217,7 @@
         "colorPlaceholder": "e.g. White"
       },
       "filter": {
+        "title": "Filters",
         "all": "All",
         "available": "Available",
         "maintenance": "Maintenance",

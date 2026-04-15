@@ -70,79 +70,81 @@ export function CalendarWeekView({ bookings, weekStart, onBookingClick }: Calend
   const nowTop = (nowMinutes / 60) * PIXELS_PER_HOUR
 
   return (
-    <div className="rounded-lg border">
-      {/* Day header */}
-      <div className="grid grid-cols-[60px_repeat(7,1fr)] border-b">
-        <div className="p-2" />
-        {days.map((day) => (
-          <div
-            key={day.toISOString()}
-            className={cn(
-              'p-2 text-center text-xs font-medium border-l',
-              isToday(day) && 'bg-primary/10',
-            )}
-          >
-            <div className="text-muted-foreground">{format(day, 'EEE')}</div>
-            <div className={cn('text-sm', isToday(day) && 'text-primary font-semibold')}>
-              {format(day, 'd')}
-            </div>
-          </div>
-        ))}
-      </div>
-
-      <div className="overflow-y-auto max-h-[600px]">
-        <div className="grid grid-cols-[60px_repeat(7,1fr)]" style={{ height: totalHeight }}>
-          {/* Hour labels */}
-          <div className="relative">
-            {HOUR_SLOTS.map((hour, idx) => (
-              <div
-                key={hour}
-                className="absolute right-2 text-[10px] text-muted-foreground -translate-y-1/2"
-                style={{ top: idx * PIXELS_PER_HOUR }}
-              >
-                {hour}
-              </div>
-            ))}
-          </div>
-
-          {/* Day columns */}
-          {days.map((day, dayIdx) => (
-            <div key={day.toISOString()} className="relative border-l">
-              {/* Hour grid lines */}
-              {HOUR_SLOTS.map((hour, hourIdx) => (
-                <div
-                  key={hour}
-                  className="absolute inset-x-0 border-t border-border/50"
-                  style={{ top: hourIdx * PIXELS_PER_HOUR }}
-                />
-              ))}
-
-              {/* Now line */}
-              {isCurrentWeek && isToday(day) && (
-                <div
-                  className="absolute inset-x-0 z-10 border-t-2 border-destructive"
-                  style={{ top: nowTop }}
-                />
+    <section className="overflow-x-auto rounded-lg border" aria-label="Week calendar">
+      <div className="min-w-[700px]">
+        {/* Day header */}
+        <div className="grid grid-cols-[60px_repeat(7,1fr)] border-b">
+          <div className="p-2" />
+          {days.map((day) => (
+            <div
+              key={day.toISOString()}
+              className={cn(
+                'p-2 text-center text-xs font-medium border-l',
+                isToday(day) && 'bg-primary/10',
               )}
-
-              {/* Booking blocks */}
-              {bookingsByDay.get(dayIdx)?.map(({ booking, top, height }) => (
-                <div
-                  key={`${booking.id}-${dayIdx}`}
-                  className="absolute inset-x-0 px-0.5"
-                  style={{ top, height }}
-                >
-                  <BookingBlock
-                    booking={booking}
-                    variant="bar"
-                    onClick={() => onBookingClick(booking)}
-                  />
-                </div>
-              ))}
+            >
+              <div className="text-muted-foreground">{format(day, 'EEE')}</div>
+              <div className={cn('text-sm', isToday(day) && 'text-primary font-semibold')}>
+                {format(day, 'd')}
+              </div>
             </div>
           ))}
         </div>
+
+        <div className="overflow-y-auto max-h-[600px]">
+          <div className="grid grid-cols-[60px_repeat(7,1fr)]" style={{ height: totalHeight }}>
+            {/* Hour labels */}
+            <div className="relative">
+              {HOUR_SLOTS.map((hour, idx) => (
+                <div
+                  key={hour}
+                  className="absolute right-2 text-[10px] text-muted-foreground -translate-y-1/2"
+                  style={{ top: idx * PIXELS_PER_HOUR }}
+                >
+                  {hour}
+                </div>
+              ))}
+            </div>
+
+            {/* Day columns */}
+            {days.map((day, dayIdx) => (
+              <div key={day.toISOString()} className="relative border-l">
+                {/* Hour grid lines */}
+                {HOUR_SLOTS.map((hour, hourIdx) => (
+                  <div
+                    key={hour}
+                    className="absolute inset-x-0 border-t border-border/50"
+                    style={{ top: hourIdx * PIXELS_PER_HOUR }}
+                  />
+                ))}
+
+                {/* Now line */}
+                {isCurrentWeek && isToday(day) && (
+                  <div
+                    className="absolute inset-x-0 z-10 border-t-2 border-destructive"
+                    style={{ top: nowTop }}
+                  />
+                )}
+
+                {/* Booking blocks */}
+                {bookingsByDay.get(dayIdx)?.map(({ booking, top, height }) => (
+                  <div
+                    key={`${booking.id}-${dayIdx}`}
+                    className="absolute inset-x-0 px-0.5"
+                    style={{ top, height }}
+                  >
+                    <BookingBlock
+                      booking={booking}
+                      variant="bar"
+                      onClick={() => onBookingClick(booking)}
+                    />
+                  </div>
+                ))}
+              </div>
+            ))}
+          </div>
+        </div>
       </div>
-    </div>
+    </section>
   )
 }

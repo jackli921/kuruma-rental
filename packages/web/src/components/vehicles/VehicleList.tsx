@@ -1,6 +1,7 @@
 'use client'
 
 import { Button } from '@/components/ui/button'
+import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from '@/components/ui/sheet'
 import { Skeleton } from '@/components/ui/skeleton'
 import { AddVehicleDialog } from '@/components/vehicles/AddVehicleDialog'
 import { BulkActionBar } from '@/components/vehicles/BulkActionBar'
@@ -17,10 +18,11 @@ import {
   filterVehicles,
   sortVehicles,
 } from '@/lib/fleet-filters'
+import { cn } from '@/lib/utils'
 import { fetchFleetOverviewAction } from '@/lib/vehicle-actions'
 import type { VehicleData } from '@/lib/vehicle-api'
 import { useQuery } from '@tanstack/react-query'
-import { AlertCircle, Car, Plus } from 'lucide-react'
+import { AlertCircle, Car, Plus, SlidersHorizontal } from 'lucide-react'
 import { useTranslations } from 'next-intl'
 import { useCallback, useMemo, useState } from 'react'
 
@@ -123,7 +125,7 @@ export function VehicleList() {
 
   return (
     <div className="flex flex-col lg:flex-row gap-6">
-      <aside className="lg:w-64 lg:sticky lg:top-20 lg:self-start shrink-0">
+      <aside className="hidden lg:block lg:w-64 lg:sticky lg:top-20 lg:self-start shrink-0">
         <FleetFilters
           filters={filters}
           sort={sort}
@@ -141,7 +143,37 @@ export function VehicleList() {
         {!isLoading && !isError && overviews && <FleetSummaryBar overviews={overviews} />}
 
         <div className="flex items-center justify-between gap-4">
-          <FleetViewToggle value={viewMode} onChange={setViewMode} />
+          <div className="flex items-center gap-2">
+            <Sheet>
+              <SheetTrigger
+                render={
+                  <Button variant="outline" size="sm" className="lg:hidden">
+                    <SlidersHorizontal className="size-4 mr-1.5" />
+                    {t('filter.title')}
+                  </Button>
+                }
+              />
+              <SheetContent side="left" className="w-72 overflow-y-auto">
+                <SheetHeader>
+                  <SheetTitle>{t('filter.title')}</SheetTitle>
+                </SheetHeader>
+                <div className="px-4 pb-4">
+                  <FleetFilters
+                    filters={filters}
+                    sort={sort}
+                    onFiltersChange={setFilters}
+                    onSortChange={setSort}
+                    seatsBounds={seatsBounds}
+                    availableMakes={availableMakes}
+                    availableModels={availableModels}
+                    availableYears={availableYears}
+                    availableColors={availableColors}
+                  />
+                </div>
+              </SheetContent>
+            </Sheet>
+            <FleetViewToggle value={viewMode} onChange={setViewMode} />
+          </div>
           <Button onClick={() => setShowAddDialog(true)}>
             <Plus className="size-4 mr-1.5" />
             {t('addVehicle')}
@@ -184,8 +216,10 @@ export function VehicleList() {
           </div>
         )}
 
+        {/* Row view: desktop-only. On mobile, card grid below is the fallback.
+            Both lists mount when viewMode==='row' — acceptable for <=50 vehicles. */}
         {!isLoading && !isError && displayed.length > 0 && viewMode === 'row' && (
-          <div className="space-y-2">
+          <div className="hidden md:block space-y-2">
             {displayed.map((overview) => (
               <FleetVehicleRow
                 key={overview.id}
@@ -199,8 +233,13 @@ export function VehicleList() {
           </div>
         )}
 
-        {!isLoading && !isError && displayed.length > 0 && viewMode === 'grid' && (
-          <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-6">
+        {!isLoading && !isError && displayed.length > 0 && (
+          <div
+            className={cn(
+              'grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-6',
+              viewMode === 'row' && 'md:hidden',
+            )}
+          >
             {displayed.map((overview) => (
               <FleetVehicleCard
                 key={overview.id}

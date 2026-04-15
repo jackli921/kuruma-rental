@@ -39,7 +39,7 @@ export function CalendarNavigation({
   }
 
   return (
-    <div className="flex items-center justify-between gap-4">
+    <div className="flex flex-wrap items-center justify-between gap-2 sm:gap-4">
       <div className="flex items-center gap-1">
         <Button variant="outline" size="icon" onClick={handlePrev} aria-label="Previous">
           <ChevronLeft className="size-4" />
@@ -52,7 +52,9 @@ export function CalendarNavigation({
         </Button>
       </div>
 
-      <span className="text-sm font-medium">{formatLabel(currentDate, viewMode)}</span>
+      <span className="order-last w-full text-center text-sm font-medium sm:order-none sm:w-auto">
+        {formatLabel(currentDate, viewMode)}
+      </span>
 
       <div className="flex items-center gap-1">
         <Button
