@@ -3,6 +3,7 @@ import { Badge } from '@/components/ui/badge'
 import { buttonVariants } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { MaintenanceHistoryCard } from '@/components/vehicles/MaintenanceHistoryCard'
+import { PhotoUpload } from '@/components/vehicles/PhotoUpload'
 import { Link } from '@/i18n/routing'
 import { formatJpy } from '@/lib/format'
 import { cn } from '@/lib/utils'
@@ -97,6 +98,7 @@ export function VehicleDetail({ vehicle, t }: VehicleDetailProps) {
         {/* Left column: photos + specs */}
         <div className="lg:col-span-2 space-y-6">
           <PhotoGallery photos={photos} name={vehicle.name} placeholder={t('photos')} />
+          <PhotoUpload key={vehicle.id} vehicleId={vehicle.id} initialPhotos={photos} />
 
           {/* Specs card */}
           <Card>
