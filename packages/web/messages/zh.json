@@ -217,6 +217,7 @@
         "colorPlaceholder": "例如 白色"
       },
       "filter": {
+        "title": "筛选",
         "all": "全部",
         "available": "可用",
         "maintenance": "维护中",

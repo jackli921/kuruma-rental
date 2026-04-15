@@ -217,6 +217,7 @@
         "colorPlaceholder": "例: ホワイト"
       },
       "filter": {
+        "title": "フィルター",
         "all": "すべて",
         "available": "利用可能",
         "maintenance": "メンテナンス中",
