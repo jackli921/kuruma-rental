@@ -88,7 +88,6 @@ export function FleetVehicleRow({
     `${overview.seats}`,
     overview.transmission === 'AUTO' ? 'AT' : 'MT',
     overview.fuelType,
-    overview.licensePlate,
   ].filter((p): p is string => Boolean(p))
 
   return (
@@ -127,7 +126,7 @@ export function FleetVehicleRow({
       </div>
 
       {/* Name + subtitle */}
-      <div className="min-w-0 flex-1">
+      <div className="min-w-[10rem] flex-1">
         <div className="truncate font-medium text-foreground">{overview.name}</div>
         <div data-testid="fleet-row-subtitle" className="truncate text-sm text-muted-foreground">
           {subtitleParts.join(' · ')}
@@ -156,7 +155,7 @@ export function FleetVehicleRow({
       </div>
 
       {/* Booking indicator */}
-      <div className="flex-shrink-0 min-w-[12rem]">
+      <div className="flex-shrink-0 min-w-[10rem]">
         <BookingIndicator current={overview.currentBooking} next={overview.nextBooking} t={t} />
       </div>
 
@@ -168,7 +167,7 @@ export function FleetVehicleRow({
       {/* Utilization */}
       <div
         data-testid="fleet-row-utilization"
-        className="flex-shrink-0 min-w-[10rem] text-right text-sm text-muted-foreground"
+        className="flex-shrink-0 min-w-[8rem] text-right text-sm text-muted-foreground"
       >
         {t('fleet.utilizationLabel', {
           percent: Math.round(overview.utilization),
