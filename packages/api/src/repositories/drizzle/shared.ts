@@ -5,14 +5,42 @@ import {
   messages,
   threadParticipants,
   threads,
+  vehicleClasses,
   vehicles,
 } from '@kuruma/shared/db/schema'
-import type { Booking, MaintenanceLog, Message, Thread, ThreadParticipant, Vehicle } from '../../stores'
+import type {
+  Booking,
+  MaintenanceLog,
+  Message,
+  Thread,
+  ThreadParticipant,
+  Vehicle,
+  VehicleClass,
+} from '../../stores'
 
 export type Db = ReturnType<typeof getDb>
 
+export const vehicleClassColumns = {
+  id: vehicleClasses.id,
+  name: vehicleClasses.name,
+  slug: vehicleClasses.slug,
+  description: vehicleClasses.description,
+  photos: vehicleClasses.photos,
+  seats: vehicleClasses.seats,
+  luggageCapacity: vehicleClasses.luggageCapacity,
+  transmission: vehicleClasses.transmission,
+  fuelType: vehicleClasses.fuelType,
+  dailyRateJpy: vehicleClasses.dailyRateJpy,
+  hourlyRateJpy: vehicleClasses.hourlyRateJpy,
+  sortOrder: vehicleClasses.sortOrder,
+  status: vehicleClasses.status,
+  createdAt: vehicleClasses.createdAt,
+  updatedAt: vehicleClasses.updatedAt,
+}
+
 export const vehicleColumns = {
   id: vehicles.id,
+  classId: vehicles.classId,
   name: vehicles.name,
   description: vehicles.description,
   photos: vehicles.photos,
@@ -104,9 +132,30 @@ export const maintenanceLogColumns = {
 // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Drizzle row types vary
 type AnyRow = Record<string, any>
 
+export function toVehicleClass(r: AnyRow): VehicleClass {
+  return {
+    id: r.id,
+    name: r.name,
+    slug: r.slug,
+    description: r.description,
+    photos: r.photos,
+    seats: r.seats,
+    luggageCapacity: r.luggageCapacity,
+    transmission: r.transmission,
+    fuelType: r.fuelType,
+    dailyRateJpy: r.dailyRateJpy,
+    hourlyRateJpy: r.hourlyRateJpy,
+    sortOrder: r.sortOrder,
+    status: r.status,
+    createdAt: r.createdAt,
+    updatedAt: r.updatedAt,
+  }
+}
+
 export function toVehicle(r: AnyRow): Vehicle {
   return {
     id: r.id,
+    classId: r.classId,
     name: r.name,
     description: r.description,
     photos: r.photos,

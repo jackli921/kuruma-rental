@@ -52,6 +52,7 @@ export const accounts = pgTable(
 )
 
 export const transmissionEnum = pgEnum('transmission', ['AUTO', 'MANUAL'])
+export const vehicleClassStatusEnum = pgEnum('vehicle_class_status', ['ACTIVE', 'ARCHIVED'])
 export const vehicleStatusEnum = pgEnum('vehicle_status', ['AVAILABLE', 'MAINTENANCE', 'RETIRED'])
 export const bookingStatusEnum = pgEnum('booking_status', [
   'CONFIRMED',
@@ -61,12 +62,54 @@ export const bookingStatusEnum = pgEnum('booking_status', [
 ])
 export const bookingSourceEnum = pgEnum('booking_source', ['DIRECT', 'TRIP_COM', 'MANUAL', 'OTHER'])
 
+// Issue #247: vehicle classes — renter-facing catalog categories.
+// Renters browse and book classes (e.g. "Compact"); owner manages
+// individual cars tagged to a class. See design doc:
+// docs/plans/2026-04-14-vehicle-class-abstraction.md
+export const vehicleClasses = pgTable(
+  'vehicle_classes',
+  {
+    id: text('id')
+      .primaryKey()
+      .$defaultFn(() => crypto.randomUUID()),
+    name: text('name').notNull(),
+    slug: text('slug').unique().notNull(),
+    description: text('description'),
+    photos: text('photos').array().notNull().default([]),
+    seats: integer('seats').notNull(),
+    luggageCapacity: integer('luggageCapacity').notNull(),
+    transmission: transmissionEnum('transmission').notNull(),
+    fuelType: text('fuelType'),
+    dailyRateJpy: integer('dailyRateJpy'),
+    hourlyRateJpy: integer('hourlyRateJpy'),
+    sortOrder: integer('sortOrder').notNull().default(0),
+    status: vehicleClassStatusEnum('status').notNull().default('ACTIVE'),
+    createdAt: timestamp('createdAt', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updatedAt', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    check(
+      'vehicle_classes_pricing_at_least_one',
+      sql`${table.dailyRateJpy} IS NOT NULL OR ${table.hourlyRateJpy} IS NOT NULL`,
+    ),
+    check(
+      'vehicle_classes_daily_rate_non_negative',
+      sql`${table.dailyRateJpy} IS NULL OR ${table.dailyRateJpy} >= 0`,
+    ),
+    check(
+      'vehicle_classes_hourly_rate_non_negative',
+      sql`${table.hourlyRateJpy} IS NULL OR ${table.hourlyRateJpy} >= 0`,
+    ),
+  ],
+)
+
 export const vehicles = pgTable(
   'vehicles',
   {
     id: text('id')
       .primaryKey()
       .$defaultFn(() => crypto.randomUUID()),
+    classId: text('classId').references(() => vehicleClasses.id),
     name: text('name').notNull(),
     description: text('description'),
     photos: text('photos').array().notNull().default([]),

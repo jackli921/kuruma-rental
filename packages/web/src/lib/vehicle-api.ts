@@ -4,6 +4,7 @@ import type { CreateVehicleInput, VehicleStatus } from '@kuruma/shared/validator
 
 export interface VehicleData {
   id: string
+  classId: string | null
   name: string
   description: string | null
   photos?: string[]
