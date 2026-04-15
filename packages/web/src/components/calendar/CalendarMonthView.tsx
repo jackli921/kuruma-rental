@@ -70,7 +70,7 @@ export function CalendarMonthView({
   const referenceDate = new Date(year, month, 1)
 
   return (
-    <div className="overflow-x-auto rounded-lg border">
+    <section className="overflow-x-auto rounded-lg border" aria-label="Month calendar">
       <div className="min-w-[500px]">
         {/* Day headers */}
         <div className="grid grid-cols-7 border-b">
@@ -131,6 +131,6 @@ export function CalendarMonthView({
           })}
         </div>
       </div>
-    </div>
+    </section>
   )
 }

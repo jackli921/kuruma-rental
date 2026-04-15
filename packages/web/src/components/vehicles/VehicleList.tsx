@@ -216,6 +216,8 @@ export function VehicleList() {
           </div>
         )}
 
+        {/* Row view: desktop-only. On mobile, card grid below is the fallback.
+            Both lists mount when viewMode==='row' — acceptable for <=50 vehicles. */}
         {!isLoading && !isError && displayed.length > 0 && viewMode === 'row' && (
           <div className="hidden md:block space-y-2">
             {displayed.map((overview) => (

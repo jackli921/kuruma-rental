@@ -70,7 +70,7 @@ export function CalendarWeekView({ bookings, weekStart, onBookingClick }: Calend
   const nowTop = (nowMinutes / 60) * PIXELS_PER_HOUR
 
   return (
-    <div className="overflow-x-auto rounded-lg border">
+    <section className="overflow-x-auto rounded-lg border" aria-label="Week calendar">
       <div className="min-w-[700px]">
         {/* Day header */}
         <div className="grid grid-cols-[60px_repeat(7,1fr)] border-b">
@@ -145,6 +145,6 @@ export function CalendarWeekView({ bookings, weekStart, onBookingClick }: Calend
           </div>
         </div>
       </div>
-    </div>
+    </section>
   )
 }
