@@ -1,5 +1,6 @@
 export type {
   Vehicle,
+  VehicleClass,
   Booking,
   User,
   Thread,
@@ -22,6 +23,7 @@ import type {
   ThreadParticipant,
   User,
   Vehicle,
+  VehicleClass,
 } from '../stores'
 
 export interface VehicleFilters {
@@ -128,4 +130,18 @@ export interface MaintenanceLogRepository {
   findActiveByVehicleId(vehicleId: string): Promise<MaintenanceLog | undefined>
   create(data: Omit<MaintenanceLog, 'id' | 'createdAt' | 'updatedAt'>): Promise<MaintenanceLog>
   resolve(id: string, resolvedAt: Date): Promise<MaintenanceLog | undefined>
+}
+
+export interface VehicleClassFilters {
+  status?: string
+  includeArchived?: boolean
+}
+
+export interface VehicleClassRepository {
+  findAll(filters?: VehicleClassFilters): Promise<VehicleClass[]>
+  findById(id: string): Promise<VehicleClass | undefined>
+  findBySlug(slug: string): Promise<VehicleClass | undefined>
+  create(data: Omit<VehicleClass, 'id' | 'createdAt' | 'updatedAt'>): Promise<VehicleClass>
+  update(id: string, data: Partial<VehicleClass>): Promise<VehicleClass | undefined>
+  archive(id: string): Promise<VehicleClass | undefined>
 }

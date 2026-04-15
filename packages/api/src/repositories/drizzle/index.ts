@@ -1,5 +1,6 @@
 export type { Db } from './shared'
 export { DrizzleVehicleRepository } from './vehicle'
+export { DrizzleVehicleClassRepository } from './vehicle-class'
 export { DrizzleBookingRepository } from './booking'
 export { DrizzleAvailabilityRepository } from './availability'
 export { DrizzleFleetOverviewRepository } from './fleet-overview'
