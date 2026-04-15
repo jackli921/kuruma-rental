@@ -16,7 +16,7 @@ import { formatJpy } from '@/lib/format'
 import { calculateCancellationFee } from '@kuruma/shared/lib/cancellation-policy'
 import { format } from 'date-fns'
 import { useTranslations } from 'next-intl'
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { cancelBooking, updateBookingStatus } from './calendar-actions'
 
 interface BookingDetailDialogProps {
@@ -37,11 +37,9 @@ export function BookingDetailDialog({
   const [showCancelConfirm, setShowCancelConfirm] = useState(false)
 
   // Reset state when a different booking is selected.
-  // Uses a ref to track the previous booking ID and reset inline
-  // (avoids useEffect with "unnecessary" deps that biome flags).
-  const [prevBookingId, setPrevBookingId] = useState<string | null>(null)
-  if (booking?.id !== prevBookingId) {
-    setPrevBookingId(booking?.id ?? null)
+  const prevBookingId = useRef<string | null>(null)
+  if (booking?.id !== prevBookingId.current) {
+    prevBookingId.current = booking?.id ?? null
     if (isSubmitting) setIsSubmitting(false)
     if (error) setError(null)
     if (showCancelConfirm) setShowCancelConfirm(false)
