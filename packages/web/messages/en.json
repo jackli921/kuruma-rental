@@ -128,7 +128,18 @@
         "refundAmount": "Refund amount",
         "freeCancellation": "Free cancellation",
         "errorNetwork": "Network error. Please try again.",
-        "errorConflict": "This booking was modified by another user. Please refresh."
+        "errorConflict": "This booking was modified by another user. Please refresh.",
+        "bookingCalendar": "Booking Calendar",
+        "today": "Today",
+        "previous": "Previous",
+        "next": "Next",
+        "views": {
+          "day": "Day",
+          "week": "Week",
+          "month": "Month"
+        },
+        "noEventsInRange": "No bookings in this range",
+        "showMore": "+{count} more"
       }
     },
     "vehicles": {

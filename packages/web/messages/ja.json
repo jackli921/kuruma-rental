@@ -128,7 +128,18 @@
         "refundAmount": "返金額",
         "freeCancellation": "無料キャンセル",
         "errorNetwork": "ネットワークエラーです。もう一度お試しください。",
-        "errorConflict": "この予約は別のユーザーによって変更されました。ページを更新してください。"
+        "errorConflict": "この予約は別のユーザーによって変更されました。ページを更新してください。",
+        "bookingCalendar": "予約カレンダー",
+        "today": "今日",
+        "previous": "前へ",
+        "next": "次へ",
+        "views": {
+          "day": "日",
+          "week": "週",
+          "month": "月"
+        },
+        "noEventsInRange": "この期間に予約はありません",
+        "showMore": "+{count}件"
       }
     },
     "vehicles": {
