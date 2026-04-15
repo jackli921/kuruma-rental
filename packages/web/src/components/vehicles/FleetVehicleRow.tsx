@@ -9,6 +9,7 @@ import {
 } from '@/components/ui/dropdown-menu'
 import { ExpiryBadge } from '@/components/vehicles/ExpiryBadge'
 import { VehicleStatusBadge } from '@/components/vehicles/VehicleStatusBadge'
+import { Link } from '@/i18n/routing'
 import { formatVehicleRate } from '@/lib/format'
 import type { FleetBookingSummaryData, FleetVehicleOverviewData } from '@/lib/vehicle-api'
 import { computeExpiryStatus } from '@kuruma/shared/lib/expiry'
@@ -127,7 +128,12 @@ export function FleetVehicleRow({
 
       {/* Name + subtitle */}
       <div className="min-w-[10rem] flex-1">
-        <div className="truncate font-medium text-foreground">{overview.name}</div>
+        <Link
+          href={`/manage/vehicles/${overview.id}`}
+          className="truncate font-medium text-foreground hover:underline"
+        >
+          {overview.name}
+        </Link>
         <div data-testid="fleet-row-subtitle" className="truncate text-sm text-muted-foreground">
           {subtitleParts.join(' · ')}
         </div>

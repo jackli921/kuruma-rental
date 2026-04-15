@@ -4,6 +4,7 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { ExpiryBadge } from '@/components/vehicles/ExpiryBadge'
 import { VehicleStatusToggle } from '@/components/vehicles/VehicleStatusToggle'
+import { Link } from '@/i18n/routing'
 import { formatVehicleRate } from '@/lib/format'
 import type { VehicleData } from '@/lib/vehicle-api'
 import { computeExpiryStatus } from '@kuruma/shared/lib/expiry'
@@ -72,7 +73,11 @@ export function FleetVehicleCard({
       </div>
       <CardHeader>
         <div className="flex items-center justify-between">
-          <CardTitle>{vehicle.name}</CardTitle>
+          <CardTitle>
+            <Link href={`/manage/vehicles/${vehicle.id}`} className="hover:underline">
+              {vehicle.name}
+            </Link>
+          </CardTitle>
           <VehicleStatusToggle vehicle={vehicle} />
         </div>
         {vehicle.status === 'MAINTENANCE' && vehicle.activeMaintenanceReason && (
