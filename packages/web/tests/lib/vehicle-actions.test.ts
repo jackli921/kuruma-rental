@@ -119,7 +119,7 @@ describe('vehicle-actions', () => {
       const result = await updateVehicleStatusAction('v1', 'MAINTENANCE')
 
       expect(result).toEqual({ success: true, data: { id: 'v1', status: 'MAINTENANCE' } })
-      expect(updateVehicleStatus).toHaveBeenCalledWith('v1', 'MAINTENANCE', 'tok')
+      expect(updateVehicleStatus).toHaveBeenCalledWith('v1', 'MAINTENANCE', undefined, 'tok')
     })
   })
 

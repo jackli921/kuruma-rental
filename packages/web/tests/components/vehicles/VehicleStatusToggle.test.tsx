@@ -16,6 +16,12 @@ vi.mock('next-intl', () => ({
       'statusToggle.restore': 'Restore',
       'statusToggle.error': 'Could not update status. Please try again.',
       'statusToggle.ariaLabel': 'Change status',
+      dialogTitle: 'Maintenance Reason',
+      dialogDescription: 'Why is this vehicle going into maintenance?',
+      reasonLabel: 'Reason',
+      reasonPlaceholder: 'Enter reason...',
+      cancel: 'Cancel',
+      submit: 'Confirm',
     }
     return messages[key] ?? key
   },
@@ -98,7 +104,7 @@ describe('VehicleStatusToggle', () => {
     expect(maintenance).toHaveAttribute('aria-pressed', 'false')
   })
 
-  it('calls updateVehicleStatus when the user clicks a non-active option', async () => {
+  it('calls updateVehicleStatus after maintenance dialog submission', async () => {
     updateVehicleStatusActionMock.mockResolvedValueOnce({
       success: true,
       data: { ...makeVehicle(), status: 'MAINTENANCE' },
@@ -106,10 +112,16 @@ describe('VehicleStatusToggle', () => {
     const vehicle = makeVehicle({ status: 'AVAILABLE' })
     renderWithClient(<VehicleStatusToggle vehicle={vehicle} />)
 
+    // Click Maintenance opens the dialog
     fireEvent.click(screen.getByRole('button', { name: 'Maintenance' }))
 
+    // Fill reason and submit
+    const input = await screen.findByPlaceholderText('Enter reason...')
+    fireEvent.change(input, { target: { value: 'Oil change' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Confirm' }))
+
     await waitFor(() => {
-      expect(updateVehicleStatusActionMock).toHaveBeenCalledWith('v_1', 'MAINTENANCE')
+      expect(updateVehicleStatusActionMock).toHaveBeenCalledWith('v_1', 'MAINTENANCE', 'Oil change')
     })
   })
 
@@ -137,7 +149,11 @@ describe('VehicleStatusToggle', () => {
       vehicles: [vehicle],
     })
 
+    // Click Maintenance -> fill dialog -> submit
     fireEvent.click(screen.getByRole('button', { name: 'Maintenance' }))
+    const input = await screen.findByPlaceholderText('Enter reason...')
+    fireEvent.change(input, { target: { value: 'Tire rotation' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Confirm' }))
 
     await waitFor(() => {
       const cached = client.getQueryData<VehicleData[]>(['vehicles'])
@@ -159,7 +175,11 @@ describe('VehicleStatusToggle', () => {
       vehicles: [vehicle],
     })
 
+    // Click Maintenance -> fill dialog -> submit
     fireEvent.click(screen.getByRole('button', { name: 'Maintenance' }))
+    const input = await screen.findByPlaceholderText('Enter reason...')
+    fireEvent.change(input, { target: { value: 'Broken' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Confirm' }))
 
     await waitFor(() => {
       expect(screen.getByText('Could not update status. Please try again.')).toBeInTheDocument()
@@ -186,7 +206,7 @@ describe('VehicleStatusToggle', () => {
     fireEvent.click(restore)
 
     await waitFor(() => {
-      expect(updateVehicleStatusActionMock).toHaveBeenCalledWith('v_1', 'AVAILABLE')
+      expect(updateVehicleStatusActionMock).toHaveBeenCalledWith('v_1', 'AVAILABLE', undefined)
     })
   })
 })

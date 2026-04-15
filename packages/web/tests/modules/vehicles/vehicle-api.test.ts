@@ -211,7 +211,7 @@ describe('vehicle-api', () => {
         )
 
       const { updateVehicleStatus } = await import('@/lib/vehicle-api')
-      await updateVehicleStatus('v1', 'MAINTENANCE', 'test-jwt-token')
+      await updateVehicleStatus('v1', 'MAINTENANCE', undefined, 'test-jwt-token')
 
       const init = spy.mock.calls[0]?.[1] as RequestInit
       const headers = init.headers as Record<string, string>
