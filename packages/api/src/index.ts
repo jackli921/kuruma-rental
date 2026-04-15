@@ -14,6 +14,7 @@ import {
   DrizzleMessageRepository,
   DrizzleStatsRepository,
   DrizzleThreadRepository,
+  DrizzleUserRepository,
   DrizzleVehicleRepository,
 } from './repositories/drizzle'
 import {
@@ -24,6 +25,7 @@ import {
   InMemoryMessageRepository,
   InMemoryStatsRepository,
   InMemoryThreadRepository,
+  InMemoryUserRepository,
   InMemoryVehicleRepository,
 } from './repositories/in-memory'
 import { InMemoryVehicleDetailRepository } from './repositories/in-memory-vehicle-detail'
@@ -35,6 +37,7 @@ import type {
   MessageRepository,
   StatsRepository,
   ThreadRepository,
+  UserRepository,
   VehicleDetailRepository,
   VehicleRepository,
 } from './repositories/types'
@@ -60,10 +63,12 @@ export function createApp(overrides?: {
   threadRepo?: ThreadRepository
   messageRepo?: MessageRepository
   maintenanceLogRepo?: MaintenanceLogRepository
+  userRepo?: UserRepository
 }) {
   let vehicleRepo: VehicleRepository
   let bookingRepo: BookingRepository
   let availabilityRepo: AvailabilityRepository
+  let userRepo: UserRepository
   let fleetOverviewRepo: FleetOverviewRepository
   let vehicleDetailRepo: VehicleDetailRepository
   let statsRepo: StatsRepository
@@ -84,6 +89,7 @@ export function createApp(overrides?: {
     threadRepo = overrides.threadRepo ?? new InMemoryThreadRepository()
     messageRepo =
       overrides.messageRepo ?? new InMemoryMessageRepository(threadRepo as InMemoryThreadRepository)
+    userRepo = overrides.userRepo ?? new InMemoryUserRepository()
   } else if (process.env.DATABASE_URL) {
     const db = getDb()
     vehicleRepo = new DrizzleVehicleRepository(db)
@@ -100,6 +106,7 @@ export function createApp(overrides?: {
     statsRepo = new DrizzleStatsRepository(db)
     threadRepo = new DrizzleThreadRepository(db)
     messageRepo = new DrizzleMessageRepository(db)
+    userRepo = new DrizzleUserRepository(db)
   } else {
     vehicleRepo = new InMemoryVehicleRepository()
     bookingRepo = new InMemoryBookingRepository()
@@ -124,6 +131,7 @@ export function createApp(overrides?: {
     threadRepo = new InMemoryThreadRepository()
     messageRepo = new InMemoryMessageRepository(threadRepo as InMemoryThreadRepository)
     maintenanceLogRepo = new InMemoryMaintenanceLogRepository()
+    userRepo = new InMemoryUserRepository()
   }
 
   const app = new Hono()
@@ -172,7 +180,7 @@ export function createApp(overrides?: {
   app.use('/availability/*', requireAuth())
   app.use('/threads/*', requireAuth())
 
-  const bookingService = new BookingService(bookingRepo, vehicleRepo)
+  const bookingService = new BookingService(bookingRepo, vehicleRepo, userRepo)
   const maintenanceService = new MaintenanceService(vehicleRepo, maintenanceLogRepo)
 
   // Chain .route() calls so TypeScript infers the full route type tree.

@@ -1,6 +1,7 @@
 export type {
   Vehicle,
   Booking,
+  User,
   Thread,
   ThreadParticipant,
   Message,
@@ -19,6 +20,7 @@ import type {
   Message,
   Thread,
   ThreadParticipant,
+  User,
   Vehicle,
 } from '../stores'
 
@@ -47,6 +49,10 @@ export interface VehicleRepository {
 // AvailabilityRepository, which also reads vehicles + bookings.
 export interface FleetOverviewRepository {
   findFleetOverview(): Promise<FleetVehicleOverview[]>
+}
+
+export interface UserRepository {
+  findByIds(ids: string[]): Promise<User[]>
 }
 
 export interface BookingFilters {

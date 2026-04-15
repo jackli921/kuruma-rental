@@ -46,6 +46,11 @@ export function createBookingRoutes(service: BookingService) {
         return ok(c, result.data, 200, { nextCursor: result.nextCursor })
       }
 
+      if (expand === 'renter') {
+        const result = await service.findAllWithRentersPaginated(filters)
+        return ok(c, result.data, 200, { nextCursor: result.nextCursor })
+      }
+
       const result = await service.findAllPaginated(filters)
       return ok(c, result.data, 200, { nextCursor: result.nextCursor })
     })

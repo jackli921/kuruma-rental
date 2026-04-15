@@ -3,7 +3,12 @@ import { calculateCancellationFee } from '@kuruma/shared/lib/cancellation-policy
 import { calculateBookingPrice } from '@kuruma/shared/lib/pricing'
 import { checkRentalRules } from '@kuruma/shared/lib/rental-rules'
 import { PG_ERROR, pgErrorCode } from '../pg-errors'
-import type { BookingFilters, BookingRepository, VehicleRepository } from '../repositories/types'
+import type {
+  BookingFilters,
+  BookingRepository,
+  UserRepository,
+  VehicleRepository,
+} from '../repositories/types'
 import type { Booking } from '../stores'
 
 const DEFAULT_BUFFER_MINUTES = 60
@@ -46,6 +51,7 @@ export class BookingService {
   constructor(
     private readonly bookingRepo: BookingRepository,
     private readonly vehicleRepo?: VehicleRepository,
+    private readonly userRepo?: UserRepository,
   ) {}
 
   async findAll(filters?: BookingFilters): Promise<Booking[]> {
@@ -80,6 +86,30 @@ export class BookingService {
       data: data.map((booking) => ({
         ...booking,
         vehicle: vehicleMap.get(booking.vehicleId),
+      })),
+      nextCursor,
+    }
+  }
+
+  async findAllWithRentersPaginated(filters: BookingFilters): Promise<{
+    data: (Booking & {
+      renter?: { id: string; name: string | null; email: string; language: string } | undefined
+    })[]
+    nextCursor: string | null
+  }> {
+    const { data, nextCursor } = await this.findAllPaginated(filters)
+    if (!this.userRepo) return { data, nextCursor }
+
+    const renterIds = [...new Set(data.map((b) => b.renterId))]
+    const userList = await this.userRepo.findByIds(renterIds)
+    const userMap = new Map(
+      userList.map((u) => [u.id, { id: u.id, name: u.name, email: u.email, language: u.language }]),
+    )
+
+    return {
+      data: data.map((booking) => ({
+        ...booking,
+        renter: userMap.get(booking.renterId),
       })),
       nextCursor,
     }

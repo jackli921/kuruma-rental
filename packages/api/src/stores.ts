@@ -81,5 +81,12 @@ export interface MaintenanceLog {
   updatedAt: Date
 }
 
+export interface User {
+  id: string
+  name: string | null
+  email: string
+  language: string
+}
+
 // Map stores removed — repositories handle data access now.
 // Types remain here as the shared contract between repositories and routes.
