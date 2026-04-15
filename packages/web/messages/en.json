@@ -113,7 +113,22 @@
         "end": "End",
         "source": "Source",
         "notes": "Notes",
-        "close": "Close"
+        "close": "Close",
+        "email": "Email",
+        "language": "Language",
+        "totalPrice": "Total price",
+        "startTrip": "Start trip",
+        "completeTrip": "Complete trip",
+        "cancelBooking": "Cancel booking",
+        "starting": "Starting...",
+        "completing": "Completing...",
+        "cancelling": "Cancelling...",
+        "cancelConfirm": "Are you sure you want to cancel this booking?",
+        "cancellationFee": "Cancellation fee",
+        "refundAmount": "Refund amount",
+        "freeCancellation": "Free cancellation",
+        "errorNetwork": "Network error. Please try again.",
+        "errorConflict": "This booking was modified by another user. Please refresh."
       }
     },
     "vehicles": {

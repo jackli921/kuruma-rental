@@ -113,7 +113,22 @@
         "end": "结束",
         "source": "来源",
         "notes": "备注",
-        "close": "关闭"
+        "close": "关闭",
+        "email": "邮箱",
+        "language": "语言",
+        "totalPrice": "总价",
+        "startTrip": "开始用车",
+        "completeTrip": "完成用车",
+        "cancelBooking": "取消预订",
+        "starting": "开始中...",
+        "completing": "完成中...",
+        "cancelling": "取消中...",
+        "cancelConfirm": "确定要取消此预订吗？",
+        "cancellationFee": "取消费用",
+        "refundAmount": "退款金额",
+        "freeCancellation": "免费取消",
+        "errorNetwork": "网络错误，请重试。",
+        "errorConflict": "此预订已被其他用户修改，请刷新页面。"
       }
     },
     "vehicles": {

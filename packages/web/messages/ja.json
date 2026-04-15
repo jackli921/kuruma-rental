@@ -113,7 +113,22 @@
         "end": "終了",
         "source": "予約元",
         "notes": "備考",
-        "close": "閉じる"
+        "close": "閉じる",
+        "email": "メール",
+        "language": "言語",
+        "totalPrice": "合計金額",
+        "startTrip": "利用開始",
+        "completeTrip": "利用完了",
+        "cancelBooking": "予約キャンセル",
+        "starting": "開始中...",
+        "completing": "完了中...",
+        "cancelling": "キャンセル中...",
+        "cancelConfirm": "この予約をキャンセルしてもよろしいですか？",
+        "cancellationFee": "キャンセル料",
+        "refundAmount": "返金額",
+        "freeCancellation": "無料キャンセル",
+        "errorNetwork": "ネットワークエラーです。もう一度お試しください。",
+        "errorConflict": "この予約は別のユーザーによって変更されました。ページを更新してください。"
       }
     },
     "vehicles": {

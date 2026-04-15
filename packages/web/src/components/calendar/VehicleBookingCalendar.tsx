@@ -3,7 +3,7 @@
 import { Card, CardContent } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
 import type { CalendarBooking } from '@/lib/calendar'
-import { useQuery } from '@tanstack/react-query'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { startOfWeek } from 'date-fns'
 import { Calendar } from 'lucide-react'
 import { useState } from 'react'
@@ -19,6 +19,7 @@ interface VehicleBookingCalendarProps {
 }
 
 export function VehicleBookingCalendar({ vehicleId }: VehicleBookingCalendarProps) {
+  const queryClient = useQueryClient()
   const [currentDate, setCurrentDate] = useState(() => new Date())
   const [viewMode, setViewMode] = useState<'week' | 'month'>('week')
   const [selectedBooking, setSelectedBooking] = useState<CalendarBooking | null>(null)
@@ -89,7 +90,14 @@ export function VehicleBookingCalendar({ vehicleId }: VehicleBookingCalendarProp
           </div>
         </div>
 
-        <BookingDetailDialog booking={selectedBooking} onClose={() => setSelectedBooking(null)} />
+        <BookingDetailDialog
+          booking={selectedBooking}
+          onClose={() => setSelectedBooking(null)}
+          onBookingUpdate={() => {
+            setSelectedBooking(null)
+            queryClient.invalidateQueries({ queryKey: ['bookings', 'calendar', vehicleId] })
+          }}
+        />
       </CardContent>
     </Card>
   )
