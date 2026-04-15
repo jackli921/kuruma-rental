@@ -4,7 +4,7 @@ const API_BASE = 'http://localhost:8787'
 
 // Mock createApiClient before importing the module under test
 vi.mock('@/lib/api-client', () => ({
-  createApiClient: (token?: string) => {
+  createApiClient: (_token?: string) => {
     const { hc } = require('hono/client')
     return hc('http://localhost:8787')
   },

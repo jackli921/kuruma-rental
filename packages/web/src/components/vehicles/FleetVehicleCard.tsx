@@ -7,7 +7,16 @@ import { VehicleStatusToggle } from '@/components/vehicles/VehicleStatusToggle'
 import { formatVehicleRate } from '@/lib/format'
 import type { VehicleData } from '@/lib/vehicle-api'
 import { computeExpiryStatus } from '@kuruma/shared/lib/expiry'
-import { Car, Fuel, Pencil, RectangleHorizontal, Settings2, Trash2, Users, Wrench } from 'lucide-react'
+import {
+  Car,
+  Fuel,
+  Pencil,
+  RectangleHorizontal,
+  Settings2,
+  Trash2,
+  Users,
+  Wrench,
+} from 'lucide-react'
 import { useTranslations } from 'next-intl'
 import Image from 'next/image'
 
