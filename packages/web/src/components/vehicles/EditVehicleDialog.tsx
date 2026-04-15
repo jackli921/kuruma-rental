@@ -47,7 +47,7 @@ export function EditVehicleDialog({ vehicle, onOpenChange }: EditVehicleDialogPr
 
   return (
     <Dialog open={vehicle !== null} onOpenChange={onOpenChange}>
-      <DialogContent>
+      <DialogContent className="max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>{t('editVehicle')}</DialogTitle>
           <DialogDescription>{vehicle?.name}</DialogDescription>
