@@ -8,6 +8,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import { VehicleForm } from '@/components/vehicles/VehicleForm'
+import { vehicleKeys } from '@/lib/query-keys'
 import { createVehicleAction } from '@/lib/vehicle-actions'
 import type { CreateVehicleInput } from '@kuruma/shared/validators/vehicle'
 import { useQueryClient } from '@tanstack/react-query'
@@ -34,7 +35,7 @@ export function AddVehicleDialog({ open, onOpenChange }: AddVehicleDialogProps) 
         setError(result.error)
         return
       }
-      await queryClient.invalidateQueries({ queryKey: ['vehicles'] })
+      await queryClient.invalidateQueries({ queryKey: vehicleKeys.all })
       onOpenChange(false)
     } catch (e) {
       setError(e instanceof Error ? e.message : 'An error occurred')

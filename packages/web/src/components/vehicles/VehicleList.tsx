@@ -18,6 +18,7 @@ import {
   filterVehicles,
   sortVehicles,
 } from '@/lib/fleet-filters'
+import { vehicleKeys } from '@/lib/query-keys'
 import { cn } from '@/lib/utils'
 import { fetchFleetOverviewAction } from '@/lib/vehicle-actions'
 import type { VehicleData } from '@/lib/vehicle-api'
@@ -62,7 +63,7 @@ export function VehicleList() {
     error,
     refetch,
   } = useQuery({
-    queryKey: ['vehicles', 'fleet-overview'],
+    queryKey: vehicleKeys.fleetOverview,
     queryFn: async () => {
       const result = await fetchFleetOverviewAction()
       if (!result.success) throw new Error(result.error)

@@ -9,6 +9,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
+import { vehicleKeys } from '@/lib/query-keys'
 import { retireVehicleAction } from '@/lib/vehicle-actions'
 import type { VehicleData } from '@/lib/vehicle-api'
 import { useQueryClient } from '@tanstack/react-query'
@@ -36,7 +37,7 @@ export function RetireVehicleDialog({ vehicle, onOpenChange }: RetireVehicleDial
         setError(result.error)
         return
       }
-      await queryClient.invalidateQueries({ queryKey: ['vehicles'] })
+      await queryClient.invalidateQueries({ queryKey: vehicleKeys.all })
       onOpenChange(false)
     } catch (e) {
       setError(e instanceof Error ? e.message : 'An error occurred')

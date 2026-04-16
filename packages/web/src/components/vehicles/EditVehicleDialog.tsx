@@ -8,6 +8,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import { VehicleForm } from '@/components/vehicles/VehicleForm'
+import { vehicleKeys } from '@/lib/query-keys'
 import { updateVehicleAction } from '@/lib/vehicle-actions'
 import type { VehicleData } from '@/lib/vehicle-api'
 import type { CreateVehicleInput } from '@kuruma/shared/validators/vehicle'
@@ -36,7 +37,7 @@ export function EditVehicleDialog({ vehicle, onOpenChange }: EditVehicleDialogPr
         setError(result.error)
         return
       }
-      await queryClient.invalidateQueries({ queryKey: ['vehicles'] })
+      await queryClient.invalidateQueries({ queryKey: vehicleKeys.all })
       onOpenChange(false)
     } catch (e) {
       setError(e instanceof Error ? e.message : 'An error occurred')

@@ -9,6 +9,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
+import { vehicleKeys } from '@/lib/query-keys'
 import { bulkUpdateVehicleStatus } from '@/lib/vehicle-api'
 import { useQueryClient } from '@tanstack/react-query'
 import { useTranslations } from 'next-intl'
@@ -37,7 +38,7 @@ export function BulkActionBar({ selectedIds, onClearSelection }: BulkActionBarPr
     setError(null)
     try {
       await bulkUpdateVehicleStatus([...selectedIds], confirmAction)
-      await queryClient.invalidateQueries({ queryKey: ['vehicles'] })
+      await queryClient.invalidateQueries({ queryKey: vehicleKeys.all })
       onClearSelection()
       setConfirmAction(null)
     } catch (e) {
