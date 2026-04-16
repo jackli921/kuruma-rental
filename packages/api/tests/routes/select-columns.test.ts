@@ -19,6 +19,7 @@ function createTestApp() {
 
 const VEHICLE_FIELDS = [
   'id',
+  'classId',
   'name',
   'description',
   'photos',
