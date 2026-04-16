@@ -37,7 +37,14 @@
   border-top-color: transparent;
 }
 
-/* Time gutter labels */
+/* Time gutter — sync width between header and body */
+.rbc-time-gutter,
+.rbc-time-header-gutter {
+  min-width: 72px;
+  max-width: 72px;
+  width: 72px;
+}
+
 .rbc-time-gutter .rbc-label {
   font-size: 0.6875rem;
   color: var(--color-muted-foreground);
