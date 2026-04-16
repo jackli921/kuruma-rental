@@ -3,6 +3,7 @@ import { Badge } from '@/components/ui/badge'
 import { buttonVariants } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { MaintenanceHistoryCard } from '@/components/vehicles/MaintenanceHistoryCard'
+import { VehicleStatusBadge } from '@/components/vehicles/VehicleStatusBadge'
 import { Link } from '@/i18n/routing'
 import { formatJpy } from '@/lib/format'
 import { cn } from '@/lib/utils'
@@ -38,12 +39,6 @@ const SOURCE_LABELS: Record<string, string> = {
   OTHER: 'Other',
 }
 
-const STATUS_VARIANT: Record<string, 'default' | 'secondary' | 'destructive'> = {
-  AVAILABLE: 'default',
-  MAINTENANCE: 'secondary',
-  RETIRED: 'destructive',
-}
-
 export function VehicleDetail({ vehicle, t }: VehicleDetailProps) {
   const photos = vehicle.photos ?? []
   const primaryPhoto = photos[0]
@@ -53,6 +48,16 @@ export function VehicleDetail({ vehicle, t }: VehicleDetailProps) {
     vehicle.transmission === 'AUTO' ? 'AT' : 'MT',
     vehicle.fuelType,
   ].filter((p): p is string => Boolean(p))
+
+  const utilization = vehicle.utilizationLast30Days
+  const avgUtilization =
+    utilization.length > 0
+      ? Math.round(
+          (utilization.reduce((sum, d) => sum + d.bookedHours, 0) / (utilization.length * 24)) *
+            100,
+        )
+      : 0
+  const nextBooking = vehicle.upcomingBookings[0]
 
   return (
     <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
@@ -89,7 +94,7 @@ export function VehicleDetail({ vehicle, t }: VehicleDetailProps) {
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2.5 flex-wrap">
             <h1 className="text-2xl font-semibold tracking-tight">{vehicle.name}</h1>
-            <Badge variant={STATUS_VARIANT[vehicle.status] ?? 'secondary'}>{vehicle.status}</Badge>
+            <VehicleStatusBadge status={vehicle.status} />
           </div>
           <div className="mt-1 flex items-center gap-3 text-sm text-muted-foreground">
             {vehicle.licensePlate && (
@@ -109,6 +114,35 @@ export function VehicleDetail({ vehicle, t }: VehicleDetailProps) {
             <p className="text-sm text-muted-foreground">{formatJpy(vehicle.hourlyRateJpy)}/hr</p>
           )}
         </div>
+      </div>
+
+      {/* Compact stats bar */}
+      <div className="flex items-center gap-6 text-sm text-muted-foreground mb-6 px-1">
+        <div>
+          <span className="font-medium text-foreground">{avgUtilization}%</span>{' '}
+          {t('utilizationShort')}
+        </div>
+        <div>
+          <span className="font-medium text-foreground">{vehicle.upcomingBookings.length}</span>{' '}
+          {t('upcomingShort')}
+        </div>
+        {nextBooking && (
+          <div>
+            {t('nextBookingShort')}{' '}
+            <span className="font-medium text-foreground">
+              {new Date(nextBooking.startAt).toLocaleDateString('en-US', {
+                month: 'short',
+                day: 'numeric',
+              })}
+            </span>
+          </div>
+        )}
+        {vehicle.revenueLast30d > 0 && (
+          <div>
+            <span className="font-medium text-foreground">{formatJpy(vehicle.revenueLast30d)}</span>{' '}
+            {t('revenueLast30dShort')}
+          </div>
+        )}
       </div>
 
       {/* HERO: Booking Calendar */}
