@@ -8,6 +8,7 @@ import { MaintenanceService } from '../../src/services/maintenance'
 import { testAuthMiddleware } from '../helpers/auth'
 
 let app: Hono
+let maintenanceService: MaintenanceService
 
 function validVehicleInput() {
   return {
@@ -41,7 +42,7 @@ describe('Maintenance Logs', () => {
   beforeEach(() => {
     const vehicleRepo = new InMemoryVehicleRepository()
     const maintenanceLogRepo = new InMemoryMaintenanceLogRepository()
-    const maintenanceService = new MaintenanceService(vehicleRepo, maintenanceLogRepo)
+    maintenanceService = new MaintenanceService(vehicleRepo, maintenanceLogRepo)
 
     app = new Hono()
     app.use('*', testAuthMiddleware('staff-user', 'STAFF'))
@@ -152,6 +153,33 @@ describe('Maintenance Logs', () => {
       // Old one is resolved
       expect(logsBody.data[1].reason).toBe('Oil change')
       expect(logsBody.data[1].resolvedAt).not.toBeNull()
+    })
+  })
+
+  // Contract test: verifies service logic returns 409 on status mismatch.
+  // JS event loop serializes the InMemory calls — true DB-level concurrency
+  // requires an integration test against Postgres with the conditional WHERE.
+  describe('concurrent status toggle', () => {
+    it('second toggle returns 409 when first already changed the status', async () => {
+      const vehicle = await createVehicle()
+
+      // Both requests race — fire concurrently
+      const [res1, res2] = await Promise.all([
+        patchStatus(vehicle.id, 'MAINTENANCE', 'Oil change'),
+        patchStatus(vehicle.id, 'MAINTENANCE', 'Brake pads'),
+      ])
+
+      const statuses = [res1.status, res2.status].sort()
+      // Exactly one succeeds, one gets 409
+      expect(statuses).toEqual([200, 409])
+
+      // Only one maintenance log should be active
+      const logsRes = await app.request(`/vehicles/${vehicle.id}/maintenance-logs`)
+      const logsBody = await logsRes.json()
+      const activeLogs = logsBody.data.filter(
+        (l: { resolvedAt: string | null }) => l.resolvedAt === null,
+      )
+      expect(activeLogs).toHaveLength(1)
     })
   })
 

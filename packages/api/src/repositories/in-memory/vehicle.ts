@@ -1,5 +1,5 @@
 import type { Vehicle } from '../../stores'
-import type { VehicleFilters, VehicleRepository } from '../types'
+import type { VehicleFilters, VehicleRepository, VehicleUpdateOptions } from '../types'
 
 export class InMemoryVehicleRepository implements VehicleRepository {
   private readonly store: Map<string, Vehicle>
@@ -38,9 +38,14 @@ export class InMemoryVehicleRepository implements VehicleRepository {
     return vehicle
   }
 
-  async update(id: string, data: Partial<Vehicle>): Promise<Vehicle | undefined> {
+  async update(
+    id: string,
+    data: Partial<Vehicle>,
+    options?: VehicleUpdateOptions,
+  ): Promise<Vehicle | undefined> {
     const existing = this.store.get(id)
     if (!existing) return undefined
+    if (options?.expectedStatus && existing.status !== options.expectedStatus) return undefined
 
     const updated: Vehicle = {
       ...existing,

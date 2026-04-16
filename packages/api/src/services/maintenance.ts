@@ -7,7 +7,7 @@ import type { Vehicle } from '../stores'
 
 export type ToggleStatusResult =
   | { ok: true; vehicle: Vehicle; log?: MaintenanceLog }
-  | { ok: false; status: 400 | 404; error: string }
+  | { ok: false; status: 400 | 404 | 409; error: string }
 
 export class MaintenanceService {
   constructor(
@@ -34,31 +34,34 @@ export class MaintenanceService {
       }
     }
 
-    // Always resolve any active log before creating a new one.
-    // Handles both MAINTENANCE→AVAILABLE and MAINTENANCE→MAINTENANCE (H3 fix).
-    if (existing.status === 'MAINTENANCE') {
-      const activeLog = await this.maintenanceLogRepo.findActiveByVehicleId(vehicleId)
-      if (activeLog) {
-        await this.maintenanceLogRepo.resolve(activeLog.id, now)
-      }
-    }
-
-    const updated = await this.vehicleRepo.update(vehicleId, { status })
+    // Conditional update — fails if another request already changed the status.
+    // Returns undefined for both "not found" and "status mismatch"; since we
+    // already verified existence above, undefined here means a concurrent change.
+    const updated = await this.vehicleRepo.update(
+      vehicleId,
+      { status },
+      { expectedStatus: existing.status },
+    )
     if (!updated) {
-      return { ok: false, status: 404, error: 'Vehicle not found' }
+      return { ok: false, status: 409, error: 'Vehicle status was modified concurrently' }
     }
 
-    // Create a log entry when entering MAINTENANCE
-    if (status === 'MAINTENANCE' && reason) {
-      const log = await this.maintenanceLogRepo.create({
-        vehicleId,
-        reason: reason.trim(),
-        notes: null,
-        costJpy: null,
-        startedAt: now,
-        resolvedAt: null,
-      })
-      return { ok: true, vehicle: updated, log }
+    // Atomic log transition: resolve active log + optionally create new one
+    const newLogData =
+      status === 'MAINTENANCE' && reason
+        ? {
+            vehicleId,
+            reason: reason.trim(),
+            notes: null,
+            costJpy: null,
+            startedAt: now,
+            resolvedAt: null,
+          }
+        : undefined
+
+    if (existing.status === 'MAINTENANCE' || newLogData) {
+      const { created } = await this.maintenanceLogRepo.transitionLogs(vehicleId, now, newLogData)
+      if (created) return { ok: true, vehicle: updated, log: created }
     }
 
     return { ok: true, vehicle: updated }
