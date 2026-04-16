@@ -23,27 +23,42 @@ import { cn } from '@/lib/utils'
 import { fetchFleetOverviewAction } from '@/lib/vehicle-actions'
 import type { VehicleData } from '@/lib/vehicle-api'
 import { useQuery } from '@tanstack/react-query'
-import { AlertCircle, Car, Plus, SlidersHorizontal } from 'lucide-react'
+import { AlertCircle, Car, ChevronLeft, ChevronRight, Plus, SlidersHorizontal } from 'lucide-react'
 import { useTranslations } from 'next-intl'
 import { useCallback, useMemo, useState } from 'react'
 
 const DEFAULT_SEATS_BOUNDS = { min: 2, max: 10 } as const
+const PAGE_SIZE = 10
 
 const SKELETON_KEYS = ['a', 'b', 'c', 'd', 'e', 'f'] as const
 
 export function VehicleList() {
   const t = useTranslations('business.vehicles')
-  const [filters, setFilters] = useState<FleetFilterState>({
+  const [filters, setFiltersRaw] = useState<FleetFilterState>({
     statuses: ['AVAILABLE', 'MAINTENANCE'],
   })
   // Default sort is utilization-desc — the owner wants to see which
   // cars are earning the most first. See issue #52.
-  const [sort, setSort] = useState<SortOrder>('utilization-desc')
+  const [sort, setSortRaw] = useState<SortOrder>('utilization-desc')
+
+  const setFilters = useCallback(
+    (f: FleetFilterState | ((prev: FleetFilterState) => FleetFilterState)) => {
+      setFiltersRaw(f)
+      setPage(0)
+    },
+    [],
+  )
+
+  const setSort = useCallback((s: SortOrder) => {
+    setSortRaw(s)
+    setPage(0)
+  }, [])
   const [viewMode, setViewMode] = useFleetViewMode()
   const [editingVehicle, setEditingVehicle] = useState<VehicleData | null>(null)
   const [retiringVehicle, setRetiringVehicle] = useState<VehicleData | null>(null)
   const [showAddDialog, setShowAddDialog] = useState(false)
   const [selectedIds, setSelectedIds] = useState<ReadonlySet<string>>(new Set())
+  const [page, setPage] = useState(0)
 
   const toggleSelect = useCallback((id: string) => {
     setSelectedIds((prev) => {
@@ -109,6 +124,13 @@ export function VehicleList() {
     [overviews, filters, sort],
   )
 
+  // Reset to first page when filters/sort change the result set
+  const displayedLen = displayed.length
+  const totalPages = Math.max(1, Math.ceil(displayedLen / PAGE_SIZE))
+  const safePage = Math.min(page, totalPages - 1)
+  const pageStart = safePage * PAGE_SIZE
+  const paged = displayed.slice(pageStart, pageStart + PAGE_SIZE)
+
   // Only non-RETIRED vehicles in the current filtered view are selectable
   const selectableIds = useMemo(
     () => displayed.filter((v) => v.status !== 'RETIRED').map((v) => v.id),
@@ -140,7 +162,7 @@ export function VehicleList() {
         />
       </aside>
 
-      <div className="flex-1 space-y-6">
+      <div className="flex-1 min-w-0 space-y-6">
         {!isLoading && !isError && overviews && <FleetSummaryBar overviews={overviews} />}
 
         <div className="flex items-center justify-between gap-4">
@@ -203,25 +225,51 @@ export function VehicleList() {
         )}
 
         {!isLoading && !isError && displayed.length > 0 && (
-          <div className="flex items-center gap-2 px-1">
-            <input
-              type="checkbox"
-              checked={allSelected}
-              onChange={toggleSelectAll}
-              className="size-4 rounded border-border accent-primary"
-              aria-label={allSelected ? t('bulk.deselectAll') : t('bulk.selectAll')}
-            />
-            <span className="text-sm text-muted-foreground">
-              {allSelected ? t('bulk.deselectAll') : t('bulk.selectAll')}
-            </span>
+          <div className="flex items-center justify-between gap-2 px-1">
+            <div className="flex items-center gap-2">
+              <input
+                type="checkbox"
+                checked={allSelected}
+                onChange={toggleSelectAll}
+                className="size-4 rounded border-border accent-primary"
+                aria-label={allSelected ? t('bulk.deselectAll') : t('bulk.selectAll')}
+              />
+              <span className="text-sm text-muted-foreground">
+                {allSelected ? t('bulk.deselectAll') : t('bulk.selectAll')}
+              </span>
+            </div>
+            {totalPages > 1 && (
+              <div className="flex items-center gap-1">
+                <span className="text-sm text-muted-foreground mr-2">
+                  {pageStart + 1}–{Math.min(pageStart + PAGE_SIZE, displayedLen)} of {displayedLen}
+                </span>
+                <Button
+                  variant="outline"
+                  size="icon"
+                  disabled={safePage === 0}
+                  onClick={() => setPage((p) => p - 1)}
+                  aria-label="Previous page"
+                >
+                  <ChevronLeft className="size-4" />
+                </Button>
+                <Button
+                  variant="outline"
+                  size="icon"
+                  disabled={safePage >= totalPages - 1}
+                  onClick={() => setPage((p) => p + 1)}
+                  aria-label="Next page"
+                >
+                  <ChevronRight className="size-4" />
+                </Button>
+              </div>
+            )}
           </div>
         )}
 
-        {/* Row view: desktop-only. On mobile, card grid below is the fallback.
-            Both lists mount when viewMode==='row' — acceptable for <=50 vehicles. */}
-        {!isLoading && !isError && displayed.length > 0 && viewMode === 'row' && (
+        {/* Row view: desktop-only. On mobile, card grid below is the fallback. */}
+        {!isLoading && !isError && paged.length > 0 && viewMode === 'row' && (
           <div className="hidden md:block space-y-2">
-            {displayed.map((overview) => (
+            {paged.map((overview) => (
               <FleetVehicleRow
                 key={overview.id}
                 overview={overview}
@@ -234,14 +282,14 @@ export function VehicleList() {
           </div>
         )}
 
-        {!isLoading && !isError && displayed.length > 0 && (
+        {!isLoading && !isError && paged.length > 0 && (
           <div
             className={cn(
               'grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-6',
               viewMode === 'row' && 'md:hidden',
             )}
           >
-            {displayed.map((overview) => (
+            {paged.map((overview) => (
               <FleetVehicleCard
                 key={overview.id}
                 vehicle={overview}
@@ -251,6 +299,38 @@ export function VehicleList() {
                 onRetire={setRetiringVehicle}
               />
             ))}
+          </div>
+        )}
+
+        {/* Pagination */}
+        {!isLoading && !isError && totalPages > 1 && (
+          <div className="flex items-center justify-between border-t pt-4">
+            <span className="text-sm text-muted-foreground">
+              {pageStart + 1}–{Math.min(pageStart + PAGE_SIZE, displayedLen)} of {displayedLen}
+            </span>
+            <div className="flex items-center gap-1">
+              <Button
+                variant="outline"
+                size="icon"
+                disabled={safePage === 0}
+                onClick={() => setPage((p) => p - 1)}
+                aria-label="Previous page"
+              >
+                <ChevronLeft className="size-4" />
+              </Button>
+              <span className="px-3 text-sm tabular-nums">
+                {safePage + 1} / {totalPages}
+              </span>
+              <Button
+                variant="outline"
+                size="icon"
+                disabled={safePage >= totalPages - 1}
+                onClick={() => setPage((p) => p + 1)}
+                aria-label="Next page"
+              >
+                <ChevronRight className="size-4" />
+              </Button>
+            </div>
           </div>
         )}
 
