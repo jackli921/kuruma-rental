@@ -1,5 +1,6 @@
 import { Hono } from 'hono'
 import { beforeEach, describe, expect, it } from 'vitest'
+import { SYSTEM_CONTEXT } from '../../src/middleware/auth'
 import {
   InMemoryAvailabilityRepository,
   InMemoryBookingRepository,
@@ -44,7 +45,7 @@ async function createTestBooking(
   const endAt = overrides.endAt ?? new Date('2026-06-01T14:00:00Z')
   const effectiveEndAt =
     overrides.effectiveEndAt ?? new Date(endAt.getTime() + bufferMinutes * 60 * 1000)
-  return bookingRepo.create({
+  return bookingRepo.create(SYSTEM_CONTEXT, {
     renterId: 'user1',
     vehicleId: 'v1',
     startAt: new Date('2026-06-01T10:00:00Z'),

@@ -1,3 +1,4 @@
+import { type CallerContext, PRIVILEGED_ROLES } from '../../middleware/auth'
 import type { Message, Thread, ThreadParticipant } from '../../stores'
 import type { ThreadRepository } from '../types'
 
@@ -7,33 +8,46 @@ export class InMemoryThreadRepository implements ThreadRepository {
   private readonly messages = new Map<string, Message>()
 
   async findAll(
-    userId: string,
+    ctx: CallerContext,
   ): Promise<Array<Thread & { participants: ThreadParticipant[]; lastMessage: Message | null }>> {
-    const userParticipations = [...this.participants.values()].filter((p) => p.userId === userId)
-    const threadIds = new Set(userParticipations.map((p) => p.threadId))
+    let filteredThreads: Thread[]
 
-    return [...this.threads.values()]
-      .filter((t) => threadIds.has(t.id))
-      .map((thread) => {
-        const threadParticipants = [...this.participants.values()].filter(
-          (p) => p.threadId === thread.id,
-        )
-        const threadMessages = [...this.messages.values()]
-          .filter((m) => m.threadId === thread.id)
-          .sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime())
-        const lastMessage = threadMessages.at(-1) ?? null
+    if (PRIVILEGED_ROLES.has(ctx.role)) {
+      filteredThreads = [...this.threads.values()]
+    } else {
+      const userParticipations = [...this.participants.values()].filter(
+        (p) => p.userId === ctx.userId,
+      )
+      const threadIds = new Set(userParticipations.map((p) => p.threadId))
+      filteredThreads = [...this.threads.values()].filter((t) => threadIds.has(t.id))
+    }
 
-        return { ...thread, participants: threadParticipants, lastMessage }
-      })
+    return filteredThreads.map((thread) => {
+      const threadParticipants = [...this.participants.values()].filter(
+        (p) => p.threadId === thread.id,
+      )
+      const threadMessages = [...this.messages.values()]
+        .filter((m) => m.threadId === thread.id)
+        .sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime())
+      const lastMessage = threadMessages.at(-1) ?? null
+
+      return { ...thread, participants: threadParticipants, lastMessage }
+    })
   }
 
   async findById(
+    ctx: CallerContext,
     id: string,
   ): Promise<(Thread & { participants: ThreadParticipant[]; messages: Message[] }) | undefined> {
     const thread = this.threads.get(id)
     if (!thread) return undefined
 
     const threadParticipants = [...this.participants.values()].filter((p) => p.threadId === id)
+
+    // CallerContext scoping: non-privileged non-participants get undefined
+    const isParticipant = threadParticipants.some((p) => p.userId === ctx.userId)
+    if (!isParticipant && !PRIVILEGED_ROLES.has(ctx.role)) return undefined
+
     const threadMessages = [...this.messages.values()]
       .filter((m) => m.threadId === id)
       .sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime())
@@ -41,7 +55,11 @@ export class InMemoryThreadRepository implements ThreadRepository {
     return { ...thread, participants: threadParticipants, messages: threadMessages }
   }
 
-  async create(bookingId: string | null, participantIds: string[]): Promise<Thread> {
+  async create(
+    _ctx: CallerContext,
+    bookingId: string | null,
+    participantIds: string[],
+  ): Promise<Thread> {
     const now = new Date()
     const thread: Thread = {
       id: crypto.randomUUID(),
@@ -64,9 +82,9 @@ export class InMemoryThreadRepository implements ThreadRepository {
     return thread
   }
 
-  async markAsRead(threadId: string, userId: string): Promise<void> {
+  async markAsRead(ctx: CallerContext, threadId: string): Promise<void> {
     for (const [key, p] of this.participants) {
-      if (p.threadId === threadId && p.userId === userId) {
+      if (p.threadId === threadId && p.userId === ctx.userId) {
         this.participants.set(key, { ...p, unreadCount: 0 })
       }
     }
