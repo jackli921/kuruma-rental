@@ -3,6 +3,8 @@
 
 .rbc-calendar {
   font-family: inherit;
+  overflow: hidden;
+  max-width: 100%;
 }
 
 /* Header cells (day names) */
