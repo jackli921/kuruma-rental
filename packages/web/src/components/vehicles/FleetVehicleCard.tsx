@@ -83,17 +83,17 @@ export function FleetVehicleCard({
       </Link>
 
       {/* Info */}
-      <div className="flex-1 min-w-0">
-        <div className="flex items-center gap-2">
-          <Link
-            href={`/manage/vehicles/${vehicle.id}`}
-            className="truncate font-medium text-sm hover:underline"
-          >
-            {vehicle.name}
-          </Link>
+      <div className="flex-1 min-w-0 overflow-hidden">
+        <Link
+          href={`/manage/vehicles/${vehicle.id}`}
+          className="block truncate font-medium text-sm hover:underline"
+        >
+          {vehicle.name}
+        </Link>
+        <div className="flex items-center gap-1.5 mt-0.5">
           <VehicleStatusToggle vehicle={vehicle} />
         </div>
-        <div className="text-xs text-muted-foreground mt-0.5">
+        <div className="text-xs text-muted-foreground mt-0.5 truncate">
           {specParts.join(' · ')}
           {price ? ` · ${price}` : ''}
         </div>
