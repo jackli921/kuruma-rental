@@ -7,6 +7,7 @@ import {
 import { InMemoryVehicleDetailRepository } from '../../src/repositories/in-memory-vehicle-detail'
 import { createVehicleDetailRoutes } from '../../src/routes/vehicle-detail'
 import type { Vehicle } from '../../src/stores'
+import { testAuthMiddleware } from '../helpers/auth'
 
 let app: Hono
 let vehicleRepo: InMemoryVehicleRepository
@@ -83,6 +84,7 @@ describe('GET /vehicles/:id/detail', () => {
 
     const detailRepo = new InMemoryVehicleDetailRepository(vehicleRepo, bookingRepo, renterNames)
     app = new Hono()
+    app.use('*', testAuthMiddleware('staff-user', 'STAFF'))
     app.route('/', createVehicleDetailRoutes(detailRepo))
   })
 
@@ -261,5 +263,25 @@ describe('GET /vehicles/:id/detail', () => {
     const body = await res.json()
 
     expect(body.data.upcomingBookings).toHaveLength(0)
+  })
+
+  it('returns 403 for RENTER role', async () => {
+    const vehicle = await seedVehicle()
+    const renterApp = new Hono()
+    renterApp.use('*', testAuthMiddleware('renter-user', 'RENTER'))
+    const repo = new InMemoryVehicleDetailRepository(vehicleRepo, bookingRepo, renterNames)
+    renterApp.route('/', createVehicleDetailRoutes(repo))
+    const res = await renterApp.request(`/vehicles/${vehicle.id}/detail`)
+    expect(res.status).toBe(403)
+  })
+
+  it('fails closed when no auth middleware is present', async () => {
+    const vehicle = await seedVehicle()
+    const noAuthApp = new Hono()
+    const repo = new InMemoryVehicleDetailRepository(vehicleRepo, bookingRepo, renterNames)
+    noAuthApp.route('/', createVehicleDetailRoutes(repo))
+    const res = await noAuthApp.request(`/vehicles/${vehicle.id}/detail`)
+    // requireUser throws → 500 (fail-closed, not a silent pass-through)
+    expect(res.status).toBe(500)
   })
 })
