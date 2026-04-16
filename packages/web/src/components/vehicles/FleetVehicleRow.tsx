@@ -114,7 +114,7 @@ export function FleetVehicleRow({
             fill
             className="object-cover"
             sizes="80px"
-            loading="lazy"
+            loading="eager"
           />
         ) : (
           <div
@@ -127,7 +127,7 @@ export function FleetVehicleRow({
       </div>
 
       {/* Name + subtitle */}
-      <div className="min-w-[10rem] flex-1">
+      <div className="min-w-0 flex-1">
         <Link
           href={`/manage/vehicles/${overview.id}`}
           className="truncate font-medium text-foreground hover:underline"
@@ -161,19 +161,19 @@ export function FleetVehicleRow({
       </div>
 
       {/* Booking indicator */}
-      <div className="flex-shrink-0 min-w-[10rem]">
+      <div className="min-w-0 flex-1 truncate">
         <BookingIndicator current={overview.currentBooking} next={overview.nextBooking} t={t} />
       </div>
 
       {/* Price */}
-      <div className="flex-shrink-0 min-w-[10rem] text-right text-sm font-medium">
+      <div className="flex-shrink-0 whitespace-nowrap text-right text-sm font-medium">
         {price ?? ''}
       </div>
 
-      {/* Utilization */}
+      {/* Utilization — hidden on smaller screens to prevent overflow */}
       <div
         data-testid="fleet-row-utilization"
-        className="flex-shrink-0 min-w-[8rem] text-right text-sm text-muted-foreground"
+        className="hidden xl:block flex-shrink-0 whitespace-nowrap text-right text-sm text-muted-foreground"
       >
         {t('fleet.utilizationLabel', {
           percent: Math.round(overview.utilization),

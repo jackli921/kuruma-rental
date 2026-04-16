@@ -36,6 +36,9 @@ export function toCalendarEvents(bookings: CalendarBooking[]): CalendarEvent[] {
   }))
 }
 
+const SCROLL_TO_TIME = new Date(1970, 0, 1, 8, 0, 0)
+const CALENDAR_COMPONENTS = { toolbar: () => null } as const
+
 export function BookingsCalendar({
   events,
   defaultView = 'week',
@@ -85,27 +88,59 @@ export function BookingsCalendar({
     return `${s} - ${e}`
   }, [currentDate, currentView, culture])
 
+  const handleToolbarNavigate = useCallback(
+    (action: 'PREV' | 'NEXT' | 'TODAY') => {
+      if (action === 'TODAY') {
+        setCurrentDate(new Date())
+        return
+      }
+      const offset = action === 'PREV' ? -1 : 1
+      setCurrentDate((prev) => {
+        const d = new Date(prev)
+        if (currentView === 'month') d.setMonth(d.getMonth() + offset)
+        else if (currentView === 'week') d.setDate(d.getDate() + offset * 7)
+        else d.setDate(d.getDate() + offset)
+        return d
+      })
+    },
+    [currentView],
+  )
+
+  const messages = useMemo(
+    () => ({
+      today: t('today'),
+      previous: t('previous'),
+      next: t('next'),
+      day: t('views.day'),
+      week: t('views.week'),
+      month: t('views.month'),
+      noEventsInRange: t('noEventsInRange'),
+      showMore: (total: number) => t('showMore', { count: total }),
+    }),
+    [t],
+  )
+
+  const calendarStyle = useMemo(
+    () => ({ height: currentView === 'month' ? 600 : 700 }),
+    [currentView],
+  )
+
+  const handleClose = useCallback(() => setSelectedBooking(null), [])
+
+  const handleBookingUpdate = useCallback(
+    (updated: CalendarBooking) => {
+      setSelectedBooking(null)
+      onBookingUpdate?.(updated)
+    },
+    [onBookingUpdate],
+  )
+
   return (
     <div>
       <CalendarToolbar
         label={toolbarLabel}
         view={currentView}
-        onNavigate={(action) => {
-          const offset = action === 'PREV' ? -1 : action === 'NEXT' ? 1 : 0
-          if (action === 'TODAY') {
-            setCurrentDate(new Date())
-          } else {
-            const d = new Date(currentDate)
-            if (currentView === 'month') {
-              d.setMonth(d.getMonth() + offset)
-            } else if (currentView === 'week') {
-              d.setDate(d.getDate() + offset * 7)
-            } else {
-              d.setDate(d.getDate() + offset)
-            }
-            setCurrentDate(d)
-          }
-        }}
+        onNavigate={handleToolbarNavigate}
         onView={setCurrentView}
         views={views}
       />
@@ -122,31 +157,17 @@ export function BookingsCalendar({
         views={views}
         step={60}
         timeslots={1}
-        scrollToTime={new Date(1970, 0, 1, 8, 0, 0)}
-        style={{ height: currentView === 'month' ? 600 : 700 }}
-        messages={{
-          today: t('today'),
-          previous: t('previous'),
-          next: t('next'),
-          day: t('views.day'),
-          week: t('views.week'),
-          month: t('views.month'),
-          noEventsInRange: t('noEventsInRange'),
-          showMore: (total: number) => t('showMore', { count: total }),
-        }}
-        components={{
-          toolbar: () => null,
-        }}
+        scrollToTime={SCROLL_TO_TIME}
+        style={calendarStyle}
+        messages={messages}
+        components={CALENDAR_COMPONENTS}
         popup
       />
 
       <BookingDetailDialog
         booking={selectedBooking}
-        onClose={() => setSelectedBooking(null)}
-        onBookingUpdate={(updated) => {
-          setSelectedBooking(null)
-          onBookingUpdate?.(updated)
-        }}
+        onClose={handleClose}
+        onBookingUpdate={handleBookingUpdate}
       />
     </div>
   )

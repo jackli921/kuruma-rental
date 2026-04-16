@@ -73,7 +73,7 @@ export function FleetVehicleCard({
             fill
             className="object-cover"
             sizes="80px"
-            loading="lazy"
+            loading="eager"
           />
         ) : (
           <div className="flex h-full w-full items-center justify-center">
