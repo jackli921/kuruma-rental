@@ -47,18 +47,13 @@ vi.mock('next-intl', () => ({
   },
 }))
 
-vi.mock('@tanstack/react-query', () => ({
-  useQueryClient: () => ({
-    invalidateQueries: vi.fn().mockResolvedValue(undefined),
-  }),
-}))
-
 vi.mock('@/lib/vehicle-actions', () => ({
   updateVehicleAction: vi.fn().mockResolvedValue({ success: true, data: undefined }),
 }))
 
 import { EditVehicleDialog } from '@/components/vehicles/EditVehicleDialog'
 import type { VehicleData } from '@/lib/vehicle-api'
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 
 function makeVehicle(overrides: Partial<VehicleData> = {}): VehicleData {
   return {
@@ -85,6 +80,18 @@ function makeVehicle(overrides: Partial<VehicleData> = {}): VehicleData {
   }
 }
 
+const queryClient = new QueryClient({
+  defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
+})
+
+function renderDialog(props: { vehicle: VehicleData | null; onOpenChange?: () => void }) {
+  return render(
+    <QueryClientProvider client={queryClient}>
+      <EditVehicleDialog vehicle={props.vehicle} onOpenChange={props.onOpenChange ?? vi.fn()} />
+    </QueryClientProvider>,
+  )
+}
+
 describe('EditVehicleDialog', () => {
   afterEach(() => {
     cleanup()
@@ -92,7 +99,7 @@ describe('EditVehicleDialog', () => {
 
   it('pre-populates the daily rate and hourly rate from the vehicle prop', () => {
     const vehicle = makeVehicle({ dailyRateJpy: 6500, hourlyRateJpy: 900 })
-    render(<EditVehicleDialog vehicle={vehicle} onOpenChange={vi.fn()} />)
+    renderDialog({ vehicle })
 
     expect(screen.getByLabelText('Daily rate')).toHaveValue(6500)
     expect(screen.getByLabelText('Hourly rate')).toHaveValue(900)
@@ -100,7 +107,7 @@ describe('EditVehicleDialog', () => {
 
   it('pre-populates only the daily rate when hourly is null', () => {
     const vehicle = makeVehicle({ dailyRateJpy: 8000, hourlyRateJpy: null })
-    render(<EditVehicleDialog vehicle={vehicle} onOpenChange={vi.fn()} />)
+    renderDialog({ vehicle })
 
     expect(screen.getByLabelText('Daily rate')).toHaveValue(8000)
     expect(screen.getByLabelText('Hourly rate')).not.toHaveValue()
@@ -108,7 +115,7 @@ describe('EditVehicleDialog', () => {
 
   it('pre-populates only the hourly rate when daily is null', () => {
     const vehicle = makeVehicle({ dailyRateJpy: null, hourlyRateJpy: 1200 })
-    render(<EditVehicleDialog vehicle={vehicle} onOpenChange={vi.fn()} />)
+    renderDialog({ vehicle })
 
     expect(screen.getByLabelText('Daily rate')).not.toHaveValue()
     expect(screen.getByLabelText('Hourly rate')).toHaveValue(1200)
@@ -122,7 +129,7 @@ describe('EditVehicleDialog', () => {
       dailyRateJpy: 6500,
       hourlyRateJpy: 900,
     })
-    render(<EditVehicleDialog vehicle={vehicle} onOpenChange={vi.fn()} />)
+    renderDialog({ vehicle })
 
     expect(screen.getByLabelText('Vehicle name')).toHaveValue('Honda N-BOX')
     expect(screen.getByLabelText('Seats')).toHaveValue(4)
@@ -130,7 +137,7 @@ describe('EditVehicleDialog', () => {
   })
 
   it('renders nothing when vehicle is null', () => {
-    render(<EditVehicleDialog vehicle={null} onOpenChange={vi.fn()} />)
+    renderDialog({ vehicle: null })
     expect(screen.queryByLabelText('Daily rate')).not.toBeInTheDocument()
   })
 
@@ -143,7 +150,7 @@ describe('EditVehicleDialog', () => {
       maxRentalHours: 48,
       advanceBookingHours: 12,
     })
-    render(<EditVehicleDialog vehicle={vehicle} onOpenChange={vi.fn()} />)
+    renderDialog({ vehicle })
 
     expect(screen.getByLabelText('Minimum rental (hours)')).toHaveValue(6)
     expect(screen.getByLabelText('Maximum rental (hours)')).toHaveValue(48)
@@ -153,21 +160,21 @@ describe('EditVehicleDialog', () => {
   // Issue #226: pre-populate shaken and insurance expiry dates.
   it('pre-fills shaken expiry date from existing vehicle', () => {
     const vehicle = makeVehicle({ shakenExpiryDate: '2027-03-15' })
-    render(<EditVehicleDialog vehicle={vehicle} onOpenChange={vi.fn()} />)
+    renderDialog({ vehicle })
 
     expect(screen.getByLabelText('Shaken expiry date')).toHaveValue('2027-03-15')
   })
 
   it('pre-fills insurance expiry date from existing vehicle', () => {
     const vehicle = makeVehicle({ insuranceExpiryDate: '2027-06-30' })
-    render(<EditVehicleDialog vehicle={vehicle} onOpenChange={vi.fn()} />)
+    renderDialog({ vehicle })
 
     expect(screen.getByLabelText('Insurance expiry date')).toHaveValue('2027-06-30')
   })
 
   it('renders empty date inputs when vehicle has null expiry dates', () => {
     const vehicle = makeVehicle({ shakenExpiryDate: null, insuranceExpiryDate: null })
-    render(<EditVehicleDialog vehicle={vehicle} onOpenChange={vi.fn()} />)
+    renderDialog({ vehicle })
 
     expect(screen.getByLabelText('Shaken expiry date')).not.toHaveValue()
     expect(screen.getByLabelText('Insurance expiry date')).not.toHaveValue()
@@ -179,7 +186,7 @@ describe('EditVehicleDialog', () => {
       maxRentalHours: null,
       advanceBookingHours: null,
     })
-    render(<EditVehicleDialog vehicle={vehicle} onOpenChange={vi.fn()} />)
+    renderDialog({ vehicle })
 
     // Edit mode: an unset rule on the vehicle should render blank, not the
     // form's create-mode default. Owner needs to distinguish "no rule" from
