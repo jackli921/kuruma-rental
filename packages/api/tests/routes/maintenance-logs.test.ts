@@ -156,6 +156,9 @@ describe('Maintenance Logs', () => {
     })
   })
 
+  // Contract test: verifies service logic returns 409 on status mismatch.
+  // JS event loop serializes the InMemory calls — true DB-level concurrency
+  // requires an integration test against Postgres with the conditional WHERE.
   describe('concurrent status toggle', () => {
     it('second toggle returns 409 when first already changed the status', async () => {
       const vehicle = await createVehicle()
