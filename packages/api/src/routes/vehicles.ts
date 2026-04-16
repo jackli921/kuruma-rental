@@ -50,6 +50,7 @@ export function createVehicleRoutes(
 
       try {
         const vehicle = await repo.create({
+          classId: parsed.data.classId ?? null,
           name: parsed.data.name,
           description: parsed.data.description ?? null,
           photos: parsed.data.photos,
@@ -123,6 +124,7 @@ export function createVehicleRoutes(
 
       const changes = {
         ...d,
+        classId: merge('classId', existing.classId),
         description: merge('description', existing.description),
         fuelType: merge('fuelType', existing.fuelType),
         licensePlate: merge('licensePlate', existing.licensePlate),

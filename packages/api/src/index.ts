@@ -15,6 +15,7 @@ import {
   DrizzleStatsRepository,
   DrizzleThreadRepository,
   DrizzleUserRepository,
+  DrizzleVehicleClassRepository,
   DrizzleVehicleRepository,
 } from './repositories/drizzle'
 import {
@@ -26,6 +27,7 @@ import {
   InMemoryStatsRepository,
   InMemoryThreadRepository,
   InMemoryUserRepository,
+  InMemoryVehicleClassRepository,
   InMemoryVehicleRepository,
 } from './repositories/in-memory'
 import { InMemoryVehicleDetailRepository } from './repositories/in-memory-vehicle-detail'
@@ -38,6 +40,7 @@ import type {
   StatsRepository,
   ThreadRepository,
   UserRepository,
+  VehicleClassRepository,
   VehicleDetailRepository,
   VehicleRepository,
 } from './repositories/types'
@@ -48,10 +51,12 @@ import health from './routes/health'
 import { createMaintenanceLogRoutes } from './routes/maintenance-logs'
 import { createMessageRoutes } from './routes/messages'
 import { createStatsRoutes } from './routes/stats'
+import { createVehicleClassRoutes } from './routes/vehicle-classes'
 import { createVehicleDetailRoutes } from './routes/vehicle-detail'
 import { createVehicleRoutes } from './routes/vehicles'
 import { BookingService } from './services/booking'
 import { MaintenanceService } from './services/maintenance'
+import { VehicleClassService } from './services/vehicle-class'
 
 export function createApp(overrides?: {
   vehicleRepo: VehicleRepository
@@ -62,9 +67,11 @@ export function createApp(overrides?: {
   statsRepo?: StatsRepository
   threadRepo?: ThreadRepository
   messageRepo?: MessageRepository
+  vehicleClassRepo?: VehicleClassRepository
   maintenanceLogRepo?: MaintenanceLogRepository
   userRepo?: UserRepository
 }) {
+  let vehicleClassRepo: VehicleClassRepository
   let vehicleRepo: VehicleRepository
   let bookingRepo: BookingRepository
   let availabilityRepo: AvailabilityRepository
@@ -78,6 +85,7 @@ export function createApp(overrides?: {
 
   if (overrides) {
     ;({ vehicleRepo, bookingRepo, availabilityRepo } = overrides)
+    vehicleClassRepo = overrides.vehicleClassRepo ?? new InMemoryVehicleClassRepository()
     maintenanceLogRepo = overrides.maintenanceLogRepo ?? new InMemoryMaintenanceLogRepository()
     fleetOverviewRepo =
       overrides.fleetOverviewRepo ??
@@ -92,6 +100,7 @@ export function createApp(overrides?: {
     userRepo = overrides.userRepo ?? new InMemoryUserRepository()
   } else if (process.env.DATABASE_URL) {
     const db = getDb()
+    vehicleClassRepo = new DrizzleVehicleClassRepository(db)
     vehicleRepo = new DrizzleVehicleRepository(db)
     bookingRepo = new DrizzleBookingRepository(db)
     availabilityRepo = new DrizzleAvailabilityRepository(db)
@@ -108,6 +117,7 @@ export function createApp(overrides?: {
     messageRepo = new DrizzleMessageRepository(db)
     userRepo = new DrizzleUserRepository(db)
   } else {
+    vehicleClassRepo = new InMemoryVehicleClassRepository()
     vehicleRepo = new InMemoryVehicleRepository()
     bookingRepo = new InMemoryBookingRepository()
     availabilityRepo = new InMemoryAvailabilityRepository(
@@ -174,12 +184,16 @@ export function createApp(overrides?: {
     )
   }
 
-  // Auth middleware on all protected paths
+  // Auth middleware on all protected paths.
+  // TODO(#247): vehicle-classes GETs should be public for renter catalog.
+  // Move public read routes before this block when building the catalog UI.
+  app.use('/vehicle-classes/*', requireAuth())
   app.use('/vehicles/*', requireAuth())
   app.use('/bookings/*', requireAuth())
   app.use('/availability/*', requireAuth())
   app.use('/threads/*', requireAuth())
 
+  const vehicleClassService = new VehicleClassService(vehicleClassRepo)
   const bookingService = new BookingService(bookingRepo, vehicleRepo, userRepo)
   const maintenanceService = new MaintenanceService(vehicleRepo, maintenanceLogRepo)
 
@@ -189,6 +203,7 @@ export function createApp(overrides?: {
     .route('/', health)
     .route('/', createFleetOverviewRoutes(fleetOverviewRepo))
     .route('/', createVehicleDetailRoutes(vehicleDetailRepo))
+    .route('/', createVehicleClassRoutes(vehicleClassService))
     .route('/', createVehicleRoutes(vehicleRepo, maintenanceService))
     .route('/', createMaintenanceLogRoutes(maintenanceService))
     .route('/', createBookingRoutes(bookingService))

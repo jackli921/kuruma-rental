@@ -14,6 +14,7 @@ const jpyRate = z.number().int('Rate must be a whole yen amount').min(0, 'Rate c
 // `updateVehicleSchema` can still be `.partial()` — `superRefine` wraps the
 // result in ZodEffects which doesn't support `.partial()` directly.
 const vehicleObjectSchema = z.object({
+  classId: z.string().uuid('Class ID must be a valid UUID').nullish(),
   name: z.string().trim().min(1, 'Name is required'),
   description: z.string().optional(),
   photos: z.array(z.string().url()).default([]),

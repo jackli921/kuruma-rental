@@ -1,5 +1,24 @@
+export interface VehicleClass {
+  id: string
+  name: string
+  slug: string
+  description: string | null
+  photos: string[]
+  seats: number
+  luggageCapacity: number
+  transmission: 'AUTO' | 'MANUAL'
+  fuelType: string | null
+  dailyRateJpy: number | null
+  hourlyRateJpy: number | null
+  sortOrder: number
+  status: 'ACTIVE' | 'ARCHIVED'
+  createdAt: Date
+  updatedAt: Date
+}
+
 export interface Vehicle {
   id: string
+  classId: string | null
   name: string
   description: string | null
   photos: string[]
