@@ -1,4 +1,5 @@
 import type { FleetVehicleOverview } from '@kuruma/shared/types/fleet'
+import { SYSTEM_CONTEXT } from '../../middleware/auth'
 import type {
   BookingRepository,
   FleetOverviewRepository,
@@ -40,7 +41,7 @@ export class InMemoryFleetOverviewRepository implements FleetOverviewRepository 
     const windowStart = new Date(now.getTime() - UTILIZATION_WINDOW_HOURS * 60 * 60 * 1000)
 
     const vehicles = await this.vehicleRepo.findAll()
-    const allBookings = await this.bookingRepo.findAll()
+    const allBookings = await this.bookingRepo.findAll(SYSTEM_CONTEXT)
 
     return Promise.all(
       vehicles.map(async (vehicle) => {

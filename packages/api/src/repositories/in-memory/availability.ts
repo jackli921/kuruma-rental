@@ -1,3 +1,4 @@
+import { SYSTEM_CONTEXT } from '../../middleware/auth'
 import type { Booking, Vehicle } from '../../stores'
 import type { AvailabilityRepository, BookingRepository, VehicleRepository } from '../types'
 import { getConflictingBookings } from './booking'
@@ -10,7 +11,7 @@ export class InMemoryAvailabilityRepository implements AvailabilityRepository {
 
   async findAvailableVehicles(from: Date, to: Date): Promise<Vehicle[]> {
     const vehicles = await this.vehicleRepo.findAll({ status: 'AVAILABLE' })
-    const allBookings = await this.bookingRepo.findAll()
+    const allBookings = await this.bookingRepo.findAll(SYSTEM_CONTEXT)
 
     return vehicles.filter((vehicle) => {
       const conflicts = getConflictingBookings(
@@ -39,7 +40,7 @@ export class InMemoryAvailabilityRepository implements AvailabilityRepository {
     const vehicle = await this.vehicleRepo.findById(vehicleId)
     if (!vehicle) return undefined
 
-    const allBookings = await this.bookingRepo.findAll()
+    const allBookings = await this.bookingRepo.findAll(SYSTEM_CONTEXT)
     const conflicts = getConflictingBookings(
       allBookings,
       vehicle.id,

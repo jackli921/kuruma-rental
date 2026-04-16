@@ -1,5 +1,6 @@
 import { messages, threadParticipants, threads } from '@kuruma/shared/db/schema'
 import { and, asc, eq, sql } from 'drizzle-orm'
+import type { CallerContext } from '../../middleware/auth'
 import type { Message } from '../../stores'
 import type { MessageRepository } from '../types'
 import { type Db, messageColumns, normaliseMessage } from './shared'
@@ -7,11 +8,11 @@ import { type Db, messageColumns, normaliseMessage } from './shared'
 export class DrizzleMessageRepository implements MessageRepository {
   constructor(private readonly db: Db) {}
 
-  async create(threadId: string, senderId: string, content: string): Promise<Message> {
+  async create(ctx: CallerContext, threadId: string, content: string): Promise<Message> {
     return this.db.transaction(async (tx) => {
       const [inserted] = (await tx
         .insert(messages)
-        .values({ threadId, senderId, content })
+        .values({ threadId, senderId: ctx.userId, content })
         .returning(messageColumns)) as Array<Parameters<typeof normaliseMessage>[0]>
 
       if (!inserted) {
@@ -25,7 +26,7 @@ export class DrizzleMessageRepository implements MessageRepository {
         .where(
           and(
             eq(threadParticipants.threadId, threadId),
-            sql`${threadParticipants.userId} <> ${senderId}`,
+            sql`${threadParticipants.userId} <> ${ctx.userId}`,
           ),
         )
 
@@ -35,7 +36,7 @@ export class DrizzleMessageRepository implements MessageRepository {
     })
   }
 
-  async findByThreadId(threadId: string): Promise<Message[]> {
+  async findByThreadId(ctx: CallerContext, threadId: string): Promise<Message[]> {
     const rows = (await this.db
       .select(messageColumns)
       .from(messages)

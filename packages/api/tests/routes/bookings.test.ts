@@ -1,5 +1,6 @@
 import { Hono } from 'hono'
 import { beforeEach, describe, expect, it } from 'vitest'
+import { SYSTEM_CONTEXT } from '../../src/middleware/auth'
 import {
   InMemoryBookingRepository,
   InMemoryUserRepository,
@@ -132,7 +133,7 @@ describe('Booking Routes', () => {
       // Create one booking via route (gets USER1 from JWT context)
       await createBooking()
       // Create second booking directly in repo with USER2 (bypasses JWT)
-      await bookingRepo.create({
+      await bookingRepo.create(SYSTEM_CONTEXT, {
         vehicleId: V2,
         renterId: USER2,
         startAt: new Date(Date.now() + 24 * 60 * 60 * 1000),
@@ -362,7 +363,7 @@ describe('Booking Routes', () => {
       // Create via route (renterId comes from JWT = USER1)
       await createBooking()
       // Create directly in repo with USER2 (route always overrides renterId from JWT)
-      await bookingRepo.create({
+      await bookingRepo.create(SYSTEM_CONTEXT, {
         renterId: USER2,
         vehicleId: V2,
         startAt: new Date(Date.now() + 24 * 60 * 60 * 1000),

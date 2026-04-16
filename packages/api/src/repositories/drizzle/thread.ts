@@ -1,5 +1,6 @@
 import { messages, threadParticipants, threads } from '@kuruma/shared/db/schema'
 import { and, asc, eq, inArray, sql } from 'drizzle-orm'
+import type { CallerContext } from '../../middleware/auth'
 import type { Message, Thread, ThreadParticipant } from '../../stores'
 import type { ThreadRepository } from '../types'
 import {
@@ -17,13 +18,13 @@ export class DrizzleThreadRepository implements ThreadRepository {
   constructor(private readonly db: Db) {}
 
   async findAll(
-    userId: string,
+    ctx: CallerContext,
   ): Promise<Array<Thread & { participants: ThreadParticipant[]; lastMessage: Message | null }>> {
     // Step 1: which threads does this user participate in?
     const myParticipations = await this.db
       .select({ threadId: threadParticipants.threadId })
       .from(threadParticipants)
-      .where(eq(threadParticipants.userId, userId))
+      .where(eq(threadParticipants.userId, ctx.userId))
 
     const threadIds = [...new Set(myParticipations.map((p) => p.threadId))]
     if (threadIds.length === 0) return []
@@ -40,9 +41,7 @@ export class DrizzleThreadRepository implements ThreadRepository {
       .from(threadParticipants)
       .where(inArray(threadParticipants.threadId, threadIds))).map(toThreadParticipant)
 
-    // Step 4: fetch only the latest message per thread. The DISTINCT ON
-    // pattern keeps this O(threads) instead of O(messages) -- important once
-    // any single conversation grows beyond a few dozen messages.
+    // Step 4: fetch only the latest message per thread.
     const lastMessageRows = await this.db.execute<RawMessageRow>(sql`
       SELECT DISTINCT ON ("threadId")
         "id", "threadId", "senderId", "content", "sourceLanguage", "translations", "createdAt"
@@ -54,8 +53,6 @@ export class DrizzleThreadRepository implements ThreadRepository {
       ORDER BY "threadId", "createdAt" DESC
     `)
 
-    // postgres-js returns rows on the result directly; neon-http wraps in {rows}.
-    // Coerce both shapes into a single array.
     const lastMessageList = (
       Array.isArray(lastMessageRows)
         ? lastMessageRows
@@ -75,6 +72,7 @@ export class DrizzleThreadRepository implements ThreadRepository {
   }
 
   async findById(
+    ctx: CallerContext,
     id: string,
   ): Promise<(Thread & { participants: ThreadParticipant[]; messages: Message[] }) | undefined> {
     const [thread] = (await this.db
@@ -96,16 +94,22 @@ export class DrizzleThreadRepository implements ThreadRepository {
         .orderBy(asc(messages.createdAt)),
     ])
 
+    const participants = participantRows.map(toThreadParticipant)
+
+    // CallerContext scoping: non-participant renters get undefined
+    const isParticipant = participants.some((p) => p.userId === ctx.userId)
+    if (!isParticipant && ctx.role === 'RENTER') return undefined
+
     return {
       ...thread,
-      participants: participantRows.map(toThreadParticipant),
+      participants,
       messages: (messageRows as Array<Parameters<typeof normaliseMessage>[0]>).map(
         normaliseMessage,
       ),
     }
   }
 
-  async create(bookingId: string | null, participantIds: string[]): Promise<Thread> {
+  async create(ctx: CallerContext, bookingId: string | null, participantIds: string[]): Promise<Thread> {
     return this.db.transaction(async (tx) => {
       const [insertedThread] = (await tx
         .insert(threads)
@@ -130,11 +134,11 @@ export class DrizzleThreadRepository implements ThreadRepository {
     })
   }
 
-  async markAsRead(threadId: string, userId: string): Promise<void> {
-    // Single UPDATE -- no read-modify-write, no race window.
+  async markAsRead(ctx: CallerContext, threadId: string): Promise<void> {
+    // CallerContext: only mark the caller's own participation as read
     await this.db
       .update(threadParticipants)
       .set({ unreadCount: 0 })
-      .where(and(eq(threadParticipants.threadId, threadId), eq(threadParticipants.userId, userId)))
+      .where(and(eq(threadParticipants.threadId, threadId), eq(threadParticipants.userId, ctx.userId)))
   }
 }
