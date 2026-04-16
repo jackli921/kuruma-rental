@@ -100,9 +100,14 @@ export class InMemoryBookingRepository implements BookingRepository {
   }
 
   async create(
-    _ctx: CallerContext,
+    ctx: CallerContext,
     data: Omit<Booking, 'id' | 'createdAt' | 'updatedAt'>,
   ): Promise<Booking> {
+    // CallerContext scoping: non-privileged callers can only create bookings for themselves
+    if (!PRIVILEGED_ROLES.has(ctx.role) && data.renterId !== ctx.userId) {
+      throw new Error('Cannot create booking for another user')
+    }
+
     // Mirror the DB-level `bookings_no_overlap` exclusion constraint so in-memory
     // tests exercise the same conflict behavior as real Postgres.
     if (BLOCKING_STATUSES.has(data.status)) {

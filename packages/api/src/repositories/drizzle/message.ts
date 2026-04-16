@@ -1,6 +1,6 @@
 import { messages, threadParticipants, threads } from '@kuruma/shared/db/schema'
 import { and, asc, eq, sql } from 'drizzle-orm'
-import type { CallerContext } from '../../middleware/auth'
+import { type CallerContext, PRIVILEGED_ROLES } from '../../middleware/auth'
 import type { Message } from '../../stores'
 import type { MessageRepository } from '../types'
 import { type Db, messageColumns, normaliseMessage } from './shared'
@@ -37,6 +37,17 @@ export class DrizzleMessageRepository implements MessageRepository {
   }
 
   async findByThreadId(ctx: CallerContext, threadId: string): Promise<Message[]> {
+    // CallerContext scoping: verify non-privileged caller is a thread participant
+    if (!PRIVILEGED_ROLES.has(ctx.role)) {
+      const [participation] = await this.db
+        .select({ threadId: threadParticipants.threadId })
+        .from(threadParticipants)
+        .where(
+          and(eq(threadParticipants.threadId, threadId), eq(threadParticipants.userId, ctx.userId)),
+        )
+      if (!participation) return []
+    }
+
     const rows = (await this.db
       .select(messageColumns)
       .from(messages)

@@ -95,6 +95,11 @@ export class DrizzleBookingRepository implements BookingRepository {
   }
 
   async create(ctx: CallerContext, data: Omit<Booking, 'id' | 'createdAt' | 'updatedAt'>): Promise<Booking> {
+    // CallerContext scoping: non-privileged callers can only create bookings for themselves
+    if (!PRIVILEGED_ROLES.has(ctx.role) && data.renterId !== ctx.userId) {
+      throw new Error('Cannot create booking for another user')
+    }
+
     const [inserted] = await this.db
       .insert(bookings)
       .values({

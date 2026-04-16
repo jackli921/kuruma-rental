@@ -1,6 +1,6 @@
 import { messages, threadParticipants, threads } from '@kuruma/shared/db/schema'
 import { and, asc, eq, inArray, sql } from 'drizzle-orm'
-import type { CallerContext } from '../../middleware/auth'
+import { type CallerContext, PRIVILEGED_ROLES } from '../../middleware/auth'
 import type { Message, Thread, ThreadParticipant } from '../../stores'
 import type { ThreadRepository } from '../types'
 import {
@@ -20,20 +20,29 @@ export class DrizzleThreadRepository implements ThreadRepository {
   async findAll(
     ctx: CallerContext,
   ): Promise<Array<Thread & { participants: ThreadParticipant[]; lastMessage: Message | null }>> {
-    // Step 1: which threads does this user participate in?
-    const myParticipations = await this.db
-      .select({ threadId: threadParticipants.threadId })
-      .from(threadParticipants)
-      .where(eq(threadParticipants.userId, ctx.userId))
+    let threadRows: Thread[]
 
-    const threadIds = [...new Set(myParticipations.map((p) => p.threadId))]
+    if (PRIVILEGED_ROLES.has(ctx.role)) {
+      // Staff/admin see all threads
+      threadRows = (await this.db.select(threadColumns).from(threads)).map(toThread)
+    } else {
+      // Non-privileged: only threads where the user is a participant
+      const myParticipations = await this.db
+        .select({ threadId: threadParticipants.threadId })
+        .from(threadParticipants)
+        .where(eq(threadParticipants.userId, ctx.userId))
+
+      const threadIds = [...new Set(myParticipations.map((p) => p.threadId))]
+      if (threadIds.length === 0) return []
+
+      threadRows = (await this.db
+        .select(threadColumns)
+        .from(threads)
+        .where(inArray(threads.id, threadIds))).map(toThread)
+    }
+
+    const threadIds = threadRows.map((t) => t.id)
     if (threadIds.length === 0) return []
-
-    // Step 2: fetch the threads themselves.
-    const threadRows = (await this.db
-      .select(threadColumns)
-      .from(threads)
-      .where(inArray(threads.id, threadIds))).map(toThread)
 
     // Step 3: fetch all participants for those threads in one round-trip.
     const participantRows = (await this.db
@@ -96,9 +105,9 @@ export class DrizzleThreadRepository implements ThreadRepository {
 
     const participants = participantRows.map(toThreadParticipant)
 
-    // CallerContext scoping: non-participant renters get undefined
+    // CallerContext scoping: non-privileged non-participants get undefined
     const isParticipant = participants.some((p) => p.userId === ctx.userId)
-    if (!isParticipant && ctx.role === 'RENTER') return undefined
+    if (!isParticipant && !PRIVILEGED_ROLES.has(ctx.role)) return undefined
 
     return {
       ...thread,
