@@ -1,5 +1,10 @@
 import type { Vehicle } from '../../stores'
-import type { PaginatedResult, VehicleFilters, VehicleRepository, VehicleUpdateOptions } from '../types'
+import type {
+  PaginatedResult,
+  VehicleFilters,
+  VehicleRepository,
+  VehicleUpdateOptions,
+} from '../types'
 
 export class InMemoryVehicleRepository implements VehicleRepository {
   private readonly store: Map<string, Vehicle>
