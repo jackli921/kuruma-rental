@@ -3,6 +3,7 @@ import type {
   VehicleDetail,
   VehicleDetailBooking,
 } from '@kuruma/shared/types/vehicle-detail'
+import { SYSTEM_CONTEXT } from '../middleware/auth'
 import type { Booking } from '../stores'
 import type {
   BookingRepository,
@@ -43,7 +44,7 @@ export class InMemoryVehicleDetailRepository implements VehicleDetailRepository 
     const vehicle = await this.vehicleRepo.findById(vehicleId)
     if (!vehicle) return undefined
 
-    const allBookings = await this.bookingRepo.findAll({ vehicleId })
+    const allBookings = await this.bookingRepo.findAll(SYSTEM_CONTEXT, { vehicleId })
     const now = new Date()
 
     const maintenanceLogs = this.maintenanceLogRepo

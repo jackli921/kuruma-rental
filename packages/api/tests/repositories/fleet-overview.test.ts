@@ -10,6 +10,7 @@
 // Buffer time is NOT counted — only startAt..endAt.
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { SYSTEM_CONTEXT } from '../../src/middleware/auth'
 import {
   InMemoryBookingRepository,
   InMemoryFleetOverviewRepository,
@@ -100,6 +101,7 @@ describe('InMemoryFleetOverviewRepository', () => {
   it('excludes CANCELLED bookings from utilization and count', async () => {
     const vehicle = await vehicleRepo.create(baseVehicleInput({ name: 'Cancelled' }))
     await bookingRepo.create(
+      SYSTEM_CONTEXT,
       baseBookingInput({
         vehicleId: vehicle.id,
         startAt: new Date('2026-04-05T10:00:00Z'),
@@ -122,6 +124,7 @@ describe('InMemoryFleetOverviewRepository', () => {
     // squarely inside the 30-day window.
     const vehicle = await vehicleRepo.create(baseVehicleInput({ name: 'Booked Once' }))
     await bookingRepo.create(
+      SYSTEM_CONTEXT,
       baseBookingInput({
         vehicleId: vehicle.id,
         startAt: new Date('2026-04-05T10:00:00Z'),
@@ -140,6 +143,7 @@ describe('InMemoryFleetOverviewRepository', () => {
   it('populates currentBooking when now falls inside a non-CANCELLED booking', async () => {
     const vehicle = await vehicleRepo.create(baseVehicleInput({ name: 'On Rental' }))
     await bookingRepo.create(
+      SYSTEM_CONTEXT,
       baseBookingInput({
         vehicleId: vehicle.id,
         // FIXED_NOW = 2026-04-11T12:00:00Z is inside this window
@@ -163,6 +167,7 @@ describe('InMemoryFleetOverviewRepository', () => {
     // Future booking — closer one first in creation order, but we want
     // findFleetOverview to pick the earliest startAt regardless of insert order.
     await bookingRepo.create(
+      SYSTEM_CONTEXT,
       baseBookingInput({
         vehicleId: vehicle.id,
         startAt: new Date('2026-04-20T10:00:00Z'),
@@ -172,6 +177,7 @@ describe('InMemoryFleetOverviewRepository', () => {
       }),
     )
     await bookingRepo.create(
+      SYSTEM_CONTEXT,
       baseBookingInput({
         vehicleId: vehicle.id,
         startAt: new Date('2026-04-12T08:00:00Z'),
@@ -192,6 +198,7 @@ describe('InMemoryFleetOverviewRepository', () => {
   it('excludes CANCELLED bookings from currentBooking and nextBooking', async () => {
     const vehicle = await vehicleRepo.create(baseVehicleInput({ name: 'All Cancelled' }))
     await bookingRepo.create(
+      SYSTEM_CONTEXT,
       baseBookingInput({
         vehicleId: vehicle.id,
         startAt: new Date('2026-04-11T09:00:00Z'),
@@ -201,6 +208,7 @@ describe('InMemoryFleetOverviewRepository', () => {
       }),
     )
     await bookingRepo.create(
+      SYSTEM_CONTEXT,
       baseBookingInput({
         vehicleId: vehicle.id,
         startAt: new Date('2026-04-15T10:00:00Z'),
@@ -222,6 +230,7 @@ describe('InMemoryFleetOverviewRepository', () => {
 
     const vehicle = await vehicleRepo.create(baseVehicleInput({ name: 'Alice Rental' }))
     await bookingRepo.create(
+      SYSTEM_CONTEXT,
       baseBookingInput({
         vehicleId: vehicle.id,
         renterId: 'user_alice',
@@ -249,6 +258,7 @@ describe('InMemoryFleetOverviewRepository', () => {
     //   clipped = [2026-03-12T12:00, 2026-03-22T12:00] = 10 days = 240h
     const vehicle = await vehicleRepo.create(baseVehicleInput({ name: 'Long Window' }))
     await bookingRepo.create(
+      SYSTEM_CONTEXT,
       baseBookingInput({
         vehicleId: vehicle.id,
         startAt: new Date('2026-03-02T12:00:00Z'),
@@ -276,6 +286,7 @@ describe('InMemoryFleetOverviewRepository', () => {
     //   clipped = [startAt, now] = 2h
     const vehicle = await vehicleRepo.create(baseVehicleInput({ name: 'Currently Active' }))
     await bookingRepo.create(
+      SYSTEM_CONTEXT,
       baseBookingInput({
         vehicleId: vehicle.id,
         startAt: new Date('2026-04-11T10:00:00Z'),

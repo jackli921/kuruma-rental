@@ -1,3 +1,4 @@
+import { type CallerContext, PRIVILEGED_ROLES } from '../../middleware/auth'
 import { PG_ERROR } from '../../pg-errors'
 import type { Booking } from '../../stores'
 import type { BookingFilters, BookingRepository } from '../types'
@@ -30,8 +31,14 @@ export class InMemoryBookingRepository implements BookingRepository {
     this.store = store ?? new Map()
   }
 
-  async findAll(filters?: BookingFilters): Promise<Booking[]> {
-    let results = [...this.store.values()]
+  private scopedValues(ctx: CallerContext): Booking[] {
+    const all = [...this.store.values()]
+    if (PRIVILEGED_ROLES.has(ctx.role)) return all
+    return all.filter((b) => b.renterId === ctx.userId)
+  }
+
+  async findAll(ctx: CallerContext, filters?: BookingFilters): Promise<Booking[]> {
+    let results = this.scopedValues(ctx)
 
     if (filters?.status) {
       results = results.filter((b) => b.status === filters.status)
@@ -75,18 +82,32 @@ export class InMemoryBookingRepository implements BookingRepository {
     return results
   }
 
-  async findById(id: string): Promise<Booking | undefined> {
-    return this.store.get(id)
+  async findById(ctx: CallerContext, id: string): Promise<Booking | undefined> {
+    const booking = this.store.get(id)
+    if (!booking) return undefined
+    if (!PRIVILEGED_ROLES.has(ctx.role) && booking.renterId !== ctx.userId) return undefined
+    return booking
   }
 
-  async findByIdempotencyKey(key: string): Promise<Booking | undefined> {
+  async findByIdempotencyKey(ctx: CallerContext, key: string): Promise<Booking | undefined> {
     for (const booking of this.store.values()) {
-      if (booking.idempotencyKey === key) return booking
+      if (booking.idempotencyKey === key) {
+        if (!PRIVILEGED_ROLES.has(ctx.role) && booking.renterId !== ctx.userId) return undefined
+        return booking
+      }
     }
     return undefined
   }
 
-  async create(data: Omit<Booking, 'id' | 'createdAt' | 'updatedAt'>): Promise<Booking> {
+  async create(
+    ctx: CallerContext,
+    data: Omit<Booking, 'id' | 'createdAt' | 'updatedAt'>,
+  ): Promise<Booking> {
+    // CallerContext scoping: non-privileged callers can only create bookings for themselves
+    if (!PRIVILEGED_ROLES.has(ctx.role) && data.renterId !== ctx.userId) {
+      throw new Error('Cannot create booking for another user')
+    }
+
     // Mirror the DB-level `bookings_no_overlap` exclusion constraint so in-memory
     // tests exercise the same conflict behavior as real Postgres.
     if (BLOCKING_STATUSES.has(data.status)) {
@@ -126,11 +147,13 @@ export class InMemoryBookingRepository implements BookingRepository {
   }
 
   async updateStatus(
+    ctx: CallerContext,
     id: string,
     transition: { from: Booking['status']; to: Booking['status'] },
   ): Promise<Booking | undefined> {
     const existing = this.store.get(id)
     if (!existing || existing.status !== transition.from) return undefined
+    if (!PRIVILEGED_ROLES.has(ctx.role) && existing.renterId !== ctx.userId) return undefined
 
     const updated: Booking = {
       ...existing,
@@ -142,11 +165,13 @@ export class InMemoryBookingRepository implements BookingRepository {
   }
 
   async cancel(
+    ctx: CallerContext,
     id: string,
     opts: { from: Booking['status']; fee: number; cancelledAt: Date },
   ): Promise<Booking | undefined> {
     const existing = this.store.get(id)
     if (!existing || existing.status !== opts.from) return undefined
+    if (!PRIVILEGED_ROLES.has(ctx.role) && existing.renterId !== ctx.userId) return undefined
 
     const cancelled: Booking = {
       ...existing,

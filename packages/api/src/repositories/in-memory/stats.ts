@@ -1,3 +1,4 @@
+import { SYSTEM_CONTEXT } from '../../middleware/auth'
 import type {
   BookingRepository,
   DashboardStats,
@@ -14,7 +15,7 @@ export class InMemoryStatsRepository implements StatsRepository {
   async getDashboardStats(): Promise<DashboardStats> {
     const [vehicles, bookings] = await Promise.all([
       this.vehicleRepo.findAll({ status: 'AVAILABLE' }),
-      this.bookingRepo.findAll(),
+      this.bookingRepo.findAll(SYSTEM_CONTEXT),
     ])
 
     return {
