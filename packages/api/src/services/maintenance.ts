@@ -34,7 +34,9 @@ export class MaintenanceService {
       }
     }
 
-    // Conditional update — fails if another request already changed the status
+    // Conditional update — fails if another request already changed the status.
+    // Returns undefined for both "not found" and "status mismatch"; since we
+    // already verified existence above, undefined here means a concurrent change.
     const updated = await this.vehicleRepo.update(
       vehicleId,
       { status },
