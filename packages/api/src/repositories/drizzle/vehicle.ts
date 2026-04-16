@@ -1,7 +1,7 @@
 import { vehicles } from '@kuruma/shared/db/schema'
-import { eq, inArray, ne, sql } from 'drizzle-orm'
+import { and, eq, inArray, ne, sql } from 'drizzle-orm'
 import type { Vehicle } from '../../stores'
-import type { VehicleFilters, VehicleRepository } from '../types'
+import type { VehicleFilters, VehicleRepository, VehicleUpdateOptions } from '../types'
 import { type Db, toVehicle, vehicleColumns } from './shared'
 
 export class DrizzleVehicleRepository implements VehicleRepository {
@@ -65,12 +65,20 @@ export class DrizzleVehicleRepository implements VehicleRepository {
     return toVehicle(inserted)
   }
 
-  async update(id: string, data: Partial<Vehicle>): Promise<Vehicle | undefined> {
+  async update(
+    id: string,
+    data: Partial<Vehicle>,
+    options?: VehicleUpdateOptions,
+  ): Promise<Vehicle | undefined> {
     const { id: _id, createdAt: _createdAt, ...fields } = data
+    const conditions = [eq(vehicles.id, id)]
+    if (options?.expectedStatus) {
+      conditions.push(eq(vehicles.status, options.expectedStatus))
+    }
     const [updated] = await this.db
       .update(vehicles)
       .set({ ...fields, updatedAt: sql`now()` })
-      .where(eq(vehicles.id, id))
+      .where(and(...conditions))
       .returning()
 
     return updated ? toVehicle(updated) : undefined

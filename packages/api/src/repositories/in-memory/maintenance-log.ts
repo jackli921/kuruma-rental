@@ -1,5 +1,5 @@
 import type { MaintenanceLog } from '../../stores'
-import type { MaintenanceLogRepository } from '../types'
+import type { MaintenanceLogRepository, TransitionLogsResult } from '../types'
 
 export class InMemoryMaintenanceLogRepository implements MaintenanceLogRepository {
   private readonly store: Map<string, MaintenanceLog>
@@ -55,5 +55,22 @@ export class InMemoryMaintenanceLogRepository implements MaintenanceLogRepositor
     }
     this.store.set(resolved.id, resolved)
     return resolved
+  }
+
+  async transitionLogs(
+    vehicleId: string,
+    resolvedAt: Date,
+    newLogData?: Omit<MaintenanceLog, 'id' | 'createdAt' | 'updatedAt'>,
+  ): Promise<TransitionLogsResult> {
+    const result: TransitionLogsResult = {}
+    const active = await this.findActiveByVehicleId(vehicleId)
+    if (active) {
+      const resolved = await this.resolve(active.id, resolvedAt)
+      if (resolved) result.resolved = resolved
+    }
+    if (newLogData) {
+      result.created = await this.create(newLogData)
+    }
+    return result
   }
 }

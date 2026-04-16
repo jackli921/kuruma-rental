@@ -38,9 +38,14 @@ export class InMemoryVehicleRepository implements VehicleRepository {
     return vehicle
   }
 
-  async update(id: string, data: Partial<Vehicle>): Promise<Vehicle | undefined> {
+  async update(
+    id: string,
+    data: Partial<Vehicle>,
+    options?: { expectedStatus?: Vehicle['status'] },
+  ): Promise<Vehicle | undefined> {
     const existing = this.store.get(id)
     if (!existing) return undefined
+    if (options?.expectedStatus && existing.status !== options.expectedStatus) return undefined
 
     const updated: Vehicle = {
       ...existing,

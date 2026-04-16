@@ -31,12 +31,20 @@ export interface VehicleFilters {
   includeRetired?: boolean
 }
 
+export interface VehicleUpdateOptions {
+  expectedStatus?: Vehicle['status']
+}
+
 export interface VehicleRepository {
   findAll(filters?: VehicleFilters): Promise<Vehicle[]>
   findById(id: string): Promise<Vehicle | undefined>
   findByIds(ids: string[]): Promise<Vehicle[]>
   create(data: Omit<Vehicle, 'id' | 'createdAt' | 'updatedAt'>): Promise<Vehicle>
-  update(id: string, data: Partial<Vehicle>): Promise<Vehicle | undefined>
+  update(
+    id: string,
+    data: Partial<Vehicle>,
+    options?: VehicleUpdateOptions,
+  ): Promise<Vehicle | undefined>
   softDelete(id: string): Promise<Vehicle | undefined>
   bulkUpdateStatus(ids: string[], status: 'AVAILABLE' | 'MAINTENANCE'): Promise<Vehicle[]>
 }
@@ -125,11 +133,21 @@ export interface MessageRepository {
   findByThreadId(threadId: string): Promise<Message[]>
 }
 
+export interface TransitionLogsResult {
+  resolved?: MaintenanceLog
+  created?: MaintenanceLog
+}
+
 export interface MaintenanceLogRepository {
   findByVehicleId(vehicleId: string): Promise<MaintenanceLog[]>
   findActiveByVehicleId(vehicleId: string): Promise<MaintenanceLog | undefined>
   create(data: Omit<MaintenanceLog, 'id' | 'createdAt' | 'updatedAt'>): Promise<MaintenanceLog>
   resolve(id: string, resolvedAt: Date): Promise<MaintenanceLog | undefined>
+  transitionLogs(
+    vehicleId: string,
+    resolvedAt: Date,
+    newLogData?: Omit<MaintenanceLog, 'id' | 'createdAt' | 'updatedAt'>,
+  ): Promise<TransitionLogsResult>
 }
 
 export interface VehicleClassFilters {
