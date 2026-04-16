@@ -46,7 +46,7 @@ export function FleetVehicleCard({
 
   return (
     <Card>
-      <div className="relative aspect-[4/3] overflow-hidden bg-muted">
+      <div className="relative aspect-[16/9] overflow-hidden bg-muted">
         {vehicle.status !== 'RETIRED' && (
           <input
             type="checkbox"
