@@ -12,14 +12,14 @@ export class InMemoryStatsRepository implements StatsRepository {
   ) {}
 
   async getDashboardStats(): Promise<DashboardStats> {
-    const [vehicles, bookings] = await Promise.all([
+    const [vehicleResult, bookings] = await Promise.all([
       this.vehicleRepo.findAll({ status: 'AVAILABLE' }),
       this.bookingRepo.findAll(),
     ])
 
     return {
       totalBookings: bookings.length,
-      activeVehicles: vehicles.length,
+      activeVehicles: vehicleResult.total,
       totalCustomers: 0, // No users table in InMemory
       unreadMessages: 0, // No messages table yet
     }

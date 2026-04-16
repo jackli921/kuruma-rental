@@ -1,5 +1,5 @@
 import type { Vehicle } from '../../stores'
-import type { VehicleFilters, VehicleRepository } from '../types'
+import type { PaginatedResult, VehicleFilters, VehicleRepository } from '../types'
 
 export class InMemoryVehicleRepository implements VehicleRepository {
   private readonly store: Map<string, Vehicle>
@@ -8,11 +8,21 @@ export class InMemoryVehicleRepository implements VehicleRepository {
     this.store = store ?? new Map()
   }
 
-  async findAll(filters?: VehicleFilters): Promise<Vehicle[]> {
+  async findAll(filters?: VehicleFilters): Promise<PaginatedResult<Vehicle>> {
     const all = [...this.store.values()]
-    if (filters?.status) return all.filter((v) => v.status === filters.status)
-    if (filters?.includeRetired) return all
-    return all.filter((v) => v.status !== 'RETIRED')
+    let filtered: Vehicle[]
+    if (filters?.status) {
+      filtered = all.filter((v) => v.status === filters.status)
+    } else if (filters?.includeRetired) {
+      filtered = all
+    } else {
+      filtered = all.filter((v) => v.status !== 'RETIRED')
+    }
+    const total = filtered.length
+    const offset = filters?.offset ?? 0
+    const limit = filters?.limit
+    const data = limit != null ? filtered.slice(offset, offset + limit) : filtered.slice(offset)
+    return { data, total }
   }
 
   async findById(id: string): Promise<Vehicle | undefined> {

@@ -302,7 +302,7 @@ describe('Booking Routes', () => {
         insuranceExpiryDate: null,
       })
 
-      const allVehicles = await vehicleRepo.findAll()
+      const { data: allVehicles } = await vehicleRepo.findAll()
       const vehicleId = allVehicles[0]!.id
 
       await createBooking({

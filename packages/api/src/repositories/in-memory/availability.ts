@@ -9,7 +9,7 @@ export class InMemoryAvailabilityRepository implements AvailabilityRepository {
   ) {}
 
   async findAvailableVehicles(from: Date, to: Date): Promise<Vehicle[]> {
-    const vehicles = await this.vehicleRepo.findAll({ status: 'AVAILABLE' })
+    const { data: vehicles } = await this.vehicleRepo.findAll({ status: 'AVAILABLE' })
     const allBookings = await this.bookingRepo.findAll()
 
     return vehicles.filter((vehicle) => {

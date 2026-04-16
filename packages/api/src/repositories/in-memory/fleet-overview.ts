@@ -39,7 +39,7 @@ export class InMemoryFleetOverviewRepository implements FleetOverviewRepository 
     const now = new Date()
     const windowStart = new Date(now.getTime() - UTILIZATION_WINDOW_HOURS * 60 * 60 * 1000)
 
-    const vehicles = await this.vehicleRepo.findAll()
+    const { data: vehicles } = await this.vehicleRepo.findAll()
     const allBookings = await this.bookingRepo.findAll()
 
     return Promise.all(

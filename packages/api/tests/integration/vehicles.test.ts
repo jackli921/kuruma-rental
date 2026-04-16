@@ -123,13 +123,13 @@ describe('DrizzleVehicleRepository', () => {
     createdIds.push(maintenance.id)
 
     // findAll without filter should include both
-    const all = await repo.findAll()
+    const { data: all } = await repo.findAll()
     const allIds = all.map((v) => v.id)
     expect(allIds).toContain(available.id)
     expect(allIds).toContain(maintenance.id)
 
     // findAll with status filter should only include matching
-    const filtered = await repo.findAll({ status: 'MAINTENANCE' })
+    const { data: filtered } = await repo.findAll({ status: 'MAINTENANCE' })
     const filteredIds = filtered.map((v) => v.id)
     expect(filteredIds).toContain(maintenance.id)
     expect(filteredIds).not.toContain(available.id)
