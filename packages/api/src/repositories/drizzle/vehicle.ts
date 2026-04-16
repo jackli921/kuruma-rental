@@ -1,5 +1,5 @@
 import { vehicles } from '@kuruma/shared/db/schema'
-import { type SQL, count, eq, inArray, ne, sql } from 'drizzle-orm'
+import { type SQL, and, count, eq, inArray, ne, sql } from 'drizzle-orm'
 import type { Vehicle } from '../../stores'
 import type { PaginatedResult, VehicleFilters, VehicleRepository } from '../types'
 import { type Db, toVehicle, vehicleColumns } from './shared'
@@ -16,7 +16,7 @@ export class DrizzleVehicleRepository implements VehicleRepository {
       conditions.push(ne(vehicles.status, 'RETIRED'))
     }
 
-    const where = conditions.length > 0 ? conditions[0]! : undefined
+    const where = conditions.length > 0 ? and(...conditions) : undefined
 
     const [countResult, rows] = await Promise.all([
       this.db.select({ value: count() }).from(vehicles).where(where),

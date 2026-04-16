@@ -69,6 +69,13 @@ describe('VehicleRepository.findAll pagination', () => {
     expect(result.data[0]!.name).toBe('Car B')
     expect(result.total).toBe(1)
   })
+
+  it('returns empty data when offset exceeds total', async () => {
+    const result = await repo.findAll({ limit: 10, offset: 100 })
+
+    expect(result.data).toHaveLength(0)
+    expect(result.total).toBe(3)
+  })
 })
 
 describe('VehicleRepository.findByIds', () => {

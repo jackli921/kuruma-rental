@@ -30,8 +30,7 @@ export function createVehicleRoutes(
         return fail(c, 'offset must be a non-negative integer', 400)
       }
 
-      const filters: VehicleFilters = { limit, offset }
-      if (status) filters.status = status
+      const filters: VehicleFilters = { limit, offset, ...(status ? { status } : {}) }
       const { data, total } = await repo.findAll(filters)
       return ok(c, data, 200, { total, limit, offset })
     })
