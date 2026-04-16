@@ -7,6 +7,12 @@ vi.mock('@/lib/vehicle-actions', () => ({
   updateVehicleStatusAction: vi.fn().mockResolvedValue({ success: true, data: {} }),
 }))
 
+vi.mock('@/i18n/routing', () => ({
+  Link: ({ children, ...props }: { children: React.ReactNode; href: string }) => (
+    <a {...props}>{children}</a>
+  ),
+}))
+
 vi.mock('next-intl', () => ({
   useTranslations: () => (key: string) => {
     const messages: Record<string, string> = {
