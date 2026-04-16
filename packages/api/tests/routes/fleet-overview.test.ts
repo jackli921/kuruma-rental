@@ -6,6 +6,7 @@
 
 import { Hono } from 'hono'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { SYSTEM_CONTEXT } from '../../src/middleware/auth'
 import {
   InMemoryBookingRepository,
   InMemoryFleetOverviewRepository,
@@ -115,7 +116,7 @@ describe('GET /vehicles/fleet-overview', () => {
       shakenExpiryDate: null,
       insuranceExpiryDate: null,
     })
-    await bookingRepo.create({
+    await bookingRepo.create(SYSTEM_CONTEXT, {
       renterId: 'user_1',
       vehicleId: vehicle.id,
       startAt: new Date('2026-04-11T09:00:00Z'),

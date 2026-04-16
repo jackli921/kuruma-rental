@@ -15,6 +15,7 @@ export type { VehicleDetail } from '@kuruma/shared/types/vehicle-detail'
 import type { FleetVehicleOverview } from '@kuruma/shared/types/fleet'
 import type { DashboardStats } from '@kuruma/shared/types/stats'
 import type { VehicleDetail } from '@kuruma/shared/types/vehicle-detail'
+import type { CallerContext } from '../middleware/auth'
 import type {
   Booking,
   MaintenanceLog,
@@ -75,16 +76,23 @@ export interface BookingFilters {
   cursor?: string
 }
 
+export type { CallerContext } from '../middleware/auth'
+
 export interface BookingRepository {
-  findAll(filters?: BookingFilters): Promise<Booking[]>
-  findById(id: string): Promise<Booking | undefined>
-  findByIdempotencyKey(key: string): Promise<Booking | undefined>
-  create(data: Omit<Booking, 'id' | 'createdAt' | 'updatedAt'>): Promise<Booking>
+  findAll(ctx: CallerContext, filters?: BookingFilters): Promise<Booking[]>
+  findById(ctx: CallerContext, id: string): Promise<Booking | undefined>
+  findByIdempotencyKey(ctx: CallerContext, key: string): Promise<Booking | undefined>
+  create(
+    ctx: CallerContext,
+    data: Omit<Booking, 'id' | 'createdAt' | 'updatedAt'>,
+  ): Promise<Booking>
   updateStatus(
+    ctx: CallerContext,
     id: string,
     transition: { from: Booking['status']; to: Booking['status'] },
   ): Promise<Booking | undefined>
   cancel(
+    ctx: CallerContext,
     id: string,
     opts: { from: Booking['status']; fee: number; cancelledAt: Date },
   ): Promise<Booking | undefined>
@@ -119,18 +127,19 @@ export interface VehicleDetailRepository {
 
 export interface ThreadRepository {
   findAll(
-    userId: string,
+    ctx: CallerContext,
   ): Promise<Array<Thread & { participants: ThreadParticipant[]; lastMessage: Message | null }>>
   findById(
+    ctx: CallerContext,
     id: string,
   ): Promise<(Thread & { participants: ThreadParticipant[]; messages: Message[] }) | undefined>
-  create(bookingId: string | null, participantIds: string[]): Promise<Thread>
-  markAsRead(threadId: string, userId: string): Promise<void>
+  create(ctx: CallerContext, bookingId: string | null, participantIds: string[]): Promise<Thread>
+  markAsRead(ctx: CallerContext, threadId: string): Promise<void>
 }
 
 export interface MessageRepository {
-  create(threadId: string, senderId: string, content: string): Promise<Message>
-  findByThreadId(threadId: string): Promise<Message[]>
+  create(ctx: CallerContext, threadId: string, content: string): Promise<Message>
+  findByThreadId(ctx: CallerContext, threadId: string): Promise<Message[]>
 }
 
 export interface TransitionLogsResult {

@@ -1,3 +1,4 @@
+import type { CallerContext } from '../../middleware/auth'
 import type { Message } from '../../stores'
 import type { MessageRepository } from '../types'
 import type { InMemoryThreadRepository } from './thread'
@@ -5,11 +6,11 @@ import type { InMemoryThreadRepository } from './thread'
 export class InMemoryMessageRepository implements MessageRepository {
   constructor(private readonly threadRepo: InMemoryThreadRepository) {}
 
-  async create(threadId: string, senderId: string, content: string): Promise<Message> {
+  async create(ctx: CallerContext, threadId: string, content: string): Promise<Message> {
     const message: Message = {
       id: crypto.randomUUID(),
       threadId,
-      senderId,
+      senderId: ctx.userId,
       content,
       sourceLanguage: null,
       translations: '{}',
@@ -19,8 +20,8 @@ export class InMemoryMessageRepository implements MessageRepository {
     return message
   }
 
-  async findByThreadId(threadId: string): Promise<Message[]> {
-    const thread = await this.threadRepo.findById(threadId)
+  async findByThreadId(_ctx: CallerContext, threadId: string): Promise<Message[]> {
+    const thread = await this.threadRepo.findById(_ctx, threadId)
     return thread?.messages ?? []
   }
 }

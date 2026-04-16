@@ -1,6 +1,6 @@
 import { createBookingSchema, updateBookingStatusSchema } from '@kuruma/shared/validators/booking'
 import { Hono } from 'hono'
-import { PRIVILEGED_ROLES, requireUser } from '../middleware/auth'
+import { requireUser, toCallerContext } from '../middleware/auth'
 import type { BookingFilters } from '../repositories/types'
 import type { BookingService } from '../services/booking'
 import { fail, ok, parseDateRange } from './helpers'
@@ -8,7 +8,7 @@ import { fail, ok, parseDateRange } from './helpers'
 export function createBookingRoutes(service: BookingService) {
   return new Hono()
     .get('/bookings', async (c) => {
-      const user = requireUser(c)
+      const ctx = toCallerContext(requireUser(c))
 
       const statusFilter = c.req.query('status')
       const vehicleIdFilter = c.req.query('vehicleId')
@@ -36,41 +36,34 @@ export function createBookingRoutes(service: BookingService) {
         filters.to = dateRange.to
       }
 
-      // Ownership: non-privileged users can only see their own bookings
-      if (!PRIVILEGED_ROLES.has(user.role)) {
-        filters.renterId = user.id
-      }
+      // Ownership scoping is handled by CallerContext in the repository layer.
+      // No manual filtering needed here.
 
       if (expand === 'vehicle') {
-        const result = await service.findAllWithVehiclesPaginated(filters)
+        const result = await service.findAllWithVehiclesPaginated(ctx, filters)
         return ok(c, result.data, 200, { nextCursor: result.nextCursor })
       }
 
       if (expand === 'renter') {
-        const result = await service.findAllWithRentersPaginated(filters)
+        const result = await service.findAllWithRentersPaginated(ctx, filters)
         return ok(c, result.data, 200, { nextCursor: result.nextCursor })
       }
 
-      const result = await service.findAllPaginated(filters)
+      const result = await service.findAllPaginated(ctx, filters)
       return ok(c, result.data, 200, { nextCursor: result.nextCursor })
     })
     .get('/bookings/:id', async (c) => {
-      const user = requireUser(c)
+      const ctx = toCallerContext(requireUser(c))
 
-      const booking = await service.findById(c.req.param('id'))
+      const booking = await service.findById(ctx, c.req.param('id'))
       if (!booking) {
-        return fail(c, 'Booking not found', 404)
-      }
-
-      // Ownership: non-privileged users can only view their own bookings (404 to avoid info leak)
-      if (!PRIVILEGED_ROLES.has(user.role) && booking.renterId !== user.id) {
         return fail(c, 'Booking not found', 404)
       }
 
       return ok(c, booking)
     })
     .post('/bookings', async (c) => {
-      const user = requireUser(c)
+      const ctx = toCallerContext(requireUser(c))
 
       const body = await c.req.json()
       const result = createBookingSchema.safeParse(body)
@@ -80,9 +73,9 @@ export function createBookingRoutes(service: BookingService) {
       }
 
       // Actor derivation: renterId comes from JWT, never from body
-      const createResult = await service.create({
+      const createResult = await service.create(ctx, {
         vehicleId: result.data.vehicleId,
-        renterId: user.id,
+        renterId: ctx.userId,
         startAt: new Date(result.data.startAt),
         endAt: new Date(result.data.endAt),
         source: result.data.source,
@@ -101,17 +94,7 @@ export function createBookingRoutes(service: BookingService) {
       return ok(c, createResult.booking, createResult.status ?? 201)
     })
     .patch('/bookings/:id/status', async (c) => {
-      const user = requireUser(c)
-
-      const booking = await service.findById(c.req.param('id'))
-      if (!booking) {
-        return fail(c, 'Booking not found', 404)
-      }
-
-      // Ownership: allow privileged roles or the booking owner (404 to avoid info leak)
-      if (!PRIVILEGED_ROLES.has(user.role) && booking.renterId !== user.id) {
-        return fail(c, 'Booking not found', 404)
-      }
+      const ctx = toCallerContext(requireUser(c))
 
       const body = await c.req.json()
       const parsed = updateBookingStatusSchema.safeParse(body)
@@ -119,7 +102,7 @@ export function createBookingRoutes(service: BookingService) {
         return fail(c, parsed.error.flatten().fieldErrors, 400)
       }
 
-      const result = await service.updateStatus(c.req.param('id'), parsed.data.status)
+      const result = await service.updateStatus(ctx, c.req.param('id'), parsed.data.status)
       if (!result.ok) {
         return fail(c, result.error, result.status)
       }
@@ -127,19 +110,9 @@ export function createBookingRoutes(service: BookingService) {
       return ok(c, result.booking)
     })
     .post('/bookings/:id/cancel', async (c) => {
-      const user = requireUser(c)
+      const ctx = toCallerContext(requireUser(c))
 
-      const booking = await service.findById(c.req.param('id'))
-      if (!booking) {
-        return fail(c, 'Booking not found', 404)
-      }
-
-      // Ownership: non-privileged users can only cancel their own bookings (404 to avoid info leak)
-      if (!PRIVILEGED_ROLES.has(user.role) && booking.renterId !== user.id) {
-        return fail(c, 'Booking not found', 404)
-      }
-
-      const result = await service.cancel(c.req.param('id'))
+      const result = await service.cancel(ctx, c.req.param('id'))
       if (!result.ok) {
         return fail(c, result.error, result.status)
       }
