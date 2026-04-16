@@ -4,7 +4,7 @@ import type { CalendarBooking } from '@/lib/calendar'
 import { STATUS_CLASS } from '@/lib/event-colors'
 import { localizer } from '@/lib/rbc-localizer'
 import { useLocale, useTranslations } from 'next-intl'
-import { useCallback, useState } from 'react'
+import { useCallback, useMemo, useState } from 'react'
 import { Calendar, type View } from 'react-big-calendar'
 import 'react-big-calendar/lib/css/react-big-calendar.css'
 import { BookingDetailDialog } from './BookingDetailDialog'
@@ -64,8 +64,26 @@ export function BookingsCalendar({
 
   const culture = locale === 'zh' ? 'zh-CN' : locale
 
-  // rbc toolbar label — we render our own toolbar but need the label string
-  const [toolbarLabel, setToolbarLabel] = useState('')
+  const toolbarLabel = useMemo(() => {
+    const fmt = (opts: Intl.DateTimeFormatOptions) =>
+      new Intl.DateTimeFormat(culture, opts).format(currentDate)
+
+    if (currentView === 'month') return fmt({ year: 'numeric', month: 'long' })
+    if (currentView === 'day') return fmt({ weekday: 'long', month: 'short', day: 'numeric' })
+
+    // week: show range "Apr 13 - 19, 2026"
+    const start = new Date(currentDate)
+    start.setDate(start.getDate() - start.getDay())
+    const end = new Date(start)
+    end.setDate(end.getDate() + 6)
+    const s = new Intl.DateTimeFormat(culture, { month: 'short', day: 'numeric' }).format(start)
+    const e = new Intl.DateTimeFormat(culture, {
+      month: 'short',
+      day: 'numeric',
+      year: 'numeric',
+    }).format(end)
+    return `${s} - ${e}`
+  }, [currentDate, currentView, culture])
 
   return (
     <div>
@@ -117,14 +135,7 @@ export function BookingsCalendar({
           showMore: (total: number) => t('showMore', { count: total }),
         }}
         components={{
-          toolbar: (props) => {
-            // Capture the label from rbc's built-in toolbar rendering
-            if (props.label !== toolbarLabel) {
-              // Use queueMicrotask to avoid setState during render
-              queueMicrotask(() => setToolbarLabel(props.label))
-            }
-            return null
-          },
+          toolbar: () => null,
         }}
         popup
       />
