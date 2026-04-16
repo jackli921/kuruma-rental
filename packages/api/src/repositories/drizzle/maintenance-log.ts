@@ -61,12 +61,13 @@ export class DrizzleMaintenanceLogRepository implements MaintenanceLogRepository
     return this.db.transaction(async (tx) => {
       const result: TransitionLogsResult = {}
 
-      // Resolve any active log
+      // Lock the active log row so a concurrent transaction blocks until we commit
       const [activeRow] = await tx
         .select(maintenanceLogColumns)
         .from(maintenanceLogs)
         .where(and(eq(maintenanceLogs.vehicleId, vehicleId), isNull(maintenanceLogs.resolvedAt)))
         .limit(1)
+        .for('update')
 
       if (activeRow) {
         const [resolved] = await tx
