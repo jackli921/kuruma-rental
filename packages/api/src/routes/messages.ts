@@ -1,6 +1,7 @@
 import { createThreadSchema, sendMessageSchema } from '@kuruma/shared/validators/message'
 import { Hono } from 'hono'
 import { PRIVILEGED_ROLES, requireUser, toCallerContext } from '../middleware/auth'
+import { PG_ERROR, pgErrorCode } from '../pg-errors'
 import type { MessageRepository, ThreadRepository } from '../repositories/types'
 import { fail, ok, parseBody } from './helpers'
 
@@ -44,12 +45,27 @@ export function createMessageRoutes(threadRepo: ThreadRepository, messageRepo: M
         return fail(c, 'Caller must be a participant', 400)
       }
 
-      const thread = await threadRepo.create(
-        ctx,
-        parsed.data.bookingId ?? null,
-        parsed.data.participantIds,
-      )
-      return ok(c, thread, 201)
+      const idempotencyKey = parsed.data.idempotencyKey ?? null
+      if (idempotencyKey) {
+        const existing = await threadRepo.findByIdempotencyKey(idempotencyKey)
+        if (existing) return ok(c, existing, 200)
+      }
+
+      try {
+        const thread = await threadRepo.create(
+          ctx,
+          parsed.data.bookingId ?? null,
+          parsed.data.participantIds,
+          idempotencyKey,
+        )
+        return ok(c, thread, 201)
+      } catch (err) {
+        if (pgErrorCode(err) === PG_ERROR.UNIQUE_VIOLATION && idempotencyKey) {
+          const existing = await threadRepo.findByIdempotencyKey(idempotencyKey)
+          if (existing) return ok(c, existing, 200)
+        }
+        throw err
+      }
     })
     .post('/threads/:id/messages', async (c) => {
       const ctx = toCallerContext(requireUser(c))
@@ -61,8 +77,27 @@ export function createMessageRoutes(threadRepo: ThreadRepository, messageRepo: M
       const parsed = await parseBody(c, sendMessageSchema)
       if (!parsed.ok) return parsed.response
 
-      const message = await messageRepo.create(ctx, thread.id, parsed.data.content)
-      return ok(c, message, 201)
+      const msgIdempotencyKey = parsed.data.idempotencyKey ?? null
+      if (msgIdempotencyKey) {
+        const existing = await messageRepo.findByIdempotencyKey(msgIdempotencyKey)
+        if (existing) return ok(c, existing, 200)
+      }
+
+      try {
+        const message = await messageRepo.create(
+          ctx,
+          thread.id,
+          parsed.data.content,
+          msgIdempotencyKey,
+        )
+        return ok(c, message, 201)
+      } catch (err) {
+        if (pgErrorCode(err) === PG_ERROR.UNIQUE_VIOLATION && msgIdempotencyKey) {
+          const existing = await messageRepo.findByIdempotencyKey(msgIdempotencyKey)
+          if (existing) return ok(c, existing, 200)
+        }
+        throw err
+      }
     })
     .post('/threads/:id/read', async (c) => {
       const ctx = toCallerContext(requireUser(c))

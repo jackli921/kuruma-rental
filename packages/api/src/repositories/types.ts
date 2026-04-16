@@ -133,12 +133,24 @@ export interface ThreadRepository {
     ctx: CallerContext,
     id: string,
   ): Promise<(Thread & { participants: ThreadParticipant[]; messages: Message[] }) | undefined>
-  create(ctx: CallerContext, bookingId: string | null, participantIds: string[]): Promise<Thread>
+  findByIdempotencyKey(key: string): Promise<Thread | undefined>
+  create(
+    ctx: CallerContext,
+    bookingId: string | null,
+    participantIds: string[],
+    idempotencyKey?: string | null,
+  ): Promise<Thread>
   markAsRead(ctx: CallerContext, threadId: string): Promise<void>
 }
 
 export interface MessageRepository {
-  create(ctx: CallerContext, threadId: string, content: string): Promise<Message>
+  findByIdempotencyKey(key: string): Promise<Message | undefined>
+  create(
+    ctx: CallerContext,
+    threadId: string,
+    content: string,
+    idempotencyKey?: string | null,
+  ): Promise<Message>
   findByThreadId(ctx: CallerContext, threadId: string): Promise<Message[]>
 }
 

@@ -117,6 +117,63 @@ describe('Message Routes', () => {
       expect(body.data.createdAt).toBeDefined()
       expect(body.data.updatedAt).toBeDefined()
     })
+
+    describe('idempotency key', () => {
+      const KEY_A = '00000000-0000-4000-8000-aaaa00000001'
+      const KEY_B = '00000000-0000-4000-8000-aaaa00000002'
+
+      it('returns 200 with same thread when duplicate key is sent', async () => {
+        const first = await app.request('/threads', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ participantIds: [U1, U2], idempotencyKey: KEY_A }),
+        })
+        expect(first.status).toBe(201)
+        const firstBody = await first.json()
+
+        const second = await app.request('/threads', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ participantIds: [U1, U2], idempotencyKey: KEY_A }),
+        })
+        expect(second.status).toBe(200)
+        const secondBody = await second.json()
+
+        expect(secondBody.data.id).toBe(firstBody.data.id)
+        expect(secondBody.data.idempotencyKey).toBe(KEY_A)
+      })
+
+      it('creates distinct threads when different keys are sent', async () => {
+        const first = await app.request('/threads', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ participantIds: [U1, U2], idempotencyKey: KEY_A }),
+        })
+        const second = await app.request('/threads', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ participantIds: [U1, U2], idempotencyKey: KEY_B }),
+        })
+
+        expect(first.status).toBe(201)
+        expect(second.status).toBe(201)
+
+        const a = await first.json()
+        const b = await second.json()
+        expect(a.data.id).not.toBe(b.data.id)
+      })
+
+      it('creates thread without idempotency key for backward compatibility', async () => {
+        const res = await app.request('/threads', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ participantIds: [U1, U2] }),
+        })
+        expect(res.status).toBe(201)
+        const body = await res.json()
+        expect(body.data.idempotencyKey).toBeNull()
+      })
+    })
   })
 
   describe('access control', () => {
@@ -198,6 +255,19 @@ describe('Message Routes', () => {
   })
 
   describe('POST /threads/:id/messages', () => {
+    const MSG_KEY_A = '00000000-0000-4000-8000-bbbb00000001'
+    const MSG_KEY_B = '00000000-0000-4000-8000-bbbb00000002'
+
+    /** Helper: create a thread and return its id. */
+    async function createThread(): Promise<string> {
+      const res = await app.request('/threads', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ participantIds: [U1, U2] }),
+      })
+      return (await res.json()).data.id
+    }
+
     it('sends a message to a thread', async () => {
       // Create thread first
       const createRes = await app.request('/threads', {
@@ -224,6 +294,66 @@ describe('Message Routes', () => {
       expect(body.data.content).toBe('Hello!')
       expect(body.data.id).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/)
       expect(body.data.createdAt).toBeDefined()
+    })
+
+    describe('idempotency key', () => {
+      it('returns 200 with same message when duplicate key is sent', async () => {
+        const threadId = await createThread()
+
+        const first = await app.request(`/threads/${threadId}/messages`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ content: 'Hello!', idempotencyKey: MSG_KEY_A }),
+        })
+        expect(first.status).toBe(201)
+        const firstBody = await first.json()
+
+        const second = await app.request(`/threads/${threadId}/messages`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ content: 'Hello!', idempotencyKey: MSG_KEY_A }),
+        })
+        expect(second.status).toBe(200)
+        const secondBody = await second.json()
+
+        expect(secondBody.data.id).toBe(firstBody.data.id)
+        expect(secondBody.data.idempotencyKey).toBe(MSG_KEY_A)
+      })
+
+      it('creates distinct messages when different keys are sent', async () => {
+        const threadId = await createThread()
+
+        const first = await app.request(`/threads/${threadId}/messages`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ content: 'Hello!', idempotencyKey: MSG_KEY_A }),
+        })
+        const second = await app.request(`/threads/${threadId}/messages`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ content: 'Hello!', idempotencyKey: MSG_KEY_B }),
+        })
+
+        expect(first.status).toBe(201)
+        expect(second.status).toBe(201)
+
+        const a = await first.json()
+        const b = await second.json()
+        expect(a.data.id).not.toBe(b.data.id)
+      })
+
+      it('sends message without idempotency key for backward compatibility', async () => {
+        const threadId = await createThread()
+
+        const res = await app.request(`/threads/${threadId}/messages`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ content: 'Hello!' }),
+        })
+        expect(res.status).toBe(201)
+        const body = await res.json()
+        expect(body.data.idempotencyKey).toBeNull()
+      })
     })
   })
 

@@ -90,6 +90,7 @@ export const bookingColumns = {
 export const threadColumns = {
   id: threads.id,
   bookingId: threads.bookingId,
+  idempotencyKey: threads.idempotencyKey,
   createdAt: threads.createdAt,
   updatedAt: threads.updatedAt,
 }
@@ -108,6 +109,7 @@ export const messageColumns = {
   content: messages.content,
   sourceLanguage: messages.sourceLanguage,
   translations: messages.translations,
+  idempotencyKey: messages.idempotencyKey,
   createdAt: messages.createdAt,
 }
 
@@ -206,6 +208,7 @@ export function toThread(r: AnyRow): Thread {
   return {
     id: r.id,
     bookingId: r.bookingId,
+    idempotencyKey: r.idempotencyKey ?? null,
     createdAt: r.createdAt,
     updatedAt: r.updatedAt,
   }
@@ -243,6 +246,7 @@ export type RawMessageRow = {
   content: string
   sourceLanguage: string | null
   translations: string | null
+  idempotencyKey: string | null
   createdAt: Date
 }
 
@@ -257,6 +261,7 @@ export function normaliseMessage(row: RawMessageRow): Message {
     content: row.content,
     sourceLanguage: row.sourceLanguage,
     translations: row.translations ?? '{}',
+    idempotencyKey: row.idempotencyKey ?? null,
     createdAt: row.createdAt,
   }
 }

@@ -67,6 +67,7 @@ export interface Booking {
 export interface Thread {
   id: string
   bookingId: string | null
+  idempotencyKey: string | null
   createdAt: Date
   updatedAt: Date
 }
@@ -85,6 +86,7 @@ export interface Message {
   content: string
   sourceLanguage: string | null
   translations: string
+  idempotencyKey: string | null
   createdAt: Date
 }
 
