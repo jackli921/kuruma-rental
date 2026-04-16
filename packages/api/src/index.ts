@@ -184,7 +184,9 @@ export function createApp(overrides?: {
     )
   }
 
-  // Auth middleware on all protected paths
+  // Auth middleware on all protected paths.
+  // TODO(#247): vehicle-classes GETs should be public for renter catalog.
+  // Move public read routes before this block when building the catalog UI.
   app.use('/vehicle-classes/*', requireAuth())
   app.use('/vehicles/*', requireAuth())
   app.use('/bookings/*', requireAuth())

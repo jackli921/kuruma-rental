@@ -1,5 +1,5 @@
 import { vehicleClasses } from '@kuruma/shared/db/schema'
-import { eq, ne, sql } from 'drizzle-orm'
+import { asc, eq, ne, sql } from 'drizzle-orm'
 import type { VehicleClass } from '../../stores'
 import type { VehicleClassFilters, VehicleClassRepository } from '../types'
 import { type Db, toVehicleClass, vehicleClassColumns } from './shared'
@@ -8,11 +8,14 @@ export class DrizzleVehicleClassRepository implements VehicleClassRepository {
   constructor(private readonly db: Db) {}
 
   async findAll(filters?: VehicleClassFilters): Promise<VehicleClass[]> {
-    const query = this.db.select(vehicleClassColumns).from(vehicleClasses)
+    const query = this.db
+      .select(vehicleClassColumns)
+      .from(vehicleClasses)
+      .orderBy(asc(vehicleClasses.sortOrder))
 
     if (filters?.status) {
       const rows = await query.where(
-        eq(vehicleClasses.status, filters.status as VehicleClass['status']),
+        eq(vehicleClasses.status, filters.status),
       )
       return rows.map(toVehicleClass)
     }

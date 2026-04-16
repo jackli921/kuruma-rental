@@ -133,7 +133,7 @@ export interface MaintenanceLogRepository {
 }
 
 export interface VehicleClassFilters {
-  status?: string
+  status?: 'ACTIVE' | 'ARCHIVED'
   includeArchived?: boolean
 }
 

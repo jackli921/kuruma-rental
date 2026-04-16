@@ -5,19 +5,19 @@ const jpyRate = z.number().int('Rate must be a whole yen amount').min(0, 'Rate c
 const SLUG_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+)*$/
 
 const vehicleClassObjectSchema = z.object({
-  name: z.string().trim().min(1, 'Name is required'),
+  name: z.string().trim().min(1, 'Name is required').max(200),
   slug: z
     .string()
     .trim()
     .min(1, 'Slug is required')
     .max(100)
     .regex(SLUG_PATTERN, 'Slug must be lowercase alphanumeric with hyphens'),
-  description: z.string().optional(),
-  photos: z.array(z.string().url()).default([]),
+  description: z.string().trim().max(2000).optional(),
+  photos: z.array(z.string().url().max(2048)).max(20).default([]),
   seats: z.number().int().min(1, 'Must have at least 1 seat').max(50),
   luggageCapacity: z.number().int().min(0, 'Luggage capacity cannot be negative'),
   transmission: z.enum(['AUTO', 'MANUAL']),
-  fuelType: z.string().optional(),
+  fuelType: z.string().trim().max(50).optional(),
   dailyRateJpy: jpyRate.nullish(),
   hourlyRateJpy: jpyRate.nullish(),
   sortOrder: z.number().int().min(0).default(0),

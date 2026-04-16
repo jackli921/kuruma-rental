@@ -10,7 +10,13 @@ import { fail, ok, parseBody, stripUndefined } from './helpers'
 export function createVehicleClassRoutes(service: VehicleClassService) {
   return new Hono()
     .get('/vehicle-classes', async (c) => {
-      const classes = await service.findAll()
+      const rawStatus = c.req.query('status')
+      const status: 'ACTIVE' | 'ARCHIVED' | undefined =
+        rawStatus === 'ACTIVE' || rawStatus === 'ARCHIVED' ? rawStatus : undefined
+      const includeArchived = c.req.query('includeArchived') === 'true'
+      const classes = await service.findAll(
+        status ? { status } : includeArchived ? { includeArchived } : undefined,
+      )
       return ok(c, classes)
     })
     .get('/vehicle-classes/by-slug/:slug', async (c) => {
