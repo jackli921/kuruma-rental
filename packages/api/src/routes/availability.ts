@@ -1,4 +1,5 @@
 import { Hono } from 'hono'
+import { STAFF_ROLES, getUser } from '../middleware/auth'
 import type { AvailabilityRepository } from '../repositories/types'
 import { fail, ok, parseDateRange } from './helpers'
 
@@ -25,10 +26,17 @@ export function createAvailabilityRoutes(repo: AvailabilityRepository) {
         return ok(c, { available: true, vehicle: result.vehicle })
       }
 
+      const user = getUser(c)
+      const isStaff = user && STAFF_ROLES.has(user.role)
+
+      const conflicts = isStaff
+        ? result.conflicts
+        : result.conflicts.map((b) => ({ startAt: b.startAt, effectiveEndAt: b.effectiveEndAt }))
+
       return ok(c, {
         available: false,
         vehicle: result.vehicle,
-        conflicts: result.conflicts,
+        conflicts,
       })
     })
 }
