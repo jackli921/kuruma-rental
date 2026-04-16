@@ -24,6 +24,53 @@ function vehicleInput(overrides?: Partial<Vehicle>) {
   }
 }
 
+describe('VehicleRepository.findAll pagination', () => {
+  let repo: InMemoryVehicleRepository
+
+  beforeEach(async () => {
+    repo = new InMemoryVehicleRepository()
+    await repo.create(vehicleInput({ name: 'Car A' }))
+    await repo.create(vehicleInput({ name: 'Car B' }))
+    await repo.create(vehicleInput({ name: 'Car C' }))
+  })
+
+  it('returns paginated data with total count', async () => {
+    const result = await repo.findAll({ limit: 2, offset: 0 })
+
+    expect(result.data).toHaveLength(2)
+    expect(result.total).toBe(3)
+    expect(result.data[0]!.name).toBe('Car A')
+    expect(result.data[1]!.name).toBe('Car B')
+  })
+
+  it('returns correct page with offset', async () => {
+    const result = await repo.findAll({ limit: 2, offset: 2 })
+
+    expect(result.data).toHaveLength(1)
+    expect(result.data[0]!.name).toBe('Car C')
+    expect(result.total).toBe(3)
+  })
+
+  it('returns all items when no limit/offset given', async () => {
+    const result = await repo.findAll()
+
+    expect(result.data).toHaveLength(3)
+    expect(result.total).toBe(3)
+  })
+
+  it('applies status filter before pagination', async () => {
+    // Retire Car B
+    const all = await repo.findAll()
+    await repo.softDelete(all.data[1]!.id)
+
+    const result = await repo.findAll({ status: 'RETIRED', limit: 10, offset: 0 })
+
+    expect(result.data).toHaveLength(1)
+    expect(result.data[0]!.name).toBe('Car B')
+    expect(result.total).toBe(1)
+  })
+})
+
 describe('VehicleRepository.findByIds', () => {
   let repo: InMemoryVehicleRepository
 
