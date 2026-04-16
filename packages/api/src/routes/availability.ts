@@ -27,7 +27,7 @@ export function createAvailabilityRoutes(repo: AvailabilityRepository) {
       }
 
       const user = getUser(c)
-      const isStaff = user && STAFF_ROLES.has(user.role)
+      const isStaff = user != null && STAFF_ROLES.has(user.role)
 
       const conflicts = isStaff
         ? result.conflicts
