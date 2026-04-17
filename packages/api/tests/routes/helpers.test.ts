@@ -308,7 +308,38 @@ describe('parsePagination()', () => {
     const res = await app.request('/paginate?offset=-1')
     expect(res.status).toBe(400)
     const body = await res.json()
-    expect(body.error).toBe('offset must be a non-negative integer')
+    expect(body.error).toBe('offset must be a non-negative integer (max 1000000)')
+  })
+
+  it('returns 400 for offset above MAX_OFFSET', async () => {
+    const res = await app.request('/paginate?offset=1000001')
+    expect(res.status).toBe(400)
+    const body = await res.json()
+    expect(body.error).toBe('offset must be a non-negative integer (max 1000000)')
+  })
+
+  it('rejects lenient parseInt input for limit ("10abc" must not parse to 10)', async () => {
+    const res = await app.request('/paginate?limit=10abc')
+    expect(res.status).toBe(400)
+    const body = await res.json()
+    expect(body.error).toBe('limit must be between 1 and 100')
+  })
+
+  it('rejects lenient parseInt input for offset ("5xyz" must not parse to 5)', async () => {
+    const res = await app.request('/paginate?offset=5xyz')
+    expect(res.status).toBe(400)
+    const body = await res.json()
+    expect(body.error).toBe('offset must be a non-negative integer (max 1000000)')
+  })
+
+  it('rejects decimal input for limit ("1.5")', async () => {
+    const res = await app.request('/paginate?limit=1.5')
+    expect(res.status).toBe(400)
+  })
+
+  it('rejects scientific notation for offset ("1e5")', async () => {
+    const res = await app.request('/paginate?offset=1e5')
+    expect(res.status).toBe(400)
   })
 
   it('respects custom defaults and maxLimit', async () => {
