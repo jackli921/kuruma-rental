@@ -1,15 +1,14 @@
-import { EmptyState } from '@/components/EmptyState'
-import { MessageSquare } from 'lucide-react'
-import { getTranslations } from 'next-intl/server'
+import { auth } from '@/auth'
+import { MessagingLayout } from '@/components/messaging/MessagingLayout'
+import { getLocale } from 'next-intl/server'
+import { redirect } from 'next/navigation'
 
 export default async function ManageMessagesPage() {
-  const t = await getTranslations('business.messages')
+  const [session, locale] = await Promise.all([auth(), getLocale()])
 
-  return (
-    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-      <h1 className="text-3xl font-semibold tracking-tight">{t('title')}</h1>
-      <p className="text-sm text-muted-foreground mt-1">{t('subtitle')}</p>
-      <EmptyState icon={MessageSquare} message={t('empty')} />
-    </div>
-  )
+  if (!session?.user?.id) {
+    redirect(`/${locale}/login`)
+  }
+
+  return <MessagingLayout currentUserId={session.user.id} />
 }

@@ -1,3 +1,4 @@
+import { detectImageType } from '../lib/image-signature'
 import type { PhotoStorage, VehicleRepository } from '../repositories/types'
 
 const MAX_PHOTOS_PER_VEHICLE = 10
@@ -6,24 +7,30 @@ const ALLOWED_MIME_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp', 'im
 
 export type UploadResult =
   | { ok: true; uploaded: string[]; total: number }
-  | { ok: false; error: string; status: 400 | 404 | 409 }
+  | { ok: false; error: string; status: 400 | 404 | 500 }
 
 export type DeleteResult =
   | { ok: true; deletedUrl: string; remaining: number }
-  | { ok: false; error: string; status: 400 | 404 | 409 }
+  | { ok: false; error: string; status: 400 | 404 }
 
 export interface PhotoServiceLogger {
   warn(message: string, ...args: unknown[]): void
 }
 
-function validateFile(file: File): string | null {
+async function validateFile(file: File): Promise<{ ok: File } | { err: string }> {
   if (!ALLOWED_MIME_TYPES.has(file.type)) {
-    return 'Only image files are allowed (JPEG, PNG, WebP, AVIF)'
+    return { err: 'Only image files are allowed (JPEG, PNG, WebP, AVIF)' }
   }
-  if (file.size > MAX_FILE_SIZE) {
-    return 'File must be under 5MB'
+  if (file.size > MAX_FILE_SIZE) return { err: 'File must be under 5MB' }
+  const bytes = new Uint8Array(await file.arrayBuffer())
+  const detected = detectImageType(bytes)
+  if (detected === null) {
+    return { err: 'File content does not match an allowed image format' }
   }
-  return null
+  if (detected !== file.type) {
+    return { err: 'File content does not match declared Content-Type' }
+  }
+  return { ok: file }
 }
 
 export class VehiclePhotoService {
@@ -34,14 +41,8 @@ export class VehiclePhotoService {
   ) {}
 
   async upload(vehicleId: string, files: readonly File[]): Promise<UploadResult> {
-    if (files.length === 0) {
-      return { ok: false, error: 'No file provided', status: 400 }
-    }
-
-    const vehicle = await this.repo.findById(vehicleId)
-    if (!vehicle) return { ok: false, error: 'Vehicle not found', status: 404 }
-
-    if (vehicle.photos.length + files.length > MAX_PHOTOS_PER_VEHICLE) {
+    if (files.length === 0) return { ok: false, error: 'No file provided', status: 400 }
+    if (files.length > MAX_PHOTOS_PER_VEHICLE) {
       return {
         ok: false,
         error: `Maximum ${MAX_PHOTOS_PER_VEHICLE} photos per vehicle`,
@@ -49,73 +50,58 @@ export class VehiclePhotoService {
       }
     }
 
+    // Byte-level signature validation before hitting storage so we never persist a spoofed file.
     for (const file of files) {
-      const error = validateFile(file)
-      if (error) return { ok: false, error, status: 400 }
+      const result = await validateFile(file)
+      if ('err' in result) return { ok: false, error: result.err, status: 400 }
     }
 
-    const results = await Promise.all(files.map((f) => this.storage.put(vehicle.id, f)))
-    const uploaded = results.map((r) => r.url)
+    const uploadResults = await Promise.allSettled(files.map((f) => this.storage.put(vehicleId, f)))
+    const succeeded = uploadResults.flatMap((r) => (r.status === 'fulfilled' ? [r.value] : []))
+    const anyFailed = uploadResults.some((r) => r.status === 'rejected')
 
-    // Optimistic concurrency: only append if photos hasn't changed since read.
-    // A concurrent upload/delete that races with this one will cause one to
-    // return undefined — we roll back the uploaded storage objects and 409.
-    let updated: Awaited<ReturnType<VehicleRepository['update']>>
-    try {
-      updated = await this.repo.update(
-        vehicle.id,
-        { photos: [...vehicle.photos, ...uploaded] },
-        { expectedPhotos: vehicle.photos },
-      )
-    } catch (e) {
-      await this.cleanupStorage(uploaded)
-      throw e
+    if (anyFailed) {
+      await this.cleanupStorage(succeeded.map((r) => r.url))
+      return { ok: false, error: 'One or more uploads failed', status: 500 }
     }
 
-    if (!updated) {
-      await this.cleanupStorage(uploaded)
+    const urls = succeeded.map((r) => r.url)
+    const appendResult = await this.repo.appendPhotos(vehicleId, urls, MAX_PHOTOS_PER_VEHICLE)
+
+    if (appendResult.outcome === 'not_found') {
+      await this.cleanupStorage(urls)
+      return { ok: false, error: 'Vehicle not found', status: 404 }
+    }
+    if (appendResult.outcome === 'cap_exceeded') {
+      await this.cleanupStorage(urls)
       return {
         ok: false,
-        error: 'Vehicle photos changed concurrently; retry',
-        status: 409,
+        error: `Maximum ${MAX_PHOTOS_PER_VEHICLE} photos per vehicle`,
+        status: 400,
       }
     }
 
-    return { ok: true, uploaded, total: updated.photos.length }
+    return { ok: true, uploaded: urls, total: appendResult.vehicle.photos.length }
   }
 
-  async delete(vehicleId: string, photoIdx: number): Promise<DeleteResult> {
-    const vehicle = await this.repo.findById(vehicleId)
-    if (!vehicle) return { ok: false, error: 'Vehicle not found', status: 404 }
+  async deleteByUrl(vehicleId: string, url: string): Promise<DeleteResult> {
+    if (!url) return { ok: false, error: 'url query parameter required', status: 400 }
 
-    if (!Number.isInteger(photoIdx) || photoIdx < 0 || photoIdx >= vehicle.photos.length) {
-      return { ok: false, error: 'Photo index out of range', status: 400 }
-    }
-
-    const deletedUrl = vehicle.photos[photoIdx]!
-    const photos = vehicle.photos.filter((_, i) => i !== photoIdx)
-
-    const updated = await this.repo.update(
-      vehicle.id,
-      { photos },
-      { expectedPhotos: vehicle.photos },
-    )
+    const updated = await this.repo.removePhotoByUrl(vehicleId, url)
     if (!updated) {
-      return {
-        ok: false,
-        error: 'Vehicle photos changed concurrently; retry',
-        status: 409,
-      }
+      // Either the vehicle does not exist or the URL is not one of its photos.
+      // Treat both as 404 so we do not leak existence info.
+      return { ok: false, error: 'Photo not found', status: 404 }
     }
 
-    // Best-effort storage cleanup after DB update succeeds.
+    // Best-effort storage cleanup after the authoritative DB write succeeds.
     try {
-      await this.storage.delete(deletedUrl)
+      await this.storage.delete(url)
     } catch (e) {
-      this.logger.warn('Photo storage cleanup failed, orphan left:', deletedUrl, e)
+      this.logger.warn('Photo storage cleanup failed, orphan left:', url, e)
     }
 
-    return { ok: true, deletedUrl, remaining: updated.photos.length }
+    return { ok: true, deletedUrl: url, remaining: updated.photos.length }
   }
 
   private async cleanupStorage(urls: readonly string[]): Promise<void> {

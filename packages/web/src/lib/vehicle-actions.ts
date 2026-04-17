@@ -75,7 +75,7 @@ export async function uploadVehiclePhotosAction(
 
 export async function deleteVehiclePhotoAction(
   vehicleId: string,
-  photoIdx: number,
+  photoUrl: string,
 ): Promise<ActionResult<PhotoDeleteResult>> {
-  return withAuth((token) => deleteVehiclePhoto(vehicleId, photoIdx, token))
+  return withAuth((token) => deleteVehiclePhoto(vehicleId, photoUrl, token))
 }

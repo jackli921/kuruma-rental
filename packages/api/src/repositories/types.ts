@@ -41,10 +41,6 @@ export interface PaginatedResult<T> {
 
 export interface VehicleUpdateOptions {
   expectedStatus?: Vehicle['status']
-  /** Optimistic concurrency guard: the update only applies if the current
-   *  photos array matches this exactly. Used by VehiclePhotoService to
-   *  prevent lost-update when two uploads/deletes race. */
-  expectedPhotos?: readonly string[]
 }
 
 export interface VehicleRepository {
@@ -59,6 +55,16 @@ export interface VehicleRepository {
   ): Promise<Vehicle | undefined>
   softDelete(id: string): Promise<Vehicle | undefined>
   bulkUpdateStatus(ids: string[], status: 'AVAILABLE' | 'MAINTENANCE'): Promise<Vehicle[]>
+  // Atomic photo-array ops. Single SQL statements so concurrent callers
+  // cannot race a read-modify-write on the photos array.
+  appendPhotos(
+    id: string,
+    urls: string[],
+    maxPhotos: number,
+  ): Promise<
+    { outcome: 'ok'; vehicle: Vehicle } | { outcome: 'cap_exceeded' } | { outcome: 'not_found' }
+  >
+  removePhotoByUrl(id: string, url: string): Promise<Vehicle | undefined>
 }
 
 // Aggregated read for the owner-facing /manage/vehicles list. Enriches

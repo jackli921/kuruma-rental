@@ -22,12 +22,12 @@ export function createVehiclePhotoRoutes(service: VehiclePhotoService) {
 
       return ok(c, { uploaded: result.uploaded, total: result.total }, 201)
     })
-    .delete('/vehicles/:id/photos/:photoIdx', async (c) => {
+    .delete('/vehicles/:id/photos', async (c) => {
       const user = requireUser(c)
       if (!STAFF_ROLES.has(user.role)) return fail(c, 'Forbidden', 403)
 
-      const idx = Number.parseInt(c.req.param('photoIdx'), 10)
-      const result = await service.delete(c.req.param('id'), idx)
+      const url = c.req.query('url') ?? ''
+      const result = await service.deleteByUrl(c.req.param('id'), url)
       if (!result.ok) return fail(c, result.error, result.status)
 
       return ok(c, { deleted: result.deletedUrl, remaining: result.remaining })

@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it } from 'vitest'
 import { InMemoryVehicleRepository } from '../../src/repositories/in-memory'
 import { InMemoryPhotoStorage } from '../../src/repositories/in-memory/photo-storage'
+import type { PhotoStorage } from '../../src/repositories/types'
 import { VehiclePhotoService } from '../../src/services/vehicle-photo'
 import type { Vehicle } from '../../src/stores'
 
@@ -31,79 +32,55 @@ function vehicleInput(overrides?: Partial<Vehicle>) {
   }
 }
 
-function makeFile(name = 'x.jpg', bytes = 100): File {
-  return new File([new ArrayBuffer(bytes)], name, { type: 'image/jpeg' })
-}
-
-describe('VehiclePhotoService concurrency', () => {
-  let service: VehiclePhotoService
+describe('VehiclePhotoService.deleteByUrl', () => {
   let repo: InMemoryVehicleRepository
   let storage: InMemoryPhotoStorage
+  let service: VehiclePhotoService
   let vehicleId: string
 
   beforeEach(async () => {
     repo = new InMemoryVehicleRepository()
     storage = new InMemoryPhotoStorage()
     service = new VehiclePhotoService(repo, storage)
-    const v = await repo.create(vehicleInput())
+    const v = await repo.create(vehicleInput({ photos: ['a.jpg', 'b.jpg'] }))
     vehicleId = v.id
   })
 
-  it('returns 409 when a concurrent upload changes photos between read and write', async () => {
-    // Simulate race: another writer sneaks in between findById and update.
-    const originalFindById = repo.findById.bind(repo)
-    repo.findById = async (id: string) => {
-      const v = await originalFindById(id)
-      if (v) await originalFindById(id) // read the "stale" snapshot
-      // Concurrent writer mutates photos between our read and write.
-      if (v) await repo.update(id, { photos: ['sneak-in.jpg'] })
-      return v
-    }
-
-    const result = await service.upload(vehicleId, [makeFile()])
-
+  it('returns 400 when url query param is empty', async () => {
+    const result = await service.deleteByUrl(vehicleId, '')
     expect(result.ok).toBe(false)
     if (result.ok) throw new Error('expected failure')
-    expect(result.status).toBe(409)
-    expect(result.error).toMatch(/concurrently/)
-
-    // Rollback: uploaded file must be cleaned from storage (storage is empty).
-    // Storage uses `has(key)` — after rollback, no key remains. We can't
-    // enumerate, so we verify the vehicle's surviving photos point to the
-    // sneaked-in write only, proving our upload's URL did not land.
-
-    // Sneaked-in write survives; our upload did not clobber it.
-    const after = await originalFindById(vehicleId)
-    expect(after?.photos).toEqual(['sneak-in.jpg'])
+    expect(result.status).toBe(400)
+    expect(result.error).toBe('url query parameter required')
   })
 
-  it('returns 409 when a concurrent delete changes photos between read and write', async () => {
-    const v = await repo.update(vehicleId, { photos: ['a.jpg', 'b.jpg', 'c.jpg'] })
-    if (!v) throw new Error('setup failed')
-
-    const originalFindById = repo.findById.bind(repo)
-    repo.findById = async (id: string) => {
-      const snapshot = await originalFindById(id)
-      // Concurrent writer removes a different photo between our read and write.
-      if (snapshot) await repo.update(id, { photos: ['a.jpg', 'c.jpg'] })
-      return snapshot
-    }
-
-    const result = await service.delete(vehicleId, 0)
-
+  it('returns 404 when url is not in vehicle.photos', async () => {
+    const result = await service.deleteByUrl(vehicleId, 'not-here.jpg')
     expect(result.ok).toBe(false)
     if (result.ok) throw new Error('expected failure')
-    expect(result.status).toBe(409)
+    expect(result.status).toBe(404)
+    expect(result.error).toBe('Photo not found')
   })
 
-  it('uses injected logger instead of console for storage cleanup warnings', async () => {
+  it('removes the url and returns remaining count', async () => {
+    const result = await service.deleteByUrl(vehicleId, 'a.jpg')
+    expect(result.ok).toBe(true)
+    if (!result.ok) throw new Error('expected success')
+    expect(result.deletedUrl).toBe('a.jpg')
+    expect(result.remaining).toBe(1)
+
+    const after = await repo.findById(vehicleId)
+    expect(after?.photos).toEqual(['b.jpg'])
+  })
+
+  it('uses injected logger when storage cleanup fails', async () => {
     const warnings: unknown[][] = []
     const logger = {
       warn: (...args: unknown[]) => {
         warnings.push(args)
       },
     }
-    const failingStorage = {
+    const failingStorage: PhotoStorage = {
       put: storage.put.bind(storage),
       delete: async () => {
         throw new Error('R2 down')
@@ -111,12 +88,8 @@ describe('VehiclePhotoService concurrency', () => {
     }
     const svc = new VehiclePhotoService(repo, failingStorage, logger)
 
-    const v = await repo.update(vehicleId, { photos: ['gone.jpg'] })
-    if (!v) throw new Error('setup')
+    const result = await svc.deleteByUrl(vehicleId, 'a.jpg')
 
-    const result = await svc.delete(vehicleId, 0)
-
-    // DB delete still succeeds; storage cleanup failure is logged, not thrown.
     expect(result.ok).toBe(true)
     expect(warnings).toHaveLength(1)
     expect(warnings[0]?.[0]).toMatch(/cleanup failed/i)

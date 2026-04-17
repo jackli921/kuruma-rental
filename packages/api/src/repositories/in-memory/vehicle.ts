@@ -6,10 +6,6 @@ import type {
   VehicleUpdateOptions,
 } from '../types'
 
-function arraysEqual(a: readonly string[], b: readonly string[]): boolean {
-  return a.length === b.length && a.every((v, i) => v === b[i])
-}
-
 export class InMemoryVehicleRepository implements VehicleRepository {
   private readonly store: Map<string, Vehicle>
 
@@ -65,9 +61,6 @@ export class InMemoryVehicleRepository implements VehicleRepository {
     const existing = this.store.get(id)
     if (!existing) return undefined
     if (options?.expectedStatus && existing.status !== options.expectedStatus) return undefined
-    if (options?.expectedPhotos && !arraysEqual(existing.photos, options.expectedPhotos)) {
-      return undefined
-    }
 
     const updated: Vehicle = {
       ...existing,
@@ -103,6 +96,38 @@ export class InMemoryVehicleRepository implements VehicleRepository {
       this.store.set(vehicle.id, vehicle)
       updated.push(vehicle)
     }
+    return updated
+  }
+
+  async appendPhotos(
+    id: string,
+    urls: string[],
+    maxPhotos: number,
+  ): Promise<
+    { outcome: 'ok'; vehicle: Vehicle } | { outcome: 'cap_exceeded' } | { outcome: 'not_found' }
+  > {
+    const existing = this.store.get(id)
+    if (!existing) return { outcome: 'not_found' }
+    if (existing.photos.length + urls.length > maxPhotos) return { outcome: 'cap_exceeded' }
+    const updated: Vehicle = {
+      ...existing,
+      photos: [...existing.photos, ...urls],
+      updatedAt: new Date(),
+    }
+    this.store.set(updated.id, updated)
+    return { outcome: 'ok', vehicle: updated }
+  }
+
+  async removePhotoByUrl(id: string, url: string): Promise<Vehicle | undefined> {
+    const existing = this.store.get(id)
+    if (!existing) return undefined
+    if (!existing.photos.includes(url)) return undefined
+    const updated: Vehicle = {
+      ...existing,
+      photos: existing.photos.filter((u) => u !== url),
+      updatedAt: new Date(),
+    }
+    this.store.set(updated.id, updated)
     return updated
   }
 }
