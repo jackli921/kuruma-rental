@@ -1,6 +1,7 @@
 import type {
   MaintenanceLog,
   MaintenanceLogRepository,
+  RunInTransaction,
   VehicleRepository,
 } from '../repositories/types'
 import type { Vehicle } from '../stores'
@@ -13,6 +14,7 @@ export class MaintenanceService {
   constructor(
     private readonly vehicleRepo: VehicleRepository,
     private readonly maintenanceLogRepo: MaintenanceLogRepository,
+    private readonly runInTransaction: RunInTransaction,
   ) {}
 
   async toggleStatus(
@@ -21,6 +23,7 @@ export class MaintenanceService {
     reason?: string,
     now: Date = new Date(),
   ): Promise<ToggleStatusResult> {
+    // Reads + validation outside the transaction
     const existing = await this.vehicleRepo.findById(vehicleId)
     if (!existing) {
       return { ok: false, status: 404, error: 'Vehicle not found' }
@@ -34,19 +37,6 @@ export class MaintenanceService {
       }
     }
 
-    // Conditional update — fails if another request already changed the status.
-    // Returns undefined for both "not found" and "status mismatch"; since we
-    // already verified existence above, undefined here means a concurrent change.
-    const updated = await this.vehicleRepo.update(
-      vehicleId,
-      { status },
-      { expectedStatus: existing.status },
-    )
-    if (!updated) {
-      return { ok: false, status: 409, error: 'Vehicle status was modified concurrently' }
-    }
-
-    // Atomic log transition: resolve active log + optionally create new one
     const newLogData =
       status === 'MAINTENANCE' && reason
         ? {
@@ -59,12 +49,30 @@ export class MaintenanceService {
           }
         : undefined
 
-    if (existing.status === 'MAINTENANCE' || newLogData) {
-      const { created } = await this.maintenanceLogRepo.transitionLogs(vehicleId, now, newLogData)
-      if (created) return { ok: true, vehicle: updated, log: created }
-    }
+    // Both writes inside a single transaction — if the log transition fails,
+    // the vehicle status update is rolled back (Drizzle: DB transaction;
+    // InMemory: simulated via snapshot/restore in tests).
+    return this.runInTransaction(async ({ vehicleRepo, maintenanceLogRepo }) => {
+      const updated = await vehicleRepo.update(
+        vehicleId,
+        { status },
+        { expectedStatus: existing.status },
+      )
+      if (!updated) {
+        return {
+          ok: false as const,
+          status: 409 as const,
+          error: 'Vehicle status was modified concurrently',
+        }
+      }
 
-    return { ok: true, vehicle: updated }
+      if (existing.status === 'MAINTENANCE' || newLogData) {
+        const { created } = await maintenanceLogRepo.transitionLogs(vehicleId, now, newLogData)
+        if (created) return { ok: true as const, vehicle: updated, log: created }
+      }
+
+      return { ok: true as const, vehicle: updated }
+    })
   }
 
   async findLogsByVehicleId(vehicleId: string): Promise<MaintenanceLog[]> {

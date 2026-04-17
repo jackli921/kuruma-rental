@@ -4,6 +4,7 @@ import {
   InMemoryMaintenanceLogRepository,
   InMemoryVehicleRepository,
 } from '../../src/repositories/in-memory'
+import type { RunInTransaction } from '../../src/repositories/types'
 import { createVehicleRoutes } from '../../src/routes/vehicles'
 import { MaintenanceService } from '../../src/services/maintenance'
 import { testAuthMiddleware } from '../helpers/auth'
@@ -35,7 +36,9 @@ describe('Vehicle CRUD Routes', () => {
   beforeEach(() => {
     const repo = new InMemoryVehicleRepository()
     const maintenanceLogRepo = new InMemoryMaintenanceLogRepository()
-    const maintenanceService = new MaintenanceService(repo, maintenanceLogRepo)
+    const runInTransaction: RunInTransaction = async (fn) =>
+      fn({ vehicleRepo: repo, maintenanceLogRepo })
+    const maintenanceService = new MaintenanceService(repo, maintenanceLogRepo, runInTransaction)
     app = new Hono()
     app.use('*', testAuthMiddleware('staff-user', 'STAFF'))
     app.route('/', createVehicleRoutes(repo, maintenanceService))
