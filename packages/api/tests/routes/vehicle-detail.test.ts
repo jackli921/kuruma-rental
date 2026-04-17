@@ -7,6 +7,7 @@ import {
 } from '../../src/repositories/in-memory'
 import { InMemoryVehicleDetailRepository } from '../../src/repositories/in-memory-vehicle-detail'
 import { createVehicleDetailRoutes } from '../../src/routes/vehicle-detail'
+import { VehicleDetailService } from '../../src/services/vehicle-detail'
 import type { Vehicle } from '../../src/stores'
 import { testAuthMiddleware } from '../helpers/auth'
 
@@ -86,7 +87,7 @@ describe('GET /vehicles/:id/detail', () => {
     const detailRepo = new InMemoryVehicleDetailRepository(vehicleRepo, bookingRepo, renterNames)
     app = new Hono()
     app.use('*', testAuthMiddleware('staff-user', 'STAFF'))
-    app.route('/', createVehicleDetailRoutes(detailRepo))
+    app.route('/', createVehicleDetailRoutes(new VehicleDetailService(detailRepo)))
   })
 
   it('returns 404 for nonexistent vehicle', async () => {
@@ -271,7 +272,7 @@ describe('GET /vehicles/:id/detail', () => {
     const renterApp = new Hono()
     renterApp.use('*', testAuthMiddleware('renter-user', 'RENTER'))
     const repo = new InMemoryVehicleDetailRepository(vehicleRepo, bookingRepo, renterNames)
-    renterApp.route('/', createVehicleDetailRoutes(repo))
+    renterApp.route('/', createVehicleDetailRoutes(new VehicleDetailService(repo)))
     const res = await renterApp.request(`/vehicles/${vehicle.id}/detail`)
     expect(res.status).toBe(403)
   })
@@ -280,7 +281,7 @@ describe('GET /vehicles/:id/detail', () => {
     const vehicle = await seedVehicle()
     const noAuthApp = new Hono()
     const repo = new InMemoryVehicleDetailRepository(vehicleRepo, bookingRepo, renterNames)
-    noAuthApp.route('/', createVehicleDetailRoutes(repo))
+    noAuthApp.route('/', createVehicleDetailRoutes(new VehicleDetailService(repo)))
     const res = await noAuthApp.request(`/vehicles/${vehicle.id}/detail`)
     // requireUser throws → 500 (fail-closed, not a silent pass-through)
     expect(res.status).toBe(500)

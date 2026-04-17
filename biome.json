@@ -39,7 +39,10 @@
       ".wrangler",
       "drizzle",
       "bun.lock",
-      "next-env.d.ts"
+      "next-env.d.ts",
+      "test-results",
+      "playwright-report",
+      "blob-report"
     ]
   }
 }
