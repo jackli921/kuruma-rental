@@ -89,6 +89,48 @@ describe('ClassForm', () => {
     })
   })
 
+  // MEDIUM 4 regression: an empty-string description from an untouched
+  // Textarea must not reach the API as `description: ""` — the server would
+  // store an empty value instead of treating it as "no description". The
+  // form coerces empty/whitespace-only descriptions to undefined on submit.
+  it('omits description when the field is left empty', async () => {
+    const onSubmit = vi.fn().mockResolvedValue(undefined)
+    const user = userEvent.setup()
+
+    render(<ClassForm onSubmit={onSubmit} />)
+
+    await user.type(screen.getByLabelText('form.name'), 'Compact')
+    await user.type(screen.getByLabelText('form.slug'), 'compact')
+    await user.type(screen.getByLabelText('form.dailyRate'), '8000')
+    // description left blank
+    await user.click(screen.getByRole('button', { name: 'form.save' }))
+
+    await waitFor(() => {
+      expect(onSubmit).toHaveBeenCalledTimes(1)
+    })
+    const data = onSubmit.mock.calls[0][0]
+    expect(data.description).toBeUndefined()
+  })
+
+  it('omits description when the field contains only whitespace', async () => {
+    const onSubmit = vi.fn().mockResolvedValue(undefined)
+    const user = userEvent.setup()
+
+    render(<ClassForm onSubmit={onSubmit} />)
+
+    await user.type(screen.getByLabelText('form.name'), 'Compact')
+    await user.type(screen.getByLabelText('form.slug'), 'compact')
+    await user.type(screen.getByLabelText('form.description'), '   ')
+    await user.type(screen.getByLabelText('form.dailyRate'), '8000')
+    await user.click(screen.getByRole('button', { name: 'form.save' }))
+
+    await waitFor(() => {
+      expect(onSubmit).toHaveBeenCalledTimes(1)
+    })
+    const data = onSubmit.mock.calls[0][0]
+    expect(data.description).toBeUndefined()
+  })
+
   it('pre-fills defaults in edit mode', () => {
     render(
       <ClassForm

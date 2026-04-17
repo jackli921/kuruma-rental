@@ -14,6 +14,7 @@ import { useForm } from 'react-hook-form'
 import type { z } from 'zod'
 
 type ClassFormValues = z.input<typeof createVehicleClassSchema>
+type ClassFormOutput = z.output<typeof createVehicleClassSchema>
 
 interface ClassFormProps {
   onSubmit: (data: CreateVehicleClassInput) => Promise<void>
@@ -33,11 +34,14 @@ function nullableNumber(v: unknown) {
 export function ClassForm({ onSubmit, onCancel, defaultValues, isSubmitting }: ClassFormProps) {
   const t = useTranslations('business.classes')
 
+  // MEDIUM 3: three-type-parameter useForm lets RHF narrow the submit
+  // handler to the schema's OUTPUT type (CreateVehicleClassInput) — no
+  // `as` assertion needed at handleSubmit.
   const {
     register,
     handleSubmit,
     formState: { errors },
-  } = useForm<ClassFormValues>({
+  } = useForm<ClassFormValues, unknown, ClassFormOutput>({
     resolver: zodResolver(createVehicleClassSchema),
     defaultValues: {
       name: '',
@@ -55,7 +59,16 @@ export function ClassForm({ onSubmit, onCancel, defaultValues, isSubmitting }: C
 
   return (
     <form
-      onSubmit={handleSubmit((data) => onSubmit(data as CreateVehicleClassInput))}
+      onSubmit={handleSubmit(async (data) => {
+        // MEDIUM 4: an empty Textarea submits `""`, not `undefined`. Coerce
+        // blank/whitespace-only descriptions so the API receives "no
+        // description" rather than an empty string value.
+        const trimmed = data.description?.trim()
+        const { description: _drop, ...rest } = data
+        const payload: CreateVehicleClassInput =
+          trimmed && trimmed.length > 0 ? { ...rest, description: trimmed } : rest
+        await onSubmit(payload)
+      })}
       className="space-y-4"
     >
       <div>

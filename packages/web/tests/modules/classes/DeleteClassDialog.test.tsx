@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { cleanup, render, screen } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
 import type { ReactNode } from 'react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
@@ -11,8 +11,9 @@ vi.mock('next-intl', () => ({
   },
 }))
 
+const archiveClassAction = vi.fn()
 vi.mock('@/modules/classes/actions', () => ({
-  archiveClassAction: vi.fn(),
+  archiveClassAction: (...args: unknown[]) => archiveClassAction(...args),
 }))
 
 import type { VehicleClassData } from '@/modules/classes/api'
@@ -44,14 +45,20 @@ function renderDialog(stats: ClassStats | null) {
   function Wrapper({ children }: { children: ReactNode }) {
     return <QueryClientProvider client={client}>{children}</QueryClientProvider>
   }
-  return render(
-    <DeleteClassDialog vehicleClass={mockClass} stats={stats} onOpenChange={() => {}} />,
-    { wrapper: Wrapper },
-  )
+  return {
+    client,
+    ...render(
+      <DeleteClassDialog vehicleClass={mockClass} stats={stats} onOpenChange={() => {}} />,
+      { wrapper: Wrapper },
+    ),
+  }
 }
 
 describe('DeleteClassDialog', () => {
-  afterEach(() => cleanup())
+  afterEach(() => {
+    cleanup()
+    archiveClassAction.mockReset()
+  })
 
   it('disables delete button while stats are loading (null)', () => {
     renderDialog(null)
@@ -76,5 +83,58 @@ describe('DeleteClassDialog', () => {
   it('does not show the blocked warning when there are zero active bookings', () => {
     renderDialog({ carsCount: 3, activeBookingsCount: 0 })
     expect(screen.queryByText(/deleteBlockedActiveBookings/)).not.toBeInTheDocument()
+  })
+
+  // HIGH 1 regression: two synchronous clicks within one frame both see
+  // isPending=false because React state updates haven't flushed. Without a
+  // synchronous guard, the archive action fires twice.
+  it('fires archiveClassAction only once when the delete button is double-clicked rapidly', async () => {
+    // Pending promise so isPending stays true after the first click settles.
+    archiveClassAction.mockReturnValue(new Promise(() => {}))
+    renderDialog({ carsCount: 3, activeBookingsCount: 0 })
+    const button = screen.getByRole('button', { name: 'deleteConfirm' })
+
+    await act(async () => {
+      fireEvent.click(button)
+      fireEvent.click(button)
+      // Flush any microtasks queued by useMutation without waiting for
+      // isPending state updates to propagate back to the click handler.
+      await Promise.resolve()
+    })
+
+    expect(archiveClassAction).toHaveBeenCalledTimes(1)
+    expect(archiveClassAction).toHaveBeenCalledWith('c1')
+  })
+
+  // HIGH 2 regression: when the dialog opens (vehicleClass goes non-null) we
+  // must refetch fleet-overview so the "safe to archive" decision reflects
+  // fresh data, not a cached snapshot that may predate a just-confirmed
+  // booking.
+  it('refetches fleet-overview queries when the dialog opens', () => {
+    const client = new QueryClient({
+      defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
+    })
+    const refetchSpy = vi.spyOn(client, 'refetchQueries')
+
+    const { rerender } = render(
+      <QueryClientProvider client={client}>
+        <DeleteClassDialog vehicleClass={null} stats={null} onOpenChange={() => {}} />
+      </QueryClientProvider>,
+    )
+
+    // Closed dialog should not trigger a refetch.
+    expect(refetchSpy).not.toHaveBeenCalled()
+
+    rerender(
+      <QueryClientProvider client={client}>
+        <DeleteClassDialog
+          vehicleClass={mockClass}
+          stats={{ carsCount: 3, activeBookingsCount: 0 }}
+          onOpenChange={() => {}}
+        />
+      </QueryClientProvider>,
+    )
+
+    expect(refetchSpy).toHaveBeenCalledWith({ queryKey: ['vehicles', 'fleet-overview'] })
   })
 })

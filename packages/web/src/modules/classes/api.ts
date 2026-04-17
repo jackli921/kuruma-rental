@@ -76,6 +76,7 @@ export async function createClass(
   return unwrap<VehicleClassData>(res)
 }
 
+// TODO: wire hc type-safe $patch when vehicle-classes OpenAPI types land
 export async function updateClass(
   id: string,
   data: UpdateVehicleClassInput,

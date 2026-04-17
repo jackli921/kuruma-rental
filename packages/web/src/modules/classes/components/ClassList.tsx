@@ -62,10 +62,21 @@ export function ClassList() {
     })
   }, [classes])
 
+  // LOW 5: Build stats once per fleet/classes change instead of re-running
+  // the filter on every render for every row. O(classes * fleet) walks
+  // collapse into a single O(fleet) pass + O(classes) lookups.
+  const statsById = useMemo(() => {
+    const map = new Map<string, ReturnType<typeof computeClassStats>>()
+    for (const c of sorted) {
+      map.set(c.id, computeClassStats(c.id, fleet ?? []))
+    }
+    return map
+  }, [sorted, fleet])
+
   const deletingStats = useMemo(() => {
     if (!deleting) return null
-    return computeClassStats(deleting.id, fleet ?? [])
-  }, [deleting, fleet])
+    return statsById.get(deleting.id) ?? computeClassStats(deleting.id, fleet ?? [])
+  }, [deleting, fleet, statsById])
 
   return (
     <div className="space-y-6">
@@ -110,7 +121,7 @@ export function ClassList() {
             <ClassRow
               key={c.id}
               vehicleClass={c}
-              stats={computeClassStats(c.id, fleet ?? [])}
+              stats={statsById.get(c.id) ?? { carsCount: 0, activeBookingsCount: 0 }}
               onEdit={setEditing}
               onDelete={setDeleting}
             />
