@@ -1,11 +1,11 @@
 import { SignJWT } from 'jose'
 import { beforeEach, describe, expect, it } from 'vitest'
-import { createApp } from '../index'
-import { InMemoryAvailabilityRepository } from '../repositories/in-memory/availability'
-import { InMemoryBookingRepository } from '../repositories/in-memory/booking'
-import { InMemoryUserRepository } from '../repositories/in-memory/user'
-import { InMemoryVehicleRepository } from '../repositories/in-memory/vehicle'
-import type { User, Vehicle } from '../stores'
+import { createApp } from '../../src/index'
+import { InMemoryAvailabilityRepository } from '../../src/repositories/in-memory/availability'
+import { InMemoryBookingRepository } from '../../src/repositories/in-memory/booking'
+import { InMemoryUserRepository } from '../../src/repositories/in-memory/user'
+import { InMemoryVehicleRepository } from '../../src/repositories/in-memory/vehicle'
+import type { User, Vehicle } from '../../src/stores'
 
 const AUTH_SECRET = 'test-secret-for-manual-booking-tests'
 
