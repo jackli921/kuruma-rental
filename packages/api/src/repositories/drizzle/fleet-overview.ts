@@ -4,7 +4,7 @@ import { and, ne, sql } from 'drizzle-orm'
 import { eq } from 'drizzle-orm'
 import type { Vehicle } from '../../stores'
 import type { FleetOverviewRepository } from '../types'
-import { type Db, toVehicle, vehicleColumns } from './shared'
+import { type Db, overlapHours, toVehicle, vehicleColumns } from './shared'
 
 // Fleet overview: owner-facing aggregated read. Two round-trips instead
 // of N+1 -- one SELECT for all vehicles, one SELECT for all relevant
@@ -13,18 +13,6 @@ import { type Db, toVehicle, vehicleColumns } from './shared'
 // is trivially fast and much clearer than a window-function CTE. See
 // issue #52.
 const UTILIZATION_WINDOW_MS = 30 * 24 * 60 * 60 * 1000
-
-function overlapHours(
-  bookingStart: Date,
-  bookingEnd: Date,
-  windowStart: Date,
-  windowEnd: Date,
-): number {
-  const start = bookingStart < windowStart ? windowStart : bookingStart
-  const end = bookingEnd > windowEnd ? windowEnd : bookingEnd
-  if (end <= start) return 0
-  return (end.getTime() - start.getTime()) / (1000 * 60 * 60)
-}
 
 export class DrizzleFleetOverviewRepository implements FleetOverviewRepository {
   constructor(private readonly db: Db) {}
