@@ -10,7 +10,15 @@ import {
 } from '../../src/repositories/drizzle'
 import type { Vehicle } from '../../src/stores'
 import { authHeaders, setupAuthEnv } from '../helpers/auth'
-import { DEFAULT_DAILY_RATE_JPY, cleanupBookings, cleanupUsers, cleanupVehicles, db } from './setup'
+import {
+  DEFAULT_DAILY_RATE_JPY,
+  cleanupBookings,
+  cleanupUsers,
+  cleanupVehicleClasses,
+  cleanupVehicles,
+  db,
+  seedVehicleClass,
+} from './setup'
 
 const bookingRepo = new DrizzleBookingRepository(db)
 const vehicleRepo = new DrizzleVehicleRepository(db)
@@ -19,8 +27,10 @@ const vehicleRepo = new DrizzleVehicleRepository(db)
 
 let testUser: { id: string; email: string }
 let testVehicle: Vehicle
+let testClassId: string
 const createdBookingIds: string[] = []
 const createdVehicleIds: string[] = []
+const createdClassIds: string[] = []
 
 beforeAll(async () => {
   const [user] = await db
@@ -34,7 +44,12 @@ beforeAll(async () => {
     .returning()
   testUser = user
 
+  const klass = await seedVehicleClass('booking')
+  testClassId = klass.id
+  createdClassIds.push(klass.id)
+
   testVehicle = await vehicleRepo.create({
+    classId: testClassId,
     name: 'Booking Test Car',
     description: null,
     seats: 5,
@@ -61,12 +76,14 @@ afterEach(async () => {
 afterAll(async () => {
   await cleanupVehicles(createdVehicleIds)
   await cleanupUsers([testUser.id])
+  await cleanupVehicleClasses(createdClassIds)
 })
 
 describe('DrizzleBookingRepository', () => {
   it('create inserts and returns a booking with correct fields', async () => {
     const input = {
       renterId: testUser.id,
+      classId: testClassId,
       vehicleId: testVehicle.id,
       startAt: new Date('2026-07-01T10:00:00Z'),
       endAt: new Date('2026-07-01T14:00:00Z'),
@@ -97,6 +114,7 @@ describe('DrizzleBookingRepository', () => {
   it('findById retrieves a created booking', async () => {
     const created = await bookingRepo.create(SYSTEM_CONTEXT, {
       renterId: testUser.id,
+      classId: testClassId,
       vehicleId: testVehicle.id,
       startAt: new Date('2026-08-01T09:00:00Z'),
       endAt: new Date('2026-08-01T12:00:00Z'),
@@ -131,6 +149,7 @@ describe('DrizzleBookingRepository', () => {
   it('findAll returns bookings and filters by status', async () => {
     const confirmed = await bookingRepo.create(SYSTEM_CONTEXT, {
       renterId: testUser.id,
+      classId: testClassId,
       vehicleId: testVehicle.id,
       startAt: new Date('2026-09-01T10:00:00Z'),
       endAt: new Date('2026-09-01T14:00:00Z'),
@@ -144,6 +163,7 @@ describe('DrizzleBookingRepository', () => {
 
     const cancelled = await bookingRepo.create(SYSTEM_CONTEXT, {
       renterId: testUser.id,
+      classId: testClassId,
       vehicleId: testVehicle.id,
       startAt: new Date('2026-10-01T10:00:00Z'),
       endAt: new Date('2026-10-01T14:00:00Z'),
@@ -168,6 +188,7 @@ describe('DrizzleBookingRepository', () => {
 
   it('findAll filters by vehicleId', async () => {
     const otherVehicle = await vehicleRepo.create({
+      classId: testClassId,
       name: 'Other Car',
       description: null,
       seats: 4,
@@ -187,6 +208,7 @@ describe('DrizzleBookingRepository', () => {
 
     const bookingA = await bookingRepo.create(SYSTEM_CONTEXT, {
       renterId: testUser.id,
+      classId: testClassId,
       vehicleId: testVehicle.id,
       startAt: new Date('2026-11-01T10:00:00Z'),
       endAt: new Date('2026-11-01T14:00:00Z'),
@@ -200,6 +222,7 @@ describe('DrizzleBookingRepository', () => {
 
     const bookingB = await bookingRepo.create(SYSTEM_CONTEXT, {
       renterId: testUser.id,
+      classId: testClassId,
       vehicleId: otherVehicle.id,
       startAt: new Date('2026-11-01T10:00:00Z'),
       endAt: new Date('2026-11-01T14:00:00Z'),
@@ -220,6 +243,7 @@ describe('DrizzleBookingRepository', () => {
   it('updateStatus transitions CONFIRMED to ACTIVE', async () => {
     const created = await bookingRepo.create(SYSTEM_CONTEXT, {
       renterId: testUser.id,
+      classId: testClassId,
       vehicleId: testVehicle.id,
       startAt: new Date('2026-12-01T10:00:00Z'),
       endAt: new Date('2026-12-01T14:00:00Z'),
@@ -251,6 +275,7 @@ describe('DrizzleBookingRepository', () => {
   it('create persists totalPrice through Drizzle insert (issue #89)', async () => {
     const booking = await bookingRepo.create(SYSTEM_CONTEXT, {
       renterId: testUser.id,
+      classId: testClassId,
       vehicleId: testVehicle.id,
       startAt: new Date('2026-07-15T10:00:00Z'),
       endAt: new Date('2026-07-15T14:00:00Z'),
@@ -273,6 +298,7 @@ describe('DrizzleBookingRepository', () => {
   it('rejects overlapping bookings with PG error code 23P01', async () => {
     const firstBooking = await bookingRepo.create(SYSTEM_CONTEXT, {
       renterId: testUser.id,
+      classId: testClassId,
       vehicleId: testVehicle.id,
       startAt: new Date('2027-01-01T10:00:00Z'),
       endAt: new Date('2027-01-01T14:00:00Z'),
@@ -287,6 +313,7 @@ describe('DrizzleBookingRepository', () => {
     try {
       const second = await bookingRepo.create(SYSTEM_CONTEXT, {
         renterId: testUser.id,
+        classId: testClassId,
         vehicleId: testVehicle.id,
         startAt: new Date('2027-01-01T13:00:00Z'),
         endAt: new Date('2027-01-01T17:00:00Z'),
@@ -308,6 +335,7 @@ describe('DrizzleBookingRepository', () => {
   it('allows overlapping booking after first is cancelled', async () => {
     const firstBooking = await bookingRepo.create(SYSTEM_CONTEXT, {
       renterId: testUser.id,
+      classId: testClassId,
       vehicleId: testVehicle.id,
       startAt: new Date('2027-02-01T10:00:00Z'),
       endAt: new Date('2027-02-01T14:00:00Z'),
@@ -332,6 +360,7 @@ describe('DrizzleBookingRepository', () => {
     // only applies to CONFIRMED/ACTIVE
     const secondBooking = await bookingRepo.create(SYSTEM_CONTEXT, {
       renterId: testUser.id,
+      classId: testClassId,
       vehicleId: testVehicle.id,
       startAt: new Date('2027-02-01T12:00:00Z'),
       endAt: new Date('2027-02-01T16:00:00Z'),
@@ -351,6 +380,7 @@ describe('DrizzleBookingRepository', () => {
     // First booking: 10:00-14:00, effectiveEnd 15:00 (buffer)
     const first = await bookingRepo.create(SYSTEM_CONTEXT, {
       renterId: testUser.id,
+      classId: testClassId,
       vehicleId: testVehicle.id,
       startAt: new Date('2027-04-01T10:00:00Z'),
       endAt: new Date('2027-04-01T14:00:00Z'),
@@ -366,6 +396,7 @@ describe('DrizzleBookingRepository', () => {
     // tstzrange is [closed, open) so startAt === effectiveEndAt does NOT overlap
     const second = await bookingRepo.create(SYSTEM_CONTEXT, {
       renterId: testUser.id,
+      classId: testClassId,
       vehicleId: testVehicle.id,
       startAt: new Date('2027-04-01T15:00:00Z'),
       endAt: new Date('2027-04-01T19:00:00Z'),
@@ -384,6 +415,7 @@ describe('DrizzleBookingRepository', () => {
   it('concurrent overlapping bookings: exactly one succeeds', async () => {
     const input = {
       renterId: testUser.id,
+      classId: testClassId,
       vehicleId: testVehicle.id,
       startAt: new Date('2027-06-01T10:00:00Z'),
       endAt: new Date('2027-06-01T14:00:00Z'),
@@ -437,6 +469,7 @@ describe('POST /bookings overlap via HTTP (real Postgres)', () => {
     const httpAvailabilityRepo = new DrizzleAvailabilityRepository(db)
 
     httpVehicle = await httpVehicleRepo.create({
+      classId: testClassId,
       name: 'HTTP Overlap Test Car',
       description: null,
       seats: 4,
@@ -474,6 +507,7 @@ describe('POST /bookings overlap via HTTP (real Postgres)', () => {
 
   it('returns 409 when second booking overlaps an existing CONFIRMED booking', async () => {
     const bookingBody = {
+      classId: testClassId,
       vehicleId: httpVehicle.id,
       startAt: '2027-03-01T10:00:00Z',
       endAt: '2027-03-01T14:00:00Z',

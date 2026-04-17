@@ -8,7 +8,15 @@ import {
   DrizzleVehicleRepository,
 } from '../../src/repositories/drizzle'
 import type { Vehicle } from '../../src/stores'
-import { DEFAULT_DAILY_RATE_JPY, cleanupBookings, cleanupUsers, cleanupVehicles, db } from './setup'
+import {
+  DEFAULT_DAILY_RATE_JPY,
+  cleanupBookings,
+  cleanupUsers,
+  cleanupVehicleClasses,
+  cleanupVehicles,
+  db,
+  seedVehicleClass,
+} from './setup'
 
 const vehicleRepo = new DrizzleVehicleRepository(db)
 const bookingRepo = new DrizzleBookingRepository(db)
@@ -28,8 +36,10 @@ const TODAY_START = (() => {
 })()
 
 let testUser: { id: string; email: string }
+let testClassId: string
 const createdVehicleIds: string[] = []
 const createdBookingIds: string[] = []
+const createdClassIds: string[] = []
 
 beforeAll(async () => {
   const [user] = await db
@@ -43,6 +53,10 @@ beforeAll(async () => {
     })
     .returning()
   testUser = user
+
+  const klass = await seedVehicleClass('vd')
+  testClassId = klass.id
+  createdClassIds.push(klass.id)
 })
 
 afterEach(async () => {
@@ -53,10 +67,12 @@ afterEach(async () => {
 afterAll(async () => {
   await cleanupVehicles(createdVehicleIds)
   await cleanupUsers([testUser.id])
+  await cleanupVehicleClasses(createdClassIds)
 })
 
 async function createVehicle(): Promise<Vehicle> {
   const v = await vehicleRepo.create({
+    classId: testClassId,
     name: 'VD Test Car',
     description: null,
     seats: 5,
@@ -87,6 +103,7 @@ type BookingOverrides = {
 async function createBooking(vehicleId: string, overrides: BookingOverrides) {
   const booking = await bookingRepo.create(SYSTEM_CONTEXT, {
     renterId: testUser.id,
+    classId: testClassId,
     vehicleId,
     startAt: overrides.startAt,
     endAt: overrides.endAt,

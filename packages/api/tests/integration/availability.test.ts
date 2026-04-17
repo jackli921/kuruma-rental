@@ -7,15 +7,25 @@ import {
   DrizzleVehicleRepository,
 } from '../../src/repositories/drizzle'
 import type { Vehicle } from '../../src/stores'
-import { DEFAULT_DAILY_RATE_JPY, cleanupBookings, cleanupUsers, cleanupVehicles, db } from './setup'
+import {
+  DEFAULT_DAILY_RATE_JPY,
+  cleanupBookings,
+  cleanupUsers,
+  cleanupVehicleClasses,
+  cleanupVehicles,
+  db,
+  seedVehicleClass,
+} from './setup'
 
 const vehicleRepo = new DrizzleVehicleRepository(db)
 const bookingRepo = new DrizzleBookingRepository(db)
 const availabilityRepo = new DrizzleAvailabilityRepository(db)
 
 let testUser: { id: string; email: string }
+let testClassId: string
 const createdVehicleIds: string[] = []
 const createdBookingIds: string[] = []
+const createdClassIds: string[] = []
 
 beforeAll(async () => {
   const [user] = await db
@@ -28,6 +38,10 @@ beforeAll(async () => {
     })
     .returning()
   testUser = user
+
+  const klass = await seedVehicleClass('avail')
+  testClassId = klass.id
+  createdClassIds.push(klass.id)
 })
 
 afterEach(async () => {
@@ -38,12 +52,14 @@ afterEach(async () => {
 afterAll(async () => {
   await cleanupVehicles(createdVehicleIds)
   await cleanupUsers([testUser.id])
+  await cleanupVehicleClasses(createdClassIds)
 })
 
 function createTestVehicle(
   overrides: Partial<Omit<Vehicle, 'id' | 'createdAt' | 'updatedAt'>> = {},
 ): Promise<Vehicle> {
   return vehicleRepo.create({
+    classId: overrides.classId ?? testClassId,
     name: overrides.name ?? 'Avail Test Car',
     description: overrides.description ?? null,
     seats: overrides.seats ?? 5,
@@ -88,6 +104,7 @@ describe('DrizzleAvailabilityRepository', () => {
 
       const booking = await bookingRepo.create(SYSTEM_CONTEXT, {
         renterId: testUser.id,
+        classId: testClassId,
         vehicleId: vehicle.id,
         startAt: new Date('2026-08-01T10:00:00Z'),
         endAt,
@@ -118,6 +135,7 @@ describe('DrizzleAvailabilityRepository', () => {
 
       const booking = await bookingRepo.create(SYSTEM_CONTEXT, {
         renterId: testUser.id,
+        classId: testClassId,
         vehicleId: vehicle.id,
         startAt: new Date('2026-08-01T10:00:00Z'),
         endAt,
@@ -149,6 +167,7 @@ describe('DrizzleAvailabilityRepository', () => {
 
       const booking = await bookingRepo.create(SYSTEM_CONTEXT, {
         renterId: testUser.id,
+        classId: testClassId,
         vehicleId: vehicle.id,
         startAt: new Date('2026-08-01T10:00:00Z'),
         endAt,
@@ -178,6 +197,7 @@ describe('DrizzleAvailabilityRepository', () => {
 
       const booking = await bookingRepo.create(SYSTEM_CONTEXT, {
         renterId: testUser.id,
+        classId: testClassId,
         vehicleId: vehicle.id,
         startAt: new Date('2026-08-01T10:00:00Z'),
         endAt,
@@ -208,6 +228,7 @@ describe('DrizzleAvailabilityRepository', () => {
 
       const booking = await bookingRepo.create(SYSTEM_CONTEXT, {
         renterId: testUser.id,
+        classId: testClassId,
         vehicleId: vehicle.id,
         startAt: new Date('2026-08-01T10:00:00Z'),
         endAt,
@@ -275,6 +296,7 @@ describe('DrizzleAvailabilityRepository', () => {
 
       const booking = await bookingRepo.create(SYSTEM_CONTEXT, {
         renterId: testUser.id,
+        classId: testClassId,
         vehicleId: vehicle.id,
         startAt: new Date('2026-08-01T10:00:00Z'),
         endAt,
