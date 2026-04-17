@@ -30,6 +30,13 @@ import type {
 export interface VehicleFilters {
   status?: string
   includeRetired?: boolean
+  limit?: number
+  offset?: number
+}
+
+export interface PaginatedResult<T> {
+  data: T[]
+  total: number
 }
 
 export interface VehicleUpdateOptions {
@@ -37,7 +44,7 @@ export interface VehicleUpdateOptions {
 }
 
 export interface VehicleRepository {
-  findAll(filters?: VehicleFilters): Promise<Vehicle[]>
+  findAll(filters?: VehicleFilters): Promise<PaginatedResult<Vehicle>>
   findById(id: string): Promise<Vehicle | undefined>
   findByIds(ids: string[]): Promise<Vehicle[]>
   create(data: Omit<Vehicle, 'id' | 'createdAt' | 'updatedAt'>): Promise<Vehicle>
