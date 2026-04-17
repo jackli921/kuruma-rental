@@ -8,12 +8,11 @@ import { getTranslations } from 'next-intl/server'
 //
 // No auth required — classes come from the public /vehicle-classes endpoint.
 export default async function VehicleCatalogPage() {
+  // API sorts by sortOrder ascending — no client-side sort needed.
   const [t, classes] = await Promise.all([
     getTranslations('catalog'),
     fetchClasses({ status: 'ACTIVE' }),
   ])
-
-  const sorted = [...classes].sort((a, b) => a.sortOrder - b.sortOrder)
 
   return (
     <main className="flex-1 py-10 px-4 sm:px-6 lg:px-8">
@@ -23,14 +22,14 @@ export default async function VehicleCatalogPage() {
           <p className="mt-2 text-lg text-muted-foreground">{t('subtitle')}</p>
         </div>
 
-        {sorted.length === 0 ? (
+        {classes.length === 0 ? (
           <div className="text-center py-20">
             <Car className="size-12 text-muted-foreground/30 mx-auto mb-4" />
             <p className="text-lg text-muted-foreground">{t('empty')}</p>
           </div>
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-            {sorted.map((vc) => (
+            {classes.map((vc) => (
               <ClassCatalogCard key={vc.id} vehicleClass={vc} />
             ))}
           </div>
