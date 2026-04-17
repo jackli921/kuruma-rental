@@ -107,6 +107,9 @@ export class InMemoryBookingRepository implements BookingRepository {
     const ids = new Set(vehicleIds)
     let count = 0
     for (const booking of this.store.values()) {
+      // Issue #308: bookings with a class but no vehicle assigned yet cannot
+      // belong to a specific vehicle, so they cannot block class archive.
+      if (booking.vehicleId === null) continue
       if (ids.has(booking.vehicleId) && BLOCKING_STATUSES.has(booking.status)) count++
     }
     return count
