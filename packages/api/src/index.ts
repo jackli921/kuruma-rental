@@ -66,12 +66,14 @@ import { createVehiclePhotoRoutes } from './routes/vehicle-photos'
 import { createVehicleRoutes } from './routes/vehicles'
 import { BookingService } from './services/booking'
 import { CustomerService } from './services/customer'
+import { FleetOverviewService } from './services/fleet-overview'
 import { GoogleTranslationProvider } from './services/google-translation-provider'
 import { MaintenanceService } from './services/maintenance'
 import { MessageTranslationService } from './services/message-translation'
 import type { TranslationProvider } from './services/translation-provider'
 import { VehicleClassService } from './services/vehicle-class'
 import { VehicleClassAvailabilityService } from './services/vehicle-class-availability'
+import { VehicleDetailService } from './services/vehicle-detail'
 import { VehiclePhotoService } from './services/vehicle-photo'
 
 export function createApp(overrides?: {
@@ -271,13 +273,15 @@ export function createApp(overrides?: {
     maintenanceLogRepo,
     runInTransaction,
   )
+  const fleetOverviewService = new FleetOverviewService(fleetOverviewRepo)
+  const vehicleDetailService = new VehicleDetailService(vehicleDetailRepo)
 
   // Chain .route() calls so TypeScript infers the full route type tree.
   // hc<AppType> needs this to produce typed client methods.
   return app
     .route('/', health)
-    .route('/', createFleetOverviewRoutes(fleetOverviewRepo))
-    .route('/', createVehicleDetailRoutes(vehicleDetailRepo))
+    .route('/', createFleetOverviewRoutes(fleetOverviewService))
+    .route('/', createVehicleDetailRoutes(vehicleDetailService))
     .route(
       '/',
       createVehicleClassRoutes(
