@@ -58,6 +58,7 @@ import health from './routes/health'
 import { createMaintenanceLogRoutes } from './routes/maintenance-logs'
 import { createMessageRoutes } from './routes/messages'
 import { createStatsRoutes } from './routes/stats'
+import { createUserRoutes } from './routes/users'
 import { createVehicleClassRoutes } from './routes/vehicle-classes'
 import { createVehicleDetailRoutes } from './routes/vehicle-detail'
 import { createVehiclePhotoRoutes } from './routes/vehicle-photos'
@@ -213,6 +214,7 @@ export function createApp(overrides?: {
   app.use('/availability/*', requireAuth())
   app.use('/threads/*', requireAuth())
   app.use('/customers/*', requireAuth())
+  app.use('/users/*', requireAuth())
 
   const vehicleClassService = new VehicleClassService(vehicleClassRepo)
   const bookingService = new BookingService(bookingRepo, vehicleRepo, userRepo)
@@ -238,6 +240,7 @@ export function createApp(overrides?: {
     .route('/', createStatsRoutes(statsRepo))
     .route('/', createMessageRoutes(threadRepo, messageRepo))
     .route('/', createCustomerRoutes(customerService))
+    .route('/', createUserRoutes(userRepo, threadRepo))
 }
 
 const DEV_WEB_ORIGINS = ['http://localhost:3001', 'http://127.0.0.1:3001']

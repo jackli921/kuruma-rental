@@ -22,7 +22,7 @@ export function PhotoUpload({ vehicleId, initialPhotos }: PhotoUploadProps) {
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [photos, setPhotos] = useState(initialPhotos)
   const [uploading, setUploading] = useState(false)
-  const [deleting, setDeleting] = useState<number | null>(null)
+  const [deletingUrl, setDeletingUrl] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [dragOver, setDragOver] = useState(false)
 
@@ -46,13 +46,10 @@ export function PhotoUpload({ vehicleId, initialPhotos }: PhotoUploadProps) {
         return
       }
 
-      setPhotos((prev) => {
-        if (prev.length + imageFiles.length > MAX_PHOTOS) {
-          setError(t('photoLimit', { max: MAX_PHOTOS }))
-          return prev
-        }
-        return prev
-      })
+      if (photos.length + imageFiles.length > MAX_PHOTOS) {
+        setError(t('photoLimit', { max: MAX_PHOTOS }))
+        return
+      }
 
       setUploading(true)
       const formData = new FormData()
@@ -71,23 +68,23 @@ export function PhotoUpload({ vehicleId, initialPhotos }: PhotoUploadProps) {
       setPhotos((prev) => [...prev, ...result.data.uploaded])
       invalidate()
     },
-    [vehicleId, t, invalidate],
+    [vehicleId, t, invalidate, photos.length],
   )
 
   const handleDelete = useCallback(
-    async (idx: number) => {
+    async (url: string) => {
       setError(null)
-      setDeleting(idx)
+      setDeletingUrl(url)
 
-      const result = await deleteVehiclePhotoAction(vehicleId, idx)
-      setDeleting(null)
+      const result = await deleteVehiclePhotoAction(vehicleId, url)
+      setDeletingUrl(null)
 
       if (!result.success) {
         setError(result.error)
         return
       }
 
-      setPhotos((prev) => prev.filter((_, i) => i !== idx))
+      setPhotos((prev) => prev.filter((u) => u !== url))
       invalidate()
     },
     [vehicleId, invalidate],
@@ -131,12 +128,12 @@ export function PhotoUpload({ vehicleId, initialPhotos }: PhotoUploadProps) {
               />
               <button
                 type="button"
-                onClick={() => handleDelete(idx)}
-                disabled={deleting === idx}
+                onClick={() => handleDelete(url)}
+                disabled={deletingUrl === url}
                 className="absolute top-1 right-1 bg-black/60 text-white rounded-full w-5 h-5 flex items-center justify-center text-xs opacity-0 group-hover:opacity-100 transition-opacity disabled:opacity-50"
                 aria-label={t('deletePhoto')}
               >
-                {deleting === idx ? '...' : '\u00d7'}
+                {deletingUrl === url ? '...' : '\u00d7'}
               </button>
             </div>
           ))}

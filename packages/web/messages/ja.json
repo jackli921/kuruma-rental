@@ -139,7 +139,13 @@
           "month": "月"
         },
         "noEventsInRange": "この期間に予約はありません",
-        "showMore": "+{count}件"
+        "showMore": "+{count}件",
+        "viewFullDetails": "詳細を表示"
+      },
+      "detail": {
+        "stubTitle": "予約詳細",
+        "stubBody": "予約詳細ページは近日公開予定です — ID: {id}",
+        "backToCalendar": "カレンダーに戻る"
       },
       "manualBooking": {
         "title": "手動予約の作成",
@@ -403,7 +409,9 @@
       "noMessages": "この会話にはまだメッセージがありません。",
       "you": "自分",
       "today": "今日",
-      "yesterday": "昨日"
+      "yesterday": "昨日",
+      "back": "受信トレイに戻る",
+      "composeLabel": "メッセージを作成"
     }
   },
   "bookings": {
