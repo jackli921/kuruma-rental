@@ -6,6 +6,7 @@ import { setupGlobalHandlers } from './error-handlers'
 import { requireAuth } from './middleware/auth'
 import { structuredLogger } from './middleware/logger'
 import { requestId } from './middleware/request-id'
+import { DisabledPhotoStorage } from './repositories/disabled-photo-storage'
 import {
   DrizzleAvailabilityRepository,
   DrizzleBookingRepository,
@@ -160,10 +161,13 @@ export function createApp(overrides?: {
       | R2BucketLike
       | undefined
     const photosPublicUrl = process.env.VEHICLE_PHOTOS_PUBLIC_URL ?? ''
+    // In the Drizzle branch (production) an InMemory fallback is dangerous —
+    // each CF Worker request gets a fresh instance, so uploads "succeed" but
+    // return URLs pointing at nothing. DisabledPhotoStorage throws loudly.
     photoStorage =
       vehiclePhotosBucket && photosPublicUrl
         ? new R2PhotoStorage(vehiclePhotosBucket, photosPublicUrl)
-        : new InMemoryPhotoStorage()
+        : new DisabledPhotoStorage()
   } else {
     vehicleClassRepo = new InMemoryVehicleClassRepository()
     vehicleRepo = new InMemoryVehicleRepository()
