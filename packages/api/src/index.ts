@@ -57,6 +57,7 @@ import { createFleetOverviewRoutes } from './routes/fleet-overview'
 import health from './routes/health'
 import { createMaintenanceLogRoutes } from './routes/maintenance-logs'
 import { createMessageRoutes } from './routes/messages'
+import { createPartnerBookingRoutes } from './routes/partner-bookings'
 import { createStatsRoutes } from './routes/stats'
 import { createTranslateRoutes } from './routes/translate'
 import { createUserRoutes } from './routes/users'
@@ -69,6 +70,7 @@ import { CustomerService } from './services/customer'
 import { GoogleTranslationProvider } from './services/google-translation-provider'
 import { MaintenanceService } from './services/maintenance'
 import { MessageTranslationService } from './services/message-translation'
+import { PartnerBookingService } from './services/partner-booking'
 import type { TranslationProvider } from './services/translation-provider'
 import { VehicleClassService } from './services/vehicle-class'
 import { VehiclePhotoService } from './services/vehicle-photo'
@@ -280,6 +282,7 @@ export function createApp(overrides?: {
     )
     .route('/', createMaintenanceLogRoutes(maintenanceService))
     .route('/', createBookingRoutes(bookingService))
+    .route('/', createPartnerBookingRoutes(new PartnerBookingService(bookingService, userRepo)))
     .route('/', createAvailabilityRoutes(availabilityRepo))
     .route('/', createStatsRoutes(statsRepo))
     .route('/', createMessageRoutes(threadRepo, messageRepo))
