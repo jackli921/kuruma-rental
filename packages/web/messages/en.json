@@ -46,6 +46,34 @@
     "switchToRenter": "Switch to renter view",
     "switchToBusiness": "Switch to business view"
   },
+  "catalog": {
+    "title": "Browse our fleet",
+    "subtitle": "Choose a class. Every car in the class is the same rate and spec.",
+    "empty": "No classes available right now.",
+    "seats": "{count} seats",
+    "auto": "Auto",
+    "manual": "Manual",
+    "priceFrom": "From",
+    "perDay": "/ day",
+    "viewClass": "View class",
+    "detail": {
+      "backToCatalog": "Back to catalog",
+      "specs": "Specifications",
+      "seats": "{count} seats",
+      "transmission": "Transmission",
+      "fuelType": "Fuel type",
+      "luggage": "{count} bags",
+      "auto": "Automatic",
+      "manual": "Manual",
+      "description": "About this class",
+      "photos": "Photos",
+      "bookCta": "Check availability",
+      "priceFrom": "From",
+      "perDay": "/ day",
+      "notFound": "Class not found",
+      "notFoundDescription": "The class you are looking for does not exist or has been archived."
+    }
+  },
   "vehicles": {
     "title": "Browse vehicles",
     "subtitle": "Find the perfect car for your trip around Japan.",

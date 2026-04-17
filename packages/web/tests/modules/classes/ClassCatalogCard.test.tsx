@@ -1,0 +1,93 @@
+import { cleanup, render, screen } from '@testing-library/react'
+import { afterEach, describe, expect, it, vi } from 'vitest'
+
+vi.mock('next-intl', () => ({
+  useTranslations: () => (key: string, values?: Record<string, unknown>) => {
+    const messages: Record<string, string> = {
+      seats: '{count} seats',
+      auto: 'Auto',
+      manual: 'Manual',
+      perDay: '/ day',
+      priceFrom: 'From',
+      viewClass: 'View class',
+    }
+    const template = messages[key] ?? key
+    if (!values) return template
+    return Object.entries(values).reduce<string>(
+      (acc, [k, v]) => acc.replace(`{${k}}`, String(v)),
+      template,
+    )
+  },
+}))
+
+vi.mock('@/i18n/routing', () => ({
+  Link: ({ href, children, ...rest }: { href: string; children: React.ReactNode }) => (
+    <a href={href} {...rest}>
+      {children}
+    </a>
+  ),
+}))
+
+// Import directly from components to avoid pulling the module barrel's
+// api.ts chain (which imports Auth.js → next/server) into the test env.
+import { ClassCatalogCard } from '@/modules/classes/components/ClassCatalogCard'
+
+const baseClass = {
+  id: 'c1',
+  name: 'Compact',
+  slug: 'compact',
+  description: 'A small runabout',
+  photos: ['https://example.com/a.jpg', 'https://example.com/b.jpg'],
+  seats: 5,
+  luggageCapacity: 2,
+  transmission: 'AUTO' as const,
+  fuelType: 'GASOLINE',
+  dailyRateJpy: 8000,
+  hourlyRateJpy: null,
+  sortOrder: 0,
+  status: 'ACTIVE' as const,
+  createdAt: '2026-01-01T00:00:00Z',
+  updatedAt: '2026-01-01T00:00:00Z',
+}
+
+describe('ClassCatalogCard', () => {
+  afterEach(() => {
+    cleanup()
+  })
+
+  it('links to the class detail page by slug', () => {
+    render(<ClassCatalogCard vehicleClass={baseClass} />)
+    const link = screen.getByRole('link')
+    expect(link).toHaveAttribute('href', '/vehicles/classes/compact')
+  })
+
+  it('shows name, seats, transmission, and daily rate', () => {
+    render(<ClassCatalogCard vehicleClass={baseClass} />)
+    expect(screen.getByText('Compact')).toBeInTheDocument()
+    expect(screen.getByText('5 seats')).toBeInTheDocument()
+    expect(screen.getByText('Auto')).toBeInTheDocument()
+    // Japanese yen formatting uses ¥ symbol (may be in a nested <span>)
+    expect(screen.getByText(/[¥￥]\s*8,000/)).toBeInTheDocument()
+  })
+
+  it('renders the first photo as hero image with alt=name', () => {
+    render(<ClassCatalogCard vehicleClass={baseClass} />)
+    const img = screen.getByRole('img', { name: 'Compact' })
+    expect(img).toHaveAttribute('src', 'https://example.com/a.jpg')
+  })
+
+  it('renders placeholder when no photos are present', () => {
+    render(<ClassCatalogCard vehicleClass={{ ...baseClass, photos: [] }} />)
+    expect(screen.queryByRole('img')).toBeNull()
+  })
+
+  it('hides price when dailyRateJpy is null', () => {
+    render(<ClassCatalogCard vehicleClass={{ ...baseClass, dailyRateJpy: null }} />)
+    expect(screen.queryByText(/[¥￥]/)).toBeNull()
+  })
+
+  it('shows Manual transmission correctly', () => {
+    render(<ClassCatalogCard vehicleClass={{ ...baseClass, transmission: 'MANUAL' }} />)
+    expect(screen.getByText('Manual')).toBeInTheDocument()
+  })
+})

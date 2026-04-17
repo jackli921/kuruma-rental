@@ -1,0 +1,65 @@
+import { Link } from '@/i18n/routing'
+import { formatJpy } from '@/lib/format'
+import { Car, Settings2, Users } from 'lucide-react'
+import { useTranslations } from 'next-intl'
+import type { VehicleClassData } from '../api'
+
+interface ClassCatalogCardProps {
+  vehicleClass: VehicleClassData
+}
+
+export function ClassCatalogCard({ vehicleClass }: ClassCatalogCardProps) {
+  const t = useTranslations('catalog')
+
+  const photo = vehicleClass.photos[0]
+  const transmissionLabel = vehicleClass.transmission === 'AUTO' ? t('auto') : t('manual')
+  const hasPrice = vehicleClass.dailyRateJpy != null
+
+  return (
+    <Link
+      href={`/vehicles/classes/${vehicleClass.slug}`}
+      className="group rounded-xl overflow-hidden bg-card border border-border shadow-sm hover:shadow-md transition-shadow"
+    >
+      <div className="aspect-[4/3] overflow-hidden bg-muted">
+        {photo ? (
+          <img
+            src={photo}
+            alt={vehicleClass.name}
+            className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+          />
+        ) : (
+          <div className="w-full h-full flex items-center justify-center">
+            <Car className="size-12 text-muted-foreground/30" />
+          </div>
+        )}
+      </div>
+      <div className="p-5">
+        <h2 className="text-lg font-semibold">{vehicleClass.name}</h2>
+        {vehicleClass.description && (
+          <p className="mt-1 text-sm text-muted-foreground line-clamp-2">
+            {vehicleClass.description}
+          </p>
+        )}
+        <div className="mt-4 flex items-center gap-4 text-sm text-muted-foreground">
+          <span className="flex items-center gap-1.5">
+            <Users className="size-4" />
+            {t('seats', { count: vehicleClass.seats })}
+          </span>
+          <span className="flex items-center gap-1.5">
+            <Settings2 className="size-4" />
+            {transmissionLabel}
+          </span>
+        </div>
+        {hasPrice && (
+          <p className="mt-4 text-sm">
+            <span className="text-muted-foreground">{t('priceFrom')} </span>
+            <span className="font-semibold text-foreground">
+              {formatJpy(vehicleClass.dailyRateJpy as number)}
+            </span>
+            <span className="text-muted-foreground"> {t('perDay')}</span>
+          </p>
+        )}
+      </div>
+    </Link>
+  )
+}
