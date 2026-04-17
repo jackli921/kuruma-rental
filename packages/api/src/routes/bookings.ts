@@ -1,6 +1,6 @@
 import { createBookingSchema, updateBookingStatusSchema } from '@kuruma/shared/validators/booking'
 import { Hono } from 'hono'
-import { requireUser, toCallerContext } from '../middleware/auth'
+import { STAFF_ROLES, requireUser, toCallerContext } from '../middleware/auth'
 import type { BookingFilters } from '../repositories/types'
 import type { BookingService } from '../services/booking'
 import { fail, ok, parseDateRange, parseLimit } from './helpers'
@@ -69,13 +69,19 @@ export function createBookingRoutes(service: BookingService) {
         return fail(c, result.error.flatten().fieldErrors, 400)
       }
 
-      // Actor derivation: renterId comes from JWT, never from body
+      // Staff/admin can create bookings on behalf of a customer (manual bookings).
+      // Non-staff always book as themselves and source is forced to DIRECT
+      // to prevent advance-booking-hours bypass via source=MANUAL.
+      const isStaff = STAFF_ROLES.has(ctx.role)
+      const renterId = isStaff && result.data.renterId ? result.data.renterId : ctx.userId
+      const source = isStaff ? result.data.source : 'DIRECT'
+
       const createResult = await service.create(ctx, {
         vehicleId: result.data.vehicleId,
-        renterId: ctx.userId,
+        renterId,
         startAt: new Date(result.data.startAt),
         endAt: new Date(result.data.endAt),
-        source: result.data.source,
+        source,
         externalId: result.data.externalId ?? null,
         notes: result.data.notes ?? null,
         idempotencyKey: result.data.idempotencyKey ?? null,
