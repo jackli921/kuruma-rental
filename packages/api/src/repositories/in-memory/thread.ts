@@ -56,9 +56,16 @@ export class InMemoryThreadRepository implements ThreadRepository {
     return { ...thread, participants: threadParticipants, messages: threadMessages }
   }
 
-  async findByIdempotencyKey(key: string): Promise<Thread | undefined> {
+  async findByIdempotencyKey(ctx: CallerContext, key: string): Promise<Thread | undefined> {
+    // CallerContext scoping (issue #328): non-privileged callers only match
+    // threads they participate in. Privileged roles see all.
     for (const thread of this.threads.values()) {
-      if (thread.idempotencyKey === key) return thread
+      if (thread.idempotencyKey !== key) continue
+      if (PRIVILEGED_ROLES.has(ctx.role)) return thread
+      const isParticipant = [...this.participants.values()].some(
+        (p) => p.threadId === thread.id && p.userId === ctx.userId,
+      )
+      if (isParticipant) return thread
     }
     return undefined
   }

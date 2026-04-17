@@ -184,7 +184,13 @@ export interface ThreadRepository {
     ctx: CallerContext,
     id: string,
   ): Promise<(Thread & { participants: ThreadParticipant[]; messages: Message[] }) | undefined>
-  findByIdempotencyKey(key: string): Promise<Thread | undefined>
+  /**
+   * Look up a thread by idempotency key scoped to the caller. Non-privileged
+   * callers only match threads where they are a participant. Prevents
+   * cross-tenant leakage when a client replays a key observed from another
+   * tenant (issue #328).
+   */
+  findByIdempotencyKey(ctx: CallerContext, key: string): Promise<Thread | undefined>
   create(
     ctx: CallerContext,
     bookingId: string | null,
@@ -201,7 +207,13 @@ export interface MessageRepository {
    * `undefined`. Privileged roles (STAFF/ADMIN) bypass the scope.
    */
   findById(ctx: CallerContext, id: string): Promise<Message | undefined>
-  findByIdempotencyKey(key: string): Promise<Message | undefined>
+  /**
+   * Look up a message by idempotency key scoped to the caller. The key is
+   * sender-owned: the lookup matches only messages where `senderId = ctx.userId`
+   * for non-privileged callers. Prevents cross-tenant leakage when a client
+   * replays a key observed from another sender (issue #328).
+   */
+  findByIdempotencyKey(ctx: CallerContext, key: string): Promise<Message | undefined>
   create(
     ctx: CallerContext,
     threadId: string,
