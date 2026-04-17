@@ -25,12 +25,12 @@ const MINUTE = 60 * SECOND
 const HOUR = 60 * MINUTE
 const DAY = 24 * HOUR
 
-export function formatRelativeTime(iso: string, now: Date = new Date()): string {
+export function formatRelativeTime(iso: string, locale = 'en', now: Date = new Date()): string {
   const then = new Date(iso).getTime()
   const diff = now.getTime() - then
   if (diff < MINUTE) return 'now'
   if (diff < HOUR) return `${Math.floor(diff / MINUTE)}m`
   if (diff < DAY) return `${Math.floor(diff / HOUR)}h`
   if (diff < 7 * DAY) return `${Math.floor(diff / DAY)}d`
-  return new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+  return new Date(iso).toLocaleDateString(locale, { month: 'short', day: 'numeric' })
 }

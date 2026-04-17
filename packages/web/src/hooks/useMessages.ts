@@ -50,21 +50,28 @@ interface SendMessageVariables {
   senderId: string
 }
 
+function optimisticIdFor(idempotencyKey: string): string {
+  return `optimistic-${idempotencyKey}`
+}
+
 export function useSendMessage() {
   const queryClient = useQueryClient()
 
-  return useMutation<MessageData, Error, SendMessageVariables, { previous?: ThreadDetailData }>({
+  return useMutation<MessageData, Error, SendMessageVariables>({
     mutationFn: ({ threadId, content, idempotencyKey }) =>
       sendMessageAction(threadId, content, idempotencyKey).then(unwrap),
 
+    // Surgical insert: append the optimistic message identified by its
+    // idempotencyKey. Snapshot/rollback would corrupt the cache when two sends
+    // are in flight — restoring a snapshot taken before send #2 would erase
+    // send #1's still-in-flight optimistic entry.
     onMutate: async ({ threadId, content, idempotencyKey, senderId }) => {
       const key = messageKeys.thread(threadId)
       await queryClient.cancelQueries({ queryKey: key })
-      const previous = queryClient.getQueryData<ThreadDetailData>(key)
-
-      if (previous) {
+      queryClient.setQueryData<ThreadDetailData>(key, (prev) => {
+        if (!prev) return prev
         const optimistic: MessageData = {
-          id: `optimistic-${idempotencyKey}`,
+          id: optimisticIdFor(idempotencyKey),
           threadId,
           senderId,
           content,
@@ -73,23 +80,33 @@ export function useSendMessage() {
           idempotencyKey,
           createdAt: new Date().toISOString(),
         }
-        queryClient.setQueryData<ThreadDetailData>(key, {
-          ...previous,
-          messages: [...previous.messages, optimistic],
-        })
-      }
-
-      return previous ? { previous } : {}
+        return { ...prev, messages: [...prev.messages, optimistic] }
+      })
     },
 
-    onError: (_err, { threadId }, context) => {
-      if (context?.previous) {
-        queryClient.setQueryData(messageKeys.thread(threadId), context.previous)
-      }
+    // Surgical remove: drop only the failed entry by its optimistic id, leaving
+    // any other in-flight optimistic messages untouched.
+    onError: (_err, { threadId, idempotencyKey }) => {
+      const key = messageKeys.thread(threadId)
+      const optimisticId = optimisticIdFor(idempotencyKey)
+      queryClient.setQueryData<ThreadDetailData>(key, (prev) =>
+        prev ? { ...prev, messages: prev.messages.filter((m) => m.id !== optimisticId) } : prev,
+      )
     },
 
-    onSettled: (_data, _err, { threadId }) => {
-      queryClient.invalidateQueries({ queryKey: messageKeys.thread(threadId) })
+    onSuccess: (real, { threadId, idempotencyKey }) => {
+      const key = messageKeys.thread(threadId)
+      const optimisticId = optimisticIdFor(idempotencyKey)
+      queryClient.setQueryData<ThreadDetailData>(key, (prev) =>
+        prev
+          ? { ...prev, messages: prev.messages.map((m) => (m.id === optimisticId ? real : m)) }
+          : prev,
+      )
+    },
+
+    onSettled: () => {
+      // Refresh the inbox previews / unread counts; the thread cache is already
+      // up to date via the surgical insert, so no extra fetch needed there.
       queryClient.invalidateQueries({ queryKey: messageKeys.threads() })
     },
   })

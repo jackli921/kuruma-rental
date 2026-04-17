@@ -372,7 +372,8 @@
       "you": "我",
       "today": "今天",
       "yesterday": "昨天",
-      "back": "返回收件箱"
+      "back": "返回收件箱",
+      "composeLabel": "撰写消息"
     }
   },
   "bookings": {

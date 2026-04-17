@@ -372,7 +372,8 @@
       "you": "自分",
       "today": "今日",
       "yesterday": "昨日",
-      "back": "受信トレイに戻る"
+      "back": "受信トレイに戻る",
+      "composeLabel": "メッセージを作成"
     }
   },
   "bookings": {

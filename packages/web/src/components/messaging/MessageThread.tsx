@@ -51,12 +51,12 @@ export function MessageThread({ threadId, currentUserId }: MessageThreadProps) {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight })
   }, [messages])
 
-  async function handleSend(content: string) {
+  async function handleSend(content: string, idempotencyKey: string) {
     if (!thread) return
     await sendMessage.mutateAsync({
       threadId: thread.id,
       content,
-      idempotencyKey: crypto.randomUUID(),
+      idempotencyKey,
       senderId: currentUserId,
     })
   }

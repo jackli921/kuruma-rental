@@ -55,23 +55,23 @@ describe('formatRelativeTime', () => {
   const now = new Date('2026-04-16T12:00:00Z')
 
   it('returns "now" for less than a minute ago', () => {
-    expect(formatRelativeTime('2026-04-16T11:59:30Z', now)).toBe('now')
+    expect(formatRelativeTime('2026-04-16T11:59:30Z', 'en', now)).toBe('now')
   })
 
   it('returns minutes for less than an hour ago', () => {
-    expect(formatRelativeTime('2026-04-16T11:55:00Z', now)).toBe('5m')
+    expect(formatRelativeTime('2026-04-16T11:55:00Z', 'en', now)).toBe('5m')
   })
 
   it('returns hours for less than a day ago', () => {
-    expect(formatRelativeTime('2026-04-16T09:00:00Z', now)).toBe('3h')
+    expect(formatRelativeTime('2026-04-16T09:00:00Z', 'en', now)).toBe('3h')
   })
 
   it('returns days for less than a week ago', () => {
-    expect(formatRelativeTime('2026-04-14T12:00:00Z', now)).toBe('2d')
+    expect(formatRelativeTime('2026-04-14T12:00:00Z', 'en', now)).toBe('2d')
   })
 
-  it('returns a date string for more than a week ago', () => {
-    const result = formatRelativeTime('2026-03-01T12:00:00Z', now)
-    expect(result).toMatch(/Mar/)
+  it('uses the supplied locale for the date fallback (>1 week)', () => {
+    expect(formatRelativeTime('2026-03-01T12:00:00Z', 'en', now)).toMatch(/Mar/)
+    expect(formatRelativeTime('2026-03-01T12:00:00Z', 'ja', now)).toMatch(/3/)
   })
 })

@@ -5,6 +5,7 @@ import { Badge } from '@/components/ui/badge'
 import type { ThreadSummaryData } from '@/lib/message-api'
 import { formatRelativeTime, getCounterpartyId, getMyUnreadCount } from '@/lib/message-utils'
 import { cn } from '@/lib/utils'
+import { useLocale } from 'next-intl'
 
 interface ThreadListItemProps {
   readonly thread: ThreadSummaryData
@@ -30,6 +31,7 @@ export function ThreadListItem({
   isSelected,
   onSelect,
 }: ThreadListItemProps) {
+  const locale = useLocale()
   const counterpartyId = getCounterpartyId(thread, currentUserId)
   const counterpartyName = counterpartyId ? (userNames.get(counterpartyId) ?? null) : null
   const displayName = counterpartyName ?? counterpartyId?.slice(0, 8) ?? 'Unknown'
@@ -62,7 +64,7 @@ export function ThreadListItem({
             {displayName}
           </span>
           <span className="shrink-0 text-xs text-muted-foreground">
-            {formatRelativeTime(lastMessageAt)}
+            {formatRelativeTime(lastMessageAt, locale)}
           </span>
         </div>
 

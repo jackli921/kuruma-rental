@@ -7,7 +7,12 @@ import { useTranslations } from 'next-intl'
 import { type KeyboardEvent, useState } from 'react'
 
 interface ComposeInputProps {
-  readonly onSend: (content: string) => Promise<void> | void
+  /**
+   * Send the message. The same `idempotencyKey` is reused if the user retries
+   * after a failure, so the server can dedupe a network-burp double-send. A new
+   * key is minted only after a successful send.
+   */
+  readonly onSend: (content: string, idempotencyKey: string) => Promise<void>
   readonly disabled?: boolean
 }
 
@@ -15,6 +20,8 @@ export function ComposeInput({ onSend, disabled = false }: ComposeInputProps) {
   const t = useTranslations('messaging.thread')
   const [value, setValue] = useState('')
   const [isSending, setIsSending] = useState(false)
+  // Holds the key for the in-flight (or retry-eligible) send. null = next send mints fresh.
+  const [pendingKey, setPendingKey] = useState<string | null>(null)
 
   const trimmed = value.trim()
   const canSend = trimmed.length > 0 && !disabled && !isSending
@@ -22,10 +29,16 @@ export function ComposeInput({ onSend, disabled = false }: ComposeInputProps) {
   async function send() {
     if (!canSend) return
     const content = trimmed
-    setValue('')
+    const key = pendingKey ?? crypto.randomUUID()
+    setPendingKey(key)
     setIsSending(true)
     try {
-      await onSend(content)
+      await onSend(content, key)
+      // Success: reset both so the next message gets a fresh key.
+      setValue('')
+      setPendingKey(null)
+    } catch {
+      // Failure: keep value and key so a manual retry hits the server's idempotent path.
     } finally {
       setIsSending(false)
     }
@@ -48,7 +61,7 @@ export function ComposeInput({ onSend, disabled = false }: ComposeInputProps) {
         disabled={disabled}
         rows={1}
         className="max-h-32 min-h-10 resize-none"
-        aria-label={t('sendPlaceholder')}
+        aria-label={t('composeLabel')}
       />
       <Button
         type="button"

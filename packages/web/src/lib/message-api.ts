@@ -61,13 +61,9 @@ export async function fetchThreads(token?: string): Promise<ThreadSummaryData[]>
 
 export async function fetchThread(id: string, token?: string): Promise<ThreadDetailData | null> {
   const client = createApiClient(token)
-  try {
-    const res = await client.threads[':id'].$get({ param: { id } })
-    return await unwrap<ThreadDetailData>(res)
-  } catch (e) {
-    if (e instanceof Error && e.message === 'Thread not found') return null
-    throw e
-  }
+  const res = await client.threads[':id'].$get({ param: { id } })
+  if (res.status === 404) return null
+  return unwrap<ThreadDetailData>(res)
 }
 
 export async function sendMessage(
