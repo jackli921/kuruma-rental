@@ -247,6 +247,10 @@ describe('Maintenance Logs', () => {
         insuranceExpiryDate: null,
       })
 
+      // Guard: snapshot must have captured the vehicle — if store field was renamed,
+      // the snapshot would be empty and rollback silently does nothing.
+      expect(await vehicleRepo.findById(vehicle.id)).toBeDefined()
+
       // toggleStatus should propagate the error from the transaction
       await expect(service.toggleStatus(vehicle.id, 'MAINTENANCE', 'Oil change')).rejects.toThrow(
         'simulated DB failure',
