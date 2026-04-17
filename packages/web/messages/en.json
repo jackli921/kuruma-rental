@@ -377,7 +377,9 @@
       "noMessages": "No messages in this conversation yet.",
       "you": "You",
       "today": "Today",
-      "yesterday": "Yesterday"
+      "yesterday": "Yesterday",
+      "back": "Back to inbox",
+      "composeLabel": "Compose message"
     }
   },
   "bookings": {
