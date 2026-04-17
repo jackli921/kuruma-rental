@@ -66,6 +66,53 @@ describe('classes api', () => {
     })
   })
 
+  describe('fetchClassBySlug', () => {
+    it('calls GET /vehicle-classes/by-slug/:slug and unwraps response', async () => {
+      const spy = vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(
+        new Response(JSON.stringify({ success: true, data: mockClass }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        }),
+      )
+
+      const { fetchClassBySlug } = await import('@/modules/classes/api')
+      const result = await fetchClassBySlug('compact')
+
+      const calledUrl = spy.mock.calls[0]?.[0]?.toString() ?? ''
+      expect(calledUrl).toBe(`${API_BASE}/vehicle-classes/by-slug/compact`)
+      expect(result).toEqual(mockClass)
+    })
+
+    it('returns null on 404 not-found', async () => {
+      vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(
+        new Response(JSON.stringify({ success: false, error: 'Vehicle class not found' }), {
+          status: 404,
+          headers: { 'Content-Type': 'application/json' },
+        }),
+      )
+
+      const { fetchClassBySlug } = await import('@/modules/classes/api')
+      const result = await fetchClassBySlug('nope')
+      expect(result).toBeNull()
+    })
+
+    it('does not send Authorization header when no token is given (public endpoint)', async () => {
+      const spy = vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(
+        new Response(JSON.stringify({ success: true, data: mockClass }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        }),
+      )
+
+      const { fetchClassBySlug } = await import('@/modules/classes/api')
+      await fetchClassBySlug('compact')
+
+      const init = spy.mock.calls[0]?.[1] as RequestInit | undefined
+      const headers = (init?.headers ?? {}) as Record<string, string>
+      expect(headers.Authorization).toBeUndefined()
+    })
+  })
+
   describe('createClass', () => {
     it('POSTs JSON and returns created class', async () => {
       const input = {
