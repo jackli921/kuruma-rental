@@ -14,15 +14,20 @@ export function createVehicleClassRoutes(
 ) {
   const app = new Hono()
 
-  // Public catalog endpoints are unauthenticated so a stricter IP-based
-  // limit sits on top of the global limiter to blunt scraping and probes.
-  // If the binding is absent (local dev, test), the rate-limit middleware
-  // isn't attached — the global limiter in createApp() still covers DoS.
+  // Public catalog GETs are unauthenticated so a stricter IP-based limit
+  // sits on top of the global limiter to blunt scraping and probes. Scoped
+  // to GET only so staff POST/PATCH/DELETE on /vehicle-classes/:id don't
+  // share the public bucket (different traffic shape, different tuning).
+  // If the binding is absent (local dev, test), the middleware isn't
+  // attached — the global limiter in createApp() still covers DoS.
   if (publicCatalogLimiter) {
     const byIp = (c: Context) => c.req.header('cf-connecting-ip') ?? ''
-    app.use('/vehicle-classes', rateLimit(publicCatalogLimiter, byIp))
-    app.use('/vehicle-classes/by-slug/*', rateLimit(publicCatalogLimiter, byIp))
-    app.use('/vehicle-classes/:id', rateLimit(publicCatalogLimiter, byIp))
+    const limiter = rateLimit(publicCatalogLimiter, byIp)
+    const onlyGet = (mw: typeof limiter) => async (c: Context, next: () => Promise<void>) =>
+      c.req.method === 'GET' ? mw(c, next) : next()
+    app.use('/vehicle-classes', onlyGet(limiter))
+    app.use('/vehicle-classes/by-slug/*', onlyGet(limiter))
+    app.use('/vehicle-classes/:id', onlyGet(limiter))
   }
 
   return app

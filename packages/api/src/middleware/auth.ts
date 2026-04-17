@@ -67,9 +67,11 @@ export function requireUser(c: { get: (key: string) => unknown }): AuthUser {
 export function requireAuth(): MiddlewareHandler {
   return async (c: Context, next) => {
     // Idempotent: if an earlier middleware already authenticated the caller,
-    // don't re-verify. This lets per-route requireAuth() compose with a
-    // globally-mounted requireAuth() (or a test auth shim) without
-    // double-verifying the token.
+    // skip re-verification. Auth is a property of the request, not of the
+    // pipeline position — re-verifying a JWT we already verified is waste.
+    // This also lets tests set a user via testAuthMiddleware without the
+    // full JWT round-trip. Invariant: `c.get('user')` is only ever written
+    // by auth code paths (this file + test helpers), never from user input.
     if (getUser(c)) return next()
 
     const authHeader = c.req.header('Authorization')

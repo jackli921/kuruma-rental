@@ -33,13 +33,18 @@ async function createClass(input = validInput()) {
   })
 }
 
+function makeService(repo: InMemoryVehicleClassRepository) {
+  const vehicleRepo = new InMemoryVehicleRepository()
+  const bookingRepo = new InMemoryBookingRepository()
+  return new VehicleClassService(repo, new InMemoryAvailabilityRepository(vehicleRepo, bookingRepo))
+}
+
 describe('Vehicle Class CRUD Routes', () => {
   beforeEach(() => {
     const repo = new InMemoryVehicleClassRepository()
-    const service = new VehicleClassService(repo)
     app = new Hono()
     app.use('*', testAuthMiddleware('staff-user', 'STAFF'))
-    app.route('/', createVehicleClassRoutes(service))
+    app.route('/', createVehicleClassRoutes(makeService(repo)))
   })
 
   describe('GET /vehicle-classes', () => {
@@ -212,7 +217,7 @@ describe('Vehicle Class CRUD Routes', () => {
     it('RENTER can GET vehicle classes', async () => {
       const renterApp = new Hono()
       const repo = new InMemoryVehicleClassRepository()
-      const service = new VehicleClassService(repo)
+      const service = makeService(repo)
       renterApp.use('*', testAuthMiddleware('renter-user', 'RENTER'))
       renterApp.route('/', createVehicleClassRoutes(service))
       const res = await renterApp.request('/vehicle-classes')
@@ -222,7 +227,7 @@ describe('Vehicle Class CRUD Routes', () => {
     it('RENTER gets 403 on POST', async () => {
       const renterApp = new Hono()
       const repo = new InMemoryVehicleClassRepository()
-      const service = new VehicleClassService(repo)
+      const service = makeService(repo)
       renterApp.use('*', testAuthMiddleware('renter-user', 'RENTER'))
       renterApp.route('/', createVehicleClassRoutes(service))
       const res = await renterApp.request('/vehicle-classes', {
@@ -237,7 +242,7 @@ describe('Vehicle Class CRUD Routes', () => {
   describe('Public access (no auth)', () => {
     function publicApp() {
       const repo = new InMemoryVehicleClassRepository()
-      const service = new VehicleClassService(repo)
+      const service = makeService(repo)
       const a = new Hono()
       // Deliberately NO auth middleware — renter catalog must be crawlable.
       a.route('/', createVehicleClassRoutes(service))

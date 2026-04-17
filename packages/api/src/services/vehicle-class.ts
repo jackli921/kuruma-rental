@@ -22,7 +22,7 @@ export type AvailabilityResult =
 export class VehicleClassService {
   constructor(
     private readonly repo: VehicleClassRepository,
-    private readonly availabilityRepo?: AvailabilityRepository,
+    private readonly availabilityRepo: AvailabilityRepository,
   ) {}
 
   async getAvailabilityBySlug(slug: string, from: Date, to: Date): Promise<AvailabilityResult> {
@@ -30,9 +30,6 @@ export class VehicleClassService {
     if (!vc) return { ok: false, error: 'Vehicle class not found', status: 404 }
     if (vc.status === 'ARCHIVED') {
       return { ok: false, error: 'Vehicle class not found', status: 404 }
-    }
-    if (!this.availabilityRepo) {
-      return { ok: false, error: 'Availability not configured', status: 500 }
     }
     const counts = await this.availabilityRepo.countClassAvailability(vc.id, from, to)
     return { ok: true, vehicleClass: vc, counts }
