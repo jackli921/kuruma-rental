@@ -33,7 +33,55 @@ export function stripUndefined<T extends Record<string, unknown>>(obj: T): Parti
   return result as Partial<T>
 }
 
-// --- Request parsing helpers ---
+// --- Pagination helpers ---
+
+type LimitOptions = { defaultLimit?: number; maxLimit?: number }
+type LimitSuccess = { ok: true; limit: number }
+type PaginationSuccess = { ok: true; limit: number; offset: number }
+type ParseFailure = { ok: false; response: Response }
+
+const MAX_OFFSET = 1_000_000
+
+// Strict non-negative integer parse. Rejects "10abc", "1.5", "-1", "1e5",
+// unlike Number.parseInt which silently accepts the prefix of malformed input.
+function parseNonNegativeInt(raw: string): number | undefined {
+  if (!/^\d+$/.test(raw)) return undefined
+  const n = Number(raw)
+  return Number.isSafeInteger(n) ? n : undefined
+}
+
+/** Parse `limit` query param only. Use for cursor-based pagination where
+ *  `offset` is not meaningful. Defaults: limit=25, max=100. */
+export function parseLimit(c: Context, opts?: LimitOptions): LimitSuccess | ParseFailure {
+  const maxLimit = opts?.maxLimit ?? 100
+  const limitParam = c.req.query('limit')
+  const limit =
+    limitParam === undefined ? (opts?.defaultLimit ?? 25) : parseNonNegativeInt(limitParam)
+  if (limit === undefined || limit < 1 || limit > maxLimit) {
+    return { ok: false, response: fail(c, `limit must be between 1 and ${maxLimit}`, 400) }
+  }
+  return { ok: true, limit }
+}
+
+/** Parse `limit` and `offset` query params. Use for offset-based pagination.
+ *  Defaults: limit=25, max=100, offset=0, maxOffset=1,000,000. */
+export function parsePagination(c: Context, opts?: LimitOptions): PaginationSuccess | ParseFailure {
+  const limitResult = parseLimit(c, opts)
+  if (!limitResult.ok) return limitResult
+
+  const offsetParam = c.req.query('offset')
+  const offset = offsetParam === undefined ? 0 : parseNonNegativeInt(offsetParam)
+  if (offset === undefined || offset > MAX_OFFSET) {
+    return {
+      ok: false,
+      response: fail(c, `offset must be a non-negative integer (max ${MAX_OFFSET})`, 400),
+    }
+  }
+
+  return { ok: true, limit: limitResult.limit, offset }
+}
+
+// --- Body parsing helpers ---
 
 type ParseBodySuccess<T> = { ok: true; data: T }
 type ParseBodyFailure = { ok: false; response: Response }
