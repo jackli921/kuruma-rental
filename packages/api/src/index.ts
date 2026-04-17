@@ -52,19 +52,26 @@ import type {
 } from './repositories/types'
 import { createAvailabilityRoutes } from './routes/availability'
 import { createBookingRoutes } from './routes/bookings'
+import { createCustomerRoutes } from './routes/customers'
 import { createFleetOverviewRoutes } from './routes/fleet-overview'
 import health from './routes/health'
 import { createMaintenanceLogRoutes } from './routes/maintenance-logs'
 import { createMessageRoutes } from './routes/messages'
 import { createStatsRoutes } from './routes/stats'
+import { createTranslateRoutes } from './routes/translate'
 import { createUserRoutes } from './routes/users'
 import { createVehicleClassRoutes } from './routes/vehicle-classes'
 import { createVehicleDetailRoutes } from './routes/vehicle-detail'
 import { createVehiclePhotoRoutes } from './routes/vehicle-photos'
 import { createVehicleRoutes } from './routes/vehicles'
 import { BookingService } from './services/booking'
+import { CustomerService } from './services/customer'
+import { GoogleTranslationProvider } from './services/google-translation-provider'
 import { MaintenanceService } from './services/maintenance'
+import { MessageTranslationService } from './services/message-translation'
+import type { TranslationProvider } from './services/translation-provider'
 import { VehicleClassService } from './services/vehicle-class'
+import { VehiclePhotoService } from './services/vehicle-photo'
 
 export function createApp(overrides?: {
   vehicleRepo: VehicleRepository
@@ -163,6 +170,28 @@ export function createApp(overrides?: {
     photoStorage = new InMemoryPhotoStorage()
   }
 
+  // Translation provider: real Google when the key is set. In production
+  // without a key, a sentinel provider throws on first use (not at boot,
+  // so unrelated tests can still run createApp). The stub is dev-only
+  // so a secret drift can't ship working translations silently.
+  const translationProvider: TranslationProvider = (() => {
+    const key = process.env.GOOGLE_TRANSLATE_API_KEY
+    if (key) return new GoogleTranslationProvider(key)
+    if (process.env.NODE_ENV === 'production') {
+      return {
+        translate: async () => {
+          throw new Error('GOOGLE_TRANSLATE_API_KEY not configured')
+        },
+      }
+    }
+    return {
+      translate: async (text, source, targetLanguage) => ({
+        translatedText: `[${targetLanguage}] ${text}`,
+        detectedLanguage: source ?? targetLanguage,
+      }),
+    }
+  })()
+
   const app = new Hono()
 
   // Global error handlers — prevent stack traces leaking to clients.
@@ -211,10 +240,12 @@ export function createApp(overrides?: {
   app.use('/bookings/*', requireAuth())
   app.use('/availability/*', requireAuth())
   app.use('/threads/*', requireAuth())
+  app.use('/customers/*', requireAuth())
   app.use('/users/*', requireAuth())
 
   const vehicleClassService = new VehicleClassService(vehicleClassRepo)
   const bookingService = new BookingService(bookingRepo, vehicleRepo, userRepo)
+  const customerService = new CustomerService(userRepo)
   const maintenanceService = new MaintenanceService(
     vehicleRepo,
     maintenanceLogRepo,
@@ -229,12 +260,17 @@ export function createApp(overrides?: {
     .route('/', createVehicleDetailRoutes(vehicleDetailRepo))
     .route('/', createVehicleClassRoutes(vehicleClassService))
     .route('/', createVehicleRoutes(vehicleRepo, maintenanceService))
-    .route('/', createVehiclePhotoRoutes(vehicleRepo, photoStorage))
+    .route('/', createVehiclePhotoRoutes(new VehiclePhotoService(vehicleRepo, photoStorage)))
     .route('/', createMaintenanceLogRoutes(maintenanceService))
     .route('/', createBookingRoutes(bookingService))
     .route('/', createAvailabilityRoutes(availabilityRepo))
     .route('/', createStatsRoutes(statsRepo))
     .route('/', createMessageRoutes(threadRepo, messageRepo))
+    .route(
+      '/',
+      createTranslateRoutes(new MessageTranslationService(messageRepo, translationProvider)),
+    )
+    .route('/', createCustomerRoutes(customerService))
     .route('/', createUserRoutes(userRepo, threadRepo))
 }
 

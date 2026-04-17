@@ -26,6 +26,14 @@ export interface CalendarResource {
   resourceTitle: string
 }
 
+export interface SlotSelectInfo {
+  start: Date
+  end: Date
+  // Present in day view where the calendar has vehicle resource columns.
+  // The owner clicking column X means "book vehicle X at this time".
+  resourceId?: string
+}
+
 interface BookingsCalendarProps {
   readonly events: CalendarEvent[]
   readonly resources?: CalendarResource[]
@@ -35,6 +43,7 @@ interface BookingsCalendarProps {
   readonly onDateChange: (date: Date) => void
   readonly views?: View[]
   readonly onBookingUpdate?: (updated: CalendarBooking) => void
+  readonly onSelectSlot?: (slotInfo: SlotSelectInfo) => void
 }
 
 export function toCalendarEvents(bookings: CalendarBooking[]): CalendarEvent[] {
@@ -60,6 +69,7 @@ export function BookingsCalendar({
   onDateChange,
   views = ['day', 'week', 'month'],
   onBookingUpdate,
+  onSelectSlot,
 }: BookingsCalendarProps) {
   const locale = useLocale()
   const t = useTranslations('business.bookings.calendar')
@@ -128,6 +138,16 @@ export function BookingsCalendar({
 
   const calendarStyle = useMemo(() => ({ height: view === 'month' ? 600 : 700 }), [view])
 
+  const handleSlotSelect = useCallback(
+    (slotInfo: { start: Date; end: Date; resourceId?: string | number | undefined }) => {
+      if (!onSelectSlot) return
+      const payload: SlotSelectInfo = { start: slotInfo.start, end: slotInfo.end }
+      if (typeof slotInfo.resourceId === 'string') payload.resourceId = slotInfo.resourceId
+      onSelectSlot(payload)
+    },
+    [onSelectSlot],
+  )
+
   const handleClose = useCallback(() => setSelectedBooking(null), [])
 
   const handleBookingUpdate = useCallback(
@@ -159,6 +179,8 @@ export function BookingsCalendar({
         onView={onViewChange}
         onNavigate={onDateChange}
         onSelectEvent={handleSelectEvent}
+        selectable={onSelectSlot ? true : undefined}
+        onSelectSlot={onSelectSlot ? handleSlotSelect : undefined}
         eventPropGetter={eventPropGetter}
         views={views}
         step={60}

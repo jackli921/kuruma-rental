@@ -140,13 +140,56 @@
         },
         "noEventsInRange": "この期間に予約はありません",
         "showMore": "+{count}件",
-        "viewFullDetails": "詳細を表示"
+        "viewFullDetails": "詳細を表示",
+        "sidebar": {
+          "title": "フィルター",
+          "vehicles": { "title": "車両", "all": "すべて", "none": "なし" },
+          "statuses": {
+            "title": "ステータス",
+            "CONFIRMED": "確定",
+            "ACTIVE": "利用中",
+            "COMPLETED": "完了",
+            "CANCELLED": "キャンセル"
+          }
+        }
       },
       "detail": {
         "stubTitle": "予約詳細",
         "stubBody": "予約詳細ページは近日公開予定です — ID: {id}",
         "backToCalendar": "カレンダーに戻る"
-      }
+      },
+      "manualBooking": {
+        "title": "手動予約の作成",
+        "description": "来店・電話のお客様の予約を作成",
+        "customer": "お客様",
+        "searchExisting": "既存を検索",
+        "createNew": "新規作成",
+        "searchPlaceholder": "名前、メール、電話で検索...",
+        "searching": "検索中...",
+        "change": "変更",
+        "name": "名前",
+        "namePlaceholder": "お客様の名前",
+        "email": "メール",
+        "phone": "電話番号",
+        "language": "言語",
+        "bookingDetails": "予約詳細",
+        "vehicle": "車両",
+        "selectVehicle": "車両を選択",
+        "startAt": "開始",
+        "endAt": "終了",
+        "notes": "メモ",
+        "notesPlaceholder": "予約に関するメモ（任意）...",
+        "cancel": "キャンセル",
+        "creating": "作成中...",
+        "createBooking": "予約を作成",
+        "selectCustomer": "お客様を選択してください",
+        "nameRequired": "名前は必須です",
+        "contactRequired": "メールか電話番号が必要です",
+        "fillAllFields": "車両、開始時間、終了時間は必須です",
+        "vehicleUnavailable": "選択した期間は利用できません",
+        "unexpectedError": "予期しないエラーが発生しました"
+      },
+      "newBooking": "新規予約"
     },
     "vehicles": {
       "title": "車両管理",

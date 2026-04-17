@@ -7,6 +7,7 @@ import { z } from 'zod'
 export const createBookingSchema = z
   .object({
     vehicleId: z.string().uuid('Vehicle ID must be a valid UUID'),
+    renterId: z.string().uuid('Renter ID must be a valid UUID').optional(),
     startAt: z.string().datetime({ message: 'Must be ISO datetime' }),
     endAt: z.string().datetime({ message: 'Must be ISO datetime' }),
     notes: z.string().optional(),

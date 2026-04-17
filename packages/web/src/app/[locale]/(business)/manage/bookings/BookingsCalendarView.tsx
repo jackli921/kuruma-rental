@@ -3,9 +3,14 @@
 import {
   BookingsCalendar,
   type CalendarResource,
+  type SlotSelectInfo,
   toCalendarEvents,
 } from '@/components/calendar/BookingsCalendar'
+import { CalendarSidebar } from '@/components/calendar/CalendarSidebar'
+import { ManualBookingDialog } from '@/components/calendar/ManualBookingDialog'
+import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
+import { useCalendarFilters } from '@/hooks/useCalendarFilters'
 import { fetchFleetOverviewAction } from '@/lib/vehicle-actions'
 import { keepPreviousData, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
@@ -18,8 +23,9 @@ import {
   startOfMonth,
   startOfWeek,
 } from 'date-fns'
+import { useTranslations } from 'next-intl'
 import { useRouter, useSearchParams } from 'next/navigation'
-import { useCallback, useMemo } from 'react'
+import { useCallback, useMemo, useState } from 'react'
 import type { View } from 'react-big-calendar'
 import { fetchAllCalendarBookings } from './booking-actions'
 
@@ -50,18 +56,29 @@ function parseViewParam(param: string | null): View {
   return 'week'
 }
 
+// Format a Date for <input type="datetime-local"> — needs local-time wall clock,
+// not a UTC ISO string (which would shift by the browser's timezone offset).
+function toLocalDatetime(date: Date): string {
+  const pad = (n: number) => String(n).padStart(2, '0')
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`
+}
+
 export function BookingsCalendarView() {
+  const t = useTranslations('business.bookings')
   const queryClient = useQueryClient()
   const router = useRouter()
   const searchParams = useSearchParams()
 
   // Derive state directly from the URL — single source of truth.
-  // Back/forward buttons update searchParams, which triggers re-render
-  // with the correct view/date automatically.
   const view = parseViewParam(searchParams.get('view'))
   const date = useMemo(() => parseDateParam(searchParams.get('date')), [searchParams])
-
   const range = useMemo(() => computeRange(view, date), [view, date])
+
+  const [showManualBooking, setShowManualBooking] = useState(false)
+  const [slotDefaults, setSlotDefaults] = useState<{
+    startAt?: string
+    vehicleId?: string
+  }>({})
 
   const updateUrl = useCallback(
     (nextView: View, nextDate: Date) => {
@@ -102,15 +119,50 @@ export function BookingsCalendarView() {
     },
   })
 
-  const resources: CalendarResource[] = useMemo(
-    () =>
-      fleetOverviews
-        .filter((v) => v.status !== 'RETIRED')
-        .map((v) => ({ resourceId: v.id, resourceTitle: v.name })),
+  const activeVehicles = useMemo(
+    () => fleetOverviews.filter((v) => v.status !== 'RETIRED'),
     [fleetOverviews],
   )
 
-  const events = useMemo(() => toCalendarEvents(bookings), [bookings])
+  const resources: CalendarResource[] = useMemo(
+    () => activeVehicles.map((v) => ({ resourceId: v.id, resourceTitle: v.name })),
+    [activeVehicles],
+  )
+
+  const knownVehicleIds = useMemo(() => activeVehicles.map((v) => v.id), [activeVehicles])
+  const filters = useCalendarFilters(knownVehicleIds)
+
+  const allEvents = useMemo(() => toCalendarEvents(bookings), [bookings])
+  const events = useMemo(() => filters.filterEvents(allEvents), [allEvents, filters])
+  const visibleResources = useMemo(() => filters.filterResources(resources), [resources, filters])
+
+  const sidebarVehicles = useMemo(
+    () => activeVehicles.map((v) => ({ id: v.id, name: v.name })),
+    [activeVehicles],
+  )
+
+  const handleInvalidate = useCallback(() => {
+    queryClient.invalidateQueries({ queryKey: ['bookings', 'calendar'] })
+  }, [queryClient])
+
+  const handleSelectSlot = useCallback((slotInfo: SlotSelectInfo) => {
+    const next: { startAt?: string; vehicleId?: string } = {
+      startAt: toLocalDatetime(slotInfo.start),
+    }
+    if (slotInfo.resourceId) next.vehicleId = slotInfo.resourceId
+    setSlotDefaults(next)
+    setShowManualBooking(true)
+  }, [])
+
+  const handleOpenDialog = useCallback(() => {
+    setSlotDefaults({})
+    setShowManualBooking(true)
+  }, [])
+
+  const handleCloseDialog = useCallback(() => {
+    setShowManualBooking(false)
+    setSlotDefaults({})
+  }, [])
 
   if (bookingsInitialLoading) {
     return (
@@ -126,21 +178,32 @@ export function BookingsCalendarView() {
   }
 
   return (
-    <div className="mt-6">
-      <BookingsCalendar
-        events={events}
-        resources={resources}
-        view={view}
-        date={date}
-        views={['day', 'week', 'month']}
-        onViewChange={handleViewChange}
-        onDateChange={handleDateChange}
-        onBookingUpdate={() => {
-          queryClient.invalidateQueries({
-            queryKey: ['bookings', 'calendar'],
-          })
-        }}
-      />
+    <div className="mt-6 flex gap-4">
+      <CalendarSidebar vehicles={sidebarVehicles} filters={filters} />
+      <div className="flex-1 min-w-0">
+        <div className="flex justify-end mb-4">
+          <Button onClick={handleOpenDialog}>{t('newBooking')}</Button>
+        </div>
+        <BookingsCalendar
+          events={events}
+          resources={visibleResources}
+          view={view}
+          date={date}
+          views={['day', 'week', 'month']}
+          onViewChange={handleViewChange}
+          onDateChange={handleDateChange}
+          onBookingUpdate={handleInvalidate}
+          onSelectSlot={handleSelectSlot}
+        />
+        <ManualBookingDialog
+          open={showManualBooking}
+          onClose={handleCloseDialog}
+          onBookingCreated={handleInvalidate}
+          vehicles={fleetOverviews}
+          defaultStartAt={slotDefaults.startAt}
+          defaultVehicleId={slotDefaults.vehicleId}
+        />
+      </div>
     </div>
   )
 }
