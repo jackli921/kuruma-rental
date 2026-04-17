@@ -1,5 +1,6 @@
 import { VehicleBookingCalendar } from '@/components/calendar/VehicleBookingCalendar'
 import { buttonVariants } from '@/components/ui/button'
+import { PhotoUpload } from '@/components/vehicles/PhotoUpload'
 import { VehicleStatusBadge } from '@/components/vehicles/VehicleStatusBadge'
 import { Link } from '@/i18n/routing'
 import { formatJpy } from '@/lib/format'
@@ -126,6 +127,9 @@ export function VehicleDetail({ vehicle, t }: VehicleDetailProps) {
 
       {/* Booking Calendar */}
       <VehicleBookingCalendar vehicleId={vehicle.id} />
+
+      {/* Photo management */}
+      <PhotoUpload key={vehicle.id} vehicleId={vehicle.id} initialPhotos={photos} />
     </div>
   )
 }
