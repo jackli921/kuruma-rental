@@ -40,12 +40,11 @@ export class InMemoryVehicleDetailRepository implements VehicleDetailRepository 
     private readonly maintenanceLogRepo?: MaintenanceLogRepository,
   ) {}
 
-  async findVehicleDetail(vehicleId: string): Promise<VehicleDetail | undefined> {
+  async findVehicleDetail(vehicleId: string, now: Date): Promise<VehicleDetail | undefined> {
     const vehicle = await this.vehicleRepo.findById(vehicleId)
     if (!vehicle) return undefined
 
     const allBookings = await this.bookingRepo.findAll(SYSTEM_CONTEXT, { vehicleId })
-    const now = new Date()
 
     const maintenanceLogs = this.maintenanceLogRepo
       ? (await this.maintenanceLogRepo.findByVehicleId(vehicleId)).map((log) => ({
