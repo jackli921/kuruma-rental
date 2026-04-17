@@ -1,5 +1,5 @@
 import { users } from '@kuruma/shared/db/schema'
-import { eq, ilike, inArray, or } from 'drizzle-orm'
+import { and, eq, ilike, inArray, or } from 'drizzle-orm'
 import type { User } from '../../stores'
 import type { UserRepository } from '../types'
 import type { Db } from './shared'
@@ -10,6 +10,18 @@ const userColumns = {
   email: users.email,
   phone: users.phone,
   language: users.language,
+  role: users.role,
+}
+
+const PLACEHOLDER_EMAIL_SUFFIX = '@placeholder.kuruma.local'
+
+// Auth.js requires users.email NOT NULL, so phone-only customers need a synthetic email.
+// The sentinel is never surfaced to API callers — the repo maps it back to null on read.
+function maskPlaceholderEmail<T extends { email: string | null }>(row: T): T {
+  if (row.email?.endsWith(PLACEHOLDER_EMAIL_SUFFIX)) {
+    return { ...row, email: null }
+  }
+  return row
 }
 
 export class DrizzleUserRepository implements UserRepository {
@@ -17,11 +29,8 @@ export class DrizzleUserRepository implements UserRepository {
 
   async findByIds(ids: string[]): Promise<User[]> {
     if (ids.length === 0) return []
-    const rows = await this.db
-      .select(userColumns)
-      .from(users)
-      .where(inArray(users.id, ids))
-    return rows as User[]
+    const rows = await this.db.select(userColumns).from(users).where(inArray(users.id, ids))
+    return rows.map(maskPlaceholderEmail) as User[]
   }
 
   async search(query: string): Promise<User[]> {
@@ -30,14 +39,17 @@ export class DrizzleUserRepository implements UserRepository {
       .select(userColumns)
       .from(users)
       .where(
-        or(
-          ilike(users.name, pattern),
-          ilike(users.email, pattern),
-          ilike(users.phone, pattern),
+        and(
+          eq(users.role, 'RENTER'),
+          or(
+            ilike(users.name, pattern),
+            ilike(users.email, pattern),
+            ilike(users.phone, pattern),
+          ),
         ),
       )
       .limit(20)
-    return rows as User[]
+    return rows.map(maskPlaceholderEmail) as User[]
   }
 
   async quickCreate(data: {
@@ -46,16 +58,35 @@ export class DrizzleUserRepository implements UserRepository {
     phone: string | null
     language: string
   }): Promise<User> {
-    const [row] = await this.db
+    // Insert with ON CONFLICT for email AND phone so concurrent walk-in requests
+    // with the same contact info resolve to the same row instead of duplicating.
+    // The placeholder email is only used when caller supplied no email.
+    const insertEmail = data.email ?? `phone-${crypto.randomUUID()}${PLACEHOLDER_EMAIL_SUFFIX}`
+
+    const [inserted] = await this.db
       .insert(users)
       .values({
         name: data.name,
-        email: data.email ?? `phone-${crypto.randomUUID()}@placeholder.kuruma.local`,
+        email: insertEmail,
         phone: data.phone,
         language: data.language,
       })
+      .onConflictDoNothing()
       .returning(userColumns)
-    return row as User
+
+    if (inserted) return maskPlaceholderEmail(inserted) as User
+
+    // Conflict happened — fetch the existing row by whichever field caused it.
+    const existing = data.email
+      ? await this.findByEmail(data.email)
+      : data.phone
+        ? await this.findByPhone(data.phone)
+        : undefined
+
+    if (!existing) {
+      throw new Error('quickCreate: insert conflicted but existing row not found')
+    }
+    return existing
   }
 
   async findByEmail(email: string): Promise<User | undefined> {
@@ -64,7 +95,7 @@ export class DrizzleUserRepository implements UserRepository {
       .from(users)
       .where(eq(users.email, email))
       .limit(1)
-    return row as User | undefined
+    return row ? (maskPlaceholderEmail(row) as User) : undefined
   }
 
   async findByPhone(phone: string): Promise<User | undefined> {
@@ -73,6 +104,6 @@ export class DrizzleUserRepository implements UserRepository {
       .from(users)
       .where(eq(users.phone, phone))
       .limit(1)
-    return row as User | undefined
+    return row ? (maskPlaceholderEmail(row) as User) : undefined
   }
 }

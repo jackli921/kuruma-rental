@@ -101,7 +101,9 @@ export class BookingService {
     filters: BookingFilters,
   ): Promise<{
     data: (Booking & {
-      renter?: { id: string; name: string | null; email: string; language: string } | undefined
+      renter?:
+        | { id: string; name: string | null; email: string | null; language: string }
+        | undefined
     })[]
     nextCursor: string | null
   }> {
@@ -132,6 +134,19 @@ export class BookingService {
     input: CreateBookingInput,
     now: Date = new Date(),
   ): Promise<CreateBookingResult> {
+    // Staff/admin override path: validate that the target renterId exists and
+    // is a RENTER — prevents bookings attached to other staff/admin accounts
+    // and surfaces FK failures as a friendly 400 rather than a generic 500.
+    if (input.renterId !== ctx.userId && this.userRepo) {
+      const [renter] = await this.userRepo.findByIds([input.renterId])
+      if (!renter) {
+        return { ok: false, status: 400, error: 'Renter not found' }
+      }
+      if ((renter.role ?? 'RENTER') !== 'RENTER') {
+        return { ok: false, status: 400, error: 'Target user is not a renter' }
+      }
+    }
+
     // Idempotency: if a key was provided, check for an existing booking first.
     if (input.idempotencyKey) {
       const existing = await this.bookingRepo.findByIdempotencyKey(ctx, input.idempotencyKey)

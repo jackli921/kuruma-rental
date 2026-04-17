@@ -3,8 +3,9 @@ import { beforeEach, describe, expect, it } from 'vitest'
 import { createApp } from '../index'
 import { InMemoryAvailabilityRepository } from '../repositories/in-memory/availability'
 import { InMemoryBookingRepository } from '../repositories/in-memory/booking'
+import { InMemoryUserRepository } from '../repositories/in-memory/user'
 import { InMemoryVehicleRepository } from '../repositories/in-memory/vehicle'
-import type { Vehicle } from '../stores'
+import type { User, Vehicle } from '../stores'
 
 const AUTH_SECRET = 'test-secret-for-manual-booking-tests'
 
@@ -47,9 +48,21 @@ function makeTestVehicle(overrides?: Partial<Vehicle>): Vehicle {
   }
 }
 
+function makeRenter(id: string): User {
+  return {
+    id,
+    name: 'Test Renter',
+    email: `renter-${id}@test.local`,
+    phone: null,
+    language: 'en',
+    role: 'RENTER',
+  }
+}
+
 describe('Manual booking (staff/admin renterId override + advance rule skip)', () => {
   let vehicleRepo: InMemoryVehicleRepository
   let bookingRepo: InMemoryBookingRepository
+  let userStore: Map<string, User>
   let app: ReturnType<typeof createApp>
   let vehicle: Vehicle
 
@@ -62,14 +75,17 @@ describe('Manual booking (staff/admin renterId override + advance rule skip)', (
 
     vehicleRepo = new InMemoryVehicleRepository(vehicleStore)
     bookingRepo = new InMemoryBookingRepository()
+    userStore = new Map<string, User>()
+    const userRepo = new InMemoryUserRepository(userStore)
     const availabilityRepo = new InMemoryAvailabilityRepository(vehicleRepo, bookingRepo)
 
-    app = createApp({ vehicleRepo, bookingRepo, availabilityRepo })
+    app = createApp({ vehicleRepo, bookingRepo, availabilityRepo, userRepo })
   })
 
   it('staff can create booking with custom renterId', async () => {
     const staffId = crypto.randomUUID()
     const customerId = crypto.randomUUID()
+    userStore.set(customerId, makeRenter(customerId))
     const token = await createTestToken({ id: staffId, role: 'STAFF' })
 
     // Start 48 hours from now to satisfy advance booking rule
@@ -217,5 +233,61 @@ describe('Manual booking (staff/admin renterId override + advance rule skip)', (
     const body = (await res.json()) as { success: boolean; code: string }
     expect(body.success).toBe(false)
     expect(body.code).toBe('RENTAL_RULE_ADVANCE_BOOKING')
+  })
+
+  it('rejects manual booking when target renterId does not exist', async () => {
+    const staffId = crypto.randomUUID()
+    const token = await createTestToken({ id: staffId, role: 'STAFF' })
+    const startAt = new Date(Date.now() + 48 * 60 * 60 * 1000)
+    const endAt = new Date(startAt.getTime() + 4 * 60 * 60 * 1000)
+
+    const res = await app.request('/bookings', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({
+        vehicleId: vehicle.id,
+        renterId: crypto.randomUUID(), // unknown user
+        startAt: startAt.toISOString(),
+        endAt: endAt.toISOString(),
+        source: 'MANUAL',
+      }),
+    })
+
+    expect(res.status).toBe(400)
+    const body = (await res.json()) as { success: boolean; error: string }
+    expect(body.success).toBe(false)
+    expect(body.error).toContain('Renter not found')
+  })
+
+  it('rejects manual booking when target user is not a RENTER', async () => {
+    const staffId = crypto.randomUUID()
+    const otherStaffId = crypto.randomUUID()
+    userStore.set(otherStaffId, { ...makeRenter(otherStaffId), role: 'STAFF' })
+    const token = await createTestToken({ id: staffId, role: 'STAFF' })
+    const startAt = new Date(Date.now() + 48 * 60 * 60 * 1000)
+    const endAt = new Date(startAt.getTime() + 4 * 60 * 60 * 1000)
+
+    const res = await app.request('/bookings', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({
+        vehicleId: vehicle.id,
+        renterId: otherStaffId,
+        startAt: startAt.toISOString(),
+        endAt: endAt.toISOString(),
+        source: 'MANUAL',
+      }),
+    })
+
+    expect(res.status).toBe(400)
+    const body = (await res.json()) as { success: boolean; error: string }
+    expect(body.success).toBe(false)
+    expect(body.error).toContain('not a renter')
   })
 })

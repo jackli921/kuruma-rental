@@ -35,7 +35,7 @@ interface ManualBookingDialogProps {
 interface CustomerResult {
   id: string
   name: string | null
-  email: string
+  email: string | null
   phone: string | null
   language: string
 }
@@ -72,6 +72,18 @@ export function ManualBookingDialog({
   const [error, setError] = useState<string | null>(null)
   const [availabilityError, setAvailabilityError] = useState<string | null>(null)
   const searchTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  // Tracks the most recent search request. Responses with an older seq are
+  // discarded so a slower earlier-fired request can't clobber a later one.
+  const searchSeqRef = useRef(0)
+
+  // Clear any pending timeout on unmount so late-resolving fetches don't
+  // setState on a torn-down component.
+  useEffect(() => {
+    return () => {
+      if (searchTimeoutRef.current) clearTimeout(searchTimeoutRef.current)
+      searchSeqRef.current += 1
+    }
+  }, [])
 
   // Reset on open/close
   useEffect(() => {
@@ -93,7 +105,7 @@ export function ManualBookingDialog({
     }
   }, [open, defaultVehicleId, defaultStartAt])
 
-  // Debounced customer search
+  // Debounced customer search with sequence-based response ordering.
   const handleSearchChange = useCallback((value: string) => {
     setSearchQuery(value)
     setSelectedCustomer(null)
@@ -103,8 +115,11 @@ export function ManualBookingDialog({
       return
     }
     searchTimeoutRef.current = setTimeout(async () => {
+      const seq = ++searchSeqRef.current
       setIsSearching(true)
       const result = await searchCustomers(value)
+      // Drop responses from superseded requests (stale query) or unmount.
+      if (seq !== searchSeqRef.current) return
       if (result.success) setSearchResults(result.data)
       setIsSearching(false)
     }, 300)
@@ -262,8 +277,10 @@ export function ManualBookingDialog({
                             setSearchResults([])
                           }}
                         >
-                          <span className="font-medium">{c.name ?? c.email}</span>
-                          {c.name && <span className="text-muted-foreground ml-2">{c.email}</span>}
+                          <span className="font-medium">{c.name ?? c.email ?? c.phone}</span>
+                          {c.name && (
+                            <span className="text-muted-foreground ml-2">{c.email ?? c.phone}</span>
+                          )}
                         </button>
                       </li>
                     ))}
@@ -272,9 +289,11 @@ export function ManualBookingDialog({
                 {selectedCustomer && (
                   <div className="flex items-center justify-between bg-accent/50 rounded-md px-3 py-2 text-sm">
                     <span>
-                      {selectedCustomer.name ?? selectedCustomer.email}
+                      {selectedCustomer.name ?? selectedCustomer.email ?? selectedCustomer.phone}
                       {selectedCustomer.name && (
-                        <span className="text-muted-foreground ml-2">{selectedCustomer.email}</span>
+                        <span className="text-muted-foreground ml-2">
+                          {selectedCustomer.email ?? selectedCustomer.phone}
+                        </span>
                       )}
                     </span>
                     <Button

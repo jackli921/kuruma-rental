@@ -9,7 +9,7 @@ export type ActionResult<T = void> = { success: true; data: T } | { success: fal
 interface CustomerData {
   id: string
   name: string | null
-  email: string
+  email: string | null
   phone: string | null
   language: string
 }
