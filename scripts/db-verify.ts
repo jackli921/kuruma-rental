@@ -34,7 +34,7 @@ function listSnapshotFiles(): Set<string> {
   return new Set(readdirSync(META_DIR).filter((f) => /^\d{4}_snapshot\.json$/.test(f)))
 }
 
-type JournalEntry = { idx: number; tag: string }
+type JournalEntry = { idx: number; tag: string; when: number }
 type Journal = { entries: JournalEntry[] }
 
 let failures = 0
@@ -124,7 +124,44 @@ if (!existsSync(JOURNAL_PATH)) {
   }
 }
 
-// ---- Check 3: journal ↔ DB (only if DATABASE_URL set) ----
+// ---- Check 3: journal `when` monotonicity ----
+//
+// drizzle-kit migrate skips any entry whose `when` is older than the last-applied
+// migration's `when`, while still printing "migrations applied successfully". A
+// rebased or cherry-picked migration can inherit an earlier timestamp and be
+// silently skipped, causing schema drift at runtime. See CLAUDE.md gotcha
+// (2026-04-17 incident).
+if (existsSync(JOURNAL_PATH)) {
+  const journal = JSON.parse(readFileSync(JOURNAL_PATH, 'utf8')) as Journal
+  const outOfOrder: string[] = []
+  for (let i = 1; i < journal.entries.length; i++) {
+    const prev = journal.entries[i - 1]
+    const curr = journal.entries[i]
+    if (!prev || !curr) continue
+    if (curr.when <= prev.when) {
+      outOfOrder.push(
+        `${curr.tag} (when=${curr.when}) is not greater than ${prev.tag} (when=${prev.when})`,
+      )
+    }
+  }
+  if (outOfOrder.length > 0) {
+    fail(
+      'journal `when` monotonicity',
+      `Out-of-order timestamps will be silently skipped by drizzle-kit migrate.
+Bump each offending entry's \`when\` in drizzle/meta/_journal.json to
+max(previous.when) + 1, then re-run \`bun run db:migrate\`.
+
+${outOfOrder.join('\n')}`,
+    )
+  } else {
+    pass('journal `when` monotonicity', `${journal.entries.length} entries strictly increasing`)
+  }
+}
+
+// ---- Check 4: journal ↔ DB (only if DATABASE_URL set) ----
+//
+// CLAUDE.md gotcha: "migrations applied successfully" is not a reliable signal.
+// The authoritative check is applied-count vs journal-count.
 if (!process.env.DATABASE_URL) {
   console.log('• journal ↔ DB sync — skipped (no DATABASE_URL)')
 } else {
