@@ -173,6 +173,29 @@ describe('Message Routes', () => {
         const body = await res.json()
         expect(body.data.idempotencyKey).toBeNull()
       })
+
+      it('concurrent duplicate requests yield exactly one 201 and one 200', async () => {
+        const key = '00000000-0000-4000-8000-aaaa00000099'
+        const [r1, r2] = await Promise.all([
+          app.request('/threads', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ participantIds: [U1, U2], idempotencyKey: key }),
+          }),
+          app.request('/threads', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ participantIds: [U1, U2], idempotencyKey: key }),
+          }),
+        ])
+
+        const statuses = [r1.status, r2.status].sort()
+        expect(statuses).toEqual([200, 201])
+
+        const b1 = await r1.json()
+        const b2 = await r2.json()
+        expect(b1.data.id).toBe(b2.data.id)
+      })
     })
   })
 
@@ -353,6 +376,31 @@ describe('Message Routes', () => {
         expect(res.status).toBe(201)
         const body = await res.json()
         expect(body.data.idempotencyKey).toBeNull()
+      })
+
+      it('concurrent duplicate requests yield exactly one 201 and one 200', async () => {
+        const threadId = await createThread()
+        const key = '00000000-0000-4000-8000-bbbb00000099'
+
+        const [r1, r2] = await Promise.all([
+          app.request(`/threads/${threadId}/messages`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ content: 'Hello!', idempotencyKey: key }),
+          }),
+          app.request(`/threads/${threadId}/messages`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ content: 'Hello!', idempotencyKey: key }),
+          }),
+        ])
+
+        const statuses = [r1.status, r2.status].sort()
+        expect(statuses).toEqual([200, 201])
+
+        const b1 = await r1.json()
+        const b2 = await r2.json()
+        expect(b1.data.id).toBe(b2.data.id)
       })
     })
   })
