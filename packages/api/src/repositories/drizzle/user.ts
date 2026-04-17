@@ -9,6 +9,8 @@ const userColumns = {
   name: users.name,
   email: users.email,
   language: users.language,
+  country: users.country,
+  role: users.role,
 }
 
 export class DrizzleUserRepository implements UserRepository {

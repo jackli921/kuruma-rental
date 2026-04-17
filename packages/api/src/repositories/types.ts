@@ -11,7 +11,9 @@ export type {
 export type { DashboardStats } from '@kuruma/shared/types/stats'
 export type { FleetVehicleOverview, FleetBookingSummary } from '@kuruma/shared/types/fleet'
 export type { VehicleDetail } from '@kuruma/shared/types/vehicle-detail'
+export type { Customer, CustomerSort, CustomerWithBookings } from '@kuruma/shared/types/customer'
 
+import type { Customer, CustomerSort, CustomerWithBookings } from '@kuruma/shared/types/customer'
 import type { FleetVehicleOverview } from '@kuruma/shared/types/fleet'
 import type { DashboardStats } from '@kuruma/shared/types/stats'
 import type { VehicleDetail } from '@kuruma/shared/types/vehicle-detail'
@@ -81,6 +83,18 @@ export interface FleetOverviewRepository {
 
 export interface UserRepository {
   findByIds(ids: string[]): Promise<User[]>
+}
+
+export interface CustomerListFilters {
+  search?: string | undefined
+  sort?: CustomerSort | undefined
+  limit?: number | undefined
+  cursor?: string | undefined
+}
+
+export interface CustomerRepository {
+  findAllWithAggregates(filters: CustomerListFilters): Promise<Customer[]>
+  findByIdWithBookings(id: string): Promise<CustomerWithBookings | undefined>
 }
 
 export interface BookingFilters {

@@ -52,12 +52,16 @@ describe('Booking Routes', () => {
       name: 'Test Renter',
       email: 'renter@example.com',
       language: 'en',
+      country: null,
+      role: 'RENTER',
     })
     userStore.set(USER2, {
       id: USER2,
       name: 'Second Renter',
       email: 'renter2@example.com',
       language: 'ja',
+      country: null,
+      role: 'RENTER',
     })
     vehicleRepo = new InMemoryVehicleRepository()
     bookingRepo = new InMemoryBookingRepository()

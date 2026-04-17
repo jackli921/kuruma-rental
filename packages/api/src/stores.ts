@@ -75,11 +75,15 @@ export interface MaintenanceLog {
   updatedAt: Date
 }
 
+import type { UserRole } from './middleware/auth'
+
 export interface User {
   id: string
   name: string | null
   email: string
   language: string
+  country: string | null
+  role: UserRole
 }
 
 // Map stores removed — repositories handle data access now.
