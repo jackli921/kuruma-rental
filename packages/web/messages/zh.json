@@ -275,7 +275,9 @@
         "year": "年份",
         "yearPlaceholder": "例如 2022",
         "color": "颜色",
-        "colorPlaceholder": "例如 白色"
+        "colorPlaceholder": "例如 白色",
+        "class": "类别",
+        "classNone": "未分配"
       },
       "photos": {
         "heading": "照片",

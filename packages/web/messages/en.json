@@ -275,7 +275,9 @@
         "year": "Year",
         "yearPlaceholder": "e.g. 2022",
         "color": "Color",
-        "colorPlaceholder": "e.g. White"
+        "colorPlaceholder": "e.g. White",
+        "class": "Class",
+        "classNone": "Unassigned"
       },
       "photos": {
         "heading": "Photos",

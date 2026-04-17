@@ -275,7 +275,9 @@
         "year": "年式",
         "yearPlaceholder": "例: 2022",
         "color": "色",
-        "colorPlaceholder": "例: ホワイト"
+        "colorPlaceholder": "例: ホワイト",
+        "class": "クラス",
+        "classNone": "未割り当て"
       },
       "photos": {
         "heading": "写真",

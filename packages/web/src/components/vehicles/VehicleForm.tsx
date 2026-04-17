@@ -4,6 +4,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
+import type { VehicleClassData } from '@/modules/classes'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { type CreateVehicleInput, createVehicleSchema } from '@kuruma/shared/validators/vehicle'
 import { useTranslations } from 'next-intl'
@@ -17,9 +18,18 @@ interface VehicleFormProps {
   onCancel?: () => void
   defaultValues?: Partial<CreateVehicleInput>
   isSubmitting?: boolean
+  // Passed from the parent so the form stays a dumb presentational component;
+  // the Fleet page fetches classes once and shares the cache across dialogs.
+  classes?: readonly VehicleClassData[] | undefined
 }
 
-export function VehicleForm({ onSubmit, onCancel, defaultValues, isSubmitting }: VehicleFormProps) {
+export function VehicleForm({
+  onSubmit,
+  onCancel,
+  defaultValues,
+  isSubmitting,
+  classes,
+}: VehicleFormProps) {
   const t = useTranslations('business.vehicles')
 
   const {
@@ -43,6 +53,7 @@ export function VehicleForm({ onSubmit, onCancel, defaultValues, isSubmitting }:
       minRentalHours: 4,
       maxRentalHours: 72,
       advanceBookingHours: null,
+      classId: null,
       ...defaultValues,
     },
   })
@@ -74,6 +85,29 @@ export function VehicleForm({ onSubmit, onCancel, defaultValues, isSubmitting }:
           {...register('description')}
         />
       </div>
+
+      {classes && classes.length > 0 && (
+        <div>
+          <Label htmlFor="classId">{t('form.class')}</Label>
+          <select
+            id="classId"
+            className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-xs"
+            {...register('classId', {
+              // Empty string ("Unassigned") submits as null to match the
+              // nullable UUID validator. Any other value passes through as
+              // the class UUID.
+              setValueAs: (v) => (v === '' || v == null ? null : String(v)),
+            })}
+          >
+            <option value="">{t('form.classNone')}</option>
+            {classes.map((klass) => (
+              <option key={klass.id} value={klass.id}>
+                {klass.name}
+              </option>
+            ))}
+          </select>
+        </div>
+      )}
 
       <div className="grid grid-cols-2 gap-4">
         <div>
