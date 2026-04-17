@@ -6,11 +6,15 @@ const ALLOWED_MIME_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp', 'im
 
 export type UploadResult =
   | { ok: true; uploaded: string[]; total: number }
-  | { ok: false; error: string; status: 400 | 404 }
+  | { ok: false; error: string; status: 400 | 404 | 409 }
 
 export type DeleteResult =
   | { ok: true; deletedUrl: string; remaining: number }
-  | { ok: false; error: string; status: 400 | 404 }
+  | { ok: false; error: string; status: 400 | 404 | 409 }
+
+export interface PhotoServiceLogger {
+  warn(message: string, ...args: unknown[]): void
+}
 
 function validateFile(file: File): string | null {
   if (!ALLOWED_MIME_TYPES.has(file.type)) {
@@ -26,6 +30,7 @@ export class VehiclePhotoService {
   constructor(
     private readonly repo: VehicleRepository,
     private readonly storage: PhotoStorage,
+    private readonly logger: PhotoServiceLogger = console,
   ) {}
 
   async upload(vehicleId: string, files: readonly File[]): Promise<UploadResult> {
@@ -36,8 +41,6 @@ export class VehiclePhotoService {
     const vehicle = await this.repo.findById(vehicleId)
     if (!vehicle) return { ok: false, error: 'Vehicle not found', status: 404 }
 
-    // TODO: race condition — concurrent uploads can exceed limit.
-    // Fix with DB-level constraint or SELECT FOR UPDATE when needed.
     if (vehicle.photos.length + files.length > MAX_PHOTOS_PER_VEHICLE) {
       return {
         ok: false,
@@ -54,15 +57,31 @@ export class VehiclePhotoService {
     const results = await Promise.all(files.map((f) => this.storage.put(vehicle.id, f)))
     const uploaded = results.map((r) => r.url)
 
+    // Optimistic concurrency: only append if photos hasn't changed since read.
+    // A concurrent upload/delete that races with this one will cause one to
+    // return undefined — we roll back the uploaded storage objects and 409.
+    let updated: Awaited<ReturnType<VehicleRepository['update']>>
     try {
-      await this.repo.update(vehicle.id, { photos: [...vehicle.photos, ...uploaded] })
+      updated = await this.repo.update(
+        vehicle.id,
+        { photos: [...vehicle.photos, ...uploaded] },
+        { expectedPhotos: vehicle.photos },
+      )
     } catch (e) {
-      // Compensating cleanup: remove uploaded files if DB update fails.
-      await Promise.all(results.map((r) => this.storage.delete(r.url).catch(() => {})))
+      await this.cleanupStorage(uploaded)
       throw e
     }
 
-    return { ok: true, uploaded, total: vehicle.photos.length + uploaded.length }
+    if (!updated) {
+      await this.cleanupStorage(uploaded)
+      return {
+        ok: false,
+        error: 'Vehicle photos changed concurrently; retry',
+        status: 409,
+      }
+    }
+
+    return { ok: true, uploaded, total: updated.photos.length }
   }
 
   async delete(vehicleId: string, photoIdx: number): Promise<DeleteResult> {
@@ -76,15 +95,36 @@ export class VehiclePhotoService {
     const deletedUrl = vehicle.photos[photoIdx]!
     const photos = vehicle.photos.filter((_, i) => i !== photoIdx)
 
-    await this.repo.update(vehicle.id, { photos })
+    const updated = await this.repo.update(
+      vehicle.id,
+      { photos },
+      { expectedPhotos: vehicle.photos },
+    )
+    if (!updated) {
+      return {
+        ok: false,
+        error: 'Vehicle photos changed concurrently; retry',
+        status: 409,
+      }
+    }
 
     // Best-effort storage cleanup after DB update succeeds.
     try {
       await this.storage.delete(deletedUrl)
     } catch (e) {
-      console.warn('Photo storage cleanup failed, orphan left:', deletedUrl, e)
+      this.logger.warn('Photo storage cleanup failed, orphan left:', deletedUrl, e)
     }
 
-    return { ok: true, deletedUrl, remaining: photos.length }
+    return { ok: true, deletedUrl, remaining: updated.photos.length }
+  }
+
+  private async cleanupStorage(urls: readonly string[]): Promise<void> {
+    await Promise.all(
+      urls.map((url) =>
+        this.storage.delete(url).catch((e) => {
+          this.logger.warn('Photo storage cleanup failed, orphan left:', url, e)
+        }),
+      ),
+    )
   }
 }

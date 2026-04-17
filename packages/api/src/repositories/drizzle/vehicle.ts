@@ -92,6 +92,10 @@ export class DrizzleVehicleRepository implements VehicleRepository {
     if (options?.expectedStatus) {
       conditions.push(eq(vehicles.status, options.expectedStatus))
     }
+    if (options?.expectedPhotos) {
+      // Postgres array equality: element-wise with order mattering.
+      conditions.push(sql`${vehicles.photos} = ${[...options.expectedPhotos]}`)
+    }
     const [updated] = await this.db
       .update(vehicles)
       .set({ ...fields, updatedAt: sql`now()` })

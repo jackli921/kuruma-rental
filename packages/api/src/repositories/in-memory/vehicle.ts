@@ -6,6 +6,10 @@ import type {
   VehicleUpdateOptions,
 } from '../types'
 
+function arraysEqual(a: readonly string[], b: readonly string[]): boolean {
+  return a.length === b.length && a.every((v, i) => v === b[i])
+}
+
 export class InMemoryVehicleRepository implements VehicleRepository {
   private readonly store: Map<string, Vehicle>
 
@@ -61,6 +65,9 @@ export class InMemoryVehicleRepository implements VehicleRepository {
     const existing = this.store.get(id)
     if (!existing) return undefined
     if (options?.expectedStatus && existing.status !== options.expectedStatus) return undefined
+    if (options?.expectedPhotos && !arraysEqual(existing.photos, options.expectedPhotos)) {
+      return undefined
+    }
 
     const updated: Vehicle = {
       ...existing,

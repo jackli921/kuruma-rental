@@ -41,6 +41,10 @@ export interface PaginatedResult<T> {
 
 export interface VehicleUpdateOptions {
   expectedStatus?: Vehicle['status']
+  /** Optimistic concurrency guard: the update only applies if the current
+   *  photos array matches this exactly. Used by VehiclePhotoService to
+   *  prevent lost-update when two uploads/deletes race. */
+  expectedPhotos?: readonly string[]
 }
 
 export interface VehicleRepository {
