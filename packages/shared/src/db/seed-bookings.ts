@@ -49,13 +49,20 @@ async function seed() {
 
   console.log('Fetching vehicles...')
   const vehicleRows = await db
-    .select({ id: vehicles.id, name: vehicles.name })
+    .select({ id: vehicles.id, name: vehicles.name, classId: vehicles.classId })
     .from(vehicles)
     .where(eq(vehicles.status, 'AVAILABLE'))
     .limit(10)
 
   if (vehicleRows.length === 0) {
     console.error('No vehicles found. Run `bun run db:seed` first.')
+    process.exit(1)
+  }
+
+  // Issue #308: bookings now require classId. Seeded vehicles must have a
+  // class assigned (the main `db:seed` script handles that).
+  if (vehicleRows.some((v) => !v.classId)) {
+    console.error('Some vehicles have no classId. Re-run `bun run db:seed` first.')
     process.exit(1)
   }
 
@@ -67,7 +74,7 @@ async function seed() {
   const vehicle = (i: number) => {
     const v = vehicleRows[i % vehicleRows.length]
     if (!v) throw new Error('No vehicles available')
-    return v.id
+    return v
   }
 
   // Spread bookings across the current week + next week so the calendar
@@ -98,9 +105,13 @@ async function seed() {
       bookingSeeds.map((b, i) => {
         const startAt = dayAt(b.dayOffset, b.hour)
         const endAt = addHours(startAt, b.durationHours)
+        const v = vehicle(i)
+        // classId is non-null because of the check above
+        if (!v.classId) throw new Error(`Vehicle ${v.id} has no classId`)
         return {
           renterId: renter(i),
-          vehicleId: vehicle(i),
+          classId: v.classId,
+          vehicleId: v.id,
           startAt,
           endAt,
           effectiveEndAt: endAt,

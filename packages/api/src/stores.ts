@@ -21,7 +21,10 @@ export type { VehicleBase as Vehicle } from '@kuruma/shared/types/vehicle'
 export interface Booking {
   id: string
   renterId: string
-  vehicleId: string
+  // Issue #308: classId is the renter-facing choice (always present).
+  // vehicleId is nullable — owner may assign a specific car later.
+  classId: string
+  vehicleId: string | null
   startAt: Date
   endAt: Date
   effectiveEndAt: Date

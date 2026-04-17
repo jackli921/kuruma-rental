@@ -6,7 +6,12 @@ import { z } from 'zod'
 // dropped by Zod, and the server writes its own computed value.
 export const createBookingSchema = z
   .object({
-    vehicleId: z.string().uuid('Vehicle ID must be a valid UUID'),
+    // Issue #308: renters book a Class (interface). A specific vehicle is
+    // either chosen up-front (staff/manual flow) or assigned later by the
+    // owner. `vehicleId` is therefore optional; `classId` is the new
+    // required field.
+    classId: z.string().uuid('Class ID must be a valid UUID'),
+    vehicleId: z.string().uuid('Vehicle ID must be a valid UUID').optional(),
     renterId: z.string().uuid('Renter ID must be a valid UUID').optional(),
     startAt: z.string().datetime({ message: 'Must be ISO datetime' }),
     endAt: z.string().datetime({ message: 'Must be ISO datetime' }),
