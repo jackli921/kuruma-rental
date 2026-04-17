@@ -140,7 +140,18 @@
         },
         "noEventsInRange": "该时段暂无预订",
         "showMore": "+{count}条",
-        "viewFullDetails": "查看详情"
+        "viewFullDetails": "查看详情",
+        "sidebar": {
+          "title": "筛选",
+          "vehicles": { "title": "车辆", "all": "全部", "none": "无" },
+          "statuses": {
+            "title": "状态",
+            "CONFIRMED": "已确认",
+            "ACTIVE": "使用中",
+            "COMPLETED": "已完成",
+            "CANCELLED": "已取消"
+          }
+        }
       },
       "detail": {
         "stubTitle": "预订详情",

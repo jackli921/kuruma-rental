@@ -5,7 +5,9 @@ import {
   type CalendarResource,
   toCalendarEvents,
 } from '@/components/calendar/BookingsCalendar'
+import { CalendarSidebar } from '@/components/calendar/CalendarSidebar'
 import { Skeleton } from '@/components/ui/skeleton'
+import { useCalendarFilters } from '@/hooks/useCalendarFilters'
 import { fetchFleetOverviewAction } from '@/lib/vehicle-actions'
 import { keepPreviousData, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
@@ -102,15 +104,27 @@ export function BookingsCalendarView() {
     },
   })
 
-  const resources: CalendarResource[] = useMemo(
-    () =>
-      fleetOverviews
-        .filter((v) => v.status !== 'RETIRED')
-        .map((v) => ({ resourceId: v.id, resourceTitle: v.name })),
+  const activeVehicles = useMemo(
+    () => fleetOverviews.filter((v) => v.status !== 'RETIRED'),
     [fleetOverviews],
   )
 
-  const events = useMemo(() => toCalendarEvents(bookings), [bookings])
+  const resources: CalendarResource[] = useMemo(
+    () => activeVehicles.map((v) => ({ resourceId: v.id, resourceTitle: v.name })),
+    [activeVehicles],
+  )
+
+  const knownVehicleIds = useMemo(() => activeVehicles.map((v) => v.id), [activeVehicles])
+  const filters = useCalendarFilters(knownVehicleIds)
+
+  const allEvents = useMemo(() => toCalendarEvents(bookings), [bookings])
+  const events = useMemo(() => filters.filterEvents(allEvents), [allEvents, filters])
+  const visibleResources = useMemo(() => filters.filterResources(resources), [resources, filters])
+
+  const sidebarVehicles = useMemo(
+    () => activeVehicles.map((v) => ({ id: v.id, name: v.name })),
+    [activeVehicles],
+  )
 
   if (bookingsInitialLoading) {
     return (
@@ -126,21 +140,24 @@ export function BookingsCalendarView() {
   }
 
   return (
-    <div className="mt-6">
-      <BookingsCalendar
-        events={events}
-        resources={resources}
-        view={view}
-        date={date}
-        views={['day', 'week', 'month']}
-        onViewChange={handleViewChange}
-        onDateChange={handleDateChange}
-        onBookingUpdate={() => {
-          queryClient.invalidateQueries({
-            queryKey: ['bookings', 'calendar'],
-          })
-        }}
-      />
+    <div className="mt-6 flex gap-4">
+      <CalendarSidebar vehicles={sidebarVehicles} filters={filters} />
+      <div className="flex-1 min-w-0">
+        <BookingsCalendar
+          events={events}
+          resources={visibleResources}
+          view={view}
+          date={date}
+          views={['day', 'week', 'month']}
+          onViewChange={handleViewChange}
+          onDateChange={handleDateChange}
+          onBookingUpdate={() => {
+            queryClient.invalidateQueries({
+              queryKey: ['bookings', 'calendar'],
+            })
+          }}
+        />
+      </div>
     </div>
   )
 }
