@@ -67,6 +67,7 @@ import { BookingService } from './services/booking'
 import { CustomerService } from './services/customer'
 import { MaintenanceService } from './services/maintenance'
 import { VehicleClassService } from './services/vehicle-class'
+import { VehiclePhotoService } from './services/vehicle-photo'
 
 export function createApp(overrides?: {
   vehicleRepo: VehicleRepository
@@ -233,7 +234,7 @@ export function createApp(overrides?: {
     .route('/', createVehicleDetailRoutes(vehicleDetailRepo))
     .route('/', createVehicleClassRoutes(vehicleClassService))
     .route('/', createVehicleRoutes(vehicleRepo, maintenanceService))
-    .route('/', createVehiclePhotoRoutes(vehicleRepo, photoStorage))
+    .route('/', createVehiclePhotoRoutes(new VehiclePhotoService(vehicleRepo, photoStorage)))
     .route('/', createMaintenanceLogRoutes(maintenanceService))
     .route('/', createBookingRoutes(bookingService))
     .route('/', createAvailabilityRoutes(availabilityRepo))
