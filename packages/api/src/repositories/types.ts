@@ -133,6 +133,16 @@ export interface MessageRepository {
   findByThreadId(threadId: string): Promise<Message[]>
 }
 
+// Transaction boundary for operations spanning multiple repositories.
+// Drizzle: wraps db.transaction(), creating repos bound to the tx handle.
+// InMemory: passes repos through (JS event loop is single-threaded).
+export type RunInTransaction = <T>(
+  fn: (repos: {
+    vehicleRepo: VehicleRepository
+    maintenanceLogRepo: MaintenanceLogRepository
+  }) => Promise<T>,
+) => Promise<T>
+
 export interface TransitionLogsResult {
   resolved?: MaintenanceLog
   created?: MaintenanceLog

@@ -17,6 +17,7 @@ import {
   DrizzleUserRepository,
   DrizzleVehicleClassRepository,
   DrizzleVehicleRepository,
+  createDrizzleTransaction,
 } from './repositories/drizzle'
 import {
   InMemoryAvailabilityRepository,
@@ -37,6 +38,7 @@ import type {
   FleetOverviewRepository,
   MaintenanceLogRepository,
   MessageRepository,
+  RunInTransaction,
   StatsRepository,
   ThreadRepository,
   UserRepository,
@@ -82,11 +84,13 @@ export function createApp(overrides?: {
   let threadRepo: ThreadRepository
   let messageRepo: MessageRepository
   let maintenanceLogRepo: MaintenanceLogRepository
+  let runInTransaction: RunInTransaction
 
   if (overrides) {
     ;({ vehicleRepo, bookingRepo, availabilityRepo } = overrides)
     vehicleClassRepo = overrides.vehicleClassRepo ?? new InMemoryVehicleClassRepository()
     maintenanceLogRepo = overrides.maintenanceLogRepo ?? new InMemoryMaintenanceLogRepository()
+    runInTransaction = async (fn) => fn({ vehicleRepo, maintenanceLogRepo })
     fleetOverviewRepo =
       overrides.fleetOverviewRepo ??
       new InMemoryFleetOverviewRepository(vehicleRepo, bookingRepo, new Map(), maintenanceLogRepo)
@@ -105,6 +109,7 @@ export function createApp(overrides?: {
     bookingRepo = new DrizzleBookingRepository(db)
     availabilityRepo = new DrizzleAvailabilityRepository(db)
     maintenanceLogRepo = new DrizzleMaintenanceLogRepository(db)
+    runInTransaction = createDrizzleTransaction(db)
     fleetOverviewRepo = new DrizzleFleetOverviewRepository(db)
     vehicleDetailRepo = new InMemoryVehicleDetailRepository(
       vehicleRepo,
@@ -141,6 +146,7 @@ export function createApp(overrides?: {
     threadRepo = new InMemoryThreadRepository()
     messageRepo = new InMemoryMessageRepository(threadRepo as InMemoryThreadRepository)
     maintenanceLogRepo = new InMemoryMaintenanceLogRepository()
+    runInTransaction = async (fn) => fn({ vehicleRepo, maintenanceLogRepo })
     userRepo = new InMemoryUserRepository()
   }
 
@@ -195,7 +201,11 @@ export function createApp(overrides?: {
 
   const vehicleClassService = new VehicleClassService(vehicleClassRepo)
   const bookingService = new BookingService(bookingRepo, vehicleRepo, userRepo)
-  const maintenanceService = new MaintenanceService(vehicleRepo, maintenanceLogRepo)
+  const maintenanceService = new MaintenanceService(
+    vehicleRepo,
+    maintenanceLogRepo,
+    runInTransaction,
+  )
 
   // Chain .route() calls so TypeScript infers the full route type tree.
   // hc<AppType> needs this to produce typed client methods.
