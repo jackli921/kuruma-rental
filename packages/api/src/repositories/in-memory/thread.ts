@@ -120,4 +120,16 @@ export class InMemoryThreadRepository implements ThreadRepository {
       }
     }
   }
+
+  _getMessage(id: string): Message | undefined {
+    return this.messages.get(id)
+  }
+
+  _updateMessage(id: string, patch: Partial<Message>): Message | undefined {
+    const existing = this.messages.get(id)
+    if (!existing) return undefined
+    const updated = { ...existing, ...patch }
+    this.messages.set(id, updated)
+    return updated
+  }
 }

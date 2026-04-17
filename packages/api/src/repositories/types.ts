@@ -170,6 +170,7 @@ export interface ThreadRepository {
 }
 
 export interface MessageRepository {
+  findById(id: string): Promise<Message | undefined>
   findByIdempotencyKey(key: string): Promise<Message | undefined>
   create(
     ctx: CallerContext,
@@ -178,6 +179,18 @@ export interface MessageRepository {
     idempotencyKey?: string | null,
   ): Promise<Message>
   findByThreadId(ctx: CallerContext, threadId: string): Promise<Message[]>
+  /**
+   * Merge a single language translation into the message's `translations`
+   * JSON map. If `detectedSourceLanguage` is provided, also update the
+   * message's `sourceLanguage` column (used when the original language
+   * was unknown at send time and the provider auto-detected it).
+   */
+  updateTranslation(
+    messageId: string,
+    language: string,
+    translatedText: string,
+    detectedSourceLanguage: string | null,
+  ): Promise<Message | undefined>
 }
 
 // Transaction boundary for operations spanning multiple repositories.
