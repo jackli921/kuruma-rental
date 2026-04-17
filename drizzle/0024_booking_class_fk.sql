@@ -23,6 +23,19 @@ FROM "vehicles" v
 WHERE "bookings"."vehicleId" = v."id" AND "bookings"."classId" IS NULL;
 --> statement-breakpoint
 
+-- Fail loudly if any row is unbackfillable — a vehicle with a NULL classId
+-- would otherwise hit a cryptic NOT NULL violation below. Surfacing the
+-- count makes the fix obvious: backfill vehicles.classId first.
+DO $$
+DECLARE missing int;
+BEGIN
+  SELECT count(*) INTO missing FROM bookings WHERE "classId" IS NULL;
+  IF missing > 0 THEN
+    RAISE EXCEPTION 'bookings.classId backfill incomplete: % rows still NULL. Backfill vehicles.classId first.', missing;
+  END IF;
+END $$;
+--> statement-breakpoint
+
 ALTER TABLE "bookings" ADD CONSTRAINT "bookings_classId_vehicle_classes_id_fk"
   FOREIGN KEY ("classId") REFERENCES "public"."vehicle_classes"("id")
   ON DELETE no action ON UPDATE no action;

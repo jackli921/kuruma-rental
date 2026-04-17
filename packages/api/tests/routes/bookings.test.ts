@@ -33,11 +33,16 @@ function validBookingInput() {
   // Issue #308: default input books the class without a specific vehicle.
   // Tests that need per-vehicle behaviour (overlap, rental rules, expand)
   // override vehicleId after seeding a concrete vehicle in the class.
+  // Anchor both timestamps to a single `now` so the duration is exactly
+  // 24h — otherwise two Date.now() calls can differ by a few ms, which
+  // Math.ceil() rounds up to 2 days in pricing.
+  const now = Date.now()
+  const HOUR = 60 * 60 * 1000
   return {
     classId: testClassId,
     renterId: USER1,
-    startAt: futureDate(24),
-    endAt: futureDate(48),
+    startAt: new Date(now + 24 * HOUR).toISOString(),
+    endAt: new Date(now + 48 * HOUR).toISOString(),
     source: 'DIRECT' as const,
   }
 }

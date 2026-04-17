@@ -362,13 +362,21 @@ export class BookingService {
     return { ok: true, bufferMinutes, totalPrice: pricing.totalPriceJpy }
   }
 
+  // Explicit "missing repo" guard — silent `return null` would masquerade
+  // as "class not found" and make every booking fail with a confusing 400.
+  // The composition root always wires these repos; a test double that
+  // forgets to is a bug in the fixture, not a runtime edge case.
   private async lookupClass(id: string): Promise<VehicleClass | null> {
-    if (!this.vehicleClassRepo) return null
+    if (!this.vehicleClassRepo) {
+      throw new Error('BookingService missing vehicleClassRepo; check DI wiring')
+    }
     return (await this.vehicleClassRepo.findById(id)) ?? null
   }
 
   private async lookupVehicle(id: string): Promise<Vehicle | null> {
-    if (!this.vehicleRepo) return null
+    if (!this.vehicleRepo) {
+      throw new Error('BookingService missing vehicleRepo; check DI wiring')
+    }
     return (await this.vehicleRepo.findById(id)) ?? null
   }
 }
