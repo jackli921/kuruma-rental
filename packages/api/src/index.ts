@@ -266,7 +266,7 @@ export function createApp(overrides?: {
 
   const vehicleClassService = new VehicleClassService(vehicleClassRepo)
   // Messaging: if a staff user id is configured, every confirmed booking
-  // auto-creates a renter↔staff thread for coordination (design doc
+  // auto-creates a renter/staff thread for coordination (design doc
   // `docs/plans/2026-04-14-messaging-design.md`).
   const staffUserId = process.env.DEFAULT_STAFF_ID
   const threading = staffUserId ? { threadRepo, staffUserId } : undefined

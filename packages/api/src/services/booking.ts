@@ -49,6 +49,11 @@ export type CancelResult =
     }
   | { ok: false; status: 404 | 409; error: string }
 
+/**
+ * Opt-in messaging hook. When supplied, every confirmed booking also creates
+ * a thread with `[renter, staffUserId]` as participants. Failure to create
+ * the thread never rolls back the booking.
+ */
 export interface BookingThreading {
   threadRepo: ThreadRepository
   staffUserId: string
@@ -161,7 +166,7 @@ export class BookingService {
         // Repair-on-replay: first attempt may have failed after booking was
         // persisted but before thread creation. `ensureThread` is idempotent
         // (keyed by `booking:<id>`) so this is safe to run unconditionally.
-        await this.ensureThread(ctx, existing, input.renterId)
+        await this.ensureThread(ctx, existing)
         return { ok: true, booking: existing, status: 200 }
       }
     }
@@ -193,7 +198,7 @@ export class BookingService {
         idempotencyKey: input.idempotencyKey ?? null,
       })
 
-      await this.ensureThread(ctx, booking, input.renterId)
+      await this.ensureThread(ctx, booking)
 
       return { ok: true, booking }
     } catch (err) {
@@ -212,7 +217,7 @@ export class BookingService {
       if (code === PG_ERROR.UNIQUE_VIOLATION && input.idempotencyKey) {
         const existing = await this.bookingRepo.findByIdempotencyKey(ctx, input.idempotencyKey)
         if (existing) {
-          await this.ensureThread(ctx, existing, input.renterId)
+          await this.ensureThread(ctx, existing)
           return { ok: true, booking: existing, status: 200 }
         }
       }
@@ -223,11 +228,7 @@ export class BookingService {
 
   // TODO(#300): if a second post-booking side effect appears here, extract
   // an outbox/event dispatcher rather than chaining another inline hook.
-  private async ensureThread(
-    ctx: CallerContext,
-    booking: Booking,
-    renterId: string,
-  ): Promise<void> {
+  private async ensureThread(ctx: CallerContext, booking: Booking): Promise<void> {
     if (!this.threading) return
     const threadKey = `booking:${booking.id}`
     try {
@@ -236,7 +237,7 @@ export class BookingService {
       await this.threading.threadRepo.create(
         ctx,
         booking.id,
-        [renterId, this.threading.staffUserId],
+        [booking.renterId, this.threading.staffUserId],
         threadKey,
       )
     } catch (err) {
