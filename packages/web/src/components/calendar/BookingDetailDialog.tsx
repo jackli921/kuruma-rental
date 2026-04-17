@@ -11,6 +11,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
+import { Link } from '@/i18n/routing'
 import type { CalendarBooking } from '@/lib/calendar'
 import { formatJpy } from '@/lib/format'
 import { calculateCancellationFee } from '@kuruma/shared/lib/cancellation-policy'
@@ -152,6 +153,16 @@ export function BookingDetailDialog({
         )}
 
         {error && <p className="text-sm text-destructive px-1">{error}</p>}
+
+        {booking && (
+          <Link
+            href={`/manage/bookings/${booking.id}`}
+            className="text-sm text-primary hover:underline self-start"
+            onClick={onClose}
+          >
+            {t('viewFullDetails')}
+          </Link>
+        )}
 
         <DialogFooter>
           {booking?.status === 'CONFIRMED' && !showCancelConfirm && (
