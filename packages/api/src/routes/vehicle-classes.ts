@@ -1,14 +1,31 @@
+import { type RateLimitBinding, rateLimit } from '@elithrar/workers-hono-rate-limit'
 import {
   createVehicleClassSchema,
   updateVehicleClassSchema,
 } from '@kuruma/shared/validators/vehicle-class'
-import { Hono } from 'hono'
+import { type Context, Hono } from 'hono'
 import { STAFF_ROLES, requireAuth, requireUser } from '../middleware/auth'
 import type { VehicleClassService } from '../services/vehicle-class'
 import { fail, ok, parseBody, parseDateRange, stripUndefined } from './helpers'
 
-export function createVehicleClassRoutes(service: VehicleClassService) {
-  return new Hono()
+export function createVehicleClassRoutes(
+  service: VehicleClassService,
+  publicCatalogLimiter?: RateLimitBinding,
+) {
+  const app = new Hono()
+
+  // Public catalog endpoints are unauthenticated so a stricter IP-based
+  // limit sits on top of the global limiter to blunt scraping and probes.
+  // If the binding is absent (local dev, test), the rate-limit middleware
+  // isn't attached — the global limiter in createApp() still covers DoS.
+  if (publicCatalogLimiter) {
+    const byIp = (c: Context) => c.req.header('cf-connecting-ip') ?? ''
+    app.use('/vehicle-classes', rateLimit(publicCatalogLimiter, byIp))
+    app.use('/vehicle-classes/by-slug/*', rateLimit(publicCatalogLimiter, byIp))
+    app.use('/vehicle-classes/:id', rateLimit(publicCatalogLimiter, byIp))
+  }
+
+  return app
     .get('/vehicle-classes', async (c) => {
       const rawStatus = c.req.query('status')
       const status: 'ACTIVE' | 'ARCHIVED' | undefined =

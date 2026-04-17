@@ -33,6 +33,14 @@ name = "PHOTO_UPLOAD_USER_LIMITER"
 namespace_id = "1003"
 simple = { limit = 50, period = 60 }
 
+# Public vehicle-class catalog (no auth, scrape-prone). 60 req/min/IP is
+# enough for renter browsing and blunts mass scraping/probing. Stacked on
+# top of RATE_LIMITER (100/60s) — callers hit whichever cap triggers first.
+[[ratelimits]]
+name = "PUBLIC_CATALOG_LIMITER"
+namespace_id = "1004"
+simple = { limit = 60, period = 60 }
+
 # R2 bucket for vehicle photo uploads. Create the bucket manually:
 #   npx wrangler r2 bucket create kuruma-vehicle-photos
 # Enable public access for dev:

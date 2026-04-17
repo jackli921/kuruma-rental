@@ -88,6 +88,7 @@ export function createApp(overrides?: {
   userRepo?: UserRepository
   photoUploadLimiter?: RateLimitBinding
   photoUploadUserLimiter?: RateLimitBinding
+  publicCatalogLimiter?: RateLimitBinding
 }) {
   let vehicleClassRepo: VehicleClassRepository
   let vehicleRepo: VehicleRepository
@@ -110,6 +111,9 @@ export function createApp(overrides?: {
     ((globalThis as Record<string, unknown>).PHOTO_UPLOAD_USER_LIMITER as
       | RateLimitBinding
       | undefined)
+  const publicCatalogLimiter =
+    overrides?.publicCatalogLimiter ??
+    ((globalThis as Record<string, unknown>).PUBLIC_CATALOG_LIMITER as RateLimitBinding | undefined)
 
   if (overrides) {
     ;({ vehicleRepo, bookingRepo, availabilityRepo } = overrides)
@@ -268,7 +272,7 @@ export function createApp(overrides?: {
     .route('/', health)
     .route('/', createFleetOverviewRoutes(fleetOverviewRepo))
     .route('/', createVehicleDetailRoutes(vehicleDetailRepo))
-    .route('/', createVehicleClassRoutes(vehicleClassService))
+    .route('/', createVehicleClassRoutes(vehicleClassService, publicCatalogLimiter))
     .route('/', createVehicleRoutes(vehicleRepo, maintenanceService))
     .route(
       '/',
