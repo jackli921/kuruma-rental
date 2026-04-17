@@ -1,6 +1,7 @@
 'use client'
 
 import { Badge } from '@/components/ui/badge'
+import { BadgeGroup } from '@/components/ui/badge-group'
 import { Input } from '@/components/ui/input'
 import {
   Select,
@@ -155,55 +156,24 @@ export function FleetFilters({
 
       <div className="space-y-2">
         <SectionHeading>{t('statusHeading')}</SectionHeading>
-        <div className="flex flex-wrap gap-1.5">
-          {STATUS_OPTIONS.map((status) => {
-            const isSelected = filters.statuses?.includes(status) ?? false
-            return (
-              <Badge
-                key={status}
-                variant={isSelected ? 'default' : 'outline'}
-                render={
-                  <button
-                    type="button"
-                    aria-pressed={isSelected}
-                    aria-label={statusLabel(status)}
-                    onClick={() => handleStatusToggle(status)}
-                  />
-                }
-              >
-                {statusLabel(status)}
-              </Badge>
-            )
-          })}
-        </div>
+        <BadgeGroup
+          items={STATUS_OPTIONS}
+          selected={filters.statuses}
+          onToggle={handleStatusToggle}
+          label={statusLabel}
+        />
       </div>
 
       <Separator />
 
       <div className="space-y-2">
         <SectionHeading>{t('transmissionHeading')}</SectionHeading>
-        <div className="flex flex-wrap gap-1.5">
-          {TRANSMISSION_OPTIONS.map((transmission) => {
-            const isSelected = filters.transmissions?.includes(transmission) ?? false
-            const label = t(TRANSMISSION_LABEL_KEYS[transmission])
-            return (
-              <Badge
-                key={transmission}
-                variant={isSelected ? 'default' : 'outline'}
-                render={
-                  <button
-                    type="button"
-                    aria-pressed={isSelected}
-                    aria-label={label}
-                    onClick={() => handleTransmissionToggle(transmission)}
-                  />
-                }
-              >
-                {label}
-              </Badge>
-            )
-          })}
-        </div>
+        <BadgeGroup
+          items={TRANSMISSION_OPTIONS}
+          selected={filters.transmissions}
+          onToggle={handleTransmissionToggle}
+          label={(key) => t(TRANSMISSION_LABEL_KEYS[key])}
+        />
       </div>
 
       {hasCapacityRange && (
@@ -211,27 +181,12 @@ export function FleetFilters({
           <Separator />
           <div className="space-y-2">
             <SectionHeading>{t('capacityHeading')}</SectionHeading>
-            <div className="flex flex-wrap gap-1.5">
-              {seatOptions.map((seats) => {
-                const isSelected = filters.seats?.includes(seats) ?? false
-                return (
-                  <Badge
-                    key={seats}
-                    variant={isSelected ? 'default' : 'outline'}
-                    render={
-                      <button
-                        type="button"
-                        aria-pressed={isSelected}
-                        aria-label={t('seatsBadgeLabel', { count: seats })}
-                        onClick={() => handleSeatsToggle(seats)}
-                      />
-                    }
-                  >
-                    {t('seatsBadgeLabel', { count: seats })}
-                  </Badge>
-                )
-              })}
-            </div>
+            <BadgeGroup
+              items={seatOptions}
+              selected={filters.seats}
+              onToggle={handleSeatsToggle}
+              label={(seats) => t('seatsBadgeLabel', { count: seats })}
+            />
           </div>
         </>
       )}
@@ -241,27 +196,11 @@ export function FleetFilters({
           <Separator />
           <div className="space-y-2">
             <SectionHeading>{t('makeHeading')}</SectionHeading>
-            <div className="flex flex-wrap gap-1.5">
-              {availableMakes.map((make) => {
-                const isSelected = filters.makes?.includes(make) ?? false
-                return (
-                  <Badge
-                    key={make}
-                    variant={isSelected ? 'default' : 'outline'}
-                    render={
-                      <button
-                        type="button"
-                        aria-pressed={isSelected}
-                        aria-label={make}
-                        onClick={() => handleMakeToggle(make)}
-                      />
-                    }
-                  >
-                    {make}
-                  </Badge>
-                )
-              })}
-            </div>
+            <BadgeGroup
+              items={availableMakes}
+              selected={filters.makes}
+              onToggle={handleMakeToggle}
+            />
           </div>
         </>
       )}
@@ -271,27 +210,11 @@ export function FleetFilters({
           <Separator />
           <div className="space-y-2">
             <SectionHeading>{t('modelHeading')}</SectionHeading>
-            <div className="flex flex-wrap gap-1.5">
-              {availableModels.map((model) => {
-                const isSelected = filters.models?.includes(model) ?? false
-                return (
-                  <Badge
-                    key={model}
-                    variant={isSelected ? 'default' : 'outline'}
-                    render={
-                      <button
-                        type="button"
-                        aria-pressed={isSelected}
-                        aria-label={model}
-                        onClick={() => handleModelToggle(model)}
-                      />
-                    }
-                  >
-                    {model}
-                  </Badge>
-                )
-              })}
-            </div>
+            <BadgeGroup
+              items={availableModels}
+              selected={filters.models}
+              onToggle={handleModelToggle}
+            />
           </div>
         </>
       )}
@@ -301,27 +224,11 @@ export function FleetFilters({
           <Separator />
           <div className="space-y-2">
             <SectionHeading>{t('yearHeading')}</SectionHeading>
-            <div className="flex flex-wrap gap-1.5">
-              {availableYears.map((year) => {
-                const isSelected = filters.years?.includes(year) ?? false
-                return (
-                  <Badge
-                    key={year}
-                    variant={isSelected ? 'default' : 'outline'}
-                    render={
-                      <button
-                        type="button"
-                        aria-pressed={isSelected}
-                        aria-label={String(year)}
-                        onClick={() => handleYearToggle(year)}
-                      />
-                    }
-                  >
-                    {year}
-                  </Badge>
-                )
-              })}
-            </div>
+            <BadgeGroup
+              items={availableYears}
+              selected={filters.years}
+              onToggle={handleYearToggle}
+            />
           </div>
         </>
       )}
@@ -331,27 +238,11 @@ export function FleetFilters({
           <Separator />
           <div className="space-y-2">
             <SectionHeading>{t('colorHeading')}</SectionHeading>
-            <div className="flex flex-wrap gap-1.5">
-              {availableColors.map((color) => {
-                const isSelected = filters.colors?.includes(color) ?? false
-                return (
-                  <Badge
-                    key={color}
-                    variant={isSelected ? 'default' : 'outline'}
-                    render={
-                      <button
-                        type="button"
-                        aria-pressed={isSelected}
-                        aria-label={color}
-                        onClick={() => handleColorToggle(color)}
-                      />
-                    }
-                  >
-                    {color}
-                  </Badge>
-                )
-              })}
-            </div>
+            <BadgeGroup
+              items={availableColors}
+              selected={filters.colors}
+              onToggle={handleColorToggle}
+            />
           </div>
         </>
       )}
