@@ -102,6 +102,38 @@ describe('VehiclePhotoService.uploadPhotos', () => {
   })
 })
 
+describe('VehiclePhotoService.uploadPhotos rollback', () => {
+  it('rolls back already-uploaded files when a later put rejects', async () => {
+    // Stub storage that rejects on the second put. All earlier successes
+    // must be deleted; DB should be unchanged.
+    const deletedUrls: string[] = []
+    let callCount = 0
+    const flakyStorage = {
+      put: async (vId: string, file: File) => {
+        callCount += 1
+        if (callCount === 2) throw new Error('network blip')
+        return { key: `k${callCount}`, url: `https://r2.example/${vId}/p${callCount}.jpg` }
+      },
+      delete: async (url: string) => {
+        deletedUrls.push(url)
+      },
+    }
+    const flakyService = new VehiclePhotoService(repo, flakyStorage)
+
+    const files = [makeFile('a.jpg', 'image/jpeg', JPEG), makeFile('b.jpg', 'image/jpeg', JPEG)]
+    const result = await flakyService.uploadPhotos(vehicleId, files)
+
+    expect(result.ok).toBe(false)
+    if (result.ok) return
+    expect(result.status).toBe(500)
+    // The one successful upload must have been cleaned up.
+    expect(deletedUrls).toEqual([`https://r2.example/${vehicleId}/p1.jpg`])
+
+    const after = await repo.findById(vehicleId)
+    expect(after?.photos).toHaveLength(0)
+  })
+})
+
 describe('VehiclePhotoService.deletePhoto', () => {
   it('removes the photo from the vehicle and R2', async () => {
     const file = makeFile('a.jpg', 'image/jpeg', JPEG)
