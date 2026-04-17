@@ -28,9 +28,27 @@ function vehicleInput(overrides?: Partial<Vehicle>) {
   }
 }
 
+/** Magic byte prefixes so the declared content-type matches the sniffed type. */
+const MAGIC: Record<string, number[]> = {
+  'image/jpeg': [0xff, 0xd8, 0xff, 0xe0, 0x00, 0x10],
+  'image/png': [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a],
+  'image/webp': [0x52, 0x49, 0x46, 0x46, 0x00, 0x00, 0x00, 0x00, 0x57, 0x45, 0x42, 0x50],
+  'image/avif': [0x00, 0x00, 0x00, 0x20, 0x66, 0x74, 0x79, 0x70, 0x61, 0x76, 0x69, 0x66],
+}
+
 function makeFormData(name: string, type: string, sizeBytes: number): FormData {
-  const buffer = new ArrayBuffer(sizeBytes)
-  const file = new File([buffer], name, { type })
+  const prefix = MAGIC[type] ?? []
+  const bytes = new Uint8Array(sizeBytes)
+  bytes.set(prefix.slice(0, sizeBytes))
+  const file = new File([bytes], name, { type })
+  const form = new FormData()
+  form.append('file', file)
+  return form
+}
+
+/** Build FormData with explicit raw bytes — use to test spoofing scenarios. */
+function makeFormDataWithBytes(name: string, type: string, bytes: Uint8Array): FormData {
+  const file = new File([bytes], name, { type })
   const form = new FormData()
   form.append('file', file)
   return form
@@ -115,6 +133,52 @@ describe('POST /vehicles/:id/photos', () => {
     })
 
     expect(res.status).toBe(400)
+  })
+
+  it('rejects HTML bytes labeled image/jpeg (content-type spoofing) with 415', async () => {
+    const headers = await authHeaders()
+    const htmlBytes = new TextEncoder().encode('<html><script>alert(1)</script></html>')
+    const form = makeFormDataWithBytes('evil.jpg', 'image/jpeg', htmlBytes)
+
+    const res = await app.request(`/vehicles/${vehicleId}/photos`, {
+      method: 'POST',
+      headers,
+      body: form,
+    })
+
+    expect(res.status).toBe(415)
+    const body = await res.json()
+    expect(body.success).toBe(false)
+    expect(body.error).toMatch(/content|format|image/i)
+  })
+
+  it('rejects PNG bytes labeled image/jpeg (type mismatch) with 415', async () => {
+    const headers = await authHeaders()
+    const pngBytes = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 0])
+    const form = makeFormDataWithBytes('fake.jpg', 'image/jpeg', pngBytes)
+
+    const res = await app.request(`/vehicles/${vehicleId}/photos`, {
+      method: 'POST',
+      headers,
+      body: form,
+    })
+
+    expect(res.status).toBe(415)
+  })
+
+  it('accepts when declared content-type matches actual bytes', async () => {
+    const headers = await authHeaders()
+    // PNG bytes with matching image/png content-type
+    const pngBytes = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 0])
+    const form = makeFormDataWithBytes('real.png', 'image/png', pngBytes)
+
+    const res = await app.request(`/vehicles/${vehicleId}/photos`, {
+      method: 'POST',
+      headers,
+      body: form,
+    })
+
+    expect(res.status).toBe(201)
   })
 
   it('rejects file larger than 5MB with 400', async () => {

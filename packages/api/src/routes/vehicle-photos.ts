@@ -1,4 +1,5 @@
 import { Hono } from 'hono'
+import { type ImageType, detectImageType } from '../lib/magic-bytes'
 import { STAFF_ROLES, requireUser } from '../middleware/auth'
 import type { PhotoStorage, VehicleRepository } from '../repositories/types'
 import { fail, ok } from './helpers'
@@ -7,12 +8,34 @@ const MAX_PHOTOS_PER_VEHICLE = 10
 const MAX_FILE_SIZE = 5 * 1024 * 1024
 const ALLOWED_MIME_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp', 'image/avif'])
 
+// Enough bytes to sniff every supported format (AVIF needs 12).
+const SNIFF_BYTES = 16
+
+const MIME_TO_TYPE: Record<string, ImageType> = {
+  'image/jpeg': 'jpeg',
+  'image/png': 'png',
+  'image/webp': 'webp',
+  'image/avif': 'avif',
+}
+
 function validateFile(file: File): string | null {
   if (!ALLOWED_MIME_TYPES.has(file.type)) {
     return 'Only image files are allowed (JPEG, PNG, WebP, AVIF)'
   }
   if (file.size > MAX_FILE_SIZE) {
     return 'File must be under 5MB'
+  }
+  return null
+}
+
+/** Verify the declared MIME matches the sniffed magic bytes. Blocks
+ *  content-type spoofing — a stored XSS vector if we trust `file.type`. */
+async function verifyMagicBytes(file: File): Promise<string | null> {
+  const head = new Uint8Array(await file.slice(0, SNIFF_BYTES).arrayBuffer())
+  const detected = detectImageType(head)
+  if (!detected) return 'File content does not match any supported image format'
+  if (MIME_TO_TYPE[file.type] !== detected) {
+    return 'File content does not match declared content type'
   }
   return null
 }
@@ -44,6 +67,11 @@ export function createVehiclePhotoRoutes(repo: VehicleRepository, storage: Photo
       for (const file of files) {
         const error = validateFile(file)
         if (error) return fail(c, error, 400)
+      }
+
+      for (const file of files) {
+        const error = await verifyMagicBytes(file)
+        if (error) return fail(c, error, 415)
       }
 
       const results = await Promise.all(files.map((f) => storage.put(vehicle.id, f)))
