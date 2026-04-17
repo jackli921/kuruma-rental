@@ -1,17 +1,17 @@
 import { translateMessageSchema } from '@kuruma/shared/validators/translation'
 import { Hono } from 'hono'
-import { requireUser } from '../middleware/auth'
+import { requireUser, toCallerContext } from '../middleware/auth'
 import type { MessageTranslationService } from '../services/message-translation'
 import { fail, ok, parseBody } from './helpers'
 
 export function createTranslateRoutes(service: MessageTranslationService) {
   return new Hono().post('/messages/:id/translate', async (c) => {
-    requireUser(c) // authenticated staff or renter
+    const ctx = toCallerContext(requireUser(c))
 
     const parsed = await parseBody(c, translateMessageSchema)
     if (!parsed.ok) return parsed.response
 
-    const result = await service.translate(c.req.param('id'), parsed.data.targetLanguage)
+    const result = await service.translate(ctx, c.req.param('id'), parsed.data.targetLanguage)
     if (!result.ok) return fail(c, result.error, result.status)
 
     return ok(c, {

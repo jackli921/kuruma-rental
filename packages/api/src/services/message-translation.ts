@@ -1,3 +1,4 @@
+import type { CallerContext } from '../middleware/auth'
 import type { MessageRepository } from '../repositories/types'
 import type { TranslationProvider } from './translation-provider'
 
@@ -21,8 +22,14 @@ export class MessageTranslationService {
     private readonly provider: TranslationProvider,
   ) {}
 
-  async translate(messageId: string, targetLanguage: string): Promise<TranslateResult> {
-    const message = await this.messageRepo.findById(messageId)
+  async translate(
+    ctx: CallerContext,
+    messageId: string,
+    targetLanguage: string,
+  ): Promise<TranslateResult> {
+    // Scope the lookup to the caller — a non-participant gets 404, not the
+    // stranger's message content via translatedText.
+    const message = await this.messageRepo.findById(ctx, messageId)
     if (!message) return { ok: false, status: 404, error: 'Message not found' }
 
     const cache = parseCache(message.translations)
@@ -45,7 +52,12 @@ export class MessageTranslationService {
       )
       translatedText = result.translatedText
       detectedLanguage = result.detectedLanguage
-    } catch {
+    } catch (err) {
+      console.error('Translation provider failed', {
+        messageId,
+        targetLanguage,
+        err: err instanceof Error ? err.message : String(err),
+      })
       return { ok: false, status: 502, error: 'Translation provider unavailable' }
     }
 

@@ -25,16 +25,20 @@ export class GoogleTranslationProvider implements TranslationProvider {
     targetLanguage: string,
   ): Promise<{ translatedText: string; detectedLanguage: string }> {
     const params = new URLSearchParams({
-      key: this.apiKey,
       q: text,
       target: targetLanguage,
       format: 'text',
     })
     if (sourceLanguage) params.set('source', sourceLanguage)
 
+    // API key in header, not body — prevents WAF/log middleware from
+    // capturing it in request-body traces.
     const response = await this.fetchFn(ENDPOINT, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded',
+        'X-Goog-Api-Key': this.apiKey,
+      },
       body: params.toString(),
     })
 

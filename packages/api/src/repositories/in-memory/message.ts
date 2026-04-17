@@ -1,4 +1,4 @@
-import type { CallerContext } from '../../middleware/auth'
+import { type CallerContext, PRIVILEGED_ROLES } from '../../middleware/auth'
 import { PG_ERROR } from '../../pg-errors'
 import type { Message } from '../../stores'
 import type { MessageRepository } from '../types'
@@ -19,8 +19,13 @@ export class InMemoryMessageRepository implements MessageRepository {
 
   constructor(private readonly threadRepo: InMemoryThreadRepository) {}
 
-  async findById(id: string): Promise<Message | undefined> {
-    return this.threadRepo._getMessage(id)
+  async findById(ctx: CallerContext, id: string): Promise<Message | undefined> {
+    const msg = this.threadRepo._getMessage(id)
+    if (!msg) return undefined
+    if (PRIVILEGED_ROLES.has(ctx.role)) return msg
+    // Non-privileged: verify the caller is a participant of the message's thread.
+    const thread = await this.threadRepo.findById(ctx, msg.threadId)
+    return thread ? msg : undefined
   }
 
   async findByIdempotencyKey(key: string): Promise<Message | undefined> {

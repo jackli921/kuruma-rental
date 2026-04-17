@@ -170,7 +170,12 @@ export interface ThreadRepository {
 }
 
 export interface MessageRepository {
-  findById(id: string): Promise<Message | undefined>
+  /**
+   * Find a message by id, scoped to the caller. Non-privileged callers
+   * only see messages in threads they participate in; others get
+   * `undefined`. Privileged roles (STAFF/ADMIN) bypass the scope.
+   */
+  findById(ctx: CallerContext, id: string): Promise<Message | undefined>
   findByIdempotencyKey(key: string): Promise<Message | undefined>
   create(
     ctx: CallerContext,

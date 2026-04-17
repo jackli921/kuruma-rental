@@ -26,8 +26,10 @@ describe('GoogleTranslationProvider', () => {
     const [url, init] = fetchFn.mock.calls[0]!
     expect(url).toBe('https://translation.googleapis.com/language/translate/v2')
     expect(init?.method).toBe('POST')
+    const headers = init?.headers as Record<string, string>
+    expect(headers['X-Goog-Api-Key']).toBe('test-key')
     const body = init?.body as string
-    expect(body).toContain('key=test-key')
+    expect(body).not.toContain('key=test-key')
     expect(body).toContain('target=en')
     expect(body).toContain('q=')
   })

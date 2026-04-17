@@ -170,17 +170,27 @@ export function createApp(overrides?: {
     photoStorage = new InMemoryPhotoStorage()
   }
 
-  // Translation provider: real Google when the key is set, otherwise a
-  // no-op stub that returns the original text prefixed with the target
-  // code. Lets preview/dev envs work without Google credentials.
-  const translationProvider: TranslationProvider = process.env.GOOGLE_TRANSLATE_API_KEY
-    ? new GoogleTranslationProvider(process.env.GOOGLE_TRANSLATE_API_KEY)
-    : {
-        translate: async (text, _source, targetLanguage) => ({
-          translatedText: `[${targetLanguage}] ${text}`,
-          detectedLanguage: _source ?? targetLanguage,
-        }),
+  // Translation provider: real Google when the key is set. In production
+  // without a key, a sentinel provider throws on first use (not at boot,
+  // so unrelated tests can still run createApp). The stub is dev-only
+  // so a secret drift can't ship working translations silently.
+  const translationProvider: TranslationProvider = (() => {
+    const key = process.env.GOOGLE_TRANSLATE_API_KEY
+    if (key) return new GoogleTranslationProvider(key)
+    if (process.env.NODE_ENV === 'production') {
+      return {
+        translate: async () => {
+          throw new Error('GOOGLE_TRANSLATE_API_KEY not configured')
+        },
       }
+    }
+    return {
+      translate: async (text, source, targetLanguage) => ({
+        translatedText: `[${targetLanguage}] ${text}`,
+        detectedLanguage: source ?? targetLanguage,
+      }),
+    }
+  })()
 
   const app = new Hono()
 
