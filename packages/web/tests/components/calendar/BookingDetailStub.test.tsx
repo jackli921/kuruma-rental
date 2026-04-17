@@ -23,7 +23,7 @@ vi.mock('next-intl', () => ({
   useTranslations: () => (key: string, values?: Record<string, string>) => {
     const m: Record<string, string> = {
       stubTitle: 'Booking detail',
-      stubBody: `Booking detail page coming soon — id: ${values?.id ?? ''}`,
+      stubBody: `Full booking detail page coming soon — id: ${values?.id ?? ''}`,
       backToCalendar: 'Back to calendar',
     }
     return m[key] ?? key

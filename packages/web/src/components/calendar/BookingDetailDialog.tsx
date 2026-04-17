@@ -157,7 +157,7 @@ export function BookingDetailDialog({
         {booking && (
           <Link
             href={`/manage/bookings/${booking.id}`}
-            className="text-sm text-primary hover:underline self-start"
+            className="text-sm text-primary hover:underline focus-visible:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded self-start"
             onClick={onClose}
           >
             {t('viewFullDetails')}
