@@ -20,7 +20,7 @@ export async function searchCustomers(query: string): Promise<ActionResult<Custo
 
   try {
     const client = createApiClient(token)
-    const res = await client.customers.$get({ query: { search: query } })
+    const res = await client.customers.search.$get({ query: { q: query } })
     const body = (await res.json()) as ApiResponse<CustomerData[]>
     if (!body.success) return { success: false, error: body.error ?? 'Search failed' }
     return { success: true, data: body.data }

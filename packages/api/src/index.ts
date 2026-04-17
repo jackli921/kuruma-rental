@@ -9,6 +9,7 @@ import { requestId } from './middleware/request-id'
 import {
   DrizzleAvailabilityRepository,
   DrizzleBookingRepository,
+  DrizzleCustomerRepository,
   DrizzleFleetOverviewRepository,
   DrizzleMaintenanceLogRepository,
   DrizzleMessageRepository,
@@ -23,6 +24,7 @@ import {
 import {
   InMemoryAvailabilityRepository,
   InMemoryBookingRepository,
+  InMemoryCustomerRepository,
   InMemoryFleetOverviewRepository,
   InMemoryMaintenanceLogRepository,
   InMemoryMessageRepository,
@@ -38,6 +40,7 @@ import { type R2BucketLike, R2PhotoStorage } from './repositories/r2-photo-stora
 import type {
   AvailabilityRepository,
   BookingRepository,
+  CustomerRepository,
   FleetOverviewRepository,
   MaintenanceLogRepository,
   MessageRepository,
@@ -88,6 +91,7 @@ export function createApp(overrides?: {
   maintenanceLogRepo?: MaintenanceLogRepository
   photoStorage?: PhotoStorage
   userRepo?: UserRepository
+  customerRepo?: CustomerRepository
   photoUploadLimiter?: RateLimitBinding
   photoUploadUserLimiter?: RateLimitBinding
 }) {
@@ -103,6 +107,7 @@ export function createApp(overrides?: {
   let messageRepo: MessageRepository
   let maintenanceLogRepo: MaintenanceLogRepository
   let photoStorage: PhotoStorage
+  let customerRepo: CustomerRepository
   let runInTransaction: RunInTransaction
   const photoUploadLimiter =
     overrides?.photoUploadLimiter ??
@@ -130,6 +135,7 @@ export function createApp(overrides?: {
       overrides.messageRepo ?? new InMemoryMessageRepository(threadRepo as InMemoryThreadRepository)
     photoStorage = overrides.photoStorage ?? new InMemoryPhotoStorage()
     userRepo = overrides.userRepo ?? new InMemoryUserRepository()
+    customerRepo = overrides.customerRepo ?? new InMemoryCustomerRepository(new Map(), new Map())
   } else if (process.env.DATABASE_URL) {
     const db = getDb()
     vehicleClassRepo = new DrizzleVehicleClassRepository(db)
@@ -144,6 +150,7 @@ export function createApp(overrides?: {
     threadRepo = new DrizzleThreadRepository(db)
     messageRepo = new DrizzleMessageRepository(db)
     userRepo = new DrizzleUserRepository(db)
+    customerRepo = new DrizzleCustomerRepository(db)
     const vehiclePhotosBucket = (globalThis as Record<string, unknown>).VEHICLE_PHOTOS as
       | R2BucketLike
       | undefined
@@ -180,6 +187,7 @@ export function createApp(overrides?: {
     runInTransaction = async (fn) => fn({ vehicleRepo, maintenanceLogRepo })
     userRepo = new InMemoryUserRepository()
     photoStorage = new InMemoryPhotoStorage()
+    customerRepo = new InMemoryCustomerRepository(new Map(), new Map())
   }
 
   // Translation provider: real Google when the key is set. In production
@@ -253,11 +261,12 @@ export function createApp(overrides?: {
   app.use('/availability/*', requireAuth())
   app.use('/threads/*', requireAuth())
   app.use('/customers/*', requireAuth())
+  app.use('/customers', requireAuth())
   app.use('/users/*', requireAuth())
 
   const vehicleClassService = new VehicleClassService(vehicleClassRepo)
   const bookingService = new BookingService(bookingRepo, vehicleRepo, userRepo)
-  const customerService = new CustomerService(userRepo)
+  const customerService = new CustomerService(customerRepo, userRepo)
   const maintenanceService = new MaintenanceService(
     vehicleRepo,
     maintenanceLogRepo,
