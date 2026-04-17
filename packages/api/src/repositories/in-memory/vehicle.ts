@@ -23,6 +23,9 @@ export class InMemoryVehicleRepository implements VehicleRepository {
     } else {
       filtered = all.filter((v) => v.status !== 'RETIRED')
     }
+    if (filters?.classId !== undefined) {
+      filtered = filtered.filter((v) => v.classId === filters.classId)
+    }
     const total = filtered.length
     const offset = filters?.offset ?? 0
     const limit = filters?.limit

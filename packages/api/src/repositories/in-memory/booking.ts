@@ -99,6 +99,16 @@ export class InMemoryBookingRepository implements BookingRepository {
     return undefined
   }
 
+  async countActiveForVehicles(vehicleIds: string[]): Promise<number> {
+    if (vehicleIds.length === 0) return 0
+    const ids = new Set(vehicleIds)
+    let count = 0
+    for (const booking of this.store.values()) {
+      if (ids.has(booking.vehicleId) && BLOCKING_STATUSES.has(booking.status)) count++
+    }
+    return count
+  }
+
   async create(
     ctx: CallerContext,
     data: Omit<Booking, 'id' | 'createdAt' | 'updatedAt'>,
