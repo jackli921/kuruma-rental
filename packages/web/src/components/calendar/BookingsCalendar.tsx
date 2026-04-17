@@ -26,6 +26,11 @@ export interface CalendarResource {
   resourceTitle: string
 }
 
+export interface SlotSelectInfo {
+  start: Date
+  end: Date
+}
+
 interface BookingsCalendarProps {
   readonly events: CalendarEvent[]
   readonly resources?: CalendarResource[]
@@ -35,6 +40,7 @@ interface BookingsCalendarProps {
   readonly onDateChange: (date: Date) => void
   readonly views?: View[]
   readonly onBookingUpdate?: (updated: CalendarBooking) => void
+  readonly onSelectSlot?: (slotInfo: SlotSelectInfo) => void
 }
 
 export function toCalendarEvents(bookings: CalendarBooking[]): CalendarEvent[] {
