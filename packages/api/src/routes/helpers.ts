@@ -33,34 +33,42 @@ export function stripUndefined<T extends Record<string, unknown>>(obj: T): Parti
   return result as Partial<T>
 }
 
-// --- Request parsing helpers ---
-
 // --- Pagination helpers ---
 
+type LimitOptions = { defaultLimit?: number; maxLimit?: number }
+type LimitSuccess = { ok: true; limit: number }
 type PaginationSuccess = { ok: true; limit: number; offset: number }
-type PaginationFailure = { ok: false; response: Response }
+type ParseFailure = { ok: false; response: Response }
 
-export function parsePagination(
-  c: Context,
-  opts?: { defaultLimit?: number; maxLimit?: number },
-): PaginationSuccess | PaginationFailure {
-  const defaultLimit = opts?.defaultLimit ?? 25
+/** Parse `limit` query param only. Use for cursor-based pagination where
+ *  `offset` is not meaningful. Defaults: limit=25, max=100. */
+export function parseLimit(c: Context, opts?: LimitOptions): LimitSuccess | ParseFailure {
   const maxLimit = opts?.maxLimit ?? 100
-
-  const limitParam = c.req.query('limit')
-  const offsetParam = c.req.query('offset')
-
-  const limit = limitParam ? Number.parseInt(limitParam, 10) : defaultLimit
+  const limit = readLimit(c, opts?.defaultLimit ?? 25)
   if (Number.isNaN(limit) || limit < 1 || limit > maxLimit) {
     return { ok: false, response: fail(c, `limit must be between 1 and ${maxLimit}`, 400) }
   }
+  return { ok: true, limit }
+}
 
+/** Parse `limit` and `offset` query params. Use for offset-based pagination.
+ *  Defaults: limit=25, max=100, offset=0. */
+export function parsePagination(c: Context, opts?: LimitOptions): PaginationSuccess | ParseFailure {
+  const limitResult = parseLimit(c, opts)
+  if (!limitResult.ok) return limitResult
+
+  const offsetParam = c.req.query('offset')
   const offset = offsetParam ? Number.parseInt(offsetParam, 10) : 0
   if (Number.isNaN(offset) || offset < 0) {
     return { ok: false, response: fail(c, 'offset must be a non-negative integer', 400) }
   }
 
-  return { ok: true, limit, offset }
+  return { ok: true, limit: limitResult.limit, offset }
+}
+
+function readLimit(c: Context, defaultLimit: number): number {
+  const limitParam = c.req.query('limit')
+  return limitParam ? Number.parseInt(limitParam, 10) : defaultLimit
 }
 
 // --- Body parsing helpers ---

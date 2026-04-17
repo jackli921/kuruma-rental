@@ -1,7 +1,14 @@
 import { Hono } from 'hono'
 import { describe, expect, it } from 'vitest'
 import { z } from 'zod'
-import { fail, ok, parseBody, parseDateRange, parsePagination } from '../../src/routes/helpers'
+import {
+  fail,
+  ok,
+  parseBody,
+  parseDateRange,
+  parseLimit,
+  parsePagination,
+} from '../../src/routes/helpers'
 
 // Tiny Hono app that uses the helpers so we can test through real HTTP.
 function createTestApp() {
@@ -24,6 +31,12 @@ function createTestApp() {
     const result = await parseBody(c, testSchema)
     if (!result.ok) return result.response
     return ok(c, result.data)
+  })
+
+  app.get('/limit-only', (c) => {
+    const result = parseLimit(c, { defaultLimit: 20 })
+    if (!result.ok) return result.response
+    return ok(c, { limit: result.limit })
   })
 
   app.get('/paginate', (c) => {
@@ -219,6 +232,39 @@ describe('parseDateRange()', () => {
     const body = await res.json()
     expect(new Date(body.data.from).getTime()).toBe(new Date(from).getTime())
     expect(new Date(body.data.to).getTime()).toBe(new Date(to).getTime())
+  })
+})
+
+describe('parseLimit()', () => {
+  const app = createTestApp()
+
+  it('returns defaultLimit when no param provided', async () => {
+    const res = await app.request('/limit-only')
+    expect(res.status).toBe(200)
+    const body = await res.json()
+    expect(body.data).toEqual({ limit: 20 })
+  })
+
+  it('parses valid limit', async () => {
+    const res = await app.request('/limit-only?limit=50')
+    expect(res.status).toBe(200)
+    const body = await res.json()
+    expect(body.data).toEqual({ limit: 50 })
+  })
+
+  it('returns 400 for invalid limit', async () => {
+    const res = await app.request('/limit-only?limit=0')
+    expect(res.status).toBe(400)
+    const body = await res.json()
+    expect(body.error).toBe('limit must be between 1 and 100')
+  })
+
+  it('ignores offset query param (no offset in result)', async () => {
+    const res = await app.request('/limit-only?limit=10&offset=999')
+    expect(res.status).toBe(200)
+    const body = await res.json()
+    expect(body.data).toEqual({ limit: 10 })
+    expect(body.data.offset).toBeUndefined()
   })
 })
 

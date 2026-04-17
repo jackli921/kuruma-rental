@@ -3,7 +3,7 @@ import { Hono } from 'hono'
 import { requireUser, toCallerContext } from '../middleware/auth'
 import type { BookingFilters } from '../repositories/types'
 import type { BookingService } from '../services/booking'
-import { fail, ok, parseDateRange, parsePagination } from './helpers'
+import { fail, ok, parseDateRange, parseLimit } from './helpers'
 
 export function createBookingRoutes(service: BookingService) {
   return new Hono()
@@ -19,7 +19,7 @@ export function createBookingRoutes(service: BookingService) {
       const dateRange = parseDateRange(c, false)
       if (!dateRange.ok) return dateRange.response
 
-      const pg = parsePagination(c, { defaultLimit: 20 })
+      const pg = parseLimit(c, { defaultLimit: 20 })
       if (!pg.ok) return pg.response
       const { limit } = pg
 
