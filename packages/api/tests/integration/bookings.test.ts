@@ -6,6 +6,7 @@ import { pgErrorCode } from '../../src/pg-errors'
 import {
   DrizzleAvailabilityRepository,
   DrizzleBookingRepository,
+  DrizzleVehicleClassRepository,
   DrizzleVehicleRepository,
 } from '../../src/repositories/drizzle'
 import type { Vehicle } from '../../src/stores'
@@ -467,6 +468,7 @@ describe('POST /bookings overlap via HTTP (real Postgres)', () => {
     const httpVehicleRepo = new DrizzleVehicleRepository(db)
     const httpBookingRepo = new DrizzleBookingRepository(db)
     const httpAvailabilityRepo = new DrizzleAvailabilityRepository(db)
+    const httpVehicleClassRepo = new DrizzleVehicleClassRepository(db)
 
     httpVehicle = await httpVehicleRepo.create({
       classId: testClassId,
@@ -491,6 +493,7 @@ describe('POST /bookings overlap via HTTP (real Postgres)', () => {
       vehicleRepo: httpVehicleRepo,
       bookingRepo: httpBookingRepo,
       availabilityRepo: httpAvailabilityRepo,
+      vehicleClassRepo: httpVehicleClassRepo,
     })
     headers = await authHeaders({ sub: httpUser.id, role: 'RENTER' })
   })
