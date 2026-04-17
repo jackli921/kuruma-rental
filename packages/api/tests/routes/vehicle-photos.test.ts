@@ -9,6 +9,9 @@ import { InMemoryPhotoStorage } from '../../src/repositories/in-memory/photo-sto
 import type { Vehicle } from '../../src/stores'
 import { authHeaders, setupAuthEnv } from '../helpers/auth'
 
+const JPEG_HEADER = [0xff, 0xd8, 0xff, 0xe0, 0x00, 0x10, 0x4a, 0x46, 0x49, 0x46]
+const PNG_HEADER = [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00, 0x00]
+
 function vehicleInput(overrides?: Partial<Vehicle>) {
   return {
     name: 'Test Car',
@@ -28,9 +31,19 @@ function vehicleInput(overrides?: Partial<Vehicle>) {
   }
 }
 
-function makeFormData(name: string, type: string, sizeBytes: number): FormData {
-  const buffer = new ArrayBuffer(sizeBytes)
-  const file = new File([buffer], name, { type })
+function imageBuffer(header: number[], totalSize: number): ArrayBuffer {
+  const buf = new Uint8Array(totalSize)
+  buf.set(header, 0)
+  return buf.buffer
+}
+
+function makeFormData(
+  name: string,
+  type: string,
+  sizeBytes: number,
+  header: number[] = JPEG_HEADER,
+): FormData {
+  const file = new File([imageBuffer(header, sizeBytes)], name, { type })
   const form = new FormData()
   form.append('file', file)
   return form
@@ -117,6 +130,36 @@ describe('POST /vehicles/:id/photos', () => {
     expect(res.status).toBe(400)
   })
 
+  it('rejects PNG bytes declared as image/jpeg (content-type spoofing)', async () => {
+    const headers = await authHeaders()
+    const form = makeFormData('spoof.jpg', 'image/jpeg', 1024, PNG_HEADER)
+
+    const res = await app.request(`/vehicles/${vehicleId}/photos`, {
+      method: 'POST',
+      headers,
+      body: form,
+    })
+
+    expect(res.status).toBe(400)
+    const body = await res.json()
+    expect(body.error).toContain('does not match declared Content-Type')
+  })
+
+  it('rejects non-image bytes declared as image/jpeg (magic-byte check)', async () => {
+    const headers = await authHeaders()
+    const form = makeFormData('fake.jpg', 'image/jpeg', 1024, [0x3c, 0x21, 0x44, 0x4f])
+
+    const res = await app.request(`/vehicles/${vehicleId}/photos`, {
+      method: 'POST',
+      headers,
+      body: form,
+    })
+
+    expect(res.status).toBe(400)
+    const body = await res.json()
+    expect(body.error).toContain('image format')
+  })
+
   it('rejects file larger than 5MB with 400', async () => {
     const headers = await authHeaders()
     const form = makeFormData('huge.jpg', 'image/jpeg', 6 * 1024 * 1024)
@@ -190,8 +233,35 @@ describe('POST /vehicles/:id/photos', () => {
   })
 })
 
+describe('concurrent upload race on photo cap', () => {
+  it('serializes appends so cap cannot be exceeded', async () => {
+    const ctx = createTestApp()
+    const photos = Array.from({ length: 9 }, (_, i) => `https://example.com/photo${i}.jpg`)
+    const v = await ctx.vehicleRepo.create(vehicleInput({ photos }))
+    const headers = await authHeaders()
+
+    // Three concurrent single-photo uploads against a vehicle with 9 existing.
+    // Exactly one should succeed, two should 400.
+    const responses = await Promise.all(
+      [0, 1, 2].map(() =>
+        ctx.app.request(`/vehicles/${v.id}/photos`, {
+          method: 'POST',
+          headers,
+          body: makeFormData('extra.jpg', 'image/jpeg', 1024),
+        }),
+      ),
+    )
+
+    const statuses = responses.map((r) => r.status).sort()
+    expect(statuses).toEqual([201, 400, 400])
+
+    const updated = await ctx.vehicleRepo.findById(v.id)
+    expect(updated?.photos).toHaveLength(10)
+  })
+})
+
 describe('upload → delete round-trip', () => {
-  it('upload then delete by index removes file from storage', async () => {
+  it('upload then delete by URL removes file from storage', async () => {
     const ctx = createTestApp()
     const vehicle = await ctx.vehicleRepo.create(vehicleInput())
     const headers = await authHeaders()
@@ -203,11 +273,12 @@ describe('upload → delete round-trip', () => {
       body: form,
     })
     expect(uploadRes.status).toBe(201)
+    const uploaded: string = (await uploadRes.json()).data.uploaded[0]
 
-    const deleteRes = await ctx.app.request(`/vehicles/${vehicle.id}/photos/0`, {
-      method: 'DELETE',
-      headers,
-    })
+    const deleteRes = await ctx.app.request(
+      `/vehicles/${vehicle.id}/photos?url=${encodeURIComponent(uploaded)}`,
+      { method: 'DELETE', headers },
+    )
     expect(deleteRes.status).toBe(200)
 
     const updated = await ctx.vehicleRepo.findById(vehicle.id)
@@ -215,7 +286,7 @@ describe('upload → delete round-trip', () => {
   })
 })
 
-describe('DELETE /vehicles/:id/photos/:photoIdx', () => {
+describe('DELETE /vehicles/:id/photos?url=', () => {
   let app: ReturnType<typeof createTestApp>['app']
   let vehicleRepo: InMemoryVehicleRepository
   let vehicleId: string
@@ -230,13 +301,13 @@ describe('DELETE /vehicles/:id/photos/:photoIdx', () => {
     vehicleId = v.id
   })
 
-  it('deletes a photo by index', async () => {
+  it('deletes a photo by URL', async () => {
     const headers = await authHeaders()
 
-    const res = await app.request(`/vehicles/${vehicleId}/photos/0`, {
-      method: 'DELETE',
-      headers,
-    })
+    const res = await app.request(
+      `/vehicles/${vehicleId}/photos?url=${encodeURIComponent('https://test.com/a.jpg')}`,
+      { method: 'DELETE', headers },
+    )
 
     expect(res.status).toBe(200)
     const body = await res.json()
@@ -248,10 +319,10 @@ describe('DELETE /vehicles/:id/photos/:photoIdx', () => {
     expect(updated?.photos).toEqual(['https://test.com/b.jpg'])
   })
 
-  it('returns 400 for out-of-range index', async () => {
+  it('returns 400 when url query is missing', async () => {
     const headers = await authHeaders()
 
-    const res = await app.request(`/vehicles/${vehicleId}/photos/5`, {
+    const res = await app.request(`/vehicles/${vehicleId}/photos`, {
       method: 'DELETE',
       headers,
     })
@@ -259,24 +330,24 @@ describe('DELETE /vehicles/:id/photos/:photoIdx', () => {
     expect(res.status).toBe(400)
   })
 
-  it('returns 400 for non-numeric index', async () => {
+  it('returns 404 for URL not in vehicle.photos', async () => {
     const headers = await authHeaders()
 
-    const res = await app.request(`/vehicles/${vehicleId}/photos/abc`, {
-      method: 'DELETE',
-      headers,
-    })
+    const res = await app.request(
+      `/vehicles/${vehicleId}/photos?url=${encodeURIComponent('https://test.com/other.jpg')}`,
+      { method: 'DELETE', headers },
+    )
 
-    expect(res.status).toBe(400)
+    expect(res.status).toBe(404)
   })
 
   it('returns 404 for nonexistent vehicle', async () => {
     const headers = await authHeaders()
 
-    const res = await app.request('/vehicles/nonexistent/photos/0', {
-      method: 'DELETE',
-      headers,
-    })
+    const res = await app.request(
+      `/vehicles/nonexistent/photos?url=${encodeURIComponent('https://test.com/a.jpg')}`,
+      { method: 'DELETE', headers },
+    )
 
     expect(res.status).toBe(404)
   })
@@ -284,10 +355,10 @@ describe('DELETE /vehicles/:id/photos/:photoIdx', () => {
   it('returns 403 for RENTER role', async () => {
     const headers = await authHeaders({ sub: 'renter-1', role: 'RENTER' })
 
-    const res = await app.request(`/vehicles/${vehicleId}/photos/0`, {
-      method: 'DELETE',
-      headers,
-    })
+    const res = await app.request(
+      `/vehicles/${vehicleId}/photos?url=${encodeURIComponent('https://test.com/a.jpg')}`,
+      { method: 'DELETE', headers },
+    )
 
     expect(res.status).toBe(403)
   })

@@ -221,11 +221,11 @@ export async function uploadVehiclePhotos(
 
 export async function deleteVehiclePhoto(
   vehicleId: string,
-  photoIdx: number,
+  photoUrl: string,
   token?: string,
 ): Promise<PhotoDeleteResult> {
   const client = createApiClient()
-  const url = `${client.vehicles[':id'].$url({ param: { id: vehicleId } }).toString()}/photos/${photoIdx}`
+  const url = `${client.vehicles[':id'].$url({ param: { id: vehicleId } }).toString()}/photos?url=${encodeURIComponent(photoUrl)}`
   const headers: Record<string, string> = {}
   if (token) {
     headers.Authorization = `Bearer ${token}`
