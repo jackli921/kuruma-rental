@@ -275,7 +275,7 @@ export function createApp(overrides?: {
     vehicleRepo,
     availabilityRepo,
   )
-  const bookingService = new BookingService(bookingRepo, vehicleRepo, userRepo)
+  const bookingService = new BookingService(bookingRepo, vehicleRepo, userRepo, vehicleClassRepo)
   const customerService = new CustomerService(customerRepo, userRepo)
   const maintenanceService = new MaintenanceService(
     vehicleRepo,

@@ -70,6 +70,7 @@ export const vehicleColumns = {
 export const bookingColumns = {
   id: bookings.id,
   renterId: bookings.renterId,
+  classId: bookings.classId,
   vehicleId: bookings.vehicleId,
   startAt: bookings.startAt,
   endAt: bookings.endAt,
@@ -213,6 +214,7 @@ export function toBooking(r: BookingRow): Booking {
   return {
     id: r.id,
     renterId: r.renterId,
+    classId: r.classId,
     vehicleId: r.vehicleId,
     startAt: r.startAt,
     endAt: r.endAt,

@@ -169,6 +169,13 @@
       "when": 1776384834572,
       "tag": "0023_add_phone_to_users",
       "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "7",
+      "when": 1776463363231,
+      "tag": "0024_booking_class_fk",
+      "breakpoints": true
     }
   ]
 }

@@ -2,25 +2,40 @@ import { describe, expect, it } from 'vitest'
 import { createBookingSchema, updateBookingStatusSchema } from '../../src/validators/booking'
 
 const VALID_UUID = '550e8400-e29b-41d4-a716-446655440000'
+const VALID_CLASS_UUID = '550e8400-e29b-41d4-a716-446655440001'
 
 describe('createBookingSchema', () => {
   const validInput = {
-    vehicleId: VALID_UUID,
+    classId: VALID_CLASS_UUID,
     startAt: '2026-04-10T09:00:00Z',
     endAt: '2026-04-10T17:00:00Z',
   }
 
-  it('accepts valid input with required fields', () => {
+  it('accepts valid input with required fields (classId only, no vehicleId)', () => {
     const result = createBookingSchema.safeParse(validInput)
     expect(result.success).toBe(true)
     if (result.success) {
+      expect(result.data.classId).toBe(VALID_CLASS_UUID)
+      expect(result.data.vehicleId).toBeUndefined()
       expect(result.data.source).toBe('DIRECT')
+    }
+  })
+
+  it('accepts valid input with classId + optional vehicleId', () => {
+    const result = createBookingSchema.safeParse({
+      ...validInput,
+      vehicleId: VALID_UUID,
+    })
+    expect(result.success).toBe(true)
+    if (result.success) {
+      expect(result.data.vehicleId).toBe(VALID_UUID)
     }
   })
 
   it('accepts valid input with all fields', () => {
     const result = createBookingSchema.safeParse({
       ...validInput,
+      vehicleId: VALID_UUID,
       notes: 'Arriving at KIX',
       source: 'TRIP_COM',
       externalId: 'TC-12345',
@@ -28,14 +43,19 @@ describe('createBookingSchema', () => {
     expect(result.success).toBe(true)
   })
 
-  it('rejects non-UUID vehicleId', () => {
-    const result = createBookingSchema.safeParse({ ...validInput, vehicleId: 'vehicle-123' })
+  it('rejects non-UUID classId', () => {
+    const result = createBookingSchema.safeParse({ ...validInput, classId: 'class-123' })
     expect(result.success).toBe(false)
   })
 
-  it('rejects missing vehicleId', () => {
-    const { vehicleId, ...rest } = validInput
+  it('rejects missing classId', () => {
+    const { classId, ...rest } = validInput
     const result = createBookingSchema.safeParse(rest)
+    expect(result.success).toBe(false)
+  })
+
+  it('rejects non-UUID vehicleId when provided', () => {
+    const result = createBookingSchema.safeParse({ ...validInput, vehicleId: 'vehicle-123' })
     expect(result.success).toBe(false)
   })
 

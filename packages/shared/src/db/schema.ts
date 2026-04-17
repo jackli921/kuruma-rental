@@ -165,9 +165,12 @@ export const bookings = pgTable('bookings', {
   renterId: text('renterId')
     .notNull()
     .references(() => users.id),
-  vehicleId: text('vehicleId')
+  // Issue #308: classId is the renter's choice (always present).
+  // vehicleId is nullable — owner assigns a specific car later.
+  classId: text('classId')
     .notNull()
-    .references(() => vehicles.id),
+    .references(() => vehicleClasses.id),
+  vehicleId: text('vehicleId').references(() => vehicles.id),
   startAt: timestamp('startAt', { withTimezone: true, mode: 'date' }).notNull(),
   endAt: timestamp('endAt', { withTimezone: true, mode: 'date' }).notNull(),
   effectiveEndAt: timestamp('effectiveEndAt', { withTimezone: true, mode: 'date' }).notNull(),

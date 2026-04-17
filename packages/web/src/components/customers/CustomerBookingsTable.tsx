@@ -40,7 +40,7 @@ export async function CustomerBookingsTable({ bookings, locale }: Props) {
         <TableBody>
           {bookings.map((b) => (
             <TableRow key={b.id}>
-              <TableCell>{b.vehicleName ?? b.vehicleId}</TableCell>
+              <TableCell>{b.vehicleName ?? b.vehicleId ?? '—'}</TableCell>
               <TableCell>{formatDateTime(b.startAt, locale)}</TableCell>
               <TableCell>{formatDateTime(b.endAt, locale)}</TableCell>
               <TableCell>
