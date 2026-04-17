@@ -4,6 +4,7 @@ import { ComposeInput } from '@/components/messaging/ComposeInput'
 import { MessageBubble } from '@/components/messaging/MessageBubble'
 import { MessageThreadSkeleton } from '@/components/messaging/MessageThreadSkeleton'
 import { useMarkAsRead, useSendMessage, useThread, useUserNames } from '@/hooks/useMessages'
+import { getMyUnreadCount } from '@/lib/message-utils'
 import { AlertCircle } from 'lucide-react'
 import { useTranslations } from 'next-intl'
 import { useEffect, useMemo, useRef } from 'react'
@@ -32,13 +33,16 @@ export function MessageThread({ threadId, currentUserId }: MessageThreadProps) {
     return m
   }, [nameRows])
 
-  // Mark as read whenever the thread opens or new messages arrive while viewing.
-  // We depend on `thread` (re-fetched after each invalidation) to re-run on
-  // message arrivals; markAsRead.mutate is stable across renders.
+  // Mark as read only when the caller actually has unread. Depending on `thread`
+  // itself would re-fire on every refetch — and markAsRead's onSuccess invalidates
+  // the thread list, which can cascade into an infinite mark→invalidate→refetch
+  // loop. `unread` is a primitive that increments when a new message arrives,
+  // which is exactly when we want to re-mark.
+  const unread = thread ? getMyUnreadCount(thread, currentUserId) : 0
   const markAsReadMutate = markAsRead.mutate
   useEffect(() => {
-    if (thread) markAsReadMutate(threadId)
-  }, [threadId, thread, markAsReadMutate])
+    if (unread > 0) markAsReadMutate(threadId)
+  }, [threadId, unread, markAsReadMutate])
 
   // Auto-scroll to bottom whenever the messages array reference changes.
   const messages = thread?.messages

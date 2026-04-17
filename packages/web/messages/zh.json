@@ -371,7 +371,8 @@
       "noMessages": "此对话中暂无消息。",
       "you": "我",
       "today": "今天",
-      "yesterday": "昨天"
+      "yesterday": "昨天",
+      "back": "返回收件箱"
     }
   },
   "bookings": {

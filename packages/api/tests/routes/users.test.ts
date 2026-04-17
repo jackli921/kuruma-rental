@@ -1,31 +1,40 @@
 import { Hono } from 'hono'
 import { beforeEach, describe, expect, it } from 'vitest'
 import { createApp } from '../../src/index'
-import { InMemoryUserRepository } from '../../src/repositories/in-memory'
+import { InMemoryThreadRepository, InMemoryUserRepository } from '../../src/repositories/in-memory'
 import { createUserRoutes } from '../../src/routes/users'
 import { setupAuthEnv, testAuthMiddleware } from '../helpers/auth'
 
 const U1 = '00000000-0000-4000-8000-0000000000a1'
 const U2 = '00000000-0000-4000-8000-0000000000a2'
+const U3 = '00000000-0000-4000-8000-0000000000a3' // not a thread participant of U1
 
 let userRepo: InMemoryUserRepository
-let app: Hono
+let threadRepo: InMemoryThreadRepository
 
-beforeEach(() => {
+function appAs(userId: string, role: 'RENTER' | 'STAFF' | 'ADMIN' = 'RENTER'): Hono {
+  const a = new Hono()
+  a.use('*', testAuthMiddleware(userId, role))
+  a.route('/', createUserRoutes(userRepo, threadRepo))
+  return a
+}
+
+beforeEach(async () => {
   const store = new Map([
     [U1, { id: U1, name: 'Alice', email: 'a@x', language: 'en' }],
     [U2, { id: U2, name: 'Bob', email: 'b@x', language: 'en' }],
+    [U3, { id: U3, name: 'Carol', email: 'c@x', language: 'en' }],
   ])
   userRepo = new InMemoryUserRepository(store)
-  app = new Hono()
-  app.use('*', testAuthMiddleware(U1, 'RENTER'))
-  app.route('/', createUserRoutes(userRepo))
+  threadRepo = new InMemoryThreadRepository()
+  // U1 and U2 share a thread; U3 is unrelated to U1.
+  await threadRepo.create({ userId: U1, role: 'RENTER' }, null, [U1, U2], null)
 })
 
 describe('User Routes', () => {
-  describe('GET /users', () => {
-    it('returns id+name pairs for the requested ids', async () => {
-      const res = await app.request(`/users?ids=${U1},${U2}`)
+  describe('GET /users — name resolution scoped to thread participants', () => {
+    it('returns id+name pairs for ids the caller shares a thread with', async () => {
+      const res = await appAs(U1).request(`/users?ids=${U1},${U2}`)
       expect(res.status).toBe(200)
       const body = await res.json()
       expect(body.success).toBe(true)
@@ -34,8 +43,32 @@ describe('User Routes', () => {
       expect(body.data).toContainEqual({ id: U2, name: 'Bob' })
     })
 
+    it('omits ids the renter does not share a thread with (no enumeration oracle)', async () => {
+      const res = await appAs(U1).request(`/users?ids=${U2},${U3}`)
+      expect(res.status).toBe(200)
+      const body = await res.json()
+      expect(body.data).toHaveLength(1)
+      expect(body.data).toContainEqual({ id: U2, name: 'Bob' })
+      // U3 is intentionally NOT present — caller has no thread with U3.
+    })
+
+    it('returns empty array when none of the ids are in the caller-allowed set', async () => {
+      const res = await appAs(U1).request(`/users?ids=${U3}`)
+      expect(res.status).toBe(200)
+      expect((await res.json()).data).toEqual([])
+    })
+
+    it('allows privileged roles (STAFF/ADMIN) to resolve any user', async () => {
+      const res = await appAs(U1, 'STAFF').request(`/users?ids=${U2},${U3}`)
+      expect(res.status).toBe(200)
+      const body = await res.json()
+      expect(body.data).toHaveLength(2)
+    })
+  })
+
+  describe('GET /users — input validation', () => {
     it('rejects malformed uuids with 400', async () => {
-      const res = await app.request(`/users?ids=${U1},not-a-uuid`)
+      const res = await appAs(U1).request(`/users?ids=${U1},not-a-uuid`)
       expect(res.status).toBe(400)
       const body = await res.json()
       expect(body.success).toBe(false)
@@ -46,7 +79,7 @@ describe('User Routes', () => {
         { length: 51 },
         (_, i) => `00000000-0000-4000-8000-${i.toString(16).padStart(12, '0')}`,
       ).join(',')
-      const res = await app.request(`/users?ids=${ids}`)
+      const res = await appAs(U1).request(`/users?ids=${ids}`)
       expect(res.status).toBe(400)
       const body = await res.json()
       expect(body.success).toBe(false)
@@ -54,11 +87,12 @@ describe('User Routes', () => {
     })
 
     it('returns empty array when ids parameter is missing or empty', async () => {
-      const missing = await app.request('/users')
+      const a = appAs(U1)
+      const missing = await a.request('/users')
       expect(missing.status).toBe(200)
       expect((await missing.json()).data).toEqual([])
 
-      const empty = await app.request('/users?ids=')
+      const empty = await a.request('/users?ids=')
       expect(empty.status).toBe(200)
       expect((await empty.json()).data).toEqual([])
     })

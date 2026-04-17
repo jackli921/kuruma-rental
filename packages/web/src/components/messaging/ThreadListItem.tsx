@@ -45,7 +45,7 @@ export function ThreadListItem({
         'flex w-full items-start gap-3 px-4 py-3 text-left transition-colors hover:bg-muted/60',
         isSelected && 'bg-muted',
       )}
-      aria-current={isSelected ? 'true' : undefined}
+      aria-current={isSelected ? 'page' : undefined}
     >
       <Avatar size="default">
         <AvatarFallback>{initials(counterpartyName)}</AvatarFallback>

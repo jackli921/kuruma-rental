@@ -47,7 +47,7 @@ export function MessagingLayout({ currentUserId }: MessagingLayoutProps) {
                 variant="ghost"
                 size="icon"
                 onClick={() => setSelectedThreadId(null)}
-                aria-label="Back to inbox"
+                aria-label={t('thread.back')}
               >
                 <ArrowLeft className="size-5" />
               </Button>

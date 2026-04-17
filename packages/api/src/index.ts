@@ -239,7 +239,7 @@ export function createApp(overrides?: {
     .route('/', createAvailabilityRoutes(availabilityRepo))
     .route('/', createStatsRoutes(statsRepo))
     .route('/', createMessageRoutes(threadRepo, messageRepo))
-    .route('/', createUserRoutes(userRepo))
+    .route('/', createUserRoutes(userRepo, threadRepo))
 }
 
 const DEV_WEB_ORIGINS = ['http://localhost:3001', 'http://127.0.0.1:3001']
