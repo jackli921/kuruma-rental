@@ -8,12 +8,9 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import { VehicleForm } from '@/components/vehicles/VehicleForm'
-import { vehicleKeys } from '@/lib/query-keys'
+import { useVehicleMutation } from '@/hooks/useVehicleMutation'
 import { createVehicleAction } from '@/lib/vehicle-actions'
-import type { CreateVehicleInput } from '@kuruma/shared/validators/vehicle'
-import { useQueryClient } from '@tanstack/react-query'
 import { useTranslations } from 'next-intl'
-import { useState } from 'react'
 
 interface AddVehicleDialogProps {
   open: boolean
@@ -22,30 +19,18 @@ interface AddVehicleDialogProps {
 
 export function AddVehicleDialog({ open, onOpenChange }: AddVehicleDialogProps) {
   const t = useTranslations('business.vehicles')
-  const queryClient = useQueryClient()
-  const [isSubmitting, setIsSubmitting] = useState(false)
-  const [error, setError] = useState<string | null>(null)
+  const { mutate, isPending, error, reset } = useVehicleMutation({
+    mutationFn: createVehicleAction,
+    onSuccess: () => onOpenChange(false),
+  })
 
-  const handleSubmit = async (data: CreateVehicleInput) => {
-    setIsSubmitting(true)
-    setError(null)
-    try {
-      const result = await createVehicleAction(data)
-      if (!result.success) {
-        setError(result.error)
-        return
-      }
-      await queryClient.invalidateQueries({ queryKey: vehicleKeys.all })
-      onOpenChange(false)
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'An error occurred')
-    } finally {
-      setIsSubmitting(false)
-    }
+  const handleOpenChange = (nextOpen: boolean) => {
+    if (!nextOpen) reset()
+    onOpenChange(nextOpen)
   }
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogContent className="max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>{t('addVehicle')}</DialogTitle>
@@ -53,9 +38,9 @@ export function AddVehicleDialog({ open, onOpenChange }: AddVehicleDialogProps) 
         </DialogHeader>
         {error && <p className="text-sm text-destructive px-1">{error}</p>}
         <VehicleForm
-          onSubmit={handleSubmit}
-          onCancel={() => onOpenChange(false)}
-          isSubmitting={isSubmitting}
+          onSubmit={async (data) => mutate(data)}
+          onCancel={() => handleOpenChange(false)}
+          isSubmitting={isPending}
         />
       </DialogContent>
     </Dialog>
