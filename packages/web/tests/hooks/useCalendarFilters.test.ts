@@ -83,6 +83,26 @@ describe('useCalendarFilters', () => {
     expect(parsed.uncheckedVehicles).not.toContain('v99')
   })
 
+  it('re-prunes stale ids when knownVehicleIds arrives after initial mount', () => {
+    // Fleet query is still loading on first render — ids arrive later.
+    localStorage.setItem(
+      STORAGE_KEY,
+      JSON.stringify({ uncheckedVehicles: ['v1', 'v99'], uncheckedStatuses: [] }),
+    )
+
+    const { result, rerender } = renderHook(
+      ({ ids }: { ids: string[] }) => useCalendarFilters(ids),
+      { initialProps: { ids: [] as string[] } },
+    )
+
+    rerender({ ids: VEHICLES })
+    expect(result.current.isVehicleChecked('v1')).toBe(false)
+    expect(result.current.isVehicleChecked('v2')).toBe(true)
+    const parsed = JSON.parse(localStorage.getItem(STORAGE_KEY)!)
+    expect(parsed.uncheckedVehicles).not.toContain('v99')
+    expect(parsed.uncheckedVehicles).toContain('v1')
+  })
+
   it('filters a list of events + resources through filterEvents/filterResources', () => {
     const { result } = renderHook(() => useCalendarFilters(VEHICLES))
     act(() => result.current.toggleVehicle('v1'))

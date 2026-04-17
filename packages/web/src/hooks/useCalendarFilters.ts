@@ -1,11 +1,13 @@
 'use client'
 
 import type { BookingStatus } from '@kuruma/shared/db/schema'
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
 const STORAGE_KEY = 'kuruma.calendar.filters'
 const ALL_STATUSES: readonly BookingStatus[] = ['CONFIRMED', 'ACTIVE', 'COMPLETED', 'CANCELLED']
 
+// Track *hidden* items rather than visible ones so a newly added vehicle
+// defaults to visible (additive change won't hide it retroactively).
 interface StoredState {
   uncheckedVehicles: string[]
   uncheckedStatuses: BookingStatus[]
@@ -48,12 +50,12 @@ export interface CalendarFiltersApi {
 }
 
 export function useCalendarFilters(knownVehicleIds: string[]): CalendarFiltersApi {
+  // Load raw state; pruning happens in the effect below so it still runs
+  // when fleet data arrives on a later render (first render might have ids=[]).
   const [uncheckedVehicles, setUncheckedVehicles] = useState<Set<string>>(() => {
     const stored = loadFromStorage()
     if (!stored) return new Set()
-    // Prune stale ids — keep only those that still exist.
-    const known = new Set(knownVehicleIds)
-    return new Set(stored.uncheckedVehicles.filter((id) => known.has(id)))
+    return new Set(stored.uncheckedVehicles)
   })
 
   const [uncheckedStatuses, setUncheckedStatuses] = useState<Set<BookingStatus>>(() => {
@@ -61,6 +63,31 @@ export function useCalendarFilters(knownVehicleIds: string[]): CalendarFiltersAp
     if (!stored) return new Set()
     return new Set(stored.uncheckedStatuses.filter((s) => ALL_STATUSES.includes(s)))
   })
+
+  // Prune stale ids whenever the fleet arrives or changes. Depend on
+  // knownVehicleIds directly — the setUncheckedVehicles short-circuits
+  // (returns prev) when nothing changes, so re-running cheap.
+  useEffect(() => {
+    if (knownVehicleIds.length === 0) return
+    const known = new Set(knownVehicleIds)
+    setUncheckedVehicles((prev) => {
+      let pruned: Set<string> | null = null
+      for (const id of prev) {
+        if (!known.has(id)) {
+          pruned ??= new Set(prev)
+          pruned.delete(id)
+        }
+      }
+      return pruned ?? prev
+    })
+  }, [knownVehicleIds])
+
+  // Keep a ref to the latest known ids so `clearAllVehicles` can stay
+  // reference-stable (no dep on `knownVehicleIds`).
+  const knownIdsRef = useRef(knownVehicleIds)
+  useEffect(() => {
+    knownIdsRef.current = knownVehicleIds
+  }, [knownVehicleIds])
 
   // Persist on every change.
   useEffect(() => {
@@ -98,10 +125,7 @@ export function useCalendarFilters(knownVehicleIds: string[]): CalendarFiltersAp
   }, [])
 
   const selectAllVehicles = useCallback(() => setUncheckedVehicles(new Set()), [])
-  const clearAllVehicles = useCallback(
-    () => setUncheckedVehicles(new Set(knownVehicleIds)),
-    [knownVehicleIds],
-  )
+  const clearAllVehicles = useCallback(() => setUncheckedVehicles(new Set(knownIdsRef.current)), [])
 
   const filterEvents = useCallback(
     <T extends { raw: { vehicleId: string; status: BookingStatus } }>(events: T[]): T[] =>
@@ -117,14 +141,28 @@ export function useCalendarFilters(knownVehicleIds: string[]): CalendarFiltersAp
     [uncheckedVehicles],
   )
 
-  return {
-    isVehicleChecked,
-    isStatusChecked,
-    toggleVehicle,
-    toggleStatus,
-    selectAllVehicles,
-    clearAllVehicles,
-    filterEvents,
-    filterResources,
-  }
+  // Memoize the returned object so downstream useMemo/useCallback deps
+  // don't invalidate on every render.
+  return useMemo<CalendarFiltersApi>(
+    () => ({
+      isVehicleChecked,
+      isStatusChecked,
+      toggleVehicle,
+      toggleStatus,
+      selectAllVehicles,
+      clearAllVehicles,
+      filterEvents,
+      filterResources,
+    }),
+    [
+      isVehicleChecked,
+      isStatusChecked,
+      toggleVehicle,
+      toggleStatus,
+      selectAllVehicles,
+      clearAllVehicles,
+      filterEvents,
+      filterResources,
+    ],
+  )
 }
