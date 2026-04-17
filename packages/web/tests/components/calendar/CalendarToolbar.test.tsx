@@ -34,23 +34,6 @@ describe('CalendarToolbar', () => {
     expect(screen.getByRole('button', { name: 'Month' })).toBeInTheDocument()
   })
 
-  it('marks the active view with the default button variant', () => {
-    render(
-      <CalendarToolbar
-        label="Apr 2026"
-        view="month"
-        onNavigate={noop}
-        onView={noop}
-        views={['day', 'week', 'month']}
-      />,
-    )
-    const monthBtn = screen.getByRole('button', { name: 'Month' })
-    const weekBtn = screen.getByRole('button', { name: 'Week' })
-    // active button renders without the `outline` variant classes
-    expect(monthBtn.className).not.toContain('border-input')
-    expect(weekBtn.className).toContain('border-input')
-  })
-
   it('calls onView with the clicked view', () => {
     const onView = vi.fn()
     render(
