@@ -21,6 +21,10 @@ export class DrizzleVehicleRepository implements VehicleRepository {
       conditions.push(ne(vehicles.status, 'RETIRED'))
     }
 
+    if (filters?.classId !== undefined) {
+      conditions.push(eq(vehicles.classId, filters.classId))
+    }
+
     const where = conditions.length > 0 ? and(...conditions) : undefined
 
     const [countResult, rows] = await Promise.all([

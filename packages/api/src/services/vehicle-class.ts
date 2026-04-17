@@ -1,4 +1,9 @@
-import type { VehicleClassFilters, VehicleClassRepository } from '../repositories/types'
+import type {
+  BookingRepository,
+  VehicleClassFilters,
+  VehicleClassRepository,
+  VehicleRepository,
+} from '../repositories/types'
 import type { VehicleClass } from '../stores'
 
 export type CreateResult =
@@ -9,10 +14,20 @@ export type UpdateResult = CreateResult
 
 export type ArchiveResult =
   | { ok: true; vehicleClass: VehicleClass }
-  | { ok: false; error: string; status: number }
+  | {
+      ok: false
+      error: string
+      status: number
+      code?: 'CLASS_HAS_ACTIVE_BOOKINGS'
+      activeBookingsCount?: number
+    }
 
 export class VehicleClassService {
-  constructor(private readonly repo: VehicleClassRepository) {}
+  constructor(
+    private readonly repo: VehicleClassRepository,
+    private readonly vehicleRepo: VehicleRepository,
+    private readonly bookingRepo: BookingRepository,
+  ) {}
 
   async findAll(filters?: VehicleClassFilters): Promise<VehicleClass[]> {
     return this.repo.findAll(filters)
@@ -71,6 +86,29 @@ export class VehicleClassService {
     if (!existing) {
       return { ok: false, error: 'Vehicle class not found', status: 404 }
     }
+
+    // Guard: cannot archive a class that still has live bookings via any of
+    // its member vehicles. Owner must reassign/cancel those bookings first.
+    // Client-side check in /manage/classes is racy — this is the server seal.
+    const { data: members } = await this.vehicleRepo.findAll({
+      classId: id,
+      includeRetired: true,
+    })
+    if (members.length > 0) {
+      const activeBookingsCount = await this.bookingRepo.countActiveForVehicles(
+        members.map((v) => v.id),
+      )
+      if (activeBookingsCount > 0) {
+        return {
+          ok: false,
+          error: 'Cannot archive a class with active bookings',
+          status: 409,
+          code: 'CLASS_HAS_ACTIVE_BOOKINGS',
+          activeBookingsCount,
+        }
+      }
+    }
+
     const archived = await this.repo.archive(id)
     if (!archived) {
       return { ok: false, error: 'Vehicle class not found', status: 404 }

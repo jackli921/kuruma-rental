@@ -196,6 +196,10 @@
       "title": "车队管理",
       "subtitle": "管理您的车辆",
       "empty": "尚未添加车辆",
+      "group": {
+        "unassigned": "未分配",
+        "vehicleCount": "{count} 辆车"
+      },
       "loadError": "无法加载车队信息",
       "retry": "重试",
       "addVehicle": "添加车辆",
@@ -275,7 +279,9 @@
         "year": "年份",
         "yearPlaceholder": "例如 2022",
         "color": "颜色",
-        "colorPlaceholder": "例如 白色"
+        "colorPlaceholder": "例如 白色",
+        "class": "类别",
+        "classNone": "未分配"
       },
       "photos": {
         "heading": "照片",
