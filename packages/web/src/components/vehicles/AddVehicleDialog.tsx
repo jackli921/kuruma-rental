@@ -10,14 +10,16 @@ import {
 import { VehicleForm } from '@/components/vehicles/VehicleForm'
 import { useVehicleMutation } from '@/hooks/useVehicleMutation'
 import { createVehicleAction } from '@/lib/vehicle-actions'
+import type { VehicleClassData } from '@/modules/classes'
 import { useTranslations } from 'next-intl'
 
 interface AddVehicleDialogProps {
   open: boolean
   onOpenChange: (open: boolean) => void
+  classes?: readonly VehicleClassData[] | undefined
 }
 
-export function AddVehicleDialog({ open, onOpenChange }: AddVehicleDialogProps) {
+export function AddVehicleDialog({ open, onOpenChange, classes }: AddVehicleDialogProps) {
   const t = useTranslations('business.vehicles')
   const { mutate, isPending, error, reset } = useVehicleMutation({
     mutationFn: createVehicleAction,
@@ -41,6 +43,7 @@ export function AddVehicleDialog({ open, onOpenChange }: AddVehicleDialogProps) 
           onSubmit={async (data) => mutate(data)}
           onCancel={() => handleOpenChange(false)}
           isSubmitting={isPending}
+          classes={classes}
         />
       </DialogContent>
     </Dialog>
