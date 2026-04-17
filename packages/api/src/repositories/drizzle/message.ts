@@ -8,11 +8,25 @@ import { type Db, messageColumns, normaliseMessage } from './shared'
 export class DrizzleMessageRepository implements MessageRepository {
   constructor(private readonly db: Db) {}
 
-  async create(ctx: CallerContext, threadId: string, content: string): Promise<Message> {
+  async findByIdempotencyKey(key: string): Promise<Message | undefined> {
+    const rows = (await this.db
+      .select(messageColumns)
+      .from(messages)
+      .where(eq(messages.idempotencyKey, key))) as Array<Parameters<typeof normaliseMessage>[0]>
+    const [row] = rows
+    return row ? normaliseMessage(row) : undefined
+  }
+
+  async create(
+    ctx: CallerContext,
+    threadId: string,
+    content: string,
+    idempotencyKey?: string | null,
+  ): Promise<Message> {
     return this.db.transaction(async (tx) => {
       const [inserted] = (await tx
         .insert(messages)
-        .values({ threadId, senderId: ctx.userId, content })
+        .values({ threadId, senderId: ctx.userId, content, idempotencyKey: idempotencyKey ?? null })
         .returning(messageColumns)) as Array<Parameters<typeof normaliseMessage>[0]>
 
       if (!inserted) {

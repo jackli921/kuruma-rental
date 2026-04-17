@@ -1,30 +1,11 @@
 import { createApiClient } from '@/lib/api-client'
 import type { ApiResponse } from '@kuruma/shared/types/api-response'
+import type { VehicleBase } from '@kuruma/shared/types/vehicle'
 import type { CreateVehicleInput, VehicleStatus } from '@kuruma/shared/validators/vehicle'
 
-export interface VehicleData {
-  id: string
-  classId: string | null
-  name: string
-  description: string | null
+// JSON-serialized Vehicle — dates come as ISO strings from the API.
+export type VehicleData = Omit<VehicleBase, 'createdAt' | 'updatedAt'> & {
   photos?: string[]
-  seats: number
-  transmission: 'AUTO' | 'MANUAL'
-  fuelType: string | null
-  licensePlate: string | null
-  status: 'AVAILABLE' | 'MAINTENANCE' | 'RETIRED'
-  bufferMinutes: number
-  minRentalHours: number | null
-  maxRentalHours: number | null
-  advanceBookingHours: number | null
-  make: string | null
-  model: string | null
-  year: number | null
-  color: string | null
-  dailyRateJpy: number | null
-  hourlyRateJpy: number | null
-  shakenExpiryDate: string | null
-  insuranceExpiryDate: string | null
   createdAt: string
   updatedAt: string
 }

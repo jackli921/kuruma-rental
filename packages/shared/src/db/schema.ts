@@ -211,6 +211,7 @@ export const threads = pgTable('threads', {
     .primaryKey()
     .$defaultFn(() => crypto.randomUUID()),
   bookingId: text('bookingId').references(() => bookings.id),
+  idempotencyKey: text('idempotencyKey'),
   createdAt: timestamp('createdAt', { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp('updatedAt', { withTimezone: true }).notNull().defaultNow(),
 })
@@ -245,6 +246,7 @@ export const messages = pgTable('messages', {
   content: text('content').notNull(),
   sourceLanguage: text('sourceLanguage'),
   translations: text('translations').default('{}'),
+  idempotencyKey: text('idempotencyKey'),
   createdAt: timestamp('createdAt', { withTimezone: true }).notNull().defaultNow(),
 })
 
