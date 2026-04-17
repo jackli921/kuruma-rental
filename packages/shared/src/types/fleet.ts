@@ -4,37 +4,15 @@
 // per-request by the repository; NOT denormalized into the vehicles
 // table. See issue #52.
 
+import type { VehicleBase } from './vehicle'
+
 export interface FleetBookingSummary {
   startAt: Date
   endAt: Date
   renterName: string | null
 }
 
-export interface FleetVehicleOverview {
-  // All columns from the underlying Vehicle row. Kept as a structural
-  // match rather than `extends Vehicle` so this file has zero runtime
-  // dependency on the api package.
-  id: string
-  classId: string | null
-  name: string
-  description: string | null
-  photos: string[]
-  seats: number
-  transmission: 'AUTO' | 'MANUAL'
-  fuelType: string | null
-  licensePlate: string | null
-  status: 'AVAILABLE' | 'MAINTENANCE' | 'RETIRED'
-  bufferMinutes: number
-  minRentalHours: number | null
-  maxRentalHours: number | null
-  advanceBookingHours: number | null
-  dailyRateJpy: number | null
-  hourlyRateJpy: number | null
-  shakenExpiryDate: string | null
-  insuranceExpiryDate: string | null
-  createdAt: Date
-  updatedAt: Date
-
+export interface FleetVehicleOverview extends VehicleBase {
   // Utilization: fraction of hours booked in the last 30 days, expressed
   // as a percentage 0..100. CANCELLED bookings excluded. Buffer time is
   // NOT counted — only the renter-facing window (startAt..endAt).
