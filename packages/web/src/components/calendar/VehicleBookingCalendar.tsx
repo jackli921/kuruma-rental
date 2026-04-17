@@ -8,6 +8,7 @@ import { endOfMonth, startOfMonth } from 'date-fns'
 import { Calendar, ChevronDown, ChevronRight } from 'lucide-react'
 import { useTranslations } from 'next-intl'
 import { useState } from 'react'
+import type { View } from 'react-big-calendar'
 import { BookingsCalendar, toCalendarEvents } from './BookingsCalendar'
 import { fetchVehicleCalendarBookings } from './calendar-actions'
 
@@ -19,6 +20,8 @@ export function VehicleBookingCalendar({ vehicleId }: VehicleBookingCalendarProp
   const t = useTranslations('business.bookings.calendar')
   const queryClient = useQueryClient()
   const [expanded, setExpanded] = useState(true)
+  const [view, setView] = useState<View>('week')
+  const [date, setDate] = useState(() => new Date())
   const [range] = useState(() => ({
     from: startOfMonth(new Date()).toISOString(),
     to: endOfMonth(new Date()).toISOString(),
@@ -58,7 +61,10 @@ export function VehicleBookingCalendar({ vehicleId }: VehicleBookingCalendarProp
         ) : (
           <BookingsCalendar
             events={events}
-            defaultView="week"
+            view={view}
+            date={date}
+            onViewChange={setView}
+            onDateChange={setDate}
             views={['week', 'month']}
             onBookingUpdate={() => {
               queryClient.invalidateQueries({
