@@ -1,10 +1,29 @@
-import { Hono } from 'hono'
+import { type RateLimitBinding, rateLimit } from '@elithrar/workers-hono-rate-limit'
+import { type Context, Hono } from 'hono'
 import { STAFF_ROLES, requireUser } from '../middleware/auth'
 import type { VehiclePhotoService } from '../services/vehicle-photo'
 import { fail, ok } from './helpers'
 
-export function createVehiclePhotoRoutes(service: VehiclePhotoService) {
-  return new Hono()
+export function createVehiclePhotoRoutes(
+  service: VehiclePhotoService,
+  photoUploadLimiter?: RateLimitBinding,
+  photoUploadUserLimiter?: RateLimitBinding,
+) {
+  const app = new Hono()
+
+  // Stack two limits. Per-user caps aggregate volume so rotating vehicle IDs
+  // can't burst around the per-(user,vehicle) bucket. Runs first so requests
+  // from a flooding account short-circuit before hitting the narrower limit.
+  const vehicleKey = (c: Context) => `${requireUser(c).id}:${c.req.param('id')}`
+  const userKey = (c: Context) => requireUser(c).id
+  if (photoUploadUserLimiter) {
+    app.use('/vehicles/:id/photos', rateLimit(photoUploadUserLimiter, userKey))
+  }
+  if (photoUploadLimiter) {
+    app.use('/vehicles/:id/photos', rateLimit(photoUploadLimiter, vehicleKey))
+  }
+
+  return app
     .post('/vehicles/:id/photos', async (c) => {
       const user = requireUser(c)
       if (!STAFF_ROLES.has(user.role)) return fail(c, 'Forbidden', 403)

@@ -86,6 +86,8 @@ export function createApp(overrides?: {
   maintenanceLogRepo?: MaintenanceLogRepository
   photoStorage?: PhotoStorage
   userRepo?: UserRepository
+  photoUploadLimiter?: RateLimitBinding
+  photoUploadUserLimiter?: RateLimitBinding
 }) {
   let vehicleClassRepo: VehicleClassRepository
   let vehicleRepo: VehicleRepository
@@ -100,6 +102,14 @@ export function createApp(overrides?: {
   let maintenanceLogRepo: MaintenanceLogRepository
   let photoStorage: PhotoStorage
   let runInTransaction: RunInTransaction
+  const photoUploadLimiter =
+    overrides?.photoUploadLimiter ??
+    ((globalThis as Record<string, unknown>).PHOTO_UPLOAD_LIMITER as RateLimitBinding | undefined)
+  const photoUploadUserLimiter =
+    overrides?.photoUploadUserLimiter ??
+    ((globalThis as Record<string, unknown>).PHOTO_UPLOAD_USER_LIMITER as
+      | RateLimitBinding
+      | undefined)
 
   if (overrides) {
     ;({ vehicleRepo, bookingRepo, availabilityRepo } = overrides)
@@ -260,7 +270,14 @@ export function createApp(overrides?: {
     .route('/', createVehicleDetailRoutes(vehicleDetailRepo))
     .route('/', createVehicleClassRoutes(vehicleClassService))
     .route('/', createVehicleRoutes(vehicleRepo, maintenanceService))
-    .route('/', createVehiclePhotoRoutes(new VehiclePhotoService(vehicleRepo, photoStorage)))
+    .route(
+      '/',
+      createVehiclePhotoRoutes(
+        new VehiclePhotoService(vehicleRepo, photoStorage),
+        photoUploadLimiter,
+        photoUploadUserLimiter,
+      ),
+    )
     .route('/', createMaintenanceLogRoutes(maintenanceService))
     .route('/', createBookingRoutes(bookingService))
     .route('/', createAvailabilityRoutes(availabilityRepo))
