@@ -34,7 +34,7 @@ export class DrizzleVehicleRepository implements VehicleRepository {
       .select(vehicleColumns)
       .from(vehicles)
       .where(inArray(vehicles.id, ids))
-    return rows as Vehicle[]
+    return rows.map(toVehicle)
   }
 
   async create(data: Omit<Vehicle, 'id' | 'createdAt' | 'updatedAt'>): Promise<Vehicle> {
