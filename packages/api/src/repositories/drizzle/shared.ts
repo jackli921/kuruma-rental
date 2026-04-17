@@ -1,3 +1,4 @@
+import type { Column } from 'drizzle-orm'
 import type { getDb } from '@kuruma/shared/db'
 import {
   bookings,
@@ -129,10 +130,20 @@ export const maintenanceLogColumns = {
 // the boundary. If a schema column is added to the domain type, the
 // mapper fails to compile — unlike `as Type` which silently allows it.
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any -- Drizzle row types vary
-type AnyRow = Record<string, any>
+// Derives the query-result shape from a Drizzle column selection object.
+// Each column's `_` metadata carries its data type and nullability.
+type ColumnRow<T extends Record<string, Column>> = {
+  [K in keyof T]: T[K]['_']['notNull'] extends true ? T[K]['_']['data'] : T[K]['_']['data'] | null
+}
 
-export function toVehicleClass(r: AnyRow): VehicleClass {
+type VehicleClassRow = ColumnRow<typeof vehicleClassColumns>
+type VehicleRow = ColumnRow<typeof vehicleColumns>
+type BookingRow = ColumnRow<typeof bookingColumns>
+type ThreadRow = ColumnRow<typeof threadColumns>
+type ThreadParticipantRow = ColumnRow<typeof participantColumns>
+type MaintenanceLogRow = ColumnRow<typeof maintenanceLogColumns>
+
+export function toVehicleClass(r: VehicleClassRow): VehicleClass {
   return {
     id: r.id,
     name: r.name,
@@ -152,7 +163,7 @@ export function toVehicleClass(r: AnyRow): VehicleClass {
   }
 }
 
-export function toVehicle(r: AnyRow): Vehicle {
+export function toVehicle(r: VehicleRow): Vehicle {
   return {
     id: r.id,
     classId: r.classId,
@@ -181,7 +192,7 @@ export function toVehicle(r: AnyRow): Vehicle {
   }
 }
 
-export function toBooking(r: AnyRow): Booking {
+export function toBooking(r: BookingRow): Booking {
   return {
     id: r.id,
     renterId: r.renterId,
@@ -202,7 +213,7 @@ export function toBooking(r: AnyRow): Booking {
   }
 }
 
-export function toThread(r: AnyRow): Thread {
+export function toThread(r: ThreadRow): Thread {
   return {
     id: r.id,
     bookingId: r.bookingId,
@@ -211,7 +222,7 @@ export function toThread(r: AnyRow): Thread {
   }
 }
 
-export function toThreadParticipant(r: AnyRow): ThreadParticipant {
+export function toThreadParticipant(r: ThreadParticipantRow): ThreadParticipant {
   return {
     id: r.id,
     threadId: r.threadId,
@@ -220,7 +231,7 @@ export function toThreadParticipant(r: AnyRow): ThreadParticipant {
   }
 }
 
-export function toMaintenanceLog(r: AnyRow): MaintenanceLog {
+export function toMaintenanceLog(r: MaintenanceLogRow): MaintenanceLog {
   return {
     id: r.id,
     vehicleId: r.vehicleId,
