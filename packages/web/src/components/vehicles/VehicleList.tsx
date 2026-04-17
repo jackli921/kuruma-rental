@@ -7,6 +7,7 @@ import { AddVehicleDialog } from '@/components/vehicles/AddVehicleDialog'
 import { BulkActionBar } from '@/components/vehicles/BulkActionBar'
 import { EditVehicleDialog } from '@/components/vehicles/EditVehicleDialog'
 import { FleetFilters } from '@/components/vehicles/FleetFilters'
+import { FleetGroupedList } from '@/components/vehicles/FleetGroupedList'
 import { FleetSummaryBar } from '@/components/vehicles/FleetSummaryBar'
 import { FleetVehicleCard } from '@/components/vehicles/FleetVehicleCard'
 import { FleetVehicleRow } from '@/components/vehicles/FleetVehicleRow'
@@ -22,6 +23,7 @@ import { vehicleKeys } from '@/lib/query-keys'
 import { cn } from '@/lib/utils'
 import { fetchFleetOverviewAction } from '@/lib/vehicle-actions'
 import type { VehicleData } from '@/lib/vehicle-api'
+import { classKeys, fetchClassesAction } from '@/modules/classes'
 import { useQuery } from '@tanstack/react-query'
 import { AlertCircle, Car, ChevronLeft, ChevronRight, Plus, SlidersHorizontal } from 'lucide-react'
 import { useTranslations } from 'next-intl'
@@ -86,6 +88,19 @@ export function VehicleList() {
     },
   })
 
+  // Classes power the grouping sections and the class dropdown inside the
+  // add/edit dialogs. ACTIVE-only: archived classes should not appear as
+  // assignment targets. Shares the same query key as the Classes page so
+  // navigating between the two doesn't double-fetch.
+  const { data: classes } = useQuery({
+    queryKey: classKeys.list(),
+    queryFn: async () => {
+      const result = await fetchClassesAction()
+      if (!result.success) throw new Error(result.error)
+      return result.data
+    },
+  })
+
   const seatsBounds = useMemo(() => {
     if (!overviews || overviews.length === 0) {
       return DEFAULT_SEATS_BOUNDS
@@ -123,6 +138,13 @@ export function VehicleList() {
     () => sortVehicles(filterVehicles(overviews ?? [], filters), sort),
     [overviews, filters, sort],
   )
+
+  // Grouping is the default Fleet view when at least one class is
+  // defined. With 40-50 vehicles across a handful of classes, showing
+  // every group at once is cheaper for the owner than paging. The flat
+  // paginated view is kept only for the no-classes-yet fallback.
+  const hasClasses = (classes?.length ?? 0) > 0
+  const useGroupedView = hasClasses && viewMode === 'grid'
 
   // Reset to first page when filters/sort change the result set
   const displayedLen = displayed.length
@@ -282,7 +304,24 @@ export function VehicleList() {
           </div>
         )}
 
-        {!isLoading && !isError && paged.length > 0 && (
+        {!isLoading && !isError && useGroupedView && classes && displayed.length > 0 && (
+          <FleetGroupedList
+            vehicles={displayed}
+            classes={classes}
+            renderVehicle={(overview) => (
+              <FleetVehicleCard
+                key={overview.id}
+                vehicle={overview}
+                selected={selectedIds.has(overview.id)}
+                onToggleSelect={toggleSelect}
+                onEdit={setEditingVehicle}
+                onRetire={setRetiringVehicle}
+              />
+            )}
+          />
+        )}
+
+        {!isLoading && !isError && !useGroupedView && paged.length > 0 && (
           <div
             className={cn(
               'grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-6',
@@ -302,8 +341,9 @@ export function VehicleList() {
           </div>
         )}
 
-        {/* Pagination */}
-        {!isLoading && !isError && totalPages > 1 && (
+        {/* Pagination — disabled in grouped view; owners need the full class
+            picture at once, not paginated slices. */}
+        {!isLoading && !isError && !useGroupedView && totalPages > 1 && (
           <div className="flex items-center justify-between border-t pt-4">
             <span className="text-sm text-muted-foreground">
               {pageStart + 1}–{Math.min(pageStart + PAGE_SIZE, displayedLen)} of {displayedLen}
@@ -341,8 +381,12 @@ export function VehicleList() {
           </div>
         )}
 
-        <AddVehicleDialog open={showAddDialog} onOpenChange={setShowAddDialog} />
-        <EditVehicleDialog vehicle={editingVehicle} onOpenChange={() => setEditingVehicle(null)} />
+        <AddVehicleDialog open={showAddDialog} onOpenChange={setShowAddDialog} classes={classes} />
+        <EditVehicleDialog
+          vehicle={editingVehicle}
+          onOpenChange={() => setEditingVehicle(null)}
+          classes={classes}
+        />
         <RetireVehicleDialog
           vehicle={retiringVehicle}
           onOpenChange={() => setRetiringVehicle(null)}

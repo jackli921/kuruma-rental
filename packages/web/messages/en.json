@@ -196,6 +196,10 @@
       "title": "Fleet",
       "subtitle": "Manage your vehicles",
       "empty": "No vehicles added yet",
+      "group": {
+        "unassigned": "Unassigned",
+        "vehicleCount": "{count, plural, =1 {# vehicle} other {# vehicles}}"
+      },
       "loadError": "Couldn't load your fleet",
       "retry": "Try again",
       "addVehicle": "Add vehicle",
