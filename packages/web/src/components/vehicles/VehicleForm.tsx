@@ -94,9 +94,8 @@ export function VehicleForm({
             className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-xs"
             {...register('classId', {
               // Empty string ("Unassigned") submits as null to match the
-              // nullable UUID validator. Any other value passes through as
-              // the class UUID.
-              setValueAs: (v) => (v === '' || v == null ? null : String(v)),
+              // nullable UUID validator. Any other value is the class UUID.
+              setValueAs: (v) => (v === '' || v == null ? null : v),
             })}
           >
             <option value="">{t('form.classNone')}</option>

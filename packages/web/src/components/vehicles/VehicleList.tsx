@@ -89,13 +89,13 @@ export function VehicleList() {
   })
 
   // Classes power the grouping sections and the class dropdown inside the
-  // add/edit dialogs. ACTIVE-only: archived classes should not appear as
-  // assignment targets. Shares the same query key as the Classes page so
-  // navigating between the two doesn't double-fetch.
+  // add/edit dialogs. Archived classes are excluded explicitly — they must
+  // never appear as assignment targets. Shares the same query key as the
+  // Classes page so navigating between the two doesn't double-fetch.
   const { data: classes } = useQuery({
     queryKey: classKeys.list(),
     queryFn: async () => {
-      const result = await fetchClassesAction()
+      const result = await fetchClassesAction({ includeArchived: false })
       if (!result.success) throw new Error(result.error)
       return result.data
     },
