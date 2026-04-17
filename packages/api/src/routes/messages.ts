@@ -2,24 +2,16 @@ import { createThreadSchema, sendMessageSchema } from '@kuruma/shared/validators
 import { Hono } from 'hono'
 import { PRIVILEGED_ROLES, requireUser, toCallerContext } from '../middleware/auth'
 import type { MessageRepository, ThreadRepository } from '../repositories/types'
-import { fail, ok, parseBody } from './helpers'
+import { fail, ok, parseBody, parsePagination } from './helpers'
 
 export function createMessageRoutes(threadRepo: ThreadRepository, messageRepo: MessageRepository) {
   return new Hono()
     .get('/threads', async (c) => {
       const ctx = toCallerContext(requireUser(c))
 
-      const limitParam = c.req.query('limit')
-      const offsetParam = c.req.query('offset')
-
-      const limit = limitParam ? Number.parseInt(limitParam, 10) : 25
-      if (Number.isNaN(limit) || limit < 1 || limit > 100) {
-        return fail(c, 'limit must be between 1 and 100', 400)
-      }
-      const offset = offsetParam ? Number.parseInt(offsetParam, 10) : 0
-      if (Number.isNaN(offset) || offset < 0) {
-        return fail(c, 'offset must be a non-negative integer', 400)
-      }
+      const pg = parsePagination(c)
+      if (!pg.ok) return pg.response
+      const { limit, offset } = pg
 
       const all = await threadRepo.findAll(ctx)
       const page = all.slice(offset, offset + limit)

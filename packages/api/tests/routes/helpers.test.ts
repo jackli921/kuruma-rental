@@ -1,7 +1,7 @@
 import { Hono } from 'hono'
 import { describe, expect, it } from 'vitest'
 import { z } from 'zod'
-import { fail, ok, parseBody, parseDateRange } from '../../src/routes/helpers'
+import { fail, ok, parseBody, parseDateRange, parsePagination } from '../../src/routes/helpers'
 
 // Tiny Hono app that uses the helpers so we can test through real HTTP.
 function createTestApp() {
@@ -24,6 +24,18 @@ function createTestApp() {
     const result = await parseBody(c, testSchema)
     if (!result.ok) return result.response
     return ok(c, result.data)
+  })
+
+  app.get('/paginate', (c) => {
+    const result = parsePagination(c)
+    if (!result.ok) return result.response
+    return ok(c, { limit: result.limit, offset: result.offset })
+  })
+
+  app.get('/paginate-custom', (c) => {
+    const result = parsePagination(c, { defaultLimit: 10, maxLimit: 50 })
+    if (!result.ok) return result.response
+    return ok(c, { limit: result.limit, offset: result.offset })
   })
 
   app.get('/date-required', (c) => {
@@ -207,5 +219,63 @@ describe('parseDateRange()', () => {
     const body = await res.json()
     expect(new Date(body.data.from).getTime()).toBe(new Date(from).getTime())
     expect(new Date(body.data.to).getTime()).toBe(new Date(to).getTime())
+  })
+})
+
+describe('parsePagination()', () => {
+  const app = createTestApp()
+
+  it('returns defaults when no params provided', async () => {
+    const res = await app.request('/paginate')
+    expect(res.status).toBe(200)
+    const body = await res.json()
+    expect(body.data).toEqual({ limit: 25, offset: 0 })
+  })
+
+  it('parses valid limit and offset', async () => {
+    const res = await app.request('/paginate?limit=10&offset=20')
+    expect(res.status).toBe(200)
+    const body = await res.json()
+    expect(body.data).toEqual({ limit: 10, offset: 20 })
+  })
+
+  it('returns 400 for limit below 1', async () => {
+    const res = await app.request('/paginate?limit=0')
+    expect(res.status).toBe(400)
+    const body = await res.json()
+    expect(body.error).toBe('limit must be between 1 and 100')
+  })
+
+  it('returns 400 for limit above max', async () => {
+    const res = await app.request('/paginate?limit=101')
+    expect(res.status).toBe(400)
+    const body = await res.json()
+    expect(body.error).toBe('limit must be between 1 and 100')
+  })
+
+  it('returns 400 for NaN limit', async () => {
+    const res = await app.request('/paginate?limit=abc')
+    expect(res.status).toBe(400)
+  })
+
+  it('returns 400 for negative offset', async () => {
+    const res = await app.request('/paginate?offset=-1')
+    expect(res.status).toBe(400)
+    const body = await res.json()
+    expect(body.error).toBe('offset must be a non-negative integer')
+  })
+
+  it('respects custom defaults and maxLimit', async () => {
+    const res = await app.request('/paginate-custom')
+    expect(res.status).toBe(200)
+    const body = await res.json()
+    expect(body.data).toEqual({ limit: 10, offset: 0 })
+  })
+
+  it('returns 400 when limit exceeds custom maxLimit', async () => {
+    const res = await app.request('/paginate-custom?limit=51')
+    expect(res.status).toBe(400)
+    const body = await res.json()
+    expect(body.error).toBe('limit must be between 1 and 50')
   })
 })

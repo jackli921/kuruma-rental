@@ -35,6 +35,36 @@ export function stripUndefined<T extends Record<string, unknown>>(obj: T): Parti
 
 // --- Request parsing helpers ---
 
+// --- Pagination helpers ---
+
+type PaginationSuccess = { ok: true; limit: number; offset: number }
+type PaginationFailure = { ok: false; response: Response }
+
+export function parsePagination(
+  c: Context,
+  opts?: { defaultLimit?: number; maxLimit?: number },
+): PaginationSuccess | PaginationFailure {
+  const defaultLimit = opts?.defaultLimit ?? 25
+  const maxLimit = opts?.maxLimit ?? 100
+
+  const limitParam = c.req.query('limit')
+  const offsetParam = c.req.query('offset')
+
+  const limit = limitParam ? Number.parseInt(limitParam, 10) : defaultLimit
+  if (Number.isNaN(limit) || limit < 1 || limit > maxLimit) {
+    return { ok: false, response: fail(c, `limit must be between 1 and ${maxLimit}`, 400) }
+  }
+
+  const offset = offsetParam ? Number.parseInt(offsetParam, 10) : 0
+  if (Number.isNaN(offset) || offset < 0) {
+    return { ok: false, response: fail(c, 'offset must be a non-negative integer', 400) }
+  }
+
+  return { ok: true, limit, offset }
+}
+
+// --- Body parsing helpers ---
+
 type ParseBodySuccess<T> = { ok: true; data: T }
 type ParseBodyFailure = { ok: false; response: Response }
 
