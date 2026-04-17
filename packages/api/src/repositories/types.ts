@@ -210,3 +210,9 @@ export interface VehicleClassRepository {
   update(id: string, data: Partial<VehicleClass>): Promise<VehicleClass | undefined>
   archive(id: string): Promise<VehicleClass | undefined>
 }
+
+export interface PhotoStorage {
+  put(vehicleId: string, file: File): Promise<{ key: string; url: string }>
+  /** Accepts either a key or full URL — implementations strip the base URL prefix. */
+  delete(keyOrUrl: string): Promise<void>
+}

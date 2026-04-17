@@ -11,12 +11,15 @@
 // CI runs the same flow in the `db-drift` job (see .github/workflows/ci.yml).
 
 import { afterEach, beforeAll, describe, expect, it } from 'vitest'
+import type { CallerContext } from '../../src/middleware/auth'
 import { DrizzleMessageRepository, DrizzleThreadRepository } from '../../src/repositories/drizzle'
 import type { Db } from '../../src/repositories/drizzle'
 import { cleanupMessaging, createTestUsers, testDb } from './messaging-setup'
 
 const threadRepo = new DrizzleThreadRepository(testDb as unknown as Db)
 const messageRepo = new DrizzleMessageRepository(testDb as unknown as Db)
+
+const ctx = (userId: string): CallerContext => ({ userId, role: 'RENTER' })
 
 const createdUserIds: string[] = []
 
@@ -31,7 +34,7 @@ describe('DrizzleThreadRepository', () => {
       const [u1, u2] = await createTestUsers(2)
       createdUserIds.push(u1!, u2!)
 
-      const thread = await threadRepo.create(null, [u1!, u2!])
+      const thread = await threadRepo.create(ctx(u1!), null, [u1!, u2!])
 
       expect(thread.id).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/)
       expect(thread.bookingId).toBeNull()
@@ -43,8 +46,8 @@ describe('DrizzleThreadRepository', () => {
       const [u1, u2] = await createTestUsers(2)
       createdUserIds.push(u1!, u2!)
 
-      const thread = await threadRepo.create(null, [u1!, u2!])
-      const fetched = await threadRepo.findById(thread.id)
+      const thread = await threadRepo.create(ctx(u1!), null, [u1!, u2!])
+      const fetched = await threadRepo.findById(ctx(u1!), thread.id)
 
       expect(fetched).toBeDefined()
       expect(fetched!.participants).toHaveLength(2)
@@ -59,7 +62,7 @@ describe('DrizzleThreadRepository', () => {
       const [u1, u2] = await createTestUsers(2)
       createdUserIds.push(u1!, u2!)
 
-      const thread = await threadRepo.create(null, [u1!, u2!])
+      const thread = await threadRepo.create(ctx(u1!), null, [u1!, u2!])
 
       expect(thread.bookingId).toBeNull()
     })
@@ -71,13 +74,13 @@ describe('DrizzleThreadRepository', () => {
       createdUserIds.push(alice!, bob!, carol!)
 
       // Thread 1: alice + bob
-      await threadRepo.create(null, [alice!, bob!])
+      await threadRepo.create(ctx(alice!), null, [alice!, bob!])
       // Thread 2: bob + carol (alice is NOT a participant)
-      await threadRepo.create(null, [bob!, carol!])
+      await threadRepo.create(ctx(bob!), null, [bob!, carol!])
 
-      const aliceThreads = await threadRepo.findAll(alice!)
-      const bobThreads = await threadRepo.findAll(bob!)
-      const carolThreads = await threadRepo.findAll(carol!)
+      const aliceThreads = await threadRepo.findAll(ctx(alice!))
+      const bobThreads = await threadRepo.findAll(ctx(bob!))
+      const carolThreads = await threadRepo.findAll(ctx(carol!))
 
       expect(aliceThreads).toHaveLength(1)
       expect(bobThreads).toHaveLength(2)
@@ -88,12 +91,12 @@ describe('DrizzleThreadRepository', () => {
       const [alice, bob] = await createTestUsers(2)
       createdUserIds.push(alice!, bob!)
 
-      const thread = await threadRepo.create(null, [alice!, bob!])
-      await messageRepo.create(thread.id, alice!, 'first')
+      const thread = await threadRepo.create(ctx(alice!), null, [alice!, bob!])
+      await messageRepo.create(ctx(alice!), thread.id, 'first')
       await new Promise((r) => setTimeout(r, 5)) // ensure ordering
-      await messageRepo.create(thread.id, bob!, 'second')
+      await messageRepo.create(ctx(bob!), thread.id, 'second')
 
-      const threads = await threadRepo.findAll(alice!)
+      const threads = await threadRepo.findAll(ctx(alice!))
       expect(threads).toHaveLength(1)
       const t = threads[0]!
       expect(t.participants).toHaveLength(2)
@@ -105,7 +108,7 @@ describe('DrizzleThreadRepository', () => {
       const [loner] = await createTestUsers(1)
       createdUserIds.push(loner!)
 
-      const result = await threadRepo.findAll(loner!)
+      const result = await threadRepo.findAll(ctx(loner!))
       expect(result).toEqual([])
     })
   })
@@ -115,14 +118,14 @@ describe('DrizzleThreadRepository', () => {
       const [alice, bob] = await createTestUsers(2)
       createdUserIds.push(alice!, bob!)
 
-      const thread = await threadRepo.create(null, [alice!, bob!])
-      await messageRepo.create(thread.id, alice!, 'one')
+      const thread = await threadRepo.create(ctx(alice!), null, [alice!, bob!])
+      await messageRepo.create(ctx(alice!), thread.id, 'one')
       await new Promise((r) => setTimeout(r, 5))
-      await messageRepo.create(thread.id, bob!, 'two')
+      await messageRepo.create(ctx(bob!), thread.id, 'two')
       await new Promise((r) => setTimeout(r, 5))
-      await messageRepo.create(thread.id, alice!, 'three')
+      await messageRepo.create(ctx(alice!), thread.id, 'three')
 
-      const found = await threadRepo.findById(thread.id)
+      const found = await threadRepo.findById(ctx(alice!), thread.id)
 
       expect(found).toBeDefined()
       expect(found!.id).toBe(thread.id)
@@ -132,7 +135,12 @@ describe('DrizzleThreadRepository', () => {
     })
 
     it('returns undefined for nonexistent thread id', async () => {
-      const found = await threadRepo.findById('00000000-0000-0000-0000-000000000000')
+      const [requester] = await createTestUsers(1)
+      createdUserIds.push(requester!)
+      const found = await threadRepo.findById(
+        ctx(requester!),
+        '00000000-0000-0000-0000-000000000000',
+      )
       expect(found).toBeUndefined()
     })
   })
@@ -142,18 +150,18 @@ describe('DrizzleThreadRepository', () => {
       const [alice, bob] = await createTestUsers(2)
       createdUserIds.push(alice!, bob!)
 
-      const thread = await threadRepo.create(null, [alice!, bob!])
+      const thread = await threadRepo.create(ctx(alice!), null, [alice!, bob!])
       // Alice sends two messages → bob's unreadCount becomes 2
-      await messageRepo.create(thread.id, alice!, 'hi')
-      await messageRepo.create(thread.id, alice!, 'you there?')
+      await messageRepo.create(ctx(alice!), thread.id, 'hi')
+      await messageRepo.create(ctx(alice!), thread.id, 'you there?')
 
-      const beforeBob = await threadRepo.findAll(bob!)
+      const beforeBob = await threadRepo.findAll(ctx(bob!))
       const bobBefore = beforeBob[0]!.participants.find((p) => p.userId === bob)!
       expect(bobBefore.unreadCount).toBe(2)
 
-      await threadRepo.markAsRead(thread.id, bob!)
+      await threadRepo.markAsRead(ctx(bob!), thread.id)
 
-      const afterBob = await threadRepo.findAll(bob!)
+      const afterBob = await threadRepo.findAll(ctx(bob!))
       const bobAfter = afterBob[0]!.participants.find((p) => p.userId === bob)!
       const aliceAfter = afterBob[0]!.participants.find((p) => p.userId === alice)!
       expect(bobAfter.unreadCount).toBe(0)
@@ -165,13 +173,13 @@ describe('DrizzleThreadRepository', () => {
       const [alice, bob, eve] = await createTestUsers(3)
       createdUserIds.push(alice!, bob!, eve!)
 
-      const thread = await threadRepo.create(null, [alice!, bob!])
-      await messageRepo.create(thread.id, alice!, 'hi')
+      const thread = await threadRepo.create(ctx(alice!), null, [alice!, bob!])
+      await messageRepo.create(ctx(alice!), thread.id, 'hi')
 
       // eve is not in the thread; should not throw, should not affect anything.
-      await expect(threadRepo.markAsRead(thread.id, eve!)).resolves.toBeUndefined()
+      await expect(threadRepo.markAsRead(ctx(eve!), thread.id)).resolves.toBeUndefined()
 
-      const after = await threadRepo.findAll(bob!)
+      const after = await threadRepo.findAll(ctx(bob!))
       const bobAfter = after[0]!.participants.find((p) => p.userId === bob)!
       expect(bobAfter.unreadCount).toBe(1)
     })
@@ -184,8 +192,8 @@ describe('DrizzleMessageRepository', () => {
       const [alice, bob] = await createTestUsers(2)
       createdUserIds.push(alice!, bob!)
 
-      const thread = await threadRepo.create(null, [alice!, bob!])
-      const message = await messageRepo.create(thread.id, alice!, 'hello world')
+      const thread = await threadRepo.create(ctx(alice!), null, [alice!, bob!])
+      const message = await messageRepo.create(ctx(alice!), thread.id, 'hello world')
 
       expect(message.id).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/)
       expect(message.threadId).toBe(thread.id)
@@ -203,14 +211,14 @@ describe('DrizzleMessageRepository', () => {
       const [alice, bob, carol] = await createTestUsers(3)
       createdUserIds.push(alice!, bob!, carol!)
 
-      const thread = await threadRepo.create(null, [alice!, bob!, carol!])
+      const thread = await threadRepo.create(ctx(alice!), null, [alice!, bob!, carol!])
 
       // Alice sends 5 messages serially.
       for (let i = 0; i < 5; i++) {
-        await messageRepo.create(thread.id, alice!, `msg ${i}`)
+        await messageRepo.create(ctx(alice!), thread.id, `msg ${i}`)
       }
 
-      const found = await threadRepo.findById(thread.id)
+      const found = await threadRepo.findById(ctx(alice!), thread.id)
       const aliceP = found!.participants.find((p) => p.userId === alice)!
       const bobP = found!.participants.find((p) => p.userId === bob)!
       const carolP = found!.participants.find((p) => p.userId === carol)!
@@ -231,14 +239,16 @@ describe('DrizzleMessageRepository', () => {
       const [alice, bob] = await createTestUsers(2)
       createdUserIds.push(alice!, bob!)
 
-      const thread = await threadRepo.create(null, [alice!, bob!])
+      const thread = await threadRepo.create(ctx(alice!), null, [alice!, bob!])
 
       const N = 10
       await Promise.all(
-        Array.from({ length: N }, (_, i) => messageRepo.create(thread.id, alice!, `parallel ${i}`)),
+        Array.from({ length: N }, (_, i) =>
+          messageRepo.create(ctx(alice!), thread.id, `parallel ${i}`),
+        ),
       )
 
-      const found = await threadRepo.findById(thread.id)
+      const found = await threadRepo.findById(ctx(alice!), thread.id)
       const bobP = found!.participants.find((p) => p.userId === bob)!
       expect(bobP.unreadCount).toBe(N)
       expect(found!.messages).toHaveLength(N)
@@ -250,14 +260,14 @@ describe('DrizzleMessageRepository', () => {
       const [alice, bob] = await createTestUsers(2)
       createdUserIds.push(alice!, bob!)
 
-      const thread = await threadRepo.create(null, [alice!, bob!])
-      await messageRepo.create(thread.id, alice!, 'first')
+      const thread = await threadRepo.create(ctx(alice!), null, [alice!, bob!])
+      await messageRepo.create(ctx(alice!), thread.id, 'first')
       await new Promise((r) => setTimeout(r, 5))
-      await messageRepo.create(thread.id, bob!, 'second')
+      await messageRepo.create(ctx(bob!), thread.id, 'second')
       await new Promise((r) => setTimeout(r, 5))
-      await messageRepo.create(thread.id, alice!, 'third')
+      await messageRepo.create(ctx(alice!), thread.id, 'third')
 
-      const messages = await messageRepo.findByThreadId(thread.id)
+      const messages = await messageRepo.findByThreadId(ctx(alice!), thread.id)
       expect(messages.map((m) => m.content)).toEqual(['first', 'second', 'third'])
     })
 
@@ -265,8 +275,8 @@ describe('DrizzleMessageRepository', () => {
       const [alice, bob] = await createTestUsers(2)
       createdUserIds.push(alice!, bob!)
 
-      const thread = await threadRepo.create(null, [alice!, bob!])
-      const messages = await messageRepo.findByThreadId(thread.id)
+      const thread = await threadRepo.create(ctx(alice!), null, [alice!, bob!])
+      const messages = await messageRepo.findByThreadId(ctx(alice!), thread.id)
       expect(messages).toEqual([])
     })
   })
@@ -280,13 +290,13 @@ describe('persistence across repo instances (the whole point of #28)', () => {
     const repoA = new DrizzleThreadRepository(testDb as unknown as Db)
     const messageRepoA = new DrizzleMessageRepository(testDb as unknown as Db)
 
-    const thread = await repoA.create(null, [alice!, bob!])
-    await messageRepoA.create(thread.id, alice!, 'before restart')
+    const thread = await repoA.create(ctx(alice!), null, [alice!, bob!])
+    await messageRepoA.create(ctx(alice!), thread.id, 'before restart')
 
     // Simulate Worker cold-start: throw away the repo handles, build new ones.
     const repoB = new DrizzleThreadRepository(testDb as unknown as Db)
 
-    const found = await repoB.findById(thread.id)
+    const found = await repoB.findById(ctx(alice!), thread.id)
     expect(found).toBeDefined()
     expect(found!.messages).toHaveLength(1)
     expect(found!.messages[0]!.content).toBe('before restart')

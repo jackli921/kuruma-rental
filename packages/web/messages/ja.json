@@ -259,6 +259,17 @@
         "color": "色",
         "colorPlaceholder": "例: ホワイト"
       },
+      "photos": {
+        "heading": "写真",
+        "hint": "ドラッグ＆ドロップまたはクリックしてアップロード。最大{max}枚、各{maxSize}MBまで。",
+        "uploadPhotos": "画像をここにドロップまたはクリックして選択",
+        "uploading": "アップロード中...",
+        "deletePhoto": "写真を削除",
+        "photoAlt": "車両写真 {index}",
+        "photoLimit": "写真は最大{max}枚までです",
+        "sizeLimit": "各写真は{max}MB以下にしてください",
+        "typeError": "画像ファイルのみアップロードできます"
+      },
       "filter": {
         "title": "フィルター",
         "all": "すべて",

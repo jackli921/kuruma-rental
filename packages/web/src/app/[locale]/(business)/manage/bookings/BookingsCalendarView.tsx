@@ -2,6 +2,7 @@
 
 import {
   BookingsCalendar,
+  type CalendarResource,
   type SlotSelectInfo,
   toCalendarEvents,
 } from '@/components/calendar/BookingsCalendar'
@@ -9,12 +10,49 @@ import { ManualBookingDialog } from '@/components/calendar/ManualBookingDialog'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
 import { fetchFleetOverviewAction } from '@/lib/vehicle-actions'
-import type { FleetVehicleOverviewData } from '@/lib/vehicle-api'
-import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { endOfMonth, startOfMonth } from 'date-fns'
+import { keepPreviousData, useQuery, useQueryClient } from '@tanstack/react-query'
+import {
+  endOfDay,
+  endOfMonth,
+  endOfWeek,
+  format,
+  parse,
+  startOfDay,
+  startOfMonth,
+  startOfWeek,
+} from 'date-fns'
 import { useTranslations } from 'next-intl'
-import { useCallback, useEffect, useState } from 'react'
+import { useRouter, useSearchParams } from 'next/navigation'
+import { useCallback, useMemo, useState } from 'react'
+import type { View } from 'react-big-calendar'
 import { fetchAllCalendarBookings } from './booking-actions'
+
+function computeRange(view: View, date: Date): { from: string; to: string } {
+  switch (view) {
+    case 'day':
+      return { from: startOfDay(date).toISOString(), to: endOfDay(date).toISOString() }
+    case 'week':
+      return {
+        from: startOfWeek(date, { weekStartsOn: 1 }).toISOString(),
+        to: endOfWeek(date, { weekStartsOn: 1 }).toISOString(),
+      }
+    default:
+      return { from: startOfMonth(date).toISOString(), to: endOfMonth(date).toISOString() }
+  }
+}
+
+// Parse YYYY-MM-DD as a local date (not UTC) to avoid timezone drift
+// where 2026-04-16 in JST serializes and parses back to a different day.
+function parseDateParam(param: string | null): Date {
+  if (!param) return new Date()
+  const parsed = parse(param, 'yyyy-MM-dd', new Date())
+  return Number.isNaN(parsed.getTime()) ? new Date() : parsed
+}
+
+function parseViewParam(param: string | null): View {
+  if (param === 'day' || param === 'week' || param === 'month') return param
+  return 'week'
+}
 
 function toLocalDatetime(date: Date): string {
   const pad = (n: number) => String(n).padStart(2, '0')
@@ -24,35 +62,68 @@ function toLocalDatetime(date: Date): string {
 export function BookingsCalendarView() {
   const t = useTranslations('business.bookings')
   const queryClient = useQueryClient()
-  const [range, _setRange] = useState(() => ({
-    from: startOfMonth(new Date()).toISOString(),
-    to: endOfMonth(new Date()).toISOString(),
-  }))
+  const router = useRouter()
+  const searchParams = useSearchParams()
+
+  // Derive state directly from the URL — single source of truth.
+  const view = parseViewParam(searchParams.get('view'))
+  const date = useMemo(() => parseDateParam(searchParams.get('date')), [searchParams])
+  const range = useMemo(() => computeRange(view, date), [view, date])
+
   const [showManualBooking, setShowManualBooking] = useState(false)
   const [slotStartAt, setSlotStartAt] = useState<string | undefined>()
-  const [vehicles, setVehicles] = useState<FleetVehicleOverviewData[]>([])
 
-  useEffect(() => {
-    fetchFleetOverviewAction().then((result) => {
-      if (result.success) setVehicles(result.data)
-    })
-  }, [])
+  const updateUrl = useCallback(
+    (nextView: View, nextDate: Date) => {
+      const params = new URLSearchParams(searchParams.toString())
+      params.set('view', nextView)
+      params.set('date', format(nextDate, 'yyyy-MM-dd'))
+      router.replace(`?${params.toString()}`, { scroll: false })
+    },
+    [router, searchParams],
+  )
+
+  const handleViewChange = useCallback(
+    (nextView: View) => updateUrl(nextView, date),
+    [date, updateUrl],
+  )
+
+  const handleDateChange = useCallback(
+    (nextDate: Date) => updateUrl(view, nextDate),
+    [view, updateUrl],
+  )
 
   const {
     data: bookings = [],
-    isLoading,
-    error,
+    isPending: bookingsInitialLoading,
+    error: bookingsError,
   } = useQuery({
     queryKey: ['bookings', 'calendar', range.from, range.to],
     queryFn: () => fetchAllCalendarBookings(range.from, range.to),
+    placeholderData: keepPreviousData,
   })
 
-  const events = toCalendarEvents(bookings)
+  const { data: fleetOverviews = [] } = useQuery({
+    queryKey: ['vehicles', 'fleet-overview'],
+    queryFn: async () => {
+      const result = await fetchFleetOverviewAction()
+      if (!result.success) throw new Error(result.error)
+      return result.data
+    },
+  })
+
+  const resources: CalendarResource[] = useMemo(
+    () =>
+      fleetOverviews
+        .filter((v) => v.status !== 'RETIRED')
+        .map((v) => ({ resourceId: v.id, resourceTitle: v.name })),
+    [fleetOverviews],
+  )
+
+  const events = useMemo(() => toCalendarEvents(bookings), [bookings])
 
   const handleInvalidate = useCallback(() => {
-    queryClient.invalidateQueries({
-      queryKey: ['bookings', 'calendar'],
-    })
+    queryClient.invalidateQueries({ queryKey: ['bookings', 'calendar'] })
   }, [queryClient])
 
   const handleSelectSlot = useCallback((slotInfo: SlotSelectInfo) => {
@@ -70,7 +141,7 @@ export function BookingsCalendarView() {
     setSlotStartAt(undefined)
   }, [])
 
-  if (isLoading) {
+  if (bookingsInitialLoading) {
     return (
       <div className="mt-6 space-y-2">
         <Skeleton className="h-10 w-full" />
@@ -79,7 +150,7 @@ export function BookingsCalendarView() {
     )
   }
 
-  if (error) {
+  if (bookingsError) {
     return <p className="mt-6 text-sm text-destructive">Failed to load bookings</p>
   }
 
@@ -90,8 +161,12 @@ export function BookingsCalendarView() {
       </div>
       <BookingsCalendar
         events={events}
-        defaultView="week"
-        views={['week', 'month']}
+        resources={resources}
+        view={view}
+        date={date}
+        views={['day', 'week', 'month']}
+        onViewChange={handleViewChange}
+        onDateChange={handleDateChange}
         onBookingUpdate={handleInvalidate}
         onSelectSlot={handleSelectSlot}
       />
@@ -99,7 +174,7 @@ export function BookingsCalendarView() {
         open={showManualBooking}
         onClose={handleCloseDialog}
         onBookingCreated={handleInvalidate}
-        vehicles={vehicles}
+        vehicles={fleetOverviews}
         defaultStartAt={slotStartAt}
       />
     </div>

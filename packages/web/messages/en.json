@@ -259,6 +259,17 @@
         "color": "Color",
         "colorPlaceholder": "e.g. White"
       },
+      "photos": {
+        "heading": "Photos",
+        "hint": "Drag and drop or click to upload. Max {max} photos, {maxSize}MB each.",
+        "uploadPhotos": "Drop images here or click to browse",
+        "uploading": "Uploading...",
+        "deletePhoto": "Delete photo",
+        "photoAlt": "Vehicle photo {index}",
+        "photoLimit": "Maximum {max} photos allowed",
+        "sizeLimit": "Each photo must be under {max}MB",
+        "typeError": "Only image files are allowed"
+      },
       "filter": {
         "title": "Filters",
         "all": "All",

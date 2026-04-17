@@ -9,7 +9,7 @@ import { STAFF_ROLES, requireUser } from '../middleware/auth'
 import { PG_ERROR, pgErrorCode } from '../pg-errors'
 import type { Vehicle, VehicleFilters, VehicleRepository } from '../repositories/types'
 import type { MaintenanceService } from '../services/maintenance'
-import { fail, ok, parseBody, stripUndefined } from './helpers'
+import { fail, ok, parseBody, parsePagination, stripUndefined } from './helpers'
 
 export function createVehicleRoutes(
   repo: VehicleRepository,
@@ -18,17 +18,9 @@ export function createVehicleRoutes(
   return new Hono()
     .get('/vehicles', async (c) => {
       const status = c.req.query('status')
-      const limitParam = c.req.query('limit')
-      const offsetParam = c.req.query('offset')
-
-      const limit = limitParam ? Number.parseInt(limitParam, 10) : 50
-      if (Number.isNaN(limit) || limit < 1 || limit > 100) {
-        return fail(c, 'limit must be between 1 and 100', 400)
-      }
-      const offset = offsetParam ? Number.parseInt(offsetParam, 10) : 0
-      if (Number.isNaN(offset) || offset < 0) {
-        return fail(c, 'offset must be a non-negative integer', 400)
-      }
+      const pg = parsePagination(c, { defaultLimit: 50 })
+      if (!pg.ok) return pg.response
+      const { limit, offset } = pg
 
       const filters: VehicleFilters = { limit, offset, ...(status ? { status } : {}) }
       const { data, total } = await repo.findAll(filters)

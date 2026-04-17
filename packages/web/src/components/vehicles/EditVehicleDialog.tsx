@@ -7,6 +7,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
+import { PhotoUpload } from '@/components/vehicles/PhotoUpload'
 import { VehicleForm } from '@/components/vehicles/VehicleForm'
 import { useVehicleMutation } from '@/hooks/useVehicleMutation'
 import { updateVehicleAction } from '@/lib/vehicle-actions'
@@ -35,6 +36,13 @@ export function EditVehicleDialog({ vehicle, onOpenChange }: EditVehicleDialogPr
         </DialogHeader>
         {error && <p className="text-sm text-destructive px-1">{error}</p>}
         {vehicle && (
+          <PhotoUpload
+            key={vehicle.id}
+            vehicleId={vehicle.id}
+            initialPhotos={vehicle.photos ?? []}
+          />
+        )}
+        {vehicle && (
           <VehicleForm
             key={vehicle.id}
             onSubmit={async (data) => mutate(data)}
@@ -48,16 +56,8 @@ export function EditVehicleDialog({ vehicle, onOpenChange }: EditVehicleDialogPr
               transmission: vehicle.transmission,
               ...(vehicle.fuelType != null && { fuelType: vehicle.fuelType }),
               bufferMinutes: vehicle.bufferMinutes,
-              // Issue #60: the rate inputs were added in #48 but this
-              // whitelist forgot to forward them, so the edit form
-              // rendered them empty and every save attempt failed the
-              // "at least one rate is required" validator.
               dailyRateJpy: vehicle.dailyRateJpy,
               hourlyRateJpy: vehicle.hourlyRateJpy,
-              // Issue #50: forward rental rules so edit mode shows the
-              // saved values instead of the form's create-mode defaults.
-              // Same whitelist trap as #60 — forgetting a new field silently
-              // falls back to `minRentalHours: 4, maxRentalHours: 72`.
               minRentalHours: vehicle.minRentalHours,
               maxRentalHours: vehicle.maxRentalHours,
               advanceBookingHours: vehicle.advanceBookingHours,

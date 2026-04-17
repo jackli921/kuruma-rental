@@ -16,6 +16,7 @@ import {
   DrizzleThreadRepository,
   DrizzleUserRepository,
   DrizzleVehicleClassRepository,
+  DrizzleVehicleDetailRepository,
   DrizzleVehicleRepository,
   createDrizzleTransaction,
 } from './repositories/drizzle'
@@ -32,12 +33,15 @@ import {
   InMemoryVehicleRepository,
 } from './repositories/in-memory'
 import { InMemoryVehicleDetailRepository } from './repositories/in-memory-vehicle-detail'
+import { InMemoryPhotoStorage } from './repositories/in-memory/photo-storage'
+import { type R2BucketLike, R2PhotoStorage } from './repositories/r2-photo-storage'
 import type {
   AvailabilityRepository,
   BookingRepository,
   FleetOverviewRepository,
   MaintenanceLogRepository,
   MessageRepository,
+  PhotoStorage,
   RunInTransaction,
   StatsRepository,
   ThreadRepository,
@@ -56,6 +60,7 @@ import { createMessageRoutes } from './routes/messages'
 import { createStatsRoutes } from './routes/stats'
 import { createVehicleClassRoutes } from './routes/vehicle-classes'
 import { createVehicleDetailRoutes } from './routes/vehicle-detail'
+import { createVehiclePhotoRoutes } from './routes/vehicle-photos'
 import { createVehicleRoutes } from './routes/vehicles'
 import { BookingService } from './services/booking'
 import { CustomerService } from './services/customer'
@@ -73,6 +78,7 @@ export function createApp(overrides?: {
   messageRepo?: MessageRepository
   vehicleClassRepo?: VehicleClassRepository
   maintenanceLogRepo?: MaintenanceLogRepository
+  photoStorage?: PhotoStorage
   userRepo?: UserRepository
 }) {
   let vehicleClassRepo: VehicleClassRepository
@@ -86,6 +92,7 @@ export function createApp(overrides?: {
   let threadRepo: ThreadRepository
   let messageRepo: MessageRepository
   let maintenanceLogRepo: MaintenanceLogRepository
+  let photoStorage: PhotoStorage
   let runInTransaction: RunInTransaction
 
   if (overrides) {
@@ -103,6 +110,7 @@ export function createApp(overrides?: {
     threadRepo = overrides.threadRepo ?? new InMemoryThreadRepository()
     messageRepo =
       overrides.messageRepo ?? new InMemoryMessageRepository(threadRepo as InMemoryThreadRepository)
+    photoStorage = overrides.photoStorage ?? new InMemoryPhotoStorage()
     userRepo = overrides.userRepo ?? new InMemoryUserRepository()
   } else if (process.env.DATABASE_URL) {
     const db = getDb()
@@ -113,16 +121,19 @@ export function createApp(overrides?: {
     maintenanceLogRepo = new DrizzleMaintenanceLogRepository(db)
     runInTransaction = createDrizzleTransaction(db)
     fleetOverviewRepo = new DrizzleFleetOverviewRepository(db)
-    vehicleDetailRepo = new InMemoryVehicleDetailRepository(
-      vehicleRepo,
-      bookingRepo,
-      new Map(),
-      maintenanceLogRepo,
-    )
+    vehicleDetailRepo = new DrizzleVehicleDetailRepository(db)
     statsRepo = new DrizzleStatsRepository(db)
     threadRepo = new DrizzleThreadRepository(db)
     messageRepo = new DrizzleMessageRepository(db)
     userRepo = new DrizzleUserRepository(db)
+    const vehiclePhotosBucket = (globalThis as Record<string, unknown>).VEHICLE_PHOTOS as
+      | R2BucketLike
+      | undefined
+    const photosPublicUrl = process.env.VEHICLE_PHOTOS_PUBLIC_URL ?? ''
+    photoStorage =
+      vehiclePhotosBucket && photosPublicUrl
+        ? new R2PhotoStorage(vehiclePhotosBucket, photosPublicUrl)
+        : new InMemoryPhotoStorage()
   } else {
     vehicleClassRepo = new InMemoryVehicleClassRepository()
     vehicleRepo = new InMemoryVehicleRepository()
@@ -150,6 +161,7 @@ export function createApp(overrides?: {
     maintenanceLogRepo = new InMemoryMaintenanceLogRepository()
     runInTransaction = async (fn) => fn({ vehicleRepo, maintenanceLogRepo })
     userRepo = new InMemoryUserRepository()
+    photoStorage = new InMemoryPhotoStorage()
   }
 
   const app = new Hono()
@@ -219,6 +231,7 @@ export function createApp(overrides?: {
     .route('/', createVehicleDetailRoutes(vehicleDetailRepo))
     .route('/', createVehicleClassRoutes(vehicleClassService))
     .route('/', createVehicleRoutes(vehicleRepo, maintenanceService))
+    .route('/', createVehiclePhotoRoutes(vehicleRepo, photoStorage))
     .route('/', createMaintenanceLogRoutes(maintenanceService))
     .route('/', createBookingRoutes(bookingService))
     .route('/', createAvailabilityRoutes(availabilityRepo))
