@@ -158,6 +158,10 @@ export class BookingService {
     if (input.idempotencyKey) {
       const existing = await this.bookingRepo.findByIdempotencyKey(ctx, input.idempotencyKey)
       if (existing) {
+        // Repair-on-replay: first attempt may have failed after booking was
+        // persisted but before thread creation. `ensureThread` is idempotent
+        // (keyed by `booking:<id>`) so this is safe to run unconditionally.
+        await this.ensureThread(ctx, existing, input.renterId)
         return { ok: true, booking: existing, status: 200 }
       }
     }
@@ -189,19 +193,7 @@ export class BookingService {
         idempotencyKey: input.idempotencyKey ?? null,
       })
 
-      // Messaging: auto-create a renter↔staff thread for the booking.
-      // Failure here must not roll back the booking — threads can be
-      // repaired async; the booking is authoritative.
-      if (this.threading) {
-        try {
-          await this.threading.threadRepo.create(ctx, booking.id, [
-            input.renterId,
-            this.threading.staffUserId,
-          ])
-        } catch (err) {
-          console.error('[booking] thread auto-create failed', { bookingId: booking.id, err })
-        }
-      }
+      await this.ensureThread(ctx, booking, input.renterId)
 
       return { ok: true, booking }
     } catch (err) {
@@ -220,11 +212,44 @@ export class BookingService {
       if (code === PG_ERROR.UNIQUE_VIOLATION && input.idempotencyKey) {
         const existing = await this.bookingRepo.findByIdempotencyKey(ctx, input.idempotencyKey)
         if (existing) {
+          await this.ensureThread(ctx, existing, input.renterId)
           return { ok: true, booking: existing, status: 200 }
         }
       }
 
       throw err
+    }
+  }
+
+  // TODO(#300): if a second post-booking side effect appears here, extract
+  // an outbox/event dispatcher rather than chaining another inline hook.
+  private async ensureThread(
+    ctx: CallerContext,
+    booking: Booking,
+    renterId: string,
+  ): Promise<void> {
+    if (!this.threading) return
+    const threadKey = `booking:${booking.id}`
+    try {
+      const existing = await this.threading.threadRepo.findByIdempotencyKey(threadKey)
+      if (existing) return
+      await this.threading.threadRepo.create(
+        ctx,
+        booking.id,
+        [renterId, this.threading.staffUserId],
+        threadKey,
+      )
+    } catch (err) {
+      // Booking is authoritative — log and continue. A subsequent replay
+      // with the same idempotencyKey will retry this helper.
+      console.error(
+        JSON.stringify({
+          level: 'error',
+          event: 'thread_autocreate_failed',
+          bookingId: booking.id,
+          error: err instanceof Error ? err.message : String(err),
+        }),
+      )
     }
   }
 

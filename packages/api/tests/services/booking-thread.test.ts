@@ -42,14 +42,22 @@ function stubThread(bookingId: string, participantIds: string[]): Thread {
 
 function makeMockThreadRepo(): ThreadRepository & {
   create: ReturnType<typeof vi.fn>
+  findByIdempotencyKey: ReturnType<typeof vi.fn>
 } {
-  const create = vi.fn(async (_ctx, bookingId, participantIds) =>
-    stubThread(bookingId ?? 'none', participantIds),
-  )
+  // Track threads by idempotency key so findByIdempotencyKey reflects reality.
+  // Mirrors how both the Drizzle and InMemory repos behave (unique constraint
+  // on idempotencyKey means the second call with the same key finds the first).
+  const byKey = new Map<string, Thread>()
+  const create = vi.fn(async (_ctx, bookingId, participantIds, idempotencyKey) => {
+    const thread = stubThread(bookingId ?? 'none', participantIds)
+    if (idempotencyKey) byKey.set(idempotencyKey, thread)
+    return thread
+  })
+  const findByIdempotencyKey = vi.fn(async (k: string) => byKey.get(k))
   return {
     findAll: vi.fn(async () => []),
     findById: vi.fn(async () => undefined),
-    findByIdempotencyKey: vi.fn(async () => undefined),
+    findByIdempotencyKey,
     create,
     markAsRead: vi.fn(async () => undefined),
   }
@@ -98,8 +106,11 @@ describe('BookingService.create — auto-thread on confirmation', () => {
     expect([...(participantIds as string[])].sort()).toEqual([RENTER, STAFF].sort())
   })
 
-  it('does not create a thread when threading is not configured (back-compat)', async () => {
-    const { service } = makeService() // no threadRepo
+  it('does not touch the thread repo when threading is not configured (back-compat)', async () => {
+    // Wire a spy repo but omit staffUserId → threading is disabled.
+    // This is stronger than omitting the repo entirely: it proves no code
+    // path calls threadRepo.create when the feature is off.
+    const { service } = makeService(threadRepo) // no staffUserId
     const result = await service.create(renterCtx, {
       vehicleId: V1,
       renterId: RENTER,
@@ -108,8 +119,8 @@ describe('BookingService.create — auto-thread on confirmation', () => {
       source: 'DIRECT',
     })
     expect(result.ok).toBe(true)
-    // No thread repo wired → no call to verify. The fact that the booking
-    // still succeeds proves threading is opt-in.
+    expect(threadRepo.create).not.toHaveBeenCalled()
+    expect(threadRepo.findByIdempotencyKey).not.toHaveBeenCalled()
   })
 
   it('does not create a duplicate thread on an idempotent replay', async () => {
@@ -134,12 +145,13 @@ describe('BookingService.create — auto-thread on confirmation', () => {
     expect(threadRepo.create).toHaveBeenCalledTimes(1)
   })
 
-  it('still returns the booking if thread creation throws', async () => {
+  it('still returns the booking if thread creation throws, and emits a structured log', async () => {
     // A messaging outage must not roll back the booking — the booking is
     // authoritative; threads can be repaired async later.
     threadRepo.create = vi.fn(async () => {
       throw new Error('thread service down')
     })
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
     const { service } = makeService(threadRepo, STAFF)
 
     const result = await service.create(renterCtx, {
@@ -154,5 +166,50 @@ describe('BookingService.create — auto-thread on confirmation', () => {
     if (!result.ok) return
     expect(result.booking.id).toBeTruthy()
     expect(threadRepo.create).toHaveBeenCalledTimes(1)
+    // Structured log must include the event name and bookingId so ops can
+    // alert on thread_autocreate_failed without scraping the whole line.
+    const logged = errorSpy.mock.calls.map((c) => c[0] as string).join('\n')
+    expect(logged).toContain('thread_autocreate_failed')
+    expect(logged).toContain(result.booking.id)
+    errorSpy.mockRestore()
+  })
+
+  it('repairs a missing thread on idempotent replay when the first attempt failed', async () => {
+    // Regression for HIGH #2: first call persists booking then threadRepo.create
+    // throws (swallowed). Without repair-on-replay, the booking stays thread-less
+    // forever because the idempotency short-circuit skips the thread step.
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+
+    // Arrange a throw-once repo: create() fails the first time then succeeds.
+    let callCount = 0
+    threadRepo.create = vi.fn(async (_ctx, bookingId, participantIds) => {
+      callCount++
+      if (callCount === 1) throw new Error('transient outage')
+      return stubThread(bookingId ?? 'none', participantIds)
+    })
+
+    const { service } = makeService(threadRepo, STAFF)
+    const input = {
+      vehicleId: V1,
+      renterId: RENTER,
+      startAt: futureDate(24),
+      endAt: futureDate(48),
+      source: 'DIRECT' as const,
+      idempotencyKey: 'replay-key',
+    }
+
+    const first = await service.create(renterCtx, input)
+    expect(first.ok).toBe(true)
+    expect(threadRepo.create).toHaveBeenCalledTimes(1) // failed
+
+    // Second call with the same idempotencyKey: booking short-circuits, but
+    // the replay must re-attempt the thread side effect.
+    const second = await service.create(renterCtx, input)
+    expect(second.ok).toBe(true)
+    if (!first.ok || !second.ok) return
+    expect(second.booking.id).toBe(first.booking.id)
+    expect(threadRepo.create).toHaveBeenCalledTimes(2) // second attempt succeeded
+
+    errorSpy.mockRestore()
   })
 })
