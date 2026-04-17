@@ -1,5 +1,6 @@
 import { Hono } from 'hono'
 import { beforeEach, describe, expect, it } from 'vitest'
+import { SYSTEM_CONTEXT } from '../../src/middleware/auth'
 import {
   InMemoryAvailabilityRepository,
   InMemoryBookingRepository,
@@ -19,6 +20,13 @@ function buildAvailabilityService(classRepo: InMemoryVehicleClassRepository) {
 }
 
 let app: Hono
+let classRepo: InMemoryVehicleClassRepository
+let vehicleRepo: InMemoryVehicleRepository
+let bookingRepo: InMemoryBookingRepository
+
+function makeService() {
+  return new VehicleClassService(classRepo, vehicleRepo, bookingRepo)
+}
 
 function validInput() {
   return {
@@ -41,12 +49,13 @@ async function createClass(input = validInput()) {
 
 describe('Vehicle Class CRUD Routes', () => {
   beforeEach(() => {
-    const repo = new InMemoryVehicleClassRepository()
-    const service = new VehicleClassService(repo)
-    const availabilityService = buildAvailabilityService(repo)
+    classRepo = new InMemoryVehicleClassRepository()
+    vehicleRepo = new InMemoryVehicleRepository()
+    bookingRepo = new InMemoryBookingRepository()
+    const availabilityService = buildAvailabilityService(classRepo)
     app = new Hono()
     app.use('*', testAuthMiddleware('staff-user', 'STAFF'))
-    app.route('/', createVehicleClassRoutes(service, availabilityService))
+    app.route('/', createVehicleClassRoutes(makeService(), availabilityService))
   })
 
   describe('GET /vehicle-classes', () => {
@@ -200,13 +209,131 @@ describe('Vehicle Class CRUD Routes', () => {
   })
 
   describe('DELETE /vehicle-classes/:id', () => {
-    it('archives the class', async () => {
+    async function makeVehicle(classId: string) {
+      return vehicleRepo.create({
+        classId,
+        name: 'Test Car',
+        description: null,
+        photos: [],
+        seats: 5,
+        transmission: 'AUTO',
+        fuelType: null,
+        licensePlate: null,
+        status: 'AVAILABLE',
+        bufferMinutes: 0,
+        minRentalHours: null,
+        maxRentalHours: null,
+        advanceBookingHours: null,
+        make: null,
+        model: null,
+        year: null,
+        color: null,
+        dailyRateJpy: 5000,
+        hourlyRateJpy: null,
+        shakenExpiryDate: null,
+        insuranceExpiryDate: null,
+      })
+    }
+
+    async function makeBooking(
+      vehicleId: string,
+      status: 'CONFIRMED' | 'ACTIVE' | 'CANCELLED' | 'COMPLETED',
+    ) {
+      return bookingRepo.create(SYSTEM_CONTEXT, {
+        renterId: 'user-1',
+        vehicleId,
+        startAt: new Date('2026-06-01T10:00:00Z'),
+        endAt: new Date('2026-06-01T14:00:00Z'),
+        effectiveEndAt: new Date('2026-06-01T14:00:00Z'),
+        status,
+        source: 'DIRECT',
+        externalId: null,
+        notes: null,
+        totalPrice: null,
+        cancellationFee: null,
+        cancelledAt: status === 'CANCELLED' ? new Date() : null,
+        idempotencyKey: null,
+      })
+    }
+
+    it('archives the class when no vehicles or bookings exist', async () => {
       const createRes = await createClass()
       const { data: created } = await createRes.json()
       const res = await app.request(`/vehicle-classes/${created.id}`, { method: 'DELETE' })
       expect(res.status).toBe(200)
       const { data } = await res.json()
       expect(data.status).toBe('ARCHIVED')
+    })
+
+    it('archives the class when member vehicles have no active bookings', async () => {
+      const { data: created } = await (await createClass()).json()
+      await makeVehicle(created.id)
+      const res = await app.request(`/vehicle-classes/${created.id}`, { method: 'DELETE' })
+      expect(res.status).toBe(200)
+    })
+
+    it('returns 409 with CLASS_HAS_ACTIVE_BOOKINGS when a member has a CONFIRMED booking', async () => {
+      const { data: created } = await (await createClass()).json()
+      const v = await makeVehicle(created.id)
+      await makeBooking(v.id, 'CONFIRMED')
+      const res = await app.request(`/vehicle-classes/${created.id}`, { method: 'DELETE' })
+      expect(res.status).toBe(409)
+      const body = await res.json()
+      expect(body.success).toBe(false)
+      expect(body.code).toBe('CLASS_HAS_ACTIVE_BOOKINGS')
+      expect(body.activeBookingsCount).toBe(1)
+    })
+
+    it('returns 409 when a member has an ACTIVE booking', async () => {
+      const { data: created } = await (await createClass()).json()
+      const v = await makeVehicle(created.id)
+      await makeBooking(v.id, 'ACTIVE')
+      const res = await app.request(`/vehicle-classes/${created.id}`, { method: 'DELETE' })
+      expect(res.status).toBe(409)
+    })
+
+    it('allows archive when bookings are CANCELLED or COMPLETED', async () => {
+      const { data: created } = await (await createClass()).json()
+      const v = await makeVehicle(created.id)
+      await makeBooking(v.id, 'CANCELLED')
+      await makeBooking(v.id, 'COMPLETED')
+      const res = await app.request(`/vehicle-classes/${created.id}`, { method: 'DELETE' })
+      expect(res.status).toBe(200)
+    })
+
+    it('counts bookings across multiple member vehicles', async () => {
+      const { data: created } = await (await createClass()).json()
+      const v1 = await makeVehicle(created.id)
+      const v2 = await makeVehicle(created.id)
+      await makeBooking(v1.id, 'CONFIRMED')
+      await makeBooking(v2.id, 'ACTIVE')
+      const res = await app.request(`/vehicle-classes/${created.id}`, { method: 'DELETE' })
+      expect(res.status).toBe(409)
+      const body = await res.json()
+      expect(body.activeBookingsCount).toBe(2)
+    })
+
+    it('blocks archive when a RETIRED member vehicle has an active booking', async () => {
+      // A retired car can still have a future CONFIRMED booking — the owner
+      // retired the vehicle but hasn't cancelled/reassigned the booking yet.
+      // Archiving the class before that is resolved would leave an orphan.
+      const { data: created } = await (await createClass()).json()
+      const v = await makeVehicle(created.id)
+      await makeBooking(v.id, 'CONFIRMED')
+      await vehicleRepo.softDelete(v.id)
+      const res = await app.request(`/vehicle-classes/${created.id}`, { method: 'DELETE' })
+      expect(res.status).toBe(409)
+      const body = await res.json()
+      expect(body.activeBookingsCount).toBe(1)
+    })
+
+    it('ignores active bookings on vehicles in a different class', async () => {
+      const { data: created } = await (await createClass()).json()
+      const other = await (await createClass({ ...validInput(), slug: 'suv', name: 'SUV' })).json()
+      const v = await makeVehicle(other.data.id)
+      await makeBooking(v.id, 'CONFIRMED')
+      const res = await app.request(`/vehicle-classes/${created.id}`, { method: 'DELETE' })
+      expect(res.status).toBe(200)
     })
 
     it('returns 404 for nonexistent', async () => {
@@ -218,9 +345,11 @@ describe('Vehicle Class CRUD Routes', () => {
   describe('Authorization', () => {
     it('RENTER can GET vehicle classes', async () => {
       const renterApp = new Hono()
-      const repo = new InMemoryVehicleClassRepository()
-      const service = new VehicleClassService(repo)
-      const availabilityService = buildAvailabilityService(repo)
+      const localClassRepo = new InMemoryVehicleClassRepository()
+      const localVehicleRepo = new InMemoryVehicleRepository()
+      const localBookingRepo = new InMemoryBookingRepository()
+      const service = new VehicleClassService(localClassRepo, localVehicleRepo, localBookingRepo)
+      const availabilityService = buildAvailabilityService(localClassRepo)
       renterApp.use('*', testAuthMiddleware('renter-user', 'RENTER'))
       renterApp.route('/', createVehicleClassRoutes(service, availabilityService))
       const res = await renterApp.request('/vehicle-classes')
@@ -229,9 +358,11 @@ describe('Vehicle Class CRUD Routes', () => {
 
     it('RENTER gets 403 on POST', async () => {
       const renterApp = new Hono()
-      const repo = new InMemoryVehicleClassRepository()
-      const service = new VehicleClassService(repo)
-      const availabilityService = buildAvailabilityService(repo)
+      const localClassRepo = new InMemoryVehicleClassRepository()
+      const localVehicleRepo = new InMemoryVehicleRepository()
+      const localBookingRepo = new InMemoryBookingRepository()
+      const service = new VehicleClassService(localClassRepo, localVehicleRepo, localBookingRepo)
+      const availabilityService = buildAvailabilityService(localClassRepo)
       renterApp.use('*', testAuthMiddleware('renter-user', 'RENTER'))
       renterApp.route('/', createVehicleClassRoutes(service, availabilityService))
       const res = await renterApp.request('/vehicle-classes', {

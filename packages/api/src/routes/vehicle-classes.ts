@@ -110,7 +110,14 @@ export function createVehicleClassRoutes(
         if (!STAFF_ROLES.has(user.role)) return fail(c, 'Forbidden', 403)
 
         const result = await service.archive(c.req.param('id'))
-        if (!result.ok) return fail(c, result.error, result.status)
+        if (!result.ok) {
+          const extras: Record<string, unknown> = {}
+          if (result.code) extras.code = result.code
+          if (result.activeBookingsCount !== undefined) {
+            extras.activeBookingsCount = result.activeBookingsCount
+          }
+          return fail(c, result.error, result.status, extras)
+        }
         return ok(c, result.vehicleClass)
       })
   )
