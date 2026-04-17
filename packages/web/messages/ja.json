@@ -346,8 +346,29 @@
     },
     "customers": {
       "title": "お客様",
-      "subtitle": "お客様の表示と管理",
-      "empty": "お客様はまだいません"
+      "subtitle": "予約されたお客様一覧(新しい順)",
+      "empty": "お客様はまだいません",
+      "searchPlaceholder": "名前またはメールで検索",
+      "loadMore": "もっと見る",
+      "backToList": "一覧に戻る",
+      "unnamed": "(名前なし)",
+      "language": "言語",
+      "bookingHistory": "予約履歴",
+      "columns": {
+        "name": "名前",
+        "email": "メール",
+        "country": "国",
+        "bookingCount": "予約数",
+        "totalSpent": "合計金額",
+        "lastBookingAt": "最終予約"
+      },
+      "bookingColumns": {
+        "vehicle": "車両",
+        "startAt": "開始",
+        "endAt": "終了",
+        "status": "状態",
+        "totalPrice": "金額"
+      }
     },
     "messages": {
       "title": "メッセージ",

@@ -346,8 +346,29 @@
     },
     "customers": {
       "title": "Customers",
-      "subtitle": "View and manage your customers",
-      "empty": "No customers yet"
+      "subtitle": "Everyone who has booked from you, most recent first",
+      "empty": "No customers yet",
+      "searchPlaceholder": "Search by name or email",
+      "loadMore": "Load more",
+      "backToList": "Back to customers",
+      "unnamed": "(No name)",
+      "language": "Language",
+      "bookingHistory": "Booking history",
+      "columns": {
+        "name": "Name",
+        "email": "Email",
+        "country": "Country",
+        "bookingCount": "Bookings",
+        "totalSpent": "Total spent",
+        "lastBookingAt": "Last booking"
+      },
+      "bookingColumns": {
+        "vehicle": "Vehicle",
+        "startAt": "Starts",
+        "endAt": "Ends",
+        "status": "Status",
+        "totalPrice": "Amount"
+      }
     },
     "messages": {
       "title": "Messages",
