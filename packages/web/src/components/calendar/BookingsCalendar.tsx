@@ -16,14 +16,24 @@ export interface CalendarEvent {
   title: string
   start: Date
   end: Date
+  resourceId: string
   raw: CalendarBooking
+}
+
+export interface CalendarResource {
+  resourceId: string
+  resourceTitle: string
 }
 
 interface BookingsCalendarProps {
   readonly events: CalendarEvent[]
+  readonly resources?: CalendarResource[]
   readonly defaultView?: View
+  readonly defaultDate?: Date
   readonly views?: View[]
   readonly onBookingUpdate?: (updated: CalendarBooking) => void
+  readonly onViewChange?: (view: View) => void
+  readonly onDateChange?: (date: Date) => void
 }
 
 export function toCalendarEvents(bookings: CalendarBooking[]): CalendarEvent[] {
@@ -32,6 +42,7 @@ export function toCalendarEvents(bookings: CalendarBooking[]): CalendarEvent[] {
     title: b.renterName ?? b.renterEmail ?? b.source,
     start: new Date(b.startAt),
     end: new Date(b.effectiveEndAt),
+    resourceId: b.vehicleId,
     raw: b,
   }))
 }
@@ -41,23 +52,39 @@ const CALENDAR_COMPONENTS = { toolbar: () => null } as const
 
 export function BookingsCalendar({
   events,
+  resources,
   defaultView = 'week',
-  views = ['week', 'month'],
+  defaultDate,
+  views = ['day', 'week', 'month'],
   onBookingUpdate,
+  onViewChange,
+  onDateChange,
 }: BookingsCalendarProps) {
   const locale = useLocale()
   const t = useTranslations('business.bookings.calendar')
   const [currentView, setCurrentView] = useState<View>(defaultView)
-  const [currentDate, setCurrentDate] = useState(() => new Date())
+  const [currentDate, setCurrentDate] = useState(() => defaultDate ?? new Date())
   const [selectedBooking, setSelectedBooking] = useState<CalendarBooking | null>(null)
 
   const handleSelectEvent = useCallback((event: CalendarEvent) => {
     setSelectedBooking(event.raw)
   }, [])
 
-  const handleNavigate = useCallback((date: Date) => {
-    setCurrentDate(date)
-  }, [])
+  const handleViewChange = useCallback(
+    (view: View) => {
+      setCurrentView(view)
+      onViewChange?.(view)
+    },
+    [onViewChange],
+  )
+
+  const handleNavigate = useCallback(
+    (date: Date) => {
+      setCurrentDate(date)
+      onDateChange?.(date)
+    },
+    [onDateChange],
+  )
 
   const eventPropGetter = useCallback((event: CalendarEvent) => {
     return {
@@ -91,19 +118,17 @@ export function BookingsCalendar({
   const handleToolbarNavigate = useCallback(
     (action: 'PREV' | 'NEXT' | 'TODAY') => {
       if (action === 'TODAY') {
-        setCurrentDate(new Date())
+        handleNavigate(new Date())
         return
       }
       const offset = action === 'PREV' ? -1 : 1
-      setCurrentDate((prev) => {
-        const d = new Date(prev)
-        if (currentView === 'month') d.setMonth(d.getMonth() + offset)
-        else if (currentView === 'week') d.setDate(d.getDate() + offset * 7)
-        else d.setDate(d.getDate() + offset)
-        return d
-      })
+      const d = new Date(currentDate)
+      if (currentView === 'month') d.setMonth(d.getMonth() + offset)
+      else if (currentView === 'week') d.setDate(d.getDate() + offset * 7)
+      else d.setDate(d.getDate() + offset)
+      handleNavigate(d)
     },
-    [currentView],
+    [currentView, currentDate, handleNavigate],
   )
 
   const messages = useMemo(
@@ -141,16 +166,19 @@ export function BookingsCalendar({
         label={toolbarLabel}
         view={currentView}
         onNavigate={handleToolbarNavigate}
-        onView={setCurrentView}
+        onView={handleViewChange}
         views={views}
       />
       <Calendar
         localizer={localizer}
         culture={culture}
         events={events}
+        resources={currentView === 'day' ? resources : undefined}
+        resourceIdAccessor="resourceId"
+        resourceTitleAccessor="resourceTitle"
         view={currentView}
         date={currentDate}
-        onView={setCurrentView}
+        onView={handleViewChange}
         onNavigate={handleNavigate}
         onSelectEvent={handleSelectEvent}
         eventPropGetter={eventPropGetter}
