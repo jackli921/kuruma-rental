@@ -1,5 +1,5 @@
 import { bookings } from '@kuruma/shared/db/schema'
-import { and, desc, eq, lt, or, sql } from 'drizzle-orm'
+import { and, count, desc, eq, inArray, lt, or, sql } from 'drizzle-orm'
 import { type CallerContext, PRIVILEGED_ROLES } from '../../middleware/auth'
 import type { Booking } from '../../stores'
 import type { BookingFilters, BookingRepository } from '../types'
@@ -92,6 +92,20 @@ export class DrizzleBookingRepository implements BookingRepository {
       .where(and(...conditions))
 
     return row ? toBooking(row) : undefined
+  }
+
+  async countActiveForVehicles(vehicleIds: string[]): Promise<number> {
+    if (vehicleIds.length === 0) return 0
+    const [row] = await this.db
+      .select({ value: count() })
+      .from(bookings)
+      .where(
+        and(
+          inArray(bookings.vehicleId, vehicleIds),
+          inArray(bookings.status, ['CONFIRMED', 'ACTIVE'] as const),
+        ),
+      )
+    return row?.value ?? 0
   }
 
   async create(ctx: CallerContext, data: Omit<Booking, 'id' | 'createdAt' | 'updatedAt'>): Promise<Booking> {
