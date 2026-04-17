@@ -75,6 +75,7 @@ import { MaintenanceService } from './services/maintenance'
 import { MessageTranslationService } from './services/message-translation'
 import type { TranslationProvider } from './services/translation-provider'
 import { VehicleClassService } from './services/vehicle-class'
+import { VehicleClassAvailabilityService } from './services/vehicle-class-availability'
 import { VehicleDetailService } from './services/vehicle-detail'
 import { VehiclePhotoService } from './services/vehicle-photo'
 
@@ -94,6 +95,7 @@ export function createApp(overrides?: {
   customerRepo?: CustomerRepository
   photoUploadLimiter?: RateLimitBinding
   photoUploadUserLimiter?: RateLimitBinding
+  publicCatalogLimiter?: RateLimitBinding
 }) {
   let vehicleClassRepo: VehicleClassRepository
   let vehicleRepo: VehicleRepository
@@ -117,6 +119,9 @@ export function createApp(overrides?: {
     ((globalThis as Record<string, unknown>).PHOTO_UPLOAD_USER_LIMITER as
       | RateLimitBinding
       | undefined)
+  const publicCatalogLimiter =
+    overrides?.publicCatalogLimiter ??
+    ((globalThis as Record<string, unknown>).PUBLIC_CATALOG_LIMITER as RateLimitBinding | undefined)
 
   if (overrides) {
     ;({ vehicleRepo, bookingRepo, availabilityRepo } = overrides)
@@ -253,9 +258,9 @@ export function createApp(overrides?: {
   }
 
   // Auth middleware on all protected paths.
-  // TODO(#247): vehicle-classes GETs should be public for renter catalog.
-  // Move public read routes before this block when building the catalog UI.
-  app.use('/vehicle-classes/*', requireAuth())
+  // vehicle-classes: public GETs for renter catalog (list, by-slug, availability)
+  // are registered before auth inside createVehicleClassRoutes. Mutations +
+  // admin-only GET-by-id stay auth-protected via inner middleware.
   app.use('/vehicles/*', requireAuth())
   app.use('/bookings/*', requireAuth())
   app.use('/availability/*', requireAuth())
@@ -265,6 +270,11 @@ export function createApp(overrides?: {
   app.use('/users/*', requireAuth())
 
   const vehicleClassService = new VehicleClassService(vehicleClassRepo, vehicleRepo, bookingRepo)
+  const vehicleClassAvailabilityService = new VehicleClassAvailabilityService(
+    vehicleClassRepo,
+    vehicleRepo,
+    availabilityRepo,
+  )
   const bookingService = new BookingService(bookingRepo, vehicleRepo, userRepo)
   const customerService = new CustomerService(customerRepo, userRepo)
   const maintenanceService = new MaintenanceService(
@@ -281,7 +291,14 @@ export function createApp(overrides?: {
     .route('/', health)
     .route('/', createFleetOverviewRoutes(fleetOverviewService))
     .route('/', createVehicleDetailRoutes(vehicleDetailService))
-    .route('/', createVehicleClassRoutes(vehicleClassService))
+    .route(
+      '/',
+      createVehicleClassRoutes(
+        vehicleClassService,
+        vehicleClassAvailabilityService,
+        publicCatalogLimiter,
+      ),
+    )
     .route('/', createVehicleRoutes(vehicleRepo, maintenanceService))
     .route(
       '/',

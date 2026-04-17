@@ -14,6 +14,14 @@ interface CustomerData {
   language: string
 }
 
+// Generic caught-error handler. Logs for Cloudflare Worker traces (so
+// real failures aren't silently mapped to "Network error") then returns
+// the user-facing message. Caller decides the string.
+function handleCaught(err: unknown, fallback: string): { success: false; error: string } {
+  console.error(err)
+  return { success: false, error: fallback }
+}
+
 export async function searchCustomers(query: string): Promise<ActionResult<CustomerData[]>> {
   const token = await getApiToken()
   if (!token) return { success: false, error: 'Authentication required' }
@@ -24,8 +32,8 @@ export async function searchCustomers(query: string): Promise<ActionResult<Custo
     const body = (await res.json()) as ApiResponse<CustomerData[]>
     if (!body.success) return { success: false, error: body.error ?? 'Search failed' }
     return { success: true, data: body.data }
-  } catch {
-    return { success: false, error: 'Network error' }
+  } catch (err) {
+    return handleCaught(err, 'Network error')
   }
 }
 
@@ -40,20 +48,12 @@ export async function quickCreateCustomer(input: {
 
   try {
     const client = createApiClient(token)
-    const url = client.customers['quick-create'].$url()
-    const res = await fetch(url, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${token}`,
-      },
-      body: JSON.stringify(input),
-    })
+    const res = await client.customers['quick-create'].$post({ json: input })
     const body = (await res.json()) as ApiResponse<CustomerData>
     if (!body.success) return { success: false, error: body.error ?? 'Create failed' }
     return { success: true, data: body.data }
-  } catch {
-    return { success: false, error: 'Network error' }
+  } catch (err) {
+    return handleCaught(err, 'Network error')
   }
 }
 
@@ -83,11 +83,14 @@ export async function createManualBooking(input: {
     const body = (await res.json()) as ApiResponse<{ id: string }>
     if (!body.success) return { success: false, error: body.error ?? 'Booking failed' }
     return { success: true, data: body.data }
-  } catch {
-    return { success: false, error: 'Network error' }
+  } catch (err) {
+    return handleCaught(err, 'Network error')
   }
 }
 
+// Availability stays on raw fetch because the API route reads `from`/`to`
+// via c.req.query() directly (no zValidator), so the typed Hono client
+// doesn't carry them. URL construction is still type-safe via $url().
 export async function checkAvailability(
   vehicleId: string,
   from: string,
@@ -107,7 +110,7 @@ export async function checkAvailability(
     const body = (await res.json()) as ApiResponse<{ available: boolean }>
     if (!body.success) return { success: false, error: body.error ?? 'Check failed' }
     return { success: true, data: body.data }
-  } catch {
-    return { success: false, error: 'Network error' }
+  } catch (err) {
+    return handleCaught(err, 'Network error')
   }
 }

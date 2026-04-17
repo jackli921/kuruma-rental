@@ -2,13 +2,22 @@ import { Hono } from 'hono'
 import { beforeEach, describe, expect, it } from 'vitest'
 import { SYSTEM_CONTEXT } from '../../src/middleware/auth'
 import {
+  InMemoryAvailabilityRepository,
   InMemoryBookingRepository,
   InMemoryVehicleClassRepository,
   InMemoryVehicleRepository,
 } from '../../src/repositories/in-memory'
 import { createVehicleClassRoutes } from '../../src/routes/vehicle-classes'
 import { VehicleClassService } from '../../src/services/vehicle-class'
+import { VehicleClassAvailabilityService } from '../../src/services/vehicle-class-availability'
 import { testAuthMiddleware } from '../helpers/auth'
+
+function buildAvailabilityService(classRepo: InMemoryVehicleClassRepository) {
+  const vehicleRepo = new InMemoryVehicleRepository()
+  const bookingRepo = new InMemoryBookingRepository()
+  const availabilityRepo = new InMemoryAvailabilityRepository(vehicleRepo, bookingRepo)
+  return new VehicleClassAvailabilityService(classRepo, vehicleRepo, availabilityRepo)
+}
 
 let app: Hono
 let classRepo: InMemoryVehicleClassRepository
@@ -43,9 +52,10 @@ describe('Vehicle Class CRUD Routes', () => {
     classRepo = new InMemoryVehicleClassRepository()
     vehicleRepo = new InMemoryVehicleRepository()
     bookingRepo = new InMemoryBookingRepository()
+    const availabilityService = buildAvailabilityService(classRepo)
     app = new Hono()
     app.use('*', testAuthMiddleware('staff-user', 'STAFF'))
-    app.route('/', createVehicleClassRoutes(makeService()))
+    app.route('/', createVehicleClassRoutes(makeService(), availabilityService))
   })
 
   describe('GET /vehicle-classes', () => {
@@ -339,8 +349,9 @@ describe('Vehicle Class CRUD Routes', () => {
       const localVehicleRepo = new InMemoryVehicleRepository()
       const localBookingRepo = new InMemoryBookingRepository()
       const service = new VehicleClassService(localClassRepo, localVehicleRepo, localBookingRepo)
+      const availabilityService = buildAvailabilityService(localClassRepo)
       renterApp.use('*', testAuthMiddleware('renter-user', 'RENTER'))
-      renterApp.route('/', createVehicleClassRoutes(service))
+      renterApp.route('/', createVehicleClassRoutes(service, availabilityService))
       const res = await renterApp.request('/vehicle-classes')
       expect(res.status).toBe(200)
     })
@@ -351,8 +362,9 @@ describe('Vehicle Class CRUD Routes', () => {
       const localVehicleRepo = new InMemoryVehicleRepository()
       const localBookingRepo = new InMemoryBookingRepository()
       const service = new VehicleClassService(localClassRepo, localVehicleRepo, localBookingRepo)
+      const availabilityService = buildAvailabilityService(localClassRepo)
       renterApp.use('*', testAuthMiddleware('renter-user', 'RENTER'))
-      renterApp.route('/', createVehicleClassRoutes(service))
+      renterApp.route('/', createVehicleClassRoutes(service, availabilityService))
       const res = await renterApp.request('/vehicle-classes', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
