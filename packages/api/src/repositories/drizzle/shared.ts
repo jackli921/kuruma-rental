@@ -9,6 +9,7 @@ import {
   vehicleClasses,
   vehicles,
 } from '@kuruma/shared/db/schema'
+import type { VehicleDetailBooking } from '@kuruma/shared/types/vehicle-detail'
 import type {
   Booking,
   MaintenanceLog,
@@ -124,6 +125,20 @@ export const maintenanceLogColumns = {
   resolvedAt: maintenanceLogs.resolvedAt,
   createdAt: maintenanceLogs.createdAt,
   updatedAt: maintenanceLogs.updatedAt,
+}
+
+// --- Shared date/time helpers ---
+
+export function overlapHours(
+  bookingStart: Date,
+  bookingEnd: Date,
+  windowStart: Date,
+  windowEnd: Date,
+): number {
+  const start = bookingStart < windowStart ? windowStart : bookingStart
+  const end = bookingEnd > windowEnd ? windowEnd : bookingEnd
+  if (end <= start) return 0
+  return (end.getTime() - start.getTime()) / (1000 * 60 * 60)
 }
 
 // --- Row-to-domain mappers ---
@@ -245,6 +260,53 @@ export function toMaintenanceLog(r: MaintenanceLogRow): MaintenanceLog {
     resolvedAt: r.resolvedAt,
     createdAt: r.createdAt,
     updatedAt: r.updatedAt,
+  }
+}
+
+// VehicleDetailBooking — narrow upcoming-bookings rows. Drizzle infers
+// `source`/`status` as `string`; the DB enum values are a superset of the
+// two used here (status is filtered to CONFIRMED | ACTIVE at query time).
+// This validates the contract at the boundary instead of using `as`, which
+// would silently let wider values through (e.g. if the query filter is ever
+// relaxed). A row outside the union is an operator bug or data corruption —
+// fail loudly.
+const VEHICLE_DETAIL_BOOKING_SOURCES = ['DIRECT', 'TRIP_COM', 'MANUAL', 'OTHER'] as const
+const VEHICLE_DETAIL_BOOKING_STATUSES = ['CONFIRMED', 'ACTIVE'] as const
+
+type VehicleDetailBookingSource = (typeof VEHICLE_DETAIL_BOOKING_SOURCES)[number]
+type VehicleDetailBookingStatus = (typeof VEHICLE_DETAIL_BOOKING_STATUSES)[number]
+
+export type VehicleDetailBookingRow = {
+  id: string
+  startAt: Date
+  endAt: Date
+  source: string
+  status: string
+  renterName: string | null
+}
+
+function isVehicleDetailSource(v: string): v is VehicleDetailBookingSource {
+  return (VEHICLE_DETAIL_BOOKING_SOURCES as readonly string[]).includes(v)
+}
+
+function isVehicleDetailStatus(v: string): v is VehicleDetailBookingStatus {
+  return (VEHICLE_DETAIL_BOOKING_STATUSES as readonly string[]).includes(v)
+}
+
+export function toVehicleDetailBooking(r: VehicleDetailBookingRow): VehicleDetailBooking {
+  if (!isVehicleDetailSource(r.source)) {
+    throw new Error(`Invalid booking source for vehicle detail: ${r.source} (id=${r.id})`)
+  }
+  if (!isVehicleDetailStatus(r.status)) {
+    throw new Error(`Invalid booking status for vehicle detail: ${r.status} (id=${r.id})`)
+  }
+  return {
+    id: r.id,
+    startAt: r.startAt,
+    endAt: r.endAt,
+    renterName: r.renterName,
+    source: r.source,
+    status: r.status,
   }
 }
 
