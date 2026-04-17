@@ -28,8 +28,13 @@ export class InMemoryMessageRepository implements MessageRepository {
     return thread ? msg : undefined
   }
 
-  async findByIdempotencyKey(key: string): Promise<Message | undefined> {
-    return this.idempotencyIndex.get(key)
+  async findByIdempotencyKey(ctx: CallerContext, key: string): Promise<Message | undefined> {
+    // CallerContext scoping (issue #328): the key is sender-owned, so
+    // non-privileged callers only match messages they themselves sent.
+    const msg = this.idempotencyIndex.get(key)
+    if (!msg) return undefined
+    if (PRIVILEGED_ROLES.has(ctx.role)) return msg
+    return msg.senderId === ctx.userId ? msg : undefined
   }
 
   async updateTranslation(
