@@ -79,7 +79,7 @@ function renderWithClient(
     },
   })
   if (seed?.vehicles) {
-    client.setQueryData(['vehicles'], seed.vehicles)
+    client.setQueryData(['vehicles', 'fleet-overview'], seed.vehicles)
   }
   render(<QueryClientProvider client={client}>{ui}</QueryClientProvider>)
   return { client }
@@ -156,7 +156,7 @@ describe('VehicleStatusToggle', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Confirm' }))
 
     await waitFor(() => {
-      const cached = client.getQueryData<VehicleData[]>(['vehicles'])
+      const cached = client.getQueryData<VehicleData[]>(['vehicles', 'fleet-overview'])
       expect(cached?.[0]?.status).toBe('MAINTENANCE')
     })
 
@@ -185,7 +185,7 @@ describe('VehicleStatusToggle', () => {
       expect(screen.getByText('Could not update status. Please try again.')).toBeInTheDocument()
     })
 
-    const cached = client.getQueryData<VehicleData[]>(['vehicles'])
+    const cached = client.getQueryData<VehicleData[]>(['vehicles', 'fleet-overview'])
     expect(cached?.[0]?.status).toBe('AVAILABLE')
   })
 

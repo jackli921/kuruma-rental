@@ -8,6 +8,8 @@ import { useCallback, useRef, useState } from 'react'
 const MAX_PHOTOS = 10
 const MAX_SIZE_MB = 5
 const MAX_SIZE_BYTES = MAX_SIZE_MB * 1024 * 1024
+const ALLOWED_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp', 'image/avif'])
+const ACCEPT = Array.from(ALLOWED_TYPES).join(',')
 
 interface PhotoUploadProps {
   vehicleId: string
@@ -32,7 +34,7 @@ export function PhotoUpload({ vehicleId, initialPhotos }: PhotoUploadProps) {
     async (files: File[]) => {
       setError(null)
 
-      const imageFiles = files.filter((f) => f.type.startsWith('image/'))
+      const imageFiles = files.filter((f) => ALLOWED_TYPES.has(f.type))
       if (imageFiles.length === 0) {
         setError(t('typeError'))
         return
@@ -44,10 +46,13 @@ export function PhotoUpload({ vehicleId, initialPhotos }: PhotoUploadProps) {
         return
       }
 
-      if (photos.length + imageFiles.length > MAX_PHOTOS) {
-        setError(t('photoLimit', { max: MAX_PHOTOS }))
-        return
-      }
+      setPhotos((prev) => {
+        if (prev.length + imageFiles.length > MAX_PHOTOS) {
+          setError(t('photoLimit', { max: MAX_PHOTOS }))
+          return prev
+        }
+        return prev
+      })
 
       setUploading(true)
       const formData = new FormData()
@@ -66,7 +71,7 @@ export function PhotoUpload({ vehicleId, initialPhotos }: PhotoUploadProps) {
       setPhotos((prev) => [...prev, ...result.data.uploaded])
       invalidate()
     },
-    [vehicleId, photos.length, t, invalidate],
+    [vehicleId, t, invalidate],
   )
 
   const handleDelete = useCallback(
@@ -92,10 +97,11 @@ export function PhotoUpload({ vehicleId, initialPhotos }: PhotoUploadProps) {
     (e: React.DragEvent) => {
       e.preventDefault()
       setDragOver(false)
+      if (uploading) return
       const files = Array.from(e.dataTransfer.files)
       if (files.length > 0) validateAndUpload(files)
     },
-    [validateAndUpload],
+    [validateAndUpload, uploading],
   )
 
   const handleFileChange = useCallback(
@@ -110,7 +116,7 @@ export function PhotoUpload({ vehicleId, initialPhotos }: PhotoUploadProps) {
   return (
     <div className="space-y-3">
       <div className="text-sm font-medium">{t('heading')}</div>
-      <p className="text-xs text-muted-foreground">
+      <p className="text-xs text-muted-foreground" id="photo-upload-hint">
         {t('hint', { max: MAX_PHOTOS, maxSize: MAX_SIZE_MB })}
       </p>
 
@@ -140,24 +146,26 @@ export function PhotoUpload({ vehicleId, initialPhotos }: PhotoUploadProps) {
       {photos.length < MAX_PHOTOS && (
         <button
           type="button"
+          disabled={uploading}
           onDragOver={(e) => {
             e.preventDefault()
-            setDragOver(true)
+            if (!uploading) setDragOver(true)
           }}
           onDragLeave={() => setDragOver(false)}
           onDrop={handleDrop}
-          className={`w-full border-2 border-dashed rounded-lg p-6 text-center cursor-pointer transition-colors ${
+          className={`w-full border-2 border-dashed rounded-lg p-6 text-center cursor-pointer transition-colors disabled:cursor-not-allowed disabled:opacity-60 ${
             dragOver
               ? 'border-primary bg-primary/5'
               : 'border-muted-foreground/25 hover:border-muted-foreground/50'
           }`}
           onClick={() => fileInputRef.current?.click()}
           aria-label={t('uploadPhotos')}
+          aria-describedby="photo-upload-hint"
         >
           <input
             ref={fileInputRef}
             type="file"
-            accept="image/*"
+            accept={ACCEPT}
             multiple
             className="hidden"
             onChange={handleFileChange}

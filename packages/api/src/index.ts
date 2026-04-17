@@ -14,7 +14,10 @@ import {
   DrizzleMessageRepository,
   DrizzleStatsRepository,
   DrizzleThreadRepository,
+  DrizzleUserRepository,
+  DrizzleVehicleClassRepository,
   DrizzleVehicleRepository,
+  createDrizzleTransaction,
 } from './repositories/drizzle'
 import {
   InMemoryAvailabilityRepository,
@@ -24,6 +27,8 @@ import {
   InMemoryMessageRepository,
   InMemoryStatsRepository,
   InMemoryThreadRepository,
+  InMemoryUserRepository,
+  InMemoryVehicleClassRepository,
   InMemoryVehicleRepository,
 } from './repositories/in-memory'
 import { InMemoryVehicleDetailRepository } from './repositories/in-memory-vehicle-detail'
@@ -36,8 +41,11 @@ import type {
   MaintenanceLogRepository,
   MessageRepository,
   PhotoStorage,
+  RunInTransaction,
   StatsRepository,
   ThreadRepository,
+  UserRepository,
+  VehicleClassRepository,
   VehicleDetailRepository,
   VehicleRepository,
 } from './repositories/types'
@@ -48,11 +56,13 @@ import health from './routes/health'
 import { createMaintenanceLogRoutes } from './routes/maintenance-logs'
 import { createMessageRoutes } from './routes/messages'
 import { createStatsRoutes } from './routes/stats'
+import { createVehicleClassRoutes } from './routes/vehicle-classes'
 import { createVehicleDetailRoutes } from './routes/vehicle-detail'
 import { createVehiclePhotoRoutes } from './routes/vehicle-photos'
 import { createVehicleRoutes } from './routes/vehicles'
 import { BookingService } from './services/booking'
 import { MaintenanceService } from './services/maintenance'
+import { VehicleClassService } from './services/vehicle-class'
 
 export function createApp(overrides?: {
   vehicleRepo: VehicleRepository
@@ -63,12 +73,16 @@ export function createApp(overrides?: {
   statsRepo?: StatsRepository
   threadRepo?: ThreadRepository
   messageRepo?: MessageRepository
+  vehicleClassRepo?: VehicleClassRepository
   maintenanceLogRepo?: MaintenanceLogRepository
   photoStorage?: PhotoStorage
+  userRepo?: UserRepository
 }) {
+  let vehicleClassRepo: VehicleClassRepository
   let vehicleRepo: VehicleRepository
   let bookingRepo: BookingRepository
   let availabilityRepo: AvailabilityRepository
+  let userRepo: UserRepository
   let fleetOverviewRepo: FleetOverviewRepository
   let vehicleDetailRepo: VehicleDetailRepository
   let statsRepo: StatsRepository
@@ -76,10 +90,13 @@ export function createApp(overrides?: {
   let messageRepo: MessageRepository
   let maintenanceLogRepo: MaintenanceLogRepository
   let photoStorage: PhotoStorage
+  let runInTransaction: RunInTransaction
 
   if (overrides) {
     ;({ vehicleRepo, bookingRepo, availabilityRepo } = overrides)
+    vehicleClassRepo = overrides.vehicleClassRepo ?? new InMemoryVehicleClassRepository()
     maintenanceLogRepo = overrides.maintenanceLogRepo ?? new InMemoryMaintenanceLogRepository()
+    runInTransaction = async (fn) => fn({ vehicleRepo, maintenanceLogRepo })
     fleetOverviewRepo =
       overrides.fleetOverviewRepo ??
       new InMemoryFleetOverviewRepository(vehicleRepo, bookingRepo, new Map(), maintenanceLogRepo)
@@ -91,12 +108,15 @@ export function createApp(overrides?: {
     messageRepo =
       overrides.messageRepo ?? new InMemoryMessageRepository(threadRepo as InMemoryThreadRepository)
     photoStorage = overrides.photoStorage ?? new InMemoryPhotoStorage()
+    userRepo = overrides.userRepo ?? new InMemoryUserRepository()
   } else if (process.env.DATABASE_URL) {
     const db = getDb()
+    vehicleClassRepo = new DrizzleVehicleClassRepository(db)
     vehicleRepo = new DrizzleVehicleRepository(db)
     bookingRepo = new DrizzleBookingRepository(db)
     availabilityRepo = new DrizzleAvailabilityRepository(db)
     maintenanceLogRepo = new DrizzleMaintenanceLogRepository(db)
+    runInTransaction = createDrizzleTransaction(db)
     fleetOverviewRepo = new DrizzleFleetOverviewRepository(db)
     vehicleDetailRepo = new InMemoryVehicleDetailRepository(
       vehicleRepo,
@@ -107,6 +127,7 @@ export function createApp(overrides?: {
     statsRepo = new DrizzleStatsRepository(db)
     threadRepo = new DrizzleThreadRepository(db)
     messageRepo = new DrizzleMessageRepository(db)
+    userRepo = new DrizzleUserRepository(db)
     const vehiclePhotosBucket = (globalThis as Record<string, unknown>).VEHICLE_PHOTOS as
       | R2BucketLike
       | undefined
@@ -116,6 +137,7 @@ export function createApp(overrides?: {
         ? new R2PhotoStorage(vehiclePhotosBucket, photosPublicUrl)
         : new InMemoryPhotoStorage()
   } else {
+    vehicleClassRepo = new InMemoryVehicleClassRepository()
     vehicleRepo = new InMemoryVehicleRepository()
     bookingRepo = new InMemoryBookingRepository()
     availabilityRepo = new InMemoryAvailabilityRepository(
@@ -138,6 +160,9 @@ export function createApp(overrides?: {
     statsRepo = new InMemoryStatsRepository(vehicleRepo, bookingRepo)
     threadRepo = new InMemoryThreadRepository()
     messageRepo = new InMemoryMessageRepository(threadRepo as InMemoryThreadRepository)
+    maintenanceLogRepo = new InMemoryMaintenanceLogRepository()
+    runInTransaction = async (fn) => fn({ vehicleRepo, maintenanceLogRepo })
+    userRepo = new InMemoryUserRepository()
     photoStorage = new InMemoryPhotoStorage()
   }
 
@@ -181,14 +206,22 @@ export function createApp(overrides?: {
     )
   }
 
-  // Auth middleware on all protected paths
+  // Auth middleware on all protected paths.
+  // TODO(#247): vehicle-classes GETs should be public for renter catalog.
+  // Move public read routes before this block when building the catalog UI.
+  app.use('/vehicle-classes/*', requireAuth())
   app.use('/vehicles/*', requireAuth())
   app.use('/bookings/*', requireAuth())
   app.use('/availability/*', requireAuth())
   app.use('/threads/*', requireAuth())
 
-  const bookingService = new BookingService(bookingRepo, vehicleRepo)
-  const maintenanceService = new MaintenanceService(vehicleRepo, maintenanceLogRepo)
+  const vehicleClassService = new VehicleClassService(vehicleClassRepo)
+  const bookingService = new BookingService(bookingRepo, vehicleRepo, userRepo)
+  const maintenanceService = new MaintenanceService(
+    vehicleRepo,
+    maintenanceLogRepo,
+    runInTransaction,
+  )
 
   // Chain .route() calls so TypeScript infers the full route type tree.
   // hc<AppType> needs this to produce typed client methods.
@@ -196,6 +229,7 @@ export function createApp(overrides?: {
     .route('/', health)
     .route('/', createFleetOverviewRoutes(fleetOverviewRepo))
     .route('/', createVehicleDetailRoutes(vehicleDetailRepo))
+    .route('/', createVehicleClassRoutes(vehicleClassService))
     .route('/', createVehicleRoutes(vehicleRepo, maintenanceService))
     .route('/', createVehiclePhotoRoutes(vehicleRepo, photoStorage))
     .route('/', createMaintenanceLogRoutes(maintenanceService))

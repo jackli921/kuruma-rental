@@ -1,5 +1,6 @@
 import { users } from '@kuruma/shared/db/schema'
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest'
+import { SYSTEM_CONTEXT } from '../../src/middleware/auth'
 import {
   DrizzleAvailabilityRepository,
   DrizzleBookingRepository,
@@ -85,7 +86,7 @@ describe('DrizzleAvailabilityRepository', () => {
       const endAt = new Date('2026-08-01T14:00:00Z')
       const effectiveEndAt = new Date(endAt.getTime() + vehicle.bufferMinutes * 60 * 1000)
 
-      const booking = await bookingRepo.create({
+      const booking = await bookingRepo.create(SYSTEM_CONTEXT, {
         renterId: testUser.id,
         vehicleId: vehicle.id,
         startAt: new Date('2026-08-01T10:00:00Z'),
@@ -115,7 +116,7 @@ describe('DrizzleAvailabilityRepository', () => {
       const endAt = new Date('2026-08-01T14:00:00Z')
       const effectiveEndAt = new Date(endAt.getTime() + vehicle.bufferMinutes * 60 * 1000)
 
-      const booking = await bookingRepo.create({
+      const booking = await bookingRepo.create(SYSTEM_CONTEXT, {
         renterId: testUser.id,
         vehicleId: vehicle.id,
         startAt: new Date('2026-08-01T10:00:00Z'),
@@ -146,7 +147,7 @@ describe('DrizzleAvailabilityRepository', () => {
       const endAt = new Date('2026-08-01T14:00:00Z')
       const effectiveEndAt = new Date(endAt.getTime() + vehicle.bufferMinutes * 60 * 1000) // 15:00
 
-      const booking = await bookingRepo.create({
+      const booking = await bookingRepo.create(SYSTEM_CONTEXT, {
         renterId: testUser.id,
         vehicleId: vehicle.id,
         startAt: new Date('2026-08-01T10:00:00Z'),
@@ -175,7 +176,7 @@ describe('DrizzleAvailabilityRepository', () => {
       const endAt = new Date('2026-08-01T14:00:00Z')
       const effectiveEndAt = new Date(endAt.getTime() + vehicle.bufferMinutes * 60 * 1000) // 15:00
 
-      const booking = await bookingRepo.create({
+      const booking = await bookingRepo.create(SYSTEM_CONTEXT, {
         renterId: testUser.id,
         vehicleId: vehicle.id,
         startAt: new Date('2026-08-01T10:00:00Z'),
@@ -205,7 +206,7 @@ describe('DrizzleAvailabilityRepository', () => {
       const endAt = new Date('2026-08-01T14:00:00Z')
       const effectiveEndAt = new Date(endAt.getTime() + vehicle.bufferMinutes * 60 * 1000)
 
-      const booking = await bookingRepo.create({
+      const booking = await bookingRepo.create(SYSTEM_CONTEXT, {
         renterId: testUser.id,
         vehicleId: vehicle.id,
         startAt: new Date('2026-08-01T10:00:00Z'),
@@ -272,7 +273,7 @@ describe('DrizzleAvailabilityRepository', () => {
       const endAt = new Date('2026-08-01T14:00:00Z')
       const effectiveEndAt = new Date(endAt.getTime() + vehicle.bufferMinutes * 60 * 1000)
 
-      const booking = await bookingRepo.create({
+      const booking = await bookingRepo.create(SYSTEM_CONTEXT, {
         renterId: testUser.id,
         vehicleId: vehicle.id,
         startAt: new Date('2026-08-01T10:00:00Z'),

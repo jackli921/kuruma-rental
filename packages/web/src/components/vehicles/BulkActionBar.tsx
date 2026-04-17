@@ -9,6 +9,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
+import { vehicleKeys } from '@/lib/query-keys'
 import { bulkUpdateVehicleStatus } from '@/lib/vehicle-api'
 import { useQueryClient } from '@tanstack/react-query'
 import { useTranslations } from 'next-intl'
@@ -37,7 +38,7 @@ export function BulkActionBar({ selectedIds, onClearSelection }: BulkActionBarPr
     setError(null)
     try {
       await bulkUpdateVehicleStatus([...selectedIds], confirmAction)
-      await queryClient.invalidateQueries({ queryKey: ['vehicles'] })
+      await queryClient.invalidateQueries({ queryKey: vehicleKeys.all })
       onClearSelection()
       setConfirmAction(null)
     } catch (e) {
@@ -50,9 +51,9 @@ export function BulkActionBar({ selectedIds, onClearSelection }: BulkActionBarPr
   return (
     <>
       <div className="fixed inset-x-0 bottom-0 z-40 border-t bg-background/95 backdrop-blur-sm p-3">
-        <div className="mx-auto flex max-w-5xl items-center justify-between gap-4">
+        <div className="mx-auto flex max-w-5xl flex-wrap items-center justify-between gap-3">
           <span className="text-sm font-medium">{t('bulk.selectedCount', { count })}</span>
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <Button variant="outline" size="sm" onClick={onClearSelection}>
               {t('bulk.deselectAll')}
             </Button>

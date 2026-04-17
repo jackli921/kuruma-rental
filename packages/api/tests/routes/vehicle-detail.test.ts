@@ -1,5 +1,6 @@
 import { Hono } from 'hono'
 import { beforeEach, describe, expect, it } from 'vitest'
+import { SYSTEM_CONTEXT } from '../../src/middleware/auth'
 import {
   InMemoryBookingRepository,
   InMemoryVehicleRepository,
@@ -7,6 +8,7 @@ import {
 import { InMemoryVehicleDetailRepository } from '../../src/repositories/in-memory-vehicle-detail'
 import { createVehicleDetailRoutes } from '../../src/routes/vehicle-detail'
 import type { Vehicle } from '../../src/stores'
+import { testAuthMiddleware } from '../helpers/auth'
 
 let app: Hono
 let vehicleRepo: InMemoryVehicleRepository
@@ -58,7 +60,7 @@ async function seedBooking(
     source?: 'DIRECT' | 'TRIP_COM' | 'MANUAL' | 'OTHER'
   },
 ) {
-  return bookingRepo.create({
+  return bookingRepo.create(SYSTEM_CONTEXT, {
     vehicleId,
     renterId: overrides?.renterId ?? 'renter-1',
     startAt,
@@ -83,6 +85,7 @@ describe('GET /vehicles/:id/detail', () => {
 
     const detailRepo = new InMemoryVehicleDetailRepository(vehicleRepo, bookingRepo, renterNames)
     app = new Hono()
+    app.use('*', testAuthMiddleware('staff-user', 'STAFF'))
     app.route('/', createVehicleDetailRoutes(detailRepo))
   })
 
@@ -175,22 +178,22 @@ describe('GET /vehicles/:id/detail', () => {
     const b1 = await seedBooking(vehicle.id, pastDate(72), pastDate(48), {
       totalPrice: 5000,
     })
-    await bookingRepo.updateStatus(b1.id, { from: 'CONFIRMED', to: 'ACTIVE' })
-    await bookingRepo.updateStatus(b1.id, { from: 'ACTIVE', to: 'COMPLETED' })
+    await bookingRepo.updateStatus(SYSTEM_CONTEXT, b1.id, { from: 'CONFIRMED', to: 'ACTIVE' })
+    await bookingRepo.updateStatus(SYSTEM_CONTEXT, b1.id, { from: 'ACTIVE', to: 'COMPLETED' })
 
     // Completed booking 10 days ago
     const b2 = await seedBooking(vehicle.id, pastDate(240), pastDate(216), {
       totalPrice: 8000,
     })
-    await bookingRepo.updateStatus(b2.id, { from: 'CONFIRMED', to: 'ACTIVE' })
-    await bookingRepo.updateStatus(b2.id, { from: 'ACTIVE', to: 'COMPLETED' })
+    await bookingRepo.updateStatus(SYSTEM_CONTEXT, b2.id, { from: 'CONFIRMED', to: 'ACTIVE' })
+    await bookingRepo.updateStatus(SYSTEM_CONTEXT, b2.id, { from: 'ACTIVE', to: 'COMPLETED' })
 
     // Completed booking 60 days ago
     const b3 = await seedBooking(vehicle.id, pastDate(1440), pastDate(1416), {
       totalPrice: 12000,
     })
-    await bookingRepo.updateStatus(b3.id, { from: 'CONFIRMED', to: 'ACTIVE' })
-    await bookingRepo.updateStatus(b3.id, { from: 'ACTIVE', to: 'COMPLETED' })
+    await bookingRepo.updateStatus(SYSTEM_CONTEXT, b3.id, { from: 'CONFIRMED', to: 'ACTIVE' })
+    await bookingRepo.updateStatus(SYSTEM_CONTEXT, b3.id, { from: 'ACTIVE', to: 'COMPLETED' })
 
     const res = await app.request(`/vehicles/${vehicle.id}/detail`)
     const body = await res.json()
@@ -206,8 +209,8 @@ describe('GET /vehicles/:id/detail', () => {
     const b1 = await seedBooking(vehicle.id, pastDate(72), pastDate(48), {
       totalPrice: null,
     })
-    await bookingRepo.updateStatus(b1.id, { from: 'CONFIRMED', to: 'ACTIVE' })
-    await bookingRepo.updateStatus(b1.id, { from: 'ACTIVE', to: 'COMPLETED' })
+    await bookingRepo.updateStatus(SYSTEM_CONTEXT, b1.id, { from: 'CONFIRMED', to: 'ACTIVE' })
+    await bookingRepo.updateStatus(SYSTEM_CONTEXT, b1.id, { from: 'ACTIVE', to: 'COMPLETED' })
 
     const res = await app.request(`/vehicles/${vehicle.id}/detail`)
     const body = await res.json()
@@ -236,8 +239,8 @@ describe('GET /vehicles/:id/detail', () => {
     const b = await seedBooking(vehicle.id, pastDate(48), pastDate(24), {
       totalPrice: 5000,
     })
-    await bookingRepo.updateStatus(b.id, { from: 'CONFIRMED', to: 'ACTIVE' })
-    await bookingRepo.updateStatus(b.id, { from: 'ACTIVE', to: 'COMPLETED' })
+    await bookingRepo.updateStatus(SYSTEM_CONTEXT, b.id, { from: 'CONFIRMED', to: 'ACTIVE' })
+    await bookingRepo.updateStatus(SYSTEM_CONTEXT, b.id, { from: 'ACTIVE', to: 'COMPLETED' })
 
     const res = await app.request(`/vehicles/${vehicle.id}/detail`)
     const body = await res.json()
@@ -261,5 +264,25 @@ describe('GET /vehicles/:id/detail', () => {
     const body = await res.json()
 
     expect(body.data.upcomingBookings).toHaveLength(0)
+  })
+
+  it('returns 403 for RENTER role', async () => {
+    const vehicle = await seedVehicle()
+    const renterApp = new Hono()
+    renterApp.use('*', testAuthMiddleware('renter-user', 'RENTER'))
+    const repo = new InMemoryVehicleDetailRepository(vehicleRepo, bookingRepo, renterNames)
+    renterApp.route('/', createVehicleDetailRoutes(repo))
+    const res = await renterApp.request(`/vehicles/${vehicle.id}/detail`)
+    expect(res.status).toBe(403)
+  })
+
+  it('fails closed when no auth middleware is present', async () => {
+    const vehicle = await seedVehicle()
+    const noAuthApp = new Hono()
+    const repo = new InMemoryVehicleDetailRepository(vehicleRepo, bookingRepo, renterNames)
+    noAuthApp.route('/', createVehicleDetailRoutes(repo))
+    const res = await noAuthApp.request(`/vehicles/${vehicle.id}/detail`)
+    // requireUser throws → 500 (fail-closed, not a silent pass-through)
+    expect(res.status).toBe(500)
   })
 })

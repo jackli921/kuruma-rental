@@ -1,16 +1,20 @@
 import { Hono } from 'hono'
 import { beforeEach, describe, expect, it } from 'vitest'
+import { SYSTEM_CONTEXT } from '../../src/middleware/auth'
 import {
   InMemoryBookingRepository,
+  InMemoryUserRepository,
   InMemoryVehicleRepository,
 } from '../../src/repositories/in-memory'
 import { createBookingRoutes } from '../../src/routes/bookings'
 import { BookingService } from '../../src/services/booking'
+import type { User } from '../../src/stores'
 import { testAuthMiddleware } from '../helpers/auth'
 
 let app: Hono
 let vehicleRepo: InMemoryVehicleRepository
 let bookingRepo: InMemoryBookingRepository
+let userRepo: InMemoryUserRepository
 let service: BookingService
 
 function futureDate(hoursFromNow: number): string {
@@ -42,9 +46,23 @@ async function createBooking(input = validBookingInput()) {
 
 describe('Booking Routes', () => {
   beforeEach(() => {
+    const userStore = new Map<string, User>()
+    userStore.set(USER1, {
+      id: USER1,
+      name: 'Test Renter',
+      email: 'renter@example.com',
+      language: 'en',
+    })
+    userStore.set(USER2, {
+      id: USER2,
+      name: 'Second Renter',
+      email: 'renter2@example.com',
+      language: 'ja',
+    })
     vehicleRepo = new InMemoryVehicleRepository()
     bookingRepo = new InMemoryBookingRepository()
-    service = new BookingService(bookingRepo, vehicleRepo)
+    userRepo = new InMemoryUserRepository(userStore)
+    service = new BookingService(bookingRepo, vehicleRepo, userRepo)
     app = new Hono()
     // ADMIN with USER1 identity — mirrors pre-auth test data
     app.use('*', testAuthMiddleware(USER1, 'ADMIN'))
@@ -115,7 +133,7 @@ describe('Booking Routes', () => {
       // Create one booking via route (gets USER1 from JWT context)
       await createBooking()
       // Create second booking directly in repo with USER2 (bypasses JWT)
-      await bookingRepo.create({
+      await bookingRepo.create(SYSTEM_CONTEXT, {
         vehicleId: V2,
         renterId: USER2,
         startAt: new Date(Date.now() + 24 * 60 * 60 * 1000),
@@ -285,7 +303,7 @@ describe('Booking Routes', () => {
         insuranceExpiryDate: null,
       })
 
-      const allVehicles = await vehicleRepo.findAll()
+      const { data: allVehicles } = await vehicleRepo.findAll()
       const vehicleId = allVehicles[0]!.id
 
       await createBooking({
@@ -312,6 +330,65 @@ describe('Booking Routes', () => {
       expect(body.success).toBe(true)
       expect(body.data).toHaveLength(1)
       expect(body.data[0].vehicle).toBeUndefined()
+    })
+
+    it('returns bookings with renter data when expand=renter', async () => {
+      await createBooking()
+
+      const res = await app.request('/bookings?expand=renter')
+      const body = await res.json()
+
+      expect(body.success).toBe(true)
+      expect(body.data).toHaveLength(1)
+      expect(body.data[0].renter).toEqual({
+        id: USER1,
+        name: 'Test Renter',
+        email: 'renter@example.com',
+        language: 'en',
+      })
+    })
+
+    it('returns bookings without renter data when expand is not set', async () => {
+      await createBooking()
+
+      const res = await app.request('/bookings')
+      const body = await res.json()
+
+      expect(body.success).toBe(true)
+      expect(body.data).toHaveLength(1)
+      expect(body.data[0].renter).toBeUndefined()
+    })
+
+    it('returns correct renter for each booking when expand=renter', async () => {
+      // Create via route (renterId comes from JWT = USER1)
+      await createBooking()
+      // Create directly in repo with USER2 (route always overrides renterId from JWT)
+      await bookingRepo.create(SYSTEM_CONTEXT, {
+        renterId: USER2,
+        vehicleId: V2,
+        startAt: new Date(Date.now() + 24 * 60 * 60 * 1000),
+        endAt: new Date(Date.now() + 48 * 60 * 60 * 1000),
+        effectiveEndAt: new Date(Date.now() + 49 * 60 * 60 * 1000),
+        status: 'CONFIRMED',
+        source: 'DIRECT',
+        externalId: null,
+        notes: null,
+        totalPrice: null,
+        cancellationFee: null,
+        cancelledAt: null,
+        idempotencyKey: null,
+      })
+
+      const res = await app.request('/bookings?expand=renter')
+      const body = await res.json()
+
+      expect(body.success).toBe(true)
+      expect(body.data).toHaveLength(2)
+
+      const byRenter = new Map(body.data.map((b: { renterId: string }) => [b.renterId, b]))
+      expect(byRenter.get(USER1).renter.name).toBe('Test Renter')
+      expect(byRenter.get(USER2).renter.name).toBe('Second Renter')
+      expect(byRenter.get(USER2).renter.language).toBe('ja')
     })
   })
 

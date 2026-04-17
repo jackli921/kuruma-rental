@@ -1,6 +1,8 @@
 export type {
   Vehicle,
+  VehicleClass,
   Booking,
+  User,
   Thread,
   ThreadParticipant,
   Message,
@@ -13,26 +15,44 @@ export type { VehicleDetail } from '@kuruma/shared/types/vehicle-detail'
 import type { FleetVehicleOverview } from '@kuruma/shared/types/fleet'
 import type { DashboardStats } from '@kuruma/shared/types/stats'
 import type { VehicleDetail } from '@kuruma/shared/types/vehicle-detail'
+import type { CallerContext } from '../middleware/auth'
 import type {
   Booking,
   MaintenanceLog,
   Message,
   Thread,
   ThreadParticipant,
+  User,
   Vehicle,
+  VehicleClass,
 } from '../stores'
 
 export interface VehicleFilters {
   status?: string
   includeRetired?: boolean
+  limit?: number
+  offset?: number
+}
+
+export interface PaginatedResult<T> {
+  data: T[]
+  total: number
+}
+
+export interface VehicleUpdateOptions {
+  expectedStatus?: Vehicle['status']
 }
 
 export interface VehicleRepository {
-  findAll(filters?: VehicleFilters): Promise<Vehicle[]>
+  findAll(filters?: VehicleFilters): Promise<PaginatedResult<Vehicle>>
   findById(id: string): Promise<Vehicle | undefined>
   findByIds(ids: string[]): Promise<Vehicle[]>
   create(data: Omit<Vehicle, 'id' | 'createdAt' | 'updatedAt'>): Promise<Vehicle>
-  update(id: string, data: Partial<Vehicle>): Promise<Vehicle | undefined>
+  update(
+    id: string,
+    data: Partial<Vehicle>,
+    options?: VehicleUpdateOptions,
+  ): Promise<Vehicle | undefined>
   softDelete(id: string): Promise<Vehicle | undefined>
   bulkUpdateStatus(ids: string[], status: 'AVAILABLE' | 'MAINTENANCE'): Promise<Vehicle[]>
 }
@@ -49,6 +69,10 @@ export interface FleetOverviewRepository {
   findFleetOverview(): Promise<FleetVehicleOverview[]>
 }
 
+export interface UserRepository {
+  findByIds(ids: string[]): Promise<User[]>
+}
+
 export interface BookingFilters {
   status?: string
   vehicleId?: string
@@ -59,16 +83,23 @@ export interface BookingFilters {
   cursor?: string
 }
 
+export type { CallerContext } from '../middleware/auth'
+
 export interface BookingRepository {
-  findAll(filters?: BookingFilters): Promise<Booking[]>
-  findById(id: string): Promise<Booking | undefined>
-  findByIdempotencyKey(key: string): Promise<Booking | undefined>
-  create(data: Omit<Booking, 'id' | 'createdAt' | 'updatedAt'>): Promise<Booking>
+  findAll(ctx: CallerContext, filters?: BookingFilters): Promise<Booking[]>
+  findById(ctx: CallerContext, id: string): Promise<Booking | undefined>
+  findByIdempotencyKey(ctx: CallerContext, key: string): Promise<Booking | undefined>
+  create(
+    ctx: CallerContext,
+    data: Omit<Booking, 'id' | 'createdAt' | 'updatedAt'>,
+  ): Promise<Booking>
   updateStatus(
+    ctx: CallerContext,
     id: string,
     transition: { from: Booking['status']; to: Booking['status'] },
   ): Promise<Booking | undefined>
   cancel(
+    ctx: CallerContext,
     id: string,
     opts: { from: Booking['status']; fee: number; cancelledAt: Date },
   ): Promise<Booking | undefined>
@@ -103,18 +134,34 @@ export interface VehicleDetailRepository {
 
 export interface ThreadRepository {
   findAll(
-    userId: string,
+    ctx: CallerContext,
   ): Promise<Array<Thread & { participants: ThreadParticipant[]; lastMessage: Message | null }>>
   findById(
+    ctx: CallerContext,
     id: string,
   ): Promise<(Thread & { participants: ThreadParticipant[]; messages: Message[] }) | undefined>
-  create(bookingId: string | null, participantIds: string[]): Promise<Thread>
-  markAsRead(threadId: string, userId: string): Promise<void>
+  create(ctx: CallerContext, bookingId: string | null, participantIds: string[]): Promise<Thread>
+  markAsRead(ctx: CallerContext, threadId: string): Promise<void>
 }
 
 export interface MessageRepository {
-  create(threadId: string, senderId: string, content: string): Promise<Message>
-  findByThreadId(threadId: string): Promise<Message[]>
+  create(ctx: CallerContext, threadId: string, content: string): Promise<Message>
+  findByThreadId(ctx: CallerContext, threadId: string): Promise<Message[]>
+}
+
+// Transaction boundary for operations spanning multiple repositories.
+// Drizzle: wraps db.transaction(), creating repos bound to the tx handle.
+// InMemory: passes repos through (JS event loop is single-threaded).
+export type RunInTransaction = <T>(
+  fn: (repos: {
+    vehicleRepo: VehicleRepository
+    maintenanceLogRepo: MaintenanceLogRepository
+  }) => Promise<T>,
+) => Promise<T>
+
+export interface TransitionLogsResult {
+  resolved?: MaintenanceLog
+  created?: MaintenanceLog
 }
 
 export interface MaintenanceLogRepository {
@@ -122,6 +169,25 @@ export interface MaintenanceLogRepository {
   findActiveByVehicleId(vehicleId: string): Promise<MaintenanceLog | undefined>
   create(data: Omit<MaintenanceLog, 'id' | 'createdAt' | 'updatedAt'>): Promise<MaintenanceLog>
   resolve(id: string, resolvedAt: Date): Promise<MaintenanceLog | undefined>
+  transitionLogs(
+    vehicleId: string,
+    resolvedAt: Date,
+    newLogData?: Omit<MaintenanceLog, 'id' | 'createdAt' | 'updatedAt'>,
+  ): Promise<TransitionLogsResult>
+}
+
+export interface VehicleClassFilters {
+  status?: 'ACTIVE' | 'ARCHIVED'
+  includeArchived?: boolean
+}
+
+export interface VehicleClassRepository {
+  findAll(filters?: VehicleClassFilters): Promise<VehicleClass[]>
+  findById(id: string): Promise<VehicleClass | undefined>
+  findBySlug(slug: string): Promise<VehicleClass | undefined>
+  create(data: Omit<VehicleClass, 'id' | 'createdAt' | 'updatedAt'>): Promise<VehicleClass>
+  update(id: string, data: Partial<VehicleClass>): Promise<VehicleClass | undefined>
+  archive(id: string): Promise<VehicleClass | undefined>
 }
 
 export interface PhotoStorage {

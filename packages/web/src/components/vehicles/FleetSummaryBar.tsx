@@ -29,21 +29,21 @@ export function FleetSummaryBar({ overviews }: FleetSummaryBarProps) {
   return (
     <div className="flex flex-wrap items-center gap-x-4 gap-y-1 rounded-lg border bg-card px-4 py-3 text-sm">
       <span className="font-medium text-foreground">{t('fleet.summary.total', { n: total })}</span>
-      <span className="text-muted-foreground" aria-hidden>
+      <span className="hidden sm:inline text-muted-foreground" aria-hidden>
         ·
       </span>
       <span className="text-foreground">{t('fleet.summary.onRental', { n: onRental })}</span>
-      <span className="text-muted-foreground" aria-hidden>
+      <span className="hidden sm:inline text-muted-foreground" aria-hidden>
         ·
       </span>
       <span className="text-foreground">{t('fleet.summary.available', { n: available })}</span>
-      <span className="text-muted-foreground" aria-hidden>
+      <span className="hidden sm:inline text-muted-foreground" aria-hidden>
         ·
       </span>
       <span className="text-foreground">{t('fleet.summary.maintenance', { n: maintenance })}</span>
       {expiring > 0 && (
         <>
-          <span className="text-muted-foreground" aria-hidden>
+          <span className="hidden sm:inline text-muted-foreground" aria-hidden>
             ·
           </span>
           <span className="text-destructive">{t('fleet.summary.expiring', { n: expiring })}</span>

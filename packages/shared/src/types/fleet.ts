@@ -15,6 +15,7 @@ export interface FleetVehicleOverview {
   // match rather than `extends Vehicle` so this file has zero runtime
   // dependency on the api package.
   id: string
+  classId: string | null
   name: string
   description: string | null
   photos: string[]

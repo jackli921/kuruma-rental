@@ -1,6 +1,7 @@
 'use client'
 
 import { MaintenanceReasonDialog } from '@/components/vehicles/MaintenanceReasonDialog'
+import { vehicleKeys } from '@/lib/query-keys'
 import { cn } from '@/lib/utils'
 import { updateVehicleStatusAction } from '@/lib/vehicle-actions'
 import type { VehicleData } from '@/lib/vehicle-api'
@@ -14,7 +15,6 @@ interface VehicleStatusToggleProps {
 
 type TogglableStatus = 'AVAILABLE' | 'MAINTENANCE'
 const togglableStatuses: TogglableStatus[] = ['AVAILABLE', 'MAINTENANCE']
-const VEHICLES_KEY = ['vehicles'] as const
 
 interface OptimisticContext {
   previous: VehicleData[] | undefined
@@ -37,11 +37,11 @@ export function VehicleStatusToggle({ vehicle }: VehicleStatusToggleProps) {
       return result.data
     },
     onMutate: async ({ status }) => {
-      await queryClient.cancelQueries({ queryKey: VEHICLES_KEY })
-      const previous = queryClient.getQueryData<VehicleData[]>(VEHICLES_KEY)
+      await queryClient.cancelQueries({ queryKey: vehicleKeys.fleetOverview })
+      const previous = queryClient.getQueryData<VehicleData[]>(vehicleKeys.fleetOverview)
       if (previous) {
         queryClient.setQueryData<VehicleData[]>(
-          VEHICLES_KEY,
+          vehicleKeys.fleetOverview,
           previous.map((v) => (v.id === vehicle.id ? { ...v, status } : v)),
         )
       }
@@ -49,11 +49,11 @@ export function VehicleStatusToggle({ vehicle }: VehicleStatusToggleProps) {
     },
     onError: (_err, _next, ctx) => {
       if (ctx?.previous) {
-        queryClient.setQueryData(VEHICLES_KEY, ctx.previous)
+        queryClient.setQueryData(vehicleKeys.fleetOverview, ctx.previous)
       }
     },
     onSettled: () => {
-      queryClient.invalidateQueries({ queryKey: VEHICLES_KEY })
+      queryClient.invalidateQueries({ queryKey: vehicleKeys.fleetOverview })
     },
   })
 

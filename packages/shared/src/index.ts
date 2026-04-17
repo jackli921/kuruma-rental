@@ -13,3 +13,9 @@ export {
   type CreateBookingInput,
   type UpdateBookingStatusInput,
 } from './validators/booking'
+export {
+  createVehicleClassSchema,
+  updateVehicleClassSchema,
+  type CreateVehicleClassInput,
+  type UpdateVehicleClassInput,
+} from './validators/vehicle-class'

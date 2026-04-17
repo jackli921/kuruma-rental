@@ -1,5 +1,6 @@
 import { Hono } from 'hono'
 import { beforeEach, describe, expect, it } from 'vitest'
+import { SYSTEM_CONTEXT } from '../../src/middleware/auth'
 import {
   InMemoryAvailabilityRepository,
   InMemoryBookingRepository,
@@ -7,10 +8,12 @@ import {
 } from '../../src/repositories/in-memory'
 import type { Booking, Vehicle } from '../../src/repositories/types'
 import { createAvailabilityRoutes } from '../../src/routes/availability'
+import { testAuthMiddleware } from '../helpers/auth'
 
 let app: Hono
 let vehicleRepo: InMemoryVehicleRepository
 let bookingRepo: InMemoryBookingRepository
+let availabilityRepo: InMemoryAvailabilityRepository
 
 async function createTestVehicle(
   overrides: Partial<Omit<Vehicle, 'id' | 'createdAt' | 'updatedAt'>> = {},
@@ -42,7 +45,7 @@ async function createTestBooking(
   const endAt = overrides.endAt ?? new Date('2026-06-01T14:00:00Z')
   const effectiveEndAt =
     overrides.effectiveEndAt ?? new Date(endAt.getTime() + bufferMinutes * 60 * 1000)
-  return bookingRepo.create({
+  return bookingRepo.create(SYSTEM_CONTEXT, {
     renterId: 'user1',
     vehicleId: 'v1',
     startAt: new Date('2026-06-01T10:00:00Z'),
@@ -60,8 +63,9 @@ describe('Availability Routes', () => {
   beforeEach(() => {
     vehicleRepo = new InMemoryVehicleRepository()
     bookingRepo = new InMemoryBookingRepository()
-    const availabilityRepo = new InMemoryAvailabilityRepository(vehicleRepo, bookingRepo)
+    availabilityRepo = new InMemoryAvailabilityRepository(vehicleRepo, bookingRepo)
     app = new Hono()
+    app.use('*', testAuthMiddleware('staff-user', 'STAFF'))
     app.route('/', createAvailabilityRoutes(availabilityRepo))
   })
 
@@ -278,6 +282,42 @@ describe('Availability Routes', () => {
       const body = await res.json()
       expect(body.success).toBe(false)
       expect(body.error).toBe('Vehicle not found')
+    })
+
+    it('strips conflict details for RENTER role', async () => {
+      const renterApp = new Hono()
+      renterApp.use('*', testAuthMiddleware('renter-user', 'RENTER'))
+      renterApp.route('/', createAvailabilityRoutes(availabilityRepo))
+
+      const vehicle = await createTestVehicle()
+      await createTestBooking({
+        vehicleId: vehicle.id,
+        renterId: 'other-renter',
+        notes: 'secret internal note',
+        startAt: new Date('2026-06-01T10:00:00Z'),
+        endAt: new Date('2026-06-01T14:00:00Z'),
+        status: 'CONFIRMED',
+      })
+
+      const res = await renterApp.request(
+        `/availability/${vehicle.id}?from=2026-06-01T12:00:00Z&to=2026-06-01T16:00:00Z`,
+      )
+
+      expect(res.status).toBe(200)
+
+      const body = await res.json()
+      expect(body.success).toBe(true)
+      expect(body.data.available).toBe(false)
+      expect(body.data.conflicts).toHaveLength(1)
+
+      const conflict = body.data.conflicts[0]
+      // Should only have time window fields
+      expect(Object.keys(conflict)).toEqual(['startAt', 'effectiveEndAt'])
+      // Should NOT leak sensitive fields
+      expect(conflict).not.toHaveProperty('id')
+      expect(conflict).not.toHaveProperty('renterId')
+      expect(conflict).not.toHaveProperty('notes')
+      expect(conflict).not.toHaveProperty('status')
     })
   })
 })

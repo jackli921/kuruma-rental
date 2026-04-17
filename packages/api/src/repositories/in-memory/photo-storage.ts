@@ -6,7 +6,7 @@ export class InMemoryPhotoStorage implements PhotoStorage {
   private readonly store = new Map<string, ArrayBuffer>()
 
   async put(vehicleId: string, file: File): Promise<{ key: string; url: string }> {
-    const ext = file.name.split('.').pop() ?? 'bin'
+    const ext = file.name.split('.').pop() ?? file.type.split('/').pop() ?? 'bin'
     const id = crypto.randomUUID()
     const key = `vehicles/${vehicleId}/${id}.${ext}`
 

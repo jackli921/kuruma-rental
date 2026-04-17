@@ -33,6 +33,19 @@ function isAuthUser(v: unknown): v is AuthUser {
   )
 }
 
+/** Caller identity extracted from JWT — required by every scoped repository method. */
+export interface CallerContext {
+  readonly userId: string
+  readonly role: UserRole
+}
+
+export function toCallerContext(user: AuthUser): CallerContext {
+  return { userId: user.id, role: user.role }
+}
+
+/** System-level context for internal queries that need full access (stats, fleet overview, availability). */
+export const SYSTEM_CONTEXT: CallerContext = { userId: 'system', role: 'ADMIN' } as const
+
 /** Roles that can manage bookings across all users */
 export const PRIVILEGED_ROLES: ReadonlySet<UserRole> = new Set(['STAFF', 'ADMIN', 'PARTNER'])
 

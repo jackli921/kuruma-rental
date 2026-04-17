@@ -35,6 +35,8 @@ export function createVehiclePhotoRoutes(repo: VehicleRepository, storage: Photo
       )
       if (files.length === 0) return fail(c, 'No file provided', 400)
 
+      // TODO: race condition — concurrent uploads can exceed limit.
+      // Fix with DB-level constraint or SELECT FOR UPDATE when needed.
       if (vehicle.photos.length + files.length > MAX_PHOTOS_PER_VEHICLE) {
         return fail(c, `Maximum ${MAX_PHOTOS_PER_VEHICLE} photos per vehicle`, 400)
       }
@@ -47,7 +49,13 @@ export function createVehiclePhotoRoutes(repo: VehicleRepository, storage: Photo
       const results = await Promise.all(files.map((f) => storage.put(vehicle.id, f)))
       const uploaded = results.map((r) => r.url)
 
-      await repo.update(vehicle.id, { photos: [...vehicle.photos, ...uploaded] })
+      try {
+        await repo.update(vehicle.id, { photos: [...vehicle.photos, ...uploaded] })
+      } catch (e) {
+        // Clean up uploaded files if DB update fails to avoid orphans
+        await Promise.all(results.map((r) => storage.delete(r.url).catch(() => {}))).catch(() => {})
+        throw e
+      }
 
       return ok(c, { uploaded, total: vehicle.photos.length + uploaded.length }, 201)
     })
@@ -66,15 +74,14 @@ export function createVehiclePhotoRoutes(repo: VehicleRepository, storage: Photo
       const deletedUrl = vehicle.photos[idx]!
       const photos = vehicle.photos.filter((_, i) => i !== idx)
 
-      // Best-effort R2 cleanup. Pass the full URL — storage.delete()
-      // handles stripping the base URL prefix to derive the R2 key.
+      await repo.update(vehicle.id, { photos })
+
+      // Best-effort R2 cleanup after DB update succeeds.
       try {
         await storage.delete(deletedUrl)
-      } catch {
-        // orphan in storage is acceptable for MVP
+      } catch (e) {
+        console.warn('R2 photo cleanup failed, orphan left:', deletedUrl, e)
       }
-
-      await repo.update(vehicle.id, { photos })
 
       return ok(c, { deleted: deletedUrl, remaining: photos.length })
     })

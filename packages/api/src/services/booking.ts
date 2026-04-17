@@ -2,8 +2,14 @@ import { type BookingStatus, VALID_BOOKING_TRANSITIONS } from '@kuruma/shared/db
 import { calculateCancellationFee } from '@kuruma/shared/lib/cancellation-policy'
 import { calculateBookingPrice } from '@kuruma/shared/lib/pricing'
 import { checkRentalRules } from '@kuruma/shared/lib/rental-rules'
+import type { CallerContext } from '../middleware/auth'
 import { PG_ERROR, pgErrorCode } from '../pg-errors'
-import type { BookingFilters, BookingRepository, VehicleRepository } from '../repositories/types'
+import type {
+  BookingFilters,
+  BookingRepository,
+  UserRepository,
+  VehicleRepository,
+} from '../repositories/types'
 import type { Booking } from '../stores'
 
 const DEFAULT_BUFFER_MINUTES = 60
@@ -46,18 +52,20 @@ export class BookingService {
   constructor(
     private readonly bookingRepo: BookingRepository,
     private readonly vehicleRepo?: VehicleRepository,
+    private readonly userRepo?: UserRepository,
   ) {}
 
-  async findAll(filters?: BookingFilters): Promise<Booking[]> {
-    return this.bookingRepo.findAll(filters)
+  async findAll(ctx: CallerContext, filters?: BookingFilters): Promise<Booking[]> {
+    return this.bookingRepo.findAll(ctx, filters)
   }
 
   async findAllPaginated(
+    ctx: CallerContext,
     filters: BookingFilters,
   ): Promise<{ data: Booking[]; nextCursor: string | null }> {
     const limit = filters.limit ?? 20
     // Overfetch by 1 to detect if more pages exist
-    const rows = await this.bookingRepo.findAll({ ...filters, limit: limit + 1 })
+    const rows = await this.bookingRepo.findAll(ctx, { ...filters, limit: limit + 1 })
     const hasMore = rows.length > limit
     const data = hasMore ? rows.slice(0, limit) : rows
     const last = data[data.length - 1]
@@ -65,11 +73,14 @@ export class BookingService {
     return { data, nextCursor }
   }
 
-  async findAllWithVehiclesPaginated(filters: BookingFilters): Promise<{
+  async findAllWithVehiclesPaginated(
+    ctx: CallerContext,
+    filters: BookingFilters,
+  ): Promise<{
     data: (Booking & { vehicle?: { name: string; photos: string[] } | undefined })[]
     nextCursor: string | null
   }> {
-    const { data, nextCursor } = await this.findAllPaginated(filters)
+    const { data, nextCursor } = await this.findAllPaginated(ctx, filters)
     if (!this.vehicleRepo) return { data, nextCursor }
 
     const vehicleIds = [...new Set(data.map((b) => b.vehicleId))]
@@ -85,14 +96,45 @@ export class BookingService {
     }
   }
 
-  async findById(id: string): Promise<Booking | undefined> {
-    return this.bookingRepo.findById(id)
+  async findAllWithRentersPaginated(
+    ctx: CallerContext,
+    filters: BookingFilters,
+  ): Promise<{
+    data: (Booking & {
+      renter?: { id: string; name: string | null; email: string; language: string } | undefined
+    })[]
+    nextCursor: string | null
+  }> {
+    const { data, nextCursor } = await this.findAllPaginated(ctx, filters)
+    if (!this.userRepo) return { data, nextCursor }
+
+    const renterIds = [...new Set(data.map((b) => b.renterId))]
+    const userList = await this.userRepo.findByIds(renterIds)
+    const userMap = new Map(
+      userList.map((u) => [u.id, { id: u.id, name: u.name, email: u.email, language: u.language }]),
+    )
+
+    return {
+      data: data.map((booking) => ({
+        ...booking,
+        renter: userMap.get(booking.renterId),
+      })),
+      nextCursor,
+    }
   }
 
-  async create(input: CreateBookingInput, now: Date = new Date()): Promise<CreateBookingResult> {
+  async findById(ctx: CallerContext, id: string): Promise<Booking | undefined> {
+    return this.bookingRepo.findById(ctx, id)
+  }
+
+  async create(
+    ctx: CallerContext,
+    input: CreateBookingInput,
+    now: Date = new Date(),
+  ): Promise<CreateBookingResult> {
     // Idempotency: if a key was provided, check for an existing booking first.
     if (input.idempotencyKey) {
-      const existing = await this.bookingRepo.findByIdempotencyKey(input.idempotencyKey)
+      const existing = await this.bookingRepo.findByIdempotencyKey(ctx, input.idempotencyKey)
       if (existing) {
         return { ok: true, booking: existing, status: 200 }
       }
@@ -109,7 +151,7 @@ export class BookingService {
     const effectiveEndAt = new Date(input.endAt.getTime() + bufferMinutes * MS_PER_MINUTE)
 
     try {
-      const booking = await this.bookingRepo.create({
+      const booking = await this.bookingRepo.create(ctx, {
         renterId: input.renterId,
         vehicleId: input.vehicleId,
         startAt: input.startAt,
@@ -140,7 +182,7 @@ export class BookingService {
 
       // Idempotency key unique constraint race: re-fetch and return existing
       if (code === PG_ERROR.UNIQUE_VIOLATION && input.idempotencyKey) {
-        const existing = await this.bookingRepo.findByIdempotencyKey(input.idempotencyKey)
+        const existing = await this.bookingRepo.findByIdempotencyKey(ctx, input.idempotencyKey)
         if (existing) {
           return { ok: true, booking: existing, status: 200 }
         }
@@ -150,8 +192,12 @@ export class BookingService {
     }
   }
 
-  async updateStatus(bookingId: string, newStatus: BookingStatus): Promise<StatusTransitionResult> {
-    const booking = await this.bookingRepo.findById(bookingId)
+  async updateStatus(
+    ctx: CallerContext,
+    bookingId: string,
+    newStatus: BookingStatus,
+  ): Promise<StatusTransitionResult> {
+    const booking = await this.bookingRepo.findById(ctx, bookingId)
     if (!booking) {
       return { ok: false, status: 404, error: 'Booking not found' }
     }
@@ -165,7 +211,7 @@ export class BookingService {
       }
     }
 
-    const updated = await this.bookingRepo.updateStatus(booking.id, {
+    const updated = await this.bookingRepo.updateStatus(ctx, booking.id, {
       from: booking.status,
       to: newStatus as Booking['status'],
     })
@@ -179,8 +225,12 @@ export class BookingService {
     return { ok: true, booking: updated }
   }
 
-  async cancel(bookingId: string, now: Date = new Date()): Promise<CancelResult> {
-    const booking = await this.bookingRepo.findById(bookingId)
+  async cancel(
+    ctx: CallerContext,
+    bookingId: string,
+    now: Date = new Date(),
+  ): Promise<CancelResult> {
+    const booking = await this.bookingRepo.findById(ctx, bookingId)
     if (!booking) {
       return { ok: false, status: 404, error: 'Booking not found' }
     }
@@ -195,7 +245,7 @@ export class BookingService {
 
     const cancellation = calculateCancellationFee(booking.startAt, now, booking.totalPrice ?? 0)
 
-    const updated = await this.bookingRepo.cancel(booking.id, {
+    const updated = await this.bookingRepo.cancel(ctx, booking.id, {
       from: booking.status,
       fee: cancellation.feeAmount,
       cancelledAt: now,

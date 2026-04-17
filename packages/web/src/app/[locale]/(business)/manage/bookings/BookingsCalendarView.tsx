@@ -1,26 +1,55 @@
-import { CalendarClock } from 'lucide-react'
-import { getTranslations } from 'next-intl/server'
+'use client'
 
-export async function BookingsCalendarView() {
-  const t = await getTranslations('business.bookings.placeholder')
+import { BookingsCalendar, toCalendarEvents } from '@/components/calendar/BookingsCalendar'
+import { Skeleton } from '@/components/ui/skeleton'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { endOfMonth, startOfMonth } from 'date-fns'
+import { useState } from 'react'
+import { fetchAllCalendarBookings } from './booking-actions'
+
+export function BookingsCalendarView() {
+  const queryClient = useQueryClient()
+  const [range, _setRange] = useState(() => ({
+    from: startOfMonth(new Date()).toISOString(),
+    to: endOfMonth(new Date()).toISOString(),
+  }))
+
+  const {
+    data: bookings = [],
+    isLoading,
+    error,
+  } = useQuery({
+    queryKey: ['bookings', 'calendar', range.from, range.to],
+    queryFn: () => fetchAllCalendarBookings(range.from, range.to),
+  })
+
+  const events = toCalendarEvents(bookings)
+
+  if (isLoading) {
+    return (
+      <div className="mt-6 space-y-2">
+        <Skeleton className="h-10 w-full" />
+        <Skeleton className="h-[600px] w-full" />
+      </div>
+    )
+  }
+
+  if (error) {
+    return <p className="mt-6 text-sm text-destructive">Failed to load bookings</p>
+  }
 
   return (
-    <div className="mt-12 flex justify-center">
-      <div className="max-w-lg rounded-lg border border-dashed border-border bg-card p-10 text-center">
-        <div className="mx-auto mb-4 flex size-12 items-center justify-center rounded-full bg-muted">
-          <CalendarClock className="size-6 text-muted-foreground" aria-hidden="true" />
-        </div>
-        <h2 className="text-lg font-medium">{t('title')}</h2>
-        <p className="mt-2 text-sm text-muted-foreground">{t('body')}</p>
-        <a
-          className="mt-4 inline-block text-sm text-primary underline-offset-4 hover:underline"
-          href="https://github.com/jackli921/kuruma-rental/issues/54"
-          rel="noreferrer"
-          target="_blank"
-        >
-          {t('trackingLink')}
-        </a>
-      </div>
+    <div className="mt-6">
+      <BookingsCalendar
+        events={events}
+        defaultView="week"
+        views={['week', 'month']}
+        onBookingUpdate={() => {
+          queryClient.invalidateQueries({
+            queryKey: ['bookings', 'calendar'],
+          })
+        }}
+      />
     </div>
   )
 }

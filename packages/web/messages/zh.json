@@ -113,7 +113,33 @@
         "end": "结束",
         "source": "来源",
         "notes": "备注",
-        "close": "关闭"
+        "close": "关闭",
+        "email": "邮箱",
+        "language": "语言",
+        "totalPrice": "总价",
+        "startTrip": "开始用车",
+        "completeTrip": "完成用车",
+        "cancelBooking": "取消预订",
+        "starting": "开始中...",
+        "completing": "完成中...",
+        "cancelling": "取消中...",
+        "cancelConfirm": "确定要取消此预订吗？",
+        "cancellationFee": "取消费用",
+        "refundAmount": "退款金额",
+        "freeCancellation": "免费取消",
+        "errorNetwork": "网络错误，请重试。",
+        "errorConflict": "此预订已被其他用户修改，请刷新页面。",
+        "bookingCalendar": "预订日历",
+        "today": "今天",
+        "previous": "上一页",
+        "next": "下一页",
+        "views": {
+          "day": "日",
+          "week": "周",
+          "month": "月"
+        },
+        "noEventsInRange": "该时段暂无预订",
+        "showMore": "+{count}条"
       }
     },
     "vehicles": {
@@ -213,6 +239,7 @@
         "typeError": "仅允许上传图片文件"
       },
       "filter": {
+        "title": "筛选",
         "all": "全部",
         "available": "可用",
         "maintenance": "维护中",
@@ -264,6 +291,10 @@
         "revenueLast30d": "过去30天",
         "revenueAllTime": "累计",
         "utilization": "使用率（过去30天）",
+        "utilizationShort": "使用率(30天)",
+        "upcomingShort": "即将到来",
+        "nextBookingShort": "下次:",
+        "revenueLast30dShort": "收入(30天)",
         "noRevenue": "暂无收入",
         "rentalRules": "租赁规则",
         "hours": "{count}小时",

@@ -24,7 +24,10 @@ export class R2PhotoStorage implements PhotoStorage {
   ) {}
 
   async put(vehicleId: string, file: File): Promise<{ key: string; url: string }> {
-    const ext = EXT_MAP[file.type] ?? file.name.split('.').pop() ?? 'bin'
+    if (!/^[\w-]+$/.test(vehicleId)) {
+      throw new Error('Invalid vehicle ID format')
+    }
+    const ext = EXT_MAP[file.type] ?? 'bin'
     const id = crypto.randomUUID()
     const key = `vehicles/${vehicleId}/${id}.${ext}`
 

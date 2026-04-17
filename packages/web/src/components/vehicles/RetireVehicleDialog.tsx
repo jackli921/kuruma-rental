@@ -9,11 +9,10 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
+import { useVehicleMutation } from '@/hooks/useVehicleMutation'
 import { retireVehicleAction } from '@/lib/vehicle-actions'
 import type { VehicleData } from '@/lib/vehicle-api'
-import { useQueryClient } from '@tanstack/react-query'
 import { useTranslations } from 'next-intl'
-import { useState } from 'react'
 
 interface RetireVehicleDialogProps {
   vehicle: VehicleData | null
@@ -22,28 +21,10 @@ interface RetireVehicleDialogProps {
 
 export function RetireVehicleDialog({ vehicle, onOpenChange }: RetireVehicleDialogProps) {
   const t = useTranslations('business.vehicles')
-  const queryClient = useQueryClient()
-  const [isSubmitting, setIsSubmitting] = useState(false)
-  const [error, setError] = useState<string | null>(null)
-
-  const handleRetire = async () => {
-    if (!vehicle) return
-    setIsSubmitting(true)
-    setError(null)
-    try {
-      const result = await retireVehicleAction(vehicle.id)
-      if (!result.success) {
-        setError(result.error)
-        return
-      }
-      await queryClient.invalidateQueries({ queryKey: ['vehicles'] })
-      onOpenChange(false)
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'An error occurred')
-    } finally {
-      setIsSubmitting(false)
-    }
-  }
+  const { mutate, isPending, error } = useVehicleMutation<void>({
+    mutationFn: () => retireVehicleAction(vehicle?.id ?? ''),
+    onSuccess: () => onOpenChange(false),
+  })
 
   return (
     <Dialog open={vehicle !== null} onOpenChange={onOpenChange}>
@@ -57,7 +38,7 @@ export function RetireVehicleDialog({ vehicle, onOpenChange }: RetireVehicleDial
           <Button variant="outline" onClick={() => onOpenChange(false)}>
             {t('form.cancel')}
           </Button>
-          <Button variant="destructive" onClick={handleRetire} disabled={isSubmitting}>
+          <Button variant="destructive" onClick={() => mutate()} disabled={isPending}>
             {t('retireVehicle')}
           </Button>
         </DialogFooter>

@@ -47,7 +47,7 @@ export function FleetViewToggle({ value, onChange }: FleetViewToggleProps) {
   const t = useTranslations('business.vehicles')
 
   return (
-    <div className="inline-flex items-center gap-1 rounded-lg border bg-card p-1">
+    <div className="hidden md:inline-flex items-center gap-1 rounded-lg border bg-card p-1">
       <Button
         variant="ghost"
         size="sm"

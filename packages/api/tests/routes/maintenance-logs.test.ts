@@ -2,12 +2,14 @@ import { Hono } from 'hono'
 import { beforeEach, describe, expect, it } from 'vitest'
 import { InMemoryMaintenanceLogRepository } from '../../src/repositories/in-memory'
 import { InMemoryVehicleRepository } from '../../src/repositories/in-memory'
+import type { RunInTransaction } from '../../src/repositories/types'
 import { createMaintenanceLogRoutes } from '../../src/routes/maintenance-logs'
 import { createVehicleRoutes } from '../../src/routes/vehicles'
 import { MaintenanceService } from '../../src/services/maintenance'
 import { testAuthMiddleware } from '../helpers/auth'
 
 let app: Hono
+let maintenanceService: MaintenanceService
 
 function validVehicleInput() {
   return {
@@ -37,11 +39,19 @@ async function patchStatus(id: string, status: string, reason?: string) {
   })
 }
 
+function createInMemoryTransaction(
+  vehicleRepo: InMemoryVehicleRepository,
+  maintenanceLogRepo: InMemoryMaintenanceLogRepository,
+): RunInTransaction {
+  return async (fn) => fn({ vehicleRepo, maintenanceLogRepo })
+}
+
 describe('Maintenance Logs', () => {
   beforeEach(() => {
     const vehicleRepo = new InMemoryVehicleRepository()
     const maintenanceLogRepo = new InMemoryMaintenanceLogRepository()
-    const maintenanceService = new MaintenanceService(vehicleRepo, maintenanceLogRepo)
+    const runInTransaction = createInMemoryTransaction(vehicleRepo, maintenanceLogRepo)
+    maintenanceService = new MaintenanceService(vehicleRepo, maintenanceLogRepo, runInTransaction)
 
     app = new Hono()
     app.use('*', testAuthMiddleware('staff-user', 'STAFF'))
@@ -155,13 +165,115 @@ describe('Maintenance Logs', () => {
     })
   })
 
+  // Contract test: verifies service logic returns 409 on status mismatch.
+  // JS event loop serializes the InMemory calls — true DB-level concurrency
+  // requires an integration test against Postgres with the conditional WHERE.
+  describe('concurrent status toggle', () => {
+    it('second toggle returns 409 when first already changed the status', async () => {
+      const vehicle = await createVehicle()
+
+      // Both requests race — fire concurrently
+      const [res1, res2] = await Promise.all([
+        patchStatus(vehicle.id, 'MAINTENANCE', 'Oil change'),
+        patchStatus(vehicle.id, 'MAINTENANCE', 'Brake pads'),
+      ])
+
+      const statuses = [res1.status, res2.status].sort()
+      // Exactly one succeeds, one gets 409
+      expect(statuses).toEqual([200, 409])
+
+      // Only one maintenance log should be active
+      const logsRes = await app.request(`/vehicles/${vehicle.id}/maintenance-logs`)
+      const logsBody = await logsRes.json()
+      const activeLogs = logsBody.data.filter(
+        (l: { resolvedAt: string | null }) => l.resolvedAt === null,
+      )
+      expect(activeLogs).toHaveLength(1)
+    })
+  })
+
+  describe('transaction rollback', () => {
+    it('reverts vehicle status when log transition fails', async () => {
+      const vehicleRepo = new InMemoryVehicleRepository()
+      const maintenanceLogRepo = new InMemoryMaintenanceLogRepository()
+
+      // Transaction that simulates rollback: snapshot state, run fn, restore on error
+      const rollbackTransaction: RunInTransaction = async (fn) => {
+        const snapshot = new Map([
+          ...(vehicleRepo as unknown as { store: Map<string, unknown> }).store,
+        ])
+        try {
+          return await fn({ vehicleRepo, maintenanceLogRepo })
+        } catch (err) {
+          ;(vehicleRepo as unknown as { store: Map<string, unknown> }).store.clear()
+          for (const [k, v] of snapshot) {
+            ;(vehicleRepo as unknown as { store: Map<string, unknown> }).store.set(k, v)
+          }
+          throw err
+        }
+      }
+
+      // Sabotage transitionLogs to throw after vehicle update
+      const originalTransition = maintenanceLogRepo.transitionLogs.bind(maintenanceLogRepo)
+      let callCount = 0
+      maintenanceLogRepo.transitionLogs = async (...args) => {
+        callCount++
+        if (callCount === 1) throw new Error('simulated DB failure')
+        return originalTransition(...args)
+      }
+
+      const service = new MaintenanceService(vehicleRepo, maintenanceLogRepo, rollbackTransaction)
+      const vehicle = await vehicleRepo.create({
+        name: 'Test Car',
+        classId: null,
+        description: null,
+        photos: [],
+        seats: 5,
+        transmission: 'AUTO',
+        fuelType: 'GASOLINE',
+        licensePlate: 'TEST-001',
+        status: 'AVAILABLE',
+        bufferMinutes: 60,
+        minRentalHours: null,
+        maxRentalHours: null,
+        advanceBookingHours: null,
+        make: null,
+        model: null,
+        year: null,
+        color: null,
+        dailyRateJpy: 8000,
+        hourlyRateJpy: null,
+        shakenExpiryDate: null,
+        insuranceExpiryDate: null,
+      })
+
+      // Guard: snapshot must have captured the vehicle — if store field was renamed,
+      // the snapshot would be empty and rollback silently does nothing.
+      expect(await vehicleRepo.findById(vehicle.id)).toBeDefined()
+
+      // toggleStatus should propagate the error from the transaction
+      await expect(service.toggleStatus(vehicle.id, 'MAINTENANCE', 'Oil change')).rejects.toThrow(
+        'simulated DB failure',
+      )
+
+      // Vehicle status must remain AVAILABLE — rolled back
+      const after = await vehicleRepo.findById(vehicle.id)
+      expect(after?.status).toBe('AVAILABLE')
+    })
+  })
+
   describe('auth', () => {
     it('rejects RENTER role with 403', async () => {
       const renterApp = new Hono()
       renterApp.use('*', testAuthMiddleware('renter-user', 'RENTER'))
       const vehicleRepo = new InMemoryVehicleRepository()
       const maintenanceLogRepo = new InMemoryMaintenanceLogRepository()
-      const maintenanceService = new MaintenanceService(vehicleRepo, maintenanceLogRepo)
+      const runInTransaction = createInMemoryTransaction(vehicleRepo, maintenanceLogRepo)
+      const maintenanceService = new MaintenanceService(
+        vehicleRepo,
+        maintenanceLogRepo,
+        runInTransaction,
+      )
       renterApp.route('/', createMaintenanceLogRoutes(maintenanceService))
 
       const res = await renterApp.request('/vehicles/some-id/maintenance-logs')

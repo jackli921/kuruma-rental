@@ -1,5 +1,24 @@
+export interface VehicleClass {
+  id: string
+  name: string
+  slug: string
+  description: string | null
+  photos: string[]
+  seats: number
+  luggageCapacity: number
+  transmission: 'AUTO' | 'MANUAL'
+  fuelType: string | null
+  dailyRateJpy: number | null
+  hourlyRateJpy: number | null
+  sortOrder: number
+  status: 'ACTIVE' | 'ARCHIVED'
+  createdAt: Date
+  updatedAt: Date
+}
+
 export interface Vehicle {
   id: string
+  classId: string | null
   name: string
   description: string | null
   photos: string[]
@@ -79,6 +98,13 @@ export interface MaintenanceLog {
   resolvedAt: Date | null
   createdAt: Date
   updatedAt: Date
+}
+
+export interface User {
+  id: string
+  name: string | null
+  email: string
+  language: string
 }
 
 // Map stores removed — repositories handle data access now.

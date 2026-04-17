@@ -9,12 +9,11 @@ import {
 } from '@/components/ui/dialog'
 import { PhotoUpload } from '@/components/vehicles/PhotoUpload'
 import { VehicleForm } from '@/components/vehicles/VehicleForm'
+import { useVehicleMutation } from '@/hooks/useVehicleMutation'
 import { updateVehicleAction } from '@/lib/vehicle-actions'
 import type { VehicleData } from '@/lib/vehicle-api'
 import type { CreateVehicleInput } from '@kuruma/shared/validators/vehicle'
-import { useQueryClient } from '@tanstack/react-query'
 import { useTranslations } from 'next-intl'
-import { useState } from 'react'
 
 interface EditVehicleDialogProps {
   vehicle: VehicleData | null
@@ -23,28 +22,10 @@ interface EditVehicleDialogProps {
 
 export function EditVehicleDialog({ vehicle, onOpenChange }: EditVehicleDialogProps) {
   const t = useTranslations('business.vehicles')
-  const queryClient = useQueryClient()
-  const [isSubmitting, setIsSubmitting] = useState(false)
-  const [error, setError] = useState<string | null>(null)
-
-  const handleSubmit = async (data: CreateVehicleInput) => {
-    if (!vehicle) return
-    setIsSubmitting(true)
-    setError(null)
-    try {
-      const result = await updateVehicleAction(vehicle.id, data)
-      if (!result.success) {
-        setError(result.error)
-        return
-      }
-      await queryClient.invalidateQueries({ queryKey: ['vehicles'] })
-      onOpenChange(false)
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'An error occurred')
-    } finally {
-      setIsSubmitting(false)
-    }
-  }
+  const { mutate, isPending, error } = useVehicleMutation<CreateVehicleInput>({
+    mutationFn: (data) => updateVehicleAction(vehicle?.id ?? '', data),
+    onSuccess: () => onOpenChange(false),
+  })
 
   return (
     <Dialog open={vehicle !== null} onOpenChange={onOpenChange}>
@@ -64,9 +45,9 @@ export function EditVehicleDialog({ vehicle, onOpenChange }: EditVehicleDialogPr
         {vehicle && (
           <VehicleForm
             key={vehicle.id}
-            onSubmit={handleSubmit}
+            onSubmit={async (data) => mutate(data)}
             onCancel={() => onOpenChange(false)}
-            isSubmitting={isSubmitting}
+            isSubmitting={isPending}
             defaultValues={{
               name: vehicle.name,
               ...(vehicle.description != null && { description: vehicle.description }),

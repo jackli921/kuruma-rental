@@ -113,7 +113,33 @@
         "end": "終了",
         "source": "予約元",
         "notes": "備考",
-        "close": "閉じる"
+        "close": "閉じる",
+        "email": "メール",
+        "language": "言語",
+        "totalPrice": "合計金額",
+        "startTrip": "利用開始",
+        "completeTrip": "利用完了",
+        "cancelBooking": "予約キャンセル",
+        "starting": "開始中...",
+        "completing": "完了中...",
+        "cancelling": "キャンセル中...",
+        "cancelConfirm": "この予約をキャンセルしてもよろしいですか？",
+        "cancellationFee": "キャンセル料",
+        "refundAmount": "返金額",
+        "freeCancellation": "無料キャンセル",
+        "errorNetwork": "ネットワークエラーです。もう一度お試しください。",
+        "errorConflict": "この予約は別のユーザーによって変更されました。ページを更新してください。",
+        "bookingCalendar": "予約カレンダー",
+        "today": "今日",
+        "previous": "前へ",
+        "next": "次へ",
+        "views": {
+          "day": "日",
+          "week": "週",
+          "month": "月"
+        },
+        "noEventsInRange": "この期間に予約はありません",
+        "showMore": "+{count}件"
       }
     },
     "vehicles": {
@@ -213,6 +239,7 @@
         "typeError": "画像ファイルのみアップロードできます"
       },
       "filter": {
+        "title": "フィルター",
         "all": "すべて",
         "available": "利用可能",
         "maintenance": "メンテナンス中",
@@ -264,6 +291,10 @@
         "revenueLast30d": "過去30日間",
         "revenueAllTime": "累計",
         "utilization": "稼働率（過去30日間）",
+        "utilizationShort": "稼働率(30日)",
+        "upcomingShort": "予約予定",
+        "nextBookingShort": "次回:",
+        "revenueLast30dShort": "売上(30日)",
         "noRevenue": "まだ売上はありません",
         "rentalRules": "レンタルルール",
         "hours": "{count}時間",
