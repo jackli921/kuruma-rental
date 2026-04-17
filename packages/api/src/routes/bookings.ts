@@ -3,7 +3,7 @@ import { Hono } from 'hono'
 import { requireUser, toCallerContext } from '../middleware/auth'
 import type { BookingFilters } from '../repositories/types'
 import type { BookingService } from '../services/booking'
-import { fail, ok, parseDateRange } from './helpers'
+import { fail, ok, parseDateRange, parseLimit } from './helpers'
 
 export function createBookingRoutes(service: BookingService) {
   return new Hono()
@@ -14,17 +14,14 @@ export function createBookingRoutes(service: BookingService) {
       const vehicleIdFilter = c.req.query('vehicleId')
       const renterIdFilter = c.req.query('renterId')
       const expand = c.req.query('expand')
-      const limitParam = c.req.query('limit')
       const cursor = c.req.query('cursor')
 
       const dateRange = parseDateRange(c, false)
       if (!dateRange.ok) return dateRange.response
 
-      // Validate limit: 1-100, default 20
-      const limit = limitParam ? Number.parseInt(limitParam, 10) : 20
-      if (Number.isNaN(limit) || limit < 1 || limit > 100) {
-        return fail(c, 'limit must be between 1 and 100', 400)
-      }
+      const pg = parseLimit(c, { defaultLimit: 20 })
+      if (!pg.ok) return pg.response
+      const { limit } = pg
 
       const filters: BookingFilters = { limit }
       if (cursor) filters.cursor = cursor
