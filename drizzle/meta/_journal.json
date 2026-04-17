@@ -148,6 +148,20 @@
       "when": 1776566400000,
       "tag": "0020_add-maintenance-logs-vehicle-index",
       "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "7",
+      "when": 1776582814428,
+      "tag": "0021_add-messaging-idempotency-keys",
+      "breakpoints": true
+    },
+    {
+      "idx": 22,
+      "version": "7",
+      "when": 1776582822759,
+      "tag": "0022_messaging-idempotency-unique-indexes",
+      "breakpoints": true
     }
   ]
 }

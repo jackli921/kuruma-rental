@@ -1,5 +1,5 @@
 import { users } from '@kuruma/shared/db/schema'
-import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest'
+import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import type { CallerContext } from '../../src/middleware/auth'
 import { DrizzleBookingRepository, DrizzleVehicleRepository } from '../../src/repositories/drizzle'
 import type { Booking, Vehicle } from '../../src/stores'
@@ -73,12 +73,8 @@ beforeAll(async () => {
   createdVehicleIds.push(vehicle.id)
 })
 
-afterEach(async () => {
-  await cleanupBookings(createdBookingIds)
-  createdBookingIds.length = 0
-})
-
 afterAll(async () => {
+  await cleanupBookings(createdBookingIds)
   await cleanupVehicles(createdVehicleIds)
   await cleanupUsers(createdUserIds)
 })

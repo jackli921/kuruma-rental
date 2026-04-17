@@ -53,7 +53,7 @@ export class DrizzleThreadRepository implements ThreadRepository {
     // Step 4: fetch only the latest message per thread.
     const lastMessageRows = await this.db.execute<RawMessageRow>(sql`
       SELECT DISTINCT ON ("threadId")
-        "id", "threadId", "senderId", "content", "sourceLanguage", "translations", "createdAt"
+        "id", "threadId", "senderId", "content", "sourceLanguage", "translations", "idempotencyKey", "createdAt"
       FROM "messages"
       WHERE "threadId" IN (${sql.join(
         threadIds.map((id) => sql`${id}`),
@@ -118,11 +118,24 @@ export class DrizzleThreadRepository implements ThreadRepository {
     }
   }
 
-  async create(ctx: CallerContext, bookingId: string | null, participantIds: string[]): Promise<Thread> {
+  async findByIdempotencyKey(key: string): Promise<Thread | undefined> {
+    const [row] = (await this.db
+      .select(threadColumns)
+      .from(threads)
+      .where(eq(threads.idempotencyKey, key))).map(toThread)
+    return row
+  }
+
+  async create(
+    _ctx: CallerContext,
+    bookingId: string | null,
+    participantIds: string[],
+    idempotencyKey?: string | null,
+  ): Promise<Thread> {
     return this.db.transaction(async (tx) => {
       const [insertedThread] = (await tx
         .insert(threads)
-        .values({ bookingId })
+        .values({ bookingId, idempotencyKey: idempotencyKey ?? null })
         .returning(threadColumns)).map(toThread)
 
       if (!insertedThread) {
