@@ -50,7 +50,7 @@ describe('actor derivation from JWT', () => {
       headers: { 'Content-Type': 'application/json', ...headers },
       body: JSON.stringify({
         vehicleId: vehicle.id,
-        renterId: 'attacker-trying-to-spoof',
+        renterId: 'a0000000-0000-4000-a000-000000000099',
         startAt: futureDate(24),
         endAt: futureDate(48),
         source: 'DIRECT',
