@@ -7,6 +7,7 @@ import { PG_ERROR, pgErrorCode } from '../pg-errors'
 import type {
   BookingFilters,
   BookingRepository,
+  ThreadRepository,
   UserRepository,
   VehicleRepository,
 } from '../repositories/types'
@@ -48,11 +49,17 @@ export type CancelResult =
     }
   | { ok: false; status: 404 | 409; error: string }
 
+export interface BookingThreading {
+  threadRepo: ThreadRepository
+  staffUserId: string
+}
+
 export class BookingService {
   constructor(
     private readonly bookingRepo: BookingRepository,
     private readonly vehicleRepo?: VehicleRepository,
     private readonly userRepo?: UserRepository,
+    private readonly threading?: BookingThreading,
   ) {}
 
   async findAll(ctx: CallerContext, filters?: BookingFilters): Promise<Booking[]> {
@@ -181,6 +188,20 @@ export class BookingService {
         cancelledAt: null,
         idempotencyKey: input.idempotencyKey ?? null,
       })
+
+      // Messaging: auto-create a renter↔staff thread for the booking.
+      // Failure here must not roll back the booking — threads can be
+      // repaired async; the booking is authoritative.
+      if (this.threading) {
+        try {
+          await this.threading.threadRepo.create(ctx, booking.id, [
+            input.renterId,
+            this.threading.staffUserId,
+          ])
+        } catch (err) {
+          console.error('[booking] thread auto-create failed', { bookingId: booking.id, err })
+        }
+      }
 
       return { ok: true, booking }
     } catch (err) {
