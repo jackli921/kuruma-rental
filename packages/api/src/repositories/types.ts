@@ -32,6 +32,7 @@ import type {
 export interface VehicleFilters {
   status?: string
   includeRetired?: boolean
+  classId?: string
   limit?: number
   offset?: number
 }
@@ -125,6 +126,10 @@ export interface BookingRepository {
   findAll(ctx: CallerContext, filters?: BookingFilters): Promise<Booking[]>
   findById(ctx: CallerContext, id: string): Promise<Booking | undefined>
   findByIdempotencyKey(ctx: CallerContext, key: string): Promise<Booking | undefined>
+  /** Counts bookings in BLOCKING_STATUSES (CONFIRMED, ACTIVE) for the given
+   *  vehicle set. Used to guard operations that assume no live bookings exist
+   *  for those vehicles — e.g. archiving a vehicle class. */
+  countActiveForVehicles(vehicleIds: string[]): Promise<number>
   create(
     ctx: CallerContext,
     data: Omit<Booking, 'id' | 'createdAt' | 'updatedAt'>,
