@@ -78,7 +78,10 @@ export interface VehicleRepository {
 // (vehicles + bookings + users.name) — following the same boundary as
 // AvailabilityRepository, which also reads vehicles + bookings.
 export interface FleetOverviewRepository {
-  findFleetOverview(): Promise<FleetVehicleOverview[]>
+  // `now` is injected so time-based cutoffs (utilization window,
+  // current/upcoming filtering) live in callers, not infrastructure.
+  // Tests can pass a fixed Date without faking the global clock.
+  findFleetOverview(now: Date): Promise<FleetVehicleOverview[]>
 }
 
 export interface UserRepository {
@@ -162,7 +165,10 @@ export interface AvailabilityRepository {
 // Returns a single vehicle with upcoming bookings, revenue, and utilization.
 // See issue #53.
 export interface VehicleDetailRepository {
-  findVehicleDetail(vehicleId: string): Promise<VehicleDetail | undefined>
+  // `now` injected for the same reason as FleetOverviewRepository:
+  // revenue window, upcoming-booking filtering, and utilization range
+  // are business decisions owned by the service layer.
+  findVehicleDetail(vehicleId: string, now: Date): Promise<VehicleDetail | undefined>
 }
 
 export interface ThreadRepository {

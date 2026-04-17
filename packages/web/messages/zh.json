@@ -40,6 +40,7 @@
     "dashboard": "仪表盘",
     "customers": "客户",
     "fleet": "车队管理",
+    "classes": "车型",
     "menu": "菜单",
     "close": "关闭菜单",
     "switchToRenter": "切换到租客视图",
@@ -417,6 +418,59 @@
         "endAt": "结束",
         "status": "状态",
         "totalPrice": "金额"
+      }
+    },
+    "classes": {
+      "title": "车型",
+      "subtitle": "将车队按车型分组，供租客浏览。",
+      "addClass": "添加车型",
+      "addSubtitle": "为租客浏览创建新的车型。",
+      "editClass": "编辑车型",
+      "deleteAction": "删除车型",
+      "deleteTitle": "删除 {name}？",
+      "deleteDescription": "将把车型归档。车辆保留，但会失去车型标签。",
+      "deleteBlockedActiveBookings": "该车型的车辆有 {count} 个进行中的预订，请先完成后再删除。",
+      "deleteConfirm": "删除",
+      "deleting": "删除中...",
+      "empty": "暂无车型。添加第一个来为车队分组。",
+      "loadError": "无法加载车型",
+      "retry": "重试",
+      "status": {
+        "ACTIVE": "可用",
+        "ARCHIVED": "已归档"
+      },
+      "stats": {
+        "cars": "{count} 辆",
+        "activeBookings": "进行中 {count} 个",
+        "seats": "{count} 座",
+        "luggage": "行李 {count} 件",
+        "daily": "{amount} /天",
+        "hourly": "{amount} /时"
+      },
+      "form": {
+        "name": "车型名称",
+        "namePlaceholder": "例如：紧凑型",
+        "slug": "标识",
+        "slugPlaceholder": "例如：compact",
+        "slugHint": "仅小写字母、数字和连字符，用于 URL。",
+        "description": "描述",
+        "descriptionPlaceholder": "展示给租客的简短介绍。",
+        "seats": "座位数",
+        "luggageCapacity": "行李容量（件）",
+        "transmission": "变速器",
+        "transmissionAuto": "自动",
+        "transmissionManual": "手动",
+        "fuelType": "燃料类型",
+        "fuelTypePlaceholder": "例如：汽油、混动、电动",
+        "pricingHeading": "价格（日元）",
+        "pricingHint": "至少需要一项（日租或小时）。",
+        "dailyRate": "日租价",
+        "hourlyRate": "小时价",
+        "sortOrder": "排序",
+        "sortOrderHint": "值越小越靠前，相同值按名称 A-Z 排序。",
+        "save": "保存车型",
+        "saving": "保存中...",
+        "cancel": "取消"
       }
     },
     "messages": {

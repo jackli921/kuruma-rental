@@ -40,6 +40,7 @@
     "dashboard": "Dashboard",
     "customers": "Customers",
     "fleet": "Fleet",
+    "classes": "Classes",
     "menu": "Menu",
     "close": "Close menu",
     "switchToRenter": "Switch to renter view",
@@ -417,6 +418,59 @@
         "endAt": "Ends",
         "status": "Status",
         "totalPrice": "Amount"
+      }
+    },
+    "classes": {
+      "title": "Vehicle classes",
+      "subtitle": "Group your fleet into classes that renters browse.",
+      "addClass": "Add class",
+      "addSubtitle": "Create a new class for renters to browse.",
+      "editClass": "Edit class",
+      "deleteAction": "Delete class",
+      "deleteTitle": "Delete {name}?",
+      "deleteDescription": "This archives the class. Vehicles remain; they just lose their class tag.",
+      "deleteBlockedActiveBookings": "{count, plural, one {# active booking} other {# active bookings}} on vehicles in this class. Finish them before deleting.",
+      "deleteConfirm": "Delete",
+      "deleting": "Deleting...",
+      "empty": "No classes yet. Add your first one to group the fleet.",
+      "loadError": "Couldn't load classes",
+      "retry": "Try again",
+      "status": {
+        "ACTIVE": "Active",
+        "ARCHIVED": "Archived"
+      },
+      "stats": {
+        "cars": "{count, plural, one {# car} other {# cars}}",
+        "activeBookings": "{count, plural, one {# active booking} other {# active bookings}}",
+        "seats": "{count, plural, one {# seat} other {# seats}}",
+        "luggage": "{count, plural, one {# bag} other {# bags}}",
+        "daily": "{amount} /day",
+        "hourly": "{amount} /hr"
+      },
+      "form": {
+        "name": "Class name",
+        "namePlaceholder": "e.g. Compact",
+        "slug": "Slug",
+        "slugPlaceholder": "e.g. compact",
+        "slugHint": "Lowercase letters, numbers, and hyphens. Used in the URL.",
+        "description": "Description",
+        "descriptionPlaceholder": "Short pitch renters will read.",
+        "seats": "Seats",
+        "luggageCapacity": "Luggage (bags)",
+        "transmission": "Transmission",
+        "transmissionAuto": "Automatic",
+        "transmissionManual": "Manual",
+        "fuelType": "Fuel type",
+        "fuelTypePlaceholder": "e.g. Gasoline, Hybrid, EV",
+        "pricingHeading": "Pricing (JPY)",
+        "pricingHint": "At least one rate is required.",
+        "dailyRate": "Daily rate",
+        "hourlyRate": "Hourly rate",
+        "sortOrder": "Sort order",
+        "sortOrderHint": "Lower values show first. Same value falls back to name A-Z.",
+        "save": "Save class",
+        "saving": "Saving...",
+        "cancel": "Cancel"
       }
     },
     "messages": {

@@ -2,7 +2,7 @@
 
 import { useLayoutPreference } from '@/components/providers/LayoutPreferenceProvider'
 import { Link, usePathname } from '@/i18n/routing'
-import { Calendar, Car, LayoutDashboard, MessageSquare, Users } from 'lucide-react'
+import { Calendar, Car, Layers, LayoutDashboard, MessageSquare, Users } from 'lucide-react'
 import { useTranslations } from 'next-intl'
 import { useEffect, useState } from 'react'
 
@@ -10,6 +10,7 @@ const SIDEBAR_ITEMS = [
   { href: '/dashboard', icon: LayoutDashboard, labelKey: 'dashboard' },
   { href: '/manage/bookings', icon: Calendar, labelKey: 'bookings' },
   { href: '/manage/vehicles', icon: Car, labelKey: 'fleet' },
+  { href: '/manage/classes', icon: Layers, labelKey: 'classes' },
   { href: '/manage/customers', icon: Users, labelKey: 'customers' },
   { href: '/manage/messages', icon: MessageSquare, labelKey: 'messages' },
 ] as const
