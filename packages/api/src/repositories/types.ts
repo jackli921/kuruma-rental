@@ -11,7 +11,9 @@ export type {
 export type { DashboardStats } from '@kuruma/shared/types/stats'
 export type { FleetVehicleOverview, FleetBookingSummary } from '@kuruma/shared/types/fleet'
 export type { VehicleDetail } from '@kuruma/shared/types/vehicle-detail'
+export type { Customer, CustomerSort, CustomerWithBookings } from '@kuruma/shared/types/customer'
 
+import type { Customer, CustomerSort, CustomerWithBookings } from '@kuruma/shared/types/customer'
 import type { FleetVehicleOverview } from '@kuruma/shared/types/fleet'
 import type { DashboardStats } from '@kuruma/shared/types/stats'
 import type { VehicleDetail } from '@kuruma/shared/types/vehicle-detail'
@@ -76,7 +78,10 @@ export interface VehicleRepository {
 // (vehicles + bookings + users.name) — following the same boundary as
 // AvailabilityRepository, which also reads vehicles + bookings.
 export interface FleetOverviewRepository {
-  findFleetOverview(): Promise<FleetVehicleOverview[]>
+  // `now` is injected so time-based cutoffs (utilization window,
+  // current/upcoming filtering) live in callers, not infrastructure.
+  // Tests can pass a fixed Date without faking the global clock.
+  findFleetOverview(now: Date): Promise<FleetVehicleOverview[]>
 }
 
 export interface UserRepository {
@@ -90,6 +95,18 @@ export interface UserRepository {
   }): Promise<User>
   findByEmail(email: string): Promise<User | undefined>
   findByPhone(phone: string): Promise<User | undefined>
+}
+
+export interface CustomerListFilters {
+  search?: string | undefined
+  sort?: CustomerSort | undefined
+  limit?: number | undefined
+  cursor?: string | undefined
+}
+
+export interface CustomerRepository {
+  findAllWithAggregates(filters: CustomerListFilters): Promise<Customer[]>
+  findByIdWithBookings(id: string): Promise<CustomerWithBookings | undefined>
 }
 
 export interface BookingFilters {
@@ -148,7 +165,10 @@ export interface AvailabilityRepository {
 // Returns a single vehicle with upcoming bookings, revenue, and utilization.
 // See issue #53.
 export interface VehicleDetailRepository {
-  findVehicleDetail(vehicleId: string): Promise<VehicleDetail | undefined>
+  // `now` injected for the same reason as FleetOverviewRepository:
+  // revenue window, upcoming-booking filtering, and utilization range
+  // are business decisions owned by the service layer.
+  findVehicleDetail(vehicleId: string, now: Date): Promise<VehicleDetail | undefined>
 }
 
 export interface ThreadRepository {

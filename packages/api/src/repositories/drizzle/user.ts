@@ -10,6 +10,7 @@ const userColumns = {
   email: users.email,
   phone: users.phone,
   language: users.language,
+  country: users.country,
   role: users.role,
 }
 

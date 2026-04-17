@@ -9,6 +9,7 @@ import { requestId } from './middleware/request-id'
 import {
   DrizzleAvailabilityRepository,
   DrizzleBookingRepository,
+  DrizzleCustomerRepository,
   DrizzleFleetOverviewRepository,
   DrizzleMaintenanceLogRepository,
   DrizzleMessageRepository,
@@ -23,6 +24,7 @@ import {
 import {
   InMemoryAvailabilityRepository,
   InMemoryBookingRepository,
+  InMemoryCustomerRepository,
   InMemoryFleetOverviewRepository,
   InMemoryMaintenanceLogRepository,
   InMemoryMessageRepository,
@@ -38,6 +40,7 @@ import { type R2BucketLike, R2PhotoStorage } from './repositories/r2-photo-stora
 import type {
   AvailabilityRepository,
   BookingRepository,
+  CustomerRepository,
   FleetOverviewRepository,
   MaintenanceLogRepository,
   MessageRepository,
@@ -66,11 +69,14 @@ import { createVehiclePhotoRoutes } from './routes/vehicle-photos'
 import { createVehicleRoutes } from './routes/vehicles'
 import { BookingService } from './services/booking'
 import { CustomerService } from './services/customer'
+import { FleetOverviewService } from './services/fleet-overview'
 import { GoogleTranslationProvider } from './services/google-translation-provider'
 import { MaintenanceService } from './services/maintenance'
 import { MessageTranslationService } from './services/message-translation'
 import type { TranslationProvider } from './services/translation-provider'
 import { VehicleClassService } from './services/vehicle-class'
+import { VehicleClassAvailabilityService } from './services/vehicle-class-availability'
+import { VehicleDetailService } from './services/vehicle-detail'
 import { VehiclePhotoService } from './services/vehicle-photo'
 
 export function createApp(overrides?: {
@@ -86,8 +92,10 @@ export function createApp(overrides?: {
   maintenanceLogRepo?: MaintenanceLogRepository
   photoStorage?: PhotoStorage
   userRepo?: UserRepository
+  customerRepo?: CustomerRepository
   photoUploadLimiter?: RateLimitBinding
   photoUploadUserLimiter?: RateLimitBinding
+  publicCatalogLimiter?: RateLimitBinding
 }) {
   let vehicleClassRepo: VehicleClassRepository
   let vehicleRepo: VehicleRepository
@@ -101,6 +109,7 @@ export function createApp(overrides?: {
   let messageRepo: MessageRepository
   let maintenanceLogRepo: MaintenanceLogRepository
   let photoStorage: PhotoStorage
+  let customerRepo: CustomerRepository
   let runInTransaction: RunInTransaction
   const photoUploadLimiter =
     overrides?.photoUploadLimiter ??
@@ -110,6 +119,9 @@ export function createApp(overrides?: {
     ((globalThis as Record<string, unknown>).PHOTO_UPLOAD_USER_LIMITER as
       | RateLimitBinding
       | undefined)
+  const publicCatalogLimiter =
+    overrides?.publicCatalogLimiter ??
+    ((globalThis as Record<string, unknown>).PUBLIC_CATALOG_LIMITER as RateLimitBinding | undefined)
 
   if (overrides) {
     ;({ vehicleRepo, bookingRepo, availabilityRepo } = overrides)
@@ -128,6 +140,7 @@ export function createApp(overrides?: {
       overrides.messageRepo ?? new InMemoryMessageRepository(threadRepo as InMemoryThreadRepository)
     photoStorage = overrides.photoStorage ?? new InMemoryPhotoStorage()
     userRepo = overrides.userRepo ?? new InMemoryUserRepository()
+    customerRepo = overrides.customerRepo ?? new InMemoryCustomerRepository(new Map(), new Map())
   } else if (process.env.DATABASE_URL) {
     const db = getDb()
     vehicleClassRepo = new DrizzleVehicleClassRepository(db)
@@ -142,6 +155,7 @@ export function createApp(overrides?: {
     threadRepo = new DrizzleThreadRepository(db)
     messageRepo = new DrizzleMessageRepository(db)
     userRepo = new DrizzleUserRepository(db)
+    customerRepo = new DrizzleCustomerRepository(db)
     const vehiclePhotosBucket = (globalThis as Record<string, unknown>).VEHICLE_PHOTOS as
       | R2BucketLike
       | undefined
@@ -178,6 +192,7 @@ export function createApp(overrides?: {
     runInTransaction = async (fn) => fn({ vehicleRepo, maintenanceLogRepo })
     userRepo = new InMemoryUserRepository()
     photoStorage = new InMemoryPhotoStorage()
+    customerRepo = new InMemoryCustomerRepository(new Map(), new Map())
   }
 
   // Translation provider: real Google when the key is set. In production
@@ -243,32 +258,47 @@ export function createApp(overrides?: {
   }
 
   // Auth middleware on all protected paths.
-  // TODO(#247): vehicle-classes GETs should be public for renter catalog.
-  // Move public read routes before this block when building the catalog UI.
-  app.use('/vehicle-classes/*', requireAuth())
+  // vehicle-classes: public GETs for renter catalog (list, by-slug, availability)
+  // are registered before auth inside createVehicleClassRoutes. Mutations +
+  // admin-only GET-by-id stay auth-protected via inner middleware.
   app.use('/vehicles/*', requireAuth())
   app.use('/bookings/*', requireAuth())
   app.use('/availability/*', requireAuth())
   app.use('/threads/*', requireAuth())
   app.use('/customers/*', requireAuth())
+  app.use('/customers', requireAuth())
   app.use('/users/*', requireAuth())
 
   const vehicleClassService = new VehicleClassService(vehicleClassRepo)
+  const vehicleClassAvailabilityService = new VehicleClassAvailabilityService(
+    vehicleClassRepo,
+    vehicleRepo,
+    availabilityRepo,
+  )
   const bookingService = new BookingService(bookingRepo, vehicleRepo, userRepo, vehicleClassRepo)
-  const customerService = new CustomerService(userRepo)
+  const customerService = new CustomerService(customerRepo, userRepo)
   const maintenanceService = new MaintenanceService(
     vehicleRepo,
     maintenanceLogRepo,
     runInTransaction,
   )
+  const fleetOverviewService = new FleetOverviewService(fleetOverviewRepo)
+  const vehicleDetailService = new VehicleDetailService(vehicleDetailRepo)
 
   // Chain .route() calls so TypeScript infers the full route type tree.
   // hc<AppType> needs this to produce typed client methods.
   return app
     .route('/', health)
-    .route('/', createFleetOverviewRoutes(fleetOverviewRepo))
-    .route('/', createVehicleDetailRoutes(vehicleDetailRepo))
-    .route('/', createVehicleClassRoutes(vehicleClassService))
+    .route('/', createFleetOverviewRoutes(fleetOverviewService))
+    .route('/', createVehicleDetailRoutes(vehicleDetailService))
+    .route(
+      '/',
+      createVehicleClassRoutes(
+        vehicleClassService,
+        vehicleClassAvailabilityService,
+        publicCatalogLimiter,
+      ),
+    )
     .route('/', createVehicleRoutes(vehicleRepo, maintenanceService))
     .route(
       '/',

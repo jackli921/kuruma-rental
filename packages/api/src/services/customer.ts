@@ -1,8 +1,40 @@
-import type { UserRepository } from '../repositories/types'
+import type { Customer, CustomerSort, CustomerWithBookings } from '@kuruma/shared/types/customer'
+import type { CustomerListFilters, CustomerRepository, UserRepository } from '../repositories/types'
 import type { User } from '../stores'
 
+export interface CustomerListQuery {
+  limit: number
+  cursor?: string | undefined
+  sort?: CustomerSort | undefined
+  search?: string | undefined
+}
+
 export class CustomerService {
-  constructor(private readonly userRepo: UserRepository) {}
+  constructor(
+    private readonly customerRepo: CustomerRepository,
+    private readonly userRepo: UserRepository,
+  ) {}
+
+  async findAllPaginated(
+    q: CustomerListQuery,
+  ): Promise<{ data: Customer[]; nextCursor: string | null }> {
+    const filters: CustomerListFilters = {
+      limit: q.limit + 1, // overfetch by 1 to detect hasMore
+      cursor: q.cursor,
+      sort: q.sort,
+      search: q.search,
+    }
+    const rows = await this.customerRepo.findAllWithAggregates(filters)
+    const hasMore = rows.length > q.limit
+    const data = hasMore ? rows.slice(0, q.limit) : rows
+    const last = data[data.length - 1]
+    const nextCursor = hasMore && last ? encodeCursor(last, q.sort ?? 'lastBookingAt') : null
+    return { data, nextCursor }
+  }
+
+  async findById(id: string): Promise<CustomerWithBookings | undefined> {
+    return this.customerRepo.findByIdWithBookings(id)
+  }
 
   async search(query: string): Promise<User[]> {
     return this.userRepo.search(query)
@@ -34,4 +66,10 @@ export class CustomerService {
     })
     return { user, created: true }
   }
+}
+
+function encodeCursor(c: Customer, sort: CustomerSort): string {
+  if (sort === 'bookingCount') return `${c.bookingCount}_${c.id}`
+  if (sort === 'name') return `${c.name ?? ''}_${c.id}`
+  return `${c.lastBookingAt}_${c.id}`
 }

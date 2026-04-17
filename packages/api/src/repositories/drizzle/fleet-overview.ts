@@ -17,8 +17,7 @@ const UTILIZATION_WINDOW_MS = 30 * 24 * 60 * 60 * 1000
 export class DrizzleFleetOverviewRepository implements FleetOverviewRepository {
   constructor(private readonly db: Db) {}
 
-  async findFleetOverview(): Promise<FleetVehicleOverview[]> {
-    const now = new Date()
+  async findFleetOverview(now: Date): Promise<FleetVehicleOverview[]> {
     const windowStart = new Date(now.getTime() - UTILIZATION_WINDOW_MS)
 
     // Round-trip 1: all vehicles.

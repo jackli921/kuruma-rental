@@ -15,6 +15,7 @@
     "./types/vehicle": "./src/types/vehicle.ts",
     "./types/vehicle-detail": "./src/types/vehicle-detail.ts",
     "./types/maintenance-log": "./src/types/maintenance-log.ts",
+    "./types/customer": "./src/types/customer.ts",
     "./lib/cancellation-policy": "./src/lib/cancellation-policy.ts",
     "./lib/pricing": "./src/lib/pricing.ts",
     "./lib/expiry": "./src/lib/expiry.ts",

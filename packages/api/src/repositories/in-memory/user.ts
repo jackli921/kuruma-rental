@@ -52,6 +52,7 @@ export class InMemoryUserRepository implements UserRepository {
       email: data.email,
       phone: data.phone,
       language: data.language,
+      country: null,
       role: 'RENTER',
     }
     this.store.set(user.id, user)
