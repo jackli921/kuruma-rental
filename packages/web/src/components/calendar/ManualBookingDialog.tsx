@@ -28,8 +28,8 @@ interface ManualBookingDialogProps {
   readonly onClose: () => void
   readonly onBookingCreated: () => void
   readonly vehicles: FleetVehicleOverviewData[]
-  readonly defaultVehicleId?: string
-  readonly defaultStartAt?: string
+  readonly defaultVehicleId?: string | undefined
+  readonly defaultStartAt?: string | undefined
 }
 
 interface CustomerResult {

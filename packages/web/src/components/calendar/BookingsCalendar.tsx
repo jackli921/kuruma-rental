@@ -19,11 +19,17 @@ export interface CalendarEvent {
   raw: CalendarBooking
 }
 
+export interface SlotSelectInfo {
+  start: Date
+  end: Date
+}
+
 interface BookingsCalendarProps {
   readonly events: CalendarEvent[]
   readonly defaultView?: View
   readonly views?: View[]
   readonly onBookingUpdate?: (updated: CalendarBooking) => void
+  readonly onSelectSlot?: (slotInfo: SlotSelectInfo) => void
 }
 
 export function toCalendarEvents(bookings: CalendarBooking[]): CalendarEvent[] {
@@ -44,6 +50,7 @@ export function BookingsCalendar({
   defaultView = 'week',
   views = ['week', 'month'],
   onBookingUpdate,
+  onSelectSlot,
 }: BookingsCalendarProps) {
   const locale = useLocale()
   const t = useTranslations('business.bookings.calendar')
@@ -125,6 +132,13 @@ export function BookingsCalendar({
     [currentView],
   )
 
+  const handleSlotSelect = useCallback(
+    (slotInfo: { start: Date; end: Date }) => {
+      onSelectSlot?.({ start: slotInfo.start, end: slotInfo.end })
+    },
+    [onSelectSlot],
+  )
+
   const handleClose = useCallback(() => setSelectedBooking(null), [])
 
   const handleBookingUpdate = useCallback(
@@ -153,6 +167,8 @@ export function BookingsCalendar({
         onView={setCurrentView}
         onNavigate={handleNavigate}
         onSelectEvent={handleSelectEvent}
+        selectable={!!onSelectSlot}
+        onSelectSlot={handleSlotSelect}
         eventPropGetter={eventPropGetter}
         views={views}
         step={60}
