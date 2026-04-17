@@ -36,8 +36,7 @@ export class InMemoryFleetOverviewRepository implements FleetOverviewRepository 
     private readonly maintenanceLogRepo?: MaintenanceLogRepository,
   ) {}
 
-  async findFleetOverview(): Promise<FleetVehicleOverview[]> {
-    const now = new Date()
+  async findFleetOverview(now: Date): Promise<FleetVehicleOverview[]> {
     const windowStart = new Date(now.getTime() - UTILIZATION_WINDOW_HOURS * 60 * 60 * 1000)
 
     const { data: vehicles } = await this.vehicleRepo.findAll()

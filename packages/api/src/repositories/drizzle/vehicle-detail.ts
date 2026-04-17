@@ -37,12 +37,11 @@ function dayStart(d: Date): Date {
 export class DrizzleVehicleDetailRepository implements VehicleDetailRepository {
   constructor(private readonly db: Db) {}
 
-  async findVehicleDetail(vehicleId: string): Promise<VehicleDetail | undefined> {
+  async findVehicleDetail(vehicleId: string, now: Date): Promise<VehicleDetail | undefined> {
     const vehicleRow = await this.fetchVehicleRow(vehicleId)
     if (!vehicleRow) return undefined
     const vehicle = toVehicle(vehicleRow)
 
-    const now = new Date()
     const todayStart = dayStart(now)
     const windowStart = new Date(todayStart.getTime() - (UTILIZATION_WINDOW_DAYS - 1) * MS_PER_DAY)
     const windowEnd = new Date(todayStart.getTime() + MS_PER_DAY)
