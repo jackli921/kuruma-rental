@@ -29,7 +29,10 @@ export function DeleteClassDialog({ vehicleClass, stats, onOpenChange }: DeleteC
     onSuccess: () => onOpenChange(false),
   })
 
-  const blocked = stats != null && hasActiveBookings(stats)
+  // Until fleet stats have loaded we cannot confirm the class is
+  // booking-free, so disable the destructive action defensively.
+  const showBlockedWarning = stats != null && hasActiveBookings(stats)
+  const blocked = stats == null || showBlockedWarning
 
   return (
     <Dialog open={vehicleClass !== null} onOpenChange={onOpenChange}>
@@ -39,11 +42,11 @@ export function DeleteClassDialog({ vehicleClass, stats, onOpenChange }: DeleteC
           <DialogDescription>{t('deleteDescription')}</DialogDescription>
         </DialogHeader>
 
-        {blocked && (
+        {showBlockedWarning && (
           <div className="border border-destructive/30 bg-destructive/5 rounded-lg p-3 flex items-start gap-2">
             <AlertTriangle className="size-4 text-destructive mt-0.5 shrink-0" />
             <p className="text-sm text-destructive">
-              {t('deleteBlockedActiveBookings', { count: stats?.activeBookingsCount ?? 0 })}
+              {t('deleteBlockedActiveBookings', { count: stats.activeBookingsCount })}
             </p>
           </div>
         )}
