@@ -303,6 +303,20 @@ describe('Vehicle Class CRUD Routes', () => {
       expect(body.activeBookingsCount).toBe(2)
     })
 
+    it('blocks archive when a RETIRED member vehicle has an active booking', async () => {
+      // A retired car can still have a future CONFIRMED booking — the owner
+      // retired the vehicle but hasn't cancelled/reassigned the booking yet.
+      // Archiving the class before that is resolved would leave an orphan.
+      const { data: created } = await (await createClass()).json()
+      const v = await makeVehicle(created.id)
+      await makeBooking(v.id, 'CONFIRMED')
+      await vehicleRepo.softDelete(v.id)
+      const res = await app.request(`/vehicle-classes/${created.id}`, { method: 'DELETE' })
+      expect(res.status).toBe(409)
+      const body = await res.json()
+      expect(body.activeBookingsCount).toBe(1)
+    })
+
     it('ignores active bookings on vehicles in a different class', async () => {
       const { data: created } = await (await createClass()).json()
       const other = await (await createClass({ ...validInput(), slug: 'suv', name: 'SUV' })).json()

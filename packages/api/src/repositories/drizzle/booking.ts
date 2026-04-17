@@ -102,7 +102,7 @@ export class DrizzleBookingRepository implements BookingRepository {
       .where(
         and(
           inArray(bookings.vehicleId, vehicleIds),
-          sql`${bookings.status} IN ('CONFIRMED', 'ACTIVE')`,
+          inArray(bookings.status, ['CONFIRMED', 'ACTIVE'] as const),
         ),
       )
     return row?.value ?? 0
