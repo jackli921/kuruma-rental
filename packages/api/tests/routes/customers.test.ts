@@ -1,5 +1,5 @@
 import { Hono } from 'hono'
-import { beforeEach, describe, expect, it } from 'vitest'
+import { describe, expect, it } from 'vitest'
 import { InMemoryUserRepository } from '../../src/repositories/in-memory'
 import { createCustomerRoutes } from '../../src/routes/customers'
 import { CustomerService } from '../../src/services/customer'

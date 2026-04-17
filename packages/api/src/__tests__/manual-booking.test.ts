@@ -1,5 +1,5 @@
 import { SignJWT } from 'jose'
-import { describe, beforeEach, it, expect } from 'vitest'
+import { beforeEach, describe, expect, it } from 'vitest'
 import { createApp } from '../index'
 import { InMemoryAvailabilityRepository } from '../repositories/in-memory/availability'
 import { InMemoryBookingRepository } from '../repositories/in-memory/booking'
@@ -92,7 +92,10 @@ describe('Manual booking (staff/admin renterId override + advance rule skip)', (
     })
 
     expect(res.status).toBe(201)
-    const body = (await res.json()) as { success: boolean; data: { renterId: string; source: string } }
+    const body = (await res.json()) as {
+      success: boolean
+      data: { renterId: string; source: string }
+    }
     expect(body.success).toBe(true)
     // The booking should use the custom renterId, not the staff user's id
     expect(body.data.renterId).toBe(customerId)

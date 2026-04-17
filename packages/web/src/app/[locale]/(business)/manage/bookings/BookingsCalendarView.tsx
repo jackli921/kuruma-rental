@@ -1,18 +1,32 @@
 'use client'
 
 import { BookingsCalendar, toCalendarEvents } from '@/components/calendar/BookingsCalendar'
+import { ManualBookingDialog } from '@/components/calendar/ManualBookingDialog'
+import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
+import { fetchFleetOverviewAction } from '@/lib/vehicle-actions'
+import type { FleetVehicleOverviewData } from '@/lib/vehicle-api'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { endOfMonth, startOfMonth } from 'date-fns'
-import { useState } from 'react'
+import { useTranslations } from 'next-intl'
+import { useCallback, useEffect, useState } from 'react'
 import { fetchAllCalendarBookings } from './booking-actions'
 
 export function BookingsCalendarView() {
+  const t = useTranslations('business.bookings')
   const queryClient = useQueryClient()
   const [range, _setRange] = useState(() => ({
     from: startOfMonth(new Date()).toISOString(),
     to: endOfMonth(new Date()).toISOString(),
   }))
+  const [showManualBooking, setShowManualBooking] = useState(false)
+  const [vehicles, setVehicles] = useState<FleetVehicleOverviewData[]>([])
+
+  useEffect(() => {
+    fetchFleetOverviewAction().then((result) => {
+      if (result.success) setVehicles(result.data)
+    })
+  }, [])
 
   const {
     data: bookings = [],
@@ -24,6 +38,12 @@ export function BookingsCalendarView() {
   })
 
   const events = toCalendarEvents(bookings)
+
+  const handleInvalidate = useCallback(() => {
+    queryClient.invalidateQueries({
+      queryKey: ['bookings', 'calendar'],
+    })
+  }, [queryClient])
 
   if (isLoading) {
     return (
@@ -40,15 +60,20 @@ export function BookingsCalendarView() {
 
   return (
     <div className="mt-6">
+      <div className="flex justify-end mb-4">
+        <Button onClick={() => setShowManualBooking(true)}>{t('newBooking')}</Button>
+      </div>
       <BookingsCalendar
         events={events}
         defaultView="week"
         views={['week', 'month']}
-        onBookingUpdate={() => {
-          queryClient.invalidateQueries({
-            queryKey: ['bookings', 'calendar'],
-          })
-        }}
+        onBookingUpdate={handleInvalidate}
+      />
+      <ManualBookingDialog
+        open={showManualBooking}
+        onClose={() => setShowManualBooking(false)}
+        onBookingCreated={handleInvalidate}
+        vehicles={vehicles}
       />
     </div>
   )
