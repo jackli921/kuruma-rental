@@ -66,6 +66,12 @@ export function requireUser(c: { get: (key: string) => unknown }): AuthUser {
 
 export function requireAuth(): MiddlewareHandler {
   return async (c: Context, next) => {
+    // Idempotent: if an earlier middleware already authenticated the caller,
+    // don't re-verify. This lets per-route requireAuth() compose with a
+    // globally-mounted requireAuth() (or a test auth shim) without
+    // double-verifying the token.
+    if (getUser(c)) return next()
+
     const authHeader = c.req.header('Authorization')
 
     if (authHeader?.startsWith('Bearer ')) {

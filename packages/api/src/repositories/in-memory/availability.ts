@@ -9,6 +9,25 @@ export class InMemoryAvailabilityRepository implements AvailabilityRepository {
     private readonly bookingRepo: BookingRepository,
   ) {}
 
+  async countClassAvailability(
+    classId: string,
+    from: Date,
+    to: Date,
+  ): Promise<{ total: number; available: number }> {
+    const { data: all } = await this.vehicleRepo.findAll({ includeRetired: true })
+    const inClass = all.filter((v) => v.classId === classId && v.status !== 'RETIRED')
+    const total = inClass.length
+    if (total === 0) return { total: 0, available: 0 }
+
+    const allBookings = await this.bookingRepo.findAll(SYSTEM_CONTEXT)
+    const available = inClass.filter((v) => {
+      if (v.status !== 'AVAILABLE') return false
+      const conflicts = getConflictingBookings(allBookings, v.id, v.bufferMinutes, from, to)
+      return conflicts.length === 0
+    }).length
+    return { total, available }
+  }
+
   async findAvailableVehicles(from: Date, to: Date): Promise<Vehicle[]> {
     const { data: vehicles } = await this.vehicleRepo.findAll({ status: 'AVAILABLE' })
     const allBookings = await this.bookingRepo.findAll(SYSTEM_CONTEXT)

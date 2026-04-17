@@ -7,6 +7,31 @@ import { type Db, bookingColumns, toBooking, toVehicle, vehicleColumns } from '.
 export class DrizzleAvailabilityRepository implements AvailabilityRepository {
   constructor(private readonly db: Db) {}
 
+  async countClassAvailability(
+    classId: string,
+    from: Date,
+    to: Date,
+  ): Promise<{ total: number; available: number }> {
+    const fromIso = from.toISOString()
+    const toIso = to.toISOString()
+    const [row] = await this.db
+      .select({
+        total: sql<number>`count(*) filter (where ${vehicles.status} <> 'RETIRED')::int`,
+        available: sql<number>`count(*) filter (
+          where ${vehicles.status} = 'AVAILABLE'
+          AND NOT EXISTS (
+            SELECT 1 FROM bookings b
+            WHERE b."vehicleId" = ${vehicles.id}
+            AND b.status IN ('CONFIRMED', 'ACTIVE')
+            AND tstzrange(b."startAt", b."effectiveEndAt") && tstzrange(${fromIso}::timestamptz, ${toIso}::timestamptz)
+          )
+        )::int`,
+      })
+      .from(vehicles)
+      .where(eq(vehicles.classId, classId))
+    return { total: Number(row?.total ?? 0), available: Number(row?.available ?? 0) }
+  }
+
   async findAvailableVehicles(from: Date, to: Date): Promise<Vehicle[]> {
     const fromIso = from.toISOString()
     const toIso = to.toISOString()

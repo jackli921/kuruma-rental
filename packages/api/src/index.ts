@@ -243,9 +243,9 @@ export function createApp(overrides?: {
   }
 
   // Auth middleware on all protected paths.
-  // TODO(#247): vehicle-classes GETs should be public for renter catalog.
-  // Move public read routes before this block when building the catalog UI.
-  app.use('/vehicle-classes/*', requireAuth())
+  // Note: /vehicle-classes/* has per-route auth — GETs are public for the
+  // renter catalog; POST/PATCH/DELETE require STAFF via `requireAuth()` on
+  // each handler in `routes/vehicle-classes.ts` (see #309).
   app.use('/vehicles/*', requireAuth())
   app.use('/bookings/*', requireAuth())
   app.use('/availability/*', requireAuth())
@@ -253,7 +253,7 @@ export function createApp(overrides?: {
   app.use('/customers/*', requireAuth())
   app.use('/users/*', requireAuth())
 
-  const vehicleClassService = new VehicleClassService(vehicleClassRepo)
+  const vehicleClassService = new VehicleClassService(vehicleClassRepo, availabilityRepo)
   const bookingService = new BookingService(bookingRepo, vehicleRepo, userRepo)
   const customerService = new CustomerService(userRepo)
   const maintenanceService = new MaintenanceService(

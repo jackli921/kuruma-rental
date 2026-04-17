@@ -3,9 +3,9 @@ import {
   updateVehicleClassSchema,
 } from '@kuruma/shared/validators/vehicle-class'
 import { Hono } from 'hono'
-import { STAFF_ROLES, requireUser } from '../middleware/auth'
+import { STAFF_ROLES, requireAuth, requireUser } from '../middleware/auth'
 import type { VehicleClassService } from '../services/vehicle-class'
-import { fail, ok, parseBody, stripUndefined } from './helpers'
+import { fail, ok, parseBody, parseDateRange, stripUndefined } from './helpers'
 
 export function createVehicleClassRoutes(service: VehicleClassService) {
   return new Hono()
@@ -19,6 +19,18 @@ export function createVehicleClassRoutes(service: VehicleClassService) {
       )
       return ok(c, classes)
     })
+    .get('/vehicle-classes/by-slug/:slug/availability', async (c) => {
+      const range = parseDateRange(c, true)
+      if (!range.ok) return range.response
+      const result = await service.getAvailabilityBySlug(c.req.param('slug'), range.from, range.to)
+      if (!result.ok) return fail(c, result.error, result.status)
+      return ok(c, {
+        classId: result.vehicleClass.id,
+        slug: result.vehicleClass.slug,
+        total: result.counts.total,
+        available: result.counts.available,
+      })
+    })
     .get('/vehicle-classes/by-slug/:slug', async (c) => {
       const vc = await service.findBySlug(c.req.param('slug'))
       if (!vc) return fail(c, 'Vehicle class not found', 404)
@@ -29,7 +41,7 @@ export function createVehicleClassRoutes(service: VehicleClassService) {
       if (!vc) return fail(c, 'Vehicle class not found', 404)
       return ok(c, vc)
     })
-    .post('/vehicle-classes', async (c) => {
+    .post('/vehicle-classes', requireAuth(), async (c) => {
       const user = requireUser(c)
       if (!STAFF_ROLES.has(user.role)) return fail(c, 'Forbidden', 403)
 
@@ -55,7 +67,7 @@ export function createVehicleClassRoutes(service: VehicleClassService) {
       if (!result.ok) return fail(c, result.error, result.status)
       return ok(c, result.vehicleClass, 201)
     })
-    .patch('/vehicle-classes/:id', async (c) => {
+    .patch('/vehicle-classes/:id', requireAuth(), async (c) => {
       const user = requireUser(c)
       if (!STAFF_ROLES.has(user.role)) return fail(c, 'Forbidden', 403)
 
@@ -69,7 +81,7 @@ export function createVehicleClassRoutes(service: VehicleClassService) {
       if (!result.ok) return fail(c, result.error, result.status)
       return ok(c, result.vehicleClass)
     })
-    .delete('/vehicle-classes/:id', async (c) => {
+    .delete('/vehicle-classes/:id', requireAuth(), async (c) => {
       const user = requireUser(c)
       if (!STAFF_ROLES.has(user.role)) return fail(c, 'Forbidden', 403)
 

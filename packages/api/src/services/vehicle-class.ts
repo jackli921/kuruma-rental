@@ -1,4 +1,8 @@
-import type { VehicleClassFilters, VehicleClassRepository } from '../repositories/types'
+import type {
+  AvailabilityRepository,
+  VehicleClassFilters,
+  VehicleClassRepository,
+} from '../repositories/types'
 import type { VehicleClass } from '../stores'
 
 export type CreateResult =
@@ -11,8 +15,28 @@ export type ArchiveResult =
   | { ok: true; vehicleClass: VehicleClass }
   | { ok: false; error: string; status: number }
 
+export type AvailabilityResult =
+  | { ok: true; vehicleClass: VehicleClass; counts: { total: number; available: number } }
+  | { ok: false; error: string; status: number }
+
 export class VehicleClassService {
-  constructor(private readonly repo: VehicleClassRepository) {}
+  constructor(
+    private readonly repo: VehicleClassRepository,
+    private readonly availabilityRepo?: AvailabilityRepository,
+  ) {}
+
+  async getAvailabilityBySlug(slug: string, from: Date, to: Date): Promise<AvailabilityResult> {
+    const vc = await this.repo.findBySlug(slug)
+    if (!vc) return { ok: false, error: 'Vehicle class not found', status: 404 }
+    if (vc.status === 'ARCHIVED') {
+      return { ok: false, error: 'Vehicle class not found', status: 404 }
+    }
+    if (!this.availabilityRepo) {
+      return { ok: false, error: 'Availability not configured', status: 500 }
+    }
+    const counts = await this.availabilityRepo.countClassAvailability(vc.id, from, to)
+    return { ok: true, vehicleClass: vc, counts }
+  }
 
   async findAll(filters?: VehicleClassFilters): Promise<VehicleClass[]> {
     return this.repo.findAll(filters)

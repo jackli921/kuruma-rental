@@ -142,6 +142,15 @@ export interface AvailabilityRepository {
       }
     | undefined
   >
+  /** Counts bookable vehicles for a class over a date range.
+   *  - `total`: non-retired vehicles tagged with this classId (the class pool)
+   *  - `available`: subset with no conflicting CONFIRMED/ACTIVE booking and
+   *    status = AVAILABLE (MAINTENANCE vehicles count toward total but not available) */
+  countClassAvailability(
+    classId: string,
+    from: Date,
+    to: Date,
+  ): Promise<{ total: number; available: number }>
 }
 
 // Enriched read for the owner-facing /manage/vehicles/[id] detail page.
