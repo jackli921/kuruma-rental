@@ -1,4 +1,5 @@
-import { Hono } from 'hono'
+import { type RateLimitBinding, rateLimit } from '@elithrar/workers-hono-rate-limit'
+import { type Context, Hono } from 'hono'
 import { detectImageType } from '../lib/image-signature'
 import { STAFF_ROLES, requireUser } from '../middleware/auth'
 import type { PhotoStorage, VehicleRepository } from '../repositories/types'
@@ -22,8 +23,27 @@ async function validateFile(file: File): Promise<{ ok: ValidatedFile } | { err: 
   return { ok: { file, bytes } }
 }
 
-export function createVehiclePhotoRoutes(repo: VehicleRepository, storage: PhotoStorage) {
-  return new Hono()
+export function createVehiclePhotoRoutes(
+  repo: VehicleRepository,
+  storage: PhotoStorage,
+  photoUploadLimiter?: RateLimitBinding,
+  photoUploadUserLimiter?: RateLimitBinding,
+) {
+  const app = new Hono()
+
+  // Stack two limits. Per-user caps aggregate volume so rotating vehicle IDs
+  // can't burst around the per-(user,vehicle) bucket. Runs first so requests
+  // from a flooding account short-circuit before hitting the narrower limit.
+  const vehicleKey = (c: Context) => `${requireUser(c).id}:${c.req.param('id')}`
+  const userKey = (c: Context) => requireUser(c).id
+  if (photoUploadUserLimiter) {
+    app.use('/vehicles/:id/photos', rateLimit(photoUploadUserLimiter, userKey))
+  }
+  if (photoUploadLimiter) {
+    app.use('/vehicles/:id/photos', rateLimit(photoUploadLimiter, vehicleKey))
+  }
+
+  return app
     .post('/vehicles/:id/photos', async (c) => {
       const user = requireUser(c)
       if (!STAFF_ROLES.has(user.role)) return fail(c, 'Forbidden', 403)
