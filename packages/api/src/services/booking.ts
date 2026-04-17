@@ -276,7 +276,8 @@ export class BookingService {
       {
         minRentalHours: vehicle.minRentalHours,
         maxRentalHours: vehicle.maxRentalHours,
-        advanceBookingHours: vehicle.advanceBookingHours,
+        // Walk-in/phone bookings shouldn't be blocked by advance booking rules
+        advanceBookingHours: input.source === 'MANUAL' ? null : vehicle.advanceBookingHours,
       },
       input.startAt,
       input.endAt,

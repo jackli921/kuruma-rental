@@ -71,6 +71,15 @@ export interface FleetOverviewRepository {
 
 export interface UserRepository {
   findByIds(ids: string[]): Promise<User[]>
+  search(query: string): Promise<User[]>
+  quickCreate(data: {
+    name: string
+    email: string | null
+    phone: string | null
+    language: string
+  }): Promise<User>
+  findByEmail(email: string): Promise<User | undefined>
+  findByPhone(phone: string): Promise<User | undefined>
 }
 
 export interface BookingFilters {

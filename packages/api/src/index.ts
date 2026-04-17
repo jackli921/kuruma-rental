@@ -48,6 +48,7 @@ import type {
 } from './repositories/types'
 import { createAvailabilityRoutes } from './routes/availability'
 import { createBookingRoutes } from './routes/bookings'
+import { createCustomerRoutes } from './routes/customers'
 import { createFleetOverviewRoutes } from './routes/fleet-overview'
 import health from './routes/health'
 import { createMaintenanceLogRoutes } from './routes/maintenance-logs'
@@ -57,6 +58,7 @@ import { createVehicleClassRoutes } from './routes/vehicle-classes'
 import { createVehicleDetailRoutes } from './routes/vehicle-detail'
 import { createVehicleRoutes } from './routes/vehicles'
 import { BookingService } from './services/booking'
+import { CustomerService } from './services/customer'
 import { MaintenanceService } from './services/maintenance'
 import { VehicleClassService } from './services/vehicle-class'
 
@@ -198,9 +200,11 @@ export function createApp(overrides?: {
   app.use('/bookings/*', requireAuth())
   app.use('/availability/*', requireAuth())
   app.use('/threads/*', requireAuth())
+  app.use('/customers/*', requireAuth())
 
   const vehicleClassService = new VehicleClassService(vehicleClassRepo)
   const bookingService = new BookingService(bookingRepo, vehicleRepo, userRepo)
+  const customerService = new CustomerService(userRepo)
   const maintenanceService = new MaintenanceService(
     vehicleRepo,
     maintenanceLogRepo,
@@ -220,6 +224,7 @@ export function createApp(overrides?: {
     .route('/', createAvailabilityRoutes(availabilityRepo))
     .route('/', createStatsRoutes(statsRepo))
     .route('/', createMessageRoutes(threadRepo, messageRepo))
+    .route('/', createCustomerRoutes(customerService))
 }
 
 const DEV_WEB_ORIGINS = ['http://localhost:3001', 'http://127.0.0.1:3001']
