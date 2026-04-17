@@ -189,4 +189,33 @@ describe('Manual booking (staff/admin renterId override + advance rule skip)', (
     expect(body.success).toBe(false)
     expect(body.code).toBe('RENTAL_RULE_MIN_DURATION')
   })
+
+  it('renter cannot bypass advance booking rule by sending source=MANUAL', async () => {
+    // Uses the default vehicle from beforeEach which has advanceBookingHours: 24
+    const renterToken = await createTestToken({ id: 'renter-1', role: 'RENTER' })
+
+    // Start 1h from now — should fail advance booking check (requires 24h)
+    const startAt = new Date(Date.now() + 1 * 60 * 60 * 1000)
+    const endAt = new Date(startAt.getTime() + 4 * 60 * 60 * 1000)
+
+    const res = await app.request('/bookings', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${renterToken}`,
+      },
+      body: JSON.stringify({
+        vehicleId: vehicle.id,
+        startAt: startAt.toISOString(),
+        endAt: endAt.toISOString(),
+        source: 'MANUAL',
+      }),
+    })
+
+    // Source should be forced to DIRECT for renters, so advance rule applies
+    expect(res.status).toBe(400)
+    const body = (await res.json()) as { success: boolean; code: string }
+    expect(body.success).toBe(false)
+    expect(body.code).toBe('RENTAL_RULE_ADVANCE_BOOKING')
+  })
 })

@@ -17,12 +17,14 @@ export class InMemoryUserRepository implements UserRepository {
 
   async search(query: string): Promise<User[]> {
     const lower = query.toLowerCase()
-    return [...this.store.values()].filter((u) => {
-      const nameMatch = u.name?.toLowerCase().includes(lower) ?? false
-      const emailMatch = u.email.toLowerCase().includes(lower)
-      const phoneMatch = u.phone?.toLowerCase().includes(lower) ?? false
-      return nameMatch || emailMatch || phoneMatch
-    })
+    return [...this.store.values()]
+      .filter((u) => {
+        const nameMatch = u.name?.toLowerCase().includes(lower) ?? false
+        const emailMatch = u.email.toLowerCase().includes(lower)
+        const phoneMatch = u.phone?.toLowerCase().includes(lower) ?? false
+        return nameMatch || emailMatch || phoneMatch
+      })
+      .slice(0, 20)
   }
 
   async quickCreate(data: {
@@ -34,7 +36,7 @@ export class InMemoryUserRepository implements UserRepository {
     const user: User = {
       id: crypto.randomUUID(),
       name: data.name,
-      email: data.email ?? '',
+      email: data.email ?? `phone-${crypto.randomUUID()}@placeholder.kuruma.local`,
       phone: data.phone,
       language: data.language,
     }

@@ -36,6 +36,7 @@ export class DrizzleUserRepository implements UserRepository {
           ilike(users.phone, pattern),
         ),
       )
+      .limit(20)
     return rows as User[]
   }
 
@@ -49,7 +50,7 @@ export class DrizzleUserRepository implements UserRepository {
       .insert(users)
       .values({
         name: data.name,
-        email: data.email ?? '',
+        email: data.email ?? `phone-${crypto.randomUUID()}@placeholder.kuruma.local`,
         phone: data.phone,
         language: data.language,
       })

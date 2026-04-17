@@ -73,16 +73,18 @@ export function createBookingRoutes(service: BookingService) {
       }
 
       // Staff/admin can create bookings on behalf of a customer (manual bookings).
-      // Non-staff always book as themselves.
-      const renterId =
-        STAFF_ROLES.has(ctx.role) && result.data.renterId ? result.data.renterId : ctx.userId
+      // Non-staff always book as themselves and source is forced to DIRECT
+      // to prevent advance-booking-hours bypass via source=MANUAL.
+      const isStaff = STAFF_ROLES.has(ctx.role)
+      const renterId = isStaff && result.data.renterId ? result.data.renterId : ctx.userId
+      const source = isStaff ? result.data.source : 'DIRECT'
 
       const createResult = await service.create(ctx, {
         vehicleId: result.data.vehicleId,
         renterId,
         startAt: new Date(result.data.startAt),
         endAt: new Date(result.data.endAt),
-        source: result.data.source,
+        source,
         externalId: result.data.externalId ?? null,
         notes: result.data.notes ?? null,
         idempotencyKey: result.data.idempotencyKey ?? null,
