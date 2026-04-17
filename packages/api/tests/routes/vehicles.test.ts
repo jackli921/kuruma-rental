@@ -99,6 +99,35 @@ describe('Vehicle CRUD Routes', () => {
       expect(body.data[0].status).toBe('RETIRED')
     })
 
+    it('paginates with limit and offset', async () => {
+      await createVehicle({ ...validVehicleInput(), name: 'Car A' })
+      await createVehicle({ ...validVehicleInput(), name: 'Car B' })
+      await createVehicle({ ...validVehicleInput(), name: 'Car C' })
+
+      const res = await app.request('/vehicles?limit=2&offset=0')
+      const body = await res.json()
+
+      expect(body.success).toBe(true)
+      expect(body.data).toHaveLength(2)
+      expect(body.total).toBe(3)
+      expect(body.limit).toBe(2)
+      expect(body.offset).toBe(0)
+    })
+
+    it('returns second page with offset', async () => {
+      await createVehicle({ ...validVehicleInput(), name: 'Car A' })
+      await createVehicle({ ...validVehicleInput(), name: 'Car B' })
+      await createVehicle({ ...validVehicleInput(), name: 'Car C' })
+
+      const res = await app.request('/vehicles?limit=2&offset=2')
+      const body = await res.json()
+
+      expect(body.success).toBe(true)
+      expect(body.data).toHaveLength(1)
+      expect(body.data[0].name).toBe('Car C')
+      expect(body.total).toBe(3)
+    })
+
     it('filters by explicit status query param', async () => {
       await createVehicle()
       const createRes = await createVehicle({

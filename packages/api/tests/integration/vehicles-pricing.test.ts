@@ -214,7 +214,7 @@ describe('DrizzleVehicleRepository — pricing (#48)', () => {
       )
       createdVehicleIds.push(a.id, b.id)
 
-      const all = await repo.findAll()
+      const { data: all } = await repo.findAll()
       const aRow = all.find((v) => v.id === a.id)!
       const bRow = all.find((v) => v.id === b.id)!
 

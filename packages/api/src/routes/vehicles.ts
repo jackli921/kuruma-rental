@@ -7,7 +7,7 @@ import {
 import { Hono } from 'hono'
 import { STAFF_ROLES, requireUser } from '../middleware/auth'
 import { PG_ERROR, pgErrorCode } from '../pg-errors'
-import type { Vehicle, VehicleRepository } from '../repositories/types'
+import type { Vehicle, VehicleFilters, VehicleRepository } from '../repositories/types'
 import type { MaintenanceService } from '../services/maintenance'
 import { fail, ok, parseBody, stripUndefined } from './helpers'
 
@@ -30,9 +30,9 @@ export function createVehicleRoutes(
         return fail(c, 'offset must be a non-negative integer', 400)
       }
 
-      const all = status ? await repo.findAll({ status }) : await repo.findAll()
-      const page = all.slice(offset, offset + limit)
-      return ok(c, page, 200, { total: all.length, limit, offset })
+      const filters: VehicleFilters = { limit, offset, ...(status ? { status } : {}) }
+      const { data, total } = await repo.findAll(filters)
+      return ok(c, data, 200, { total, limit, offset })
     })
     .get('/vehicles/:id', async (c) => {
       const vehicle = await repo.findById(c.req.param('id'))
