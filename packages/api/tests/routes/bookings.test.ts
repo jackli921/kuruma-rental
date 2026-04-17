@@ -51,12 +51,14 @@ describe('Booking Routes', () => {
       id: USER1,
       name: 'Test Renter',
       email: 'renter@example.com',
+      phone: null,
       language: 'en',
     })
     userStore.set(USER2, {
       id: USER2,
       name: 'Second Renter',
       email: 'renter2@example.com',
+      phone: null,
       language: 'ja',
     })
     vehicleRepo = new InMemoryVehicleRepository()
@@ -171,10 +173,11 @@ describe('Booking Routes', () => {
       const app2 = new Hono()
       app2.use('*', testAuthMiddleware(USER2, 'ADMIN'))
       app2.route('/', createBookingRoutes(service))
+      const { renterId: _, ...inputWithoutRenter } = validBookingInput()
       await app2.request('/bookings', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ...validBookingInput(), vehicleId: V2 }),
+        body: JSON.stringify({ ...inputWithoutRenter, vehicleId: V2 }),
       })
 
       // Query as RENTER — should only see own bookings
