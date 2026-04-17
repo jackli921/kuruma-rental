@@ -1,4 +1,5 @@
 import { type CallerContext, PRIVILEGED_ROLES } from '../../middleware/auth'
+import { PG_ERROR } from '../../pg-errors'
 import type { Message, Thread, ThreadParticipant } from '../../stores'
 import type { ThreadRepository } from '../types'
 
@@ -55,15 +56,34 @@ export class InMemoryThreadRepository implements ThreadRepository {
     return { ...thread, participants: threadParticipants, messages: threadMessages }
   }
 
+  async findByIdempotencyKey(key: string): Promise<Thread | undefined> {
+    for (const thread of this.threads.values()) {
+      if (thread.idempotencyKey === key) return thread
+    }
+    return undefined
+  }
+
   async create(
     _ctx: CallerContext,
     bookingId: string | null,
     participantIds: string[],
+    idempotencyKey?: string | null,
   ): Promise<Thread> {
+    if (idempotencyKey) {
+      for (const existing of this.threads.values()) {
+        if (existing.idempotencyKey === idempotencyKey) {
+          const err = new Error('unique_idempotency_key violation') as Error & { code: string }
+          err.code = PG_ERROR.UNIQUE_VIOLATION
+          throw err
+        }
+      }
+    }
+
     const now = new Date()
     const thread: Thread = {
       id: crypto.randomUUID(),
       bookingId,
+      idempotencyKey: idempotencyKey ?? null,
       createdAt: now,
       updatedAt: now,
     }
