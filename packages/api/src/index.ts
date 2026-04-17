@@ -16,6 +16,7 @@ import {
   DrizzleThreadRepository,
   DrizzleUserRepository,
   DrizzleVehicleClassRepository,
+  DrizzleVehicleDetailRepository,
   DrizzleVehicleRepository,
   createDrizzleTransaction,
 } from './repositories/drizzle'
@@ -119,12 +120,7 @@ export function createApp(overrides?: {
     maintenanceLogRepo = new DrizzleMaintenanceLogRepository(db)
     runInTransaction = createDrizzleTransaction(db)
     fleetOverviewRepo = new DrizzleFleetOverviewRepository(db)
-    vehicleDetailRepo = new InMemoryVehicleDetailRepository(
-      vehicleRepo,
-      bookingRepo,
-      new Map(),
-      maintenanceLogRepo,
-    )
+    vehicleDetailRepo = new DrizzleVehicleDetailRepository(db)
     statsRepo = new DrizzleStatsRepository(db)
     threadRepo = new DrizzleThreadRepository(db)
     messageRepo = new DrizzleMessageRepository(db)

@@ -98,4 +98,36 @@ export class InMemoryVehicleRepository implements VehicleRepository {
     }
     return updated
   }
+
+  async appendPhotos(
+    id: string,
+    urls: string[],
+    maxPhotos: number,
+  ): Promise<
+    { outcome: 'ok'; vehicle: Vehicle } | { outcome: 'cap_exceeded' } | { outcome: 'not_found' }
+  > {
+    const existing = this.store.get(id)
+    if (!existing) return { outcome: 'not_found' }
+    if (existing.photos.length + urls.length > maxPhotos) return { outcome: 'cap_exceeded' }
+    const updated: Vehicle = {
+      ...existing,
+      photos: [...existing.photos, ...urls],
+      updatedAt: new Date(),
+    }
+    this.store.set(updated.id, updated)
+    return { outcome: 'ok', vehicle: updated }
+  }
+
+  async removePhotoByUrl(id: string, url: string): Promise<Vehicle | undefined> {
+    const existing = this.store.get(id)
+    if (!existing) return undefined
+    if (!existing.photos.includes(url)) return undefined
+    const updated: Vehicle = {
+      ...existing,
+      photos: existing.photos.filter((u) => u !== url),
+      updatedAt: new Date(),
+    }
+    this.store.set(updated.id, updated)
+    return updated
+  }
 }

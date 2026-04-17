@@ -120,4 +120,49 @@ export class DrizzleVehicleRepository implements VehicleRepository {
       .returning()
     return rows.map(toVehicle)
   }
+
+  async appendPhotos(
+    id: string,
+    urls: string[],
+    maxPhotos: number,
+  ): Promise<
+    { outcome: 'ok'; vehicle: Vehicle } | { outcome: 'cap_exceeded' } | { outcome: 'not_found' }
+  > {
+    // Single-statement conditional append: only succeed if the resulting
+    // cardinality stays within the cap. Concurrent callers serialize at
+    // the row level, so two racing uploads cannot both pass the guard.
+    // URLs are chained via array_append to keep them as bound parameters
+    // rather than interpolated literals.
+    let photosExpr: SQL = sql`${vehicles.photos}`
+    for (const url of urls) {
+      photosExpr = sql`array_append(${photosExpr}, ${url})`
+    }
+    const [updated] = await this.db
+      .update(vehicles)
+      .set({ photos: photosExpr, updatedAt: sql`now()` })
+      .where(
+        and(
+          eq(vehicles.id, id),
+          sql`cardinality(${vehicles.photos}) + ${urls.length} <= ${maxPhotos}`,
+        ),
+      )
+      .returning()
+
+    if (updated) return { outcome: 'ok', vehicle: toVehicle(updated) }
+    const existing = await this.findById(id)
+    return existing ? { outcome: 'cap_exceeded' } : { outcome: 'not_found' }
+  }
+
+  async removePhotoByUrl(id: string, url: string): Promise<Vehicle | undefined> {
+    // array_remove is atomic — no TOCTOU between read of photos and write.
+    const [updated] = await this.db
+      .update(vehicles)
+      .set({
+        photos: sql`array_remove(${vehicles.photos}, ${url})`,
+        updatedAt: sql`now()`,
+      })
+      .where(and(eq(vehicles.id, id), sql`${url} = ANY(${vehicles.photos})`))
+      .returning()
+    return updated ? toVehicle(updated) : undefined
+  }
 }
