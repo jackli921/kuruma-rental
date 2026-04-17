@@ -264,7 +264,7 @@ export function createApp(overrides?: {
   app.use('/customers', requireAuth())
   app.use('/users/*', requireAuth())
 
-  const vehicleClassService = new VehicleClassService(vehicleClassRepo)
+  const vehicleClassService = new VehicleClassService(vehicleClassRepo, vehicleRepo, bookingRepo)
   const bookingService = new BookingService(bookingRepo, vehicleRepo, userRepo)
   const customerService = new CustomerService(customerRepo, userRepo)
   const maintenanceService = new MaintenanceService(
