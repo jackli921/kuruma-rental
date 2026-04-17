@@ -66,6 +66,11 @@ export function requireUser(c: { get: (key: string) => unknown }): AuthUser {
 
 export function requireAuth(): MiddlewareHandler {
   return async (c: Context, next) => {
+    // Skip if an upstream middleware already authenticated (e.g. createApp's
+    // app-level requireAuth or testAuthMiddleware). Prevents double-verify
+    // when public + protected routes are mounted in the same Hono instance.
+    if (getUser(c)) return next()
+
     const authHeader = c.req.header('Authorization')
 
     if (authHeader?.startsWith('Bearer ')) {

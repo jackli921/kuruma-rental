@@ -33,6 +33,16 @@ name = "PHOTO_UPLOAD_USER_LIMITER"
 namespace_id = "1003"
 simple = { limit = 50, period = 60 }
 
+# Per-IP limiter for the public (unauthenticated) catalog endpoints:
+# GET /vehicle-classes, /vehicle-classes/by-slug/:slug,
+# /vehicle-classes/:slug/availability. Tighter than the global RATE_LIMITER
+# because these are the only unauth data paths and are the most scrape-prone
+# (competitor pricing crawls, availability enumeration).
+[[ratelimits]]
+name = "PUBLIC_CATALOG_LIMITER"
+namespace_id = "1004"
+simple = { limit = 30, period = 60 }
+
 # R2 bucket for vehicle photo uploads. Create the bucket manually:
 #   npx wrangler r2 bucket create kuruma-vehicle-photos
 # Enable public access for dev:
