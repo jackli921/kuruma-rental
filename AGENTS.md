@@ -50,6 +50,8 @@ Enforced by `bun run --filter @kuruma/api lint:boundaries` (CI step).
 |------|---------|
 | Run all tests | `bun run test` |
 | Run one package's tests | `bun run --filter @kuruma/web test` |
+| Run E2E tests (Playwright) | `bun run test:e2e` |
+| Debug E2E in Playwright UI | `bun run test:e2e:ui` |
 | Dev server (web) | `bun run dev` |
 | Dev server (API) | `bun run dev:api` |
 | Lint | `bun run lint` |

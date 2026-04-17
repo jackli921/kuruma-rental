@@ -83,6 +83,15 @@ export interface FleetOverviewRepository {
 
 export interface UserRepository {
   findByIds(ids: string[]): Promise<User[]>
+  search(query: string): Promise<User[]>
+  quickCreate(data: {
+    name: string
+    email: string | null
+    phone: string | null
+    language: string
+  }): Promise<User>
+  findByEmail(email: string): Promise<User | undefined>
+  findByPhone(phone: string): Promise<User | undefined>
 }
 
 export interface CustomerListFilters {
@@ -175,6 +184,12 @@ export interface ThreadRepository {
 }
 
 export interface MessageRepository {
+  /**
+   * Find a message by id, scoped to the caller. Non-privileged callers
+   * only see messages in threads they participate in; others get
+   * `undefined`. Privileged roles (STAFF/ADMIN) bypass the scope.
+   */
+  findById(ctx: CallerContext, id: string): Promise<Message | undefined>
   findByIdempotencyKey(key: string): Promise<Message | undefined>
   create(
     ctx: CallerContext,
@@ -183,6 +198,18 @@ export interface MessageRepository {
     idempotencyKey?: string | null,
   ): Promise<Message>
   findByThreadId(ctx: CallerContext, threadId: string): Promise<Message[]>
+  /**
+   * Merge a single language translation into the message's `translations`
+   * JSON map. If `detectedSourceLanguage` is provided, also update the
+   * message's `sourceLanguage` column (used when the original language
+   * was unknown at send time and the provider auto-detected it).
+   */
+  updateTranslation(
+    messageId: string,
+    language: string,
+    translatedText: string,
+    detectedSourceLanguage: string | null,
+  ): Promise<Message | undefined>
 }
 
 // Transaction boundary for operations spanning multiple repositories.

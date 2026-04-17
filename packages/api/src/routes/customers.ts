@@ -1,3 +1,4 @@
+import { quickCreateCustomerSchema } from '@kuruma/shared/validators/customer'
 import { Hono } from 'hono'
 import { STAFF_ROLES, requireUser } from '../middleware/auth'
 import type { CustomerService } from '../services/customer'
@@ -31,6 +32,26 @@ export function createCustomerRoutes(service: CustomerService) {
         search: search || undefined,
       })
       return ok(c, result.data, 200, { nextCursor: result.nextCursor })
+    })
+    .get('/customers/search', async (c) => {
+      // Flat user lookup for the manual-booking dialog. Separate from the
+      // paginated list above so callers get a predictable User[] shape.
+      const q = c.req.query('q')
+      if (!q || q.length < 2) {
+        return fail(c, 'Search query must be at least 2 characters', 400)
+      }
+      const customers = await service.search(q)
+      return ok(c, customers)
+    })
+    .post('/customers/quick-create', async (c) => {
+      const body = await c.req.json()
+      const result = quickCreateCustomerSchema.safeParse(body)
+      if (!result.success) {
+        return fail(c, result.error.flatten().fieldErrors as Record<string, unknown>, 400)
+      }
+
+      const { user: customer, created } = await service.quickCreate(result.data)
+      return ok(c, customer, created ? 201 : 200)
     })
     .get('/customers/:id', async (c) => {
       const customer = await service.findById(c.req.param('id'))

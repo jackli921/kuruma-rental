@@ -140,7 +140,7 @@ describe('POST /vehicles/:id/photos', () => {
       body: form,
     })
 
-    expect(res.status).toBe(400)
+    expect(res.status).toBe(415)
     const body = await res.json()
     expect(body.error).toContain('does not match declared Content-Type')
   })
@@ -155,7 +155,7 @@ describe('POST /vehicles/:id/photos', () => {
       body: form,
     })
 
-    expect(res.status).toBe(400)
+    expect(res.status).toBe(415)
     const body = await res.json()
     expect(body.error).toContain('image format')
   })

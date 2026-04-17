@@ -1,6 +1,7 @@
 import { Hono } from 'hono'
 import { beforeEach, describe, expect, it } from 'vitest'
 import { InMemoryCustomerRepository } from '../../src/repositories/in-memory/customer'
+import { InMemoryUserRepository } from '../../src/repositories/in-memory/user'
 import { createCustomerRoutes } from '../../src/routes/customers'
 import { CustomerService } from '../../src/services/customer'
 import type { Booking, User } from '../../src/stores'
@@ -19,6 +20,7 @@ function mkUser(id: string, overrides: Partial<User> = {}): User {
     id,
     name: `Name ${id.slice(-2)}`,
     email: `${id.slice(-2)}@example.com`,
+    phone: null,
     language: 'en',
     country: 'JP',
     role: 'RENTER',
@@ -61,12 +63,13 @@ function setup({
 } = {}) {
   const userStore = new Map(users.map((u) => [u.id, u]))
   const bookingStore = new Map(bookings.map((b) => [b.id, b]))
-  const repo = new InMemoryCustomerRepository(userStore, bookingStore)
-  const service = new CustomerService(repo)
+  const customerRepo = new InMemoryCustomerRepository(userStore, bookingStore)
+  const userRepo = new InMemoryUserRepository(userStore)
+  const service = new CustomerService(customerRepo, userRepo)
   app = new Hono()
   app.use('*', testAuthMiddleware(ADMIN, asRole))
   app.route('/', createCustomerRoutes(service))
-  return { repo, service }
+  return { customerRepo, userRepo, service }
 }
 
 describe('GET /customers', () => {
@@ -112,8 +115,6 @@ describe('GET /customers', () => {
     expect(body.success).toBe(true)
     expect(body.data).toHaveLength(2)
 
-    // Default sort: lastBookingAt DESC → Bob (Apr 8) then Alice (Apr 10)?
-    // Wait: Alice's latest is Apr 10, Bob's is Apr 8 → Alice first.
     const [alice, bob] = body.data
     expect(alice).toMatchObject({
       id: USER1,
@@ -221,7 +222,6 @@ describe('GET /customers', () => {
     )
     const body2 = await res2.json()
     expect(body2.data).toHaveLength(2)
-    // No duplicate IDs between pages.
     const ids1 = new Set(body1.data.map((c: { id: string }) => c.id))
     for (const c of body2.data) {
       expect(ids1.has(c.id)).toBe(false)
@@ -230,6 +230,10 @@ describe('GET /customers', () => {
 })
 
 describe('GET /customers/:id', () => {
+  beforeEach(() => {
+    app = new Hono()
+  })
+
   it('returns 404 for unknown customer', async () => {
     setup({ users: [mkUser(USER1)] })
     const res = await app.request('/customers/does-not-exist')
@@ -259,5 +263,220 @@ describe('GET /customers/:id', () => {
     expect(body.data.bookings).toHaveLength(2)
     expect(body.data.bookings[0].id).toBe('b-new')
     expect(body.data.bookings[1].id).toBe('b-old')
+  })
+})
+
+describe('GET /customers/search', () => {
+  beforeEach(() => {
+    app = new Hono()
+  })
+
+  function seed(): User[] {
+    return [
+      mkUser('u1', {
+        name: 'Tanaka Yuki',
+        email: 'tanaka@example.com',
+        phone: '+81-90-1234-5678',
+        language: 'ja',
+      }),
+      mkUser('u2', {
+        name: 'Smith John',
+        email: 'smith@example.com',
+        phone: null,
+        language: 'en',
+      }),
+      mkUser('u3', {
+        name: 'Chen Wei',
+        email: 'chen@example.com',
+        phone: '+86-138-0000-0000',
+        language: 'zh',
+      }),
+    ]
+  }
+
+  it('returns matching customers by name', async () => {
+    setup({ users: seed(), asRole: 'STAFF' })
+    const res = await app.request('/customers/search?q=tanaka')
+
+    expect(res.status).toBe(200)
+    const body = await res.json()
+    expect(body.success).toBe(true)
+    expect(body.data).toHaveLength(1)
+    expect(body.data[0].name).toBe('Tanaka Yuki')
+    expect(body.data[0].email).toBe('tanaka@example.com')
+  })
+
+  it('returns 403 for RENTER role', async () => {
+    setup({ users: seed(), asRole: 'RENTER' })
+    const res = await app.request('/customers/search?q=tanaka')
+    expect(res.status).toBe(403)
+  })
+
+  it('returns 400 when search query is less than 2 characters', async () => {
+    setup({ users: seed(), asRole: 'STAFF' })
+    const res = await app.request('/customers/search?q=a')
+    expect(res.status).toBe(400)
+    const body = await res.json()
+    expect(body.error).toBe('Search query must be at least 2 characters')
+  })
+
+  it('returns 400 when search query is missing', async () => {
+    setup({ users: seed(), asRole: 'STAFF' })
+    const res = await app.request('/customers/search')
+    expect(res.status).toBe(400)
+  })
+
+  it('matches by email', async () => {
+    setup({ users: seed(), asRole: 'STAFF' })
+    const res = await app.request('/customers/search?q=smith@')
+    expect(res.status).toBe(200)
+    const body = await res.json()
+    expect(body.data).toHaveLength(1)
+    expect(body.data[0].name).toBe('Smith John')
+  })
+
+  it('matches by phone', async () => {
+    setup({ users: seed(), asRole: 'STAFF' })
+    const res = await app.request('/customers/search?q=1234-5678')
+    expect(res.status).toBe(200)
+    const body = await res.json()
+    expect(body.data).toHaveLength(1)
+    expect(body.data[0].name).toBe('Tanaka Yuki')
+  })
+
+  it('returns empty array when no matches', async () => {
+    setup({ users: seed(), asRole: 'STAFF' })
+    const res = await app.request('/customers/search?q=zzzzz')
+    expect(res.status).toBe(200)
+    const body = await res.json()
+    expect(body.data).toEqual([])
+  })
+})
+
+describe('POST /customers/quick-create', () => {
+  beforeEach(() => {
+    app = new Hono()
+  })
+
+  it('creates a new customer with name and email', async () => {
+    setup({ asRole: 'STAFF' })
+    const res = await app.request('/customers/quick-create', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        name: 'New Customer',
+        email: 'new@example.com',
+        language: 'en',
+      }),
+    })
+    expect(res.status).toBe(201)
+    const body = await res.json()
+    expect(body.success).toBe(true)
+    expect(body.data.name).toBe('New Customer')
+    expect(body.data.email).toBe('new@example.com')
+    expect(body.data.id).toBeDefined()
+  })
+
+  it('is idempotent on email — returns existing user on second call', async () => {
+    setup({ asRole: 'STAFF' })
+    const payload = { name: 'Dup', email: 'dup@example.com', language: 'en' }
+
+    const res1 = await app.request('/customers/quick-create', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    })
+    expect(res1.status).toBe(201)
+    const body1 = await res1.json()
+
+    const res2 = await app.request('/customers/quick-create', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    })
+    expect(res2.status).toBe(200)
+    const body2 = await res2.json()
+    expect(body2.data.id).toBe(body1.data.id)
+  })
+
+  it('returns 400 when neither email nor phone is provided', async () => {
+    setup({ asRole: 'STAFF' })
+    const res = await app.request('/customers/quick-create', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: 'No Contact' }),
+    })
+    expect(res.status).toBe(400)
+  })
+
+  it('returns 403 for RENTER role', async () => {
+    setup({ asRole: 'RENTER' })
+    const res = await app.request('/customers/quick-create', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: 'Forbidden', email: 'f@example.com' }),
+    })
+    expect(res.status).toBe(403)
+  })
+
+  it('creates customer with phone only (no email)', async () => {
+    setup({ asRole: 'STAFF' })
+    const res = await app.request('/customers/quick-create', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        name: 'Phone Only',
+        phone: '+81-90-9999-8888',
+        language: 'ja',
+      }),
+    })
+    expect(res.status).toBe(201)
+    const body = await res.json()
+    expect(body.data.name).toBe('Phone Only')
+    expect(body.data.phone).toBe('+81-90-9999-8888')
+  })
+
+  it('is idempotent on phone — returns existing user', async () => {
+    setup({ asRole: 'STAFF' })
+    const payload = { name: 'Phone Dup', phone: '+81-90-1111-2222', language: 'ja' }
+
+    const res1 = await app.request('/customers/quick-create', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    })
+    expect(res1.status).toBe(201)
+    const body1 = await res1.json()
+
+    const res2 = await app.request('/customers/quick-create', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    })
+    expect(res2.status).toBe(200)
+    const body2 = await res2.json()
+    expect(body2.data.id).toBe(body1.data.id)
+  })
+
+  it('defaults language to en when not specified', async () => {
+    setup({ asRole: 'STAFF' })
+    const res = await app.request('/customers/quick-create', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: 'Default Lang', email: 'deflang@example.com' }),
+    })
+    expect(res.status).toBe(201)
+    const body = await res.json()
+    expect(body.data.language).toBe('en')
+  })
+
+  it('returns 400 when name is empty', async () => {
+    setup({ asRole: 'STAFF' })
+    const res = await app.request('/customers/quick-create', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: '', email: 'valid@example.com' }),
+    })
+    expect(res.status).toBe(400)
   })
 })

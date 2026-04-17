@@ -139,8 +139,57 @@
           "month": "Month"
         },
         "noEventsInRange": "No bookings in this range",
-        "showMore": "+{count} more"
-      }
+        "showMore": "+{count} more",
+        "viewFullDetails": "View full details",
+        "sidebar": {
+          "title": "Filters",
+          "vehicles": { "title": "Vehicles", "all": "All", "none": "None" },
+          "statuses": {
+            "title": "Status",
+            "CONFIRMED": "Confirmed",
+            "ACTIVE": "Active",
+            "COMPLETED": "Completed",
+            "CANCELLED": "Cancelled"
+          }
+        }
+      },
+      "detail": {
+        "stubTitle": "Booking detail",
+        "stubBody": "Full booking detail page coming soon — id: {id}",
+        "backToCalendar": "Back to calendar"
+      },
+      "manualBooking": {
+        "title": "New Manual Booking",
+        "description": "Create a booking on behalf of a walk-in or phone customer",
+        "customer": "Customer",
+        "searchExisting": "Search existing",
+        "createNew": "Create new",
+        "searchPlaceholder": "Search by name, email, or phone...",
+        "searching": "Searching...",
+        "change": "Change",
+        "name": "Name",
+        "namePlaceholder": "Customer name",
+        "email": "Email",
+        "phone": "Phone",
+        "language": "Language",
+        "bookingDetails": "Booking Details",
+        "vehicle": "Vehicle",
+        "selectVehicle": "Select a vehicle",
+        "startAt": "Start",
+        "endAt": "End",
+        "notes": "Notes",
+        "notesPlaceholder": "Optional notes about this booking...",
+        "cancel": "Cancel",
+        "creating": "Creating...",
+        "createBooking": "Create Booking",
+        "selectCustomer": "Please select a customer",
+        "nameRequired": "Customer name is required",
+        "contactRequired": "At least email or phone is required",
+        "fillAllFields": "Vehicle, start time, and end time are required",
+        "vehicleUnavailable": "Vehicle is not available for the selected dates",
+        "unexpectedError": "An unexpected error occurred"
+      },
+      "newBooking": "New Booking"
     },
     "vehicles": {
       "title": "Fleet",
@@ -392,7 +441,9 @@
       "noMessages": "No messages in this conversation yet.",
       "you": "You",
       "today": "Today",
-      "yesterday": "Yesterday"
+      "yesterday": "Yesterday",
+      "back": "Back to inbox",
+      "composeLabel": "Compose message"
     }
   },
   "bookings": {

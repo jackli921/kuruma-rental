@@ -8,6 +8,60 @@ import { type Db, messageColumns, normaliseMessage } from './shared'
 export class DrizzleMessageRepository implements MessageRepository {
   constructor(private readonly db: Db) {}
 
+  async findById(ctx: CallerContext, id: string): Promise<Message | undefined> {
+    // Non-privileged callers only see messages in threads they participate in.
+    // Use a join rather than two round-trips so the filter runs server-side.
+    const query = this.db
+      .select(messageColumns)
+      .from(messages)
+      .where(eq(messages.id, id))
+
+    if (!PRIVILEGED_ROLES.has(ctx.role)) {
+      const [row] = (await this.db
+        .select(messageColumns)
+        .from(messages)
+        .innerJoin(threadParticipants, eq(threadParticipants.threadId, messages.threadId))
+        .where(
+          and(eq(messages.id, id), eq(threadParticipants.userId, ctx.userId)),
+        )) as Array<Parameters<typeof normaliseMessage>[0]>
+      return row ? normaliseMessage(row) : undefined
+    }
+
+    const [row] = (await query) as Array<Parameters<typeof normaliseMessage>[0]>
+    return row ? normaliseMessage(row) : undefined
+  }
+
+  async updateTranslation(
+    messageId: string,
+    language: string,
+    translatedText: string,
+    detectedSourceLanguage: string | null,
+  ): Promise<Message | undefined> {
+    // Single-statement atomic merge — avoids the SELECT-then-UPDATE race
+    // where two concurrent translates would clobber each other at READ
+    // COMMITTED isolation. jsonb_set merges the new language in place.
+    const nextJson = sql`jsonb_set(
+      COALESCE(NULLIF(${messages.translations}, '')::jsonb, '{}'::jsonb),
+      ARRAY[${language}],
+      to_jsonb(${translatedText}::text)
+    )::text`
+
+    const setClause = detectedSourceLanguage
+      ? {
+          translations: nextJson,
+          sourceLanguage: sql`COALESCE(${messages.sourceLanguage}, ${detectedSourceLanguage})`,
+        }
+      : { translations: nextJson }
+
+    const [updated] = (await this.db
+      .update(messages)
+      .set(setClause)
+      .where(eq(messages.id, messageId))
+      .returning(messageColumns)) as Array<Parameters<typeof normaliseMessage>[0]>
+
+    return updated ? normaliseMessage(updated) : undefined
+  }
+
   async findByIdempotencyKey(key: string): Promise<Message | undefined> {
     const rows = (await this.db
       .select(messageColumns)

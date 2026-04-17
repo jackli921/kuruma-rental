@@ -96,7 +96,8 @@ function applySearch(rows: Customer[], search: string | undefined): Customer[] {
   if (!search) return rows
   const q = search.toLowerCase()
   return rows.filter(
-    (r) => (r.name?.toLowerCase() ?? '').startsWith(q) || r.email.toLowerCase().startsWith(q),
+    (r) =>
+      (r.name?.toLowerCase() ?? '').startsWith(q) || (r.email?.toLowerCase() ?? '').startsWith(q),
   )
 }
 

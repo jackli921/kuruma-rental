@@ -1,16 +1,54 @@
-import type { CallerContext } from '../../middleware/auth'
+import { type CallerContext, PRIVILEGED_ROLES } from '../../middleware/auth'
 import { PG_ERROR } from '../../pg-errors'
 import type { Message } from '../../stores'
 import type { MessageRepository } from '../types'
 import type { InMemoryThreadRepository } from './thread'
+
+function parseJson(raw: string | null | undefined): Record<string, string> {
+  if (!raw) return {}
+  try {
+    const parsed = JSON.parse(raw)
+    return typeof parsed === 'object' && parsed !== null ? (parsed as Record<string, string>) : {}
+  } catch {
+    return {}
+  }
+}
 
 export class InMemoryMessageRepository implements MessageRepository {
   private readonly idempotencyIndex = new Map<string, Message>()
 
   constructor(private readonly threadRepo: InMemoryThreadRepository) {}
 
+  async findById(ctx: CallerContext, id: string): Promise<Message | undefined> {
+    const msg = this.threadRepo._getMessage(id)
+    if (!msg) return undefined
+    if (PRIVILEGED_ROLES.has(ctx.role)) return msg
+    // Non-privileged: verify the caller is a participant of the message's thread.
+    const thread = await this.threadRepo.findById(ctx, msg.threadId)
+    return thread ? msg : undefined
+  }
+
   async findByIdempotencyKey(key: string): Promise<Message | undefined> {
     return this.idempotencyIndex.get(key)
+  }
+
+  async updateTranslation(
+    messageId: string,
+    language: string,
+    translatedText: string,
+    detectedSourceLanguage: string | null,
+  ): Promise<Message | undefined> {
+    const existing = this.threadRepo._getMessage(messageId)
+    if (!existing) return undefined
+
+    const translations = parseJson(existing.translations)
+    translations[language] = translatedText
+
+    const patch: Partial<Message> = { translations: JSON.stringify(translations) }
+    if (detectedSourceLanguage && !existing.sourceLanguage) {
+      patch.sourceLanguage = detectedSourceLanguage
+    }
+    return this.threadRepo._updateMessage(messageId, patch)
   }
 
   async create(

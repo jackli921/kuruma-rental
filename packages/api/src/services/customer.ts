@@ -1,5 +1,6 @@
 import type { Customer, CustomerSort, CustomerWithBookings } from '@kuruma/shared/types/customer'
-import type { CustomerListFilters, CustomerRepository } from '../repositories/types'
+import type { CustomerListFilters, CustomerRepository, UserRepository } from '../repositories/types'
+import type { User } from '../stores'
 
 export interface CustomerListQuery {
   limit: number
@@ -9,7 +10,10 @@ export interface CustomerListQuery {
 }
 
 export class CustomerService {
-  constructor(private readonly repo: CustomerRepository) {}
+  constructor(
+    private readonly customerRepo: CustomerRepository,
+    private readonly userRepo: UserRepository,
+  ) {}
 
   async findAllPaginated(
     q: CustomerListQuery,
@@ -20,7 +24,7 @@ export class CustomerService {
       sort: q.sort,
       search: q.search,
     }
-    const rows = await this.repo.findAllWithAggregates(filters)
+    const rows = await this.customerRepo.findAllWithAggregates(filters)
     const hasMore = rows.length > q.limit
     const data = hasMore ? rows.slice(0, q.limit) : rows
     const last = data[data.length - 1]
@@ -29,7 +33,38 @@ export class CustomerService {
   }
 
   async findById(id: string): Promise<CustomerWithBookings | undefined> {
-    return this.repo.findByIdWithBookings(id)
+    return this.customerRepo.findByIdWithBookings(id)
+  }
+
+  async search(query: string): Promise<User[]> {
+    return this.userRepo.search(query)
+  }
+
+  async quickCreate(input: {
+    name: string
+    email?: string | undefined
+    phone?: string | undefined
+    language: string
+  }): Promise<{ user: User; created: boolean }> {
+    // Fast-path: if a customer already exists for this email/phone, return it
+    // without attempting an insert. The repository also handles concurrent
+    // inserts idempotently, but this short-circuits the common case.
+    if (input.email) {
+      const existing = await this.userRepo.findByEmail(input.email)
+      if (existing) return { user: existing, created: false }
+    }
+    if (input.phone) {
+      const existing = await this.userRepo.findByPhone(input.phone)
+      if (existing) return { user: existing, created: false }
+    }
+
+    const user = await this.userRepo.quickCreate({
+      name: input.name,
+      email: input.email ?? null,
+      phone: input.phone ?? null,
+      language: input.language,
+    })
+    return { user, created: true }
   }
 }
 

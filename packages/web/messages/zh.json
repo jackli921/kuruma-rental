@@ -139,8 +139,57 @@
           "month": "月"
         },
         "noEventsInRange": "该时段暂无预订",
-        "showMore": "+{count}条"
-      }
+        "showMore": "+{count}条",
+        "viewFullDetails": "查看详情",
+        "sidebar": {
+          "title": "筛选",
+          "vehicles": { "title": "车辆", "all": "全部", "none": "无" },
+          "statuses": {
+            "title": "状态",
+            "CONFIRMED": "已确认",
+            "ACTIVE": "使用中",
+            "COMPLETED": "已完成",
+            "CANCELLED": "已取消"
+          }
+        }
+      },
+      "detail": {
+        "stubTitle": "预订详情",
+        "stubBody": "预订详情页即将推出 — ID：{id}",
+        "backToCalendar": "返回日历"
+      },
+      "manualBooking": {
+        "title": "手动创建预订",
+        "description": "为到店或电话客户创建预订",
+        "customer": "客户",
+        "searchExisting": "搜索现有客户",
+        "createNew": "创建新客户",
+        "searchPlaceholder": "按姓名、邮箱或电话搜索...",
+        "searching": "搜索中...",
+        "change": "更改",
+        "name": "姓名",
+        "namePlaceholder": "客户姓名",
+        "email": "邮箱",
+        "phone": "电话",
+        "language": "语言",
+        "bookingDetails": "预订详情",
+        "vehicle": "车辆",
+        "selectVehicle": "选择车辆",
+        "startAt": "开始时间",
+        "endAt": "结束时间",
+        "notes": "备注",
+        "notesPlaceholder": "关于此预订的备注（可选）...",
+        "cancel": "取消",
+        "creating": "创建中...",
+        "createBooking": "创建预订",
+        "selectCustomer": "请选择客户",
+        "nameRequired": "客户姓名为必填项",
+        "contactRequired": "至少需要邮箱或电话",
+        "fillAllFields": "车辆、开始时间和结束时间为必填项",
+        "vehicleUnavailable": "所选时间段该车辆不可用",
+        "unexpectedError": "发生意外错误"
+      },
+      "newBooking": "新建预订"
     },
     "vehicles": {
       "title": "车队管理",
@@ -392,7 +441,9 @@
       "noMessages": "此对话中暂无消息。",
       "you": "我",
       "today": "今天",
-      "yesterday": "昨天"
+      "yesterday": "昨天",
+      "back": "返回收件箱",
+      "composeLabel": "撰写消息"
     }
   },
   "bookings": {

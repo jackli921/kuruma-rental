@@ -24,4 +24,9 @@ export class InMemoryPhotoStorage implements PhotoStorage {
   has(key: string): boolean {
     return this.store.has(key)
   }
+
+  /** Test helper — count stored objects to verify rollback on failed uploads. */
+  size(): number {
+    return this.store.size
+  }
 }

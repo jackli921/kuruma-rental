@@ -21,7 +21,9 @@
     "./lib/rental-rules": "./src/lib/rental-rules.ts",
     "./validators/booking": "./src/validators/booking.ts",
     "./validators/vehicle": "./src/validators/vehicle.ts",
-    "./validators/vehicle-class": "./src/validators/vehicle-class.ts"
+    "./validators/vehicle-class": "./src/validators/vehicle-class.ts",
+    "./validators/customer": "./src/validators/customer.ts",
+    "./validators/translation": "./src/validators/translation.ts"
   },
   "scripts": {
     "test": "vitest run",

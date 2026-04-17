@@ -80,7 +80,11 @@ import type { UserRole } from './middleware/auth'
 export interface User {
   id: string
   name: string | null
-  email: string
+  // email may be null for phone-only customers created via /customers/quick-create.
+  // Storage keeps a synthetic placeholder (Auth.js adapter requires NOT NULL) but
+  // repository reads mask it back to null so API consumers never see it.
+  email: string | null
+  phone: string | null
   language: string
   country: string | null
   role: UserRole

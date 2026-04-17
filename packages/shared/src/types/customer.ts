@@ -5,7 +5,8 @@
 export interface Customer {
   id: string
   name: string | null
-  email: string
+  // null for phone-only walk-in customers created via /customers/quick-create
+  email: string | null
   language: string
   country: string | null
   bookingCount: number
