@@ -140,7 +140,18 @@
         },
         "noEventsInRange": "この期間に予約はありません",
         "showMore": "+{count}件",
-        "viewFullDetails": "詳細を表示"
+        "viewFullDetails": "詳細を表示",
+        "sidebar": {
+          "title": "フィルター",
+          "vehicles": { "title": "車両", "all": "すべて", "none": "なし" },
+          "statuses": {
+            "title": "ステータス",
+            "CONFIRMED": "確定",
+            "ACTIVE": "利用中",
+            "COMPLETED": "完了",
+            "CANCELLED": "キャンセル"
+          }
+        }
       },
       "detail": {
         "stubTitle": "予約詳細",

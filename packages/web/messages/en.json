@@ -140,7 +140,18 @@
         },
         "noEventsInRange": "No bookings in this range",
         "showMore": "+{count} more",
-        "viewFullDetails": "View full details"
+        "viewFullDetails": "View full details",
+        "sidebar": {
+          "title": "Filters",
+          "vehicles": { "title": "Vehicles", "all": "All", "none": "None" },
+          "statuses": {
+            "title": "Status",
+            "CONFIRMED": "Confirmed",
+            "ACTIVE": "Active",
+            "COMPLETED": "Completed",
+            "CANCELLED": "Cancelled"
+          }
+        }
       },
       "detail": {
         "stubTitle": "Booking detail",

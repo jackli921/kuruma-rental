@@ -6,9 +6,11 @@ import {
   type SlotSelectInfo,
   toCalendarEvents,
 } from '@/components/calendar/BookingsCalendar'
+import { CalendarSidebar } from '@/components/calendar/CalendarSidebar'
 import { ManualBookingDialog } from '@/components/calendar/ManualBookingDialog'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
+import { useCalendarFilters } from '@/hooks/useCalendarFilters'
 import { fetchFleetOverviewAction } from '@/lib/vehicle-actions'
 import { keepPreviousData, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
@@ -117,15 +119,27 @@ export function BookingsCalendarView() {
     },
   })
 
-  const resources: CalendarResource[] = useMemo(
-    () =>
-      fleetOverviews
-        .filter((v) => v.status !== 'RETIRED')
-        .map((v) => ({ resourceId: v.id, resourceTitle: v.name })),
+  const activeVehicles = useMemo(
+    () => fleetOverviews.filter((v) => v.status !== 'RETIRED'),
     [fleetOverviews],
   )
 
-  const events = useMemo(() => toCalendarEvents(bookings), [bookings])
+  const resources: CalendarResource[] = useMemo(
+    () => activeVehicles.map((v) => ({ resourceId: v.id, resourceTitle: v.name })),
+    [activeVehicles],
+  )
+
+  const knownVehicleIds = useMemo(() => activeVehicles.map((v) => v.id), [activeVehicles])
+  const filters = useCalendarFilters(knownVehicleIds)
+
+  const allEvents = useMemo(() => toCalendarEvents(bookings), [bookings])
+  const events = useMemo(() => filters.filterEvents(allEvents), [allEvents, filters])
+  const visibleResources = useMemo(() => filters.filterResources(resources), [resources, filters])
+
+  const sidebarVehicles = useMemo(
+    () => activeVehicles.map((v) => ({ id: v.id, name: v.name })),
+    [activeVehicles],
+  )
 
   const handleInvalidate = useCallback(() => {
     queryClient.invalidateQueries({ queryKey: ['bookings', 'calendar'] })
@@ -164,29 +178,32 @@ export function BookingsCalendarView() {
   }
 
   return (
-    <div className="mt-6">
-      <div className="flex justify-end mb-4">
-        <Button onClick={handleOpenDialog}>{t('newBooking')}</Button>
+    <div className="mt-6 flex gap-4">
+      <CalendarSidebar vehicles={sidebarVehicles} filters={filters} />
+      <div className="flex-1 min-w-0">
+        <div className="flex justify-end mb-4">
+          <Button onClick={handleOpenDialog}>{t('newBooking')}</Button>
+        </div>
+        <BookingsCalendar
+          events={events}
+          resources={visibleResources}
+          view={view}
+          date={date}
+          views={['day', 'week', 'month']}
+          onViewChange={handleViewChange}
+          onDateChange={handleDateChange}
+          onBookingUpdate={handleInvalidate}
+          onSelectSlot={handleSelectSlot}
+        />
+        <ManualBookingDialog
+          open={showManualBooking}
+          onClose={handleCloseDialog}
+          onBookingCreated={handleInvalidate}
+          vehicles={fleetOverviews}
+          defaultStartAt={slotDefaults.startAt}
+          defaultVehicleId={slotDefaults.vehicleId}
+        />
       </div>
-      <BookingsCalendar
-        events={events}
-        resources={resources}
-        view={view}
-        date={date}
-        views={['day', 'week', 'month']}
-        onViewChange={handleViewChange}
-        onDateChange={handleDateChange}
-        onBookingUpdate={handleInvalidate}
-        onSelectSlot={handleSelectSlot}
-      />
-      <ManualBookingDialog
-        open={showManualBooking}
-        onClose={handleCloseDialog}
-        onBookingCreated={handleInvalidate}
-        vehicles={fleetOverviews}
-        defaultStartAt={slotDefaults.startAt}
-        defaultVehicleId={slotDefaults.vehicleId}
-      />
     </div>
   )
 }
