@@ -139,7 +139,13 @@
           "month": "月"
         },
         "noEventsInRange": "该时段暂无预订",
-        "showMore": "+{count}条"
+        "showMore": "+{count}条",
+        "viewFullDetails": "查看详情"
+      },
+      "detail": {
+        "stubTitle": "预订详情",
+        "stubBody": "预订详情页即将推出 — ID：{id}",
+        "backToCalendar": "返回日历"
       }
     },
     "vehicles": {

@@ -139,7 +139,13 @@
           "month": "月"
         },
         "noEventsInRange": "この期間に予約はありません",
-        "showMore": "+{count}件"
+        "showMore": "+{count}件",
+        "viewFullDetails": "詳細を表示"
+      },
+      "detail": {
+        "stubTitle": "予約詳細",
+        "stubBody": "予約詳細ページは近日公開予定です — ID: {id}",
+        "backToCalendar": "カレンダーに戻る"
       }
     },
     "vehicles": {

@@ -139,7 +139,13 @@
           "month": "Month"
         },
         "noEventsInRange": "No bookings in this range",
-        "showMore": "+{count} more"
+        "showMore": "+{count} more",
+        "viewFullDetails": "View full details"
+      },
+      "detail": {
+        "stubTitle": "Booking detail",
+        "stubBody": "Full booking detail page coming soon — id: {id}",
+        "backToCalendar": "Back to calendar"
       }
     },
     "vehicles": {
