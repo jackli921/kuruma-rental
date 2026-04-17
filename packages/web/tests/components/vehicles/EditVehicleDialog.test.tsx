@@ -80,13 +80,12 @@ function makeVehicle(overrides: Partial<VehicleData> = {}): VehicleData {
   }
 }
 
-const queryClient = new QueryClient({
-  defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
-})
-
 function renderDialog(props: { vehicle: VehicleData | null; onOpenChange?: () => void }) {
+  const client = new QueryClient({
+    defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
+  })
   return render(
-    <QueryClientProvider client={queryClient}>
+    <QueryClientProvider client={client}>
       <EditVehicleDialog vehicle={props.vehicle} onOpenChange={props.onOpenChange ?? vi.fn()} />
     </QueryClientProvider>,
   )

@@ -96,4 +96,20 @@ describe('useVehicleMutation', () => {
 
     expect(result.current.error).toBe('Network failure')
   })
+
+  it('clears error when a subsequent mutate succeeds', async () => {
+    const useVehicleMutation = await loadHook()
+    const mutationFn = vi.fn<(input: string) => Promise<ActionResult<{ id: string }>>>()
+    mutationFn.mockResolvedValueOnce({ success: false, error: 'First attempt failed' })
+
+    const { Wrapper } = createWrapper()
+    const { result } = renderHook(() => useVehicleMutation({ mutationFn }), { wrapper: Wrapper })
+
+    result.current.mutate('input')
+    await waitFor(() => expect(result.current.error).toBe('First attempt failed'))
+
+    mutationFn.mockResolvedValueOnce({ success: true, data: { id: 'v1' } })
+    result.current.mutate('input')
+    await waitFor(() => expect(result.current.error).toBeNull())
+  })
 })

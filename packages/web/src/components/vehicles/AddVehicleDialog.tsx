@@ -19,13 +19,18 @@ interface AddVehicleDialogProps {
 
 export function AddVehicleDialog({ open, onOpenChange }: AddVehicleDialogProps) {
   const t = useTranslations('business.vehicles')
-  const { mutate, isPending, error } = useVehicleMutation({
+  const { mutate, isPending, error, reset } = useVehicleMutation({
     mutationFn: createVehicleAction,
     onSuccess: () => onOpenChange(false),
   })
 
+  const handleOpenChange = (nextOpen: boolean) => {
+    if (!nextOpen) reset()
+    onOpenChange(nextOpen)
+  }
+
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogContent className="max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>{t('addVehicle')}</DialogTitle>
@@ -34,7 +39,7 @@ export function AddVehicleDialog({ open, onOpenChange }: AddVehicleDialogProps) 
         {error && <p className="text-sm text-destructive px-1">{error}</p>}
         <VehicleForm
           onSubmit={async (data) => mutate(data)}
-          onCancel={() => onOpenChange(false)}
+          onCancel={() => handleOpenChange(false)}
           isSubmitting={isPending}
         />
       </DialogContent>
