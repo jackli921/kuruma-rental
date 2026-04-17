@@ -3,7 +3,6 @@
 import {
   BookingsCalendar,
   type CalendarResource,
-  type SlotSelectInfo,
   toCalendarEvents,
 } from '@/components/calendar/BookingsCalendar'
 import { ManualBookingDialog } from '@/components/calendar/ManualBookingDialog'
@@ -54,11 +53,6 @@ function parseViewParam(param: string | null): View {
   return 'week'
 }
 
-function toLocalDatetime(date: Date): string {
-  const pad = (n: number) => String(n).padStart(2, '0')
-  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`
-}
-
 export function BookingsCalendarView() {
   const t = useTranslations('business.bookings')
   const queryClient = useQueryClient()
@@ -71,7 +65,6 @@ export function BookingsCalendarView() {
   const range = useMemo(() => computeRange(view, date), [view, date])
 
   const [showManualBooking, setShowManualBooking] = useState(false)
-  const [slotStartAt, setSlotStartAt] = useState<string | undefined>()
 
   const updateUrl = useCallback(
     (nextView: View, nextDate: Date) => {
@@ -126,21 +119,6 @@ export function BookingsCalendarView() {
     queryClient.invalidateQueries({ queryKey: ['bookings', 'calendar'] })
   }, [queryClient])
 
-  const handleSelectSlot = useCallback((slotInfo: SlotSelectInfo) => {
-    setSlotStartAt(toLocalDatetime(slotInfo.start))
-    setShowManualBooking(true)
-  }, [])
-
-  const handleOpenDialog = useCallback(() => {
-    setSlotStartAt(undefined)
-    setShowManualBooking(true)
-  }, [])
-
-  const handleCloseDialog = useCallback(() => {
-    setShowManualBooking(false)
-    setSlotStartAt(undefined)
-  }, [])
-
   if (bookingsInitialLoading) {
     return (
       <div className="mt-6 space-y-2">
@@ -157,7 +135,7 @@ export function BookingsCalendarView() {
   return (
     <div className="mt-6">
       <div className="flex justify-end mb-4">
-        <Button onClick={handleOpenDialog}>{t('newBooking')}</Button>
+        <Button onClick={() => setShowManualBooking(true)}>{t('newBooking')}</Button>
       </div>
       <BookingsCalendar
         events={events}
@@ -168,14 +146,12 @@ export function BookingsCalendarView() {
         onViewChange={handleViewChange}
         onDateChange={handleDateChange}
         onBookingUpdate={handleInvalidate}
-        onSelectSlot={handleSelectSlot}
       />
       <ManualBookingDialog
         open={showManualBooking}
-        onClose={handleCloseDialog}
+        onClose={() => setShowManualBooking(false)}
         onBookingCreated={handleInvalidate}
         vehicles={fleetOverviews}
-        defaultStartAt={slotStartAt}
       />
     </div>
   )
