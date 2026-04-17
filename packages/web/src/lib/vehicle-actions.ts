@@ -3,12 +3,16 @@
 import { getApiToken } from '@/lib/api-token'
 import {
   type FleetVehicleOverviewData,
+  type PhotoDeleteResult,
+  type PhotoUploadResult,
   type VehicleData,
   createVehicle,
+  deleteVehiclePhoto,
   fetchFleetOverview,
   retireVehicle,
   updateVehicle,
   updateVehicleStatus,
+  uploadVehiclePhotos,
 } from '@/lib/vehicle-api'
 import type { CreateVehicleInput, VehicleStatus } from '@kuruma/shared/validators/vehicle'
 
@@ -56,4 +60,22 @@ export async function updateVehicleStatusAction(
 
 export async function retireVehicleAction(id: string): Promise<ActionResult<VehicleData>> {
   return withAuth((token) => retireVehicle(id, token))
+}
+
+export async function uploadVehiclePhotosAction(
+  vehicleId: string,
+  formData: FormData,
+): Promise<ActionResult<PhotoUploadResult>> {
+  const files = formData.getAll('file').filter((f): f is File => f instanceof File)
+  if (files.length === 0) {
+    return { success: false, error: 'No files provided' }
+  }
+  return withAuth((token) => uploadVehiclePhotos(vehicleId, files, token))
+}
+
+export async function deleteVehiclePhotoAction(
+  vehicleId: string,
+  photoIdx: number,
+): Promise<ActionResult<PhotoDeleteResult>> {
+  return withAuth((token) => deleteVehiclePhoto(vehicleId, photoIdx, token))
 }
