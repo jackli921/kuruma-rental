@@ -3,6 +3,7 @@
 import type { CalendarBooking } from '@/lib/calendar'
 import { STATUS_CLASS } from '@/lib/event-colors'
 import { localizer } from '@/lib/rbc-localizer'
+import { endOfWeek, startOfWeek } from 'date-fns'
 import { useLocale, useTranslations } from 'next-intl'
 import { useCallback, useMemo, useState } from 'react'
 import { Calendar, type View } from 'react-big-calendar'
@@ -28,12 +29,12 @@ export interface CalendarResource {
 interface BookingsCalendarProps {
   readonly events: CalendarEvent[]
   readonly resources?: CalendarResource[]
-  readonly defaultView?: View
-  readonly defaultDate?: Date
+  readonly view: View
+  readonly date: Date
+  readonly onViewChange: (view: View) => void
+  readonly onDateChange: (date: Date) => void
   readonly views?: View[]
   readonly onBookingUpdate?: (updated: CalendarBooking) => void
-  readonly onViewChange?: (view: View) => void
-  readonly onDateChange?: (date: Date) => void
 }
 
 export function toCalendarEvents(bookings: CalendarBooking[]): CalendarEvent[] {
@@ -53,38 +54,20 @@ const CALENDAR_COMPONENTS = { toolbar: () => null } as const
 export function BookingsCalendar({
   events,
   resources,
-  defaultView = 'week',
-  defaultDate,
-  views = ['day', 'week', 'month'],
-  onBookingUpdate,
+  view,
+  date,
   onViewChange,
   onDateChange,
+  views = ['day', 'week', 'month'],
+  onBookingUpdate,
 }: BookingsCalendarProps) {
   const locale = useLocale()
   const t = useTranslations('business.bookings.calendar')
-  const [currentView, setCurrentView] = useState<View>(defaultView)
-  const [currentDate, setCurrentDate] = useState(() => defaultDate ?? new Date())
   const [selectedBooking, setSelectedBooking] = useState<CalendarBooking | null>(null)
 
   const handleSelectEvent = useCallback((event: CalendarEvent) => {
     setSelectedBooking(event.raw)
   }, [])
-
-  const handleViewChange = useCallback(
-    (view: View) => {
-      setCurrentView(view)
-      onViewChange?.(view)
-    },
-    [onViewChange],
-  )
-
-  const handleNavigate = useCallback(
-    (date: Date) => {
-      setCurrentDate(date)
-      onDateChange?.(date)
-    },
-    [onDateChange],
-  )
 
   const eventPropGetter = useCallback((event: CalendarEvent) => {
     return {
@@ -96,16 +79,14 @@ export function BookingsCalendar({
 
   const toolbarLabel = useMemo(() => {
     const fmt = (opts: Intl.DateTimeFormatOptions) =>
-      new Intl.DateTimeFormat(culture, opts).format(currentDate)
+      new Intl.DateTimeFormat(culture, opts).format(date)
 
-    if (currentView === 'month') return fmt({ year: 'numeric', month: 'long' })
-    if (currentView === 'day') return fmt({ weekday: 'long', month: 'short', day: 'numeric' })
+    if (view === 'month') return fmt({ year: 'numeric', month: 'long' })
+    if (view === 'day') return fmt({ weekday: 'long', month: 'short', day: 'numeric' })
 
-    // week: show range "Apr 13 - 19, 2026"
-    const start = new Date(currentDate)
-    start.setDate(start.getDate() - start.getDay())
-    const end = new Date(start)
-    end.setDate(end.getDate() + 6)
+    // week: show range using Monday-start to match rbc's localizer
+    const start = startOfWeek(date, { weekStartsOn: 1 })
+    const end = endOfWeek(date, { weekStartsOn: 1 })
     const s = new Intl.DateTimeFormat(culture, { month: 'short', day: 'numeric' }).format(start)
     const e = new Intl.DateTimeFormat(culture, {
       month: 'short',
@@ -113,22 +94,22 @@ export function BookingsCalendar({
       year: 'numeric',
     }).format(end)
     return `${s} - ${e}`
-  }, [currentDate, currentView, culture])
+  }, [date, view, culture])
 
   const handleToolbarNavigate = useCallback(
     (action: 'PREV' | 'NEXT' | 'TODAY') => {
       if (action === 'TODAY') {
-        handleNavigate(new Date())
+        onDateChange(new Date())
         return
       }
       const offset = action === 'PREV' ? -1 : 1
-      const d = new Date(currentDate)
-      if (currentView === 'month') d.setMonth(d.getMonth() + offset)
-      else if (currentView === 'week') d.setDate(d.getDate() + offset * 7)
+      const d = new Date(date)
+      if (view === 'month') d.setMonth(d.getMonth() + offset)
+      else if (view === 'week') d.setDate(d.getDate() + offset * 7)
       else d.setDate(d.getDate() + offset)
-      handleNavigate(d)
+      onDateChange(d)
     },
-    [currentView, currentDate, handleNavigate],
+    [view, date, onDateChange],
   )
 
   const messages = useMemo(
@@ -145,10 +126,7 @@ export function BookingsCalendar({
     [t],
   )
 
-  const calendarStyle = useMemo(
-    () => ({ height: currentView === 'month' ? 600 : 700 }),
-    [currentView],
-  )
+  const calendarStyle = useMemo(() => ({ height: view === 'month' ? 600 : 700 }), [view])
 
   const handleClose = useCallback(() => setSelectedBooking(null), [])
 
@@ -164,22 +142,22 @@ export function BookingsCalendar({
     <div>
       <CalendarToolbar
         label={toolbarLabel}
-        view={currentView}
+        view={view}
         onNavigate={handleToolbarNavigate}
-        onView={handleViewChange}
+        onView={onViewChange}
         views={views}
       />
       <Calendar
         localizer={localizer}
         culture={culture}
         events={events}
-        resources={currentView === 'day' ? resources : undefined}
+        resources={view === 'day' ? resources : undefined}
         resourceIdAccessor="resourceId"
         resourceTitleAccessor="resourceTitle"
-        view={currentView}
-        date={currentDate}
-        onView={handleViewChange}
-        onNavigate={handleNavigate}
+        view={view}
+        date={date}
+        onView={onViewChange}
+        onNavigate={onDateChange}
         onSelectEvent={handleSelectEvent}
         eventPropGetter={eventPropGetter}
         views={views}

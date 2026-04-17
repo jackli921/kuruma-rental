@@ -7,10 +7,19 @@ import {
 } from '@/components/calendar/BookingsCalendar'
 import { Skeleton } from '@/components/ui/skeleton'
 import { fetchFleetOverviewAction } from '@/lib/vehicle-actions'
-import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { endOfDay, endOfMonth, endOfWeek, startOfDay, startOfMonth, startOfWeek } from 'date-fns'
+import { keepPreviousData, useQuery, useQueryClient } from '@tanstack/react-query'
+import {
+  endOfDay,
+  endOfMonth,
+  endOfWeek,
+  format,
+  parse,
+  startOfDay,
+  startOfMonth,
+  startOfWeek,
+} from 'date-fns'
 import { useRouter, useSearchParams } from 'next/navigation'
-import { useCallback, useMemo, useState } from 'react'
+import { useCallback, useMemo } from 'react'
 import type { View } from 'react-big-calendar'
 import { fetchAllCalendarBookings } from './booking-actions'
 
@@ -28,13 +37,15 @@ function computeRange(view: View, date: Date): { from: string; to: string } {
   }
 }
 
-function parseInitialDate(param: string | null): Date {
+// Parse YYYY-MM-DD as a local date (not UTC) to avoid timezone drift
+// where 2026-04-16 in JST serializes and parses back to a different day.
+function parseDateParam(param: string | null): Date {
   if (!param) return new Date()
-  const d = new Date(param)
-  return Number.isNaN(d.getTime()) ? new Date() : d
+  const parsed = parse(param, 'yyyy-MM-dd', new Date())
+  return Number.isNaN(parsed.getTime()) ? new Date() : parsed
 }
 
-function parseInitialView(param: string | null): View {
+function parseViewParam(param: string | null): View {
   if (param === 'day' || param === 'week' || param === 'month') return param
   return 'week'
 }
@@ -44,8 +55,11 @@ export function BookingsCalendarView() {
   const router = useRouter()
   const searchParams = useSearchParams()
 
-  const [view, setView] = useState<View>(() => parseInitialView(searchParams.get('view')))
-  const [date, setDate] = useState<Date>(() => parseInitialDate(searchParams.get('date')))
+  // Derive state directly from the URL — single source of truth.
+  // Back/forward buttons update searchParams, which triggers re-render
+  // with the correct view/date automatically.
+  const view = parseViewParam(searchParams.get('view'))
+  const date = useMemo(() => parseDateParam(searchParams.get('date')), [searchParams])
 
   const range = useMemo(() => computeRange(view, date), [view, date])
 
@@ -53,35 +67,30 @@ export function BookingsCalendarView() {
     (nextView: View, nextDate: Date) => {
       const params = new URLSearchParams(searchParams.toString())
       params.set('view', nextView)
-      params.set('date', nextDate.toISOString().slice(0, 10))
+      params.set('date', format(nextDate, 'yyyy-MM-dd'))
       router.replace(`?${params.toString()}`, { scroll: false })
     },
     [router, searchParams],
   )
 
   const handleViewChange = useCallback(
-    (nextView: View) => {
-      setView(nextView)
-      updateUrl(nextView, date)
-    },
+    (nextView: View) => updateUrl(nextView, date),
     [date, updateUrl],
   )
 
   const handleDateChange = useCallback(
-    (nextDate: Date) => {
-      setDate(nextDate)
-      updateUrl(view, nextDate)
-    },
+    (nextDate: Date) => updateUrl(view, nextDate),
     [view, updateUrl],
   )
 
   const {
     data: bookings = [],
-    isLoading: bookingsLoading,
+    isPending: bookingsInitialLoading,
     error: bookingsError,
   } = useQuery({
-    queryKey: ['bookings', 'calendar', view, range.from, range.to],
+    queryKey: ['bookings', 'calendar', range.from, range.to],
     queryFn: () => fetchAllCalendarBookings(range.from, range.to),
+    placeholderData: keepPreviousData,
   })
 
   const { data: fleetOverviews = [] } = useQuery({
@@ -94,13 +103,16 @@ export function BookingsCalendarView() {
   })
 
   const resources: CalendarResource[] = useMemo(
-    () => fleetOverviews.map((v) => ({ resourceId: v.id, resourceTitle: v.name })),
+    () =>
+      fleetOverviews
+        .filter((v) => v.status !== 'RETIRED')
+        .map((v) => ({ resourceId: v.id, resourceTitle: v.name })),
     [fleetOverviews],
   )
 
   const events = useMemo(() => toCalendarEvents(bookings), [bookings])
 
-  if (bookingsLoading) {
+  if (bookingsInitialLoading) {
     return (
       <div className="mt-6 space-y-2">
         <Skeleton className="h-10 w-full" />
@@ -118,8 +130,8 @@ export function BookingsCalendarView() {
       <BookingsCalendar
         events={events}
         resources={resources}
-        defaultView={view}
-        defaultDate={date}
+        view={view}
+        date={date}
         views={['day', 'week', 'month']}
         onViewChange={handleViewChange}
         onDateChange={handleDateChange}
