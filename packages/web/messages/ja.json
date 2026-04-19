@@ -46,6 +46,34 @@
     "switchToRenter": "利用者ビューに切替",
     "switchToBusiness": "管理者ビューに切替"
   },
+  "catalog": {
+    "title": "車両クラスから選ぶ",
+    "subtitle": "同じクラス内の車はすべて同じ料金・仕様です。",
+    "empty": "現在利用可能なクラスはありません。",
+    "seats": "{count}席",
+    "auto": "オートマ",
+    "manual": "マニュアル",
+    "priceFrom": "最低",
+    "perDay": "/ 日",
+    "viewClass": "詳細を見る",
+    "detail": {
+      "backToCatalog": "一覧に戻る",
+      "specs": "仕様",
+      "seats": "{count}席",
+      "transmission": "トランスミッション",
+      "fuelType": "燃料タイプ",
+      "luggage": "荷物 {count}個",
+      "auto": "オートマチック",
+      "manual": "マニュアル",
+      "description": "このクラスについて",
+      "photos": "写真",
+      "bookCta": "空き状況を確認",
+      "priceFrom": "最低",
+      "perDay": "/ 日",
+      "notFound": "クラスが見つかりません",
+      "notFoundDescription": "お探しのクラスは存在しないか、アーカイブされています。"
+    }
+  },
   "vehicles": {
     "title": "車両を探す",
     "subtitle": "日本旅行にぴったりの車を見つけましょう。",
