@@ -62,11 +62,20 @@ const snapshotFilesBefore = listSnapshotFiles()
 const journalBefore = readFileSync(JOURNAL_PATH, 'utf8')
 
 try {
-  execSync('bunx drizzle-kit generate', { cwd: REPO_ROOT, stdio: 'pipe' })
+  // Capture stdout. drizzle-kit exits 0 on some fatal conditions (snapshot
+  // collisions, malformed journal) and writes the error to stdout. Without
+  // checking the captured output, the success path below would run even when
+  // the internal state was broken — false positive. See issue #349.
+  const result = execSync('bunx drizzle-kit generate', {
+    cwd: REPO_ROOT,
+    encoding: 'utf8',
+  })
   const sqlFilesAfter = listMigrationFiles()
   const newFiles = [...sqlFilesAfter].filter((f) => !sqlFilesBefore.has(f))
 
-  if (newFiles.length === 0) {
+  if (/^\s*Error:/im.test(result)) {
+    fail('drizzle-kit generate produced an error', result.trim())
+  } else if (newFiles.length === 0) {
     pass('schema.ts ↔ snapshot in sync', 'no pending changes')
   } else {
     // Rollback the accidental generation: delete the new .sql + snapshot, restore journal.
