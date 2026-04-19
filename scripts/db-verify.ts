@@ -7,14 +7,17 @@
  * This script runs three checks; any failure exits non-zero and blocks CI / commits.
  *
  * Checks:
- *  1. Schema ↔ snapshot sync (drizzle-kit check) — editing schema.ts without
- *     running db:generate is detected here. No DB connection required.
- *  2. Journal ↔ disk sync — every `_journal.json` entry must map to an on-disk
- *     `.sql` file and vice versa. No DB connection required.
- *  3. Journal ↔ DB sync — the number of applied migrations in
- *     `drizzle.__drizzle_migrations` must equal the number of journal entries.
- *     Only runs when DATABASE_URL is set (skipped cleanly otherwise so the other
- *     two checks still gate local commits).
+ *  1.   Schema ↔ snapshot sync (drizzle-kit check) — editing schema.ts without
+ *       running db:generate is detected here. No DB connection required.
+ *  1.5. Journal `when` strictly monotonic — guards against drizzle-orm's
+ *       silent-skip behavior when a cherry-picked/rebased migration has an
+ *       older `when` than its predecessor. See the CLAUDE.md gotcha.
+ *  2.   Journal ↔ disk sync — every `_journal.json` entry must map to an
+ *       on-disk `.sql` file and vice versa. No DB connection required.
+ *  3.   Journal ↔ DB sync — the number of applied migrations in
+ *       `drizzle.__drizzle_migrations` must equal the number of journal
+ *       entries. Only runs when DATABASE_URL is set (skipped cleanly
+ *       otherwise so the other checks still gate local commits).
  */
 
 import { execSync } from 'node:child_process'
@@ -34,7 +37,7 @@ function listSnapshotFiles(): Set<string> {
   return new Set(readdirSync(META_DIR).filter((f) => /^\d{4}_snapshot\.json$/.test(f)))
 }
 
-type JournalEntry = { idx: number; tag: string }
+type JournalEntry = { idx: number; tag: string; when: number }
 type Journal = { entries: JournalEntry[] }
 
 let failures = 0
@@ -90,6 +93,40 @@ drizzle-kit would have created: ${newFiles.join(', ')}
   const stdout = (err as { stdout?: Buffer }).stdout?.toString() ?? ''
   const stderr = (err as { stderr?: Buffer }).stderr?.toString() ?? ''
   fail('drizzle-kit generate failed', `${stdout}\n${stderr}`.trim())
+}
+
+// ---- Check 1.5: journal `when` strictly monotonic ----
+//
+// `drizzle-orm`'s pg migrator applies a migration iff
+//   lastDbMigration.created_at < migration.folderMillis
+// where `folderMillis` is `entry.when` from _journal.json. If a cherry-picked
+// or rebased migration has an older `when` than its predecessor, migrate
+// SILENTLY skips it on incremental prod deploys — fresh CI misses it because
+// lastDbMigration is null there and everything applies. See issue #[TBD].
+// Enforce strictly monotonic `when` at commit time.
+if (existsSync(JOURNAL_PATH)) {
+  const journal = JSON.parse(readFileSync(JOURNAL_PATH, 'utf8')) as Journal
+  const violations: string[] = []
+  for (let i = 1; i < journal.entries.length; i++) {
+    const prev = journal.entries[i - 1]!
+    const cur = journal.entries[i]!
+    if (cur.when <= prev.when) {
+      violations.push(`  ${cur.tag} (when=${cur.when}) <= ${prev.tag} (when=${prev.when})`)
+    }
+  }
+  if (violations.length > 0) {
+    fail(
+      'journal `when` strictly monotonic',
+      `drizzle-orm migrate skips any entry whose \`when\` is <= the latest applied \`created_at\`.
+${violations.join('\n')}
+
+Fix: bump the offending entries' \`when\` in drizzle/meta/_journal.json so each is
+strictly greater than its predecessor. \`when\` is only an ordering signal; bumping
+does not affect already-applied rows in \`drizzle.__drizzle_migrations\`.`,
+    )
+  } else {
+    pass('journal `when` strictly monotonic', `${journal.entries.length} entries`)
+  }
 }
 
 // ---- Check 2: journal ↔ disk ----

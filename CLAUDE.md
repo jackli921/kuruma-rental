@@ -96,7 +96,13 @@ bun run db:verify   # must show 3 green checks
 
 **Hand-written migrations:** use `bun run db:generate --custom --name <name>`, never drop raw `.sql` into `drizzle/`.
 
-**`bun run db:verify`** checks: schema-snapshot sync, journal-disk sync, journal-DB sync. CI enforces via `db-drift` job. Run before any commit touching `schema.ts` or `drizzle/`.
+**`bun run db:verify`** checks: schema-snapshot sync, monotonic journal `when`, journal-disk sync, journal-DB sync. CI enforces via `db-drift` job. Run before any commit touching `schema.ts` or `drizzle/`.
+
+**Gotcha — drizzle-kit migrate silently skips out-of-order timestamps (2026-04-17 incident).** Cherry-picking or rebasing a migration can leave its `when` field in `drizzle/meta/_journal.json` older than the preceding migration. `drizzle-kit migrate` treats migrations whose `when` is older than the last-applied as already-applied and skips them — while still printing "migrations applied successfully". The resulting column drift crashed the booking API (`column "phone" does not exist`) and blocked production Deploy for ~15 min.
+- **`db:verify` now enforces strictly monotonic `when` at commit time** — this is the primary guard. Do not remove the check.
+- **If you rebase/cherry-pick a migration**, bump its `when` in `_journal.json` to `max(previous_when) + 1` before committing; `db:verify` will tell you if you forgot.
+- **Do not trust `drizzle-kit migrate`'s success line alone** — it prints "migrations applied successfully" even when it skipped an entry. The `journal ↔ DB sync` check (count vs count) is what actually catches a skip post-deploy.
+- **Recovery if a skip reaches prod:** apply the skipped SQL manually (`ALTER TABLE … IF NOT EXISTS` form), then insert a matching row into `drizzle.__drizzle_migrations` with the file's SHA256 hash and a `created_at` strictly greater than its predecessor.
 
 ---
 
