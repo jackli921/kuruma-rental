@@ -34,6 +34,9 @@ jobs:
       - name: Check shared export drift
         run: bun run scripts/lint-export-drift.ts
 
+      - name: Check FK indexes
+        run: bun run lint:fk-indexes
+
       - name: Check unused deps and exports
         run: bun run lint:deps
         continue-on-error: true
