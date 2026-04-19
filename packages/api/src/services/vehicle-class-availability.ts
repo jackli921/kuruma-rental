@@ -1,3 +1,4 @@
+import { SYSTEM_CONTEXT } from '../middleware/auth'
 import type {
   AvailabilityRepository,
   VehicleClassRepository,
@@ -41,7 +42,11 @@ export class VehicleClassAvailabilityService {
 
     // Only AVAILABLE vehicles count toward the class total. MAINTENANCE and
     // RETIRED vehicles are never bookable regardless of the date range.
-    const { data: vehicles } = await this.vehicleRepo.findAll({ status: 'AVAILABLE' })
+    // Public catalog endpoint; no user context. SYSTEM_CONTEXT is safe
+    // because this read does not expose per-tenant data.
+    const { data: vehicles } = await this.vehicleRepo.findAll(SYSTEM_CONTEXT, {
+      status: 'AVAILABLE',
+    })
     const inClass = vehicles.filter((v) => v.classId === vc.id)
     const totalCars = inClass.length
     if (totalCars === 0) {

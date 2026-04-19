@@ -5,7 +5,7 @@ import {
   updateVehicleStatusWithReasonSchema,
 } from '@kuruma/shared/validators/vehicle'
 import { Hono } from 'hono'
-import { STAFF_ROLES, requireUser } from '../middleware/auth'
+import { STAFF_ROLES, requireUser, toCallerContext } from '../middleware/auth'
 import { PG_ERROR, pgErrorCode } from '../pg-errors'
 import type { Vehicle, VehicleFilters, VehicleRepository } from '../repositories/types'
 import type { MaintenanceService } from '../services/maintenance'
@@ -17,17 +17,19 @@ export function createVehicleRoutes(
 ) {
   return new Hono()
     .get('/vehicles', async (c) => {
+      const ctx = toCallerContext(requireUser(c))
       const status = c.req.query('status')
       const pg = parsePagination(c, { defaultLimit: 50 })
       if (!pg.ok) return pg.response
       const { limit, offset } = pg
 
       const filters: VehicleFilters = { limit, offset, ...(status ? { status } : {}) }
-      const { data, total } = await repo.findAll(filters)
+      const { data, total } = await repo.findAll(ctx, filters)
       return ok(c, data, 200, { total, limit, offset })
     })
     .get('/vehicles/:id', async (c) => {
-      const vehicle = await repo.findById(c.req.param('id'))
+      const ctx = toCallerContext(requireUser(c))
+      const vehicle = await repo.findById(ctx, c.req.param('id'))
       if (!vehicle) {
         return fail(c, 'Vehicle not found', 404)
       }
@@ -36,12 +38,13 @@ export function createVehicleRoutes(
     .post('/vehicles', async (c) => {
       const user = requireUser(c)
       if (!STAFF_ROLES.has(user.role)) return fail(c, 'Forbidden', 403)
+      const ctx = toCallerContext(user)
 
       const parsed = await parseBody(c, createVehicleSchema)
       if (!parsed.ok) return parsed.response
 
       try {
-        const vehicle = await repo.create({
+        const vehicle = await repo.create(ctx, {
           classId: parsed.data.classId ?? null,
           name: parsed.data.name,
           description: parsed.data.description ?? null,
@@ -76,6 +79,7 @@ export function createVehicleRoutes(
     .patch('/vehicles/bulk-status', async (c) => {
       const user = requireUser(c)
       if (!STAFF_ROLES.has(user.role)) return fail(c, 'Forbidden', 403)
+      const ctx = toCallerContext(user)
 
       const parsed = await parseBody(c, bulkUpdateVehicleStatusSchema)
       if (!parsed.ok) return parsed.response
@@ -84,7 +88,7 @@ export function createVehicleRoutes(
       const uniqueIds = [...new Set(vehicleIds)]
 
       // Pre-check: all IDs must exist and not be RETIRED.
-      const existing = await repo.findByIds(uniqueIds)
+      const existing = await repo.findByIds(ctx, uniqueIds)
       if (existing.length !== uniqueIds.length) {
         return fail(c, 'One or more vehicles not found', 404)
       }
@@ -93,14 +97,15 @@ export function createVehicleRoutes(
         return fail(c, 'Cannot bulk-update retired vehicles', 400)
       }
 
-      const updated = await repo.bulkUpdateStatus(uniqueIds, status)
+      const updated = await repo.bulkUpdateStatus(ctx, uniqueIds, status)
       return ok(c, updated)
     })
     .patch('/vehicles/:id', async (c) => {
       const user = requireUser(c)
       if (!STAFF_ROLES.has(user.role)) return fail(c, 'Forbidden', 403)
+      const ctx = toCallerContext(user)
 
-      const existing = await repo.findById(c.req.param('id'))
+      const existing = await repo.findById(ctx, c.req.param('id'))
       if (!existing) {
         return fail(c, 'Vehicle not found', 404)
       }
@@ -148,7 +153,11 @@ export function createVehicleRoutes(
       }
 
       try {
-        const updated = await repo.update(existing.id, stripUndefined(changes) as Partial<Vehicle>)
+        const updated = await repo.update(
+          ctx,
+          existing.id,
+          stripUndefined(changes) as Partial<Vehicle>,
+        )
         return ok(c, updated)
       } catch (err) {
         if (pgErrorCode(err) === PG_ERROR.UNIQUE_VIOLATION) {
@@ -160,11 +169,13 @@ export function createVehicleRoutes(
     .patch('/vehicles/:id/status', async (c) => {
       const user = requireUser(c)
       if (!STAFF_ROLES.has(user.role)) return fail(c, 'Forbidden', 403)
+      const ctx = toCallerContext(user)
 
       const parsed = await parseBody(c, updateVehicleStatusWithReasonSchema)
       if (!parsed.ok) return parsed.response
 
       const result = await maintenanceService.toggleStatus(
+        ctx,
         c.req.param('id'),
         parsed.data.status,
         parsed.data.reason,
@@ -175,13 +186,14 @@ export function createVehicleRoutes(
     .delete('/vehicles/:id', async (c) => {
       const user = requireUser(c)
       if (!STAFF_ROLES.has(user.role)) return fail(c, 'Forbidden', 403)
+      const ctx = toCallerContext(user)
 
-      const existing = await repo.findById(c.req.param('id'))
+      const existing = await repo.findById(ctx, c.req.param('id'))
       if (!existing) {
         return fail(c, 'Vehicle not found', 404)
       }
 
-      const retired = await repo.softDelete(existing.id)
+      const retired = await repo.softDelete(ctx, existing.id)
       return ok(c, retired)
     })
 }

@@ -49,7 +49,7 @@ beforeAll(async () => {
   testClassId = klass.id
   createdClassIds.push(klass.id)
 
-  testVehicle = await vehicleRepo.create({
+  testVehicle = await vehicleRepo.create(SYSTEM_CONTEXT, {
     classId: testClassId,
     name: 'Booking Test Car',
     description: null,
@@ -188,7 +188,7 @@ describe('DrizzleBookingRepository', () => {
   })
 
   it('findAll filters by vehicleId', async () => {
-    const otherVehicle = await vehicleRepo.create({
+    const otherVehicle = await vehicleRepo.create(SYSTEM_CONTEXT, {
       classId: testClassId,
       name: 'Other Car',
       description: null,
@@ -470,7 +470,7 @@ describe('POST /bookings overlap via HTTP (real Postgres)', () => {
     const httpAvailabilityRepo = new DrizzleAvailabilityRepository(db)
     const httpVehicleClassRepo = new DrizzleVehicleClassRepository(db)
 
-    httpVehicle = await httpVehicleRepo.create({
+    httpVehicle = await httpVehicleRepo.create(SYSTEM_CONTEXT, {
       classId: testClassId,
       name: 'HTTP Overlap Test Car',
       description: null,

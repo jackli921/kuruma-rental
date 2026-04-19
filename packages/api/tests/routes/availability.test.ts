@@ -18,7 +18,7 @@ let availabilityRepo: InMemoryAvailabilityRepository
 async function createTestVehicle(
   overrides: Partial<Omit<Vehicle, 'id' | 'createdAt' | 'updatedAt'>> = {},
 ): Promise<Vehicle> {
-  return vehicleRepo.create({
+  return vehicleRepo.create(SYSTEM_CONTEXT, {
     name: 'Toyota Corolla',
     description: null,
     seats: 5,

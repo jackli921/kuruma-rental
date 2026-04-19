@@ -210,7 +210,7 @@ describe('Vehicle Class CRUD Routes', () => {
 
   describe('DELETE /vehicle-classes/:id', () => {
     async function makeVehicle(classId: string) {
-      return vehicleRepo.create({
+      return vehicleRepo.create(SYSTEM_CONTEXT, {
         classId,
         name: 'Test Car',
         description: null,
@@ -320,7 +320,7 @@ describe('Vehicle Class CRUD Routes', () => {
       const { data: created } = await (await createClass()).json()
       const v = await makeVehicle(created.id)
       await makeBooking(v.id, 'CONFIRMED')
-      await vehicleRepo.softDelete(v.id)
+      await vehicleRepo.softDelete(SYSTEM_CONTEXT, v.id)
       const res = await app.request(`/vehicle-classes/${created.id}`, { method: 'DELETE' })
       expect(res.status).toBe(409)
       const body = await res.json()

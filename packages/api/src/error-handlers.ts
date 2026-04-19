@@ -1,5 +1,6 @@
 import type { Hono } from 'hono'
 import { HTTPException } from 'hono/http-exception'
+import { ForbiddenError } from './middleware/auth'
 
 export function setupGlobalHandlers(app: Hono): void {
   app.onError((err, c) => {
@@ -9,6 +10,12 @@ export function setupGlobalHandlers(app: Hono): void {
     // sanitized branch so internal error messages never leak.
     if (err instanceof HTTPException && err.res) {
       return err.getResponse()
+    }
+    // Repo-layer authz guards (issue #329) throw ForbiddenError when a
+    // caller bypassed the route-level STAFF_ROLES gate. Map to 403 so
+    // clients see a policy denial, not a server outage.
+    if (err instanceof ForbiddenError) {
+      return c.json({ success: false, error: 'Forbidden' }, 403)
     }
     console.error(
       JSON.stringify({

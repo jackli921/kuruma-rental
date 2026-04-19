@@ -71,7 +71,7 @@ afterAll(async () => {
 })
 
 async function createVehicle(): Promise<Vehicle> {
-  const v = await vehicleRepo.create({
+  const v = await vehicleRepo.create(SYSTEM_CONTEXT, {
     classId: testClassId,
     name: 'VD Test Car',
     description: null,

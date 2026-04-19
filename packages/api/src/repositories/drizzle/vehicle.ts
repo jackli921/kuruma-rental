@@ -1,5 +1,6 @@
 import { vehicles } from '@kuruma/shared/db/schema'
 import { type SQL, and, count, eq, inArray, ne, sql } from 'drizzle-orm'
+import { type CallerContext, requireStaffContext } from '../../middleware/auth'
 import type { Vehicle } from '../../stores'
 import type {
   PaginatedResult,
@@ -12,7 +13,10 @@ import { type Db, toVehicle, vehicleColumns } from './shared'
 export class DrizzleVehicleRepository implements VehicleRepository {
   constructor(private readonly db: Db) {}
 
-  async findAll(filters?: VehicleFilters): Promise<PaginatedResult<Vehicle>> {
+  async findAll(
+    _ctx: CallerContext,
+    filters?: VehicleFilters,
+  ): Promise<PaginatedResult<Vehicle>> {
     const conditions: SQL[] = []
 
     if (filters?.status) {
@@ -43,13 +47,13 @@ export class DrizzleVehicleRepository implements VehicleRepository {
     }
   }
 
-  async findById(id: string): Promise<Vehicle | undefined> {
+  async findById(_ctx: CallerContext, id: string): Promise<Vehicle | undefined> {
     const [row] = await this.db.select(vehicleColumns).from(vehicles).where(eq(vehicles.id, id))
 
     return row ? toVehicle(row) : undefined
   }
 
-  async findByIds(ids: string[]): Promise<Vehicle[]> {
+  async findByIds(_ctx: CallerContext, ids: string[]): Promise<Vehicle[]> {
     if (ids.length === 0) return []
     const rows = await this.db
       .select(vehicleColumns)
@@ -58,7 +62,11 @@ export class DrizzleVehicleRepository implements VehicleRepository {
     return rows.map(toVehicle)
   }
 
-  async create(data: Omit<Vehicle, 'id' | 'createdAt' | 'updatedAt'>): Promise<Vehicle> {
+  async create(
+    ctx: CallerContext,
+    data: Omit<Vehicle, 'id' | 'createdAt' | 'updatedAt'>,
+  ): Promise<Vehicle> {
+    requireStaffContext(ctx)
     const [inserted] = await this.db
       .insert(vehicles)
       .values({
@@ -87,10 +95,12 @@ export class DrizzleVehicleRepository implements VehicleRepository {
   }
 
   async update(
+    ctx: CallerContext,
     id: string,
     data: Partial<Vehicle>,
     options?: VehicleUpdateOptions,
   ): Promise<Vehicle | undefined> {
+    requireStaffContext(ctx)
     const { id: _id, createdAt: _createdAt, ...fields } = data
     const conditions = [eq(vehicles.id, id)]
     if (options?.expectedStatus) {
@@ -105,7 +115,8 @@ export class DrizzleVehicleRepository implements VehicleRepository {
     return updated ? toVehicle(updated) : undefined
   }
 
-  async softDelete(id: string): Promise<Vehicle | undefined> {
+  async softDelete(ctx: CallerContext, id: string): Promise<Vehicle | undefined> {
+    requireStaffContext(ctx)
     const [retired] = await this.db
       .update(vehicles)
       .set({ status: 'RETIRED', updatedAt: sql`now()` })
@@ -115,7 +126,12 @@ export class DrizzleVehicleRepository implements VehicleRepository {
     return retired ? toVehicle(retired) : undefined
   }
 
-  async bulkUpdateStatus(ids: string[], status: 'AVAILABLE' | 'MAINTENANCE'): Promise<Vehicle[]> {
+  async bulkUpdateStatus(
+    ctx: CallerContext,
+    ids: string[],
+    status: 'AVAILABLE' | 'MAINTENANCE',
+  ): Promise<Vehicle[]> {
+    requireStaffContext(ctx)
     if (ids.length === 0) return []
     const rows = await this.db
       .update(vehicles)
@@ -126,12 +142,14 @@ export class DrizzleVehicleRepository implements VehicleRepository {
   }
 
   async appendPhotos(
+    ctx: CallerContext,
     id: string,
     urls: string[],
     maxPhotos: number,
   ): Promise<
     { outcome: 'ok'; vehicle: Vehicle } | { outcome: 'cap_exceeded' } | { outcome: 'not_found' }
   > {
+    requireStaffContext(ctx)
     // Single-statement conditional append: only succeed if the resulting
     // cardinality stays within the cap. Concurrent callers serialize at
     // the row level, so two racing uploads cannot both pass the guard.
@@ -153,11 +171,16 @@ export class DrizzleVehicleRepository implements VehicleRepository {
       .returning()
 
     if (updated) return { outcome: 'ok', vehicle: toVehicle(updated) }
-    const existing = await this.findById(id)
+    const existing = await this.findById(ctx, id)
     return existing ? { outcome: 'cap_exceeded' } : { outcome: 'not_found' }
   }
 
-  async removePhotoByUrl(id: string, url: string): Promise<Vehicle | undefined> {
+  async removePhotoByUrl(
+    ctx: CallerContext,
+    id: string,
+    url: string,
+  ): Promise<Vehicle | undefined> {
+    requireStaffContext(ctx)
     // array_remove is atomic — no TOCTOU between read of photos and write.
     const [updated] = await this.db
       .update(vehicles)

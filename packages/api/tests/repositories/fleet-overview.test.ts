@@ -83,7 +83,7 @@ describe('InMemoryFleetOverviewRepository', () => {
   })
 
   it('returns 0% utilization and null bookings for a vehicle with no bookings', async () => {
-    const vehicle = await vehicleRepo.create(baseVehicleInput({ name: 'Unbooked' }))
+    const vehicle = await vehicleRepo.create(SYSTEM_CONTEXT, baseVehicleInput({ name: 'Unbooked' }))
 
     const overviews = await fleetRepo.findFleetOverview(FIXED_NOW)
     const overview = overviews[0]
@@ -99,7 +99,10 @@ describe('InMemoryFleetOverviewRepository', () => {
   })
 
   it('excludes CANCELLED bookings from utilization and count', async () => {
-    const vehicle = await vehicleRepo.create(baseVehicleInput({ name: 'Cancelled' }))
+    const vehicle = await vehicleRepo.create(
+      SYSTEM_CONTEXT,
+      baseVehicleInput({ name: 'Cancelled' }),
+    )
     await bookingRepo.create(
       SYSTEM_CONTEXT,
       baseBookingInput({
@@ -122,7 +125,10 @@ describe('InMemoryFleetOverviewRepository', () => {
     // Booking window: 2026-04-05 10:00 → 2026-04-06 10:00 UTC.
     // Now = 2026-04-11 12:00 UTC, so this sits 5-6 days in the past,
     // squarely inside the 30-day window.
-    const vehicle = await vehicleRepo.create(baseVehicleInput({ name: 'Booked Once' }))
+    const vehicle = await vehicleRepo.create(
+      SYSTEM_CONTEXT,
+      baseVehicleInput({ name: 'Booked Once' }),
+    )
     await bookingRepo.create(
       SYSTEM_CONTEXT,
       baseBookingInput({
@@ -141,7 +147,10 @@ describe('InMemoryFleetOverviewRepository', () => {
   })
 
   it('populates currentBooking when now falls inside a non-CANCELLED booking', async () => {
-    const vehicle = await vehicleRepo.create(baseVehicleInput({ name: 'On Rental' }))
+    const vehicle = await vehicleRepo.create(
+      SYSTEM_CONTEXT,
+      baseVehicleInput({ name: 'On Rental' }),
+    )
     await bookingRepo.create(
       SYSTEM_CONTEXT,
       baseBookingInput({
@@ -163,7 +172,10 @@ describe('InMemoryFleetOverviewRepository', () => {
   })
 
   it('populates nextBooking with the soonest future non-CANCELLED booking', async () => {
-    const vehicle = await vehicleRepo.create(baseVehicleInput({ name: 'Has Future Booking' }))
+    const vehicle = await vehicleRepo.create(
+      SYSTEM_CONTEXT,
+      baseVehicleInput({ name: 'Has Future Booking' }),
+    )
     // Future booking — closer one first in creation order, but we want
     // findFleetOverview to pick the earliest startAt regardless of insert order.
     await bookingRepo.create(
@@ -196,7 +208,10 @@ describe('InMemoryFleetOverviewRepository', () => {
   })
 
   it('excludes CANCELLED bookings from currentBooking and nextBooking', async () => {
-    const vehicle = await vehicleRepo.create(baseVehicleInput({ name: 'All Cancelled' }))
+    const vehicle = await vehicleRepo.create(
+      SYSTEM_CONTEXT,
+      baseVehicleInput({ name: 'All Cancelled' }),
+    )
     await bookingRepo.create(
       SYSTEM_CONTEXT,
       baseBookingInput({
@@ -228,7 +243,10 @@ describe('InMemoryFleetOverviewRepository', () => {
     const renterNameByUserId = new Map<string, string>([['user_alice', 'Alice Smith']])
     fleetRepo = new InMemoryFleetOverviewRepository(vehicleRepo, bookingRepo, renterNameByUserId)
 
-    const vehicle = await vehicleRepo.create(baseVehicleInput({ name: 'Alice Rental' }))
+    const vehicle = await vehicleRepo.create(
+      SYSTEM_CONTEXT,
+      baseVehicleInput({ name: 'Alice Rental' }),
+    )
     await bookingRepo.create(
       SYSTEM_CONTEXT,
       baseBookingInput({
@@ -256,7 +274,10 @@ describe('InMemoryFleetOverviewRepository', () => {
     //   startAt = 2026-03-02T12:00:00Z (40 days before now)
     //   endAt   = 2026-03-22T12:00:00Z (20 days before now)
     //   clipped = [2026-03-12T12:00, 2026-03-22T12:00] = 10 days = 240h
-    const vehicle = await vehicleRepo.create(baseVehicleInput({ name: 'Long Window' }))
+    const vehicle = await vehicleRepo.create(
+      SYSTEM_CONTEXT,
+      baseVehicleInput({ name: 'Long Window' }),
+    )
     await bookingRepo.create(
       SYSTEM_CONTEXT,
       baseBookingInput({
@@ -284,7 +305,10 @@ describe('InMemoryFleetOverviewRepository', () => {
     //   startAt = 2026-04-11T10:00:00Z (2h ago)
     //   endAt   = 2026-04-11T22:00:00Z (10h future)
     //   clipped = [startAt, now] = 2h
-    const vehicle = await vehicleRepo.create(baseVehicleInput({ name: 'Currently Active' }))
+    const vehicle = await vehicleRepo.create(
+      SYSTEM_CONTEXT,
+      baseVehicleInput({ name: 'Currently Active' }),
+    )
     await bookingRepo.create(
       SYSTEM_CONTEXT,
       baseBookingInput({
@@ -304,9 +328,11 @@ describe('InMemoryFleetOverviewRepository', () => {
 
   it('returns one overview row per vehicle and preserves all Vehicle columns', async () => {
     const v1 = await vehicleRepo.create(
+      SYSTEM_CONTEXT,
       baseVehicleInput({ name: 'First', dailyRateJpy: 7500, hourlyRateJpy: 900 }),
     )
     const v2 = await vehicleRepo.create(
+      SYSTEM_CONTEXT,
       baseVehicleInput({ name: 'Second', dailyRateJpy: null, hourlyRateJpy: 1200 }),
     )
 

@@ -14,7 +14,7 @@ export class InMemoryStatsRepository implements StatsRepository {
 
   async getDashboardStats(): Promise<DashboardStats> {
     const [vehicleResult, bookings] = await Promise.all([
-      this.vehicleRepo.findAll({ status: 'AVAILABLE' }),
+      this.vehicleRepo.findAll(SYSTEM_CONTEXT, { status: 'AVAILABLE' }),
       this.bookingRepo.findAll(SYSTEM_CONTEXT),
     ])
 

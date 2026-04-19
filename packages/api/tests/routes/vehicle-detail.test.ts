@@ -29,7 +29,7 @@ const DEFAULT_BUFFER_MS = 60 * 60 * 1000
 async function seedVehicle(
   overrides?: Partial<Omit<Vehicle, 'id' | 'createdAt' | 'updatedAt'>>,
 ): Promise<Vehicle> {
-  return vehicleRepo.create({
+  return vehicleRepo.create(SYSTEM_CONTEXT, {
     name: 'Toyota Alphard',
     description: 'Luxury van',
     photos: ['photo1.jpg'],

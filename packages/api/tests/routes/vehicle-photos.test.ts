@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it } from 'vitest'
 import { createApp } from '../../src/index'
+import { SYSTEM_CONTEXT } from '../../src/middleware/auth'
 import {
   InMemoryAvailabilityRepository,
   InMemoryBookingRepository,
@@ -77,7 +78,7 @@ describe('POST /vehicles/:id/photos', () => {
     const ctx = createTestApp()
     app = ctx.app
     vehicleRepo = ctx.vehicleRepo
-    const v = await vehicleRepo.create(vehicleInput())
+    const v = await vehicleRepo.create(SYSTEM_CONTEXT, vehicleInput())
     vehicleId = v.id
   })
 
@@ -97,7 +98,7 @@ describe('POST /vehicles/:id/photos', () => {
     expect(body.data.uploaded).toHaveLength(1)
     expect(body.data.uploaded[0]).toContain('vehicles/')
 
-    const updated = await vehicleRepo.findById(vehicleId)
+    const updated = await vehicleRepo.findById(SYSTEM_CONTEXT, vehicleId)
     expect(updated?.photos).toHaveLength(1)
   })
 
@@ -178,7 +179,7 @@ describe('POST /vehicles/:id/photos', () => {
 
   it('rejects when vehicle already has 10 photos', async () => {
     const photos = Array.from({ length: 10 }, (_, i) => `https://example.com/photo${i}.jpg`)
-    await vehicleRepo.update(vehicleId, { photos })
+    await vehicleRepo.update(SYSTEM_CONTEXT, vehicleId, { photos })
 
     const headers = await authHeaders()
     const form = makeFormData('extra.jpg', 'image/jpeg', 1024)
@@ -237,7 +238,7 @@ describe('concurrent upload race on photo cap', () => {
   it('serializes appends so cap cannot be exceeded', async () => {
     const ctx = createTestApp()
     const photos = Array.from({ length: 9 }, (_, i) => `https://example.com/photo${i}.jpg`)
-    const v = await ctx.vehicleRepo.create(vehicleInput({ photos }))
+    const v = await ctx.vehicleRepo.create(SYSTEM_CONTEXT, vehicleInput({ photos }))
     const headers = await authHeaders()
 
     // Three concurrent single-photo uploads against a vehicle with 9 existing.
@@ -255,7 +256,7 @@ describe('concurrent upload race on photo cap', () => {
     const statuses = responses.map((r) => r.status).sort()
     expect(statuses).toEqual([201, 400, 400])
 
-    const updated = await ctx.vehicleRepo.findById(v.id)
+    const updated = await ctx.vehicleRepo.findById(SYSTEM_CONTEXT, v.id)
     expect(updated?.photos).toHaveLength(10)
   })
 })
@@ -263,7 +264,7 @@ describe('concurrent upload race on photo cap', () => {
 describe('upload → delete round-trip', () => {
   it('upload then delete by URL removes file from storage', async () => {
     const ctx = createTestApp()
-    const vehicle = await ctx.vehicleRepo.create(vehicleInput())
+    const vehicle = await ctx.vehicleRepo.create(SYSTEM_CONTEXT, vehicleInput())
     const headers = await authHeaders()
 
     const form = makeFormData('car.jpg', 'image/jpeg', 1024)
@@ -281,7 +282,7 @@ describe('upload → delete round-trip', () => {
     )
     expect(deleteRes.status).toBe(200)
 
-    const updated = await ctx.vehicleRepo.findById(vehicle.id)
+    const updated = await ctx.vehicleRepo.findById(SYSTEM_CONTEXT, vehicle.id)
     expect(updated?.photos).toEqual([])
   })
 })
@@ -296,6 +297,7 @@ describe('DELETE /vehicles/:id/photos?url=', () => {
     app = ctx.app
     vehicleRepo = ctx.vehicleRepo
     const v = await vehicleRepo.create(
+      SYSTEM_CONTEXT,
       vehicleInput({ photos: ['https://test.com/a.jpg', 'https://test.com/b.jpg'] }),
     )
     vehicleId = v.id
@@ -315,7 +317,7 @@ describe('DELETE /vehicles/:id/photos?url=', () => {
     expect(body.data.deleted).toBe('https://test.com/a.jpg')
     expect(body.data.remaining).toBe(1)
 
-    const updated = await vehicleRepo.findById(vehicleId)
+    const updated = await vehicleRepo.findById(SYSTEM_CONTEXT, vehicleId)
     expect(updated?.photos).toEqual(['https://test.com/b.jpg'])
   })
 

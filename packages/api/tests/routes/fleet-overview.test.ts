@@ -54,7 +54,7 @@ describe('GET /vehicles/fleet-overview', () => {
   })
 
   it('returns an enriched row per vehicle with default zeroed metrics', async () => {
-    await vehicleRepo.create({
+    await vehicleRepo.create(SYSTEM_CONTEXT, {
       name: 'Toyota Corolla',
       description: null,
       photos: [],
@@ -99,7 +99,7 @@ describe('GET /vehicles/fleet-overview', () => {
   })
 
   it('serializes current/next booking Date fields as ISO strings', async () => {
-    const vehicle = await vehicleRepo.create({
+    const vehicle = await vehicleRepo.create(SYSTEM_CONTEXT, {
       name: 'On Rental',
       description: null,
       photos: [],
@@ -146,7 +146,7 @@ describe('GET /vehicles/fleet-overview', () => {
   })
 
   it('includes activeMaintenanceReason when vehicle is in MAINTENANCE', async () => {
-    const vehicle = await vehicleRepo.create({
+    const vehicle = await vehicleRepo.create(SYSTEM_CONTEXT, {
       name: 'Under Repair',
       description: null,
       photos: [],
@@ -177,7 +177,7 @@ describe('GET /vehicles/fleet-overview', () => {
   })
 
   it('returns null activeMaintenanceReason for AVAILABLE vehicles', async () => {
-    await vehicleRepo.create({
+    await vehicleRepo.create(SYSTEM_CONTEXT, {
       name: 'Ready Car',
       description: null,
       photos: [],

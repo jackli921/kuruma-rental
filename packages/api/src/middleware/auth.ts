@@ -49,8 +49,34 @@ export const SYSTEM_CONTEXT: CallerContext = { userId: 'system', role: 'ADMIN' }
 /** Roles that can manage bookings across all users */
 export const PRIVILEGED_ROLES: ReadonlySet<UserRole> = new Set(['STAFF', 'ADMIN', 'PARTNER'])
 
-/** Roles that can manage vehicles */
+/**
+ * Roles that can manage vehicles. PARTNER is deliberately excluded —
+ * 3rd-party API callers (Trip.com) manage bookings, not fleet inventory.
+ */
 export const STAFF_ROLES: ReadonlySet<UserRole> = new Set(['STAFF', 'ADMIN'])
+
+/**
+ * Thrown by repo-layer guards when a non-authorised caller hits a
+ * protected method. The global error handler maps this to a 403 response
+ * so a bypassed route-level gate surfaces as a policy denial, not a 500.
+ */
+export class ForbiddenError extends Error {
+  readonly name = 'ForbiddenError'
+  constructor(message = 'Forbidden') {
+    super(message)
+  }
+}
+
+/**
+ * Repo-layer guard for mutation methods. Throws `ForbiddenError` if the
+ * caller is not a STAFF role. Defence in depth against a route forgetting
+ * its `STAFF_ROLES` gate (issue #329). `SYSTEM_CONTEXT` (role: ADMIN) passes.
+ */
+export function requireStaffContext(ctx: CallerContext): void {
+  if (!STAFF_ROLES.has(ctx.role)) {
+    throw new ForbiddenError('STAFF role required')
+  }
+}
 
 export function getUser(c: { get: (key: string) => unknown }): AuthUser | undefined {
   const raw = c.get('user')

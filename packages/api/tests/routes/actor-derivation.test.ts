@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { createApp } from '../../src/index'
+import { SYSTEM_CONTEXT } from '../../src/middleware/auth'
 import {
   InMemoryAvailabilityRepository,
   InMemoryBookingRepository,
@@ -48,7 +49,7 @@ describe('actor derivation from JWT', () => {
     const { app, vehicleRepo, classId } = await createTestApp()
     const headers = await authHeaders({ sub: 'real-user-id', role: 'RENTER' })
 
-    const vehicle = await vehicleRepo.create({
+    const vehicle = await vehicleRepo.create(SYSTEM_CONTEXT, {
       classId,
       name: 'Test Car',
       description: null,
@@ -92,7 +93,7 @@ describe('actor derivation from JWT', () => {
     const ownerHeaders = await authHeaders({ sub: 'owner-user', role: 'RENTER' })
     const attackerHeaders = await authHeaders({ sub: 'attacker-user', role: 'RENTER' })
 
-    const vehicle = await vehicleRepo.create({
+    const vehicle = await vehicleRepo.create(SYSTEM_CONTEXT, {
       classId,
       name: 'Test Car',
       description: null,
@@ -175,7 +176,7 @@ describe('actor derivation from JWT', () => {
     const renterHeaders = await authHeaders({ sub: 'renter-user', role: 'RENTER' })
     const staffHeaders = await authHeaders({ sub: 'staff-user', role: 'STAFF' })
 
-    const vehicle = await vehicleRepo.create({
+    const vehicle = await vehicleRepo.create(SYSTEM_CONTEXT, {
       classId,
       name: 'Test Car',
       description: null,

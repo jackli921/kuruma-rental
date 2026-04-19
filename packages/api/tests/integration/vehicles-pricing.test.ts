@@ -12,6 +12,7 @@
 //     bun run test:integration
 
 import { afterEach, describe, expect, it } from 'vitest'
+import { SYSTEM_CONTEXT } from '../../src/middleware/auth'
 import { DrizzleVehicleRepository } from '../../src/repositories/drizzle'
 import type { Db } from '../../src/repositories/drizzle'
 import type { Vehicle } from '../../src/stores'
@@ -91,32 +92,41 @@ function baseVehicle(
 describe('DrizzleVehicleRepository — pricing (#48)', () => {
   describe('create', () => {
     it('round-trips a vehicle with only dailyRateJpy', async () => {
-      const created = await repo.create(baseVehicle({ dailyRateJpy: 9000, hourlyRateJpy: null }))
+      const created = await repo.create(
+        SYSTEM_CONTEXT,
+        baseVehicle({ dailyRateJpy: 9000, hourlyRateJpy: null }),
+      )
       createdVehicleIds.push(created.id)
 
       expect(created.dailyRateJpy).toBe(9000)
       expect(created.hourlyRateJpy).toBeNull()
 
-      const found = await repo.findById(created.id)
+      const found = await repo.findById(SYSTEM_CONTEXT, created.id)
       expect(found).toBeDefined()
       expect(found!.dailyRateJpy).toBe(9000)
       expect(found!.hourlyRateJpy).toBeNull()
     })
 
     it('round-trips a vehicle with only hourlyRateJpy', async () => {
-      const created = await repo.create(baseVehicle({ dailyRateJpy: null, hourlyRateJpy: 1500 }))
+      const created = await repo.create(
+        SYSTEM_CONTEXT,
+        baseVehicle({ dailyRateJpy: null, hourlyRateJpy: 1500 }),
+      )
       createdVehicleIds.push(created.id)
 
       expect(created.dailyRateJpy).toBeNull()
       expect(created.hourlyRateJpy).toBe(1500)
 
-      const found = await repo.findById(created.id)
+      const found = await repo.findById(SYSTEM_CONTEXT, created.id)
       expect(found!.dailyRateJpy).toBeNull()
       expect(found!.hourlyRateJpy).toBe(1500)
     })
 
     it('round-trips a vehicle with both rates set', async () => {
-      const created = await repo.create(baseVehicle({ dailyRateJpy: 12000, hourlyRateJpy: 2000 }))
+      const created = await repo.create(
+        SYSTEM_CONTEXT,
+        baseVehicle({ dailyRateJpy: 12000, hourlyRateJpy: 2000 }),
+      )
       createdVehicleIds.push(created.id)
 
       expect(created.dailyRateJpy).toBe(12000)
@@ -124,7 +134,10 @@ describe('DrizzleVehicleRepository — pricing (#48)', () => {
     })
 
     it('accepts zero as a valid rate (free promo)', async () => {
-      const created = await repo.create(baseVehicle({ dailyRateJpy: 0, hourlyRateJpy: null }))
+      const created = await repo.create(
+        SYSTEM_CONTEXT,
+        baseVehicle({ dailyRateJpy: 0, hourlyRateJpy: null }),
+      )
       createdVehicleIds.push(created.id)
 
       expect(created.dailyRateJpy).toBe(0)
@@ -136,21 +149,21 @@ describe('DrizzleVehicleRepository — pricing (#48)', () => {
       // the validator (e.g. a future migration script or an ops repair
       // query) must not be able to sneak an un-priced vehicle in.
       await expectConstraintViolation(
-        repo.create(baseVehicle({ dailyRateJpy: null, hourlyRateJpy: null })),
+        repo.create(SYSTEM_CONTEXT, baseVehicle({ dailyRateJpy: null, hourlyRateJpy: null })),
         'vehicles_pricing_at_least_one',
       )
     })
 
     it('rejects a negative daily rate at the DB level (CHECK constraint)', async () => {
       await expectConstraintViolation(
-        repo.create(baseVehicle({ dailyRateJpy: -100 })),
+        repo.create(SYSTEM_CONTEXT, baseVehicle({ dailyRateJpy: -100 })),
         'vehicles_daily_rate_non_negative',
       )
     })
 
     it('rejects a negative hourly rate at the DB level (CHECK constraint)', async () => {
       await expectConstraintViolation(
-        repo.create(baseVehicle({ dailyRateJpy: null, hourlyRateJpy: -50 })),
+        repo.create(SYSTEM_CONTEXT, baseVehicle({ dailyRateJpy: null, hourlyRateJpy: -50 })),
         'vehicles_hourly_rate_non_negative',
       )
     })
@@ -158,10 +171,10 @@ describe('DrizzleVehicleRepository — pricing (#48)', () => {
 
   describe('update', () => {
     it('updates dailyRateJpy independently of other fields', async () => {
-      const created = await repo.create(baseVehicle({ dailyRateJpy: 8000 }))
+      const created = await repo.create(SYSTEM_CONTEXT, baseVehicle({ dailyRateJpy: 8000 }))
       createdVehicleIds.push(created.id)
 
-      const updated = await repo.update(created.id, { dailyRateJpy: 10000 })
+      const updated = await repo.update(SYSTEM_CONTEXT, created.id, { dailyRateJpy: 10000 })
 
       expect(updated).toBeDefined()
       expect(updated!.dailyRateJpy).toBe(10000)
@@ -171,50 +184,63 @@ describe('DrizzleVehicleRepository — pricing (#48)', () => {
     })
 
     it('allows setting hourlyRateJpy on a daily-only vehicle', async () => {
-      const created = await repo.create(baseVehicle({ dailyRateJpy: 8000, hourlyRateJpy: null }))
+      const created = await repo.create(
+        SYSTEM_CONTEXT,
+        baseVehicle({ dailyRateJpy: 8000, hourlyRateJpy: null }),
+      )
       createdVehicleIds.push(created.id)
 
-      const updated = await repo.update(created.id, { hourlyRateJpy: 1200 })
+      const updated = await repo.update(SYSTEM_CONTEXT, created.id, { hourlyRateJpy: 1200 })
 
       expect(updated!.dailyRateJpy).toBe(8000)
       expect(updated!.hourlyRateJpy).toBe(1200)
     })
 
     it('allows clearing dailyRateJpy when hourlyRateJpy remains set', async () => {
-      const created = await repo.create(baseVehicle({ dailyRateJpy: 8000, hourlyRateJpy: 1200 }))
+      const created = await repo.create(
+        SYSTEM_CONTEXT,
+        baseVehicle({ dailyRateJpy: 8000, hourlyRateJpy: 1200 }),
+      )
       createdVehicleIds.push(created.id)
 
-      const updated = await repo.update(created.id, { dailyRateJpy: null })
+      const updated = await repo.update(SYSTEM_CONTEXT, created.id, { dailyRateJpy: null })
 
       expect(updated!.dailyRateJpy).toBeNull()
       expect(updated!.hourlyRateJpy).toBe(1200)
     })
 
     it('rejects an update that would leave both rates null (CHECK constraint)', async () => {
-      const created = await repo.create(baseVehicle({ dailyRateJpy: 8000, hourlyRateJpy: null }))
+      const created = await repo.create(
+        SYSTEM_CONTEXT,
+        baseVehicle({ dailyRateJpy: 8000, hourlyRateJpy: null }),
+      )
       createdVehicleIds.push(created.id)
 
       await expectConstraintViolation(
-        repo.update(created.id, { dailyRateJpy: null, hourlyRateJpy: null }),
+        repo.update(SYSTEM_CONTEXT, created.id, { dailyRateJpy: null, hourlyRateJpy: null }),
         'vehicles_pricing_at_least_one',
       )
 
       // The original row must be unchanged (CHECK constraint rolls the
       // transaction back).
-      const stillThere = await repo.findById(created.id)
+      const stillThere = await repo.findById(SYSTEM_CONTEXT, created.id)
       expect(stillThere!.dailyRateJpy).toBe(8000)
     })
   })
 
   describe('findAll', () => {
     it('returns the new rate columns on every row', async () => {
-      const a = await repo.create(baseVehicle({ name: 'Car A', dailyRateJpy: 8000 }))
+      const a = await repo.create(
+        SYSTEM_CONTEXT,
+        baseVehicle({ name: 'Car A', dailyRateJpy: 8000 }),
+      )
       const b = await repo.create(
+        SYSTEM_CONTEXT,
         baseVehicle({ name: 'Car B', dailyRateJpy: null, hourlyRateJpy: 1500 }),
       )
       createdVehicleIds.push(a.id, b.id)
 
-      const { data: all } = await repo.findAll()
+      const { data: all } = await repo.findAll(SYSTEM_CONTEXT)
       const aRow = all.find((v) => v.id === a.id)!
       const bRow = all.find((v) => v.id === b.id)!
 

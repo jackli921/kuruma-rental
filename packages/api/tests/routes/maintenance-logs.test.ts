@@ -1,5 +1,6 @@
 import { Hono } from 'hono'
 import { beforeEach, describe, expect, it } from 'vitest'
+import { SYSTEM_CONTEXT } from '../../src/middleware/auth'
 import { InMemoryMaintenanceLogRepository } from '../../src/repositories/in-memory'
 import { InMemoryVehicleRepository } from '../../src/repositories/in-memory'
 import type { RunInTransaction } from '../../src/repositories/types'
@@ -223,7 +224,7 @@ describe('Maintenance Logs', () => {
       }
 
       const service = new MaintenanceService(vehicleRepo, maintenanceLogRepo, rollbackTransaction)
-      const vehicle = await vehicleRepo.create({
+      const vehicle = await vehicleRepo.create(SYSTEM_CONTEXT, {
         name: 'Test Car',
         classId: null,
         description: null,
@@ -249,15 +250,15 @@ describe('Maintenance Logs', () => {
 
       // Guard: snapshot must have captured the vehicle — if store field was renamed,
       // the snapshot would be empty and rollback silently does nothing.
-      expect(await vehicleRepo.findById(vehicle.id)).toBeDefined()
+      expect(await vehicleRepo.findById(SYSTEM_CONTEXT, vehicle.id)).toBeDefined()
 
       // toggleStatus should propagate the error from the transaction
-      await expect(service.toggleStatus(vehicle.id, 'MAINTENANCE', 'Oil change')).rejects.toThrow(
-        'simulated DB failure',
-      )
+      await expect(
+        service.toggleStatus(SYSTEM_CONTEXT, vehicle.id, 'MAINTENANCE', 'Oil change'),
+      ).rejects.toThrow('simulated DB failure')
 
       // Vehicle status must remain AVAILABLE — rolled back
-      const after = await vehicleRepo.findById(vehicle.id)
+      const after = await vehicleRepo.findById(SYSTEM_CONTEXT, vehicle.id)
       expect(after?.status).toBe('AVAILABLE')
     })
   })
