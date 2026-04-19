@@ -48,21 +48,30 @@ jobs:
           bun run db:migrate
           bun run db:verify
 
-      # 2. Set API Worker secrets (idempotent — wrangler secret put is a
-      # full replace, so running every deploy keeps the Worker in sync
-      # with whatever is in GitHub Secrets).
-      # IMPORTANT: AUTH_SECRET must match between API and Web workers.
-      # If you add a shared secret, add it to BOTH worker sections.
-      - name: Set API Worker secrets
-        working-directory: packages/api
-        run: |
-          echo "${{ secrets.PROD_DATABASE_URL }}" | npx wrangler secret put DATABASE_URL
-          echo "${{ secrets.AUTH_SECRET }}" | npx wrangler secret put AUTH_SECRET
-
-      # 3. Deploy API Worker. First-time run creates the Worker.
+      # 2. Deploy API Worker. First-time run creates the Worker.
+      # Secrets are NOT re-asserted on every deploy: wrangler 4's gradual
+      # deployments refuse `secret put` when there's an un-promoted pending
+      # version (cloudflare/workers-sdk#6763), and the old re-assert-every-
+      # deploy pattern accumulated those pending versions until deploys
+      # locked up. Rotate secrets via rotate-secrets.yml (workflow_dispatch);
+      # the presence check in step 3 fails the deploy loudly if one is gone.
       - name: Deploy API Worker
         working-directory: packages/api
         run: npx wrangler deploy
+
+      # 3. Verify required secrets exist on the API Worker. Read-only drift
+      # detector — catches "secret got deleted or never rotated" but NOT
+      # value mismatches (CF never returns secret values). Source-of-truth
+      # is GitHub Secrets, enforced by rotate-secrets.yml.
+      - name: Verify API Worker secrets present
+        working-directory: packages/api
+        run: |
+          secrets_json=$(npx wrangler secret list)
+          for key in DATABASE_URL AUTH_SECRET; do
+            echo "$secrets_json" | jq -e --arg k "$key" 'any(.[]; .name == $k)' > /dev/null \
+              || { echo "::error::Missing required secret on API Worker: $key (rotate via rotate-secrets.yml)"; exit 1; }
+          done
+          echo "API Worker secrets present"
 
       # 4. Smoke test the API before we point web traffic at it.
       # /health must return 200 and /bookings must not 500 (catches
@@ -77,16 +86,7 @@ jobs:
           curl -fsS --retry 10 --retry-delay 3 --retry-all-errors "$API_WORKER_URL/health"
           echo "API smoke test passed"
 
-      # 5. Set Web Worker secrets (same idempotent pattern).
-      - name: Set Web Worker secrets
-        working-directory: packages/web
-        run: |
-          echo "${{ secrets.PROD_DATABASE_URL }}" | npx wrangler secret put DATABASE_URL
-          echo "${{ secrets.AUTH_SECRET }}" | npx wrangler secret put AUTH_SECRET
-          echo "${{ secrets.AUTH_GOOGLE_ID }}" | npx wrangler secret put AUTH_GOOGLE_ID
-          echo "${{ secrets.AUTH_GOOGLE_SECRET }}" | npx wrangler secret put AUTH_GOOGLE_SECRET
-
-      # 6. Build web. NEXT_PUBLIC_API_URL must be set at build time --
+      # 5. Build web. NEXT_PUBLIC_API_URL must be set at build time --
       # Next.js bakes NEXT_PUBLIC_* into the JS bundle, it is NOT
       # resolved at runtime. This is why the current production is
       # broken: web was built without this set and fell back to
@@ -113,7 +113,19 @@ jobs:
         working-directory: packages/web
         run: npx wrangler deploy
 
-      # 7. Smoke test the web landing page (public, no auth required).
+      # 7. Verify required secrets exist on the Web Worker. Same read-only
+      # drift detector as the API step — see that step's comment for why.
+      - name: Verify Web Worker secrets present
+        working-directory: packages/web
+        run: |
+          secrets_json=$(npx wrangler secret list)
+          for key in DATABASE_URL AUTH_SECRET AUTH_GOOGLE_ID AUTH_GOOGLE_SECRET; do
+            echo "$secrets_json" | jq -e --arg k "$key" 'any(.[]; .name == $k)' > /dev/null \
+              || { echo "::error::Missing required secret on Web Worker: $key (rotate via rotate-secrets.yml)"; exit 1; }
+          done
+          echo "Web Worker secrets present"
+
+      # 8. Smoke test the web landing page (public, no auth required).
       # Same retry rationale as the API smoke test.
       - name: Smoke test Web
         run: |
