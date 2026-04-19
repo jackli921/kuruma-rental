@@ -16,7 +16,8 @@ export interface Customer {
 
 export interface CustomerBookingSummary {
   id: string
-  vehicleId: string
+  // null for bookings created with a vehicle class but no specific vehicle assigned yet (issue #308)
+  vehicleId: string | null
   vehicleName: string | null
   startAt: string
   endAt: string

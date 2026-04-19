@@ -62,11 +62,19 @@ export class DrizzleMessageRepository implements MessageRepository {
     return updated ? normaliseMessage(updated) : undefined
   }
 
-  async findByIdempotencyKey(key: string): Promise<Message | undefined> {
+  async findByIdempotencyKey(ctx: CallerContext, key: string): Promise<Message | undefined> {
+    // CallerContext scoping (issue #328): the key is sender-owned, so
+    // non-privileged callers only match messages they themselves sent.
+    // Privileged roles bypass the sender filter.
+    const conditions = [eq(messages.idempotencyKey, key)]
+    if (!PRIVILEGED_ROLES.has(ctx.role)) {
+      conditions.push(eq(messages.senderId, ctx.userId))
+    }
+
     const rows = (await this.db
       .select(messageColumns)
       .from(messages)
-      .where(eq(messages.idempotencyKey, key))) as Array<Parameters<typeof normaliseMessage>[0]>
+      .where(and(...conditions))) as Array<Parameters<typeof normaliseMessage>[0]>
     const [row] = rows
     return row ? normaliseMessage(row) : undefined
   }

@@ -4,18 +4,34 @@ import {
   InMemoryAvailabilityRepository,
   InMemoryBookingRepository,
   InMemoryStatsRepository,
+  InMemoryVehicleClassRepository,
   InMemoryVehicleRepository,
 } from '../../src/repositories/in-memory'
 import { authHeaders, setupAuthEnv } from '../helpers/auth'
 
 const TEST_API_KEY = 'test-stats-key'
 
-function createTestApp() {
+async function createTestApp() {
   setupAuthEnv()
   const vehicleRepo = new InMemoryVehicleRepository()
   const bookingRepo = new InMemoryBookingRepository()
   const availabilityRepo = new InMemoryAvailabilityRepository(vehicleRepo, bookingRepo)
   const statsRepo = new InMemoryStatsRepository(vehicleRepo, bookingRepo)
+  const vehicleClassRepo = new InMemoryVehicleClassRepository()
+  const klass = await vehicleClassRepo.create({
+    name: 'Compact',
+    slug: 'compact',
+    description: null,
+    photos: [],
+    seats: 5,
+    luggageCapacity: 2,
+    transmission: 'AUTO',
+    fuelType: null,
+    dailyRateJpy: 8000,
+    hourlyRateJpy: null,
+    sortOrder: 0,
+    status: 'ACTIVE',
+  })
 
   return {
     app: createApp({
@@ -23,9 +39,11 @@ function createTestApp() {
       bookingRepo,
       availabilityRepo,
       statsRepo,
+      vehicleClassRepo,
     }),
     vehicleRepo,
     bookingRepo,
+    classId: klass.id,
   }
 }
 
@@ -35,7 +53,7 @@ beforeAll(() => {
 
 describe('GET /stats', () => {
   it('returns 401 without API key', async () => {
-    const { app } = createTestApp()
+    const { app } = await createTestApp()
     const res = await app.request('/stats')
 
     expect(res.status).toBe(401)
@@ -44,7 +62,7 @@ describe('GET /stats', () => {
   })
 
   it('returns 401 with wrong API key', async () => {
-    const { app } = createTestApp()
+    const { app } = await createTestApp()
     const res = await app.request('/stats', {
       headers: { 'X-API-Key': 'wrong-key' },
     })
@@ -53,7 +71,7 @@ describe('GET /stats', () => {
   })
 
   it('returns 200 with all zeros for empty stores', async () => {
-    const { app } = createTestApp()
+    const { app } = await createTestApp()
     const res = await app.request('/stats', {
       headers: { 'X-API-Key': TEST_API_KEY },
     })
@@ -73,7 +91,7 @@ describe('GET /stats', () => {
   })
 
   it('returns correct counts after creating vehicles and bookings', async () => {
-    const { app } = createTestApp()
+    const { app, classId } = await createTestApp()
     const staffHeaders = await authHeaders({ sub: 'staff-user', role: 'STAFF' })
     const renterHeaders = await authHeaders({ sub: 'renter-user', role: 'RENTER' })
 
@@ -82,6 +100,7 @@ describe('GET /stats', () => {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', ...staffHeaders },
       body: JSON.stringify({
+        classId,
         name: 'Toyota Prius',
         description: 'Hybrid',
         seats: 5,
@@ -94,6 +113,7 @@ describe('GET /stats', () => {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', ...staffHeaders },
       body: JSON.stringify({
+        classId,
         name: 'Honda Fit',
         description: 'Compact',
         seats: 5,
@@ -106,6 +126,7 @@ describe('GET /stats', () => {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', ...staffHeaders },
       body: JSON.stringify({
+        classId,
         name: 'Suzuki Swift',
         description: 'Under repair',
         seats: 5,
@@ -131,6 +152,7 @@ describe('GET /stats', () => {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', ...renterHeaders },
       body: JSON.stringify({
+        classId,
         vehicleId: availableVehicle.id,
         startAt: '2026-05-01T10:00:00Z',
         endAt: '2026-05-03T10:00:00Z',
@@ -141,6 +163,7 @@ describe('GET /stats', () => {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', ...renterHeaders },
       body: JSON.stringify({
+        classId,
         vehicleId: availableVehicle.id,
         startAt: '2026-06-01T10:00:00Z',
         endAt: '2026-06-03T10:00:00Z',

@@ -224,6 +224,10 @@
       "title": "車両管理",
       "subtitle": "車両の管理",
       "empty": "車両はまだ追加されていません",
+      "group": {
+        "unassigned": "未割り当て",
+        "vehicleCount": "{count}台"
+      },
       "loadError": "車両情報を読み込めませんでした",
       "retry": "再試行",
       "addVehicle": "車両を追加",
@@ -303,7 +307,9 @@
         "year": "年式",
         "yearPlaceholder": "例: 2022",
         "color": "色",
-        "colorPlaceholder": "例: ホワイト"
+        "colorPlaceholder": "例: ホワイト",
+        "class": "クラス",
+        "classNone": "未割り当て"
       },
       "photos": {
         "heading": "写真",

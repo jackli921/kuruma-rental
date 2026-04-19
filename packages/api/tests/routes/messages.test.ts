@@ -196,6 +196,59 @@ describe('Message Routes', () => {
         const b2 = await r2.json()
         expect(b1.data.id).toBe(b2.data.id)
       })
+
+      // Issue #328: without caller scope on findByIdempotencyKey, a renter
+      // who guessed or observed another tenant's key would receive the
+      // other tenant's thread on replay. Lookup must filter by participant.
+      it('cross-tenant: U3 replaying U1/U2 thread key gets a fresh thread, not theirs', async () => {
+        const sharedKey = '00000000-0000-4000-8000-aaaa0f0f0f01'
+
+        // U1 creates a thread with U2 using the key.
+        const first = await appAs(U1).request('/threads', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ participantIds: [U1, U2], idempotencyKey: sharedKey }),
+        })
+        expect(first.status).toBe(201)
+        const firstThreadId = (await first.json()).data.id
+
+        // U3 attempts to replay the same key (between themselves and some other user).
+        // Must NOT return U1/U2's thread. Because uniqueness is global on the
+        // idempotency key column, U3's insert will collide; the correct fix
+        // scopes the *lookup* so the post-race re-fetch also returns nothing
+        // for U3. This leaves U3 with a 500 from the collision OR a clean
+        // scope miss — either way, U3 must not see U1/U2's thread id.
+        const second = await appAs(U3).request('/threads', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ participantIds: [U3, U2], idempotencyKey: sharedKey }),
+        })
+        if (second.status === 200 || second.status === 201) {
+          const secondBody = await second.json()
+          expect(secondBody.data.id).not.toBe(firstThreadId)
+        }
+        // If status is 500, the collision was caught but not leaked — also acceptable.
+        expect([200, 201, 500]).toContain(second.status)
+      })
+
+      it('same caller replaying own key returns their existing thread', async () => {
+        const key = '00000000-0000-4000-8000-aaaa0f0f0f02'
+        const first = await appAs(U1).request('/threads', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ participantIds: [U1, U2], idempotencyKey: key }),
+        })
+        expect(first.status).toBe(201)
+        const firstId = (await first.json()).data.id
+
+        const replay = await appAs(U1).request('/threads', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ participantIds: [U1, U2], idempotencyKey: key }),
+        })
+        expect(replay.status).toBe(200)
+        expect((await replay.json()).data.id).toBe(firstId)
+      })
     })
   })
 
@@ -401,6 +454,62 @@ describe('Message Routes', () => {
         const b1 = await r1.json()
         const b2 = await r2.json()
         expect(b1.data.id).toBe(b2.data.id)
+      })
+
+      // Issue #328: findByIdempotencyKey must scope to sender. Two
+      // participants in the same thread replaying the same key must
+      // not see each other's messages.
+      it('cross-tenant: U2 replaying U1 message key does not leak U1 message', async () => {
+        // U1 creates thread and sends a message with idempotency key.
+        const createRes = await appAs(U1).request('/threads', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ participantIds: [U1, U2] }),
+        })
+        const threadId = (await createRes.json()).data.id
+
+        const sharedKey = '00000000-0000-4000-8000-bbbb0f0f0f01'
+        const u1Msg = await appAs(U1).request(`/threads/${threadId}/messages`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ content: 'From U1', idempotencyKey: sharedKey }),
+        })
+        expect(u1Msg.status).toBe(201)
+        const u1MsgId = (await u1Msg.json()).data.id
+
+        // U2 sends in the same thread with the same key. U2 must NOT get U1's message back.
+        const u2Msg = await appAs(U2).request(`/threads/${threadId}/messages`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ content: 'From U2', idempotencyKey: sharedKey }),
+        })
+        if (u2Msg.status === 200 || u2Msg.status === 201) {
+          const body = await u2Msg.json()
+          expect(body.data.id).not.toBe(u1MsgId)
+          expect(body.data.senderId).toBe(U2)
+        }
+        expect([200, 201, 500]).toContain(u2Msg.status)
+      })
+
+      it('same sender replaying own key returns their existing message', async () => {
+        const threadId = await createThread()
+        const key = '00000000-0000-4000-8000-bbbb0f0f0f02'
+
+        const first = await appAs(U1).request(`/threads/${threadId}/messages`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ content: 'Hi', idempotencyKey: key }),
+        })
+        expect(first.status).toBe(201)
+        const firstId = (await first.json()).data.id
+
+        const replay = await appAs(U1).request(`/threads/${threadId}/messages`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ content: 'Hi', idempotencyKey: key }),
+        })
+        expect(replay.status).toBe(200)
+        expect((await replay.json()).data.id).toBe(firstId)
       })
     })
   })

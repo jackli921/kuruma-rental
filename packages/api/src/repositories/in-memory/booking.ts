@@ -13,6 +13,9 @@ export function getConflictingBookings(
   to: Date,
 ): Booking[] {
   return bookings.filter((booking) => {
+    // Issue #308: unassigned bookings (vehicleId=null) don't conflict with a
+    // specific vehicle at the row level. Class-level capacity is evaluated
+    // in AvailabilityService (see #301b).
     if (booking.vehicleId !== vehicleId) return false
     if (!BLOCKING_STATUSES.has(booking.status)) return false
 
@@ -104,6 +107,9 @@ export class InMemoryBookingRepository implements BookingRepository {
     const ids = new Set(vehicleIds)
     let count = 0
     for (const booking of this.store.values()) {
+      // Issue #308: bookings with a class but no vehicle assigned yet cannot
+      // belong to a specific vehicle, so they cannot block class archive.
+      if (booking.vehicleId === null) continue
       if (ids.has(booking.vehicleId) && BLOCKING_STATUSES.has(booking.status)) count++
     }
     return count
@@ -119,9 +125,13 @@ export class InMemoryBookingRepository implements BookingRepository {
     }
 
     // Mirror the DB-level `bookings_no_overlap` exclusion constraint so in-memory
-    // tests exercise the same conflict behavior as real Postgres.
-    if (BLOCKING_STATUSES.has(data.status)) {
+    // tests exercise the same conflict behavior as real Postgres. The PG
+    // exclusion is defined WITH ("vehicleId" =, tstzrange &&); Postgres only
+    // excludes rows where every `=` operand is non-null, so unassigned
+    // bookings (vehicleId=null) cannot collide with anything. Mirror that here.
+    if (BLOCKING_STATUSES.has(data.status) && data.vehicleId !== null) {
       for (const existing of this.store.values()) {
+        if (existing.vehicleId === null) continue
         if (existing.vehicleId !== data.vehicleId) continue
         if (!BLOCKING_STATUSES.has(existing.status)) continue
         const overlaps =

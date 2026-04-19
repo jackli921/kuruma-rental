@@ -3,7 +3,15 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import type { CallerContext } from '../../src/middleware/auth'
 import { DrizzleBookingRepository, DrizzleVehicleRepository } from '../../src/repositories/drizzle'
 import type { Booking, Vehicle } from '../../src/stores'
-import { DEFAULT_DAILY_RATE_JPY, cleanupBookings, cleanupUsers, cleanupVehicles, db } from './setup'
+import {
+  DEFAULT_DAILY_RATE_JPY,
+  cleanupBookings,
+  cleanupUsers,
+  cleanupVehicleClasses,
+  cleanupVehicles,
+  db,
+  seedVehicleClass,
+} from './setup'
 
 // Cast: test DB uses postgres-js, same query API as neon-http
 const bookingRepo = new DrizzleBookingRepository(db as never)
@@ -13,9 +21,11 @@ let renterA: { id: string }
 let renterB: { id: string }
 let staff: { id: string }
 let vehicle: Vehicle
+let testClassId: string
 const createdBookingIds: string[] = []
 const createdVehicleIds: string[] = []
 const createdUserIds: string[] = []
+const createdClassIds: string[] = []
 
 const ctxA: () => CallerContext = () => ({ userId: renterA.id, role: 'RENTER' })
 const ctxB: () => CallerContext = () => ({ userId: renterB.id, role: 'RENTER' })
@@ -54,7 +64,12 @@ beforeAll(async () => {
   staff = s
   createdUserIds.push(a.id, b.id, s.id)
 
+  const klass = await seedVehicleClass('rls')
+  testClassId = klass.id
+  createdClassIds.push(klass.id)
+
   vehicle = await vehicleRepo.create({
+    classId: testClassId,
     name: 'RLS Test Car',
     description: null,
     seats: 5,
@@ -77,11 +92,13 @@ afterAll(async () => {
   await cleanupBookings(createdBookingIds)
   await cleanupVehicles(createdVehicleIds)
   await cleanupUsers(createdUserIds)
+  await cleanupVehicleClasses(createdClassIds)
 })
 
 function makeBookingData(renterId: string, startHour: number) {
   return {
     renterId,
+    classId: testClassId,
     vehicleId: vehicle.id,
     startAt: new Date(`2026-08-01T${String(startHour).padStart(2, '0')}:00:00Z`),
     endAt: new Date(`2026-08-01T${String(startHour + 2).padStart(2, '0')}:00:00Z`),

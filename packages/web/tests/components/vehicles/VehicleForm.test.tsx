@@ -35,6 +35,8 @@ vi.mock('next-intl', () => ({
       'form.save': 'Save vehicle',
       'form.saving': 'Saving...',
       'form.cancel': 'Cancel',
+      'form.class': 'Class',
+      'form.classNone': 'Unassigned',
     }
     return messages[key] ?? key
   },
@@ -281,6 +283,137 @@ describe('VehicleForm', () => {
         expect(onSubmit).toHaveBeenCalledTimes(1)
       })
       expect(onSubmit.mock.calls[0][0].advanceBookingHours).toBeNull()
+    })
+  })
+
+  // Issue #313: class assignment dropdown
+  describe('class assignment', () => {
+    const classes = [
+      {
+        id: '11111111-1111-4111-8111-111111111111',
+        name: 'Compact',
+        slug: 'compact',
+        description: null,
+        photos: [],
+        seats: 5,
+        luggageCapacity: 2,
+        transmission: 'AUTO' as const,
+        fuelType: null,
+        dailyRateJpy: 8000,
+        hourlyRateJpy: null,
+        sortOrder: 0,
+        status: 'ACTIVE' as const,
+        createdAt: '2026-01-01T00:00:00.000Z',
+        updatedAt: '2026-01-01T00:00:00.000Z',
+      },
+      {
+        id: '22222222-2222-4222-8222-222222222222',
+        name: 'SUV',
+        slug: 'suv',
+        description: null,
+        photos: [],
+        seats: 7,
+        luggageCapacity: 4,
+        transmission: 'AUTO' as const,
+        fuelType: null,
+        dailyRateJpy: 12000,
+        hourlyRateJpy: null,
+        sortOrder: 1,
+        status: 'ACTIVE' as const,
+        createdAt: '2026-01-01T00:00:00.000Z',
+        updatedAt: '2026-01-01T00:00:00.000Z',
+      },
+    ]
+
+    it('renders a class dropdown with Unassigned + each class as options', () => {
+      render(<VehicleForm onSubmit={vi.fn()} classes={classes} />)
+
+      const select = screen.getByLabelText('Class') as HTMLSelectElement
+      expect(select).toBeInTheDocument()
+      const optionValues = Array.from(select.options).map((o) => o.value)
+      expect(optionValues).toEqual([
+        '',
+        '11111111-1111-4111-8111-111111111111',
+        '22222222-2222-4222-8222-222222222222',
+      ])
+    })
+
+    it('submits the selected classId', async () => {
+      const user = userEvent.setup()
+      const onSubmit = vi.fn().mockResolvedValue(undefined)
+      render(
+        <VehicleForm
+          onSubmit={onSubmit}
+          classes={classes}
+          defaultValues={{
+            name: 'Honda Fit',
+            seats: 5,
+            transmission: 'AUTO',
+            dailyRateJpy: 7000,
+          }}
+        />,
+      )
+
+      await user.selectOptions(
+        screen.getByLabelText('Class'),
+        '22222222-2222-4222-8222-222222222222',
+      )
+      await user.click(screen.getByRole('button', { name: 'Save vehicle' }))
+
+      await waitFor(() => {
+        expect(onSubmit).toHaveBeenCalledTimes(1)
+      })
+      expect(onSubmit.mock.calls[0][0].classId).toBe('22222222-2222-4222-8222-222222222222')
+    })
+
+    it('submits null when Unassigned is selected', async () => {
+      const user = userEvent.setup()
+      const onSubmit = vi.fn().mockResolvedValue(undefined)
+      render(
+        <VehicleForm
+          onSubmit={onSubmit}
+          classes={classes}
+          defaultValues={{
+            name: 'Honda Fit',
+            seats: 5,
+            transmission: 'AUTO',
+            dailyRateJpy: 7000,
+            classId: '11111111-1111-4111-8111-111111111111',
+          }}
+        />,
+      )
+
+      await user.selectOptions(screen.getByLabelText('Class'), '')
+      await user.click(screen.getByRole('button', { name: 'Save vehicle' }))
+
+      await waitFor(() => {
+        expect(onSubmit).toHaveBeenCalledTimes(1)
+      })
+      expect(onSubmit.mock.calls[0][0].classId).toBeNull()
+    })
+
+    it('pre-selects the vehicle classId in edit mode', () => {
+      render(
+        <VehicleForm
+          onSubmit={vi.fn()}
+          classes={classes}
+          defaultValues={{
+            name: 'Honda Fit',
+            seats: 5,
+            transmission: 'AUTO',
+            dailyRateJpy: 7000,
+            classId: '22222222-2222-4222-8222-222222222222',
+          }}
+        />,
+      )
+
+      const select = screen.getByLabelText('Class') as HTMLSelectElement
+      expect(select.value).toBe('22222222-2222-4222-8222-222222222222')
+    })
+
+    it('does not render the dropdown when no classes are passed', () => {
+      render(<VehicleForm onSubmit={vi.fn()} />)
+      expect(screen.queryByLabelText('Class')).not.toBeInTheDocument()
     })
   })
 
