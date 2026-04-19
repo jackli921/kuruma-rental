@@ -1,5 +1,7 @@
 import { Hono } from 'hono'
 import { beforeEach, describe, expect, it } from 'vitest'
+import { setupGlobalHandlers } from '../../src/error-handlers'
+import { toCallerContext } from '../../src/middleware/auth'
 import {
   InMemoryMaintenanceLogRepository,
   InMemoryVehicleRepository,
@@ -648,6 +650,51 @@ describe('Vehicle CRUD Routes', () => {
       const body = await res.json()
       expect(body.success).toBe(false)
       expect(body.error).toBe('Vehicle not found')
+    })
+  })
+
+  // Issue #329: the repo-layer ForbiddenError must surface as a 403 from
+  // the global error handler, not a 500. This simulates a future route
+  // that forgets its STAFF_ROLES gate by mounting a custom handler that
+  // calls the repo directly with a RENTER ctx. Before the typed-error
+  // mapping, this path would have returned 500 (Internal server error).
+  describe('ForbiddenError → 403 mapping', () => {
+    it('bypassed route-level gate still returns 403 from the repo guard', async () => {
+      const repo = new InMemoryVehicleRepository()
+      const renterApp = new Hono()
+      setupGlobalHandlers(renterApp)
+      renterApp.use('*', testAuthMiddleware('renter-user', 'RENTER'))
+      // Simulate a route that forgot its STAFF_ROLES check: goes straight
+      // to the repo with the caller's ctx. The repo guard must stop it.
+      renterApp.post('/leaky-create', async (c) => {
+        const ctx = toCallerContext({ id: 'renter-user', role: 'RENTER' })
+        const vehicle = await repo.create(ctx, {
+          classId: null,
+          name: 'Leaked',
+          description: null,
+          photos: [],
+          seats: 4,
+          transmission: 'AUTO' as const,
+          fuelType: null,
+          licensePlate: null,
+          status: 'AVAILABLE',
+          bufferMinutes: 60,
+          minRentalHours: null,
+          maxRentalHours: null,
+          advanceBookingHours: null,
+          dailyRateJpy: 8000,
+          hourlyRateJpy: null,
+          shakenExpiryDate: null,
+          insuranceExpiryDate: null,
+        })
+        return c.json({ success: true, data: vehicle })
+      })
+
+      const res = await renterApp.request('/leaky-create', { method: 'POST' })
+
+      expect(res.status).toBe(403)
+      const body = await res.json()
+      expect(body).toEqual({ success: false, error: 'Forbidden' })
     })
   })
 })
