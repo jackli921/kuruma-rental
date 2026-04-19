@@ -37,6 +37,9 @@ jobs:
       - name: Check FK indexes
         run: bun run lint:fk-indexes
 
+      - name: Check i18n locale parity
+        run: bun run lint:i18n-parity
+
       - name: Check unused deps and exports
         run: bun run lint:deps
         continue-on-error: true
