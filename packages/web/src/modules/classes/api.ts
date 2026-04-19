@@ -56,6 +56,15 @@ export async function fetchClasses(
   return unwrap<VehicleClassData[]>(res)
 }
 
+// Public endpoint — no auth token required. Use this on renter-facing pages
+// so anonymous visitors can browse the catalog.
+export async function fetchClassBySlug(slug: string): Promise<VehicleClassData | null> {
+  const client = createApiClient()
+  const res = await client['vehicle-classes']['by-slug'][':slug'].$get({ param: { slug } })
+  if (res.status === 404) return null
+  return unwrap<VehicleClassData>(res)
+}
+
 export async function fetchClassById(id: string, token?: string): Promise<VehicleClassData | null> {
   const client = createApiClient(token)
   try {
