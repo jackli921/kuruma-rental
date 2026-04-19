@@ -5,6 +5,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { useRouter } from '@/i18n/routing'
 import { createClassBooking } from '@/lib/bookings'
+import { parseJstDateTimeLocal } from '@/lib/datetime'
 import { fetchClassAvailability } from '@/modules/classes'
 import { CheckCircle2, XCircle } from 'lucide-react'
 import { useTranslations } from 'next-intl'
@@ -40,7 +41,9 @@ export function ClassBookingForm({ vehicleClass }: ClassBookingFormProps) {
     error: null,
   })
 
-  const hasValidRange = startAt !== '' && endAt !== '' && new Date(endAt) > new Date(startAt)
+  // datetime-local wall clock is always JST — see parseJstDateTimeLocal.
+  const hasValidRange =
+    startAt !== '' && endAt !== '' && parseJstDateTimeLocal(endAt) > parseJstDateTimeLocal(startAt)
 
   // Debounced availability check: fire when the user has a valid pair of
   // dates. The endpoint is cheap and idempotent, so there's no need for
@@ -54,8 +57,8 @@ export function ClassBookingForm({ vehicleClass }: ClassBookingFormProps) {
     }
     let cancelled = false
     setAvailability({ status: 'checking' })
-    const from = new Date(startAt)
-    const to = new Date(endAt)
+    const from = parseJstDateTimeLocal(startAt)
+    const to = parseJstDateTimeLocal(endAt)
     const timer = setTimeout(async () => {
       const result = await fetchClassAvailability(vehicleClass.slug, from, to)
       if (cancelled) return
@@ -84,8 +87,8 @@ export function ClassBookingForm({ vehicleClass }: ClassBookingFormProps) {
     setSubmitState({ isPending: true, error: null })
     const result = await createClassBooking({
       classId: vehicleClass.id,
-      startAt: new Date(startAt).toISOString(),
-      endAt: new Date(endAt).toISOString(),
+      startAt: parseJstDateTimeLocal(startAt).toISOString(),
+      endAt: parseJstDateTimeLocal(endAt).toISOString(),
     })
     if (result.success) {
       router.push(`/bookings/confirmation?bookingId=${result.bookingId}`)
