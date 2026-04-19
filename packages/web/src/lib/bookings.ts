@@ -48,6 +48,69 @@ export async function checkAvailability(
   return json.data.available
 }
 
+interface CreateClassBookingInput {
+  classId: string
+  startAt: string
+  endAt: string
+  notes?: string
+}
+
+// Issue #311: renters book a class, not a specific vehicle. The owner
+// assigns a car from the class at pickup. Separate from createBooking
+// because the input shape and error mapping differ — classId is
+// authoritative, not a hint, and 409 means "no cars in this class are
+// free" rather than "this specific car is taken".
+export async function createClassBooking(
+  input: CreateClassBookingInput,
+): Promise<CreateBookingResult> {
+  const session = await auth()
+  if (!session?.user?.id) {
+    return { success: false, error: 'You must be logged in to make a booking.' }
+  }
+
+  if (!input.classId) {
+    return { success: false, error: 'Vehicle class is required.' }
+  }
+
+  if (!input.startAt || !input.endAt) {
+    return { success: false, error: 'Start and end dates are required.' }
+  }
+
+  if (new Date(input.endAt) <= new Date(input.startAt)) {
+    return { success: false, error: 'End date must be after start date.' }
+  }
+
+  const token = await getApiToken()
+  const client = createApiClient(token)
+  const idempotencyKey = crypto.randomUUID()
+  const res = await client.bookings.$post({
+    json: {
+      classId: input.classId,
+      renterId: session.user.id,
+      startAt: input.startAt,
+      endAt: input.endAt,
+      source: 'DIRECT',
+      idempotencyKey,
+      ...(input.notes ? { notes: input.notes } : {}),
+    },
+  })
+
+  const json = (await res.json()) as { success: boolean; data?: { id: string }; error?: string }
+
+  if (json.success && json.data) {
+    return { success: true, bookingId: json.data.id }
+  }
+
+  if (res.status === 409) {
+    return {
+      success: false,
+      error: 'No cars available for these dates. Please choose different dates.',
+    }
+  }
+
+  return { success: false, error: 'Failed to create booking.' }
+}
+
 export async function createBooking(input: CreateBookingInput): Promise<CreateBookingResult> {
   const session = await auth()
   if (!session?.user?.id) {
