@@ -43,9 +43,10 @@ Paying the $5/mo CF Workers Paid tier only buys breathing room up to 10 MiB — 
 | Forms | react-hook-form + zod → API (already) | react-hook-form + zod → API (unchanged) |
 | Components | shadcn / Tailwind / base-ui | shadcn / Tailwind / base-ui (unchanged) |
 
-**Packages pruned from `packages/web`:** `next`, `next-auth`, `next-intl`, `@opennextjs/cloudflare`, `@vercel/og`, `wrangler`.
+**Packages pruned from `packages/web`:** `next`, `next-auth`, `next-intl`, `@opennextjs/cloudflare`, `@auth/drizzle-adapter`, `wrangler`.
+(`@vercel/og` is transitive through `@opennextjs/cloudflare`; drops free. Grep confirmed no `ImageResponse` / `opengraph-image` usage in the app — nothing to port.)
 **Packages added to `packages/web`:** `vite`, `@vitejs/plugin-react`, `@tanstack/react-router`, `@tanstack/router-plugin`, `use-intl`.
-**Packages added to `packages/api`:** `@auth/core`.
+**Packages added to `packages/api`:** `@auth/core`, `@auth/drizzle-adapter`, `@hono/auth-js` (Hono wrapper — cleaner than hand-mounting `@auth/core` handlers on Hono context).
 
 ## 4. Routing
 
@@ -73,6 +74,14 @@ Route groups (`(auth)`, `(renter)`, `(business)`) map to TanStack Router layout 
 Default pattern: `loader` calls `queryClient.ensureQueryData(...)`; component uses `useQuery(...)` with the same key. Result: prefetch during navigation, live reactivity during mount.
 Per-route deviation allowed where a specific need exists (e.g., optimistic UI).
 
+### 4.5 Loading contract (auth-session FOUC)
+Inline bootstrap (§6.2) handles i18n FOUC but can't touch the HttpOnly session cookie — it's invisible to JS by design. The loading contract for auth-gated routes:
+
+- `beforeLoad` on `_renter` / `_business` calls `queryClient.ensureQueryData({ queryKey: ['session'] })`. Navigation is held until `/auth/session` resolves (hit or 401). No render happens with ambiguous auth state.
+- Cold mount (direct URL entry to `/manage/bookings`): TanStack's `pendingComponent` on the layout route renders a global `<PageSkeleton>` during the in-flight session fetch. No auth flash, no redirect-then-content flash.
+- Subsequent navigations are synchronous — React Query serves the cached session, `beforeLoad` resolves immediately.
+- Sign-out invalidates the `['session']` query; the next guarded route re-fetches.
+
 ## 5. Auth relocation
 
 ### 5.1 Endpoints (on Hono API)
@@ -88,7 +97,7 @@ Stays, relocated from `packages/web/src/auth.ts` to `packages/api/src/auth/index
 ### 5.3 Session transport
 - JWT signed with `AUTH_SECRET` (shared between web build-time and API runtime — already shared today for the current Bearer path, so no new secret plumbing).
 - Payload: `{ sub, email, role, csrf, iat, exp }`. `csrf` = 32-byte random, generated at sign-in, stable for session lifetime (razor default; override trigger documented).
-- Cookie: `kuruma_session`, HttpOnly, Secure, `SameSite=None` (interim), 7-day lifetime (matches today).
+- Cookie: `kuruma_session`, HttpOnly, Secure, `SameSite=Lax`, 7-day lifetime (matches today). Set by the API, surfaced to the browser through the Pages Functions proxy (§5.5) so it's same-origin.
 - Web never reads the cookie directly. It calls `/auth/session` via React Query; response body includes `csrfToken` for client-side double-submit.
 
 ### 5.4 CSRF (#372)
@@ -97,10 +106,15 @@ Stays, relocated from `packages/web/src/auth.ts` to `packages/api/src/auth/index
 - Apple callback is exempt (no session exists yet; the OAuth state param provides CSRF equivalence for that one round-trip).
 - Bearer-token path stays for partner callers (identified by route prefix, e.g., `/api/partner/*`). Those don't need CSRF because they're not cookie-authenticated.
 
-### 5.5 Cross-domain + parent-domain cutover (#373)
-- **Interim** (during migration and until owner picks a domain): API on `*.workers.dev`, web on `*.pages.dev`. Cookie `SameSite=None; Secure` works but Safari ITP is hostile to cross-site cookies.
-- **Cutover** (before public launch): API at `api.<owner-chosen>.app`, web at `app.<owner-chosen>.app`. Cookie flips to `Domain=<owner-chosen>.app; SameSite=Lax`.
-- Cutover work is trivial (cookie config + env var); timing is gated on the owner.
+### 5.5 Same-origin via CF Pages Functions proxy
+Safari ITP is hostile to cross-site cookies. Rather than ship `SameSite=None` and hope for the best during the weeks/months before the owner picks a domain (#373), the web app is same-origin with the API from day one via a CF Pages Function proxy:
+
+- `packages/web/functions/api/[[path]].ts` — CF Pages Function that proxies `/api/*` to the API Worker (`API_ORIGIN` env var on Pages).
+- `packages/web/functions/auth/[[path]].ts` — same for `/auth/*`.
+- Browser sees one origin (the Pages hostname). Cookie is `SameSite=Lax; Secure`, no `Domain=` attribute. Safari-safe immediately.
+- Partner/3rd-party callers hit the API Worker directly at its `*.workers.dev` hostname with Bearer tokens — no cookie involved.
+
+Parent-domain cutover (#373) becomes a cosmetic hostname change only (DNS flip from `*.pages.dev` to `app.<owner-chosen>.app`). The proxy and cookie config are unchanged; it's still same-origin. Timing is still gated on the owner but no longer blocks Safari auth.
 
 ## 6. i18n (#377)
 
@@ -130,50 +144,65 @@ Non-active locales load lazily on switch via `useQuery(['messages', locale])`, c
 - `publicDir: 'public'` copies `messages/*.json` and static assets.
 - No SSR. No edge runtime. Just static output.
 
-### 7.2 CF Pages
-- New CF Pages project, separate from the existing Worker.
+### 7.2 Prerender — explicit drop (reversal documented)
+The original brainstorm floated "SPA with prerendered public routes" for SEO on `/`, `/vehicles`, `/vehicles/$id`. **This spec drops prerender for v1.** `_redirects: /* /index.html 200` means every route is served by the SPA shell; public routes rank on client-rendered content.
+Reversal path if SEO becomes critical (razor table trigger row 2): add `vite-react-ssg` or a small CF Pages Function that server-renders the three public routes on first request and caches. Half-day of work. Owner-visible behavior today: link previews (Line/WeChat/Slack) will not show a useful OG image; Google will index the app but crawl budget is higher than SSR'd HTML.
+
+### 7.3 CF Pages deploy
+- New CF Pages project `kuruma-web-pages`, separate from the existing Worker.
 - Build command: `bun run build` inside `packages/web`.
 - Output directory: `packages/web/dist`.
-- Env vars: all `VITE_*` prefix, baked in at build time (no runtime env). `VITE_API_BASE_URL` replaces today's `NEXT_PUBLIC_API_URL` / server-side `API_URL`.
-- `_redirects` file for SPA fallback: `/* /index.html 200`.
+- Client env vars: all `VITE_*` prefix, baked in at build time (no runtime env). `VITE_API_BASE_URL = '/api'` (same-origin via proxy — §5.5).
+- Functions env vars: `API_ORIGIN` (the API Worker URL, read server-side by the proxy Functions).
+- `_redirects` file for SPA fallback: `/* /index.html 200` (last — Functions match first).
 - `_headers` file sets CSP, COOP, COEP; mirrors current middleware CSP where applicable.
 
-### 7.3 CI changes
-- `deploy.yml` — gate the existing web-Worker deploy step with `if: false` (the "bridge freeze"; umbrella issue #378, §2). Keep the step in the file as a comment so we can delete it at cutover without hunting.
-- New step: `wrangler pages deploy packages/web/dist --project-name=kuruma-web-pages`.
+### 7.4 CI changes
+- `deploy.yml` — gate the existing web-Worker deploy step with `if: false` (the "bridge freeze"; umbrella issue #378). Keep the step so we can delete it at cutover without hunting.
+- New step: `wrangler pages deploy packages/web/dist --project-name=kuruma-web-pages --branch=<preview|production>`. CF Pages creates a per-branch preview URL automatically.
 - Rotate-secrets workflow untouched.
 - `db-drift` job untouched.
 
-### 7.4 Cutover
-Final slice (see §8 step 6): DNS flip, delete old Worker + `packages/web/{next.config.ts,middleware.ts,auth.ts,auth.config.ts,open-next.config.ts,app/**}`, drop deps listed in §3.
+### 7.5 Bridge: coexistence and cutover
+During migration the two deploys coexist:
+- **Old Next.js Worker** at its current `*.workers.dev` hostname — frozen at last green build (CI step gated off). Still serves production until cutover.
+- **New Pages project** at `kuruma-web-pages.pages.dev` + per-branch preview URLs — receives every migration PR. Not user-facing during bridge.
+
+There is no `VITE_USE_NEW_WEB` flag. The switch is a DNS/routing change at step 6 of §8:
+1. The public hostname (currently CNAMEd to the old Worker) is repointed to the Pages project.
+2. Old Worker is deleted from the CF dashboard.
+3. Frozen CI step is deleted, Next.js app is deleted, deps pruned.
+
+Before that cutover, internal testing and stakeholder review happen on the Pages preview URLs. QA sign-off per slice means "green on the Pages preview" — not "merged to main behind a flag."
 
 ## 8. Vertical slicing
 
-Each slice is its own PR, its own sub-issue of #378, behind `VITE_USE_NEW_WEB` so the old Next.js app keeps serving until step 6.
+Each slice is its own PR, its own sub-issue of #378. Slices merge to `main` and deploy to the Pages project's preview URL. The old Next.js Worker keeps serving production until the DNS flip in step 6 (see §7.5).
 
 1. **Shell + public landing.** Vite + TanStack root route, `use-intl` provider, locale bootstrap, navbar/footer, `/`, `/vehicles`, `/vehicles/$id`. Proves build + CF Pages + i18n on staging.
 2. **Auth slice.** Add `@auth/core` + relocate DrizzleAdapter config from `packages/web` to `packages/api`; build `/auth/*` endpoints on Hono; port `/login` page; implement `useSession` + CSRF token flow; `_auth`/`_renter`/`_business` layout guards. First real cookie exercise.
 3. **Renter browse + book.** `/bookings/new`, `/bookings/confirmation`. Full renter journey from landing to confirmed booking.
 4. **Business dashboard.** `/dashboard`, `/manage/*` (vehicles, bookings, customers, classes). Largest surface, but port-only.
 5. **Renter account + messaging.** `/bookings`, `/messages/*`. Tail.
-6. **Cutover.** DNS flip, delete Next.js app, prune deps, remove the frozen CI step, close #378.
+6. **Cutover.** DNS flip public hostname to Pages, delete old Worker, delete Next.js app + `auth.ts`/`auth.config.ts`/`middleware.ts`/`open-next.config.ts`/`app/**`, prune deps listed in §3, remove the frozen CI step, close #378.
 
 ## 9. Test strategy
 
 - Unit tests — port unchanged where possible; route-level utilities get new tests for guards.
 - Integration — API auth endpoints (`/auth/*`) get Hono `app.request(...)` tests including CSRF paths and Apple carve-out.
-- E2E (Playwright) — existing flows retargeted at the staging Pages URL via `VITE_USE_NEW_WEB` feature flag. Every slice must leave the e2e smoke green on staging before the PR merges.
+- E2E (Playwright) — existing flows retargeted at the CF Pages preview URL produced by the slice's PR (Pages auto-creates `<branch>.<project>.pages.dev`). Test config reads `E2E_BASE_URL` env var; CI sets it to the preview URL for migration PRs. Every slice must leave the e2e smoke green on its preview before the PR merges.
 - Size check — CI step that fails if `packages/web/dist` exceeds a budget (start at 2 MiB gzipped, tighten later). Headroom under CF's free tier forever.
 
 ## 10. Risks + mitigations
 
 | Risk | Mitigation |
 |------|-----------|
-| Safari ITP blocks cross-site cookie | Interim works; fix at parent-domain cutover (#373); e2e on Safari to catch regressions |
+| Safari ITP blocks cross-site cookie | Moot — Pages Functions proxy (§5.5) makes web and API same-origin from day one; cookie is `SameSite=Lax` |
+| CF Pages Functions proxy adds a hop | One extra hop inside CF's own network — negligible latency. Measured in p95 before cutover; if >50ms added, reassess |
 | `use-intl` has a subtle behavioral diff from `next-intl` | Snapshot every rendered locale string on a visited-routes sweep before cutover |
 | TanStack `loader`/React Query interaction surprises | Start with shell slice (§8 step 1) to discover patterns before committing the whole app |
 | Apple callback CSRF carve-out widens over time | Single carve-out, codified in middleware with a comment + test that exercises it |
-| Long-lived migration branch drifts | Migration lands slice-by-slice to `main` behind a flag — no long-lived branch |
+| Long-lived migration branch drifts | Slices merge to `main` and deploy to Pages previews — no long-lived branch. Old Worker stays frozen at last green until cutover |
 | Owner picks a domain that requires re-issuing cookies mid-session | Accept one forced re-login at cutover; announce in release notes |
 
 ## 11. Decisions captured elsewhere
