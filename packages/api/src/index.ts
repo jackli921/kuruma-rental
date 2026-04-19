@@ -350,4 +350,9 @@ function resolveAllowedOrigins(envValue: string | undefined): string[] {
   return [...new Set([...devOrigins, ...fromEnv])]
 }
 
-export default createApp()
+/**
+ * Inferred type of the composed app; used by the web client for `hc<AppType>()`.
+ * Declared here so consumers can `import type { AppType } from '@kuruma/api'`
+ * without triggering any runtime side-effects.
+ */
+export type AppType = ReturnType<typeof createApp>

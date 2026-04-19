@@ -3,10 +3,15 @@
 // (http://localhost:8787) rejects, and the fleet page hangs on skeleton
 // loaders forever. See packages/api/src/index.ts for the middleware.
 
-import { describe, expect, it } from 'vitest'
-import app from '../../src/index'
+import { beforeAll, describe, expect, it } from 'vitest'
+import { type AppType, createApp } from '../../src/index'
 
 describe('CORS middleware', () => {
+  let app: AppType
+  beforeAll(() => {
+    app = createApp()
+  })
+
   it('emits Access-Control-Allow-Origin for the web dev origin on a simple GET', async () => {
     const res = await app.request('/health', {
       headers: { Origin: 'http://localhost:3001' },
