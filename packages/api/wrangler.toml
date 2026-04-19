@@ -43,13 +43,18 @@ name = "PUBLIC_CATALOG_LIMITER"
 namespace_id = "1004"
 simple = { limit = 30, period = 60 }
 
-# R2 bucket for vehicle photo uploads. Create the bucket manually:
+# R2 bucket for vehicle photo uploads — DISABLED.
+# R2 is not enabled on the current Cloudflare account (blocked on #304 account
+# migration). Re-enable by uncommenting once R2 is provisioned:
 #   npx wrangler r2 bucket create kuruma-vehicle-photos
-# Enable public access for dev:
 #   npx wrangler r2 bucket dev-url-enable kuruma-vehicle-photos
-[[r2_buckets]]
-binding = "VEHICLE_PHOTOS"
-bucket_name = "kuruma-vehicle-photos"
+# With the binding commented out, wrangler deploy no longer calls the R2 API
+# (which was returning 10042 "Please enable R2"). Runtime: the composition
+# root falls back to DisabledPhotoStorage, which returns a clear 500 on any
+# upload attempt instead of silently accepting into ephemeral per-request memory.
+# [[r2_buckets]]
+# binding = "VEHICLE_PHOTOS"
+# bucket_name = "kuruma-vehicle-photos"
 
 [vars]
 WEB_ORIGIN = "https://kuruma-rental.kanata-studio-dev.workers.dev"
