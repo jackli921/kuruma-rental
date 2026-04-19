@@ -67,7 +67,7 @@ Critical rules:
 3. **`open-next.config.ts` must exist** or the CLI hangs.
 4. **`typescript.ignoreBuildErrors: true`** in `next.config.ts` (tsc runs locally/CI, not during `next build`).
 5. Secrets set via `npx wrangler secret put` — CF dashboard wipes them on redeploy.
-6. **Shared secrets (AUTH_SECRET) must be set on BOTH workers.** `deploy.yml` is the single source of truth — never set secrets manually via `wrangler secret put` in production. If they drift, JWT verification fails silently ("Unauthorized").
+6. **Shared secrets (AUTH_SECRET, DATABASE_URL) must match between API and Web workers.** GitHub Secrets is the source of truth. `deploy.yml` no longer re-asserts secrets every deploy — wrangler 4's gradual deployments refuse `secret put` when a pending version exists (cloudflare/workers-sdk#6763) and the old pattern locked up deploys. Instead: `deploy.yml` runs a read-only `wrangler secret list` presence check; `rotate-secrets.yml` (workflow_dispatch) re-asserts values. Rotate after changing a GitHub Secret, whenever the presence check fails, or if "Unauthorized" starts appearing silently.
 
 ## i18n (next-intl v4)
 

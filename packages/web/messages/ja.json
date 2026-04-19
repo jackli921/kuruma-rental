@@ -46,6 +46,34 @@
     "switchToRenter": "利用者ビューに切替",
     "switchToBusiness": "管理者ビューに切替"
   },
+  "catalog": {
+    "title": "車両クラスから選ぶ",
+    "subtitle": "同じクラス内の車はすべて同じ料金・仕様です。",
+    "empty": "現在利用可能なクラスはありません。",
+    "seats": "{count}席",
+    "auto": "オートマ",
+    "manual": "マニュアル",
+    "priceFrom": "最低",
+    "perDay": "/ 日",
+    "viewClass": "詳細を見る",
+    "detail": {
+      "backToCatalog": "一覧に戻る",
+      "specs": "仕様",
+      "seats": "{count}席",
+      "transmission": "トランスミッション",
+      "fuelType": "燃料タイプ",
+      "luggage": "荷物 {count}個",
+      "auto": "オートマチック",
+      "manual": "マニュアル",
+      "description": "このクラスについて",
+      "photos": "写真",
+      "bookCta": "空き状況を確認",
+      "priceFrom": "最低",
+      "perDay": "/ 日",
+      "notFound": "クラスが見つかりません",
+      "notFoundDescription": "お探しのクラスは存在しないか、アーカイブされています。"
+    }
+  },
   "vehicles": {
     "title": "車両を探す",
     "subtitle": "日本旅行にぴったりの車を見つけましょう。",
@@ -508,31 +536,30 @@
   },
   "bookings": {
     "new": {
-      "title": "車両を予約",
-      "vehicleNotFound": "車両が見つかりません。",
+      "title": "このクラスを予約",
+      "classInfo": "クラス情報",
       "pickupDate": "乗車日時",
       "returnDate": "返却日時",
-      "checkAvailability": "空き状況を確認",
-      "available": "選択した日程で利用可能です",
-      "notAvailable": "選択した日程では利用できません",
+      "available": "利用可能",
+      "availableCount": "{total}台中{count}台が選択した日程で利用できます",
+      "notAvailable": "選択した日程では利用可能な車両がありません。別の日程をお選びください。",
+      "checkingAvailability": "空き状況を確認中...",
+      "availabilityError": "空き状況を確認できませんでした。もう一度お試しください。",
       "selectDates": "日程を選択して空き状況を確認",
       "confirmBooking": "予約を確定",
       "submitting": "予約中...",
-      "vehicleInfo": "車両情報",
       "seats": "{count}席",
+      "luggage": "荷物{count}個",
       "auto": "オートマ",
       "manual": "マニュアル",
-      "rentalRuleViolation": {
-        "advance": "この車両は{duration}前までに予約する必要があります。",
-        "min": "この車両は最短{duration}のレンタルが必要です。",
-        "max": "この車両は最長{duration}までレンタルできます。"
-      }
+      "priceFrom": "最低",
+      "perDay": "/ 日"
     },
     "confirmation": {
       "title": "予約が確定しました",
-      "subtitle": "ご予約が正常に作成されました。",
+      "subtitle": "ご予約が正常に作成されました。具体的な車両は当日お渡し時にご案内します。",
       "bookingId": "予約ID",
-      "vehicle": "車両",
+      "vehicleClass": "クラス",
       "pickupDate": "乗車日",
       "returnDate": "返却日",
       "status": "ステータス",
