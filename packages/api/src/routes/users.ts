@@ -1,5 +1,6 @@
 import { Hono } from 'hono'
 import { z } from 'zod'
+import type { CallerContext } from '../middleware/auth'
 import { PRIVILEGED_ROLES, requireUser, toCallerContext } from '../middleware/auth'
 import type { ThreadRepository, UserRepository } from '../repositories/types'
 import { fail, ok } from './helpers'
@@ -15,10 +16,10 @@ const idsSchema = z.array(z.string().uuid()).max(MAX_IDS)
  * user table 50 ids at a time.
  */
 async function allowedUserIds(
-  ctx: { userId: string; role: string },
+  ctx: CallerContext,
   threadRepo: ThreadRepository,
 ): Promise<Set<string> | 'all'> {
-  if (PRIVILEGED_ROLES.has(ctx.role as never)) return 'all'
+  if (PRIVILEGED_ROLES.has(ctx.role)) return 'all'
   const threads = await threadRepo.findAll({ userId: ctx.userId, role: 'RENTER' })
   const allowed = new Set<string>([ctx.userId])
   for (const thread of threads) {

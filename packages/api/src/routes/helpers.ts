@@ -81,6 +81,26 @@ export function parsePagination(c: Context, opts?: LimitOptions): PaginationSucc
   return { ok: true, limit: limitResult.limit, offset }
 }
 
+// --- Cache headers ---
+
+/**
+ * Mark this response as publicly cacheable at the edge for `maxAgeSeconds`.
+ *
+ * Uses `s-maxage` (shared-cache directive) so CF's edge caches the response
+ * but browsers do not — a browser user who refreshes will hit our Worker
+ * again. That's usually what we want: origin traffic drops dramatically
+ * while owner edits still propagate to any given user within maxAgeSeconds.
+ *
+ * Call BEFORE `ok(c, data)`. Hono merges the header into the final response.
+ *
+ * Never call this on an error path — caching a 404 at the edge would pin
+ * the missing resource until the TTL expires, blocking creation from taking
+ * effect edge-wide.
+ */
+export function cachePublic(c: Context, maxAgeSeconds: number): void {
+  c.header('Cache-Control', `public, s-maxage=${maxAgeSeconds}`)
+}
+
 // --- Body parsing helpers ---
 
 type ParseBodySuccess<T> = { ok: true; data: T }

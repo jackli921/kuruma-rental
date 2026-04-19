@@ -536,31 +536,30 @@
   },
   "bookings": {
     "new": {
-      "title": "预订车辆",
-      "vehicleNotFound": "未找到车辆。",
+      "title": "预订此车型",
+      "classInfo": "车型信息",
       "pickupDate": "取车日期和时间",
       "returnDate": "还车日期和时间",
-      "checkAvailability": "查看可用性",
-      "available": "所选日期可用",
-      "notAvailable": "所选日期不可用",
+      "available": "可预订",
+      "availableCount": "所选日期共有 {total} 辆车,目前有 {count} 辆可预订",
+      "notAvailable": "所选日期没有可用车辆。请选择其他日期。",
+      "checkingAvailability": "正在查询可用性...",
+      "availabilityError": "无法查询可用性,请稍后再试。",
       "selectDates": "选择日期以查看可用性",
       "confirmBooking": "确认预订",
       "submitting": "预订中...",
-      "vehicleInfo": "车辆信息",
       "seats": "{count}座",
+      "luggage": "{count}件行李",
       "auto": "自动挡",
       "manual": "手动挡",
-      "rentalRuleViolation": {
-        "advance": "此车辆须至少提前 {duration} 预订。",
-        "min": "此车辆最短租赁时长为 {duration}。",
-        "max": "此车辆最长租赁时长为 {duration}。"
-      }
+      "priceFrom": "起",
+      "perDay": "/ 天"
     },
     "confirmation": {
       "title": "预订已确认",
-      "subtitle": "您的预订已成功创建。",
+      "subtitle": "您的预订已成功创建。具体车辆将在取车时分配。",
       "bookingId": "预订编号",
-      "vehicle": "车辆",
+      "vehicleClass": "车型",
       "pickupDate": "取车",
       "returnDate": "还车",
       "status": "状态",

@@ -9,6 +9,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
+import { parseJstDateTimeLocal } from '@/lib/datetime'
 import type { FleetVehicleOverviewData } from '@/lib/vehicle-api'
 import { useTranslations } from 'next-intl'
 import { useCallback, useEffect, useRef, useState } from 'react'
@@ -160,7 +161,14 @@ export function ManualBookingDialog({
     if (availabilityTimeoutRef.current) clearTimeout(availabilityTimeoutRef.current)
     availabilityTimeoutRef.current = setTimeout(async () => {
       const seq = ++availabilitySeqRef.current
-      const result = await checkAvailability(vehicleId, startAt, endAt)
+      // Pin the wall-clock strings to JST before crossing the network —
+      // see parseJstDateTimeLocal for why. The API parses the query params
+      // with native Date(), which would otherwise interpret them as UTC.
+      const result = await checkAvailability(
+        vehicleId,
+        parseJstDateTimeLocal(startAt).toISOString(),
+        parseJstDateTimeLocal(endAt).toISOString(),
+      )
       if (seq !== availabilitySeqRef.current) return
       if (result.success && !result.data.available) {
         setAvailabilityError(t('vehicleUnavailable'))
@@ -199,8 +207,8 @@ export function ManualBookingDialog({
       } = {
         vehicleId: slot.vehicleId,
         renterId: resolved.renterId,
-        startAt: new Date(slot.startAt).toISOString(),
-        endAt: new Date(slot.endAt).toISOString(),
+        startAt: parseJstDateTimeLocal(slot.startAt).toISOString(),
+        endAt: parseJstDateTimeLocal(slot.endAt).toISOString(),
       }
       if (slot.notes.trim()) bookingInput.notes = slot.notes.trim()
 

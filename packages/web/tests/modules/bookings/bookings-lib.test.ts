@@ -11,7 +11,7 @@ vi.mock('@/auth', () => ({
   auth: vi.fn(),
 }))
 
-import { checkAvailability, getBookingById } from '@/lib/bookings'
+import { getBookingById } from '@/lib/bookings'
 
 const MOCK_BOOKING = {
   id: 'booking-001',
@@ -61,76 +61,5 @@ describe('getBookingById', () => {
     const result = await getBookingById('nonexistent-id')
 
     expect(result).toBeNull()
-  })
-})
-
-describe('checkAvailability', () => {
-  beforeEach(() => {
-    vi.stubGlobal('fetch', vi.fn())
-  })
-
-  afterEach(() => {
-    vi.restoreAllMocks()
-  })
-
-  it('returns true when vehicle is available', async () => {
-    vi.mocked(fetch).mockResolvedValue(
-      new Response(
-        JSON.stringify({
-          success: true,
-          data: { available: true, vehicle: {}, conflicts: [] },
-        }),
-      ),
-    )
-
-    const result = await checkAvailability(
-      'vehicle-001',
-      new Date('2026-04-15T09:00:00Z'),
-      new Date('2026-04-17T09:00:00Z'),
-    )
-
-    expect(fetch).toHaveBeenCalledTimes(1)
-    const calledUrl = vi.mocked(fetch).mock.calls[0]?.[0]?.toString() ?? ''
-    expect(calledUrl).toContain('/availability/vehicle-001')
-    expect(calledUrl).toContain('from=2026-04-15T09%3A00%3A00.000Z')
-    expect(calledUrl).toContain('to=2026-04-17T09%3A00%3A00.000Z')
-    expect(result).toBe(true)
-  })
-
-  it('returns false when vehicle is not available', async () => {
-    vi.mocked(fetch).mockResolvedValue(
-      new Response(
-        JSON.stringify({
-          success: true,
-          data: {
-            available: false,
-            vehicle: {},
-            conflicts: [{ id: 'booking-existing' }],
-          },
-        }),
-      ),
-    )
-
-    const result = await checkAvailability(
-      'vehicle-001',
-      new Date('2026-04-10T09:00:00Z'),
-      new Date('2026-04-12T09:00:00Z'),
-    )
-
-    expect(result).toBe(false)
-  })
-
-  it('returns false when API returns error', async () => {
-    vi.mocked(fetch).mockResolvedValue(
-      new Response(JSON.stringify({ success: false, error: 'Vehicle not found' }), { status: 404 }),
-    )
-
-    const result = await checkAvailability(
-      'nonexistent',
-      new Date('2026-04-15T09:00:00Z'),
-      new Date('2026-04-17T09:00:00Z'),
-    )
-
-    expect(result).toBe(false)
   })
 })

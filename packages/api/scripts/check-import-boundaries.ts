@@ -40,12 +40,26 @@ function checkFile(filePath: string): Violation[] {
   const isRoute = rel.startsWith('routes/')
   const isService = rel.startsWith('services/')
   const isCompositionRoot = rel === 'index.ts'
+  const isHelpers = rel === 'routes/helpers.ts'
 
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i]!
     const trimmed = line.trim()
 
-    // Skip non-import lines
+    // Rule 4: Routes must parse request bodies via parseBody(c, schema) from
+    // helpers.ts, not via direct c.req.json() + ad-hoc safeParse. Keeps error-
+    // envelope shape consistent across the API. helpers.ts itself is the one
+    // legitimate caller of c.req.json().
+    if (isRoute && !isHelpers && /\bc\.req\.json\s*\(/.test(trimmed)) {
+      violations.push({
+        file: rel,
+        line: i + 1,
+        text: trimmed,
+        rule: 'Routes must use parseBody(c, schema) from helpers.ts instead of calling c.req.json() directly.',
+      })
+    }
+
+    // Skip non-import lines for the remaining rules
     if (!trimmed.startsWith('import ') && !trimmed.startsWith('import{')) continue
 
     // Rule 1: Routes must not import concrete repositories.

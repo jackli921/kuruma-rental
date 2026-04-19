@@ -2,6 +2,7 @@ import { sql } from 'drizzle-orm'
 import {
   check,
   date,
+  index,
   integer,
   pgEnum,
   pgTable,
@@ -155,36 +156,47 @@ export const vehicles = pgTable(
       'vehicles_hourly_rate_non_negative',
       sql`${table.hourlyRateJpy} IS NULL OR ${table.hourlyRateJpy} >= 0`,
     ),
+    // Issue #330: renter catalog + booking-by-class filter on classId.
+    // Every FK column needs its own index — pg doesn't auto-create one.
+    index('idx_vehicles_classId').on(table.classId),
   ],
 )
 
-export const bookings = pgTable('bookings', {
-  id: text('id')
-    .primaryKey()
-    .$defaultFn(() => crypto.randomUUID()),
-  renterId: text('renterId')
-    .notNull()
-    .references(() => users.id),
-  // Issue #308: classId is the renter's choice (always present).
-  // vehicleId is nullable — owner assigns a specific car later.
-  classId: text('classId')
-    .notNull()
-    .references(() => vehicleClasses.id),
-  vehicleId: text('vehicleId').references(() => vehicles.id),
-  startAt: timestamp('startAt', { withTimezone: true, mode: 'date' }).notNull(),
-  endAt: timestamp('endAt', { withTimezone: true, mode: 'date' }).notNull(),
-  effectiveEndAt: timestamp('effectiveEndAt', { withTimezone: true, mode: 'date' }).notNull(),
-  status: bookingStatusEnum('status').notNull().default('CONFIRMED'),
-  source: bookingSourceEnum('source').notNull().default('DIRECT'),
-  externalId: text('externalId'),
-  notes: text('notes'),
-  totalPrice: integer('totalPrice'), // whole JPY, nullable for legacy bookings
-  cancellationFee: integer('cancellationFee'), // whole JPY, set on cancellation
-  cancelledAt: timestamp('cancelledAt', { withTimezone: true, mode: 'date' }),
-  idempotencyKey: text('idempotencyKey'),
-  createdAt: timestamp('createdAt', { withTimezone: true }).notNull().defaultNow(),
-  updatedAt: timestamp('updatedAt', { withTimezone: true }).notNull().defaultNow(),
-})
+export const bookings = pgTable(
+  'bookings',
+  {
+    id: text('id')
+      .primaryKey()
+      .$defaultFn(() => crypto.randomUUID()),
+    renterId: text('renterId')
+      .notNull()
+      .references(() => users.id),
+    // Issue #308: classId is the renter's choice (always present).
+    // vehicleId is nullable — owner assigns a specific car later.
+    classId: text('classId')
+      .notNull()
+      .references(() => vehicleClasses.id),
+    vehicleId: text('vehicleId').references(() => vehicles.id),
+    startAt: timestamp('startAt', { withTimezone: true, mode: 'date' }).notNull(),
+    endAt: timestamp('endAt', { withTimezone: true, mode: 'date' }).notNull(),
+    effectiveEndAt: timestamp('effectiveEndAt', { withTimezone: true, mode: 'date' }).notNull(),
+    status: bookingStatusEnum('status').notNull().default('CONFIRMED'),
+    source: bookingSourceEnum('source').notNull().default('DIRECT'),
+    externalId: text('externalId'),
+    notes: text('notes'),
+    totalPrice: integer('totalPrice'), // whole JPY, nullable for legacy bookings
+    cancellationFee: integer('cancellationFee'), // whole JPY, set on cancellation
+    cancelledAt: timestamp('cancelledAt', { withTimezone: true, mode: 'date' }),
+    idempotencyKey: text('idempotencyKey'),
+    createdAt: timestamp('createdAt', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updatedAt', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    // Issue #330: booking-by-class queries filter on classId every request.
+    // Paired with idx_vehicles_classId to avoid sequential scans at scale.
+    index('idx_bookings_classId').on(table.classId),
+  ],
+)
 
 // Issue #225: maintenance log and notes per vehicle. Tracks why a vehicle
 // entered MAINTENANCE, with optional cost tracking and resolution timestamp.

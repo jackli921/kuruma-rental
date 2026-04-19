@@ -1,6 +1,6 @@
 {
-  "id": "41bba898-085e-4bbf-af70-e80d8640fcdf",
-  "prevId": "1c559150-9101-42a7-89c7-a9a2da918740",
+  "id": "7f832ec1-8438-437f-9930-006dbb6c0d03",
+  "prevId": "e8a4d07b-830a-4e27-97c3-31a4bc4edef1",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -121,11 +121,17 @@
           "primaryKey": false,
           "notNull": true
         },
+        "classId": {
+          "name": "classId",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
         "vehicleId": {
           "name": "vehicleId",
           "type": "text",
           "primaryKey": false,
-          "notNull": true
+          "notNull": false
         },
         "startAt": {
           "name": "startAt",
@@ -212,7 +218,23 @@
           "default": "now()"
         }
       },
-      "indexes": {},
+      "indexes": {
+        "idx_bookings_classId": {
+          "name": "idx_bookings_classId",
+          "columns": [
+            {
+              "expression": "classId",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
       "foreignKeys": {
         "bookings_renterId_users_id_fk": {
           "name": "bookings_renterId_users_id_fk",
@@ -220,6 +242,19 @@
           "tableTo": "users",
           "columnsFrom": [
             "renterId"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "bookings_classId_vehicle_classes_id_fk": {
+          "name": "bookings_classId_vehicle_classes_id_fk",
+          "tableFrom": "bookings",
+          "tableTo": "vehicle_classes",
+          "columnsFrom": [
+            "classId"
           ],
           "columnsTo": [
             "id"
@@ -601,6 +636,12 @@
           "notNull": true,
           "default": "'RENTER'"
         },
+        "phone": {
+          "name": "phone",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
         "language": {
           "name": "language",
           "type": "text",
@@ -932,7 +973,23 @@
           "default": "now()"
         }
       },
-      "indexes": {},
+      "indexes": {
+        "idx_vehicles_classId": {
+          "name": "idx_vehicles_classId",
+          "columns": [
+            {
+              "expression": "classId",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
       "foreignKeys": {
         "vehicles_classId_vehicle_classes_id_fk": {
           "name": "vehicles_classId_vehicle_classes_id_fk",

@@ -7,7 +7,7 @@ import { type Context, Hono } from 'hono'
 import { STAFF_ROLES, requireAuth, requireUser } from '../middleware/auth'
 import type { VehicleClassService } from '../services/vehicle-class'
 import type { VehicleClassAvailabilityService } from '../services/vehicle-class-availability'
-import { fail, ok, parseBody, parseDateRange, stripUndefined } from './helpers'
+import { cachePublic, fail, ok, parseBody, parseDateRange, stripUndefined } from './helpers'
 
 export function createVehicleClassRoutes(
   service: VehicleClassService,
@@ -39,11 +39,16 @@ export function createVehicleClassRoutes(
         const classes = await service.findAll(
           status ? { status } : includeArchived ? { includeArchived } : undefined,
         )
+        // Catalog changes minutes-to-hours, not per-request. 60s at the edge
+        // cuts origin traffic ~95% while keeping propagation fast enough that
+        // owner edits (rate change, name fix) are visible within a minute.
+        cachePublic(c, 60)
         return ok(c, classes)
       })
       .get('/vehicle-classes/by-slug/:slug', async (c) => {
         const vc = await service.findBySlug(c.req.param('slug'))
         if (!vc) return fail(c, 'Vehicle class not found', 404)
+        cachePublic(c, 60)
         return ok(c, vc)
       })
       .get('/vehicle-classes/:slug/availability', async (c) => {
@@ -56,6 +61,11 @@ export function createVehicleClassRoutes(
           range.to,
         )
         if (!result.ok) return fail(c, result.error, result.status)
+        // Short TTL — availability is time-sensitive (bookings land, vehicles
+        // go under maintenance). 10s absorbs a renter's click-to-confirm
+        // round trip without keeping a stale view for long. The DB exclusion
+        // constraint is the real guardrail for overlap; this is just perf.
+        cachePublic(c, 10)
         return ok(c, result.data)
       })
       // --- Protected routes (auth required) ---
