@@ -52,6 +52,17 @@ export const PRIVILEGED_ROLES: ReadonlySet<UserRole> = new Set(['STAFF', 'ADMIN'
 /** Roles that can manage vehicles */
 export const STAFF_ROLES: ReadonlySet<UserRole> = new Set(['STAFF', 'ADMIN'])
 
+/**
+ * Repo-layer guard for mutation methods. Throws if the caller is not a
+ * STAFF role. Used as defence in depth against a route forgetting its
+ * `STAFF_ROLES` gate (issue #329). `SYSTEM_CONTEXT` (role: ADMIN) passes.
+ */
+export function requireStaffContext(ctx: CallerContext): void {
+  if (!STAFF_ROLES.has(ctx.role)) {
+    throw new Error('Forbidden: STAFF role required')
+  }
+}
+
 export function getUser(c: { get: (key: string) => unknown }): AuthUser | undefined {
   const raw = c.get('user')
   return isAuthUser(raw) ? raw : undefined

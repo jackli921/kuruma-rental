@@ -100,7 +100,7 @@ describe('Booking Routes', () => {
     // Seed two concrete vehicles in the class for tests that need per-vehicle
     // conflict detection, expand projection, etc. Tests without a specific
     // vehicle use seededVehicleId = null by default (class-only booking).
-    const v1 = await vehicleRepo.create({
+    const v1 = await vehicleRepo.create(SYSTEM_CONTEXT, {
       classId: testClassId,
       name: 'Aqua 01',
       description: null,
@@ -123,7 +123,7 @@ describe('Booking Routes', () => {
       shakenExpiryDate: null,
       insuranceExpiryDate: null,
     })
-    const v2 = await vehicleRepo.create({
+    const v2 = await vehicleRepo.create(SYSTEM_CONTEXT, {
       classId: testClassId,
       name: 'Aqua 02',
       description: null,
@@ -372,7 +372,7 @@ describe('Booking Routes', () => {
     })
 
     it('returns bookings with vehicle data when expand=vehicle', async () => {
-      const corolla = await vehicleRepo.create({
+      const corolla = await vehicleRepo.create(SYSTEM_CONTEXT, {
         classId: testClassId,
         name: 'Toyota Corolla',
         description: 'A reliable sedan',
@@ -627,7 +627,7 @@ describe('Booking Routes', () => {
         sortOrder: 0,
         status: 'ACTIVE',
       })
-      const otherClassVehicle = await vehicleRepo.create({
+      const otherClassVehicle = await vehicleRepo.create(SYSTEM_CONTEXT, {
         classId: otherClass.id,
         name: 'Land Cruiser',
         description: null,
@@ -831,7 +831,7 @@ describe('Booking Routes', () => {
         maxRentalHours?: number | null
         advanceBookingHours?: number | null
       }) {
-        const vehicle = await vehicleRepo.create({
+        const vehicle = await vehicleRepo.create(SYSTEM_CONTEXT, {
           classId: testClassId,
           name: 'Toyota Alphard',
           description: null,
@@ -1012,7 +1012,7 @@ describe('Booking Routes', () => {
         dailyRateJpy: number | null
         hourlyRateJpy: number | null
       }) {
-        const vehicle = await vehicleRepo.create({
+        const vehicle = await vehicleRepo.create(SYSTEM_CONTEXT, {
           classId: testClassId,
           name: 'Test Vehicle',
           description: null,
@@ -1249,7 +1249,7 @@ describe('Booking Routes', () => {
     // the 24h booking (10,000 JPY/day × 1 day = 10,000). Clients can no
     // longer propose totalPrice on the request body.
     async function seedPricedVehicle() {
-      const vehicle = await vehicleRepo.create({
+      const vehicle = await vehicleRepo.create(SYSTEM_CONTEXT, {
         classId: testClassId,
         name: 'Priced Vehicle',
         description: null,

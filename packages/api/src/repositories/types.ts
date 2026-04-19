@@ -46,28 +46,44 @@ export interface VehicleUpdateOptions {
   expectedStatus?: Vehicle['status']
 }
 
+/**
+ * Issue #329: CallerContext is threaded through every method as defence
+ * in depth. Mutations reject non-STAFF callers at the repo layer so a
+ * forgotten route-level `STAFF_ROLES` check cannot silently escalate
+ * privilege. Reads stay unrestricted so the public renter catalog can
+ * pass `SYSTEM_CONTEXT` for aggregate queries.
+ */
 export interface VehicleRepository {
-  findAll(filters?: VehicleFilters): Promise<PaginatedResult<Vehicle>>
-  findById(id: string): Promise<Vehicle | undefined>
-  findByIds(ids: string[]): Promise<Vehicle[]>
-  create(data: Omit<Vehicle, 'id' | 'createdAt' | 'updatedAt'>): Promise<Vehicle>
+  findAll(ctx: CallerContext, filters?: VehicleFilters): Promise<PaginatedResult<Vehicle>>
+  findById(ctx: CallerContext, id: string): Promise<Vehicle | undefined>
+  findByIds(ctx: CallerContext, ids: string[]): Promise<Vehicle[]>
+  create(
+    ctx: CallerContext,
+    data: Omit<Vehicle, 'id' | 'createdAt' | 'updatedAt'>,
+  ): Promise<Vehicle>
   update(
+    ctx: CallerContext,
     id: string,
     data: Partial<Vehicle>,
     options?: VehicleUpdateOptions,
   ): Promise<Vehicle | undefined>
-  softDelete(id: string): Promise<Vehicle | undefined>
-  bulkUpdateStatus(ids: string[], status: 'AVAILABLE' | 'MAINTENANCE'): Promise<Vehicle[]>
+  softDelete(ctx: CallerContext, id: string): Promise<Vehicle | undefined>
+  bulkUpdateStatus(
+    ctx: CallerContext,
+    ids: string[],
+    status: 'AVAILABLE' | 'MAINTENANCE',
+  ): Promise<Vehicle[]>
   // Atomic photo-array ops. Single SQL statements so concurrent callers
   // cannot race a read-modify-write on the photos array.
   appendPhotos(
+    ctx: CallerContext,
     id: string,
     urls: string[],
     maxPhotos: number,
   ): Promise<
     { outcome: 'ok'; vehicle: Vehicle } | { outcome: 'cap_exceeded' } | { outcome: 'not_found' }
   >
-  removePhotoByUrl(id: string, url: string): Promise<Vehicle | undefined>
+  removePhotoByUrl(ctx: CallerContext, id: string, url: string): Promise<Vehicle | undefined>
 }
 
 // Aggregated read for the owner-facing /manage/vehicles list. Enriches

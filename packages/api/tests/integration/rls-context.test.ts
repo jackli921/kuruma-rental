@@ -1,6 +1,6 @@
 import { users } from '@kuruma/shared/db/schema'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
-import type { CallerContext } from '../../src/middleware/auth'
+import { type CallerContext, SYSTEM_CONTEXT } from '../../src/middleware/auth'
 import { DrizzleBookingRepository, DrizzleVehicleRepository } from '../../src/repositories/drizzle'
 import type { Booking, Vehicle } from '../../src/stores'
 import {
@@ -68,7 +68,7 @@ beforeAll(async () => {
   testClassId = klass.id
   createdClassIds.push(klass.id)
 
-  vehicle = await vehicleRepo.create({
+  vehicle = await vehicleRepo.create(SYSTEM_CONTEXT, {
     classId: testClassId,
     name: 'RLS Test Car',
     description: null,

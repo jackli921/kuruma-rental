@@ -1,4 +1,5 @@
 import { detectImageType } from '../lib/image-signature'
+import type { CallerContext } from '../middleware/auth'
 import type { PhotoStorage, VehicleRepository } from '../repositories/types'
 
 const MAX_PHOTOS_PER_VEHICLE = 10
@@ -21,7 +22,7 @@ export class VehiclePhotoService {
     private readonly storage: PhotoStorage,
   ) {}
 
-  async uploadPhotos(vehicleId: string, files: File[]): Promise<UploadResult> {
+  async uploadPhotos(ctx: CallerContext, vehicleId: string, files: File[]): Promise<UploadResult> {
     if (files.length === 0) return { ok: false, status: 400, error: 'No file provided' }
     if (files.length > MAX_PHOTOS_PER_VEHICLE) {
       return {
@@ -54,6 +55,7 @@ export class VehiclePhotoService {
     }
 
     const appendResult = await this.repo.appendPhotos(
+      ctx,
       vehicleId,
       succeeded.map((r) => r.url),
       MAX_PHOTOS_PER_VEHICLE,
@@ -79,8 +81,8 @@ export class VehiclePhotoService {
     }
   }
 
-  async deletePhoto(vehicleId: string, url: string): Promise<DeleteResult> {
-    const updated = await this.repo.removePhotoByUrl(vehicleId, url)
+  async deletePhoto(ctx: CallerContext, vehicleId: string, url: string): Promise<DeleteResult> {
+    const updated = await this.repo.removePhotoByUrl(ctx, vehicleId, url)
     if (!updated) {
       // Either the vehicle does not exist or the URL is not one of its photos.
       // Treat both as 404 so we do not leak existence info.

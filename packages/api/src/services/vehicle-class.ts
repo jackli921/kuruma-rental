@@ -1,3 +1,4 @@
+import { SYSTEM_CONTEXT } from '../middleware/auth'
 import type {
   BookingRepository,
   VehicleClassFilters,
@@ -90,7 +91,10 @@ export class VehicleClassService {
     // Guard: cannot archive a class that still has live bookings via any of
     // its member vehicles. Owner must reassign/cancel those bookings first.
     // Client-side check in /manage/classes is racy — this is the server seal.
-    const { data: members } = await this.vehicleRepo.findAll({
+    // Archive is a staff-only route; the route-level STAFF_ROLES gate
+    // already covers authz. Use SYSTEM_CONTEXT for this internal read so
+    // the service boundary stays auth-agnostic.
+    const { data: members } = await this.vehicleRepo.findAll(SYSTEM_CONTEXT, {
       classId: id,
       includeRetired: true,
     })

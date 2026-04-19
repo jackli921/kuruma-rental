@@ -88,7 +88,7 @@ export class BookingService {
     if (!this.vehicleRepo) return { data, nextCursor }
 
     const vehicleIds = [...new Set(data.flatMap((b) => (b.vehicleId ? [b.vehicleId] : [])))]
-    const vehicleList = await this.vehicleRepo.findByIds(vehicleIds)
+    const vehicleList = await this.vehicleRepo.findByIds(ctx, vehicleIds)
     const vehicleMap = new Map(vehicleList.map((v) => [v.id, { name: v.name, photos: v.photos }]))
 
     return {
@@ -163,7 +163,7 @@ export class BookingService {
     // Pricing falls back to the class rate when no specific vehicle is attached.
     // Issue #65: rental rules + Issue #74: server-side pricing — never
     // accepted from the client.
-    const resolution = await this.resolveClassAndVehicle(input, now)
+    const resolution = await this.resolveClassAndVehicle(ctx, input, now)
     if (!resolution.ok) return resolution
 
     const { bufferMinutes, totalPrice } = resolution
@@ -285,6 +285,7 @@ export class BookingService {
   // them would let a renter book a Compact and receive an SUV. Pricing and
   // buffer come from the vehicle when assigned, otherwise from the class.
   private async resolveClassAndVehicle(
+    ctx: CallerContext,
     input: CreateBookingInput,
     now: Date,
   ): Promise<
@@ -299,7 +300,7 @@ export class BookingService {
       return { ok: false, status: 400, error: 'Vehicle class is archived' }
     }
 
-    const vehicle = input.vehicleId ? await this.lookupVehicle(input.vehicleId) : null
+    const vehicle = input.vehicleId ? await this.lookupVehicle(ctx, input.vehicleId) : null
     if (input.vehicleId && !vehicle) {
       return { ok: false, status: 400, error: 'Vehicle not found' }
     }
@@ -373,10 +374,10 @@ export class BookingService {
     return (await this.vehicleClassRepo.findById(id)) ?? null
   }
 
-  private async lookupVehicle(id: string): Promise<Vehicle | null> {
+  private async lookupVehicle(ctx: CallerContext, id: string): Promise<Vehicle | null> {
     if (!this.vehicleRepo) {
       throw new Error('BookingService missing vehicleRepo; check DI wiring')
     }
-    return (await this.vehicleRepo.findById(id)) ?? null
+    return (await this.vehicleRepo.findById(ctx, id)) ?? null
   }
 }

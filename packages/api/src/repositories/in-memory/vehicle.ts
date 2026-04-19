@@ -1,3 +1,4 @@
+import { type CallerContext, requireStaffContext } from '../../middleware/auth'
 import type { Vehicle } from '../../stores'
 import type {
   PaginatedResult,
@@ -13,7 +14,7 @@ export class InMemoryVehicleRepository implements VehicleRepository {
     this.store = store ?? new Map()
   }
 
-  async findAll(filters?: VehicleFilters): Promise<PaginatedResult<Vehicle>> {
+  async findAll(_ctx: CallerContext, filters?: VehicleFilters): Promise<PaginatedResult<Vehicle>> {
     const all = [...this.store.values()]
     let filtered: Vehicle[]
     if (filters?.status) {
@@ -33,18 +34,22 @@ export class InMemoryVehicleRepository implements VehicleRepository {
     return { data, total }
   }
 
-  async findById(id: string): Promise<Vehicle | undefined> {
+  async findById(_ctx: CallerContext, id: string): Promise<Vehicle | undefined> {
     return this.store.get(id)
   }
 
-  async findByIds(ids: string[]): Promise<Vehicle[]> {
+  async findByIds(_ctx: CallerContext, ids: string[]): Promise<Vehicle[]> {
     return ids.flatMap((id) => {
       const v = this.store.get(id)
       return v ? [v] : []
     })
   }
 
-  async create(data: Omit<Vehicle, 'id' | 'createdAt' | 'updatedAt'>): Promise<Vehicle> {
+  async create(
+    ctx: CallerContext,
+    data: Omit<Vehicle, 'id' | 'createdAt' | 'updatedAt'>,
+  ): Promise<Vehicle> {
+    requireStaffContext(ctx)
     const now = new Date()
     const vehicle: Vehicle = {
       ...data,
@@ -57,10 +62,12 @@ export class InMemoryVehicleRepository implements VehicleRepository {
   }
 
   async update(
+    ctx: CallerContext,
     id: string,
     data: Partial<Vehicle>,
     options?: VehicleUpdateOptions,
   ): Promise<Vehicle | undefined> {
+    requireStaffContext(ctx)
     const existing = this.store.get(id)
     if (!existing) return undefined
     if (options?.expectedStatus && existing.status !== options.expectedStatus) return undefined
@@ -76,7 +83,8 @@ export class InMemoryVehicleRepository implements VehicleRepository {
     return updated
   }
 
-  async softDelete(id: string): Promise<Vehicle | undefined> {
+  async softDelete(ctx: CallerContext, id: string): Promise<Vehicle | undefined> {
+    requireStaffContext(ctx)
     const existing = this.store.get(id)
     if (!existing) return undefined
 
@@ -89,7 +97,12 @@ export class InMemoryVehicleRepository implements VehicleRepository {
     return retired
   }
 
-  async bulkUpdateStatus(ids: string[], status: 'AVAILABLE' | 'MAINTENANCE'): Promise<Vehicle[]> {
+  async bulkUpdateStatus(
+    ctx: CallerContext,
+    ids: string[],
+    status: 'AVAILABLE' | 'MAINTENANCE',
+  ): Promise<Vehicle[]> {
+    requireStaffContext(ctx)
     const now = new Date()
     const updated: Vehicle[] = []
     for (const id of ids) {
@@ -103,12 +116,14 @@ export class InMemoryVehicleRepository implements VehicleRepository {
   }
 
   async appendPhotos(
+    ctx: CallerContext,
     id: string,
     urls: string[],
     maxPhotos: number,
   ): Promise<
     { outcome: 'ok'; vehicle: Vehicle } | { outcome: 'cap_exceeded' } | { outcome: 'not_found' }
   > {
+    requireStaffContext(ctx)
     const existing = this.store.get(id)
     if (!existing) return { outcome: 'not_found' }
     if (existing.photos.length + urls.length > maxPhotos) return { outcome: 'cap_exceeded' }
@@ -121,7 +136,12 @@ export class InMemoryVehicleRepository implements VehicleRepository {
     return { outcome: 'ok', vehicle: updated }
   }
 
-  async removePhotoByUrl(id: string, url: string): Promise<Vehicle | undefined> {
+  async removePhotoByUrl(
+    ctx: CallerContext,
+    id: string,
+    url: string,
+  ): Promise<Vehicle | undefined> {
+    requireStaffContext(ctx)
     const existing = this.store.get(id)
     if (!existing) return undefined
     if (!existing.photos.includes(url)) return undefined

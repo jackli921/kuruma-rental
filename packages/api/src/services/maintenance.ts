@@ -1,3 +1,4 @@
+import type { CallerContext } from '../middleware/auth'
 import type {
   MaintenanceLog,
   MaintenanceLogRepository,
@@ -18,13 +19,14 @@ export class MaintenanceService {
   ) {}
 
   async toggleStatus(
+    ctx: CallerContext,
     vehicleId: string,
     status: Vehicle['status'],
     reason?: string,
     now: Date = new Date(),
   ): Promise<ToggleStatusResult> {
     // Reads + validation outside the transaction
-    const existing = await this.vehicleRepo.findById(vehicleId)
+    const existing = await this.vehicleRepo.findById(ctx, vehicleId)
     if (!existing) {
       return { ok: false, status: 404, error: 'Vehicle not found' }
     }
@@ -54,6 +56,7 @@ export class MaintenanceService {
     // InMemory: simulated via snapshot/restore in tests).
     return this.runInTransaction(async ({ vehicleRepo, maintenanceLogRepo }) => {
       const updated = await vehicleRepo.update(
+        ctx,
         vehicleId,
         { status },
         { expectedStatus: existing.status },

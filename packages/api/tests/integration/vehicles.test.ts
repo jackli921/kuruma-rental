@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it } from 'vitest'
+import { SYSTEM_CONTEXT } from '../../src/middleware/auth'
 import { DrizzleVehicleRepository } from '../../src/repositories/drizzle'
 import { DEFAULT_DAILY_RATE_JPY, cleanupVehicles, db } from './setup'
 
@@ -29,7 +30,7 @@ describe('DrizzleVehicleRepository', () => {
       insuranceExpiryDate: null,
     }
 
-    const vehicle = await repo.create(input)
+    const vehicle = await repo.create(SYSTEM_CONTEXT, input)
     createdIds.push(vehicle.id)
 
     expect(vehicle.id).toMatch(/^[0-9a-f-]{36}$/)
@@ -49,7 +50,7 @@ describe('DrizzleVehicleRepository', () => {
   })
 
   it('findById retrieves a created vehicle', async () => {
-    const created = await repo.create({
+    const created = await repo.create(SYSTEM_CONTEXT, {
       name: 'Findable Car',
       description: null,
       seats: 4,
@@ -67,7 +68,7 @@ describe('DrizzleVehicleRepository', () => {
     })
     createdIds.push(created.id)
 
-    const found = await repo.findById(created.id)
+    const found = await repo.findById(SYSTEM_CONTEXT, created.id)
 
     expect(found).toBeDefined()
     expect(found!.id).toBe(created.id)
@@ -81,12 +82,12 @@ describe('DrizzleVehicleRepository', () => {
   })
 
   it('findById returns undefined for non-existent id', async () => {
-    const found = await repo.findById('non-existent-id')
+    const found = await repo.findById(SYSTEM_CONTEXT, 'non-existent-id')
     expect(found).toBeUndefined()
   })
 
   it('findAll returns all vehicles and filters by status', async () => {
-    const available = await repo.create({
+    const available = await repo.create(SYSTEM_CONTEXT, {
       name: 'Available Car',
       description: null,
       seats: 5,
@@ -104,7 +105,7 @@ describe('DrizzleVehicleRepository', () => {
     })
     createdIds.push(available.id)
 
-    const maintenance = await repo.create({
+    const maintenance = await repo.create(SYSTEM_CONTEXT, {
       name: 'Maintenance Car',
       description: null,
       seats: 4,
@@ -123,20 +124,20 @@ describe('DrizzleVehicleRepository', () => {
     createdIds.push(maintenance.id)
 
     // findAll without filter should include both
-    const { data: all } = await repo.findAll()
+    const { data: all } = await repo.findAll(SYSTEM_CONTEXT)
     const allIds = all.map((v) => v.id)
     expect(allIds).toContain(available.id)
     expect(allIds).toContain(maintenance.id)
 
     // findAll with status filter should only include matching
-    const { data: filtered } = await repo.findAll({ status: 'MAINTENANCE' })
+    const { data: filtered } = await repo.findAll(SYSTEM_CONTEXT, { status: 'MAINTENANCE' })
     const filteredIds = filtered.map((v) => v.id)
     expect(filteredIds).toContain(maintenance.id)
     expect(filteredIds).not.toContain(available.id)
   })
 
   it('update modifies specified fields and preserves others', async () => {
-    const created = await repo.create({
+    const created = await repo.create(SYSTEM_CONTEXT, {
       name: 'Original Name',
       description: 'Original desc',
       seats: 5,
@@ -154,7 +155,7 @@ describe('DrizzleVehicleRepository', () => {
     })
     createdIds.push(created.id)
 
-    const updated = await repo.update(created.id, {
+    const updated = await repo.update(SYSTEM_CONTEXT, created.id, {
       name: 'Updated Name',
       seats: 7,
     })
@@ -175,12 +176,12 @@ describe('DrizzleVehicleRepository', () => {
   })
 
   it('update returns undefined for non-existent id', async () => {
-    const result = await repo.update('non-existent-id', { name: 'Nope' })
+    const result = await repo.update(SYSTEM_CONTEXT, 'non-existent-id', { name: 'Nope' })
     expect(result).toBeUndefined()
   })
 
   it('softDelete sets status to RETIRED', async () => {
-    const created = await repo.create({
+    const created = await repo.create(SYSTEM_CONTEXT, {
       name: 'To Be Retired',
       description: null,
       seats: 4,
@@ -198,7 +199,7 @@ describe('DrizzleVehicleRepository', () => {
     })
     createdIds.push(created.id)
 
-    const retired = await repo.softDelete(created.id)
+    const retired = await repo.softDelete(SYSTEM_CONTEXT, created.id)
 
     expect(retired).toBeDefined()
     expect(retired!.id).toBe(created.id)
@@ -208,12 +209,12 @@ describe('DrizzleVehicleRepository', () => {
     expect(retired!.updatedAt.getTime()).toBeGreaterThanOrEqual(created.createdAt.getTime())
 
     // Verify persisted in DB
-    const fromDb = await repo.findById(created.id)
+    const fromDb = await repo.findById(SYSTEM_CONTEXT, created.id)
     expect(fromDb!.status).toBe('RETIRED')
   })
 
   it('softDelete returns undefined for non-existent id', async () => {
-    const result = await repo.softDelete('non-existent-id')
+    const result = await repo.softDelete(SYSTEM_CONTEXT, 'non-existent-id')
     expect(result).toBeUndefined()
   })
 })

@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it } from 'vitest'
+import { SYSTEM_CONTEXT } from '../../src/middleware/auth'
 import { InMemoryVehicleRepository } from '../../src/repositories/in-memory'
 import { InMemoryPhotoStorage } from '../../src/repositories/in-memory/photo-storage'
 import { VehiclePhotoService } from '../../src/services/vehicle-photo'
@@ -40,34 +41,34 @@ beforeEach(async () => {
   repo = new InMemoryVehicleRepository()
   storage = new InMemoryPhotoStorage()
   service = new VehiclePhotoService(repo, storage)
-  const v = await repo.create(vehicleInput())
+  const v = await repo.create(SYSTEM_CONTEXT, vehicleInput())
   vehicleId = v.id
 })
 
 describe('VehiclePhotoService.uploadPhotos', () => {
   it('uploads a valid image and appends the URL to the vehicle', async () => {
     const file = makeFile('a.jpg', 'image/jpeg', JPEG)
-    const result = await service.uploadPhotos(vehicleId, [file])
+    const result = await service.uploadPhotos(SYSTEM_CONTEXT, vehicleId, [file])
 
     expect(result.ok).toBe(true)
     if (!result.ok) return
     expect(result.uploaded).toHaveLength(1)
     expect(result.total).toBe(1)
 
-    const updated = await repo.findById(vehicleId)
+    const updated = await repo.findById(SYSTEM_CONTEXT, vehicleId)
     expect(updated?.photos).toHaveLength(1)
   })
 
   it('rejects non-image MIME with 400', async () => {
     const file = new File([new Uint8Array(100)], 'doc.pdf', { type: 'application/pdf' })
-    const result = await service.uploadPhotos(vehicleId, [file])
+    const result = await service.uploadPhotos(SYSTEM_CONTEXT, vehicleId, [file])
     expect(result).toEqual({ ok: false, status: 400, error: expect.stringContaining('image') })
   })
 
   it('rejects content-type spoofing with 415', async () => {
     // PNG bytes labeled as image/jpeg
     const file = makeFile('fake.jpg', 'image/jpeg', PNG)
-    const result = await service.uploadPhotos(vehicleId, [file])
+    const result = await service.uploadPhotos(SYSTEM_CONTEXT, vehicleId, [file])
     expect(result.ok).toBe(false)
     if (result.ok) return
     expect(result.status).toBe(415)
@@ -77,7 +78,7 @@ describe('VehiclePhotoService.uploadPhotos', () => {
     const bytes = new Uint8Array(6 * 1024 * 1024)
     bytes.set(JPEG)
     const file = new File([bytes], 'huge.jpg', { type: 'image/jpeg' })
-    const result = await service.uploadPhotos(vehicleId, [file])
+    const result = await service.uploadPhotos(SYSTEM_CONTEXT, vehicleId, [file])
     expect(result.ok).toBe(false)
     if (result.ok) return
     expect(result.status).toBe(400)
@@ -86,7 +87,7 @@ describe('VehiclePhotoService.uploadPhotos', () => {
 
   it('returns 404 with no orphan when vehicle does not exist', async () => {
     const file = makeFile('a.jpg', 'image/jpeg', JPEG)
-    const result = await service.uploadPhotos('nonexistent-id', [file])
+    const result = await service.uploadPhotos(SYSTEM_CONTEXT, 'nonexistent-id', [file])
     expect(result.ok).toBe(false)
     if (result.ok) return
     expect(result.status).toBe(404)
@@ -95,7 +96,7 @@ describe('VehiclePhotoService.uploadPhotos', () => {
   })
 
   it('returns 400 when no files provided', async () => {
-    const result = await service.uploadPhotos(vehicleId, [])
+    const result = await service.uploadPhotos(SYSTEM_CONTEXT, vehicleId, [])
     expect(result.ok).toBe(false)
     if (result.ok) return
     expect(result.status).toBe(400)
@@ -109,7 +110,7 @@ describe('VehiclePhotoService.uploadPhotos rollback', () => {
     const deletedUrls: string[] = []
     let callCount = 0
     const flakyStorage = {
-      put: async (vId: string, file: File) => {
+      put: async (vId: string, _file: File) => {
         callCount += 1
         if (callCount === 2) throw new Error('network blip')
         return { key: `k${callCount}`, url: `https://r2.example/${vId}/p${callCount}.jpg` }
@@ -121,7 +122,7 @@ describe('VehiclePhotoService.uploadPhotos rollback', () => {
     const flakyService = new VehiclePhotoService(repo, flakyStorage)
 
     const files = [makeFile('a.jpg', 'image/jpeg', JPEG), makeFile('b.jpg', 'image/jpeg', JPEG)]
-    const result = await flakyService.uploadPhotos(vehicleId, files)
+    const result = await flakyService.uploadPhotos(SYSTEM_CONTEXT, vehicleId, files)
 
     expect(result.ok).toBe(false)
     if (result.ok) return
@@ -129,7 +130,7 @@ describe('VehiclePhotoService.uploadPhotos rollback', () => {
     // The one successful upload must have been cleaned up.
     expect(deletedUrls).toEqual([`https://r2.example/${vehicleId}/p1.jpg`])
 
-    const after = await repo.findById(vehicleId)
+    const after = await repo.findById(SYSTEM_CONTEXT, vehicleId)
     expect(after?.photos).toHaveLength(0)
   })
 })
@@ -137,21 +138,25 @@ describe('VehiclePhotoService.uploadPhotos rollback', () => {
 describe('VehiclePhotoService.deletePhoto', () => {
   it('removes the photo from the vehicle and R2', async () => {
     const file = makeFile('a.jpg', 'image/jpeg', JPEG)
-    const up = await service.uploadPhotos(vehicleId, [file])
+    const up = await service.uploadPhotos(SYSTEM_CONTEXT, vehicleId, [file])
     if (!up.ok) throw new Error('setup failed')
     const url = up.uploaded[0]!
 
-    const result = await service.deletePhoto(vehicleId, url)
+    const result = await service.deletePhoto(SYSTEM_CONTEXT, vehicleId, url)
     expect(result.ok).toBe(true)
     if (!result.ok) return
     expect(result.remaining).toBe(0)
 
-    const after = await repo.findById(vehicleId)
+    const after = await repo.findById(SYSTEM_CONTEXT, vehicleId)
     expect(after?.photos).toHaveLength(0)
   })
 
   it('returns 404 when the url is not associated with the vehicle', async () => {
-    const result = await service.deletePhoto(vehicleId, 'https://r2.example/missing.jpg')
+    const result = await service.deletePhoto(
+      SYSTEM_CONTEXT,
+      vehicleId,
+      'https://r2.example/missing.jpg',
+    )
     expect(result.ok).toBe(false)
     if (result.ok) return
     expect(result.status).toBe(404)

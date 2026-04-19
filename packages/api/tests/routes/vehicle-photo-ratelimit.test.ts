@@ -1,6 +1,7 @@
 import type { RateLimitBinding } from '@elithrar/workers-hono-rate-limit'
 import { describe, expect, it } from 'vitest'
 import { createApp } from '../../src/index'
+import { SYSTEM_CONTEXT } from '../../src/middleware/auth'
 import {
   InMemoryAvailabilityRepository,
   InMemoryBookingRepository,
@@ -76,7 +77,7 @@ function createTestApp(opts?: {
 describe('photo upload rate limiting', () => {
   it('returns 429 after exceeding the per-(user, vehicle) limit', async () => {
     const ctx = createTestApp({ photoUploadLimiter: createFakeLimiter(2) })
-    const vehicle = await ctx.vehicleRepo.create(vehicleInput())
+    const vehicle = await ctx.vehicleRepo.create(SYSTEM_CONTEXT, vehicleInput())
     const headers = await authHeaders()
 
     const first = await ctx.app.request(`/vehicles/${vehicle.id}/photos`, {
@@ -102,8 +103,8 @@ describe('photo upload rate limiting', () => {
 
   it('keeps separate buckets per (user, vehicle) pair', async () => {
     const ctx = createTestApp({ photoUploadLimiter: createFakeLimiter(1) })
-    const v1 = await ctx.vehicleRepo.create(vehicleInput())
-    const v2 = await ctx.vehicleRepo.create(vehicleInput())
+    const v1 = await ctx.vehicleRepo.create(SYSTEM_CONTEXT, vehicleInput())
+    const v2 = await ctx.vehicleRepo.create(SYSTEM_CONTEXT, vehicleInput())
     const headersUserA = await authHeaders({ sub: 'user-a', role: 'ADMIN' })
     const headersUserB = await authHeaders({ sub: 'user-b', role: 'ADMIN' })
 
@@ -136,7 +137,7 @@ describe('photo upload rate limiting', () => {
 
   it('bypasses rate limiting when no binding is injected (local dev)', async () => {
     const ctx = createTestApp()
-    const vehicle = await ctx.vehicleRepo.create(vehicleInput())
+    const vehicle = await ctx.vehicleRepo.create(SYSTEM_CONTEXT, vehicleInput())
     const headers = await authHeaders()
 
     for (let i = 0; i < 5; i++) {
@@ -152,6 +153,7 @@ describe('photo upload rate limiting', () => {
   it('also rate-limits DELETE requests (URL-query shape)', async () => {
     const ctx = createTestApp({ photoUploadLimiter: createFakeLimiter(1) })
     const vehicle = await ctx.vehicleRepo.create(
+      SYSTEM_CONTEXT,
       vehicleInput({ photos: ['https://test/a.jpg', 'https://test/b.jpg'] }),
     )
     const headers = await authHeaders()
@@ -176,9 +178,9 @@ describe('photo upload rate limiting', () => {
       photoUploadLimiter: createFakeLimiter(100),
       photoUploadUserLimiter: createFakeLimiter(2),
     })
-    const v1 = await ctx.vehicleRepo.create(vehicleInput())
-    const v2 = await ctx.vehicleRepo.create(vehicleInput())
-    const v3 = await ctx.vehicleRepo.create(vehicleInput())
+    const v1 = await ctx.vehicleRepo.create(SYSTEM_CONTEXT, vehicleInput())
+    const v2 = await ctx.vehicleRepo.create(SYSTEM_CONTEXT, vehicleInput())
+    const v3 = await ctx.vehicleRepo.create(SYSTEM_CONTEXT, vehicleInput())
     const headers = await authHeaders()
 
     const a = await ctx.app.request(`/vehicles/${v1.id}/photos`, {

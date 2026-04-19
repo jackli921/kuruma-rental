@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { createApp } from '../../src/index'
+import { SYSTEM_CONTEXT } from '../../src/middleware/auth'
 import {
   InMemoryAvailabilityRepository,
   InMemoryBookingRepository,
@@ -170,8 +171,8 @@ describe('public catalog endpoints', () => {
     it('returns totalCars=availableCars when no bookings conflict', async () => {
       const ctx = createTestApp()
       const vc = await ctx.vehicleClassRepo.create(classInput())
-      const v1 = await ctx.vehicleRepo.create(vehicleInput({ classId: vc.id }))
-      const v2 = await ctx.vehicleRepo.create(vehicleInput({ classId: vc.id }))
+      const v1 = await ctx.vehicleRepo.create(SYSTEM_CONTEXT, vehicleInput({ classId: vc.id }))
+      const v2 = await ctx.vehicleRepo.create(SYSTEM_CONTEXT, vehicleInput({ classId: vc.id }))
 
       const res = await ctx.app.request(
         `/vehicle-classes/compact/availability?from=${FROM}&to=${TO}`,
@@ -187,8 +188,8 @@ describe('public catalog endpoints', () => {
       const ctx = createTestApp()
       const vc = await ctx.vehicleClassRepo.create(classInput())
       const other = await ctx.vehicleClassRepo.create(classInput({ slug: 'suv', name: 'SUV' }))
-      await ctx.vehicleRepo.create(vehicleInput({ classId: vc.id }))
-      await ctx.vehicleRepo.create(vehicleInput({ classId: other.id }))
+      await ctx.vehicleRepo.create(SYSTEM_CONTEXT, vehicleInput({ classId: vc.id }))
+      await ctx.vehicleRepo.create(SYSTEM_CONTEXT, vehicleInput({ classId: other.id }))
 
       const res = await ctx.app.request(
         `/vehicle-classes/compact/availability?from=${FROM}&to=${TO}`,
@@ -201,8 +202,8 @@ describe('public catalog endpoints', () => {
     it('subtracts bookings that fully overlap the window', async () => {
       const ctx = createTestApp()
       const vc = await ctx.vehicleClassRepo.create(classInput())
-      const v1 = await ctx.vehicleRepo.create(vehicleInput({ classId: vc.id }))
-      const v2 = await ctx.vehicleRepo.create(vehicleInput({ classId: vc.id }))
+      const v1 = await ctx.vehicleRepo.create(SYSTEM_CONTEXT, vehicleInput({ classId: vc.id }))
+      const v2 = await ctx.vehicleRepo.create(SYSTEM_CONTEXT, vehicleInput({ classId: vc.id }))
 
       // v1 is fully booked across the window
       const now = new Date()
@@ -239,7 +240,7 @@ describe('public catalog endpoints', () => {
     it('counts partial overlaps as conflicts (effectiveEndAt respected)', async () => {
       const ctx = createTestApp()
       const vc = await ctx.vehicleClassRepo.create(classInput())
-      const v1 = await ctx.vehicleRepo.create(vehicleInput({ classId: vc.id }))
+      const v1 = await ctx.vehicleRepo.create(SYSTEM_CONTEXT, vehicleInput({ classId: vc.id }))
 
       // booking ends with 60-min buffer extending into the window
       await ctx.bookingRepo.create(
@@ -272,8 +273,8 @@ describe('public catalog endpoints', () => {
     it('returns all-booked counts when every car in class is booked', async () => {
       const ctx = createTestApp()
       const vc = await ctx.vehicleClassRepo.create(classInput())
-      const v1 = await ctx.vehicleRepo.create(vehicleInput({ classId: vc.id }))
-      const v2 = await ctx.vehicleRepo.create(vehicleInput({ classId: vc.id }))
+      const v1 = await ctx.vehicleRepo.create(SYSTEM_CONTEXT, vehicleInput({ classId: vc.id }))
+      const v2 = await ctx.vehicleRepo.create(SYSTEM_CONTEXT, vehicleInput({ classId: vc.id }))
       for (const id of [v1.id, v2.id]) {
         await ctx.bookingRepo.create(
           { userId: 'r1', role: 'ADMIN' },
@@ -307,9 +308,18 @@ describe('public catalog endpoints', () => {
     it('excludes RETIRED/MAINTENANCE vehicles from totalCars', async () => {
       const ctx = createTestApp()
       const vc = await ctx.vehicleClassRepo.create(classInput())
-      await ctx.vehicleRepo.create(vehicleInput({ classId: vc.id, status: 'AVAILABLE' }))
-      await ctx.vehicleRepo.create(vehicleInput({ classId: vc.id, status: 'MAINTENANCE' }))
-      await ctx.vehicleRepo.create(vehicleInput({ classId: vc.id, status: 'RETIRED' }))
+      await ctx.vehicleRepo.create(
+        SYSTEM_CONTEXT,
+        vehicleInput({ classId: vc.id, status: 'AVAILABLE' }),
+      )
+      await ctx.vehicleRepo.create(
+        SYSTEM_CONTEXT,
+        vehicleInput({ classId: vc.id, status: 'MAINTENANCE' }),
+      )
+      await ctx.vehicleRepo.create(
+        SYSTEM_CONTEXT,
+        vehicleInput({ classId: vc.id, status: 'RETIRED' }),
+      )
 
       const res = await ctx.app.request(
         `/vehicle-classes/compact/availability?from=${FROM}&to=${TO}`,
@@ -345,7 +355,7 @@ describe('public catalog endpoints', () => {
       const ctx = createTestApp()
       const vc = await ctx.vehicleClassRepo.create(classInput())
       for (let i = 0; i < 7; i++) {
-        await ctx.vehicleRepo.create(vehicleInput({ classId: vc.id }))
+        await ctx.vehicleRepo.create(SYSTEM_CONTEXT, vehicleInput({ classId: vc.id }))
       }
       const res = await ctx.app.request(
         `/vehicle-classes/compact/availability?from=${FROM}&to=${TO}`,

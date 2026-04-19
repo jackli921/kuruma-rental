@@ -18,7 +18,7 @@ async function seedVehicle(
   repo: InMemoryVehicleRepository,
   overrides: Partial<Omit<Vehicle, 'id' | 'createdAt' | 'updatedAt'>> = {},
 ): Promise<Vehicle> {
-  return repo.create({
+  return repo.create(SYSTEM_CONTEXT, {
     name: 'Test',
     description: null,
     photos: [],

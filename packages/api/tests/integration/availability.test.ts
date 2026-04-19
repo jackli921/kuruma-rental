@@ -58,7 +58,7 @@ afterAll(async () => {
 function createTestVehicle(
   overrides: Partial<Omit<Vehicle, 'id' | 'createdAt' | 'updatedAt'>> = {},
 ): Promise<Vehicle> {
-  return vehicleRepo.create({
+  return vehicleRepo.create(SYSTEM_CONTEXT, {
     classId: overrides.classId ?? testClassId,
     name: overrides.name ?? 'Avail Test Car',
     description: overrides.description ?? null,

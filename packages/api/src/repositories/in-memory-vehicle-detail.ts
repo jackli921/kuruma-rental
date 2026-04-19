@@ -41,7 +41,7 @@ export class InMemoryVehicleDetailRepository implements VehicleDetailRepository 
   ) {}
 
   async findVehicleDetail(vehicleId: string, now: Date): Promise<VehicleDetail | undefined> {
-    const vehicle = await this.vehicleRepo.findById(vehicleId)
+    const vehicle = await this.vehicleRepo.findById(SYSTEM_CONTEXT, vehicleId)
     if (!vehicle) return undefined
 
     const allBookings = await this.bookingRepo.findAll(SYSTEM_CONTEXT, { vehicleId })
