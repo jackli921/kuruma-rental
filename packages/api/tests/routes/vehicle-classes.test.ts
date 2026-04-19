@@ -373,4 +373,46 @@ describe('Vehicle Class CRUD Routes', () => {
       expect(res.status).toBe(403)
     })
   })
+
+  describe('Cache-Control on public catalog GETs', () => {
+    it('sets public, s-maxage=60 on GET /vehicle-classes', async () => {
+      const res = await app.request('/vehicle-classes')
+      expect(res.status).toBe(200)
+      expect(res.headers.get('Cache-Control')).toBe('public, s-maxage=60')
+    })
+
+    it('sets public, s-maxage=60 on GET /vehicle-classes/by-slug/:slug', async () => {
+      await createClass()
+      const res = await app.request('/vehicle-classes/by-slug/compact')
+      expect(res.status).toBe(200)
+      expect(res.headers.get('Cache-Control')).toBe('public, s-maxage=60')
+    })
+
+    it('does NOT set public cache on 404 by-slug — negative responses would pin missing slugs at the edge', async () => {
+      const res = await app.request('/vehicle-classes/by-slug/does-not-exist')
+      expect(res.status).toBe(404)
+      expect(res.headers.get('Cache-Control')).toBeNull()
+    })
+
+    it('sets a shorter s-maxage=10 on /:slug/availability — time-range queries change faster', async () => {
+      await createClass()
+      const res = await app.request(
+        '/vehicle-classes/compact/availability?from=2026-05-01T00:00:00Z&to=2026-05-02T00:00:00Z',
+      )
+      expect(res.status).toBe(200)
+      expect(res.headers.get('Cache-Control')).toBe('public, s-maxage=10')
+    })
+
+    it('does NOT set cache on writes — PATCH has no Cache-Control (must not be cached at the edge)', async () => {
+      const createRes = await createClass()
+      const { data } = await createRes.json()
+      const res = await app.request(`/vehicle-classes/${data.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: 'Renamed' }),
+      })
+      expect(res.status).toBe(200)
+      expect(res.headers.get('Cache-Control')).toBeNull()
+    })
+  })
 })
