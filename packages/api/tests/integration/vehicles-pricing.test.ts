@@ -235,6 +235,7 @@ describe('DrizzleVehicleRepository — pricing (#48)', () => {
         baseVehicle({ name: 'Car A', dailyRateJpy: 8000 }),
       )
       const b = await repo.create(
+        SYSTEM_CONTEXT,
         baseVehicle({ name: 'Car B', dailyRateJpy: null, hourlyRateJpy: 1500 }),
       )
       createdVehicleIds.push(a.id, b.id)
