@@ -5,48 +5,7 @@ import { createApiClient } from '@/lib/api-client'
 import { getApiToken } from '@/lib/api-token'
 import type { ApiResponse } from '@kuruma/shared/types/api-response'
 
-interface CreateBookingInput {
-  vehicleId: string
-  startAt: string
-  endAt: string
-  notes?: string
-}
-
-// Structured rental-rule failure surfaced from the API. The form needs the
-// exact `code` + `required` hours so it can render the same translated
-// message as the inline client-side check (#65).
-export type RentalRuleFailure = {
-  code: 'RENTAL_RULE_ADVANCE_BOOKING' | 'RENTAL_RULE_MIN_DURATION' | 'RENTAL_RULE_MAX_DURATION'
-  required: number
-  actual: number
-}
-
-type CreateBookingResult =
-  | { success: true; bookingId: string }
-  | { success: false; error: string; rentalRule?: RentalRuleFailure }
-
-export async function checkAvailability(
-  vehicleId: string,
-  startAt: Date,
-  endAt: Date,
-): Promise<boolean> {
-  const token = await getApiToken()
-  // Raw fetch — hc client used only for typed URL construction.
-  const client = createApiClient()
-  const url = client.availability[':vehicleId'].$url({ param: { vehicleId } })
-  url.searchParams.set('from', startAt.toISOString())
-  url.searchParams.set('to', endAt.toISOString())
-  const headers: Record<string, string> = {}
-  if (token) {
-    headers.Authorization = `Bearer ${token}`
-  }
-  const res = await fetch(url, { headers })
-  const json = (await res.json()) as ApiResponse<{ available: boolean }>
-
-  if (!json.success) return false
-
-  return json.data.available
-}
+type CreateBookingResult = { success: true; bookingId: string } | { success: false; error: string }
 
 interface CreateClassBookingInput {
   classId: string
@@ -56,10 +15,9 @@ interface CreateClassBookingInput {
 }
 
 // Issue #311: renters book a class, not a specific vehicle. The owner
-// assigns a car from the class at pickup. Separate from createBooking
-// because the input shape and error mapping differ — classId is
-// authoritative, not a hint, and 409 means "no cars in this class are
-// free" rather than "this specific car is taken".
+// assigns a car from the class at pickup. The API accepts classId-only
+// bookings (see createBookingSchema in shared/validators) and a 409
+// Conflict here means "no cars in this class are free for these dates".
 export async function createClassBooking(
   input: CreateClassBookingInput,
 ): Promise<CreateBookingResult> {
@@ -105,88 +63,6 @@ export async function createClassBooking(
     return {
       success: false,
       error: 'No cars available for these dates. Please choose different dates.',
-    }
-  }
-
-  return { success: false, error: 'Failed to create booking.' }
-}
-
-export async function createBooking(input: CreateBookingInput): Promise<CreateBookingResult> {
-  const session = await auth()
-  if (!session?.user?.id) {
-    return { success: false, error: 'You must be logged in to make a booking.' }
-  }
-
-  if (!input.vehicleId) {
-    return { success: false, error: 'Vehicle ID is required.' }
-  }
-
-  if (!input.startAt || !input.endAt) {
-    return { success: false, error: 'Start and end dates are required.' }
-  }
-
-  const startAt = new Date(input.startAt)
-  const endAt = new Date(input.endAt)
-
-  if (endAt <= startAt) {
-    return { success: false, error: 'End date must be after start date.' }
-  }
-
-  // Optimistic concurrency: skip the availability pre-check and let the DB
-  // exclusion constraint be the authoritative guard. A separate check-then-act
-  // round-trip adds latency and creates a race window where two users both
-  // pass the check but only one succeeds at insert time. Handle the 409
-  // (constraint violation) with a user-friendly message instead.
-  // getApiToken() calls auth() internally — Next.js deduplicates within a request.
-  const token = await getApiToken()
-  const client = createApiClient(token)
-  const idempotencyKey = crypto.randomUUID()
-  const res = await client.bookings.$post({
-    json: {
-      vehicleId: input.vehicleId,
-      renterId: session.user.id,
-      startAt: input.startAt,
-      endAt: input.endAt,
-      source: 'DIRECT',
-      idempotencyKey,
-      ...(input.notes ? { notes: input.notes } : {}),
-    },
-  })
-
-  const json = (await res.json()) as {
-    success: boolean
-    data?: { id: string }
-    error?: string
-    code?: string
-    details?: { required?: number; actual?: number }
-  }
-
-  if (json.success && json.data) {
-    return { success: true, bookingId: json.data.id }
-  }
-
-  // 409 Conflict — DB exclusion constraint rejected overlapping booking.
-  if (res.status === 409) {
-    return {
-      success: false,
-      error: 'This vehicle was just booked by another renter. Please choose different dates.',
-    }
-  }
-
-  // Rental-rule rejections carry a known code so the client can translate.
-  if (
-    json.code === 'RENTAL_RULE_ADVANCE_BOOKING' ||
-    json.code === 'RENTAL_RULE_MIN_DURATION' ||
-    json.code === 'RENTAL_RULE_MAX_DURATION'
-  ) {
-    return {
-      success: false,
-      error: json.error ?? 'Booking violates a rental rule',
-      rentalRule: {
-        code: json.code,
-        required: json.details?.required ?? 0,
-        actual: json.details?.actual ?? 0,
-      },
     }
   }
 
@@ -242,7 +118,8 @@ export async function getBookingsByRenterId(userId: string): Promise<BookingWith
 interface Booking {
   id: string
   renterId: string
-  vehicleId: string
+  classId: string
+  vehicleId: string | null
   startAt: string
   endAt: string
   effectiveEndAt: string

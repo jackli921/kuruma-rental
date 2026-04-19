@@ -1,5 +1,6 @@
 export {
   fetchClassAvailability,
+  fetchClassById,
   fetchClassBySlug,
   fetchClasses,
   type ClassAvailability,
