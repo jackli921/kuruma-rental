@@ -3,7 +3,7 @@ import { Hono } from 'hono'
 import { STAFF_ROLES, requireUser, toCallerContext } from '../middleware/auth'
 import type { BookingFilters } from '../repositories/types'
 import type { BookingService } from '../services/booking'
-import { fail, ok, parseDateRange, parseLimit } from './helpers'
+import { fail, ok, parseBody, parseDateRange, parseLimit } from './helpers'
 
 export function createBookingRoutes(service: BookingService) {
   return new Hono()
@@ -62,30 +62,26 @@ export function createBookingRoutes(service: BookingService) {
     .post('/bookings', async (c) => {
       const ctx = toCallerContext(requireUser(c))
 
-      const body = await c.req.json()
-      const result = createBookingSchema.safeParse(body)
-
-      if (!result.success) {
-        return fail(c, result.error.flatten().fieldErrors, 400)
-      }
+      const parsed = await parseBody(c, createBookingSchema)
+      if (!parsed.ok) return parsed.response
 
       // Staff/admin can create bookings on behalf of a customer (manual bookings).
       // Non-staff always book as themselves and source is forced to DIRECT
       // to prevent advance-booking-hours bypass via source=MANUAL.
       const isStaff = STAFF_ROLES.has(ctx.role)
-      const renterId = isStaff && result.data.renterId ? result.data.renterId : ctx.userId
-      const source = isStaff ? result.data.source : 'DIRECT'
+      const renterId = isStaff && parsed.data.renterId ? parsed.data.renterId : ctx.userId
+      const source = isStaff ? parsed.data.source : 'DIRECT'
 
       const createResult = await service.create(ctx, {
-        classId: result.data.classId,
-        vehicleId: result.data.vehicleId ?? null,
+        classId: parsed.data.classId,
+        vehicleId: parsed.data.vehicleId ?? null,
         renterId,
-        startAt: new Date(result.data.startAt),
-        endAt: new Date(result.data.endAt),
+        startAt: new Date(parsed.data.startAt),
+        endAt: new Date(parsed.data.endAt),
         source,
-        externalId: result.data.externalId ?? null,
-        notes: result.data.notes ?? null,
-        idempotencyKey: result.data.idempotencyKey ?? null,
+        externalId: parsed.data.externalId ?? null,
+        notes: parsed.data.notes ?? null,
+        idempotencyKey: parsed.data.idempotencyKey ?? null,
       })
 
       if (!createResult.ok) {
@@ -100,11 +96,8 @@ export function createBookingRoutes(service: BookingService) {
     .patch('/bookings/:id/status', async (c) => {
       const ctx = toCallerContext(requireUser(c))
 
-      const body = await c.req.json()
-      const parsed = updateBookingStatusSchema.safeParse(body)
-      if (!parsed.success) {
-        return fail(c, parsed.error.flatten().fieldErrors, 400)
-      }
+      const parsed = await parseBody(c, updateBookingStatusSchema)
+      if (!parsed.ok) return parsed.response
 
       const result = await service.updateStatus(ctx, c.req.param('id'), parsed.data.status)
       if (!result.ok) {
