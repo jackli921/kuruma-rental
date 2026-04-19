@@ -6,17 +6,21 @@ import { getApiToken } from '@/lib/api-token'
 import { getBookingById } from '@/lib/bookings'
 import { formatDateTime } from '@/lib/format'
 import { cn } from '@/lib/utils'
-import { getVehicleById } from '@/lib/vehicles'
+import { fetchClassById } from '@/modules/classes'
 import { CheckCircle } from 'lucide-react'
 import { getLocale, getTranslations } from 'next-intl/server'
 import { notFound, redirect } from 'next/navigation'
 
 interface ConfirmationPageProps {
-  searchParams: Promise<{ bookingId?: string; vehicleId?: string }>
+  searchParams: Promise<{ bookingId?: string }>
 }
 
+// Issue #311: confirmation page after a successful class booking. Shows the
+// class the renter booked (not a vehicle — the owner assigns a specific car
+// later). Booking.vehicleId may be null for class-only bookings; we look up
+// the class from booking.classId instead.
 export default async function BookingConfirmationPage({ searchParams }: ConfirmationPageProps) {
-  const { bookingId, vehicleId } = await searchParams
+  const { bookingId } = await searchParams
   const [session, t, locale] = await Promise.all([
     auth(),
     getTranslations('bookings.confirmation'),
@@ -37,7 +41,7 @@ export default async function BookingConfirmationPage({ searchParams }: Confirma
   }
 
   const token = await getApiToken()
-  const vehicle = vehicleId ? await getVehicleById(vehicleId, token) : null
+  const vehicleClass = await fetchClassById(booking.classId, token)
 
   const startDate = formatDateTime(booking.startAt, locale)
   const endDate = formatDateTime(booking.endAt, locale)
@@ -57,10 +61,10 @@ export default async function BookingConfirmationPage({ searchParams }: Confirma
               <span className="text-sm text-muted-foreground">{t('bookingId')}</span>
               <span className="text-sm font-mono">{booking.id.slice(0, 8)}</span>
             </div>
-            {vehicle && (
+            {vehicleClass && (
               <div className="flex justify-between">
-                <span className="text-sm text-muted-foreground">{t('vehicle')}</span>
-                <span className="text-sm font-medium">{vehicle.name}</span>
+                <span className="text-sm text-muted-foreground">{t('vehicleClass')}</span>
+                <span className="text-sm font-medium">{vehicleClass.name}</span>
               </div>
             )}
             <div className="flex justify-between">

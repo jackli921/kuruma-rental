@@ -56,6 +56,37 @@ export async function fetchClasses(
   return unwrap<VehicleClassData[]>(res)
 }
 
+// JSON shape returned by GET /vehicle-classes/:slug/availability. The
+// full API response includes `sampleAvailableVehicleIds` but renters
+// never need those, so the UI-facing type omits it.
+export interface ClassAvailability {
+  totalCars: number
+  availableCars: number
+}
+
+// Public endpoint — no auth needed. Returns null on 404 or any server
+// error so the UI can treat "unknown" as "can't book" without throwing.
+// Renters see the disabled-submit path, not an error boundary.
+export async function fetchClassAvailability(
+  slug: string,
+  from: Date,
+  to: Date,
+): Promise<ClassAvailability | null> {
+  const client = createApiClient()
+  const url = client['vehicle-classes'][':slug'].availability.$url({ param: { slug } })
+  url.searchParams.set('from', from.toISOString())
+  url.searchParams.set('to', to.toISOString())
+  const res = await fetch(url)
+  if (!res.ok) return null
+  const body = (await res.json().catch(() => null)) as ApiResponse<{
+    totalCars: number
+    availableCars: number
+    sampleAvailableVehicleIds: string[]
+  }> | null
+  if (!body || !body.success) return null
+  return { totalCars: body.data.totalCars, availableCars: body.data.availableCars }
+}
+
 // Public endpoint — no auth token required. Use this on renter-facing pages
 // so anonymous visitors can browse the catalog.
 export async function fetchClassBySlug(slug: string): Promise<VehicleClassData | null> {
