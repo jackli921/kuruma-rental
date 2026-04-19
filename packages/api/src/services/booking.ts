@@ -9,15 +9,18 @@ import type {
   BookingRepository,
   ThreadRepository,
   UserRepository,
+  VehicleClassRepository,
   VehicleRepository,
 } from '../repositories/types'
-import type { Booking } from '../stores'
+import type { Booking, Vehicle, VehicleClass } from '../stores'
 
 const DEFAULT_BUFFER_MINUTES = 60
 const MS_PER_MINUTE = 60 * 1000
 
 export interface CreateBookingInput {
-  vehicleId: string
+  // Issue #308: renters book a class; vehicle is optional (owner assigns later).
+  classId: string
+  vehicleId?: string | null
   renterId: string
   startAt: Date
   endAt: Date
@@ -64,6 +67,7 @@ export class BookingService {
     private readonly bookingRepo: BookingRepository,
     private readonly vehicleRepo?: VehicleRepository,
     private readonly userRepo?: UserRepository,
+    private readonly vehicleClassRepo?: VehicleClassRepository,
     private readonly threading?: BookingThreading,
   ) {}
 
@@ -95,14 +99,14 @@ export class BookingService {
     const { data, nextCursor } = await this.findAllPaginated(ctx, filters)
     if (!this.vehicleRepo) return { data, nextCursor }
 
-    const vehicleIds = [...new Set(data.map((b) => b.vehicleId))]
+    const vehicleIds = [...new Set(data.flatMap((b) => (b.vehicleId ? [b.vehicleId] : [])))]
     const vehicleList = await this.vehicleRepo.findByIds(vehicleIds)
     const vehicleMap = new Map(vehicleList.map((v) => [v.id, { name: v.name, photos: v.photos }]))
 
     return {
       data: data.map((booking) => ({
         ...booking,
-        vehicle: vehicleMap.get(booking.vehicleId),
+        vehicle: booking.vehicleId ? vehicleMap.get(booking.vehicleId) : undefined,
       })),
       nextCursor,
     }
@@ -171,20 +175,21 @@ export class BookingService {
       }
     }
 
-    // Issue #65: rental rules + Issue #74: server-side pricing.
-    // Both depend on the vehicle lookup. totalPrice is never accepted
-    // from the client — always computed server-side.
-    const vehicleLookup = await this.resolveVehicle(input, now)
-    if (vehicleLookup && !vehicleLookup.ok) return vehicleLookup
+    // Issue #308: resolve the class (required) + optional pre-assigned vehicle.
+    // Pricing falls back to the class rate when no specific vehicle is attached.
+    // Issue #65: rental rules + Issue #74: server-side pricing — never
+    // accepted from the client.
+    const resolution = await this.resolveClassAndVehicle(input, now)
+    if (!resolution.ok) return resolution
 
-    const bufferMinutes = vehicleLookup?.bufferMinutes ?? DEFAULT_BUFFER_MINUTES
-    const totalPrice = vehicleLookup?.totalPrice ?? null
+    const { bufferMinutes, totalPrice } = resolution
     const effectiveEndAt = new Date(input.endAt.getTime() + bufferMinutes * MS_PER_MINUTE)
 
     try {
       const booking = await this.bookingRepo.create(ctx, {
         renterId: input.renterId,
-        vehicleId: input.vehicleId,
+        classId: input.classId,
+        vehicleId: input.vehicleId ?? null,
         startAt: input.startAt,
         endAt: input.endAt,
         effectiveEndAt,
@@ -232,7 +237,7 @@ export class BookingService {
     if (!this.threading) return
     const threadKey = `booking:${booking.id}`
     try {
-      const existing = await this.threading.threadRepo.findByIdempotencyKey(threadKey)
+      const existing = await this.threading.threadRepo.findByIdempotencyKey(ctx, threadKey)
       if (existing) return
       await this.threading.threadRepo.create(
         ctx,
@@ -322,41 +327,69 @@ export class BookingService {
     return { ok: true, booking: updated, cancellation }
   }
 
-  private async resolveVehicle(
+  // Resolves the booking's class (required by #308) and optional vehicle.
+  // When a vehicle is provided, it must belong to the chosen class — mixing
+  // them would let a renter book a Compact and receive an SUV. Pricing and
+  // buffer come from the vehicle when assigned, otherwise from the class.
+  private async resolveClassAndVehicle(
     input: CreateBookingInput,
     now: Date,
   ): Promise<
     | (CreateBookingResult & { ok: false })
-    | { ok: true; bufferMinutes: number; totalPrice: number }
-    | null
+    | { ok: true; bufferMinutes: number; totalPrice: number | null }
   > {
-    if (!this.vehicleRepo) return null
-    const vehicle = await this.vehicleRepo.findById(input.vehicleId)
-    if (!vehicle) return null
+    const vehicleClass = await this.lookupClass(input.classId)
+    if (!vehicleClass) {
+      return { ok: false, status: 400, error: 'Vehicle class not found' }
+    }
+    if (vehicleClass.status === 'ARCHIVED') {
+      return { ok: false, status: 400, error: 'Vehicle class is archived' }
+    }
 
-    const check = checkRentalRules(
-      {
-        minRentalHours: vehicle.minRentalHours,
-        maxRentalHours: vehicle.maxRentalHours,
-        // Walk-in/phone bookings shouldn't be blocked by advance booking rules
-        advanceBookingHours: input.source === 'MANUAL' ? null : vehicle.advanceBookingHours,
-      },
-      input.startAt,
-      input.endAt,
-      now,
-    )
-    if (!check.ok) {
+    const vehicle = input.vehicleId ? await this.lookupVehicle(input.vehicleId) : null
+    if (input.vehicleId && !vehicle) {
+      return { ok: false, status: 400, error: 'Vehicle not found' }
+    }
+    if (vehicle && vehicle.classId !== input.classId) {
       return {
         ok: false,
         status: 400,
-        error: 'Booking violates a rental rule on this vehicle',
-        code: check.code,
-        details: { required: check.required, actual: check.actual },
+        error: 'Vehicle does not belong to the selected class',
       }
     }
 
+    // Rental rules + advance-booking use vehicle overrides when present,
+    // otherwise fall back to class-level (currently unused — class doesn't
+    // carry rental rules yet).
+    if (vehicle) {
+      const check = checkRentalRules(
+        {
+          minRentalHours: vehicle.minRentalHours,
+          maxRentalHours: vehicle.maxRentalHours,
+          advanceBookingHours: input.source === 'MANUAL' ? null : vehicle.advanceBookingHours,
+        },
+        input.startAt,
+        input.endAt,
+        now,
+      )
+      if (!check.ok) {
+        return {
+          ok: false,
+          status: 400,
+          error: 'Booking violates a rental rule on this vehicle',
+          code: check.code,
+          details: { required: check.required, actual: check.actual },
+        }
+      }
+    }
+
+    // Pricing source: vehicle overrides are optional. A null rate on the
+    // vehicle falls back to the class rate. That way a single vehicle
+    // without special pricing inherits from its class without duplication.
+    const dailyRateJpy = vehicle?.dailyRateJpy ?? vehicleClass.dailyRateJpy
+    const hourlyRateJpy = vehicle?.hourlyRateJpy ?? vehicleClass.hourlyRateJpy
     const pricing = calculateBookingPrice(
-      { dailyRateJpy: vehicle.dailyRateJpy, hourlyRateJpy: vehicle.hourlyRateJpy },
+      { dailyRateJpy, hourlyRateJpy },
       input.startAt,
       input.endAt,
     )
@@ -366,12 +399,31 @@ export class BookingService {
         status: 400,
         error:
           pricing.code === 'NO_RATES_SET'
-            ? 'Vehicle has no daily or hourly rate configured'
+            ? 'No daily or hourly rate configured'
             : 'Invalid booking duration',
         code: pricing.code,
       }
     }
 
-    return { ok: true, bufferMinutes: vehicle.bufferMinutes, totalPrice: pricing.totalPriceJpy }
+    const bufferMinutes = vehicle?.bufferMinutes ?? DEFAULT_BUFFER_MINUTES
+    return { ok: true, bufferMinutes, totalPrice: pricing.totalPriceJpy }
+  }
+
+  // Explicit "missing repo" guard — silent `return null` would masquerade
+  // as "class not found" and make every booking fail with a confusing 400.
+  // The composition root always wires these repos; a test double that
+  // forgets to is a bug in the fixture, not a runtime edge case.
+  private async lookupClass(id: string): Promise<VehicleClass | null> {
+    if (!this.vehicleClassRepo) {
+      throw new Error('BookingService missing vehicleClassRepo; check DI wiring')
+    }
+    return (await this.vehicleClassRepo.findById(id)) ?? null
+  }
+
+  private async lookupVehicle(id: string): Promise<Vehicle | null> {
+    if (!this.vehicleRepo) {
+      throw new Error('BookingService missing vehicleRepo; check DI wiring')
+    }
+    return (await this.vehicleRepo.findById(id)) ?? null
   }
 }

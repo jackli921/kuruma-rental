@@ -7,6 +7,7 @@ import type { CallerContext } from '../../src/middleware/auth'
 import {
   InMemoryBookingRepository,
   InMemoryUserRepository,
+  InMemoryVehicleClassRepository,
   InMemoryVehicleRepository,
 } from '../../src/repositories/in-memory'
 import type { ThreadRepository } from '../../src/repositories/types'
@@ -15,7 +16,6 @@ import type { Thread, User } from '../../src/stores'
 
 const RENTER = '00000000-0000-4000-8000-0000000000a1'
 const STAFF = '00000000-0000-4000-8000-0000000000b1'
-const V1 = '00000000-0000-4000-8000-000000000001'
 
 const renterCtx: CallerContext = { userId: RENTER, role: 'RENTER' }
 
@@ -53,7 +53,7 @@ function makeMockThreadRepo(): ThreadRepository & {
     if (idempotencyKey) byKey.set(idempotencyKey, thread)
     return thread
   })
-  const findByIdempotencyKey = vi.fn(async (k: string) => byKey.get(k))
+  const findByIdempotencyKey = vi.fn(async (_ctx: CallerContext, k: string) => byKey.get(k))
   return {
     findAll: vi.fn(async () => []),
     findById: vi.fn(async () => undefined),
@@ -63,9 +63,26 @@ function makeMockThreadRepo(): ThreadRepository & {
   }
 }
 
-function makeService(threadRepo?: ThreadRepository, staffUserId?: string) {
+async function makeService(threadRepo?: ThreadRepository, staffUserId?: string) {
   const bookingRepo = new InMemoryBookingRepository()
   const vehicleRepo = new InMemoryVehicleRepository()
+  const vehicleClassRepo = new InMemoryVehicleClassRepository()
+  // Booking creation requires a valid classId (issue #308). These tests
+  // exercise thread auto-creation, not vehicle selection — book class-only.
+  const klass = await vehicleClassRepo.create({
+    name: 'Compact',
+    slug: 'compact',
+    description: null,
+    photos: [],
+    seats: 5,
+    luggageCapacity: 2,
+    transmission: 'AUTO',
+    fuelType: null,
+    dailyRateJpy: 8000,
+    hourlyRateJpy: null,
+    sortOrder: 0,
+    status: 'ACTIVE',
+  })
   const userStore = new Map<string, User>([
     [RENTER, { id: RENTER, name: 'R', email: 'r@x', phone: null, language: 'en' }],
     [STAFF, { id: STAFF, name: 'S', email: 's@x', phone: null, language: 'en' }],
@@ -75,9 +92,10 @@ function makeService(threadRepo?: ThreadRepository, staffUserId?: string) {
     bookingRepo,
     vehicleRepo,
     userRepo,
+    vehicleClassRepo,
     threadRepo && staffUserId ? { threadRepo, staffUserId } : undefined,
   )
-  return { service, bookingRepo }
+  return { service, bookingRepo, classId: klass.id }
 }
 
 describe('BookingService.create — auto-thread on confirmation', () => {
@@ -88,9 +106,9 @@ describe('BookingService.create — auto-thread on confirmation', () => {
   })
 
   it('creates a thread with renter + staff as participants after successful booking', async () => {
-    const { service } = makeService(threadRepo, STAFF)
+    const { service, classId } = await makeService(threadRepo, STAFF)
     const result = await service.create(renterCtx, {
-      vehicleId: V1,
+      classId,
       renterId: RENTER,
       startAt: futureDate(24),
       endAt: futureDate(48),
@@ -110,9 +128,9 @@ describe('BookingService.create — auto-thread on confirmation', () => {
     // Wire a spy repo but omit staffUserId → threading is disabled.
     // This is stronger than omitting the repo entirely: it proves no code
     // path calls threadRepo.create when the feature is off.
-    const { service } = makeService(threadRepo) // no staffUserId
+    const { service, classId } = await makeService(threadRepo) // no staffUserId
     const result = await service.create(renterCtx, {
-      vehicleId: V1,
+      classId,
       renterId: RENTER,
       startAt: futureDate(24),
       endAt: futureDate(48),
@@ -124,9 +142,9 @@ describe('BookingService.create — auto-thread on confirmation', () => {
   })
 
   it('does not create a duplicate thread on an idempotent replay', async () => {
-    const { service } = makeService(threadRepo, STAFF)
+    const { service, classId } = await makeService(threadRepo, STAFF)
     const input = {
-      vehicleId: V1,
+      classId,
       renterId: RENTER,
       startAt: futureDate(24),
       endAt: futureDate(48),
@@ -152,10 +170,10 @@ describe('BookingService.create — auto-thread on confirmation', () => {
       throw new Error('thread service down')
     })
     const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
-    const { service } = makeService(threadRepo, STAFF)
+    const { service, classId } = await makeService(threadRepo, STAFF)
 
     const result = await service.create(renterCtx, {
-      vehicleId: V1,
+      classId,
       renterId: RENTER,
       startAt: futureDate(24),
       endAt: futureDate(48),
@@ -188,9 +206,9 @@ describe('BookingService.create — auto-thread on confirmation', () => {
       return stubThread(bookingId ?? 'none', participantIds)
     })
 
-    const { service } = makeService(threadRepo, STAFF)
+    const { service, classId } = await makeService(threadRepo, STAFF)
     const input = {
-      vehicleId: V1,
+      classId,
       renterId: RENTER,
       startAt: futureDate(24),
       endAt: futureDate(48),

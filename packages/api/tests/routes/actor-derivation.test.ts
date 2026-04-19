@@ -3,6 +3,7 @@ import { createApp } from '../../src/index'
 import {
   InMemoryAvailabilityRepository,
   InMemoryBookingRepository,
+  InMemoryVehicleClassRepository,
   InMemoryVehicleRepository,
 } from '../../src/repositories/in-memory'
 import { authHeaders, setupAuthEnv } from '../helpers/auth'
@@ -13,20 +14,42 @@ function futureDate(hoursFromNow: number): string {
   return d.toISOString()
 }
 
-function createTestApp() {
+async function createTestApp() {
   setupAuthEnv()
   const vehicleRepo = new InMemoryVehicleRepository()
   const bookingRepo = new InMemoryBookingRepository()
   const availabilityRepo = new InMemoryAvailabilityRepository(vehicleRepo, bookingRepo)
-  return { app: createApp({ vehicleRepo, bookingRepo, availabilityRepo }), vehicleRepo }
+  const vehicleClassRepo = new InMemoryVehicleClassRepository()
+  // Issue #308: bookings require a classId. Seed a default class that
+  // every vehicle in these tests belongs to.
+  const klass = await vehicleClassRepo.create({
+    name: 'Compact',
+    slug: 'compact',
+    description: null,
+    photos: [],
+    seats: 5,
+    luggageCapacity: 2,
+    transmission: 'AUTO',
+    fuelType: null,
+    dailyRateJpy: 8000,
+    hourlyRateJpy: null,
+    sortOrder: 0,
+    status: 'ACTIVE',
+  })
+  return {
+    app: createApp({ vehicleRepo, bookingRepo, availabilityRepo, vehicleClassRepo }),
+    vehicleRepo,
+    classId: klass.id,
+  }
 }
 
 describe('actor derivation from JWT', () => {
   it('POST /bookings uses JWT sub as renterId, ignores body.renterId', async () => {
-    const { app, vehicleRepo } = createTestApp()
+    const { app, vehicleRepo, classId } = await createTestApp()
     const headers = await authHeaders({ sub: 'real-user-id', role: 'RENTER' })
 
     const vehicle = await vehicleRepo.create({
+      classId,
       name: 'Test Car',
       description: null,
       photos: [],
@@ -49,6 +72,7 @@ describe('actor derivation from JWT', () => {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', ...headers },
       body: JSON.stringify({
+        classId,
         vehicleId: vehicle.id,
         renterId: 'a0000000-0000-4000-a000-000000000099',
         startAt: futureDate(24),
@@ -64,11 +88,12 @@ describe('actor derivation from JWT', () => {
   })
 
   it('POST /bookings/:id/cancel requires booking ownership', async () => {
-    const { app, vehicleRepo } = createTestApp()
+    const { app, vehicleRepo, classId } = await createTestApp()
     const ownerHeaders = await authHeaders({ sub: 'owner-user', role: 'RENTER' })
     const attackerHeaders = await authHeaders({ sub: 'attacker-user', role: 'RENTER' })
 
     const vehicle = await vehicleRepo.create({
+      classId,
       name: 'Test Car',
       description: null,
       photos: [],
@@ -92,6 +117,7 @@ describe('actor derivation from JWT', () => {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', ...ownerHeaders },
       body: JSON.stringify({
+        classId,
         vehicleId: vehicle.id,
         startAt: futureDate(24),
         endAt: futureDate(48),
@@ -109,13 +135,14 @@ describe('actor derivation from JWT', () => {
   })
 
   it('RENTER cannot create vehicles (role gate)', async () => {
-    const { app } = createTestApp()
+    const { app, classId } = await createTestApp()
     const renterHeaders = await authHeaders({ sub: 'renter-user', role: 'RENTER' })
 
     const res = await app.request('/vehicles', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', ...renterHeaders },
       body: JSON.stringify({
+        classId,
         name: 'Hacked Car',
         seats: 5,
         transmission: 'AUTO',
@@ -126,13 +153,14 @@ describe('actor derivation from JWT', () => {
   })
 
   it('STAFF can create vehicles', async () => {
-    const { app } = createTestApp()
+    const { app, classId } = await createTestApp()
     const staffHeaders = await authHeaders({ sub: 'staff-user', role: 'STAFF' })
 
     const res = await app.request('/vehicles', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', ...staffHeaders },
       body: JSON.stringify({
+        classId,
         name: 'Staff Car',
         seats: 5,
         transmission: 'AUTO',
@@ -143,11 +171,12 @@ describe('actor derivation from JWT', () => {
   })
 
   it('STAFF can cancel any booking', async () => {
-    const { app, vehicleRepo } = createTestApp()
+    const { app, vehicleRepo, classId } = await createTestApp()
     const renterHeaders = await authHeaders({ sub: 'renter-user', role: 'RENTER' })
     const staffHeaders = await authHeaders({ sub: 'staff-user', role: 'STAFF' })
 
     const vehicle = await vehicleRepo.create({
+      classId,
       name: 'Test Car',
       description: null,
       photos: [],
@@ -170,6 +199,7 @@ describe('actor derivation from JWT', () => {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', ...renterHeaders },
       body: JSON.stringify({
+        classId,
         vehicleId: vehicle.id,
         startAt: futureDate(24),
         endAt: futureDate(48),

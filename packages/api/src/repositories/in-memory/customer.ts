@@ -50,7 +50,7 @@ export class InMemoryCustomerRepository implements CustomerRepository {
       .map((b) => ({
         id: b.id,
         vehicleId: b.vehicleId,
-        vehicleName: this.vehicles.get(b.vehicleId)?.name ?? null,
+        vehicleName: b.vehicleId ? (this.vehicles.get(b.vehicleId)?.name ?? null) : null,
         startAt: b.startAt.toISOString(),
         endAt: b.endAt.toISOString(),
         status: b.status,

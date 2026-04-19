@@ -5,7 +5,8 @@ import { InMemoryAvailabilityRepository } from '../../src/repositories/in-memory
 import { InMemoryBookingRepository } from '../../src/repositories/in-memory/booking'
 import { InMemoryUserRepository } from '../../src/repositories/in-memory/user'
 import { InMemoryVehicleRepository } from '../../src/repositories/in-memory/vehicle'
-import type { User, Vehicle } from '../../src/stores'
+import { InMemoryVehicleClassRepository } from '../../src/repositories/in-memory/vehicle-class'
+import type { User, Vehicle, VehicleClass } from '../../src/stores'
 
 const AUTH_SECRET = 'test-secret-for-manual-booking-tests'
 
@@ -65,12 +66,30 @@ describe('Manual booking (staff/admin renterId override + advance rule skip)', (
   let userStore: Map<string, User>
   let app: ReturnType<typeof createApp>
   let vehicle: Vehicle
+  let testClassId: string
 
-  beforeEach(() => {
+  beforeEach(async () => {
     process.env.AUTH_SECRET = AUTH_SECRET
 
+    const vehicleClassRepo = new InMemoryVehicleClassRepository()
+    const klass: VehicleClass = await vehicleClassRepo.create({
+      name: 'Compact',
+      slug: 'compact',
+      description: null,
+      photos: [],
+      seats: 5,
+      luggageCapacity: 2,
+      transmission: 'AUTO',
+      fuelType: null,
+      dailyRateJpy: 8000,
+      hourlyRateJpy: null,
+      sortOrder: 0,
+      status: 'ACTIVE',
+    })
+    testClassId = klass.id
+
     const vehicleStore = new Map<string, Vehicle>()
-    vehicle = makeTestVehicle()
+    vehicle = makeTestVehicle({ classId: testClassId })
     vehicleStore.set(vehicle.id, vehicle)
 
     vehicleRepo = new InMemoryVehicleRepository(vehicleStore)
@@ -79,7 +98,7 @@ describe('Manual booking (staff/admin renterId override + advance rule skip)', (
     const userRepo = new InMemoryUserRepository(userStore)
     const availabilityRepo = new InMemoryAvailabilityRepository(vehicleRepo, bookingRepo)
 
-    app = createApp({ vehicleRepo, bookingRepo, availabilityRepo, userRepo })
+    app = createApp({ vehicleRepo, bookingRepo, availabilityRepo, userRepo, vehicleClassRepo })
   })
 
   it('staff can create booking with custom renterId', async () => {
@@ -99,6 +118,7 @@ describe('Manual booking (staff/admin renterId override + advance rule skip)', (
         Authorization: `Bearer ${token}`,
       },
       body: JSON.stringify({
+        classId: testClassId,
         vehicleId: vehicle.id,
         renterId: customerId,
         startAt: startAt.toISOString(),
@@ -133,6 +153,7 @@ describe('Manual booking (staff/admin renterId override + advance rule skip)', (
         Authorization: `Bearer ${token}`,
       },
       body: JSON.stringify({
+        classId: testClassId,
         vehicleId: vehicle.id,
         renterId: attackerRenterId,
         startAt: startAt.toISOString(),
@@ -164,6 +185,7 @@ describe('Manual booking (staff/admin renterId override + advance rule skip)', (
         Authorization: `Bearer ${token}`,
       },
       body: JSON.stringify({
+        classId: testClassId,
         vehicleId: vehicle.id,
         startAt: startAt.toISOString(),
         endAt: endAt.toISOString(),
@@ -193,6 +215,7 @@ describe('Manual booking (staff/admin renterId override + advance rule skip)', (
         Authorization: `Bearer ${token}`,
       },
       body: JSON.stringify({
+        classId: testClassId,
         vehicleId: vehicle.id,
         startAt: startAt.toISOString(),
         endAt: endAt.toISOString(),
@@ -221,6 +244,7 @@ describe('Manual booking (staff/admin renterId override + advance rule skip)', (
         Authorization: `Bearer ${renterToken}`,
       },
       body: JSON.stringify({
+        classId: testClassId,
         vehicleId: vehicle.id,
         startAt: startAt.toISOString(),
         endAt: endAt.toISOString(),
@@ -248,6 +272,7 @@ describe('Manual booking (staff/admin renterId override + advance rule skip)', (
         Authorization: `Bearer ${token}`,
       },
       body: JSON.stringify({
+        classId: testClassId,
         vehicleId: vehicle.id,
         renterId: crypto.randomUUID(), // unknown user
         startAt: startAt.toISOString(),
@@ -277,6 +302,7 @@ describe('Manual booking (staff/admin renterId override + advance rule skip)', (
         Authorization: `Bearer ${token}`,
       },
       body: JSON.stringify({
+        classId: testClassId,
         vehicleId: vehicle.id,
         renterId: otherStaffId,
         startAt: startAt.toISOString(),

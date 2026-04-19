@@ -4,34 +4,45 @@ import { SYSTEM_CONTEXT } from '../../src/middleware/auth'
 import {
   InMemoryBookingRepository,
   InMemoryUserRepository,
+  InMemoryVehicleClassRepository,
   InMemoryVehicleRepository,
 } from '../../src/repositories/in-memory'
 import { createBookingRoutes } from '../../src/routes/bookings'
 import { BookingService } from '../../src/services/booking'
-import type { User } from '../../src/stores'
+import type { User, VehicleClass } from '../../src/stores'
 import { testAuthMiddleware } from '../helpers/auth'
 
 let app: Hono
 let vehicleRepo: InMemoryVehicleRepository
 let bookingRepo: InMemoryBookingRepository
 let userRepo: InMemoryUserRepository
+let vehicleClassRepo: InMemoryVehicleClassRepository
 let service: BookingService
+let testClassId: string
+let seededVehicleId: string
+let seededVehicle2Id: string
 
 function futureDate(hoursFromNow: number): string {
   return new Date(Date.now() + hoursFromNow * 60 * 60 * 1000).toISOString()
 }
 
-const V1 = '00000000-0000-4000-8000-000000000001'
-const V2 = '00000000-0000-4000-8000-000000000002'
 const USER1 = '00000000-0000-4000-8000-0000000000a1'
 const USER2 = '00000000-0000-4000-8000-0000000000a2'
 
 function validBookingInput() {
+  // Issue #308: default input books the class without a specific vehicle.
+  // Tests that need per-vehicle behaviour (overlap, rental rules, expand)
+  // override vehicleId after seeding a concrete vehicle in the class.
+  // Anchor both timestamps to a single `now` so the duration is exactly
+  // 24h — otherwise two Date.now() calls can differ by a few ms, which
+  // Math.ceil() rounds up to 2 days in pricing.
+  const now = Date.now()
+  const HOUR = 60 * 60 * 1000
   return {
-    vehicleId: V1,
+    classId: testClassId,
     renterId: USER1,
-    startAt: futureDate(24),
-    endAt: futureDate(48),
+    startAt: new Date(now + 24 * HOUR).toISOString(),
+    endAt: new Date(now + 48 * HOUR).toISOString(),
     source: 'DIRECT' as const,
   }
 }
@@ -45,7 +56,7 @@ async function createBooking(input = validBookingInput()) {
 }
 
 describe('Booking Routes', () => {
-  beforeEach(() => {
+  beforeEach(async () => {
     const userStore = new Map<string, User>()
     userStore.set(USER1, {
       id: USER1,
@@ -68,7 +79,76 @@ describe('Booking Routes', () => {
     vehicleRepo = new InMemoryVehicleRepository()
     bookingRepo = new InMemoryBookingRepository()
     userRepo = new InMemoryUserRepository(userStore)
-    service = new BookingService(bookingRepo, vehicleRepo, userRepo)
+    vehicleClassRepo = new InMemoryVehicleClassRepository()
+    // Seed a default vehicle class for tests. Booking creation requires a
+    // valid classId (issue #308).
+    const klass: VehicleClass = await vehicleClassRepo.create({
+      name: 'Compact',
+      slug: 'compact',
+      description: null,
+      photos: [],
+      seats: 5,
+      luggageCapacity: 2,
+      transmission: 'AUTO',
+      fuelType: null,
+      dailyRateJpy: 8000,
+      hourlyRateJpy: null,
+      sortOrder: 0,
+      status: 'ACTIVE',
+    })
+    testClassId = klass.id
+    // Seed two concrete vehicles in the class for tests that need per-vehicle
+    // conflict detection, expand projection, etc. Tests without a specific
+    // vehicle use seededVehicleId = null by default (class-only booking).
+    const v1 = await vehicleRepo.create({
+      classId: testClassId,
+      name: 'Aqua 01',
+      description: null,
+      photos: [],
+      seats: 5,
+      transmission: 'AUTO',
+      fuelType: null,
+      licensePlate: null,
+      status: 'AVAILABLE',
+      bufferMinutes: 60,
+      minRentalHours: null,
+      maxRentalHours: null,
+      advanceBookingHours: null,
+      make: null,
+      model: null,
+      year: null,
+      color: null,
+      dailyRateJpy: 8000,
+      hourlyRateJpy: null,
+      shakenExpiryDate: null,
+      insuranceExpiryDate: null,
+    })
+    const v2 = await vehicleRepo.create({
+      classId: testClassId,
+      name: 'Aqua 02',
+      description: null,
+      photos: [],
+      seats: 5,
+      transmission: 'AUTO',
+      fuelType: null,
+      licensePlate: null,
+      status: 'AVAILABLE',
+      bufferMinutes: 60,
+      minRentalHours: null,
+      maxRentalHours: null,
+      advanceBookingHours: null,
+      make: null,
+      model: null,
+      year: null,
+      color: null,
+      dailyRateJpy: 8000,
+      hourlyRateJpy: null,
+      shakenExpiryDate: null,
+      insuranceExpiryDate: null,
+    })
+    seededVehicleId = v1.id
+    seededVehicle2Id = v2.id
+    service = new BookingService(bookingRepo, vehicleRepo, userRepo, vehicleClassRepo)
     app = new Hono()
     // ADMIN with USER1 identity — mirrors pre-auth test data
     app.use('*', testAuthMiddleware(USER1, 'ADMIN'))
@@ -89,7 +169,7 @@ describe('Booking Routes', () => {
       await createBooking()
       await createBooking({
         ...validBookingInput(),
-        vehicleId: V2,
+        vehicleId: seededVehicle2Id,
       })
 
       const res = await app.request('/bookings')
@@ -121,18 +201,18 @@ describe('Booking Routes', () => {
     })
 
     it('filters by vehicleId', async () => {
-      await createBooking()
+      await createBooking({ ...validBookingInput(), vehicleId: seededVehicleId })
       await createBooking({
         ...validBookingInput(),
-        vehicleId: V2,
+        vehicleId: seededVehicle2Id,
       })
 
-      const res = await app.request(`/bookings?vehicleId=${V1}`)
+      const res = await app.request(`/bookings?vehicleId=${seededVehicleId}`)
       const body = await res.json()
 
       expect(body.success).toBe(true)
       expect(body.data).toHaveLength(1)
-      expect(body.data[0].vehicleId).toBe(V1)
+      expect(body.data[0].vehicleId).toBe(seededVehicleId)
     })
 
     it('filters by renterId', async () => {
@@ -140,7 +220,8 @@ describe('Booking Routes', () => {
       await createBooking()
       // Create second booking directly in repo with USER2 (bypasses JWT)
       await bookingRepo.create(SYSTEM_CONTEXT, {
-        vehicleId: V2,
+        classId: testClassId,
+        vehicleId: seededVehicle2Id,
         renterId: USER2,
         startAt: new Date(Date.now() + 24 * 60 * 60 * 1000),
         endAt: new Date(Date.now() + 48 * 60 * 60 * 1000),
@@ -149,6 +230,10 @@ describe('Booking Routes', () => {
         source: 'DIRECT',
         externalId: null,
         notes: null,
+        totalPrice: null,
+        cancellationFee: null,
+        cancelledAt: null,
+        idempotencyKey: null,
       })
 
       const res = await app.request(`/bookings?renterId=${USER1}`)
@@ -181,7 +266,7 @@ describe('Booking Routes', () => {
       await app2.request('/bookings', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ...inputWithoutRenter, vehicleId: V2 }),
+        body: JSON.stringify({ ...inputWithoutRenter, vehicleId: seededVehicle2Id }),
       })
 
       // Query as RENTER — should only see own bookings
@@ -234,7 +319,7 @@ describe('Booking Routes', () => {
       await createBooking()
       await createBooking({
         ...validBookingInput(),
-        vehicleId: V2,
+        vehicleId: seededVehicle2Id,
       })
 
       // Cancel one
@@ -287,7 +372,8 @@ describe('Booking Routes', () => {
     })
 
     it('returns bookings with vehicle data when expand=vehicle', async () => {
-      await vehicleRepo.create({
+      const corolla = await vehicleRepo.create({
+        classId: testClassId,
         name: 'Toyota Corolla',
         description: 'A reliable sedan',
         photos: ['photo1.jpg', 'photo2.jpg'],
@@ -303,6 +389,10 @@ describe('Booking Routes', () => {
         minRentalHours: null,
         maxRentalHours: null,
         advanceBookingHours: null,
+        make: null,
+        model: null,
+        year: null,
+        color: null,
         // Rates required for server-side pricing (issue #74).
         dailyRateJpy: 10000,
         hourlyRateJpy: null,
@@ -310,12 +400,9 @@ describe('Booking Routes', () => {
         insuranceExpiryDate: null,
       })
 
-      const { data: allVehicles } = await vehicleRepo.findAll()
-      const vehicleId = allVehicles[0]!.id
-
       await createBooking({
         ...validBookingInput(),
-        vehicleId,
+        vehicleId: corolla.id,
       })
 
       const res = await app.request('/bookings?expand=vehicle')
@@ -371,8 +458,9 @@ describe('Booking Routes', () => {
       await createBooking()
       // Create directly in repo with USER2 (route always overrides renterId from JWT)
       await bookingRepo.create(SYSTEM_CONTEXT, {
+        classId: testClassId,
         renterId: USER2,
-        vehicleId: V2,
+        vehicleId: seededVehicle2Id,
         startAt: new Date(Date.now() + 24 * 60 * 60 * 1000),
         endAt: new Date(Date.now() + 48 * 60 * 60 * 1000),
         effectiveEndAt: new Date(Date.now() + 49 * 60 * 60 * 1000),
@@ -403,11 +491,12 @@ describe('Booking Routes', () => {
     async function createNBookings(n: number) {
       const ids: string[] = []
       for (let i = 0; i < n; i++) {
+        // Book class-only so each booking is independent (no vehicle overlap).
         const res = await app.request('/bookings', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            vehicleId: `00000000-0000-4000-8000-00000000${String(i).padStart(4, '0')}`,
+            classId: testClassId,
             renterId: USER1,
             startAt: futureDate(24),
             endAt: futureDate(48),
@@ -509,15 +598,125 @@ describe('Booking Routes', () => {
   })
 
   describe('POST /bookings', () => {
+    // Issue #308: class + vehicle coupling rules.
+    it('creates a class-only booking (no vehicleId) with status CONFIRMED', async () => {
+      const res = await createBooking(validBookingInput())
+
+      expect(res.status).toBe(201)
+      const body = await res.json()
+      expect(body.data.classId).toBe(testClassId)
+      expect(body.data.vehicleId).toBeNull()
+      expect(body.data.status).toBe('CONFIRMED')
+      // Falls back to class rate (8000 JPY/day × 1 day)
+      expect(body.data.totalPrice).toBe(8000)
+    })
+
+    it('rejects booking when vehicle does not belong to the selected class', async () => {
+      // Create a second class + vehicle in it
+      const otherClass = await vehicleClassRepo.create({
+        name: 'SUV',
+        slug: 'suv',
+        description: null,
+        photos: [],
+        seats: 7,
+        luggageCapacity: 4,
+        transmission: 'AUTO',
+        fuelType: null,
+        dailyRateJpy: 15000,
+        hourlyRateJpy: null,
+        sortOrder: 0,
+        status: 'ACTIVE',
+      })
+      const otherClassVehicle = await vehicleRepo.create({
+        classId: otherClass.id,
+        name: 'Land Cruiser',
+        description: null,
+        photos: [],
+        seats: 7,
+        transmission: 'AUTO',
+        fuelType: null,
+        licensePlate: null,
+        status: 'AVAILABLE',
+        bufferMinutes: 60,
+        minRentalHours: null,
+        maxRentalHours: null,
+        advanceBookingHours: null,
+        make: null,
+        model: null,
+        year: null,
+        color: null,
+        dailyRateJpy: 15000,
+        hourlyRateJpy: null,
+        shakenExpiryDate: null,
+        insuranceExpiryDate: null,
+      })
+
+      const res = await createBooking({
+        ...validBookingInput(),
+        classId: testClassId,
+        vehicleId: otherClassVehicle.id,
+      })
+
+      expect(res.status).toBe(400)
+      const body = await res.json()
+      expect(body.error).toMatch(/does not belong/i)
+    })
+
+    it('rejects booking with unknown classId', async () => {
+      const res = await createBooking({
+        ...validBookingInput(),
+        classId: '00000000-0000-4000-8000-0000000000ff',
+      })
+
+      expect(res.status).toBe(400)
+      const body = await res.json()
+      expect(body.error).toMatch(/class not found/i)
+    })
+
+    it('rejects booking with provided but unknown vehicleId', async () => {
+      const res = await createBooking({
+        ...validBookingInput(),
+        vehicleId: '00000000-0000-4000-8000-0000000000fe',
+      })
+
+      expect(res.status).toBe(400)
+      const body = await res.json()
+      expect(body.error).toMatch(/vehicle not found/i)
+    })
+
+    it('rejects booking against an archived class', async () => {
+      await vehicleClassRepo.archive(testClassId)
+      const res = await createBooking(validBookingInput())
+
+      expect(res.status).toBe(400)
+      const body = await res.json()
+      expect(body.error).toMatch(/archived/i)
+    })
+
+    it('allows two class-only bookings at the same time (no vehicle conflict)', async () => {
+      // With null vehicleId, DB exclusion does not apply — class pool
+      // capacity is enforced by the availability endpoint, not per-row.
+      const first = await createBooking(validBookingInput())
+      expect(first.status).toBe(201)
+
+      const second = await createBooking({
+        ...validBookingInput(),
+        startAt: futureDate(30),
+        endAt: futureDate(54),
+      })
+      expect(second.status).toBe(201)
+    })
+
     it('creates a booking with valid input and returns 201 with status CONFIRMED', async () => {
-      const input = validBookingInput()
+      const input = { ...validBookingInput(), vehicleId: seededVehicleId }
       const res = await createBooking(input)
 
       expect(res.status).toBe(201)
 
       const body = await res.json()
       expect(body.success).toBe(true)
-      expect(body.data.vehicleId).toBe(V1)
+      expect(body.data.classId).toBe(testClassId)
+      expect(body.data.vehicleId).toBe(seededVehicleId)
       expect(body.data.renterId).toBe(USER1)
       expect(body.data.status).toBe('CONFIRMED')
       expect(body.data.source).toBe('DIRECT')
@@ -587,11 +786,12 @@ describe('Booking Routes', () => {
     })
 
     it('returns 409 when the new booking overlaps an existing CONFIRMED booking on the same vehicle', async () => {
-      const first = await createBooking()
+      const first = await createBooking({ ...validBookingInput(), vehicleId: seededVehicleId })
       expect(first.status).toBe(201)
 
       const second = await createBooking({
         ...validBookingInput(),
+        vehicleId: seededVehicleId,
         startAt: futureDate(36),
         endAt: futureDate(60),
       })
@@ -604,20 +804,20 @@ describe('Booking Routes', () => {
     })
 
     it('allows overlapping booking on a different vehicle', async () => {
-      const first = await createBooking()
+      const first = await createBooking({ ...validBookingInput(), vehicleId: seededVehicleId })
       expect(first.status).toBe(201)
 
-      const res = await createBooking({ ...validBookingInput(), vehicleId: V2 })
+      const res = await createBooking({ ...validBookingInput(), vehicleId: seededVehicle2Id })
       expect(res.status).toBe(201)
     })
 
     it('allows a new booking once the conflicting one is CANCELLED', async () => {
-      const first = await createBooking()
+      const first = await createBooking({ ...validBookingInput(), vehicleId: seededVehicleId })
       const created = await first.json()
 
       await app.request(`/bookings/${created.data.id}/cancel`, { method: 'POST' })
 
-      const res = await createBooking()
+      const res = await createBooking({ ...validBookingInput(), vehicleId: seededVehicleId })
       expect(res.status).toBe(201)
     })
 
@@ -632,6 +832,7 @@ describe('Booking Routes', () => {
         advanceBookingHours?: number | null
       }) {
         const vehicle = await vehicleRepo.create({
+          classId: testClassId,
           name: 'Toyota Alphard',
           description: null,
           photos: [],
@@ -644,6 +845,10 @@ describe('Booking Routes', () => {
           minRentalHours: rules.minRentalHours ?? null,
           maxRentalHours: rules.maxRentalHours ?? null,
           advanceBookingHours: rules.advanceBookingHours ?? null,
+          make: null,
+          model: null,
+          year: null,
+          color: null,
           dailyRateJpy: 18000,
           hourlyRateJpy: 2500,
           shakenExpiryDate: null,
@@ -754,7 +959,7 @@ describe('Booking Routes', () => {
         const first = await createBooking({
           ...validBookingInput(),
           idempotencyKey: crypto.randomUUID(),
-          vehicleId: V1,
+          vehicleId: seededVehicleId,
         })
         expect(first.status).toBe(201)
         const firstBody = await first.json()
@@ -762,7 +967,7 @@ describe('Booking Routes', () => {
         const second = await createBooking({
           ...validBookingInput(),
           idempotencyKey: crypto.randomUUID(),
-          vehicleId: V2,
+          vehicleId: seededVehicle2Id,
         })
         expect(second.status).toBe(201)
         const secondBody = await second.json()
@@ -786,7 +991,7 @@ describe('Booking Routes', () => {
         // then both attempt create. Second one hits the unique constraint.
         const [r1, r2] = await Promise.all([
           createBooking(input),
-          createBooking({ ...input, vehicleId: V2 }),
+          createBooking({ ...input, vehicleId: seededVehicle2Id }),
         ])
 
         const statuses = [r1.status, r2.status].sort()
@@ -808,6 +1013,7 @@ describe('Booking Routes', () => {
         hourlyRateJpy: number | null
       }) {
         const vehicle = await vehicleRepo.create({
+          classId: testClassId,
           name: 'Test Vehicle',
           description: null,
           photos: [],
@@ -820,6 +1026,10 @@ describe('Booking Routes', () => {
           minRentalHours: null,
           maxRentalHours: null,
           advanceBookingHours: null,
+          make: null,
+          model: null,
+          year: null,
+          color: null,
           dailyRateJpy: rates.dailyRateJpy,
           hourlyRateJpy: rates.hourlyRateJpy,
           shakenExpiryDate: null,
@@ -840,6 +1050,7 @@ describe('Booking Routes', () => {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
+            classId: testClassId,
             vehicleId,
             renterId: USER1,
             startAt: futureDate(48),
@@ -855,7 +1066,11 @@ describe('Booking Routes', () => {
         expect(body.data.totalPrice).toBe(10000)
       })
 
-      it('rejects booking when vehicle has no rates set with 400 NO_RATES_SET', async () => {
+      // Issue #308: pricing now falls back to class rate when the vehicle
+      // has no override. The old "vehicle with null rates → NO_RATES_SET"
+      // behaviour no longer applies — the class itself enforces non-null
+      // pricing at the schema level.
+      it('uses class rate when vehicle has no override rates set', async () => {
         const vehicleId = await seedVehicleWithRates({
           dailyRateJpy: null,
           hourlyRateJpy: null,
@@ -866,17 +1081,16 @@ describe('Booking Routes', () => {
           vehicleId,
         })
 
-        expect(res.status).toBe(400)
+        expect(res.status).toBe(201)
         const body = await res.json()
-        expect(body.success).toBe(false)
-        expect(body.code).toBe('NO_RATES_SET')
+        expect(body.data.totalPrice).toBe(8000) // class dailyRateJpy
       })
     })
   })
 
   describe('GET /bookings/:id', () => {
     it('returns a specific booking', async () => {
-      const createRes = await createBooking()
+      const createRes = await createBooking({ ...validBookingInput(), vehicleId: seededVehicleId })
       const created = await createRes.json()
 
       const res = await app.request(`/bookings/${created.data.id}`)
@@ -886,7 +1100,7 @@ describe('Booking Routes', () => {
       const body = await res.json()
       expect(body.success).toBe(true)
       expect(body.data.id).toBe(created.data.id)
-      expect(body.data.vehicleId).toBe(V1)
+      expect(body.data.vehicleId).toBe(seededVehicleId)
     })
 
     it('returns 404 for nonexistent booking', async () => {
@@ -1036,6 +1250,7 @@ describe('Booking Routes', () => {
     // longer propose totalPrice on the request body.
     async function seedPricedVehicle() {
       const vehicle = await vehicleRepo.create({
+        classId: testClassId,
         name: 'Priced Vehicle',
         description: null,
         photos: [],
@@ -1048,6 +1263,10 @@ describe('Booking Routes', () => {
         minRentalHours: null,
         maxRentalHours: null,
         advanceBookingHours: null,
+        make: null,
+        model: null,
+        year: null,
+        color: null,
         dailyRateJpy: 10000,
         hourlyRateJpy: null,
         shakenExpiryDate: null,

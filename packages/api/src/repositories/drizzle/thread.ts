@@ -118,12 +118,26 @@ export class DrizzleThreadRepository implements ThreadRepository {
     }
   }
 
-  async findByIdempotencyKey(key: string): Promise<Thread | undefined> {
+  async findByIdempotencyKey(ctx: CallerContext, key: string): Promise<Thread | undefined> {
+    // CallerContext scoping (issue #328): non-privileged callers only match
+    // threads where they are a participant. Join the single thread row
+    // against thread_participants so filtering happens server-side.
+    if (PRIVILEGED_ROLES.has(ctx.role)) {
+      const [row] = (await this.db
+        .select(threadColumns)
+        .from(threads)
+        .where(eq(threads.idempotencyKey, key))).map(toThread)
+      return row
+    }
+
     const [row] = (await this.db
       .select(threadColumns)
       .from(threads)
-      .where(eq(threads.idempotencyKey, key))).map(toThread)
-    return row
+      .innerJoin(threadParticipants, eq(threadParticipants.threadId, threads.id))
+      .where(
+        and(eq(threads.idempotencyKey, key), eq(threadParticipants.userId, ctx.userId)),
+      )) as Array<Parameters<typeof toThread>[0]>
+    return row ? toThread(row) : undefined
   }
 
   async create(

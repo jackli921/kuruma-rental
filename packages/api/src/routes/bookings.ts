@@ -77,7 +77,8 @@ export function createBookingRoutes(service: BookingService) {
       const source = isStaff ? result.data.source : 'DIRECT'
 
       const createResult = await service.create(ctx, {
-        vehicleId: result.data.vehicleId,
+        classId: result.data.classId,
+        vehicleId: result.data.vehicleId ?? null,
         renterId,
         startAt: new Date(result.data.startAt),
         endAt: new Date(result.data.endAt),

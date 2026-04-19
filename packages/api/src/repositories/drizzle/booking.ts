@@ -118,6 +118,7 @@ export class DrizzleBookingRepository implements BookingRepository {
       .insert(bookings)
       .values({
         renterId: data.renterId,
+        classId: data.classId,
         vehicleId: data.vehicleId,
         startAt: data.startAt,
         endAt: data.endAt,

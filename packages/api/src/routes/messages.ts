@@ -66,7 +66,7 @@ export function createMessageRoutes(threadRepo: ThreadRepository, messageRepo: M
       const idempotencyKey = parsed.data.idempotencyKey ?? null
       const { record: thread, status } = await idempotentCreate(
         idempotencyKey,
-        (k) => threadRepo.findByIdempotencyKey(k),
+        (k) => threadRepo.findByIdempotencyKey(ctx, k),
         () =>
           threadRepo.create(
             ctx,
@@ -90,7 +90,7 @@ export function createMessageRoutes(threadRepo: ThreadRepository, messageRepo: M
       const msgIdempotencyKey = parsed.data.idempotencyKey ?? null
       const { record: message, status } = await idempotentCreate(
         msgIdempotencyKey,
-        (k) => messageRepo.findByIdempotencyKey(k),
+        (k) => messageRepo.findByIdempotencyKey(ctx, k),
         () => messageRepo.create(ctx, thread.id, parsed.data.content, msgIdempotencyKey),
       )
       return ok(c, message, status)

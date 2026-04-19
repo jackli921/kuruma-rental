@@ -47,6 +47,9 @@ export class DrizzleFleetOverviewRepository implements FleetOverviewRepository {
 
     const bookingsByVehicleId = new Map<string, typeof bookingRows>()
     for (const row of bookingRows) {
+      // Issue #308: bookings can be unassigned (vehicleId=null). Fleet
+      // overview is per-vehicle, so skip rows without an assigned car.
+      if (!row.vehicleId) continue
       const list = bookingsByVehicleId.get(row.vehicleId) ?? []
       list.push(row)
       bookingsByVehicleId.set(row.vehicleId, list)
