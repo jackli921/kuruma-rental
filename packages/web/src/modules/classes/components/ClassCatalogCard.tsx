@@ -13,7 +13,7 @@ export function ClassCatalogCard({ vehicleClass }: ClassCatalogCardProps) {
 
   const photo = vehicleClass.photos[0]
   const transmissionLabel = vehicleClass.transmission === 'AUTO' ? t('auto') : t('manual')
-  const hasPrice = vehicleClass.dailyRateJpy != null
+  const dailyRate = vehicleClass.dailyRateJpy
 
   return (
     <Link
@@ -50,12 +50,10 @@ export function ClassCatalogCard({ vehicleClass }: ClassCatalogCardProps) {
             {transmissionLabel}
           </span>
         </div>
-        {hasPrice && (
+        {dailyRate != null && (
           <p className="mt-4 text-sm">
             <span className="text-muted-foreground">{t('priceFrom')} </span>
-            <span className="font-semibold text-foreground">
-              {formatJpy(vehicleClass.dailyRateJpy as number)}
-            </span>
+            <span className="font-semibold text-foreground">{formatJpy(dailyRate)}</span>
             <span className="text-muted-foreground"> {t('perDay')}</span>
           </p>
         )}
