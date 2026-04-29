@@ -52,3 +52,7 @@ next-env.d.ts
 /playwright-report/
 /blob-report/
 /playwright/.cache/
+
+# internal / private docs — not for owner or public repo
+docs/internal/
+.superpowers/
