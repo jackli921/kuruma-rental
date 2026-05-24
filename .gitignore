@@ -55,4 +55,5 @@ next-env.d.ts
 
 # internal / private docs — not for owner or public repo
 docs/internal/
+docs/meeting_notes/
 .superpowers/
