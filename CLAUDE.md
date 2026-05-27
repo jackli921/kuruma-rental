@@ -27,11 +27,12 @@ Airbnb-style car rental platform for a Japan-based company (Osaka) serving inter
 
 | File | What |
 |------|------|
-| `docs/2026-04-02-kuruma-mvp-design.md` | Full MVP spec (data model, user flows, scheduling) |
-| `docs/plans/2026-04-07-architecture-redesign.md` | Architecture decisions, current state, execution order |
-| `docs/plans/2026-04-07-schema-api-design.md` | Schema + API contract (architect-reviewed) |
+| `docs/plans/2026-05-25-marketplace-mvp-proposal.md` | **Source of truth.** Marketplace MVP plan (multi-tenant), 8-slice execution. Epic #385. |
+| `docs/plans/2026-04-07-architecture-redesign.md` | Architecture decisions (instant-book, hourly, monorepo) — still holds post-pivot |
 | `packages/web/DESIGN.md` | Web design system (colors, typography, spacing, components) |
 | `docs/plans/2026-04-09-cloudflare-deployment-lessons.md` | CF Workers deployment post-mortem (10 lessons, correct patterns) |
+| `docs/2026-04-02-kuruma-mvp-design.md` | _Superseded 2026-05-24_ — pre-pivot single-tenant spec; kept for history |
+| `docs/plans/2026-04-07-schema-api-design.md` | _Superseded 2026-05-24_ — pre-pivot schema; marketplace schema lives in proposal §5 |
 
 ---
 
