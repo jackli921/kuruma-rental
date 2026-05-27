@@ -60,3 +60,5 @@ Enforced by `bun run --filter @kuruma/api lint:boundaries` (CI step).
 | DB apply migrations | `bun run db:migrate` |
 | DB seed | `bun run db:seed` |
 | DB browser | `bun run db:studio` |
+
+## Imported Claude Cowork project instructions
