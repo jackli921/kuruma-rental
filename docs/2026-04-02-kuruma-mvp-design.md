@@ -1,5 +1,7 @@
 # Kuruma Rental Platform - MVP Design Spec
 
+> **SUPERSEDED 2026-05-24** by `docs/plans/2026-05-25-marketplace-mvp-proposal.md` (multi-tenant marketplace pivot). Kept for history. Single-tenant assumptions throughout no longer hold.
+
 > Airbnb-style car rental platform for a Japan-based car rental company serving international tourists
 
 ## Business Context
