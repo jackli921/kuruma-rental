@@ -1,3 +1,4 @@
+import { BEST_CAR_RENTAL_OPERATOR_ID } from '@kuruma/shared/db/constants'
 import { bookings, users, vehicleClasses, vehicles } from '@kuruma/shared/db/schema'
 import { eq } from 'drizzle-orm'
 import { testDb } from './pg-test-client'
@@ -22,6 +23,9 @@ export async function seedVehicleClass(
     .insert(vehicleClasses)
     .values({
       id: crypto.randomUUID(),
+      // Transitional tenant (#386). Seeded by global-setup; vehicle_classes is
+      // not operator-scoped yet (deferred follow-up), so set it directly here.
+      operatorId: BEST_CAR_RENTAL_OPERATOR_ID,
       name: `Class ${uniq}`,
       slug: `class-${uniq}`,
       description: null,

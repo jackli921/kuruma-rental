@@ -1,6 +1,6 @@
 import { type CallerContext, requireStaffContext } from '../../middleware/auth'
 import type { Vehicle } from '../../stores'
-import { operatorReadScope } from '../../tenancy'
+import { operatorReadScope, resolveOperatorIdForWrite } from '../../tenancy'
 import type {
   PaginatedResult,
   VehicleFilters,
@@ -67,6 +67,9 @@ export class InMemoryVehicleRepository implements VehicleRepository {
     const now = new Date()
     const vehicle: Vehicle = {
       ...data,
+      // Transitional (#386): mirror DrizzleVehicleRepository — resolve the
+      // tenant for direct-repo callers that omit operatorId.
+      operatorId: resolveOperatorIdForWrite(ctx, data.operatorId),
       id: crypto.randomUUID(),
       createdAt: now,
       updatedAt: now,
