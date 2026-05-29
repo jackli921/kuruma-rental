@@ -13,25 +13,59 @@ import {
 } from 'drizzle-orm/pg-core'
 import type { AdapterAccountType } from 'next-auth/adapters'
 
-export const roleEnum = pgEnum('role', ['RENTER', 'STAFF', 'ADMIN'])
+// Marketplace tenancy (epic #385, slice 1 / #386).
+// OPERATOR_* roles are tenant-scoped and NEVER bypass operator scope.
+// PLATFORM_ADMIN is the only role allowed to bypass (env-gated).
+// Legacy STAFF / ADMIN remain as temporary platform-admin equivalents
+// during the transition — no new users get them. See proposal §6.2.
+export const roleEnum = pgEnum('role', [
+  'RENTER',
+  'STAFF',
+  'ADMIN',
+  'OPERATOR_OWNER',
+  'OPERATOR_STAFF',
+  'PLATFORM_ADMIN',
+])
 
-// Auth.js required fields + app profile fields
-// Column names must be camelCase to match @auth/drizzle-adapter expectations
-export const users = pgTable('users', {
+// Operators are the marketplace tenants (e.g. Best Car Rental). Every
+// operator-owned entity (vehicles, classes, later locations/insurance/fees)
+// carries an operatorId FK. See proposal §6 row 1.
+export const operators = pgTable('operators', {
   id: text('id')
     .primaryKey()
     .$defaultFn(() => crypto.randomUUID()),
-  name: text('name'),
-  email: text('email').unique().notNull(),
-  emailVerified: timestamp('emailVerified', { mode: 'date' }),
-  image: text('image'),
-  role: roleEnum('role').notNull().default('RENTER'),
-  phone: text('phone'),
-  language: text('language').notNull().default('en'),
-  country: text('country'),
+  // kebab-case ASCII, max 32 chars; powers /manage/<slug>/... routing (§9 item 15)
+  slug: text('slug').notNull().unique(),
+  name: text('name').notNull(),
+  // §9 item 2: external pre-auth/handoff URL (separate Stripe site, post-MVP)
+  preAuthHandoffUrl: text('pre_auth_handoff_url'),
   createdAt: timestamp('createdAt', { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp('updatedAt', { withTimezone: true }).notNull().defaultNow(),
 })
+
+// Auth.js required fields + app profile fields
+// Column names must be camelCase to match @auth/drizzle-adapter expectations
+export const users = pgTable(
+  'users',
+  {
+    id: text('id')
+      .primaryKey()
+      .$defaultFn(() => crypto.randomUUID()),
+    name: text('name'),
+    email: text('email').unique().notNull(),
+    emailVerified: timestamp('emailVerified', { mode: 'date' }),
+    image: text('image'),
+    role: roleEnum('role').notNull().default('RENTER'),
+    // NULL = renter or platform admin (both legitimate). Set for OPERATOR_*.
+    operatorId: text('operatorId').references(() => operators.id),
+    phone: text('phone'),
+    language: text('language').notNull().default('en'),
+    country: text('country'),
+    createdAt: timestamp('createdAt', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updatedAt', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [index('idx_users_operatorId').on(table.operatorId)],
+)
 
 export const accounts = pgTable(
   'accounts',
@@ -74,6 +108,11 @@ export const vehicleClasses = pgTable(
     id: text('id')
       .primaryKey()
       .$defaultFn(() => crypto.randomUUID()),
+    // Tenant owner. NOT NULL — fresh branch wipe+reseed (proposal §5.1) assigns
+    // Best Car Rental immediately, so no nullable debt. See #386 plan v2 P1b.
+    operatorId: text('operatorId')
+      .notNull()
+      .references(() => operators.id),
     name: text('name').notNull(),
     slug: text('slug').unique().notNull(),
     description: text('description'),
@@ -102,6 +141,7 @@ export const vehicleClasses = pgTable(
       'vehicle_classes_hourly_rate_non_negative',
       sql`${table.hourlyRateJpy} IS NULL OR ${table.hourlyRateJpy} >= 0`,
     ),
+    index('idx_vehicle_classes_operatorId').on(table.operatorId),
   ],
 )
 
@@ -111,6 +151,10 @@ export const vehicles = pgTable(
     id: text('id')
       .primaryKey()
       .$defaultFn(() => crypto.randomUUID()),
+    // Tenant owner. NOT NULL — see vehicleClasses.operatorId rationale (#386 P1b).
+    operatorId: text('operatorId')
+      .notNull()
+      .references(() => operators.id),
     classId: text('classId').references(() => vehicleClasses.id),
     name: text('name').notNull(),
     description: text('description'),
@@ -159,6 +203,7 @@ export const vehicles = pgTable(
     // Issue #330: renter catalog + booking-by-class filter on classId.
     // Every FK column needs its own index — pg doesn't auto-create one.
     index('idx_vehicles_classId').on(table.classId),
+    index('idx_vehicles_operatorId').on(table.operatorId),
   ],
 )
 
