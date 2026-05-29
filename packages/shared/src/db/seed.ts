@@ -1,6 +1,11 @@
 import { sql } from 'drizzle-orm'
+import {
+  BEST_CAR_RENTAL_NAME,
+  BEST_CAR_RENTAL_OPERATOR_ID,
+  BEST_CAR_RENTAL_SLUG,
+} from './constants'
 import { getDb } from './index'
-import { vehicles } from './schema'
+import { operators, vehicles } from './schema'
 
 // Realistic JPY day-rates loosely anchored to Osaka/Kansai rental shop
 // price lists in 2025-26. Hourly rate is roughly (daily / 8) rounded to a
@@ -302,6 +307,19 @@ const SEED_VEHICLES = [
 async function seed() {
   const db = getDb()
 
+  // Transitional tenant (#386). vehicles.operatorId is NOT NULL with an FK to
+  // operators, so the Best Car Rental operator must exist before any vehicle.
+  // Idempotent so reseeding a warm DB is safe.
+  console.log('Seeding Best Car Rental operator...')
+  await db
+    .insert(operators)
+    .values({
+      id: BEST_CAR_RENTAL_OPERATOR_ID,
+      slug: BEST_CAR_RENTAL_SLUG,
+      name: BEST_CAR_RENTAL_NAME,
+    })
+    .onConflictDoNothing()
+
   // Clear existing vehicles for idempotent seeding
   console.log('Clearing existing vehicles...')
   await db.delete(vehicles).where(sql`1=1`)
@@ -309,7 +327,7 @@ async function seed() {
   console.log('Seeding vehicles...')
   const inserted = await db
     .insert(vehicles)
-    .values(SEED_VEHICLES)
+    .values(SEED_VEHICLES.map((v) => ({ ...v, operatorId: BEST_CAR_RENTAL_OPERATOR_ID })))
     .returning({ id: vehicles.id, name: vehicles.name })
 
   for (const v of inserted) {
