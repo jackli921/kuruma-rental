@@ -1,4 +1,8 @@
-import { type CallerContext, PRIVILEGED_ROLES } from '../../middleware/auth'
+import {
+  type CallerContext,
+  PRIVILEGED_ROLES,
+  rejectOperatorContextUntilScoped,
+} from '../../middleware/auth'
 import { PG_ERROR } from '../../pg-errors'
 import type { Message, Thread, ThreadParticipant } from '../../stores'
 import type { ThreadRepository } from '../types'
@@ -11,6 +15,7 @@ export class InMemoryThreadRepository implements ThreadRepository {
   async findAll(
     ctx: CallerContext,
   ): Promise<Array<Thread & { participants: ThreadParticipant[]; lastMessage: Message | null }>> {
+    rejectOperatorContextUntilScoped(ctx, 'ThreadRepository')
     let filteredThreads: Thread[]
 
     if (PRIVILEGED_ROLES.has(ctx.role)) {
@@ -40,6 +45,7 @@ export class InMemoryThreadRepository implements ThreadRepository {
     ctx: CallerContext,
     id: string,
   ): Promise<(Thread & { participants: ThreadParticipant[]; messages: Message[] }) | undefined> {
+    rejectOperatorContextUntilScoped(ctx, 'ThreadRepository')
     const thread = this.threads.get(id)
     if (!thread) return undefined
 
@@ -57,6 +63,7 @@ export class InMemoryThreadRepository implements ThreadRepository {
   }
 
   async findByIdempotencyKey(ctx: CallerContext, key: string): Promise<Thread | undefined> {
+    rejectOperatorContextUntilScoped(ctx, 'ThreadRepository')
     // CallerContext scoping (issue #328): non-privileged callers only match
     // threads they participate in. Privileged roles see all.
     for (const thread of this.threads.values()) {
@@ -71,11 +78,12 @@ export class InMemoryThreadRepository implements ThreadRepository {
   }
 
   async create(
-    _ctx: CallerContext,
+    ctx: CallerContext,
     bookingId: string | null,
     participantIds: string[],
     idempotencyKey?: string | null,
   ): Promise<Thread> {
+    rejectOperatorContextUntilScoped(ctx, 'ThreadRepository')
     if (idempotencyKey) {
       for (const existing of this.threads.values()) {
         if (existing.idempotencyKey === idempotencyKey) {
@@ -110,6 +118,7 @@ export class InMemoryThreadRepository implements ThreadRepository {
   }
 
   async markAsRead(ctx: CallerContext, threadId: string): Promise<void> {
+    rejectOperatorContextUntilScoped(ctx, 'ThreadRepository')
     for (const [key, p] of this.participants) {
       if (p.threadId === threadId && p.userId === ctx.userId) {
         this.participants.set(key, { ...p, unreadCount: 0 })

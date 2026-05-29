@@ -1,4 +1,8 @@
-import { type CallerContext, PRIVILEGED_ROLES } from '../../middleware/auth'
+import {
+  type CallerContext,
+  PRIVILEGED_ROLES,
+  rejectOperatorContextUntilScoped,
+} from '../../middleware/auth'
 import { PG_ERROR } from '../../pg-errors'
 import type { Message } from '../../stores'
 import type { MessageRepository } from '../types'
@@ -20,6 +24,7 @@ export class InMemoryMessageRepository implements MessageRepository {
   constructor(private readonly threadRepo: InMemoryThreadRepository) {}
 
   async findById(ctx: CallerContext, id: string): Promise<Message | undefined> {
+    rejectOperatorContextUntilScoped(ctx, 'MessageRepository')
     const msg = this.threadRepo._getMessage(id)
     if (!msg) return undefined
     if (PRIVILEGED_ROLES.has(ctx.role)) return msg
@@ -29,6 +34,7 @@ export class InMemoryMessageRepository implements MessageRepository {
   }
 
   async findByIdempotencyKey(ctx: CallerContext, key: string): Promise<Message | undefined> {
+    rejectOperatorContextUntilScoped(ctx, 'MessageRepository')
     // CallerContext scoping (issue #328): the key is sender-owned, so
     // non-privileged callers only match messages they themselves sent.
     const msg = this.idempotencyIndex.get(key)
@@ -62,6 +68,7 @@ export class InMemoryMessageRepository implements MessageRepository {
     content: string,
     idempotencyKey?: string | null,
   ): Promise<Message> {
+    rejectOperatorContextUntilScoped(ctx, 'MessageRepository')
     if (idempotencyKey && this.idempotencyIndex.has(idempotencyKey)) {
       const err = new Error('unique_idempotency_key violation') as Error & { code: string }
       err.code = PG_ERROR.UNIQUE_VIOLATION
@@ -87,8 +94,9 @@ export class InMemoryMessageRepository implements MessageRepository {
     return message
   }
 
-  async findByThreadId(_ctx: CallerContext, threadId: string): Promise<Message[]> {
-    const thread = await this.threadRepo.findById(_ctx, threadId)
+  async findByThreadId(ctx: CallerContext, threadId: string): Promise<Message[]> {
+    rejectOperatorContextUntilScoped(ctx, 'MessageRepository')
+    const thread = await this.threadRepo.findById(ctx, threadId)
     return thread?.messages ?? []
   }
 }

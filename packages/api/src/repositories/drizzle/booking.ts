@@ -1,6 +1,10 @@
 import { bookings } from '@kuruma/shared/db/schema'
 import { and, count, desc, eq, inArray, lt, or, sql } from 'drizzle-orm'
-import { type CallerContext, PRIVILEGED_ROLES } from '../../middleware/auth'
+import {
+  type CallerContext,
+  PRIVILEGED_ROLES,
+  rejectOperatorContextUntilScoped,
+} from '../../middleware/auth'
 import type { Booking } from '../../stores'
 import type { BookingFilters, BookingRepository } from '../types'
 import { type Db, bookingColumns, toBooking } from './shared'
@@ -9,6 +13,7 @@ export class DrizzleBookingRepository implements BookingRepository {
   constructor(private readonly db: Db) {}
 
   async findAll(ctx: CallerContext, filters?: BookingFilters): Promise<Booking[]> {
+    rejectOperatorContextUntilScoped(ctx, 'BookingRepository')
     const conditions = []
 
     // CallerContext scoping: non-privileged users only see own bookings
@@ -67,6 +72,7 @@ export class DrizzleBookingRepository implements BookingRepository {
   }
 
   async findById(ctx: CallerContext, id: string): Promise<Booking | undefined> {
+    rejectOperatorContextUntilScoped(ctx, 'BookingRepository')
     const conditions = [eq(bookings.id, id)]
     if (!PRIVILEGED_ROLES.has(ctx.role)) {
       conditions.push(eq(bookings.renterId, ctx.userId))
@@ -81,6 +87,7 @@ export class DrizzleBookingRepository implements BookingRepository {
   }
 
   async findByIdempotencyKey(ctx: CallerContext, key: string): Promise<Booking | undefined> {
+    rejectOperatorContextUntilScoped(ctx, 'BookingRepository')
     const conditions = [eq(bookings.idempotencyKey, key)]
     if (!PRIVILEGED_ROLES.has(ctx.role)) {
       conditions.push(eq(bookings.renterId, ctx.userId))
@@ -109,6 +116,7 @@ export class DrizzleBookingRepository implements BookingRepository {
   }
 
   async create(ctx: CallerContext, data: Omit<Booking, 'id' | 'createdAt' | 'updatedAt'>): Promise<Booking> {
+    rejectOperatorContextUntilScoped(ctx, 'BookingRepository')
     // CallerContext scoping: non-privileged callers can only create bookings for themselves
     if (!PRIVILEGED_ROLES.has(ctx.role) && data.renterId !== ctx.userId) {
       throw new Error('Cannot create booking for another user')
@@ -143,6 +151,7 @@ export class DrizzleBookingRepository implements BookingRepository {
     id: string,
     transition: { from: Booking['status']; to: Booking['status'] },
   ): Promise<Booking | undefined> {
+    rejectOperatorContextUntilScoped(ctx, 'BookingRepository')
     const conditions = [eq(bookings.id, id), eq(bookings.status, transition.from)]
     if (!PRIVILEGED_ROLES.has(ctx.role)) {
       conditions.push(eq(bookings.renterId, ctx.userId))
@@ -162,6 +171,7 @@ export class DrizzleBookingRepository implements BookingRepository {
     id: string,
     opts: { from: Booking['status']; fee: number; cancelledAt: Date },
   ): Promise<Booking | undefined> {
+    rejectOperatorContextUntilScoped(ctx, 'BookingRepository')
     const conditions = [eq(bookings.id, id), eq(bookings.status, opts.from)]
     if (!PRIVILEGED_ROLES.has(ctx.role)) {
       conditions.push(eq(bookings.renterId, ctx.userId))

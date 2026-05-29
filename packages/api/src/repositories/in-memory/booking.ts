@@ -1,4 +1,8 @@
-import { type CallerContext, PRIVILEGED_ROLES } from '../../middleware/auth'
+import {
+  type CallerContext,
+  PRIVILEGED_ROLES,
+  rejectOperatorContextUntilScoped,
+} from '../../middleware/auth'
 import { PG_ERROR } from '../../pg-errors'
 import type { Booking } from '../../stores'
 import type { BookingFilters, BookingRepository } from '../types'
@@ -41,6 +45,7 @@ export class InMemoryBookingRepository implements BookingRepository {
   }
 
   async findAll(ctx: CallerContext, filters?: BookingFilters): Promise<Booking[]> {
+    rejectOperatorContextUntilScoped(ctx, 'BookingRepository')
     let results = this.scopedValues(ctx)
 
     if (filters?.status) {
@@ -86,6 +91,7 @@ export class InMemoryBookingRepository implements BookingRepository {
   }
 
   async findById(ctx: CallerContext, id: string): Promise<Booking | undefined> {
+    rejectOperatorContextUntilScoped(ctx, 'BookingRepository')
     const booking = this.store.get(id)
     if (!booking) return undefined
     if (!PRIVILEGED_ROLES.has(ctx.role) && booking.renterId !== ctx.userId) return undefined
@@ -93,6 +99,7 @@ export class InMemoryBookingRepository implements BookingRepository {
   }
 
   async findByIdempotencyKey(ctx: CallerContext, key: string): Promise<Booking | undefined> {
+    rejectOperatorContextUntilScoped(ctx, 'BookingRepository')
     for (const booking of this.store.values()) {
       if (booking.idempotencyKey === key) {
         if (!PRIVILEGED_ROLES.has(ctx.role) && booking.renterId !== ctx.userId) return undefined
@@ -119,6 +126,7 @@ export class InMemoryBookingRepository implements BookingRepository {
     ctx: CallerContext,
     data: Omit<Booking, 'id' | 'createdAt' | 'updatedAt'>,
   ): Promise<Booking> {
+    rejectOperatorContextUntilScoped(ctx, 'BookingRepository')
     // CallerContext scoping: non-privileged callers can only create bookings for themselves
     if (!PRIVILEGED_ROLES.has(ctx.role) && data.renterId !== ctx.userId) {
       throw new Error('Cannot create booking for another user')
@@ -171,6 +179,7 @@ export class InMemoryBookingRepository implements BookingRepository {
     id: string,
     transition: { from: Booking['status']; to: Booking['status'] },
   ): Promise<Booking | undefined> {
+    rejectOperatorContextUntilScoped(ctx, 'BookingRepository')
     const existing = this.store.get(id)
     if (!existing || existing.status !== transition.from) return undefined
     if (!PRIVILEGED_ROLES.has(ctx.role) && existing.renterId !== ctx.userId) return undefined
@@ -189,6 +198,7 @@ export class InMemoryBookingRepository implements BookingRepository {
     id: string,
     opts: { from: Booking['status']; fee: number; cancelledAt: Date },
   ): Promise<Booking | undefined> {
+    rejectOperatorContextUntilScoped(ctx, 'BookingRepository')
     const existing = this.store.get(id)
     if (!existing || existing.status !== opts.from) return undefined
     if (!PRIVILEGED_ROLES.has(ctx.role) && existing.renterId !== ctx.userId) return undefined
