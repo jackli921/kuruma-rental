@@ -26,8 +26,9 @@ function getAuthResult(): NextAuthResult {
       callbacks: {
         async jwt({ token, user }) {
           if (user) {
-            // First sign-in: populate role from the user object
+            // First sign-in: populate role + tenant from the user object
             token.role = (user as { role?: string }).role ?? 'RENTER'
+            token.operatorId = (user as { operatorId?: string | null }).operatorId ?? null
             token.roleRefreshedAt = Date.now()
           } else if (token.sub) {
             // Subsequent refreshes: re-fetch role from DB at most every 5 minutes
@@ -37,12 +38,13 @@ function getAuthResult(): NextAuthResult {
               try {
                 const db = getDb()
                 const [dbUser] = await db
-                  .select({ role: users.role })
+                  .select({ role: users.role, operatorId: users.operatorId })
                   .from(users)
                   .where(eq(users.id, token.sub))
                   .limit(1)
                 if (dbUser) {
                   token.role = dbUser.role
+                  token.operatorId = dbUser.operatorId
                 }
                 token.roleRefreshedAt = Date.now()
               } catch {
@@ -57,6 +59,7 @@ function getAuthResult(): NextAuthResult {
           if (session.user) {
             session.user.id = token.sub!
             ;(session.user as { role?: string }).role = token.role as string
+            session.user.operatorId = token.operatorId ?? null
           }
           return session
         },

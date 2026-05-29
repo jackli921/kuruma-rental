@@ -72,6 +72,43 @@ describe('getApiToken', () => {
     expect(payload.aud).toBe('kuruma-api')
   })
 
+  it('signs operatorId into the payload when the session carries one', async () => {
+    const { auth } = await import('@/auth')
+    vi.mocked(auth).mockResolvedValueOnce({
+      user: { id: 'owner-7', role: 'OPERATOR_OWNER', operatorId: 'op_best_car_rental' },
+      expires: '',
+    } as never)
+
+    const { getApiToken } = await import('@/lib/api-token')
+    const token = await getApiToken()
+
+    const key = new TextEncoder().encode(TEST_SECRET)
+    const { payload } = await jwtVerify(token!, key, {
+      algorithms: ['HS256'],
+      issuer: 'kuruma-web',
+      audience: 'kuruma-api',
+    })
+    expect(payload.sub).toBe('owner-7')
+    expect(payload.role).toBe('OPERATOR_OWNER')
+    expect(payload.operatorId).toBe('op_best_car_rental')
+  })
+
+  it('omits operatorId from the payload when the session has none', async () => {
+    const { auth } = await import('@/auth')
+    vi.mocked(auth).mockResolvedValueOnce({
+      user: { id: 'renter-1', role: 'RENTER' },
+      expires: '',
+    } as never)
+
+    const { getApiToken } = await import('@/lib/api-token')
+    const token = await getApiToken()
+
+    const key = new TextEncoder().encode(TEST_SECRET)
+    const { payload } = await jwtVerify(token!, key)
+    expect(payload.role).toBe('RENTER')
+    expect('operatorId' in payload).toBe(false)
+  })
+
   it('defaults role to RENTER when session.user has no role', async () => {
     const { auth } = await import('@/auth')
     vi.mocked(auth).mockResolvedValueOnce({

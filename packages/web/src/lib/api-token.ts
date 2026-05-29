@@ -14,7 +14,12 @@ export async function getApiToken(): Promise<string | undefined> {
   const role = session.user.role ?? 'RENTER'
   const key = new TextEncoder().encode(secret)
 
-  return new SignJWT({ role })
+  // Only tenant-scoped (OPERATOR_*) sessions carry an operatorId. Omit the claim
+  // entirely otherwise so the API treats the caller as unscoped (verifyJwt).
+  const claims: Record<string, unknown> = { role }
+  if (session.user.operatorId) claims.operatorId = session.user.operatorId
+
+  return new SignJWT(claims)
     .setProtectedHeader({ alg: 'HS256' })
     .setSubject(userId)
     .setIssuer('kuruma-web')

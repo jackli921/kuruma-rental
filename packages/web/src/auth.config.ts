@@ -14,6 +14,7 @@ export default {
     jwt({ token, user }) {
       if (user) {
         token.role = (user as { role?: string }).role ?? 'RENTER'
+        token.operatorId = (user as { operatorId?: string | null }).operatorId ?? null
       }
       return token
     },
@@ -21,6 +22,7 @@ export default {
       if (session.user) {
         session.user.id = token.sub!
         ;(session.user as { role?: string }).role = (token.role as string) ?? 'RENTER'
+        session.user.operatorId = token.operatorId ?? null
       }
       return session
     },
