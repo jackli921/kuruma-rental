@@ -7,6 +7,7 @@
     ".": "./src/index.ts",
     "./db": "./src/db/index.ts",
     "./db/schema": "./src/db/schema.ts",
+    "./db/constants": "./src/db/constants.ts",
     "./validators/auth": "./src/validators/auth.ts",
     "./validators/message": "./src/validators/message.ts",
     "./types/stats": "./src/types/stats.ts",

@@ -4,9 +4,10 @@ import {
   updateVehicleClassSchema,
 } from '@kuruma/shared/validators/vehicle-class'
 import { type Context, Hono } from 'hono'
-import { STAFF_ROLES, requireAuth, requireUser } from '../middleware/auth'
+import { STAFF_ROLES, requireAuth, requireUser, toCallerContext } from '../middleware/auth'
 import type { VehicleClassService } from '../services/vehicle-class'
 import type { VehicleClassAvailabilityService } from '../services/vehicle-class-availability'
+import { resolveOperatorIdForWrite } from '../tenancy'
 import { cachePublic, fail, ok, parseBody, parseDateRange, stripUndefined } from './helpers'
 
 export function createVehicleClassRoutes(
@@ -84,6 +85,9 @@ export function createVehicleClassRoutes(
 
         const d = parsed.data
         const result = await service.create({
+          // Transitional: legacy STAFF/ADMIN writes attach to the default
+          // operator until operator-portal write flows land (#386).
+          operatorId: resolveOperatorIdForWrite(toCallerContext(user)),
           name: d.name,
           slug: d.slug,
           description: d.description ?? null,

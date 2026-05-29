@@ -51,6 +51,7 @@ export class DrizzleVehicleClassRepository implements VehicleClassRepository {
     const [inserted] = await this.db
       .insert(vehicleClasses)
       .values({
+        operatorId: data.operatorId,
         name: data.name,
         slug: data.slug,
         description: data.description,

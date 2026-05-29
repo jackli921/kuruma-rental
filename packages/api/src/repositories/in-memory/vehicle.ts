@@ -1,5 +1,6 @@
 import { type CallerContext, requireStaffContext } from '../../middleware/auth'
 import type { Vehicle } from '../../stores'
+import { operatorReadScope } from '../../tenancy'
 import type {
   PaginatedResult,
   VehicleFilters,
@@ -14,8 +15,12 @@ export class InMemoryVehicleRepository implements VehicleRepository {
     this.store = store ?? new Map()
   }
 
-  async findAll(_ctx: CallerContext, filters?: VehicleFilters): Promise<PaginatedResult<Vehicle>> {
-    const all = [...this.store.values()]
+  async findAll(ctx: CallerContext, filters?: VehicleFilters): Promise<PaginatedResult<Vehicle>> {
+    const scope = operatorReadScope(ctx)
+    if (scope.kind === 'none') return { data: [], total: 0 }
+    const all = [...this.store.values()].filter((v) =>
+      scope.kind === 'operator' ? v.operatorId === scope.operatorId : true,
+    )
     let filtered: Vehicle[]
     if (filters?.status) {
       filtered = all.filter((v) => v.status === filters.status)
@@ -34,14 +39,23 @@ export class InMemoryVehicleRepository implements VehicleRepository {
     return { data, total }
   }
 
-  async findById(_ctx: CallerContext, id: string): Promise<Vehicle | undefined> {
-    return this.store.get(id)
+  async findById(ctx: CallerContext, id: string): Promise<Vehicle | undefined> {
+    const scope = operatorReadScope(ctx)
+    if (scope.kind === 'none') return undefined
+    const v = this.store.get(id)
+    if (!v) return undefined
+    if (scope.kind === 'operator' && v.operatorId !== scope.operatorId) return undefined
+    return v
   }
 
-  async findByIds(_ctx: CallerContext, ids: string[]): Promise<Vehicle[]> {
+  async findByIds(ctx: CallerContext, ids: string[]): Promise<Vehicle[]> {
+    const scope = operatorReadScope(ctx)
+    if (scope.kind === 'none') return []
     return ids.flatMap((id) => {
       const v = this.store.get(id)
-      return v ? [v] : []
+      if (!v) return []
+      if (scope.kind === 'operator' && v.operatorId !== scope.operatorId) return []
+      return [v]
     })
   }
 

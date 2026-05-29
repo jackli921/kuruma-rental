@@ -2,6 +2,7 @@ import { vehicles } from '@kuruma/shared/db/schema'
 import { type SQL, and, count, eq, inArray, ne, sql } from 'drizzle-orm'
 import { type CallerContext, requireStaffContext } from '../../middleware/auth'
 import type { Vehicle } from '../../stores'
+import { operatorReadScope } from '../../tenancy'
 import type {
   PaginatedResult,
   VehicleFilters,
@@ -13,11 +14,17 @@ import { type Db, toVehicle, vehicleColumns } from './shared'
 export class DrizzleVehicleRepository implements VehicleRepository {
   constructor(private readonly db: Db) {}
 
-  async findAll(
-    _ctx: CallerContext,
-    filters?: VehicleFilters,
-  ): Promise<PaginatedResult<Vehicle>> {
+  async findAll(ctx: CallerContext, filters?: VehicleFilters): Promise<PaginatedResult<Vehicle>> {
     const conditions: SQL[] = []
+
+    // Tenant scope: operators see only their vehicles; bypass roles see all;
+    // a scoped caller with no tenant sees nothing (#386).
+    const scope = operatorReadScope(ctx)
+    if (scope.kind === 'operator') {
+      conditions.push(eq(vehicles.operatorId, scope.operatorId))
+    } else if (scope.kind === 'none') {
+      conditions.push(sql`false`)
+    }
 
     if (filters?.status) {
       conditions.push(eq(vehicles.status, filters.status as Vehicle['status']))
@@ -47,18 +54,30 @@ export class DrizzleVehicleRepository implements VehicleRepository {
     }
   }
 
-  async findById(_ctx: CallerContext, id: string): Promise<Vehicle | undefined> {
-    const [row] = await this.db.select(vehicleColumns).from(vehicles).where(eq(vehicles.id, id))
+  async findById(ctx: CallerContext, id: string): Promise<Vehicle | undefined> {
+    const scope = operatorReadScope(ctx)
+    if (scope.kind === 'none') return undefined
+    const conditions: SQL[] = [eq(vehicles.id, id)]
+    if (scope.kind === 'operator') conditions.push(eq(vehicles.operatorId, scope.operatorId))
+
+    const [row] = await this.db
+      .select(vehicleColumns)
+      .from(vehicles)
+      .where(and(...conditions))
 
     return row ? toVehicle(row) : undefined
   }
 
-  async findByIds(_ctx: CallerContext, ids: string[]): Promise<Vehicle[]> {
+  async findByIds(ctx: CallerContext, ids: string[]): Promise<Vehicle[]> {
     if (ids.length === 0) return []
+    const scope = operatorReadScope(ctx)
+    if (scope.kind === 'none') return []
+    const conditions: SQL[] = [inArray(vehicles.id, ids)]
+    if (scope.kind === 'operator') conditions.push(eq(vehicles.operatorId, scope.operatorId))
     const rows = await this.db
       .select(vehicleColumns)
       .from(vehicles)
-      .where(inArray(vehicles.id, ids))
+      .where(and(...conditions))
     return rows.map(toVehicle)
   }
 
@@ -70,6 +89,7 @@ export class DrizzleVehicleRepository implements VehicleRepository {
     const [inserted] = await this.db
       .insert(vehicles)
       .values({
+        operatorId: data.operatorId,
         classId: data.classId,
         name: data.name,
         description: data.description,

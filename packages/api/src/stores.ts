@@ -1,5 +1,7 @@
 export interface VehicleClass {
   id: string
+  /** Owning operator (marketplace tenant, #386). NOT NULL in the DB. */
+  operatorId: string
   name: string
   slug: string
   description: string | null

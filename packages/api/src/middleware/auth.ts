@@ -42,6 +42,11 @@ const ALL_ROLES: ReadonlySet<string> = new Set<string>([
 /** Tenant-scoped roles. They NEVER bypass operator scope (proposal §6.2). */
 const OPERATOR_ROLES: ReadonlySet<UserRole> = new Set(['OPERATOR_OWNER', 'OPERATOR_STAFF'])
 
+/** True for tenant-scoped roles (OPERATOR_OWNER / OPERATOR_STAFF). */
+export function isOperatorRole(role: UserRole): boolean {
+  return OPERATOR_ROLES.has(role)
+}
+
 /**
  * Roles that see across all operators. PLATFORM_ADMIN is the sanctioned bypass;
  * legacy STAFF / ADMIN / PARTNER are treated as temporary platform-admin
