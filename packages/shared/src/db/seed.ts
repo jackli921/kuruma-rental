@@ -1,11 +1,14 @@
-import { sql } from 'drizzle-orm'
+import { inArray, sql } from 'drizzle-orm'
 import {
   BEST_CAR_RENTAL_NAME,
   BEST_CAR_RENTAL_OPERATOR_ID,
+  BEST_CAR_RENTAL_OWNER_EMAIL,
+  BEST_CAR_RENTAL_OWNER_NAME,
   BEST_CAR_RENTAL_SLUG,
 } from './constants'
 import { getDb } from './index'
-import { operators, vehicles } from './schema'
+import { parsePlatformAdminEmails } from './platform-admins'
+import { operators, users, vehicles } from './schema'
 
 // Realistic JPY day-rates loosely anchored to Osaka/Kansai rental shop
 // price lists in 2025-26. Hourly rate is roughly (daily / 8) rounded to a
@@ -319,6 +322,40 @@ async function seed() {
       name: BEST_CAR_RENTAL_NAME,
     })
     .onConflictDoNothing()
+
+  // Best Car Rental owner — the first OPERATOR_OWNER, scoped to the operator
+  // above so their session/JWT carries operatorId (proposal acceptance:
+  // "operator-staff login includes operatorId"). Idempotent: reseeding
+  // re-asserts the role + tenant rather than duplicating the user.
+  console.log('Seeding Best Car Rental owner...')
+  await db
+    .insert(users)
+    .values({
+      name: BEST_CAR_RENTAL_OWNER_NAME,
+      email: BEST_CAR_RENTAL_OWNER_EMAIL,
+      role: 'OPERATOR_OWNER',
+      operatorId: BEST_CAR_RENTAL_OPERATOR_ID,
+    })
+    .onConflictDoUpdate({
+      target: users.email,
+      set: {
+        role: 'OPERATOR_OWNER',
+        operatorId: BEST_CAR_RENTAL_OPERATOR_ID,
+        updatedAt: new Date(),
+      },
+    })
+
+  // Platform-admin bootstrap (proposal §9 item 23): promote any existing user
+  // whose email is in the PLATFORM_ADMIN_EMAILS allowlist. Idempotent and a
+  // no-op when the env var is unset.
+  const platformAdminEmails = parsePlatformAdminEmails(process.env.PLATFORM_ADMIN_EMAILS)
+  if (platformAdminEmails.length > 0) {
+    console.log(`Promoting ${platformAdminEmails.length} platform admin(s)...`)
+    await db
+      .update(users)
+      .set({ role: 'PLATFORM_ADMIN', updatedAt: new Date() })
+      .where(inArray(sql`lower(${users.email})`, platformAdminEmails))
+  }
 
   // Clear existing vehicles for idempotent seeding
   console.log('Clearing existing vehicles...')
