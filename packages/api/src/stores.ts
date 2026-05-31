@@ -95,5 +95,14 @@ export interface User {
   role: UserRole
 }
 
+export interface Operator {
+  id: string
+  slug: string
+  name: string
+  preAuthHandoffUrl: string | null
+  createdAt: Date
+  updatedAt: Date
+}
+
 // Map stores removed — repositories handle data access now.
 // Types remain here as the shared contract between repositories and routes.

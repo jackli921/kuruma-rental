@@ -171,6 +171,18 @@ export function rejectOperatorContextUntilScoped(ctx: CallerContext, repoName: s
   }
 }
 
+/**
+ * Guard for platform-admin-only paths (operator bootstrap, proposal §9 item 23).
+ * Only PLATFORM_ADMIN passes — legacy STAFF/ADMIN do NOT, since operator
+ * creation is a platform-governance action, not a fleet-management one.
+ * `SYSTEM_CONTEXT` (role PLATFORM_ADMIN) passes.
+ */
+export function requirePlatformAdmin(ctx: CallerContext): void {
+  if (ctx.role !== 'PLATFORM_ADMIN') {
+    throw new ForbiddenError('PLATFORM_ADMIN role required')
+  }
+}
+
 export function getUser(c: { get: (key: string) => unknown }): AuthUser | undefined {
   const raw = c.get('user')
   return isAuthUser(raw) ? raw : undefined
