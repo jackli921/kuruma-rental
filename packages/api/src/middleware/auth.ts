@@ -29,6 +29,12 @@ export interface AuthEnv {
   }
 }
 
+// The web package mints API tokens with these claims (packages/web/src/lib/
+// api-token.ts). verifyJwt asserts both so a token minted with the shared
+// AUTH_SECRET for any other purpose cannot be replayed as an API caller.
+export const API_TOKEN_ISSUER = 'kuruma-web'
+export const API_TOKEN_AUDIENCE = 'kuruma-api'
+
 const ALL_ROLES: ReadonlySet<string> = new Set<string>([
   'RENTER',
   'STAFF',
@@ -232,7 +238,11 @@ async function verifyJwt(token: string): Promise<AuthUser | null> {
 
   try {
     const key = new TextEncoder().encode(secret)
-    const { payload } = await jwtVerify(token, key, { algorithms: ['HS256'] })
+    const { payload } = await jwtVerify(token, key, {
+      algorithms: ['HS256'],
+      issuer: API_TOKEN_ISSUER,
+      audience: API_TOKEN_AUDIENCE,
+    })
 
     const id = payload.sub
     if (!id) return null

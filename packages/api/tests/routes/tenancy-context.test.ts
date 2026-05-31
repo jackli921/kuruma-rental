@@ -51,6 +51,8 @@ async function bearer(payload: Record<string, unknown>): Promise<Record<string, 
     .setProtectedHeader({ alg: 'HS256' })
     .setIssuedAt()
     .setExpirationTime('1h')
+    .setIssuer('kuruma-web')
+    .setAudience('kuruma-api')
     .sign(key)
   return { Authorization: `Bearer ${token}` }
 }

@@ -352,8 +352,11 @@ async function seed() {
   if (platformAdminEmails.length > 0) {
     console.log(`Promoting ${platformAdminEmails.length} platform admin(s)...`)
     await db
+      // operatorId is nulled: a PLATFORM_ADMIN belongs to no tenant (proposal
+      // §6.2). Promoting an existing OPERATOR_* row must clear its old tenant,
+      // not leave a contradictory "admin scoped to operator X" row.
       .update(users)
-      .set({ role: 'PLATFORM_ADMIN', updatedAt: new Date() })
+      .set({ role: 'PLATFORM_ADMIN', operatorId: null, updatedAt: new Date() })
       .where(inArray(sql`lower(${users.email})`, platformAdminEmails))
   }
 
