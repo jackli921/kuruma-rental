@@ -1,6 +1,6 @@
 import { vehicles } from '@kuruma/shared/db/schema'
 import { type SQL, and, count, eq, inArray, ne, sql } from 'drizzle-orm'
-import { type CallerContext, requireStaffContext } from '../../middleware/auth'
+import { type CallerContext, requireFleetWriteScope } from '../../middleware/auth'
 import type { Vehicle } from '../../stores'
 import { operatorReadScope, resolveOperatorIdForWrite } from '../../tenancy'
 import type {
@@ -85,7 +85,7 @@ export class DrizzleVehicleRepository implements VehicleRepository {
     ctx: CallerContext,
     data: Omit<Vehicle, 'id' | 'createdAt' | 'updatedAt'>,
   ): Promise<Vehicle> {
-    requireStaffContext(ctx)
+    requireFleetWriteScope(ctx)
     const [inserted] = await this.db
       .insert(vehicles)
       .values({
@@ -124,9 +124,11 @@ export class DrizzleVehicleRepository implements VehicleRepository {
     data: Partial<Vehicle>,
     options?: VehicleUpdateOptions,
   ): Promise<Vehicle | undefined> {
-    requireStaffContext(ctx)
+    requireFleetWriteScope(ctx)
     const { id: _id, createdAt: _createdAt, ...fields } = data
+    const scope = operatorReadScope(ctx)
     const conditions = [eq(vehicles.id, id)]
+    if (scope.kind === 'operator') conditions.push(eq(vehicles.operatorId, scope.operatorId))
     if (options?.expectedStatus) {
       conditions.push(eq(vehicles.status, options.expectedStatus))
     }
@@ -140,11 +142,14 @@ export class DrizzleVehicleRepository implements VehicleRepository {
   }
 
   async softDelete(ctx: CallerContext, id: string): Promise<Vehicle | undefined> {
-    requireStaffContext(ctx)
+    requireFleetWriteScope(ctx)
+    const scope = operatorReadScope(ctx)
+    const conditions = [eq(vehicles.id, id)]
+    if (scope.kind === 'operator') conditions.push(eq(vehicles.operatorId, scope.operatorId))
     const [retired] = await this.db
       .update(vehicles)
       .set({ status: 'RETIRED', updatedAt: sql`now()` })
-      .where(eq(vehicles.id, id))
+      .where(and(...conditions))
       .returning()
 
     return retired ? toVehicle(retired) : undefined
@@ -155,12 +160,15 @@ export class DrizzleVehicleRepository implements VehicleRepository {
     ids: string[],
     status: 'AVAILABLE' | 'MAINTENANCE',
   ): Promise<Vehicle[]> {
-    requireStaffContext(ctx)
+    requireFleetWriteScope(ctx)
     if (ids.length === 0) return []
+    const scope = operatorReadScope(ctx)
+    const conditions: SQL[] = [inArray(vehicles.id, ids)]
+    if (scope.kind === 'operator') conditions.push(eq(vehicles.operatorId, scope.operatorId))
     const rows = await this.db
       .update(vehicles)
       .set({ status, updatedAt: sql`now()` })
-      .where(inArray(vehicles.id, ids))
+      .where(and(...conditions))
       .returning()
     return rows.map(toVehicle)
   }
@@ -173,7 +181,8 @@ export class DrizzleVehicleRepository implements VehicleRepository {
   ): Promise<
     { outcome: 'ok'; vehicle: Vehicle } | { outcome: 'cap_exceeded' } | { outcome: 'not_found' }
   > {
-    requireStaffContext(ctx)
+    requireFleetWriteScope(ctx)
+    const scope = operatorReadScope(ctx)
     // Single-statement conditional append: only succeed if the resulting
     // cardinality stays within the cap. Concurrent callers serialize at
     // the row level, so two racing uploads cannot both pass the guard.
@@ -183,15 +192,15 @@ export class DrizzleVehicleRepository implements VehicleRepository {
     for (const url of urls) {
       photosExpr = sql`array_append(${photosExpr}, ${url})`
     }
+    const conditions: SQL[] = [
+      eq(vehicles.id, id),
+      sql`cardinality(${vehicles.photos}) + ${urls.length} <= ${maxPhotos}`,
+    ]
+    if (scope.kind === 'operator') conditions.push(eq(vehicles.operatorId, scope.operatorId))
     const [updated] = await this.db
       .update(vehicles)
       .set({ photos: photosExpr, updatedAt: sql`now()` })
-      .where(
-        and(
-          eq(vehicles.id, id),
-          sql`cardinality(${vehicles.photos}) + ${urls.length} <= ${maxPhotos}`,
-        ),
-      )
+      .where(and(...conditions))
       .returning()
 
     if (updated) return { outcome: 'ok', vehicle: toVehicle(updated) }
@@ -204,15 +213,18 @@ export class DrizzleVehicleRepository implements VehicleRepository {
     id: string,
     url: string,
   ): Promise<Vehicle | undefined> {
-    requireStaffContext(ctx)
+    requireFleetWriteScope(ctx)
+    const scope = operatorReadScope(ctx)
     // array_remove is atomic — no TOCTOU between read of photos and write.
+    const conditions: SQL[] = [eq(vehicles.id, id), sql`${url} = ANY(${vehicles.photos})`]
+    if (scope.kind === 'operator') conditions.push(eq(vehicles.operatorId, scope.operatorId))
     const [updated] = await this.db
       .update(vehicles)
       .set({
         photos: sql`array_remove(${vehicles.photos}, ${url})`,
         updatedAt: sql`now()`,
       })
-      .where(and(eq(vehicles.id, id), sql`${url} = ANY(${vehicles.photos})`))
+      .where(and(...conditions))
       .returning()
     return updated ? toVehicle(updated) : undefined
   }

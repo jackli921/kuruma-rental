@@ -168,4 +168,34 @@ describe('cross-operator vehicle isolation', () => {
     expect(data).toHaveLength(0)
     expect(await vehicleRepo.findById(noTenant, vehicleA.id)).toBeUndefined()
   })
+
+  // Writes are scoped at the repository, not just the route: an operator cannot
+  // mutate another tenant's vehicle even by id (#386 F2). Run after the read
+  // assertions above; the final case renames operator A's own vehicle.
+  it('update cannot reach another tenant vehicle (no-op, not leak)', async () => {
+    expect(
+      await vehicleRepo.update(ctxFor(opAId), vehicleB.id, { name: 'hijacked' }),
+    ).toBeUndefined()
+    expect(await vehicleRepo.findById(SYSTEM_CONTEXT, vehicleB.id)).toMatchObject({
+      name: 'Iso Car B',
+    })
+  })
+
+  it('softDelete cannot reach another tenant vehicle', async () => {
+    expect(await vehicleRepo.softDelete(ctxFor(opAId), vehicleB.id)).toBeUndefined()
+    expect(await vehicleRepo.findById(SYSTEM_CONTEXT, vehicleB.id)).toMatchObject({
+      status: 'AVAILABLE',
+    })
+  })
+
+  it('bulkUpdateStatus skips another tenant vehicle', async () => {
+    expect(await vehicleRepo.bulkUpdateStatus(ctxFor(opAId), [vehicleB.id], 'MAINTENANCE')).toEqual(
+      [],
+    )
+  })
+
+  it('an operator can update its own tenant vehicle', async () => {
+    const updated = await vehicleRepo.update(ctxFor(opAId), vehicleA.id, { name: 'Iso Car A v2' })
+    expect(updated).toMatchObject({ id: vehicleA.id, name: 'Iso Car A v2' })
+  })
 })

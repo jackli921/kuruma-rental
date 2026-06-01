@@ -132,6 +132,17 @@ export const PRIVILEGED_ROLES: ReadonlySet<UserRole> = new Set([
 export const STAFF_ROLES: ReadonlySet<UserRole> = new Set(['STAFF', 'ADMIN', 'PLATFORM_ADMIN'])
 
 /**
+ * Roles permitted to mutate fleet inventory: STAFF roles PLUS tenant-scoped
+ * operators (OPERATOR_OWNER / OPERATOR_STAFF). Operators are further bounded to
+ * their own tenant by the repository's operator predicate — the repo, not the
+ * route, is the tenant boundary (#386 F2 / #397).
+ */
+export const FLEET_WRITE_ROLES: ReadonlySet<UserRole> = new Set<UserRole>([
+  ...STAFF_ROLES,
+  ...OPERATOR_ROLES,
+])
+
+/**
  * Thrown by repo-layer guards when a non-authorised caller hits a
  * protected method. The global error handler maps this to a 403 response
  * so a bypassed route-level gate surfaces as a policy denial, not a 500.
@@ -144,14 +155,18 @@ export class ForbiddenError extends Error {
 }
 
 /**
- * Repo-layer guard for mutation methods. Throws `ForbiddenError` if the
- * caller is not a STAFF role. Defence in depth against a route forgetting
- * its `STAFF_ROLES` gate (issue #329). `SYSTEM_CONTEXT` (role: ADMIN) passes.
+ * Repo-layer guard for fleet mutation methods. Admits STAFF roles and
+ * tenant-scoped operators (`FLEET_WRITE_ROLES`); a tenant-scoped caller missing
+ * its operatorId fails closed via `requireOperatorScope`. Defence in depth
+ * against a route forgetting its gate (issue #329). The caller's tenant is
+ * enforced by the repository's operator predicate, so an admitted operator can
+ * only mutate its own vehicles. `SYSTEM_CONTEXT` (PLATFORM_ADMIN) passes.
  */
-export function requireStaffContext(ctx: CallerContext): void {
-  if (!STAFF_ROLES.has(ctx.role)) {
-    throw new ForbiddenError('STAFF role required')
+export function requireFleetWriteScope(ctx: CallerContext): void {
+  if (!FLEET_WRITE_ROLES.has(ctx.role)) {
+    throw new ForbiddenError('fleet write scope required')
   }
+  requireOperatorScope(ctx)
 }
 
 /**

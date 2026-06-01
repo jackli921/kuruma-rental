@@ -1,4 +1,4 @@
-import { type CallerContext, requireStaffContext } from '../../middleware/auth'
+import { type CallerContext, requireFleetWriteScope } from '../../middleware/auth'
 import type { Vehicle } from '../../stores'
 import { operatorReadScope, resolveOperatorIdForWrite } from '../../tenancy'
 import type {
@@ -63,7 +63,7 @@ export class InMemoryVehicleRepository implements VehicleRepository {
     ctx: CallerContext,
     data: Omit<Vehicle, 'id' | 'createdAt' | 'updatedAt'>,
   ): Promise<Vehicle> {
-    requireStaffContext(ctx)
+    requireFleetWriteScope(ctx)
     const now = new Date()
     const vehicle: Vehicle = {
       ...data,
@@ -84,9 +84,11 @@ export class InMemoryVehicleRepository implements VehicleRepository {
     data: Partial<Vehicle>,
     options?: VehicleUpdateOptions,
   ): Promise<Vehicle | undefined> {
-    requireStaffContext(ctx)
+    requireFleetWriteScope(ctx)
+    const scope = operatorReadScope(ctx)
     const existing = this.store.get(id)
     if (!existing) return undefined
+    if (scope.kind === 'operator' && existing.operatorId !== scope.operatorId) return undefined
     if (options?.expectedStatus && existing.status !== options.expectedStatus) return undefined
 
     const updated: Vehicle = {
@@ -101,9 +103,11 @@ export class InMemoryVehicleRepository implements VehicleRepository {
   }
 
   async softDelete(ctx: CallerContext, id: string): Promise<Vehicle | undefined> {
-    requireStaffContext(ctx)
+    requireFleetWriteScope(ctx)
+    const scope = operatorReadScope(ctx)
     const existing = this.store.get(id)
     if (!existing) return undefined
+    if (scope.kind === 'operator' && existing.operatorId !== scope.operatorId) return undefined
 
     const retired: Vehicle = {
       ...existing,
@@ -119,12 +123,14 @@ export class InMemoryVehicleRepository implements VehicleRepository {
     ids: string[],
     status: 'AVAILABLE' | 'MAINTENANCE',
   ): Promise<Vehicle[]> {
-    requireStaffContext(ctx)
+    requireFleetWriteScope(ctx)
+    const scope = operatorReadScope(ctx)
     const now = new Date()
     const updated: Vehicle[] = []
     for (const id of ids) {
       const existing = this.store.get(id)
       if (!existing) continue
+      if (scope.kind === 'operator' && existing.operatorId !== scope.operatorId) continue
       const vehicle: Vehicle = { ...existing, status, updatedAt: now }
       this.store.set(vehicle.id, vehicle)
       updated.push(vehicle)
@@ -140,9 +146,13 @@ export class InMemoryVehicleRepository implements VehicleRepository {
   ): Promise<
     { outcome: 'ok'; vehicle: Vehicle } | { outcome: 'cap_exceeded' } | { outcome: 'not_found' }
   > {
-    requireStaffContext(ctx)
+    requireFleetWriteScope(ctx)
+    const scope = operatorReadScope(ctx)
     const existing = this.store.get(id)
     if (!existing) return { outcome: 'not_found' }
+    if (scope.kind === 'operator' && existing.operatorId !== scope.operatorId) {
+      return { outcome: 'not_found' }
+    }
     if (existing.photos.length + urls.length > maxPhotos) return { outcome: 'cap_exceeded' }
     const updated: Vehicle = {
       ...existing,
@@ -158,9 +168,11 @@ export class InMemoryVehicleRepository implements VehicleRepository {
     id: string,
     url: string,
   ): Promise<Vehicle | undefined> {
-    requireStaffContext(ctx)
+    requireFleetWriteScope(ctx)
+    const scope = operatorReadScope(ctx)
     const existing = this.store.get(id)
     if (!existing) return undefined
+    if (scope.kind === 'operator' && existing.operatorId !== scope.operatorId) return undefined
     if (!existing.photos.includes(url)) return undefined
     const updated: Vehicle = {
       ...existing,

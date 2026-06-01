@@ -3,9 +3,10 @@ import {
   type AuthUser,
   type CallerContext,
   ForbiddenError,
-  rejectOperatorContextUntilScoped,
-  requireOperatorScope,
   SYSTEM_CONTEXT,
+  rejectOperatorContextUntilScoped,
+  requireFleetWriteScope,
+  requireOperatorScope,
   toCallerContext,
 } from '../../src/middleware/auth'
 
@@ -93,6 +94,37 @@ describe('requireOperatorScope', () => {
   })
 })
 
+describe('requireFleetWriteScope', () => {
+  const operatorOwner = (operatorId?: string): CallerContext =>
+    operatorId !== undefined
+      ? { userId: 'u', role: 'OPERATOR_OWNER', operatorId, bypassScope: false }
+      : { userId: 'u', role: 'OPERATOR_OWNER', bypassScope: false }
+
+  test('admits STAFF roles and SYSTEM_CONTEXT', () => {
+    expect(() => requireFleetWriteScope(toCallerContext(authUser({ role: 'STAFF' })))).not.toThrow()
+    expect(() => requireFleetWriteScope(SYSTEM_CONTEXT)).not.toThrow()
+  })
+
+  test('admits an OPERATOR_OWNER carrying its tenant', () => {
+    expect(() => requireFleetWriteScope(operatorOwner('op_1'))).not.toThrow()
+  })
+
+  test('rejects RENTER with "fleet write scope required"', () => {
+    const ctx = toCallerContext(authUser({ role: 'RENTER' }))
+    expect(() => requireFleetWriteScope(ctx)).toThrow(ForbiddenError)
+    expect(() => requireFleetWriteScope(ctx)).toThrow('fleet write scope required')
+  })
+
+  test('rejects PARTNER (3rd-party callers manage bookings, not fleet)', () => {
+    const ctx = toCallerContext(authUser({ id: 'partner:api-key', role: 'PARTNER' }))
+    expect(() => requireFleetWriteScope(ctx)).toThrow('fleet write scope required')
+  })
+
+  test('fails closed for an operator missing its tenant claim', () => {
+    expect(() => requireFleetWriteScope(operatorOwner())).toThrow('operator scope required')
+  })
+})
+
 describe('rejectOperatorContextUntilScoped', () => {
   test('throws ForbiddenError naming the repo for OPERATOR_OWNER', () => {
     const ctx: CallerContext = {
@@ -128,6 +160,8 @@ describe('rejectOperatorContextUntilScoped', () => {
   })
 
   test('does NOT throw for PLATFORM_ADMIN', () => {
-    expect(() => rejectOperatorContextUntilScoped(SYSTEM_CONTEXT, 'BookingRepository')).not.toThrow()
+    expect(() =>
+      rejectOperatorContextUntilScoped(SYSTEM_CONTEXT, 'BookingRepository'),
+    ).not.toThrow()
   })
 })

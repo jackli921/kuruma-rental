@@ -116,10 +116,11 @@ describe('VehicleRepository.findByIds', () => {
   })
 })
 
-// Issue #329: defence in depth — VehicleRepository mutations must reject
-// non-STAFF callers even if a route forgets the STAFF_ROLES gate. Read
-// paths stay unrestricted so the public renter catalog can pass
-// SYSTEM_CONTEXT for aggregate queries.
+// Issue #329 / #386 F2: defence in depth — VehicleRepository mutations must
+// reject callers outside FLEET_WRITE_ROLES (e.g. renters) even if a route
+// forgets its gate. Operators ARE admitted but are tenant-scoped by the
+// operator predicate (see tenancy-guards.test.ts). Read paths stay
+// unrestricted so the public renter catalog can pass SYSTEM_CONTEXT.
 describe('VehicleRepository CallerContext enforcement', () => {
   let repo: InMemoryVehicleRepository
   let vehicle: Vehicle
@@ -136,35 +137,37 @@ describe('VehicleRepository CallerContext enforcement', () => {
 
   it('rejects renter calling create', async () => {
     await expect(repo.create(renterCtx, vehicleInput({ name: 'Blocked' }))).rejects.toThrow(
-      /staff|forbidden/i,
+      'fleet write scope required',
     )
   })
 
   it('rejects renter calling update', async () => {
     await expect(repo.update(renterCtx, vehicle.id, { seats: 7 })).rejects.toThrow(
-      /staff|forbidden/i,
+      'fleet write scope required',
     )
   })
 
   it('rejects renter calling softDelete', async () => {
-    await expect(repo.softDelete(renterCtx, vehicle.id)).rejects.toThrow(/staff|forbidden/i)
+    await expect(repo.softDelete(renterCtx, vehicle.id)).rejects.toThrow(
+      'fleet write scope required',
+    )
   })
 
   it('rejects renter calling bulkUpdateStatus', async () => {
     await expect(repo.bulkUpdateStatus(renterCtx, [vehicle.id], 'MAINTENANCE')).rejects.toThrow(
-      /staff|forbidden/i,
+      'fleet write scope required',
     )
   })
 
   it('rejects renter calling appendPhotos', async () => {
     await expect(
       repo.appendPhotos(renterCtx, vehicle.id, ['https://example.com/p.jpg'], 10),
-    ).rejects.toThrow(/staff|forbidden/i)
+    ).rejects.toThrow('fleet write scope required')
   })
 
   it('rejects renter calling removePhotoByUrl', async () => {
     await expect(repo.removePhotoByUrl(renterCtx, vehicle.id, 'photo.jpg')).rejects.toThrow(
-      /staff|forbidden/i,
+      'fleet write scope required',
     )
   })
 

@@ -351,13 +351,23 @@ async function seed() {
   const platformAdminEmails = parsePlatformAdminEmails(process.env.PLATFORM_ADMIN_EMAILS)
   if (platformAdminEmails.length > 0) {
     console.log(`Promoting ${platformAdminEmails.length} platform admin(s)...`)
-    await db
+    const promoted = await db
       // operatorId is nulled: a PLATFORM_ADMIN belongs to no tenant (proposal
       // §6.2). Promoting an existing OPERATOR_* row must clear its old tenant,
       // not leave a contradictory "admin scoped to operator X" row.
       .update(users)
       .set({ role: 'PLATFORM_ADMIN', operatorId: null, updatedAt: new Date() })
       .where(inArray(sql`lower(${users.email})`, platformAdminEmails))
+      // Print the affected rows: a misconfigured allowlist that overlaps an
+      // operator owner silently strips their tenant — make that visible (#386).
+      .returning({ email: users.email })
+    for (const u of promoted) {
+      console.log(`  + ${u.email} -> PLATFORM_ADMIN (tenant cleared)`)
+    }
+    const unmatched = platformAdminEmails.length - promoted.length
+    if (unmatched > 0) {
+      console.log(`  note: ${unmatched} allowlisted email(s) matched no existing user`)
+    }
   }
 
   // Clear existing vehicles for idempotent seeding
