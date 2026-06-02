@@ -10,6 +10,7 @@ import {
   DrizzleVehicleClassRepository,
   DrizzleVehicleRepository,
 } from '../../src/repositories/drizzle'
+import { VehicleClassService } from '../../src/services/vehicle-class'
 import type { Vehicle, VehicleClass } from '../../src/stores'
 import { DEFAULT_DAILY_RATE_JPY, db } from './setup'
 
@@ -397,5 +398,79 @@ describe('vehicle classId is sealed to the vehicle’s operator (composite FK)',
     const v = await vehicleRepo.create(SYSTEM_CONTEXT, vehicleInput(opAId, null))
     const updated = await vehicleRepo.update(SYSTEM_CONTEXT, v.id, { classId: classA.id })
     expect(updated?.classId).toBe(classA.id)
+  })
+})
+
+// #397 opens class writes to OPERATOR_* at the route. Class repo writes take no
+// ctx (no repo-layer guard), so the tenant seal for class update/archive lives
+// in VehicleClassService.{update,archive} via its caller-scoped findById. This
+// probes that seal against real Postgres: if an operator could mutate another
+// tenant's class, the service-layer boundary would be a real bypass and we'd
+// need a repo-layer guard. It must resolve to 404, leaving the row untouched.
+describe('cross-operator class WRITE denial (service seal, #397)', () => {
+  const classRepo = new DrizzleVehicleClassRepository(db)
+  const vehicleRepo = new DrizzleVehicleRepository(db)
+  const bookingRepo = new DrizzleBookingRepository(db)
+  const service = new VehicleClassService(classRepo, vehicleRepo, bookingRepo)
+  const uniq = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
+  const opAId = `op_clsw_a_${uniq}`
+  const opBId = `op_clsw_b_${uniq}`
+  const createdClassIds: string[] = []
+  let classA: VehicleClass
+
+  const ctxFor = (operatorId: string): CallerContext => ({
+    userId: 'owner',
+    role: 'OPERATOR_OWNER',
+    operatorId,
+    bypassScope: false,
+  })
+
+  beforeAll(async () => {
+    await db.insert(operators).values([
+      { id: opAId, slug: `clsw-a-${uniq}`, name: 'ClsW Operator A' },
+      { id: opBId, slug: `clsw-b-${uniq}`, name: 'ClsW Operator B' },
+    ])
+    classA = await classRepo.create({
+      operatorId: opAId,
+      name: 'ClsW Class A',
+      slug: `clsw-a-${uniq}`,
+      description: null,
+      photos: [],
+      seats: 5,
+      luggageCapacity: 2,
+      transmission: 'AUTO',
+      fuelType: null,
+      dailyRateJpy: DEFAULT_DAILY_RATE_JPY,
+      hourlyRateJpy: null,
+      sortOrder: 0,
+      status: 'ACTIVE',
+    })
+    createdClassIds.push(classA.id)
+  })
+
+  afterAll(async () => {
+    if (createdClassIds.length > 0) {
+      await db.delete(vehicleClasses).where(inArray(vehicleClasses.id, createdClassIds))
+    }
+    await db.delete(operators).where(inArray(operators.id, [opAId, opBId]))
+  })
+
+  it('operator B cannot update operator A class (404, row untouched)', async () => {
+    const res = await service.update(ctxFor(opBId), classA.id, { name: 'hijacked' })
+    expect(res).toMatchObject({ ok: false, status: 404, error: 'Vehicle class not found' })
+    expect(await classRepo.findById(SYSTEM_CONTEXT, classA.id)).toMatchObject({
+      name: 'ClsW Class A',
+    })
+  })
+
+  it('operator B cannot archive operator A class (404, still ACTIVE)', async () => {
+    const res = await service.archive(ctxFor(opBId), classA.id)
+    expect(res).toMatchObject({ ok: false, status: 404 })
+    expect(await classRepo.findById(SYSTEM_CONTEXT, classA.id)).toMatchObject({ status: 'ACTIVE' })
+  })
+
+  it('operator A can update its own class', async () => {
+    const res = await service.update(ctxFor(opAId), classA.id, { name: 'ClsW Class A v2' })
+    expect(res).toMatchObject({ ok: true, vehicleClass: { name: 'ClsW Class A v2' } })
   })
 })
