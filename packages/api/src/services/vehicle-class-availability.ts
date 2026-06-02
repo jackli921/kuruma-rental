@@ -1,4 +1,4 @@
-import { SYSTEM_CONTEXT } from '../middleware/auth'
+import { type CallerContext, SYSTEM_CONTEXT } from '../middleware/auth'
 import type {
   AvailabilityRepository,
   VehicleClassRepository,
@@ -33,11 +33,12 @@ export class VehicleClassAvailabilityService {
   ) {}
 
   async getAvailabilityForClass(
+    ctx: CallerContext,
     slug: string,
     from: Date,
     to: Date,
   ): Promise<ClassAvailabilityResult> {
-    const vc = await this.classRepo.findBySlug(slug)
+    const vc = await this.classRepo.findBySlug(ctx, slug)
     if (!vc) return { ok: false, error: 'Vehicle class not found', status: 404 }
 
     // Only AVAILABLE vehicles count toward the class total. MAINTENANCE and

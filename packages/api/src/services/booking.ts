@@ -2,7 +2,7 @@ import { type BookingStatus, VALID_BOOKING_TRANSITIONS } from '@kuruma/shared/db
 import { calculateCancellationFee } from '@kuruma/shared/lib/cancellation-policy'
 import { calculateBookingPrice } from '@kuruma/shared/lib/pricing'
 import { checkRentalRules } from '@kuruma/shared/lib/rental-rules'
-import type { CallerContext } from '../middleware/auth'
+import { type CallerContext, SYSTEM_CONTEXT } from '../middleware/auth'
 import { PG_ERROR, pgErrorCode } from '../pg-errors'
 import type {
   BookingFilters,
@@ -418,7 +418,10 @@ export class BookingService {
     if (!this.vehicleClassRepo) {
       throw new Error('BookingService missing vehicleClassRepo; check DI wiring')
     }
-    return (await this.vehicleClassRepo.findById(id)) ?? null
+    // Marketplace-wide lookup: a booking's class is resolved regardless of
+    // operator (the caller may be a renter/partner). SYSTEM_CONTEXT = 'all'
+    // scope; this is an internal pricing read, not per-tenant exposure (#395).
+    return (await this.vehicleClassRepo.findById(SYSTEM_CONTEXT, id)) ?? null
   }
 
   private async lookupVehicle(ctx: CallerContext, id: string): Promise<Vehicle | null> {

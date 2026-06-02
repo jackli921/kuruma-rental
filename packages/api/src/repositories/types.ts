@@ -296,9 +296,9 @@ export interface VehicleClassFilters {
 }
 
 export interface VehicleClassRepository {
-  findAll(filters?: VehicleClassFilters): Promise<VehicleClass[]>
-  findById(id: string): Promise<VehicleClass | undefined>
-  findBySlug(slug: string): Promise<VehicleClass | undefined>
+  findAll(ctx: CallerContext, filters?: VehicleClassFilters): Promise<VehicleClass[]>
+  findById(ctx: CallerContext, id: string): Promise<VehicleClass | undefined>
+  findBySlug(ctx: CallerContext, slug: string): Promise<VehicleClass | undefined>
   create(data: Omit<VehicleClass, 'id' | 'createdAt' | 'updatedAt'>): Promise<VehicleClass>
   update(id: string, data: Partial<VehicleClass>): Promise<VehicleClass | undefined>
   archive(id: string): Promise<VehicleClass | undefined>

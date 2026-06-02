@@ -109,6 +109,18 @@ export const SYSTEM_CONTEXT: CallerContext = {
 } as const
 
 /**
+ * Context for anonymous, public catalog reads (renter storefront). Renters
+ * browse the cross-operator marketplace, so this resolves to an `all` operator
+ * scope (operatorReadScope) — NOT a privilege bypass. Use it on unauthenticated
+ * routes so scoped repos still receive a caller context (#395).
+ */
+export const PUBLIC_CONTEXT: CallerContext = {
+  userId: 'public',
+  role: 'RENTER',
+  bypassScope: false,
+} as const
+
+/**
  * DEPRECATED — legacy global-bypass roles. Treated as temporary platform-admin
  * equivalents during the marketplace transition (proposal §6.2). Do NOT add new
  * users to these roles, and OPERATOR_OWNER / OPERATOR_STAFF must NEVER inherit
