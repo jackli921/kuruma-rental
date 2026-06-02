@@ -1,7 +1,7 @@
 import { Hono } from 'hono'
 import { beforeEach, describe, expect, it } from 'vitest'
 import { setupGlobalHandlers } from '../../src/error-handlers'
-import { toCallerContext } from '../../src/middleware/auth'
+import { type UserRole, toCallerContext } from '../../src/middleware/auth'
 import {
   InMemoryMaintenanceLogRepository,
   InMemoryVehicleRepository,
@@ -695,6 +695,92 @@ describe('Vehicle CRUD Routes', () => {
       expect(res.status).toBe(403)
       const body = await res.json()
       expect(body).toEqual({ success: false, error: 'Forbidden' })
+    })
+  })
+
+  // #397: tenant-scoped operators must be able to manage their OWN fleet.
+  // The route gate was STAFF_ROLES (operators excluded -> 403 wall); it must
+  // widen to FLEET_WRITE_ROLES. Tenant isolation is still enforced downstream
+  // by the repo's operator predicate (other-tenant reads -> not found -> 404).
+  describe('Operator write-scope (#397)', () => {
+    const OP_A = 'operator-aaaaaaaa'
+    const OP_B = 'operator-bbbbbbbb'
+
+    function mountFor(repo: InMemoryVehicleRepository, role: UserRole, operatorId?: string) {
+      const maintenanceLogRepo = new InMemoryMaintenanceLogRepository()
+      const runInTransaction: RunInTransaction = async (fn) =>
+        fn({ vehicleRepo: repo, maintenanceLogRepo })
+      const maintenanceService = new MaintenanceService(repo, maintenanceLogRepo, runInTransaction)
+      const a = new Hono()
+      setupGlobalHandlers(a)
+      a.use('*', testAuthMiddleware(`${role}-user`, role, operatorId))
+      a.route('/', createVehicleRoutes(repo, maintenanceService))
+      return a
+    }
+
+    async function post(app: Hono, input = validVehicleInput()) {
+      return app.request('/vehicles', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(input),
+      })
+    }
+
+    it('lets an OPERATOR_OWNER create a vehicle stamped with its own operatorId', async () => {
+      const repo = new InMemoryVehicleRepository()
+      const res = await post(mountFor(repo, 'OPERATOR_OWNER', OP_A))
+
+      expect(res.status).toBe(201)
+      const body = await res.json()
+      expect(body.success).toBe(true)
+      expect(body.data.operatorId).toBe(OP_A)
+      expect(body.data.name).toBe('Toyota Corolla')
+    })
+
+    it('lets an OPERATOR_STAFF create a vehicle', async () => {
+      const repo = new InMemoryVehicleRepository()
+      const res = await post(mountFor(repo, 'OPERATOR_STAFF', OP_A))
+
+      expect(res.status).toBe(201)
+      expect((await res.json()).data.operatorId).toBe(OP_A)
+    })
+
+    it('lets an OPERATOR_OWNER update its own vehicle', async () => {
+      const repo = new InMemoryVehicleRepository()
+      const ownerApp = mountFor(repo, 'OPERATOR_OWNER', OP_A)
+      const created = await (await post(ownerApp)).json()
+
+      const res = await ownerApp.request(`/vehicles/${created.data.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: 'Renamed by owner' }),
+      })
+
+      expect(res.status).toBe(200)
+      expect((await res.json()).data.name).toBe('Renamed by owner')
+    })
+
+    it("returns 404 when an OPERATOR_OWNER mutates another operator's vehicle", async () => {
+      const repo = new InMemoryVehicleRepository()
+      const created = await (await post(mountFor(repo, 'OPERATOR_OWNER', OP_A))).json()
+      const intruder = mountFor(repo, 'OPERATOR_OWNER', OP_B)
+
+      const patch = await intruder.request(`/vehicles/${created.data.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: 'Hijacked' }),
+      })
+      expect(patch.status).toBe(404)
+
+      const del = await intruder.request(`/vehicles/${created.data.id}`, { method: 'DELETE' })
+      expect(del.status).toBe(404)
+    })
+
+    it('returns 403 (fail-closed) for an OPERATOR_OWNER missing its operatorId', async () => {
+      const repo = new InMemoryVehicleRepository()
+      const res = await post(mountFor(repo, 'OPERATOR_OWNER'))
+
+      expect(res.status).toBe(403)
     })
   })
 })

@@ -5,10 +5,15 @@ import { API_TOKEN_AUDIENCE, API_TOKEN_ISSUER, type UserRole } from '../../src/m
 export const TEST_AUTH_SECRET = 'test-auth-secret-at-least-32-chars-long'
 
 /** Middleware that sets a fake authenticated user for unit tests that
- *  mount route handlers directly (without the full createApp() + JWT flow). */
-export function testAuthMiddleware(id = 'test-user', role: UserRole = 'ADMIN'): MiddlewareHandler {
+ *  mount route handlers directly (without the full createApp() + JWT flow).
+ *  Pass `operatorId` to simulate a tenant-scoped OPERATOR_* caller. */
+export function testAuthMiddleware(
+  id = 'test-user',
+  role: UserRole = 'ADMIN',
+  operatorId?: string,
+): MiddlewareHandler {
   return async (c, next) => {
-    c.set('user', { id, role })
+    c.set('user', operatorId !== undefined ? { id, role, operatorId } : { id, role })
     return next()
   }
 }

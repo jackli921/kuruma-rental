@@ -5,7 +5,7 @@ import {
   updateVehicleStatusWithReasonSchema,
 } from '@kuruma/shared/validators/vehicle'
 import { Hono } from 'hono'
-import { STAFF_ROLES, requireUser, toCallerContext } from '../middleware/auth'
+import { FLEET_WRITE_ROLES, requireUser, toCallerContext } from '../middleware/auth'
 import { PG_ERROR, pgErrorCode } from '../pg-errors'
 import type { Vehicle, VehicleFilters, VehicleRepository } from '../repositories/types'
 import type { MaintenanceService } from '../services/maintenance'
@@ -38,7 +38,7 @@ export function createVehicleRoutes(
     })
     .post('/vehicles', async (c) => {
       const user = requireUser(c)
-      if (!STAFF_ROLES.has(user.role)) return fail(c, 'Forbidden', 403)
+      if (!FLEET_WRITE_ROLES.has(user.role)) return fail(c, 'Forbidden', 403)
       const ctx = toCallerContext(user)
 
       const parsed = await parseBody(c, createVehicleSchema)
@@ -82,7 +82,7 @@ export function createVehicleRoutes(
     })
     .patch('/vehicles/bulk-status', async (c) => {
       const user = requireUser(c)
-      if (!STAFF_ROLES.has(user.role)) return fail(c, 'Forbidden', 403)
+      if (!FLEET_WRITE_ROLES.has(user.role)) return fail(c, 'Forbidden', 403)
       const ctx = toCallerContext(user)
 
       const parsed = await parseBody(c, bulkUpdateVehicleStatusSchema)
@@ -106,7 +106,7 @@ export function createVehicleRoutes(
     })
     .patch('/vehicles/:id', async (c) => {
       const user = requireUser(c)
-      if (!STAFF_ROLES.has(user.role)) return fail(c, 'Forbidden', 403)
+      if (!FLEET_WRITE_ROLES.has(user.role)) return fail(c, 'Forbidden', 403)
       const ctx = toCallerContext(user)
 
       const existing = await repo.findById(ctx, c.req.param('id'))
@@ -172,7 +172,7 @@ export function createVehicleRoutes(
     })
     .patch('/vehicles/:id/status', async (c) => {
       const user = requireUser(c)
-      if (!STAFF_ROLES.has(user.role)) return fail(c, 'Forbidden', 403)
+      if (!FLEET_WRITE_ROLES.has(user.role)) return fail(c, 'Forbidden', 403)
       const ctx = toCallerContext(user)
 
       const parsed = await parseBody(c, updateVehicleStatusWithReasonSchema)
@@ -189,7 +189,7 @@ export function createVehicleRoutes(
     })
     .delete('/vehicles/:id', async (c) => {
       const user = requireUser(c)
-      if (!STAFF_ROLES.has(user.role)) return fail(c, 'Forbidden', 403)
+      if (!FLEET_WRITE_ROLES.has(user.role)) return fail(c, 'Forbidden', 403)
       const ctx = toCallerContext(user)
 
       const existing = await repo.findById(ctx, c.req.param('id'))
