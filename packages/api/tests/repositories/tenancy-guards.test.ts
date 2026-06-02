@@ -132,6 +132,13 @@ describe('VehicleRepository operator-scopes writes', () => {
     expect(updated).toMatchObject({ id: a.id, name: 'Renamed A' })
   })
 
+  it('update ignores operatorId in the patch (cannot move a vehicle to another tenant)', async () => {
+    const { repo, a } = await seed()
+    const updated = await repo.update(ctxFor(opA), a.id, { operatorId: opB, name: 'moved' })
+    expect(updated?.operatorId).toBe(opA)
+    expect(updated?.name).toBe('moved')
+  })
+
   it('softDelete cannot reach another tenant vehicle', async () => {
     const { repo, b } = await seed()
     expect(await repo.softDelete(ctxFor(opA), b.id)).toBeUndefined()

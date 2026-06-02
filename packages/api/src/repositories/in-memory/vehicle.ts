@@ -95,6 +95,8 @@ export class InMemoryVehicleRepository implements VehicleRepository {
       ...existing,
       ...data,
       id: existing.id,
+      // Tenant anchor is immutable on update — mirrors the Drizzle repo (#386 F2).
+      operatorId: existing.operatorId,
       createdAt: existing.createdAt,
       updatedAt: new Date(),
     }

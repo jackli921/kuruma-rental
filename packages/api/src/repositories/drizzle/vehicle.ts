@@ -125,7 +125,9 @@ export class DrizzleVehicleRepository implements VehicleRepository {
     options?: VehicleUpdateOptions,
   ): Promise<Vehicle | undefined> {
     requireFleetWriteScope(ctx)
-    const { id: _id, createdAt: _createdAt, ...fields } = data
+    // operatorId is the tenant anchor — never reassignable via an update, or a
+    // caller could move a vehicle to another tenant (#386 F2). Strip it here.
+    const { id: _id, createdAt: _createdAt, operatorId: _operatorId, ...fields } = data
     const scope = operatorReadScope(ctx)
     const conditions = [eq(vehicles.id, id)]
     if (scope.kind === 'operator') conditions.push(eq(vehicles.operatorId, scope.operatorId))
