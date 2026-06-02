@@ -97,9 +97,10 @@ export class VehicleClassService {
     // Guard: cannot archive a class that still has live bookings via any of
     // its member vehicles. Owner must reassign/cancel those bookings first.
     // Client-side check in /manage/classes is racy — this is the server seal.
-    // Archive is a staff-only route; the route-level STAFF_ROLES gate
-    // already covers authz. Use SYSTEM_CONTEXT for this internal read so
-    // the service boundary stays auth-agnostic.
+    // The route-level FLEET_WRITE_ROLES gate (staff + tenant operators, #397)
+    // already covers authz, and the caller-scoped findById above bounds the
+    // operator to its own class. Use SYSTEM_CONTEXT for this internal members
+    // read so the service boundary stays auth-agnostic.
     const { data: members } = await this.vehicleRepo.findAll(SYSTEM_CONTEXT, {
       classId: id,
       includeRetired: true,

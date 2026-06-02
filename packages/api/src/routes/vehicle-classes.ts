@@ -5,8 +5,8 @@ import {
 } from '@kuruma/shared/validators/vehicle-class'
 import { type Context, Hono } from 'hono'
 import {
+  FLEET_WRITE_ROLES,
   PUBLIC_CONTEXT,
-  STAFF_ROLES,
   requireAuth,
   requireUser,
   toCallerContext,
@@ -87,7 +87,7 @@ export function createVehicleClassRoutes(
       })
       .post('/vehicle-classes', async (c) => {
         const user = requireUser(c)
-        if (!STAFF_ROLES.has(user.role)) return fail(c, 'Forbidden', 403)
+        if (!FLEET_WRITE_ROLES.has(user.role)) return fail(c, 'Forbidden', 403)
 
         const parsed = await parseBody(c, createVehicleClassSchema)
         if (!parsed.ok) return parsed.response
@@ -116,7 +116,7 @@ export function createVehicleClassRoutes(
       })
       .patch('/vehicle-classes/:id', async (c) => {
         const user = requireUser(c)
-        if (!STAFF_ROLES.has(user.role)) return fail(c, 'Forbidden', 403)
+        if (!FLEET_WRITE_ROLES.has(user.role)) return fail(c, 'Forbidden', 403)
 
         const parsed = await parseBody(c, updateVehicleClassSchema)
         if (!parsed.ok) return parsed.response
@@ -131,7 +131,7 @@ export function createVehicleClassRoutes(
       })
       .delete('/vehicle-classes/:id', async (c) => {
         const user = requireUser(c)
-        if (!STAFF_ROLES.has(user.role)) return fail(c, 'Forbidden', 403)
+        if (!FLEET_WRITE_ROLES.has(user.role)) return fail(c, 'Forbidden', 403)
 
         const result = await service.archive(toCallerContext(user), c.req.param('id'))
         if (!result.ok) {

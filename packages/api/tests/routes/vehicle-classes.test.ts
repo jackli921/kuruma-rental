@@ -1,6 +1,7 @@
 import { Hono } from 'hono'
 import { beforeEach, describe, expect, it } from 'vitest'
-import { SYSTEM_CONTEXT } from '../../src/middleware/auth'
+import { setupGlobalHandlers } from '../../src/error-handlers'
+import { SYSTEM_CONTEXT, type UserRole } from '../../src/middleware/auth'
 import {
   InMemoryAvailabilityRepository,
   InMemoryBookingRepository,
@@ -413,6 +414,92 @@ describe('Vehicle Class CRUD Routes', () => {
       })
       expect(res.status).toBe(200)
       expect(res.headers.get('Cache-Control')).toBeNull()
+    })
+  })
+
+  // #397: operators must manage their OWN classes. Route gate widens from
+  // STAFF_ROLES to FLEET_WRITE_ROLES; tenant isolation stays enforced by the
+  // service's caller-scoped findById (other-tenant edits -> 404).
+  describe('Operator write-scope (#397)', () => {
+    const OP_A = 'operator-aaaaaaaa'
+    const OP_B = 'operator-bbbbbbbb'
+
+    function mountFor(repo: InMemoryVehicleClassRepository, role: UserRole, operatorId?: string) {
+      const vRepo = new InMemoryVehicleRepository()
+      const bRepo = new InMemoryBookingRepository()
+      const service = new VehicleClassService(repo, vRepo, bRepo)
+      const availabilityService = buildAvailabilityService(repo)
+      const a = new Hono()
+      setupGlobalHandlers(a)
+      a.use('*', testAuthMiddleware(`${role}-user`, role, operatorId))
+      a.route('/', createVehicleClassRoutes(service, availabilityService))
+      return a
+    }
+
+    async function post(app: Hono, input = validInput()) {
+      return app.request('/vehicle-classes', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(input),
+      })
+    }
+
+    it('lets an OPERATOR_OWNER create a class stamped with its own operatorId', async () => {
+      const repo = new InMemoryVehicleClassRepository()
+      const res = await post(mountFor(repo, 'OPERATOR_OWNER', OP_A))
+
+      expect(res.status).toBe(201)
+      const body = await res.json()
+      expect(body.data.operatorId).toBe(OP_A)
+      expect(body.data.name).toBe('Compact')
+    })
+
+    it('lets an OPERATOR_STAFF create a class', async () => {
+      const repo = new InMemoryVehicleClassRepository()
+      const res = await post(mountFor(repo, 'OPERATOR_STAFF', OP_A))
+
+      expect(res.status).toBe(201)
+      expect((await res.json()).data.operatorId).toBe(OP_A)
+    })
+
+    it('lets an OPERATOR_OWNER update its own class', async () => {
+      const repo = new InMemoryVehicleClassRepository()
+      const ownerApp = mountFor(repo, 'OPERATOR_OWNER', OP_A)
+      const created = await (await post(ownerApp)).json()
+
+      const res = await ownerApp.request(`/vehicle-classes/${created.data.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: 'Renamed by owner' }),
+      })
+
+      expect(res.status).toBe(200)
+      expect((await res.json()).data.name).toBe('Renamed by owner')
+    })
+
+    it("returns 404 when an OPERATOR_OWNER mutates another operator's class", async () => {
+      const repo = new InMemoryVehicleClassRepository()
+      const created = await (await post(mountFor(repo, 'OPERATOR_OWNER', OP_A))).json()
+      const intruder = mountFor(repo, 'OPERATOR_OWNER', OP_B)
+
+      const patch = await intruder.request(`/vehicle-classes/${created.data.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: 'Hijacked' }),
+      })
+      expect(patch.status).toBe(404)
+
+      const del = await intruder.request(`/vehicle-classes/${created.data.id}`, {
+        method: 'DELETE',
+      })
+      expect(del.status).toBe(404)
+    })
+
+    it('returns 403 (fail-closed) for an OPERATOR_OWNER missing its operatorId', async () => {
+      const repo = new InMemoryVehicleClassRepository()
+      const res = await post(mountFor(repo, 'OPERATOR_OWNER'))
+
+      expect(res.status).toBe(403)
     })
   })
 })
