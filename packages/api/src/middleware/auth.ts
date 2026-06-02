@@ -3,11 +3,24 @@ import type { Context, MiddlewareHandler } from 'hono'
 import { jwtVerify } from 'jose'
 import { fail } from '../routes/helpers'
 
-export type UserRole = 'RENTER' | 'STAFF' | 'ADMIN' | 'PARTNER'
+// PARTNER is API-key-only (3rd-party callers) — not a DB role. OPERATOR_* and
+// PLATFORM_ADMIN are the marketplace roles (epic #385); they exist in the DB
+// roleEnum. See packages/shared/src/db/schema.ts.
+export type UserRole =
+  | 'RENTER'
+  | 'STAFF'
+  | 'ADMIN'
+  | 'PARTNER'
+  | 'OPERATOR_OWNER'
+  | 'OPERATOR_STAFF'
+  | 'PLATFORM_ADMIN'
 
 export interface AuthUser {
   id: string
   role: UserRole
+  // Tenant the caller belongs to. Present for OPERATOR_* roles; absent for
+  // renters, platform admins, and legacy privileged roles.
+  operatorId?: string
 }
 
 export interface AuthEnv {
@@ -16,7 +29,42 @@ export interface AuthEnv {
   }
 }
 
-const ALL_ROLES: ReadonlySet<string> = new Set<string>(['RENTER', 'STAFF', 'ADMIN', 'PARTNER'])
+// The web package mints API tokens with these claims (packages/web/src/lib/
+// api-token.ts). verifyJwt asserts both so a token minted with the shared
+// AUTH_SECRET for any other purpose cannot be replayed as an API caller.
+export const API_TOKEN_ISSUER = 'kuruma-web'
+export const API_TOKEN_AUDIENCE = 'kuruma-api'
+
+const ALL_ROLES: ReadonlySet<string> = new Set<string>([
+  'RENTER',
+  'STAFF',
+  'ADMIN',
+  'PARTNER',
+  'OPERATOR_OWNER',
+  'OPERATOR_STAFF',
+  'PLATFORM_ADMIN',
+])
+
+/** Tenant-scoped roles. They NEVER bypass operator scope (proposal §6.2). */
+const OPERATOR_ROLES: ReadonlySet<UserRole> = new Set(['OPERATOR_OWNER', 'OPERATOR_STAFF'])
+
+/** True for tenant-scoped roles (OPERATOR_OWNER / OPERATOR_STAFF). */
+export function isOperatorRole(role: UserRole): boolean {
+  return OPERATOR_ROLES.has(role)
+}
+
+/**
+ * Roles that see across all operators. PLATFORM_ADMIN is the sanctioned bypass;
+ * legacy STAFF / ADMIN / PARTNER are treated as temporary platform-admin
+ * equivalents during the marketplace transition (proposal §6.2). OPERATOR_*
+ * are deliberately excluded — they are always tenant-scoped.
+ */
+const SCOPE_BYPASS_ROLES: ReadonlySet<UserRole> = new Set([
+  'STAFF',
+  'ADMIN',
+  'PARTNER',
+  'PLATFORM_ADMIN',
+])
 
 function isValidRole(value: string): value is UserRole {
   return ALL_ROLES.has(value)
@@ -37,23 +85,62 @@ function isAuthUser(v: unknown): v is AuthUser {
 export interface CallerContext {
   readonly userId: string
   readonly role: UserRole
+  /** Tenant the caller is scoped to. Set for OPERATOR_* roles. */
+  readonly operatorId?: string
+  /** True only for PLATFORM_ADMIN + legacy privileged roles. OPERATOR_* never bypass. */
+  readonly bypassScope?: boolean
 }
 
 export function toCallerContext(user: AuthUser): CallerContext {
-  return { userId: user.id, role: user.role }
+  const bypassScope = SCOPE_BYPASS_ROLES.has(user.role)
+  // Only attach operatorId for tenant-scoped roles, and only when present
+  // (exactOptionalPropertyTypes forbids an explicit `operatorId: undefined`).
+  if (OPERATOR_ROLES.has(user.role) && user.operatorId !== undefined) {
+    return { userId: user.id, role: user.role, operatorId: user.operatorId, bypassScope }
+  }
+  return { userId: user.id, role: user.role, bypassScope }
 }
 
 /** System-level context for internal queries that need full access (stats, fleet overview, availability). */
-export const SYSTEM_CONTEXT: CallerContext = { userId: 'system', role: 'ADMIN' } as const
+export const SYSTEM_CONTEXT: CallerContext = {
+  userId: 'system',
+  role: 'PLATFORM_ADMIN',
+  bypassScope: true,
+} as const
 
-/** Roles that can manage bookings across all users */
-export const PRIVILEGED_ROLES: ReadonlySet<UserRole> = new Set(['STAFF', 'ADMIN', 'PARTNER'])
+/**
+ * DEPRECATED — legacy global-bypass roles. Treated as temporary platform-admin
+ * equivalents during the marketplace transition (proposal §6.2). Do NOT add new
+ * users to these roles, and OPERATOR_OWNER / OPERATOR_STAFF must NEVER inherit
+ * this bypass — use `requireOperatorScope` / `rejectOperatorContextUntilScoped`.
+ */
+export const PRIVILEGED_ROLES: ReadonlySet<UserRole> = new Set([
+  'STAFF',
+  'ADMIN',
+  'PARTNER',
+  // PLATFORM_ADMIN is the most-privileged role and SYSTEM_CONTEXT's role; it
+  // must pass every gate ADMIN passed (stats / fleet-overview / availability
+  // read SYSTEM_CONTEXT). OPERATOR_* are NOT here — they are tenant-scoped.
+  'PLATFORM_ADMIN',
+])
 
 /**
  * Roles that can manage vehicles. PARTNER is deliberately excluded —
  * 3rd-party API callers (Trip.com) manage bookings, not fleet inventory.
+ * PLATFORM_ADMIN included as the platform super-admin (and SYSTEM_CONTEXT role).
  */
-export const STAFF_ROLES: ReadonlySet<UserRole> = new Set(['STAFF', 'ADMIN'])
+export const STAFF_ROLES: ReadonlySet<UserRole> = new Set(['STAFF', 'ADMIN', 'PLATFORM_ADMIN'])
+
+/**
+ * Roles permitted to mutate fleet inventory: STAFF roles PLUS tenant-scoped
+ * operators (OPERATOR_OWNER / OPERATOR_STAFF). Operators are further bounded to
+ * their own tenant by the repository's operator predicate — the repo, not the
+ * route, is the tenant boundary (#386 F2 / #397).
+ */
+export const FLEET_WRITE_ROLES: ReadonlySet<UserRole> = new Set<UserRole>([
+  ...STAFF_ROLES,
+  ...OPERATOR_ROLES,
+])
 
 /**
  * Thrown by repo-layer guards when a non-authorised caller hits a
@@ -68,13 +155,52 @@ export class ForbiddenError extends Error {
 }
 
 /**
- * Repo-layer guard for mutation methods. Throws `ForbiddenError` if the
- * caller is not a STAFF role. Defence in depth against a route forgetting
- * its `STAFF_ROLES` gate (issue #329). `SYSTEM_CONTEXT` (role: ADMIN) passes.
+ * Repo-layer guard for fleet mutation methods. Admits STAFF roles and
+ * tenant-scoped operators (`FLEET_WRITE_ROLES`); a tenant-scoped caller missing
+ * its operatorId fails closed via `requireOperatorScope`. Defence in depth
+ * against a route forgetting its gate (issue #329). The caller's tenant is
+ * enforced by the repository's operator predicate, so an admitted operator can
+ * only mutate its own vehicles. `SYSTEM_CONTEXT` (PLATFORM_ADMIN) passes.
  */
-export function requireStaffContext(ctx: CallerContext): void {
-  if (!STAFF_ROLES.has(ctx.role)) {
-    throw new ForbiddenError('STAFF role required')
+export function requireFleetWriteScope(ctx: CallerContext): void {
+  if (!FLEET_WRITE_ROLES.has(ctx.role)) {
+    throw new ForbiddenError('fleet write scope required')
+  }
+  requireOperatorScope(ctx)
+}
+
+/**
+ * Repo-layer guard for operator-scoped paths. Throws `ForbiddenError` if a
+ * tenant-scoped caller (OPERATOR_*) reached a scoped method without an
+ * operatorId — a fail-closed defence against a token that lost its tenant claim.
+ */
+export function requireOperatorScope(ctx: CallerContext): void {
+  if (OPERATOR_ROLES.has(ctx.role) && !ctx.operatorId) {
+    throw new ForbiddenError('operator scope required')
+  }
+}
+
+/**
+ * Fail-closed guard for repos NOT yet operator-scoped in this slice. An
+ * OPERATOR_* caller hitting such a repo is rejected with a specific message
+ * rather than silently falling through to a global-bypass path (plan v2 P1a).
+ * Legacy STAFF/ADMIN, PARTNER, PLATFORM_ADMIN, and RENTER paths are unaffected.
+ */
+export function rejectOperatorContextUntilScoped(ctx: CallerContext, repoName: string): void {
+  if (OPERATOR_ROLES.has(ctx.role)) {
+    throw new ForbiddenError(`${repoName} not yet operator-scoped`)
+  }
+}
+
+/**
+ * Guard for platform-admin-only paths (operator bootstrap, proposal §9 item 23).
+ * Only PLATFORM_ADMIN passes — legacy STAFF/ADMIN do NOT, since operator
+ * creation is a platform-governance action, not a fleet-management one.
+ * `SYSTEM_CONTEXT` (role PLATFORM_ADMIN) passes.
+ */
+export function requirePlatformAdmin(ctx: CallerContext): void {
+  if (ctx.role !== 'PLATFORM_ADMIN') {
+    throw new ForbiddenError('PLATFORM_ADMIN role required')
   }
 }
 
@@ -127,14 +253,20 @@ async function verifyJwt(token: string): Promise<AuthUser | null> {
 
   try {
     const key = new TextEncoder().encode(secret)
-    const { payload } = await jwtVerify(token, key, { algorithms: ['HS256'] })
+    const { payload } = await jwtVerify(token, key, {
+      algorithms: ['HS256'],
+      issuer: API_TOKEN_ISSUER,
+      audience: API_TOKEN_AUDIENCE,
+    })
 
     const id = payload.sub
     if (!id) return null
 
     const rawRole = typeof payload.role === 'string' ? payload.role : undefined
     const role: UserRole = rawRole && isValidRole(rawRole) ? rawRole : 'RENTER'
-    return { id, role }
+    const operatorId = typeof payload.operatorId === 'string' ? payload.operatorId : undefined
+    // exactOptionalPropertyTypes: omit the key entirely rather than set undefined.
+    return operatorId !== undefined ? { id, role, operatorId } : { id, role }
   } catch {
     return null
   }

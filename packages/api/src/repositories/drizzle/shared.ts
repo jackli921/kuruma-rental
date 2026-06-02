@@ -24,6 +24,7 @@ export type Db = ReturnType<typeof getDb>
 
 export const vehicleClassColumns = {
   id: vehicleClasses.id,
+  operatorId: vehicleClasses.operatorId,
   name: vehicleClasses.name,
   slug: vehicleClasses.slug,
   description: vehicleClasses.description,
@@ -42,6 +43,7 @@ export const vehicleClassColumns = {
 
 export const vehicleColumns = {
   id: vehicles.id,
+  operatorId: vehicles.operatorId,
   classId: vehicles.classId,
   name: vehicles.name,
   description: vehicles.description,
@@ -164,6 +166,7 @@ type MaintenanceLogRow = ColumnRow<typeof maintenanceLogColumns>
 export function toVehicleClass(r: VehicleClassRow): VehicleClass {
   return {
     id: r.id,
+    operatorId: r.operatorId,
     name: r.name,
     slug: r.slug,
     description: r.description,
@@ -184,6 +187,7 @@ export function toVehicleClass(r: VehicleClassRow): VehicleClass {
 export function toVehicle(r: VehicleRow): Vehicle {
   return {
     id: r.id,
+    operatorId: r.operatorId,
     classId: r.classId,
     name: r.name,
     description: r.description,

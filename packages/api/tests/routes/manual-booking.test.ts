@@ -15,6 +15,8 @@ async function createTestToken(user: { id: string; role: string }): Promise<stri
   return new SignJWT({ sub: user.id, role: user.role })
     .setProtectedHeader({ alg: 'HS256' })
     .setExpirationTime('1h')
+    .setIssuer('kuruma-web')
+    .setAudience('kuruma-api')
     .sign(key)
 }
 

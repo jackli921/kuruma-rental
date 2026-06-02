@@ -7,6 +7,7 @@ export type {
   ThreadParticipant,
   Message,
   MaintenanceLog,
+  Operator,
 } from '../stores'
 export type { DashboardStats } from '@kuruma/shared/types/stats'
 export type { FleetVehicleOverview, FleetBookingSummary } from '@kuruma/shared/types/fleet'
@@ -22,12 +23,23 @@ import type {
   Booking,
   MaintenanceLog,
   Message,
+  Operator,
   Thread,
   ThreadParticipant,
   User,
   Vehicle,
   VehicleClass,
 } from '../stores'
+
+/** Operator (tenant) data access. Admin bootstrap only in slice 1 (#386). */
+export interface OperatorRepository {
+  create(data: {
+    name: string
+    slug: string
+    preAuthHandoffUrl: string | null
+  }): Promise<Operator>
+  existsBySlug(slug: string): Promise<boolean>
+}
 
 export interface VehicleFilters {
   status?: string

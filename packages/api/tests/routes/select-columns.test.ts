@@ -38,6 +38,7 @@ async function createTestApp() {
 
 const VEHICLE_FIELDS = [
   'id',
+  'operatorId',
   'classId',
   'name',
   'description',

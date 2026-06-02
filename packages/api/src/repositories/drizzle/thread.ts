@@ -1,6 +1,10 @@
 import { messages, threadParticipants, threads } from '@kuruma/shared/db/schema'
 import { and, asc, eq, inArray, sql } from 'drizzle-orm'
-import { type CallerContext, PRIVILEGED_ROLES } from '../../middleware/auth'
+import {
+  type CallerContext,
+  PRIVILEGED_ROLES,
+  rejectOperatorContextUntilScoped,
+} from '../../middleware/auth'
 import type { Message, Thread, ThreadParticipant } from '../../stores'
 import type { ThreadRepository } from '../types'
 import {
@@ -20,6 +24,7 @@ export class DrizzleThreadRepository implements ThreadRepository {
   async findAll(
     ctx: CallerContext,
   ): Promise<Array<Thread & { participants: ThreadParticipant[]; lastMessage: Message | null }>> {
+    rejectOperatorContextUntilScoped(ctx, 'ThreadRepository')
     let threadRows: Thread[]
 
     if (PRIVILEGED_ROLES.has(ctx.role)) {
@@ -84,6 +89,7 @@ export class DrizzleThreadRepository implements ThreadRepository {
     ctx: CallerContext,
     id: string,
   ): Promise<(Thread & { participants: ThreadParticipant[]; messages: Message[] }) | undefined> {
+    rejectOperatorContextUntilScoped(ctx, 'ThreadRepository')
     const [thread] = (await this.db
       .select(threadColumns)
       .from(threads)
@@ -119,6 +125,7 @@ export class DrizzleThreadRepository implements ThreadRepository {
   }
 
   async findByIdempotencyKey(ctx: CallerContext, key: string): Promise<Thread | undefined> {
+    rejectOperatorContextUntilScoped(ctx, 'ThreadRepository')
     // CallerContext scoping (issue #328): non-privileged callers only match
     // threads where they are a participant. Join the single thread row
     // against thread_participants so filtering happens server-side.
@@ -141,11 +148,12 @@ export class DrizzleThreadRepository implements ThreadRepository {
   }
 
   async create(
-    _ctx: CallerContext,
+    ctx: CallerContext,
     bookingId: string | null,
     participantIds: string[],
     idempotencyKey?: string | null,
   ): Promise<Thread> {
+    rejectOperatorContextUntilScoped(ctx, 'ThreadRepository')
     return this.db.transaction(async (tx) => {
       const [insertedThread] = (await tx
         .insert(threads)
@@ -171,6 +179,7 @@ export class DrizzleThreadRepository implements ThreadRepository {
   }
 
   async markAsRead(ctx: CallerContext, threadId: string): Promise<void> {
+    rejectOperatorContextUntilScoped(ctx, 'ThreadRepository')
     // CallerContext: only mark the caller's own participation as read
     await this.db
       .update(threadParticipants)

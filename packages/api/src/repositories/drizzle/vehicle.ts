@@ -1,7 +1,8 @@
 import { vehicles } from '@kuruma/shared/db/schema'
 import { type SQL, and, count, eq, inArray, ne, sql } from 'drizzle-orm'
-import { type CallerContext, requireStaffContext } from '../../middleware/auth'
+import { type CallerContext, requireFleetWriteScope } from '../../middleware/auth'
 import type { Vehicle } from '../../stores'
+import { operatorReadScope, resolveOperatorIdForWrite } from '../../tenancy'
 import type {
   PaginatedResult,
   VehicleFilters,
@@ -13,11 +14,17 @@ import { type Db, toVehicle, vehicleColumns } from './shared'
 export class DrizzleVehicleRepository implements VehicleRepository {
   constructor(private readonly db: Db) {}
 
-  async findAll(
-    _ctx: CallerContext,
-    filters?: VehicleFilters,
-  ): Promise<PaginatedResult<Vehicle>> {
+  async findAll(ctx: CallerContext, filters?: VehicleFilters): Promise<PaginatedResult<Vehicle>> {
     const conditions: SQL[] = []
+
+    // Tenant scope: operators see only their vehicles; bypass roles see all;
+    // a scoped caller with no tenant sees nothing (#386).
+    const scope = operatorReadScope(ctx)
+    if (scope.kind === 'operator') {
+      conditions.push(eq(vehicles.operatorId, scope.operatorId))
+    } else if (scope.kind === 'none') {
+      conditions.push(sql`false`)
+    }
 
     if (filters?.status) {
       conditions.push(eq(vehicles.status, filters.status as Vehicle['status']))
@@ -47,18 +54,30 @@ export class DrizzleVehicleRepository implements VehicleRepository {
     }
   }
 
-  async findById(_ctx: CallerContext, id: string): Promise<Vehicle | undefined> {
-    const [row] = await this.db.select(vehicleColumns).from(vehicles).where(eq(vehicles.id, id))
+  async findById(ctx: CallerContext, id: string): Promise<Vehicle | undefined> {
+    const scope = operatorReadScope(ctx)
+    if (scope.kind === 'none') return undefined
+    const conditions: SQL[] = [eq(vehicles.id, id)]
+    if (scope.kind === 'operator') conditions.push(eq(vehicles.operatorId, scope.operatorId))
+
+    const [row] = await this.db
+      .select(vehicleColumns)
+      .from(vehicles)
+      .where(and(...conditions))
 
     return row ? toVehicle(row) : undefined
   }
 
-  async findByIds(_ctx: CallerContext, ids: string[]): Promise<Vehicle[]> {
+  async findByIds(ctx: CallerContext, ids: string[]): Promise<Vehicle[]> {
     if (ids.length === 0) return []
+    const scope = operatorReadScope(ctx)
+    if (scope.kind === 'none') return []
+    const conditions: SQL[] = [inArray(vehicles.id, ids)]
+    if (scope.kind === 'operator') conditions.push(eq(vehicles.operatorId, scope.operatorId))
     const rows = await this.db
       .select(vehicleColumns)
       .from(vehicles)
-      .where(inArray(vehicles.id, ids))
+      .where(and(...conditions))
     return rows.map(toVehicle)
   }
 
@@ -66,10 +85,15 @@ export class DrizzleVehicleRepository implements VehicleRepository {
     ctx: CallerContext,
     data: Omit<Vehicle, 'id' | 'createdAt' | 'updatedAt'>,
   ): Promise<Vehicle> {
-    requireStaffContext(ctx)
+    requireFleetWriteScope(ctx)
     const [inserted] = await this.db
       .insert(vehicles)
       .values({
+        // Transitional (#386): the route resolves operatorId, but direct-repo
+        // callers (seeds, internal jobs, tests) may omit it — fall back to the
+        // caller's tenant or the seeded Best Car Rental operator. Idempotent
+        // with the route's resolution. Drop once operators own their writes.
+        operatorId: resolveOperatorIdForWrite(ctx, data.operatorId),
         classId: data.classId,
         name: data.name,
         description: data.description,
@@ -100,9 +124,13 @@ export class DrizzleVehicleRepository implements VehicleRepository {
     data: Partial<Vehicle>,
     options?: VehicleUpdateOptions,
   ): Promise<Vehicle | undefined> {
-    requireStaffContext(ctx)
-    const { id: _id, createdAt: _createdAt, ...fields } = data
+    requireFleetWriteScope(ctx)
+    // operatorId is the tenant anchor — never reassignable via an update, or a
+    // caller could move a vehicle to another tenant (#386 F2). Strip it here.
+    const { id: _id, createdAt: _createdAt, operatorId: _operatorId, ...fields } = data
+    const scope = operatorReadScope(ctx)
     const conditions = [eq(vehicles.id, id)]
+    if (scope.kind === 'operator') conditions.push(eq(vehicles.operatorId, scope.operatorId))
     if (options?.expectedStatus) {
       conditions.push(eq(vehicles.status, options.expectedStatus))
     }
@@ -116,11 +144,14 @@ export class DrizzleVehicleRepository implements VehicleRepository {
   }
 
   async softDelete(ctx: CallerContext, id: string): Promise<Vehicle | undefined> {
-    requireStaffContext(ctx)
+    requireFleetWriteScope(ctx)
+    const scope = operatorReadScope(ctx)
+    const conditions = [eq(vehicles.id, id)]
+    if (scope.kind === 'operator') conditions.push(eq(vehicles.operatorId, scope.operatorId))
     const [retired] = await this.db
       .update(vehicles)
       .set({ status: 'RETIRED', updatedAt: sql`now()` })
-      .where(eq(vehicles.id, id))
+      .where(and(...conditions))
       .returning()
 
     return retired ? toVehicle(retired) : undefined
@@ -131,12 +162,15 @@ export class DrizzleVehicleRepository implements VehicleRepository {
     ids: string[],
     status: 'AVAILABLE' | 'MAINTENANCE',
   ): Promise<Vehicle[]> {
-    requireStaffContext(ctx)
+    requireFleetWriteScope(ctx)
     if (ids.length === 0) return []
+    const scope = operatorReadScope(ctx)
+    const conditions: SQL[] = [inArray(vehicles.id, ids)]
+    if (scope.kind === 'operator') conditions.push(eq(vehicles.operatorId, scope.operatorId))
     const rows = await this.db
       .update(vehicles)
       .set({ status, updatedAt: sql`now()` })
-      .where(inArray(vehicles.id, ids))
+      .where(and(...conditions))
       .returning()
     return rows.map(toVehicle)
   }
@@ -149,7 +183,8 @@ export class DrizzleVehicleRepository implements VehicleRepository {
   ): Promise<
     { outcome: 'ok'; vehicle: Vehicle } | { outcome: 'cap_exceeded' } | { outcome: 'not_found' }
   > {
-    requireStaffContext(ctx)
+    requireFleetWriteScope(ctx)
+    const scope = operatorReadScope(ctx)
     // Single-statement conditional append: only succeed if the resulting
     // cardinality stays within the cap. Concurrent callers serialize at
     // the row level, so two racing uploads cannot both pass the guard.
@@ -159,15 +194,15 @@ export class DrizzleVehicleRepository implements VehicleRepository {
     for (const url of urls) {
       photosExpr = sql`array_append(${photosExpr}, ${url})`
     }
+    const conditions: SQL[] = [
+      eq(vehicles.id, id),
+      sql`cardinality(${vehicles.photos}) + ${urls.length} <= ${maxPhotos}`,
+    ]
+    if (scope.kind === 'operator') conditions.push(eq(vehicles.operatorId, scope.operatorId))
     const [updated] = await this.db
       .update(vehicles)
       .set({ photos: photosExpr, updatedAt: sql`now()` })
-      .where(
-        and(
-          eq(vehicles.id, id),
-          sql`cardinality(${vehicles.photos}) + ${urls.length} <= ${maxPhotos}`,
-        ),
-      )
+      .where(and(...conditions))
       .returning()
 
     if (updated) return { outcome: 'ok', vehicle: toVehicle(updated) }
@@ -180,15 +215,18 @@ export class DrizzleVehicleRepository implements VehicleRepository {
     id: string,
     url: string,
   ): Promise<Vehicle | undefined> {
-    requireStaffContext(ctx)
+    requireFleetWriteScope(ctx)
+    const scope = operatorReadScope(ctx)
     // array_remove is atomic — no TOCTOU between read of photos and write.
+    const conditions: SQL[] = [eq(vehicles.id, id), sql`${url} = ANY(${vehicles.photos})`]
+    if (scope.kind === 'operator') conditions.push(eq(vehicles.operatorId, scope.operatorId))
     const [updated] = await this.db
       .update(vehicles)
       .set({
         photos: sql`array_remove(${vehicles.photos}, ${url})`,
         updatedAt: sql`now()`,
       })
-      .where(and(eq(vehicles.id, id), sql`${url} = ANY(${vehicles.photos})`))
+      .where(and(...conditions))
       .returning()
     return updated ? toVehicle(updated) : undefined
   }

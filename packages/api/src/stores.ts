@@ -1,5 +1,7 @@
 export interface VehicleClass {
   id: string
+  /** Owning operator (marketplace tenant, #386). NOT NULL in the DB. */
+  operatorId: string
   name: string
   slug: string
   description: string | null
@@ -91,6 +93,15 @@ export interface User {
   language: string
   country: string | null
   role: UserRole
+}
+
+export interface Operator {
+  id: string
+  slug: string
+  name: string
+  preAuthHandoffUrl: string | null
+  createdAt: Date
+  updatedAt: Date
 }
 
 // Map stores removed — repositories handle data access now.

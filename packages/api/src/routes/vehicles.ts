@@ -9,6 +9,7 @@ import { STAFF_ROLES, requireUser, toCallerContext } from '../middleware/auth'
 import { PG_ERROR, pgErrorCode } from '../pg-errors'
 import type { Vehicle, VehicleFilters, VehicleRepository } from '../repositories/types'
 import type { MaintenanceService } from '../services/maintenance'
+import { resolveOperatorIdForWrite } from '../tenancy'
 import { fail, ok, parseBody, parsePagination, stripUndefined } from './helpers'
 
 export function createVehicleRoutes(
@@ -45,6 +46,9 @@ export function createVehicleRoutes(
 
       try {
         const vehicle = await repo.create(ctx, {
+          // Transitional: legacy STAFF/ADMIN writes attach to the default
+          // operator until operator-portal write flows land (#386).
+          operatorId: resolveOperatorIdForWrite(ctx),
           classId: parsed.data.classId ?? null,
           name: parsed.data.name,
           description: parsed.data.description ?? null,

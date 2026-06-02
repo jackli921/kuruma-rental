@@ -1,6 +1,14 @@
-import { sql } from 'drizzle-orm'
+import { inArray, sql } from 'drizzle-orm'
+import {
+  BEST_CAR_RENTAL_NAME,
+  BEST_CAR_RENTAL_OPERATOR_ID,
+  BEST_CAR_RENTAL_OWNER_EMAIL,
+  BEST_CAR_RENTAL_OWNER_NAME,
+  BEST_CAR_RENTAL_SLUG,
+} from './constants'
 import { getDb } from './index'
-import { vehicles } from './schema'
+import { parsePlatformAdminEmails } from './platform-admins'
+import { operators, users, vehicles } from './schema'
 
 // Realistic JPY day-rates loosely anchored to Osaka/Kansai rental shop
 // price lists in 2025-26. Hourly rate is roughly (daily / 8) rounded to a
@@ -302,6 +310,66 @@ const SEED_VEHICLES = [
 async function seed() {
   const db = getDb()
 
+  // Transitional tenant (#386). vehicles.operatorId is NOT NULL with an FK to
+  // operators, so the Best Car Rental operator must exist before any vehicle.
+  // Idempotent so reseeding a warm DB is safe.
+  console.log('Seeding Best Car Rental operator...')
+  await db
+    .insert(operators)
+    .values({
+      id: BEST_CAR_RENTAL_OPERATOR_ID,
+      slug: BEST_CAR_RENTAL_SLUG,
+      name: BEST_CAR_RENTAL_NAME,
+    })
+    .onConflictDoNothing()
+
+  // Best Car Rental owner — the first OPERATOR_OWNER, scoped to the operator
+  // above so their session/JWT carries operatorId (proposal acceptance:
+  // "operator-staff login includes operatorId"). Idempotent: reseeding
+  // re-asserts the role + tenant rather than duplicating the user.
+  console.log('Seeding Best Car Rental owner...')
+  await db
+    .insert(users)
+    .values({
+      name: BEST_CAR_RENTAL_OWNER_NAME,
+      email: BEST_CAR_RENTAL_OWNER_EMAIL,
+      role: 'OPERATOR_OWNER',
+      operatorId: BEST_CAR_RENTAL_OPERATOR_ID,
+    })
+    .onConflictDoUpdate({
+      target: users.email,
+      set: {
+        role: 'OPERATOR_OWNER',
+        operatorId: BEST_CAR_RENTAL_OPERATOR_ID,
+        updatedAt: new Date(),
+      },
+    })
+
+  // Platform-admin bootstrap (proposal §9 item 23): promote any existing user
+  // whose email is in the PLATFORM_ADMIN_EMAILS allowlist. Idempotent and a
+  // no-op when the env var is unset.
+  const platformAdminEmails = parsePlatformAdminEmails(process.env.PLATFORM_ADMIN_EMAILS)
+  if (platformAdminEmails.length > 0) {
+    console.log(`Promoting ${platformAdminEmails.length} platform admin(s)...`)
+    const promoted = await db
+      // operatorId is nulled: a PLATFORM_ADMIN belongs to no tenant (proposal
+      // §6.2). Promoting an existing OPERATOR_* row must clear its old tenant,
+      // not leave a contradictory "admin scoped to operator X" row.
+      .update(users)
+      .set({ role: 'PLATFORM_ADMIN', operatorId: null, updatedAt: new Date() })
+      .where(inArray(sql`lower(${users.email})`, platformAdminEmails))
+      // Print the affected rows: a misconfigured allowlist that overlaps an
+      // operator owner silently strips their tenant — make that visible (#386).
+      .returning({ email: users.email })
+    for (const u of promoted) {
+      console.log(`  + ${u.email} -> PLATFORM_ADMIN (tenant cleared)`)
+    }
+    const unmatched = platformAdminEmails.length - promoted.length
+    if (unmatched > 0) {
+      console.log(`  note: ${unmatched} allowlisted email(s) matched no existing user`)
+    }
+  }
+
   // Clear existing vehicles for idempotent seeding
   console.log('Clearing existing vehicles...')
   await db.delete(vehicles).where(sql`1=1`)
@@ -309,7 +377,7 @@ async function seed() {
   console.log('Seeding vehicles...')
   const inserted = await db
     .insert(vehicles)
-    .values(SEED_VEHICLES)
+    .values(SEED_VEHICLES.map((v) => ({ ...v, operatorId: BEST_CAR_RENTAL_OPERATOR_ID })))
     .returning({ id: vehicles.id, name: vehicles.name })
 
   for (const v of inserted) {

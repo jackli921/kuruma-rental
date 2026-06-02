@@ -3,6 +3,8 @@ export type Transmission = 'AUTO' | 'MANUAL'
 
 export interface VehicleBase {
   id: string
+  /** Owning operator (marketplace tenant, #386). NOT NULL in the DB. */
+  operatorId: string
   classId: string | null
   name: string
   description: string | null

@@ -18,6 +18,8 @@ async function signJwt(
     .setProtectedHeader({ alg: 'HS256' })
     .setExpirationTime(expiresIn)
     .setIssuedAt()
+    .setIssuer('kuruma-web')
+    .setAudience('kuruma-api')
     .sign(key)
 }
 
@@ -65,6 +67,8 @@ describe('auth middleware', () => {
       .setProtectedHeader({ alg: 'HS256' })
       .setIssuedAt(now - 60)
       .setExpirationTime(now - 10)
+      .setIssuer('kuruma-web')
+      .setAudience('kuruma-api')
       .sign(key)
     const res = await app.request('/vehicles', {
       headers: { Authorization: `Bearer ${token}` },
@@ -78,6 +82,38 @@ describe('auth middleware', () => {
       { sub: 'user_123', role: 'RENTER' },
       'wrong-secret-that-is-also-32-chars!',
     )
+    const res = await app.request('/vehicles', {
+      headers: { Authorization: `Bearer ${token}` },
+    })
+    expect(res.status).toBe(401)
+  })
+
+  test('returns 401 with a valid signature but wrong audience', async () => {
+    const app = createTestApp()
+    const key = new TextEncoder().encode(TEST_AUTH_SECRET)
+    const token = await new SignJWT({ sub: 'user_123', role: 'RENTER' })
+      .setProtectedHeader({ alg: 'HS256' })
+      .setIssuedAt()
+      .setExpirationTime('1h')
+      .setIssuer('kuruma-web')
+      .setAudience('not-kuruma-api')
+      .sign(key)
+    const res = await app.request('/vehicles', {
+      headers: { Authorization: `Bearer ${token}` },
+    })
+    expect(res.status).toBe(401)
+  })
+
+  test('returns 401 with a valid signature but wrong issuer', async () => {
+    const app = createTestApp()
+    const key = new TextEncoder().encode(TEST_AUTH_SECRET)
+    const token = await new SignJWT({ sub: 'user_123', role: 'RENTER' })
+      .setProtectedHeader({ alg: 'HS256' })
+      .setIssuedAt()
+      .setExpirationTime('1h')
+      .setIssuer('evil-issuer')
+      .setAudience('kuruma-api')
+      .sign(key)
     const res = await app.request('/vehicles', {
       headers: { Authorization: `Bearer ${token}` },
     })

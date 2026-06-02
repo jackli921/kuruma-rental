@@ -1,6 +1,6 @@
 import type { MiddlewareHandler } from 'hono'
 import { SignJWT } from 'jose'
-import type { UserRole } from '../../src/middleware/auth'
+import { API_TOKEN_AUDIENCE, API_TOKEN_ISSUER, type UserRole } from '../../src/middleware/auth'
 
 export const TEST_AUTH_SECRET = 'test-auth-secret-at-least-32-chars-long'
 
@@ -22,6 +22,8 @@ export async function signTestJwt(
     .setProtectedHeader({ alg: 'HS256' })
     .setExpirationTime('1h')
     .setIssuedAt()
+    .setIssuer(API_TOKEN_ISSUER)
+    .setAudience(API_TOKEN_AUDIENCE)
     .sign(key)
 }
 

@@ -1,5 +1,6 @@
-import { type CallerContext, requireStaffContext } from '../../middleware/auth'
+import { type CallerContext, requireFleetWriteScope } from '../../middleware/auth'
 import type { Vehicle } from '../../stores'
+import { operatorReadScope, resolveOperatorIdForWrite } from '../../tenancy'
 import type {
   PaginatedResult,
   VehicleFilters,
@@ -14,8 +15,12 @@ export class InMemoryVehicleRepository implements VehicleRepository {
     this.store = store ?? new Map()
   }
 
-  async findAll(_ctx: CallerContext, filters?: VehicleFilters): Promise<PaginatedResult<Vehicle>> {
-    const all = [...this.store.values()]
+  async findAll(ctx: CallerContext, filters?: VehicleFilters): Promise<PaginatedResult<Vehicle>> {
+    const scope = operatorReadScope(ctx)
+    if (scope.kind === 'none') return { data: [], total: 0 }
+    const all = [...this.store.values()].filter((v) =>
+      scope.kind === 'operator' ? v.operatorId === scope.operatorId : true,
+    )
     let filtered: Vehicle[]
     if (filters?.status) {
       filtered = all.filter((v) => v.status === filters.status)
@@ -34,14 +39,23 @@ export class InMemoryVehicleRepository implements VehicleRepository {
     return { data, total }
   }
 
-  async findById(_ctx: CallerContext, id: string): Promise<Vehicle | undefined> {
-    return this.store.get(id)
+  async findById(ctx: CallerContext, id: string): Promise<Vehicle | undefined> {
+    const scope = operatorReadScope(ctx)
+    if (scope.kind === 'none') return undefined
+    const v = this.store.get(id)
+    if (!v) return undefined
+    if (scope.kind === 'operator' && v.operatorId !== scope.operatorId) return undefined
+    return v
   }
 
-  async findByIds(_ctx: CallerContext, ids: string[]): Promise<Vehicle[]> {
+  async findByIds(ctx: CallerContext, ids: string[]): Promise<Vehicle[]> {
+    const scope = operatorReadScope(ctx)
+    if (scope.kind === 'none') return []
     return ids.flatMap((id) => {
       const v = this.store.get(id)
-      return v ? [v] : []
+      if (!v) return []
+      if (scope.kind === 'operator' && v.operatorId !== scope.operatorId) return []
+      return [v]
     })
   }
 
@@ -49,10 +63,13 @@ export class InMemoryVehicleRepository implements VehicleRepository {
     ctx: CallerContext,
     data: Omit<Vehicle, 'id' | 'createdAt' | 'updatedAt'>,
   ): Promise<Vehicle> {
-    requireStaffContext(ctx)
+    requireFleetWriteScope(ctx)
     const now = new Date()
     const vehicle: Vehicle = {
       ...data,
+      // Transitional (#386): mirror DrizzleVehicleRepository — resolve the
+      // tenant for direct-repo callers that omit operatorId.
+      operatorId: resolveOperatorIdForWrite(ctx, data.operatorId),
       id: crypto.randomUUID(),
       createdAt: now,
       updatedAt: now,
@@ -67,15 +84,19 @@ export class InMemoryVehicleRepository implements VehicleRepository {
     data: Partial<Vehicle>,
     options?: VehicleUpdateOptions,
   ): Promise<Vehicle | undefined> {
-    requireStaffContext(ctx)
+    requireFleetWriteScope(ctx)
+    const scope = operatorReadScope(ctx)
     const existing = this.store.get(id)
     if (!existing) return undefined
+    if (scope.kind === 'operator' && existing.operatorId !== scope.operatorId) return undefined
     if (options?.expectedStatus && existing.status !== options.expectedStatus) return undefined
 
     const updated: Vehicle = {
       ...existing,
       ...data,
       id: existing.id,
+      // Tenant anchor is immutable on update — mirrors the Drizzle repo (#386 F2).
+      operatorId: existing.operatorId,
       createdAt: existing.createdAt,
       updatedAt: new Date(),
     }
@@ -84,9 +105,11 @@ export class InMemoryVehicleRepository implements VehicleRepository {
   }
 
   async softDelete(ctx: CallerContext, id: string): Promise<Vehicle | undefined> {
-    requireStaffContext(ctx)
+    requireFleetWriteScope(ctx)
+    const scope = operatorReadScope(ctx)
     const existing = this.store.get(id)
     if (!existing) return undefined
+    if (scope.kind === 'operator' && existing.operatorId !== scope.operatorId) return undefined
 
     const retired: Vehicle = {
       ...existing,
@@ -102,12 +125,14 @@ export class InMemoryVehicleRepository implements VehicleRepository {
     ids: string[],
     status: 'AVAILABLE' | 'MAINTENANCE',
   ): Promise<Vehicle[]> {
-    requireStaffContext(ctx)
+    requireFleetWriteScope(ctx)
+    const scope = operatorReadScope(ctx)
     const now = new Date()
     const updated: Vehicle[] = []
     for (const id of ids) {
       const existing = this.store.get(id)
       if (!existing) continue
+      if (scope.kind === 'operator' && existing.operatorId !== scope.operatorId) continue
       const vehicle: Vehicle = { ...existing, status, updatedAt: now }
       this.store.set(vehicle.id, vehicle)
       updated.push(vehicle)
@@ -123,9 +148,13 @@ export class InMemoryVehicleRepository implements VehicleRepository {
   ): Promise<
     { outcome: 'ok'; vehicle: Vehicle } | { outcome: 'cap_exceeded' } | { outcome: 'not_found' }
   > {
-    requireStaffContext(ctx)
+    requireFleetWriteScope(ctx)
+    const scope = operatorReadScope(ctx)
     const existing = this.store.get(id)
     if (!existing) return { outcome: 'not_found' }
+    if (scope.kind === 'operator' && existing.operatorId !== scope.operatorId) {
+      return { outcome: 'not_found' }
+    }
     if (existing.photos.length + urls.length > maxPhotos) return { outcome: 'cap_exceeded' }
     const updated: Vehicle = {
       ...existing,
@@ -141,9 +170,11 @@ export class InMemoryVehicleRepository implements VehicleRepository {
     id: string,
     url: string,
   ): Promise<Vehicle | undefined> {
-    requireStaffContext(ctx)
+    requireFleetWriteScope(ctx)
+    const scope = operatorReadScope(ctx)
     const existing = this.store.get(id)
     if (!existing) return undefined
+    if (scope.kind === 'operator' && existing.operatorId !== scope.operatorId) return undefined
     if (!existing.photos.includes(url)) return undefined
     const updated: Vehicle = {
       ...existing,

@@ -183,6 +183,13 @@
       "when": 1776596311383,
       "tag": "0025_add_class_fk_indexes",
       "breakpoints": true
+    },
+    {
+      "idx": 26,
+      "version": "7",
+      "when": 1780029855505,
+      "tag": "0026_slice1_tenancy",
+      "breakpoints": true
     }
   ]
 }

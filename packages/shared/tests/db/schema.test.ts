@@ -26,7 +26,16 @@ describe('schema exports', () => {
   })
 
   it('roleEnum contains expected values', () => {
-    expect(roleEnum.enumValues).toEqual(['RENTER', 'STAFF', 'ADMIN'])
+    // Marketplace tenancy (#386) added OPERATOR_OWNER / OPERATOR_STAFF /
+    // PLATFORM_ADMIN alongside the legacy roles.
+    expect(roleEnum.enumValues).toEqual([
+      'RENTER',
+      'STAFF',
+      'ADMIN',
+      'OPERATOR_OWNER',
+      'OPERATOR_STAFF',
+      'PLATFORM_ADMIN',
+    ])
   })
 
   it('exports vehicle table with required columns', () => {

@@ -14,6 +14,7 @@ import {
   DrizzleFleetOverviewRepository,
   DrizzleMaintenanceLogRepository,
   DrizzleMessageRepository,
+  DrizzleOperatorRepository,
   DrizzleStatsRepository,
   DrizzleThreadRepository,
   DrizzleUserRepository,
@@ -29,6 +30,7 @@ import {
   InMemoryFleetOverviewRepository,
   InMemoryMaintenanceLogRepository,
   InMemoryMessageRepository,
+  InMemoryOperatorRepository,
   InMemoryStatsRepository,
   InMemoryThreadRepository,
   InMemoryUserRepository,
@@ -45,6 +47,7 @@ import type {
   FleetOverviewRepository,
   MaintenanceLogRepository,
   MessageRepository,
+  OperatorRepository,
   PhotoStorage,
   RunInTransaction,
   StatsRepository,
@@ -54,6 +57,7 @@ import type {
   VehicleDetailRepository,
   VehicleRepository,
 } from './repositories/types'
+import { createAdminRoutes } from './routes/admin'
 import { createAvailabilityRoutes } from './routes/availability'
 import { createBookingRoutes } from './routes/bookings'
 import { createCustomerRoutes } from './routes/customers'
@@ -74,6 +78,7 @@ import { FleetOverviewService } from './services/fleet-overview'
 import { GoogleTranslationProvider } from './services/google-translation-provider'
 import { MaintenanceService } from './services/maintenance'
 import { MessageTranslationService } from './services/message-translation'
+import { OperatorService } from './services/operator'
 import type { TranslationProvider } from './services/translation-provider'
 import { VehicleClassService } from './services/vehicle-class'
 import { VehicleClassAvailabilityService } from './services/vehicle-class-availability'
@@ -94,6 +99,7 @@ export function createApp(overrides?: {
   photoStorage?: PhotoStorage
   userRepo?: UserRepository
   customerRepo?: CustomerRepository
+  operatorRepo?: OperatorRepository
   photoUploadLimiter?: RateLimitBinding
   photoUploadUserLimiter?: RateLimitBinding
   publicCatalogLimiter?: RateLimitBinding
@@ -111,6 +117,7 @@ export function createApp(overrides?: {
   let maintenanceLogRepo: MaintenanceLogRepository
   let photoStorage: PhotoStorage
   let customerRepo: CustomerRepository
+  let operatorRepo: OperatorRepository
   let runInTransaction: RunInTransaction
   const photoUploadLimiter =
     overrides?.photoUploadLimiter ??
@@ -142,6 +149,7 @@ export function createApp(overrides?: {
     photoStorage = overrides.photoStorage ?? new InMemoryPhotoStorage()
     userRepo = overrides.userRepo ?? new InMemoryUserRepository()
     customerRepo = overrides.customerRepo ?? new InMemoryCustomerRepository(new Map(), new Map())
+    operatorRepo = overrides.operatorRepo ?? new InMemoryOperatorRepository()
   } else if (process.env.DATABASE_URL) {
     const db = getDb()
     vehicleClassRepo = new DrizzleVehicleClassRepository(db)
@@ -157,6 +165,7 @@ export function createApp(overrides?: {
     messageRepo = new DrizzleMessageRepository(db)
     userRepo = new DrizzleUserRepository(db)
     customerRepo = new DrizzleCustomerRepository(db)
+    operatorRepo = new DrizzleOperatorRepository(db)
     const vehiclePhotosBucket = (globalThis as Record<string, unknown>).VEHICLE_PHOTOS as
       | R2BucketLike
       | undefined
@@ -197,6 +206,7 @@ export function createApp(overrides?: {
     userRepo = new InMemoryUserRepository()
     photoStorage = new InMemoryPhotoStorage()
     customerRepo = new InMemoryCustomerRepository(new Map(), new Map())
+    operatorRepo = new InMemoryOperatorRepository()
   }
 
   // Translation provider: real Google when the key is set. In production
@@ -272,6 +282,7 @@ export function createApp(overrides?: {
   app.use('/customers/*', requireAuth())
   app.use('/customers', requireAuth())
   app.use('/users/*', requireAuth())
+  app.use('/admin/*', requireAuth())
 
   const vehicleClassService = new VehicleClassService(vehicleClassRepo, vehicleRepo, bookingRepo)
   const vehicleClassAvailabilityService = new VehicleClassAvailabilityService(
@@ -299,6 +310,7 @@ export function createApp(overrides?: {
   )
   const fleetOverviewService = new FleetOverviewService(fleetOverviewRepo)
   const vehicleDetailService = new VehicleDetailService(vehicleDetailRepo)
+  const operatorService = new OperatorService(operatorRepo)
 
   // Chain .route() calls so TypeScript infers the full route type tree.
   // hc<AppType> needs this to produce typed client methods.
@@ -334,6 +346,7 @@ export function createApp(overrides?: {
     )
     .route('/', createCustomerRoutes(customerService))
     .route('/', createUserRoutes(userRepo, threadRepo))
+    .route('/', createAdminRoutes(operatorService))
 }
 
 const DEV_WEB_ORIGINS = ['http://localhost:3001', 'http://127.0.0.1:3001']

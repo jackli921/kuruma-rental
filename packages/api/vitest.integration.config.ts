@@ -5,6 +5,7 @@ export default defineConfig({
   test: {
     globals: true,
     include: ['tests/integration/**/*.test.ts'],
+    globalSetup: ['./tests/integration/global-setup.ts'],
     testTimeout: 30000,
   },
   resolve: {
