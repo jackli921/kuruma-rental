@@ -2,6 +2,7 @@ import { sql } from 'drizzle-orm'
 import {
   check,
   date,
+  foreignKey,
   index,
   integer,
   pgEnum,
@@ -142,6 +143,10 @@ export const vehicleClasses = pgTable(
       sql`${table.hourlyRateJpy} IS NULL OR ${table.hourlyRateJpy} >= 0`,
     ),
     index('idx_vehicle_classes_operatorId').on(table.operatorId),
+    // Composite-FK target (#395 Phase 2): lets vehicles reference a class by
+    // (operatorId, id) so a vehicle can only point at a class in its own tenant.
+    // id is already unique (PK); this names the (operatorId, id) key for the FK.
+    unique('vehicle_classes_operatorId_id_unique').on(table.operatorId, table.id),
   ],
 )
 
@@ -155,7 +160,10 @@ export const vehicles = pgTable(
     operatorId: text('operatorId')
       .notNull()
       .references(() => operators.id),
-    classId: text('classId').references(() => vehicleClasses.id),
+    // FK is composite (operatorId, classId) -> vehicle_classes(operatorId, id),
+    // declared in the table extras below — NOT a single-column reference. This
+    // seals a vehicle's class to its own operator at the DB (#395 Phase 2).
+    classId: text('classId'),
     name: text('name').notNull(),
     description: text('description'),
     photos: text('photos').array().notNull().default([]),
@@ -204,6 +212,14 @@ export const vehicles = pgTable(
     // Every FK column needs its own index — pg doesn't auto-create one.
     index('idx_vehicles_classId').on(table.classId),
     index('idx_vehicles_operatorId').on(table.operatorId),
+    // A vehicle's class must belong to the vehicle's own operator (#395 Phase 2).
+    // classId is nullable + MATCH SIMPLE, so an unassigned vehicle (classId NULL)
+    // is unconstrained; when set, (operatorId, classId) must match a class row.
+    foreignKey({
+      columns: [table.operatorId, table.classId],
+      foreignColumns: [vehicleClasses.operatorId, vehicleClasses.id],
+      name: 'vehicles_operatorId_classId_fk',
+    }),
   ],
 )
 

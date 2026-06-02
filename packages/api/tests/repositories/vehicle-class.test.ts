@@ -1,9 +1,11 @@
 import { beforeEach, describe, expect, it } from 'vitest'
+import { type CallerContext, PUBLIC_CONTEXT, SYSTEM_CONTEXT } from '../../src/middleware/auth'
 import { InMemoryVehicleClassRepository } from '../../src/repositories/in-memory'
 import type { VehicleClass } from '../../src/stores'
 
 function vehicleClassInput(overrides?: Partial<VehicleClass>) {
   return {
+    operatorId: 'op_test',
     name: 'Economy',
     slug: 'economy',
     description: 'Compact and fuel-efficient',
@@ -29,7 +31,7 @@ describe('InMemoryVehicleClassRepository', () => {
 
   describe('findAll', () => {
     it('returns empty array when no classes exist', async () => {
-      const result = await repo.findAll()
+      const result = await repo.findAll(SYSTEM_CONTEXT)
       expect(result).toEqual([])
     })
 
@@ -37,7 +39,7 @@ describe('InMemoryVehicleClassRepository', () => {
       await repo.create(vehicleClassInput({ name: 'Active', status: 'ACTIVE' }))
       await repo.create(vehicleClassInput({ name: 'Gone', slug: 'gone', status: 'ARCHIVED' }))
 
-      const result = await repo.findAll()
+      const result = await repo.findAll(SYSTEM_CONTEXT)
 
       expect(result).toHaveLength(1)
       expect(result[0]!.name).toBe('Active')
@@ -47,7 +49,7 @@ describe('InMemoryVehicleClassRepository', () => {
       await repo.create(vehicleClassInput({ name: 'Active', status: 'ACTIVE' }))
       await repo.create(vehicleClassInput({ name: 'Gone', slug: 'gone', status: 'ARCHIVED' }))
 
-      const result = await repo.findAll({ includeArchived: true })
+      const result = await repo.findAll(SYSTEM_CONTEXT, { includeArchived: true })
 
       expect(result).toHaveLength(2)
     })
@@ -56,7 +58,7 @@ describe('InMemoryVehicleClassRepository', () => {
       await repo.create(vehicleClassInput({ name: 'Active', status: 'ACTIVE' }))
       await repo.create(vehicleClassInput({ name: 'Gone', slug: 'gone', status: 'ARCHIVED' }))
 
-      const result = await repo.findAll({ status: 'ARCHIVED' })
+      const result = await repo.findAll(SYSTEM_CONTEXT, { status: 'ARCHIVED' })
 
       expect(result).toHaveLength(1)
       expect(result[0]!.name).toBe('Gone')
@@ -81,7 +83,7 @@ describe('InMemoryVehicleClassRepository', () => {
     it('returns the class when found', async () => {
       const created = await repo.create(vehicleClassInput())
 
-      const found = await repo.findById(created.id)
+      const found = await repo.findById(SYSTEM_CONTEXT, created.id)
 
       expect(found).toBeDefined()
       expect(found!.id).toBe(created.id)
@@ -89,7 +91,7 @@ describe('InMemoryVehicleClassRepository', () => {
     })
 
     it('returns undefined when not found', async () => {
-      const found = await repo.findById('nonexistent')
+      const found = await repo.findById(SYSTEM_CONTEXT, 'nonexistent')
       expect(found).toBeUndefined()
     })
   })
@@ -98,7 +100,7 @@ describe('InMemoryVehicleClassRepository', () => {
     it('returns the class when found', async () => {
       const created = await repo.create(vehicleClassInput({ slug: 'premium-suv' }))
 
-      const found = await repo.findBySlug('premium-suv')
+      const found = await repo.findBySlug(SYSTEM_CONTEXT, 'premium-suv')
 
       expect(found).toBeDefined()
       expect(found!.id).toBe(created.id)
@@ -106,7 +108,7 @@ describe('InMemoryVehicleClassRepository', () => {
     })
 
     it('returns undefined when not found', async () => {
-      const found = await repo.findBySlug('nonexistent')
+      const found = await repo.findBySlug(SYSTEM_CONTEXT, 'nonexistent')
       expect(found).toBeUndefined()
     })
   })
@@ -153,5 +155,69 @@ describe('InMemoryVehicleClassRepository', () => {
       const result = await repo.archive('nonexistent')
       expect(result).toBeUndefined()
     })
+  })
+})
+
+// Reads are operator-scoped (#395): an OPERATOR_* caller only sees its own
+// tenant's classes; admins (SYSTEM_CONTEXT) and the anonymous renter catalog
+// (PUBLIC_CONTEXT) see across operators; a tenant-less operator fails closed.
+// Mirrors the cross-operator vehicle isolation in tenancy-guards.test.ts.
+// Reads only: the class-operator write seal is a DB composite FK with no
+// in-memory equivalent, so it is exercised solely in the Drizzle integration
+// block ("...sealed to the vehicle's operator") in tenancy-isolation.test.ts.
+describe('InMemoryVehicleClassRepository operator-scopes reads', () => {
+  const opA = 'op_a'
+  const opB = 'op_b'
+
+  const ctxFor = (operatorId: string): CallerContext => ({
+    userId: 'owner',
+    role: 'OPERATOR_OWNER',
+    operatorId,
+    bypassScope: false,
+  })
+
+  const seed = async () => {
+    const repo = new InMemoryVehicleClassRepository()
+    const a = await repo.create(vehicleClassInput({ operatorId: opA, name: 'A', slug: 'a-class' }))
+    const b = await repo.create(vehicleClassInput({ operatorId: opB, name: 'B', slug: 'b-class' }))
+    return { repo, a, b }
+  }
+
+  it('findAll returns only the scoped tenant classes', async () => {
+    const { repo, a } = await seed()
+    const result = await repo.findAll(ctxFor(opA))
+    expect(result.map((vc) => vc.id)).toEqual([a.id])
+    expect(result.every((vc) => vc.operatorId === opA)).toBe(true)
+  })
+
+  it('findById cannot reach another tenant class', async () => {
+    const { repo, a, b } = await seed()
+    expect(await repo.findById(ctxFor(opA), a.id)).toMatchObject({ id: a.id })
+    expect(await repo.findById(ctxFor(opA), b.id)).toBeUndefined()
+  })
+
+  it('findBySlug cannot reach another tenant class', async () => {
+    const { repo } = await seed()
+    expect(await repo.findBySlug(ctxFor(opA), 'a-class')).toMatchObject({ slug: 'a-class' })
+    expect(await repo.findBySlug(ctxFor(opA), 'b-class')).toBeUndefined()
+  })
+
+  it('a tenant-less operator sees nothing (fail-closed)', async () => {
+    const { repo, a } = await seed()
+    const noTenant: CallerContext = { userId: 'x', role: 'OPERATOR_OWNER', bypassScope: false }
+    expect(await repo.findAll(noTenant)).toEqual([])
+    expect(await repo.findById(noTenant, a.id)).toBeUndefined()
+    expect(await repo.findBySlug(noTenant, 'a-class')).toBeUndefined()
+  })
+
+  it('the anonymous renter catalog sees every operator’s classes', async () => {
+    const { repo, a, b } = await seed()
+    const ids = (await repo.findAll(PUBLIC_CONTEXT)).map((vc) => vc.id).sort()
+    expect(ids).toEqual([a.id, b.id].sort())
+  })
+
+  it('an admin (SYSTEM_CONTEXT) sees every operator’s classes', async () => {
+    const { repo } = await seed()
+    expect(await repo.findAll(SYSTEM_CONTEXT)).toHaveLength(2)
   })
 })
