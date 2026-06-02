@@ -1,14 +1,16 @@
-import { operators, vehicles } from '@kuruma/shared/db/schema'
+import { operators, vehicleClasses, vehicles } from '@kuruma/shared/db/schema'
 import { inArray } from 'drizzle-orm'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { type CallerContext, ForbiddenError, SYSTEM_CONTEXT } from '../../src/middleware/auth'
+import { pgErrorCode } from '../../src/pg-errors'
 import {
   DrizzleBookingRepository,
   DrizzleMessageRepository,
   DrizzleThreadRepository,
+  DrizzleVehicleClassRepository,
   DrizzleVehicleRepository,
 } from '../../src/repositories/drizzle'
-import type { Vehicle } from '../../src/stores'
+import type { Vehicle, VehicleClass } from '../../src/stores'
 import { DEFAULT_DAILY_RATE_JPY, db } from './setup'
 
 // An OPERATOR_* caller scoped to one tenant must never observe another
@@ -197,5 +199,203 @@ describe('cross-operator vehicle isolation', () => {
   it('an operator can update its own tenant vehicle', async () => {
     const updated = await vehicleRepo.update(ctxFor(opAId), vehicleA.id, { name: 'Iso Car A v2' })
     expect(updated).toMatchObject({ id: vehicleA.id, name: 'Iso Car A v2' })
+  })
+})
+
+// Vehicle-class reads are operator-scoped (#395): an OPERATOR_* caller only
+// sees its own tenant's classes; a tenant-less operator fails closed; admins
+// (SYSTEM_CONTEXT) read across operators. Exercised against real Postgres.
+describe('cross-operator class isolation', () => {
+  const classRepo = new DrizzleVehicleClassRepository(db)
+  const uniq = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
+  const opAId = `op_cls_a_${uniq}`
+  const opBId = `op_cls_b_${uniq}`
+  const createdClassIds: string[] = []
+  let classA: VehicleClass
+  let classB: VehicleClass
+
+  const ctxFor = (operatorId: string): CallerContext => ({
+    userId: 'owner',
+    role: 'OPERATOR_OWNER',
+    operatorId,
+    bypassScope: false,
+  })
+
+  const seedClass = (operatorId: string, suffix: string): Promise<VehicleClass> =>
+    classRepo.create({
+      operatorId,
+      name: `Iso Class ${suffix}`,
+      slug: `iso-class-${suffix}-${uniq}`,
+      description: null,
+      photos: [],
+      seats: 5,
+      luggageCapacity: 2,
+      transmission: 'AUTO',
+      fuelType: null,
+      dailyRateJpy: DEFAULT_DAILY_RATE_JPY,
+      hourlyRateJpy: null,
+      sortOrder: 0,
+      status: 'ACTIVE',
+    })
+
+  beforeAll(async () => {
+    await db.insert(operators).values([
+      { id: opAId, slug: `cls-a-${uniq}`, name: 'Class Operator A' },
+      { id: opBId, slug: `cls-b-${uniq}`, name: 'Class Operator B' },
+    ])
+    classA = await seedClass(opAId, 'a')
+    classB = await seedClass(opBId, 'b')
+    createdClassIds.push(classA.id, classB.id)
+  })
+
+  afterAll(async () => {
+    if (createdClassIds.length > 0) {
+      await db.delete(vehicleClasses).where(inArray(vehicleClasses.id, createdClassIds))
+    }
+    await db.delete(operators).where(inArray(operators.id, [opAId, opBId]))
+  })
+
+  it('findAll returns only the scoped tenant classes', async () => {
+    const ids = (await classRepo.findAll(ctxFor(opAId))).map((c) => c.id)
+    expect(ids).toContain(classA.id)
+    expect(ids).not.toContain(classB.id)
+  })
+
+  it('findById cannot reach another tenant class', async () => {
+    const ctxA = ctxFor(opAId)
+    expect(await classRepo.findById(ctxA, classA.id)).toMatchObject({ id: classA.id })
+    expect(await classRepo.findById(ctxA, classB.id)).toBeUndefined()
+  })
+
+  it('findBySlug cannot reach another tenant class', async () => {
+    const ctxA = ctxFor(opAId)
+    expect(await classRepo.findBySlug(ctxA, classA.slug)).toMatchObject({ id: classA.id })
+    expect(await classRepo.findBySlug(ctxA, classB.slug)).toBeUndefined()
+  })
+
+  it('an OPERATOR_* caller with no tenant claim sees nothing (fail-closed)', async () => {
+    const noTenant: CallerContext = { userId: 'x', role: 'OPERATOR_OWNER', bypassScope: false }
+    expect(await classRepo.findAll(noTenant)).toHaveLength(0)
+    expect(await classRepo.findById(noTenant, classA.id)).toBeUndefined()
+    expect(await classRepo.findBySlug(noTenant, classA.slug)).toBeUndefined()
+  })
+
+  it('SYSTEM_CONTEXT reads classes across operators', async () => {
+    const ids = (await classRepo.findAll(SYSTEM_CONTEXT)).map((c) => c.id)
+    expect(ids).toContain(classA.id)
+    expect(ids).toContain(classB.id)
+  })
+})
+
+// Composite FK seal (#395 Phase 2): a vehicle's classId must belong to the
+// vehicle's own operator. Enforced at the DB by FK vehicles(operatorId,classId)
+// -> vehicle_classes(operatorId,id). A NULL classId stays allowed (MATCH SIMPLE),
+// so an unassigned vehicle is fine. Covers create AND update (reassign on edit).
+describe('vehicle classId is sealed to the vehicle’s operator (composite FK)', () => {
+  const vehicleRepo = new DrizzleVehicleRepository(db)
+  const classRepo = new DrizzleVehicleClassRepository(db)
+  const uniq = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
+  const opAId = `op_fk_a_${uniq}`
+  const opBId = `op_fk_b_${uniq}`
+  let classA: VehicleClass
+  let classB: VehicleClass
+
+  const makeClass = (operatorId: string, suffix: string): Promise<VehicleClass> =>
+    classRepo.create({
+      operatorId,
+      name: `FK Class ${suffix}`,
+      slug: `fk-class-${suffix}-${uniq}`,
+      description: null,
+      photos: [],
+      seats: 5,
+      luggageCapacity: 2,
+      transmission: 'AUTO',
+      fuelType: null,
+      dailyRateJpy: DEFAULT_DAILY_RATE_JPY,
+      hourlyRateJpy: null,
+      sortOrder: 0,
+      status: 'ACTIVE',
+    })
+
+  const vehicleInput = (operatorId: string, classId: string | null) => ({
+    operatorId,
+    classId,
+    name: 'FK Vehicle',
+    description: null,
+    photos: [] as string[],
+    seats: 5,
+    transmission: 'AUTO' as const,
+    fuelType: null,
+    licensePlate: null,
+    status: 'AVAILABLE' as const,
+    bufferMinutes: 60,
+    minRentalHours: null,
+    maxRentalHours: null,
+    advanceBookingHours: null,
+    make: null,
+    model: null,
+    year: null,
+    color: null,
+    dailyRateJpy: DEFAULT_DAILY_RATE_JPY,
+    hourlyRateJpy: null,
+    shakenExpiryDate: null,
+    insuranceExpiryDate: null,
+  })
+
+  beforeAll(async () => {
+    await db.insert(operators).values([
+      { id: opAId, slug: `fk-a-${uniq}`, name: 'FK Operator A' },
+      { id: opBId, slug: `fk-b-${uniq}`, name: 'FK Operator B' },
+    ])
+    classA = await makeClass(opAId, 'a')
+    classB = await makeClass(opBId, 'b')
+  })
+
+  // Delete by operatorId so any vehicle created by a still-failing assertion
+  // (cross-tenant rows that wrongly succeed before the FK lands) is also removed.
+  afterAll(async () => {
+    await db.delete(vehicles).where(inArray(vehicles.operatorId, [opAId, opBId]))
+    await db.delete(vehicleClasses).where(inArray(vehicleClasses.operatorId, [opAId, opBId]))
+    await db.delete(operators).where(inArray(operators.id, [opAId, opBId]))
+  })
+
+  // Anchor to the PG foreign_key_violation code so the test cannot pass on an
+  // unrelated error (e.g. a future NOT NULL column) while the cross-tenant seal
+  // silently breaks. drizzle's err.message is just the failed SQL; the real PG
+  // code lives at err.cause.code — pgErrorCode() reads both paths.
+  const PG_FK_VIOLATION = '23503'
+  const violationCode = (p: Promise<unknown>): Promise<string | null> =>
+    p.then(
+      () => null,
+      (err) => pgErrorCode(err),
+    )
+
+  it('create rejects a class owned by another operator', async () => {
+    expect(
+      await violationCode(vehicleRepo.create(SYSTEM_CONTEXT, vehicleInput(opAId, classB.id))),
+    ).toBe(PG_FK_VIOLATION)
+  })
+
+  it('create accepts the operator’s own class', async () => {
+    const v = await vehicleRepo.create(SYSTEM_CONTEXT, vehicleInput(opAId, classA.id))
+    expect(v.classId).toBe(classA.id)
+  })
+
+  it('create accepts a null class (unassigned vehicle)', async () => {
+    const v = await vehicleRepo.create(SYSTEM_CONTEXT, vehicleInput(opAId, null))
+    expect(v.classId).toBeNull()
+  })
+
+  it('update rejects reassigning to another operator’s class', async () => {
+    const v = await vehicleRepo.create(SYSTEM_CONTEXT, vehicleInput(opAId, null))
+    expect(
+      await violationCode(vehicleRepo.update(SYSTEM_CONTEXT, v.id, { classId: classB.id })),
+    ).toBe(PG_FK_VIOLATION)
+  })
+
+  it('update accepts reassigning to the operator’s own class', async () => {
+    const v = await vehicleRepo.create(SYSTEM_CONTEXT, vehicleInput(opAId, null))
+    const updated = await vehicleRepo.update(SYSTEM_CONTEXT, v.id, { classId: classA.id })
+    expect(updated?.classId).toBe(classA.id)
   })
 })

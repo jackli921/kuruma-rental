@@ -1,4 +1,6 @@
+import type { CallerContext } from '../../middleware/auth'
 import type { VehicleClass } from '../../stores'
+import { operatorReadScope } from '../../tenancy'
 import type { VehicleClassFilters, VehicleClassRepository } from '../types'
 
 export class InMemoryVehicleClassRepository implements VehicleClassRepository {
@@ -8,19 +10,33 @@ export class InMemoryVehicleClassRepository implements VehicleClassRepository {
     this.store = store ?? new Map()
   }
 
-  async findAll(filters?: VehicleClassFilters): Promise<VehicleClass[]> {
-    const all = [...this.store.values()]
+  async findAll(ctx: CallerContext, filters?: VehicleClassFilters): Promise<VehicleClass[]> {
+    const scope = operatorReadScope(ctx)
+    if (scope.kind === 'none') return []
+    const all = [...this.store.values()].filter((vc) =>
+      scope.kind === 'operator' ? vc.operatorId === scope.operatorId : true,
+    )
     if (filters?.status) return all.filter((vc) => vc.status === filters.status)
     if (filters?.includeArchived) return all
     return all.filter((vc) => vc.status !== 'ARCHIVED')
   }
 
-  async findById(id: string): Promise<VehicleClass | undefined> {
-    return this.store.get(id)
+  async findById(ctx: CallerContext, id: string): Promise<VehicleClass | undefined> {
+    const scope = operatorReadScope(ctx)
+    if (scope.kind === 'none') return undefined
+    const vc = this.store.get(id)
+    if (!vc) return undefined
+    if (scope.kind === 'operator' && vc.operatorId !== scope.operatorId) return undefined
+    return vc
   }
 
-  async findBySlug(slug: string): Promise<VehicleClass | undefined> {
-    return [...this.store.values()].find((vc) => vc.slug === slug)
+  async findBySlug(ctx: CallerContext, slug: string): Promise<VehicleClass | undefined> {
+    const scope = operatorReadScope(ctx)
+    if (scope.kind === 'none') return undefined
+    const vc = [...this.store.values()].find((v) => v.slug === slug)
+    if (!vc) return undefined
+    if (scope.kind === 'operator' && vc.operatorId !== scope.operatorId) return undefined
+    return vc
   }
 
   async create(data: Omit<VehicleClass, 'id' | 'createdAt' | 'updatedAt'>): Promise<VehicleClass> {

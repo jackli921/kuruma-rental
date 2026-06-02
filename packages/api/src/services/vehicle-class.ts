@@ -1,4 +1,4 @@
-import { SYSTEM_CONTEXT } from '../middleware/auth'
+import { type CallerContext, SYSTEM_CONTEXT } from '../middleware/auth'
 import type {
   BookingRepository,
   VehicleClassFilters,
@@ -30,20 +30,25 @@ export class VehicleClassService {
     private readonly bookingRepo: BookingRepository,
   ) {}
 
-  async findAll(filters?: VehicleClassFilters): Promise<VehicleClass[]> {
-    return this.repo.findAll(filters)
+  async findAll(ctx: CallerContext, filters?: VehicleClassFilters): Promise<VehicleClass[]> {
+    return this.repo.findAll(ctx, filters)
   }
 
-  async findById(id: string): Promise<VehicleClass | undefined> {
-    return this.repo.findById(id)
+  async findById(ctx: CallerContext, id: string): Promise<VehicleClass | undefined> {
+    return this.repo.findById(ctx, id)
   }
 
-  async findBySlug(slug: string): Promise<VehicleClass | undefined> {
-    return this.repo.findBySlug(slug)
+  async findBySlug(ctx: CallerContext, slug: string): Promise<VehicleClass | undefined> {
+    return this.repo.findBySlug(ctx, slug)
   }
 
-  async create(data: Omit<VehicleClass, 'id' | 'createdAt' | 'updatedAt'>): Promise<CreateResult> {
-    const existing = await this.repo.findBySlug(data.slug)
+  async create(
+    ctx: CallerContext,
+    data: Omit<VehicleClass, 'id' | 'createdAt' | 'updatedAt'>,
+  ): Promise<CreateResult> {
+    // Slug uniqueness is global (DB unique constraint), so the collision check
+    // must see across operators — scope it to SYSTEM, not the caller (#395).
+    const existing = await this.repo.findBySlug(SYSTEM_CONTEXT, data.slug)
     if (existing) {
       return { ok: false, error: 'Slug already in use', status: 409 }
     }
@@ -51,14 +56,15 @@ export class VehicleClassService {
     return { ok: true, vehicleClass }
   }
 
-  async update(id: string, data: Partial<VehicleClass>): Promise<UpdateResult> {
-    const existing = await this.repo.findById(id)
+  async update(ctx: CallerContext, id: string, data: Partial<VehicleClass>): Promise<UpdateResult> {
+    // Existence is caller-scoped: an operator may only edit its own class.
+    const existing = await this.repo.findById(ctx, id)
     if (!existing) {
       return { ok: false, error: 'Vehicle class not found', status: 404 }
     }
 
     if (data.slug !== undefined && data.slug !== existing.slug) {
-      const slugOwner = await this.repo.findBySlug(data.slug)
+      const slugOwner = await this.repo.findBySlug(SYSTEM_CONTEXT, data.slug)
       if (slugOwner && slugOwner.id !== id) {
         return { ok: false, error: 'Slug already in use', status: 409 }
       }
@@ -82,8 +88,8 @@ export class VehicleClassService {
     return { ok: true, vehicleClass: updated }
   }
 
-  async archive(id: string): Promise<ArchiveResult> {
-    const existing = await this.repo.findById(id)
+  async archive(ctx: CallerContext, id: string): Promise<ArchiveResult> {
+    const existing = await this.repo.findById(ctx, id)
     if (!existing) {
       return { ok: false, error: 'Vehicle class not found', status: 404 }
     }

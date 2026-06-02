@@ -1,46 +1,57 @@
 import { vehicleClasses } from '@kuruma/shared/db/schema'
-import { asc, eq, ne, sql } from 'drizzle-orm'
+import { type SQL, and, asc, eq, ne, sql } from 'drizzle-orm'
+import type { CallerContext } from '../../middleware/auth'
 import type { VehicleClass } from '../../stores'
+import { operatorReadScope } from '../../tenancy'
 import type { VehicleClassFilters, VehicleClassRepository } from '../types'
 import { type Db, toVehicleClass, vehicleClassColumns } from './shared'
 
 export class DrizzleVehicleClassRepository implements VehicleClassRepository {
   constructor(private readonly db: Db) {}
 
-  async findAll(filters?: VehicleClassFilters): Promise<VehicleClass[]> {
-    const query = this.db
-      .select(vehicleClassColumns)
-      .from(vehicleClasses)
-      .orderBy(asc(vehicleClasses.sortOrder))
-
-    if (filters?.status) {
-      const rows = await query.where(
-        eq(vehicleClasses.status, filters.status),
-      )
-      return rows.map(toVehicleClass)
+  async findAll(ctx: CallerContext, filters?: VehicleClassFilters): Promise<VehicleClass[]> {
+    const scope = operatorReadScope(ctx)
+    const conditions: SQL[] = []
+    if (scope.kind === 'operator') {
+      conditions.push(eq(vehicleClasses.operatorId, scope.operatorId))
+    } else if (scope.kind === 'none') {
+      conditions.push(sql`false`)
     }
 
-    const rows = filters?.includeArchived
-      ? await query
-      : await query.where(ne(vehicleClasses.status, 'ARCHIVED'))
+    if (filters?.status) {
+      conditions.push(eq(vehicleClasses.status, filters.status))
+    } else if (!filters?.includeArchived) {
+      conditions.push(ne(vehicleClasses.status, 'ARCHIVED'))
+    }
+
+    const where = conditions.length > 0 ? and(...conditions) : undefined
+    const rows = await this.db
+      .select(vehicleClassColumns)
+      .from(vehicleClasses)
+      .where(where)
+      .orderBy(asc(vehicleClasses.sortOrder))
 
     return rows.map(toVehicleClass)
   }
 
-  async findById(id: string): Promise<VehicleClass | undefined> {
-    const [row] = await this.db
-      .select(vehicleClassColumns)
-      .from(vehicleClasses)
-      .where(eq(vehicleClasses.id, id))
+  async findById(ctx: CallerContext, id: string): Promise<VehicleClass | undefined> {
+    const scope = operatorReadScope(ctx)
+    if (scope.kind === 'none') return undefined
+    const conditions: SQL[] = [eq(vehicleClasses.id, id)]
+    if (scope.kind === 'operator') conditions.push(eq(vehicleClasses.operatorId, scope.operatorId))
+
+    const [row] = await this.db.select(vehicleClassColumns).from(vehicleClasses).where(and(...conditions))
 
     return row ? toVehicleClass(row) : undefined
   }
 
-  async findBySlug(slug: string): Promise<VehicleClass | undefined> {
-    const [row] = await this.db
-      .select(vehicleClassColumns)
-      .from(vehicleClasses)
-      .where(eq(vehicleClasses.slug, slug))
+  async findBySlug(ctx: CallerContext, slug: string): Promise<VehicleClass | undefined> {
+    const scope = operatorReadScope(ctx)
+    if (scope.kind === 'none') return undefined
+    const conditions: SQL[] = [eq(vehicleClasses.slug, slug)]
+    if (scope.kind === 'operator') conditions.push(eq(vehicleClasses.operatorId, scope.operatorId))
+
+    const [row] = await this.db.select(vehicleClassColumns).from(vehicleClasses).where(and(...conditions))
 
     return row ? toVehicleClass(row) : undefined
   }
