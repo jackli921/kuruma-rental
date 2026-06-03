@@ -200,9 +200,9 @@ Mirror `packages/api/tests/integration/rls-context.test.ts` (seed operator A + o
 | Layer | New ACRISS work | Vehicle-CRUD acceptance proof (regression) |
 |---|---|---|
 | **Validator** (`packages/shared/test/validators/`) | `'CCAR'` accepted; `'ccar'` accepted and uppercased to `'CCAR'`; `'CCA'` (3) rejected; `'CCARX'` (5) rejected; `'cc-r'` rejected; `null`/omitted accepted (nullish) | existing plate/shaken rules still pass (no change expected) |
-| **InMemory repo** | `create`/`update` round-trips `acrissCode`; op-A staff cannot read/update op-B class (`operatorReadScope`); RENTER/anonymous (`PUBLIC_CONTEXT`) read across operators (catalog is public) but only ACTIVE | op-A staff cannot create/read/update/softDelete op-B vehicle; bypass roles see both |
+| **InMemory repo** | `create`/`update` round-trips `acrissCode`; op-A staff cannot **read** op-B class (`findById`/`findAll` scoped via `operatorReadScope`) — `update`/`archive` take no `CallerContext`, so mutation isolation is **not** a repo-test concern (proven at the service, below); RENTER/anonymous (`PUBLIC_CONTEXT`) read across operators (catalog is public) but only ACTIVE | op-A staff cannot create/read/update/softDelete op-B vehicle; bypass roles see both |
 | **Drizzle repo** (Neon `test`) | inserting `acrissCode='cc'` (lowercase, len 2) → 23514 check_violation; valid 4-char code persists | composite FK `(operatorId, classId)` rejects a vehicle whose class belongs to another operator → 23503 (already covered by #395/#400 — keep the assertion) |
-| **Service** | class `create`/`update` returns `acrissCode`; slug-uniqueness 409 still holds; archive-with-active-bookings 409 still holds | n/a (no vehicle service) |
+| **Service** | class `create`/`update` returns `acrissCode`; **op-A `update`/`archive` of an op-B class → 404** (caller-scoped `findById(ctx,id)` runs before the unscoped `repo.update(id)`/`archive(id)` — this is the mutation-isolation seal); slug-uniqueness 409 still holds; archive-with-active-bookings 409 still holds | n/a (no vehicle service) |
 | **Route** | `POST /vehicle-classes` with bad ACRISS → 400 (Zod via `parseBody`); `GET /vehicle-classes` (public) returns `acrissCode` | `POST /vehicles` cross-operator: operator caller's `operatorId` stamped from token, body `operatorId` ignored; missing/ambiguous operator for a bypass caller → 422 (`OperatorRequiredError`); 401/403/404 matrix |
 | **Web** | `ClassForm` renders the ACRISS select with translated labels; submitting selects the code | `ClassRow`/catalog renders `t('acriss.CCAR')` = "Compact" |
 | **i18n** | parity test: every `ACRISS_CODES` key exists in en/ja/zh `acriss` namespace | — |
@@ -285,6 +285,7 @@ Conventional commits, small + focused. Never force-push; always rebase (`memory/
 2. **`acrissCode` nullable vs required.** Nullable for operator-created classes; every demo seed class carries a code. This keeps the integration anchor without blocking manual class creation.
 3. **ACRISS seed subset size.** Use the 8-code subset in §5.1. Du can refine ja/zh label wording during discovery without changing the schema/API contract.
 4. **`SUVR` purity.** Keep `SUVR` as a pragmatic demo label. The field is format-validated, not dictionary-gated; a stricter OTA table can replace the subset post-MVP.
+5. **`CallerContext` on class mutations (relayed review note, 2026-06-02).** Keep the repo shape — `VehicleClassRepository.update(id, data)`/`archive(id)` do **not** take `CallerContext`; do not expand the interface. Mutation isolation is proven at the **service**: `VehicleClassService.update(ctx, id)`/`archive(ctx, id)` call caller-scoped `findById(ctx, id)` first → 404 for another operator's class. §7 attributes read-isolation to repo tests and mutation-isolation to service/route tests accordingly. (Option 1 from the review note; matches the implemented shape on `marketplace-pivot`.)
 
 ---
 
