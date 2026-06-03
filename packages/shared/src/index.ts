@@ -1,5 +1,6 @@
 export { getDb } from './db'
 export * from './db/schema'
+export { ACRISS_CODES, ACRISS_PATTERN, type AcrissCode } from './acriss'
 export { registerSchema, type RegisterInput } from './validators/auth'
 export {
   createVehicleSchema,

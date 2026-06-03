@@ -5,6 +5,7 @@
   "type": "module",
   "exports": {
     ".": "./src/index.ts",
+    "./acriss": "./src/acriss.ts",
     "./db": "./src/db/index.ts",
     "./db/schema": "./src/db/schema.ts",
     "./db/constants": "./src/db/constants.ts",
