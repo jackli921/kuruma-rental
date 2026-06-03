@@ -41,6 +41,7 @@
     "customers": "Customers",
     "fleet": "Fleet",
     "classes": "Classes",
+    "locations": "Locations",
     "menu": "Menu",
     "close": "Close menu",
     "switchToRenter": "Switch to renter view",
@@ -172,7 +173,11 @@
         "viewFullDetails": "View full details",
         "sidebar": {
           "title": "Filters",
-          "vehicles": { "title": "Vehicles", "all": "All", "none": "None" },
+          "vehicles": {
+            "title": "Vehicles",
+            "all": "All",
+            "none": "None"
+          },
           "statuses": {
             "title": "Status",
             "CONFIRMED": "Confirmed",
@@ -503,6 +508,46 @@
         "sortOrder": "Sort order",
         "sortOrderHint": "Lower values show first. Same value falls back to name A-Z.",
         "save": "Save class",
+        "saving": "Saving...",
+        "cancel": "Cancel"
+      }
+    },
+    "locations": {
+      "title": "Locations",
+      "subtitle": "Manage your pickup and return locations.",
+      "addLocation": "Add location",
+      "addSubtitle": "Create a new pickup and return location.",
+      "editLocation": "Edit location",
+      "archiveAction": "Archive location",
+      "archiveTitle": "Archive {name}?",
+      "archiveDescription": "This archives the location. It stays in the list, but won't be offered for new pickups.",
+      "archiveConfirm": "Archive",
+      "archiving": "Archiving...",
+      "empty": "No locations yet. Add your first pickup point.",
+      "loadError": "Couldn't load locations",
+      "retry": "Try again",
+      "status": {
+        "ACTIVE": "Active",
+        "ARCHIVED": "Archived"
+      },
+      "row": {
+        "hours": "{open}–{close}",
+        "alwaysOpen": "Hours not set",
+        "turnaround": "{hours}h turnaround"
+      },
+      "form": {
+        "name": "Location name",
+        "namePlaceholder": "e.g. Namba Branch",
+        "address": "Address",
+        "addressPlaceholder": "e.g. 1-2-3 Namba, Chuo-ku, Osaka",
+        "setHours": "Set operating hours",
+        "hoursHint": "Leave off for a location that's always available.",
+        "openTime": "Opens",
+        "closeTime": "Closes",
+        "timezone": "Timezone",
+        "turnaround": "Turnaround (minutes)",
+        "turnaroundHint": "Buffer before a returned vehicle is bookable again. Default 2880 (48h).",
+        "save": "Save location",
         "saving": "Saving...",
         "cancel": "Cancel"
       }
