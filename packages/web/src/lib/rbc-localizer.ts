@@ -8,10 +8,6 @@ const LOCALE_MAP: Record<string, Locale> = {
   zh: zhCN,
 }
 
-export function getDateFnsLocale(locale: string): Locale {
-  return LOCALE_MAP[locale] ?? enUS
-}
-
 export const localizer = dateFnsLocalizer({
   format,
   parse,

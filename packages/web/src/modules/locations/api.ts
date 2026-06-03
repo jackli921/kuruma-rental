@@ -47,17 +47,6 @@ export async function fetchLocations(
   return unwrap<LocationData[]>(res)
 }
 
-export async function fetchLocationById(id: string, token?: string): Promise<LocationData | null> {
-  const client = createApiClient(token)
-  try {
-    const res = await client.locations[':id'].$get({ param: { id } })
-    return await unwrap<LocationData>(res)
-  } catch (e) {
-    if (e instanceof Error && e.message === 'Location not found') return null
-    throw e
-  }
-}
-
 export async function createLocation(
   data: CreateLocationInput,
   token?: string,
