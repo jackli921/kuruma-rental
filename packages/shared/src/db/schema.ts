@@ -210,6 +210,11 @@ export const vehicles = pgTable(
     // declared in the table extras below — NOT a single-column reference. This
     // seals a vehicle's class to its own operator at the DB (#395 Phase 2).
     classId: text('classId'),
+    // Pickup/return location, sealed to the vehicle's own operator by the
+    // composite FK below (#387 slice 2). Nullable + MATCH SIMPLE: a vehicle
+    // with no assigned location is unconstrained. Operationally attached to
+    // bookings in slice 6 — this slice adds the additive column + seal only.
+    pickupLocationId: text('pickupLocationId'),
     name: text('name').notNull(),
     description: text('description'),
     photos: text('photos').array().notNull().default([]),
@@ -258,6 +263,7 @@ export const vehicles = pgTable(
     // Every FK column needs its own index — pg doesn't auto-create one.
     index('idx_vehicles_classId').on(table.classId),
     index('idx_vehicles_operatorId').on(table.operatorId),
+    index('idx_vehicles_pickupLocationId').on(table.pickupLocationId),
     // A vehicle's class must belong to the vehicle's own operator (#395 Phase 2).
     // classId is nullable + MATCH SIMPLE, so an unassigned vehicle (classId NULL)
     // is unconstrained; when set, (operatorId, classId) must match a class row.
@@ -265,6 +271,15 @@ export const vehicles = pgTable(
       columns: [table.operatorId, table.classId],
       foreignColumns: [vehicleClasses.operatorId, vehicleClasses.id],
       name: 'vehicles_operatorId_classId_fk',
+    }),
+    // A vehicle's pickup location must belong to the vehicle's own operator
+    // (#387 slice 2). pickupLocationId is nullable + MATCH SIMPLE, mirroring
+    // classId: unassigned is fine; when set, (operatorId, pickupLocationId)
+    // must match a locations row. Target is locations_operatorId_id_unique.
+    foreignKey({
+      columns: [table.operatorId, table.pickupLocationId],
+      foreignColumns: [locations.operatorId, locations.id],
+      name: 'vehicles_operatorId_pickupLocationId_fk',
     }),
   ],
 )
