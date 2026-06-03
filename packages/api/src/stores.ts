@@ -14,6 +14,8 @@ export interface VehicleClass {
   fuelType: string | null
   dailyRateJpy: number | null
   hourlyRateJpy: number | null
+  /** ACRISS taxonomy code (#388). Null when the class has no mapped code. */
+  acrissCode: string | null
   sortOrder: number
   status: 'ACTIVE' | 'ARCHIVED'
   createdAt: Date

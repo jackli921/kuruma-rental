@@ -73,6 +73,7 @@ export class DrizzleVehicleClassRepository implements VehicleClassRepository {
         fuelType: data.fuelType,
         dailyRateJpy: data.dailyRateJpy,
         hourlyRateJpy: data.hourlyRateJpy,
+        acrissCode: data.acrissCode,
         sortOrder: data.sortOrder,
         status: data.status,
       })

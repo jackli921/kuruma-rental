@@ -16,6 +16,7 @@ function vehicleClassInput(overrides?: Partial<VehicleClass>) {
     fuelType: 'GASOLINE',
     dailyRateJpy: 5000,
     hourlyRateJpy: 1000,
+    acrissCode: null,
     sortOrder: 1,
     status: 'ACTIVE' as const,
     ...overrides,
@@ -76,6 +77,11 @@ describe('InMemoryVehicleClassRepository', () => {
       expect(created.slug).toBe('economy')
       expect(created.seats).toBe(4)
       expect(created.dailyRateJpy).toBe(5000)
+    })
+
+    it('persists the acrissCode (#388)', async () => {
+      const created = await repo.create(vehicleClassInput({ acrissCode: 'CCAR' }))
+      expect(created.acrissCode).toBe('CCAR')
     })
   })
 
