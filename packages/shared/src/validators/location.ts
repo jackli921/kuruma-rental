@@ -30,8 +30,11 @@ const operatingHoursSchema = z
   // MVP shape is a single same-day pair; overnight/wrap-around is not modeled
   // yet (issue #387 #5), so an inverted or empty range is a typo, not a
   // midnight-spanning window. Zero-padded HH:mm compares correctly as strings.
+  // Attach to closeTime (not the object root) so the form renders the message
+  // under the closeTime field it already shows, instead of failing silently.
   .refine((hours) => hours === null || hours.openTime < hours.closeTime, {
     message: 'closeTime must be after openTime',
+    path: ['closeTime'],
   })
 
 // Field schemas WITHOUT defaults, so the update (partial) variant can reuse them

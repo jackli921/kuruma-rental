@@ -148,6 +148,20 @@ describe('createLocationSchema', () => {
     expect(result.success).toBe(false)
   })
 
+  it('attaches the inverted-range error to operatingHours.closeTime', () => {
+    // The form renders child errors under openTime/closeTime, not at the object
+    // level, so the cross-field message must land on a rendered subfield (#387
+    // PR review) or it fails silently.
+    const result = createLocationSchema.safeParse({
+      ...validInput(),
+      operatingHours: { openTime: '20:00', closeTime: '08:00' },
+    })
+    expect(result.success).toBe(false)
+    if (!result.success) {
+      expect(result.error.issues[0]?.path).toEqual(['operatingHours', 'closeTime'])
+    }
+  })
+
   it('does not accept an operatorId in the operator-caller schema', () => {
     const result = createLocationSchema.safeParse({ ...validInput(), operatorId: 'op_x' })
     // operatorId is stripped (not part of the schema) — the route stamps it.
