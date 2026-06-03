@@ -1,3 +1,4 @@
+import { BEST_CAR_RENTAL_OPERATOR_ID } from '@kuruma/shared/db/constants'
 import { users } from '@kuruma/shared/db/schema'
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest'
 import { SYSTEM_CONTEXT } from '../../src/middleware/auth'
@@ -59,6 +60,7 @@ function createTestVehicle(
   overrides: Partial<Omit<Vehicle, 'id' | 'createdAt' | 'updatedAt'>> = {},
 ): Promise<Vehicle> {
   return vehicleRepo.create(SYSTEM_CONTEXT, {
+    operatorId: overrides.operatorId ?? BEST_CAR_RENTAL_OPERATOR_ID,
     classId: overrides.classId ?? testClassId,
     name: overrides.name ?? 'Avail Test Car',
     description: overrides.description ?? null,

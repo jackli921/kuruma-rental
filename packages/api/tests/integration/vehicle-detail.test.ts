@@ -1,3 +1,4 @@
+import { BEST_CAR_RENTAL_OPERATOR_ID } from '@kuruma/shared/db/constants'
 import { users } from '@kuruma/shared/db/schema'
 import { sql } from 'drizzle-orm'
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest'
@@ -72,6 +73,7 @@ afterAll(async () => {
 
 async function createVehicle(): Promise<Vehicle> {
   const v = await vehicleRepo.create(SYSTEM_CONTEXT, {
+    operatorId: BEST_CAR_RENTAL_OPERATOR_ID,
     classId: testClassId,
     name: 'VD Test Car',
     description: null,

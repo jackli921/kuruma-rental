@@ -11,6 +11,7 @@
 //   cd packages/api && DATABASE_URL=postgres://kuruma:kuruma@localhost:5432/kuruma_test \
 //     bun run test:integration
 
+import { BEST_CAR_RENTAL_OPERATOR_ID } from '@kuruma/shared/db/constants'
 import { afterEach, describe, expect, it } from 'vitest'
 import { SYSTEM_CONTEXT } from '../../src/middleware/auth'
 import { DrizzleVehicleRepository } from '../../src/repositories/drizzle'
@@ -69,6 +70,7 @@ function baseVehicle(
   overrides: Partial<Omit<Vehicle, 'id' | 'createdAt' | 'updatedAt'>> = {},
 ): Omit<Vehicle, 'id' | 'createdAt' | 'updatedAt'> {
   return {
+    operatorId: BEST_CAR_RENTAL_OPERATOR_ID,
     name: 'Test Vehicle',
     description: null,
     photos: [],

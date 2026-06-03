@@ -7,10 +7,10 @@ import { operators } from '@kuruma/shared/db/schema'
 import { testDb } from './pg-test-client'
 
 // Slice 1 (#386) made vehicles.operatorId / vehicle_classes.operatorId NOT
-// NULL with an FK to operators. Every integration test that seeds a vehicle
-// or class needs the transitional Best Car Rental operator to exist, and repo
-// writes that omit operatorId fall back to it (resolveOperatorIdForWrite).
-// Seed it once per run; idempotent so reruns against a warm DB are safe.
+// NULL with an FK to operators. Every integration test that seeds a vehicle or
+// class needs the transitional Best Car Rental operator to exist and must pass
+// its operatorId explicitly — #401 removed the silent resolveOperatorIdForWrite
+// fall-back. Seed it once per run; idempotent so reruns against a warm DB are safe.
 export async function setup(): Promise<void> {
   await testDb
     .insert(operators)
