@@ -23,12 +23,6 @@ export interface AuthUser {
   operatorId?: string
 }
 
-export interface AuthEnv {
-  Variables: {
-    user: AuthUser
-  }
-}
-
 // The web package mints API tokens with these claims (packages/web/src/lib/
 // api-token.ts). verifyJwt asserts both so a token minted with the shared
 // AUTH_SECRET for any other purpose cannot be replayed as an API caller.
