@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { ACRISS_PATTERN } from '../acriss'
 
 const jpyRate = z.number().int('Rate must be a whole yen amount').min(0, 'Rate cannot be negative')
 
@@ -20,6 +21,18 @@ const vehicleClassObjectSchema = z.object({
   fuelType: z.string().trim().max(50).optional(),
   dailyRateJpy: jpyRate.nullish(),
   hourlyRateJpy: jpyRate.nullish(),
+  // ACRISS taxonomy code (#388). Format-only validation against the single
+  // ACRISS_PATTERN source — the value is normalised to upper-case so 'ccar'
+  // and 'CCAR' are the same code. Nullish: existing/operator-created classes
+  // without a mapped code still validate (the friendly label is the renter
+  // surface). Lives on the base object so it flows to both create and update;
+  // operatorId stays on the create .extend() only (non-patchable).
+  acrissCode: z
+    .string()
+    .trim()
+    .toUpperCase()
+    .regex(ACRISS_PATTERN, 'Invalid ACRISS code')
+    .nullish(),
   sortOrder: z.number().int().min(0).default(0),
 })
 
