@@ -1,0 +1,2 @@
+ALTER TABLE "vehicle_classes" ADD COLUMN "acrissCode" text;--> statement-breakpoint
+ALTER TABLE "vehicle_classes" ADD CONSTRAINT "vehicle_classes_acriss_code_format" CHECK ("vehicle_classes"."acrissCode" IS NULL OR "vehicle_classes"."acrissCode" ~ '^[A-Z9]{4}$');

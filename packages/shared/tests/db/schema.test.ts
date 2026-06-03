@@ -8,6 +8,7 @@ import {
   roleEnum,
   transmissionEnum,
   users,
+  vehicleClasses,
   vehicles,
 } from '../../src/db/schema'
 
@@ -57,6 +58,15 @@ describe('schema exports', () => {
     expect(columnNames).toContain('endAt')
     expect(columnNames).toContain('status')
     expect(columnNames).toContain('source')
+  })
+
+  it('vehicle_classes table carries the acrissCode column (#388)', () => {
+    const columnNames = Object.keys(vehicleClasses)
+    expect(columnNames).toContain('acrissCode')
+  })
+
+  it('vehicle_classes.acrissCode is nullable (operator-created classes may omit it)', () => {
+    expect(vehicleClasses.acrissCode.notNull).toBe(false)
   })
 
   it('transmissionEnum contains expected values', () => {

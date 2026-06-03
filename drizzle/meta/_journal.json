@@ -211,6 +211,13 @@
       "when": 1780450273229,
       "tag": "0029_add_vehicle_pickup_location",
       "breakpoints": true
+    },
+    {
+      "idx": 30,
+      "version": "7",
+      "when": 1780485923354,
+      "tag": "0030_add_acriss_code_to_vehicle_classes",
+      "breakpoints": true
     }
   ]
 }
