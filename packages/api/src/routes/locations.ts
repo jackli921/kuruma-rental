@@ -9,10 +9,13 @@ import { FLEET_WRITE_ROLES, requireAuth, requireUser, toCallerContext } from '..
 import type { LocationFilters } from '../repositories/types'
 import type { LocationService } from '../services/location'
 import type { Location } from '../stores'
-import { operatorReadScope, resolveOperatorIdForWrite } from '../tenancy'
+import { type ResolveWriteOperatorId, operatorReadScope } from '../tenancy'
 import { fail, ok, parseBody, stripUndefined } from './helpers'
 
-export function createLocationRoutes(service: LocationService) {
+export function createLocationRoutes(
+  service: LocationService,
+  resolveWriteOperatorId: ResolveWriteOperatorId,
+) {
   const app = new Hono()
 
   // No public routes in slice 2 — locations are operator-portal only until
@@ -71,12 +74,12 @@ export function createLocationRoutes(service: LocationService) {
         const parsed = await parseBody(c, platformAdminCreateLocationSchema)
         if (!parsed.ok) return parsed.response
         d = parsed.data
-        operatorId = resolveOperatorIdForWrite(ctx, parsed.data.operatorId)
+        operatorId = await resolveWriteOperatorId(ctx, parsed.data.operatorId)
       } else {
         const parsed = await parseBody(c, createLocationSchema)
         if (!parsed.ok) return parsed.response
         d = parsed.data
-        operatorId = resolveOperatorIdForWrite(ctx)
+        operatorId = await resolveWriteOperatorId(ctx)
       }
 
       const result = await service.create(ctx, {

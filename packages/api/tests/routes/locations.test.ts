@@ -6,6 +6,7 @@ import { InMemoryLocationRepository } from '../../src/repositories/in-memory'
 import { createLocationRoutes } from '../../src/routes/locations'
 import { LocationService } from '../../src/services/location'
 import { testAuthMiddleware } from '../helpers/auth'
+import { testResolveWriteOperatorId } from '../helpers/operator'
 
 const OP_A = 'operator-aaaaaaaa'
 const OP_B = 'operator-bbbbbbbb'
@@ -14,7 +15,7 @@ function mountFor(repo: InMemoryLocationRepository, role: UserRole, operatorId?:
   const app = new Hono()
   setupGlobalHandlers(app)
   app.use('*', testAuthMiddleware(`${role}-user`, role, operatorId))
-  app.route('/', createLocationRoutes(new LocationService(repo)))
+  app.route('/', createLocationRoutes(new LocationService(repo), testResolveWriteOperatorId()))
   return app
 }
 
@@ -32,7 +33,13 @@ const POST = (app: Hono, b = body()) =>
 describe('Location routes — auth', () => {
   it('401 when unauthenticated (no user, no token)', async () => {
     const app = new Hono()
-    app.route('/', createLocationRoutes(new LocationService(new InMemoryLocationRepository())))
+    app.route(
+      '/',
+      createLocationRoutes(
+        new LocationService(new InMemoryLocationRepository()),
+        testResolveWriteOperatorId(),
+      ),
+    )
     const res = await app.request('/locations')
     expect(res.status).toBe(401)
   })

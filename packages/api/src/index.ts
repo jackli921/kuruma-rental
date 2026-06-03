@@ -367,7 +367,7 @@ export function createApp(overrides?: {
     .route('/', createCustomerRoutes(customerService))
     .route('/', createUserRoutes(userRepo, threadRepo))
     .route('/', createAdminRoutes(operatorService))
-    .route('/', createLocationRoutes(locationService))
+    .route('/', createLocationRoutes(locationService, resolveWriteOperatorId))
     .route('/', createOperatorRoutes(operatorService))
 }
 
