@@ -1,12 +1,12 @@
+import { isBusinessRole } from '@/lib/business-roles'
 import { cookies } from 'next/headers'
 
 export type ViewMode = 'renter' | 'business'
 
 const COOKIE_NAME = 'kuruma-view'
-const BUSINESS_ROLES = new Set(['STAFF', 'ADMIN'])
 
 export function isBusiness(role: string | undefined): boolean {
-  return BUSINESS_ROLES.has(role ?? '')
+  return isBusinessRole(role)
 }
 
 export async function getViewMode(role: string | undefined): Promise<ViewMode> {

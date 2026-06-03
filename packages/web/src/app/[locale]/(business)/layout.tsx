@@ -1,9 +1,8 @@
 import { auth } from '@/auth'
 import { BusinessSidebar } from '@/components/nav/BusinessSidebar'
 import { routing } from '@/i18n/routing'
+import { isBusinessRole } from '@/lib/business-roles'
 import { redirect } from 'next/navigation'
-
-const BUSINESS_ROLES = new Set(['STAFF', 'ADMIN'])
 
 export default async function BusinessLayout({
   children,
@@ -22,7 +21,7 @@ export default async function BusinessLayout({
   }
 
   const role = session.user.role
-  if (!BUSINESS_ROLES.has(role)) {
+  if (!isBusinessRole(role)) {
     redirect(`/${safeLocale}`)
   }
 
