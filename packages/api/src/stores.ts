@@ -122,5 +122,19 @@ export interface Location {
   updatedAt: Date
 }
 
+export interface InsuranceOption {
+  id: string
+  /** Owning operator (marketplace tenant, #404). NOT NULL in the DB. */
+  operatorId: string
+  name: string
+  description: string | null
+  dailyPriceJpy: number
+  /** null = no deductible (full cover). */
+  deductibleJpy: number | null
+  status: 'ACTIVE' | 'ARCHIVED'
+  createdAt: Date
+  updatedAt: Date
+}
+
 // Map stores removed — repositories handle data access now.
 // Types remain here as the shared contract between repositories and routes.

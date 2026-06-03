@@ -12,6 +12,7 @@ import {
   text,
   timestamp,
   unique,
+  uniqueIndex,
 } from 'drizzle-orm/pg-core'
 import type { AdapterAccountType } from 'next-auth/adapters'
 import type { LocationOperatingHours } from '../types/location'
@@ -206,6 +207,52 @@ export const locations = pgTable(
     // tenant (slice 2 migration #2). Mirrors vehicle_classes_operatorId_id_unique.
     unique('locations_operatorId_id_unique').on(table.operatorId, table.id),
     check('locations_turnaround_non_negative', sql`${table.defaultTurnaroundMinutes} >= 0`),
+  ],
+)
+
+export const insuranceStatusEnum = pgEnum('insurance_status', ['ACTIVE', 'ARCHIVED'])
+
+// Operator-owned insurance options (epic #385, slice 4a / #404). Per-operator
+// CRUD only — no vehicle_insurance_options join table in MVP. At booking
+// (slice 6) the renter picks from the operator's full active list and the
+// booking stores the selected option + price snapshot. Every row is
+// tenant-scoped via operatorId. See proposal §3.
+export const insuranceOptions = pgTable(
+  'insurance_options',
+  {
+    id: text('id')
+      .primaryKey()
+      .$defaultFn(() => crypto.randomUUID()),
+    // Tenant owner. NOT NULL — same fresh-branch reseed rationale as
+    // locations.operatorId (#387); no nullable tenancy debt.
+    operatorId: text('operatorId')
+      .notNull()
+      .references(() => operators.id),
+    name: text('name').notNull(),
+    description: text('description'),
+    dailyPriceJpy: integer('dailyPriceJpy').notNull(),
+    // null = no deductible (full cover).
+    deductibleJpy: integer('deductibleJpy'),
+    status: insuranceStatusEnum('status').notNull().default('ACTIVE'),
+    createdAt: timestamp('createdAt', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updatedAt', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    index('idx_insurance_options_operatorId').on(table.operatorId),
+    // Composite-unique so a future composite FK can seal a referrer to the
+    // option's own tenant (mirrors locations_operatorId_id_unique).
+    unique('insurance_options_operatorId_id_unique').on(table.operatorId, table.id),
+    // Name uniqueness scoped to ACTIVE rows so archiving an option frees its
+    // name for reuse (review 2026-06-02). Two ACTIVE options can't share a
+    // name; an archived one no longer reserves it. PARTIAL index.
+    uniqueIndex('insurance_options_active_name_unique')
+      .on(table.operatorId, table.name)
+      .where(sql`status = 'ACTIVE'`),
+    check('insurance_options_daily_price_non_negative', sql`${table.dailyPriceJpy} >= 0`),
+    check(
+      'insurance_options_deductible_non_negative',
+      sql`${table.deductibleJpy} IS NULL OR ${table.deductibleJpy} >= 0`,
+    ),
   ],
 )
 
