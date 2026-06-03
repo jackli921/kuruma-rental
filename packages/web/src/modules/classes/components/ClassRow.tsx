@@ -21,8 +21,17 @@ function formatYen(value: number | null): string | null {
 
 export function ClassRow({ vehicleClass: c, stats, onEdit, onDelete }: ClassRowProps) {
   const t = useTranslations('business.classes')
+  const tAcriss = useTranslations('acriss')
   const daily = formatYen(c.dailyRateJpy)
   const hourly = formatYen(c.hourlyRateJpy)
+  // Friendly ACRISS label with raw-code fallback: a code outside the 8-key
+  // dictionary (operators may enter their own) must render the code itself,
+  // never a missing-key crash (#388).
+  const acrissLabel = c.acrissCode
+    ? tAcriss.has(c.acrissCode)
+      ? tAcriss(c.acrissCode)
+      : c.acrissCode
+    : null
 
   return (
     <div className="border border-border rounded-lg p-4 flex items-start gap-4 hover:bg-accent/30 transition-colors">
@@ -30,6 +39,11 @@ export function ClassRow({ vehicleClass: c, stats, onEdit, onDelete }: ClassRowP
         <div className="flex items-center gap-2 flex-wrap">
           <h3 className="text-lg font-medium truncate">{c.name}</h3>
           <ClassStatusBadge status={c.status} />
+          {acrissLabel && (
+            <span className="text-xs rounded bg-muted px-1.5 py-0.5 text-muted-foreground">
+              {acrissLabel}
+            </span>
+          )}
         </div>
         <p className="text-xs text-muted-foreground font-mono mt-0.5">{c.slug}</p>
 

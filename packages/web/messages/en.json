@@ -47,6 +47,16 @@
     "switchToRenter": "Switch to renter view",
     "switchToBusiness": "Switch to business view"
   },
+  "acriss": {
+    "MCAR": "Mini",
+    "ECAR": "Economy",
+    "CCAR": "Compact",
+    "ICAR": "Intermediate",
+    "SCAR": "Standard",
+    "FCAR": "Full-size",
+    "IVAR": "Passenger van",
+    "SUVR": "SUV"
+  },
   "catalog": {
     "title": "Browse our fleet",
     "subtitle": "Choose a class. Every car in the class is the same rate and spec.",
@@ -63,6 +73,7 @@
       "seats": "{count} seats",
       "transmission": "Transmission",
       "fuelType": "Fuel type",
+      "acrissCode": "ACRISS class",
       "luggage": "{count} bags",
       "auto": "Automatic",
       "manual": "Manual",
@@ -501,6 +512,8 @@
         "transmissionManual": "Manual",
         "fuelType": "Fuel type",
         "fuelTypePlaceholder": "e.g. Gasoline, Hybrid, EV",
+        "acrissCode": "ACRISS class",
+        "acrissCodeNone": "None",
         "pricingHeading": "Pricing (JPY)",
         "pricingHint": "At least one rate is required.",
         "dailyRate": "Daily rate",

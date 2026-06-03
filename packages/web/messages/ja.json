@@ -47,6 +47,16 @@
     "switchToRenter": "利用者ビューに切替",
     "switchToBusiness": "管理者ビューに切替"
   },
+  "acriss": {
+    "MCAR": "ミニ",
+    "ECAR": "エコノミー",
+    "CCAR": "コンパクト",
+    "ICAR": "ミドル",
+    "SCAR": "スタンダード",
+    "FCAR": "フルサイズ",
+    "IVAR": "乗用バン",
+    "SUVR": "SUV"
+  },
   "catalog": {
     "title": "車両クラスから選ぶ",
     "subtitle": "同じクラス内の車はすべて同じ料金・仕様です。",
@@ -63,6 +73,7 @@
       "seats": "{count}席",
       "transmission": "トランスミッション",
       "fuelType": "燃料タイプ",
+      "acrissCode": "ACRISSクラス",
       "luggage": "荷物 {count}個",
       "auto": "オートマチック",
       "manual": "マニュアル",
@@ -501,6 +512,8 @@
         "transmissionManual": "マニュアル",
         "fuelType": "燃料種別",
         "fuelTypePlaceholder": "例: ガソリン、ハイブリッド、EV",
+        "acrissCode": "ACRISSクラス",
+        "acrissCodeNone": "なし",
         "pricingHeading": "料金 (円)",
         "pricingHint": "日額または時間額のいずれか必須です。",
         "dailyRate": "日額",

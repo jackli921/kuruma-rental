@@ -1,22 +1,34 @@
 import { cleanup, render, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
+// Only the 8 dictionary codes exist under the `acriss` namespace; an
+// off-dictionary code must fall back to the raw code via t.has().
+const ACRISS_LABELS: Record<string, string> = {
+  CCAR: 'Compact',
+  SUVR: 'SUV',
+  MCAR: 'Mini',
+}
+
 vi.mock('next-intl', () => ({
-  useTranslations: () => (key: string, values?: Record<string, unknown>) => {
-    const messages: Record<string, string> = {
-      seats: '{count} seats',
-      auto: 'Auto',
-      manual: 'Manual',
-      perDay: '/ day',
-      priceFrom: 'From',
-      viewClass: 'View class',
+  useTranslations: (namespace?: string) => {
+    const t = (key: string, values?: Record<string, unknown>) => {
+      const messages: Record<string, string> = {
+        seats: '{count} seats',
+        auto: 'Auto',
+        manual: 'Manual',
+        perDay: '/ day',
+        priceFrom: 'From',
+        viewClass: 'View class',
+      }
+      const template = namespace === 'acriss' ? (ACRISS_LABELS[key] ?? key) : (messages[key] ?? key)
+      if (!values) return template
+      return Object.entries(values).reduce<string>(
+        (acc, [k, v]) => acc.replace(`{${k}}`, String(v)),
+        template,
+      )
     }
-    const template = messages[key] ?? key
-    if (!values) return template
-    return Object.entries(values).reduce<string>(
-      (acc, [k, v]) => acc.replace(`{${k}}`, String(v)),
-      template,
-    )
+    t.has = (key: string) => (namespace === 'acriss' ? key in ACRISS_LABELS : true)
+    return t
   },
 }))
 
@@ -44,6 +56,7 @@ const baseClass = {
   fuelType: 'GASOLINE',
   dailyRateJpy: 8000,
   hourlyRateJpy: null,
+  acrissCode: null,
   sortOrder: 0,
   status: 'ACTIVE' as const,
   createdAt: '2026-01-01T00:00:00Z',
@@ -89,5 +102,29 @@ describe('ClassCatalogCard', () => {
   it('shows Manual transmission correctly', () => {
     render(<ClassCatalogCard vehicleClass={{ ...baseClass, transmission: 'MANUAL' }} />)
     expect(screen.getByText('Manual')).toBeInTheDocument()
+  })
+
+  it('renders the locale-correct ACRISS label for an in-dictionary code', () => {
+    // Name 'Big Wagon' avoids colliding with the 'SUV' badge label.
+    render(
+      <ClassCatalogCard vehicleClass={{ ...baseClass, name: 'Big Wagon', acrissCode: 'SUVR' }} />,
+    )
+    expect(screen.getByText('SUV')).toBeInTheDocument()
+  })
+
+  it('falls back to the raw code for an off-dictionary ACRISS code (no missing-key crash)', () => {
+    // IFAR is format-valid but not in the 8-key dictionary — the renter surface
+    // must show the raw code, never throw a missing-message error (#388).
+    render(<ClassCatalogCard vehicleClass={{ ...baseClass, acrissCode: 'IFAR' }} />)
+    expect(screen.getByText('IFAR')).toBeInTheDocument()
+  })
+
+  it('renders no ACRISS badge when acrissCode is null', () => {
+    render(
+      <ClassCatalogCard vehicleClass={{ ...baseClass, name: 'Big Wagon', acrissCode: null }} />,
+    )
+    // No dictionary label appears (name is 'Big Wagon', not a label).
+    expect(screen.queryByText('SUV')).toBeNull()
+    expect(screen.queryByText('Mini')).toBeNull()
   })
 })
