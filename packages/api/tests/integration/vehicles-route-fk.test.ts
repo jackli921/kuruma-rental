@@ -113,4 +113,23 @@ describe('POST/PATCH /vehicles maps a cross-operator classId to 422 (#400)', () 
     })
     expect(res.status).toBe(422)
   })
+
+  // The single-column vehicles.operatorId -> operators FK is distinct from the
+  // composite classId FK. classId: null leaves the composite FK unconstrained
+  // (MATCH SIMPLE), so an unknown operatorId trips operators FK alone — and must
+  // report "Invalid operator", not the misleading "Invalid vehicle class".
+  it('POST returns 422 "Invalid operator" for a non-existent operatorId', async () => {
+    const res = await post({
+      operatorId: `op_missing_${uniq}`,
+      classId: null,
+      name: 'Route FK Vehicle',
+      seats: 5,
+      transmission: 'AUTO' as const,
+      bufferMinutes: 60,
+      licensePlate: null,
+      dailyRateJpy: 8000,
+    })
+    expect(res.status).toBe(422)
+    expect((await res.json()).error).toBe('Invalid operator')
+  })
 })
