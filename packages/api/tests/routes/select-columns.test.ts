@@ -8,6 +8,7 @@ import {
   InMemoryVehicleRepository,
 } from '../../src/repositories/in-memory'
 import { authHeaders, setupAuthEnv } from '../helpers/auth'
+import { seededOperatorRepo } from '../helpers/operator'
 
 async function createTestApp() {
   setupAuthEnv()
@@ -31,7 +32,14 @@ async function createTestApp() {
     status: 'ACTIVE',
   })
   return {
-    app: createApp({ vehicleRepo, bookingRepo, availabilityRepo, statsRepo, vehicleClassRepo }),
+    app: createApp({
+      vehicleRepo,
+      bookingRepo,
+      availabilityRepo,
+      statsRepo,
+      vehicleClassRepo,
+      operatorRepo: seededOperatorRepo(),
+    }),
     classId: klass.id,
   }
 }

@@ -9,12 +9,13 @@ import { FLEET_WRITE_ROLES, requireUser, toCallerContext } from '../middleware/a
 import { PG_ERROR, pgErrorCode } from '../pg-errors'
 import type { Vehicle, VehicleFilters, VehicleRepository } from '../repositories/types'
 import type { MaintenanceService } from '../services/maintenance'
-import { resolveOperatorIdForWrite } from '../tenancy'
+import type { ResolveWriteOperatorId } from '../tenancy'
 import { fail, ok, parseBody, parsePagination, stripUndefined } from './helpers'
 
 export function createVehicleRoutes(
   repo: VehicleRepository,
   maintenanceService: MaintenanceService,
+  resolveWriteOperatorId: ResolveWriteOperatorId,
 ) {
   return new Hono()
     .get('/vehicles', async (c) => {
@@ -44,11 +45,14 @@ export function createVehicleRoutes(
       const parsed = await parseBody(c, createVehicleSchema)
       if (!parsed.ok) return parsed.response
 
+      // Resolve the target tenant before the insert so a missing/ambiguous
+      // operatorId (#401) surfaces as 403/422 from the global handler rather
+      // than as a caught DB error below.
+      const operatorId = await resolveWriteOperatorId(ctx, parsed.data.operatorId)
+
       try {
         const vehicle = await repo.create(ctx, {
-          // Transitional: legacy STAFF/ADMIN writes attach to the default
-          // operator until operator-portal write flows land (#386).
-          operatorId: resolveOperatorIdForWrite(ctx),
+          operatorId,
           classId: parsed.data.classId ?? null,
           name: parsed.data.name,
           description: parsed.data.description ?? null,
@@ -76,6 +80,11 @@ export function createVehicleRoutes(
       } catch (err) {
         if (pgErrorCode(err) === PG_ERROR.UNIQUE_VIOLATION) {
           return fail(c, 'License plate already in use', 409)
+        }
+        // #400: the composite FK (operatorId,classId) -> vehicle_classes rejects
+        // an unknown or cross-tenant classId at the DB. Surface as 422, not 500.
+        if (pgErrorCode(err) === PG_ERROR.FOREIGN_KEY_VIOLATION) {
+          return fail(c, 'Invalid vehicle class', 422)
         }
         throw err
       }
@@ -166,6 +175,11 @@ export function createVehicleRoutes(
       } catch (err) {
         if (pgErrorCode(err) === PG_ERROR.UNIQUE_VIOLATION) {
           return fail(c, 'License plate already in use', 409)
+        }
+        // #400: the composite FK (operatorId,classId) -> vehicle_classes rejects
+        // an unknown or cross-tenant classId at the DB. Surface as 422, not 500.
+        if (pgErrorCode(err) === PG_ERROR.FOREIGN_KEY_VIOLATION) {
+          return fail(c, 'Invalid vehicle class', 422)
         }
         throw err
       }

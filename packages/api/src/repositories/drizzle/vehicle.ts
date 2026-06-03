@@ -2,7 +2,7 @@ import { vehicles } from '@kuruma/shared/db/schema'
 import { type SQL, and, count, eq, inArray, ne, sql } from 'drizzle-orm'
 import { type CallerContext, requireFleetWriteScope } from '../../middleware/auth'
 import type { Vehicle } from '../../stores'
-import { operatorReadScope, resolveOperatorIdForWrite } from '../../tenancy'
+import { operatorReadScope } from '../../tenancy'
 import type {
   PaginatedResult,
   VehicleFilters,
@@ -89,11 +89,11 @@ export class DrizzleVehicleRepository implements VehicleRepository {
     const [inserted] = await this.db
       .insert(vehicles)
       .values({
-        // Transitional (#386): the route resolves operatorId, but direct-repo
-        // callers (seeds, internal jobs, tests) may omit it — fall back to the
-        // caller's tenant or the seeded Best Car Rental operator. Idempotent
-        // with the route's resolution. Drop once operators own their writes.
-        operatorId: resolveOperatorIdForWrite(ctx, data.operatorId),
+        // operatorId arrives already resolved by the route's write-operator
+        // resolver (#401); the repo trusts it. requireFleetWriteScope above is
+        // the repo-layer authz seal, and the composite FK seals cross-tenant
+        // classId at the DB (#395).
+        operatorId: data.operatorId,
         classId: data.classId,
         name: data.name,
         description: data.description,

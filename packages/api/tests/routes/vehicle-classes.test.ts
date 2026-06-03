@@ -12,6 +12,7 @@ import { createVehicleClassRoutes } from '../../src/routes/vehicle-classes'
 import { VehicleClassService } from '../../src/services/vehicle-class'
 import { VehicleClassAvailabilityService } from '../../src/services/vehicle-class-availability'
 import { testAuthMiddleware } from '../helpers/auth'
+import { testResolveWriteOperatorId } from '../helpers/operator'
 
 function buildAvailabilityService(classRepo: InMemoryVehicleClassRepository) {
   const vehicleRepo = new InMemoryVehicleRepository()
@@ -56,7 +57,10 @@ describe('Vehicle Class CRUD Routes', () => {
     const availabilityService = buildAvailabilityService(classRepo)
     app = new Hono()
     app.use('*', testAuthMiddleware('staff-user', 'STAFF'))
-    app.route('/', createVehicleClassRoutes(makeService(), availabilityService))
+    app.route(
+      '/',
+      createVehicleClassRoutes(makeService(), availabilityService, testResolveWriteOperatorId()),
+    )
   })
 
   describe('GET /vehicle-classes', () => {
@@ -352,7 +356,10 @@ describe('Vehicle Class CRUD Routes', () => {
       const service = new VehicleClassService(localClassRepo, localVehicleRepo, localBookingRepo)
       const availabilityService = buildAvailabilityService(localClassRepo)
       renterApp.use('*', testAuthMiddleware('renter-user', 'RENTER'))
-      renterApp.route('/', createVehicleClassRoutes(service, availabilityService))
+      renterApp.route(
+        '/',
+        createVehicleClassRoutes(service, availabilityService, testResolveWriteOperatorId()),
+      )
       const res = await renterApp.request('/vehicle-classes')
       expect(res.status).toBe(200)
     })
@@ -365,7 +372,10 @@ describe('Vehicle Class CRUD Routes', () => {
       const service = new VehicleClassService(localClassRepo, localVehicleRepo, localBookingRepo)
       const availabilityService = buildAvailabilityService(localClassRepo)
       renterApp.use('*', testAuthMiddleware('renter-user', 'RENTER'))
-      renterApp.route('/', createVehicleClassRoutes(service, availabilityService))
+      renterApp.route(
+        '/',
+        createVehicleClassRoutes(service, availabilityService, testResolveWriteOperatorId()),
+      )
       const res = await renterApp.request('/vehicle-classes', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -432,7 +442,10 @@ describe('Vehicle Class CRUD Routes', () => {
       const a = new Hono()
       setupGlobalHandlers(a)
       a.use('*', testAuthMiddleware(`${role}-user`, role, operatorId))
-      a.route('/', createVehicleClassRoutes(service, availabilityService))
+      a.route(
+        '/',
+        createVehicleClassRoutes(service, availabilityService, testResolveWriteOperatorId()),
+      )
       return a
     }
 

@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it } from 'vitest'
 import { InMemoryVehicleRepository } from '../../src/repositories/in-memory'
 import { createVehicleRoutes } from '../../src/routes/vehicles'
 import { testAuthMiddleware } from '../helpers/auth'
+import { testResolveWriteOperatorId } from '../helpers/operator'
 
 let app: Hono
 let repo: InMemoryVehicleRepository
@@ -41,7 +42,8 @@ describe('PATCH /vehicles/bulk-status', () => {
     repo = new InMemoryVehicleRepository()
     app = new Hono()
     app.use('*', testAuthMiddleware('staff-user', 'STAFF'))
-    app.route('/', createVehicleRoutes(repo))
+    // maintenanceService is unused by the bulk-status + create paths under test.
+    app.route('/', createVehicleRoutes(repo, undefined, testResolveWriteOperatorId()))
   })
 
   it('updates all vehicles to MAINTENANCE and returns them', async () => {
@@ -115,7 +117,7 @@ describe('PATCH /vehicles/bulk-status', () => {
   it('returns 403 when user is a RENTER', async () => {
     const renterApp = new Hono()
     renterApp.use('*', testAuthMiddleware('renter-user', 'RENTER'))
-    renterApp.route('/', createVehicleRoutes(repo))
+    renterApp.route('/', createVehicleRoutes(repo, undefined, testResolveWriteOperatorId()))
 
     const v1 = await createVehicle()
 

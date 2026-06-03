@@ -15,6 +15,12 @@ export class InMemoryOperatorRepository implements OperatorRepository {
     return false
   }
 
+  async findSoleId(): Promise<string | null> {
+    if (this.store.size !== 1) return null
+    const [id] = this.store.keys()
+    return id ?? null
+  }
+
   async create(data: {
     name: string
     slug: string

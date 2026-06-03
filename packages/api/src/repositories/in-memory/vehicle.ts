@@ -1,6 +1,6 @@
 import { type CallerContext, requireFleetWriteScope } from '../../middleware/auth'
 import type { Vehicle } from '../../stores'
-import { operatorReadScope, resolveOperatorIdForWrite } from '../../tenancy'
+import { operatorReadScope } from '../../tenancy'
 import type {
   PaginatedResult,
   VehicleFilters,
@@ -65,11 +65,11 @@ export class InMemoryVehicleRepository implements VehicleRepository {
   ): Promise<Vehicle> {
     requireFleetWriteScope(ctx)
     const now = new Date()
+    // operatorId arrives already resolved by the route's write-operator
+    // resolver (#401); the repo trusts it. requireFleetWriteScope above is the
+    // repo-layer authz seal.
     const vehicle: Vehicle = {
       ...data,
-      // Transitional (#386): mirror DrizzleVehicleRepository — resolve the
-      // tenant for direct-repo callers that omit operatorId.
-      operatorId: resolveOperatorIdForWrite(ctx, data.operatorId),
       id: crypto.randomUUID(),
       createdAt: now,
       updatedAt: now,

@@ -8,6 +8,7 @@ import { createMaintenanceLogRoutes } from '../../src/routes/maintenance-logs'
 import { createVehicleRoutes } from '../../src/routes/vehicles'
 import { MaintenanceService } from '../../src/services/maintenance'
 import { testAuthMiddleware } from '../helpers/auth'
+import { testResolveWriteOperatorId } from '../helpers/operator'
 
 let app: Hono
 let maintenanceService: MaintenanceService
@@ -56,7 +57,10 @@ describe('Maintenance Logs', () => {
 
     app = new Hono()
     app.use('*', testAuthMiddleware('staff-user', 'STAFF'))
-    app.route('/', createVehicleRoutes(vehicleRepo, maintenanceService))
+    app.route(
+      '/',
+      createVehicleRoutes(vehicleRepo, maintenanceService, testResolveWriteOperatorId()),
+    )
     app.route('/', createMaintenanceLogRoutes(maintenanceService))
   })
 

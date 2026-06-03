@@ -1,5 +1,28 @@
-import { BEST_CAR_RENTAL_OPERATOR_ID } from '@kuruma/shared/db/constants'
-import { type CallerContext, ForbiddenError, isOperatorRole } from './middleware/auth'
+import {
+  type CallerContext,
+  ForbiddenError,
+  OperatorRequiredError,
+  isOperatorRole,
+} from './middleware/auth'
+
+/**
+ * Narrow read capability the write-operator resolver needs: the id of the only
+ * operator, or null when there is not exactly one (zero or 2+). Implemented by
+ * `OperatorRepository`; injected so the resolver stays a pure policy function.
+ */
+export interface OperatorLookup {
+  findSoleId(): Promise<string | null>
+}
+
+/**
+ * The write-operator resolver bound to a concrete `OperatorLookup` at the
+ * composition root and injected into the write routes — so a route can resolve
+ * the target tenant without importing a repository (layering boundary).
+ */
+export type ResolveWriteOperatorId = (
+  ctx: CallerContext,
+  inputOperatorId?: string,
+) => Promise<string>
 
 /**
  * How a scoped repository read should be filtered by operator:
@@ -24,20 +47,30 @@ export function operatorReadScope(ctx: CallerContext): OperatorReadScope {
 }
 
 /**
- * Resolve the operatorId to stamp on a write. TRANSITIONAL (slice 1, #386):
- * - OPERATOR_OWNER / OPERATOR_STAFF must write under their own tenant; missing
- *   operatorId fails closed. They cannot write on behalf of another operator,
- *   so an `inputOperatorId` is ignored for them.
- * - PLATFORM_ADMIN / legacy STAFF / ADMIN may pass an explicit operatorId, else
- *   fall back to the seeded Best Car Rental operator so the existing owner
- *   create-flow keeps working until operator-portal write paths land.
- *
- * Once admin create endpoints take an explicit operatorId, drop the fallback.
+ * Resolve the operatorId to stamp on a write (#401):
+ * - OPERATOR_OWNER / OPERATOR_STAFF write under their own tenant; missing
+ *   operatorId fails closed. They cannot write for another operator, so an
+ *   `inputOperatorId` is ignored.
+ * - PLATFORM_ADMIN / legacy STAFF / ADMIN must name the target operator — either
+ *   explicitly via `inputOperatorId`, or implicitly when exactly one operator
+ *   exists (single-tenant inference). Zero or 2+ operators with no explicit id
+ *   is ambiguous and rejected (`OperatorRequiredError` -> 422), so a legacy
+ *   admin write can never be silently misattributed once operator #2 exists.
+ *   Replaces the old hardcoded Best-Car-Rental fallback.
  */
-export function resolveOperatorIdForWrite(ctx: CallerContext, inputOperatorId?: string): string {
+export async function resolveOperatorIdForWrite(
+  ctx: CallerContext,
+  inputOperatorId: string | undefined,
+  operators: OperatorLookup,
+): Promise<string> {
   if (isOperatorRole(ctx.role)) {
     if (!ctx.operatorId) throw new ForbiddenError('operator scope required')
     return ctx.operatorId
   }
-  return inputOperatorId ?? BEST_CAR_RENTAL_OPERATOR_ID
+  if (inputOperatorId) return inputOperatorId
+  const soleOperatorId = await operators.findSoleId()
+  if (soleOperatorId) return soleOperatorId
+  throw new OperatorRequiredError(
+    'operatorId is required: specify a target operator (zero or multiple operators exist)',
+  )
 }

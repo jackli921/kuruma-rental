@@ -13,12 +13,13 @@ import {
 } from '../middleware/auth'
 import type { VehicleClassService } from '../services/vehicle-class'
 import type { VehicleClassAvailabilityService } from '../services/vehicle-class-availability'
-import { resolveOperatorIdForWrite } from '../tenancy'
+import type { ResolveWriteOperatorId } from '../tenancy'
 import { cachePublic, fail, ok, parseBody, parseDateRange, stripUndefined } from './helpers'
 
 export function createVehicleClassRoutes(
   service: VehicleClassService,
   availabilityService: VehicleClassAvailabilityService,
+  resolveWriteOperatorId: ResolveWriteOperatorId,
   publicCatalogLimiter?: RateLimitBinding,
 ) {
   const app = new Hono()
@@ -93,10 +94,12 @@ export function createVehicleClassRoutes(
         if (!parsed.ok) return parsed.response
 
         const d = parsed.data
-        const result = await service.create(toCallerContext(user), {
-          // Transitional: legacy STAFF/ADMIN writes attach to the default
-          // operator until operator-portal write flows land (#386).
-          operatorId: resolveOperatorIdForWrite(toCallerContext(user)),
+        const ctx = toCallerContext(user)
+        // Resolve the target tenant before the create; a missing/ambiguous
+        // operatorId (#401) throws to the global handler as 403/422.
+        const operatorId = await resolveWriteOperatorId(ctx, d.operatorId)
+        const result = await service.create(ctx, {
+          operatorId,
           name: d.name,
           slug: d.slug,
           description: d.description ?? null,

@@ -1,7 +1,17 @@
-import { BEST_CAR_RENTAL_OPERATOR_ID } from '@kuruma/shared/db/constants'
 import { describe, expect, test } from 'vitest'
-import { type CallerContext, ForbiddenError } from '../src/middleware/auth'
-import { operatorReadScope, resolveOperatorIdForWrite } from '../src/tenancy'
+import { type CallerContext, ForbiddenError, OperatorRequiredError } from '../src/middleware/auth'
+import { type OperatorLookup, operatorReadScope, resolveOperatorIdForWrite } from '../src/tenancy'
+
+const lookupReturning = (soleId: string | null): OperatorLookup => ({
+  findSoleId: async () => soleId,
+})
+const lookupNeverCalled: OperatorLookup = {
+  findSoleId: async () => {
+    throw new Error(
+      'findSoleId must not be called for operator-scoped or explicit-operatorId writes',
+    )
+  },
+}
 
 const operatorCtx = (operatorId?: string): CallerContext =>
   operatorId !== undefined
@@ -32,24 +42,39 @@ describe('operatorReadScope', () => {
 })
 
 describe('resolveOperatorIdForWrite', () => {
-  test('operator role writes under its own ctx.operatorId', () => {
-    expect(resolveOperatorIdForWrite(operatorCtx('op_7'))).toBe('op_7')
+  test('operator role writes under its own ctx.operatorId', async () => {
+    await expect(
+      resolveOperatorIdForWrite(operatorCtx('op_7'), undefined, lookupNeverCalled),
+    ).resolves.toBe('op_7')
   })
 
-  test('operator role with no operatorId fails closed', () => {
-    expect(() => resolveOperatorIdForWrite(operatorCtx())).toThrow(ForbiddenError)
+  test('operator role with no operatorId fails closed', async () => {
+    await expect(
+      resolveOperatorIdForWrite(operatorCtx(), undefined, lookupNeverCalled),
+    ).rejects.toBeInstanceOf(ForbiddenError)
   })
 
-  test('operator role ignores an input operatorId (cannot write for another tenant)', () => {
-    expect(resolveOperatorIdForWrite(operatorCtx('op_7'), 'op_other')).toBe('op_7')
+  test('operator role ignores an input operatorId (cannot write for another tenant)', async () => {
+    await expect(
+      resolveOperatorIdForWrite(operatorCtx('op_7'), 'op_other', lookupNeverCalled),
+    ).resolves.toBe('op_7')
   })
 
-  test('legacy/admin falls back to seeded Best Car Rental operator', () => {
-    expect(resolveOperatorIdForWrite(legacyStaffCtx)).toBe(BEST_CAR_RENTAL_OPERATOR_ID)
-    expect(resolveOperatorIdForWrite(adminCtx)).toBe(BEST_CAR_RENTAL_OPERATOR_ID)
+  test('non-operator honours an explicit input operatorId without consulting the lookup', async () => {
+    await expect(
+      resolveOperatorIdForWrite(adminCtx, 'op_explicit', lookupNeverCalled),
+    ).resolves.toBe('op_explicit')
   })
 
-  test('legacy/admin honours an explicit input operatorId when given', () => {
-    expect(resolveOperatorIdForWrite(adminCtx, 'op_explicit')).toBe('op_explicit')
+  test('non-operator with no input infers the sole operator (no BCR hardcode)', async () => {
+    await expect(
+      resolveOperatorIdForWrite(legacyStaffCtx, undefined, lookupReturning('op_only')),
+    ).resolves.toBe('op_only')
+  })
+
+  test('non-operator with no input is rejected when zero or 2+ operators exist', async () => {
+    await expect(
+      resolveOperatorIdForWrite(adminCtx, undefined, lookupReturning(null)),
+    ).rejects.toBeInstanceOf(OperatorRequiredError)
   })
 })

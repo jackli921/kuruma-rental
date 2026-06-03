@@ -5,6 +5,7 @@
 export const PG_ERROR = {
   EXCLUSION_VIOLATION: '23P01',
   UNIQUE_VIOLATION: '23505',
+  FOREIGN_KEY_VIOLATION: '23503',
 } as const
 
 /** Extract the Postgres error code from an unknown thrown value, or null.
