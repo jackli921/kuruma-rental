@@ -127,6 +127,27 @@ describe('createLocationSchema', () => {
     expect(result.success).toBe(false)
   })
 
+  it('rejects an inverted operating-hours range (close before open)', () => {
+    // The MVP shape is a single same-day pair; overnight/wrap-around is not
+    // modeled yet, so 20:00 -> 08:00 is a typo, not an overnight window.
+    const result = createLocationSchema.safeParse({
+      ...validInput(),
+      operatingHours: { openTime: '20:00', closeTime: '08:00' },
+    })
+    expect(result.success).toBe(false)
+    if (!result.success) {
+      expect(result.error.issues[0]?.message).toBe('closeTime must be after openTime')
+    }
+  })
+
+  it('rejects an empty operating-hours range (open equals close)', () => {
+    const result = createLocationSchema.safeParse({
+      ...validInput(),
+      operatingHours: { openTime: '09:00', closeTime: '09:00' },
+    })
+    expect(result.success).toBe(false)
+  })
+
   it('does not accept an operatorId in the operator-caller schema', () => {
     const result = createLocationSchema.safeParse({ ...validInput(), operatorId: 'op_x' })
     // operatorId is stripped (not part of the schema) — the route stamps it.
@@ -179,6 +200,13 @@ describe('updateLocationSchema', () => {
   it('still validates HH:mm on operating hours when present', () => {
     const result = updateLocationSchema.safeParse({
       operatingHours: { openTime: '99:99', closeTime: '20:00' },
+    })
+    expect(result.success).toBe(false)
+  })
+
+  it('rejects an inverted operating-hours range on update', () => {
+    const result = updateLocationSchema.safeParse({
+      operatingHours: { openTime: '22:00', closeTime: '06:00' },
     })
     expect(result.success).toBe(false)
   })

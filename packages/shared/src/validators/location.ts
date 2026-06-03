@@ -27,6 +27,12 @@ const operatingHoursSchema = z
   })
   .strict()
   .nullable()
+  // MVP shape is a single same-day pair; overnight/wrap-around is not modeled
+  // yet (issue #387 #5), so an inverted or empty range is a typo, not a
+  // midnight-spanning window. Zero-padded HH:mm compares correctly as strings.
+  .refine((hours) => hours === null || hours.openTime < hours.closeTime, {
+    message: 'closeTime must be after openTime',
+  })
 
 // Field schemas WITHOUT defaults, so the update (partial) variant can reuse them
 // without injecting defaults on an empty PATCH. zod v4 `.partial()` keeps a
