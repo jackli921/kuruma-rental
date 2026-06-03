@@ -12,6 +12,7 @@ import {
   DrizzleBookingRepository,
   DrizzleCustomerRepository,
   DrizzleFleetOverviewRepository,
+  DrizzleInsuranceOptionRepository,
   DrizzleLocationRepository,
   DrizzleMaintenanceLogRepository,
   DrizzleMessageRepository,
@@ -29,6 +30,7 @@ import {
   InMemoryBookingRepository,
   InMemoryCustomerRepository,
   InMemoryFleetOverviewRepository,
+  InMemoryInsuranceOptionRepository,
   InMemoryLocationRepository,
   InMemoryMaintenanceLogRepository,
   InMemoryMessageRepository,
@@ -47,6 +49,7 @@ import type {
   BookingRepository,
   CustomerRepository,
   FleetOverviewRepository,
+  InsuranceOptionRepository,
   LocationRepository,
   MaintenanceLogRepository,
   MessageRepository,
@@ -66,6 +69,7 @@ import { createBookingRoutes } from './routes/bookings'
 import { createCustomerRoutes } from './routes/customers'
 import { createFleetOverviewRoutes } from './routes/fleet-overview'
 import health from './routes/health'
+import { createInsuranceOptionRoutes } from './routes/insurance-options'
 import { createLocationRoutes } from './routes/locations'
 import { createMaintenanceLogRoutes } from './routes/maintenance-logs'
 import { createMessageRoutes } from './routes/messages'
@@ -81,6 +85,7 @@ import { BookingService } from './services/booking'
 import { CustomerService } from './services/customer'
 import { FleetOverviewService } from './services/fleet-overview'
 import { GoogleTranslationProvider } from './services/google-translation-provider'
+import { InsuranceOptionService } from './services/insurance-option'
 import { LocationService } from './services/location'
 import { MaintenanceService } from './services/maintenance'
 import { MessageTranslationService } from './services/message-translation'
@@ -108,6 +113,7 @@ export function createApp(overrides?: {
   customerRepo?: CustomerRepository
   operatorRepo?: OperatorRepository
   locationRepo?: LocationRepository
+  insuranceOptionRepo?: InsuranceOptionRepository
   photoUploadLimiter?: RateLimitBinding
   photoUploadUserLimiter?: RateLimitBinding
   publicCatalogLimiter?: RateLimitBinding
@@ -127,6 +133,7 @@ export function createApp(overrides?: {
   let customerRepo: CustomerRepository
   let operatorRepo: OperatorRepository
   let locationRepo: LocationRepository
+  let insuranceOptionRepo: InsuranceOptionRepository
   let runInTransaction: RunInTransaction
   const photoUploadLimiter =
     overrides?.photoUploadLimiter ??
@@ -160,6 +167,7 @@ export function createApp(overrides?: {
     customerRepo = overrides.customerRepo ?? new InMemoryCustomerRepository(new Map(), new Map())
     operatorRepo = overrides.operatorRepo ?? new InMemoryOperatorRepository()
     locationRepo = overrides.locationRepo ?? new InMemoryLocationRepository()
+    insuranceOptionRepo = overrides.insuranceOptionRepo ?? new InMemoryInsuranceOptionRepository()
   } else if (process.env.DATABASE_URL) {
     const db = getDb()
     vehicleClassRepo = new DrizzleVehicleClassRepository(db)
@@ -177,6 +185,7 @@ export function createApp(overrides?: {
     customerRepo = new DrizzleCustomerRepository(db)
     operatorRepo = new DrizzleOperatorRepository(db)
     locationRepo = new DrizzleLocationRepository(db)
+    insuranceOptionRepo = new DrizzleInsuranceOptionRepository(db)
     const vehiclePhotosBucket = (globalThis as Record<string, unknown>).VEHICLE_PHOTOS as
       | R2BucketLike
       | undefined
@@ -219,6 +228,7 @@ export function createApp(overrides?: {
     customerRepo = new InMemoryCustomerRepository(new Map(), new Map())
     operatorRepo = new InMemoryOperatorRepository()
     locationRepo = new InMemoryLocationRepository()
+    insuranceOptionRepo = new InMemoryInsuranceOptionRepository()
   }
 
   // Translation provider: real Google when the key is set. In production
@@ -330,6 +340,7 @@ export function createApp(overrides?: {
   const resolveWriteOperatorId: ResolveWriteOperatorId = (ctx, inputOperatorId) =>
     resolveOperatorIdForWrite(ctx, inputOperatorId, operatorRepo)
   const locationService = new LocationService(locationRepo)
+  const insuranceOptionService = new InsuranceOptionService(insuranceOptionRepo)
 
   // Chain .route() calls so TypeScript infers the full route type tree.
   // hc<AppType> needs this to produce typed client methods.
@@ -368,6 +379,7 @@ export function createApp(overrides?: {
     .route('/', createUserRoutes(userRepo, threadRepo))
     .route('/', createAdminRoutes(operatorService))
     .route('/', createLocationRoutes(locationService, resolveWriteOperatorId))
+    .route('/', createInsuranceOptionRoutes(insuranceOptionService, resolveWriteOperatorId))
     .route('/', createOperatorRoutes(operatorService))
 }
 

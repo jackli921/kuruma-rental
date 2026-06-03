@@ -149,6 +149,31 @@ export const FLEET_WRITE_ROLES: ReadonlySet<UserRole> = new Set<UserRole>([
 ])
 
 /**
+ * Roles permitted to READ operator-private config (insurance options, fee
+ * schedules). STAFF roles (incl. PLATFORM_ADMIN) PLUS tenant-scoped operators.
+ * Deliberately EXCLUDES RENTER and PARTNER: unlike the public vehicle catalog,
+ * insurance/fees are operator-private, so they must never reach a renter or a
+ * 3rd-party API caller (slice-4 plan §2 [P0]).
+ */
+export const MANAGEMENT_READ_ROLES: ReadonlySet<UserRole> = new Set<UserRole>([
+  ...STAFF_ROLES,
+  ...OPERATOR_ROLES,
+])
+
+/**
+ * Repo-layer read guard for operator-private config. Must be called BEFORE
+ * `operatorReadScope(ctx)`, because that helper maps every non-operator role —
+ * including RENTER — to `{kind:'all'}` (the vehicle catalog is public). Without
+ * this seal a renter or PARTNER could read every operator's insurance/fees
+ * config. Throws `ForbiddenError` (-> 403) for RENTER / PARTNER (slice-4 [P0]).
+ */
+export function requireManagementRead(ctx: CallerContext): void {
+  if (!MANAGEMENT_READ_ROLES.has(ctx.role)) {
+    throw new ForbiddenError('management read scope required')
+  }
+}
+
+/**
  * Thrown by repo-layer guards when a non-authorised caller hits a
  * protected method. The global error handler maps this to a 403 response
  * so a bypassed route-level gate surfaces as a policy denial, not a 500.

@@ -9,6 +9,7 @@ export type {
   MaintenanceLog,
   Operator,
   Location,
+  InsuranceOption,
 } from '../stores'
 export type { DashboardStats } from '@kuruma/shared/types/stats'
 export type { FleetVehicleOverview, FleetBookingSummary } from '@kuruma/shared/types/fleet'
@@ -22,6 +23,7 @@ import type { VehicleDetail } from '@kuruma/shared/types/vehicle-detail'
 import type { CallerContext } from '../middleware/auth'
 import type {
   Booking,
+  InsuranceOption,
   Location,
   MaintenanceLog,
   Message,
@@ -78,6 +80,38 @@ export interface LocationRepository {
   create(data: Omit<Location, 'id' | 'createdAt' | 'updatedAt'>): Promise<Location>
   update(id: string, data: Partial<Location>): Promise<Location | undefined>
   archive(id: string): Promise<Location | undefined>
+}
+
+export interface InsuranceOptionFilters {
+  status?: 'ACTIVE' | 'ARCHIVED'
+  includeArchived?: boolean
+  /**
+   * Explicit tenant filter. ONLY the bypass-role route layer sets this (from
+   * `?operatorId=`); it narrows a bypass-role read to one tenant. It is IGNORED
+   * for operator callers — their scope is absolute (see findAll precedence).
+   */
+  operatorId?: string
+}
+
+export interface InsuranceOptionRepository {
+  // Reads call requireManagementRead(ctx) (rejects RENTER + PARTNER) BEFORE
+  // operatorReadScope(ctx): insurance is operator-private, not a public catalog
+  // (slice-4 plan §2 [P0]).
+  findAll(ctx: CallerContext, filters?: InsuranceOptionFilters): Promise<InsuranceOption[]>
+  findById(ctx: CallerContext, id: string): Promise<InsuranceOption | undefined>
+  /**
+   * Operator-keyed lookup for the service-level name-uniqueness pre-check,
+   * filtered to status='ACTIVE' to match the partial active-name unique index
+   * (archiving frees the name). NOT ctx-scoped — the caller passes an
+   * already-resolved operatorId; the DB partial index is the real seal.
+   */
+  findActiveByOperatorAndName(
+    operatorId: string,
+    name: string,
+  ): Promise<InsuranceOption | undefined>
+  create(data: Omit<InsuranceOption, 'id' | 'createdAt' | 'updatedAt'>): Promise<InsuranceOption>
+  update(id: string, data: Partial<InsuranceOption>): Promise<InsuranceOption | undefined>
+  archive(id: string): Promise<InsuranceOption | undefined>
 }
 
 export interface VehicleFilters {
