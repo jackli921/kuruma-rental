@@ -197,6 +197,13 @@
       "when": 1780370856695,
       "tag": "0027_class_operator_fk",
       "breakpoints": true
+    },
+    {
+      "idx": 28,
+      "version": "7",
+      "when": 1780448316973,
+      "tag": "0028_add_locations_table",
+      "breakpoints": true
     }
   ]
 }

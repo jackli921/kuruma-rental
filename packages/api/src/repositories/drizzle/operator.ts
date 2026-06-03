@@ -23,6 +23,16 @@ export class DrizzleOperatorRepository implements OperatorRepository {
     return rows.length === 1 ? (rows[0]?.id ?? null) : null
   }
 
+  async findById(id: string): Promise<Operator | undefined> {
+    const [row] = await this.db.select().from(operators).where(eq(operators.id, id)).limit(1)
+    return row
+  }
+
+  async findBySlug(slug: string): Promise<Operator | undefined> {
+    const [row] = await this.db.select().from(operators).where(eq(operators.slug, slug)).limit(1)
+    return row
+  }
+
   async create(data: {
     name: string
     slug: string

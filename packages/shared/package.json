@@ -17,6 +17,7 @@
     "./types/vehicle-detail": "./src/types/vehicle-detail.ts",
     "./types/maintenance-log": "./src/types/maintenance-log.ts",
     "./types/customer": "./src/types/customer.ts",
+    "./types/location": "./src/types/location.ts",
     "./lib/cancellation-policy": "./src/lib/cancellation-policy.ts",
     "./lib/pricing": "./src/lib/pricing.ts",
     "./lib/expiry": "./src/lib/expiry.ts",
@@ -24,6 +25,7 @@
     "./validators/booking": "./src/validators/booking.ts",
     "./validators/vehicle": "./src/validators/vehicle.ts",
     "./validators/vehicle-class": "./src/validators/vehicle-class.ts",
+    "./validators/location": "./src/validators/location.ts",
     "./validators/customer": "./src/validators/customer.ts",
     "./validators/translation": "./src/validators/translation.ts"
   },

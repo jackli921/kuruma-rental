@@ -21,6 +21,17 @@ export class InMemoryOperatorRepository implements OperatorRepository {
     return id ?? null
   }
 
+  async findById(id: string): Promise<Operator | undefined> {
+    return this.store.get(id)
+  }
+
+  async findBySlug(slug: string): Promise<Operator | undefined> {
+    for (const op of this.store.values()) {
+      if (op.slug === slug) return op
+    }
+    return undefined
+  }
+
   async create(data: {
     name: string
     slug: string

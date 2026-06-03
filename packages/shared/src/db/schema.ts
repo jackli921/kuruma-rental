@@ -5,6 +5,7 @@ import {
   foreignKey,
   index,
   integer,
+  jsonb,
   pgEnum,
   pgTable,
   primaryKey,
@@ -13,6 +14,7 @@ import {
   unique,
 } from 'drizzle-orm/pg-core'
 import type { AdapterAccountType } from 'next-auth/adapters'
+import type { LocationOperatingHours } from '../types/location'
 
 // Marketplace tenancy (epic #385, slice 1 / #386).
 // OPERATOR_* roles are tenant-scoped and NEVER bypass operator scope.
@@ -147,6 +149,50 @@ export const vehicleClasses = pgTable(
     // (operatorId, id) so a vehicle can only point at a class in its own tenant.
     // id is already unique (PK); this names the (operatorId, id) key for the FK.
     unique('vehicle_classes_operatorId_id_unique').on(table.operatorId, table.id),
+  ],
+)
+
+export const locationStatusEnum = pgEnum('location_status', ['ACTIVE', 'ARCHIVED'])
+
+// Operator-owned pickup/return storefronts (epic #385, slice 2 / #387).
+// Vehicles anchor to a pickup location; renter search (slice 5) returns
+// storefront cards; bookings (slice 6) carry pickup/dropoff FKs. Every row
+// is tenant-scoped via operatorId. See proposal §6 row 2, §9 items 2/20.
+export const locations = pgTable(
+  'locations',
+  {
+    id: text('id')
+      .primaryKey()
+      .$defaultFn(() => crypto.randomUUID()),
+    // Tenant owner. NOT NULL — same fresh-branch reseed rationale as
+    // vehicleClasses.operatorId (#386 P1b); no nullable tenancy debt.
+    operatorId: text('operatorId')
+      .notNull()
+      .references(() => operators.id),
+    name: text('name').notNull(),
+    address: text('address').notNull(),
+    // MVP shape (locked, see LocationOperatingHours): a single
+    // { openTime, closeTime } pair applied to all weekdays, or null. Per-weekday
+    // schedules ship as a separate migration + validator change (proposal §9 #4).
+    operatingHours: jsonb('operatingHours').$type<LocationOperatingHours>(),
+    timezone: text('timezone').notNull().default('Asia/Tokyo'),
+    // §9 item 20: turnaround/cooldown buffer before the same vehicle is bookable
+    // again after a return. 48h (2880m) default; per-location override here.
+    defaultTurnaroundMinutes: integer('defaultTurnaroundMinutes').notNull().default(2880),
+    status: locationStatusEnum('status').notNull().default('ACTIVE'),
+    createdAt: timestamp('createdAt', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updatedAt', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    index('idx_locations_operatorId').on(table.operatorId),
+    // Name is unique per operator (not globally) — two operators may both have a
+    // "Namba" store. DB seal behind the service-level friendly 409 (#387).
+    unique('locations_operatorId_name_unique').on(table.operatorId, table.name),
+    // Composite-FK target: lets vehicles reference a pickup location by
+    // (operatorId, id) so a vehicle can only point at a location in its own
+    // tenant (slice 2 migration #2). Mirrors vehicle_classes_operatorId_id_unique.
+    unique('locations_operatorId_id_unique').on(table.operatorId, table.id),
+    check('locations_turnaround_non_negative', sql`${table.defaultTurnaroundMinutes} >= 0`),
   ],
 )
 

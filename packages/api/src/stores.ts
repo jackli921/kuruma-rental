@@ -1,3 +1,5 @@
+import type { LocationOperatingHours } from '@kuruma/shared/types/location'
+
 export interface VehicleClass {
   id: string
   /** Owning operator (marketplace tenant, #386). NOT NULL in the DB. */
@@ -100,6 +102,20 @@ export interface Operator {
   slug: string
   name: string
   preAuthHandoffUrl: string | null
+  createdAt: Date
+  updatedAt: Date
+}
+
+export interface Location {
+  id: string
+  /** Owning operator (marketplace tenant, #387). NOT NULL in the DB. */
+  operatorId: string
+  name: string
+  address: string
+  operatingHours: LocationOperatingHours
+  timezone: string
+  defaultTurnaroundMinutes: number
+  status: 'ACTIVE' | 'ARCHIVED'
   createdAt: Date
   updatedAt: Date
 }
