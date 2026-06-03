@@ -2,9 +2,9 @@ name: CI
 
 on:
   push:
-    branches: [main]
+    branches: [main, marketplace-pivot]
   pull_request:
-    branches: [main]
+    branches: [main, marketplace-pivot]
 
 env:
   BUN_VERSION: "1.2.13"
