@@ -1,3 +1,4 @@
+import { isBusinessRole } from '@/lib/business-roles'
 import {
   classifyRoute,
   extractSessionRole,
@@ -16,8 +17,6 @@ import { routing } from './i18n/routing'
 const { auth } = NextAuth(authConfig)
 
 const intlMiddleware = createIntlMiddleware(routing)
-
-const BUSINESS_ROLES = new Set(['STAFF', 'ADMIN'])
 
 export default auth((req) => {
   const { pathname } = req.nextUrl
@@ -38,7 +37,7 @@ export default auth((req) => {
   // can happen on CF Workers when auth() fails silently.
   if (route.type === 'business' && session) {
     const role = extractSessionRole(session as { user?: { role?: unknown } | null })
-    if (!role || !BUSINESS_ROLES.has(role)) {
+    if (!isBusinessRole(role ?? undefined)) {
       return NextResponse.redirect(new URL(`/${locale}`, req.url))
     }
   }

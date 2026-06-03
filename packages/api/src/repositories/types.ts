@@ -8,6 +8,7 @@ export type {
   Message,
   MaintenanceLog,
   Operator,
+  Location,
 } from '../stores'
 export type { DashboardStats } from '@kuruma/shared/types/stats'
 export type { FleetVehicleOverview, FleetBookingSummary } from '@kuruma/shared/types/fleet'
@@ -21,6 +22,7 @@ import type { VehicleDetail } from '@kuruma/shared/types/vehicle-detail'
 import type { CallerContext } from '../middleware/auth'
 import type {
   Booking,
+  Location,
   MaintenanceLog,
   Message,
   Operator,
@@ -31,7 +33,7 @@ import type {
   VehicleClass,
 } from '../stores'
 
-/** Operator (tenant) data access. Admin bootstrap only in slice 1 (#386). */
+/** Operator (tenant) data access. Admin bootstrap (#386) + slug/id resolution (#387). */
 export interface OperatorRepository {
   create(data: {
     name: string
@@ -46,6 +48,36 @@ export interface OperatorRepository {
    * ambiguous multi-operator case (#401). Structurally satisfies `OperatorLookup`.
    */
   findSoleId(): Promise<string | null>
+  // Slice 2 (#387): the business layout resolves the /manage/<slug> URL segment
+  // and the sidebar resolves the caller's own slug. Access is decided in
+  // OperatorService (operator may only read its own); the repo is unscoped.
+  findById(id: string): Promise<Operator | undefined>
+  findBySlug(slug: string): Promise<Operator | undefined>
+}
+
+export interface LocationFilters {
+  status?: 'ACTIVE' | 'ARCHIVED'
+  includeArchived?: boolean
+  /**
+   * Explicit tenant filter. ONLY the PLATFORM_ADMIN route layer sets this (from
+   * `?operatorId=`); it narrows a bypass-role read to one tenant. It is IGNORED
+   * for operator callers — their scope is absolute (see findAll precedence).
+   */
+  operatorId?: string
+}
+
+export interface LocationRepository {
+  findAll(ctx: CallerContext, filters?: LocationFilters): Promise<Location[]>
+  findById(ctx: CallerContext, id: string): Promise<Location | undefined>
+  /**
+   * Operator-keyed lookup for the service-level name-uniqueness pre-check. NOT
+   * ctx-scoped — the caller passes an already-resolved operatorId (the DB
+   * `(operatorId, name)` unique constraint is the real seal).
+   */
+  findByOperatorAndName(operatorId: string, name: string): Promise<Location | undefined>
+  create(data: Omit<Location, 'id' | 'createdAt' | 'updatedAt'>): Promise<Location>
+  update(id: string, data: Partial<Location>): Promise<Location | undefined>
+  archive(id: string): Promise<Location | undefined>
 }
 
 export interface VehicleFilters {

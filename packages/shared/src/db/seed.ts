@@ -8,7 +8,7 @@ import {
 } from './constants'
 import { getDb } from './index'
 import { parsePlatformAdminEmails } from './platform-admins'
-import { operators, users, vehicles } from './schema'
+import { locations, operators, users, vehicles } from './schema'
 
 // Realistic JPY day-rates loosely anchored to Osaka/Kansai rental shop
 // price lists in 2025-26. Hourly rate is roughly (daily / 8) rounded to a
@@ -307,6 +307,28 @@ const SEED_VEHICLES = [
   },
 ]
 
+// Best Car Rental's pickup/return storefronts across Kansai (#387 slice 2).
+// Distinct names per operator satisfy locations_operatorId_name_unique. Hours
+// are a single open/close pair (LocationOperatingHours MVP shape); turnaround
+// uses the 48h (2880m) default unless a storefront needs a tighter cooldown.
+const SEED_LOCATIONS = [
+  {
+    name: 'Namba Store',
+    address: '2-10-70 Namba, Chuo Ward, Osaka 542-0076',
+    operatingHours: { openTime: '08:00', closeTime: '20:00' },
+  },
+  {
+    name: 'Umeda Store',
+    address: '3-1-1 Umeda, Kita Ward, Osaka 530-0001',
+    operatingHours: { openTime: '08:00', closeTime: '21:00' },
+  },
+  {
+    name: 'Kansai Airport Counter',
+    address: '1 Senshu-kuko Naka, Tajiri, Sennan District, Osaka 549-0001',
+    operatingHours: { openTime: '06:00', closeTime: '23:00' },
+  },
+]
+
 async function seed() {
   const db = getDb()
 
@@ -368,6 +390,20 @@ async function seed() {
     if (unmatched > 0) {
       console.log(`  note: ${unmatched} allowlisted email(s) matched no existing user`)
     }
+  }
+
+  // Best Car Rental storefronts (#387). Idempotent on (operatorId, name): a
+  // reseed leaves existing rows untouched, preserving each row's id so the
+  // vehicles->locations composite FK target stays stable across reseeds.
+  console.log('Seeding locations...')
+  const insertedLocations = await db
+    .insert(locations)
+    .values(SEED_LOCATIONS.map((l) => ({ ...l, operatorId: BEST_CAR_RENTAL_OPERATOR_ID })))
+    .onConflictDoNothing({ target: [locations.operatorId, locations.name] })
+    .returning({ id: locations.id, name: locations.name })
+  console.log(`  seeded ${insertedLocations.length} new location(s)`)
+  for (const l of insertedLocations) {
+    console.log(`  + ${l.name} (${l.id})`)
   }
 
   // Clear existing vehicles for idempotent seeding

@@ -41,6 +41,7 @@
     "customers": "お客様",
     "fleet": "車両管理",
     "classes": "クラス",
+    "locations": "拠点",
     "menu": "メニュー",
     "close": "メニューを閉じる",
     "switchToRenter": "利用者ビューに切替",
@@ -172,7 +173,11 @@
         "viewFullDetails": "詳細を表示",
         "sidebar": {
           "title": "フィルター",
-          "vehicles": { "title": "車両", "all": "すべて", "none": "なし" },
+          "vehicles": {
+            "title": "車両",
+            "all": "すべて",
+            "none": "なし"
+          },
           "statuses": {
             "title": "ステータス",
             "CONFIRMED": "確定",
@@ -503,6 +508,46 @@
         "sortOrder": "並び順",
         "sortOrderHint": "値が小さいほど先に表示されます。同値の場合は名前順。",
         "save": "クラスを保存",
+        "saving": "保存中...",
+        "cancel": "キャンセル"
+      }
+    },
+    "locations": {
+      "title": "拠点",
+      "subtitle": "貸出・返却の拠点を管理します。",
+      "addLocation": "拠点を追加",
+      "addSubtitle": "新しい貸出・返却拠点を作成します。",
+      "editLocation": "拠点を編集",
+      "archiveAction": "拠点をアーカイブ",
+      "archiveTitle": "{name} をアーカイブしますか？",
+      "archiveDescription": "拠点をアーカイブします。一覧には残りますが、新規の貸出には表示されません。",
+      "archiveConfirm": "アーカイブ",
+      "archiving": "アーカイブ中...",
+      "empty": "拠点はまだありません。最初の拠点を追加しましょう。",
+      "loadError": "拠点を読み込めませんでした",
+      "retry": "再試行",
+      "status": {
+        "ACTIVE": "有効",
+        "ARCHIVED": "アーカイブ済み"
+      },
+      "row": {
+        "hours": "{open}–{close}",
+        "alwaysOpen": "営業時間未設定",
+        "turnaround": "整備 {hours}時間"
+      },
+      "form": {
+        "name": "拠点名",
+        "namePlaceholder": "例：難波店",
+        "address": "住所",
+        "addressPlaceholder": "例：大阪市中央区難波1-2-3",
+        "setHours": "営業時間を設定",
+        "hoursHint": "常時利用可能な拠点は設定不要です。",
+        "openTime": "開店",
+        "closeTime": "閉店",
+        "timezone": "タイムゾーン",
+        "turnaround": "整備時間（分）",
+        "turnaroundHint": "返却後、再び予約可能になるまでの猶予。既定 2880（48時間）。",
+        "save": "拠点を保存",
         "saving": "保存中...",
         "cancel": "キャンセル"
       }

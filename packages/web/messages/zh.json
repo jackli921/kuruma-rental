@@ -41,6 +41,7 @@
     "customers": "客户",
     "fleet": "车队管理",
     "classes": "车型",
+    "locations": "取还点",
     "menu": "菜单",
     "close": "关闭菜单",
     "switchToRenter": "切换到租客视图",
@@ -172,7 +173,11 @@
         "viewFullDetails": "查看详情",
         "sidebar": {
           "title": "筛选",
-          "vehicles": { "title": "车辆", "all": "全部", "none": "无" },
+          "vehicles": {
+            "title": "车辆",
+            "all": "全部",
+            "none": "无"
+          },
           "statuses": {
             "title": "状态",
             "CONFIRMED": "已确认",
@@ -503,6 +508,46 @@
         "sortOrder": "排序",
         "sortOrderHint": "值越小越靠前，相同值按名称 A-Z 排序。",
         "save": "保存车型",
+        "saving": "保存中...",
+        "cancel": "取消"
+      }
+    },
+    "locations": {
+      "title": "取还点",
+      "subtitle": "管理您的取车与还车地点。",
+      "addLocation": "添加取还点",
+      "addSubtitle": "创建新的取车与还车地点。",
+      "editLocation": "编辑取还点",
+      "archiveAction": "归档取还点",
+      "archiveTitle": "归档 {name}？",
+      "archiveDescription": "这将归档该取还点。它仍会显示在列表中，但不会用于新的取车。",
+      "archiveConfirm": "归档",
+      "archiving": "归档中...",
+      "empty": "暂无取还点。添加第一个取车地点。",
+      "loadError": "无法加载取还点",
+      "retry": "重试",
+      "status": {
+        "ACTIVE": "可用",
+        "ARCHIVED": "已归档"
+      },
+      "row": {
+        "hours": "{open}–{close}",
+        "alwaysOpen": "未设置营业时间",
+        "turnaround": "周转 {hours} 小时"
+      },
+      "form": {
+        "name": "取还点名称",
+        "namePlaceholder": "例如：难波店",
+        "address": "地址",
+        "addressPlaceholder": "例如：大阪市中央区难波1-2-3",
+        "setHours": "设置营业时间",
+        "hoursHint": "全天可用的地点无需设置。",
+        "openTime": "开始",
+        "closeTime": "结束",
+        "timezone": "时区",
+        "turnaround": "周转时间（分钟）",
+        "turnaroundHint": "车辆归还后再次可预订前的缓冲。默认 2880（48 小时）。",
+        "save": "保存取还点",
         "saving": "保存中...",
         "cancel": "取消"
       }
