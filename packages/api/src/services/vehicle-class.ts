@@ -43,7 +43,10 @@ export class VehicleClassService {
   }
 
   async create(
-    ctx: CallerContext,
+    // Intentionally unscoped: create takes ctx for interface symmetry with the
+    // other methods, but slug uniqueness is global so it uses SYSTEM_CONTEXT
+    // below, not the caller. Underscore-prefixed to mark it deliberately unused.
+    _ctx: CallerContext,
     data: Omit<VehicleClass, 'id' | 'createdAt' | 'updatedAt'>,
   ): Promise<CreateResult> {
     // Slug uniqueness is global (DB unique constraint), so the collision check
