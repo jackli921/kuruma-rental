@@ -29,7 +29,7 @@ The two read models (§9 item 21, §10 item 12):
 
 | Precondition | Why | Status 2026-06-02 |
 |---|---|---|
-| **Slice 2 (#387 locations) merged to `marketplace-pivot`** | The store card IS a `locations` row. Search reads `locations` (name, address, `operatingHours`, `defaultTurnaroundMinutes`) and joins `vehicles.pickupLocationId → locations.id`. Without it there is no storefront entity to return. | In progress on `feature/387-locations` (locations table + `vehicles.pickupLocationId` composite FK present on that branch; not yet on `marketplace-pivot`) |
+| **Slice 2 (#387 locations) merged to `marketplace-pivot`** | The store card IS a `locations` row. Search reads `locations` (name, address, `operatingHours`, `defaultTurnaroundMinutes`) and joins `vehicles.pickupLocationId → locations.id`. Without it there is no storefront entity to return. | In review (PR #414 → `marketplace-pivot`; locations table + `vehicles.pickupLocationId` composite FK present on that branch, not yet on pivot) |
 | **Slice 3 (#388 ACRISS + vehicle CRUD) merged** | `classSummaries` group by ACRISS class; the card shows "Compact x4, Minivan x2". Requires `vehicle_classes.acriss_code` + i18n class labels. The current `marketplace-pivot` `vehicle_classes` has **no `acrissCode` column yet** — slice 3 adds it. | Not started |
 | **Slice 4 (#389a/b/c pricing) merged** | Card pricing is computed from `vehicles.dailyRateJpy` / `vehicles.hourlyRateJpy`. §10 item 11 + §5.1: pricing is **vehicle-level only**; slice 4c drops `vehicle_classes.dailyRateJpy`. Slice 5 must read price from `vehicles`, never from the class. | Not started (4a/4b drafted in `2026-06-02-slice4-*`; 4c trails #388) |
 
@@ -225,7 +225,7 @@ Search is **public/renter-facing**. This is the inverse of slice 4's operator-pr
 
 Slice 5 ideally adds **no tables and no columns** — it reads slices 1–4's schema. The only candidate change is **covering indexes** for the new query paths, if `bun run lint:fk-indexes` / query plans demand:
 
-- `vehicles.pickupLocationId` — #387 already adds `idx_vehicles_pickupLocationId` (confirmed on `feature/387-locations`); the storefront availability join reuses it. **No new index needed if present.**
+- `vehicles.pickupLocationId` — #387 already adds `idx_vehicles_pickupLocationId` (confirmed on PR #414); the storefront availability join reuses it. **No new index needed if present.**
 - `bookings(vehicleId, status, startAt, effectiveEndAt)` — the `NOT EXISTS` overlap subquery filters on `vehicleId` + status + range. A composite/GiST index here would help at scale, **but** §8.2 sets search p95 <500ms at MVP scale (3 ops × ~40 vehicles) which the live scan "handles trivially." **Recommendation: ship no new index in slice 5; measure first.** If a plan regression shows up, add the index in a dedicated follow-up — do not speculatively index (YAGNI).
 
 **If** any index is added: `bun run db:generate --name <describe>` → `db:migrate` → `db:verify` (3 green); respect the journal-`when` monotonic rule (CLAUDE.md 2026-04-17) when rebasing onto `marketplace-pivot`. **No hand-written `.sql` in `drizzle/`.**
@@ -269,7 +269,8 @@ All green before merge: `bun run test` (unit + integration) · `bun run test:e2e
 ## 11. Execution order & worktree
 
 ```
-git worktree add ../kuruma-storefront-search -b feature/391-renter-storefront-search marketplace-pivot
+# Branch from the remote pivot; local marketplace-pivot is known to lag.
+git worktree add ../kuruma-storefront-search -b feature/391-renter-storefront-search origin/marketplace-pivot
 ```
 
 Within the worktree (vertical slice, RED/GREEN per behaviour):

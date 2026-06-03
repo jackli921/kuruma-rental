@@ -27,7 +27,7 @@ Status snapshot (2026-06-02):
 | Provides | Slice / issue | State | Seed needs it for |
 |---|---|---|---|
 | `operators`, role enum, `CallerContext.operatorId` | #386 (slice 1) | **CLOSED / merged** | operator rows, scoped seed verification |
-| `locations` table + `vehicles.pickup_location_id` | #387 (slice 2) | in progress (`feature/387-locations`) | location rows, vehicle→location FK |
+| `locations` table + `vehicles.pickup_location_id` | #387 (slice 2) | in review (PR #414 → `marketplace-pivot`) | location rows, vehicle→location FK |
 | `vehicle_classes.acriss_code` + vehicle CRUD | #388 (slice 3) | not started | ACRISS distribution across ~40 vehicles |
 | `insurance_options`, `fee_schedules`, vehicle-only pricing | #389 / #404-406 (slice 4) | planned (`2026-06-02-slice4-*.md`) | insurance + fee seed rows |
 | storefront search read models | #391 (slice 5) | **OPEN** | E2E step 1–3 (search → storefront → vehicle) |
@@ -156,7 +156,7 @@ New spec: `e2e/marketplace-happy-path.spec.ts`. **This is the required-green gat
 | 2. Storefront result | Renter clicks the Best Car Rental Osaka card | URL → `/en/storefronts/best-car-rental/<location>`; heading `level:1` = operator+location name; available-vehicle list `toHaveCount(expected)` for the seeded date range | "storefront result" |
 | 3. Vehicle selection | Renter picks the seeded `CCAR` Toyota Yaris | selection panel shows make/model/**license plate** + `dailyRateJpy` formatted as `¥8,000`; **insurance dropdown lists exactly the operator's 2 options** (Normal/Premium) | "vehicle selection" |
 | 4. Booking | Renter selects Premium insurance, confirms dates, enters contact (email/name/phone/lang), submits | confirmation page URL contains `/booking/`; **booking-code matches `/^[2-9A-HJ-NP-Z]{8}$/`** (no-confusables alphabet, §9 item 3); page shows selected vehicle, selected Premium insurance, pre-auth handoff link (`href` = operator pre-auth URL), and a **"potential additional charges"** block listing the snapshotted overtime/cleaning/no-fuel fees | "vehicle selection → booking → confirmation" |
-| 5. Operator-visible notification | Switch to operator session (Best Car Rental owner), open `/manage/best-car-rental/bookings` | new booking row present with the **same booking-code** from step 4; **notification badge count incremented**; `notification_log` row rendered with `status: sent` (or `queued`) | "confirmation notification visible in operator portal" |
+| 5. Operator-visible notification | Switch to operator session (Best Car Rental owner), open flat `/manage/bookings` | new booking row present with the **same booking-code** from step 4; **notification badge count incremented**; `notification_log` row rendered with `status: sent` (or `queued`) | "confirmation notification visible in operator portal" |
 
 `test.step()` per row so the HTML report reads as the acceptance script. A failing step captures screenshot+trace (config already on). Run the renter journey on a mobile viewport variant too (proposal §8.2: iPhone/Android Chrome) — one extra project or `test.use({ viewport })` block.
 
@@ -220,17 +220,18 @@ Bundle measurement runs on the build output, independent of feature merges (§1.
 A `docs/runbooks/` markdown (or runbook section) the operator follows live:
 
 **Cold start**
-1. `git checkout marketplace-pivot && bun install`
-2. Point `.env` + API `.dev.vars` at a fresh Neon branch off `marketplace-pivot` (proposal §5.2).
-3. `bun run db:migrate` → `bun run db:seed` → `bun run db:seed-bookings` → `bun run db:verify` (3 green).
-4. `bun run dev:api` and `bun run dev` (two terminals).
+1. `git fetch origin`
+2. Use a fresh worktree or fast-forwarded local branch from `origin/marketplace-pivot`, then `bun install`.
+3. Point `.env` + API `.dev.vars` at a fresh Neon branch off the fully merged pivot (proposal §5.2).
+4. `bun run db:migrate` → `bun run db:seed` → `bun run db:seed-bookings` → `bun run db:verify` (3 green).
+5. `bun run dev:api` and `bun run dev` (two terminals).
 
 **Walkthrough script (mirrors the E2E journey, §5.1)**
 1. **Renter search** — open renter portal, search Osaka pickup/return + dates + Compact class → storefront cards across all 3 operators with per-class summaries + min price.
 2. **Storefront** — open *Best Car Rental — Namba* → available vehicles for the dates, grouped by ACRISS class.
 3. **Select** — pick the Toyota Yaris (CCAR) → plate + price + insurance options shown.
 4. **Book** — choose Premium insurance, confirm, enter contact → confirmation page with booking-code, selected insurance, pre-auth handoff link, and "potential additional charges".
-5. **Operator view** — log in as the Best Car Rental owner → `/manage/best-car-rental/bookings` shows the new booking + notification badge; show the operator-notification email content.
+5. **Operator view** — log in as the Best Car Rental owner → flat `/manage/bookings` shows the new booking + notification badge; show the operator-notification email content.
 6. **Show range** — switch locale to ja and zh on the renter pages; switch to a second operator portal to show tenant isolation (operator 2 cannot see operator 1's bookings — proposal §6.2).
 
 **Talking points:** multi-tenant isolation, ACRISS-standard taxonomy (Trip.com-ready), 48h turnaround, fee disclosure pattern (NicoNico/Hertz parity), substitution audit trail.
@@ -252,7 +253,8 @@ A `docs/runbooks/` markdown (or runbook section) the operator follows live:
 ## 10. Execution order & worktree
 
 ```bash
-git worktree add ../kuruma-demo-seed -b feature/390-demo-seed-e2e marketplace-pivot
+# Branch from the remote pivot; local marketplace-pivot is known to lag.
+git worktree add ../kuruma-demo-seed -b feature/390-demo-seed-e2e origin/marketplace-pivot
 ```
 
 Within the worktree, TDD where applicable (seed builders + booking-code generator are pure → unit-test first; E2E journey is RED via `test.fixme` → GREEN as slice 5/6/7 UI lands):

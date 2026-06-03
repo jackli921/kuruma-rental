@@ -10,7 +10,7 @@
 
 ## 0. Decision: split #389 into 4a / 4b / 4c
 
-#389 bundles three independent domains. Per review, it is split into three sub-issues under epic #385, each a mergeable vertical slice on its own worktree off `marketplace-pivot`:
+#389 bundles three independent domains. Per review, it is split into three sub-issues under epic #385, each a mergeable vertical slice on its own worktree off `origin/marketplace-pivot`:
 
 | Sub-slice | Domain | New? | Independent of | Effort |
 |---|---|---|---|---|
@@ -28,8 +28,8 @@
 
 | Precondition | Why | Status 2026-06-02 |
 |---|---|---|
-| **#401 merged to `marketplace-pivot`** | Slice 4 repos build on the post-#401 write contract: `resolveOperatorIdForWrite(ctx, input, operators)` with single-operator inference + `OperatorRequiredError`, **no `BEST_CAR_RENTAL_OPERATOR_ID` fallback**. Building on the current pivot branch bakes in a contract actively being removed (`memory/project_operator-2-gate`). | On `feat/401-drop-operator-fallback`, not yet merged |
-| **#387 (locations) merged** — for the WEB layer of 4a/4c only | 4a/4c pages reuse #387's `[operatorSlug]` layout + operator slug-resolution + `BusinessSidebar` conditional-link pattern. Backend repos/services have no #387 dependency and can start earlier. | In progress (`feature/387-locations`) |
+| **#401 merged to `marketplace-pivot`** | Slice 4 repos build on the post-#401 write contract: `resolveOperatorIdForWrite(ctx, input, operators)` with single-operator inference + `OperatorRequiredError`, **no `BEST_CAR_RENTAL_OPERATOR_ID` fallback**. | Merged to `origin/marketplace-pivot` via PR #408. The local `marketplace-pivot` branch may still be stale; branch from `origin/marketplace-pivot` or fast-forward local before kickoff. |
+| **#387 (locations) merged** — for the WEB layer of 4a/4b only | Routing is **flat & JWT-scoped** (`/manage/insurance`, `/manage/fees`) like every other manage page — **NO `[operatorSlug]` segment** (slice-2 decision: operator derived from JWT, not URL). #387 lands `lib/business-roles.ts` admitting `OPERATOR_*` to the flat `/manage` portal — the 4a/4b pages need that gate. Backend repos/services have no #387 dependency. | In review (PR #414 → `marketplace-pivot`) |
 | **#388 (ACRISS + vehicle CRUD)** — for **4c only** | 4c drops legacy class pricing while #388 reworks the class/vehicle forms; landing 4c first would conflict. 4a/4b do not depend on #388. | Not started |
 
 `operators` table, `roleEnum` (incl. `OPERATOR_OWNER`/`OPERATOR_STAFF`/`PLATFORM_ADMIN`), `vehicles`/`vehicleClasses.operatorId`, the `(operatorId, id)` composite-unique on `vehicle_classes` (#395), and `CallerContext.operatorId`/`bypassScope` (#401) are all assumed present from slices 1-3.
@@ -50,7 +50,7 @@ Established by `vehicles` / `vehicle_classes` (per AGENTS.md API layout `routes/
 - **Service** is auth-agnostic; returns `{ ok: true, ... } | { ok: false, error, status, code? }`.
 - **Route** gates mutations with role check, builds ctx via `toCallerContext(requireUser(c))`, uses `ok()`/`fail()`/`parseBody()` from `routes/helpers.ts`. Mounted at `/` in `index.ts`.
 - **Validators** (`packages/shared/src/validators/<entity>.ts`): `create<X>Schema` / `update<X>Schema` (= `.partial()`), cross-field rules via `.superRefine()`.
-- **Web** module `packages/web/src/modules/<entity>/` (`api.ts`, `hooks.ts`, `components/`) + page under `manage/[operatorSlug]/<entity>/page.tsx`, i18n namespace `business.<entity>`.
+- **Web** module `packages/web/src/modules/<entity>/` (`api.ts`, `hooks.ts`, `components/`) + **flat** page `app/[locale]/(business)/manage/<entity>/page.tsx` — JWT-scoped, **no `[operatorSlug]` segment** (mirrors `/manage/locations`); i18n namespace `business.<entity>`; link in `BusinessSidebar.tsx`.
 
 **Bypass-caller scoping (every list/create, mirrors #387):** operator callers auto-scope to `ctx.operatorId` and any `?operatorId=` they pass is dropped at the route. **[P1] Gate on `ctx.bypassScope === true`, not on the `PLATFORM_ADMIN` string** — during transition, legacy `STAFF`/`ADMIN` are bypass equivalents and must obey the same rule. A bypass caller's GET requires explicit `?operatorId=<id>` OR `?includeAll=true` (else 400); a bypass caller's POST requires `operatorId` in body (`platformAdmin*` schema variant; missing → 400 via `parseBody`). Cross-operator id on GET/PATCH/DELETE returns **404, not 403** (no tenant-existence leak). Mutations load the row first to capture its tenant before writing.
 
@@ -78,7 +78,12 @@ export const insuranceOptions = pgTable('insurance_options', {
 }, (t) => [
   index('idx_insurance_options_operatorId').on(t.operatorId),
   unique('insurance_options_operatorId_id_unique').on(t.operatorId, t.id),
-  unique('insurance_options_operator_name_unique').on(t.operatorId, t.name),
+  // Name uniqueness scoped to ACTIVE rows so archiving an option frees its name
+  // for reuse (consistent with fee_schedules active-uniqueness). Two ACTIVE options
+  // can't share a name; an archived one no longer reserves it. PARTIAL index.
+  uniqueIndex('insurance_options_active_name_unique')
+    .on(t.operatorId, t.name)
+    .where(sql`status = 'ACTIVE'`),
   check('insurance_options_daily_price_non_negative', sql`${t.dailyPriceJpy} >= 0`),
   check('insurance_options_deductible_non_negative',
     sql`${t.deductibleJpy} IS NULL OR ${t.deductibleJpy} >= 0`),
@@ -103,10 +108,10 @@ export interface InsuranceOptionRepository {
   archive(ctx: CallerContext, id: string): Promise<InsuranceOption | undefined>
 }
 ```
-Drizzle + InMemory pair under `repositories/{drizzle,in-memory}/insurance-option.ts`. Service `services/insurance-option.ts` (name-uniqueness 409, archive sets status). Routes `routes/insurance-options.ts` at `/insurance-options`. DI + mount in `index.ts`.
+Drizzle + InMemory pair under `repositories/{drizzle,in-memory}/insurance-option.ts`. Service `services/insurance-option.ts`: name-uniqueness 409 **checked against ACTIVE rows only and excluding the current row id on update** (matches the active-name partial index — archiving frees the name, and a no-name-change edit can't self-collide); archive sets status. Routes `routes/insurance-options.ts` at `/insurance-options`. DI + mount in `index.ts`.
 
 ### Web
-`manage/[operatorSlug]/insurance/page.tsx` + `modules/insurance/` (`InsuranceList`, `InsuranceForm`, `InsuranceArchiveDialog`, `useInsuranceOptions`). i18n `business.insurance.*`. Sidebar link gated on `operatorId`.
+Flat `manage/insurance/page.tsx` (JWT-scoped, **no `[operatorSlug]`**) + `modules/insurance/` (`InsuranceList`, `InsuranceForm`, `InsuranceArchiveDialog`, `useInsuranceOptions`). i18n `business.insurance.*`. `BusinessSidebar` link (between Classes/Customers, like Locations).
 
 ---
 
@@ -164,7 +169,7 @@ export const feeSchedules = pgTable('fee_schedules', {
 - Platform-admin extend variant adds `operatorId`.
 
 ### Repo / Service / Routes / Web
-Same shape as 4a. `FeeScheduleFilters` adds `feeType?` and `vehicleClassId?`. **[P1] Service is the coherence + uniqueness seal:** `update` fetches the existing row, **merges the patch**, then validates (a) fee-type↔unit coherence on the *merged* `feeType`+`unit` (400 on mismatch) and (b) active-uniqueness on the merged `(operatorId, feeType, vehicleClassId)` **excluding the current row id** (409) — so a no-key-change edit (e.g. bumping only `amountJpy`) does not falsely collide with itself. This is the merge-then-validate pattern `VehicleClassService.update` uses for "at least one rate". `create` validates the same on the full payload (no exclusion). The DB partial-unique indexes + the schema `.superRefine()` are backstops, not the only checks. Routes at `/fee-schedules`. Page `manage/[operatorSlug]/fees/page.tsx` + `modules/fees/` — form: feeType select → unit auto-constrained by type, amount, optional class dropdown (operator's classes only). i18n `business.fees.*`.
+Same shape as 4a. `FeeScheduleFilters` adds `feeType?` and `vehicleClassId?`. **[P1] Service is the coherence + uniqueness seal:** `update` fetches the existing row, **merges the patch**, then validates (a) fee-type↔unit coherence on the *merged* `feeType`+`unit` (400 on mismatch) and (b) active-uniqueness on the merged `(operatorId, feeType, vehicleClassId)` **excluding the current row id** (409) — so a no-key-change edit (e.g. bumping only `amountJpy`) does not falsely collide with itself. This is the merge-then-validate pattern `VehicleClassService.update` uses for "at least one rate". `create` validates the same on the full payload (no exclusion). The DB partial-unique indexes + the schema `.superRefine()` are backstops, not the only checks. Routes at `/fee-schedules`. **Flat** page `manage/fees/page.tsx` (JWT-scoped, **no `[operatorSlug]`**) + `modules/fees/` — form: feeType select → unit auto-constrained by type, amount, optional class dropdown (operator's classes only). i18n `business.fees.*`.
 
 ### Slice-6 boundary (explicit — does NOT ship in 4b)
 4b stores schedules only. **Deferred to slice 6 (#392):** snapshot of applicable `fee_schedules` rows into `bookings.fee_snapshot jsonb` at booking; overtime compute `ceil(overage_hours) * snapshotted_hourly_rate`; the confirmation-page "potential additional charges" block. 4b ships zero renter-facing surface and zero booking coupling.
@@ -214,9 +219,9 @@ Per sub-slice, mirroring `packages/api/tests/integration/rls-context.test.ts` (s
 |---|---|---|---|
 | **Validator** (`packages/shared/test/validators/`) | reject empty name, negative price, negative deductible; accept null deductible | **fee-type↔unit coherence**: `OVERTIME_HOURLY`+`FLAT` rejected; `CLEANING_FLAT`+`PER_HOUR` rejected; valid combos pass; negative amount rejected | class schema no longer accepts rate fields |
 | **InMemory repo** | CRUD; op-A staff can't see/update/archive op-B rows; **[P0] `RENTER` and `PARTNER` reads → Forbidden (NOT all-operators)**; bypass roles see both | same + filter by feeType/classId; **[P1] merged-patch coherence: patching only `unit` against an existing row is validated against the stored `feeType`** | — |
-| **Drizzle repo** (Neon `test`) | FK on operatorId; unique `(operatorId,name)` → 23505 | **composite FK rejects a fee whose class belongs to another operator → 23503**; **second ACTIVE fee of same (operator,type,scope) → 23505** on the partial index | post-drop: inserting a class with a rate column fails (column gone) |
-| **Service** | name-uniqueness 409; archive sets status; cross-operator id update → 404 | active-uniqueness 409 message; archive frees the slot (re-create succeeds) | `VehicleClassService` has no rate path |
-| **Route** | 401/403/404 matrix; **`RENTER`/`PARTNER` read → 403**; bypass GET w/o operatorId→400, POST w/o operatorId→400; operator `?operatorId=B` dropped | same matrix; unit-coherence + merged-patch coherence → **400** | n/a (no new route) |
+| **Drizzle repo** (Neon `test`) | FK on operatorId; **two ACTIVE options same `(operatorId,name)` → 23505 on the partial index**; **archiving an option then creating a new one with the same name succeeds (name freed)** | **composite FK rejects a fee whose class belongs to another operator → 23503**; **second ACTIVE fee of same (operator,type,scope) → 23505** on the partial index | post-drop: inserting a class with a rate column fails (column gone) |
+| **Service** | name-uniqueness 409 (**ACTIVE-only, excludes current row id on update**); archive sets status; cross-operator id update → 404 | active-uniqueness 409 message (**excludes current row id**); archive frees the slot (re-create succeeds) | `VehicleClassService` has no rate path |
+| **Route** | 401/403/404 matrix; **`RENTER`/`PARTNER` read → 403**. **[Item 4] Bypass-precedence (explicit): GET `?operatorId=A` narrows to A · GET `?includeAll=true` returns all · GET with neither → 400 · POST w/o body operatorId → 400 · operator caller's `?operatorId=B` is dropped (returns own rows only)** | same matrix; **same bypass-precedence cases**; unit-coherence + merged-patch coherence → **400** | n/a (no new route) |
 | **Web** | `InsuranceForm` validation surfaces | `FeeScheduleForm` constrains unit by type | `ClassForm` no longer renders rate inputs |
 
 E2E: none required for slice 4 (operator-portal only; renter-facing E2E starts slice 5 per proposal §6.1).
@@ -232,10 +237,12 @@ All green before merge: `bun run test` · `bun run lint` · `bun run --filter @k
 ## 9. Execution order & worktrees
 
 ```
-git worktree add ../kuruma-insurance -b feature/389a-insurance marketplace-pivot   # 4a
-git worktree add ../kuruma-fees      -b feature/389b-fees      marketplace-pivot   # 4b (parallel)
+# Branch from origin/marketplace-pivot — local marketplace-pivot lags remote (PR #408/#401).
+# `git fetch origin` first; or fast-forward local before branching.
+git worktree add ../kuruma-insurance -b feature/389a-insurance origin/marketplace-pivot   # 4a
+git worktree add ../kuruma-fees      -b feature/389b-fees      origin/marketplace-pivot   # 4b (parallel)
 # 4c after #388:
-git worktree add ../kuruma-pricing   -b feature/389c-pricing   marketplace-pivot
+git worktree add ../kuruma-pricing   -b feature/389c-pricing   origin/marketplace-pivot
 ```
 Within each: schema migration → validator (RED/GREEN per rule) → InMemory repo → service → routes → DI wire → Drizzle repo (integration) → web → i18n (restart dev) → review → rebase → PR (`Closes #389a` etc.).
 
@@ -258,7 +265,7 @@ Within each: schema migration → validator (RED/GREEN per rule) → InMemory re
 
 ## 11. Critical files
 
-**4a:** `validators/insurance-option.ts`, `repositories/{drizzle,in-memory}/insurance-option.ts`, `services/insurance-option.ts`, `routes/insurance-options.ts`, `modules/insurance/*`, `manage/[operatorSlug]/insurance/page.tsx`; modify `schema.ts`, `repositories/types.ts`, `index.ts`, `messages/{en,ja,zh}.json`, `BusinessSidebar.tsx`, `seed.ts`.
+**4a:** `validators/insurance-option.ts`, `repositories/{drizzle,in-memory}/insurance-option.ts`, `services/insurance-option.ts`, `routes/insurance-options.ts`, `modules/insurance/*`, `app/[locale]/(business)/manage/insurance/page.tsx` (flat); modify `schema.ts`, `repositories/types.ts`, `index.ts`, `messages/{en,ja,zh}.json`, `BusinessSidebar.tsx`, `seed.ts`.
 **4b:** same set for `fee-schedule` / `fees`.
 **4c:** modify `schema.ts` (drop columns+checks), `validators/vehicle-class.ts`, `services/vehicle-class.ts`, `modules/classes/components/ClassForm.tsx`; new drop migration.
 

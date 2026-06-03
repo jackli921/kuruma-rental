@@ -20,7 +20,7 @@ This is an **outbound-integration slice**: it adds a generic `EmailSender` port,
 | Not in slice 7 | Owned by | Why it matters |
 |---|---|---|
 | The booking DB transaction (availability validate → insert → first `booking_events` → fee snapshot) | **Slice 6 (#392)**, proposal §2 "Booking write boundary" + §10 item 14 | Slice 7 fires **after commit only**. We do not touch the transaction. |
-| `bookings.booking_code`, `requested_vehicle_id`, `assigned_vehicle_id`, `fee_snapshot`, `bookings.operatorId`, `booking_events` table | **Slice 6 (#392)**, proposal §5.1 step 4 + §9 item 3 | The notification payload reads these. **They are NOT on `marketplace-pivot` yet** (verified: `bookings` still has the legacy single-`vehicleId` shape). See §1 preconditions. |
+| `bookings.booking_code`, `requested_vehicle_id`, `assigned_vehicle_id`, `insurance_option_id`, `insurance_snapshot`, `fee_snapshot`, `bookings.operatorId`, `booking_events` table | **Slice 6 (#392)**, proposal §5.1 step 4 + §9 item 3 | The notification payload reads these. **They are NOT on `marketplace-pivot` yet** (verified: `bookings` still has the legacy single-`vehicleId` shape). See §1 preconditions. |
 | `operators.pre_auth_handoff_url` **column** | **Already merged (slice 1, #386)** | Verified present on `marketplace-pivot`. Slice 7 *consumes* it; does not add it. |
 | Renter cancellation UI / auto-charge of fees | Post-MVP (proposal §9 items 7/19) | Confirmation email lists a cancellation contact + "potential additional charges" informationally only. |
 | Operator-portal "manual resend" button beyond a basic action | This slice ships the API + a minimal portal surface; rich ops UI is slice 8 polish (proposal §8.2: "failed sends visible to operator with manual-resend button") |
@@ -31,7 +31,7 @@ This is an **outbound-integration slice**: it adds a generic `EmailSender` port,
 
 | Precondition | Why | Status 2026-06-02 |
 |---|---|---|
-| **Slice 6 (#392) merged to `marketplace-pivot`** | Slice 7's payload reads `booking_code`, `assigned_vehicle_id`, `fee_snapshot`, `bookings.operatorId`, and fires off the post-commit hook slice 6 introduces. **Hard dependency** (proposal §6 "Depends on Slice 6"). | **Not started.** `bookings` on `marketplace-pivot` is still the legacy shape — no `bookingCode`/`operatorId`/`feeSnapshot`/event log. **This slice cannot start until #392 lands.** |
+| **Slice 6 (#392) merged to `marketplace-pivot`** | Slice 7's payload reads `booking_code`, `assigned_vehicle_id`, selected `insurance_snapshot`, `fee_snapshot`, `bookings.operatorId`, and fires off the post-commit hook slice 6 introduces. **Hard dependency** (proposal §6 "Depends on Slice 6"). | **Not started.** `bookings` on `marketplace-pivot` is still the legacy shape — no `bookingCode`/`operatorId`/`insuranceSnapshot`/`feeSnapshot`/event log. **This slice cannot start until #392 lands.** |
 | `operators` table + `pre_auth_handoff_url` column | Confirmation page + email link out to it. | **Merged** (#386). `OperatorRepository` exists with `create`/`existsBySlug` only — slice 7 **adds `findById`** (§4). |
 | `CallerContext.operatorId` / `bypassScope` (#386/#401) | `notification_log` reads are operator-private (§6.2 scoping). | Merged on pivot. |
 | Resend account + `RESEND_API_KEY` secret provisioned | Adapter needs a key; absent → dev stub / prod sentinel (mirrors `GoogleTranslationProvider`). | Provision before the integration test against the real boundary; unit tests inject a fake `fetchFn`. |
@@ -249,7 +249,8 @@ All green before merge: `bun run test` · `bun run lint` · `bun run --filter @k
 ## 9. Execution order & worktree
 
 ```bash
-git worktree add ../kuruma-notifications -b feature/393-notifications-preauth marketplace-pivot
+# Branch from the remote pivot; local marketplace-pivot is known to lag.
+git worktree add ../kuruma-notifications -b feature/393-notifications-preauth origin/marketplace-pivot
 ```
 Within the worktree (TDD RED→GREEN per slice, one behavior at a time):
 1. `notification_log` migration → `db:verify` (3 green).
@@ -262,7 +263,7 @@ Within the worktree (TDD RED→GREEN per slice, one behavior at a time):
 8. `routes/notifications.ts` (list + resend).
 9. Web: confirmation-page selected-insurance summary + pre-auth CTA + potential-charges block + i18n keys (en/ja/zh, verify parity).
 10. E2E happy path.
-11. Review → rebase onto `marketplace-pivot` (regenerate migration if journal moved) → PR (`Closes #393`).
+11. Review → rebase onto `origin/marketplace-pivot` (regenerate migration if journal moved) → PR (`Closes #393`).
 
 ---
 

@@ -30,9 +30,9 @@ This is the **booking write-path rework**. It converts the legacy single-insert,
 | **Slice 4a (#389a — insurance options) merged to `marketplace-pivot`** | Slice 6 reads active `insurance_options` so the renter can pick one during booking and the booking can snapshot the selected option's name/price/deductible. | Plan landed (`docs/plans/2026-06-02-slice4-insurance-pricing-fees.md` §3); merge state TBC at kickoff |
 | **Slice 4b (#392 dep — fee schedules) merged to `marketplace-pivot`** | Slice 6 reads `fee_schedules` rows to build `bookings.fee_snapshot`. Without the table + its `feeType`/`unit`/`amountJpy`/`vehicleClassId` columns there is nothing to snapshot. | Plan landed (`docs/plans/2026-06-02-slice4-insurance-pricing-fees.md` §4); merge state TBC at kickoff |
 | **Slice 5 (#391 — storefront search + vehicle selection) merged** | Slice 6 is the **submit** for the vehicle the renter selected in slice 5's storefront-detail screen. Slice 5 owns "renter picks a concrete vehicle"; slice 6 owns "renter confirms that vehicle into a booking." Proposal §6 critical path: "5 and 6 can partially parallelize" — but the submit endpoint needs slice 5's vehicle-selection UI as its caller. | #391 |
-| **Slice 2 (#387 — locations) merged** | `bookings.pickup_location_id` + `dropoff_location_id` FKs (proposal §2 "Locations") and the substitution rule "same-operator, **same-location**" (§9 item 25) both require the `locations` table. Substitution's location check is unimplementable without it. | In progress (`feature/387-locations`); **HARD blocker** for slice 6 |
+| **Slice 2 (#387 — locations) merged** | `bookings.pickup_location_id` + `dropoff_location_id` FKs (proposal §2 "Locations") and the substitution rule "same-operator, **same-location**" (§9 item 25) both require the `locations` table. Substitution's location check is unimplementable without it. | In review (PR #414 → `marketplace-pivot`); **HARD blocker** for slice 6 |
 | **Slice 1 (#386 — tenancy) merged** | `CallerContext.operatorId` / `bypassScope`, `OPERATOR_*` roles, `operators` table. **Confirmed present on `marketplace-pivot`** (`packages/api/src/middleware/auth.ts` already exports `operatorId?`, `bypassScope?`, `OPERATOR_ROLES`, `SCOPE_BYPASS_ROLES`). | Merged |
-| **`#401` (drop operator fallback) merged** | Operator-scoped writes resolve `operatorId` from `ctx`, no `BEST_CAR_RENTAL_OPERATOR_ID` fallback (`memory/project_operator-2-gate`). Substitution + operator booking-list reads must obey this. | `feat/401-drop-operator-fallback`, not yet merged |
+| **`#401` (drop operator fallback) merged** | Operator-scoped writes resolve `operatorId` from `ctx`, no `BEST_CAR_RENTAL_OPERATOR_ID` fallback (`memory/project_operator-2-gate`). Substitution + operator booking-list reads must obey this. | Merged to `origin/marketplace-pivot` via PR #408. Branch from `origin/marketplace-pivot` or fast-forward local before kickoff. |
 
 If a contract name differs at kickoff, slice 6 adapts its own PR — never refactor a landed slice (`CLAUDE.md` "Stay in scope").
 
@@ -296,7 +296,8 @@ All green before merge: `bun run test` · `bun run lint` · `bun run --filter @k
 ## 9. Execution order & worktree
 
 ```
-git worktree add ../kuruma-booking-events -b feature/392-booking-event-log marketplace-pivot
+# Branch from the remote pivot; local marketplace-pivot is known to lag.
+git worktree add ../kuruma-booking-events -b feature/392-booking-event-log origin/marketplace-pivot
 ```
 
 Per `CLAUDE.md` Monorepo: fresh `bun install` + verify `tsc --noEmit` in the worktree. Order within the slice (vertical, RED→GREEN per cycle):

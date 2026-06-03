@@ -31,8 +31,8 @@ The demo target (proposal §6 row 3) is: *operator adds a Toyota Yaris in class 
 | Precondition | Why | Status 2026-06-02 |
 |---|---|---|
 | **#386 (slice 1 tenancy) merged to `marketplace-pivot`** | Slice 3 builds on `operators` table, `roleEnum` (`OPERATOR_OWNER`/`OPERATOR_STAFF`/`PLATFORM_ADMIN`), `vehicleClasses.operatorId` + `vehicles.operatorId` (NOT NULL FKs), the `vehicle_classes_operatorId_id_unique` composite key (#395), and `CallerContext.operatorId`/`bypassScope`. | `origin/marketplace-pivot` contains the slice-1/operator-scope commits; the local `marketplace-pivot` branch is stale at `main`. Create worktrees from `origin/marketplace-pivot` or fast-forward the local tracking branch before kickoff. |
-| **#401 (drop operator fallback) merged** | The write contract this slice extends: `resolveOperatorIdForWrite(ctx, inputOperatorId, operators)` in `packages/api/src/tenancy.ts` with single-operator inference + `OperatorRequiredError` (→ 422), **no `BEST_CAR_RENTAL` hardcode**. Building on the pre-#401 synchronous resolver bakes in a contract being removed (`memory/project_operator-2-gate`). | On `feat/401-drop-operator-fallback`, not yet merged |
-| **#387 (locations) merged** — for the WEB layer only | Slice-3 web reuses #387's `[operatorSlug]` layout + slug-resolution + `BusinessSidebar` conditional-link pattern. Class/vehicle backend has no #387 dependency. | In progress (`feature/387-locations`) |
+| **#401 (drop operator fallback) merged** | The write contract this slice extends: `resolveOperatorIdForWrite(ctx, inputOperatorId, operators)` in `packages/api/src/tenancy.ts` with single-operator inference + `OperatorRequiredError` (→ 422), **no `BEST_CAR_RENTAL` hardcode**. | Merged to `origin/marketplace-pivot` via PR #408. The local `marketplace-pivot` branch may still be stale; branch from `origin/marketplace-pivot` or fast-forward local before kickoff. |
+| **#387 (locations) merged** — for the WEB layer only | Slice-3 web reuses #387's flat `/manage/*` business portal gate + `BusinessSidebar` link pattern. Routing is JWT-scoped (`/manage/classes`) with **no `[operatorSlug]` segment**. Class/vehicle backend has no #387 dependency. | In review (PR #414 → `marketplace-pivot`) |
 
 If contract names differ at kickoff, this PR adapts — never refactor a landed slice.
 
@@ -52,7 +52,7 @@ Two *different* established shapes coexist; pick the right one per entity (per A
 
 **Validators** (`packages/shared/src/validators/`): `create<X>Schema` / `update<X>Schema = base.partial()`, cross-field via `.superRefine()`. Platform-admin create variants add `operatorId` (the class validator already extends `operatorId` optional per #401).
 
-**Web**: `packages/web/src/modules/classes/*` (`ClassForm`, `ClassList`, `AddClassDialog`, etc.) + `manage/[operatorSlug]/classes/page.tsx` (post-#387 layout). i18n namespace `business.classes.*`; a new `acriss.*` namespace for the code→label dictionary.
+**Web**: `packages/web/src/modules/classes/*` (`ClassForm`, `ClassList`, `AddClassDialog`, etc.) + flat `app/[locale]/(business)/manage/classes/page.tsx` (JWT-scoped, no `[operatorSlug]`). i18n namespace `business.classes.*`; a new `acriss.*` namespace for the code→label dictionary.
 
 ---
 
@@ -221,7 +221,8 @@ All green before merge:
 ## 9. Execution order & worktrees
 
 ```bash
-git worktree add ../kuruma-acriss -b feature/388-acriss-vehicle-crud marketplace-pivot
+# Branch from the remote pivot; local marketplace-pivot is known to lag.
+git worktree add ../kuruma-acriss -b feature/388-acriss-vehicle-crud origin/marketplace-pivot
 cd ../kuruma-acriss && bun install && bunx tsc --noEmit   # fresh-worktree hygiene (CLAUDE.md)
 ```
 
@@ -249,7 +250,7 @@ Conventional commits, small + focused. Never force-push; always rebase (`memory/
 | **Insurance options / fee schedules** | **Slice 4a/4b** | proposal §6 row 4 |
 | **Renter storefront search / per-class availability summaries / "from ¥X"** | **Slice 5** (#391) | proposal §6 row 5, §10 item 21 |
 | **Booking with requested/assigned vehicle, fee snapshot, exclusion constraint** | **Slice 6** (#392) | proposal §6 row 6, §10 item 14 |
-| **Locations CRUD + `vehicles.pickupLocationId` operational attach** | **Slice 2** (#387) — already merged | proposal §6 row 2 (column exists; bookings attach in slice 6) |
+| **Locations CRUD + `vehicles.pickupLocationId` operational attach** | **Slice 2** (#387) — PR #414 in review | proposal §6 row 2 (column exists on the slice-2 branch; bookings attach in slice 6) |
 | **Structural/positional ACRISS validation, full ACRISS table (~hundreds of codes)** | Post-MVP refinement | §2 reversibility ("rename labels"); MVP needs only the seed subset |
 | **Sha-ken expiry reminder UX** | Post-MVP | proposal §9 item 8 ("data column required now; reminder UX is post-MVP" — column already exists) |
 
@@ -289,4 +290,4 @@ Conventional commits, small + focused. Never force-push; always rebase (`memory/
 
 ## 14. Review log
 
-**v1 (2026-06-02)** — initial draft. Grounded against merged `feat/401-drop-operator-fallback` + `feature/387-locations` code (tenancy.ts, vehicle/class repos, routes, validators, seed, ClassForm). Key finding surfaced: plate/shaken/vehicle-operator-scoping already merged; net-new = `acrissCode` on `vehicle_classes` + taxonomy seed + i18n. Awaiting reviewer green light.
+**v1 (2026-06-02)** — initial draft. Grounded against `origin/marketplace-pivot` + PR #414 slice-2 code (tenancy.ts, vehicle/class repos, routes, validators, seed, ClassForm). Key finding surfaced: plate/shaken/vehicle-operator-scoping already merged; net-new = `acrissCode` on `vehicle_classes` + taxonomy seed + i18n. Awaiting reviewer green light.
