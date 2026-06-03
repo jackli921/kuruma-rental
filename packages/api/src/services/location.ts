@@ -1,4 +1,5 @@
 import type { CallerContext } from '../middleware/auth'
+import { PG_ERROR, pgErrorCode } from '../pg-errors'
 import type { Location, LocationFilters, LocationRepository } from '../repositories/types'
 
 export type LocationResult =
@@ -7,6 +8,8 @@ export type LocationResult =
 
 const DUPLICATE_NAME_MESSAGE = 'A location with this name already exists'
 const NOT_FOUND_MESSAGE = 'Location not found'
+
+const isDuplicateName = (err: unknown): boolean => pgErrorCode(err) === PG_ERROR.UNIQUE_VIOLATION
 
 export class LocationService {
   constructor(private readonly repo: LocationRepository) {}
@@ -31,8 +34,16 @@ export class LocationService {
     const duplicate = await this.repo.findByOperatorAndName(data.operatorId, data.name)
     if (duplicate) return { ok: false, error: DUPLICATE_NAME_MESSAGE, status: 409 }
 
-    const location = await this.repo.create(data)
-    return { ok: true, location }
+    // The pre-check is a UX nicety; the unique constraint is the real seal.
+    // A concurrent insert can win the race after the check passes, so map the
+    // resulting unique-violation to the same friendly 409 instead of a 500.
+    try {
+      const location = await this.repo.create(data)
+      return { ok: true, location }
+    } catch (err) {
+      if (isDuplicateName(err)) return { ok: false, error: DUPLICATE_NAME_MESSAGE, status: 409 }
+      throw err
+    }
   }
 
   async update(ctx: CallerContext, id: string, data: Partial<Location>): Promise<LocationResult> {
@@ -49,9 +60,16 @@ export class LocationService {
       }
     }
 
-    const updated = await this.repo.update(id, data)
-    if (!updated) return { ok: false, error: NOT_FOUND_MESSAGE, status: 404 }
-    return { ok: true, location: updated }
+    try {
+      const updated = await this.repo.update(id, data)
+      if (!updated) return { ok: false, error: NOT_FOUND_MESSAGE, status: 404 }
+      return { ok: true, location: updated }
+    } catch (err) {
+      // Same lost-race seal as create: a concurrent rename onto this name maps
+      // to a friendly 409 rather than surfacing the raw unique-violation.
+      if (isDuplicateName(err)) return { ok: false, error: DUPLICATE_NAME_MESSAGE, status: 409 }
+      throw err
+    }
   }
 
   async archive(ctx: CallerContext, id: string): Promise<LocationResult> {

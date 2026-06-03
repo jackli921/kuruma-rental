@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it } from 'vitest'
 import { type CallerContext, PUBLIC_CONTEXT, SYSTEM_CONTEXT } from '../../src/middleware/auth'
+import { PG_ERROR } from '../../src/pg-errors'
 import { InMemoryLocationRepository } from '../../src/repositories/in-memory'
 import type { Location } from '../../src/stores'
 
@@ -41,6 +42,20 @@ describe('InMemoryLocationRepository', () => {
         locationInput({ operatingHours: { openTime: '09:00', closeTime: '20:00' } }),
       )
       expect(created.operatingHours).toEqual({ openTime: '09:00', closeTime: '20:00' })
+    })
+
+    it('throws a unique-violation on a duplicate operator+name (mirrors the DB seal)', async () => {
+      await repo.create(locationInput({ operatorId: 'op_a', name: 'Namba' }))
+      await expect(
+        repo.create(locationInput({ operatorId: 'op_a', name: 'Namba' })),
+      ).rejects.toMatchObject({ code: PG_ERROR.UNIQUE_VIOLATION })
+    })
+
+    it('allows the same name under a different operator', async () => {
+      await repo.create(locationInput({ operatorId: 'op_a', name: 'Namba' }))
+      await expect(
+        repo.create(locationInput({ operatorId: 'op_b', name: 'Namba' })),
+      ).resolves.toMatchObject({ name: 'Namba' })
     })
   })
 
@@ -103,6 +118,14 @@ describe('InMemoryLocationRepository', () => {
 
     it('returns undefined for missing id', async () => {
       expect(await repo.update('nonexistent', { name: 'Nope' })).toBeUndefined()
+    })
+
+    it('throws a unique-violation when renaming onto another row in the same operator', async () => {
+      const a = await repo.create(locationInput({ operatorId: 'op_a', name: 'Namba' }))
+      await repo.create(locationInput({ operatorId: 'op_a', name: 'Umeda' }))
+      await expect(repo.update(a.id, { name: 'Umeda' })).rejects.toMatchObject({
+        code: PG_ERROR.UNIQUE_VIOLATION,
+      })
     })
   })
 

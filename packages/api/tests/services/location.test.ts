@@ -1,7 +1,13 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { CallerContext } from '../../src/middleware/auth'
+import { PG_ERROR } from '../../src/pg-errors'
 import { InMemoryLocationRepository } from '../../src/repositories/in-memory'
 import { LocationService } from '../../src/services/location'
+
+const uniqueViolation = () =>
+  Object.assign(new Error('duplicate key value violates unique constraint'), {
+    code: PG_ERROR.UNIQUE_VIOLATION,
+  })
 
 const opA = 'op_a'
 const opB = 'op_b'
@@ -55,6 +61,19 @@ describe('LocationService', () => {
       await service.create(ctxFor(opA), createInput(opA, 'Namba'))
       const result = await service.create(ctxFor(opB), createInput(opB, 'Namba'))
       expect(result.ok).toBe(true)
+    })
+
+    it('maps a unique-violation that slips past the pre-check (lost race) to 409', async () => {
+      // The pre-check sees no duplicate, but a concurrent insert wins the race
+      // and the DB unique constraint fires. The service must surface the
+      // friendly 409 rather than let the raw error escape as a 500.
+      vi.spyOn(repo, 'findByOperatorAndName').mockResolvedValue(undefined)
+      vi.spyOn(repo, 'create').mockRejectedValue(uniqueViolation())
+
+      const result = await service.create(ctxFor(opA), createInput(opA, 'Namba'))
+
+      expect(result.ok).toBe(false)
+      if (!result.ok) expect(result.status).toBe(409)
     })
   })
 
@@ -113,6 +132,20 @@ describe('LocationService', () => {
 
       expect(result.ok).toBe(true)
       if (result.ok) expect(result.location.name).toBe('Namba South')
+    })
+
+    it('maps a unique-violation on rename that slips past the pre-check to 409', async () => {
+      const created = await service.create(ctxFor(opA), createInput(opA, 'Namba'))
+      if (!created.ok) throw new Error('seed failed')
+
+      // Pre-check passes, but the concurrent rename collides at the DB.
+      vi.spyOn(repo, 'findByOperatorAndName').mockResolvedValue(undefined)
+      vi.spyOn(repo, 'update').mockRejectedValue(uniqueViolation())
+
+      const result = await service.update(ctxFor(opA), created.location.id, { name: 'Umeda' })
+
+      expect(result.ok).toBe(false)
+      if (!result.ok) expect(result.status).toBe(409)
     })
   })
 
