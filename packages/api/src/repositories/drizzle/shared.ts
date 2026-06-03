@@ -2,6 +2,7 @@ import type { Column } from 'drizzle-orm'
 import type { getDb } from '@kuruma/shared/db'
 import {
   bookings,
+  locations,
   maintenanceLogs,
   messages,
   threadParticipants,
@@ -12,6 +13,7 @@ import {
 import type { VehicleDetailBooking } from '@kuruma/shared/types/vehicle-detail'
 import type {
   Booking,
+  Location,
   MaintenanceLog,
   Message,
   Thread,
@@ -67,6 +69,19 @@ export const vehicleColumns = {
   insuranceExpiryDate: vehicles.insuranceExpiryDate,
   createdAt: vehicles.createdAt,
   updatedAt: vehicles.updatedAt,
+}
+
+export const locationColumns = {
+  id: locations.id,
+  operatorId: locations.operatorId,
+  name: locations.name,
+  address: locations.address,
+  operatingHours: locations.operatingHours,
+  timezone: locations.timezone,
+  defaultTurnaroundMinutes: locations.defaultTurnaroundMinutes,
+  status: locations.status,
+  createdAt: locations.createdAt,
+  updatedAt: locations.updatedAt,
 }
 
 export const bookingColumns = {
@@ -158,6 +173,7 @@ type ColumnRow<T extends Record<string, Column>> = {
 
 type VehicleClassRow = ColumnRow<typeof vehicleClassColumns>
 type VehicleRow = ColumnRow<typeof vehicleColumns>
+type LocationRow = ColumnRow<typeof locationColumns>
 type BookingRow = ColumnRow<typeof bookingColumns>
 type ThreadRow = ColumnRow<typeof threadColumns>
 type ThreadParticipantRow = ColumnRow<typeof participantColumns>
@@ -178,6 +194,21 @@ export function toVehicleClass(r: VehicleClassRow): VehicleClass {
     dailyRateJpy: r.dailyRateJpy,
     hourlyRateJpy: r.hourlyRateJpy,
     sortOrder: r.sortOrder,
+    status: r.status,
+    createdAt: r.createdAt,
+    updatedAt: r.updatedAt,
+  }
+}
+
+export function toLocation(r: LocationRow): Location {
+  return {
+    id: r.id,
+    operatorId: r.operatorId,
+    name: r.name,
+    address: r.address,
+    operatingHours: r.operatingHours,
+    timezone: r.timezone,
+    defaultTurnaroundMinutes: r.defaultTurnaroundMinutes,
     status: r.status,
     createdAt: r.createdAt,
     updatedAt: r.updatedAt,
