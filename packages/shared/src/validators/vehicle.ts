@@ -50,29 +50,38 @@ const vehicleObjectSchema = z.object({
   color: z.string().trim().nullish(),
 })
 
-export const createVehicleSchema = vehicleObjectSchema.superRefine((data, ctx) => {
-  if (data.dailyRateJpy == null && data.hourlyRateJpy == null) {
-    ctx.addIssue({
-      code: z.ZodIssueCode.custom,
-      path: ['dailyRateJpy'],
-      message: 'At least one rate (daily or hourly) is required',
-    })
-  }
+export const createVehicleSchema = vehicleObjectSchema
+  .extend({
+    // #401: a non-operator (platform/legacy admin) caller may name the target
+    // operator. OPERATOR_* callers' tenant comes from their token and this is
+    // ignored for them. Optional — omit when exactly one operator exists.
+    // `operators.id` is text (e.g. the seeded `op_best_car_rental`), not a UUID;
+    // existence is enforced by the DB FK (23503 -> 422), not here.
+    operatorId: z.string().min(1, 'Operator ID must not be empty').optional(),
+  })
+  .superRefine((data, ctx) => {
+    if (data.dailyRateJpy == null && data.hourlyRateJpy == null) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['dailyRateJpy'],
+        message: 'At least one rate (daily or hourly) is required',
+      })
+    }
 
-  // Issue #50: if both rental bounds are set, min must be <= max. Otherwise
-  // the owner could create a vehicle nobody can book ("min 10h, max 5h").
-  // Enforced here rather than on the column so each field can still be
-  // optional independently.
-  const min = data.minRentalHours
-  const max = data.maxRentalHours
-  if (min != null && max != null && min > max) {
-    ctx.addIssue({
-      code: z.ZodIssueCode.custom,
-      path: ['maxRentalHours'],
-      message: 'Maximum rental hours must be greater than or equal to minimum',
-    })
-  }
-})
+    // Issue #50: if both rental bounds are set, min must be <= max. Otherwise
+    // the owner could create a vehicle nobody can book ("min 10h, max 5h").
+    // Enforced here rather than on the column so each field can still be
+    // optional independently.
+    const min = data.minRentalHours
+    const max = data.maxRentalHours
+    if (min != null && max != null && min > max) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['maxRentalHours'],
+        message: 'Maximum rental hours must be greater than or equal to minimum',
+      })
+    }
+  })
 
 export const updateVehicleSchema = vehicleObjectSchema.partial().superRefine((data, ctx) => {
   // Only check when both rate keys are present in the patch — a patch with

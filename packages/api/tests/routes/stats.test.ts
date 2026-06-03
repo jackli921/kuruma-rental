@@ -8,6 +8,7 @@ import {
   InMemoryVehicleRepository,
 } from '../../src/repositories/in-memory'
 import { authHeaders, setupAuthEnv } from '../helpers/auth'
+import { seededOperatorRepo } from '../helpers/operator'
 
 const TEST_API_KEY = 'test-stats-key'
 
@@ -40,6 +41,7 @@ async function createTestApp() {
       availabilityRepo,
       statsRepo,
       vehicleClassRepo,
+      operatorRepo: seededOperatorRepo(),
     }),
     vehicleRepo,
     bookingRepo,

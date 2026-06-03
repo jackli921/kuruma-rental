@@ -8,6 +8,7 @@ import {
   InMemoryVehicleRepository,
 } from '../../src/repositories/in-memory'
 import { authHeaders, setupAuthEnv } from '../helpers/auth'
+import { seededOperatorRepo } from '../helpers/operator'
 
 function futureDate(hoursFromNow: number): string {
   const d = new Date()
@@ -38,7 +39,13 @@ async function createTestApp() {
     status: 'ACTIVE',
   })
   return {
-    app: createApp({ vehicleRepo, bookingRepo, availabilityRepo, vehicleClassRepo }),
+    app: createApp({
+      vehicleRepo,
+      bookingRepo,
+      availabilityRepo,
+      vehicleClassRepo,
+      operatorRepo: seededOperatorRepo(),
+    }),
     vehicleRepo,
     classId: klass.id,
   }

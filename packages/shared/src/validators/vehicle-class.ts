@@ -23,15 +23,24 @@ const vehicleClassObjectSchema = z.object({
   sortOrder: z.number().int().min(0).default(0),
 })
 
-export const createVehicleClassSchema = vehicleClassObjectSchema.superRefine((data, ctx) => {
-  if (data.dailyRateJpy == null && data.hourlyRateJpy == null) {
-    ctx.addIssue({
-      code: z.ZodIssueCode.custom,
-      path: ['dailyRateJpy'],
-      message: 'At least one rate (daily or hourly) is required',
-    })
-  }
-})
+export const createVehicleClassSchema = vehicleClassObjectSchema
+  .extend({
+    // #401: a non-operator (platform/legacy admin) caller may name the target
+    // operator. OPERATOR_* callers' tenant comes from their token and this is
+    // ignored for them. Optional — omit when exactly one operator exists.
+    // `operators.id` is text (e.g. the seeded `op_best_car_rental`), not a UUID;
+    // existence is enforced by the DB FK (23503 -> 422), not here.
+    operatorId: z.string().min(1, 'Operator ID must not be empty').optional(),
+  })
+  .superRefine((data, ctx) => {
+    if (data.dailyRateJpy == null && data.hourlyRateJpy == null) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['dailyRateJpy'],
+        message: 'At least one rate (daily or hourly) is required',
+      })
+    }
+  })
 
 export const updateVehicleClassSchema = vehicleClassObjectSchema
   .partial()

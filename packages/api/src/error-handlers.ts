@@ -1,6 +1,6 @@
 import type { Hono } from 'hono'
 import { HTTPException } from 'hono/http-exception'
-import { ForbiddenError } from './middleware/auth'
+import { ForbiddenError, OperatorRequiredError } from './middleware/auth'
 
 export function setupGlobalHandlers(app: Hono): void {
   app.onError((err, c) => {
@@ -16,6 +16,11 @@ export function setupGlobalHandlers(app: Hono): void {
     // clients see a policy denial, not a server outage.
     if (err instanceof ForbiddenError) {
       return c.json({ success: false, error: 'Forbidden' }, 403)
+    }
+    // A non-operator write that named no target operator and could not be
+    // inferred (zero or 2+ operators). Well-formed but unprocessable (#401).
+    if (err instanceof OperatorRequiredError) {
+      return c.json({ success: false, error: err.message }, 422)
     }
     console.error(
       JSON.stringify({

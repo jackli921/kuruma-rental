@@ -1,3 +1,4 @@
+import { BEST_CAR_RENTAL_OPERATOR_ID } from '@kuruma/shared/db/constants'
 import { users } from '@kuruma/shared/db/schema'
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest'
 import { createApp } from '../../src/index'
@@ -50,6 +51,7 @@ beforeAll(async () => {
   createdClassIds.push(klass.id)
 
   testVehicle = await vehicleRepo.create(SYSTEM_CONTEXT, {
+    operatorId: BEST_CAR_RENTAL_OPERATOR_ID,
     classId: testClassId,
     name: 'Booking Test Car',
     description: null,
@@ -189,6 +191,7 @@ describe('DrizzleBookingRepository', () => {
 
   it('findAll filters by vehicleId', async () => {
     const otherVehicle = await vehicleRepo.create(SYSTEM_CONTEXT, {
+      operatorId: BEST_CAR_RENTAL_OPERATOR_ID,
       classId: testClassId,
       name: 'Other Car',
       description: null,
@@ -471,6 +474,7 @@ describe('POST /bookings overlap via HTTP (real Postgres)', () => {
     const httpVehicleClassRepo = new DrizzleVehicleClassRepository(db)
 
     httpVehicle = await httpVehicleRepo.create(SYSTEM_CONTEXT, {
+      operatorId: BEST_CAR_RENTAL_OPERATOR_ID,
       classId: testClassId,
       name: 'HTTP Overlap Test Car',
       description: null,

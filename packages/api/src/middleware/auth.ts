@@ -167,6 +167,21 @@ export class ForbiddenError extends Error {
 }
 
 /**
+ * Thrown when a non-operator caller (PLATFORM_ADMIN / legacy STAFF / ADMIN) tries
+ * to create tenant-owned inventory without naming a target operator, and the
+ * target cannot be inferred (zero or 2+ operators exist). Replaces the old
+ * silent Best-Car-Rental default (#401) so a legacy admin write can no longer be
+ * misattributed once a second operator exists. Mapped to 422 by the global
+ * handler — the request is well-formed but missing a required `operatorId`.
+ */
+export class OperatorRequiredError extends Error {
+  readonly name = 'OperatorRequiredError'
+  constructor(message = 'operatorId is required') {
+    super(message)
+  }
+}
+
+/**
  * Repo-layer guard for fleet mutation methods. Admits STAFF roles and
  * tenant-scoped operators (`FLEET_WRITE_ROLES`); a tenant-scoped caller missing
  * its operatorId fails closed via `requireOperatorScope`. Defence in depth

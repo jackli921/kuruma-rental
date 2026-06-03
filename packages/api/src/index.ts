@@ -84,6 +84,7 @@ import { VehicleClassService } from './services/vehicle-class'
 import { VehicleClassAvailabilityService } from './services/vehicle-class-availability'
 import { VehicleDetailService } from './services/vehicle-detail'
 import { VehiclePhotoService } from './services/vehicle-photo'
+import { type ResolveWriteOperatorId, resolveOperatorIdForWrite } from './tenancy'
 
 export function createApp(overrides?: {
   vehicleRepo: VehicleRepository
@@ -311,6 +312,10 @@ export function createApp(overrides?: {
   const fleetOverviewService = new FleetOverviewService(fleetOverviewRepo)
   const vehicleDetailService = new VehicleDetailService(vehicleDetailRepo)
   const operatorService = new OperatorService(operatorRepo)
+  // #401: bind the write-operator resolver to the concrete operator lookup, so
+  // the write routes resolve the target tenant without importing a repository.
+  const resolveWriteOperatorId: ResolveWriteOperatorId = (ctx, inputOperatorId) =>
+    resolveOperatorIdForWrite(ctx, inputOperatorId, operatorRepo)
 
   // Chain .route() calls so TypeScript infers the full route type tree.
   // hc<AppType> needs this to produce typed client methods.
@@ -323,10 +328,11 @@ export function createApp(overrides?: {
       createVehicleClassRoutes(
         vehicleClassService,
         vehicleClassAvailabilityService,
+        resolveWriteOperatorId,
         publicCatalogLimiter,
       ),
     )
-    .route('/', createVehicleRoutes(vehicleRepo, maintenanceService))
+    .route('/', createVehicleRoutes(vehicleRepo, maintenanceService, resolveWriteOperatorId))
     .route(
       '/',
       createVehiclePhotoRoutes(

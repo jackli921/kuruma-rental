@@ -1,3 +1,4 @@
+import { BEST_CAR_RENTAL_OPERATOR_ID } from '@kuruma/shared/db/constants'
 import { afterEach, describe, expect, it } from 'vitest'
 import { SYSTEM_CONTEXT } from '../../src/middleware/auth'
 import { DrizzleVehicleRepository } from '../../src/repositories/drizzle'
@@ -14,6 +15,7 @@ afterEach(async () => {
 describe('DrizzleVehicleRepository', () => {
   it('create inserts and returns a vehicle with correct fields', async () => {
     const input = {
+      operatorId: BEST_CAR_RENTAL_OPERATOR_ID,
       name: 'Test Corolla',
       description: 'A test vehicle',
       seats: 5,
@@ -51,6 +53,7 @@ describe('DrizzleVehicleRepository', () => {
 
   it('findById retrieves a created vehicle', async () => {
     const created = await repo.create(SYSTEM_CONTEXT, {
+      operatorId: BEST_CAR_RENTAL_OPERATOR_ID,
       name: 'Findable Car',
       description: null,
       seats: 4,
@@ -88,6 +91,7 @@ describe('DrizzleVehicleRepository', () => {
 
   it('findAll returns all vehicles and filters by status', async () => {
     const available = await repo.create(SYSTEM_CONTEXT, {
+      operatorId: BEST_CAR_RENTAL_OPERATOR_ID,
       name: 'Available Car',
       description: null,
       seats: 5,
@@ -106,6 +110,7 @@ describe('DrizzleVehicleRepository', () => {
     createdIds.push(available.id)
 
     const maintenance = await repo.create(SYSTEM_CONTEXT, {
+      operatorId: BEST_CAR_RENTAL_OPERATOR_ID,
       name: 'Maintenance Car',
       description: null,
       seats: 4,
@@ -138,6 +143,7 @@ describe('DrizzleVehicleRepository', () => {
 
   it('update modifies specified fields and preserves others', async () => {
     const created = await repo.create(SYSTEM_CONTEXT, {
+      operatorId: BEST_CAR_RENTAL_OPERATOR_ID,
       name: 'Original Name',
       description: 'Original desc',
       seats: 5,
@@ -182,6 +188,7 @@ describe('DrizzleVehicleRepository', () => {
 
   it('softDelete sets status to RETIRED', async () => {
     const created = await repo.create(SYSTEM_CONTEXT, {
+      operatorId: BEST_CAR_RENTAL_OPERATOR_ID,
       name: 'To Be Retired',
       description: null,
       seats: 4,

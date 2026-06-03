@@ -10,6 +10,7 @@ import type { RunInTransaction } from '../../src/repositories/types'
 import { createVehicleRoutes } from '../../src/routes/vehicles'
 import { MaintenanceService } from '../../src/services/maintenance'
 import { testAuthMiddleware } from '../helpers/auth'
+import { testResolveWriteOperatorId } from '../helpers/operator'
 
 let app: Hono
 
@@ -43,7 +44,7 @@ describe('Vehicle CRUD Routes', () => {
     const maintenanceService = new MaintenanceService(repo, maintenanceLogRepo, runInTransaction)
     app = new Hono()
     app.use('*', testAuthMiddleware('staff-user', 'STAFF'))
-    app.route('/', createVehicleRoutes(repo, maintenanceService))
+    app.route('/', createVehicleRoutes(repo, maintenanceService, testResolveWriteOperatorId()))
   })
 
   describe('GET /vehicles', () => {
@@ -706,7 +707,12 @@ describe('Vehicle CRUD Routes', () => {
     const OP_A = 'operator-aaaaaaaa'
     const OP_B = 'operator-bbbbbbbb'
 
-    function mountFor(repo: InMemoryVehicleRepository, role: UserRole, operatorId?: string) {
+    function mountFor(
+      repo: InMemoryVehicleRepository,
+      role: UserRole,
+      operatorId?: string,
+      resolve = testResolveWriteOperatorId(),
+    ) {
       const maintenanceLogRepo = new InMemoryMaintenanceLogRepository()
       const runInTransaction: RunInTransaction = async (fn) =>
         fn({ vehicleRepo: repo, maintenanceLogRepo })
@@ -714,7 +720,7 @@ describe('Vehicle CRUD Routes', () => {
       const a = new Hono()
       setupGlobalHandlers(a)
       a.use('*', testAuthMiddleware(`${role}-user`, role, operatorId))
-      a.route('/', createVehicleRoutes(repo, maintenanceService))
+      a.route('/', createVehicleRoutes(repo, maintenanceService, resolve))
       return a
     }
 
@@ -781,6 +787,59 @@ describe('Vehicle CRUD Routes', () => {
       const res = await post(mountFor(repo, 'OPERATOR_OWNER'))
 
       expect(res.status).toBe(403)
+    })
+  })
+
+  // #401: a non-operator caller (PLATFORM_ADMIN / legacy STAFF / ADMIN) must name
+  // the target operator — explicitly, or implicitly when exactly one operator
+  // exists. The old silent Best-Car-Rental default is gone.
+  describe('Non-operator write-operator resolution (#401)', () => {
+    const SOME_OPERATOR = 'op_explicit_target'
+
+    function mountStaff(repo: InMemoryVehicleRepository, resolve = testResolveWriteOperatorId()) {
+      const maintenanceLogRepo = new InMemoryMaintenanceLogRepository()
+      const runInTransaction: RunInTransaction = async (fn) =>
+        fn({ vehicleRepo: repo, maintenanceLogRepo })
+      const maintenanceService = new MaintenanceService(repo, maintenanceLogRepo, runInTransaction)
+      const a = new Hono()
+      setupGlobalHandlers(a)
+      a.use('*', testAuthMiddleware('staff-user', 'STAFF'))
+      a.route('/', createVehicleRoutes(repo, maintenanceService, resolve))
+      return a
+    }
+
+    function postVehicle(a: Hono, input: Record<string, unknown> = validVehicleInput()) {
+      return a.request('/vehicles', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(input),
+      })
+    }
+
+    it('infers the sole operator for a legacy STAFF create when exactly one exists', async () => {
+      const repo = new InMemoryVehicleRepository()
+      const res = await postVehicle(mountStaff(repo, testResolveWriteOperatorId('op_only')))
+
+      expect(res.status).toBe(201)
+      expect((await res.json()).data.operatorId).toBe('op_only')
+    })
+
+    it('honours an explicit operatorId in the body even when inference is ambiguous', async () => {
+      const repo = new InMemoryVehicleRepository()
+      const res = await postVehicle(mountStaff(repo, testResolveWriteOperatorId(null)), {
+        ...validVehicleInput(),
+        operatorId: SOME_OPERATOR,
+      })
+
+      expect(res.status).toBe(201)
+      expect((await res.json()).data.operatorId).toBe(SOME_OPERATOR)
+    })
+
+    it('rejects with 422 when no operatorId is given and there is not exactly one operator', async () => {
+      const repo = new InMemoryVehicleRepository()
+      const res = await postVehicle(mountStaff(repo, testResolveWriteOperatorId(null)))
+
+      expect(res.status).toBe(422)
     })
   })
 })

@@ -11,14 +11,16 @@ import {
   requireUser,
   toCallerContext,
 } from '../middleware/auth'
+import { PG_ERROR, pgErrorCode } from '../pg-errors'
 import type { VehicleClassService } from '../services/vehicle-class'
 import type { VehicleClassAvailabilityService } from '../services/vehicle-class-availability'
-import { resolveOperatorIdForWrite } from '../tenancy'
+import type { ResolveWriteOperatorId } from '../tenancy'
 import { cachePublic, fail, ok, parseBody, parseDateRange, stripUndefined } from './helpers'
 
 export function createVehicleClassRoutes(
   service: VehicleClassService,
   availabilityService: VehicleClassAvailabilityService,
+  resolveWriteOperatorId: ResolveWriteOperatorId,
   publicCatalogLimiter?: RateLimitBinding,
 ) {
   const app = new Hono()
@@ -93,26 +95,38 @@ export function createVehicleClassRoutes(
         if (!parsed.ok) return parsed.response
 
         const d = parsed.data
-        const result = await service.create(toCallerContext(user), {
-          // Transitional: legacy STAFF/ADMIN writes attach to the default
-          // operator until operator-portal write flows land (#386).
-          operatorId: resolveOperatorIdForWrite(toCallerContext(user)),
-          name: d.name,
-          slug: d.slug,
-          description: d.description ?? null,
-          photos: d.photos,
-          seats: d.seats,
-          luggageCapacity: d.luggageCapacity,
-          transmission: d.transmission,
-          fuelType: d.fuelType ?? null,
-          dailyRateJpy: d.dailyRateJpy ?? null,
-          hourlyRateJpy: d.hourlyRateJpy ?? null,
-          sortOrder: d.sortOrder,
-          status: 'ACTIVE',
-        })
+        const ctx = toCallerContext(user)
+        // Resolve the target tenant before the create; a missing/ambiguous
+        // operatorId (#401) throws to the global handler as 403/422.
+        const operatorId = await resolveWriteOperatorId(ctx, d.operatorId)
+        try {
+          const result = await service.create(ctx, {
+            operatorId,
+            name: d.name,
+            slug: d.slug,
+            description: d.description ?? null,
+            photos: d.photos,
+            seats: d.seats,
+            luggageCapacity: d.luggageCapacity,
+            transmission: d.transmission,
+            fuelType: d.fuelType ?? null,
+            dailyRateJpy: d.dailyRateJpy ?? null,
+            hourlyRateJpy: d.hourlyRateJpy ?? null,
+            sortOrder: d.sortOrder,
+            status: 'ACTIVE',
+          })
 
-        if (!result.ok) return fail(c, result.error, result.status)
-        return ok(c, result.vehicleClass, 201)
+          if (!result.ok) return fail(c, result.error, result.status)
+          return ok(c, result.vehicleClass, 201)
+        } catch (err) {
+          // #400: vehicleClasses.operatorId -> operators is the only FK a create
+          // can violate. An unknown operatorId rejects at the DB (23503); surface
+          // it as 422, not a raw 500.
+          if (pgErrorCode(err) === PG_ERROR.FOREIGN_KEY_VIOLATION) {
+            return fail(c, 'Invalid operator', 422)
+          }
+          throw err
+        }
       })
       .patch('/vehicle-classes/:id', async (c) => {
         const user = requireUser(c)

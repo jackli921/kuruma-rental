@@ -1,3 +1,4 @@
+import { BEST_CAR_RENTAL_OPERATOR_ID } from '@kuruma/shared/db/constants'
 import { users } from '@kuruma/shared/db/schema'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { type CallerContext, SYSTEM_CONTEXT } from '../../src/middleware/auth'
@@ -69,6 +70,7 @@ beforeAll(async () => {
   createdClassIds.push(klass.id)
 
   vehicle = await vehicleRepo.create(SYSTEM_CONTEXT, {
+    operatorId: BEST_CAR_RENTAL_OPERATOR_ID,
     classId: testClassId,
     name: 'RLS Test Car',
     description: null,

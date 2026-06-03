@@ -6,15 +6,24 @@ import {
 } from '@kuruma/shared/validators/vehicle'
 import { Hono } from 'hono'
 import { FLEET_WRITE_ROLES, requireUser, toCallerContext } from '../middleware/auth'
-import { PG_ERROR, pgErrorCode } from '../pg-errors'
+import { PG_ERROR, VEHICLES_CLASS_FK, pgConstraintName, pgErrorCode } from '../pg-errors'
 import type { Vehicle, VehicleFilters, VehicleRepository } from '../repositories/types'
 import type { MaintenanceService } from '../services/maintenance'
-import { resolveOperatorIdForWrite } from '../tenancy'
+import type { ResolveWriteOperatorId } from '../tenancy'
 import { fail, ok, parseBody, parsePagination, stripUndefined } from './helpers'
+
+// #400: vehicles carries two FKs — the composite (operatorId, classId) ->
+// vehicle_classes (classId guard) and the single operatorId -> operators. Map
+// each 23503 to the cause that actually failed so a bad operatorId isn't
+// reported as "Invalid vehicle class".
+function fkViolationMessage(err: unknown): string {
+  return pgConstraintName(err) === VEHICLES_CLASS_FK ? 'Invalid vehicle class' : 'Invalid operator'
+}
 
 export function createVehicleRoutes(
   repo: VehicleRepository,
   maintenanceService: MaintenanceService,
+  resolveWriteOperatorId: ResolveWriteOperatorId,
 ) {
   return new Hono()
     .get('/vehicles', async (c) => {
@@ -44,11 +53,14 @@ export function createVehicleRoutes(
       const parsed = await parseBody(c, createVehicleSchema)
       if (!parsed.ok) return parsed.response
 
+      // Resolve the target tenant before the insert so a missing/ambiguous
+      // operatorId (#401) surfaces as 403/422 from the global handler rather
+      // than as a caught DB error below.
+      const operatorId = await resolveWriteOperatorId(ctx, parsed.data.operatorId)
+
       try {
         const vehicle = await repo.create(ctx, {
-          // Transitional: legacy STAFF/ADMIN writes attach to the default
-          // operator until operator-portal write flows land (#386).
-          operatorId: resolveOperatorIdForWrite(ctx),
+          operatorId,
           classId: parsed.data.classId ?? null,
           name: parsed.data.name,
           description: parsed.data.description ?? null,
@@ -76,6 +88,12 @@ export function createVehicleRoutes(
       } catch (err) {
         if (pgErrorCode(err) === PG_ERROR.UNIQUE_VIOLATION) {
           return fail(c, 'License plate already in use', 409)
+        }
+        // #400: a FK violation (unknown/cross-tenant classId, or unknown
+        // operatorId) is a client error, not a server fault — map to 422 with
+        // the cause that actually failed.
+        if (pgErrorCode(err) === PG_ERROR.FOREIGN_KEY_VIOLATION) {
+          return fail(c, fkViolationMessage(err), 422)
         }
         throw err
       }
@@ -166,6 +184,12 @@ export function createVehicleRoutes(
       } catch (err) {
         if (pgErrorCode(err) === PG_ERROR.UNIQUE_VIOLATION) {
           return fail(c, 'License plate already in use', 409)
+        }
+        // #400: a FK violation (unknown/cross-tenant classId, or unknown
+        // operatorId) is a client error, not a server fault — map to 422 with
+        // the cause that actually failed.
+        if (pgErrorCode(err) === PG_ERROR.FOREIGN_KEY_VIOLATION) {
+          return fail(c, fkViolationMessage(err), 422)
         }
         throw err
       }
