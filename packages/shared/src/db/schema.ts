@@ -125,8 +125,8 @@ export const vehicleClasses = pgTable(
     luggageCapacity: integer('luggageCapacity').notNull(),
     transmission: transmissionEnum('transmission').notNull(),
     fuelType: text('fuelType'),
-    dailyRateJpy: integer('dailyRateJpy'),
-    hourlyRateJpy: integer('hourlyRateJpy'),
+    // #406: pricing moved to the vehicle level. Classes no longer carry rates;
+    // a storefront's "from" price is min(member vehicle rate) (slice 5).
     // ACRISS taxonomy code (#388). Nullable — operator-created classes without
     // a mapped code are legitimate. No uniqueness: ACRISS is a category, so
     // multiple classes may share a code. The CHECK below mirrors ACRISS_PATTERN
@@ -138,18 +138,6 @@ export const vehicleClasses = pgTable(
     updatedAt: timestamp('updatedAt', { withTimezone: true }).notNull().defaultNow(),
   },
   (table) => [
-    check(
-      'vehicle_classes_pricing_at_least_one',
-      sql`${table.dailyRateJpy} IS NOT NULL OR ${table.hourlyRateJpy} IS NOT NULL`,
-    ),
-    check(
-      'vehicle_classes_daily_rate_non_negative',
-      sql`${table.dailyRateJpy} IS NULL OR ${table.dailyRateJpy} >= 0`,
-    ),
-    check(
-      'vehicle_classes_hourly_rate_non_negative',
-      sql`${table.hourlyRateJpy} IS NULL OR ${table.hourlyRateJpy} >= 0`,
-    ),
     // Format-only ACRISS validation at the DB boundary (#388). Mirrors
     // ACRISS_PATTERN (= /^[A-Z9]{4}$/) and the Zod regex. A malformed code
     // rejects with 23514 even if a writer bypasses the validator. NULL is

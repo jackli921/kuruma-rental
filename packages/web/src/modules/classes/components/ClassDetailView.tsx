@@ -1,7 +1,6 @@
 import { buttonVariants } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Link } from '@/i18n/routing'
-import { formatJpy } from '@/lib/format'
 import { cn } from '@/lib/utils'
 import { ArrowLeft, Briefcase, Car, Fuel, Settings2, Tag, Users } from 'lucide-react'
 import { useTranslations } from 'next-intl'
@@ -76,14 +75,6 @@ export function ClassDetailView({ vehicleClass: vc }: ClassDetailViewProps) {
               </p>
             )}
           </div>
-
-          {vc.dailyRateJpy != null && (
-            <p className="text-xl">
-              <span className="text-sm text-muted-foreground">{t('priceFrom')} </span>
-              <span className="font-semibold">{formatJpy(vc.dailyRateJpy)}</span>
-              <span className="text-sm text-muted-foreground"> {t('perDay')}</span>
-            </p>
-          )}
 
           <Card>
             <CardContent className="pt-2">

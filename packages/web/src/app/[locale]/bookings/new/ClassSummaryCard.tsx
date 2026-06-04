@@ -1,5 +1,4 @@
 import { Card, CardContent } from '@/components/ui/card'
-import { formatJpy } from '@/lib/format'
 import type { VehicleClassData } from '@/modules/classes'
 import { Briefcase, Car, Fuel, Settings2, Users } from 'lucide-react'
 import { useTranslations } from 'next-intl'
@@ -52,13 +51,6 @@ export function ClassSummaryCard({ vehicleClass: vc }: ClassSummaryCardProps) {
                 {t('luggage', { count: vc.luggageCapacity })}
               </span>
             </div>
-            {vc.dailyRateJpy != null && (
-              <p className="text-sm">
-                <span className="text-muted-foreground">{t('priceFrom')} </span>
-                <span className="font-semibold">{formatJpy(vc.dailyRateJpy)}</span>
-                <span className="text-muted-foreground"> {t('perDay')}</span>
-              </p>
-            )}
           </div>
         </div>
       </CardContent>

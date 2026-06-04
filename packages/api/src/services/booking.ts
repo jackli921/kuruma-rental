@@ -384,13 +384,17 @@ export class BookingService {
       }
     }
 
-    // Pricing source: vehicle overrides are optional. A null rate on the
-    // vehicle falls back to the class rate. That way a single vehicle
-    // without special pricing inherits from its class without duplication.
-    const dailyRateJpy = vehicle?.dailyRateJpy ?? vehicleClass.dailyRateJpy
-    const hourlyRateJpy = vehicle?.hourlyRateJpy ?? vehicleClass.hourlyRateJpy
+    // Pricing source: the assigned vehicle's rates only (#406 — class pricing
+    // dropped). A class-only booking (no vehicle assigned yet, #308) has no
+    // price source, so it persists totalPrice: null until a vehicle is
+    // assigned. Price snapshot on assignment/substitution is slice 6 (#392).
+    const bufferMinutes = vehicle?.bufferMinutes ?? DEFAULT_BUFFER_MINUTES
+    if (!vehicle) {
+      return { ok: true, bufferMinutes, totalPrice: null }
+    }
+
     const pricing = calculateBookingPrice(
-      { dailyRateJpy, hourlyRateJpy },
+      { dailyRateJpy: vehicle.dailyRateJpy, hourlyRateJpy: vehicle.hourlyRateJpy },
       input.startAt,
       input.endAt,
     )
@@ -406,7 +410,6 @@ export class BookingService {
       }
     }
 
-    const bufferMinutes = vehicle?.bufferMinutes ?? DEFAULT_BUFFER_MINUTES
     return { ok: true, bufferMinutes, totalPrice: pricing.totalPriceJpy }
   }
 
