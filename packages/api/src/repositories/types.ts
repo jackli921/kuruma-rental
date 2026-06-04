@@ -10,6 +10,7 @@ export type {
   Operator,
   Location,
   InsuranceOption,
+  FeeSchedule,
 } from '../stores'
 export type { DashboardStats } from '@kuruma/shared/types/stats'
 export type { FleetVehicleOverview, FleetBookingSummary } from '@kuruma/shared/types/fleet'
@@ -23,6 +24,7 @@ import type { VehicleDetail } from '@kuruma/shared/types/vehicle-detail'
 import type { CallerContext } from '../middleware/auth'
 import type {
   Booking,
+  FeeSchedule,
   InsuranceOption,
   Location,
   MaintenanceLog,
@@ -375,6 +377,40 @@ export interface VehicleClassRepository {
   create(data: Omit<VehicleClass, 'id' | 'createdAt' | 'updatedAt'>): Promise<VehicleClass>
   update(id: string, data: Partial<VehicleClass>): Promise<VehicleClass | undefined>
   archive(id: string): Promise<VehicleClass | undefined>
+}
+
+export interface FeeScheduleFilters {
+  status?: 'ACTIVE' | 'ARCHIVED'
+  includeArchived?: boolean
+  /**
+   * Explicit tenant filter. ONLY the bypass route layer sets this (from
+   * `?operatorId=`); it narrows a bypass-role read to one tenant. IGNORED for
+   * operator callers — their scope is absolute (see findAll precedence).
+   */
+  operatorId?: string
+  feeType?: 'OVERTIME_HOURLY' | 'CLEANING_FLAT' | 'NO_FUEL_FLAT'
+  /** Narrow to one vehicle class. The string 'null' / explicit null is not a
+   *  filter value here — operator-wide rows surface in an unfiltered list. */
+  vehicleClassId?: string
+}
+
+export interface FeeScheduleRepository {
+  findAll(ctx: CallerContext, filters?: FeeScheduleFilters): Promise<FeeSchedule[]>
+  findById(ctx: CallerContext, id: string): Promise<FeeSchedule | undefined>
+  /**
+   * Active-uniqueness pre-check lookup for the service. NOT ctx-scoped — the
+   * caller passes an already-resolved operatorId. Returns the ACTIVE row (if
+   * any) matching (operatorId, feeType, scope) where scope is the per-class id
+   * or `null` (operator-wide). The DB partial unique indexes are the real seal.
+   */
+  findActiveByScope(
+    operatorId: string,
+    feeType: FeeSchedule['feeType'],
+    vehicleClassId: string | null,
+  ): Promise<FeeSchedule | undefined>
+  create(data: Omit<FeeSchedule, 'id' | 'createdAt' | 'updatedAt'>): Promise<FeeSchedule>
+  update(id: string, data: Partial<FeeSchedule>): Promise<FeeSchedule | undefined>
+  archive(id: string): Promise<FeeSchedule | undefined>
 }
 
 export interface PhotoStorage {

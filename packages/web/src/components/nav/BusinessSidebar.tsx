@@ -9,6 +9,7 @@ import {
   LayoutDashboard,
   MapPin,
   MessageSquare,
+  Receipt,
   ShieldCheck,
   Users,
 } from 'lucide-react'
@@ -22,6 +23,7 @@ const SIDEBAR_ITEMS = [
   { href: '/manage/classes', icon: Layers, labelKey: 'classes' },
   { href: '/manage/locations', icon: MapPin, labelKey: 'locations' },
   { href: '/manage/insurance', icon: ShieldCheck, labelKey: 'insurance' },
+  { href: '/manage/fees', icon: Receipt, labelKey: 'fees' },
   { href: '/manage/customers', icon: Users, labelKey: 'customers' },
   { href: '/manage/messages', icon: MessageSquare, labelKey: 'messages' },
 ] as const

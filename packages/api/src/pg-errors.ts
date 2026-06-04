@@ -16,6 +16,14 @@ export const PG_ERROR = {
  */
 export const VEHICLES_CLASS_FK = 'vehicles_operatorId_classId_fk'
 
+/**
+ * Composite FK fee_schedules(operatorId, vehicleClassId) -> vehicle_classes(operatorId, id),
+ * named explicitly in schema.ts. fee_schedules also carries operatorId -> operators, so a
+ * 23503 alone is ambiguous; match on this name to tell a bad (or cross-tenant) vehicleClassId
+ * apart from a bad operatorId (#405, mirrors VEHICLES_CLASS_FK / #400).
+ */
+export const FEE_SCHEDULES_CLASS_FK = 'fee_schedules_operator_class_fk'
+
 /** Extract the Postgres error code from an unknown thrown value, or null.
  *
  * Drizzle + postgres-js wraps the raw PostgresError inside `err.cause`,
