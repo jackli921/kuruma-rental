@@ -194,6 +194,28 @@ describe('Vehicle Class CRUD Routes', () => {
       expect(data.name).toBe('Renamed')
       expect(data.operatorId).toBe(originalOperatorId)
     })
+
+    it('a name-only PATCH preserves existing photos and sortOrder (issue #430)', async () => {
+      // Regression: .partial() kept the base .default()s, so a name-only patch
+      // parsed as { name, photos: [], sortOrder: 0 } and wiped both columns.
+      const photos = ['https://cdn.example.com/a.jpg', 'https://cdn.example.com/b.jpg']
+      const { data: created } = await (
+        await createClass({ ...validInput(), photos, sortOrder: 9 })
+      ).json()
+      expect(created.photos).toEqual(photos)
+      expect(created.sortOrder).toBe(9)
+
+      const res = await app.request(`/vehicle-classes/${created.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: 'Renamed' }),
+      })
+      expect(res.status).toBe(200)
+      const { data } = await res.json()
+      expect(data.name).toBe('Renamed')
+      expect(data.photos).toEqual(photos)
+      expect(data.sortOrder).toBe(9)
+    })
   })
 
   describe('GET /vehicle-classes/:id', () => {
