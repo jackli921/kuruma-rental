@@ -134,6 +134,68 @@ describe('Vehicle Class CRUD Routes', () => {
     })
   })
 
+  describe('ACRISS code (#388)', () => {
+    it('persists acrissCode on create and returns it', async () => {
+      const res = await createClass({ ...validInput(), acrissCode: 'CCAR' })
+      expect(res.status).toBe(201)
+      const { data } = await res.json()
+      expect(data.acrissCode).toBe('CCAR')
+    })
+
+    it('normalises a lowercase acrissCode to upper-case on create', async () => {
+      const res = await createClass({ ...validInput(), slug: 'lc', acrissCode: 'ccar' })
+      const { data } = await res.json()
+      expect(data.acrissCode).toBe('CCAR')
+    })
+
+    it('rejects a malformed acrissCode on create with 400', async () => {
+      const res = await createClass({ ...validInput(), slug: 'bad', acrissCode: 'CCARX' })
+      expect(res.status).toBe(400)
+    })
+
+    it('updates acrissCode via PATCH', async () => {
+      const { data: created } = await (await createClass()).json()
+      const res = await app.request(`/vehicle-classes/${created.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ acrissCode: 'icar' }),
+      })
+      expect(res.status).toBe(200)
+      const { data } = await res.json()
+      expect(data.acrissCode).toBe('ICAR')
+    })
+
+    it('nullifies acrissCode via PATCH', async () => {
+      const { data: created } = await (
+        await createClass({ ...validInput(), acrissCode: 'CCAR' })
+      ).json()
+      const res = await app.request(`/vehicle-classes/${created.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ acrissCode: null }),
+      })
+      expect(res.status).toBe(200)
+      const { data } = await res.json()
+      expect(data.acrissCode).toBeNull()
+    })
+
+    it('a PATCH carrying operatorId cannot move the class to another operator', async () => {
+      // operatorId is not on the update schema, so the validator strips it.
+      // The class keeps its original operator even when a PATCH smuggles one in.
+      const { data: created } = await (await createClass()).json()
+      const originalOperatorId = created.operatorId
+      const res = await app.request(`/vehicle-classes/${created.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ operatorId: 'op_someone_else', name: 'Renamed' }),
+      })
+      expect(res.status).toBe(200)
+      const { data } = await res.json()
+      expect(data.name).toBe('Renamed')
+      expect(data.operatorId).toBe(originalOperatorId)
+    })
+  })
+
   describe('GET /vehicle-classes/:id', () => {
     it('returns the class by ID', async () => {
       const createRes = await createClass()

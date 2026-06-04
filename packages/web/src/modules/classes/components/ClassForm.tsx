@@ -5,6 +5,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { zodResolver } from '@hookform/resolvers/zod'
+import { ACRISS_CODES } from '@kuruma/shared/acriss'
 import {
   type CreateVehicleClassInput,
   createVehicleClassSchema,
@@ -31,8 +32,19 @@ function nullableNumber(v: unknown) {
   return Number.isNaN(n) ? null : n
 }
 
+// The ACRISS <select>'s "None" option has an empty value. Coerce it to null so
+// the schema's .nullish() accepts it instead of failing the regex on ''.
+function nullableString(v: unknown) {
+  return v === '' || v == null ? null : v
+}
+
+const ACRISS_CODE_LIST = Object.keys(ACRISS_CODES) as (keyof typeof ACRISS_CODES)[]
+
 export function ClassForm({ onSubmit, onCancel, defaultValues, isSubmitting }: ClassFormProps) {
   const t = useTranslations('business.classes')
+  // ACRISS labels live under the top-level `acriss.*` namespace, not
+  // `business.classes`, so resolve them through a separate translator.
+  const tAcriss = useTranslations('acriss')
 
   // MEDIUM 3: three-type-parameter useForm lets RHF narrow the submit
   // handler to the schema's OUTPUT type (CreateVehicleClassInput) — no
@@ -138,6 +150,25 @@ export function ClassForm({ onSubmit, onCancel, defaultValues, isSubmitting }: C
             {...register('fuelType')}
           />
         </div>
+      </div>
+
+      <div>
+        <Label htmlFor="class-acrissCode">{t('form.acrissCode')}</Label>
+        <select
+          id="class-acrissCode"
+          className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-xs"
+          {...register('acrissCode', { setValueAs: nullableString })}
+        >
+          <option value="">{t('form.acrissCodeNone')}</option>
+          {ACRISS_CODE_LIST.map((code) => (
+            <option key={code} value={code}>
+              {tAcriss(code)}
+            </option>
+          ))}
+        </select>
+        {errors.acrissCode && (
+          <p className="text-sm text-destructive mt-1">{errors.acrissCode.message}</p>
+        )}
       </div>
 
       {/* Pricing — at least one rate is required (enforced server-side) */}

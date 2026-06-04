@@ -3,7 +3,7 @@ import { Card, CardContent } from '@/components/ui/card'
 import { Link } from '@/i18n/routing'
 import { formatJpy } from '@/lib/format'
 import { cn } from '@/lib/utils'
-import { ArrowLeft, Briefcase, Car, Fuel, Settings2, Users } from 'lucide-react'
+import { ArrowLeft, Briefcase, Car, Fuel, Settings2, Tag, Users } from 'lucide-react'
 import { useTranslations } from 'next-intl'
 import type { VehicleClassData } from '../api'
 
@@ -15,10 +15,18 @@ interface ClassDetailViewProps {
 // handles the slug lookup + notFound path, so this just renders.
 export function ClassDetailView({ vehicleClass: vc }: ClassDetailViewProps) {
   const t = useTranslations('catalog.detail')
+  const tAcriss = useTranslations('acriss')
 
   const transmissionLabel = vc.transmission === 'AUTO' ? t('auto') : t('manual')
   const photos = vc.photos
   const primaryPhoto = photos[0]
+  // ACRISS label with raw-code fallback (#388): an off-dictionary code renders
+  // the code rather than throwing a missing-key error.
+  const acrissLabel = vc.acrissCode
+    ? tAcriss.has(vc.acrissCode)
+      ? tAcriss(vc.acrissCode)
+      : vc.acrissCode
+    : null
 
   return (
     <div className="max-w-7xl mx-auto">
@@ -104,6 +112,15 @@ export function ClassDetailView({ vehicleClass: vc }: ClassDetailViewProps) {
                     <div>
                       <p className="text-xs text-muted-foreground">{t('fuelType')}</p>
                       <p className="text-sm font-medium">{vc.fuelType}</p>
+                    </div>
+                  </div>
+                )}
+                {acrissLabel && (
+                  <div className="flex items-center gap-2.5">
+                    <Tag className="size-5 text-muted-foreground" />
+                    <div>
+                      <p className="text-xs text-muted-foreground">{t('acrissCode')}</p>
+                      <p className="text-sm font-medium">{acrissLabel}</p>
                     </div>
                   </div>
                 )}

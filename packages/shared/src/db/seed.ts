@@ -1,4 +1,4 @@
-import { inArray, sql } from 'drizzle-orm'
+import { eq, inArray, sql } from 'drizzle-orm'
 import {
   BEST_CAR_RENTAL_NAME,
   BEST_CAR_RENTAL_OPERATOR_ID,
@@ -8,7 +8,101 @@ import {
 } from './constants'
 import { getDb } from './index'
 import { parsePlatformAdminEmails } from './platform-admins'
-import { locations, operators, users, vehicles } from './schema'
+import { locations, operators, users, vehicleClasses, vehicles } from './schema'
+
+// Best Car Rental's renter-facing classes, keyed by ACRISS code (#388). Each
+// seeded vehicle attaches to one of these via the (operatorId, classId)
+// composite FK, so the class row MUST be inserted before the vehicle row.
+// dailyRateJpy is the class "from" price (lowest in its bucket). Idempotent on
+// slug. CCAR carries the Toyota Yaris (proposal §6 row 3 demo target).
+const SEED_CLASSES = [
+  {
+    slug: 'kei',
+    name: 'Kei car',
+    acrissCode: 'MCAR',
+    description: "Japan's compact kei class — cheapest to rent, easiest to park.",
+    seats: 4,
+    luggageCapacity: 1,
+    transmission: 'AUTO' as const,
+    fuelType: 'Gasoline',
+    dailyRateJpy: 6500,
+    hourlyRateJpy: 900,
+    sortOrder: 1,
+  },
+  {
+    slug: 'compact',
+    name: 'Compact',
+    acrissCode: 'CCAR',
+    description: 'Fuel-efficient compact hatchbacks. Great for city driving and short trips.',
+    seats: 5,
+    luggageCapacity: 2,
+    transmission: 'AUTO' as const,
+    fuelType: 'Hybrid',
+    dailyRateJpy: 8000,
+    hourlyRateJpy: 1100,
+    sortOrder: 2,
+  },
+  {
+    slug: 'sedan',
+    name: 'Sedan',
+    acrissCode: 'SCAR',
+    description: 'Comfortable mid-size sedans for longer highway drives.',
+    seats: 5,
+    luggageCapacity: 3,
+    transmission: 'AUTO' as const,
+    fuelType: 'Hybrid',
+    dailyRateJpy: 9500,
+    hourlyRateJpy: 1300,
+    sortOrder: 3,
+  },
+  {
+    slug: 'suv',
+    name: 'SUV',
+    acrissCode: 'SUVR',
+    description: 'Mid-size SUVs and off-roaders for mountain roads and group trips.',
+    seats: 5,
+    luggageCapacity: 4,
+    transmission: 'AUTO' as const,
+    fuelType: 'Hybrid',
+    dailyRateJpy: 9000,
+    hourlyRateJpy: 1300,
+    sortOrder: 4,
+  },
+  {
+    slug: 'van',
+    name: 'Van / MPV',
+    acrissCode: 'IVAR',
+    description: 'Spacious 6-7 seat minivans for families and groups with luggage.',
+    seats: 7,
+    luggageCapacity: 5,
+    transmission: 'AUTO' as const,
+    fuelType: 'Hybrid',
+    dailyRateJpy: 11000,
+    hourlyRateJpy: 1500,
+    sortOrder: 5,
+  },
+] as const
+
+// Maps each seeded vehicle (by name) to its class slug. A vehicle whose name
+// is absent is seeded with no class (classId NULL is valid). Keeping this as a
+// lookup avoids stamping classId on every SEED_VEHICLES entry.
+const VEHICLE_CLASS_SLUG_BY_NAME: Record<string, string> = {
+  'Honda N-BOX': 'kei',
+  'Suzuki Hustler': 'kei',
+  'Daihatsu Tanto': 'kei',
+  'Toyota Aqua': 'compact',
+  'Toyota Yaris': 'compact',
+  'Honda Fit': 'compact',
+  'Toyota Corolla': 'sedan',
+  'Toyota Camry': 'sedan',
+  'Mazda CX-5': 'suv',
+  'Toyota RAV4': 'suv',
+  'Toyota Harrier': 'suv',
+  'Suzuki Jimny': 'suv',
+  'Toyota Alphard': 'van',
+  'Toyota Sienta': 'van',
+  'Honda Freed': 'van',
+}
 
 // Realistic JPY day-rates loosely anchored to Osaka/Kansai rental shop
 // price lists in 2025-26. Hourly rate is roughly (daily / 8) rounded to a
@@ -406,14 +500,39 @@ async function seed() {
     console.log(`  + ${l.name} (${l.id})`)
   }
 
-  // Clear existing vehicles for idempotent seeding
+  // Vehicle classes MUST exist before vehicles: vehicles.(operatorId, classId)
+  // is a composite FK to vehicle_classes.(operatorId, id) (#395). Idempotent on
+  // slug so a reseed leaves existing class rows (and their ids) untouched,
+  // keeping the composite-FK target stable across reseeds (#388).
+  console.log('Seeding vehicle classes...')
+  await db
+    .insert(vehicleClasses)
+    .values(SEED_CLASSES.map((c) => ({ ...c, operatorId: BEST_CAR_RENTAL_OPERATOR_ID })))
+    .onConflictDoNothing({ target: vehicleClasses.slug })
+
+  // Resolve slug -> id for the just-seeded (or pre-existing) classes so each
+  // vehicle can attach by classId. Scoped to this operator's classes.
+  const classRows = await db
+    .select({ id: vehicleClasses.id, slug: vehicleClasses.slug })
+    .from(vehicleClasses)
+    .where(eq(vehicleClasses.operatorId, BEST_CAR_RENTAL_OPERATOR_ID))
+  const classIdBySlug = new Map(classRows.map((r) => [r.slug, r.id]))
+
+  // Clear existing vehicles for idempotent seeding. Classes are NOT cleared —
+  // their ids must stay stable as composite-FK targets.
   console.log('Clearing existing vehicles...')
   await db.delete(vehicles).where(sql`1=1`)
 
   console.log('Seeding vehicles...')
   const inserted = await db
     .insert(vehicles)
-    .values(SEED_VEHICLES.map((v) => ({ ...v, operatorId: BEST_CAR_RENTAL_OPERATOR_ID })))
+    .values(
+      SEED_VEHICLES.map((v) => {
+        const classSlug = VEHICLE_CLASS_SLUG_BY_NAME[v.name]
+        const classId = classSlug ? (classIdBySlug.get(classSlug) ?? null) : null
+        return { ...v, operatorId: BEST_CAR_RENTAL_OPERATOR_ID, classId }
+      }),
+    )
     .returning({ id: vehicles.id, name: vehicles.name })
 
   for (const v of inserted) {

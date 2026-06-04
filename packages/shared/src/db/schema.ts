@@ -126,6 +126,11 @@ export const vehicleClasses = pgTable(
     fuelType: text('fuelType'),
     dailyRateJpy: integer('dailyRateJpy'),
     hourlyRateJpy: integer('hourlyRateJpy'),
+    // ACRISS taxonomy code (#388). Nullable — operator-created classes without
+    // a mapped code are legitimate. No uniqueness: ACRISS is a category, so
+    // multiple classes may share a code. The CHECK below mirrors ACRISS_PATTERN
+    // (packages/shared/src/acriss.ts) — keep the two in sync.
+    acrissCode: text('acrissCode'),
     sortOrder: integer('sortOrder').notNull().default(0),
     status: vehicleClassStatusEnum('status').notNull().default('ACTIVE'),
     createdAt: timestamp('createdAt', { withTimezone: true }).notNull().defaultNow(),
@@ -143,6 +148,14 @@ export const vehicleClasses = pgTable(
     check(
       'vehicle_classes_hourly_rate_non_negative',
       sql`${table.hourlyRateJpy} IS NULL OR ${table.hourlyRateJpy} >= 0`,
+    ),
+    // Format-only ACRISS validation at the DB boundary (#388). Mirrors
+    // ACRISS_PATTERN (= /^[A-Z9]{4}$/) and the Zod regex. A malformed code
+    // rejects with 23514 even if a writer bypasses the validator. NULL is
+    // allowed (column is nullable); positional validation is deferred post-MVP.
+    check(
+      'vehicle_classes_acriss_code_format',
+      sql`${table.acrissCode} IS NULL OR ${table.acrissCode} ~ '^[A-Z9]{4}$'`,
     ),
     index('idx_vehicle_classes_operatorId').on(table.operatorId),
     // Composite-FK target (#395 Phase 2): lets vehicles reference a class by

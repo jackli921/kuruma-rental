@@ -10,10 +10,19 @@ interface ClassCatalogCardProps {
 
 export function ClassCatalogCard({ vehicleClass }: ClassCatalogCardProps) {
   const t = useTranslations('catalog')
+  const tAcriss = useTranslations('acriss')
 
   const photo = vehicleClass.photos[0]
   const transmissionLabel = vehicleClass.transmission === 'AUTO' ? t('auto') : t('manual')
   const dailyRate = vehicleClass.dailyRateJpy
+  // Locale-correct ACRISS label, falling back to the raw code when it is
+  // outside the 8-key dictionary so an off-dictionary code never crashes (#388).
+  const acrissCode = vehicleClass.acrissCode
+  const acrissLabel = acrissCode
+    ? tAcriss.has(acrissCode)
+      ? tAcriss(acrissCode)
+      : acrissCode
+    : null
 
   return (
     <Link
@@ -34,7 +43,14 @@ export function ClassCatalogCard({ vehicleClass }: ClassCatalogCardProps) {
         )}
       </div>
       <div className="p-5">
-        <h2 className="text-lg font-semibold">{vehicleClass.name}</h2>
+        <div className="flex items-center gap-2">
+          <h2 className="text-lg font-semibold">{vehicleClass.name}</h2>
+          {acrissLabel && (
+            <span className="text-xs rounded bg-muted px-1.5 py-0.5 text-muted-foreground">
+              {acrissLabel}
+            </span>
+          )}
+        </div>
         {vehicleClass.description && (
           <p className="mt-1 text-sm text-muted-foreground line-clamp-2">
             {vehicleClass.description}

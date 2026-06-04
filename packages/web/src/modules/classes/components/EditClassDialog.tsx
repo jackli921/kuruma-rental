@@ -53,6 +53,7 @@ export function EditClassDialog({ vehicleClass, onOpenChange }: EditClassDialogP
               ...(vehicleClass.fuelType != null && { fuelType: vehicleClass.fuelType }),
               dailyRateJpy: vehicleClass.dailyRateJpy,
               hourlyRateJpy: vehicleClass.hourlyRateJpy,
+              ...(vehicleClass.acrissCode != null && { acrissCode: vehicleClass.acrissCode }),
               sortOrder: vehicleClass.sortOrder,
             }}
           />

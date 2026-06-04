@@ -25,6 +25,50 @@ describe('ClassForm', () => {
     expect(screen.getByLabelText('form.dailyRate')).toBeInTheDocument()
     expect(screen.getByLabelText('form.hourlyRate')).toBeInTheDocument()
     expect(screen.getByLabelText('form.sortOrder')).toBeInTheDocument()
+    expect(screen.getByLabelText('form.acrissCode')).toBeInTheDocument()
+  })
+
+  it('offers the 8 ACRISS codes plus a "none" option in the select', () => {
+    render(<ClassForm onSubmit={vi.fn()} />)
+    const select = screen.getByLabelText('form.acrissCode') as HTMLSelectElement
+    const values = Array.from(select.options).map((o) => o.value)
+    // empty value (None) first, then the 8 dictionary codes
+    expect(values).toEqual(['', 'MCAR', 'ECAR', 'CCAR', 'ICAR', 'SCAR', 'FCAR', 'IVAR', 'SUVR'])
+  })
+
+  it('submits the chosen acrissCode', async () => {
+    const onSubmit = vi.fn().mockResolvedValue(undefined)
+    const user = userEvent.setup()
+
+    render(<ClassForm onSubmit={onSubmit} />)
+
+    await user.type(screen.getByLabelText('form.name'), 'Compact')
+    await user.type(screen.getByLabelText('form.slug'), 'compact')
+    await user.type(screen.getByLabelText('form.dailyRate'), '8000')
+    await user.selectOptions(screen.getByLabelText('form.acrissCode'), 'CCAR')
+    await user.click(screen.getByRole('button', { name: 'form.save' }))
+
+    await waitFor(() => {
+      expect(onSubmit).toHaveBeenCalledTimes(1)
+    })
+    expect(onSubmit.mock.calls[0][0].acrissCode).toBe('CCAR')
+  })
+
+  it('submits null acrissCode when "none" is left selected', async () => {
+    const onSubmit = vi.fn().mockResolvedValue(undefined)
+    const user = userEvent.setup()
+
+    render(<ClassForm onSubmit={onSubmit} />)
+
+    await user.type(screen.getByLabelText('form.name'), 'Compact')
+    await user.type(screen.getByLabelText('form.slug'), 'compact')
+    await user.type(screen.getByLabelText('form.dailyRate'), '8000')
+    await user.click(screen.getByRole('button', { name: 'form.save' }))
+
+    await waitFor(() => {
+      expect(onSubmit).toHaveBeenCalledTimes(1)
+    })
+    expect(onSubmit.mock.calls[0][0].acrissCode == null).toBe(true)
   })
 
   it('submits valid data with daily rate only', async () => {

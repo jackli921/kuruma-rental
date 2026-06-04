@@ -94,6 +94,60 @@ describe('createVehicleClassSchema', () => {
     const result = createVehicleClassSchema.safeParse({ ...validInput(), dailyRateJpy: 55.5 })
     expect(result.success).toBe(false)
   })
+
+  describe('acrissCode', () => {
+    it('accepts a valid 4-char code', () => {
+      const result = createVehicleClassSchema.safeParse({ ...validInput(), acrissCode: 'CCAR' })
+      expect(result.success).toBe(true)
+      if (result.success) expect(result.data.acrissCode).toBe('CCAR')
+    })
+
+    it('uppercases a lowercase code', () => {
+      const result = createVehicleClassSchema.safeParse({ ...validInput(), acrissCode: 'ccar' })
+      expect(result.success).toBe(true)
+      if (result.success) expect(result.data.acrissCode).toBe('CCAR')
+    })
+
+    it('trims surrounding whitespace before validating', () => {
+      const result = createVehicleClassSchema.safeParse({ ...validInput(), acrissCode: '  ccar ' })
+      expect(result.success).toBe(true)
+      if (result.success) expect(result.data.acrissCode).toBe('CCAR')
+    })
+
+    it('rejects a 3-char code', () => {
+      const result = createVehicleClassSchema.safeParse({ ...validInput(), acrissCode: 'CCA' })
+      expect(result.success).toBe(false)
+    })
+
+    it('rejects a 5-char code', () => {
+      const result = createVehicleClassSchema.safeParse({ ...validInput(), acrissCode: 'CCARX' })
+      expect(result.success).toBe(false)
+    })
+
+    it('rejects a code with a hyphen', () => {
+      const result = createVehicleClassSchema.safeParse({ ...validInput(), acrissCode: 'cc-r' })
+      expect(result.success).toBe(false)
+    })
+
+    it('accepts null (operator-created class without a mapped code)', () => {
+      const result = createVehicleClassSchema.safeParse({ ...validInput(), acrissCode: null })
+      expect(result.success).toBe(true)
+      if (result.success) expect(result.data.acrissCode).toBeNull()
+    })
+
+    it('accepts an omitted code', () => {
+      const result = createVehicleClassSchema.safeParse(validInput())
+      expect(result.success).toBe(true)
+    })
+
+    it('accepts a format-valid code outside the 8-code seed subset', () => {
+      // The validator gates on format only, not the dictionary — operators may
+      // legitimately enter codes we have not mapped yet.
+      const result = createVehicleClassSchema.safeParse({ ...validInput(), acrissCode: 'IFAR' })
+      expect(result.success).toBe(true)
+      if (result.success) expect(result.data.acrissCode).toBe('IFAR')
+    })
+  })
 })
 
 describe('updateVehicleClassSchema', () => {
@@ -118,5 +172,30 @@ describe('updateVehicleClassSchema', () => {
   it('allows nullifying one rate when other not present', () => {
     const result = updateVehicleClassSchema.safeParse({ dailyRateJpy: null })
     expect(result.success).toBe(true)
+  })
+
+  it('accepts an acrissCode patch (flows from the base schema)', () => {
+    const result = updateVehicleClassSchema.safeParse({ acrissCode: 'icar' })
+    expect(result.success).toBe(true)
+    if (result.success) expect(result.data.acrissCode).toBe('ICAR')
+  })
+
+  it('rejects a malformed acrissCode patch', () => {
+    const result = updateVehicleClassSchema.safeParse({ acrissCode: 'CCARX' })
+    expect(result.success).toBe(false)
+  })
+
+  it('allows nullifying acrissCode', () => {
+    const result = updateVehicleClassSchema.safeParse({ acrissCode: null })
+    expect(result.success).toBe(true)
+    if (result.success) expect(result.data.acrissCode).toBeNull()
+  })
+
+  it('drops operatorId — it is not patchable (cross-operator move guard)', () => {
+    // operatorId lives only on the create .extend(), never the update schema.
+    // A PATCH that smuggles it in must not reassign the class's tenant.
+    const result = updateVehicleClassSchema.safeParse({ operatorId: 'op_other', name: 'X' })
+    expect(result.success).toBe(true)
+    if (result.success) expect('operatorId' in result.data).toBe(false)
   })
 })
