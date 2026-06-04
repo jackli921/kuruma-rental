@@ -42,6 +42,7 @@
     "fleet": "車両管理",
     "classes": "クラス",
     "locations": "拠点",
+    "insurance": "保険",
     "menu": "メニュー",
     "close": "メニューを閉じる",
     "switchToRenter": "利用者ビューに切替",
@@ -561,6 +562,44 @@
         "turnaround": "整備時間（分）",
         "turnaroundHint": "返却後、再び予約可能になるまでの猶予。既定 2880（48時間）。",
         "save": "拠点を保存",
+        "saving": "保存中...",
+        "cancel": "キャンセル"
+      }
+    },
+    "insurance": {
+      "title": "保険オプション",
+      "subtitle": "お客様が予約時に追加できる保険オプションを管理します。",
+      "addOption": "オプションを追加",
+      "addSubtitle": "新しい保険オプションを作成します。",
+      "editOption": "オプションを編集",
+      "archiveAction": "オプションをアーカイブ",
+      "archiveTitle": "{name} をアーカイブしますか？",
+      "archiveDescription": "このオプションをアーカイブします。一覧には残りますが、新規予約では提供されません。",
+      "archiveConfirm": "アーカイブ",
+      "archiving": "アーカイブ中...",
+      "empty": "まだ保険オプションがありません。最初のオプションを追加してください。",
+      "loadError": "保険オプションを読み込めませんでした",
+      "retry": "再試行",
+      "status": {
+        "ACTIVE": "有効",
+        "ARCHIVED": "アーカイブ済み"
+      },
+      "row": {
+        "perDay": "{price}/日",
+        "deductible": "免責額 {amount}",
+        "noDeductible": "免責なし（フルカバー）"
+      },
+      "form": {
+        "name": "オプション名",
+        "namePlaceholder": "例：標準補償",
+        "description": "説明",
+        "descriptionPlaceholder": "例：車両損害補償（CDW）を含みます。",
+        "dailyPrice": "1日あたりの料金（円）",
+        "dailyPriceHint": "車両料金に加えて、レンタル日数分が請求されます。",
+        "setDeductible": "免責額を設定する",
+        "deductibleHint": "免責なしのフルカバーの場合はオフのままにします。",
+        "deductible": "免責額（円）",
+        "save": "オプションを保存",
         "saving": "保存中...",
         "cancel": "キャンセル"
       }

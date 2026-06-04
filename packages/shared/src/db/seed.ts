@@ -1,4 +1,4 @@
-import { eq, inArray, sql } from 'drizzle-orm'
+import { and, eq, inArray, sql } from 'drizzle-orm'
 import {
   BEST_CAR_RENTAL_NAME,
   BEST_CAR_RENTAL_OPERATOR_ID,
@@ -8,7 +8,7 @@ import {
 } from './constants'
 import { getDb } from './index'
 import { parsePlatformAdminEmails } from './platform-admins'
-import { locations, operators, users, vehicleClasses, vehicles } from './schema'
+import { insuranceOptions, locations, operators, users, vehicleClasses, vehicles } from './schema'
 
 // Best Car Rental's renter-facing classes, keyed by ACRISS code (#388). Each
 // seeded vehicle attaches to one of these via the (operatorId, classId)
@@ -423,6 +423,25 @@ const SEED_LOCATIONS = [
   },
 ]
 
+// Best Car Rental's insurance options (#404 slice 4a, proposal §2/§3). A normal
+// option (150,000 yen deductible) and a premium one (250,000 yen deductible).
+// dailyPriceJpy are operator-set placeholders. Distinct names per operator
+// satisfy insurance_options_active_name_unique (partial, ACTIVE-only).
+const SEED_INSURANCE_OPTIONS = [
+  {
+    name: 'Standard Cover',
+    description: 'Collision damage waiver with a standard deductible.',
+    dailyPriceJpy: 1500,
+    deductibleJpy: 150000,
+  },
+  {
+    name: 'Premium Cover',
+    description: 'Lower out-of-pocket exposure with a higher protection tier.',
+    dailyPriceJpy: 2500,
+    deductibleJpy: 250000,
+  },
+]
+
 async function seed() {
   const db = getDb()
 
@@ -517,6 +536,30 @@ async function seed() {
     .from(vehicleClasses)
     .where(eq(vehicleClasses.operatorId, BEST_CAR_RENTAL_OPERATOR_ID))
   const classIdBySlug = new Map(classRows.map((r) => [r.slug, r.id]))
+
+  // Best Car Rental insurance options (#404). The active-name uniqueness is a
+  // PARTIAL index (status='ACTIVE'), which onConflict can't target, so insert
+  // each option only when no ACTIVE row of that name exists — idempotent across
+  // reseeds without disturbing an operator's edits.
+  console.log('Seeding insurance options...')
+  for (const option of SEED_INSURANCE_OPTIONS) {
+    const [existing] = await db
+      .select({ id: insuranceOptions.id })
+      .from(insuranceOptions)
+      .where(
+        and(
+          eq(insuranceOptions.operatorId, BEST_CAR_RENTAL_OPERATOR_ID),
+          eq(insuranceOptions.name, option.name),
+          eq(insuranceOptions.status, 'ACTIVE'),
+        ),
+      )
+    if (existing) continue
+    const [inserted] = await db
+      .insert(insuranceOptions)
+      .values({ ...option, operatorId: BEST_CAR_RENTAL_OPERATOR_ID })
+      .returning({ id: insuranceOptions.id, name: insuranceOptions.name })
+    if (inserted) console.log(`  + ${inserted.name} (${inserted.id})`)
+  }
 
   // Clear existing vehicles for idempotent seeding. Classes are NOT cleared —
   // their ids must stay stable as composite-FK targets.

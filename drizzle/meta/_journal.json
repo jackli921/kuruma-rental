@@ -218,6 +218,13 @@
       "when": 1780485923354,
       "tag": "0030_add_acriss_code_to_vehicle_classes",
       "breakpoints": true
+    },
+    {
+      "idx": 31,
+      "version": "7",
+      "when": 1780539394397,
+      "tag": "0031_add_insurance_options",
+      "breakpoints": true
     }
   ]
 }

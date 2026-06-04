@@ -42,6 +42,7 @@
     "fleet": "Fleet",
     "classes": "Classes",
     "locations": "Locations",
+    "insurance": "Insurance",
     "menu": "Menu",
     "close": "Close menu",
     "switchToRenter": "Switch to renter view",
@@ -561,6 +562,44 @@
         "turnaround": "Turnaround (minutes)",
         "turnaroundHint": "Buffer before a returned vehicle is bookable again. Default 2880 (48h).",
         "save": "Save location",
+        "saving": "Saving...",
+        "cancel": "Cancel"
+      }
+    },
+    "insurance": {
+      "title": "Insurance options",
+      "subtitle": "Manage the insurance options renters can add to a booking.",
+      "addOption": "Add option",
+      "addSubtitle": "Create a new insurance option.",
+      "editOption": "Edit option",
+      "archiveAction": "Archive option",
+      "archiveTitle": "Archive {name}?",
+      "archiveDescription": "This archives the option. It stays in the list, but won't be offered for new bookings.",
+      "archiveConfirm": "Archive",
+      "archiving": "Archiving...",
+      "empty": "No insurance options yet. Add your first one.",
+      "loadError": "Couldn't load insurance options",
+      "retry": "Try again",
+      "status": {
+        "ACTIVE": "Active",
+        "ARCHIVED": "Archived"
+      },
+      "row": {
+        "perDay": "{price}/day",
+        "deductible": "Deductible {amount}",
+        "noDeductible": "No deductible (full cover)"
+      },
+      "form": {
+        "name": "Option name",
+        "namePlaceholder": "e.g. Standard Cover",
+        "description": "Description",
+        "descriptionPlaceholder": "e.g. Covers collision damage waiver.",
+        "dailyPrice": "Daily price (yen)",
+        "dailyPriceHint": "Charged per rental day on top of the vehicle rate.",
+        "setDeductible": "Set a deductible",
+        "deductibleHint": "Leave off for full cover with no deductible.",
+        "deductible": "Deductible (yen)",
+        "save": "Save option",
         "saving": "Saving...",
         "cancel": "Cancel"
       }

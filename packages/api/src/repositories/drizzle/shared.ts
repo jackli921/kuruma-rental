@@ -2,6 +2,7 @@ import type { Column } from 'drizzle-orm'
 import type { getDb } from '@kuruma/shared/db'
 import {
   bookings,
+  insuranceOptions,
   locations,
   maintenanceLogs,
   messages,
@@ -13,6 +14,7 @@ import {
 import type { VehicleDetailBooking } from '@kuruma/shared/types/vehicle-detail'
 import type {
   Booking,
+  InsuranceOption,
   Location,
   MaintenanceLog,
   Message,
@@ -83,6 +85,18 @@ export const locationColumns = {
   status: locations.status,
   createdAt: locations.createdAt,
   updatedAt: locations.updatedAt,
+}
+
+export const insuranceOptionColumns = {
+  id: insuranceOptions.id,
+  operatorId: insuranceOptions.operatorId,
+  name: insuranceOptions.name,
+  description: insuranceOptions.description,
+  dailyPriceJpy: insuranceOptions.dailyPriceJpy,
+  deductibleJpy: insuranceOptions.deductibleJpy,
+  status: insuranceOptions.status,
+  createdAt: insuranceOptions.createdAt,
+  updatedAt: insuranceOptions.updatedAt,
 }
 
 export const bookingColumns = {
@@ -175,6 +189,7 @@ type ColumnRow<T extends Record<string, Column>> = {
 type VehicleClassRow = ColumnRow<typeof vehicleClassColumns>
 type VehicleRow = ColumnRow<typeof vehicleColumns>
 type LocationRow = ColumnRow<typeof locationColumns>
+type InsuranceOptionRow = ColumnRow<typeof insuranceOptionColumns>
 type BookingRow = ColumnRow<typeof bookingColumns>
 type ThreadRow = ColumnRow<typeof threadColumns>
 type ThreadParticipantRow = ColumnRow<typeof participantColumns>
@@ -211,6 +226,20 @@ export function toLocation(r: LocationRow): Location {
     operatingHours: r.operatingHours,
     timezone: r.timezone,
     defaultTurnaroundMinutes: r.defaultTurnaroundMinutes,
+    status: r.status,
+    createdAt: r.createdAt,
+    updatedAt: r.updatedAt,
+  }
+}
+
+export function toInsuranceOption(r: InsuranceOptionRow): InsuranceOption {
+  return {
+    id: r.id,
+    operatorId: r.operatorId,
+    name: r.name,
+    description: r.description,
+    dailyPriceJpy: r.dailyPriceJpy,
+    deductibleJpy: r.deductibleJpy,
     status: r.status,
     createdAt: r.createdAt,
     updatedAt: r.updatedAt,

@@ -42,6 +42,7 @@
     "fleet": "车队管理",
     "classes": "车型",
     "locations": "取还点",
+    "insurance": "保险",
     "menu": "菜单",
     "close": "关闭菜单",
     "switchToRenter": "切换到租客视图",
@@ -561,6 +562,44 @@
         "turnaround": "周转时间（分钟）",
         "turnaroundHint": "车辆归还后再次可预订前的缓冲。默认 2880（48 小时）。",
         "save": "保存取还点",
+        "saving": "保存中...",
+        "cancel": "取消"
+      }
+    },
+    "insurance": {
+      "title": "保险选项",
+      "subtitle": "管理客户在预订时可添加的保险选项。",
+      "addOption": "添加选项",
+      "addSubtitle": "创建新的保险选项。",
+      "editOption": "编辑选项",
+      "archiveAction": "归档选项",
+      "archiveTitle": "归档 {name}？",
+      "archiveDescription": "此操作将归档该选项。它仍会显示在列表中，但不会用于新预订。",
+      "archiveConfirm": "归档",
+      "archiving": "归档中...",
+      "empty": "还没有保险选项。请添加第一个选项。",
+      "loadError": "无法加载保险选项",
+      "retry": "重试",
+      "status": {
+        "ACTIVE": "启用",
+        "ARCHIVED": "已归档"
+      },
+      "row": {
+        "perDay": "{price}/天",
+        "deductible": "免赔额 {amount}",
+        "noDeductible": "无免赔额（全额承保）"
+      },
+      "form": {
+        "name": "选项名称",
+        "namePlaceholder": "例如：标准保险",
+        "description": "描述",
+        "descriptionPlaceholder": "例如：包含车辆损失免责（CDW）。",
+        "dailyPrice": "每日价格（日元）",
+        "dailyPriceHint": "在车辆租金基础上按租赁天数收取。",
+        "setDeductible": "设置免赔额",
+        "deductibleHint": "若为无免赔额的全额承保，请保持关闭。",
+        "deductible": "免赔额（日元）",
+        "save": "保存选项",
         "saving": "保存中...",
         "cancel": "取消"
       }
