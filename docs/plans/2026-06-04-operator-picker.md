@@ -4,7 +4,8 @@
 - **Epic:** #385 (marketplace MVP) · follows #401/#400/#397
 - **Branch:** `feat/operator-picker` off `origin/marketplace-pivot`
 - **Date:** 2026-06-04
-- **Status:** REVISED after review round 2 — AWAITING RE-REVIEW (no code written yet)
+- **Status:** APPROVED (review round 2). Slice 3a (`GET /operators` API + tests, §3a) landed in
+  commit `f0fd29a`; slices 3b–3e (inference retirement, web picker, class scoping, 422 mapping) pending.
 
 ## 1. Problem / why this is a gate
 
