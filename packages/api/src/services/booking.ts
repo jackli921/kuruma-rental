@@ -176,7 +176,8 @@ export class BookingService {
     }
 
     // Issue #308: resolve the class (required) + optional pre-assigned vehicle.
-    // Pricing falls back to the class rate when no specific vehicle is attached.
+    // Pricing comes from the vehicle when attached; class-only bookings carry
+    // no price (totalPrice null) until a vehicle is assigned — #406, slice 6.
     // Issue #65: rental rules + Issue #74: server-side pricing — never
     // accepted from the client.
     const resolution = await this.resolveClassAndVehicle(ctx, input, now)
@@ -329,8 +330,9 @@ export class BookingService {
 
   // Resolves the booking's class (required by #308) and optional vehicle.
   // When a vehicle is provided, it must belong to the chosen class — mixing
-  // them would let a renter book a Compact and receive an SUV. Pricing and
-  // buffer come from the vehicle when assigned, otherwise from the class.
+  // them would let a renter book a Compact and receive an SUV. Buffer and
+  // pricing come from the vehicle; class-only bookings stay unpriced
+  // (totalPrice null) until a vehicle is assigned (#406, snapshot in slice 6).
   private async resolveClassAndVehicle(
     ctx: CallerContext,
     input: CreateBookingInput,
