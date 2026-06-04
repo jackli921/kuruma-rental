@@ -204,3 +204,49 @@ describe('ClassForm', () => {
     expect(screen.getByLabelText('form.sortOrder')).toHaveValue(5)
   })
 })
+
+// Issue #407: admin operator picker (gate before operator #2)
+describe('ClassForm — operator picker', () => {
+  afterEach(() => {
+    cleanup()
+  })
+
+  const operators = [
+    { id: 'op_a', name: 'Best Car Rental', slug: 'best-car-rental' },
+    { id: 'op_b', name: 'Acme Cars', slug: 'acme-cars' },
+  ]
+  const oneOperator = [{ id: 'op_a', name: 'Best Car Rental', slug: 'best-car-rental' }]
+
+  it('hides the picker but submits the sole operatorId when one operator exists', async () => {
+    const onSubmit = vi.fn().mockResolvedValue(undefined)
+    const user = userEvent.setup()
+    render(<ClassForm onSubmit={onSubmit} operators={oneOperator} />)
+
+    expect(screen.queryByLabelText('form.operator')).not.toBeInTheDocument()
+    await user.type(screen.getByLabelText('form.name'), 'Compact')
+    await user.type(screen.getByLabelText('form.slug'), 'compact')
+    await user.type(screen.getByLabelText('form.dailyRate'), '8000')
+    await user.click(screen.getByRole('button', { name: 'form.save' }))
+
+    await waitFor(() => expect(onSubmit).toHaveBeenCalledTimes(1))
+    expect(onSubmit.mock.calls[0][0].operatorId).toBe('op_a')
+  })
+
+  it('requires an operator choice when multiple operators exist, then submits it', async () => {
+    const onSubmit = vi.fn().mockResolvedValue(undefined)
+    const user = userEvent.setup()
+    render(<ClassForm onSubmit={onSubmit} operators={operators} />)
+
+    const picker = screen.getByLabelText('form.operator')
+    await user.type(screen.getByLabelText('form.name'), 'Compact')
+    await user.type(screen.getByLabelText('form.slug'), 'compact')
+    await user.type(screen.getByLabelText('form.dailyRate'), '8000')
+    await user.click(screen.getByRole('button', { name: 'form.save' }))
+    await waitFor(() => expect(onSubmit).not.toHaveBeenCalled())
+
+    await user.selectOptions(picker, 'op_b')
+    await user.click(screen.getByRole('button', { name: 'form.save' }))
+    await waitFor(() => expect(onSubmit).toHaveBeenCalledTimes(1))
+    expect(onSubmit.mock.calls[0][0].operatorId).toBe('op_b')
+  })
+})

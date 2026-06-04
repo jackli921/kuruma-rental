@@ -8,6 +8,10 @@ import type {
 // JSON-serialized VehicleClass — dates come as ISO strings from the API.
 export interface VehicleClassData {
   id: string
+  // #407: the owning operator. Optional only because legacy test fixtures
+  // predate it; the API always returns it. Used to scope the vehicle-create
+  // class dropdown to the picked operator (composite FK).
+  operatorId?: string
   name: string
   slug: string
   description: string | null

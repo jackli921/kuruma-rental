@@ -45,13 +45,6 @@ export interface OperatorRepository {
     preAuthHandoffUrl: string | null
   }): Promise<Operator>
   existsBySlug(slug: string): Promise<boolean>
-  /**
-   * Id of the only operator, or null when there is not exactly one (zero or
-   * 2+). The write-operator resolver uses it to infer the tenant for a
-   * non-operator create while a single operator exists, and to reject the
-   * ambiguous multi-operator case (#401). Structurally satisfies `OperatorLookup`.
-   */
-  findSoleId(): Promise<string | null>
   // Slice 2 (#387): the business layout resolves the /manage/<slug> URL segment
   // and the sidebar resolves the caller's own slug. Access is decided in
   // OperatorService (operator may only read its own); the repo is unscoped.

@@ -327,7 +327,10 @@
         "color": "Color",
         "colorPlaceholder": "e.g. White",
         "class": "Class",
-        "classNone": "Unassigned"
+        "classNone": "Unassigned",
+        "operator": "Operator",
+        "operatorPlaceholder": "Select an operator",
+        "operatorRequired": "Select an operator to continue"
       },
       "photos": {
         "heading": "Photos",

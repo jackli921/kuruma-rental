@@ -15,12 +15,6 @@ export class InMemoryOperatorRepository implements OperatorRepository {
     return false
   }
 
-  async findSoleId(): Promise<string | null> {
-    if (this.store.size !== 1) return null
-    const [id] = this.store.keys()
-    return id ?? null
-  }
-
   async list(): Promise<Operator[]> {
     return [...this.store.values()].sort((a, b) => a.name.localeCompare(b.name))
   }

@@ -24,6 +24,7 @@ import { cn } from '@/lib/utils'
 import { fetchFleetOverviewAction } from '@/lib/vehicle-actions'
 import type { VehicleData } from '@/lib/vehicle-api'
 import { classKeys, fetchClassesAction } from '@/modules/classes'
+import { fetchOperatorsAction, operatorKeys } from '@/modules/operators'
 import { useQuery } from '@tanstack/react-query'
 import { AlertCircle, Car, ChevronLeft, ChevronRight, Plus, SlidersHorizontal } from 'lucide-react'
 import { useTranslations } from 'next-intl'
@@ -96,6 +97,17 @@ export function VehicleList() {
     queryKey: classKeys.list(),
     queryFn: async () => {
       const result = await fetchClassesAction({ includeArchived: false })
+      if (!result.success) throw new Error(result.error)
+      return result.data
+    },
+  })
+
+  // #407: operators power the admin picker in the add dialog. The picker only
+  // shows when 2+ exist; the create body always carries an explicit operatorId.
+  const { data: operators } = useQuery({
+    queryKey: operatorKeys.list(),
+    queryFn: async () => {
+      const result = await fetchOperatorsAction()
       if (!result.success) throw new Error(result.error)
       return result.data
     },
@@ -381,7 +393,12 @@ export function VehicleList() {
           </div>
         )}
 
-        <AddVehicleDialog open={showAddDialog} onOpenChange={setShowAddDialog} classes={classes} />
+        <AddVehicleDialog
+          open={showAddDialog}
+          onOpenChange={setShowAddDialog}
+          classes={classes}
+          operators={operators}
+        />
         <EditVehicleDialog
           vehicle={editingVehicle}
           onOpenChange={() => setEditingVehicle(null)}

@@ -37,6 +37,9 @@ vi.mock('next-intl', () => ({
       'form.cancel': 'Cancel',
       'form.class': 'Class',
       'form.classNone': 'Unassigned',
+      'form.operator': 'Operator',
+      'form.operatorPlaceholder': 'Select an operator',
+      'form.operatorRequired': 'Operator is required',
     }
     return messages[key] ?? key
   },
@@ -414,6 +417,92 @@ describe('VehicleForm', () => {
     it('does not render the dropdown when no classes are passed', () => {
       render(<VehicleForm onSubmit={vi.fn()} />)
       expect(screen.queryByLabelText('Class')).not.toBeInTheDocument()
+    })
+  })
+
+  // Issue #407: admin operator picker (gate before operator #2)
+  describe('operator picker', () => {
+    const operators = [
+      { id: 'op_a', name: 'Best Car Rental', slug: 'best-car-rental' },
+      { id: 'op_b', name: 'Acme Cars', slug: 'acme-cars' },
+    ]
+    const oneOperator = [{ id: 'op_a', name: 'Best Car Rental', slug: 'best-car-rental' }]
+    const baseClass = {
+      slug: 'x',
+      description: null,
+      photos: [],
+      seats: 5,
+      luggageCapacity: 2,
+      transmission: 'AUTO' as const,
+      fuelType: null,
+      dailyRateJpy: 8000,
+      hourlyRateJpy: null,
+      acrissCode: null,
+      sortOrder: 0,
+      status: 'ACTIVE' as const,
+      createdAt: '2026-01-01T00:00:00.000Z',
+      updatedAt: '2026-01-01T00:00:00.000Z',
+    }
+
+    it('hides the picker but submits the sole operatorId when one operator exists', async () => {
+      const onSubmit = vi.fn().mockResolvedValue(undefined)
+      const user = userEvent.setup()
+      render(<VehicleForm onSubmit={onSubmit} operators={oneOperator} />)
+
+      expect(screen.queryByLabelText('Operator')).not.toBeInTheDocument()
+      await user.type(screen.getByLabelText('Vehicle name'), 'Corolla')
+      await user.type(screen.getByLabelText('Daily rate'), '8000')
+      await user.click(screen.getByRole('button', { name: 'Save vehicle' }))
+
+      await waitFor(() => expect(onSubmit).toHaveBeenCalledTimes(1))
+      expect(onSubmit.mock.calls[0][0].operatorId).toBe('op_a')
+    })
+
+    it('requires an operator choice when multiple operators exist, then submits it', async () => {
+      const onSubmit = vi.fn().mockResolvedValue(undefined)
+      const user = userEvent.setup()
+      render(<VehicleForm onSubmit={onSubmit} operators={operators} />)
+
+      const picker = screen.getByLabelText('Operator')
+      await user.type(screen.getByLabelText('Vehicle name'), 'Corolla')
+      await user.type(screen.getByLabelText('Daily rate'), '8000')
+      await user.click(screen.getByRole('button', { name: 'Save vehicle' }))
+      // Blocked: no operator chosen.
+      await waitFor(() => expect(onSubmit).not.toHaveBeenCalled())
+
+      await user.selectOptions(picker, 'op_b')
+      await user.click(screen.getByRole('button', { name: 'Save vehicle' }))
+      await waitFor(() => expect(onSubmit).toHaveBeenCalledTimes(1))
+      expect(onSubmit.mock.calls[0][0].operatorId).toBe('op_b')
+    })
+
+    it('scopes the class dropdown to the selected operator', async () => {
+      const user = userEvent.setup()
+      const classes = [
+        { ...baseClass, id: 'c_a', name: 'A Compact', operatorId: 'op_a' },
+        { ...baseClass, id: 'c_b', name: 'B SUV', operatorId: 'op_b' },
+      ]
+      render(<VehicleForm onSubmit={vi.fn()} operators={operators} classes={classes} />)
+
+      await user.selectOptions(screen.getByLabelText('Operator'), 'op_a')
+      const select = screen.getByLabelText('Class') as HTMLSelectElement
+      expect(Array.from(select.options).map((o) => o.value)).toEqual(['', 'c_a'])
+    })
+
+    it('does not render the picker and omits operatorId in edit mode (no operators)', async () => {
+      const onSubmit = vi.fn().mockResolvedValue(undefined)
+      const user = userEvent.setup()
+      render(
+        <VehicleForm
+          onSubmit={onSubmit}
+          defaultValues={{ name: 'Fit', seats: 5, transmission: 'AUTO', dailyRateJpy: 7000 }}
+        />,
+      )
+
+      expect(screen.queryByLabelText('Operator')).not.toBeInTheDocument()
+      await user.click(screen.getByRole('button', { name: 'Save vehicle' }))
+      await waitFor(() => expect(onSubmit).toHaveBeenCalledTimes(1))
+      expect(onSubmit.mock.calls[0][0].operatorId).toBeUndefined()
     })
   })
 

@@ -16,13 +16,6 @@ export class DrizzleOperatorRepository implements OperatorRepository {
     return row !== undefined
   }
 
-  async findSoleId(): Promise<string | null> {
-    // LIMIT 2 is enough to distinguish "exactly one" from "zero or many"
-    // without scanning the whole table.
-    const rows = await this.db.select({ id: operators.id }).from(operators).limit(2)
-    return rows.length === 1 ? (rows[0]?.id ?? null) : null
-  }
-
   async list(): Promise<Operator[]> {
     return this.db.select().from(operators).orderBy(asc(operators.name))
   }

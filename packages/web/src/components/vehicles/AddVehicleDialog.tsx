@@ -11,15 +11,22 @@ import { VehicleForm } from '@/components/vehicles/VehicleForm'
 import { useVehicleMutation } from '@/hooks/useVehicleMutation'
 import { createVehicleAction } from '@/lib/vehicle-actions'
 import type { VehicleClassData } from '@/modules/classes'
+import type { OperatorOption } from '@/modules/operators'
 import { useTranslations } from 'next-intl'
 
 interface AddVehicleDialogProps {
   open: boolean
   onOpenChange: (open: boolean) => void
   classes?: readonly VehicleClassData[] | undefined
+  operators?: readonly OperatorOption[] | undefined
 }
 
-export function AddVehicleDialog({ open, onOpenChange, classes }: AddVehicleDialogProps) {
+export function AddVehicleDialog({
+  open,
+  onOpenChange,
+  classes,
+  operators,
+}: AddVehicleDialogProps) {
   const t = useTranslations('business.vehicles')
   const { mutate, isPending, error, reset } = useVehicleMutation({
     mutationFn: createVehicleAction,
@@ -44,6 +51,7 @@ export function AddVehicleDialog({ open, onOpenChange, classes }: AddVehicleDial
           onCancel={() => handleOpenChange(false)}
           isSubmitting={isPending}
           classes={classes}
+          operators={operators}
         />
       </DialogContent>
     </Dialog>

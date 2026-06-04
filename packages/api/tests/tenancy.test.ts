@@ -1,17 +1,6 @@
 import { describe, expect, test } from 'vitest'
 import { type CallerContext, ForbiddenError, OperatorRequiredError } from '../src/middleware/auth'
-import { type OperatorLookup, operatorReadScope, resolveOperatorIdForWrite } from '../src/tenancy'
-
-const lookupReturning = (soleId: string | null): OperatorLookup => ({
-  findSoleId: async () => soleId,
-})
-const lookupNeverCalled: OperatorLookup = {
-  findSoleId: async () => {
-    throw new Error(
-      'findSoleId must not be called for operator-scoped or explicit-operatorId writes',
-    )
-  },
-}
+import { operatorReadScope, resolveOperatorIdForWrite } from '../src/tenancy'
 
 const operatorCtx = (operatorId?: string): CallerContext =>
   operatorId !== undefined
@@ -43,38 +32,33 @@ describe('operatorReadScope', () => {
 
 describe('resolveOperatorIdForWrite', () => {
   test('operator role writes under its own ctx.operatorId', async () => {
-    await expect(
-      resolveOperatorIdForWrite(operatorCtx('op_7'), undefined, lookupNeverCalled),
-    ).resolves.toBe('op_7')
+    await expect(resolveOperatorIdForWrite(operatorCtx('op_7'), undefined)).resolves.toBe('op_7')
   })
 
   test('operator role with no operatorId fails closed', async () => {
-    await expect(
-      resolveOperatorIdForWrite(operatorCtx(), undefined, lookupNeverCalled),
-    ).rejects.toBeInstanceOf(ForbiddenError)
+    await expect(resolveOperatorIdForWrite(operatorCtx(), undefined)).rejects.toBeInstanceOf(
+      ForbiddenError,
+    )
   })
 
   test('operator role ignores an input operatorId (cannot write for another tenant)', async () => {
-    await expect(
-      resolveOperatorIdForWrite(operatorCtx('op_7'), 'op_other', lookupNeverCalled),
-    ).resolves.toBe('op_7')
+    await expect(resolveOperatorIdForWrite(operatorCtx('op_7'), 'op_other')).resolves.toBe('op_7')
   })
 
-  test('non-operator honours an explicit input operatorId without consulting the lookup', async () => {
-    await expect(
-      resolveOperatorIdForWrite(adminCtx, 'op_explicit', lookupNeverCalled),
-    ).resolves.toBe('op_explicit')
+  test('non-operator honours an explicit input operatorId', async () => {
+    await expect(resolveOperatorIdForWrite(adminCtx, 'op_explicit')).resolves.toBe('op_explicit')
   })
 
-  test('non-operator with no input infers the sole operator (no BCR hardcode)', async () => {
-    await expect(
-      resolveOperatorIdForWrite(legacyStaffCtx, undefined, lookupReturning('op_only')),
-    ).resolves.toBe('op_only')
-  })
-
-  test('non-operator with no input is rejected when zero or 2+ operators exist', async () => {
-    await expect(
-      resolveOperatorIdForWrite(adminCtx, undefined, lookupReturning(null)),
-    ).rejects.toBeInstanceOf(OperatorRequiredError)
+  // #407: sole-operator inference is retired — a non-operator write must name its
+  // target operator explicitly, even while exactly one operator exists. This
+  // closes the read-then-write TOCTOU and stops silent misattribution once a
+  // second operator is onboarded.
+  test('non-operator with no operatorId is always rejected (inference retired #407)', async () => {
+    await expect(resolveOperatorIdForWrite(adminCtx, undefined)).rejects.toBeInstanceOf(
+      OperatorRequiredError,
+    )
+    await expect(resolveOperatorIdForWrite(legacyStaffCtx, undefined)).rejects.toBeInstanceOf(
+      OperatorRequiredError,
+    )
   })
 })

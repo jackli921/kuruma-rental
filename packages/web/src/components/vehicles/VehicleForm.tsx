@@ -5,6 +5,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import type { VehicleClassData } from '@/modules/classes'
+import type { OperatorOption } from '@/modules/operators'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { type CreateVehicleInput, createVehicleSchema } from '@kuruma/shared/validators/vehicle'
 import { useTranslations } from 'next-intl'
@@ -21,6 +22,11 @@ interface VehicleFormProps {
   // Passed from the parent so the form stays a dumb presentational component;
   // the Fleet page fetches classes once and shares the cache across dialogs.
   classes?: readonly VehicleClassData[] | undefined
+  // #407: operators the caller may create under. Supplied ONLY by the add
+  // dialog (create mode); absent in edit mode (operator is immutable). With one
+  // operator the picker is hidden and the id submitted silently; with 2+ the
+  // admin must choose (gate before operator #2).
+  operators?: readonly OperatorOption[] | undefined
 }
 
 export function VehicleForm({
@@ -29,12 +35,17 @@ export function VehicleForm({
   defaultValues,
   isSubmitting,
   classes,
+  operators,
 }: VehicleFormProps) {
   const t = useTranslations('business.vehicles')
+
+  const showOperatorPicker = operators !== undefined && operators.length > 1
 
   const {
     register,
     handleSubmit,
+    watch,
+    setValue,
     formState: { errors },
   } = useForm<VehicleFormValues>({
     resolver: zodResolver(createVehicleSchema),
@@ -54,9 +65,22 @@ export function VehicleForm({
       maxRentalHours: 72,
       advanceBookingHours: null,
       classId: null,
+      // #407: with a single operator, default it so the body always carries an
+      // explicit operatorId; with 2+ leave blank to force a choice.
+      operatorId: operators?.length === 1 ? operators[0]?.id : undefined,
       ...defaultValues,
     },
   })
+
+  // #407: a vehicle's class must belong to its operator (composite FK). When the
+  // picker is shown, scope class options to the chosen operator; otherwise show
+  // all (single-operator or edit mode).
+  const selectedOperatorId = watch('operatorId')
+  const visibleClasses = showOperatorPicker
+    ? (classes ?? []).filter((klass) => klass.operatorId === selectedOperatorId)
+    : classes
+
+  const operatorField = register('operatorId', { required: t('form.operatorRequired') })
 
   // Numeric fields that must submit `null` (not NaN or undefined) when blank.
   // Matches the pricing pattern from #48.
@@ -86,7 +110,39 @@ export function VehicleForm({
         />
       </div>
 
-      {classes && classes.length > 0 && (
+      {showOperatorPicker && (
+        <div>
+          <Label htmlFor="operatorId">{t('form.operator')}</Label>
+          <select
+            id="operatorId"
+            aria-label={t('form.operator')}
+            className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-xs"
+            {...operatorField}
+            onChange={(e) => {
+              operatorField.onChange(e)
+              // Operator changed: drop any class from the previous operator so a
+              // cross-operator (FK-violating) classId can never be submitted.
+              setValue('classId', null)
+            }}
+          >
+            <option value="">{t('form.operatorPlaceholder')}</option>
+            {operators?.map((op) => (
+              <option key={op.id} value={op.id}>
+                {op.name}
+              </option>
+            ))}
+          </select>
+          {errors.operatorId && (
+            <p className="text-sm text-destructive mt-1">{errors.operatorId.message}</p>
+          )}
+        </div>
+      )}
+
+      {/* Single-operator create: carry the id without a visible control so the
+          one-click flow is unchanged while the body still names the operator. */}
+      {operators?.length === 1 && <input type="hidden" {...register('operatorId')} />}
+
+      {visibleClasses && visibleClasses.length > 0 && (
         <div>
           <Label htmlFor="classId">{t('form.class')}</Label>
           <select
@@ -99,7 +155,7 @@ export function VehicleForm({
             })}
           >
             <option value="">{t('form.classNone')}</option>
-            {classes.map((klass) => (
+            {visibleClasses.map((klass) => (
               <option key={klass.id} value={klass.id}>
                 {klass.name}
               </option>

@@ -345,10 +345,10 @@ export function createApp(overrides?: {
   const fleetOverviewService = new FleetOverviewService(fleetOverviewRepo)
   const vehicleDetailService = new VehicleDetailService(vehicleDetailRepo)
   const operatorService = new OperatorService(operatorRepo)
-  // #401: bind the write-operator resolver to the concrete operator lookup, so
-  // the write routes resolve the target tenant without importing a repository.
+  // #407: the write-operator resolver is a pure policy function — sole-operator
+  // inference is retired, so it no longer needs an operator lookup.
   const resolveWriteOperatorId: ResolveWriteOperatorId = (ctx, inputOperatorId) =>
-    resolveOperatorIdForWrite(ctx, inputOperatorId, operatorRepo)
+    resolveOperatorIdForWrite(ctx, inputOperatorId)
   const locationService = new LocationService(locationRepo)
   const insuranceOptionService = new InsuranceOptionService(insuranceOptionRepo)
   const feeScheduleService = new FeeScheduleService(feeScheduleRepo)
