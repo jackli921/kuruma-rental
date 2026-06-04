@@ -21,6 +21,18 @@ export class OperatorService {
     return this.scopeToCaller(ctx, await this.repo.findBySlug(slug))
   }
 
+  /**
+   * List operators for the admin operator picker (#407). Bypass roles
+   * (PLATFORM_ADMIN, legacy STAFF/ADMIN) see every operator; an OPERATOR_*
+   * caller sees only its own row (and nothing if it carries no operatorId —
+   * fail-closed, never leaking other tenants).
+   */
+  async list(ctx: CallerContext): Promise<Operator[]> {
+    const all = await this.repo.list()
+    if (!isOperatorRole(ctx.role)) return all
+    return all.filter((o) => o.id === ctx.operatorId)
+  }
+
   private scopeToCaller(ctx: CallerContext, operator: Operator | undefined): Operator | undefined {
     if (!operator) return undefined
     if (isOperatorRole(ctx.role) && operator.id !== ctx.operatorId) return undefined

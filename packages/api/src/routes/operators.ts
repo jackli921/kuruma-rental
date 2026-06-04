@@ -12,10 +12,25 @@ import { fail, ok } from './helpers'
 export function createOperatorRoutes(service: OperatorService) {
   const app = new Hono()
 
+  // `/operators/*` does not match the bare `/operators` collection path, so gate
+  // it explicitly; `requireUser` in each handler is the 401 backstop regardless.
+  app.use('/operators', requireAuth())
   app.use('/operators/*', requireAuth())
 
   return (
     app
+      // List operators for the admin picker (#407). Bypass roles see all; an
+      // OPERATOR_* caller sees only its own row (scoped in the service).
+      .get('/operators', async (c) => {
+        const user = requireUser(c)
+        if (!FLEET_WRITE_ROLES.has(user.role)) return fail(c, 'Forbidden', 403)
+
+        const operators = await service.list(toCallerContext(user))
+        return ok(
+          c,
+          operators.map(({ id, name, slug }) => ({ id, name, slug })),
+        )
+      })
       // The literal `by-slug` segment MUST be registered before the parametric
       // `:id` so `/operators/by-slug/foo` can never be captured as an id.
       .get('/operators/by-slug/:slug', async (c) => {

@@ -56,6 +56,9 @@ export interface OperatorRepository {
   // and the sidebar resolves the caller's own slug. Access is decided in
   // OperatorService (operator may only read its own); the repo is unscoped.
   findById(id: string): Promise<Operator | undefined>
+  // #407: list all operators (name-sorted), powering the admin operator picker.
+  // Caller scoping (operator sees only its own) is applied in OperatorService.
+  list(): Promise<Operator[]>
   findBySlug(slug: string): Promise<Operator | undefined>
 }
 

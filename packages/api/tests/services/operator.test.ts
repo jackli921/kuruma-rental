@@ -15,6 +15,49 @@ function makeService() {
   return { repo, service: new OperatorService(repo) }
 }
 
+describe('InMemoryOperatorRepository.list', () => {
+  test('returns all operators sorted by name', async () => {
+    const repo = new InMemoryOperatorRepository()
+    await repo.create({ name: 'Zebra Cars', slug: 'zebra-cars', preAuthHandoffUrl: null })
+    await repo.create({ name: 'Acme Cars', slug: 'acme-cars', preAuthHandoffUrl: null })
+    const list = await repo.list()
+    expect(list.map((o) => o.name)).toEqual(['Acme Cars', 'Zebra Cars'])
+  })
+
+  test('returns an empty array when there are no operators', async () => {
+    expect(await new InMemoryOperatorRepository().list()).toEqual([])
+  })
+})
+
+describe('OperatorService.list', () => {
+  async function seedTwo() {
+    const { repo, service } = makeService()
+    const a = await repo.create({ name: 'Acme', slug: 'acme', preAuthHandoffUrl: null })
+    const b = await repo.create({ name: 'Best', slug: 'best', preAuthHandoffUrl: null })
+    return { repo, service, a, b }
+  }
+
+  test('a bypass caller (PLATFORM_ADMIN) sees every operator', async () => {
+    const { service, a, b } = await seedTwo()
+    const list = await service.list(SYSTEM_CONTEXT)
+    expect(list.map((o) => o.id).sort()).toEqual([a.id, b.id].sort())
+  })
+
+  test('an OPERATOR_OWNER sees only its own operator', async () => {
+    const { service, a } = await seedTwo()
+    const ctx: CallerContext = { ...ownerCtx, operatorId: a.id }
+    const list = await service.list(ctx)
+    expect(list).toHaveLength(1)
+    expect(list[0]?.id).toBe(a.id)
+  })
+
+  test('an OPERATOR_* caller with no operatorId sees nothing (fail-closed)', async () => {
+    const { service } = await seedTwo()
+    const ctx: CallerContext = { ...ownerCtx, operatorId: undefined }
+    expect(await service.list(ctx)).toEqual([])
+  })
+})
+
 describe('OperatorService.create', () => {
   test('derives a kebab slug from the name', async () => {
     const { service } = makeService()

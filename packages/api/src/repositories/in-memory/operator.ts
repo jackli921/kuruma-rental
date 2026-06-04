@@ -21,6 +21,10 @@ export class InMemoryOperatorRepository implements OperatorRepository {
     return id ?? null
   }
 
+  async list(): Promise<Operator[]> {
+    return [...this.store.values()].sort((a, b) => a.name.localeCompare(b.name))
+  }
+
   async findById(id: string): Promise<Operator | undefined> {
     return this.store.get(id)
   }
