@@ -43,6 +43,7 @@
     "classes": "クラス",
     "locations": "拠点",
     "insurance": "保険",
+    "fees": "料金",
     "menu": "メニュー",
     "close": "メニューを閉じる",
     "switchToRenter": "利用者ビューに切替",
@@ -600,6 +601,48 @@
         "deductibleHint": "免責なしのフルカバーの場合はオフのままにします。",
         "deductible": "免責額（円）",
         "save": "オプションを保存",
+        "saving": "保存中...",
+        "cancel": "キャンセル"
+      }
+    },
+    "fees": {
+      "title": "料金",
+      "subtitle": "車両の延長料金・清掃料金・燃料未補給料金を設定します。",
+      "addFee": "料金を追加",
+      "addSubtitle": "新しい料金を作成します。",
+      "editFee": "料金を編集",
+      "archiveAction": "料金をアーカイブ",
+      "archiveTitle": "{name}をアーカイブしますか？",
+      "archiveDescription": "料金をアーカイブします。一覧には残りますが、新規予約には適用されず、同種別の枠が空きます。",
+      "archiveConfirm": "アーカイブ",
+      "archiving": "アーカイブ中...",
+      "empty": "まだ料金がありません。延長・清掃・燃料未補給の料金を追加してください。",
+      "loadError": "料金を読み込めませんでした",
+      "retry": "再試行",
+      "status": {
+        "ACTIVE": "有効",
+        "ARCHIVED": "アーカイブ済み"
+      },
+      "type": {
+        "OVERTIME_HOURLY": "延長料金",
+        "CLEANING_FLAT": "清掃料金",
+        "NO_FUEL_FLAT": "燃料未補給料金"
+      },
+      "unit": {
+        "PER_HOUR": "1時間あたり",
+        "PER_DAY": "1日あたり",
+        "PER_KM": "1kmあたり",
+        "FLAT": "一律"
+      },
+      "form": {
+        "feeType": "料金の種別",
+        "unit": "単位",
+        "unitHint": "単位は料金の種別から自動的に設定されます。",
+        "amount": "金額（円）",
+        "vehicleClass": "車両クラス",
+        "vehicleClassHint": "全クラス共通にする場合はそのままにしてください。",
+        "operatorWide": "全クラス（事業者全体）",
+        "save": "料金を保存",
         "saving": "保存中...",
         "cancel": "キャンセル"
       }

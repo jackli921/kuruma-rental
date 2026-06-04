@@ -43,6 +43,7 @@
     "classes": "Classes",
     "locations": "Locations",
     "insurance": "Insurance",
+    "fees": "Fees",
     "menu": "Menu",
     "close": "Close menu",
     "switchToRenter": "Switch to renter view",
@@ -600,6 +601,48 @@
         "deductibleHint": "Leave off for full cover with no deductible.",
         "deductible": "Deductible (yen)",
         "save": "Save option",
+        "saving": "Saving...",
+        "cancel": "Cancel"
+      }
+    },
+    "fees": {
+      "title": "Fees",
+      "subtitle": "Set overtime, cleaning, and no-fuel fees for your fleet.",
+      "addFee": "Add fee",
+      "addSubtitle": "Create a new fee schedule.",
+      "editFee": "Edit fee",
+      "archiveAction": "Archive fee",
+      "archiveTitle": "Archive {name}?",
+      "archiveDescription": "This archives the fee. It stays in the list, but won't apply to new bookings and frees its slot for a replacement.",
+      "archiveConfirm": "Archive",
+      "archiving": "Archiving...",
+      "empty": "No fees yet. Add overtime, cleaning, or no-fuel charges.",
+      "loadError": "Couldn't load fees",
+      "retry": "Try again",
+      "status": {
+        "ACTIVE": "Active",
+        "ARCHIVED": "Archived"
+      },
+      "type": {
+        "OVERTIME_HOURLY": "Overtime",
+        "CLEANING_FLAT": "Cleaning",
+        "NO_FUEL_FLAT": "Returned without fuel"
+      },
+      "unit": {
+        "PER_HOUR": "per hour",
+        "PER_DAY": "per day",
+        "PER_KM": "per km",
+        "FLAT": "flat"
+      },
+      "form": {
+        "feeType": "Fee type",
+        "unit": "Unit",
+        "unitHint": "The unit is set automatically by the fee type.",
+        "amount": "Amount (JPY)",
+        "vehicleClass": "Vehicle class",
+        "vehicleClassHint": "Leave as operator-wide to apply to your whole fleet.",
+        "operatorWide": "All classes (operator-wide)",
+        "save": "Save fee",
         "saving": "Saving...",
         "cancel": "Cancel"
       }

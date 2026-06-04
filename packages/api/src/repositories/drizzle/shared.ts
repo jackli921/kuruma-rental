@@ -3,6 +3,7 @@ import type { getDb } from '@kuruma/shared/db'
 import {
   bookings,
   insuranceOptions,
+  feeSchedules,
   locations,
   maintenanceLogs,
   messages,
@@ -15,6 +16,7 @@ import type { VehicleDetailBooking } from '@kuruma/shared/types/vehicle-detail'
 import type {
   Booking,
   InsuranceOption,
+  FeeSchedule,
   Location,
   MaintenanceLog,
   Message,
@@ -97,6 +99,18 @@ export const insuranceOptionColumns = {
   status: insuranceOptions.status,
   createdAt: insuranceOptions.createdAt,
   updatedAt: insuranceOptions.updatedAt,
+}
+
+export const feeScheduleColumns = {
+  id: feeSchedules.id,
+  operatorId: feeSchedules.operatorId,
+  vehicleClassId: feeSchedules.vehicleClassId,
+  feeType: feeSchedules.feeType,
+  unit: feeSchedules.unit,
+  amountJpy: feeSchedules.amountJpy,
+  status: feeSchedules.status,
+  createdAt: feeSchedules.createdAt,
+  updatedAt: feeSchedules.updatedAt,
 }
 
 export const bookingColumns = {
@@ -190,6 +204,7 @@ type VehicleClassRow = ColumnRow<typeof vehicleClassColumns>
 type VehicleRow = ColumnRow<typeof vehicleColumns>
 type LocationRow = ColumnRow<typeof locationColumns>
 type InsuranceOptionRow = ColumnRow<typeof insuranceOptionColumns>
+type FeeScheduleRow = ColumnRow<typeof feeScheduleColumns>
 type BookingRow = ColumnRow<typeof bookingColumns>
 type ThreadRow = ColumnRow<typeof threadColumns>
 type ThreadParticipantRow = ColumnRow<typeof participantColumns>
@@ -240,6 +255,20 @@ export function toInsuranceOption(r: InsuranceOptionRow): InsuranceOption {
     description: r.description,
     dailyPriceJpy: r.dailyPriceJpy,
     deductibleJpy: r.deductibleJpy,
+    status: r.status,
+    createdAt: r.createdAt,
+    updatedAt: r.updatedAt,
+  }
+}
+
+export function toFeeSchedule(r: FeeScheduleRow): FeeSchedule {
+  return {
+    id: r.id,
+    operatorId: r.operatorId,
+    vehicleClassId: r.vehicleClassId,
+    feeType: r.feeType,
+    unit: r.unit,
+    amountJpy: r.amountJpy,
     status: r.status,
     createdAt: r.createdAt,
     updatedAt: r.updatedAt,

@@ -256,6 +256,69 @@ export const insuranceOptions = pgTable(
   ],
 )
 
+// Operator-owned fee schedules (epic #385, slice 4b / #405). Per-operator,
+// optionally per vehicle class (null vehicleClassId = operator-wide). MVP fee
+// types: overtime (hourly), cleaning (flat), no-fuel (flat). 4b stores the
+// schedules only — booking snapshot + overtime compute land in slice 6 (#392).
+export const feeTypeEnum = pgEnum('fee_type', ['OVERTIME_HOURLY', 'CLEANING_FLAT', 'NO_FUEL_FLAT'])
+export const feeUnitEnum = pgEnum('fee_unit', ['PER_HOUR', 'PER_DAY', 'PER_KM', 'FLAT'])
+export const feeScheduleStatusEnum = pgEnum('fee_schedule_status', ['ACTIVE', 'ARCHIVED'])
+
+export const feeSchedules = pgTable(
+  'fee_schedules',
+  {
+    id: text('id')
+      .primaryKey()
+      .$defaultFn(() => crypto.randomUUID()),
+    // Tenant owner. NOT NULL — same fresh-branch reseed rationale as
+    // vehicleClasses.operatorId (#386 P1b); no nullable tenancy debt.
+    operatorId: text('operatorId')
+      .notNull()
+      .references(() => operators.id),
+    // null = operator-wide fee; non-null = scoped to one vehicle class. The
+    // composite FK below seals a per-class fee's class to the SAME operator.
+    vehicleClassId: text('vehicleClassId'),
+    // feeType<->unit coherence (OVERTIME_HOURLY=>PER_HOUR, *_FLAT=>FLAT) is NOT
+    // enforced by a DB CHECK — it lives in the Zod schema (create) and
+    // FeeScheduleService (merge-then-validate on update), which is the only
+    // writer. A direct SQL/seed write could persist an incoherent pair; if a
+    // second writer appears (e.g. slice-6 snapshot), add a CHECK here.
+    feeType: feeTypeEnum('feeType').notNull(),
+    unit: feeUnitEnum('unit').notNull(),
+    amountJpy: integer('amountJpy').notNull(),
+    status: feeScheduleStatusEnum('status').notNull().default('ACTIVE'),
+    createdAt: timestamp('createdAt', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updatedAt', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    // Composite index covers the operator read-scope (leading column) AND the
+    // composite FK source, so lint:fk-indexes + FK maintenance are satisfied.
+    // (operatorId) is a prefix of this, so no separate idx_fee_schedules_operatorId
+    // is needed. The partial UNIQUE indexes below are conditional and do NOT
+    // count as FK cover.
+    index('idx_fee_schedules_operator_class').on(table.operatorId, table.vehicleClassId),
+    // Composite FK seal (#395): a per-class fee's class must belong to the SAME
+    // operator. MATCH SIMPLE — when vehicleClassId IS NULL the FK is not
+    // enforced (operator-wide row).
+    foreignKey({
+      columns: [table.operatorId, table.vehicleClassId],
+      foreignColumns: [vehicleClasses.operatorId, vehicleClasses.id],
+      name: 'fee_schedules_operator_class_fk',
+    }),
+    check('fee_schedules_amount_non_negative', sql`${table.amountJpy} >= 0`),
+    // Uniqueness: ONE active fee per (operator, type, scope). Two partial
+    // indexes because NULL != NULL in a plain UNIQUE — operator-wide rows would
+    // otherwise never dedupe. Scoped to status='ACTIVE' so archiving frees the
+    // slot for a re-created fee.
+    uniqueIndex('fee_schedules_active_class_unique')
+      .on(table.operatorId, table.feeType, table.vehicleClassId)
+      .where(sql`status = 'ACTIVE' AND "vehicleClassId" IS NOT NULL`),
+    uniqueIndex('fee_schedules_active_operatorwide_unique')
+      .on(table.operatorId, table.feeType)
+      .where(sql`status = 'ACTIVE' AND "vehicleClassId" IS NULL`),
+  ],
+)
+
 export const vehicles = pgTable(
   'vehicles',
   {
