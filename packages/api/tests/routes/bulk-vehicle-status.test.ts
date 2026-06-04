@@ -3,13 +3,15 @@ import { beforeEach, describe, expect, it } from 'vitest'
 import { InMemoryVehicleRepository } from '../../src/repositories/in-memory'
 import { createVehicleRoutes } from '../../src/routes/vehicles'
 import { testAuthMiddleware } from '../helpers/auth'
-import { testResolveWriteOperatorId } from '../helpers/operator'
+import { TEST_OPERATOR_ID, testResolveWriteOperatorId } from '../helpers/operator'
 
 let app: Hono
 let repo: InMemoryVehicleRepository
 
 function validVehicleInput(overrides: Record<string, unknown> = {}) {
   return {
+    // #407: STAFF/ADMIN creates must name the operator (inference retired).
+    operatorId: TEST_OPERATOR_ID,
     name: 'Toyota Corolla',
     seats: 5,
     transmission: 'AUTO' as const,

@@ -8,7 +8,7 @@ import {
   InMemoryVehicleRepository,
 } from '../../src/repositories/in-memory'
 import { authHeaders, setupAuthEnv } from '../helpers/auth'
-import { seededOperatorRepo } from '../helpers/operator'
+import { TEST_OPERATOR_ID, seededOperatorRepo } from '../helpers/operator'
 
 function futureDate(hoursFromNow: number): string {
   const d = new Date()
@@ -150,6 +150,7 @@ describe('actor derivation from JWT', () => {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', ...renterHeaders },
       body: JSON.stringify({
+        operatorId: TEST_OPERATOR_ID,
         classId,
         name: 'Hacked Car',
         seats: 5,
@@ -168,6 +169,7 @@ describe('actor derivation from JWT', () => {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', ...staffHeaders },
       body: JSON.stringify({
+        operatorId: TEST_OPERATOR_ID,
         classId,
         name: 'Staff Car',
         seats: 5,

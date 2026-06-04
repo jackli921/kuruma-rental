@@ -8,7 +8,7 @@ import {
   InMemoryVehicleRepository,
 } from '../../src/repositories/in-memory'
 import { authHeaders, setupAuthEnv } from '../helpers/auth'
-import { seededOperatorRepo } from '../helpers/operator'
+import { TEST_OPERATOR_ID, seededOperatorRepo } from '../helpers/operator'
 
 async function createTestApp() {
   setupAuthEnv()
@@ -101,6 +101,7 @@ describe('API responses contain only expected fields', () => {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', ...staffHeaders },
       body: JSON.stringify({
+        operatorId: TEST_OPERATOR_ID,
         classId,
         name: 'Test Car',
         description: 'Test',
@@ -129,6 +130,7 @@ describe('API responses contain only expected fields', () => {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', ...staffHeaders },
       body: JSON.stringify({
+        operatorId: TEST_OPERATOR_ID,
         classId,
         name: 'Test Car',
         description: 'Test',
@@ -158,6 +160,7 @@ describe('API responses contain only expected fields', () => {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', ...staffHeaders },
       body: JSON.stringify({
+        operatorId: TEST_OPERATOR_ID,
         classId,
         name: 'Test Car',
         description: 'Test',
