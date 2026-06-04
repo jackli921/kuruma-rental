@@ -136,5 +136,19 @@ export interface InsuranceOption {
   updatedAt: Date
 }
 
+export interface FeeSchedule {
+  id: string
+  /** Owning operator (marketplace tenant, #405). NOT NULL in the DB. */
+  operatorId: string
+  /** null = operator-wide fee; non-null = scoped to one vehicle class. */
+  vehicleClassId: string | null
+  feeType: 'OVERTIME_HOURLY' | 'CLEANING_FLAT' | 'NO_FUEL_FLAT'
+  unit: 'PER_HOUR' | 'PER_DAY' | 'PER_KM' | 'FLAT'
+  amountJpy: number
+  status: 'ACTIVE' | 'ARCHIVED'
+  createdAt: Date
+  updatedAt: Date
+}
+
 // Map stores removed — repositories handle data access now.
 // Types remain here as the shared contract between repositories and routes.

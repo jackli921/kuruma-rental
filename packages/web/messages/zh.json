@@ -43,6 +43,7 @@
     "classes": "车型",
     "locations": "取还点",
     "insurance": "保险",
+    "fees": "费用",
     "menu": "菜单",
     "close": "关闭菜单",
     "switchToRenter": "切换到租客视图",
@@ -600,6 +601,48 @@
         "deductibleHint": "若为无免赔额的全额承保，请保持关闭。",
         "deductible": "免赔额（日元）",
         "save": "保存选项",
+        "saving": "保存中...",
+        "cancel": "取消"
+      }
+    },
+    "fees": {
+      "title": "费用",
+      "subtitle": "为您的车队设置超时、清洁和未加油费用。",
+      "addFee": "添加费用",
+      "addSubtitle": "创建新的费用项。",
+      "editFee": "编辑费用",
+      "archiveAction": "归档费用",
+      "archiveTitle": "归档 {name}？",
+      "archiveDescription": "此操作会归档该费用。它仍保留在列表中，但不会应用于新订单，并会释放同类别的名额。",
+      "archiveConfirm": "归档",
+      "archiving": "归档中...",
+      "empty": "暂无费用。请添加超时、清洁或未加油费用。",
+      "loadError": "无法加载费用",
+      "retry": "重试",
+      "status": {
+        "ACTIVE": "启用",
+        "ARCHIVED": "已归档"
+      },
+      "type": {
+        "OVERTIME_HOURLY": "超时费",
+        "CLEANING_FLAT": "清洁费",
+        "NO_FUEL_FLAT": "未加油费"
+      },
+      "unit": {
+        "PER_HOUR": "每小时",
+        "PER_DAY": "每天",
+        "PER_KM": "每公里",
+        "FLAT": "固定"
+      },
+      "form": {
+        "feeType": "费用类型",
+        "unit": "单位",
+        "unitHint": "单位会根据费用类型自动设置。",
+        "amount": "金额（日元）",
+        "vehicleClass": "车辆类别",
+        "vehicleClassHint": "保留为全车队适用即对所有类别生效。",
+        "operatorWide": "所有类别（全车队）",
+        "save": "保存费用",
         "saving": "保存中...",
         "cancel": "取消"
       }

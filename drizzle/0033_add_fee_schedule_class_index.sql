@@ -1,0 +1,1 @@
+CREATE INDEX "idx_fee_schedules_vehicle_class" ON "fee_schedules" USING btree ("vehicleClassId");
