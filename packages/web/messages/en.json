@@ -505,6 +505,9 @@
       "form": {
         "name": "Class name",
         "namePlaceholder": "e.g. Compact",
+        "operator": "Operator",
+        "operatorPlaceholder": "Select an operator",
+        "operatorRequired": "Select an operator to continue",
         "slug": "Slug",
         "slugPlaceholder": "e.g. compact",
         "slugHint": "Lowercase letters, numbers, and hyphens. Used in the URL.",
