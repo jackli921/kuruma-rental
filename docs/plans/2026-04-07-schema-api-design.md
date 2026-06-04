@@ -1,5 +1,7 @@
 # Schema + API Contract Design Spec
 
+> **SUPERSEDED 2026-05-24** by `docs/plans/2026-05-25-marketplace-mvp-proposal.md` §5. Marketplace schema adds operators/locations/insurance/booking_events/fee_schedules + operator_id FKs. Kept for history.
+
 > **Goal:** Define the complete Drizzle schema and Hono API contract for Kuruma Rental — all 6 business entities, Auth.js integration, scheduling constraints, and translation model.
 
 ---
