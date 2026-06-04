@@ -1,8 +1,10 @@
 import { SignJWT } from 'jose'
 import { beforeEach, describe, expect, it } from 'vitest'
 import { createApp } from '../../src/index'
+import { SYSTEM_CONTEXT } from '../../src/middleware/auth'
 import { InMemoryAvailabilityRepository } from '../../src/repositories/in-memory/availability'
 import { InMemoryBookingRepository } from '../../src/repositories/in-memory/booking'
+import { InMemoryThreadRepository } from '../../src/repositories/in-memory/thread'
 import { InMemoryUserRepository } from '../../src/repositories/in-memory/user'
 import { InMemoryVehicleRepository } from '../../src/repositories/in-memory/vehicle'
 import { InMemoryVehicleClassRepository } from '../../src/repositories/in-memory/vehicle-class'
@@ -65,6 +67,7 @@ describe('#396 — OPERATOR_* cannot enumerate users via any current ingress', (
   let app: ReturnType<typeof createApp>
   let userRepo: SpyUserRepository
   let bookingRepo: InMemoryBookingRepository
+  let threadRepo: InMemoryThreadRepository
   let vehicle: Vehicle
   let classId: string
 
@@ -127,9 +130,17 @@ describe('#396 — OPERATOR_* cannot enumerate users via any current ingress', (
     }
     const vehicleRepo = new InMemoryVehicleRepository(new Map([[vehicle.id, vehicle]]))
     bookingRepo = new InMemoryBookingRepository()
+    threadRepo = new InMemoryThreadRepository()
     const availabilityRepo = new InMemoryAvailabilityRepository(vehicleRepo, bookingRepo)
 
-    app = createApp({ vehicleRepo, bookingRepo, availabilityRepo, userRepo, vehicleClassRepo })
+    app = createApp({
+      vehicleRepo,
+      bookingRepo,
+      availabilityRepo,
+      userRepo,
+      vehicleClassRepo,
+      threadRepo,
+    })
   })
 
   it('GET /customers is STAFF-gated — operator gets 403', async () => {
@@ -153,7 +164,13 @@ describe('#396 — OPERATOR_* cannot enumerate users via any current ingress', (
     expect(res.status).toBe(403)
   })
 
-  it('GET /users resolves only the caller — a foreign id is dropped', async () => {
+  it('GET /users resolves only the caller — operators excluded from thread-participant resolution', async () => {
+    // Seed a thread the operator shares with FOREIGN. A RENTER in this position
+    // could resolve the co-participant's name via /users; an OPERATOR_* must
+    // NOT — the route's thread lookup uses a synthetic RENTER context, so
+    // without an explicit operator self-only guard this would leak (#396 review).
+    await threadRepo.create(SYSTEM_CONTEXT, null, [SELF_ID, FOREIGN_ID])
+
     const res = await app.request(`/users?ids=${SELF_ID},${FOREIGN_ID}`, {
       headers: await operatorBearer(SELF_ID),
     })
@@ -190,8 +207,9 @@ describe('#396 — OPERATOR_* cannot enumerate users via any current ingress', (
       }),
     })
 
-    // Operator cannot create an on-behalf booking (fail-closed at the repo)...
-    expect(res.status).not.toBe(201)
+    // Operator cannot create an on-behalf booking — fail-closed at the repo
+    // with a tenant-guard 403 (not an incidental 400/404 from a wrong path)...
+    expect(res.status).toBe(403)
     // ...and crucially the route forced renterId = ctx.userId, so the service's
     // staff-override branch (userRepo.findByIds([renterId])) never ran for the
     // foreign id. If the route forcing regresses, this assertion catches it.
