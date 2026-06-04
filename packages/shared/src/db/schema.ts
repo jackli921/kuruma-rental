@@ -291,12 +291,16 @@ export const feeSchedules = pgTable(
     updatedAt: timestamp('updatedAt', { withTimezone: true }).notNull().defaultNow(),
   },
   (table) => [
-    // Composite index covers the operator read-scope (leading column) AND the
-    // composite FK source, so lint:fk-indexes + FK maintenance are satisfied.
-    // (operatorId) is a prefix of this, so no separate idx_fee_schedules_operatorId
-    // is needed. The partial UNIQUE indexes below are conditional and do NOT
-    // count as FK cover.
+    // Composite index for the operator read-scope (leading column) AND the
+    // composite FK source. (operatorId) is a prefix of this, so the operatorId
+    // FK + the operator-wide read are both covered; no separate
+    // idx_fee_schedules_operatorId is needed.
     index('idx_fee_schedules_operator_class').on(table.operatorId, table.vehicleClassId),
+    // vehicleClassId needs its OWN leading index: it is only the TRAILING column
+    // of the composite above, which lint:fk-indexes does not count as FK cover.
+    // Without this, a JOIN from vehicle_classes -> fee_schedules by class alone
+    // seq-scans (the composite FK references vehicle_classes.id via vehicleClassId).
+    index('idx_fee_schedules_vehicle_class').on(table.vehicleClassId),
     // Composite FK seal (#395): a per-class fee's class must belong to the SAME
     // operator. MATCH SIMPLE — when vehicleClassId IS NULL the FK is not
     // enforced (operator-wide row).
