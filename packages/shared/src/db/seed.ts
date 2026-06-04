@@ -8,14 +8,7 @@ import {
 } from './constants'
 import { getDb } from './index'
 import { parsePlatformAdminEmails } from './platform-admins'
-import {
-  insuranceOptions,
-  locations,
-  operators,
-  users,
-  vehicleClasses,
-  vehicles,
-} from './schema'
+import { insuranceOptions, locations, operators, users, vehicleClasses, vehicles } from './schema'
 
 // Best Car Rental's renter-facing classes, keyed by ACRISS code (#388). Each
 // seeded vehicle attaches to one of these via the (operatorId, classId)
