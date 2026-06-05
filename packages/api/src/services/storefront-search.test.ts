@@ -245,4 +245,19 @@ describe('StorefrontSearchService.search (#391)', () => {
     expect(page2.storefronts.map((s) => s.operatorName)).toEqual(['C Rentals'])
     expect(page2.nextCursor).toBeNull()
   })
+
+  it('rejects a malformed cursor with a 400 instead of throwing (public-input guard)', async () => {
+    const op = await makeOperator('Best Car Rental', 'best')
+    const compact = await makeClass({ operatorId: op.id, acrissCode: 'CCAR' })
+    const namba = await makeLocation({ operatorId: op.id, name: 'Namba' })
+    await makeVehicle({ operatorId: op.id, classId: compact.id, pickupLocationId: namba.id })
+
+    // '%%%' is not valid base64 -> atob() throws; the service must not let that
+    // surface as a 500 on a public endpoint.
+    const result = await service.search(PUBLIC_CONTEXT, { from: FROM, to: TO, cursor: '%%%' })
+
+    if (result.ok) throw new Error('expected a failure result for a malformed cursor')
+    expect(result.status).toBe(400)
+    expect(result.error).toMatch(/cursor/i)
+  })
 })

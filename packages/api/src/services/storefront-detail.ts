@@ -100,7 +100,12 @@ export class StorefrontDetailService {
       .map((v) => toAvailableVehicle(v, v.classId ? classById.get(v.classId) : undefined))
       .sort(compareVehicles)
 
-    const start = cursor ? vehicles.findIndex((v) => v.id === decodeCursor(cursor)) + 1 : 0
+    let start = 0
+    if (cursor) {
+      const decoded = decodeCursor(cursor)
+      if (decoded === undefined) return { ok: false, error: 'Invalid cursor', status: 400 }
+      start = vehicles.findIndex((v) => v.id === decoded) + 1
+    }
     const page = vehicles.slice(start, start + limit)
     const nextCursor =
       start + limit < vehicles.length ? encodeCursor(page[page.length - 1]?.id ?? '') : null
@@ -164,4 +169,12 @@ function compareVehicles(a: AvailableVehicle, b: AvailableVehicle): number {
 }
 
 const encodeCursor = (vehicleId: string): string => btoa(vehicleId)
-const decodeCursor = (cursor: string): string => atob(cursor)
+// Returns undefined for a malformed (non-base64) cursor so the caller can
+// answer 400 instead of letting atob() throw into a 500 on a public endpoint.
+const decodeCursor = (cursor: string): string | undefined => {
+  try {
+    return atob(cursor)
+  } catch {
+    return undefined
+  }
+}

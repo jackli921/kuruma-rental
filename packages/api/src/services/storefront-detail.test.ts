@@ -268,4 +268,24 @@ describe('StorefrontDetailService.getDetail (#391)', () => {
     expect(page2.vehicles.map((v) => v.name)).toEqual(['Car C'])
     expect(page2.nextCursor).toBeNull()
   })
+
+  it('rejects a malformed cursor with a 400 instead of throwing (public-input guard)', async () => {
+    const op = await makeOperator('Best Car Rental', 'best')
+    const compact = await makeClass({ operatorId: op.id, acrissCode: 'CCAR' })
+    const namba = await makeLocation({ operatorId: op.id, name: 'Namba' })
+    await makeVehicle({ operatorId: op.id, classId: compact.id, pickupLocationId: namba.id })
+
+    // '%%%' is not valid base64 -> atob() throws; a known store with a bad
+    // cursor must be a 400, not a 500.
+    const result = await service.getDetail(PUBLIC_CONTEXT, {
+      locationId: namba.id,
+      from: FROM,
+      to: TO,
+      cursor: '%%%',
+    })
+
+    if (result.ok) throw new Error('expected a failure result for a malformed cursor')
+    expect(result.status).toBe(400)
+    expect(result.error).toMatch(/cursor/i)
+  })
 })

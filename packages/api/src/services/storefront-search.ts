@@ -98,7 +98,12 @@ export class StorefrontSearchService {
       .filter((c): c is StorefrontCard => c !== null)
       .sort(compareCards)
 
-    const start = cursor ? cards.findIndex((c) => c.locationId === decodeCursor(cursor)) + 1 : 0
+    let start = 0
+    if (cursor) {
+      const decoded = decodeCursor(cursor)
+      if (decoded === undefined) return { ok: false, error: 'Invalid cursor', status: 400 }
+      start = cards.findIndex((c) => c.locationId === decoded) + 1
+    }
     const page = cards.slice(start, start + limit)
     const nextCursor =
       start + limit < cards.length ? encodeCursor(page[page.length - 1]?.locationId ?? '') : null
@@ -195,4 +200,12 @@ function compareCards(a: StorefrontCard, b: StorefrontCard): number {
 // Opaque base64 cursor over locationId (§3.3). btoa/atob are Web-standard
 // globals available on CF Workers and Bun.
 const encodeCursor = (locationId: string): string => btoa(locationId)
-const decodeCursor = (cursor: string): string => atob(cursor)
+// Returns undefined for a malformed (non-base64) cursor so the caller can
+// answer 400 instead of letting atob() throw into a 500 on a public endpoint.
+const decodeCursor = (cursor: string): string | undefined => {
+  try {
+    return atob(cursor)
+  } catch {
+    return undefined
+  }
+}
