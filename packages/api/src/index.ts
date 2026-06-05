@@ -19,6 +19,7 @@ import {
   DrizzleMessageRepository,
   DrizzleOperatorRepository,
   DrizzleStatsRepository,
+  DrizzleStorefrontRepository,
   DrizzleThreadRepository,
   DrizzleUserRepository,
   DrizzleVehicleClassRepository,
@@ -38,6 +39,7 @@ import {
   InMemoryMessageRepository,
   InMemoryOperatorRepository,
   InMemoryStatsRepository,
+  InMemoryStorefrontRepository,
   InMemoryThreadRepository,
   InMemoryUserRepository,
   InMemoryVehicleClassRepository,
@@ -60,6 +62,7 @@ import type {
   PhotoStorage,
   RunInTransaction,
   StatsRepository,
+  StorefrontRepository,
   ThreadRepository,
   UserRepository,
   VehicleClassRepository,
@@ -79,6 +82,7 @@ import { createMaintenanceLogRoutes } from './routes/maintenance-logs'
 import { createMessageRoutes } from './routes/messages'
 import { createOperatorRoutes } from './routes/operators'
 import { createStatsRoutes } from './routes/stats'
+import { createStorefrontRoutes } from './routes/storefronts'
 import { createTranslateRoutes } from './routes/translate'
 import { createUserRoutes } from './routes/users'
 import { createVehicleClassRoutes } from './routes/vehicle-classes'
@@ -95,6 +99,8 @@ import { LocationService } from './services/location'
 import { MaintenanceService } from './services/maintenance'
 import { MessageTranslationService } from './services/message-translation'
 import { OperatorService } from './services/operator'
+import { StorefrontDetailService } from './services/storefront-detail'
+import { StorefrontSearchService } from './services/storefront-search'
 import type { TranslationProvider } from './services/translation-provider'
 import { VehicleClassService } from './services/vehicle-class'
 import { VehicleClassAvailabilityService } from './services/vehicle-class-availability'
@@ -120,6 +126,7 @@ export function createApp(overrides?: {
   locationRepo?: LocationRepository
   insuranceOptionRepo?: InsuranceOptionRepository
   feeScheduleRepo?: FeeScheduleRepository
+  storefrontRepo?: StorefrontRepository
   photoUploadLimiter?: RateLimitBinding
   photoUploadUserLimiter?: RateLimitBinding
   publicCatalogLimiter?: RateLimitBinding
@@ -141,6 +148,7 @@ export function createApp(overrides?: {
   let locationRepo: LocationRepository
   let insuranceOptionRepo: InsuranceOptionRepository
   let feeScheduleRepo: FeeScheduleRepository
+  let storefrontRepo: StorefrontRepository
   let runInTransaction: RunInTransaction
   const photoUploadLimiter =
     overrides?.photoUploadLimiter ??
@@ -176,6 +184,8 @@ export function createApp(overrides?: {
     locationRepo = overrides.locationRepo ?? new InMemoryLocationRepository()
     insuranceOptionRepo = overrides.insuranceOptionRepo ?? new InMemoryInsuranceOptionRepository()
     feeScheduleRepo = overrides.feeScheduleRepo ?? new InMemoryFeeScheduleRepository()
+    storefrontRepo =
+      overrides.storefrontRepo ?? new InMemoryStorefrontRepository(locationRepo, operatorRepo)
   } else if (process.env.DATABASE_URL) {
     const db = getDb()
     vehicleClassRepo = new DrizzleVehicleClassRepository(db)
@@ -195,6 +205,7 @@ export function createApp(overrides?: {
     locationRepo = new DrizzleLocationRepository(db)
     insuranceOptionRepo = new DrizzleInsuranceOptionRepository(db)
     feeScheduleRepo = new DrizzleFeeScheduleRepository(db)
+    storefrontRepo = new DrizzleStorefrontRepository(db)
     const vehiclePhotosBucket = (globalThis as Record<string, unknown>).VEHICLE_PHOTOS as
       | R2BucketLike
       | undefined
@@ -239,6 +250,7 @@ export function createApp(overrides?: {
     locationRepo = new InMemoryLocationRepository()
     insuranceOptionRepo = new InMemoryInsuranceOptionRepository()
     feeScheduleRepo = new InMemoryFeeScheduleRepository()
+    storefrontRepo = new InMemoryStorefrontRepository(locationRepo, operatorRepo)
   }
 
   // Translation provider: real Google when the key is set. In production
@@ -352,6 +364,16 @@ export function createApp(overrides?: {
   const locationService = new LocationService(locationRepo)
   const insuranceOptionService = new InsuranceOptionService(insuranceOptionRepo)
   const feeScheduleService = new FeeScheduleService(feeScheduleRepo)
+  const storefrontSearchService = new StorefrontSearchService(
+    storefrontRepo,
+    availabilityRepo,
+    vehicleClassRepo,
+  )
+  const storefrontDetailService = new StorefrontDetailService(
+    storefrontRepo,
+    availabilityRepo,
+    vehicleClassRepo,
+  )
 
   // Chain .route() calls so TypeScript infers the full route type tree.
   // hc<AppType> needs this to produce typed client methods.
@@ -365,6 +387,14 @@ export function createApp(overrides?: {
         vehicleClassService,
         vehicleClassAvailabilityService,
         resolveWriteOperatorId,
+        publicCatalogLimiter,
+      ),
+    )
+    .route(
+      '/',
+      createStorefrontRoutes(
+        storefrontSearchService,
+        storefrontDetailService,
         publicCatalogLimiter,
       ),
     )
