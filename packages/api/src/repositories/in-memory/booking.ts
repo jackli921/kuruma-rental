@@ -208,4 +208,41 @@ export class InMemoryBookingRepository implements BookingRepository {
     this.store.set(cancelled.id, cancelled)
     return cancelled
   }
+
+  async reassignVehicle(
+    ctx: CallerContext,
+    id: string,
+    data: { assignedVehicleId: string; totalPrice: number | null; effectiveEndAt: Date },
+  ): Promise<Booking | undefined> {
+    const existing = this.store.get(id)
+    if (!existing || !this.isVisible(ctx, existing)) return undefined
+
+    // Re-check the exclusion constraint for the NEW assigned vehicle over the
+    // booking's window, skipping the booking itself — mirrors the DB
+    // bookings_no_overlap re-check on UPDATE assignedVehicleId (§5.5).
+    if (BLOCKING_STATUSES.has(existing.status)) {
+      for (const other of this.store.values()) {
+        if (other.id === id) continue
+        if (other.assignedVehicleId !== data.assignedVehicleId) continue
+        if (!BLOCKING_STATUSES.has(other.status)) continue
+        const overlaps =
+          existing.startAt < other.effectiveEndAt && other.startAt < data.effectiveEndAt
+        if (overlaps) {
+          throw Object.assign(new Error('bookings_no_overlap violation'), {
+            code: PG_ERROR.EXCLUSION_VIOLATION,
+          })
+        }
+      }
+    }
+
+    const updated: Booking = {
+      ...existing,
+      assignedVehicleId: data.assignedVehicleId,
+      totalPrice: data.totalPrice,
+      effectiveEndAt: data.effectiveEndAt,
+      updatedAt: new Date(),
+    }
+    this.store.set(id, updated)
+    return updated
+  }
 }

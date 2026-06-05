@@ -21,7 +21,7 @@ import { InMemoryBookingRepository } from '../../src/repositories/in-memory/book
 import { InMemoryBookingEventRepository } from '../../src/repositories/in-memory/booking-event'
 import type { RunInTransaction, TransactionRepos } from '../../src/repositories/types'
 import { BookingService, type CreateBookingInput } from '../../src/services/booking'
-import type { Booking, BookingEvent, User, Vehicle } from '../../src/stores'
+import type { Booking, BookingEvent, User, Vehicle, VehicleClass } from '../../src/stores'
 
 const OP_A = 'op-a'
 const OP_B = 'op-b'
@@ -517,5 +517,271 @@ describe('BookingService.create — single-transaction submit (#392 §4)', () =>
     expect(result.ok).toBe(false)
     if (result.ok) return
     expect(result.status).toBe(400)
+  })
+})
+
+// ---- Substitution (#392 §5.5) ----
+
+const ACRISS_A = 'ECMR'
+const ACRISS_B = 'IFAR'
+
+const opCtxA: CallerContext = {
+  userId: 'opA-staff',
+  role: 'OPERATOR_OWNER',
+  operatorId: OP_A,
+  bypassScope: false,
+}
+const opCtxB: CallerContext = {
+  userId: 'opB-staff',
+  role: 'OPERATOR_OWNER',
+  operatorId: OP_B,
+  bypassScope: false,
+}
+
+function classData(
+  o: Partial<VehicleClass> = {},
+): Omit<VehicleClass, 'id' | 'createdAt' | 'updatedAt'> {
+  return {
+    operatorId: OP_A,
+    name: 'Class',
+    slug: 'class',
+    description: null,
+    photos: [],
+    seats: 5,
+    luggageCapacity: 2,
+    transmission: 'AUTO',
+    fuelType: null,
+    acrissCode: null,
+    sortOrder: 0,
+    status: 'ACTIVE',
+    ...o,
+  }
+}
+
+function bookingRow(o: Partial<Booking>): Omit<Booking, 'id' | 'createdAt' | 'updatedAt'> {
+  return {
+    operatorId: OP_A,
+    renterId: 'seed-renter',
+    classId: CLASS_COMPACT,
+    requestedVehicleId: 'seed-veh',
+    assignedVehicleId: 'seed-veh',
+    pickupLocationId: 'seed-loc',
+    dropoffLocationId: 'seed-loc',
+    startAt: START,
+    endAt: END,
+    effectiveEndAt: new Date(END.getTime() + TURNAROUND_MS),
+    status: 'CONFIRMED',
+    source: 'DIRECT',
+    bookingCode: 'SEEDROW1',
+    insuranceOptionId: null,
+    insuranceSnapshot: null,
+    feeSnapshot: [],
+    externalId: null,
+    notes: null,
+    totalPrice: 1,
+    cancellationFee: null,
+    cancelledAt: null,
+    idempotencyKey: null,
+    ...o,
+  }
+}
+
+interface SubHarness {
+  service: BookingService
+  repos: TransactionRepos
+  events: BookingEvent[]
+  classA: VehicleClass
+  classB: VehicleClass
+  locationId: string
+  v1Id: string
+  bookingId: string
+}
+
+// Seeds a confirmed operator-A booking on vehicle V1 (class A @ ACRISS_A, the
+// Osaka location) via the real submit path, ready for substitution tests.
+async function setupSub(): Promise<SubHarness> {
+  const events: BookingEvent[] = []
+  const bookingRepo = new InMemoryBookingRepository()
+  const bookingEventRepo = new InMemoryBookingEventRepository(events)
+  const vehicleRepo = new InMemoryVehicleRepository()
+  const locationRepo = new InMemoryLocationRepository()
+  const insuranceOptionRepo = new InMemoryInsuranceOptionRepository()
+  const feeScheduleRepo = new InMemoryFeeScheduleRepository()
+  const maintenanceLogRepo = new InMemoryMaintenanceLogRepository()
+  const vehicleClassRepo = new InMemoryVehicleClassRepository()
+  const userRepo = new InMemoryUserRepository(
+    new Map<string, User>([
+      [
+        RENTER,
+        {
+          id: RENTER,
+          name: 'R',
+          email: 'r@x',
+          phone: null,
+          language: 'en',
+          country: null,
+          role: 'RENTER',
+        },
+      ],
+    ]),
+  )
+
+  const classA = await vehicleClassRepo.create(
+    classData({ name: 'Compact A', slug: 'compact-a', acrissCode: ACRISS_A }),
+  )
+  const classB = await vehicleClassRepo.create(
+    classData({ name: 'SUV B', slug: 'suv-b', acrissCode: ACRISS_B }),
+  )
+  const location = await locationRepo.create({
+    operatorId: OP_A,
+    name: 'Osaka',
+    address: '1',
+    operatingHours: null,
+    timezone: 'Asia/Tokyo',
+    defaultTurnaroundMinutes: 2880,
+    status: 'ACTIVE',
+  } as Parameters<typeof locationRepo.create>[0])
+  const v1 = await vehicleRepo.create(
+    SYSTEM_CONTEXT,
+    vehicleData({ classId: classA.id, pickupLocationId: location.id, dailyRateJpy: 10000 }),
+  )
+
+  const repos: TransactionRepos = {
+    vehicleRepo,
+    maintenanceLogRepo,
+    bookingRepo,
+    bookingEventRepo,
+    locationRepo,
+    insuranceOptionRepo,
+    feeScheduleRepo,
+  }
+  const runInTransaction: RunInTransaction = async (fn) => fn(repos)
+  const service = new BookingService(
+    bookingRepo,
+    runInTransaction,
+    vehicleRepo,
+    userRepo,
+    vehicleClassRepo,
+    undefined,
+    () => 'SUBSEED1',
+  )
+
+  const created = await service.create(
+    renterCtx,
+    createInput({
+      requestedVehicleId: v1.id,
+      pickupLocationId: location.id,
+      dropoffLocationId: location.id,
+    }),
+    NOW,
+  )
+  if (!created.ok) throw new Error('setupSub: seed booking failed')
+  return {
+    service,
+    repos,
+    events,
+    classA,
+    classB,
+    locationId: location.id,
+    v1Id: v1.id,
+    bookingId: created.booking.id,
+  }
+}
+
+describe('BookingService.substitute — operator vehicle swap (#392 §5.5)', () => {
+  // A same-operator candidate vehicle (class A @ the Osaka location by default).
+  const addVehicle = (h: SubHarness, o: Partial<Vehicle> = {}) =>
+    h.repos.vehicleRepo.create(
+      SYSTEM_CONTEXT,
+      vehicleData({
+        classId: h.classA.id,
+        pickupLocationId: h.locationId,
+        dailyRateJpy: 15000,
+        ...o,
+      }),
+    )
+
+  it('rejects a replacement vehicle from another operator (404, no leak)', async () => {
+    const h = await setupSub()
+    const foreign = await addVehicle(h, { operatorId: OP_B })
+    const result = await h.service.substitute(opCtxA, h.bookingId, foreign.id, null)
+    expect(result.ok).toBe(false)
+    if (result.ok) return
+    expect(result.status).toBe(404)
+  })
+
+  it('rejects a replacement vehicle at a different pickup location (400)', async () => {
+    const h = await setupSub()
+    const loc2 = await h.repos.locationRepo.create({
+      operatorId: OP_A,
+      name: 'Kyoto',
+      address: '2',
+      operatingHours: null,
+      timezone: 'Asia/Tokyo',
+      defaultTurnaroundMinutes: 2880,
+      status: 'ACTIVE',
+    } as Parameters<typeof h.repos.locationRepo.create>[0])
+    const elsewhere = await addVehicle(h, { pickupLocationId: loc2.id })
+    const result = await h.service.substitute(opCtxA, h.bookingId, elsewhere.id, null)
+    expect(result.ok).toBe(false)
+    if (result.ok) return
+    expect(result.status).toBe(400)
+  })
+
+  it('rejects a replacement vehicle of a different ACRISS class (400)', async () => {
+    const h = await setupSub()
+    const otherClass = await addVehicle(h, { classId: h.classB.id })
+    const result = await h.service.substitute(opCtxA, h.bookingId, otherClass.id, null)
+    expect(result.ok).toBe(false)
+    if (result.ok) return
+    expect(result.status).toBe(400)
+  })
+
+  it('swaps the vehicle: updates assignedVehicleId, keeps requestedVehicleId, re-snapshots totalPrice, appends VEHICLE_SUBSTITUTED', async () => {
+    const h = await setupSub()
+    const replacement = await addVehicle(h, { dailyRateJpy: 15000 })
+    const result = await h.service.substitute(opCtxA, h.bookingId, replacement.id, 'maintenance')
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+    expect(result.booking.assignedVehicleId).toBe(replacement.id)
+    expect(result.booking.requestedVehicleId).toBe(h.v1Id) // audit trail preserved
+    expect(result.booking.totalPrice).toBe(30000) // 2 days * 15000 (#429 re-snapshot)
+    const subs = h.events.filter((e) => e.type === 'VEHICLE_SUBSTITUTED')
+    expect(subs).toHaveLength(1)
+    expect(subs[0]).toMatchObject({ bookingId: h.bookingId, actorId: opCtxA.userId })
+    expect(subs[0]!.payload).toMatchObject({
+      fromVehicleId: h.v1Id,
+      toVehicleId: replacement.id,
+      reason: 'maintenance',
+    })
+  })
+
+  it('rejects a replacement already booked for the range (409, no event appended)', async () => {
+    const h = await setupSub()
+    const replacement = await addVehicle(h)
+    await h.repos.bookingRepo.create(
+      SYSTEM_CONTEXT,
+      bookingRow({
+        assignedVehicleId: replacement.id,
+        requestedVehicleId: replacement.id,
+        pickupLocationId: h.locationId,
+        dropoffLocationId: h.locationId,
+        bookingCode: 'OTHER001',
+      }),
+    )
+    const result = await h.service.substitute(opCtxA, h.bookingId, replacement.id, null)
+    expect(result.ok).toBe(false)
+    if (result.ok) return
+    expect(result.status).toBe(409)
+    expect(h.events.filter((e) => e.type === 'VEHICLE_SUBSTITUTED')).toHaveLength(0)
+  })
+
+  it('returns 404 when the booking belongs to another operator (no cross-tenant write)', async () => {
+    const h = await setupSub()
+    const replacement = await addVehicle(h)
+    const result = await h.service.substitute(opCtxB, h.bookingId, replacement.id, null)
+    expect(result.ok).toBe(false)
+    if (result.ok) return
+    expect(result.status).toBe(404)
   })
 })
