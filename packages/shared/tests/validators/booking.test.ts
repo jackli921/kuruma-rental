@@ -2,66 +2,81 @@ import { describe, expect, it } from 'vitest'
 import { createBookingSchema, updateBookingStatusSchema } from '../../src/validators/booking'
 
 const VALID_UUID = '550e8400-e29b-41d4-a716-446655440000'
-const VALID_CLASS_UUID = '550e8400-e29b-41d4-a716-446655440001'
+const PICKUP_UUID = '550e8400-e29b-41d4-a716-446655440002'
+const DROPOFF_UUID = '550e8400-e29b-41d4-a716-446655440003'
+const INSURANCE_UUID = '550e8400-e29b-41d4-a716-446655440004'
+const RENTER_UUID = '550e8400-e29b-41d4-a716-446655440005'
 
+// Slice 6 (#392): the renter books a CONCRETE vehicle selected in storefront
+// (slice 5). The server derives operatorId/classId/assignedVehicleId/totalPrice
+// from that vehicle — none of those are client fields (proposal §6.2, §4.1).
 describe('createBookingSchema', () => {
   const validInput = {
-    classId: VALID_CLASS_UUID,
+    requestedVehicleId: VALID_UUID,
+    pickupLocationId: PICKUP_UUID,
+    dropoffLocationId: DROPOFF_UUID,
     startAt: '2026-04-10T09:00:00Z',
     endAt: '2026-04-10T17:00:00Z',
   }
 
-  it('accepts valid input with required fields (classId only, no vehicleId)', () => {
+  it('accepts the minimal required fields and defaults source to DIRECT', () => {
     const result = createBookingSchema.safeParse(validInput)
     expect(result.success).toBe(true)
     if (result.success) {
-      expect(result.data.classId).toBe(VALID_CLASS_UUID)
-      expect(result.data.vehicleId).toBeUndefined()
+      expect(result.data.requestedVehicleId).toBe(VALID_UUID)
+      expect(result.data.pickupLocationId).toBe(PICKUP_UUID)
+      expect(result.data.dropoffLocationId).toBe(DROPOFF_UUID)
       expect(result.data.source).toBe('DIRECT')
+      expect(result.data.insuranceOptionId).toBeUndefined()
     }
   })
 
-  it('accepts valid input with classId + optional vehicleId', () => {
+  it('accepts optional insuranceOptionId, renterId, notes, source, externalId', () => {
     const result = createBookingSchema.safeParse({
       ...validInput,
-      vehicleId: VALID_UUID,
-    })
-    expect(result.success).toBe(true)
-    if (result.success) {
-      expect(result.data.vehicleId).toBe(VALID_UUID)
-    }
-  })
-
-  it('accepts valid input with all fields', () => {
-    const result = createBookingSchema.safeParse({
-      ...validInput,
-      vehicleId: VALID_UUID,
+      insuranceOptionId: INSURANCE_UUID,
+      renterId: RENTER_UUID,
       notes: 'Arriving at KIX',
       source: 'TRIP_COM',
       externalId: 'TC-12345',
     })
     expect(result.success).toBe(true)
+    if (result.success) {
+      expect(result.data.insuranceOptionId).toBe(INSURANCE_UUID)
+      expect(result.data.renterId).toBe(RENTER_UUID)
+      expect(result.data.source).toBe('TRIP_COM')
+    }
   })
 
-  it('rejects non-UUID classId', () => {
-    const result = createBookingSchema.safeParse({ ...validInput, classId: 'class-123' })
+  it('rejects missing requestedVehicleId', () => {
+    const { requestedVehicleId, ...rest } = validInput
+    expect(createBookingSchema.safeParse(rest).success).toBe(false)
+  })
+
+  it('rejects non-UUID requestedVehicleId', () => {
+    const result = createBookingSchema.safeParse({ ...validInput, requestedVehicleId: 'vehicle-1' })
     expect(result.success).toBe(false)
   })
 
-  it('rejects missing classId', () => {
-    const { classId, ...rest } = validInput
-    const result = createBookingSchema.safeParse(rest)
-    expect(result.success).toBe(false)
+  it('rejects missing pickupLocationId', () => {
+    const { pickupLocationId, ...rest } = validInput
+    expect(createBookingSchema.safeParse(rest).success).toBe(false)
   })
 
-  it('rejects non-UUID vehicleId when provided', () => {
-    const result = createBookingSchema.safeParse({ ...validInput, vehicleId: 'vehicle-123' })
+  it('rejects missing dropoffLocationId', () => {
+    const { dropoffLocationId, ...rest } = validInput
+    expect(createBookingSchema.safeParse(rest).success).toBe(false)
+  })
+
+  it('rejects non-UUID insuranceOptionId when provided', () => {
+    const result = createBookingSchema.safeParse({ ...validInput, insuranceOptionId: 'ins-1' })
     expect(result.success).toBe(false)
   })
 
   it('rejects invalid datetime format', () => {
-    const result = createBookingSchema.safeParse({ ...validInput, startAt: 'not-a-date' })
-    expect(result.success).toBe(false)
+    expect(createBookingSchema.safeParse({ ...validInput, startAt: 'not-a-date' }).success).toBe(
+      false,
+    )
   })
 
   it('rejects endAt before startAt', () => {
@@ -73,9 +88,42 @@ describe('createBookingSchema', () => {
     expect(result.success).toBe(false)
   })
 
-  it('rejects invalid source enum', () => {
-    const result = createBookingSchema.safeParse({ ...validInput, source: 'AIRBNB' })
+  it('rejects endAt equal to startAt', () => {
+    const result = createBookingSchema.safeParse({
+      ...validInput,
+      startAt: '2026-04-10T09:00:00Z',
+      endAt: '2026-04-10T09:00:00Z',
+    })
     expect(result.success).toBe(false)
+  })
+
+  it('rejects invalid source enum', () => {
+    expect(createBookingSchema.safeParse({ ...validInput, source: 'AIRBNB' }).success).toBe(false)
+  })
+
+  it('silently drops server-derived fields a malicious client may inject', () => {
+    const result = createBookingSchema.safeParse({
+      ...validInput,
+      assignedVehicleId: VALID_UUID,
+      operatorId: VALID_UUID,
+      classId: VALID_UUID,
+      totalPrice: 1,
+      bookingCode: 'HACKED01',
+      insuranceSnapshot: { name: 'x' },
+      feeSnapshot: [{ feeType: 'CLEANING_FLAT' }],
+      status: 'COMPLETED',
+    })
+    expect(result.success).toBe(true)
+    if (result.success) {
+      const data = result.data as Record<string, unknown>
+      expect(data.assignedVehicleId).toBeUndefined()
+      expect(data.operatorId).toBeUndefined()
+      expect(data.totalPrice).toBeUndefined()
+      expect(data.bookingCode).toBeUndefined()
+      expect(data.insuranceSnapshot).toBeUndefined()
+      expect(data.feeSnapshot).toBeUndefined()
+      expect(data.status).toBeUndefined()
+    }
   })
 })
 
@@ -90,18 +138,15 @@ describe('updateBookingStatusSchema', () => {
 
   it('accepts all valid statuses', () => {
     for (const status of ['CONFIRMED', 'ACTIVE', 'COMPLETED', 'CANCELLED']) {
-      const result = updateBookingStatusSchema.safeParse({ status })
-      expect(result.success).toBe(true)
+      expect(updateBookingStatusSchema.safeParse({ status }).success).toBe(true)
     }
   })
 
   it('rejects invalid status', () => {
-    const result = updateBookingStatusSchema.safeParse({ status: 'BANANA' })
-    expect(result.success).toBe(false)
+    expect(updateBookingStatusSchema.safeParse({ status: 'BANANA' }).success).toBe(false)
   })
 
   it('rejects empty status', () => {
-    const result = updateBookingStatusSchema.safeParse({ status: '' })
-    expect(result.success).toBe(false)
+    expect(updateBookingStatusSchema.safeParse({ status: '' }).success).toBe(false)
   })
 })
