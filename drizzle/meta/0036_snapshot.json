@@ -1,6 +1,6 @@
 {
-  "id": "85685884-a036-4868-bbd8-91e99d31a54d",
-  "prevId": "c38bf72f-6d80-4439-aee0-b9761de620cb",
+  "id": "02b63f2a-34c7-4115-bdea-62a2f1ce0bb5",
+  "prevId": "85685884-a036-4868-bbd8-91e99d31a54d",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -105,6 +105,121 @@
       "checkConstraints": {},
       "isRLSEnabled": false
     },
+    "public.booking_events": {
+      "name": "booking_events",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "bookingId": {
+          "name": "bookingId",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "type": {
+          "name": "type",
+          "type": "booking_event_type",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "payload": {
+          "name": "payload",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "actorId": {
+          "name": "actorId",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "createdAt": {
+          "name": "createdAt",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "idx_booking_events_bookingId": {
+          "name": "idx_booking_events_bookingId",
+          "columns": [
+            {
+              "expression": "bookingId",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "createdAt",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "idx_booking_events_actorId": {
+          "name": "idx_booking_events_actorId",
+          "columns": [
+            {
+              "expression": "actorId",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "booking_events_bookingId_bookings_id_fk": {
+          "name": "booking_events_bookingId_bookings_id_fk",
+          "tableFrom": "booking_events",
+          "tableTo": "bookings",
+          "columnsFrom": [
+            "bookingId"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "booking_events_actorId_users_id_fk": {
+          "name": "booking_events_actorId_users_id_fk",
+          "tableFrom": "booking_events",
+          "tableTo": "users",
+          "columnsFrom": [
+            "actorId"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
     "public.bookings": {
       "name": "bookings",
       "schema": "",
@@ -113,6 +228,12 @@
           "name": "id",
           "type": "text",
           "primaryKey": true,
+          "notNull": true
+        },
+        "operatorId": {
+          "name": "operatorId",
+          "type": "text",
+          "primaryKey": false,
           "notNull": true
         },
         "renterId": {
@@ -127,11 +248,35 @@
           "primaryKey": false,
           "notNull": true
         },
+        "requestedVehicleId": {
+          "name": "requestedVehicleId",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "assignedVehicleId": {
+          "name": "assignedVehicleId",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
         "vehicleId": {
           "name": "vehicleId",
           "type": "text",
           "primaryKey": false,
           "notNull": false
+        },
+        "pickupLocationId": {
+          "name": "pickupLocationId",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "dropoffLocationId": {
+          "name": "dropoffLocationId",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
         },
         "startAt": {
           "name": "startAt",
@@ -166,6 +311,31 @@
           "primaryKey": false,
           "notNull": true,
           "default": "'DIRECT'"
+        },
+        "bookingCode": {
+          "name": "bookingCode",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "insuranceOptionId": {
+          "name": "insuranceOptionId",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "insuranceSnapshot": {
+          "name": "insuranceSnapshot",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "feeSnapshot": {
+          "name": "feeSnapshot",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'[]'::jsonb"
         },
         "externalId": {
           "name": "externalId",
@@ -233,15 +403,105 @@
           "concurrently": false,
           "method": "btree",
           "with": {}
+        },
+        "idx_bookings_operatorId": {
+          "name": "idx_bookings_operatorId",
+          "columns": [
+            {
+              "expression": "operatorId",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "idx_bookings_requestedVehicleId": {
+          "name": "idx_bookings_requestedVehicleId",
+          "columns": [
+            {
+              "expression": "requestedVehicleId",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "idx_bookings_assignedVehicleId": {
+          "name": "idx_bookings_assignedVehicleId",
+          "columns": [
+            {
+              "expression": "assignedVehicleId",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "idx_bookings_pickupLocationId": {
+          "name": "idx_bookings_pickupLocationId",
+          "columns": [
+            {
+              "expression": "pickupLocationId",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "idx_bookings_dropoffLocationId": {
+          "name": "idx_bookings_dropoffLocationId",
+          "columns": [
+            {
+              "expression": "dropoffLocationId",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "idx_bookings_insuranceOptionId": {
+          "name": "idx_bookings_insuranceOptionId",
+          "columns": [
+            {
+              "expression": "insuranceOptionId",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
         }
       },
       "foreignKeys": {
-        "bookings_renterId_users_id_fk": {
-          "name": "bookings_renterId_users_id_fk",
+        "bookings_operatorId_operators_id_fk": {
+          "name": "bookings_operatorId_operators_id_fk",
           "tableFrom": "bookings",
-          "tableTo": "users",
+          "tableTo": "operators",
           "columnsFrom": [
-            "renterId"
+            "operatorId"
           ],
           "columnsTo": [
             "id"
@@ -249,12 +509,12 @@
           "onDelete": "no action",
           "onUpdate": "no action"
         },
-        "bookings_classId_vehicle_classes_id_fk": {
-          "name": "bookings_classId_vehicle_classes_id_fk",
+        "bookings_renterId_users_id_fk": {
+          "name": "bookings_renterId_users_id_fk",
           "tableFrom": "bookings",
-          "tableTo": "vehicle_classes",
+          "tableTo": "users",
           "columnsFrom": [
-            "classId"
+            "renterId"
           ],
           "columnsTo": [
             "id"
@@ -274,10 +534,104 @@
           ],
           "onDelete": "no action",
           "onUpdate": "no action"
+        },
+        "bookings_pickupLocationId_locations_id_fk": {
+          "name": "bookings_pickupLocationId_locations_id_fk",
+          "tableFrom": "bookings",
+          "tableTo": "locations",
+          "columnsFrom": [
+            "pickupLocationId"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "bookings_dropoffLocationId_locations_id_fk": {
+          "name": "bookings_dropoffLocationId_locations_id_fk",
+          "tableFrom": "bookings",
+          "tableTo": "locations",
+          "columnsFrom": [
+            "dropoffLocationId"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "bookings_operator_class_fk": {
+          "name": "bookings_operator_class_fk",
+          "tableFrom": "bookings",
+          "tableTo": "vehicle_classes",
+          "columnsFrom": [
+            "operatorId",
+            "classId"
+          ],
+          "columnsTo": [
+            "operatorId",
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "bookings_operator_requested_vehicle_fk": {
+          "name": "bookings_operator_requested_vehicle_fk",
+          "tableFrom": "bookings",
+          "tableTo": "vehicles",
+          "columnsFrom": [
+            "operatorId",
+            "requestedVehicleId"
+          ],
+          "columnsTo": [
+            "operatorId",
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "bookings_operator_assigned_vehicle_fk": {
+          "name": "bookings_operator_assigned_vehicle_fk",
+          "tableFrom": "bookings",
+          "tableTo": "vehicles",
+          "columnsFrom": [
+            "operatorId",
+            "assignedVehicleId"
+          ],
+          "columnsTo": [
+            "operatorId",
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "bookings_operator_insurance_fk": {
+          "name": "bookings_operator_insurance_fk",
+          "tableFrom": "bookings",
+          "tableTo": "insurance_options",
+          "columnsFrom": [
+            "operatorId",
+            "insuranceOptionId"
+          ],
+          "columnsTo": [
+            "operatorId",
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
+      "uniqueConstraints": {
+        "bookings_bookingCode_unique": {
+          "name": "bookings_bookingCode_unique",
+          "nullsNotDistinct": false,
+          "columns": [
+            "bookingCode"
+          ]
+        }
+      },
       "policies": {},
       "checkConstraints": {},
       "isRLSEnabled": false
@@ -1690,6 +2044,14 @@
           "columns": [
             "licensePlate"
           ]
+        },
+        "vehicles_operatorId_id_unique": {
+          "name": "vehicles_operatorId_id_unique",
+          "nullsNotDistinct": false,
+          "columns": [
+            "operatorId",
+            "id"
+          ]
         }
       },
       "policies": {},
@@ -1711,6 +2073,16 @@
     }
   },
   "enums": {
+    "public.booking_event_type": {
+      "name": "booking_event_type",
+      "schema": "public",
+      "values": [
+        "BOOKING_CREATED",
+        "VEHICLE_SUBSTITUTED",
+        "BOOKING_CANCELLED",
+        "STATUS_CHANGED"
+      ]
+    },
     "public.booking_source": {
       "name": "booking_source",
       "schema": "public",

@@ -101,6 +101,16 @@ export const bookingStatusEnum = pgEnum('booking_status', [
   'CANCELLED',
 ])
 export const bookingSourceEnum = pgEnum('booking_source', ['DIRECT', 'TRIP_COM', 'MANUAL', 'OTHER'])
+// Append-only booking lifecycle events (epic #385, slice 6 / #392). bookings.status
+// is the write-through projection of the latest lifecycle event. BOOKING_CREATED +
+// VEHICLE_SUBSTITUTED are new this slice; CANCELLED/STATUS_CHANGED make the existing
+// transitions also append an event so the log is complete. See proposal §2.
+export const bookingEventTypeEnum = pgEnum('booking_event_type', [
+  'BOOKING_CREATED',
+  'VEHICLE_SUBSTITUTED',
+  'BOOKING_CANCELLED',
+  'STATUS_CHANGED',
+])
 
 // Issue #247: vehicle classes — renter-facing catalog categories.
 // Renters browse and book classes (e.g. "Compact"); owner manages
@@ -342,7 +352,6 @@ export const vehicles = pgTable(
     fuelType: text('fuelType'),
     licensePlate: text('licensePlate').unique(),
     status: vehicleStatusEnum('status').notNull().default('AVAILABLE'),
-    bufferMinutes: integer('bufferMinutes').notNull().default(60),
     minRentalHours: integer('minRentalHours'),
     maxRentalHours: integer('maxRentalHours'),
     advanceBookingHours: integer('advanceBookingHours'),
@@ -400,6 +409,11 @@ export const vehicles = pgTable(
       foreignColumns: [locations.operatorId, locations.id],
       name: 'vehicles_operatorId_pickupLocationId_fk',
     }),
+    // Composite-FK target (#392): lets bookings reference requested/assigned
+    // vehicles by (operatorId, id) so an assigned car must belong to the
+    // booking's operator. id is already PK-unique; this names the (operatorId,
+    // id) key. Mirrors vehicle_classes_operatorId_id_unique.
+    unique('vehicles_operatorId_id_unique').on(table.operatorId, table.id),
   ],
 )
 
@@ -409,23 +423,48 @@ export const bookings = pgTable(
     id: text('id')
       .primaryKey()
       .$defaultFn(() => crypto.randomUUID()),
+    // Tenant owner (#392). Server-derived from the assigned vehicle's operator —
+    // NEVER client-supplied (proposal §6.2). NOT NULL: the bookings table is
+    // reseeded at the marketplace cutover, no nullable tenancy debt (#386 P1b).
+    operatorId: text('operatorId')
+      .notNull()
+      .references(() => operators.id),
     renterId: text('renterId')
       .notNull()
       .references(() => users.id),
-    // Issue #308: classId is the renter's choice (always present).
-    // vehicleId is nullable — owner assigns a specific car later.
-    classId: text('classId')
+    // classId stays for discovery/grouping; the composite FK below seals it to
+    // the booking's own operator (#392, mirrors vehicles_operatorId_classId_fk).
+    classId: text('classId').notNull(),
+    // What the renter selected in storefront (slice 5). Immutable audit trail —
+    // substitution NEVER mutates this (proposal §2 "Vehicle substitution").
+    requestedVehicleId: text('requestedVehicleId').notNull(),
+    // What the operator fulfills; the exclusion constraint keys on THIS column.
+    // Server-derived = requestedVehicleId at submit; operator may substitute.
+    assignedVehicleId: text('assignedVehicleId').notNull(),
+    pickupLocationId: text('pickupLocationId')
       .notNull()
-      .references(() => vehicleClasses.id),
-    vehicleId: text('vehicleId').references(() => vehicles.id),
+      .references(() => locations.id),
+    dropoffLocationId: text('dropoffLocationId')
+      .notNull()
+      .references(() => locations.id),
     startAt: timestamp('startAt', { withTimezone: true, mode: 'date' }).notNull(),
     endAt: timestamp('endAt', { withTimezone: true, mode: 'date' }).notNull(),
     effectiveEndAt: timestamp('effectiveEndAt', { withTimezone: true, mode: 'date' }).notNull(),
     status: bookingStatusEnum('status').notNull().default('CONFIRMED'),
     source: bookingSourceEnum('source').notNull().default('DIRECT'),
+    // Human-facing reservation code (proposal §10 item 3). 8-char no-confusables
+    // base32, generated server-side; UNIQUE so a rare collision retries (§5.4).
+    bookingCode: text('bookingCode').notNull().unique(),
+    // Selected renter insurance option + its snapshot, locked at booking time.
+    // Null when the renter declines or the operator has no active option.
+    insuranceOptionId: text('insuranceOptionId'),
+    insuranceSnapshot: jsonb('insuranceSnapshot').$type<InsuranceSnapshot>(),
+    // Applicable fee_schedules rows snapshotted at booking time (informational in
+    // MVP; locks rate-at-time-of-booking, proposal §9 item 19). Never null.
+    feeSnapshot: jsonb('feeSnapshot').$type<FeeSnapshotItem[]>().notNull().default([]),
     externalId: text('externalId'),
     notes: text('notes'),
-    totalPrice: integer('totalPrice'), // whole JPY, nullable for legacy bookings
+    totalPrice: integer('totalPrice'), // whole JPY; non-null on every slice-6 submit (#429)
     cancellationFee: integer('cancellationFee'), // whole JPY, set on cancellation
     cancelledAt: timestamp('cancelledAt', { withTimezone: true, mode: 'date' }),
     idempotencyKey: text('idempotencyKey'),
@@ -434,8 +473,66 @@ export const bookings = pgTable(
   },
   (table) => [
     // Issue #330: booking-by-class queries filter on classId every request.
-    // Paired with idx_vehicles_classId to avoid sequential scans at scale.
     index('idx_bookings_classId').on(table.classId),
+    // FK-index cover (#392) — every FK column must be a leading index column
+    // (lint:fk-indexes). idx_bookings_operatorId also serves the operator
+    // read-scope (findAll filters on operatorId).
+    index('idx_bookings_operatorId').on(table.operatorId),
+    index('idx_bookings_requestedVehicleId').on(table.requestedVehicleId),
+    index('idx_bookings_assignedVehicleId').on(table.assignedVehicleId),
+    index('idx_bookings_pickupLocationId').on(table.pickupLocationId),
+    index('idx_bookings_dropoffLocationId').on(table.dropoffLocationId),
+    index('idx_bookings_insuranceOptionId').on(table.insuranceOptionId),
+    // Class must belong to the booking's operator (#392). Composite seal.
+    foreignKey({
+      columns: [table.operatorId, table.classId],
+      foreignColumns: [vehicleClasses.operatorId, vehicleClasses.id],
+      name: 'bookings_operator_class_fk',
+    }),
+    // Requested + assigned vehicles must belong to the booking's operator
+    // (proposal §5.5). Makes "operator only assigns its own cars" a DB invariant.
+    foreignKey({
+      columns: [table.operatorId, table.requestedVehicleId],
+      foreignColumns: [vehicles.operatorId, vehicles.id],
+      name: 'bookings_operator_requested_vehicle_fk',
+    }),
+    foreignKey({
+      columns: [table.operatorId, table.assignedVehicleId],
+      foreignColumns: [vehicles.operatorId, vehicles.id],
+      name: 'bookings_operator_assigned_vehicle_fk',
+    }),
+    // Selected insurance option must belong to the booking's operator (nullable
+    // + MATCH SIMPLE: unconstrained when the renter declines coverage).
+    foreignKey({
+      columns: [table.operatorId, table.insuranceOptionId],
+      foreignColumns: [insuranceOptions.operatorId, insuranceOptions.id],
+      name: 'bookings_operator_insurance_fk',
+    }),
+  ],
+)
+
+// Append-only booking lifecycle log (proposal §5.2 / #392). The events are the
+// source of truth; bookings.status is the write-through projection of the latest
+// lifecycle event. No update/delete repo methods exist — append-only by contract.
+export const bookingEvents = pgTable(
+  'booking_events',
+  {
+    id: text('id')
+      .primaryKey()
+      .$defaultFn(() => crypto.randomUUID()),
+    bookingId: text('bookingId')
+      .notNull()
+      .references(() => bookings.id),
+    type: bookingEventTypeEnum('type').notNull(),
+    payload: jsonb('payload').$type<BookingEventPayload>().notNull(),
+    // Renter for CREATED; operator user for SUBSTITUTED/CANCELLED; null = system.
+    actorId: text('actorId').references(() => users.id),
+    createdAt: timestamp('createdAt', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    // Ordered replay per booking. bookingId leads so it also covers the FK index.
+    index('idx_booking_events_bookingId').on(table.bookingId, table.createdAt),
+    index('idx_booking_events_actorId').on(table.actorId),
   ],
 )
 
@@ -515,3 +612,51 @@ export const VALID_BOOKING_TRANSITIONS: Record<BookingStatus, BookingStatus[]> =
   COMPLETED: [],
   CANCELLED: [],
 }
+
+// ---- Slice 6 (#392) booking snapshot + event payload types ----
+// Snapshots lock rates at booking time; operator edits to the live
+// insurance_options / fee_schedules rows never rewrite a booked snapshot.
+export type FeeType = (typeof feeTypeEnum.enumValues)[number]
+export type FeeUnit = (typeof feeUnitEnum.enumValues)[number]
+export type BookingEventType = (typeof bookingEventTypeEnum.enumValues)[number]
+
+export type InsuranceSnapshot = {
+  insuranceOptionId: string
+  name: string
+  dailyPriceJpy: number
+  deductibleJpy: number | null
+}
+
+export type FeeSnapshotItem = {
+  feeType: FeeType
+  unit: FeeUnit
+  amountJpy: number
+  // Provenance: class-specific (the class id) vs operator-wide (null).
+  vehicleClassId: string | null
+}
+
+export type BookingCreatedPayload = {
+  requestedVehicleId: string
+  assignedVehicleId: string
+  classId: string
+  startAt: string
+  endAt: string
+  totalPrice: number
+  insuranceSnapshot: InsuranceSnapshot | null
+  feeSnapshot: FeeSnapshotItem[]
+}
+export type VehicleSubstitutedPayload = {
+  fromVehicleId: string
+  toVehicleId: string
+  reason: string | null
+}
+export type BookingCancelledPayload = {
+  cancellationFee: number | null
+  cancelledAt: string
+}
+export type StatusChangedPayload = { from: BookingStatus; to: BookingStatus }
+export type BookingEventPayload =
+  | BookingCreatedPayload
+  | VehicleSubstitutedPayload
+  | BookingCancelledPayload
+  | StatusChangedPayload
