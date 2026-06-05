@@ -3,6 +3,7 @@ import { createApp } from '../../src/index'
 import {
   InMemoryAvailabilityRepository,
   InMemoryBookingRepository,
+  InMemoryLocationRepository,
   InMemoryStatsRepository,
   InMemoryVehicleClassRepository,
   InMemoryVehicleRepository,
@@ -17,7 +18,9 @@ async function createTestApp() {
   const availabilityRepo = new InMemoryAvailabilityRepository(vehicleRepo, bookingRepo)
   const statsRepo = new InMemoryStatsRepository(vehicleRepo, bookingRepo)
   const vehicleClassRepo = new InMemoryVehicleClassRepository()
+  const locationRepo = new InMemoryLocationRepository()
   const klass = await vehicleClassRepo.create({
+    operatorId: TEST_OPERATOR_ID,
     name: 'Compact',
     slug: 'compact',
     description: null,
@@ -26,9 +29,22 @@ async function createTestApp() {
     luggageCapacity: 2,
     transmission: 'AUTO',
     fuelType: null,
+    acrissCode: null,
     dailyRateJpy: 8000,
     hourlyRateJpy: null,
     sortOrder: 0,
+    status: 'ACTIVE',
+  })
+  // #392: booking create derives operatorId from the vehicle and validates the
+  // pickup/dropoff against the SAME operator's locations. Seed one under
+  // TEST_OPERATOR_ID so the POST /bookings flow has a valid location to resolve.
+  const location = await locationRepo.create({
+    operatorId: TEST_OPERATOR_ID,
+    name: 'Namba HQ',
+    address: '1-1 Namba, Chuo-ku, Osaka',
+    operatingHours: null,
+    timezone: 'Asia/Tokyo',
+    defaultTurnaroundMinutes: 2880,
     status: 'ACTIVE',
   })
   return {
@@ -38,9 +54,11 @@ async function createTestApp() {
       availabilityRepo,
       statsRepo,
       vehicleClassRepo,
+      locationRepo,
       operatorRepo: seededOperatorRepo(),
     }),
     classId: klass.id,
+    locationId: location.id,
   }
 }
 
@@ -75,14 +93,22 @@ const VEHICLE_FIELDS = [
 
 const BOOKING_FIELDS = [
   'id',
+  'operatorId',
   'renterId',
   'classId',
-  'vehicleId',
+  'requestedVehicleId',
+  'assignedVehicleId',
+  'pickupLocationId',
+  'dropoffLocationId',
   'startAt',
   'endAt',
   'effectiveEndAt',
   'status',
   'source',
+  'bookingCode',
+  'insuranceOptionId',
+  'insuranceSnapshot',
+  'feeSnapshot',
   'externalId',
   'notes',
   'totalPrice',
@@ -152,7 +178,7 @@ describe('API responses contain only expected fields', () => {
   })
 
   it('GET /bookings returns bookings with exact field set', async () => {
-    const { app, classId } = await createTestApp()
+    const { app, classId, locationId } = await createTestApp()
     const staffHeaders = await authHeaders({ sub: 'staff-user', role: 'STAFF' })
     const renterHeaders = await authHeaders({ sub: 'renter-user', role: 'RENTER' })
 
@@ -172,13 +198,16 @@ describe('API responses contain only expected fields', () => {
     })
     const vehicle = await vRes.json()
 
-    // Create a booking (RENTER — renterId derived from JWT sub)
+    // Create a booking (RENTER — renterId derived from JWT sub). #392: the
+    // renter books a concrete vehicle (requestedVehicleId) and names pickup/
+    // dropoff locations; the server derives operatorId/classId/assignedVehicleId.
     await app.request('/bookings', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', ...renterHeaders },
       body: JSON.stringify({
-        classId,
-        vehicleId: vehicle.data.id,
+        requestedVehicleId: vehicle.data.id,
+        pickupLocationId: locationId,
+        dropoffLocationId: locationId,
         startAt: '2026-05-01T10:00:00Z',
         endAt: '2026-05-03T10:00:00Z',
         source: 'DIRECT',
