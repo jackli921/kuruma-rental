@@ -176,7 +176,8 @@ export class BookingService {
     }
 
     // Issue #308: resolve the class (required) + optional pre-assigned vehicle.
-    // Pricing falls back to the class rate when no specific vehicle is attached.
+    // Pricing comes from the vehicle when attached; class-only bookings carry
+    // no price (totalPrice null) until a vehicle is assigned — #406, slice 6.
     // Issue #65: rental rules + Issue #74: server-side pricing — never
     // accepted from the client.
     const resolution = await this.resolveClassAndVehicle(ctx, input, now)
@@ -329,8 +330,9 @@ export class BookingService {
 
   // Resolves the booking's class (required by #308) and optional vehicle.
   // When a vehicle is provided, it must belong to the chosen class — mixing
-  // them would let a renter book a Compact and receive an SUV. Pricing and
-  // buffer come from the vehicle when assigned, otherwise from the class.
+  // them would let a renter book a Compact and receive an SUV. Buffer and
+  // pricing come from the vehicle; class-only bookings stay unpriced
+  // (totalPrice null) until a vehicle is assigned (#406, snapshot in slice 6).
   private async resolveClassAndVehicle(
     ctx: CallerContext,
     input: CreateBookingInput,
@@ -384,13 +386,17 @@ export class BookingService {
       }
     }
 
-    // Pricing source: vehicle overrides are optional. A null rate on the
-    // vehicle falls back to the class rate. That way a single vehicle
-    // without special pricing inherits from its class without duplication.
-    const dailyRateJpy = vehicle?.dailyRateJpy ?? vehicleClass.dailyRateJpy
-    const hourlyRateJpy = vehicle?.hourlyRateJpy ?? vehicleClass.hourlyRateJpy
+    // Pricing source: the assigned vehicle's rates only (#406 — class pricing
+    // dropped). A class-only booking (no vehicle assigned yet, #308) has no
+    // price source, so it persists totalPrice: null until a vehicle is
+    // assigned. Price snapshot on assignment/substitution is slice 6 (#392).
+    const bufferMinutes = vehicle?.bufferMinutes ?? DEFAULT_BUFFER_MINUTES
+    if (!vehicle) {
+      return { ok: true, bufferMinutes, totalPrice: null }
+    }
+
     const pricing = calculateBookingPrice(
-      { dailyRateJpy, hourlyRateJpy },
+      { dailyRateJpy: vehicle.dailyRateJpy, hourlyRateJpy: vehicle.hourlyRateJpy },
       input.startAt,
       input.endAt,
     )
@@ -406,7 +412,6 @@ export class BookingService {
       }
     }
 
-    const bufferMinutes = vehicle?.bufferMinutes ?? DEFAULT_BUFFER_MINUTES
     return { ok: true, bufferMinutes, totalPrice: pricing.totalPriceJpy }
   }
 

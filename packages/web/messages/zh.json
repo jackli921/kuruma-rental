@@ -495,9 +495,7 @@
         "cars": "{count} 辆",
         "activeBookings": "进行中 {count} 个",
         "seats": "{count} 座",
-        "luggage": "行李 {count} 件",
-        "daily": "{amount} /天",
-        "hourly": "{amount} /时"
+        "luggage": "行李 {count} 件"
       },
       "form": {
         "name": "车型名称",
@@ -516,10 +514,6 @@
         "fuelTypePlaceholder": "例如：汽油、混动、电动",
         "acrissCode": "ACRISS 车型类别",
         "acrissCodeNone": "无",
-        "pricingHeading": "价格（日元）",
-        "pricingHint": "至少需要一项（日租或小时）。",
-        "dailyRate": "日租价",
-        "hourlyRate": "小时价",
         "sortOrder": "排序",
         "sortOrderHint": "值越小越靠前，相同值按名称 A-Z 排序。",
         "save": "保存车型",

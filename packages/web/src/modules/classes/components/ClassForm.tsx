@@ -24,14 +24,6 @@ interface ClassFormProps {
   isSubmitting?: boolean
 }
 
-// Submit `null` (not NaN/undefined) when a numeric field is blank. Mirrors the
-// pricing pattern from VehicleForm (#48).
-function nullableNumber(v: unknown) {
-  if (v === '' || v == null) return null
-  const n = Number(v)
-  return Number.isNaN(n) ? null : n
-}
-
 // The ACRISS <select>'s "None" option has an empty value. Coerce it to null so
 // the schema's .nullish() accepts it instead of failing the regex on ''.
 function nullableString(v: unknown) {
@@ -169,42 +161,6 @@ export function ClassForm({ onSubmit, onCancel, defaultValues, isSubmitting }: C
         {errors.acrissCode && (
           <p className="text-sm text-destructive mt-1">{errors.acrissCode.message}</p>
         )}
-      </div>
-
-      {/* Pricing — at least one rate is required (enforced server-side) */}
-      <div>
-        <div className="text-sm font-medium mb-2">{t('form.pricingHeading')}</div>
-        <p className="text-xs text-muted-foreground mb-3">{t('form.pricingHint')}</p>
-        <div className="grid grid-cols-2 gap-4">
-          <div>
-            <Label htmlFor="class-dailyRate">{t('form.dailyRate')}</Label>
-            <Input
-              id="class-dailyRate"
-              type="number"
-              inputMode="numeric"
-              min={0}
-              placeholder="8000"
-              {...register('dailyRateJpy', { setValueAs: nullableNumber })}
-            />
-            {errors.dailyRateJpy && (
-              <p className="text-sm text-destructive mt-1">{errors.dailyRateJpy.message}</p>
-            )}
-          </div>
-          <div>
-            <Label htmlFor="class-hourlyRate">{t('form.hourlyRate')}</Label>
-            <Input
-              id="class-hourlyRate"
-              type="number"
-              inputMode="numeric"
-              min={0}
-              placeholder="1200"
-              {...register('hourlyRateJpy', { setValueAs: nullableNumber })}
-            />
-            {errors.hourlyRateJpy && (
-              <p className="text-sm text-destructive mt-1">{errors.hourlyRateJpy.message}</p>
-            )}
-          </div>
-        </div>
       </div>
 
       <div>

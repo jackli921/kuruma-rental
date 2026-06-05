@@ -13,7 +13,7 @@ describe('ClassForm', () => {
     cleanup()
   })
 
-  it('renders required fields: name, slug, seats, luggage, transmission, pricing, sortOrder', () => {
+  it('renders required fields: name, slug, seats, luggage, transmission, sortOrder (no pricing, #406)', () => {
     render(<ClassForm onSubmit={vi.fn()} />)
     expect(screen.getByLabelText('form.name')).toBeInTheDocument()
     expect(screen.getByLabelText('form.slug')).toBeInTheDocument()
@@ -22,10 +22,11 @@ describe('ClassForm', () => {
     expect(screen.getByLabelText('form.luggageCapacity')).toBeInTheDocument()
     expect(screen.getByLabelText('form.transmission')).toBeInTheDocument()
     expect(screen.getByLabelText('form.fuelType')).toBeInTheDocument()
-    expect(screen.getByLabelText('form.dailyRate')).toBeInTheDocument()
-    expect(screen.getByLabelText('form.hourlyRate')).toBeInTheDocument()
     expect(screen.getByLabelText('form.sortOrder')).toBeInTheDocument()
     expect(screen.getByLabelText('form.acrissCode')).toBeInTheDocument()
+    // #406: class pricing dropped — no rate inputs on the form.
+    expect(screen.queryByLabelText('form.dailyRate')).toBeNull()
+    expect(screen.queryByLabelText('form.hourlyRate')).toBeNull()
   })
 
   it('offers the 8 ACRISS codes plus a "none" option in the select', () => {
@@ -44,7 +45,6 @@ describe('ClassForm', () => {
 
     await user.type(screen.getByLabelText('form.name'), 'Compact')
     await user.type(screen.getByLabelText('form.slug'), 'compact')
-    await user.type(screen.getByLabelText('form.dailyRate'), '8000')
     await user.selectOptions(screen.getByLabelText('form.acrissCode'), 'CCAR')
     await user.click(screen.getByRole('button', { name: 'form.save' }))
 
@@ -62,7 +62,6 @@ describe('ClassForm', () => {
 
     await user.type(screen.getByLabelText('form.name'), 'Compact')
     await user.type(screen.getByLabelText('form.slug'), 'compact')
-    await user.type(screen.getByLabelText('form.dailyRate'), '8000')
     await user.click(screen.getByRole('button', { name: 'form.save' }))
 
     await waitFor(() => {
@@ -71,7 +70,7 @@ describe('ClassForm', () => {
     expect(onSubmit.mock.calls[0][0].acrissCode == null).toBe(true)
   })
 
-  it('submits valid data with daily rate only', async () => {
+  it('submits valid data without any rate fields (#406)', async () => {
     const onSubmit = vi.fn().mockResolvedValue(undefined)
     const user = userEvent.setup()
 
@@ -83,7 +82,6 @@ describe('ClassForm', () => {
     await user.type(screen.getByLabelText('form.seats'), '5')
     await user.clear(screen.getByLabelText('form.luggageCapacity'))
     await user.type(screen.getByLabelText('form.luggageCapacity'), '2')
-    await user.type(screen.getByLabelText('form.dailyRate'), '8000')
     await user.click(screen.getByRole('button', { name: 'form.save' }))
 
     await waitFor(() => {
@@ -96,25 +94,10 @@ describe('ClassForm', () => {
       seats: 5,
       luggageCapacity: 2,
       transmission: 'AUTO',
-      dailyRateJpy: 8000,
     })
-    // hourly rate left blank should submit as null, not 0 or NaN
-    expect(data.hourlyRateJpy == null).toBe(true)
-  })
-
-  it('blocks submit when both rates are empty', async () => {
-    const onSubmit = vi.fn().mockResolvedValue(undefined)
-    const user = userEvent.setup()
-
-    render(<ClassForm onSubmit={onSubmit} />)
-
-    await user.type(screen.getByLabelText('form.name'), 'Compact')
-    await user.type(screen.getByLabelText('form.slug'), 'compact')
-    await user.click(screen.getByRole('button', { name: 'form.save' }))
-
-    await waitFor(() => {
-      expect(onSubmit).not.toHaveBeenCalled()
-    })
+    // #406: the form no longer carries rate fields.
+    expect('dailyRateJpy' in data).toBe(false)
+    expect('hourlyRateJpy' in data).toBe(false)
   })
 
   it('rejects invalid slug (uppercase, spaces)', async () => {
@@ -125,7 +108,6 @@ describe('ClassForm', () => {
 
     await user.type(screen.getByLabelText('form.name'), 'Compact')
     await user.type(screen.getByLabelText('form.slug'), 'Compact Class')
-    await user.type(screen.getByLabelText('form.dailyRate'), '8000')
     await user.click(screen.getByRole('button', { name: 'form.save' }))
 
     await waitFor(() => {
@@ -145,7 +127,6 @@ describe('ClassForm', () => {
 
     await user.type(screen.getByLabelText('form.name'), 'Compact')
     await user.type(screen.getByLabelText('form.slug'), 'compact')
-    await user.type(screen.getByLabelText('form.dailyRate'), '8000')
     // description left blank
     await user.click(screen.getByRole('button', { name: 'form.save' }))
 
@@ -165,7 +146,6 @@ describe('ClassForm', () => {
     await user.type(screen.getByLabelText('form.name'), 'Compact')
     await user.type(screen.getByLabelText('form.slug'), 'compact')
     await user.type(screen.getByLabelText('form.description'), '   ')
-    await user.type(screen.getByLabelText('form.dailyRate'), '8000')
     await user.click(screen.getByRole('button', { name: 'form.save' }))
 
     await waitFor(() => {
@@ -187,8 +167,6 @@ describe('ClassForm', () => {
           luggageCapacity: 3,
           transmission: 'MANUAL',
           fuelType: 'Hybrid',
-          dailyRateJpy: 10000,
-          hourlyRateJpy: 1500,
           sortOrder: 5,
         }}
       />,
@@ -199,8 +177,6 @@ describe('ClassForm', () => {
     expect(screen.getByLabelText('form.seats')).toHaveValue(7)
     expect(screen.getByLabelText('form.luggageCapacity')).toHaveValue(3)
     expect(screen.getByLabelText('form.fuelType')).toHaveValue('Hybrid')
-    expect(screen.getByLabelText('form.dailyRate')).toHaveValue(10000)
-    expect(screen.getByLabelText('form.hourlyRate')).toHaveValue(1500)
     expect(screen.getByLabelText('form.sortOrder')).toHaveValue(5)
   })
 })

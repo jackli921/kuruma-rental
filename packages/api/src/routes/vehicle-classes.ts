@@ -110,8 +110,6 @@ export function createVehicleClassRoutes(
             luggageCapacity: d.luggageCapacity,
             transmission: d.transmission,
             fuelType: d.fuelType ?? null,
-            dailyRateJpy: d.dailyRateJpy ?? null,
-            hourlyRateJpy: d.hourlyRateJpy ?? null,
             acrissCode: d.acrissCode ?? null,
             sortOrder: d.sortOrder,
             status: 'ACTIVE',

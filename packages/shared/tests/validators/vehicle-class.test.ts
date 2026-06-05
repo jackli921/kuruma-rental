@@ -11,7 +11,6 @@ function validInput() {
     seats: 5,
     luggageCapacity: 2,
     transmission: 'AUTO' as const,
-    dailyRateJpy: 5500,
   }
 }
 
@@ -68,31 +67,34 @@ describe('createVehicleClassSchema', () => {
     expect(result.success).toBe(false)
   })
 
-  it('rejects when both rates are missing', () => {
-    const input = { ...validInput(), dailyRateJpy: undefined, hourlyRateJpy: undefined }
-    const result = createVehicleClassSchema.safeParse(input)
-    expect(result.success).toBe(false)
-  })
-
-  it('accepts when only hourly rate is set', () => {
-    const input = { ...validInput(), dailyRateJpy: undefined, hourlyRateJpy: 1000 }
-    const result = createVehicleClassSchema.safeParse(input)
+  // #406: pricing moved to the vehicle level. A class no longer carries a rate
+  // and no longer requires one.
+  it('accepts a class with no rate fields (pricing is vehicle-level, #406)', () => {
+    const result = createVehicleClassSchema.safeParse({
+      name: 'Compact',
+      slug: 'compact',
+      seats: 5,
+      luggageCapacity: 2,
+      transmission: 'AUTO',
+    })
     expect(result.success).toBe(true)
   })
 
-  it('accepts zero rate (free promo)', () => {
-    const result = createVehicleClassSchema.safeParse({ ...validInput(), dailyRateJpy: 0 })
+  it('strips legacy rate fields from parsed output (#406)', () => {
+    const result = createVehicleClassSchema.safeParse({
+      name: 'Compact',
+      slug: 'compact',
+      seats: 5,
+      luggageCapacity: 2,
+      transmission: 'AUTO',
+      dailyRateJpy: 5000,
+      hourlyRateJpy: 800,
+    })
     expect(result.success).toBe(true)
-  })
-
-  it('rejects negative rate', () => {
-    const result = createVehicleClassSchema.safeParse({ ...validInput(), dailyRateJpy: -100 })
-    expect(result.success).toBe(false)
-  })
-
-  it('rejects non-integer rate', () => {
-    const result = createVehicleClassSchema.safeParse({ ...validInput(), dailyRateJpy: 55.5 })
-    expect(result.success).toBe(false)
+    if (result.success) {
+      expect('dailyRateJpy' in result.data).toBe(false)
+      expect('hourlyRateJpy' in result.data).toBe(false)
+    }
   })
 
   describe('acrissCode', () => {
@@ -161,17 +163,13 @@ describe('updateVehicleClassSchema', () => {
     expect(result.success).toBe(true)
   })
 
-  it('rejects both rates null when both keys present', () => {
-    const result = updateVehicleClassSchema.safeParse({
-      dailyRateJpy: null,
-      hourlyRateJpy: null,
-    })
-    expect(result.success).toBe(false)
-  })
-
-  it('allows nullifying one rate when other not present', () => {
-    const result = updateVehicleClassSchema.safeParse({ dailyRateJpy: null })
+  it('strips legacy rate fields from a patch (#406)', () => {
+    const result = updateVehicleClassSchema.safeParse({ dailyRateJpy: 5000, hourlyRateJpy: 800 })
     expect(result.success).toBe(true)
+    if (result.success) {
+      expect('dailyRateJpy' in result.data).toBe(false)
+      expect('hourlyRateJpy' in result.data).toBe(false)
+    }
   })
 
   it('accepts an acrissCode patch (flows from the base schema)', () => {
@@ -197,5 +195,29 @@ describe('updateVehicleClassSchema', () => {
     const result = updateVehicleClassSchema.safeParse({ operatorId: 'op_other', name: 'X' })
     expect(result.success).toBe(true)
     if (result.success) expect('operatorId' in result.data).toBe(false)
+  })
+
+  it('does NOT inject photos/sortOrder defaults on a partial patch (issue #430)', () => {
+    // .partial() does not strip .default(), so a name-only patch used to come
+    // back as { name, photos: [], sortOrder: 0 } and wipe those columns on write.
+    const result = updateVehicleClassSchema.safeParse({ name: 'Renamed' })
+    expect(result.success).toBe(true)
+    if (result.success) {
+      expect(result.data).toEqual({ name: 'Renamed' })
+      expect('photos' in result.data).toBe(false)
+      expect('sortOrder' in result.data).toBe(false)
+    }
+  })
+
+  it('passes photos/sortOrder through when explicitly provided', () => {
+    const result = updateVehicleClassSchema.safeParse({
+      photos: ['https://cdn.example.com/a.jpg'],
+      sortOrder: 7,
+    })
+    expect(result.success).toBe(true)
+    if (result.success) {
+      expect(result.data.photos).toEqual(['https://cdn.example.com/a.jpg'])
+      expect(result.data.sortOrder).toBe(7)
+    }
   })
 })
