@@ -1,8 +1,6 @@
 import { z } from 'zod'
 import { ACRISS_PATTERN } from '../acriss'
 
-const jpyRate = z.number().int('Rate must be a whole yen amount').min(0, 'Rate cannot be negative')
-
 // photos/sortOrder carry .default()s only on create. Kept off the base because
 // Zod .partial() does NOT strip .default(), so a partial PATCH would re-inject
 // { photos: [], sortOrder: 0 } and wipe those columns on write (issue #430).
@@ -25,8 +23,6 @@ const vehicleClassObjectSchema = z.object({
   luggageCapacity: z.number().int().min(0, 'Luggage capacity cannot be negative'),
   transmission: z.enum(['AUTO', 'MANUAL']),
   fuelType: z.string().trim().max(50).optional(),
-  dailyRateJpy: jpyRate.nullish(),
-  hourlyRateJpy: jpyRate.nullish(),
   // ACRISS taxonomy code (#388). Format-only validation against the single
   // ACRISS_PATTERN source — the value is normalised to upper-case so 'ccar'
   // and 'CCAR' are the same code. Nullish: existing/operator-created classes
@@ -42,41 +38,21 @@ const vehicleClassObjectSchema = z.object({
   sortOrder: sortOrderSchema.optional(),
 })
 
-export const createVehicleClassSchema = vehicleClassObjectSchema
-  .extend({
-    // Defaults belong on create only — see photosSchema/sortOrderSchema note (#430).
-    photos: photosSchema.default([]),
-    sortOrder: sortOrderSchema.default(0),
-    // #401: a non-operator (platform/legacy admin) caller may name the target
-    // operator. OPERATOR_* callers' tenant comes from their token and this is
-    // ignored for them. Optional — omit when exactly one operator exists.
-    // `operators.id` is text (e.g. the seeded `op_best_car_rental`), not a UUID;
-    // existence is enforced by the DB FK (23503 -> 422), not here.
-    operatorId: z.string().min(1, 'Operator ID must not be empty').optional(),
-  })
-  .superRefine((data, ctx) => {
-    if (data.dailyRateJpy == null && data.hourlyRateJpy == null) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        path: ['dailyRateJpy'],
-        message: 'At least one rate (daily or hourly) is required',
-      })
-    }
-  })
+export const createVehicleClassSchema = vehicleClassObjectSchema.extend({
+  // Defaults belong on create only — see photosSchema/sortOrderSchema note (#430).
+  photos: photosSchema.default([]),
+  sortOrder: sortOrderSchema.default(0),
+  // #401: a non-operator (platform/legacy admin) caller may name the target
+  // operator. OPERATOR_* callers' tenant comes from their token and this is
+  // ignored for them. Optional — omit when exactly one operator exists.
+  // `operators.id` is text (e.g. the seeded `op_best_car_rental`), not a UUID;
+  // existence is enforced by the DB FK (23503 -> 422), not here.
+  operatorId: z.string().min(1, 'Operator ID must not be empty').optional(),
+})
 
-export const updateVehicleClassSchema = vehicleClassObjectSchema
-  .partial()
-  .superRefine((data, ctx) => {
-    if ('dailyRateJpy' in data && 'hourlyRateJpy' in data) {
-      if (data.dailyRateJpy == null && data.hourlyRateJpy == null) {
-        ctx.addIssue({
-          code: z.ZodIssueCode.custom,
-          path: ['dailyRateJpy'],
-          message: 'At least one rate (daily or hourly) is required',
-        })
-      }
-    }
-  })
+// #406: classes no longer carry pricing — rates live on the vehicle. No
+// "at least one rate" refinement here anymore.
+export const updateVehicleClassSchema = vehicleClassObjectSchema.partial()
 
 export type CreateVehicleClassInput = z.infer<typeof createVehicleClassSchema>
 export type CreateVehicleClassFormInput = z.input<typeof createVehicleClassSchema>

@@ -59,7 +59,6 @@ describe('POST /vehicle-classes maps an unknown operatorId to 422 (#400)', () =>
         seats: 5,
         luggageCapacity: 2,
         transmission: 'AUTO',
-        dailyRateJpy: 8000,
       }),
     })
     expect(res.status).toBe(422)

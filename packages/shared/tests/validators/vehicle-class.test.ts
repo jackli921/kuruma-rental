@@ -11,7 +11,6 @@ function validInput() {
     seats: 5,
     luggageCapacity: 2,
     transmission: 'AUTO' as const,
-    dailyRateJpy: 5500,
   }
 }
 
@@ -68,31 +67,34 @@ describe('createVehicleClassSchema', () => {
     expect(result.success).toBe(false)
   })
 
-  it('rejects when both rates are missing', () => {
-    const input = { ...validInput(), dailyRateJpy: undefined, hourlyRateJpy: undefined }
-    const result = createVehicleClassSchema.safeParse(input)
-    expect(result.success).toBe(false)
-  })
-
-  it('accepts when only hourly rate is set', () => {
-    const input = { ...validInput(), dailyRateJpy: undefined, hourlyRateJpy: 1000 }
-    const result = createVehicleClassSchema.safeParse(input)
+  // #406: pricing moved to the vehicle level. A class no longer carries a rate
+  // and no longer requires one.
+  it('accepts a class with no rate fields (pricing is vehicle-level, #406)', () => {
+    const result = createVehicleClassSchema.safeParse({
+      name: 'Compact',
+      slug: 'compact',
+      seats: 5,
+      luggageCapacity: 2,
+      transmission: 'AUTO',
+    })
     expect(result.success).toBe(true)
   })
 
-  it('accepts zero rate (free promo)', () => {
-    const result = createVehicleClassSchema.safeParse({ ...validInput(), dailyRateJpy: 0 })
+  it('strips legacy rate fields from parsed output (#406)', () => {
+    const result = createVehicleClassSchema.safeParse({
+      name: 'Compact',
+      slug: 'compact',
+      seats: 5,
+      luggageCapacity: 2,
+      transmission: 'AUTO',
+      dailyRateJpy: 5000,
+      hourlyRateJpy: 800,
+    })
     expect(result.success).toBe(true)
-  })
-
-  it('rejects negative rate', () => {
-    const result = createVehicleClassSchema.safeParse({ ...validInput(), dailyRateJpy: -100 })
-    expect(result.success).toBe(false)
-  })
-
-  it('rejects non-integer rate', () => {
-    const result = createVehicleClassSchema.safeParse({ ...validInput(), dailyRateJpy: 55.5 })
-    expect(result.success).toBe(false)
+    if (result.success) {
+      expect('dailyRateJpy' in result.data).toBe(false)
+      expect('hourlyRateJpy' in result.data).toBe(false)
+    }
   })
 
   describe('acrissCode', () => {
@@ -161,17 +163,13 @@ describe('updateVehicleClassSchema', () => {
     expect(result.success).toBe(true)
   })
 
-  it('rejects both rates null when both keys present', () => {
-    const result = updateVehicleClassSchema.safeParse({
-      dailyRateJpy: null,
-      hourlyRateJpy: null,
-    })
-    expect(result.success).toBe(false)
-  })
-
-  it('allows nullifying one rate when other not present', () => {
-    const result = updateVehicleClassSchema.safeParse({ dailyRateJpy: null })
+  it('strips legacy rate fields from a patch (#406)', () => {
+    const result = updateVehicleClassSchema.safeParse({ dailyRateJpy: 5000, hourlyRateJpy: 800 })
     expect(result.success).toBe(true)
+    if (result.success) {
+      expect('dailyRateJpy' in result.data).toBe(false)
+      expect('hourlyRateJpy' in result.data).toBe(false)
+    }
   })
 
   it('accepts an acrissCode patch (flows from the base schema)', () => {
