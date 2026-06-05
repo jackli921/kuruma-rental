@@ -3,6 +3,74 @@
 **Resume here after `/clear`.** Worktree: `/Users/jack/Dev/kuruma-slice6`
 Branch: `feat/slice6-booking-events` (base `origin/marketplace-pivot` @ `2fbbedd`).
 
+## SESSION UPDATE 2026-06-05 — Task #5 LANDED (DI wire + fixture migration) — READ THIS FIRST
+
+Commits since #4 (`b9d857d`):
+- `705859c` **Task #5 (DI wire) + fixture migration.** `createApp` now builds an
+  in-memory `bookingEventRepo` and passes the full 7-repo `TransactionRepos`
+  bundle through `runInTransaction` in BOTH in-memory branches; `BookingService`
+  uses the new positional ctor (`runInTransaction` 2nd). Also fixed two in-memory
+  repos that missed the slice-6 `booking.vehicleId -> assignedVehicleId` rename
+  (Task #3 gap): `in-memory/fleet-overview.ts` + `in-memory/customer.ts`.
+  New shared fixture helper **`tests/helpers/booking.ts` (`bookingInput`)** —
+  marketplace Booking shape + sane defaults + AUTO-UNIQUE `bookingCode`
+  (NOT NULL UNIQUE). Migrated fixtures: vehicle-detail, public-catalog,
+  vehicle-classes, stats, availability, all 3 fleet-overview test files.
+- `61a7899` **partial select-columns** — fixtures migrated; 1 test stays RED
+  (POSTs through the route → blocked on #7).
+
+### The handoff was WRONG about #5 scope (important)
+The previous note claimed the 12 RED files "fail ONLY because createApp mis-wires
+the ctor." FALSE. Most don't use `createApp` — they build fixtures directly and
+broke on the new Booking shape (`bookingCode` NOT NULL UNIQUE collisions on
+`undefined`, `assignedVehicleId` undefined). DI wiring was real but small; the
+fixture migration was the bulk. And several files can't go green at #5 at all —
+they need the ROUTE layer (#7) or a contract rewrite.
+
+### State now: `bunx vitest run tests/routes tests/services tests/repositories tests/lib`
+**683 passing.** 67 RED across 6 files, ALL explained (NOT fixture bugs):
+| File | RED | Cause | Fixed by |
+|------|-----|-------|----------|
+| `tests/routes/bookings.test.ts` | 48 | route #7 + many assert pre-slice-6 class-only/optional-vehicle contract | #7 + rewrite |
+| `tests/routes/manual-booking.test.ts` | 7 | route #7 (POST body still old shape) | #7 |
+| `tests/repositories/tenancy-guards.test.ts` | 6 | assert superseded "BookingRepo fails closed for OPERATOR_*" | contract rewrite |
+| `tests/routes/actor-derivation.test.ts` | 3 | route #7 | #7 |
+| `tests/routes/operator-user-isolation.test.ts` | 2 | superseded fail-closed contract | contract rewrite |
+| `tests/routes/select-columns.test.ts` | 1 | route #7 | #7 |
+
+### Root blocker = Task #7 (route not migrated)
+`src/routes/bookings.ts` (~L75-85) still reads `parsed.data.classId` /
+`parsed.data.vehicleId ?? null` — fields the reshaped `createBookingSchema`
+(Task #2) no longer produces. Must map the new validator output
+(`requestedVehicleId`, `pickup/dropoffLocationId`, `insuranceOptionId?`) to
+`CreateBookingInput`, and add `POST /bookings/:id/substitute` (OPERATOR_* only,
+renter 403, cross-op 404). CAUTION: `bookings.test.ts` itself asserts the OLD
+contract in many cases (class-only bookings, optional vehicleId, `vehicleId`
+filter param) — those are not just fixtures, they need rewriting to the
+"concrete vehicle required" slice-6 contract. Treat #7 as route migration +
+bookings.test.ts rewrite together.
+
+### NEXT (entry points, in order)
+1. **Task #7** — route migration (above). Unblocks bookings/manual-booking/
+   actor-derivation/select-columns. Use `bookingInput` for any repo-seeded fixtures.
+2. **Contract rewrite** — operator-user-isolation + tenancy-guards to the
+   three-way scope (`src/tenancy.ts` `bookingReadScope`: operator reads/writes own
+   tenant). Confirm POST /bookings 400-vs-403 is intentional, not a masked guard.
+3. **Task #6** — Drizzle bundle is still tsc-red (`createDrizzleTransaction`
+   passes only 2 repos; `DrizzleBookingEventRepository` + `reassignVehicle` don't
+   exist; stale `vehicleId`/`bufferMinutes` in `src/repositories/drizzle/*`) +
+   Neon integration tests. Do the Drizzle bundle widening here.
+
+### Don'ts (unchanged)
+- `--no-verify` WIP commits required (full-monorepo tsc red until #6/#7). Note it.
+- `#392` stays OPEN; do NOT claim the E2E gate until #391 lands.
+- Never weaken assertions to go green; superseded-contract tests get REWRITTEN
+  to the new contract, not deleted/softened.
+- Verify with `bunx vitest run tests/routes tests/services tests/repositories tests/lib`
+  (excludes `tests/integration/*`, which need DATABASE_URL + the #6 Drizzle work).
+
+---
+
 ## SESSION UPDATE 2026-06-04 (cont. 2) — Task #4 LANDED (service, all green, --no-verify WIP)
 
 Commits since #3 (`3de3e19`):
