@@ -261,8 +261,19 @@ export interface StatsRepository {
   getDashboardStats(): Promise<DashboardStats>
 }
 
+/**
+ * Optional scoping for {@link AvailabilityRepository.findAvailableVehicles}.
+ * Storefront search (#391) needs availability scoped to one location/class;
+ * every field defaults to "no filter" so existing callers are unaffected.
+ */
+export interface AvailabilityFilters {
+  locationId?: string
+  operatorId?: string
+  classId?: string
+}
+
 export interface AvailabilityRepository {
-  findAvailableVehicles(from: Date, to: Date): Promise<Vehicle[]>
+  findAvailableVehicles(from: Date, to: Date, filters?: AvailabilityFilters): Promise<Vehicle[]>
   checkVehicleAvailability(
     vehicleId: string,
     from: Date,
