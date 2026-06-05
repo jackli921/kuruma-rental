@@ -5,6 +5,7 @@ import { InMemoryMessageRepository } from '../../src/repositories/in-memory/mess
 import { InMemoryThreadRepository } from '../../src/repositories/in-memory/thread'
 import { InMemoryVehicleRepository } from '../../src/repositories/in-memory/vehicle'
 import type { Vehicle } from '../../src/stores'
+import { bookingInput } from '../helpers/booking'
 
 // Repos NOT yet operator-scoped in slice 1 (#386) must fail closed for any
 // tenant-scoped caller rather than silently serving cross-tenant data. The
@@ -19,27 +20,96 @@ const operatorCtx: CallerContext = {
 
 type Invocation = readonly [method: string, run: () => Promise<unknown>]
 
-describe('BookingRepository rejects OPERATOR_* until scoped', () => {
-  const repo = new InMemoryBookingRepository()
-  const invocations: Invocation[] = [
-    ['findAll', () => repo.findAll(operatorCtx)],
-    ['findById', () => repo.findById(operatorCtx, 'b1')],
-    ['findByIdempotencyKey', () => repo.findByIdempotencyKey(operatorCtx, 'k1')],
-    // biome-ignore lint/suspicious/noExplicitAny: throwaway stub; guard throws first
-    ['create', () => repo.create(operatorCtx, {} as any)],
-    [
-      'updateStatus',
-      () => repo.updateStatus(operatorCtx, 'b1', { from: 'CONFIRMED', to: 'ACTIVE' }),
-    ],
-    [
-      'cancel',
-      () => repo.cancel(operatorCtx, 'b1', { from: 'CONFIRMED', fee: 0, cancelledAt: new Date() }),
-    ],
-  ]
+// Slice 6 (#392, proposal §6.2): BookingRepository is now operator-scoped via
+// the three-way bookingReadScope (renter-own / operator-own-tenant / bypass /
+// none). An OPERATOR_* caller is bounded to its OWN tenant on reads AND writes
+// — never fail-closed, never a cross-tenant leak — and a tenant-less operator
+// (scope 'none') still fails closed. This supersedes the slice-1 fail-closed
+// contract (the repo no longer throws "not yet operator-scoped").
+describe('BookingRepository operator-scopes reads and writes (#392)', () => {
+  const opA = 'op_a'
+  const opB = 'op_b'
+  const ctxFor = (operatorId: string): CallerContext => ({
+    userId: 'op-user',
+    role: 'OPERATOR_OWNER',
+    operatorId,
+    bypassScope: false,
+  })
+  const noTenant: CallerContext = { userId: 'op-user', role: 'OPERATOR_OWNER', bypassScope: false }
 
-  it.each(invocations)('%s throws ForbiddenError naming the repo', async (_method, run) => {
-    await expect(run()).rejects.toThrow(ForbiddenError)
-    await expect(run()).rejects.toThrow('BookingRepository not yet operator-scoped')
+  const seed = async () => {
+    const repo = new InMemoryBookingRepository()
+    const a = await repo.create(
+      SYSTEM_CONTEXT,
+      bookingInput({
+        operatorId: opA,
+        renterId: 'renter-a',
+        requestedVehicleId: 'veh-a',
+        assignedVehicleId: 'veh-a',
+        idempotencyKey: 'key-a',
+      }),
+    )
+    const b = await repo.create(
+      SYSTEM_CONTEXT,
+      bookingInput({
+        operatorId: opB,
+        renterId: 'renter-b',
+        requestedVehicleId: 'veh-b',
+        assignedVehicleId: 'veh-b',
+        idempotencyKey: 'key-b',
+      }),
+    )
+    return { repo, a, b }
+  }
+
+  it('findAll returns only the caller’s own tenant bookings', async () => {
+    const { repo, a } = await seed()
+    const rows = await repo.findAll(ctxFor(opA))
+    expect(rows.map((r) => r.id)).toEqual([a.id])
+  })
+
+  it('findById returns the caller’s own tenant booking but not another tenant’s', async () => {
+    const { repo, a, b } = await seed()
+    expect(await repo.findById(ctxFor(opA), a.id)).toMatchObject({ id: a.id, operatorId: opA })
+    // Cross-tenant: undefined (no existence leak), not a thrown guard.
+    expect(await repo.findById(ctxFor(opA), b.id)).toBeUndefined()
+  })
+
+  it('findByIdempotencyKey cannot reach another tenant booking', async () => {
+    const { repo } = await seed()
+    expect(await repo.findByIdempotencyKey(ctxFor(opA), 'key-a')).toMatchObject({ operatorId: opA })
+    expect(await repo.findByIdempotencyKey(ctxFor(opA), 'key-b')).toBeUndefined()
+  })
+
+  it('updateStatus is a no-op on another tenant booking', async () => {
+    const { repo, b } = await seed()
+    expect(
+      await repo.updateStatus(ctxFor(opA), b.id, { from: 'CONFIRMED', to: 'ACTIVE' }),
+    ).toBeUndefined()
+    expect(await repo.findById(SYSTEM_CONTEXT, b.id)).toMatchObject({ status: 'CONFIRMED' })
+  })
+
+  it('cancel is a no-op on another tenant booking', async () => {
+    const { repo, b } = await seed()
+    expect(
+      await repo.cancel(ctxFor(opA), b.id, { from: 'CONFIRMED', fee: 0, cancelledAt: new Date() }),
+    ).toBeUndefined()
+    expect(await repo.findById(SYSTEM_CONTEXT, b.id)).toMatchObject({ status: 'CONFIRMED' })
+  })
+
+  it('create rejects booking for another operator', async () => {
+    const { repo } = await seed()
+    await expect(
+      repo.create(ctxFor(opA), bookingInput({ operatorId: opB, assignedVehicleId: 'veh-c' })),
+    ).rejects.toThrow(ForbiddenError)
+  })
+
+  it('a tenant-less operator fails closed', async () => {
+    const { repo } = await seed()
+    expect(await repo.findAll(noTenant)).toEqual([])
+    await expect(
+      repo.create(noTenant, bookingInput({ operatorId: opA, assignedVehicleId: 'veh-d' })),
+    ).rejects.toThrow(ForbiddenError)
   })
 })
 
