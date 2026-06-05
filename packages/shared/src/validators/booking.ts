@@ -36,5 +36,14 @@ export const updateBookingStatusSchema = z.object({
   }),
 })
 
+// Slice 6 (#392 §5.5): operator-only vehicle substitution. The new vehicle must
+// be the same operator + pickup location + ACRISS class as the booking (the
+// service enforces those; the schema only shapes the request body).
+export const substituteVehicleSchema = z.object({
+  newVehicleId: z.string().uuid('New vehicle ID must be a valid UUID'),
+  reason: z.string().optional(),
+})
+
 export type CreateBookingInput = z.infer<typeof createBookingSchema>
 export type UpdateBookingStatusInput = z.infer<typeof updateBookingStatusSchema>
+export type SubstituteVehicleInput = z.infer<typeof substituteVehicleSchema>

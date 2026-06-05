@@ -4,6 +4,7 @@ import { SYSTEM_CONTEXT } from '../../src/middleware/auth'
 import {
   InMemoryAvailabilityRepository,
   InMemoryBookingRepository,
+  InMemoryLocationRepository,
   InMemoryVehicleClassRepository,
   InMemoryVehicleRepository,
 } from '../../src/repositories/in-memory'
@@ -38,26 +39,40 @@ async function createTestApp() {
     sortOrder: 0,
     status: 'ACTIVE',
   })
+  const locationRepo = new InMemoryLocationRepository()
+  const location = await locationRepo.create({
+    operatorId: TEST_OPERATOR_ID,
+    name: 'Namba',
+    address: '1-2-3 Namba',
+    operatingHours: null,
+    timezone: 'Asia/Tokyo',
+    defaultTurnaroundMinutes: 2880,
+    status: 'ACTIVE',
+  } as Parameters<typeof locationRepo.create>[0])
   return {
     app: createApp({
       vehicleRepo,
       bookingRepo,
       availabilityRepo,
       vehicleClassRepo,
+      locationRepo,
       operatorRepo: seededOperatorRepo(),
     }),
     vehicleRepo,
     classId: klass.id,
+    locationId: location.id,
   }
 }
 
 describe('actor derivation from JWT', () => {
   it('POST /bookings uses JWT sub as renterId, ignores body.renterId', async () => {
-    const { app, vehicleRepo, classId } = await createTestApp()
+    const { app, vehicleRepo, classId, locationId } = await createTestApp()
     const headers = await authHeaders({ sub: 'real-user-id', role: 'RENTER' })
 
     const vehicle = await vehicleRepo.create(SYSTEM_CONTEXT, {
+      operatorId: TEST_OPERATOR_ID,
       classId,
+      pickupLocationId: locationId,
       name: 'Test Car',
       description: null,
       photos: [],
@@ -80,8 +95,9 @@ describe('actor derivation from JWT', () => {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', ...headers },
       body: JSON.stringify({
-        classId,
-        vehicleId: vehicle.id,
+        requestedVehicleId: vehicle.id,
+        pickupLocationId: locationId,
+        dropoffLocationId: locationId,
         renterId: 'a0000000-0000-4000-a000-000000000099',
         startAt: futureDate(24),
         endAt: futureDate(48),
@@ -96,12 +112,14 @@ describe('actor derivation from JWT', () => {
   })
 
   it('POST /bookings/:id/cancel requires booking ownership', async () => {
-    const { app, vehicleRepo, classId } = await createTestApp()
+    const { app, vehicleRepo, classId, locationId } = await createTestApp()
     const ownerHeaders = await authHeaders({ sub: 'owner-user', role: 'RENTER' })
     const attackerHeaders = await authHeaders({ sub: 'attacker-user', role: 'RENTER' })
 
     const vehicle = await vehicleRepo.create(SYSTEM_CONTEXT, {
+      operatorId: TEST_OPERATOR_ID,
       classId,
+      pickupLocationId: locationId,
       name: 'Test Car',
       description: null,
       photos: [],
@@ -125,8 +143,9 @@ describe('actor derivation from JWT', () => {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', ...ownerHeaders },
       body: JSON.stringify({
-        classId,
-        vehicleId: vehicle.id,
+        requestedVehicleId: vehicle.id,
+        pickupLocationId: locationId,
+        dropoffLocationId: locationId,
         startAt: futureDate(24),
         endAt: futureDate(48),
         source: 'DIRECT',
@@ -181,12 +200,14 @@ describe('actor derivation from JWT', () => {
   })
 
   it('STAFF can cancel any booking', async () => {
-    const { app, vehicleRepo, classId } = await createTestApp()
+    const { app, vehicleRepo, classId, locationId } = await createTestApp()
     const renterHeaders = await authHeaders({ sub: 'renter-user', role: 'RENTER' })
     const staffHeaders = await authHeaders({ sub: 'staff-user', role: 'STAFF' })
 
     const vehicle = await vehicleRepo.create(SYSTEM_CONTEXT, {
+      operatorId: TEST_OPERATOR_ID,
       classId,
+      pickupLocationId: locationId,
       name: 'Test Car',
       description: null,
       photos: [],
@@ -209,8 +230,9 @@ describe('actor derivation from JWT', () => {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', ...renterHeaders },
       body: JSON.stringify({
-        classId,
-        vehicleId: vehicle.id,
+        requestedVehicleId: vehicle.id,
+        pickupLocationId: locationId,
+        dropoffLocationId: locationId,
         startAt: futureDate(24),
         endAt: futureDate(48),
         source: 'DIRECT',
