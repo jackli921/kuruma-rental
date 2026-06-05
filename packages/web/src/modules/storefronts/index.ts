@@ -18,3 +18,4 @@ export {
   StorefrontDetailView,
   StorefrontSearchForm,
 } from './components'
+export { normalizeClassFilter, parseSearchRange, type SearchRange } from './params'
