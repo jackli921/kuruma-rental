@@ -1,5 +1,5 @@
 import { createApiClient } from '@/lib/api-client'
-import type { ApiResponse } from '@kuruma/shared/types/api-response'
+import { unwrap } from '@/lib/api-error'
 
 // JSON-serialized operator option for the admin picker (#407). The list
 // endpoint returns only the fields the picker needs (id + display name + slug).
@@ -7,19 +7,6 @@ export interface OperatorOption {
   id: string
   name: string
   slug: string
-}
-
-async function unwrap<T>(res: Response): Promise<T> {
-  const body = (await res.json().catch(() => ({
-    success: false as const,
-    error: `Non-JSON response (HTTP ${res.status})`,
-  }))) as ApiResponse<T>
-
-  if (!body.success) {
-    throw new Error(body.error ?? `HTTP ${res.status}`)
-  }
-
-  return body.data
 }
 
 // Lists the operators the caller may write under. Bypass roles see all

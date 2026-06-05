@@ -18,8 +18,9 @@ export function testResolveWriteOperatorId(): ResolveWriteOperatorId {
 
 /**
  * An in-memory operator repo seeded with exactly one operator, for
- * `createApp`-based tests whose non-operator creates rely on sole-operator
- * inference (#401).
+ * `createApp`-based tests. Non-operator creates now send an explicit
+ * `operatorId` (sole-operator inference was retired in #407); this just
+ * provides the operator row their writes reference.
  */
 export function seededOperatorRepo(id: string = TEST_OPERATOR_ID): InMemoryOperatorRepository {
   const now = new Date()
