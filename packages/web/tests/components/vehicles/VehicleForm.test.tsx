@@ -61,7 +61,6 @@ describe('VehicleForm', () => {
 
     expect(screen.getByLabelText('Vehicle name')).toBeInTheDocument()
     expect(screen.getByLabelText('Seats')).toBeInTheDocument()
-    expect(screen.getByLabelText('Buffer time (minutes)')).toBeInTheDocument()
     expect(screen.getByText('Save vehicle')).toBeInTheDocument()
   })
 
@@ -139,7 +138,6 @@ describe('VehicleForm', () => {
 
     expect(screen.getByLabelText('Vehicle name')).toHaveValue('Honda Fit')
     expect(screen.getByLabelText('Seats')).toHaveValue(4)
-    expect(screen.getByLabelText('Buffer time (minutes)')).toHaveValue(90)
     expect(screen.getByLabelText('Daily rate')).toHaveValue(7500)
     expect(screen.getByLabelText('Hourly rate')).toHaveValue(1100)
   })

@@ -31,13 +31,8 @@ export class InMemoryAvailabilityRepository implements AvailabilityRepository {
       if (filters?.operatorId && vehicle.operatorId !== filters.operatorId) return false
       if (filters?.classId && vehicle.classId !== filters.classId) return false
 
-      const conflicts = getConflictingBookings(
-        allBookings,
-        vehicle.id,
-        vehicle.bufferMinutes,
-        from,
-        to,
-      )
+      // Turnaround is location-derived now (#392); the vehicle buffer is gone.
+      const conflicts = getConflictingBookings(allBookings, vehicle.id, from, to)
       return conflicts.length === 0
     })
   }
@@ -58,13 +53,7 @@ export class InMemoryAvailabilityRepository implements AvailabilityRepository {
     if (!vehicle) return undefined
 
     const allBookings = await this.bookingRepo.findAll(SYSTEM_CONTEXT)
-    const conflicts = getConflictingBookings(
-      allBookings,
-      vehicle.id,
-      vehicle.bufferMinutes,
-      from,
-      to,
-    )
+    const conflicts = getConflictingBookings(allBookings, vehicle.id, from, to)
 
     return {
       available: conflicts.length === 0,

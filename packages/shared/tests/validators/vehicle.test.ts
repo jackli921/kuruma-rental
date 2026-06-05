@@ -19,7 +19,7 @@ describe('createVehicleSchema', () => {
     const result = createVehicleSchema.safeParse(validInput)
     expect(result.success).toBe(true)
     if (result.success) {
-      expect(result.data.bufferMinutes).toBe(60) // default
+      expect(result.data.photos).toEqual([]) // default
     }
   })
 
@@ -28,7 +28,6 @@ describe('createVehicleSchema', () => {
       ...validInput,
       description: 'Compact hybrid',
       fuelType: 'Hybrid',
-      bufferMinutes: 90,
       minRentalHours: 2,
       maxRentalHours: 168,
       advanceBookingHours: 24,
@@ -78,11 +77,6 @@ describe('createVehicleSchema', () => {
       ...validInput,
       photos: ['not-a-url'],
     })
-    expect(result.success).toBe(false)
-  })
-
-  it('rejects negative bufferMinutes', () => {
-    const result = createVehicleSchema.safeParse({ ...validInput, bufferMinutes: -10 })
     expect(result.success).toBe(false)
   })
 
@@ -346,28 +340,24 @@ describe('updateVehicleSchema', () => {
     expect(result.success).toBe(true)
   })
 
-  it('does NOT inject photos/bufferMinutes defaults on a partial patch (issue #432)', () => {
+  it('does NOT inject photos defaults on a partial patch (issue #432)', () => {
     // .partial() does not strip .default(), so a name-only patch used to come
-    // back as { name, photos: [], bufferMinutes: 60 } and wipe/reset those
-    // columns on write.
+    // back as { name, photos: [] } and wipe that column on write.
     const result = updateVehicleSchema.safeParse({ name: 'Renamed' })
     expect(result.success).toBe(true)
     if (result.success) {
       expect(result.data).toEqual({ name: 'Renamed' })
       expect('photos' in result.data).toBe(false)
-      expect('bufferMinutes' in result.data).toBe(false)
     }
   })
 
-  it('passes photos/bufferMinutes through when explicitly provided', () => {
+  it('passes photos through when explicitly provided', () => {
     const result = updateVehicleSchema.safeParse({
       photos: ['https://cdn.example.com/a.jpg'],
-      bufferMinutes: 30,
     })
     expect(result.success).toBe(true)
     if (result.success) {
       expect(result.data.photos).toEqual(['https://cdn.example.com/a.jpg'])
-      expect(result.data.bufferMinutes).toBe(30)
     }
   })
 })

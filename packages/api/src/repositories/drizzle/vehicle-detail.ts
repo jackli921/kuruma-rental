@@ -92,7 +92,7 @@ export class DrizzleVehicleDetailRepository implements VehicleDetailRepository {
       .leftJoin(users, eq(bookings.renterId, users.id))
       .where(
         and(
-          eq(bookings.vehicleId, vehicleId),
+          eq(bookings.assignedVehicleId, vehicleId),
           inArray(bookings.status, ['CONFIRMED', 'ACTIVE']),
           gt(bookings.startAt, now),
         ),
@@ -116,7 +116,7 @@ export class DrizzleVehicleDetailRepository implements VehicleDetailRepository {
       .from(bookings)
       .where(
         and(
-          eq(bookings.vehicleId, vehicleId),
+          eq(bookings.assignedVehicleId, vehicleId),
           eq(bookings.status, 'COMPLETED'),
           sql`${bookings.totalPrice} IS NOT NULL`,
         ),
@@ -143,7 +143,7 @@ export class DrizzleVehicleDetailRepository implements VehicleDetailRepository {
       .from(bookings)
       .where(
         and(
-          eq(bookings.vehicleId, vehicleId),
+          eq(bookings.assignedVehicleId, vehicleId),
           ne(bookings.status, 'CANCELLED'),
           sql`${bookings.endAt} > ${windowStart.toISOString()}`,
           sql`${bookings.startAt} < ${windowEnd.toISOString()}`,

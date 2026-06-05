@@ -22,7 +22,6 @@ function uniqueViolation(
 export function getConflictingBookings(
   bookings: Booking[],
   vehicleId: string,
-  _bufferMinutes: number,
   from: Date,
   to: Date,
 ): Booking[] {

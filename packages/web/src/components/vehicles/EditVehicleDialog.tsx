@@ -69,7 +69,6 @@ export function EditVehicleDialog({
               seats: vehicle.seats,
               transmission: vehicle.transmission,
               ...(vehicle.fuelType != null && { fuelType: vehicle.fuelType }),
-              bufferMinutes: vehicle.bufferMinutes,
               dailyRateJpy: vehicle.dailyRateJpy,
               hourlyRateJpy: vehicle.hourlyRateJpy,
               minRentalHours: vehicle.minRentalHours,

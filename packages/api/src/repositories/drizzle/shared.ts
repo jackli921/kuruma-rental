@@ -1,6 +1,7 @@
 import type { Column } from 'drizzle-orm'
 import type { getDb } from '@kuruma/shared/db'
 import {
+  bookingEvents,
   bookings,
   insuranceOptions,
   feeSchedules,
@@ -15,6 +16,7 @@ import {
 import type { VehicleDetailBooking } from '@kuruma/shared/types/vehicle-detail'
 import type {
   Booking,
+  BookingEvent,
   InsuranceOption,
   FeeSchedule,
   Location,
@@ -59,7 +61,6 @@ export const vehicleColumns = {
   fuelType: vehicles.fuelType,
   licensePlate: vehicles.licensePlate,
   status: vehicles.status,
-  bufferMinutes: vehicles.bufferMinutes,
   minRentalHours: vehicles.minRentalHours,
   maxRentalHours: vehicles.maxRentalHours,
   advanceBookingHours: vehicles.advanceBookingHours,
@@ -114,14 +115,22 @@ export const feeScheduleColumns = {
 
 export const bookingColumns = {
   id: bookings.id,
+  operatorId: bookings.operatorId,
   renterId: bookings.renterId,
   classId: bookings.classId,
-  vehicleId: bookings.vehicleId,
+  requestedVehicleId: bookings.requestedVehicleId,
+  assignedVehicleId: bookings.assignedVehicleId,
+  pickupLocationId: bookings.pickupLocationId,
+  dropoffLocationId: bookings.dropoffLocationId,
   startAt: bookings.startAt,
   endAt: bookings.endAt,
   effectiveEndAt: bookings.effectiveEndAt,
   status: bookings.status,
   source: bookings.source,
+  bookingCode: bookings.bookingCode,
+  insuranceOptionId: bookings.insuranceOptionId,
+  insuranceSnapshot: bookings.insuranceSnapshot,
+  feeSnapshot: bookings.feeSnapshot,
   externalId: bookings.externalId,
   notes: bookings.notes,
   totalPrice: bookings.totalPrice,
@@ -130,6 +139,15 @@ export const bookingColumns = {
   idempotencyKey: bookings.idempotencyKey,
   createdAt: bookings.createdAt,
   updatedAt: bookings.updatedAt,
+}
+
+export const bookingEventColumns = {
+  id: bookingEvents.id,
+  bookingId: bookingEvents.bookingId,
+  type: bookingEvents.type,
+  payload: bookingEvents.payload,
+  actorId: bookingEvents.actorId,
+  createdAt: bookingEvents.createdAt,
 }
 
 // Explicit column lists. Following the pattern in DrizzleVehicleRepository
@@ -205,6 +223,7 @@ type LocationRow = ColumnRow<typeof locationColumns>
 type InsuranceOptionRow = ColumnRow<typeof insuranceOptionColumns>
 type FeeScheduleRow = ColumnRow<typeof feeScheduleColumns>
 type BookingRow = ColumnRow<typeof bookingColumns>
+type BookingEventRow = ColumnRow<typeof bookingEventColumns>
 type ThreadRow = ColumnRow<typeof threadColumns>
 type ThreadParticipantRow = ColumnRow<typeof participantColumns>
 type MaintenanceLogRow = ColumnRow<typeof maintenanceLogColumns>
@@ -286,7 +305,6 @@ export function toVehicle(r: VehicleRow): Vehicle {
     fuelType: r.fuelType,
     licensePlate: r.licensePlate,
     status: r.status,
-    bufferMinutes: r.bufferMinutes,
     minRentalHours: r.minRentalHours,
     maxRentalHours: r.maxRentalHours,
     advanceBookingHours: r.advanceBookingHours,
@@ -306,14 +324,22 @@ export function toVehicle(r: VehicleRow): Vehicle {
 export function toBooking(r: BookingRow): Booking {
   return {
     id: r.id,
+    operatorId: r.operatorId,
     renterId: r.renterId,
     classId: r.classId,
-    vehicleId: r.vehicleId,
+    requestedVehicleId: r.requestedVehicleId,
+    assignedVehicleId: r.assignedVehicleId,
+    pickupLocationId: r.pickupLocationId,
+    dropoffLocationId: r.dropoffLocationId,
     startAt: r.startAt,
     endAt: r.endAt,
     effectiveEndAt: r.effectiveEndAt,
     status: r.status,
     source: r.source,
+    bookingCode: r.bookingCode,
+    insuranceOptionId: r.insuranceOptionId,
+    insuranceSnapshot: r.insuranceSnapshot,
+    feeSnapshot: r.feeSnapshot,
     externalId: r.externalId,
     notes: r.notes,
     totalPrice: r.totalPrice,
@@ -322,6 +348,17 @@ export function toBooking(r: BookingRow): Booking {
     idempotencyKey: r.idempotencyKey,
     createdAt: r.createdAt,
     updatedAt: r.updatedAt,
+  }
+}
+
+export function toBookingEvent(r: BookingEventRow): BookingEvent {
+  return {
+    id: r.id,
+    bookingId: r.bookingId,
+    type: r.type,
+    payload: r.payload,
+    actorId: r.actorId,
+    createdAt: r.createdAt,
   }
 }
 

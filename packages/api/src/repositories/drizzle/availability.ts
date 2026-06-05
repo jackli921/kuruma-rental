@@ -19,7 +19,7 @@ export class DrizzleAvailabilityRepository implements AvailabilityRepository {
       eq(vehicles.status, 'AVAILABLE'),
       sql`NOT EXISTS (
             SELECT 1 FROM bookings b
-            WHERE b."vehicleId" = ${vehicles.id}
+            WHERE b."assignedVehicleId" = ${vehicles.id}
             AND b.status IN ('CONFIRMED', 'ACTIVE')
             AND tstzrange(b."startAt", b."effectiveEndAt") && tstzrange(${fromIso}::timestamptz, ${toIso}::timestamptz)
           )`,
@@ -59,7 +59,7 @@ export class DrizzleAvailabilityRepository implements AvailabilityRepository {
       .from(bookings)
       .where(
         and(
-          eq(bookings.vehicleId, vehicleId),
+          eq(bookings.assignedVehicleId, vehicleId),
           sql`status IN ('CONFIRMED', 'ACTIVE')`,
           sql`tstzrange("startAt", "effectiveEndAt") && tstzrange(${fromIso}::timestamptz, ${toIso}::timestamptz)`,
         ),

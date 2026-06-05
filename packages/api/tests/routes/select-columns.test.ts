@@ -75,7 +75,6 @@ const VEHICLE_FIELDS = [
   'fuelType',
   'licensePlate',
   'status',
-  'bufferMinutes',
   'minRentalHours',
   'maxRentalHours',
   'advanceBookingHours',

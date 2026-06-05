@@ -85,7 +85,7 @@ export class DrizzleCustomerRepository implements CustomerRepository {
     const bookingRows = await this.db
       .select({
         id: bookings.id,
-        vehicleId: bookings.vehicleId,
+        vehicleId: bookings.assignedVehicleId,
         vehicleName: vehicles.name,
         startAt: bookings.startAt,
         endAt: bookings.endAt,
@@ -93,7 +93,7 @@ export class DrizzleCustomerRepository implements CustomerRepository {
         totalPrice: bookings.totalPrice,
       })
       .from(bookings)
-      .leftJoin(vehicles, eq(vehicles.id, bookings.vehicleId))
+      .leftJoin(vehicles, eq(vehicles.id, bookings.assignedVehicleId))
       .where(eq(bookings.renterId, id))
       .orderBy(desc(bookings.startAt))
 

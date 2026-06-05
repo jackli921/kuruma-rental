@@ -21,7 +21,6 @@ export interface VehicleBase {
   fuelType: string | null
   licensePlate: string | null
   status: VehicleStatus
-  bufferMinutes: number
   minRentalHours: number | null
   maxRentalHours: number | null
   advanceBookingHours: number | null

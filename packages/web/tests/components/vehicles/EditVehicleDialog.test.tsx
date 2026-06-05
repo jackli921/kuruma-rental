@@ -171,7 +171,6 @@ describe('EditVehicleDialog', () => {
 
     expect(screen.getByLabelText('Vehicle name')).toHaveValue('Honda N-BOX')
     expect(screen.getByLabelText('Seats')).toHaveValue(4)
-    expect(screen.getByLabelText('Buffer time (minutes)')).toHaveValue(45)
   })
 
   it('renders nothing when vehicle is null', () => {

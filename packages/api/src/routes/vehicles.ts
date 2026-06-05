@@ -86,7 +86,6 @@ export function createVehicleRoutes(
           fuelType: parsed.data.fuelType ?? null,
           licensePlate: parsed.data.licensePlate ?? null,
           status: 'AVAILABLE',
-          bufferMinutes: parsed.data.bufferMinutes,
           minRentalHours: parsed.data.minRentalHours ?? null,
           maxRentalHours: parsed.data.maxRentalHours ?? null,
           advanceBookingHours: parsed.data.advanceBookingHours ?? null,

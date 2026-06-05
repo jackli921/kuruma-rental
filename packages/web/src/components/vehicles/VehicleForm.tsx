@@ -75,7 +75,6 @@ export function VehicleForm({
       transmission: 'AUTO',
       fuelType: '',
       licensePlate: '',
-      bufferMinutes: 60,
       photos: [],
       // Issue #50: sensible defaults owner-side so create mode is pre-filled
       // with typical shop rules. Edit mode overrides via ...defaultValues
@@ -327,15 +326,6 @@ export function VehicleForm({
             {...register('licensePlate')}
           />
         </div>
-      </div>
-
-      <div>
-        <Label htmlFor="bufferMinutes">{t('form.bufferMinutes')}</Label>
-        <Input
-          id="bufferMinutes"
-          type="number"
-          {...register('bufferMinutes', { valueAsNumber: true })}
-        />
       </div>
 
       {/* Pricing (#48). At least one rate is required — enforced server-side

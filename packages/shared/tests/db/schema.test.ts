@@ -46,14 +46,14 @@ describe('schema exports', () => {
     expect(columnNames).toContain('seats')
     expect(columnNames).toContain('transmission')
     expect(columnNames).toContain('status')
-    expect(columnNames).toContain('bufferMinutes')
   })
 
   it('exports booking table with required columns', () => {
     const columnNames = Object.keys(bookings)
     expect(columnNames).toContain('id')
     expect(columnNames).toContain('renterId')
-    expect(columnNames).toContain('vehicleId')
+    expect(columnNames).toContain('requestedVehicleId')
+    expect(columnNames).toContain('assignedVehicleId')
     expect(columnNames).toContain('startAt')
     expect(columnNames).toContain('endAt')
     expect(columnNames).toContain('status')

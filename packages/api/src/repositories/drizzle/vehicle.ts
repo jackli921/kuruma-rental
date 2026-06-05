@@ -106,7 +106,6 @@ export class DrizzleVehicleRepository implements VehicleRepository {
         fuelType: data.fuelType,
         licensePlate: data.licensePlate,
         status: data.status,
-        bufferMinutes: data.bufferMinutes,
         minRentalHours: data.minRentalHours,
         maxRentalHours: data.maxRentalHours,
         advanceBookingHours: data.advanceBookingHours,

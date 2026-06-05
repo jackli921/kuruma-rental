@@ -1,31 +1,37 @@
 import { bookings } from '@kuruma/shared/db/schema'
-import { and, count, desc, eq, inArray, lt, or, sql } from 'drizzle-orm'
-import {
-  type CallerContext,
-  PRIVILEGED_ROLES,
-  rejectOperatorContextUntilScoped,
-} from '../../middleware/auth'
+import { type SQL, and, count, desc, eq, inArray, lt, or, sql } from 'drizzle-orm'
+import { type CallerContext, ForbiddenError } from '../../middleware/auth'
 import type { Booking } from '../../stores'
+import { bookingReadScope } from '../../tenancy'
 import type { BookingFilters, BookingRepository } from '../types'
 import { type Db, bookingColumns, toBooking } from './shared'
 
 export class DrizzleBookingRepository implements BookingRepository {
   constructor(private readonly db: Db) {}
 
-  async findAll(ctx: CallerContext, filters?: BookingFilters): Promise<Booking[]> {
-    rejectOperatorContextUntilScoped(ctx, 'BookingRepository')
-    const conditions = []
+  // Three-way read scope (#392, proposal §6.2), mirroring the in-memory repo:
+  // bypass sees all, an operator sees only its tenant, a renter sees only their
+  // own. `null` = the `none` scope (operator missing operatorId) — read nothing.
+  // Otherwise returns the conditions to AND into the query (empty = unscoped).
+  private scopeConditions(ctx: CallerContext): SQL[] | null {
+    const scope = bookingReadScope(ctx)
+    if (scope.kind === 'none') return null
+    if (scope.kind === 'operator') return [eq(bookings.operatorId, scope.operatorId)]
+    if (scope.kind === 'renter') return [eq(bookings.renterId, scope.renterId)]
+    return []
+  }
 
-    // CallerContext scoping: non-privileged users only see own bookings
-    if (!PRIVILEGED_ROLES.has(ctx.role)) {
-      conditions.push(eq(bookings.renterId, ctx.userId))
-    }
+  async findAll(ctx: CallerContext, filters?: BookingFilters): Promise<Booking[]> {
+    const scoped = this.scopeConditions(ctx)
+    if (scoped === null) return []
+    const conditions: SQL[] = [...scoped]
 
     if (filters?.status) {
       conditions.push(eq(bookings.status, filters.status as Booking['status']))
     }
     if (filters?.vehicleId) {
-      conditions.push(eq(bookings.vehicleId, filters.vehicleId))
+      // Filters by the assigned vehicle (the fulfilling car).
+      conditions.push(eq(bookings.assignedVehicleId, filters.vehicleId))
     }
     if (filters?.renterId) {
       conditions.push(eq(bookings.renterId, filters.renterId))
@@ -72,31 +78,23 @@ export class DrizzleBookingRepository implements BookingRepository {
   }
 
   async findById(ctx: CallerContext, id: string): Promise<Booking | undefined> {
-    rejectOperatorContextUntilScoped(ctx, 'BookingRepository')
-    const conditions = [eq(bookings.id, id)]
-    if (!PRIVILEGED_ROLES.has(ctx.role)) {
-      conditions.push(eq(bookings.renterId, ctx.userId))
-    }
-
+    const scoped = this.scopeConditions(ctx)
+    if (scoped === null) return undefined
     const [row] = await this.db
       .select(bookingColumns)
       .from(bookings)
-      .where(and(...conditions))
+      .where(and(eq(bookings.id, id), ...scoped))
 
     return row ? toBooking(row) : undefined
   }
 
   async findByIdempotencyKey(ctx: CallerContext, key: string): Promise<Booking | undefined> {
-    rejectOperatorContextUntilScoped(ctx, 'BookingRepository')
-    const conditions = [eq(bookings.idempotencyKey, key)]
-    if (!PRIVILEGED_ROLES.has(ctx.role)) {
-      conditions.push(eq(bookings.renterId, ctx.userId))
-    }
-
+    const scoped = this.scopeConditions(ctx)
+    if (scoped === null) return undefined
     const [row] = await this.db
       .select(bookingColumns)
       .from(bookings)
-      .where(and(...conditions))
+      .where(and(eq(bookings.idempotencyKey, key), ...scoped))
 
     return row ? toBooking(row) : undefined
   }
@@ -108,31 +106,48 @@ export class DrizzleBookingRepository implements BookingRepository {
       .from(bookings)
       .where(
         and(
-          inArray(bookings.vehicleId, vehicleIds),
+          inArray(bookings.assignedVehicleId, vehicleIds),
           inArray(bookings.status, ['CONFIRMED', 'ACTIVE'] as const),
         ),
       )
     return row?.value ?? 0
   }
 
-  async create(ctx: CallerContext, data: Omit<Booking, 'id' | 'createdAt' | 'updatedAt'>): Promise<Booking> {
-    rejectOperatorContextUntilScoped(ctx, 'BookingRepository')
-    // CallerContext scoping: non-privileged callers can only create bookings for themselves
-    if (!PRIVILEGED_ROLES.has(ctx.role) && data.renterId !== ctx.userId) {
-      throw new Error('Cannot create booking for another user')
+  async create(
+    ctx: CallerContext,
+    data: Omit<Booking, 'id' | 'createdAt' | 'updatedAt'>,
+  ): Promise<Booking> {
+    const scope = bookingReadScope(ctx)
+    if (scope.kind === 'none') throw new ForbiddenError('operator scope required')
+    if (scope.kind === 'renter' && data.renterId !== scope.renterId) {
+      throw new ForbiddenError('Cannot create booking for another user')
+    }
+    if (scope.kind === 'operator' && data.operatorId !== scope.operatorId) {
+      throw new ForbiddenError('Cannot create booking for another operator')
     }
 
+    // The DB seals the rest: the bookings_no_overlap exclusion (23P01) prevents
+    // double-booking the assigned vehicle, and the bookingCode/idempotencyKey
+    // unique constraints (23505) drive the service's retry/replay branches.
     const [inserted] = await this.db
       .insert(bookings)
       .values({
+        operatorId: data.operatorId,
         renterId: data.renterId,
         classId: data.classId,
-        vehicleId: data.vehicleId,
+        requestedVehicleId: data.requestedVehicleId,
+        assignedVehicleId: data.assignedVehicleId,
+        pickupLocationId: data.pickupLocationId,
+        dropoffLocationId: data.dropoffLocationId,
         startAt: data.startAt,
         endAt: data.endAt,
         effectiveEndAt: data.effectiveEndAt,
         status: data.status,
         source: data.source,
+        bookingCode: data.bookingCode,
+        insuranceOptionId: data.insuranceOptionId,
+        insuranceSnapshot: data.insuranceSnapshot,
+        feeSnapshot: data.feeSnapshot,
         externalId: data.externalId,
         notes: data.notes,
         totalPrice: data.totalPrice,
@@ -151,16 +166,12 @@ export class DrizzleBookingRepository implements BookingRepository {
     id: string,
     transition: { from: Booking['status']; to: Booking['status'] },
   ): Promise<Booking | undefined> {
-    rejectOperatorContextUntilScoped(ctx, 'BookingRepository')
-    const conditions = [eq(bookings.id, id), eq(bookings.status, transition.from)]
-    if (!PRIVILEGED_ROLES.has(ctx.role)) {
-      conditions.push(eq(bookings.renterId, ctx.userId))
-    }
-
+    const scoped = this.scopeConditions(ctx)
+    if (scoped === null) return undefined
     const [updated] = await this.db
       .update(bookings)
       .set({ status: transition.to, updatedAt: sql`now()` })
-      .where(and(...conditions))
+      .where(and(eq(bookings.id, id), eq(bookings.status, transition.from), ...scoped))
       .returning()
 
     return updated ? toBooking(updated) : undefined
@@ -171,12 +182,8 @@ export class DrizzleBookingRepository implements BookingRepository {
     id: string,
     opts: { from: Booking['status']; fee: number; cancelledAt: Date },
   ): Promise<Booking | undefined> {
-    rejectOperatorContextUntilScoped(ctx, 'BookingRepository')
-    const conditions = [eq(bookings.id, id), eq(bookings.status, opts.from)]
-    if (!PRIVILEGED_ROLES.has(ctx.role)) {
-      conditions.push(eq(bookings.renterId, ctx.userId))
-    }
-
+    const scoped = this.scopeConditions(ctx)
+    if (scoped === null) return undefined
     const [cancelled] = await this.db
       .update(bookings)
       .set({
@@ -185,9 +192,34 @@ export class DrizzleBookingRepository implements BookingRepository {
         cancelledAt: opts.cancelledAt,
         updatedAt: sql`now()`,
       })
-      .where(and(...conditions))
+      .where(and(eq(bookings.id, id), eq(bookings.status, opts.from), ...scoped))
       .returning()
 
     return cancelled ? toBooking(cancelled) : undefined
+  }
+
+  async reassignVehicle(
+    ctx: CallerContext,
+    id: string,
+    data: { assignedVehicleId: string; totalPrice: number | null; effectiveEndAt: Date },
+  ): Promise<Booking | undefined> {
+    const scoped = this.scopeConditions(ctx)
+    if (scoped === null) return undefined
+    // The bookings_no_overlap exclusion re-checks the NEW assignedVehicleId over
+    // [startAt, effectiveEndAt) on UPDATE; a conflicting range raises 23P01,
+    // which the service maps to a 409 (mirrors the in-memory exclusion mirror).
+    // requestedVehicleId is deliberately never touched.
+    const [updated] = await this.db
+      .update(bookings)
+      .set({
+        assignedVehicleId: data.assignedVehicleId,
+        totalPrice: data.totalPrice,
+        effectiveEndAt: data.effectiveEndAt,
+        updatedAt: sql`now()`,
+      })
+      .where(and(eq(bookings.id, id), ...scoped))
+      .returning()
+
+    return updated ? toBooking(updated) : undefined
   }
 }
