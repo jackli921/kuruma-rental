@@ -3,6 +3,71 @@
 **Resume here after `/clear`.** Worktree: `/Users/jack/Dev/kuruma-slice6`
 Branch: `feat/slice6-booking-events` (base `origin/marketplace-pivot` @ `2fbbedd`).
 
+## SESSION UPDATE 2026-06-04 (cont. 2) — Task #4 LANDED (service, all green, --no-verify WIP)
+
+Commits since #3 (`3de3e19`):
+- `5601010` **Task #4a — submit transaction.** `BookingService.create` rewritten
+  around the injected `runInTransaction`. New `CreateBookingInput`
+  (requestedVehicleId + pickup/dropoff location ids + optional insuranceOptionId;
+  operatorId/classId/assignedVehicleId/totalPrice ALL server-derived). Inside the
+  tx: resolve assigned vehicle (= requested) → operator/class/rates; turnaround =
+  `pickupLocation.defaultTurnaroundMinutes ?? 2880` (the 60-min buffer is GONE);
+  price off the assigned vehicle (non-null, #429); insurance snapshot (active,
+  this operator) added to totalPrice; fee snapshot (operator-wide + class rows);
+  booking_code with bounded regenerate-on-23505 retry; INSERT booking THEN append
+  BOOKING_CREATED (insert-first = atomicity); `ensureThread` AFTER commit.
+  - Ctor: `(bookingRepo, runInTransaction, vehicleRepo?, userRepo?,
+    vehicleClassRepo?, threading?, generateCode = generateBookingCode)`.
+    `vehicleClassRepo` kept (substitution ACRISS lookup).
+  - `BOOKING_CODE_CONSTRAINT`/`IDEMPOTENCY_CONSTRAINT` moved to `pg-errors.ts`
+    (services must not import a concrete repo). In-memory unique error now sets
+    `constraint_name` (mirrors postgres-js) so `pgConstraintName` works uniformly
+    in-memory + Drizzle.
+  - `VehicleBase.pickupLocationId?: string | null` exposed (slice-2 column,
+    operationally wired here). `InMemoryBookingEventRepository` added to barrel.
+- `7b5d539` **Task #4b — substitution (§5.5).** `BookingService.substitute` +
+  new `BookingRepository.reassignVehicle` (re-checks exclusion for the NEW
+  vehicle over the booking window, re-snapshots totalPrice #429, preserves
+  requestedVehicleId, appends VEHICLE_SUBSTITUTED). cross-op→404,
+  diff-location/diff-ACRISS→400, already-booked→409 (no event).
+
+Tests (`bun run --filter @kuruma/api test`, 33 green): `tests/services/booking.test.ts`
+(16: 10 submit + 6 substitution), `tests/services/booking-thread.test.ts` (5,
+reshaped to the new input), `tests/repositories/{booking,booking-event}.test.ts` (12).
+
+### NEXT = Task #5 (DI wire — `index.ts`) — the entry point
+`createApp` still constructs the OLD BookingService ctor (`index.ts:~332`) and an
+in-memory `runInTransaction` carrying only `{vehicleRepo, maintenanceLogRepo}`
+(`index.ts:~161` overrides branch, `~234` no-DB branch). Widen BOTH + add the event repo:
+1. Construct `bookingEventRepo` (InMemory in the two in-memory branches, Drizzle in the DB branch).
+2. In-memory `runInTransaction` → pass the full 7-repo `TransactionRepos` bundle
+   (type already widened, `types.ts:~371`). Same for `createDrizzleTransaction(db)`
+   (`repositories/drizzle/transaction.ts`) — construct all 7 tx-bound repos (this
+   is the #6 overlap; do the bundle widening as part of #5/#6).
+3. `new BookingService(bookingRepo, runInTransaction, vehicleRepo, userRepo,
+   vehicleClassRepo, threading)` — NEW positional order.
+Once #5 lands, the 12 downstream-RED files below go green (they fail today ONLY
+because createApp mis-wires the new ctor — positional args shifted).
+
+**Downstream RED (expected, resolve at #5–#7):** `tests/routes/{bookings,
+manual-booking,operator-user-isolation,public-catalog,select-columns,stats,
+vehicle-classes,vehicle-detail,actor-derivation,availability}.test.ts`,
+`tests/repositories/{fleet-overview,tenancy-guards}.test.ts`. All booking-coupled
+(createApp wiring or old Booking fixture shape). 12 files / 88 tests.
+
+**Scope carried to #6/#7 (NOT done in #4):**
+- `bufferMinutes` still referenced by `VehicleBase` + `drizzle/{shared,vehicle}.ts`
+  + `seed.ts` + `validators/vehicle.ts` + `in-memory/availability.ts`. The schema
+  column is ALREADY dropped (migration 0037) — these TS refs are the real
+  downstream tsc red; remove in #6.
+- `cancel`/`updateStatus` do NOT yet append `BOOKING_CANCELLED`/`STATUS_CHANGED`
+  events (§3.1 says they should — "existing transitions rewired to also append").
+  Deferred to #7: they must move the projection write into the tx to append
+  atomically. Task #4 was scoped to create + substitute only.
+- `#392` stays OPEN; do NOT claim the E2E gate until #391 lands (original contract).
+
+---
+
 ## SESSION UPDATE 2026-06-04 (cont.) — Tasks #2 + #3 LANDED (all green, --no-verify WIP)
 
 Commits since the schema commit (`e38e85f`):
