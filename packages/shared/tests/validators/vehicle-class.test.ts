@@ -196,4 +196,28 @@ describe('updateVehicleClassSchema', () => {
     expect(result.success).toBe(true)
     if (result.success) expect('operatorId' in result.data).toBe(false)
   })
+
+  it('does NOT inject photos/sortOrder defaults on a partial patch (issue #430)', () => {
+    // .partial() does not strip .default(), so a name-only patch used to come
+    // back as { name, photos: [], sortOrder: 0 } and wipe those columns on write.
+    const result = updateVehicleClassSchema.safeParse({ name: 'Renamed' })
+    expect(result.success).toBe(true)
+    if (result.success) {
+      expect(result.data).toEqual({ name: 'Renamed' })
+      expect('photos' in result.data).toBe(false)
+      expect('sortOrder' in result.data).toBe(false)
+    }
+  })
+
+  it('passes photos/sortOrder through when explicitly provided', () => {
+    const result = updateVehicleClassSchema.safeParse({
+      photos: ['https://cdn.example.com/a.jpg'],
+      sortOrder: 7,
+    })
+    expect(result.success).toBe(true)
+    if (result.success) {
+      expect(result.data.photos).toEqual(['https://cdn.example.com/a.jpg'])
+      expect(result.data.sortOrder).toBe(7)
+    }
+  })
 })

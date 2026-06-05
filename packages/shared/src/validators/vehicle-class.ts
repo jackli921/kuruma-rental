@@ -1,6 +1,12 @@
 import { z } from 'zod'
 import { ACRISS_PATTERN } from '../acriss'
 
+// photos/sortOrder carry .default()s only on create. Kept off the base because
+// Zod .partial() does NOT strip .default(), so a partial PATCH would re-inject
+// { photos: [], sortOrder: 0 } and wipe those columns on write (issue #430).
+const photosSchema = z.array(z.string().url().max(2048)).max(20)
+const sortOrderSchema = z.number().int().min(0)
+
 const SLUG_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+)*$/
 
 const vehicleClassObjectSchema = z.object({
@@ -12,7 +18,7 @@ const vehicleClassObjectSchema = z.object({
     .max(100)
     .regex(SLUG_PATTERN, 'Slug must be lowercase alphanumeric with hyphens'),
   description: z.string().trim().max(2000).optional(),
-  photos: z.array(z.string().url().max(2048)).max(20).default([]),
+  photos: photosSchema.optional(),
   seats: z.number().int().min(1, 'Must have at least 1 seat').max(50),
   luggageCapacity: z.number().int().min(0, 'Luggage capacity cannot be negative'),
   transmission: z.enum(['AUTO', 'MANUAL']),
@@ -29,10 +35,13 @@ const vehicleClassObjectSchema = z.object({
     .toUpperCase()
     .regex(ACRISS_PATTERN, 'Invalid ACRISS code')
     .nullish(),
-  sortOrder: z.number().int().min(0).default(0),
+  sortOrder: sortOrderSchema.optional(),
 })
 
 export const createVehicleClassSchema = vehicleClassObjectSchema.extend({
+  // Defaults belong on create only — see photosSchema/sortOrderSchema note (#430).
+  photos: photosSchema.default([]),
+  sortOrder: sortOrderSchema.default(0),
   // #401: a non-operator (platform/legacy admin) caller may name the target
   // operator. OPERATOR_* callers' tenant comes from their token and this is
   // ignored for them. Optional — omit when exactly one operator exists.
