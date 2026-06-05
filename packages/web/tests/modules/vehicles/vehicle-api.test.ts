@@ -136,6 +136,23 @@ describe('vehicle-api', () => {
       expect(JSON.parse(init.body as string)).toEqual(input)
       expect(result.name).toBe('Honda Fit')
     })
+
+    // #407 P2 (§3e): a 422 must surface its status so the action layer can map
+    // the operator-required rejection to a picker, not a generic dialog error.
+    it('throws an error carrying status 422 on an operator-required rejection', async () => {
+      vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            success: false,
+            error: 'operatorId is required: specify a target operator',
+          }),
+          { status: 422, headers: { 'Content-Type': 'application/json' } },
+        ),
+      )
+
+      const { createVehicle } = await import('@/lib/vehicle-api')
+      await expect(createVehicle({ name: 'x' } as never)).rejects.toMatchObject({ status: 422 })
+    })
   })
 
   describe('updateVehicle', () => {

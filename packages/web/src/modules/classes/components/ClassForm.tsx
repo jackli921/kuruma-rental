@@ -12,6 +12,7 @@ import {
   createVehicleClassSchema,
 } from '@kuruma/shared/validators/vehicle-class'
 import { useTranslations } from 'next-intl'
+import { useEffect, useRef } from 'react'
 import { useForm } from 'react-hook-form'
 import type { z } from 'zod'
 
@@ -27,6 +28,10 @@ interface ClassFormProps {
   // dialog (create mode). One operator → hidden + submitted silently; 2+ →
   // the admin must choose (gate before operator #2).
   operators?: readonly OperatorOption[] | undefined
+  // #407 P2: set when the server rejected the create with OPERATOR_REQUIRED
+  // (a second operator now exists). Forces the picker open with an inline
+  // prompt even if the still-stale `operators` prop carries a single entry.
+  operatorRequired?: boolean
 }
 
 // Submit `null` (not NaN/undefined) when a numeric field is blank. Mirrors the
@@ -51,13 +56,15 @@ export function ClassForm({
   defaultValues,
   isSubmitting,
   operators,
+  operatorRequired,
 }: ClassFormProps) {
   const t = useTranslations('business.classes')
   // ACRISS labels live under the top-level `acriss.*` namespace, not
   // `business.classes`, so resolve them through a separate translator.
   const tAcriss = useTranslations('acriss')
 
-  const showOperatorPicker = operators !== undefined && operators.length > 1
+  const showOperatorPicker =
+    (operators !== undefined && operators.length > 1) || operatorRequired === true
 
   // MEDIUM 3: three-type-parameter useForm lets RHF narrow the submit
   // handler to the schema's OUTPUT type (CreateVehicleClassInput) — no
@@ -65,6 +72,8 @@ export function ClassForm({
   const {
     register,
     handleSubmit,
+    setValue,
+    getValues,
     formState: { errors },
   } = useForm<ClassFormValues, unknown, ClassFormOutput>({
     resolver: zodResolver(createVehicleClassSchema),
@@ -84,6 +93,31 @@ export function ClassForm({
       ...defaultValues,
     },
   })
+
+  // #407 P1: keep operatorId in sync with the operators list, which loads
+  // asynchronously (client query, `undefined` until resolved) and can change
+  // while the dialog is open. Reading the default only at mount left operatorId
+  // unset on a cold-load race (-> 422) and left a stale auto-default selected
+  // on a 1->2 change (bypassing the explicit-choice gate).
+  const prevOperatorCount = useRef<number | undefined>(undefined)
+  useEffect(() => {
+    if (!operators) return
+    const count = operators.length
+    const previousCount = prevOperatorCount.current
+    prevOperatorCount.current = count
+    if (count === 1) {
+      setValue('operatorId', operators[0]?.id)
+      return
+    }
+    if (count > 1) {
+      const current = getValues('operatorId')
+      const pickerJustAppeared = previousCount === undefined || previousCount <= 1
+      const isValidChoice = operators.some((op) => op.id === current)
+      if (pickerJustAppeared || !isValidChoice) {
+        setValue('operatorId', '')
+      }
+    }
+  }, [operators, setValue, getValues])
 
   const operatorField = register('operatorId', { required: t('form.operatorRequired') })
 
@@ -117,14 +151,20 @@ export function ClassForm({
               </option>
             ))}
           </select>
+          {operatorRequired && (
+            <p className="text-sm text-destructive mt-1">{t('form.operatorRequired')}</p>
+          )}
           {errors.operatorId && (
             <p className="text-sm text-destructive mt-1">{errors.operatorId.message}</p>
           )}
         </div>
       )}
 
-      {/* Single-operator create: carry the id without a visible control. */}
-      {operators?.length === 1 && <input type="hidden" {...register('operatorId')} />}
+      {/* Single-operator create: carry the id without a visible control.
+          Suppressed once the picker is forced open (P2 OPERATOR_REQUIRED). */}
+      {!showOperatorPicker && operators?.length === 1 && (
+        <input type="hidden" {...register('operatorId')} />
+      )}
 
       <div>
         <Label htmlFor="class-name">{t('form.name')}</Label>

@@ -504,6 +504,49 @@ describe('VehicleForm', () => {
       await waitFor(() => expect(onSubmit).toHaveBeenCalledTimes(1))
       expect(onSubmit.mock.calls[0][0].operatorId).toBeUndefined()
     })
+
+    // #407 P1: the operators list loads via a client query that is `undefined`
+    // until it resolves. If the form only reads the default at mount, the sole
+    // operatorId never populates and the create posts no operator -> 422.
+    it('populates the sole operatorId when operators arrive after mount', async () => {
+      const onSubmit = vi.fn().mockResolvedValue(undefined)
+      const user = userEvent.setup()
+      const { rerender } = render(<VehicleForm onSubmit={onSubmit} operators={undefined} />)
+      // The single-operator list resolves after the form has mounted.
+      rerender(<VehicleForm onSubmit={onSubmit} operators={oneOperator} />)
+
+      await user.type(screen.getByLabelText('Vehicle name'), 'Corolla')
+      await user.type(screen.getByLabelText('Daily rate'), '8000')
+      await user.click(screen.getByRole('button', { name: 'Save vehicle' }))
+
+      await waitFor(() => expect(onSubmit).toHaveBeenCalledTimes(1))
+      expect(onSubmit.mock.calls[0][0].operatorId).toBe('op_a')
+    })
+
+    // #407 P1: a 1->2 change while the dialog is open must clear the stale
+    // auto-default so the admin is forced through the explicit-choice gate.
+    it('resets the auto-selected operator to force a choice when a 2nd operator appears', async () => {
+      const onSubmit = vi.fn().mockResolvedValue(undefined)
+      const user = userEvent.setup()
+      const { rerender } = render(<VehicleForm onSubmit={onSubmit} operators={oneOperator} />)
+      rerender(<VehicleForm onSubmit={onSubmit} operators={operators} />)
+
+      expect((screen.getByLabelText('Operator') as HTMLSelectElement).value).toBe('')
+
+      await user.type(screen.getByLabelText('Vehicle name'), 'Corolla')
+      await user.type(screen.getByLabelText('Daily rate'), '8000')
+      await user.click(screen.getByRole('button', { name: 'Save vehicle' }))
+      await waitFor(() => expect(onSubmit).not.toHaveBeenCalled())
+    })
+
+    // #407 P2 (§3e): when the server rejects with OPERATOR_REQUIRED, the form
+    // reveals the picker and prompts for a choice even if the client still
+    // believes there is a single operator (stale list, pending refetch).
+    it('reveals the picker and shows the inline prompt when operatorRequired is set', () => {
+      render(<VehicleForm onSubmit={vi.fn()} operators={oneOperator} operatorRequired />)
+      expect(screen.getByLabelText('Operator')).toBeInTheDocument()
+      expect(screen.getByText('Operator is required')).toBeInTheDocument()
+    })
   })
 
   // Issue #226: compliance expiry date fields

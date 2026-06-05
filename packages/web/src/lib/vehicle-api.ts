@@ -1,5 +1,5 @@
 import { createApiClient } from '@/lib/api-client'
-import type { ApiResponse } from '@kuruma/shared/types/api-response'
+import { unwrap } from '@/lib/api-error'
 import type { VehicleBase } from '@kuruma/shared/types/vehicle'
 import type { CreateVehicleInput, VehicleStatus } from '@kuruma/shared/validators/vehicle'
 
@@ -26,19 +26,6 @@ export interface FleetVehicleOverviewData extends VehicleData {
   currentBooking: FleetBookingSummaryData | null
   nextBooking: FleetBookingSummaryData | null
   activeMaintenanceReason: string | null
-}
-
-async function unwrap<T>(res: Response): Promise<T> {
-  const body = (await res.json().catch(() => ({
-    success: false as const,
-    error: `Non-JSON response (HTTP ${res.status})`,
-  }))) as ApiResponse<T>
-
-  if (!body.success) {
-    throw new Error(body.error ?? `HTTP ${res.status}`)
-  }
-
-  return body.data
 }
 
 export async function fetchVehicles(status?: string, token?: string): Promise<VehicleData[]> {

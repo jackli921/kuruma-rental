@@ -9,6 +9,7 @@ import type { OperatorOption } from '@/modules/operators'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { type CreateVehicleInput, createVehicleSchema } from '@kuruma/shared/validators/vehicle'
 import { useTranslations } from 'next-intl'
+import { useEffect, useRef } from 'react'
 import { useForm } from 'react-hook-form'
 import type { z } from 'zod'
 
@@ -27,6 +28,10 @@ interface VehicleFormProps {
   // operator the picker is hidden and the id submitted silently; with 2+ the
   // admin must choose (gate before operator #2).
   operators?: readonly OperatorOption[] | undefined
+  // #407 P2: set when the server rejected the create with OPERATOR_REQUIRED
+  // (a second operator now exists). Forces the picker open with an inline
+  // prompt even if the still-stale `operators` prop carries a single entry.
+  operatorRequired?: boolean
 }
 
 export function VehicleForm({
@@ -36,16 +41,19 @@ export function VehicleForm({
   isSubmitting,
   classes,
   operators,
+  operatorRequired,
 }: VehicleFormProps) {
   const t = useTranslations('business.vehicles')
 
-  const showOperatorPicker = operators !== undefined && operators.length > 1
+  const showOperatorPicker =
+    (operators !== undefined && operators.length > 1) || operatorRequired === true
 
   const {
     register,
     handleSubmit,
     watch,
     setValue,
+    getValues,
     formState: { errors },
   } = useForm<VehicleFormValues>({
     resolver: zodResolver(createVehicleSchema),
@@ -71,6 +79,32 @@ export function VehicleForm({
       ...defaultValues,
     },
   })
+
+  // #407 P1: keep operatorId in sync with the operators list, which loads
+  // asynchronously (client query, `undefined` until resolved) and can change
+  // while the dialog is open. Reading the default only at mount left operatorId
+  // unset on a cold-load race (-> 422) and left a stale auto-default selected
+  // on a 1->2 change (bypassing the explicit-choice gate).
+  const prevOperatorCount = useRef<number | undefined>(undefined)
+  useEffect(() => {
+    if (!operators) return
+    const count = operators.length
+    const previousCount = prevOperatorCount.current
+    prevOperatorCount.current = count
+    if (count === 1) {
+      setValue('operatorId', operators[0]?.id)
+      return
+    }
+    if (count > 1) {
+      const current = getValues('operatorId')
+      const pickerJustAppeared = previousCount === undefined || previousCount <= 1
+      const isValidChoice = operators.some((op) => op.id === current)
+      if (pickerJustAppeared || !isValidChoice) {
+        setValue('operatorId', '')
+        setValue('classId', null)
+      }
+    }
+  }, [operators, setValue, getValues])
 
   // #407: a vehicle's class must belong to its operator (composite FK). When the
   // picker is shown, scope class options to the chosen operator; otherwise show
@@ -132,6 +166,9 @@ export function VehicleForm({
               </option>
             ))}
           </select>
+          {operatorRequired && (
+            <p className="text-sm text-destructive mt-1">{t('form.operatorRequired')}</p>
+          )}
           {errors.operatorId && (
             <p className="text-sm text-destructive mt-1">{errors.operatorId.message}</p>
           )}
@@ -139,8 +176,11 @@ export function VehicleForm({
       )}
 
       {/* Single-operator create: carry the id without a visible control so the
-          one-click flow is unchanged while the body still names the operator. */}
-      {operators?.length === 1 && <input type="hidden" {...register('operatorId')} />}
+          one-click flow is unchanged while the body still names the operator.
+          Suppressed once the picker is forced open (P2 OPERATOR_REQUIRED). */}
+      {!showOperatorPicker && operators?.length === 1 && (
+        <input type="hidden" {...register('operatorId')} />
+      )}
 
       {visibleClasses && visibleClasses.length > 0 && (
         <div>

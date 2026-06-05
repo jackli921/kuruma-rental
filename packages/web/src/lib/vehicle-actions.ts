@@ -1,5 +1,6 @@
 'use server'
 
+import { operatorRequiredCode } from '@/lib/api-error'
 import { getApiToken } from '@/lib/api-token'
 import {
   type FleetVehicleOverviewData,
@@ -16,7 +17,9 @@ import {
 } from '@/lib/vehicle-api'
 import type { CreateVehicleInput, VehicleStatus } from '@kuruma/shared/validators/vehicle'
 
-export type ActionResult<T> = { success: true; data: T } | { success: false; error: string }
+export type ActionResult<T> =
+  | { success: true; data: T }
+  | { success: false; error: string; code?: string }
 
 async function withAuth<T>(fn: (token: string) => Promise<T>): Promise<ActionResult<T>> {
   const token = await getApiToken()
@@ -27,7 +30,10 @@ async function withAuth<T>(fn: (token: string) => Promise<T>): Promise<ActionRes
     const data = await fn(token)
     return { success: true, data }
   } catch (e) {
-    return { success: false, error: e instanceof Error ? e.message : 'An error occurred' }
+    const error = e instanceof Error ? e.message : 'An error occurred'
+    // #407 P2 (§3e): preserve OPERATOR_REQUIRED so the form can recover.
+    const code = operatorRequiredCode(e)
+    return code ? { success: false, error, code } : { success: false, error }
   }
 }
 

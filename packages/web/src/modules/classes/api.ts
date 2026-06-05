@@ -1,4 +1,5 @@
 import { createApiClient } from '@/lib/api-client'
+import { unwrap } from '@/lib/api-error'
 import type { ApiResponse } from '@kuruma/shared/types/api-response'
 import type {
   CreateVehicleClassInput,
@@ -27,19 +28,6 @@ export interface VehicleClassData {
   status: 'ACTIVE' | 'ARCHIVED'
   createdAt: string
   updatedAt: string
-}
-
-async function unwrap<T>(res: Response): Promise<T> {
-  const body = (await res.json().catch(() => ({
-    success: false as const,
-    error: `Non-JSON response (HTTP ${res.status})`,
-  }))) as ApiResponse<T>
-
-  if (!body.success) {
-    throw new Error(body.error ?? `HTTP ${res.status}`)
-  }
-
-  return body.data
 }
 
 interface ListOptions {
