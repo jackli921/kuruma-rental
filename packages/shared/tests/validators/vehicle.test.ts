@@ -345,6 +345,31 @@ describe('updateVehicleSchema', () => {
     const result = updateVehicleSchema.safeParse({ minRentalHours: 4 })
     expect(result.success).toBe(true)
   })
+
+  it('does NOT inject photos/bufferMinutes defaults on a partial patch (issue #432)', () => {
+    // .partial() does not strip .default(), so a name-only patch used to come
+    // back as { name, photos: [], bufferMinutes: 60 } and wipe/reset those
+    // columns on write.
+    const result = updateVehicleSchema.safeParse({ name: 'Renamed' })
+    expect(result.success).toBe(true)
+    if (result.success) {
+      expect(result.data).toEqual({ name: 'Renamed' })
+      expect('photos' in result.data).toBe(false)
+      expect('bufferMinutes' in result.data).toBe(false)
+    }
+  })
+
+  it('passes photos/bufferMinutes through when explicitly provided', () => {
+    const result = updateVehicleSchema.safeParse({
+      photos: ['https://cdn.example.com/a.jpg'],
+      bufferMinutes: 30,
+    })
+    expect(result.success).toBe(true)
+    if (result.success) {
+      expect(result.data.photos).toEqual(['https://cdn.example.com/a.jpg'])
+      expect(result.data.bufferMinutes).toBe(30)
+    }
+  })
 })
 
 describe('updateVehicleStatusSchema', () => {
