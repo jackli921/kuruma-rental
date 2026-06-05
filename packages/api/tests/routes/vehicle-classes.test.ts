@@ -12,7 +12,7 @@ import { createVehicleClassRoutes } from '../../src/routes/vehicle-classes'
 import { VehicleClassService } from '../../src/services/vehicle-class'
 import { VehicleClassAvailabilityService } from '../../src/services/vehicle-class-availability'
 import { testAuthMiddleware } from '../helpers/auth'
-import { testResolveWriteOperatorId } from '../helpers/operator'
+import { TEST_OPERATOR_ID, testResolveWriteOperatorId } from '../helpers/operator'
 
 function buildAvailabilityService(classRepo: InMemoryVehicleClassRepository) {
   const vehicleRepo = new InMemoryVehicleRepository()
@@ -32,6 +32,9 @@ function makeService() {
 
 function validInput() {
   return {
+    // #407: a STAFF/ADMIN create must name its target operator explicitly now
+    // that sole-operator inference is retired (mirrors the web admin picker).
+    operatorId: TEST_OPERATOR_ID,
     name: 'Compact',
     slug: 'compact',
     seats: 5,

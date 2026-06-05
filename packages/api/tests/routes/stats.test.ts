@@ -8,7 +8,7 @@ import {
   InMemoryVehicleRepository,
 } from '../../src/repositories/in-memory'
 import { authHeaders, setupAuthEnv } from '../helpers/auth'
-import { seededOperatorRepo } from '../helpers/operator'
+import { TEST_OPERATOR_ID, seededOperatorRepo } from '../helpers/operator'
 
 const TEST_API_KEY = 'test-stats-key'
 
@@ -102,6 +102,7 @@ describe('GET /stats', () => {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', ...staffHeaders },
       body: JSON.stringify({
+        operatorId: TEST_OPERATOR_ID,
         classId,
         name: 'Toyota Prius',
         description: 'Hybrid',
@@ -115,6 +116,7 @@ describe('GET /stats', () => {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', ...staffHeaders },
       body: JSON.stringify({
+        operatorId: TEST_OPERATOR_ID,
         classId,
         name: 'Honda Fit',
         description: 'Compact',
@@ -128,6 +130,7 @@ describe('GET /stats', () => {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', ...staffHeaders },
       body: JSON.stringify({
+        operatorId: TEST_OPERATOR_ID,
         classId,
         name: 'Suzuki Swift',
         description: 'Under repair',

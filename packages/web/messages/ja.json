@@ -327,7 +327,10 @@
         "color": "色",
         "colorPlaceholder": "例: ホワイト",
         "class": "クラス",
-        "classNone": "未割り当て"
+        "classNone": "未割り当て",
+        "operator": "事業者",
+        "operatorPlaceholder": "事業者を選択",
+        "operatorRequired": "続行するには事業者を選択してください"
       },
       "photos": {
         "heading": "写真",
@@ -500,6 +503,9 @@
       "form": {
         "name": "クラス名",
         "namePlaceholder": "例: コンパクト",
+        "operator": "事業者",
+        "operatorPlaceholder": "事業者を選択",
+        "operatorRequired": "続行するには事業者を選択してください",
         "slug": "スラッグ",
         "slugPlaceholder": "例: compact",
         "slugHint": "小文字・数字・ハイフンのみ。URLで使用されます。",

@@ -8,13 +8,15 @@ import { createMaintenanceLogRoutes } from '../../src/routes/maintenance-logs'
 import { createVehicleRoutes } from '../../src/routes/vehicles'
 import { MaintenanceService } from '../../src/services/maintenance'
 import { testAuthMiddleware } from '../helpers/auth'
-import { testResolveWriteOperatorId } from '../helpers/operator'
+import { TEST_OPERATOR_ID, testResolveWriteOperatorId } from '../helpers/operator'
 
 let app: Hono
 let maintenanceService: MaintenanceService
 
 function validVehicleInput() {
   return {
+    // #407: STAFF/ADMIN creates must name the operator (inference retired).
+    operatorId: TEST_OPERATOR_ID,
     name: 'Toyota Corolla',
     seats: 5,
     transmission: 'AUTO' as const,

@@ -327,7 +327,10 @@
         "color": "颜色",
         "colorPlaceholder": "例如 白色",
         "class": "类别",
-        "classNone": "未分配"
+        "classNone": "未分配",
+        "operator": "运营商",
+        "operatorPlaceholder": "选择运营商",
+        "operatorRequired": "请选择运营商以继续"
       },
       "photos": {
         "heading": "照片",
@@ -500,6 +503,9 @@
       "form": {
         "name": "车型名称",
         "namePlaceholder": "例如：紧凑型",
+        "operator": "运营商",
+        "operatorPlaceholder": "选择运营商",
+        "operatorRequired": "请选择运营商以继续",
         "slug": "标识",
         "slugPlaceholder": "例如：compact",
         "slugHint": "仅小写字母、数字和连字符，用于 URL。",

@@ -6,18 +6,14 @@ import { type ResolveWriteOperatorId, resolveOperatorIdForWrite } from '../../sr
 export const TEST_OPERATOR_ID = 'op_test'
 
 /**
- * A write-operator resolver backed by a single in-memory operator, so a
- * non-operator (STAFF/ADMIN) create infers that sole operator — mirroring the
- * single-operator MVP. Operator-role callers resolve to their own
- * `ctx.operatorId`. Pass `null` to model the ambiguous case (zero or 2+
- * operators), where a non-operator create with no explicit operatorId is
- * rejected with `OperatorRequiredError` -> 422 (#401).
+ * The production write-operator resolver, used as-is in route tests (#407):
+ * operator-role callers resolve to their own `ctx.operatorId`; a non-operator
+ * (STAFF/ADMIN) create must send an explicit `operatorId` in the body, else
+ * `OperatorRequiredError` -> 422. Sole-operator inference is retired, so a
+ * non-operator create without `operatorId` is always rejected.
  */
-export function testResolveWriteOperatorId(
-  soleOperatorId: string | null = TEST_OPERATOR_ID,
-): ResolveWriteOperatorId {
-  return (ctx, input) =>
-    resolveOperatorIdForWrite(ctx, input, { findSoleId: async () => soleOperatorId })
+export function testResolveWriteOperatorId(): ResolveWriteOperatorId {
+  return (ctx, input) => resolveOperatorIdForWrite(ctx, input)
 }
 
 /**

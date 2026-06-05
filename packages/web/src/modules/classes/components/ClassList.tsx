@@ -12,6 +12,7 @@ import { DeleteClassDialog } from '@/modules/classes/components/DeleteClassDialo
 import { EditClassDialog } from '@/modules/classes/components/EditClassDialog'
 import { classKeys } from '@/modules/classes/hooks'
 import { computeClassStats } from '@/modules/classes/stats'
+import { fetchOperatorsAction, operatorKeys } from '@/modules/operators'
 import { useQuery } from '@tanstack/react-query'
 import { AlertCircle, LayersIcon, Plus } from 'lucide-react'
 import { useTranslations } from 'next-intl'
@@ -37,6 +38,17 @@ export function ClassList() {
       // includeArchived=true so the owner sees soft-deleted classes and can
       // tell why a slug is taken. Archived rows render with a muted badge.
       const result = await fetchClassesAction({ includeArchived: true })
+      if (!result.success) throw new Error(result.error)
+      return result.data
+    },
+  })
+
+  // #407: operators power the admin picker in the add dialog (shown only when
+  // 2+ exist). Shares the cache key with the Fleet page.
+  const { data: operators } = useQuery({
+    queryKey: operatorKeys.list(),
+    queryFn: async () => {
+      const result = await fetchOperatorsAction()
       if (!result.success) throw new Error(result.error)
       return result.data
     },
@@ -129,7 +141,7 @@ export function ClassList() {
         </div>
       )}
 
-      <AddClassDialog open={showAdd} onOpenChange={setShowAdd} />
+      <AddClassDialog open={showAdd} onOpenChange={setShowAdd} operators={operators} />
       <EditClassDialog vehicleClass={editing} onOpenChange={() => setEditing(null)} />
       <DeleteClassDialog
         vehicleClass={deleting}

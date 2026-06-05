@@ -10,12 +10,15 @@ import type { RunInTransaction } from '../../src/repositories/types'
 import { createVehicleRoutes } from '../../src/routes/vehicles'
 import { MaintenanceService } from '../../src/services/maintenance'
 import { testAuthMiddleware } from '../helpers/auth'
-import { testResolveWriteOperatorId } from '../helpers/operator'
+import { TEST_OPERATOR_ID, testResolveWriteOperatorId } from '../helpers/operator'
 
 let app: Hono
 
 function validVehicleInput() {
   return {
+    // #407: a STAFF/ADMIN create must name its target operator explicitly now
+    // that sole-operator inference is retired (mirrors the web admin picker).
+    operatorId: TEST_OPERATOR_ID,
     name: 'Toyota Corolla',
     seats: 5,
     transmission: 'AUTO' as const,
@@ -813,9 +816,9 @@ describe('Vehicle CRUD Routes', () => {
     })
   })
 
-  // #401: a non-operator caller (PLATFORM_ADMIN / legacy STAFF / ADMIN) must name
-  // the target operator — explicitly, or implicitly when exactly one operator
-  // exists. The old silent Best-Car-Rental default is gone.
+  // #401/#407: a non-operator caller (PLATFORM_ADMIN / legacy STAFF / ADMIN) must
+  // name the target operator explicitly. Sole-operator inference is retired, so a
+  // create that omits operatorId is a 422 — there is no silent default.
   describe('Non-operator write-operator resolution (#401)', () => {
     const SOME_OPERATOR = 'op_explicit_target'
 
@@ -839,12 +842,24 @@ describe('Vehicle CRUD Routes', () => {
       })
     }
 
-    it('infers the sole operator for a legacy STAFF create when exactly one exists', async () => {
+    it('rejects a STAFF create that omits operatorId, but stamps an explicit one (#407)', async () => {
       const repo = new InMemoryVehicleRepository()
-      const res = await postVehicle(mountStaff(repo, testResolveWriteOperatorId('op_only')))
 
-      expect(res.status).toBe(201)
-      expect((await res.json()).data.operatorId).toBe('op_only')
+      // Inference is retired: omitting operatorId is now a 422.
+      // (JSON.stringify drops the undefined key, so the body truly omits it.)
+      const omitted = await postVehicle(mountStaff(repo), {
+        ...validVehicleInput(),
+        operatorId: undefined,
+      })
+      expect(omitted.status).toBe(422)
+
+      // An explicit operatorId is honoured and stamped on the created row.
+      const stamped = await postVehicle(mountStaff(repo), {
+        ...validVehicleInput(),
+        operatorId: SOME_OPERATOR,
+      })
+      expect(stamped.status).toBe(201)
+      expect((await stamped.json()).data.operatorId).toBe(SOME_OPERATOR)
     })
 
     it('honours an explicit operatorId in the body even when inference is ambiguous', async () => {
@@ -858,9 +873,12 @@ describe('Vehicle CRUD Routes', () => {
       expect((await res.json()).data.operatorId).toBe(SOME_OPERATOR)
     })
 
-    it('rejects with 422 when no operatorId is given and there is not exactly one operator', async () => {
+    it('rejects with 422 when a non-operator create omits operatorId', async () => {
       const repo = new InMemoryVehicleRepository()
-      const res = await postVehicle(mountStaff(repo, testResolveWriteOperatorId(null)))
+      const res = await postVehicle(mountStaff(repo), {
+        ...validVehicleInput(),
+        operatorId: undefined,
+      })
 
       expect(res.status).toBe(422)
     })

@@ -86,6 +86,42 @@ describe('vehicle-actions', () => {
       expect(result).toEqual({ success: true, data: { id: 'v1' } })
       expect(createVehicle).toHaveBeenCalledWith(input, 'tok')
     })
+
+    // #407 P2 (§3e): a 422 operator-required rejection must reach the client as
+    // a recognisable code so the form can refetch operators + reveal the picker.
+    it('maps a 422 operator-required rejection to code OPERATOR_REQUIRED', async () => {
+      const { getApiToken } = await import('@/lib/api-token')
+      vi.mocked(getApiToken).mockResolvedValueOnce('tok')
+
+      const { ApiError } = await import('@/lib/api-error')
+      const { createVehicle } = await import('@/lib/vehicle-api')
+      vi.mocked(createVehicle).mockRejectedValueOnce(
+        new ApiError('operatorId is required: specify a target operator', 422),
+      )
+
+      const { createVehicleAction } = await import('@/lib/vehicle-actions')
+      const result = await createVehicleAction({ name: 'x' } as never)
+
+      expect(result).toEqual({
+        success: false,
+        error: 'operatorId is required: specify a target operator',
+        code: 'OPERATOR_REQUIRED',
+      })
+    })
+
+    // A non-operator 422 (or any other error) stays a plain failure, no code.
+    it('does not attach a code to unrelated failures', async () => {
+      const { getApiToken } = await import('@/lib/api-token')
+      vi.mocked(getApiToken).mockResolvedValueOnce('tok')
+
+      const { createVehicle } = await import('@/lib/vehicle-api')
+      vi.mocked(createVehicle).mockRejectedValueOnce(new Error('Boom'))
+
+      const { createVehicleAction } = await import('@/lib/vehicle-actions')
+      const result = await createVehicleAction({ name: 'x' } as never)
+
+      expect(result).toEqual({ success: false, error: 'Boom' })
+    })
   })
 
   describe('updateVehicleAction', () => {

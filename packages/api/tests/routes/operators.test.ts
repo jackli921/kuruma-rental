@@ -29,6 +29,41 @@ function mountFor(role: UserRole, operatorId?: string) {
   return app
 }
 
+describe('GET /operators (list)', () => {
+  it('returns name-sorted {id,name,slug} for a STAFF caller', async () => {
+    const res = await mountFor('STAFF').request('/operators')
+    expect(res.status).toBe(200)
+    const { data } = await res.json()
+    expect(data).toEqual([
+      { id: opB.id, name: 'Acme Cars', slug: 'acme-cars' },
+      { id: opA.id, name: 'Best Car Rental', slug: 'best-car-rental' },
+    ])
+  })
+
+  it('lets a PLATFORM_ADMIN see every operator', async () => {
+    const { data } = await (await mountFor('PLATFORM_ADMIN').request('/operators')).json()
+    expect(data.map((o: { id: string }) => o.id).sort()).toEqual([opA.id, opB.id].sort())
+  })
+
+  it('scopes an OPERATOR_STAFF to its own operator only', async () => {
+    const res = await mountFor('OPERATOR_STAFF', opA.id).request('/operators')
+    expect(res.status).toBe(200)
+    const { data } = await res.json()
+    expect(data).toEqual([{ id: opA.id, name: 'Best Car Rental', slug: 'best-car-rental' }])
+  })
+
+  it('returns 403 for a RENTER', async () => {
+    expect((await mountFor('RENTER').request('/operators')).status).toBe(403)
+  })
+
+  it('returns 401 when unauthenticated', async () => {
+    const app = new Hono()
+    setupGlobalHandlers(app)
+    app.route('/', createOperatorRoutes(new OperatorService(repo)))
+    expect((await app.request('/operators')).status).toBe(401)
+  })
+})
+
 describe('GET /operators/:id', () => {
   it('lets an OPERATOR_STAFF read its own operator', async () => {
     const res = await mountFor('OPERATOR_STAFF', opA.id).request(`/operators/${opA.id}`)
