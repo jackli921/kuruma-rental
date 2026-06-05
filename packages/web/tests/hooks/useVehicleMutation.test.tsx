@@ -80,6 +80,41 @@ describe('useVehicleMutation', () => {
     expect(onSuccess).not.toHaveBeenCalled()
   })
 
+  it('exposes errorCode when the ActionResult carries one (OPERATOR_REQUIRED)', async () => {
+    // #407 P2 (§3e): the hook must surface result.code so the dialog can reveal
+    // the operator picker instead of showing a generic error toast.
+    const useVehicleMutation = await loadHook()
+    const mutationFn = vi.fn<(input: string) => Promise<ActionResult<unknown>>>()
+    mutationFn.mockResolvedValueOnce({
+      success: false,
+      error: 'operatorId is required',
+      code: 'OPERATOR_REQUIRED',
+    })
+
+    const { Wrapper } = createWrapper()
+    const { result } = renderHook(() => useVehicleMutation({ mutationFn }), { wrapper: Wrapper })
+
+    result.current.mutate('input')
+    await waitFor(() => expect(result.current.isPending).toBe(false))
+
+    expect(result.current.errorCode).toBe('OPERATOR_REQUIRED')
+    expect(result.current.error).toBe('operatorId is required')
+  })
+
+  it('leaves errorCode undefined for a code-less failure', async () => {
+    const useVehicleMutation = await loadHook()
+    const mutationFn = vi.fn<(input: string) => Promise<ActionResult<unknown>>>()
+    mutationFn.mockResolvedValueOnce({ success: false, error: 'Vehicle not found' })
+
+    const { Wrapper } = createWrapper()
+    const { result } = renderHook(() => useVehicleMutation({ mutationFn }), { wrapper: Wrapper })
+
+    result.current.mutate('input')
+    await waitFor(() => expect(result.current.isPending).toBe(false))
+
+    expect(result.current.errorCode).toBeUndefined()
+  })
+
   it('exposes error string when mutationFn throws an exception', async () => {
     const useVehicleMutation = await loadHook()
     const mutationFn = vi.fn<(input: string) => Promise<ActionResult<unknown>>>()

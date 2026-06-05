@@ -1,3 +1,4 @@
+import { ActionError } from '@/lib/api-error'
 import type { ActionResult } from '@/modules/classes/actions'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 
@@ -20,7 +21,7 @@ export function useClassMutation<TInput, TData = unknown>({
   const mutation = useMutation<TData, Error, TInput>({
     mutationFn: async (input) => {
       const result = await mutationFn(input)
-      if (!result.success) throw new Error(result.error)
+      if (!result.success) throw new ActionError(result.error, result.code)
       return result.data
     },
     onSuccess: (data) => {
@@ -34,6 +35,7 @@ export function useClassMutation<TInput, TData = unknown>({
     mutateAsync: mutation.mutateAsync,
     isPending: mutation.isPending,
     error: mutation.error?.message ?? null,
+    errorCode: mutation.error instanceof ActionError ? mutation.error.code : undefined,
     reset: mutation.reset,
   }
 }

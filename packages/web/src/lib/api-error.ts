@@ -17,6 +17,24 @@ export class ApiError extends Error {
 }
 
 /**
+ * Error a mutation hook throws when a server action returns `success: false`.
+ * Carries the optional `code` from the {@link ActionResult} (e.g.
+ * {@link OPERATOR_REQUIRED}) so React Query's `error` retains it and the dialog
+ * can branch on it rather than only on the message string (#407 §3e).
+ */
+export class ActionError extends Error {
+  readonly name = 'ActionError'
+  // `string | undefined` (not optional `?`) so the assignment satisfies
+  // exactOptionalPropertyTypes when the source ActionResult carries no code.
+  readonly code: string | undefined
+
+  constructor(message: string, code?: string) {
+    super(message)
+    this.code = code
+  }
+}
+
+/**
  * Shared response unwrapper for the web-side API clients. On a success body
  * returns `data`; on a failure body throws an {@link ApiError} carrying the
  * status. Replaces the per-module copies that discarded the status.
