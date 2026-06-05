@@ -1,20 +1,21 @@
 import { type CallerContext, ForbiddenError } from '../../middleware/auth'
-import { PG_ERROR } from '../../pg-errors'
+import { BOOKING_CODE_CONSTRAINT, IDEMPOTENCY_CONSTRAINT, PG_ERROR } from '../../pg-errors'
 import type { Booking } from '../../stores'
 import { bookingReadScope } from '../../tenancy'
 import type { BookingFilters, BookingRepository } from '../types'
 
 export const BLOCKING_STATUSES: ReadonlySet<Booking['status']> = new Set(['CONFIRMED', 'ACTIVE'])
 
-// Constraint names the service distinguishes on (§5.4): a bookingCode clash
-// regenerates + retries, an idempotencyKey clash replays the existing booking.
-export const BOOKING_CODE_CONSTRAINT = 'bookings_bookingCode_unique'
-export const IDEMPOTENCY_CONSTRAINT = 'bookings_idempotencyKey_unique'
-
-function uniqueViolation(constraint: string): Error & { code: string; constraint: string } {
-  return Object.assign(new Error(`duplicate key violates unique constraint "${constraint}"`), {
+// Mirror postgres-js's PostgresError shape: the violated constraint is exposed
+// as `constraint_name` (NOT `constraint`), which is what `pgConstraintName`
+// reads. Faithful mirroring lets the service's retry/replay branch behave
+// identically against the in-memory and Drizzle repos.
+function uniqueViolation(
+  constraintName: string,
+): Error & { code: string; constraint_name: string } {
+  return Object.assign(new Error(`duplicate key violates unique constraint "${constraintName}"`), {
     code: PG_ERROR.UNIQUE_VIOLATION,
-    constraint,
+    constraint_name: constraintName,
   })
 }
 

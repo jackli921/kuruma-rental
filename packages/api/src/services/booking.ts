@@ -1,26 +1,40 @@
+import type { InsuranceSnapshot } from '@kuruma/shared/db/schema'
 import { type BookingStatus, VALID_BOOKING_TRANSITIONS } from '@kuruma/shared/db/schema'
 import { calculateCancellationFee } from '@kuruma/shared/lib/cancellation-policy'
 import { calculateBookingPrice } from '@kuruma/shared/lib/pricing'
 import { checkRentalRules } from '@kuruma/shared/lib/rental-rules'
+import { generateBookingCode } from '../lib/booking-code'
 import { type CallerContext, SYSTEM_CONTEXT } from '../middleware/auth'
-import { PG_ERROR, pgErrorCode } from '../pg-errors'
+import { BOOKING_CODE_CONSTRAINT, PG_ERROR, pgConstraintName, pgErrorCode } from '../pg-errors'
 import type {
   BookingFilters,
   BookingRepository,
+  RunInTransaction,
   ThreadRepository,
+  TransactionRepos,
   UserRepository,
   VehicleClassRepository,
   VehicleRepository,
 } from '../repositories/types'
-import type { Booking, Vehicle, VehicleClass } from '../stores'
+import type { Booking } from '../stores'
 
-const DEFAULT_BUFFER_MINUTES = 60
 const MS_PER_MINUTE = 60 * 1000
+const MS_PER_DAY = 24 * 60 * MS_PER_MINUTE
+// Location-only turnaround fallback when a pickup location has no value set
+// (§5.3, proposal §9 item 20). The legacy 60-min vehicle buffer is GONE — a
+// 60-min result is a regression the turnaround test pins against.
+const DEFAULT_TURNAROUND_MINUTES = 2880 // 48h
+// A booking_code collision is ~2^-40 per attempt; a few retries is plenty.
+const MAX_BOOKING_CODE_ATTEMPTS = 3
 
+// Slice 6 (#392): the renter books a CONCRETE vehicle chosen in the storefront
+// (slice 5). operatorId / classId / assignedVehicleId / totalPrice are all
+// server-derived from that vehicle — never client fields (proposal §6.2, §4.1).
 export interface CreateBookingInput {
-  // Issue #308: renters book a class; vehicle is optional (owner assigns later).
-  classId: string
-  vehicleId?: string | null
+  requestedVehicleId: string
+  pickupLocationId: string
+  dropoffLocationId: string
+  insuranceOptionId?: string | null
   renterId: string
   startAt: Date
   endAt: Date
@@ -40,6 +54,10 @@ export type CreateBookingResult =
       details?: { required: number; actual: number }
     }
 
+export type SubstituteResult =
+  | { ok: true; booking: Booking }
+  | { ok: false; status: 400 | 404 | 409; error: string }
+
 export type StatusTransitionResult =
   | { ok: true; booking: Booking }
   | { ok: false; status: 400 | 404 | 409; error: string }
@@ -55,7 +73,7 @@ export type CancelResult =
 /**
  * Opt-in messaging hook. When supplied, every confirmed booking also creates
  * a thread with `[renter, staffUserId]` as participants. Failure to create
- * the thread never rolls back the booking.
+ * the thread never rolls back the booking (it runs AFTER commit).
  */
 export interface BookingThreading {
   threadRepo: ThreadRepository
@@ -65,10 +83,13 @@ export interface BookingThreading {
 export class BookingService {
   constructor(
     private readonly bookingRepo: BookingRepository,
+    private readonly runInTransaction: RunInTransaction,
     private readonly vehicleRepo?: VehicleRepository,
     private readonly userRepo?: UserRepository,
     private readonly vehicleClassRepo?: VehicleClassRepository,
     private readonly threading?: BookingThreading,
+    // Injectable so the collision-retry path is deterministically testable.
+    private readonly generateCode: () => string = generateBookingCode,
   ) {}
 
   async findAll(ctx: CallerContext, filters?: BookingFilters): Promise<Booking[]> {
@@ -99,14 +120,15 @@ export class BookingService {
     const { data, nextCursor } = await this.findAllPaginated(ctx, filters)
     if (!this.vehicleRepo) return { data, nextCursor }
 
-    const vehicleIds = [...new Set(data.flatMap((b) => (b.vehicleId ? [b.vehicleId] : [])))]
+    // The fulfilling car is the assigned vehicle (#392 — vehicleId is gone).
+    const vehicleIds = [...new Set(data.map((b) => b.assignedVehicleId))]
     const vehicleList = await this.vehicleRepo.findByIds(ctx, vehicleIds)
     const vehicleMap = new Map(vehicleList.map((v) => [v.id, { name: v.name, photos: v.photos }]))
 
     return {
       data: data.map((booking) => ({
         ...booking,
-        vehicle: booking.vehicleId ? vehicleMap.get(booking.vehicleId) : undefined,
+        vehicle: vehicleMap.get(booking.assignedVehicleId),
       })),
       nextCursor,
     }
@@ -150,9 +172,9 @@ export class BookingService {
     input: CreateBookingInput,
     now: Date = new Date(),
   ): Promise<CreateBookingResult> {
-    // Staff/admin override path: validate that the target renterId exists and
-    // is a RENTER — prevents bookings attached to other staff/admin accounts
-    // and surfaces FK failures as a friendly 400 rather than a generic 500.
+    // Staff/admin override path: validate the target renterId exists and is a
+    // RENTER — prevents bookings attached to other staff/admin accounts and
+    // surfaces FK failures as a friendly 400 rather than a generic 500.
     if (input.renterId !== ctx.userId && this.userRepo) {
       const [renter] = await this.userRepo.findByIds([input.renterId])
       if (!renter) {
@@ -163,73 +185,219 @@ export class BookingService {
       }
     }
 
-    // Idempotency: if a key was provided, check for an existing booking first.
+    // Idempotency: if a key was provided, replay an existing booking first.
     if (input.idempotencyKey) {
       const existing = await this.bookingRepo.findByIdempotencyKey(ctx, input.idempotencyKey)
       if (existing) {
-        // Repair-on-replay: first attempt may have failed after booking was
-        // persisted but before thread creation. `ensureThread` is idempotent
-        // (keyed by `booking:<id>`) so this is safe to run unconditionally.
         await this.ensureThread(ctx, existing)
         return { ok: true, booking: existing, status: 200 }
       }
     }
 
-    // Issue #308: resolve the class (required) + optional pre-assigned vehicle.
-    // Pricing comes from the vehicle when attached; class-only bookings carry
-    // no price (totalPrice null) until a vehicle is assigned — #406, slice 6.
-    // Issue #65: rental rules + Issue #74: server-side pricing — never
-    // accepted from the client.
-    const resolution = await this.resolveClassAndVehicle(ctx, input, now)
-    if (!resolution.ok) return resolution
-
-    const { bufferMinutes, totalPrice } = resolution
-    const effectiveEndAt = new Date(input.endAt.getTime() + bufferMinutes * MS_PER_MINUTE)
-
-    try {
-      const booking = await this.bookingRepo.create(ctx, {
-        renterId: input.renterId,
-        classId: input.classId,
-        vehicleId: input.vehicleId ?? null,
-        startAt: input.startAt,
-        endAt: input.endAt,
-        effectiveEndAt,
-        status: 'CONFIRMED',
-        source: input.source,
-        externalId: input.externalId ?? null,
-        notes: input.notes ?? null,
-        totalPrice,
-        cancellationFee: null,
-        cancelledAt: null,
-        idempotencyKey: input.idempotencyKey ?? null,
-      })
-
-      await this.ensureThread(ctx, booking)
-
-      return { ok: true, booking }
-    } catch (err) {
-      const code = pgErrorCode(err)
-
-      // Overlap exclusion constraint
-      if (code === PG_ERROR.EXCLUSION_VIOLATION) {
-        return {
-          ok: false,
-          status: 409,
-          error: 'Vehicle is already booked for the requested time range',
+    // The whole submit is ONE transaction (proposal §4): resolve + price +
+    // snapshot + insert booking + append BOOKING_CREATED, atomically. The
+    // booking_code is generated inside the tx, so a UNIQUE clash re-runs the
+    // entire atomic insert cleanly (§5.4) — bounded retry around the tx.
+    let lastErr: unknown
+    for (let attempt = 0; attempt < MAX_BOOKING_CODE_ATTEMPTS; attempt++) {
+      try {
+        const result = await this.runInTransaction((repos) =>
+          this.submitInTx(ctx, input, now, repos),
+        )
+        if (!result.ok) return result // domain validation failure — never retried
+        // Post-commit side effect (#335): thread autocreate must NOT be in the tx.
+        await this.ensureThread(ctx, result.booking)
+        return { ok: true, booking: result.booking }
+      } catch (err) {
+        const code = pgErrorCode(err)
+        if (
+          code === PG_ERROR.UNIQUE_VIOLATION &&
+          pgConstraintName(err) === BOOKING_CODE_CONSTRAINT
+        ) {
+          lastErr = err // regenerate + retry the whole atomic insert
+          continue
         }
-      }
-
-      // Idempotency key unique constraint race: re-fetch and return existing
-      if (code === PG_ERROR.UNIQUE_VIOLATION && input.idempotencyKey) {
-        const existing = await this.bookingRepo.findByIdempotencyKey(ctx, input.idempotencyKey)
-        if (existing) {
-          await this.ensureThread(ctx, existing)
-          return { ok: true, booking: existing, status: 200 }
+        if (code === PG_ERROR.EXCLUSION_VIOLATION) {
+          return {
+            ok: false,
+            status: 409,
+            error: 'Vehicle is already booked for the requested time range',
+          }
         }
+        // Idempotency-key race: a concurrent replay won — return its booking.
+        if (code === PG_ERROR.UNIQUE_VIOLATION && input.idempotencyKey) {
+          const existing = await this.bookingRepo.findByIdempotencyKey(ctx, input.idempotencyKey)
+          if (existing) {
+            await this.ensureThread(ctx, existing)
+            return { ok: true, booking: existing, status: 200 }
+          }
+        }
+        throw err
       }
-
-      throw err
     }
+    // Exhausted the bounded retries — surface as a 500 at the route boundary.
+    throw lastErr
+  }
+
+  // The atomic decision-and-record (FC/IS: the decision; ensureThread is the
+  // imperative shell). Resolution reads run as SYSTEM_CONTEXT — these are
+  // internal pricing/snapshot reads, and insurance/fee reads reject RENTER
+  // callers by design; the booking's tenant is derived from the vehicle, not
+  // the caller. The booking + event WRITES use the caller's ctx (renter-own /
+  // operator scope is enforced at the repo).
+  private async submitInTx(
+    ctx: CallerContext,
+    input: CreateBookingInput,
+    now: Date,
+    repos: TransactionRepos,
+  ): Promise<CreateBookingResult> {
+    const vehicle = await repos.vehicleRepo.findById(SYSTEM_CONTEXT, input.requestedVehicleId)
+    if (!vehicle) {
+      return { ok: false, status: 400, error: 'Vehicle not found' }
+    }
+    if (vehicle.status !== 'AVAILABLE') {
+      return { ok: false, status: 400, error: 'Vehicle is not available' }
+    }
+    if (!vehicle.classId) {
+      return { ok: false, status: 400, error: 'Vehicle has no class' }
+    }
+    const operatorId = vehicle.operatorId
+    const classId = vehicle.classId
+    const assignedVehicleId = vehicle.id // server-derived = requested at submit
+
+    const ruleCheck = checkRentalRules(
+      {
+        minRentalHours: vehicle.minRentalHours,
+        maxRentalHours: vehicle.maxRentalHours,
+        advanceBookingHours: input.source === 'MANUAL' ? null : vehicle.advanceBookingHours,
+      },
+      input.startAt,
+      input.endAt,
+      now,
+    )
+    if (!ruleCheck.ok) {
+      return {
+        ok: false,
+        status: 400,
+        error: 'Booking violates a rental rule on this vehicle',
+        code: ruleCheck.code,
+        details: { required: ruleCheck.required, actual: ruleCheck.actual },
+      }
+    }
+
+    // Turnaround is location-only (§5.3): pickup location's default, 48h fallback.
+    const pickup = await repos.locationRepo.findById(SYSTEM_CONTEXT, input.pickupLocationId)
+    if (!pickup || pickup.operatorId !== operatorId) {
+      return { ok: false, status: 400, error: 'Pickup location is not available' }
+    }
+    if (input.dropoffLocationId !== input.pickupLocationId) {
+      const dropoff = await repos.locationRepo.findById(SYSTEM_CONTEXT, input.dropoffLocationId)
+      if (!dropoff || dropoff.operatorId !== operatorId) {
+        return { ok: false, status: 400, error: 'Dropoff location is not available' }
+      }
+    }
+    const turnaroundMinutes = pickup.defaultTurnaroundMinutes ?? DEFAULT_TURNAROUND_MINUTES
+    const effectiveEndAt = new Date(input.endAt.getTime() + turnaroundMinutes * MS_PER_MINUTE)
+
+    // Price off the ASSIGNED vehicle's rates — never class-level (#406), never
+    // client-supplied (#74), non-null on every submit (#429 backfill guard).
+    const pricing = calculateBookingPrice(
+      { dailyRateJpy: vehicle.dailyRateJpy, hourlyRateJpy: vehicle.hourlyRateJpy },
+      input.startAt,
+      input.endAt,
+    )
+    if (!pricing.ok) {
+      return {
+        ok: false,
+        status: 400,
+        error:
+          pricing.code === 'NO_RATES_SET'
+            ? 'No daily or hourly rate configured'
+            : 'Invalid booking duration',
+        code: pricing.code,
+      }
+    }
+    let totalPrice = pricing.totalPriceJpy
+
+    // Selected insurance: snapshot the chosen ACTIVE option from THIS operator.
+    let insuranceOptionId: string | null = null
+    let insuranceSnapshot: InsuranceSnapshot | null = null
+    if (input.insuranceOptionId) {
+      const opt = await repos.insuranceOptionRepo.findById(SYSTEM_CONTEXT, input.insuranceOptionId)
+      if (!opt || opt.operatorId !== operatorId || opt.status !== 'ACTIVE') {
+        return { ok: false, status: 400, error: 'Insurance option is not available' }
+      }
+      insuranceOptionId = opt.id
+      insuranceSnapshot = {
+        insuranceOptionId: opt.id,
+        name: opt.name,
+        dailyPriceJpy: opt.dailyPriceJpy,
+        deductibleJpy: opt.deductibleJpy,
+      }
+      totalPrice += opt.dailyPriceJpy * rentalDays(input.startAt, input.endAt)
+    }
+
+    // Fee snapshot: this operator's ACTIVE fees that are operator-wide or match
+    // the booking's class. Locks the rate at booking time (§6.2, informational).
+    const fees = await repos.feeScheduleRepo.findAll(SYSTEM_CONTEXT, {
+      operatorId,
+      status: 'ACTIVE',
+    })
+    const feeSnapshot = fees
+      .filter((f) => f.vehicleClassId === null || f.vehicleClassId === classId)
+      .map((f) => ({
+        feeType: f.feeType,
+        unit: f.unit,
+        amountJpy: f.amountJpy,
+        vehicleClassId: f.vehicleClassId,
+      }))
+
+    const bookingCode = this.generateCode()
+
+    // Insert FIRST: the exclusion / unique constraints fire here, BEFORE the
+    // event append, so a rolled-back insert leaves no orphan event (atomicity).
+    const booking = await repos.bookingRepo.create(ctx, {
+      operatorId,
+      renterId: input.renterId,
+      classId,
+      requestedVehicleId: input.requestedVehicleId,
+      assignedVehicleId,
+      pickupLocationId: input.pickupLocationId,
+      dropoffLocationId: input.dropoffLocationId,
+      startAt: input.startAt,
+      endAt: input.endAt,
+      effectiveEndAt,
+      status: 'CONFIRMED',
+      source: input.source,
+      bookingCode,
+      insuranceOptionId,
+      insuranceSnapshot,
+      feeSnapshot,
+      externalId: input.externalId ?? null,
+      notes: input.notes ?? null,
+      totalPrice,
+      cancellationFee: null,
+      cancelledAt: null,
+      idempotencyKey: input.idempotencyKey ?? null,
+    })
+
+    await repos.bookingEventRepo.append(ctx, {
+      bookingId: booking.id,
+      type: 'BOOKING_CREATED',
+      actorId: input.renterId,
+      payload: {
+        requestedVehicleId: input.requestedVehicleId,
+        assignedVehicleId,
+        classId,
+        startAt: input.startAt.toISOString(),
+        endAt: input.endAt.toISOString(),
+        totalPrice,
+        insuranceSnapshot,
+        feeSnapshot,
+      },
+    })
+
+    return { ok: true, booking }
   }
 
   // TODO(#300): if a second post-booking side effect appears here, extract
@@ -327,112 +495,10 @@ export class BookingService {
     }
     return { ok: true, booking: updated, cancellation }
   }
+}
 
-  // Resolves the booking's class (required by #308) and optional vehicle.
-  // When a vehicle is provided, it must belong to the chosen class — mixing
-  // them would let a renter book a Compact and receive an SUV. Buffer and
-  // pricing come from the vehicle; class-only bookings stay unpriced
-  // (totalPrice null) until a vehicle is assigned (#406, snapshot in slice 6).
-  private async resolveClassAndVehicle(
-    ctx: CallerContext,
-    input: CreateBookingInput,
-    now: Date,
-  ): Promise<
-    | (CreateBookingResult & { ok: false })
-    | { ok: true; bufferMinutes: number; totalPrice: number | null }
-  > {
-    const vehicleClass = await this.lookupClass(input.classId)
-    if (!vehicleClass) {
-      return { ok: false, status: 400, error: 'Vehicle class not found' }
-    }
-    if (vehicleClass.status === 'ARCHIVED') {
-      return { ok: false, status: 400, error: 'Vehicle class is archived' }
-    }
-
-    const vehicle = input.vehicleId ? await this.lookupVehicle(ctx, input.vehicleId) : null
-    if (input.vehicleId && !vehicle) {
-      return { ok: false, status: 400, error: 'Vehicle not found' }
-    }
-    if (vehicle && vehicle.classId !== input.classId) {
-      return {
-        ok: false,
-        status: 400,
-        error: 'Vehicle does not belong to the selected class',
-      }
-    }
-
-    // Rental rules + advance-booking use vehicle overrides when present,
-    // otherwise fall back to class-level (currently unused — class doesn't
-    // carry rental rules yet).
-    if (vehicle) {
-      const check = checkRentalRules(
-        {
-          minRentalHours: vehicle.minRentalHours,
-          maxRentalHours: vehicle.maxRentalHours,
-          advanceBookingHours: input.source === 'MANUAL' ? null : vehicle.advanceBookingHours,
-        },
-        input.startAt,
-        input.endAt,
-        now,
-      )
-      if (!check.ok) {
-        return {
-          ok: false,
-          status: 400,
-          error: 'Booking violates a rental rule on this vehicle',
-          code: check.code,
-          details: { required: check.required, actual: check.actual },
-        }
-      }
-    }
-
-    // Pricing source: the assigned vehicle's rates only (#406 — class pricing
-    // dropped). A class-only booking (no vehicle assigned yet, #308) has no
-    // price source, so it persists totalPrice: null until a vehicle is
-    // assigned. Price snapshot on assignment/substitution is slice 6 (#392).
-    const bufferMinutes = vehicle?.bufferMinutes ?? DEFAULT_BUFFER_MINUTES
-    if (!vehicle) {
-      return { ok: true, bufferMinutes, totalPrice: null }
-    }
-
-    const pricing = calculateBookingPrice(
-      { dailyRateJpy: vehicle.dailyRateJpy, hourlyRateJpy: vehicle.hourlyRateJpy },
-      input.startAt,
-      input.endAt,
-    )
-    if (!pricing.ok) {
-      return {
-        ok: false,
-        status: 400,
-        error:
-          pricing.code === 'NO_RATES_SET'
-            ? 'No daily or hourly rate configured'
-            : 'Invalid booking duration',
-        code: pricing.code,
-      }
-    }
-
-    return { ok: true, bufferMinutes, totalPrice: pricing.totalPriceJpy }
-  }
-
-  // Explicit "missing repo" guard — silent `return null` would masquerade
-  // as "class not found" and make every booking fail with a confusing 400.
-  // The composition root always wires these repos; a test double that
-  // forgets to is a bug in the fixture, not a runtime edge case.
-  private async lookupClass(id: string): Promise<VehicleClass | null> {
-    if (!this.vehicleClassRepo) {
-      throw new Error('BookingService missing vehicleClassRepo; check DI wiring')
-    }
-    // Marketplace-wide lookup: a booking's class is resolved regardless of
-    // operator (the caller may be a renter/partner). SYSTEM_CONTEXT = 'all'
-    // scope; this is an internal pricing read, not per-tenant exposure (#395).
-    return (await this.vehicleClassRepo.findById(SYSTEM_CONTEXT, id)) ?? null
-  }
-
-  private async lookupVehicle(ctx: CallerContext, id: string): Promise<Vehicle | null> {
-    if (!this.vehicleRepo) {
-      throw new Error('BookingService missing vehicleRepo; check DI wiring')
-    }
-    return (await this.vehicleRepo.findById(ctx, id)) ?? null
-  }
+// Insurance is priced per rental day (ceil), min 1 — matches the daily-rate
+// rounding the base price uses for whole-day rentals.
+function rentalDays(startAt: Date, endAt: Date): number {
+  return Math.max(1, Math.ceil((endAt.getTime() - startAt.getTime()) / MS_PER_DAY))
 }

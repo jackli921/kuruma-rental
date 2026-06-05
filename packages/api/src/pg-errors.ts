@@ -34,6 +34,16 @@ export const VEHICLES_PICKUP_LOCATION_FK = 'vehicles_operatorId_pickupLocationId
  */
 export const FEE_SCHEDULES_CLASS_FK = 'fee_schedules_operator_class_fk'
 
+/**
+ * Booking unique constraints the BookingService distinguishes on (#392, §5.4).
+ * A `bookingCode` clash is astronomically rare but recoverable: regenerate the
+ * code and retry the whole atomic insert. An `idempotencyKey` clash means a
+ * concurrent replay won the race: re-fetch and return the existing booking.
+ * Matching by name (not just the 23505 code) keeps the two paths apart.
+ */
+export const BOOKING_CODE_CONSTRAINT = 'bookings_bookingCode_unique'
+export const IDEMPOTENCY_CONSTRAINT = 'bookings_idempotencyKey_unique'
+
 /** Extract the Postgres error code from an unknown thrown value, or null.
  *
  * Drizzle + postgres-js wraps the raw PostgresError inside `err.cause`,

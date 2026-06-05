@@ -1,10 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { type CallerContext, SYSTEM_CONTEXT } from '../../src/middleware/auth'
-import { PG_ERROR } from '../../src/pg-errors'
-import {
-  BOOKING_CODE_CONSTRAINT,
-  InMemoryBookingRepository,
-} from '../../src/repositories/in-memory/booking'
+import { BOOKING_CODE_CONSTRAINT, PG_ERROR } from '../../src/pg-errors'
+import { InMemoryBookingRepository } from '../../src/repositories/in-memory/booking'
 import type { Booking } from '../../src/stores'
 
 type NewBooking = Omit<Booking, 'id' | 'createdAt' | 'updatedAt'>
@@ -37,7 +34,11 @@ function bookingData(overrides: Partial<Booking> = {}): NewBooking {
   }
 }
 
-const renterCtx = (userId: string): CallerContext => ({ userId, role: 'RENTER', bypassScope: false })
+const renterCtx = (userId: string): CallerContext => ({
+  userId,
+  role: 'RENTER',
+  bypassScope: false,
+})
 const operatorCtx = (operatorId: string): CallerContext => ({
   userId: `${operatorId}-staff`,
   role: 'OPERATOR_OWNER',
@@ -75,10 +76,13 @@ describe('InMemoryBookingRepository — exclusion on assignedVehicleId', () => {
     const repo = new InMemoryBookingRepository()
     await repo.create(SYSTEM_CONTEXT, bookingData({ bookingCode: 'DUP00001' }))
     await expect(
-      repo.create(SYSTEM_CONTEXT, bookingData({ bookingCode: 'DUP00001', assignedVehicleId: 'v9' })),
+      repo.create(
+        SYSTEM_CONTEXT,
+        bookingData({ bookingCode: 'DUP00001', assignedVehicleId: 'v9' }),
+      ),
     ).rejects.toMatchObject({
       code: PG_ERROR.UNIQUE_VIOLATION,
-      constraint: BOOKING_CODE_CONSTRAINT,
+      constraint_name: BOOKING_CODE_CONSTRAINT,
     })
   })
 })
