@@ -3,7 +3,70 @@
 **Resume here after `/clear`.** Worktree: `/Users/jack/Dev/kuruma-slice6`
 Branch: `feat/slice6-booking-events` (base `origin/marketplace-pivot` @ `2fbbedd`).
 
-## SESSION UPDATE 2026-06-05 — Task #5 LANDED (DI wire + fixture migration) — READ THIS FIRST
+## SESSION UPDATE 2026-06-05 (cont.) — Task #7 + tenancy contract rewrite LANDED — READ THIS FIRST
+
+Commits since #5 (`1d4aa1e`):
+- `fc75c18` **Task #7 — route migration + concrete-vehicle test rewrite.**
+  `src/routes/bookings.ts`: POST maps the reshaped validator output
+  (`requestedVehicleId` + `pickup/dropoffLocationId` + optional `insuranceOptionId`)
+  to `CreateBookingInput`; new `POST /bookings/:id/substitute` (operator-only via
+  `isOperatorRole`; renter→403; service returns cross-op→404). New
+  `substituteVehicleSchema` in `@kuruma/shared/validators/booking`.
+  Rewrote the 4 route-coupled test files to the slice-6 **concrete-vehicle**
+  contract (class-only bookings GONE; assertions on `assignedVehicleId`; new
+  substitute route tests): `bookings.test.ts` (63), `manual-booking.test.ts` (7),
+  `actor-derivation.test.ts` (5), `select-columns.test.ts` (3). The bookings
+  harness wires the 7-repo `TransactionRepos` bundle through an in-memory
+  `runInTransaction` + the new `BookingService` ctor; `createApp`-based files seed
+  a location (operatorId-matched) + give vehicles `operatorId`/`pickupLocationId`.
+- `81d11a5` **tenancy contract rewrite (handoff step 2).** The slice-1
+  fail-closed contract is superseded. `tenancy-guards.test.ts`: rewrote the
+  `BookingRepository` block to pin the three-way `bookingReadScope`
+  (renter-own / operator-own-tenant / bypass / none): operator reads+writes own
+  tenant only, cross-tenant read→undefined, cross-tenant write→no-op, create
+  rejects another operator, tenant-less operator fails closed (Thread/Message
+  repos stay fail-closed — slice 7). `operator-user-isolation.test.ts` (#396):
+  expand=renter now 200 but scope filters foreign-tenant bookings BEFORE renter
+  enrichment (operator resolves only its own customer, never FOREIGN); POST forces
+  renterId=self (201, no foreign lookup). The 400-vs-403 question is resolved:
+  it was an incidental 400 (missing seeded location), NOT a masked guard — the
+  real closure is renterId-forced-to-self + operator scope.
+
+### State: `bunx vitest run tests/routes tests/services tests/repositories tests/lib`
+**751 passing, 0 RED** (was 683/67). All 6 previously-RED files green. No regressions.
+
+### NEXT = Task #6 (Drizzle bundle) — the ONLY remaining tsc-red, then web/E2E
+`bunx tsc --noEmit` in `packages/api` is red ONLY in `src/repositories/drizzle/*`
+(+ 1 in `index.ts`). Exact surface (captured 2026-06-05):
+1. `index.ts:194` — `DrizzleBookingRepository` missing `reassignVehicle` (§5.5).
+2. `drizzle/transaction.ts:13` — `createDrizzleTransaction` passes only
+   `{vehicleRepo, maintenanceLogRepo}`; widen to the full 7-repo `TransactionRepos`
+   (construct tx-bound booking, bookingEvent, location, insuranceOption,
+   feeSchedule repos). New **`DrizzleBookingEventRepository`** needed.
+3. `drizzle/booking.ts` (8) — `bookings.vehicleId`→`assignedVehicleId`; insert +
+   select mappers to the new Booking shape (operatorId, requested/assigned
+   vehicle, pickup/dropoff loc, bookingCode, insurance/fee snapshots); add
+   `reassignVehicle` (re-check exclusion for the new vehicle, re-snapshot price).
+4. `drizzle/vehicle.ts` (7) — drop `bufferMinutes`; map `operatorId` +
+   `pickupLocationId` on insert/select.
+5. Mechanical `bookings.vehicleId`→`assignedVehicleId`: `customer.ts`,
+   `fleet-overview.ts`, `availability.ts`, `vehicle-detail.ts`, `shared.ts`
+   (shared.ts also drops `vehicles.bufferMinutes` + a `Booking{vehicleId}` literal).
+6. Neon integration tests (`tests/integration/*`, need `DATABASE_URL`) — real
+   exclusion 23P01, turnaround window, bookingCode 23505, composite FK 23503.
+   Use the isolated `slice6-dev` Neon branch (worktree `.env` already points there).
+
+After #6: Task #8 web `bookings/new` form + confirmation, #9 form-onwards E2E,
+#10 full gate, #11 review → rebase → **DRAFT** PR. `#392` stays OPEN.
+
+### Don'ts (unchanged)
+- `--no-verify` WIP required (full-monorepo tsc red until #6). Note it.
+- `#392` stays OPEN; do NOT claim the E2E gate until #391 lands.
+- Never weaken assertions; superseded-contract tests get REWRITTEN, not softened.
+
+---
+
+## SESSION UPDATE 2026-06-05 — Task #5 LANDED (DI wire + fixture migration)
 
 Commits since #4 (`b9d857d`):
 - `705859c` **Task #5 (DI wire) + fixture migration.** `createApp` now builds an
