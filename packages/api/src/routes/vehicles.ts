@@ -62,6 +62,10 @@ export function createVehicleRoutes(
         const vehicle = await repo.create(ctx, {
           operatorId,
           classId: parsed.data.classId ?? null,
+          // Write path (operator assigns a pickup location) is a slice-2
+          // follow-up; createVehicleSchema has no pickupLocationId yet, so
+          // the API creates vehicles unassigned. Slice 5 only reads it.
+          pickupLocationId: null,
           name: parsed.data.name,
           description: parsed.data.description ?? null,
           photos: parsed.data.photos,

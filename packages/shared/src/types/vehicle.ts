@@ -6,6 +6,8 @@ export interface VehicleBase {
   /** Owning operator (marketplace tenant, #386). NOT NULL in the DB. */
   operatorId: string
   classId: string | null
+  /** Pickup storefront location (#387). Null = unassigned (invisible to storefront search). */
+  pickupLocationId: string | null
   name: string
   description: string | null
   photos: string[]

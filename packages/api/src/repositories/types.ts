@@ -261,8 +261,19 @@ export interface StatsRepository {
   getDashboardStats(): Promise<DashboardStats>
 }
 
+/**
+ * Optional scoping for {@link AvailabilityRepository.findAvailableVehicles}.
+ * Storefront search (#391) needs availability scoped to one location/class;
+ * every field defaults to "no filter" so existing callers are unaffected.
+ */
+export interface AvailabilityFilters {
+  locationId?: string
+  operatorId?: string
+  classId?: string
+}
+
 export interface AvailabilityRepository {
-  findAvailableVehicles(from: Date, to: Date): Promise<Vehicle[]>
+  findAvailableVehicles(from: Date, to: Date, filters?: AvailabilityFilters): Promise<Vehicle[]>
   checkVehicleAvailability(
     vehicleId: string,
     from: Date,
@@ -275,6 +286,31 @@ export interface AvailabilityRepository {
       }
     | undefined
   >
+}
+
+/**
+ * A location surfaced as a public storefront card (#391): the owning operator's
+ * display `name` joined in for the renter. The availability counts and
+ * from-prices are layered on later by StorefrontSearchService — this is just the
+ * location row plus the operator name.
+ */
+export type Storefront = Location & { operatorName: string }
+
+export interface StorefrontFilters {
+  /** Narrow to a single storefront — the degenerate single-card search. */
+  pickupLocationId?: string
+}
+
+/**
+ * Public renter-facing catalog read (#391). Distinct from LocationRepository,
+ * which is operator-private management CRUD: this returns ACTIVE storefronts
+ * across ALL operators for the anonymous renter (operatorReadScope resolves
+ * PUBLIC_CONTEXT to {kind:'all'}). Cross-tenant is intentional — the safety
+ * control on this public multi-tenant read is column projection, not row
+ * scoping (slice-5 plan §5). Archived locations never surface.
+ */
+export interface StorefrontRepository {
+  findActiveStorefronts(ctx: CallerContext, filters?: StorefrontFilters): Promise<Storefront[]>
 }
 
 // Enriched read for the owner-facing /manage/vehicles/[id] detail page.

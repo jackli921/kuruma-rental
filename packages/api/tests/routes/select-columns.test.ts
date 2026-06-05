@@ -48,6 +48,7 @@ const VEHICLE_FIELDS = [
   'id',
   'operatorId',
   'classId',
+  'pickupLocationId',
   'name',
   'description',
   'photos',
