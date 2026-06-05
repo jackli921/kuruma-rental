@@ -10,6 +10,7 @@ import { createVehicleDetailRoutes } from '../../src/routes/vehicle-detail'
 import { VehicleDetailService } from '../../src/services/vehicle-detail'
 import type { Vehicle } from '../../src/stores'
 import { testAuthMiddleware } from '../helpers/auth'
+import { bookingInput } from '../helpers/booking'
 
 let app: Hono
 let vehicleRepo: InMemoryVehicleRepository
@@ -61,21 +62,19 @@ async function seedBooking(
     source?: 'DIRECT' | 'TRIP_COM' | 'MANUAL' | 'OTHER'
   },
 ) {
-  return bookingRepo.create(SYSTEM_CONTEXT, {
-    vehicleId,
-    renterId: overrides?.renterId ?? 'renter-1',
-    startAt,
-    endAt,
-    effectiveEndAt: new Date(endAt.getTime() + DEFAULT_BUFFER_MS),
-    status: overrides?.status ?? 'CONFIRMED',
-    source: overrides?.source ?? 'DIRECT',
-    externalId: null,
-    notes: null,
-    totalPrice: overrides?.totalPrice ?? null,
-    cancellationFee: null,
-    cancelledAt: null,
-    idempotencyKey: null,
-  })
+  return bookingRepo.create(
+    SYSTEM_CONTEXT,
+    bookingInput({
+      assignedVehicleId: vehicleId,
+      renterId: overrides?.renterId ?? 'renter-1',
+      startAt,
+      endAt,
+      effectiveEndAt: new Date(endAt.getTime() + DEFAULT_BUFFER_MS),
+      status: overrides?.status ?? 'CONFIRMED',
+      source: overrides?.source ?? 'DIRECT',
+      totalPrice: overrides?.totalPrice ?? null,
+    }),
+  )
 }
 
 describe('GET /vehicles/:id/detail', () => {

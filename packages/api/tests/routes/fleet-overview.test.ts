@@ -16,6 +16,7 @@ import {
 import { createFleetOverviewRoutes } from '../../src/routes/fleet-overview'
 import { FleetOverviewService } from '../../src/services/fleet-overview'
 import { testAuthMiddleware } from '../helpers/auth'
+import { bookingInput } from '../helpers/booking'
 
 const FIXED_NOW = new Date('2026-04-11T12:00:00Z')
 
@@ -117,20 +118,17 @@ describe('GET /vehicles/fleet-overview', () => {
       shakenExpiryDate: null,
       insuranceExpiryDate: null,
     })
-    await bookingRepo.create(SYSTEM_CONTEXT, {
-      renterId: 'user_1',
-      vehicleId: vehicle.id,
-      startAt: new Date('2026-04-11T09:00:00Z'),
-      endAt: new Date('2026-04-11T18:00:00Z'),
-      effectiveEndAt: new Date('2026-04-11T19:00:00Z'),
-      status: 'ACTIVE',
-      source: 'DIRECT',
-      externalId: null,
-      notes: null,
-      totalPrice: null,
-      cancellationFee: null,
-      cancelledAt: null,
-    })
+    await bookingRepo.create(
+      SYSTEM_CONTEXT,
+      bookingInput({
+        renterId: 'user_1',
+        assignedVehicleId: vehicle.id,
+        startAt: new Date('2026-04-11T09:00:00Z'),
+        endAt: new Date('2026-04-11T18:00:00Z'),
+        effectiveEndAt: new Date('2026-04-11T19:00:00Z'),
+        status: 'ACTIVE',
+      }),
+    )
 
     const res = await app.request('/vehicles/fleet-overview')
     const body = (await res.json()) as {

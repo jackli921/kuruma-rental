@@ -12,6 +12,7 @@ import { createVehicleClassRoutes } from '../../src/routes/vehicle-classes'
 import { VehicleClassService } from '../../src/services/vehicle-class'
 import { VehicleClassAvailabilityService } from '../../src/services/vehicle-class-availability'
 import { testAuthMiddleware } from '../helpers/auth'
+import { bookingInput } from '../helpers/booking'
 import { TEST_OPERATOR_ID, testResolveWriteOperatorId } from '../helpers/operator'
 
 function buildAvailabilityService(classRepo: InMemoryVehicleClassRepository) {
@@ -332,21 +333,19 @@ describe('Vehicle Class CRUD Routes', () => {
       vehicleId: string,
       status: 'CONFIRMED' | 'ACTIVE' | 'CANCELLED' | 'COMPLETED',
     ) {
-      return bookingRepo.create(SYSTEM_CONTEXT, {
-        renterId: 'user-1',
-        vehicleId,
-        startAt: new Date('2026-06-01T10:00:00Z'),
-        endAt: new Date('2026-06-01T14:00:00Z'),
-        effectiveEndAt: new Date('2026-06-01T14:00:00Z'),
-        status,
-        source: 'DIRECT',
-        externalId: null,
-        notes: null,
-        totalPrice: null,
-        cancellationFee: null,
-        cancelledAt: status === 'CANCELLED' ? new Date() : null,
-        idempotencyKey: null,
-      })
+      return bookingRepo.create(
+        SYSTEM_CONTEXT,
+        bookingInput({
+          renterId: 'user-1',
+          // #392: archive-blocking keys on the ASSIGNED vehicle; point the
+          // fixture at the class member so countActiveForVehicles matches.
+          assignedVehicleId: vehicleId,
+          startAt: new Date('2026-06-01T10:00:00Z'),
+          endAt: new Date('2026-06-01T14:00:00Z'),
+          status,
+          cancelledAt: status === 'CANCELLED' ? new Date() : null,
+        }),
+      )
     }
 
     it('archives the class when no vehicles or bookings exist', async () => {

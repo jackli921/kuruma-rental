@@ -29,6 +29,7 @@ import {
 } from './repositories/drizzle'
 import {
   InMemoryAvailabilityRepository,
+  InMemoryBookingEventRepository,
   InMemoryBookingRepository,
   InMemoryCustomerRepository,
   InMemoryFeeScheduleRepository,
@@ -166,7 +167,17 @@ export function createApp(overrides?: {
     ;({ vehicleRepo, bookingRepo, availabilityRepo } = overrides)
     vehicleClassRepo = overrides.vehicleClassRepo ?? new InMemoryVehicleClassRepository()
     maintenanceLogRepo = overrides.maintenanceLogRepo ?? new InMemoryMaintenanceLogRepository()
-    runInTransaction = async (fn) => fn({ vehicleRepo, maintenanceLogRepo })
+    const bookingEventRepo = new InMemoryBookingEventRepository()
+    runInTransaction = async (fn) =>
+      fn({
+        vehicleRepo,
+        maintenanceLogRepo,
+        bookingRepo,
+        bookingEventRepo,
+        locationRepo,
+        insuranceOptionRepo,
+        feeScheduleRepo,
+      })
     fleetOverviewRepo =
       overrides.fleetOverviewRepo ??
       new InMemoryFleetOverviewRepository(vehicleRepo, bookingRepo, new Map(), maintenanceLogRepo)
@@ -241,8 +252,17 @@ export function createApp(overrides?: {
     statsRepo = new InMemoryStatsRepository(vehicleRepo, bookingRepo)
     threadRepo = new InMemoryThreadRepository()
     messageRepo = new InMemoryMessageRepository(threadRepo as InMemoryThreadRepository)
-    maintenanceLogRepo = new InMemoryMaintenanceLogRepository()
-    runInTransaction = async (fn) => fn({ vehicleRepo, maintenanceLogRepo })
+    const bookingEventRepo = new InMemoryBookingEventRepository()
+    runInTransaction = async (fn) =>
+      fn({
+        vehicleRepo,
+        maintenanceLogRepo,
+        bookingRepo,
+        bookingEventRepo,
+        locationRepo,
+        insuranceOptionRepo,
+        feeScheduleRepo,
+      })
     userRepo = new InMemoryUserRepository()
     photoStorage = new InMemoryPhotoStorage()
     customerRepo = new InMemoryCustomerRepository(new Map(), new Map())
@@ -343,6 +363,7 @@ export function createApp(overrides?: {
   const threading = staffUserId ? { threadRepo, staffUserId } : undefined
   const bookingService = new BookingService(
     bookingRepo,
+    runInTransaction,
     vehicleRepo,
     userRepo,
     vehicleClassRepo,
