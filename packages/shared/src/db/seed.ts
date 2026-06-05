@@ -13,7 +13,7 @@ import { insuranceOptions, locations, operators, users, vehicleClasses, vehicles
 // Best Car Rental's renter-facing classes, keyed by ACRISS code (#388). Each
 // seeded vehicle attaches to one of these via the (operatorId, classId)
 // composite FK, so the class row MUST be inserted before the vehicle row.
-// dailyRateJpy is the class "from" price (lowest in its bucket). Idempotent on
+// Pricing lives on the vehicle (#406) — classes carry no rate. Idempotent on
 // slug. CCAR carries the Toyota Yaris (proposal §6 row 3 demo target).
 const SEED_CLASSES = [
   {
@@ -25,8 +25,6 @@ const SEED_CLASSES = [
     luggageCapacity: 1,
     transmission: 'AUTO' as const,
     fuelType: 'Gasoline',
-    dailyRateJpy: 6500,
-    hourlyRateJpy: 900,
     sortOrder: 1,
   },
   {
@@ -38,8 +36,6 @@ const SEED_CLASSES = [
     luggageCapacity: 2,
     transmission: 'AUTO' as const,
     fuelType: 'Hybrid',
-    dailyRateJpy: 8000,
-    hourlyRateJpy: 1100,
     sortOrder: 2,
   },
   {
@@ -51,8 +47,6 @@ const SEED_CLASSES = [
     luggageCapacity: 3,
     transmission: 'AUTO' as const,
     fuelType: 'Hybrid',
-    dailyRateJpy: 9500,
-    hourlyRateJpy: 1300,
     sortOrder: 3,
   },
   {
@@ -64,8 +58,6 @@ const SEED_CLASSES = [
     luggageCapacity: 4,
     transmission: 'AUTO' as const,
     fuelType: 'Hybrid',
-    dailyRateJpy: 9000,
-    hourlyRateJpy: 1300,
     sortOrder: 4,
   },
   {
@@ -77,8 +69,6 @@ const SEED_CLASSES = [
     luggageCapacity: 5,
     transmission: 'AUTO' as const,
     fuelType: 'Hybrid',
-    dailyRateJpy: 11000,
-    hourlyRateJpy: 1500,
     sortOrder: 5,
   },
 ] as const

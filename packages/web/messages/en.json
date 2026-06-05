@@ -495,9 +495,7 @@
         "cars": "{count, plural, one {# car} other {# cars}}",
         "activeBookings": "{count, plural, one {# active booking} other {# active bookings}}",
         "seats": "{count, plural, one {# seat} other {# seats}}",
-        "luggage": "{count, plural, one {# bag} other {# bags}}",
-        "daily": "{amount} /day",
-        "hourly": "{amount} /hr"
+        "luggage": "{count, plural, one {# bag} other {# bags}}"
       },
       "form": {
         "name": "Class name",
@@ -516,10 +514,6 @@
         "fuelTypePlaceholder": "e.g. Gasoline, Hybrid, EV",
         "acrissCode": "ACRISS class",
         "acrissCodeNone": "None",
-        "pricingHeading": "Pricing (JPY)",
-        "pricingHint": "At least one rate is required.",
-        "dailyRate": "Daily rate",
-        "hourlyRate": "Hourly rate",
         "sortOrder": "Sort order",
         "sortOrderHint": "Lower values show first. Same value falls back to name A-Z.",
         "save": "Save class",

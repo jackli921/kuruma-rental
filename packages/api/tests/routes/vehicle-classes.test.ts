@@ -37,7 +37,6 @@ function validInput() {
     seats: 5,
     luggageCapacity: 2,
     transmission: 'AUTO' as const,
-    dailyRateJpy: 5500,
   }
 }
 
@@ -124,13 +123,13 @@ describe('Vehicle Class CRUD Routes', () => {
       expect(res.status).toBe(409)
     })
 
-    it('rejects when both rates missing', async () => {
-      const res = await createClass({
-        ...validInput(),
-        slug: 'no-rate',
-        dailyRateJpy: undefined as unknown as number,
-      })
-      expect(res.status).toBe(400)
+    it('creates a class without any rate fields (#406 — pricing is vehicle-level)', async () => {
+      const res = await createClass({ ...validInput(), slug: 'no-rate' })
+      expect(res.status).toBe(201)
+      const { data } = await res.json()
+      expect(data.slug).toBe('no-rate')
+      expect('dailyRateJpy' in data).toBe(false)
+      expect('hourlyRateJpy' in data).toBe(false)
     })
   })
 
@@ -263,15 +262,17 @@ describe('Vehicle Class CRUD Routes', () => {
       expect(res.status).toBe(409)
     })
 
-    it('returns 400 when both rates nullified', async () => {
+    it('accepts a patch with no rate fields — no "at least one rate" gate (#406)', async () => {
       const createRes = await createClass()
       const { data: created } = await createRes.json()
       const res = await app.request(`/vehicle-classes/${created.id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ dailyRateJpy: null, hourlyRateJpy: null }),
+        body: JSON.stringify({ name: 'Renamed' }),
       })
-      expect(res.status).toBe(400)
+      expect(res.status).toBe(200)
+      const { data } = await res.json()
+      expect(data.name).toBe('Renamed')
     })
   })
 
