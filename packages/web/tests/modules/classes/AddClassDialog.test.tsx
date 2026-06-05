@@ -92,7 +92,6 @@ describe('AddClassDialog — OPERATOR_REQUIRED recovery', () => {
 
     await user.type(screen.getByLabelText('Class name'), 'Compact')
     await user.type(screen.getByLabelText('Slug'), 'compact')
-    await user.type(screen.getByLabelText('Daily rate'), '8000')
     await user.click(screen.getByText('Save class'))
 
     expect(await screen.findByLabelText('Operator')).toBeInTheDocument()

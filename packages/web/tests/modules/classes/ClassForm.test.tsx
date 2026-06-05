@@ -201,7 +201,6 @@ describe('ClassForm — operator picker', () => {
     expect(screen.queryByLabelText('form.operator')).not.toBeInTheDocument()
     await user.type(screen.getByLabelText('form.name'), 'Compact')
     await user.type(screen.getByLabelText('form.slug'), 'compact')
-    await user.type(screen.getByLabelText('form.dailyRate'), '8000')
     await user.click(screen.getByRole('button', { name: 'form.save' }))
 
     await waitFor(() => expect(onSubmit).toHaveBeenCalledTimes(1))
@@ -216,7 +215,6 @@ describe('ClassForm — operator picker', () => {
     const picker = screen.getByLabelText('form.operator')
     await user.type(screen.getByLabelText('form.name'), 'Compact')
     await user.type(screen.getByLabelText('form.slug'), 'compact')
-    await user.type(screen.getByLabelText('form.dailyRate'), '8000')
     await user.click(screen.getByRole('button', { name: 'form.save' }))
     await waitFor(() => expect(onSubmit).not.toHaveBeenCalled())
 
@@ -235,7 +233,6 @@ describe('ClassForm — operator picker', () => {
 
     await user.type(screen.getByLabelText('form.name'), 'Compact')
     await user.type(screen.getByLabelText('form.slug'), 'compact')
-    await user.type(screen.getByLabelText('form.dailyRate'), '8000')
     await user.click(screen.getByRole('button', { name: 'form.save' }))
 
     await waitFor(() => expect(onSubmit).toHaveBeenCalledTimes(1))
@@ -253,7 +250,6 @@ describe('ClassForm — operator picker', () => {
 
     await user.type(screen.getByLabelText('form.name'), 'Compact')
     await user.type(screen.getByLabelText('form.slug'), 'compact')
-    await user.type(screen.getByLabelText('form.dailyRate'), '8000')
     await user.click(screen.getByRole('button', { name: 'form.save' }))
     await waitFor(() => expect(onSubmit).not.toHaveBeenCalled())
   })
