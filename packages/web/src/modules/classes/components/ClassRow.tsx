@@ -14,16 +14,9 @@ interface ClassRowProps {
   onDelete: (c: VehicleClassData) => void
 }
 
-function formatYen(value: number | null): string | null {
-  if (value == null) return null
-  return `¥${value.toLocaleString('en-US')}`
-}
-
 export function ClassRow({ vehicleClass: c, stats, onEdit, onDelete }: ClassRowProps) {
   const t = useTranslations('business.classes')
   const tAcriss = useTranslations('acriss')
-  const daily = formatYen(c.dailyRateJpy)
-  const hourly = formatYen(c.hourlyRateJpy)
   // Friendly ACRISS label with raw-code fallback: a code outside the 8-key
   // dictionary (operators may enter their own) must render the code itself,
   // never a missing-key crash (#388).
@@ -52,8 +45,6 @@ export function ClassRow({ vehicleClass: c, stats, onEdit, onDelete }: ClassRowP
           <span>{t('stats.activeBookings', { count: stats.activeBookingsCount })}</span>
           <span>{t('stats.seats', { count: c.seats })}</span>
           <span>{t('stats.luggage', { count: c.luggageCapacity })}</span>
-          {daily && <span>{t('stats.daily', { amount: daily })}</span>}
-          {hourly && <span>{t('stats.hourly', { amount: hourly })}</span>}
         </div>
       </div>
 

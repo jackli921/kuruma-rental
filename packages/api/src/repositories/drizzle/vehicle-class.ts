@@ -71,8 +71,6 @@ export class DrizzleVehicleClassRepository implements VehicleClassRepository {
         luggageCapacity: data.luggageCapacity,
         transmission: data.transmission,
         fuelType: data.fuelType,
-        dailyRateJpy: data.dailyRateJpy,
-        hourlyRateJpy: data.hourlyRateJpy,
         acrissCode: data.acrissCode,
         sortOrder: data.sortOrder,
         status: data.status,

@@ -91,8 +91,6 @@ describe('Booking Routes', () => {
       luggageCapacity: 2,
       transmission: 'AUTO',
       fuelType: null,
-      dailyRateJpy: 8000,
-      hourlyRateJpy: null,
       sortOrder: 0,
       status: 'ACTIVE',
     })
@@ -607,8 +605,10 @@ describe('Booking Routes', () => {
       expect(body.data.classId).toBe(testClassId)
       expect(body.data.vehicleId).toBeNull()
       expect(body.data.status).toBe('CONFIRMED')
-      // Falls back to class rate (8000 JPY/day × 1 day)
-      expect(body.data.totalPrice).toBe(8000)
+      // #406: a class-only booking has no price source (class pricing is gone,
+      // vehicle not yet assigned) — totalPrice is null until a vehicle is
+      // assigned (price snapshot on assignment is slice 6).
+      expect(body.data.totalPrice).toBeNull()
     })
 
     it('rejects booking when vehicle does not belong to the selected class', async () => {
@@ -1066,25 +1066,11 @@ describe('Booking Routes', () => {
         expect(body.data.totalPrice).toBe(10000)
       })
 
-      // Issue #308: pricing now falls back to class rate when the vehicle
-      // has no override. The old "vehicle with null rates → NO_RATES_SET"
-      // behaviour no longer applies — the class itself enforces non-null
-      // pricing at the schema level.
-      it('uses class rate when vehicle has no override rates set', async () => {
-        const vehicleId = await seedVehicleWithRates({
-          dailyRateJpy: null,
-          hourlyRateJpy: null,
-        })
-
-        const res = await createBooking({
-          ...validBookingInput(),
-          vehicleId,
-        })
-
-        expect(res.status).toBe(201)
-        const body = await res.json()
-        expect(body.data.totalPrice).toBe(8000) // class dailyRateJpy
-      })
+      // #406: class pricing is gone. A vehicle with both rates null is now
+      // unreachable (vehicle schema "at least one rate" + DB CHECK
+      // vehicles_pricing_at_least_one), so the old "falls back to class rate"
+      // path is deleted. Class-only (vehicle-less) pricing is covered by the
+      // "class-only booking … totalPrice null" test above.
     })
   })
 
@@ -1203,6 +1189,22 @@ describe('Booking Routes', () => {
       expect(body.success).toBe(true)
       expect(body.data.status).toBe('CANCELLED')
       expect(body.data.id).toBe(created.data.id)
+    })
+
+    it('cancels a class-only (null-total) booking with a zero fee (#406)', async () => {
+      // A class-only booking has no price source (#406) so totalPrice is null.
+      // The cancellation fee is a percentage of the total, so a null total
+      // yields 0. Pinned here so the `?? 0` in BookingService.cancel stays an
+      // intentional choice, not an accidental one (revisited in slice 6).
+      const createRes = await createBooking(validBookingInput())
+      const created = await createRes.json()
+      expect(created.data.totalPrice).toBeNull()
+
+      const res = await app.request(`/bookings/${created.data.id}/cancel`, { method: 'POST' })
+      expect(res.status).toBe(200)
+      const body = await res.json()
+      expect(body.data.status).toBe('CANCELLED')
+      expect(body.data.cancellationFee).toBe(0)
     })
 
     it('rejects cancelling an already COMPLETED booking with 409', async () => {

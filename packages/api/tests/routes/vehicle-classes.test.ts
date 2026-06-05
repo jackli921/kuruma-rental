@@ -37,7 +37,6 @@ function validInput() {
     seats: 5,
     luggageCapacity: 2,
     transmission: 'AUTO' as const,
-    dailyRateJpy: 5500,
   }
 }
 
@@ -124,13 +123,13 @@ describe('Vehicle Class CRUD Routes', () => {
       expect(res.status).toBe(409)
     })
 
-    it('rejects when both rates missing', async () => {
-      const res = await createClass({
-        ...validInput(),
-        slug: 'no-rate',
-        dailyRateJpy: undefined as unknown as number,
-      })
-      expect(res.status).toBe(400)
+    it('creates a class without any rate fields (#406 — pricing is vehicle-level)', async () => {
+      const res = await createClass({ ...validInput(), slug: 'no-rate' })
+      expect(res.status).toBe(201)
+      const { data } = await res.json()
+      expect(data.slug).toBe('no-rate')
+      expect('dailyRateJpy' in data).toBe(false)
+      expect('hourlyRateJpy' in data).toBe(false)
     })
   })
 
@@ -193,6 +192,28 @@ describe('Vehicle Class CRUD Routes', () => {
       const { data } = await res.json()
       expect(data.name).toBe('Renamed')
       expect(data.operatorId).toBe(originalOperatorId)
+    })
+
+    it('a name-only PATCH preserves existing photos and sortOrder (issue #430)', async () => {
+      // Regression: .partial() kept the base .default()s, so a name-only patch
+      // parsed as { name, photos: [], sortOrder: 0 } and wiped both columns.
+      const photos = ['https://cdn.example.com/a.jpg', 'https://cdn.example.com/b.jpg']
+      const { data: created } = await (
+        await createClass({ ...validInput(), photos, sortOrder: 9 })
+      ).json()
+      expect(created.photos).toEqual(photos)
+      expect(created.sortOrder).toBe(9)
+
+      const res = await app.request(`/vehicle-classes/${created.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: 'Renamed' }),
+      })
+      expect(res.status).toBe(200)
+      const { data } = await res.json()
+      expect(data.name).toBe('Renamed')
+      expect(data.photos).toEqual(photos)
+      expect(data.sortOrder).toBe(9)
     })
   })
 
@@ -263,15 +284,17 @@ describe('Vehicle Class CRUD Routes', () => {
       expect(res.status).toBe(409)
     })
 
-    it('returns 400 when both rates nullified', async () => {
+    it('accepts a patch with no rate fields — no "at least one rate" gate (#406)', async () => {
       const createRes = await createClass()
       const { data: created } = await createRes.json()
       const res = await app.request(`/vehicle-classes/${created.id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ dailyRateJpy: null, hourlyRateJpy: null }),
+        body: JSON.stringify({ name: 'Renamed' }),
       })
-      expect(res.status).toBe(400)
+      expect(res.status).toBe(200)
+      const { data } = await res.json()
+      expect(data.name).toBe('Renamed')
     })
   })
 

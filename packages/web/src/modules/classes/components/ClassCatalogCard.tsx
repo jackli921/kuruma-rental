@@ -1,5 +1,4 @@
 import { Link } from '@/i18n/routing'
-import { formatJpy } from '@/lib/format'
 import { Car, Settings2, Users } from 'lucide-react'
 import { useTranslations } from 'next-intl'
 import type { VehicleClassData } from '../api'
@@ -14,7 +13,6 @@ export function ClassCatalogCard({ vehicleClass }: ClassCatalogCardProps) {
 
   const photo = vehicleClass.photos[0]
   const transmissionLabel = vehicleClass.transmission === 'AUTO' ? t('auto') : t('manual')
-  const dailyRate = vehicleClass.dailyRateJpy
   // Locale-correct ACRISS label, falling back to the raw code when it is
   // outside the 8-key dictionary so an off-dictionary code never crashes (#388).
   const acrissCode = vehicleClass.acrissCode
@@ -66,13 +64,6 @@ export function ClassCatalogCard({ vehicleClass }: ClassCatalogCardProps) {
             {transmissionLabel}
           </span>
         </div>
-        {dailyRate != null && (
-          <p className="mt-4 text-sm">
-            <span className="text-muted-foreground">{t('priceFrom')} </span>
-            <span className="font-semibold text-foreground">{formatJpy(dailyRate)}</span>
-            <span className="text-muted-foreground"> {t('perDay')}</span>
-          </p>
-        )}
       </div>
     </Link>
   )

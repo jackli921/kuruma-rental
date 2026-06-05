@@ -239,6 +239,13 @@
       "when": 1780543358568,
       "tag": "0033_add_fee_schedule_class_index",
       "breakpoints": true
+    },
+    {
+      "idx": 34,
+      "version": "7",
+      "when": 1780545488543,
+      "tag": "0034_drop_class_level_pricing",
+      "breakpoints": true
     }
   ]
 }

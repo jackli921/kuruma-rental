@@ -50,20 +50,6 @@ export async function fetchInsuranceOptions(
   return unwrap<InsuranceOptionData[]>(res)
 }
 
-export async function fetchInsuranceOptionById(
-  id: string,
-  token?: string,
-): Promise<InsuranceOptionData | null> {
-  const client = createApiClient(token)
-  try {
-    const res = await client['insurance-options'][':id'].$get({ param: { id } })
-    return await unwrap<InsuranceOptionData>(res)
-  } catch (e) {
-    if (e instanceof Error && e.message === 'Insurance option not found') return null
-    throw e
-  }
-}
-
 export async function createInsuranceOption(
   data: CreateInsuranceOptionInput,
   token?: string,
