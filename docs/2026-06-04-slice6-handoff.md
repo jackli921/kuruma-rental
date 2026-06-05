@@ -3,7 +3,39 @@
 **Resume here after `/clear`.** Worktree: `/Users/jack/Dev/kuruma-slice6`
 Branch: `feat/slice6-booking-events` (base `origin/marketplace-pivot` @ `2fbbedd`).
 
-## SESSION UPDATE 2026-06-05 (cont.) — Task #7 + tenancy contract rewrite LANDED — READ THIS FIRST
+## SESSION UPDATE 2026-06-05 (cont. 2) — Task #6 CORE LANDED + bufferMinutes fully removed — READ THIS FIRST
+
+Commit `2a72f55` (CLEAN — `lint-staged` passed, NO `--no-verify`): the full-monorepo `src`
+tsc is now GREEN. Task #6 (Drizzle bundle) core is done.
+
+- **Drizzle bundle**: new `DrizzleBookingEventRepository` (`drizzle/booking-event.ts`);
+  `reassignVehicle` + three-way `bookingReadScope` on `DrizzleBookingRepository` (mirrors the
+  in-memory repo, replaces the slice-1 PRIVILEGED_ROLES scoping); `createDrizzleTransaction`
+  widened to the 7-repo `TransactionRepos`; booking insert/select reshaped to the marketplace
+  Booking; `bookingColumns`/`toBooking` + new `bookingEventColumns`/`toBookingEvent` in
+  `drizzle/shared.ts`; `bookings.vehicleId`→`assignedVehicleId` in availability (incl. the
+  raw-SQL `b."assignedVehicleId"` in the NOT EXISTS), customer, fleet-overview, vehicle-detail;
+  `vehicles.pickupLocationId` now mapped on insert/select (substitution reads
+  `replacement.pickupLocationId`, `services/booking.ts:437`).
+- **bufferMinutes FULLY REMOVED** (handoff said "drizzle-only"; reality was ~10x): dropped from
+  `VehicleBase`, `validators/vehicle.ts` (incl. the `.default(60)`), `seed.ts` (×15), in-memory
+  availability (param dropped from `getConflictingBookings`), `routes/vehicles.ts`, web
+  `VehicleForm`/`EditVehicleDialog` + en/ja/zh i18n (form key + dead detail keys), and the ~10
+  asserting tests. User explicitly approved "full removal now".
+- Unit/route suites GREEN: api 751, shared 285, web 432; biome clean. 27 files changed.
+
+### NEXT = Task #6.4 (Neon integration tests) — NOT yet done
+`tests/integration/*` (~10 files) still use the OLD booking shape (`vehicleId:`, no
+`bookingCode`/pickup-dropoff, server-derived operatorId) + bufferMinutes turnaround math. They
+need a contract rewrite (same shape as the #7 route-test rewrite) and a run against the
+isolated `slice6-dev` Neon branch (worktree `.env` already points there) to exercise the real
+exclusion (23P01), bookingCode unique (23505), and composite FKs (23503). After that: #8 web
+`bookings/new` form, #9 form-onwards E2E, #10 full gate, #11 review → rebase → DRAFT PR.
+Do NOT weaken assertions; superseded-shape tests get REWRITTEN. `#392` stays OPEN.
+
+---
+
+## SESSION UPDATE 2026-06-05 (cont.) — Task #7 + tenancy contract rewrite LANDED — (prior session; superseded by cont. 2 above)
 
 Commits since #5 (`1d4aa1e`):
 - `fc75c18` **Task #7 — route migration + concrete-vehicle test rewrite.**
