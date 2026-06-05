@@ -54,8 +54,6 @@ const baseClass = {
   luggageCapacity: 2,
   transmission: 'AUTO' as const,
   fuelType: 'GASOLINE',
-  dailyRateJpy: 8000,
-  hourlyRateJpy: null,
   acrissCode: null,
   sortOrder: 0,
   status: 'ACTIVE' as const,
@@ -74,13 +72,16 @@ describe('ClassCatalogCard', () => {
     expect(link).toHaveAttribute('href', '/vehicles/classes/compact')
   })
 
-  it('shows name, seats, transmission, and daily rate', () => {
+  it('shows name, seats, and transmission', () => {
     render(<ClassCatalogCard vehicleClass={baseClass} />)
     expect(screen.getByText('Compact')).toBeInTheDocument()
     expect(screen.getByText('5 seats')).toBeInTheDocument()
     expect(screen.getByText('Auto')).toBeInTheDocument()
-    // Japanese yen formatting uses ¥ symbol (may be in a nested <span>)
-    expect(screen.getByText(/[¥￥]\s*8,000/)).toBeInTheDocument()
+  })
+
+  it('renders no price on the card (#406 — class pricing dropped; "from" price is slice 5)', () => {
+    render(<ClassCatalogCard vehicleClass={baseClass} />)
+    expect(screen.queryByText(/[¥￥]/)).toBeNull()
   })
 
   it('renders the first photo as hero image with alt=name', () => {
@@ -92,11 +93,6 @@ describe('ClassCatalogCard', () => {
   it('renders placeholder when no photos are present', () => {
     render(<ClassCatalogCard vehicleClass={{ ...baseClass, photos: [] }} />)
     expect(screen.queryByRole('img')).toBeNull()
-  })
-
-  it('hides price when dailyRateJpy is null', () => {
-    render(<ClassCatalogCard vehicleClass={{ ...baseClass, dailyRateJpy: null }} />)
-    expect(screen.queryByText(/[¥￥]/)).toBeNull()
   })
 
   it('shows Manual transmission correctly', () => {

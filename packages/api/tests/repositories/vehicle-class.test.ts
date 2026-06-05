@@ -14,8 +14,6 @@ function vehicleClassInput(overrides?: Partial<VehicleClass>) {
     luggageCapacity: 2,
     transmission: 'AUTO' as const,
     fuelType: 'GASOLINE',
-    dailyRateJpy: 5000,
-    hourlyRateJpy: 1000,
     acrissCode: null,
     sortOrder: 1,
     status: 'ACTIVE' as const,
@@ -76,7 +74,6 @@ describe('InMemoryVehicleClassRepository', () => {
       expect(created.name).toBe('Economy')
       expect(created.slug).toBe('economy')
       expect(created.seats).toBe(4)
-      expect(created.dailyRateJpy).toBe(5000)
     })
 
     it('persists the acrissCode (#388)', async () => {
@@ -123,11 +120,10 @@ describe('InMemoryVehicleClassRepository', () => {
     it('modifies fields and bumps updatedAt', async () => {
       const created = await repo.create(vehicleClassInput())
 
-      const updated = await repo.update(created.id, { name: 'Premium', dailyRateJpy: 8000 })
+      const updated = await repo.update(created.id, { name: 'Premium' })
 
       expect(updated).toBeDefined()
       expect(updated!.name).toBe('Premium')
-      expect(updated!.dailyRateJpy).toBe(8000)
       expect(updated!.updatedAt.getTime()).toBeGreaterThanOrEqual(created.updatedAt.getTime())
     })
 

@@ -73,17 +73,6 @@ export class VehicleClassService {
       }
     }
 
-    const mergedDaily = data.dailyRateJpy !== undefined ? data.dailyRateJpy : existing.dailyRateJpy
-    const mergedHourly =
-      data.hourlyRateJpy !== undefined ? data.hourlyRateJpy : existing.hourlyRateJpy
-    if (mergedDaily == null && mergedHourly == null) {
-      return {
-        ok: false,
-        error: 'At least one rate (daily or hourly) is required',
-        status: 400,
-      }
-    }
-
     const updated = await this.repo.update(id, data)
     if (!updated) {
       return { ok: false, error: 'Vehicle class not found', status: 404 }

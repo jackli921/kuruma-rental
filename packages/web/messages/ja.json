@@ -498,9 +498,7 @@
         "cars": "{count} 台",
         "activeBookings": "利用中 {count} 件",
         "seats": "{count} 人乗り",
-        "luggage": "荷物 {count} 個",
-        "daily": "{amount} /日",
-        "hourly": "{amount} /時間"
+        "luggage": "荷物 {count} 個"
       },
       "form": {
         "name": "クラス名",
@@ -522,10 +520,6 @@
         "fuelTypePlaceholder": "例: ガソリン、ハイブリッド、EV",
         "acrissCode": "ACRISSクラス",
         "acrissCodeNone": "なし",
-        "pricingHeading": "料金 (円)",
-        "pricingHint": "日額または時間額のいずれか必須です。",
-        "dailyRate": "日額",
-        "hourlyRate": "時間額",
         "sortOrder": "並び順",
         "sortOrderHint": "値が小さいほど先に表示されます。同値の場合は名前順。",
         "save": "クラスを保存",

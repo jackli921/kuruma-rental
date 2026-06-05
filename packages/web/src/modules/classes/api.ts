@@ -21,8 +21,6 @@ export interface VehicleClassData {
   luggageCapacity: number
   transmission: 'AUTO' | 'MANUAL'
   fuelType: string | null
-  dailyRateJpy: number | null
-  hourlyRateJpy: number | null
   acrissCode: string | null
   sortOrder: number
   status: 'ACTIVE' | 'ARCHIVED'

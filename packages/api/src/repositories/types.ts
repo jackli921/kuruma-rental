@@ -184,6 +184,18 @@ export interface FleetOverviewRepository {
   findFleetOverview(now: Date): Promise<FleetVehicleOverview[]>
 }
 
+/**
+ * #396: UserRepository is intentionally NOT operator-scoped — it takes no
+ * CallerContext. This stays safe because every ingress already blocks
+ * OPERATOR_* callers from reaching it: /customers is STAFF-gated, /users
+ * resolves OPERATOR_* callers to self-only (they are excluded from the
+ * thread-participant name resolution that renters get), and the booking paths
+ * fail-close at BookingRepository before any user lookup (regression-locked in
+ * tests/routes/operator-user-isolation.test.ts). Renters are shared
+ * marketplace customers (users.operatorId is nullable), so filtering users by
+ * operatorId would hide the very customers operators will later need to see.
+ * Real per-operator scoping is deferred to slice 6 (operator customer access).
+ */
 export interface UserRepository {
   findByIds(ids: string[]): Promise<User[]>
   search(query: string): Promise<User[]>

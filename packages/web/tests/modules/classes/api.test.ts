@@ -19,8 +19,6 @@ const mockClass = {
   luggageCapacity: 2,
   transmission: 'AUTO',
   fuelType: null,
-  dailyRateJpy: 8000,
-  hourlyRateJpy: null,
   sortOrder: 0,
   status: 'ACTIVE',
   createdAt: '2026-01-01T00:00:00Z',
@@ -123,7 +121,6 @@ describe('classes api', () => {
         transmission: 'AUTO' as const,
         photos: [],
         sortOrder: 0,
-        dailyRateJpy: 8000,
       }
       const spy = vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(
         new Response(JSON.stringify({ success: true, data: mockClass }), {

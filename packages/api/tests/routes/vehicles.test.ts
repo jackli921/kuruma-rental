@@ -305,6 +305,29 @@ describe('Vehicle CRUD Routes', () => {
       expect(body.data.transmission).toBe('AUTO')
     })
 
+    it('a name-only PATCH preserves existing photos and bufferMinutes (issue #432)', async () => {
+      // Regression: .partial() kept the base .default()s, so a name-only patch
+      // parsed as { name, photos: [], bufferMinutes: 60 } and wiped photos +
+      // reset bufferMinutes on write.
+      const photos = ['https://cdn.example.com/a.jpg', 'https://cdn.example.com/b.jpg']
+      const createRes = await createVehicle({ ...validVehicleInput(), photos, bufferMinutes: 30 })
+      const created = await createRes.json()
+      expect(created.data.photos).toEqual(photos)
+      expect(created.data.bufferMinutes).toBe(30)
+
+      const res = await app.request(`/vehicles/${created.data.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: 'Renamed' }),
+      })
+
+      expect(res.status).toBe(200)
+      const body = await res.json()
+      expect(body.data.name).toBe('Renamed')
+      expect(body.data.photos).toEqual(photos)
+      expect(body.data.bufferMinutes).toBe(30)
+    })
+
     it('updates licensePlate via PATCH', async () => {
       const createRes = await createVehicle()
       const created = await createRes.json()

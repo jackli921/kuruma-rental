@@ -56,8 +56,6 @@ const baseClass = {
   luggageCapacity: 2,
   transmission: 'AUTO' as const,
   fuelType: 'GASOLINE',
-  dailyRateJpy: 8000,
-  hourlyRateJpy: null,
   acrissCode: null,
   sortOrder: 0,
   status: 'ACTIVE' as const,
@@ -113,9 +111,8 @@ describe('ClassDetailView', () => {
     expect(screen.getByText('GASOLINE')).toBeInTheDocument()
   })
 
-  it('hides price and fuel section when missing', () => {
-    render(<ClassDetailView vehicleClass={{ ...baseClass, dailyRateJpy: null, fuelType: null }} />)
-    expect(screen.queryByText(/[¥￥]/)).toBeNull()
+  it('hides the fuel section when fuelType is missing', () => {
+    render(<ClassDetailView vehicleClass={{ ...baseClass, fuelType: null }} />)
     expect(screen.queryByText('GASOLINE')).toBeNull()
   })
 
