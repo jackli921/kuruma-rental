@@ -1,3 +1,9 @@
+import type {
+  BookingEventPayload,
+  BookingEventType,
+  FeeSnapshotItem,
+  InsuranceSnapshot,
+} from '@kuruma/shared/db/schema'
 import type { LocationOperatingHours } from '@kuruma/shared/types/location'
 
 export interface VehicleClass {
@@ -24,16 +30,30 @@ export type { VehicleBase as Vehicle } from '@kuruma/shared/types/vehicle'
 
 export interface Booking {
   id: string
+  // Tenant owner (#392), server-derived from the assigned vehicle's operator.
+  operatorId: string
   renterId: string
-  // Issue #308: classId is the renter-facing choice (always present).
-  // vehicleId is nullable — owner may assign a specific car later.
+  // classId stays for discovery/grouping; sealed to operatorId by composite FK.
   classId: string
-  vehicleId: string | null
+  // What the renter selected in storefront (slice 5) — immutable audit trail.
+  requestedVehicleId: string
+  // What the operator fulfills; the exclusion constraint keys on this. Server-
+  // derived = requestedVehicleId at submit; operator may substitute (#392).
+  assignedVehicleId: string
+  pickupLocationId: string
+  dropoffLocationId: string
   startAt: Date
   endAt: Date
   effectiveEndAt: Date
   status: 'CONFIRMED' | 'ACTIVE' | 'COMPLETED' | 'CANCELLED'
   source: 'DIRECT' | 'TRIP_COM' | 'MANUAL' | 'OTHER'
+  // Human-facing reservation code, 8-char no-confusables base32 (§10 item 3).
+  bookingCode: string
+  // Selected insurance + its snapshot, locked at booking time. Null = declined.
+  insuranceOptionId: string | null
+  insuranceSnapshot: InsuranceSnapshot | null
+  // Applicable fee_schedules rows snapshotted at booking time (never null).
+  feeSnapshot: FeeSnapshotItem[]
   externalId: string | null
   notes: string | null
   totalPrice: number | null
@@ -42,6 +62,18 @@ export interface Booking {
   idempotencyKey: string | null
   createdAt: Date
   updatedAt: Date
+}
+
+// Append-only booking lifecycle event (#392, proposal §5.2). The events are the
+// source of truth; bookings.status is the write-through projection.
+export interface BookingEvent {
+  id: string
+  bookingId: string
+  type: BookingEventType
+  payload: BookingEventPayload
+  // Renter for CREATED; operator user for SUBSTITUTED/CANCELLED; null = system.
+  actorId: string | null
+  createdAt: Date
 }
 
 export interface Thread {
