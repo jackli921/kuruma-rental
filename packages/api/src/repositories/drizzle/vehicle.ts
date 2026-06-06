@@ -95,6 +95,9 @@ export class DrizzleVehicleRepository implements VehicleRepository {
         // classId at the DB (#395).
         operatorId: data.operatorId,
         classId: data.classId,
+        // Storefront placement (#435). Composite FK (operatorId, pickupLocationId)
+        // -> locations seals it to the vehicle's own tenant at the DB (#387).
+        pickupLocationId: data.pickupLocationId,
         name: data.name,
         description: data.description,
         photos: data.photos,

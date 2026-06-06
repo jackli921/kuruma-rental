@@ -329,6 +329,9 @@
         "colorPlaceholder": "例如 白色",
         "class": "类别",
         "classNone": "未分配",
+        "pickupLocation": "取车地点",
+        "pickupLocationNone": "无取车地点",
+        "pickupLocationCurrent": "当前取车地点",
         "operator": "运营商",
         "operatorPlaceholder": "选择运营商",
         "operatorRequired": "请选择运营商以继续"

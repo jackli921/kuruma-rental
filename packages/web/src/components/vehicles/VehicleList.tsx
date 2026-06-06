@@ -24,6 +24,7 @@ import { cn } from '@/lib/utils'
 import { fetchFleetOverviewAction } from '@/lib/vehicle-actions'
 import type { VehicleData } from '@/lib/vehicle-api'
 import { classKeys, fetchClassesAction } from '@/modules/classes'
+import { fetchLocationsAction, locationKeys } from '@/modules/locations'
 import { fetchOperatorsAction, operatorKeys } from '@/modules/operators'
 import { useQuery } from '@tanstack/react-query'
 import { AlertCircle, Car, ChevronLeft, ChevronRight, Plus, SlidersHorizontal } from 'lucide-react'
@@ -108,6 +109,22 @@ export function VehicleList() {
     queryKey: operatorKeys.list(),
     queryFn: async () => {
       const result = await fetchOperatorsAction()
+      if (!result.success) throw new Error(result.error)
+      return result.data
+    },
+  })
+
+  // #435: locations power the pickup-location dropdown in the add/edit dialogs.
+  // `includeAll: true` lets bypass-scope admins (PLATFORM_ADMIN) read across
+  // operators — without it GET /locations 400s for them, leaving the picker
+  // empty on exactly the operator-picker path this supports. Operator-scoped
+  // callers ignore the flag and auto-scope. Active-only (archived must never be
+  // an assignment target). Own cache key — `list()` is the archived-including
+  // Locations-page list, so sharing it would leak archived rows into the picker.
+  const { data: locations } = useQuery({
+    queryKey: locationKeys.assignable(),
+    queryFn: async () => {
+      const result = await fetchLocationsAction({ includeAll: true })
       if (!result.success) throw new Error(result.error)
       return result.data
     },
@@ -397,12 +414,14 @@ export function VehicleList() {
           open={showAddDialog}
           onOpenChange={setShowAddDialog}
           classes={classes}
+          locations={locations}
           operators={operators}
         />
         <EditVehicleDialog
           vehicle={editingVehicle}
           onOpenChange={() => setEditingVehicle(null)}
           classes={classes}
+          locations={locations}
         />
         <RetireVehicleDialog
           vehicle={retiringVehicle}

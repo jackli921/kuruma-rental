@@ -27,6 +27,9 @@ async function withAuth<T>(fn: (token: string) => Promise<T>): Promise<ActionRes
 
 export async function fetchLocationsAction(options?: {
   includeArchived?: boolean
+  // #435: lets the vehicle picker request a cross-operator active list so
+  // bypass-scope admins don't hit the GET /locations 400 scope guard.
+  includeAll?: boolean
 }): Promise<ActionResult<LocationData[]>> {
   return withAuth((token) => fetchLocations(options ?? {}, token))
 }

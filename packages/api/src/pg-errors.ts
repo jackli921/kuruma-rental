@@ -18,6 +18,15 @@ export const PG_ERROR = {
 export const VEHICLES_CLASS_FK = 'vehicles_operatorId_classId_fk'
 
 /**
+ * Composite FK vehicles(operatorId, pickupLocationId) -> locations(operatorId, id),
+ * named explicitly in schema.ts (#387 slice 2). vehicles carries three FKs, so a
+ * 23503 alone is ambiguous; match on this name to tell a bad (or cross-tenant)
+ * pickupLocationId apart from a bad classId or operatorId (#435, mirrors
+ * VEHICLES_CLASS_FK / #400).
+ */
+export const VEHICLES_PICKUP_LOCATION_FK = 'vehicles_operatorId_pickupLocationId_fk'
+
+/**
  * Composite FK fee_schedules(operatorId, vehicleClassId) -> vehicle_classes(operatorId, id),
  * named explicitly in schema.ts. fee_schedules also carries operatorId -> operators, so a
  * 23503 alone is ambiguous; match on this name to tell a bad (or cross-tenant) vehicleClassId

@@ -40,12 +40,16 @@ vi.mock('next-intl', () => ({
       'form.operator': 'Operator',
       'form.operatorPlaceholder': 'Select an operator',
       'form.operatorRequired': 'Operator is required',
+      'form.pickupLocation': 'Pickup location',
+      'form.pickupLocationNone': 'No pickup location',
+      'form.pickupLocationCurrent': 'Current pickup location',
     }
     return messages[key] ?? key
   },
 }))
 
 import { VehicleForm } from '@/components/vehicles/VehicleForm'
+import type { LocationData } from '@/modules/locations'
 
 describe('VehicleForm', () => {
   afterEach(() => {
@@ -417,6 +421,262 @@ describe('VehicleForm', () => {
     it('does not render the dropdown when no classes are passed', () => {
       render(<VehicleForm onSubmit={vi.fn()} />)
       expect(screen.queryByLabelText('Class')).not.toBeInTheDocument()
+    })
+  })
+
+  // Issue #435: pickup-location assignment dropdown (mirrors classId; the
+  // (operatorId, pickupLocationId) composite FK means the picker is scoped
+  // to the selected operator exactly like the class picker).
+  describe('pickup location assignment', () => {
+    const baseLocation = {
+      address: '1-1 Test',
+      operatingHours: {} as LocationData['operatingHours'],
+      timezone: 'Asia/Tokyo',
+      defaultTurnaroundMinutes: 60,
+      status: 'ACTIVE' as const,
+      createdAt: '2026-01-01T00:00:00.000Z',
+      updatedAt: '2026-01-01T00:00:00.000Z',
+    }
+    const locations: LocationData[] = [
+      {
+        ...baseLocation,
+        id: '0a000000-0000-4000-8000-000000000001',
+        operatorId: 'op_a',
+        name: 'Osaka Namba',
+      },
+      {
+        ...baseLocation,
+        id: '0a000000-0000-4000-8000-000000000002',
+        operatorId: 'op_a',
+        name: 'Kyoto Station',
+      },
+    ]
+
+    it('renders a pickup-location dropdown with None + each location as options', () => {
+      render(<VehicleForm onSubmit={vi.fn()} locations={locations} />)
+
+      const select = screen.getByLabelText('Pickup location') as HTMLSelectElement
+      expect(select).toBeInTheDocument()
+      expect(Array.from(select.options).map((o) => o.value)).toEqual([
+        '',
+        '0a000000-0000-4000-8000-000000000001',
+        '0a000000-0000-4000-8000-000000000002',
+      ])
+    })
+
+    it('submits the selected pickupLocationId', async () => {
+      const user = userEvent.setup()
+      const onSubmit = vi.fn().mockResolvedValue(undefined)
+      render(
+        <VehicleForm
+          onSubmit={onSubmit}
+          locations={locations}
+          defaultValues={{ name: 'Fit', seats: 5, transmission: 'AUTO', dailyRateJpy: 7000 }}
+        />,
+      )
+
+      await user.selectOptions(
+        screen.getByLabelText('Pickup location'),
+        '0a000000-0000-4000-8000-000000000002',
+      )
+      await user.click(screen.getByRole('button', { name: 'Save vehicle' }))
+
+      await waitFor(() => expect(onSubmit).toHaveBeenCalledTimes(1))
+      expect(onSubmit.mock.calls[0][0].pickupLocationId).toBe(
+        '0a000000-0000-4000-8000-000000000002',
+      )
+    })
+
+    it('submits null when No pickup location is selected', async () => {
+      const user = userEvent.setup()
+      const onSubmit = vi.fn().mockResolvedValue(undefined)
+      render(
+        <VehicleForm
+          onSubmit={onSubmit}
+          locations={locations}
+          defaultValues={{
+            name: 'Fit',
+            seats: 5,
+            transmission: 'AUTO',
+            dailyRateJpy: 7000,
+            pickupLocationId: '0a000000-0000-4000-8000-000000000001',
+          }}
+        />,
+      )
+
+      await user.selectOptions(screen.getByLabelText('Pickup location'), '')
+      await user.click(screen.getByRole('button', { name: 'Save vehicle' }))
+
+      await waitFor(() => expect(onSubmit).toHaveBeenCalledTimes(1))
+      expect(onSubmit.mock.calls[0][0].pickupLocationId).toBeNull()
+    })
+
+    it('pre-selects the vehicle pickupLocationId in edit mode', () => {
+      render(
+        <VehicleForm
+          onSubmit={vi.fn()}
+          locations={locations}
+          defaultValues={{
+            name: 'Fit',
+            seats: 5,
+            transmission: 'AUTO',
+            dailyRateJpy: 7000,
+            pickupLocationId: '0a000000-0000-4000-8000-000000000002',
+          }}
+        />,
+      )
+
+      expect((screen.getByLabelText('Pickup location') as HTMLSelectElement).value).toBe(
+        '0a000000-0000-4000-8000-000000000002',
+      )
+    })
+
+    it('does not render the dropdown when no locations are passed', () => {
+      render(<VehicleForm onSubmit={vi.fn()} />)
+      expect(screen.queryByLabelText('Pickup location')).not.toBeInTheDocument()
+    })
+
+    it('scopes the location dropdown to the selected operator', async () => {
+      const user = userEvent.setup()
+      const operators = [
+        { id: 'op_a', name: 'Best Car Rental', slug: 'best-car-rental' },
+        { id: 'op_b', name: 'Acme Cars', slug: 'acme-cars' },
+      ]
+      const scoped: LocationData[] = [
+        {
+          ...baseLocation,
+          id: '0b000000-0000-4000-8000-00000000000a',
+          operatorId: 'op_a',
+          name: 'A Osaka',
+        },
+        {
+          ...baseLocation,
+          id: '0b000000-0000-4000-8000-00000000000b',
+          operatorId: 'op_b',
+          name: 'B Tokyo',
+        },
+      ]
+      render(<VehicleForm onSubmit={vi.fn()} operators={operators} locations={scoped} />)
+
+      await user.selectOptions(screen.getByLabelText('Operator'), 'op_a')
+      const select = screen.getByLabelText('Pickup location') as HTMLSelectElement
+      expect(Array.from(select.options).map((o) => o.value)).toEqual([
+        '',
+        '0b000000-0000-4000-8000-00000000000a',
+      ])
+    })
+
+    it('clears a stale pickupLocationId when the operator changes', async () => {
+      const user = userEvent.setup()
+      const onSubmit = vi.fn().mockResolvedValue(undefined)
+      const operators = [
+        { id: 'op_a', name: 'Best Car Rental', slug: 'best-car-rental' },
+        { id: 'op_b', name: 'Acme Cars', slug: 'acme-cars' },
+      ]
+      const scoped: LocationData[] = [
+        {
+          ...baseLocation,
+          id: '0b000000-0000-4000-8000-00000000000a',
+          operatorId: 'op_a',
+          name: 'A Osaka',
+        },
+        {
+          ...baseLocation,
+          id: '0b000000-0000-4000-8000-00000000000b',
+          operatorId: 'op_b',
+          name: 'B Tokyo',
+        },
+      ]
+      render(<VehicleForm onSubmit={onSubmit} operators={operators} locations={scoped} />)
+
+      await user.selectOptions(screen.getByLabelText('Operator'), 'op_a')
+      await user.selectOptions(
+        screen.getByLabelText('Pickup location'),
+        '0b000000-0000-4000-8000-00000000000a',
+      )
+      // Switching operators must drop the now cross-operator location.
+      await user.selectOptions(screen.getByLabelText('Operator'), 'op_b')
+      await user.type(screen.getByLabelText('Vehicle name'), 'Corolla')
+      await user.type(screen.getByLabelText('Daily rate'), '8000')
+      await user.click(screen.getByRole('button', { name: 'Save vehicle' }))
+
+      await waitFor(() => expect(onSubmit).toHaveBeenCalledTimes(1))
+      expect(onSubmit.mock.calls[0][0].pickupLocationId).toBeNull()
+    })
+
+    // #435 P2-1: edit mode hides the operator picker, but a bypass admin's
+    // location list spans every operator. Scope by the vehicle's immutable
+    // operatorId so cross-tenant locations are never offered.
+    it('scopes locations to the vehicle operator in edit mode (operatorId prop, no picker)', () => {
+      const multi: LocationData[] = [
+        {
+          ...baseLocation,
+          id: '0c000000-0000-4000-8000-00000000000a',
+          operatorId: 'op_a',
+          name: 'A Osaka',
+        },
+        {
+          ...baseLocation,
+          id: '0c000000-0000-4000-8000-00000000000b',
+          operatorId: 'op_b',
+          name: 'B Tokyo',
+        },
+      ]
+      render(
+        <VehicleForm
+          onSubmit={vi.fn()}
+          operatorId="op_b"
+          locations={multi}
+          defaultValues={{ name: 'Fit', seats: 5, transmission: 'AUTO', dailyRateJpy: 7000 }}
+        />,
+      )
+
+      expect(screen.queryByLabelText('Operator')).not.toBeInTheDocument()
+      const select = screen.getByLabelText('Pickup location') as HTMLSelectElement
+      expect(Array.from(select.options).map((o) => o.value)).toEqual([
+        '',
+        '0c000000-0000-4000-8000-00000000000b',
+      ])
+    })
+
+    // #435 P1-2: a vehicle assigned to a since-archived location — the id is
+    // absent from the active list. Without preservation the unmatched <select>
+    // falls back to empty and a normal save silently nulls pickupLocationId.
+    it('preserves an assigned location missing from the active list and submits it unchanged', async () => {
+      const user = userEvent.setup()
+      const onSubmit = vi.fn().mockResolvedValue(undefined)
+      const ARCHIVED = '0d000000-0000-4000-8000-00000000000f'
+      const active: LocationData[] = [
+        {
+          ...baseLocation,
+          id: '0a000000-0000-4000-8000-000000000001',
+          operatorId: 'op_a',
+          name: 'Osaka Namba',
+        },
+      ]
+      render(
+        <VehicleForm
+          onSubmit={onSubmit}
+          operatorId="op_a"
+          locations={active}
+          defaultValues={{
+            name: 'Fit',
+            seats: 5,
+            transmission: 'AUTO',
+            dailyRateJpy: 7000,
+            pickupLocationId: ARCHIVED,
+          }}
+        />,
+      )
+
+      const select = screen.getByLabelText('Pickup location') as HTMLSelectElement
+      expect(Array.from(select.options).map((o) => o.value)).toContain(ARCHIVED)
+      expect(select.value).toBe(ARCHIVED)
+      expect(screen.getByRole('option', { name: 'Current pickup location' })).toBeInTheDocument()
+
+      await user.click(screen.getByRole('button', { name: 'Save vehicle' }))
+      await waitFor(() => expect(onSubmit).toHaveBeenCalledTimes(1))
+      expect(onSubmit.mock.calls[0][0].pickupLocationId).toBe(ARCHIVED)
     })
   })
 

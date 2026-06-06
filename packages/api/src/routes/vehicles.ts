@@ -6,18 +6,31 @@ import {
 } from '@kuruma/shared/validators/vehicle'
 import { Hono } from 'hono'
 import { FLEET_WRITE_ROLES, requireUser, toCallerContext } from '../middleware/auth'
-import { PG_ERROR, VEHICLES_CLASS_FK, pgConstraintName, pgErrorCode } from '../pg-errors'
+import {
+  PG_ERROR,
+  VEHICLES_CLASS_FK,
+  VEHICLES_PICKUP_LOCATION_FK,
+  pgConstraintName,
+  pgErrorCode,
+} from '../pg-errors'
 import type { Vehicle, VehicleFilters, VehicleRepository } from '../repositories/types'
 import type { MaintenanceService } from '../services/maintenance'
 import type { ResolveWriteOperatorId } from '../tenancy'
 import { fail, ok, parseBody, parsePagination, stripUndefined } from './helpers'
 
-// #400: vehicles carries two FKs — the composite (operatorId, classId) ->
-// vehicle_classes (classId guard) and the single operatorId -> operators. Map
-// each 23503 to the cause that actually failed so a bad operatorId isn't
-// reported as "Invalid vehicle class".
+// vehicles carries three FKs — composite (operatorId, classId) -> vehicle_classes
+// (#400), composite (operatorId, pickupLocationId) -> locations (#435), and the
+// single operatorId -> operators. A 23503 alone is ambiguous, so match the
+// constraint name to report the cause that actually failed.
 function fkViolationMessage(err: unknown): string {
-  return pgConstraintName(err) === VEHICLES_CLASS_FK ? 'Invalid vehicle class' : 'Invalid operator'
+  switch (pgConstraintName(err)) {
+    case VEHICLES_CLASS_FK:
+      return 'Invalid vehicle class'
+    case VEHICLES_PICKUP_LOCATION_FK:
+      return 'Invalid pickup location'
+    default:
+      return 'Invalid operator'
+  }
 }
 
 export function createVehicleRoutes(
@@ -62,10 +75,9 @@ export function createVehicleRoutes(
         const vehicle = await repo.create(ctx, {
           operatorId,
           classId: parsed.data.classId ?? null,
-          // Write path (operator assigns a pickup location) is a slice-2
-          // follow-up; createVehicleSchema has no pickupLocationId yet, so
-          // the API creates vehicles unassigned. Slice 5 only reads it.
-          pickupLocationId: null,
+          // Storefront placement (#435). A cross-tenant or missing location is
+          // sealed by the composite FK below and mapped to 422.
+          pickupLocationId: parsed.data.pickupLocationId ?? null,
           name: parsed.data.name,
           description: parsed.data.description ?? null,
           photos: parsed.data.photos,
@@ -148,6 +160,8 @@ export function createVehicleRoutes(
       const changes = {
         ...d,
         classId: merge('classId', existing.classId),
+        // #435: explicit-null clears the assignment; absent keeps existing.
+        pickupLocationId: merge('pickupLocationId', existing.pickupLocationId),
         description: merge('description', existing.description),
         fuelType: merge('fuelType', existing.fuelType),
         licensePlate: merge('licensePlate', existing.licensePlate),

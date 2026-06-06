@@ -12,6 +12,7 @@ import { useVehicleMutation } from '@/hooks/useVehicleMutation'
 import { OPERATOR_REQUIRED } from '@/lib/api-error'
 import { createVehicleAction } from '@/lib/vehicle-actions'
 import type { VehicleClassData } from '@/modules/classes'
+import type { LocationData } from '@/modules/locations'
 import { type OperatorOption, operatorKeys } from '@/modules/operators'
 import { useQueryClient } from '@tanstack/react-query'
 import { useTranslations } from 'next-intl'
@@ -21,6 +22,7 @@ interface AddVehicleDialogProps {
   open: boolean
   onOpenChange: (open: boolean) => void
   classes?: readonly VehicleClassData[] | undefined
+  locations?: readonly LocationData[] | undefined
   operators?: readonly OperatorOption[] | undefined
 }
 
@@ -28,6 +30,7 @@ export function AddVehicleDialog({
   open,
   onOpenChange,
   classes,
+  locations,
   operators,
 }: AddVehicleDialogProps) {
   const t = useTranslations('business.vehicles')
@@ -64,6 +67,7 @@ export function AddVehicleDialog({
           onCancel={() => handleOpenChange(false)}
           isSubmitting={isPending}
           classes={classes}
+          locations={locations}
           operators={operators}
           operatorRequired={operatorRequired}
         />
