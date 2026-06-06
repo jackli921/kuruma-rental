@@ -102,6 +102,26 @@ export interface Message {
   createdAt: Date
 }
 
+// Slice 7 (#393): one row per outbound email. status drives the lease-bounded
+// send lifecycle (QUEUED -> SENDING -> SENT/FAILED); idempotencyKey seals one
+// logical notification per (booking, kind).
+export interface NotificationLog {
+  id: string
+  bookingId: string
+  operatorId: string
+  kind: 'OPERATOR_BOOKING_ALERT' | 'RENTER_BOOKING_CONFIRM'
+  channel: string
+  recipient: string
+  locale: string
+  status: 'QUEUED' | 'SENDING' | 'SENT' | 'FAILED'
+  providerMessageId: string | null
+  error: string | null
+  attempts: number
+  idempotencyKey: string
+  createdAt: Date
+  updatedAt: Date
+}
+
 export interface MaintenanceLog {
   id: string
   vehicleId: string

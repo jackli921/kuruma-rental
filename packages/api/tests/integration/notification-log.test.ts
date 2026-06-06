@@ -1,10 +1,14 @@
 import { BEST_CAR_RENTAL_OPERATOR_ID } from '@kuruma/shared/db/constants'
 import { notificationLog, users } from '@kuruma/shared/db/schema'
-import { eq } from 'drizzle-orm'
+import { eq, sql } from 'drizzle-orm'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { SYSTEM_CONTEXT } from '../../src/middleware/auth'
 import { pgErrorCode } from '../../src/pg-errors'
-import { DrizzleBookingRepository, DrizzleVehicleRepository } from '../../src/repositories/drizzle'
+import {
+  DrizzleBookingRepository,
+  DrizzleNotificationLogRepository,
+  DrizzleVehicleRepository,
+} from '../../src/repositories/drizzle'
 import type { Vehicle } from '../../src/stores'
 import { bookingInput } from '../helpers/booking'
 import {
@@ -144,5 +148,42 @@ describe('notification_log schema invariants', () => {
       .values(row({ operatorId: 'missing-operator', idempotencyKey: 'notify:bad-operator:x' }))
       .catch((e: unknown) => e)
     expect(pgErrorCode(err)).toBe('23503')
+  })
+})
+
+// Proves the §3 atomic claim predicate against REAL Postgres — the InMemory unit
+// tests cover the contract, but only this exercises the SQL `status IN (...) OR
+// (SENDING AND updatedAt < now() - lease)` and the RETURNING-no-row guard.
+describe('DrizzleNotificationLogRepository claim lease (§3)', () => {
+  const repo = new DrizzleNotificationLogRepository(db)
+  const keyFor = (kind: string) => `notify:${testBookingId}:claim-${kind}`
+
+  it('claims a QUEUED row to SENDING, then refuses to re-claim a LIVE lease', async () => {
+    const queued = await repo.upsertQueued(row({ idempotencyKey: keyFor('live') }))
+    const first = await repo.claim(queued.id)
+    expect(first?.status).toBe('SENDING')
+    expect(first?.attempts).toBe(1)
+    expect(await repo.claim(queued.id)).toBeUndefined() // live lease held
+  })
+
+  it('reclaims a SENDING row whose lease has EXPIRED', async () => {
+    const queued = await repo.upsertQueued(row({ idempotencyKey: keyFor('expired') }))
+    await repo.claim(queued.id)
+    await db
+      .update(notificationLog)
+      .set({ updatedAt: sql`now() - interval '10 minutes'` })
+      .where(eq(notificationLog.id, queued.id))
+    const reclaimed = await repo.claim(queued.id)
+    expect(reclaimed?.status).toBe('SENDING')
+    expect(reclaimed?.attempts).toBe(2)
+  })
+
+  it('upsertQueued returns the existing row unchanged on idempotency conflict', async () => {
+    const first = await repo.upsertQueued(row({ idempotencyKey: keyFor('idem') }))
+    await repo.claim(first.id)
+    await repo.markSent(first.id, 'msg-x')
+    const replay = await repo.upsertQueued(row({ idempotencyKey: keyFor('idem') }))
+    expect(replay.id).toBe(first.id)
+    expect(replay.status).toBe('SENT')
   })
 })
