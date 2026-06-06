@@ -2,6 +2,7 @@ import { type RateLimitBinding, rateLimit } from '@elithrar/workers-hono-rate-li
 import { getDb } from '@kuruma/shared/db'
 import { Hono } from 'hono'
 import { cors } from 'hono/cors'
+import type { GoogleOAuthConfig } from './auth/google'
 import { setupGlobalHandlers } from './error-handlers'
 import { requireAuth } from './middleware/auth'
 import { csrf } from './middleware/csrf'
@@ -471,7 +472,7 @@ export function createApp(overrides?: {
   // hc<AppType> needs this to produce typed client methods.
   return app
     .route('/', health)
-    .route('/', createAuthRoutes())
+    .route('/', createAuthRoutes(resolveGoogleOAuthConfig()))
     .route('/', createFleetOverviewRoutes(fleetOverviewService))
     .route('/', createVehicleDetailRoutes(vehicleDetailService))
     .route(
@@ -517,6 +518,30 @@ export function createApp(overrides?: {
     .route('/', createFeeScheduleRoutes(feeScheduleService, resolveWriteOperatorId))
     .route('/', createNotificationRoutes(notificationService))
     .route('/', createOperatorRoutes(operatorService))
+}
+
+/**
+ * Resolve Google OAuth config from env, or undefined when unconfigured (local
+ * dev / CI without secrets) — the /auth/google/* routes then return 503 rather
+ * than crashing at boot. redirect_uri is derived from AUTH_URL so it always
+ * matches the deployed origin; the post-login target defaults to the first
+ * allowed web origin.
+ */
+function resolveGoogleOAuthConfig(): GoogleOAuthConfig | undefined {
+  const clientId = process.env.AUTH_GOOGLE_ID
+  const clientSecret = process.env.AUTH_GOOGLE_SECRET
+  const authUrl = process.env.AUTH_URL
+  if (!clientId || !clientSecret || !authUrl) return undefined
+
+  const base = authUrl.replace(/\/$/, '')
+  const postLoginRedirect =
+    process.env.WEB_POST_LOGIN_URL ?? resolveAllowedOrigins(process.env.WEB_ORIGIN)[0] ?? base
+  return {
+    clientId,
+    clientSecret,
+    redirectUri: `${base}/auth/google/callback`,
+    postLoginRedirect,
+  }
 }
 
 const DEV_WEB_ORIGINS = ['http://localhost:3001', 'http://127.0.0.1:3001']

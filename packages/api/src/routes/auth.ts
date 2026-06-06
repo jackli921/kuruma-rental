@@ -1,6 +1,13 @@
 import type { Context } from 'hono'
 import { Hono } from 'hono'
 import { deleteCookie, getCookie, setCookie } from 'hono/cookie'
+import {
+  type GoogleOAuthConfig,
+  OAUTH_STATE_COOKIE,
+  OAUTH_STATE_TTL_SECONDS,
+  buildGoogleAuthorizeUrl,
+  randomToken,
+} from '../auth/google'
 import { SESSION_COOKIE, verifySessionCookie } from '../middleware/auth'
 import { fail, ok } from './helpers'
 
@@ -37,8 +44,23 @@ export function clearSessionCookie(c: Context): void {
  * calls this endpoint to learn who it is and to obtain the `csrfToken` it must
  * echo in `X-CSRF-Token` on every state-changing request (design spec §5.3).
  */
-export function createAuthRoutes() {
+export function createAuthRoutes(googleConfig?: GoogleOAuthConfig) {
   return new Hono()
+    .post('/auth/google/start', (c) => {
+      if (!googleConfig) return fail(c, 'Google sign-in is not configured', 503)
+
+      // Bind a fresh state to a short-lived cookie; the callback rejects any
+      // response whose state doesn't match (OAuth CSRF defence).
+      const state = randomToken()
+      setCookie(c, OAUTH_STATE_COOKIE, state, {
+        httpOnly: true,
+        secure: true,
+        sameSite: 'Lax',
+        path: '/',
+        maxAge: OAUTH_STATE_TTL_SECONDS,
+      })
+      return c.redirect(buildGoogleAuthorizeUrl(googleConfig, state), 302)
+    })
     .get('/auth/session', async (c) => {
       const token = getCookie(c, SESSION_COOKIE)
       if (!token) return fail(c, 'Unauthorized', 401)
