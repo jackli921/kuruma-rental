@@ -221,6 +221,29 @@ describe('BookingService.create — single-transaction submit (#392 §4)', () =>
     })
   })
 
+  it('records the acting caller (not the renter) as the BOOKING_CREATED actor for a manual booking', async () => {
+    const h = await setup({ codes: ['MANUAL12'] })
+    const { vehicleId, locationId } = await seedReady(h)
+    const staffCtx: CallerContext = { userId: 'staff-9', role: 'STAFF', bypassScope: true }
+
+    const result = await h.service.create(
+      staffCtx,
+      createInput({
+        requestedVehicleId: vehicleId,
+        pickupLocationId: locationId,
+        dropoffLocationId: locationId,
+        renterId: RENTER, // staff books on behalf of an existing renter
+      }),
+      NOW,
+    )
+
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+    // The booking belongs to the renter, but the audit actor is the staff member.
+    expect(result.booking.renterId).toBe(RENTER)
+    expect(h.events[0]).toMatchObject({ type: 'BOOKING_CREATED', actorId: 'staff-9' })
+  })
+
   it('sets effectiveEndAt = endAt + location turnaround (48h), NOT the legacy 60-min buffer', async () => {
     const h = await setup()
     const { vehicleId, locationId } = await seedReady(h)

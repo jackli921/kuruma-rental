@@ -384,7 +384,11 @@ export class BookingService {
     await repos.bookingEventRepo.append(ctx, {
       bookingId: booking.id,
       type: 'BOOKING_CREATED',
-      actorId: input.renterId,
+      // The actor is who PERFORMED the booking (the authed caller), not the
+      // subject: a staff/manual booking records the staff member, not the
+      // customer. The renter lives in the booking row + payload. Mirrors
+      // VEHICLE_SUBSTITUTED, which also uses ctx.userId.
+      actorId: ctx.userId,
       payload: {
         requestedVehicleId: input.requestedVehicleId,
         assignedVehicleId,
