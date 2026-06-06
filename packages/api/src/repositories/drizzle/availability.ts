@@ -1,30 +1,41 @@
 import { bookings, vehicles } from '@kuruma/shared/db/schema'
-import { and, eq, sql } from 'drizzle-orm'
+import { type SQL, and, eq, sql } from 'drizzle-orm'
 import type { Booking, Vehicle } from '../../stores'
-import type { AvailabilityRepository } from '../types'
+import type { AvailabilityFilters, AvailabilityRepository } from '../types'
 import { type Db, bookingColumns, toBooking, toVehicle, vehicleColumns } from './shared'
 
 export class DrizzleAvailabilityRepository implements AvailabilityRepository {
   constructor(private readonly db: Db) {}
 
-  async findAvailableVehicles(from: Date, to: Date): Promise<Vehicle[]> {
+  async findAvailableVehicles(
+    from: Date,
+    to: Date,
+    filters?: AvailabilityFilters,
+  ): Promise<Vehicle[]> {
     const fromIso = from.toISOString()
     const toIso = to.toISOString()
 
-    const rows = await this.db
-      .select(vehicleColumns)
-      .from(vehicles)
-      .where(
-        and(
-          eq(vehicles.status, 'AVAILABLE'),
-          sql`NOT EXISTS (
+    const conditions: SQL[] = [
+      eq(vehicles.status, 'AVAILABLE'),
+      sql`NOT EXISTS (
             SELECT 1 FROM bookings b
             WHERE b."vehicleId" = ${vehicles.id}
             AND b.status IN ('CONFIRMED', 'ACTIVE')
             AND tstzrange(b."startAt", b."effectiveEndAt") && tstzrange(${fromIso}::timestamptz, ${toIso}::timestamptz)
           )`,
-        ),
-      )
+    ]
+    // Storefront scope (#391): INNER match on the nullable pickupLocationId — a
+    // vehicle with no assigned location matches no locationId, so it is
+    // invisible to storefront search (§9 item 8). Additive; existing callers
+    // pass no filter and scan the whole fleet unchanged.
+    if (filters?.locationId) conditions.push(eq(vehicles.pickupLocationId, filters.locationId))
+    if (filters?.operatorId) conditions.push(eq(vehicles.operatorId, filters.operatorId))
+    if (filters?.classId) conditions.push(eq(vehicles.classId, filters.classId))
+
+    const rows = await this.db
+      .select(vehicleColumns)
+      .from(vehicles)
+      .where(and(...conditions))
     return rows.map(toVehicle)
   }
 

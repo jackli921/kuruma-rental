@@ -35,6 +35,13 @@ function collectTsFiles(dir: string): string[] {
 function checkFile(filePath: string): Violation[] {
   const violations: Violation[] = []
   const rel = relative(API_SRC, filePath)
+
+  // Test files are not part of the production dependency graph. They
+  // legitimately construct concrete repositories to exercise the DI wiring
+  // (a service test injects InMemory doubles by design). The layer-boundary
+  // rules govern production code only, so co-located *.test.ts are exempt.
+  if (rel.endsWith('.test.ts') || rel.endsWith('.spec.ts')) return violations
+
   const lines = readFileSync(filePath, 'utf-8').split('\n')
 
   const isRoute = rel.startsWith('routes/')

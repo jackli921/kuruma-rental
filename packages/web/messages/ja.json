@@ -47,7 +47,8 @@
     "menu": "メニュー",
     "close": "メニューを閉じる",
     "switchToRenter": "利用者ビューに切替",
-    "switchToBusiness": "管理者ビューに切替"
+    "switchToBusiness": "管理者ビューに切替",
+    "search": "検索"
   },
   "acriss": {
     "MCAR": "ミニ",
@@ -770,6 +771,32 @@
     "footer": {
       "copyright": "クルマレンタル 全著作権所有。",
       "tagline": "大阪のレンタカーサービス"
+    }
+  },
+  "search": {
+    "title": "クルマを探す",
+    "subtitle": "受け取り日時で全店舗の空車を検索できます。",
+    "fromLabel": "受け取り日時",
+    "toLabel": "返却日時",
+    "submit": "検索",
+    "needDates": "受け取りと返却の日時を選ぶと、空車のある店舗が表示されます。",
+    "empty": "選択した日時に空車のある店舗はありません。",
+    "fromDaily": "¥{price}〜／日",
+    "fromHourly": "¥{price}〜／時間",
+    "noPrice": "料金はお問い合わせください",
+    "classCount": "{label} {count}台",
+    "seats": "{count}人乗り",
+    "auto": "オートマ",
+    "manual": "マニュアル",
+    "viewStore": "クルマを見る",
+    "detail": {
+      "backToSearch": "検索に戻る",
+      "availableVehicles": "空車",
+      "noVehicles": "選択した日時にこの店舗で利用できるクルマはありません。",
+      "select": "選択",
+      "selectComingSoon": "予約は近日公開",
+      "notFound": "店舗が見つかりません",
+      "notFoundDescription": "この店舗は存在しないか、現在ご利用いただけません。"
     }
   }
 }

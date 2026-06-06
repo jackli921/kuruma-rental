@@ -26,7 +26,10 @@ export async function Navbar() {
   const canSwitchView = isBusiness(role)
   const viewMode = await getViewMode(role)
 
-  const publicItems = [{ href: '/vehicles' as const, label: t('vehicles') }]
+  const publicItems = [
+    { href: '/search' as const, label: t('search') },
+    { href: '/vehicles' as const, label: t('vehicles') },
+  ]
 
   const renterItems = [
     { href: '/bookings' as const, label: t('bookings') },

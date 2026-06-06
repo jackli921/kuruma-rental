@@ -47,7 +47,8 @@
     "menu": "菜单",
     "close": "关闭菜单",
     "switchToRenter": "切换到租客视图",
-    "switchToBusiness": "切换到管理视图"
+    "switchToBusiness": "切换到管理视图",
+    "search": "搜索"
   },
   "acriss": {
     "MCAR": "微型车",
@@ -770,6 +771,32 @@
     "footer": {
       "copyright": "库鲁马租车 版权所有。",
       "tagline": "日本大阪租车服务"
+    }
+  },
+  "search": {
+    "title": "寻找车辆",
+    "subtitle": "按取车时间搜索所有门店的可用车辆。",
+    "fromLabel": "取车日期与时间",
+    "toLabel": "还车日期与时间",
+    "submit": "搜索",
+    "needDates": "选择取车和还车时间即可查看有空车的门店。",
+    "empty": "所选时间内没有门店有可用车辆。",
+    "fromDaily": "¥{price}起／天",
+    "fromHourly": "¥{price}起／小时",
+    "noPrice": "价格请咨询",
+    "classCount": "{label} {count}辆",
+    "seats": "{count}座",
+    "auto": "自动挡",
+    "manual": "手动挡",
+    "viewStore": "查看车辆",
+    "detail": {
+      "backToSearch": "返回搜索",
+      "availableVehicles": "可用车辆",
+      "noVehicles": "所选时间内该门店没有可用车辆。",
+      "select": "选择",
+      "selectComingSoon": "预订即将开放",
+      "notFound": "未找到门店",
+      "notFoundDescription": "该门店不存在或已不可用。"
     }
   }
 }
