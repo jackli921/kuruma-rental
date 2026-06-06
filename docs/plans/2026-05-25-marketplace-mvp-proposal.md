@@ -2,7 +2,7 @@
 
 **Date:** 2026-05-25
 **Status:** Accepted for MVP implementation (Jack, 2026-05-27)
-**Scope update (2026-06-05):** `docs/plans/2026-06-05-scope-update-du-kaku.md` (Du + Kaku alignment) amends §1/§2/§9/§10 — adds in-app payment, document upload + verification, a dual (map/flat-list + storefront) search model, paid add-ons, and a platform-admin revenue portal. MVP-vs-later triage pending.
+**Scope update (2026-06-05):** `docs/plans/2026-06-05-scope-update-du-kaku.md` (Du + Kaku alignment) amends §1/§2/§6/§9/§10 — adds in-app payment, document upload + manual verification, a dual (map/flat-list + storefront) search model, paid add-ons, luggage attributes, and a platform-admin revenue portal. MVP-vs-later triage is resolved in that addendum's §5.
 **Supersedes:** 2026-04-28 email-hub pivot
 **Anchored in:** `docs/internal/2026-05-24-qiao-du-meeting.md`, `docs/meeting_notes/2026_05_24_notes_02.txt`, Du follow-up notes from 2026-05-27
 
@@ -14,7 +14,7 @@ A multi-tenant Airbnb-style car rental marketplace. Partner operators register s
 
 **First operator:** Best Car Rental (Osaka), 30–40 cars. **Second wave:** Mr. Qiao's partner operators (count TBD).
 
-**Out of MVP** (deferred, designed-for): online payment, pre-auth (lives on separate Stripe site), license/IDP/photo upload, calendar dashboards, cancellation/modification UI, OTA email parsing, Trip.com sync (Du's parallel work — integration boundary designed but not built).
+**Out of MVP / fast-follow after 2026-06-05 triage** (deferred, designed-for): class-combo deals with inventory-count availability, automated document verification, richer admin portal workflows, calendar dashboards, cancellation/modification UI, OTA email parsing, Trip.com sync (Du's parallel work — integration boundary designed but not built). In-app Stripe payment, paid add-ons, document upload + manual verification, luggage attributes, map/list search over specific vehicles, and the platform revenue tab are now MVP/MVP-lite per the addendum.
 
 ---
 
@@ -22,7 +22,7 @@ A multi-tenant Airbnb-style car rental marketplace. Partner operators register s
 
 | Decision | Choice | Reversibility |
 |---|---|---|
-| **Search result shape** | NicoNico-style storefront-first flow: search form filters by pickup/return datetime, pickup/return location, and class; results show storefront cards with per-class availability summaries; clicking a storefront shows available individual vehicles at that storefront for selection. | Storefront-first mirrors the reference UX and makes partner/location choice explicit |
+| **Search result shape** | Dual model: keep the NicoNico-style storefront-first flow, and add a map + left-side flat list across operators/locations for specific vehicles. Class-combo deals are designed-for now but fast-follow after demo. | Lets us demo cross-operator discovery without throwing away storefront-first partner/location context |
 | **Class display vs vehicle booking** | ACRISS class is the discovery/filtering/grouping layer; a concrete vehicle is selected before booking submit. Persist both `requested_vehicle_id` (what the renter chose) and `assigned_vehicle_id` (what the operator will fulfill). Initially they are the same. Postgres exclusion constraint on `(assigned_vehicle_id, time_range)` enforces uniqueness atomically. | Class-only booking would have a check-then-act race; selected-vehicle booking lets the DB constraint enforce uniqueness atomically while preserving a path for real-world substitutions |
 | **Class taxonomy** | ACRISS 4-letter codes live on `vehicle_classes.acriss_code`; vehicles reference a class via `vehicles.class_id`; i18n friendly labels render in UI | Reversible (rename labels); adopting ACRISS aligns with OTA standard for future Trip.com sync |
 | **Tenant routing** | Business portal under `/manage/<operator_slug>/...`; renter portal = single URL space (cross-operator search is the point) | Reversible via 301 + URL rewrites; subdomain swap is future post-MVP if white-label needed |
@@ -33,7 +33,7 @@ A multi-tenant Airbnb-style car rental marketplace. Partner operators register s
 | **Vehicle turnaround buffer** | Default 48-hour cooldown after return before the same vehicle is bookable again. Storefront/location default is operator-adjustable; vehicle-level override is allowed for exceptions. Availability and exclusion ranges use `effective_end_at = end_at + turnaround_minutes`. | Prevents immediate re-rental after return and preserves the existing exclusion-constraint model |
 | **Booking write boundary** | Booking submit runs in one DB transaction: validate selected-vehicle availability, insert booking with `requested_vehicle_id` + `assigned_vehicle_id`, insert initial `booking_events`, snapshot applicable fees. Notification work happens after commit via `notification_log`. | Keeps atomic business state in Postgres while avoiding email/network side effects inside the transaction |
 | **Vehicle substitution** | If the selected car becomes unavailable after booking, an operator may substitute another available vehicle from the same operator/location and same-or-better ACRISS class. Substitution updates `assigned_vehicle_id` in a transaction, rechecks availability/exclusion, and appends a `VEHICLE_SUBSTITUTED` booking event with old/new vehicle IDs and reason. | Handles normal rental-ops reality without reverting to vague class-only reservations; audit trail preserves what the renter originally selected |
-| **Additive fees** | `fee_schedules` per operator (optionally per `vehicle_class_id`); platform-defined fee-type enum starts with `OVERTIME_HOURLY` + `CLEANING_FLAT` + `NO_FUEL_FLAT`. Overtime is charged as `ceil(overtime_hours) * hourly_rate_for_class`. At booking: snapshot applicable rows into `bookings.fee_snapshot jsonb` (locks rate-at-time-of-booking). MVP displays informationally on confirmation; no auto-compute/charge. | Snapshot pattern lets post-MVP checkout flow apply actual fees against locked rates without retroactive surprises |
+| **Additive costs** | Two buckets: selectable paid add-ons chosen during booking (baby seat, etc.) and potential post-rental `fee_schedules` (`OVERTIME_HOURLY`, `CLEANING_FLAT`, `NO_FUEL_FLAT`) snapshotted for disclosure. | Keeps paid checkout add-ons separate from later/manual incident fees |
 | **Insurance** | Per-operator `insurance_options`; operator picks which apply per vehicle; seed defaults from notes_02 (150k normal / 250k premium) | Per-operator from start; platform-standard could overlay later |
 | **Locations** | First-class entity, `operator_id` FK, N per operator; bookings carry `pickup_location_id` + `dropoff_location_id` (separate FKs; MVP UX defaults equal) | One-way rental unlocks without schema change |
 | **Booking ID** | UUIDv7 internal + short alphanumeric `booking_code` for human/email reference | UUIDv7 keeps existing pattern (`project_architect-review`) |
@@ -94,12 +94,17 @@ None of the above will paint us into a corner. The two that *touch the most code
 
 ### Renter portal
 
-1. Search — pickup location + return location + start datetime + end datetime + class filters → storefront cards across all operators
-2. Storefront result card — operator/location name, address, distance/area, operating hours, per-class availability summary, min price, and representative photos
+1. Search — pickup location + return location + start datetime + end datetime + class filters → storefront cards plus map/list results over specific vehicles across all operators
+2. Result cards — operator/location, address/area, operating hours, per-class availability or selected vehicle, min price, representative photos, seats, and luggage count/size
 3. Storefront detail — available individual vehicles at that storefront for the selected date range, grouped/filterable by ACRISS class
-4. Booking flow — select vehicle, select insurance, confirm pickup/return locations + dates, enter renter contact (email, name, phone, language)
-5. Booking confirmation page — booking code, selected vehicle details (make/model/license plate), pickup details, **link to pre-auth handoff site** (operator's configured URL), and **"potential additional charges"** block listing snapshotted fees (overtime/hour, cleaning, no-fuel return) — informational only
-6. Confirmation email — booking details + pre-auth link + potential additional charges + cancellation contact
+4. Booking flow — select vehicle, upload document(s), wait for manual verification gate, select paid add-ons, select insurance, confirm pickup/return locations + dates, enter renter contact
+5. Stripe payment — platform account collects the shown price; webhook records `payment_events` with partner-business attribution and 4% platform fee
+6. Booking confirmation page/email — booking code, selected vehicle details, pickup details, pre-auth handoff link, paid selections, and potential additional charges
+
+### Platform admin portal
+
+1. Revenue tab — read-only successful-payment aggregates per partner business
+2. Manual document review — approve/reject uploaded IDP/passport documents before booking can proceed
 
 ### Platform / shared
 
@@ -110,6 +115,7 @@ None of the above will paint us into a corner. The two that *touch the most code
 5. Outbound email via `EmailSender` interface (concrete vendor chosen at slice 7; Resend likely for DX) — see §10 item 2
 6. Operator-scoped query enforcement via `CallerContext`
 7. Operator onboarding for MVP — env-gated admin invite endpoint + seed script; no public self-serve
+8. `payment_events` as Stripe webhook source-of-truth for revenue reporting
 
 ---
 
@@ -126,7 +132,7 @@ None of the above will paint us into a corner. The two that *touch the most code
 | **Demo seed data** — 3+ operators, 30+ vehicles, varied ACRISS codes, multiple locations, sample bookings | New | ~0.5 day |
 | **Integration + i18n keys + polish** | — | 2–3 days |
 | **E2E happy path** — renter search → book → notification email → operator sees it | New | 1–2 days |
-| **Total** | | **~18–23 focused dev days** |
+| **Total** | | **~18–23 focused dev days before 2026-06-05 scope expansion; re-estimate after slice 6 lands** |
 
 Migration epic #378 is **not** in this estimate.
 
@@ -168,7 +174,7 @@ Formalize three long-lived environments + short-lived feature branches:
 
 ## 6. Vertical-slice execution plan (ordered)
 
-Each slice = DB → API → UI → test → mergeable. Slices listed in dependency order; each is shippable.
+Each slice = DB → API → UI → test → mergeable. Slices listed in dependency order; each is shippable. After 2026-06-05 triage, the order after slice 6 is re-baselined to: **7 notifications + pre-auth → luggage + map/list view → doc upload + manual verify → payment + add-ons + `payment_events` → admin revenue tab → 8 demo seed + E2E**.
 
 | # | Slice | What ships | Days |
 |---|---|---|---|
@@ -303,12 +309,12 @@ These are either resolved defaults or implementation notes that should stay visi
 13. **Currency** — JPY only. No conversion in MVP. Trip.com integration will surface multi-currency later, not now.
 14. **Trip.com / Du integration boundary** — beyond #6, design `bookings.source` enum already includes `TRIP_COM` per current schema; honor that.
 15. **Operator slug strategy** — auto-generated from operator name on creation (kebab-case, ASCII, max 32 chars). Collisions append numeric suffix (`acme-2`). Editable only by platform admin (env-gated endpoint), not by operator. Stored as `operators.slug text unique not null`. Used in `/manage/<slug>/...`.
-16. **KANATA / three-party structure** — KANATA STUDIO is platform owner, **implicit** in the data model (no row, no entity). `operators` table holds rental businesses; Best Car Rental is operator #1. Kaku is a business-arrangement concern (sourcing + payment intermediary per `memory/project_business-structure.md`), not a system entity. Commission / revenue-share is **post-MVP** — no money flows through the platform yet (payment is at-store). When that lands, design a `commission_terms` table per-operator.
+16. **KANATA / three-party structure + commission** — KANATA STUDIO is platform owner, **implicit** in the data model (no row, no entity). `operators` table holds rental businesses; Best Car Rental is operator #1. Kaku is a business-arrangement concern, not a system entity. Per 2026-06-05 scope update, money flows through the platform in MVP: Stripe collects the full amount, `payment_events` records partner-business attribution, platform retains 4%, and partner remittance is computed manually at month-end.
 17. **Notification reliability** — at-least-once delivery via Resend's built-in retry. Persist a `notification_log` row per send (`status: queued | sent | failed`). Failed sends visible in operator portal with manual-resend button. No DLQ for MVP.
 18. **Platform brand on renter portal** — renter portal is **platform-neutral** (multi-operator marketplace). Per-card operator name shows as a label, not as branding. Domain near-term is `bestcarrental.jp` per `memory/project_company-identity.md`, with cross-operator listings on it (the brand becomes the marketplace name, not exclusively Mr. Qiao's business).
-19. **Additive fees / potential charges** — `fee_schedules` table per-operator, optionally per-class via nullable `vehicle_class_id` FK. Platform-defined fee-type enum starts with `OVERTIME_HOURLY` + `CLEANING_FLAT` + `NO_FUEL_FLAT` for MVP. Operator sets `amount_jpy` + `unit` (`PER_HOUR` / `PER_DAY` / `PER_KM` / `FLAT`) per row. Overtime calculation rule from Du: `ceil(actual_return_overage_hours) * snapshotted_overtime_hourly_rate_for_class`. At booking, applicable rows snapshot into `bookings.fee_snapshot jsonb` — locks rate-at-time-of-booking so post-MVP checkout charges against the locked rate, not the current one. Confirmation page + email display them as "potential additional charges" — informational only in MVP. Auto-application at checkout is post-MVP (needs damage-assessment + final-charge flow). Pattern matches NicoNico / Hertz fee disclosure.
+19. **Add-ons vs potential charges** — paid add-ons are selected in the booking wizard and charged through Stripe in MVP. `fee_schedules` remain the separate potential-charge model for overtime/cleaning/no-fuel disclosures; applicable rows snapshot into `bookings.fee_snapshot jsonb` and stay informational until a later final-charge workflow exists.
 20. **Turnaround buffer** — default cooldown is 48 hours after scheduled return before the same vehicle appears as available again. Operators can adjust at storefront/location level; individual vehicles can override when needed. Existing `bufferMinutes` concept should be renamed or mapped to `turnaround_minutes` so implementers do not leave the old 60-minute default in place.
-21. **Search API contract** — use two renter-facing read models: storefront search returns location/storefront cards with `class_summaries`; storefront detail returns available vehicles for the selected date range + class filters. Do not return a flat cross-operator vehicle list as the primary search result.
+21. **Search API contract** — use renter-facing read models for both storefront search and map/list vehicle search. Storefront search returns location cards with `class_summaries`; storefront detail returns available vehicles; map/list search returns available specific vehicles across operators/locations. Class-combo results are designed-for but not demo scope.
 22. **Booking transaction boundary** — selected-vehicle booking is one DB transaction for availability validation, booking insert with requested/assigned vehicle IDs, first event insert, and fee snapshot. Email/notification side effects are queued/logged after commit only.
 23. **Platform admin bootstrap** — seed the first platform admin from `PLATFORM_ADMIN_EMAILS`; expose only env-gated admin endpoints for operator creation/invite during MVP. Public operator signup is post-MVP.
 24. **Issue/worktree policy** — create one GitHub epic for the marketplace MVP, then one GitHub issue per vertical slice. Implementation agents work from one issue at a time on `feature/<issue-number>-<slug>` branches/worktrees off `marketplace-pivot`.
@@ -328,10 +334,10 @@ Initial walkthrough decisions from 2026-05-25 plus Du follow-up decisions from 2
 6. **Du discovery session** — still relevant; schedule during slices 2–3 (before slice 4 starts). Targeted at his daily workflow + operator-portal information architecture. Output may surface follow-up work in slice 7–8 polish.
 7. **Operator approval workflow** — invite-only via env-gated admin endpoint for MVP. Matches "partners register as they come" framing — when a partner says yes, Jack creates the operator account. Self-serve signup form is post-MVP.
 8. **Booking modification UI** — none in MVP. Event log makes modification trivially addable post-MVP without schema change.
-9. **Additive cost model** — `fee_schedules` per-operator (optionally per-class) with platform-defined fee-type enum: `OVERTIME_HOURLY` + `CLEANING_FLAT` + `NO_FUEL_FLAT` for MVP. At booking, applicable fees snapshot to `bookings.fee_snapshot jsonb` locking rate-at-time-of-booking. Overtime is later computed as rounded-up overage hours times the snapshotted hourly class rate. Confirmation page + email show informationally; auto-charge at checkout is post-MVP. See §9 item 19 for full schema sketch.
+9. **Additive cost model** — paid add-ons are selected and charged during the MVP booking wizard. Potential post-rental fees still use `fee_schedules`, snapshot into `bookings.fee_snapshot jsonb`, and render informationally until a later final-charge workflow exists.
 10. **NicoNico-style renter flow from Du follow-up** — landing/search collects pickup/return datetime, pickup/return location, and class filters; results are storefront cards with class availability summaries; storefront detail shows available individual vehicles; booking reserves the selected vehicle.
 11. **Turnaround buffer** — default 48 hours after return; configurable by storefront/location with optional vehicle override. Availability and booking conflict ranges use the chosen turnaround.
-12. **Search contract** — storefront cards first, storefront vehicle detail second. This is the primary renter search model; flat all-vehicle search is rejected for MVP because it hides the operator/location choice.
+12. **Search contract** — storefront-first remains supported, but the 2026-06-05 update adds a map + left-side flat list over specific vehicles as MVP-lite. Both flows are first-class; class-combo results are fast-follow.
 13. **ACRISS placement** — `vehicle_classes.acriss_code` is canonical; vehicles point to classes. Rejected: duplicating ACRISS on vehicles unless a future integration proves class records cannot express the needed variance.
 14. **Booking transaction boundary** — booking submit is one DB transaction for selected vehicle availability, booking row with requested/assigned vehicle IDs, initial event, and fee snapshot; notifications happen after commit through `notification_log`.
 15. **Platform admin bootstrap** — seed + env-gated admin endpoint for MVP operator onboarding. Public self-serve registration is post-MVP.
