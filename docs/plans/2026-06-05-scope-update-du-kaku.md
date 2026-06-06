@@ -101,27 +101,29 @@ A **third dashboard**, separate from the renter portal and the operator portal, 
 
 **Demo goal:** a tourist can discover → book → **pay**, and a partner can see their sales + our 4%. The **payment → commission** thread is the spine; everything else is discovery polish.
 
-| New item | Demo | Scope |
-|---|---|---|
-| Wizard + add-ons + Stripe payment (§1.4) | **MVP** | The business model. Stripe **test keys** for the demo. |
-| Platform admin + revenue tab (§1.5) | **MVP** | Partner pitch; read-only aggregates over `payment_events`. |
-| Doc upload + verification (§1.3) | **MVP-lite** | Upload + **manual** admin verify gates booking; automated IDV deferred. |
-| Luggage attributes (§1.2) | **MVP** | Cheap, high tourist value. |
-| Map + flat list over **specific** vehicles (§1.1) | **MVP-lite** | New presentation over slice-5 data. |
-| **Class-combo** deals (§1.1) | **Fast-follow** | New inventory-count availability model; designed-for now, built post-demo. |
+| New item | Demo | Scope | Issue |
+|---|---|---|---|
+| Wizard + add-ons + Stripe payment (§1.4) | **MVP** | The business model. Stripe **test keys** for the demo. | #460 (wizard+add-ons), #461 (Stripe) |
+| Platform admin + revenue tab (§1.5) | **MVP** | Partner pitch; read-only aggregates over `payment_events`. | #462 |
+| Doc upload + verification (§1.3) | **MVP-lite** | Upload + **manual** admin verify gates booking; automated IDV deferred. | #459 (+ retention #466) |
+| Luggage attributes (§1.2) | **MVP** | Cheap, high tourist value. | #457 |
+| Map + flat list over **specific** vehicles (§1.1) | **MVP-lite** | New presentation over slice-5 data. | #458 |
+| **Class-combo** deals (§1.1) | **Fast-follow** | New inventory-count availability model; designed-for now, built post-demo. | #464 |
 
 **Design-for-later commitments (build now so post-demo is additive — no migration churn):**
 
 1. **Stripe = webhook is the source of truth.** The Checkout Session is created **server-side** with `metadata` (partner-business id + booking id); payment is recorded only on the **signed `checkout.session.completed` webhook** (idempotent), never the client redirect. That row drives the 4% calc.
-2. **Booking fulfillment mode** (`SPECIFIC` | `CLASS_COMBO`) column added now — only `SPECIFIC` is exercised for the demo; the availability service + search read-models are shaped so a per-(operator, location, class, time) inventory-count path drops in later.
+2. **Booking fulfillment mode** (`SPECIFIC` | `CLASS_COMBO`) column added now (**#463**) — only `SPECIFIC` is exercised for the demo; the availability service + search read-models are shaped so a per-(operator, location, class, time) inventory-count path drops in later.
 3. **`payment_events` table complete from day one** (operator_id, booking_id, gross, 4% fee, net, stripe ids, status) so the revenue tab is a query post-demo.
 4. **Document verification is manual** for the demo (admin review); automated IDV is fast-follow.
 
 **Re-baselined slice order (supersedes proposal §6):**
 
-finish **6** booking → **7** notifications + pre-auth → **luggage + map/list view** → **doc upload + manual verify** → **payment + add-ons + `payment_events`** → **admin revenue tab** → **8** demo seed + E2E.
+finish **6** booking (#392) → **7** notifications + pre-auth (#393) → **luggage** (#457) **+ map/list view** (#458) → **doc upload + manual verify** (#459, retention #466) → **payment + add-ons** (#460) **+ Stripe/`payment_events`** (#461) → **admin revenue tab** (#462) → **8** demo seed + E2E (#390).
 
-*Post-demo fast-follow:* class-combo deals + inventory availability, automated IDV, richer admin portal.
+*The `fulfillment_mode` affordance (#463) lands with the booking work so class-combo is additive later.*
+
+*Post-demo fast-follow:* class-combo deals + inventory availability (#464), automated IDV (#465), richer admin portal.
 
 **Impact:** these additions **materially expand** the proposal's ~18–23 dev-day estimate (§5/§7) — payment + webhooks, document verification, the third admin portal, and the dual-search presentation are each substantial. Re-estimate after slice 6 lands.
 
