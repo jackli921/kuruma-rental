@@ -58,9 +58,13 @@ export async function Navbar() {
             <span className="hidden sm:inline">Kuruma</span>
           </Link>
 
-          {/* Desktop nav -- hidden for business users when sidebar is present (CSS :has() rule) */}
+          {/* Desktop nav. `data-business-nav` (business view only) drives the
+              business-sidebar hide rule; `data-global-nav` (always present) drives
+              the admin-shell hide rule so renter/public links never bleed onto
+              /admin regardless of view mode (#481 review P2). */}
           <nav
             className="hidden md:flex items-center gap-1"
+            data-global-nav=""
             {...(viewMode === 'business' && { 'data-business-nav': '' })}
           >
             {navItems.map((item) => (

@@ -1,5 +1,6 @@
 import {
   classifyRoute,
+  decideAdminAccess,
   extractSessionRole,
   getLocaleFromPath,
   stripLocale,
@@ -69,6 +70,30 @@ describe('classifyRoute', () => {
     expect(classifyRoute('/dashboard')).toEqual({ type: 'business' })
   })
 
+  test('identifies admin paths and subpaths', () => {
+    expect(classifyRoute('/admin')).toEqual({ type: 'admin' })
+    expect(classifyRoute('/admin/revenue')).toEqual({ type: 'admin' })
+  })
+
+  test('does not gate non-segment /admin lookalikes as admin (#481 review P3)', () => {
+    // `startsWith('/admin')` would over-match these and force a platform-admin
+    // gate onto unrelated future routes. Only `/admin` and real `/admin/...`
+    // subpaths are admin.
+    expect(classifyRoute('/administration')).toEqual({ type: 'public' })
+    expect(classifyRoute('/admin-help')).toEqual({ type: 'public' })
+  })
+
+  test('classifies a protected path regardless of case (#481 review: normalize-before-authorize)', () => {
+    // A non-admin must not slip past the gate via a case-variant path that the
+    // gate would otherwise read as `public`. Authorize on a normalized path.
+    expect(classifyRoute('/Admin')).toEqual({ type: 'admin' })
+    expect(classifyRoute('/ADMIN/revenue')).toEqual({ type: 'admin' })
+    expect(classifyRoute('/Dashboard')).toEqual({ type: 'business' })
+    expect(classifyRoute('/Bookings')).toEqual({ type: 'renter' })
+    // Case-normalization must not resurrect the lookalike over-match.
+    expect(classifyRoute('/Administration')).toEqual({ type: 'public' })
+  })
+
   test('identifies public paths', () => {
     expect(classifyRoute('/')).toEqual({ type: 'public' })
     expect(classifyRoute('/vehicles')).toEqual({ type: 'public' })
@@ -117,5 +142,23 @@ describe('extractSessionRole', () => {
 
   test('returns null when role is an empty string', () => {
     expect(extractSessionRole({ user: { role: '' } })).toBeNull()
+  })
+})
+
+describe('decideAdminAccess', () => {
+  test('unauthenticated (null role) -> login', () => {
+    expect(decideAdminAccess(null)).toEqual({ action: 'login' })
+  })
+
+  test('authenticated non-admin role -> forbidden', () => {
+    expect(decideAdminAccess('RENTER')).toEqual({ action: 'forbidden' })
+    expect(decideAdminAccess('OPERATOR_OWNER')).toEqual({ action: 'forbidden' })
+    expect(decideAdminAccess('OPERATOR_STAFF')).toEqual({ action: 'forbidden' })
+  })
+
+  test('platform-admin roles -> allow', () => {
+    expect(decideAdminAccess('PLATFORM_ADMIN')).toEqual({ action: 'allow' })
+    expect(decideAdminAccess('STAFF')).toEqual({ action: 'allow' })
+    expect(decideAdminAccess('ADMIN')).toEqual({ action: 'allow' })
   })
 })

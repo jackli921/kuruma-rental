@@ -815,5 +815,15 @@
       "notFound": "未找到门店",
       "notFoundDescription": "该门店不存在或已不可用。"
     }
+  },
+  "admin": {
+    "nav": { "overview": "概览", "revenue": "合作伙伴收益" },
+    "home": { "title": "平台管理", "subtitle": "平台运营" },
+    "revenue": {
+      "title": "合作伙伴收益",
+      "subtitle": "按合作伙伴的月度结算",
+      "comingSoon": "即将推出 — 依赖支付事件（#461）",
+      "model": "租客支付标价；平台保留 4%；汇款 = 已付 − 4%，按业务方汇总，按月结算。"
+    }
   }
 }
