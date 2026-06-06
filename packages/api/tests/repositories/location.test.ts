@@ -57,6 +57,14 @@ describe('InMemoryLocationRepository', () => {
         repo.create(locationInput({ operatorId: 'op_b', name: 'Namba' })),
       ).resolves.toMatchObject({ name: 'Namba' })
     })
+
+    it('frees an archived name for re-creation (#410, mirrors the partial index)', async () => {
+      const first = await repo.create(locationInput({ operatorId: 'op_a', name: 'Namba' }))
+      await repo.archive(first.id)
+      await expect(
+        repo.create(locationInput({ operatorId: 'op_a', name: 'Namba' })),
+      ).resolves.toMatchObject({ name: 'Namba', status: 'ACTIVE' })
+    })
   })
 
   describe('findAll', () => {

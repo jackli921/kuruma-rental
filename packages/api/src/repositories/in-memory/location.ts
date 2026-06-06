@@ -11,12 +11,17 @@ export class InMemoryLocationRepository implements LocationRepository {
     this.store = store ?? new Map()
   }
 
-  // Mirror the DB's locations_operatorId_name_unique seal so this in-memory
-  // double surfaces the same UNIQUE_VIOLATION the real Postgres would on a
-  // lost create/rename race — the service maps it to a friendly 409.
+  // Mirror the DB's partial unique index seal (#410) so this in-memory double
+  // surfaces the same UNIQUE_VIOLATION the real Postgres would on a lost
+  // create/rename race — the service maps it to a friendly 409. Only live
+  // (non-archived) rows clash: an archived location has freed its name.
   private assertNameFree(operatorId: string, name: string, exceptId?: string): void {
     const clash = [...this.store.values()].some(
-      (l) => l.operatorId === operatorId && l.name === name && l.id !== exceptId,
+      (l) =>
+        l.operatorId === operatorId &&
+        l.name === name &&
+        l.status !== 'ARCHIVED' &&
+        l.id !== exceptId,
     )
     if (clash) {
       throw Object.assign(new Error('duplicate key value violates unique constraint'), {
@@ -52,8 +57,12 @@ export class InMemoryLocationRepository implements LocationRepository {
     return location
   }
 
+  // Active-only to agree with the partial unique index (#410): the service's
+  // friendly-409 pre-check must not treat an archived name as taken.
   async findByOperatorAndName(operatorId: string, name: string): Promise<Location | undefined> {
-    return [...this.store.values()].find((l) => l.operatorId === operatorId && l.name === name)
+    return [...this.store.values()].find(
+      (l) => l.operatorId === operatorId && l.name === name && l.status !== 'ARCHIVED',
+    )
   }
 
   async create(data: Omit<Location, 'id' | 'createdAt' | 'updatedAt'>): Promise<Location> {
