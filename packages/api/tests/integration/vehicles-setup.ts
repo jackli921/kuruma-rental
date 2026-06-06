@@ -15,6 +15,6 @@ export { testDb }
 export async function cleanupVehicles(vehicleIds: string[]): Promise<void> {
   if (vehicleIds.length === 0) return
 
-  await testDb.delete(bookings).where(inArray(bookings.vehicleId, vehicleIds))
+  await testDb.delete(bookings).where(inArray(bookings.assignedVehicleId, vehicleIds))
   await testDb.delete(vehicles).where(inArray(vehicles.id, vehicleIds))
 }
