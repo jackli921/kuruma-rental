@@ -5,7 +5,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { useRouter } from '@/i18n/routing'
 import { useTranslations } from 'next-intl'
-import { type FormEvent, useState } from 'react'
+import type { FormEvent } from 'react'
 
 interface StorefrontSearchFormProps {
   /** Wall-clock `datetime-local` strings (JST) to prefill from the URL. */
@@ -25,12 +25,17 @@ export function StorefrontSearchForm({
 }: StorefrontSearchFormProps) {
   const t = useTranslations('search')
   const router = useRouter()
-  const [from, setFrom] = useState(defaultFrom)
-  const [to, setTo] = useState(defaultTo)
 
+  // Read the range from the FORM (DOM), not React state. Uncontrolled inputs
+  // survive a pre-hydration fill on slow CI runners; a controlled form would
+  // reconcile them back to empty on hydrate and block submit (#392 E2E flake).
   function handleSubmit(e: FormEvent<HTMLFormElement>): void {
     e.preventDefault()
-    const params = new URLSearchParams({ from, to })
+    const data = new FormData(e.currentTarget)
+    const params = new URLSearchParams({
+      from: String(data.get('from') ?? ''),
+      to: String(data.get('to') ?? ''),
+    })
     router.push(`/search?${params.toString()}`)
   }
 
@@ -38,25 +43,11 @@ export function StorefrontSearchForm({
     <form onSubmit={handleSubmit} className="flex flex-col gap-4 sm:flex-row sm:items-end">
       <div className="flex-1 space-y-2">
         <Label htmlFor="from">{t('fromLabel')}</Label>
-        <Input
-          id="from"
-          name="from"
-          type="datetime-local"
-          value={from}
-          onChange={(e) => setFrom(e.target.value)}
-          required
-        />
+        <Input id="from" name="from" type="datetime-local" defaultValue={defaultFrom} required />
       </div>
       <div className="flex-1 space-y-2">
         <Label htmlFor="to">{t('toLabel')}</Label>
-        <Input
-          id="to"
-          name="to"
-          type="datetime-local"
-          value={to}
-          onChange={(e) => setTo(e.target.value)}
-          required
-        />
+        <Input id="to" name="to" type="datetime-local" defaultValue={defaultTo} required />
       </div>
       <Button type="submit" className="sm:w-auto">
         {t('submit')}
