@@ -222,3 +222,13 @@
 :root:has([data-business-sidebar]) [data-business-nav] {
   display: none;
 }
+
+/* On the admin portal the AdminSidebar is the only nav (third dashboard,
+   separate from renter + operator — #481 review P2). Suppress the global
+   Navbar's business links (desktop) and its mobile menu (mobile) so the admin
+   shell never shows operator nav. The sidebar is in the DOM at all widths, so
+   :has() matches on mobile too. */
+:root:has([data-admin-sidebar]) [data-business-nav],
+:root:has([data-admin-sidebar]) [data-mobile-menu] {
+  display: none;
+}

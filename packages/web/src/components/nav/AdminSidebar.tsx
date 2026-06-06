@@ -42,9 +42,9 @@ export function AdminSidebar() {
   return (
     <aside
       data-admin-sidebar=""
-      className="hidden md:flex flex-col w-56 shrink-0 border-r border-sidebar-border bg-sidebar"
+      className="flex md:flex-col w-full md:w-56 shrink-0 border-b md:border-b-0 md:border-r border-sidebar-border bg-sidebar"
     >
-      <nav className="flex flex-col gap-1 p-3">
+      <nav className="flex flex-row md:flex-col gap-1 p-3 overflow-x-auto">
         {SIDEBAR_ITEMS.map(({ href, icon: Icon, labelKey }) => {
           const isActive = mounted && href === activeHref
           return (

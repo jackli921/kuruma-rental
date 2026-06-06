@@ -29,7 +29,7 @@ export function MobileMenu({ session, navItems }: MobileMenuProps) {
     <Sheet open={open} onOpenChange={setOpen}>
       <SheetTrigger
         render={
-          <Button variant="ghost" size="sm" className="md:hidden">
+          <Button variant="ghost" size="sm" className="md:hidden" data-mobile-menu="">
             <Menu className="size-5" />
             <span className="sr-only">{t('nav.menu')}</span>
           </Button>
