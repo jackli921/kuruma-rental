@@ -1,0 +1,8 @@
+/**
+ * Slice 8 demo seed fixtures (#390). Pure typed data consumed by the seed
+ * builders in `seed.ts` / `seed-bookings.ts`. Kept side-effect-free so the
+ * credibility-floor invariants (3 operators, 9 locations, ~41 vehicles across
+ * 6-8 ACRISS codes, coherent fees) are unit-testable without a database.
+ */
+export { DEMO_OPERATORS, type DemoOperator, type DemoOwner } from './operators'
+export { DEMO_LOCATIONS, type DemoLocation } from './locations'
