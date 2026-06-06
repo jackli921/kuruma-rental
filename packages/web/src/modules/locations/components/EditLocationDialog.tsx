@@ -11,7 +11,7 @@ import { updateLocationAction } from '@/modules/locations/actions'
 import type { LocationData } from '@/modules/locations/api'
 import { LocationForm } from '@/modules/locations/components/LocationForm'
 import { useLocationMutation } from '@/modules/locations/hooks'
-import type { CreateLocationInput } from '@kuruma/shared/validators/location'
+import type { UpdateLocationInput } from '@kuruma/shared/validators/location'
 import { useTranslations } from 'next-intl'
 
 interface EditLocationDialogProps {
@@ -21,7 +21,9 @@ interface EditLocationDialogProps {
 
 export function EditLocationDialog({ location, onOpenChange }: EditLocationDialogProps) {
   const t = useTranslations('business.locations')
-  const { mutateAsync, isPending, error } = useLocationMutation<CreateLocationInput>({
+  // #413: an edit is a PATCH — type the mutation with the update input so the
+  // form (mode="edit") and updateLocationAction agree on UpdateLocationInput.
+  const { mutateAsync, isPending, error } = useLocationMutation<UpdateLocationInput>({
     mutationFn: (data) => updateLocationAction(location?.id ?? '', data),
     onSuccess: () => onOpenChange(false),
   })
@@ -37,6 +39,7 @@ export function EditLocationDialog({ location, onOpenChange }: EditLocationDialo
         {location && (
           <LocationForm
             key={location.id}
+            mode="edit"
             onSubmit={async (data) => {
               await mutateAsync(data)
             }}
