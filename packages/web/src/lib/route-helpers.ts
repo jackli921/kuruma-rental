@@ -5,7 +5,7 @@ const DEFAULT_LOCALE = 'en'
 
 const RENTER_PATHS = ['/bookings', '/messages']
 const BUSINESS_PATHS = ['/dashboard', '/manage/']
-const ADMIN_PATHS = ['/admin']
+const ADMIN_PREFIX = '/admin'
 
 type RouteClassification =
   | { type: 'public' }
@@ -33,7 +33,9 @@ export function getLocaleFromPath(pathname: string): string {
 }
 
 export function classifyRoute(path: string): RouteClassification {
-  if (ADMIN_PATHS.some((p) => path.startsWith(p))) {
+  // Segment-aware so `/administration` / `/admin-help` are NOT gated as admin
+  // (#481 review P3): only the exact `/admin` or a real `/admin/...` subpath.
+  if (path === ADMIN_PREFIX || path.startsWith(`${ADMIN_PREFIX}/`)) {
     return { type: 'admin' }
   }
   if (BUSINESS_PATHS.some((p) => path.startsWith(p))) {

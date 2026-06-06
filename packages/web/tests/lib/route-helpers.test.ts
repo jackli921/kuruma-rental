@@ -75,6 +75,14 @@ describe('classifyRoute', () => {
     expect(classifyRoute('/admin/revenue')).toEqual({ type: 'admin' })
   })
 
+  test('does not gate non-segment /admin lookalikes as admin (#481 review P3)', () => {
+    // `startsWith('/admin')` would over-match these and force a platform-admin
+    // gate onto unrelated future routes. Only `/admin` and real `/admin/...`
+    // subpaths are admin.
+    expect(classifyRoute('/administration')).toEqual({ type: 'public' })
+    expect(classifyRoute('/admin-help')).toEqual({ type: 'public' })
+  })
+
   test('identifies public paths', () => {
     expect(classifyRoute('/')).toEqual({ type: 'public' })
     expect(classifyRoute('/vehicles')).toEqual({ type: 'public' })
