@@ -7,3 +7,5 @@
 export { DEMO_OPERATORS, type DemoOperator, type DemoOwner } from './operators'
 export { DEMO_LOCATIONS, type DemoLocation } from './locations'
 export { DEMO_VEHICLE_CLASSES, type DemoVehicleClass } from './classes'
+export { DEMO_INSURANCE_OPTIONS, type DemoInsuranceOption } from './insurance'
+export { DEMO_FEE_SCHEDULES, type DemoFeeSchedule } from './fees'
