@@ -2,13 +2,14 @@ import type { Context } from 'hono'
 import { Hono } from 'hono'
 import { deleteCookie, getCookie, setCookie } from 'hono/cookie'
 import {
+  type GoogleAuthRuntime,
   type GoogleOAuthConfig,
   OAUTH_STATE_COOKIE,
   OAUTH_STATE_TTL_SECONDS,
   buildGoogleAuthorizeUrl,
   randomToken,
 } from '../auth/google'
-import { SESSION_COOKIE, verifySessionCookie } from '../middleware/auth'
+import { SESSION_COOKIE, mintSessionToken, verifySessionCookie } from '../middleware/auth'
 import { fail, ok } from './helpers'
 
 // 7-day lifetime, matching the Auth.js session today (design spec §5.3).
@@ -44,7 +45,10 @@ export function clearSessionCookie(c: Context): void {
  * calls this endpoint to learn who it is and to obtain the `csrfToken` it must
  * echo in `X-CSRF-Token` on every state-changing request (design spec §5.3).
  */
-export function createAuthRoutes(googleConfig?: GoogleOAuthConfig) {
+export function createAuthRoutes(
+  googleConfig?: GoogleOAuthConfig,
+  googleRuntime?: GoogleAuthRuntime,
+) {
   return new Hono()
     .post('/auth/google/start', (c) => {
       if (!googleConfig) return fail(c, 'Google sign-in is not configured', 503)
@@ -60,6 +64,40 @@ export function createAuthRoutes(googleConfig?: GoogleOAuthConfig) {
         maxAge: OAUTH_STATE_TTL_SECONDS,
       })
       return c.redirect(buildGoogleAuthorizeUrl(googleConfig, state), 302)
+    })
+    .get('/auth/google/callback', async (c) => {
+      if (!googleConfig || !googleRuntime) return fail(c, 'Google sign-in is not configured', 503)
+
+      // Reject unless the returned state matches the one we bound at /start —
+      // an attacker can neither read nor forge the HttpOnly state cookie.
+      const expectedState = getCookie(c, OAUTH_STATE_COOKIE)
+      const state = c.req.query('state')
+      if (!expectedState || !state || expectedState !== state) {
+        return fail(c, 'Invalid OAuth state', 400)
+      }
+      const code = c.req.query('code')
+      if (!code) return fail(c, 'Missing authorization code', 400)
+      deleteCookie(c, OAUTH_STATE_COOKIE, { path: '/' })
+
+      const secret = process.env.AUTH_SECRET
+      if (!secret) return fail(c, 'Server auth is not configured', 500)
+
+      const { accessToken } = await googleRuntime.provider.exchangeCode(code, googleConfig)
+      const profile = await googleRuntime.provider.getUserInfo(accessToken)
+      const user = await googleRuntime.accountStore.resolveUser(profile)
+
+      const token = await mintSessionToken(
+        {
+          sub: user.id,
+          role: user.role,
+          csrf: randomToken(),
+          // exactOptionalPropertyTypes: omit the key rather than pass undefined.
+          ...(user.operatorId !== undefined ? { operatorId: user.operatorId } : {}),
+        },
+        secret,
+      )
+      setSessionCookie(c, token)
+      return c.redirect(googleConfig.postLoginRedirect, 302)
     })
     .get('/auth/session', async (c) => {
       const token = getCookie(c, SESSION_COOKIE)

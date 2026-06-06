@@ -3,6 +3,45 @@
 // directly rather than via @auth/core so the result is OUR kuruma_session
 // cookie (Phase 1) — one session system, not Auth.js's parallel one.
 
+import type { UserRole } from '../middleware/auth'
+
+/** OpenID Connect profile we read from Google's userinfo endpoint. `sub` is the
+ *  stable Google account id used as `accounts.providerAccountId`. */
+export interface GoogleProfile {
+  readonly sub: string
+  readonly email?: string
+  readonly name?: string
+  readonly picture?: string
+}
+
+/**
+ * The Google HTTP boundary, as a port. The route depends on this interface so
+ * tests inject a fake instead of mocking global fetch — mirrors the injected
+ * TranslationProvider pattern (services/google-translation-provider.ts).
+ */
+export interface GoogleOAuthProvider {
+  /** Exchange an authorization code for tokens at Google's token endpoint. */
+  exchangeCode(code: string, config: GoogleOAuthConfig): Promise<{ accessToken: string }>
+  /** Fetch the OIDC profile for an access token. */
+  getUserInfo(accessToken: string): Promise<GoogleProfile>
+}
+
+/**
+ * Resolves an OAuth profile to a local user, creating + linking the account on
+ * first sign-in. Implemented over the same `accounts` table Auth.js uses, so a
+ * user who signed in via the old web app maps to the SAME row (compat).
+ */
+export interface OAuthAccountStore {
+  resolveUser(profile: GoogleProfile): Promise<{ id: string; role: UserRole; operatorId?: string }>
+}
+
+/** The runtime dependencies the callback needs (vs. start, which needs only
+ *  config). Bundled so it's present-or-absent as a unit. */
+export interface GoogleAuthRuntime {
+  readonly provider: GoogleOAuthProvider
+  readonly accountStore: OAuthAccountStore
+}
+
 export const GOOGLE_AUTHORIZE_ENDPOINT = 'https://accounts.google.com/o/oauth2/v2/auth'
 export const GOOGLE_TOKEN_ENDPOINT = 'https://oauth2.googleapis.com/token'
 export const GOOGLE_USERINFO_ENDPOINT = 'https://openidconnect.googleapis.com/v1/userinfo'

@@ -1,7 +1,7 @@
 import { timingSafeEqual } from 'node:crypto'
 import type { Context, MiddlewareHandler } from 'hono'
 import { getCookie } from 'hono/cookie'
-import { jwtVerify } from 'jose'
+import { SignJWT, jwtVerify } from 'jose'
 import { fail } from '../routes/helpers'
 
 // PARTNER is API-key-only (3rd-party callers) — not a DB role. OPERATOR_* and
@@ -358,6 +358,31 @@ async function verifyJwt(token: string): Promise<AuthUser | null> {
  *  invalid/expired/tampered. Used by GET /auth/session and the CSRF middleware. */
 export async function verifySessionCookie(token: string): Promise<VerifiedSession | null> {
   return verifyAndMap(token)
+}
+
+// 7-day session, matching Auth.js today and the cookie maxAge (design spec §5.3).
+const SESSION_TTL = '7d'
+
+/**
+ * Mint a `kuruma_session` JWT for a signed-in user. Kept beside
+ * `verifySessionCookie` so the two halves of the session contract (and its
+ * iss/aud) can't drift. Reused by every OAuth provider (Google now, Apple next).
+ */
+export async function mintSessionToken(
+  claims: { sub: string; role: UserRole; operatorId?: string; csrf: string },
+  secret: string,
+): Promise<string> {
+  const key = new TextEncoder().encode(secret)
+  const payload: Record<string, unknown> = { role: claims.role, csrf: claims.csrf }
+  if (claims.operatorId !== undefined) payload.operatorId = claims.operatorId
+  return new SignJWT(payload)
+    .setProtectedHeader({ alg: 'HS256' })
+    .setSubject(claims.sub)
+    .setIssuedAt()
+    .setIssuer(API_TOKEN_ISSUER)
+    .setAudience(API_TOKEN_AUDIENCE)
+    .setExpirationTime(SESSION_TTL)
+    .sign(key)
 }
 
 function verifyApiKey(key: string): AuthUser | null {
