@@ -8,13 +8,16 @@ import {
   DrizzleVehicleRepository,
 } from '../../src/repositories/drizzle'
 import type { Vehicle } from '../../src/stores'
+import { bookingInput } from '../helpers/booking'
 import {
   DEFAULT_DAILY_RATE_JPY,
   cleanupBookings,
+  cleanupLocations,
   cleanupUsers,
   cleanupVehicleClasses,
   cleanupVehicles,
   db,
+  seedLocation,
   seedVehicleClass,
 } from './setup'
 
@@ -22,11 +25,20 @@ const vehicleRepo = new DrizzleVehicleRepository(db)
 const bookingRepo = new DrizzleBookingRepository(db)
 const availabilityRepo = new DrizzleAvailabilityRepository(db)
 
+// Slice 6 (#392): turnaround is location-derived. The DB trigger sets
+// effectiveEndAt = endAt + pickupLocation.defaultTurnaroundMinutes (migration
+// 0036). We seed a location with an EXPLICIT 120-min turnaround so the buffer
+// window is exact AND not the gone 60-min vehicle buffer — the "excludes when
+// query in buffer" case below FAILS if turnaround ever reverts to 60.
+const TURNAROUND_MINUTES = 120
+
 let testUser: { id: string; email: string }
 let testClassId: string
+let testLocationId: string
 const createdVehicleIds: string[] = []
 const createdBookingIds: string[] = []
 const createdClassIds: string[] = []
+const createdLocationIds: string[] = []
 
 beforeAll(async () => {
   const [user] = await db
@@ -43,6 +55,10 @@ beforeAll(async () => {
   const klass = await seedVehicleClass('avail')
   testClassId = klass.id
   createdClassIds.push(klass.id)
+
+  const location = await seedLocation('avail', TURNAROUND_MINUTES)
+  testLocationId = location.id
+  createdLocationIds.push(location.id)
 })
 
 afterEach(async () => {
@@ -54,6 +70,7 @@ afterAll(async () => {
   await cleanupVehicles(createdVehicleIds)
   await cleanupUsers([testUser.id])
   await cleanupVehicleClasses(createdClassIds)
+  await cleanupLocations(createdLocationIds)
 })
 
 function createTestVehicle(
@@ -69,7 +86,6 @@ function createTestVehicle(
     fuelType: overrides.fuelType ?? null,
     licensePlate: overrides.licensePlate ?? null,
     status: overrides.status ?? 'AVAILABLE',
-    bufferMinutes: overrides.bufferMinutes ?? 60,
     minRentalHours: overrides.minRentalHours ?? null,
     maxRentalHours: overrides.maxRentalHours ?? null,
     advanceBookingHours: overrides.advanceBookingHours ?? null,
@@ -77,6 +93,24 @@ function createTestVehicle(
     shakenExpiryDate: overrides.shakenExpiryDate ?? null,
     insuranceExpiryDate: overrides.insuranceExpiryDate ?? null,
   })
+}
+
+// Marketplace-shape booking on a given assigned vehicle. effectiveEndAt is NOT
+// passed — the DB trigger derives it from the pickup location's turnaround.
+function seedBooking(vehicleId: string, overrides: Parameters<typeof bookingInput>[0] = {}) {
+  return bookingRepo.create(
+    SYSTEM_CONTEXT,
+    bookingInput({
+      operatorId: BEST_CAR_RENTAL_OPERATOR_ID,
+      renterId: testUser.id,
+      classId: testClassId,
+      requestedVehicleId: vehicleId,
+      assignedVehicleId: vehicleId,
+      pickupLocationId: testLocationId,
+      dropoffLocationId: testLocationId,
+      ...overrides,
+    }),
+  )
 }
 
 describe('DrizzleAvailabilityRepository', () => {
@@ -98,19 +132,13 @@ describe('DrizzleAvailabilityRepository', () => {
     })
 
     it('excludes vehicles with overlapping bookings', async () => {
-      const vehicle = await createTestVehicle({ name: 'Overlap Car', bufferMinutes: 60 })
+      const vehicle = await createTestVehicle({ name: 'Overlap Car' })
       createdVehicleIds.push(vehicle.id)
 
-      const endAt = new Date('2026-08-01T14:00:00Z')
-      const effectiveEndAt = new Date(endAt.getTime() + vehicle.bufferMinutes * 60 * 1000)
-
-      const booking = await bookingRepo.create(SYSTEM_CONTEXT, {
-        renterId: testUser.id,
-        classId: testClassId,
-        vehicleId: vehicle.id,
+      // Booking 10:00-14:00; trigger turnaround 120min -> effectiveEnd 16:00.
+      const booking = await seedBooking(vehicle.id, {
         startAt: new Date('2026-08-01T10:00:00Z'),
-        endAt,
-        effectiveEndAt,
+        endAt: new Date('2026-08-01T14:00:00Z'),
         status: 'CONFIRMED',
         source: 'DIRECT',
         externalId: null,
@@ -118,7 +146,7 @@ describe('DrizzleAvailabilityRepository', () => {
       })
       createdBookingIds.push(booking.id)
 
-      // Query 12:00-16:00 overlaps with booking 10:00-15:00(effective)
+      // Query 12:00-16:00 overlaps effective range [10:00, 16:00)
       const result = await availabilityRepo.findAvailableVehicles(
         new Date('2026-08-01T12:00:00Z'),
         new Date('2026-08-01T16:00:00Z'),
@@ -129,19 +157,12 @@ describe('DrizzleAvailabilityRepository', () => {
     })
 
     it('includes vehicles without overlap', async () => {
-      const vehicle = await createTestVehicle({ name: 'No Overlap Car', bufferMinutes: 60 })
+      const vehicle = await createTestVehicle({ name: 'No Overlap Car' })
       createdVehicleIds.push(vehicle.id)
 
-      const endAt = new Date('2026-08-01T14:00:00Z')
-      const effectiveEndAt = new Date(endAt.getTime() + vehicle.bufferMinutes * 60 * 1000)
-
-      const booking = await bookingRepo.create(SYSTEM_CONTEXT, {
-        renterId: testUser.id,
-        classId: testClassId,
-        vehicleId: vehicle.id,
+      const booking = await seedBooking(vehicle.id, {
         startAt: new Date('2026-08-01T10:00:00Z'),
-        endAt,
-        effectiveEndAt,
+        endAt: new Date('2026-08-01T14:00:00Z'),
         status: 'CONFIRMED',
         source: 'DIRECT',
         externalId: null,
@@ -149,7 +170,7 @@ describe('DrizzleAvailabilityRepository', () => {
       })
       createdBookingIds.push(booking.id)
 
-      // Query 16:00-20:00 does not overlap with booking 10:00-15:00(effective)
+      // Query 16:00-20:00 starts at the effective end (16:00) -> no overlap
       const result = await availabilityRepo.findAvailableVehicles(
         new Date('2026-08-01T16:00:00Z'),
         new Date('2026-08-01T20:00:00Z'),
@@ -159,21 +180,14 @@ describe('DrizzleAvailabilityRepository', () => {
       expect(resultIds).toContain(vehicle.id)
     })
 
-    it('respects effectiveEndAt buffer -- excludes when query falls in buffer window', async () => {
-      // Booking 10:00-14:00, buffer 60min, effectiveEndAt = 15:00
-      const vehicle = await createTestVehicle({ name: 'Buffer Car', bufferMinutes: 60 })
+    it('respects effectiveEndAt buffer -- excludes when query in buffer', async () => {
+      // Booking 10:00-14:00; location turnaround 120min -> effectiveEndAt = 16:00.
+      const vehicle = await createTestVehicle({ name: 'Buffer Car' })
       createdVehicleIds.push(vehicle.id)
 
-      const endAt = new Date('2026-08-01T14:00:00Z')
-      const effectiveEndAt = new Date(endAt.getTime() + vehicle.bufferMinutes * 60 * 1000) // 15:00
-
-      const booking = await bookingRepo.create(SYSTEM_CONTEXT, {
-        renterId: testUser.id,
-        classId: testClassId,
-        vehicleId: vehicle.id,
+      const booking = await seedBooking(vehicle.id, {
         startAt: new Date('2026-08-01T10:00:00Z'),
-        endAt,
-        effectiveEndAt,
+        endAt: new Date('2026-08-01T14:00:00Z'),
         status: 'CONFIRMED',
         source: 'DIRECT',
         externalId: null,
@@ -181,29 +195,24 @@ describe('DrizzleAvailabilityRepository', () => {
       })
       createdBookingIds.push(booking.id)
 
-      // Query 14:30-16:00 overlaps with effective range [10:00, 15:00)
+      // Query 15:15-15:45 falls inside the location-derived turnaround window
+      // [10:00, 16:00) but PAST the legacy 60-min end (15:00). A regression to a
+      // 60-min turnaround would (wrongly) include this vehicle.
       const excluded = await availabilityRepo.findAvailableVehicles(
-        new Date('2026-08-01T14:30:00Z'),
-        new Date('2026-08-01T16:00:00Z'),
+        new Date('2026-08-01T15:15:00Z'),
+        new Date('2026-08-01T15:45:00Z'),
       )
       expect(excluded.map((v) => v.id)).not.toContain(vehicle.id)
     })
 
     it('respects effectiveEndAt buffer -- includes when query starts after buffer', async () => {
-      // Booking 10:00-14:00, buffer 60min, effectiveEndAt = 15:00
-      const vehicle = await createTestVehicle({ name: 'Buffer Car 2', bufferMinutes: 60 })
+      // Booking 10:00-14:00; location turnaround 120min -> effectiveEndAt = 16:00.
+      const vehicle = await createTestVehicle({ name: 'Buffer Car 2' })
       createdVehicleIds.push(vehicle.id)
 
-      const endAt = new Date('2026-08-01T14:00:00Z')
-      const effectiveEndAt = new Date(endAt.getTime() + vehicle.bufferMinutes * 60 * 1000) // 15:00
-
-      const booking = await bookingRepo.create(SYSTEM_CONTEXT, {
-        renterId: testUser.id,
-        classId: testClassId,
-        vehicleId: vehicle.id,
+      const booking = await seedBooking(vehicle.id, {
         startAt: new Date('2026-08-01T10:00:00Z'),
-        endAt,
-        effectiveEndAt,
+        endAt: new Date('2026-08-01T14:00:00Z'),
         status: 'CONFIRMED',
         source: 'DIRECT',
         externalId: null,
@@ -211,11 +220,10 @@ describe('DrizzleAvailabilityRepository', () => {
       })
       createdBookingIds.push(booking.id)
 
-      // Query 15:30-18:00 does NOT overlap with effective range [10:00, 15:00)
-      // tstzrange is [) by default, so 15:00 is excluded from the booking range
-      // and 15:30 starts after 15:00, so no overlap
+      // Query 16:00-18:00 starts at the effective end. tstzrange is [) so 16:00
+      // is excluded from the booking range -> no overlap -> available.
       const included = await availabilityRepo.findAvailableVehicles(
-        new Date('2026-08-01T15:30:00Z'),
+        new Date('2026-08-01T16:00:00Z'),
         new Date('2026-08-01T18:00:00Z'),
       )
       expect(included.map((v) => v.id)).toContain(vehicle.id)
@@ -225,16 +233,9 @@ describe('DrizzleAvailabilityRepository', () => {
       const vehicle = await createTestVehicle({ name: 'Cancelled Car' })
       createdVehicleIds.push(vehicle.id)
 
-      const endAt = new Date('2026-08-01T14:00:00Z')
-      const effectiveEndAt = new Date(endAt.getTime() + vehicle.bufferMinutes * 60 * 1000)
-
-      const booking = await bookingRepo.create(SYSTEM_CONTEXT, {
-        renterId: testUser.id,
-        classId: testClassId,
-        vehicleId: vehicle.id,
+      const booking = await seedBooking(vehicle.id, {
         startAt: new Date('2026-08-01T10:00:00Z'),
-        endAt,
-        effectiveEndAt,
+        endAt: new Date('2026-08-01T14:00:00Z'),
         status: 'CANCELLED',
         source: 'DIRECT',
         externalId: null,
@@ -293,16 +294,9 @@ describe('DrizzleAvailabilityRepository', () => {
       const vehicle = await createTestVehicle({ name: 'Booked Car' })
       createdVehicleIds.push(vehicle.id)
 
-      const endAt = new Date('2026-08-01T14:00:00Z')
-      const effectiveEndAt = new Date(endAt.getTime() + vehicle.bufferMinutes * 60 * 1000)
-
-      const booking = await bookingRepo.create(SYSTEM_CONTEXT, {
-        renterId: testUser.id,
-        classId: testClassId,
-        vehicleId: vehicle.id,
+      const booking = await seedBooking(vehicle.id, {
         startAt: new Date('2026-08-01T10:00:00Z'),
-        endAt,
-        effectiveEndAt,
+        endAt: new Date('2026-08-01T14:00:00Z'),
         status: 'CONFIRMED',
         source: 'DIRECT',
         externalId: null,
