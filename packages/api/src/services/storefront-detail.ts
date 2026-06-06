@@ -2,6 +2,7 @@ import type { LocationOperatingHours } from '@kuruma/shared/types/location'
 import type { CallerContext } from '../middleware/auth'
 import type {
   AvailabilityRepository,
+  InsuranceOptionRepository,
   StorefrontRepository,
   Vehicle,
   VehicleClass,
@@ -50,6 +51,24 @@ export type StorefrontDetailResult =
   | { ok: true; data: StorefrontDetailData }
   | { ok: false; error: string; status: number }
 
+/**
+ * Renter-safe insurance projection (#392): the four fields a renter needs to
+ * choose coverage at booking. Operator-internal columns (operatorId, status,
+ * timestamps) are intentionally absent — same column-whitelist discipline as
+ * the public vehicle catalog.
+ */
+export interface StorefrontInsuranceOption {
+  id: string
+  name: string
+  description: string | null
+  dailyPriceJpy: number
+  deductibleJpy: number | null
+}
+
+export type StorefrontInsuranceResult =
+  | { ok: true; data: StorefrontInsuranceOption[] }
+  | { ok: false; error: string; status: number }
+
 export interface StorefrontDetailParams {
   locationId: string
   from: Date
@@ -71,7 +90,37 @@ export class StorefrontDetailService {
     private readonly storefrontRepo: StorefrontRepository,
     private readonly availabilityRepo: AvailabilityRepository,
     private readonly classRepo: VehicleClassRepository,
+    private readonly insuranceOptionRepo: InsuranceOptionRepository,
   ) {}
+
+  /**
+   * The ACTIVE insurance options offered at one storefront (#392), for the
+   * renter's booking-form dropdown. Resolves the location to its operator via
+   * the same ACTIVE-only storefront read (unknown/archived -> 404), then lists
+   * that operator's active coverage. PUBLIC: the route builds PUBLIC_CONTEXT and
+   * the repo read is single-operator + active-only (never a cross-operator leak).
+   */
+  async getInsuranceOptions(
+    ctx: CallerContext,
+    locationId: string,
+  ): Promise<StorefrontInsuranceResult> {
+    const [storefront] = await this.storefrontRepo.findActiveStorefronts(ctx, {
+      pickupLocationId: locationId,
+    })
+    if (!storefront) return { ok: false, error: 'Storefront not found', status: 404 }
+
+    const options = await this.insuranceOptionRepo.findActiveByOperator(storefront.operatorId)
+    return {
+      ok: true,
+      data: options.map((o) => ({
+        id: o.id,
+        name: o.name,
+        description: o.description,
+        dailyPriceJpy: o.dailyPriceJpy,
+        deductibleJpy: o.deductibleJpy,
+      })),
+    }
+  }
 
   async getDetail(
     ctx: CallerContext,

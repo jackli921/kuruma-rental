@@ -69,6 +69,12 @@ export class InMemoryInsuranceOptionRepository implements InsuranceOptionReposit
     )
   }
 
+  async findActiveByOperator(operatorId: string): Promise<InsuranceOption[]> {
+    return [...this.store.values()]
+      .filter((o) => o.operatorId === operatorId && o.status === 'ACTIVE')
+      .sort((a, b) => a.name.localeCompare(b.name))
+  }
+
   async create(
     data: Omit<InsuranceOption, 'id' | 'createdAt' | 'updatedAt'>,
   ): Promise<InsuranceOption> {

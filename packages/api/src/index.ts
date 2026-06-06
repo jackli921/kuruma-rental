@@ -394,6 +394,7 @@ export function createApp(overrides?: {
     storefrontRepo,
     availabilityRepo,
     vehicleClassRepo,
+    insuranceOptionRepo,
   )
 
   // Chain .route() calls so TypeScript infers the full route type tree.

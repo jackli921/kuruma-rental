@@ -109,6 +109,14 @@ export interface InsuranceOptionRepository {
     operatorId: string,
     name: string,
   ): Promise<InsuranceOption | undefined>
+  /**
+   * ACTIVE options for one operator, name-sorted. NOT ctx-scoped — the caller
+   * passes an already-resolved operatorId. Powers the PUBLIC storefront read
+   * (#392): a renter booking at a storefront must see its operator's active
+   * coverage, so this deliberately bypasses the management-only `findAll` seal.
+   * Scope is single-operator + ACTIVE-only, never a cross-operator enumeration.
+   */
+  findActiveByOperator(operatorId: string): Promise<InsuranceOption[]>
   create(data: Omit<InsuranceOption, 'id' | 'createdAt' | 'updatedAt'>): Promise<InsuranceOption>
   update(id: string, data: Partial<InsuranceOption>): Promise<InsuranceOption | undefined>
   archive(id: string): Promise<InsuranceOption | undefined>
