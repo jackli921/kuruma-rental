@@ -6,6 +6,7 @@ import {
   DEMO_INSURANCE_OPTIONS,
   DEMO_LOCATIONS,
   DEMO_OPERATORS,
+  DEMO_VEHICLES,
   DEMO_VEHICLE_CLASSES,
 } from '../../src/db/seed-data'
 
@@ -199,5 +200,68 @@ describe('seed-data demo fee schedules (slice 8 §3.4)', () => {
     for (const fee of perClass) {
       expect(classIdsByOperator.get(fee.operatorId)?.has(fee.vehicleClassId as string)).toBe(true)
     }
+  })
+})
+
+// Slice 8 §3.3 — ~41 vehicles across 8 ACRISS codes. Two composite-FK seals
+// (class + pickup location, both to the vehicle's own operator) and the headline
+// credibility floor: every storefront (location) shows >=3 distinct class summaries.
+describe('seed-data demo vehicles (slice 8 §3.3)', () => {
+  const operatorIds = new Set(DEMO_OPERATORS.map((o) => o.id))
+  const operatorClassKeys = new Set(DEMO_VEHICLE_CLASSES.map((c) => `${c.operatorId}::${c.id}`))
+  const operatorLocationKeys = new Set(DEMO_LOCATIONS.map((l) => `${l.operatorId}::${l.id}`))
+  const acrissByClassId = new Map(DEMO_VEHICLE_CLASSES.map((c) => [c.id, c.acrissCode]))
+
+  it('defines exactly 41 vehicles (credibility floor §3.3)', () => {
+    expect(DEMO_VEHICLES).toHaveLength(41)
+  })
+
+  it('references only defined operators', () => {
+    for (const v of DEMO_VEHICLES) expect(operatorIds.has(v.operatorId)).toBe(true)
+  })
+
+  it('has unique ids and unique license plates (vehicles.licensePlate unique)', () => {
+    expect(new Set(DEMO_VEHICLES.map((v) => v.id)).size).toBe(DEMO_VEHICLES.length)
+    expect(new Set(DEMO_VEHICLES.map((v) => v.licensePlate)).size).toBe(DEMO_VEHICLES.length)
+  })
+
+  it('seals every vehicle class to its own operator (vehicles_operatorId_classId_fk)', () => {
+    for (const v of DEMO_VEHICLES) {
+      expect(operatorClassKeys.has(`${v.operatorId}::${v.classId}`)).toBe(true)
+    }
+  })
+
+  it('seals every pickup location to its own operator (vehicles_operatorId_pickupLocationId_fk)', () => {
+    for (const v of DEMO_VEHICLES) {
+      expect(operatorLocationKeys.has(`${v.operatorId}::${v.pickupLocationId}`)).toBe(true)
+    }
+  })
+
+  it('gives every storefront >=3 distinct class summaries (headline floor §3.3)', () => {
+    for (const loc of DEMO_LOCATIONS) {
+      const classesHere = new Set(
+        DEMO_VEHICLES.filter((v) => v.pickupLocationId === loc.id).map((v) => v.classId),
+      )
+      expect(classesHere.size).toBeGreaterThanOrEqual(3)
+    }
+  })
+
+  it('covers exactly the 8 ACRISS codes of the class taxonomy (no empty class)', () => {
+    const codesViaVehicles = new Set(DEMO_VEHICLES.map((v) => acrissByClassId.get(v.classId)))
+    const classCodes = new Set(DEMO_VEHICLE_CLASSES.map((c) => c.acrissCode))
+    expect(codesViaVehicles).toEqual(classCodes)
+    expect(codesViaVehicles.size).toBe(8)
+  })
+
+  it('prices every vehicle with >=1 non-negative rate (vehicles_pricing_at_least_one)', () => {
+    for (const v of DEMO_VEHICLES) {
+      expect(v.dailyRateJpy != null || v.hourlyRateJpy != null).toBe(true)
+      if (v.dailyRateJpy != null) expect(v.dailyRateJpy).toBeGreaterThanOrEqual(0)
+      if (v.hourlyRateJpy != null) expect(v.hourlyRateJpy).toBeGreaterThanOrEqual(0)
+    }
+  })
+
+  it('sets positive seats (notNull integer column)', () => {
+    for (const v of DEMO_VEHICLES) expect(v.seats).toBeGreaterThan(0)
   })
 })
