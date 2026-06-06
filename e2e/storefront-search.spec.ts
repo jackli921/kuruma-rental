@@ -38,7 +38,7 @@ test.describe('Renter storefront search flow', () => {
     await expect(page.getByText('From ¥4,500 / day')).toBeVisible()
   })
 
-  test('clicking a card opens the detail with grouped vehicles + a disabled select', async ({
+  test('clicking a card opens the detail with grouped vehicles + a booking link', async ({
     page,
   }) => {
     await page.goto(`/en/search?from=${PICKUP}&to=${RETURN}`)
@@ -57,9 +57,12 @@ test.describe('Renter storefront search flow', () => {
     await expect(page.getByRole('heading', { name: 'E2E Honda Fit' })).toBeVisible()
     await expect(page.getByRole('heading', { name: 'E2E Toyota Sienta' })).toBeVisible()
 
-    // The select control is a disabled placeholder — booking is slice 6 (§6).
-    const select = page.getByRole('button', { name: 'Booking opens soon' })
-    await expect(select).toHaveCount(2)
-    await expect(select.first()).toBeDisabled()
+    // Booking CTA links into the slice-6 form, carrying vehicle + store + dates (#392).
+    const bookLinks = page.getByRole('link', { name: 'Book this car' })
+    await expect(bookLinks).toHaveCount(2)
+    await expect(bookLinks.first()).toHaveAttribute(
+      'href',
+      /\/bookings\/new\?vehicleId=e2e-store-vehicle-1&locationId=e2e-store-1&from=.+&to=.+/,
+    )
   })
 })
