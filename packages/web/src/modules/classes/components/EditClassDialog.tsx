@@ -11,7 +11,7 @@ import { updateClassAction } from '@/modules/classes/actions'
 import type { VehicleClassData } from '@/modules/classes/api'
 import { ClassForm } from '@/modules/classes/components/ClassForm'
 import { useClassMutation } from '@/modules/classes/hooks'
-import type { CreateVehicleClassInput } from '@kuruma/shared/validators/vehicle-class'
+import type { UpdateVehicleClassInput } from '@kuruma/shared/validators/vehicle-class'
 import { useTranslations } from 'next-intl'
 
 interface EditClassDialogProps {
@@ -21,7 +21,9 @@ interface EditClassDialogProps {
 
 export function EditClassDialog({ vehicleClass, onOpenChange }: EditClassDialogProps) {
   const t = useTranslations('business.classes')
-  const { mutateAsync, isPending, error } = useClassMutation<CreateVehicleClassInput>({
+  // #413: an edit is a PATCH — type the mutation with the update input so the
+  // form (mode="edit") and updateClassAction agree on UpdateVehicleClassInput.
+  const { mutateAsync, isPending, error } = useClassMutation<UpdateVehicleClassInput>({
     mutationFn: (data) => updateClassAction(vehicleClass?.id ?? '', data),
     onSuccess: () => onOpenChange(false),
   })
@@ -37,6 +39,7 @@ export function EditClassDialog({ vehicleClass, onOpenChange }: EditClassDialogP
         {vehicleClass && (
           <ClassForm
             key={vehicleClass.id}
+            mode="edit"
             onSubmit={async (data) => {
               await mutateAsync(data)
             }}
