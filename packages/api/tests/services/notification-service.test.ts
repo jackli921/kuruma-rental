@@ -165,7 +165,44 @@ describe('NotificationService', () => {
     await logRepo.claim(seeded.id)
     await logRepo.markFailed(seeded.id, 'earlier failure')
     const result = await service.resend(op1Ctx, seeded.id)
-    expect(result).toEqual({ ok: true, status: 'SENT' })
+    expect(result).toEqual({ ok: true, status: 'SENT', outcome: 'resent' })
+  })
+
+  it('reports a live SENDING lease as in_progress without re-sending (#485)', async () => {
+    // Another sender holds a fresh (non-expired) lease: resend must NOT report a
+    // green "sent" — the portal needs to say "already in progress".
+    const sender = { send: vi.fn(async () => ({ providerMessageId: 'msg-1' })) }
+    const { service, logRepo, booking } = build(sender)
+    const seeded = await logRepo.upsertQueued({
+      bookingId: booking.id,
+      operatorId: OP1,
+      kind: 'RENTER_BOOKING_CONFIRM',
+      recipient: 'jane@example.com',
+      locale: 'en',
+      idempotencyKey: `notify:${booking.id}:RENTER_BOOKING_CONFIRM`,
+    })
+    await logRepo.claim(seeded.id) // live lease held elsewhere
+    const result = await service.resend(op1Ctx, seeded.id)
+    expect(result).toEqual({ ok: true, status: 'SENDING', outcome: 'in_progress' })
+    expect(sender.send).not.toHaveBeenCalled()
+  })
+
+  it('reports an already-SENT row as already_sent without re-sending (#485)', async () => {
+    const sender = { send: vi.fn(async () => ({ providerMessageId: 'msg-1' })) }
+    const { service, logRepo, booking } = build(sender)
+    const seeded = await logRepo.upsertQueued({
+      bookingId: booking.id,
+      operatorId: OP1,
+      kind: 'RENTER_BOOKING_CONFIRM',
+      recipient: 'jane@example.com',
+      locale: 'en',
+      idempotencyKey: `notify:${booking.id}:RENTER_BOOKING_CONFIRM`,
+    })
+    await logRepo.claim(seeded.id)
+    await logRepo.markSent(seeded.id, 'msg-earlier')
+    const result = await service.resend(op1Ctx, seeded.id)
+    expect(result).toEqual({ ok: true, status: 'SENT', outcome: 'already_sent' })
+    expect(sender.send).not.toHaveBeenCalled()
   })
 
   it('two concurrent resends of one row invoke the sender exactly once (atomic claim)', async () => {
