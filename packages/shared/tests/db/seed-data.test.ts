@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
+import { ACRISS_PATTERN } from '../../src/acriss'
 import { BEST_CAR_RENTAL_OPERATOR_ID, BEST_CAR_RENTAL_OWNER_EMAIL } from '../../src/db/constants'
-import { DEMO_LOCATIONS, DEMO_OPERATORS } from '../../src/db/seed-data'
+import { DEMO_LOCATIONS, DEMO_OPERATORS, DEMO_VEHICLE_CLASSES } from '../../src/db/seed-data'
 
 const KEBAB = /^[a-z0-9]+(?:-[a-z0-9]+)*$/
 const EMAIL = /^[^@\s]+@[^@\s]+\.[^@\s]+$/
@@ -71,5 +72,43 @@ describe('seed-data demo locations (slice 8 §3.2)', () => {
     ).toHaveLength(8)
     // override must stay non-negative (locations_turnaround_non_negative CHECK)
     for (const l of overridden) expect(l.defaultTurnaroundMinutes).toBeGreaterThanOrEqual(0)
+  })
+})
+
+// Slice 8 §3.3 — ACRISS class taxonomy; no operator has a single-class fleet.
+describe('seed-data demo vehicle classes (slice 8 §3.3)', () => {
+  const operatorIds = new Set(DEMO_OPERATORS.map((o) => o.id))
+
+  it('gives every operator at least 3 classes (no single-class fleet)', () => {
+    for (const operatorId of operatorIds) {
+      const count = DEMO_VEHICLE_CLASSES.filter((c) => c.operatorId === operatorId).length
+      expect(count).toBeGreaterThanOrEqual(3)
+    }
+  })
+
+  it('references only defined operators', () => {
+    for (const cls of DEMO_VEHICLE_CLASSES) expect(operatorIds.has(cls.operatorId)).toBe(true)
+  })
+
+  it('has globally-unique slugs (vehicle_classes.slug is globally unique)', () => {
+    const slugs = DEMO_VEHICLE_CLASSES.map((c) => c.slug)
+    expect(new Set(slugs).size).toBe(slugs.length)
+  })
+
+  it('spans 6-8 distinct ACRISS codes (credibility floor §3.3)', () => {
+    const codes = new Set(DEMO_VEHICLE_CLASSES.map((c) => c.acrissCode))
+    expect(codes.size).toBeGreaterThanOrEqual(6)
+    expect(codes.size).toBeLessThanOrEqual(8)
+  })
+
+  it('uses only well-formed ACRISS codes (vehicle_classes_acriss_code_format)', () => {
+    for (const cls of DEMO_VEHICLE_CLASSES) expect(cls.acrissCode).toMatch(ACRISS_PATTERN)
+  })
+
+  it('sets positive seats and non-negative luggage capacity (notNull columns)', () => {
+    for (const cls of DEMO_VEHICLE_CLASSES) {
+      expect(cls.seats).toBeGreaterThan(0)
+      expect(cls.luggageCapacity).toBeGreaterThanOrEqual(0)
+    }
   })
 })

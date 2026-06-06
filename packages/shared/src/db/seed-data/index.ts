@@ -6,3 +6,4 @@
  */
 export { DEMO_OPERATORS, type DemoOperator, type DemoOwner } from './operators'
 export { DEMO_LOCATIONS, type DemoLocation } from './locations'
+export { DEMO_VEHICLE_CLASSES, type DemoVehicleClass } from './classes'
