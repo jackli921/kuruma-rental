@@ -30,7 +30,7 @@ This is **in addition to**, not a replacement of, the storefront-first flow alre
 
 ### 1.2 Luggage capacity on result cards (NEW vehicle attribute)
 
-Result cards must show **seats + luggage count + luggage size** (standardized across models so cards are comparable). Provisional approach (to minimize partner effort): **per-vehicle partner input** for luggage count/size, with a **class-level default fallback** when a partner leaves it blank. Platform-standard taxonomy vs partner-input is **not finalized** (§4.2).
+Result cards must show **seats + luggage count + luggage size** (standardized across models so cards are comparable). Provisional approach (to minimize partner effort): **per-vehicle partner input** for luggage count/size, with a **class-level default fallback** when a partner leaves it blank. **Decision (2026-06-05): both layers** — per-vehicle partner input is primary; platform supplies a **class-level default backup** when the partner leaves the field empty.
 
 ### 1.3 Renter document upload + verification gate (NEW; was Out-of-MVP)
 
@@ -67,7 +67,7 @@ A **third dashboard**, separate from the renter portal and the operator portal, 
 - Per-partner aggregation of these events drives the **monthly payout** figure in the admin revenue tab.
 - A business may have **multiple stores**; attribution is at the **business** level via the id carried on each transaction.
 
-> Open: whether to implement via Stripe Connect (application-fee split) or a single account + our-DB calculation + manual monthly remittance (§4.4). The model above assumes platform-collect + our-DB calc.
+> **Decision (2026-06-05): no Stripe Connect.** All payments route to a **single platform Stripe account**; remittance to partners is **computed on the backend and paid manually at month-end** (the model above).
 
 ---
 
@@ -79,19 +79,49 @@ A **third dashboard**, separate from the renter portal and the operator portal, 
 
 ---
 
-## 4. Open questions (resolve before MVP-vs-later triage)
+## 4. Questions
 
-1. **Document verification mechanism** — manual admin review vs automated IDV (OCR / 3rd-party)? Encryption + retention policy for passport / IDP images? *(Du to circle back with team.)*
-2. **Luggage standardization** — platform-standard taxonomy vs per-partner input (§1.2)?
-3. **Class-combo availability** — confirm the per-(operator, location, class, time) inventory-count approach and how it interacts with the existing exclusion constraint (§1.1).
-4. **Stripe integration shape** — Stripe Connect vs single account + manual payout for the 4% split (§2)?
-5. **MVP-vs-later triage** — which of §1.1–1.5 are genuinely required for the Qiao demo vs. fast-follow. *(Next working session.)*
+**Resolved 2026-06-05:**
+
+- **Luggage standardization (was Q2)** → both layers: per-vehicle partner input primary, class-level default backup when empty (§1.2).
+- **Stripe integration shape (was Q4)** → no Connect; single platform Stripe account; manual month-end remittance computed on the backend (§2).
+
+**Still open:**
+
+1. **Document verification — storage/retention.** Interim mechanism decided: **manual** admin review for MVP (see §5). Still open: encryption + retention policy for passport / IDP images, and whether to add automated IDV later. *(Du to circle back with team.)*
+2. **Class-combo availability model** — confirm the per-(operator, location, class, time) inventory-count approach and how it interacts with the existing exclusion constraint (§1.1). *(Designed-for now, built post-demo — see §5.)*
+
+> **MVP-vs-later triage (was Q5): resolved 2026-06-05 — see §5.**
 
 ---
 
-## 5. Impact note
+## 5. MVP-vs-later triage + re-baselined slice plan (resolved 2026-06-05)
 
-These five additions **materially expand** the proposal's ~18–23 dev-day estimate (§5/§7) — payment + Stripe webhooks, document upload/verification, a third admin portal, dual-search, and an add-ons entity are each substantial. The slice plan (§6) is **not** re-baselined here; that happens after the §4 triage.
+**Demo goal:** a tourist can discover → book → **pay**, and a partner can see their sales + our 4%. The **payment → commission** thread is the spine; everything else is discovery polish.
+
+| New item | Demo | Scope |
+|---|---|---|
+| Wizard + add-ons + Stripe payment (§1.4) | **MVP** | The business model. Stripe **test keys** for the demo. |
+| Platform admin + revenue tab (§1.5) | **MVP** | Partner pitch; read-only aggregates over `payment_events`. |
+| Doc upload + verification (§1.3) | **MVP-lite** | Upload + **manual** admin verify gates booking; automated IDV deferred. |
+| Luggage attributes (§1.2) | **MVP** | Cheap, high tourist value. |
+| Map + flat list over **specific** vehicles (§1.1) | **MVP-lite** | New presentation over slice-5 data. |
+| **Class-combo** deals (§1.1) | **Fast-follow** | New inventory-count availability model; designed-for now, built post-demo. |
+
+**Design-for-later commitments (build now so post-demo is additive — no migration churn):**
+
+1. **Stripe = webhook is the source of truth.** The Checkout Session is created **server-side** with `metadata` (partner-business id + booking id); payment is recorded only on the **signed `checkout.session.completed` webhook** (idempotent), never the client redirect. That row drives the 4% calc.
+2. **Booking fulfillment mode** (`SPECIFIC` | `CLASS_COMBO`) column added now — only `SPECIFIC` is exercised for the demo; the availability service + search read-models are shaped so a per-(operator, location, class, time) inventory-count path drops in later.
+3. **`payment_events` table complete from day one** (operator_id, booking_id, gross, 4% fee, net, stripe ids, status) so the revenue tab is a query post-demo.
+4. **Document verification is manual** for the demo (admin review); automated IDV is fast-follow.
+
+**Re-baselined slice order (supersedes proposal §6):**
+
+finish **6** booking → **7** notifications + pre-auth → **luggage + map/list view** → **doc upload + manual verify** → **payment + add-ons + `payment_events`** → **admin revenue tab** → **8** demo seed + E2E.
+
+*Post-demo fast-follow:* class-combo deals + inventory availability, automated IDV, richer admin portal.
+
+**Impact:** these additions **materially expand** the proposal's ~18–23 dev-day estimate (§5/§7) — payment + webhooks, document verification, the third admin portal, and the dual-search presentation are each substantial. Re-estimate after slice 6 lands.
 
 ---
 
@@ -115,10 +145,11 @@ These five additions **materially expand** the proposal's ~18–23 dev-day estim
 
 **押金 vs 支付（已澄清）：** 两者并存。Stripe 支付 = 用车租金；预授权押金 = 针对**车损 / 肇事逃逸**的单独冻结，不属于租金。
 
+**已确认（6月5日补充）：** 行李信息=合作商按车填写为主、平台按车型默认值兜底；Stripe=不用 Connect，统一进平台账户，月底后台计算手动打款。
+
+**MVP 范围已划定（6月5日，详见英文版 §5）：** 演示先做——预订向导+增值项+Stripe 支付、平台后台营收页、行李信息、地图/列表（先展示具体车辆）、证件**人工审核**；**车型套餐**与**自动证件识别**为演示后快速跟进（但 schema 现在就预留，避免返工）。
+
 **待确认问题（需大家反馈）：**
 
-1. 证件验证方式：人工审核 vs 自动识别（OCR / 第三方）？护照 / 驾照照片的加密存储与保留期限政策？
-2. 行李信息：由平台统一定义标准，还是各合作商自行填写？
-3. 车型套餐如何防止超卖（取车前无具体车辆，需按 门店 × 车型 × 时间段 做库存计数）？
-4. Stripe 接入方式：用 Stripe Connect，还是单一账户 + 每月手动打款来实现 4% 分账？
-5. 哪些功能属于 MVP 必需、哪些可作为后续迭代？（下次讨论）
+1. 证件照片的**加密存储与保留期限**政策？（验证方式 MVP 先用人工审核，自动识别后续再议）
+2. 车型套餐如何防止超卖（取车前无具体车辆，需按 门店 × 车型 × 时间段 做库存计数）？
