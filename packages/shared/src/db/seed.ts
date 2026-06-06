@@ -392,7 +392,7 @@ const SEED_VEHICLES = [
 ]
 
 // Best Car Rental's pickup/return storefronts across Kansai (#387 slice 2).
-// Distinct names per operator satisfy locations_operatorId_name_unique. Hours
+// Distinct names per operator satisfy locations_operatorId_active_name_unique. Hours
 // are a single open/close pair (LocationOperatingHours MVP shape); turnaround
 // uses the 48h (2880m) default unless a storefront needs a tighter cooldown.
 const SEED_LOCATIONS = [
