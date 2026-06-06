@@ -1,4 +1,4 @@
-import postgres from 'postgres'
+import { testSql } from './pg'
 
 // On http/localhost Auth.js uses the unprefixed cookie name (no `__Secure-`).
 // The `encode` salt MUST equal this name or the web's `auth()` cannot decrypt
@@ -13,19 +13,8 @@ const OWNER_NAME = 'Best Car Rental Owner'
 const OPERATOR_ID = 'op_best_car_rental'
 
 /** Look up the seeded owner's auto-generated id by its stable seed email. */
-async function findOwnerId(databaseUrl: string): Promise<string> {
-  const u = new URL(databaseUrl)
-  // Build from URL parts so libpq-only params (e.g. channel_binding) don't reach
-  // postgres-js; the Neon `-pooler` host accepts TCP with ssl=require.
-  const sql = postgres({
-    host: u.hostname,
-    port: u.port ? Number(u.port) : 5432,
-    database: u.pathname.replace(/^\//, ''),
-    username: decodeURIComponent(u.username),
-    password: decodeURIComponent(u.password),
-    ssl: 'require',
-    max: 1,
-  })
+async function findOwnerId(): Promise<string> {
+  const sql = testSql()
   try {
     const rows = await sql<{ id: string }[]>`
       SELECT id FROM users WHERE email = ${OWNER_EMAIL} LIMIT 1
@@ -50,11 +39,9 @@ async function findOwnerId(databaseUrl: string): Promise<string> {
  */
 export async function mintOperatorSessionToken(): Promise<string> {
   const secret = process.env.AUTH_SECRET
-  const databaseUrl = process.env.DATABASE_URL
   if (!secret) throw new Error('AUTH_SECRET is required to mint an e2e session')
-  if (!databaseUrl) throw new Error('DATABASE_URL is required to resolve the owner id')
 
-  const sub = await findOwnerId(databaseUrl)
+  const sub = await findOwnerId()
 
   // next-auth/jwt is ESM-only; dynamic import so Playwright's CJS transform of
   // this file doesn't ERR_REQUIRE_ESM at load time.

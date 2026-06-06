@@ -53,7 +53,6 @@ next-env.d.ts
 /blob-report/
 /playwright/.cache/
 e2e/.auth/
-/playwright/.cache/
 
 # internal / private docs — not for owner or public repo
 docs/internal/

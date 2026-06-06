@@ -1,9 +1,24 @@
 import { expect, test } from '@playwright/test'
+import { testSql } from './pg'
+
+// Names this spec creates; cleaned up in afterAll so a reused local branch
+// doesn't accrete rows (a per-run CI branch is disposable, so this is belt-and-
+// braces). The '%' makes the timestamped CRUD name match too.
+const TEST_LOCATION_PREFIX = 'E2E '
 
 // #416: authenticated, real-DB coverage for operator locations. The minted
 // session cookie (auth.setup.ts) carries OPERATOR_OWNER + operatorId, so these
 // flows exercise the real web -> real Hono API -> seeded Neon branch end to end.
 test.describe('operator locations (authenticated, real DB)', () => {
+  test.afterAll(async () => {
+    const sql = testSql()
+    try {
+      await sql`DELETE FROM locations WHERE name LIKE ${`${TEST_LOCATION_PREFIX}%`}`
+    } finally {
+      await sql.end({ timeout: 5 })
+    }
+  })
+
   test('owner reaches /manage/locations and sees the seeded storefronts (P1)', async ({ page }) => {
     await page.goto('/en/manage/locations')
 
@@ -50,7 +65,7 @@ test.describe('operator locations (authenticated, real DB)', () => {
     await expect(page.getByRole('heading', { name, exact: true })).toBeVisible()
 
     // EDIT
-    const row = page.locator('div.rounded-lg').filter({ hasText: name })
+    const row = page.getByTestId('location-row').filter({ hasText: name })
     await row.getByRole('button', { name: 'Edit location' }).click()
     const editDialog = page.getByRole('dialog')
     await editDialog.locator('#location-name').fill(renamed)
@@ -58,7 +73,7 @@ test.describe('operator locations (authenticated, real DB)', () => {
     await expect(page.getByRole('heading', { name: renamed, exact: true })).toBeVisible()
 
     // ARCHIVE
-    const editedRow = page.locator('div.rounded-lg').filter({ hasText: renamed })
+    const editedRow = page.getByTestId('location-row').filter({ hasText: renamed })
     await editedRow.getByRole('button', { name: 'Archive location' }).click()
     await page.getByRole('dialog').getByRole('button', { name: 'Archive', exact: true }).click()
     // Status flips to Archived and the archive control disables on that row.
