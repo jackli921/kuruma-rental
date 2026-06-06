@@ -38,16 +38,23 @@ export function clearSessionCookie(c: Context): void {
  * echo in `X-CSRF-Token` on every state-changing request (design spec §5.3).
  */
 export function createAuthRoutes() {
-  return new Hono().get('/auth/session', async (c) => {
-    const token = getCookie(c, SESSION_COOKIE)
-    if (!token) return fail(c, 'Unauthorized', 401)
+  return new Hono()
+    .get('/auth/session', async (c) => {
+      const token = getCookie(c, SESSION_COOKIE)
+      if (!token) return fail(c, 'Unauthorized', 401)
 
-    const session = await verifySessionCookie(token)
-    if (!session) return fail(c, 'Unauthorized', 401)
+      const session = await verifySessionCookie(token)
+      if (!session) return fail(c, 'Unauthorized', 401)
 
-    return ok(c, {
-      user: { id: session.user.id, role: session.user.role },
-      csrfToken: session.csrf,
+      return ok(c, {
+        user: { id: session.user.id, role: session.user.role },
+        csrfToken: session.csrf,
+      })
     })
-  })
+    .post('/auth/signout', (c) => {
+      // CSRF-gated by the global csrf middleware (cookie-authenticated non-GET).
+      // Idempotent: clearing an absent cookie is a no-op 204.
+      clearSessionCookie(c)
+      return c.body(null, 204)
+    })
 }
