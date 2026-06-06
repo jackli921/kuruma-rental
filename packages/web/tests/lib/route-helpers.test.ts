@@ -69,6 +69,11 @@ describe('classifyRoute', () => {
     expect(classifyRoute('/dashboard')).toEqual({ type: 'business' })
   })
 
+  test('identifies admin paths and subpaths', () => {
+    expect(classifyRoute('/admin')).toEqual({ type: 'admin' })
+    expect(classifyRoute('/admin/revenue')).toEqual({ type: 'admin' })
+  })
+
   test('identifies public paths', () => {
     expect(classifyRoute('/')).toEqual({ type: 'public' })
     expect(classifyRoute('/vehicles')).toEqual({ type: 'public' })

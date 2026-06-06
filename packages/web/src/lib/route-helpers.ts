@@ -3,8 +3,13 @@ const DEFAULT_LOCALE = 'en'
 
 const RENTER_PATHS = ['/bookings', '/messages']
 const BUSINESS_PATHS = ['/dashboard', '/manage/']
+const ADMIN_PATHS = ['/admin']
 
-type RouteClassification = { type: 'public' } | { type: 'renter' } | { type: 'business' }
+type RouteClassification =
+  | { type: 'public' }
+  | { type: 'renter' }
+  | { type: 'business' }
+  | { type: 'admin' }
 
 export function stripLocale(pathname: string): string {
   const segments = pathname.split('/')
@@ -26,6 +31,9 @@ export function getLocaleFromPath(pathname: string): string {
 }
 
 export function classifyRoute(path: string): RouteClassification {
+  if (ADMIN_PATHS.some((p) => path.startsWith(p))) {
+    return { type: 'admin' }
+  }
   if (BUSINESS_PATHS.some((p) => path.startsWith(p))) {
     return { type: 'business' }
   }
