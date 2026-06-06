@@ -187,9 +187,13 @@ export const locations = pgTable(
   },
   (table) => [
     index('idx_locations_operatorId').on(table.operatorId),
-    // Name is unique per operator (not globally) — two operators may both have a
-    // "Namba" store. DB seal behind the service-level friendly 409 (#387).
-    unique('locations_operatorId_name_unique').on(table.operatorId, table.name),
+    // Name is unique per operator among *non-archived* rows (#410): a storefront
+    // name belongs to active inventory, so archiving a location frees its name to
+    // be reused. Two operators may both run an active "Namba". Partial unique
+    // index excludes ARCHIVED rows; DB seal behind the service-level 409 (#387).
+    uniqueIndex('locations_operatorId_active_name_unique')
+      .on(table.operatorId, table.name)
+      .where(sql`${table.status} <> 'ARCHIVED'`),
     // Composite-FK target: lets vehicles reference a pickup location by
     // (operatorId, id) so a vehicle can only point at a location in its own
     // tenant (slice 2 migration #2). Mirrors vehicle_classes_operatorId_id_unique.

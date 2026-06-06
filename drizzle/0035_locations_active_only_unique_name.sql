@@ -1,0 +1,2 @@
+ALTER TABLE "locations" DROP CONSTRAINT "locations_operatorId_name_unique";--> statement-breakpoint
+CREATE UNIQUE INDEX "locations_operatorId_active_name_unique" ON "locations" USING btree ("operatorId","name") WHERE "locations"."status" <> 'ARCHIVED';

@@ -48,11 +48,20 @@ export class DrizzleLocationRepository implements LocationRepository {
     return row ? toLocation(row) : undefined
   }
 
+  // Powers the service's friendly-409 pre-check, so it must agree with the
+  // partial unique index (#410): only a live (non-archived) location counts as
+  // a name clash — an archived one has freed its name.
   async findByOperatorAndName(operatorId: string, name: string): Promise<Location | undefined> {
     const [row] = await this.db
       .select(locationColumns)
       .from(locations)
-      .where(and(eq(locations.operatorId, operatorId), eq(locations.name, name)))
+      .where(
+        and(
+          eq(locations.operatorId, operatorId),
+          eq(locations.name, name),
+          ne(locations.status, 'ARCHIVED'),
+        ),
+      )
     return row ? toLocation(row) : undefined
   }
 

@@ -11,10 +11,11 @@ import { db } from './setup'
 // Locations are operator-scoped (#387). Mirrors the vehicle-class isolation
 // suite: an OPERATOR_* caller only ever observes its own tenant's locations,
 // a tenant-less operator fails closed, and admins (SYSTEM_CONTEXT) read across.
-// Name uniqueness is PER OPERATOR — two tenants may both run a "Namba" store —
-// sealed at the DB by locations_operatorId_name_unique (23505). Exercised
-// against real Postgres so the scope filter and constraint are proven, not
-// just the in-memory stand-in.
+// Name uniqueness is PER OPERATOR and ACTIVE-ONLY — two tenants may both run a
+// "Namba" store, and archiving frees the name (#410) — sealed at the DB by the
+// partial unique index locations_operatorId_active_name_unique (23505).
+// Exercised against real Postgres so the scope filter and constraint are
+// proven, not just the in-memory stand-in.
 
 const ctxFor = (operatorId: string): CallerContext => ({
   userId: 'owner',
@@ -131,6 +132,39 @@ describe('location name uniqueness is sealed per operator (23505)', () => {
     const sibling = await repo.create(locationInput(opBId, 'Shinsaibashi'))
     expect(sibling.name).toBe('Shinsaibashi')
     expect(sibling.operatorId).toBe(opBId)
+  })
+})
+
+// #410: a storefront name is a property of *active* inventory. Uniqueness is
+// sealed by a partial index over non-archived rows, so archiving a location
+// frees its name for re-use — while two live locations still can't collide.
+describe('archiving a location frees its name for re-creation (#410)', () => {
+  const repo = new DrizzleLocationRepository(db)
+  const uniq = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
+  const opId = `op_locr_${uniq}`
+
+  beforeAll(async () => {
+    await db.insert(operators).values({ id: opId, slug: `locr-${uniq}`, name: 'LocR Operator' })
+  })
+
+  afterAll(async () => {
+    await db.delete(locations).where(inArray(locations.operatorId, [opId]))
+    await db.delete(operators).where(inArray(operators.id, [opId]))
+  })
+
+  it('re-creates a name after the prior location is archived', async () => {
+    const first = await repo.create(locationInput(opId, 'Dotonbori'))
+    await repo.archive(first.id)
+    const second = await repo.create(locationInput(opId, 'Dotonbori'))
+    expect(second.id).not.toBe(first.id)
+    expect(second.status).toBe('ACTIVE')
+  })
+
+  it('still rejects two ACTIVE locations with the same name', async () => {
+    await repo.create(locationInput(opId, 'Namba Parks'))
+    expect(await violationCode(repo.create(locationInput(opId, 'Namba Parks')))).toBe(
+      PG_UNIQUE_VIOLATION,
+    )
   })
 })
 
