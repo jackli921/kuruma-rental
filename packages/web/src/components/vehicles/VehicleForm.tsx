@@ -5,6 +5,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import type { VehicleClassData } from '@/modules/classes'
+import type { LocationData } from '@/modules/locations'
 import type { OperatorOption } from '@/modules/operators'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { type CreateVehicleInput, createVehicleSchema } from '@kuruma/shared/validators/vehicle'
@@ -23,6 +24,10 @@ interface VehicleFormProps {
   // Passed from the parent so the form stays a dumb presentational component;
   // the Fleet page fetches classes once and shares the cache across dialogs.
   classes?: readonly VehicleClassData[] | undefined
+  // #435: storefronts the vehicle can be picked up from. Like classId, a
+  // vehicle's pickup location must belong to its operator (composite FK), so
+  // the picker is scoped to the chosen operator when the operator picker shows.
+  locations?: readonly LocationData[] | undefined
   // #407: operators the caller may create under. Supplied ONLY by the add
   // dialog (create mode); absent in edit mode (operator is immutable). With one
   // operator the picker is hidden and the id submitted silently; with 2+ the
@@ -40,6 +45,7 @@ export function VehicleForm({
   defaultValues,
   isSubmitting,
   classes,
+  locations,
   operators,
   operatorRequired,
 }: VehicleFormProps) {
@@ -73,6 +79,7 @@ export function VehicleForm({
       maxRentalHours: 72,
       advanceBookingHours: null,
       classId: null,
+      pickupLocationId: null,
       // #407: with a single operator, default it so the body always carries an
       // explicit operatorId; with 2+ leave blank to force a choice.
       operatorId: operators?.length === 1 ? operators[0]?.id : undefined,
@@ -102,6 +109,7 @@ export function VehicleForm({
       if (pickerJustAppeared || !isValidChoice) {
         setValue('operatorId', '')
         setValue('classId', null)
+        setValue('pickupLocationId', null)
       }
     }
   }, [operators, setValue, getValues])
@@ -113,6 +121,11 @@ export function VehicleForm({
   const visibleClasses = showOperatorPicker
     ? (classes ?? []).filter((klass) => klass.operatorId === selectedOperatorId)
     : classes
+  // #435: same composite-FK scoping as classes — a pickup location must belong
+  // to the chosen operator, so filter the options when the operator picker shows.
+  const visibleLocations = showOperatorPicker
+    ? (locations ?? []).filter((loc) => loc.operatorId === selectedOperatorId)
+    : locations
 
   const operatorField = register('operatorId', { required: t('form.operatorRequired') })
 
@@ -154,9 +167,10 @@ export function VehicleForm({
             {...operatorField}
             onChange={(e) => {
               operatorField.onChange(e)
-              // Operator changed: drop any class from the previous operator so a
-              // cross-operator (FK-violating) classId can never be submitted.
+              // Operator changed: drop any class/location from the previous
+              // operator so a cross-operator (FK-violating) id can never be submitted.
               setValue('classId', null)
+              setValue('pickupLocationId', null)
             }}
           >
             <option value="">{t('form.operatorPlaceholder')}</option>
@@ -198,6 +212,28 @@ export function VehicleForm({
             {visibleClasses.map((klass) => (
               <option key={klass.id} value={klass.id}>
                 {klass.name}
+              </option>
+            ))}
+          </select>
+        </div>
+      )}
+
+      {visibleLocations && visibleLocations.length > 0 && (
+        <div>
+          <Label htmlFor="pickupLocationId">{t('form.pickupLocation')}</Label>
+          <select
+            id="pickupLocationId"
+            className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-xs"
+            {...register('pickupLocationId', {
+              // Empty string ("No pickup location") submits as null to match the
+              // nullable UUID validator. Any other value is the location UUID.
+              setValueAs: (v) => (v === '' || v == null ? null : v),
+            })}
+          >
+            <option value="">{t('form.pickupLocationNone')}</option>
+            {visibleLocations.map((loc) => (
+              <option key={loc.id} value={loc.id}>
+                {loc.name}
               </option>
             ))}
           </select>

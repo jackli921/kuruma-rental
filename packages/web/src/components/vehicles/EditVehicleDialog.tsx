@@ -13,6 +13,7 @@ import { useVehicleMutation } from '@/hooks/useVehicleMutation'
 import { updateVehicleAction } from '@/lib/vehicle-actions'
 import type { VehicleData } from '@/lib/vehicle-api'
 import type { VehicleClassData } from '@/modules/classes'
+import type { LocationData } from '@/modules/locations'
 import type { CreateVehicleInput } from '@kuruma/shared/validators/vehicle'
 import { useTranslations } from 'next-intl'
 
@@ -20,9 +21,15 @@ interface EditVehicleDialogProps {
   vehicle: VehicleData | null
   onOpenChange: (open: boolean) => void
   classes?: readonly VehicleClassData[] | undefined
+  locations?: readonly LocationData[] | undefined
 }
 
-export function EditVehicleDialog({ vehicle, onOpenChange, classes }: EditVehicleDialogProps) {
+export function EditVehicleDialog({
+  vehicle,
+  onOpenChange,
+  classes,
+  locations,
+}: EditVehicleDialogProps) {
   const t = useTranslations('business.vehicles')
   const { mutate, isPending, error } = useVehicleMutation<CreateVehicleInput>({
     mutationFn: (data) => updateVehicleAction(vehicle?.id ?? '', data),
@@ -51,9 +58,11 @@ export function EditVehicleDialog({ vehicle, onOpenChange, classes }: EditVehicl
             onCancel={() => onOpenChange(false)}
             isSubmitting={isPending}
             classes={classes}
+            locations={locations}
             defaultValues={{
               name: vehicle.name,
               classId: vehicle.classId,
+              pickupLocationId: vehicle.pickupLocationId,
               ...(vehicle.description != null && { description: vehicle.description }),
               photos: vehicle.photos ?? [],
               seats: vehicle.seats,

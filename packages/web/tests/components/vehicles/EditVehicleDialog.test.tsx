@@ -42,6 +42,8 @@ vi.mock('next-intl', () => ({
       'form.save': 'Save vehicle',
       'form.saving': 'Saving...',
       'form.cancel': 'Cancel',
+      'form.pickupLocation': 'Pickup location',
+      'form.pickupLocationNone': 'No pickup location',
     }
     return messages[key] ?? key
   },
@@ -53,7 +55,35 @@ vi.mock('@/lib/vehicle-actions', () => ({
 
 import { EditVehicleDialog } from '@/components/vehicles/EditVehicleDialog'
 import type { VehicleData } from '@/lib/vehicle-api'
+import type { LocationData } from '@/modules/locations'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+
+const LOCATIONS: LocationData[] = [
+  {
+    id: '0a000000-0000-4000-8000-000000000001',
+    operatorId: 'op_a',
+    name: 'Osaka Namba',
+    address: '1-1 Test',
+    operatingHours: {} as LocationData['operatingHours'],
+    timezone: 'Asia/Tokyo',
+    defaultTurnaroundMinutes: 60,
+    status: 'ACTIVE',
+    createdAt: '2026-01-01T00:00:00.000Z',
+    updatedAt: '2026-01-01T00:00:00.000Z',
+  },
+  {
+    id: '0a000000-0000-4000-8000-000000000002',
+    operatorId: 'op_a',
+    name: 'Kyoto Station',
+    address: '2-2 Test',
+    operatingHours: {} as LocationData['operatingHours'],
+    timezone: 'Asia/Tokyo',
+    defaultTurnaroundMinutes: 60,
+    status: 'ACTIVE',
+    createdAt: '2026-01-01T00:00:00.000Z',
+    updatedAt: '2026-01-01T00:00:00.000Z',
+  },
+]
 
 function makeVehicle(overrides: Partial<VehicleData> = {}): VehicleData {
   return {
@@ -72,6 +102,7 @@ function makeVehicle(overrides: Partial<VehicleData> = {}): VehicleData {
     advanceBookingHours: null,
     dailyRateJpy: 6500,
     hourlyRateJpy: 900,
+    pickupLocationId: null,
     shakenExpiryDate: null,
     insuranceExpiryDate: null,
     createdAt: '2026-01-01T00:00:00Z',
@@ -80,13 +111,21 @@ function makeVehicle(overrides: Partial<VehicleData> = {}): VehicleData {
   }
 }
 
-function renderDialog(props: { vehicle: VehicleData | null; onOpenChange?: () => void }) {
+function renderDialog(props: {
+  vehicle: VehicleData | null
+  onOpenChange?: () => void
+  locations?: LocationData[]
+}) {
   const client = new QueryClient({
     defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
   })
   return render(
     <QueryClientProvider client={client}>
-      <EditVehicleDialog vehicle={props.vehicle} onOpenChange={props.onOpenChange ?? vi.fn()} />
+      <EditVehicleDialog
+        vehicle={props.vehicle}
+        onOpenChange={props.onOpenChange ?? vi.fn()}
+        locations={props.locations}
+      />
     </QueryClientProvider>,
   )
 }
@@ -177,6 +216,25 @@ describe('EditVehicleDialog', () => {
 
     expect(screen.getByLabelText('Shaken expiry date')).not.toHaveValue()
     expect(screen.getByLabelText('Insurance expiry date')).not.toHaveValue()
+  })
+
+  // Issue #435: pre-populate the pickup-location picker. Same whitelist trap as
+  // #60/#50/#226 — the dialog must forward pickupLocationId into defaultValues,
+  // or the saved storefront silently reverts to "No pickup location" on edit.
+  it('pre-selects the vehicle pickupLocationId in edit mode', () => {
+    const vehicle = makeVehicle({ pickupLocationId: '0a000000-0000-4000-8000-000000000002' })
+    renderDialog({ vehicle, locations: LOCATIONS })
+
+    expect((screen.getByLabelText('Pickup location') as HTMLSelectElement).value).toBe(
+      '0a000000-0000-4000-8000-000000000002',
+    )
+  })
+
+  it('renders "No pickup location" selected when the vehicle has none', () => {
+    const vehicle = makeVehicle({ pickupLocationId: null })
+    renderDialog({ vehicle, locations: LOCATIONS })
+
+    expect((screen.getByLabelText('Pickup location') as HTMLSelectElement).value).toBe('')
   })
 
   it('renders empty rental-rules inputs when the vehicle has null values', () => {

@@ -24,6 +24,7 @@ import { cn } from '@/lib/utils'
 import { fetchFleetOverviewAction } from '@/lib/vehicle-actions'
 import type { VehicleData } from '@/lib/vehicle-api'
 import { classKeys, fetchClassesAction } from '@/modules/classes'
+import { fetchLocationsAction, locationKeys } from '@/modules/locations'
 import { fetchOperatorsAction, operatorKeys } from '@/modules/operators'
 import { useQuery } from '@tanstack/react-query'
 import { AlertCircle, Car, ChevronLeft, ChevronRight, Plus, SlidersHorizontal } from 'lucide-react'
@@ -108,6 +109,19 @@ export function VehicleList() {
     queryKey: operatorKeys.list(),
     queryFn: async () => {
       const result = await fetchOperatorsAction()
+      if (!result.success) throw new Error(result.error)
+      return result.data
+    },
+  })
+
+  // #435: locations power the pickup-location dropdown in the add/edit dialogs.
+  // Archived locations are excluded — they must never be assignment targets.
+  // Shares the Locations page query key so navigating between the two reuses
+  // the cache.
+  const { data: locations } = useQuery({
+    queryKey: locationKeys.list(),
+    queryFn: async () => {
+      const result = await fetchLocationsAction({ includeArchived: false })
       if (!result.success) throw new Error(result.error)
       return result.data
     },
@@ -397,12 +411,14 @@ export function VehicleList() {
           open={showAddDialog}
           onOpenChange={setShowAddDialog}
           classes={classes}
+          locations={locations}
           operators={operators}
         />
         <EditVehicleDialog
           vehicle={editingVehicle}
           onOpenChange={() => setEditingVehicle(null)}
           classes={classes}
+          locations={locations}
         />
         <RetireVehicleDialog
           vehicle={retiringVehicle}
