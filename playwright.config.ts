@@ -1,4 +1,5 @@
 import { defineConfig, devices } from '@playwright/test'
+import { E2E_AUTH_SECRET } from './e2e/mint-mock-session'
 
 const PORT = 3001
 const BASE_URL = `http://localhost:${PORT}`
@@ -47,7 +48,7 @@ export default defineConfig({
         // Valid-format placeholders — the E2E spec routes hit the mock API,
         // not the real DB. Middleware's auth() import chain touches neon()
         // and will crash on empty values even if the DB is never queried.
-        AUTH_SECRET: 'e2e-placeholder-secret-not-real',
+        AUTH_SECRET: E2E_AUTH_SECRET,
         DATABASE_URL: 'postgresql://e2e:e2e@localhost:5432/e2e?connect_timeout=1',
         NEXT_PUBLIC_API_URL: MOCK_API_URL,
       },
