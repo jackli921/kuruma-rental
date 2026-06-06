@@ -392,8 +392,8 @@ export function createApp(overrides?: {
 
   // CSRF guard for the cookie session (design spec §5.4). Must run before the
   // route-auth guards so a forged cookie-authenticated mutation is rejected
-  // (403) before any handler work. No-op for safe methods, Bearer/API-key
-  // callers, and the cookie-less Apple first-touch — see middleware/csrf.ts.
+  // (403) before any handler work. No-op for safe methods and cookie-less
+  // Bearer/API-key callers — see middleware/csrf.ts.
   app.use('*', csrf())
 
   // Auth middleware on all protected paths.

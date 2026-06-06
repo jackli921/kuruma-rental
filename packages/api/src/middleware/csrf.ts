@@ -25,8 +25,8 @@ function tokensMatch(a: string, b: string): boolean {
  * Exemptions fall out of the invariant "CSRF rides the ambient cookie":
  *  - Safe methods (GET/HEAD/OPTIONS) never mutate.
  *  - Requests with no session cookie aren't cookie-authenticated — partner
- *    Bearer/API-key callers and Apple's first-touch form POST (no session yet,
- *    OAuth `state` covers that round-trip). Nothing to forge → pass through.
+ *    Bearer/API-key callers carry no ambient cookie. Nothing to forge → pass
+ *    through. (Google's callback is a GET, already covered by safe methods.)
  */
 export function csrf(): MiddlewareHandler {
   return async (c, next) => {

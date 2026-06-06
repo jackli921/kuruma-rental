@@ -366,7 +366,7 @@ const SESSION_TTL = '7d'
 /**
  * Mint a `kuruma_session` JWT for a signed-in user. Kept beside
  * `verifySessionCookie` so the two halves of the session contract (and its
- * iss/aud) can't drift. Reused by every OAuth provider (Google now, Apple next).
+ * iss/aud) can't drift. Shared by the Google sign-in flow (the only provider).
  */
 export async function mintSessionToken(
   claims: { sub: string; role: UserRole; operatorId?: string; csrf: string },
