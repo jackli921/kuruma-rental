@@ -811,5 +811,15 @@
       "notFound": "Store not found",
       "notFoundDescription": "This store does not exist or is no longer available."
     }
+  },
+  "admin": {
+    "nav": { "overview": "Overview", "revenue": "Partner Revenue" },
+    "home": { "title": "Platform Admin", "subtitle": "Platform operations" },
+    "revenue": {
+      "title": "Partner Revenue",
+      "subtitle": "Monthly payout per partner",
+      "comingSoon": "Coming soon — depends on payment events (#461)",
+      "model": "Renter pays the listed price; the platform keeps 4%; remittance = paid − 4%, aggregated per business for monthly payout."
+    }
   }
 }
