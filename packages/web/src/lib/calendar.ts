@@ -19,7 +19,10 @@ export interface CalendarBooking {
 
 interface BookingWithRenter {
   id: string
-  vehicleId: string
+  // #392: the API returns the fulfilling car as `assignedVehicleId` (the legacy
+  // `vehicleId` column is gone). The calendar binds events to vehicle columns by
+  // this id.
+  assignedVehicleId: string
   renterId: string
   startAt: string
   endAt: string
@@ -53,7 +56,7 @@ export async function fetchCalendarBookings(
 
   return body.data.map((b) => ({
     id: b.id,
-    vehicleId: b.vehicleId,
+    vehicleId: b.assignedVehicleId,
     renterId: b.renterId,
     startAt: b.startAt,
     endAt: b.endAt,

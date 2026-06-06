@@ -7,32 +7,47 @@ import { pgErrorCode } from '../../src/pg-errors'
 import {
   DrizzleAvailabilityRepository,
   DrizzleBookingRepository,
+  DrizzleLocationRepository,
   DrizzleVehicleClassRepository,
   DrizzleVehicleRepository,
 } from '../../src/repositories/drizzle'
 import type { Vehicle } from '../../src/stores'
 import { authHeaders, setupAuthEnv } from '../helpers/auth'
+import { bookingInput } from '../helpers/booking'
 import {
   DEFAULT_DAILY_RATE_JPY,
   cleanupBookings,
+  cleanupLocations,
   cleanupUsers,
   cleanupVehicleClasses,
   cleanupVehicles,
   db,
+  seedLocation,
   seedVehicleClass,
 } from './setup'
 
 const bookingRepo = new DrizzleBookingRepository(db)
 const vehicleRepo = new DrizzleVehicleRepository(db)
 
+// Slice 6 (#392): effectiveEndAt is DB-trigger-derived = endAt + the pickup
+// location's defaultTurnaroundMinutes (migration 0036). The value passed to the
+// insert is overwritten by the trigger. We seed the location with an EXPLICIT,
+// non-default turnaround so the expected effective end is computable here — and
+// crucially NOT 60min: the legacy vehicle.bufferMinutes (60) is gone, so a
+// 60-min result would be a regression (proposal §9 item 20).
+const TURNAROUND_MINUTES = 120
+const effectiveEnd = (endAt: Date): Date => new Date(endAt.getTime() + TURNAROUND_MINUTES * 60_000)
+
 // --- Test data ---
 
 let testUser: { id: string; email: string }
 let testVehicle: Vehicle
 let testClassId: string
+let testLocationId: string
 const createdBookingIds: string[] = []
 const createdVehicleIds: string[] = []
 const createdClassIds: string[] = []
+const createdLocationIds: string[] = []
 
 beforeAll(async () => {
   const [user] = await db
@@ -50,6 +65,11 @@ beforeAll(async () => {
   testClassId = klass.id
   createdClassIds.push(klass.id)
 
+  // bookings carry NOT NULL pickup/dropoff location FKs sealed to the operator.
+  const location = await seedLocation('booking', TURNAROUND_MINUTES)
+  testLocationId = location.id
+  createdLocationIds.push(location.id)
+
   testVehicle = await vehicleRepo.create(SYSTEM_CONTEXT, {
     operatorId: BEST_CAR_RENTAL_OPERATOR_ID,
     classId: testClassId,
@@ -60,7 +80,6 @@ beforeAll(async () => {
     fuelType: null,
     licensePlate: null,
     status: 'AVAILABLE',
-    bufferMinutes: 60,
     minRentalHours: null,
     maxRentalHours: null,
     advanceBookingHours: null,
@@ -71,6 +90,26 @@ beforeAll(async () => {
   createdVehicleIds.push(testVehicle.id)
 })
 
+// Marketplace-shape booking seeded directly through the repo. The helper supplies
+// a unique bookingCode per call (so overlapping-range creates trip the exclusion
+// constraint 23P01, not the bookingCode unique 23505) plus null snapshot defaults.
+// effectiveEndAt is intentionally NOT set here — the DB trigger derives it.
+function seedBooking(overrides: Parameters<typeof bookingInput>[0] = {}) {
+  return bookingRepo.create(
+    SYSTEM_CONTEXT,
+    bookingInput({
+      operatorId: BEST_CAR_RENTAL_OPERATOR_ID,
+      renterId: testUser.id,
+      classId: testClassId,
+      requestedVehicleId: testVehicle.id,
+      assignedVehicleId: testVehicle.id,
+      pickupLocationId: testLocationId,
+      dropoffLocationId: testLocationId,
+      ...overrides,
+    }),
+  )
+}
+
 afterEach(async () => {
   await cleanupBookings(createdBookingIds)
   createdBookingIds.length = 0
@@ -80,48 +119,49 @@ afterAll(async () => {
   await cleanupVehicles(createdVehicleIds)
   await cleanupUsers([testUser.id])
   await cleanupVehicleClasses(createdClassIds)
+  await cleanupLocations(createdLocationIds)
 })
 
 describe('DrizzleBookingRepository', () => {
   it('create inserts and returns a booking with correct fields', async () => {
-    const input = {
-      renterId: testUser.id,
-      classId: testClassId,
-      vehicleId: testVehicle.id,
+    const endAt = new Date('2026-07-01T14:00:00Z')
+    const booking = await seedBooking({
       startAt: new Date('2026-07-01T10:00:00Z'),
-      endAt: new Date('2026-07-01T14:00:00Z'),
-      effectiveEndAt: new Date('2026-07-01T15:00:00Z'),
-      status: 'CONFIRMED' as const,
-      source: 'DIRECT' as const,
+      endAt,
+      status: 'CONFIRMED',
+      source: 'DIRECT',
       externalId: null,
       notes: 'Test booking',
-    }
-
-    const booking = await bookingRepo.create(SYSTEM_CONTEXT, input)
+    })
     createdBookingIds.push(booking.id)
 
     expect(booking.id).toMatch(/^[0-9a-f-]{36}$/)
+    expect(booking.operatorId).toBe(BEST_CAR_RENTAL_OPERATOR_ID)
     expect(booking.renterId).toBe(testUser.id)
-    expect(booking.vehicleId).toBe(testVehicle.id)
+    expect(booking.classId).toBe(testClassId)
+    expect(booking.requestedVehicleId).toBe(testVehicle.id)
+    expect(booking.assignedVehicleId).toBe(testVehicle.id)
+    expect(booking.pickupLocationId).toBe(testLocationId)
+    expect(booking.dropoffLocationId).toBe(testLocationId)
+    expect(booking.bookingCode).toMatch(/^[0-9A-Z]+$/) // NOT NULL UNIQUE code persisted
     expect(booking.startAt).toEqual(new Date('2026-07-01T10:00:00Z'))
-    expect(booking.endAt).toEqual(new Date('2026-07-01T14:00:00Z'))
-    expect(booking.effectiveEndAt).toEqual(new Date('2026-07-01T15:00:00Z'))
+    expect(booking.endAt).toEqual(endAt)
+    // Trigger-derived: endAt + the location's 120-min turnaround (NOT 60).
+    expect(booking.effectiveEndAt).toEqual(effectiveEnd(endAt))
     expect(booking.status).toBe('CONFIRMED')
     expect(booking.source).toBe('DIRECT')
     expect(booking.externalId).toBeNull()
     expect(booking.notes).toBe('Test booking')
+    expect(booking.feeSnapshot).toEqual([])
     expect(booking.createdAt).toBeInstanceOf(Date)
     expect(booking.updatedAt).toBeInstanceOf(Date)
   })
 
   it('findById retrieves a created booking', async () => {
-    const created = await bookingRepo.create(SYSTEM_CONTEXT, {
-      renterId: testUser.id,
-      classId: testClassId,
-      vehicleId: testVehicle.id,
+    const endAt = new Date('2026-08-01T12:00:00Z')
+    const created = await seedBooking({
       startAt: new Date('2026-08-01T09:00:00Z'),
-      endAt: new Date('2026-08-01T12:00:00Z'),
-      effectiveEndAt: new Date('2026-08-01T13:00:00Z'),
+      endAt,
       status: 'CONFIRMED',
       source: 'DIRECT',
       externalId: null,
@@ -134,10 +174,10 @@ describe('DrizzleBookingRepository', () => {
     expect(found).toBeDefined()
     expect(found!.id).toBe(created.id)
     expect(found!.renterId).toBe(testUser.id)
-    expect(found!.vehicleId).toBe(testVehicle.id)
+    expect(found!.assignedVehicleId).toBe(testVehicle.id)
     expect(found!.startAt).toEqual(new Date('2026-08-01T09:00:00Z'))
-    expect(found!.endAt).toEqual(new Date('2026-08-01T12:00:00Z'))
-    expect(found!.effectiveEndAt).toEqual(new Date('2026-08-01T13:00:00Z'))
+    expect(found!.endAt).toEqual(endAt)
+    expect(found!.effectiveEndAt).toEqual(effectiveEnd(endAt))
     expect(found!.status).toBe('CONFIRMED')
     expect(found!.source).toBe('DIRECT')
     expect(found!.externalId).toBeNull()
@@ -150,13 +190,9 @@ describe('DrizzleBookingRepository', () => {
   })
 
   it('findAll returns bookings and filters by status', async () => {
-    const confirmed = await bookingRepo.create(SYSTEM_CONTEXT, {
-      renterId: testUser.id,
-      classId: testClassId,
-      vehicleId: testVehicle.id,
+    const confirmed = await seedBooking({
       startAt: new Date('2026-09-01T10:00:00Z'),
       endAt: new Date('2026-09-01T14:00:00Z'),
-      effectiveEndAt: new Date('2026-09-01T15:00:00Z'),
       status: 'CONFIRMED',
       source: 'DIRECT',
       externalId: null,
@@ -164,13 +200,9 @@ describe('DrizzleBookingRepository', () => {
     })
     createdBookingIds.push(confirmed.id)
 
-    const cancelled = await bookingRepo.create(SYSTEM_CONTEXT, {
-      renterId: testUser.id,
-      classId: testClassId,
-      vehicleId: testVehicle.id,
+    const cancelled = await seedBooking({
       startAt: new Date('2026-10-01T10:00:00Z'),
       endAt: new Date('2026-10-01T14:00:00Z'),
-      effectiveEndAt: new Date('2026-10-01T15:00:00Z'),
       status: 'CANCELLED',
       source: 'DIRECT',
       externalId: null,
@@ -189,7 +221,7 @@ describe('DrizzleBookingRepository', () => {
     expect(filteredIds).not.toContain(cancelled.id)
   })
 
-  it('findAll filters by vehicleId', async () => {
+  it('findAll filters by vehicleId (the assigned vehicle)', async () => {
     const otherVehicle = await vehicleRepo.create(SYSTEM_CONTEXT, {
       operatorId: BEST_CAR_RENTAL_OPERATOR_ID,
       classId: testClassId,
@@ -200,7 +232,6 @@ describe('DrizzleBookingRepository', () => {
       fuelType: null,
       licensePlate: null,
       status: 'AVAILABLE',
-      bufferMinutes: 60,
       minRentalHours: null,
       maxRentalHours: null,
       advanceBookingHours: null,
@@ -210,13 +241,9 @@ describe('DrizzleBookingRepository', () => {
     })
     createdVehicleIds.push(otherVehicle.id)
 
-    const bookingA = await bookingRepo.create(SYSTEM_CONTEXT, {
-      renterId: testUser.id,
-      classId: testClassId,
-      vehicleId: testVehicle.id,
+    const bookingA = await seedBooking({
       startAt: new Date('2026-11-01T10:00:00Z'),
       endAt: new Date('2026-11-01T14:00:00Z'),
-      effectiveEndAt: new Date('2026-11-01T15:00:00Z'),
       status: 'CONFIRMED',
       source: 'DIRECT',
       externalId: null,
@@ -224,13 +251,11 @@ describe('DrizzleBookingRepository', () => {
     })
     createdBookingIds.push(bookingA.id)
 
-    const bookingB = await bookingRepo.create(SYSTEM_CONTEXT, {
-      renterId: testUser.id,
-      classId: testClassId,
-      vehicleId: otherVehicle.id,
+    const bookingB = await seedBooking({
+      requestedVehicleId: otherVehicle.id,
+      assignedVehicleId: otherVehicle.id,
       startAt: new Date('2026-11-01T10:00:00Z'),
       endAt: new Date('2026-11-01T14:00:00Z'),
-      effectiveEndAt: new Date('2026-11-01T15:00:00Z'),
       status: 'CONFIRMED',
       source: 'DIRECT',
       externalId: null,
@@ -245,13 +270,9 @@ describe('DrizzleBookingRepository', () => {
   })
 
   it('updateStatus transitions CONFIRMED to ACTIVE', async () => {
-    const created = await bookingRepo.create(SYSTEM_CONTEXT, {
-      renterId: testUser.id,
-      classId: testClassId,
-      vehicleId: testVehicle.id,
+    const created = await seedBooking({
       startAt: new Date('2026-12-01T10:00:00Z'),
       endAt: new Date('2026-12-01T14:00:00Z'),
-      effectiveEndAt: new Date('2026-12-01T15:00:00Z'),
       status: 'CONFIRMED',
       source: 'DIRECT',
       externalId: null,
@@ -268,7 +289,7 @@ describe('DrizzleBookingRepository', () => {
     expect(updated!.id).toBe(created.id)
     expect(updated!.status).toBe('ACTIVE')
     expect(updated!.renterId).toBe(testUser.id)
-    expect(updated!.vehicleId).toBe(testVehicle.id)
+    expect(updated!.assignedVehicleId).toBe(testVehicle.id)
     expect(updated!.startAt).toEqual(new Date('2026-12-01T10:00:00Z'))
 
     // Verify persisted in DB
@@ -277,13 +298,9 @@ describe('DrizzleBookingRepository', () => {
   })
 
   it('create persists totalPrice through Drizzle insert (issue #89)', async () => {
-    const booking = await bookingRepo.create(SYSTEM_CONTEXT, {
-      renterId: testUser.id,
-      classId: testClassId,
-      vehicleId: testVehicle.id,
+    const booking = await seedBooking({
       startAt: new Date('2026-07-15T10:00:00Z'),
       endAt: new Date('2026-07-15T14:00:00Z'),
-      effectiveEndAt: new Date('2026-07-15T15:00:00Z'),
       status: 'CONFIRMED',
       source: 'DIRECT',
       externalId: null,
@@ -300,13 +317,9 @@ describe('DrizzleBookingRepository', () => {
   })
 
   it('rejects overlapping bookings with PG error code 23P01', async () => {
-    const firstBooking = await bookingRepo.create(SYSTEM_CONTEXT, {
-      renterId: testUser.id,
-      classId: testClassId,
-      vehicleId: testVehicle.id,
+    const firstBooking = await seedBooking({
       startAt: new Date('2027-01-01T10:00:00Z'),
       endAt: new Date('2027-01-01T14:00:00Z'),
-      effectiveEndAt: new Date('2027-01-01T15:00:00Z'),
       status: 'CONFIRMED',
       source: 'DIRECT',
       externalId: null,
@@ -315,13 +328,9 @@ describe('DrizzleBookingRepository', () => {
     createdBookingIds.push(firstBooking.id)
 
     try {
-      const second = await bookingRepo.create(SYSTEM_CONTEXT, {
-        renterId: testUser.id,
-        classId: testClassId,
-        vehicleId: testVehicle.id,
+      const second = await seedBooking({
         startAt: new Date('2027-01-01T13:00:00Z'),
         endAt: new Date('2027-01-01T17:00:00Z'),
-        effectiveEndAt: new Date('2027-01-01T18:00:00Z'),
         status: 'CONFIRMED',
         source: 'DIRECT',
         externalId: null,
@@ -337,13 +346,9 @@ describe('DrizzleBookingRepository', () => {
   })
 
   it('allows overlapping booking after first is cancelled', async () => {
-    const firstBooking = await bookingRepo.create(SYSTEM_CONTEXT, {
-      renterId: testUser.id,
-      classId: testClassId,
-      vehicleId: testVehicle.id,
+    const firstBooking = await seedBooking({
       startAt: new Date('2027-02-01T10:00:00Z'),
       endAt: new Date('2027-02-01T14:00:00Z'),
-      effectiveEndAt: new Date('2027-02-01T15:00:00Z'),
       status: 'CONFIRMED',
       source: 'DIRECT',
       externalId: null,
@@ -362,13 +367,9 @@ describe('DrizzleBookingRepository', () => {
 
     // Overlapping booking should now succeed — exclusion constraint
     // only applies to CONFIRMED/ACTIVE
-    const secondBooking = await bookingRepo.create(SYSTEM_CONTEXT, {
-      renterId: testUser.id,
-      classId: testClassId,
-      vehicleId: testVehicle.id,
+    const secondBooking = await seedBooking({
       startAt: new Date('2027-02-01T12:00:00Z'),
       endAt: new Date('2027-02-01T16:00:00Z'),
-      effectiveEndAt: new Date('2027-02-01T17:00:00Z'),
       status: 'CONFIRMED',
       source: 'DIRECT',
       externalId: null,
@@ -377,34 +378,28 @@ describe('DrizzleBookingRepository', () => {
     createdBookingIds.push(secondBooking.id)
 
     expect(secondBooking.status).toBe('CONFIRMED')
-    expect(secondBooking.vehicleId).toBe(testVehicle.id)
+    expect(secondBooking.assignedVehicleId).toBe(testVehicle.id)
   })
 
   it('allows adjacent (non-overlapping) bookings on same vehicle', async () => {
-    // First booking: 10:00-14:00, effectiveEnd 15:00 (buffer)
-    const first = await bookingRepo.create(SYSTEM_CONTEXT, {
-      renterId: testUser.id,
-      classId: testClassId,
-      vehicleId: testVehicle.id,
+    // First booking: 10:00-14:00; trigger turnaround 120min -> effectiveEnd 16:00.
+    const firstEnd = new Date('2027-04-01T14:00:00Z')
+    const first = await seedBooking({
       startAt: new Date('2027-04-01T10:00:00Z'),
-      endAt: new Date('2027-04-01T14:00:00Z'),
-      effectiveEndAt: new Date('2027-04-01T15:00:00Z'),
+      endAt: firstEnd,
       status: 'CONFIRMED',
       source: 'DIRECT',
       externalId: null,
       notes: null,
     })
     createdBookingIds.push(first.id)
+    expect(first.effectiveEndAt).toEqual(effectiveEnd(firstEnd)) // 16:00
 
-    // Second booking starts exactly at first's effectiveEndAt (boundary)
-    // tstzrange is [closed, open) so startAt === effectiveEndAt does NOT overlap
-    const second = await bookingRepo.create(SYSTEM_CONTEXT, {
-      renterId: testUser.id,
-      classId: testClassId,
-      vehicleId: testVehicle.id,
-      startAt: new Date('2027-04-01T15:00:00Z'),
+    // Second booking starts exactly at first's effectiveEndAt (boundary).
+    // tstzrange is [closed, open) so startAt === effectiveEndAt does NOT overlap.
+    const second = await seedBooking({
+      startAt: effectiveEnd(firstEnd), // 16:00
       endAt: new Date('2027-04-01T19:00:00Z'),
-      effectiveEndAt: new Date('2027-04-01T20:00:00Z'),
       status: 'CONFIRMED',
       source: 'DIRECT',
       externalId: null,
@@ -413,33 +408,32 @@ describe('DrizzleBookingRepository', () => {
     createdBookingIds.push(second.id)
 
     expect(second.status).toBe('CONFIRMED')
-    expect(second.startAt).toEqual(new Date('2027-04-01T15:00:00Z'))
+    expect(second.startAt).toEqual(effectiveEnd(firstEnd))
   })
 
   it('concurrent overlapping bookings: exactly one succeeds', async () => {
-    const input = {
-      renterId: testUser.id,
-      classId: testClassId,
-      vehicleId: testVehicle.id,
+    const window = {
       startAt: new Date('2027-06-01T10:00:00Z'),
       endAt: new Date('2027-06-01T14:00:00Z'),
-      effectiveEndAt: new Date('2027-06-01T15:00:00Z'),
       status: 'CONFIRMED' as const,
       source: 'DIRECT' as const,
       externalId: null,
       notes: null,
     }
 
-    const results = await Promise.allSettled([
-      bookingRepo.create(SYSTEM_CONTEXT, input),
-      bookingRepo.create(SYSTEM_CONTEXT, input),
-    ])
+    // Distinct bookingCode per call (helper) so the ONLY conflict is the
+    // exclusion constraint on the shared vehicle + overlapping range.
+    const results = await Promise.allSettled([seedBooking(window), seedBooking(window)])
 
     const fulfilled = results.filter((r) => r.status === 'fulfilled')
     const rejected = results.filter((r) => r.status === 'rejected')
 
     expect(fulfilled).toHaveLength(1)
     expect(rejected).toHaveLength(1)
+
+    // The rejection is the exclusion violation, not a bookingCode clash.
+    const reason = (rejected[0] as PromiseRejectedResult).reason
+    expect(pgErrorCode(reason)).toBe('23P01')
 
     // Clean up the one that succeeded
     const winner = (fulfilled[0] as PromiseFulfilledResult<{ id: string }>).value
@@ -476,6 +470,7 @@ describe('POST /bookings overlap via HTTP (real Postgres)', () => {
     httpVehicle = await httpVehicleRepo.create(SYSTEM_CONTEXT, {
       operatorId: BEST_CAR_RENTAL_OPERATOR_ID,
       classId: testClassId,
+      pickupLocationId: testLocationId, // #392: car must live where it's booked
       name: 'HTTP Overlap Test Car',
       description: null,
       seats: 4,
@@ -483,7 +478,6 @@ describe('POST /bookings overlap via HTTP (real Postgres)', () => {
       fuelType: null,
       licensePlate: null,
       status: 'AVAILABLE',
-      bufferMinutes: 60,
       minRentalHours: null,
       maxRentalHours: null,
       advanceBookingHours: null,
@@ -493,11 +487,16 @@ describe('POST /bookings overlap via HTTP (real Postgres)', () => {
       insuranceExpiryDate: null,
     })
 
+    // The booking submit reads the pickup location INSIDE the transaction to
+    // derive turnaround (services/booking.ts submitInTx). Inject the Drizzle
+    // location repo so the tx sees the DB-seeded tenant location — otherwise the
+    // override branch defaults to an empty in-memory repo and submit 400s.
     app = createApp({
       vehicleRepo: httpVehicleRepo,
       bookingRepo: httpBookingRepo,
       availabilityRepo: httpAvailabilityRepo,
       vehicleClassRepo: httpVehicleClassRepo,
+      locationRepo: new DrizzleLocationRepository(db),
     })
     headers = await authHeaders({ sub: httpUser.id, role: 'RENTER' })
   })
@@ -513,9 +512,13 @@ describe('POST /bookings overlap via HTTP (real Postgres)', () => {
   })
 
   it('returns 409 when second booking overlaps an existing CONFIRMED booking', async () => {
+    // Slice 6 contract: renter books a concrete vehicle; operatorId / classId /
+    // assignedVehicleId / turnaround are all server-derived. pickup/dropoff point
+    // at the tenant's location seeded in the file-level beforeAll.
     const bookingBody = {
-      classId: testClassId,
-      vehicleId: httpVehicle.id,
+      requestedVehicleId: httpVehicle.id,
+      pickupLocationId: testLocationId,
+      dropoffLocationId: testLocationId,
       startAt: '2027-03-01T10:00:00Z',
       endAt: '2027-03-01T14:00:00Z',
       source: 'DIRECT',

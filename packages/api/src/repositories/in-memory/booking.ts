@@ -1,33 +1,36 @@
-import {
-  type CallerContext,
-  PRIVILEGED_ROLES,
-  rejectOperatorContextUntilScoped,
-} from '../../middleware/auth'
-import { PG_ERROR } from '../../pg-errors'
+import { type CallerContext, ForbiddenError } from '../../middleware/auth'
+import { BOOKING_CODE_CONSTRAINT, IDEMPOTENCY_CONSTRAINT, PG_ERROR } from '../../pg-errors'
 import type { Booking } from '../../stores'
+import { bookingReadScope } from '../../tenancy'
 import type { BookingFilters, BookingRepository } from '../types'
 
 export const BLOCKING_STATUSES: ReadonlySet<Booking['status']> = new Set(['CONFIRMED', 'ACTIVE'])
 
+// Mirror postgres-js's PostgresError shape: the violated constraint is exposed
+// as `constraint_name` (NOT `constraint`), which is what `pgConstraintName`
+// reads. Faithful mirroring lets the service's retry/replay branch behave
+// identically against the in-memory and Drizzle repos.
+function uniqueViolation(
+  constraintName: string,
+): Error & { code: string; constraint_name: string } {
+  return Object.assign(new Error(`duplicate key violates unique constraint "${constraintName}"`), {
+    code: PG_ERROR.UNIQUE_VIOLATION,
+    constraint_name: constraintName,
+  })
+}
+
 export function getConflictingBookings(
   bookings: Booking[],
   vehicleId: string,
-  _bufferMinutes: number,
   from: Date,
   to: Date,
 ): Booking[] {
   return bookings.filter((booking) => {
-    // Issue #308: unassigned bookings (vehicleId=null) don't conflict with a
-    // specific vehicle at the row level. Class-level capacity is evaluated
-    // in AvailabilityService (see #301b).
-    if (booking.vehicleId !== vehicleId) return false
+    // #392: the exclusion keys on the ASSIGNED vehicle (NOT NULL post-slice-6).
+    if (booking.assignedVehicleId !== vehicleId) return false
     if (!BLOCKING_STATUSES.has(booking.status)) return false
-
-    // Use effectiveEndAt (which includes buffer) instead of computing at runtime
-    const effectiveEnd = booking.effectiveEndAt
-
-    // Overlap: booking starts before requested end AND effective end is after requested start
-    return booking.startAt < to && effectiveEnd > from
+    // effectiveEndAt already includes the turnaround window (location-derived).
+    return booking.startAt < to && booking.effectiveEndAt > from
   })
 }
 
@@ -38,21 +41,35 @@ export class InMemoryBookingRepository implements BookingRepository {
     this.store = store ?? new Map()
   }
 
+  // Three-way read scope (#392, proposal §6.2): bypass sees all, an operator
+  // sees only its tenant's bookings, a renter sees only their own. Replaces the
+  // legacy renter-vs-PRIVILEGED_ROLES split.
   private scopedValues(ctx: CallerContext): Booking[] {
+    const scope = bookingReadScope(ctx)
+    if (scope.kind === 'none') return []
     const all = [...this.store.values()]
-    if (PRIVILEGED_ROLES.has(ctx.role)) return all
-    return all.filter((b) => b.renterId === ctx.userId)
+    if (scope.kind === 'operator') return all.filter((b) => b.operatorId === scope.operatorId)
+    if (scope.kind === 'renter') return all.filter((b) => b.renterId === scope.renterId)
+    return all
+  }
+
+  private isVisible(ctx: CallerContext, booking: Booking): boolean {
+    const scope = bookingReadScope(ctx)
+    if (scope.kind === 'none') return false
+    if (scope.kind === 'operator') return booking.operatorId === scope.operatorId
+    if (scope.kind === 'renter') return booking.renterId === scope.renterId
+    return true
   }
 
   async findAll(ctx: CallerContext, filters?: BookingFilters): Promise<Booking[]> {
-    rejectOperatorContextUntilScoped(ctx, 'BookingRepository')
     let results = this.scopedValues(ctx)
 
     if (filters?.status) {
       results = results.filter((b) => b.status === filters.status)
     }
     if (filters?.vehicleId) {
-      results = results.filter((b) => b.vehicleId === filters.vehicleId)
+      // Filters by the assigned vehicle (the fulfilling car).
+      results = results.filter((b) => b.assignedVehicleId === filters.vehicleId)
     }
     if (filters?.renterId) {
       results = results.filter((b) => b.renterId === filters.renterId)
@@ -70,7 +87,6 @@ export class InMemoryBookingRepository implements BookingRepository {
       return b.id < a.id ? -1 : 1
     })
 
-    // Cursor: skip past the cursor position
     if (filters?.cursor) {
       const sep = filters.cursor.indexOf('_')
       const cursorTime = new Date(filters.cursor.slice(0, sep))
@@ -82,7 +98,6 @@ export class InMemoryBookingRepository implements BookingRepository {
       })
     }
 
-    // Apply limit
     if (filters?.limit) {
       results = results.slice(0, filters.limit)
     }
@@ -91,19 +106,15 @@ export class InMemoryBookingRepository implements BookingRepository {
   }
 
   async findById(ctx: CallerContext, id: string): Promise<Booking | undefined> {
-    rejectOperatorContextUntilScoped(ctx, 'BookingRepository')
     const booking = this.store.get(id)
     if (!booking) return undefined
-    if (!PRIVILEGED_ROLES.has(ctx.role) && booking.renterId !== ctx.userId) return undefined
-    return booking
+    return this.isVisible(ctx, booking) ? booking : undefined
   }
 
   async findByIdempotencyKey(ctx: CallerContext, key: string): Promise<Booking | undefined> {
-    rejectOperatorContextUntilScoped(ctx, 'BookingRepository')
     for (const booking of this.store.values()) {
       if (booking.idempotencyKey === key) {
-        if (!PRIVILEGED_ROLES.has(ctx.role) && booking.renterId !== ctx.userId) return undefined
-        return booking
+        return this.isVisible(ctx, booking) ? booking : undefined
       }
     }
     return undefined
@@ -114,10 +125,7 @@ export class InMemoryBookingRepository implements BookingRepository {
     const ids = new Set(vehicleIds)
     let count = 0
     for (const booking of this.store.values()) {
-      // Issue #308: bookings with a class but no vehicle assigned yet cannot
-      // belong to a specific vehicle, so they cannot block class archive.
-      if (booking.vehicleId === null) continue
-      if (ids.has(booking.vehicleId) && BLOCKING_STATUSES.has(booking.status)) count++
+      if (ids.has(booking.assignedVehicleId) && BLOCKING_STATUSES.has(booking.status)) count++
     }
     return count
   }
@@ -126,50 +134,42 @@ export class InMemoryBookingRepository implements BookingRepository {
     ctx: CallerContext,
     data: Omit<Booking, 'id' | 'createdAt' | 'updatedAt'>,
   ): Promise<Booking> {
-    rejectOperatorContextUntilScoped(ctx, 'BookingRepository')
-    // CallerContext scoping: non-privileged callers can only create bookings for themselves
-    if (!PRIVILEGED_ROLES.has(ctx.role) && data.renterId !== ctx.userId) {
-      throw new Error('Cannot create booking for another user')
+    const scope = bookingReadScope(ctx)
+    if (scope.kind === 'none') throw new ForbiddenError('operator scope required')
+    if (scope.kind === 'renter' && data.renterId !== scope.renterId) {
+      throw new ForbiddenError('Cannot create booking for another user')
+    }
+    if (scope.kind === 'operator' && data.operatorId !== scope.operatorId) {
+      throw new ForbiddenError('Cannot create booking for another operator')
     }
 
-    // Mirror the DB-level `bookings_no_overlap` exclusion constraint so in-memory
-    // tests exercise the same conflict behavior as real Postgres. The PG
-    // exclusion is defined WITH ("vehicleId" =, tstzrange &&); Postgres only
-    // excludes rows where every `=` operand is non-null, so unassigned
-    // bookings (vehicleId=null) cannot collide with anything. Mirror that here.
-    if (BLOCKING_STATUSES.has(data.status) && data.vehicleId !== null) {
+    // Mirror the DB `bookings_no_overlap` exclusion on the ASSIGNED vehicle.
+    // assignedVehicleId is NOT NULL post-slice-6, so every CONFIRMED/ACTIVE row
+    // occupies its car — the old "null operand skips exclusion" loophole is gone.
+    if (BLOCKING_STATUSES.has(data.status)) {
       for (const existing of this.store.values()) {
-        if (existing.vehicleId === null) continue
-        if (existing.vehicleId !== data.vehicleId) continue
+        if (existing.assignedVehicleId !== data.assignedVehicleId) continue
         if (!BLOCKING_STATUSES.has(existing.status)) continue
         const overlaps =
           data.startAt < existing.effectiveEndAt && existing.startAt < data.effectiveEndAt
         if (overlaps) {
-          const err = new Error('bookings_no_overlap violation') as Error & { code: string }
-          err.code = PG_ERROR.EXCLUSION_VIOLATION
-          throw err
+          throw Object.assign(new Error('bookings_no_overlap violation'), {
+            code: PG_ERROR.EXCLUSION_VIOLATION,
+          })
         }
       }
     }
 
-    // Mirror the DB-level partial unique index on idempotencyKey
-    if (data.idempotencyKey) {
-      for (const existing of this.store.values()) {
-        if (existing.idempotencyKey === data.idempotencyKey) {
-          const err = new Error('unique_idempotency_key violation') as Error & { code: string }
-          err.code = PG_ERROR.UNIQUE_VIOLATION
-          throw err
-        }
+    for (const existing of this.store.values()) {
+      // bookingCode is UNIQUE NOT NULL — the service retries on this clash (§5.4).
+      if (existing.bookingCode === data.bookingCode) throw uniqueViolation(BOOKING_CODE_CONSTRAINT)
+      if (data.idempotencyKey && existing.idempotencyKey === data.idempotencyKey) {
+        throw uniqueViolation(IDEMPOTENCY_CONSTRAINT)
       }
     }
 
     const now = new Date()
-    const booking: Booking = {
-      ...data,
-      id: crypto.randomUUID(),
-      createdAt: now,
-      updatedAt: now,
-    }
+    const booking: Booking = { ...data, id: crypto.randomUUID(), createdAt: now, updatedAt: now }
     this.store.set(booking.id, booking)
     return booking
   }
@@ -179,16 +179,11 @@ export class InMemoryBookingRepository implements BookingRepository {
     id: string,
     transition: { from: Booking['status']; to: Booking['status'] },
   ): Promise<Booking | undefined> {
-    rejectOperatorContextUntilScoped(ctx, 'BookingRepository')
     const existing = this.store.get(id)
     if (!existing || existing.status !== transition.from) return undefined
-    if (!PRIVILEGED_ROLES.has(ctx.role) && existing.renterId !== ctx.userId) return undefined
+    if (!this.isVisible(ctx, existing)) return undefined
 
-    const updated: Booking = {
-      ...existing,
-      status: transition.to,
-      updatedAt: new Date(),
-    }
+    const updated: Booking = { ...existing, status: transition.to, updatedAt: new Date() }
     this.store.set(updated.id, updated)
     return updated
   }
@@ -198,10 +193,9 @@ export class InMemoryBookingRepository implements BookingRepository {
     id: string,
     opts: { from: Booking['status']; fee: number; cancelledAt: Date },
   ): Promise<Booking | undefined> {
-    rejectOperatorContextUntilScoped(ctx, 'BookingRepository')
     const existing = this.store.get(id)
     if (!existing || existing.status !== opts.from) return undefined
-    if (!PRIVILEGED_ROLES.has(ctx.role) && existing.renterId !== ctx.userId) return undefined
+    if (!this.isVisible(ctx, existing)) return undefined
 
     const cancelled: Booking = {
       ...existing,
@@ -212,5 +206,42 @@ export class InMemoryBookingRepository implements BookingRepository {
     }
     this.store.set(cancelled.id, cancelled)
     return cancelled
+  }
+
+  async reassignVehicle(
+    ctx: CallerContext,
+    id: string,
+    data: { assignedVehicleId: string; totalPrice: number | null; effectiveEndAt: Date },
+  ): Promise<Booking | undefined> {
+    const existing = this.store.get(id)
+    if (!existing || !this.isVisible(ctx, existing)) return undefined
+
+    // Re-check the exclusion constraint for the NEW assigned vehicle over the
+    // booking's window, skipping the booking itself — mirrors the DB
+    // bookings_no_overlap re-check on UPDATE assignedVehicleId (§5.5).
+    if (BLOCKING_STATUSES.has(existing.status)) {
+      for (const other of this.store.values()) {
+        if (other.id === id) continue
+        if (other.assignedVehicleId !== data.assignedVehicleId) continue
+        if (!BLOCKING_STATUSES.has(other.status)) continue
+        const overlaps =
+          existing.startAt < other.effectiveEndAt && other.startAt < data.effectiveEndAt
+        if (overlaps) {
+          throw Object.assign(new Error('bookings_no_overlap violation'), {
+            code: PG_ERROR.EXCLUSION_VIOLATION,
+          })
+        }
+      }
+    }
+
+    const updated: Booking = {
+      ...existing,
+      assignedVehicleId: data.assignedVehicleId,
+      totalPrice: data.totalPrice,
+      effectiveEndAt: data.effectiveEndAt,
+      updatedAt: new Date(),
+    }
+    this.store.set(id, updated)
+    return updated
   }
 }

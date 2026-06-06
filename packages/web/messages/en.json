@@ -235,6 +235,7 @@
         "contactRequired": "At least email or phone is required",
         "fillAllFields": "Vehicle, start time, and end time are required",
         "vehicleUnavailable": "Vehicle is not available for the selected dates",
+        "vehicleNoLocation": "This vehicle has no pickup location set; assign one before booking",
         "unexpectedError": "An unexpected error occurred"
       },
       "newBooking": "New Booking"
@@ -292,7 +293,6 @@
         "fuelTypePlaceholder": "e.g. Gasoline, Hybrid, EV",
         "licensePlate": "License plate",
         "licensePlatePlaceholder": "e.g. 品川 500 あ 1234",
-        "bufferMinutes": "Buffer time (minutes)",
         "photos": "Photo URLs",
         "photosPlaceholder": "https://example.com/photo.jpg",
         "addPhoto": "Add photo URL",
@@ -389,8 +389,6 @@
         "auto": "Automatic",
         "manual": "Manual",
         "fuelType": "Fuel type",
-        "buffer": "Buffer time",
-        "bufferMinutes": "{count} min",
         "upcomingBookings": "Upcoming bookings",
         "noUpcomingBookings": "No upcoming bookings",
         "renterName": "Renter",
@@ -680,34 +678,47 @@
   },
   "bookings": {
     "new": {
-      "title": "Book this class",
-      "classInfo": "Class details",
-      "pickupDate": "Pickup date and time",
-      "returnDate": "Return date and time",
-      "available": "Available",
-      "availableCount": "{count} of {total} cars free for your dates",
-      "notAvailable": "No cars available for these dates. Please choose different dates.",
-      "checkingAvailability": "Checking availability...",
-      "availabilityError": "Could not check availability. Please try again.",
-      "selectDates": "Select dates to check availability",
+      "title": "Confirm your booking",
+      "pickupDate": "Pickup",
+      "returnDate": "Return",
       "confirmBooking": "Confirm booking",
       "submitting": "Booking...",
       "seats": "{count} seats",
-      "luggage": "{count} bags",
       "auto": "Automatic",
       "manual": "Manual",
-      "priceFrom": "From",
-      "perDay": "/ day"
+      "perDay": "/ day",
+      "insurance": "Insurance",
+      "declineInsurance": "No insurance",
+      "noInsurance": "This operator offers no insurance options.",
+      "insuranceHint": "Optional coverage, added per day to your total."
     },
     "confirmation": {
       "title": "Booking confirmed",
-      "subtitle": "Your reservation has been created successfully. We'll assign a specific car at pickup.",
-      "bookingId": "Booking ID",
+      "subtitle": "Your reservation is confirmed. Show your reservation code at pickup.",
+      "bookingCode": "Reservation code",
       "vehicleClass": "Class",
       "pickupDate": "Pickup",
       "returnDate": "Return",
       "status": "Status",
       "confirmed": "Confirmed",
+      "insurance": "Insurance",
+      "insuranceDeclined": "Declined",
+      "perDay": "/ day",
+      "fees": {
+        "title": "Potential additional charges",
+        "disclaimer": "These apply only if incurred (e.g. late return, cleaning, returned without fuel) and are settled at drop-off.",
+        "type": {
+          "OVERTIME_HOURLY": "Overtime",
+          "CLEANING_FLAT": "Cleaning",
+          "NO_FUEL_FLAT": "Returned without fuel"
+        },
+        "unit": {
+          "PER_HOUR": "per hour",
+          "PER_DAY": "per day",
+          "PER_KM": "per km",
+          "FLAT": "flat"
+        }
+      },
       "viewBookings": "View my bookings",
       "backToVehicles": "Browse more vehicles"
     },
@@ -796,8 +807,7 @@
       "backToSearch": "Back to search",
       "availableVehicles": "Available cars",
       "noVehicles": "No cars are available at this store for the selected dates.",
-      "select": "Select",
-      "selectComingSoon": "Booking opens soon",
+      "book": "Book this car",
       "notFound": "Store not found",
       "notFoundDescription": "This store does not exist or is no longer available."
     }

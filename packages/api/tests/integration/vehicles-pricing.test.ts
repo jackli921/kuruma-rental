@@ -79,7 +79,6 @@ function baseVehicle(
     fuelType: null,
     licensePlate: null,
     status: 'AVAILABLE',
-    bufferMinutes: 60,
     minRentalHours: null,
     maxRentalHours: null,
     advanceBookingHours: null,

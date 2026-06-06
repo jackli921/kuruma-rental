@@ -3,12 +3,14 @@ import { beforeEach, describe, expect, it } from 'vitest'
 import { createApp } from '../../src/index'
 import { InMemoryAvailabilityRepository } from '../../src/repositories/in-memory/availability'
 import { InMemoryBookingRepository } from '../../src/repositories/in-memory/booking'
+import { InMemoryLocationRepository } from '../../src/repositories/in-memory/location'
 import { InMemoryUserRepository } from '../../src/repositories/in-memory/user'
 import { InMemoryVehicleRepository } from '../../src/repositories/in-memory/vehicle'
 import { InMemoryVehicleClassRepository } from '../../src/repositories/in-memory/vehicle-class'
-import type { User, Vehicle, VehicleClass } from '../../src/stores'
+import type { Location, User, Vehicle, VehicleClass } from '../../src/stores'
 
 const AUTH_SECRET = 'test-secret-for-manual-booking-tests'
+const OPERATOR = '00000000-0000-4000-8000-0000000000c1'
 
 async function createTestToken(user: { id: string; role: string }): Promise<string> {
   const key = new TextEncoder().encode(AUTH_SECRET)
@@ -24,7 +26,9 @@ function makeTestVehicle(overrides?: Partial<Vehicle>): Vehicle {
   const now = new Date()
   return {
     id: crypto.randomUUID(),
+    operatorId: OPERATOR,
     classId: null,
+    pickupLocationId: null,
     name: 'Test Car',
     description: null,
     photos: [],
@@ -69,6 +73,7 @@ describe('Manual booking (staff/admin renterId override + advance rule skip)', (
   let app: ReturnType<typeof createApp>
   let vehicle: Vehicle
   let testClassId: string
+  let locationId: string
 
   beforeEach(async () => {
     process.env.AUTH_SECRET = AUTH_SECRET
@@ -90,8 +95,20 @@ describe('Manual booking (staff/admin renterId override + advance rule skip)', (
     })
     testClassId = klass.id
 
+    const locationRepo = new InMemoryLocationRepository()
+    const location = await locationRepo.create({
+      operatorId: OPERATOR,
+      name: 'Namba',
+      address: '1-2-3 Namba',
+      operatingHours: null,
+      timezone: 'Asia/Tokyo',
+      defaultTurnaroundMinutes: 2880,
+      status: 'ACTIVE',
+    } as Omit<Location, 'id' | 'createdAt' | 'updatedAt'>)
+    locationId = location.id
+
     const vehicleStore = new Map<string, Vehicle>()
-    vehicle = makeTestVehicle({ classId: testClassId })
+    vehicle = makeTestVehicle({ classId: testClassId, pickupLocationId: locationId })
     vehicleStore.set(vehicle.id, vehicle)
 
     vehicleRepo = new InMemoryVehicleRepository(vehicleStore)
@@ -100,7 +117,14 @@ describe('Manual booking (staff/admin renterId override + advance rule skip)', (
     const userRepo = new InMemoryUserRepository(userStore)
     const availabilityRepo = new InMemoryAvailabilityRepository(vehicleRepo, bookingRepo)
 
-    app = createApp({ vehicleRepo, bookingRepo, availabilityRepo, userRepo, vehicleClassRepo })
+    app = createApp({
+      vehicleRepo,
+      bookingRepo,
+      availabilityRepo,
+      userRepo,
+      vehicleClassRepo,
+      locationRepo,
+    })
   })
 
   it('staff can create booking with custom renterId', async () => {
@@ -120,8 +144,9 @@ describe('Manual booking (staff/admin renterId override + advance rule skip)', (
         Authorization: `Bearer ${token}`,
       },
       body: JSON.stringify({
-        classId: testClassId,
-        vehicleId: vehicle.id,
+        requestedVehicleId: vehicle.id,
+        pickupLocationId: locationId,
+        dropoffLocationId: locationId,
         renterId: customerId,
         startAt: startAt.toISOString(),
         endAt: endAt.toISOString(),
@@ -155,8 +180,9 @@ describe('Manual booking (staff/admin renterId override + advance rule skip)', (
         Authorization: `Bearer ${token}`,
       },
       body: JSON.stringify({
-        classId: testClassId,
-        vehicleId: vehicle.id,
+        requestedVehicleId: vehicle.id,
+        pickupLocationId: locationId,
+        dropoffLocationId: locationId,
         renterId: attackerRenterId,
         startAt: startAt.toISOString(),
         endAt: endAt.toISOString(),
@@ -187,8 +213,9 @@ describe('Manual booking (staff/admin renterId override + advance rule skip)', (
         Authorization: `Bearer ${token}`,
       },
       body: JSON.stringify({
-        classId: testClassId,
-        vehicleId: vehicle.id,
+        requestedVehicleId: vehicle.id,
+        pickupLocationId: locationId,
+        dropoffLocationId: locationId,
         startAt: startAt.toISOString(),
         endAt: endAt.toISOString(),
         source: 'MANUAL',
@@ -217,8 +244,9 @@ describe('Manual booking (staff/admin renterId override + advance rule skip)', (
         Authorization: `Bearer ${token}`,
       },
       body: JSON.stringify({
-        classId: testClassId,
-        vehicleId: vehicle.id,
+        requestedVehicleId: vehicle.id,
+        pickupLocationId: locationId,
+        dropoffLocationId: locationId,
         startAt: startAt.toISOString(),
         endAt: endAt.toISOString(),
         source: 'MANUAL',
@@ -246,8 +274,9 @@ describe('Manual booking (staff/admin renterId override + advance rule skip)', (
         Authorization: `Bearer ${renterToken}`,
       },
       body: JSON.stringify({
-        classId: testClassId,
-        vehicleId: vehicle.id,
+        requestedVehicleId: vehicle.id,
+        pickupLocationId: locationId,
+        dropoffLocationId: locationId,
         startAt: startAt.toISOString(),
         endAt: endAt.toISOString(),
         source: 'MANUAL',
@@ -274,8 +303,9 @@ describe('Manual booking (staff/admin renterId override + advance rule skip)', (
         Authorization: `Bearer ${token}`,
       },
       body: JSON.stringify({
-        classId: testClassId,
-        vehicleId: vehicle.id,
+        requestedVehicleId: vehicle.id,
+        pickupLocationId: locationId,
+        dropoffLocationId: locationId,
         renterId: crypto.randomUUID(), // unknown user
         startAt: startAt.toISOString(),
         endAt: endAt.toISOString(),
@@ -304,8 +334,9 @@ describe('Manual booking (staff/admin renterId override + advance rule skip)', (
         Authorization: `Bearer ${token}`,
       },
       body: JSON.stringify({
-        classId: testClassId,
-        vehicleId: vehicle.id,
+        requestedVehicleId: vehicle.id,
+        pickupLocationId: locationId,
+        dropoffLocationId: locationId,
         renterId: otherStaffId,
         startAt: startAt.toISOString(),
         endAt: endAt.toISOString(),

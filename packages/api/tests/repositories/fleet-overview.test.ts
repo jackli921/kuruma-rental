@@ -17,6 +17,7 @@ import {
   InMemoryVehicleRepository,
 } from '../../src/repositories/in-memory'
 import type { Booking, Vehicle } from '../../src/stores'
+import { bookingInput } from '../helpers/booking'
 
 const FIXED_NOW = new Date('2026-04-11T12:00:00Z')
 
@@ -46,23 +47,16 @@ function baseVehicleInput(
 
 function baseBookingInput(
   overrides: Partial<Omit<Booking, 'id' | 'createdAt' | 'updatedAt'>> & {
-    vehicleId: string
+    assignedVehicleId: string
   },
 ): Omit<Booking, 'id' | 'createdAt' | 'updatedAt'> {
-  return {
+  return bookingInput({
     renterId: 'user_1',
     startAt: new Date('2026-04-10T10:00:00Z'),
     endAt: new Date('2026-04-10T14:00:00Z'),
     effectiveEndAt: new Date('2026-04-10T15:00:00Z'),
-    status: 'CONFIRMED',
-    source: 'DIRECT',
-    externalId: null,
-    notes: null,
-    totalPrice: null,
-    cancellationFee: null,
-    cancelledAt: null,
     ...overrides,
-  }
+  })
 }
 
 describe('InMemoryFleetOverviewRepository', () => {
@@ -106,7 +100,7 @@ describe('InMemoryFleetOverviewRepository', () => {
     await bookingRepo.create(
       SYSTEM_CONTEXT,
       baseBookingInput({
-        vehicleId: vehicle.id,
+        assignedVehicleId: vehicle.id,
         startAt: new Date('2026-04-05T10:00:00Z'),
         endAt: new Date('2026-04-06T10:00:00Z'),
         effectiveEndAt: new Date('2026-04-06T11:00:00Z'),
@@ -132,7 +126,7 @@ describe('InMemoryFleetOverviewRepository', () => {
     await bookingRepo.create(
       SYSTEM_CONTEXT,
       baseBookingInput({
-        vehicleId: vehicle.id,
+        assignedVehicleId: vehicle.id,
         startAt: new Date('2026-04-05T10:00:00Z'),
         endAt: new Date('2026-04-06T10:00:00Z'),
         effectiveEndAt: new Date('2026-04-06T11:00:00Z'),
@@ -154,7 +148,7 @@ describe('InMemoryFleetOverviewRepository', () => {
     await bookingRepo.create(
       SYSTEM_CONTEXT,
       baseBookingInput({
-        vehicleId: vehicle.id,
+        assignedVehicleId: vehicle.id,
         // FIXED_NOW = 2026-04-11T12:00:00Z is inside this window
         startAt: new Date('2026-04-11T09:00:00Z'),
         endAt: new Date('2026-04-11T18:00:00Z'),
@@ -181,7 +175,7 @@ describe('InMemoryFleetOverviewRepository', () => {
     await bookingRepo.create(
       SYSTEM_CONTEXT,
       baseBookingInput({
-        vehicleId: vehicle.id,
+        assignedVehicleId: vehicle.id,
         startAt: new Date('2026-04-20T10:00:00Z'),
         endAt: new Date('2026-04-20T14:00:00Z'),
         effectiveEndAt: new Date('2026-04-20T15:00:00Z'),
@@ -191,7 +185,7 @@ describe('InMemoryFleetOverviewRepository', () => {
     await bookingRepo.create(
       SYSTEM_CONTEXT,
       baseBookingInput({
-        vehicleId: vehicle.id,
+        assignedVehicleId: vehicle.id,
         startAt: new Date('2026-04-12T08:00:00Z'),
         endAt: new Date('2026-04-12T10:00:00Z'),
         effectiveEndAt: new Date('2026-04-12T11:00:00Z'),
@@ -215,7 +209,7 @@ describe('InMemoryFleetOverviewRepository', () => {
     await bookingRepo.create(
       SYSTEM_CONTEXT,
       baseBookingInput({
-        vehicleId: vehicle.id,
+        assignedVehicleId: vehicle.id,
         startAt: new Date('2026-04-11T09:00:00Z'),
         endAt: new Date('2026-04-11T18:00:00Z'),
         effectiveEndAt: new Date('2026-04-11T19:00:00Z'),
@@ -225,7 +219,7 @@ describe('InMemoryFleetOverviewRepository', () => {
     await bookingRepo.create(
       SYSTEM_CONTEXT,
       baseBookingInput({
-        vehicleId: vehicle.id,
+        assignedVehicleId: vehicle.id,
         startAt: new Date('2026-04-15T10:00:00Z'),
         endAt: new Date('2026-04-15T14:00:00Z'),
         effectiveEndAt: new Date('2026-04-15T15:00:00Z'),
@@ -250,7 +244,7 @@ describe('InMemoryFleetOverviewRepository', () => {
     await bookingRepo.create(
       SYSTEM_CONTEXT,
       baseBookingInput({
-        vehicleId: vehicle.id,
+        assignedVehicleId: vehicle.id,
         renterId: 'user_alice',
         startAt: new Date('2026-04-11T09:00:00Z'),
         endAt: new Date('2026-04-11T18:00:00Z'),
@@ -281,7 +275,7 @@ describe('InMemoryFleetOverviewRepository', () => {
     await bookingRepo.create(
       SYSTEM_CONTEXT,
       baseBookingInput({
-        vehicleId: vehicle.id,
+        assignedVehicleId: vehicle.id,
         startAt: new Date('2026-03-02T12:00:00Z'),
         endAt: new Date('2026-03-22T12:00:00Z'),
         effectiveEndAt: new Date('2026-03-22T13:00:00Z'),
@@ -312,7 +306,7 @@ describe('InMemoryFleetOverviewRepository', () => {
     await bookingRepo.create(
       SYSTEM_CONTEXT,
       baseBookingInput({
-        vehicleId: vehicle.id,
+        assignedVehicleId: vehicle.id,
         startAt: new Date('2026-04-11T10:00:00Z'),
         endAt: new Date('2026-04-11T22:00:00Z'),
         effectiveEndAt: new Date('2026-04-11T23:00:00Z'),

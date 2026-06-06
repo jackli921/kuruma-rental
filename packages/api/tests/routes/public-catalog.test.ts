@@ -8,6 +8,7 @@ import {
   InMemoryVehicleRepository,
 } from '../../src/repositories/in-memory'
 import { authHeaders, setupAuthEnv } from '../helpers/auth'
+import { bookingInput } from '../helpers/booking'
 
 function vehicleInput(overrides?: Partial<{ classId: string | null; status: string }>) {
   return {
@@ -209,21 +210,15 @@ describe('public catalog endpoints', () => {
       const now = new Date()
       await ctx.bookingRepo.create(
         { userId: 'r1', role: 'ADMIN' },
-        {
+        bookingInput({
           renterId: 'r1',
-          vehicleId: v1.id,
+          assignedVehicleId: v1.id,
           startAt: new Date(FROM),
           endAt: new Date(TO),
           effectiveEndAt: new Date(TO),
           status: 'CONFIRMED',
-          source: 'DIRECT',
-          externalId: null,
-          notes: null,
           totalPrice: 10000,
-          cancellationFee: null,
-          cancelledAt: null,
-          idempotencyKey: null,
-        },
+        }),
       )
 
       const res = await ctx.app.request(
@@ -245,21 +240,15 @@ describe('public catalog endpoints', () => {
       // booking ends with 60-min buffer extending into the window
       await ctx.bookingRepo.create(
         { userId: 'r1', role: 'ADMIN' },
-        {
+        bookingInput({
           renterId: 'r1',
-          vehicleId: v1.id,
+          assignedVehicleId: v1.id,
           startAt: new Date('2026-04-30T20:00:00Z'),
           endAt: new Date('2026-05-01T01:00:00Z'),
           effectiveEndAt: new Date('2026-05-01T02:00:00Z'),
           status: 'CONFIRMED',
-          source: 'DIRECT',
-          externalId: null,
-          notes: null,
           totalPrice: 5000,
-          cancellationFee: null,
-          cancelledAt: null,
-          idempotencyKey: null,
-        },
+        }),
       )
 
       const res = await ctx.app.request(
@@ -278,21 +267,15 @@ describe('public catalog endpoints', () => {
       for (const id of [v1.id, v2.id]) {
         await ctx.bookingRepo.create(
           { userId: 'r1', role: 'ADMIN' },
-          {
+          bookingInput({
             renterId: 'r1',
-            vehicleId: id,
+            assignedVehicleId: id,
             startAt: new Date(FROM),
             endAt: new Date(TO),
             effectiveEndAt: new Date(TO),
             status: 'CONFIRMED',
-            source: 'DIRECT',
-            externalId: null,
-            notes: null,
             totalPrice: 10000,
-            cancellationFee: null,
-            cancelledAt: null,
-            idempotencyKey: null,
-          },
+          }),
         )
       }
 

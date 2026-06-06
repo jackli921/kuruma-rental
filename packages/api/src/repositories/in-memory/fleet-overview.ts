@@ -45,7 +45,7 @@ export class InMemoryFleetOverviewRepository implements FleetOverviewRepository 
     return Promise.all(
       vehicles.map(async (vehicle) => {
         const vehicleBookings = allBookings.filter(
-          (b) => b.vehicleId === vehicle.id && b.status !== 'CANCELLED',
+          (b) => b.assignedVehicleId === vehicle.id && b.status !== 'CANCELLED',
         )
 
         const recent = vehicleBookings.filter((b) => b.endAt > windowStart && b.startAt < now)

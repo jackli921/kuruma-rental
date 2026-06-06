@@ -235,6 +235,7 @@
         "contactRequired": "メールか電話番号が必要です",
         "fillAllFields": "車両、開始時間、終了時間は必須です",
         "vehicleUnavailable": "選択した期間は利用できません",
+        "vehicleNoLocation": "この車両には受取場所が設定されていません。予約前に設定してください",
         "unexpectedError": "予期しないエラーが発生しました"
       },
       "newBooking": "新規予約"
@@ -292,7 +293,6 @@
         "fuelTypePlaceholder": "例：ガソリン、ハイブリッド、EV",
         "licensePlate": "ナンバープレート",
         "licensePlatePlaceholder": "例：品川 500 あ 1234",
-        "bufferMinutes": "バッファ時間（分）",
         "photos": "写真URL",
         "photosPlaceholder": "https://example.com/photo.jpg",
         "addPhoto": "写真URLを追加",
@@ -389,8 +389,6 @@
         "auto": "オートマ",
         "manual": "マニュアル",
         "fuelType": "燃料タイプ",
-        "buffer": "バッファー時間",
-        "bufferMinutes": "{count}分",
         "upcomingBookings": "今後の予約",
         "noUpcomingBookings": "今後の予約はありません",
         "renterName": "利用者",
@@ -680,34 +678,47 @@
   },
   "bookings": {
     "new": {
-      "title": "このクラスを予約",
-      "classInfo": "クラス情報",
-      "pickupDate": "乗車日時",
-      "returnDate": "返却日時",
-      "available": "利用可能",
-      "availableCount": "{total}台中{count}台が選択した日程で利用できます",
-      "notAvailable": "選択した日程では利用可能な車両がありません。別の日程をお選びください。",
-      "checkingAvailability": "空き状況を確認中...",
-      "availabilityError": "空き状況を確認できませんでした。もう一度お試しください。",
-      "selectDates": "日程を選択して空き状況を確認",
+      "title": "予約の確認",
+      "pickupDate": "貸出",
+      "returnDate": "返却",
       "confirmBooking": "予約を確定",
       "submitting": "予約中...",
       "seats": "{count}席",
-      "luggage": "荷物{count}個",
       "auto": "オートマ",
       "manual": "マニュアル",
-      "priceFrom": "最低",
-      "perDay": "/ 日"
+      "perDay": "/ 日",
+      "insurance": "保険",
+      "declineInsurance": "保険なし",
+      "noInsurance": "この事業者は保険オプションを提供していません。",
+      "insuranceHint": "任意の補償です。1日あたりの料金が合計に加算されます。"
     },
     "confirmation": {
       "title": "予約が確定しました",
-      "subtitle": "ご予約が正常に作成されました。具体的な車両は当日お渡し時にご案内します。",
-      "bookingId": "予約ID",
+      "subtitle": "ご予約が確定しました。受取時に予約コードをご提示ください。",
+      "bookingCode": "予約コード",
       "vehicleClass": "クラス",
-      "pickupDate": "乗車日",
-      "returnDate": "返却日",
+      "pickupDate": "貸出",
+      "returnDate": "返却",
       "status": "ステータス",
       "confirmed": "確定済み",
+      "insurance": "保険",
+      "insuranceDeclined": "なし",
+      "perDay": "/ 日",
+      "fees": {
+        "title": "追加料金の可能性",
+        "disclaimer": "これらは発生した場合のみ（延滞・清掃・燃料未補給など）、返却時に精算されます。",
+        "type": {
+          "OVERTIME_HOURLY": "延長",
+          "CLEANING_FLAT": "清掃",
+          "NO_FUEL_FLAT": "燃料未補給"
+        },
+        "unit": {
+          "PER_HOUR": "1時間あたり",
+          "PER_DAY": "1日あたり",
+          "PER_KM": "1kmあたり",
+          "FLAT": "一律"
+        }
+      },
       "viewBookings": "予約一覧を見る",
       "backToVehicles": "他の車両を見る"
     },
@@ -796,8 +807,7 @@
       "backToSearch": "検索に戻る",
       "availableVehicles": "空車",
       "noVehicles": "選択した日時にこの店舗で利用できるクルマはありません。",
-      "select": "選択",
-      "selectComingSoon": "予約は近日公開",
+      "book": "このクルマを予約",
       "notFound": "店舗が見つかりません",
       "notFoundDescription": "この店舗は存在しないか、現在ご利用いただけません。"
     }

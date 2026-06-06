@@ -1,5 +1,6 @@
 export { InMemoryVehicleRepository } from './vehicle'
 export { InMemoryBookingRepository } from './booking'
+export { InMemoryBookingEventRepository } from './booking-event'
 export { InMemoryAvailabilityRepository } from './availability'
 export { InMemoryFleetOverviewRepository } from './fleet-overview'
 export { InMemoryStatsRepository } from './stats'

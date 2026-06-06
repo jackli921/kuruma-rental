@@ -10,12 +10,11 @@ const MAX_VEHICLE_YEAR = 2100
 // issue #48).
 const jpyRate = z.number().int('Rate must be a whole yen amount').min(0, 'Rate cannot be negative')
 
-// photos/bufferMinutes carry .default()s only on create. Kept off the base
-// because Zod .partial() does NOT strip .default(), so a partial PATCH would
-// re-inject { photos: [], bufferMinutes: 60 } and wipe/reset those columns on
-// write (issue #432, same root cause as #430).
+// photos carries a .default() only on create. Kept off the base because Zod
+// .partial() does NOT strip .default(), so a partial PATCH would re-inject
+// { photos: [] } and wipe that column on write (issue #432, same root cause
+// as #430).
 const photosSchema = z.array(z.string().url())
-const bufferMinutesSchema = z.number().int().min(0)
 
 // Raw object schema, no cross-field refinements. Kept separate so
 // `updateVehicleSchema` can still be `.partial()` — `superRefine` wraps the
@@ -34,7 +33,6 @@ const vehicleObjectSchema = z.object({
   transmission: z.enum(['AUTO', 'MANUAL']),
   fuelType: z.string().optional(),
   licensePlate: z.string().trim().max(20).nullish(),
-  bufferMinutes: bufferMinutesSchema.optional(),
   // Issue #50: rental rules. All three are nullish so the form can submit
   // `null` when a field is blank (same pattern as pricing #48). `.optional()`
   // alone would reject explicit null which react-hook-form emits when a
@@ -64,10 +62,8 @@ const vehicleObjectSchema = z.object({
 
 export const createVehicleSchema = vehicleObjectSchema
   .extend({
-    // Defaults belong on create only — see photosSchema/bufferMinutesSchema
-    // note (#432).
+    // Defaults belong on create only — see photosSchema note (#432).
     photos: photosSchema.default([]),
-    bufferMinutes: bufferMinutesSchema.default(60),
     // #401: a non-operator (platform/legacy admin) caller may name the target
     // operator. OPERATOR_* callers' tenant comes from their token and this is
     // ignored for them. Optional — omit when exactly one operator exists.

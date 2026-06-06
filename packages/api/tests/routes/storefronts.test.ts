@@ -4,12 +4,13 @@ import { SYSTEM_CONTEXT } from '../../src/middleware/auth'
 import {
   InMemoryAvailabilityRepository,
   InMemoryBookingRepository,
+  InMemoryInsuranceOptionRepository,
   InMemoryLocationRepository,
   InMemoryOperatorRepository,
   InMemoryVehicleClassRepository,
   InMemoryVehicleRepository,
 } from '../../src/repositories/in-memory'
-import type { Location, Vehicle, VehicleClass } from '../../src/stores'
+import type { InsuranceOption, Location, Vehicle, VehicleClass } from '../../src/stores'
 import { setupAuthEnv } from '../helpers/auth'
 
 const FROM = '2026-08-01T10:00:00Z'
@@ -23,6 +24,7 @@ function setup() {
   const bookingRepo = new InMemoryBookingRepository()
   const availabilityRepo = new InMemoryAvailabilityRepository(vehicleRepo, bookingRepo)
   const vehicleClassRepo = new InMemoryVehicleClassRepository()
+  const insuranceOptionRepo = new InMemoryInsuranceOptionRepository()
   const app = createApp({
     vehicleRepo,
     bookingRepo,
@@ -30,8 +32,9 @@ function setup() {
     vehicleClassRepo,
     locationRepo,
     operatorRepo,
+    insuranceOptionRepo,
   })
-  return { app, operatorRepo, locationRepo, vehicleRepo, vehicleClassRepo }
+  return { app, operatorRepo, locationRepo, vehicleRepo, vehicleClassRepo, insuranceOptionRepo }
 }
 
 type Ctx = ReturnType<typeof setup>
@@ -74,6 +77,22 @@ function makeLocation(
     operatingHours: { openTime: '09:00', closeTime: '20:00' },
     timezone: 'Asia/Tokyo',
     defaultTurnaroundMinutes: 60,
+    status: 'ACTIVE',
+    ...overrides,
+  })
+}
+
+function makeInsurance(
+  ctx: Ctx,
+  operatorId: string,
+  overrides: Partial<Omit<InsuranceOption, 'id' | 'createdAt' | 'updatedAt'>> = {},
+) {
+  return ctx.insuranceOptionRepo.create({
+    operatorId,
+    name: 'CDW',
+    description: null,
+    dailyPriceJpy: 1500,
+    deductibleJpy: null,
     status: 'ACTIVE',
     ...overrides,
   })
@@ -220,6 +239,68 @@ describe('storefront routes (#391)', () => {
       const { namba } = await seedStorefront(ctx, 1)
       const res = await ctx.app.request(`/storefronts/${namba.id}/vehicles`)
       expect(res.status).toBe(400)
+    })
+  })
+
+  describe('GET /storefronts/:locationId/insurance-options (public, #392)', () => {
+    it('returns 200 without auth with the operator ACTIVE options (renter-safe projection)', async () => {
+      const ctx = setup()
+      const { op, namba } = await seedStorefront(ctx, 1)
+      await makeInsurance(ctx, op.id, {
+        name: 'CDW',
+        description: 'Collision damage waiver',
+        dailyPriceJpy: 1500,
+        deductibleJpy: 50000,
+      })
+
+      const res = await ctx.app.request(`/storefronts/${namba.id}/insurance-options`)
+
+      expect(res.status).toBe(200)
+      const body = await res.json()
+      expect(body.success).toBe(true)
+      expect(body.data).toEqual([
+        {
+          id: expect.any(String),
+          name: 'CDW',
+          description: 'Collision damage waiver',
+          dailyPriceJpy: 1500,
+          deductibleJpy: 50000,
+        },
+      ])
+      // Operator internals must never leak on the public read.
+      expect(body.data[0]).not.toHaveProperty('operatorId')
+      expect(body.data[0]).not.toHaveProperty('status')
+    })
+
+    it('excludes ARCHIVED options and never another operator', async () => {
+      const ctx = setup()
+      const { op, namba } = await seedStorefront(ctx, 1)
+      const other = await makeOperator(ctx, 'Other Co', 'other')
+      await makeInsurance(ctx, op.id, { name: 'Active' })
+      const archived = await makeInsurance(ctx, op.id, { name: 'Old' })
+      await ctx.insuranceOptionRepo.archive(archived.id)
+      await makeInsurance(ctx, other.id, { name: 'Foreign' })
+
+      const res = await ctx.app.request(`/storefronts/${namba.id}/insurance-options`)
+
+      const body = await res.json()
+      expect(body.data.map((o: { name: string }) => o.name)).toEqual(['Active'])
+    })
+
+    it('sets a 10s public edge-cache header', async () => {
+      const ctx = setup()
+      const { namba } = await seedStorefront(ctx, 1)
+
+      const res = await ctx.app.request(`/storefronts/${namba.id}/insurance-options`)
+
+      expect(res.headers.get('Cache-Control')).toBe('public, s-maxage=10')
+    })
+
+    it('returns 404 for an unknown locationId (does not cache the miss)', async () => {
+      const ctx = setup()
+      const res = await ctx.app.request('/storefronts/loc_nope/insurance-options')
+      expect(res.status).toBe(404)
+      expect(res.headers.get('Cache-Control')).toBeNull()
     })
   })
 })

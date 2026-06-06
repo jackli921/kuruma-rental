@@ -29,7 +29,7 @@ export class DrizzleFleetOverviewRepository implements FleetOverviewRepository {
     const bookingRows = await this.db
       .select({
         id: bookings.id,
-        vehicleId: bookings.vehicleId,
+        vehicleId: bookings.assignedVehicleId,
         renterId: bookings.renterId,
         startAt: bookings.startAt,
         endAt: bookings.endAt,

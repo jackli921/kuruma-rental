@@ -1,4 +1,5 @@
 import { buttonVariants } from '@/components/ui/button'
+import { Link } from '@/i18n/routing'
 import { cn } from '@/lib/utils'
 import { Car, Settings2, Users } from 'lucide-react'
 import { useTranslations } from 'next-intl'
@@ -6,17 +7,23 @@ import type { AvailableVehicleData } from '../api'
 
 interface AvailableVehicleCardProps {
   vehicle: AvailableVehicleData
+  /** The storefront's location — becomes the booking's pickup/dropoff. */
+  locationId: string
+  /** Selected date range (ISO), carried through to the booking form. */
+  from: string
+  to: string
 }
 
 /**
  * One available vehicle inside a storefront detail page (#391). The projection
- * is already renter-safe (the API drops operator internals). The "select"
- * control is a disabled placeholder — booking is slice 6 (§6).
+ * is already renter-safe (the API drops operator internals). The CTA carries the
+ * vehicle + storefront location + dates into the booking form (#392).
  */
-export function AvailableVehicleCard({ vehicle }: AvailableVehicleCardProps) {
+export function AvailableVehicleCard({ vehicle, locationId, from, to }: AvailableVehicleCardProps) {
   const t = useTranslations('search')
   const photo = vehicle.photos[0]
   const transmissionLabel = vehicle.transmission === 'AUTO' ? t('auto') : t('manual')
+  const bookingQuery = new URLSearchParams({ vehicleId: vehicle.id, locationId, from, to })
 
   const priceLabel =
     vehicle.dailyRateJpy != null
@@ -49,17 +56,12 @@ export function AvailableVehicleCard({ vehicle }: AvailableVehicleCardProps) {
           </span>
         </div>
         <p className="mt-auto pt-1 text-base font-semibold text-foreground">{priceLabel}</p>
-        {/* Booking is slice 6 — disabled placeholder, never a live submit (§6). */}
-        <button
-          type="button"
-          disabled
-          className={cn(
-            buttonVariants({ variant: 'secondary', size: 'sm' }),
-            'w-full cursor-not-allowed opacity-60',
-          )}
+        <Link
+          href={`/bookings/new?${bookingQuery.toString()}`}
+          className={cn(buttonVariants({ variant: 'default', size: 'sm' }), 'w-full')}
         >
-          {t('detail.selectComingSoon')}
-        </button>
+          {t('detail.book')}
+        </Link>
       </div>
     </div>
   )

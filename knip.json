@@ -4,7 +4,7 @@
     ".": {
       "entry": ["scripts/*.ts", "e2e/mock-api.ts"],
       "ignore": ["scripts/__fixtures__/**"],
-      "ignoreDependencies": ["postgres", "drizzle-orm"]
+      "ignoreDependencies": ["postgres", "drizzle-orm", "@auth/core"]
     },
     "packages/api": {
       "ignore": ["tests/**"],

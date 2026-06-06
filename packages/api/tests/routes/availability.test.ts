@@ -9,6 +9,7 @@ import {
 import type { Booking, Vehicle } from '../../src/repositories/types'
 import { createAvailabilityRoutes } from '../../src/routes/availability'
 import { testAuthMiddleware } from '../helpers/auth'
+import { bookingInput } from '../helpers/booking'
 
 let app: Hono
 let vehicleRepo: InMemoryVehicleRepository
@@ -43,20 +44,20 @@ async function createTestBooking(
   bufferMinutes = 30,
 ): Promise<Booking> {
   const endAt = overrides.endAt ?? new Date('2026-06-01T14:00:00Z')
+  // effectiveEndAt encodes the turnaround buffer that drives overlap exclusion;
+  // preserve the endAt + bufferMinutes math unless a test pins it explicitly.
   const effectiveEndAt =
     overrides.effectiveEndAt ?? new Date(endAt.getTime() + bufferMinutes * 60 * 1000)
-  return bookingRepo.create(SYSTEM_CONTEXT, {
-    renterId: 'user1',
-    vehicleId: 'v1',
-    startAt: new Date('2026-06-01T10:00:00Z'),
-    endAt,
-    effectiveEndAt,
-    status: 'CONFIRMED',
-    source: 'DIRECT',
-    externalId: null,
-    notes: null,
-    ...overrides,
-  })
+  return bookingRepo.create(
+    SYSTEM_CONTEXT,
+    bookingInput({
+      renterId: 'user1',
+      startAt: new Date('2026-06-01T10:00:00Z'),
+      ...overrides,
+      endAt,
+      effectiveEndAt,
+    }),
+  )
 }
 
 describe('Availability Routes', () => {
@@ -92,7 +93,7 @@ describe('Availability Routes', () => {
     it('excludes vehicles with overlapping bookings', async () => {
       const vehicle = await createTestVehicle()
       await createTestBooking({
-        vehicleId: vehicle.id,
+        assignedVehicleId: vehicle.id,
         startAt: new Date('2026-06-01T10:00:00Z'),
         endAt: new Date('2026-06-01T14:00:00Z'),
         status: 'CONFIRMED',
@@ -112,7 +113,7 @@ describe('Availability Routes', () => {
     it('includes vehicles when no overlap exists', async () => {
       const vehicle = await createTestVehicle()
       await createTestBooking({
-        vehicleId: vehicle.id,
+        assignedVehicleId: vehicle.id,
         startAt: new Date('2026-06-01T10:00:00Z'),
         endAt: new Date('2026-06-01T14:00:00Z'),
         status: 'CONFIRMED',
@@ -135,7 +136,7 @@ describe('Availability Routes', () => {
       const vehicle = await createTestVehicle({ bufferMinutes: 60 })
       await createTestBooking(
         {
-          vehicleId: vehicle.id,
+          assignedVehicleId: vehicle.id,
           startAt: new Date('2026-06-01T10:00:00Z'),
           endAt: new Date('2026-06-01T14:00:00Z'),
           status: 'CONFIRMED',
@@ -164,13 +165,13 @@ describe('Availability Routes', () => {
     it('ignores CANCELLED and COMPLETED bookings', async () => {
       const vehicle = await createTestVehicle()
       await createTestBooking({
-        vehicleId: vehicle.id,
+        assignedVehicleId: vehicle.id,
         startAt: new Date('2026-06-01T10:00:00Z'),
         endAt: new Date('2026-06-01T14:00:00Z'),
         status: 'CANCELLED',
       })
       await createTestBooking({
-        vehicleId: vehicle.id,
+        assignedVehicleId: vehicle.id,
         startAt: new Date('2026-06-01T10:00:00Z'),
         endAt: new Date('2026-06-01T14:00:00Z'),
         status: 'COMPLETED',
@@ -252,7 +253,7 @@ describe('Availability Routes', () => {
     it('returns available=false with conflicts when booked', async () => {
       const vehicle = await createTestVehicle()
       const booking = await createTestBooking({
-        vehicleId: vehicle.id,
+        assignedVehicleId: vehicle.id,
         startAt: new Date('2026-06-01T10:00:00Z'),
         endAt: new Date('2026-06-01T14:00:00Z'),
         status: 'CONFIRMED',
@@ -291,7 +292,7 @@ describe('Availability Routes', () => {
 
       const vehicle = await createTestVehicle()
       await createTestBooking({
-        vehicleId: vehicle.id,
+        assignedVehicleId: vehicle.id,
         renterId: 'other-renter',
         notes: 'secret internal note',
         startAt: new Date('2026-06-01T10:00:00Z'),

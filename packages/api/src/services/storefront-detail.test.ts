@@ -2,12 +2,13 @@ import { beforeEach, describe, expect, it } from 'vitest'
 import { PUBLIC_CONTEXT, SYSTEM_CONTEXT } from '../middleware/auth'
 import { InMemoryAvailabilityRepository } from '../repositories/in-memory/availability'
 import { InMemoryBookingRepository } from '../repositories/in-memory/booking'
+import { InMemoryInsuranceOptionRepository } from '../repositories/in-memory/insurance-option'
 import { InMemoryLocationRepository } from '../repositories/in-memory/location'
 import { InMemoryOperatorRepository } from '../repositories/in-memory/operator'
 import { InMemoryStorefrontRepository } from '../repositories/in-memory/storefront'
 import { InMemoryVehicleRepository } from '../repositories/in-memory/vehicle'
 import { InMemoryVehicleClassRepository } from '../repositories/in-memory/vehicle-class'
-import type { Location, Operator, Vehicle, VehicleClass } from '../stores'
+import type { InsuranceOption, Location, Operator, Vehicle, VehicleClass } from '../stores'
 import { StorefrontDetailService } from './storefront-detail'
 
 const FROM = new Date('2026-08-01T10:00:00Z')
@@ -18,6 +19,7 @@ let locationRepo: InMemoryLocationRepository
 let vehicleRepo: InMemoryVehicleRepository
 let bookingRepo: InMemoryBookingRepository
 let classRepo: InMemoryVehicleClassRepository
+let insuranceRepo: InMemoryInsuranceOptionRepository
 let service: StorefrontDetailService
 
 beforeEach(() => {
@@ -26,10 +28,25 @@ beforeEach(() => {
   vehicleRepo = new InMemoryVehicleRepository()
   bookingRepo = new InMemoryBookingRepository()
   classRepo = new InMemoryVehicleClassRepository()
+  insuranceRepo = new InMemoryInsuranceOptionRepository()
   const storefrontRepo = new InMemoryStorefrontRepository(locationRepo, operatorRepo)
   const availabilityRepo = new InMemoryAvailabilityRepository(vehicleRepo, bookingRepo)
-  service = new StorefrontDetailService(storefrontRepo, availabilityRepo, classRepo)
+  service = new StorefrontDetailService(storefrontRepo, availabilityRepo, classRepo, insuranceRepo)
 })
+
+function makeInsurance(
+  overrides: Partial<Omit<InsuranceOption, 'id' | 'createdAt' | 'updatedAt'>>,
+): Promise<InsuranceOption> {
+  return insuranceRepo.create({
+    operatorId: 'op_a',
+    name: 'CDW',
+    description: null,
+    dailyPriceJpy: 1500,
+    deductibleJpy: null,
+    status: 'ACTIVE',
+    ...overrides,
+  })
+}
 
 function makeOperator(name: string, slug: string): Promise<Operator> {
   return operatorRepo.create({ name, slug, preAuthHandoffUrl: null })
@@ -79,7 +96,6 @@ function makeVehicle(overrides: Partial<Omit<Vehicle, 'id' | 'createdAt' | 'upda
     fuelType: null,
     licensePlate: 'OSAKA 300 あ 12-34',
     status: 'AVAILABLE',
-    bufferMinutes: 60,
     minRentalHours: null,
     maxRentalHours: null,
     advanceBookingHours: null,
@@ -97,14 +113,22 @@ function makeVehicle(overrides: Partial<Omit<Vehicle, 'id' | 'createdAt' | 'upda
 
 function bookOverlapping(vehicleId: string, classId: string) {
   return bookingRepo.create(SYSTEM_CONTEXT, {
+    operatorId: 'op_a',
     renterId: 'u1',
     classId,
-    vehicleId,
+    requestedVehicleId: vehicleId,
+    assignedVehicleId: vehicleId,
+    pickupLocationId: 'loc_namba',
+    dropoffLocationId: 'loc_namba',
     startAt: new Date('2026-08-01T09:00:00Z'),
     endAt: new Date('2026-08-01T12:00:00Z'),
     effectiveEndAt: new Date('2026-08-01T13:00:00Z'),
     status: 'CONFIRMED',
     source: 'DIRECT',
+    bookingCode: `bk-${vehicleId}`,
+    insuranceOptionId: null,
+    insuranceSnapshot: null,
+    feeSnapshot: [],
     externalId: null,
     notes: null,
     totalPrice: null,
@@ -287,5 +311,82 @@ describe('StorefrontDetailService.getDetail (#391)', () => {
     if (result.ok) throw new Error('expected a failure result for a malformed cursor')
     expect(result.status).toBe(400)
     expect(result.error).toMatch(/cursor/i)
+  })
+})
+
+describe('getInsuranceOptions', () => {
+  it('returns the location operator ACTIVE options in a renter-safe projection', async () => {
+    const op = await makeOperator('Op A', 'op-a')
+    const loc = await makeLocation({ operatorId: op.id })
+    await makeInsurance({
+      operatorId: op.id,
+      name: 'CDW',
+      description: 'Collision damage waiver',
+      dailyPriceJpy: 1500,
+      deductibleJpy: 50000,
+    })
+
+    const result = await service.getInsuranceOptions(PUBLIC_CONTEXT, loc.id)
+
+    if (!result.ok) throw new Error('expected ok result')
+    expect(result.data).toEqual([
+      {
+        id: expect.any(String),
+        name: 'CDW',
+        description: 'Collision damage waiver',
+        dailyPriceJpy: 1500,
+        deductibleJpy: 50000,
+      },
+    ])
+  })
+
+  it('excludes ARCHIVED options', async () => {
+    const op = await makeOperator('Op A', 'op-a')
+    const loc = await makeLocation({ operatorId: op.id })
+    await makeInsurance({ operatorId: op.id, name: 'Active CDW', dailyPriceJpy: 1000 })
+    const archived = await makeInsurance({ operatorId: op.id, name: 'Old CDW', dailyPriceJpy: 800 })
+    await insuranceRepo.archive(archived.id)
+
+    const result = await service.getInsuranceOptions(PUBLIC_CONTEXT, loc.id)
+
+    if (!result.ok) throw new Error('expected ok result')
+    expect(result.data.map((o) => o.name)).toEqual(['Active CDW'])
+  })
+
+  it('returns ONLY the location operator options, never another operator', async () => {
+    const opA = await makeOperator('Op A', 'op-a')
+    const opB = await makeOperator('Op B', 'op-b')
+    const locA = await makeLocation({ operatorId: opA.id, name: 'Namba' })
+    await makeInsurance({ operatorId: opA.id, name: 'A-CDW', dailyPriceJpy: 1000 })
+    await makeInsurance({ operatorId: opB.id, name: 'B-CDW', dailyPriceJpy: 2000 })
+
+    const result = await service.getInsuranceOptions(PUBLIC_CONTEXT, locA.id)
+
+    if (!result.ok) throw new Error('expected ok result')
+    expect(result.data.map((o) => o.name)).toEqual(['A-CDW'])
+  })
+
+  it('returns an empty list when the operator has no options', async () => {
+    const op = await makeOperator('Op A', 'op-a')
+    const loc = await makeLocation({ operatorId: op.id })
+
+    const result = await service.getInsuranceOptions(PUBLIC_CONTEXT, loc.id)
+
+    if (!result.ok) throw new Error('expected ok result')
+    expect(result.data).toEqual([])
+  })
+
+  it('404s for an unknown location', async () => {
+    const result = await service.getInsuranceOptions(PUBLIC_CONTEXT, crypto.randomUUID())
+    expect(result).toEqual({ ok: false, error: 'Storefront not found', status: 404 })
+  })
+
+  it('404s for an archived location', async () => {
+    const op = await makeOperator('Op A', 'op-a')
+    const loc = await makeLocation({ operatorId: op.id })
+    await locationRepo.archive(loc.id)
+
+    const result = await service.getInsuranceOptions(PUBLIC_CONTEXT, loc.id)
+    expect(result).toEqual({ ok: false, error: 'Storefront not found', status: 404 })
   })
 })

@@ -4,18 +4,22 @@ import { createApp } from '../../src/index'
 import { SYSTEM_CONTEXT } from '../../src/middleware/auth'
 import { InMemoryAvailabilityRepository } from '../../src/repositories/in-memory/availability'
 import { InMemoryBookingRepository } from '../../src/repositories/in-memory/booking'
+import { InMemoryLocationRepository } from '../../src/repositories/in-memory/location'
 import { InMemoryThreadRepository } from '../../src/repositories/in-memory/thread'
 import { InMemoryUserRepository } from '../../src/repositories/in-memory/user'
 import { InMemoryVehicleRepository } from '../../src/repositories/in-memory/vehicle'
 import { InMemoryVehicleClassRepository } from '../../src/repositories/in-memory/vehicle-class'
-import type { User, Vehicle, VehicleClass } from '../../src/stores'
+import type { Location, User, Vehicle, VehicleClass } from '../../src/stores'
 import { TEST_AUTH_SECRET, setupAuthEnv } from '../helpers/auth'
+import { bookingInput } from '../helpers/booking'
 
 // #396 — UserRepository is intentionally NOT operator-scoped (it takes no
 // CallerContext). This is safe today because every ingress that reaches it
-// already blocks OPERATOR_* callers: /customers is STAFF-gated, /users treats
-// non-privileged callers as self-only, and the booking paths fail-close at the
-// BookingRepository (rejectOperatorContextUntilScoped) before any user lookup.
+// already blocks an OPERATOR_* caller from resolving an ARBITRARY user:
+// /customers is STAFF-gated, /users treats non-privileged callers as self-only,
+// and the booking paths are operator-SCOPED (slice 6, #392) — an operator only
+// ever sees its OWN tenant's bookings, so renter enrichment can only resolve
+// that operator's own customers, never a foreign tenant's renter.
 //
 // These tests PIN those closures so the latent enumeration vector cannot
 // silently reopen if a route's gate is weakened. Renters remain shared
@@ -23,8 +27,10 @@ import { TEST_AUTH_SECRET, setupAuthEnv } from '../helpers/auth'
 // NOT filtered per operator — see the issue plan / Track decision.
 
 const OPERATOR_ID = 'op_396'
+const OTHER_OPERATOR_ID = 'op_other'
 const SELF_ID = '00000000-0000-4000-8000-00000000005f' // the operator's own user id
-const FOREIGN_ID = '00000000-0000-4000-8000-0000000000f0' // a renter in no operator
+const OWN_RENTER_ID = '00000000-0000-4000-8000-00000000001a' // a renter of OPERATOR_ID
+const FOREIGN_ID = '00000000-0000-4000-8000-0000000000f0' // a renter of another tenant
 
 async function operatorBearer(
   sub: string,
@@ -70,12 +76,14 @@ describe('#396 — OPERATOR_* cannot enumerate users via any current ingress', (
   let threadRepo: InMemoryThreadRepository
   let vehicle: Vehicle
   let classId: string
+  let locationId: string
 
   beforeEach(async () => {
     setupAuthEnv()
 
     const userStore = new Map<string, User>([
       [SELF_ID, mkUser(SELF_ID, 'OPERATOR_OWNER')],
+      [OWN_RENTER_ID, mkUser(OWN_RENTER_ID, 'RENTER')],
       [FOREIGN_ID, mkUser(FOREIGN_ID, 'RENTER')],
     ])
     userRepo = new SpyUserRepository(userStore)
@@ -97,14 +105,27 @@ describe('#396 — OPERATOR_* cannot enumerate users via any current ingress', (
     })
     classId = klass.id
 
-    // Vehicle is owned by the operator's own tenant so the booking attempt gets
-    // PAST vehicle scoping and fail-closes at BookingRepository — proving the
-    // closure is the tenant guard, not an incidental "vehicle not found".
+    const locationRepo = new InMemoryLocationRepository()
+    const location = await locationRepo.create({
+      operatorId: OPERATOR_ID,
+      name: 'Namba',
+      address: '1-2-3 Namba',
+      operatingHours: null,
+      timezone: 'Asia/Tokyo',
+      defaultTurnaroundMinutes: 2880,
+      status: 'ACTIVE',
+    } as Omit<Location, 'id' | 'createdAt' | 'updatedAt'>)
+    locationId = location.id
+
+    // Vehicle is in the operator's own tenant + pickup location, so an operator
+    // booking for SELF succeeds — proving the renterId is forced to self (not an
+    // incidental failure) and the foreign id is never looked up.
     const now = new Date()
     vehicle = {
       id: crypto.randomUUID(),
       operatorId: OPERATOR_ID,
       classId,
+      pickupLocationId: locationId,
       name: 'Test Car',
       description: null,
       photos: [],
@@ -140,6 +161,7 @@ describe('#396 — OPERATOR_* cannot enumerate users via any current ingress', (
       userRepo,
       vehicleClassRepo,
       threadRepo,
+      locationRepo,
     })
   })
 
@@ -180,13 +202,45 @@ describe('#396 — OPERATOR_* cannot enumerate users via any current ingress', (
     expect(body.data.map((u) => u.id)).not.toContain(FOREIGN_ID)
   })
 
-  it('GET /bookings?expand=renter fail-closes before renter enrichment', async () => {
+  it('GET /bookings?expand=renter resolves only the operator’s own tenant renters, never a foreign tenant’s', async () => {
+    // One booking in the operator's own tenant (renter OWN_RENTER) and one in a
+    // foreign tenant (renter FOREIGN). The three-way scope filters the foreign
+    // booking out in findAll, BEFORE renter enrichment runs — so the operator
+    // can resolve its own customer but FOREIGN is never looked up (#396).
+    await bookingRepo.create(
+      SYSTEM_CONTEXT,
+      bookingInput({
+        operatorId: OPERATOR_ID,
+        renterId: OWN_RENTER_ID,
+        requestedVehicleId: 'veh-own',
+        assignedVehicleId: 'veh-own',
+        pickupLocationId: locationId,
+        dropoffLocationId: locationId,
+      }),
+    )
+    await bookingRepo.create(
+      SYSTEM_CONTEXT,
+      bookingInput({
+        operatorId: OTHER_OPERATOR_ID,
+        renterId: FOREIGN_ID,
+        requestedVehicleId: 'veh-foreign',
+        assignedVehicleId: 'veh-foreign',
+      }),
+    )
+
     const res = await app.request('/bookings?expand=renter', {
       headers: await operatorBearer(SELF_ID),
     })
-    // BookingRepository.findAll rejects OPERATOR_* (rejectOperatorContextUntilScoped)
-    // -> ForbiddenError -> 403, never reaching userRepo.findByIds(renterIds).
-    expect(res.status).toBe(403)
+
+    expect(res.status).toBe(200)
+    const body = (await res.json()) as {
+      data: { renterId: string; renter?: { id: string } }[]
+    }
+    // Only the operator's own tenant booking is visible + enriched.
+    expect(body.data.map((b) => b.renterId)).toEqual([OWN_RENTER_ID])
+    expect(body.data[0]?.renter?.id).toBe(OWN_RENTER_ID)
+    // Enrichment ran for the own renter but NEVER for the foreign tenant's renter.
+    expect(userRepo.findByIdsArgs.flat()).toContain(OWN_RENTER_ID)
     expect(userRepo.findByIdsArgs.flat()).not.toContain(FOREIGN_ID)
   })
 
@@ -198,8 +252,9 @@ describe('#396 — OPERATOR_* cannot enumerate users via any current ingress', (
       method: 'POST',
       headers: { 'Content-Type': 'application/json', ...(await operatorBearer(SELF_ID)) },
       body: JSON.stringify({
-        classId,
-        vehicleId: vehicle.id,
+        requestedVehicleId: vehicle.id,
+        pickupLocationId: locationId,
+        dropoffLocationId: locationId,
         renterId: FOREIGN_ID, // attempt to book on behalf of another user
         startAt: startAt.toISOString(),
         endAt: endAt.toISOString(),
@@ -207,12 +262,14 @@ describe('#396 — OPERATOR_* cannot enumerate users via any current ingress', (
       }),
     })
 
-    // Operator cannot create an on-behalf booking — fail-closed at the repo
-    // with a tenant-guard 403 (not an incidental 400/404 from a wrong path)...
-    expect(res.status).toBe(403)
-    // ...and crucially the route forced renterId = ctx.userId, so the service's
-    // staff-override branch (userRepo.findByIds([renterId])) never ran for the
-    // foreign id. If the route forcing regresses, this assertion catches it.
+    // OPERATOR_* is not a STAFF role, so the route forces renterId = ctx.userId
+    // (the operator's own id). The booking is created for SELF, not FOREIGN...
+    expect(res.status).toBe(201)
+    const body = (await res.json()) as { data: { renterId: string } }
+    expect(body.data.renterId).toBe(SELF_ID)
+    expect(body.data.renterId).not.toBe(FOREIGN_ID)
+    // ...and the service's staff-override branch (userRepo.findByIds([renterId]))
+    // never ran for the foreign id. If the route forcing regresses, this catches it.
     expect(userRepo.findByIdsArgs.flat()).not.toContain(FOREIGN_ID)
   })
 })

@@ -58,7 +58,12 @@ export async function quickCreateCustomer(input: {
 }
 
 export async function createManualBooking(input: {
-  vehicleId: string
+  // Slice 6 (#392): a booking targets a concrete vehicle (requestedVehicleId)
+  // and carries pickup/dropoff locations — all required by createBookingSchema.
+  // For a manual booking pickup = dropoff = the vehicle's home location.
+  requestedVehicleId: string
+  pickupLocationId: string
+  dropoffLocationId: string
   renterId: string
   startAt: string
   endAt: string
@@ -71,7 +76,9 @@ export async function createManualBooking(input: {
     const client = createApiClient(token)
     const res = await client.bookings.$post({
       json: {
-        vehicleId: input.vehicleId,
+        requestedVehicleId: input.requestedVehicleId,
+        pickupLocationId: input.pickupLocationId,
+        dropoffLocationId: input.dropoffLocationId,
         startAt: input.startAt,
         endAt: input.endAt,
         notes: input.notes,

@@ -36,7 +36,6 @@ const vehicleInput = (operatorId: string) => ({
   fuelType: null,
   licensePlate: null,
   status: 'AVAILABLE' as const,
-  bufferMinutes: 60,
   minRentalHours: null,
   maxRentalHours: null,
   advanceBookingHours: null,

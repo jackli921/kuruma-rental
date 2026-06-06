@@ -1,4 +1,4 @@
-import { eq, sql } from 'drizzle-orm'
+import { and, eq, isNotNull, sql } from 'drizzle-orm'
 import { getDb } from './index'
 import { bookings, users, vehicles } from './schema'
 
@@ -49,13 +49,23 @@ async function seed() {
 
   console.log('Fetching vehicles...')
   const vehicleRows = await db
-    .select({ id: vehicles.id, name: vehicles.name, classId: vehicles.classId })
+    .select({
+      id: vehicles.id,
+      name: vehicles.name,
+      classId: vehicles.classId,
+      operatorId: vehicles.operatorId,
+      pickupLocationId: vehicles.pickupLocationId,
+    })
     .from(vehicles)
-    .where(eq(vehicles.status, 'AVAILABLE'))
+    // Slice 6 (#392): bookings require a pickup location + operator. Only seed
+    // against vehicles that have a pickup location anchored (slice 2 / #387).
+    .where(and(eq(vehicles.status, 'AVAILABLE'), isNotNull(vehicles.pickupLocationId)))
     .limit(10)
 
   if (vehicleRows.length === 0) {
-    console.error('No vehicles found. Run `bun run db:seed` first.')
+    console.error(
+      'No AVAILABLE vehicles with a pickup location found. Run `bun run db:seed` first.',
+    )
     process.exit(1)
   }
 
@@ -106,14 +116,26 @@ async function seed() {
         const startAt = dayAt(b.dayOffset, b.hour)
         const endAt = addHours(startAt, b.durationHours)
         const v = vehicle(i)
-        // classId is non-null because of the check above
+        // classId + pickupLocationId are non-null because of the filters above.
         if (!v.classId) throw new Error(`Vehicle ${v.id} has no classId`)
+        if (!v.pickupLocationId) throw new Error(`Vehicle ${v.id} has no pickupLocationId`)
         return {
+          operatorId: v.operatorId,
           renterId: renter(i),
           classId: v.classId,
-          vehicleId: v.id,
+          // Demo data assigns the requested vehicle directly (no substitution).
+          requestedVehicleId: v.id,
+          assignedVehicleId: v.id,
+          pickupLocationId: v.pickupLocationId,
+          dropoffLocationId: v.pickupLocationId,
+          // Placeholder reservation code — the real generator (nanoid, #392) runs
+          // in BookingService at submit; demo rows just need a UNIQUE value.
+          bookingCode: `SEED${String(i).padStart(4, '0')}`,
           startAt,
           endAt,
+          // The bookings_set_effective_end_at trigger overwrites this from the
+          // pickup location's turnaround on INSERT; the value here only satisfies
+          // the NOT NULL insert type.
           effectiveEndAt: endAt,
           status: b.status,
           source: 'DIRECT' as const,

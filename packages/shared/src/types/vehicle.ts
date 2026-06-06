@@ -6,7 +6,12 @@ export interface VehicleBase {
   /** Owning operator (marketplace tenant, #386). NOT NULL in the DB. */
   operatorId: string
   classId: string | null
-  /** Pickup storefront location (#387). Null = unassigned (invisible to storefront search). */
+  /**
+   * Pickup storefront location (#387 slice 2). Null = unassigned (invisible to
+   * storefront search, #391). Operationally wired in #392 slice 6: booking submit
+   * derives turnaround from the booking's pickup location, and substitution
+   * requires a replacement to share this vehicle's pickup location.
+   */
   pickupLocationId: string | null
   name: string
   description: string | null
@@ -16,7 +21,6 @@ export interface VehicleBase {
   fuelType: string | null
   licensePlate: string | null
   status: VehicleStatus
-  bufferMinutes: number
   minRentalHours: number | null
   maxRentalHours: number | null
   advanceBookingHours: number | null

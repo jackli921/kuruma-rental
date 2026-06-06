@@ -77,6 +77,17 @@ export class DrizzleInsuranceOptionRepository implements InsuranceOptionReposito
     return row ? toInsuranceOption(row) : undefined
   }
 
+  async findActiveByOperator(operatorId: string): Promise<InsuranceOption[]> {
+    const rows = await this.db
+      .select(insuranceOptionColumns)
+      .from(insuranceOptions)
+      .where(
+        and(eq(insuranceOptions.operatorId, operatorId), eq(insuranceOptions.status, 'ACTIVE')),
+      )
+      .orderBy(asc(insuranceOptions.name))
+    return rows.map(toInsuranceOption)
+  }
+
   async create(
     data: Omit<InsuranceOption, 'id' | 'createdAt' | 'updatedAt'>,
   ): Promise<InsuranceOption> {

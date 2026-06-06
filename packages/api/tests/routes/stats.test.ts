@@ -1,5 +1,6 @@
 import { beforeAll, describe, expect, it } from 'vitest'
 import { createApp } from '../../src/index'
+import { SYSTEM_CONTEXT } from '../../src/middleware/auth'
 import {
   InMemoryAvailabilityRepository,
   InMemoryBookingRepository,
@@ -8,6 +9,7 @@ import {
   InMemoryVehicleRepository,
 } from '../../src/repositories/in-memory'
 import { authHeaders, setupAuthEnv } from '../helpers/auth'
+import { bookingInput } from '../helpers/booking'
 import { TEST_OPERATOR_ID, seededOperatorRepo } from '../helpers/operator'
 
 const TEST_API_KEY = 'test-stats-key'
@@ -93,9 +95,8 @@ describe('GET /stats', () => {
   })
 
   it('returns correct counts after creating vehicles and bookings', async () => {
-    const { app, classId } = await createTestApp()
+    const { app, bookingRepo, classId } = await createTestApp()
     const staffHeaders = await authHeaders({ sub: 'staff-user', role: 'STAFF' })
-    const renterHeaders = await authHeaders({ sub: 'renter-user', role: 'RENTER' })
 
     // Create 3 vehicles (2 AVAILABLE, 1 will be soft-deleted)
     await app.request('/vehicles', {
@@ -146,35 +147,35 @@ describe('GET /stats', () => {
       headers: staffHeaders,
     })
 
-    // Create 2 bookings
+    // Seed 2 bookings on the available vehicle. The stats endpoint only counts
+    // booking rows (status/source/dates don't affect the count), so seed via the
+    // repo directly — distinct date windows keep the no-overlap exclusion happy.
     const vehiclesRes = await app.request('/vehicles', { headers: staffHeaders })
     const vehiclesBody = await vehiclesRes.json()
     const availableVehicle = vehiclesBody.data.find(
       (v: { status: string }) => v.status === 'AVAILABLE',
     )
 
-    await app.request('/bookings', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', ...renterHeaders },
-      body: JSON.stringify({
+    await bookingRepo.create(
+      SYSTEM_CONTEXT,
+      bookingInput({
         classId,
-        vehicleId: availableVehicle.id,
-        startAt: '2026-05-01T10:00:00Z',
-        endAt: '2026-05-03T10:00:00Z',
+        assignedVehicleId: availableVehicle.id,
+        startAt: new Date('2026-05-01T10:00:00Z'),
+        endAt: new Date('2026-05-03T10:00:00Z'),
         source: 'DIRECT',
       }),
-    })
-    await app.request('/bookings', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', ...renterHeaders },
-      body: JSON.stringify({
+    )
+    await bookingRepo.create(
+      SYSTEM_CONTEXT,
+      bookingInput({
         classId,
-        vehicleId: availableVehicle.id,
-        startAt: '2026-06-01T10:00:00Z',
-        endAt: '2026-06-03T10:00:00Z',
+        assignedVehicleId: availableVehicle.id,
+        startAt: new Date('2026-06-01T10:00:00Z'),
+        endAt: new Date('2026-06-03T10:00:00Z'),
         source: 'TRIP_COM',
       }),
-    })
+    )
 
     const res = await app.request('/stats', {
       headers: { 'X-API-Key': TEST_API_KEY },

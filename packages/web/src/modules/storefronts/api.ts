@@ -58,6 +58,15 @@ export interface StorefrontSummaryData {
   operatingHours: OperatingHoursData | null
 }
 
+/** Renter-safe insurance projection from GET /storefronts/:id/insurance-options (#392). */
+export interface StorefrontInsuranceOptionData {
+  id: string
+  name: string
+  description: string | null
+  dailyPriceJpy: number
+  deductibleJpy: number | null
+}
+
 export interface StorefrontDetailData {
   storefront: StorefrontSummaryData
   vehicles: AvailableVehicleData[]
@@ -135,4 +144,17 @@ export async function fetchStorefrontDetail(
   const res = await fetch(url)
   if (res.status === 404) return null
   return unwrap<StorefrontDetailData>(res)
+}
+
+// Public endpoint — the ACTIVE coverage offered at this storefront (#392), for
+// the booking-form insurance dropdown. Returns null on 404 (unknown/archived
+// store) so the caller can fall back to "no coverage offered".
+export async function fetchStorefrontInsuranceOptions(
+  locationId: string,
+): Promise<StorefrontInsuranceOptionData[] | null> {
+  const client = createApiClient()
+  const url = client.storefronts[':locationId']['insurance-options'].$url({ param: { locationId } })
+  const res = await fetch(url)
+  if (res.status === 404) return null
+  return unwrap<StorefrontInsuranceOptionData[]>(res)
 }

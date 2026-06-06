@@ -155,23 +155,36 @@ beforeAll(async () => {
   await setPickup(v3Id, namba.id)
   await setPickup(v4Id, gion.id)
 
-  // v2 is booked across [FROM, TO): startAt 10:00, effectiveEndAt 15:00.
+  // v2 is booked across [FROM, TO): startAt 10:00, effectiveEndAt 15:00
+  // (endAt 14:00 + namba turnaround 60min; the DB trigger derives this).
   await bookingRepo.create(SYSTEM_CONTEXT, {
+    operatorId: opAId,
     renterId,
     classId: compactAId,
-    vehicleId: v2Id,
+    requestedVehicleId: v2Id,
+    assignedVehicleId: v2Id,
+    pickupLocationId: namba.id,
+    dropoffLocationId: namba.id,
     startAt: FROM,
     endAt: TO,
     effectiveEndAt: new Date('2026-08-01T15:00:00Z'),
     status: 'CONFIRMED',
     source: 'DIRECT',
+    bookingCode: `SF-${uniq}`,
+    insuranceOptionId: null,
+    insuranceSnapshot: null,
+    feeSnapshot: [],
     externalId: null,
     notes: null,
+    totalPrice: null,
+    cancellationFee: null,
+    cancelledAt: null,
+    idempotencyKey: null,
   })
 })
 
 afterAll(async () => {
-  await db.delete(bookings).where(inArray(bookings.vehicleId, [v1Id, v2Id, v3Id, v4Id]))
+  await db.delete(bookings).where(inArray(bookings.assignedVehicleId, [v1Id, v2Id, v3Id, v4Id]))
   await db.delete(vehicles).where(inArray(vehicles.operatorId, [opAId, opBId]))
   await db.delete(vehicleClasses).where(inArray(vehicleClasses.operatorId, [opAId, opBId]))
   await db.delete(locations).where(inArray(locations.operatorId, [opAId, opBId]))

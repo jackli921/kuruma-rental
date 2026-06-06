@@ -198,14 +198,26 @@ export function ManualBookingDialog({
         return
       }
 
+      // #392: a booking requires pickup/dropoff locations. For a manual booking
+      // both default to the selected vehicle's home location.
+      const vehicle = vehicles.find((v) => v.id === slot.vehicleId)
+      if (!vehicle?.pickupLocationId) {
+        setError(t('vehicleNoLocation'))
+        return
+      }
+
       const bookingInput: {
-        vehicleId: string
+        requestedVehicleId: string
+        pickupLocationId: string
+        dropoffLocationId: string
         renterId: string
         startAt: string
         endAt: string
         notes?: string
       } = {
-        vehicleId: slot.vehicleId,
+        requestedVehicleId: slot.vehicleId,
+        pickupLocationId: vehicle.pickupLocationId,
+        dropoffLocationId: vehicle.pickupLocationId,
         renterId: resolved.renterId,
         startAt: parseJstDateTimeLocal(slot.startAt).toISOString(),
         endAt: parseJstDateTimeLocal(slot.endAt).toISOString(),

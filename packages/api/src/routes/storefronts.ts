@@ -79,4 +79,16 @@ export function createStorefrontRoutes(
       cachePublic(c, CACHE_SECONDS)
       return ok(c, result.data)
     })
+    .get('/storefronts/:locationId/insurance-options', async (c) => {
+      // The ACTIVE coverage a renter can add when booking at this storefront
+      // (#392). Public + active-only + single-operator — see the service for the
+      // [P0] seal rationale. 404 mirrors the vehicles route (unknown/archived).
+      const result = await detailService.getInsuranceOptions(
+        PUBLIC_CONTEXT,
+        c.req.param('locationId'),
+      )
+      if (!result.ok) return fail(c, result.error, result.status)
+      cachePublic(c, CACHE_SECONDS)
+      return ok(c, result.data)
+    })
 }

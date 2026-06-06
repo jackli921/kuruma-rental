@@ -23,7 +23,6 @@ describe('DrizzleVehicleRepository', () => {
       fuelType: 'Gasoline',
       licensePlate: null,
       status: 'AVAILABLE' as const,
-      bufferMinutes: 30,
       minRentalHours: 4,
       maxRentalHours: 72,
       advanceBookingHours: 24,
@@ -42,7 +41,6 @@ describe('DrizzleVehicleRepository', () => {
     expect(vehicle.transmission).toBe('AUTO')
     expect(vehicle.fuelType).toBe('Gasoline')
     expect(vehicle.status).toBe('AVAILABLE')
-    expect(vehicle.bufferMinutes).toBe(30)
     expect(vehicle.minRentalHours).toBe(4)
     expect(vehicle.maxRentalHours).toBe(72)
     expect(vehicle.advanceBookingHours).toBe(24)
@@ -61,7 +59,6 @@ describe('DrizzleVehicleRepository', () => {
       fuelType: null,
       licensePlate: null,
       status: 'AVAILABLE',
-      bufferMinutes: 60,
       minRentalHours: null,
       maxRentalHours: null,
       advanceBookingHours: null,
@@ -81,7 +78,6 @@ describe('DrizzleVehicleRepository', () => {
     expect(found!.transmission).toBe('MANUAL')
     expect(found!.fuelType).toBeNull()
     expect(found!.status).toBe('AVAILABLE')
-    expect(found!.bufferMinutes).toBe(60)
   })
 
   it('findById returns undefined for non-existent id', async () => {
@@ -99,7 +95,6 @@ describe('DrizzleVehicleRepository', () => {
       fuelType: null,
       licensePlate: null,
       status: 'AVAILABLE',
-      bufferMinutes: 60,
       minRentalHours: null,
       maxRentalHours: null,
       advanceBookingHours: null,
@@ -118,7 +113,6 @@ describe('DrizzleVehicleRepository', () => {
       fuelType: null,
       licensePlate: null,
       status: 'MAINTENANCE',
-      bufferMinutes: 60,
       minRentalHours: null,
       maxRentalHours: null,
       advanceBookingHours: null,
@@ -151,7 +145,6 @@ describe('DrizzleVehicleRepository', () => {
       fuelType: 'Gasoline',
       licensePlate: null,
       status: 'AVAILABLE',
-      bufferMinutes: 60,
       minRentalHours: null,
       maxRentalHours: null,
       advanceBookingHours: null,
@@ -175,7 +168,6 @@ describe('DrizzleVehicleRepository', () => {
     expect(updated!.transmission).toBe('AUTO')
     expect(updated!.fuelType).toBe('Gasoline')
     expect(updated!.status).toBe('AVAILABLE')
-    expect(updated!.bufferMinutes).toBe(60)
     expect(updated!.createdAt).toBeInstanceOf(Date)
     expect(updated!.updatedAt).toBeInstanceOf(Date)
     expect(updated!.updatedAt.getTime()).toBeGreaterThanOrEqual(created.createdAt.getTime())
@@ -196,7 +188,6 @@ describe('DrizzleVehicleRepository', () => {
       fuelType: null,
       licensePlate: null,
       status: 'AVAILABLE',
-      bufferMinutes: 60,
       minRentalHours: null,
       maxRentalHours: null,
       advanceBookingHours: null,

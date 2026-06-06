@@ -253,6 +253,27 @@
       "when": 1780706601569,
       "tag": "0035_locations_active_only_unique_name",
       "breakpoints": true
+    },
+    {
+      "idx": 36,
+      "version": "7",
+      "when": 1780706601570,
+      "tag": "0036_slice6_booking_events_additive",
+      "breakpoints": true
+    },
+    {
+      "idx": 37,
+      "version": "7",
+      "when": 1780706601571,
+      "tag": "0037_booking_exclusion_assigned_vehicle",
+      "breakpoints": true
+    },
+    {
+      "idx": 38,
+      "version": "7",
+      "when": 1780706601572,
+      "tag": "0038_slice6_drop_legacy_vehicle_buffer",
+      "breakpoints": true
     }
   ]
 }

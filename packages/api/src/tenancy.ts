@@ -37,6 +37,29 @@ export function operatorReadScope(ctx: CallerContext): OperatorReadScope {
 }
 
 /**
+ * How a booking read is scoped (#392, proposal §6.2). Unlike the public vehicle
+ * catalog (`operatorReadScope` maps renters to `all`), bookings are private:
+ * - `all`      — bypass callers (PLATFORM_ADMIN / legacy STAFF/ADMIN/PARTNER).
+ *                Gated on `ctx.bypassScope`, NOT a role string (slice-4 [P1]).
+ * - `operator` — OPERATOR_* caller: only this tenant's bookings.
+ * - `renter`   — every other caller (RENTER): only their own bookings.
+ * - `none`     — OPERATOR_* missing operatorId: fail-closed (read nothing).
+ */
+export type BookingReadScope =
+  | { kind: 'all' }
+  | { kind: 'operator'; operatorId: string }
+  | { kind: 'renter'; renterId: string }
+  | { kind: 'none' }
+
+export function bookingReadScope(ctx: CallerContext): BookingReadScope {
+  if (ctx.bypassScope) return { kind: 'all' }
+  if (isOperatorRole(ctx.role)) {
+    return ctx.operatorId ? { kind: 'operator', operatorId: ctx.operatorId } : { kind: 'none' }
+  }
+  return { kind: 'renter', renterId: ctx.userId }
+}
+
+/**
  * Resolve the operatorId to stamp on a write (#401, #407):
  * - OPERATOR_OWNER / OPERATOR_STAFF write under their own tenant; missing
  *   operatorId fails closed. They cannot write for another operator, so an

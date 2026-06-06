@@ -1,6 +1,10 @@
-import { createBookingSchema, updateBookingStatusSchema } from '@kuruma/shared/validators/booking'
+import {
+  createBookingSchema,
+  substituteVehicleSchema,
+  updateBookingStatusSchema,
+} from '@kuruma/shared/validators/booking'
 import { Hono } from 'hono'
-import { STAFF_ROLES, requireUser, toCallerContext } from '../middleware/auth'
+import { STAFF_ROLES, isOperatorRole, requireUser, toCallerContext } from '../middleware/auth'
 import type { BookingFilters } from '../repositories/types'
 import type { BookingService } from '../services/booking'
 import { fail, ok, parseBody, parseDateRange, parseLimit } from './helpers'
@@ -66,15 +70,20 @@ export function createBookingRoutes(service: BookingService) {
       if (!parsed.ok) return parsed.response
 
       // Staff/admin can create bookings on behalf of a customer (manual bookings).
-      // Non-staff always book as themselves and source is forced to DIRECT
-      // to prevent advance-booking-hours bypass via source=MANUAL.
+      // Non-staff always book as themselves and source is forced to DIRECT to
+      // prevent advance-booking-hours bypass via source=MANUAL. OPERATOR_* are
+      // deliberately NOT manual bookers: UserRepository is not tenant-scoped, so
+      // letting an operator resolve an arbitrary renterId reopens the #396
+      // cross-tenant user-enumeration vector (operator-user-isolation.test.ts).
       const isStaff = STAFF_ROLES.has(ctx.role)
       const renterId = isStaff && parsed.data.renterId ? parsed.data.renterId : ctx.userId
       const source = isStaff ? parsed.data.source : 'DIRECT'
 
       const createResult = await service.create(ctx, {
-        classId: parsed.data.classId,
-        vehicleId: parsed.data.vehicleId ?? null,
+        requestedVehicleId: parsed.data.requestedVehicleId,
+        pickupLocationId: parsed.data.pickupLocationId,
+        dropoffLocationId: parsed.data.dropoffLocationId,
+        insuranceOptionId: parsed.data.insuranceOptionId ?? null,
         renterId,
         startAt: new Date(parsed.data.startAt),
         endAt: new Date(parsed.data.endAt),
@@ -115,5 +124,29 @@ export function createBookingRoutes(service: BookingService) {
       }
 
       return ok(c, result.booking, 200, { cancellation: result.cancellation })
+    })
+    .post('/bookings/:id/substitute', async (c) => {
+      const ctx = toCallerContext(requireUser(c))
+
+      // §5.5: substitution is operator-only. Renters never reassign their own
+      // vehicle (403). Cross-operator bookings 404 at the service (no leak).
+      if (!isOperatorRole(ctx.role)) {
+        return fail(c, 'Only operators can substitute a vehicle', 403)
+      }
+
+      const parsed = await parseBody(c, substituteVehicleSchema)
+      if (!parsed.ok) return parsed.response
+
+      const result = await service.substitute(
+        ctx,
+        c.req.param('id'),
+        parsed.data.newVehicleId,
+        parsed.data.reason ?? null,
+      )
+      if (!result.ok) {
+        return fail(c, result.error, result.status)
+      }
+
+      return ok(c, result.booking)
     })
 }

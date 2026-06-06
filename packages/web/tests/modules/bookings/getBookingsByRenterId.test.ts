@@ -15,7 +15,7 @@ import { getBookingsByRenterId } from '@/lib/bookings'
 
 const MOCK_BOOKING_WITH_VEHICLE_1 = {
   id: 'booking-001',
-  vehicleId: 'vehicle-001',
+  assignedVehicleId: 'vehicle-001',
   renterId: 'user-001',
   startAt: '2026-04-10T09:00:00.000Z',
   endAt: '2026-04-12T09:00:00.000Z',
@@ -29,7 +29,7 @@ const MOCK_BOOKING_WITH_VEHICLE_1 = {
 
 const MOCK_BOOKING_WITH_VEHICLE_2 = {
   id: 'booking-002',
-  vehicleId: 'vehicle-002',
+  assignedVehicleId: 'vehicle-002',
   renterId: 'user-001',
   startAt: '2026-04-15T10:00:00.000Z',
   endAt: '2026-04-17T10:00:00.000Z',

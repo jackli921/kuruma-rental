@@ -2,6 +2,7 @@ export type {
   Vehicle,
   VehicleClass,
   Booking,
+  BookingEvent,
   User,
   Thread,
   ThreadParticipant,
@@ -24,6 +25,7 @@ import type { VehicleDetail } from '@kuruma/shared/types/vehicle-detail'
 import type { CallerContext } from '../middleware/auth'
 import type {
   Booking,
+  BookingEvent,
   FeeSchedule,
   InsuranceOption,
   Location,
@@ -107,6 +109,14 @@ export interface InsuranceOptionRepository {
     operatorId: string,
     name: string,
   ): Promise<InsuranceOption | undefined>
+  /**
+   * ACTIVE options for one operator, name-sorted. NOT ctx-scoped — the caller
+   * passes an already-resolved operatorId. Powers the PUBLIC storefront read
+   * (#392): a renter booking at a storefront must see its operator's active
+   * coverage, so this deliberately bypasses the management-only `findAll` seal.
+   * Scope is single-operator + ACTIVE-only, never a cross-operator enumeration.
+   */
+  findActiveByOperator(operatorId: string): Promise<InsuranceOption[]>
   create(data: Omit<InsuranceOption, 'id' | 'createdAt' | 'updatedAt'>): Promise<InsuranceOption>
   update(id: string, data: Partial<InsuranceOption>): Promise<InsuranceOption | undefined>
   archive(id: string): Promise<InsuranceOption | undefined>
@@ -255,6 +265,30 @@ export interface BookingRepository {
     id: string,
     opts: { from: Booking['status']; fee: number; cancelledAt: Date },
   ): Promise<Booking | undefined>
+  /**
+   * Operator vehicle substitution (#392, §5.5): atomically reassign a booking to
+   * a new vehicle. Re-checks the exclusion constraint for the NEW assigned
+   * vehicle over the booking's [startAt, effectiveEndAt) — throws
+   * EXCLUSION_VIOLATION (23P01) if that car is already booked for the range —
+   * and re-snapshots totalPrice/effectiveEndAt. Returns undefined when the
+   * booking is not visible to the caller. requestedVehicleId is never touched.
+   */
+  reassignVehicle(
+    ctx: CallerContext,
+    id: string,
+    data: { assignedVehicleId: string; totalPrice: number | null; effectiveEndAt: Date },
+  ): Promise<Booking | undefined>
+}
+
+/**
+ * Append-only booking lifecycle log (#392, proposal §5.2). The events are the
+ * source of truth; `bookings.status` is the write-through projection. There is
+ * deliberately NO update/delete method — immutability is enforced by the
+ * interface, not just convention.
+ */
+export interface BookingEventRepository {
+  append(ctx: CallerContext, event: Omit<BookingEvent, 'id' | 'createdAt'>): Promise<BookingEvent>
+  findByBookingId(ctx: CallerContext, bookingId: string): Promise<BookingEvent[]>
 }
 
 export interface StatsRepository {
@@ -385,12 +419,23 @@ export interface MessageRepository {
 // Transaction boundary for operations spanning multiple repositories.
 // Drizzle: wraps db.transaction(), creating repos bound to the tx handle.
 // InMemory: passes repos through (JS event loop is single-threaded).
-export type RunInTransaction = <T>(
-  fn: (repos: {
-    vehicleRepo: VehicleRepository
-    maintenanceLogRepo: MaintenanceLogRepository
-  }) => Promise<T>,
-) => Promise<T>
+//
+// Slice 6 (#392) widens the bundle so the single-transaction booking submit
+// (proposal §4) can — atomically — validate availability (booking insert ->
+// exclusion constraint), append the BOOKING_CREATED event, and read the
+// vehicle / location / insurance / fee rows for the price + snapshots at a
+// consistent point-in-time. MaintenanceService still uses only the first two.
+export interface TransactionRepos {
+  vehicleRepo: VehicleRepository
+  maintenanceLogRepo: MaintenanceLogRepository
+  bookingRepo: BookingRepository
+  bookingEventRepo: BookingEventRepository
+  locationRepo: LocationRepository
+  insuranceOptionRepo: InsuranceOptionRepository
+  feeScheduleRepo: FeeScheduleRepository
+}
+
+export type RunInTransaction = <T>(fn: (repos: TransactionRepos) => Promise<T>) => Promise<T>
 
 export interface TransitionLogsResult {
   resolved?: MaintenanceLog

@@ -13,6 +13,7 @@ import {
 } from '../../src/repositories/in-memory'
 import { FleetOverviewService } from '../../src/services/fleet-overview'
 import type { Booking, Vehicle } from '../../src/stores'
+import { bookingInput } from '../helpers/booking'
 
 async function seedVehicle(
   repo: InMemoryVehicleRepository,
@@ -46,21 +47,16 @@ async function seedBooking(
   endAt: Date,
   status: Booking['status'] = 'CONFIRMED',
 ): Promise<void> {
-  await repo.create(SYSTEM_CONTEXT, {
-    vehicleId,
-    renterId: 'renter-1',
-    startAt,
-    endAt,
-    effectiveEndAt: new Date(endAt.getTime() + 60 * 60 * 1000),
-    status,
-    source: 'DIRECT',
-    externalId: null,
-    notes: null,
-    totalPrice: null,
-    cancellationFee: null,
-    cancelledAt: null,
-    idempotencyKey: null,
-  })
+  await repo.create(
+    SYSTEM_CONTEXT,
+    bookingInput({
+      assignedVehicleId: vehicleId,
+      startAt,
+      endAt,
+      effectiveEndAt: new Date(endAt.getTime() + 60 * 60 * 1000),
+      status,
+    }),
+  )
 }
 
 describe('FleetOverviewService — clock injection', () => {

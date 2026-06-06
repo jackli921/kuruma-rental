@@ -49,8 +49,10 @@ export class InMemoryCustomerRepository implements CustomerRepository {
       .sort((a, b) => b.startAt.getTime() - a.startAt.getTime())
       .map((b) => ({
         id: b.id,
-        vehicleId: b.vehicleId,
-        vehicleName: b.vehicleId ? (this.vehicles.get(b.vehicleId)?.name ?? null) : null,
+        vehicleId: b.assignedVehicleId,
+        vehicleName: b.assignedVehicleId
+          ? (this.vehicles.get(b.assignedVehicleId)?.name ?? null)
+          : null,
         startAt: b.startAt.toISOString(),
         endAt: b.endAt.toISOString(),
         status: b.status,

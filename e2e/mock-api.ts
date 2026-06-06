@@ -118,12 +118,47 @@ const TEST_VEHICLE = {
   updatedAt: FROZEN_TIMESTAMP,
 }
 
+// Renter who books in the slice-6 E2E (#392). The forged session cookie's
+// subject MUST match this id, and POST /bookings stamps it as the renter so the
+// confirmation page's ownership check passes. Keep in sync with e2e/auth.ts.
+const TEST_RENTER_ID = 'e2e-renter-1'
+
+// The storefront operator's ACTIVE insurance options (#392). The booking form's
+// dropdown renders these; the spec selects the first.
+const TEST_INSURANCE = [
+  {
+    id: 'e2e-ins-1',
+    name: 'Collision Damage Waiver',
+    description: 'Reduces your liability in an accident.',
+    dailyPriceJpy: 1500,
+    deductibleJpy: 50000,
+  },
+  {
+    id: 'e2e-ins-2',
+    name: 'Full Protection',
+    description: null,
+    dailyPriceJpy: 3000,
+    deductibleJpy: null,
+  },
+]
+
+// Snapshotted at booking time — drives the confirmation "potential additional
+// charges" block.
+const TEST_FEE_SNAPSHOT = [
+  { feeType: 'CLEANING_FLAT', unit: 'FLAT', amountJpy: 3000, vehicleClassId: null },
+  { feeType: 'OVERTIME_HOURLY', unit: 'PER_HOUR', amountJpy: 1000, vehicleClassId: null },
+]
+
+// POST /bookings creates; GET /bookings/:id reads. In-memory so the confirmation
+// page can re-fetch what the form just created (unique ids keep workers isolated).
+const bookings = new Map<string, unknown>()
+
 const ok = (data: unknown) => Response.json({ success: true, data })
 const fail = (error: string, status: number) => Response.json({ success: false, error }, { status })
 
 Bun.serve({
   port: MOCK_PORT,
-  fetch(req) {
+  async fetch(req) {
     const url = new URL(req.url)
 
     if (url.pathname === '/vehicles') return ok([TEST_VEHICLE])
@@ -159,6 +194,67 @@ Bun.serve({
       const to = url.searchParams.get('to')
       if (!from || !to) return fail('from and to query parameters required', 400)
       return ok(TEST_STOREFRONT_DETAIL)
+    }
+
+    // Renter-facing active insurance for a storefront (public, #392).
+    if (url.pathname === `/storefronts/${TEST_STORE_ID}/insurance-options`) {
+      return ok(TEST_INSURANCE)
+    }
+
+    // Create a booking (#392). The web sends the slice-6 contract; the server
+    // derives renterId/operatorId/snapshots. We reflect the chosen insurance so
+    // the confirmation page can assert it.
+    if (url.pathname === '/bookings' && req.method === 'POST') {
+      const body = (await req.json().catch(() => ({}))) as {
+        requestedVehicleId?: string
+        pickupLocationId?: string
+        dropoffLocationId?: string
+        insuranceOptionId?: string
+        startAt?: string
+        endAt?: string
+      }
+      const chosen = TEST_INSURANCE.find((o) => o.id === body.insuranceOptionId)
+      const id = crypto.randomUUID()
+      const booking = {
+        id,
+        renterId: TEST_RENTER_ID,
+        classId: null,
+        requestedVehicleId: body.requestedVehicleId ?? null,
+        assignedVehicleId: body.requestedVehicleId ?? null,
+        pickupLocationId: body.pickupLocationId ?? null,
+        dropoffLocationId: body.dropoffLocationId ?? null,
+        startAt: body.startAt ?? FROZEN_TIMESTAMP,
+        endAt: body.endAt ?? FROZEN_TIMESTAMP,
+        effectiveEndAt: body.endAt ?? FROZEN_TIMESTAMP,
+        status: 'CONFIRMED',
+        source: 'DIRECT',
+        bookingCode: `E2E${id.slice(0, 6).toUpperCase()}`,
+        insuranceOptionId: chosen?.id ?? null,
+        insuranceSnapshot: chosen
+          ? {
+              insuranceOptionId: chosen.id,
+              name: chosen.name,
+              dailyPriceJpy: chosen.dailyPriceJpy,
+              deductibleJpy: chosen.deductibleJpy,
+            }
+          : null,
+        feeSnapshot: TEST_FEE_SNAPSHOT,
+        totalPrice: null,
+        externalId: null,
+        notes: null,
+        createdAt: FROZEN_TIMESTAMP,
+        updatedAt: FROZEN_TIMESTAMP,
+      }
+      bookings.set(id, booking)
+      return ok(booking)
+    }
+
+    // Confirmation page re-fetch (#392). GET /bookings/:id.
+    const bookingMatch = url.pathname.match(/^\/bookings\/([^/]+)$/)
+    if (bookingMatch && req.method === 'GET') {
+      const booking = bookings.get(bookingMatch[1] ?? '')
+      if (!booking) return fail('Booking not found', 404)
+      return ok(booking)
     }
 
     return fail('Not found', 404)
