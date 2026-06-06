@@ -20,5 +20,11 @@
     ".next/types/**/*.ts",
     ".next/dev/types/**/*.ts"
   ],
-  "exclude": ["node_modules"]
+  "exclude": [
+    "node_modules",
+    "src/main.tsx",
+    "src/routes/**",
+    "src/routeTree.gen.ts",
+    "src/vite/**"
+  ]
 }

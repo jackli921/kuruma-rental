@@ -18,6 +18,9 @@
 /.next/
 /out/
 
+# vite (CF Pages build output)
+packages/web/dist/
+
 # production
 /build
 
