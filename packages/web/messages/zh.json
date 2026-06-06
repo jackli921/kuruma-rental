@@ -677,34 +677,47 @@
   },
   "bookings": {
     "new": {
-      "title": "预订此车型",
-      "classInfo": "车型信息",
-      "pickupDate": "取车日期和时间",
-      "returnDate": "还车日期和时间",
-      "available": "可预订",
-      "availableCount": "所选日期共有 {total} 辆车,目前有 {count} 辆可预订",
-      "notAvailable": "所选日期没有可用车辆。请选择其他日期。",
-      "checkingAvailability": "正在查询可用性...",
-      "availabilityError": "无法查询可用性,请稍后再试。",
-      "selectDates": "选择日期以查看可用性",
+      "title": "确认预订",
+      "pickupDate": "取车",
+      "returnDate": "还车",
       "confirmBooking": "确认预订",
       "submitting": "预订中...",
       "seats": "{count}座",
-      "luggage": "{count}件行李",
       "auto": "自动挡",
       "manual": "手动挡",
-      "priceFrom": "起",
-      "perDay": "/ 天"
+      "perDay": "/ 天",
+      "insurance": "保险",
+      "declineInsurance": "不购买保险",
+      "noInsurance": "该运营商未提供保险选项。",
+      "insuranceHint": "可选保障，按天计入总价。"
     },
     "confirmation": {
       "title": "预订已确认",
-      "subtitle": "您的预订已成功创建。具体车辆将在取车时分配。",
-      "bookingId": "预订编号",
+      "subtitle": "您的预订已确认。取车时请出示预订码。",
+      "bookingCode": "预订码",
       "vehicleClass": "车型",
       "pickupDate": "取车",
       "returnDate": "还车",
       "status": "状态",
       "confirmed": "已确认",
+      "insurance": "保险",
+      "insuranceDeclined": "未购买",
+      "perDay": "/ 天",
+      "fees": {
+        "title": "可能产生的额外费用",
+        "disclaimer": "仅在发生时收取（如超时、清洁、未加油），并在还车时结算。",
+        "type": {
+          "OVERTIME_HOURLY": "超时",
+          "CLEANING_FLAT": "清洁",
+          "NO_FUEL_FLAT": "未加满油"
+        },
+        "unit": {
+          "PER_HOUR": "每小时",
+          "PER_DAY": "每天",
+          "PER_KM": "每公里",
+          "FLAT": "固定"
+        }
+      },
       "viewBookings": "查看我的预订",
       "backToVehicles": "浏览更多车辆"
     },
@@ -793,8 +806,7 @@
       "backToSearch": "返回搜索",
       "availableVehicles": "可用车辆",
       "noVehicles": "所选时间内该门店没有可用车辆。",
-      "select": "选择",
-      "selectComingSoon": "预订即将开放",
+      "book": "预订此车",
       "notFound": "未找到门店",
       "notFoundDescription": "该门店不存在或已不可用。"
     }

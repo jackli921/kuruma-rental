@@ -1,35 +1,66 @@
-import { fetchClassBySlug } from '@/modules/classes'
-import { getTranslations } from 'next-intl/server'
-import { notFound } from 'next/navigation'
-import { ClassBookingForm } from './ClassBookingForm'
-import { ClassSummaryCard } from './ClassSummaryCard'
+import { auth } from '@/auth'
+import {
+  fetchStorefrontDetail,
+  fetchStorefrontInsuranceOptions,
+  parseSearchRange,
+} from '@/modules/storefronts'
+import { getLocale, getTranslations } from 'next-intl/server'
+import { notFound, redirect } from 'next/navigation'
+import { BookingVehicleSummary } from './BookingVehicleSummary'
+import { VehicleBookingForm } from './VehicleBookingForm'
 
 interface NewBookingPageProps {
-  searchParams: Promise<{ classSlug?: string }>
+  searchParams: Promise<{ vehicleId?: string; locationId?: string; from?: string; to?: string }>
 }
 
-// Issue #311: renter booking flow. The entry point is the class detail page,
-// which links here with ?classSlug=<slug>. Middleware gates the whole
-// /bookings/* tree, so by the time we render we know the caller is signed
-// in. We resolve the class server-side so the form knows the classId (which
-// the API requires) without a second round-trip.
+// Slice 6 (#392): renter booking flow. The entry point is a storefront vehicle
+// card, which links here with ?vehicleId&locationId&from&to. Middleware gates
+// /bookings/*, so the caller is signed in. We re-read the storefront detail for
+// the date range: this both fetches the renter-safe vehicle projection and
+// re-confirms availability (a car booked since browsing simply won't be listed).
 export default async function NewBookingPage({ searchParams }: NewBookingPageProps) {
-  const { classSlug } = await searchParams
-  if (!classSlug) {
+  const { vehicleId, locationId, from, to } = await searchParams
+  const [t, locale, session] = await Promise.all([
+    getTranslations('bookings.new'),
+    getLocale(),
+    auth(),
+  ])
+
+  if (!session?.user?.id) {
+    redirect(`/${locale}/login`)
+  }
+
+  const range = parseSearchRange(from, to)
+  if (!vehicleId || !locationId || !range) {
     notFound()
   }
 
-  const [t, vc] = await Promise.all([getTranslations('bookings.new'), fetchClassBySlug(classSlug)])
-  if (!vc) {
+  const [detail, insuranceOptions] = await Promise.all([
+    fetchStorefrontDetail(locationId, { from: range.from, to: range.to }),
+    fetchStorefrontInsuranceOptions(locationId),
+  ])
+  const vehicle = detail?.vehicles.find((v) => v.id === vehicleId)
+  if (!detail || !vehicle) {
     notFound()
   }
 
   return (
-    <main className="flex-1 py-10 px-4 sm:px-6 lg:px-8">
-      <div className="max-w-2xl mx-auto space-y-6">
+    <main className="flex-1 px-4 py-10 sm:px-6 lg:px-8">
+      <div className="mx-auto max-w-2xl space-y-6">
         <h1 className="text-3xl font-semibold tracking-tight">{t('title')}</h1>
-        <ClassSummaryCard vehicleClass={vc} />
-        <ClassBookingForm vehicleClass={{ id: vc.id, slug: vc.slug, name: vc.name }} />
+        <BookingVehicleSummary
+          vehicle={vehicle}
+          storefront={detail.storefront}
+          from={range.from}
+          to={range.to}
+        />
+        <VehicleBookingForm
+          vehicleId={vehicle.id}
+          pickupLocationId={detail.storefront.locationId}
+          startAtIso={range.from.toISOString()}
+          endAtIso={range.to.toISOString()}
+          insuranceOptions={insuranceOptions ?? []}
+        />
       </div>
     </main>
   )

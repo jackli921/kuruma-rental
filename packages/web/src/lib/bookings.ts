@@ -7,27 +7,29 @@ import type { ApiResponse } from '@kuruma/shared/types/api-response'
 
 type CreateBookingResult = { success: true; bookingId: string } | { success: false; error: string }
 
-interface CreateClassBookingInput {
-  classId: string
+interface CreateBookingInput {
+  requestedVehicleId: string
+  pickupLocationId: string
+  dropoffLocationId: string
+  insuranceOptionId?: string | null
   startAt: string
   endAt: string
   notes?: string
 }
 
-// Issue #311: renters book a class, not a specific vehicle. The owner
-// assigns a car from the class at pickup. The API accepts classId-only
-// bookings (see createBookingSchema in shared/validators) and a 409
-// Conflict here means "no cars in this class are free for these dates".
-export async function createClassBooking(
-  input: CreateClassBookingInput,
-): Promise<CreateBookingResult> {
+// Slice 6 (#392): renters book a CONCRETE vehicle chosen in the storefront.
+// operatorId/classId/assignedVehicleId/pricing are all server-derived; the web
+// only sends what the renter selected. renterId is forced to self at the API
+// for non-staff, so we don't send it. A 409 means the car was taken between
+// browse and submit (the DB exclusion constraint is the real guard).
+export async function createBooking(input: CreateBookingInput): Promise<CreateBookingResult> {
   const session = await auth()
   if (!session?.user?.id) {
     return { success: false, error: 'You must be logged in to make a booking.' }
   }
 
-  if (!input.classId) {
-    return { success: false, error: 'Vehicle class is required.' }
+  if (!input.requestedVehicleId || !input.pickupLocationId || !input.dropoffLocationId) {
+    return { success: false, error: 'Vehicle and pickup location are required.' }
   }
 
   if (!input.startAt || !input.endAt) {
@@ -40,15 +42,16 @@ export async function createClassBooking(
 
   const token = await getApiToken()
   const client = createApiClient(token)
-  const idempotencyKey = crypto.randomUUID()
   const res = await client.bookings.$post({
     json: {
-      classId: input.classId,
-      renterId: session.user.id,
+      requestedVehicleId: input.requestedVehicleId,
+      pickupLocationId: input.pickupLocationId,
+      dropoffLocationId: input.dropoffLocationId,
+      ...(input.insuranceOptionId ? { insuranceOptionId: input.insuranceOptionId } : {}),
       startAt: input.startAt,
       endAt: input.endAt,
       source: 'DIRECT',
-      idempotencyKey,
+      idempotencyKey: crypto.randomUUID(),
       ...(input.notes ? { notes: input.notes } : {}),
     },
   })
@@ -62,7 +65,7 @@ export async function createClassBooking(
   if (res.status === 409) {
     return {
       success: false,
-      error: 'No cars available for these dates. Please choose different dates.',
+      error: 'This car was just booked for these dates. Please choose another vehicle.',
     }
   }
 
@@ -82,7 +85,8 @@ export type BookingWithVehicle = {
 
 interface BookingWithVehicleResponse {
   id: string
-  vehicleId: string
+  // Slice 6 (#392): the booking's vehicle column is assignedVehicleId.
+  assignedVehicleId: string
   startAt: string
   endAt: string
   status: 'CONFIRMED' | 'ACTIVE' | 'COMPLETED' | 'CANCELLED'
@@ -105,7 +109,7 @@ export async function getBookingsByRenterId(userId: string): Promise<BookingWith
 
   return json.data.map((booking) => ({
     id: booking.id,
-    vehicleId: booking.vehicleId,
+    vehicleId: booking.assignedVehicleId,
     vehicleName: booking.vehicle?.name ?? '',
     vehiclePhoto: booking.vehicle?.photos?.[0] ?? null,
     startAt: booking.startAt,
@@ -115,16 +119,42 @@ export async function getBookingsByRenterId(userId: string): Promise<BookingWith
   }))
 }
 
+// Locked insurance choice at booking time (#392). Mirrors the API's
+// InsuranceSnapshot; null when the renter declined or the operator had none.
+export interface BookingInsuranceSnapshot {
+  insuranceOptionId: string
+  name: string
+  dailyPriceJpy: number
+  deductibleJpy: number | null
+}
+
+// One snapshotted fee disclosed at booking time (#392). vehicleClassId null =
+// operator-wide; otherwise the fee is specific to the booking's class.
+export interface BookingFeeSnapshotItem {
+  feeType: string
+  unit: string
+  amountJpy: number
+  vehicleClassId: string | null
+}
+
 interface Booking {
   id: string
   renterId: string
-  classId: string
-  vehicleId: string | null
+  classId: string | null
+  requestedVehicleId: string
+  assignedVehicleId: string
+  pickupLocationId: string
+  dropoffLocationId: string
   startAt: string
   endAt: string
   effectiveEndAt: string
   status: 'CONFIRMED' | 'ACTIVE' | 'COMPLETED' | 'CANCELLED'
   source: string
+  bookingCode: string
+  insuranceOptionId: string | null
+  insuranceSnapshot: BookingInsuranceSnapshot | null
+  feeSnapshot: BookingFeeSnapshotItem[]
+  totalPrice: number | null
   externalId: string | null
   notes: string | null
   createdAt: string

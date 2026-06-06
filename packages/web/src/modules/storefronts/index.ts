@@ -1,5 +1,6 @@
 export {
   fetchStorefrontDetail,
+  fetchStorefrontInsuranceOptions,
   fetchStorefronts,
   type AvailableVehicleData,
   type ClassSummaryData,
@@ -7,6 +8,7 @@ export {
   type StorefrontCardData,
   type StorefrontDetailData,
   type StorefrontDetailParams,
+  type StorefrontInsuranceOptionData,
   type StorefrontSearchParams,
   type StorefrontSearchResultData,
   type StorefrontSummaryData,
