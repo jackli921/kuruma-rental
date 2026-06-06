@@ -6,6 +6,7 @@ import {
 } from '@kuruma/shared/validators/location'
 import { Hono } from 'hono'
 import { FLEET_WRITE_ROLES, requireAuth, requireUser, toCallerContext } from '../middleware/auth'
+import { PG_ERROR, pgErrorCode } from '../pg-errors'
 import type { LocationFilters } from '../repositories/types'
 import type { LocationService } from '../services/location'
 import type { Location } from '../stores'
@@ -82,17 +83,29 @@ export function createLocationRoutes(
         operatorId = await resolveWriteOperatorId(ctx)
       }
 
-      const result = await service.create(ctx, {
-        operatorId,
-        name: d.name,
-        address: d.address,
-        operatingHours: d.operatingHours,
-        timezone: d.timezone,
-        defaultTurnaroundMinutes: d.defaultTurnaroundMinutes,
-        status: 'ACTIVE',
-      })
-      if (!result.ok) return fail(c, result.error, result.status)
-      return ok(c, result.location, 201)
+      try {
+        const result = await service.create(ctx, {
+          operatorId,
+          name: d.name,
+          address: d.address,
+          operatingHours: d.operatingHours,
+          timezone: d.timezone,
+          defaultTurnaroundMinutes: d.defaultTurnaroundMinutes,
+          status: 'ACTIVE',
+        })
+        if (!result.ok) return fail(c, result.error, result.status)
+        return ok(c, result.location, 201)
+      } catch (err) {
+        // operatorId is the only client-supplied FK on this write, so an
+        // unknown one trips locations_operatorId_operators_id_fk (23503) — a
+        // client error, not a server fault. Map to 422, mirroring the #400
+        // vehicle/class FK->422 contract. No constraint-name disambiguation
+        // needed here: a single FK means a static message is unambiguous.
+        if (pgErrorCode(err) === PG_ERROR.FOREIGN_KEY_VIOLATION) {
+          return fail(c, 'Invalid operator', 422)
+        }
+        throw err
+      }
     })
     .patch('/locations/:id', async (c) => {
       const user = requireUser(c)
