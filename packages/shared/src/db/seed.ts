@@ -1,4 +1,4 @@
-import { and, eq, inArray, sql } from 'drizzle-orm'
+import { and, eq, inArray, ne, sql } from 'drizzle-orm'
 import {
   BEST_CAR_RENTAL_NAME,
   BEST_CAR_RENTAL_OPERATOR_ID,
@@ -495,18 +495,30 @@ async function seed() {
     }
   }
 
-  // Best Car Rental storefronts (#387). Idempotent on (operatorId, name): a
-  // reseed leaves existing rows untouched, preserving each row's id so the
-  // vehicles->locations composite FK target stays stable across reseeds.
+  // Best Car Rental storefronts (#387). Since #410 (migration 0035) the
+  // (operatorId, name) uniqueness is a PARTIAL index (WHERE status <> 'ARCHIVED'),
+  // which onConflict can't target — mirror the insurance-options pattern below:
+  // insert each location only when no non-archived row of that name exists.
+  // Idempotent across reseeds and preserves each row's id as the
+  // vehicles->locations composite-FK target.
   console.log('Seeding locations...')
-  const insertedLocations = await db
-    .insert(locations)
-    .values(SEED_LOCATIONS.map((l) => ({ ...l, operatorId: BEST_CAR_RENTAL_OPERATOR_ID })))
-    .onConflictDoNothing({ target: [locations.operatorId, locations.name] })
-    .returning({ id: locations.id, name: locations.name })
-  console.log(`  seeded ${insertedLocations.length} new location(s)`)
-  for (const l of insertedLocations) {
-    console.log(`  + ${l.name} (${l.id})`)
+  for (const loc of SEED_LOCATIONS) {
+    const [existing] = await db
+      .select({ id: locations.id })
+      .from(locations)
+      .where(
+        and(
+          eq(locations.operatorId, BEST_CAR_RENTAL_OPERATOR_ID),
+          eq(locations.name, loc.name),
+          ne(locations.status, 'ARCHIVED'),
+        ),
+      )
+    if (existing) continue
+    const [inserted] = await db
+      .insert(locations)
+      .values({ ...loc, operatorId: BEST_CAR_RENTAL_OPERATOR_ID })
+      .returning({ id: locations.id, name: locations.name })
+    if (inserted) console.log(`  + ${inserted.name} (${inserted.id})`)
   }
 
   // Vehicle classes MUST exist before vehicles: vehicles.(operatorId, classId)
@@ -517,7 +529,16 @@ async function seed() {
   await db
     .insert(vehicleClasses)
     .values(SEED_CLASSES.map((c) => ({ ...c, operatorId: BEST_CAR_RENTAL_OPERATOR_ID })))
-    .onConflictDoNothing({ target: vehicleClasses.slug })
+    // Reseed-repair for the one column slice 3 (#388) added after these classes
+    // were first seeded: backfill acrissCode where it is still NULL. coalesce
+    // keeps any existing code, so this repairs the gap (#420) without clobbering
+    // an operator's later edit, and the id stays put as the composite-FK target.
+    .onConflictDoUpdate({
+      target: vehicleClasses.slug,
+      set: {
+        acrissCode: sql`coalesce(${vehicleClasses.acrissCode}, excluded.${sql.identifier('acrissCode')})`,
+      },
+    })
 
   // Resolve slug -> id for the just-seeded (or pre-existing) classes so each
   // vehicle can attach by classId. Scoped to this operator's classes.
