@@ -529,7 +529,16 @@ async function seed() {
   await db
     .insert(vehicleClasses)
     .values(SEED_CLASSES.map((c) => ({ ...c, operatorId: BEST_CAR_RENTAL_OPERATOR_ID })))
-    .onConflictDoNothing({ target: vehicleClasses.slug })
+    // Reseed-repair for the one column slice 3 (#388) added after these classes
+    // were first seeded: backfill acrissCode where it is still NULL. coalesce
+    // keeps any existing code, so this repairs the gap (#420) without clobbering
+    // an operator's later edit, and the id stays put as the composite-FK target.
+    .onConflictDoUpdate({
+      target: vehicleClasses.slug,
+      set: {
+        acrissCode: sql`coalesce(${vehicleClasses.acrissCode}, excluded.${sql.identifier('acrissCode')})`,
+      },
+    })
 
   // Resolve slug -> id for the just-seeded (or pre-existing) classes so each
   // vehicle can attach by classId. Scoped to this operator's classes.
