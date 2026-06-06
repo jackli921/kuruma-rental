@@ -17,6 +17,7 @@ import {
   DrizzleLocationRepository,
   DrizzleMaintenanceLogRepository,
   DrizzleMessageRepository,
+  DrizzleNotificationLogRepository,
   DrizzleOperatorRepository,
   DrizzleStatsRepository,
   DrizzleStorefrontRepository,
@@ -38,6 +39,7 @@ import {
   InMemoryLocationRepository,
   InMemoryMaintenanceLogRepository,
   InMemoryMessageRepository,
+  InMemoryNotificationLogRepository,
   InMemoryOperatorRepository,
   InMemoryStatsRepository,
   InMemoryStorefrontRepository,
@@ -59,6 +61,7 @@ import type {
   LocationRepository,
   MaintenanceLogRepository,
   MessageRepository,
+  NotificationLogRepository,
   OperatorRepository,
   PhotoStorage,
   RunInTransaction,
@@ -81,6 +84,7 @@ import { createInsuranceOptionRoutes } from './routes/insurance-options'
 import { createLocationRoutes } from './routes/locations'
 import { createMaintenanceLogRoutes } from './routes/maintenance-logs'
 import { createMessageRoutes } from './routes/messages'
+import { createNotificationRoutes } from './routes/notifications'
 import { createOperatorRoutes } from './routes/operators'
 import { createStatsRoutes } from './routes/stats'
 import { createStorefrontRoutes } from './routes/storefronts'
@@ -91,7 +95,11 @@ import { createVehicleDetailRoutes } from './routes/vehicle-detail'
 import { createVehiclePhotoRoutes } from './routes/vehicle-photos'
 import { createVehicleRoutes } from './routes/vehicles'
 import { BookingService } from './services/booking'
+import { BookingPostCommitDispatcher } from './services/booking-post-commit-dispatcher'
 import { CustomerService } from './services/customer'
+import type { EmailSender } from './services/email/email-sender'
+import { ResendEmailSender } from './services/email/resend-email-sender'
+import { makeEnsureThread } from './services/ensure-thread'
 import { FeeScheduleService } from './services/fee-schedule'
 import { FleetOverviewService } from './services/fleet-overview'
 import { GoogleTranslationProvider } from './services/google-translation-provider'
@@ -99,6 +107,8 @@ import { InsuranceOptionService } from './services/insurance-option'
 import { LocationService } from './services/location'
 import { MaintenanceService } from './services/maintenance'
 import { MessageTranslationService } from './services/message-translation'
+import { NotificationService } from './services/notification'
+import { NotificationDispatcher } from './services/notification-dispatcher'
 import { OperatorService } from './services/operator'
 import { StorefrontDetailService } from './services/storefront-detail'
 import { StorefrontSearchService } from './services/storefront-search'
@@ -127,6 +137,7 @@ export function createApp(overrides?: {
   locationRepo?: LocationRepository
   insuranceOptionRepo?: InsuranceOptionRepository
   feeScheduleRepo?: FeeScheduleRepository
+  notificationLogRepo?: NotificationLogRepository
   storefrontRepo?: StorefrontRepository
   photoUploadLimiter?: RateLimitBinding
   photoUploadUserLimiter?: RateLimitBinding
@@ -149,6 +160,7 @@ export function createApp(overrides?: {
   let locationRepo: LocationRepository
   let insuranceOptionRepo: InsuranceOptionRepository
   let feeScheduleRepo: FeeScheduleRepository
+  let notificationLogRepo: NotificationLogRepository
   let storefrontRepo: StorefrontRepository
   let runInTransaction: RunInTransaction
   const photoUploadLimiter =
@@ -195,6 +207,7 @@ export function createApp(overrides?: {
     locationRepo = overrides.locationRepo ?? new InMemoryLocationRepository()
     insuranceOptionRepo = overrides.insuranceOptionRepo ?? new InMemoryInsuranceOptionRepository()
     feeScheduleRepo = overrides.feeScheduleRepo ?? new InMemoryFeeScheduleRepository()
+    notificationLogRepo = overrides.notificationLogRepo ?? new InMemoryNotificationLogRepository()
     storefrontRepo =
       overrides.storefrontRepo ?? new InMemoryStorefrontRepository(locationRepo, operatorRepo)
   } else if (process.env.DATABASE_URL) {
@@ -216,6 +229,7 @@ export function createApp(overrides?: {
     locationRepo = new DrizzleLocationRepository(db)
     insuranceOptionRepo = new DrizzleInsuranceOptionRepository(db)
     feeScheduleRepo = new DrizzleFeeScheduleRepository(db)
+    notificationLogRepo = new DrizzleNotificationLogRepository(db)
     storefrontRepo = new DrizzleStorefrontRepository(db)
     const vehiclePhotosBucket = (globalThis as Record<string, unknown>).VEHICLE_PHOTOS as
       | R2BucketLike
@@ -270,6 +284,7 @@ export function createApp(overrides?: {
     locationRepo = new InMemoryLocationRepository()
     insuranceOptionRepo = new InMemoryInsuranceOptionRepository()
     feeScheduleRepo = new InMemoryFeeScheduleRepository()
+    notificationLogRepo = new InMemoryNotificationLogRepository()
     storefrontRepo = new InMemoryStorefrontRepository(locationRepo, operatorRepo)
   }
 
@@ -292,6 +307,28 @@ export function createApp(overrides?: {
         translatedText: `[${targetLanguage}] ${text}`,
         detectedLanguage: source ?? targetLanguage,
       }),
+    }
+  })()
+
+  // Outbound email: real Resend when the key is set. In production without a key,
+  // a sentinel throws on first use (not at boot). In dev, a console stub logs the
+  // send so flows work end-to-end without a vendor account. Mirrors translationProvider.
+  const emailSender: EmailSender = (() => {
+    const key = process.env.RESEND_API_KEY
+    const from = process.env.EMAIL_FROM ?? ''
+    if (key) return new ResendEmailSender(key, from)
+    if (process.env.NODE_ENV === 'production') {
+      return {
+        send: async () => {
+          throw new Error('RESEND_API_KEY not configured')
+        },
+      }
+    }
+    return {
+      send: async (m) => {
+        console.info('[email:dev]', m.to, m.subject)
+        return { providerMessageId: 'dev' }
+      },
     }
   })()
 
@@ -360,14 +397,39 @@ export function createApp(overrides?: {
   // auto-creates a renter/staff thread for coordination (design doc
   // `docs/plans/2026-04-14-messaging-design.md`).
   const staffUserId = process.env.DEFAULT_STAFF_ID
-  const threading = staffUserId ? { threadRepo, staffUserId } : undefined
+  // Single post-commit seam (#393): thread autocreate (#335) + outbound
+  // notifications, awaited in the service, each caught-and-logged.
+  const notificationDispatcher = new NotificationDispatcher(
+    notificationLogRepo,
+    operatorRepo,
+    vehicleRepo,
+    userRepo,
+    locationRepo,
+    emailSender,
+    {
+      emailFrom: process.env.EMAIL_FROM ?? '',
+      emailReplyTo: process.env.EMAIL_REPLY_TO,
+      fallbackOperatorEmail:
+        process.env.OPERATOR_ALERT_FALLBACK_EMAIL ??
+        process.env.EMAIL_REPLY_TO ??
+        process.env.EMAIL_FROM,
+    },
+  )
+  const ensureThread = staffUserId ? makeEnsureThread({ threadRepo, staffUserId }) : async () => {}
+  const postCommit = new BookingPostCommitDispatcher(ensureThread, notificationDispatcher)
   const bookingService = new BookingService(
     bookingRepo,
     runInTransaction,
     vehicleRepo,
     userRepo,
     vehicleClassRepo,
-    threading,
+    postCommit,
+    operatorRepo,
+  )
+  const notificationService = new NotificationService(
+    notificationLogRepo,
+    bookingRepo,
+    notificationDispatcher,
   )
   const customerService = new CustomerService(customerRepo, userRepo)
   const maintenanceService = new MaintenanceService(
@@ -444,6 +506,7 @@ export function createApp(overrides?: {
     .route('/', createLocationRoutes(locationService, resolveWriteOperatorId))
     .route('/', createInsuranceOptionRoutes(insuranceOptionService, resolveWriteOperatorId))
     .route('/', createFeeScheduleRoutes(feeScheduleService, resolveWriteOperatorId))
+    .route('/', createNotificationRoutes(notificationService))
     .route('/', createOperatorRoutes(operatorService))
 }
 

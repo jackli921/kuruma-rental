@@ -274,6 +274,13 @@
       "when": 1780706601572,
       "tag": "0038_slice6_drop_legacy_vehicle_buffer",
       "breakpoints": true
+    },
+    {
+      "idx": 39,
+      "version": "7",
+      "when": 1780746399877,
+      "tag": "0039_add_notification_log",
+      "breakpoints": true
     }
   ]
 }

@@ -1,0 +1,206 @@
+import { describe, expect, it, vi } from 'vitest'
+import type { CallerContext } from '../../src/middleware/auth'
+import { InMemoryNotificationLogRepository } from '../../src/repositories/in-memory/notification-log'
+import { InMemoryOperatorRepository } from '../../src/repositories/in-memory/operator'
+import { InMemoryUserRepository } from '../../src/repositories/in-memory/user'
+import type {
+  BookingRepository,
+  LocationRepository,
+  VehicleRepository,
+} from '../../src/repositories/types'
+import type { EmailSender } from '../../src/services/email/email-sender'
+import { NotificationService } from '../../src/services/notification'
+import { NotificationDispatcher } from '../../src/services/notification-dispatcher'
+import type { Booking, User } from '../../src/stores'
+
+const OP1 = 'op-1'
+const OP2 = 'op-2'
+const RENTER = 'renter-1'
+const op1Ctx: CallerContext = {
+  userId: 'u1',
+  role: 'OPERATOR_OWNER',
+  operatorId: OP1,
+  bypassScope: false,
+}
+const op2Ctx: CallerContext = {
+  userId: 'u2',
+  role: 'OPERATOR_OWNER',
+  operatorId: OP2,
+  bypassScope: false,
+}
+
+function makeBooking(): Booking {
+  const now = new Date('2026-07-01T00:00:00Z')
+  return {
+    id: 'bk-1',
+    operatorId: OP1,
+    renterId: RENTER,
+    classId: 'cls-1',
+    requestedVehicleId: 'veh-1',
+    assignedVehicleId: 'veh-1',
+    pickupLocationId: 'loc-1',
+    dropoffLocationId: 'loc-2',
+    startAt: now,
+    endAt: now,
+    effectiveEndAt: now,
+    status: 'CONFIRMED',
+    source: 'DIRECT',
+    bookingCode: 'ABCD2345',
+    insuranceOptionId: null,
+    insuranceSnapshot: null,
+    feeSnapshot: [],
+    externalId: null,
+    notes: null,
+    totalPrice: 24000,
+    cancellationFee: null,
+    cancelledAt: null,
+    idempotencyKey: null,
+    createdAt: now,
+    updatedAt: now,
+  }
+}
+
+const fakeVehicleRepo = {
+  findById: async () => ({ name: 'Aqua', make: null, model: null, licensePlate: null }),
+} as unknown as VehicleRepository
+const fakeLocationRepo = {
+  findById: async (_c: unknown, id: string) => ({ id, name: id }),
+} as unknown as LocationRepository
+
+function build(sender?: EmailSender) {
+  const booking = makeBooking()
+  const logRepo = new InMemoryNotificationLogRepository()
+  const ts = new Date('2026-06-01T00:00:00Z')
+  const operatorRepo = new InMemoryOperatorRepository(
+    new Map([
+      [
+        OP1,
+        {
+          id: OP1,
+          slug: 'bcr',
+          name: 'BCR',
+          preAuthHandoffUrl: null,
+          createdAt: ts,
+          updatedAt: ts,
+        },
+      ],
+    ]),
+  )
+  const userRepo = new InMemoryUserRepository(
+    new Map<string, User>([
+      [
+        RENTER,
+        {
+          id: RENTER,
+          name: 'Jane',
+          email: 'jane@example.com',
+          phone: null,
+          language: 'en',
+          country: null,
+          role: 'RENTER',
+          operatorId: null,
+        },
+      ],
+      [
+        'owner-1',
+        {
+          id: 'owner-1',
+          name: 'Op',
+          email: 'owner@op.com',
+          phone: null,
+          language: 'ja',
+          country: null,
+          role: 'OPERATOR_OWNER',
+          operatorId: OP1,
+        },
+      ],
+    ]),
+  )
+  const okSender: EmailSender = sender ?? {
+    send: vi.fn(async () => ({ providerMessageId: 'msg-1' })),
+  }
+  const dispatcher = new NotificationDispatcher(
+    logRepo,
+    operatorRepo,
+    fakeVehicleRepo,
+    userRepo,
+    fakeLocationRepo,
+    okSender,
+    { emailFrom: 'noreply@bcr.jp' },
+  )
+  const bookingRepo = {
+    findById: async (_c: unknown, id: string) => (id === booking.id ? booking : undefined),
+  } as unknown as BookingRepository
+  const service = new NotificationService(logRepo, bookingRepo, dispatcher)
+  return { service, dispatcher, logRepo, booking, sender: okSender }
+}
+
+describe('NotificationService', () => {
+  it('findAll returns the operator-scoped rows', async () => {
+    const { service, dispatcher, booking } = build()
+    await dispatcher.dispatch(booking)
+    const rows = await service.findAll(op1Ctx)
+    expect(rows).toHaveLength(2)
+    expect(rows.every((r) => r.operatorId === OP1)).toBe(true)
+  })
+
+  it('resend of a cross-operator id returns 404 (no tenant-existence leak)', async () => {
+    const { service, dispatcher, booking, logRepo } = build()
+    await dispatcher.dispatch(booking)
+    const [row] = await logRepo.findAll({ userId: 'x', role: 'PLATFORM_ADMIN', bypassScope: true })
+    const result = await service.resend(op2Ctx, row!.id)
+    expect(result).toEqual({ ok: false, status: 404, error: 'Notification not found' })
+  })
+
+  it('resend re-sends a FAILED row to SENT', async () => {
+    const { service, logRepo, booking } = build()
+    const seeded = await logRepo.upsertQueued({
+      bookingId: booking.id,
+      operatorId: OP1,
+      kind: 'RENTER_BOOKING_CONFIRM',
+      recipient: 'jane@example.com',
+      locale: 'en',
+      idempotencyKey: `notify:${booking.id}:RENTER_BOOKING_CONFIRM`,
+    })
+    await logRepo.claim(seeded.id)
+    await logRepo.markFailed(seeded.id, 'earlier failure')
+    const result = await service.resend(op1Ctx, seeded.id)
+    expect(result).toEqual({ ok: true, status: 'SENT' })
+  })
+
+  it('two concurrent resends of one row invoke the sender exactly once (atomic claim)', async () => {
+    const sender = { send: vi.fn(async () => ({ providerMessageId: 'msg-1' })) }
+    const { service, logRepo, booking } = build(sender)
+    const seeded = await logRepo.upsertQueued({
+      bookingId: booking.id,
+      operatorId: OP1,
+      kind: 'RENTER_BOOKING_CONFIRM',
+      recipient: 'jane@example.com',
+      locale: 'en',
+      idempotencyKey: `notify:${booking.id}:RENTER_BOOKING_CONFIRM`,
+    })
+    await logRepo.claim(seeded.id)
+    await logRepo.markFailed(seeded.id, 'earlier failure')
+    await Promise.all([service.resend(op1Ctx, seeded.id), service.resend(op1Ctx, seeded.id)])
+    expect(sender.send).toHaveBeenCalledTimes(1)
+  })
+
+  it('surfaces a send failure as 502', async () => {
+    const sender = {
+      send: vi.fn(async () => {
+        throw new Error('SMTP down')
+      }),
+    }
+    const { service, logRepo, booking } = build(sender)
+    const seeded = await logRepo.upsertQueued({
+      bookingId: booking.id,
+      operatorId: OP1,
+      kind: 'RENTER_BOOKING_CONFIRM',
+      recipient: 'jane@example.com',
+      locale: 'en',
+      idempotencyKey: `notify:${booking.id}:RENTER_BOOKING_CONFIRM`,
+    })
+    const result = await service.resend(op1Ctx, seeded.id)
+    expect(result).toMatchObject({ ok: false, status: 502 })
+  })
+})

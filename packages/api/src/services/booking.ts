@@ -9,14 +9,20 @@ import { BOOKING_CODE_CONSTRAINT, PG_ERROR, pgConstraintName, pgErrorCode } from
 import type {
   BookingFilters,
   BookingRepository,
+  OperatorRepository,
   RunInTransaction,
-  ThreadRepository,
   TransactionRepos,
   UserRepository,
   VehicleClassRepository,
   VehicleRepository,
 } from '../repositories/types'
 import type { Booking } from '../stores'
+import type { BookingPostCommitDispatcher } from './booking-post-commit-dispatcher'
+
+/** Renter-safe operator projection attached to a single booking read (§4h). */
+export type BookingWithOperator = Booking & {
+  operator?: { name: string; preAuthHandoffUrl: string | null }
+}
 
 const MS_PER_MINUTE = 60 * 1000
 const MS_PER_DAY = 24 * 60 * MS_PER_MINUTE
@@ -75,11 +81,6 @@ export type CancelResult =
  * a thread with `[renter, staffUserId]` as participants. Failure to create
  * the thread never rolls back the booking (it runs AFTER commit).
  */
-export interface BookingThreading {
-  threadRepo: ThreadRepository
-  staffUserId: string
-}
-
 export class BookingService {
   constructor(
     private readonly bookingRepo: BookingRepository,
@@ -87,7 +88,13 @@ export class BookingService {
     private readonly vehicleRepo?: VehicleRepository,
     private readonly userRepo?: UserRepository,
     private readonly vehicleClassRepo?: VehicleClassRepository,
-    private readonly threading?: BookingThreading,
+    // Single post-commit seam (#393, TODO #300): ensureThread + notifications,
+    // each caught-and-logged. Replaces the inline ensureThread calls.
+    private readonly postCommit?: BookingPostCommitDispatcher,
+    // §4h: reads the renter-safe operator projection for findById. Unscoped repo
+    // read — the booking is already tenant-checked, and only name + handoff URL
+    // are exposed, so no cross-tenant leak.
+    private readonly operatorRepo?: OperatorRepository,
     // Injectable so the collision-retry path is deterministically testable.
     private readonly generateCode: () => string = generateBookingCode,
   ) {}
@@ -163,8 +170,17 @@ export class BookingService {
     }
   }
 
-  async findById(ctx: CallerContext, id: string): Promise<Booking | undefined> {
-    return this.bookingRepo.findById(ctx, id)
+  async findById(ctx: CallerContext, id: string): Promise<BookingWithOperator | undefined> {
+    const booking = await this.bookingRepo.findById(ctx, id)
+    if (!booking || !this.operatorRepo) return booking
+    // The renter already owns this booking (scope enforced above); exposing their
+    // operator's public handoff URL + name leaks nothing cross-tenant (§4h).
+    const operator = await this.operatorRepo.findById(booking.operatorId)
+    if (!operator) return booking
+    return {
+      ...booking,
+      operator: { name: operator.name, preAuthHandoffUrl: operator.preAuthHandoffUrl },
+    }
   }
 
   async create(
@@ -189,7 +205,7 @@ export class BookingService {
     if (input.idempotencyKey) {
       const existing = await this.bookingRepo.findByIdempotencyKey(ctx, input.idempotencyKey)
       if (existing) {
-        await this.ensureThread(ctx, existing)
+        await this.postCommit?.run(ctx, existing)
         return { ok: true, booking: existing, status: 200 }
       }
     }
@@ -205,8 +221,9 @@ export class BookingService {
           this.submitInTx(ctx, input, now, repos),
         )
         if (!result.ok) return result // domain validation failure — never retried
-        // Post-commit side effect (#335): thread autocreate must NOT be in the tx.
-        await this.ensureThread(ctx, result.booking)
+        // Post-commit side effects (#335 thread + #393 notifications) — never in
+        // the tx; awaited, caught-and-logged in the dispatcher (booking authoritative).
+        await this.postCommit?.run(ctx, result.booking)
         return { ok: true, booking: result.booking }
       } catch (err) {
         const code = pgErrorCode(err)
@@ -228,7 +245,7 @@ export class BookingService {
         if (code === PG_ERROR.UNIQUE_VIOLATION && input.idempotencyKey) {
           const existing = await this.bookingRepo.findByIdempotencyKey(ctx, input.idempotencyKey)
           if (existing) {
-            await this.ensureThread(ctx, existing)
+            await this.postCommit?.run(ctx, existing)
             return { ok: true, booking: existing, status: 200 }
           }
         }
@@ -526,34 +543,6 @@ export class BookingService {
       this.vehicleClassRepo.findById(SYSTEM_CONTEXT, newClassId),
     ])
     return !!bookingClass?.acrissCode && bookingClass.acrissCode === newClass?.acrissCode
-  }
-
-  // TODO(#300): if a second post-booking side effect appears here, extract
-  // an outbox/event dispatcher rather than chaining another inline hook.
-  private async ensureThread(ctx: CallerContext, booking: Booking): Promise<void> {
-    if (!this.threading) return
-    const threadKey = `booking:${booking.id}`
-    try {
-      const existing = await this.threading.threadRepo.findByIdempotencyKey(ctx, threadKey)
-      if (existing) return
-      await this.threading.threadRepo.create(
-        ctx,
-        booking.id,
-        [booking.renterId, this.threading.staffUserId],
-        threadKey,
-      )
-    } catch (err) {
-      // Booking is authoritative — log and continue. A subsequent replay
-      // with the same idempotencyKey will retry this helper.
-      console.error(
-        JSON.stringify({
-          level: 'error',
-          event: 'thread_autocreate_failed',
-          bookingId: booking.id,
-          error: err instanceof Error ? err.message : String(err),
-        }),
-      )
-    }
   }
 
   async updateStatus(

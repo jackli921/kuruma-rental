@@ -8,6 +8,7 @@ export type {
   ThreadParticipant,
   Message,
   MaintenanceLog,
+  NotificationLog,
   Operator,
   Location,
   InsuranceOption,
@@ -31,6 +32,7 @@ import type {
   Location,
   MaintenanceLog,
   Message,
+  NotificationLog,
   Operator,
   Thread,
   ThreadParticipant,
@@ -217,6 +219,50 @@ export interface UserRepository {
   }): Promise<User>
   findByEmail(email: string): Promise<User | undefined>
   findByPhone(phone: string): Promise<User | undefined>
+  // Slice 7 (#393): the operator's OPERATOR_OWNER contact users, for the booking
+  // alert recipient. A fixed-purpose PLATFORM-INTERNAL read over the indexed
+  // users.operatorId — NOT a caller-facing lookup, so it does NOT reopen the #396
+  // renter-enumeration vector. Owner-only by design (no OPERATOR_STAFF in MVP).
+  findOperatorContacts(operatorId: string): Promise<User[]>
+}
+
+/**
+ * Slice 7 (#393): how long a SENDING lease is honoured before another sender may
+ * reclaim the row (§3). A crash mid-send leaves a SENDING row that is reclaimable
+ * ONLY after this window — a live lease is never reclaimed (else double-send).
+ */
+export const SEND_LEASE_MS = 5 * 60 * 1000
+
+export interface NotificationLogUpsert {
+  bookingId: string
+  operatorId: string
+  kind: NotificationLog['kind']
+  recipient: string
+  locale: string
+  idempotencyKey: string
+}
+
+export interface NotificationLogFilters {
+  bookingId?: string
+  operatorId?: string
+}
+
+export interface NotificationLogRepository {
+  // Insert a QUEUED row keyed by idempotencyKey. If a row already exists (a
+  // post-commit replay), return it UNCHANGED — the unique key seals one row per
+  // (booking, kind), so a replay never creates a duplicate to double-send.
+  upsertQueued(data: NotificationLogUpsert): Promise<NotificationLog>
+  // Atomic lease claim (§3): flips QUEUED / FAILED / an EXPIRED SENDING to
+  // SENDING and bumps attempts, returning the row. Returns undefined when a LIVE
+  // SENDING lease holds it — the concurrent-send guard. Unscoped (keyed by id;
+  // the resend route scopes via findById first).
+  claim(id: string): Promise<NotificationLog | undefined>
+  markSent(id: string, providerMessageId: string): Promise<void>
+  markFailed(id: string, error: string): Promise<void>
+  // Operator-portal list (management-read guarded, operator-scoped).
+  findAll(ctx: CallerContext, filters?: NotificationLogFilters): Promise<NotificationLog[]>
+  // Scoped single read (resend route: cross-operator id -> undefined -> 404).
+  findById(ctx: CallerContext, id: string): Promise<NotificationLog | undefined>
 }
 
 export interface CustomerListFilters {

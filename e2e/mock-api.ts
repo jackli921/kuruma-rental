@@ -244,6 +244,9 @@ Bun.serve({
         notes: null,
         createdAt: FROZEN_TIMESTAMP,
         updatedAt: FROZEN_TIMESTAMP,
+        // Slice 7 (#393, §4h): renter-safe operator projection. Drives the
+        // confirmation page's pre-auth handoff CTA (external link).
+        operator: { name: 'Best Car Rental', preAuthHandoffUrl: 'https://pay.example.com/preauth' },
       }
       bookings.set(id, booking)
       return ok(booking)

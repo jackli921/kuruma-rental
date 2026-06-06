@@ -704,8 +704,12 @@
       "insurance": "保险",
       "insuranceDeclined": "未购买",
       "perDay": "/ 天",
+      "preAuthTitle": "保障您的预订",
+      "preAuthExplain": "运营商会在取车时对您的卡进行临时冻结（预授权）作为押金，这不是实际扣款。在到店前完成可以加快交车手续。",
+      "preAuthCta": "完成预授权",
+      "cancellationContact": "如需更改或取消，请尽快联系 {operator}。临近取车日期可能会产生取消费用。",
+      "potentialChargesTitle": "可能产生的额外费用",
       "fees": {
-        "title": "可能产生的额外费用",
         "disclaimer": "仅在发生时收取（如超时、清洁、未加油），并在还车时结算。",
         "type": {
           "OVERTIME_HOURLY": "超时",
