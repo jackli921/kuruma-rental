@@ -115,13 +115,16 @@ export function VehicleList() {
   })
 
   // #435: locations power the pickup-location dropdown in the add/edit dialogs.
-  // Archived locations are excluded — they must never be assignment targets.
-  // Shares the Locations page query key so navigating between the two reuses
-  // the cache.
+  // `includeAll: true` lets bypass-scope admins (PLATFORM_ADMIN) read across
+  // operators — without it GET /locations 400s for them, leaving the picker
+  // empty on exactly the operator-picker path this supports. Operator-scoped
+  // callers ignore the flag and auto-scope. Active-only (archived must never be
+  // an assignment target). Own cache key — `list()` is the archived-including
+  // Locations-page list, so sharing it would leak archived rows into the picker.
   const { data: locations } = useQuery({
-    queryKey: locationKeys.list(),
+    queryKey: locationKeys.assignable(),
     queryFn: async () => {
-      const result = await fetchLocationsAction({ includeArchived: false })
+      const result = await fetchLocationsAction({ includeAll: true })
       if (!result.success) throw new Error(result.error)
       return result.data
     },

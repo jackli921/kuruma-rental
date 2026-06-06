@@ -42,6 +42,7 @@ vi.mock('next-intl', () => ({
       'form.operatorRequired': 'Operator is required',
       'form.pickupLocation': 'Pickup location',
       'form.pickupLocationNone': 'No pickup location',
+      'form.pickupLocationCurrent': 'Current pickup location',
     }
     return messages[key] ?? key
   },
@@ -601,6 +602,81 @@ describe('VehicleForm', () => {
 
       await waitFor(() => expect(onSubmit).toHaveBeenCalledTimes(1))
       expect(onSubmit.mock.calls[0][0].pickupLocationId).toBeNull()
+    })
+
+    // #435 P2-1: edit mode hides the operator picker, but a bypass admin's
+    // location list spans every operator. Scope by the vehicle's immutable
+    // operatorId so cross-tenant locations are never offered.
+    it('scopes locations to the vehicle operator in edit mode (operatorId prop, no picker)', () => {
+      const multi: LocationData[] = [
+        {
+          ...baseLocation,
+          id: '0c000000-0000-4000-8000-00000000000a',
+          operatorId: 'op_a',
+          name: 'A Osaka',
+        },
+        {
+          ...baseLocation,
+          id: '0c000000-0000-4000-8000-00000000000b',
+          operatorId: 'op_b',
+          name: 'B Tokyo',
+        },
+      ]
+      render(
+        <VehicleForm
+          onSubmit={vi.fn()}
+          operatorId="op_b"
+          locations={multi}
+          defaultValues={{ name: 'Fit', seats: 5, transmission: 'AUTO', dailyRateJpy: 7000 }}
+        />,
+      )
+
+      expect(screen.queryByLabelText('Operator')).not.toBeInTheDocument()
+      const select = screen.getByLabelText('Pickup location') as HTMLSelectElement
+      expect(Array.from(select.options).map((o) => o.value)).toEqual([
+        '',
+        '0c000000-0000-4000-8000-00000000000b',
+      ])
+    })
+
+    // #435 P1-2: a vehicle assigned to a since-archived location — the id is
+    // absent from the active list. Without preservation the unmatched <select>
+    // falls back to empty and a normal save silently nulls pickupLocationId.
+    it('preserves an assigned location missing from the active list and submits it unchanged', async () => {
+      const user = userEvent.setup()
+      const onSubmit = vi.fn().mockResolvedValue(undefined)
+      const ARCHIVED = '0d000000-0000-4000-8000-00000000000f'
+      const active: LocationData[] = [
+        {
+          ...baseLocation,
+          id: '0a000000-0000-4000-8000-000000000001',
+          operatorId: 'op_a',
+          name: 'Osaka Namba',
+        },
+      ]
+      render(
+        <VehicleForm
+          onSubmit={onSubmit}
+          operatorId="op_a"
+          locations={active}
+          defaultValues={{
+            name: 'Fit',
+            seats: 5,
+            transmission: 'AUTO',
+            dailyRateJpy: 7000,
+            pickupLocationId: ARCHIVED,
+          }}
+        />,
+      )
+
+      const select = screen.getByLabelText('Pickup location') as HTMLSelectElement
+      expect(Array.from(select.options).map((o) => o.value)).toContain(ARCHIVED)
+      expect(select.value).toBe(ARCHIVED)
+      expect(screen.getByRole('option', { name: 'Current pickup location' })).toBeInTheDocument()
+
+      await user.click(screen.getByRole('button', { name: 'Save vehicle' }))
+      await waitFor(() => expect(onSubmit).toHaveBeenCalledTimes(1))
+      expect(onSubmit.mock.calls[0][0].pickupLocationId).toBe(ARCHIVED)
     })
   })
 

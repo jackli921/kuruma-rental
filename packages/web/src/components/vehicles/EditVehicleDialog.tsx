@@ -59,6 +59,7 @@ export function EditVehicleDialog({
             isSubmitting={isPending}
             classes={classes}
             locations={locations}
+            operatorId={vehicle.operatorId}
             defaultValues={{
               name: vehicle.name,
               classId: vehicle.classId,

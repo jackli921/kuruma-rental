@@ -28,6 +28,10 @@ interface VehicleFormProps {
   // vehicle's pickup location must belong to its operator (composite FK), so
   // the picker is scoped to the chosen operator when the operator picker shows.
   locations?: readonly LocationData[] | undefined
+  // #435 P2-1: in edit mode the operator is fixed and its picker is hidden, so
+  // there is no watched operatorId to scope by. The edit dialog passes the
+  // vehicle's immutable operatorId here so location options stay in-tenant.
+  operatorId?: string | undefined
   // #407: operators the caller may create under. Supplied ONLY by the add
   // dialog (create mode); absent in edit mode (operator is immutable). With one
   // operator the picker is hidden and the id submitted silently; with 2+ the
@@ -46,6 +50,7 @@ export function VehicleForm({
   isSubmitting,
   classes,
   locations,
+  operatorId,
   operators,
   operatorRequired,
 }: VehicleFormProps) {
@@ -122,10 +127,23 @@ export function VehicleForm({
     ? (classes ?? []).filter((klass) => klass.operatorId === selectedOperatorId)
     : classes
   // #435: same composite-FK scoping as classes — a pickup location must belong
-  // to the chosen operator, so filter the options when the operator picker shows.
-  const visibleLocations = showOperatorPicker
-    ? (locations ?? []).filter((loc) => loc.operatorId === selectedOperatorId)
-    : locations
+  // to one operator. In create mode that's the picked (or sole) operator; in
+  // edit mode the picker is hidden, so scope by the vehicle's operatorId prop.
+  const scopeOperatorId = showOperatorPicker ? selectedOperatorId : operatorId
+  const scopedLocations =
+    scopeOperatorId != null
+      ? (locations ?? []).filter((loc) => loc.operatorId === scopeOperatorId)
+      : locations
+  // #435 P1-2: a vehicle can reference a since-archived location, absent from
+  // the active-only list. Preserve it as an explicit option so an unmatched
+  // <select> can't silently null the assignment on a normal save.
+  const assignedLocationId = defaultValues?.pickupLocationId ?? null
+  const assignedLocationMissing =
+    assignedLocationId != null &&
+    locations != null &&
+    !(scopedLocations ?? []).some((loc) => loc.id === assignedLocationId)
+  const showLocationPicker =
+    (scopedLocations != null && scopedLocations.length > 0) || assignedLocationMissing
 
   const operatorField = register('operatorId', { required: t('form.operatorRequired') })
 
@@ -218,7 +236,7 @@ export function VehicleForm({
         </div>
       )}
 
-      {visibleLocations && visibleLocations.length > 0 && (
+      {showLocationPicker && (
         <div>
           <Label htmlFor="pickupLocationId">{t('form.pickupLocation')}</Label>
           <select
@@ -231,7 +249,10 @@ export function VehicleForm({
             })}
           >
             <option value="">{t('form.pickupLocationNone')}</option>
-            {visibleLocations.map((loc) => (
+            {assignedLocationMissing && (
+              <option value={assignedLocationId ?? ''}>{t('form.pickupLocationCurrent')}</option>
+            )}
+            {(scopedLocations ?? []).map((loc) => (
               <option key={loc.id} value={loc.id}>
                 {loc.name}
               </option>

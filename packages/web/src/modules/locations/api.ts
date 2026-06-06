@@ -33,6 +33,10 @@ async function unwrap<T>(res: Response): Promise<T> {
 interface ListOptions {
   status?: 'ACTIVE' | 'ARCHIVED'
   includeArchived?: boolean
+  // #435: bypass-scope callers (PLATFORM_ADMIN) must opt into a cross-operator
+  // read — GET /locations 400s otherwise. Operator-scoped callers auto-scope
+  // and the API ignores this flag for them.
+  includeAll?: boolean
 }
 
 export async function fetchLocations(
@@ -43,6 +47,7 @@ export async function fetchLocations(
   const query: Record<string, string> = {}
   if (options.status) query.status = options.status
   if (options.includeArchived) query.includeArchived = 'true'
+  if (options.includeAll) query.includeAll = 'true'
   const res = await client.locations.$get(Object.keys(query).length > 0 ? { query } : undefined)
   return unwrap<LocationData[]>(res)
 }

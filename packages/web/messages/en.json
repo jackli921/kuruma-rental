@@ -331,6 +331,7 @@
         "classNone": "Unassigned",
         "pickupLocation": "Pickup location",
         "pickupLocationNone": "No pickup location",
+        "pickupLocationCurrent": "Current pickup location",
         "operator": "Operator",
         "operatorPlaceholder": "Select an operator",
         "operatorRequired": "Select an operator to continue"
