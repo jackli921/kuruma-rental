@@ -9,13 +9,16 @@ import {
   DrizzleVehicleRepository,
 } from '../../src/repositories/drizzle'
 import type { Vehicle } from '../../src/stores'
+import { bookingInput } from '../helpers/booking'
 import {
   DEFAULT_DAILY_RATE_JPY,
   cleanupBookings,
+  cleanupLocations,
   cleanupUsers,
   cleanupVehicleClasses,
   cleanupVehicles,
   db,
+  seedLocation,
   seedVehicleClass,
 } from './setup'
 
@@ -46,9 +49,11 @@ const TODAY_START = (() => {
 
 let testUser: { id: string; email: string }
 let testClassId: string
+let testLocationId: string
 const createdVehicleIds: string[] = []
 const createdBookingIds: string[] = []
 const createdClassIds: string[] = []
+const createdLocationIds: string[] = []
 
 beforeAll(async () => {
   const [user] = await db
@@ -66,6 +71,10 @@ beforeAll(async () => {
   const klass = await seedVehicleClass('vd')
   testClassId = klass.id
   createdClassIds.push(klass.id)
+
+  const location = await seedLocation('vd')
+  testLocationId = location.id
+  createdLocationIds.push(location.id)
 })
 
 afterEach(async () => {
@@ -77,6 +86,7 @@ afterAll(async () => {
   await cleanupVehicles(createdVehicleIds)
   await cleanupUsers([testUser.id])
   await cleanupVehicleClasses(createdClassIds)
+  await cleanupLocations(createdLocationIds)
 })
 
 async function createVehicle(): Promise<Vehicle> {
@@ -90,7 +100,6 @@ async function createVehicle(): Promise<Vehicle> {
     fuelType: null,
     licensePlate: null,
     status: 'AVAILABLE',
-    bufferMinutes: 60,
     minRentalHours: null,
     maxRentalHours: null,
     advanceBookingHours: null,
@@ -111,21 +120,25 @@ type BookingOverrides = {
 }
 
 async function createBooking(vehicleId: string, overrides: BookingOverrides) {
-  const booking = await bookingRepo.create(SYSTEM_CONTEXT, {
-    renterId: testUser.id,
-    classId: testClassId,
-    vehicleId,
-    startAt: overrides.startAt,
-    endAt: overrides.endAt,
-    effectiveEndAt: new Date(overrides.endAt.getTime() + HOUR_MS),
-    status: overrides.status,
-    source: overrides.source ?? 'DIRECT',
-    externalId: null,
-    notes: null,
-    totalPrice: overrides.totalPrice ?? null,
-    cancellationFee: null,
-    cancelledAt: null,
-  })
+  // effectiveEndAt is DB-trigger-derived (#392); utilization/revenue read
+  // startAt/endAt, so the turnaround value is irrelevant to these aggregates.
+  const booking = await bookingRepo.create(
+    SYSTEM_CONTEXT,
+    bookingInput({
+      operatorId: BEST_CAR_RENTAL_OPERATOR_ID,
+      renterId: testUser.id,
+      classId: testClassId,
+      requestedVehicleId: vehicleId,
+      assignedVehicleId: vehicleId,
+      pickupLocationId: testLocationId,
+      dropoffLocationId: testLocationId,
+      startAt: overrides.startAt,
+      endAt: overrides.endAt,
+      status: overrides.status,
+      source: overrides.source ?? 'DIRECT',
+      totalPrice: overrides.totalPrice ?? null,
+    }),
+  )
   createdBookingIds.push(booking.id)
   return booking
 }

@@ -4,13 +4,16 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { type CallerContext, SYSTEM_CONTEXT } from '../../src/middleware/auth'
 import { DrizzleBookingRepository, DrizzleVehicleRepository } from '../../src/repositories/drizzle'
 import type { Booking, Vehicle } from '../../src/stores'
+import { bookingInput } from '../helpers/booking'
 import {
   DEFAULT_DAILY_RATE_JPY,
   cleanupBookings,
+  cleanupLocations,
   cleanupUsers,
   cleanupVehicleClasses,
   cleanupVehicles,
   db,
+  seedLocation,
   seedVehicleClass,
 } from './setup'
 
@@ -18,19 +21,31 @@ import {
 const bookingRepo = new DrizzleBookingRepository(db as never)
 const vehicleRepo = new DrizzleVehicleRepository(db as never)
 
+// Turnaround short enough that the 8-10 and 14-16 bookings on the same vehicle
+// stay non-overlapping after the trigger extends effectiveEndAt (#392).
+const TURNAROUND_MINUTES = 120
+
 let renterA: { id: string }
 let renterB: { id: string }
 let staff: { id: string }
 let vehicle: Vehicle
 let testClassId: string
+let testLocationId: string
 const createdBookingIds: string[] = []
 const createdVehicleIds: string[] = []
 const createdUserIds: string[] = []
 const createdClassIds: string[] = []
+const createdLocationIds: string[] = []
 
 const ctxA: () => CallerContext = () => ({ userId: renterA.id, role: 'RENTER' })
 const ctxB: () => CallerContext = () => ({ userId: renterB.id, role: 'RENTER' })
-const ctxStaff: () => CallerContext = () => ({ userId: staff.id, role: 'STAFF' })
+// Booking bypass is gated on bypassScope, NOT the role string (#392 tenancy.ts).
+// The auth middleware sets it for legacy STAFF; mirror that here.
+const ctxStaff: () => CallerContext = () => ({
+  userId: staff.id,
+  role: 'STAFF',
+  bypassScope: true,
+})
 
 beforeAll(async () => {
   const [a] = await db
@@ -69,6 +84,10 @@ beforeAll(async () => {
   testClassId = klass.id
   createdClassIds.push(klass.id)
 
+  const location = await seedLocation('rls', TURNAROUND_MINUTES)
+  testLocationId = location.id
+  createdLocationIds.push(location.id)
+
   vehicle = await vehicleRepo.create(SYSTEM_CONTEXT, {
     operatorId: BEST_CAR_RENTAL_OPERATOR_ID,
     classId: testClassId,
@@ -79,7 +98,6 @@ beforeAll(async () => {
     fuelType: null,
     licensePlate: null,
     status: 'AVAILABLE',
-    bufferMinutes: 60,
     minRentalHours: null,
     maxRentalHours: null,
     advanceBookingHours: null,
@@ -95,25 +113,26 @@ afterAll(async () => {
   await cleanupVehicles(createdVehicleIds)
   await cleanupUsers(createdUserIds)
   await cleanupVehicleClasses(createdClassIds)
+  await cleanupLocations(createdLocationIds)
 })
 
+// Marketplace-shape booking (#392). effectiveEndAt is DB-trigger-derived.
 function makeBookingData(renterId: string, startHour: number) {
-  return {
+  const pad = (h: number) => String(h).padStart(2, '0')
+  return bookingInput({
+    operatorId: BEST_CAR_RENTAL_OPERATOR_ID,
     renterId,
     classId: testClassId,
-    vehicleId: vehicle.id,
-    startAt: new Date(`2026-08-01T${String(startHour).padStart(2, '0')}:00:00Z`),
-    endAt: new Date(`2026-08-01T${String(startHour + 2).padStart(2, '0')}:00:00Z`),
-    effectiveEndAt: new Date(`2026-08-01T${String(startHour + 3).padStart(2, '0')}:00:00Z`),
-    status: 'CONFIRMED' as const,
-    source: 'DIRECT' as const,
-    externalId: null,
-    notes: null,
+    requestedVehicleId: vehicle.id,
+    assignedVehicleId: vehicle.id,
+    pickupLocationId: testLocationId,
+    dropoffLocationId: testLocationId,
+    startAt: new Date(`2026-08-01T${pad(startHour)}:00:00Z`),
+    endAt: new Date(`2026-08-01T${pad(startHour + 2)}:00:00Z`),
+    status: 'CONFIRMED',
+    source: 'DIRECT',
     totalPrice: 5000,
-    cancellationFee: null,
-    cancelledAt: null,
-    idempotencyKey: null,
-  }
+  })
 }
 
 describe('CallerContext booking isolation', () => {

@@ -2,15 +2,20 @@ import type { Booking } from '../../src/stores'
 
 type NewBooking = Omit<Booking, 'id' | 'createdAt' | 'updatedAt'>
 
+// Process-unique prefix (random per vitest worker) so parallel integration test
+// files sharing one Postgres branch never collide on the bookingCode UNIQUE
+// constraint; the per-call sequence guarantees uniqueness within a worker.
+const CODE_PREFIX = `T${crypto.randomUUID().replace(/-/g, '').slice(0, 8).toUpperCase()}`
 let codeSeq = 0
 /**
  * Unique reservation code per call. `bookings.bookingCode` is NOT NULL UNIQUE
  * (#392), so fixtures that don't care about the code itself must still avoid
- * collisions on the in-memory unique mirror. Base36 keeps it short + readable.
+ * collisions on the in-memory unique mirror AND the real DB across parallel
+ * workers. Uppercase base36 keeps it readable and within [0-9A-Z].
  */
 export function nextBookingCode(): string {
   codeSeq += 1
-  return `T${codeSeq.toString(36).toUpperCase().padStart(7, '0')}`
+  return `${CODE_PREFIX}${codeSeq.toString(36).toUpperCase().padStart(4, '0')}`
 }
 
 /**

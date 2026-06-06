@@ -1,5 +1,5 @@
-import { operators, vehicleClasses, vehicles } from '@kuruma/shared/db/schema'
-import { inArray } from 'drizzle-orm'
+import { bookings, operators, users, vehicleClasses, vehicles } from '@kuruma/shared/db/schema'
+import { eq, inArray } from 'drizzle-orm'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { type CallerContext, ForbiddenError, SYSTEM_CONTEXT } from '../../src/middleware/auth'
 import { pgErrorCode } from '../../src/pg-errors'
@@ -12,7 +12,8 @@ import {
 } from '../../src/repositories/drizzle'
 import { VehicleClassService } from '../../src/services/vehicle-class'
 import type { Vehicle, VehicleClass } from '../../src/stores'
-import { DEFAULT_DAILY_RATE_JPY, db } from './setup'
+import { bookingInput } from '../helpers/booking'
+import { DEFAULT_DAILY_RATE_JPY, cleanupLocations, db, seedLocation } from './setup'
 
 // An OPERATOR_* caller scoped to one tenant must never observe another
 // tenant's vehicles, and repos not yet operator-scoped in slice 1 (#386) must
@@ -27,35 +28,11 @@ const operatorCtx: CallerContext = {
 
 type Invocation = readonly [method: string, run: () => Promise<unknown>]
 
-describe('booking/message/thread repos reject OPERATOR_* until scoped (Drizzle)', () => {
-  const booking = new DrizzleBookingRepository(db)
+describe('message/thread repos reject OPERATOR_* until scoped (slice 7, Drizzle)', () => {
   const thread = new DrizzleThreadRepository(db)
   const message = new DrizzleMessageRepository(db)
 
   const cases: ReadonlyArray<readonly [repoName: string, invocations: Invocation[]]> = [
-    [
-      'BookingRepository',
-      [
-        ['findAll', () => booking.findAll(operatorCtx)],
-        ['findById', () => booking.findById(operatorCtx, 'b1')],
-        ['findByIdempotencyKey', () => booking.findByIdempotencyKey(operatorCtx, 'k1')],
-        // biome-ignore lint/suspicious/noExplicitAny: throwaway stub; guard throws first
-        ['create', () => booking.create(operatorCtx, {} as any)],
-        [
-          'updateStatus',
-          () => booking.updateStatus(operatorCtx, 'b1', { from: 'CONFIRMED', to: 'ACTIVE' }),
-        ],
-        [
-          'cancel',
-          () =>
-            booking.cancel(operatorCtx, 'b1', {
-              from: 'CONFIRMED',
-              fee: 0,
-              cancelledAt: new Date(),
-            }),
-        ],
-      ],
-    ],
     [
       'ThreadRepository',
       [
@@ -87,6 +64,159 @@ describe('booking/message/thread repos reject OPERATOR_* until scoped (Drizzle)'
   }
 })
 
+// Slice 6 (#392) supersedes the slice-1 fail-closed contract for BookingRepository:
+// it is now operator-scoped (three-way bookingReadScope). Proven against real
+// Postgres — an operator reads/writes only its own tenant, a tenant-less operator
+// fails closed, and a cross-tenant write is a no-op (mirrors the tenancy-guards unit).
+describe('booking repo is operator-scoped (Drizzle, real Postgres)', () => {
+  const bookingRepo = new DrizzleBookingRepository(db)
+  const vehicleRepo = new DrizzleVehicleRepository(db)
+  const classRepo = new DrizzleVehicleClassRepository(db)
+  const uniq = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
+  const opAId = `op_bk_a_${uniq}`
+  const opBId = `op_bk_b_${uniq}`
+  const renterId = crypto.randomUUID()
+  const createdLocationIds: string[] = []
+  let classAId: string
+  let vehicleAId: string
+  let locationAId: string
+  let bookingAId: string
+
+  const ctxFor = (operatorId: string): CallerContext => ({
+    userId: 'owner',
+    role: 'OPERATOR_OWNER',
+    operatorId,
+    bypassScope: false,
+  })
+
+  // operatorId belongs to A; an op-B caller passing this must be rejected before
+  // any insert, so the FK ids only need to be well-formed (the create throws first).
+  const foreignCreateInput = () =>
+    bookingInput({
+      operatorId: opAId,
+      renterId,
+      classId: classAId,
+      requestedVehicleId: vehicleAId,
+      assignedVehicleId: vehicleAId,
+      pickupLocationId: locationAId,
+      dropoffLocationId: locationAId,
+      startAt: new Date('2027-09-02T10:00:00Z'),
+      endAt: new Date('2027-09-02T14:00:00Z'),
+      status: 'CONFIRMED',
+      source: 'DIRECT',
+    })
+
+  beforeAll(async () => {
+    await db.insert(operators).values([
+      { id: opAId, slug: `bk-a-${uniq}`, name: 'Bk Operator A' },
+      { id: opBId, slug: `bk-b-${uniq}`, name: 'Bk Operator B' },
+    ])
+    await db.insert(users).values({
+      id: renterId,
+      email: `bk-${uniq}@kuruma-test.com`,
+      role: 'RENTER',
+      language: 'en',
+    })
+    const classA = await classRepo.create({
+      operatorId: opAId,
+      name: `Bk Class ${uniq}`,
+      slug: `bk-class-${uniq}`,
+      description: null,
+      photos: [],
+      seats: 5,
+      luggageCapacity: 2,
+      transmission: 'AUTO',
+      fuelType: null,
+      dailyRateJpy: DEFAULT_DAILY_RATE_JPY,
+      hourlyRateJpy: null,
+      sortOrder: 0,
+      status: 'ACTIVE',
+    })
+    classAId = classA.id
+    const location = await seedLocation('bk', 2880, opAId)
+    locationAId = location.id
+    createdLocationIds.push(location.id)
+    const vehicleA = await vehicleRepo.create(SYSTEM_CONTEXT, {
+      operatorId: opAId,
+      classId: classAId,
+      name: 'Bk Car A',
+      description: null,
+      seats: 5,
+      transmission: 'AUTO',
+      fuelType: null,
+      licensePlate: null,
+      status: 'AVAILABLE',
+      minRentalHours: null,
+      maxRentalHours: null,
+      advanceBookingHours: null,
+      dailyRateJpy: DEFAULT_DAILY_RATE_JPY,
+      shakenExpiryDate: null,
+      insuranceExpiryDate: null,
+    })
+    vehicleAId = vehicleA.id
+    const bookingA = await bookingRepo.create(
+      SYSTEM_CONTEXT,
+      bookingInput({
+        operatorId: opAId,
+        renterId,
+        classId: classAId,
+        requestedVehicleId: vehicleAId,
+        assignedVehicleId: vehicleAId,
+        pickupLocationId: locationAId,
+        dropoffLocationId: locationAId,
+        startAt: new Date('2027-09-01T10:00:00Z'),
+        endAt: new Date('2027-09-01T14:00:00Z'),
+        status: 'CONFIRMED',
+        source: 'DIRECT',
+      }),
+    )
+    bookingAId = bookingA.id
+  })
+
+  afterAll(async () => {
+    await db.delete(bookings).where(eq(bookings.operatorId, opAId))
+    await db.delete(vehicles).where(inArray(vehicles.operatorId, [opAId, opBId]))
+    await db.delete(vehicleClasses).where(inArray(vehicleClasses.operatorId, [opAId, opBId]))
+    await cleanupLocations(createdLocationIds)
+    await db.delete(users).where(inArray(users.id, [renterId]))
+    await db.delete(operators).where(inArray(operators.id, [opAId, opBId]))
+  })
+
+  it('operator reads only its own tenant bookings', async () => {
+    const ownIds = (await bookingRepo.findAll(ctxFor(opAId))).map((b) => b.id)
+    expect(ownIds).toContain(bookingAId)
+    const foreignIds = (await bookingRepo.findAll(ctxFor(opBId))).map((b) => b.id)
+    expect(foreignIds).not.toContain(bookingAId)
+  })
+
+  it('operator findById cannot reach another tenant booking', async () => {
+    expect(await bookingRepo.findById(ctxFor(opAId), bookingAId)).toMatchObject({ id: bookingAId })
+    expect(await bookingRepo.findById(ctxFor(opBId), bookingAId)).toBeUndefined()
+  })
+
+  it('operator cannot create a booking for another operator', async () => {
+    await expect(bookingRepo.create(ctxFor(opBId), foreignCreateInput())).rejects.toThrow(
+      ForbiddenError,
+    )
+  })
+
+  it('cross-tenant cancel is a no-op, leaving the booking CONFIRMED', async () => {
+    const result = await bookingRepo.cancel(ctxFor(opBId), bookingAId, {
+      from: 'CONFIRMED',
+      fee: 0,
+      cancelledAt: new Date(),
+    })
+    expect(result).toBeUndefined()
+    expect((await bookingRepo.findById(ctxFor(opAId), bookingAId))?.status).toBe('CONFIRMED')
+  })
+
+  it('a tenant-less operator fails closed', async () => {
+    const noTenant: CallerContext = { userId: 'x', role: 'OPERATOR_OWNER', bypassScope: false }
+    expect(await bookingRepo.findAll(noTenant)).toHaveLength(0)
+    expect(await bookingRepo.findById(noTenant, bookingAId)).toBeUndefined()
+  })
+})
+
 describe('cross-operator vehicle isolation', () => {
   const vehicleRepo = new DrizzleVehicleRepository(db)
   const uniq = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
@@ -115,7 +245,6 @@ describe('cross-operator vehicle isolation', () => {
       fuelType: null,
       licensePlate: null,
       status: 'AVAILABLE',
-      bufferMinutes: 60,
       minRentalHours: null,
       maxRentalHours: null,
       advanceBookingHours: null,
@@ -329,7 +458,6 @@ describe('vehicle classId is sealed to the vehicle’s operator (composite FK)',
     fuelType: null,
     licensePlate: null,
     status: 'AVAILABLE' as const,
-    bufferMinutes: 60,
     minRentalHours: null,
     maxRentalHours: null,
     advanceBookingHours: null,
