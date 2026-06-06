@@ -33,6 +33,18 @@ test.describe('admin portal guard (#462)', () => {
     await expect(page).toHaveURL(/\/en\/?$/)
   })
 
+  test('an OPERATOR_OWNER is forbidden and bounced to the home page (#481 review)', async ({
+    context,
+    page,
+  }) => {
+    // Operators clear the business guard, so they are the realistic escalation
+    // actor here. The admin gate is deliberately narrower than business — the
+    // tenant-scoped OPERATOR_* roles must NOT reach the cross-tenant /admin.
+    await signInAs(context, 'OPERATOR_OWNER')
+    await page.goto('/en/admin')
+    await expect(page).toHaveURL(/\/en\/?$/)
+  })
+
   test('a PLATFORM_ADMIN sees the nav and the revenue placeholder', async ({ context, page }) => {
     await signInAs(context, 'PLATFORM_ADMIN')
 
