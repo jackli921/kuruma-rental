@@ -51,7 +51,6 @@ describe('POST/PATCH /vehicles maps a cross-operator classId to 422 (#400)', () 
     name: 'Route FK Vehicle',
     seats: 5,
     transmission: 'AUTO' as const,
-    bufferMinutes: 60,
     licensePlate: null,
     dailyRateJpy: 8000,
   })
@@ -125,7 +124,6 @@ describe('POST/PATCH /vehicles maps a cross-operator classId to 422 (#400)', () 
       name: 'Route FK Vehicle',
       seats: 5,
       transmission: 'AUTO' as const,
-      bufferMinutes: 60,
       licensePlate: null,
       dailyRateJpy: 8000,
     })
