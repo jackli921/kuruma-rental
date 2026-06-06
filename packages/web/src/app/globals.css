@@ -225,10 +225,11 @@
 
 /* On the admin portal the AdminSidebar is the only nav (third dashboard,
    separate from renter + operator — #481 review P2). Suppress the global
-   Navbar's business links (desktop) and its mobile menu (mobile) so the admin
-   shell never shows operator nav. The sidebar is in the DOM at all widths, so
-   :has() matches on mobile too. */
-:root:has([data-admin-sidebar]) [data-business-nav],
+   Navbar's desktop links (data-global-nav, present in every view mode — a
+   platform admin can hold the renter-view cookie) and its mobile menu so the
+   admin shell never shows renter/operator nav. The sidebar is in the DOM at
+   all widths, so :has() matches on mobile too. */
+:root:has([data-admin-sidebar]) [data-global-nav],
 :root:has([data-admin-sidebar]) [data-mobile-menu] {
   display: none;
 }

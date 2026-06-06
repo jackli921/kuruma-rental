@@ -58,6 +58,33 @@ test.describe('admin portal guard (#462)', () => {
     await expect(page.getByText(/coming soon/i)).toBeVisible()
     await expect(page.getByText(/4%/)).toBeVisible()
   })
+
+  test('a PLATFORM_ADMIN in renter view gets no global-nav leak on /admin (#481 review P2)', async ({
+    context,
+    page,
+  }) => {
+    // PLATFORM_ADMIN is a business role, so it can hold the renter-view cookie.
+    // In renter view the global Navbar renders public/renter links WITHOUT the
+    // data-business-nav marker, so the round-1 CSS (keyed on data-business-nav)
+    // did not suppress them. The AdminSidebar must remain the only nav.
+    await signInAs(context, 'PLATFORM_ADMIN')
+    await context.addCookies([
+      {
+        name: 'kuruma-view',
+        value: 'renter',
+        domain: 'localhost',
+        path: '/',
+        expires: Math.floor(Date.now() / 1000) + ONE_HOUR_S,
+      },
+    ])
+    await page.goto('/en/admin')
+
+    // The admin sidebar is present...
+    await expect(page.getByRole('link', { name: /partner revenue/i })).toBeVisible()
+    // ...but the renter/public links from the global nav do not bleed through.
+    await expect(page.getByRole('link', { name: 'Bookings' })).toBeHidden()
+    await expect(page.getByRole('link', { name: 'Vehicles' })).toBeHidden()
+  })
 })
 
 test.describe('admin portal at mobile width (#481 review P2)', () => {
