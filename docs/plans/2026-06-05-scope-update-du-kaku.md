@@ -1,7 +1,7 @@
 # Marketplace MVP — Scope Update (Du + Kaku alignment, 2026-06-05)
 
 **Date:** 2026-06-05
-**Status:** Recorded for decision history. **MVP-vs-later triage still pending** — this captures the 1st Du + Kaku alignment meeting; it does NOT yet re-baseline the slice plan (§6 of the proposal).
+**Status:** Recorded for decision history. **MVP-vs-later triage resolved** — this captures the 1st Du + Kaku alignment meeting and re-baselines the slice plan (§6 of the proposal) via §5 below.
 **Amends:** `docs/plans/2026-05-25-marketplace-mvp-proposal.md` — §1 (Out-of-MVP), §2 (search/booking model), §9 items 16/19, §10 items 9/12. Where this doc and the proposal disagree on the items below, **this doc wins**; everything else in the proposal still holds.
 **Source:** 1st alignment meeting with Du + Kaku, 2026-06-05.
 
@@ -85,10 +85,12 @@ A **third dashboard**, separate from the renter portal and the operator portal, 
 
 - **Luggage standardization (was Q2)** → both layers: per-vehicle partner input primary, class-level default backup when empty (§1.2).
 - **Stripe integration shape (was Q4)** → no Connect; single platform Stripe account; manual month-end remittance computed on the backend (§2).
+- **Document storage** → store images in **Cloudflare R2** (object storage); the DB keeps **metadata only** (`storage_key`, type, status, expiry, verified_at) — no bytea, no `image_url`. At-rest encryption on by default; access via short-lived signed URLs. Verification = **manual** admin review for MVP (see §5).
+- **Document auto-retention** → app-delete on verification-pass / rental-end **plus an R2 lifecycle-rule backstop**. *(Principle: data minimization — keep the verdict, not the scan.)*
 
 **Still open:**
 
-1. **Document verification — storage/retention.** Interim mechanism decided: **manual** admin review for MVP (see §5). Still open: encryption + retention policy for passport / IDP images, and whether to add automated IDV later. *(Du to circle back with team.)*
+1. **Document retention window** — the **N-days** value for the lifecycle backstop, and whether to add automated IDV later. *(Du to confirm.)*
 2. **Class-combo availability model** — confirm the per-(operator, location, class, time) inventory-count approach and how it interacts with the existing exclusion constraint (§1.1). *(Designed-for now, built post-demo — see §5.)*
 
 > **MVP-vs-later triage (was Q5): resolved 2026-06-05 — see §5.**
@@ -132,7 +134,7 @@ finish **6** booking → **7** notifications + pre-auth → **luggage + map/list
 **已确认的变更：**
 
 1. 搜索结果页改为「地图 + 左侧列表」，同时展示各合作商不同门店下的：**具体车辆（带车牌）** 和 **车型套餐**（如「面包车」，具体车辆由合作商在取车当天根据可用情况决定）。需同时保留原「先选门店再选车」的流程——架构上两种流程都要支持，方便后续切换。
-2. 搜索结果卡片除座位数外，还要显示**可放行李数量和行李尺寸**（需跨车型标准化）。暂定方案：由各合作商为每辆车自行填写，未填写时用该车型的默认值兜底（平台统一标准 vs 合作商填写，尚未定）。
+2. 搜索结果卡片除座位数外，还要显示**可放行李数量和行李尺寸**（需跨车型标准化）。已定方案：由各合作商为每辆车自行填写为主，未填写时用该车型的平台默认值兜底。
 3. 用户必须上传**国际驾照**（可能还有护照）照片并安全存储；预订前需通过一个**验证界面**核验有效期等信息，**验证通过后才能预订**。
 4. 预订改为**多步骤向导**：日期范围 → 付费增值项（如儿童座椅等）→ 保险选择 → 最终确认 → **Stripe 支付**。
 5. 新增**第三个后台：平台管理后台**（独立于用户端和合作商端），含各合作商**营收统计页**：基于 Stripe 成功支付汇总每个合作商的销售额，用于每月结算。
@@ -145,11 +147,11 @@ finish **6** booking → **7** notifications + pre-auth → **luggage + map/list
 
 **押金 vs 支付（已澄清）：** 两者并存。Stripe 支付 = 用车租金；预授权押金 = 针对**车损 / 肇事逃逸**的单独冻结，不属于租金。
 
-**已确认（6月5日补充）：** 行李信息=合作商按车填写为主、平台按车型默认值兜底；Stripe=不用 Connect，统一进平台账户，月底后台计算手动打款。
+**已确认（6月5日补充）：** 行李信息=合作商按车填写为主、平台按车型默认值兜底；Stripe=不用 Connect，统一进平台账户，月底后台计算手动打款；证件照片=存对象存储（R2），数据库只存元数据，验证通过/租期结束后自动删除（数据最小化）。
 
 **MVP 范围已划定（6月5日，详见英文版 §5）：** 演示先做——预订向导+增值项+Stripe 支付、平台后台营收页、行李信息、地图/列表（先展示具体车辆）、证件**人工审核**；**车型套餐**与**自动证件识别**为演示后快速跟进（但 schema 现在就预留，避免返工）。
 
 **待确认问题（需大家反馈）：**
 
-1. 证件照片的**加密存储与保留期限**政策？（验证方式 MVP 先用人工审核，自动识别后续再议）
+1. 证件照片**保留多少天**后自动删除（lifecycle 兜底用的 N 天数值）？是否后续加自动证件识别？（存储方案已定：R2+元数据，验证 MVP 先人工审核）
 2. 车型套餐如何防止超卖（取车前无具体车辆，需按 门店 × 车型 × 时间段 做库存计数）？
