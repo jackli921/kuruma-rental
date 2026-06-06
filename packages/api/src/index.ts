@@ -4,6 +4,7 @@ import { Hono } from 'hono'
 import { cors } from 'hono/cors'
 import { setupGlobalHandlers } from './error-handlers'
 import { requireAuth } from './middleware/auth'
+import { csrf } from './middleware/csrf'
 import { structuredLogger } from './middleware/logger'
 import { requestId } from './middleware/request-id'
 import { DisabledPhotoStorage } from './repositories/disabled-photo-storage'
@@ -74,6 +75,7 @@ import type {
   VehicleRepository,
 } from './repositories/types'
 import { createAdminRoutes } from './routes/admin'
+import { createAuthRoutes } from './routes/auth'
 import { createAvailabilityRoutes } from './routes/availability'
 import { createBookingRoutes } from './routes/bookings'
 import { createCustomerRoutes } from './routes/customers'
@@ -372,6 +374,12 @@ export function createApp(overrides?: {
     )
   }
 
+  // CSRF guard for the cookie session (design spec §5.4). Must run before the
+  // route-auth guards so a forged cookie-authenticated mutation is rejected
+  // (403) before any handler work. No-op for safe methods, Bearer/API-key
+  // callers, and the cookie-less Apple first-touch — see middleware/csrf.ts.
+  app.use('*', csrf())
+
   // Auth middleware on all protected paths.
   // vehicle-classes: public GETs for renter catalog (list, by-slug, availability)
   // are registered before auth inside createVehicleClassRoutes. Mutations +
@@ -463,6 +471,7 @@ export function createApp(overrides?: {
   // hc<AppType> needs this to produce typed client methods.
   return app
     .route('/', health)
+    .route('/', createAuthRoutes())
     .route('/', createFleetOverviewRoutes(fleetOverviewService))
     .route('/', createVehicleDetailRoutes(vehicleDetailService))
     .route(

@@ -1,5 +1,6 @@
 import { timingSafeEqual } from 'node:crypto'
 import type { Context, MiddlewareHandler } from 'hono'
+import { getCookie } from 'hono/cookie'
 import { jwtVerify } from 'jose'
 import { fail } from '../routes/helpers'
 
@@ -28,6 +29,11 @@ export interface AuthUser {
 // AUTH_SECRET for any other purpose cannot be replayed as an API caller.
 export const API_TOKEN_ISSUER = 'kuruma-web'
 export const API_TOKEN_AUDIENCE = 'kuruma-api'
+
+// Cookie that carries the browser session JWT (Vite/CF Pages migration, #378).
+// Set by the API at OAuth sign-in; read by requireAuth's cookie path, the CSRF
+// middleware, and GET /auth/session. See design spec §5.3.
+export const SESSION_COOKIE = 'kuruma_session'
 
 const ALL_ROLES: ReadonlySet<string> = new Set<string>([
   'RENTER',
@@ -280,6 +286,18 @@ export function requireAuth(): MiddlewareHandler {
       }
     }
 
+    // Browser callers authenticate with the HttpOnly kuruma_session cookie
+    // (Vite/CF Pages migration, #378). CSRF for these is enforced separately by
+    // the csrf middleware; here we only establish identity.
+    const cookieToken = getCookie(c, SESSION_COOKIE)
+    if (cookieToken) {
+      const user = await verifyJwt(cookieToken)
+      if (user) {
+        c.set('user', user)
+        return next()
+      }
+    }
+
     const apiKey = c.req.header('X-API-Key')
     if (apiKey) {
       const user = verifyApiKey(apiKey)
@@ -293,7 +311,18 @@ export function requireAuth(): MiddlewareHandler {
   }
 }
 
-async function verifyJwt(token: string): Promise<AuthUser | null> {
+/** A verified session: the caller identity plus the CSRF token bound to it.
+ *  `csrf` is absent for Bearer API tokens (they carry no csrf claim and are
+ *  CSRF-immune anyway — see middleware/csrf.ts). */
+export interface VerifiedSession {
+  readonly user: AuthUser
+  readonly csrf?: string
+}
+
+/** Verify an HS256 token (Bearer API token or session cookie) and map its
+ *  payload to a caller + CSRF token. Single verification path so the cookie and
+ *  Bearer flows can never diverge on what a valid token means. */
+async function verifyAndMap(token: string): Promise<VerifiedSession | null> {
   const secret = process.env.AUTH_SECRET
   if (!secret) return null
 
@@ -311,11 +340,24 @@ async function verifyJwt(token: string): Promise<AuthUser | null> {
     const rawRole = typeof payload.role === 'string' ? payload.role : undefined
     const role: UserRole = rawRole && isValidRole(rawRole) ? rawRole : 'RENTER'
     const operatorId = typeof payload.operatorId === 'string' ? payload.operatorId : undefined
-    // exactOptionalPropertyTypes: omit the key entirely rather than set undefined.
-    return operatorId !== undefined ? { id, role, operatorId } : { id, role }
+    const csrf = typeof payload.csrf === 'string' ? payload.csrf : undefined
+    // exactOptionalPropertyTypes: omit optional keys entirely rather than set undefined.
+    const user: AuthUser = operatorId !== undefined ? { id, role, operatorId } : { id, role }
+    return csrf !== undefined ? { user, csrf } : { user }
   } catch {
     return null
   }
+}
+
+async function verifyJwt(token: string): Promise<AuthUser | null> {
+  const session = await verifyAndMap(token)
+  return session ? session.user : null
+}
+
+/** Verify a `kuruma_session` cookie JWT → caller + CSRF token, or null if
+ *  invalid/expired/tampered. Used by GET /auth/session and the CSRF middleware. */
+export async function verifySessionCookie(token: string): Promise<VerifiedSession | null> {
+  return verifyAndMap(token)
 }
 
 function verifyApiKey(key: string): AuthUser | null {
