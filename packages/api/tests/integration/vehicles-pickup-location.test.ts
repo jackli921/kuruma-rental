@@ -1,18 +1,25 @@
-import { locations, operators, vehicles } from '@kuruma/shared/db/schema'
+import { locations, operators, users, vehicles } from '@kuruma/shared/db/schema'
 import { eq, inArray } from 'drizzle-orm'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
+import { createApp } from '../../src/index'
 import { SYSTEM_CONTEXT } from '../../src/middleware/auth'
 import { pgErrorCode } from '../../src/pg-errors'
-import { DrizzleLocationRepository, DrizzleVehicleRepository } from '../../src/repositories/drizzle'
+import {
+  DrizzleAvailabilityRepository,
+  DrizzleBookingRepository,
+  DrizzleLocationRepository,
+  DrizzleVehicleRepository,
+} from '../../src/repositories/drizzle'
 import type { Location } from '../../src/stores'
+import { authHeaders, setupAuthEnv } from '../helpers/auth'
 import { DEFAULT_DAILY_RATE_JPY, db } from './setup'
 
 // Composite FK seal (#387 slice 2): a vehicle's pickupLocationId must belong to
 // the vehicle's own operator. Enforced at the DB by FK
 // vehicles(operatorId, pickupLocationId) -> locations(operatorId, id). A NULL
-// pickupLocationId stays allowed (MATCH SIMPLE). pickupLocationId is not yet
-// wired into the vehicle repo/route/validator (slice 6), so the column is
-// exercised directly via raw update — proving the seal, not the write path.
+// pickupLocationId stays allowed (MATCH SIMPLE). This first suite exercises the
+// column via raw update — proving the DB seal in isolation; the write path
+// (repo/route/validator) it now flows through is covered by the #435 suites below.
 
 const uniq = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
 const opAId = `op_vploc_a_${uniq}`
@@ -113,5 +120,124 @@ describe('vehicle pickupLocationId is sealed to the vehicle’s operator (compos
   it('accepts a null pickup location (unassigned vehicle)', async () => {
     await setPickupLocation(vehicleAId, null)
     expect(await readPickupLocation(vehicleAId)).toBeNull()
+  })
+})
+
+// #435 wires pickupLocationId through the repo write path (the read path landed
+// in #391). Before this, DrizzleVehicleRepository.create dropped the column on
+// insert, so an operator could never place a car at a storefront via the API.
+describe('vehicle repo create persists pickupLocationId (#435)', () => {
+  const vehicleRepo = new DrizzleVehicleRepository(db)
+  const locationRepo = new DrizzleLocationRepository(db)
+  const wUniq = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
+  const opId = `op_vplocw_${wUniq}`
+  let location: Location
+
+  beforeAll(async () => {
+    await db
+      .insert(operators)
+      .values({ id: opId, slug: `vplocw-${wUniq}`, name: 'VpLocW Operator' })
+    location = await locationRepo.create(locationInput(opId, 'Namba'))
+  })
+
+  afterAll(async () => {
+    await db.delete(vehicles).where(eq(vehicles.operatorId, opId))
+    await db.delete(locations).where(eq(locations.operatorId, opId))
+    await db.delete(operators).where(eq(operators.id, opId))
+  })
+
+  it('persists a pickupLocationId passed to create', async () => {
+    const created = await vehicleRepo.create(SYSTEM_CONTEXT, {
+      ...vehicleInput(opId),
+      pickupLocationId: location.id,
+    })
+    expect(created.pickupLocationId).toBe(location.id)
+    expect(await readPickupLocation(created.id)).toBe(location.id)
+  })
+})
+
+// Full HTTP path: a bypass (STAFF) caller names the operator in the body. The
+// route must forward pickupLocationId through create/patch and map the
+// composite-FK 23503 (a cross-tenant or missing location) to 422, distinct from
+// the classId/operator FKs (#435, mirrors the #400 contract).
+describe('POST/PATCH /vehicles wires pickupLocationId end-to-end (#435)', () => {
+  const rUniq = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
+  const opId = `op_vplocr_${rUniq}`
+  const foreignOpId = `op_vplocr_x_${rUniq}`
+  const staffUserId = crypto.randomUUID()
+  let ownLocation: Location
+  let foreignLocation: Location
+  let app: ReturnType<typeof createApp>
+  let headers: Record<string, string>
+
+  const vehicleBody = (extra: Record<string, unknown>) => ({
+    operatorId: opId,
+    name: 'Pickup Route Vehicle',
+    seats: 5,
+    transmission: 'AUTO' as const,
+    bufferMinutes: 60,
+    dailyRateJpy: DEFAULT_DAILY_RATE_JPY,
+    ...extra,
+  })
+
+  beforeAll(async () => {
+    setupAuthEnv()
+    await db.insert(operators).values([
+      { id: opId, slug: `vplocr-${rUniq}`, name: 'VpLocR Operator' },
+      { id: foreignOpId, slug: `vplocr-x-${rUniq}`, name: 'VpLocR Foreign' },
+    ])
+    const locationRepo = new DrizzleLocationRepository(db)
+    ownLocation = await locationRepo.create(locationInput(opId, 'Namba'))
+    foreignLocation = await locationRepo.create(locationInput(foreignOpId, 'Umeda'))
+    await db.insert(users).values({
+      id: staffUserId,
+      email: `vplocr-${rUniq}@kuruma-test.com`,
+      role: 'STAFF',
+      language: 'en',
+    })
+    app = createApp({
+      vehicleRepo: new DrizzleVehicleRepository(db),
+      bookingRepo: new DrizzleBookingRepository(db),
+      availabilityRepo: new DrizzleAvailabilityRepository(db),
+      locationRepo,
+    })
+    headers = await authHeaders({ sub: staffUserId, role: 'STAFF' })
+  })
+
+  afterAll(async () => {
+    await db.delete(vehicles).where(inArray(vehicles.operatorId, [opId, foreignOpId]))
+    await db.delete(locations).where(inArray(locations.operatorId, [opId, foreignOpId]))
+    await db.delete(users).where(eq(users.id, staffUserId))
+    await db.delete(operators).where(inArray(operators.id, [opId, foreignOpId]))
+  })
+
+  const post = (body: unknown) =>
+    app.request('/vehicles', {
+      method: 'POST',
+      headers: { ...headers, 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    })
+
+  it('POST persists the operator’s own pickupLocationId (201)', async () => {
+    const res = await post(vehicleBody({ pickupLocationId: ownLocation.id }))
+    expect(res.status).toBe(201)
+    expect((await res.json()).data.pickupLocationId).toBe(ownLocation.id)
+  })
+
+  it('POST returns 422 "Invalid pickup location" for another operator’s location', async () => {
+    const res = await post(vehicleBody({ pickupLocationId: foreignLocation.id }))
+    expect(res.status).toBe(422)
+    expect((await res.json()).error).toBe('Invalid pickup location')
+  })
+
+  it('PATCH assigns a pickupLocationId to an unassigned vehicle', async () => {
+    const created = await (await post(vehicleBody({}))).json()
+    const res = await app.request(`/vehicles/${created.data.id}`, {
+      method: 'PATCH',
+      headers: { ...headers, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ pickupLocationId: ownLocation.id }),
+    })
+    expect(res.status).toBe(200)
+    expect((await res.json()).data.pickupLocationId).toBe(ownLocation.id)
   })
 })

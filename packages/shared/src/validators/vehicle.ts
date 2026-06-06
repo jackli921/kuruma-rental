@@ -22,6 +22,11 @@ const bufferMinutesSchema = z.number().int().min(0)
 // result in ZodEffects which doesn't support `.partial()` directly.
 const vehicleObjectSchema = z.object({
   classId: z.string().uuid('Class ID must be a valid UUID').nullish(),
+  // Storefront placement (#435): the operator's pickup/return location for this
+  // car. Nullish so a PATCH can clear it (explicit null) or omit it; tenant
+  // ownership + existence are sealed by the composite FK (23503 -> 422), not
+  // here. locations.id is a uuid, like classId.
+  pickupLocationId: z.string().uuid('Pickup location ID must be a valid UUID').nullish(),
   name: z.string().trim().min(1, 'Name is required'),
   description: z.string().optional(),
   photos: photosSchema.optional(),
