@@ -2,7 +2,9 @@ import { type RateLimitBinding, rateLimit } from '@elithrar/workers-hono-rate-li
 import { getDb } from '@kuruma/shared/db'
 import { Hono } from 'hono'
 import { cors } from 'hono/cors'
-import type { GoogleOAuthConfig } from './auth/google'
+import { DrizzleOAuthAccountStore } from './auth/drizzle-oauth-account-store'
+import { FetchGoogleOAuthProvider } from './auth/fetch-google-oauth-provider'
+import type { GoogleAuthRuntime, GoogleOAuthConfig } from './auth/google'
 import { setupGlobalHandlers } from './error-handlers'
 import { requireAuth } from './middleware/auth'
 import { csrf } from './middleware/csrf'
@@ -145,6 +147,9 @@ export function createApp(overrides?: {
   photoUploadLimiter?: RateLimitBinding
   photoUploadUserLimiter?: RateLimitBinding
   publicCatalogLimiter?: RateLimitBinding
+  // Injected Google OAuth runtime (provider + account store). Integration tests
+  // pass a fake so the callback can be exercised without a live Google/DB.
+  googleAuthRuntime?: GoogleAuthRuntime
 }) {
   let vehicleClassRepo: VehicleClassRepository
   let vehicleRepo: VehicleRepository
@@ -166,6 +171,9 @@ export function createApp(overrides?: {
   let notificationLogRepo: NotificationLogRepository
   let storefrontRepo: StorefrontRepository
   let runInTransaction: RunInTransaction
+  // Undefined unless an override injects one (tests) or the DB branch builds the
+  // real one. Absent ⇒ /auth/google/callback 503s (e.g. local dev without a DB).
+  let googleAuthRuntime: GoogleAuthRuntime | undefined
   const photoUploadLimiter =
     overrides?.photoUploadLimiter ??
     ((globalThis as Record<string, unknown>).PHOTO_UPLOAD_LIMITER as RateLimitBinding | undefined)
@@ -213,6 +221,7 @@ export function createApp(overrides?: {
     notificationLogRepo = overrides.notificationLogRepo ?? new InMemoryNotificationLogRepository()
     storefrontRepo =
       overrides.storefrontRepo ?? new InMemoryStorefrontRepository(locationRepo, operatorRepo)
+    googleAuthRuntime = overrides.googleAuthRuntime
   } else if (process.env.DATABASE_URL) {
     const db = getDb()
     vehicleClassRepo = new DrizzleVehicleClassRepository(db)
@@ -234,6 +243,12 @@ export function createApp(overrides?: {
     feeScheduleRepo = new DrizzleFeeScheduleRepository(db)
     notificationLogRepo = new DrizzleNotificationLogRepository(db)
     storefrontRepo = new DrizzleStorefrontRepository(db)
+    // Real Google OAuth runtime: HTTP provider + Drizzle-backed account store.
+    // Built only here (the composition root) so the route stays adapter-agnostic.
+    googleAuthRuntime = {
+      provider: new FetchGoogleOAuthProvider(),
+      accountStore: new DrizzleOAuthAccountStore(db),
+    }
     const vehiclePhotosBucket = (globalThis as Record<string, unknown>).VEHICLE_PHOTOS as
       | R2BucketLike
       | undefined
@@ -472,7 +487,7 @@ export function createApp(overrides?: {
   // hc<AppType> needs this to produce typed client methods.
   return app
     .route('/', health)
-    .route('/', createAuthRoutes(resolveGoogleOAuthConfig()))
+    .route('/', createAuthRoutes(resolveGoogleOAuthConfig(), googleAuthRuntime))
     .route('/', createFleetOverviewRoutes(fleetOverviewService))
     .route('/', createVehicleDetailRoutes(vehicleDetailService))
     .route(
