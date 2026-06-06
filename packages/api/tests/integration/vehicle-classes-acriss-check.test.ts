@@ -15,6 +15,9 @@ import { DEFAULT_DAILY_RATE_JPY, db } from './setup'
 describe('vehicle_classes acrissCode CHECK (23514)', () => {
   const createdIds: string[] = []
 
+  // Inlined rather than reusing setup.ts `seedVehicleClass`: that helper takes
+  // no acrissCode override, and the malformed-code path needs one. Unique
+  // name/slug per row mirrors the helper so parallel test files don't collide.
   function classValues(acrissCode: string | null) {
     const uniq = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
     return {
