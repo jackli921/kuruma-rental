@@ -22,6 +22,8 @@ import type {
   TransactionRepos,
 } from '../../src/repositories/types'
 import { BookingService, type CreateBookingInput } from '../../src/services/booking'
+import { BookingPostCommitDispatcher } from '../../src/services/booking-post-commit-dispatcher'
+import { makeEnsureThread } from '../../src/services/ensure-thread'
 import type { Thread, User, Vehicle } from '../../src/stores'
 
 const RENTER = '00000000-0000-4000-8000-0000000000a1'
@@ -164,13 +166,22 @@ async function makeService(threadRepo?: ThreadRepository, staffUserId?: string) 
   }
   const runInTransaction: RunInTransaction = async (fn) => fn(repos)
 
+  // Compose the post-commit seam exactly as index.ts does: ensureThread (when a
+  // staff user is configured) + a no-op notification dispatch (this suite asserts
+  // thread autocreate, not email).
+  const postCommit =
+    threadRepo && staffUserId
+      ? new BookingPostCommitDispatcher(makeEnsureThread({ threadRepo, staffUserId }), {
+          dispatch: async () => {},
+        })
+      : undefined
   const service = new BookingService(
     bookingRepo,
     runInTransaction,
     vehicleRepo,
     userRepo,
     vehicleClassRepo,
-    threadRepo && staffUserId ? { threadRepo, staffUserId } : undefined,
+    postCommit,
   )
   return { service, bookingRepo, vehicleId: vehicle.id, locationId: location.id }
 }
