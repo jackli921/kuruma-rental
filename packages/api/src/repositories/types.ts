@@ -219,6 +219,11 @@ export interface UserRepository {
   }): Promise<User>
   findByEmail(email: string): Promise<User | undefined>
   findByPhone(phone: string): Promise<User | undefined>
+  // Slice 7 (#393): the operator's OPERATOR_OWNER contact users, for the booking
+  // alert recipient. A fixed-purpose PLATFORM-INTERNAL read over the indexed
+  // users.operatorId — NOT a caller-facing lookup, so it does NOT reopen the #396
+  // renter-enumeration vector. Owner-only by design (no OPERATOR_STAFF in MVP).
+  findOperatorContacts(operatorId: string): Promise<User[]>
 }
 
 /**

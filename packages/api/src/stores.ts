@@ -147,6 +147,9 @@ export interface User {
   language: string
   country: string | null
   role: UserRole
+  // Owning operator for OPERATOR_* users; null/undefined for renters + platform
+  // admins. Optional because most reads don't project it (#393 findOperatorContacts).
+  operatorId?: string | null
 }
 
 export interface Operator {

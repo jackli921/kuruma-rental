@@ -368,6 +368,7 @@ export function createApp(overrides?: {
     userRepo,
     vehicleClassRepo,
     threading,
+    operatorRepo,
   )
   const customerService = new CustomerService(customerRepo, userRepo)
   const maintenanceService = new MaintenanceService(

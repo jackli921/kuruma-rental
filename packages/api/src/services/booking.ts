@@ -9,6 +9,7 @@ import { BOOKING_CODE_CONSTRAINT, PG_ERROR, pgConstraintName, pgErrorCode } from
 import type {
   BookingFilters,
   BookingRepository,
+  OperatorRepository,
   RunInTransaction,
   ThreadRepository,
   TransactionRepos,
@@ -17,6 +18,11 @@ import type {
   VehicleRepository,
 } from '../repositories/types'
 import type { Booking } from '../stores'
+
+/** Renter-safe operator projection attached to a single booking read (§4h). */
+export type BookingWithOperator = Booking & {
+  operator?: { name: string; preAuthHandoffUrl: string | null }
+}
 
 const MS_PER_MINUTE = 60 * 1000
 const MS_PER_DAY = 24 * 60 * MS_PER_MINUTE
@@ -88,6 +94,10 @@ export class BookingService {
     private readonly userRepo?: UserRepository,
     private readonly vehicleClassRepo?: VehicleClassRepository,
     private readonly threading?: BookingThreading,
+    // §4h: reads the renter-safe operator projection for findById. Unscoped repo
+    // read — the booking is already tenant-checked, and only name + handoff URL
+    // are exposed, so no cross-tenant leak.
+    private readonly operatorRepo?: OperatorRepository,
     // Injectable so the collision-retry path is deterministically testable.
     private readonly generateCode: () => string = generateBookingCode,
   ) {}
@@ -163,8 +173,17 @@ export class BookingService {
     }
   }
 
-  async findById(ctx: CallerContext, id: string): Promise<Booking | undefined> {
-    return this.bookingRepo.findById(ctx, id)
+  async findById(ctx: CallerContext, id: string): Promise<BookingWithOperator | undefined> {
+    const booking = await this.bookingRepo.findById(ctx, id)
+    if (!booking || !this.operatorRepo) return booking
+    // The renter already owns this booking (scope enforced above); exposing their
+    // operator's public handoff URL + name leaks nothing cross-tenant (§4h).
+    const operator = await this.operatorRepo.findById(booking.operatorId)
+    if (!operator) return booking
+    return {
+      ...booking,
+      operator: { name: operator.name, preAuthHandoffUrl: operator.preAuthHandoffUrl },
+    }
   }
 
   async create(

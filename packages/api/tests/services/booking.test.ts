@@ -143,6 +143,7 @@ async function setup(opts: { codes?: string[] } = {}): Promise<Harness> {
     userRepo,
     vehicleClassRepo,
     undefined,
+    undefined,
     generateMock,
   )
 
@@ -718,6 +719,7 @@ async function setupSub(): Promise<SubHarness> {
     vehicleRepo,
     userRepo,
     vehicleClassRepo,
+    undefined,
     undefined,
     () => 'SUBSEED1',
   )

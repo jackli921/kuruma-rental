@@ -66,4 +66,10 @@ export class InMemoryUserRepository implements UserRepository {
   async findByPhone(phone: string): Promise<User | undefined> {
     return [...this.store.values()].find((u) => u.phone === phone)
   }
+
+  async findOperatorContacts(operatorId: string): Promise<User[]> {
+    return [...this.store.values()].filter(
+      (u) => u.role === 'OPERATOR_OWNER' && u.operatorId === operatorId,
+    )
+  }
 }
