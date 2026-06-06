@@ -1,5 +1,6 @@
 import {
   classifyRoute,
+  decideAdminAccess,
   extractSessionRole,
   getLocaleFromPath,
   stripLocale,
@@ -122,5 +123,23 @@ describe('extractSessionRole', () => {
 
   test('returns null when role is an empty string', () => {
     expect(extractSessionRole({ user: { role: '' } })).toBeNull()
+  })
+})
+
+describe('decideAdminAccess', () => {
+  test('unauthenticated (null role) -> login', () => {
+    expect(decideAdminAccess(null)).toEqual({ action: 'login' })
+  })
+
+  test('authenticated non-admin role -> forbidden', () => {
+    expect(decideAdminAccess('RENTER')).toEqual({ action: 'forbidden' })
+    expect(decideAdminAccess('OPERATOR_OWNER')).toEqual({ action: 'forbidden' })
+    expect(decideAdminAccess('OPERATOR_STAFF')).toEqual({ action: 'forbidden' })
+  })
+
+  test('platform-admin roles -> allow', () => {
+    expect(decideAdminAccess('PLATFORM_ADMIN')).toEqual({ action: 'allow' })
+    expect(decideAdminAccess('STAFF')).toEqual({ action: 'allow' })
+    expect(decideAdminAccess('ADMIN')).toEqual({ action: 'allow' })
   })
 })

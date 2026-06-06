@@ -1,3 +1,5 @@
+import { isPlatformAdmin } from '@/lib/platform-roles'
+
 const LOCALES = new Set(['en', 'ja', 'zh'])
 const DEFAULT_LOCALE = 'en'
 
@@ -41,6 +43,24 @@ export function classifyRoute(path: string): RouteClassification {
     return { type: 'renter' }
   }
   return { type: 'public' }
+}
+
+type AdminAccessDecision = { action: 'login' | 'forbidden' | 'allow' }
+
+/**
+ * Pure authz decision for `/admin` routes. Keeps the middleware (an I/O shell)
+ * thin and the rule unit-testable (FC/IS): `null` role (unauthenticated) -> send
+ * to login; an authenticated non-platform-admin -> forbidden; a platform admin ->
+ * allow. The redirect I/O itself stays in `middleware.ts`.
+ */
+export function decideAdminAccess(role: string | null): AdminAccessDecision {
+  if (role === null) {
+    return { action: 'login' }
+  }
+  if (!isPlatformAdmin(role)) {
+    return { action: 'forbidden' }
+  }
+  return { action: 'allow' }
 }
 
 /**

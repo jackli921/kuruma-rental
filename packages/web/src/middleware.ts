@@ -1,6 +1,7 @@
 import { isBusinessRole } from '@/lib/business-roles'
 import {
   classifyRoute,
+  decideAdminAccess,
   extractSessionRole,
   getLocaleFromPath,
   stripLocale,
@@ -26,7 +27,10 @@ export default auth((req) => {
   const route = classifyRoute(path)
 
   // Redirect unauthenticated users to login
-  if ((route.type === 'renter' || route.type === 'business') && !session) {
+  if (
+    (route.type === 'renter' || route.type === 'business' || route.type === 'admin') &&
+    !session
+  ) {
     const loginUrl = new URL(`/${locale}/login`, req.url)
     loginUrl.searchParams.set('callbackUrl', pathname)
     return NextResponse.redirect(loginUrl)
@@ -38,6 +42,15 @@ export default auth((req) => {
   if (route.type === 'business' && session) {
     const role = extractSessionRole(session as { user?: { role?: unknown } | null })
     if (!isBusinessRole(role ?? undefined)) {
+      return NextResponse.redirect(new URL(`/${locale}`, req.url))
+    }
+  }
+
+  // Admin paths require a platform admin (narrower than business — no OPERATOR_*).
+  // decideAdminAccess is the pure, unit-tested rule; here we only do the I/O.
+  if (route.type === 'admin' && session) {
+    const role = extractSessionRole(session as { user?: { role?: unknown } | null })
+    if (decideAdminAccess(role).action !== 'allow') {
       return NextResponse.redirect(new URL(`/${locale}`, req.url))
     }
   }
