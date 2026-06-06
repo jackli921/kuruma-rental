@@ -2,6 +2,7 @@
 
 **Date:** 2026-05-25
 **Status:** Accepted for MVP implementation (Jack, 2026-05-27)
+**Scope update (2026-06-05):** `docs/plans/2026-06-05-scope-update-du-kaku.md` (Du + Kaku alignment) amends §1/§2/§9/§10 — adds in-app payment, document upload + verification, a dual (map/flat-list + storefront) search model, paid add-ons, and a platform-admin revenue portal. MVP-vs-later triage pending.
 **Supersedes:** 2026-04-28 email-hub pivot
 **Anchored in:** `docs/internal/2026-05-24-qiao-du-meeting.md`, `docs/meeting_notes/2026_05_24_notes_02.txt`, Du follow-up notes from 2026-05-27
 
