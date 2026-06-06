@@ -32,6 +32,12 @@ test.describe('Renter booking flow', () => {
     await expect(page.getByText('Collision Damage Waiver', { exact: false })).toBeVisible()
     await expect(page.getByText('Potential additional charges')).toBeVisible()
     await expect(page.getByText('Cleaning', { exact: true })).toBeVisible()
+
+    // Slice 7 (#393): pre-auth handoff CTA links to the operator's EXTERNAL
+    // pre-auth URL (plain anchor, new tab) — not the i18n Link.
+    const preAuth = page.getByRole('link', { name: 'Complete pre-authorization' })
+    await expect(preAuth).toHaveAttribute('href', 'https://pay.example.com/preauth')
+    await expect(preAuth).toHaveAttribute('target', '_blank')
   })
 
   test('redirects to login when the renter is not authenticated', async ({ browser }) => {

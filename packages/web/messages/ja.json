@@ -704,8 +704,12 @@
       "insurance": "保険",
       "insuranceDeclined": "なし",
       "perDay": "/ 日",
+      "preAuthTitle": "ご予約の事前承認",
+      "preAuthExplain": "オペレーターは保証金として、受取時にお客様のカードへ一時的な与信枠（事前承認）を設定します。これは請求ではありません。受取前に完了すると、引き渡しがスムーズになります。",
+      "preAuthCta": "事前承認を完了する",
+      "cancellationContact": "変更・キャンセルは、できるだけ早く {operator} までご連絡ください。受取日が近い場合はキャンセル料が発生することがあります。",
+      "potentialChargesTitle": "追加料金の可能性",
       "fees": {
-        "title": "追加料金の可能性",
         "disclaimer": "これらは発生した場合のみ（延滞・清掃・燃料未補給など）、返却時に精算されます。",
         "type": {
           "OVERTIME_HOURLY": "延長",

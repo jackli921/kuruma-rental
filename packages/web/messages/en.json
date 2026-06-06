@@ -704,8 +704,12 @@
       "insurance": "Insurance",
       "insuranceDeclined": "Declined",
       "perDay": "/ day",
+      "preAuthTitle": "Secure your booking",
+      "preAuthExplain": "Your operator places a temporary hold (pre-authorization) on your card as a security deposit. This is not a charge; completing it before pickup speeds up your handover.",
+      "preAuthCta": "Complete pre-authorization",
+      "cancellationContact": "To change or cancel, contact {operator} as soon as possible. Cancellation fees may apply closer to pickup.",
+      "potentialChargesTitle": "Potential additional charges",
       "fees": {
-        "title": "Potential additional charges",
         "disclaimer": "These apply only if incurred (e.g. late return, cleaning, returned without fuel) and are settled at drop-off.",
         "type": {
           "OVERTIME_HOURLY": "Overtime",

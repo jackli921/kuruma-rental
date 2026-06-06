@@ -159,6 +159,9 @@ interface Booking {
   notes: string | null
   createdAt: string
   updatedAt: string
+  // Renter-safe operator projection (#393, §4h). Attached by the API's findById;
+  // the confirmation page reads preAuthHandoffUrl for the pre-auth CTA (null => hide).
+  operator?: { name: string; preAuthHandoffUrl: string | null }
 }
 
 export async function getBookingById(id: string): Promise<Booking | null> {
