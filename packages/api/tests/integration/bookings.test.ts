@@ -470,6 +470,7 @@ describe('POST /bookings overlap via HTTP (real Postgres)', () => {
     httpVehicle = await httpVehicleRepo.create(SYSTEM_CONTEXT, {
       operatorId: BEST_CAR_RENTAL_OPERATOR_ID,
       classId: testClassId,
+      pickupLocationId: testLocationId, // #392: car must live where it's booked
       name: 'HTTP Overlap Test Car',
       description: null,
       seats: 4,

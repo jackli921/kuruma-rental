@@ -244,6 +244,39 @@ describe('BookingService.create — single-transaction submit (#392 §4)', () =>
     expect(h.events[0]).toMatchObject({ type: 'BOOKING_CREATED', actorId: 'staff-9' })
   })
 
+  it('rejects a pickup location that is not the vehicle’s own storefront, even same-operator', async () => {
+    const h = await setup({ codes: ['MISMATCH1'] })
+    const { vehicleId } = await seedReady(h) // vehicle's pickupLocationId = seeded location
+    // A second ACTIVE location under the SAME operator — a forged body could try
+    // to book the car here while it physically lives at the seeded storefront.
+    const other = await h.repos.locationRepo.create({
+      operatorId: OP_A,
+      name: 'Umeda Annex',
+      address: '9-9-9 Umeda',
+      operatingHours: null,
+      timezone: 'Asia/Tokyo',
+      defaultTurnaroundMinutes: 1440,
+      status: 'ACTIVE',
+    } as Parameters<typeof h.repos.locationRepo.create>[0])
+
+    const result = await h.service.create(
+      renterCtx,
+      createInput({
+        requestedVehicleId: vehicleId,
+        pickupLocationId: other.id,
+        dropoffLocationId: other.id,
+      }),
+      NOW,
+    )
+
+    expect(result.ok).toBe(false)
+    if (result.ok) return
+    expect(result.status).toBe(400)
+    expect(result.error).toMatch(/pickup location does not match/i)
+    // No booking row, no event leaked.
+    expect(h.events).toHaveLength(0)
+  })
+
   it('sets effectiveEndAt = endAt + location turnaround (48h), NOT the legacy 60-min buffer', async () => {
     const h = await setup()
     const { vehicleId, locationId } = await seedReady(h)
@@ -806,5 +839,71 @@ describe('BookingService.substitute — operator vehicle swap (#392 §5.5)', () 
     expect(result.ok).toBe(false)
     if (result.ok) return
     expect(result.status).toBe(404)
+  })
+})
+
+describe('BookingService lifecycle events (#392 §3.1)', () => {
+  it('appends STATUS_CHANGED in the same tx when a booking transitions', async () => {
+    const h = await setup({ codes: ['LIFE0001'] })
+    const { vehicleId, locationId } = await seedReady(h)
+    const created = await h.service.create(
+      renterCtx,
+      createInput({
+        requestedVehicleId: vehicleId,
+        pickupLocationId: locationId,
+        dropoffLocationId: locationId,
+      }),
+      NOW,
+    )
+    expect(created.ok).toBe(true)
+    if (!created.ok) return
+
+    const res = await h.service.updateStatus(opCtxA, created.booking.id, 'ACTIVE')
+    expect(res.ok).toBe(true)
+    if (!res.ok) return
+    expect(res.booking.status).toBe('ACTIVE')
+
+    // Event log is the source of truth: create + the transition, in order.
+    const events = await h.repos.bookingEventRepo.findByBookingId(
+      SYSTEM_CONTEXT,
+      created.booking.id,
+    )
+    expect(events.map((e) => e.type)).toEqual(['BOOKING_CREATED', 'STATUS_CHANGED'])
+    expect(events[1]).toMatchObject({
+      type: 'STATUS_CHANGED',
+      actorId: opCtxA.userId,
+      payload: { from: 'CONFIRMED', to: 'ACTIVE' },
+    })
+  })
+
+  it('appends BOOKING_CANCELLED in the same tx when a booking is cancelled', async () => {
+    const h = await setup({ codes: ['LIFE0002'] })
+    const { vehicleId, locationId } = await seedReady(h)
+    const created = await h.service.create(
+      renterCtx,
+      createInput({
+        requestedVehicleId: vehicleId,
+        pickupLocationId: locationId,
+        dropoffLocationId: locationId,
+      }),
+      NOW,
+    )
+    expect(created.ok).toBe(true)
+    if (!created.ok) return
+
+    const res = await h.service.cancel(renterCtx, created.booking.id, NOW)
+    expect(res.ok).toBe(true)
+    if (!res.ok) return
+
+    const events = await h.repos.bookingEventRepo.findByBookingId(
+      SYSTEM_CONTEXT,
+      created.booking.id,
+    )
+    expect(events.map((e) => e.type)).toEqual(['BOOKING_CREATED', 'BOOKING_CANCELLED'])
+    expect(events[1]).toMatchObject({
+      type: 'BOOKING_CANCELLED',
+      actorId: RENTER,
+      payload: { cancellationFee: res.cancellation.feeAmount, cancelledAt: NOW.toISOString() },
+    })
   })
 })

@@ -188,6 +188,7 @@ describe('API responses contain only expected fields', () => {
       body: JSON.stringify({
         operatorId: TEST_OPERATOR_ID,
         classId,
+        pickupLocationId: locationId, // #392: the car must live where it's booked
         name: 'Test Car',
         description: 'Test',
         seats: 5,

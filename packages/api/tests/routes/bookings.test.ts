@@ -626,6 +626,28 @@ describe('Booking Routes', () => {
       expect(body.error).toMatch(/not available/i)
     })
 
+    it('rejects a pickup location that is not the vehicle’s storefront with 400 (#392)', async () => {
+      // Same operator, different location — a forged body must not book a car
+      // away from where it lives.
+      const other = await locationRepo.create({
+        operatorId: OPERATOR,
+        name: 'Umeda Annex',
+        address: '9-9-9 Umeda',
+        operatingHours: null,
+        timezone: 'Asia/Tokyo',
+        defaultTurnaroundMinutes: 1440,
+        status: 'ACTIVE',
+      } as Omit<Location, 'id' | 'createdAt' | 'updatedAt'>)
+
+      const res = await createBooking(
+        validBookingInput({ pickupLocationId: other.id, dropoffLocationId: other.id }),
+      )
+
+      expect(res.status).toBe(400)
+      const body = await res.json()
+      expect(body.error).toMatch(/pickup location does not match/i)
+    })
+
     it('creates a booking with valid input and returns 201 with status CONFIRMED', async () => {
       const res = await createBooking(validBookingInput())
 

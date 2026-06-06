@@ -285,6 +285,14 @@ export class BookingService {
       }
     }
 
+    // The car physically lives at its own storefront, so a booking can only pick
+    // it up there. Without this, a forged body could pair a vehicle with another
+    // of the operator's locations — the operator check below passes (same tenant)
+    // but the stamped pickup/turnaround would lie about where the car is (#392).
+    if (vehicle.pickupLocationId !== input.pickupLocationId) {
+      return { ok: false, status: 400, error: 'Pickup location does not match the vehicle' }
+    }
+
     // Turnaround is location-only (§5.3): pickup location's default, 48h fallback.
     const pickup = await repos.locationRepo.findById(SYSTEM_CONTEXT, input.pickupLocationId)
     if (!pickup || pickup.operatorId !== operatorId) {
@@ -567,9 +575,21 @@ export class BookingService {
       }
     }
 
-    const updated = await this.bookingRepo.updateStatus(ctx, booking.id, {
-      from: booking.status,
-      to: newStatus as Booking['status'],
+    // Projection update + STATUS_CHANGED append in one tx so booking_events stays
+    // the source of truth (§3.1) and never drifts from the status column.
+    const updated = await this.runInTransaction(async (repos) => {
+      const next = await repos.bookingRepo.updateStatus(ctx, booking.id, {
+        from: booking.status,
+        to: newStatus as Booking['status'],
+      })
+      if (!next) return undefined
+      await repos.bookingEventRepo.append(ctx, {
+        bookingId: booking.id,
+        type: 'STATUS_CHANGED',
+        actorId: ctx.userId,
+        payload: { from: booking.status, to: newStatus as Booking['status'] },
+      })
+      return next
     })
     if (!updated) {
       return {
@@ -601,10 +621,22 @@ export class BookingService {
 
     const cancellation = calculateCancellationFee(booking.startAt, now, booking.totalPrice ?? 0)
 
-    const updated = await this.bookingRepo.cancel(ctx, booking.id, {
-      from: booking.status,
-      fee: cancellation.feeAmount,
-      cancelledAt: now,
+    // Projection cancel + BOOKING_CANCELLED append in one tx so the event log
+    // records every lifecycle transition, not just create/substitute (§3.1).
+    const updated = await this.runInTransaction(async (repos) => {
+      const next = await repos.bookingRepo.cancel(ctx, booking.id, {
+        from: booking.status,
+        fee: cancellation.feeAmount,
+        cancelledAt: now,
+      })
+      if (!next) return undefined
+      await repos.bookingEventRepo.append(ctx, {
+        bookingId: booking.id,
+        type: 'BOOKING_CANCELLED',
+        actorId: ctx.userId,
+        payload: { cancellationFee: cancellation.feeAmount, cancelledAt: now.toISOString() },
+      })
+      return next
     })
     if (!updated) {
       return {
