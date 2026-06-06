@@ -9,30 +9,46 @@ import { zodResolver } from '@hookform/resolvers/zod'
 import { ACRISS_CODES } from '@kuruma/shared/acriss'
 import {
   type CreateVehicleClassInput,
+  type UpdateVehicleClassInput,
   createVehicleClassSchema,
+  updateVehicleClassSchema,
 } from '@kuruma/shared/validators/vehicle-class'
 import { useTranslations } from 'next-intl'
 import { useEffect, useRef } from 'react'
-import { useForm } from 'react-hook-form'
+import { type Resolver, useForm } from 'react-hook-form'
 import type { z } from 'zod'
 
 type ClassFormValues = z.input<typeof createVehicleClassSchema>
 type ClassFormOutput = z.output<typeof createVehicleClassSchema>
 
-interface ClassFormProps {
-  onSubmit: (data: CreateVehicleClassInput) => Promise<void>
+// #413: one form, two modes. Create validates with createVehicleClassSchema and
+// emits CreateVehicleClassInput; edit validates with updateVehicleClassSchema
+// (partial, no defaults, no operatorId) and emits UpdateVehicleClassInput. The
+// discriminated union ties each mode to its onSubmit input type and keeps the
+// #407 operator picker create-only — operatorId is not patchable, so edit mode
+// never accepts or renders it.
+type ClassFormBaseProps = {
   onCancel?: () => void
   defaultValues?: Partial<CreateVehicleClassInput>
   isSubmitting?: boolean
-  // #407: operators the caller may create under. Supplied only by the add
-  // dialog (create mode). One operator → hidden + submitted silently; 2+ →
-  // the admin must choose (gate before operator #2).
-  operators?: readonly OperatorOption[] | undefined
-  // #407 P2: set when the server rejected the create with OPERATOR_REQUIRED
-  // (a second operator now exists). Forces the picker open with an inline
-  // prompt even if the still-stale `operators` prop carries a single entry.
-  operatorRequired?: boolean
 }
+type ClassFormProps =
+  | (ClassFormBaseProps & {
+      mode?: 'create'
+      onSubmit: (data: CreateVehicleClassInput) => Promise<void>
+      // #407: operators the caller may create under. Supplied only by the add
+      // dialog. One operator → hidden + submitted silently; 2+ → the admin must
+      // choose (gate before operator #2).
+      operators?: readonly OperatorOption[] | undefined
+      // #407 P2: set when the server rejected the create with OPERATOR_REQUIRED
+      // (a second operator now exists). Forces the picker open with an inline
+      // prompt even if the still-stale `operators` prop carries a single entry.
+      operatorRequired?: boolean
+    })
+  | (ClassFormBaseProps & {
+      mode: 'edit'
+      onSubmit: (data: UpdateVehicleClassInput) => Promise<void>
+    })
 
 // The ACRISS <select>'s "None" option has an empty value. Coerce it to null so
 // the schema's .nullish() accepts it instead of failing the regex on ''.
@@ -42,14 +58,12 @@ function nullableString(v: unknown) {
 
 const ACRISS_CODE_LIST = Object.keys(ACRISS_CODES) as (keyof typeof ACRISS_CODES)[]
 
-export function ClassForm({
-  onSubmit,
-  onCancel,
-  defaultValues,
-  isSubmitting,
-  operators,
-  operatorRequired,
-}: ClassFormProps) {
+export function ClassForm(props: ClassFormProps) {
+  const { onCancel, defaultValues, isSubmitting } = props
+  const mode = props.mode ?? 'create'
+  // #407 picker inputs are create-only; edit mode never shows or syncs them.
+  const operators = props.mode === 'edit' ? undefined : props.operators
+  const operatorRequired = props.mode === 'edit' ? false : props.operatorRequired
   const t = useTranslations('business.classes')
   // ACRISS labels live under the top-level `acriss.*` namespace, not
   // `business.classes`, so resolve them through a separate translator.
@@ -58,9 +72,10 @@ export function ClassForm({
   const showOperatorPicker =
     (operators !== undefined && operators.length > 1) || operatorRequired === true
 
-  // MEDIUM 3: three-type-parameter useForm lets RHF narrow the submit
-  // handler to the schema's OUTPUT type (CreateVehicleClassInput) — no
-  // `as` assertion needed at handleSubmit.
+  // MEDIUM 3: three-type-parameter useForm narrows the submit handler to the
+  // schema's OUTPUT type (CreateVehicleClassInput) — no `as` at handleSubmit.
+  // Edit reuses the same field shape with the partial update resolver; the lone
+  // cast bridges that resolver's value type to the create shape.
   const {
     register,
     handleSubmit,
@@ -68,7 +83,9 @@ export function ClassForm({
     getValues,
     formState: { errors },
   } = useForm<ClassFormValues, unknown, ClassFormOutput>({
-    resolver: zodResolver(createVehicleClassSchema),
+    resolver: zodResolver(
+      mode === 'edit' ? updateVehicleClassSchema : createVehicleClassSchema,
+    ) as Resolver<ClassFormValues, unknown, ClassFormOutput>,
     defaultValues: {
       name: '',
       slug: '',
@@ -121,9 +138,12 @@ export function ClassForm({
         // description" rather than an empty string value.
         const trimmed = data.description?.trim()
         const { description: _drop, ...rest } = data
-        const payload: CreateVehicleClassInput =
-          trimmed && trimmed.length > 0 ? { ...rest, description: trimmed } : rest
-        await onSubmit(payload)
+        const payload = trimmed && trimmed.length > 0 ? { ...rest, description: trimmed } : rest
+        // `payload` is the create OUTPUT shape (a structural superset of the
+        // update input). Narrow on mode to call the correctly-typed onSubmit;
+        // in edit mode the update resolver has already stripped operatorId.
+        if (props.mode === 'edit') await props.onSubmit(payload)
+        else await props.onSubmit(payload)
       })}
       className="space-y-4"
     >

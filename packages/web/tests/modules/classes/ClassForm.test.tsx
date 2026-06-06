@@ -261,3 +261,59 @@ describe('ClassForm — operator picker', () => {
     expect(screen.getAllByText('form.operatorRequired').length).toBeGreaterThan(0)
   })
 })
+
+// Issue #413: edit mode validates with the update schema and never touches the
+// create-only operator picker (operatorId is not patchable).
+describe('ClassForm — edit mode (#413)', () => {
+  afterEach(() => {
+    cleanup()
+  })
+
+  const editDefaults = {
+    name: 'Standard',
+    slug: 'standard',
+    seats: 7,
+    luggageCapacity: 3,
+    transmission: 'MANUAL' as const,
+    sortOrder: 5,
+  }
+
+  it('never renders the operator picker in edit mode', () => {
+    render(<ClassForm mode="edit" onSubmit={vi.fn()} defaultValues={editDefaults} />)
+    expect(screen.queryByLabelText('form.operator')).not.toBeInTheDocument()
+  })
+
+  it('submits an edit without an operatorId (not patchable)', async () => {
+    const onSubmit = vi.fn().mockResolvedValue(undefined)
+    const user = userEvent.setup()
+
+    render(<ClassForm mode="edit" onSubmit={onSubmit} defaultValues={editDefaults} />)
+
+    await user.clear(screen.getByLabelText('form.seats'))
+    await user.type(screen.getByLabelText('form.seats'), '8')
+    await user.click(screen.getByRole('button', { name: 'form.save' }))
+
+    await waitFor(() => {
+      expect(onSubmit).toHaveBeenCalledTimes(1)
+    })
+    const data = onSubmit.mock.calls[0][0]
+    expect('operatorId' in data).toBe(false)
+    expect(data).toMatchObject({ name: 'Standard', slug: 'standard', seats: 8 })
+  })
+
+  it('still rejects an invalid slug in edit mode', async () => {
+    const onSubmit = vi.fn().mockResolvedValue(undefined)
+    const user = userEvent.setup()
+
+    render(<ClassForm mode="edit" onSubmit={onSubmit} defaultValues={editDefaults} />)
+
+    const slug = screen.getByLabelText('form.slug')
+    await user.clear(slug)
+    await user.type(slug, 'Not A Slug')
+    await user.click(screen.getByRole('button', { name: 'form.save' }))
+
+    await waitFor(() => {
+      expect(onSubmit).not.toHaveBeenCalled()
+    })
+  })
+})
