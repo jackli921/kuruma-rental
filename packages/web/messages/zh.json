@@ -235,6 +235,7 @@
         "contactRequired": "至少需要邮箱或电话",
         "fillAllFields": "车辆、开始时间和结束时间为必填项",
         "vehicleUnavailable": "所选时间段该车辆不可用",
+        "vehicleNoLocation": "该车辆未设置取车地点；预订前请先设置",
         "unexpectedError": "发生意外错误"
       },
       "newBooking": "新建预订"

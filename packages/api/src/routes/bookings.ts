@@ -70,8 +70,11 @@ export function createBookingRoutes(service: BookingService) {
       if (!parsed.ok) return parsed.response
 
       // Staff/admin can create bookings on behalf of a customer (manual bookings).
-      // Non-staff always book as themselves and source is forced to DIRECT
-      // to prevent advance-booking-hours bypass via source=MANUAL.
+      // Non-staff always book as themselves and source is forced to DIRECT to
+      // prevent advance-booking-hours bypass via source=MANUAL. OPERATOR_* are
+      // deliberately NOT manual bookers: UserRepository is not tenant-scoped, so
+      // letting an operator resolve an arbitrary renterId reopens the #396
+      // cross-tenant user-enumeration vector (operator-user-isolation.test.ts).
       const isStaff = STAFF_ROLES.has(ctx.role)
       const renterId = isStaff && parsed.data.renterId ? parsed.data.renterId : ctx.userId
       const source = isStaff ? parsed.data.source : 'DIRECT'

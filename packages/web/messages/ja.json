@@ -235,6 +235,7 @@
         "contactRequired": "メールか電話番号が必要です",
         "fillAllFields": "車両、開始時間、終了時間は必須です",
         "vehicleUnavailable": "選択した期間は利用できません",
+        "vehicleNoLocation": "この車両には受取場所が設定されていません。予約前に設定してください",
         "unexpectedError": "予期しないエラーが発生しました"
       },
       "newBooking": "新規予約"

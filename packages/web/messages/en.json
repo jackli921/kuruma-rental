@@ -235,6 +235,7 @@
         "contactRequired": "At least email or phone is required",
         "fillAllFields": "Vehicle, start time, and end time are required",
         "vehicleUnavailable": "Vehicle is not available for the selected dates",
+        "vehicleNoLocation": "This vehicle has no pickup location set; assign one before booking",
         "unexpectedError": "An unexpected error occurred"
       },
       "newBooking": "New Booking"
