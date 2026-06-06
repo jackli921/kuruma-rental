@@ -33,15 +33,19 @@ export function getLocaleFromPath(pathname: string): string {
 }
 
 export function classifyRoute(path: string): RouteClassification {
+  // Authorize on a case-normalized path so a case-variant (`/Admin`) can't slip
+  // past the gate as `public` (#481 review: normalize-before-authorize). All the
+  // prefix constants are lowercase, so lowercasing the input is sufficient.
+  const normalized = path.toLowerCase()
   // Segment-aware so `/administration` / `/admin-help` are NOT gated as admin
   // (#481 review P3): only the exact `/admin` or a real `/admin/...` subpath.
-  if (path === ADMIN_PREFIX || path.startsWith(`${ADMIN_PREFIX}/`)) {
+  if (normalized === ADMIN_PREFIX || normalized.startsWith(`${ADMIN_PREFIX}/`)) {
     return { type: 'admin' }
   }
-  if (BUSINESS_PATHS.some((p) => path.startsWith(p))) {
+  if (BUSINESS_PATHS.some((p) => normalized.startsWith(p))) {
     return { type: 'business' }
   }
-  if (RENTER_PATHS.some((p) => path.startsWith(p))) {
+  if (RENTER_PATHS.some((p) => normalized.startsWith(p))) {
     return { type: 'renter' }
   }
   return { type: 'public' }

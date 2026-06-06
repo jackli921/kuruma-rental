@@ -83,6 +83,17 @@ describe('classifyRoute', () => {
     expect(classifyRoute('/admin-help')).toEqual({ type: 'public' })
   })
 
+  test('classifies a protected path regardless of case (#481 review: normalize-before-authorize)', () => {
+    // A non-admin must not slip past the gate via a case-variant path that the
+    // gate would otherwise read as `public`. Authorize on a normalized path.
+    expect(classifyRoute('/Admin')).toEqual({ type: 'admin' })
+    expect(classifyRoute('/ADMIN/revenue')).toEqual({ type: 'admin' })
+    expect(classifyRoute('/Dashboard')).toEqual({ type: 'business' })
+    expect(classifyRoute('/Bookings')).toEqual({ type: 'renter' })
+    // Case-normalization must not resurrect the lookalike over-match.
+    expect(classifyRoute('/Administration')).toEqual({ type: 'public' })
+  })
+
   test('identifies public paths', () => {
     expect(classifyRoute('/')).toEqual({ type: 'public' })
     expect(classifyRoute('/vehicles')).toEqual({ type: 'public' })
