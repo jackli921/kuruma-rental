@@ -5,42 +5,62 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { zodResolver } from '@hookform/resolvers/zod'
-import { type CreateLocationInput, createLocationSchema } from '@kuruma/shared/validators/location'
+import {
+  type CreateLocationInput,
+  type UpdateLocationInput,
+  createLocationSchema,
+  updateLocationSchema,
+} from '@kuruma/shared/validators/location'
 import { useTranslations } from 'next-intl'
 import { useState } from 'react'
-import { useForm } from 'react-hook-form'
+import { type Resolver, useForm } from 'react-hook-form'
 import type { z } from 'zod'
 
 type LocationFormValues = z.input<typeof createLocationSchema>
 type LocationFormOutput = z.output<typeof createLocationSchema>
 
-interface LocationFormProps {
-  onSubmit: (data: CreateLocationInput) => Promise<void>
+// #413: one form, two modes. Create validates with createLocationSchema and
+// emits CreateLocationInput; edit validates with the no-default
+// updateLocationSchema and emits UpdateLocationInput (a PATCH must not inject
+// defaults). The discriminated union ties each mode to its onSubmit input type,
+// so an edit dialog can't be wired to the create type.
+type LocationFormBaseProps = {
   onCancel?: () => void
   defaultValues?: Partial<CreateLocationInput>
   isSubmitting?: boolean
 }
+type LocationFormProps =
+  | (LocationFormBaseProps & {
+      mode?: 'create'
+      onSubmit: (data: CreateLocationInput) => Promise<void>
+    })
+  | (LocationFormBaseProps & {
+      mode: 'edit'
+      onSubmit: (data: UpdateLocationInput) => Promise<void>
+    })
 
 const DEFAULT_OPEN = '09:00'
 const DEFAULT_CLOSE = '18:00'
 
-export function LocationForm({
-  onSubmit,
-  onCancel,
-  defaultValues,
-  isSubmitting,
-}: LocationFormProps) {
+export function LocationForm(props: LocationFormProps) {
+  const { onCancel, defaultValues, isSubmitting } = props
+  const mode = props.mode ?? 'create'
   const t = useTranslations('business.locations')
 
-  // Three-type-parameter useForm lets RHF narrow the submit handler to the
-  // schema's OUTPUT type (CreateLocationInput) — no `as` at handleSubmit.
+  // Three-type-parameter useForm narrows the submit handler to the schema's
+  // OUTPUT type (CreateLocationInput) — no `as` at handleSubmit. The fields are
+  // identical across modes (update is the same fields, partial + no defaults),
+  // so register/errors stay typed to the create shape and only the resolver
+  // swaps. The lone cast bridges the update resolver's value type to that shape.
   const {
     register,
     handleSubmit,
     setValue,
     formState: { errors },
   } = useForm<LocationFormValues, unknown, LocationFormOutput>({
-    resolver: zodResolver(createLocationSchema),
+    resolver: zodResolver(
+      mode === 'edit' ? updateLocationSchema : createLocationSchema,
+    ) as Resolver<LocationFormValues, unknown, LocationFormOutput>,
     defaultValues: {
       name: '',
       address: '',
@@ -66,7 +86,11 @@ export function LocationForm({
   return (
     <form
       onSubmit={handleSubmit(async (data) => {
-        await onSubmit(data)
+        // `data` is the create OUTPUT shape (a structural superset). In edit
+        // mode it also satisfies UpdateLocationInput (all-optional), so narrow
+        // on mode to call the correctly-typed onSubmit without a cast.
+        if (props.mode === 'edit') await props.onSubmit(data)
+        else await props.onSubmit(data)
       })}
       className="space-y-4"
     >

@@ -22,7 +22,10 @@ export function LocationRow({ location: l, onEdit, onArchive }: LocationRowProps
   const turnaroundHours = Math.round(l.defaultTurnaroundMinutes / MINUTES_PER_HOUR)
 
   return (
-    <div className="border border-border rounded-lg p-4 flex items-start gap-4 hover:bg-accent/30 transition-colors">
+    <div
+      data-testid="location-row"
+      className="border border-border rounded-lg p-4 flex items-start gap-4 hover:bg-accent/30 transition-colors"
+    >
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-2 flex-wrap">
           <h3 className="text-lg font-medium truncate">{l.name}</h3>

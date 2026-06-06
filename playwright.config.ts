@@ -7,6 +7,10 @@ const MOCK_API_URL = `http://localhost:${MOCK_API_PORT}`
 
 export default defineConfig({
   testDir: './e2e',
+  // The authenticated real-DB track has its own config (playwright.real-db.config.ts)
+  // with real servers + a seeded Neon branch. Exclude it here so the mock track
+  // never tries to run those specs against the unauthenticated mock API.
+  testIgnore: '**/real-db/**',
   fullyParallel: true,
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 2 : 0,
