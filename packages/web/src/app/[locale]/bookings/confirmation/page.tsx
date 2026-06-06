@@ -1,4 +1,5 @@
 import { auth } from '@/auth'
+import { PreAuthHandoffCard } from '@/components/bookings/PreAuthHandoffCard'
 import { buttonVariants } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Link } from '@/i18n/routing'
@@ -86,10 +87,18 @@ export default async function BookingConfirmationPage({ searchParams }: Confirma
           </CardContent>
         </Card>
 
+        <PreAuthHandoffCard
+          url={booking.operator?.preAuthHandoffUrl ?? null}
+          title={t('preAuthTitle')}
+          explain={t('preAuthExplain')}
+          ctaLabel={t('preAuthCta')}
+          cancellationContact={t('cancellationContact', { operator: booking.operator?.name ?? '' })}
+        />
+
         {booking.feeSnapshot.length > 0 && (
           <Card className="mt-4">
             <CardContent className="space-y-3 pt-2">
-              <h2 className="text-sm font-semibold">{t('fees.title')}</h2>
+              <h2 className="text-sm font-semibold">{t('potentialChargesTitle')}</h2>
               <ul className="space-y-2">
                 {booking.feeSnapshot.map((fee) => (
                   <li
