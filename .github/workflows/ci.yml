@@ -53,6 +53,13 @@ jobs:
           AUTH_SECRET: ci-placeholder-secret-not-real
           DATABASE_URL: postgresql://placeholder:placeholder@localhost:5432/placeholder
 
+      # Slice 8 §7: renter first-load JS budget. Advisory until the shared
+      # baseline is trimmed under 500 KB (perf NFR is "measure + record, not
+      # yet SLO-gated"); reads the .next build-manifest produced above.
+      - name: Check renter bundle budget (advisory)
+        run: bun run perf:bundle
+        continue-on-error: true
+
   # Non-bypassable drift gate. See scripts/db-verify.ts and the "Database
   # Migrations" section of CLAUDE.md for why this exists. Two production
   # incidents (see issue #27) traced to schema changes that shipped without
