@@ -11,5 +11,4 @@ const port = Number(process.env.REAL_API_PORT ?? 8788)
 const app = createApp()
 
 Bun.serve({ port, fetch: app.fetch })
-// biome-ignore lint/suspicious/noConsole: webServer readiness signal for Playwright
 console.log(`[e2e] real API listening on http://localhost:${port}`)
