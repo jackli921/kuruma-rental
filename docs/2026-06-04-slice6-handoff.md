@@ -3,6 +3,59 @@
 **Resume here after `/clear`.** Worktree: `/Users/jack/Dev/kuruma-slice6`
 Branch: `feat/slice6-booking-events` (base `origin/marketplace-pivot` @ `2fbbedd`).
 
+## SESSION UPDATE 2026-06-05 (cont. 3) — Task #6.4 DONE: Neon integration tests GREEN — READ THIS FIRST
+
+All `tests/integration/*` (14 files, **156 tests**) pass against the isolated
+`slice6-dev` Neon branch, and the api unit/route suite stays green (**790**).
+Committed CLEAN (lint-staged, NO `--no-verify`) in checkpoints on
+`feat/slice6-booking-events`:
+- `3080593` setup helpers + bookings.test.ts (booking repo + HTTP 409, 12/12)
+- `f8fe0e4` availability.test.ts → location-derived turnaround (10/10)
+- `b145c00` drop bufferMinutes from vehicle integration tests (27/27)
+- `59d50f2` rls-context + vehicle-detail + tenancy-isolation reshape (51/51)
+
+### Contract realities that bit us (don't relearn these)
+1. **effectiveEndAt is DB-trigger-derived** (migration 0036): the trigger sets
+   `effectiveEndAt = endAt + pickupLocation.defaultTurnaroundMinutes`, OVERWRITING
+   whatever the insert passes. Tests seed a location with an explicit turnaround
+   (120min) and compute expected = endAt + turnaround. A 60-min result must FAIL —
+   the legacy `vehicle.bufferMinutes` (60) is gone.
+2. **bookings need NOT NULL pickup/dropoff location FKs** sealed to the operator.
+   New `setup.ts` helpers `seedLocation(prefix, turnaroundMinutes?, operatorId?)`
+   + `cleanupLocations()`. Every booking-seeding test seeds a location first.
+3. **booking repo `create` input === `Omit<Booking,'id'|'createdAt'|'updatedAt'>`**
+   = exactly what `tests/helpers/booking.ts` `bookingInput()` returns → reused
+   everywhere. `nextBookingCode()` now has a random per-worker prefix so the
+   parallel files sharing one Neon branch don't collide on `bookingCode` UNIQUE.
+4. **HTTP POST /bookings in integration** must inject
+   `locationRepo: new DrizzleLocationRepository(db)` — the createApp overrides
+   branch otherwise builds an empty in-memory locationRepo and the submit tx 400s
+   on the pickup-location lookup.
+5. **STAFF ctx needs `bypassScope: true`** for booking bypass — `bookingReadScope`
+   gates bypass on the flag, NOT the role string (rls-context fix).
+6. **tenancy-isolation's BookingRepository fail-closed block was superseded** → the
+   repo is operator-scoped now; replaced with a real-PG three-way-scope block.
+   Thread/Message stay fail-closed (slice 7).
+
+### Run the integration suite
+```
+cd packages/api
+export DATABASE_URL="$(grep -E '^DATABASE_URL=' ../../.env | head -1 | cut -d= -f2-)"
+bunx vitest run --config vitest.integration.config.ts        # all 14 files
+```
+The blessed `bun run --filter @kuruma/api test:integration` does NOT auto-load the
+worktree `.env` here — extract `DATABASE_URL` as above. Host MUST be
+`ep-small-dawn-anzoxhc5` = slice6-dev, NOT production `ep-winter-surf-anys1b0p`.
+
+### NEXT = Task #8 (web `bookings/new` form) — NOT started
+Then #9 form-onwards E2E, #10 full gate (`bun run test`, lint, lint:fk-indexes,
+i18n-parity, export-drift, db:verify — the full #10 gate is still PENDING), #11
+review (code-reviewer + architect) → rebase onto `origin/marketplace-pivot` (never
+force-push) → **DRAFT** PR. `#392` stays OPEN; do NOT claim the E2E hard gate
+until #391 lands.
+
+---
+
 ## SESSION UPDATE 2026-06-05 (cont. 2) — Task #6 CORE LANDED + bufferMinutes fully removed — READ THIS FIRST
 
 Commit `2a72f55` (CLEAN — `lint-staged` passed, NO `--no-verify`): the full-monorepo `src`
