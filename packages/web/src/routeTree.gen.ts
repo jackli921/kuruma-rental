@@ -12,6 +12,11 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as LocaleRouteImport } from './routes/$locale'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as LocaleIndexRouteImport } from './routes/$locale/index'
+import { Route as LocaleLoginRouteImport } from './routes/$locale/login'
+import { Route as LocaleRenterRouteImport } from './routes/$locale/_renter'
+import { Route as LocaleBusinessRouteImport } from './routes/$locale/_business'
+import { Route as LocaleRenterBookingsRouteImport } from './routes/$locale/_renter/bookings'
+import { Route as LocaleBusinessDashboardRouteImport } from './routes/$locale/_business/dashboard'
 
 const LocaleRoute = LocaleRouteImport.update({
   id: '/$locale',
@@ -28,28 +33,82 @@ const LocaleIndexRoute = LocaleIndexRouteImport.update({
   path: '/',
   getParentRoute: () => LocaleRoute,
 } as any)
+const LocaleLoginRoute = LocaleLoginRouteImport.update({
+  id: '/login',
+  path: '/login',
+  getParentRoute: () => LocaleRoute,
+} as any)
+const LocaleRenterRoute = LocaleRenterRouteImport.update({
+  id: '/_renter',
+  getParentRoute: () => LocaleRoute,
+} as any)
+const LocaleBusinessRoute = LocaleBusinessRouteImport.update({
+  id: '/_business',
+  getParentRoute: () => LocaleRoute,
+} as any)
+const LocaleRenterBookingsRoute = LocaleRenterBookingsRouteImport.update({
+  id: '/bookings',
+  path: '/bookings',
+  getParentRoute: () => LocaleRenterRoute,
+} as any)
+const LocaleBusinessDashboardRoute = LocaleBusinessDashboardRouteImport.update({
+  id: '/dashboard',
+  path: '/dashboard',
+  getParentRoute: () => LocaleBusinessRoute,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/$locale': typeof LocaleRouteWithChildren
+  '/$locale/login': typeof LocaleLoginRoute
   '/$locale/': typeof LocaleIndexRoute
+  '/$locale/dashboard': typeof LocaleBusinessDashboardRoute
+  '/$locale/bookings': typeof LocaleRenterBookingsRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/$locale': typeof LocaleIndexRoute
+  '/$locale/login': typeof LocaleLoginRoute
+  '/$locale/dashboard': typeof LocaleBusinessDashboardRoute
+  '/$locale/bookings': typeof LocaleRenterBookingsRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/$locale': typeof LocaleRouteWithChildren
+  '/$locale/_business': typeof LocaleBusinessRouteWithChildren
+  '/$locale/_renter': typeof LocaleRenterRouteWithChildren
+  '/$locale/login': typeof LocaleLoginRoute
   '/$locale/': typeof LocaleIndexRoute
+  '/$locale/_business/dashboard': typeof LocaleBusinessDashboardRoute
+  '/$locale/_renter/bookings': typeof LocaleRenterBookingsRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/$locale' | '/$locale/'
+  fullPaths:
+    | '/'
+    | '/$locale'
+    | '/$locale/login'
+    | '/$locale/'
+    | '/$locale/dashboard'
+    | '/$locale/bookings'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/$locale'
-  id: '__root__' | '/' | '/$locale' | '/$locale/'
+  to:
+    | '/'
+    | '/$locale'
+    | '/$locale/login'
+    | '/$locale/dashboard'
+    | '/$locale/bookings'
+  id:
+    | '__root__'
+    | '/'
+    | '/$locale'
+    | '/$locale/_business'
+    | '/$locale/_renter'
+    | '/$locale/login'
+    | '/$locale/'
+    | '/$locale/_business/dashboard'
+    | '/$locale/_renter/bookings'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -80,14 +139,79 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof LocaleIndexRouteImport
       parentRoute: typeof LocaleRoute
     }
+    '/$locale/login': {
+      id: '/$locale/login'
+      path: '/login'
+      fullPath: '/$locale/login'
+      preLoaderRoute: typeof LocaleLoginRouteImport
+      parentRoute: typeof LocaleRoute
+    }
+    '/$locale/_renter': {
+      id: '/$locale/_renter'
+      path: ''
+      fullPath: '/$locale'
+      preLoaderRoute: typeof LocaleRenterRouteImport
+      parentRoute: typeof LocaleRoute
+    }
+    '/$locale/_business': {
+      id: '/$locale/_business'
+      path: ''
+      fullPath: '/$locale'
+      preLoaderRoute: typeof LocaleBusinessRouteImport
+      parentRoute: typeof LocaleRoute
+    }
+    '/$locale/_renter/bookings': {
+      id: '/$locale/_renter/bookings'
+      path: '/bookings'
+      fullPath: '/$locale/bookings'
+      preLoaderRoute: typeof LocaleRenterBookingsRouteImport
+      parentRoute: typeof LocaleRenterRoute
+    }
+    '/$locale/_business/dashboard': {
+      id: '/$locale/_business/dashboard'
+      path: '/dashboard'
+      fullPath: '/$locale/dashboard'
+      preLoaderRoute: typeof LocaleBusinessDashboardRouteImport
+      parentRoute: typeof LocaleBusinessRoute
+    }
   }
 }
 
+interface LocaleBusinessRouteChildren {
+  LocaleBusinessDashboardRoute: typeof LocaleBusinessDashboardRoute
+}
+
+const LocaleBusinessRouteChildren: LocaleBusinessRouteChildren = {
+  LocaleBusinessDashboardRoute: LocaleBusinessDashboardRoute,
+}
+
+const LocaleBusinessRouteWithChildren = LocaleBusinessRoute._addFileChildren(
+  LocaleBusinessRouteChildren,
+)
+
+interface LocaleRenterRouteChildren {
+  LocaleRenterBookingsRoute: typeof LocaleRenterBookingsRoute
+}
+
+const LocaleRenterRouteChildren: LocaleRenterRouteChildren = {
+  LocaleRenterBookingsRoute: LocaleRenterBookingsRoute,
+}
+
+const LocaleRenterRouteWithChildren = LocaleRenterRoute._addFileChildren(
+  LocaleRenterRouteChildren,
+)
+
 interface LocaleRouteChildren {
+  LocaleBusinessRoute: typeof LocaleBusinessRouteWithChildren
+  LocaleRenterRoute: typeof LocaleRenterRouteWithChildren
+  LocaleLoginRoute: typeof LocaleLoginRoute
   LocaleIndexRoute: typeof LocaleIndexRoute
 }
 
 const LocaleRouteChildren: LocaleRouteChildren = {
+  LocaleBusinessRoute: LocaleBusinessRouteWithChildren,
+  LocaleRenterRoute: LocaleRenterRouteWithChildren,
+  LocaleLoginRoute: LocaleLoginRoute,
   LocaleIndexRoute: LocaleIndexRoute,
 }
 
