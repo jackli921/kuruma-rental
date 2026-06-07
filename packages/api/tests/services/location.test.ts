@@ -2,7 +2,9 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { CallerContext } from '../../src/middleware/auth'
 import { PG_ERROR } from '../../src/pg-errors'
 import { InMemoryLocationRepository } from '../../src/repositories/in-memory'
+import { InMemoryBookingRepository } from '../../src/repositories/in-memory/booking'
 import { LocationService } from '../../src/services/location'
+import type { Booking } from '../../src/stores'
 
 const uniqueViolation = () =>
   Object.assign(new Error('duplicate key value violates unique constraint'), {
@@ -31,13 +33,48 @@ function createInput(operatorId: string, name: string) {
   }
 }
 
+function seedBooking(store: Map<string, Booking>, overrides: Partial<Booking>): void {
+  const now = new Date('2026-07-01T00:00:00Z')
+  const booking: Booking = {
+    id: crypto.randomUUID(),
+    operatorId: opA,
+    renterId: 'renter-1',
+    classId: 'cls-1',
+    requestedVehicleId: 'veh-1',
+    assignedVehicleId: 'veh-1',
+    pickupLocationId: 'loc-x',
+    dropoffLocationId: 'loc-x',
+    startAt: now,
+    endAt: now,
+    effectiveEndAt: now,
+    status: 'CONFIRMED',
+    source: 'DIRECT',
+    bookingCode: `BK${store.size}`,
+    insuranceOptionId: null,
+    insuranceSnapshot: null,
+    feeSnapshot: [],
+    externalId: null,
+    notes: null,
+    totalPrice: 12000,
+    cancellationFee: null,
+    cancelledAt: null,
+    idempotencyKey: null,
+    createdAt: now,
+    updatedAt: now,
+    ...overrides,
+  }
+  store.set(booking.id, booking)
+}
+
 describe('LocationService', () => {
   let repo: InMemoryLocationRepository
+  let bookingStore: Map<string, Booking>
   let service: LocationService
 
   beforeEach(() => {
     repo = new InMemoryLocationRepository()
-    service = new LocationService(repo)
+    bookingStore = new Map()
+    service = new LocationService(repo, new InMemoryBookingRepository(bookingStore))
   })
 
   describe('create', () => {
@@ -170,6 +207,47 @@ describe('LocationService', () => {
       expect(result.ok).toBe(false)
       if (!result.ok) expect(result.status).toBe(404)
       expect(archiveSpy).not.toHaveBeenCalled()
+    })
+
+    it('refuses to archive a location with active bookings (409 + code, #412)', async () => {
+      const created = await service.create(ctxFor(opA), createInput(opA, 'Namba'))
+      if (!created.ok) throw new Error('seed failed')
+      seedBooking(bookingStore, { pickupLocationId: created.location.id, status: 'CONFIRMED' })
+
+      const archiveSpy = vi.spyOn(repo, 'archive')
+      const result = await service.archive(ctxFor(opA), created.location.id)
+
+      expect(result.ok).toBe(false)
+      if (!result.ok) {
+        expect(result.status).toBe(409)
+        expect(result.code).toBe('LOCATION_HAS_ACTIVE_BOOKINGS')
+        expect(result.activeBookingsCount).toBe(1)
+      }
+      expect(archiveSpy).not.toHaveBeenCalled()
+    })
+
+    it('counts a booking that references the location only as DROPOFF (#412)', async () => {
+      const created = await service.create(ctxFor(opA), createInput(opA, 'Namba'))
+      if (!created.ok) throw new Error('seed failed')
+      seedBooking(bookingStore, {
+        pickupLocationId: 'other-loc',
+        dropoffLocationId: created.location.id,
+        status: 'ACTIVE',
+      })
+
+      const result = await service.archive(ctxFor(opA), created.location.id)
+      expect(result.ok).toBe(false)
+      if (!result.ok) expect(result.status).toBe(409)
+    })
+
+    it('archives when only non-active (CANCELLED) bookings reference the location (#412)', async () => {
+      const created = await service.create(ctxFor(opA), createInput(opA, 'Namba'))
+      if (!created.ok) throw new Error('seed failed')
+      seedBooking(bookingStore, { pickupLocationId: created.location.id, status: 'CANCELLED' })
+
+      const result = await service.archive(ctxFor(opA), created.location.id)
+      expect(result.ok).toBe(true)
+      if (result.ok) expect(result.location.status).toBe('ARCHIVED')
     })
   })
 })
