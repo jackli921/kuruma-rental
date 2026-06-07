@@ -1,11 +1,19 @@
+import type { BrowserContext } from '@playwright/test'
 import { test as setup } from '@playwright/test'
-import { STORAGE_STATE } from './constants'
-import { SESSION_COOKIE_NAME, mintOperatorSessionToken } from './mint-session'
+import { OPERATOR_STORAGE_STATE, RENTER_STORAGE_STATE } from './constants'
+import {
+  SESSION_COOKIE_NAME,
+  mintOperatorSessionToken,
+  mintRenterSessionToken,
+} from './mint-session'
 
 const ONE_HOUR_S = 60 * 60
 
-setup('mint operator session cookie', async ({ context }) => {
-  const value = await mintOperatorSessionToken()
+async function saveSession(
+  context: BrowserContext,
+  value: string,
+  storageStatePath: string,
+): Promise<void> {
   await context.addCookies([
     {
       name: SESSION_COOKIE_NAME,
@@ -17,5 +25,13 @@ setup('mint operator session cookie', async ({ context }) => {
       expires: Math.floor(Date.now() / 1000) + ONE_HOUR_S,
     },
   ])
-  await context.storageState({ path: STORAGE_STATE })
+  await context.storageState({ path: storageStatePath })
+}
+
+setup('mint operator session cookie', async ({ context }) => {
+  await saveSession(context, await mintOperatorSessionToken(), OPERATOR_STORAGE_STATE)
+})
+
+setup('mint renter session cookie', async ({ context }) => {
+  await saveSession(context, await mintRenterSessionToken(), RENTER_STORAGE_STATE)
 })
