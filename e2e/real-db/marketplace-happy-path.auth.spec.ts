@@ -96,7 +96,7 @@ test.describe('marketplace happy path — renter books, operator sees it (real D
 
       bookingCode = (await renter.locator('span.font-mono').first().innerText()).trim()
       expect(bookingCode).toMatch(BOOKING_CODE_RE)
-      await expect(renter.getByText('Confirmed')).toBeVisible()
+      await expect(renter.getByText('Confirmed', { exact: true })).toBeVisible()
     })
 
     await test.step('6a. operator portal shows the new booking on the calendar', async () => {
