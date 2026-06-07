@@ -18,6 +18,7 @@ import {
   DEMO_OPERATORS,
   DEMO_RENTERS,
 } from './seed-data'
+import { seedId } from './seed-id'
 
 /**
  * Slice 8 demo bookings + events + notifications (#390, §3.5). Consumes the
@@ -52,7 +53,7 @@ function insuranceSnapshotFor(insuranceOptionId: string | null): InsuranceSnapsh
   const opt = insuranceById.get(insuranceOptionId)
   if (!opt) throw new Error(`Unknown insurance option ${insuranceOptionId}`)
   return {
-    insuranceOptionId: opt.id,
+    insuranceOptionId: seedId(opt.id),
     name: opt.name,
     dailyPriceJpy: opt.dailyPriceJpy,
     deductibleJpy: opt.deductibleJpy,
@@ -69,7 +70,7 @@ function feeSnapshotFor(operatorId: string, classId: string): FeeSnapshotItem[] 
     feeType: f.feeType,
     unit: f.unit,
     amountJpy: f.amountJpy,
-    vehicleClassId: f.vehicleClassId ?? null,
+    vehicleClassId: f.vehicleClassId ? seedId(f.vehicleClassId) : null,
   }))
 }
 
@@ -145,9 +146,9 @@ async function seed() {
   const notificationValues = []
 
   for (const b of DEMO_BOOKINGS) {
-    const requested = takeVehicle(b.operatorId, b.classId)
+    const requested = takeVehicle(seedId(b.operatorId), seedId(b.classId))
     // Substitution demo: assign a DIFFERENT car of the same operator+class.
-    const assigned = b.substitute ? takeVehicle(b.operatorId, b.classId) : requested
+    const assigned = b.substitute ? takeVehicle(seedId(b.operatorId), seedId(b.classId)) : requested
     const startAt = dayAt(b.startOffsetDays, b.startHour)
     const endAt = addHours(startAt, b.durationHours)
     const insuranceSnapshot = insuranceSnapshotFor(b.insuranceOptionId)
@@ -155,10 +156,10 @@ async function seed() {
     const isCancelled = b.status === 'CANCELLED'
 
     bookingValues.push({
-      id: b.id,
-      operatorId: b.operatorId,
-      renterId: b.renterId,
-      classId: b.classId,
+      id: seedId(b.id),
+      operatorId: seedId(b.operatorId),
+      renterId: seedId(b.renterId),
+      classId: seedId(b.classId),
       requestedVehicleId: requested.id,
       assignedVehicleId: assigned.id,
       pickupLocationId: assigned.pickupLocationId,
@@ -172,7 +173,7 @@ async function seed() {
       status: b.status,
       source: 'DIRECT' as const,
       totalPrice: b.totalPriceJpy,
-      insuranceOptionId: b.insuranceOptionId,
+      insuranceOptionId: b.insuranceOptionId ? seedId(b.insuranceOptionId) : null,
       insuranceSnapshot,
       feeSnapshot,
       cancelledAt: isCancelled ? addHours(startAt, -24) : null,
@@ -182,7 +183,7 @@ async function seed() {
     const createdPayload: BookingCreatedPayload = {
       requestedVehicleId: requested.id,
       assignedVehicleId: assigned.id,
-      classId: b.classId,
+      classId: seedId(b.classId),
       startAt: startAt.toISOString(),
       endAt: endAt.toISOString(),
       totalPrice: b.totalPriceJpy,
@@ -190,10 +191,10 @@ async function seed() {
       feeSnapshot,
     }
     eventValues.push({
-      bookingId: b.id,
+      bookingId: seedId(b.id),
       type: 'BOOKING_CREATED' as const,
       payload: createdPayload,
-      actorId: b.renterId,
+      actorId: seedId(b.renterId),
     })
     if (b.substitute) {
       const substitutedPayload: VehicleSubstitutedPayload = {
@@ -203,7 +204,7 @@ async function seed() {
       }
       // actorId null = system/operator action in the demo.
       eventValues.push({
-        bookingId: b.id,
+        bookingId: seedId(b.id),
         type: 'VEHICLE_SUBSTITUTED' as const,
         payload: substitutedPayload,
         actorId: null,
@@ -213,8 +214,8 @@ async function seed() {
     // One operator alert per booking so the portal badge + notification list are
     // populated. status SENT (terminal) — the demo skips the QUEUED->SENDING lease.
     notificationValues.push({
-      bookingId: b.id,
-      operatorId: b.operatorId,
+      bookingId: seedId(b.id),
+      operatorId: seedId(b.operatorId),
       kind: 'OPERATOR_BOOKING_ALERT' as const,
       channel: 'EMAIL',
       recipient: ownerEmailByOperator.get(b.operatorId) ?? 'owner@example.test',
@@ -222,7 +223,7 @@ async function seed() {
       status: 'SENT' as const,
       providerMessageId: `demo-${b.id}`,
       attempts: 1,
-      idempotencyKey: `booking:${b.id}:OPERATOR_BOOKING_ALERT`,
+      idempotencyKey: `booking:${seedId(b.id)}:OPERATOR_BOOKING_ALERT`,
     })
   }
 

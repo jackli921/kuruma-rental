@@ -17,6 +17,7 @@ import {
   DEMO_VEHICLES,
   DEMO_VEHICLE_CLASSES,
 } from './seed-data'
+import { seedId } from './seed-id'
 
 /**
  * Slice 8 marketplace demo seed (#390, plan §3-§4). Rewrites the legacy
@@ -54,7 +55,12 @@ async function seed() {
   for (const op of DEMO_OPERATORS) {
     await db
       .insert(operators)
-      .values({ id: op.id, slug: op.slug, name: op.name, preAuthHandoffUrl: op.preAuthHandoffUrl })
+      .values({
+        id: seedId(op.id),
+        slug: op.slug,
+        name: op.name,
+        preAuthHandoffUrl: op.preAuthHandoffUrl,
+      })
       .onConflictDoUpdate({
         target: operators.id,
         set: {
@@ -76,11 +82,16 @@ async function seed() {
         name: op.owner.name,
         email: op.owner.email,
         role: 'OPERATOR_OWNER',
-        operatorId: op.id,
+        operatorId: seedId(op.id),
       })
       .onConflictDoUpdate({
         target: users.email,
-        set: { name: op.owner.name, role: 'OPERATOR_OWNER', operatorId: op.id, updatedAt: now },
+        set: {
+          name: op.owner.name,
+          role: 'OPERATOR_OWNER',
+          operatorId: seedId(op.id),
+          updatedAt: now,
+        },
       })
   }
 
@@ -110,8 +121,8 @@ async function seed() {
     await db
       .insert(vehicleClasses)
       .values({
-        id: cls.id,
-        operatorId: cls.operatorId,
+        id: seedId(cls.id),
+        operatorId: seedId(cls.operatorId),
         name: cls.name,
         slug: cls.slug,
         description: cls.description,
@@ -142,8 +153,8 @@ async function seed() {
     await db
       .insert(locations)
       .values({
-        id: loc.id,
-        operatorId: loc.operatorId,
+        id: seedId(loc.id),
+        operatorId: seedId(loc.operatorId),
         name: loc.name,
         address: loc.address,
         timezone: loc.timezone,
@@ -167,8 +178,8 @@ async function seed() {
     await db
       .insert(insuranceOptions)
       .values({
-        id: opt.id,
-        operatorId: opt.operatorId,
+        id: seedId(opt.id),
+        operatorId: seedId(opt.operatorId),
         name: opt.name,
         description: opt.description,
         dailyPriceJpy: opt.dailyPriceJpy,
@@ -193,9 +204,9 @@ async function seed() {
     await db
       .insert(feeSchedules)
       .values({
-        id: fee.id,
-        operatorId: fee.operatorId,
-        vehicleClassId: fee.vehicleClassId ?? null,
+        id: seedId(fee.id),
+        operatorId: seedId(fee.operatorId),
+        vehicleClassId: fee.vehicleClassId ? seedId(fee.vehicleClassId) : null,
         feeType: fee.feeType,
         unit: fee.unit,
         amountJpy: fee.amountJpy,
@@ -214,10 +225,10 @@ async function seed() {
     await db
       .insert(vehicles)
       .values({
-        id: v.id,
-        operatorId: v.operatorId,
-        classId: v.classId,
-        pickupLocationId: v.pickupLocationId,
+        id: seedId(v.id),
+        operatorId: seedId(v.operatorId),
+        classId: seedId(v.classId),
+        pickupLocationId: seedId(v.pickupLocationId),
         name: v.name,
         make: v.make,
         model: v.model,
@@ -234,8 +245,8 @@ async function seed() {
       .onConflictDoUpdate({
         target: vehicles.id,
         set: {
-          classId: v.classId,
-          pickupLocationId: v.pickupLocationId,
+          classId: seedId(v.classId),
+          pickupLocationId: seedId(v.pickupLocationId),
           name: v.name,
           dailyRateJpy: v.dailyRateJpy,
           hourlyRateJpy: v.hourlyRateJpy,
