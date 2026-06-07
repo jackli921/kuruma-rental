@@ -104,7 +104,7 @@ async function seed() {
   console.log(`Creating ${DEMO_RENTERS.length} demo renters...`)
   await db.insert(users).values(
     DEMO_RENTERS.map((r) => ({
-      id: r.id,
+      id: seedId(r.id),
       name: r.name,
       email: r.email,
       language: r.language,
