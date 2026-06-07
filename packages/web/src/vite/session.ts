@@ -36,6 +36,23 @@ export async function fetchSession(): Promise<Session | null> {
   return isSessionEnvelope(body) ? body.data : null
 }
 
+/**
+ * End the session (spec §5.4). The API clears the `kuruma_session` cookie and
+ * replies 204. As a cookie-authenticated POST it is CSRF-gated, so the caller
+ * must echo the session's CSRF token in the `X-CSRF-Token` header — a value a
+ * cross-origin attacker can't read.
+ */
+export async function signOut(csrfToken: string): Promise<void> {
+  const response = await fetch('/auth/signout', {
+    method: 'POST',
+    credentials: 'include',
+    headers: { 'X-CSRF-Token': csrfToken },
+  })
+  if (!response.ok) {
+    throw new Error(`Sign out failed: ${response.status}`)
+  }
+}
+
 export function sessionQueryOptions() {
   return queryOptions({
     queryKey: ['session'],

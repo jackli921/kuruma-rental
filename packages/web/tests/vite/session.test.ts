@@ -1,4 +1,4 @@
-import { fetchSession } from '@/vite/session'
+import { fetchSession, signOut } from '@/vite/session'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 function jsonResponse(body: unknown, status = 200): Response {
@@ -90,5 +90,31 @@ describe('fetchSession', () => {
       vi.fn(async () => jsonResponse({ success: false }, 500)),
     )
     await expect(fetchSession()).rejects.toThrow()
+  })
+})
+
+describe('signOut', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals()
+  })
+
+  it('POSTs to /auth/signout echoing the CSRF token from the session', async () => {
+    const fetchMock = vi.fn(async () => new Response(null, { status: 204 }))
+    vi.stubGlobal('fetch', fetchMock)
+
+    await expect(signOut('csrf-123')).resolves.toBeUndefined()
+    expect(fetchMock).toHaveBeenCalledWith('/auth/signout', {
+      method: 'POST',
+      credentials: 'include',
+      headers: { 'X-CSRF-Token': 'csrf-123' },
+    })
+  })
+
+  it('throws when the CSRF token is rejected (403)', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => jsonResponse({ success: false, error: 'CSRF token mismatch' }, 403)),
+    )
+    await expect(signOut('stale')).rejects.toThrow('403')
   })
 })
