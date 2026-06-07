@@ -1,51 +1,55 @@
 # Slice 8 — Demo Seed, E2E Happy-Path & Polish (issue #390)
 
-**Date:** 2026-06-02
-**Status:** Draft v1 — awaiting green light to create the worktree
-**Parent epic:** #385
-**Source of truth:** `docs/plans/2026-05-25-marketplace-mvp-proposal.md` (§6 row 8, §6.1 E2E gate, §6.2 scoping, §7 NFRs, §8.2, §9 item 9)
-**Slice intent (proposal §6 row 8):** "3 operators × multi-location × ~40 vehicles across ACRISS codes, sample bookings, E2E happy-path test, i18n sweep. Demo: cold-start to Qiao demo."
+**Date:** 2026-06-02 · **Revised:** 2026-06-07 (re-scoped to interim core-path milestone)
+**Status:** Green-lit as the **INTERIM core-path integration milestone** — NOT the final expanded-MVP demo.
+**Parent epic:** #385 · **Issue:** #390 (interim). The final expanded-MVP demo is tracked as a separate issue (see §0).
+**Supersedes note:** the 2026-06-05 scope update (`docs/plans/2026-06-05-scope-update-du-kaku.md`) re-baselines the *final* slice 8 to land LAST, after #457–462 (luggage/map/doc/payment/admin). This doc is retained for its **core-path scope + mechanics**; its original "final Qiao demo" framing is superseded.
+**Source of truth:** `docs/plans/2026-05-25-marketplace-mvp-proposal.md` (§6.1 E2E gate, §6.2 scoping, §7 NFRs, §8.2, §9 item 9) + the 2026-06-05 scope update (ordering).
+**Slice intent (interim):** prove slices 3–7 integrate end-to-end on a seeded DB — *renter search → storefront → vehicle → book → confirmation visible in operator portal* — with a credible marketplace seed, a **real-DB** E2E gate, an i18n sweep, and verified perf budgets. Locks a regression guard before the payment/doc/admin work lands.
 
 ---
 
 ## 0. What this slice is (and is not)
 
-Slice 8 is the **integration / polish** slice — it ships no new domain entity. It (a) replaces the legacy flat vehicle seed with a credible marketplace dataset, (b) lands the **renter happy-path Playwright test** that is the §6.1 merge gate for this slice, (c) runs an **i18n parity + quality sweep**, (d) **verifies the §7 performance budgets**, and (e) produces a **demo runbook** for the Qiao/Du walkthrough.
+This is the **interim core-path integration milestone** (#390) — it ships no new domain entity. It (a) replaces the legacy flat vehicle seed with a credible marketplace dataset, (b) lands the **renter happy-path Playwright test against the real web → API → seeded-DB stack** that is the §6.1 merge gate, (c) runs an **i18n parity + quality sweep**, (d) **verifies the §7 performance budgets as a hard gate**, and (e) produces a **demo runbook** for an internal core-path walkthrough.
 
-**Acceptance (epic #385):** the demo shows *renter search → storefront result → vehicle selection → booking → confirmation notification visible in the operator portal*. That exact sentence is both the E2E assertion target (§5) and the runbook script (§8).
+**Acceptance (interim):** the flow shows *renter search → storefront result → vehicle selection → booking → confirmation notification visible in the operator portal*. That exact sentence is both the E2E assertion target (§5) and the runbook script (§8).
 
-**Not in scope:** any schema change, any new repo/service/route, any new feature UI. If the seed needs a column that does not exist, that is a defect in slices 1–7, not a slice-8 task — treat it as an upstream bug, do not patch it here.
+**Explicitly deferred to the FINAL expanded-MVP demo (separate issue, re-baselined after #457–462 per the 2026-06-05 scope update):** paid checkout (Stripe `payment_events`, #461), paid add-ons + reservation wizard (#460), document upload/verification (#459), map/flat-list search (#458), luggage filter (#457), and partner revenue/commission visibility (#462). The final Qiao demo must prove *discover → book → **pay** → partner revenue*; **this interim milestone does not, by design** — it locks the core path as a regression guard underneath that work.
+
+**Not in scope:** any schema change, any new repo/service/route, any new feature UI. If the seed needs a column that does not exist, that is a defect in the owning slice (1–7), not a task here — treat it as an upstream bug, do not patch it.
 
 ---
 
-## 1. The hard dependency (read this first)
+## 1. Dependency status (now satisfied)
 
-> **Slice 8 can only *fully* land after slices 3–7 merge to `marketplace-pivot`.** The seed writes `operators`, `locations`, `vehicle_classes.acriss_code`, `vehicles` (operator/location/class FKs), `insurance_options`, `fee_schedules`, `bookings` (`requested_vehicle_id` / `assigned_vehicle_id` / `booking_code` / `insurance_option_id` / `insurance_snapshot` / `fee_snapshot`), `booking_events`, and `notification_log`. None of those tables/columns exist on `marketplace-pivot` yet for slices 5–7.
+> **All slices this milestone consumes — 3, 4, 5, 6, 7 — are MERGED to `marketplace-pivot` (as of 2026-06-06).** The seed writes `operators`, `locations`, `vehicle_classes.acriss_code`, `vehicles` (operator/location/class FKs), `insurance_options`, `fee_schedules`, `bookings` (`requested_vehicle_id` / `assigned_vehicle_id` / `booking_code` / `insurance_option_id` / `insurance_snapshot` / `fee_snapshot`), `booking_events`, and `notification_log` — all present on the trunk now. **This milestone is unblocked.**
 
-Status snapshot (2026-06-02):
+Status snapshot (2026-06-07):
 
 | Provides | Slice / issue | State | Seed needs it for |
 |---|---|---|---|
-| `operators`, role enum, `CallerContext.operatorId` | #386 (slice 1) | **CLOSED / merged** | operator rows, scoped seed verification |
-| `locations` table + `vehicles.pickup_location_id` | #387 (slice 2) | in review (PR #414 → `marketplace-pivot`) | location rows, vehicle→location FK |
-| `vehicle_classes.acriss_code` + vehicle CRUD | #388 (slice 3) | not started | ACRISS distribution across ~40 vehicles |
-| `insurance_options`, `fee_schedules`, vehicle-only pricing | #389 / #404-406 (slice 4) | planned (`2026-06-02-slice4-*.md`) | insurance + fee seed rows |
-| storefront search read models | #391 (slice 5) | **OPEN** | E2E step 1–3 (search → storefront → vehicle) |
-| `booking_events`, `bookings.*` marketplace cols, exclusion on `assigned_vehicle_id` | #392 (slice 6) | **OPEN** | sample bookings + E2E step 4 (book) |
-| `EmailSender`, `notification_log`, operator notification badge | #393 (slice 7) | **OPEN** | E2E step 5 (operator-visible notification) |
+| `operators`, role enum, `CallerContext.operatorId` | #386 (slice 1) | **MERGED** | operator rows, scoped seed verification |
+| `locations` + `vehicles.pickup_location_id` | #387 (slice 2) | **MERGED** (PR #414) | location rows, vehicle→location FK |
+| `vehicle_classes.acriss_code` + vehicle CRUD | #388 (slice 3) | **MERGED** (PR #418) | ACRISS distribution across ~40 vehicles |
+| `insurance_options`, `fee_schedules`, vehicle-only pricing | #404–406 (slice 4) | **MERGED** (PRs #421/#424/#427) | insurance + fee seed rows |
+| storefront search read models | #391 (slice 5) | **MERGED** (PR #438) | E2E step 1–3 (search → storefront → vehicle) |
+| `booking_events`, `bookings.*` marketplace cols, exclusion on `assigned_vehicle_id` | #392 (slice 6) | **MERGED** (PR #469) | sample bookings + E2E step 4 (book) |
+| `EmailSender`, `notification_log`, operator notification badge | #393 (slice 7) | **MERGED** (PR #482) | E2E step 5 (operator-visible notification) |
 
-**Entity shapes are cited from the proposal and resolved slice plans, not invented** — each seed builder consumes whatever the *merged* migration for that slice produced. Concrete shapes confirmed so far: insurance/fee schema in `docs/plans/2026-06-02-slice4-insurance-pricing-fees.md` §3–4; booking-code + selected-insurance snapshot in `docs/plans/2026-06-02-slice6-booking-event-log.md` §5–6; turnaround `default_turnaround_minutes = 2880` in proposal §5.1.
+**Entity shapes are cited from the proposal and merged slice migrations, not invented** — each seed builder consumes whatever the merged migration produced. Verify shapes against the merged schema at wire-up (§11 risks 2/4).
 
-### 1.1 What can be drafted before 3–7 merge (de-risking)
+### 1.1 Re-baseline & the interim/final split (read this)
 
-To keep slice 8 off the critical path, draft these against the proposal contracts and stub-validate, sequencing the final wire-up after merges:
+The 2026-06-05 scope update **supersedes proposal §6 ordering** and moves the *final* slice 8 demo to dead-last, after #457–462:
 
-1. **Seed *data tables* (pure data, no DB writes)** — the operator/location/vehicle/ACRISS/booking arrays as typed `const` fixtures in `packages/shared/src/db/seed-data/`. No schema import, so they compile today. Review for credibility (names, plates, ACRISS spread, prices) with Du early.
-2. **The i18n sweep script invocation + checklist** (§6) — `lint:i18n-parity` already exists and passes (501 keys × en/ja/zh). The renter-facing key audit can start as soon as slice 5/6/7 namespaces land incrementally.
-3. **Playwright journey skeleton** (§5) — `describe`/`test.step` structure with `test.fixme()` placeholders, plus the marketplace mock-API fixtures, drafted against the §6.1 flow. The mock-API extension (storefront/booking/notification endpoints) is the only part that can land before slice 5/6 UI exists.
-4. **Perf-budget harness** (§7) — the build-size assertion and Lighthouse/`@next/bundle-analyzer` step are infra, independent of feature merges.
+> 6 → 7 → luggage(#457)+map/list(#458) → doc(#459) → payment+add-ons(#460)+Stripe(#461) → admin revenue(#462) → **8 demo seed + E2E (#390)**.
 
-**The DB-writing seed builders + the real assertions wire up last**, after each slice's migration is merged. Net: slice-8 wall-clock collapses to ~1 day of integration once 5–7 are in, instead of 2–3 days cold.
+So #390 is **split** to avoid letting an obsolete flow pass as "done":
+- **This doc = the INTERIM core-path milestone** — lands now (deps merged), proves search→book→confirm on real infra, and stands as a regression guard for everything built on top.
+- **A separate FINAL-demo issue** (re-baselined after #457–462) owns the *discover→book→pay→partner-revenue* Qiao demo. The seed/E2E/runbook mechanics here are its starting point.
+
+Work already committed in worktree `kuruma-slice8-draftable` (`feat/slice8-draftable`, 7 commits): `seed-data/` fixtures, fleet, perf harness, Playwright skeleton, i18n checklist. **Remaining for this milestone:** real DB seed wire-up, the manual i18n sweep, the **real-DB E2E lane (#445)**, and converting the `test.fixme()` skeleton into real real-DB assertions (§5).
 
 ---
 
@@ -58,7 +62,7 @@ To keep slice 8 off the critical path, draft these against the proposal contract
 | `db:seed` / `db:seed-bookings` commands | `package.json:24-25` | Repointed to the marketplace seed; ordering documented (§4). |
 | Playwright config | `playwright.config.ts` | Reused. `testDir: ./e2e`, mock-API webServer on `:8787`, web dev on `:3001`, `screenshot: only-on-failure`, `trace: on-first-retry`. |
 | Mock API | `e2e/mock-api.ts` | **Extended** with storefront-search / booking-submit / operator-notification fixtures (§5.3). |
-| Existing E2E specs | `e2e/landing.spec.ts`, `e2e/browse.spec.ts` (#296 scaffold, #321 browse) | Kept; the new `marketplace-happy-path.spec.ts` is additive. Existing specs guard against regressions per §6.2. |
+| Existing mock-track E2E specs | `e2e/landing.spec.ts`, `e2e/browse.spec.ts` (#296 scaffold, #321 browse) | Kept as **smoke** (§5.3); the new real-DB `e2e/real-db/marketplace-happy-path.auth.spec.ts` (lane #416) is the additive **gate**. Existing specs guard against regressions per §6.2. |
 | i18n messages | `packages/web/messages/{en,ja,zh}.json` | 9 namespaces (`common errors auth nav catalog vehicles business messaging bookings landing`), **501 keys each, in parity today**. Sweep adds the slice-5/6/7 namespaces and re-verifies. |
 | Parity lint | `scripts/lint-i18n-parity.ts` + `package.json:18` (`lint:i18n-parity`) | Machine half of the sweep (#375). Quality half is manual (§6). |
 | `test:e2e` command | `package.json:11` (`bunx playwright test`) | The §6.1 gate runner. |
@@ -129,6 +133,8 @@ packages/shared/src/db/
 
 Idempotency: delete-by-`@example.test` / delete-by-seeded-operator-slug before insert (same pattern as today's `seed.ts:307` and `seed-bookings.ts:31-35`). FK order matters — children deleted before parents, inserted parents-first. Run order per CLAUDE.md: `db:generate → db:migrate → db:seed → db:seed-bookings → db:verify`.
 
+**`PLATFORM_ADMIN` is a special case (P2).** Admin users come from the env var `PLATFORM_ADMIN_EMAILS`, **not** `@example.test` and **not** an operator slug, so the delete-by patterns above do not cover them — and `users.email` is `UNIQUE` (`schema.ts:25`). Seed admins with an explicit **upsert keyed on email** (`INSERT … ON CONFLICT (email) DO UPDATE SET role='PLATFORM_ADMIN', …`), iterating the *current* `PLATFORM_ADMIN_EMAILS` list. Do **not** blanket-delete `role='PLATFORM_ADMIN'` rows (that would clobber a real admin). On re-seed with a changed env list, **do not** attempt to demote previously-seeded admins — tracking which rows the seed promoted would need a new ownership marker (e.g. a `seeded_by` column), and §0 forbids schema changes in this slice. **No-schema choice (explicit):** the seed only ever upserts the *current* `PLATFORM_ADMIN_EMAILS` to `PLATFORM_ADMIN`; a stale demo-admin (email dropped from the env list) is **left in place** — documented, accepted behaviour. Net: re-seeding never collides on the unique key and never needs schema.
+
 ---
 
 ## 4. Seed execution & ordering
@@ -146,7 +152,7 @@ bun run db:verify           # 3 green checks (schema/journal/DB sync)
 
 ## 5. E2E happy-path journey (the §6.1 merge gate)
 
-New spec: `e2e/marketplace-happy-path.spec.ts`. **This is the required-green gate before slice 8 merge** (proposal §6.1: "renter search → storefront result → vehicle selection → book → confirmation email visible in operator portal"). Mutation-resistant assertions only — specific text/URL/role queries, never `toBeVisible()`-truthiness on a bare container.
+New spec: `e2e/real-db/marketplace-happy-path.auth.spec.ts` — added to the **existing authenticated real-DB lane** (#416; §5.2), run via `bun run test:e2e:real-db`. **This is the required-green gate before slice 8 merge** (proposal §6.1: "renter search → storefront result → vehicle selection → book → confirmation email visible in operator portal"). Mutation-resistant assertions only — specific text/URL/role queries, never `toBeVisible()`-truthiness on a bare container.
 
 ### 5.1 Journey mapped to acceptance criteria
 
@@ -160,16 +166,18 @@ New spec: `e2e/marketplace-happy-path.spec.ts`. **This is the required-green gat
 
 `test.step()` per row so the HTML report reads as the acceptance script. A failing step captures screenshot+trace (config already on). Run the renter journey on a mobile viewport variant too (proposal §8.2: iPhone/Android Chrome) — one extra project or `test.use({ viewport })` block.
 
-### 5.2 What is mocked vs real (proposal §6.2)
+### 5.2 What is mocked vs real — the REQUIRED gate is real-DB (proposal §6.2)
 
-- **Mocked (HTTP boundaries only):** Resend send (the mock-API records the call and flips `notification_log.status`), OAuth callback (a test session helper sets the renter/operator JWT). **Nothing internal is mocked.**
-- **Real:** the entire web UI render, routing, search/booking/notification API contract via the mock-API fixtures, i18n message resolution. The mock-API mirrors the *real* response envelope (`{ success, data }` per `e2e/mock-api.ts:57-58`).
+The proposal (§6.1/§6.2, test pyramid ~p.196) mandates the slice-8 E2E exercise the **real stack** — real web → real Hono API → seeded Postgres — with **only outbound HTTP boundaries stubbed**. The mock-API track that slices 5/6/7 specs use does **not** satisfy this gate: routing the API/DB path through `e2e/mock-api.ts` proves render/flow but not that the *real* search→book→notify contract works end-to-end. For an integration milestone, that real path is the whole point.
 
-> Note: the current harness (`playwright.config.ts:42-49`) deliberately uses placeholder `DATABASE_URL` and routes to the mock-API — the spec never touches Postgres. Real-DB booking coverage is the **integration** suite (slice 6), not this E2E. This matches the existing two-track E2E strategy (`memory/project_e2e-strategy`).
+- **Mocked (outbound HTTP only):** Resend send (record the call; assert `notification_log.status` flips), OAuth callback (a test session helper mints the renter/operator JWT). **Nothing internal — no API, no DB — is mocked.**
+- **Real:** web UI render + routing, the live Hono API (`e2e/real-db/real-api-server.ts`), the seeded Postgres branch, i18n resolution. Booking writes hit the real exclusion constraint; the notification row is written by the real `BookingPostCommitDispatcher`.
 
-### 5.3 Mock-API extension (`e2e/mock-api.ts`)
+> **The real-DB lane already exists (#416).** `playwright.real-db.config.ts` boots the real Hono API (`e2e/real-db/real-api-server.ts`, :8788) + real web (:3002) against a `DATABASE_URL` Neon branch, with a minted Auth.js session (`e2e/real-db/auth.setup.ts` → `STORAGE_STATE`); specs matching `*.auth.spec.ts` run authenticated (see `e2e/real-db/locations.auth.spec.ts` for the pattern + `pg.ts` cleanup). Run with `bun run test:e2e:real-db` (needs `AUTH_SECRET` + `DATABASE_URL`). **Slice 8 adds `marketplace-happy-path.auth.spec.ts` to this lane and runs the seed against the branch in setup.** What remains is **#445** — wiring this lane as a *required CI gate* with a disposable per-run Neon branch (migrate→seed→test→drop); locally it already runs today. This is the "write" track of the two-track E2E strategy (`memory/project_e2e-strategy`). The mock-API specs (§5.3) stay as a fast pre-merge **smoke** check.
 
-Add fixture endpoints mirroring the slice-5/6/7 real contracts:
+### 5.3 Mock-API smoke track (optional, fast pre-merge — NOT the gate)
+
+The mock-API track is a fast smoke check, **not** the merge gate (§5.2). Most fixtures already exist from slices 5/6/7. Optionally top up endpoints mirroring the real contracts:
 - `GET /storefronts?from&to&...` → storefront cards with `class_summaries` (proposal §9 item 21).
 - `GET /storefronts/:slug/:locationId/vehicles?from&to&class` → available vehicles for the range.
 - `GET /insurance-options?operatorId=` → the operator's 2 options.
@@ -206,7 +214,7 @@ These NFRs are **explicitly verified in slice 8** (§7: "Next.js bundle already 
 
 | Budget | Target | How verified in slice 8 |
 |---|---|---|
-| **First-load JS** | **< 500 KB** on renter pages (§7, §8.2) | `bun run --filter @kuruma/web build` → read Next.js per-route "First Load JS" for `/`, `/search`, `/storefronts/*`, `/booking/*`. Record numbers in the runbook. If any renter route exceeds, file a follow-up (do not fix here unless trivial). |
+| **First-load JS** | **< 500 KB** on renter pages (§7, §8.2 — "not negotiable") | **HARD GATE.** A script reads Next.js per-route "First Load JS" for `/`, `/search`, `/storefronts/*`, `/booking/*` from `bun run --filter @kuruma/web build` and **fails the merge** if any renter route exceeds 500 KB. If a route is genuinely over and cannot be trimmed in-slice, it requires an **explicit, written, owner-signed-off exception recorded in this doc and the PR** — never a silent follow-up. The proposal calls this budget "not negotiable." |
 | **Search perf** | live availability < 500 ms p95 at MVP scale (3 ops × 40 vehicles) (§7, §8.2) | Hit the real search endpoint against the seeded `test`/dev branch; record p95 over ~50 runs. "Not enforced via SLO yet" (§7) — measure + record, do not gate. |
 | **Responsive** | renter portal usable on iPhone + Android Chrome (§8.2) | E2E mobile-viewport variant (§5.1). |
 | **Accessibility** | WCAG 2.1 AA — contrast, keyboard nav, aria on icon-only controls (§8.2) | Spot-audit renter happy-path pages (axe pass + keyboard-only run of the journey). |
@@ -215,9 +223,9 @@ Bundle measurement runs on the build output, independent of feature merges (§1.
 
 ---
 
-## 8. Demo runbook (cold-start → Qiao/Du walkthrough)
+## 8. Demo runbook (cold-start → internal core-path walkthrough)
 
-A `docs/runbooks/` markdown (or runbook section) the operator follows live:
+A `docs/runbooks/` markdown (or runbook section) the operator follows live. *(This is the **core-path subset** for an internal walkthrough; the full Qiao/Du demo — discover→book→pay→partner revenue — is #488.)*
 
 **Cold start**
 1. `git fetch origin`
@@ -244,27 +252,29 @@ A `docs/runbooks/` markdown (or runbook section) the operator follows live:
 |---|---|
 | **Unit** | Seed builders: ACRISS distribution covers 6–8 codes; every storefront returns ≥3 class summaries; booking-code generator matches no-confusables regex; idempotent re-seed is a no-op (count stable). Pure-function tests on `seed-data/` fixtures. |
 | **Integration** (Neon `test`/dev) | Run the full seed against a real branch; assert row counts (3 operators, 9 locations, ~41 vehicles, 6 insurance, 9+ fees, N bookings), FK integrity, exclusion-constraint non-violation, `db:verify` green. |
-| **E2E (Playwright)** | `marketplace-happy-path.spec.ts` (§5) — **the required §6.1 gate**. Plus existing `landing`/`browse` specs stay green (regression guard, §6.2). |
+| **E2E (Playwright, real-DB lane #416)** | `e2e/real-db/marketplace-happy-path.auth.spec.ts` (§5) via `test:e2e:real-db` — **the required §6.1 gate**. Mock-track `landing`/`browse` specs stay green as smoke (regression guard, §6.2). |
 
-**Merge gate (proposal §6.1, all green):** `bun run test` · `bun run lint` · `bun run --filter @kuruma/api lint:boundaries` · `bun run lint:modules` · `bun run lint:i18n-parity` · `bun run db:verify` · **`bun run test:e2e` (happy-path green — required for slice 8)** · code-reviewer + architect agents (`memory/feedback_review-before-ship`).
+**Merge gate (proposal §6.1, all green):** `bun run test` · `bun run lint` · `bun run --filter @kuruma/api lint:boundaries` · `bun run lint:modules` · `bun run lint:i18n-parity` · `bun run db:verify` · **`AUTH_SECRET=… DATABASE_URL=<seeded-branch> bun run test:e2e:real-db` (real-stack happy-path green — required for slice 8; the mock-track `test:e2e` is smoke-only)** · code-reviewer + architect agents (`memory/feedback_review-before-ship`).
 
 ---
 
 ## 10. Execution order & worktree
 
 ```bash
-# Branch from the remote pivot; local marketplace-pivot is known to lag.
-git worktree add ../kuruma-demo-seed -b feature/390-demo-seed-e2e origin/marketplace-pivot
+# Existing worktree (7 commits of draftable-now work): ../kuruma-slice8-draftable on feat/slice8-draftable.
+# All consumed slices (3–7) are merged, so rebase onto the trunk before wiring DB seed + real-DB E2E:
+git -C ../kuruma-slice8-draftable fetch origin && git -C ../kuruma-slice8-draftable rebase origin/marketplace-pivot
 ```
 
-Within the worktree, TDD where applicable (seed builders + booking-code generator are pure → unit-test first; E2E journey is RED via `test.fixme` → GREEN as slice 5/6/7 UI lands):
+All consumed slices (3–7) are merged, so the steps run back-to-back (no waiting). TDD where applicable (seed builders + booking-code generator are pure → unit-test first; the real-DB E2E journey is RED via `test.fixme` → GREEN as each seed/lane piece lands):
 
-1. Draftable-now (§1.1): `seed-data/` fixtures, i18n checklist, Playwright skeleton + mock-API extension, perf harness.
-2. After slices 3–4 merge: wire `seed.ts` (operators→locations→classes→vehicles→insurance→fees); integration row-count tests green.
-3. After slice 6 merge: wire `seed-bookings.ts` (bookings+events+`booking_code`+`fee_snapshot`); E2E steps 1–4 green.
-4. After slice 7 merge: `notification_log` seed + E2E step 5 green; full §6.1 gate green.
-5. i18n sweep (§6) + perf verification (§7) + runbook (§8).
-6. Rebase onto `origin/marketplace-pivot`, review, PR (`Closes #390`).
+1. **Done (in worktree, 7 commits):** `seed-data/` fixtures, fleet, i18n checklist, Playwright skeleton, perf harness.
+2. Wire `seed.ts` (operators→locations→classes→vehicles→insurance→fees) — incl. the `PLATFORM_ADMIN` email-upsert (§3.6); integration row-count tests green.
+3. Wire `seed-bookings.ts` (bookings+events+`booking_code`+`fee_snapshot`+`notification_log`).
+4. Add `e2e/real-db/marketplace-happy-path.auth.spec.ts` to the **existing real-DB lane (#416)**; run `db:seed`+`db:seed-bookings` against the branch in setup. (CI-gating + disposable per-run Neon branch lifecycle is **#445**.)
+5. Convert the `test.fixme()` skeleton into real **real-DB** assertions; full §6.1 gate green on the real-DB lane.
+6. i18n sweep (§6) + perf **hard-gate** verification (§7) + runbook (§8).
+7. Rebase onto `origin/marketplace-pivot`, code-reviewer + architect, PR (`Closes #390`).
 
 Always rebase, never force push (CLAUDE.md session protocol).
 
@@ -274,18 +284,19 @@ Always rebase, never force push (CLAUDE.md session protocol).
 
 | # | Risk / question | Owner | Mitigation |
 |---|---|---|---|
-| 1 | **Slice 8 is gated on 5/6/7, all OPEN.** It cannot fully land until they merge. | sequencing | §1.1 draftable-now work keeps it off the critical path; final wire-up ≈ 1 day post-merge. |
+| 1 | **RESOLVED.** Slices 3–7 are all MERGED (2026-06-06); this interim milestone is unblocked. The *final* expanded-MVP demo is split to a separate issue, re-baselined after #457–462 (§1.1). | sequencing | Interim milestone lands now; final demo tracked separately so an obsolete flow can't pass as "done." |
 | 2 | Seed needs a column a slice didn't ship (e.g. `operators.pre_auth_handoff_url`, `vehicles.turnaround_minutes_override`). | slices 2/7 | Treat as a defect in the owning slice; do **not** add schema in slice 8. Proposal §9 items 2 & 20 mandate these — verify present at wire-up. |
 | 3 | Concurrent seed migration is N/A (slice 8 adds no migration) but seed **assumes journal is clean** post-5/6/7. | this slice | `db:verify` before seeding; watch the out-of-order `when` trap (CLAUDE.md 2026-04-17) if slices rebased. |
-| 4 | E2E mock-API contract drifts from real slice-5/6 API. | this slice | Mirror the `{ success, data }` envelope; cross-check fixture shapes against the merged route handlers at wire-up. The integration suite (slice 6) is the real-DB truth; E2E is render/flow. |
+| 4 | Mock-API contract drifts from the real slice-5/6 API. | this slice | Only affects the **optional smoke track** (§5.3); the **required** E2E gate runs real web → real API → seeded DB (§5.2), so it cannot drift from the real contract. Keep mock fixtures loosely in sync for smoke value — the real lane is the source of truth. |
 | 5 | i18n quality (vs parity) is manual and easy to skip. | this slice | §6(b) explicit checklist; lint catches parity, human catches EN-copied-into-JA. |
-| 6 | First-load JS may exceed 500 KB once slice-5/6 renter pages land. | slices 5/6 | §7 measures at build; if over, file follow-up — the deploy-bridge (§8 of proposal) bundle concern is separate. |
-| 7 | Booking-code regex must match the real generator alphabet exactly. | slice 6 | Verify the nanoid alphabet (`2-9A-HJ-NP-Z`, excludes `0 O 1 I l`) against slice-6's impl before asserting in E2E. |
+| 6 | First-load JS may exceed 500 KB once slice-5/6 renter pages land. | this slice | §7 is now a **hard gate** — merge fails if a renter route exceeds 500 KB; an over-budget route needs a written, owner-signed exception in this doc + PR, not a silent follow-up. |
+| 7 | The required gate runs on the real-DB lane. **The lane already exists (#416)** — config, minted session, `real-api-server.ts`, example `*.auth.spec.ts`. | this slice | Slice 8 adds the happy-path `*.auth.spec.ts` + runs the seed against the branch. **#445** (CI-gating + disposable per-run Neon branch) is the remaining infra to make it a *required CI* gate; locally it already runs via `test:e2e:real-db`. |
+| 8 | Booking-code regex must match the real generator alphabet exactly. | slice 6 | Verify the nanoid alphabet (`2-9A-HJ-NP-Z`, excludes `0 O 1 I l`) against slice-6's impl before asserting in E2E. |
 
 ---
 
 ## 12. Critical files
 
-**New:** `e2e/marketplace-happy-path.spec.ts`, `packages/shared/src/db/seed-data/*.ts`, demo runbook (`docs/runbooks/2026-demo-runbook.md` or runbook section).
-**Modified:** `packages/shared/src/db/seed.ts`, `packages/shared/src/db/seed-bookings.ts`, `e2e/mock-api.ts`, `package.json` (optional `db:seed:all`), `packages/web/messages/{en,ja,zh}.json` (sweep top-ups only — most keys ship in their owning slices).
-**Read-only (verify, never modify):** `playwright.config.ts`, `scripts/lint-i18n-parity.ts`, `packages/shared/src/db/schema.ts`.
+**New:** `e2e/real-db/marketplace-happy-path.auth.spec.ts` (added to the real-DB lane #416), `packages/shared/src/db/seed-data/*.ts`, demo runbook (`docs/runbooks/2026-demo-runbook.md` or runbook section).
+**Modified:** `packages/shared/src/db/seed.ts`, `packages/shared/src/db/seed-bookings.ts`, `e2e/mock-api.ts` (smoke only), `package.json` (optional `db:seed:all`), `packages/web/messages/{en,ja,zh}.json` (sweep top-ups only — most keys ship in their owning slices).
+**Read-only (verify, never modify):** `playwright.config.ts`, `playwright.real-db.config.ts` + `e2e/real-db/{auth.setup,mint-session,pg,real-api-server}.ts` (lane #416), `scripts/lint-i18n-parity.ts`, `packages/shared/src/db/schema.ts`.
