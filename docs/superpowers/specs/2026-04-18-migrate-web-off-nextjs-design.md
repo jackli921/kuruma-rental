@@ -86,7 +86,7 @@ Inline bootstrap (§6.2) handles i18n FOUC but can't touch the HttpOnly session 
 
 ### 5.1 Endpoints (on Hono API)
 - `POST /auth/google/start` → 302 to Google OAuth with state/nonce.
-- `GET /auth/google/callback` → verifies, upserts user via DrizzleAdapter, sets `kuruma_session` cookie (HttpOnly, Secure, `SameSite=None`), redirects to web.
+- `GET /auth/google/callback` → verifies, upserts user via DrizzleAdapter, sets `kuruma_session` cookie (HttpOnly, Secure, `SameSite=Lax`), redirects to web. (`Lax` is the source of truth — the same-origin Pages Functions proxy in §5.5 makes this safe from day one; see §5.4 and the §200 risk row.)
 - `POST /auth/apple/callback` → same as Google; CSRF-exempt (first touch from Apple form POST, no session yet).
 - `GET /auth/session` → reads cookie, returns `{ user: {...}, csrfToken }` or 401.
 - `POST /auth/signout` → clears cookie, 204.
