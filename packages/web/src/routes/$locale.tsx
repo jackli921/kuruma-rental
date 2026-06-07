@@ -1,5 +1,7 @@
+import { LayoutPreferenceProvider } from '@/vite/LayoutPreferenceProvider'
 import { isLocale } from '@/vite/i18n/locale'
 import { messagesQueryOptions } from '@/vite/i18n/messages'
+import { Navbar } from '@/vite/nav/Navbar'
 import { Outlet, createFileRoute, notFound } from '@tanstack/react-router'
 import { useEffect } from 'react'
 import { IntlProvider } from 'use-intl'
@@ -25,7 +27,10 @@ function LocaleLayout() {
 
   return (
     <IntlProvider locale={locale} messages={messages}>
-      <Outlet />
+      <LayoutPreferenceProvider>
+        <Navbar />
+        <Outlet />
+      </LayoutPreferenceProvider>
     </IntlProvider>
   )
 }
