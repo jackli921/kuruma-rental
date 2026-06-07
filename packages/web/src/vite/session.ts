@@ -1,9 +1,11 @@
 import { queryOptions, useQuery } from '@tanstack/react-query'
 
-// The session the browser learns via GET /auth/session (spec §5.3). User is
-// {id, role} only — no email (the API projects just what guards/nav need).
+// The session the browser learns via GET /auth/session (spec §5.3). `id`/`role`
+// drive guards; the optional `name`/`email`/`image` are display-only profile the
+// session token carries for the navbar avatar/menu (mirrors NextAuth's old JWT).
+// They are absent for users whose OAuth profile omitted them.
 export interface Session {
-  user: { id: string; role: string }
+  user: { id: string; role: string; name?: string; email?: string; image?: string }
   csrfToken: string
 }
 

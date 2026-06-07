@@ -43,6 +43,39 @@ describe('GET /auth/session', () => {
     })
   })
 
+  test('session cookie carrying profile → 200 includes name/email/image', async () => {
+    const app = createTestApp()
+    const token = await signSession({
+      sub: 'user_123',
+      role: 'RENTER',
+      csrf: 'c',
+      name: 'Aiko Tanaka',
+      email: 'aiko@example.com',
+      image: 'https://img.example/avatar.png',
+    })
+    const res = await app.request('/auth/session', { headers: cookie(token) })
+    expect(res.status).toBe(200)
+    const body = await res.json()
+    expect(body.data.user).toMatchObject({
+      id: 'user_123',
+      role: 'RENTER',
+      name: 'Aiko Tanaka',
+      email: 'aiko@example.com',
+      image: 'https://img.example/avatar.png',
+    })
+  })
+
+  test('session cookie without profile → 200, user has id/role and no stray profile keys', async () => {
+    const app = createTestApp()
+    const token = await signSession({ sub: 'user_123', role: 'RENTER', csrf: 'c' })
+    const res = await app.request('/auth/session', { headers: cookie(token) })
+    const body = await res.json()
+    expect(body.data.user).toMatchObject({ id: 'user_123', role: 'RENTER' })
+    expect(body.data.user.name).toBeUndefined()
+    expect(body.data.user.email).toBeUndefined()
+    expect(body.data.user.image).toBeUndefined()
+  })
+
   test('no session cookie → 401', async () => {
     const app = createTestApp()
     const res = await app.request('/auth/session')

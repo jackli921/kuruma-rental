@@ -24,7 +24,7 @@ function makeRuntime() {
         },
         getUserInfo: async (accessToken: string) => {
           calls.accessToken = accessToken
-          return { sub: 'g-123', email: 'jo@ex.com', name: 'Jo' }
+          return { sub: 'g-123', email: 'jo@ex.com', name: 'Jo', picture: 'https://pic/jo.png' }
         },
       },
       accountStore: {
@@ -70,6 +70,12 @@ describe('GET /auth/google/callback', () => {
     expect(payload.sub).toBe('user_42')
     expect(payload.role).toBe('RENTER')
     expect(typeof payload.csrf).toBe('string')
+
+    // Display profile from the OAuth response is minted into the session token
+    // so the navbar can render the avatar/name/email without a DB round-trip.
+    expect(payload.name).toBe('Jo')
+    expect(payload.email).toBe('jo@ex.com')
+    expect(payload.image).toBe('https://pic/jo.png')
 
     // The one-time state cookie is cleared.
     const allCookies = res.headers.getSetCookie?.() ?? []

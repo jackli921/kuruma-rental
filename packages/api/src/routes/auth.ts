@@ -93,6 +93,11 @@ export function createAuthRoutes(
           csrf: randomToken(),
           // exactOptionalPropertyTypes: omit the key rather than pass undefined.
           ...(user.operatorId !== undefined ? { operatorId: user.operatorId } : {}),
+          // Display profile for the navbar (avatar/name/email) — mirrors what
+          // NextAuth seeded into its session JWT from the OAuth profile.
+          ...(profile.name !== undefined ? { name: profile.name } : {}),
+          ...(profile.email !== undefined ? { email: profile.email } : {}),
+          ...(profile.picture !== undefined ? { image: profile.picture } : {}),
         },
         secret,
       )
@@ -106,8 +111,11 @@ export function createAuthRoutes(
       const session = await verifySessionCookie(token)
       if (!session) return fail(c, 'Unauthorized', 401)
 
+      // Spread the display-only profile (name/email/image) the token carries.
+      // `profile` holds only the keys actually present, so the user object never
+      // gains a stray `name: undefined` (exactOptionalPropertyTypes).
       return ok(c, {
-        user: { id: session.user.id, role: session.user.role },
+        user: { id: session.user.id, role: session.user.role, ...session.profile },
         csrfToken: session.csrf,
       })
     })

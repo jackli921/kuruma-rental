@@ -29,6 +29,37 @@ describe('fetchSession', () => {
     expect(fetchMock).toHaveBeenCalledWith('/auth/session', { credentials: 'include' })
   })
 
+  it('passes the optional display profile (name/email/image) through', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () =>
+        jsonResponse({
+          success: true,
+          data: {
+            user: {
+              id: 'u1',
+              role: 'RENTER',
+              name: 'Aiko Tanaka',
+              email: 'aiko@example.com',
+              image: 'https://img.example/avatar.png',
+            },
+            csrfToken: 'tok',
+          },
+        }),
+      ),
+    )
+    await expect(fetchSession()).resolves.toEqual({
+      user: {
+        id: 'u1',
+        role: 'RENTER',
+        name: 'Aiko Tanaka',
+        email: 'aiko@example.com',
+        image: 'https://img.example/avatar.png',
+      },
+      csrfToken: 'tok',
+    })
+  })
+
   it('returns null on 401 (no session)', async () => {
     vi.stubGlobal(
       'fetch',
