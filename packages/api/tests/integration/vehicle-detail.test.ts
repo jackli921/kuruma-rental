@@ -25,10 +25,18 @@ const detailRepo = new DrizzleVehicleDetailRepository(db)
 const HOUR_MS = 60 * 60 * 1000
 const DAY_MS = 24 * HOUR_MS
 
-// Anchor all relative dates to a fixed "now" captured at suite start so
-// day-boundary calculations are deterministic even if the clock ticks
-// across midnight mid-suite.
-const NOW = new Date()
+// Anchor all relative dates to LOCAL NOON of the current day. The utilization
+// window buckets [todayStart-29d, todayStart+1d) with no bucket for tomorrow
+// (see vehicle-detail repo dayStart()), so an ACTIVE booking spanning NOW±1h
+// loses its post-midnight slice when the suite runs within ~1h of midnight —
+// the source of the flaky `expected 3.44 to be close to 4`. Pinning to noon
+// keeps the ±1h window far from any day boundary in both UTC (CI) and local
+// dev timezones, making the result deterministic regardless of wall-clock.
+const NOW = (() => {
+  const d = new Date()
+  d.setHours(12, 0, 0, 0)
+  return d
+})()
 const TODAY_START = (() => {
   const d = new Date(NOW)
   d.setHours(0, 0, 0, 0)
