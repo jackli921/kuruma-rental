@@ -54,6 +54,8 @@ export function createNotificationRoutes(service: NotificationService) {
       // tenant-existence leak. The atomic claim makes a double-click send once.
       const result = await service.resend(toCallerContext(user), c.req.param('id'))
       if (!result.ok) return fail(c, result.error, result.status)
-      return ok(c, { status: result.status })
+      // `outcome` lets the portal distinguish a real re-send from a no-op
+      // ("already in progress" / "already sent") instead of a blanket green (#485).
+      return ok(c, { status: result.status, outcome: result.outcome })
     })
 }

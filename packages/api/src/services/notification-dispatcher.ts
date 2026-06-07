@@ -28,6 +28,20 @@ interface Resolved {
 }
 
 /**
+ * Explicit result of one processOne attempt, so callers (notably the operator
+ * resend) never have to re-derive "did a send actually happen?" from a status
+ * that conflates a fresh send with a no-op. `claim()` returns null only for a
+ * terminal SENT row or a live (non-expired) SENDING lease, which is exactly the
+ * already_sent / in_progress split.
+ */
+export type DispatchOutcome =
+  | { result: 'sent'; row: NotificationLog }
+  | { result: 'failed'; row: NotificationLog }
+  | { result: 'already_sent'; row: NotificationLog }
+  | { result: 'in_progress'; row: NotificationLog }
+  | { result: 'no_recipient' }
+
+/**
  * Turns a committed booking into outbound email. Owns the upsert -> atomic claim
  * -> render -> send -> mark unit (processOne), reused by both the post-commit
  * dispatch and the operator-portal resend. Never throws to its caller — a send
@@ -52,15 +66,16 @@ export class NotificationDispatcher {
 
   /**
    * Idempotent send unit for one (booking, kind). Upserts a QUEUED row, atomically
-   * claims it, renders + sends, and records the terminal state. A null claim (live
-   * lease or terminal SENT) is a no-op. Returns the row's resulting state, or
-   * undefined when there is no resolvable recipient.
+   * claims it, renders + sends, and records the terminal state. A null claim is a
+   * no-op — already_sent (terminal SENT) or in_progress (a live SENDING lease held
+   * by another sender). Returns an explicit DispatchOutcome so callers don't infer
+   * "did we send?" from a status.
    */
-  async processOne(booking: Booking, kind: Kind): Promise<NotificationLog | undefined> {
+  async processOne(booking: Booking, kind: Kind): Promise<DispatchOutcome> {
     const resolved = await this.resolveRecipient(booking, kind)
     if (!resolved) {
       console.error('[notification] no recipient', { bookingId: booking.id, kind })
-      return undefined
+      return { result: 'no_recipient' }
     }
 
     const row = await this.notificationLogRepo.upsertQueued({
@@ -73,18 +88,25 @@ export class NotificationDispatcher {
     })
 
     const claimed = await this.notificationLogRepo.claim(row.id)
-    if (!claimed) return row // live lease or already SENT — skip
+    if (!claimed) {
+      // claim() only declines a terminal SENT row or a live (non-expired) SENDING
+      // lease — QUEUED/FAILED/expired-SENDING are always claimable. So the un-claimed
+      // status disambiguates "already done" from "in flight elsewhere".
+      return row.status === 'SENT'
+        ? { result: 'already_sent', row }
+        : { result: 'in_progress', row }
+    }
 
     try {
       const message = await this.buildMessage(booking, kind, claimed.recipient, claimed.locale)
       const { providerMessageId } = await this.emailSender.send(message)
       await this.notificationLogRepo.markSent(claimed.id, providerMessageId)
-      return { ...claimed, status: 'SENT', providerMessageId }
+      return { result: 'sent', row: { ...claimed, status: 'SENT', providerMessageId } }
     } catch (err) {
       const reason = err instanceof Error ? err.message : String(err)
       console.error('[notification] send failed', { id: claimed.id, kind, reason })
       await this.notificationLogRepo.markFailed(claimed.id, reason.slice(0, 500))
-      return { ...claimed, status: 'FAILED', error: reason }
+      return { result: 'failed', row: { ...claimed, status: 'FAILED', error: reason } }
     }
   }
 

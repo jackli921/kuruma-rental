@@ -9,7 +9,11 @@ import type { NotificationLog } from '../stores'
 import type { NotificationDispatcher } from './notification-dispatcher'
 
 export type ResendResult =
-  | { ok: true; status: NotificationLog['status'] }
+  | {
+      ok: true
+      status: NotificationLog['status']
+      outcome: 'resent' | 'already_sent' | 'in_progress'
+    }
   | { ok: false; status: number; error: string }
 
 /**
@@ -38,11 +42,18 @@ export class NotificationService {
     const booking = await this.bookingRepo.findById(SYSTEM_CONTEXT, row.bookingId)
     if (!booking) return { ok: false, status: 404, error: 'Booking not found' }
 
-    const result = await this.dispatcher.processOne(booking, row.kind)
-    if (!result) return { ok: false, status: 422, error: 'No resolvable recipient' }
-    if (result.status === 'FAILED') {
-      return { ok: false, status: 502, error: result.error ?? 'Send failed' }
+    const outcome = await this.dispatcher.processOne(booking, row.kind)
+    switch (outcome.result) {
+      case 'no_recipient':
+        return { ok: false, status: 422, error: 'No resolvable recipient' }
+      case 'failed':
+        return { ok: false, status: 502, error: outcome.row.error ?? 'Send failed' }
+      case 'sent':
+        return { ok: true, status: 'SENT', outcome: 'resent' }
+      case 'already_sent':
+        return { ok: true, status: 'SENT', outcome: 'already_sent' }
+      case 'in_progress':
+        return { ok: true, status: 'SENDING', outcome: 'in_progress' }
     }
-    return { ok: true, status: result.status }
   }
 }
