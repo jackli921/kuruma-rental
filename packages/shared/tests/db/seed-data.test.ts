@@ -2,10 +2,12 @@ import { describe, expect, it } from 'vitest'
 import { ACRISS_PATTERN } from '../../src/acriss'
 import { BEST_CAR_RENTAL_OPERATOR_ID, BEST_CAR_RENTAL_OWNER_EMAIL } from '../../src/db/constants'
 import {
+  DEMO_BOOKINGS,
   DEMO_FEE_SCHEDULES,
   DEMO_INSURANCE_OPTIONS,
   DEMO_LOCATIONS,
   DEMO_OPERATORS,
+  DEMO_RENTERS,
   DEMO_VEHICLES,
   DEMO_VEHICLE_CLASSES,
 } from '../../src/db/seed-data'
@@ -263,5 +265,75 @@ describe('seed-data demo vehicles (slice 8 §3.3)', () => {
 
   it('sets positive seats (notNull integer column)', () => {
     for (const v of DEMO_VEHICLES) expect(v.seats).toBeGreaterThan(0)
+  })
+})
+
+// Slice 8 §3.5 — demo renter personas covering all three locales.
+describe('seed-data demo renters (slice 8 §3.5)', () => {
+  it('defines 4 renters with unique ids and @example.test emails', () => {
+    expect(DEMO_RENTERS).toHaveLength(4)
+    expect(new Set(DEMO_RENTERS.map((r) => r.id)).size).toBe(4)
+    for (const r of DEMO_RENTERS) expect(r.email).toMatch(/@example\.test$/)
+  })
+
+  it('covers the ja/zh/en renter locales (proposal §8.2)', () => {
+    expect(new Set(DEMO_RENTERS.map((r) => r.language))).toEqual(new Set(['ja', 'zh', 'en']))
+  })
+})
+
+// Slice 8 §3.5 — sample bookings in marketplace shape. The booking-code alphabet
+// must match the slice-6 generator (2-9A-HJ-NP-Z, excludes 0 O 1 I l) so the E2E
+// operator-portal assertion reads identically (§5 step 5, §9 item 3).
+describe('seed-data demo bookings (slice 8 §3.5)', () => {
+  const NO_CONFUSABLES = /^[2-9A-HJ-NP-Z]{8}$/
+  const operatorIds = new Set(DEMO_OPERATORS.map((o) => o.id))
+  const renterIds = new Set(DEMO_RENTERS.map((r) => r.id))
+  const classKeys = new Set(DEMO_VEHICLE_CLASSES.map((c) => `${c.operatorId}::${c.id}`))
+  const insuranceByOperator = new Map(
+    DEMO_INSURANCE_OPTIONS.map((o) => [o.id, o.operatorId] as const),
+  )
+
+  it('has unique ids and unique no-confusables booking codes', () => {
+    expect(new Set(DEMO_BOOKINGS.map((b) => b.id)).size).toBe(DEMO_BOOKINGS.length)
+    const codes = DEMO_BOOKINGS.map((b) => b.bookingCode)
+    expect(new Set(codes).size).toBe(codes.length)
+    for (const code of codes) expect(code).toMatch(NO_CONFUSABLES)
+  })
+
+  it('references only defined renters and operators', () => {
+    for (const b of DEMO_BOOKINGS) {
+      expect(renterIds.has(b.renterId)).toBe(true)
+      expect(operatorIds.has(b.operatorId)).toBe(true)
+    }
+  })
+
+  it('seals every (operatorId, classId) to a defined class of that operator', () => {
+    for (const b of DEMO_BOOKINGS) {
+      expect(classKeys.has(`${b.operatorId}::${b.classId}`)).toBe(true)
+    }
+  })
+
+  it('pairs each selected insurance option with the booking’s own operator', () => {
+    for (const b of DEMO_BOOKINGS) {
+      if (b.insuranceOptionId == null) continue
+      expect(insuranceByOperator.get(b.insuranceOptionId)).toBe(b.operatorId)
+    }
+  })
+
+  it('demos exactly one vehicle substitution (§9 item 25)', () => {
+    expect(DEMO_BOOKINGS.filter((b) => b.substitute)).toHaveLength(1)
+  })
+
+  it('spreads across all four booking statuses', () => {
+    expect(new Set(DEMO_BOOKINGS.map((b) => b.status))).toEqual(
+      new Set(['CONFIRMED', 'ACTIVE', 'COMPLETED', 'CANCELLED']),
+    )
+  })
+
+  it('uses positive durations and non-negative prices', () => {
+    for (const b of DEMO_BOOKINGS) {
+      expect(b.durationHours).toBeGreaterThan(0)
+      expect(b.totalPriceJpy).toBeGreaterThanOrEqual(0)
+    }
   })
 })
