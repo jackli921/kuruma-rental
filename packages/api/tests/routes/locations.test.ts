@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest'
 import { setupGlobalHandlers } from '../../src/error-handlers'
 import type { UserRole } from '../../src/middleware/auth'
 import { InMemoryLocationRepository } from '../../src/repositories/in-memory'
+import { InMemoryBookingRepository } from '../../src/repositories/in-memory/booking'
 import { createLocationRoutes } from '../../src/routes/locations'
 import { LocationService } from '../../src/services/location'
 import { testAuthMiddleware } from '../helpers/auth'
@@ -11,11 +12,19 @@ import { testResolveWriteOperatorId } from '../helpers/operator'
 const OP_A = 'operator-aaaaaaaa'
 const OP_B = 'operator-bbbbbbbb'
 
-function mountFor(repo: InMemoryLocationRepository, role: UserRole, operatorId?: string) {
+function mountFor(
+  repo: InMemoryLocationRepository,
+  role: UserRole,
+  operatorId?: string,
+  bookingRepo: InMemoryBookingRepository = new InMemoryBookingRepository(),
+) {
   const app = new Hono()
   setupGlobalHandlers(app)
   app.use('*', testAuthMiddleware(`${role}-user`, role, operatorId))
-  app.route('/', createLocationRoutes(new LocationService(repo), testResolveWriteOperatorId()))
+  app.route(
+    '/',
+    createLocationRoutes(new LocationService(repo, bookingRepo), testResolveWriteOperatorId()),
+  )
   return app
 }
 
@@ -36,7 +45,7 @@ describe('Location routes — auth', () => {
     app.route(
       '/',
       createLocationRoutes(
-        new LocationService(new InMemoryLocationRepository()),
+        new LocationService(new InMemoryLocationRepository(), new InMemoryBookingRepository()),
         testResolveWriteOperatorId(),
       ),
     )

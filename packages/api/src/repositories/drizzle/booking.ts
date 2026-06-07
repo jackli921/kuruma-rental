@@ -113,6 +113,22 @@ export class DrizzleBookingRepository implements BookingRepository {
     return row?.value ?? 0
   }
 
+  async countActiveForLocation(locationId: string): Promise<number> {
+    const [row] = await this.db
+      .select({ value: count() })
+      .from(bookings)
+      .where(
+        and(
+          or(
+            eq(bookings.pickupLocationId, locationId),
+            eq(bookings.dropoffLocationId, locationId),
+          ),
+          inArray(bookings.status, ['CONFIRMED', 'ACTIVE'] as const),
+        ),
+      )
+    return row?.value ?? 0
+  }
+
   async create(
     ctx: CallerContext,
     data: Omit<Booking, 'id' | 'createdAt' | 'updatedAt'>,

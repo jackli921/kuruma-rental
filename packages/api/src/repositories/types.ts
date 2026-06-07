@@ -297,6 +297,10 @@ export interface BookingRepository {
    *  vehicle set. Used to guard operations that assume no live bookings exist
    *  for those vehicles — e.g. archiving a vehicle class. */
   countActiveForVehicles(vehicleIds: string[]): Promise<number>
+  /** Counts bookings in BLOCKING_STATUSES (CONFIRMED, ACTIVE) that reference the
+   *  given location as pickup OR dropoff. Guards archiving a location still in
+   *  live use (#412). */
+  countActiveForLocation(locationId: string): Promise<number>
   create(
     ctx: CallerContext,
     data: Omit<Booking, 'id' | 'createdAt' | 'updatedAt'>,

@@ -127,7 +127,16 @@ export function createLocationRoutes(
       if (!FLEET_WRITE_ROLES.has(user.role)) return fail(c, 'Forbidden', 403)
 
       const result = await service.archive(toCallerContext(user), c.req.param('id'))
-      if (!result.ok) return fail(c, result.error, result.status)
+      if (!result.ok) {
+        // Surface the active-bookings discriminator so the portal can prompt the
+        // owner to reassign/cancel first instead of showing a generic 409 (#412).
+        const extras: Record<string, unknown> = {}
+        if (result.code) extras.code = result.code
+        if (result.activeBookingsCount !== undefined) {
+          extras.activeBookingsCount = result.activeBookingsCount
+        }
+        return fail(c, result.error, result.status, extras)
+      }
       return ok(c, result.location)
     })
 }

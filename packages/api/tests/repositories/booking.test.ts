@@ -139,3 +139,55 @@ describe('InMemoryBookingRepository — three-way read scope', () => {
     ).rejects.toThrow(/another user/)
   })
 })
+
+describe('InMemoryBookingRepository — countActiveForLocation (#412)', () => {
+  it('counts active bookings referencing the location as pickup OR dropoff, ignoring non-active', async () => {
+    const repo = new InMemoryBookingRepository()
+    // pickup = loc-1, CONFIRMED -> counts
+    await repo.create(
+      SYSTEM_CONTEXT,
+      bookingData({
+        bookingCode: 'LOC00001',
+        assignedVehicleId: 'veh-1',
+        pickupLocationId: 'loc-1',
+        dropoffLocationId: 'loc-9',
+      }),
+    )
+    // dropoff = loc-1, ACTIVE -> counts (distinct vehicle avoids the exclusion)
+    await repo.create(
+      SYSTEM_CONTEXT,
+      bookingData({
+        bookingCode: 'LOC00002',
+        assignedVehicleId: 'veh-2',
+        status: 'ACTIVE',
+        pickupLocationId: 'loc-9',
+        dropoffLocationId: 'loc-1',
+      }),
+    )
+    // pickup = loc-1 but CANCELLED -> ignored
+    await repo.create(
+      SYSTEM_CONTEXT,
+      bookingData({
+        bookingCode: 'LOC00003',
+        assignedVehicleId: 'veh-3',
+        status: 'CANCELLED',
+        pickupLocationId: 'loc-1',
+        dropoffLocationId: 'loc-1',
+      }),
+    )
+    // active but a different location -> ignored
+    await repo.create(
+      SYSTEM_CONTEXT,
+      bookingData({
+        bookingCode: 'LOC00004',
+        assignedVehicleId: 'veh-4',
+        pickupLocationId: 'loc-2',
+        dropoffLocationId: 'loc-2',
+      }),
+    )
+
+    expect(await repo.countActiveForLocation('loc-1')).toBe(2)
+    expect(await repo.countActiveForLocation('loc-2')).toBe(1)
+    expect(await repo.countActiveForLocation('loc-unknown')).toBe(0)
+  })
+})

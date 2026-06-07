@@ -130,6 +130,16 @@ export class InMemoryBookingRepository implements BookingRepository {
     return count
   }
 
+  async countActiveForLocation(locationId: string): Promise<number> {
+    let count = 0
+    for (const booking of this.store.values()) {
+      const referencesLocation =
+        booking.pickupLocationId === locationId || booking.dropoffLocationId === locationId
+      if (referencesLocation && BLOCKING_STATUSES.has(booking.status)) count++
+    }
+    return count
+  }
+
   async create(
     ctx: CallerContext,
     data: Omit<Booking, 'id' | 'createdAt' | 'updatedAt'>,
