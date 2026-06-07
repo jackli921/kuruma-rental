@@ -4,6 +4,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { type CallerContext, SYSTEM_CONTEXT } from '../../src/middleware/auth'
 import { pgErrorCode } from '../../src/pg-errors'
 import { DrizzleLocationRepository } from '../../src/repositories/drizzle'
+import { DrizzleBookingRepository } from '../../src/repositories/drizzle/booking'
 import { LocationService } from '../../src/services/location'
 import type { Location } from '../../src/stores'
 import { db } from './setup'
@@ -174,7 +175,7 @@ describe('archiving a location frees its name for re-creation (#410)', () => {
 // Resolves to 404 (no cross-tenant existence leak), leaving the row untouched.
 describe('cross-operator location WRITE denial (service seal, #387)', () => {
   const repo = new DrizzleLocationRepository(db)
-  const service = new LocationService(repo)
+  const service = new LocationService(repo, new DrizzleBookingRepository(db))
   const uniq = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
   const opAId = `op_locw_a_${uniq}`
   const opBId = `op_locw_b_${uniq}`
