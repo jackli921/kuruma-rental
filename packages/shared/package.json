@@ -30,6 +30,7 @@
     "./validators/vehicle-class": "./src/validators/vehicle-class.ts",
     "./validators/location": "./src/validators/location.ts",
     "./validators/insurance-option": "./src/validators/insurance-option.ts",
+    "./validators/add-on": "./src/validators/add-on.ts",
     "./validators/fee-schedule": "./src/validators/fee-schedule.ts",
     "./validators/customer": "./src/validators/customer.ts",
     "./validators/operator": "./src/validators/operator.ts",
