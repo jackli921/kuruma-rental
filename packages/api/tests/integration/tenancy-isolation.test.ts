@@ -1,3 +1,4 @@
+import { runTx } from '@kuruma/shared/db'
 import { bookings, operators, users, vehicleClasses, vehicles } from '@kuruma/shared/db/schema'
 import { eq, inArray } from 'drizzle-orm'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
@@ -29,8 +30,10 @@ const operatorCtx: CallerContext = {
 type Invocation = readonly [method: string, run: () => Promise<unknown>]
 
 describe('message/thread repos reject OPERATOR_* until scoped (slice 7, Drizzle)', () => {
-  const thread = new DrizzleThreadRepository(db)
-  const message = new DrizzleMessageRepository(db)
+  // runTx is inert here — every call below uses an OPERATOR_* ctx, which the
+  // repo rejects (rejectOperatorContextUntilScoped) before reaching the tx.
+  const thread = new DrizzleThreadRepository(db, runTx)
+  const message = new DrizzleMessageRepository(db, runTx)
 
   const cases: ReadonlyArray<readonly [repoName: string, invocations: Invocation[]]> = [
     [

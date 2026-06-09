@@ -1,3 +1,4 @@
+import type { RunTx } from '@kuruma/shared/db'
 import { messages, threadParticipants, threads } from '@kuruma/shared/db/schema'
 import { and, asc, eq, inArray, sql } from 'drizzle-orm'
 import {
@@ -19,7 +20,14 @@ import {
 } from './shared'
 
 export class DrizzleThreadRepository implements ThreadRepository {
-  constructor(private readonly db: Db) {}
+  // The interactive-transaction runner is injected (DIP) — the composition root
+  // wires the concrete (runTx, per-call neon-serverless); tests/e2e inject a
+  // postgres-js runner. The neon-http db this repo holds for reads can't run
+  // interactive transactions on CF Workers (#493).
+  constructor(
+    private readonly db: Db,
+    private readonly runTransaction: RunTx,
+  ) {}
 
   async findAll(
     ctx: CallerContext,
@@ -154,7 +162,7 @@ export class DrizzleThreadRepository implements ThreadRepository {
     idempotencyKey?: string | null,
   ): Promise<Thread> {
     rejectOperatorContextUntilScoped(ctx, 'ThreadRepository')
-    return this.db.transaction(async (tx) => {
+    return this.runTransaction(async (tx) => {
       const [insertedThread] = (await tx
         .insert(threads)
         .values({ bookingId, idempotencyKey: idempotencyKey ?? null })

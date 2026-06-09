@@ -25,9 +25,12 @@
       },
       "devDependencies": {
         "@cloudflare/workers-types": "^4.20260410.1",
+        "@neondatabase/serverless": "^1.0.2",
+        "@types/ws": "^8.5.12",
         "postgres": "^3.4.8",
         "vitest": "^2",
         "wrangler": "^4.80.0",
+        "ws": "^8.18.0",
       },
     },
     "packages/shared": {
