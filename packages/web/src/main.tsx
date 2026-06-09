@@ -1,3 +1,4 @@
+import '@/app/globals.css'
 import { queryClient } from '@/vite/query-client'
 import { RouterProvider, createRouter } from '@tanstack/react-router'
 import { StrictMode } from 'react'
