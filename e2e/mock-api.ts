@@ -161,6 +161,11 @@ Bun.serve({
   async fetch(req) {
     const url = new URL(req.url)
 
+    // Signed-out session for the public mock track. The Vite Navbar calls
+    // /auth/session on every page; 401 -> null (anonymous) in fetchSession
+    // (packages/web/src/vite/session.ts), whereas a 404 would throw.
+    if (url.pathname === '/auth/session') return fail('unauthenticated', 401)
+
     if (url.pathname === '/vehicles') return ok([TEST_VEHICLE])
 
     // Mirror real contract: /availability requires from + to date range.
