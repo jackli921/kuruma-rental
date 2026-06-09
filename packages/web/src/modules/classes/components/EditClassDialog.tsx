@@ -52,7 +52,6 @@ export function EditClassDialog({ vehicleClass, onOpenChange }: EditClassDialogP
               photos: vehicleClass.photos,
               seats: vehicleClass.seats,
               luggageCapacity: vehicleClass.luggageCapacity,
-              luggageSize: vehicleClass.luggageSize,
               transmission: vehicleClass.transmission,
               ...(vehicleClass.fuelType != null && { fuelType: vehicleClass.fuelType }),
               ...(vehicleClass.acrissCode != null && { acrissCode: vehicleClass.acrissCode }),

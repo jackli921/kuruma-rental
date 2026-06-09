@@ -4,7 +4,6 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 // Only these codes exist under the `acriss` namespace; an off-dictionary code
 // must fall back to the raw code via t.has().
 const ACRISS_LABELS: Record<string, string> = { CCAR: 'Compact', SUVR: 'SUV' }
-const SIZE_LABELS: Record<string, string> = { SMALL: 'Small', MEDIUM: 'Medium', LARGE: 'Large' }
 
 vi.mock('next-intl', () => ({
   useTranslations: (namespace?: string) => {
@@ -24,12 +23,7 @@ vi.mock('next-intl', () => ({
         priceFrom: 'From',
         perDay: '/ day',
       }
-      const template =
-        namespace === 'acriss'
-          ? (ACRISS_LABELS[key] ?? key)
-          : namespace === 'luggageSize'
-            ? (SIZE_LABELS[key] ?? key)
-            : (messages[key] ?? key)
+      const template = namespace === 'acriss' ? (ACRISS_LABELS[key] ?? key) : (messages[key] ?? key)
       if (!values) return template
       return Object.entries(values).reduce<string>(
         (acc, [k, v]) => acc.replace(`{${k}}`, String(v)),
@@ -60,7 +54,6 @@ const baseClass = {
   photos: ['https://example.com/a.jpg', 'https://example.com/b.jpg', 'https://example.com/c.jpg'],
   seats: 5,
   luggageCapacity: 2,
-  luggageSize: 'LARGE' as const,
   transmission: 'AUTO' as const,
   fuelType: 'GASOLINE',
   acrissCode: null,
@@ -110,12 +103,11 @@ describe('ClassDetailView', () => {
     expect(cta).toHaveAttribute('href', '/bookings/new?classSlug=compact')
   })
 
-  it('shows seats, transmission, luggage (count + size), fuel type in specs', () => {
+  it('shows seats, transmission, luggage, fuel type in specs', () => {
     render(<ClassDetailView vehicleClass={baseClass} />)
     expect(screen.getByText('5 seats')).toBeInTheDocument()
     expect(screen.getByText('Automatic')).toBeInTheDocument()
     expect(screen.getByText('2 bags')).toBeInTheDocument()
-    expect(screen.getByText(/Large/)).toBeInTheDocument()
     expect(screen.getByText('GASOLINE')).toBeInTheDocument()
   })
 

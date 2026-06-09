@@ -1,7 +1,7 @@
 import { Card, CardContent } from '@/components/ui/card'
 import { formatDateTime, formatJpy } from '@/lib/format'
 import type { AvailableVehicleData, StorefrontSummaryData } from '@/modules/storefronts'
-import { Briefcase, Car, MapPin, Settings2, Users } from 'lucide-react'
+import { Car, MapPin, Settings2, Users } from 'lucide-react'
 import { getLocale, getTranslations } from 'next-intl/server'
 
 interface BookingVehicleSummaryProps {
@@ -19,11 +19,7 @@ export async function BookingVehicleSummary({
   from,
   to,
 }: BookingVehicleSummaryProps) {
-  const [t, tSize, locale] = await Promise.all([
-    getTranslations('bookings.new'),
-    getTranslations('luggageSize'),
-    getLocale(),
-  ])
+  const [t, locale] = await Promise.all([getTranslations('bookings.new'), getLocale()])
   const transmissionLabel = vehicle.transmission === 'AUTO' ? t('auto') : t('manual')
 
   return (
@@ -43,15 +39,6 @@ export async function BookingVehicleSummary({
             <Settings2 className="size-4" />
             {transmissionLabel}
           </span>
-          {vehicle.luggageCapacity != null && (
-            <span className="flex items-center gap-1.5">
-              <Briefcase className="size-4" />
-              {t('luggage', { count: vehicle.luggageCapacity })}
-              {vehicle.luggageSize != null && (
-                <span className="text-muted-foreground/80"> · {tSize(vehicle.luggageSize)}</span>
-              )}
-            </span>
-          )}
           {vehicle.dailyRateJpy != null && (
             <span className="flex items-center gap-1.5">
               <Car className="size-4" />

@@ -1,7 +1,7 @@
 import { buttonVariants } from '@/components/ui/button'
 import { Link } from '@/i18n/routing'
 import { cn } from '@/lib/utils'
-import { Briefcase, Car, Settings2, Users } from 'lucide-react'
+import { Car, Settings2, Users } from 'lucide-react'
 import { useTranslations } from 'next-intl'
 import type { AvailableVehicleData } from '../api'
 
@@ -21,7 +21,6 @@ interface AvailableVehicleCardProps {
  */
 export function AvailableVehicleCard({ vehicle, locationId, from, to }: AvailableVehicleCardProps) {
   const t = useTranslations('search')
-  const tSize = useTranslations('luggageSize')
   const photo = vehicle.photos[0]
   const transmissionLabel = vehicle.transmission === 'AUTO' ? t('auto') : t('manual')
   const bookingQuery = new URLSearchParams({ vehicleId: vehicle.id, locationId, from, to })
@@ -55,15 +54,6 @@ export function AvailableVehicleCard({ vehicle, locationId, from, to }: Availabl
             <Settings2 className="size-4" />
             {transmissionLabel}
           </span>
-          {vehicle.luggageCapacity != null && (
-            <span className="flex items-center gap-1.5">
-              <Briefcase className="size-4" />
-              {t('luggage', { count: vehicle.luggageCapacity })}
-              {vehicle.luggageSize != null && (
-                <span className="text-muted-foreground/80"> · {tSize(vehicle.luggageSize)}</span>
-              )}
-            </span>
-          )}
         </div>
         <p className="mt-auto pt-1 text-base font-semibold text-foreground">{priceLabel}</p>
         <Link

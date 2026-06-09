@@ -1,6 +1,5 @@
 import { createApiClient } from '@/lib/api-client'
 import { unwrap } from '@/lib/api-error'
-import type { LuggageSize } from '@kuruma/shared/lib/luggage'
 import type { ApiResponse } from '@kuruma/shared/types/api-response'
 import type {
   CreateVehicleClassInput,
@@ -20,7 +19,6 @@ export interface VehicleClassData {
   photos: string[]
   seats: number
   luggageCapacity: number
-  luggageSize: LuggageSize
   transmission: 'AUTO' | 'MANUAL'
   fuelType: string | null
   acrissCode: string | null

@@ -1,5 +1,4 @@
 import { createApiClient } from '@/lib/api-client'
-import type { LuggageSize } from '@kuruma/shared/lib/luggage'
 import type { ApiResponse } from '@kuruma/shared/types/api-response'
 
 // --- JSON-serialized shapes returned by the public storefront endpoints (#391).
@@ -15,9 +14,6 @@ export interface ClassSummaryData {
   acrissCode: string | null
   /** Operator-entered class name; the web localizes via acrissCode. */
   label: string
-  // #457 D6: class-default luggage for compare-on-search badges.
-  luggageCapacity: number | null
-  luggageSize: LuggageSize | null
   availableCount: number
 }
 
@@ -46,9 +42,6 @@ export interface AvailableVehicleData {
   model: string | null
   year: number | null
   seats: number
-  // #457: effective luggage (vehicle override resolved against the class default).
-  luggageCapacity: number | null
-  luggageSize: LuggageSize | null
   transmission: 'AUTO' | 'MANUAL'
   acrissCode: string | null
   classLabel: string

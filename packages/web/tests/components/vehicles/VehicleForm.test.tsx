@@ -10,13 +10,6 @@ vi.mock('next-intl', () => ({
       'form.description': 'Description',
       'form.descriptionPlaceholder': 'Brief description',
       'form.seats': 'Seats',
-      'form.luggageCapacity': 'Luggage capacity (bags)',
-      'form.luggageSize': 'Luggage size',
-      'form.luggageInheritPlaceholder': 'Inherit from class',
-      'form.luggageSizeInherit': 'Inherit from class',
-      'form.luggageSizeSmall': 'Small',
-      'form.luggageSizeMedium': 'Medium',
-      'form.luggageSizeLarge': 'Large',
       'form.transmission': 'Transmission',
       'form.transmissionAuto': 'Automatic',
       'form.transmissionManual': 'Manual',
@@ -825,68 +818,6 @@ describe('VehicleForm', () => {
       ).toBeInTheDocument()
       expect(screen.getByLabelText('Shaken expiry date')).toBeInTheDocument()
       expect(screen.getByLabelText('Insurance expiry date')).toBeInTheDocument()
-    })
-  })
-
-  // Issue #457: per-vehicle luggage override (count + size). Both nullable —
-  // blank inherits the class default (resolveLuggage uses `vehicle.x ?? class.x`).
-  describe('luggage override (#457)', () => {
-    it('renders the luggage capacity input and size select', () => {
-      render(<VehicleForm onSubmit={vi.fn()} />)
-
-      expect(screen.getByLabelText('Luggage capacity (bags)')).toBeInTheDocument()
-      expect(screen.getByLabelText('Luggage size')).toBeInTheDocument()
-    })
-
-    it('submits the entered luggage capacity and size override', async () => {
-      const user = userEvent.setup()
-      const onSubmit = vi.fn().mockResolvedValue(undefined)
-      render(<VehicleForm onSubmit={onSubmit} />)
-
-      await user.type(screen.getByLabelText('Vehicle name'), 'Toyota Alphard')
-      await user.type(screen.getByLabelText('Daily rate'), '15000')
-      await user.type(screen.getByLabelText('Luggage capacity (bags)'), '6')
-      await user.selectOptions(screen.getByLabelText('Luggage size'), 'LARGE')
-      await user.click(screen.getByRole('button', { name: 'Save vehicle' }))
-
-      await waitFor(() => expect(onSubmit).toHaveBeenCalledTimes(1))
-      expect(onSubmit.mock.calls[0][0]).toMatchObject({
-        luggageCapacity: 6,
-        luggageSize: 'LARGE',
-      })
-    })
-
-    it('submits null for both when left blank (inherit the class default)', async () => {
-      const user = userEvent.setup()
-      const onSubmit = vi.fn().mockResolvedValue(undefined)
-      render(<VehicleForm onSubmit={onSubmit} />)
-
-      await user.type(screen.getByLabelText('Vehicle name'), 'Toyota Corolla')
-      await user.type(screen.getByLabelText('Daily rate'), '8000')
-      await user.click(screen.getByRole('button', { name: 'Save vehicle' }))
-
-      await waitFor(() => expect(onSubmit).toHaveBeenCalledTimes(1))
-      expect(onSubmit.mock.calls[0][0].luggageCapacity).toBeNull()
-      expect(onSubmit.mock.calls[0][0].luggageSize).toBeNull()
-    })
-
-    it('pre-fills the override in edit mode', () => {
-      render(
-        <VehicleForm
-          onSubmit={vi.fn()}
-          defaultValues={{
-            name: 'Toyota Alphard',
-            seats: 7,
-            transmission: 'AUTO',
-            dailyRateJpy: 15000,
-            luggageCapacity: 6,
-            luggageSize: 'LARGE',
-          }}
-        />,
-      )
-
-      expect(screen.getByLabelText('Luggage capacity (bags)')).toHaveValue(6)
-      expect((screen.getByLabelText('Luggage size') as HTMLSelectElement).value).toBe('LARGE')
     })
   })
 })
