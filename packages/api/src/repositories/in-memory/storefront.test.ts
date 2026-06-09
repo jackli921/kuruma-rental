@@ -25,6 +25,8 @@ function locationInput(overrides: Partial<LocationInput> = {}): LocationInput {
     operatorId: 'op_a',
     name: 'Namba',
     address: '1-1 Namba, Osaka',
+    latitude: null,
+    longitude: null,
     operatingHours: null,
     timezone: 'Asia/Tokyo',
     defaultTurnaroundMinutes: 2880,

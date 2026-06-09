@@ -79,7 +79,14 @@ export interface LocationRepository {
    * `(operatorId, name)` unique constraint is the real seal).
    */
   findByOperatorAndName(operatorId: string, name: string): Promise<Location | undefined>
-  create(data: Omit<Location, 'id' | 'createdAt' | 'updatedAt'>): Promise<Location>
+  // lat/lng are optional on create (default null): the location form does not
+  // capture coordinates yet (#458 §4 follow-up). The DB column is nullable.
+  create(
+    data: Omit<Location, 'id' | 'createdAt' | 'updatedAt' | 'latitude' | 'longitude'> & {
+      latitude?: number | null
+      longitude?: number | null
+    },
+  ): Promise<Location>
   update(id: string, data: Partial<Location>): Promise<Location | undefined>
   archive(id: string): Promise<Location | undefined>
 }
