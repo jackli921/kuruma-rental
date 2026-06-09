@@ -1,6 +1,7 @@
 import type { Column } from 'drizzle-orm'
 import type { getDb } from '@kuruma/shared/db'
 import {
+  addOnOptions,
   bookingEvents,
   bookings,
   insuranceOptions,
@@ -16,6 +17,7 @@ import {
 } from '@kuruma/shared/db/schema'
 import type { VehicleDetailBooking } from '@kuruma/shared/types/vehicle-detail'
 import type {
+  AddOn,
   Booking,
   BookingEvent,
   InsuranceOption,
@@ -104,6 +106,17 @@ export const insuranceOptionColumns = {
   status: insuranceOptions.status,
   createdAt: insuranceOptions.createdAt,
   updatedAt: insuranceOptions.updatedAt,
+}
+
+export const addOnOptionColumns = {
+  id: addOnOptions.id,
+  operatorId: addOnOptions.operatorId,
+  name: addOnOptions.name,
+  description: addOnOptions.description,
+  priceJpy: addOnOptions.priceJpy,
+  status: addOnOptions.status,
+  createdAt: addOnOptions.createdAt,
+  updatedAt: addOnOptions.updatedAt,
 }
 
 export const feeScheduleColumns = {
@@ -241,6 +254,7 @@ type VehicleClassRow = ColumnRow<typeof vehicleClassColumns>
 type VehicleRow = ColumnRow<typeof vehicleColumns>
 type LocationRow = ColumnRow<typeof locationColumns>
 type InsuranceOptionRow = ColumnRow<typeof insuranceOptionColumns>
+type AddOnOptionRow = ColumnRow<typeof addOnOptionColumns>
 type FeeScheduleRow = ColumnRow<typeof feeScheduleColumns>
 type PaymentEventRow = ColumnRow<typeof paymentEventColumns>
 type BookingRow = ColumnRow<typeof bookingColumns>
@@ -293,6 +307,19 @@ export function toInsuranceOption(r: InsuranceOptionRow): InsuranceOption {
     description: r.description,
     dailyPriceJpy: r.dailyPriceJpy,
     deductibleJpy: r.deductibleJpy,
+    status: r.status,
+    createdAt: r.createdAt,
+    updatedAt: r.updatedAt,
+  }
+}
+
+export function toAddOn(r: AddOnOptionRow): AddOn {
+  return {
+    id: r.id,
+    operatorId: r.operatorId,
+    name: r.name,
+    description: r.description,
+    priceJpy: r.priceJpy,
     status: r.status,
     createdAt: r.createdAt,
     updatedAt: r.updatedAt,

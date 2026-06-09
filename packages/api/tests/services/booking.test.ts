@@ -9,6 +9,7 @@ import { describe, expect, it, vi } from 'vitest'
 import { type CallerContext, SYSTEM_CONTEXT } from '../../src/middleware/auth'
 import { PG_ERROR } from '../../src/pg-errors'
 import {
+  InMemoryAddOnRepository,
   InMemoryDocumentStorage,
   InMemoryFeeScheduleRepository,
   InMemoryInsuranceOptionRepository,
@@ -97,6 +98,7 @@ async function setup(
   const vehicleRepo = new InMemoryVehicleRepository()
   const locationRepo = new InMemoryLocationRepository()
   const insuranceOptionRepo = new InMemoryInsuranceOptionRepository()
+  const addOnRepo = new InMemoryAddOnRepository()
   const feeScheduleRepo = new InMemoryFeeScheduleRepository()
   const maintenanceLogRepo = new InMemoryMaintenanceLogRepository()
   const vehicleClassRepo = new InMemoryVehicleClassRepository()
@@ -137,6 +139,7 @@ async function setup(
     bookingEventRepo,
     locationRepo,
     insuranceOptionRepo,
+    addOnRepo,
     feeScheduleRepo,
   }
   const runInTransaction: RunInTransaction = async (fn) => fn(repos)
@@ -760,6 +763,7 @@ async function setupSub(): Promise<SubHarness> {
   const vehicleRepo = new InMemoryVehicleRepository()
   const locationRepo = new InMemoryLocationRepository()
   const insuranceOptionRepo = new InMemoryInsuranceOptionRepository()
+  const addOnRepo = new InMemoryAddOnRepository()
   const feeScheduleRepo = new InMemoryFeeScheduleRepository()
   const maintenanceLogRepo = new InMemoryMaintenanceLogRepository()
   const vehicleClassRepo = new InMemoryVehicleClassRepository()
@@ -807,6 +811,7 @@ async function setupSub(): Promise<SubHarness> {
     bookingEventRepo,
     locationRepo,
     insuranceOptionRepo,
+    addOnRepo,
     feeScheduleRepo,
   }
   const runInTransaction: RunInTransaction = async (fn) => fn(repos)

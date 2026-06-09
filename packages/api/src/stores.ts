@@ -214,6 +214,18 @@ export interface InsuranceOption {
   updatedAt: Date
 }
 
+export interface AddOn {
+  id: string
+  /** Owning operator (marketplace tenant, #460). NOT NULL in the DB. */
+  operatorId: string
+  name: string
+  description: string | null
+  priceJpy: number
+  status: 'ACTIVE' | 'ARCHIVED'
+  createdAt: Date
+  updatedAt: Date
+}
+
 export interface FeeSchedule {
   id: string
   /** Owning operator (marketplace tenant, #405). NOT NULL in the DB. */
