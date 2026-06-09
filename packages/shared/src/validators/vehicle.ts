@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { LUGGAGE_SIZES } from '../lib/luggage'
 
 const MIN_VEHICLE_YEAR = 1900
 const MAX_VEHICLE_YEAR = 2100
@@ -30,6 +31,12 @@ const vehicleObjectSchema = z.object({
   description: z.string().optional(),
   photos: photosSchema.optional(),
   seats: z.number().int().min(1, 'Must have at least 1 seat').max(50),
+  // Per-vehicle luggage override (#457). Both nullish: omit to inherit the
+  // class default, or submit explicit `null` to clear an override back to the
+  // class default (same react-hook-form rationale as the rental rules above).
+  // No `.default()` here — the class is the fallback, resolved at read time.
+  luggageCapacity: z.number().int().min(0, 'Luggage capacity cannot be negative').nullish(),
+  luggageSize: z.enum(LUGGAGE_SIZES).nullish(),
   transmission: z.enum(['AUTO', 'MANUAL']),
   fuelType: z.string().optional(),
   licensePlate: z.string().trim().max(20).nullish(),

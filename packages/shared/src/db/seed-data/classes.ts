@@ -1,3 +1,4 @@
+import type { LuggageSize } from '../../lib/luggage'
 import type { vehicleClasses } from '../schema'
 
 /**
@@ -7,6 +8,8 @@ import type { vehicleClasses } from '../schema'
  * rate. `slug` is GLOBALLY unique (schema), so the two new operators namespace
  * their slugs; Best Car Rental keeps its existing short slugs. `acrissCode`
  * must match ACRISS_PATTERN (/^[A-Z9]{4}$/); a code may repeat across operators.
+ * `luggageSize` (#457) is the class default — spread across SMALL/MEDIUM/LARGE
+ * for demo variety; per-vehicle overrides fall back to it.
  */
 type ClassRow = typeof vehicleClasses.$inferInsert
 
@@ -20,6 +23,7 @@ export type DemoVehicleClass = Pick<
   | 'acrissCode'
   | 'seats'
   | 'luggageCapacity'
+  | 'luggageSize'
   | 'transmission'
   | 'fuelType'
   | 'sortOrder'
@@ -31,6 +35,7 @@ export type DemoVehicleClass = Pick<
   readonly acrissCode: string
   readonly seats: number
   readonly luggageCapacity: number
+  readonly luggageSize: LuggageSize
   readonly sortOrder: number
 }
 
@@ -45,6 +50,7 @@ export const DEMO_VEHICLE_CLASSES: readonly DemoVehicleClass[] = [
     description: "Japan's compact kei class — cheapest to rent, easiest to park.",
     seats: 4,
     luggageCapacity: 1,
+    luggageSize: 'SMALL',
     transmission: 'AUTO',
     fuelType: 'Gasoline',
     sortOrder: 1,
@@ -58,6 +64,7 @@ export const DEMO_VEHICLE_CLASSES: readonly DemoVehicleClass[] = [
     description: 'Fuel-efficient compact hatchbacks for city driving and short trips.',
     seats: 5,
     luggageCapacity: 2,
+    luggageSize: 'MEDIUM',
     transmission: 'AUTO',
     fuelType: 'Hybrid',
     sortOrder: 2,
@@ -71,6 +78,7 @@ export const DEMO_VEHICLE_CLASSES: readonly DemoVehicleClass[] = [
     description: 'Comfortable mid-size sedans for longer highway drives.',
     seats: 5,
     luggageCapacity: 3,
+    luggageSize: 'MEDIUM',
     transmission: 'AUTO',
     fuelType: 'Hybrid',
     sortOrder: 3,
@@ -84,6 +92,7 @@ export const DEMO_VEHICLE_CLASSES: readonly DemoVehicleClass[] = [
     description: 'Mid-size SUVs for mountain roads and group trips.',
     seats: 5,
     luggageCapacity: 4,
+    luggageSize: 'LARGE',
     transmission: 'AUTO',
     fuelType: 'Hybrid',
     sortOrder: 4,
@@ -98,6 +107,7 @@ export const DEMO_VEHICLE_CLASSES: readonly DemoVehicleClass[] = [
     description: 'Efficient economy hatchbacks for budget-conscious renters.',
     seats: 5,
     luggageCapacity: 2,
+    luggageSize: 'SMALL',
     transmission: 'AUTO',
     fuelType: 'Hybrid',
     sortOrder: 1,
@@ -111,6 +121,7 @@ export const DEMO_VEHICLE_CLASSES: readonly DemoVehicleClass[] = [
     description: 'Roomier intermediate cars with extra luggage space.',
     seats: 5,
     luggageCapacity: 3,
+    luggageSize: 'MEDIUM',
     transmission: 'AUTO',
     fuelType: 'Hybrid',
     sortOrder: 2,
@@ -124,6 +135,7 @@ export const DEMO_VEHICLE_CLASSES: readonly DemoVehicleClass[] = [
     description: 'All-road SUVs for Kobe and the surrounding hills.',
     seats: 5,
     luggageCapacity: 4,
+    luggageSize: 'LARGE',
     transmission: 'AUTO',
     fuelType: 'Gasoline',
     sortOrder: 3,
@@ -137,6 +149,7 @@ export const DEMO_VEHICLE_CLASSES: readonly DemoVehicleClass[] = [
     description: 'Spacious 7-seat minivans for families and groups.',
     seats: 7,
     luggageCapacity: 5,
+    luggageSize: 'LARGE',
     transmission: 'AUTO',
     fuelType: 'Hybrid',
     sortOrder: 4,
@@ -151,6 +164,7 @@ export const DEMO_VEHICLE_CLASSES: readonly DemoVehicleClass[] = [
     description: 'Easy-to-park kei cars for Kyoto and Nara backstreets.',
     seats: 4,
     luggageCapacity: 1,
+    luggageSize: 'SMALL',
     transmission: 'AUTO',
     fuelType: 'Gasoline',
     sortOrder: 1,
@@ -164,6 +178,7 @@ export const DEMO_VEHICLE_CLASSES: readonly DemoVehicleClass[] = [
     description: 'Nimble compacts for sightseeing day trips.',
     seats: 5,
     luggageCapacity: 2,
+    luggageSize: 'MEDIUM',
     transmission: 'AUTO',
     fuelType: 'Hybrid',
     sortOrder: 2,
@@ -177,6 +192,7 @@ export const DEMO_VEHICLE_CLASSES: readonly DemoVehicleClass[] = [
     description: 'Full-size SUVs for larger groups with luggage.',
     seats: 7,
     luggageCapacity: 5,
+    luggageSize: 'LARGE',
     transmission: 'AUTO',
     fuelType: 'Gasoline',
     sortOrder: 3,
@@ -190,6 +206,7 @@ export const DEMO_VEHICLE_CLASSES: readonly DemoVehicleClass[] = [
     description: 'Premium 8-seat vans (Alphard class) for comfort-first groups.',
     seats: 8,
     luggageCapacity: 6,
+    luggageSize: 'LARGE',
     transmission: 'AUTO',
     fuelType: 'Hybrid',
     sortOrder: 4,

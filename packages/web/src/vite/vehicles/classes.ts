@@ -1,5 +1,6 @@
 import { unwrap } from '@/lib/api-error'
 import { getApiBaseUrl } from '@/vite/api-base'
+import type { LuggageSize } from '@kuruma/shared/lib/luggage'
 import { queryOptions } from '@tanstack/react-query'
 
 // JSON-serialized VehicleClass — dates arrive as ISO strings from the API. The
@@ -14,6 +15,7 @@ export interface VehicleClassData {
   photos: string[]
   seats: number
   luggageCapacity: number
+  luggageSize: LuggageSize
   transmission: 'AUTO' | 'MANUAL'
   fuelType: string | null
   acrissCode: string | null

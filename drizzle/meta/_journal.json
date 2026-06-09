@@ -285,15 +285,22 @@
     {
       "idx": 40,
       "version": "7",
-      "when": 1781003114551,
-      "tag": "0040_add_booking_fulfillment_mode",
+      "when": 1780966943984,
+      "tag": "0040_vehicle_luggage",
       "breakpoints": true
     },
     {
       "idx": 41,
       "version": "7",
-      "when": 1781004404359,
-      "tag": "0041_booking_specific_requires_assigned",
+      "when": 1781043331838,
+      "tag": "0041_add_booking_fulfillment_mode",
+      "breakpoints": true
+    },
+    {
+      "idx": 42,
+      "version": "7",
+      "when": 1781043340404,
+      "tag": "0042_booking_specific_requires_assigned",
       "breakpoints": true
     }
   ]

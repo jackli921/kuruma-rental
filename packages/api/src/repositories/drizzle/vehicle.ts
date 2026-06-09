@@ -102,6 +102,8 @@ export class DrizzleVehicleRepository implements VehicleRepository {
         description: data.description,
         photos: data.photos,
         seats: data.seats,
+        luggageCapacity: data.luggageCapacity,
+        luggageSize: data.luggageSize,
         transmission: data.transmission,
         fuelType: data.fuelType,
         licensePlate: data.licensePlate,

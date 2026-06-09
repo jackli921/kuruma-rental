@@ -1,3 +1,4 @@
+import { type LuggageSize, resolveLuggage } from '@kuruma/shared/lib/luggage'
 import type { LocationOperatingHours } from '@kuruma/shared/types/location'
 import type { CallerContext } from '../middleware/auth'
 import type {
@@ -33,6 +34,10 @@ export interface AvailableVehicle {
   model: string | null
   year: number | null
   seats: number
+  // #457: effective luggage — vehicle override resolved against the class default
+  // (resolveLuggage). Null only when the vehicle has no class to fall back to.
+  luggageCapacity: number | null
+  luggageSize: LuggageSize | null
   transmission: Vehicle['transmission']
   acrissCode: string | null
   classLabel: string
@@ -192,6 +197,11 @@ function keepClass(
 }
 
 function toAvailableVehicle(vehicle: Vehicle, vc: VehicleClass | undefined): AvailableVehicle {
+  // A classless vehicle has no default to fall back to, so its own (possibly null)
+  // luggage stands; otherwise resolve override-then-class per field.
+  const luggage = vc
+    ? resolveLuggage(vehicle, vc)
+    : { luggageCapacity: vehicle.luggageCapacity, luggageSize: vehicle.luggageSize }
   return {
     id: vehicle.id,
     name: vehicle.name,
@@ -199,6 +209,8 @@ function toAvailableVehicle(vehicle: Vehicle, vc: VehicleClass | undefined): Ava
     model: vehicle.model,
     year: vehicle.year,
     seats: vehicle.seats,
+    luggageCapacity: luggage.luggageCapacity,
+    luggageSize: luggage.luggageSize,
     transmission: vehicle.transmission,
     acrissCode: vc?.acrissCode ?? null,
     classLabel: vc?.name ?? '',

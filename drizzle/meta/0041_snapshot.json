@@ -1,6 +1,6 @@
 {
-  "id": "8305a551-967c-47be-ba25-2d2839b7bfde",
-  "prevId": "83414291-e943-4c50-a3ee-50496c5c4459",
+  "id": "6b997d6b-1ae6-4317-a75c-cdc7b2712497",
+  "prevId": "72e503ab-323d-4ac0-88ae-5d17c674c247",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -622,12 +622,7 @@
         }
       },
       "policies": {},
-      "checkConstraints": {
-        "bookings_specific_requires_assigned": {
-          "name": "bookings_specific_requires_assigned",
-          "value": "\"bookings\".\"fulfillmentMode\" <> 'SPECIFIC' OR \"bookings\".\"assignedVehicleId\" IS NOT NULL"
-        }
-      },
+      "checkConstraints": {},
       "isRLSEnabled": false
     },
     "public.fee_schedules": {
@@ -1832,6 +1827,14 @@
           "primaryKey": false,
           "notNull": true
         },
+        "luggageSize": {
+          "name": "luggageSize",
+          "type": "luggage_size",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'MEDIUM'"
+        },
         "transmission": {
           "name": "transmission",
           "type": "transmission",
@@ -1992,6 +1995,19 @@
           "type": "integer",
           "primaryKey": false,
           "notNull": true
+        },
+        "luggageCapacity": {
+          "name": "luggageCapacity",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "luggageSize": {
+          "name": "luggageSize",
+          "type": "luggage_size",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": false
         },
         "transmission": {
           "name": "transmission",
@@ -2309,6 +2325,15 @@
       "values": [
         "ACTIVE",
         "ARCHIVED"
+      ]
+    },
+    "public.luggage_size": {
+      "name": "luggage_size",
+      "schema": "public",
+      "values": [
+        "SMALL",
+        "MEDIUM",
+        "LARGE"
       ]
     },
     "public.notification_kind": {

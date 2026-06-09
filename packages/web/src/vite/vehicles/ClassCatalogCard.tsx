@@ -1,6 +1,6 @@
 import type { VehicleClassData } from '@/vite/vehicles/classes'
 import { Link } from '@tanstack/react-router'
-import { Car, Settings2, Users } from 'lucide-react'
+import { Briefcase, Car, Settings2, Users } from 'lucide-react'
 import { useLocale, useTranslations } from 'use-intl'
 
 interface ClassCatalogCardProps {
@@ -10,6 +10,7 @@ interface ClassCatalogCardProps {
 export function ClassCatalogCard({ vehicleClass }: ClassCatalogCardProps) {
   const t = useTranslations('catalog')
   const tAcriss = useTranslations('acriss')
+  const tSize = useTranslations('luggageSize')
   const locale = useLocale()
 
   const photo = vehicleClass.photos[0]
@@ -64,6 +65,11 @@ export function ClassCatalogCard({ vehicleClass }: ClassCatalogCardProps) {
           <span className="flex items-center gap-1.5">
             <Settings2 className="size-4" />
             {transmissionLabel}
+          </span>
+          <span className="flex items-center gap-1.5">
+            <Briefcase className="size-4" />
+            {t('luggage', { count: vehicleClass.luggageCapacity })}
+            <span className="text-muted-foreground/80"> · {tSize(vehicleClass.luggageSize)}</span>
           </span>
         </div>
       </div>
