@@ -1,3 +1,5 @@
+import type { LuggageSize } from '../lib/luggage'
+
 export type VehicleStatus = 'AVAILABLE' | 'MAINTENANCE' | 'RETIRED'
 export type Transmission = 'AUTO' | 'MANUAL'
 
@@ -17,6 +19,9 @@ export interface VehicleBase {
   description: string | null
   photos: string[]
   seats: number
+  /** #457: per-vehicle luggage override (nullable). null → use the class default. */
+  luggageCapacity: number | null
+  luggageSize: LuggageSize | null
   transmission: Transmission
   fuelType: string | null
   licensePlate: string | null

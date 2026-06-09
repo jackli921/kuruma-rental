@@ -1,5 +1,6 @@
 import { Badge } from '@/components/ui/badge'
 import type { ClassSummaryData } from '@/vite/storefronts/api'
+import { Briefcase } from 'lucide-react'
 import { useTranslations } from 'use-intl'
 
 interface ClassSummaryBadgesProps {
@@ -15,6 +16,7 @@ interface ClassSummaryBadgesProps {
 export function ClassSummaryBadges({ summaries }: ClassSummaryBadgesProps) {
   const t = useTranslations('search')
   const tAcriss = useTranslations('acriss')
+  const tSize = useTranslations('luggageSize')
 
   return (
     <div className="flex flex-wrap gap-1.5">
@@ -23,9 +25,32 @@ export function ClassSummaryBadges({ summaries }: ClassSummaryBadgesProps) {
           summary.acrissCode && tAcriss.has(summary.acrissCode)
             ? tAcriss(summary.acrissCode)
             : summary.label
+        // #457 D6: class-default luggage so renters compare storefronts at a
+        // glance. The chip stays compact (briefcase + bag count); the full
+        // "{n} bags · {size}" rides along in the title.
+        const bags = summary.luggageCapacity
+        const luggageTitle =
+          bags == null
+            ? undefined
+            : summary.luggageSize != null
+              ? `${t('luggage', { count: bags })} · ${tSize(summary.luggageSize)}`
+              : t('luggage', { count: bags })
         return (
-          <Badge key={`${summary.acrissCode ?? 'na'}-${summary.label}`} variant="secondary">
+          <Badge
+            key={`${summary.acrissCode ?? 'na'}-${summary.label}`}
+            variant="secondary"
+            className="gap-1.5"
+          >
             {t('classCount', { label, count: summary.availableCount })}
+            {bags != null && (
+              <span
+                className="inline-flex items-center gap-0.5 text-muted-foreground"
+                title={luggageTitle}
+              >
+                <Briefcase className="size-3" aria-hidden />
+                {bags}
+              </span>
+            )}
           </Badge>
         )
       })}

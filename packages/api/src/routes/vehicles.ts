@@ -82,6 +82,8 @@ export function createVehicleRoutes(
           description: parsed.data.description ?? null,
           photos: parsed.data.photos,
           seats: parsed.data.seats,
+          luggageCapacity: parsed.data.luggageCapacity ?? null,
+          luggageSize: parsed.data.luggageSize ?? null,
           transmission: parsed.data.transmission,
           fuelType: parsed.data.fuelType ?? null,
           licensePlate: parsed.data.licensePlate ?? null,
