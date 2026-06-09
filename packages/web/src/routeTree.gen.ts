@@ -15,8 +15,10 @@ import { Route as LocaleIndexRouteImport } from './routes/$locale/index'
 import { Route as LocaleLoginRouteImport } from './routes/$locale/login'
 import { Route as LocaleRenterRouteImport } from './routes/$locale/_renter'
 import { Route as LocaleBusinessRouteImport } from './routes/$locale/_business'
+import { Route as LocaleVehiclesIndexRouteImport } from './routes/$locale/vehicles/index'
 import { Route as LocaleRenterBookingsRouteImport } from './routes/$locale/_renter/bookings'
 import { Route as LocaleBusinessDashboardRouteImport } from './routes/$locale/_business/dashboard'
+import { Route as LocaleVehiclesClassesSlugRouteImport } from './routes/$locale/vehicles/classes/$slug'
 
 const LocaleRoute = LocaleRouteImport.update({
   id: '/$locale',
@@ -46,6 +48,11 @@ const LocaleBusinessRoute = LocaleBusinessRouteImport.update({
   id: '/_business',
   getParentRoute: () => LocaleRoute,
 } as any)
+const LocaleVehiclesIndexRoute = LocaleVehiclesIndexRouteImport.update({
+  id: '/vehicles/',
+  path: '/vehicles/',
+  getParentRoute: () => LocaleRoute,
+} as any)
 const LocaleRenterBookingsRoute = LocaleRenterBookingsRouteImport.update({
   id: '/bookings',
   path: '/bookings',
@@ -56,6 +63,12 @@ const LocaleBusinessDashboardRoute = LocaleBusinessDashboardRouteImport.update({
   path: '/dashboard',
   getParentRoute: () => LocaleBusinessRoute,
 } as any)
+const LocaleVehiclesClassesSlugRoute =
+  LocaleVehiclesClassesSlugRouteImport.update({
+    id: '/vehicles/classes/$slug',
+    path: '/vehicles/classes/$slug',
+    getParentRoute: () => LocaleRoute,
+  } as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
@@ -64,6 +77,8 @@ export interface FileRoutesByFullPath {
   '/$locale/': typeof LocaleIndexRoute
   '/$locale/dashboard': typeof LocaleBusinessDashboardRoute
   '/$locale/bookings': typeof LocaleRenterBookingsRoute
+  '/$locale/vehicles/': typeof LocaleVehiclesIndexRoute
+  '/$locale/vehicles/classes/$slug': typeof LocaleVehiclesClassesSlugRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -71,6 +86,8 @@ export interface FileRoutesByTo {
   '/$locale/login': typeof LocaleLoginRoute
   '/$locale/dashboard': typeof LocaleBusinessDashboardRoute
   '/$locale/bookings': typeof LocaleRenterBookingsRoute
+  '/$locale/vehicles': typeof LocaleVehiclesIndexRoute
+  '/$locale/vehicles/classes/$slug': typeof LocaleVehiclesClassesSlugRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -82,6 +99,8 @@ export interface FileRoutesById {
   '/$locale/': typeof LocaleIndexRoute
   '/$locale/_business/dashboard': typeof LocaleBusinessDashboardRoute
   '/$locale/_renter/bookings': typeof LocaleRenterBookingsRoute
+  '/$locale/vehicles/': typeof LocaleVehiclesIndexRoute
+  '/$locale/vehicles/classes/$slug': typeof LocaleVehiclesClassesSlugRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -92,6 +111,8 @@ export interface FileRouteTypes {
     | '/$locale/'
     | '/$locale/dashboard'
     | '/$locale/bookings'
+    | '/$locale/vehicles/'
+    | '/$locale/vehicles/classes/$slug'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -99,6 +120,8 @@ export interface FileRouteTypes {
     | '/$locale/login'
     | '/$locale/dashboard'
     | '/$locale/bookings'
+    | '/$locale/vehicles'
+    | '/$locale/vehicles/classes/$slug'
   id:
     | '__root__'
     | '/'
@@ -109,6 +132,8 @@ export interface FileRouteTypes {
     | '/$locale/'
     | '/$locale/_business/dashboard'
     | '/$locale/_renter/bookings'
+    | '/$locale/vehicles/'
+    | '/$locale/vehicles/classes/$slug'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -160,6 +185,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof LocaleBusinessRouteImport
       parentRoute: typeof LocaleRoute
     }
+    '/$locale/vehicles/': {
+      id: '/$locale/vehicles/'
+      path: '/vehicles'
+      fullPath: '/$locale/vehicles/'
+      preLoaderRoute: typeof LocaleVehiclesIndexRouteImport
+      parentRoute: typeof LocaleRoute
+    }
     '/$locale/_renter/bookings': {
       id: '/$locale/_renter/bookings'
       path: '/bookings'
@@ -173,6 +205,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/$locale/dashboard'
       preLoaderRoute: typeof LocaleBusinessDashboardRouteImport
       parentRoute: typeof LocaleBusinessRoute
+    }
+    '/$locale/vehicles/classes/$slug': {
+      id: '/$locale/vehicles/classes/$slug'
+      path: '/vehicles/classes/$slug'
+      fullPath: '/$locale/vehicles/classes/$slug'
+      preLoaderRoute: typeof LocaleVehiclesClassesSlugRouteImport
+      parentRoute: typeof LocaleRoute
     }
   }
 }
@@ -206,6 +245,8 @@ interface LocaleRouteChildren {
   LocaleRenterRoute: typeof LocaleRenterRouteWithChildren
   LocaleLoginRoute: typeof LocaleLoginRoute
   LocaleIndexRoute: typeof LocaleIndexRoute
+  LocaleVehiclesIndexRoute: typeof LocaleVehiclesIndexRoute
+  LocaleVehiclesClassesSlugRoute: typeof LocaleVehiclesClassesSlugRoute
 }
 
 const LocaleRouteChildren: LocaleRouteChildren = {
@@ -213,6 +254,8 @@ const LocaleRouteChildren: LocaleRouteChildren = {
   LocaleRenterRoute: LocaleRenterRouteWithChildren,
   LocaleLoginRoute: LocaleLoginRoute,
   LocaleIndexRoute: LocaleIndexRoute,
+  LocaleVehiclesIndexRoute: LocaleVehiclesIndexRoute,
+  LocaleVehiclesClassesSlugRoute: LocaleVehiclesClassesSlugRoute,
 }
 
 const LocaleRouteWithChildren =
