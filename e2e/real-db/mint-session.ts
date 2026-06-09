@@ -5,43 +5,64 @@ import { testSql } from './pg'
 // the session JWE. See issue #416 proven reference.
 export const SESSION_COOKIE_NAME = 'authjs.session-token'
 
-// Seed identity, mirrored from @kuruma/shared/db/constants. Duplicated on
-// purpose: Playwright require()s this file as CJS, and importing the shared
-// workspace package's TS source there breaks. Update both if the seed changes.
-const OWNER_EMAIL = 'owner@best-car-rental.local'
-const OWNER_NAME = 'Best Car Rental Owner'
-const OPERATOR_ID = 'op_best_car_rental'
+// Seed identities, mirrored from @kuruma/shared seed data. Duplicated on purpose:
+// Playwright require()s this file as CJS, and importing the shared workspace
+// package's TS source here breaks. Update both if the seed changes.
+//
+// Best Car Rental owner — db/constants.ts BEST_CAR_RENTAL_OWNER_EMAIL. operatorId
+// is NOT hard-coded: the demo seed mints UUID ids (db/seed-id.ts), so we read the
+// owner's actual operatorId off the user row below. A stale slug here would scope
+// the operator token to the wrong tenant and the portal would show no data.
+const OPERATOR = {
+  email: 'owner@best-car-rental.local',
+  name: 'Best Car Rental Owner',
+  role: 'OPERATOR_OWNER',
+} as const
 
-/** Look up the seeded owner's auto-generated id by its stable seed email. */
-async function findOwnerId(): Promise<string> {
+// Renter persona — seed-data/bookings.ts DEMO_RENTERS (Sarah Smith, en). A RENTER
+// has operatorId = null in the DB, so its token omits the claim: the booking API
+// forces renterId = ctx.userId for non-staff, so this owns a self-service booking.
+const RENTER = {
+  email: 'sarah@example.test',
+  name: 'Sarah Smith',
+  role: 'RENTER',
+} as const
+
+/** Look up a seeded user's id + tenant (operatorId) by its stable seed email. */
+async function findUser(email: string): Promise<{ id: string; operatorId: string | null }> {
   const sql = testSql()
   try {
-    const rows = await sql<{ id: string }[]>`
-      SELECT id FROM users WHERE email = ${OWNER_EMAIL} LIMIT 1
+    const rows = await sql<{ id: string; operatorId: string | null }[]>`
+      SELECT id, "operatorId" FROM users WHERE email = ${email} LIMIT 1
     `
-    const owner = rows[0]
-    if (!owner) {
-      throw new Error(
-        `Owner ${OWNER_EMAIL} not found — run db:seed against the e2e Neon branch first`,
-      )
+    const user = rows[0]
+    if (!user) {
+      throw new Error(`User ${email} not found — run db:seed against the e2e Neon branch first`)
     }
-    return owner.id
+    return user
   } finally {
     await sql.end({ timeout: 5 })
   }
 }
 
+interface SessionIdentity {
+  email: string
+  name: string
+  role: string
+}
+
 /**
- * Mint an Auth.js v5 session-cookie value for the seeded Best Car Rental owner,
- * using the app's own `encode` so the JWE format matches what `auth()` expects.
- * The browser receives only this cookie; the web mints the downstream HS256 API
- * token itself (`lib/api-token.ts`) from the same secret.
+ * Mint an Auth.js v5 session-cookie value for a seeded user, using the app's own
+ * `encode` so the JWE format matches what `auth()` expects. The browser receives
+ * only this cookie; the web mints the downstream HS256 API token itself
+ * (`lib/api-token.ts`) from the same secret. The DB-resolved operatorId becomes
+ * the token's tenant claim (omitted for an unscoped RENTER).
  */
-export async function mintOperatorSessionToken(): Promise<string> {
+async function mintSessionToken(identity: SessionIdentity): Promise<string> {
   const secret = process.env.AUTH_SECRET
   if (!secret) throw new Error('AUTH_SECRET is required to mint an e2e session')
 
-  const sub = await findOwnerId()
+  const user = await findUser(identity.email)
 
   // next-auth/jwt is ESM-only; dynamic import so Playwright's CJS transform of
   // this file doesn't ERR_REQUIRE_ESM at load time.
@@ -54,12 +75,22 @@ export async function mintOperatorSessionToken(): Promise<string> {
     salt: SESSION_COOKIE_NAME,
     secret,
     token: {
-      sub,
-      name: OWNER_NAME,
-      email: OWNER_EMAIL,
-      role: 'OPERATOR_OWNER',
-      operatorId: OPERATOR_ID,
+      sub: user.id,
+      name: identity.name,
+      email: identity.email,
+      role: identity.role,
+      ...(user.operatorId ? { operatorId: user.operatorId } : {}),
       roleRefreshedAt: Date.now(),
     },
   })
+}
+
+/** Session cookie value for the seeded Best Car Rental OPERATOR_OWNER. */
+export function mintOperatorSessionToken(): Promise<string> {
+  return mintSessionToken(OPERATOR)
+}
+
+/** Session cookie value for the seeded RENTER persona (Sarah Smith). */
+export function mintRenterSessionToken(): Promise<string> {
+  return mintSessionToken(RENTER)
 }

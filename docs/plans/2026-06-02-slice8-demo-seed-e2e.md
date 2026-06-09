@@ -227,6 +227,16 @@ These NFRs are **explicitly verified in slice 8** (§7: "Next.js bundle already 
 
 Bundle measurement runs on the build output, independent of feature merges (§1.1 item 4) — can be wired early.
 
+### 7.1 First-load JS budget — measured result + signed exception
+
+**Measured (this slice):** shared first-load JS = **554.9 kB**, which is **54.9 kB over** the < 500 KB target. `scripts/check-bundle-size.ts` (`perf:bundle`) reads `rootMainFiles` + `polyfillFiles` from the Next 16 build-manifest (Turbopack emits no per-route First Load JS / app-build-manifest, so the shared baseline is the measurable figure).
+
+**Root cause — Next.js 16 framework floor, not app code.** The two largest chunks both carry `react.dev/errors` markers (`react-dom` + `react` + `scheduler` ≈ 425 kB framework floor); the third (~110 kB) is the app shell. The heavy feature deps that would be cheap to split — `react-big-calendar`, `date-fns`, `recharts` — are **confirmed absent** from the shared set (they load per-route). There is no cheap code-split that brings the shared baseline under 500 kB; it is the framework floor.
+
+**Disposition — signed exception (owner pre-authorized).** The 500 kB target is **not gated** in slice 8: the CI bundle-size step runs `continue-on-error` (advisory). The path to compliance is the **#378 Vite + TanStack Router migration**, which removes the Next.js framework floor — tracked there, not blocked here. Rationale: the overage is entirely framework, not feature regression, and re-architecting the bundler inside an integration/polish slice is out of scope.
+
+> **Exception of record:** renter first-load JS baseline 554.9 kB (target < 500 kB) is accepted for the slice-8 interim milestone. Owner-signed; revisited when #378 lands. Re-measure after #378 and close the exception or re-budget.
+
 ---
 
 ## 8. Demo runbook (cold-start → Qiao/Du walkthrough)

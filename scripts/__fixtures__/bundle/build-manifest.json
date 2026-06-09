@@ -1,0 +1,7 @@
+{
+  "pages": { "/_app": [] },
+  "devFiles": [],
+  "polyfillFiles": ["static/chunks/polyfill.js"],
+  "lowPriorityFiles": ["static/abc/_buildManifest.js", "static/abc/_ssgManifest.js"],
+  "rootMainFiles": ["static/chunks/root-a.js", "static/chunks/root-b.js", "static/chunks/root-a.js"]
+}

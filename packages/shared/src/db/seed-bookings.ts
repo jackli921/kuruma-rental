@@ -1,22 +1,43 @@
-import { and, eq, isNotNull, sql } from 'drizzle-orm'
+import { and, eq, inArray, isNotNull } from 'drizzle-orm'
 import { getDb } from './index'
-import { bookings, users, vehicles } from './schema'
+import {
+  type BookingCreatedPayload,
+  type FeeSnapshotItem,
+  type InsuranceSnapshot,
+  type VehicleSubstitutedPayload,
+  bookingEvents,
+  bookings,
+  notificationLog,
+  users,
+  vehicles,
+} from './schema'
+import {
+  DEMO_BOOKINGS,
+  DEMO_FEE_SCHEDULES,
+  DEMO_INSURANCE_OPTIONS,
+  DEMO_OPERATORS,
+  DEMO_RENTERS,
+} from './seed-data'
+import { seedId } from './seed-id'
 
-// Demo renters — emails clearly marked @example.test so they never collide
-// with real OAuth users, and so you can grep them out for cleanup later.
-const DEMO_RENTERS = [
-  { name: 'Tanaka Yui', email: 'yui@example.test', language: 'ja' },
-  { name: 'Chen Wei', email: 'wei@example.test', language: 'zh' },
-  { name: 'Sarah Smith', email: 'sarah@example.test', language: 'en' },
-  { name: 'Sato Hiroshi', email: 'hiroshi@example.test', language: 'ja' },
-] as const
+/**
+ * Slice 8 demo bookings + events + notifications (#390, §3.5). Consumes the
+ * pure `DEMO_BOOKINGS` descriptors: resolves a concrete seeded vehicle per
+ * booking, computes demo-time-relative timestamps, snapshots insurance/fees, and
+ * writes the marketplace shape — bookings, the append-only booking_events log
+ * (BOOKING_CREATED per row + one VEHICLE_SUBSTITUTED), and one operator
+ * notification_log row per booking. Run AFTER `db:seed` (needs the seeded fleet).
+ *
+ * Idempotent: cleanup deletes every booking owned by a demo-renter persona (and
+ * its events/notifications, FK-safe order) plus the renter rows, then re-inserts.
+ * Scoped to the RENTER `@example.test` personas — operator owners (also
+ * `@example.test`) are never touched.
+ */
 
-// Given a start date, returns a Date `hours` later.
 function addHours(d: Date, hours: number): Date {
   return new Date(d.getTime() + hours * 60 * 60 * 1000)
 }
 
-// Returns a date at hour:00 (minutes/sec/ms zeroed) for today + dayOffset.
 function dayAt(dayOffset: number, hour: number): Date {
   const d = new Date()
   d.setDate(d.getDate() + dayOffset)
@@ -24,131 +45,196 @@ function dayAt(dayOffset: number, hour: number): Date {
   return d
 }
 
+const insuranceById = new Map(DEMO_INSURANCE_OPTIONS.map((o) => [o.id, o]))
+const ownerEmailByOperator = new Map(DEMO_OPERATORS.map((o) => [o.id, o.owner.email]))
+
+function insuranceSnapshotFor(insuranceOptionId: string | null): InsuranceSnapshot | null {
+  if (!insuranceOptionId) return null
+  const opt = insuranceById.get(insuranceOptionId)
+  if (!opt) throw new Error(`Unknown insurance option ${insuranceOptionId}`)
+  return {
+    insuranceOptionId: seedId(opt.id),
+    name: opt.name,
+    dailyPriceJpy: opt.dailyPriceJpy,
+    deductibleJpy: opt.deductibleJpy,
+  }
+}
+
+// Snapshot the operator's fees that apply to this class: every operator-wide row
+// plus any row scoped to exactly this class (proposal §9 item 19).
+function feeSnapshotFor(operatorId: string, classId: string): FeeSnapshotItem[] {
+  return DEMO_FEE_SCHEDULES.filter(
+    (f) =>
+      f.operatorId === operatorId && (f.vehicleClassId == null || f.vehicleClassId === classId),
+  ).map((f) => ({
+    feeType: f.feeType,
+    unit: f.unit,
+    amountJpy: f.amountJpy,
+    vehicleClassId: f.vehicleClassId ? seedId(f.vehicleClassId) : null,
+  }))
+}
+
+type SeededVehicle = { id: string; pickupLocationId: string }
+
 async function seed() {
   const db = getDb()
 
-  console.log('Clearing demo bookings and demo renters...')
-  // Delete bookings by demo renter (cascades are safe — bookings reference users)
-  await db
-    .delete(bookings)
-    .where(sql`${bookings.renterId} IN (SELECT id FROM ${users} WHERE email LIKE '%@example.test')`)
-  await db.delete(users).where(sql`${users.email} LIKE '%@example.test'`)
+  // --- Idempotent cleanup (FK-safe), scoped to demo-renter personas. ---
+  console.log('Clearing demo bookings, events, notifications, renters...')
+  const renterEmails = DEMO_RENTERS.map((r) => r.email)
+  const existingRenters = await db
+    .select({ id: users.id })
+    .from(users)
+    .where(inArray(users.email, renterEmails))
+  const renterIds = existingRenters.map((r) => r.id)
+  if (renterIds.length > 0) {
+    const owned = await db
+      .select({ id: bookings.id })
+      .from(bookings)
+      .where(inArray(bookings.renterId, renterIds))
+    const ownedIds = owned.map((b) => b.id)
+    if (ownedIds.length > 0) {
+      await db.delete(notificationLog).where(inArray(notificationLog.bookingId, ownedIds))
+      await db.delete(bookingEvents).where(inArray(bookingEvents.bookingId, ownedIds))
+      await db.delete(bookings).where(inArray(bookings.id, ownedIds))
+    }
+    await db.delete(users).where(inArray(users.id, renterIds))
+  }
 
-  console.log('Creating demo renters...')
-  const insertedRenters = await db
-    .insert(users)
-    .values(
-      DEMO_RENTERS.map((r) => ({
-        name: r.name,
-        email: r.email,
-        language: r.language,
-        role: 'RENTER' as const,
-      })),
-    )
-    .returning({ id: users.id, name: users.name })
+  console.log(`Creating ${DEMO_RENTERS.length} demo renters...`)
+  await db.insert(users).values(
+    DEMO_RENTERS.map((r) => ({
+      id: seedId(r.id),
+      name: r.name,
+      email: r.email,
+      language: r.language,
+      role: 'RENTER' as const,
+    })),
+  )
 
-  console.log('Fetching vehicles...')
+  // Resolve seeded vehicles into per-(operator,class) queues so each booking can
+  // take a DISTINCT car — CONFIRMED/ACTIVE rows occupy their assigned vehicle via
+  // the bookings_no_overlap exclusion constraint, so reuse would collide.
   const vehicleRows = await db
     .select({
       id: vehicles.id,
-      name: vehicles.name,
       classId: vehicles.classId,
       operatorId: vehicles.operatorId,
       pickupLocationId: vehicles.pickupLocationId,
     })
     .from(vehicles)
-    // Slice 6 (#392): bookings require a pickup location + operator. Only seed
-    // against vehicles that have a pickup location anchored (slice 2 / #387).
     .where(and(eq(vehicles.status, 'AVAILABLE'), isNotNull(vehicles.pickupLocationId)))
-    .limit(10)
 
-  if (vehicleRows.length === 0) {
-    console.error(
-      'No AVAILABLE vehicles with a pickup location found. Run `bun run db:seed` first.',
-    )
-    process.exit(1)
+  const queueByOpClass = new Map<string, SeededVehicle[]>()
+  for (const v of vehicleRows) {
+    if (!v.classId || !v.pickupLocationId) continue
+    const key = `${v.operatorId}::${v.classId}`
+    const queue = queueByOpClass.get(key) ?? []
+    queue.push({ id: v.id, pickupLocationId: v.pickupLocationId })
+    queueByOpClass.set(key, queue)
   }
 
-  // Issue #308: bookings now require classId. Seeded vehicles must have a
-  // class assigned (the main `db:seed` script handles that).
-  if (vehicleRows.some((v) => !v.classId)) {
-    console.error('Some vehicles have no classId. Re-run `bun run db:seed` first.')
-    process.exit(1)
-  }
-
-  const renter = (i: number) => {
-    const r = insertedRenters[i % insertedRenters.length]
-    if (!r) throw new Error('No demo renters created')
-    return r.id
-  }
-  const vehicle = (i: number) => {
-    const v = vehicleRows[i % vehicleRows.length]
-    if (!v) throw new Error('No vehicles available')
+  const takeVehicle = (operatorId: string, classId: string): SeededVehicle => {
+    const v = queueByOpClass.get(`${operatorId}::${classId}`)?.shift()
+    if (!v) throw new Error(`No seeded vehicle for ${operatorId}/${classId} — run db:seed first`)
     return v
   }
 
-  // Spread bookings across the current week + next week so the calendar
-  // shows events immediately regardless of which day the user opens it.
-  const bookingSeeds = [
-    // Past — COMPLETED
-    { dayOffset: -3, hour: 10, durationHours: 8, status: 'COMPLETED' as const, price: 8000 },
-    { dayOffset: -5, hour: 9, durationHours: 24, status: 'COMPLETED' as const, price: 9500 },
-    // Yesterday — CANCELLED
-    { dayOffset: -1, hour: 14, durationHours: 4, status: 'CANCELLED' as const, price: null },
-    // Today — ACTIVE (in progress)
-    { dayOffset: 0, hour: 9, durationHours: 10, status: 'ACTIVE' as const, price: 12500 },
-    { dayOffset: 0, hour: 14, durationHours: 6, status: 'ACTIVE' as const, price: 6500 },
-    // Today/tomorrow — CONFIRMED (future)
-    { dayOffset: 1, hour: 10, durationHours: 4, status: 'CONFIRMED' as const, price: 6500 },
-    { dayOffset: 1, hour: 13, durationHours: 24, status: 'CONFIRMED' as const, price: 8000 },
-    { dayOffset: 2, hour: 9, durationHours: 8, status: 'CONFIRMED' as const, price: 11500 },
-    { dayOffset: 3, hour: 11, durationHours: 48, status: 'CONFIRMED' as const, price: 18000 },
-    { dayOffset: 5, hour: 8, durationHours: 12, status: 'CONFIRMED' as const, price: 9500 },
-    { dayOffset: 7, hour: 10, durationHours: 6, status: 'CONFIRMED' as const, price: 6500 },
-    { dayOffset: 10, hour: 14, durationHours: 72, status: 'CONFIRMED' as const, price: 24000 },
-  ]
+  console.log(`Creating ${DEMO_BOOKINGS.length} demo bookings + events + notifications...`)
+  const bookingValues = []
+  const eventValues = []
+  const notificationValues = []
 
-  console.log('Creating demo bookings...')
-  const inserted = await db
-    .insert(bookings)
-    .values(
-      bookingSeeds.map((b, i) => {
-        const startAt = dayAt(b.dayOffset, b.hour)
-        const endAt = addHours(startAt, b.durationHours)
-        const v = vehicle(i)
-        // classId + pickupLocationId are non-null because of the filters above.
-        if (!v.classId) throw new Error(`Vehicle ${v.id} has no classId`)
-        if (!v.pickupLocationId) throw new Error(`Vehicle ${v.id} has no pickupLocationId`)
-        return {
-          operatorId: v.operatorId,
-          renterId: renter(i),
-          classId: v.classId,
-          // Demo data assigns the requested vehicle directly (no substitution).
-          requestedVehicleId: v.id,
-          assignedVehicleId: v.id,
-          pickupLocationId: v.pickupLocationId,
-          dropoffLocationId: v.pickupLocationId,
-          // Placeholder reservation code — the real generator (nanoid, #392) runs
-          // in BookingService at submit; demo rows just need a UNIQUE value.
-          bookingCode: `SEED${String(i).padStart(4, '0')}`,
-          startAt,
-          endAt,
-          // The bookings_set_effective_end_at trigger overwrites this from the
-          // pickup location's turnaround on INSERT; the value here only satisfies
-          // the NOT NULL insert type.
-          effectiveEndAt: endAt,
-          status: b.status,
-          source: 'DIRECT' as const,
-          totalPrice: b.price,
-          cancelledAt: b.status === 'CANCELLED' ? addHours(startAt, -24) : null,
-          cancellationFee: b.status === 'CANCELLED' ? 0 : null,
-        }
-      }),
-    )
-    .returning({ id: bookings.id, status: bookings.status })
+  for (const b of DEMO_BOOKINGS) {
+    const requested = takeVehicle(seedId(b.operatorId), seedId(b.classId))
+    // Substitution demo: assign a DIFFERENT car of the same operator+class.
+    const assigned = b.substitute ? takeVehicle(seedId(b.operatorId), seedId(b.classId)) : requested
+    const startAt = dayAt(b.startOffsetDays, b.startHour)
+    const endAt = addHours(startAt, b.durationHours)
+    const insuranceSnapshot = insuranceSnapshotFor(b.insuranceOptionId)
+    const feeSnapshot = feeSnapshotFor(b.operatorId, b.classId)
+    const isCancelled = b.status === 'CANCELLED'
 
-  console.log(`\nSeeded ${insertedRenters.length} demo renters.`)
-  console.log(`Seeded ${inserted.length} demo bookings.`)
+    bookingValues.push({
+      id: seedId(b.id),
+      operatorId: seedId(b.operatorId),
+      renterId: seedId(b.renterId),
+      classId: seedId(b.classId),
+      requestedVehicleId: requested.id,
+      assignedVehicleId: assigned.id,
+      pickupLocationId: assigned.pickupLocationId,
+      dropoffLocationId: assigned.pickupLocationId,
+      bookingCode: b.bookingCode,
+      startAt,
+      endAt,
+      // Overwritten by the bookings_set_effective_end_at trigger on INSERT; the
+      // value here only satisfies the NOT NULL insert type.
+      effectiveEndAt: endAt,
+      status: b.status,
+      source: 'DIRECT' as const,
+      totalPrice: b.totalPriceJpy,
+      insuranceOptionId: b.insuranceOptionId ? seedId(b.insuranceOptionId) : null,
+      insuranceSnapshot,
+      feeSnapshot,
+      cancelledAt: isCancelled ? addHours(startAt, -24) : null,
+      cancellationFee: isCancelled ? 0 : null,
+    })
+
+    const createdPayload: BookingCreatedPayload = {
+      requestedVehicleId: requested.id,
+      assignedVehicleId: assigned.id,
+      classId: seedId(b.classId),
+      startAt: startAt.toISOString(),
+      endAt: endAt.toISOString(),
+      totalPrice: b.totalPriceJpy,
+      insuranceSnapshot,
+      feeSnapshot,
+    }
+    eventValues.push({
+      bookingId: seedId(b.id),
+      type: 'BOOKING_CREATED' as const,
+      payload: createdPayload,
+      actorId: seedId(b.renterId),
+    })
+    if (b.substitute) {
+      const substitutedPayload: VehicleSubstitutedPayload = {
+        fromVehicleId: requested.id,
+        toVehicleId: assigned.id,
+        reason: 'Original vehicle in maintenance — upgraded same class.',
+      }
+      // actorId null = system/operator action in the demo.
+      eventValues.push({
+        bookingId: seedId(b.id),
+        type: 'VEHICLE_SUBSTITUTED' as const,
+        payload: substitutedPayload,
+        actorId: null,
+      })
+    }
+
+    // One operator alert per booking so the portal badge + notification list are
+    // populated. status SENT (terminal) — the demo skips the QUEUED->SENDING lease.
+    notificationValues.push({
+      bookingId: seedId(b.id),
+      operatorId: seedId(b.operatorId),
+      kind: 'OPERATOR_BOOKING_ALERT' as const,
+      channel: 'EMAIL',
+      recipient: ownerEmailByOperator.get(b.operatorId) ?? 'owner@example.test',
+      locale: 'en',
+      status: 'SENT' as const,
+      providerMessageId: `demo-${b.id}`,
+      attempts: 1,
+      idempotencyKey: `booking:${seedId(b.id)}:OPERATOR_BOOKING_ALERT`,
+    })
+  }
+
+  await db.insert(bookings).values(bookingValues)
+  await db.insert(bookingEvents).values(eventValues)
+  await db.insert(notificationLog).values(notificationValues)
+
+  console.log(
+    `\nSeeded ${DEMO_RENTERS.length} renters, ${bookingValues.length} bookings, ` +
+      `${eventValues.length} events, ${notificationValues.length} notifications.`,
+  )
   process.exit(0)
 }
 

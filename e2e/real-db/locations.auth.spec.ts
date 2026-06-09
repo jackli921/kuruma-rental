@@ -25,10 +25,10 @@ test.describe('operator locations (authenticated, real DB)', () => {
     // No redirect to sign-in: the operator session is honoured by middleware.
     await expect(page).toHaveURL(/\/en\/manage\/locations\/?$/)
 
-    // The three seeded Best Car Rental storefronts render.
-    await expect(page.getByText('Namba Store')).toBeVisible()
-    await expect(page.getByText('Umeda Store')).toBeVisible()
-    await expect(page.getByText('Kansai Airport Counter')).toBeVisible()
+    // The three seeded Best Car Rental storefronts render (slice 8 seed, §3.2).
+    await expect(page.getByText('Namba')).toBeVisible()
+    await expect(page.getByText('Shin-Osaka')).toBeVisible()
+    await expect(page.getByText('Kansai Airport (KIX)')).toBeVisible()
   })
 
   test('invalid hours show the error under Closes, not Opens (P2)', async ({ page }) => {
