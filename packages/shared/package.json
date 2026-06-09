@@ -19,6 +19,7 @@
     "./types/maintenance-log": "./src/types/maintenance-log.ts",
     "./types/customer": "./src/types/customer.ts",
     "./types/location": "./src/types/location.ts",
+    "./types/search-result": "./src/types/search-result.ts",
     "./lib/cancellation-policy": "./src/lib/cancellation-policy.ts",
     "./lib/luggage": "./src/lib/luggage.ts",
     "./lib/pricing": "./src/lib/pricing.ts",
