@@ -855,5 +855,54 @@
     "statusPending": "確認待ち",
     "statusApproved": "承認済み",
     "statusRejected": "却下"
+  },
+  "reservation": {
+    "title": "予約を完了する",
+    "vehicleHeading": "予約するクルマ",
+    "steps": {
+      "dates": "日時",
+      "addOns": "オプション",
+      "insurance": "保険",
+      "confirm": "確認",
+      "payment": "お支払い"
+    },
+    "dates": {
+      "heading": "レンタル日時",
+      "pickup": "貸出",
+      "return": "返却",
+      "duration": "{count}日間"
+    },
+    "addOns": {
+      "heading": "オプションを追加",
+      "empty": "この店舗で利用できるオプションはありません。",
+      "price": "1回のレンタルにつき{price}"
+    },
+    "insurance": {
+      "heading": "補償を選択",
+      "none": "保険なし",
+      "noneDescription": "補償を付けず、自己責任で運転します。",
+      "perDay": "{price} / 日",
+      "deductible": "免責額 {amount}",
+      "noDeductible": "免責額なし",
+      "empty": "この店舗で利用できる保険はありません。"
+    },
+    "confirm": {
+      "heading": "予約内容の確認",
+      "base": "レンタル料金",
+      "insurance": "保険",
+      "addOns": "オプション",
+      "total": "推定合計",
+      "note": "税金および事業者手数料はお支払い時に計算されます。"
+    },
+    "payment": {
+      "heading": "お支払い",
+      "comingSoon": "オンライン決済は近日公開予定です。ご予約はまだ確定していません。",
+      "pay": "支払って確定"
+    },
+    "nav": {
+      "back": "戻る",
+      "continue": "次へ",
+      "toPayment": "お支払いへ進む"
+    }
   }
 }

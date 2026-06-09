@@ -855,5 +855,54 @@
     "statusPending": "待审核",
     "statusApproved": "已批准",
     "statusRejected": "已拒绝"
+  },
+  "reservation": {
+    "title": "完成预订",
+    "vehicleHeading": "您正在预订",
+    "steps": {
+      "dates": "日期",
+      "addOns": "附加项",
+      "insurance": "保险",
+      "confirm": "确认",
+      "payment": "支付"
+    },
+    "dates": {
+      "heading": "您的租赁日期",
+      "pickup": "取车",
+      "return": "还车",
+      "duration": "{count} 天"
+    },
+    "addOns": {
+      "heading": "添加可选附加项",
+      "empty": "该门店没有可用的附加项。",
+      "price": "每次租赁 {price}"
+    },
+    "insurance": {
+      "heading": "选择您的保障",
+      "none": "不购买保险",
+      "noneDescription": "放弃保障，自行承担风险。",
+      "perDay": "{price} / 天",
+      "deductible": "免赔额 {amount}",
+      "noDeductible": "无免赔额",
+      "empty": "该门店没有可用的保险方案。"
+    },
+    "confirm": {
+      "heading": "查看您的预订",
+      "base": "租车费",
+      "insurance": "保险",
+      "addOns": "附加项",
+      "total": "预计总额",
+      "note": "税费及任何运营商费用将在支付时计算。"
+    },
+    "payment": {
+      "heading": "支付",
+      "comingSoon": "在线支付即将推出。您的预订尚未确认。",
+      "pay": "支付并确认"
+    },
+    "nav": {
+      "back": "返回",
+      "continue": "继续",
+      "toPayment": "继续支付"
+    }
   }
 }
