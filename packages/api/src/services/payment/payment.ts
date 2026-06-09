@@ -32,9 +32,25 @@ export type WebhookOutcome =
   | 'ignored' // wrong type / unpaid / missing or unknown booking
   | 'invalid_signature' // bad or stale Stripe signature
 
+/** Reconciliation identifiers carried out of the webhook for anomaly logging
+ *  (#461 P1b). A `double_payment` needs the paymentIntent so an operator can
+ *  actually refund; an `amount_mismatch` needs both amounts to investigate.
+ *  Without these the 200 ack would discard everything Stripe just told us. */
+export interface WebhookLogContext {
+  eventId: string
+  checkoutSessionId: string
+  paymentIntentId: string | null
+  bookingId: string
+  amountTotal: number | null
+  expectedAmountJpy: number | null
+  currency: string | null
+}
+
 export interface WebhookResult {
   status: 200 | 400
   outcome: WebhookOutcome
+  /** Present for anomaly/duplicate outcomes so the route can log identifiers. */
+  context?: WebhookLogContext
 }
 
 export interface BookingPaymentStatus {
@@ -73,15 +89,27 @@ export class PaymentService {
     const existing = await this.paymentEvents.findSucceededByBookingId(bookingId)
     if (existing) return { ok: false, status: 409, error: 'Booking is already paid' }
 
+    // Deterministic idempotency key per (booking, amount): two concurrent POSTs
+    // return the SAME Stripe Session, so a racing double-submit can't open two
+    // payable sessions (#461 P1). A later price change (e.g. #460 add-ons) yields
+    // a new key → a fresh session, which is correct.
+    const idempotencyKey = `checkout:${booking.id}:${amountJpy}`
+
+    // Return target: the renter Pay UI + post-payment page are #460's surface. The
+    // current web tree only has localized routes, so we point at the live web ROOT
+    // (it redirects to the detected locale) and carry the booking code + outcome as
+    // query params for #460 to consume — never a hardcoded path that 404s (#461 P2).
     const base = this.config.webBaseUrl.replace(/\/$/, '')
-    const url = `${base}/bookings/${booking.bookingCode}`
+    const returnUrl = (outcome: 'success' | 'cancelled') =>
+      `${base}/?payment=${outcome}&booking=${encodeURIComponent(booking.bookingCode)}`
     const session = await this.gateway.createCheckoutSession({
       bookingId: booking.id,
       operatorId: booking.operatorId,
       amountJpy,
       bookingCode: booking.bookingCode,
-      successUrl: `${url}?payment=success`,
-      cancelUrl: `${url}?payment=cancelled`,
+      idempotencyKey,
+      successUrl: returnUrl('success'),
+      cancelUrl: returnUrl('cancelled'),
     })
     return { ok: true, url: session.url }
   }
@@ -107,6 +135,19 @@ export class PaymentService {
     const booking = await this.bookings.findById(SYSTEM_CONTEXT, bookingId)
     if (!booking) return { status: 200, outcome: 'ignored' }
 
+    // Identifiers an operator needs to reconcile or refund an anomaly (#461 P1b).
+    // Carried out with every non-trivial outcome so the 200 ack never discards
+    // the paymentIntent / session / amounts Stripe just reported.
+    const context: WebhookLogContext = {
+      eventId: event.eventId,
+      checkoutSessionId: event.checkoutSessionId,
+      paymentIntentId: event.paymentIntentId,
+      bookingId: booking.id,
+      amountTotal: event.amountTotal,
+      expectedAmountJpy: booking.totalPrice,
+      currency: event.currency,
+    }
+
     // Trust Stripe's amount over the client, but still assert it matches the
     // booking snapshot — a stale/buggy session must not record a wrong amount.
     // The explicit null check also closes the null===null hole (a booking with
@@ -116,7 +157,7 @@ export class PaymentService {
       event.amountTotal !== booking.totalPrice ||
       event.currency !== CURRENCY
     ) {
-      return { status: 200, outcome: 'amount_mismatch' }
+      return { status: 200, outcome: 'amount_mismatch', context }
     }
 
     const grossJpy = event.amountTotal
@@ -138,12 +179,13 @@ export class PaymentService {
     } catch (err) {
       if (pgErrorCode(err) !== PG_ERROR.UNIQUE_VIOLATION) throw err
       // A different Session already paid THIS booking — a genuine double charge
-      // to refund. Every other unique seal is a benign redelivery.
+      // to refund (context carries the paymentIntent so an operator can act).
+      // Every other unique seal is a benign redelivery.
       const outcome =
         pgConstraintName(err) === PAYMENT_EVENT_ONE_SUCCESS_CONSTRAINT
           ? 'double_payment'
           : 'duplicate'
-      return { status: 200, outcome }
+      return { status: 200, outcome, context }
     }
   }
 

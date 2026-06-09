@@ -103,8 +103,23 @@ describe('PaymentService.createCheckoutSession', () => {
       operatorId: 'op-1',
       amountJpy: 100_000,
       bookingCode: 'ABCD2345',
+      // P1: deterministic per (booking, amount) so concurrent POSTs dedupe to one session.
+      idempotencyKey: 'checkout:bk-1:100000',
     })
-    expect(gateway.lastCheckout?.successUrl).toContain('ABCD2345')
+    // P2: a live root path (not a hardcoded /bookings/:code that 404s) carrying the code.
+    expect(gateway.lastCheckout?.successUrl).toBe(
+      'https://app.example.com/?payment=success&booking=ABCD2345',
+    )
+    expect(gateway.lastCheckout?.cancelUrl).toBe(
+      'https://app.example.com/?payment=cancelled&booking=ABCD2345',
+    )
+  })
+
+  it('uses the same idempotency key across repeated checkout requests', async () => {
+    await service.createCheckoutSession(RENTER, 'bk-1')
+    const first = gateway.lastCheckout?.idempotencyKey
+    await service.createCheckoutSession(RENTER, 'bk-1')
+    expect(gateway.lastCheckout?.idempotencyKey).toBe(first)
   })
 
   it('404s when the booking is not visible to the caller', async () => {
@@ -205,10 +220,20 @@ describe('PaymentService.handleWebhook', () => {
     expect(await service.handleWebhook('raw', 'sig')).toMatchObject({ outcome: 'ignored' })
   })
 
-  it('rejects an amount that does not match the booking total', async () => {
+  it('rejects an amount that does not match the booking total, carrying reconciliation context', async () => {
     gateway.nextEvent = completedEvent({ amountTotal: 99_999 })
     const result = await service.handleWebhook('raw', 'sig')
-    expect(result).toEqual({ status: 200, outcome: 'amount_mismatch' })
+    expect(result.status).toBe(200)
+    expect(result.outcome).toBe('amount_mismatch')
+    // P1b: the anomaly carries the identifiers an operator needs to investigate.
+    expect(result.context).toMatchObject({
+      eventId: 'evt_1',
+      checkoutSessionId: 'cs_test_1',
+      paymentIntentId: 'pi_1',
+      bookingId: 'bk-1',
+      amountTotal: 99_999,
+      expectedAmountJpy: 100_000,
+    })
     expect(await paymentRepo.findSucceededByBookingId('bk-1')).toBeNull()
   })
 
@@ -228,16 +253,26 @@ describe('PaymentService.handleWebhook', () => {
     gateway.nextEvent = completedEvent()
     await service.handleWebhook('raw', 'sig')
     const second = await service.handleWebhook('raw', 'sig')
-    expect(second).toEqual({ status: 200, outcome: 'duplicate' })
+    expect(second).toMatchObject({ status: 200, outcome: 'duplicate' })
   })
 
-  it('flags a SECOND distinct session paying the same booking as a double-payment', async () => {
+  it('flags a SECOND distinct session as double-payment, carrying the paymentIntent to refund', async () => {
     gateway.nextEvent = completedEvent()
     await service.handleWebhook('raw', 'sig')
-    // A wholly different Stripe event + session, same booking.
-    gateway.nextEvent = completedEvent({ eventId: 'evt_2', checkoutSessionId: 'cs_test_2' })
+    // A wholly different Stripe event + session + paymentIntent, same booking.
+    gateway.nextEvent = completedEvent({
+      eventId: 'evt_2',
+      checkoutSessionId: 'cs_test_2',
+      paymentIntentId: 'pi_2',
+    })
     const result = await service.handleWebhook('raw', 'sig')
-    expect(result).toEqual({ status: 200, outcome: 'double_payment' })
+    expect(result.status).toBe(200)
+    expect(result.outcome).toBe('double_payment')
+    // P1b: without pi_2 the operator can't refund the duplicate charge.
+    expect(result.context).toMatchObject({
+      paymentIntentId: 'pi_2',
+      checkoutSessionId: 'cs_test_2',
+    })
   })
 })
 

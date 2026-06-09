@@ -15,6 +15,13 @@ export interface CreateCheckoutParams {
   amountJpy: number
   /** Human reservation code, shown as the Stripe line-item description. */
   bookingCode: string
+  /**
+   * Stripe idempotency key (#461 P1). Deterministic per (booking, amount), so two
+   * concurrent checkout POSTs return the SAME Session instead of two live ones —
+   * Stripe itself dedupes the create. Closes the double-charge window the DB seal
+   * could only detect AFTER Stripe may have charged twice.
+   */
+  idempotencyKey: string
   successUrl: string
   cancelUrl: string
 }

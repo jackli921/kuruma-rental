@@ -40,9 +40,14 @@ export function createPaymentRoutes(service: PaymentService) {
       const result = await service.handleWebhook(rawBody, signature)
 
       // The shell logs; the service core stays side-effect-free. A double charge
-      // or an amount mismatch needs an operator's eyes; everything else is normal.
+      // or an amount mismatch needs an operator's eyes — log the FULL context
+      // (event/session/paymentIntent/booking/amounts) so they can reconcile or
+      // refund, since the 200 ack persists nothing for these (#461 P1b).
       if (result.outcome === 'double_payment' || result.outcome === 'amount_mismatch') {
-        console.error('[payment:webhook] anomaly', { outcome: result.outcome })
+        console.error('[payment:webhook] anomaly', {
+          outcome: result.outcome,
+          ...result.context,
+        })
       } else if (result.outcome === 'invalid_signature') {
         console.warn('[payment:webhook] rejected: invalid signature')
       }

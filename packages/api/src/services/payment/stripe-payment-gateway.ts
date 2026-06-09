@@ -35,25 +35,31 @@ export class StripePaymentGateway implements PaymentGateway {
   }
 
   async createCheckoutSession(p: CreateCheckoutParams): Promise<CheckoutSession> {
-    const session = await this.stripe.checkout.sessions.create({
-      mode: 'payment',
-      line_items: [
-        {
-          price_data: {
-            currency: CURRENCY,
-            product_data: { name: `Rental booking ${p.bookingCode}` },
-            unit_amount: p.amountJpy,
+    const session = await this.stripe.checkout.sessions.create(
+      {
+        mode: 'payment',
+        line_items: [
+          {
+            price_data: {
+              currency: CURRENCY,
+              product_data: { name: `Rental booking ${p.bookingCode}` },
+              unit_amount: p.amountJpy,
+            },
+            quantity: 1,
           },
-          quantity: 1,
-        },
-      ],
-      // metadata = partner-business id + booking id (#461 acceptance). The
-      // webhook re-derives operatorId from the booking and ignores it here.
-      metadata: { bookingId: p.bookingId, operatorId: p.operatorId },
-      payment_intent_data: { metadata: { bookingId: p.bookingId } },
-      success_url: p.successUrl,
-      cancel_url: p.cancelUrl,
-    })
+        ],
+        // metadata = partner-business id + booking id (#461 acceptance). The
+        // webhook re-derives operatorId from the booking and ignores it here.
+        metadata: { bookingId: p.bookingId, operatorId: p.operatorId },
+        payment_intent_data: { metadata: { bookingId: p.bookingId } },
+        success_url: p.successUrl,
+        cancel_url: p.cancelUrl,
+        // P1 (#461): two concurrent creates with this key return the SAME Session
+        // (Stripe locks on the key), so the renter can never be double-charged by a
+        // racing second checkout request. Valid 24h — matches Checkout expiry.
+      },
+      { idempotencyKey: p.idempotencyKey },
+    )
     return { sessionId: session.id, url: session.url ?? '' }
   }
 
