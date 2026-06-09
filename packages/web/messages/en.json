@@ -820,6 +820,15 @@
     "auto": "Automatic",
     "manual": "Manual",
     "viewStore": "View cars",
+    "select": "Select",
+    "view": {
+      "stores": "Stores",
+      "map": "Map",
+      "label": "Result view"
+    },
+    "list": {
+      "empty": "No cars are available for these dates."
+    },
     "detail": {
       "backToSearch": "Back to search",
       "availableVehicles": "Available cars",

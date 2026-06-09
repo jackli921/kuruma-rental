@@ -820,6 +820,15 @@
     "auto": "自动挡",
     "manual": "手动挡",
     "viewStore": "查看车辆",
+    "select": "选择",
+    "view": {
+      "stores": "门店",
+      "map": "地图",
+      "label": "结果视图"
+    },
+    "list": {
+      "empty": "所选日期没有可用车辆。"
+    },
     "detail": {
       "backToSearch": "返回搜索",
       "availableVehicles": "可用车辆",
