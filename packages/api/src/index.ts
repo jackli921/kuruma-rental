@@ -91,6 +91,7 @@ import { createMaintenanceLogRoutes } from './routes/maintenance-logs'
 import { createMessageRoutes } from './routes/messages'
 import { createNotificationRoutes } from './routes/notifications'
 import { createOperatorRoutes } from './routes/operators'
+import { createFlatSearchRoutes } from './routes/search'
 import { createStatsRoutes } from './routes/stats'
 import { createStorefrontRoutes } from './routes/storefronts'
 import { createTranslateRoutes } from './routes/translate'
@@ -106,6 +107,7 @@ import type { EmailSender } from './services/email/email-sender'
 import { ResendEmailSender } from './services/email/resend-email-sender'
 import { makeEnsureThread } from './services/ensure-thread'
 import { FeeScheduleService } from './services/fee-schedule'
+import { FlatSearchService } from './services/flat-search'
 import { FleetOverviewService } from './services/fleet-overview'
 import { GoogleTranslationProvider } from './services/google-translation-provider'
 import { InsuranceOptionService } from './services/insurance-option'
@@ -482,6 +484,11 @@ export function createApp(overrides?: {
     vehicleClassRepo,
     insuranceOptionRepo,
   )
+  const flatSearchService = new FlatSearchService(
+    storefrontRepo,
+    availabilityRepo,
+    vehicleClassRepo,
+  )
 
   // Chain .route() calls so TypeScript infers the full route type tree.
   // hc<AppType> needs this to produce typed client methods.
@@ -507,6 +514,7 @@ export function createApp(overrides?: {
         publicCatalogLimiter,
       ),
     )
+    .route('/', createFlatSearchRoutes(flatSearchService, publicCatalogLimiter))
     .route('/', createVehicleRoutes(vehicleRepo, maintenanceService, resolveWriteOperatorId))
     .route(
       '/',
