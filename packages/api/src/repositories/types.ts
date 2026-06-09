@@ -13,6 +13,7 @@ export type {
   Location,
   InsuranceOption,
   FeeSchedule,
+  PaymentEvent,
 } from '../stores'
 export type { DashboardStats } from '@kuruma/shared/types/stats'
 export type { FleetVehicleOverview, FleetBookingSummary } from '@kuruma/shared/types/fleet'
@@ -34,12 +35,29 @@ import type {
   Message,
   NotificationLog,
   Operator,
+  PaymentEvent,
   Thread,
   ThreadParticipant,
   User,
   Vehicle,
   VehicleClass,
 } from '../stores'
+
+/** A verified successful payment to persist. id + createdAt are assigned by the
+ *  store (DB defaults / in-memory), so the service never invents them (#461). */
+export type NewPaymentEvent = Omit<PaymentEvent, 'id' | 'createdAt'>
+
+/** payment_events data access (#461). The webhook is the only writer. */
+export interface PaymentEventRepository {
+  // Persist a verified successful payment. Throws a PG-shaped UNIQUE_VIOLATION
+  // (with `constraint_name`) when any of the three seals is hit, so the
+  // PaymentService can tell a redelivered webhook (idempotent no-op) apart from
+  // a second Session paying the same booking (double-pay anomaly). See pg-errors.
+  insert(event: NewPaymentEvent): Promise<PaymentEvent>
+  // The recorded SUCCEEDED payment for a booking, or null. Powers both the
+  // already-paid guard at checkout and the derived "is this booking paid?" read.
+  findSucceededByBookingId(bookingId: string): Promise<PaymentEvent | null>
+}
 
 /** Operator (tenant) data access. Admin bootstrap (#386) + slug/id resolution (#387). */
 export interface OperatorRepository {

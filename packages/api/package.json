@@ -20,7 +20,8 @@
     "@elithrar/workers-hono-rate-limit": "^0.5.1",
     "@kuruma/shared": "workspace:*",
     "hono": "^4",
-    "nanoid": "^5.1.11"
+    "nanoid": "^5.1.11",
+    "stripe": "^22.2.0"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "^4.20260410.1",

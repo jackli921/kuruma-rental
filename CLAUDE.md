@@ -78,6 +78,15 @@ Critical rules:
 - **New i18n namespaces require dev server restart** (`rm -rf packages/web/.next && bun run dev`).
 - **Verify all i18n keys exist after merges.** Conflict resolution silently drops keys.
 
+## Stripe payments (#461)
+
+- **Webhook is the source of truth.** A `payment_events` row is written ONLY on the verified, signed `checkout.session.completed` webhook — never the client redirect. "Don't trust the client for money."
+- **CF Workers Stripe rules** (both mandatory, or it throws at runtime): construct with `Stripe(key, { httpClient: Stripe.createFetchHttpClient() })`, and verify webhooks with `webhooks.constructEventAsync` (SubtleCrypto), NOT the sync `constructEvent`. Stripe SDK confined to `services/payment/stripe-payment-gateway.ts`.
+- **Webhook raw body**: read `await c.req.text()` (NOT parsed JSON) — the signature is over the exact bytes. `/webhooks/stripe` is public (no `requireAuth`); the global CSRF guard no-ops on the cookie-less call.
+- **JPY is zero-decimal**: Stripe `unit_amount` / `amount_total` are whole yen (no ×100).
+- **Three unique seals** on `payment_events`: `stripeEventId` (redelivery), `stripeCheckoutSessionId`, and a PARTIAL `payment_events_one_success_per_booking` (`WHERE status='SUCCEEDED'`). The webhook tells them apart by constraint name (`pg-errors.ts`): event/session = idempotent no-op, one-success = double-pay anomaly.
+- **Secrets**: `STRIPE_SECRET_KEY` + `STRIPE_WEBHOOK_SECRET` (test mode for the demo). Wired in `rotate-secrets.yml`; absent ⇒ a throwing sentinel gateway. NOT yet in `deploy.yml`'s presence check (would break deploys before Stripe is set up) — add there once live.
+
 ## Monorepo
 
 - shadcn: `bunx shadcn@latest add <component> -c packages/web`

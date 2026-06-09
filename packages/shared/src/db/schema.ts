@@ -583,6 +583,50 @@ export const bookingEvents = pgTable(
   ],
 )
 
+// In-app Stripe payment of the rental total (epic #385, slice payment / #461; 2026-06-05 scope addendum §2). The signed checkout.session.completed webhook is the SOURCE OF TRUTH — a row exists only after a verified, paid session.
+// MVP records only the success event; REFUNDED/DISPUTED are post-MVP (YAGNI).
+export const paymentEventStatusEnum = pgEnum('payment_event_status', ['SUCCEEDED'])
+export const paymentEvents = pgTable(
+  'payment_events',
+  {
+    id: text('id')
+      .primaryKey()
+      .$defaultFn(() => crypto.randomUUID()),
+    // Partner attribution for the #462 revenue tab. RE-DERIVED server-side from the booking on the webhook — never trusted from Stripe metadata (#461).
+    operatorId: text('operatorId')
+      .notNull()
+      .references(() => operators.id),
+    bookingId: text('bookingId')
+      .notNull()
+      .references(() => bookings.id),
+    // Stripe ids: stripeEventId = redelivery idempotency fence; stripeCheckoutSessionId pins the row to one Session; paymentIntent nullable until it settles.
+    stripeEventId: text('stripeEventId').notNull(),
+    stripeCheckoutSessionId: text('stripeCheckoutSessionId').notNull(),
+    stripePaymentIntentId: text('stripePaymentIntentId'),
+    // Whole JPY (zero-decimal). grossJpy = Stripe amount_total (trusted, not client); platformFee = 4% of gross; net = gross - fee (commission.ts).
+    grossJpy: integer('grossJpy').notNull(),
+    platformFeeJpy: integer('platformFeeJpy').notNull(),
+    netToPartnerJpy: integer('netToPartnerJpy').notNull(),
+    currency: text('currency').notNull().default('jpy'),
+    status: paymentEventStatusEnum('status').notNull(),
+    createdAt: timestamp('createdAt', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    // FK cover (lint:fk-indexes) + #462 revenue aggregation by partner.
+    index('idx_payment_events_operatorId').on(table.operatorId),
+    index('idx_payment_events_bookingId').on(table.bookingId), // FK cover + "is this booking paid?" lookup
+    // Stripe redelivery dedupe: the same event id can never insert twice (#461 P1).
+    uniqueIndex('payment_events_stripeEventId_unique').on(table.stripeEventId),
+    // Defence in depth: one Checkout Session records at most one row.
+    uniqueIndex('payment_events_stripeCheckoutSessionId_unique').on(table.stripeCheckoutSessionId),
+    // The BUSINESS-FACT seal: at most ONE successful payment per booking, even across two valid Sessions both completing — vendor dedupe (above) stops duplicate MESSAGES, this stops a duplicate FACT (#461 P1).
+    // Partial so a future REFUNDED row never collides with the SUCCEEDED one.
+    uniqueIndex('payment_events_one_success_per_booking')
+      .on(table.bookingId)
+      .where(sql`status = 'SUCCEEDED'`),
+  ],
+)
+
 // Issue #225: maintenance log and notes per vehicle. Tracks why a vehicle
 // entered MAINTENANCE, with optional cost tracking and resolution timestamp.
 export const maintenanceLogs = pgTable(
