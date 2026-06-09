@@ -27,6 +27,7 @@ function makeClass(overrides: Partial<VehicleClassData> = {}): VehicleClassData 
     photos: [],
     seats: 5,
     luggageCapacity: 2,
+    luggageSize: 'MEDIUM',
     transmission: 'AUTO',
     fuelType: null,
     acrissCode: null,
@@ -61,5 +62,12 @@ describe('ClassCatalog', () => {
     const vanLink = screen.getByText('Van').closest('a')
     expect(vanLink).toHaveAttribute('data-to', '/$locale/vehicles/classes/$slug')
     expect(vanLink).toHaveAttribute('data-slug', 'van')
+  })
+
+  // #457: class-default luggage on each catalog card.
+  it('shows the class luggage count and size on the card', () => {
+    renderCatalog([makeClass({ luggageCapacity: 3, luggageSize: 'LARGE' })])
+    expect(screen.getByText('3 bags')).toBeInTheDocument()
+    expect(screen.getByText(/Large/)).toBeInTheDocument()
   })
 })
