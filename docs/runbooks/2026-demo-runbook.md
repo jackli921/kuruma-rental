@@ -5,7 +5,8 @@
 > The full customer-facing Qiao/Du demo (pay → partner-revenue) is **#488** and is gated on #457–#462.
 >
 > The authoritative proof of the core path is the **automated real-DB E2E lane** (§3). The
-> manual click-through (§4) is for narration; note the **#493 caveat** on live booking submit.
+> manual click-through (§4) is for narration. (Live booking submit now works on the
+> neon-serverless API — **#493 is fixed**; see §4.)
 
 ---
 
@@ -58,10 +59,10 @@ renter search → Best Car Rental KIX storefront → vehicle → book → confir
 (`/^[2-9A-HJ-NP-Z]{8}$/`) → operator sees the booking on `/manage/bookings?view=month`
 + an `OPERATOR_BOOKING_ALERT` row in `notification_log`.
 
-> **Why the lane uses a postgres-js API server.** The production driver is `neon-http`, which
-> cannot run interactive transactions; the booking → thread-creation path opens one. The lane's
-> `e2e/real-db/real-api-server.ts` injects postgres-js Drizzle repos to exercise the real path.
-> See §4 caveat and **#493**.
+> **Why the lane uses a postgres-js API server.** The booking → thread-creation path opens an
+> interactive transaction. Production now runs these via `runTx` (neon-serverless) since **#493**,
+> but the lane keeps `e2e/real-db/real-api-server.ts` on postgres-js (TCP) to exercise the real
+> path without opening a WebSocket connection per transaction.
 
 ---
 
@@ -75,7 +76,7 @@ operator `/manage/bookings?view=month`.
 2. **Storefront** — open *Best Car Rental — Kansai Airport (KIX)* → available vehicles grouped by ACRISS class.
 3. **Select** — pick a vehicle → plate, price, insurance options shown. (`/bookings/new` requires a logged-in renter; it redirects to `/login` otherwise.)
 4. **Book** — choose insurance, confirm.
-   - ⚠️ **#493 caveat.** Live booking **submit 500s on any neon-http-backed API — including local `bun run dev:api`** — because thread creation opens an interactive transaction the HTTP driver rejects. This is a production-latent bug fixed only in the E2E harness so far. To *show* a confirmed booking live, use the **seeded** bookings (next step) until #493 lands.
+   - ✅ **#493 fixed.** Live booking submit works: thread creation runs through `runTx` (neon-serverless), not the HTTP driver. Requires the API's `DATABASE_URL` to be the Neon **pooled** endpoint (`-pooler`); on a deployed Worker / `wrangler dev` it commits and returns a confirmation code. (Confirm once via the manual deploy smoke — AC bullet 1 of #493.)
 5. **Operator view** — log in as `owner@best-car-rental.local` → `/manage/bookings?view=month` shows the seeded bookings on the calendar (event title = renter name) + notification badge. Operator-2 portal cannot see operator-1 bookings (tenant isolation).
 6. **Range** — switch locale to `ja` / `zh` on the renter pages.
 
@@ -83,8 +84,5 @@ operator `/manage/bookings?view=month`.
 
 ## 5. Known gaps (interim)
 
-- **#493** — neon-http has no interactive transactions; live booking submit 500s until the API
-  switches to neon-serverless WebSocket Pool (or the write is made non-interactive). Blocks the
-  live submit step above.
 - Full customer demo (pay → partner revenue, pre-auth handoff narration) is **#488**.
 - First-load JS baseline 554.9 kB > 500 kB target — signed exception, see plan §7.1 (resolved by #378).
