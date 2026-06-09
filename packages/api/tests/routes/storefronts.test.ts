@@ -56,6 +56,7 @@ function makeClass(
     photos: [],
     seats: 5,
     luggageCapacity: 2,
+    luggageSize: 'MEDIUM',
     transmission: 'AUTO',
     fuelType: null,
     acrissCode: 'CCAR',
@@ -161,7 +162,13 @@ describe('storefront routes (#391)', () => {
       expect(card.name).toBe('Namba')
       expect(card.operatorName).toBe('Best Car Rental')
       expect(card.classSummaries).toEqual([
-        { acrissCode: 'CCAR', label: 'Compact', availableCount: 2 },
+        {
+          acrissCode: 'CCAR',
+          label: 'Compact',
+          luggageCapacity: 2,
+          luggageSize: 'MEDIUM',
+          availableCount: 2,
+        },
       ])
       expect(card.fromDailyPriceJpy).toBe(8000)
       expect(card.fromHourlyPriceJpy).toBeNull()

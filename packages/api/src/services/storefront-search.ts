@@ -1,3 +1,4 @@
+import type { LuggageSize } from '@kuruma/shared/lib/luggage'
 import type { LocationOperatingHours } from '@kuruma/shared/types/location'
 import type { CallerContext } from '../middleware/auth'
 import type {
@@ -18,6 +19,10 @@ export interface ClassSummary {
   acrissCode: string | null
   /** Operator-entered class name. The web layer localizes via acrissCode (§3). */
   label: string
+  // #457 D6: class-default luggage so search cards can be compared on luggage,
+  // not just seats/price. Null only defensively (a summary always has its class).
+  luggageCapacity: number | null
+  luggageSize: LuggageSize | null
   availableCount: number
 }
 
@@ -178,6 +183,8 @@ function summarizeByClass(
     return {
       acrissCode: vc?.acrissCode ?? null,
       label: vc?.name ?? '',
+      luggageCapacity: vc?.luggageCapacity ?? null,
+      luggageSize: vc?.luggageSize ?? null,
       availableCount,
     }
   })

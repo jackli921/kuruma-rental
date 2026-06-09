@@ -238,6 +238,42 @@ describe('StorefrontDetailService.getDetail (#391)', () => {
     expect(vehicle).not.toHaveProperty('operatorId')
   })
 
+  it('resolves effective luggage: vehicle override wins, null falls back to class (#457)', async () => {
+    const op = await makeOperator('Best Car Rental', 'best')
+    const compact = await makeClass({
+      operatorId: op.id,
+      name: 'Compact',
+      luggageCapacity: 2,
+      luggageSize: 'MEDIUM',
+    })
+    const namba = await makeLocation({ operatorId: op.id, name: 'Namba' })
+    await makeVehicle({
+      operatorId: op.id,
+      classId: compact.id,
+      pickupLocationId: namba.id,
+      name: 'Override',
+      licensePlate: 'OVERRIDE-1',
+      luggageCapacity: 4,
+      luggageSize: 'LARGE',
+    })
+    await makeVehicle({
+      operatorId: op.id,
+      classId: compact.id,
+      pickupLocationId: namba.id,
+      name: 'Fallback',
+      licensePlate: 'FALLBACK-1',
+      luggageCapacity: null,
+      luggageSize: null,
+    })
+
+    const data = await okData(
+      await service.getDetail(PUBLIC_CONTEXT, { locationId: namba.id, from: FROM, to: TO }),
+    )
+    const byName = new Map(data.vehicles.map((v) => [v.name, v]))
+    expect(byName.get('Override')).toMatchObject({ luggageCapacity: 4, luggageSize: 'LARGE' })
+    expect(byName.get('Fallback')).toMatchObject({ luggageCapacity: 2, luggageSize: 'MEDIUM' })
+  })
+
   it('class filter narrows the vehicle list to the requested ACRISS code', async () => {
     const op = await makeOperator('Best Car Rental', 'best')
     const compact = await makeClass({ operatorId: op.id, name: 'Compact', acrissCode: 'CCAR' })
