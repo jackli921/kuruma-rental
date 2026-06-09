@@ -55,6 +55,9 @@ export function VehicleForm({
   operatorRequired,
 }: VehicleFormProps) {
   const t = useTranslations('business.vehicles')
+  // Size adjectives (Small/Medium/Large) live in one shared namespace, reused by
+  // the display cards too, so they are never duplicated per-form (#457).
+  const tSize = useTranslations('luggageSize')
 
   const showOperatorPicker =
     (operators !== undefined && operators.length > 1) || operatorRequired === true
@@ -342,9 +345,9 @@ export function VehicleForm({
             })}
           >
             <option value="">{t('form.luggageSizeInherit')}</option>
-            <option value="SMALL">{t('form.luggageSizeSmall')}</option>
-            <option value="MEDIUM">{t('form.luggageSizeMedium')}</option>
-            <option value="LARGE">{t('form.luggageSizeLarge')}</option>
+            <option value="SMALL">{tSize('SMALL')}</option>
+            <option value="MEDIUM">{tSize('MEDIUM')}</option>
+            <option value="LARGE">{tSize('LARGE')}</option>
           </select>
         </div>
       </div>

@@ -68,6 +68,8 @@ export function ClassForm(props: ClassFormProps) {
   // ACRISS labels live under the top-level `acriss.*` namespace, not
   // `business.classes`, so resolve them through a separate translator.
   const tAcriss = useTranslations('acriss')
+  // Luggage size adjectives are shared with the renter display cards (#457).
+  const tSize = useTranslations('luggageSize')
 
   const showOperatorPicker =
     (operators !== undefined && operators.length > 1) || operatorRequired === true
@@ -233,9 +235,9 @@ export function ClassForm(props: ClassFormProps) {
             className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-xs"
             {...register('luggageSize')}
           >
-            <option value="SMALL">{t('form.luggageSizeSmall')}</option>
-            <option value="MEDIUM">{t('form.luggageSizeMedium')}</option>
-            <option value="LARGE">{t('form.luggageSizeLarge')}</option>
+            <option value="SMALL">{tSize('SMALL')}</option>
+            <option value="MEDIUM">{tSize('MEDIUM')}</option>
+            <option value="LARGE">{tSize('LARGE')}</option>
           </select>
           {errors.luggageSize && (
             <p className="text-sm text-destructive mt-1">{errors.luggageSize.message}</p>
