@@ -709,6 +709,9 @@ export type BookingCreatedPayload = {
   requestedVehicleId: string
   assignedVehicleId: string
   classId: string
+  // #463: the discriminator is a defining booking attribute, so the self-contained
+  // CREATED audit snapshot records it alongside the vehicle/class it mirrors.
+  fulfillmentMode: BookingFulfillmentMode
   startAt: string
   endAt: string
   totalPrice: number

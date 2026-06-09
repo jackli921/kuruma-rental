@@ -107,6 +107,7 @@ describe('InMemoryAvailabilityRepository.findAvailableVehicles — storefront fi
       effectiveEndAt: new Date('2026-08-01T13:00:00Z'),
       status: 'CONFIRMED',
       source: 'DIRECT',
+      fulfillmentMode: 'SPECIFIC',
       bookingCode: `bk-${booked.id}`,
       insuranceOptionId: null,
       insuranceSnapshot: null,

@@ -1,6 +1,7 @@
 import type {
   BookingEventPayload,
   BookingEventType,
+  BookingFulfillmentMode,
   FeeSnapshotItem,
   InsuranceSnapshot,
 } from '@kuruma/shared/db/schema'
@@ -47,6 +48,9 @@ export interface Booking {
   effectiveEndAt: Date
   status: 'CONFIRMED' | 'ACTIVE' | 'COMPLETED' | 'CANCELLED'
   source: 'DIRECT' | 'TRIP_COM' | 'MANUAL' | 'OTHER'
+  // #463: how the booking is fulfilled. Server-derived SPECIFIC pre-demo;
+  // CLASS_COMBO is #464. Always written explicitly by app code (Option B).
+  fulfillmentMode: BookingFulfillmentMode
   // Human-facing reservation code, 8-char no-confusables base32 (§10 item 3).
   bookingCode: string
   // Selected insurance + its snapshot, locked at booking time. Null = declined.
