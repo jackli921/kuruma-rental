@@ -1,4 +1,4 @@
-import { SearchResultsList } from '@/vite/search/SearchResultsList'
+import { SearchMap } from '@/vite/search/SearchMap'
 import { type ResultView, SearchViewToggle } from '@/vite/search/SearchViewToggle'
 import { fetchSearchResults } from '@/vite/search/api'
 import { StorefrontCard } from '@/vite/storefronts/StorefrontCard'
@@ -92,7 +92,7 @@ function StorefrontSearchRoute() {
         </div>
 
         {data.view === 'map' ? (
-          <SearchResultsList result={data.flat} />
+          <SearchMap result={data.flat} />
         ) : (
           <StoreGrid result={data.storefronts} from={from ?? ''} to={to ?? ''} />
         )}

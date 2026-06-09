@@ -827,7 +827,11 @@
       "label": "结果视图"
     },
     "list": {
+      "heading": "可用车辆",
       "empty": "所选日期没有可用车辆。"
+    },
+    "map": {
+      "noCoordinates": "这些结果暂时无法在地图上显示。"
     },
     "detail": {
       "backToSearch": "返回搜索",

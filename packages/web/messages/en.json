@@ -827,7 +827,11 @@
       "label": "Result view"
     },
     "list": {
+      "heading": "Available cars",
       "empty": "No cars are available for these dates."
+    },
+    "map": {
+      "noCoordinates": "Map view isn't available for these results yet."
     },
     "detail": {
       "backToSearch": "Back to search",
