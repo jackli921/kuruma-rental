@@ -24,8 +24,10 @@ export interface SizeReport {
 /**
  * Pure: gzip each file's bytes and sum, largest-first. Content is supplied by the
  * caller (not read here) so the budget math is unit-testable without a real build.
- * Per-file gzip sum mirrors the numbers `vite build` prints, so a regression here
- * maps directly to a chunk you can see in the build log.
+ * Each file's gzip size matches what `vite build` prints per chunk, so a regression
+ * points straight at a chunk in the build log. The *sum* is a conservative proxy
+ * for the deploy footprint (per-file gzip overcounts vs one stream), not the exact
+ * over-the-wire transfer — fine for a budget, where erring high fails earlier.
  */
 export function measureGzip(
   files: ReadonlyArray<{ file: string; content: Uint8Array }>,

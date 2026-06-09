@@ -14,12 +14,16 @@ export function SearchWidget() {
   const [pickupDate, setPickupDate] = useState('')
   const [returnDate, setReturnDate] = useState('')
 
-  // The catalog ignores date params for now; real date-driven search lands in
-  // 5d-3, where these inputs feed TanStack `validateSearch`. Until then submit
-  // just routes to the locale-scoped catalog.
+  // Hand the chosen range to the storefront availability search. The inputs are
+  // `datetime-local` (JST wall-clock) to match StorefrontSearchForm, so the
+  // values feed `/search`'s parseSearchRange directly — no format conversion.
   function handleSubmit(e: FormEvent) {
     e.preventDefault()
-    navigate({ to: '/$locale/vehicles', params: { locale } })
+    navigate({
+      to: '/$locale/search',
+      params: { locale },
+      search: { from: pickupDate, to: returnDate },
+    })
   }
 
   return (
@@ -47,7 +51,7 @@ export function SearchWidget() {
           </Label>
           <Input
             id="pickup-date"
-            type="date"
+            type="datetime-local"
             value={pickupDate}
             onChange={(e) => setPickupDate(e.target.value)}
             className="h-6 border-0 p-0 text-sm font-semibold shadow-none focus-visible:ring-0"
@@ -66,7 +70,7 @@ export function SearchWidget() {
           </Label>
           <Input
             id="return-date"
-            type="date"
+            type="datetime-local"
             value={returnDate}
             onChange={(e) => setReturnDate(e.target.value)}
             className="h-6 border-0 p-0 text-sm font-semibold shadow-none focus-visible:ring-0"

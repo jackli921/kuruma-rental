@@ -24,13 +24,20 @@ describe('SearchWidget', () => {
     expect(screen.getByRole('button', { name: /search/i })).toBeInTheDocument()
   })
 
-  it('navigates to the locale-scoped catalog on submit', () => {
+  it('navigates to the locale-scoped storefront search carrying the chosen range', () => {
     renderWidget()
+    fireEvent.change(screen.getByLabelText('Pickup date'), {
+      target: { value: '2026-07-01T10:00' },
+    })
+    fireEvent.change(screen.getByLabelText('Return date'), {
+      target: { value: '2026-07-03T10:00' },
+    })
     fireEvent.click(screen.getByRole('button', { name: /search/i }))
     expect(mockNavigate).toHaveBeenCalledTimes(1)
     expect(mockNavigate).toHaveBeenCalledWith({
-      to: '/$locale/vehicles',
+      to: '/$locale/search',
       params: { locale: 'en' },
+      search: { from: '2026-07-01T10:00', to: '2026-07-03T10:00' },
     })
   })
 })

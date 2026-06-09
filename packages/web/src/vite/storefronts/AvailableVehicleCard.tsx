@@ -6,19 +6,14 @@ import { useTranslations } from 'use-intl'
 
 interface AvailableVehicleCardProps {
   readonly vehicle: AvailableVehicleData
-  /** The storefront's location — becomes the booking's pickup/dropoff. */
-  readonly locationId: string
-  /** Selected date range (ISO), carried through to the booking form. */
-  readonly from: string
-  readonly to: string
 }
 
 /**
  * One available vehicle inside a storefront detail page (#391). The projection
  * is already renter-safe (the API drops operator internals). The booking CTA
- * (`/bookings/new`, carrying vehicle + location + dates) is deferred to a later
- * migration phase, so it renders inert for now — `locationId`/`from`/`to` stay
- * on the props as the contract the live CTA will consume.
+ * (`/bookings/new`, carrying the vehicle + storefront location + dates) is
+ * deferred with the rest of the booking flow, so it renders inert for now; the
+ * location/range props it will need get re-added when that CTA goes live.
  */
 export function AvailableVehicleCard({ vehicle }: AvailableVehicleCardProps) {
   const t = useTranslations('search')

@@ -26,7 +26,7 @@ function makeVehicle(overrides: Partial<AvailableVehicleData> = {}): AvailableVe
 function renderCard(vehicle: AvailableVehicleData) {
   return render(
     <IntlProvider locale="en" messages={en}>
-      <AvailableVehicleCard vehicle={vehicle} locationId="loc-1" from="f" to="t" />
+      <AvailableVehicleCard vehicle={vehicle} />
     </IntlProvider>,
   )
 }

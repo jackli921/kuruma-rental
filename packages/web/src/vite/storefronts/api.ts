@@ -3,8 +3,9 @@ import { getApiBaseUrl } from '@/vite/api-base'
 
 // JSON-serialized shapes returned by the public storefront endpoints (#391).
 // The Vite shell owns these DTOs (rather than importing the frozen Next module's
-// copy) so it stays self-contained once `modules/storefronts` is deleted at
-// cutover. The API serializes everything to JSON, so there are no Date instances.
+// copy) so it stays self-contained and free of that module's process.env path.
+// These supersede `modules/storefronts/api.ts` — delete that file at cutover
+// (#378). The API serializes everything to JSON, so there are no Date instances.
 
 export interface OperatingHoursData {
   openTime: string

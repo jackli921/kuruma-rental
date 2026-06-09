@@ -10,7 +10,7 @@
 /index.html
   Cache-Control: no-cache
 /messages/*
-  Cache-Control: no-cache, must-revalidate
+  Cache-Control: no-cache
 
 # Baseline hardening on every Pages response. Enforced headers below are all safe
 # for this app (redirect-based OAuth, same-origin /api proxy, no framing).
