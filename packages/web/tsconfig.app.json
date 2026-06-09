@@ -1,0 +1,21 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "types": ["vite/client"],
+    "tsBuildInfoFile": "./tsconfig.app.tsbuildinfo",
+    "paths": {
+      "@/*": ["./src/*"],
+      "@kuruma/shared": ["../shared/src"],
+      "@kuruma/shared/*": ["../shared/src/*"]
+    }
+  },
+  "include": [
+    "src/main.tsx",
+    "src/routes/**/*.ts",
+    "src/routes/**/*.tsx",
+    "src/routeTree.gen.ts",
+    "src/vite/**/*.ts",
+    "src/vite/**/*.tsx"
+  ],
+  "exclude": ["node_modules"]
+}

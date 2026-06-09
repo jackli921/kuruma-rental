@@ -1,5 +1,4 @@
 import { defineConfig, devices } from '@playwright/test'
-import { E2E_AUTH_SECRET } from './e2e/mint-mock-session'
 
 const PORT = 3001
 const BASE_URL = `http://localhost:${PORT}`
@@ -11,7 +10,11 @@ export default defineConfig({
   // The authenticated real-DB track has its own config (playwright.real-db.config.ts)
   // with real servers + a seeded Neon branch. Exclude it here so the mock track
   // never tries to run those specs against the unauthenticated mock API.
-  testIgnore: '**/real-db/**',
+  //
+  // admin-portal + booking specs exercise /en/admin and /manage/bookings, routes
+  // the Vite shell does not serve yet (#378 migration is public-flow first).
+  // Re-enable each when its flow is ported. Tracked in #501.
+  testIgnore: ['**/real-db/**', '**/admin-portal.spec.ts', '**/booking.spec.ts'],
   fullyParallel: true,
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 2 : 0,
@@ -45,12 +48,10 @@ export default defineConfig({
       reuseExistingServer: !process.env.CI,
       timeout: 120_000,
       env: {
-        // Valid-format placeholders — the E2E spec routes hit the mock API,
-        // not the real DB. Middleware's auth() import chain touches neon()
-        // and will crash on empty values even if the DB is never queried.
-        AUTH_SECRET: E2E_AUTH_SECRET,
-        DATABASE_URL: 'postgresql://e2e:e2e@localhost:5432/e2e?connect_timeout=1',
-        NEXT_PUBLIC_API_URL: MOCK_API_URL,
+        // The Vite dev server proxies /api + /auth to this mock API (see
+        // vite.config.mts `server.proxy`). Unlike the old Next middleware, the
+        // SPA has no server-side auth import chain, so no AUTH_SECRET/DATABASE_URL.
+        VITE_DEV_API_PROXY: MOCK_API_URL,
       },
     },
   ],

@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Best Car Rental</title>
+    <!--
+      Pre-paint locale bootstrap (spec §6.2): set <html lang> before React mounts
+      for a11y/font correctness. Mirrors detectLocale() (the tested canonical path
+      used by the `/` redirect); content never flashes wrong because the $locale
+      route holds navigation until its messages loader resolves (§4.5).
+    -->
+    <script>
+      (function () {
+        var supported = ['en', 'ja', 'zh'];
+        var cookie = null;
+        document.cookie.split('; ').forEach(function (part) {
+          var eq = part.indexOf('=');
+          if (eq !== -1 && part.slice(0, eq) === 'NEXT_LOCALE') {
+            cookie = decodeURIComponent(part.slice(eq + 1));
+          }
+        });
+        var locale = 'en';
+        if (supported.indexOf(cookie) !== -1) {
+          locale = cookie;
+        } else {
+          var langs = navigator.languages || [navigator.language || 'en'];
+          for (var i = 0; i < langs.length; i++) {
+            var prefix = (langs[i] || '').split('-')[0].toLowerCase();
+            if (supported.indexOf(prefix) !== -1) {
+              locale = prefix;
+              break;
+            }
+          }
+        }
+        document.documentElement.lang = locale;
+      })();
+    </script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

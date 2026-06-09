@@ -63,11 +63,15 @@ jobs:
       # detector — catches "secret got deleted or never rotated" but NOT
       # value mismatches (CF never returns secret values). Source-of-truth
       # is GitHub Secrets, enforced by rotate-secrets.yml.
+      # AUTH_GOOGLE_ID/SECRET + AUTH_URL moved here when OAuth moved onto the API
+      # (#378 Phase 2). AUTH_URL is the public Pages origin used to build the
+      # google redirect_uri; set it once Pages is live (#304). Missing any of
+      # these ships /auth/google/* as a silent 503 — see resolveGoogleOAuthConfig.
       - name: Verify API Worker secrets present
         working-directory: packages/api
         run: |
           secrets_json=$(npx wrangler secret list)
-          for key in DATABASE_URL AUTH_SECRET; do
+          for key in DATABASE_URL AUTH_SECRET AUTH_GOOGLE_ID AUTH_GOOGLE_SECRET AUTH_URL; do
             echo "$secrets_json" | jq -e --arg k "$key" 'any(.[]; .name == $k)' > /dev/null \
               || { echo "::error::Missing required secret on API Worker: $key (rotate via rotate-secrets.yml)"; exit 1; }
           done
@@ -91,7 +95,13 @@ jobs:
       # resolved at runtime. This is why the current production is
       # broken: web was built without this set and fell back to
       # http://localhost:8787.
+      # BRIDGE FREEZE (#378 §7.4/§7.5): web is migrating to CF Pages. The old
+      # Next.js Worker stays frozen at its last green build, so every web-Worker
+      # step below is gated off (kept, not deleted, for removal at DNS cutover).
+      # `build` is now `vite build` — running this path would build/deploy the
+      # wrong artifact. The CF Pages deploy lands in a later PR (gated on #304).
       - name: Build Web Worker
+        if: false
         working-directory: packages/web
         # NEXT_PUBLIC_API_URL must be a literal here, not `${{ env.X }}`.
         # GitHub Actions does not reliably propagate workflow-level env
@@ -110,12 +120,14 @@ jobs:
           bun run build:worker
 
       - name: Deploy Web Worker
+        if: false # bridge freeze (#378 §7.5) — delete at cutover
         working-directory: packages/web
         run: npx wrangler deploy
 
       # 7. Verify required secrets exist on the Web Worker. Same read-only
       # drift detector as the API step — see that step's comment for why.
       - name: Verify Web Worker secrets present
+        if: false # bridge freeze (#378 §7.5) — delete at cutover
         working-directory: packages/web
         run: |
           secrets_json=$(npx wrangler secret list)
@@ -128,6 +140,7 @@ jobs:
       # 8. Smoke test the web landing page (public, no auth required).
       # Same retry rationale as the API smoke test.
       - name: Smoke test Web
+        if: false # bridge freeze (#378 §7.5) — delete at cutover
         run: |
           curl -fsS --retry 10 --retry-delay 3 --retry-all-errors "$WEB_WORKER_URL/en" > /dev/null
           echo "Web landing OK"

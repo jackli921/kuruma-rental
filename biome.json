@@ -37,6 +37,8 @@
       ".next",
       ".open-next",
       ".wrangler",
+      "dist",
+      "routeTree.gen.ts",
       "drizzle",
       "bun.lock",
       "next-env.d.ts",

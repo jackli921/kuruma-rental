@@ -2,8 +2,12 @@ import { type RateLimitBinding, rateLimit } from '@elithrar/workers-hono-rate-li
 import { getDb, runTx } from '@kuruma/shared/db'
 import { Hono } from 'hono'
 import { cors } from 'hono/cors'
+import { DrizzleOAuthAccountStore } from './auth/drizzle-oauth-account-store'
+import { FetchGoogleOAuthProvider } from './auth/fetch-google-oauth-provider'
+import type { GoogleAuthRuntime, GoogleOAuthConfig } from './auth/google'
 import { setupGlobalHandlers } from './error-handlers'
 import { requireAuth } from './middleware/auth'
+import { csrf } from './middleware/csrf'
 import { structuredLogger } from './middleware/logger'
 import { requestId } from './middleware/request-id'
 import { DisabledPhotoStorage } from './repositories/disabled-photo-storage'
@@ -74,6 +78,7 @@ import type {
   VehicleRepository,
 } from './repositories/types'
 import { createAdminRoutes } from './routes/admin'
+import { createAuthRoutes } from './routes/auth'
 import { createAvailabilityRoutes } from './routes/availability'
 import { createBookingRoutes } from './routes/bookings'
 import { createCustomerRoutes } from './routes/customers'
@@ -142,6 +147,9 @@ export function createApp(overrides?: {
   photoUploadLimiter?: RateLimitBinding
   photoUploadUserLimiter?: RateLimitBinding
   publicCatalogLimiter?: RateLimitBinding
+  // Injected Google OAuth runtime (provider + account store). Integration tests
+  // pass a fake so the callback can be exercised without a live Google/DB.
+  googleAuthRuntime?: GoogleAuthRuntime
 }) {
   let vehicleClassRepo: VehicleClassRepository
   let vehicleRepo: VehicleRepository
@@ -163,6 +171,9 @@ export function createApp(overrides?: {
   let notificationLogRepo: NotificationLogRepository
   let storefrontRepo: StorefrontRepository
   let runInTransaction: RunInTransaction
+  // Undefined unless an override injects one (tests) or the DB branch builds the
+  // real one. Absent ⇒ /auth/google/callback 503s (e.g. local dev without a DB).
+  let googleAuthRuntime: GoogleAuthRuntime | undefined
   const photoUploadLimiter =
     overrides?.photoUploadLimiter ??
     ((globalThis as Record<string, unknown>).PHOTO_UPLOAD_LIMITER as RateLimitBinding | undefined)
@@ -210,6 +221,7 @@ export function createApp(overrides?: {
     notificationLogRepo = overrides.notificationLogRepo ?? new InMemoryNotificationLogRepository()
     storefrontRepo =
       overrides.storefrontRepo ?? new InMemoryStorefrontRepository(locationRepo, operatorRepo)
+    googleAuthRuntime = overrides.googleAuthRuntime
   } else if (process.env.DATABASE_URL) {
     const db = getDb()
     vehicleClassRepo = new DrizzleVehicleClassRepository(db)
@@ -231,6 +243,12 @@ export function createApp(overrides?: {
     feeScheduleRepo = new DrizzleFeeScheduleRepository(db)
     notificationLogRepo = new DrizzleNotificationLogRepository(db)
     storefrontRepo = new DrizzleStorefrontRepository(db)
+    // Real Google OAuth runtime: HTTP provider + Drizzle-backed account store.
+    // Built only here (the composition root) so the route stays adapter-agnostic.
+    googleAuthRuntime = {
+      provider: new FetchGoogleOAuthProvider(),
+      accountStore: new DrizzleOAuthAccountStore(db),
+    }
     const vehiclePhotosBucket = (globalThis as Record<string, unknown>).VEHICLE_PHOTOS as
       | R2BucketLike
       | undefined
@@ -372,6 +390,12 @@ export function createApp(overrides?: {
     )
   }
 
+  // CSRF guard for the cookie session (design spec §5.4). Must run before the
+  // route-auth guards so a forged cookie-authenticated mutation is rejected
+  // (403) before any handler work. No-op for safe methods and cookie-less
+  // Bearer/API-key callers — see middleware/csrf.ts.
+  app.use('*', csrf())
+
   // Auth middleware on all protected paths.
   // vehicle-classes: public GETs for renter catalog (list, by-slug, availability)
   // are registered before auth inside createVehicleClassRoutes. Mutations +
@@ -463,6 +487,7 @@ export function createApp(overrides?: {
   // hc<AppType> needs this to produce typed client methods.
   return app
     .route('/', health)
+    .route('/', createAuthRoutes(resolveGoogleOAuthConfig(), googleAuthRuntime))
     .route('/', createFleetOverviewRoutes(fleetOverviewService))
     .route('/', createVehicleDetailRoutes(vehicleDetailService))
     .route(
@@ -508,6 +533,30 @@ export function createApp(overrides?: {
     .route('/', createFeeScheduleRoutes(feeScheduleService, resolveWriteOperatorId))
     .route('/', createNotificationRoutes(notificationService))
     .route('/', createOperatorRoutes(operatorService))
+}
+
+/**
+ * Resolve Google OAuth config from env, or undefined when unconfigured (local
+ * dev / CI without secrets) — the /auth/google/* routes then return 503 rather
+ * than crashing at boot. redirect_uri is derived from AUTH_URL so it always
+ * matches the deployed origin; the post-login target defaults to the first
+ * allowed web origin.
+ */
+function resolveGoogleOAuthConfig(): GoogleOAuthConfig | undefined {
+  const clientId = process.env.AUTH_GOOGLE_ID
+  const clientSecret = process.env.AUTH_GOOGLE_SECRET
+  const authUrl = process.env.AUTH_URL
+  if (!clientId || !clientSecret || !authUrl) return undefined
+
+  const base = authUrl.replace(/\/$/, '')
+  const postLoginRedirect =
+    process.env.WEB_POST_LOGIN_URL ?? resolveAllowedOrigins(process.env.WEB_ORIGIN)[0] ?? base
+  return {
+    clientId,
+    clientSecret,
+    redirectUri: `${base}/auth/google/callback`,
+    postLoginRedirect,
+  }
 }
 
 const DEV_WEB_ORIGINS = ['http://localhost:3001', 'http://127.0.0.1:3001']

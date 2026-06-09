@@ -1,0 +1,27 @@
+# Cloudflare Pages response headers (spec §6.1). Rules are path-prefix matched.
+
+# Content-hashed bundles are immutable — Vite fingerprints every file under
+# /assets, so a new deploy always ships new URLs. Cache them for a year.
+/assets/*
+  Cache-Control: public, max-age=31536000, immutable
+
+# The app shell and locale data are re-fetched each deploy; never cache them so a
+# new release takes effect immediately (the shell pulls the fresh asset URLs).
+/index.html
+  Cache-Control: no-cache
+/messages/*
+  Cache-Control: no-cache
+
+# Baseline hardening on every Pages response. Enforced headers below are all safe
+# for this app (redirect-based OAuth, same-origin /api proxy, no framing).
+/*
+  X-Content-Type-Options: nosniff
+  Referrer-Policy: strict-origin-when-cross-origin
+  X-Frame-Options: SAMEORIGIN
+  Cross-Origin-Opener-Policy: same-origin-allow-popups
+  # CSP ships Report-Only until the live preview (CF #304) lets us verify it
+  # against the Google OAuth redirect, Unsplash imagery, and the inline locale
+  # bootstrap in index.html. The follow-up hashes that inline script and flips
+  # this to an enforcing `Content-Security-Policy`. COEP is intentionally omitted
+  # — `require-corp` would block the cross-origin Unsplash images.
+  Content-Security-Policy-Report-Only: default-src 'self'; img-src 'self' data: https://images.unsplash.com; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'; font-src 'self' data:; connect-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'

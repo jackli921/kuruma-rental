@@ -38,7 +38,7 @@ test.describe('Renter storefront search flow', () => {
     await expect(page.getByText('From ¥4,500 / day')).toBeVisible()
   })
 
-  test('clicking a card opens the detail with grouped vehicles + a booking link', async ({
+  test('clicking a card opens the detail with grouped vehicles + a deferred booking CTA', async ({
     page,
   }) => {
     await page.goto(`/en/search?from=${PICKUP}&to=${RETURN}`)
@@ -57,12 +57,12 @@ test.describe('Renter storefront search flow', () => {
     await expect(page.getByRole('heading', { name: 'E2E Honda Fit' })).toBeVisible()
     await expect(page.getByRole('heading', { name: 'E2E Toyota Sienta' })).toBeVisible()
 
-    // Booking CTA links into the slice-6 form, carrying vehicle + store + dates (#392).
-    const bookLinks = page.getByRole('link', { name: 'Book this car' })
-    await expect(bookLinks).toHaveCount(2)
-    await expect(bookLinks.first()).toHaveAttribute(
-      'href',
-      /\/bookings\/new\?vehicleId=e2e-store-vehicle-1&locationId=e2e-store-1&from=.+&to=.+/,
-    )
+    // The booking CTA (/bookings/new) is deferred in the Vite migration, so it
+    // renders as an inert disabled button per vehicle rather than a link.
+    // Re-assert the live /bookings/new link once the booking flow is ported (#501).
+    const bookButtons = page.getByRole('button', { name: 'Book this car' })
+    await expect(bookButtons).toHaveCount(2)
+    await expect(bookButtons.first()).toBeDisabled()
+    await expect(page.getByRole('link', { name: 'Book this car' })).toHaveCount(0)
   })
 })
