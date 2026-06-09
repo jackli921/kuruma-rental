@@ -62,4 +62,17 @@ describe('DrizzleVehicleRepository luggage override (#457)', () => {
     expect(created.luggageCapacity).toBeNull()
     expect(created.luggageSize).toBeNull()
   })
+
+  // Plan P1: clearing an override (PATCH null) must persist null so the read path
+  // falls back to the class default — not silently keep the old override.
+  it('update clears a per-vehicle override back to null', async () => {
+    const created = await repo.create(SYSTEM_CONTEXT, vehicleInput(4, 'LARGE'))
+    createdIds.push(created.id)
+
+    await repo.update(SYSTEM_CONTEXT, created.id, { luggageCapacity: null, luggageSize: null })
+
+    const fetched = await repo.findById(SYSTEM_CONTEXT, created.id)
+    expect(fetched?.luggageCapacity).toBeNull()
+    expect(fetched?.luggageSize).toBeNull()
+  })
 })
