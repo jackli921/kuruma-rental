@@ -6,6 +6,7 @@ import { DrizzleOAuthAccountStore } from './auth/drizzle-oauth-account-store'
 import { FetchGoogleOAuthProvider } from './auth/fetch-google-oauth-provider'
 import type { GoogleAuthRuntime, GoogleOAuthConfig } from './auth/google'
 import { setupGlobalHandlers } from './error-handlers'
+import { parseBoolFlag } from './lib/parse-bool-flag'
 import { requireAuth } from './middleware/auth'
 import { csrf } from './middleware/csrf'
 import { structuredLogger } from './middleware/logger'
@@ -114,6 +115,7 @@ import { createVehicleRoutes } from './routes/vehicles'
 import { BookingService } from './services/booking'
 import { BookingPostCommitDispatcher } from './services/booking-post-commit-dispatcher'
 import { CustomerService } from './services/customer'
+import { documentVerificationGate } from './services/document-verification-gate'
 import type { EmailSender } from './services/email/email-sender'
 import { ResendEmailSender } from './services/email/resend-email-sender'
 import { makeEnsureThread } from './services/ensure-thread'
@@ -523,6 +525,14 @@ export function createApp(overrides?: {
   )
   const ensureThread = staffUserId ? makeEnsureThread({ threadRepo, staffUserId }) : async () => {}
   const postCommit = new BookingPostCommitDispatcher(ensureThread, notificationDispatcher)
+  const renterDocumentService = new RenterDocumentService(renterDocumentRepo, documentStorage)
+  // #459: gate new bookings on renter document verification only when the flag
+  // is explicitly on. Default OFF keeps the booking flow (and its 900+ tests,
+  // the #390 demo, #460/#461) untouched. When on, an unverified renter is 403'd
+  // before any booking work.
+  const verificationGate = parseBoolFlag(process.env.REQUIRE_DOCUMENT_VERIFICATION)
+    ? documentVerificationGate(renterDocumentService)
+    : undefined
   const bookingService = new BookingService(
     bookingRepo,
     runInTransaction,
@@ -531,6 +541,8 @@ export function createApp(overrides?: {
     vehicleClassRepo,
     postCommit,
     operatorRepo,
+    undefined,
+    verificationGate,
   )
   const notificationService = new NotificationService(
     notificationLogRepo,
@@ -546,7 +558,6 @@ export function createApp(overrides?: {
   const fleetOverviewService = new FleetOverviewService(fleetOverviewRepo)
   const vehicleDetailService = new VehicleDetailService(vehicleDetailRepo)
   const operatorService = new OperatorService(operatorRepo)
-  const renterDocumentService = new RenterDocumentService(renterDocumentRepo, documentStorage)
   // #407: the write-operator resolver is a pure policy function — sole-operator
   // inference is retired, so it no longer needs an operator lookup.
   const resolveWriteOperatorId: ResolveWriteOperatorId = (ctx, inputOperatorId) =>
