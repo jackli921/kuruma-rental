@@ -121,19 +121,19 @@ export function ClassDetailView({ vehicleClass: vc }: ClassDetailViewProps) {
             </CardContent>
           </Card>
 
-          {/* The booking flow (/bookings/new) is deferred to a later migration
-              phase, so this CTA is inert for now; it gets wired to /search once
-              5d-3 lands the availability page. */}
-          <button
-            type="button"
-            disabled
+          {/* The direct booking flow (/bookings/new) is still deferred, so the
+              class CTA routes to availability search — the renter picks dates and
+              finds a store offering this class (5d-3). */}
+          <Link
+            to="/$locale/search"
+            params={{ locale }}
             className={cn(
               buttonVariants({ variant: 'default', size: 'lg' }),
               'w-full gap-2 text-base',
             )}
           >
             {t('bookCta')}
-          </button>
+          </Link>
         </div>
       </div>
     </div>
