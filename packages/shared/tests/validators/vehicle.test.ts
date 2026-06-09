@@ -396,3 +396,62 @@ describe('updateVehicleStatusSchema', () => {
     expect(result.success).toBe(false)
   })
 })
+
+describe('vehicle luggage (#457)', () => {
+  const validInput = {
+    name: 'Toyota Prius 2022',
+    seats: 5,
+    transmission: 'AUTO' as const,
+    dailyRateJpy: 8000,
+  }
+
+  it('create accepts a per-vehicle luggage override', () => {
+    const result = createVehicleSchema.safeParse({
+      ...validInput,
+      luggageCapacity: 3,
+      luggageSize: 'LARGE',
+    })
+    expect(result.success).toBe(true)
+    if (result.success) {
+      expect(result.data.luggageCapacity).toBe(3)
+      expect(result.data.luggageSize).toBe('LARGE')
+    }
+  })
+
+  it('create allows luggage to be omitted (read-time class fallback)', () => {
+    const result = createVehicleSchema.safeParse(validInput)
+    expect(result.success).toBe(true)
+    if (result.success) {
+      expect('luggageCapacity' in result.data).toBe(false)
+      expect('luggageSize' in result.data).toBe(false)
+    }
+  })
+
+  it('create rejects an invalid luggage size', () => {
+    const result = createVehicleSchema.safeParse({ ...validInput, luggageSize: 'HUGE' })
+    expect(result.success).toBe(false)
+  })
+
+  it('create rejects a negative luggage count', () => {
+    const result = createVehicleSchema.safeParse({ ...validInput, luggageCapacity: -1 })
+    expect(result.success).toBe(false)
+  })
+
+  it('update accepts explicit null to clear the override (enables class fallback)', () => {
+    const result = updateVehicleSchema.safeParse({ luggageCapacity: null, luggageSize: null })
+    expect(result.success).toBe(true)
+    if (result.success) {
+      expect(result.data.luggageCapacity).toBeNull()
+      expect(result.data.luggageSize).toBeNull()
+    }
+  })
+
+  it('update without luggage does not inject luggage keys', () => {
+    const result = updateVehicleSchema.safeParse({ name: 'Renamed' })
+    expect(result.success).toBe(true)
+    if (result.success) {
+      expect('luggageCapacity' in result.data).toBe(false)
+      expect('luggageSize' in result.data).toBe(false)
+    }
+  })
+})

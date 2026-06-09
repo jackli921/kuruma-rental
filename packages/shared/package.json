@@ -20,6 +20,7 @@
     "./types/customer": "./src/types/customer.ts",
     "./types/location": "./src/types/location.ts",
     "./lib/cancellation-policy": "./src/lib/cancellation-policy.ts",
+    "./lib/luggage": "./src/lib/luggage.ts",
     "./lib/pricing": "./src/lib/pricing.ts",
     "./lib/expiry": "./src/lib/expiry.ts",
     "./lib/rental-rules": "./src/lib/rental-rules.ts",

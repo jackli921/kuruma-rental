@@ -15,6 +15,7 @@ import {
   uniqueIndex,
 } from 'drizzle-orm/pg-core'
 import type { AdapterAccountType } from 'next-auth/adapters'
+import { LUGGAGE_SIZES } from '../lib/luggage'
 import type { LocationOperatingHours } from '../types/location'
 
 // Marketplace tenancy (epic #385, slice 1 / #386).
@@ -92,6 +93,9 @@ export const accounts = pgTable(
 )
 
 export const transmissionEnum = pgEnum('transmission', ['AUTO', 'MANUAL'])
+// #457: standardized luggage-size taxonomy. Values declared once in lib/luggage.ts
+// (shared by the Zod enum, the resolver, and this pgEnum).
+export const luggageSizeEnum = pgEnum('luggage_size', LUGGAGE_SIZES)
 export const vehicleClassStatusEnum = pgEnum('vehicle_class_status', ['ACTIVE', 'ARCHIVED'])
 export const vehicleStatusEnum = pgEnum('vehicle_status', ['AVAILABLE', 'MAINTENANCE', 'RETIRED'])
 export const bookingStatusEnum = pgEnum('booking_status', [
@@ -133,6 +137,9 @@ export const vehicleClasses = pgTable(
     photos: text('photos').array().notNull().default([]),
     seats: integer('seats').notNull(),
     luggageCapacity: integer('luggageCapacity').notNull(),
+    // #457: class default size — NOT NULL so the per-vehicle override always has a
+    // backstop to fall back to. Existing rows backfill to 'MEDIUM'.
+    luggageSize: luggageSizeEnum('luggageSize').notNull().default('MEDIUM'),
     transmission: transmissionEnum('transmission').notNull(),
     fuelType: text('fuelType'),
     // #406: pricing moved to the vehicle level. Classes no longer carry rates;
@@ -363,6 +370,10 @@ export const vehicles = pgTable(
     description: text('description'),
     photos: text('photos').array().notNull().default([]),
     seats: integer('seats').notNull(),
+    // #457: per-vehicle luggage override (both nullable). null on either field means
+    // "use the class default"; resolved per-field via resolveLuggage (lib/luggage.ts).
+    luggageCapacity: integer('luggageCapacity'),
+    luggageSize: luggageSizeEnum('luggageSize'),
     transmission: transmissionEnum('transmission').notNull(),
     fuelType: text('fuelType'),
     licensePlate: text('licensePlate').unique(),

@@ -1,5 +1,6 @@
 import { unwrap } from '@/lib/api-error'
 import { getApiBaseUrl } from '@/vite/api-base'
+import type { LuggageSize } from '@kuruma/shared/lib/luggage'
 
 // JSON-serialized shapes returned by the public storefront endpoints (#391).
 // The Vite shell owns these DTOs (rather than importing the frozen Next module's
@@ -17,6 +18,9 @@ export interface ClassSummaryData {
   acrissCode: string | null
   /** Operator-entered class name; the web localizes via acrissCode. */
   label: string
+  // #457 D6: class-default luggage for compare-on-search badges.
+  luggageCapacity: number | null
+  luggageSize: LuggageSize | null
   availableCount: number
 }
 
@@ -45,6 +49,9 @@ export interface AvailableVehicleData {
   model: string | null
   year: number | null
   seats: number
+  // #457: effective luggage (vehicle override resolved against the class default).
+  luggageCapacity: number | null
+  luggageSize: LuggageSize | null
   transmission: 'AUTO' | 'MANUAL'
   acrissCode: string | null
   classLabel: string

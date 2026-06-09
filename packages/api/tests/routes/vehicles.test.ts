@@ -527,6 +527,52 @@ describe('Vehicle CRUD Routes', () => {
       const body = await res.json()
       expect(body.success).toBe(false)
     })
+
+    // #457: a per-vehicle luggage override is nullable. Submitting explicit null
+    // must clear it (so the vehicle falls back to its class default); omitting the
+    // keys must leave the override untouched.
+    it('clears the luggage override when explicit null is sent', async () => {
+      const createRes = await createVehicle({
+        ...validVehicleInput(),
+        luggageCapacity: 4,
+        luggageSize: 'LARGE',
+      })
+      const created = await createRes.json()
+      expect(created.data.luggageCapacity).toBe(4)
+      expect(created.data.luggageSize).toBe('LARGE')
+
+      const res = await app.request(`/vehicles/${created.data.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ luggageCapacity: null, luggageSize: null }),
+      })
+
+      expect(res.status).toBe(200)
+      const body = await res.json()
+      expect(body.data.luggageCapacity).toBeNull()
+      expect(body.data.luggageSize).toBeNull()
+    })
+
+    it('leaves the luggage override untouched when the keys are absent', async () => {
+      const createRes = await createVehicle({
+        ...validVehicleInput(),
+        luggageCapacity: 3,
+        luggageSize: 'MEDIUM',
+      })
+      const created = await createRes.json()
+
+      const res = await app.request(`/vehicles/${created.data.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: 'Renamed Car' }),
+      })
+
+      expect(res.status).toBe(200)
+      const body = await res.json()
+      expect(body.data.name).toBe('Renamed Car')
+      expect(body.data.luggageCapacity).toBe(3)
+      expect(body.data.luggageSize).toBe('MEDIUM')
+    })
   })
 
   describe('PATCH /vehicles/:id/status (issue #51)', () => {

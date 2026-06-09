@@ -1,5 +1,6 @@
 import { z } from 'zod'
 import { ACRISS_PATTERN } from '../acriss'
+import { LUGGAGE_SIZES } from '../lib/luggage'
 
 // photos/sortOrder carry .default()s only on create. Kept off the base because
 // Zod .partial() does NOT strip .default(), so a partial PATCH would re-inject
@@ -21,6 +22,10 @@ const vehicleClassObjectSchema = z.object({
   photos: photosSchema.optional(),
   seats: z.number().int().min(1, 'Must have at least 1 seat').max(50),
   luggageCapacity: z.number().int().min(0, 'Luggage capacity cannot be negative'),
+  // Class-level default luggage size (#457) — the fallback when a vehicle leaves
+  // its size blank. Optional on the base (no default) so a partial PATCH never
+  // re-injects it; the create .extend() supplies the default (#430 pattern).
+  luggageSize: z.enum(LUGGAGE_SIZES).optional(),
   transmission: z.enum(['AUTO', 'MANUAL']),
   fuelType: z.string().trim().max(50).optional(),
   // ACRISS taxonomy code (#388). Format-only validation against the single
@@ -42,6 +47,8 @@ export const createVehicleClassSchema = vehicleClassObjectSchema.extend({
   // Defaults belong on create only — see photosSchema/sortOrderSchema note (#430).
   photos: photosSchema.default([]),
   sortOrder: sortOrderSchema.default(0),
+  // Default belongs on create only — see #430 note above.
+  luggageSize: z.enum(LUGGAGE_SIZES).default('MEDIUM'),
   // #401: a non-operator (platform/legacy admin) caller may name the target
   // operator. OPERATOR_* callers' tenant comes from their token and this is
   // ignored for them. Optional — omit when exactly one operator exists.

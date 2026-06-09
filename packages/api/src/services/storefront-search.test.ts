@@ -44,6 +44,7 @@ function makeClass(overrides: Partial<Omit<VehicleClass, 'id' | 'createdAt' | 'u
     photos: [],
     seats: 5,
     luggageCapacity: 2,
+    luggageSize: 'MEDIUM',
     transmission: 'AUTO',
     fuelType: null,
     acrissCode: 'CCAR',
@@ -75,6 +76,8 @@ function makeVehicle(overrides: Partial<Omit<Vehicle, 'id' | 'createdAt' | 'upda
     description: null,
     photos: [],
     seats: 5,
+    luggageCapacity: null,
+    luggageSize: null,
     transmission: 'AUTO',
     fuelType: null,
     licensePlate: null,
@@ -138,13 +141,36 @@ describe('StorefrontSearchService.search (#391)', () => {
 
     const before = await ok(await service.search(PUBLIC_CONTEXT, { from: FROM, to: TO }))
     const beforeSummary = before.storefronts[0]?.classSummaries.find((s) => s.acrissCode === 'CCAR')
-    expect(beforeSummary).toEqual({ acrissCode: 'CCAR', label: 'Compact', availableCount: 3 })
+    expect(beforeSummary).toEqual({
+      acrissCode: 'CCAR',
+      label: 'Compact',
+      luggageCapacity: 2,
+      luggageSize: 'MEDIUM',
+      availableCount: 3,
+    })
 
     await bookOverlapping(booked.id, compact.id)
 
     const after = await ok(await service.search(PUBLIC_CONTEXT, { from: FROM, to: TO }))
     const afterSummary = after.storefronts[0]?.classSummaries.find((s) => s.acrissCode === 'CCAR')
     expect(afterSummary?.availableCount).toBe(2)
+  })
+
+  it('classSummaries carry the class default luggage for compare-on-search (#457 D6)', async () => {
+    const op = await makeOperator('Best Car Rental', 'best')
+    const compact = await makeClass({
+      operatorId: op.id,
+      name: 'Compact',
+      acrissCode: 'CCAR',
+      luggageCapacity: 3,
+      luggageSize: 'LARGE',
+    })
+    const namba = await makeLocation({ operatorId: op.id, name: 'Namba' })
+    await makeVehicle({ operatorId: op.id, classId: compact.id, pickupLocationId: namba.id })
+
+    const data = await ok(await service.search(PUBLIC_CONTEXT, { from: FROM, to: TO }))
+    const summary = data.storefronts[0]?.classSummaries.find((s) => s.acrissCode === 'CCAR')
+    expect(summary).toMatchObject({ luggageCapacity: 3, luggageSize: 'LARGE' })
   })
 
   it('fromDailyPriceJpy is the minimum dailyRateJpy across available vehicles', async () => {
@@ -208,7 +234,13 @@ describe('StorefrontSearchService.search (#391)', () => {
     )
 
     expect(data.storefronts[0]?.classSummaries).toEqual([
-      { acrissCode: 'CCAR', label: 'Compact', availableCount: 2 },
+      {
+        acrissCode: 'CCAR',
+        label: 'Compact',
+        luggageCapacity: 2,
+        luggageSize: 'MEDIUM',
+        availableCount: 2,
+      },
     ])
   })
 
