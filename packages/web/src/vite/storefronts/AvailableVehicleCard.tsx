@@ -1,7 +1,7 @@
 import { buttonVariants } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import type { AvailableVehicleData } from '@/vite/storefronts/api'
-import { Car, Settings2, Users } from 'lucide-react'
+import { Briefcase, Car, Settings2, Users } from 'lucide-react'
 import { useTranslations } from 'use-intl'
 
 interface AvailableVehicleCardProps {
@@ -17,6 +17,7 @@ interface AvailableVehicleCardProps {
  */
 export function AvailableVehicleCard({ vehicle }: AvailableVehicleCardProps) {
   const t = useTranslations('search')
+  const tSize = useTranslations('luggageSize')
   const photo = vehicle.photos[0]
   const transmissionLabel = vehicle.transmission === 'AUTO' ? t('auto') : t('manual')
 
@@ -49,6 +50,15 @@ export function AvailableVehicleCard({ vehicle }: AvailableVehicleCardProps) {
             <Settings2 className="size-4" />
             {transmissionLabel}
           </span>
+          {vehicle.luggageCapacity != null && (
+            <span className="flex items-center gap-1.5">
+              <Briefcase className="size-4" />
+              {t('luggage', { count: vehicle.luggageCapacity })}
+              {vehicle.luggageSize != null && (
+                <span className="text-muted-foreground/80"> · {tSize(vehicle.luggageSize)}</span>
+              )}
+            </span>
+          )}
         </div>
         <p className="mt-auto pt-1 text-base font-semibold text-foreground">{priceLabel}</p>
         <button

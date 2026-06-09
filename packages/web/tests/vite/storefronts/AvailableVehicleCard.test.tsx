@@ -18,6 +18,8 @@ function makeVehicle(overrides: Partial<AvailableVehicleData> = {}): AvailableVe
     classLabel: 'Compact',
     dailyRateJpy: 8000,
     hourlyRateJpy: null,
+    luggageCapacity: null,
+    luggageSize: null,
     photos: [],
     ...overrides,
   }
@@ -45,5 +47,23 @@ describe('AvailableVehicleCard', () => {
     const book = screen.getByRole('button', { name: 'Book this car' })
     expect(book).toBeDisabled()
     expect(screen.queryByRole('link')).toBeNull()
+  })
+
+  // #457: effective luggage (vehicle override resolved against the class default).
+  it('shows the resolved luggage count and size when both are present', () => {
+    renderCard(makeVehicle({ luggageCapacity: 4, luggageSize: 'LARGE' }))
+    expect(screen.getByText('4 bags')).toBeInTheDocument()
+    expect(screen.getByText(/Large/)).toBeInTheDocument()
+  })
+
+  it('shows the count alone when the resolved size is null', () => {
+    renderCard(makeVehicle({ luggageCapacity: 4, luggageSize: null }))
+    expect(screen.getByText('4 bags')).toBeInTheDocument()
+    expect(screen.queryByText(/Large/)).toBeNull()
+  })
+
+  it('renders no luggage line when capacity is unknown (classless, no override)', () => {
+    renderCard(makeVehicle({ luggageCapacity: null, luggageSize: null }))
+    expect(screen.queryByText(/bags/)).toBeNull()
   })
 })
