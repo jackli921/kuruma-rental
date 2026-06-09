@@ -1,3 +1,4 @@
+import type { RunTx } from '@kuruma/shared/db'
 import * as schema from '@kuruma/shared/db/schema'
 import { drizzle } from 'drizzle-orm/postgres-js'
 import postgres from 'postgres'
@@ -31,9 +32,9 @@ import {
 // getDb()) 500s on POST /bookings. The integration suite hits the same wall and
 // resolves it identically: a postgres-js client (real Postgres TCP, transaction-
 // capable) injected via createApp overrides. We mirror that so the E2E exercises
-// the real service/repo logic + real data over real HTTP. (Production's neon-http
-// interactive-transaction gap is a separate latent infra defect this milestone
-// surfaced — a follow-up, not patched here; slice 8 must not touch slices 1-7.)
+// the real service/repo logic + real data over real HTTP. (#493 has since fixed
+// the production gap — interactive transactions run via runTx/neon-serverless —
+// but we still inject a postgres-js runner here so the e2e stays on TCP Postgres.)
 const port = Number(process.env.REAL_API_PORT ?? 8788)
 
 const url = process.env.DATABASE_URL
@@ -55,6 +56,11 @@ const client = postgres({
 })
 const db = drizzle(client, { schema }) as unknown as Db
 
+// #493: thread/message create take an injected interactive-tx runner (DIP).
+// Back it with this postgres-js client so the e2e stays on TCP Postgres instead
+// of the production default (per-call neon-serverless runTx).
+const runOnTestDb: RunTx = (fn) => db.transaction(fn)
+
 // Full Drizzle repo wiring (the production composition root, but off postgres-js).
 // createApp's override branch swaps runInTransaction for an in-memory passthrough,
 // so the booking submit's atomic wrap is relaxed (booking_events land in memory) —
@@ -68,8 +74,8 @@ const app = createApp({
   fleetOverviewRepo: new DrizzleFleetOverviewRepository(db),
   vehicleDetailRepo: new DrizzleVehicleDetailRepository(db),
   statsRepo: new DrizzleStatsRepository(db),
-  threadRepo: new DrizzleThreadRepository(db),
-  messageRepo: new DrizzleMessageRepository(db),
+  threadRepo: new DrizzleThreadRepository(db, runOnTestDb),
+  messageRepo: new DrizzleMessageRepository(db, runOnTestDb),
   maintenanceLogRepo: new DrizzleMaintenanceLogRepository(db),
   userRepo: new DrizzleUserRepository(db),
   customerRepo: new DrizzleCustomerRepository(db),

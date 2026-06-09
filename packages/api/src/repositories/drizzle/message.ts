@@ -1,3 +1,4 @@
+import type { RunTx } from '@kuruma/shared/db'
 import { messages, threadParticipants, threads } from '@kuruma/shared/db/schema'
 import { and, asc, eq, sql } from 'drizzle-orm'
 import {
@@ -10,7 +11,12 @@ import type { MessageRepository } from '../types'
 import { type Db, messageColumns, normaliseMessage } from './shared'
 
 export class DrizzleMessageRepository implements MessageRepository {
-  constructor(private readonly db: Db) {}
+  // Interactive-transaction runner injected (DIP); the root wires runTx
+  // (per-call neon-serverless) since the neon-http db can't transact (#493).
+  constructor(
+    private readonly db: Db,
+    private readonly runTransaction: RunTx,
+  ) {}
 
   async findById(ctx: CallerContext, id: string): Promise<Message | undefined> {
     rejectOperatorContextUntilScoped(ctx, 'MessageRepository')
@@ -92,7 +98,7 @@ export class DrizzleMessageRepository implements MessageRepository {
     idempotencyKey?: string | null,
   ): Promise<Message> {
     rejectOperatorContextUntilScoped(ctx, 'MessageRepository')
-    return this.db.transaction(async (tx) => {
+    return this.runTransaction(async (tx) => {
       const [inserted] = (await tx
         .insert(messages)
         .values({ threadId, senderId: ctx.userId, content, idempotencyKey: idempotencyKey ?? null })

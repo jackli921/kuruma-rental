@@ -11,6 +11,7 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:integration": "vitest run --config vitest.integration.config.ts",
+    "test:neon": "vitest run --config vitest.neon.config.ts",
     "typecheck": "tsc --noEmit",
     "lint:boundaries": "bun run scripts/check-import-boundaries.ts"
   },
@@ -22,8 +23,11 @@
   },
   "devDependencies": {
     "@cloudflare/workers-types": "^4.20260410.1",
+    "@neondatabase/serverless": "^1.0.2",
+    "@types/ws": "^8.5.12",
     "postgres": "^3.4.8",
     "vitest": "^2",
-    "wrangler": "^4.80.0"
+    "wrangler": "^4.80.0",
+    "ws": "^8.18.0"
   }
 }

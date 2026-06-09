@@ -10,14 +10,20 @@
 //
 // CI runs the same flow in the `db-drift` job (see .github/workflows/ci.yml).
 
+import type { RunTx } from '@kuruma/shared/db'
 import { afterEach, beforeAll, describe, expect, it } from 'vitest'
 import type { CallerContext } from '../../src/middleware/auth'
 import { DrizzleMessageRepository, DrizzleThreadRepository } from '../../src/repositories/drizzle'
 import type { Db } from '../../src/repositories/drizzle'
 import { cleanupMessaging, createTestUsers, testDb } from './messaging-setup'
 
-const threadRepo = new DrizzleThreadRepository(testDb as unknown as Db)
-const messageRepo = new DrizzleMessageRepository(testDb as unknown as Db)
+// thread/message create open interactive transactions; inject a postgres-js
+// runner so they use the test DB over TCP instead of the default neon-serverless
+// runTx, which can't reach a local/docker Postgres (#493).
+const txDb = testDb as unknown as Db
+const runOnTestDb: RunTx = (fn) => txDb.transaction(fn)
+const threadRepo = new DrizzleThreadRepository(txDb, runOnTestDb)
+const messageRepo = new DrizzleMessageRepository(txDb, runOnTestDb)
 
 const ctx = (userId: string): CallerContext => ({ userId, role: 'RENTER' })
 
@@ -287,14 +293,14 @@ describe('persistence across repo instances (the whole point of #28)', () => {
     const [alice, bob] = await createTestUsers(2)
     createdUserIds.push(alice!, bob!)
 
-    const repoA = new DrizzleThreadRepository(testDb as unknown as Db)
-    const messageRepoA = new DrizzleMessageRepository(testDb as unknown as Db)
+    const repoA = new DrizzleThreadRepository(txDb, runOnTestDb)
+    const messageRepoA = new DrizzleMessageRepository(txDb, runOnTestDb)
 
     const thread = await repoA.create(ctx(alice!), null, [alice!, bob!])
     await messageRepoA.create(ctx(alice!), thread.id, 'before restart')
 
     // Simulate Worker cold-start: throw away the repo handles, build new ones.
-    const repoB = new DrizzleThreadRepository(testDb as unknown as Db)
+    const repoB = new DrizzleThreadRepository(txDb, runOnTestDb)
 
     const found = await repoB.findById(ctx(alice!), thread.id)
     expect(found).toBeDefined()
