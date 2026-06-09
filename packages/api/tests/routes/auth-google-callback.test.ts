@@ -101,4 +101,30 @@ describe('GET /auth/google/callback', () => {
     const res = await app.request('/auth/google/callback?state=s1&code=c1')
     expect(res.status).toBe(400)
   })
+
+  test('valid return cookie → redirects there (not postLoginRedirect) + clears it', async () => {
+    setupAuthEnv()
+    const { runtime } = makeRuntime()
+    const app = createAuthRoutes(config, runtime)
+    const res = await app.request('/auth/google/callback?state=s1&code=c1', {
+      headers: { Cookie: 'kuruma_oauth_state=s1; kuruma_oauth_return=%2Fja%2Fbookings%2Fnew' },
+    })
+    expect(res.status).toBe(302)
+    expect(res.headers.get('location')).toBe('/ja/bookings/new')
+    const cleared = (res.headers.getSetCookie?.() ?? []).some(
+      (c) => c.startsWith('kuruma_oauth_return=') && /Max-Age=0/.test(c),
+    )
+    expect(cleared).toBe(true)
+  })
+
+  test('tampered open-redirect return cookie → falls back to postLoginRedirect', async () => {
+    setupAuthEnv()
+    const { runtime } = makeRuntime()
+    const app = createAuthRoutes(config, runtime)
+    const res = await app.request('/auth/google/callback?state=s1&code=c1', {
+      headers: { Cookie: 'kuruma_oauth_state=s1; kuruma_oauth_return=%2F%2Fevil.com' },
+    })
+    expect(res.status).toBe(302)
+    expect(res.headers.get('location')).toBe('https://web.example.test/en/dashboard')
+  })
 })

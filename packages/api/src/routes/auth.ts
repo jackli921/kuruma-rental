@@ -4,10 +4,12 @@ import { deleteCookie, getCookie, setCookie } from 'hono/cookie'
 import {
   type GoogleAuthRuntime,
   type GoogleOAuthConfig,
+  OAUTH_RETURN_COOKIE,
   OAUTH_STATE_COOKIE,
   OAUTH_STATE_TTL_SECONDS,
   buildGoogleAuthorizeUrl,
   randomToken,
+  safeReturnPath,
 } from '../auth/google'
 import { SESSION_COOKIE, mintSessionToken, verifySessionCookie } from '../middleware/auth'
 import { fail, ok } from './helpers'
@@ -63,6 +65,20 @@ export function createAuthRoutes(
         path: '/',
         maxAge: OAUTH_STATE_TTL_SECONDS,
       })
+
+      // Carry a *validated* return path through the round-trip so the callback
+      // can land the user back where the guard intercepted them. Open-redirect
+      // targets are dropped (safeReturnPath → undefined) and simply ignored.
+      const returnTo = safeReturnPath(c.req.query('returnTo'))
+      if (returnTo) {
+        setCookie(c, OAUTH_RETURN_COOKIE, returnTo, {
+          httpOnly: true,
+          secure: true,
+          sameSite: 'Lax',
+          path: '/',
+          maxAge: OAUTH_STATE_TTL_SECONDS,
+        })
+      }
       return c.redirect(buildGoogleAuthorizeUrl(googleConfig, state), 302)
     })
     .get('/auth/google/callback', async (c) => {
@@ -102,7 +118,13 @@ export function createAuthRoutes(
         secret,
       )
       setSessionCookie(c, token)
-      return c.redirect(googleConfig.postLoginRedirect, 302)
+
+      // Honour a return path stashed at /start, then clear the one-time cookie.
+      // The attacker can neither read nor forge the HttpOnly value, but we still
+      // re-validate (defence in depth) so a tampered cookie can't open-redirect.
+      const returnTo = safeReturnPath(getCookie(c, OAUTH_RETURN_COOKIE))
+      deleteCookie(c, OAUTH_RETURN_COOKIE, { path: '/' })
+      return c.redirect(returnTo ?? googleConfig.postLoginRedirect, 302)
     })
     .get('/auth/session', async (c) => {
       const token = getCookie(c, SESSION_COOKIE)

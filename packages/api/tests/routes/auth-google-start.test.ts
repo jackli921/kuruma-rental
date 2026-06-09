@@ -47,4 +47,43 @@ describe('POST /auth/google/start', () => {
     const res = await app.request('/auth/google/start', { method: 'POST' })
     expect(res.status).toBe(503)
   })
+
+  test('stashes a safe returnTo in the kuruma_oauth_return cookie', async () => {
+    setupGoogleEnv()
+    const app = createApp()
+    const res = await app.request('/auth/google/start?returnTo=%2Fen%2Fbookings%2Fnew', {
+      method: 'POST',
+    })
+    expect(res.status).toBe(302)
+    const setCookie = (res.headers.getSetCookie?.() ?? []).find((c) =>
+      c.startsWith('kuruma_oauth_return='),
+    )
+    expect(setCookie).toBeTruthy()
+    expect(setCookie).toContain('HttpOnly')
+    expect(setCookie).toContain('SameSite=Lax')
+    expect(readReturnCookie(res)).toBe('/en/bookings/new')
+  })
+
+  test('ignores an open-redirect returnTo — no return cookie set', async () => {
+    setupGoogleEnv()
+    const app = createApp()
+    const res = await app.request('/auth/google/start?returnTo=%2F%2Fevil.com', { method: 'POST' })
+    expect(res.status).toBe(302)
+    expect(readReturnCookie(res)).toBeUndefined()
+  })
+
+  test('no returnTo query → no return cookie', async () => {
+    setupGoogleEnv()
+    const app = createApp()
+    const res = await app.request('/auth/google/start', { method: 'POST' })
+    expect(readReturnCookie(res)).toBeUndefined()
+  })
 })
+
+/** Read the decoded value of the kuruma_oauth_return cookie, or undefined. */
+function readReturnCookie(res: Response): string | undefined {
+  const hit = (res.headers.getSetCookie?.() ?? []).find((c) => c.startsWith('kuruma_oauth_return='))
+  if (!hit) return undefined
+  const value = hit.slice('kuruma_oauth_return='.length).split(';')[0] ?? ''
+  return value === '' ? undefined : decodeURIComponent(value)
+}
