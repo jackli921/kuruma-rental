@@ -63,11 +63,15 @@ jobs:
       # detector — catches "secret got deleted or never rotated" but NOT
       # value mismatches (CF never returns secret values). Source-of-truth
       # is GitHub Secrets, enforced by rotate-secrets.yml.
+      # AUTH_GOOGLE_ID/SECRET + AUTH_URL moved here when OAuth moved onto the API
+      # (#378 Phase 2). AUTH_URL is the public Pages origin used to build the
+      # google redirect_uri; set it once Pages is live (#304). Missing any of
+      # these ships /auth/google/* as a silent 503 — see resolveGoogleOAuthConfig.
       - name: Verify API Worker secrets present
         working-directory: packages/api
         run: |
           secrets_json=$(npx wrangler secret list)
-          for key in DATABASE_URL AUTH_SECRET; do
+          for key in DATABASE_URL AUTH_SECRET AUTH_GOOGLE_ID AUTH_GOOGLE_SECRET AUTH_URL; do
             echo "$secrets_json" | jq -e --arg k "$key" 'any(.[]; .name == $k)' > /dev/null \
               || { echo "::error::Missing required secret on API Worker: $key (rotate via rotate-secrets.yml)"; exit 1; }
           done
