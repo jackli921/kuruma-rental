@@ -1,17 +1,24 @@
+import { CallToAction } from '@/vite/landing/CallToAction'
+import { FeaturedVehicles } from '@/vite/landing/FeaturedVehicles'
+import { Features } from '@/vite/landing/Features'
+import { Footer } from '@/vite/landing/Footer'
+import { Hero } from '@/vite/landing/Hero'
 import { createFileRoute } from '@tanstack/react-router'
-import { useTranslations } from 'use-intl'
 
-// Landing placeholder proving use-intl renders inside the locale layout.
-// The full landing port (current marketplace `[locale]/page.tsx`) lands in 5d.
+// Public marketing landing (ports the Next `[locale]/page.tsx`). The Navbar is
+// supplied by the `$locale` layout, so this route owns only the page body.
 export const Route = createFileRoute('/$locale/')({
-  component: LandingPlaceholder,
+  component: LandingRoute,
 })
 
-function LandingPlaceholder() {
-  const t = useTranslations('common')
+function LandingRoute() {
   return (
-    <main>
-      <h1>{t('appName')}</h1>
+    <main className="flex-1">
+      <Hero />
+      <FeaturedVehicles />
+      <Features />
+      <CallToAction />
+      <Footer />
     </main>
   )
 }
