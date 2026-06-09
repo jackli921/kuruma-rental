@@ -1,6 +1,6 @@
 # Slice: Stripe payment + `payment_events` (webhook source-of-truth) — #461
 
-**Status:** APPROVED (conditional green 2026-06-09) — amended per 3 P1/P2 review findings + positive-int total; proceeding to Neon + TDD
+**Status:** IMPLEMENTED (2026-06-09) — all amendments shipped. Unit: commission 6 + repo 5 + service 16 + routes 7. Integration: 4 (real-DB constraint-name parity). Full CI gate green local. Awaiting code-reviewer/architect + PR.
 **Branch target:** `marketplace-pivot` (PR squash; close #461 manually)
 **Worktree:** `~/Dev/kuruma-461-payment` on `feat/461-payment` (already created)
 **Source of truth:** proposal §5 + `2026-06-05-scope-update-du-kaku.md` §2 + issue #461
