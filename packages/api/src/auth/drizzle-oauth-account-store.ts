@@ -21,8 +21,16 @@ const GOOGLE_PROVIDER = 'google'
 export class DrizzleOAuthAccountStore implements OAuthAccountStore {
   private readonly adapter: ReturnType<typeof DrizzleAdapter>
 
-  constructor(private readonly db: Db) {
-    this.adapter = DrizzleAdapter(db, { usersTable: users, accountsTable: accounts })
+  constructor(
+    private readonly db: Db,
+    // Defaulted, but injectable so the concurrent first-login race path can be
+    // unit-tested without a live Postgres.
+    adapter: ReturnType<typeof DrizzleAdapter> = DrizzleAdapter(db, {
+      usersTable: users,
+      accountsTable: accounts,
+    }),
+  ) {
+    this.adapter = adapter
   }
 
   async resolveUser(
@@ -53,13 +61,30 @@ export class DrizzleOAuthAccountStore implements OAuthAccountStore {
         name: profile.name ?? null,
         image: profile.picture ?? null,
       })
-      await linkAccount({
-        userId: created.id,
-        type: 'oidc',
-        provider: GOOGLE_PROVIDER,
-        providerAccountId: profile.sub,
-      })
-      userId = created.id
+      try {
+        await linkAccount({
+          userId: created.id,
+          type: 'oidc',
+          provider: GOOGLE_PROVIDER,
+          providerAccountId: profile.sub,
+        })
+        userId = created.id
+      } catch (err) {
+        // A concurrent first-login for the same Google account won the race and
+        // already linked it: the accounts PK is (provider, providerAccountId), so
+        // our linkAccount hit a unique violation. Re-resolve to the winner and
+        // drop the orphan user our createUser left behind, so the race yields one
+        // user + a successful login instead of a duplicate + a failed callback.
+        // (A db.transaction() can't fence this — neon-http can't run interactive
+        // transactions on Workers, #493 — so the unique index is the race fence.)
+        const winner = await getUserByAccount({
+          provider: GOOGLE_PROVIDER,
+          providerAccountId: profile.sub,
+        })
+        if (!winner) throw err
+        await this.db.delete(users).where(eq(users.id, created.id))
+        userId = winner.id
+      }
     }
 
     // The adapter's AdapterUser carries no role/operatorId — re-select the
