@@ -1,0 +1,26 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  // CF Pages project for the Vite SPA (#378 §7.3–§7.5). Separate from the
+  // frozen opennext Worker config in wrangler.jsonc, which serves production
+  // until the DNS cutover (spec §8 step 6) and is deleted then, not here.
+  // Pages config uses `pages_build_output_dir`; a Worker config uses `main` —
+  // the two are mutually exclusive, hence a second file.
+  "name": "kuruma-web-pages",
+  "pages_build_output_dir": "dist",
+  "compatibility_date": "2025-04-01",
+  // nodejs_compat: the build/runtime expects Node globals.
+  // global_fetch_strictly_public: the proxy Functions (functions/api,
+  // functions/auth) fetch() the API Worker's *.workers.dev URL. Without this
+  // flag CF short-circuits same-account inter-Worker fetches INTERNALLY and
+  // returns 404 — it never reaches kuruma-api. Same diagnosis as wrangler.jsonc.
+  // The flag must also be enabled on the Pages project; verified live at #304.
+  "compatibility_flags": ["nodejs_compat", "global_fetch_strictly_public"],
+  // API_ORIGIN is read server-side by functions/_shared/proxy.ts to forward
+  // /api/* and /auth/* to the API Worker. NOT a secret (it's a public URL), so
+  // a plaintext Pages var is correct. Updated to the freelance subdomain at #304
+  // (docs/cloudflare-account-migration.md §6). VITE_API_BASE_URL is deliberately
+  // absent so the browser keeps using the same-origin /api proxy (spec §5.5).
+  "vars": {
+    "API_ORIGIN": "https://kuruma-api.kanata-studio-dev.workers.dev"
+  }
+}

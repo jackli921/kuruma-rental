@@ -11,6 +11,7 @@
     "preview": "vite preview --port 3001",
     "preview:worker": "opennextjs-cloudflare build && wrangler dev",
     "deploy": "opennextjs-cloudflare build && wrangler deploy",
+    "deploy:pages": "wrangler pages deploy dist --project-name=kuruma-web-pages --branch=production --commit-dirty=true --config wrangler.pages.jsonc",
     "start": "next start",
     "test": "vitest run",
     "test:watch": "vitest",

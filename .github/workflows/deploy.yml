@@ -20,7 +20,7 @@ env:
   CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
   CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
   API_WORKER_URL: https://kuruma-api.kanata-studio-dev.workers.dev
-  WEB_WORKER_URL: https://kuruma-rental.kanata-studio-dev.workers.dev
+  WEB_PAGES_URL: https://kuruma-web-pages.pages.dev
 
 jobs:
   deploy:
@@ -90,57 +90,49 @@ jobs:
           curl -fsS --retry 10 --retry-delay 3 --retry-all-errors "$API_WORKER_URL/health"
           echo "API smoke test passed"
 
-      # 5. Build web. NEXT_PUBLIC_API_URL must be set at build time --
-      # Next.js bakes NEXT_PUBLIC_* into the JS bundle, it is NOT
-      # resolved at runtime. This is why the current production is
-      # broken: web was built without this set and fell back to
-      # http://localhost:8787.
-      # BRIDGE FREEZE (#378 §7.4/§7.5): web is migrating to CF Pages. The old
-      # Next.js Worker stays frozen at its last green build, so every web-Worker
-      # step below is gated off (kept, not deleted, for removal at DNS cutover).
-      # `build` is now `vite build` — running this path would build/deploy the
-      # wrong artifact. The CF Pages deploy lands in a later PR (gated on #304).
-      - name: Build Web Worker
-        if: false
+      # 5. Build the Vite SPA → packages/web/dist (#378 §7.5 cutover). The old
+      # opennext web-Worker deploy block was deleted here, not gated off: a dead
+      # `if:false` deploy beside the live one is a footgun (someone un-freezes the
+      # wrong path under pressure). The frozen Worker keeps serving production on
+      # CF until the DNS flip (spec §8 step 6); git history is the recovery path.
+      #
+      # No VITE_API_BASE_URL is set on purpose — the client falls back to the
+      # same-origin `/api` proxy (spec §5.5), which keeps the session cookie
+      # SameSite=Lax. The placeholders mirror the CI "Build web" step; the static
+      # build bakes no secret (no VITE_* references them), they only satisfy any
+      # import-time env reads.
+      - name: Build web (Vite → packages/web/dist)
         working-directory: packages/web
-        # NEXT_PUBLIC_API_URL must be a literal here, not `${{ env.X }}`.
-        # GitHub Actions does not reliably propagate workflow-level env
-        # into a step's `env:` block -- the reference resolves to an
-        # empty string, and Next.js then bakes the fallback
-        # `http://localhost:8787` into the server bundle. Symptom of the
-        # bug this comment exists to prevent: deployed pages that fetch
-        # from the API throw `Failed to fetch bookings: HTTP 404` because
-        # they hit the web Worker's own URL instead of the API Worker.
         env:
-          NEXT_PUBLIC_API_URL: https://kuruma-api.kanata-studio-dev.workers.dev
-          DATABASE_URL: ${{ secrets.PROD_DATABASE_URL }}
-          AUTH_SECRET: ${{ secrets.AUTH_SECRET }}
-        run: |
-          bun run build
-          bun run build:worker
+          AUTH_SECRET: ci-placeholder-secret-not-real
+          DATABASE_URL: postgresql://placeholder:placeholder@localhost:5432/placeholder
+        run: bun run build
 
-      - name: Deploy Web Worker
-        if: false # bridge freeze (#378 §7.5) — delete at cutover
+      # 6. Enforce the gzip budget on the artifact we're about to ship, even if
+      # CI was bypassed (workflow_dispatch). Cheap insurance against a bloated
+      # deploy. Budget + math live in scripts/lint-dist-size.ts.
+      - name: Check web dist size budget
+        run: bun run lint:dist-size
+
+      # 7. Deploy the SPA to CF Pages via the `deploy:pages` script (single
+      # source of truth for the flags — also what a human runs for the first
+      # post-#304 deploy). First run auto-creates the project; the API_ORIGIN var
+      # + compat flags come from wrangler.pages.jsonc.
+      #
+      # GUARDED: WEB_PAGES_DEPLOY_ENABLED is an unset-by-default repo variable.
+      # Until #304 lands (freelance CF account + the global_fetch_strictly_public
+      # Pages flag) a manual workflow_dispatch must NOT create a stray Pages
+      # project on the old account — so deploy + smoke stay dormant. Set the
+      # variable to 'true' at cutover (docs/plans/2026-06-09-378-pages-cutover.md §8).
+      - name: Deploy web to CF Pages
+        if: vars.WEB_PAGES_DEPLOY_ENABLED == 'true'
         working-directory: packages/web
-        run: npx wrangler deploy
+        run: bun run deploy:pages
 
-      # 7. Verify required secrets exist on the Web Worker. Same read-only
-      # drift detector as the API step — see that step's comment for why.
-      - name: Verify Web Worker secrets present
-        if: false # bridge freeze (#378 §7.5) — delete at cutover
-        working-directory: packages/web
+      # 8. Smoke test the Pages landing page (public, no auth). Same retry
+      # rationale as the API smoke test (first-deploy propagation delay).
+      - name: Smoke test web (Pages)
+        if: vars.WEB_PAGES_DEPLOY_ENABLED == 'true'
         run: |
-          secrets_json=$(npx wrangler secret list)
-          for key in DATABASE_URL AUTH_SECRET AUTH_GOOGLE_ID AUTH_GOOGLE_SECRET; do
-            echo "$secrets_json" | jq -e --arg k "$key" 'any(.[]; .name == $k)' > /dev/null \
-              || { echo "::error::Missing required secret on Web Worker: $key (rotate via rotate-secrets.yml)"; exit 1; }
-          done
-          echo "Web Worker secrets present"
-
-      # 8. Smoke test the web landing page (public, no auth required).
-      # Same retry rationale as the API smoke test.
-      - name: Smoke test Web
-        if: false # bridge freeze (#378 §7.5) — delete at cutover
-        run: |
-          curl -fsS --retry 10 --retry-delay 3 --retry-all-errors "$WEB_WORKER_URL/en" > /dev/null
-          echo "Web landing OK"
+          curl -fsS --retry 10 --retry-delay 3 --retry-all-errors "$WEB_PAGES_URL/en" > /dev/null
+          echo "Web (Pages) landing OK"
