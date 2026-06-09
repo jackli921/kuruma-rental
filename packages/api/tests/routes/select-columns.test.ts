@@ -71,6 +71,8 @@ const VEHICLE_FIELDS = [
   'description',
   'photos',
   'seats',
+  'luggageCapacity',
+  'luggageSize',
   'transmission',
   'fuelType',
   'licensePlate',

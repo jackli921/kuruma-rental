@@ -76,6 +76,8 @@ function makeVehicle(overrides: Partial<Omit<Vehicle, 'id' | 'createdAt' | 'upda
     description: null,
     photos: [],
     seats: 5,
+    luggageCapacity: null,
+    luggageSize: null,
     transmission: 'AUTO',
     fuelType: null,
     licensePlate: null,

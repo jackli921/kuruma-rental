@@ -93,6 +93,8 @@ function makeVehicle(overrides: Partial<Omit<Vehicle, 'id' | 'createdAt' | 'upda
     description: null,
     photos: ['https://cdn/yaris.jpg'],
     seats: 5,
+    luggageCapacity: null,
+    luggageSize: null,
     transmission: 'AUTO',
     fuelType: null,
     licensePlate: 'OSAKA 300 あ 12-34',
