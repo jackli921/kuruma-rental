@@ -44,6 +44,18 @@ export const FEE_SCHEDULES_CLASS_FK = 'fee_schedules_operator_class_fk'
 export const BOOKING_CODE_CONSTRAINT = 'bookings_bookingCode_unique'
 export const IDEMPOTENCY_CONSTRAINT = 'bookings_idempotencyKey_unique'
 
+/**
+ * payment_events unique constraints the PaymentService distinguishes on (#461).
+ * All three are 23505, but they mean different things:
+ * - STRIPE_EVENT / SESSION clashes = a redelivered webhook → idempotent no-op.
+ * - ONE_SUCCESS clash = a *different* Session already paid this booking → a
+ *   double-payment anomaly to log loudly (an operator must refund one).
+ * Matching by name (not just the code) keeps the no-op path apart from the alarm.
+ */
+export const PAYMENT_EVENT_STRIPE_EVENT_CONSTRAINT = 'payment_events_stripeEventId_unique'
+export const PAYMENT_EVENT_SESSION_CONSTRAINT = 'payment_events_stripeCheckoutSessionId_unique'
+export const PAYMENT_EVENT_ONE_SUCCESS_CONSTRAINT = 'payment_events_one_success_per_booking'
+
 /** Extract the Postgres error code from an unknown thrown value, or null.
  *
  * Drizzle + postgres-js wraps the raw PostgresError inside `err.cause`,

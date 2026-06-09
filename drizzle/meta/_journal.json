@@ -288,6 +288,13 @@
       "when": 1780966943984,
       "tag": "0040_vehicle_luggage",
       "breakpoints": true
+    },
+    {
+      "idx": 41,
+      "version": "7",
+      "when": 1781042609760,
+      "tag": "0041_add_payment_events",
+      "breakpoints": true
     }
   ]
 }
