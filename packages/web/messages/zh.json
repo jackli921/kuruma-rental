@@ -30,7 +30,10 @@
     "login": "登录",
     "logout": "退出",
     "google": "Google",
-    "apple": "Apple"
+    "apple": "Apple",
+    "signInTitle": "登录",
+    "signInSubtitle": "继续使用 Best Car Rental",
+    "continueWithGoogle": "使用 Google 继续"
   },
   "nav": {
     "home": "首页",

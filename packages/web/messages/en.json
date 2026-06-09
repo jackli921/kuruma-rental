@@ -30,7 +30,10 @@
     "login": "Log in",
     "logout": "Log out",
     "google": "Google",
-    "apple": "Apple"
+    "apple": "Apple",
+    "signInTitle": "Sign in",
+    "signInSubtitle": "Continue to Best Car Rental",
+    "continueWithGoogle": "Continue with Google"
   },
   "nav": {
     "home": "Home",
