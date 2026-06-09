@@ -9,6 +9,25 @@
 
 ---
 
+## §0 — Re-grounding (2026-06-10): Vite migration merged + migration renumber
+
+> **This section supersedes the stale web references in §2.3, §3.5, §4 (web table), and §5 Slices D/E below.** Between this doc's authoring (2026-06-06) and pickup (2026-06-10), **#497 + #505 merged**: the web shell is now **Vite + TanStack Router on CF Pages**, not Next.js. The **API design (§3.2, §3.3 schema, Slices 0/B/C) is unchanged** — the migration did not touch the API; only the migration *number* changes.
+
+**A. Migration number: `0039` → `0041`.** Trunk now ends at `0040_vehicle_luggage` (#457 merged; `when`=1780966943984). The lat/lng migration is **`0041_add_location_coordinates`** with a `when` later than `0040`'s. Every "0039" below is superseded by "0041".
+
+**B. Web = Vite + TanStack Router (corrected mapping):**
+- **Route:** extend the **existing** `packages/web/src/routes/$locale/search.tsx` (TanStack `createFileRoute`), not a Next `app/[locale]/search/page.tsx`. The `?view` toggle is a `view?: 'map' | 'stores' | undefined` field in the route's `validateSearch` (optional `?: T | undefined` — exactOptionalPropertyTypes gotcha) + `loaderDeps`; the loader fetches `/search/vehicles` **only** when `view==='map'` AND the JST range is valid (else `{ result: null }`, mirroring the current storefront loader).
+- **Module dir:** `packages/web/src/vite/search/` — **flat**, mirroring `src/vite/storefronts/` (NO nested `components/`, NO `index.ts` barrel; the Vite shell uses neither). `lint:modules` only restricts `@/modules/*`, so cross-`@/vite/` imports are allowed — reuse `@/vite/storefronts/StorefrontSearchForm` + `@/vite/storefronts/params` (`parseSearchRange`/`normalizeClassFilter`) directly. **This resolves D6** (no boundary concern in the Vite tree).
+- **Data fetch:** raw `fetch(\`${getApiBaseUrl()}/search/vehicles?…\`, { credentials: 'include' })` + `unwrap<SearchResultsData>(res)` from `@/lib/api-error`. The Vite shell **owns its DTOs** in `src/vite/search/api.ts` (mirror the JSON shape; do NOT import a shared/Next DTO copy). Same pattern as `src/vite/storefronts/api.ts`. The shared **type** module (Slice A) is still the API/server contract; the web mirrors it as a local interface.
+- **i18n:** `use-intl` `useTranslations('search')` (NOT next-intl). Keys still go in all 3 `packages/web/messages/{en,ja,zh}.json` (i18n-parity CI gate).
+- **Links/toggle:** TanStack `Link` (`to`/`params`/`search`) from `@tanstack/react-router`, not `@/i18n/routing`; `aria-current="page"` for the active toggle (hydration-trap gotcha still applies). No `buttonVariants asChild`.
+- **Map host:** Vite is a pure client SPA (no SSR) → **no `dynamic(…, {ssr:false})`**; pigeon-maps renders client-side directly. It still can't run in jsdom, so tests inject the **fake `MapAdapter`** (D1 seam unchanged). Omit `'use client'` (no-op in Vite).
+- **Route regen:** extending the existing search route adds **no** new route file, so likely **no** `routeTree.gen.ts` regen — but if any new route file is added, run `vite build` to regen and **stage** `routeTree.gen.ts` before typecheck.
+- **Tests:** vitest + RTL under `src/vite/search/*.test.tsx`; mock `@tanstack/react-router` `Link`/`useNavigate` and wrap in `IntlProvider` (en), per the slice-5d test pattern already in `src/vite/`.
+- **Gate (Vite):** web `vitest run`, `typecheck` (`tsc --noEmit && tsc -p tsconfig.app.json`), `vite build`, `lint:dist-size` — not the old `.next` build.
+
+---
+
 ## 1. Goal + Non-goals
 
 ### Goal
