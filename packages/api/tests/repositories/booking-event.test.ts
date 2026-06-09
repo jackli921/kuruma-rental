@@ -7,6 +7,7 @@ const createdPayload: BookingCreatedPayload = {
   requestedVehicleId: 'veh-1',
   assignedVehicleId: 'veh-1',
   classId: 'class-1',
+  fulfillmentMode: 'SPECIFIC',
   startAt: '2026-04-10T09:00:00Z',
   endAt: '2026-04-10T17:00:00Z',
   totalPrice: 12000,

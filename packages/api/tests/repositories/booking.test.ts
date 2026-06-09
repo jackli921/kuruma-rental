@@ -20,6 +20,7 @@ function bookingData(overrides: Partial<Booking> = {}): NewBooking {
     effectiveEndAt: new Date('2026-04-12T17:00:00Z'), // +48h turnaround
     status: 'CONFIRMED',
     source: 'DIRECT',
+    fulfillmentMode: 'SPECIFIC',
     bookingCode: 'AAAA2222',
     insuranceOptionId: null,
     insuranceSnapshot: null,

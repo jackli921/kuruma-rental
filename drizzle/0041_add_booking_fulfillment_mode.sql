@@ -1,0 +1,2 @@
+CREATE TYPE "public"."booking_fulfillment_mode" AS ENUM('SPECIFIC', 'CLASS_COMBO');--> statement-breakpoint
+ALTER TABLE "bookings" ADD COLUMN "fulfillmentMode" "booking_fulfillment_mode" DEFAULT 'SPECIFIC' NOT NULL;

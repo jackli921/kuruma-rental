@@ -128,6 +128,7 @@ function bookOverlapping(vehicleId: string, classId: string) {
     effectiveEndAt: new Date('2026-08-01T13:00:00Z'),
     status: 'CONFIRMED',
     source: 'DIRECT',
+    fulfillmentMode: 'SPECIFIC',
     bookingCode: `bk-${vehicleId}`,
     insuranceOptionId: null,
     insuranceSnapshot: null,

@@ -1,0 +1,1 @@
+ALTER TABLE "bookings" ADD CONSTRAINT "bookings_specific_requires_assigned" CHECK ("bookings"."fulfillmentMode" <> 'SPECIFIC' OR "bookings"."assignedVehicleId" IS NOT NULL);
