@@ -73,6 +73,10 @@ export function VehicleForm({
       description: '',
       seats: 5,
       transmission: 'AUTO',
+      // #457: luggage override defaults to null (inherit the class default);
+      // edit mode spreads the vehicle's own value (number/size or explicit null).
+      luggageCapacity: null,
+      luggageSize: null,
       fuelType: '',
       licensePlate: '',
       photos: [],
@@ -304,6 +308,43 @@ export function VehicleForm({
           >
             <option value="AUTO">{t('form.transmissionAuto')}</option>
             <option value="MANUAL">{t('form.transmissionManual')}</option>
+          </select>
+        </div>
+      </div>
+
+      {/* Per-vehicle luggage override (#457). Both optional: blank inherits the
+          class default (resolveLuggage falls back to `vehicle.x ?? class.x`). */}
+      <div className="grid grid-cols-2 gap-4">
+        <div>
+          <Label htmlFor="luggageCapacity">{t('form.luggageCapacity')}</Label>
+          <Input
+            id="luggageCapacity"
+            type="number"
+            inputMode="numeric"
+            min={0}
+            placeholder={t('form.luggageInheritPlaceholder')}
+            {...register('luggageCapacity', { setValueAs: nullableNumber })}
+          />
+          {errors.luggageCapacity && (
+            <p className="text-sm text-destructive mt-1">{errors.luggageCapacity.message}</p>
+          )}
+        </div>
+
+        <div>
+          <Label htmlFor="luggageSize">{t('form.luggageSize')}</Label>
+          <select
+            id="luggageSize"
+            className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-xs"
+            {...register('luggageSize', {
+              // Empty ("Inherit from class") submits as null so the vehicle
+              // falls back to the class default size.
+              setValueAs: (v) => (v === '' || v == null ? null : v),
+            })}
+          >
+            <option value="">{t('form.luggageSizeInherit')}</option>
+            <option value="SMALL">{t('form.luggageSizeSmall')}</option>
+            <option value="MEDIUM">{t('form.luggageSizeMedium')}</option>
+            <option value="LARGE">{t('form.luggageSizeLarge')}</option>
           </select>
         </div>
       </div>

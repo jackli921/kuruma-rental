@@ -92,6 +92,7 @@ export function ClassForm(props: ClassFormProps) {
       description: '',
       seats: 5,
       luggageCapacity: 2,
+      luggageSize: 'MEDIUM',
       transmission: 'AUTO',
       fuelType: '',
       photos: [],
@@ -200,7 +201,7 @@ export function ClassForm(props: ClassFormProps) {
         />
       </div>
 
-      <div className="grid grid-cols-2 gap-4">
+      <div className="grid grid-cols-3 gap-4">
         <div>
           <Label htmlFor="class-seats">{t('form.seats')}</Label>
           <Input
@@ -221,6 +222,23 @@ export function ClassForm(props: ClassFormProps) {
           />
           {errors.luggageCapacity && (
             <p className="text-sm text-destructive mt-1">{errors.luggageCapacity.message}</p>
+          )}
+        </div>
+        <div>
+          {/* #457: class default luggage size — inherited by vehicles that leave
+              their per-vehicle override blank. Required; defaults to MEDIUM. */}
+          <Label htmlFor="class-luggageSize">{t('form.luggageSize')}</Label>
+          <select
+            id="class-luggageSize"
+            className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-xs"
+            {...register('luggageSize')}
+          >
+            <option value="SMALL">{t('form.luggageSizeSmall')}</option>
+            <option value="MEDIUM">{t('form.luggageSizeMedium')}</option>
+            <option value="LARGE">{t('form.luggageSizeLarge')}</option>
+          </select>
+          {errors.luggageSize && (
+            <p className="text-sm text-destructive mt-1">{errors.luggageSize.message}</p>
           )}
         </div>
       </div>

@@ -20,6 +20,7 @@ describe('ClassForm', () => {
     expect(screen.getByLabelText('form.description')).toBeInTheDocument()
     expect(screen.getByLabelText('form.seats')).toBeInTheDocument()
     expect(screen.getByLabelText('form.luggageCapacity')).toBeInTheDocument()
+    expect(screen.getByLabelText('form.luggageSize')).toBeInTheDocument()
     expect(screen.getByLabelText('form.transmission')).toBeInTheDocument()
     expect(screen.getByLabelText('form.fuelType')).toBeInTheDocument()
     expect(screen.getByLabelText('form.sortOrder')).toBeInTheDocument()
@@ -100,6 +101,39 @@ describe('ClassForm', () => {
     expect('hourlyRateJpy' in data).toBe(false)
   })
 
+  // #457: class-level default luggage size — the fallback when a vehicle leaves
+  // its override blank. Required (no "none" option); defaults to MEDIUM.
+  it('defaults luggageSize to MEDIUM and submits it', async () => {
+    const onSubmit = vi.fn().mockResolvedValue(undefined)
+    const user = userEvent.setup()
+
+    render(<ClassForm onSubmit={onSubmit} />)
+
+    expect((screen.getByLabelText('form.luggageSize') as HTMLSelectElement).value).toBe('MEDIUM')
+
+    await user.type(screen.getByLabelText('form.name'), 'Compact')
+    await user.type(screen.getByLabelText('form.slug'), 'compact')
+    await user.click(screen.getByRole('button', { name: 'form.save' }))
+
+    await waitFor(() => expect(onSubmit).toHaveBeenCalledTimes(1))
+    expect(onSubmit.mock.calls[0][0].luggageSize).toBe('MEDIUM')
+  })
+
+  it('submits the chosen luggageSize', async () => {
+    const onSubmit = vi.fn().mockResolvedValue(undefined)
+    const user = userEvent.setup()
+
+    render(<ClassForm onSubmit={onSubmit} />)
+
+    await user.type(screen.getByLabelText('form.name'), 'SUV')
+    await user.type(screen.getByLabelText('form.slug'), 'suv')
+    await user.selectOptions(screen.getByLabelText('form.luggageSize'), 'LARGE')
+    await user.click(screen.getByRole('button', { name: 'form.save' }))
+
+    await waitFor(() => expect(onSubmit).toHaveBeenCalledTimes(1))
+    expect(onSubmit.mock.calls[0][0].luggageSize).toBe('LARGE')
+  })
+
   it('rejects invalid slug (uppercase, spaces)', async () => {
     const onSubmit = vi.fn().mockResolvedValue(undefined)
     const user = userEvent.setup()
@@ -165,6 +199,7 @@ describe('ClassForm', () => {
           description: 'Mid-size',
           seats: 7,
           luggageCapacity: 3,
+          luggageSize: 'LARGE',
           transmission: 'MANUAL',
           fuelType: 'Hybrid',
           sortOrder: 5,
@@ -176,6 +211,7 @@ describe('ClassForm', () => {
     expect(screen.getByLabelText('form.description')).toHaveValue('Mid-size')
     expect(screen.getByLabelText('form.seats')).toHaveValue(7)
     expect(screen.getByLabelText('form.luggageCapacity')).toHaveValue(3)
+    expect((screen.getByLabelText('form.luggageSize') as HTMLSelectElement).value).toBe('LARGE')
     expect(screen.getByLabelText('form.fuelType')).toHaveValue('Hybrid')
     expect(screen.getByLabelText('form.sortOrder')).toHaveValue(5)
   })
