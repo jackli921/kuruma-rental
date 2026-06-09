@@ -67,6 +67,23 @@ describe('createVehicleClassSchema', () => {
     expect(result.success).toBe(false)
   })
 
+  it('defaults luggageSize to MEDIUM when omitted (#457)', () => {
+    const result = createVehicleClassSchema.safeParse(validInput())
+    expect(result.success).toBe(true)
+    if (result.success) expect(result.data.luggageSize).toBe('MEDIUM')
+  })
+
+  it('accepts an explicit luggageSize (#457)', () => {
+    const result = createVehicleClassSchema.safeParse({ ...validInput(), luggageSize: 'LARGE' })
+    expect(result.success).toBe(true)
+    if (result.success) expect(result.data.luggageSize).toBe('LARGE')
+  })
+
+  it('rejects an invalid luggageSize (#457)', () => {
+    const result = createVehicleClassSchema.safeParse({ ...validInput(), luggageSize: 'XL' })
+    expect(result.success).toBe(false)
+  })
+
   // #406: pricing moved to the vehicle level. A class no longer carries a rate
   // and no longer requires one.
   it('accepts a class with no rate fields (pricing is vehicle-level, #406)', () => {
@@ -207,6 +224,18 @@ describe('updateVehicleClassSchema', () => {
       expect('photos' in result.data).toBe(false)
       expect('sortOrder' in result.data).toBe(false)
     }
+  })
+
+  it('does NOT inject a default luggageSize on a partial patch (#457, #430 pattern)', () => {
+    const result = updateVehicleClassSchema.safeParse({ name: 'Renamed' })
+    expect(result.success).toBe(true)
+    if (result.success) expect('luggageSize' in result.data).toBe(false)
+  })
+
+  it('passes luggageSize through when explicitly provided (#457)', () => {
+    const result = updateVehicleClassSchema.safeParse({ luggageSize: 'SMALL' })
+    expect(result.success).toBe(true)
+    if (result.success) expect(result.data.luggageSize).toBe('SMALL')
   })
 
   it('passes photos/sortOrder through when explicitly provided', () => {
