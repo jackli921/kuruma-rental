@@ -66,4 +66,9 @@ describe('AvailableVehicleCard', () => {
     renderCard(makeVehicle({ luggageCapacity: null, luggageSize: null }))
     expect(screen.queryByText(/bags/)).toBeNull()
   })
+
+  it('renders a singular bag label when capacity is one', () => {
+    renderCard(makeVehicle({ luggageCapacity: 1, luggageSize: 'SMALL' }))
+    expect(screen.getByText('1 bag')).toBeInTheDocument()
+  })
 })

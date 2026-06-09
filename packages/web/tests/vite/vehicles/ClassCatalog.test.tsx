@@ -70,4 +70,10 @@ describe('ClassCatalog', () => {
     expect(screen.getByText('3 bags')).toBeInTheDocument()
     expect(screen.getByText(/Large/)).toBeInTheDocument()
   })
+
+  // Seed data has one-bag classes (Kei car) — the count must pluralize.
+  it('renders a singular bag label for a one-bag class', () => {
+    renderCatalog([makeClass({ luggageCapacity: 1, luggageSize: 'SMALL' })])
+    expect(screen.getByText('1 bag')).toBeInTheDocument()
+  })
 })

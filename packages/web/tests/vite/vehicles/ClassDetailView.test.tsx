@@ -52,4 +52,9 @@ describe('ClassDetailView', () => {
     expect(screen.getByText('3 bags')).toBeInTheDocument()
     expect(screen.getByText(/Large/)).toBeInTheDocument()
   })
+
+  it('renders a singular bag label for a one-bag class', () => {
+    renderDetail(makeClass({ luggageCapacity: 1, luggageSize: 'SMALL' }))
+    expect(screen.getByText('1 bag')).toBeInTheDocument()
+  })
 })
