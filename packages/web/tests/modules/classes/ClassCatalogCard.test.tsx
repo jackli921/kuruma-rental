@@ -9,18 +9,26 @@ const ACRISS_LABELS: Record<string, string> = {
   MCAR: 'Mini',
 }
 
+const SIZE_LABELS: Record<string, string> = { SMALL: 'Small', MEDIUM: 'Medium', LARGE: 'Large' }
+
 vi.mock('next-intl', () => ({
   useTranslations: (namespace?: string) => {
     const t = (key: string, values?: Record<string, unknown>) => {
       const messages: Record<string, string> = {
         seats: '{count} seats',
+        luggage: '{count} bags',
         auto: 'Auto',
         manual: 'Manual',
         perDay: '/ day',
         priceFrom: 'From',
         viewClass: 'View class',
       }
-      const template = namespace === 'acriss' ? (ACRISS_LABELS[key] ?? key) : (messages[key] ?? key)
+      const template =
+        namespace === 'acriss'
+          ? (ACRISS_LABELS[key] ?? key)
+          : namespace === 'luggageSize'
+            ? (SIZE_LABELS[key] ?? key)
+            : (messages[key] ?? key)
       if (!values) return template
       return Object.entries(values).reduce<string>(
         (acc, [k, v]) => acc.replace(`{${k}}`, String(v)),
@@ -52,6 +60,7 @@ const baseClass = {
   photos: ['https://example.com/a.jpg', 'https://example.com/b.jpg'],
   seats: 5,
   luggageCapacity: 2,
+  luggageSize: 'MEDIUM' as const,
   transmission: 'AUTO' as const,
   fuelType: 'GASOLINE',
   acrissCode: null,
@@ -77,6 +86,12 @@ describe('ClassCatalogCard', () => {
     expect(screen.getByText('Compact')).toBeInTheDocument()
     expect(screen.getByText('5 seats')).toBeInTheDocument()
     expect(screen.getByText('Auto')).toBeInTheDocument()
+  })
+
+  it('shows luggage capacity and size (#457)', () => {
+    render(<ClassCatalogCard vehicleClass={baseClass} />)
+    expect(screen.getByText('2 bags')).toBeInTheDocument()
+    expect(screen.getByText(/Medium/)).toBeInTheDocument()
   })
 
   it('renders no price on the card (#406 — class pricing dropped; "from" price is slice 5)', () => {

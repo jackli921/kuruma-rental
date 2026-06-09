@@ -15,6 +15,7 @@ interface ClassDetailViewProps {
 export function ClassDetailView({ vehicleClass: vc }: ClassDetailViewProps) {
   const t = useTranslations('catalog.detail')
   const tAcriss = useTranslations('acriss')
+  const tSize = useTranslations('luggageSize')
 
   const transmissionLabel = vc.transmission === 'AUTO' ? t('auto') : t('manual')
   const photos = vc.photos
@@ -95,6 +96,7 @@ export function ClassDetailView({ vehicleClass: vc }: ClassDetailViewProps) {
                   <Briefcase className="size-5 text-muted-foreground" />
                   <p className="text-sm font-medium">
                     {t('luggage', { count: vc.luggageCapacity })}
+                    <span className="text-muted-foreground"> · {tSize(vc.luggageSize)}</span>
                   </p>
                 </div>
                 {vc.fuelType && (
