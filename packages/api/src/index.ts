@@ -217,7 +217,7 @@ export function createApp(overrides?: {
     bookingRepo = new DrizzleBookingRepository(db)
     availabilityRepo = new DrizzleAvailabilityRepository(db)
     maintenanceLogRepo = new DrizzleMaintenanceLogRepository(db)
-    runInTransaction = createDrizzleTransaction(db)
+    runInTransaction = createDrizzleTransaction()
     fleetOverviewRepo = new DrizzleFleetOverviewRepository(db)
     vehicleDetailRepo = new DrizzleVehicleDetailRepository(db)
     statsRepo = new DrizzleStatsRepository(db)

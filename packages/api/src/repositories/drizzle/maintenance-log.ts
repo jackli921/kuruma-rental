@@ -58,43 +58,47 @@ export class DrizzleMaintenanceLogRepository implements MaintenanceLogRepository
     resolvedAt: Date,
     newLogData?: Omit<MaintenanceLog, 'id' | 'createdAt' | 'updatedAt'>,
   ): Promise<TransitionLogsResult> {
-    return this.db.transaction(async (tx) => {
-      const result: TransitionLogsResult = {}
+    // Operates on the INJECTED handle (this.db) — it must NOT open its own
+    // transaction. The only caller, MaintenanceService.setStatus, invokes this
+    // inside runInTransaction with a tx-bound repo, so the FOR UPDATE lock and
+    // the vehicle-status update commit as one atomic unit. Opening a separate
+    // transaction here would split that unit (#493 boundary drift). Callers
+    // must provide the transaction boundary.
+    const result: TransitionLogsResult = {}
 
-      // Lock the active log row so a concurrent transaction blocks until we commit
-      const [activeRow] = await tx
-        .select(maintenanceLogColumns)
-        .from(maintenanceLogs)
-        .where(and(eq(maintenanceLogs.vehicleId, vehicleId), isNull(maintenanceLogs.resolvedAt)))
-        .limit(1)
-        .for('update')
+    // Lock the active log row so a concurrent transaction blocks until we commit
+    const [activeRow] = await this.db
+      .select(maintenanceLogColumns)
+      .from(maintenanceLogs)
+      .where(and(eq(maintenanceLogs.vehicleId, vehicleId), isNull(maintenanceLogs.resolvedAt)))
+      .limit(1)
+      .for('update')
 
-      if (activeRow) {
-        const [resolved] = await tx
-          .update(maintenanceLogs)
-          .set({ resolvedAt, updatedAt: new Date() })
-          .where(eq(maintenanceLogs.id, activeRow.id))
-          .returning(maintenanceLogColumns)
-        if (resolved) result.resolved = toMaintenanceLog(resolved)
-      }
+    if (activeRow) {
+      const [resolved] = await this.db
+        .update(maintenanceLogs)
+        .set({ resolvedAt, updatedAt: new Date() })
+        .where(eq(maintenanceLogs.id, activeRow.id))
+        .returning(maintenanceLogColumns)
+      if (resolved) result.resolved = toMaintenanceLog(resolved)
+    }
 
-      // Create new log if entering MAINTENANCE
-      if (newLogData) {
-        const [created] = await tx
-          .insert(maintenanceLogs)
-          .values({
-            vehicleId: newLogData.vehicleId,
-            reason: newLogData.reason,
-            notes: newLogData.notes,
-            costJpy: newLogData.costJpy,
-            startedAt: newLogData.startedAt,
-            resolvedAt: newLogData.resolvedAt,
-          })
-          .returning(maintenanceLogColumns)
-        if (created) result.created = toMaintenanceLog(created)
-      }
+    // Create new log if entering MAINTENANCE
+    if (newLogData) {
+      const [created] = await this.db
+        .insert(maintenanceLogs)
+        .values({
+          vehicleId: newLogData.vehicleId,
+          reason: newLogData.reason,
+          notes: newLogData.notes,
+          costJpy: newLogData.costJpy,
+          startedAt: newLogData.startedAt,
+          resolvedAt: newLogData.resolvedAt,
+        })
+        .returning(maintenanceLogColumns)
+      if (created) result.created = toMaintenanceLog(created)
+    }
 
-      return result
-    })
+    return result
   }
 }
