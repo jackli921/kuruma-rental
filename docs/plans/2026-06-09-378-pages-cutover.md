@@ -26,11 +26,10 @@ In `deploy.yml` (on marketplace-pivot) the four web-**Worker** steps (Build / De
 ## 2. Scope
 
 **In scope**
-1. New CF Pages config file `packages/web/wrangler.pages.jsonc` (project name, `pages_build_output_dir`, compat flags, `API_ORIGIN` var).
-2. `deploy.yml`: replace the four frozen web-Worker steps with live Pages steps — vite build → `wrangler pages deploy` → smoke. (See Open Question §5 for keep-vs-delete.)
-3. `package.json` (web): a `deploy:pages` convenience script so the deploy command has one source of truth.
-4. A small unit test asserting the Pages config is internally consistent (project name, output dir, `API_ORIGIN`, compat flags) — keeps the cutover config from silently drifting.
-5. Doc: this plan + a short PR note spelling out the #304 gate and the post-merge human steps.
+1. `package.json` (web): `pages:create-project` (compat flags, one-time) + `deploy:pages` (every deploy) scripts — the CLI source of truth (§3.1; no config file — course-correction).
+2. `deploy.yml`: delete the frozen web-Worker deploy block; add live Pages steps — vite build → dist-size → `deploy:pages` (guarded) → smoke (§5).
+3. A drift unit test (scripts ↔ deploy.yml ↔ vite outDir agree; compat flags present; Worker block gone) — keeps the cutover wiring from silently drifting.
+4. Doc: this plan + a PR note spelling out the #304 gate and the post-merge human steps.
 
 **Out of scope** (later slices / other issues)
 - DNS flip + old Worker deletion + Next.js source deletion + dep pruning → §8 step 6 cutover, NOT now.
@@ -42,28 +41,17 @@ In `deploy.yml` (on marketplace-pivot) the four web-**Worker** steps (Build / De
 
 ## 3. Design decisions
 
-### 3.1 New Pages config file (don't overload the Worker config)
-`packages/web/wrangler.jsonc` is a **Worker** config (`main: .open-next/worker.js`, `assets`). CF Pages needs `pages_build_output_dir`, which is incompatible in the same file. So add a separate `wrangler.pages.jsonc`:
+### 3.1 No Pages config file — project settings applied via CLI scripts (revised after spec-vs-tool check)
 
-```jsonc
-{
-  "$schema": "node_modules/wrangler/config-schema.json",
-  "name": "kuruma-web-pages",
-  "pages_build_output_dir": "dist",
-  "compatibility_date": "2025-04-01",
-  // global_fetch_strictly_public: the proxy Functions fetch() the API Worker's
-  // *.workers.dev URL. Without this flag CF short-circuits inter-Worker fetches
-  // internally and returns 404 (same bug the Worker hit — see wrangler.jsonc).
-  // The flag must also be enabled on the Pages project; verified at #304.
-  "compatibility_flags": ["nodejs_compat", "global_fetch_strictly_public"],
-  // API_ORIGIN is the API Worker URL the proxy forwards to. NOT a secret →
-  // plaintext var is fine. Updated to the freelance subdomain at #304
-  // (see docs/cloudflare-account-migration.md §6).
-  "vars": { "API_ORIGIN": "https://kuruma-api.kanata-studio-dev.workers.dev" }
-}
-```
+> **Course-correction (2026-06-09):** the original plan added a `wrangler.pages.jsonc` and passed `--config`. Empirically (`wrangler 4.81`): `wrangler pages deploy` has **no `--config` flag** ("Pages does not support custom paths for the Wrangler configuration file"), and it only auto-discovers a file literally named `wrangler.{toml,json,jsonc}`. Here that name is taken by the **frozen Worker** config — wrangler warns and **ignores** it. A `wrangler.pages.jsonc` is therefore never read. Making `wrangler.jsonc` the Pages config would break the Worker's `deploy`/`build:worker` scripts — that's the §8 step 6 teardown, out of scope. So: **no Pages config file.**
 
-Keep `packages/web/wrangler.jsonc` (Worker) untouched — it is deleted at the §8 step 6 cutover, not here.
+The Pages project's settings live in two CLI scripts (config-as-code, reproducible, drift-tested):
+
+- **`pages:create-project`** (one-time, run at #304): `wrangler pages project create kuruma-web-pages --production-branch=production --compatibility-date=2025-04-01 --compatibility-flag=nodejs_compat --compatibility-flag=global_fetch_strictly_public`. This is where `global_fetch_strictly_public` (and `nodejs_compat`) get set for the proxy Functions — the flag #304 already calls out.
+- **`deploy:pages`** (every deploy): `wrangler pages deploy dist --project-name=kuruma-web-pages --branch=production --commit-dirty=true`. Run from `packages/web` so `functions/` is compiled. No `--config`. The sibling Worker `wrangler.jsonc` is warned-and-ignored (cosmetic).
+- **`API_ORIGIN`** (one-time, at #304): `echo "<api-worker-url>" | wrangler pages secret put API_ORIGIN --project-name=kuruma-web-pages` (or set as a plaintext var in the dashboard). The proxy reads `context.env.API_ORIGIN` either way. Updated to the freelance subdomain per `docs/cloudflare-account-migration.md` §6.
+
+`packages/web/wrangler.jsonc` (Worker) is left untouched — deleted at §8 step 6, not here.
 
 ### 3.2 deploy.yml Pages steps (replace the frozen block)
 ```yaml
@@ -85,7 +73,7 @@ Keep `packages/web/wrangler.jsonc` (Worker) untouched — it is deleted at the �
       - name: Deploy web to CF Pages
         if: vars.WEB_PAGES_DEPLOY_ENABLED == 'true'
         working-directory: packages/web
-        run: npx wrangler pages deploy dist --project-name=kuruma-web-pages --branch=production --commit-dirty=true --config wrangler.pages.jsonc
+        run: bun run deploy:pages   # = wrangler pages deploy dist --project-name=kuruma-web-pages --branch=production --commit-dirty=true
 
       - name: Smoke test web (Pages)
         if: vars.WEB_PAGES_DEPLOY_ENABLED == 'true'
@@ -99,7 +87,7 @@ Keep `packages/web/wrangler.jsonc` (Worker) untouched — it is deleted at the �
 Same-origin `/api` is the whole point of the proxy (Safari ITP, spec §5.5). Setting `VITE_API_BASE_URL` would defeat it. Documented inline so nobody "helpfully" adds it.
 
 ### 3.4 First-deploy project creation
-`wrangler pages deploy --project-name=X` auto-creates the project on first run. `API_ORIGIN` + compat flags come from `wrangler.pages.jsonc`. No manual dashboard step for those. (The `global_fetch_strictly_public` Pages-project flag is the one thing that needs dashboard/#304 verification.)
+Run `bun run pages:create-project` once at #304 (sets compat flags + production branch), then `wrangler pages secret put API_ORIGIN`. `deploy:pages` then deploys into it. `wrangler pages deploy` would also auto-create a bare project, but it would lack the compat flags — so the explicit create-project step is required, not optional.
 
 ---
 
@@ -107,12 +95,13 @@ Same-origin `/api` is the whole point of the proxy (Safari ITP, spec §5.5). Set
 
 | File | Change |
 |------|--------|
-| `packages/web/wrangler.pages.jsonc` | **new** — Pages project config (§3.1) |
-| `.github/workflows/deploy.yml` | delete the 4-step frozen Worker deploy block; add live Pages steps (deploy+smoke guarded by `WEB_PAGES_DEPLOY_ENABLED`); swap `WEB_WORKER_URL`→`WEB_PAGES_URL` env (§3.2, §5) |
-| `packages/web/package.json` | add `"deploy:pages"` script (single source of truth for the deploy cmd) |
-| `packages/web/src/__tests__/wrangler-pages-config.test.ts` | **new** — assert config invariants (project name, output dir, API_ORIGIN, compat flags) |
+| `.github/workflows/deploy.yml` | delete the 4-step frozen Worker deploy block; add live Pages steps (build → dist-size → deploy → smoke; deploy+smoke guarded by `WEB_PAGES_DEPLOY_ENABLED`); swap `WEB_WORKER_URL`→`WEB_PAGES_URL` env (§3.2, §5) |
+| `packages/web/package.json` | add `deploy:pages` + `pages:create-project` scripts (CLI source of truth — §3.1) |
+| `packages/web/tests/deploy/wrangler-pages-config.test.ts` | **new** — drift test: scripts ↔ deploy.yml ↔ vite outDir agree; compat flags present; Worker block gone (9 cases) |
 | `docs/plans/2026-06-09-378-pages-cutover.md` | this plan |
 | PR body | #304 gate + post-merge human steps |
+
+(No `wrangler.pages.jsonc` — see §3.1 course-correction.)
 
 ---
 
@@ -149,8 +138,8 @@ Live deploy CANNOT be verified (gated on #304). So verification is config-correc
 
 | Risk | Mitigation |
 |------|-----------|
-| `wrangler pages deploy` picks up the Worker `wrangler.jsonc` and errors | Pass `--config wrangler.pages.jsonc` explicitly; test with `--dry-run` |
-| `global_fetch_strictly_public` not honored from Pages config | Documented as #304 live-verify item; flag also set on project in dashboard |
+| `wrangler pages deploy` picks up the Worker `wrangler.jsonc` | Verified: it warns and **ignores** it (no `pages_build_output_dir`), then proceeds. Cosmetic warning only |
+| `global_fetch_strictly_public` not applied to Functions | Set via `pages:create-project --compatibility-flag`; #304 live-verify confirms |
 | `API_ORIGIN` subdomain changes at #304 | One-line var update; cross-referenced in the migration doc §6 + PR body |
 | Someone sets `VITE_API_BASE_URL` later and breaks same-origin | Inline comment in deploy step + a note in the config test |
 | deploy.yml accidentally runs before #304 | Inert: triggers only on `branches:[main]`; this PR targets marketplace-pivot |
@@ -159,11 +148,13 @@ Live deploy CANNOT be verified (gated on #304). So verification is config-correc
 
 ## 8. Post-merge HUMAN steps (all gated on #304)
 
-1. Land #304 (freelance CF account + token/account-id secrets, enable `global_fetch_strictly_public` on the Pages project).
-2. Set repo **variable** `WEB_PAGES_DEPLOY_ENABLED=true` (gh: `gh variable set WEB_PAGES_DEPLOY_ENABLED -b true`) — un-gates the Pages deploy+smoke steps (§5.1).
-3. First deploy creates `kuruma-web-pages.pages.dev`; note the origin.
-3. Create GitHub Secret **`AUTH_URL`** = the Pages origin (e.g. `https://kuruma-web-pages.pages.dev`).
-4. Register `<AUTH_URL>/auth/google/callback` in Google Cloud Console (OAuth redirect URI).
-5. Run **`rotate-secrets.yml`** (workflow_dispatch) to assert API-Worker secrets incl. `AUTH_URL`.
-6. Live-verify: load the Pages preview, exercise Google login round-trip + a `/api` fetch; confirm the proxy + cookie are same-origin.
-7. Then proceed to #500 (CSP enforce) and #501 (e2e on preview).
+1. Land #304 (freelance CF account + token/account-id secrets).
+2. Create the Pages project with its compat flags: `bun run --filter @kuruma/web pages:create-project` (this is what sets `global_fetch_strictly_public`). Confirm the flag in the dashboard.
+3. Set the proxy's upstream: `echo "<api-worker-url>" | bunx wrangler pages secret put API_ORIGIN --project-name=kuruma-web-pages` (or a plaintext var in the dashboard). Use the freelance subdomain (migration doc §6).
+4. Set repo **variable** `WEB_PAGES_DEPLOY_ENABLED=true` (`gh variable set WEB_PAGES_DEPLOY_ENABLED -b true`) — un-gates the Pages deploy+smoke steps (§5.1).
+5. Run the deploy (push to main once cut over, or `gh workflow run deploy.yml`). First deploy publishes `kuruma-web-pages.pages.dev`; note the origin.
+6. Create GitHub Secret **`AUTH_URL`** = the Pages origin (e.g. `https://kuruma-web-pages.pages.dev`).
+7. Register `<AUTH_URL>/auth/google/callback` in Google Cloud Console (OAuth redirect URI).
+8. Run **`rotate-secrets.yml`** (workflow_dispatch) to assert API-Worker secrets incl. `AUTH_URL`.
+9. Live-verify: load the Pages URL, exercise Google login round-trip + a `/api` fetch; confirm the proxy + cookie are same-origin.
+10. Then proceed to #500 (CSP enforce) and #501 (e2e on preview).

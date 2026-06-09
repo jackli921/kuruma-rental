@@ -116,8 +116,14 @@ jobs:
 
       # 7. Deploy the SPA to CF Pages via the `deploy:pages` script (single
       # source of truth for the flags — also what a human runs for the first
-      # post-#304 deploy). First run auto-creates the project; the API_ORIGIN var
-      # + compat flags come from wrangler.pages.jsonc.
+      # post-#304 deploy). `functions/` is compiled from cwd (packages/web).
+      #
+      # The Pages project's compat flags (incl. global_fetch_strictly_public) and
+      # API_ORIGIN var are NOT set here — `wrangler pages deploy` has no --config
+      # and only auto-discovers a file named wrangler.jsonc (which here is the
+      # frozen Worker config; it's warned-and-ignored). Those project settings are
+      # applied once at #304 via `pages:create-project` + `wrangler pages secret
+      # put API_ORIGIN` (see plan §3 / §8).
       #
       # GUARDED: WEB_PAGES_DEPLOY_ENABLED is an unset-by-default repo variable.
       # Until #304 lands (freelance CF account + the global_fetch_strictly_public
