@@ -46,6 +46,7 @@ export function bookingInput(overrides: Partial<NewBooking> = {}): NewBooking {
     insuranceOptionId: null,
     insuranceSnapshot: null,
     feeSnapshot: [],
+    addOnSnapshot: [],
     externalId: null,
     notes: null,
     totalPrice: null,

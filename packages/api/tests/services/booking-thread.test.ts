@@ -202,6 +202,7 @@ function bookingInput(
     startAt: futureDate(24),
     endAt: futureDate(48),
     source: 'DIRECT',
+    addOnIds: [],
     ...o,
   }
 }

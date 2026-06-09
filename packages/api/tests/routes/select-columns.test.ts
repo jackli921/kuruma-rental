@@ -111,6 +111,7 @@ const BOOKING_FIELDS = [
   'insuranceOptionId',
   'insuranceSnapshot',
   'feeSnapshot',
+  'addOnSnapshot',
   'externalId',
   'notes',
   'totalPrice',

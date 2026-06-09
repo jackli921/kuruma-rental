@@ -84,6 +84,7 @@ export function createBookingRoutes(service: BookingService) {
         pickupLocationId: parsed.data.pickupLocationId,
         dropoffLocationId: parsed.data.dropoffLocationId,
         insuranceOptionId: parsed.data.insuranceOptionId ?? null,
+        addOnIds: parsed.data.addOnIds,
         renterId,
         startAt: new Date(parsed.data.startAt),
         endAt: new Date(parsed.data.endAt),

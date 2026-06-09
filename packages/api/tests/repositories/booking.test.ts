@@ -25,6 +25,7 @@ function bookingData(overrides: Partial<Booking> = {}): NewBooking {
     insuranceOptionId: null,
     insuranceSnapshot: null,
     feeSnapshot: [],
+    addOnSnapshot: [],
     externalId: null,
     notes: null,
     totalPrice: 12000,

@@ -180,6 +180,7 @@ function createInput(o: Partial<CreateBookingInput> = {}): CreateBookingInput {
     startAt: START,
     endAt: END,
     source: 'DIRECT',
+    addOnIds: [],
     ...o,
   }
 }
@@ -460,6 +461,97 @@ describe('BookingService.create — single-transaction submit (#392 §4)', () =>
     expect(result.status).toBe(400)
   })
 
+  it('snapshots selected active add-ons and adds each flat price to totalPrice (#460)', async () => {
+    const h = await setup()
+    const { vehicleId, locationId } = await seedReady(h)
+    const seat = await h.repos.addOnRepo.create({
+      operatorId: OP_A,
+      name: 'Baby seat',
+      description: null,
+      priceJpy: 1100,
+      status: 'ACTIVE',
+    } as Parameters<typeof h.repos.addOnRepo.create>[0])
+    const etc = await h.repos.addOnRepo.create({
+      operatorId: OP_A,
+      name: 'ETC card',
+      description: null,
+      priceJpy: 330,
+      status: 'ACTIVE',
+    } as Parameters<typeof h.repos.addOnRepo.create>[0])
+
+    const result = await h.service.create(
+      renterCtx,
+      createInput({
+        requestedVehicleId: vehicleId,
+        pickupLocationId: locationId,
+        dropoffLocationId: locationId,
+        addOnIds: [seat.id, etc.id],
+      }),
+      NOW,
+    )
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+    expect(result.booking.addOnSnapshot).toEqual([
+      { addOnId: seat.id, name: 'Baby seat', priceJpy: 1100 },
+      { addOnId: etc.id, name: 'ETC card', priceJpy: 330 },
+    ])
+    // 2 days * 10000 vehicle + 1100 + 330 add-ons (flat, NOT per-day) = 21430
+    expect(result.booking.totalPrice).toBe(21430)
+  })
+
+  it('de-duplicates a repeated add-on id (charges once) (#460)', async () => {
+    const h = await setup()
+    const { vehicleId, locationId } = await seedReady(h)
+    const seat = await h.repos.addOnRepo.create({
+      operatorId: OP_A,
+      name: 'Baby seat',
+      description: null,
+      priceJpy: 1100,
+      status: 'ACTIVE',
+    } as Parameters<typeof h.repos.addOnRepo.create>[0])
+
+    const result = await h.service.create(
+      renterCtx,
+      createInput({
+        requestedVehicleId: vehicleId,
+        pickupLocationId: locationId,
+        dropoffLocationId: locationId,
+        addOnIds: [seat.id, seat.id],
+      }),
+      NOW,
+    )
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+    expect(result.booking.addOnSnapshot).toHaveLength(1)
+    expect(result.booking.totalPrice).toBe(21100) // 20000 + 1100 once
+  })
+
+  it('rejects another operator’s / archived add-on (400) (#460)', async () => {
+    const h = await setup()
+    const { vehicleId, locationId } = await seedReady(h)
+    const foreign = await h.repos.addOnRepo.create({
+      operatorId: OP_B,
+      name: 'Foreign seat',
+      description: null,
+      priceJpy: 999,
+      status: 'ACTIVE',
+    } as Parameters<typeof h.repos.addOnRepo.create>[0])
+
+    const result = await h.service.create(
+      renterCtx,
+      createInput({
+        requestedVehicleId: vehicleId,
+        pickupLocationId: locationId,
+        dropoffLocationId: locationId,
+        addOnIds: [foreign.id],
+      }),
+      NOW,
+    )
+    expect(result.ok).toBe(false)
+    if (result.ok) return
+    expect(result.status).toBe(400)
+  })
+
   it('snapshots operator-wide + class-specific active fees, excluding other operators and archived rows', async () => {
     const h = await setup()
     const { vehicleId, locationId } = await seedReady(h)
@@ -530,6 +622,7 @@ describe('BookingService.create — single-transaction submit (#392 §4)', () =>
       insuranceOptionId: null,
       insuranceSnapshot: null,
       feeSnapshot: [],
+      addOnSnapshot: [],
       externalId: null,
       notes: null,
       totalPrice: 20000,
@@ -595,6 +688,7 @@ describe('BookingService.create — single-transaction submit (#392 §4)', () =>
       insuranceOptionId: null,
       insuranceSnapshot: null,
       feeSnapshot: [],
+      addOnSnapshot: [],
       externalId: null,
       notes: null,
       totalPrice: 1,
@@ -638,6 +732,7 @@ describe('BookingService.create — single-transaction submit (#392 §4)', () =>
       insuranceOptionId: null,
       insuranceSnapshot: null,
       feeSnapshot: [],
+      addOnSnapshot: [],
       externalId: null,
       notes: null,
       totalPrice: 1,
@@ -733,6 +828,7 @@ function bookingRow(o: Partial<Booking>): Omit<Booking, 'id' | 'createdAt' | 'up
     insuranceOptionId: null,
     insuranceSnapshot: null,
     feeSnapshot: [],
+    addOnSnapshot: [],
     externalId: null,
     notes: null,
     totalPrice: 1,

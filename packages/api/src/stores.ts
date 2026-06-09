@@ -1,4 +1,5 @@
 import type {
+  AddOnSnapshot,
   BookingEventPayload,
   BookingEventType,
   BookingFulfillmentMode,
@@ -60,6 +61,8 @@ export interface Booking {
   insuranceSnapshot: InsuranceSnapshot | null
   // Applicable fee_schedules rows snapshotted at booking time (never null).
   feeSnapshot: FeeSnapshotItem[]
+  // Paid add-ons selected at booking time (#460), never null.
+  addOnSnapshot: AddOnSnapshot[]
   externalId: string | null
   notes: string | null
   totalPrice: number | null
