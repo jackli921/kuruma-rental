@@ -108,6 +108,7 @@ export function createVehicleClassRoutes(
             photos: d.photos,
             seats: d.seats,
             luggageCapacity: d.luggageCapacity,
+            luggageSize: d.luggageSize,
             transmission: d.transmission,
             fuelType: d.fuelType ?? null,
             acrissCode: d.acrissCode ?? null,

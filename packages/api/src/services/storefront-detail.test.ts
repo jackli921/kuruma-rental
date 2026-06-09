@@ -61,6 +61,7 @@ function makeClass(overrides: Partial<Omit<VehicleClass, 'id' | 'createdAt' | 'u
     photos: [],
     seats: 5,
     luggageCapacity: 2,
+    luggageSize: 'MEDIUM',
     transmission: 'AUTO',
     fuelType: null,
     acrissCode: 'CCAR',

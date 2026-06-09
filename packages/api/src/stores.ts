@@ -4,6 +4,7 @@ import type {
   FeeSnapshotItem,
   InsuranceSnapshot,
 } from '@kuruma/shared/db/schema'
+import type { LuggageSize } from '@kuruma/shared/lib/luggage'
 import type { LocationOperatingHours } from '@kuruma/shared/types/location'
 
 export interface VehicleClass {
@@ -16,6 +17,7 @@ export interface VehicleClass {
   photos: string[]
   seats: number
   luggageCapacity: number
+  luggageSize: LuggageSize
   transmission: 'AUTO' | 'MANUAL'
   fuelType: string | null
   /** ACRISS taxonomy code (#388). Null when the class has no mapped code. */
