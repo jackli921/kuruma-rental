@@ -1,5 +1,5 @@
 import { type RateLimitBinding, rateLimit } from '@elithrar/workers-hono-rate-limit'
-import { getDb } from '@kuruma/shared/db'
+import { getDb, runTx } from '@kuruma/shared/db'
 import { Hono } from 'hono'
 import { cors } from 'hono/cors'
 import { setupGlobalHandlers } from './error-handlers'
@@ -217,12 +217,12 @@ export function createApp(overrides?: {
     bookingRepo = new DrizzleBookingRepository(db)
     availabilityRepo = new DrizzleAvailabilityRepository(db)
     maintenanceLogRepo = new DrizzleMaintenanceLogRepository(db)
-    runInTransaction = createDrizzleTransaction()
+    runInTransaction = createDrizzleTransaction(runTx)
     fleetOverviewRepo = new DrizzleFleetOverviewRepository(db)
     vehicleDetailRepo = new DrizzleVehicleDetailRepository(db)
     statsRepo = new DrizzleStatsRepository(db)
-    threadRepo = new DrizzleThreadRepository(db)
-    messageRepo = new DrizzleMessageRepository(db)
+    threadRepo = new DrizzleThreadRepository(db, runTx)
+    messageRepo = new DrizzleMessageRepository(db, runTx)
     userRepo = new DrizzleUserRepository(db)
     customerRepo = new DrizzleCustomerRepository(db)
     operatorRepo = new DrizzleOperatorRepository(db)

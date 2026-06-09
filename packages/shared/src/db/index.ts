@@ -47,6 +47,10 @@ export function getDb(url?: string): NeonHttpDb {
 // composition root passes getDb() with (no-arg) — so the read handle and this
 // helper can never resolve different databases. On CF Workers the global
 // WebSocket is used; under Node the test setup sets neonConfig.webSocketConstructor.
+//
+// DATABASE_URL MUST be the Neon POOLED endpoint (host contains `-pooler`):
+// runTx opens a fresh connection per interactive transaction, so a direct
+// (unpooled) endpoint would exhaust Postgres backends under load (#493 review).
 export async function runTx<T>(fn: (tx: TxHandle) => Promise<T>): Promise<T> {
   const connectionUrl = process.env.DATABASE_URL
   if (!connectionUrl) {
@@ -61,7 +65,10 @@ export async function runTx<T>(fn: (tx: TxHandle) => Promise<T>): Promise<T> {
     const txDb = drizzleServerless({ client: pool, schema }) as unknown as NeonHttpDb
     return await txDb.transaction(fn)
   } finally {
-    await pool.end()
+    // Close the per-call connection within this request (Workers-safe). Swallow a
+    // teardown error so it can't mask the real transaction error — the booking
+    // retry loop keys off the original pg constraint error (#493 review).
+    await pool.end().catch(() => {})
   }
 }
 

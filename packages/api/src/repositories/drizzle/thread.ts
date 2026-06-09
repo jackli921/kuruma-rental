@@ -1,4 +1,4 @@
-import { runTx } from '@kuruma/shared/db'
+import type { RunTx } from '@kuruma/shared/db'
 import { messages, threadParticipants, threads } from '@kuruma/shared/db/schema'
 import { and, asc, eq, inArray, sql } from 'drizzle-orm'
 import {
@@ -20,13 +20,13 @@ import {
 } from './shared'
 
 export class DrizzleThreadRepository implements ThreadRepository {
-  // The interactive-transaction runner is injected (DIP) so tests/e2e can supply
-  // a transaction-capable driver (postgres-js). Prod defaults to runTx, which
-  // opens a per-call neon-serverless connection — the neon-http db this repo
-  // holds for reads can't run interactive transactions on CF Workers (#493).
+  // The interactive-transaction runner is injected (DIP) — the composition root
+  // wires the concrete (runTx, per-call neon-serverless); tests/e2e inject a
+  // postgres-js runner. The neon-http db this repo holds for reads can't run
+  // interactive transactions on CF Workers (#493).
   constructor(
     private readonly db: Db,
-    private readonly runTransaction: typeof runTx = runTx,
+    private readonly runTransaction: RunTx,
   ) {}
 
   async findAll(

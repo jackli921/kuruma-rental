@@ -1,4 +1,4 @@
-import { getDb } from '@kuruma/shared/db'
+import { getDb, runTx } from '@kuruma/shared/db'
 import { threadParticipants, threads, users } from '@kuruma/shared/db/schema'
 // Real-Neon lane (#493): proves the production driver wiring can run an
 // INTERACTIVE transaction end-to-end. The renter booking-submit path opens
@@ -63,7 +63,7 @@ describe.skipIf(!NEON_URL)('interactive transaction via production wiring (#493)
     // Pre-fix: DrizzleThreadRepository.create -> this.db.transaction(...) on the
     // neon-http driver throws "No transactions support in neon-http driver".
     // Post-fix: it runs through runTx (neon-serverless) and commits.
-    const repo = new DrizzleThreadRepository(getDb())
+    const repo = new DrizzleThreadRepository(getDb(), runTx)
     const thread = await repo.create(ctx(a!), null, [a!, b!])
     createdThreadIds.push(thread.id)
 
