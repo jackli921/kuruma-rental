@@ -536,6 +536,14 @@ export const bookings = pgTable(
       foreignColumns: [insuranceOptions.operatorId, insuranceOptions.id],
       name: 'bookings_operator_insurance_fk',
     }),
+    // #463: a SPECIFIC booking MUST name the vehicle it fulfills. A tautology
+    // today (assignedVehicleId is NOT NULL), but #464 makes that column nullable
+    // for CLASS_COMBO — this CHECK then keeps every SPECIFIC row honest instead of
+    // letting the invariant silently evaporate one migration away. #464 relaxes it.
+    check(
+      'bookings_specific_requires_assigned',
+      sql`${table.fulfillmentMode} <> 'SPECIFIC' OR ${table.assignedVehicleId} IS NOT NULL`,
+    ),
   ],
 )
 

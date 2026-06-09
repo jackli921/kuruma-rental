@@ -1,3 +1,4 @@
+import { getTableConfig } from 'drizzle-orm/pg-core'
 import { describe, expect, it } from 'vitest'
 import {
   VALID_BOOKING_TRANSITIONS,
@@ -96,6 +97,15 @@ describe('schema exports', () => {
   it('bookings.fulfillmentMode is NOT NULL with a SPECIFIC default (#463)', () => {
     expect(bookings.fulfillmentMode.notNull).toBe(true)
     expect(bookings.fulfillmentMode.default).toBe('SPECIFIC')
+  })
+
+  // #463: seals the SPECIFIC => assigned-vehicle invariant. A tautology today
+  // (assignedVehicleId is NOT NULL), but #464 makes that column nullable for
+  // CLASS_COMBO; this CHECK then keeps SPECIFIC rows honest. Locking its
+  // presence here means #464 can't silently drop it.
+  it('bookings declares the SPECIFIC-requires-assigned-vehicle CHECK (#463)', () => {
+    const checkNames = getTableConfig(bookings).checks.map((c) => c.name)
+    expect(checkNames).toContain('bookings_specific_requires_assigned')
   })
 
   it('VALID_BOOKING_TRANSITIONS allows CONFIRMED to ACTIVE or CANCELLED', () => {

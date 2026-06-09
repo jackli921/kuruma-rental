@@ -288,6 +288,13 @@
       "when": 1781003114551,
       "tag": "0040_add_booking_fulfillment_mode",
       "breakpoints": true
+    },
+    {
+      "idx": 41,
+      "version": "7",
+      "when": 1781004404359,
+      "tag": "0041_booking_specific_requires_assigned",
+      "breakpoints": true
     }
   ]
 }
