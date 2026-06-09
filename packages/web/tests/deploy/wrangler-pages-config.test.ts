@@ -28,9 +28,10 @@ const pkg = JSON.parse(readFileSync(path.join(WEB_ROOT, 'package.json'), 'utf8')
 const scripts = pkg.scripts ?? {}
 const deployYml = readFileSync(DEPLOY_YML, 'utf8')
 
-describe('deploy:pages script', () => {
-  const deployScript = scripts['deploy:pages'] ?? ''
+const deployScript = scripts['deploy:pages'] ?? ''
+const createScript = scripts['pages:create-project'] ?? ''
 
+describe('deploy:pages script', () => {
   test('deploys the Vite output dir to the kuruma-web-pages project', () => {
     expect(deployScript).toContain(`wrangler pages deploy ${OUTPUT_DIR}`)
     expect(deployScript).toContain(`--project-name=${PROJECT_NAME}`)
@@ -39,14 +40,19 @@ describe('deploy:pages script', () => {
   test('does NOT pass --config (unsupported by `wrangler pages deploy`)', () => {
     expect(deployScript).not.toContain('--config')
   })
+
+  test('deploys to the branch that create-project declares as production', () => {
+    // A production deploy requires --branch to equal create-project's
+    // --production-branch. If they drift, deploys silently publish previews
+    // (<branch>.kuruma-web-pages.pages.dev) and the apex smoke test goes stale.
+    expect(deployScript).toContain('--branch=production')
+    expect(createScript).toContain('--production-branch=production')
+  })
 })
 
 describe('pages:create-project script (one-time #304 setup, config-as-code)', () => {
-  const createScript = scripts['pages:create-project'] ?? ''
-
-  test('creates the same project name with a production branch', () => {
+  test('creates the same project name', () => {
     expect(createScript).toContain(`wrangler pages project create ${PROJECT_NAME}`)
-    expect(createScript).toContain('--production-branch=production')
   })
 
   test('sets the compat flags the proxy Functions need', () => {
@@ -76,6 +82,12 @@ describe('deploy.yml ↔ scripts agree (one active web path)', () => {
 
   test('enforces the dist-size budget before deploying', () => {
     expect(deployYml).toContain('lint:dist-size')
+  })
+
+  test('smoke-tests the proxy seam, not just the static shell', () => {
+    // A missing API_ORIGIN ships green if the smoke only hits /en (static).
+    // Crossing /api/health proves API_ORIGIN is set and the upstream reachable.
+    expect(deployYml).toContain('$WEB_PAGES_URL/api/health')
   })
 })
 

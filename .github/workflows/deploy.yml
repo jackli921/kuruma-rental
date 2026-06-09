@@ -135,10 +135,18 @@ jobs:
         working-directory: packages/web
         run: bun run deploy:pages
 
-      # 8. Smoke test the Pages landing page (public, no auth). Same retry
-      # rationale as the API smoke test (first-deploy propagation delay).
+      # 8. Smoke test the Pages deploy. Two curls because they prove different
+      # things, and there is no Pages-side secret-presence step (unlike the API
+      # Worker) to catch a missing API_ORIGIN:
+      #   - /en exercises the static SPA shell (_redirects → index.html).
+      #   - /api/health crosses the proxy Function → API_ORIGIN/health. A 200
+      #     proves API_ORIGIN is set AND the upstream API is reachable; a 500
+      #     ("API_ORIGIN is not configured") or a 5xx fails the deploy loudly,
+      #     instead of shipping a green deploy whose /api calls 500 at runtime.
+      # Same retry rationale as the API smoke test (first-deploy propagation).
       - name: Smoke test web (Pages)
         if: vars.WEB_PAGES_DEPLOY_ENABLED == 'true'
         run: |
           curl -fsS --retry 10 --retry-delay 3 --retry-all-errors "$WEB_PAGES_URL/en" > /dev/null
-          echo "Web (Pages) landing OK"
+          curl -fsS --retry 10 --retry-delay 3 --retry-all-errors "$WEB_PAGES_URL/api/health" > /dev/null
+          echo "Web (Pages) shell + proxy seam OK"

@@ -97,11 +97,15 @@ Run `bun run pages:create-project` once at #304 (sets compat flags + production 
 |------|--------|
 | `.github/workflows/deploy.yml` | delete the 4-step frozen Worker deploy block; add live Pages steps (build → dist-size → deploy → smoke; deploy+smoke guarded by `WEB_PAGES_DEPLOY_ENABLED`); swap `WEB_WORKER_URL`→`WEB_PAGES_URL` env (§3.2, §5) |
 | `packages/web/package.json` | add `deploy:pages` + `pages:create-project` scripts (CLI source of truth — §3.1) |
-| `packages/web/tests/deploy/wrangler-pages-config.test.ts` | **new** — drift test: scripts ↔ deploy.yml ↔ vite outDir agree; compat flags present; Worker block gone (9 cases) |
+| `.github/workflows/rotate-secrets.yml` | delete the frozen web-Worker rotate block (one active path; Pages holds no rotatable secrets — review SF1) |
+| `docs/cloudflare-account-migration.md` | refresh §4–§9 for the Pages reality (create-project, `API_ORIGIN`, `WEB_PAGES_DEPLOY_ENABLED`; drop the deleted `WEB_WORKER_URL`) — review SF2 |
+| `packages/web/tests/deploy/wrangler-pages-config.test.ts` | **new** — drift test: scripts ↔ deploy.yml ↔ vite outDir agree; compat flags present; branch-name agreement; proxy-seam smoke; Worker block gone (11 cases) |
 | `docs/plans/2026-06-09-378-pages-cutover.md` | this plan |
 | PR body | #304 gate + post-merge human steps |
 
 (No `wrangler.pages.jsonc` — see §3.1 course-correction.)
+
+> **Drift-test scope (review NIT-4):** the test guards the *scripts and workflow text*, not the *live Pages project*. `pages:create-project` is create-only — it errors if the project already exists, and nothing re-asserts its compat flags afterward, so a flag toggled in the dashboard won't fail CI. Acceptable within wrangler 4's constraints; §8 step 2 verifies the flags live, once.
 
 ---
 
@@ -149,7 +153,7 @@ Live deploy CANNOT be verified (gated on #304). So verification is config-correc
 ## 8. Post-merge HUMAN steps (all gated on #304)
 
 1. Land #304 (freelance CF account + token/account-id secrets).
-2. Create the Pages project with its compat flags: `bun run --filter @kuruma/web pages:create-project` (this is what sets `global_fetch_strictly_public`). Confirm the flag in the dashboard.
+2. Create the Pages project with its compat flags: `bun run --filter @kuruma/web pages:create-project` (this is what sets `global_fetch_strictly_public`). Run **once** — it errors if the project already exists. Confirm the flag live in the dashboard (Settings → Functions → Compatibility flags); nothing re-asserts it afterward.
 3. Set the proxy's upstream: `echo "<api-worker-url>" | bunx wrangler pages secret put API_ORIGIN --project-name=kuruma-web-pages` (or a plaintext var in the dashboard). Use the freelance subdomain (migration doc §6).
 4. Set repo **variable** `WEB_PAGES_DEPLOY_ENABLED=true` (`gh variable set WEB_PAGES_DEPLOY_ENABLED -b true`) — un-gates the Pages deploy+smoke steps (§5.1).
 5. Run the deploy (push to main once cut over, or `gh workflow run deploy.yml`). First deploy publishes `kuruma-web-pages.pages.dev`; note the origin.
