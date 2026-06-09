@@ -1,6 +1,6 @@
 {
-  "id": "6b997d6b-1ae6-4317-a75c-cdc7b2712497",
-  "prevId": "72e503ab-323d-4ac0-88ae-5d17c674c247",
+  "id": "14b4fe2e-2302-49a5-b9e0-6257ac4a7c33",
+  "prevId": "6b997d6b-1ae6-4317-a75c-cdc7b2712497",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -622,7 +622,12 @@
         }
       },
       "policies": {},
-      "checkConstraints": {},
+      "checkConstraints": {
+        "bookings_specific_requires_assigned": {
+          "name": "bookings_specific_requires_assigned",
+          "value": "\"bookings\".\"fulfillmentMode\" <> 'SPECIFIC' OR \"bookings\".\"assignedVehicleId\" IS NOT NULL"
+        }
+      },
       "isRLSEnabled": false
     },
     "public.fee_schedules": {

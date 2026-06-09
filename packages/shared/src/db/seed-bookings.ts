@@ -172,6 +172,7 @@ async function seed() {
       effectiveEndAt: endAt,
       status: b.status,
       source: 'DIRECT' as const,
+      fulfillmentMode: 'SPECIFIC' as const, // #463: seed bookings are all specific-vehicle
       totalPrice: b.totalPriceJpy,
       insuranceOptionId: b.insuranceOptionId ? seedId(b.insuranceOptionId) : null,
       insuranceSnapshot,
@@ -184,6 +185,7 @@ async function seed() {
       requestedVehicleId: requested.id,
       assignedVehicleId: assigned.id,
       classId: seedId(b.classId),
+      fulfillmentMode: 'SPECIFIC',
       startAt: startAt.toISOString(),
       endAt: endAt.toISOString(),
       totalPrice: b.totalPriceJpy,

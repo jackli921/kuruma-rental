@@ -105,6 +105,15 @@ export const bookingStatusEnum = pgEnum('booking_status', [
   'CANCELLED',
 ])
 export const bookingSourceEnum = pgEnum('booking_source', ['DIRECT', 'TRIP_COM', 'MANUAL', 'OTHER'])
+// #463 (§5 "design-for-later"): how a booking is fulfilled. SPECIFIC = a concrete
+// requested/assigned vehicle (the only mode exercised pre-demo). CLASS_COMBO = book a
+// class, operator assigns a car later — the post-demo fast-follow (#464), which also
+// needs its own schema work (no assigned vehicle at booking time). Landing the
+// discriminator now keeps #464 from retrofitting a flag onto a table full of demo rows.
+export const bookingFulfillmentModeEnum = pgEnum('booking_fulfillment_mode', [
+  'SPECIFIC',
+  'CLASS_COMBO',
+])
 // Append-only booking lifecycle events (epic #385, slice 6 / #392). bookings.status
 // is the write-through projection of the latest lifecycle event. BOOKING_CREATED +
 // VEHICLE_SUBSTITUTED are new this slice; CANCELLED/STATUS_CHANGED make the existing
@@ -478,6 +487,10 @@ export const bookings = pgTable(
     effectiveEndAt: timestamp('effectiveEndAt', { withTimezone: true, mode: 'date' }).notNull(),
     status: bookingStatusEnum('status').notNull().default('CONFIRMED'),
     source: bookingSourceEnum('source').notNull().default('DIRECT'),
+    // #463: fulfillment discriminator. Server-derived = SPECIFIC for every pre-demo
+    // booking; CLASS_COMBO is #464. The DB DEFAULT is a defensive seal for raw SQL /
+    // migrations only — app code always writes the mode explicitly (Option B).
+    fulfillmentMode: bookingFulfillmentModeEnum('fulfillmentMode').notNull().default('SPECIFIC'),
     // Human-facing reservation code (proposal §10 item 3). 8-char no-confusables
     // base32, generated server-side; UNIQUE so a rare collision retries (§5.4).
     bookingCode: text('bookingCode').notNull().unique(),
@@ -534,6 +547,14 @@ export const bookings = pgTable(
       foreignColumns: [insuranceOptions.operatorId, insuranceOptions.id],
       name: 'bookings_operator_insurance_fk',
     }),
+    // #463: a SPECIFIC booking MUST name the vehicle it fulfills. A tautology
+    // today (assignedVehicleId is NOT NULL), but #464 makes that column nullable
+    // for CLASS_COMBO — this CHECK then keeps every SPECIFIC row honest instead of
+    // letting the invariant silently evaporate one migration away. #464 relaxes it.
+    check(
+      'bookings_specific_requires_assigned',
+      sql`${table.fulfillmentMode} <> 'SPECIFIC' OR ${table.assignedVehicleId} IS NOT NULL`,
+    ),
   ],
 )
 
@@ -562,34 +583,27 @@ export const bookingEvents = pgTable(
   ],
 )
 
-// In-app Stripe payment of the rental total (epic #385, slice payment / #461;
-// 2026-06-05 scope addendum §2). The signed checkout.session.completed webhook
-// is the SOURCE OF TRUTH — a row exists only after a verified, paid session.
+// In-app Stripe payment of the rental total (epic #385, slice payment / #461; 2026-06-05 scope addendum §2). The signed checkout.session.completed webhook is the SOURCE OF TRUTH — a row exists only after a verified, paid session.
 // MVP records only the success event; REFUNDED/DISPUTED are post-MVP (YAGNI).
 export const paymentEventStatusEnum = pgEnum('payment_event_status', ['SUCCEEDED'])
-
 export const paymentEvents = pgTable(
   'payment_events',
   {
     id: text('id')
       .primaryKey()
       .$defaultFn(() => crypto.randomUUID()),
-    // Partner attribution for the #462 revenue tab. RE-DERIVED server-side from
-    // the booking on the webhook — never trusted from Stripe metadata (#461).
+    // Partner attribution for the #462 revenue tab. RE-DERIVED server-side from the booking on the webhook — never trusted from Stripe metadata (#461).
     operatorId: text('operatorId')
       .notNull()
       .references(() => operators.id),
     bookingId: text('bookingId')
       .notNull()
       .references(() => bookings.id),
-    // Stripe identifiers. stripeEventId is the redelivery idempotency fence;
-    // stripeCheckoutSessionId pins the row to one Session; paymentIntent is
-    // nullable (present once the payment intent settles).
+    // Stripe ids: stripeEventId = redelivery idempotency fence; stripeCheckoutSessionId pins the row to one Session; paymentIntent nullable until it settles.
     stripeEventId: text('stripeEventId').notNull(),
     stripeCheckoutSessionId: text('stripeCheckoutSessionId').notNull(),
     stripePaymentIntentId: text('stripePaymentIntentId'),
-    // Whole JPY (zero-decimal currency). grossJpy = Stripe amount_total (trusted,
-    // not the client). platformFee = 4% of gross; net = gross - fee (commission.ts).
+    // Whole JPY (zero-decimal). grossJpy = Stripe amount_total (trusted, not client); platformFee = 4% of gross; net = gross - fee (commission.ts).
     grossJpy: integer('grossJpy').notNull(),
     platformFeeJpy: integer('platformFeeJpy').notNull(),
     netToPartnerJpy: integer('netToPartnerJpy').notNull(),
@@ -598,17 +612,14 @@ export const paymentEvents = pgTable(
     createdAt: timestamp('createdAt', { withTimezone: true }).notNull().defaultNow(),
   },
   (table) => [
-    // FK cover (lint:fk-indexes) + the #462 revenue aggregation by partner.
+    // FK cover (lint:fk-indexes) + #462 revenue aggregation by partner.
     index('idx_payment_events_operatorId').on(table.operatorId),
-    // FK cover + the "is this booking paid?" lookup (derived paid status).
-    index('idx_payment_events_bookingId').on(table.bookingId),
+    index('idx_payment_events_bookingId').on(table.bookingId), // FK cover + "is this booking paid?" lookup
     // Stripe redelivery dedupe: the same event id can never insert twice (#461 P1).
     uniqueIndex('payment_events_stripeEventId_unique').on(table.stripeEventId),
     // Defence in depth: one Checkout Session records at most one row.
     uniqueIndex('payment_events_stripeCheckoutSessionId_unique').on(table.stripeCheckoutSessionId),
-    // The BUSINESS-FACT seal: at most ONE successful payment per booking, even
-    // across two distinct valid Sessions both completing. Vendor event dedupe
-    // (above) only stops duplicate MESSAGES; this stops a duplicate FACT (#461 P1).
+    // The BUSINESS-FACT seal: at most ONE successful payment per booking, even across two valid Sessions both completing — vendor dedupe (above) stops duplicate MESSAGES, this stops a duplicate FACT (#461 P1).
     // Partial so a future REFUNDED row never collides with the SUCCEEDED one.
     uniqueIndex('payment_events_one_success_per_booking')
       .on(table.bookingId)
@@ -726,6 +737,7 @@ export const notificationLog = pgTable(
 )
 
 export type BookingStatus = (typeof bookingStatusEnum.enumValues)[number]
+export type BookingFulfillmentMode = (typeof bookingFulfillmentModeEnum.enumValues)[number]
 
 export const VALID_BOOKING_TRANSITIONS: Record<BookingStatus, BookingStatus[]> = {
   CONFIRMED: ['ACTIVE', 'CANCELLED'],
@@ -760,6 +772,9 @@ export type BookingCreatedPayload = {
   requestedVehicleId: string
   assignedVehicleId: string
   classId: string
+  // #463: the discriminator is a defining booking attribute, so the self-contained
+  // CREATED audit snapshot records it alongside the vehicle/class it mirrors.
+  fulfillmentMode: BookingFulfillmentMode
   startAt: string
   endAt: string
   totalPrice: number

@@ -25,6 +25,7 @@ function makeBooking(overrides: Partial<Booking> = {}): Booking {
     assignedVehicleId: 'veh-1',
     pickupLocationId: 'loc-1',
     dropoffLocationId: 'loc-1',
+    fulfillmentMode: 'SPECIFIC',
     startAt: now,
     endAt: now,
     effectiveEndAt: now,

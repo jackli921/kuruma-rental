@@ -106,6 +106,7 @@ const BOOKING_FIELDS = [
   'effectiveEndAt',
   'status',
   'source',
+  'fulfillmentMode',
   'bookingCode',
   'insuranceOptionId',
   'insuranceSnapshot',
