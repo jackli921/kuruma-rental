@@ -78,6 +78,25 @@ export interface BookingEvent {
   createdAt: Date
 }
 
+// A recorded Stripe payment of the rental total (#461). Persisted ONLY on the
+// verified checkout.session.completed webhook — the source of truth for revenue.
+export interface PaymentEvent {
+  id: string
+  // Partner attribution, re-derived from the booking on the webhook (#462 revenue).
+  operatorId: string
+  bookingId: string
+  stripeEventId: string
+  stripeCheckoutSessionId: string
+  stripePaymentIntentId: string | null
+  // Whole JPY. gross = Stripe amount_total; fee = 4%; net = gross - fee.
+  grossJpy: number
+  platformFeeJpy: number
+  netToPartnerJpy: number
+  currency: string
+  status: 'SUCCEEDED'
+  createdAt: Date
+}
+
 export interface Thread {
   id: string
   bookingId: string | null

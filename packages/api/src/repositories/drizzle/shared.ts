@@ -8,6 +8,7 @@ import {
   locations,
   maintenanceLogs,
   messages,
+  paymentEvents,
   threadParticipants,
   threads,
   vehicleClasses,
@@ -22,6 +23,7 @@ import type {
   Location,
   MaintenanceLog,
   Message,
+  PaymentEvent,
   Thread,
   ThreadParticipant,
   Vehicle,
@@ -114,6 +116,20 @@ export const feeScheduleColumns = {
   status: feeSchedules.status,
   createdAt: feeSchedules.createdAt,
   updatedAt: feeSchedules.updatedAt,
+}
+export const paymentEventColumns = {
+  id: paymentEvents.id,
+  operatorId: paymentEvents.operatorId,
+  bookingId: paymentEvents.bookingId,
+  stripeEventId: paymentEvents.stripeEventId,
+  stripeCheckoutSessionId: paymentEvents.stripeCheckoutSessionId,
+  stripePaymentIntentId: paymentEvents.stripePaymentIntentId,
+  grossJpy: paymentEvents.grossJpy,
+  platformFeeJpy: paymentEvents.platformFeeJpy,
+  netToPartnerJpy: paymentEvents.netToPartnerJpy,
+  currency: paymentEvents.currency,
+  status: paymentEvents.status,
+  createdAt: paymentEvents.createdAt,
 }
 
 export const bookingColumns = {
@@ -225,6 +241,7 @@ type VehicleRow = ColumnRow<typeof vehicleColumns>
 type LocationRow = ColumnRow<typeof locationColumns>
 type InsuranceOptionRow = ColumnRow<typeof insuranceOptionColumns>
 type FeeScheduleRow = ColumnRow<typeof feeScheduleColumns>
+type PaymentEventRow = ColumnRow<typeof paymentEventColumns>
 type BookingRow = ColumnRow<typeof bookingColumns>
 type BookingEventRow = ColumnRow<typeof bookingEventColumns>
 type ThreadRow = ColumnRow<typeof threadColumns>
@@ -292,6 +309,23 @@ export function toFeeSchedule(r: FeeScheduleRow): FeeSchedule {
     status: r.status,
     createdAt: r.createdAt,
     updatedAt: r.updatedAt,
+  }
+}
+
+export function toPaymentEvent(r: PaymentEventRow): PaymentEvent {
+  return {
+    id: r.id,
+    operatorId: r.operatorId,
+    bookingId: r.bookingId,
+    stripeEventId: r.stripeEventId,
+    stripeCheckoutSessionId: r.stripeCheckoutSessionId,
+    stripePaymentIntentId: r.stripePaymentIntentId,
+    grossJpy: r.grossJpy,
+    platformFeeJpy: r.platformFeeJpy,
+    netToPartnerJpy: r.netToPartnerJpy,
+    currency: r.currency,
+    status: r.status,
+    createdAt: r.createdAt,
   }
 }
 
