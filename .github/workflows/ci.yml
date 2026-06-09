@@ -53,12 +53,11 @@ jobs:
           AUTH_SECRET: ci-placeholder-secret-not-real
           DATABASE_URL: postgresql://placeholder:placeholder@localhost:5432/placeholder
 
-      # Slice 8 §7: renter first-load JS budget. Advisory until the shared
-      # baseline is trimmed under 500 KB (perf NFR is "measure + record, not
-      # yet SLO-gated"); reads the .next build-manifest produced above.
-      - name: Check renter bundle budget (advisory)
-        run: bun run perf:bundle
-        continue-on-error: true
+      # The web CI build is now `vite build` (no `.next`), so slice 8's
+      # `.next`-manifest renter-bundle advisory is obsolete — its perf concern is
+      # "resolved by #378" per that slice. This enforcing gate is its successor.
+      - name: Check web dist size budget
+        run: bun run lint:dist-size
 
   # Non-bypassable drift gate. See scripts/db-verify.ts and the "Database
   # Migrations" section of CLAUDE.md for why this exists. Two production

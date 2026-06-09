@@ -17,6 +17,7 @@
     "lint:modules": "bun run scripts/lint-module-boundaries.ts",
     "lint:fk-indexes": "bun run scripts/lint-fk-indexes.ts",
     "lint:i18n-parity": "bun run scripts/lint-i18n-parity.ts",
+    "lint:dist-size": "bun run scripts/lint-dist-size.ts",
     "lint:deps": "bun node_modules/.bin/knip",
     "perf:bundle": "bun run scripts/check-bundle-size.ts",
     "format": "bunx biome format --write .",

@@ -1,0 +1,6 @@
+# SPA fallback (spec §6.1). Cloudflare Pages matches in this order: Pages
+# Functions (functions/api/*, functions/auth/*) first, then existing static
+# files (assets, messages, index.html), then these _redirects rules. So this
+# catch-all only ever serves real client routes (e.g. /en/vehicles) the app
+# router resolves; it never shadows the proxy Functions or hashed assets.
+/*    /index.html    200
