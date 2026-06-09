@@ -394,6 +394,8 @@ export class BookingService {
       effectiveEndAt,
       status: 'CONFIRMED',
       source: input.source,
+      // #463: server-derived. Every pre-demo submit is SPECIFIC; CLASS_COMBO is #464.
+      fulfillmentMode: 'SPECIFIC',
       bookingCode,
       insuranceOptionId,
       insuranceSnapshot,
@@ -418,6 +420,7 @@ export class BookingService {
         requestedVehicleId: input.requestedVehicleId,
         assignedVehicleId,
         classId,
+        fulfillmentMode: 'SPECIFIC', // #463: mirror the booking's discriminator in the audit snapshot
         startAt: input.startAt.toISOString(),
         endAt: input.endAt.toISOString(),
         totalPrice,

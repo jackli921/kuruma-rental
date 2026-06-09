@@ -160,6 +160,7 @@ export class DrizzleBookingRepository implements BookingRepository {
         effectiveEndAt: data.effectiveEndAt,
         status: data.status,
         source: data.source,
+        fulfillmentMode: data.fulfillmentMode,
         bookingCode: data.bookingCode,
         insuranceOptionId: data.insuranceOptionId,
         insuranceSnapshot: data.insuranceSnapshot,

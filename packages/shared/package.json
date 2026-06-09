@@ -21,6 +21,7 @@
     "./types/location": "./src/types/location.ts",
     "./types/search-result": "./src/types/search-result.ts",
     "./lib/cancellation-policy": "./src/lib/cancellation-policy.ts",
+    "./lib/commission": "./src/lib/commission.ts",
     "./lib/luggage": "./src/lib/luggage.ts",
     "./lib/pricing": "./src/lib/pricing.ts",
     "./lib/expiry": "./src/lib/expiry.ts",

@@ -292,8 +292,29 @@
     {
       "idx": 41,
       "version": "7",
-      "when": 1781043360374,
-      "tag": "0041_add_location_coordinates",
+      "when": 1781043331838,
+      "tag": "0041_add_booking_fulfillment_mode",
+      "breakpoints": true
+    },
+    {
+      "idx": 42,
+      "version": "7",
+      "when": 1781043340404,
+      "tag": "0042_booking_specific_requires_assigned",
+      "breakpoints": true
+    },
+    {
+      "idx": 43,
+      "version": "7",
+      "when": 1781044530577,
+      "tag": "0043_add_payment_events",
+      "breakpoints": true
+    },
+    {
+      "idx": 44,
+      "version": "7",
+      "when": 1781046012253,
+      "tag": "0044_add_location_coordinates",
       "breakpoints": true
     }
   ]

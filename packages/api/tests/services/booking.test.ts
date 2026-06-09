@@ -206,6 +206,8 @@ describe('BookingService.create — single-transaction submit (#392 §4)', () =>
     expect(b.status).toBe('CONFIRMED')
     expect(b.bookingCode).toBe('ABCD2345')
     expect(b.totalPrice).toBe(20000) // 2 days * 10000, non-null on submit (#429)
+    // #463: every pre-demo booking is server-derived SPECIFIC.
+    expect(b.fulfillmentMode).toBe('SPECIFIC')
 
     // BOOKING_CREATED event appended, payload mirrors the booking.
     expect(h.events).toHaveLength(1)
@@ -219,6 +221,7 @@ describe('BookingService.create — single-transaction submit (#392 §4)', () =>
       assignedVehicleId: vehicleId,
       classId: CLASS_COMPACT,
       totalPrice: 20000,
+      fulfillmentMode: 'SPECIFIC', // #463: snapshot the discriminator in the audit event
     })
   })
 

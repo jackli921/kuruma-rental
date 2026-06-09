@@ -31,6 +31,7 @@ function makeBooking(operatorId: string): Booking {
     effectiveEndAt: now,
     status: 'CONFIRMED',
     source: 'DIRECT',
+    fulfillmentMode: 'SPECIFIC',
     bookingCode: 'ABCD2345',
     insuranceOptionId: null,
     insuranceSnapshot: null,

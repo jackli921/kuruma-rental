@@ -41,6 +41,7 @@ export function bookingInput(overrides: Partial<NewBooking> = {}): NewBooking {
     effectiveEndAt: endAt,
     status: 'CONFIRMED',
     source: 'DIRECT',
+    fulfillmentMode: 'SPECIFIC',
     bookingCode: nextBookingCode(),
     insuranceOptionId: null,
     insuranceSnapshot: null,

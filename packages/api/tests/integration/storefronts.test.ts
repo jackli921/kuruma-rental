@@ -170,6 +170,7 @@ beforeAll(async () => {
     effectiveEndAt: new Date('2026-08-01T15:00:00Z'),
     status: 'CONFIRMED',
     source: 'DIRECT',
+    fulfillmentMode: 'SPECIFIC',
     bookingCode: `SF-${uniq}`,
     insuranceOptionId: null,
     insuranceSnapshot: null,

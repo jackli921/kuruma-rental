@@ -1,6 +1,7 @@
 import type {
   BookingEventPayload,
   BookingEventType,
+  BookingFulfillmentMode,
   FeeSnapshotItem,
   InsuranceSnapshot,
 } from '@kuruma/shared/db/schema'
@@ -49,6 +50,9 @@ export interface Booking {
   effectiveEndAt: Date
   status: 'CONFIRMED' | 'ACTIVE' | 'COMPLETED' | 'CANCELLED'
   source: 'DIRECT' | 'TRIP_COM' | 'MANUAL' | 'OTHER'
+  // #463: how the booking is fulfilled. Server-derived SPECIFIC pre-demo;
+  // CLASS_COMBO is #464. Always written explicitly by app code (Option B).
+  fulfillmentMode: BookingFulfillmentMode
   // Human-facing reservation code, 8-char no-confusables base32 (§10 item 3).
   bookingCode: string
   // Selected insurance + its snapshot, locked at booking time. Null = declined.
@@ -75,6 +79,25 @@ export interface BookingEvent {
   payload: BookingEventPayload
   // Renter for CREATED; operator user for SUBSTITUTED/CANCELLED; null = system.
   actorId: string | null
+  createdAt: Date
+}
+
+// A recorded Stripe payment of the rental total (#461). Persisted ONLY on the
+// verified checkout.session.completed webhook — the source of truth for revenue.
+export interface PaymentEvent {
+  id: string
+  // Partner attribution, re-derived from the booking on the webhook (#462 revenue).
+  operatorId: string
+  bookingId: string
+  stripeEventId: string
+  stripeCheckoutSessionId: string
+  stripePaymentIntentId: string | null
+  // Whole JPY. gross = Stripe amount_total; fee = 4%; net = gross - fee.
+  grossJpy: number
+  platformFeeJpy: number
+  netToPartnerJpy: number
+  currency: string
+  status: 'SUCCEEDED'
   createdAt: Date
 }
 

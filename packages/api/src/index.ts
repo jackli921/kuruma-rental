@@ -23,6 +23,7 @@ import {
   DrizzleMessageRepository,
   DrizzleNotificationLogRepository,
   DrizzleOperatorRepository,
+  DrizzlePaymentEventRepository,
   DrizzleStatsRepository,
   DrizzleStorefrontRepository,
   DrizzleThreadRepository,
@@ -45,6 +46,7 @@ import {
   InMemoryMessageRepository,
   InMemoryNotificationLogRepository,
   InMemoryOperatorRepository,
+  InMemoryPaymentEventRepository,
   InMemoryStatsRepository,
   InMemoryStorefrontRepository,
   InMemoryThreadRepository,
@@ -67,6 +69,7 @@ import type {
   MessageRepository,
   NotificationLogRepository,
   OperatorRepository,
+  PaymentEventRepository,
   PhotoStorage,
   RunInTransaction,
   StatsRepository,
@@ -91,6 +94,7 @@ import { createMaintenanceLogRoutes } from './routes/maintenance-logs'
 import { createMessageRoutes } from './routes/messages'
 import { createNotificationRoutes } from './routes/notifications'
 import { createOperatorRoutes } from './routes/operators'
+import { createPaymentRoutes } from './routes/payments'
 import { createFlatSearchRoutes } from './routes/search'
 import { createStatsRoutes } from './routes/stats'
 import { createStorefrontRoutes } from './routes/storefronts'
@@ -117,6 +121,9 @@ import { MessageTranslationService } from './services/message-translation'
 import { NotificationService } from './services/notification'
 import { NotificationDispatcher } from './services/notification-dispatcher'
 import { OperatorService } from './services/operator'
+import { PaymentService } from './services/payment/payment'
+import type { PaymentGateway } from './services/payment/payment-gateway'
+import { StripePaymentGateway } from './services/payment/stripe-payment-gateway'
 import { StorefrontDetailService } from './services/storefront-detail'
 import { StorefrontSearchService } from './services/storefront-search'
 import type { TranslationProvider } from './services/translation-provider'
@@ -146,6 +153,9 @@ export function createApp(overrides?: {
   feeScheduleRepo?: FeeScheduleRepository
   notificationLogRepo?: NotificationLogRepository
   storefrontRepo?: StorefrontRepository
+  paymentEventRepo?: PaymentEventRepository
+  // Inject a fake gateway in tests; absent ⇒ the env-resolved Stripe/sentinel.
+  paymentGateway?: PaymentGateway
   photoUploadLimiter?: RateLimitBinding
   photoUploadUserLimiter?: RateLimitBinding
   publicCatalogLimiter?: RateLimitBinding
@@ -172,6 +182,7 @@ export function createApp(overrides?: {
   let feeScheduleRepo: FeeScheduleRepository
   let notificationLogRepo: NotificationLogRepository
   let storefrontRepo: StorefrontRepository
+  let paymentEventRepo: PaymentEventRepository
   let runInTransaction: RunInTransaction
   // Undefined unless an override injects one (tests) or the DB branch builds the
   // real one. Absent ⇒ /auth/google/callback 503s (e.g. local dev without a DB).
@@ -223,6 +234,7 @@ export function createApp(overrides?: {
     notificationLogRepo = overrides.notificationLogRepo ?? new InMemoryNotificationLogRepository()
     storefrontRepo =
       overrides.storefrontRepo ?? new InMemoryStorefrontRepository(locationRepo, operatorRepo)
+    paymentEventRepo = overrides.paymentEventRepo ?? new InMemoryPaymentEventRepository()
     googleAuthRuntime = overrides.googleAuthRuntime
   } else if (process.env.DATABASE_URL) {
     const db = getDb()
@@ -245,6 +257,7 @@ export function createApp(overrides?: {
     feeScheduleRepo = new DrizzleFeeScheduleRepository(db)
     notificationLogRepo = new DrizzleNotificationLogRepository(db)
     storefrontRepo = new DrizzleStorefrontRepository(db)
+    paymentEventRepo = new DrizzlePaymentEventRepository(db)
     // Real Google OAuth runtime: HTTP provider + Drizzle-backed account store.
     // Built only here (the composition root) so the route stays adapter-agnostic.
     googleAuthRuntime = {
@@ -306,6 +319,7 @@ export function createApp(overrides?: {
     feeScheduleRepo = new InMemoryFeeScheduleRepository()
     notificationLogRepo = new InMemoryNotificationLogRepository()
     storefrontRepo = new InMemoryStorefrontRepository(locationRepo, operatorRepo)
+    paymentEventRepo = new InMemoryPaymentEventRepository()
   }
 
   // Translation provider: real Google when the key is set. In production
@@ -351,6 +365,45 @@ export function createApp(overrides?: {
       },
     }
   })()
+
+  // In-app Stripe payment (#461). Real gateway when BOTH secrets are set; in
+  // production without them a sentinel throws on first use (not at boot, so
+  // unrelated tests still construct the app). In dev a stub hands back the
+  // success URL so the flow is navigable, but webhook verification always
+  // throws (no secret) so nothing is recorded without real wiring. An override
+  // (tests) wins outright. Mirrors emailSender / translationProvider.
+  const paymentGateway: PaymentGateway =
+    overrides?.paymentGateway ??
+    (() => {
+      const secretKey = process.env.STRIPE_SECRET_KEY
+      const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET
+      if (secretKey && webhookSecret) return new StripePaymentGateway(secretKey, webhookSecret)
+      if (process.env.NODE_ENV === 'production') {
+        return {
+          createCheckoutSession: async () => {
+            throw new Error('STRIPE_SECRET_KEY / STRIPE_WEBHOOK_SECRET not configured')
+          },
+          parseWebhookEvent: async () => {
+            throw new Error('STRIPE_WEBHOOK_SECRET not configured')
+          },
+        }
+      }
+      return {
+        createCheckoutSession: async (p) => {
+          console.info('[payment:dev] checkout session for', p.bookingCode)
+          return { sessionId: 'dev', url: p.successUrl }
+        },
+        parseWebhookEvent: async () => {
+          throw new Error('Stripe not configured (dev): cannot verify webhook')
+        },
+      }
+    })()
+  // Renter is redirected back here after Stripe Checkout — the first allowed web
+  // origin (success/cancel paths are appended in the service).
+  const paymentWebBaseUrl = resolveAllowedOrigins(process.env.WEB_ORIGIN)[0] ?? ''
+  const paymentService = new PaymentService(paymentEventRepo, bookingRepo, paymentGateway, {
+    webBaseUrl: paymentWebBaseUrl,
+  })
 
   const app = new Hono()
 
@@ -526,6 +579,7 @@ export function createApp(overrides?: {
     )
     .route('/', createMaintenanceLogRoutes(maintenanceService))
     .route('/', createBookingRoutes(bookingService))
+    .route('/', createPaymentRoutes(paymentService))
     .route('/', createAvailabilityRoutes(availabilityRepo))
     .route('/', createStatsRoutes(statsRepo))
     .route('/', createMessageRoutes(threadRepo, messageRepo))

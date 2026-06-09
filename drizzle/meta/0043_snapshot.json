@@ -1,6 +1,6 @@
 {
-  "id": "6b997d6b-1ae6-4317-a75c-cdc7b2712497",
-  "prevId": "72e503ab-323d-4ac0-88ae-5d17c674c247",
+  "id": "db00df16-f8d1-43ca-981b-7b089dc92a16",
+  "prevId": "14b4fe2e-2302-49a5-b9e0-6257ac4a7c33",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -622,7 +622,12 @@
         }
       },
       "policies": {},
-      "checkConstraints": {},
+      "checkConstraints": {
+        "bookings_specific_requires_assigned": {
+          "name": "bookings_specific_requires_assigned",
+          "value": "\"bookings\".\"fulfillmentMode\" <> 'SPECIFIC' OR \"bookings\".\"assignedVehicleId\" IS NOT NULL"
+        }
+      },
       "isRLSEnabled": false
     },
     "public.fee_schedules": {
@@ -1513,6 +1518,198 @@
       "checkConstraints": {},
       "isRLSEnabled": false
     },
+    "public.payment_events": {
+      "name": "payment_events",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "operatorId": {
+          "name": "operatorId",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "bookingId": {
+          "name": "bookingId",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "stripeEventId": {
+          "name": "stripeEventId",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "stripeCheckoutSessionId": {
+          "name": "stripeCheckoutSessionId",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "stripePaymentIntentId": {
+          "name": "stripePaymentIntentId",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "grossJpy": {
+          "name": "grossJpy",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "platformFeeJpy": {
+          "name": "platformFeeJpy",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "netToPartnerJpy": {
+          "name": "netToPartnerJpy",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "currency": {
+          "name": "currency",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'jpy'"
+        },
+        "status": {
+          "name": "status",
+          "type": "payment_event_status",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "createdAt": {
+          "name": "createdAt",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "idx_payment_events_operatorId": {
+          "name": "idx_payment_events_operatorId",
+          "columns": [
+            {
+              "expression": "operatorId",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "idx_payment_events_bookingId": {
+          "name": "idx_payment_events_bookingId",
+          "columns": [
+            {
+              "expression": "bookingId",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "payment_events_stripeEventId_unique": {
+          "name": "payment_events_stripeEventId_unique",
+          "columns": [
+            {
+              "expression": "stripeEventId",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "payment_events_stripeCheckoutSessionId_unique": {
+          "name": "payment_events_stripeCheckoutSessionId_unique",
+          "columns": [
+            {
+              "expression": "stripeCheckoutSessionId",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "payment_events_one_success_per_booking": {
+          "name": "payment_events_one_success_per_booking",
+          "columns": [
+            {
+              "expression": "bookingId",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "where": "status = 'SUCCEEDED'",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "payment_events_operatorId_operators_id_fk": {
+          "name": "payment_events_operatorId_operators_id_fk",
+          "tableFrom": "payment_events",
+          "tableTo": "operators",
+          "columnsFrom": [
+            "operatorId"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "payment_events_bookingId_bookings_id_fk": {
+          "name": "payment_events_bookingId_bookings_id_fk",
+          "tableFrom": "payment_events",
+          "tableTo": "bookings",
+          "columnsFrom": [
+            "bookingId"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
     "public.thread_participants": {
       "name": "thread_participants",
       "schema": "",
@@ -2352,6 +2549,13 @@
         "SENDING",
         "SENT",
         "FAILED"
+      ]
+    },
+    "public.payment_event_status": {
+      "name": "payment_event_status",
+      "schema": "public",
+      "values": [
+        "SUCCEEDED"
       ]
     },
     "public.role": {
