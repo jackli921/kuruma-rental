@@ -159,6 +159,8 @@ async function seed() {
         operatorId: seedId(loc.operatorId),
         name: loc.name,
         address: loc.address,
+        latitude: loc.latitude,
+        longitude: loc.longitude,
         timezone: loc.timezone,
         defaultTurnaroundMinutes: loc.defaultTurnaroundMinutes,
       })
@@ -167,6 +169,8 @@ async function seed() {
         set: {
           name: loc.name,
           address: loc.address,
+          latitude: loc.latitude,
+          longitude: loc.longitude,
           timezone: loc.timezone,
           defaultTurnaroundMinutes: loc.defaultTurnaroundMinutes,
           updatedAt: now,

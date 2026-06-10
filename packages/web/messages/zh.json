@@ -820,6 +820,20 @@
     "auto": "自动挡",
     "manual": "手动挡",
     "viewStore": "查看车辆",
+    "select": "选择",
+    "showOnMap": "在地图上显示",
+    "view": {
+      "stores": "门店",
+      "map": "地图",
+      "label": "结果视图"
+    },
+    "list": {
+      "heading": "可用车辆",
+      "empty": "所选日期没有可用车辆。"
+    },
+    "map": {
+      "noCoordinates": "这些结果暂时无法在地图上显示。"
+    },
     "detail": {
       "backToSearch": "返回搜索",
       "availableVehicles": "可用车辆",

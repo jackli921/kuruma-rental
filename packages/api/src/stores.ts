@@ -192,6 +192,10 @@ export interface Location {
   operatorId: string
   name: string
   address: string
+  /** WGS84 decimal degrees (#458 D2). null = not-yet-geocoded; the search map
+   *  degrades that row to list-only. */
+  latitude: number | null
+  longitude: number | null
   operatingHours: LocationOperatingHours
   timezone: string
   defaultTurnaroundMinutes: number

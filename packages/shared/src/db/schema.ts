@@ -2,6 +2,7 @@ import { sql } from 'drizzle-orm'
 import {
   check,
   date,
+  doublePrecision,
   foreignKey,
   index,
   integer,
@@ -199,6 +200,11 @@ export const locations = pgTable(
       .references(() => operators.id),
     name: text('name').notNull(),
     address: text('address').notNull(),
+    // WGS84 decimal degrees, nullable (#458 D2). null = not-yet-geocoded → that
+    // row renders list-only; no 0,0 default. Bounds checked at the Zod boundary.
+    // Rationale + precision choice: design doc §3.3.
+    latitude: doublePrecision('latitude'),
+    longitude: doublePrecision('longitude'),
     // MVP shape (locked, see LocationOperatingHours): a single
     // { openTime, closeTime } pair applied to all weekdays, or null. Per-weekday
     // schedules ship as a separate migration + validator change (proposal §9 #4).
