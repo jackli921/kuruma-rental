@@ -838,5 +838,22 @@
       "comingSoon": "近日公開 — 決済イベント（#461）に依存します",
       "model": "レンターは表示価格を支払います。プラットフォームは4%を保持し、送金額 = 支払額 − 4% を事業者ごとに集計して月次で支払います。"
     }
+  },
+  "documents": {
+    "title": "本人確認書類",
+    "subtitle": "ご予約の前に、本人確認のため国際運転免許証をアップロードしてください。",
+    "typeLabel": "書類の種類",
+    "typeIdp": "国際運転免許証",
+    "typePassport": "パスポート",
+    "fileLabel": "書類の画像",
+    "uploadButton": "アップロード",
+    "uploading": "アップロード中…",
+    "uploadError": "アップロードに失敗しました。10MB以下のJPEG、PNG、またはWebP形式でお試しください。",
+    "loading": "読み込み中…",
+    "empty": "まだ書類がアップロードされていません。",
+    "expiresOn": "有効期限 {date}",
+    "statusPending": "確認待ち",
+    "statusApproved": "承認済み",
+    "statusRejected": "却下"
   }
 }

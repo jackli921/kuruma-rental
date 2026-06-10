@@ -838,5 +838,22 @@
       "comingSoon": "Coming soon — depends on payment events (#461)",
       "model": "Renter pays the listed price; the platform keeps 4%; remittance = paid − 4%, aggregated per business for monthly payout."
     }
+  },
+  "documents": {
+    "title": "Identity documents",
+    "subtitle": "Upload your International Driving Permit for verification before you book.",
+    "typeLabel": "Document type",
+    "typeIdp": "International Driving Permit",
+    "typePassport": "Passport",
+    "fileLabel": "Document image",
+    "uploadButton": "Upload",
+    "uploading": "Uploading…",
+    "uploadError": "Upload failed. Please try a JPEG, PNG or WebP under 10MB.",
+    "loading": "Loading…",
+    "empty": "You haven't uploaded any documents yet.",
+    "expiresOn": "Expires {date}",
+    "statusPending": "Pending review",
+    "statusApproved": "Approved",
+    "statusRejected": "Rejected"
   }
 }

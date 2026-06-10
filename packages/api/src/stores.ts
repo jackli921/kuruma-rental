@@ -228,5 +228,21 @@ export interface FeeSchedule {
   updatedAt: Date
 }
 
+// Renter identity document metadata (#459). Bytes live in R2; this is the
+// verdict + pointer only. `expiryDate` is a YYYY-MM-DD string (DB `date`).
+export interface RenterDocument {
+  id: string
+  renterId: string
+  type: 'IDP' | 'PASSPORT'
+  storageKey: string
+  status: 'PENDING' | 'APPROVED' | 'REJECTED'
+  expiryDate: string | null
+  verifiedAt: Date | null
+  verifierId: string | null
+  rejectionReason: string | null
+  createdAt: Date
+  updatedAt: Date
+}
+
 // Map stores removed — repositories handle data access now.
 // Types remain here as the shared contract between repositories and routes.

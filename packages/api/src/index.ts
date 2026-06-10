@@ -6,10 +6,12 @@ import { DrizzleOAuthAccountStore } from './auth/drizzle-oauth-account-store'
 import { FetchGoogleOAuthProvider } from './auth/fetch-google-oauth-provider'
 import type { GoogleAuthRuntime, GoogleOAuthConfig } from './auth/google'
 import { setupGlobalHandlers } from './error-handlers'
+import { parseBoolFlag } from './lib/parse-bool-flag'
 import { requireAuth } from './middleware/auth'
 import { csrf } from './middleware/csrf'
 import { structuredLogger } from './middleware/logger'
 import { requestId } from './middleware/request-id'
+import { DisabledDocumentStorage } from './repositories/disabled-document-storage'
 import { DisabledPhotoStorage } from './repositories/disabled-photo-storage'
 import {
   DrizzleAvailabilityRepository,
@@ -24,6 +26,7 @@ import {
   DrizzleNotificationLogRepository,
   DrizzleOperatorRepository,
   DrizzlePaymentEventRepository,
+  DrizzleRenterDocumentRepository,
   DrizzleStatsRepository,
   DrizzleStorefrontRepository,
   DrizzleThreadRepository,
@@ -38,6 +41,7 @@ import {
   InMemoryBookingEventRepository,
   InMemoryBookingRepository,
   InMemoryCustomerRepository,
+  InMemoryDocumentStorage,
   InMemoryFeeScheduleRepository,
   InMemoryFleetOverviewRepository,
   InMemoryInsuranceOptionRepository,
@@ -47,6 +51,7 @@ import {
   InMemoryNotificationLogRepository,
   InMemoryOperatorRepository,
   InMemoryPaymentEventRepository,
+  InMemoryRenterDocumentRepository,
   InMemoryStatsRepository,
   InMemoryStorefrontRepository,
   InMemoryThreadRepository,
@@ -56,11 +61,13 @@ import {
 } from './repositories/in-memory'
 import { InMemoryVehicleDetailRepository } from './repositories/in-memory-vehicle-detail'
 import { InMemoryPhotoStorage } from './repositories/in-memory/photo-storage'
+import { R2DocumentStorage } from './repositories/r2-document-storage'
 import { type R2BucketLike, R2PhotoStorage } from './repositories/r2-photo-storage'
 import type {
   AvailabilityRepository,
   BookingRepository,
   CustomerRepository,
+  DocumentStorage,
   FeeScheduleRepository,
   FleetOverviewRepository,
   InsuranceOptionRepository,
@@ -71,6 +78,7 @@ import type {
   OperatorRepository,
   PaymentEventRepository,
   PhotoStorage,
+  RenterDocumentRepository,
   RunInTransaction,
   StatsRepository,
   StorefrontRepository,
@@ -85,6 +93,7 @@ import { createAuthRoutes } from './routes/auth'
 import { createAvailabilityRoutes } from './routes/availability'
 import { createBookingRoutes } from './routes/bookings'
 import { createCustomerRoutes } from './routes/customers'
+import { createDocumentRoutes } from './routes/documents'
 import { createFeeScheduleRoutes } from './routes/fee-schedules'
 import { createFleetOverviewRoutes } from './routes/fleet-overview'
 import health from './routes/health'
@@ -106,6 +115,7 @@ import { createVehicleRoutes } from './routes/vehicles'
 import { BookingService } from './services/booking'
 import { BookingPostCommitDispatcher } from './services/booking-post-commit-dispatcher'
 import { CustomerService } from './services/customer'
+import { documentVerificationGate } from './services/document-verification-gate'
 import type { EmailSender } from './services/email/email-sender'
 import { ResendEmailSender } from './services/email/resend-email-sender'
 import { makeEnsureThread } from './services/ensure-thread'
@@ -122,6 +132,7 @@ import { OperatorService } from './services/operator'
 import { PaymentService } from './services/payment/payment'
 import type { PaymentGateway } from './services/payment/payment-gateway'
 import { StripePaymentGateway } from './services/payment/stripe-payment-gateway'
+import { RenterDocumentService } from './services/renter-document'
 import { StorefrontDetailService } from './services/storefront-detail'
 import { StorefrontSearchService } from './services/storefront-search'
 import type { TranslationProvider } from './services/translation-provider'
@@ -143,6 +154,8 @@ export function createApp(overrides?: {
   vehicleClassRepo?: VehicleClassRepository
   maintenanceLogRepo?: MaintenanceLogRepository
   photoStorage?: PhotoStorage
+  renterDocumentRepo?: RenterDocumentRepository
+  documentStorage?: DocumentStorage
   userRepo?: UserRepository
   customerRepo?: CustomerRepository
   operatorRepo?: OperatorRepository
@@ -173,6 +186,8 @@ export function createApp(overrides?: {
   let messageRepo: MessageRepository
   let maintenanceLogRepo: MaintenanceLogRepository
   let photoStorage: PhotoStorage
+  let renterDocumentRepo: RenterDocumentRepository
+  let documentStorage: DocumentStorage
   let customerRepo: CustomerRepository
   let operatorRepo: OperatorRepository
   let locationRepo: LocationRepository
@@ -223,6 +238,8 @@ export function createApp(overrides?: {
     messageRepo =
       overrides.messageRepo ?? new InMemoryMessageRepository(threadRepo as InMemoryThreadRepository)
     photoStorage = overrides.photoStorage ?? new InMemoryPhotoStorage()
+    renterDocumentRepo = overrides.renterDocumentRepo ?? new InMemoryRenterDocumentRepository()
+    documentStorage = overrides.documentStorage ?? new InMemoryDocumentStorage()
     userRepo = overrides.userRepo ?? new InMemoryUserRepository()
     customerRepo = overrides.customerRepo ?? new InMemoryCustomerRepository(new Map(), new Map())
     operatorRepo = overrides.operatorRepo ?? new InMemoryOperatorRepository()
@@ -273,6 +290,16 @@ export function createApp(overrides?: {
       vehiclePhotosBucket && photosPublicUrl
         ? new R2PhotoStorage(vehiclePhotosBucket, photosPublicUrl)
         : new DisabledPhotoStorage()
+    // Renter documents live in a PRIVATE R2 bucket (no public URL). Absent the
+    // binding (local dev / pre-#304), DisabledDocumentStorage throws loudly so
+    // metadata never points at bytes that were never stored.
+    const renterDocumentsBucket = (globalThis as Record<string, unknown>).RENTER_DOCUMENTS as
+      | R2BucketLike
+      | undefined
+    documentStorage = renterDocumentsBucket
+      ? new R2DocumentStorage(renterDocumentsBucket)
+      : new DisabledDocumentStorage()
+    renterDocumentRepo = new DrizzleRenterDocumentRepository(db)
   } else {
     vehicleClassRepo = new InMemoryVehicleClassRepository()
     vehicleRepo = new InMemoryVehicleRepository()
@@ -310,6 +337,8 @@ export function createApp(overrides?: {
       })
     userRepo = new InMemoryUserRepository()
     photoStorage = new InMemoryPhotoStorage()
+    renterDocumentRepo = new InMemoryRenterDocumentRepository()
+    documentStorage = new InMemoryDocumentStorage()
     customerRepo = new InMemoryCustomerRepository(new Map(), new Map())
     operatorRepo = new InMemoryOperatorRepository()
     locationRepo = new InMemoryLocationRepository()
@@ -461,6 +490,8 @@ export function createApp(overrides?: {
   app.use('/customers', requireAuth())
   app.use('/users/*', requireAuth())
   app.use('/admin/*', requireAuth())
+  app.use('/documents/*', requireAuth())
+  app.use('/documents', requireAuth())
   // locations + operators are auth-gated inside their factories (no public
   // routes), mirroring createVehicleClassRoutes — no app-level use() needed.
 
@@ -494,6 +525,14 @@ export function createApp(overrides?: {
   )
   const ensureThread = staffUserId ? makeEnsureThread({ threadRepo, staffUserId }) : async () => {}
   const postCommit = new BookingPostCommitDispatcher(ensureThread, notificationDispatcher)
+  const renterDocumentService = new RenterDocumentService(renterDocumentRepo, documentStorage)
+  // #459: gate new bookings on renter document verification only when the flag
+  // is explicitly on. Default OFF keeps the booking flow (and its 900+ tests,
+  // the #390 demo, #460/#461) untouched. When on, an unverified renter is 403'd
+  // before any booking work.
+  const verificationGate = parseBoolFlag(process.env.REQUIRE_DOCUMENT_VERIFICATION)
+    ? documentVerificationGate(renterDocumentService)
+    : undefined
   const bookingService = new BookingService(
     bookingRepo,
     runInTransaction,
@@ -502,6 +541,8 @@ export function createApp(overrides?: {
     vehicleClassRepo,
     postCommit,
     operatorRepo,
+    undefined,
+    verificationGate,
   )
   const notificationService = new NotificationService(
     notificationLogRepo,
@@ -587,6 +628,7 @@ export function createApp(overrides?: {
     .route('/', createFeeScheduleRoutes(feeScheduleService, resolveWriteOperatorId))
     .route('/', createNotificationRoutes(notificationService))
     .route('/', createOperatorRoutes(operatorService))
+    .route('/', createDocumentRoutes(renterDocumentService))
 }
 
 /**

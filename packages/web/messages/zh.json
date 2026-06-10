@@ -838,5 +838,22 @@
       "comingSoon": "即将推出 — 依赖支付事件（#461）",
       "model": "租客支付标价；平台保留 4%；汇款 = 已付 − 4%，按业务方汇总，按月结算。"
     }
+  },
+  "documents": {
+    "title": "身份证件",
+    "subtitle": "预订前请上传您的国际驾驶许可证以供核验。",
+    "typeLabel": "证件类型",
+    "typeIdp": "国际驾驶许可证",
+    "typePassport": "护照",
+    "fileLabel": "证件图片",
+    "uploadButton": "上传",
+    "uploading": "上传中…",
+    "uploadError": "上传失败。请使用 10MB 以下的 JPEG、PNG 或 WebP 文件重试。",
+    "loading": "加载中…",
+    "empty": "您还没有上传任何证件。",
+    "expiresOn": "有效期至 {date}",
+    "statusPending": "待审核",
+    "statusApproved": "已批准",
+    "statusRejected": "已拒绝"
   }
 }

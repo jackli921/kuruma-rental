@@ -736,6 +736,8 @@ export const notificationLog = pgTable(
   ],
 )
 
+export { documentStatusEnum, documentTypeEnum, renterDocuments } from './renter-documents'
+
 export type BookingStatus = (typeof bookingStatusEnum.enumValues)[number]
 export type BookingFulfillmentMode = (typeof bookingFulfillmentModeEnum.enumValues)[number]
 

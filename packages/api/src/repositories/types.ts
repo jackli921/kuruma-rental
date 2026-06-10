@@ -14,6 +14,7 @@ export type {
   InsuranceOption,
   FeeSchedule,
   PaymentEvent,
+  RenterDocument,
 } from '../stores'
 export type { DashboardStats } from '@kuruma/shared/types/stats'
 export type { FleetVehicleOverview, FleetBookingSummary } from '@kuruma/shared/types/fleet'
@@ -36,6 +37,7 @@ import type {
   NotificationLog,
   Operator,
   PaymentEvent,
+  RenterDocument,
   Thread,
   ThreadParticipant,
   User,
@@ -574,4 +576,61 @@ export interface PhotoStorage {
   put(vehicleId: string, file: File): Promise<{ key: string; url: string }>
   /** Accepts either a key or full URL — implementations strip the base URL prefix. */
   delete(keyOrUrl: string): Promise<void>
+}
+
+export interface RenterDocumentFilters {
+  limit?: number
+  offset?: number
+}
+
+/**
+ * The verdict a verifier records (#459). `verifierId` is the reviewing staff
+ * user; the repo stamps `verifiedAt` itself. APPROVED carries `expiryDate`,
+ * REJECTED carries `rejectionReason` — coherence is enforced upstream by
+ * `verifyDocumentSchema` + the service.
+ */
+export interface DocumentVerifyInput {
+  status: 'APPROVED' | 'REJECTED'
+  verifierId: string
+  expiryDate?: string | null
+  rejectionReason?: string | null
+}
+
+export interface RenterDocumentRepository {
+  /** Renter uploads their own document. Non-staff callers may only create for themselves. */
+  create(ctx: CallerContext, data: CreateRenterDocumentData): Promise<RenterDocument>
+  /** A renter's own documents (gate + list-mine). Staff may read any renter's. */
+  findByRenter(ctx: CallerContext, renterId: string): Promise<RenterDocument[]>
+  findById(ctx: CallerContext, id: string): Promise<RenterDocument | undefined>
+  /** Platform-staff pending-review queue, oldest first, paginated. */
+  listPending(
+    ctx: CallerContext,
+    filters?: RenterDocumentFilters,
+  ): Promise<PaginatedResult<RenterDocument>>
+  /** Platform-staff records a terminal verdict. */
+  verify(
+    ctx: CallerContext,
+    id: string,
+    verdict: DocumentVerifyInput,
+  ): Promise<RenterDocument | undefined>
+  /**
+   * Gate lookup for the verification policy — NOT ctx-scoped (internal). Returns
+   * the renter's APPROVED documents of a given type; the service decides
+   * eligibility against the rental window (expiry).
+   */
+  findApprovedByType(renterId: string, type: RenterDocument['type']): Promise<RenterDocument[]>
+}
+
+export type CreateRenterDocumentData = Pick<RenterDocument, 'renterId' | 'type' | 'storageKey'>
+
+/**
+ * Private object storage for renter document scans (#459). Unlike `PhotoStorage`
+ * (public vehicle photos), documents are private — access is via a short-lived
+ * signed URL, never a public base URL.
+ */
+export interface DocumentStorage {
+  put(renterId: string, file: File): Promise<{ key: string }>
+  /** Short-lived signed URL for a verifier to view the scan. */
+  getSignedUrl(key: string): Promise<string>
+  delete(key: string): Promise<void>
 }
