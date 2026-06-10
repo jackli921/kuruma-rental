@@ -52,6 +52,16 @@ export const GOOGLE_SCOPE = 'openid email profile'
 export const OAUTH_STATE_COOKIE = 'kuruma_oauth_state'
 export const OAUTH_STATE_TTL_SECONDS = 600
 
+/** Short-lived cookie carrying the post-login `returnTo` path across the
+ *  start→callback round-trip. Shares the state cookie's TTL/SameSite so it
+ *  survives Google's top-level redirect and expires with the flow. */
+export const OAUTH_RETURN_COOKIE = 'kuruma_oauth_return'
+
+// The open-redirect guard for `returnTo` lives in @kuruma/shared so the API and
+// the web boundary enforce ONE definition — a guard cloned across a trust
+// boundary drifts. Re-exported so the auth routes keep importing it from here.
+export { safeReturnPath } from '@kuruma/shared/lib/return-path'
+
 export interface GoogleOAuthConfig {
   readonly clientId: string
   readonly clientSecret: string

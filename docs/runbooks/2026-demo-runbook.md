@@ -39,7 +39,23 @@ bun run db:seed-bookings
 bun run db:verify            # must show 3 green checks
 ```
 
-Then, in two terminals: `bun run dev:api` and `bun run dev`.
+For local Google login through the Vite shell, the API's OAuth callback must use
+the web dev origin so the browser returns through Vite's `/auth` proxy:
+
+```bash
+AUTH_URL=http://localhost:3001
+WEB_POST_LOGIN_URL=http://localhost:3001/en
+```
+
+Register this redirect URI in the Google OAuth client used for local demos:
+`http://localhost:3001/auth/google/callback`.
+
+Then, in two terminals:
+
+```bash
+bun --env-file=.env run dev:api
+bun run dev
+```
 
 ---
 

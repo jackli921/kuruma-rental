@@ -26,6 +26,7 @@
     "./lib/pricing": "./src/lib/pricing.ts",
     "./lib/expiry": "./src/lib/expiry.ts",
     "./lib/rental-rules": "./src/lib/rental-rules.ts",
+    "./lib/return-path": "./src/lib/return-path.ts",
     "./validators/booking": "./src/validators/booking.ts",
     "./validators/vehicle": "./src/validators/vehicle.ts",
     "./validators/vehicle-class": "./src/validators/vehicle-class.ts",
