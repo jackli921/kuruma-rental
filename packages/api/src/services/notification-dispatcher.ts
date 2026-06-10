@@ -1,10 +1,11 @@
 import { SYSTEM_CONTEXT } from '../middleware/auth'
-import type {
-  LocationRepository,
-  NotificationLogRepository,
-  OperatorRepository,
-  UserRepository,
-  VehicleRepository,
+import {
+  type LocationRepository,
+  MAX_NOTIFICATION_ATTEMPTS,
+  type NotificationLogRepository,
+  type OperatorRepository,
+  type UserRepository,
+  type VehicleRepository,
 } from '../repositories/types'
 import type { Booking, NotificationLog } from '../stores'
 import type { EmailSender } from './email/email-sender'
@@ -107,9 +108,22 @@ export class NotificationDispatcher {
       return { result: 'sent', row: { ...claimed, status: 'SENT', providerMessageId } }
     } catch (err) {
       const reason = err instanceof Error ? err.message : String(err)
-      console.error('[notification] send failed', { id: claimed.id, kind, reason })
       await this.notificationLogRepo.markFailed(claimed.id, reason.slice(0, 500))
-      return { result: 'failed', row: { ...claimed, status: 'FAILED', error: reason } }
+      // claim() already bumped attempts, so this is the cap predicate markFailed
+      // applied — mirror it here for a truthful outcome status + a distinct
+      // abandonment signal (a silently-DEAD notification is a booking nobody acts on).
+      const status = claimed.attempts >= MAX_NOTIFICATION_ATTEMPTS ? 'DEAD' : 'FAILED'
+      if (status === 'DEAD') {
+        console.error('[notification] abandoned after max attempts', {
+          id: claimed.id,
+          kind,
+          attempts: claimed.attempts,
+          reason,
+        })
+      } else {
+        console.error('[notification] send failed', { id: claimed.id, kind, reason })
+      }
+      return { result: 'failed', row: { ...claimed, status, error: reason } }
     }
   }
 

@@ -165,11 +165,15 @@ describe('NotificationDispatcher', () => {
     }
     const { dispatcher } = build({ sender })
     // Drive the renter-confirm row to the attempt cap; each attempt claims + sends + fails.
+    let lastFailure: Awaited<ReturnType<typeof dispatcher.processOne>> | undefined
     for (let i = 0; i < MAX_NOTIFICATION_ATTEMPTS; i++) {
-      await dispatcher.processOne(booking, 'RENTER_BOOKING_CONFIRM')
+      lastFailure = await dispatcher.processOne(booking, 'RENTER_BOOKING_CONFIRM')
     }
     const sendMock = sender.send as ReturnType<typeof vi.fn>
     expect(sendMock).toHaveBeenCalledTimes(MAX_NOTIFICATION_ATTEMPTS)
+    // The cap-crossing failure reports a truthful terminal status (the DB row is
+    // now DEAD), not a stale FAILED echo.
+    expect(lastFailure).toMatchObject({ result: 'failed', row: { status: 'DEAD' } })
 
     // The row is now terminal DEAD: a replay must NOT invoke the provider again.
     const outcome = await dispatcher.processOne(booking, 'RENTER_BOOKING_CONFIRM')
