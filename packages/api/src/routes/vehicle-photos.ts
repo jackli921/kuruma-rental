@@ -1,8 +1,16 @@
 import { type RateLimitBinding, rateLimit } from '@elithrar/workers-hono-rate-limit'
 import { type Context, Hono } from 'hono'
 import { STAFF_ROLES, requireUser, toCallerContext } from '../middleware/auth'
-import type { VehiclePhotoService } from '../services/vehicle-photo'
-import { fail, ok } from './helpers'
+import {
+  MAX_FILE_SIZE,
+  MAX_PHOTOS_PER_VEHICLE,
+  type VehiclePhotoService,
+} from '../services/vehicle-photo'
+import { MULTIPART_OVERHEAD_BYTES, fail, ok, rejectOversizedBody } from './helpers'
+
+// Up to MAX_PHOTOS_PER_VEHICLE files per request; cap the whole multipart body
+// at that many max-sized files plus framing slack.
+const MAX_PHOTOS_REQUEST_BYTES = MAX_PHOTOS_PER_VEHICLE * MAX_FILE_SIZE + MULTIPART_OVERHEAD_BYTES
 
 export function createVehiclePhotoRoutes(
   service: VehiclePhotoService,
@@ -28,6 +36,9 @@ export function createVehiclePhotoRoutes(
       const user = requireUser(c)
       if (!STAFF_ROLES.has(user.role)) return fail(c, 'Forbidden', 403)
       const ctx = toCallerContext(user)
+
+      const oversized = rejectOversizedBody(c, MAX_PHOTOS_REQUEST_BYTES)
+      if (oversized) return oversized
 
       const body = await c.req.parseBody({ all: true })
       const rawFiles = body.file
