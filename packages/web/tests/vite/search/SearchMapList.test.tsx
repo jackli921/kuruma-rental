@@ -1,7 +1,7 @@
 import type { MapAdapter } from '@/vite/search/MapAdapter'
 import { SearchMapList } from '@/vite/search/SearchMapList'
 import type { SpecificSearchResult } from '@kuruma/shared/types/search-result'
-import { fireEvent, render, screen } from '@testing-library/react'
+import { fireEvent, render, screen, within } from '@testing-library/react'
 import { IntlProvider } from 'use-intl'
 import { describe, expect, it } from 'vitest'
 import en from '../../../messages/en.json'
@@ -102,5 +102,39 @@ describe('SearchMapList', () => {
     expect(nambaRow).toHaveAttribute('aria-current', 'true')
     expect(umedaRow).not.toHaveAttribute('aria-current')
     expect(screen.getByTestId('fake-map')).toHaveAttribute('data-selected', 'loc_namba')
+  })
+
+  it('selects a row from its accessible "show on map" control (row → marker sync)', () => {
+    renderMapList([
+      carAt('v1', 'Toyota Yaris', 'loc_namba', GEOCODED),
+      carAt('v2', 'Honda Fit', 'loc_umeda', NO_COORDS),
+    ])
+
+    const rows = screen.getAllByRole('listitem')
+    const nambaRow = rows.find((o) => o.textContent?.includes('Toyota Yaris'))
+    if (!nambaRow) throw new Error('expected the Namba row')
+    const showOnMap = within(nambaRow).getByRole('button', { name: /show on map/i })
+
+    fireEvent.click(showOnMap)
+
+    expect(showOnMap).toHaveAttribute('aria-pressed', 'true')
+    expect(nambaRow).toHaveAttribute('aria-current', 'true')
+    expect(screen.getByTestId('fake-map')).toHaveAttribute('data-selected', 'loc_namba')
+  })
+
+  it('toggles the selection off when the pressed control is clicked again', () => {
+    renderMapList([carAt('v1', 'Toyota Yaris', 'loc_namba', GEOCODED)])
+    const showOnMap = screen.getByRole('button', { name: /show on map/i })
+
+    fireEvent.click(showOnMap)
+    fireEvent.click(showOnMap)
+
+    expect(showOnMap).toHaveAttribute('aria-pressed', 'false')
+    expect(screen.getByTestId('fake-map')).toHaveAttribute('data-selected', '')
+  })
+
+  it('offers no "show on map" control for a list-only (null-coord) row', () => {
+    renderMapList([carAt('v2', 'Honda Fit', 'loc_umeda', NO_COORDS)])
+    expect(screen.queryByRole('button', { name: /show on map/i })).toBeNull()
   })
 })

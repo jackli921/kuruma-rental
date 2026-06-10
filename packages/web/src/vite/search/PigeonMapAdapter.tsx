@@ -1,25 +1,19 @@
 import { Marker, Map as PigeonMap } from 'pigeon-maps'
 import type { MapAdapterProps } from './MapAdapter'
+import { type Pin, computeViewport } from './viewport'
 
 // The ONLY file that imports the map library (#458 D1). Everything else depends
 // on the MapAdapter contract, so swapping pigeon-maps for MapLibre later is a
 // one-file change. pigeon-maps is zero-dep raster tiles and auto-sizes to its
 // parent container (the view gives it a fixed-height box).
-const DEFAULT_ZOOM = 11
-// Osaka centroid — only used as a fallback when no pin has coordinates (the view
-// already shows the "no map" message in that case, so this is belt-and-braces).
-const OSAKA_FALLBACK: [number, number] = [34.6937, 135.5023]
 const MARKER_COLOR = '#6b7280'
 const SELECTED_COLOR = '#2563eb'
 
-interface Pin {
-  id: string
-  lat: number
-  lng: number
-}
-
 /** Concrete `MapAdapter` (#458). Maps each geocoded result to a pigeon-maps
- *  `<Marker>`; a marker click reports its location id back to the view. */
+ *  `<Marker>`; a marker click reports its location id back to the view. The
+ *  viewport is fit to ALL pins so a Kansai-wide result set isn't pinned to one
+ *  store. `key` on the map remounts it when the result set changes so the fit
+ *  recomputes, while leaving the user free to pan/zoom within a result set. */
 export function PigeonMapAdapter({ items, selectedId, onSelect }: MapAdapterProps) {
   const pins = items
     .map((item) => ({
@@ -29,10 +23,14 @@ export function PigeonMapAdapter({ items, selectedId, onSelect }: MapAdapterProp
     }))
     .filter((p): p is Pin => p.lat !== null && p.lng !== null)
 
-  const center = pins[0] ? ([pins[0].lat, pins[0].lng] as [number, number]) : OSAKA_FALLBACK
+  const viewport = computeViewport(pins)
 
   return (
-    <PigeonMap defaultCenter={center} defaultZoom={DEFAULT_ZOOM}>
+    <PigeonMap
+      key={pins.map((p) => p.id).join(',')}
+      defaultCenter={viewport.center}
+      defaultZoom={viewport.zoom}
+    >
       {pins.map((pin) => (
         <Marker
           key={pin.id}

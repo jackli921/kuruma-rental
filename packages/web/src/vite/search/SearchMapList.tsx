@@ -1,5 +1,6 @@
 import { cn } from '@/lib/utils'
 import type { SearchResultItem } from '@kuruma/shared/types/search-result'
+import { MapPin } from 'lucide-react'
 import { useState } from 'react'
 import { useTranslations } from 'use-intl'
 import type { MapAdapter } from './MapAdapter'
@@ -31,12 +32,15 @@ export function SearchMapList({ items, adapter: Adapter }: SearchMapListProps) {
         className="flex max-h-[70vh] flex-col gap-3 overflow-y-auto pr-1"
       >
         {items.map((item) => {
-          // Clicking a marker highlights every row at that pickup location.
-          const selected = item.location.locationId === selectedId
+          // Selection syncs both ways: a marker click highlights every row at that
+          // pickup location, and the row's "show on map" control selects its marker.
+          const { locationId, latitude, longitude } = item.location
+          const selected = locationId === selectedId
+          const geocoded = latitude !== null && longitude !== null
           return (
             <li
               key={searchResultKey(item)}
-              data-location={item.location.locationId}
+              data-location={locationId}
               aria-current={selected ? 'true' : undefined}
               className={cn(
                 'rounded-xl transition-shadow',
@@ -44,6 +48,17 @@ export function SearchMapList({ items, adapter: Adapter }: SearchMapListProps) {
               )}
             >
               <SearchResultRow item={item} />
+              {geocoded && (
+                <button
+                  type="button"
+                  aria-pressed={selected}
+                  onClick={() => setSelectedId(selected ? null : locationId)}
+                  className="mt-2 inline-flex items-center gap-1.5 rounded-md px-2 py-1 text-sm text-muted-foreground transition-colors hover:bg-muted hover:text-foreground aria-[pressed=true]:text-primary"
+                >
+                  <MapPin className="size-4" />
+                  {t('showOnMap')}
+                </button>
+              )}
             </li>
           )
         })}
