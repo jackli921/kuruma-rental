@@ -49,7 +49,13 @@ export function StorefrontDetailView({ detail, from, to }: StorefrontDetailViewP
       ) : (
         <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
           {vehicles.map((vehicle) => (
-            <AvailableVehicleCard key={vehicle.id} vehicle={vehicle} />
+            <AvailableVehicleCard
+              key={vehicle.id}
+              vehicle={vehicle}
+              locationId={storefront.locationId}
+              from={from}
+              to={to}
+            />
           ))}
         </div>
       )}

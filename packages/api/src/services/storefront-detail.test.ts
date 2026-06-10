@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it } from 'vitest'
 import { PUBLIC_CONTEXT, SYSTEM_CONTEXT } from '../middleware/auth'
+import { InMemoryAddOnRepository } from '../repositories/in-memory/add-on'
 import { InMemoryAvailabilityRepository } from '../repositories/in-memory/availability'
 import { InMemoryBookingRepository } from '../repositories/in-memory/booking'
 import { InMemoryInsuranceOptionRepository } from '../repositories/in-memory/insurance-option'
@@ -8,7 +9,7 @@ import { InMemoryOperatorRepository } from '../repositories/in-memory/operator'
 import { InMemoryStorefrontRepository } from '../repositories/in-memory/storefront'
 import { InMemoryVehicleRepository } from '../repositories/in-memory/vehicle'
 import { InMemoryVehicleClassRepository } from '../repositories/in-memory/vehicle-class'
-import type { InsuranceOption, Location, Operator, Vehicle, VehicleClass } from '../stores'
+import type { AddOn, InsuranceOption, Location, Operator, Vehicle, VehicleClass } from '../stores'
 import { StorefrontDetailService } from './storefront-detail'
 
 const FROM = new Date('2026-08-01T10:00:00Z')
@@ -20,6 +21,7 @@ let vehicleRepo: InMemoryVehicleRepository
 let bookingRepo: InMemoryBookingRepository
 let classRepo: InMemoryVehicleClassRepository
 let insuranceRepo: InMemoryInsuranceOptionRepository
+let addOnRepo: InMemoryAddOnRepository
 let service: StorefrontDetailService
 
 beforeEach(() => {
@@ -29,9 +31,16 @@ beforeEach(() => {
   bookingRepo = new InMemoryBookingRepository()
   classRepo = new InMemoryVehicleClassRepository()
   insuranceRepo = new InMemoryInsuranceOptionRepository()
+  addOnRepo = new InMemoryAddOnRepository()
   const storefrontRepo = new InMemoryStorefrontRepository(locationRepo, operatorRepo)
   const availabilityRepo = new InMemoryAvailabilityRepository(vehicleRepo, bookingRepo)
-  service = new StorefrontDetailService(storefrontRepo, availabilityRepo, classRepo, insuranceRepo)
+  service = new StorefrontDetailService(
+    storefrontRepo,
+    availabilityRepo,
+    classRepo,
+    insuranceRepo,
+    addOnRepo,
+  )
 })
 
 function makeInsurance(
@@ -43,6 +52,19 @@ function makeInsurance(
     description: null,
     dailyPriceJpy: 1500,
     deductibleJpy: null,
+    status: 'ACTIVE',
+    ...overrides,
+  })
+}
+
+function makeAddOn(
+  overrides: Partial<Omit<AddOn, 'id' | 'createdAt' | 'updatedAt'>>,
+): Promise<AddOn> {
+  return addOnRepo.create({
+    operatorId: 'op_a',
+    name: 'Baby Seat',
+    description: null,
+    priceJpy: 1500,
     status: 'ACTIVE',
     ...overrides,
   })
@@ -133,6 +155,7 @@ function bookOverlapping(vehicleId: string, classId: string) {
     insuranceOptionId: null,
     insuranceSnapshot: null,
     feeSnapshot: [],
+    addOnSnapshot: [],
     externalId: null,
     notes: null,
     totalPrice: null,
@@ -427,6 +450,81 @@ describe('getInsuranceOptions', () => {
     await locationRepo.archive(loc.id)
 
     const result = await service.getInsuranceOptions(PUBLIC_CONTEXT, loc.id)
+    expect(result).toEqual({ ok: false, error: 'Storefront not found', status: 404 })
+  })
+})
+
+describe('getAddOns', () => {
+  it('returns the location operator ACTIVE add-ons in a renter-safe projection', async () => {
+    const op = await makeOperator('Op A', 'op-a')
+    const loc = await makeLocation({ operatorId: op.id })
+    await makeAddOn({
+      operatorId: op.id,
+      name: 'Baby Seat',
+      description: 'Rear-facing infant seat',
+      priceJpy: 1500,
+    })
+
+    const result = await service.getAddOns(PUBLIC_CONTEXT, loc.id)
+
+    if (!result.ok) throw new Error('expected ok result')
+    expect(result.data).toEqual([
+      {
+        id: expect.any(String),
+        name: 'Baby Seat',
+        description: 'Rear-facing infant seat',
+        priceJpy: 1500,
+      },
+    ])
+  })
+
+  it('excludes ARCHIVED add-ons', async () => {
+    const op = await makeOperator('Op A', 'op-a')
+    const loc = await makeLocation({ operatorId: op.id })
+    await makeAddOn({ operatorId: op.id, name: 'Active Seat', priceJpy: 1000 })
+    const archived = await makeAddOn({ operatorId: op.id, name: 'Old Seat', priceJpy: 800 })
+    await addOnRepo.archive(archived.id)
+
+    const result = await service.getAddOns(PUBLIC_CONTEXT, loc.id)
+
+    if (!result.ok) throw new Error('expected ok result')
+    expect(result.data.map((o) => o.name)).toEqual(['Active Seat'])
+  })
+
+  it('returns ONLY the location operator add-ons, never another operator', async () => {
+    const opA = await makeOperator('Op A', 'op-a')
+    const opB = await makeOperator('Op B', 'op-b')
+    const locA = await makeLocation({ operatorId: opA.id, name: 'Namba' })
+    await makeAddOn({ operatorId: opA.id, name: 'A-Seat', priceJpy: 1000 })
+    await makeAddOn({ operatorId: opB.id, name: 'B-Seat', priceJpy: 2000 })
+
+    const result = await service.getAddOns(PUBLIC_CONTEXT, locA.id)
+
+    if (!result.ok) throw new Error('expected ok result')
+    expect(result.data.map((o) => o.name)).toEqual(['A-Seat'])
+  })
+
+  it('returns an empty list when the operator has no add-ons', async () => {
+    const op = await makeOperator('Op A', 'op-a')
+    const loc = await makeLocation({ operatorId: op.id })
+
+    const result = await service.getAddOns(PUBLIC_CONTEXT, loc.id)
+
+    if (!result.ok) throw new Error('expected ok result')
+    expect(result.data).toEqual([])
+  })
+
+  it('404s for an unknown location', async () => {
+    const result = await service.getAddOns(PUBLIC_CONTEXT, crypto.randomUUID())
+    expect(result).toEqual({ ok: false, error: 'Storefront not found', status: 404 })
+  })
+
+  it('404s for an archived location', async () => {
+    const op = await makeOperator('Op A', 'op-a')
+    const loc = await makeLocation({ operatorId: op.id })
+    await locationRepo.archive(loc.id)
+
+    const result = await service.getAddOns(PUBLIC_CONTEXT, loc.id)
     expect(result).toEqual({ ok: false, error: 'Storefront not found', status: 404 })
   })
 })

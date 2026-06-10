@@ -1,23 +1,29 @@
 import { buttonVariants } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import type { AvailableVehicleData } from '@/vite/storefronts/api'
+import { Link } from '@tanstack/react-router'
 import { Briefcase, Car, Settings2, Users } from 'lucide-react'
-import { useTranslations } from 'use-intl'
+import { useLocale, useTranslations } from 'use-intl'
 
 interface AvailableVehicleCardProps {
   readonly vehicle: AvailableVehicleData
+  /** The storefront's location — becomes the booking's pickup/dropoff. */
+  readonly locationId: string
+  /** Selected JST date range (datetime-local strings), carried into the wizard. */
+  readonly from: string
+  readonly to: string
 }
 
 /**
  * One available vehicle inside a storefront detail page (#391). The projection
  * is already renter-safe (the API drops operator internals). The booking CTA
- * (`/bookings/new`, carrying the vehicle + storefront location + dates) is
- * deferred with the rest of the booking flow, so it renders inert for now; the
- * location/range props it will need get re-added when that CTA goes live.
+ * carries the vehicle + storefront location + dates into the reservation wizard
+ * (#460); the `_renter` guard there prompts login before booking.
  */
-export function AvailableVehicleCard({ vehicle }: AvailableVehicleCardProps) {
+export function AvailableVehicleCard({ vehicle, locationId, from, to }: AvailableVehicleCardProps) {
   const t = useTranslations('search')
   const tSize = useTranslations('luggageSize')
+  const locale = useLocale()
   const photo = vehicle.photos[0]
   const transmissionLabel = vehicle.transmission === 'AUTO' ? t('auto') : t('manual')
 
@@ -61,13 +67,14 @@ export function AvailableVehicleCard({ vehicle }: AvailableVehicleCardProps) {
           )}
         </div>
         <p className="mt-auto pt-1 text-base font-semibold text-foreground">{priceLabel}</p>
-        <button
-          type="button"
-          disabled
+        <Link
+          to="/$locale/bookings/new"
+          params={{ locale }}
+          search={{ vehicleId: vehicle.id, locationId, from, to }}
           className={cn(buttonVariants({ variant: 'default', size: 'sm' }), 'w-full')}
         >
           {t('detail.book')}
-        </button>
+        </Link>
       </div>
     </div>
   )

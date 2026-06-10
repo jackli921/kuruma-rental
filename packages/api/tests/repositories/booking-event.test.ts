@@ -13,6 +13,7 @@ const createdPayload: BookingCreatedPayload = {
   totalPrice: 12000,
   insuranceSnapshot: null,
   feeSnapshot: [],
+  addOnSnapshot: [],
 }
 const statusPayload: StatusChangedPayload = { from: 'CONFIRMED', to: 'ACTIVE' }
 

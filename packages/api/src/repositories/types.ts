@@ -12,6 +12,7 @@ export type {
   Operator,
   Location,
   InsuranceOption,
+  AddOn,
   FeeSchedule,
   PaymentEvent,
   RenterDocument,
@@ -27,6 +28,7 @@ import type { DashboardStats } from '@kuruma/shared/types/stats'
 import type { VehicleDetail } from '@kuruma/shared/types/vehicle-detail'
 import type { CallerContext } from '../middleware/auth'
 import type {
+  AddOn,
   Booking,
   BookingEvent,
   FeeSchedule,
@@ -149,6 +151,43 @@ export interface InsuranceOptionRepository {
   create(data: Omit<InsuranceOption, 'id' | 'createdAt' | 'updatedAt'>): Promise<InsuranceOption>
   update(id: string, data: Partial<InsuranceOption>): Promise<InsuranceOption | undefined>
   archive(id: string): Promise<InsuranceOption | undefined>
+}
+
+export interface AddOnFilters {
+  status?: 'ACTIVE' | 'ARCHIVED'
+  includeArchived?: boolean
+  /**
+   * Explicit tenant filter. ONLY the bypass-role route layer sets this (from
+   * `?operatorId=`); it narrows a bypass-role read to one tenant. It is IGNORED
+   * for operator callers — their scope is absolute (see findAll precedence).
+   */
+  operatorId?: string
+}
+
+export interface AddOnRepository {
+  // Reads call requireManagementRead(ctx) (rejects RENTER + PARTNER) BEFORE
+  // operatorReadScope(ctx): add-ons are operator-private, not a public catalog
+  // (#460, mirrors insurance options).
+  findAll(ctx: CallerContext, filters?: AddOnFilters): Promise<AddOn[]>
+  findById(ctx: CallerContext, id: string): Promise<AddOn | undefined>
+  /**
+   * Operator-keyed lookup for the service-level name-uniqueness pre-check,
+   * filtered to status='ACTIVE' to match the partial active-name unique index
+   * (archiving frees the name). NOT ctx-scoped — the caller passes an
+   * already-resolved operatorId; the DB partial index is the real seal.
+   */
+  findActiveByOperatorAndName(operatorId: string, name: string): Promise<AddOn | undefined>
+  /**
+   * ACTIVE add-ons for one operator, name-sorted. NOT ctx-scoped — the caller
+   * passes an already-resolved operatorId. Powers the PUBLIC storefront read
+   * (#460): a renter booking at a storefront must see its operator's active
+   * add-ons, so this deliberately bypasses the management-only `findAll` seal.
+   * Scope is single-operator + ACTIVE-only, never a cross-operator enumeration.
+   */
+  findActiveByOperator(operatorId: string): Promise<AddOn[]>
+  create(data: Omit<AddOn, 'id' | 'createdAt' | 'updatedAt'>): Promise<AddOn>
+  update(id: string, data: Partial<AddOn>): Promise<AddOn | undefined>
+  archive(id: string): Promise<AddOn | undefined>
 }
 
 export interface VehicleFilters {
@@ -509,6 +548,7 @@ export interface TransactionRepos {
   bookingEventRepo: BookingEventRepository
   locationRepo: LocationRepository
   insuranceOptionRepo: InsuranceOptionRepository
+  addOnRepo: AddOnRepository
   feeScheduleRepo: FeeScheduleRepository
 }
 

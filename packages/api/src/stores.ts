@@ -1,4 +1,5 @@
 import type {
+  AddOnSnapshot,
   BookingEventPayload,
   BookingEventType,
   BookingFulfillmentMode,
@@ -60,6 +61,8 @@ export interface Booking {
   insuranceSnapshot: InsuranceSnapshot | null
   // Applicable fee_schedules rows snapshotted at booking time (never null).
   feeSnapshot: FeeSnapshotItem[]
+  // Paid add-ons selected at booking time (#460), never null.
+  addOnSnapshot: AddOnSnapshot[]
   externalId: string | null
   notes: string | null
   totalPrice: number | null
@@ -213,6 +216,18 @@ export interface InsuranceOption {
   dailyPriceJpy: number
   /** null = no deductible (full cover). */
   deductibleJpy: number | null
+  status: 'ACTIVE' | 'ARCHIVED'
+  createdAt: Date
+  updatedAt: Date
+}
+
+export interface AddOn {
+  id: string
+  /** Owning operator (marketplace tenant, #460). NOT NULL in the DB. */
+  operatorId: string
+  name: string
+  description: string | null
+  priceJpy: number
   status: 'ACTIVE' | 'ARCHIVED'
   createdAt: Date
   updatedAt: Date

@@ -165,6 +165,7 @@ export class DrizzleBookingRepository implements BookingRepository {
         insuranceOptionId: data.insuranceOptionId,
         insuranceSnapshot: data.insuranceSnapshot,
         feeSnapshot: data.feeSnapshot,
+        addOnSnapshot: data.addOnSnapshot,
         externalId: data.externalId,
         notes: data.notes,
         totalPrice: data.totalPrice,

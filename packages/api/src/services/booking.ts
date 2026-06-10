@@ -1,4 +1,4 @@
-import type { InsuranceSnapshot } from '@kuruma/shared/db/schema'
+import type { AddOnSnapshot, InsuranceSnapshot } from '@kuruma/shared/db/schema'
 import { type BookingStatus, VALID_BOOKING_TRANSITIONS } from '@kuruma/shared/db/schema'
 import { calculateCancellationFee } from '@kuruma/shared/lib/cancellation-policy'
 import { calculateBookingPrice } from '@kuruma/shared/lib/pricing'
@@ -41,6 +41,9 @@ export interface CreateBookingInput {
   pickupLocationId: string
   dropoffLocationId: string
   insuranceOptionId?: string | null
+  // Selected paid add-on ids (#460). Required at the service boundary (the
+  // validator defaults it to []); the route forwards parsed.data.addOnIds.
+  addOnIds: string[]
   renterId: string
   startAt: Date
   endAt: Date
@@ -402,6 +405,22 @@ export class BookingService {
         vehicleClassId: f.vehicleClassId,
       }))
 
+    // Selected paid add-ons (#460): each flat priceJpy is added to totalPrice and
+    // snapshotted. One ACTIVE-only, this-operator read validates membership +
+    // tenant + active in a single query (a foreign/archived id is simply absent
+    // -> 400). De-dup so a repeated id is charged once (quantity is out of MVP).
+    const addOnSnapshot: AddOnSnapshot[] = []
+    if (input.addOnIds.length > 0) {
+      const available = await repos.addOnRepo.findActiveByOperator(operatorId)
+      const availableById = new Map(available.map((a) => [a.id, a]))
+      for (const addOnId of new Set(input.addOnIds)) {
+        const addOn = availableById.get(addOnId)
+        if (!addOn) return { ok: false, status: 400, error: 'Add-on is not available' }
+        addOnSnapshot.push({ addOnId: addOn.id, name: addOn.name, priceJpy: addOn.priceJpy })
+        totalPrice += addOn.priceJpy
+      }
+    }
+
     const bookingCode = this.generateCode()
 
     // Insert FIRST: the exclusion / unique constraints fire here, BEFORE the
@@ -425,6 +444,7 @@ export class BookingService {
       insuranceOptionId,
       insuranceSnapshot,
       feeSnapshot,
+      addOnSnapshot,
       externalId: input.externalId ?? null,
       notes: input.notes ?? null,
       totalPrice,
@@ -451,6 +471,7 @@ export class BookingService {
         totalPrice,
         insuranceSnapshot,
         feeSnapshot,
+        addOnSnapshot,
       },
     })
 

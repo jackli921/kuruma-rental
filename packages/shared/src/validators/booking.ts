@@ -15,6 +15,10 @@ export const createBookingSchema = z
     // Renter's selected insurance option (this operator's active options).
     // Null/absent = declines coverage or operator has none.
     insuranceOptionId: z.string().uuid('Insurance option ID must be a valid UUID').optional(),
+    // Selected paid add-ons (#460): 0+ of the operator's ACTIVE add-ons. The
+    // server validates each belongs to the booking's operator + snapshots them
+    // onto the booking (flat priceJpy each, added to totalPrice).
+    addOnIds: z.string().uuid('Add-on ID must be a valid UUID').array().default([]),
     // Staff-override path only: book on behalf of a renter (#314). Non-staff
     // routes ignore this and use the authenticated user.
     renterId: z.string().uuid('Renter ID must be a valid UUID').optional(),

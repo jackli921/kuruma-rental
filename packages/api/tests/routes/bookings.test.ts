@@ -2,6 +2,7 @@ import { Hono } from 'hono'
 import { beforeEach, describe, expect, it } from 'vitest'
 import { SYSTEM_CONTEXT } from '../../src/middleware/auth'
 import {
+  InMemoryAddOnRepository,
   InMemoryBookingEventRepository,
   InMemoryBookingRepository,
   InMemoryFeeScheduleRepository,
@@ -33,6 +34,7 @@ let userRepo: InMemoryUserRepository
 let vehicleClassRepo: InMemoryVehicleClassRepository
 let locationRepo: InMemoryLocationRepository
 let insuranceOptionRepo: InMemoryInsuranceOptionRepository
+let addOnRepo: InMemoryAddOnRepository
 let feeScheduleRepo: InMemoryFeeScheduleRepository
 let service: BookingService
 let testClassId: string
@@ -133,6 +135,7 @@ describe('Booking Routes', () => {
     vehicleClassRepo = new InMemoryVehicleClassRepository()
     locationRepo = new InMemoryLocationRepository()
     insuranceOptionRepo = new InMemoryInsuranceOptionRepository()
+    addOnRepo = new InMemoryAddOnRepository()
     feeScheduleRepo = new InMemoryFeeScheduleRepository()
 
     const klass: VehicleClass = await vehicleClassRepo.create({
@@ -177,6 +180,7 @@ describe('Booking Routes', () => {
       bookingEventRepo,
       locationRepo,
       insuranceOptionRepo,
+      addOnRepo,
       feeScheduleRepo,
     }
     const runInTransaction: RunInTransaction = async (fn) => fn(repos)
