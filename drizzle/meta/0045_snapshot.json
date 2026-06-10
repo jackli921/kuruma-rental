@@ -1,6 +1,6 @@
 {
-  "id": "00b877d4-b4f2-4a53-8e06-f55b0e00fe64",
-  "prevId": "db00df16-f8d1-43ca-981b-7b089dc92a16",
+  "id": "8a3c9a1e-3752-4f90-b37e-a45ebf326dea",
+  "prevId": "00b877d4-b4f2-4a53-8e06-f55b0e00fe64",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -992,6 +992,18 @@
           "type": "text",
           "primaryKey": false,
           "notNull": true
+        },
+        "latitude": {
+          "name": "latitude",
+          "type": "double precision",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "longitude": {
+          "name": "longitude",
+          "type": "double precision",
+          "primaryKey": false,
+          "notNull": false
         },
         "operatingHours": {
           "name": "operatingHours",

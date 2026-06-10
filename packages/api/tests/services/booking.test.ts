@@ -9,10 +9,12 @@ import { describe, expect, it, vi } from 'vitest'
 import { type CallerContext, SYSTEM_CONTEXT } from '../../src/middleware/auth'
 import { PG_ERROR } from '../../src/pg-errors'
 import {
+  InMemoryDocumentStorage,
   InMemoryFeeScheduleRepository,
   InMemoryInsuranceOptionRepository,
   InMemoryLocationRepository,
   InMemoryMaintenanceLogRepository,
+  InMemoryRenterDocumentRepository,
   InMemoryUserRepository,
   InMemoryVehicleClassRepository,
   InMemoryVehicleRepository,
@@ -20,7 +22,13 @@ import {
 import { InMemoryBookingRepository } from '../../src/repositories/in-memory/booking'
 import { InMemoryBookingEventRepository } from '../../src/repositories/in-memory/booking-event'
 import type { RunInTransaction, TransactionRepos } from '../../src/repositories/types'
-import { BookingService, type CreateBookingInput } from '../../src/services/booking'
+import {
+  BookingService,
+  type BookingVerificationGate,
+  type CreateBookingInput,
+} from '../../src/services/booking'
+import { documentVerificationGate } from '../../src/services/document-verification-gate'
+import { RenterDocumentService } from '../../src/services/renter-document'
 import type { Booking, BookingEvent, User, Vehicle, VehicleClass } from '../../src/stores'
 
 const OP_A = 'op-a'
@@ -79,7 +87,9 @@ interface Harness {
 // Drizzle one without real rollback — ordering insert-before-append gives the
 // atomicity the exclusion-failure test asserts). `codes` drives the injectable
 // booking_code generator so the collision-retry path is deterministic.
-async function setup(opts: { codes?: string[] } = {}): Promise<Harness> {
+async function setup(
+  opts: { codes?: string[]; verificationGate?: BookingVerificationGate } = {},
+): Promise<Harness> {
   const bookingStore = new Map<string, Booking>()
   const events: BookingEvent[] = []
   const bookingRepo = new InMemoryBookingRepository(bookingStore)
@@ -145,6 +155,7 @@ async function setup(opts: { codes?: string[] } = {}): Promise<Harness> {
     undefined,
     undefined,
     generateMock,
+    opts.verificationGate,
   )
 
   return {
@@ -180,6 +191,89 @@ async function seedReady(h: Harness) {
   ;(veh as Vehicle).pickupLocationId = locationId
   return { vehicleId: h.vehicleId, locationId }
 }
+
+describe('BookingService.create — document-verification gate (#459)', () => {
+  const staffCtx: CallerContext = { userId: 'staff-9', role: 'STAFF', bypassScope: true }
+
+  // Build the REAL gate from a document service so these exercise the actual
+  // eligibility policy (approved IDP valid through the return date), not a stub.
+  async function gateFor(seedApprovedIdp: boolean): Promise<BookingVerificationGate> {
+    const docRepo = new InMemoryRenterDocumentRepository()
+    const docService = new RenterDocumentService(docRepo, new InMemoryDocumentStorage())
+    if (seedApprovedIdp) {
+      const doc = await docRepo.create(renterCtx, {
+        renterId: RENTER,
+        type: 'IDP',
+        storageKey: 'renter-documents/renter-1/scan.jpg',
+      })
+      await docRepo.verify(staffCtx, doc.id, {
+        status: 'APPROVED',
+        verifierId: staffCtx.userId,
+        expiryDate: '2030-01-01', // valid well past the END return date
+      })
+    }
+    return documentVerificationGate(docService)
+  }
+
+  it('allows an unverified renter to book when no gate is wired (flag off)', async () => {
+    const h = await setup({ codes: ['NOGATE12'] })
+    const { vehicleId, locationId } = await seedReady(h)
+
+    const result = await h.service.create(
+      renterCtx,
+      createInput({
+        requestedVehicleId: vehicleId,
+        pickupLocationId: locationId,
+        dropoffLocationId: locationId,
+      }),
+      NOW,
+    )
+
+    expect(result.ok).toBe(true)
+  })
+
+  it('blocks a renter with no approved IDP — 403 DOCUMENT_VERIFICATION_REQUIRED (flag on)', async () => {
+    const h = await setup({ codes: ['GATED012'], verificationGate: await gateFor(false) })
+    const { vehicleId, locationId } = await seedReady(h)
+
+    const result = await h.service.create(
+      renterCtx,
+      createInput({
+        requestedVehicleId: vehicleId,
+        pickupLocationId: locationId,
+        dropoffLocationId: locationId,
+      }),
+      NOW,
+    )
+
+    expect(result.ok).toBe(false)
+    if (result.ok) return
+    expect(result.status).toBe(403)
+    expect(result.code).toBe('DOCUMENT_VERIFICATION_REQUIRED')
+    // Fail-fast: the gate runs before the transaction, so nothing is persisted.
+    expect(h.bookingStore.size).toBe(0)
+    expect(h.events).toHaveLength(0)
+  })
+
+  it('allows a renter with an approved, unexpired IDP to book (flag on)', async () => {
+    const h = await setup({ codes: ['APPRV012'], verificationGate: await gateFor(true) })
+    const { vehicleId, locationId } = await seedReady(h)
+
+    const result = await h.service.create(
+      renterCtx,
+      createInput({
+        requestedVehicleId: vehicleId,
+        pickupLocationId: locationId,
+        dropoffLocationId: locationId,
+      }),
+      NOW,
+    )
+
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+    expect(result.booking.status).toBe('CONFIRMED')
+  })
+})
 
 describe('BookingService.create — single-transaction submit (#392 §4)', () => {
   it('confirms a booking: derives operator/class/assigned vehicle, prices off the vehicle, appends BOOKING_CREATED', async () => {

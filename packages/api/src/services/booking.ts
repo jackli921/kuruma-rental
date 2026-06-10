@@ -54,11 +54,24 @@ export type CreateBookingResult =
   | { ok: true; booking: Booking; status?: 200 }
   | {
       ok: false
-      status: 400 | 409
+      status: 400 | 403 | 409
       error: string | Record<string, string[]>
       code?: string
       details?: { required: number; actual: number }
     }
+
+/**
+ * Optional pre-transaction authorization gate (#459). When injected, `create`
+ * runs it after idempotency replay and before the booking transaction; a denial
+ * short-circuits with 403. BookingService stays decoupled from the document
+ * domain — it only knows "there may be a gate" (DIP).
+ */
+export type BookingVerificationGate = (
+  ctx: CallerContext,
+  input: CreateBookingInput,
+) => Promise<
+  { ok: true } | { ok: false; status: 403; error: string; code: 'DOCUMENT_VERIFICATION_REQUIRED' }
+>
 
 export type SubstituteResult =
   | { ok: true; booking: Booking }
@@ -97,6 +110,9 @@ export class BookingService {
     private readonly operatorRepo?: OperatorRepository,
     // Injectable so the collision-retry path is deterministically testable.
     private readonly generateCode: () => string = generateBookingCode,
+    // #459: optional document-verification gate, wired only when the
+    // REQUIRE_DOCUMENT_VERIFICATION flag is on (see index.ts composition root).
+    private readonly verificationGate?: BookingVerificationGate,
   ) {}
 
   async findAll(ctx: CallerContext, filters?: BookingFilters): Promise<Booking[]> {
@@ -208,6 +224,15 @@ export class BookingService {
         await this.postCommit?.run(ctx, existing)
         return { ok: true, booking: existing, status: 200 }
       }
+    }
+
+    // Document-verification gate (#459). When wired (REQUIRE_DOCUMENT_VERIFICATION
+    // on), an unverified renter is blocked here — before any booking work. Runs
+    // AFTER idempotency replay so a previously-accepted booking stays replayable
+    // even if the renter's document later expires.
+    if (this.verificationGate) {
+      const gate = await this.verificationGate(ctx, input)
+      if (!gate.ok) return gate
     }
 
     // The whole submit is ONE transaction (proposal §4): resolve + price +
