@@ -1,5 +1,6 @@
 import { cpSync, existsSync, readFileSync } from 'node:fs'
 import path from 'node:path'
+import tailwindcss from '@tailwindcss/vite'
 import { tanstackRouter } from '@tanstack/router-plugin/vite'
 import react from '@vitejs/plugin-react'
 import { type Plugin, defineConfig } from 'vite'
@@ -42,6 +43,9 @@ export default defineConfig({
     // Router codegen must run before the React plugin.
     tanstackRouter({ target: 'react', autoCodeSplitting: true }),
     react(),
+    // Tailwind v4 — processes `@import "tailwindcss"` in app/globals.css, which
+    // main.tsx imports. Without this the Vite shell ships unstyled (#510).
+    tailwindcss(),
     messagesPlugin(),
   ],
   publicDir: 'public',

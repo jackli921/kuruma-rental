@@ -30,7 +30,10 @@
     "login": "ログイン",
     "logout": "ログアウト",
     "google": "Google",
-    "apple": "Apple"
+    "apple": "Apple",
+    "signInTitle": "ログイン",
+    "signInSubtitle": "Best Car Rental に続行",
+    "continueWithGoogle": "Googleで続行"
   },
   "nav": {
     "home": "ホーム",

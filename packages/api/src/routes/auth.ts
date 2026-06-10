@@ -4,10 +4,12 @@ import { deleteCookie, getCookie, setCookie } from 'hono/cookie'
 import {
   type GoogleAuthRuntime,
   type GoogleOAuthConfig,
+  OAUTH_RETURN_COOKIE,
   OAUTH_STATE_COOKIE,
   OAUTH_STATE_TTL_SECONDS,
   buildGoogleAuthorizeUrl,
   randomToken,
+  safeReturnPath,
 } from '../auth/google'
 import { SESSION_COOKIE, mintSessionToken, verifySessionCookie } from '../middleware/auth'
 import { fail, ok } from './helpers'
@@ -37,6 +39,13 @@ export function clearSessionCookie(c: Context): void {
   deleteCookie(c, SESSION_COOKIE, SESSION_COOKIE_OPTS)
 }
 
+/** Drop both one-time OAuth-flow cookies (state + return). Called on every
+ *  callback failure path so a dead-ended sign-in leaves nothing behind to expire. */
+function clearOAuthFlowCookies(c: Context): void {
+  deleteCookie(c, OAUTH_STATE_COOKIE, { path: '/' })
+  deleteCookie(c, OAUTH_RETURN_COOKIE, { path: '/' })
+}
+
 /**
  * Auth surface for the cookie-session flow (Vite/CF Pages migration, #378).
  *
@@ -63,6 +72,25 @@ export function createAuthRoutes(
         path: '/',
         maxAge: OAUTH_STATE_TTL_SECONDS,
       })
+
+      // Carry a *validated* return path through the round-trip so the callback
+      // can land the user back where the guard intercepted them. Open-redirect
+      // targets are dropped (safeReturnPath → undefined) and simply ignored.
+      const returnTo = safeReturnPath(c.req.query('returnTo'))
+      if (returnTo) {
+        setCookie(c, OAUTH_RETURN_COOKIE, returnTo, {
+          httpOnly: true,
+          secure: true,
+          sameSite: 'Lax',
+          path: '/',
+          maxAge: OAUTH_STATE_TTL_SECONDS,
+        })
+      } else {
+        // Bind the return cookie freshly to *this* flow: with no/invalid returnTo,
+        // erase any stale value an aborted earlier flow left behind, so the
+        // callback can't inherit it and redirect a plain login to a stale path.
+        deleteCookie(c, OAUTH_RETURN_COOKIE, { path: '/' })
+      }
       return c.redirect(buildGoogleAuthorizeUrl(googleConfig, state), 302)
     })
     .get('/auth/google/callback', async (c) => {
@@ -73,10 +101,14 @@ export function createAuthRoutes(
       const expectedState = getCookie(c, OAUTH_STATE_COOKIE)
       const state = c.req.query('state')
       if (!expectedState || !state || expectedState !== state) {
+        clearOAuthFlowCookies(c)
         return fail(c, 'Invalid OAuth state', 400)
       }
       const code = c.req.query('code')
-      if (!code) return fail(c, 'Missing authorization code', 400)
+      if (!code) {
+        clearOAuthFlowCookies(c)
+        return fail(c, 'Missing authorization code', 400)
+      }
       deleteCookie(c, OAUTH_STATE_COOKIE, { path: '/' })
 
       const secret = process.env.AUTH_SECRET
@@ -102,7 +134,19 @@ export function createAuthRoutes(
         secret,
       )
       setSessionCookie(c, token)
-      return c.redirect(googleConfig.postLoginRedirect, 302)
+
+      // Honour a return path stashed at /start, then clear the one-time cookie.
+      // The attacker can neither read nor forge the HttpOnly value, but we still
+      // re-validate (defence in depth) so a tampered cookie can't open-redirect.
+      const returnTo = safeReturnPath(getCookie(c, OAUTH_RETURN_COOKIE))
+      deleteCookie(c, OAUTH_RETURN_COOKIE, { path: '/' })
+      // Resolve the validated (root-relative) returnTo against the same web origin
+      // postLoginRedirect targets, so a relative path can never land on the API's
+      // own origin if the callback is ever hit off-proxy (#378 cutover insurance).
+      const target = returnTo
+        ? new URL(returnTo, googleConfig.postLoginRedirect).toString()
+        : googleConfig.postLoginRedirect
+      return c.redirect(target, 302)
     })
     .get('/auth/session', async (c) => {
       const token = getCookie(c, SESSION_COOKIE)
