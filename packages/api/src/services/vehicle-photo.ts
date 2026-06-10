@@ -2,8 +2,8 @@ import { detectImageType } from '../lib/image-signature'
 import type { CallerContext } from '../middleware/auth'
 import type { PhotoStorage, VehicleRepository } from '../repositories/types'
 
-const MAX_PHOTOS_PER_VEHICLE = 10
-const MAX_FILE_SIZE = 5 * 1024 * 1024
+export const MAX_PHOTOS_PER_VEHICLE = 10
+export const MAX_FILE_SIZE = 5 * 1024 * 1024
 const ALLOWED_MIME_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp', 'image/avif'])
 
 export type UploadResult =

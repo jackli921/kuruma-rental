@@ -102,6 +102,16 @@ describe('POST /vehicles/:id/photos', () => {
     expect(updated?.photos).toHaveLength(1)
   })
 
+  it('rejects an oversized body early with 413 before buffering it', async () => {
+    const res = await app.request(`/vehicles/${vehicleId}/photos`, {
+      method: 'POST',
+      headers: { ...(await authHeaders()), 'content-length': String(100 * 1024 * 1024) },
+    })
+
+    expect(res.status).toBe(413)
+    expect((await res.json()).error).toBe('Request body too large')
+  })
+
   it('rejects non-image MIME type with 400', async () => {
     const headers = await authHeaders()
     const form = makeFormData('doc.pdf', 'application/pdf', 1024)
