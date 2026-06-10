@@ -14,6 +14,7 @@ import { requestId } from './middleware/request-id'
 import { DisabledDocumentStorage } from './repositories/disabled-document-storage'
 import { DisabledPhotoStorage } from './repositories/disabled-photo-storage'
 import {
+  DrizzleAddOnRepository,
   DrizzleAvailabilityRepository,
   DrizzleBookingRepository,
   DrizzleCustomerRepository,
@@ -37,6 +38,7 @@ import {
   createDrizzleTransaction,
 } from './repositories/drizzle'
 import {
+  InMemoryAddOnRepository,
   InMemoryAvailabilityRepository,
   InMemoryBookingEventRepository,
   InMemoryBookingRepository,
@@ -64,6 +66,7 @@ import { InMemoryPhotoStorage } from './repositories/in-memory/photo-storage'
 import { R2DocumentStorage } from './repositories/r2-document-storage'
 import { type R2BucketLike, R2PhotoStorage } from './repositories/r2-photo-storage'
 import type {
+  AddOnRepository,
   AvailabilityRepository,
   BookingRepository,
   CustomerRepository,
@@ -88,6 +91,7 @@ import type {
   VehicleDetailRepository,
   VehicleRepository,
 } from './repositories/types'
+import { createAddOnRoutes } from './routes/add-ons'
 import { createAdminRoutes } from './routes/admin'
 import { createAuthRoutes } from './routes/auth'
 import { createAvailabilityRoutes } from './routes/availability'
@@ -104,6 +108,7 @@ import { createMessageRoutes } from './routes/messages'
 import { createNotificationRoutes } from './routes/notifications'
 import { createOperatorRoutes } from './routes/operators'
 import { createPaymentRoutes } from './routes/payments'
+import { createFlatSearchRoutes } from './routes/search'
 import { createStatsRoutes } from './routes/stats'
 import { createStorefrontRoutes } from './routes/storefronts'
 import { createTranslateRoutes } from './routes/translate'
@@ -112,6 +117,7 @@ import { createVehicleClassRoutes } from './routes/vehicle-classes'
 import { createVehicleDetailRoutes } from './routes/vehicle-detail'
 import { createVehiclePhotoRoutes } from './routes/vehicle-photos'
 import { createVehicleRoutes } from './routes/vehicles'
+import { AddOnService } from './services/add-on'
 import { BookingService } from './services/booking'
 import { BookingPostCommitDispatcher } from './services/booking-post-commit-dispatcher'
 import { CustomerService } from './services/customer'
@@ -120,6 +126,7 @@ import type { EmailSender } from './services/email/email-sender'
 import { ResendEmailSender } from './services/email/resend-email-sender'
 import { makeEnsureThread } from './services/ensure-thread'
 import { FeeScheduleService } from './services/fee-schedule'
+import { FlatSearchService } from './services/flat-search'
 import { FleetOverviewService } from './services/fleet-overview'
 import { GoogleTranslationProvider } from './services/google-translation-provider'
 import { InsuranceOptionService } from './services/insurance-option'
@@ -161,6 +168,7 @@ export function createApp(overrides?: {
   operatorRepo?: OperatorRepository
   locationRepo?: LocationRepository
   insuranceOptionRepo?: InsuranceOptionRepository
+  addOnRepo?: AddOnRepository
   feeScheduleRepo?: FeeScheduleRepository
   notificationLogRepo?: NotificationLogRepository
   storefrontRepo?: StorefrontRepository
@@ -192,6 +200,7 @@ export function createApp(overrides?: {
   let operatorRepo: OperatorRepository
   let locationRepo: LocationRepository
   let insuranceOptionRepo: InsuranceOptionRepository
+  let addOnRepo: AddOnRepository
   let feeScheduleRepo: FeeScheduleRepository
   let notificationLogRepo: NotificationLogRepository
   let storefrontRepo: StorefrontRepository
@@ -225,6 +234,7 @@ export function createApp(overrides?: {
         bookingEventRepo,
         locationRepo,
         insuranceOptionRepo,
+        addOnRepo,
         feeScheduleRepo,
       })
     fleetOverviewRepo =
@@ -245,6 +255,7 @@ export function createApp(overrides?: {
     operatorRepo = overrides.operatorRepo ?? new InMemoryOperatorRepository()
     locationRepo = overrides.locationRepo ?? new InMemoryLocationRepository()
     insuranceOptionRepo = overrides.insuranceOptionRepo ?? new InMemoryInsuranceOptionRepository()
+    addOnRepo = overrides.addOnRepo ?? new InMemoryAddOnRepository()
     feeScheduleRepo = overrides.feeScheduleRepo ?? new InMemoryFeeScheduleRepository()
     notificationLogRepo = overrides.notificationLogRepo ?? new InMemoryNotificationLogRepository()
     storefrontRepo =
@@ -269,6 +280,7 @@ export function createApp(overrides?: {
     operatorRepo = new DrizzleOperatorRepository(db)
     locationRepo = new DrizzleLocationRepository(db)
     insuranceOptionRepo = new DrizzleInsuranceOptionRepository(db)
+    addOnRepo = new DrizzleAddOnRepository(db)
     feeScheduleRepo = new DrizzleFeeScheduleRepository(db)
     notificationLogRepo = new DrizzleNotificationLogRepository(db)
     storefrontRepo = new DrizzleStorefrontRepository(db)
@@ -333,6 +345,7 @@ export function createApp(overrides?: {
         bookingEventRepo,
         locationRepo,
         insuranceOptionRepo,
+        addOnRepo,
         feeScheduleRepo,
       })
     userRepo = new InMemoryUserRepository()
@@ -343,6 +356,7 @@ export function createApp(overrides?: {
     operatorRepo = new InMemoryOperatorRepository()
     locationRepo = new InMemoryLocationRepository()
     insuranceOptionRepo = new InMemoryInsuranceOptionRepository()
+    addOnRepo = new InMemoryAddOnRepository()
     feeScheduleRepo = new InMemoryFeeScheduleRepository()
     notificationLogRepo = new InMemoryNotificationLogRepository()
     storefrontRepo = new InMemoryStorefrontRepository(locationRepo, operatorRepo)
@@ -564,6 +578,7 @@ export function createApp(overrides?: {
     resolveOperatorIdForWrite(ctx, inputOperatorId)
   const locationService = new LocationService(locationRepo, bookingRepo)
   const insuranceOptionService = new InsuranceOptionService(insuranceOptionRepo)
+  const addOnService = new AddOnService(addOnRepo)
   const feeScheduleService = new FeeScheduleService(feeScheduleRepo)
   const storefrontSearchService = new StorefrontSearchService(
     storefrontRepo,
@@ -575,6 +590,12 @@ export function createApp(overrides?: {
     availabilityRepo,
     vehicleClassRepo,
     insuranceOptionRepo,
+    addOnRepo,
+  )
+  const flatSearchService = new FlatSearchService(
+    storefrontRepo,
+    availabilityRepo,
+    vehicleClassRepo,
   )
 
   // Chain .route() calls so TypeScript infers the full route type tree.
@@ -601,6 +622,7 @@ export function createApp(overrides?: {
         publicCatalogLimiter,
       ),
     )
+    .route('/', createFlatSearchRoutes(flatSearchService, publicCatalogLimiter))
     .route('/', createVehicleRoutes(vehicleRepo, maintenanceService, resolveWriteOperatorId))
     .route(
       '/',
@@ -625,6 +647,7 @@ export function createApp(overrides?: {
     .route('/', createAdminRoutes(operatorService))
     .route('/', createLocationRoutes(locationService, resolveWriteOperatorId))
     .route('/', createInsuranceOptionRoutes(insuranceOptionService, resolveWriteOperatorId))
+    .route('/', createAddOnRoutes(addOnService, resolveWriteOperatorId))
     .route('/', createFeeScheduleRoutes(feeScheduleService, resolveWriteOperatorId))
     .route('/', createNotificationRoutes(notificationService))
     .route('/', createOperatorRoutes(operatorService))

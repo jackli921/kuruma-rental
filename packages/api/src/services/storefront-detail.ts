@@ -2,6 +2,7 @@ import { type LuggageSize, resolveLuggage } from '@kuruma/shared/lib/luggage'
 import type { LocationOperatingHours } from '@kuruma/shared/types/location'
 import type { CallerContext } from '../middleware/auth'
 import type {
+  AddOnRepository,
   AvailabilityRepository,
   InsuranceOptionRepository,
   StorefrontRepository,
@@ -74,6 +75,23 @@ export type StorefrontInsuranceResult =
   | { ok: true; data: StorefrontInsuranceOption[] }
   | { ok: false; error: string; status: number }
 
+/**
+ * Renter-safe add-on projection (#460): the fields a renter needs to pick paid
+ * extras (baby seat etc.) at booking. Operator-internal columns (operatorId,
+ * status, timestamps) are intentionally absent — same column-whitelist
+ * discipline as the public vehicle catalog + insurance options.
+ */
+export interface StorefrontAddOn {
+  id: string
+  name: string
+  description: string | null
+  priceJpy: number
+}
+
+export type StorefrontAddOnResult =
+  | { ok: true; data: StorefrontAddOn[] }
+  | { ok: false; error: string; status: number }
+
 export interface StorefrontDetailParams {
   locationId: string
   from: Date
@@ -96,6 +114,7 @@ export class StorefrontDetailService {
     private readonly availabilityRepo: AvailabilityRepository,
     private readonly classRepo: VehicleClassRepository,
     private readonly insuranceOptionRepo: InsuranceOptionRepository,
+    private readonly addOnRepo: AddOnRepository,
   ) {}
 
   /**
@@ -123,6 +142,31 @@ export class StorefrontDetailService {
         description: o.description,
         dailyPriceJpy: o.dailyPriceJpy,
         deductibleJpy: o.deductibleJpy,
+      })),
+    }
+  }
+
+  /**
+   * The ACTIVE paid add-ons offered at one storefront (#460), for the renter's
+   * booking-form selection. Resolves the location to its operator via the same
+   * ACTIVE-only storefront read (unknown/archived -> 404), then lists that
+   * operator's active add-ons. PUBLIC: the route builds PUBLIC_CONTEXT and the
+   * repo read is single-operator + active-only (never a cross-operator leak).
+   */
+  async getAddOns(ctx: CallerContext, locationId: string): Promise<StorefrontAddOnResult> {
+    const [storefront] = await this.storefrontRepo.findActiveStorefronts(ctx, {
+      pickupLocationId: locationId,
+    })
+    if (!storefront) return { ok: false, error: 'Storefront not found', status: 404 }
+
+    const addOns = await this.addOnRepo.findActiveByOperator(storefront.operatorId)
+    return {
+      ok: true,
+      data: addOns.map((o) => ({
+        id: o.id,
+        name: o.name,
+        description: o.description,
+        priceJpy: o.priceJpy,
       })),
     }
   }

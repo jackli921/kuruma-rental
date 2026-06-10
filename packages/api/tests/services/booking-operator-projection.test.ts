@@ -36,6 +36,7 @@ function makeBooking(operatorId: string): Booking {
     insuranceOptionId: null,
     insuranceSnapshot: null,
     feeSnapshot: [],
+    addOnSnapshot: [],
     externalId: null,
     notes: null,
     totalPrice: 24000,

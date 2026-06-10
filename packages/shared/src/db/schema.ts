@@ -2,6 +2,7 @@ import { sql } from 'drizzle-orm'
 import {
   check,
   date,
+  doublePrecision,
   foreignKey,
   index,
   integer,
@@ -17,6 +18,14 @@ import {
 import type { AdapterAccountType } from 'next-auth/adapters'
 import { LUGGAGE_SIZES } from '../lib/luggage'
 import type { LocationOperatingHours } from '../types/location'
+// Booking snapshot/event payload types live in ./booking-types (file-size split,
+// #460); imported here for the jsonb $type<> column annotations below.
+import type {
+  AddOnSnapshot,
+  BookingEventPayload,
+  FeeSnapshotItem,
+  InsuranceSnapshot,
+} from './booking-types'
 
 // Marketplace tenancy (epic #385, slice 1 / #386).
 // OPERATOR_* roles are tenant-scoped and NEVER bypass operator scope.
@@ -199,6 +208,11 @@ export const locations = pgTable(
       .references(() => operators.id),
     name: text('name').notNull(),
     address: text('address').notNull(),
+    // WGS84 decimal degrees, nullable (#458 D2). null = not-yet-geocoded → that
+    // row renders list-only; no 0,0 default. Bounds checked at the Zod boundary.
+    // Rationale + precision choice: design doc §3.3.
+    latitude: doublePrecision('latitude'),
+    longitude: doublePrecision('longitude'),
     // MVP shape (locked, see LocationOperatingHours): a single
     // { openTime, closeTime } pair applied to all weekdays, or null. Per-weekday
     // schedules ship as a separate migration + validator change (proposal §9 #4).
@@ -501,6 +515,9 @@ export const bookings = pgTable(
     // Applicable fee_schedules rows snapshotted at booking time (informational in
     // MVP; locks rate-at-time-of-booking, proposal §9 item 19). Never null.
     feeSnapshot: jsonb('feeSnapshot').$type<FeeSnapshotItem[]>().notNull().default([]),
+    // Paid add-ons selected at booking time (#460). Each flat priceJpy is locked
+    // into totalPrice; the snapshot preserves name+price at booking. Never null.
+    addOnSnapshot: jsonb('addOnSnapshot').$type<AddOnSnapshot[]>().notNull().default([]),
     externalId: text('externalId'),
     notes: text('notes'),
     totalPrice: integer('totalPrice'), // whole JPY; non-null on every slice-6 submit (#429)
@@ -755,46 +772,9 @@ export type FeeType = (typeof feeTypeEnum.enumValues)[number]
 export type FeeUnit = (typeof feeUnitEnum.enumValues)[number]
 export type BookingEventType = (typeof bookingEventTypeEnum.enumValues)[number]
 
-export type InsuranceSnapshot = {
-  insuranceOptionId: string
-  name: string
-  dailyPriceJpy: number
-  deductibleJpy: number | null
-}
-
-export type FeeSnapshotItem = {
-  feeType: FeeType
-  unit: FeeUnit
-  amountJpy: number
-  // Provenance: class-specific (the class id) vs operator-wide (null).
-  vehicleClassId: string | null
-}
-
-export type BookingCreatedPayload = {
-  requestedVehicleId: string
-  assignedVehicleId: string
-  classId: string
-  // #463: the discriminator is a defining booking attribute, so the self-contained
-  // CREATED audit snapshot records it alongside the vehicle/class it mirrors.
-  fulfillmentMode: BookingFulfillmentMode
-  startAt: string
-  endAt: string
-  totalPrice: number
-  insuranceSnapshot: InsuranceSnapshot | null
-  feeSnapshot: FeeSnapshotItem[]
-}
-export type VehicleSubstitutedPayload = {
-  fromVehicleId: string
-  toVehicleId: string
-  reason: string | null
-}
-export type BookingCancelledPayload = {
-  cancellationFee: number | null
-  cancelledAt: string
-}
-export type StatusChangedPayload = { from: BookingStatus; to: BookingStatus }
-export type BookingEventPayload =
-  | BookingCreatedPayload
-  | VehicleSubstitutedPayload
-  | BookingCancelledPayload
-  | StatusChangedPayload
+// add_on_options table + status enum live in ./add-on; booking snapshot/event
+// payload types live in ./booking-types. Both re-exported so drizzle-kit (which
+// only loads this module) and existing `@kuruma/shared/db/schema` importers see
+// them. Split out to keep this file under the 800-line cap (#460).
+export * from './add-on'
+export * from './booking-types'

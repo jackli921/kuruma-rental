@@ -1,5 +1,6 @@
 import type { RunTx } from '@kuruma/shared/db'
 import type { RunInTransaction } from '../types'
+import { DrizzleAddOnRepository } from './add-on'
 import { DrizzleBookingRepository } from './booking'
 import { DrizzleBookingEventRepository } from './booking-event'
 import { DrizzleFeeScheduleRepository } from './fee-schedule'
@@ -32,6 +33,7 @@ export function createDrizzleTransaction(runInteractiveTx: RunTx): RunInTransact
         bookingEventRepo: new DrizzleBookingEventRepository(txDb),
         locationRepo: new DrizzleLocationRepository(txDb),
         insuranceOptionRepo: new DrizzleInsuranceOptionRepository(txDb),
+        addOnRepo: new DrizzleAddOnRepository(txDb),
         feeScheduleRepo: new DrizzleFeeScheduleRepository(txDb),
       })
     })

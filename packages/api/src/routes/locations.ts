@@ -88,6 +88,10 @@ export function createLocationRoutes(
           operatorId,
           name: d.name,
           address: d.address,
+          // Coords are not captured by the location form yet (#458 §4 follow-up);
+          // default null — the row degrades to list-only on the search map.
+          latitude: null,
+          longitude: null,
           operatingHours: d.operatingHours,
           timezone: d.timezone,
           defaultTurnaroundMinutes: d.defaultTurnaroundMinutes,

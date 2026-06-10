@@ -150,3 +150,34 @@ describe('updateBookingStatusSchema', () => {
     expect(updateBookingStatusSchema.safeParse({ status: '' }).success).toBe(false)
   })
 })
+
+// Paid add-ons (#460): the renter selects 0+ of the operator's active add-ons in
+// the wizard. The server validates each against the operator + snapshots them.
+describe('createBookingSchema addOnIds (#460)', () => {
+  const validInput = {
+    requestedVehicleId: VALID_UUID,
+    pickupLocationId: PICKUP_UUID,
+    dropoffLocationId: DROPOFF_UUID,
+    startAt: '2026-04-10T09:00:00Z',
+    endAt: '2026-04-10T17:00:00Z',
+  }
+  const ADDON_A = '550e8400-e29b-41d4-a716-446655440010'
+  const ADDON_B = '550e8400-e29b-41d4-a716-446655440011'
+
+  it('defaults addOnIds to an empty array when absent', () => {
+    const result = createBookingSchema.safeParse(validInput)
+    expect(result.success).toBe(true)
+    if (result.success) expect(result.data.addOnIds).toEqual([])
+  })
+
+  it('accepts a list of add-on UUIDs', () => {
+    const result = createBookingSchema.safeParse({ ...validInput, addOnIds: [ADDON_A, ADDON_B] })
+    expect(result.success).toBe(true)
+    if (result.success) expect(result.data.addOnIds).toEqual([ADDON_A, ADDON_B])
+  })
+
+  it('rejects a non-UUID add-on id', () => {
+    const result = createBookingSchema.safeParse({ ...validInput, addOnIds: ['not-a-uuid'] })
+    expect(result.success).toBe(false)
+  })
+})

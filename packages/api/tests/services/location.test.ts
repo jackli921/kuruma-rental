@@ -53,6 +53,7 @@ function seedBooking(store: Map<string, Booking>, overrides: Partial<Booking>): 
     insuranceOptionId: null,
     insuranceSnapshot: null,
     feeSnapshot: [],
+    addOnSnapshot: [],
     externalId: null,
     notes: null,
     totalPrice: 12000,

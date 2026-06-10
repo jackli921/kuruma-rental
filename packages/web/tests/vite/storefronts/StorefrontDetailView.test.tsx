@@ -15,13 +15,15 @@ vi.mock('@tanstack/react-router', () => ({
   }: {
     to: string
     params?: { locale?: string }
-    search?: { from?: string; to?: string }
+    search?: { vehicleId?: string; locationId?: string; from?: string; to?: string }
     children: ReactNode
   }) => (
     <a
       href={to}
       data-to={to}
       data-locale={params?.locale}
+      data-vehicle={search?.vehicleId}
+      data-location={search?.locationId}
       data-from={search?.from}
       data-rangeto={search?.to}
     >
@@ -94,5 +96,15 @@ describe('StorefrontDetailView', () => {
     expect(back).toHaveAttribute('data-locale', 'en')
     expect(back).toHaveAttribute('data-from', '2026-07-01T10:00')
     expect(back).toHaveAttribute('data-rangeto', '2026-07-03T10:00')
+  })
+
+  it("carries the storefront location and date range into each car's booking CTA", () => {
+    renderDetail(makeDetail([makeVehicle()]))
+    const book = screen.getByRole('link', { name: 'Book this car' })
+    expect(book).toHaveAttribute('data-to', '/$locale/bookings/new')
+    expect(book).toHaveAttribute('data-vehicle', 'v1')
+    expect(book).toHaveAttribute('data-location', 'loc-1')
+    expect(book).toHaveAttribute('data-from', '2026-07-01T10:00')
+    expect(book).toHaveAttribute('data-rangeto', '2026-07-03T10:00')
   })
 })

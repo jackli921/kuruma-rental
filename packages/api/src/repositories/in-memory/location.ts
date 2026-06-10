@@ -65,10 +65,22 @@ export class InMemoryLocationRepository implements LocationRepository {
     )
   }
 
-  async create(data: Omit<Location, 'id' | 'createdAt' | 'updatedAt'>): Promise<Location> {
+  async create(
+    data: Omit<Location, 'id' | 'createdAt' | 'updatedAt' | 'latitude' | 'longitude'> & {
+      latitude?: number | null
+      longitude?: number | null
+    },
+  ): Promise<Location> {
     this.assertNameFree(data.operatorId, data.name)
     const now = new Date()
-    const location: Location = { ...data, id: crypto.randomUUID(), createdAt: now, updatedAt: now }
+    const location: Location = {
+      ...data,
+      latitude: data.latitude ?? null,
+      longitude: data.longitude ?? null,
+      id: crypto.randomUUID(),
+      createdAt: now,
+      updatedAt: now,
+    }
     this.store.set(location.id, location)
     return location
   }

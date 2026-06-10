@@ -1,4 +1,5 @@
 import type {
+  AddOnSnapshot,
   BookingEventPayload,
   BookingEventType,
   BookingFulfillmentMode,
@@ -60,6 +61,8 @@ export interface Booking {
   insuranceSnapshot: InsuranceSnapshot | null
   // Applicable fee_schedules rows snapshotted at booking time (never null).
   feeSnapshot: FeeSnapshotItem[]
+  // Paid add-ons selected at booking time (#460), never null.
+  addOnSnapshot: AddOnSnapshot[]
   externalId: string | null
   notes: string | null
   totalPrice: number | null
@@ -192,6 +195,10 @@ export interface Location {
   operatorId: string
   name: string
   address: string
+  /** WGS84 decimal degrees (#458 D2). null = not-yet-geocoded; the search map
+   *  degrades that row to list-only. */
+  latitude: number | null
+  longitude: number | null
   operatingHours: LocationOperatingHours
   timezone: string
   defaultTurnaroundMinutes: number
@@ -209,6 +216,18 @@ export interface InsuranceOption {
   dailyPriceJpy: number
   /** null = no deductible (full cover). */
   deductibleJpy: number | null
+  status: 'ACTIVE' | 'ARCHIVED'
+  createdAt: Date
+  updatedAt: Date
+}
+
+export interface AddOn {
+  id: string
+  /** Owning operator (marketplace tenant, #460). NOT NULL in the DB. */
+  operatorId: string
+  name: string
+  description: string | null
+  priceJpy: number
   status: 'ACTIVE' | 'ARCHIVED'
   createdAt: Date
   updatedAt: Date

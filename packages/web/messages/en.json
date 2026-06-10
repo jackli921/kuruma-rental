@@ -823,6 +823,20 @@
     "auto": "Automatic",
     "manual": "Manual",
     "viewStore": "View cars",
+    "select": "Select",
+    "showOnMap": "Show on map",
+    "view": {
+      "stores": "Stores",
+      "map": "Map",
+      "label": "Result view"
+    },
+    "list": {
+      "heading": "Available cars",
+      "empty": "No cars are available for these dates."
+    },
+    "map": {
+      "noCoordinates": "Map view isn't available for these results yet."
+    },
     "detail": {
       "backToSearch": "Back to search",
       "availableVehicles": "Available cars",
@@ -858,5 +872,54 @@
     "statusPending": "Pending review",
     "statusApproved": "Approved",
     "statusRejected": "Rejected"
+  },
+  "reservation": {
+    "title": "Complete your booking",
+    "vehicleHeading": "You're booking",
+    "steps": {
+      "dates": "Dates",
+      "addOns": "Extras",
+      "insurance": "Insurance",
+      "confirm": "Review",
+      "payment": "Payment"
+    },
+    "dates": {
+      "heading": "Your rental dates",
+      "pickup": "Pickup",
+      "return": "Return",
+      "duration": "{count, plural, one {# day} other {# days}}"
+    },
+    "addOns": {
+      "heading": "Add optional extras",
+      "empty": "No extras are available at this store.",
+      "price": "{price} per rental"
+    },
+    "insurance": {
+      "heading": "Choose your coverage",
+      "none": "No insurance",
+      "noneDescription": "Decline coverage and drive on your own risk.",
+      "perDay": "{price} / day",
+      "deductible": "Deductible {amount}",
+      "noDeductible": "No deductible",
+      "empty": "No insurance options are available at this store."
+    },
+    "confirm": {
+      "heading": "Review your booking",
+      "base": "Car rental",
+      "insurance": "Insurance",
+      "addOns": "Extras",
+      "total": "Estimated total",
+      "note": "Taxes and any operator fees are calculated at payment."
+    },
+    "payment": {
+      "heading": "Payment",
+      "comingSoon": "Online payment is coming soon. Your booking is not confirmed yet.",
+      "pay": "Pay and confirm"
+    },
+    "nav": {
+      "back": "Back",
+      "continue": "Continue",
+      "toPayment": "Continue to payment"
+    }
   }
 }

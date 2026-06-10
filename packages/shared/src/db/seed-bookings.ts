@@ -191,6 +191,7 @@ async function seed() {
       totalPrice: b.totalPriceJpy,
       insuranceSnapshot,
       feeSnapshot,
+      addOnSnapshot: [], // seed bookings carry no paid add-ons (#460)
     }
     eventValues.push({
       bookingId: seedId(b.id),
