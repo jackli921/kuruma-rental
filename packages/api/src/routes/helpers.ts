@@ -81,6 +81,34 @@ export function parsePagination(c: Context, opts?: LimitOptions): PaginationSucc
   return { ok: true, limit: limitResult.limit, offset }
 }
 
+// --- Upload size guard ---
+
+/**
+ * Pure decision: does the `Content-Length` header declare a body strictly
+ * larger than `maxBytes`? Returns false for an absent, empty, or malformed
+ * header — we only reject on a value we can trust. The per-file size check in
+ * the service is the precise backstop; this is the cheap early gate that lets
+ * a route reject an abusive body before buffering it into memory.
+ */
+export function exceedsContentLength(header: string | null | undefined, maxBytes: number): boolean {
+  if (!header) return false
+  const declared = parseNonNegativeInt(header)
+  return declared !== undefined && declared > maxBytes
+}
+
+/**
+ * Reject an oversized multipart/body request early (413) based on its
+ * `Content-Length`, before `parseBody()` buffers the bytes. Returns the 413
+ * response to short-circuit, or `undefined` to continue. Call at the top of
+ * an upload handler: `return rejectOversizedBody(c, MAX) ?? (await handle())`.
+ */
+export function rejectOversizedBody(c: Context, maxBytes: number): Response | undefined {
+  if (exceedsContentLength(c.req.header('content-length'), maxBytes)) {
+    return fail(c, 'Request body too large', 413)
+  }
+  return undefined
+}
+
 // --- Cache headers ---
 
 /**

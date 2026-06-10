@@ -2,13 +2,17 @@ import { Hono } from 'hono'
 import { describe, expect, it } from 'vitest'
 import { z } from 'zod'
 import {
+  exceedsContentLength,
   fail,
   ok,
   parseBody,
   parseDateRange,
   parseLimit,
   parsePagination,
+  rejectOversizedBody,
 } from '../../src/routes/helpers'
+
+const GUARD_MAX_BYTES = 100
 
 // Tiny Hono app that uses the helpers so we can test through real HTTP.
 function createTestApp() {
@@ -63,8 +67,67 @@ function createTestApp() {
     return ok(c, { from: result.from?.toISOString() ?? null, to: result.to?.toISOString() ?? null })
   })
 
+  app.post('/guarded', (c) => rejectOversizedBody(c, GUARD_MAX_BYTES) ?? ok(c, { passed: true }))
+
   return app
 }
+
+describe('exceedsContentLength()', () => {
+  it('is true only when a valid length is strictly above the max', () => {
+    expect(exceedsContentLength('101', GUARD_MAX_BYTES)).toBe(true)
+  })
+
+  it('is false at the exact boundary (equal is allowed)', () => {
+    expect(exceedsContentLength('100', GUARD_MAX_BYTES)).toBe(false)
+  })
+
+  it('is false below the max', () => {
+    expect(exceedsContentLength('99', GUARD_MAX_BYTES)).toBe(false)
+  })
+
+  it('is false when the header is absent (cannot pre-check; service backstops)', () => {
+    expect(exceedsContentLength(undefined, GUARD_MAX_BYTES)).toBe(false)
+    expect(exceedsContentLength(null, GUARD_MAX_BYTES)).toBe(false)
+    expect(exceedsContentLength('', GUARD_MAX_BYTES)).toBe(false)
+  })
+
+  it('is false for a malformed header rather than trusting a partial parse', () => {
+    expect(exceedsContentLength('999abc', GUARD_MAX_BYTES)).toBe(false)
+    expect(exceedsContentLength('1.5', GUARD_MAX_BYTES)).toBe(false)
+    expect(exceedsContentLength('-1', GUARD_MAX_BYTES)).toBe(false)
+  })
+})
+
+describe('rejectOversizedBody()', () => {
+  const app = createTestApp()
+
+  it('returns 413 with an error envelope when Content-Length exceeds the max', async () => {
+    const res = await app.request('/guarded', {
+      method: 'POST',
+      headers: { 'content-length': '101' },
+    })
+
+    expect(res.status).toBe(413)
+    expect(await res.json()).toEqual({ success: false, error: 'Request body too large' })
+  })
+
+  it('passes through when Content-Length is within the max', async () => {
+    const res = await app.request('/guarded', {
+      method: 'POST',
+      headers: { 'content-length': '100' },
+    })
+
+    expect(res.status).toBe(200)
+    expect(await res.json()).toEqual({ success: true, data: { passed: true } })
+  })
+
+  it('passes through when Content-Length is absent (chunked/streamed bodies)', async () => {
+    const res = await app.request('/guarded', { method: 'POST' })
+
+    expect(res.status).toBe(200)
+    expect(await res.json()).toEqual({ success: true, data: { passed: true } })
+  })
+})
 
 describe('ok()', () => {
   const app = createTestApp()
