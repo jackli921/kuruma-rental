@@ -2,6 +2,7 @@ import { type CallerContext, requireManagementRead } from '../../middleware/auth
 import type { NotificationLog } from '../../stores'
 import { operatorReadScope } from '../../tenancy'
 import {
+  MAX_NOTIFICATION_ATTEMPTS,
   type NotificationLogFilters,
   type NotificationLogRepository,
   type NotificationLogUpsert,
@@ -86,7 +87,11 @@ export class InMemoryNotificationLogRepository implements NotificationLogReposit
   async markFailed(id: string, error: string): Promise<void> {
     const row = this.store.get(id)
     if (!row) return
-    this.store.set(id, { ...row, status: 'FAILED', error, updatedAt: this.now() })
+    // #483: claim() already bumped attempts, so this row's count includes the
+    // attempt being recorded. At the cap, flip to terminal DEAD — claim() never
+    // re-arms it, so a poison recipient stops being re-sent.
+    const status = row.attempts >= MAX_NOTIFICATION_ATTEMPTS ? 'DEAD' : 'FAILED'
+    this.store.set(id, { ...row, status, error, updatedAt: this.now() })
   }
 
   async findAll(ctx: CallerContext, filters?: NotificationLogFilters): Promise<NotificationLog[]> {

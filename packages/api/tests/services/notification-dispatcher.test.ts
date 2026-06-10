@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { InMemoryNotificationLogRepository } from '../../src/repositories/in-memory/notification-log'
 import { InMemoryOperatorRepository } from '../../src/repositories/in-memory/operator'
 import { InMemoryUserRepository } from '../../src/repositories/in-memory/user'
-import { SEND_LEASE_MS } from '../../src/repositories/types'
+import { MAX_NOTIFICATION_ATTEMPTS, SEND_LEASE_MS } from '../../src/repositories/types'
 import type { LocationRepository, VehicleRepository } from '../../src/repositories/types'
 import type { EmailSender } from '../../src/services/email/email-sender'
 import { NotificationDispatcher } from '../../src/services/notification-dispatcher'
@@ -155,6 +155,30 @@ describe('NotificationDispatcher', () => {
     const rows = await logRepo.findAll({ userId: 'x', role: 'PLATFORM_ADMIN', bypassScope: true })
     expect(rows.every((r) => r.status === 'FAILED')).toBe(true)
     expect(rows[0]!.error).toContain('SMTP 550')
+  })
+
+  it('stops re-sending once a row hits the DEAD cap, returning an abandoned outcome (#483)', async () => {
+    const sender = {
+      send: vi.fn(async () => {
+        throw new Error('SMTP 550 hard bounce')
+      }),
+    }
+    const { dispatcher } = build({ sender })
+    // Drive the renter-confirm row to the attempt cap; each attempt claims + sends + fails.
+    let lastFailure: Awaited<ReturnType<typeof dispatcher.processOne>> | undefined
+    for (let i = 0; i < MAX_NOTIFICATION_ATTEMPTS; i++) {
+      lastFailure = await dispatcher.processOne(booking, 'RENTER_BOOKING_CONFIRM')
+    }
+    const sendMock = sender.send as ReturnType<typeof vi.fn>
+    expect(sendMock).toHaveBeenCalledTimes(MAX_NOTIFICATION_ATTEMPTS)
+    // The cap-crossing failure reports a truthful terminal status (the DB row is
+    // now DEAD), not a stale FAILED echo.
+    expect(lastFailure).toMatchObject({ result: 'failed', row: { status: 'DEAD' } })
+
+    // The row is now terminal DEAD: a replay must NOT invoke the provider again.
+    const outcome = await dispatcher.processOne(booking, 'RENTER_BOOKING_CONFIRM')
+    expect(outcome.result).toBe('abandoned')
+    expect(sendMock).toHaveBeenCalledTimes(MAX_NOTIFICATION_ATTEMPTS) // unchanged — no re-send
   })
 
   it('is idempotent on replay — a second dispatch does not resend a SENT row', async () => {

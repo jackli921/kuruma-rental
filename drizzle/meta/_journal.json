@@ -330,6 +330,13 @@
       "when": 1781092469127,
       "tag": "0046_add_on_options",
       "breakpoints": true
+    },
+    {
+      "idx": 47,
+      "version": "7",
+      "when": 1781134523201,
+      "tag": "0047_notification_dead_state",
+      "breakpoints": true
     }
   ]
 }

@@ -1,10 +1,11 @@
 import { SYSTEM_CONTEXT } from '../middleware/auth'
-import type {
-  LocationRepository,
-  NotificationLogRepository,
-  OperatorRepository,
-  UserRepository,
-  VehicleRepository,
+import {
+  type LocationRepository,
+  MAX_NOTIFICATION_ATTEMPTS,
+  type NotificationLogRepository,
+  type OperatorRepository,
+  type UserRepository,
+  type VehicleRepository,
 } from '../repositories/types'
 import type { Booking, NotificationLog } from '../stores'
 import type { EmailSender } from './email/email-sender'
@@ -39,6 +40,9 @@ export type DispatchOutcome =
   | { result: 'failed'; row: NotificationLog }
   | { result: 'already_sent'; row: NotificationLog }
   | { result: 'in_progress'; row: NotificationLog }
+  // #483: the row is terminal DEAD (failed MAX_NOTIFICATION_ATTEMPTS times); claim()
+  // never re-arms it, so neither a replay nor a resend will invoke the provider.
+  | { result: 'abandoned'; row: NotificationLog }
   | { result: 'no_recipient' }
 
 /**
@@ -89,12 +93,12 @@ export class NotificationDispatcher {
 
     const claimed = await this.notificationLogRepo.claim(row.id)
     if (!claimed) {
-      // claim() only declines a terminal SENT row or a live (non-expired) SENDING
-      // lease — QUEUED/FAILED/expired-SENDING are always claimable. So the un-claimed
-      // status disambiguates "already done" from "in flight elsewhere".
-      return row.status === 'SENT'
-        ? { result: 'already_sent', row }
-        : { result: 'in_progress', row }
+      // claim() only declines a terminal SENT row, a terminal DEAD row (#483), or a
+      // live (non-expired) SENDING lease — QUEUED/FAILED/expired-SENDING are always
+      // claimable. So the un-claimed status disambiguates the three terminal cases.
+      if (row.status === 'SENT') return { result: 'already_sent', row }
+      if (row.status === 'DEAD') return { result: 'abandoned', row }
+      return { result: 'in_progress', row }
     }
 
     try {
@@ -104,9 +108,22 @@ export class NotificationDispatcher {
       return { result: 'sent', row: { ...claimed, status: 'SENT', providerMessageId } }
     } catch (err) {
       const reason = err instanceof Error ? err.message : String(err)
-      console.error('[notification] send failed', { id: claimed.id, kind, reason })
       await this.notificationLogRepo.markFailed(claimed.id, reason.slice(0, 500))
-      return { result: 'failed', row: { ...claimed, status: 'FAILED', error: reason } }
+      // claim() already bumped attempts, so this is the cap predicate markFailed
+      // applied — mirror it here for a truthful outcome status + a distinct
+      // abandonment signal (a silently-DEAD notification is a booking nobody acts on).
+      const status = claimed.attempts >= MAX_NOTIFICATION_ATTEMPTS ? 'DEAD' : 'FAILED'
+      if (status === 'DEAD') {
+        console.error('[notification] abandoned after max attempts', {
+          id: claimed.id,
+          kind,
+          attempts: claimed.attempts,
+          reason,
+        })
+      } else {
+        console.error('[notification] send failed', { id: claimed.id, kind, reason })
+      }
+      return { result: 'failed', row: { ...claimed, status, error: reason } }
     }
   }
 

@@ -4,6 +4,7 @@ import { type CallerContext, requireManagementRead } from '../../middleware/auth
 import type { NotificationLog } from '../../stores'
 import { operatorReadScope } from '../../tenancy'
 import {
+  MAX_NOTIFICATION_ATTEMPTS,
   type NotificationLogFilters,
   type NotificationLogRepository,
   type NotificationLogUpsert,
@@ -92,9 +93,17 @@ export class DrizzleNotificationLogRepository implements NotificationLogReposito
   }
 
   async markFailed(id: string, error: string): Promise<void> {
+    // #483: claim() already bumped attempts, so the column reflects the attempt
+    // being recorded. Flip to terminal DEAD at the cap in ONE atomic UPDATE (a
+    // read-then-write would race a concurrent claim). claim() never re-arms DEAD,
+    // so a hard-bounce recipient stops being re-sent on every replay/resend.
     await this.db
       .update(notificationLog)
-      .set({ status: 'FAILED', error, updatedAt: sql`now()` })
+      .set({
+        status: sql`(case when ${notificationLog.attempts} >= ${MAX_NOTIFICATION_ATTEMPTS} then 'DEAD' else 'FAILED' end)::notification_status`,
+        error,
+        updatedAt: sql`now()`,
+      })
       .where(eq(notificationLog.id, id))
   }
 

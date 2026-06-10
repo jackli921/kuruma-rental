@@ -132,7 +132,9 @@ export interface Message {
 
 // Slice 7 (#393): one row per outbound email. status drives the lease-bounded
 // send lifecycle (QUEUED -> SENDING -> SENT/FAILED); idempotencyKey seals one
-// logical notification per (booking, kind).
+// logical notification per (booking, kind). DEAD (#483) is the terminal
+// poison-message sink after MAX_NOTIFICATION_ATTEMPTS failures — claim() never
+// re-arms it. Mirrors notificationStatusEnum in @kuruma/shared/db/schema.
 export interface NotificationLog {
   id: string
   bookingId: string
@@ -141,7 +143,7 @@ export interface NotificationLog {
   channel: string
   recipient: string
   locale: string
-  status: 'QUEUED' | 'SENDING' | 'SENT' | 'FAILED'
+  status: 'QUEUED' | 'SENDING' | 'SENT' | 'FAILED' | 'DEAD'
   providerMessageId: string | null
   error: string | null
   attempts: number

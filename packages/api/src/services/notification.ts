@@ -46,6 +46,9 @@ export class NotificationService {
     switch (outcome.result) {
       case 'no_recipient':
         return { ok: false, status: 422, error: 'No resolvable recipient' }
+      // #483: a DEAD row has exhausted its attempt cap — never re-send it.
+      case 'abandoned':
+        return { ok: false, status: 422, error: 'Notification abandoned after max attempts' }
       case 'failed':
         return { ok: false, status: 502, error: outcome.row.error ?? 'Send failed' }
       case 'sent':

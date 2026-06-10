@@ -9,6 +9,7 @@ import {
   DrizzleNotificationLogRepository,
   DrizzleVehicleRepository,
 } from '../../src/repositories/drizzle'
+import { MAX_NOTIFICATION_ATTEMPTS } from '../../src/repositories/types'
 import type { Vehicle } from '../../src/stores'
 import { bookingInput } from '../helpers/booking'
 import {
@@ -185,5 +186,40 @@ describe('DrizzleNotificationLogRepository claim lease (§3)', () => {
     const replay = await repo.upsertQueued(row({ idempotencyKey: keyFor('idem') }))
     expect(replay.id).toBe(first.id)
     expect(replay.status).toBe('SENT')
+  })
+})
+
+// Proves the #483 attempt cap against REAL Postgres — exercises the markFailed
+// `CASE WHEN attempts >= cap THEN 'DEAD' ELSE 'FAILED' END::notification_status`
+// expression (the InMemory test covers the contract; only this runs the SQL).
+describe('DrizzleNotificationLogRepository DEAD cap (#483)', () => {
+  const repo = new DrizzleNotificationLogRepository(db)
+  const keyFor = (suffix: string) => `notify:${testBookingId}:dead-${suffix}`
+
+  it('markFailed flips to terminal DEAD at the cap, and claim never re-arms it', async () => {
+    const queued = await repo.upsertQueued(row({ idempotencyKey: keyFor('cap') }))
+    // Drive attempts to the cap; FAILED is always reclaimable, so no lease wait.
+    for (let i = 0; i < MAX_NOTIFICATION_ATTEMPTS; i++) {
+      await repo.claim(queued.id)
+      await repo.markFailed(queued.id, 'hard bounce')
+    }
+    const dead = await repo.findById(SYSTEM_CONTEXT, queued.id)
+    expect(dead).toMatchObject({ status: 'DEAD', attempts: MAX_NOTIFICATION_ATTEMPTS })
+
+    // Even with no live lease (updatedAt far in the past), DEAD is never reclaimed.
+    await db
+      .update(notificationLog)
+      .set({ updatedAt: sql`now() - interval '1 hour'` })
+      .where(eq(notificationLog.id, queued.id))
+    expect(await repo.claim(queued.id)).toBeUndefined()
+  })
+
+  it('markFailed stays FAILED below the cap (still reclaimable)', async () => {
+    const queued = await repo.upsertQueued(row({ idempotencyKey: keyFor('below') }))
+    await repo.claim(queued.id)
+    await repo.markFailed(queued.id, 'transient')
+    const failed = await repo.findById(SYSTEM_CONTEXT, queued.id)
+    expect(failed).toMatchObject({ status: 'FAILED', attempts: 1 })
+    expect((await repo.claim(queued.id))?.status).toBe('SENDING')
   })
 })
