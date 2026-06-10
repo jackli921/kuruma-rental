@@ -94,10 +94,13 @@ export class RenterDocumentService {
     const approvedIdps = await this.repo.findApprovedByType(renterId, 'IDP')
     if (approvedIdps.length === 0) return { ok: false, reason: 'NO_APPROVED_IDP' }
 
+    // Intentionally the UTC calendar day (mirrors lib/expiry.ts). IDP expiry is a
+    // coarse date, so a ≤1-day skew at the JST boundary is acceptable here.
     const returnDay = rentalEndAt.toISOString().slice(0, 10)
-    // YYYY-MM-DD strings sort lexicographically as dates. A null expiry (should
-    // not occur for an approved doc) is treated as non-expiring.
-    const valid = approvedIdps.some((d) => d.expiryDate === null || d.expiryDate >= returnDay)
+    // YYYY-MM-DD strings sort lexicographically as dates. Fail CLOSED on a null
+    // expiry: the validator requires one to APPROVE so it shouldn't occur, but a
+    // gate must never grant eligibility from an unexpected null.
+    const valid = approvedIdps.some((d) => d.expiryDate !== null && d.expiryDate >= returnDay)
     return valid ? { ok: true } : { ok: false, reason: 'IDP_EXPIRES_BEFORE_RETURN' }
   }
 }

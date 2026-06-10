@@ -83,7 +83,9 @@ export class InMemoryRenterDocumentRepository implements RenterDocumentRepositor
   ): Promise<RenterDocument | undefined> {
     requireVerifier(ctx)
     const existing = this.store.get(id)
-    if (!existing) return undefined
+    // Verdicts are terminal: only a PENDING doc can be decided (mirrors the
+    // Drizzle WHERE status='PENDING' guard) — no silent overwrite of a verdict.
+    if (!existing || existing.status !== 'PENDING') return undefined
     const updated: RenterDocument = {
       ...existing,
       status: verdict.status,

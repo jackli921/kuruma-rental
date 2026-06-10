@@ -125,6 +125,20 @@ describe('InMemoryRenterDocumentRepository — verify', () => {
       }),
     ).rejects.toThrow(ForbiddenError)
   })
+
+  it('treats a verdict as terminal — re-verifying a decided doc returns undefined', async () => {
+    await repo.verify(staffCtx, docId, {
+      status: 'APPROVED',
+      verifierId: staffCtx.userId,
+      expiryDate: '2030-01-31',
+    })
+    const reVerify = await repo.verify(staffCtx, docId, {
+      status: 'REJECTED',
+      verifierId: staffCtx.userId,
+      rejectionReason: 'changed my mind',
+    })
+    expect(reVerify).toBeUndefined()
+  })
 })
 
 describe('InMemoryRenterDocumentRepository — pending queue + gate lookup', () => {

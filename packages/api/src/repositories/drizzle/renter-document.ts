@@ -113,7 +113,9 @@ export class DrizzleRenterDocumentRepository implements RenterDocumentRepository
         verifiedAt: sql`now()`,
         updatedAt: sql`now()`,
       })
-      .where(eq(renterDocuments.id, id))
+      // Verdicts are terminal: only a PENDING doc can be decided, so a final
+      // verdict can never be silently overwritten (no match → undefined → 404).
+      .where(and(eq(renterDocuments.id, id), eq(renterDocuments.status, 'PENDING')))
       .returning()
     return updated ? toRenterDocument(updated) : undefined
   }
