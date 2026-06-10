@@ -84,6 +84,13 @@ export function parsePagination(c: Context, opts?: LimitOptions): PaginationSucc
 // --- Upload size guard ---
 
 /**
+ * Slack added to a route's payload budget to cover multipart framing (boundary
+ * lines, Content-Disposition headers, extra form fields) so a legitimately
+ * max-sized file isn't false-rejected by a few hundred bytes of envelope. The
+ * service's exact per-file check enforces the real limit. */
+export const MULTIPART_OVERHEAD_BYTES = 64 * 1024
+
+/**
  * Pure decision: does the `Content-Length` header declare a body strictly
  * larger than `maxBytes`? Returns false for an absent, empty, or malformed
  * header — we only reject on a value we can trust. The per-file size check in

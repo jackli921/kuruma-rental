@@ -93,6 +93,16 @@ describe('POST /documents', () => {
     const res = await app.request('/documents', { method: 'POST', body: uploadForm('IDP') })
     expect(res.status).toBe(401)
   })
+
+  it('rejects an oversized body early with 413 before buffering it', async () => {
+    const res = await app.request('/documents', {
+      method: 'POST',
+      headers: { ...(await authHeaders(RENTER)), 'content-length': String(50 * 1024 * 1024) },
+    })
+
+    expect(res.status).toBe(413)
+    expect((await res.json()).error).toBe('Request body too large')
+  })
 })
 
 describe('GET /documents/me', () => {

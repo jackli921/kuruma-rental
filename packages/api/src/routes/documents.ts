@@ -1,8 +1,22 @@
-import { uploadDocumentSchema, verifyDocumentSchema } from '@kuruma/shared/validators/document'
+import {
+  MAX_DOCUMENT_BYTES,
+  uploadDocumentSchema,
+  verifyDocumentSchema,
+} from '@kuruma/shared/validators/document'
 import { Hono } from 'hono'
 import { STAFF_ROLES, requireUser, toCallerContext } from '../middleware/auth'
 import type { RenterDocumentService } from '../services/renter-document'
-import { fail, ok, parseBody, parsePagination } from './helpers'
+import {
+  MULTIPART_OVERHEAD_BYTES,
+  fail,
+  ok,
+  parseBody,
+  parsePagination,
+  rejectOversizedBody,
+} from './helpers'
+
+// One file per request; cap the request at the per-file limit plus multipart slack.
+const MAX_DOCUMENT_REQUEST_BYTES = MAX_DOCUMENT_BYTES + MULTIPART_OVERHEAD_BYTES
 
 export function createDocumentRoutes(service: RenterDocumentService) {
   const app = new Hono()
@@ -11,6 +25,9 @@ export function createDocumentRoutes(service: RenterDocumentService) {
     .post('/documents', async (c) => {
       const user = requireUser(c)
       const ctx = toCallerContext(user)
+
+      const oversized = rejectOversizedBody(c, MAX_DOCUMENT_REQUEST_BYTES)
+      if (oversized) return oversized
 
       const body = await c.req.parseBody()
       const file = body.file
