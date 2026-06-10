@@ -17,6 +17,14 @@ import {
 import type { AdapterAccountType } from 'next-auth/adapters'
 import { LUGGAGE_SIZES } from '../lib/luggage'
 import type { LocationOperatingHours } from '../types/location'
+// Booking snapshot/event payload types live in ./booking-types (file-size split,
+// #460); imported here for the jsonb $type<> column annotations below.
+import type {
+  AddOnSnapshot,
+  BookingEventPayload,
+  FeeSnapshotItem,
+  InsuranceSnapshot,
+} from './booking-types'
 
 // Marketplace tenancy (epic #385, slice 1 / #386).
 // OPERATOR_* roles are tenant-scoped and NEVER bypass operator scope.
@@ -271,46 +279,6 @@ export const insuranceOptions = pgTable(
       'insurance_options_deductible_non_negative',
       sql`${table.deductibleJpy} IS NULL OR ${table.deductibleJpy} >= 0`,
     ),
-  ],
-)
-
-export const addOnStatusEnum = pgEnum('add_on_status', ['ACTIVE', 'ARCHIVED'])
-
-// Operator-owned paid add-ons (epic #385, slice #460). Selectable priced items
-// chosen in the booking wizard (baby seat, ETC card…). priceJpy is a FLAT
-// per-booking charge — distinct from insurance_options (per-day) and from
-// fee_schedules (potential post-rental charges). At booking the renter picks
-// from the operator's active list; the chosen add-ons + price snapshot onto
-// bookings.addOnSnapshot. Structure mirrors insurance_options exactly.
-export const addOnOptions = pgTable(
-  'add_on_options',
-  {
-    id: text('id')
-      .primaryKey()
-      .$defaultFn(() => crypto.randomUUID()),
-    // Tenant owner. NOT NULL — same fresh-branch reseed rationale as
-    // insuranceOptions.operatorId (#404); no nullable tenancy debt.
-    operatorId: text('operatorId')
-      .notNull()
-      .references(() => operators.id),
-    name: text('name').notNull(),
-    description: text('description'),
-    priceJpy: integer('priceJpy').notNull(),
-    status: addOnStatusEnum('status').notNull().default('ACTIVE'),
-    createdAt: timestamp('createdAt', { withTimezone: true }).notNull().defaultNow(),
-    updatedAt: timestamp('updatedAt', { withTimezone: true }).notNull().defaultNow(),
-  },
-  (table) => [
-    index('idx_add_on_options_operatorId').on(table.operatorId),
-    // Composite-unique so a future composite FK can seal a referrer to the
-    // add-on's own tenant (mirrors insurance_options_operatorId_id_unique).
-    unique('add_on_options_operatorId_id_unique').on(table.operatorId, table.id),
-    // Name uniqueness scoped to ACTIVE rows so archiving frees the name for
-    // reuse (mirrors insurance_options_active_name_unique). PARTIAL index.
-    uniqueIndex('add_on_options_active_name_unique')
-      .on(table.operatorId, table.name)
-      .where(sql`status = 'ACTIVE'`),
-    check('add_on_options_price_non_negative', sql`${table.priceJpy} >= 0`),
   ],
 )
 
@@ -798,55 +766,9 @@ export type FeeType = (typeof feeTypeEnum.enumValues)[number]
 export type FeeUnit = (typeof feeUnitEnum.enumValues)[number]
 export type BookingEventType = (typeof bookingEventTypeEnum.enumValues)[number]
 
-export type InsuranceSnapshot = {
-  insuranceOptionId: string
-  name: string
-  dailyPriceJpy: number
-  deductibleJpy: number | null
-}
-
-export type FeeSnapshotItem = {
-  feeType: FeeType
-  unit: FeeUnit
-  amountJpy: number
-  // Provenance: class-specific (the class id) vs operator-wide (null).
-  vehicleClassId: string | null
-}
-
-// A paid add-on locked onto the booking at submit (#460). priceJpy is the flat
-// per-booking charge captured at booking time (rate-at-time-of-booking).
-export type AddOnSnapshot = {
-  addOnId: string
-  name: string
-  priceJpy: number
-}
-
-export type BookingCreatedPayload = {
-  requestedVehicleId: string
-  assignedVehicleId: string
-  classId: string
-  // #463: the discriminator is a defining booking attribute, so the self-contained
-  // CREATED audit snapshot records it alongside the vehicle/class it mirrors.
-  fulfillmentMode: BookingFulfillmentMode
-  startAt: string
-  endAt: string
-  totalPrice: number
-  insuranceSnapshot: InsuranceSnapshot | null
-  feeSnapshot: FeeSnapshotItem[]
-  addOnSnapshot: AddOnSnapshot[]
-}
-export type VehicleSubstitutedPayload = {
-  fromVehicleId: string
-  toVehicleId: string
-  reason: string | null
-}
-export type BookingCancelledPayload = {
-  cancellationFee: number | null
-  cancelledAt: string
-}
-export type StatusChangedPayload = { from: BookingStatus; to: BookingStatus }
-export type BookingEventPayload =
-  | BookingCreatedPayload
-  | VehicleSubstitutedPayload
-  | BookingCancelledPayload
-  | StatusChangedPayload
+// add_on_options table + status enum live in ./add-on; booking snapshot/event
+// payload types live in ./booking-types. Both re-exported so drizzle-kit (which
+// only loads this module) and existing `@kuruma/shared/db/schema` importers see
+// them. Split out to keep this file under the 800-line cap (#460).
+export * from './add-on'
+export * from './booking-types'
