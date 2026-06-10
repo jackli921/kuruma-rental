@@ -85,6 +85,11 @@ export function createAuthRoutes(
           path: '/',
           maxAge: OAUTH_STATE_TTL_SECONDS,
         })
+      } else {
+        // Bind the return cookie freshly to *this* flow: with no/invalid returnTo,
+        // erase any stale value an aborted earlier flow left behind, so the
+        // callback can't inherit it and redirect a plain login to a stale path.
+        deleteCookie(c, OAUTH_RETURN_COOKIE, { path: '/' })
       }
       return c.redirect(buildGoogleAuthorizeUrl(googleConfig, state), 302)
     })

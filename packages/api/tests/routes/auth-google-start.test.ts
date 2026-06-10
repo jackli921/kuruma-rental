@@ -78,6 +78,32 @@ describe('POST /auth/google/start', () => {
     const res = await app.request('/auth/google/start', { method: 'POST' })
     expect(readReturnCookie(res)).toBeUndefined()
   })
+
+  // A new flow must bind a *fresh* return value. If the browser still holds a
+  // stale kuruma_oauth_return from an aborted flow, a later plain login (no
+  // returnTo) would otherwise inherit it and the callback would redirect to that
+  // stale path. So /start must actively erase the old cookie, not just skip it.
+  test('no returnTo + stale return cookie present → erases the stale cookie', async () => {
+    setupGoogleEnv()
+    const app = createApp()
+    const res = await app.request('/auth/google/start', {
+      method: 'POST',
+      headers: { cookie: 'kuruma_oauth_return=%2Fja%2Fbookings%2Fnew' },
+    })
+    expect(res.status).toBe(302)
+    expect(erasesReturnCookie(res)).toBe(true)
+  })
+
+  test('open-redirect returnTo + stale return cookie present → erases the stale cookie', async () => {
+    setupGoogleEnv()
+    const app = createApp()
+    const res = await app.request('/auth/google/start?returnTo=%2F%2Fevil.com', {
+      method: 'POST',
+      headers: { cookie: 'kuruma_oauth_return=%2Fja%2Fbookings%2Fnew' },
+    })
+    expect(res.status).toBe(302)
+    expect(erasesReturnCookie(res)).toBe(true)
+  })
 })
 
 /** Read the decoded value of the kuruma_oauth_return cookie, or undefined. */
@@ -86,4 +112,13 @@ function readReturnCookie(res: Response): string | undefined {
   if (!hit) return undefined
   const value = hit.slice('kuruma_oauth_return='.length).split(';')[0] ?? ''
   return value === '' ? undefined : decodeURIComponent(value)
+}
+
+/** True when the response sends a Set-Cookie that expires kuruma_oauth_return
+ *  (empty value + Max-Age=0) — i.e. it tells the browser to drop the stale one. */
+function erasesReturnCookie(res: Response): boolean {
+  const hit = (res.headers.getSetCookie?.() ?? []).find((c) => c.startsWith('kuruma_oauth_return='))
+  if (!hit) return false
+  const value = hit.slice('kuruma_oauth_return='.length).split(';')[0] ?? ''
+  return value === '' && /max-age=0\b/i.test(hit)
 }
