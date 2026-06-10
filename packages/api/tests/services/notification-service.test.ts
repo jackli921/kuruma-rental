@@ -3,10 +3,11 @@ import type { CallerContext } from '../../src/middleware/auth'
 import { InMemoryNotificationLogRepository } from '../../src/repositories/in-memory/notification-log'
 import { InMemoryOperatorRepository } from '../../src/repositories/in-memory/operator'
 import { InMemoryUserRepository } from '../../src/repositories/in-memory/user'
-import type {
-  BookingRepository,
-  LocationRepository,
-  VehicleRepository,
+import {
+  type BookingRepository,
+  type LocationRepository,
+  MAX_NOTIFICATION_ATTEMPTS,
+  type VehicleRepository,
 } from '../../src/repositories/types'
 import type { EmailSender } from '../../src/services/email/email-sender'
 import { NotificationService } from '../../src/services/notification'
@@ -222,6 +223,31 @@ describe('NotificationService', () => {
     await logRepo.markFailed(seeded.id, 'earlier failure')
     await Promise.all([service.resend(op1Ctx, seeded.id), service.resend(op1Ctx, seeded.id)])
     expect(sender.send).toHaveBeenCalledTimes(1)
+  })
+
+  it('resend of a terminal DEAD row returns 422 without re-sending (#483 poison sink)', async () => {
+    const sender = { send: vi.fn(async () => ({ providerMessageId: 'msg-1' })) }
+    const { service, logRepo, booking } = build(sender)
+    const seeded = await logRepo.upsertQueued({
+      bookingId: booking.id,
+      operatorId: OP1,
+      kind: 'RENTER_BOOKING_CONFIRM',
+      recipient: 'jane@example.com',
+      locale: 'en',
+      idempotencyKey: `notify:${booking.id}:RENTER_BOOKING_CONFIRM`,
+    })
+    // Drive the row to the cap so it is terminal DEAD.
+    for (let i = 0; i < MAX_NOTIFICATION_ATTEMPTS; i++) {
+      await logRepo.claim(seeded.id)
+      await logRepo.markFailed(seeded.id, 'hard bounce')
+    }
+    const result = await service.resend(op1Ctx, seeded.id)
+    expect(result).toEqual({
+      ok: false,
+      status: 422,
+      error: 'Notification abandoned after max attempts',
+    })
+    expect(sender.send).not.toHaveBeenCalled()
   })
 
   it('surfaces a send failure as 502', async () => {

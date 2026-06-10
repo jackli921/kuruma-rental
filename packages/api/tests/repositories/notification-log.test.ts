@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it } from 'vitest'
 import { ForbiddenError, SYSTEM_CONTEXT } from '../../src/middleware/auth'
 import { InMemoryNotificationLogRepository } from '../../src/repositories/in-memory/notification-log'
-import { SEND_LEASE_MS } from '../../src/repositories/types'
+import { MAX_NOTIFICATION_ATTEMPTS, SEND_LEASE_MS } from '../../src/repositories/types'
 
 const OP1 = 'op-1'
 const OP2 = 'op-2'
@@ -114,6 +114,36 @@ describe('InMemoryNotificationLogRepository', () => {
     await repo.markFailed(other.id, 'SMTP 550')
     const failed = await repo.findById(SYSTEM_CONTEXT, other.id)
     expect(failed).toMatchObject({ status: 'FAILED', error: 'SMTP 550' })
+  })
+
+  // #483: drive a row's attempts up to N via claim->markFailed (FAILED is always
+  // reclaimable, so no lease wait is needed between cycles).
+  const failNTimes = async (id: string, n: number) => {
+    for (let i = 0; i < n; i++) {
+      await repo.claim(id)
+      await repo.markFailed(id, 'boom')
+    }
+  }
+
+  it('markFailed BELOW the attempt cap stays FAILED (still reclaimable)', async () => {
+    const row = await repo.upsertQueued(seed())
+    await failNTimes(row.id, MAX_NOTIFICATION_ATTEMPTS - 1)
+    const failed = await repo.findById(SYSTEM_CONTEXT, row.id)
+    expect(failed).toMatchObject({ status: 'FAILED', attempts: MAX_NOTIFICATION_ATTEMPTS - 1 })
+  })
+
+  it('markFailed AT the attempt cap flips to terminal DEAD (poison-message sink)', async () => {
+    const row = await repo.upsertQueued(seed())
+    await failNTimes(row.id, MAX_NOTIFICATION_ATTEMPTS)
+    const dead = await repo.findById(SYSTEM_CONTEXT, row.id)
+    expect(dead).toMatchObject({ status: 'DEAD', attempts: MAX_NOTIFICATION_ATTEMPTS })
+  })
+
+  it('claim never reclaims a terminal DEAD row (stops re-sending a poison recipient)', async () => {
+    const row = await repo.upsertQueued(seed())
+    await failNTimes(row.id, MAX_NOTIFICATION_ATTEMPTS)
+    now = new Date(now.getTime() + SEND_LEASE_MS * 10)
+    expect(await repo.claim(row.id)).toBeUndefined()
   })
 
   describe('findAll scoping', () => {

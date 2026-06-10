@@ -299,6 +299,16 @@ export interface UserRepository {
  */
 export const SEND_LEASE_MS = 5 * 60 * 1000
 
+/**
+ * #483: after this many delivery attempts a notification is marked terminal DEAD
+ * instead of FAILED. The claim predicate reclaims QUEUED / FAILED / expired
+ * SENDING but NEVER DEAD — so a permanently-bad recipient (hard bounce, malformed
+ * address) stops being re-sent on every booking replay and operator resend. The
+ * cap counts the attempt being recorded: markFailed sees the already-incremented
+ * `attempts` (claim bumped it) and flips to DEAD when `attempts >= cap`.
+ */
+export const MAX_NOTIFICATION_ATTEMPTS = 5
+
 export interface NotificationLogUpsert {
   bookingId: string
   operatorId: string

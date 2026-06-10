@@ -304,11 +304,15 @@ export const notificationKindEnum = pgEnum('notification_kind', [
 // SENDING is the in-flight lease between QUEUED and SENT/FAILED — it closes the
 // concurrent-send race (atomic claim, architect P1). Reclaimable ONLY after the
 // SEND_LEASE expires (see notification_log claim predicate); SENT is terminal.
+// DEAD is the terminal poison-message sink (#483): a row that has FAILED
+// MAX_NOTIFICATION_ATTEMPTS times. The claim predicate never re-arms it, so a
+// hard-bounce recipient stops being re-sent on every replay/resend.
 export const notificationStatusEnum = pgEnum('notification_status', [
   'QUEUED',
   'SENDING',
   'SENT',
   'FAILED',
+  'DEAD',
 ])
 
 export const feeSchedules = pgTable(
