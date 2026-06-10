@@ -1,5 +1,5 @@
 {
-  "id": "c2f21e11-1c01-43ff-9da1-fa97b7765c26",
+  "id": "8a3c9a1e-3752-4f90-b37e-a45ebf326dea",
   "prevId": "00b877d4-b4f2-4a53-8e06-f55b0e00fe64",
   "version": "7",
   "dialect": "postgresql",
@@ -334,13 +334,6 @@
         },
         "feeSnapshot": {
           "name": "feeSnapshot",
-          "type": "jsonb",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "'[]'::jsonb"
-        },
-        "addOnSnapshot": {
-          "name": "addOnSnapshot",
           "type": "jsonb",
           "primaryKey": false,
           "notNull": true,
@@ -999,6 +992,18 @@
           "type": "text",
           "primaryKey": false,
           "notNull": true
+        },
+        "latitude": {
+          "name": "latitude",
+          "type": "double precision",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "longitude": {
+          "name": "longitude",
+          "type": "double precision",
+          "primaryKey": false,
+          "notNull": false
         },
         "operatingHours": {
           "name": "operatingHours",
@@ -2604,137 +2609,6 @@
         }
       },
       "isRLSEnabled": false
-    },
-    "public.add_on_options": {
-      "name": "add_on_options",
-      "schema": "",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "text",
-          "primaryKey": true,
-          "notNull": true
-        },
-        "operatorId": {
-          "name": "operatorId",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "name": {
-          "name": "name",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "description": {
-          "name": "description",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "priceJpy": {
-          "name": "priceJpy",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "status": {
-          "name": "status",
-          "type": "add_on_status",
-          "typeSchema": "public",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "'ACTIVE'"
-        },
-        "createdAt": {
-          "name": "createdAt",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        },
-        "updatedAt": {
-          "name": "updatedAt",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        }
-      },
-      "indexes": {
-        "idx_add_on_options_operatorId": {
-          "name": "idx_add_on_options_operatorId",
-          "columns": [
-            {
-              "expression": "operatorId",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "add_on_options_active_name_unique": {
-          "name": "add_on_options_active_name_unique",
-          "columns": [
-            {
-              "expression": "operatorId",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "name",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": true,
-          "where": "status = 'ACTIVE'",
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        }
-      },
-      "foreignKeys": {
-        "add_on_options_operatorId_operators_id_fk": {
-          "name": "add_on_options_operatorId_operators_id_fk",
-          "tableFrom": "add_on_options",
-          "tableTo": "operators",
-          "columnsFrom": [
-            "operatorId"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {
-        "add_on_options_operatorId_id_unique": {
-          "name": "add_on_options_operatorId_id_unique",
-          "nullsNotDistinct": false,
-          "columns": [
-            "operatorId",
-            "id"
-          ]
-        }
-      },
-      "policies": {},
-      "checkConstraints": {
-        "add_on_options_price_non_negative": {
-          "name": "add_on_options_price_non_negative",
-          "value": "\"add_on_options\".\"priceJpy\" >= 0"
-        }
-      },
-      "isRLSEnabled": false
     }
   },
   "enums": {
@@ -2905,14 +2779,6 @@
         "AVAILABLE",
         "MAINTENANCE",
         "RETIRED"
-      ]
-    },
-    "public.add_on_status": {
-      "name": "add_on_status",
-      "schema": "public",
-      "values": [
-        "ACTIVE",
-        "ARCHIVED"
       ]
     }
   },

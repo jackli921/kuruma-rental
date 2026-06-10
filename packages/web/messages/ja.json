@@ -820,6 +820,20 @@
     "auto": "オートマ",
     "manual": "マニュアル",
     "viewStore": "クルマを見る",
+    "select": "選択",
+    "showOnMap": "地図で表示",
+    "view": {
+      "stores": "店舗",
+      "map": "地図",
+      "label": "表示切り替え"
+    },
+    "list": {
+      "heading": "空車",
+      "empty": "選択した日程で利用できるクルマがありません。"
+    },
+    "map": {
+      "noCoordinates": "これらの結果はまだ地図に表示できません。"
+    },
     "detail": {
       "backToSearch": "検索に戻る",
       "availableVehicles": "空車",

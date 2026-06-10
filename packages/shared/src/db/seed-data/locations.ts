@@ -9,7 +9,14 @@ import type { locations } from '../schema'
  */
 export type DemoLocation = Pick<
   typeof locations.$inferInsert,
-  'id' | 'operatorId' | 'name' | 'address' | 'defaultTurnaroundMinutes' | 'timezone'
+  | 'id'
+  | 'operatorId'
+  | 'name'
+  | 'address'
+  | 'defaultTurnaroundMinutes'
+  | 'timezone'
+  | 'latitude'
+  | 'longitude'
 > & {
   readonly id: string
   readonly operatorId: string
@@ -17,6 +24,10 @@ export type DemoLocation = Pick<
   readonly address: string
   readonly defaultTurnaroundMinutes: number
   readonly timezone: string
+  // WGS84 decimal degrees (#458 D2). Block-accurate — enough for storefront
+  // pins; refine if needed. Real coords so the search map demos with real pins.
+  readonly latitude: number
+  readonly longitude: number
 }
 
 const DEFAULT_TURNAROUND_MINUTES = 2880
@@ -29,6 +40,8 @@ export const DEMO_LOCATIONS: readonly DemoLocation[] = [
     operatorId: 'op_best_car_rental',
     name: 'Namba',
     address: '2-10-70 Nanba, Chuo-ku, Osaka 542-0076',
+    latitude: 34.6627,
+    longitude: 135.5012,
     defaultTurnaroundMinutes: DEFAULT_TURNAROUND_MINUTES,
     timezone: TIMEZONE,
   },
@@ -37,6 +50,8 @@ export const DEMO_LOCATIONS: readonly DemoLocation[] = [
     operatorId: 'op_best_car_rental',
     name: 'Shin-Osaka',
     address: '5-16-1 Nishinakajima, Yodogawa-ku, Osaka 532-0011',
+    latitude: 34.7338,
+    longitude: 135.5003,
     defaultTurnaroundMinutes: DEFAULT_TURNAROUND_MINUTES,
     timezone: TIMEZONE,
   },
@@ -46,6 +61,8 @@ export const DEMO_LOCATIONS: readonly DemoLocation[] = [
     operatorId: 'op_best_car_rental',
     name: 'Kansai Airport (KIX)',
     address: '1 Senshukukokita, Izumisano, Osaka 549-0001',
+    latitude: 34.4347,
+    longitude: 135.2441,
     defaultTurnaroundMinutes: 1440,
     timezone: TIMEZONE,
   },
@@ -55,6 +72,8 @@ export const DEMO_LOCATIONS: readonly DemoLocation[] = [
     operatorId: 'op_kansai_drive',
     name: 'Umeda',
     address: '3-1-1 Umeda, Kita-ku, Osaka 530-0001',
+    latitude: 34.7025,
+    longitude: 135.4959,
     defaultTurnaroundMinutes: DEFAULT_TURNAROUND_MINUTES,
     timezone: TIMEZONE,
   },
@@ -63,6 +82,8 @@ export const DEMO_LOCATIONS: readonly DemoLocation[] = [
     operatorId: 'op_kansai_drive',
     name: 'Tennoji',
     address: '10-48 Hidenin-cho, Tennoji-ku, Osaka 543-0055',
+    latitude: 34.6463,
+    longitude: 135.5135,
     defaultTurnaroundMinutes: DEFAULT_TURNAROUND_MINUTES,
     timezone: TIMEZONE,
   },
@@ -71,6 +92,8 @@ export const DEMO_LOCATIONS: readonly DemoLocation[] = [
     operatorId: 'op_kansai_drive',
     name: 'Kobe Sannomiya',
     address: '1-8-1 Kumoidori, Chuo-ku, Kobe 651-0096',
+    latitude: 34.6946,
+    longitude: 135.1956,
     defaultTurnaroundMinutes: DEFAULT_TURNAROUND_MINUTES,
     timezone: TIMEZONE,
   },
@@ -80,6 +103,8 @@ export const DEMO_LOCATIONS: readonly DemoLocation[] = [
     operatorId: 'op_sakura_mobility',
     name: 'Kyoto Station',
     address: 'Higashishiokoji-cho, Shimogyo-ku, Kyoto 600-8216',
+    latitude: 34.9858,
+    longitude: 135.7588,
     defaultTurnaroundMinutes: DEFAULT_TURNAROUND_MINUTES,
     timezone: TIMEZONE,
   },
@@ -88,6 +113,8 @@ export const DEMO_LOCATIONS: readonly DemoLocation[] = [
     operatorId: 'op_sakura_mobility',
     name: 'Nara',
     address: '1-1 Sanjohoncho, Nara 630-8122',
+    latitude: 34.6803,
+    longitude: 135.8174,
     defaultTurnaroundMinutes: DEFAULT_TURNAROUND_MINUTES,
     timezone: TIMEZONE,
   },
@@ -96,6 +123,8 @@ export const DEMO_LOCATIONS: readonly DemoLocation[] = [
     operatorId: 'op_sakura_mobility',
     name: 'Osaka Castle',
     address: '1-1 Osakajo, Chuo-ku, Osaka 540-0002',
+    latitude: 34.6873,
+    longitude: 135.5259,
     defaultTurnaroundMinutes: DEFAULT_TURNAROUND_MINUTES,
     timezone: TIMEZONE,
   },
