@@ -55,15 +55,14 @@ function makeVehicle(overrides: Partial<AvailableVehicleData> = {}): AvailableVe
   }
 }
 
-function renderCard(props: Partial<Parameters<typeof AvailableVehicleCard>[0]> = {}) {
+function renderCard(vehicle: AvailableVehicleData = makeVehicle()) {
   render(
     <IntlProvider locale="en" messages={en}>
       <AvailableVehicleCard
-        vehicle={makeVehicle()}
+        vehicle={vehicle}
         locationId="loc-1"
         from="2026-07-01T10:00"
         to="2026-07-03T10:00"
-        {...props}
       />
     </IntlProvider>,
   )
