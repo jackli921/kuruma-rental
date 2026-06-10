@@ -39,6 +39,13 @@ export function clearSessionCookie(c: Context): void {
   deleteCookie(c, SESSION_COOKIE, SESSION_COOKIE_OPTS)
 }
 
+/** Drop both one-time OAuth-flow cookies (state + return). Called on every
+ *  callback failure path so a dead-ended sign-in leaves nothing behind to expire. */
+function clearOAuthFlowCookies(c: Context): void {
+  deleteCookie(c, OAUTH_STATE_COOKIE, { path: '/' })
+  deleteCookie(c, OAUTH_RETURN_COOKIE, { path: '/' })
+}
+
 /**
  * Auth surface for the cookie-session flow (Vite/CF Pages migration, #378).
  *
@@ -89,10 +96,14 @@ export function createAuthRoutes(
       const expectedState = getCookie(c, OAUTH_STATE_COOKIE)
       const state = c.req.query('state')
       if (!expectedState || !state || expectedState !== state) {
+        clearOAuthFlowCookies(c)
         return fail(c, 'Invalid OAuth state', 400)
       }
       const code = c.req.query('code')
-      if (!code) return fail(c, 'Missing authorization code', 400)
+      if (!code) {
+        clearOAuthFlowCookies(c)
+        return fail(c, 'Missing authorization code', 400)
+      }
       deleteCookie(c, OAUTH_STATE_COOKIE, { path: '/' })
 
       const secret = process.env.AUTH_SECRET
@@ -124,7 +135,13 @@ export function createAuthRoutes(
       // re-validate (defence in depth) so a tampered cookie can't open-redirect.
       const returnTo = safeReturnPath(getCookie(c, OAUTH_RETURN_COOKIE))
       deleteCookie(c, OAUTH_RETURN_COOKIE, { path: '/' })
-      return c.redirect(returnTo ?? googleConfig.postLoginRedirect, 302)
+      // Resolve the validated (root-relative) returnTo against the same web origin
+      // postLoginRedirect targets, so a relative path can never land on the API's
+      // own origin if the callback is ever hit off-proxy (#378 cutover insurance).
+      const target = returnTo
+        ? new URL(returnTo, googleConfig.postLoginRedirect).toString()
+        : googleConfig.postLoginRedirect
+      return c.redirect(target, 302)
     })
     .get('/auth/session', async (c) => {
       const token = getCookie(c, SESSION_COOKIE)

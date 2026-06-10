@@ -1,6 +1,6 @@
-import { safeReturnPath } from '@/lib/return-path'
 import { LoginCard } from '@/vite/auth/LoginCard'
 import { sessionQueryOptions } from '@/vite/session'
+import { safeReturnPath } from '@kuruma/shared/lib/return-path'
 import { createFileRoute, redirect } from '@tanstack/react-router'
 
 // Public sign-in screen (#510). The renter/business guards redirect here with a

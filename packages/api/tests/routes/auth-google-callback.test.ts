@@ -110,7 +110,8 @@ describe('GET /auth/google/callback', () => {
       headers: { Cookie: 'kuruma_oauth_state=s1; kuruma_oauth_return=%2Fja%2Fbookings%2Fnew' },
     })
     expect(res.status).toBe(302)
-    expect(res.headers.get('location')).toBe('/ja/bookings/new')
+    // returnTo is resolved against the web origin postLoginRedirect targets.
+    expect(res.headers.get('location')).toBe('https://web.example.test/ja/bookings/new')
     const cleared = (res.headers.getSetCookie?.() ?? []).some(
       (c) => c.startsWith('kuruma_oauth_return=') && /Max-Age=0/.test(c),
     )

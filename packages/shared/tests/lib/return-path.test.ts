@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest'
-import { safeReturnPath } from '../../src/auth/google'
+import { safeReturnPath } from '../../src/lib/return-path'
 
 describe('safeReturnPath', () => {
   test.each([
