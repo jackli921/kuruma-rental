@@ -51,7 +51,10 @@
     "close": "Close menu",
     "switchToRenter": "Switch to renter view",
     "switchToBusiness": "Switch to business view",
-    "search": "Search"
+    "search": "Search",
+    "browse": "Browse",
+    "myBookings": "My Bookings",
+    "documents": "Documents"
   },
   "acriss": {
     "MCAR": "Mini",
@@ -745,13 +748,16 @@
       "title": "My bookings",
       "subtitle": "Your upcoming and past reservations",
       "empty": "You haven't made any bookings yet.",
+      "browseCars": "Browse cars",
       "pickup": "Pickup",
       "return": "Return",
       "viewDetails": "View details",
       "confirmed": "Confirmed",
       "active": "Active",
       "completed": "Completed",
-      "cancelled": "Cancelled"
+      "cancelled": "Cancelled",
+      "loadError": "Couldn't load your bookings",
+      "retry": "Try again"
     },
     "operator": {
       "title": "Bookings",

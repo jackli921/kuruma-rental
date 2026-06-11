@@ -51,7 +51,10 @@
     "close": "メニューを閉じる",
     "switchToRenter": "利用者ビューに切替",
     "switchToBusiness": "管理者ビューに切替",
-    "search": "検索"
+    "search": "検索",
+    "browse": "車を探す",
+    "myBookings": "予約一覧",
+    "documents": "書類"
   },
   "acriss": {
     "MCAR": "ミニ",
@@ -745,13 +748,16 @@
       "title": "予約一覧",
       "subtitle": "今後の予約と過去の予約",
       "empty": "まだ予約がありません。",
+      "browseCars": "車を探す",
       "pickup": "乗車",
       "return": "返却",
       "viewDetails": "詳細を見る",
       "confirmed": "確定済み",
       "active": "利用中",
       "completed": "完了",
-      "cancelled": "キャンセル済み"
+      "cancelled": "キャンセル済み",
+      "loadError": "予約を読み込めませんでした",
+      "retry": "再試行"
     },
     "operator": {
       "title": "予約",

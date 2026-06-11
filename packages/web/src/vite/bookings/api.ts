@@ -95,3 +95,64 @@ export function bookingByIdQueryOptions(id: string) {
     queryFn: () => fetchBookingById(id),
   })
 }
+
+// "My Bookings" (#543). The full BookingDto has no vehicle name, so the list view
+// reads a leaner row shape from `GET /bookings?expand=vehicle`: the assigned car's
+// display name flattened in, dates as ISO strings. Mirrors operator-bookings/api
+// `OperatorBookingRow`/`toRow`, but renter-scoped and without the renter block.
+export type MyBookingStatus = 'CONFIRMED' | 'ACTIVE' | 'COMPLETED' | 'CANCELLED'
+
+export interface MyBookingRow {
+  id: string
+  bookingCode: string
+  status: MyBookingStatus
+  startAt: string
+  endAt: string
+  totalPrice: number | null
+  // The assigned car's name (#392 — there is no `vehicleId`; the server resolves
+  // it via `expand=vehicle`). Null when the expansion is absent (vehicle deleted).
+  vehicleName: string | null
+}
+
+interface RawMyBooking {
+  id: string
+  bookingCode: string
+  status: MyBookingStatus
+  startAt: string
+  endAt: string
+  totalPrice: number | null
+  vehicle?: { name: string; photos: string[] } | undefined
+}
+
+function toMyRow(b: RawMyBooking): MyBookingRow {
+  return {
+    id: b.id,
+    bookingCode: b.bookingCode,
+    status: b.status,
+    startAt: b.startAt,
+    endAt: b.endAt,
+    totalPrice: b.totalPrice,
+    vehicleName: b.vehicle?.name ?? null,
+  }
+}
+
+// Principal-identical read: `renterId=self` means "bookings where I am the renter"
+// for any caller, so an operator-in-renter-view never sees tenant rows mislabeled
+// as personal (#543 P1). Server ownership scoping (CallerContext) is the real
+// boundary; this filter guarantees the page means the same thing for every caller.
+// First page only — `nextCursor` is intentionally discarded (no pagination yet).
+export async function fetchMyBookings(renterId: string): Promise<MyBookingRow[]> {
+  const sp = new URLSearchParams({ expand: 'vehicle', renterId })
+  const res = await fetch(`${getApiBaseUrl()}/bookings?${sp.toString()}`, {
+    credentials: 'include',
+  })
+  const data = await unwrap<RawMyBooking[]>(res)
+  return data.map(toMyRow)
+}
+
+export function myBookingsQueryOptions(renterId: string) {
+  return queryOptions({
+    queryKey: ['bookings', 'mine', renterId],
+    queryFn: () => fetchMyBookings(renterId),
+  })
+}
