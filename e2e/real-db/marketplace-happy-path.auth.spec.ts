@@ -108,6 +108,7 @@ test.describe('marketplace happy path — renter books, operator sees it (real D
       await expect(renter.getByText('Review your booking')).toBeVisible()
 
       await renter.getByRole('button', { name: 'Continue to payment' }).click() // confirm → payment
+      await expect(renter.getByRole('heading', { name: 'Confirm and reserve' })).toBeVisible()
       await renter.getByRole('button', { name: 'Reserve now' }).click() // instant-book submit
 
       await expect(renter).toHaveURL(/\/bookings\/confirmation\?bookingId=.+/)
@@ -120,9 +121,8 @@ test.describe('marketplace happy path — renter books, operator sees it (real D
 
     await test.step('6a. operator portal lists the new booking', async () => {
       // `page` is the project-default OPERATOR_OWNER session. The Vite operator view
-      // (#512) is a table ordered desc(createdAt) (repositories/drizzle/booking.ts),
-      // so this just-created booking is the FIRST row. Assert the exact reservation
-      // code cell (ties the row to THIS run) plus the renter's name.
+      // is #512. Assert the exact reservation code cell — a per-run unique token, so
+      // it ties the row to THIS run regardless of table ordering — plus Sarah's name.
       await page.goto('/en/manage/bookings')
       await expect(page.getByRole('heading', { name: 'Bookings' })).toBeVisible()
       await expect(page.getByRole('cell', { name: bookingCode })).toBeVisible({ timeout: 20_000 })
