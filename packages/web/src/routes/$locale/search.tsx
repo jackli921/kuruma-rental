@@ -4,8 +4,12 @@ import { fetchSearchResults } from '@/vite/search/api'
 import { StorefrontCard } from '@/vite/storefronts/StorefrontCard'
 import { StorefrontSearchForm } from '@/vite/storefronts/StorefrontSearchForm'
 import { type StorefrontSearchResultData, fetchStorefronts } from '@/vite/storefronts/api'
-import { normalizeClassFilter, parseSearchRange } from '@/vite/storefronts/params'
-import { createFileRoute } from '@tanstack/react-router'
+import {
+  normalizeClassFilter,
+  parseSearchRange,
+  searchRangeToSeed,
+} from '@/vite/storefronts/params'
+import { createFileRoute, redirect } from '@tanstack/react-router'
 import { Search } from 'lucide-react'
 import { useTranslations } from 'use-intl'
 
@@ -40,6 +44,20 @@ function validateSearch(search: Record<string, unknown>): StorefrontSearch {
 // otherwise the slice-5 storefront grid. Only one of the two fetches runs.
 export const Route = createFileRoute('/$locale/search')({
   validateSearch,
+  // Seed a default range (next JST hour -> +3 days) when the renter arrives
+  // without one, so the search auto-runs results instead of showing the date
+  // prompt. `replace` keeps the empty entry out of history for clean back-nav.
+  beforeLoad: ({ search, params }) => {
+    const seed = searchRangeToSeed(search)
+    if (seed) {
+      throw redirect({
+        to: '/$locale/search',
+        params: { locale: params.locale },
+        search: { ...search, ...seed },
+        replace: true,
+      })
+    }
+  },
   loaderDeps: ({ search }) => ({
     from: search.from,
     to: search.to,
@@ -84,7 +102,13 @@ function StorefrontSearchRoute() {
         </header>
 
         <div className="mb-6 rounded-xl border border-border bg-card p-5">
-          <StorefrontSearchForm defaultFrom={from ?? ''} defaultTo={to ?? ''} />
+          {/* Key on the URL range so back/forward remounts the uncontrolled
+              inputs with the restored values instead of keeping stale ones. */}
+          <StorefrontSearchForm
+            key={`${from ?? ''}|${to ?? ''}`}
+            defaultFrom={from ?? ''}
+            defaultTo={to ?? ''}
+          />
         </div>
 
         <div className="mb-8 flex justify-end">

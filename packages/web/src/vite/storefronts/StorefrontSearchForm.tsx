@@ -1,6 +1,7 @@
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { persistSearchRange } from '@/vite/storefronts/storage'
 import { useNavigate } from '@tanstack/react-router'
 import type { FormEvent } from 'react'
 import { useLocale, useTranslations } from 'use-intl'
@@ -32,11 +33,11 @@ export function StorefrontSearchForm({
   function handleSubmit(e: FormEvent<HTMLFormElement>): void {
     e.preventDefault()
     const data = new FormData(e.currentTarget)
-    navigate({
-      to: '/$locale/search',
-      params: { locale },
-      search: { from: String(data.get('from') ?? ''), to: String(data.get('to') ?? '') },
-    })
+    const from = String(data.get('from') ?? '')
+    const to = String(data.get('to') ?? '')
+    // Remember the range so the landing hero restores a refinement made here.
+    persistSearchRange(from, to)
+    navigate({ to: '/$locale/search', params: { locale }, search: { from, to } })
   }
 
   return (

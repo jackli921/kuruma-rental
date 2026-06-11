@@ -2,6 +2,7 @@
 // values from the FORM (DOM), not React state, so a pre-hydration fill survives.
 // Here submit drives TanStack `navigate` instead of next-intl `router.push`.
 import { StorefrontSearchForm } from '@/vite/storefronts/StorefrontSearchForm'
+import { readPersistedRange } from '@/vite/storefronts/storage'
 import { cleanup, fireEvent, render } from '@testing-library/react'
 import { IntlProvider } from 'use-intl'
 import { afterEach, describe, expect, it, vi } from 'vitest'
@@ -21,6 +22,7 @@ function renderForm(props: { defaultFrom?: string; defaultTo?: string } = {}) {
 describe('StorefrontSearchForm', () => {
   afterEach(() => {
     mockNavigate.mockClear()
+    sessionStorage.clear()
     cleanup()
   })
 
@@ -53,5 +55,17 @@ describe('StorefrontSearchForm', () => {
       params: { locale: 'en' },
       search: { from: '2026-08-01T09:00', to: '2026-08-02T09:00' },
     })
+  })
+
+  it('persists the submitted range so the hero remembers a refinement made here', () => {
+    const { container } = renderForm()
+    const from = container.querySelector('#from') as HTMLInputElement
+    const to = container.querySelector('#to') as HTMLInputElement
+    from.value = '2026-09-10T12:00'
+    to.value = '2026-09-13T12:00'
+
+    fireEvent.submit(container.querySelector('form') as HTMLFormElement)
+
+    expect(readPersistedRange()).toEqual({ from: '2026-09-10T12:00', to: '2026-09-13T12:00' })
   })
 })
