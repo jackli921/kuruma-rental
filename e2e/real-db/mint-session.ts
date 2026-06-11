@@ -1,14 +1,24 @@
 import { testSql } from './pg'
 
-// On http/localhost Auth.js uses the unprefixed cookie name (no `__Secure-`).
-// The `encode` salt MUST equal this name or the web's `auth()` cannot decrypt
-// the session JWE. See issue #416 proven reference.
-export const SESSION_COOKIE_NAME = 'authjs.session-token'
-
-// Seed identities, mirrored from @kuruma/shared seed data. Duplicated on purpose:
-// Playwright require()s this file as CJS, and importing the shared workspace
-// package's TS source here breaks. Update both if the seed changes.
+// The Vite/CF-Pages stack (#378) authenticates the browser with the API's own
+// `kuruma_session` HS256 JWT — NOT an Auth.js JWE (the retired Next.js path). We
+// mint it here with the SAME contract as packages/api/src/middleware/auth.ts
+// `mintSessionToken` (iss/aud/alg/exp + a `csrf` claim) — keep the two in sync.
+// GET /auth/session echoes the `csrf` claim as `csrfToken`; the wizard's
+// Reserve-now POST sends it back through the API's CSRF middleware, so a session
+// minted without it would pass auth but fail every mutation.
 //
+// Why inline `jose` instead of importing the API helper: Playwright runs these
+// specs under Node with its own loader, which transpiles files in the test dir
+// but NOT an arbitrary `packages/api/**.ts` reached via dynamic import. `jose` is
+// a published package, so importing IT is safe (mirrors the prior next-auth/jwt use).
+export const SESSION_COOKIE_NAME = 'kuruma_session'
+
+// Mirror of packages/api/src/middleware/auth.ts (API_TOKEN_ISSUER/AUDIENCE, TTL).
+const API_TOKEN_ISSUER = 'kuruma-web'
+const API_TOKEN_AUDIENCE = 'kuruma-api'
+const SESSION_TTL = '7d'
+
 // Best Car Rental owner — db/constants.ts BEST_CAR_RENTAL_OWNER_EMAIL. operatorId
 // is NOT hard-coded: the demo seed mints UUID ids (db/seed-id.ts), so we read the
 // owner's actual operatorId off the user row below. A stale slug here would scope
@@ -48,49 +58,49 @@ async function findUser(email: string): Promise<{ id: string; operatorId: string
 interface SessionIdentity {
   email: string
   name: string
-  role: string
+  role: 'RENTER' | 'OPERATOR_OWNER'
 }
 
 /**
- * Mint an Auth.js v5 session-cookie value for a seeded user, using the app's own
- * `encode` so the JWE format matches what `auth()` expects. The browser receives
- * only this cookie; the web mints the downstream HS256 API token itself
- * (`lib/api-token.ts`) from the same secret. The DB-resolved operatorId becomes
- * the token's tenant claim (omitted for an unscoped RENTER).
+ * Mint a `kuruma_session` JWT for a seeded user, signed with AUTH_SECRET — the
+ * same secret the API verifies with (middleware/auth.ts verifyAndMap). The
+ * DB-resolved operatorId becomes the tenant claim (omitted for an unscoped RENTER).
  */
-async function mintSessionToken(identity: SessionIdentity): Promise<string> {
+async function mintSession(identity: SessionIdentity): Promise<string> {
   const secret = process.env.AUTH_SECRET
   if (!secret) throw new Error('AUTH_SECRET is required to mint an e2e session')
 
   const user = await findUser(identity.email)
 
-  // next-auth/jwt is ESM-only; dynamic import so Playwright's CJS transform of
-  // this file doesn't ERR_REQUIRE_ESM at load time.
-  const { encode } = await import('next-auth/jwt')
+  // jose is ESM-only; dynamic import so Playwright's CJS transform of this file
+  // doesn't ERR_REQUIRE_ESM at load time.
+  const { SignJWT } = await import('jose')
+  const key = new TextEncoder().encode(secret)
 
-  // roleRefreshedAt = now keeps the token self-sufficient: the jwt callback's
-  // `else if (token.sub)` branch skips its DB role re-fetch for 5 minutes
-  // (packages/web/src/auth.ts), so the session needs no live DB to stay valid.
-  return encode({
-    salt: SESSION_COOKIE_NAME,
-    secret,
-    token: {
-      sub: user.id,
-      name: identity.name,
-      email: identity.email,
-      role: identity.role,
-      ...(user.operatorId ? { operatorId: user.operatorId } : {}),
-      roleRefreshedAt: Date.now(),
-    },
-  })
+  const payload: Record<string, unknown> = {
+    role: identity.role,
+    csrf: crypto.randomUUID(),
+    name: identity.name,
+    email: identity.email,
+  }
+  if (user.operatorId) payload.operatorId = user.operatorId
+
+  return new SignJWT(payload)
+    .setProtectedHeader({ alg: 'HS256' })
+    .setSubject(user.id)
+    .setIssuedAt()
+    .setIssuer(API_TOKEN_ISSUER)
+    .setAudience(API_TOKEN_AUDIENCE)
+    .setExpirationTime(SESSION_TTL)
+    .sign(key)
 }
 
 /** Session cookie value for the seeded Best Car Rental OPERATOR_OWNER. */
 export function mintOperatorSessionToken(): Promise<string> {
-  return mintSessionToken(OPERATOR)
+  return mintSession(OPERATOR)
 }
 
 /** Session cookie value for the seeded RENTER persona (Sarah Smith). */
 export function mintRenterSessionToken(): Promise<string> {
-  return mintSessionToken(RENTER)
+  return mintSession(RENTER)
 }
