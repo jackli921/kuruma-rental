@@ -1,7 +1,7 @@
 # Slice 7 — Outbound Notifications & Pre-Auth Handoff (issue #393)
 
 **Date:** 2026-06-02 (rev. 2026-06-06)
-**Status:** Draft v2.1 — second architect-review pass applied; awaiting green light to create worktree + start TDD
+**Status:** MERGED 2026-06-06 (#393, PR #482, `fd67030`) — outbound notifications + pre-auth handoff landed on `marketplace-pivot`. Plan retained for history.
 **Parent epic:** #385
 **Source of truth:** `docs/plans/2026-05-25-marketplace-mvp-proposal.md` (§6 row 7; §4 business item 8 + renter items 5/6; §9 items 2/5/17; §10 item 2; §8.1 Resend/pre-auth risks; §8.2 notification-delivery NFR)
 **Format mirror:** `docs/plans/2026-06-02-slice4-insurance-pricing-fees.md`

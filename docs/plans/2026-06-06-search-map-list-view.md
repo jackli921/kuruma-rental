@@ -3,7 +3,7 @@
 **Issue:** #458 — `feat(marketplace): map + flat-list search results (specific vehicles)`
 **Branch / worktree:** `feat/458-search-map-list` @ `/Users/jack/Dev/kuruma-search-mapview` (based on `marketplace-pivot`)
 **Date:** 2026-06-06
-**Status:** DESIGN ARTIFACT — APPROVED decisions applied (see §6: D1 swappable map via DIP, D2 add lat/lng migration now, D3 no plate string to renters). No code written yet.
+**Status:** MERGED 2026-06-10 (#458, PR #513, `8509103`) — cross-operator map + flat-list search landed on `marketplace-pivot`. Plan retained for history; the §0 "Re-grounding" section reflects the live Vite shell.
 **Source of truth:** `docs/plans/2026-06-05-scope-update-du-kaku.md` §1.1, §5; context in `docs/plans/2026-05-25-marketplace-mvp-proposal.md` §2 / §10 items 12 & 21.
 **Epic:** #385. **Refs:** #463 (`fulfillment_mode` affordance), #464 (class-combo, fast-follow), #457 (luggage), #439 (DB-seek paging follow-up), #392 (slice 6 — **MERGED**; held the migration lock, now released — see §3.3 Migration coordination).
 

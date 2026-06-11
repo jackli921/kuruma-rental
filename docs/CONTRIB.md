@@ -4,7 +4,7 @@
 
 - [Bun](https://bun.sh/) v1.1+
 - PostgreSQL (or [Neon](https://neon.tech/) serverless Postgres)
-- Node.js 20+ (for Next.js compatibility)
+- Node.js 20+ (Vite toolchain; see `.nvmrc`)
 
 ## Environment Setup
 
@@ -25,7 +25,7 @@
    | `AUTH_SECRET` | Yes | Random secret for Auth.js session signing (`bunx auth secret`) |
    | `AUTH_GOOGLE_ID` | Yes | Google OAuth client ID |
    | `AUTH_GOOGLE_SECRET` | Yes | Google OAuth client secret |
-   | `NEXT_PUBLIC_API_URL` | No | API base URL (defaults to `http://localhost:8787`) |
+   | _(none)_ | — | The Vite shell calls the API via a same-origin `/api` proxy (dev: `vite.config.mts` `server.proxy`; prod: Pages Functions) — no public API-URL env var. |
 
 3. Run database migrations and seed:
    ```sh
@@ -39,7 +39,7 @@
 kuruma-rental/
   packages/
     api/      @kuruma/api     Hono REST API (CF Workers)
-    web/      @kuruma/web     Next.js 16 frontend (CF Pages)
+    web/      @kuruma/web     Vite + TanStack Router SPA (CF Pages)
     shared/   @kuruma/shared  Drizzle schema, Zod validators, shared types
 ```
 
@@ -51,7 +51,7 @@ kuruma-rental/
 
 | Script | Command | Description |
 |--------|---------|-------------|
-| `dev` | `bun run dev` | Start Next.js dev server (port 3001) |
+| `dev` | `bun run dev` | Start Vite dev server (port 3001; proxies /api + /auth) |
 | `dev:api` | `bun run dev:api` | Start Hono API dev server (Wrangler, port 8787) |
 | `build` | `bun run build` | Build all packages |
 | `test` | `bun run test` | Run all tests across packages |
@@ -66,7 +66,7 @@ kuruma-rental/
 
 | Package | Script | Description |
 |---------|--------|-------------|
-| `@kuruma/web` | `bun run --filter @kuruma/web dev` | Next.js dev server |
+| `@kuruma/web` | `bun run --filter @kuruma/web dev` | Vite dev server |
 | `@kuruma/web` | `bun run --filter @kuruma/web typecheck` | TypeScript check (no DB needed) |
 | `@kuruma/api` | `bun run --filter @kuruma/api dev` | Wrangler dev server |
 | `@kuruma/api` | `bun run --filter @kuruma/api test` | API tests (Vitest) |

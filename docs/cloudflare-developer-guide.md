@@ -1,5 +1,7 @@
 # Cloudflare Developer Guide
 
+> **HISTORICAL (pre-Vite).** This guide documents the **Next.js 16 + OpenNext on CF Workers** web stack, which has been replaced by **Vite + TanStack Router on CF Pages** (epic #378). The API-side lessons (neon-http vs neon-serverless, secrets, the two-runtimes problem) still hold; the web/OpenNext/middleware sections are kept for history. For the current web deploy see `docs/plans/2026-06-09-378-pages-cutover.md` and `docs/cloudflare-account-migration.md`.
+
 A plain-English guide for developers working on this project. Covers the gotchas, workarounds, and patterns we discovered deploying Next.js 16 + Auth.js + Drizzle/Neon to Cloudflare Workers.
 
 If you're new to this codebase, read this before touching anything deployment-related.

@@ -1,7 +1,7 @@
 <!-- BEGIN:nextjs-agent-rules -->
-# This is NOT the Next.js you know
+# Web is Vite + TanStack Router (NOT Next.js)
 
-This version has breaking changes — APIs, conventions, and file structure may all differ from your training data. Read the relevant guide in `node_modules/next/dist/docs/` before writing any code. Heed deprecation notices.
+`packages/web` was migrated off Next.js to **Vite + TanStack Router** on Cloudflare Pages (epic #378). The live shell lives under `packages/web/src/vite/` + `packages/web/src/routes/`. A **frozen** Next.js tree (`src/app/`, `middleware.ts`, `next.config.ts`, `open-next.config.ts`) is still present but is NOT the build path and is slated for deletion at cut-over — **do not extend it**. Adding a route requires `vite build` to regenerate `routeTree.gen.ts` before typecheck.
 <!-- END:nextjs-agent-rules -->
 
 # Monorepo Architecture
@@ -9,7 +9,7 @@ This version has breaking changes — APIs, conventions, and file structure may 
 This is a Bun workspace monorepo with three packages:
 
 - `packages/api` — Hono REST API (deploys to CF Workers). All business logic lives here.
-- `packages/web` — Next.js frontend (deploys to CF Pages). UI only, no direct DB access.
+- `packages/web` — Vite + TanStack Router SPA (deploys to CF Pages). UI only, no direct DB access.
 - `packages/shared` — Drizzle schema, Zod validators, shared types. No runtime deps on api or web.
 
 **Key rules:**
