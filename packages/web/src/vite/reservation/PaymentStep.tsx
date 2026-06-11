@@ -1,13 +1,8 @@
 import { Button } from '@/components/ui/button'
 import { ApiError } from '@/lib/api-error'
-import {
-  type BookingDto,
-  type CreateBookingInput,
-  bookingByIdQueryOptions,
-  createBooking,
-} from '@/vite/bookings/api'
+import { type CreateBookingInput, createBooking } from '@/vite/bookings/api'
 import { useSession } from '@/vite/session'
-import { useMutation, useQueryClient } from '@tanstack/react-query'
+import { useMutation } from '@tanstack/react-query'
 import { useNavigate } from '@tanstack/react-router'
 import { useTranslations } from 'use-intl'
 
@@ -28,19 +23,20 @@ interface PaymentStepProps {
 export function PaymentStep({ locale, bookingInput, onBack }: PaymentStepProps) {
   const t = useTranslations('reservation')
   const navigate = useNavigate()
-  const queryClient = useQueryClient()
   const session = useSession()
   const csrfToken = session.data?.csrfToken
 
   const mutation = useMutation({
-    mutationFn: (): Promise<BookingDto> => {
+    mutationFn: (): Promise<{ id: string }> => {
       if (!csrfToken) throw new ApiError('Not signed in', 401)
       return createBooking(bookingInput, csrfToken)
     },
     onSuccess: (booking) => {
-      // Seed the cache with the booking we already hold so the confirmation
-      // route renders immediately instead of refetching GET /bookings/:id.
-      queryClient.setQueryData(bookingByIdQueryOptions(booking.id).queryKey, booking)
+      // Navigate with only the id — do NOT seed the ['bookings', id] cache with
+      // the POST result. POST returns the raw booking; only GET /bookings/:id
+      // enriches it with operator.preAuthHandoffUrl (the pay-at-pickup CTA).
+      // Seeding here would let the confirmation loader reuse the un-enriched
+      // result and hide the pre-auth card on the success path (#511 review).
       navigate({
         to: '/$locale/bookings/confirmation',
         params: { locale },

@@ -12,10 +12,7 @@ const { mockNavigate, mockCreateBooking } = vi.hoisted(() => ({
   mockCreateBooking: vi.fn(),
 }))
 vi.mock('@tanstack/react-router', () => ({ useNavigate: () => mockNavigate }))
-vi.mock('@/vite/bookings/api', () => ({
-  createBooking: mockCreateBooking,
-  bookingByIdQueryOptions: (id: string) => ({ queryKey: ['bookings', id] }),
-}))
+vi.mock('@/vite/bookings/api', () => ({ createBooking: mockCreateBooking }))
 vi.mock('@/vite/session', () => ({
   useSession: () => ({ data: { user: { id: 'r1', role: 'RENTER' }, csrfToken: 'csrf-1' } }),
 }))
@@ -64,9 +61,11 @@ describe('PaymentStep (instant-book submit, #511)', () => {
       params: { locale: 'en' },
       search: { bookingId: 'b-9' },
     })
-    // The booking we already hold is seeded into the cache so the confirmation
-    // route renders without a second GET /bookings/:id.
-    expect(client.getQueryData(['bookings', 'b-9'])).toEqual(booking)
+    // Must NOT seed ['bookings', id] with the raw POST result: POST omits the
+    // operator.preAuthHandoffUrl that only GET /bookings/:id enriches, so a seed
+    // would let the confirmation loader reuse it and hide the pre-auth CTA (#511
+    // review). The key stays empty so the loader fetches the enriched read model.
+    expect(client.getQueryData(['bookings', 'b-9'])).toBeUndefined()
   })
 
   it('shows a conflict message and does NOT navigate when the vehicle was just taken (409)', async () => {
