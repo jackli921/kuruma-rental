@@ -1,11 +1,20 @@
 import { ReservationWizard } from '@/vite/reservation/ReservationWizard'
 import type { ReservationAddOn, ReservationInsuranceOption } from '@/vite/reservation/api'
 import type { AvailableVehicleData } from '@/vite/storefronts/api'
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { IntlProvider } from 'use-intl'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import en from '../../../messages/en.json'
+
+// The wizard now renders the live submit step (PaymentStep), which reads the
+// session + router. These tests only care that the wizard reaches that step, so
+// stub the navigation/session seams; the mutation is covered in PaymentStep.test.
+vi.mock('@tanstack/react-router', () => ({ useNavigate: () => vi.fn() }))
+vi.mock('@/vite/session', () => ({
+  useSession: () => ({ data: { user: { id: 'r1', role: 'RENTER' }, csrfToken: 'csrf-1' } }),
+}))
 
 const jst = (value: string): Date => new Date(`${value}:00+09:00`)
 
@@ -31,17 +40,21 @@ const insuranceOptions: ReservationInsuranceOption[] = [
 ]
 
 function renderWizard() {
+  const client = new QueryClient({ defaultOptions: { mutations: { retry: false } } })
   return render(
-    <IntlProvider locale="en" messages={en}>
-      <ReservationWizard
-        locale="en"
-        vehicle={vehicle}
-        addOns={addOns}
-        insuranceOptions={insuranceOptions}
-        from={jst('2026-07-01T10:00')}
-        to={jst('2026-07-03T10:00')} // exactly 2 days
-      />
-    </IntlProvider>,
+    <QueryClientProvider client={client}>
+      <IntlProvider locale="en" messages={en}>
+        <ReservationWizard
+          locale="en"
+          vehicle={vehicle}
+          locationId="loc1"
+          addOns={addOns}
+          insuranceOptions={insuranceOptions}
+          from={jst('2026-07-01T10:00')}
+          to={jst('2026-07-03T10:00')} // exactly 2 days
+        />
+      </IntlProvider>
+    </QueryClientProvider>,
   )
 }
 
@@ -82,17 +95,15 @@ describe('ReservationWizard', () => {
     expect(screen.getByText('Estimated total')).toBeInTheDocument()
   })
 
-  it('reaches the payment stub with the pay action disabled (no live submit)', async () => {
+  it('reaches the instant-book submit step with a live Reserve action', async () => {
     const user = userEvent.setup()
     renderWizard()
     await user.click(screen.getByRole('button', { name: 'Continue' })) // add-ons
     await user.click(screen.getByRole('button', { name: 'Continue' })) // insurance
     await user.click(screen.getByRole('button', { name: 'Continue' })) // confirm
     await user.click(screen.getByRole('button', { name: 'Continue to payment' }))
-    expect(
-      screen.getByText('Online payment is coming soon. Your booking is not confirmed yet.'),
-    ).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Pay and confirm' })).toBeDisabled()
+    expect(screen.getByText(/You pay at pickup, not online/)).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Reserve now' })).toBeEnabled()
   })
 
   it('lets the renter step back to a previous step', async () => {

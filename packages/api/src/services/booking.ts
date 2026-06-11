@@ -189,6 +189,40 @@ export class BookingService {
     }
   }
 
+  async findAllWithVehiclesAndRentersPaginated(
+    ctx: CallerContext,
+    filters: BookingFilters,
+  ): Promise<{
+    data: (Booking & {
+      vehicle?: { name: string; photos: string[] } | undefined
+      renter?:
+        | { id: string; name: string | null; email: string | null; language: string }
+        | undefined
+    })[]
+    nextCursor: string | null
+  }> {
+    const { data, nextCursor } = await this.findAllPaginated(ctx, filters)
+
+    const vehicleIds = [...new Set(data.map((b) => b.assignedVehicleId))]
+    const vehicleList = this.vehicleRepo ? await this.vehicleRepo.findByIds(ctx, vehicleIds) : []
+    const vehicleMap = new Map(vehicleList.map((v) => [v.id, { name: v.name, photos: v.photos }]))
+
+    const renterIds = [...new Set(data.map((b) => b.renterId))]
+    const userList = this.userRepo ? await this.userRepo.findByIds(renterIds) : []
+    const renterMap = new Map(
+      userList.map((u) => [u.id, { id: u.id, name: u.name, email: u.email, language: u.language }]),
+    )
+
+    return {
+      data: data.map((booking) => ({
+        ...booking,
+        vehicle: vehicleMap.get(booking.assignedVehicleId),
+        renter: renterMap.get(booking.renterId),
+      })),
+      nextCursor,
+    }
+  }
+
   async findById(ctx: CallerContext, id: string): Promise<BookingWithOperator | undefined> {
     const booking = await this.bookingRepo.findById(ctx, id)
     if (!booking || !this.operatorRepo) return booking

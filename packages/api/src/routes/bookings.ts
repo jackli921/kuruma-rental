@@ -17,7 +17,13 @@ export function createBookingRoutes(service: BookingService) {
       const statusFilter = c.req.query('status')
       const vehicleIdFilter = c.req.query('vehicleId')
       const renterIdFilter = c.req.query('renterId')
-      const expand = c.req.query('expand')
+      // `expand` is a comma list (e.g. `vehicle,renter`); a single token still works.
+      const expand = new Set(
+        (c.req.query('expand') ?? '')
+          .split(',')
+          .map((token) => token.trim())
+          .filter(Boolean),
+      )
       const cursor = c.req.query('cursor')
 
       const dateRange = parseDateRange(c, false)
@@ -40,12 +46,17 @@ export function createBookingRoutes(service: BookingService) {
       // Ownership scoping is handled by CallerContext in the repository layer.
       // No manual filtering needed here.
 
-      if (expand === 'vehicle') {
+      if (expand.has('vehicle') && expand.has('renter')) {
+        const result = await service.findAllWithVehiclesAndRentersPaginated(ctx, filters)
+        return ok(c, result.data, 200, { nextCursor: result.nextCursor })
+      }
+
+      if (expand.has('vehicle')) {
         const result = await service.findAllWithVehiclesPaginated(ctx, filters)
         return ok(c, result.data, 200, { nextCursor: result.nextCursor })
       }
 
-      if (expand === 'renter') {
+      if (expand.has('renter')) {
         const result = await service.findAllWithRentersPaginated(ctx, filters)
         return ok(c, result.data, 200, { nextCursor: result.nextCursor })
       }

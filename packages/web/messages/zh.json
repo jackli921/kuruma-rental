@@ -752,6 +752,28 @@
       "active": "进行中",
       "completed": "已完成",
       "cancelled": "已取消"
+    },
+    "operator": {
+      "title": "预订",
+      "subtitle": "各门店的预订",
+      "empty": "暂无预订",
+      "loadError": "无法加载预订",
+      "retry": "重试",
+      "none": "—",
+      "columns": {
+        "code": "编号",
+        "vehicle": "车辆",
+        "renter": "租客",
+        "range": "日期",
+        "status": "状态",
+        "total": "合计"
+      },
+      "status": {
+        "CONFIRMED": "已确认",
+        "ACTIVE": "进行中",
+        "COMPLETED": "已完成",
+        "CANCELLED": "已取消"
+      }
     }
   },
   "landing": {
@@ -912,9 +934,14 @@
       "note": "税费及任何运营商费用将在支付时计算。"
     },
     "payment": {
-      "heading": "支付",
-      "comingSoon": "在线支付即将推出。您的预订尚未确认。",
-      "pay": "支付并确认"
+      "heading": "确认并预订",
+      "instantBook": "立即预订以锁定此车。您在取车时付款，而非在线支付——可根据运营商政策免费取消。",
+      "submit": "立即预订",
+      "submitting": "正在预订…",
+      "errorConflict": "该车辆刚刚被预订。请返回并选择其他车辆。",
+      "errorGeneric": "无法创建您的预订。请检查后重试。",
+      "errorDocs": "预订前需要完成证件验证。请先上传您的证件。",
+      "errorAuth": "您的会话已过期。请重新登录以完成预订。"
     },
     "nav": {
       "back": "返回",

@@ -82,17 +82,23 @@ describe('Navbar', () => {
     expect(screen.getByTestId('mobile-menu')).toHaveAttribute('data-nav-count', '0')
   })
 
-  it('shows the dashboard link and business markers for a business user', () => {
+  it('shows the dashboard + operator bookings links and business markers for a business user', () => {
     const { container } = renderNavbar(business)
     expect(screen.getByText('Dashboard').closest('a')).toHaveAttribute(
       'data-to',
       '/$locale/dashboard',
     )
+    // #512: the operator booking view lives at /manage/bookings (the renter owns
+    // /bookings), and a business user must be able to navigate to it.
+    expect(screen.getByText('Bookings').closest('a')).toHaveAttribute(
+      'data-to',
+      '/$locale/manage/bookings',
+    )
     expect(container.querySelector('nav')?.hasAttribute('data-business-nav')).toBe(true)
     const client = screen.getByTestId('navbar-client')
     expect(client).toHaveAttribute('data-view-mode', 'business')
     expect(client).toHaveAttribute('data-can-switch', 'true')
-    expect(screen.getByTestId('mobile-menu')).toHaveAttribute('data-nav-count', '1')
+    expect(screen.getByTestId('mobile-menu')).toHaveAttribute('data-nav-count', '2')
   })
 
   it('shows the bookings link and no business markers for a signed-in renter', () => {

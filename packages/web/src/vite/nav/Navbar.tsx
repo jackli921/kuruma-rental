@@ -23,7 +23,10 @@ export function Navbar() {
 
   const navItems: readonly NavItem[] =
     viewMode === 'business'
-      ? [{ to: '/$locale/dashboard', label: t('dashboard') }]
+      ? [
+          { to: '/$locale/dashboard', label: t('dashboard') },
+          { to: '/$locale/manage/bookings', label: t('bookings') },
+        ]
       : session?.user
         ? [{ to: '/$locale/bookings', label: t('bookings') }]
         : []
