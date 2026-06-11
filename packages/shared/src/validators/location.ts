@@ -65,6 +65,10 @@ const turnaroundSchema = z
   .number()
   .int('Turnaround must be a whole number of minutes')
   .min(MIN_TURNAROUND_MINUTES, `Turnaround must be at least ${MIN_TURNAROUND_MINUTES} minutes`)
+// #394 deepest (area) region node. Nullable FK to the platform-global regions
+// tree; a uuid like every other FK (seed-id.ts). NOT NULL is deferred (D1), so
+// null is a first-class value here, not just an absence.
+const regionIdSchema = z.string().uuid('Region ID must be a valid UUID').nullable()
 
 // WGS84 decimal degrees (#531). Bounds reject NaN/±Infinity on their own (the
 // comparison is false for non-finite values), but the explicit finiteness
@@ -107,6 +111,8 @@ const createLocationFields = {
   defaultTurnaroundMinutes: turnaroundSchema.default(2880),
   latitude: latitudeSchema.nullable().optional(),
   longitude: longitudeSchema.nullable().optional(),
+  // Omitted -> null: the operator form does not set a region yet (#394 D2).
+  regionId: regionIdSchema.default(null),
 }
 
 export const createLocationSchema = z
@@ -134,6 +140,9 @@ export const updateLocationSchema = z
     longitude: longitudeSchema.nullable(),
     // Force a re-geocode of the current address even when it didn't change.
     regeocode: z.boolean(),
+    // No .default here: a PATCH omitting regionId leaves it untouched; sending
+    // null clears it (#394). `.partial()` makes the field optional.
+    regionId: regionIdSchema,
   })
   .partial()
   .refine(coordPairIsComplete, COORD_PAIR_REFINEMENT)

@@ -6,7 +6,7 @@ import {
 } from '@kuruma/shared/validators/location'
 import { Hono } from 'hono'
 import { FLEET_WRITE_ROLES, requireAuth, requireUser, toCallerContext } from '../middleware/auth'
-import { PG_ERROR, pgErrorCode } from '../pg-errors'
+import { LOCATIONS_REGION_FK, PG_ERROR, pgConstraintName, pgErrorCode } from '../pg-errors'
 import type { LocationFilters } from '../repositories/types'
 import type { LocationService, LocationUpdateData } from '../services/location'
 import { type ResolveWriteOperatorId, operatorReadScope } from '../tenancy'
@@ -94,17 +94,18 @@ export function createLocationRoutes(
           operatingHours: d.operatingHours,
           timezone: d.timezone,
           defaultTurnaroundMinutes: d.defaultTurnaroundMinutes,
+          regionId: d.regionId,
           status: 'ACTIVE',
         })
         if (!result.ok) return fail(c, result.error, result.status)
         return ok(c, result.location, 201)
       } catch (err) {
-        // operatorId is the only client-supplied FK on this write, so an
-        // unknown one trips locations_operatorId_operators_id_fk (23503) — a
-        // client error, not a server fault. Map to 422, mirroring the #400
-        // vehicle/class FK->422 contract. No constraint-name disambiguation
-        // needed here: a single FK means a static message is unambiguous.
+        // Two client-supplied FKs now: operatorId -> operators and regionId ->
+        // regions (#394). A bare 23503 is ambiguous, so disambiguate on the
+        // constraint name to tell a bad region apart from a bad operator (mirrors
+        // the #400 vehicle/class FK->422 contract). Both map to 422 (client error).
         if (pgErrorCode(err) === PG_ERROR.FOREIGN_KEY_VIOLATION) {
+          if (pgConstraintName(err) === LOCATIONS_REGION_FK) return fail(c, 'Invalid region', 422)
           return fail(c, 'Invalid operator', 422)
         }
         throw err
@@ -119,13 +120,22 @@ export function createLocationRoutes(
 
       // parsed.data carries latitude/longitude/regeocode; the service derives
       // coordinateSource and strips regeocode before the repo write.
-      const result = await service.update(
-        toCallerContext(user),
-        c.req.param('id'),
-        stripUndefined(parsed.data) as LocationUpdateData,
-      )
-      if (!result.ok) return fail(c, result.error, result.status)
-      return ok(c, result.location)
+      try {
+        const result = await service.update(
+          toCallerContext(user),
+          c.req.param('id'),
+          stripUndefined(parsed.data) as LocationUpdateData,
+        )
+        if (!result.ok) return fail(c, result.error, result.status)
+        return ok(c, result.location)
+      } catch (err) {
+        // regionId is the only client-supplied FK on update (#394) — operatorId
+        // is not patchable — so a 23503 here is always a bad region. Map to 422.
+        if (pgErrorCode(err) === PG_ERROR.FOREIGN_KEY_VIOLATION) {
+          return fail(c, 'Invalid region', 422)
+        }
+        throw err
+      }
     })
     .delete('/locations/:id', async (c) => {
       const user = requireUser(c)

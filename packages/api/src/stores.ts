@@ -220,6 +220,9 @@ export interface Location {
   operatingHours: LocationOperatingHours
   timezone: string
   defaultTurnaroundMinutes: number
+  /** #394 deepest (area) region node, or null (not-yet-assigned, NOT NULL
+   *  deferred — D1). Drives the recursive-descendant storefront filter. */
+  regionId: string | null
   status: 'ACTIVE' | 'ARCHIVED'
   createdAt: Date
   updatedAt: Date

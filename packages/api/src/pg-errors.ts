@@ -35,6 +35,14 @@ export const VEHICLES_PICKUP_LOCATION_FK = 'vehicles_operatorId_pickupLocationId
 export const FEE_SCHEDULES_CLASS_FK = 'fee_schedules_operator_class_fk'
 
 /**
+ * locations(regionId) -> regions(id), named in schema.ts (#394). locations also
+ * carries operatorId -> operators, so once regionId is a client-supplied FK a
+ * 23503 alone is ambiguous; match on this name to tell a bad region apart from a
+ * bad operatorId (mirrors VEHICLES_CLASS_FK / #400).
+ */
+export const LOCATIONS_REGION_FK = 'locations_regionId_regions_id_fk'
+
+/**
  * Booking unique constraints the BookingService distinguishes on (#392, §5.4).
  * A `bookingCode` clash is astronomically rare but recoverable: regenerate the
  * code and retry the whole atomic insert. An `idempotencyKey` clash means a

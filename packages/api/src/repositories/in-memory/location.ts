@@ -69,11 +69,12 @@ export class InMemoryLocationRepository implements LocationRepository {
   async create(
     data: Omit<
       Location,
-      'id' | 'createdAt' | 'updatedAt' | 'latitude' | 'longitude' | 'coordinateSource'
+      'id' | 'createdAt' | 'updatedAt' | 'latitude' | 'longitude' | 'coordinateSource' | 'regionId'
     > & {
       latitude?: number | null
       longitude?: number | null
       coordinateSource?: CoordinateSource | null
+      regionId?: string | null
     },
   ): Promise<Location> {
     this.assertNameFree(data.operatorId, data.name)
@@ -83,6 +84,7 @@ export class InMemoryLocationRepository implements LocationRepository {
       latitude: data.latitude ?? null,
       longitude: data.longitude ?? null,
       coordinateSource: data.coordinateSource ?? null,
+      regionId: data.regionId ?? null,
       id: crypto.randomUUID(),
       createdAt: now,
       updatedAt: now,

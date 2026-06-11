@@ -110,17 +110,19 @@ export interface LocationRepository {
    * `(operatorId, name)` unique constraint is the real seal).
    */
   findByOperatorAndName(operatorId: string, name: string): Promise<Location | undefined>
-  // lat/lng + coordinateSource are optional on create (default null). The service
-  // derives them via the Geocoder (#531); callers that already have coords (e.g.
-  // a MANUAL pin) pass all three. All three DB columns are nullable.
+  // lat/lng + coordinateSource (#531) and regionId (#394) are optional on create
+  // (default null). The service derives coords via the Geocoder; callers with a
+  // MANUAL pin pass them. The location form does not capture a region yet. All
+  // four DB columns are nullable.
   create(
     data: Omit<
       Location,
-      'id' | 'createdAt' | 'updatedAt' | 'latitude' | 'longitude' | 'coordinateSource'
+      'id' | 'createdAt' | 'updatedAt' | 'latitude' | 'longitude' | 'coordinateSource' | 'regionId'
     > & {
       latitude?: number | null
       longitude?: number | null
       coordinateSource?: CoordinateSource | null
+      regionId?: string | null
     },
   ): Promise<Location>
   update(id: string, data: Partial<Location>): Promise<Location | undefined>
