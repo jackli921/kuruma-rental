@@ -2,23 +2,33 @@ import { buttonVariants } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { cn } from '@/lib/utils'
+import { defaultSearchRange } from '@/vite/storefronts/params'
+import { persistSearchRange, readPersistedRange } from '@/vite/storefronts/storage'
 import { useNavigate } from '@tanstack/react-router'
 import { Calendar, MapPin, Search } from 'lucide-react'
 import { type FormEvent, useState } from 'react'
 import { useLocale, useTranslations } from 'use-intl'
 
+// Prefill the inputs so a renter can search in one click: restore this session's
+// last range if there is one, otherwise the next-hour / +3 day default.
+function initialRange(): { from: string; to: string } {
+  return readPersistedRange() ?? defaultSearchRange()
+}
+
 export function SearchWidget() {
   const t = useTranslations('landing.hero')
   const locale = useLocale()
   const navigate = useNavigate()
-  const [pickupDate, setPickupDate] = useState('')
-  const [returnDate, setReturnDate] = useState('')
+  const [pickupDate, setPickupDate] = useState(() => initialRange().from)
+  const [returnDate, setReturnDate] = useState(() => initialRange().to)
 
   // Hand the chosen range to the storefront availability search. The inputs are
   // `datetime-local` (JST wall-clock) to match StorefrontSearchForm, so the
   // values feed `/search`'s parseSearchRange directly — no format conversion.
+  // Persist first so returning to the landing page restores this range.
   function handleSubmit(e: FormEvent) {
     e.preventDefault()
+    persistSearchRange(pickupDate, returnDate)
     navigate({
       to: '/$locale/search',
       params: { locale },
