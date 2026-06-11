@@ -1,7 +1,7 @@
 # Slice 6 — Booking & Event Log (issue #392)
 
 **Date:** 2026-06-02
-**Status:** Draft v2 — refreshed 2026-06-04 against landed slices 3/4a/4b/4c; awaiting green light to create worktree
+**Status:** MERGED 2026-06-06 (#392, PR #469, `3f04b2b`) — booking write-path + event log landed on `marketplace-pivot`. Plan retained for history.
 **Parent epic:** #385
 **Source of truth:** `docs/plans/2026-05-25-marketplace-mvp-proposal.md` — §6 row 6 (slice scope), §6.1 (E2E gate before slice-6 merge), §6.2 (tenant scoping), §10 item 3 (booking_code format), §9 items 19/22/25, §10 items 9/14/17, §2 rows "Record mutation model" / "Booking write boundary" / "Vehicle substitution" / "Vehicle turnaround buffer".
 **Format model:** mirrors `docs/plans/2026-06-02-slice4-insurance-pricing-fees.md` structure/depth, adapted to an event-sourced booking write-path slice.

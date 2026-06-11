@@ -1,6 +1,6 @@
 # Plan — #457: Vehicle luggage capacity (count + size) + result-card display
 
-> Status: **DRAFT — awaiting review.** No code until D1–D5 confirmed.
+> Status: **MERGED 2026-06-09** (#457, PR #503, `f8d7e97`) — landed on `marketplace-pivot`. Plan retained for history.
 > Issue: #457 (epic #385). Source: `docs/plans/2026-06-05-scope-update-du-kaku.md` §1.2.
 > Branch: `feat/457-luggage` off `origin/marketplace-pivot`. Worktree: `~/Dev/kuruma-457-luggage`.
 

@@ -40,7 +40,9 @@ Airbnb-style car rental platform for a Japan-based company (Osaka) serving inter
 
 > **Rule: Self-document gotchas.** When you hit a surprise, add it here immediately.
 
-## Next.js 16 + shadcn (base-ui)
+## Next.js 16 + shadcn (base-ui) — FROZEN Next.js tree only
+
+> The live web shell is **Vite + TanStack Router** (`packages/web/src/vite/`). The notes below apply only to the frozen Next.js tree (`src/app/`), which is not the build path and is slated for deletion at cut-over. Do not apply them to new Vite work.
 
 - **No `asChild` prop.** Use `buttonVariants()` on `<Link>`, or `render` prop on triggers. See code examples in `packages/web/src/components/`.
 - **Use `middleware.ts`, NOT `proxy.ts`.** `proxy.ts` forces Node.js runtime; `@opennextjs/cloudflare` is Edge only. The deprecation warning is cosmetic.
@@ -71,7 +73,9 @@ Critical rules:
 6. **Shared secrets (AUTH_SECRET, DATABASE_URL) must match between API and Web workers.** GitHub Secrets is the source of truth. `deploy.yml` no longer re-asserts secrets every deploy — wrangler 4's gradual deployments refuse `secret put` when a pending version exists (cloudflare/workers-sdk#6763) and the old pattern locked up deploys. Instead: `deploy.yml` runs a read-only `wrangler secret list` presence check; `rotate-secrets.yml` (workflow_dispatch) re-asserts values. Rotate after changing a GitHub Secret, whenever the presence check fails, or if "Unauthorized" starts appearing silently.
 7. **`getDb()` (neon-http) CANNOT run interactive transactions** — `db.transaction(cb)` throws `"No transactions support in neon-http driver"` at runtime (tsc does NOT catch it → it 500s in prod). The HTTP driver is stateless fetch-per-query, safe to reuse across requests. For interactive transactions use **`runTx(fn)`** from `@kuruma/shared/db` (#493): it opens a short-lived **neon-serverless (WebSocket) Pool** per call, runs the tx, closes it — the only Workers-safe lifecycle (a WebSocket Pool can't cross requests: "Cannot perform I/O on behalf of a different request"). Repos take the runner via constructor injection; the composition root wires `runTx`. **`DATABASE_URL` must be the Neon POOLED endpoint** (`-pooler` host) — per-call connections against a direct endpoint exhaust Postgres backends under load.
 
-## i18n (next-intl v4)
+## i18n (next-intl v4) — FROZEN Next.js tree only
+
+> The live Vite shell uses **use-intl** with TanStack Router (`$locale` route param, `IntlProvider`, `messages/` served by Vite). The next-intl notes below apply only to the frozen Next.js tree.
 
 - Import navigation helpers from `@/i18n/routing`, not `next/link`.
 - Business routes use `/manage/` prefix. `/dashboard` has no prefix.
