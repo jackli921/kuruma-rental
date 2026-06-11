@@ -5,6 +5,7 @@
  * 6-8 ACRISS codes, coherent fees) are unit-testable without a database.
  */
 export { DEMO_OPERATORS, type DemoOperator, type DemoOwner } from './operators'
+export { DEMO_REGIONS, type DemoRegion } from './regions'
 export { DEMO_LOCATIONS, type DemoLocation } from './locations'
 export { DEMO_VEHICLE_CLASSES, type DemoVehicleClass } from './classes'
 export { DEMO_VEHICLES, type DemoVehicle } from './vehicles'
