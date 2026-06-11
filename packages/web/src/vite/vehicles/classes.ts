@@ -47,6 +47,20 @@ export async function fetchClassBySlug(slug: string): Promise<VehicleClassData |
   return unwrap<VehicleClassData>(res)
 }
 
+// Protected single-class read for the booking confirmation label (#511). Unlike
+// the public list/by-slug endpoints, GET /vehicle-classes/:id requires auth — but
+// `operatorReadScope` maps a RENTER to the cross-operator `all` scope, so a
+// logged-in renter reads any class (the confirmation page is `_renter`-gated, so
+// the session cookie rides along via credentials). 404 (archived/unknown) → null,
+// so the page simply omits the class row rather than erroring.
+export async function fetchClassById(id: string): Promise<VehicleClassData | null> {
+  const res = await fetch(`${getApiBaseUrl()}/vehicle-classes/${encodeURIComponent(id)}`, {
+    credentials: 'include',
+  })
+  if (res.status === 404) return null
+  return unwrap<VehicleClassData>(res)
+}
+
 export function activeClassesQueryOptions() {
   return queryOptions({
     queryKey: ['vehicle-classes', 'active'],
@@ -58,5 +72,12 @@ export function classBySlugQueryOptions(slug: string) {
   return queryOptions({
     queryKey: ['vehicle-classes', 'by-slug', slug],
     queryFn: () => fetchClassBySlug(slug),
+  })
+}
+
+export function classByIdQueryOptions(id: string) {
+  return queryOptions({
+    queryKey: ['vehicle-classes', id],
+    queryFn: () => fetchClassById(id),
   })
 }
