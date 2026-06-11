@@ -779,6 +779,24 @@
         "ACTIVE": "利用中",
         "COMPLETED": "完了",
         "CANCELLED": "キャンセル済み"
+      },
+      "viewAria": "予約 {code} の詳細を表示",
+      "detail": {
+        "heading": "予約の詳細",
+        "status": "ステータス",
+        "vehicle": "車両",
+        "renter": "利用者",
+        "pickup": "受取",
+        "return": "返却",
+        "insurance": "保険",
+        "deductible": "免責額",
+        "addOns": "オプション",
+        "charges": "発生し得る追加料金",
+        "notes": "備考",
+        "total": "合計",
+        "loading": "予約を読み込み中…",
+        "loadError": "この予約を読み込めませんでした",
+        "missing": "予約が見つかりません"
       }
     }
   },
