@@ -5,9 +5,11 @@ import { createApp } from '../../src/index'
 import {
   InMemoryAvailabilityRepository,
   InMemoryBookingRepository,
+  InMemoryOperatorRepository,
   InMemoryProviderInviteRepository,
   InMemoryVehicleRepository,
 } from '../../src/repositories/in-memory'
+import type { Operator } from '../../src/stores'
 import { TEST_AUTH_SECRET, setupAuthEnv } from '../helpers/auth'
 
 async function bearer(payload: Record<string, unknown>): Promise<Record<string, string>> {
@@ -22,14 +24,30 @@ async function bearer(payload: Record<string, unknown>): Promise<Record<string, 
   return { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }
 }
 
+const OPERATOR: Operator = {
+  id: 'op_1',
+  slug: 'pilot',
+  name: 'Pilot Operator',
+  preAuthHandoffUrl: null,
+  createdAt: new Date('2026-01-01T00:00:00Z'),
+  updatedAt: new Date('2026-01-01T00:00:00Z'),
+}
+
 function makeApp() {
   setupAuthEnv()
   const vehicleRepo = new InMemoryVehicleRepository()
   const bookingRepo = new InMemoryBookingRepository()
   const availabilityRepo = new InMemoryAvailabilityRepository(vehicleRepo, bookingRepo)
   const providerInviteRepo = new InMemoryProviderInviteRepository()
-  const app = createApp({ vehicleRepo, bookingRepo, availabilityRepo, providerInviteRepo })
-  return { app, providerInviteRepo }
+  const operatorRepo = new InMemoryOperatorRepository(new Map([[OPERATOR.id, OPERATOR]]))
+  const app = createApp({
+    vehicleRepo,
+    bookingRepo,
+    availabilityRepo,
+    providerInviteRepo,
+    operatorRepo,
+  })
+  return { app, providerInviteRepo, operatorRepo }
 }
 
 const sha256Hex = (value: string) => createHash('sha256').update(value).digest('hex')
@@ -125,5 +143,48 @@ describe('POST /admin/provider-invites', () => {
       body: JSON.stringify({ email: 'pilot@operator.example', operatorId: 'op_1', role: 'WIZARD' }),
     })
     expect(res.status).toBe(400)
+  })
+})
+
+describe('GET /provider-invites/:token/preview', () => {
+  let app: ReturnType<typeof makeApp>['app']
+  let providerInviteRepo: ReturnType<typeof makeApp>['providerInviteRepo']
+
+  beforeEach(() => {
+    ;({ app, providerInviteRepo } = makeApp())
+  })
+
+  const seedInvite = (token: string) =>
+    providerInviteRepo.create({
+      email: 'invitee@example.com',
+      operatorId: 'op_1',
+      role: 'OPERATOR_OWNER',
+      tokenHash: sha256Hex(token),
+      status: 'PENDING',
+      expiresAt: new Date(Date.now() + 60_000),
+      invitedByUserId: 'admin-1',
+      acceptedByUserId: null,
+    })
+
+  test('is public (no auth) and returns operator name + valid, never the email', async () => {
+    await seedInvite('live-token')
+
+    const res = await app.request('/provider-invites/live-token/preview')
+
+    expect(res.status).toBe(200)
+    const body = await res.json()
+    expect(body.success).toBe(true)
+    expect(body.data.valid).toBe(true)
+    expect(body.data.operatorName).toBe('Pilot Operator')
+    // A leaked invite URL must not disclose the invited address (#521 §7).
+    expect(JSON.stringify(body)).not.toContain('invitee@example.com')
+  })
+
+  test('returns valid:false with no operator details for an unknown token (200)', async () => {
+    const res = await app.request('/provider-invites/never-issued/preview')
+
+    expect(res.status).toBe(200)
+    const body = await res.json()
+    expect(body.data).toEqual({ valid: false })
   })
 })

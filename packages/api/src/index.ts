@@ -116,6 +116,7 @@ import { createMessageRoutes } from './routes/messages'
 import { createNotificationRoutes } from './routes/notifications'
 import { createOperatorRoutes } from './routes/operators'
 import { createPaymentRoutes } from './routes/payments'
+import { createProviderInviteRoutes } from './routes/provider-invites'
 import { createFlatSearchRoutes } from './routes/search'
 import { createStatsRoutes } from './routes/stats'
 import { createStorefrontRoutes } from './routes/storefronts'
@@ -480,6 +481,7 @@ export function createApp(overrides?: {
   })
   const providerInviteService = new ProviderInviteService(
     providerInviteRepo,
+    operatorRepo,
     { webBaseUrl },
     (event) => console.info('[provider-invite] created', event),
   )
@@ -679,6 +681,7 @@ export function createApp(overrides?: {
       ),
     )
     .route('/', createFlatSearchRoutes(flatSearchService, publicCatalogLimiter))
+    .route('/', createProviderInviteRoutes(providerInviteService, publicCatalogLimiter))
     .route('/', createVehicleRoutes(vehicleRepo, maintenanceService, resolveWriteOperatorId))
     .route(
       '/',

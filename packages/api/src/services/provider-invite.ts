@@ -1,7 +1,7 @@
 import type { CreateProviderInviteInput } from '@kuruma/shared/validators/provider-invite'
 import { randomToken } from '../auth/google'
 import { sha256Hex } from '../auth/token-hash'
-import type { ProviderInviteRepository } from '../repositories/types'
+import type { OperatorRepository, ProviderInviteRepository } from '../repositories/types'
 
 // Invites are short-lived: a leaked link is only useful for a week, and the
 // recipient is expected to accept promptly during onboarding.
@@ -33,9 +33,19 @@ export interface CreatedInvite {
   readonly expiresAt: Date
 }
 
+/** Public preview of an invite (#521 §7). Deliberately omits the invited
+ *  `email`: a leaked link must not disclose the target address or aid a phish —
+ *  the email is verified server-side at accept, so the page never needs it. */
+export interface ProviderInvitePreview {
+  readonly valid: boolean
+  readonly operatorName?: string
+  readonly expiresAt?: Date
+}
+
 export class ProviderInviteService {
   constructor(
     private readonly repo: ProviderInviteRepository,
+    private readonly operatorRepo: OperatorRepository,
     private readonly config: ProviderInviteServiceConfig,
     private readonly recordAudit: RecordProviderInviteAudit,
   ) {}
@@ -68,5 +78,21 @@ export class ProviderInviteService {
     })
     const base = this.config.webBaseUrl.replace(/\/$/, '')
     return { token, inviteUrl: `${base}/provider/invite/${token}`, expiresAt }
+  }
+
+  // Public, unauthenticated invite preview for the acceptance page. Looked up by
+  // hash only (never plaintext). An unknown token reveals nothing; a real invite
+  // names its operator + expiry so the page can render both the live "You're
+  // invited to <Operator>" and the expired/used states — `valid` gates the CTA.
+  async preview(token: string): Promise<ProviderInvitePreview> {
+    const invite = await this.repo.findByTokenHash(sha256Hex(token))
+    if (!invite) return { valid: false }
+    const operator = await this.operatorRepo.findById(invite.operatorId)
+    const valid = invite.status === 'PENDING' && invite.expiresAt.getTime() > Date.now()
+    return {
+      valid,
+      ...(operator ? { operatorName: operator.name } : {}),
+      expiresAt: invite.expiresAt,
+    }
   }
 }
