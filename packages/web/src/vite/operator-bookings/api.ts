@@ -74,7 +74,9 @@ export async function fetchOperatorBookings(
 
 export function operatorBookingsQueryOptions(filters: OperatorBookingFilters = {}) {
   return queryOptions({
-    queryKey: ['operator-bookings', filters.status],
+    // Key on every filter that changes the response (status + limit) so two
+    // callers with different limits never collide on a stale cache entry.
+    queryKey: ['operator-bookings', filters.status, filters.limit],
     queryFn: () => fetchOperatorBookings(filters),
   })
 }

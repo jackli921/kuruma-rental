@@ -5,11 +5,14 @@ import { useSuspenseQuery } from '@tanstack/react-query'
 import { type ErrorComponentProps, createFileRoute, useRouter } from '@tanstack/react-router'
 import { useTranslations } from 'use-intl'
 
-// Operator booking list (#512). Lives under the `_business` guard, so only
-// business roles reach it; tenant scoping is server-side (CallerContext), the
-// client passes no operatorId. The loader prefetches into the query cache (no
-// FOUC); the component reads the same options via useSuspenseQuery.
-export const Route = createFileRoute('/$locale/_business/bookings')({
+// Operator booking list (#512). URL `/<locale>/manage/bookings` — the renter
+// owns `/<locale>/bookings` (#511), so the operator view lives under the
+// business `manage/` segment (matches the frozen app's business routes). Behind
+// the `_business` guard, so only business roles reach it; tenant scoping is
+// server-side (CallerContext), the client passes no operatorId. The loader
+// prefetches into the query cache (no FOUC); the component reads the same
+// options via useSuspenseQuery.
+export const Route = createFileRoute('/$locale/_business/manage/bookings')({
   loader: ({ context }) => context.queryClient.ensureQueryData(operatorBookingsQueryOptions()),
   pendingComponent: PageSkeleton,
   errorComponent: OperatorBookingsError,

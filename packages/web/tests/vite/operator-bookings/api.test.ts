@@ -117,11 +117,16 @@ describe('fetchOperatorBookings', () => {
 })
 
 describe('operatorBookingsQueryOptions', () => {
-  it('keys by the operator-bookings list and the status filter', () => {
-    expect(operatorBookingsQueryOptions().queryKey).toEqual(['operator-bookings', undefined])
-    expect(operatorBookingsQueryOptions({ status: 'ACTIVE' }).queryKey).toEqual([
+  it('keys by the operator-bookings list and the status + limit filters', () => {
+    expect(operatorBookingsQueryOptions().queryKey).toEqual([
+      'operator-bookings',
+      undefined,
+      undefined,
+    ])
+    expect(operatorBookingsQueryOptions({ status: 'ACTIVE', limit: 50 }).queryKey).toEqual([
       'operator-bookings',
       'ACTIVE',
+      50,
     ])
   })
 })

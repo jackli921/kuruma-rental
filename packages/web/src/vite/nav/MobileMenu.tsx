@@ -11,7 +11,7 @@ import { useLocale, useTranslations } from 'use-intl'
 
 // `to` is a literal union of real routes so the typed TanStack <Link> compiles;
 // a plain `string` here would fail typecheck (added routes land in 5d-2/5d-3).
-export type NavTo = '/$locale/dashboard' | '/$locale/bookings'
+export type NavTo = '/$locale/dashboard' | '/$locale/bookings' | '/$locale/manage/bookings'
 
 export interface NavItem {
   readonly to: NavTo
