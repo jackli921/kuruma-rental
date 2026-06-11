@@ -485,6 +485,27 @@ describe('Booking Routes', () => {
       expect(byRenter.get(USER2).renter.name).toBe('Second Renter')
       expect(byRenter.get(USER2).renter.language).toBe('ja')
     })
+
+    it('returns bookings with both vehicle and renter data when expand=vehicle,renter', async () => {
+      const corolla = await vehicleRepo.create(
+        SYSTEM_CONTEXT,
+        vehicleData({ name: 'Toyota Corolla', photos: ['c1.jpg'] }),
+      )
+      await createBooking(validBookingInput({ requestedVehicleId: corolla.id }))
+
+      const res = await app.request('/bookings?expand=vehicle,renter')
+      const body = await res.json()
+
+      expect(body.success).toBe(true)
+      expect(body.data).toHaveLength(1)
+      expect(body.data[0].vehicle).toEqual({ name: 'Toyota Corolla', photos: ['c1.jpg'] })
+      expect(body.data[0].renter).toEqual({
+        id: USER1,
+        name: 'Test Renter',
+        email: 'renter@example.com',
+        language: 'en',
+      })
+    })
   })
 
   describe('GET /bookings — cursor pagination', () => {

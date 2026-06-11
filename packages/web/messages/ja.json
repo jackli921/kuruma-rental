@@ -752,6 +752,28 @@
       "active": "利用中",
       "completed": "完了",
       "cancelled": "キャンセル済み"
+    },
+    "operator": {
+      "title": "予約",
+      "subtitle": "各店舗の予約状況",
+      "empty": "予約はまだありません",
+      "loadError": "予約を読み込めませんでした",
+      "retry": "再試行",
+      "none": "—",
+      "columns": {
+        "code": "予約番号",
+        "vehicle": "車両",
+        "renter": "利用者",
+        "range": "期間",
+        "status": "ステータス",
+        "total": "合計"
+      },
+      "status": {
+        "CONFIRMED": "確定",
+        "ACTIVE": "利用中",
+        "COMPLETED": "完了",
+        "CANCELLED": "キャンセル済み"
+      }
     }
   },
   "landing": {

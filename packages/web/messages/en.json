@@ -752,6 +752,28 @@
       "active": "Active",
       "completed": "Completed",
       "cancelled": "Cancelled"
+    },
+    "operator": {
+      "title": "Bookings",
+      "subtitle": "Reservations across your storefronts",
+      "empty": "No bookings yet",
+      "loadError": "Couldn't load bookings",
+      "retry": "Try again",
+      "none": "—",
+      "columns": {
+        "code": "Code",
+        "vehicle": "Vehicle",
+        "renter": "Renter",
+        "range": "Dates",
+        "status": "Status",
+        "total": "Total"
+      },
+      "status": {
+        "CONFIRMED": "Confirmed",
+        "ACTIVE": "Active",
+        "COMPLETED": "Completed",
+        "CANCELLED": "Cancelled"
+      }
     }
   },
   "landing": {
