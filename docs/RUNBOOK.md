@@ -3,13 +3,13 @@
 ## Architecture
 
 ```
-User -> CF Pages (Next.js) -> CF Workers (Hono API) -> Neon Postgres
+User -> CF Pages (Vite SPA + proxy Functions) -> CF Workers (Hono API) -> Neon Postgres
 ```
 
-- **Web**: Next.js 16 on Cloudflare Pages
+- **Web**: Vite + TanStack Router SPA on Cloudflare Pages. Same-origin `/api` + `/auth` proxy via Pages Functions (`packages/web/functions/`).
 - **API**: Hono on Cloudflare Workers
 - **DB**: Neon serverless Postgres
-- **Auth**: Auth.js v5 (Google + Apple OAuth, JWT strategy)
+- **Auth**: Google OAuth on the API, cookie session (Apple was dropped).
 
 ## Deployment
 
@@ -17,9 +17,11 @@ User -> CF Pages (Next.js) -> CF Workers (Hono API) -> Neon Postgres
 
 ```sh
 cd packages/web
-bun run build:worker    # Build with OpenNext for CF
-bun run deploy          # Deploy to Cloudflare Pages
+bun run build           # vite build -> dist/
+bun run deploy:pages    # wrangler pages deploy dist (project: kuruma-web-pages)
 ```
+
+> Web deploy is gated in CI on `WEB_PAGES_DEPLOY_ENABLED=true` and the CF account migration (#304). See `docs/plans/2026-06-09-378-pages-cutover.md` §8.
 
 ### API (Cloudflare Workers)
 

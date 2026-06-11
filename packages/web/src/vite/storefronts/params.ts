@@ -1,9 +1,14 @@
-import { parseJstDateTimeLocal } from '@/lib/datetime'
+import { formatJstDateTimeLocal, parseJstDateTimeLocal } from '@/lib/datetime'
 
 export interface SearchRange {
   from: Date
   to: Date
 }
+
+const ONE_HOUR_MS = 60 * 60 * 1000
+const HOURS_PER_DAY = 24
+const DEFAULT_RANGE_DAYS = 3
+const DEFAULT_RANGE_MS = DEFAULT_RANGE_DAYS * HOURS_PER_DAY * ONE_HOUR_MS
 
 /**
  * Parse the `from`/`to` search params (wall-clock JST `datetime-local` strings)
@@ -21,6 +26,34 @@ export function parseSearchRange(from?: string, to?: string): SearchRange | null
   } catch {
     return null
   }
+}
+
+/**
+ * The pickup/return range to prefill when a renter hasn't chosen one yet: pickup
+ * = the next whole JST hour (matches hourly booking granularity and is never in
+ * the past), return = three days later. Returned as `datetime-local` strings so
+ * both the hero widget and the search form drop them straight into their inputs.
+ * `now` is injectable to keep the computation pure and testable.
+ */
+export function defaultSearchRange(now: Date = new Date()): { from: string; to: string } {
+  const fromMs = Math.ceil(now.getTime() / ONE_HOUR_MS) * ONE_HOUR_MS
+  return {
+    from: formatJstDateTimeLocal(new Date(fromMs)),
+    to: formatJstDateTimeLocal(new Date(fromMs + DEFAULT_RANGE_MS)),
+  }
+}
+
+/**
+ * Decide whether the search route needs its date range seeded: returns the
+ * default range to inject when either bound is absent, or null when the URL
+ * already carries both. Keeps the route's beforeLoad a thin redirect shell.
+ */
+export function searchRangeToSeed(
+  search: { from?: string | undefined; to?: string | undefined },
+  now: Date = new Date(),
+): { from: string; to: string } | null {
+  if (search.from && search.to) return null
+  return defaultSearchRange(now)
 }
 
 /** Normalize the repeatable `class` search param to an array (TanStack gives string | string[]). */

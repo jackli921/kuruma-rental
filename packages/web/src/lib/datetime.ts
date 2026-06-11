@@ -22,3 +22,20 @@ export function parseJstDateTimeLocal(value: string): Date {
   }
   return d
 }
+
+const JST_OFFSET_MS = 9 * 60 * 60 * 1000
+
+/**
+ * Format an instant as a wall-clock JST `datetime-local` string
+ * ("YYYY-MM-DDTHH:mm") — the inverse of parseJstDateTimeLocal. Shifts the epoch
+ * by the fixed +09:00 offset (Tokyo has no DST) and reads the UTC fields, so the
+ * output is the Tokyo wall clock regardless of where the browser lives.
+ */
+export function formatJstDateTimeLocal(date: Date): string {
+  const jst = new Date(date.getTime() + JST_OFFSET_MS)
+  const pad = (n: number): string => String(n).padStart(2, '0')
+  return (
+    `${jst.getUTCFullYear()}-${pad(jst.getUTCMonth() + 1)}-${pad(jst.getUTCDate())}` +
+    `T${pad(jst.getUTCHours())}:${pad(jst.getUTCMinutes())}`
+  )
+}

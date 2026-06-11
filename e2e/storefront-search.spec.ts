@@ -10,22 +10,13 @@ const PICKUP = '2026-07-01T10:00'
 const RETURN = '2026-07-03T10:00'
 
 test.describe('Renter storefront search flow', () => {
-  test('date-range search surfaces a storefront card with class badge + price', async ({
+  test('auto-seeded search surfaces a storefront card with class badge + price', async ({
     page,
   }) => {
     await page.goto('/en/search')
 
-    // No range yet -> the page shows the date prompt, no result cards.
-    await expect(
-      page.getByText('Choose a pickup and return time to see available stores.'),
-    ).toBeVisible()
-
-    // Enter pickup/return and submit the search form.
-    await page.locator('#from').fill(PICKUP)
-    await page.locator('#to').fill(RETURN)
-    await page.getByRole('button', { name: 'Search' }).click()
-
-    // The chosen range lands in the URL (form -> /search?from=&to=).
+    // No range in the URL -> beforeLoad seeds a default JST range and redirects,
+    // so the search auto-runs results instead of showing the old date prompt.
     await expect(page).toHaveURL(/\/en\/search\?from=.+&to=.+/)
 
     // One storefront card linking to this store's detail, carrying the range.
@@ -36,6 +27,15 @@ test.describe('Renter storefront search flow', () => {
     // Demo target string parts: class-summary badge + "from ¥…" price.
     await expect(page.getByText('Compact ×4')).toBeVisible()
     await expect(page.getByText('From ¥4,500 / day')).toBeVisible()
+
+    // The renter can still override the seeded dates and re-search; the chosen
+    // range replaces the seed in the URL and results still render.
+    await page.locator('#from').fill(PICKUP)
+    await page.locator('#to').fill(RETURN)
+    await page.getByRole('button', { name: 'Search' }).click()
+    await expect(page).toHaveURL(/from=2026-07-01T10(%3A|:)00/)
+    await expect(page).toHaveURL(/to=2026-07-03T10(%3A|:)00/)
+    await expect(page.getByRole('link', { name: new RegExp(STORE_NAME) })).toHaveCount(1)
   })
 
   test('clicking a card opens the detail with grouped vehicles + a live booking CTA', async ({
