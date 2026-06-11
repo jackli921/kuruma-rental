@@ -38,7 +38,9 @@ import type {
   Message,
   NotificationLog,
   Operator,
+  OperatorMembership,
   PaymentEvent,
+  ProviderInvite,
   RenterDocument,
   Thread,
   ThreadParticipant,
@@ -188,6 +190,24 @@ export interface AddOnRepository {
   create(data: Omit<AddOn, 'id' | 'createdAt' | 'updatedAt'>): Promise<AddOn>
   update(id: string, data: Partial<AddOn>): Promise<AddOn | undefined>
   archive(id: string): Promise<AddOn | undefined>
+}
+
+// #521 provider authorization. Not ctx-scoped: the admin endpoint
+// (PLATFORM_ADMIN-gated) and the OAuth callback pass already-resolved values;
+// the DB unique/partial indexes are the real seals.
+export interface ProviderInviteRepository {
+  create(data: Omit<ProviderInvite, 'id' | 'createdAt' | 'updatedAt'>): Promise<ProviderInvite>
+  /** Single-row lookup by sha256(token) — the unique tokenHash index. */
+  findByTokenHash(tokenHash: string): Promise<ProviderInvite | undefined>
+}
+
+// #521. `findActiveByUserId` is served by the partial-unique-active index
+// (query filters status='ACTIVE'). `create` is fenced by that same index.
+export interface OperatorMembershipRepository {
+  findActiveByUserId(userId: string): Promise<OperatorMembership | undefined>
+  create(
+    data: Omit<OperatorMembership, 'id' | 'createdAt' | 'updatedAt'>,
+  ): Promise<OperatorMembership>
 }
 
 export interface VehicleFilters {
