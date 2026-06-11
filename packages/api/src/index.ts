@@ -27,6 +27,7 @@ import {
   DrizzleNotificationLogRepository,
   DrizzleOperatorRepository,
   DrizzlePaymentEventRepository,
+  DrizzleProviderInviteRepository,
   DrizzleRenterDocumentRepository,
   DrizzleStatsRepository,
   DrizzleStorefrontRepository,
@@ -53,6 +54,7 @@ import {
   InMemoryNotificationLogRepository,
   InMemoryOperatorRepository,
   InMemoryPaymentEventRepository,
+  InMemoryProviderInviteRepository,
   InMemoryRenterDocumentRepository,
   InMemoryStatsRepository,
   InMemoryStorefrontRepository,
@@ -81,6 +83,7 @@ import type {
   OperatorRepository,
   PaymentEventRepository,
   PhotoStorage,
+  ProviderInviteRepository,
   RenterDocumentRepository,
   RunInTransaction,
   StatsRepository,
@@ -139,6 +142,7 @@ import { OperatorService } from './services/operator'
 import { PaymentService } from './services/payment/payment'
 import type { PaymentGateway } from './services/payment/payment-gateway'
 import { StripePaymentGateway } from './services/payment/stripe-payment-gateway'
+import { ProviderInviteService } from './services/provider-invite'
 import { RenterDocumentService } from './services/renter-document'
 import { StorefrontDetailService } from './services/storefront-detail'
 import { StorefrontSearchService } from './services/storefront-search'
@@ -173,6 +177,7 @@ export function createApp(overrides?: {
   notificationLogRepo?: NotificationLogRepository
   storefrontRepo?: StorefrontRepository
   paymentEventRepo?: PaymentEventRepository
+  providerInviteRepo?: ProviderInviteRepository
   // Inject a fake gateway in tests; absent ⇒ the env-resolved Stripe/sentinel.
   paymentGateway?: PaymentGateway
   photoUploadLimiter?: RateLimitBinding
@@ -205,6 +210,7 @@ export function createApp(overrides?: {
   let notificationLogRepo: NotificationLogRepository
   let storefrontRepo: StorefrontRepository
   let paymentEventRepo: PaymentEventRepository
+  let providerInviteRepo: ProviderInviteRepository
   let runInTransaction: RunInTransaction
   // Undefined unless an override injects one (tests) or the DB branch builds the
   // real one. Absent ⇒ /auth/google/callback 503s (e.g. local dev without a DB).
@@ -261,6 +267,7 @@ export function createApp(overrides?: {
     storefrontRepo =
       overrides.storefrontRepo ?? new InMemoryStorefrontRepository(locationRepo, operatorRepo)
     paymentEventRepo = overrides.paymentEventRepo ?? new InMemoryPaymentEventRepository()
+    providerInviteRepo = overrides.providerInviteRepo ?? new InMemoryProviderInviteRepository()
     googleAuthRuntime = overrides.googleAuthRuntime
   } else if (process.env.DATABASE_URL) {
     const db = getDb()
@@ -285,6 +292,7 @@ export function createApp(overrides?: {
     notificationLogRepo = new DrizzleNotificationLogRepository(db)
     storefrontRepo = new DrizzleStorefrontRepository(db)
     paymentEventRepo = new DrizzlePaymentEventRepository(db)
+    providerInviteRepo = new DrizzleProviderInviteRepository(db)
     // Real Google OAuth runtime: HTTP provider + Drizzle-backed account store.
     // Built only here (the composition root) so the route stays adapter-agnostic.
     googleAuthRuntime = {
@@ -361,6 +369,7 @@ export function createApp(overrides?: {
     notificationLogRepo = new InMemoryNotificationLogRepository()
     storefrontRepo = new InMemoryStorefrontRepository(locationRepo, operatorRepo)
     paymentEventRepo = new InMemoryPaymentEventRepository()
+    providerInviteRepo = new InMemoryProviderInviteRepository()
   }
 
   // Translation provider: real Google when the key is set. In production
@@ -441,10 +450,17 @@ export function createApp(overrides?: {
     })()
   // Renter is redirected back here after Stripe Checkout — the first allowed web
   // origin (success/cancel paths are appended in the service).
-  const paymentWebBaseUrl = resolveAllowedOrigins(process.env.WEB_ORIGIN)[0] ?? ''
+  // First allowed web origin — where the browser is sent back to after Stripe
+  // Checkout and the base of the one-time provider-invite link (#521 §7).
+  const webBaseUrl = resolveAllowedOrigins(process.env.WEB_ORIGIN)[0] ?? ''
   const paymentService = new PaymentService(paymentEventRepo, bookingRepo, paymentGateway, {
-    webBaseUrl: paymentWebBaseUrl,
+    webBaseUrl,
   })
+  const providerInviteService = new ProviderInviteService(
+    providerInviteRepo,
+    { webBaseUrl },
+    (event) => console.info('[provider-invite] created', event),
+  )
 
   const app = new Hono()
 
@@ -644,7 +660,7 @@ export function createApp(overrides?: {
     )
     .route('/', createCustomerRoutes(customerService))
     .route('/', createUserRoutes(userRepo, threadRepo))
-    .route('/', createAdminRoutes(operatorService))
+    .route('/', createAdminRoutes(operatorService, providerInviteService))
     .route('/', createLocationRoutes(locationService, resolveWriteOperatorId))
     .route('/', createInsuranceOptionRoutes(insuranceOptionService, resolveWriteOperatorId))
     .route('/', createAddOnRoutes(addOnService, resolveWriteOperatorId))
