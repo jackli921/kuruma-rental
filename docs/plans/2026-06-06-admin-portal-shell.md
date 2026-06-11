@@ -5,7 +5,7 @@
 **Branch:** `feat/462-admin-portal-shell` (off `marketplace-pivot`)
 **Worktree:** `/Users/jack/Dev/kuruma-admin-portal`
 **Source of truth:** `docs/plans/2026-06-05-scope-update-du-kaku.md` §1.5, §2, §5
-**Status:** MERGED 2026-06-06 (#462, PR #481, `4c15833`) on the **Next.js** shell. NOT yet ported to the Vite shell — the revenue tab is unreachable on the live CF Pages deploy until ported (tracked separately; unblocks #515 and #501).
+**Status:** MERGED 2026-06-06 (#462, PR #481, `4c15833`) on the **Next.js** shell. NOT yet ported to the Vite shell — the revenue tab is unreachable on the live CF Pages deploy until ported (tracked by #541; unblocks #515 and #501).
 
 ---
 
