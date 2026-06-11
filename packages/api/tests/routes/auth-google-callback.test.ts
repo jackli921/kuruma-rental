@@ -128,4 +128,133 @@ describe('GET /auth/google/callback', () => {
     expect(res.status).toBe(302)
     expect(res.headers.get('location')).toBe('https://web.example.test/en/dashboard')
   })
+
+  // --- #521 provider door (B8): intent/invite → grant decision → mint + redirect ---
+  // The grant SERVICE decides authority; the callback only forwards identity facts
+  // and mints/redirects on its verdict. UI intent alone never grants a role.
+
+  /** Resolves op1 → 'acme'; any other id has no slug. */
+  const findSlug = async (id: string): Promise<string | undefined> =>
+    id === 'op1' ? 'acme' : undefined
+
+  test('provider intent + granted → mints operator session + redirects to /<locale>/manage/<slug>/dashboard', async () => {
+    setupAuthEnv()
+    const { runtime } = makeRuntime()
+    const providerAccess = {
+      resolve: async () => ({
+        type: 'granted' as const,
+        operatorId: 'op1',
+        role: 'OPERATOR_OWNER' as const,
+      }),
+    }
+    const app = createAuthRoutes(config, runtime, providerAccess, findSlug)
+    const res = await app.request('/auth/google/callback?state=s1&code=c1', {
+      headers: {
+        Cookie:
+          'kuruma_oauth_state=s1; kuruma_oauth_intent=provider; kuruma_oauth_return=%2Fja%2Fmanage',
+      },
+    })
+    expect(res.status).toBe(302)
+    // Server-computed dashboard (locale from returnTo, slug server-derived) wins over returnTo.
+    expect(res.headers.get('location')).toBe('https://web.example.test/ja/manage/acme/dashboard')
+
+    const token = getSetCookie(res, 'kuruma_session')
+    expect(token).toBeTruthy()
+    const { payload } = await jwtVerify(token!, new TextEncoder().encode(TEST_AUTH_SECRET), {
+      issuer: 'kuruma-web',
+      audience: 'kuruma-api',
+    })
+    // resolveUser returned RENTER; the grant upgraded it — proves intent didn't.
+    expect(payload.role).toBe('OPERATOR_OWNER')
+    expect(payload.operatorId).toBe('op1')
+    expect(payload.operatorSlug).toBe('acme')
+  })
+
+  test('provider intent + access_not_found → bounces to provider login error, mints NO session', async () => {
+    setupAuthEnv()
+    const { runtime } = makeRuntime()
+    const providerAccess = { resolve: async () => ({ type: 'access_not_found' as const }) }
+    const app = createAuthRoutes(config, runtime, providerAccess, findSlug)
+    const res = await app.request('/auth/google/callback?state=s1&code=c1', {
+      headers: { Cookie: 'kuruma_oauth_state=s1; kuruma_oauth_intent=provider' },
+    })
+    expect(res.status).toBe(302)
+    expect(res.headers.get('location')).toBe(
+      'https://web.example.test/en/provider/login?error=access_not_found',
+    )
+    // The provider door alone logs no one in.
+    expect(getSetCookie(res, 'kuruma_session')).toBeUndefined()
+  })
+
+  test('provider intent + invite_invalid → error redirect; forwards verified email + invite token to the grant service', async () => {
+    setupAuthEnv()
+    const calls: Record<string, unknown> = {}
+    const runtime = {
+      provider: {
+        exchangeCode: async () => ({ accessToken: 'a' }),
+        getUserInfo: async () => ({
+          sub: 'g-1',
+          email: 'JO@ex.com',
+          email_verified: true,
+          name: 'Jo',
+        }),
+      },
+      accountStore: { resolveUser: async () => ({ id: 'user_42', role: 'RENTER' as const }) },
+    }
+    const providerAccess = {
+      resolve: async (input: Record<string, unknown>) => {
+        Object.assign(calls, input)
+        return { type: 'invite_invalid' as const }
+      },
+    }
+    const app = createAuthRoutes(config, runtime, providerAccess, findSlug)
+    const res = await app.request('/auth/google/callback?state=s1&code=c1', {
+      headers: {
+        Cookie: 'kuruma_oauth_state=s1; kuruma_oauth_intent=provider; kuruma_oauth_invite=tok123',
+      },
+    })
+    expect(res.status).toBe(302)
+    expect(res.headers.get('location')).toBe(
+      'https://web.example.test/en/provider/login?error=invite_invalid',
+    )
+    expect(calls).toMatchObject({
+      userId: 'user_42',
+      email: 'JO@ex.com',
+      emailVerified: true,
+      inviteToken: 'tok123',
+    })
+  })
+
+  test('operator via the renter door → operator slug still minted, renter-style redirect', async () => {
+    setupAuthEnv()
+    const runtime = {
+      provider: {
+        exchangeCode: async () => ({ accessToken: 'a' }),
+        getUserInfo: async () => ({ sub: 'g-1', email: 'o@ex.com' }),
+      },
+      accountStore: {
+        resolveUser: async () => ({
+          id: 'user_op',
+          role: 'OPERATOR_OWNER' as const,
+          operatorId: 'op1',
+        }),
+      },
+    }
+    // No intent cookie = renter door; providerAccess never consulted.
+    const app = createAuthRoutes(config, runtime, undefined, findSlug)
+    const res = await app.request('/auth/google/callback?state=s1&code=c1', {
+      headers: { Cookie: 'kuruma_oauth_state=s1' },
+    })
+    expect(res.status).toBe(302)
+    expect(res.headers.get('location')).toBe('https://web.example.test/en/dashboard')
+
+    const token = getSetCookie(res, 'kuruma_session')
+    const { payload } = await jwtVerify(token!, new TextEncoder().encode(TEST_AUTH_SECRET), {
+      issuer: 'kuruma-web',
+      audience: 'kuruma-api',
+    })
+    // Slug derived on every intent so the /manage/$slug guard passes from any door.
+    expect(payload.operatorId).toBe('op1')
+    expect(payload.operatorSlug).toBe('acme')
+  })
 })
