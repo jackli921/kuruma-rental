@@ -26,6 +26,7 @@ import type { Customer, CustomerSort, CustomerWithBookings } from '@kuruma/share
 import type { FleetVehicleOverview } from '@kuruma/shared/types/fleet'
 import type { DashboardStats } from '@kuruma/shared/types/stats'
 import type { VehicleDetail } from '@kuruma/shared/types/vehicle-detail'
+import type { OperatorRole } from '@kuruma/shared/validators/provider-invite'
 import type { CallerContext } from '../middleware/auth'
 import type {
   AddOn,
@@ -313,6 +314,14 @@ export interface UserRepository {
   // users.operatorId — NOT a caller-facing lookup, so it does NOT reopen the #396
   // renter-enumeration vector. Owner-only by design (no OPERATOR_STAFF in MVP).
   findOperatorContacts(operatorId: string): Promise<User[]>
+  // #521 Decision 1: project an accepted operator grant onto users.role +
+  // users.operatorId — the single-active denormalisation the JWT reads. One of
+  // the three writes in the grant transaction; the OperatorRole subset is exactly
+  // the DB role-enum members it sets, so no widening cast is needed.
+  setOperatorAccess(
+    userId: string,
+    access: { role: OperatorRole; operatorId: string },
+  ): Promise<void>
 }
 
 /**
