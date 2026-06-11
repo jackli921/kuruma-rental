@@ -32,6 +32,7 @@ import {
   DrizzleOverviewRepository,
   DrizzlePaymentEventRepository,
   DrizzleProviderInviteRepository,
+  DrizzleRegionRepository,
   DrizzleRenterDocumentRepository,
   DrizzleStatsRepository,
   DrizzleStorefrontRepository,
@@ -62,6 +63,7 @@ import {
   InMemoryOverviewRepository,
   InMemoryPaymentEventRepository,
   InMemoryProviderInviteRepository,
+  InMemoryRegionRepository,
   InMemoryRenterDocumentRepository,
   InMemoryStatsRepository,
   InMemoryStorefrontRepository,
@@ -94,6 +96,7 @@ import type {
   PaymentEventRepository,
   PhotoStorage,
   ProviderInviteRepository,
+  RegionRepository,
   RenterDocumentRepository,
   RunInTransaction,
   RunOperatorGrant,
@@ -126,6 +129,7 @@ import { createOverviewRoutes } from './routes/overview'
 import { createPaymentRoutes } from './routes/payments'
 import { createProviderInviteRoutes } from './routes/provider-invites'
 import { rateLimitByIp } from './routes/rate-limit'
+import { createRegionRoutes } from './routes/regions'
 import { createFlatSearchRoutes } from './routes/search'
 import { createStatsRoutes } from './routes/stats'
 import { createStorefrontRoutes } from './routes/storefronts'
@@ -198,6 +202,7 @@ export function createApp(overrides?: AppOverrides) {
   let feeScheduleRepo: FeeScheduleRepository
   let notificationLogRepo: NotificationLogRepository
   let storefrontRepo: StorefrontRepository
+  let regionRepo: RegionRepository
   let paymentEventRepo: PaymentEventRepository
   let providerInviteRepo: ProviderInviteRepository
   let operatorMembershipRepo: OperatorMembershipRepository
@@ -265,6 +270,7 @@ export function createApp(overrides?: AppOverrides) {
     notificationLogRepo = overrides.notificationLogRepo ?? new InMemoryNotificationLogRepository()
     storefrontRepo =
       overrides.storefrontRepo ?? new InMemoryStorefrontRepository(locationRepo, operatorRepo)
+    regionRepo = overrides.regionRepo ?? new InMemoryRegionRepository()
     paymentEventRepo = overrides.paymentEventRepo ?? new InMemoryPaymentEventRepository()
     providerInviteRepo = overrides.providerInviteRepo ?? new InMemoryProviderInviteRepository()
     operatorMembershipRepo =
@@ -296,6 +302,7 @@ export function createApp(overrides?: AppOverrides) {
     feeScheduleRepo = new DrizzleFeeScheduleRepository(db)
     notificationLogRepo = new DrizzleNotificationLogRepository(db)
     storefrontRepo = new DrizzleStorefrontRepository(db)
+    regionRepo = new DrizzleRegionRepository(db)
     paymentEventRepo = new DrizzlePaymentEventRepository(db)
     providerInviteRepo = new DrizzleProviderInviteRepository(db)
     operatorMembershipRepo = new DrizzleOperatorMembershipRepository(db)
@@ -378,6 +385,7 @@ export function createApp(overrides?: AppOverrides) {
     feeScheduleRepo = new InMemoryFeeScheduleRepository()
     notificationLogRepo = new InMemoryNotificationLogRepository()
     storefrontRepo = new InMemoryStorefrontRepository(locationRepo, operatorRepo)
+    regionRepo = new InMemoryRegionRepository()
     paymentEventRepo = new InMemoryPaymentEventRepository()
     providerInviteRepo = new InMemoryProviderInviteRepository()
     operatorMembershipRepo = new InMemoryOperatorMembershipRepository()
@@ -649,6 +657,7 @@ export function createApp(overrides?: AppOverrides) {
     storefrontRepo,
     availabilityRepo,
     vehicleClassRepo,
+    regionRepo,
   )
   const storefrontDetailService = new StorefrontDetailService(
     storefrontRepo,
@@ -661,6 +670,7 @@ export function createApp(overrides?: AppOverrides) {
     storefrontRepo,
     availabilityRepo,
     vehicleClassRepo,
+    regionRepo,
   )
 
   // Chain .route() calls so TypeScript infers the full route type tree.
@@ -697,6 +707,7 @@ export function createApp(overrides?: AppOverrides) {
     )
     .route('/', createFlatSearchRoutes(flatSearchService, publicCatalogLimiter))
     .route('/', createProviderInviteRoutes(providerInviteService, publicCatalogLimiter))
+    .route('/', createRegionRoutes(regionRepo))
     .route('/', createVehicleRoutes(vehicleRepo, maintenanceService, resolveWriteOperatorId))
     .route(
       '/',

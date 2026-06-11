@@ -11,6 +11,7 @@ export type {
   NotificationLog,
   Operator,
   Location,
+  Region,
   InsuranceOption,
   AddOn,
   FeeSchedule,
@@ -45,6 +46,7 @@ import type {
   OperatorMembership,
   PaymentEvent,
   ProviderInvite,
+  Region,
   RenterDocument,
   Thread,
   ThreadParticipant,
@@ -519,6 +521,27 @@ export type Storefront = Location & { operatorName: string }
 export interface StorefrontFilters {
   /** Narrow to a single storefront — the degenerate single-card search. */
   pickupLocationId?: string
+  /**
+   * #394: keep only storefronts whose location.regionId is in this set (a region
+   * node + its recursive descendants, resolved by RegionRepository). An EMPTY
+   * array means "no region matched" → no storefronts (an unknown region id, or a
+   * region with no locations). Locations with a null regionId never match.
+   */
+  regionIds?: string[]
+}
+
+/**
+ * #394 hierarchical region taxonomy read. Platform-global reference data (no
+ * CallerContext — regions are not tenant-scoped). `findDescendantIds` owns the
+ * recursive tree walk in ONE place (Drizzle: a WITH RECURSIVE CTE; InMemory: a
+ * BFS over parentId), so search services stay dumb: resolve a regionId to a flat
+ * id list and hand it to the plain StorefrontFilters.regionIds filter.
+ */
+export interface RegionRepository {
+  /** The whole tree as a flat list; the web client builds the cascade from it. */
+  findAll(): Promise<Region[]>
+  /** `rootId` plus every descendant id (inclusive). Empty when `rootId` is unknown. */
+  findDescendantIds(rootId: string): Promise<string[]>
 }
 
 /**

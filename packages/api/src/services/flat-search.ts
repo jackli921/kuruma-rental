@@ -7,7 +7,9 @@ import type { CallerContext } from '../middleware/auth'
 import type {
   AvailabilityFilters,
   AvailabilityRepository,
+  RegionRepository,
   Storefront,
+  StorefrontFilters,
   StorefrontRepository,
   Vehicle,
   VehicleClass,
@@ -26,6 +28,8 @@ export interface FlatSearchParams {
   to: Date
   /** Narrow to a single storefront. */
   pickupLocationId?: string
+  /** #394: keep results in this region node + its recursive descendants. */
+  regionId?: string
   /** Narrow to one operator's inventory. */
   operatorId?: string
   /** ACRISS codes to keep; an item with no matching code is dropped. */
@@ -49,15 +53,23 @@ export class FlatSearchService {
     private readonly storefrontRepo: StorefrontRepository,
     private readonly availabilityRepo: AvailabilityRepository,
     private readonly classRepo: VehicleClassRepository,
+    private readonly regionRepo: RegionRepository,
   ) {}
 
   async search(ctx: CallerContext, params: FlatSearchParams): Promise<FlatSearchResult> {
-    const { from, to, pickupLocationId, operatorId, classes, cursor } = params
+    const { from, to, pickupLocationId, regionId, operatorId, classes, cursor } = params
     const limit = clampLimit(params.limit)
+
+    // Resolve the region selection to a flat descendant-id list (recursion lives
+    // in RegionRepository, §D6); narrowing the storefront set narrows the map
+    // results, since an unmapped vehicle is dropped below.
+    const sfFilters: StorefrontFilters = {}
+    if (pickupLocationId) sfFilters.pickupLocationId = pickupLocationId
+    if (regionId) sfFilters.regionIds = await this.regionRepo.findDescendantIds(regionId)
 
     const storefronts = await this.storefrontRepo.findActiveStorefronts(
       ctx,
-      pickupLocationId ? { pickupLocationId } : undefined,
+      regionId || pickupLocationId ? sfFilters : undefined,
     )
     // locationId -> ResultLocation (carries operatorName + real coords, D2). A
     // vehicle whose pickup location is absent here (archived/unknown) is not

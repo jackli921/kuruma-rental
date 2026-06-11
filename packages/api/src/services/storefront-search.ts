@@ -3,7 +3,9 @@ import type { LocationOperatingHours } from '@kuruma/shared/types/location'
 import type { CallerContext } from '../middleware/auth'
 import type {
   AvailabilityRepository,
+  RegionRepository,
   Storefront,
+  StorefrontFilters,
   StorefrontRepository,
   Vehicle,
   VehicleClass,
@@ -58,6 +60,8 @@ export interface StorefrontSearchParams {
   to: Date
   /** Narrow to a single storefront (degenerate single-card search). */
   pickupLocationId?: string
+  /** #394: keep storefronts in this region node + its recursive descendants. */
+  regionId?: string
   /** ACRISS codes to keep; trims classSummaries and drops stores with none. */
   classes?: string[]
   limit?: number
@@ -75,18 +79,27 @@ export class StorefrontSearchService {
     private readonly storefrontRepo: StorefrontRepository,
     private readonly availabilityRepo: AvailabilityRepository,
     private readonly classRepo: VehicleClassRepository,
+    private readonly regionRepo: RegionRepository,
   ) {}
 
   async search(
     ctx: CallerContext,
     params: StorefrontSearchParams,
   ): Promise<StorefrontSearchResult> {
-    const { from, to, pickupLocationId, classes, cursor } = params
+    const { from, to, pickupLocationId, regionId, classes, cursor } = params
     const limit = clampLimit(params.limit)
+
+    // Resolve a region selection to its node + descendants ONCE, then hand the
+    // storefront repo a flat id list (the recursion lives in RegionRepository,
+    // §D6). An empty list (unknown region / region with no locations) narrows to
+    // zero storefronts, which is the correct "nothing here" answer.
+    const filters: StorefrontFilters = {}
+    if (pickupLocationId) filters.pickupLocationId = pickupLocationId
+    if (regionId) filters.regionIds = await this.regionRepo.findDescendantIds(regionId)
 
     const storefronts = await this.storefrontRepo.findActiveStorefronts(
       ctx,
-      pickupLocationId ? { pickupLocationId } : undefined,
+      regionId || pickupLocationId ? filters : undefined,
     )
     // ONE availability scan per page — group in memory, never a query per store (N+1 guard, §3).
     const available = await this.availabilityRepo.findAvailableVehicles(
