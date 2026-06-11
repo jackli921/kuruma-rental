@@ -38,6 +38,11 @@ export default defineConfig({
     {
       name: 'authenticated-real-db',
       testMatch: /.*\.auth\.spec\.ts/,
+      // locations.auth.spec.ts drives the operator /manage/locations page, which
+      // only exists in the retired Next.js app — the Vite operator-locations port
+      // is #529 (epic #523). Re-enable it there. Until then this lane proves the
+      // #488 marketplace happy path against the shipped Vite UI.
+      testIgnore: ['**/locations.auth.spec.ts'],
       dependencies: ['setup'],
       use: { ...devices['Desktop Chrome'], storageState: STORAGE_STATE },
     },
@@ -57,15 +62,17 @@ export default defineConfig({
       },
     },
     {
-      command: 'bun run next dev -p 3002',
+      // The web app is Vite now (#378), not Next. Vite is a pure SPA dev server:
+      // it needs no AUTH_SECRET/DATABASE_URL — it proxies /api (strip prefix) and
+      // /auth (verbatim) to the real Hono API via VITE_DEV_API_PROXY, so the
+      // browser talks to the API same-origin and the minted session cookie rides.
+      command: 'bunx vite --port 3002',
       cwd: 'packages/web',
       url: BASE_URL,
       reuseExistingServer: !process.env.CI,
       timeout: 120_000,
       env: {
-        AUTH_SECRET,
-        DATABASE_URL,
-        NEXT_PUBLIC_API_URL: API_URL,
+        VITE_DEV_API_PROXY: API_URL,
       },
     },
   ],

@@ -1,12 +1,16 @@
-# Slice 8 — Core-Path Runbook (issue #390, interim milestone)
+# Marketplace Demo Runbook — renter books, operator sees it (Path A)
 
-> **Scope.** This runbook verifies the **interim core-path** that slice 8 (#390) delivers:
-> *renter search → storefront → vehicle → booking → confirmation → operator sees it.*
-> The full customer-facing Qiao/Du demo (pay → partner-revenue) is **#488** and is gated on #457–#462.
+> **Scope.** Verifies the shipped marketplace happy path end to end on the real
+> stack: *renter search → storefront → vehicle → instant-book → confirmation →
+> operator sees it*. This is the **#488** final demo, scoped to **Path A**
+> (instant-book / pay-at-pickup — no online Stripe charge) to match what ships in
+> the Vite app (#511). It began as the #390 interim core-path and was re-pointed
+> to the Vite UI when the web app moved off Next.js (#378).
 >
-> The authoritative proof of the core path is the **automated real-DB E2E lane** (§3). The
-> manual click-through (§4) is for narration. (Live booking submit now works on the
-> neon-serverless API — **#493 is fixed**; see §4.)
+> **Deferred — not in this runbook:** the Stripe *pay* step (#461 backend exists;
+> the renter flow is intentionally instant-book) and the admin *partner-revenue
+> 4%* tab (#462). The authoritative proof is the automated real-DB E2E lane (§3);
+> the manual click-through (§4) is for narration.
 
 ---
 
@@ -19,7 +23,7 @@ After `db:seed` + `db:seed-bookings` against a fresh Neon branch:
 - Key identities for the walkthrough:
   - Renter: `sarah@example.test` (role `RENTER`)
   - Operator: `owner@best-car-rental.local` (role `OPERATOR_OWNER`, Best Car Rental)
-  - `Kansai Airport (KIX)` storefront carries 4 vehicles.
+  - `Kansai Airport (KIX)` storefront carries 4 vehicles (the happy-path run consumes one for a far-future window).
 
 All seed ids are deterministic UUIDs (`seedId(slug)` — `packages/shared/src/db/seed-id.ts`); fixtures keep readable slugs.
 
@@ -33,24 +37,26 @@ git fetch origin
 bun install
 
 # Point DATABASE_URL at a fresh Neon branch off the merged pivot (NOT production).
+# The lane needs Neon today because db:seed runs through the neon-http driver — a
+# local-Postgres path is tracked in #542.
 bun run db:migrate
 bun run db:seed
 bun run db:seed-bookings
-bun run db:verify            # must show 3 green checks
+bun run db:verify            # must show 4 green checks
 ```
 
-For local Google login through the Vite shell, the API's OAuth callback must use
-the web dev origin so the browser returns through Vite's `/auth` proxy:
+For local Google login through the Vite shell (only needed for the **manual**
+walkthrough in §4, on the normal `bun run dev` web at :3001), the API's OAuth
+callback must use the web dev origin so the browser returns through Vite's
+`/auth` proxy:
 
 ```bash
 AUTH_URL=http://localhost:3001
 WEB_POST_LOGIN_URL=http://localhost:3001/en
 ```
 
-Register this redirect URI in the Google OAuth client used for local demos:
-`http://localhost:3001/auth/google/callback`.
-
-Then, in two terminals:
+Register `http://localhost:3001/auth/google/callback` in the local-demo Google
+OAuth client, then run the web + API in two terminals:
 
 ```bash
 bun --env-file=.env run dev:api
@@ -61,24 +67,31 @@ bun run dev
 
 ## 3. Verify the core path (automated — the merge gate)
 
-This is the §6.1 acceptance gate and the honest proof of the journey. It runs the real Next.js
-web → real Hono API → seeded Neon branch with a minted Auth.js session.
+The honest proof of the journey. It runs the real **Vite** web (`vite --port 3002`,
+proxying `/api` + `/auth` to the Hono API) → real Hono API (postgres-js) → the
+seeded Neon branch, authenticated with a minted **`kuruma_session`** HS256 cookie
+(`e2e/real-db/mint-session.ts`, mirroring the API's `mintSessionToken` contract).
 
 ```bash
-set -a; source /tmp/slice8-db.env; set +a   # or export DATABASE_URL for your branch
-AUTH_SECRET=ci-placeholder-secret-not-real bun run test:e2e:real-db
+AUTH_SECRET=<any 32+ char secret> DATABASE_URL=<neon-branch-pooled-url> bun run test:e2e:real-db
 ```
 
-Expected: **6 passed** (2 session-mint + 3 operator-locations + the marketplace happy-path).
-The happy-path spec (`e2e/real-db/marketplace-happy-path.auth.spec.ts`) drives:
-renter search → Best Car Rental KIX storefront → vehicle → book → confirmation code
-(`/^[2-9A-HJ-NP-Z]{8}$/`) → operator sees the booking on `/manage/bookings?view=month`
-+ an `OPERATOR_BOOKING_ALERT` row in `notification_log`.
+Expected: **3 passed** (2 session-mint + the marketplace happy-path). The
+happy-path spec (`e2e/real-db/marketplace-happy-path.auth.spec.ts`) drives:
+renter search → Best Car Rental KIX storefront → vehicle → the 5-step wizard
+(Continue ×3 → Continue to payment → **Reserve now**) → confirmation code
+(`/^[2-9A-HJ-NP-Z]{8}$/`) → operator sees the booking in the **list** at
+`/manage/bookings` (asserted by the booking-code cell) + an
+`OPERATOR_BOOKING_ALERT` row in `notification_log`.
+
+> `locations.auth.spec.ts` is quarantined in the config — the operator
+> `/manage/locations` page is the retired Next.js one; its Vite port is **#529**.
 
 > **Why the lane uses a postgres-js API server.** The booking → thread-creation path opens an
-> interactive transaction. Production now runs these via `runTx` (neon-serverless) since **#493**,
+> interactive transaction. Production runs these via `runTx` (neon-serverless) since **#493**,
 > but the lane keeps `e2e/real-db/real-api-server.ts` on postgres-js (TCP) to exercise the real
-> path without opening a WebSocket connection per transaction.
+> path without opening a WebSocket per transaction. `DATABASE_URL` should be the Neon **pooled**
+> endpoint (`-pooler`).
 
 ---
 
@@ -86,19 +99,21 @@ renter search → Best Car Rental KIX storefront → vehicle → book → confir
 
 Routes (locale-prefixed, e.g. `/en`): `/search` → `/storefronts/[locationId]?from&to`
 → `/bookings/new?vehicleId&locationId&from&to` → `/bookings/confirmation?bookingId`;
-operator `/manage/bookings?view=month`.
+operator `/manage/bookings`.
 
 1. **Renter search** — open `/search`, pick Osaka pickup + dates → storefront cards across all 3 operators with per-class min price.
 2. **Storefront** — open *Best Car Rental — Kansai Airport (KIX)* → available vehicles grouped by ACRISS class.
-3. **Select** — pick a vehicle → plate, price, insurance options shown. (`/bookings/new` requires a logged-in renter; it redirects to `/login` otherwise.)
-4. **Book** — choose insurance, confirm.
-   - ✅ **#493 fixed.** Live booking submit works: thread creation runs through `runTx` (neon-serverless), not the HTTP driver. Requires the API's `DATABASE_URL` to be the Neon **pooled** endpoint (`-pooler`); on a deployed Worker / `wrangler dev` it commits and returns a confirmation code. (Confirm once via the manual deploy smoke — AC bullet 1 of #493.)
-5. **Operator view** — log in as `owner@best-car-rental.local` → `/manage/bookings?view=month` shows the seeded bookings on the calendar (event title = renter name) + notification badge. Operator-2 portal cannot see operator-1 bookings (tenant isolation).
-6. **Range** — switch locale to `ja` / `zh` on the renter pages.
+3. **Select** — "Book this car" → `/bookings/new` carries `vehicleId` + `locationId` + dates. (Requires a logged-in renter; redirects to `/login` otherwise.)
+4. **Book (5-step wizard)** — Dates (pre-filled, read-only) → Extras (optional) → Insurance (default **No insurance**) → Review → Payment. Click **Reserve now**. Instant-book: **no online charge** — you pay at pickup via the operator's pre-authorization link.
+5. **Confirmation** — reservation code + status **Confirmed** + the pre-auth handoff card (the operator's payment link; hidden if the operator set none).
+6. **Operator view** — log in as `owner@best-car-rental.local` → `/manage/bookings` lists the booking (newest first; renter name + code) + notification badge. Tenant isolation: the operator-2 portal cannot see operator-1 bookings.
+7. **Range** — switch locale to `ja` / `zh` on the renter pages.
 
 ---
 
-## 5. Known gaps (interim)
+## 5. Known gaps / follow-ups
 
-- Full customer demo (pay → partner revenue, pre-auth handoff narration) is **#488**.
-- First-load JS baseline 554.9 kB > 500 kB target — signed exception, see plan §7.1 (resolved by #378).
+- **Out of Path A scope:** the Stripe *pay* step and the admin *partner-revenue 4%* tab — #461 (live Stripe) / #462 (Vite admin portal).
+- **Local Postgres for this lane — #542.** `db:seed`/`db:seed-bookings` use the neon-http driver and `pg.ts`/`real-api-server.ts` hardcode `ssl: 'require'`, so the lane needs a Neon branch today. #542 moves it to local Postgres (Neon local proxy or a postgres-js seed path) to drop the Neon-branch dependency.
+- **CI gate — #445.** Wiring this lane into CI with a managed Neon-branch lifecycle.
+- **Operator locations port — #529.** Re-enables `locations.auth.spec.ts` in this lane.

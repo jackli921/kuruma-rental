@@ -2,9 +2,10 @@ import { expect, test } from '@playwright/test'
 import { RENTER_STORAGE_STATE } from './constants'
 import { testSql } from './pg'
 
-// Slice 8 (#390) interim core-path milestone — the merge gate (plan §5/§6.1).
-// Proves the acceptance sentence end to end on the REAL web -> Hono API ->
-// seeded Neon branch stack (lane #416), across TWO authenticated actors:
+// #488 final marketplace demo (Path A: instant-book, no Stripe). Ported from the
+// #390 interim spec to the shipped Vite UI. Proves the acceptance sentence end to
+// end on the REAL Vite web -> Hono API -> seeded Postgres stack, across TWO
+// authenticated actors:
 //
 //   "renter search -> storefront result -> vehicle selection -> booking ->
 //    confirmation notification visible in the operator portal".
@@ -13,8 +14,9 @@ import { testSql } from './pg'
 // ctx.userId for non-staff, so the booking must be made AS the renter). Step 6
 // reuses the project-default OPERATOR_OWNER `page` to read the operator portal.
 //
-// Selectors are grounded in the merged slice-5/6/7 UI (not the mock skeleton in
-// e2e/marketplace-happy-path.spec.ts, whose fixtures predate the real pages).
+// Selectors are grounded in the shipped Vite UI (#458 search / #460 5-step
+// wizard / #511 confirmation / #512 operator list) — not the mock skeleton in
+// e2e/marketplace-happy-path.spec.ts, and not the retired Next.js pages.
 
 // Booking-code alphabet (api/lib/booking-code.ts BOOKING_CODE_PATTERN). Inlined:
 // @kuruma/api TS can't be required from this CJS-transformed Playwright file.
@@ -35,11 +37,10 @@ const OPERATOR_NAME = 'Best Car Rental'
 const UUID = '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}'
 
 // A far-future window, clear of the seeded bookings (which span demo-time-relative
-// ~-5..+7 days). Keeps a fleet of vehicles available and isolates the new booking
-// on the operator's July calendar. `datetime-local` wall-clock (parsed as JST).
+// ~-5..+7 days). Keeps a fleet of vehicles available and isolates the new booking.
+// `datetime-local` wall-clock (parsed as JST).
 const FROM = '2026-07-15T10:00'
 const TO = '2026-07-17T10:00'
-const BOOKING_MONTH = '2026-07-15' // operator calendar ?date — month view spans it
 
 // KIX seeds only 4 vehicles, so every run consumes one for the window. afterAll
 // deletes the bookings this spec created (+ their RESTRICT children, in FK order:
@@ -53,7 +54,7 @@ test.describe('marketplace happy path — renter books, operator sees it (real D
     browser,
     baseURL,
   }) => {
-    test.setTimeout(120_000) // cold Next dev compiles each route on first hit
+    test.setTimeout(120_000) // Vite builds each route on first hit; real-DB round-trips
 
     const renterContext = await browser.newContext({ storageState: RENTER_STORAGE_STATE, baseURL })
     const renter = await renterContext.newPage()
@@ -75,21 +76,40 @@ test.describe('marketplace happy path — renter books, operator sees it (real D
 
       await expect(renter).toHaveURL(new RegExp(`/storefronts/${UUID}\\?from=.+&to=.+`))
       await expect(renter.getByRole('heading', { name: STOREFRONT_NAME })).toBeVisible()
-      await expect(renter.getByText(OPERATOR_NAME)).toBeVisible()
+      // Operator name appears in several places on the detail page (header, vehicle
+      // cards) — first() keeps the assertion out of strict-mode multi-match.
+      await expect(renter.getByText(OPERATOR_NAME).first()).toBeVisible()
     })
 
-    await test.step('3. vehicle selection carries vehicle + location + dates into the form', async () => {
+    await test.step('3. vehicle selection carries vehicle + location + dates into the wizard', async () => {
+      // "Book this car" is a styled Link → /bookings/new with vehicleId + locationId
+      // + the search dates (so the wizard's first step is pre-filled, read-only).
       await renter.getByRole('link', { name: 'Book this car' }).first().click()
       await expect(renter).toHaveURL(
         new RegExp(`/bookings/new\\?vehicleId=${UUID}&locationId=${UUID}`),
       )
-      await expect(renter.getByRole('heading', { name: 'Confirm your booking' })).toBeVisible()
+      // The wizard opens on the read-only Dates step; its Continue button proves it loaded.
+      await expect(renter.getByRole('button', { name: 'Continue', exact: true })).toBeVisible()
     })
 
     let bookingCode = ''
-    await test.step('4-5. booking confirms with a no-confusables reservation code', async () => {
-      // Default insurance = decline (optional coverage); the renter just confirms.
-      await renter.getByRole('button', { name: 'Confirm booking' }).click()
+    await test.step('4-5. step through the wizard; booking confirms with a no-confusables code', async () => {
+      // 5-step wizard (#460): dates → addOns → insurance → confirm → payment.
+      // Dates are pre-filled & read-only; add-ons are optional (skip); insurance
+      // defaults to "No insurance" (decline). Each step gates on its own marker so
+      // we never click Continue before the next step has rendered.
+      await renter.getByRole('button', { name: 'Continue', exact: true }).click() // dates → addOns
+      await expect(renter.getByText('Add optional extras')).toBeVisible()
+
+      await renter.getByRole('button', { name: 'Continue', exact: true }).click() // addOns → insurance
+      await expect(renter.getByText('No insurance')).toBeVisible()
+
+      await renter.getByRole('button', { name: 'Continue', exact: true }).click() // insurance → confirm
+      await expect(renter.getByText('Review your booking')).toBeVisible()
+
+      await renter.getByRole('button', { name: 'Continue to payment' }).click() // confirm → payment
+      await expect(renter.getByRole('heading', { name: 'Confirm and reserve' })).toBeVisible()
+      await renter.getByRole('button', { name: 'Reserve now' }).click() // instant-book submit
 
       await expect(renter).toHaveURL(/\/bookings\/confirmation\?bookingId=.+/)
       await expect(renter.getByRole('heading', { name: 'Booking confirmed' })).toBeVisible()
@@ -99,13 +119,14 @@ test.describe('marketplace happy path — renter books, operator sees it (real D
       await expect(renter.getByText('Confirmed', { exact: true })).toBeVisible()
     })
 
-    await test.step('6a. operator portal shows the new booking on the calendar', async () => {
-      // `page` is the project-default OPERATOR_OWNER session. Month view spans the
-      // booking day regardless of the runner timezone; the calendar event title is
-      // the renter name (BookingsCalendar.toCalendarEvents).
-      await page.goto(`/en/manage/bookings?view=month&date=${BOOKING_MONTH}`)
+    await test.step('6a. operator portal lists the new booking', async () => {
+      // `page` is the project-default OPERATOR_OWNER session. The Vite operator view
+      // is #512. Assert the exact reservation code cell — a per-run unique token, so
+      // it ties the row to THIS run regardless of table ordering — plus Sarah's name.
+      await page.goto('/en/manage/bookings')
       await expect(page.getByRole('heading', { name: 'Bookings' })).toBeVisible()
-      await expect(page.getByText(RENTER_NAME).first()).toBeVisible({ timeout: 20_000 })
+      await expect(page.getByRole('cell', { name: bookingCode })).toBeVisible({ timeout: 20_000 })
+      await expect(page.getByRole('cell', { name: RENTER_NAME }).first()).toBeVisible()
     })
 
     await test.step('6b. slice-7 wrote the operator notification for this booking', async () => {
