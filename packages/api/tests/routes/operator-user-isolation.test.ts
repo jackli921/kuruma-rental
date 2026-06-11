@@ -244,6 +244,49 @@ describe('#396 — OPERATOR_* cannot enumerate users via any current ingress', (
     expect(userRepo.findByIdsArgs.flat()).not.toContain(FOREIGN_ID)
   })
 
+  it('GET /bookings?expand=vehicle,renter enriches only the operator’s own tenant, never a foreign tenant’s', async () => {
+    // Own booking is on the operator's real vehicle (so the vehicle branch
+    // resolves a name); the foreign booking is in another tenant. The three-way
+    // scope drops the foreign booking in findAll, BEFORE either enrichment runs.
+    await bookingRepo.create(
+      SYSTEM_CONTEXT,
+      bookingInput({
+        operatorId: OPERATOR_ID,
+        renterId: OWN_RENTER_ID,
+        requestedVehicleId: vehicle.id,
+        assignedVehicleId: vehicle.id,
+        pickupLocationId: locationId,
+        dropoffLocationId: locationId,
+      }),
+    )
+    await bookingRepo.create(
+      SYSTEM_CONTEXT,
+      bookingInput({
+        operatorId: OTHER_OPERATOR_ID,
+        renterId: FOREIGN_ID,
+        requestedVehicleId: 'veh-foreign',
+        assignedVehicleId: 'veh-foreign',
+      }),
+    )
+
+    const res = await app.request('/bookings?expand=vehicle,renter', {
+      headers: await operatorBearer(SELF_ID),
+    })
+
+    expect(res.status).toBe(200)
+    const body = (await res.json()) as {
+      data: { renterId: string; vehicle?: { name: string }; renter?: { id: string } }[]
+    }
+    // Only the operator's own booking is visible, with both projections resolved
+    // from its own tenant.
+    expect(body.data.map((b) => b.renterId)).toEqual([OWN_RENTER_ID])
+    expect(body.data[0]?.vehicle?.name).toBe('Test Car')
+    expect(body.data[0]?.renter?.id).toBe(OWN_RENTER_ID)
+    // Renter enrichment ran for the own renter but NEVER for the foreign tenant's.
+    expect(userRepo.findByIdsArgs.flat()).toContain(OWN_RENTER_ID)
+    expect(userRepo.findByIdsArgs.flat()).not.toContain(FOREIGN_ID)
+  })
+
   it('POST /bookings forces renterId to self — no arbitrary user lookup for a foreign renterId', async () => {
     const startAt = new Date(Date.now() + 48 * 60 * 60 * 1000)
     const endAt = new Date(startAt.getTime() + 4 * 60 * 60 * 1000)
