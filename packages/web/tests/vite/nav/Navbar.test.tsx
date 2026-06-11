@@ -101,15 +101,34 @@ describe('Navbar', () => {
     expect(screen.getByTestId('mobile-menu')).toHaveAttribute('data-nav-count', '2')
   })
 
-  it('shows the bookings link and no business markers for a signed-in renter', () => {
+  it('shows Browse, My Bookings, and Documents (no business markers) for a signed-in renter', () => {
     const { container } = renderNavbar(renter)
-    expect(screen.getByText('Bookings').closest('a')).toHaveAttribute(
+    expect(screen.getByText('Browse').closest('a')).toHaveAttribute('data-to', '/$locale/search')
+    expect(screen.getByText('My Bookings').closest('a')).toHaveAttribute(
       'data-to',
       '/$locale/bookings',
+    )
+    expect(screen.getByText('Documents').closest('a')).toHaveAttribute(
+      'data-to',
+      '/$locale/documents',
     )
     expect(container.querySelector('nav')?.hasAttribute('data-business-nav')).toBe(false)
     const client = screen.getByTestId('navbar-client')
     expect(client).toHaveAttribute('data-view-mode', 'renter')
     expect(client).toHaveAttribute('data-can-switch', 'false')
+    // Desktop + mobile share the same derived navItems (Browse + 2 renter-only).
+    expect(screen.getByTestId('mobile-menu')).toHaveAttribute('data-nav-count', '3')
+  })
+
+  it('hides My Bookings/Documents for an operator in renter view — gating is by role, not view (P1, AC6)', () => {
+    // Operator switched to renter view: viewMode is renter, but role is not RENTER,
+    // so the personal "my data" nav must not appear (it would otherwise drift to
+    // tenant data). Browse stays — it is public and role-agnostic.
+    document.cookie = 'kuruma-view=renter; path=/'
+    renderNavbar(business)
+    expect(screen.getByText('Browse')).toBeInTheDocument()
+    expect(screen.queryByText('My Bookings')).toBeNull()
+    expect(screen.queryByText('Documents')).toBeNull()
+    expect(screen.getByTestId('mobile-menu')).toHaveAttribute('data-nav-count', '1')
   })
 })

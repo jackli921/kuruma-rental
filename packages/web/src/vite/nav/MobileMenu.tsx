@@ -10,8 +10,14 @@ import { useState } from 'react'
 import { useLocale, useTranslations } from 'use-intl'
 
 // `to` is a literal union of real routes so the typed TanStack <Link> compiles;
-// a plain `string` here would fail typecheck (added routes land in 5d-2/5d-3).
-export type NavTo = '/$locale/dashboard' | '/$locale/bookings' | '/$locale/manage/bookings'
+// a plain `string` here would fail typecheck. Renter nav (#543) adds Browse
+// (-> public search) and Documents alongside My Bookings.
+export type NavTo =
+  | '/$locale/dashboard'
+  | '/$locale/bookings'
+  | '/$locale/manage/bookings'
+  | '/$locale/search'
+  | '/$locale/documents'
 
 export interface NavItem {
   readonly to: NavTo

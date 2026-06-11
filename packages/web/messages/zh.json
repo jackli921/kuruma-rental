@@ -51,7 +51,10 @@
     "close": "关闭菜单",
     "switchToRenter": "切换到租客视图",
     "switchToBusiness": "切换到管理视图",
-    "search": "搜索"
+    "search": "搜索",
+    "browse": "浏览车辆",
+    "myBookings": "我的预订",
+    "documents": "证件"
   },
   "acriss": {
     "MCAR": "微型车",
@@ -745,13 +748,16 @@
       "title": "我的预订",
       "subtitle": "您的即将到来和过去的预订",
       "empty": "您还没有任何预订。",
+      "browseCars": "浏览车辆",
       "pickup": "取车",
       "return": "还车",
       "viewDetails": "查看详情",
       "confirmed": "已确认",
       "active": "进行中",
       "completed": "已完成",
-      "cancelled": "已取消"
+      "cancelled": "已取消",
+      "loadError": "无法加载您的预订",
+      "retry": "重试"
     },
     "operator": {
       "title": "预订",

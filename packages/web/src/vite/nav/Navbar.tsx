@@ -10,8 +10,10 @@ import { Car } from 'lucide-react'
 import { useLocale, useTranslations } from 'use-intl'
 
 // Client navbar (the SPA reads the session via useSession, not server auth()).
-// Public/renter destinations beyond bookings (search/vehicles/messages/manage)
-// have no route yet — they arrive in 5d-2/5d-3 — so they are omitted here.
+// Renter nav (#543): Browse is public (any renter-view session); My Bookings and
+// Documents are personal "my data" pages, so they are gated on the actual RENTER
+// role — NOT viewMode. An operator who switches to renter view must not see them,
+// or they would drift to tenant data (view state is not authorization state).
 export function Navbar() {
   const { data: session } = useSession()
   const t = useTranslations('nav')
@@ -20,6 +22,14 @@ export function Navbar() {
   const role = session?.user?.role
   const canSwitchView = isBusiness(role)
   const viewMode = getViewMode(role)
+  const isRenter = role === 'RENTER'
+
+  const renterNavItems: readonly NavItem[] = isRenter
+    ? [
+        { to: '/$locale/bookings', label: t('myBookings') },
+        { to: '/$locale/documents', label: t('documents') },
+      ]
+    : []
 
   const navItems: readonly NavItem[] =
     viewMode === 'business'
@@ -28,7 +38,7 @@ export function Navbar() {
           { to: '/$locale/manage/bookings', label: t('bookings') },
         ]
       : session?.user
-        ? [{ to: '/$locale/bookings', label: t('bookings') }]
+        ? [{ to: '/$locale/search', label: t('browse') }, ...renterNavItems]
         : []
 
   return (

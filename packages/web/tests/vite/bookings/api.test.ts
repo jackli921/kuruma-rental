@@ -1,4 +1,10 @@
-import { createBooking, fetchBookingById } from '@/vite/bookings/api'
+import { ApiError } from '@/lib/api-error'
+import {
+  createBooking,
+  fetchBookingById,
+  fetchMyBookings,
+  myBookingsQueryOptions,
+} from '@/vite/bookings/api'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 function jsonResponse(body: unknown, status = 200): Response {
@@ -140,5 +146,89 @@ describe('fetchBookingById', () => {
       vi.fn(async () => jsonResponse({ success: false, error: 'boom' }, 500)),
     )
     await expect(fetchBookingById('b-1')).rejects.toMatchObject({ status: 500 })
+  })
+})
+
+// "My Bookings" (#543): the caller's own bookings, expanded with the assigned
+// vehicle. The query is principal-identical — `renterId=self` means "bookings
+// where I am the renter" for any caller, not "bookings in my tenant".
+const rawMyBooking = (over: Record<string, unknown> = {}) => ({
+  id: 'bk-1',
+  bookingCode: 'ABCD2345',
+  status: 'CONFIRMED',
+  startAt: '2026-07-01T01:00:00.000Z',
+  endAt: '2026-07-03T01:00:00.000Z',
+  totalPrice: 24000,
+  vehicle: { name: 'Toyota Aqua', photos: ['a.jpg'] },
+  ...over,
+})
+
+describe('fetchMyBookings', () => {
+  afterEach(() => vi.unstubAllGlobals())
+
+  it('GETs /api/bookings?expand=vehicle&renterId=<self> with credentials', async () => {
+    const fetchMock = vi.fn(async () => jsonResponse({ success: true, data: [], nextCursor: null }))
+    vi.stubGlobal('fetch', fetchMock)
+
+    await fetchMyBookings('me-42')
+
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit]
+    const parsed = new URL(url, 'http://x')
+    expect(parsed.pathname).toBe('/api/bookings')
+    expect(parsed.searchParams.get('expand')).toBe('vehicle')
+    expect(parsed.searchParams.get('renterId')).toBe('me-42')
+    expect(init.credentials).toBe('include')
+  })
+
+  it('maps the envelope to rows, flattening the expanded vehicle name', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => jsonResponse({ success: true, data: [rawMyBooking()], nextCursor: null })),
+    )
+
+    const rows = await fetchMyBookings('me-42')
+
+    expect(rows).toEqual([
+      {
+        id: 'bk-1',
+        bookingCode: 'ABCD2345',
+        status: 'CONFIRMED',
+        startAt: '2026-07-01T01:00:00.000Z',
+        endAt: '2026-07-03T01:00:00.000Z',
+        totalPrice: 24000,
+        vehicleName: 'Toyota Aqua',
+      },
+    ])
+  })
+
+  it('normalizes a missing vehicle expansion to null', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () =>
+        jsonResponse({
+          success: true,
+          data: [rawMyBooking({ vehicle: undefined })],
+          nextCursor: null,
+        }),
+      ),
+    )
+
+    const [row] = await fetchMyBookings('me-42')
+    expect(row!.vehicleName).toBeNull()
+  })
+
+  it('throws ApiError on a failure envelope', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => jsonResponse({ success: false, error: 'Unauthorized' }, 401)),
+    )
+
+    await expect(fetchMyBookings('me-42')).rejects.toBeInstanceOf(ApiError)
+  })
+})
+
+describe('myBookingsQueryOptions', () => {
+  it('keys by the renter so two principals never collide on cache', () => {
+    expect(myBookingsQueryOptions('me-42').queryKey).toEqual(['bookings', 'mine', 'me-42'])
   })
 })
