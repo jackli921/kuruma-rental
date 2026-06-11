@@ -57,20 +57,28 @@ export const Route = createFileRoute('/$locale/_renter/bookings/new')({
       fetchAddOns(deps.locationId),
       fetchInsuranceOptions(deps.locationId),
     ])
-    return { vehicle, addOns, insuranceOptions, from: range.from, to: range.to }
+    return {
+      vehicle,
+      locationId: deps.locationId,
+      addOns,
+      insuranceOptions,
+      from: range.from,
+      to: range.to,
+    }
   },
   component: NewBookingRoute,
 })
 
 function NewBookingRoute() {
   const { locale } = Route.useParams()
-  const { vehicle, addOns, insuranceOptions, from, to } = Route.useLoaderData()
+  const { vehicle, locationId, addOns, insuranceOptions, from, to } = Route.useLoaderData()
 
   return (
     <main className="flex-1 px-4 py-10 sm:px-6 lg:px-8">
       <ReservationWizard
         locale={locale}
         vehicle={vehicle}
+        locationId={locationId}
         addOns={addOns}
         insuranceOptions={insuranceOptions}
         from={from}

@@ -1,4 +1,5 @@
 import { Button } from '@/components/ui/button'
+import type { CreateBookingInput } from '@/vite/bookings/api'
 import type { AvailableVehicleData } from '@/vite/storefronts/api'
 import { useState } from 'react'
 import { useTranslations } from 'use-intl'
@@ -13,6 +14,8 @@ import { estimateReservation } from './pricing'
 interface ReservationWizardProps {
   readonly locale: string
   readonly vehicle: AvailableVehicleData
+  /** Storefront the vehicle belongs to — pickup and dropoff for the MVP (one location). */
+  readonly locationId: string
   readonly addOns: ReservationAddOn[]
   readonly insuranceOptions: ReservationInsuranceOption[]
   readonly from: Date
@@ -32,6 +35,7 @@ type Step = (typeof STEPS)[number]
 export function ReservationWizard({
   locale,
   vehicle,
+  locationId,
   addOns,
   insuranceOptions,
   from,
@@ -41,6 +45,9 @@ export function ReservationWizard({
   const [stepIndex, setStepIndex] = useState(0)
   const [selectedAddOnIds, setSelectedAddOnIds] = useState<string[]>([])
   const [insuranceOptionId, setInsuranceOptionId] = useState<string | null>(null)
+  // One key per wizard mount so a double-tap on Reserve replays the same booking
+  // (server idempotency) instead of racing the exclusion constraint into a 409.
+  const [idempotencyKey] = useState(() => crypto.randomUUID())
 
   const step: Step = STEPS[stepIndex] ?? 'dates'
   const selectedAddOns = addOns.filter((addOn) => selectedAddOnIds.includes(addOn.id))
@@ -52,6 +59,16 @@ export function ReservationWizard({
     insuranceDailyPriceJpy: insurance?.dailyPriceJpy ?? null,
     addOnPricesJpy: selectedAddOns.map((addOn) => addOn.priceJpy),
   })
+  const bookingInput: CreateBookingInput = {
+    requestedVehicleId: vehicle.id,
+    pickupLocationId: locationId,
+    dropoffLocationId: locationId,
+    startAt: from.toISOString(),
+    endAt: to.toISOString(),
+    insuranceOptionId,
+    addOnIds: selectedAddOnIds,
+    idempotencyKey,
+  }
 
   const toggleAddOn = (id: string): void =>
     setSelectedAddOnIds((ids) =>
@@ -107,7 +124,9 @@ export function ReservationWizard({
           insuranceName={insurance?.name ?? null}
         />
       ) : null}
-      {step === 'payment' ? <PaymentStep onBack={goBack} /> : null}
+      {step === 'payment' ? (
+        <PaymentStep locale={locale} bookingInput={bookingInput} onBack={goBack} />
+      ) : null}
 
       {step !== 'payment' ? (
         <div className="flex items-center justify-between gap-4">
