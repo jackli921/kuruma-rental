@@ -596,6 +596,23 @@ export interface TransactionRepos {
 
 export type RunInTransaction = <T>(fn: (repos: TransactionRepos) => Promise<T>) => Promise<T>
 
+// #521 §6: the minimal write surface the atomic operator-grant transaction needs —
+// the membership ledger INSERT, the denormalised users projection, and invite
+// consumption. Run together in ONE tx so a mid-sequence failure can't leave a partial
+// grant (membership without projection, or invite consumed without a membership row).
+// The membership INSERT goes first so the partial-unique-active index aborts the WHOLE
+// tx on a concurrent double-accept; the service then re-reads the winner.
+export interface OperatorGrantRepos {
+  memberships: Pick<OperatorMembershipRepository, 'create'>
+  users: Pick<UserRepository, 'setOperatorAccess'>
+  invites: Pick<ProviderInviteRepository, 'markAccepted'>
+}
+
+// Drizzle wires the real per-call neon-serverless tx (#493, pooled DATABASE_URL);
+// InMemory passes the plain repos (single-threaded, no real tx). Mirrors
+// RunInTransaction (the booking bundle) but scoped to the grant's three tables.
+export type RunOperatorGrant = <T>(fn: (repos: OperatorGrantRepos) => Promise<T>) => Promise<T>
+
 export interface TransitionLogsResult {
   resolved?: MaintenanceLog
   created?: MaintenanceLog

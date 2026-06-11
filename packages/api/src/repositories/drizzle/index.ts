@@ -1,5 +1,6 @@
 export type { Db } from './shared'
 export { createDrizzleTransaction } from './transaction'
+export { createDrizzleOperatorGrant } from './operator-grant-transaction'
 export { DrizzleVehicleRepository } from './vehicle'
 export { DrizzleVehicleClassRepository } from './vehicle-class'
 export { DrizzleBookingRepository } from './booking'
