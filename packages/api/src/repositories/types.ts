@@ -199,6 +199,9 @@ export interface ProviderInviteRepository {
   create(data: Omit<ProviderInvite, 'id' | 'createdAt' | 'updatedAt'>): Promise<ProviderInvite>
   /** Single-row lookup by sha256(token) — the unique tokenHash index. */
   findByTokenHash(tokenHash: string): Promise<ProviderInvite | undefined>
+  /** Consume the invite at acceptance: PENDING -> ACCEPTED + stamp the redeemer.
+   *  One of the three writes in the grant transaction (#521 §6). */
+  markAccepted(id: string, acceptedByUserId: string): Promise<void>
 }
 
 // #521. `findActiveByUserId` is served by the partial-unique-active index

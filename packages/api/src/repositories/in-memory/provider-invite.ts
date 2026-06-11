@@ -38,4 +38,15 @@ export class InMemoryProviderInviteRepository implements ProviderInviteRepositor
   async findByTokenHash(tokenHash: string): Promise<ProviderInvite | undefined> {
     return [...this.store.values()].find((i) => i.tokenHash === tokenHash)
   }
+
+  async markAccepted(id: string, acceptedByUserId: string): Promise<void> {
+    const invite = this.store.get(id)
+    if (!invite) return
+    this.store.set(id, {
+      ...invite,
+      status: 'ACCEPTED',
+      acceptedByUserId,
+      updatedAt: new Date(),
+    })
+  }
 }

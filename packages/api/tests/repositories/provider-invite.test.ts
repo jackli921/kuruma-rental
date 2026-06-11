@@ -60,4 +60,13 @@ describe('InMemoryProviderInviteRepository', () => {
       repo.create(inviteInput({ tokenHash: 'dup', email: 'other@example.com' })),
     ).rejects.toMatchObject({ code: PG_ERROR.UNIQUE_VIOLATION })
   })
+
+  it('markAccepted consumes the invite: PENDING -> ACCEPTED, stamping the redeemer', async () => {
+    const created = await repo.create(inviteInput({ tokenHash: 'h1' }))
+    await repo.markAccepted(created.id, 'user_42')
+
+    const found = await repo.findByTokenHash('h1')
+    expect(found?.status).toBe('ACCEPTED')
+    expect(found?.acceptedByUserId).toBe('user_42')
+  })
 })

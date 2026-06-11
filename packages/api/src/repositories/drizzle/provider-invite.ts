@@ -40,4 +40,14 @@ export class DrizzleProviderInviteRepository implements ProviderInviteRepository
       .where(eq(providerInvites.tokenHash, tokenHash))
     return row ? toProviderInvite(row) : undefined
   }
+
+  // Consume the invite at acceptance (#521 §6). Runs tx-bound inside the grant
+  // transaction; the membership INSERT (first in that tx) is the race fence, so
+  // this is an unconditional id update — no status guard needed.
+  async markAccepted(id: string, acceptedByUserId: string): Promise<void> {
+    await this.db
+      .update(providerInvites)
+      .set({ status: 'ACCEPTED', acceptedByUserId, updatedAt: new Date() })
+      .where(eq(providerInvites.id, id))
+  }
 }
