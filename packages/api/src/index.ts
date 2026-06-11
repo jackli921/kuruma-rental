@@ -25,6 +25,7 @@ import {
   DrizzleMaintenanceLogRepository,
   DrizzleMessageRepository,
   DrizzleNotificationLogRepository,
+  DrizzleOperatorMembershipRepository,
   DrizzleOperatorRepository,
   DrizzlePaymentEventRepository,
   DrizzleProviderInviteRepository,
@@ -36,6 +37,7 @@ import {
   DrizzleVehicleClassRepository,
   DrizzleVehicleDetailRepository,
   DrizzleVehicleRepository,
+  createDrizzleOperatorGrant,
   createDrizzleTransaction,
 } from './repositories/drizzle'
 import {
@@ -52,6 +54,7 @@ import {
   InMemoryMaintenanceLogRepository,
   InMemoryMessageRepository,
   InMemoryNotificationLogRepository,
+  InMemoryOperatorMembershipRepository,
   InMemoryOperatorRepository,
   InMemoryPaymentEventRepository,
   InMemoryProviderInviteRepository,
@@ -80,12 +83,14 @@ import type {
   MaintenanceLogRepository,
   MessageRepository,
   NotificationLogRepository,
+  OperatorMembershipRepository,
   OperatorRepository,
   PaymentEventRepository,
   PhotoStorage,
   ProviderInviteRepository,
   RenterDocumentRepository,
   RunInTransaction,
+  RunOperatorGrant,
   StatsRepository,
   StorefrontRepository,
   ThreadRepository,
@@ -139,6 +144,7 @@ import { MessageTranslationService } from './services/message-translation'
 import { NotificationService } from './services/notification'
 import { NotificationDispatcher } from './services/notification-dispatcher'
 import { OperatorService } from './services/operator'
+import { createOperatorGrantService } from './services/operator-grant'
 import { PaymentService } from './services/payment/payment'
 import type { PaymentGateway } from './services/payment/payment-gateway'
 import { StripePaymentGateway } from './services/payment/stripe-payment-gateway'
@@ -178,6 +184,7 @@ export function createApp(overrides?: {
   storefrontRepo?: StorefrontRepository
   paymentEventRepo?: PaymentEventRepository
   providerInviteRepo?: ProviderInviteRepository
+  operatorMembershipRepo?: OperatorMembershipRepository
   // Inject a fake gateway in tests; absent ⇒ the env-resolved Stripe/sentinel.
   paymentGateway?: PaymentGateway
   photoUploadLimiter?: RateLimitBinding
@@ -211,7 +218,11 @@ export function createApp(overrides?: {
   let storefrontRepo: StorefrontRepository
   let paymentEventRepo: PaymentEventRepository
   let providerInviteRepo: ProviderInviteRepository
+  let operatorMembershipRepo: OperatorMembershipRepository
   let runInTransaction: RunInTransaction
+  // Runs the three operator-grant writes (#521 §6) in one tx: real interactive tx
+  // in the DB branch, an inline passthrough over the in-memory repos otherwise.
+  let runOperatorGrant: RunOperatorGrant
   // Undefined unless an override injects one (tests) or the DB branch builds the
   // real one. Absent ⇒ /auth/google/callback 503s (e.g. local dev without a DB).
   let googleAuthRuntime: GoogleAuthRuntime | undefined
@@ -268,6 +279,10 @@ export function createApp(overrides?: {
       overrides.storefrontRepo ?? new InMemoryStorefrontRepository(locationRepo, operatorRepo)
     paymentEventRepo = overrides.paymentEventRepo ?? new InMemoryPaymentEventRepository()
     providerInviteRepo = overrides.providerInviteRepo ?? new InMemoryProviderInviteRepository()
+    operatorMembershipRepo =
+      overrides.operatorMembershipRepo ?? new InMemoryOperatorMembershipRepository()
+    runOperatorGrant = (fn) =>
+      fn({ memberships: operatorMembershipRepo, users: userRepo, invites: providerInviteRepo })
     googleAuthRuntime = overrides.googleAuthRuntime
   } else if (process.env.DATABASE_URL) {
     const db = getDb()
@@ -293,6 +308,10 @@ export function createApp(overrides?: {
     storefrontRepo = new DrizzleStorefrontRepository(db)
     paymentEventRepo = new DrizzlePaymentEventRepository(db)
     providerInviteRepo = new DrizzleProviderInviteRepository(db)
+    operatorMembershipRepo = new DrizzleOperatorMembershipRepository(db)
+    // Real interactive tx (#493): membership INSERT first so the partial-unique-
+    // active index aborts the whole grant on a concurrent double-accept.
+    runOperatorGrant = createDrizzleOperatorGrant(runTx)
     // Real Google OAuth runtime: HTTP provider + Drizzle-backed account store.
     // Built only here (the composition root) so the route stays adapter-agnostic.
     googleAuthRuntime = {
@@ -370,6 +389,9 @@ export function createApp(overrides?: {
     storefrontRepo = new InMemoryStorefrontRepository(locationRepo, operatorRepo)
     paymentEventRepo = new InMemoryPaymentEventRepository()
     providerInviteRepo = new InMemoryProviderInviteRepository()
+    operatorMembershipRepo = new InMemoryOperatorMembershipRepository()
+    runOperatorGrant = (fn) =>
+      fn({ memberships: operatorMembershipRepo, users: userRepo, invites: providerInviteRepo })
   }
 
   // Translation provider: real Google when the key is set. In production
@@ -461,6 +483,16 @@ export function createApp(overrides?: {
     { webBaseUrl },
     (event) => console.info('[provider-invite] created', event),
   )
+  // Operator-access grant decision (#521 §6) + slug resolver for the OAuth callback.
+  // The slug is read from the STORED operators.slug (never re-derived from the name),
+  // so /manage/<slug> redirects match the route the web app actually mounts.
+  const operatorGrantService = createOperatorGrantService({
+    memberships: operatorMembershipRepo,
+    invites: providerInviteRepo,
+    runGrant: runOperatorGrant,
+  })
+  const findOperatorSlug = async (operatorId: string): Promise<string | undefined> =>
+    (await operatorRepo.findById(operatorId))?.slug
 
   const app = new Hono()
 
@@ -618,7 +650,15 @@ export function createApp(overrides?: {
   // hc<AppType> needs this to produce typed client methods.
   return app
     .route('/', health)
-    .route('/', createAuthRoutes(resolveGoogleOAuthConfig(), googleAuthRuntime))
+    .route(
+      '/',
+      createAuthRoutes(
+        resolveGoogleOAuthConfig(),
+        googleAuthRuntime,
+        operatorGrantService,
+        findOperatorSlug,
+      ),
+    )
     .route('/', createFleetOverviewRoutes(fleetOverviewService))
     .route('/', createVehicleDetailRoutes(vehicleDetailService))
     .route(
