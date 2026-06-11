@@ -25,6 +25,7 @@ import { Route as LocaleBusinessBookingsRouteImport } from './routes/$locale/_bu
 import { Route as LocaleRenterBookingsIndexRouteImport } from './routes/$locale/_renter/bookings/index'
 import { Route as LocaleVehiclesClassesSlugRouteImport } from './routes/$locale/vehicles/classes/$slug'
 import { Route as LocaleRenterBookingsNewRouteImport } from './routes/$locale/_renter/bookings/new'
+import { Route as LocaleRenterBookingsConfirmationRouteImport } from './routes/$locale/_renter/bookings/confirmation'
 
 const LocaleRoute = LocaleRouteImport.update({
   id: '/$locale',
@@ -107,6 +108,12 @@ const LocaleRenterBookingsNewRoute = LocaleRenterBookingsNewRouteImport.update({
   path: '/new',
   getParentRoute: () => LocaleRenterBookingsRoute,
 } as any)
+const LocaleRenterBookingsConfirmationRoute =
+  LocaleRenterBookingsConfirmationRouteImport.update({
+    id: '/confirmation',
+    path: '/confirmation',
+    getParentRoute: () => LocaleRenterBookingsRoute,
+  } as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
@@ -119,6 +126,7 @@ export interface FileRoutesByFullPath {
   '/$locale/documents': typeof LocaleRenterDocumentsRoute
   '/$locale/storefronts/$locationId': typeof LocaleStorefrontsLocationIdRoute
   '/$locale/vehicles/': typeof LocaleVehiclesIndexRoute
+  '/$locale/bookings/confirmation': typeof LocaleRenterBookingsConfirmationRoute
   '/$locale/bookings/new': typeof LocaleRenterBookingsNewRoute
   '/$locale/vehicles/classes/$slug': typeof LocaleVehiclesClassesSlugRoute
   '/$locale/bookings/': typeof LocaleRenterBookingsIndexRoute
@@ -133,6 +141,7 @@ export interface FileRoutesByTo {
   '/$locale/documents': typeof LocaleRenterDocumentsRoute
   '/$locale/storefronts/$locationId': typeof LocaleStorefrontsLocationIdRoute
   '/$locale/vehicles': typeof LocaleVehiclesIndexRoute
+  '/$locale/bookings/confirmation': typeof LocaleRenterBookingsConfirmationRoute
   '/$locale/bookings/new': typeof LocaleRenterBookingsNewRoute
   '/$locale/vehicles/classes/$slug': typeof LocaleVehiclesClassesSlugRoute
 }
@@ -151,6 +160,7 @@ export interface FileRoutesById {
   '/$locale/_renter/documents': typeof LocaleRenterDocumentsRoute
   '/$locale/storefronts/$locationId': typeof LocaleStorefrontsLocationIdRoute
   '/$locale/vehicles/': typeof LocaleVehiclesIndexRoute
+  '/$locale/_renter/bookings/confirmation': typeof LocaleRenterBookingsConfirmationRoute
   '/$locale/_renter/bookings/new': typeof LocaleRenterBookingsNewRoute
   '/$locale/vehicles/classes/$slug': typeof LocaleVehiclesClassesSlugRoute
   '/$locale/_renter/bookings/': typeof LocaleRenterBookingsIndexRoute
@@ -168,6 +178,7 @@ export interface FileRouteTypes {
     | '/$locale/documents'
     | '/$locale/storefronts/$locationId'
     | '/$locale/vehicles/'
+    | '/$locale/bookings/confirmation'
     | '/$locale/bookings/new'
     | '/$locale/vehicles/classes/$slug'
     | '/$locale/bookings/'
@@ -182,6 +193,7 @@ export interface FileRouteTypes {
     | '/$locale/documents'
     | '/$locale/storefronts/$locationId'
     | '/$locale/vehicles'
+    | '/$locale/bookings/confirmation'
     | '/$locale/bookings/new'
     | '/$locale/vehicles/classes/$slug'
   id:
@@ -199,6 +211,7 @@ export interface FileRouteTypes {
     | '/$locale/_renter/documents'
     | '/$locale/storefronts/$locationId'
     | '/$locale/vehicles/'
+    | '/$locale/_renter/bookings/confirmation'
     | '/$locale/_renter/bookings/new'
     | '/$locale/vehicles/classes/$slug'
     | '/$locale/_renter/bookings/'
@@ -323,6 +336,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof LocaleRenterBookingsNewRouteImport
       parentRoute: typeof LocaleRenterBookingsRoute
     }
+    '/$locale/_renter/bookings/confirmation': {
+      id: '/$locale/_renter/bookings/confirmation'
+      path: '/confirmation'
+      fullPath: '/$locale/bookings/confirmation'
+      preLoaderRoute: typeof LocaleRenterBookingsConfirmationRouteImport
+      parentRoute: typeof LocaleRenterBookingsRoute
+    }
   }
 }
 
@@ -341,11 +361,13 @@ const LocaleBusinessRouteWithChildren = LocaleBusinessRoute._addFileChildren(
 )
 
 interface LocaleRenterBookingsRouteChildren {
+  LocaleRenterBookingsConfirmationRoute: typeof LocaleRenterBookingsConfirmationRoute
   LocaleRenterBookingsNewRoute: typeof LocaleRenterBookingsNewRoute
   LocaleRenterBookingsIndexRoute: typeof LocaleRenterBookingsIndexRoute
 }
 
 const LocaleRenterBookingsRouteChildren: LocaleRenterBookingsRouteChildren = {
+  LocaleRenterBookingsConfirmationRoute: LocaleRenterBookingsConfirmationRoute,
   LocaleRenterBookingsNewRoute: LocaleRenterBookingsNewRoute,
   LocaleRenterBookingsIndexRoute: LocaleRenterBookingsIndexRoute,
 }

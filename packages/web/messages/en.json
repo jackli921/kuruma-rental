@@ -934,9 +934,14 @@
       "note": "Taxes and any operator fees are calculated at payment."
     },
     "payment": {
-      "heading": "Payment",
-      "comingSoon": "Online payment is coming soon. Your booking is not confirmed yet.",
-      "pay": "Pay and confirm"
+      "heading": "Confirm and reserve",
+      "instantBook": "Reserve now to lock in this car. You pay at pickup, not online — free cancellation under the operator's policy.",
+      "submit": "Reserve now",
+      "submitting": "Reserving…",
+      "errorConflict": "This vehicle was just booked for these dates. Please go back and choose another.",
+      "errorGeneric": "We couldn't create your booking. Please review and try again.",
+      "errorDocs": "Document verification is required before you can book. Please upload your documents first.",
+      "errorAuth": "Your session has expired. Please sign in again to complete your booking."
     },
     "nav": {
       "back": "Back",
