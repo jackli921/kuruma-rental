@@ -4,11 +4,15 @@ import { deleteCookie, getCookie, setCookie } from 'hono/cookie'
 import {
   type GoogleAuthRuntime,
   type GoogleOAuthConfig,
+  OAUTH_INTENT_COOKIE,
+  OAUTH_INVITE_COOKIE,
   OAUTH_RETURN_COOKIE,
   OAUTH_STATE_COOKIE,
   OAUTH_STATE_TTL_SECONDS,
   buildGoogleAuthorizeUrl,
+  parseOAuthIntent,
   randomToken,
+  safeInviteToken,
   safeReturnPath,
 } from '../auth/google'
 import { SESSION_COOKIE, mintSessionToken, verifySessionCookie } from '../middleware/auth'
@@ -27,6 +31,18 @@ const SESSION_COOKIE_OPTS = {
   path: '/',
 } as const
 
+// Shared attributes for every short-lived OAuth round-trip cookie (state, return,
+// intent, invite). HttpOnly + Secure + SameSite=Lax so they survive Google's
+// top-level GET redirect back to the callback, scoped to '/', expiring with the
+// flow's TTL — one definition keeps the four cookies' security posture in lockstep.
+const OAUTH_FLOW_COOKIE_OPTS = {
+  httpOnly: true,
+  secure: true,
+  sameSite: 'Lax',
+  path: '/',
+  maxAge: OAUTH_STATE_TTL_SECONDS,
+} as const
+
 /** Set the session cookie at sign-in. Consumed by the OAuth callback (Phase 2);
  *  centralised here so the security attributes live in exactly one place. */
 export function setSessionCookie(c: Context, token: string): void {
@@ -39,11 +55,14 @@ export function clearSessionCookie(c: Context): void {
   deleteCookie(c, SESSION_COOKIE, SESSION_COOKIE_OPTS)
 }
 
-/** Drop both one-time OAuth-flow cookies (state + return). Called on every
- *  callback failure path so a dead-ended sign-in leaves nothing behind to expire. */
+/** Drop every one-time OAuth-flow cookie (state + return + intent + invite).
+ *  Called on every callback failure path so a dead-ended sign-in leaves nothing
+ *  behind to expire or leak into a later flow. */
 function clearOAuthFlowCookies(c: Context): void {
   deleteCookie(c, OAUTH_STATE_COOKIE, { path: '/' })
   deleteCookie(c, OAUTH_RETURN_COOKIE, { path: '/' })
+  deleteCookie(c, OAUTH_INTENT_COOKIE, { path: '/' })
+  deleteCookie(c, OAUTH_INVITE_COOKIE, { path: '/' })
 }
 
 /**
@@ -65,31 +84,35 @@ export function createAuthRoutes(
       // Bind a fresh state to a short-lived cookie; the callback rejects any
       // response whose state doesn't match (OAuth CSRF defence).
       const state = randomToken()
-      setCookie(c, OAUTH_STATE_COOKIE, state, {
-        httpOnly: true,
-        secure: true,
-        sameSite: 'Lax',
-        path: '/',
-        maxAge: OAUTH_STATE_TTL_SECONDS,
-      })
+      setCookie(c, OAUTH_STATE_COOKIE, state, OAUTH_FLOW_COOKIE_OPTS)
 
       // Carry a *validated* return path through the round-trip so the callback
       // can land the user back where the guard intercepted them. Open-redirect
       // targets are dropped (safeReturnPath → undefined) and simply ignored.
       const returnTo = safeReturnPath(c.req.query('returnTo'))
       if (returnTo) {
-        setCookie(c, OAUTH_RETURN_COOKIE, returnTo, {
-          httpOnly: true,
-          secure: true,
-          sameSite: 'Lax',
-          path: '/',
-          maxAge: OAUTH_STATE_TTL_SECONDS,
-        })
+        setCookie(c, OAUTH_RETURN_COOKIE, returnTo, OAUTH_FLOW_COOKIE_OPTS)
       } else {
         // Bind the return cookie freshly to *this* flow: with no/invalid returnTo,
         // erase any stale value an aborted earlier flow left behind, so the
         // callback can't inherit it and redirect a plain login to a stale path.
         deleteCookie(c, OAUTH_RETURN_COOKIE, { path: '/' })
+      }
+
+      // Provider sign-in door (#521 §5): carry intent + optional invite token to
+      // the callback. Each is bound freshly to *this* flow (set when valid, erase
+      // otherwise) so a stale value from an aborted flow can never leak forward.
+      // Identity is still Google's; these only steer the post-login authz decision.
+      if (parseOAuthIntent(c.req.query('intent')) === 'provider') {
+        setCookie(c, OAUTH_INTENT_COOKIE, 'provider', OAUTH_FLOW_COOKIE_OPTS)
+      } else {
+        deleteCookie(c, OAUTH_INTENT_COOKIE, { path: '/' })
+      }
+      const invite = safeInviteToken(c.req.query('invite'))
+      if (invite) {
+        setCookie(c, OAUTH_INVITE_COOKIE, invite, OAUTH_FLOW_COOKIE_OPTS)
+      } else {
+        deleteCookie(c, OAUTH_INVITE_COOKIE, { path: '/' })
       }
       return c.redirect(buildGoogleAuthorizeUrl(googleConfig, state), 302)
     })
