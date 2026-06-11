@@ -1,6 +1,6 @@
-import { createHash } from 'node:crypto'
 import type { CreateProviderInviteInput } from '@kuruma/shared/validators/provider-invite'
 import { randomToken } from '../auth/google'
+import { sha256Hex } from '../auth/token-hash'
 import type { ProviderInviteRepository } from '../repositories/types'
 
 // Invites are short-lived: a leaked link is only useful for a week, and the
@@ -31,10 +31,6 @@ export interface CreatedInvite {
   readonly token: string
   readonly inviteUrl: string
   readonly expiresAt: Date
-}
-
-function sha256Hex(value: string): string {
-  return createHash('sha256').update(value).digest('hex')
 }
 
 export class ProviderInviteService {
