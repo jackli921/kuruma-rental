@@ -1,5 +1,6 @@
 import { unwrap } from '@/lib/api-error'
 import { getApiBaseUrl } from '@/vite/api-base'
+import { queryOptions } from '@tanstack/react-query'
 
 // #512: operator booking view. The Vite shell owns these DTOs (it never imports
 // the frozen Next module's copy) so it stays self-contained and process.env-free.
@@ -20,13 +21,14 @@ export interface OperatorBookingRow {
   startAt: string
   endAt: string
   totalPrice: number | null
-  // The fulfilling car (#392 — `vehicleId` is gone). Vehicle NAME resolution is a
-  // slice-B decision (combined expand vs. a second fetch); the id is always here.
-  assignedVehicleId: string
+  // The fulfilling car's display name (#392 — there is no `vehicleId`; the server
+  // resolves the *assigned* vehicle via `expand=vehicle`). Null when the expansion
+  // is absent (e.g. the vehicle was deleted) so the view can fall back gracefully.
+  vehicleName: string | null
   renter: { id: string; name: string | null; email: string | null } | null
 }
 
-/** The JSON shape of one `GET /bookings?expand=renter` item we read. */
+/** The JSON shape of one `GET /bookings?expand=vehicle,renter` item we read. */
 interface RawOperatorBooking {
   id: string
   bookingCode: string
@@ -34,7 +36,7 @@ interface RawOperatorBooking {
   startAt: string
   endAt: string
   totalPrice: number | null
-  assignedVehicleId: string
+  vehicle?: { name: string; photos: string[] } | undefined
   renter?: { id: string; name: string | null; email: string | null; language: string } | undefined
 }
 
@@ -51,7 +53,7 @@ function toRow(b: RawOperatorBooking): OperatorBookingRow {
     startAt: b.startAt,
     endAt: b.endAt,
     totalPrice: b.totalPrice,
-    assignedVehicleId: b.assignedVehicleId,
+    vehicleName: b.vehicle?.name ?? null,
     renter: b.renter ? { id: b.renter.id, name: b.renter.name, email: b.renter.email } : null,
   }
 }
@@ -59,7 +61,7 @@ function toRow(b: RawOperatorBooking): OperatorBookingRow {
 export async function fetchOperatorBookings(
   filters: OperatorBookingFilters = {},
 ): Promise<OperatorBookingRow[]> {
-  const sp = new URLSearchParams({ expand: 'renter' })
+  const sp = new URLSearchParams({ expand: 'vehicle,renter' })
   if (filters.status) sp.set('status', filters.status)
   if (filters.limit) sp.set('limit', String(filters.limit))
 
@@ -68,4 +70,11 @@ export async function fetchOperatorBookings(
   })
   const data = await unwrap<RawOperatorBooking[]>(res)
   return data.map(toRow)
+}
+
+export function operatorBookingsQueryOptions(filters: OperatorBookingFilters = {}) {
+  return queryOptions({
+    queryKey: ['operator-bookings', filters.status],
+    queryFn: () => fetchOperatorBookings(filters),
+  })
 }

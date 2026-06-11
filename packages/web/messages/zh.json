@@ -752,6 +752,28 @@
       "active": "进行中",
       "completed": "已完成",
       "cancelled": "已取消"
+    },
+    "operator": {
+      "title": "预订",
+      "subtitle": "各门店的预订",
+      "empty": "暂无预订",
+      "loadError": "无法加载预订",
+      "retry": "重试",
+      "none": "—",
+      "columns": {
+        "code": "编号",
+        "vehicle": "车辆",
+        "renter": "租客",
+        "range": "日期",
+        "status": "状态",
+        "total": "合计"
+      },
+      "status": {
+        "CONFIRMED": "已确认",
+        "ACTIVE": "进行中",
+        "COMPLETED": "已完成",
+        "CANCELLED": "已取消"
+      }
     }
   },
   "landing": {

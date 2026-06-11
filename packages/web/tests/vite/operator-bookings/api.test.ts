@@ -1,5 +1,5 @@
 import { ApiError } from '@/lib/api-error'
-import { fetchOperatorBookings } from '@/vite/operator-bookings/api'
+import { fetchOperatorBookings, operatorBookingsQueryOptions } from '@/vite/operator-bookings/api'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 function jsonResponse(body: unknown, status = 200): Response {
@@ -19,6 +19,7 @@ const rawBooking = (over: Record<string, unknown> = {}) => ({
   startAt: '2026-07-01T01:00:00.000Z',
   endAt: '2026-07-03T01:00:00.000Z',
   totalPrice: 24000,
+  vehicle: { name: 'Toyota Aqua', photos: ['a.jpg'] },
   renter: { id: 'r-1', name: 'Jane', email: 'jane@example.com', language: 'en' },
   ...over,
 })
@@ -28,7 +29,7 @@ afterEach(() => {
 })
 
 describe('fetchOperatorBookings', () => {
-  it('requests the operator-scoped list with renter expansion and credentials', async () => {
+  it('requests the operator-scoped list expanding vehicle and renter, with credentials', async () => {
     const fetchMock = vi.fn(async () => jsonResponse({ success: true, data: [], nextCursor: null }))
     vi.stubGlobal('fetch', fetchMock)
 
@@ -37,11 +38,11 @@ describe('fetchOperatorBookings', () => {
     const [url, init] = fetchMock.mock.calls[0]!
     const parsed = new URL(url as string, 'http://x')
     expect(parsed.pathname).toBe('/api/bookings')
-    expect(parsed.searchParams.get('expand')).toBe('renter')
+    expect(parsed.searchParams.get('expand')).toBe('vehicle,renter')
     expect((init as RequestInit).credentials).toBe('include')
   })
 
-  it('maps the envelope data to operator booking rows (code, status, range, renter)', async () => {
+  it('maps the envelope to rows (code, status, range, total, vehicle name, renter)', async () => {
     vi.stubGlobal(
       'fetch',
       vi.fn(async () => jsonResponse({ success: true, data: [rawBooking()], nextCursor: null })),
@@ -57,7 +58,7 @@ describe('fetchOperatorBookings', () => {
         startAt: '2026-07-01T01:00:00.000Z',
         endAt: '2026-07-03T01:00:00.000Z',
         totalPrice: 24000,
-        assignedVehicleId: 'veh-1',
+        vehicleName: 'Toyota Aqua',
         renter: { id: 'r-1', name: 'Jane', email: 'jane@example.com' },
       },
     ])
@@ -71,6 +72,22 @@ describe('fetchOperatorBookings', () => {
 
     const parsed = new URL(fetchMock.mock.calls[0]![0] as string, 'http://x')
     expect(parsed.searchParams.get('status')).toBe('ACTIVE')
+  })
+
+  it('normalizes a missing vehicle expansion to null', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () =>
+        jsonResponse({
+          success: true,
+          data: [rawBooking({ vehicle: undefined })],
+          nextCursor: null,
+        }),
+      ),
+    )
+
+    const [row] = await fetchOperatorBookings()
+    expect(row!.vehicleName).toBeNull()
   })
 
   it('normalizes a missing renter expansion to null', async () => {
@@ -96,5 +113,15 @@ describe('fetchOperatorBookings', () => {
     )
 
     await expect(fetchOperatorBookings()).rejects.toBeInstanceOf(ApiError)
+  })
+})
+
+describe('operatorBookingsQueryOptions', () => {
+  it('keys by the operator-bookings list and the status filter', () => {
+    expect(operatorBookingsQueryOptions().queryKey).toEqual(['operator-bookings', undefined])
+    expect(operatorBookingsQueryOptions({ status: 'ACTIVE' }).queryKey).toEqual([
+      'operator-bookings',
+      'ACTIVE',
+    ])
   })
 })
