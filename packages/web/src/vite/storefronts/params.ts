@@ -6,8 +6,9 @@ export interface SearchRange {
 }
 
 const ONE_HOUR_MS = 60 * 60 * 1000
+const HOURS_PER_DAY = 24
 const DEFAULT_RANGE_DAYS = 3
-const DEFAULT_RANGE_MS = DEFAULT_RANGE_DAYS * 24 * ONE_HOUR_MS
+const DEFAULT_RANGE_MS = DEFAULT_RANGE_DAYS * HOURS_PER_DAY * ONE_HOUR_MS
 
 /**
  * Parse the `from`/`to` search params (wall-clock JST `datetime-local` strings)

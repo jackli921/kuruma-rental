@@ -19,8 +19,12 @@ export function SearchWidget() {
   const t = useTranslations('landing.hero')
   const locale = useLocale()
   const navigate = useNavigate()
-  const [pickupDate, setPickupDate] = useState(() => initialRange().from)
-  const [returnDate, setReturnDate] = useState(() => initialRange().to)
+  // Compute the seed once on mount (reads sessionStorage); the two inputs then
+  // own their own state. Calling initialRange() per useState would read storage
+  // and build a Date twice.
+  const [initial] = useState(initialRange)
+  const [pickupDate, setPickupDate] = useState(initial.from)
+  const [returnDate, setReturnDate] = useState(initial.to)
 
   // Hand the chosen range to the storefront availability search. The inputs are
   // `datetime-local` (JST wall-clock) to match StorefrontSearchForm, so the
