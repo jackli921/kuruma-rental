@@ -4,7 +4,7 @@
 
 - [Bun](https://bun.sh/) v1.1+
 - PostgreSQL (or [Neon](https://neon.tech/) serverless Postgres)
-- Node.js 20+ (Vite toolchain; see `.nvmrc`)
+- Node.js 20+ (Vite toolchain)
 
 ## Environment Setup
 
