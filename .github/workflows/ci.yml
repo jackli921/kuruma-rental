@@ -153,3 +153,78 @@ jobs:
           name: playwright-report
           path: playwright-report/
           retention-days: 7
+
+  e2e-real-db:
+    # Authenticated real-DB e2e gate (#445): runs the REAL Hono API + Vite web
+    # against a fresh, seeded postgres:16 — no Neon branch, no external secrets.
+    # The harness (#488) mints the API's kuruma_session cookie and drives the
+    # marketplace happy path (search -> book -> confirmation -> operator portal).
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: kuruma
+          POSTGRES_PASSWORD: kuruma
+          POSTGRES_DB: kuruma_e2e
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U kuruma -d kuruma_e2e"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 5
+
+    env:
+      DATABASE_URL: postgresql://kuruma:kuruma@localhost:5432/kuruma_e2e
+      # Static, non-secret signing key: the harness mints the session cookie and
+      # the API verifies it with the SAME value — both read this env. No GitHub
+      # Secret needed; the DB is disposable and never leaves the runner.
+      AUTH_SECRET: ci-real-db-e2e-static-secret-0123456789
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: ${{ env.BUN_VERSION }}
+
+      - run: bun install --frozen-lockfile
+
+      - name: Cache Playwright browsers
+        uses: actions/cache@v4
+        id: playwright-cache
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ hashFiles('bun.lock') }}
+
+      - name: Install Playwright browsers
+        if: steps.playwright-cache.outputs.cache-hit != 'true'
+        run: bunx playwright install --with-deps chromium
+
+      - name: Install Playwright system deps
+        if: steps.playwright-cache.outputs.cache-hit == 'true'
+        run: bunx playwright install-deps chromium
+
+      - name: Apply all migrations against fresh Postgres
+        run: bun run db:migrate
+
+      - name: Verify no schema drift
+        run: bun run db:verify
+
+      - name: Seed the marketplace fixture over TCP
+        # db:seed:tcp uses postgres-js (TCP); the production neon-http getDb()
+        # cannot reach a plain postgres:16 container.
+        run: bun run db:seed:tcp
+
+      - name: Run authenticated real-DB E2E
+        run: bun run test:e2e:real-db
+
+      - name: Upload Playwright report
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report-real-db
+          path: playwright-report/
+          retention-days: 7
