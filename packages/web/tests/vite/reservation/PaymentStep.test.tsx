@@ -12,7 +12,10 @@ const { mockNavigate, mockCreateBooking } = vi.hoisted(() => ({
   mockCreateBooking: vi.fn(),
 }))
 vi.mock('@tanstack/react-router', () => ({ useNavigate: () => mockNavigate }))
-vi.mock('@/vite/bookings/api', () => ({ createBooking: mockCreateBooking }))
+vi.mock('@/vite/bookings/api', () => ({
+  createBooking: mockCreateBooking,
+  bookingByIdQueryOptions: (id: string) => ({ queryKey: ['bookings', id] }),
+}))
 vi.mock('@/vite/session', () => ({
   useSession: () => ({ data: { user: { id: 'r1', role: 'RENTER' }, csrfToken: 'csrf-1' } }),
 }))
@@ -38,7 +41,7 @@ function renderStep(overrides: Partial<Parameters<typeof PaymentStep>[0]> = {}) 
       </IntlProvider>
     </QueryClientProvider>,
   )
-  return { onBack }
+  return { onBack, client }
 }
 
 afterEach(() => {
@@ -48,9 +51,10 @@ afterEach(() => {
 
 describe('PaymentStep (instant-book submit, #511)', () => {
   it('creates the booking with the CSRF token then navigates to confirmation on success', async () => {
-    mockCreateBooking.mockResolvedValue({ id: 'b-9', bookingCode: 'CODE9' })
+    const booking = { id: 'b-9', bookingCode: 'CODE9' }
+    mockCreateBooking.mockResolvedValue(booking)
     const user = userEvent.setup()
-    renderStep()
+    const { client } = renderStep()
 
     await user.click(screen.getByRole('button', { name: 'Reserve now' }))
 
@@ -60,6 +64,9 @@ describe('PaymentStep (instant-book submit, #511)', () => {
       params: { locale: 'en' },
       search: { bookingId: 'b-9' },
     })
+    // The booking we already hold is seeded into the cache so the confirmation
+    // route renders without a second GET /bookings/:id.
+    expect(client.getQueryData(['bookings', 'b-9'])).toEqual(booking)
   })
 
   it('shows a conflict message and does NOT navigate when the vehicle was just taken (409)', async () => {
@@ -77,7 +84,7 @@ describe('PaymentStep (instant-book submit, #511)', () => {
     expect(mockNavigate).not.toHaveBeenCalled()
   })
 
-  it('shows a generic error on a 400 domain rejection', async () => {
+  it('routes a 400 "no longer available" rejection to the choose-another message, not a dead-end generic', async () => {
     mockCreateBooking.mockRejectedValue(new ApiError('Vehicle is not available', 400))
     const user = userEvent.setup()
     renderStep()
@@ -85,7 +92,9 @@ describe('PaymentStep (instant-book submit, #511)', () => {
     await user.click(screen.getByRole('button', { name: 'Reserve now' }))
 
     expect(
-      await screen.findByText("We couldn't create your booking. Please review and try again."),
+      await screen.findByText(
+        'This vehicle was just booked for these dates. Please go back and choose another.',
+      ),
     ).toBeInTheDocument()
     expect(mockNavigate).not.toHaveBeenCalled()
   })

@@ -1,8 +1,13 @@
 import { Button } from '@/components/ui/button'
 import { ApiError } from '@/lib/api-error'
-import { type CreateBookingInput, createBooking } from '@/vite/bookings/api'
+import {
+  type BookingDto,
+  type CreateBookingInput,
+  bookingByIdQueryOptions,
+  createBooking,
+} from '@/vite/bookings/api'
 import { useSession } from '@/vite/session'
-import { useMutation } from '@tanstack/react-query'
+import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from '@tanstack/react-router'
 import { useTranslations } from 'use-intl'
 
@@ -23,15 +28,19 @@ interface PaymentStepProps {
 export function PaymentStep({ locale, bookingInput, onBack }: PaymentStepProps) {
   const t = useTranslations('reservation')
   const navigate = useNavigate()
+  const queryClient = useQueryClient()
   const session = useSession()
   const csrfToken = session.data?.csrfToken
 
   const mutation = useMutation({
-    mutationFn: (): Promise<{ id: string }> => {
+    mutationFn: (): Promise<BookingDto> => {
       if (!csrfToken) throw new ApiError('Not signed in', 401)
       return createBooking(bookingInput, csrfToken)
     },
     onSuccess: (booking) => {
+      // Seed the cache with the booking we already hold so the confirmation
+      // route renders immediately instead of refetching GET /bookings/:id.
+      queryClient.setQueryData(bookingByIdQueryOptions(booking.id).queryKey, booking)
       navigate({
         to: '/$locale/bookings/confirmation',
         params: { locale },
@@ -43,7 +52,10 @@ export function PaymentStep({ locale, bookingInput, onBack }: PaymentStepProps) 
   const message = ((): string | null => {
     const error = mutation.error
     if (!error) return null
-    if (error instanceof ApiError && error.status === 409) return t('payment.errorConflict')
+    // 409 (raced) and 400 (vehicle no longer available / not found) share one
+    // remedy for the renter: go back and pick another car.
+    if (error instanceof ApiError && (error.status === 409 || error.status === 400))
+      return t('payment.errorConflict')
     if (error instanceof ApiError && error.status === 403) return t('payment.errorDocs')
     if (error instanceof ApiError && error.status === 401) return t('payment.errorAuth')
     return t('payment.errorGeneric')
