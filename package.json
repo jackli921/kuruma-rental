@@ -24,8 +24,9 @@
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
     "db:studio": "drizzle-kit studio",
-    "db:seed": "bun run packages/shared/src/db/seed.ts",
-    "db:seed-bookings": "bun run packages/shared/src/db/seed-bookings.ts",
+    "db:seed": "bun run scripts/seed.ts",
+    "db:seed-bookings": "bun run scripts/seed-bookings.ts",
+    "db:seed:tcp": "bun run scripts/seed-tcp.ts",
     "db:verify": "bun run scripts/db-verify.ts",
     "prepare": "husky"
   },

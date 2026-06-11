@@ -1,5 +1,5 @@
 import { and, eq, inArray, isNotNull } from 'drizzle-orm'
-import { getDb } from './index'
+import type { getDb } from './index'
 import {
   type BookingCreatedPayload,
   type FeeSnapshotItem,
@@ -76,9 +76,7 @@ function feeSnapshotFor(operatorId: string, classId: string): FeeSnapshotItem[] 
 
 type SeededVehicle = { id: string; pickupLocationId: string }
 
-async function seed() {
-  const db = getDb()
-
+export async function seedBookings(db: ReturnType<typeof getDb>) {
   // --- Idempotent cleanup (FK-safe), scoped to demo-renter personas. ---
   console.log('Clearing demo bookings, events, notifications, renters...')
   const renterEmails = DEMO_RENTERS.map((r) => r.email)
@@ -238,10 +236,4 @@ async function seed() {
     `\nSeeded ${DEMO_RENTERS.length} renters, ${bookingValues.length} bookings, ` +
       `${eventValues.length} events, ${notificationValues.length} notifications.`,
   )
-  process.exit(0)
 }
-
-seed().catch((err) => {
-  console.error('Seed bookings failed:', err)
-  process.exit(1)
-})
