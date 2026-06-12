@@ -38,6 +38,11 @@
       "signInTitle": "供应商登录",
       "signInSubtitle": "登录以管理您的车队",
       "continueAsProvider": "使用 Google 继续",
+      "accessNotFoundTitle": "无运营商访问权限",
+      "accessNotFoundBody": "此 Google 账号未关联任何运营商。如果您应当拥有访问权限，请在下方申请。",
+      "inviteInvalidTitle": "邀请无效",
+      "inviteInvalidBody": "此邀请已过期、已被使用，或是发给其他 Google 账号的。请向您的运营商索取新的邀请。",
+      "requestAccess": "申请访问权限",
       "invite": {
         "title": "您受邀加入 {operator}",
         "subtitle": "请使用受邀的 Google 账号登录以加入。",

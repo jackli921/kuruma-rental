@@ -38,6 +38,11 @@
       "signInTitle": "Provider sign in",
       "signInSubtitle": "Sign in to manage your fleet",
       "continueAsProvider": "Continue with Google",
+      "accessNotFoundTitle": "No operator access",
+      "accessNotFoundBody": "This Google account isn't linked to any operator. If you should have access, request it below.",
+      "inviteInvalidTitle": "Invite not valid",
+      "inviteInvalidBody": "This invite has expired, was already used, or was issued for a different Google account. Ask your operator for a new one.",
+      "requestAccess": "Request access",
       "invite": {
         "title": "You're invited to {operator}",
         "subtitle": "Sign in with the invited Google account to join.",
