@@ -104,7 +104,25 @@ Slice-1 role-gate + ordering + tenant-isolation can be done with **in-memory rep
 - biome import-sort is an **assist** action — fix with `bunx biome check --write`, not `format`.
 - Issue #549 is claimed (`in-progress` label). On finish: PR `Closes #549`, drop label, remove worktree.
 
-## SESSION 2 PROGRESS (2026-06-12) — resume here
+## SESSION 3 (2026-06-12) — ALL IMPL DONE + REBASED, only push+PR left
+
+**State:** Slices 1-4 DONE + committed; full gate green; **rebased clean onto `origin/marketplace-pivot`** (was 2 behind: #550 provider-login, #552 admin-portal). 7 commits ahead, **NOT pushed**.
+
+**Rebase conflicts resolved:** (1) `index.ts` decl block — kept BOTH #550's providerInvite/operatorMembership repos AND my `bookingEventRepo` (wiring intact: ctor arg 8, 3-branch assign, Drizzle in DB branch). (2) `routeTree.gen.ts` — regenerated via `vite build` from disk (has both admin + my `manage/bookings/$bookingId` routes). `messages/*.json` auto-merged (admin keys diff namespace) → parity now **809 keys ×3**.
+
+**Full gate (re-verified post-rebase on touched areas):** shared 416 · api 1082 · web 779 · integration **195** (docker `kuruma-549-pg` :5449, db:verify 4/4, no migration) · biome clean · modules/boundaries/export-drift/fk OK · i18n 809×3 · dist 13.1% · typecheck 0.
+
+**ONLY REMAINING (Slice 5 tail):**
+1. `git push -u origin feat/549-trip-detail-page` (first push — clean).
+2. Open PR → base `marketplace-pivot`, body `Closes #549`.
+3. After merge: drop `in-progress` label, close #549, **remove worktree + `docker rm -f kuruma-549-pg`** (:5449).
+4. Optional `/code-review` (user-triggered/billed).
+
+**Manual-verify-only (non-blocking):** browser pass (deep-link refresh, timeline render, renter→403 on /events).
+
+---
+
+## SESSION 2 PROGRESS (2026-06-12) — superseded by Session 3 above
 
 Branch tip `63b075e`. Commits added this session (on top of `30b7c40` handoff):
 1. `791e214` **Slice 1 DONE** — `GET /bookings/:id/events`, role-gated, with ordering + tenant tests.
