@@ -22,6 +22,9 @@ export class NominatimGeocoder implements Geocoder {
     private readonly baseUrl: string,
     private readonly userAgent: string,
     private readonly fetchFn: typeof fetch = fetch,
+    // Optional auth token. LocationIQ is Nominatim-compatible but key-gated via
+    // `?key=` (#574), so providing one makes it a pure env-var swap from public OSM.
+    private readonly apiKey?: string,
   ) {}
 
   async geocode(address: string): Promise<GeocodeResult | null> {
@@ -29,6 +32,7 @@ export class NominatimGeocoder implements Geocoder {
     url.searchParams.set('format', 'jsonv2')
     url.searchParams.set('limit', '1')
     url.searchParams.set('q', address)
+    if (this.apiKey) url.searchParams.set('key', this.apiKey)
 
     try {
       const response = await this.fetchFn(url.toString(), {

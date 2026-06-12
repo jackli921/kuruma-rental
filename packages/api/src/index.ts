@@ -467,7 +467,7 @@ export function createApp(overrides?: {
       const userAgent = process.env.NOMINATIM_USER_AGENT
       const baseUrl = process.env.NOMINATIM_API_URL
       if (!userAgent || !baseUrl) return { geocode: async () => null }
-      return new NominatimGeocoder(baseUrl, userAgent)
+      return new NominatimGeocoder(baseUrl, userAgent, undefined, process.env.NOMINATIM_API_KEY)
     })()
   // Adapt the native binding's `limit({ key })` to the RateLimiter port here.
   const geocodeLimiter =
