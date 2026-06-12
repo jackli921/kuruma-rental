@@ -155,6 +155,34 @@ describe('Vehicle Class CRUD Routes', () => {
       expect(body.data).toHaveLength(1)
       expect(body.data[0].operatorId).toBe(OP_A)
     })
+
+    it('rejects a RENTER with 403 (operator/management-only)', async () => {
+      const renter = mountFor(new InMemoryVehicleClassRepository(), 'RENTER')
+      const res = await renter.request('/vehicle-classes/manage')
+      expect(res.status).toBe(403)
+      const body = await res.json()
+      expect(body.success).toBe(false)
+    })
+
+    it('rejects a PARTNER (3rd-party API caller) with 403 even with includeArchived', async () => {
+      const partner = mountFor(new InMemoryVehicleClassRepository(), 'PARTNER')
+      const res = await partner.request('/vehicle-classes/manage?includeArchived=true')
+      expect(res.status).toBe(403)
+    })
+
+    it("does not leak another operator's archived classes to a different tenant", async () => {
+      const repo = new InMemoryVehicleClassRepository()
+      const staff = mountFor(repo, 'STAFF')
+      const created = await postFor(staff, OP_B, 'b-archived')
+      const { data } = await created.json()
+      await staff.request(`/vehicle-classes/${data.id}`, { method: 'DELETE' }) // soft-archive OP_B's class
+
+      const ownerA = mountFor(repo, 'OPERATOR_OWNER', OP_A)
+      const res = await ownerA.request('/vehicle-classes/manage?includeArchived=true')
+      expect(res.status).toBe(200)
+      const body = await res.json()
+      expect(body.data).toEqual([])
+    })
   })
 
   describe('POST /vehicle-classes', () => {

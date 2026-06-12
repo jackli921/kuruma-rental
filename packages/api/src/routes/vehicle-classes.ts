@@ -8,6 +8,7 @@ import {
   FLEET_WRITE_ROLES,
   PUBLIC_CONTEXT,
   requireAuth,
+  requireManagementRead,
   requireUser,
   toCallerContext,
 } from '../middleware/auth'
@@ -87,6 +88,12 @@ export function createVehicleClassRoutes(
       // before `/:id` so the static `manage` segment wins over the param route.
       .get('/vehicle-classes/manage', async (c) => {
         const ctx = toCallerContext(requireUser(c))
+        // The gate can't live in the shared `findAll` (that method also serves the
+        // public PUBLIC_CONTEXT catalog), so seal the private screen at the route:
+        // RENTER/PARTNER -> ForbiddenError -> 403. Without this, the catalog's
+        // non-operator 'all' scope would leak every tenant's classes + archived
+        // rows to any cookie-authed caller hitting the source-agnostic API.
+        requireManagementRead(ctx)
         const includeArchived = c.req.query('includeArchived') === 'true'
         const classes = await service.findAll(
           ctx,

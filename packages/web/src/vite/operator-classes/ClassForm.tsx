@@ -83,8 +83,7 @@ export function ClassForm(props: ClassFormProps) {
         const trimmed = data.description?.trim()
         const { description: _drop, ...rest } = data
         const payload = trimmed && trimmed.length > 0 ? { ...rest, description: trimmed } : rest
-        if (props.mode === 'edit') await props.onSubmit(payload)
-        else await props.onSubmit(payload)
+        await props.onSubmit(payload)
       })}
       className="space-y-4"
     >
