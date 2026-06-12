@@ -1,9 +1,10 @@
-import { type RateLimitBinding, rateLimit } from '@elithrar/workers-hono-rate-limit'
-import { type Context, Hono } from 'hono'
+import type { RateLimitBinding } from '@elithrar/workers-hono-rate-limit'
+import { Hono } from 'hono'
 import { PUBLIC_CONTEXT } from '../middleware/auth'
 import type { StorefrontDetailService } from '../services/storefront-detail'
 import type { StorefrontSearchService } from '../services/storefront-search'
 import { cachePublic, fail, ok, parseDateRange, parseLimit } from './helpers'
+import { rateLimitByIp } from './rate-limit'
 
 const DEFAULT_LIMIT = 25
 const MAX_LIMIT = 50
@@ -28,9 +29,9 @@ export function createStorefrontRoutes(
 
   // Stricter per-IP budget on the unauthenticated catalog paths — the public
   // endpoints are the most attractive scraping target (mirrors vehicle-classes).
+  // Fails closed on an unresolvable IP (#580).
   if (publicCatalogLimiter) {
-    const ipKey = (c: Context) => c.req.header('cf-connecting-ip') ?? ''
-    app.use('/storefronts/*', rateLimit(publicCatalogLimiter, ipKey))
+    app.use('/storefronts/*', rateLimitByIp(publicCatalogLimiter))
   }
 
   return app

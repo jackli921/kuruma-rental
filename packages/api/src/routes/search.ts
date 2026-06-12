@@ -1,8 +1,9 @@
-import { type RateLimitBinding, rateLimit } from '@elithrar/workers-hono-rate-limit'
-import { type Context, Hono } from 'hono'
+import type { RateLimitBinding } from '@elithrar/workers-hono-rate-limit'
+import { Hono } from 'hono'
 import { PUBLIC_CONTEXT } from '../middleware/auth'
 import type { FlatSearchService } from '../services/flat-search'
 import { cachePublic, fail, ok, parseDateRange, parseLimit } from './helpers'
+import { rateLimitByIp } from './rate-limit'
 
 const DEFAULT_LIMIT = 25
 const MAX_LIMIT = 50
@@ -25,9 +26,9 @@ export function createFlatSearchRoutes(
 
   // Stricter per-IP budget on the unauthenticated search path — the public
   // endpoints are the most attractive scraping target (mirrors storefronts).
+  // Fails closed on an unresolvable IP (#580).
   if (publicCatalogLimiter) {
-    const ipKey = (c: Context) => c.req.header('cf-connecting-ip') ?? ''
-    app.use('/search/*', rateLimit(publicCatalogLimiter, ipKey))
+    app.use('/search/*', rateLimitByIp(publicCatalogLimiter))
   }
 
   return app.get('/search/vehicles', async (c) => {
