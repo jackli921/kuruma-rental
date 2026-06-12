@@ -1,9 +1,9 @@
-import { type RateLimitBinding, rateLimit } from '@elithrar/workers-hono-rate-limit'
+import type { RateLimitBinding } from '@elithrar/workers-hono-rate-limit'
 import {
   createVehicleClassSchema,
   updateVehicleClassSchema,
 } from '@kuruma/shared/validators/vehicle-class'
-import { type Context, Hono } from 'hono'
+import { Hono } from 'hono'
 import {
   FLEET_WRITE_ROLES,
   PUBLIC_CONTEXT,
@@ -17,6 +17,7 @@ import type { VehicleClassService } from '../services/vehicle-class'
 import type { VehicleClassAvailabilityService } from '../services/vehicle-class-availability'
 import type { ResolveWriteOperatorId } from '../tenancy'
 import { cachePublic, fail, ok, parseBody, parseDateRange, stripUndefined } from './helpers'
+import { rateLimitByIp } from './rate-limit'
 
 export function createVehicleClassRoutes(
   service: VehicleClassService,
@@ -32,11 +33,12 @@ export function createVehicleClassRoutes(
   // public endpoints are the only unauthenticated data paths and are the
   // most attractive scraping target, so they need a tighter budget than
   // the shared global one.
+  // Fails closed on an unresolvable IP (#580).
   if (publicCatalogLimiter) {
-    const ipKey = (c: Context) => c.req.header('cf-connecting-ip') ?? ''
-    app.use('/vehicle-classes', rateLimit(publicCatalogLimiter, ipKey))
-    app.use('/vehicle-classes/by-slug/*', rateLimit(publicCatalogLimiter, ipKey))
-    app.use('/vehicle-classes/:slug/availability', rateLimit(publicCatalogLimiter, ipKey))
+    const limiter = rateLimitByIp(publicCatalogLimiter)
+    app.use('/vehicle-classes', limiter)
+    app.use('/vehicle-classes/by-slug/*', limiter)
+    app.use('/vehicle-classes/:slug/availability', limiter)
   }
 
   return (
