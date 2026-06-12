@@ -79,6 +79,21 @@ export function createVehicleClassRoutes(
       })
       // --- Protected routes (auth required) ---
       .use('/vehicle-classes/*', requireAuth())
+      // Operator owner list (#528). The public GET above is PUBLIC_CONTEXT,
+      // ACTIVE-only, and edge-cached — so it can't power the owner's manage
+      // screen (no tenant scope, archived rows invisible). This route is
+      // session-scoped and honors includeArchived so owners see soft-archived
+      // classes (muted badge) and only their own tenant's inventory. Registered
+      // before `/:id` so the static `manage` segment wins over the param route.
+      .get('/vehicle-classes/manage', async (c) => {
+        const ctx = toCallerContext(requireUser(c))
+        const includeArchived = c.req.query('includeArchived') === 'true'
+        const classes = await service.findAll(
+          ctx,
+          includeArchived ? { includeArchived } : undefined,
+        )
+        return ok(c, classes)
+      })
       .get('/vehicle-classes/:id', async (c) => {
         // Operator-scoped: an OPERATOR_* caller can only read its own class;
         // bypass roles (STAFF/ADMIN/PLATFORM_ADMIN) read across operators (#395).
