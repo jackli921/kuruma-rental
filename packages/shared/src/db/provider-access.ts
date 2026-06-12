@@ -74,5 +74,10 @@ export const providerInvites = pgTable(
   (t) => [
     uniqueIndex('provider_invites_tokenHash_unique').on(t.tokenHash),
     index('idx_provider_invites_email').on(t.email),
+    // FK-covering indexes (lint:fk-indexes): keep operator-scoped listing and the
+    // set-null cascades on actor deletion from doing sequential scans.
+    index('idx_provider_invites_operatorId').on(t.operatorId),
+    index('idx_provider_invites_invitedByUserId').on(t.invitedByUserId),
+    index('idx_provider_invites_acceptedByUserId').on(t.acceptedByUserId),
   ],
 )

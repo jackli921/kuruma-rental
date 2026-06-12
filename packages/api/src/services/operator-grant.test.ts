@@ -3,6 +3,7 @@ import { sha256Hex } from '../auth/token-hash'
 import { InMemoryOperatorMembershipRepository } from '../repositories/in-memory/operator-membership'
 import { InMemoryProviderInviteRepository } from '../repositories/in-memory/provider-invite'
 import { InMemoryUserRepository } from '../repositories/in-memory/user'
+import type { OperatorMembershipRepository, RunOperatorGrant } from '../repositories/types'
 import type { OperatorMembership, ProviderInvite, User } from '../stores'
 import { createOperatorGrantService } from './operator-grant'
 
@@ -204,5 +205,42 @@ describe('OperatorGrantService', () => {
     // The partial-unique-active fence leaves exactly one membership row; the
     // losing tx re-read that winner instead of minting from its stale snapshot.
     expect(ctx.memberStore.size).toBe(1)
+  })
+
+  it('grants the accept-race loser whose invite is already consumed but whose membership the winner just committed', async () => {
+    // The dangerous race the postgres integration test catches non-deterministically:
+    // B's step-1 membership read sees nothing, then the winner commits (membership +
+    // invite ACCEPTED) before B reads the invite. B must re-read the winner's
+    // membership and grant — NOT mistake the consumed invite for a bad one. Modelled
+    // here with a stateful fake: no membership on the first read, the winner on the
+    // re-read.
+    await seedInvite(ctx.invites, { status: 'ACCEPTED', acceptedByUserId: USER_ID })
+    const winner: OperatorMembership = {
+      id: 'm-winner',
+      userId: USER_ID,
+      operatorId: OPERATOR_ID,
+      role: 'OPERATOR_OWNER',
+      status: 'ACTIVE',
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    }
+    let reads = 0
+    const memberships: Pick<OperatorMembershipRepository, 'findActiveByUserId'> = {
+      findActiveByUserId: async () => (reads++ === 0 ? undefined : winner),
+    }
+    const runGrant: RunOperatorGrant = () => {
+      throw new Error('runGrant must not run — the consumed-invite re-read skips the write')
+    }
+    const service = createOperatorGrantService({ memberships, invites: ctx.invites, runGrant })
+
+    const result = await service.resolve({
+      userId: USER_ID,
+      inviteToken: TOKEN,
+      email: EMAIL,
+      emailVerified: true,
+    })
+
+    expect(result).toEqual({ type: 'granted', operatorId: OPERATOR_ID, role: 'OPERATOR_OWNER' })
+    expect(reads).toBe(2) // step-1 (null) + the consumed-invite re-read (winner)
   })
 })

@@ -74,10 +74,24 @@ export function createOperatorGrantService(deps: OperatorGrantDeps): OperatorGra
       const invite = await deps.invites.findByTokenHash(sha256Hex(input.inviteToken))
       if (
         !invite ||
-        invite.status !== 'PENDING' ||
         invite.expiresAt.getTime() <= Date.now() ||
         invite.email.toLowerCase() !== email
       ) {
+        return { type: 'invite_invalid' }
+      }
+
+      // The invite exists, is unexpired, and matches this verified email — but a
+      // concurrent accept by THIS SAME user can flip it PENDING->ACCEPTED between
+      // our step-1 membership read and here. Don't mistake that for a bad invite:
+      // re-read the membership the winning tx just committed and grant from it.
+      // (The step-5 unique-violation catch only covers losers who reached the
+      // write; this loser bailed earlier on the consumed invite.) A genuinely
+      // consumed invite with no membership for us stays invite_invalid.
+      if (invite.status !== 'PENDING') {
+        const winner = await deps.memberships.findActiveByUserId(input.userId)
+        if (winner) {
+          return { type: 'granted', operatorId: winner.operatorId, role: winner.role }
+        }
         return { type: 'invite_invalid' }
       }
 
