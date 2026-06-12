@@ -6,7 +6,10 @@
 **Base branch:** `marketplace-pivot` @ `1cd08e4`. **MERGE, never rebase** (force-push is hard-denied).
 
 > **STATUS 2026-06-12 (FINAL — PR OPEN, MERGE-PENDING):** All slices 1-5 done +
-> reviewed + **PR #564 open** (base `marketplace-pivot`). Tip `96c9925`. Base merged
+> reviewed + **PR #564 open** (base `marketplace-pivot`). Tip `9836d57`. `/code-review`
+> run on the PR → PASS (no CRIT/HIGH/MED); LOW immutability nit fixed `9836d57`, summary
+> posted as a PR comment. CI on #564: db-drift/e2e/e2e-real-db PASS, test-and-build pending.
+> Base merged
 > in (no force) and **migration renumbered 0048 → `0050_add_location_coordinate_source`**
 > because #521 landed 0048/0049. Local gate GREEN on the merged tree: tsc api+shared,
 > lint:boundaries, **db:verify 4/4 (51 migs, fresh DB)**, shared 433, api **1175**,
