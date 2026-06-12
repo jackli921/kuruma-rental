@@ -1,19 +1,26 @@
+import { Button } from '@/components/ui/button'
 import { LocationStatusBadge } from '@/vite/operator-locations/LocationStatusBadge'
 import type { OperatorLocation } from '@/vite/operator-locations/api'
-import { Clock, MapPin } from 'lucide-react'
+import { Clock, MapPin, Pencil, Trash2 } from 'lucide-react'
 import { useTranslations } from 'use-intl'
 
 interface OperatorLocationsViewProps {
   readonly locations: readonly OperatorLocation[]
+  readonly onEdit: (l: OperatorLocation) => void
+  readonly onArchive: (l: OperatorLocation) => void
 }
 
 const MINUTES_PER_HOUR = 60
 
 // Presentational locations list + empty state (FC/IS — the route owns the
-// loader / useSuspenseQuery and the pending/error boundaries; this is a pure
-// function of the resolved rows, so it is unit-testable). The add / edit /
-// archive affordances land in follow-up slices (#529) and are mounted here.
-export function OperatorLocationsView({ locations }: OperatorLocationsViewProps) {
+// loader / useSuspenseQuery, the pending/error boundaries, and the dialog state;
+// this stays a pure function of the resolved rows + row-action callbacks, so it
+// is unit-testable). Edit/archive open the route-owned dialogs via onEdit/onArchive.
+export function OperatorLocationsView({
+  locations,
+  onEdit,
+  onArchive,
+}: OperatorLocationsViewProps) {
   const t = useTranslations('business.locations')
 
   if (locations.length === 0) {
@@ -28,13 +35,19 @@ export function OperatorLocationsView({ locations }: OperatorLocationsViewProps)
   return (
     <div className="space-y-3">
       {locations.map((l) => (
-        <LocationRow key={l.id} location={l} />
+        <LocationRow key={l.id} location={l} onEdit={onEdit} onArchive={onArchive} />
       ))}
     </div>
   )
 }
 
-function LocationRow({ location: l }: { location: OperatorLocation }) {
+interface LocationRowProps {
+  location: OperatorLocation
+  onEdit: (l: OperatorLocation) => void
+  onArchive: (l: OperatorLocation) => void
+}
+
+function LocationRow({ location: l, onEdit, onArchive }: LocationRowProps) {
   const t = useTranslations('business.locations')
   const hours = l.operatingHours
     ? t('row.hours', { open: l.operatingHours.openTime, close: l.operatingHours.closeTime })
@@ -63,6 +76,26 @@ function LocationRow({ location: l }: { location: OperatorLocation }) {
           <span>{l.timezone}</span>
           <span>{t('row.turnaround', { hours: turnaroundHours })}</span>
         </div>
+      </div>
+
+      <div className="flex shrink-0 items-center gap-1">
+        <Button
+          variant="ghost"
+          size="icon"
+          aria-label={t('editLocation')}
+          onClick={() => onEdit(l)}
+        >
+          <Pencil className="size-4" />
+        </Button>
+        <Button
+          variant="ghost"
+          size="icon"
+          aria-label={t('archiveAction')}
+          onClick={() => onArchive(l)}
+          disabled={l.status === 'ARCHIVED'}
+        >
+          <Trash2 className="size-4" />
+        </Button>
       </div>
     </div>
   )

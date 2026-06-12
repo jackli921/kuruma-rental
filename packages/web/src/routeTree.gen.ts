@@ -579,19 +579,19 @@ const LocaleAdminRouteWithChildren = LocaleAdminRoute._addFileChildren(
 interface LocaleBusinessRouteChildren {
   LocaleBusinessDashboardRoute: typeof LocaleBusinessDashboardRoute
   LocaleBusinessManageFleetRoute: typeof LocaleBusinessManageFleetRoute
+  LocaleBusinessManageLocationsRoute: typeof LocaleBusinessManageLocationsRoute
   LocaleBusinessManageBookingsBookingIdRoute: typeof LocaleBusinessManageBookingsBookingIdRoute
   LocaleBusinessManageBookingsIndexRoute: typeof LocaleBusinessManageBookingsIndexRoute
-  LocaleBusinessManageLocationsRoute: typeof LocaleBusinessManageLocationsRoute
 }
 
 const LocaleBusinessRouteChildren: LocaleBusinessRouteChildren = {
   LocaleBusinessDashboardRoute: LocaleBusinessDashboardRoute,
   LocaleBusinessManageFleetRoute: LocaleBusinessManageFleetRoute,
+  LocaleBusinessManageLocationsRoute: LocaleBusinessManageLocationsRoute,
   LocaleBusinessManageBookingsBookingIdRoute:
     LocaleBusinessManageBookingsBookingIdRoute,
   LocaleBusinessManageBookingsIndexRoute:
     LocaleBusinessManageBookingsIndexRoute,
-  LocaleBusinessManageLocationsRoute: LocaleBusinessManageLocationsRoute,
 }
 
 const LocaleBusinessRouteWithChildren = LocaleBusinessRoute._addFileChildren(

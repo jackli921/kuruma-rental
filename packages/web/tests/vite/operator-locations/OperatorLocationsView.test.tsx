@@ -1,8 +1,9 @@
 import { OperatorLocationsView } from '@/vite/operator-locations/OperatorLocationsView'
 import type { OperatorLocation } from '@/vite/operator-locations/api'
 import { render, screen } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import { IntlProvider } from 'use-intl'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import enMessages from '../../../messages/en.json'
 
 const en = enMessages.business.locations
@@ -23,12 +24,21 @@ function location(overrides: Partial<OperatorLocation> = {}): OperatorLocation {
   }
 }
 
-function renderView(locations: OperatorLocation[]) {
-  return render(
+function renderView(
+  locations: OperatorLocation[],
+  handlers: {
+    onEdit?: (l: OperatorLocation) => void
+    onArchive?: (l: OperatorLocation) => void
+  } = {},
+) {
+  const onEdit = handlers.onEdit ?? vi.fn()
+  const onArchive = handlers.onArchive ?? vi.fn()
+  render(
     <IntlProvider locale="en" messages={enMessages}>
-      <OperatorLocationsView locations={locations} />
+      <OperatorLocationsView locations={locations} onEdit={onEdit} onArchive={onArchive} />
     </IntlProvider>,
   )
+  return { onEdit, onArchive }
 }
 
 describe('OperatorLocationsView', () => {
@@ -66,5 +76,26 @@ describe('OperatorLocationsView', () => {
     expect(screen.getByText('Loc A')).toBeInTheDocument()
     expect(screen.getByText('Loc B')).toBeInTheDocument()
     expect(screen.getAllByTestId('location-row')).toHaveLength(2)
+  })
+
+  it('calls onEdit with the location when the edit button is clicked', async () => {
+    const user = userEvent.setup()
+    const { onEdit } = renderView([location()])
+    await user.click(screen.getByRole('button', { name: en.editLocation }))
+    expect(onEdit).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 'loc_1', name: 'Namba Branch' }),
+    )
+  })
+
+  it('calls onArchive with the location when the archive button is clicked', async () => {
+    const user = userEvent.setup()
+    const { onArchive } = renderView([location()])
+    await user.click(screen.getByRole('button', { name: en.archiveAction }))
+    expect(onArchive).toHaveBeenCalledWith(expect.objectContaining({ id: 'loc_1' }))
+  })
+
+  it('disables the archive button for an archived location', () => {
+    renderView([location({ id: 'l4', status: 'ARCHIVED' })])
+    expect(screen.getByRole('button', { name: en.archiveAction })).toBeDisabled()
   })
 })

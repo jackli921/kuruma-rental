@@ -1,8 +1,10 @@
 import { Button } from '@/components/ui/button'
 import { PageSkeleton } from '@/vite/PageSkeleton'
 import { AddLocationDialog } from '@/vite/operator-locations/AddLocationDialog'
+import { ArchiveLocationDialog } from '@/vite/operator-locations/ArchiveLocationDialog'
+import { EditLocationDialog } from '@/vite/operator-locations/EditLocationDialog'
 import { OperatorLocationsView } from '@/vite/operator-locations/OperatorLocationsView'
-import { operatorLocationsQueryOptions } from '@/vite/operator-locations/api'
+import { type OperatorLocation, operatorLocationsQueryOptions } from '@/vite/operator-locations/api'
 import { useSuspenseQuery } from '@tanstack/react-query'
 import { type ErrorComponentProps, createFileRoute, useRouter } from '@tanstack/react-router'
 import { Plus } from 'lucide-react'
@@ -13,8 +15,8 @@ import { useTranslations } from 'use-intl'
 // — behind the `_business` guard, so only business roles reach it; tenant scoping
 // is server-side (CallerContext), the client passes no operatorId. The loader
 // prefetches into the query cache (no FOUC); the component reads the same options
-// via useSuspenseQuery. This slice ships the read-only list; create / edit /
-// archive land in follow-up slices and are mounted here.
+// via useSuspenseQuery. The route owns the add/edit/archive dialog state so the
+// list component stays a pure projection of the rows.
 export const Route = createFileRoute('/$locale/_business/manage/locations')({
   loader: ({ context }) => context.queryClient.ensureQueryData(operatorLocationsQueryOptions()),
   pendingComponent: PageSkeleton,
@@ -26,6 +28,10 @@ function OperatorLocationsRoute() {
   const t = useTranslations('business.locations')
   const { data: locations } = useSuspenseQuery(operatorLocationsQueryOptions())
   const [addOpen, setAddOpen] = useState(false)
+  // Edit/archive open against a selected row; null = closed. Distinct state per
+  // dialog so a stale edit can't bleed into an archive prompt.
+  const [editing, setEditing] = useState<OperatorLocation | null>(null)
+  const [archiving, setArchiving] = useState<OperatorLocation | null>(null)
 
   return (
     <main className="flex-1 px-4 py-10 sm:px-6 lg:px-8">
@@ -40,8 +46,13 @@ function OperatorLocationsRoute() {
             {t('addLocation')}
           </Button>
         </header>
-        <OperatorLocationsView locations={locations} />
+        <OperatorLocationsView locations={locations} onEdit={setEditing} onArchive={setArchiving} />
         <AddLocationDialog open={addOpen} onOpenChange={setAddOpen} />
+        <EditLocationDialog location={editing} onOpenChange={(open) => !open && setEditing(null)} />
+        <ArchiveLocationDialog
+          location={archiving}
+          onOpenChange={(open) => !open && setArchiving(null)}
+        />
       </div>
     </main>
   )

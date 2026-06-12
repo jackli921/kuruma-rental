@@ -603,6 +603,7 @@
       "archiveDescription": "This archives the location. It stays in the list, but won't be offered for new pickups.",
       "archiveConfirm": "Archive",
       "archiving": "Archiving...",
+      "archiveBlocked": "Can't archive — {count, plural, one {# active booking} other {# active bookings}} must be reassigned or cancelled first.",
       "empty": "No locations yet. Add your first pickup point.",
       "loadError": "Couldn't load locations",
       "retry": "Try again",
