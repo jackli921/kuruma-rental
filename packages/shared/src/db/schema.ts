@@ -248,7 +248,11 @@ export const locations = pgTable(
     // (operatorId, id) so a vehicle can only point at a location in its own
     // tenant (slice 2 migration #2). Mirrors vehicle_classes_operatorId_id_unique.
     unique('locations_operatorId_id_unique').on(table.operatorId, table.id),
-    check('locations_turnaround_non_negative', sql`${table.defaultTurnaroundMinutes} >= 0`),
+    // #551: 60-min floor guarantees a real servicing gap between rentals. Mirrors
+    // the Zod `turnaroundSchema.min(60)`; this is the DB-level backstop for any
+    // Zod-bypassed write (seed, import, raw SQL). Not overlap-safety — overlap is
+    // already impossible at any turnaround via bookings_no_overlap.
+    check('locations_turnaround_min_60', sql`${table.defaultTurnaroundMinutes} >= 60`),
   ],
 )
 

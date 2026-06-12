@@ -58,6 +58,7 @@ function makeDetail(vehicles: AvailableVehicleData[]): StorefrontDetailData {
       address: '1-2-3 Namba, Osaka',
       operatorName: 'Best Car Rental',
       operatingHours: null,
+      turnaroundMinutes: 120,
     },
     vehicles,
     nextCursor: null,
@@ -80,6 +81,11 @@ describe('StorefrontDetailView', () => {
     expect(screen.getByText('Available cars')).toBeInTheDocument()
     expect(screen.getByText('Toyota Aqua')).toBeInTheDocument()
     expect(screen.getByText('Suzuki Jimny')).toBeInTheDocument()
+  })
+
+  it('surfaces the turnaround buffer in the store header (#551)', () => {
+    renderDetail(makeDetail([]))
+    expect(screen.getByText('~2h turnaround between rentals')).toBeInTheDocument()
   })
 
   it('shows the empty-state copy for a known-but-full store', () => {

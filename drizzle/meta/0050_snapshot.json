@@ -1,5 +1,5 @@
 {
-  "id": "500be3e2-d63f-412d-8d62-a9ae3d061366",
+  "id": "f544f9c0-7042-443d-9f71-36f525bf8abe",
   "prevId": "831a6580-177f-4c55-b39b-053ec5001010",
   "version": "7",
   "dialect": "postgresql",
@@ -1012,13 +1012,6 @@
           "primaryKey": false,
           "notNull": false
         },
-        "coordinate_source": {
-          "name": "coordinate_source",
-          "type": "coordinate_source",
-          "typeSchema": "public",
-          "primaryKey": false,
-          "notNull": false
-        },
         "operatingHours": {
           "name": "operatingHours",
           "type": "jsonb",
@@ -1129,9 +1122,9 @@
       },
       "policies": {},
       "checkConstraints": {
-        "locations_turnaround_non_negative": {
-          "name": "locations_turnaround_non_negative",
-          "value": "\"locations\".\"defaultTurnaroundMinutes\" >= 0"
+        "locations_turnaround_min_60": {
+          "name": "locations_turnaround_min_60",
+          "value": "\"locations\".\"defaultTurnaroundMinutes\" >= 60"
         }
       },
       "isRLSEnabled": false
@@ -3112,14 +3105,6 @@
         "ACTIVE",
         "COMPLETED",
         "CANCELLED"
-      ]
-    },
-    "public.coordinate_source": {
-      "name": "coordinate_source",
-      "schema": "public",
-      "values": [
-        "GEOCODED",
-        "MANUAL"
       ]
     },
     "public.document_status": {

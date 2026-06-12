@@ -842,7 +842,18 @@
         "total": "合计",
         "loading": "正在加载预订…",
         "loadError": "无法加载此预订",
-        "missing": "未找到预订"
+        "missing": "未找到预订",
+        "actions": "操作"
+      },
+      "timeline": {
+        "heading": "时间线",
+        "created": "预订已创建",
+        "statusChanged": "状态从{from}变更为{to}",
+        "vehicleSubstituted": "车辆已更换",
+        "reason": "原因：{reason}",
+        "cancelled": "预订已取消",
+        "cancellationFee": "取消费 {fee}",
+        "empty": "暂无事件"
       }
     }
   },
@@ -909,6 +920,8 @@
     "fromDaily": "¥{price}起／天",
     "fromHourly": "¥{price}起／小时",
     "noPrice": "价格请咨询",
+    "turnaround": "两次租赁间隔约{hours}小时",
+    "emptyTurnaroundHint": "车辆在两次租赁之间需要准备时间，紧接着可能无法预订。请尝试选择较晚的取车日期。",
     "classCount": "{label} {count}辆",
     "seats": "{count}座",
     "luggage": "行李{count}件",

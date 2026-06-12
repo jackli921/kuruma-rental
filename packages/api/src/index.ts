@@ -16,6 +16,7 @@ import { DisabledPhotoStorage } from './repositories/disabled-photo-storage'
 import {
   DrizzleAddOnRepository,
   DrizzleAvailabilityRepository,
+  DrizzleBookingEventRepository,
   DrizzleBookingRepository,
   DrizzleCustomerRepository,
   DrizzleFeeScheduleRepository,
@@ -73,6 +74,7 @@ import { type R2BucketLike, R2PhotoStorage } from './repositories/r2-photo-stora
 import type {
   AddOnRepository,
   AvailabilityRepository,
+  BookingEventRepository,
   BookingRepository,
   CustomerRepository,
   DocumentStorage,
@@ -225,6 +227,10 @@ export function createApp(overrides?: {
   let paymentEventRepo: PaymentEventRepository
   let providerInviteRepo: ProviderInviteRepository
   let operatorMembershipRepo: OperatorMembershipRepository
+  // #549: read side of the booking lifecycle log, injected into BookingService
+  // for findEvents. The transactional append path builds its own inside the
+  // runInTransaction bundle below.
+  let bookingEventRepo: BookingEventRepository
   let runInTransaction: RunInTransaction
   // Runs the three operator-grant writes (#521 §6) in one tx: real interactive tx
   // in the DB branch, an inline passthrough over the in-memory repos otherwise.
@@ -248,7 +254,7 @@ export function createApp(overrides?: {
     ;({ vehicleRepo, bookingRepo, availabilityRepo } = overrides)
     vehicleClassRepo = overrides.vehicleClassRepo ?? new InMemoryVehicleClassRepository()
     maintenanceLogRepo = overrides.maintenanceLogRepo ?? new InMemoryMaintenanceLogRepository()
-    const bookingEventRepo = new InMemoryBookingEventRepository()
+    bookingEventRepo = new InMemoryBookingEventRepository()
     runInTransaction = async (fn) =>
       fn({
         vehicleRepo,
@@ -295,6 +301,7 @@ export function createApp(overrides?: {
     vehicleClassRepo = new DrizzleVehicleClassRepository(db)
     vehicleRepo = new DrizzleVehicleRepository(db)
     bookingRepo = new DrizzleBookingRepository(db)
+    bookingEventRepo = new DrizzleBookingEventRepository(db)
     availabilityRepo = new DrizzleAvailabilityRepository(db)
     maintenanceLogRepo = new DrizzleMaintenanceLogRepository(db)
     runInTransaction = createDrizzleTransaction(runTx)
@@ -369,7 +376,7 @@ export function createApp(overrides?: {
     statsRepo = new InMemoryStatsRepository(vehicleRepo, bookingRepo)
     threadRepo = new InMemoryThreadRepository()
     messageRepo = new InMemoryMessageRepository(threadRepo as InMemoryThreadRepository)
-    const bookingEventRepo = new InMemoryBookingEventRepository()
+    bookingEventRepo = new InMemoryBookingEventRepository()
     runInTransaction = async (fn) =>
       fn({
         vehicleRepo,
@@ -629,6 +636,7 @@ export function createApp(overrides?: {
     vehicleClassRepo,
     postCommit,
     operatorRepo,
+    bookingEventRepo,
     undefined,
     verificationGate,
   )
