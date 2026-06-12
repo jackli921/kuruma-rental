@@ -1,8 +1,19 @@
-import { adminGuard, businessGuard, manageGuard, renterGuard } from '@/vite/guards'
+import {
+  adminGuard,
+  businessGuard,
+  isOperatorSession,
+  manageGuard,
+  renterGuard,
+} from '@/vite/guards'
 import type { Session } from '@/vite/session'
 import { describe, expect, it } from 'vitest'
 
 const session = (role: string): Session => ({ user: { id: 'u', role }, csrfToken: 't' })
+
+const tenantSession = (role: string): Session => ({
+  user: { id: 'u', role, operatorId: 'op_1' },
+  csrfToken: 't',
+})
 
 const operatorSession = (role: string, operatorSlug?: string): Session => ({
   user: { id: 'u', role, ...(operatorSlug ? { operatorSlug } : {}) },
@@ -55,6 +66,23 @@ describe('manageGuard', () => {
 
   it('redirects signed-out users to login', () => {
     expect(manageGuard(null, 'acme')).toEqual({ type: 'login' })
+  })
+})
+
+describe('isOperatorSession', () => {
+  it('is true for a tenant-scoped operator session (carries an operatorId)', () => {
+    expect(isOperatorSession(tenantSession('OPERATOR_OWNER'))).toBe(true)
+    expect(isOperatorSession(tenantSession('OPERATOR_STAFF'))).toBe(true)
+  })
+
+  it('is false for bypass business roles with no operatorId — they can read but cannot write', () => {
+    expect(isOperatorSession(session('PLATFORM_ADMIN'))).toBe(false)
+    expect(isOperatorSession(session('STAFF'))).toBe(false)
+    expect(isOperatorSession(session('ADMIN'))).toBe(false)
+  })
+
+  it('is false for a signed-out session', () => {
+    expect(isOperatorSession(null)).toBe(false)
   })
 })
 
