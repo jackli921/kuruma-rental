@@ -214,15 +214,11 @@ export class LocationService {
   }
 
   /** Build the repo patch: strip the client coord/regeocode inputs (coords are
-   *  server-derived; `regeocode` is not a column), then apply the resolution. */
+   *  server-derived; `regeocode` is not a column), then apply the resolution.
+   *  'preserve' leaves the coord columns untouched; 'set' spreads the derived
+   *  triple. Built in one expression so the patch is never mutated after birth. */
   private toPatch(data: LocationUpdateData, resolution: CoordResolution): Partial<Location> {
     const { regeocode: _regeocode, latitude: _lat, longitude: _lng, ...rest } = data
-    const patch: Partial<Location> = { ...rest }
-    if (resolution.kind === 'set') {
-      patch.latitude = resolution.coords.latitude
-      patch.longitude = resolution.coords.longitude
-      patch.coordinateSource = resolution.coords.coordinateSource
-    }
-    return patch
+    return resolution.kind === 'set' ? { ...rest, ...resolution.coords } : { ...rest }
   }
 }
