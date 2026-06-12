@@ -24,6 +24,7 @@ import {
   DrizzleVehicleDetailRepository,
   DrizzleVehicleRepository,
 } from '../../packages/api/src/repositories/drizzle'
+import { pgConnectOptions } from './pg-connect-options'
 
 // Driver note: production's getDb() uses @neondatabase/serverless (HTTP), whose
 // drizzle adapter THROWS on db.transaction() ("No transactions support in
@@ -40,20 +41,10 @@ const port = Number(process.env.REAL_API_PORT ?? 8788)
 const url = process.env.DATABASE_URL
 if (!url) throw new Error('DATABASE_URL is required for the real-DB e2e API server')
 
-// Build from URL parts so libpq-only params (channel_binding) never reach
-// postgres-js; prepare:false keeps interactive transactions safe over the Neon
-// transaction-mode pooler. Mirrors e2e/real-db/pg.ts.
-const u = new URL(url)
-const client = postgres({
-  host: u.hostname,
-  port: u.port ? Number(u.port) : 5432,
-  database: u.pathname.replace(/^\//, ''),
-  username: decodeURIComponent(u.username),
-  password: decodeURIComponent(u.password),
-  ssl: 'require',
-  prepare: false,
-  max: 5,
-})
+// Build from URL parts (see pg-connect-options) so libpq-only params never reach
+// postgres-js and TLS is off for a localhost container; prepare:false keeps
+// interactive transactions safe over the Neon transaction-mode pooler.
+const client = postgres({ ...pgConnectOptions(url), prepare: false, max: 5 })
 const db = drizzle(client, { schema }) as unknown as Db
 
 // #493: thread/message create take an injected interactive-tx runner (DIP).
