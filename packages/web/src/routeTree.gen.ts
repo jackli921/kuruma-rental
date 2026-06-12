@@ -17,6 +17,7 @@ import { Route as LocaleLoginRouteImport } from './routes/$locale/login'
 import { Route as LocaleRenterRouteImport } from './routes/$locale/_renter'
 import { Route as LocaleBusinessRouteImport } from './routes/$locale/_business'
 import { Route as LocaleVehiclesIndexRouteImport } from './routes/$locale/vehicles/index'
+import { Route as ProviderInviteTokenRouteImport } from './routes/provider/invite/$token'
 import { Route as LocaleStorefrontsLocationIdRouteImport } from './routes/$locale/storefronts/$locationId'
 import { Route as LocaleProviderLoginRouteImport } from './routes/$locale/provider/login'
 import { Route as LocaleManageOperatorSlugRouteImport } from './routes/$locale/manage/$operatorSlug'
@@ -68,6 +69,11 @@ const LocaleVehiclesIndexRoute = LocaleVehiclesIndexRouteImport.update({
   id: '/vehicles/',
   path: '/vehicles/',
   getParentRoute: () => LocaleRoute,
+} as any)
+const ProviderInviteTokenRoute = ProviderInviteTokenRouteImport.update({
+  id: '/provider/invite/$token',
+  path: '/provider/invite/$token',
+  getParentRoute: () => rootRouteImport,
 } as any)
 const LocaleStorefrontsLocationIdRoute =
   LocaleStorefrontsLocationIdRouteImport.update({
@@ -155,6 +161,7 @@ export interface FileRoutesByFullPath {
   '/$locale/manage/$operatorSlug': typeof LocaleManageOperatorSlugRouteWithChildren
   '/$locale/provider/login': typeof LocaleProviderLoginRoute
   '/$locale/storefronts/$locationId': typeof LocaleStorefrontsLocationIdRoute
+  '/provider/invite/$token': typeof ProviderInviteTokenRoute
   '/$locale/vehicles/': typeof LocaleVehiclesIndexRoute
   '/$locale/manage/bookings': typeof LocaleBusinessManageBookingsRoute
   '/$locale/bookings/confirmation': typeof LocaleRenterBookingsConfirmationRoute
@@ -174,6 +181,7 @@ export interface FileRoutesByTo {
   '/$locale/manage/$operatorSlug': typeof LocaleManageOperatorSlugRouteWithChildren
   '/$locale/provider/login': typeof LocaleProviderLoginRoute
   '/$locale/storefronts/$locationId': typeof LocaleStorefrontsLocationIdRoute
+  '/provider/invite/$token': typeof ProviderInviteTokenRoute
   '/$locale/vehicles': typeof LocaleVehiclesIndexRoute
   '/$locale/manage/bookings': typeof LocaleBusinessManageBookingsRoute
   '/$locale/bookings/confirmation': typeof LocaleRenterBookingsConfirmationRoute
@@ -198,6 +206,7 @@ export interface FileRoutesById {
   '/$locale/manage/$operatorSlug': typeof LocaleManageOperatorSlugRouteWithChildren
   '/$locale/provider/login': typeof LocaleProviderLoginRoute
   '/$locale/storefronts/$locationId': typeof LocaleStorefrontsLocationIdRoute
+  '/provider/invite/$token': typeof ProviderInviteTokenRoute
   '/$locale/vehicles/': typeof LocaleVehiclesIndexRoute
   '/$locale/_business/manage/bookings': typeof LocaleBusinessManageBookingsRoute
   '/$locale/_renter/bookings/confirmation': typeof LocaleRenterBookingsConfirmationRoute
@@ -221,6 +230,7 @@ export interface FileRouteTypes {
     | '/$locale/manage/$operatorSlug'
     | '/$locale/provider/login'
     | '/$locale/storefronts/$locationId'
+    | '/provider/invite/$token'
     | '/$locale/vehicles/'
     | '/$locale/manage/bookings'
     | '/$locale/bookings/confirmation'
@@ -240,6 +250,7 @@ export interface FileRouteTypes {
     | '/$locale/manage/$operatorSlug'
     | '/$locale/provider/login'
     | '/$locale/storefronts/$locationId'
+    | '/provider/invite/$token'
     | '/$locale/vehicles'
     | '/$locale/manage/bookings'
     | '/$locale/bookings/confirmation'
@@ -263,6 +274,7 @@ export interface FileRouteTypes {
     | '/$locale/manage/$operatorSlug'
     | '/$locale/provider/login'
     | '/$locale/storefronts/$locationId'
+    | '/provider/invite/$token'
     | '/$locale/vehicles/'
     | '/$locale/_business/manage/bookings'
     | '/$locale/_renter/bookings/confirmation'
@@ -276,6 +288,7 @@ export interface FileRouteTypes {
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   LocaleRoute: typeof LocaleRouteWithChildren
+  ProviderInviteTokenRoute: typeof ProviderInviteTokenRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -335,6 +348,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/$locale/vehicles/'
       preLoaderRoute: typeof LocaleVehiclesIndexRouteImport
       parentRoute: typeof LocaleRoute
+    }
+    '/provider/invite/$token': {
+      id: '/provider/invite/$token'
+      path: '/provider/invite/$token'
+      fullPath: '/provider/invite/$token'
+      preLoaderRoute: typeof ProviderInviteTokenRouteImport
+      parentRoute: typeof rootRouteImport
     }
     '/$locale/storefronts/$locationId': {
       id: '/$locale/storefronts/$locationId'
@@ -522,6 +542,7 @@ const LocaleRouteWithChildren =
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   LocaleRoute: LocaleRouteWithChildren,
+  ProviderInviteTokenRoute: ProviderInviteTokenRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

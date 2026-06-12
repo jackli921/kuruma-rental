@@ -207,6 +207,14 @@ export function createAuthRoutes(
           ? await findOperatorSlug(grant.operatorId)
           : undefined
 
+      // Provider intent needs a resolvable slug for the /manage/$slug destination.
+      // If the grant resolved but the slug didn't (an internal inconsistency), fail
+      // the door CLOSED *before* minting — a denied provider attempt must never
+      // leave a session cookie behind (mirrors the access_not_found bounce above).
+      if (intent === 'provider' && !operatorSlug) {
+        return c.redirect(providerLoginErrorUrl(googleConfig, locale, 'access_not_found'), 302)
+      }
+
       const token = await mintSessionToken(
         {
           sub: user.id,
@@ -226,17 +234,16 @@ export function createAuthRoutes(
       setSessionCookie(c, token)
 
       // Provider intent lands on the server-computed operator dashboard: the slug is
-      // server-derived, so it can't be steered by returnTo. A granted provider always
-      // has an operatorId; if the slug can't be resolved, fail the provider path
-      // closed to the not-found page rather than guess at a destination.
+      // server-derived, so it can't be steered by returnTo. The slug is guaranteed
+      // present here — the bail above already failed the path closed otherwise.
       if (intent === 'provider') {
-        const target = operatorSlug
-          ? new URL(
-              `/${locale}/manage/${operatorSlug}/dashboard`,
-              googleConfig.postLoginRedirect,
-            ).toString()
-          : providerLoginErrorUrl(googleConfig, locale, 'access_not_found')
-        return c.redirect(target, 302)
+        return c.redirect(
+          new URL(
+            `/${locale}/manage/${operatorSlug}/dashboard`,
+            googleConfig.postLoginRedirect,
+          ).toString(),
+          302,
+        )
       }
 
       // Renter intent: honour the validated returnTo, else the default landing.

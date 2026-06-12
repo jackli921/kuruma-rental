@@ -257,4 +257,28 @@ describe('GET /auth/google/callback', () => {
     expect(payload.operatorId).toBe('op1')
     expect(payload.operatorSlug).toBe('acme')
   })
+
+  test('provider intent + granted but slug unresolved → error redirect, mints NO session', async () => {
+    setupAuthEnv()
+    const { runtime } = makeRuntime()
+    // Grant resolves, but findSlug has no slug for this operatorId (internal
+    // inconsistency). The provider door must fail CLOSED: redirect to the error
+    // page WITHOUT leaving a session cookie, honouring "denied → no session".
+    const providerAccess = {
+      resolve: async () => ({
+        type: 'granted' as const,
+        operatorId: 'op-no-slug',
+        role: 'OPERATOR_OWNER' as const,
+      }),
+    }
+    const app = createAuthRoutes(config, runtime, providerAccess, findSlug)
+    const res = await app.request('/auth/google/callback?state=s1&code=c1', {
+      headers: { Cookie: 'kuruma_oauth_state=s1; kuruma_oauth_intent=provider' },
+    })
+    expect(res.status).toBe(302)
+    expect(res.headers.get('location')).toBe(
+      'https://web.example.test/en/provider/login?error=access_not_found',
+    )
+    expect(getSetCookie(res, 'kuruma_session')).toBeUndefined()
+  })
 })
