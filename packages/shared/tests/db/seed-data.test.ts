@@ -80,16 +80,30 @@ describe('seed-data demo locations (slice 8 §3.2)', () => {
     }
   })
 
-  it('defaults turnaround to 2880m with exactly one configurability override', () => {
-    const overridden = DEMO_LOCATIONS.filter(
-      (l) => l.defaultTurnaroundMinutes !== DEFAULT_TURNAROUND_MINUTES,
+  // #551: a realistic, VARIED turnaround distribution. The old "8 at 2880 + one
+  // override" fixture was the root of the "booked once = car gone" illusion — every
+  // store cooled down for 48h. These assertions force a credible spread instead.
+  it('keeps every turnaround at or above the 60-minute floor (locations_turnaround_min_60)', () => {
+    for (const l of DEMO_LOCATIONS) expect(l.defaultTurnaroundMinutes).toBeGreaterThanOrEqual(60)
+  })
+
+  it('varies turnaround across at least 3 distinct values', () => {
+    const distinct = new Set(DEMO_LOCATIONS.map((l) => l.defaultTurnaroundMinutes))
+    expect(distinct.size).toBeGreaterThanOrEqual(3)
+  })
+
+  it('caps the 48h maximum at no more than 2 locations', () => {
+    const atMax = DEMO_LOCATIONS.filter(
+      (l) => l.defaultTurnaroundMinutes === DEFAULT_TURNAROUND_MINUTES,
     )
-    expect(overridden).toHaveLength(1)
-    expect(
-      DEMO_LOCATIONS.filter((l) => l.defaultTurnaroundMinutes === DEFAULT_TURNAROUND_MINUTES),
-    ).toHaveLength(8)
-    // override must stay non-negative (locations_turnaround_non_negative CHECK)
-    for (const l of overridden) expect(l.defaultTurnaroundMinutes).toBeGreaterThanOrEqual(0)
+    expect(atMax.length).toBeLessThanOrEqual(2)
+  })
+
+  it('includes at least one realistic central turnaround in [60, 180] minutes', () => {
+    const central = DEMO_LOCATIONS.filter(
+      (l) => l.defaultTurnaroundMinutes >= 60 && l.defaultTurnaroundMinutes <= 180,
+    )
+    expect(central.length).toBeGreaterThanOrEqual(1)
   })
 })
 
