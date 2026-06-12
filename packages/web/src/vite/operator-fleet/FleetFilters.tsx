@@ -109,6 +109,7 @@ export function FleetFilters({ vehicles, value, onChange }: FleetFiltersProps) {
       <div className="space-y-2">
         <Input
           type="search"
+          aria-label={t('searchPlaceholder')}
           placeholder={t('searchPlaceholder')}
           value={value.search ?? ''}
           onChange={handleSearchChange}
