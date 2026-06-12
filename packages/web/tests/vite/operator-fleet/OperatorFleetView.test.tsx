@@ -1,12 +1,15 @@
 import { formatVehicleRate } from '@/lib/format'
 import { OperatorFleetView } from '@/vite/operator-fleet/OperatorFleetView'
 import type { OperatorFleetVehicle } from '@/vite/operator-fleet/api'
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { render, screen } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import { IntlProvider } from 'use-intl'
 import { describe, expect, it } from 'vitest'
 import enMessages from '../../../messages/en.json'
 
 const en = enMessages.business.vehicles.fleet
+const bulk = enMessages.business.vehicles.bulk
 
 function vehicle(overrides: Partial<OperatorFleetVehicle> = {}): OperatorFleetVehicle {
   return {
@@ -47,10 +50,13 @@ function vehicle(overrides: Partial<OperatorFleetVehicle> = {}): OperatorFleetVe
 }
 
 function renderView(vehicles: OperatorFleetVehicle[]) {
+  const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
   return render(
-    <IntlProvider locale="en" messages={enMessages}>
-      <OperatorFleetView vehicles={vehicles} locale="en" />
-    </IntlProvider>,
+    <QueryClientProvider client={queryClient}>
+      <IntlProvider locale="en" messages={enMessages}>
+        <OperatorFleetView vehicles={vehicles} locale="en" />
+      </IntlProvider>
+    </QueryClientProvider>,
   )
 }
 
@@ -84,5 +90,34 @@ describe('OperatorFleetView', () => {
     renderView([vehicle({ id: 'a', name: 'Car A' }), vehicle({ id: 'b', name: 'Car B' })])
     expect(screen.getByText('Car A')).toBeInTheDocument()
     expect(screen.getByText('Car B')).toBeInTheDocument()
+  })
+
+  it('reveals the bulk action bar with a count when a row is selected', async () => {
+    const user = userEvent.setup()
+    renderView([vehicle({ id: 'a', name: 'Car A' }), vehicle({ id: 'b', name: 'Car B' })])
+
+    expect(screen.queryByText('1 vehicle selected')).not.toBeInTheDocument()
+    await user.click(screen.getByRole('checkbox', { name: 'Select Car A' }))
+
+    expect(screen.getByText('1 vehicle selected')).toBeInTheDocument()
+  })
+
+  it('select-all checkbox selects every visible row', async () => {
+    const user = userEvent.setup()
+    renderView([vehicle({ id: 'a', name: 'Car A' }), vehicle({ id: 'b', name: 'Car B' })])
+
+    await user.click(screen.getByRole('checkbox', { name: bulk.selectAll }))
+
+    expect(screen.getByText('2 vehicles selected')).toBeInTheDocument()
+  })
+
+  it('deselect-all from the bulk bar clears the selection', async () => {
+    const user = userEvent.setup()
+    renderView([vehicle({ id: 'a', name: 'Car A' }), vehicle({ id: 'b', name: 'Car B' })])
+
+    await user.click(screen.getByRole('checkbox', { name: bulk.selectAll }))
+    await user.click(screen.getByRole('button', { name: bulk.deselectAll }))
+
+    expect(screen.queryByText('2 vehicles selected')).not.toBeInTheDocument()
   })
 })

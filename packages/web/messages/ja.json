@@ -496,6 +496,7 @@
       },
       "bulk": {
         "selectAll": "すべて選択",
+        "selectRow": "{name}を選択",
         "deselectAll": "選択解除",
         "selectedCount": "{count}台選択中",
         "setAvailable": "利用可能にする",
