@@ -141,6 +141,7 @@ import { FeeScheduleService } from './services/fee-schedule'
 import { FlatSearchService } from './services/flat-search'
 import { FleetOverviewService } from './services/fleet-overview'
 import { NominatimGeocoder } from './services/geocoding/nominatim-geocoder'
+import { ThrottledGeocoder } from './services/geocoding/throttled-geocoder'
 import type { Geocoder } from './services/geocoding/types'
 import { GoogleTranslationProvider } from './services/google-translation-provider'
 import { InsuranceOptionService } from './services/insurance-option'
@@ -199,6 +200,9 @@ export function createApp(overrides?: {
   photoUploadLimiter?: RateLimitBinding
   photoUploadUserLimiter?: RateLimitBinding
   publicCatalogLimiter?: RateLimitBinding
+  // Over-limit ⇒ the geocoder skips the lookup (#574). Inject a deny-binding in
+  // tests; absent ⇒ the globalThis-resolved GEOCODE_LIMITER (or unthrottled dev).
+  geocodeLimiter?: RateLimitBinding
   // Injected Google OAuth runtime (provider + account store). Integration tests
   // pass a fake so the callback can be exercised without a live Google/DB.
   googleAuthRuntime?: GoogleAuthRuntime
@@ -452,17 +456,12 @@ export function createApp(overrides?: {
     }
   })()
 
-  // Forward geocoder (#531): disabled by default — returns null (no coords)
-  // unless BOTH a descriptive User-Agent AND an explicit endpoint are set. We do
-  // NOT default to the public OSM endpoint: its usage policy caps the WHOLE app
-  // at 1 req/s and there is no app-side throttle/cache here yet (#574), so a
-  // burst of operator saves would breach it. Production must point
-  // NOMINATIM_API_URL at a self-hosted / proxied / quota-backed instance (or
-  // swap in a different provider adapter on this one line). Geocoding is
-  // best-effort — the service treats null as "no coordinates" and the location
-  // still saves — so the null stub is safe and there is no loud prod sentinel.
-  // A test override wins outright, proving a provider swap touches only here.
-  const geocoder: Geocoder =
+  // Forward geocoder (#531): disabled by default (null stub) unless BOTH a
+  // User-Agent and an endpoint are set; prod = LocationIQ (Nominatim-compatible,
+  // + NOMINATIM_API_KEY) or self-host. The resolved geocoder is wrapped in a
+  // ThrottledGeocoder keyed off GEOCODE_LIMITER (#574) — best-effort global cap so
+  // a burst can't breach OSMF's 1 req/s. A test override wins outright.
+  const innerGeocoder: Geocoder =
     overrides?.geocoder ??
     (() => {
       const userAgent = process.env.NOMINATIM_USER_AGENT
@@ -470,6 +469,13 @@ export function createApp(overrides?: {
       if (!userAgent || !baseUrl) return { geocode: async () => null }
       return new NominatimGeocoder(baseUrl, userAgent)
     })()
+  // Adapt the native binding's `limit({ key })` to the RateLimiter port here.
+  const geocodeLimiter =
+    overrides?.geocodeLimiter ??
+    ((globalThis as Record<string, unknown>).GEOCODE_LIMITER as RateLimitBinding | undefined)
+  const geocoder: Geocoder = geocodeLimiter
+    ? new ThrottledGeocoder(innerGeocoder, { limit: (key) => geocodeLimiter.limit({ key }) })
+    : innerGeocoder
 
   // In-app Stripe payment (#461). Real gateway when BOTH secrets are set; in
   // production without them a sentinel throws on first use (not at boot, so
