@@ -351,6 +351,13 @@
       "when": 1781264933507,
       "tag": "0049_provider_invites_fk_indexes",
       "breakpoints": true
+    },
+    {
+      "idx": 50,
+      "version": "7",
+      "when": 1781300630180,
+      "tag": "0050_add_location_coordinate_source",
+      "breakpoints": true
     }
   ]
 }
