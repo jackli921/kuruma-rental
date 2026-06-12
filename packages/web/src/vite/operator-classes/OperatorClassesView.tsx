@@ -7,12 +7,13 @@ import { useTranslations } from 'use-intl'
 
 interface OperatorClassesViewProps {
   readonly classes: readonly OperatorClass[]
-  /** Opens the edit dialog for a class. Omitted -> no edit affordance (e.g. in
-   * isolation tests). */
-  readonly onEdit?: (vehicleClass: OperatorClass) => void
+  /** Opens the edit dialog for a class. Omitted -> no edit affordance: read-only
+   * for bypass roles (#583), and in isolation tests. `| undefined` is explicit so
+   * the route can pass `canWrite ? setX : undefined` under exactOptionalPropertyTypes. */
+  readonly onEdit?: ((vehicleClass: OperatorClass) => void) | undefined
   /** Opens the archive (delete) dialog for a class. Disabled on already-archived
-   * rows. */
-  readonly onDelete?: (vehicleClass: OperatorClass) => void
+   * rows. Omitted -> no delete affordance (read-only / isolation tests). */
+  readonly onDelete?: ((vehicleClass: OperatorClass) => void) | undefined
 }
 
 // Presentational list + empty state (FC/IS): a pure function of the resolved
