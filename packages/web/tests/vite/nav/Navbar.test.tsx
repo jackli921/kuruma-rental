@@ -109,11 +109,13 @@ describe('Navbar', () => {
       'data-to',
       '/$locale/manage/insurance',
     )
+    // #530: operator pricing config (fees) lives at /manage/fees.
+    expect(screen.getByText('Fees').closest('a')).toHaveAttribute('data-to', '/$locale/manage/fees')
     expect(container.querySelector('nav')?.hasAttribute('data-business-nav')).toBe(true)
     const client = screen.getByTestId('navbar-client')
     expect(client).toHaveAttribute('data-view-mode', 'business')
     expect(client).toHaveAttribute('data-can-switch', 'true')
-    expect(screen.getByTestId('mobile-menu')).toHaveAttribute('data-nav-count', '5')
+    expect(screen.getByTestId('mobile-menu')).toHaveAttribute('data-nav-count', '6')
   })
 
   it('shows Browse, My Bookings, and Documents (no business markers) for a signed-in renter', () => {
