@@ -1,6 +1,7 @@
 import { Button } from '@/components/ui/button'
 import { PageSkeleton } from '@/vite/PageSkeleton'
 import { AddClassDialog } from '@/vite/operator-classes/AddClassDialog'
+import { DeleteClassDialog } from '@/vite/operator-classes/DeleteClassDialog'
 import { EditClassDialog } from '@/vite/operator-classes/EditClassDialog'
 import { OperatorClassesView } from '@/vite/operator-classes/OperatorClassesView'
 import { type OperatorClass, operatorClassesQueryOptions } from '@/vite/operator-classes/api'
@@ -30,6 +31,7 @@ function OperatorClassesRoute() {
   const { data: classes } = useSuspenseQuery(classesQuery)
   const [showAdd, setShowAdd] = useState(false)
   const [editing, setEditing] = useState<OperatorClass | null>(null)
+  const [deleting, setDeleting] = useState<OperatorClass | null>(null)
 
   return (
     <main className="flex-1 px-4 py-10 sm:px-6 lg:px-8">
@@ -44,10 +46,14 @@ function OperatorClassesRoute() {
             {t('addClass')}
           </Button>
         </header>
-        <OperatorClassesView classes={classes} onEdit={setEditing} />
+        <OperatorClassesView classes={classes} onEdit={setEditing} onDelete={setDeleting} />
       </div>
       <AddClassDialog open={showAdd} onOpenChange={setShowAdd} />
       <EditClassDialog vehicleClass={editing} onOpenChange={(open) => !open && setEditing(null)} />
+      <DeleteClassDialog
+        vehicleClass={deleting}
+        onOpenChange={(open) => !open && setDeleting(null)}
+      />
     </main>
   )
 }
