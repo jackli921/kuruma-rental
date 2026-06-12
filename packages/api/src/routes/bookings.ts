@@ -72,8 +72,22 @@ export function createBookingRoutes(service: BookingService) {
     })
     .get('/bookings/:id', async (c) => {
       const ctx = toCallerContext(requireUser(c))
+      const id = c.req.param('id')
 
-      const booking = await service.findById(ctx, c.req.param('id'))
+      // Mirror the list endpoint's `expand` parsing. A deep-linked trip-detail
+      // page (#549) has no list-row data, so it requests `vehicle,renter` to
+      // carry the assigned car + renter; the operator projection is preserved.
+      const expand = new Set(
+        (c.req.query('expand') ?? '')
+          .split(',')
+          .map((token) => token.trim())
+          .filter(Boolean),
+      )
+
+      const booking =
+        expand.has('vehicle') && expand.has('renter')
+          ? await service.findByIdWithVehicleAndRenter(ctx, id)
+          : await service.findById(ctx, id)
       if (!booking) {
         return fail(c, 'Booking not found', 404)
       }

@@ -242,6 +242,41 @@ export class BookingService {
   }
 
   /**
+   * #549: single-read enrichment for the deep-linked trip-detail page. ENRICHES
+   * the findById result (booking + renter-safe operator projection, §4h) with
+   * the assigned vehicle + renter — it never replaces the operator block. Mirrors
+   * the list endpoint's `expand=vehicle,renter` projection shape.
+   */
+  async findByIdWithVehicleAndRenter(
+    ctx: CallerContext,
+    id: string,
+  ): Promise<
+    | (BookingWithOperator & {
+        vehicle?: { name: string; photos: string[] } | undefined
+        renter?:
+          | { id: string; name: string | null; email: string | null; language: string }
+          | undefined
+      })
+    | undefined
+  > {
+    const booking = await this.findById(ctx, id)
+    if (!booking) return booking
+
+    const [vehicle] = this.vehicleRepo
+      ? await this.vehicleRepo.findByIds(ctx, [booking.assignedVehicleId])
+      : []
+    const [renter] = this.userRepo ? await this.userRepo.findByIds([booking.renterId]) : []
+
+    return {
+      ...booking,
+      vehicle: vehicle ? { name: vehicle.name, photos: vehicle.photos } : undefined,
+      renter: renter
+        ? { id: renter.id, name: renter.name, email: renter.email, language: renter.language }
+        : undefined,
+    }
+  }
+
+  /**
    * #549: the operator trip-detail timeline. Authorize via findById first — its
    * tenant read-scope means operator A reading operator B's booking gets
    * `undefined` (→ 404, no leak), not just an empty list. Returns the events in
