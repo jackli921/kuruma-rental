@@ -603,6 +603,7 @@
       "archiveDescription": "拠点をアーカイブします。一覧には残りますが、新規の貸出には表示されません。",
       "archiveConfirm": "アーカイブ",
       "archiving": "アーカイブ中...",
+      "archiveBlocked": "アーカイブできません — まず{count, plural, other {#件のアクティブな予約}}を再割り当てまたはキャンセルしてください。",
       "empty": "拠点はまだありません。最初の拠点を追加しましょう。",
       "loadError": "拠点を読み込めませんでした",
       "retry": "再試行",

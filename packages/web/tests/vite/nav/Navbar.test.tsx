@@ -104,6 +104,11 @@ describe('Navbar', () => {
       'data-to',
       '/$locale/manage/classes',
     )
+    // #529: the operator locations/storefronts view lives at /manage/locations.
+    expect(screen.getByText('Locations').closest('a')).toHaveAttribute(
+      'data-to',
+      '/$locale/manage/locations',
+    )
     // #530: operator pricing config (insurance) lives at /manage/insurance.
     expect(screen.getByText('Insurance').closest('a')).toHaveAttribute(
       'data-to',
@@ -115,7 +120,7 @@ describe('Navbar', () => {
     const client = screen.getByTestId('navbar-client')
     expect(client).toHaveAttribute('data-view-mode', 'business')
     expect(client).toHaveAttribute('data-can-switch', 'true')
-    expect(screen.getByTestId('mobile-menu')).toHaveAttribute('data-nav-count', '6')
+    expect(screen.getByTestId('mobile-menu')).toHaveAttribute('data-nav-count', '7')
   })
 
   it('shows Browse, My Bookings, and Documents (no business markers) for a signed-in renter', () => {
