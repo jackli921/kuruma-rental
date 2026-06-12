@@ -20,7 +20,7 @@ export class InMemoryOverviewRepository implements OverviewRepository {
   async getOperatorOverview(ctx: CallerContext, now: Date): Promise<OperatorOverview> {
     const scope = bookingReadScope(ctx)
     // `none` (operator without operatorId) + `renter` never see operator data.
-    if (scope.kind === 'none' || scope.kind === 'renter') return ZERO
+    if (scope.kind === 'none' || scope.kind === 'renter') return { ...ZERO }
 
     const [vehiclePage, bookings] = await Promise.all([
       this.vehicleRepo.findAll(SYSTEM_CONTEXT, { status: 'AVAILABLE' }),

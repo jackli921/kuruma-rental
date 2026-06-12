@@ -38,7 +38,11 @@ export class DrizzleOverviewRepository implements OverviewRepository {
         .select({ c: count() })
         .from(bookings)
         .where(
-          and(bookingOp, inArray(bookings.status, ['CONFIRMED', 'ACTIVE']), gte(bookings.startAt, now)),
+          and(
+            bookingOp,
+            inArray(bookings.status, ['CONFIRMED', 'ACTIVE'] as const),
+            gte(bookings.startAt, now),
+          ),
         ),
     ])
 
