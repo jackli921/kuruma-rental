@@ -28,6 +28,7 @@ import {
   DrizzleNotificationLogRepository,
   DrizzleOperatorMembershipRepository,
   DrizzleOperatorRepository,
+  DrizzleOverviewRepository,
   DrizzlePaymentEventRepository,
   DrizzleProviderInviteRepository,
   DrizzleRenterDocumentRepository,
@@ -57,6 +58,7 @@ import {
   InMemoryNotificationLogRepository,
   InMemoryOperatorMembershipRepository,
   InMemoryOperatorRepository,
+  InMemoryOverviewRepository,
   InMemoryPaymentEventRepository,
   InMemoryProviderInviteRepository,
   InMemoryRenterDocumentRepository,
@@ -87,6 +89,7 @@ import type {
   NotificationLogRepository,
   OperatorMembershipRepository,
   OperatorRepository,
+  OverviewRepository,
   PaymentEventRepository,
   PhotoStorage,
   ProviderInviteRepository,
@@ -117,6 +120,7 @@ import { createMaintenanceLogRoutes } from './routes/maintenance-logs'
 import { createMessageRoutes } from './routes/messages'
 import { createNotificationRoutes } from './routes/notifications'
 import { createOperatorRoutes } from './routes/operators'
+import { createOverviewRoutes } from './routes/overview'
 import { createPaymentRoutes } from './routes/payments'
 import { createProviderInviteRoutes } from './routes/provider-invites'
 import { createFlatSearchRoutes } from './routes/search'
@@ -150,6 +154,7 @@ import { NotificationService } from './services/notification'
 import { NotificationDispatcher } from './services/notification-dispatcher'
 import { OperatorService } from './services/operator'
 import { createOperatorGrantService } from './services/operator-grant'
+import { OverviewService } from './services/overview'
 import { PaymentService } from './services/payment/payment'
 import type { PaymentGateway } from './services/payment/payment-gateway'
 import { StripePaymentGateway } from './services/payment/stripe-payment-gateway'
@@ -171,6 +176,7 @@ export function createApp(overrides?: {
   fleetOverviewRepo?: FleetOverviewRepository
   vehicleDetailRepo?: VehicleDetailRepository
   statsRepo?: StatsRepository
+  overviewRepo?: OverviewRepository
   threadRepo?: ThreadRepository
   messageRepo?: MessageRepository
   vehicleClassRepo?: VehicleClassRepository
@@ -210,6 +216,7 @@ export function createApp(overrides?: {
   let fleetOverviewRepo: FleetOverviewRepository
   let vehicleDetailRepo: VehicleDetailRepository
   let statsRepo: StatsRepository
+  let overviewRepo: OverviewRepository
   let threadRepo: ThreadRepository
   let messageRepo: MessageRepository
   let maintenanceLogRepo: MaintenanceLogRepository
@@ -273,6 +280,8 @@ export function createApp(overrides?: {
       overrides.vehicleDetailRepo ??
       new InMemoryVehicleDetailRepository(vehicleRepo, bookingRepo, new Map(), maintenanceLogRepo)
     statsRepo = overrides.statsRepo ?? new InMemoryStatsRepository(vehicleRepo, bookingRepo)
+    overviewRepo =
+      overrides.overviewRepo ?? new InMemoryOverviewRepository(vehicleRepo, bookingRepo)
     threadRepo = overrides.threadRepo ?? new InMemoryThreadRepository()
     messageRepo =
       overrides.messageRepo ?? new InMemoryMessageRepository(threadRepo as InMemoryThreadRepository)
@@ -308,6 +317,7 @@ export function createApp(overrides?: {
     fleetOverviewRepo = new DrizzleFleetOverviewRepository(db)
     vehicleDetailRepo = new DrizzleVehicleDetailRepository(db)
     statsRepo = new DrizzleStatsRepository(db)
+    overviewRepo = new DrizzleOverviewRepository(db)
     threadRepo = new DrizzleThreadRepository(db, runTx)
     messageRepo = new DrizzleMessageRepository(db, runTx)
     userRepo = new DrizzleUserRepository(db)
@@ -374,6 +384,7 @@ export function createApp(overrides?: {
       maintenanceLogRepo,
     )
     statsRepo = new InMemoryStatsRepository(vehicleRepo, bookingRepo)
+    overviewRepo = new InMemoryOverviewRepository(vehicleRepo, bookingRepo)
     threadRepo = new InMemoryThreadRepository()
     messageRepo = new InMemoryMessageRepository(threadRepo as InMemoryThreadRepository)
     bookingEventRepo = new InMemoryBookingEventRepository()
@@ -652,6 +663,7 @@ export function createApp(overrides?: {
     runInTransaction,
   )
   const fleetOverviewService = new FleetOverviewService(fleetOverviewRepo)
+  const overviewService = new OverviewService(overviewRepo)
   const vehicleDetailService = new VehicleDetailService(vehicleDetailRepo)
   const operatorService = new OperatorService(operatorRepo)
   // #407: the write-operator resolver is a pure policy function — sole-operator
@@ -728,6 +740,7 @@ export function createApp(overrides?: {
     .route('/', createPaymentRoutes(paymentService))
     .route('/', createAvailabilityRoutes(availabilityRepo))
     .route('/', createStatsRoutes(statsRepo))
+    .route('/', createOverviewRoutes(overviewService))
     .route('/', createMessageRoutes(threadRepo, messageRepo))
     .route(
       '/',
