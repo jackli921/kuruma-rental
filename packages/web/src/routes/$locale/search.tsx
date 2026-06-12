@@ -154,9 +154,10 @@ function StoreGrid({
   }
   if (result.storefronts.length === 0) {
     return (
-      <div className="flex flex-col items-center justify-center py-20">
+      <div className="flex flex-col items-center justify-center py-20 text-center">
         <Search className="mb-4 size-12 text-muted-foreground/30" />
         <p className="text-lg text-muted-foreground">{t('empty')}</p>
+        <p className="mt-2 max-w-md text-sm text-muted-foreground/80">{t('emptyTurnaroundHint')}</p>
       </div>
     )
   }

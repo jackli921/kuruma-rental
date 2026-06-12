@@ -169,6 +169,9 @@ export async function seed(db: ReturnType<typeof getDb>) {
         address: loc.address,
         latitude: loc.latitude,
         longitude: loc.longitude,
+        // Seeded coords are curated from the address, so they read as GEOCODED:
+        // editing a seeded location's address in the portal re-derives them (#531).
+        coordinateSource: 'GEOCODED',
         timezone: loc.timezone,
         defaultTurnaroundMinutes: loc.defaultTurnaroundMinutes,
       })
@@ -179,6 +182,7 @@ export async function seed(db: ReturnType<typeof getDb>) {
           address: loc.address,
           latitude: loc.latitude,
           longitude: loc.longitude,
+          coordinateSource: 'GEOCODED',
           timezone: loc.timezone,
           defaultTurnaroundMinutes: loc.defaultTurnaroundMinutes,
           updatedAt: now,

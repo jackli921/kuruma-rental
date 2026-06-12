@@ -1,5 +1,7 @@
 import { unwrap } from '@/lib/api-error'
 import { getApiBaseUrl } from '@/vite/api-base'
+import type { BookingDto } from '@/vite/bookings/api'
+import type { BookingEventPayload, BookingEventType } from '@kuruma/shared/db/schema'
 import { queryOptions } from '@tanstack/react-query'
 
 // #512: operator booking view. The Vite shell owns these DTOs (it never imports
@@ -78,5 +80,77 @@ export function operatorBookingsQueryOptions(filters: OperatorBookingFilters = {
     // callers with different limits never collide on a stale cache entry.
     queryKey: ['operator-bookings', filters.status, filters.limit],
     queryFn: () => fetchOperatorBookings(filters),
+  })
+}
+
+// #549: the deep-linked trip-detail page has no list row, so it reads the single
+// booking WITH `expand=vehicle,renter` (slice 2) — a superset of the renter
+// BookingDto carrying the assigned car + renter on top of the operator block.
+export interface OperatorBookingDetailDto extends BookingDto {
+  vehicle?: { name: string; photos: string[] } | undefined
+  renter?: { id: string; name: string | null; email: string | null; language: string } | undefined
+}
+
+export async function fetchOperatorBookingDetail(
+  id: string,
+): Promise<OperatorBookingDetailDto | null> {
+  const res = await fetch(
+    `${getApiBaseUrl()}/bookings/${encodeURIComponent(id)}?expand=vehicle,renter`,
+    { credentials: 'include' },
+  )
+  // The single read is IDOR/tenant-sealed server-side (404 for a foreign or
+  // missing booking); map it to null so the loader can fire notFound().
+  if (res.status === 404) return null
+  return unwrap<OperatorBookingDetailDto>(res)
+}
+
+export function operatorBookingDetailQueryOptions(id: string) {
+  return queryOptions({
+    queryKey: ['operator-bookings', 'detail', id],
+    queryFn: () => fetchOperatorBookingDetail(id),
+  })
+}
+
+/**
+ * Derive the OperatorBookingRow shape the pure OperatorBookingDetail panel still
+ * consumes from the expanded single read — the page has no list row to pass.
+ */
+export function operatorRowFromDetail(dto: OperatorBookingDetailDto): OperatorBookingRow {
+  return {
+    id: dto.id,
+    bookingCode: dto.bookingCode,
+    status: dto.status,
+    startAt: dto.startAt,
+    endAt: dto.endAt,
+    totalPrice: dto.totalPrice,
+    vehicleName: dto.vehicle?.name ?? null,
+    renter: dto.renter
+      ? { id: dto.renter.id, name: dto.renter.name, email: dto.renter.email }
+      : null,
+  }
+}
+
+/** One lifecycle event as the operator timeline reads it (dates are ISO JSON). */
+export interface BookingEventDto {
+  id: string
+  type: BookingEventType
+  payload: BookingEventPayload
+  actorId: string | null
+  createdAt: string
+}
+
+export async function fetchBookingEvents(id: string): Promise<BookingEventDto[]> {
+  // Operator/management-only endpoint (#549) — a renter caller 403s, which
+  // unwrap() surfaces as an ApiError to the route's error boundary.
+  const res = await fetch(`${getApiBaseUrl()}/bookings/${encodeURIComponent(id)}/events`, {
+    credentials: 'include',
+  })
+  return unwrap<BookingEventDto[]>(res)
+}
+
+export function bookingEventsQueryOptions(id: string) {
+  return queryOptions({
+    queryKey: ['operator-bookings', 'events', id],
+    queryFn: () => fetchBookingEvents(id),
   })
 }

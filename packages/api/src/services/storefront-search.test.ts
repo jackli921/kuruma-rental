@@ -158,6 +158,21 @@ describe('StorefrontSearchService.search (#391)', () => {
     expect(afterSummary?.availableCount).toBe(2)
   })
 
+  it('surfaces the location turnaround minutes on each storefront card (#551)', async () => {
+    const op = await makeOperator('Best Car Rental', 'best')
+    const compact = await makeClass({ operatorId: op.id, acrissCode: 'CCAR' })
+    const namba = await makeLocation({
+      operatorId: op.id,
+      name: 'Namba',
+      defaultTurnaroundMinutes: 120,
+    })
+    await makeVehicle({ operatorId: op.id, classId: compact.id, pickupLocationId: namba.id })
+
+    const data = await ok(await service.search(PUBLIC_CONTEXT, { from: FROM, to: TO }))
+
+    expect(data.storefronts[0]?.turnaroundMinutes).toBe(120)
+  })
+
   it('classSummaries carry the class default luggage for compare-on-search (#457 D6)', async () => {
     const op = await makeOperator('Best Car Rental', 'best')
     const compact = await makeClass({

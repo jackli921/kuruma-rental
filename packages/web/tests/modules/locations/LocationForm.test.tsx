@@ -43,6 +43,11 @@ describe('LocationForm', () => {
     })
   })
 
+  it('floors the turnaround input at the 60-minute service-quality minimum (#551)', () => {
+    render(<LocationForm onSubmit={vi.fn()} />)
+    expect(screen.getByLabelText('form.turnaround')).toHaveAttribute('min', '60')
+  })
+
   it('edit mode: pre-fills the existing location and submits the edit', async () => {
     const onSubmit = vi.fn().mockResolvedValue(undefined)
     const user = userEvent.setup()

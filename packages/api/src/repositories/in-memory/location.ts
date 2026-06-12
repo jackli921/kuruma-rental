@@ -1,3 +1,4 @@
+import type { CoordinateSource } from '@kuruma/shared/db/schema'
 import type { CallerContext } from '../../middleware/auth'
 import { PG_ERROR } from '../../pg-errors'
 import type { Location } from '../../stores'
@@ -66,9 +67,13 @@ export class InMemoryLocationRepository implements LocationRepository {
   }
 
   async create(
-    data: Omit<Location, 'id' | 'createdAt' | 'updatedAt' | 'latitude' | 'longitude'> & {
+    data: Omit<
+      Location,
+      'id' | 'createdAt' | 'updatedAt' | 'latitude' | 'longitude' | 'coordinateSource'
+    > & {
       latitude?: number | null
       longitude?: number | null
+      coordinateSource?: CoordinateSource | null
     },
   ): Promise<Location> {
     this.assertNameFree(data.operatorId, data.name)
@@ -77,6 +82,7 @@ export class InMemoryLocationRepository implements LocationRepository {
       ...data,
       latitude: data.latitude ?? null,
       longitude: data.longitude ?? null,
+      coordinateSource: data.coordinateSource ?? null,
       id: crypto.randomUUID(),
       createdAt: now,
       updatedAt: now,

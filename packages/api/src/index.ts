@@ -16,6 +16,7 @@ import { DisabledPhotoStorage } from './repositories/disabled-photo-storage'
 import {
   DrizzleAddOnRepository,
   DrizzleAvailabilityRepository,
+  DrizzleBookingEventRepository,
   DrizzleBookingRepository,
   DrizzleCustomerRepository,
   DrizzleFeeScheduleRepository,
@@ -73,6 +74,7 @@ import { type R2BucketLike, R2PhotoStorage } from './repositories/r2-photo-stora
 import type {
   AddOnRepository,
   AvailabilityRepository,
+  BookingEventRepository,
   BookingRepository,
   CustomerRepository,
   DocumentStorage,
@@ -137,6 +139,8 @@ import { makeEnsureThread } from './services/ensure-thread'
 import { FeeScheduleService } from './services/fee-schedule'
 import { FlatSearchService } from './services/flat-search'
 import { FleetOverviewService } from './services/fleet-overview'
+import { NominatimGeocoder } from './services/geocoding/nominatim-geocoder'
+import type { Geocoder } from './services/geocoding/types'
 import { GoogleTranslationProvider } from './services/google-translation-provider'
 import { InsuranceOptionService } from './services/insurance-option'
 import { LocationService } from './services/location'
@@ -188,6 +192,9 @@ export function createApp(overrides?: {
   operatorMembershipRepo?: OperatorMembershipRepository
   // Inject a fake gateway in tests; absent ⇒ the env-resolved Stripe/sentinel.
   paymentGateway?: PaymentGateway
+  // Inject a fake Geocoder in tests (proves a provider swap touches only here);
+  // absent ⇒ the env-resolved Nominatim/null-stub.
+  geocoder?: Geocoder
   photoUploadLimiter?: RateLimitBinding
   photoUploadUserLimiter?: RateLimitBinding
   publicCatalogLimiter?: RateLimitBinding
@@ -220,6 +227,10 @@ export function createApp(overrides?: {
   let paymentEventRepo: PaymentEventRepository
   let providerInviteRepo: ProviderInviteRepository
   let operatorMembershipRepo: OperatorMembershipRepository
+  // #549: read side of the booking lifecycle log, injected into BookingService
+  // for findEvents. The transactional append path builds its own inside the
+  // runInTransaction bundle below.
+  let bookingEventRepo: BookingEventRepository
   let runInTransaction: RunInTransaction
   // Runs the three operator-grant writes (#521 §6) in one tx: real interactive tx
   // in the DB branch, an inline passthrough over the in-memory repos otherwise.
@@ -243,7 +254,7 @@ export function createApp(overrides?: {
     ;({ vehicleRepo, bookingRepo, availabilityRepo } = overrides)
     vehicleClassRepo = overrides.vehicleClassRepo ?? new InMemoryVehicleClassRepository()
     maintenanceLogRepo = overrides.maintenanceLogRepo ?? new InMemoryMaintenanceLogRepository()
-    const bookingEventRepo = new InMemoryBookingEventRepository()
+    bookingEventRepo = new InMemoryBookingEventRepository()
     runInTransaction = async (fn) =>
       fn({
         vehicleRepo,
@@ -290,6 +301,7 @@ export function createApp(overrides?: {
     vehicleClassRepo = new DrizzleVehicleClassRepository(db)
     vehicleRepo = new DrizzleVehicleRepository(db)
     bookingRepo = new DrizzleBookingRepository(db)
+    bookingEventRepo = new DrizzleBookingEventRepository(db)
     availabilityRepo = new DrizzleAvailabilityRepository(db)
     maintenanceLogRepo = new DrizzleMaintenanceLogRepository(db)
     runInTransaction = createDrizzleTransaction(runTx)
@@ -364,7 +376,7 @@ export function createApp(overrides?: {
     statsRepo = new InMemoryStatsRepository(vehicleRepo, bookingRepo)
     threadRepo = new InMemoryThreadRepository()
     messageRepo = new InMemoryMessageRepository(threadRepo as InMemoryThreadRepository)
-    const bookingEventRepo = new InMemoryBookingEventRepository()
+    bookingEventRepo = new InMemoryBookingEventRepository()
     runInTransaction = async (fn) =>
       fn({
         vehicleRepo,
@@ -438,6 +450,25 @@ export function createApp(overrides?: {
       },
     }
   })()
+
+  // Forward geocoder (#531): disabled by default — returns null (no coords)
+  // unless BOTH a descriptive User-Agent AND an explicit endpoint are set. We do
+  // NOT default to the public OSM endpoint: its usage policy caps the WHOLE app
+  // at 1 req/s and there is no app-side throttle/cache here yet (#574), so a
+  // burst of operator saves would breach it. Production must point
+  // NOMINATIM_API_URL at a self-hosted / proxied / quota-backed instance (or
+  // swap in a different provider adapter on this one line). Geocoding is
+  // best-effort — the service treats null as "no coordinates" and the location
+  // still saves — so the null stub is safe and there is no loud prod sentinel.
+  // A test override wins outright, proving a provider swap touches only here.
+  const geocoder: Geocoder =
+    overrides?.geocoder ??
+    (() => {
+      const userAgent = process.env.NOMINATIM_USER_AGENT
+      const baseUrl = process.env.NOMINATIM_API_URL
+      if (!userAgent || !baseUrl) return { geocode: async () => null }
+      return new NominatimGeocoder(baseUrl, userAgent)
+    })()
 
   // In-app Stripe payment (#461). Real gateway when BOTH secrets are set; in
   // production without them a sentinel throws on first use (not at boot, so
@@ -605,6 +636,7 @@ export function createApp(overrides?: {
     vehicleClassRepo,
     postCommit,
     operatorRepo,
+    bookingEventRepo,
     undefined,
     verificationGate,
   )
@@ -626,7 +658,7 @@ export function createApp(overrides?: {
   // inference is retired, so it no longer needs an operator lookup.
   const resolveWriteOperatorId: ResolveWriteOperatorId = (ctx, inputOperatorId) =>
     resolveOperatorIdForWrite(ctx, inputOperatorId)
-  const locationService = new LocationService(locationRepo, bookingRepo)
+  const locationService = new LocationService(locationRepo, bookingRepo, geocoder)
   const insuranceOptionService = new InsuranceOptionService(insuranceOptionRepo)
   const addOnService = new AddOnService(addOnRepo)
   const feeScheduleService = new FeeScheduleService(feeScheduleRepo)

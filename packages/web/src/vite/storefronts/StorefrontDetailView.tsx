@@ -1,8 +1,9 @@
 import { AvailableVehicleCard } from '@/vite/storefronts/AvailableVehicleCard'
 import type { StorefrontDetailData } from '@/vite/storefronts/api'
 import { carryForwardFilters } from '@/vite/storefronts/params'
+import { turnaroundHours } from '@/vite/storefronts/turnaround'
 import { Link } from '@tanstack/react-router'
-import { ArrowLeft, MapPin } from 'lucide-react'
+import { ArrowLeft, Clock, MapPin } from 'lucide-react'
 import { useLocale, useTranslations } from 'use-intl'
 
 interface StorefrontDetailViewProps {
@@ -50,6 +51,10 @@ export function StorefrontDetailView({
         <p className="mt-2 flex items-center gap-1.5 text-muted-foreground">
           <MapPin className="size-4 shrink-0" />
           {storefront.address}
+        </p>
+        <p className="mt-1 flex items-center gap-1.5 text-sm text-muted-foreground">
+          <Clock className="size-4 shrink-0" />
+          {t('turnaround', { hours: turnaroundHours(storefront.turnaroundMinutes) })}
         </p>
       </header>
 
