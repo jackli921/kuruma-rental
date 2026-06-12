@@ -56,9 +56,10 @@ simple.period = 60
 # caps the WHOLE app at 1 req/s; the geocoder keys every lookup by one constant
 # ("geocode:global") so this is a single shared bucket, not per-IP. period must be
 # 10 or 60 (CF native limiter), so 1/10s is the tightest legal setting and stays
-# safely under 1 req/s. Best-effort only — a fixed window can admit 2 across a
-# boundary, and dev/local has no binding (unthrottled); the production provider's
-# own server-side limit (e.g. LocationIQ) is the real guarantee.
+# safely under 1 req/s. Best-effort only — the CF limiter is per-colo (per edge
+# region), not cross-region consistent, and a fixed window can admit 2 across a
+# boundary; dev/local has no binding (unthrottled). The production provider's own
+# server-side limit (e.g. LocationIQ) is the real guarantee.
 [[ratelimits]]
 name = "GEOCODE_LIMITER"
 namespace_id = "1005"

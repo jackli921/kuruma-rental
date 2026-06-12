@@ -31,6 +31,8 @@ export class ThrottledGeocoder implements Geocoder {
       ;({ success: allowed } = await this.limiter.limit(this.key))
     } catch (err) {
       // Limiter itself failed: fail OPEN so geocoding survives a limiter outage.
+      // Safe ONLY while public OSM stays opt-in (index.ts gates on UA + URL); if
+      // OSM is ever defaulted on, fail-open could breach its 1 req/s — revisit then.
       console.warn('[geocode] rate limiter unavailable; proceeding without throttle', {
         error: err instanceof Error ? err.message : String(err),
       })
