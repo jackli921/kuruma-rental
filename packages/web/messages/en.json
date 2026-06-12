@@ -450,6 +450,35 @@
         "noMaintenanceHistory": "No maintenance records yet"
       },
       "fleet": {
+        "title": "Fleet",
+        "subtitle": "Every vehicle across your storefronts",
+        "addVehicle": "Add vehicle",
+        "empty": "No vehicles yet. Add your first car to start renting.",
+        "loadError": "Couldn't load your fleet",
+        "retry": "Try again",
+        "none": "—",
+        "perDay": "/day",
+        "perHour": "/hr",
+        "columns": {
+          "vehicle": "Vehicle",
+          "status": "Status",
+          "seats": "Seats",
+          "luggage": "Luggage",
+          "price": "Price",
+          "shaken": "Sha-ken",
+          "actions": "Actions"
+        },
+        "status": {
+          "AVAILABLE": "Available",
+          "MAINTENANCE": "Maintenance",
+          "RETIRED": "Retired"
+        },
+        "expiry": {
+          "OK": "Valid",
+          "EXPIRING_SOON": "Expiring soon",
+          "EXPIRED": "Expired",
+          "UNKNOWN": "—"
+        },
         "rowView": "Row view",
         "gridView": "Grid view",
         "moreActions": "More actions",

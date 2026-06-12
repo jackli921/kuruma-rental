@@ -16,6 +16,7 @@ export type NavTo =
   | '/$locale/dashboard'
   | '/$locale/bookings'
   | '/$locale/manage/bookings'
+  | '/$locale/manage/fleet'
   | '/$locale/search'
   | '/$locale/documents'
 

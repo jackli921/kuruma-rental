@@ -450,6 +450,35 @@
         "noMaintenanceHistory": "还没有维修记录"
       },
       "fleet": {
+        "title": "车队",
+        "subtitle": "所有门店的车辆",
+        "addVehicle": "添加车辆",
+        "empty": "暂无车辆。添加第一辆车开始出租。",
+        "loadError": "无法加载车队",
+        "retry": "重试",
+        "none": "—",
+        "perDay": "/天",
+        "perHour": "/小时",
+        "columns": {
+          "vehicle": "车辆",
+          "status": "状态",
+          "seats": "座位",
+          "luggage": "行李",
+          "price": "价格",
+          "shaken": "车检",
+          "actions": "操作"
+        },
+        "status": {
+          "AVAILABLE": "可用",
+          "MAINTENANCE": "维护中",
+          "RETIRED": "已停用"
+        },
+        "expiry": {
+          "OK": "有效",
+          "EXPIRING_SOON": "即将到期",
+          "EXPIRED": "已过期",
+          "UNKNOWN": "—"
+        },
         "rowView": "列表视图",
         "gridView": "网格视图",
         "moreActions": "更多操作",
