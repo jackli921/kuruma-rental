@@ -10,6 +10,8 @@ import enMessages from '../../../messages/en.json'
 
 const en = enMessages.business.vehicles.fleet
 const bulk = enMessages.business.vehicles.bulk
+const filter = enMessages.business.vehicles.filter
+const statusLabels = enMessages.business.vehicles.status
 
 function vehicle(overrides: Partial<OperatorFleetVehicle> = {}): OperatorFleetVehicle {
   return {
@@ -119,5 +121,29 @@ describe('OperatorFleetView', () => {
     await user.click(screen.getByRole('button', { name: bulk.deselectAll }))
 
     expect(screen.queryByText('2 vehicles selected')).not.toBeInTheDocument()
+  })
+
+  it('filters the table to rows matching the search query', async () => {
+    const user = userEvent.setup()
+    renderView([vehicle({ id: 'a', name: 'Toyota Aqua' }), vehicle({ id: 'b', name: 'Honda Fit' })])
+    expect(screen.getByText('Honda Fit')).toBeInTheDocument()
+
+    await user.type(screen.getByPlaceholderText(filter.searchPlaceholder), 'Aqua')
+
+    expect(screen.getByText('Toyota Aqua')).toBeInTheDocument()
+    expect(screen.queryByText('Honda Fit')).not.toBeInTheDocument()
+  })
+
+  it('filters the table by status when a status facet is toggled', async () => {
+    const user = userEvent.setup()
+    renderView([
+      vehicle({ id: 'a', name: 'Available Car', status: 'AVAILABLE' }),
+      vehicle({ id: 'b', name: 'Retired Car', status: 'RETIRED' }),
+    ])
+
+    await user.click(screen.getByRole('button', { name: new RegExp(`^${statusLabels.RETIRED}`) }))
+
+    expect(screen.getByText('Retired Car')).toBeInTheDocument()
+    expect(screen.queryByText('Available Car')).not.toBeInTheDocument()
   })
 })

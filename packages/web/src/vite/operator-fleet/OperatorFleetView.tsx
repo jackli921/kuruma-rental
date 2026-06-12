@@ -1,5 +1,7 @@
+import { type FleetFilterState, filterVehicles } from '@/lib/fleet-filters'
 import { formatVehicleRate } from '@/lib/format'
 import { BulkActionBar } from '@/vite/operator-fleet/BulkActionBar'
+import { FleetFilters } from '@/vite/operator-fleet/FleetFilters'
 import type { OperatorFleetVehicle, VehicleStatus } from '@/vite/operator-fleet/api'
 import { type ExpiryStatus, computeExpiryStatus } from '@kuruma/shared/lib/expiry'
 import { CarFront } from 'lucide-react'
@@ -21,10 +23,13 @@ export function OperatorFleetView({ vehicles, locale: _locale }: OperatorFleetVi
   const tBulk = useTranslations('business.vehicles.bulk')
   const todayIso = new Date().toISOString().slice(0, 10)
   const [selectedIds, setSelectedIds] = useState<readonly string[]>([])
+  const [filters, setFilters] = useState<FleetFilterState>({})
 
+  const visibleVehicles = filterVehicles([...vehicles], filters)
+  const visibleIds = visibleVehicles.map((v) => v.id)
   const clearSelection = () => setSelectedIds([])
-  const allSelected = vehicles.length > 0 && selectedIds.length === vehicles.length
-  const toggleAll = () => setSelectedIds(allSelected ? [] : vehicles.map((v) => v.id))
+  const allSelected = visibleIds.length > 0 && visibleIds.every((id) => selectedIds.includes(id))
+  const toggleAll = () => setSelectedIds(allSelected ? [] : visibleIds)
   const toggleOne = (id: string) =>
     setSelectedIds((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]))
 
@@ -38,8 +43,11 @@ export function OperatorFleetView({ vehicles, locale: _locale }: OperatorFleetVi
   }
 
   return (
-    <>
-      <div className="overflow-x-auto rounded-xl border border-border">
+    <div className="flex flex-col gap-6 lg:flex-row">
+      <aside className="lg:w-64 lg:shrink-0">
+        <FleetFilters vehicles={vehicles} value={filters} onChange={setFilters} />
+      </aside>
+      <div className="min-w-0 flex-1 overflow-x-auto rounded-xl border border-border">
         <table className="w-full text-left text-sm">
           <thead className="border-b border-border bg-muted/40 text-muted-foreground">
             <tr>
@@ -60,7 +68,7 @@ export function OperatorFleetView({ vehicles, locale: _locale }: OperatorFleetVi
             </tr>
           </thead>
           <tbody>
-            {vehicles.map((v) => (
+            {visibleVehicles.map((v) => (
               <tr
                 key={v.id}
                 className="border-b border-border transition-colors last:border-0 hover:bg-muted/40"
@@ -111,7 +119,7 @@ export function OperatorFleetView({ vehicles, locale: _locale }: OperatorFleetVi
         onDone={clearSelection}
         onClear={clearSelection}
       />
-    </>
+    </div>
   )
 }
 
