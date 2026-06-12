@@ -5,12 +5,17 @@
 **Scope:** API / service / contract ONLY — **no UI** (UI is #529, which depends on this).
 **Base branch:** `marketplace-pivot` @ `1cd08e4`. **MERGE, never rebase** (force-push is hard-denied).
 
-> **STATUS 2026-06-12 (updated):** ALL slices 1-5 implemented + committed. Tip
-> `b765772`. Local gate GREEN: lint, tsc (api+shared+web via hook), lint:boundaries,
-> db:verify 4/4, shared 433, api 1099 (in-memory), **integration 195/195 on real
-> DB :5443**. Note the local DB this session is db `postgres` (not `kuruma`) on
-> :5443. Remaining = ship only: push → PR (Closes #531) → /code-review → merge base
-> in → close #531 + drop label + cleanup. Nothing left to implement.
+> **STATUS 2026-06-12 (FINAL — PR OPEN, MERGE-PENDING):** All slices 1-5 done +
+> reviewed + **PR #564 open** (base `marketplace-pivot`). Tip `96c9925`. Base merged
+> in (no force) and **migration renumbered 0048 → `0050_add_location_coordinate_source`**
+> because #521 landed 0048/0049. Local gate GREEN on the merged tree: tsc api+shared,
+> lint:boundaries, **db:verify 4/4 (51 migs, fresh DB)**, shared 433, api **1175**,
+> **integration 195/195** on docker pg `kuruma-531-pg` :5443 (db `kuruma`, recreated).
+> Reviews: code-reviewer no CRITICAL/HIGH/MEDIUM; architect SHIP-WITH-NITS (nits fixed
+> in `59156f7`; FC/IS planner deferred). **REMAINING = merge only:** wait for CI green
+> (db-drift/e2e/e2e-real-db/test-and-build on PR #564) → merge via `gh pr merge --squash`
+> → **manually `gh issue close 531`** (non-default base won't auto-close) + drop label →
+> cleanup worktree + `docker rm -f kuruma-531-pg`. Nothing left to implement.
 
 ## Where to resume
 - **Worktree:** `~/Dev/kuruma-531-geocoding`, branch `feat/531-geocoding-foundation`.
