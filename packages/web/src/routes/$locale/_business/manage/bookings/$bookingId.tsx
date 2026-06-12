@@ -1,9 +1,12 @@
 import { PageSkeleton } from '@/vite/PageSkeleton'
+import { BookingTimeline } from '@/vite/operator-bookings/BookingTimeline'
 import { OperatorBookingDetail } from '@/vite/operator-bookings/OperatorBookingDetail'
 import {
+  bookingEventsQueryOptions,
   operatorBookingDetailQueryOptions,
   operatorRowFromDetail,
 } from '@/vite/operator-bookings/api'
+import { useSuspenseQuery } from '@tanstack/react-query'
 import {
   type ErrorComponentProps,
   Link,
@@ -26,6 +29,8 @@ export const Route = createFileRoute('/$locale/_business/manage/bookings/$bookin
       operatorBookingDetailQueryOptions(params.bookingId),
     )
     if (!detail) throw notFound()
+    // Warm the timeline cache so the page renders without a second waterfall.
+    await context.queryClient.ensureQueryData(bookingEventsQueryOptions(params.bookingId))
     return { detail }
   },
   pendingComponent: PageSkeleton,
@@ -35,13 +40,14 @@ export const Route = createFileRoute('/$locale/_business/manage/bookings/$bookin
 
 function TripDetailRoute() {
   const t = useTranslations('bookings.operator')
-  const { locale } = Route.useParams()
+  const { locale, bookingId } = Route.useParams()
   const { detail } = Route.useLoaderData()
+  const { data: events } = useSuspenseQuery(bookingEventsQueryOptions(bookingId))
   const row = operatorRowFromDetail(detail)
 
   return (
     <main className="flex-1 px-4 py-10 sm:px-6 lg:px-8">
-      <div className="mx-auto max-w-3xl">
+      <div className="mx-auto max-w-5xl">
         <Link
           to="/$locale/manage/bookings"
           params={{ locale }}
@@ -50,8 +56,20 @@ function TripDetailRoute() {
           <ChevronLeft className="size-4" />
           {t('title')}
         </Link>
-        <div className="rounded-xl border border-border py-6">
-          <OperatorBookingDetail row={row} booking={detail} locale={locale} />
+        <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,20rem)]">
+          <section className="space-y-6">
+            <div className="rounded-xl border border-border py-6">
+              <OperatorBookingDetail row={row} booking={detail} locale={locale} />
+            </div>
+            {/* Actions reserved for phase 2 (cancel / substitute / status). */}
+            <div className="rounded-xl border border-dashed border-border px-4 py-6">
+              <h2 className="text-sm font-semibold text-muted-foreground">{t('detail.actions')}</h2>
+            </div>
+          </section>
+          <aside className="rounded-xl border border-border px-4 py-6">
+            <h2 className="mb-6 text-sm font-semibold">{t('timeline.heading')}</h2>
+            <BookingTimeline events={events} locale={locale} />
+          </aside>
         </div>
       </div>
     </main>
