@@ -1,6 +1,7 @@
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { carryForwardFilters } from '@/vite/storefronts/params'
 import { persistSearchRange } from '@/vite/storefronts/storage'
 import { useNavigate } from '@tanstack/react-router'
 import type { FormEvent } from 'react'
@@ -10,6 +11,9 @@ interface StorefrontSearchFormProps {
   /** Wall-clock `datetime-local` strings (JST) to prefill from the URL. */
   readonly defaultFrom?: string
   readonly defaultTo?: string
+  /** Active result filters re-emitted so a date refinement preserves them (#499). */
+  readonly classFilter?: string | string[] | undefined
+  readonly pickupLocationId?: string | undefined
 }
 
 /**
@@ -22,6 +26,8 @@ interface StorefrontSearchFormProps {
 export function StorefrontSearchForm({
   defaultFrom = '',
   defaultTo = '',
+  classFilter,
+  pickupLocationId,
 }: StorefrontSearchFormProps) {
   const t = useTranslations('search')
   const locale = useLocale()
@@ -37,7 +43,12 @@ export function StorefrontSearchForm({
     const to = String(data.get('to') ?? '')
     // Remember the range so the landing hero restores a refinement made here.
     persistSearchRange(from, to)
-    navigate({ to: '/$locale/search', params: { locale }, search: { from, to } })
+    navigate({
+      to: '/$locale/search',
+      params: { locale },
+      // Re-emit the active filters so refining dates doesn't reset them (#499).
+      search: { from, to, ...carryForwardFilters({ class: classFilter, pickupLocationId }) },
+    })
   }
 
   return (

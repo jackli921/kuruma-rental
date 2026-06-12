@@ -793,3 +793,8 @@ export type BookingEventType = (typeof bookingEventTypeEnum.enumValues)[number]
 // them. Split out to keep this file under the 800-line cap (#460).
 export * from './add-on'
 export * from './booking-types'
+
+// operator_memberships + provider_invites tables and their enums (#521 provider
+// authorization). Re-exported so drizzle-kit and existing schema importers see
+// them; FKs reference users/operators above.
+export * from './provider-access'

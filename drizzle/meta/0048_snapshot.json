@@ -1,5 +1,5 @@
 {
-  "id": "dbc7f52c-36d4-44a6-ab53-61eb2ffc00e9",
+  "id": "d3adc145-4ab3-4f14-82cb-55046228062b",
   "prevId": "38ec4d30-7077-4a4f-b31a-28cb3b8bc127",
   "version": "7",
   "dialect": "postgresql",
@@ -1009,13 +1009,6 @@
         "longitude": {
           "name": "longitude",
           "type": "double precision",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "coordinate_source": {
-          "name": "coordinate_source",
-          "type": "coordinate_source",
-          "typeSchema": "public",
           "primaryKey": false,
           "notNull": false
         },
@@ -2754,6 +2747,280 @@
         }
       },
       "isRLSEnabled": false
+    },
+    "public.operator_memberships": {
+      "name": "operator_memberships",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "userId": {
+          "name": "userId",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "operatorId": {
+          "name": "operatorId",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "role": {
+          "name": "role",
+          "type": "operator_role",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "status": {
+          "name": "status",
+          "type": "operator_membership_status",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'ACTIVE'"
+        },
+        "createdAt": {
+          "name": "createdAt",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updatedAt": {
+          "name": "updatedAt",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "operator_memberships_active_user_unique": {
+          "name": "operator_memberships_active_user_unique",
+          "columns": [
+            {
+              "expression": "userId",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "where": "status = 'ACTIVE'",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "idx_operator_memberships_operatorId": {
+          "name": "idx_operator_memberships_operatorId",
+          "columns": [
+            {
+              "expression": "operatorId",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "operator_memberships_userId_users_id_fk": {
+          "name": "operator_memberships_userId_users_id_fk",
+          "tableFrom": "operator_memberships",
+          "tableTo": "users",
+          "columnsFrom": [
+            "userId"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "operator_memberships_operatorId_operators_id_fk": {
+          "name": "operator_memberships_operatorId_operators_id_fk",
+          "tableFrom": "operator_memberships",
+          "tableTo": "operators",
+          "columnsFrom": [
+            "operatorId"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.provider_invites": {
+      "name": "provider_invites",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "email": {
+          "name": "email",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "operatorId": {
+          "name": "operatorId",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "role": {
+          "name": "role",
+          "type": "operator_role",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "tokenHash": {
+          "name": "tokenHash",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "status": {
+          "name": "status",
+          "type": "provider_invite_status",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'PENDING'"
+        },
+        "expiresAt": {
+          "name": "expiresAt",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "invitedByUserId": {
+          "name": "invitedByUserId",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "acceptedByUserId": {
+          "name": "acceptedByUserId",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "createdAt": {
+          "name": "createdAt",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updatedAt": {
+          "name": "updatedAt",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "provider_invites_tokenHash_unique": {
+          "name": "provider_invites_tokenHash_unique",
+          "columns": [
+            {
+              "expression": "tokenHash",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "idx_provider_invites_email": {
+          "name": "idx_provider_invites_email",
+          "columns": [
+            {
+              "expression": "email",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "provider_invites_operatorId_operators_id_fk": {
+          "name": "provider_invites_operatorId_operators_id_fk",
+          "tableFrom": "provider_invites",
+          "tableTo": "operators",
+          "columnsFrom": [
+            "operatorId"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "provider_invites_invitedByUserId_users_id_fk": {
+          "name": "provider_invites_invitedByUserId_users_id_fk",
+          "tableFrom": "provider_invites",
+          "tableTo": "users",
+          "columnsFrom": [
+            "invitedByUserId"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "set null",
+          "onUpdate": "no action"
+        },
+        "provider_invites_acceptedByUserId_users_id_fk": {
+          "name": "provider_invites_acceptedByUserId_users_id_fk",
+          "tableFrom": "provider_invites",
+          "tableTo": "users",
+          "columnsFrom": [
+            "acceptedByUserId"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "set null",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
     }
   },
   "enums": {
@@ -2793,14 +3060,6 @@
         "ACTIVE",
         "COMPLETED",
         "CANCELLED"
-      ]
-    },
-    "public.coordinate_source": {
-      "name": "coordinate_source",
-      "schema": "public",
-      "values": [
-        "GEOCODED",
-        "MANUAL"
       ]
     },
     "public.document_status": {
@@ -2941,6 +3200,30 @@
       "values": [
         "ACTIVE",
         "ARCHIVED"
+      ]
+    },
+    "public.operator_membership_status": {
+      "name": "operator_membership_status",
+      "schema": "public",
+      "values": [
+        "ACTIVE",
+        "REVOKED"
+      ]
+    },
+    "public.operator_role": {
+      "name": "operator_role",
+      "schema": "public",
+      "values": [
+        "OPERATOR_OWNER",
+        "OPERATOR_STAFF"
+      ]
+    },
+    "public.provider_invite_status": {
+      "name": "provider_invite_status",
+      "schema": "public",
+      "values": [
+        "PENDING",
+        "ACCEPTED"
       ]
     }
   },

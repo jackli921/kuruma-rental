@@ -329,6 +329,11 @@ export interface VerifiedSession {
   readonly user: AuthUser
   readonly csrf?: string
   readonly profile?: SessionProfile
+  // Operator slug for the granted tenant (#521 §8). Lets the web /manage/$slug
+  // guard match the URL segment. Session metadata, NOT an authz field — authz is
+  // role + operatorId (on `user`), so this never widens an access check. Present
+  // only when operatorId is, derived server-side from the stored operators.slug.
+  readonly operatorSlug?: string
 }
 
 /** Read the optional display profile from a token payload. Returns undefined
@@ -367,6 +372,7 @@ async function verifyAndMap(token: string): Promise<VerifiedSession | null> {
     const rawRole = typeof payload.role === 'string' ? payload.role : undefined
     const role: UserRole = rawRole && isValidRole(rawRole) ? rawRole : 'RENTER'
     const operatorId = typeof payload.operatorId === 'string' ? payload.operatorId : undefined
+    const operatorSlug = typeof payload.operatorSlug === 'string' ? payload.operatorSlug : undefined
     const csrf = typeof payload.csrf === 'string' ? payload.csrf : undefined
     // exactOptionalPropertyTypes: omit optional keys entirely rather than set undefined.
     const user: AuthUser = operatorId !== undefined ? { id, role, operatorId } : { id, role }
@@ -375,6 +381,7 @@ async function verifyAndMap(token: string): Promise<VerifiedSession | null> {
       user,
       ...(csrf !== undefined ? { csrf } : {}),
       ...(profile !== undefined ? { profile } : {}),
+      ...(operatorSlug !== undefined ? { operatorSlug } : {}),
     }
   } catch {
     return null
@@ -405,6 +412,7 @@ export async function mintSessionToken(
     sub: string
     role: UserRole
     operatorId?: string
+    operatorSlug?: string
     csrf: string
     name?: string
     email?: string
@@ -415,6 +423,7 @@ export async function mintSessionToken(
   const key = new TextEncoder().encode(secret)
   const payload: Record<string, unknown> = { role: claims.role, csrf: claims.csrf }
   if (claims.operatorId !== undefined) payload.operatorId = claims.operatorId
+  if (claims.operatorSlug !== undefined) payload.operatorSlug = claims.operatorSlug
   if (claims.name !== undefined) payload.name = claims.name
   if (claims.email !== undefined) payload.email = claims.email
   if (claims.image !== undefined) payload.image = claims.image

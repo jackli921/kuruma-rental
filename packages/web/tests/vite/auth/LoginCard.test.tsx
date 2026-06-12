@@ -39,4 +39,14 @@ describe('LoginCard', () => {
       `/auth/google/start?returnTo=${encodeURIComponent('/ja/bookings/new?from=2026-06-10T09:00')}`,
     )
   })
+
+  // #521 Slice D regression guard: the provider work extracted GoogleIcon into a
+  // shared component and added an intent=provider door. The renter door must stay
+  // intent-free (intent=provider would run the operator-grant path on a renter).
+  it('keeps the renter door free of any provider intent and renders the shared Google icon', () => {
+    render(<LoginCard />)
+    const button = screen.getByRole('button', { name: /continue with google/i })
+    expect(button.closest('form')?.getAttribute('action')).not.toContain('intent')
+    expect(button.querySelector('svg')).not.toBeNull()
+  })
 })

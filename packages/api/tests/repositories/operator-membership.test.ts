@@ -1,0 +1,58 @@
+import { beforeEach, describe, expect, it } from 'vitest'
+import { PG_ERROR } from '../../src/pg-errors'
+import { InMemoryOperatorMembershipRepository } from '../../src/repositories/in-memory'
+import type { OperatorMembership } from '../../src/stores'
+
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
+
+function membershipInput(overrides?: Partial<OperatorMembership>) {
+  return {
+    userId: 'user_1',
+    operatorId: 'op_test',
+    role: 'OPERATOR_OWNER' as const,
+    status: 'ACTIVE' as const,
+    ...overrides,
+  }
+}
+
+describe('InMemoryOperatorMembershipRepository', () => {
+  let repo: InMemoryOperatorMembershipRepository
+
+  beforeEach(() => {
+    repo = new InMemoryOperatorMembershipRepository()
+  })
+
+  it('create assigns a UUID + timestamps and persists every field', async () => {
+    const m = await repo.create(membershipInput())
+    expect(m.id).toMatch(UUID_RE)
+    expect(m.createdAt).toBeInstanceOf(Date)
+    expect(m.updatedAt).toBeInstanceOf(Date)
+    expect(m.userId).toBe('user_1')
+    expect(m.operatorId).toBe('op_test')
+    expect(m.role).toBe('OPERATOR_OWNER')
+    expect(m.status).toBe('ACTIVE')
+  })
+
+  it('findActiveByUserId returns the user’s active membership', async () => {
+    const m = await repo.create(membershipInput())
+    const found = await repo.findActiveByUserId('user_1')
+    expect(found?.id).toBe(m.id)
+  })
+
+  it('findActiveByUserId returns undefined when the user has no active membership', async () => {
+    expect(await repo.findActiveByUserId('ghost')).toBeUndefined()
+  })
+
+  it('create rejects a second ACTIVE membership for one user with UNIQUE_VIOLATION (mirrors the partial-unique-active index)', async () => {
+    await repo.create(membershipInput({ userId: 'u' }))
+    await expect(
+      repo.create(membershipInput({ userId: 'u', operatorId: 'op_other' })),
+    ).rejects.toMatchObject({ code: PG_ERROR.UNIQUE_VIOLATION })
+  })
+
+  it('allows a new ACTIVE membership once a prior membership is REVOKED (partial index frees the slot)', async () => {
+    await repo.create(membershipInput({ userId: 'u', status: 'REVOKED' }))
+    const m = await repo.create(membershipInput({ userId: 'u' }))
+    expect(m.status).toBe('ACTIVE')
+  })
+})

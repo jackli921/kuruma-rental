@@ -1,0 +1,88 @@
+import { formatVehicleRate } from '@/lib/format'
+import { OperatorFleetView } from '@/vite/operator-fleet/OperatorFleetView'
+import type { OperatorFleetVehicle } from '@/vite/operator-fleet/api'
+import { render, screen } from '@testing-library/react'
+import { IntlProvider } from 'use-intl'
+import { describe, expect, it } from 'vitest'
+import enMessages from '../../../messages/en.json'
+
+const en = enMessages.business.vehicles.fleet
+
+function vehicle(overrides: Partial<OperatorFleetVehicle> = {}): OperatorFleetVehicle {
+  return {
+    id: 'v1',
+    operatorId: 'op_1',
+    classId: null,
+    pickupLocationId: null,
+    name: 'Toyota Aqua',
+    description: null,
+    photos: [],
+    seats: 5,
+    luggageCapacity: 2,
+    luggageSize: 'MEDIUM',
+    transmission: 'AUTO',
+    fuelType: null,
+    licensePlate: 'なにわ 300 あ 12-34',
+    status: 'AVAILABLE',
+    minRentalHours: null,
+    maxRentalHours: null,
+    advanceBookingHours: null,
+    make: 'Toyota',
+    model: 'Aqua',
+    year: 2022,
+    color: null,
+    dailyRateJpy: 6800,
+    hourlyRateJpy: null,
+    shakenExpiryDate: '2099-01-01',
+    insuranceExpiryDate: null,
+    createdAt: '2026-01-01T00:00:00.000Z',
+    updatedAt: '2026-01-01T00:00:00.000Z',
+    utilization: 0,
+    bookingCountLast30Days: 0,
+    currentBooking: null,
+    nextBooking: null,
+    activeMaintenanceReason: null,
+    ...overrides,
+  }
+}
+
+function renderView(vehicles: OperatorFleetVehicle[]) {
+  return render(
+    <IntlProvider locale="en" messages={enMessages}>
+      <OperatorFleetView vehicles={vehicles} locale="en" />
+    </IntlProvider>,
+  )
+}
+
+describe('OperatorFleetView', () => {
+  it('shows the empty state when there are no vehicles', () => {
+    renderView([])
+    expect(screen.getByText(en.empty)).toBeInTheDocument()
+  })
+
+  it('renders a vehicle row with name, plate, status, seats, luggage and price', () => {
+    renderView([vehicle()])
+    expect(screen.getByText('Toyota Aqua')).toBeInTheDocument()
+    expect(screen.getByText('なにわ 300 あ 12-34')).toBeInTheDocument()
+    expect(screen.getByText(en.status.AVAILABLE)).toBeInTheDocument()
+    expect(screen.getByText('5')).toBeInTheDocument()
+    const price = formatVehicleRate(6800, null, { perDay: en.perDay, perHour: en.perHour })
+    expect(screen.getByText(price as string)).toBeInTheDocument()
+  })
+
+  it('flags an expired sha-ken certificate', () => {
+    renderView([vehicle({ id: 'v2', shakenExpiryDate: '2020-01-01' })])
+    expect(screen.getByText(en.expiry.EXPIRED)).toBeInTheDocument()
+  })
+
+  it('shows the maintenance status label for a vehicle under maintenance', () => {
+    renderView([vehicle({ id: 'v3', status: 'MAINTENANCE' })])
+    expect(screen.getByText(en.status.MAINTENANCE)).toBeInTheDocument()
+  })
+
+  it('renders one row per vehicle', () => {
+    renderView([vehicle({ id: 'a', name: 'Car A' }), vehicle({ id: 'b', name: 'Car B' })])
+    expect(screen.getByText('Car A')).toBeInTheDocument()
+    expect(screen.getByText('Car B')).toBeInTheDocument()
+  })
+})

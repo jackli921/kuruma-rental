@@ -1,3 +1,4 @@
+import type { notificationStatusEnum } from '@kuruma/shared/db/schema'
 import type {
   AddOnSnapshot,
   BookingEventPayload,
@@ -9,6 +10,14 @@ import type {
 } from '@kuruma/shared/db/schema'
 import type { LuggageSize } from '@kuruma/shared/lib/luggage'
 import type { LocationOperatingHours } from '@kuruma/shared/types/location'
+
+/**
+ * Single source of truth for the notification status set is the
+ * `notificationStatusEnum` pgEnum in @kuruma/shared. Derive the union here so a
+ * new status (e.g. DEAD, #483) added to the enum can't drift from this type
+ * without a compile error (#534).
+ */
+export type NotificationStatus = (typeof notificationStatusEnum.enumValues)[number]
 
 export interface VehicleClass {
   id: string
@@ -144,7 +153,7 @@ export interface NotificationLog {
   channel: string
   recipient: string
   locale: string
-  status: 'QUEUED' | 'SENDING' | 'SENT' | 'FAILED' | 'DEAD'
+  status: NotificationStatus
   providerMessageId: string | null
   error: string | null
   attempts: number
@@ -264,6 +273,36 @@ export interface RenterDocument {
   verifiedAt: Date | null
   verifierId: string | null
   rejectionReason: string | null
+  createdAt: Date
+  updatedAt: Date
+}
+
+// Provider authorization (#521). operator_memberships is the source-of-truth
+// grant ledger; users.role/operatorId are its single-active projection (the JWT
+// reads the projection). Mirrors the operator_memberships table columns.
+export interface OperatorMembership {
+  id: string
+  userId: string
+  operatorId: string
+  role: 'OPERATOR_OWNER' | 'OPERATOR_STAFF'
+  status: 'ACTIVE' | 'REVOKED'
+  createdAt: Date
+  updatedAt: Date
+}
+
+// Pre-approved provider email for first-login provisioning (#521). The token is
+// shown once at creation; only sha256(token) is stored. Single-use
+// (PENDING->ACCEPTED), time-limited; expired-ness is computed from expiresAt.
+export interface ProviderInvite {
+  id: string
+  email: string
+  operatorId: string
+  role: 'OPERATOR_OWNER' | 'OPERATOR_STAFF'
+  tokenHash: string
+  status: 'PENDING' | 'ACCEPTED'
+  expiresAt: Date
+  invitedByUserId: string | null
+  acceptedByUserId: string | null
   createdAt: Date
   updatedAt: Date
 }

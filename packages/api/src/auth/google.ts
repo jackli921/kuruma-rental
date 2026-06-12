@@ -10,6 +10,10 @@ import type { UserRole } from '../middleware/auth'
 export interface GoogleProfile {
   readonly sub: string
   readonly email?: string
+  // Google's OIDC `email_verified` claim. Provider-invite redemption (#521) only
+  // honours an invite for a Google-verified email — an unverified/absent value is
+  // never grantable. Kept under Google's claim name alongside sub/email/picture.
+  readonly email_verified?: boolean
   readonly name?: string
   readonly picture?: string
 }
@@ -56,6 +60,55 @@ export const OAUTH_STATE_TTL_SECONDS = 600
  *  start→callback round-trip. Shares the state cookie's TTL/SameSite so it
  *  survives Google's top-level redirect and expires with the flow. */
 export const OAUTH_RETURN_COOKIE = 'kuruma_oauth_return'
+
+/** Short-lived cookies carrying the provider sign-in `intent` and optional
+ *  `invite` token across the round-trip (#521 §5). Same TTL/SameSite as the
+ *  state/return cookies so they survive Google's redirect and expire with the
+ *  flow; the callback reads then deletes them. */
+export const OAUTH_INTENT_COOKIE = 'kuruma_oauth_intent'
+export const OAUTH_INVITE_COOKIE = 'kuruma_oauth_invite'
+
+/** Which sign-in door the user came through. Identity is shared; only the
+ *  post-login authorization decision and destination differ (#521). */
+export const OAUTH_INTENTS = ['renter', 'provider'] as const
+export type OAuthIntent = (typeof OAUTH_INTENTS)[number]
+
+/** Parse the `intent` query/cookie value. Anything but the explicit `provider`
+ *  is the safe default `renter` — an unknown intent never unlocks the provider
+ *  path (which still requires a membership or matched invite regardless). */
+export function parseOAuthIntent(raw: string | undefined): OAuthIntent {
+  return raw === 'provider' ? 'provider' : 'renter'
+}
+
+// Syntactic gate only (base64url charset, bounded length) — matches randomToken's
+// base64url output. Redemption validity (hash match, expiry, email) is decided in
+// the callback; this just keeps a malformed value out of the cookie.
+const INVITE_TOKEN_RE = /^[A-Za-z0-9_-]{1,128}$/
+
+/** The invite token if syntactically acceptable, else undefined. */
+export function safeInviteToken(raw: string | undefined): string | undefined {
+  return raw && INVITE_TOKEN_RE.test(raw) ? raw : undefined
+}
+
+// Web locales (use-intl routing). Duplicated here because the API can't import the
+// web i18n module across the package boundary; small + stable. Follow-up: lift the
+// canonical list into @kuruma/shared if a third consumer appears.
+const WEB_LOCALES = ['en', 'ja', 'zh'] as const
+
+/** Locale used to build a redirect when no locale-prefixed returnTo is available. */
+export const FALLBACK_LOCALE = 'en'
+
+/**
+ * The locale segment of a validated root-relative path (`/ja/manage` → `ja`), or
+ * FALLBACK_LOCALE when the first segment isn't a known locale. Used by the OAuth
+ * callback to build provider redirects (`/<locale>/manage/<slug>/dashboard`) whose
+ * destination is computed server-side, not carried in returnTo. Input is already
+ * safeReturnPath-validated, so this only inspects the first segment.
+ */
+export function localeFromReturnPath(path: string | undefined): string {
+  const segment = path?.split('/')[1]
+  return segment && (WEB_LOCALES as readonly string[]).includes(segment) ? segment : FALLBACK_LOCALE
+}
 
 // The open-redirect guard for `returnTo` lives in @kuruma/shared so the API and
 // the web boundary enforce ONE definition — a guard cloned across a trust

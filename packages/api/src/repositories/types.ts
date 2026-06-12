@@ -27,6 +27,7 @@ import type { Customer, CustomerSort, CustomerWithBookings } from '@kuruma/share
 import type { FleetVehicleOverview } from '@kuruma/shared/types/fleet'
 import type { DashboardStats } from '@kuruma/shared/types/stats'
 import type { VehicleDetail } from '@kuruma/shared/types/vehicle-detail'
+import type { OperatorRole } from '@kuruma/shared/validators/provider-invite'
 import type { CallerContext } from '../middleware/auth'
 import type {
   AddOn,
@@ -39,7 +40,9 @@ import type {
   Message,
   NotificationLog,
   Operator,
+  OperatorMembership,
   PaymentEvent,
+  ProviderInvite,
   RenterDocument,
   Thread,
   ThreadParticipant,
@@ -196,6 +199,27 @@ export interface AddOnRepository {
   archive(id: string): Promise<AddOn | undefined>
 }
 
+// #521 provider authorization. Not ctx-scoped: the admin endpoint
+// (PLATFORM_ADMIN-gated) and the OAuth callback pass already-resolved values;
+// the DB unique/partial indexes are the real seals.
+export interface ProviderInviteRepository {
+  create(data: Omit<ProviderInvite, 'id' | 'createdAt' | 'updatedAt'>): Promise<ProviderInvite>
+  /** Single-row lookup by sha256(token) — the unique tokenHash index. */
+  findByTokenHash(tokenHash: string): Promise<ProviderInvite | undefined>
+  /** Consume the invite at acceptance: PENDING -> ACCEPTED + stamp the redeemer.
+   *  One of the three writes in the grant transaction (#521 §6). */
+  markAccepted(id: string, acceptedByUserId: string): Promise<void>
+}
+
+// #521. `findActiveByUserId` is served by the partial-unique-active index
+// (query filters status='ACTIVE'). `create` is fenced by that same index.
+export interface OperatorMembershipRepository {
+  findActiveByUserId(userId: string): Promise<OperatorMembership | undefined>
+  create(
+    data: Omit<OperatorMembership, 'id' | 'createdAt' | 'updatedAt'>,
+  ): Promise<OperatorMembership>
+}
+
 export interface VehicleFilters {
   status?: string
   includeRetired?: boolean
@@ -296,6 +320,14 @@ export interface UserRepository {
   // users.operatorId — NOT a caller-facing lookup, so it does NOT reopen the #396
   // renter-enumeration vector. Owner-only by design (no OPERATOR_STAFF in MVP).
   findOperatorContacts(operatorId: string): Promise<User[]>
+  // #521 Decision 1: project an accepted operator grant onto users.role +
+  // users.operatorId — the single-active denormalisation the JWT reads. One of
+  // the three writes in the grant transaction; the OperatorRole subset is exactly
+  // the DB role-enum members it sets, so no widening cast is needed.
+  setOperatorAccess(
+    userId: string,
+    access: { role: OperatorRole; operatorId: string },
+  ): Promise<void>
 }
 
 /**
@@ -569,6 +601,23 @@ export interface TransactionRepos {
 }
 
 export type RunInTransaction = <T>(fn: (repos: TransactionRepos) => Promise<T>) => Promise<T>
+
+// #521 §6: the minimal write surface the atomic operator-grant transaction needs —
+// the membership ledger INSERT, the denormalised users projection, and invite
+// consumption. Run together in ONE tx so a mid-sequence failure can't leave a partial
+// grant (membership without projection, or invite consumed without a membership row).
+// The membership INSERT goes first so the partial-unique-active index aborts the WHOLE
+// tx on a concurrent double-accept; the service then re-reads the winner.
+export interface OperatorGrantRepos {
+  memberships: Pick<OperatorMembershipRepository, 'create'>
+  users: Pick<UserRepository, 'setOperatorAccess'>
+  invites: Pick<ProviderInviteRepository, 'markAccepted'>
+}
+
+// Drizzle wires the real per-call neon-serverless tx (#493, pooled DATABASE_URL);
+// InMemory passes the plain repos (single-threaded, no real tx). Mirrors
+// RunInTransaction (the booking bundle) but scoped to the grant's three tables.
+export type RunOperatorGrant = <T>(fn: (repos: OperatorGrantRepos) => Promise<T>) => Promise<T>
 
 export interface TransitionLogsResult {
   resolved?: MaintenanceLog

@@ -33,7 +33,24 @@
     "apple": "Apple",
     "signInTitle": "登录",
     "signInSubtitle": "继续使用 Best Car Rental",
-    "continueWithGoogle": "使用 Google 继续"
+    "continueWithGoogle": "使用 Google 继续",
+    "provider": {
+      "signInTitle": "供应商登录",
+      "signInSubtitle": "登录以管理您的车队",
+      "continueAsProvider": "使用 Google 继续",
+      "accessNotFoundTitle": "无运营商访问权限",
+      "accessNotFoundBody": "此 Google 账号未关联任何运营商。如果您应当拥有访问权限，请在下方申请。",
+      "inviteInvalidTitle": "邀请无效",
+      "inviteInvalidBody": "此邀请已过期、已被使用，或是发给其他 Google 账号的。请向您的运营商索取新的邀请。",
+      "requestAccess": "申请访问权限",
+      "invite": {
+        "title": "您受邀加入 {operator}",
+        "subtitle": "请使用受邀的 Google 账号登录以加入。",
+        "continue": "使用 Google 继续",
+        "expiredTitle": "邀请不可用",
+        "expiredBody": "此邀请已过期或已被使用。请向您的运营商索取新的邀请。"
+      }
+    }
   },
   "nav": {
     "home": "首页",
@@ -433,6 +450,35 @@
         "noMaintenanceHistory": "还没有维修记录"
       },
       "fleet": {
+        "title": "车队",
+        "subtitle": "所有门店的车辆",
+        "addVehicle": "添加车辆",
+        "empty": "暂无车辆。添加第一辆车开始出租。",
+        "loadError": "无法加载车队",
+        "retry": "重试",
+        "none": "—",
+        "perDay": "/天",
+        "perHour": "/小时",
+        "columns": {
+          "vehicle": "车辆",
+          "status": "状态",
+          "seats": "座位",
+          "luggage": "行李",
+          "price": "价格",
+          "shaken": "车检",
+          "actions": "操作"
+        },
+        "status": {
+          "AVAILABLE": "可用",
+          "MAINTENANCE": "维护中",
+          "RETIRED": "已停用"
+        },
+        "expiry": {
+          "OK": "有效",
+          "EXPIRING_SOON": "即将到期",
+          "EXPIRED": "已过期",
+          "UNKNOWN": "—"
+        },
         "rowView": "列表视图",
         "gridView": "网格视图",
         "moreActions": "更多操作",

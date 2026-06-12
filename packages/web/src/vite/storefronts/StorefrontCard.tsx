@@ -1,5 +1,6 @@
 import { ClassSummaryBadges } from '@/vite/storefronts/ClassSummaryBadges'
 import type { StorefrontCardData } from '@/vite/storefronts/api'
+import { carryForwardFilters } from '@/vite/storefronts/params'
 import { Link } from '@tanstack/react-router'
 import { Car, MapPin } from 'lucide-react'
 import { useLocale, useTranslations } from 'use-intl'
@@ -9,6 +10,9 @@ interface StorefrontCardProps {
   /** Pickup/return strings forwarded so the date range survives the click. */
   readonly from: string
   readonly to: string
+  /** Active result filters forwarded so they survive the drill-down (#499). */
+  readonly classFilter?: string | string[] | undefined
+  readonly pickupLocationId?: string | undefined
 }
 
 /**
@@ -17,7 +21,13 @@ interface StorefrontCardProps {
  * store name, class summaries, and min price. Daily price is preferred; a store
  * with only hourly-priced cars shows the hourly fallback (§3 item 5).
  */
-export function StorefrontCard({ storefront, from, to }: StorefrontCardProps) {
+export function StorefrontCard({
+  storefront,
+  from,
+  to,
+  classFilter,
+  pickupLocationId,
+}: StorefrontCardProps) {
   const t = useTranslations('search')
   const locale = useLocale()
   const photo = storefront.representativePhotos[0]
@@ -33,7 +43,7 @@ export function StorefrontCard({ storefront, from, to }: StorefrontCardProps) {
     <Link
       to="/$locale/storefronts/$locationId"
       params={{ locale, locationId: storefront.locationId }}
-      search={{ from, to }}
+      search={{ from, to, ...carryForwardFilters({ class: classFilter, pickupLocationId }) }}
       className="group flex flex-col overflow-hidden rounded-xl border border-border bg-card shadow-sm transition-shadow hover:shadow-md"
     >
       <div className="aspect-[4/3] overflow-hidden bg-muted">

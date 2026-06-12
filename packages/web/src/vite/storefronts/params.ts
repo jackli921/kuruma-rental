@@ -61,3 +61,24 @@ export function normalizeClassFilter(value?: string | string[]): string[] {
   if (!value) return []
   return Array.isArray(value) ? value : [value]
 }
+
+/**
+ * The active result filters to re-emit across every search -> detail -> back
+ * navigation (#499). Without this, a future class / pickup-location filter UI
+ * would silently lose state on the first card click, the back-to-search link,
+ * or the invalid-range redirect. `from`/`to` are threaded separately (they key
+ * the form remount and gate availability). Empty string / empty array / absent
+ * filters are dropped so the URL stays clean and exactOptionalPropertyTypes is
+ * satisfied.
+ */
+export function carryForwardFilters(filters: {
+  class?: string | string[] | undefined
+  pickupLocationId?: string | undefined
+}): { class?: string | string[]; pickupLocationId?: string } {
+  const cls = filters.class
+  const keepClass = Array.isArray(cls) ? cls.length > 0 : Boolean(cls)
+  return {
+    ...(keepClass && cls !== undefined ? { class: cls } : {}),
+    ...(filters.pickupLocationId ? { pickupLocationId: filters.pickupLocationId } : {}),
+  }
+}

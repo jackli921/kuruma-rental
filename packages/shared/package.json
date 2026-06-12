@@ -37,7 +37,8 @@
     "./validators/customer": "./src/validators/customer.ts",
     "./validators/operator": "./src/validators/operator.ts",
     "./validators/translation": "./src/validators/translation.ts",
-    "./validators/document": "./src/validators/document.ts"
+    "./validators/document": "./src/validators/document.ts",
+    "./validators/provider-invite": "./src/validators/provider-invite.ts"
   },
   "scripts": {
     "test": "vitest run",

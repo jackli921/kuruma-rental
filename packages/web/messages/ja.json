@@ -33,7 +33,24 @@
     "apple": "Apple",
     "signInTitle": "ログイン",
     "signInSubtitle": "Best Car Rental に続行",
-    "continueWithGoogle": "Googleで続行"
+    "continueWithGoogle": "Googleで続行",
+    "provider": {
+      "signInTitle": "事業者ログイン",
+      "signInSubtitle": "車両を管理するにはログインしてください",
+      "continueAsProvider": "Googleで続行",
+      "accessNotFoundTitle": "事業者アクセスがありません",
+      "accessNotFoundBody": "この Google アカウントは事業者に登録されていません。アクセス権が必要な場合は、下記からリクエストしてください。",
+      "inviteInvalidTitle": "招待が無効です",
+      "inviteInvalidBody": "この招待は有効期限が切れているか、すでに使用されているか、別の Google アカウント宛てに発行されています。事業者に新しい招待を依頼してください。",
+      "requestAccess": "アクセスをリクエスト",
+      "invite": {
+        "title": "{operator} に招待されています",
+        "subtitle": "招待された Google アカウントでサインインして参加してください。",
+        "continue": "Googleで続行",
+        "expiredTitle": "招待は利用できません",
+        "expiredBody": "この招待は有効期限が切れているか、すでに使用されています。事業者に新しい招待を依頼してください。"
+      }
+    }
   },
   "nav": {
     "home": "ホーム",
@@ -433,6 +450,35 @@
         "noMaintenanceHistory": "メンテナンス記録なし"
       },
       "fleet": {
+        "title": "車両",
+        "subtitle": "全店舗の車両",
+        "addVehicle": "車両を追加",
+        "empty": "車両がまだありません。最初の車両を追加して貸出を始めましょう。",
+        "loadError": "車両の読み込みに失敗しました",
+        "retry": "再試行",
+        "none": "—",
+        "perDay": "/日",
+        "perHour": "/時間",
+        "columns": {
+          "vehicle": "車両",
+          "status": "ステータス",
+          "seats": "座席",
+          "luggage": "荷物",
+          "price": "料金",
+          "shaken": "車検",
+          "actions": "操作"
+        },
+        "status": {
+          "AVAILABLE": "利用可能",
+          "MAINTENANCE": "整備中",
+          "RETIRED": "廃車"
+        },
+        "expiry": {
+          "OK": "有効",
+          "EXPIRING_SOON": "まもなく期限切れ",
+          "EXPIRED": "期限切れ",
+          "UNKNOWN": "—"
+        },
         "rowView": "リスト表示",
         "gridView": "グリッド表示",
         "moreActions": "その他の操作",

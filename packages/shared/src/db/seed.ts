@@ -1,3 +1,4 @@
+import { createHash, randomBytes } from 'node:crypto'
 import type { getDb } from './index'
 import { parsePlatformAdminEmails } from './platform-admins'
 import {
@@ -5,6 +6,7 @@ import {
   insuranceOptions,
   locations,
   operators,
+  providerInvites,
   users,
   vehicleClasses,
   vehicles,
@@ -37,6 +39,8 @@ import { seedId } from './seed-id'
  */
 
 const SHAKEN_VALIDITY_DAYS = 365
+// Mirrors ProviderInviteService.INVITE_TTL_MS — a demo link is good for a week.
+const DEMO_INVITE_TTL_MS = 7 * 24 * 60 * 60 * 1000
 
 /** Demo-time-relative shaken expiry — a frozen fixture date would go stale. */
 function demoShakenExpiry(): string {
@@ -268,6 +272,50 @@ export async function seed(db: ReturnType<typeof getDb>) {
           updatedAt: now,
         },
       })
+  }
+
+  // 9. Demo provider invite (#521 §9) — env-driven so no email is hardcoded.
+  // When DEMO_PROVIDER_INVITE_EMAIL is set, mint a one-time invite for the first
+  // demo operator so the runbook (#488) can click through provider sign-up. Only
+  // sha256(token) is stored; the plaintext link is printed once here, never
+  // persisted (mirrors the admin endpoint). A STABLE id keeps re-seeds
+  // idempotent — each run rotates the token and resets the invite to PENDING so
+  // the demo can be replayed even after acceptance.
+  const demoInviteEmail = process.env.DEMO_PROVIDER_INVITE_EMAIL?.trim().toLowerCase()
+  const [demoOperator] = DEMO_OPERATORS
+  if (demoInviteEmail && demoOperator) {
+    const token = randomBytes(32).toString('base64url')
+    const tokenHash = createHash('sha256').update(token).digest('hex')
+    const expiresAt = new Date(now.getTime() + DEMO_INVITE_TTL_MS)
+    const webBase = (
+      process.env.WEB_ORIGIN?.split(',')[0]?.trim() || 'http://localhost:3001'
+    ).replace(/\/$/, '')
+    await db
+      .insert(providerInvites)
+      .values({
+        id: seedId('demo-provider-invite'),
+        email: demoInviteEmail,
+        operatorId: seedId(demoOperator.id),
+        role: 'OPERATOR_OWNER',
+        tokenHash,
+        status: 'PENDING',
+        expiresAt,
+        acceptedByUserId: null,
+      })
+      .onConflictDoUpdate({
+        target: providerInvites.id,
+        set: {
+          email: demoInviteEmail,
+          operatorId: seedId(demoOperator.id),
+          tokenHash,
+          status: 'PENDING',
+          expiresAt,
+          acceptedByUserId: null,
+          updatedAt: now,
+        },
+      })
+    console.log(`\nDemo provider invite for ${demoInviteEmail} (operator: ${demoOperator.slug}):`)
+    console.log(`  ${webBase}/provider/invite/${token}`)
   }
 
   console.log(
