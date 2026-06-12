@@ -1,8 +1,9 @@
 import { Button } from '@/components/ui/button'
 import { PageSkeleton } from '@/vite/PageSkeleton'
 import { AddClassDialog } from '@/vite/operator-classes/AddClassDialog'
+import { EditClassDialog } from '@/vite/operator-classes/EditClassDialog'
 import { OperatorClassesView } from '@/vite/operator-classes/OperatorClassesView'
-import { operatorClassesQueryOptions } from '@/vite/operator-classes/api'
+import { type OperatorClass, operatorClassesQueryOptions } from '@/vite/operator-classes/api'
 import { useSuspenseQuery } from '@tanstack/react-query'
 import { type ErrorComponentProps, createFileRoute, useRouter } from '@tanstack/react-router'
 import { Plus } from 'lucide-react'
@@ -28,6 +29,7 @@ function OperatorClassesRoute() {
   const t = useTranslations('business.classes')
   const { data: classes } = useSuspenseQuery(classesQuery)
   const [showAdd, setShowAdd] = useState(false)
+  const [editing, setEditing] = useState<OperatorClass | null>(null)
 
   return (
     <main className="flex-1 px-4 py-10 sm:px-6 lg:px-8">
@@ -42,9 +44,10 @@ function OperatorClassesRoute() {
             {t('addClass')}
           </Button>
         </header>
-        <OperatorClassesView classes={classes} />
+        <OperatorClassesView classes={classes} onEdit={setEditing} />
       </div>
       <AddClassDialog open={showAdd} onOpenChange={setShowAdd} />
+      <EditClassDialog vehicleClass={editing} onOpenChange={(open) => !open && setEditing(null)} />
     </main>
   )
 }

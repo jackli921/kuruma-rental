@@ -1,8 +1,9 @@
 import { OperatorClassesView } from '@/vite/operator-classes/OperatorClassesView'
 import type { OperatorClass } from '@/vite/operator-classes/api'
 import { render, screen, within } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import { IntlProvider } from 'use-intl'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import en from '../../../messages/en.json'
 
 function makeClass(over: Partial<OperatorClass> = {}): OperatorClass {
@@ -70,5 +71,46 @@ describe('OperatorClassesView', () => {
   it('shows the empty state when there are no classes', () => {
     renderView([])
     expect(screen.getByText(en.business.classes.empty)).toBeInTheDocument()
+  })
+
+  it('renders no action buttons when no handlers are given', () => {
+    renderView([makeClass()])
+    expect(screen.queryByRole('button')).not.toBeInTheDocument()
+  })
+})
+
+describe('OperatorClassesView actions', () => {
+  function renderWithHandlers(
+    classes: OperatorClass[],
+    handlers: { onEdit?: (c: OperatorClass) => void; onDelete?: (c: OperatorClass) => void },
+  ) {
+    return render(
+      <IntlProvider locale="en" messages={en}>
+        <OperatorClassesView classes={classes} {...handlers} />
+      </IntlProvider>,
+    )
+  }
+
+  it('calls onEdit with the class when the edit button is clicked', async () => {
+    const onEdit = vi.fn()
+    renderWithHandlers([makeClass({ id: 'c-9', name: 'Wagon' })], { onEdit })
+
+    await userEvent.click(screen.getByRole('button', { name: 'Edit class' }))
+
+    expect(onEdit).toHaveBeenCalledWith(expect.objectContaining({ id: 'c-9', name: 'Wagon' }))
+  })
+
+  it('calls onDelete with the class for an active class', async () => {
+    const onDelete = vi.fn()
+    renderWithHandlers([makeClass({ id: 'c-7' })], { onDelete })
+
+    await userEvent.click(screen.getByRole('button', { name: 'Delete class' }))
+
+    expect(onDelete).toHaveBeenCalledWith(expect.objectContaining({ id: 'c-7' }))
+  })
+
+  it('disables delete on an already-archived class', () => {
+    renderWithHandlers([makeClass({ status: 'ARCHIVED' })], { onDelete: vi.fn() })
+    expect(screen.getByRole('button', { name: 'Delete class' })).toBeDisabled()
   })
 })

@@ -1,22 +1,28 @@
+import { Button } from '@/components/ui/button'
 import { ClassStatusBadge } from '@/vite/operator-classes/ClassStatusBadge'
 import type { OperatorClass } from '@/vite/operator-classes/api'
-import { Layers } from 'lucide-react'
+import { Layers, Pencil, Trash2 } from 'lucide-react'
 import { useMemo } from 'react'
 import { useTranslations } from 'use-intl'
 
 interface OperatorClassesViewProps {
   readonly classes: readonly OperatorClass[]
+  /** Opens the edit dialog for a class. Omitted -> no edit affordance (e.g. in
+   * isolation tests). */
+  readonly onEdit?: (vehicleClass: OperatorClass) => void
+  /** Opens the archive (delete) dialog for a class. Disabled on already-archived
+   * rows. */
+  readonly onDelete?: (vehicleClass: OperatorClass) => void
 }
 
 // Presentational list + empty state (FC/IS): a pure function of the resolved
 // classes, so it stays unit-testable. The route owns the loader / useSuspenseQuery
-// and the pending/error boundaries. Edit/Delete affordances arrive in later
-// slices once their dialogs exist; this slice is the read view.
+// and the pending/error boundaries, and holds the edit/delete dialog state.
 //
 // Per-class stats (cars / active bookings) are intentionally omitted: the Vite
 // fleet-overview isn't ported yet (#526), so rather than block on it we surface
 // the class's own seats/luggage and degrade the fleet-derived counts.
-export function OperatorClassesView({ classes }: OperatorClassesViewProps) {
+export function OperatorClassesView({ classes, onEdit, onDelete }: OperatorClassesViewProps) {
   const t = useTranslations('business.classes')
   const tAcriss = useTranslations('acriss')
 
@@ -69,6 +75,33 @@ export function OperatorClassesView({ classes }: OperatorClassesViewProps) {
                 <span>{t('stats.luggage', { count: c.luggageCapacity })}</span>
               </div>
             </div>
+
+            {(onEdit || onDelete) && (
+              <div className="flex shrink-0 items-center gap-1">
+                {onEdit && (
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    onClick={() => onEdit(c)}
+                    aria-label={t('editClass')}
+                  >
+                    <Pencil className="size-4" />
+                  </Button>
+                )}
+                {onDelete && (
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    onClick={() => onDelete(c)}
+                    aria-label={t('deleteAction')}
+                    // An archived class is already soft-deleted; nothing to do.
+                    disabled={c.status === 'ARCHIVED'}
+                  >
+                    <Trash2 className="size-4" />
+                  </Button>
+                )}
+              </div>
+            )}
           </li>
         )
       })}
