@@ -920,6 +920,8 @@
     "fromDaily": "¥{price}〜／日",
     "fromHourly": "¥{price}〜／時間",
     "noPrice": "料金はお問い合わせください",
+    "turnaround": "貸出間隔 約{hours}時間",
+    "emptyTurnaroundHint": "車両は貸出の合間に準備時間が必要なため、直後はご利用いただけない場合があります。受け取り日を遅らせてお試しください。",
     "classCount": "{label} {count}台",
     "seats": "{count}人乗り",
     "luggage": "荷物 {count}個",

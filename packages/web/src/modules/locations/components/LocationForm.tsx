@@ -164,7 +164,7 @@ export function LocationForm(props: LocationFormProps) {
           <Input
             id="location-turnaround"
             type="number"
-            min={0}
+            min={60}
             {...register('defaultTurnaroundMinutes', { valueAsNumber: true })}
           />
           <p className="text-xs text-muted-foreground mt-1">{t('form.turnaroundHint')}</p>

@@ -139,6 +139,8 @@ import { makeEnsureThread } from './services/ensure-thread'
 import { FeeScheduleService } from './services/fee-schedule'
 import { FlatSearchService } from './services/flat-search'
 import { FleetOverviewService } from './services/fleet-overview'
+import { NominatimGeocoder } from './services/geocoding/nominatim-geocoder'
+import type { Geocoder } from './services/geocoding/types'
 import { GoogleTranslationProvider } from './services/google-translation-provider'
 import { InsuranceOptionService } from './services/insurance-option'
 import { LocationService } from './services/location'
@@ -190,6 +192,9 @@ export function createApp(overrides?: {
   operatorMembershipRepo?: OperatorMembershipRepository
   // Inject a fake gateway in tests; absent ⇒ the env-resolved Stripe/sentinel.
   paymentGateway?: PaymentGateway
+  // Inject a fake Geocoder in tests (proves a provider swap touches only here);
+  // absent ⇒ the env-resolved Nominatim/null-stub.
+  geocoder?: Geocoder
   photoUploadLimiter?: RateLimitBinding
   photoUploadUserLimiter?: RateLimitBinding
   publicCatalogLimiter?: RateLimitBinding
@@ -446,6 +451,25 @@ export function createApp(overrides?: {
     }
   })()
 
+  // Forward geocoder (#531): disabled by default — returns null (no coords)
+  // unless BOTH a descriptive User-Agent AND an explicit endpoint are set. We do
+  // NOT default to the public OSM endpoint: its usage policy caps the WHOLE app
+  // at 1 req/s and there is no app-side throttle/cache here yet (#574), so a
+  // burst of operator saves would breach it. Production must point
+  // NOMINATIM_API_URL at a self-hosted / proxied / quota-backed instance (or
+  // swap in a different provider adapter on this one line). Geocoding is
+  // best-effort — the service treats null as "no coordinates" and the location
+  // still saves — so the null stub is safe and there is no loud prod sentinel.
+  // A test override wins outright, proving a provider swap touches only here.
+  const geocoder: Geocoder =
+    overrides?.geocoder ??
+    (() => {
+      const userAgent = process.env.NOMINATIM_USER_AGENT
+      const baseUrl = process.env.NOMINATIM_API_URL
+      if (!userAgent || !baseUrl) return { geocode: async () => null }
+      return new NominatimGeocoder(baseUrl, userAgent)
+    })()
+
   // In-app Stripe payment (#461). Real gateway when BOTH secrets are set; in
   // production without them a sentinel throws on first use (not at boot, so
   // unrelated tests still construct the app). In dev a stub hands back the
@@ -634,7 +658,7 @@ export function createApp(overrides?: {
   // inference is retired, so it no longer needs an operator lookup.
   const resolveWriteOperatorId: ResolveWriteOperatorId = (ctx, inputOperatorId) =>
     resolveOperatorIdForWrite(ctx, inputOperatorId)
-  const locationService = new LocationService(locationRepo, bookingRepo)
+  const locationService = new LocationService(locationRepo, bookingRepo, geocoder)
   const insuranceOptionService = new InsuranceOptionService(insuranceOptionRepo)
   const addOnService = new AddOnService(addOnRepo)
   const feeScheduleService = new FeeScheduleService(feeScheduleRepo)

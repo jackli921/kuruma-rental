@@ -1,3 +1,4 @@
+import type { CoordinateSource } from '@kuruma/shared/db/schema'
 import { locations } from '@kuruma/shared/db/schema'
 import { type SQL, and, asc, eq, ne, sql } from 'drizzle-orm'
 import type { CallerContext } from '../../middleware/auth'
@@ -66,9 +67,13 @@ export class DrizzleLocationRepository implements LocationRepository {
   }
 
   async create(
-    data: Omit<Location, 'id' | 'createdAt' | 'updatedAt' | 'latitude' | 'longitude'> & {
+    data: Omit<
+      Location,
+      'id' | 'createdAt' | 'updatedAt' | 'latitude' | 'longitude' | 'coordinateSource'
+    > & {
       latitude?: number | null
       longitude?: number | null
+      coordinateSource?: CoordinateSource | null
     },
   ): Promise<Location> {
     const [inserted] = await this.db
@@ -79,6 +84,7 @@ export class DrizzleLocationRepository implements LocationRepository {
         address: data.address,
         latitude: data.latitude ?? null,
         longitude: data.longitude ?? null,
+        coordinateSource: data.coordinateSource ?? null,
         operatingHours: data.operatingHours,
         timezone: data.timezone,
         defaultTurnaroundMinutes: data.defaultTurnaroundMinutes,
