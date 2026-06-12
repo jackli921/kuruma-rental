@@ -1,5 +1,6 @@
 import { AvailableVehicleCard } from '@/vite/storefronts/AvailableVehicleCard'
 import type { StorefrontDetailData } from '@/vite/storefronts/api'
+import { carryForwardFilters } from '@/vite/storefronts/params'
 import { Link } from '@tanstack/react-router'
 import { ArrowLeft, MapPin } from 'lucide-react'
 import { useLocale, useTranslations } from 'use-intl'
@@ -9,6 +10,9 @@ interface StorefrontDetailViewProps {
   /** Date range to preserve on the "back to search" link. */
   readonly from: string
   readonly to: string
+  /** Active result filters preserved on the "back to search" link (#499). */
+  readonly classFilter?: string | string[] | undefined
+  readonly pickupLocationId?: string | undefined
 }
 
 /**
@@ -17,7 +21,13 @@ interface StorefrontDetailViewProps {
  * the grid renders same-class cars adjacently (the grouped-by-class UI, §4).
  * A known-but-full store renders the empty-state copy, not a 404.
  */
-export function StorefrontDetailView({ detail, from, to }: StorefrontDetailViewProps) {
+export function StorefrontDetailView({
+  detail,
+  from,
+  to,
+  classFilter,
+  pickupLocationId,
+}: StorefrontDetailViewProps) {
   const t = useTranslations('search')
   const locale = useLocale()
   const { storefront, vehicles } = detail
@@ -27,7 +37,7 @@ export function StorefrontDetailView({ detail, from, to }: StorefrontDetailViewP
       <Link
         to="/$locale/search"
         params={{ locale }}
-        search={{ from, to }}
+        search={{ from, to, ...carryForwardFilters({ class: classFilter, pickupLocationId }) }}
         className="mb-6 inline-flex items-center gap-1.5 text-sm font-medium text-muted-foreground transition-colors hover:text-foreground"
       >
         <ArrowLeft className="size-4" />

@@ -1,12 +1,19 @@
 import { StorefrontDetailView } from '@/vite/storefronts/StorefrontDetailView'
 import { fetchStorefrontDetail } from '@/vite/storefronts/api'
-import { normalizeClassFilter, parseSearchRange } from '@/vite/storefronts/params'
+import {
+  carryForwardFilters,
+  normalizeClassFilter,
+  parseSearchRange,
+} from '@/vite/storefronts/params'
 import { createFileRoute, notFound, redirect } from '@tanstack/react-router'
 
 interface StorefrontDetailSearch {
   from?: string | undefined
   to?: string | undefined
   class?: string | string[] | undefined
+  // Carried through (not used by the detail fetch) so the back link and the
+  // invalid-range redirect can restore the active search filters (#499).
+  pickupLocationId?: string | undefined
 }
 
 function validateSearch(search: Record<string, unknown>): StorefrontDetailSearch {
@@ -16,6 +23,7 @@ function validateSearch(search: Record<string, unknown>): StorefrontDetailSearch
     from: str(search.from),
     to: str(search.to),
     class: Array.isArray(cls) ? cls.filter((c): c is string => typeof c === 'string') : str(cls),
+    pickupLocationId: str(search.pickupLocationId),
   }
 }
 
@@ -30,10 +38,21 @@ export const Route = createFileRoute('/$locale/storefronts/$locationId')({
     from: search.from,
     to: search.to,
     classes: normalizeClassFilter(search.class),
+    pickupLocationId: search.pickupLocationId,
   }),
   loader: async ({ params, deps }) => {
     const range = parseSearchRange(deps.from, deps.to)
-    if (!range) throw redirect({ to: '/$locale/search', params: { locale: params.locale } })
+    if (!range)
+      throw redirect({
+        to: '/$locale/search',
+        params: { locale: params.locale },
+        // Range is invalid, so from/to are dropped — but keep the active filters
+        // so the renter re-picks dates without losing their class/location (#499).
+        search: carryForwardFilters({
+          class: deps.classes,
+          pickupLocationId: deps.pickupLocationId,
+        }),
+      })
     const detail = await fetchStorefrontDetail(params.locationId, {
       from: range.from,
       to: range.to,
@@ -47,11 +66,17 @@ export const Route = createFileRoute('/$locale/storefronts/$locationId')({
 
 function StorefrontDetailRoute() {
   const detail = Route.useLoaderData()
-  const { from, to } = Route.useSearch()
+  const { from, to, class: classFilter, pickupLocationId } = Route.useSearch()
 
   return (
     <main className="flex-1 px-4 py-10 sm:px-6 lg:px-8">
-      <StorefrontDetailView detail={detail} from={from ?? ''} to={to ?? ''} />
+      <StorefrontDetailView
+        detail={detail}
+        from={from ?? ''}
+        to={to ?? ''}
+        classFilter={classFilter}
+        pickupLocationId={pickupLocationId}
+      />
     </main>
   )
 }
