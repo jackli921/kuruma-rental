@@ -5,7 +5,17 @@ import { queryOptions, useQuery } from '@tanstack/react-query'
 // session token carries for the navbar avatar/menu (mirrors NextAuth's old JWT).
 // They are absent for users whose OAuth profile omitted them.
 export interface Session {
-  user: { id: string; role: string; name?: string; email?: string; image?: string }
+  // `operatorId`/`operatorSlug` are present only for operator sessions (#521);
+  // `operatorSlug` lets the `/manage/$slug` guard match the URL segment.
+  user: {
+    id: string
+    role: string
+    operatorId?: string
+    operatorSlug?: string
+    name?: string
+    email?: string
+    image?: string
+  }
   csrfToken: string
 }
 

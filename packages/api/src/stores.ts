@@ -274,5 +274,35 @@ export interface RenterDocument {
   updatedAt: Date
 }
 
+// Provider authorization (#521). operator_memberships is the source-of-truth
+// grant ledger; users.role/operatorId are its single-active projection (the JWT
+// reads the projection). Mirrors the operator_memberships table columns.
+export interface OperatorMembership {
+  id: string
+  userId: string
+  operatorId: string
+  role: 'OPERATOR_OWNER' | 'OPERATOR_STAFF'
+  status: 'ACTIVE' | 'REVOKED'
+  createdAt: Date
+  updatedAt: Date
+}
+
+// Pre-approved provider email for first-login provisioning (#521). The token is
+// shown once at creation; only sha256(token) is stored. Single-use
+// (PENDING->ACCEPTED), time-limited; expired-ness is computed from expiresAt.
+export interface ProviderInvite {
+  id: string
+  email: string
+  operatorId: string
+  role: 'OPERATOR_OWNER' | 'OPERATOR_STAFF'
+  tokenHash: string
+  status: 'PENDING' | 'ACCEPTED'
+  expiresAt: Date
+  invitedByUserId: string | null
+  acceptedByUserId: string | null
+  createdAt: Date
+  updatedAt: Date
+}
+
 // Map stores removed — repositories handle data access now.
 // Types remain here as the shared contract between repositories and routes.

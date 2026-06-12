@@ -104,6 +104,65 @@ describe('POST /auth/google/start', () => {
     expect(res.status).toBe(302)
     expect(erasesReturnCookie(res)).toBe(true)
   })
+
+  // Provider sign-in door (#521 §5): intent + optional invite token ride the same
+  // HttpOnly/Lax round-trip cookies as state/return. Identity stays Google's;
+  // these only steer the post-login authz decision the callback makes.
+  test('intent=provider → sets the kuruma_oauth_intent cookie (HttpOnly, Lax)', async () => {
+    setupGoogleEnv()
+    const app = createApp()
+    const res = await app.request('/auth/google/start?intent=provider', { method: 'POST' })
+    expect(res.status).toBe(302)
+    const hit = (res.headers.getSetCookie?.() ?? []).find((c) =>
+      c.startsWith('kuruma_oauth_intent='),
+    )
+    expect(hit).toContain('kuruma_oauth_intent=provider')
+    expect(hit).toContain('HttpOnly')
+    expect(hit).toContain('SameSite=Lax')
+    expect(readFlowCookie(res, 'kuruma_oauth_intent')).toBe('provider')
+  })
+
+  test('absent intent → no provider intent cookie set', async () => {
+    setupGoogleEnv()
+    const app = createApp()
+    const res = await app.request('/auth/google/start', { method: 'POST' })
+    expect(readFlowCookie(res, 'kuruma_oauth_intent')).toBeUndefined()
+  })
+
+  // An unknown/renter intent must not leave a stale `provider` cookie alive from
+  // an aborted provider flow — /start binds the cookie freshly (erase otherwise).
+  test('intent=renter + stale provider intent cookie → erases it', async () => {
+    setupGoogleEnv()
+    const app = createApp()
+    const res = await app.request('/auth/google/start?intent=renter', {
+      method: 'POST',
+      headers: { cookie: 'kuruma_oauth_intent=provider' },
+    })
+    expect(res.status).toBe(302)
+    expect(erasesFlowCookie(res, 'kuruma_oauth_intent')).toBe(true)
+  })
+
+  test('valid invite token → sets the kuruma_oauth_invite cookie', async () => {
+    setupGoogleEnv()
+    const app = createApp()
+    const res = await app.request('/auth/google/start?intent=provider&invite=Ab3-_xyz09', {
+      method: 'POST',
+    })
+    expect(res.status).toBe(302)
+    expect(readFlowCookie(res, 'kuruma_oauth_invite')).toBe('Ab3-_xyz09')
+  })
+
+  test('malformed invite token → no invite cookie + erases stale', async () => {
+    setupGoogleEnv()
+    const app = createApp()
+    const res = await app.request('/auth/google/start?intent=provider&invite=bad!token', {
+      method: 'POST',
+      headers: { cookie: 'kuruma_oauth_invite=stale' },
+    })
+    expect(res.status).toBe(302)
+    expect(readFlowCookie(res, 'kuruma_oauth_invite')).toBeUndefined()
+    expect(erasesFlowCookie(res, 'kuruma_oauth_invite')).toBe(true)
+  })
 })
 
 /** Read the decoded value of the kuruma_oauth_return cookie, or undefined. */
@@ -117,8 +176,21 @@ function readReturnCookie(res: Response): string | undefined {
 /** True when the response sends a Set-Cookie that expires kuruma_oauth_return
  *  (empty value + Max-Age=0) — i.e. it tells the browser to drop the stale one. */
 function erasesReturnCookie(res: Response): boolean {
-  const hit = (res.headers.getSetCookie?.() ?? []).find((c) => c.startsWith('kuruma_oauth_return='))
+  return erasesFlowCookie(res, 'kuruma_oauth_return')
+}
+
+/** Read the decoded value of a named flow cookie, or undefined (empty = unset). */
+function readFlowCookie(res: Response, name: string): string | undefined {
+  const hit = (res.headers.getSetCookie?.() ?? []).find((c) => c.startsWith(`${name}=`))
+  if (!hit) return undefined
+  const value = hit.slice(`${name}=`.length).split(';')[0] ?? ''
+  return value === '' ? undefined : decodeURIComponent(value)
+}
+
+/** True when the response expires a named flow cookie (empty value + Max-Age=0). */
+function erasesFlowCookie(res: Response, name: string): boolean {
+  const hit = (res.headers.getSetCookie?.() ?? []).find((c) => c.startsWith(`${name}=`))
   if (!hit) return false
-  const value = hit.slice('kuruma_oauth_return='.length).split(';')[0] ?? ''
+  const value = hit.slice(`${name}=`.length).split(';')[0] ?? ''
   return value === '' && /max-age=0\b/i.test(hit)
 }

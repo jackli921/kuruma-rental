@@ -72,4 +72,13 @@ export class InMemoryUserRepository implements UserRepository {
       (u) => u.role === 'OPERATOR_OWNER' && u.operatorId === operatorId,
     )
   }
+
+  async setOperatorAccess(
+    userId: string,
+    access: { role: 'OPERATOR_OWNER' | 'OPERATOR_STAFF'; operatorId: string },
+  ): Promise<void> {
+    const user = this.store.get(userId)
+    if (!user) return
+    this.store.set(userId, { ...user, role: access.role, operatorId: access.operatorId })
+  }
 }

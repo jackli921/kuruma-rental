@@ -60,6 +60,30 @@ describe('fetchSession', () => {
     })
   })
 
+  it('passes operator identity (operatorId/operatorSlug) through for an operator session', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () =>
+        jsonResponse({
+          success: true,
+          data: {
+            user: {
+              id: 'u1',
+              role: 'OPERATOR_OWNER',
+              operatorId: 'op_1',
+              operatorSlug: 'acme',
+            },
+            csrfToken: 'tok',
+          },
+        }),
+      ),
+    )
+    await expect(fetchSession()).resolves.toEqual({
+      user: { id: 'u1', role: 'OPERATOR_OWNER', operatorId: 'op_1', operatorSlug: 'acme' },
+      csrfToken: 'tok',
+    })
+  })
+
   it('returns null on 401 (no session)', async () => {
     vi.stubGlobal(
       'fetch',

@@ -38,6 +38,7 @@ export class FetchGoogleOAuthProvider implements GoogleOAuthProvider {
     const p = (await res.json()) as {
       sub?: string
       email?: string
+      email_verified?: boolean
       name?: string
       picture?: string
     }
@@ -46,6 +47,7 @@ export class FetchGoogleOAuthProvider implements GoogleOAuthProvider {
     return {
       sub: p.sub,
       ...(p.email !== undefined ? { email: p.email } : {}),
+      ...(p.email_verified !== undefined ? { email_verified: p.email_verified } : {}),
       ...(p.name !== undefined ? { name: p.name } : {}),
       ...(p.picture !== undefined ? { picture: p.picture } : {}),
     }
