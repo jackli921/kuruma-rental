@@ -478,6 +478,26 @@ describe('getAddOns', () => {
     ])
   })
 
+  it('exposes exactly the whitelisted keys — no operator-internal columns leak (#532)', async () => {
+    // Public, unauthenticated surface (tourists + Trip.com). A future refactor
+    // to `return options` / `...spread` would silently leak operatorId/status/
+    // timestamps; lock the projection to the customer-facing whitelist.
+    const op = await makeOperator('Op A', 'op-a')
+    const loc = await makeLocation({ operatorId: op.id })
+    await makeAddOn({ operatorId: op.id, name: 'Baby Seat', priceJpy: 1500 })
+
+    const result = await service.getAddOns(PUBLIC_CONTEXT, loc.id)
+
+    if (!result.ok) throw new Error('expected ok result')
+    expect(result.data).toHaveLength(1)
+    expect(Object.keys(result.data[0] ?? {}).sort()).toEqual([
+      'description',
+      'id',
+      'name',
+      'priceJpy',
+    ])
+  })
+
   it('excludes ARCHIVED add-ons', async () => {
     const op = await makeOperator('Op A', 'op-a')
     const loc = await makeLocation({ operatorId: op.id })
