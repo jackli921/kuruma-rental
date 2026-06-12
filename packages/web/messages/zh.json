@@ -842,7 +842,18 @@
         "total": "合计",
         "loading": "正在加载预订…",
         "loadError": "无法加载此预订",
-        "missing": "未找到预订"
+        "missing": "未找到预订",
+        "actions": "操作"
+      },
+      "timeline": {
+        "heading": "时间线",
+        "created": "预订已创建",
+        "statusChanged": "状态从{from}变更为{to}",
+        "vehicleSubstituted": "车辆已更换",
+        "reason": "原因：{reason}",
+        "cancelled": "预订已取消",
+        "cancellationFee": "取消费 {fee}",
+        "empty": "暂无事件"
       }
     }
   },

@@ -842,7 +842,18 @@
         "total": "Total",
         "loading": "Loading booking…",
         "loadError": "Couldn't load this booking",
-        "missing": "Booking not found"
+        "missing": "Booking not found",
+        "actions": "Actions"
+      },
+      "timeline": {
+        "heading": "Timeline",
+        "created": "Booking created",
+        "statusChanged": "Status changed from {from} to {to}",
+        "vehicleSubstituted": "Vehicle substituted",
+        "reason": "Reason: {reason}",
+        "cancelled": "Booking cancelled",
+        "cancellationFee": "Cancellation fee {fee}",
+        "empty": "No events yet"
       }
     }
   },
