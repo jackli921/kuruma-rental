@@ -27,6 +27,16 @@ export function manageGuard(session: Session | null, operatorSlug: string): Guar
   return session?.user.operatorSlug === operatorSlug ? { type: 'allow' } : { type: 'forbidden' }
 }
 
+// A *tenant-scoped* operator session carries an operatorId (#521); bypass business
+// roles (PLATFORM_ADMIN, legacy STAFF/ADMIN) do not. This is the exact mirror of the
+// API's non-bypass write branch — `operatorReadScope(ctx).kind !== 'all'` — so it gates
+// the operator-portal write affordances (Add/Edit/Archive): a write needs a single
+// target tenant, which only an operator session supplies. Bypass roles still read
+// cross-operator (#387 oversight), so the page renders read-only for them (#529 review).
+export function isOperatorSession(session: Session | null): boolean {
+  return Boolean(session?.user.operatorId)
+}
+
 export function adminGuard(session: Session | null): GuardResult {
   if (!session) return { type: 'login' }
   // Narrower than businessGuard: tenant-scoped OPERATOR_* roles clear the business

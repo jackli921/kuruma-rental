@@ -6,8 +6,12 @@ import { useTranslations } from 'use-intl'
 
 interface OperatorLocationsViewProps {
   readonly locations: readonly OperatorLocation[]
-  readonly onEdit: (l: OperatorLocation) => void
-  readonly onArchive: (l: OperatorLocation) => void
+  // Optional: omitted in read-only mode (bypass roles get cross-operator oversight
+  // but cannot write — a write needs a single target tenant they lack here, #529).
+  // `| undefined` is explicit: the route passes `canWrite ? setX : undefined`
+  // (exactOptionalPropertyTypes distinguishes absent from an explicit undefined).
+  readonly onEdit?: ((l: OperatorLocation) => void) | undefined
+  readonly onArchive?: ((l: OperatorLocation) => void) | undefined
 }
 
 const MINUTES_PER_HOUR = 60
@@ -43,8 +47,8 @@ export function OperatorLocationsView({
 
 interface LocationRowProps {
   location: OperatorLocation
-  onEdit: (l: OperatorLocation) => void
-  onArchive: (l: OperatorLocation) => void
+  onEdit?: ((l: OperatorLocation) => void) | undefined
+  onArchive?: ((l: OperatorLocation) => void) | undefined
 }
 
 function LocationRow({ location: l, onEdit, onArchive }: LocationRowProps) {
@@ -78,25 +82,31 @@ function LocationRow({ location: l, onEdit, onArchive }: LocationRowProps) {
         </div>
       </div>
 
-      <div className="flex shrink-0 items-center gap-1">
-        <Button
-          variant="ghost"
-          size="icon"
-          aria-label={t('editLocation')}
-          onClick={() => onEdit(l)}
-        >
-          <Pencil className="size-4" />
-        </Button>
-        <Button
-          variant="ghost"
-          size="icon"
-          aria-label={t('archiveAction')}
-          onClick={() => onArchive(l)}
-          disabled={l.status === 'ARCHIVED'}
-        >
-          <Trash2 className="size-4" />
-        </Button>
-      </div>
+      {(onEdit || onArchive) && (
+        <div className="flex shrink-0 items-center gap-1">
+          {onEdit && (
+            <Button
+              variant="ghost"
+              size="icon"
+              aria-label={t('editLocation')}
+              onClick={() => onEdit(l)}
+            >
+              <Pencil className="size-4" />
+            </Button>
+          )}
+          {onArchive && (
+            <Button
+              variant="ghost"
+              size="icon"
+              aria-label={t('archiveAction')}
+              onClick={() => onArchive(l)}
+              disabled={l.status === 'ARCHIVED'}
+            >
+              <Trash2 className="size-4" />
+            </Button>
+          )}
+        </div>
+      )}
     </div>
   )
 }
