@@ -117,4 +117,17 @@ export class DrizzleUserRepository implements UserRepository {
       .where(and(eq(users.operatorId, operatorId), eq(users.role, 'OPERATOR_OWNER')))
     return rows.map(maskPlaceholderEmail) as User[]
   }
+
+  // #521 §6: the operator-grant projection write. Runs tx-bound inside the grant
+  // transaction (membership INSERT first is the race fence). The OperatorRole
+  // subset maps 1:1 onto the `role` enum, so no widening cast is needed.
+  async setOperatorAccess(
+    userId: string,
+    access: { role: 'OPERATOR_OWNER' | 'OPERATOR_STAFF'; operatorId: string },
+  ): Promise<void> {
+    await this.db
+      .update(users)
+      .set({ role: access.role, operatorId: access.operatorId, updatedAt: new Date() })
+      .where(eq(users.id, userId))
+  }
 }

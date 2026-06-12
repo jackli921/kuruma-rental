@@ -4,15 +4,31 @@ import { deleteCookie, getCookie, setCookie } from 'hono/cookie'
 import {
   type GoogleAuthRuntime,
   type GoogleOAuthConfig,
+  OAUTH_INTENT_COOKIE,
+  OAUTH_INVITE_COOKIE,
   OAUTH_RETURN_COOKIE,
   OAUTH_STATE_COOKIE,
   OAUTH_STATE_TTL_SECONDS,
   buildGoogleAuthorizeUrl,
+  localeFromReturnPath,
+  parseOAuthIntent,
   randomToken,
+  safeInviteToken,
   safeReturnPath,
 } from '../auth/google'
-import { SESSION_COOKIE, mintSessionToken, verifySessionCookie } from '../middleware/auth'
+import {
+  SESSION_COOKIE,
+  type UserRole,
+  mintSessionToken,
+  verifySessionCookie,
+} from '../middleware/auth'
+import type { OperatorGrantService } from '../services/operator-grant'
 import { fail, ok } from './helpers'
+
+/** Resolves an operatorId to its stored slug (operators.slug), or undefined when
+ *  the operator is unknown. Injected so the route stays off the repo layer; the
+ *  slug is server-derived (never user input) and powers /manage/<slug> redirects. */
+export type FindOperatorSlug = (operatorId: string) => Promise<string | undefined>
 
 // 7-day lifetime, matching the Auth.js session today (design spec §5.3).
 const SESSION_TTL_SECONDS = 7 * 24 * 60 * 60
@@ -27,6 +43,18 @@ const SESSION_COOKIE_OPTS = {
   path: '/',
 } as const
 
+// Shared attributes for every short-lived OAuth round-trip cookie (state, return,
+// intent, invite). HttpOnly + Secure + SameSite=Lax so they survive Google's
+// top-level GET redirect back to the callback, scoped to '/', expiring with the
+// flow's TTL — one definition keeps the four cookies' security posture in lockstep.
+const OAUTH_FLOW_COOKIE_OPTS = {
+  httpOnly: true,
+  secure: true,
+  sameSite: 'Lax',
+  path: '/',
+  maxAge: OAUTH_STATE_TTL_SECONDS,
+} as const
+
 /** Set the session cookie at sign-in. Consumed by the OAuth callback (Phase 2);
  *  centralised here so the security attributes live in exactly one place. */
 export function setSessionCookie(c: Context, token: string): void {
@@ -39,11 +67,21 @@ export function clearSessionCookie(c: Context): void {
   deleteCookie(c, SESSION_COOKIE, SESSION_COOKIE_OPTS)
 }
 
-/** Drop both one-time OAuth-flow cookies (state + return). Called on every
- *  callback failure path so a dead-ended sign-in leaves nothing behind to expire. */
+/** Drop every one-time OAuth-flow cookie (state + return + intent + invite).
+ *  Called on every callback failure path so a dead-ended sign-in leaves nothing
+ *  behind to expire or leak into a later flow. */
 function clearOAuthFlowCookies(c: Context): void {
   deleteCookie(c, OAUTH_STATE_COOKIE, { path: '/' })
   deleteCookie(c, OAUTH_RETURN_COOKIE, { path: '/' })
+  deleteCookie(c, OAUTH_INTENT_COOKIE, { path: '/' })
+  deleteCookie(c, OAUTH_INVITE_COOKIE, { path: '/' })
+}
+
+/** Build the provider-login error redirect (#521). `error` is an OperatorGrantResult
+ *  discriminant (`access_not_found` | `invite_invalid`) — server-controlled, never
+ *  user input — resolved against the web origin like every other redirect target. */
+function providerLoginErrorUrl(config: GoogleOAuthConfig, locale: string, error: string): string {
+  return new URL(`/${locale}/provider/login?error=${error}`, config.postLoginRedirect).toString()
 }
 
 /**
@@ -53,10 +91,15 @@ function clearOAuthFlowCookies(c: Context): void {
  * app never reads the `kuruma_session` cookie directly (it's HttpOnly), so it
  * calls this endpoint to learn who it is and to obtain the `csrfToken` it must
  * echo in `X-CSRF-Token` on every state-changing request (design spec §5.3).
+ *
+ * `providerAccess` + `findOperatorSlug` are present only when the API has a DB
+ * (composition root); without them the callback is the renter-only flow.
  */
 export function createAuthRoutes(
   googleConfig?: GoogleOAuthConfig,
   googleRuntime?: GoogleAuthRuntime,
+  providerAccess?: OperatorGrantService,
+  findOperatorSlug?: FindOperatorSlug,
 ) {
   return new Hono()
     .post('/auth/google/start', (c) => {
@@ -65,31 +108,35 @@ export function createAuthRoutes(
       // Bind a fresh state to a short-lived cookie; the callback rejects any
       // response whose state doesn't match (OAuth CSRF defence).
       const state = randomToken()
-      setCookie(c, OAUTH_STATE_COOKIE, state, {
-        httpOnly: true,
-        secure: true,
-        sameSite: 'Lax',
-        path: '/',
-        maxAge: OAUTH_STATE_TTL_SECONDS,
-      })
+      setCookie(c, OAUTH_STATE_COOKIE, state, OAUTH_FLOW_COOKIE_OPTS)
 
       // Carry a *validated* return path through the round-trip so the callback
       // can land the user back where the guard intercepted them. Open-redirect
       // targets are dropped (safeReturnPath → undefined) and simply ignored.
       const returnTo = safeReturnPath(c.req.query('returnTo'))
       if (returnTo) {
-        setCookie(c, OAUTH_RETURN_COOKIE, returnTo, {
-          httpOnly: true,
-          secure: true,
-          sameSite: 'Lax',
-          path: '/',
-          maxAge: OAUTH_STATE_TTL_SECONDS,
-        })
+        setCookie(c, OAUTH_RETURN_COOKIE, returnTo, OAUTH_FLOW_COOKIE_OPTS)
       } else {
         // Bind the return cookie freshly to *this* flow: with no/invalid returnTo,
         // erase any stale value an aborted earlier flow left behind, so the
         // callback can't inherit it and redirect a plain login to a stale path.
         deleteCookie(c, OAUTH_RETURN_COOKIE, { path: '/' })
+      }
+
+      // Provider sign-in door (#521 §5): carry intent + optional invite token to
+      // the callback. Each is bound freshly to *this* flow (set when valid, erase
+      // otherwise) so a stale value from an aborted flow can never leak forward.
+      // Identity is still Google's; these only steer the post-login authz decision.
+      if (parseOAuthIntent(c.req.query('intent')) === 'provider') {
+        setCookie(c, OAUTH_INTENT_COOKIE, 'provider', OAUTH_FLOW_COOKIE_OPTS)
+      } else {
+        deleteCookie(c, OAUTH_INTENT_COOKIE, { path: '/' })
+      }
+      const invite = safeInviteToken(c.req.query('invite'))
+      if (invite) {
+        setCookie(c, OAUTH_INVITE_COOKIE, invite, OAUTH_FLOW_COOKIE_OPTS)
+      } else {
+        deleteCookie(c, OAUTH_INVITE_COOKIE, { path: '/' })
       }
       return c.redirect(buildGoogleAuthorizeUrl(googleConfig, state), 302)
     })
@@ -109,7 +156,17 @@ export function createAuthRoutes(
         clearOAuthFlowCookies(c)
         return fail(c, 'Missing authorization code', 400)
       }
-      deleteCookie(c, OAUTH_STATE_COOKIE, { path: '/' })
+
+      // Read the one-time flow cookies into memory, then drop all four (defence in
+      // depth, mirroring the existing return-cookie re-validation): the decision
+      // below works from these values and never reads the cookies again. returnTo is
+      // re-validated so a tampered cookie can't open-redirect; its locale segment
+      // also steers the server-computed provider redirects.
+      const intent = parseOAuthIntent(getCookie(c, OAUTH_INTENT_COOKIE))
+      const inviteToken = safeInviteToken(getCookie(c, OAUTH_INVITE_COOKIE))
+      const returnTo = safeReturnPath(getCookie(c, OAUTH_RETURN_COOKIE))
+      const locale = localeFromReturnPath(returnTo)
+      clearOAuthFlowCookies(c)
 
       const secret = process.env.AUTH_SECRET
       if (!secret) return fail(c, 'Server auth is not configured', 500)
@@ -118,13 +175,54 @@ export function createAuthRoutes(
       const profile = await googleRuntime.provider.getUserInfo(accessToken)
       const user = await googleRuntime.accountStore.resolveUser(profile)
 
+      // Default grant = the user's already-projected identity (a renter, or an
+      // operator arriving through the renter door). Provider intent may UPGRADE it
+      // via an invite/membership; renter intent never touches the access decision.
+      let grant: { role: UserRole; operatorId?: string } = {
+        role: user.role,
+        ...(user.operatorId !== undefined ? { operatorId: user.operatorId } : {}),
+      }
+
+      if (intent === 'provider' && providerAccess) {
+        const access = await providerAccess.resolve({
+          userId: user.id,
+          ...(profile.email !== undefined ? { email: profile.email } : {}),
+          ...(profile.email_verified !== undefined
+            ? { emailVerified: profile.email_verified }
+            : {}),
+          ...(inviteToken !== undefined ? { inviteToken } : {}),
+        })
+        if (access.type !== 'granted') {
+          // Uninvited or bad invite: bounce to the provider login with the reason,
+          // minting no session — the provider door alone never logs anyone in.
+          return c.redirect(providerLoginErrorUrl(googleConfig, locale, access.type), 302)
+        }
+        grant = { role: access.role, operatorId: access.operatorId }
+      }
+
+      // Slug is ALWAYS derived from the resolved operatorId, on every intent, so an
+      // operator using the renter door still satisfies the web /manage/$slug guard.
+      const operatorSlug =
+        grant.operatorId !== undefined && findOperatorSlug
+          ? await findOperatorSlug(grant.operatorId)
+          : undefined
+
+      // Provider intent needs a resolvable slug for the /manage/$slug destination.
+      // If the grant resolved but the slug didn't (an internal inconsistency), fail
+      // the door CLOSED *before* minting — a denied provider attempt must never
+      // leave a session cookie behind (mirrors the access_not_found bounce above).
+      if (intent === 'provider' && !operatorSlug) {
+        return c.redirect(providerLoginErrorUrl(googleConfig, locale, 'access_not_found'), 302)
+      }
+
       const token = await mintSessionToken(
         {
           sub: user.id,
-          role: user.role,
+          role: grant.role,
           csrf: randomToken(),
           // exactOptionalPropertyTypes: omit the key rather than pass undefined.
-          ...(user.operatorId !== undefined ? { operatorId: user.operatorId } : {}),
+          ...(grant.operatorId !== undefined ? { operatorId: grant.operatorId } : {}),
+          ...(operatorSlug !== undefined ? { operatorSlug } : {}),
           // Display profile for the navbar (avatar/name/email) — mirrors what
           // NextAuth seeded into its session JWT from the OAuth profile.
           ...(profile.name !== undefined ? { name: profile.name } : {}),
@@ -135,14 +233,23 @@ export function createAuthRoutes(
       )
       setSessionCookie(c, token)
 
-      // Honour a return path stashed at /start, then clear the one-time cookie.
-      // The attacker can neither read nor forge the HttpOnly value, but we still
-      // re-validate (defence in depth) so a tampered cookie can't open-redirect.
-      const returnTo = safeReturnPath(getCookie(c, OAUTH_RETURN_COOKIE))
-      deleteCookie(c, OAUTH_RETURN_COOKIE, { path: '/' })
-      // Resolve the validated (root-relative) returnTo against the same web origin
-      // postLoginRedirect targets, so a relative path can never land on the API's
-      // own origin if the callback is ever hit off-proxy (#378 cutover insurance).
+      // Provider intent lands on the server-computed operator dashboard: the slug is
+      // server-derived, so it can't be steered by returnTo. The slug is guaranteed
+      // present here — the bail above already failed the path closed otherwise.
+      if (intent === 'provider') {
+        return c.redirect(
+          new URL(
+            `/${locale}/manage/${operatorSlug}/dashboard`,
+            googleConfig.postLoginRedirect,
+          ).toString(),
+          302,
+        )
+      }
+
+      // Renter intent: honour the validated returnTo, else the default landing.
+      // Resolved against the web origin postLoginRedirect targets, so a relative
+      // path can never land on the API's own origin if the callback is ever hit
+      // off-proxy (#378 cutover insurance).
       const target = returnTo
         ? new URL(returnTo, googleConfig.postLoginRedirect).toString()
         : googleConfig.postLoginRedirect
@@ -159,7 +266,15 @@ export function createAuthRoutes(
       // `profile` holds only the keys actually present, so the user object never
       // gains a stray `name: undefined` (exactOptionalPropertyTypes).
       return ok(c, {
-        user: { id: session.user.id, role: session.user.role, ...session.profile },
+        user: {
+          id: session.user.id,
+          role: session.user.role,
+          // Operator identity (#521): operatorId scopes API authz; operatorSlug lets
+          // the web /manage/$slug guard match the URL. Both omitted for renters.
+          ...(session.user.operatorId !== undefined ? { operatorId: session.user.operatorId } : {}),
+          ...(session.operatorSlug !== undefined ? { operatorSlug: session.operatorSlug } : {}),
+          ...session.profile,
+        },
         csrfToken: session.csrf,
       })
     })

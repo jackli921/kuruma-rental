@@ -33,7 +33,24 @@
     "apple": "Apple",
     "signInTitle": "ログイン",
     "signInSubtitle": "Best Car Rental に続行",
-    "continueWithGoogle": "Googleで続行"
+    "continueWithGoogle": "Googleで続行",
+    "provider": {
+      "signInTitle": "事業者ログイン",
+      "signInSubtitle": "車両を管理するにはログインしてください",
+      "continueAsProvider": "Googleで続行",
+      "accessNotFoundTitle": "事業者アクセスがありません",
+      "accessNotFoundBody": "この Google アカウントは事業者に登録されていません。アクセス権が必要な場合は、下記からリクエストしてください。",
+      "inviteInvalidTitle": "招待が無効です",
+      "inviteInvalidBody": "この招待は有効期限が切れているか、すでに使用されているか、別の Google アカウント宛てに発行されています。事業者に新しい招待を依頼してください。",
+      "requestAccess": "アクセスをリクエスト",
+      "invite": {
+        "title": "{operator} に招待されています",
+        "subtitle": "招待された Google アカウントでサインインして参加してください。",
+        "continue": "Googleで続行",
+        "expiredTitle": "招待は利用できません",
+        "expiredBody": "この招待は有効期限が切れているか、すでに使用されています。事業者に新しい招待を依頼してください。"
+      }
+    }
   },
   "nav": {
     "home": "ホーム",

@@ -337,6 +337,20 @@
       "when": 1781134523201,
       "tag": "0047_notification_dead_state",
       "breakpoints": true
+    },
+    {
+      "idx": 48,
+      "version": "7",
+      "when": 1781137994754,
+      "tag": "0048_add_operator_memberships_and_provider_invites",
+      "breakpoints": true
+    },
+    {
+      "idx": 49,
+      "version": "7",
+      "when": 1781264933507,
+      "tag": "0049_provider_invites_fk_indexes",
+      "breakpoints": true
     }
   ]
 }
