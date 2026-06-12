@@ -444,18 +444,22 @@ export function createApp(overrides?: {
     }
   })()
 
-  // Forward geocoder (#531): real OSM/Nominatim only when a descriptive
-  // User-Agent is configured — OSMF policy forbids hitting the API without one,
-  // so with no UA we fall back to a null-returning stub. Geocoding is
-  // best-effort (the service treats null as "no coordinates" and the location
-  // still saves), so unlike email/payment there is no loud prod sentinel. A
-  // test override wins outright, proving a provider swap touches only this line.
+  // Forward geocoder (#531): disabled by default — returns null (no coords)
+  // unless BOTH a descriptive User-Agent AND an explicit endpoint are set. We do
+  // NOT default to the public OSM endpoint: its usage policy caps the WHOLE app
+  // at 1 req/s and there is no app-side throttle/cache here yet (#574), so a
+  // burst of operator saves would breach it. Production must point
+  // NOMINATIM_API_URL at a self-hosted / proxied / quota-backed instance (or
+  // swap in a different provider adapter on this one line). Geocoding is
+  // best-effort — the service treats null as "no coordinates" and the location
+  // still saves — so the null stub is safe and there is no loud prod sentinel.
+  // A test override wins outright, proving a provider swap touches only here.
   const geocoder: Geocoder =
     overrides?.geocoder ??
     (() => {
       const userAgent = process.env.NOMINATIM_USER_AGENT
-      if (!userAgent) return { geocode: async () => null }
-      const baseUrl = process.env.NOMINATIM_API_URL ?? 'https://nominatim.openstreetmap.org'
+      const baseUrl = process.env.NOMINATIM_API_URL
+      if (!userAgent || !baseUrl) return { geocode: async () => null }
       return new NominatimGeocoder(baseUrl, userAgent)
     })()
 

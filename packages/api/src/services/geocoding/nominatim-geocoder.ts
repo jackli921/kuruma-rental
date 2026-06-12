@@ -35,19 +35,29 @@ export class NominatimGeocoder implements Geocoder {
         headers: { 'User-Agent': this.userAgent },
         signal: AbortSignal.timeout(GEOCODE_TIMEOUT_MS),
       })
-      if (!response.ok) return null
+      if (!response.ok) {
+        // 429/403 here is the rate-limit/ban signal under the OSMF policy (#574);
+        // surface it so provider degradation is visible. The save still proceeds.
+        console.warn('[geocode] provider returned non-OK; persisting without coords', {
+          status: response.status,
+        })
+        return null
+      }
 
       const hits = (await response.json()) as NominatimHit[]
       const first = hits[0]
-      if (!first) return null
+      if (!first) return null // a genuine no-match is normal, not a failure
 
       const lat = Number(first.lat)
       const lng = Number(first.lon)
       if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null
       return { lat, lng }
-    } catch {
+    } catch (err) {
       // Network error, timeout (TimeoutError/AbortError), or a malformed body.
-      // Best-effort: swallow and report "no coordinates" so the save proceeds.
+      // Best-effort: log and report "no coordinates" so the save proceeds.
+      console.warn('[geocode] lookup failed; persisting without coords', {
+        error: err instanceof Error ? err.message : String(err),
+      })
       return null
     }
   }
