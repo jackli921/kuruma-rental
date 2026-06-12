@@ -53,10 +53,18 @@ const timezoneSchema = z
 // 60-min floor (#551): guarantees a real servicing gap between rentals. This is
 // a service-quality minimum, not overlap-safety — overlap is already impossible
 // at any turnaround via the bookings_no_overlap exclusion constraint.
+/**
+ * Minimum servicing gap between rentals, in minutes (#551). Single app-layer
+ * source for the floor — shared by this Zod schema and the LocationForm input.
+ * The DB CHECK `locations_turnaround_min_60` (schema.ts + the 0050 migration SQL)
+ * stays a literal `60` on purpose: regenerating it to interpolate the constant
+ * would churn the migration snapshot for no behavioural change.
+ */
+export const MIN_TURNAROUND_MINUTES = 60
 const turnaroundSchema = z
   .number()
   .int('Turnaround must be a whole number of minutes')
-  .min(60, 'Turnaround must be at least 60 minutes')
+  .min(MIN_TURNAROUND_MINUTES, `Turnaround must be at least ${MIN_TURNAROUND_MINUTES} minutes`)
 
 // WGS84 decimal degrees (#531). Bounds reject NaN/±Infinity on their own (the
 // comparison is false for non-finite values), but the explicit finiteness

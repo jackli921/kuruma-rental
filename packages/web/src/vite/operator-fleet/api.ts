@@ -176,7 +176,11 @@ export interface VehicleClassOption {
 }
 
 export async function fetchVehicleClassOptions(): Promise<VehicleClassOption[]> {
-  const res = await fetch(`${getApiBaseUrl()}/vehicle-classes`, { credentials: 'include' })
+  // `/manage` is the tenant-scoped, session-authed class list (#528). The public
+  // `/vehicle-classes` is PUBLIC_CONTEXT 'all'-scope — it would leak every
+  // operator's classes into this operator's own form dropdown. Depends on #528
+  // (the /manage route) being on trunk first.
+  const res = await fetch(`${getApiBaseUrl()}/vehicle-classes/manage`, { credentials: 'include' })
   const data = await unwrap<Array<{ id: string; name: string }>>(res)
   return data.map((c) => ({ id: c.id, name: c.name }))
 }
