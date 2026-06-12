@@ -1,6 +1,7 @@
 import { unwrap } from '@/lib/api-error'
 import { getApiBaseUrl } from '@/vite/api-base'
 import type { LocationOperatingHours } from '@kuruma/shared/types/location'
+import type { CreateLocationInput } from '@kuruma/shared/validators/location'
 import { queryOptions } from '@tanstack/react-query'
 
 // #529: operator locations/storefronts management — Vite port of the frozen
@@ -40,4 +41,19 @@ export function operatorLocationsQueryOptions() {
     queryKey: LOCATIONS_QUERY_KEY,
     queryFn: fetchOperatorLocations,
   })
+}
+
+// --- Mutations (cookie-based; operator-scoped server-side) --------------------
+// The client never names a tenant — the session cookie scopes the write. unwrap
+// throws ApiError on a failure body, so a 409 duplicate name reaches the
+// dialog's useMutation onError with its message intact, mirroring operator-fleet.
+
+export async function createLocation(data: CreateLocationInput): Promise<OperatorLocation> {
+  const res = await fetch(`${getApiBaseUrl()}/locations`, {
+    method: 'POST',
+    credentials: 'include',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data),
+  })
+  return unwrap<OperatorLocation>(res)
 }
