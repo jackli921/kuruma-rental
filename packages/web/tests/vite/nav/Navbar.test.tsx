@@ -99,11 +99,16 @@ describe('Navbar', () => {
       'data-to',
       '/$locale/manage/fleet',
     )
+    // #529: the operator locations/storefronts view lives at /manage/locations.
+    expect(screen.getByText('Locations').closest('a')).toHaveAttribute(
+      'data-to',
+      '/$locale/manage/locations',
+    )
     expect(container.querySelector('nav')?.hasAttribute('data-business-nav')).toBe(true)
     const client = screen.getByTestId('navbar-client')
     expect(client).toHaveAttribute('data-view-mode', 'business')
     expect(client).toHaveAttribute('data-can-switch', 'true')
-    expect(screen.getByTestId('mobile-menu')).toHaveAttribute('data-nav-count', '3')
+    expect(screen.getByTestId('mobile-menu')).toHaveAttribute('data-nav-count', '4')
   })
 
   it('shows Browse, My Bookings, and Documents (no business markers) for a signed-in renter', () => {
