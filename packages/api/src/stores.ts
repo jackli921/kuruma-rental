@@ -1,3 +1,4 @@
+import type { notificationStatusEnum } from '@kuruma/shared/db/schema'
 import type {
   AddOnSnapshot,
   BookingEventPayload,
@@ -8,6 +9,14 @@ import type {
 } from '@kuruma/shared/db/schema'
 import type { LuggageSize } from '@kuruma/shared/lib/luggage'
 import type { LocationOperatingHours } from '@kuruma/shared/types/location'
+
+/**
+ * Single source of truth for the notification status set is the
+ * `notificationStatusEnum` pgEnum in @kuruma/shared. Derive the union here so a
+ * new status (e.g. DEAD, #483) added to the enum can't drift from this type
+ * without a compile error (#534).
+ */
+export type NotificationStatus = (typeof notificationStatusEnum.enumValues)[number]
 
 export interface VehicleClass {
   id: string
@@ -143,7 +152,7 @@ export interface NotificationLog {
   channel: string
   recipient: string
   locale: string
-  status: 'QUEUED' | 'SENDING' | 'SENT' | 'FAILED' | 'DEAD'
+  status: NotificationStatus
   providerMessageId: string | null
   error: string | null
   attempts: number

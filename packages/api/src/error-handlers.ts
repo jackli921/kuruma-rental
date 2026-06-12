@@ -26,6 +26,15 @@ export function setupGlobalHandlers(app: Hono): void {
       JSON.stringify({
         level: 'error',
         message: err.message,
+        // Drizzle/postgres-js wrap the driver failure in `err.cause` and keep
+        // the useful frames in `err.stack`. Log both server-side so a DB error
+        // (e.g. missing column/constraint) is self-diagnosing (#539). The
+        // client response below stays sanitized — nothing here leaks.
+        cause:
+          err.cause instanceof Error
+            ? { message: err.cause.message, stack: err.cause.stack }
+            : (err.cause ?? null),
+        stack: err.stack,
         path: c.req.path,
         method: c.req.method,
       }),

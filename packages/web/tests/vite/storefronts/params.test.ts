@@ -1,4 +1,5 @@
 import {
+  carryForwardFilters,
   defaultSearchRange,
   normalizeClassFilter,
   parseSearchRange,
@@ -79,5 +80,35 @@ describe('searchRangeToSeed', () => {
 
   it('seeds defaults when both bounds are absent', () => {
     expect(searchRangeToSeed({}, now)).toEqual(defaultSearchRange(now))
+  })
+})
+
+describe('carryForwardFilters (#499)', () => {
+  it('keeps a single class code', () => {
+    expect(carryForwardFilters({ class: 'CCAR' })).toEqual({ class: 'CCAR' })
+  })
+
+  it('keeps a repeatable class array', () => {
+    expect(carryForwardFilters({ class: ['CCAR', 'ECAR'] })).toEqual({ class: ['CCAR', 'ECAR'] })
+  })
+
+  it('keeps pickupLocationId', () => {
+    expect(carryForwardFilters({ pickupLocationId: 'loc_1' })).toEqual({
+      pickupLocationId: 'loc_1',
+    })
+  })
+
+  it('threads class and pickupLocationId together', () => {
+    expect(carryForwardFilters({ class: 'CCAR', pickupLocationId: 'loc_1' })).toEqual({
+      class: 'CCAR',
+      pickupLocationId: 'loc_1',
+    })
+  })
+
+  it('drops absent, empty-string, and empty-array filters for a clean URL', () => {
+    expect(carryForwardFilters({})).toEqual({})
+    expect(carryForwardFilters({ class: '', pickupLocationId: '' })).toEqual({})
+    expect(carryForwardFilters({ class: [] })).toEqual({})
+    expect(carryForwardFilters({ class: undefined, pickupLocationId: undefined })).toEqual({})
   })
 })

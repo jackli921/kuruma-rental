@@ -90,7 +90,7 @@ export const Route = createFileRoute('/$locale/search')({
 function StorefrontSearchRoute() {
   const t = useTranslations('search')
   const { locale } = Route.useParams()
-  const { from, to } = Route.useSearch()
+  const { from, to, class: classFilter, pickupLocationId } = Route.useSearch()
   const data = Route.useLoaderData()
 
   return (
@@ -108,6 +108,8 @@ function StorefrontSearchRoute() {
             key={`${from ?? ''}|${to ?? ''}`}
             defaultFrom={from ?? ''}
             defaultTo={to ?? ''}
+            classFilter={classFilter}
+            pickupLocationId={pickupLocationId}
           />
         </div>
 
@@ -118,22 +120,32 @@ function StorefrontSearchRoute() {
         {data.view === 'map' ? (
           <SearchMap result={data.flat} />
         ) : (
-          <StoreGrid result={data.storefronts} from={from ?? ''} to={to ?? ''} />
+          <StoreGrid
+            result={data.storefronts}
+            from={from ?? ''}
+            to={to ?? ''}
+            classFilter={classFilter}
+            pickupLocationId={pickupLocationId}
+          />
         )}
       </div>
     </main>
   )
 }
 
-/** Slice-5 storefront grid (unchanged) — the default view. */
+/** Slice-5 storefront grid — the default view. Forwards active filters (#499). */
 function StoreGrid({
   result,
   from,
   to,
+  classFilter,
+  pickupLocationId,
 }: {
   readonly result: StorefrontSearchResultData | null
   readonly from: string
   readonly to: string
+  readonly classFilter?: string | string[] | undefined
+  readonly pickupLocationId?: string | undefined
 }) {
   const t = useTranslations('search')
 
@@ -151,7 +163,14 @@ function StoreGrid({
   return (
     <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
       {result.storefronts.map((storefront) => (
-        <StorefrontCard key={storefront.locationId} storefront={storefront} from={from} to={to} />
+        <StorefrontCard
+          key={storefront.locationId}
+          storefront={storefront}
+          from={from}
+          to={to}
+          classFilter={classFilter}
+          pickupLocationId={pickupLocationId}
+        />
       ))}
     </div>
   )
