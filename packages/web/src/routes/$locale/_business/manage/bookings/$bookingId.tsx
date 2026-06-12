@@ -21,8 +21,8 @@ import { useTranslations } from 'use-intl'
 // replacement for the #548 drawer — an operator can bookmark/share a reservation.
 // Behind `_business`; the single read is tenant-sealed server-side (404 -> null ->
 // notFound). All data comes from the API, so a hard refresh works (no list row).
-// The vertical event timeline lands in the next slice; the right column + Actions
-// placeholder (phase 2) are reserved there.
+// Two-column layout: booking detail + an Actions placeholder (cancel / substitute
+// / status — reserved for phase 2) on the left, the vertical event timeline right.
 export const Route = createFileRoute('/$locale/_business/manage/bookings/$bookingId')({
   loader: async ({ context, params }) => {
     const detail = await context.queryClient.ensureQueryData(
