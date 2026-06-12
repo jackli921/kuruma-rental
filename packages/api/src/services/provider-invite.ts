@@ -7,6 +7,16 @@ import type { OperatorRepository, ProviderInviteRepository } from '../repositori
 // recipient is expected to accept promptly during onboarding.
 export const INVITE_TTL_MS = 7 * 24 * 60 * 60 * 1000
 
+/** Raised when an invite is minted against an operatorId with no matching row.
+ *  The route maps this to a 404 so a bad target reads as a client error, not a
+ *  500 from the FK violation (#563). */
+export class OperatorNotFoundError extends Error {
+  constructor(readonly operatorId: string) {
+    super(`Operator not found: ${operatorId}`)
+    this.name = 'OperatorNotFoundError'
+  }
+}
+
 export interface ProviderInviteAuditEvent {
   readonly type: 'PROVIDER_INVITE_CREATED'
   readonly invitedByUserId: string
@@ -58,6 +68,11 @@ export class ProviderInviteService {
     input: CreateProviderInviteInput,
     invitedByUserId: string,
   ): Promise<CreatedInvite> {
+    // Validate the target exists before the insert so an unknown operatorId is a
+    // clean 404 rather than a 500 from the FK constraint (#563).
+    const operator = await this.operatorRepo.findById(input.operatorId)
+    if (!operator) throw new OperatorNotFoundError(input.operatorId)
+
     const token = randomToken(32)
     const expiresAt = new Date(Date.now() + (this.config.ttlMs ?? INVITE_TTL_MS))
     await this.repo.create({

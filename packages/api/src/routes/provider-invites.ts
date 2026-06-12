@@ -1,7 +1,8 @@
-import { type RateLimitBinding, rateLimit } from '@elithrar/workers-hono-rate-limit'
-import { type Context, Hono } from 'hono'
+import type { RateLimitBinding } from '@elithrar/workers-hono-rate-limit'
+import { Hono } from 'hono'
 import type { ProviderInviteService } from '../services/provider-invite'
 import { ok } from './helpers'
+import { rateLimitByIp } from './rate-limit'
 
 /**
  * Public provider-invite preview (#521 §7). Anonymous by design — the invite
@@ -22,10 +23,9 @@ export function createProviderInviteRoutes(
 
   // Per-IP budget on the unauthenticated preview path — an invite token is a
   // guessable-shaped public endpoint, so cap brute-force probing (mirrors the
-  // storefront catalog limiter).
+  // storefront catalog limiter). Fails closed on an unresolvable IP (#563).
   if (publicCatalogLimiter) {
-    const ipKey = (c: Context) => c.req.header('cf-connecting-ip') ?? ''
-    app.use('/provider-invites/*', rateLimit(publicCatalogLimiter, ipKey))
+    app.use('/provider-invites/*', rateLimitByIp(publicCatalogLimiter))
   }
 
   return app.get('/provider-invites/:token/preview', async (c) => {
