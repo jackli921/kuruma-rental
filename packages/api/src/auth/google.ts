@@ -51,22 +51,23 @@ export const GOOGLE_TOKEN_ENDPOINT = 'https://oauth2.googleapis.com/token'
 export const GOOGLE_USERINFO_ENDPOINT = 'https://openidconnect.googleapis.com/v1/userinfo'
 export const GOOGLE_SCOPE = 'openid email profile'
 
-/** Short-lived cookie binding the OAuth `state` across the start→callback
- *  round-trip. SameSite=Lax so it survives Google's top-level GET redirect. */
-export const OAUTH_STATE_COOKIE = 'kuruma_oauth_state'
+/** Per-flow OAuth round-trip cookie. Each sign-in gets its OWN cookie, named by
+ *  its random `state` (`<prefix><state>`), instead of four fixed-name single-slot
+ *  cookies — so two browser tabs starting Google sign-in at once no longer clobber
+ *  each other's flow (issue #519). The cookie's PRESENCE is itself the CSRF
+ *  binding: only a flow THIS browser started holds it, and it's HttpOnly so script
+ *  can't forge one. SameSite=Lax so it survives Google's top-level GET redirect;
+ *  it expires with the flow's TTL. The validated flow data (returnTo/intent/invite)
+ *  rides in the cookie VALUE — not the `state` param — so returnTo never appears in
+ *  the URL/referrer/logs. */
+export const OAUTH_FLOW_COOKIE_PREFIX = 'kuruma_oauth_flow_'
 export const OAUTH_STATE_TTL_SECONDS = 600
 
-/** Short-lived cookie carrying the post-login `returnTo` path across the
- *  start→callback round-trip. Shares the state cookie's TTL/SameSite so it
- *  survives Google's top-level redirect and expires with the flow. */
-export const OAUTH_RETURN_COOKIE = 'kuruma_oauth_return'
-
-/** Short-lived cookies carrying the provider sign-in `intent` and optional
- *  `invite` token across the round-trip (#521 §5). Same TTL/SameSite as the
- *  state/return cookies so they survive Google's redirect and expire with the
- *  flow; the callback reads then deletes them. */
-export const OAUTH_INTENT_COOKIE = 'kuruma_oauth_intent'
-export const OAUTH_INVITE_COOKIE = 'kuruma_oauth_invite'
+/** The per-flow cookie name for a given `state`. base64url `state` is composed of
+ *  valid cookie-name token chars (A–Z a–z 0–9 `-` `_`), so this needs no escaping. */
+export function flowCookieName(state: string): string {
+  return `${OAUTH_FLOW_COOKIE_PREFIX}${state}`
+}
 
 /** Which sign-in door the user came through. Identity is shared; only the
  *  post-login authorization decision and destination differ (#521). */
@@ -112,8 +113,10 @@ export function localeFromReturnPath(path: string | undefined): string {
 
 // The open-redirect guard for `returnTo` lives in @kuruma/shared so the API and
 // the web boundary enforce ONE definition — a guard cloned across a trust
-// boundary drifts. Re-exported so the auth routes keep importing it from here.
-export { safeReturnPath } from '@kuruma/shared/lib/return-path'
+// boundary drifts. Imported (so decodeFlowPayload can re-validate with it) and
+// re-exported so the auth routes keep importing it from here.
+import { safeReturnPath } from '@kuruma/shared/lib/return-path'
+export { safeReturnPath }
 
 export interface GoogleOAuthConfig {
   readonly clientId: string
@@ -144,4 +147,53 @@ export function buildGoogleAuthorizeUrl(config: GoogleOAuthConfig, state: string
     prompt: 'select_account',
   })
   return `${GOOGLE_AUTHORIZE_ENDPOINT}?${params.toString()}`
+}
+
+/** The data a flow carries from /start to its callback, stashed in the per-flow
+ *  cookie value. Keys are always present (values may be undefined) so callers can
+ *  destructure without exactOptionalPropertyTypes friction. */
+export interface FlowPayload {
+  readonly returnTo: string | undefined
+  readonly intent: OAuthIntent
+  readonly invite: string | undefined
+}
+
+/** Encode a flow's payload for its cookie value. Only non-default fields are
+ *  stored (renter intent + absent returnTo/invite encode to an empty object), so
+ *  the cookie stays tiny. base64url(JSON) — opaque + HttpOnly, never script-read. */
+export function encodeFlowPayload(payload: {
+  returnTo: string | undefined
+  intent: OAuthIntent
+  invite: string | undefined
+}): string {
+  const stored: Record<string, string> = {}
+  if (payload.returnTo) stored.returnTo = payload.returnTo
+  if (payload.intent === 'provider') stored.intent = 'provider'
+  if (payload.invite) stored.invite = payload.invite
+  return Buffer.from(JSON.stringify(stored)).toString('base64url')
+}
+
+/** Decode + re-validate a per-flow cookie value into a FlowPayload. Every field
+ *  runs back through its guard (safeReturnPath/parseOAuthIntent/safeInviteToken) —
+ *  the cookie was set by us, but defence in depth never trusts a returned cookie.
+ *  A malformed value degrades to the safe default (renter, no returnTo/invite):
+ *  the state binding already held (the cookie existed), so a garbled value drops
+ *  its extras rather than 400-ing a real flow. */
+export function decodeFlowPayload(raw: string | undefined): FlowPayload {
+  const parsed = parseFlowJson(raw)
+  return {
+    returnTo: safeReturnPath(parsed.returnTo),
+    intent: parseOAuthIntent(parsed.intent),
+    invite: safeInviteToken(parsed.invite),
+  }
+}
+
+function parseFlowJson(raw: string | undefined): Record<string, string | undefined> {
+  if (!raw) return {}
+  try {
+    const value: unknown = JSON.parse(Buffer.from(raw, 'base64url').toString('utf8'))
+    return value && typeof value === 'object' ? (value as Record<string, string>) : {}
+  } catch {
+    return {}
+  }
 }
