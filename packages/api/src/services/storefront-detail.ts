@@ -20,6 +20,9 @@ export interface StorefrontSummary {
   address: string
   operatorName: string
   operatingHours: LocationOperatingHours
+  /** #551: the operator's turnaround buffer, surfaced so renters see the
+   *  service-quality floor (~Nh between rentals) before booking. */
+  turnaroundMinutes: number
 }
 
 /**
@@ -217,6 +220,7 @@ export class StorefrontDetailService {
           address: storefront.address,
           operatorName: storefront.operatorName,
           operatingHours: storefront.operatingHours,
+          turnaroundMinutes: storefront.defaultTurnaroundMinutes,
         },
         vehicles: page,
         nextCursor,

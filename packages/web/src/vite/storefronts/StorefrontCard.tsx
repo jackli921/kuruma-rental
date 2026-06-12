@@ -1,8 +1,9 @@
 import { ClassSummaryBadges } from '@/vite/storefronts/ClassSummaryBadges'
 import type { StorefrontCardData } from '@/vite/storefronts/api'
 import { carryForwardFilters } from '@/vite/storefronts/params'
+import { turnaroundHours } from '@/vite/storefronts/turnaround'
 import { Link } from '@tanstack/react-router'
-import { Car, MapPin } from 'lucide-react'
+import { Car, Clock, MapPin } from 'lucide-react'
 import { useLocale, useTranslations } from 'use-intl'
 
 interface StorefrontCardProps {
@@ -69,6 +70,10 @@ export function StorefrontCard({
           </p>
         </div>
         <ClassSummaryBadges summaries={storefront.classSummaries} />
+        <p className="flex items-center gap-1 text-xs text-muted-foreground">
+          <Clock className="size-3.5 shrink-0" />
+          {t('turnaround', { hours: turnaroundHours(storefront.turnaroundMinutes) })}
+        </p>
         <p className="mt-auto text-base font-semibold text-foreground">{priceLabel}</p>
       </div>
     </Link>
