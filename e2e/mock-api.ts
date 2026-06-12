@@ -156,15 +156,42 @@ const bookings = new Map<string, unknown>()
 const ok = (data: unknown) => Response.json({ success: true, data })
 const fail = (error: string, status: number) => Response.json({ success: false, error }, { status })
 
+// Read a single cookie value off the request. The mock track has no real auth, so
+// authenticated specs (admin-portal.spec.ts) just set an `e2e-mock-role` cookie
+// the spec controls; we echo it back as the session role.
+function readCookie(req: Request, name: string): string | null {
+  const header = req.headers.get('cookie')
+  if (!header) return null
+  for (const part of header.split(';')) {
+    const [key, ...rest] = part.trim().split('=')
+    if (key === name) return decodeURIComponent(rest.join('='))
+  }
+  return null
+}
+
 Bun.serve({
   port: MOCK_PORT,
   async fetch(req) {
     const url = new URL(req.url)
 
-    // Signed-out session for the public mock track. The Vite Navbar calls
-    // /auth/session on every page; 401 -> null (anonymous) in fetchSession
-    // (packages/web/src/vite/session.ts), whereas a 404 would throw.
-    if (url.pathname === '/auth/session') return fail('unauthenticated', 401)
+    // Session resolution for the mock track. Public specs send no cookie -> 401 ->
+    // null (anonymous) in fetchSession (packages/web/src/vite/session.ts), whereas
+    // a 404 would throw. Authenticated specs set `e2e-mock-role`; we echo it as the
+    // session role so the SPA's guards (adminGuard/businessGuard) resolve without a
+    // real token or DB. Shape matches the ok() session envelope fetchSession expects.
+    if (url.pathname === '/auth/session') {
+      const role = readCookie(req, 'e2e-mock-role')
+      if (!role) return fail('unauthenticated', 401)
+      return ok({
+        user: {
+          id: `e2e-${role.toLowerCase()}`,
+          role,
+          name: `E2E ${role}`,
+          email: `${role.toLowerCase()}@e2e.local`,
+        },
+        csrfToken: 'e2e-csrf-token',
+      })
+    }
 
     if (url.pathname === '/vehicles') return ok([TEST_VEHICLE])
 

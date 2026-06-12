@@ -1,5 +1,5 @@
 import { createHash, randomBytes } from 'node:crypto'
-import { getDb } from './index'
+import type { getDb } from './index'
 import { parsePlatformAdminEmails } from './platform-admins'
 import {
   feeSchedules,
@@ -49,8 +49,7 @@ function demoShakenExpiry(): string {
   return expiry.toISOString().slice(0, 10)
 }
 
-async function seed() {
-  const db = getDb()
+export async function seed(db: ReturnType<typeof getDb>) {
   const now = new Date()
 
   // 1. Operators (tenant roots). vehicles/classes/locations all FK to these, so
@@ -320,10 +319,4 @@ async function seed() {
       `${DEMO_VEHICLE_CLASSES.length} classes, ${DEMO_VEHICLES.length} vehicles, ` +
       `${DEMO_INSURANCE_OPTIONS.length} insurance options, ${DEMO_FEE_SCHEDULES.length} fee schedules.`,
   )
-  process.exit(0)
 }
-
-seed().catch((err) => {
-  console.error('Seed failed:', err)
-  process.exit(1)
-})

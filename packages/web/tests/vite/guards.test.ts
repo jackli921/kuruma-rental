@@ -1,4 +1,4 @@
-import { businessGuard, manageGuard, renterGuard } from '@/vite/guards'
+import { adminGuard, businessGuard, manageGuard, renterGuard } from '@/vite/guards'
 import type { Session } from '@/vite/session'
 import { describe, expect, it } from 'vitest'
 
@@ -55,5 +55,23 @@ describe('manageGuard', () => {
 
   it('redirects signed-out users to login', () => {
     expect(manageGuard(null, 'acme')).toEqual({ type: 'login' })
+  })
+})
+
+describe('adminGuard', () => {
+  it('allows platform-admin roles (incl. legacy STAFF/ADMIN)', () => {
+    expect(adminGuard(session('PLATFORM_ADMIN'))).toEqual({ type: 'allow' })
+    expect(adminGuard(session('STAFF'))).toEqual({ type: 'allow' })
+    expect(adminGuard(session('ADMIN'))).toEqual({ type: 'allow' })
+  })
+  it('forbids tenant-scoped operators — admin is narrower than business', () => {
+    expect(adminGuard(session('OPERATOR_OWNER'))).toEqual({ type: 'forbidden' })
+    expect(adminGuard(session('OPERATOR_STAFF'))).toEqual({ type: 'forbidden' })
+  })
+  it('forbids a signed-in renter -> landing', () => {
+    expect(adminGuard(session('RENTER'))).toEqual({ type: 'forbidden' })
+  })
+  it('redirects signed-out users to login', () => {
+    expect(adminGuard(null)).toEqual({ type: 'login' })
   })
 })

@@ -7,12 +7,13 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
+import { isPlatformAdmin } from '@/lib/platform-roles'
 import { type Session, signOut } from '@/vite/session'
 import { type ViewMode, setViewMode } from '@/vite/view-mode'
 import { useQueryClient } from '@tanstack/react-query'
-import { useRouter } from '@tanstack/react-router'
-import { ArrowLeftRight, LogOut } from 'lucide-react'
-import { useTranslations } from 'use-intl'
+import { Link, useRouter } from '@tanstack/react-router'
+import { ArrowLeftRight, LogOut, Shield } from 'lucide-react'
+import { useLocale, useTranslations } from 'use-intl'
 
 export function getInitials(name: string | null | undefined): string {
   if (!name) return '?'
@@ -35,6 +36,7 @@ export function UserMenu({ session, canSwitchView, viewMode }: UserMenuProps) {
   const t = useTranslations()
   const router = useRouter()
   const queryClient = useQueryClient()
+  const locale = useLocale()
   const { user } = session
 
   const targetMode: ViewMode = viewMode === 'business' ? 'renter' : 'business'
@@ -74,6 +76,19 @@ export function UserMenu({ session, canSwitchView, viewMode }: UserMenuProps) {
           <p className="text-xs text-muted-foreground truncate">{user.email}</p>
         </div>
         <DropdownMenuSeparator />
+        {isPlatformAdmin(user.role) && (
+          <>
+            <DropdownMenuItem
+              render={
+                <Link to="/$locale/admin" params={{ locale }} className="cursor-pointer">
+                  <Shield className="size-4 mr-2" />
+                  {t('admin.home.title')}
+                </Link>
+              }
+            />
+            <DropdownMenuSeparator />
+          </>
+        )}
         {canSwitchView && (
           <>
             <DropdownMenuItem onClick={handleSwitchView} className="cursor-pointer">
