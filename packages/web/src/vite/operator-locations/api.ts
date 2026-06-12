@@ -31,7 +31,14 @@ export const LOCATIONS_QUERY_KEY = ['operator-locations'] as const
 export async function fetchOperatorLocations(): Promise<OperatorLocation[]> {
   // includeArchived=true so the owner sees soft-archived rows (muted badge) and
   // can tell why a name is taken; archiving frees the name for active inventory.
-  const res = await fetch(`${getApiBaseUrl()}/locations?includeArchived=true`, {
+  //
+  // includeAll=true (#435): the `_business` guard admits bypass-scope roles
+  // (STAFF/ADMIN/PLATFORM_ADMIN) too, and GET /locations 400s for them unless
+  // they opt into a cross-operator read — without this they'd hit the load-error
+  // state. Operator-scoped callers auto-scope server-side via the session cookie
+  // and the API IGNORES this flag for them, so it's safe to always send (the
+  // client still names no operatorId, so an operator's read stays tenant-scoped).
+  const res = await fetch(`${getApiBaseUrl()}/locations?includeArchived=true&includeAll=true`, {
     credentials: 'include',
   })
   return unwrap<OperatorLocation[]>(res)
