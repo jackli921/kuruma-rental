@@ -93,6 +93,98 @@ describe('Vehicle Class CRUD Routes', () => {
     })
   })
 
+  describe('GET /vehicle-classes/manage (operator owner list, #528)', () => {
+    const OP_A = 'operator-aaaaaaaa'
+    const OP_B = 'operator-bbbbbbbb'
+
+    function mountFor(repo: InMemoryVehicleClassRepository, role: UserRole, operatorId?: string) {
+      const vRepo = new InMemoryVehicleRepository()
+      const bRepo = new InMemoryBookingRepository()
+      const service = new VehicleClassService(repo, vRepo, bRepo)
+      const availabilityService = buildAvailabilityService(repo)
+      const a = new Hono()
+      setupGlobalHandlers(a)
+      a.use('*', testAuthMiddleware(`${role}-user`, role, operatorId))
+      a.route(
+        '/',
+        createVehicleClassRoutes(service, availabilityService, testResolveWriteOperatorId()),
+      )
+      return a
+    }
+
+    async function postFor(target: Hono, operatorId: string, slug: string) {
+      return target.request('/vehicle-classes', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ...validInput(), operatorId, slug }),
+      })
+    }
+
+    it('includes archived classes when includeArchived=true (the public GET cannot)', async () => {
+      const createRes = await createClass()
+      const { data } = await createRes.json()
+      await app.request(`/vehicle-classes/${data.id}`, { method: 'DELETE' }) // soft-archive
+
+      const res = await app.request('/vehicle-classes/manage?includeArchived=true')
+      expect(res.status).toBe(200)
+      const body = await res.json()
+      expect(body.data).toHaveLength(1)
+      expect(body.data[0].status).toBe('ARCHIVED')
+    })
+
+    it('excludes archived classes by default', async () => {
+      const createRes = await createClass()
+      const { data } = await createRes.json()
+      await app.request(`/vehicle-classes/${data.id}`, { method: 'DELETE' })
+
+      const res = await app.request('/vehicle-classes/manage')
+      const body = await res.json()
+      expect(body.data).toEqual([])
+    })
+
+    it('scopes the list to the caller operator (tenant isolation)', async () => {
+      const repo = new InMemoryVehicleClassRepository()
+      const staff = mountFor(repo, 'STAFF')
+      await postFor(staff, OP_A, 'a-compact')
+      await postFor(staff, OP_B, 'b-compact')
+
+      const ownerA = mountFor(repo, 'OPERATOR_OWNER', OP_A)
+      const res = await ownerA.request('/vehicle-classes/manage')
+      expect(res.status).toBe(200)
+      const body = await res.json()
+      expect(body.data).toHaveLength(1)
+      expect(body.data[0].operatorId).toBe(OP_A)
+    })
+
+    it('rejects a RENTER with 403 (operator/management-only)', async () => {
+      const renter = mountFor(new InMemoryVehicleClassRepository(), 'RENTER')
+      const res = await renter.request('/vehicle-classes/manage')
+      expect(res.status).toBe(403)
+      const body = await res.json()
+      expect(body.success).toBe(false)
+    })
+
+    it('rejects a PARTNER (3rd-party API caller) with 403 even with includeArchived', async () => {
+      const partner = mountFor(new InMemoryVehicleClassRepository(), 'PARTNER')
+      const res = await partner.request('/vehicle-classes/manage?includeArchived=true')
+      expect(res.status).toBe(403)
+    })
+
+    it("does not leak another operator's archived classes to a different tenant", async () => {
+      const repo = new InMemoryVehicleClassRepository()
+      const staff = mountFor(repo, 'STAFF')
+      const created = await postFor(staff, OP_B, 'b-archived')
+      const { data } = await created.json()
+      await staff.request(`/vehicle-classes/${data.id}`, { method: 'DELETE' }) // soft-archive OP_B's class
+
+      const ownerA = mountFor(repo, 'OPERATOR_OWNER', OP_A)
+      const res = await ownerA.request('/vehicle-classes/manage?includeArchived=true')
+      expect(res.status).toBe(200)
+      const body = await res.json()
+      expect(body.data).toEqual([])
+    })
+  })
+
   describe('POST /vehicle-classes', () => {
     it('creates with 201 and returns the class', async () => {
       const res = await createClass()

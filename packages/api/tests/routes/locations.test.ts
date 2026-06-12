@@ -5,12 +5,18 @@ import type { UserRole } from '../../src/middleware/auth'
 import { InMemoryLocationRepository } from '../../src/repositories/in-memory'
 import { InMemoryBookingRepository } from '../../src/repositories/in-memory/booking'
 import { createLocationRoutes } from '../../src/routes/locations'
+import type { Geocoder } from '../../src/services/geocoding/types'
 import { LocationService } from '../../src/services/location'
 import { testAuthMiddleware } from '../helpers/auth'
 import { testResolveWriteOperatorId } from '../helpers/operator'
 
 const OP_A = 'operator-aaaaaaaa'
 const OP_B = 'operator-bbbbbbbb'
+
+// These route tests exercise auth/validation/routing, not geocoding; a stub
+// Geocoder keeps the write path total. The #531 matrix is covered in the
+// service test, and the provider-swap contract in the createApp DI test.
+const nullGeocoder: Geocoder = { geocode: async () => null }
 
 function mountFor(
   repo: InMemoryLocationRepository,
@@ -23,7 +29,10 @@ function mountFor(
   app.use('*', testAuthMiddleware(`${role}-user`, role, operatorId))
   app.route(
     '/',
-    createLocationRoutes(new LocationService(repo, bookingRepo), testResolveWriteOperatorId()),
+    createLocationRoutes(
+      new LocationService(repo, bookingRepo, nullGeocoder),
+      testResolveWriteOperatorId(),
+    ),
   )
   return app
 }
@@ -45,7 +54,11 @@ describe('Location routes — auth', () => {
     app.route(
       '/',
       createLocationRoutes(
-        new LocationService(new InMemoryLocationRepository(), new InMemoryBookingRepository()),
+        new LocationService(
+          new InMemoryLocationRepository(),
+          new InMemoryBookingRepository(),
+          nullGeocoder,
+        ),
         testResolveWriteOperatorId(),
       ),
     )

@@ -8,8 +8,7 @@ import { Hono } from 'hono'
 import { FLEET_WRITE_ROLES, requireAuth, requireUser, toCallerContext } from '../middleware/auth'
 import { PG_ERROR, pgErrorCode } from '../pg-errors'
 import type { LocationFilters } from '../repositories/types'
-import type { LocationService } from '../services/location'
-import type { Location } from '../stores'
+import type { LocationService, LocationUpdateData } from '../services/location'
 import { type ResolveWriteOperatorId, operatorReadScope } from '../tenancy'
 import { fail, ok, parseBody, stripUndefined } from './helpers'
 
@@ -88,10 +87,10 @@ export function createLocationRoutes(
           operatorId,
           name: d.name,
           address: d.address,
-          // Coords are not captured by the location form yet (#458 §4 follow-up);
-          // default null — the row degrades to list-only on the search map.
-          latitude: null,
-          longitude: null,
+          // A submitted coord pair is an operator pin (→ MANUAL); omitted coords
+          // make the service geocode `address`. Provenance is server-derived.
+          latitude: d.latitude,
+          longitude: d.longitude,
           operatingHours: d.operatingHours,
           timezone: d.timezone,
           defaultTurnaroundMinutes: d.defaultTurnaroundMinutes,
@@ -118,10 +117,12 @@ export function createLocationRoutes(
       const parsed = await parseBody(c, updateLocationSchema)
       if (!parsed.ok) return parsed.response
 
+      // parsed.data carries latitude/longitude/regeocode; the service derives
+      // coordinateSource and strips regeocode before the repo write.
       const result = await service.update(
         toCallerContext(user),
         c.req.param('id'),
-        stripUndefined(parsed.data) as Partial<Location>,
+        stripUndefined(parsed.data) as LocationUpdateData,
       )
       if (!result.ok) return fail(c, result.error, result.status)
       return ok(c, result.location)

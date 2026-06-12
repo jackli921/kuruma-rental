@@ -27,6 +27,7 @@ function locationInput(overrides: Partial<LocationInput> = {}): LocationInput {
     address: '1-1 Namba, Osaka',
     latitude: null,
     longitude: null,
+    coordinateSource: null,
     operatingHours: null,
     timezone: 'Asia/Tokyo',
     defaultTurnaroundMinutes: 2880,
