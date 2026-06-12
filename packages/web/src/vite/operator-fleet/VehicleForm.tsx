@@ -3,7 +3,6 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Separator } from '@/components/ui/separator'
 import { Textarea } from '@/components/ui/textarea'
-import { ApiError } from '@/lib/api-error'
 import {
   FLEET_QUERY_KEY,
   type OperatorFleetVehicle,
@@ -12,11 +11,7 @@ import {
   updateVehicle,
 } from '@/vite/operator-fleet/api'
 import { zodResolver } from '@hookform/resolvers/zod'
-import {
-  type CreateVehicleInput,
-  type UpdateVehicleInput,
-  createVehicleSchema,
-} from '@kuruma/shared/validators/vehicle'
+import { type CreateVehicleInput, createVehicleSchema } from '@kuruma/shared/validators/vehicle'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { useForm } from 'react-hook-form'
 import { useTranslations } from 'use-intl'
@@ -117,29 +112,26 @@ export function VehicleForm({ vehicle, classOptions, onSaved, onCancel }: Vehicl
     register,
     handleSubmit,
     formState: { errors },
-  } = useForm<VehicleFormValues>({
+  } = useForm<VehicleFormValues, unknown, CreateVehicleInput>({
     resolver: zodResolver(createVehicleSchema),
     defaultValues: defaultsFromVehicle(vehicle),
   })
 
   const mutation = useMutation({
     mutationFn: (data: CreateVehicleInput) =>
-      isEditMode ? updateVehicle(vehicle.id, data as UpdateVehicleInput) : createVehicle(data),
+      isEditMode ? updateVehicle(vehicle.id, data) : createVehicle(data),
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: FLEET_QUERY_KEY })
       onSaved()
     },
   })
 
-  const submitError = mutation.error
-  const submitErrorMessage =
-    submitError instanceof ApiError ? submitError.message : submitError?.message
+  // zodResolver transforms before the submit handler runs, so `data` is already
+  // the parsed CreateVehicleInput (the form's 3rd generic) — no cast needed.
+  const submitErrorMessage = mutation.error?.message
 
   return (
-    <form
-      onSubmit={handleSubmit((data) => mutation.mutate(data as CreateVehicleInput))}
-      className="space-y-4"
-    >
+    <form onSubmit={handleSubmit((data) => mutation.mutate(data))} className="space-y-4">
       <div>
         <Label htmlFor="name">{t('name')}</Label>
         <Input id="name" placeholder={t('namePlaceholder')} {...register('name')} />
