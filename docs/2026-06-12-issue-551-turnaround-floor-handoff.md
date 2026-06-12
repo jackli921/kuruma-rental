@@ -2,86 +2,98 @@
 
 **Date:** 2026-06-12 · **Issue:** [#551](https://github.com/jackli921/kuruma-rental/issues/551) (epic #385)
 **Branch:** `feat/turnaround-floor-surfacing` · **Worktree:** `~/Dev/kuruma-turnaround-ux`
-**Base:** `origin/marketplace-pivot` @ `a8cd5bb` · **Tip:** `fb51bae` (1 commit, NOT pushed)
+**Base:** `origin/marketplace-pivot` @ `a8cd5bb` · **Tip:** `1f5ad1b` · **NOT pushed.**
 
-## Why this exists (the verified diagnosis)
-Reported "booked once = car gone forever" is **NOT a scheduling bug**. Overlap predicate
-(`repositories/drizzle/availability.ts`), the `bookings_no_overlap` gist exclusion, and the
-`effectiveEndAt` trigger (mig `0037`, `endAt + COALESCE(turnaround,2880)*interval '1 minute'`)
-are all correct; booking does NOT flip `vehicles.status`. The illusion = **every seeded
-location uses 48h (2880min) turnaround** + the renter search always defaults to / restores a
-near-future window, so a booking blocks the car for `rental + 48h` (~5 days) and every
-near-future re-search keeps overlapping it. The car DOES return for any pickup ≥ `endAt + 48h`.
-**Full plan + decisions live in issue #551 body + 2 comments — read them first.**
+## Status: cycles 1-3 DONE (the whole backend), cycles 4-6 LEFT (surfacing)
 
-## Decisions locked (do not relitigate)
-1. Keep 48h as the documented default; **vary the seed** with realistic per-location values.
-2. Enforce a **60-min floor** (Zod + DB CHECK). A floor is a servicing-gap guarantee, NOT
-   overlap-safety (overlap is already impossible at any turnaround).
-3. **Defer** per-vehicle override (docs = location-only MVP, mig 0037).
-4. Surface cooldown to renters at the **search grid** (primary — full stores vanish there via
-   `buildCard → null`) + on `StorefrontCard`; detail-page hint is secondary.
+5 local commits, all pre-commit-clean (biome/size/boundaries/tsc x3):
+- `fb51bae` c1 RED (validator floor tests)
+- `af15f50` this handoff doc (now rewritten to current state)
+- `efabb02` **c1 GREEN** — `validators/location.ts` `turnaroundSchema` `.min(0)` -> `.min(60, 'Turnaround must be at least 60 minutes')`
+- `34393ad` **c2** — DB CHECK + migration 0048 + integration 23514 test
+- `1f5ad1b` **c3** — varied seed distribution
 
-## TDD plan — 6 vertical cycles (one behavior each)
-- **Cycle 1 — shared validator floor.** 🔴 **IN PROGRESS.** RED test committed (`fb51bae`):
-  `packages/shared/tests/validators/location.test.ts` now asserts reject 0/30/59 (msg
-  `'Turnaround must be at least 60 minutes'`) + accept 60. **NEXT (GREEN):** in
-  `packages/shared/src/validators/location.ts` change `turnaroundSchema` `.min(0, 'Turnaround
-  cannot be negative')` → `.min(60, 'Turnaround must be at least 60 minutes')`. Then
-  `cd packages/shared && bunx vitest run tests/validators/location.test.ts` → green.
-  ⚠ Also check the `updateLocationSchema` describe block (~L196-230) for any
-  "accepts zero on update" test — flip it the same way if present (`.partial()` reuses the
-  same field schema, so the floor applies to PATCH too — desired).
-- **Cycle 2 — schema CHECK + backfill migration.**
-  - `packages/shared/src/db/schema.ts` locations CHECK `locations_turnaround_non_negative`
-    (`>= 0`) → rename `locations_turnaround_min_60` (`>= 60`).
-  - `bun run db:generate --name turnaround_min_60`, then **hand-edit** the generated SQL so
-    order is: DROP old CHECK → `UPDATE locations SET "defaultTurnaroundMinutes"=60 WHERE
-    "defaultTurnaroundMinutes"<60;` → ADD new CHECK. (Backfill before constraint — review P1.)
-  - `bun run db:migrate && bun run db:verify` (3 greens).
-  - ⚠ **Migration number = `0048` collides** with unmerged #394 + #521 (both local 0048) →
-    renumber + bump `_journal.json` `when` to `max(prev)+1` on merge (drizzle out-of-order
-    gotcha in CLAUDE.md).
-  - **2a (CI gate):** integration test — **direct drizzle insert** (Zod-bypassed) of
-    `defaultTurnaroundMinutes: 30` → expect Postgres CHECK violation `23514`. Add to
-    `packages/api/tests/integration/locations.test.ts` (or a new file). The integration DB is
-    migrated out-of-band (global-setup only seeds the operator).
-  - **2b (backfill lift):** NO in-suite harness exists → verify by **documented manual replay**
-    on a scratch DB (migrate→0047, insert 30, run 0048, assert 60), recorded in the PR.
-    Optional standalone smoke script; explicitly NOT in CI. (See issue execution-note comment.)
-- **Cycle 3 — seed distribution.** `packages/shared/src/db/seed-data/locations.ts`: today only
-  KIX overrides (1440), rest 2880 (2 distinct). Replace with e.g. Namba 60 · Shin-Osaka 90 ·
-  KIX 1440 · Umeda 120 · Tennoji 90 · Sannomiya 180 · Kyoto 120 · Nara 180 · Osaka Castle 2880.
-  Keep `DEFAULT_TURNAROUND_MINUTES = 2880` const. Test (`packages/shared/tests/db/seed-data.test.ts`):
-  every loc ≥60, **≥3 distinct values**, ≤2 at 2880, ≥1 central in [60,180]. (Old "one override"
-  assertion was a false green — replace it.)
-- **Cycle 4 — API DTO.** `Storefront = Location & {operatorName}` already carries
-  `defaultTurnaroundMinutes` (no repo change). Add `turnaroundMinutes: number` to
-  `StorefrontSummary` in `services/storefront-detail.ts` (populate in `getDetail`) + to
-  `StorefrontCard` in `services/storefront-search.ts` (populate in `buildCard`). Service unit
-  tests assert the field for a known store.
-- **Cycle 5 — renter web render.** `routes/$locale/search.tsx` `StoreGrid`: grid-level helper
-  copy (recently-returned stores/cars may be hidden during turnaround; try later dates) +
-  enriched empty-state. `vite/storefronts/StorefrontCard.tsx`: render "≈Nh turnaround between
-  rentals" (format min→hours in web). `vite/storefronts/StorefrontDetailView.tsx`: same line +
-  near-date hint (secondary). web vitest for card + grid copy. New i18n keys → add to all
-  locales (en/ja/zh) + restart dev server.
-- **Cycle 6 — operator form floor.** `packages/web/src/modules/locations/components/LocationForm.tsx`
-  turnaround `<Input min={0}>` → `min={60}` (confirmed currently 0) + a form test. (Frozen
-  Next.js tree — edits allowed for this one-liner; it shares the Zod validator already.)
+**Verified green now:** shared vitest 420 · api integration 197 (23 files) · db:verify 4/4.
+**Test DB** `kuruma-test-pg` (docker, :5432) is migrated to **49 migrations incl 0048**;
+`DATABASE_URL=postgres://kuruma:kuruma@localhost:5432/kuruma_test`.
 
-## Acceptance criteria (from issue)
-Floor enforced in Zod AND DB (Zod-bypass insert proves DB); backfill lifts <60 rows; seed
-≥3 distinct/all ≥60/≤2 at 2880; renter sees turnaround on search card + grid helper + detail;
-LocationForm min=60 tested; overlap/exclusion tests still green; full gate green
-(shared+api+web unit, api integration, db:verify 3 greens, lint/tsc/boundaries).
+## Why this exists (verified diagnosis — do not relitigate)
+Reported "booked once = car gone forever" is **NOT a scheduling bug**. The overlap predicate,
+the `bookings_no_overlap` gist exclusion, and the `effectiveEndAt` trigger (mig `0037`) are all
+correct; booking does NOT flip `vehicles.status`. The illusion = **every seeded location used 48h
+(2880m) turnaround** + the renter search defaults to a near-future window, so a booking blocked the
+car for `rental + 48h` (~5 days) and every near-future re-search kept overlapping it. Cycle 3 fixed
+the seed; the floor (c1/c2) is a service-quality guarantee, NOT overlap-safety.
+
+## What's already done (don't redo)
+- **c1** `packages/shared/src/validators/location.ts:53-60` — `turnaroundSchema` now `.min(60)`.
+  `.partial()` reuse means PATCH (updateLocationSchema) inherits the floor for free.
+- **c2** `packages/shared/src/db/schema.ts:241` — CHECK renamed `locations_turnaround_non_negative`
+  (`>=0`) -> `locations_turnaround_min_60` (`>=60`). Migration `drizzle/0048_turnaround_min_60.sql`
+  hand-edited to **DROP -> UPDATE backfill (<60 -> 60) -> ADD** (backfill before constraint).
+  Integration test `packages/api/tests/integration/locations-turnaround-floor.test.ts` asserts a
+  Zod-bypassed insert of 30 bounces with Postgres `23514`; 60 persists. Backfill-lift proven via a
+  scratch-DB replay (documented in `34393ad` commit body; not in CI).
+- **c3** `packages/shared/src/db/seed-data/locations.ts` — turnaround now varies: Namba 60,
+  Shin-Osaka 90, Umeda 120, Tennoji 90, Sannomiya 180, Kyoto 120, Nara 180, KIX 1440,
+  Osaka Castle 2880 (`DEFAULT_TURNAROUND_MINUTES` const kept). `packages/shared/tests/db/seed-data.test.ts`
+  now asserts floor / >=3 distinct / <=2 at max / >=1 central[60,180] (replaced the old
+  "exactly one override" false green).
+
+## REMAINING — cycle 4 (API DTO)
+Pure additive; **no repo change** — `Storefront = Location & {operatorName}` (`repositories/types.ts:457`)
+already carries `defaultTurnaroundMinutes` (drizzle repo selects `...locationColumns`).
+1. `packages/api/src/services/storefront-detail.ts:17` — add `turnaroundMinutes: number` to
+   `StorefrontSummary`. Populate in the `getDetail` return object at **:214-219** (after
+   `operatingHours:`) with `turnaroundMinutes: storefront.defaultTurnaroundMinutes,`.
+2. `packages/api/src/services/storefront-search.ts:29` — add `turnaroundMinutes: number` to
+   `StorefrontCard`. Populate in `buildCard`'s return at **:156-167** with
+   `turnaroundMinutes: storefront.defaultTurnaroundMinutes,`.
+3. **Tests are CO-LOCATED** (not under `tests/`): `packages/api/src/services/storefront-detail.test.ts`
+   and `storefront-search.test.ts`. Add (RED first) one assertion in each that a known store's card /
+   summary carries the expected `turnaroundMinutes`. Run: `bun run --filter @kuruma/api test` (vitest;
+   these are in-memory, no DB needed).
+
+## REMAINING — cycle 5 (renter web render) — MOST INVOLVED
+Files (all exist): `packages/web/src/routes/$locale/search.tsx` (the `StoreGrid`),
+`packages/web/src/vite/storefronts/StorefrontCard.tsx`, `.../StorefrontDetailView.tsx`,
+plus DTOs in `.../storefronts/api.ts` + `params.ts` (raw-fetch DTOs — add `turnaroundMinutes` there
+to match the API, the Vite shell owns its own DTOs, do NOT import api module types).
+1. `StorefrontCard.tsx` — render "~Nh turnaround between rentals" (format minutes->hours in web).
+2. `StorefrontDetailView.tsx` — same line + a near-date hint (secondary).
+3. `search.tsx` `StoreGrid` — grid-level helper copy (recently-returned cars may be hidden during
+   turnaround; try later dates) + enriched empty state.
+4. **i18n: new keys in ALL locales** `packages/web/messages/{en,ja,zh}.json`. After adding namespaces,
+   `rm -rf packages/web/.next` is irrelevant here (Vite) but **restart the Vite dev server**.
+5. web vitest for the card + grid copy. Run `bun run --filter @kuruma/web test`.
+6. **Adding/!! NOT adding a route file here** — these are existing routes, no `routeTree.gen.ts` regen
+   needed. (Only NEW route files require `vite build` to regen the tree before typecheck.)
+
+## REMAINING — cycle 6 (operator form floor) — one-liner
+`packages/web/src/modules/locations/components/LocationForm.tsx:167` — `min={0}` -> `min={60}`.
+(Frozen Next.js tree; this one-line edit is allowed — it shares the Zod validator already.)
+Add a form test asserting the input's `min` is 60. There's an existing `form.turnaroundHint` i18n key
+(`:170`) you may want to update to mention the 60m minimum.
 
 ## Logistics / gotchas
-- **Shell cwd resets to `~/Dev/kuruma-rental` after every Bash call** — `cd` into the worktree
-  in EACH command (or use absolute paths). Edits must use absolute worktree paths.
-- Pre-commit (husky+lint-staged) runs biome + size + boundaries + tsc on staged files — fast.
-- vitest (not bun:test). Biome import-sort is an ASSIST → `bunx biome check --write` (not `format`).
-- DB for integration: `kuruma-test-pg` on :5432 (already running). Run `db:migrate` against it
-  before integration tests after adding migration 0048.
+- **Shell cwd RESETS to `~/Dev/kuruma-rental` after every Bash call** — `cd` into the worktree in
+  EACH command (or use absolute paths). Edits already use absolute worktree paths.
+- **vitest, not bun:test.** Run package suites via `bun run --filter @kuruma/<pkg> test`.
+- **Biome import-sort/format is an ASSIST** — pre-commit will REVERT the commit if a staged file
+  isn't formatted. Run `bunx biome check --write <files>` BEFORE `git commit` (not `format`).
+- **Integration tests need `DATABASE_URL`** pointed at `kuruma-test-pg:5432` (already migrated to 0048).
+  `bun run --filter @kuruma/api test:integration <namefilter>`. It prints a harmless
+  "something prevents Vite server from exiting" after passing — ignore.
+- **Migration 0048 collides** with unmerged #394 (also local 0048); #521 moved to 0049. The renumber
+  + `_journal.json` `when`-bump (to `max(prev)+1`) happens at **MERGE time**, per the drizzle
+  out-of-order gotcha in CLAUDE.md. Nothing to do until then.
 - **Out of scope:** per-vehicle override; the near-future default-search-window UX (own follow-up).
-- On finish: rebase onto `origin/marketplace-pivot`, push, PR `Closes #551`, drop `in-progress`.
+
+## Acceptance (from issue) — remaining to satisfy
+Renter sees turnaround on search card + grid helper + detail (c4/c5); LocationForm min=60 tested (c6).
+Floor in Zod + DB (c1/c2 done), backfill (c2 done), seed >=3 distinct/all>=60/<=2 at 2880 (c3 done),
+overlap/exclusion tests still green, full gate green.
+
+## On finish
+Rebase onto `origin/marketplace-pivot` (no force — use reset->cherry-pick->ff-push if already pushed),
+push, open PR `Closes #551`, drop the `in-progress` label, then `/code-review`.
