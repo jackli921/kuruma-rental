@@ -50,10 +50,13 @@ const timezoneSchema = z
   .max(64)
   .refine(isValidTimeZone, 'Must be a valid IANA timezone')
 // §9 item 20: 48h default cooldown before the same vehicle is bookable again.
+// 60-min floor (#551): guarantees a real servicing gap between rentals. This is
+// a service-quality minimum, not overlap-safety — overlap is already impossible
+// at any turnaround via the bookings_no_overlap exclusion constraint.
 const turnaroundSchema = z
   .number()
   .int('Turnaround must be a whole number of minutes')
-  .min(0, 'Turnaround cannot be negative')
+  .min(60, 'Turnaround must be at least 60 minutes')
 
 export const createLocationSchema = z.object({
   name: nameSchema,
