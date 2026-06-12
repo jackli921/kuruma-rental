@@ -11,6 +11,7 @@
     "test:e2e": "bunx playwright test",
     "test:e2e:ui": "bunx playwright test --ui",
     "test:e2e:real-db": "bunx playwright test --config playwright.real-db.config.ts",
+    "test:e2e:real-db:local": "bun run scripts/e2e-real-db-local.ts",
     "lint": "bunx biome check . && bun run lint:size && bun run lint:modules",
     "lint:fix": "bunx biome check --write .",
     "lint:size": "bun run scripts/lint-file-size.ts",

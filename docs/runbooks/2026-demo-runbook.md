@@ -16,7 +16,8 @@
 
 ## 1. What is seeded
 
-After `db:seed` + `db:seed-bookings` against a fresh Neon branch:
+After the marketplace fixture is seeded (`db:seed:tcp` against local Postgres, or
+`db:seed` + `db:seed-bookings` against a Neon branch):
 
 - **3 operators** · **9 locations** · **12 ACRISS classes** · **41 vehicles** · **6 insurance options** · **10 fee schedules**
 - **4 renters** · **10 bookings** (+ booking_events + notification_log rows), **0 FK orphans**
@@ -36,13 +37,18 @@ git fetch origin
 # fresh worktree or fast-forwarded local branch off origin/marketplace-pivot
 bun install
 
-# Point DATABASE_URL at a fresh Neon branch off the merged pivot (NOT production).
-# The lane needs Neon today because db:seed runs through the neon-http driver — a
-# local-Postgres path is tracked in #542.
+# Local Postgres — no Neon branch (#542). Spin up a disposable container:
+docker run -d --name kuruma-e2e-pg \
+  -e POSTGRES_USER=kuruma -e POSTGRES_PASSWORD=kuruma -e POSTGRES_DB=kuruma_e2e \
+  -p 5433:5432 postgres:16
+export DATABASE_URL='postgresql://kuruma:kuruma@localhost:5433/kuruma_e2e'
 bun run db:migrate
-bun run db:seed
-bun run db:seed-bookings
+bun run db:seed:tcp          # seeds over postgres-js/TCP; the neon-http getDb() can't reach a local container
 bun run db:verify            # must show 4 green checks
+
+# Alternatively, against a fresh Neon branch off the merged pivot (NOT production):
+#   export DATABASE_URL=<neon-branch-pooled-url>
+#   bun run db:migrate && bun run db:seed && bun run db:seed-bookings && bun run db:verify
 ```
 
 For local Google login through the Vite shell (only needed for the **manual**
@@ -69,11 +75,18 @@ bun run dev
 
 The honest proof of the journey. It runs the real **Vite** web (`vite --port 3002`,
 proxying `/api` + `/auth` to the Hono API) → real Hono API (postgres-js) → the
-seeded Neon branch, authenticated with a minted **`kuruma_session`** HS256 cookie
-(`e2e/real-db/mint-session.ts`, mirroring the API's `mintSessionToken` contract).
+seeded **local Postgres** (or a Neon branch), authenticated with a minted
+**`kuruma_session`** HS256 cookie (`e2e/real-db/mint-session.ts`, mirroring the
+API's `mintSessionToken` contract).
 
 ```bash
-AUTH_SECRET=<any 32+ char secret> DATABASE_URL=<neon-branch-pooled-url> bun run test:e2e:real-db
+# One-shot against local Postgres — boots a throwaway postgres:16, migrates,
+# seeds (TCP), and runs the lane. No Neon branch, no manual env (#542):
+bun run test:e2e:real-db:local
+#   docker rm -f kuruma-e2e-pg    # tear the container down afterwards
+
+# Or point it at an already-seeded DB yourself (local container or Neon pooled URL):
+AUTH_SECRET=<any 32+ char secret> DATABASE_URL=<postgres-url> bun run test:e2e:real-db
 ```
 
 Expected: **3 passed** (2 session-mint + the marketplace happy-path). The
@@ -90,8 +103,9 @@ renter search → Best Car Rental KIX storefront → vehicle → the 5-step wiza
 > **Why the lane uses a postgres-js API server.** The booking → thread-creation path opens an
 > interactive transaction. Production runs these via `runTx` (neon-serverless) since **#493**,
 > but the lane keeps `e2e/real-db/real-api-server.ts` on postgres-js (TCP) to exercise the real
-> path without opening a WebSocket per transaction. `DATABASE_URL` should be the Neon **pooled**
-> endpoint (`-pooler`).
+> path without opening a WebSocket per transaction. `pgConnectOptions` turns TLS off for a
+> localhost container and keeps `ssl: 'require'` for remote hosts; with a Neon `DATABASE_URL`,
+> use the **pooled** endpoint (`-pooler`).
 
 ---
 
@@ -114,6 +128,6 @@ operator `/manage/bookings`.
 ## 5. Known gaps / follow-ups
 
 - **Out of Path A scope:** the Stripe *pay* step and the admin *partner-revenue 4%* tab — #461 (live Stripe) / #462 (Vite admin portal).
-- **Local Postgres for this lane — #542.** `db:seed`/`db:seed-bookings` use the neon-http driver and `pg.ts`/`real-api-server.ts` hardcode `ssl: 'require'`, so the lane needs a Neon branch today. #542 moves it to local Postgres (Neon local proxy or a postgres-js seed path) to drop the Neon-branch dependency.
-- **CI gate — #445.** Wiring this lane into CI with a managed Neon-branch lifecycle.
+- **Local Postgres for this lane — #542 (done).** `db:seed:tcp` seeds over postgres-js/TCP and `pgConnectOptions` turns TLS off for localhost, so the lane runs against a disposable `postgres:16` with no Neon branch — `bun run test:e2e:real-db:local` (§3).
+- **CI gate — #445 (done).** The `e2e-real-db` job runs this lane against a fresh `postgres:16` service container (no Neon branch, no external secrets) and is a required check on `marketplace-pivot`.
 - **Operator locations port — #529.** Re-enables `locations.auth.spec.ts` in this lane.
