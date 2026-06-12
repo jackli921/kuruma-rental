@@ -136,6 +136,16 @@ describe('POST /admin/provider-invites', () => {
     expect(res.status).toBe(400)
   })
 
+  test('returns 404 when the target operator does not exist', async () => {
+    const res = await app.request('/admin/provider-invites', {
+      method: 'POST',
+      headers: await bearer({ sub: 'admin-1', role: 'PLATFORM_ADMIN' }),
+      body: JSON.stringify({ ...validBody, operatorId: 'op_missing' }),
+    })
+    expect(res.status).toBe(404)
+    expect(await res.json()).toEqual({ success: false, error: 'Operator not found' })
+  })
+
   test('rejects an unknown operator role (400)', async () => {
     const res = await app.request('/admin/provider-invites', {
       method: 'POST',

@@ -4,6 +4,7 @@ import { InMemoryOperatorRepository } from '../../src/repositories/in-memory/ope
 import { InMemoryProviderInviteRepository } from '../../src/repositories/in-memory/provider-invite'
 import {
   INVITE_TTL_MS,
+  OperatorNotFoundError,
   type ProviderInviteAuditEvent,
   ProviderInviteService,
 } from '../../src/services/provider-invite'
@@ -69,6 +70,14 @@ describe('ProviderInviteService.createInvite', () => {
     const after = Date.now()
     expect(result.expiresAt.getTime()).toBeGreaterThanOrEqual(before + INVITE_TTL_MS)
     expect(result.expiresAt.getTime()).toBeLessThanOrEqual(after + INVITE_TTL_MS)
+  })
+
+  it('throws OperatorNotFoundError for an unknown operatorId, before any write or audit', async () => {
+    await expect(
+      service.createInvite({ ...INPUT, operatorId: 'op_missing' }, INVITED_BY),
+    ).rejects.toThrow(OperatorNotFoundError)
+    // The guard runs before the insert + audit — no partial side effects leak out.
+    expect(audits).toEqual([])
   })
 
   it('emits a privilege-grant audit event that does not leak the token', async () => {
