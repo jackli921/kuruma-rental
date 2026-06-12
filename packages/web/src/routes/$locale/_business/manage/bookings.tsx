@@ -1,8 +1,10 @@
 import { PageSkeleton } from '@/vite/PageSkeleton'
+import { OperatorBookingDetailSheet } from '@/vite/operator-bookings/OperatorBookingDetailSheet'
 import { OperatorBookingsView } from '@/vite/operator-bookings/OperatorBookingsView'
-import { operatorBookingsQueryOptions } from '@/vite/operator-bookings/api'
+import { type OperatorBookingRow, operatorBookingsQueryOptions } from '@/vite/operator-bookings/api'
 import { useSuspenseQuery } from '@tanstack/react-query'
 import { type ErrorComponentProps, createFileRoute, useRouter } from '@tanstack/react-router'
+import { useState } from 'react'
 import { useTranslations } from 'use-intl'
 
 // Operator booking list (#512). URL `/<locale>/manage/bookings` — the renter
@@ -23,6 +25,7 @@ function OperatorBookingsRoute() {
   const t = useTranslations('bookings.operator')
   const { locale } = Route.useParams()
   const { data: bookings } = useSuspenseQuery(operatorBookingsQueryOptions())
+  const [selected, setSelected] = useState<OperatorBookingRow | null>(null)
 
   return (
     <main className="flex-1 px-4 py-10 sm:px-6 lg:px-8">
@@ -31,8 +34,13 @@ function OperatorBookingsRoute() {
           <h1 className="text-3xl font-bold tracking-tight sm:text-4xl">{t('title')}</h1>
           <p className="mt-2 text-lg text-muted-foreground">{t('subtitle')}</p>
         </header>
-        <OperatorBookingsView bookings={bookings} locale={locale} />
+        <OperatorBookingsView bookings={bookings} locale={locale} onSelectBooking={setSelected} />
       </div>
+      <OperatorBookingDetailSheet
+        row={selected}
+        locale={locale}
+        onClose={() => setSelected(null)}
+      />
     </main>
   )
 }

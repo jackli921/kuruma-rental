@@ -73,13 +73,18 @@ export async function seed(db: ReturnType<typeof getDb>) {
 
   // 2. One OPERATOR_OWNER login per operator so the demo can sign into each
   // portal. Upsert on email re-asserts role + tenant rather than duplicating.
+  // DEMO_OWNER_EMAIL (optional) rebinds the first operator's owner login to your
+  // own email, so a single Google account can both book as a renter and view the
+  // operator portal in a local demo. No-op when unset (cf. PLATFORM_ADMIN_EMAILS).
+  const demoOwnerEmail = process.env.DEMO_OWNER_EMAIL?.trim()
   console.log('Seeding operator owners...')
-  for (const op of DEMO_OPERATORS) {
+  for (const [index, op] of DEMO_OPERATORS.entries()) {
+    const email = demoOwnerEmail && index === 0 ? demoOwnerEmail : op.owner.email
     await db
       .insert(users)
       .values({
         name: op.owner.name,
-        email: op.owner.email,
+        email,
         role: 'OPERATOR_OWNER',
         operatorId: seedId(op.id),
       })

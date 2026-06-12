@@ -1,8 +1,8 @@
 import { OperatorBookingsView } from '@/vite/operator-bookings/OperatorBookingsView'
 import type { OperatorBookingRow } from '@/vite/operator-bookings/api'
-import { render, screen, within } from '@testing-library/react'
+import { fireEvent, render, screen, within } from '@testing-library/react'
 import { IntlProvider } from 'use-intl'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import en from '../../../messages/en.json'
 
 function makeRow(over: Partial<OperatorBookingRow> = {}): OperatorBookingRow {
@@ -67,5 +67,20 @@ describe('OperatorBookingsView', () => {
     renderView([])
     expect(screen.getByText('No bookings yet')).toBeInTheDocument()
     expect(screen.queryByRole('table')).not.toBeInTheDocument()
+  })
+
+  it('calls onSelectBooking with the row when the booking code button is clicked', () => {
+    const onSelectBooking = vi.fn()
+    const row = makeRow()
+    render(
+      <IntlProvider locale="en" messages={en}>
+        <OperatorBookingsView bookings={[row]} locale="en" onSelectBooking={onSelectBooking} />
+      </IntlProvider>,
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: /View details for booking ABCD2345/ }))
+
+    expect(onSelectBooking).toHaveBeenCalledTimes(1)
+    expect(onSelectBooking).toHaveBeenCalledWith(row)
   })
 })
