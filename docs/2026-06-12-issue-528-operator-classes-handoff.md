@@ -1,90 +1,83 @@
 # #528 — Port operator vehicle classes CRUD to Vite — Handoff
 
-**Status:** IN PROGRESS 2026-06-12. Slices 1-2 DONE + committed, NOT pushed.
-**Worktree:** `~/Dev/kuruma-528-operator-classes` · branch `feat/528-operator-classes-vite` · off `origin/marketplace-pivot@1cd08e4` · tip `93f8f1e`.
+**Status:** FEATURE COMPLETE 2026-06-12. All 6 slices done + committed, **NOT pushed**.
+**Worktree:** `~/Dev/kuruma-528-operator-classes` · branch `feat/528-operator-classes-vite` · off `origin/marketplace-pivot@1cd08e4` · tip `d6cbace`.
 **Issue/plan:** GitHub #528 (part of epic #523). Labeled `in-progress`.
+
+## Remaining (all that's left)
+
+1. Rebase onto latest `origin/marketplace-pivot` (#521 has merged since branch point). **No force-push** — if already pushed, reset→cherry-pick→ff-push.
+2. Push, open PR `Closes #528`, then drop the `in-progress` label.
+3. Manual browser smoke (not yet done): log in as an operator → `/<locale>/manage/classes` → add / edit / archive a class; confirm archived rows show the muted badge and the nav "Classes" link works.
+4. Optional `/code-review` (user-triggered/billed).
 
 ## How to resume
 
 ```bash
 cd ~/Dev/kuruma-528-operator-classes
-git log --oneline -3            # expect 93f8f1e (slice 2), d75b516 (slice 1)
-# rebase onto latest mp when ready (NO force-push — reset/cherry-pick/ff per repo rule)
+git log --oneline -7   # d6cbace..d75b516 are the 6 #528 commits + this doc
+bun install
 git fetch origin && git rebase origin/marketplace-pivot
-bun install                    # fresh worktree hygiene
 ```
 
 Test runners (NOT `bunx vitest` from root):
 - api: `bun run --filter @kuruma/api test -- --run <file>`
-- web: `bun run --filter @kuruma/web test -- --run <path>`
+- web: `bun run --filter @kuruma/web test -- --run tests/vite/operator-classes`
 
-## Key finding (the reason this slice exists / scope note)
+## Gate (last run, all green)
+- api: **1079 passed** · web: **803 passed** · api `lint:boundaries` OK · web tsc clean.
+- New tests: api +3 (route), web +26 (operator-classes) + Navbar nav-count updated.
+- No migration (slice 1 is route-only). No `db:verify` needed.
+
+## Key finding (scope note)
 
 `GET /vehicle-classes` is the **public catalog**: `PUBLIC_CONTEXT`, ACTIVE-only,
 edge-cached, registered **before** `requireAuth`. It silently ignores the
-`includeArchived` param + bearer token the frozen Next.js owner page sends. So
-the operator "manage classes" list was never tenant-scoped and archived classes
-never appeared. `service.findAll(ctx, filters)` / `repo.findAll` already support
-scope + includeArchived — only the route didn't expose it. Hence slice 1 adds a
-protected list endpoint. **No schema/migration.** Conflict-free vs #526/#549/#394.
+`includeArchived` param + token the frozen Next owner page sends — so the operator
+"manage classes" list was never tenant-scoped and archived classes never showed.
+`service.findAll(ctx, filters)` / `repo.findAll` already support scope +
+includeArchived; only the route didn't expose it → slice 1 adds a protected list.
+No schema/migration. Conflict-free vs #526/#549/#394 (#521 merged).
 
-## Done
+## What shipped (commits)
 
-### Slice 1 — backend (`d75b516`)
-- `packages/api/src/routes/vehicle-classes.ts`: added protected
-  `GET /vehicle-classes/manage` (session-scoped via `toCallerContext`, honors
-  `?includeArchived=true`). Registered **before** `/:id` so the static segment
-  wins over the param route.
-- `packages/api/tests/routes/vehicle-classes.test.ts`: +3 tests (archived
-  inclusion, default-excludes-archived, tenant isolation OP_A vs OP_B). 47/47 green.
+- `d75b516` **slice 1 (api):** protected `GET /vehicle-classes/manage` (session-scoped,
+  honors `includeArchived`), registered before `/:id`. +3 route tests.
+- `93f8f1e` **slice 2 (web):** `vite/operator-classes/api.ts` — cookie-auth client
+  (`fetchOperatorClasses` → `/manage`, create/update/archive, `operatorClassesQueryOptions`,
+  `OperatorClass` DTO). 6 tests.
+- `6a2e5cc` **slice 3:** `OperatorClassesView` (pure list: name, status badge, slug,
+  seats/luggage, ACRISS label w/ raw fallback, sortOrder sort, empty state) +
+  `ClassStatusBadge` + route `routes/$locale/_business/manage/classes.tsx` (loader +
+  useSuspenseQuery + pending/error, behind `_business` guard). routeTree regenerated.
+- `5e78278` **slice 4:** `ClassForm` (RHF + zodResolver + use-intl; **operator picker
+  dropped** — server infers operatorId) + `AddClassDialog` (POST, slug-409 inline,
+  invalidate+close) + header "Add class" button.
+- `e68742e` **slice 5:** `EditClassDialog` (PATCH via `updateOperatorClass(id, patch)`)
+  + View `onEdit`/`onDelete` row affordances (Edit wired; Delete disabled on archived).
+- `d6cbace` **slice 6:** `DeleteClassDialog` (soft-archive; **server-409 authoritative**,
+  not fleet-stats pre-block; synchronous in-flight ref guards double-click) + business
+  nav "Classes" link (Navbar + MobileMenu `NavTo` union).
 
-### Slice 2 — Vite api client (`93f8f1e`)
-- `packages/web/src/vite/operator-classes/api.ts`: cookie-auth client
-  (`credentials:'include'`, no token). `fetchOperatorClasses` → `/vehicle-classes/manage`;
-  `createOperatorClass` (POST), `updateOperatorClass` (PATCH), `archiveOperatorClass`
-  (DELETE = soft archive); `operatorClassesQueryOptions` keyed on `includeArchived`;
-  `OperatorClass` DTO. Mirrors `vite/operator-bookings/api.ts`; never imports the
-  frozen Next module.
-- `packages/web/tests/vite/operator-classes/api.test.ts`: 6 unit tests. Green.
+## Decisions baked in
+- **Operator picker removed:** operatorId is optional on create and inferred
+  server-side (resolveWriteOperatorId) for OPERATOR_* callers. #456 "operator-scope
+  edit options" is satisfied structurally (no picker; operatorId non-patchable).
+- **Stats degraded:** per-class car/active-booking counts come from the un-ported
+  fleet-overview (#526). View shows the class's own seats/luggage instead. Archive
+  guard is server-side, so nothing depends on the missing stats.
+- **#504 luggage:** capacity ("{n} bags") is shown on each row; luggageSize (S/M/L)
+  badge not added (renter cards already show it) — minor follow-up if wanted.
 
-## Remaining — slices 3-6 (web port). Mirror `vite/operator-bookings/`.
-
-Route file to create: `packages/web/src/routes/$locale/_business/manage/classes.tsx`
-(copy `bookings.tsx`: `loader: ensureQueryData(operatorClassesQueryOptions({includeArchived:true}))`,
-`pendingComponent: PageSkeleton`, `errorComponent`, `useSuspenseQuery`). Behind the
-existing `_business.tsx` membership guard. Regen routeTree after adding the file.
-
-Port-source components in `packages/web/src/modules/classes/components/` (translate
-next-intl → use-intl, server-actions → the slice-2 client, keep shadcn/Zod):
-`ClassList.tsx` → `OperatorClassesView`, plus `ClassForm`, `AddClassDialog`,
-`EditClassDialog`, `DeleteClassDialog`, `ClassRow`, `ClassStatusBadge`.
-
-- **Slice 3 — list render:** `OperatorClassesView` + route; tests for data / empty /
-  error / `_business` guard redirect (mirror operator-bookings route test).
-- **Slice 4 — add:** AddClassDialog → `createOperatorClass`; slug-collision 409
-  surfaced in form; list refetch/invalidate `['operator-classes']`.
-- **Slice 5 — edit:** EditClassDialog → `updateOperatorClass`; preserve operator-scope
-  edit options + archived `classId` assignment (**#456 parity**).
-- **Slice 6 — archive + polish:** DeleteClassDialog → `archiveOperatorClass`; surface
-  server 409 "Cannot archive a class with active bookings" (guard is server-side
-  authoritative — `extras.activeBookingsCount`). Luggage on `ClassRow` (**#504**).
-  Add "Classes" link to business nav.
-
-### Decisions baked in
-- **Stats degrade:** Next.js `ClassList` shows per-class car/active-booking counts
-  from `fetchFleetOverviewAction` (fleet-overview not yet ported; #526 not landed).
-  **Degrade to 0 / omit** rather than depend on #526 — keeps this slice independent.
-  Archive guard is server-side anyway.
-- **i18n:** port the `business.classes` namespace into the Vite use-intl messages
-  (new namespace → may need dev-server restart per repo gotcha).
-
-## Gotchas
-- Pre-commit runs biome + full web/api tsc. Run `bunx biome check --write <files>`
-  before committing to avoid the format-fail revert cycle.
-- Route ordering: any new static `/vehicle-classes/<x>` must be registered before `/:id`.
-- No force-push (HARD-DENIED). Rebase via reset→cherry-pick→ff-push; clear BEHIND
-  with `gh pr update-branch`.
-
-## Definition of done
-All 6 slices green; `bun run --filter @kuruma/api test` + `--filter @kuruma/web test`
-+ `lint:boundaries` + tsc pass; push; open PR `Closes #528`; drop `in-progress`.
+## Gotchas hit (reusable)
+- React Query passes a **second mutation-context arg** to `mutationFn`. A mutationFn
+  bound as `useMutation({ mutationFn: createOperatorClass })` gets called
+  `(payload, ctx)` → `toHaveBeenCalledWith(objectContaining(payload))` FAILS. Assert
+  `mock.calls[0][0]` instead. (EditClassDialog binds `(data)=>update(id,data)`, so
+  there the spy sees exactly `(id, patch)` — clean.)
+- `mutate()` invokes `mutationFn` on a microtask — assert call counts under `waitFor`,
+  not synchronously (the double-click guard test).
+- routeTree.gen.ts isn't auto-built outside dev/build: boot `bun run dev` briefly and
+  poll the file (no `tsr` CLI bin installed).
+- Pre-commit runs biome + full web/api tsc → `bunx biome check --write <files>` first.
+- No force-push (HARD-DENIED).
