@@ -6,9 +6,12 @@
 **Base branch:** `marketplace-pivot` @ `1cd08e4`. **MERGE, never rebase** (force-push is hard-denied).
 
 > **STATUS 2026-06-12 (FINAL — PR OPEN, MERGE-PENDING):** All slices 1-5 done +
-> reviewed + **PR #564 open** (base `marketplace-pivot`). Tip `9836d57`. `/code-review`
-> run on the PR → PASS (no CRIT/HIGH/MED); LOW immutability nit fixed `9836d57`, summary
-> posted as a PR comment. CI on #564: db-drift/e2e/e2e-real-db PASS, test-and-build pending.
+> reviewed + **PR #564 open** (base `marketplace-pivot`). Tip `b5069ff`. Two review
+> rounds: `/code-review` PASS (LOW immutability nit fixed `9836d57`) + user MEDIUM on
+> Nominatim rate-limit → hardened `b5069ff` (geocoder requires BOTH `NOMINATIM_USER_AGENT`
+> AND explicit `NOMINATIM_API_URL` — no silent public-OSM default; warn on 429/ban; env
+> docs). **Filed #574** (global limiter+cache, blocks #529 prod enablement). Prod must NOT
+> set NOMINATIM_* until #574 lands. CI re-running on b5069ff.
 > Base merged
 > in (no force) and **migration renumbered 0048 → `0050_add_location_coordinate_source`**
 > because #521 landed 0048/0049. Local gate GREEN on the merged tree: tsc api+shared,
