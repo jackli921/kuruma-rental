@@ -9,6 +9,10 @@ import { useTranslations } from 'use-intl'
 // client-side so an oversize pick fails instantly instead of round-tripping.
 const MAX_PHOTO_BYTES = 5 * 1024 * 1024
 const MAX_PHOTO_MB = MAX_PHOTO_BYTES / (1024 * 1024)
+// Mirror of the server's per-vehicle cap (`MAX_PHOTOS_PER_VEHICLE` in
+// packages/api/src/services/vehicle-photo.ts). Named so the hint can't silently
+// drift from the server limit — change both or neither.
+const MAX_PHOTOS = 10
 const ACCEPT = 'image/jpeg,image/png,image/webp,image/avif'
 
 interface PhotoUploadProps {
@@ -113,7 +117,7 @@ export function PhotoUpload({ vehicleId, photos = [] }: PhotoUploadProps) {
 
       {vehicleId === null ? (
         <p className="text-xs text-muted-foreground">
-          {t('hint', { max: 10, maxSize: MAX_PHOTO_MB })}
+          {t('hint', { max: MAX_PHOTOS, maxSize: MAX_PHOTO_MB })}
         </p>
       ) : (
         uploadMutation.isPending && (
