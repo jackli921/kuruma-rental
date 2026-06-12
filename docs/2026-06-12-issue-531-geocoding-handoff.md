@@ -6,12 +6,17 @@
 **Base branch:** `marketplace-pivot` @ `1cd08e4`. **MERGE, never rebase** (force-push is hard-denied).
 
 > **STATUS 2026-06-12 (FINAL — PR OPEN, MERGE-PENDING):** All slices 1-5 done +
-> reviewed + **PR #564 open** (base `marketplace-pivot`). Tip `b5069ff`. Two review
-> rounds: `/code-review` PASS (LOW immutability nit fixed `9836d57`) + user MEDIUM on
-> Nominatim rate-limit → hardened `b5069ff` (geocoder requires BOTH `NOMINATIM_USER_AGENT`
-> AND explicit `NOMINATIM_API_URL` — no silent public-OSM default; warn on 429/ban; env
-> docs). **Filed #574** (global limiter+cache, blocks #529 prod enablement). Prod must NOT
-> set NOMINATIM_* until #574 lands. CI re-running on b5069ff.
+> reviewed + **PR #564 open, MERGE-READY** (base `marketplace-pivot`). Tip `a75b6a6`.
+> Two review rounds done: `/code-review` PASS (LOW immutability fix `9836d57`) + user
+> MEDIUM on Nominatim rate-limit → hardened `b5069ff` (geocoder needs BOTH `NOMINATIM_USER_AGENT`
+> AND explicit `NOMINATIM_API_URL`; warn on 429/ban; env docs) + **filed #574** (global
+> limiter, blocks #529 prod). **Base merged in twice** (#521→mig renumber 0050, then #551
+> turnaround→**mig renumbered to `0051_add_location_coordinate_source`**). PR is `MERGEABLE`,
+> `BEHIND` by 1 (#528 operator-classes — no migration, no conflict). Gate GREEN merged tree:
+> db:verify 4/4 (**52 migs**), shared 437, api 1183, integration 203. CI at handoff:
+> db-drift/e2e/e2e-real-db PASS, **test-and-build still PENDING** (user stopped the watch).
+> **NEXT = merge:** confirm test-and-build green → `gh pr merge 564 --squash --delete-branch=false`
+> (if blocked as BEHIND, `gh pr update-branch 564` — MERGE not rebase — wait CI, then merge).
 > Base merged
 > in (no force) and **migration renumbered 0048 → `0050_add_location_coordinate_source`**
 > because #521 landed 0048/0049. Local gate GREEN on the merged tree: tsc api+shared,
