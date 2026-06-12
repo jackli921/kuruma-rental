@@ -157,6 +157,7 @@ async function setup(
     vehicleClassRepo,
     undefined,
     undefined,
+    bookingEventRepo,
     generateMock,
     opts.verificationGate,
   )
@@ -919,6 +920,7 @@ async function setupSub(): Promise<SubHarness> {
     vehicleClassRepo,
     undefined,
     undefined,
+    bookingEventRepo,
     () => 'SUBSEED1',
   )
 

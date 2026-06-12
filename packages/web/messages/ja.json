@@ -842,7 +842,18 @@
         "total": "合計",
         "loading": "予約を読み込み中…",
         "loadError": "この予約を読み込めませんでした",
-        "missing": "予約が見つかりません"
+        "missing": "予約が見つかりません",
+        "actions": "操作"
+      },
+      "timeline": {
+        "heading": "タイムライン",
+        "created": "予約が作成されました",
+        "statusChanged": "ステータスが{from}から{to}に変更されました",
+        "vehicleSubstituted": "車両が変更されました",
+        "reason": "理由: {reason}",
+        "cancelled": "予約がキャンセルされました",
+        "cancellationFee": "キャンセル料 {fee}",
+        "empty": "イベントはまだありません"
       }
     }
   },
