@@ -98,4 +98,15 @@ describe('OperatorLocationsView', () => {
     renderView([location({ id: 'l4', status: 'ARCHIVED' })])
     expect(screen.getByRole('button', { name: en.archiveAction })).toBeDisabled()
   })
+
+  it('omits the edit/archive row actions in read-only mode (no handlers — bypass roles)', () => {
+    render(
+      <IntlProvider locale="en" messages={enMessages}>
+        <OperatorLocationsView locations={[location()]} />
+      </IntlProvider>,
+    )
+    expect(screen.getByTestId('location-row')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: en.editLocation })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: en.archiveAction })).not.toBeInTheDocument()
+  })
 })
