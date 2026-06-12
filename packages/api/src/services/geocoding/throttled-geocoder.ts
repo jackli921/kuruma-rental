@@ -1,0 +1,53 @@
+import type { GeocodeResult, Geocoder, RateLimiter } from './types'
+
+// One shared bucket across every isolate/request: a constant key makes the
+// native CF rate-limit binding enforce a single GLOBAL rate, not a per-key one.
+const GLOBAL_KEY = 'geocode:global'
+
+/**
+ * Wraps a `Geocoder` with an app-side global throttle (#574). OSM/Nominatim's
+ * policy caps the WHOLE app at 1 req/s; this caps our outbound geocoding before
+ * a burst of operator saves can breach it (best-effort defense-in-depth — the
+ * native binding is a fixed window, not a token bucket, so it can admit 2 across
+ * a window boundary; the production provider's own server-side limit is the real
+ * guarantee).
+ *
+ * Over the limit ⇒ SKIP the lookup and return null. A skip is indistinguishable
+ * from a provider miss/outage, which `LocationService` already handles (the save
+ * proceeds with no coords; a later edit/`regeocode` fills the pin). Honors the
+ * `Geocoder` never-throw contract: a degraded limiter fails OPEN (proceed) so a
+ * rate-limit-service blip can't silently kill all geocoding.
+ */
+export class ThrottledGeocoder implements Geocoder {
+  constructor(
+    private readonly inner: Geocoder,
+    private readonly limiter: RateLimiter,
+    private readonly key: string = GLOBAL_KEY,
+  ) {}
+
+  async geocode(address: string): Promise<GeocodeResult | null> {
+    let allowed = true
+    try {
+      ;({ success: allowed } = await this.limiter.limit(this.key))
+    } catch (err) {
+      // Limiter itself failed: fail OPEN so geocoding survives a limiter outage.
+      console.warn('[geocode] rate limiter unavailable; proceeding without throttle', {
+        error: err instanceof Error ? err.message : String(err),
+      })
+      allowed = true
+    }
+
+    if (!allowed) {
+      console.warn('[geocode] global rate limit reached; skipping lookup (no coords)', { address })
+      return null
+    }
+
+    try {
+      return await this.inner.geocode(address)
+    } catch {
+      // Inner Geocoders must never throw, but honor the contract defensively so
+      // a misbehaving adapter can't break a save through this decorator either.
+      return null
+    }
+  }
+}
