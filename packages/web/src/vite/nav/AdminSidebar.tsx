@@ -1,4 +1,3 @@
-import { cn } from '@/lib/utils'
 import { Link } from '@tanstack/react-router'
 import { Banknote, LayoutDashboard } from 'lucide-react'
 import { useLocale, useTranslations } from 'use-intl'
@@ -37,7 +36,7 @@ export function AdminSidebar() {
             // Exact: the index link (/admin) must not stay active on /admin/revenue.
             activeOptions={{ exact: true }}
             activeProps={{ 'aria-current': 'page' }}
-            className={cn(LINK_CLASSNAME)}
+            className={LINK_CLASSNAME}
           >
             <Icon className="size-5" />
             {t(labelKey)}
