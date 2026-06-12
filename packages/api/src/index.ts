@@ -2,6 +2,7 @@ import { type RateLimitBinding, rateLimit } from '@elithrar/workers-hono-rate-li
 import { getDb, runTx } from '@kuruma/shared/db'
 import { Hono } from 'hono'
 import { cors } from 'hono/cors'
+import type { AppOverrides } from './app-overrides'
 import { DrizzleOAuthAccountStore } from './auth/drizzle-oauth-account-store'
 import { FetchGoogleOAuthProvider } from './auth/fetch-google-oauth-provider'
 import type { GoogleAuthRuntime, GoogleOAuthConfig } from './auth/google'
@@ -169,45 +170,7 @@ import { VehicleDetailService } from './services/vehicle-detail'
 import { VehiclePhotoService } from './services/vehicle-photo'
 import { type ResolveWriteOperatorId, resolveOperatorIdForWrite } from './tenancy'
 
-export function createApp(overrides?: {
-  vehicleRepo: VehicleRepository
-  bookingRepo: BookingRepository
-  availabilityRepo: AvailabilityRepository
-  fleetOverviewRepo?: FleetOverviewRepository
-  vehicleDetailRepo?: VehicleDetailRepository
-  statsRepo?: StatsRepository
-  overviewRepo?: OverviewRepository
-  threadRepo?: ThreadRepository
-  messageRepo?: MessageRepository
-  vehicleClassRepo?: VehicleClassRepository
-  maintenanceLogRepo?: MaintenanceLogRepository
-  photoStorage?: PhotoStorage
-  renterDocumentRepo?: RenterDocumentRepository
-  documentStorage?: DocumentStorage
-  userRepo?: UserRepository
-  customerRepo?: CustomerRepository
-  operatorRepo?: OperatorRepository
-  locationRepo?: LocationRepository
-  insuranceOptionRepo?: InsuranceOptionRepository
-  addOnRepo?: AddOnRepository
-  feeScheduleRepo?: FeeScheduleRepository
-  notificationLogRepo?: NotificationLogRepository
-  storefrontRepo?: StorefrontRepository
-  paymentEventRepo?: PaymentEventRepository
-  providerInviteRepo?: ProviderInviteRepository
-  operatorMembershipRepo?: OperatorMembershipRepository
-  // Inject a fake gateway in tests; absent ⇒ the env-resolved Stripe/sentinel.
-  paymentGateway?: PaymentGateway
-  // Inject a fake Geocoder in tests (proves a provider swap touches only here);
-  // absent ⇒ the env-resolved Nominatim/null-stub.
-  geocoder?: Geocoder
-  photoUploadLimiter?: RateLimitBinding
-  photoUploadUserLimiter?: RateLimitBinding
-  publicCatalogLimiter?: RateLimitBinding
-  // Injected Google OAuth runtime (provider + account store). Integration tests
-  // pass a fake so the callback can be exercised without a live Google/DB.
-  googleAuthRuntime?: GoogleAuthRuntime
-}) {
+export function createApp(overrides?: AppOverrides) {
   let vehicleClassRepo: VehicleClassRepository
   let vehicleRepo: VehicleRepository
   let bookingRepo: BookingRepository
