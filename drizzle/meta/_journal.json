@@ -358,6 +358,13 @@
       "when": 1781300987432,
       "tag": "0050_turnaround_min_60",
       "breakpoints": true
+    },
+    {
+      "idx": 51,
+      "version": "7",
+      "when": 1781303301951,
+      "tag": "0051_add_location_coordinate_source",
+      "breakpoints": true
     }
   ]
 }

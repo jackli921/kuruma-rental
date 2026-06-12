@@ -243,3 +243,152 @@ describe('updateLocationSchema', () => {
     expect(result.success).toBe(false)
   })
 })
+
+describe('location coordinates (#531)', () => {
+  const NAMBA = { latitude: 34.6659, longitude: 135.5018 }
+
+  describe('on create', () => {
+    it('accepts a valid lat/lng pair and exposes both', () => {
+      const result = createLocationSchema.safeParse({ ...validInput(), ...NAMBA })
+      expect(result.success).toBe(true)
+      if (result.success) {
+        expect(result.data.latitude).toBe(34.6659)
+        expect(result.data.longitude).toBe(135.5018)
+      }
+    })
+
+    it('rejects a latitude without a longitude (pair rule)', () => {
+      const result = createLocationSchema.safeParse({ ...validInput(), latitude: 34.6659 })
+      expect(result.success).toBe(false)
+    })
+
+    it('rejects a longitude without a latitude (pair rule)', () => {
+      const result = createLocationSchema.safeParse({ ...validInput(), longitude: 135.5018 })
+      expect(result.success).toBe(false)
+    })
+
+    it('rejects one-null-one-number as a broken pair', () => {
+      const result = createLocationSchema.safeParse({
+        ...validInput(),
+        latitude: 34.6659,
+        longitude: null,
+      })
+      expect(result.success).toBe(false)
+    })
+
+    it('rejects latitude above 90', () => {
+      const result = createLocationSchema.safeParse({
+        ...validInput(),
+        latitude: 90.1,
+        longitude: 0,
+      })
+      expect(result.success).toBe(false)
+    })
+
+    it('rejects latitude below -90', () => {
+      const result = createLocationSchema.safeParse({
+        ...validInput(),
+        latitude: -90.1,
+        longitude: 0,
+      })
+      expect(result.success).toBe(false)
+    })
+
+    it('rejects longitude above 180', () => {
+      const result = createLocationSchema.safeParse({
+        ...validInput(),
+        latitude: 0,
+        longitude: 180.1,
+      })
+      expect(result.success).toBe(false)
+    })
+
+    it('rejects longitude below -180', () => {
+      const result = createLocationSchema.safeParse({
+        ...validInput(),
+        latitude: 0,
+        longitude: -180.1,
+      })
+      expect(result.success).toBe(false)
+    })
+
+    it('rejects NaN latitude', () => {
+      const result = createLocationSchema.safeParse({
+        ...validInput(),
+        latitude: Number.NaN,
+        longitude: 135,
+      })
+      expect(result.success).toBe(false)
+    })
+
+    it('rejects non-finite longitude', () => {
+      const result = createLocationSchema.safeParse({
+        ...validInput(),
+        latitude: 34,
+        longitude: Number.POSITIVE_INFINITY,
+      })
+      expect(result.success).toBe(false)
+    })
+
+    it('accepts an explicit null pair (no coords)', () => {
+      const result = createLocationSchema.safeParse({
+        ...validInput(),
+        latitude: null,
+        longitude: null,
+      })
+      expect(result.success).toBe(true)
+      if (result.success) {
+        expect(result.data.latitude).toBeNull()
+        expect(result.data.longitude).toBeNull()
+      }
+    })
+
+    it('strips a client-sent coordinateSource (server-derived only)', () => {
+      const result = createLocationSchema.safeParse({
+        ...validInput(),
+        ...NAMBA,
+        coordinateSource: 'MANUAL',
+      })
+      expect(result.success).toBe(true)
+      if (result.success) {
+        expect((result.data as Record<string, unknown>).coordinateSource).toBeUndefined()
+      }
+    })
+  })
+
+  describe('on update', () => {
+    it('accepts a coord pair', () => {
+      const result = updateLocationSchema.safeParse({ ...NAMBA })
+      expect(result.success).toBe(true)
+      if (result.success) expect(result.data.latitude).toBe(34.6659)
+    })
+
+    it('rejects a half pair (latitude only)', () => {
+      const result = updateLocationSchema.safeParse({ latitude: 34.6659 })
+      expect(result.success).toBe(false)
+    })
+
+    it('accepts a null pair to clear coords', () => {
+      const result = updateLocationSchema.safeParse({ latitude: null, longitude: null })
+      expect(result.success).toBe(true)
+      if (result.success) {
+        expect(result.data.latitude).toBeNull()
+        expect(result.data.longitude).toBeNull()
+      }
+    })
+
+    it('accepts regeocode:true', () => {
+      const result = updateLocationSchema.safeParse({ regeocode: true })
+      expect(result.success).toBe(true)
+      if (result.success) expect(result.data.regeocode).toBe(true)
+    })
+
+    it('strips a client-sent coordinateSource', () => {
+      const result = updateLocationSchema.safeParse({ coordinateSource: 'GEOCODED' })
+      expect(result.success).toBe(true)
+      if (result.success) {
+        expect((result.data as Record<string, unknown>).coordinateSource).toBeUndefined()
+      }
+    })
+  })
+})
