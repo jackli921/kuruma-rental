@@ -33,7 +33,19 @@
     "apple": "Apple",
     "signInTitle": "Sign in",
     "signInSubtitle": "Continue to Best Car Rental",
-    "continueWithGoogle": "Continue with Google"
+    "continueWithGoogle": "Continue with Google",
+    "provider": {
+      "signInTitle": "Provider sign in",
+      "signInSubtitle": "Sign in to manage your fleet",
+      "continueAsProvider": "Continue with Google",
+      "invite": {
+        "title": "You're invited to {operator}",
+        "subtitle": "Sign in with the invited Google account to join.",
+        "continue": "Continue with Google",
+        "expiredTitle": "Invite unavailable",
+        "expiredBody": "This invite has expired or has already been used. Ask your operator for a new one."
+      }
+    }
   },
   "nav": {
     "home": "Home",

@@ -33,7 +33,19 @@
     "apple": "Apple",
     "signInTitle": "登录",
     "signInSubtitle": "继续使用 Best Car Rental",
-    "continueWithGoogle": "使用 Google 继续"
+    "continueWithGoogle": "使用 Google 继续",
+    "provider": {
+      "signInTitle": "供应商登录",
+      "signInSubtitle": "登录以管理您的车队",
+      "continueAsProvider": "使用 Google 继续",
+      "invite": {
+        "title": "您受邀加入 {operator}",
+        "subtitle": "请使用受邀的 Google 账号登录以加入。",
+        "continue": "使用 Google 继续",
+        "expiredTitle": "邀请不可用",
+        "expiredBody": "此邀请已过期或已被使用。请向您的运营商索取新的邀请。"
+      }
+    }
   },
   "nav": {
     "home": "首页",

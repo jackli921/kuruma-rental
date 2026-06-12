@@ -1,8 +1,13 @@
-import { businessGuard, renterGuard } from '@/vite/guards'
+import { businessGuard, manageGuard, renterGuard } from '@/vite/guards'
 import type { Session } from '@/vite/session'
 import { describe, expect, it } from 'vitest'
 
 const session = (role: string): Session => ({ user: { id: 'u', role }, csrfToken: 't' })
+
+const operatorSession = (role: string, operatorSlug?: string): Session => ({
+  user: { id: 'u', role, ...(operatorSlug ? { operatorSlug } : {}) },
+  csrfToken: 't',
+})
 
 describe('renterGuard', () => {
   it('allows any signed-in user', () => {
@@ -24,5 +29,31 @@ describe('businessGuard', () => {
   })
   it('redirects signed-out users to login', () => {
     expect(businessGuard(null)).toEqual({ type: 'login' })
+  })
+})
+
+describe('manageGuard', () => {
+  it('allows an operator whose session slug matches the URL slug', () => {
+    expect(manageGuard(operatorSession('OPERATOR_OWNER', 'acme'), 'acme')).toEqual({
+      type: 'allow',
+    })
+  })
+
+  it('forbids an operator viewing a different operator slug (fail-closed)', () => {
+    expect(manageGuard(operatorSession('OPERATOR_OWNER', 'acme'), 'pilot')).toEqual({
+      type: 'forbidden',
+    })
+  })
+
+  it('forbids a business role without a slug (e.g. PLATFORM_ADMIN) — they use the admin portal', () => {
+    expect(manageGuard(session('PLATFORM_ADMIN'), 'acme')).toEqual({ type: 'forbidden' })
+  })
+
+  it('forbids a signed-in renter (non-business role)', () => {
+    expect(manageGuard(session('RENTER'), 'acme')).toEqual({ type: 'forbidden' })
+  })
+
+  it('redirects signed-out users to login', () => {
+    expect(manageGuard(null, 'acme')).toEqual({ type: 'login' })
   })
 })
