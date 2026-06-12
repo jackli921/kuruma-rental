@@ -842,7 +842,18 @@
         "total": "合計",
         "loading": "予約を読み込み中…",
         "loadError": "この予約を読み込めませんでした",
-        "missing": "予約が見つかりません"
+        "missing": "予約が見つかりません",
+        "actions": "操作"
+      },
+      "timeline": {
+        "heading": "タイムライン",
+        "created": "予約が作成されました",
+        "statusChanged": "ステータスが{from}から{to}に変更されました",
+        "vehicleSubstituted": "車両が変更されました",
+        "reason": "理由: {reason}",
+        "cancelled": "予約がキャンセルされました",
+        "cancellationFee": "キャンセル料 {fee}",
+        "empty": "イベントはまだありません"
       }
     }
   },
@@ -909,6 +920,8 @@
     "fromDaily": "¥{price}〜／日",
     "fromHourly": "¥{price}〜／時間",
     "noPrice": "料金はお問い合わせください",
+    "turnaround": "貸出間隔 約{hours}時間",
+    "emptyTurnaroundHint": "車両は貸出の合間に準備時間が必要なため、直後はご利用いただけない場合があります。受け取り日を遅らせてお試しください。",
     "classCount": "{label} {count}台",
     "seats": "{count}人乗り",
     "luggage": "荷物 {count}個",

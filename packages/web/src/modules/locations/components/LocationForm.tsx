@@ -7,6 +7,7 @@ import { Textarea } from '@/components/ui/textarea'
 import { zodResolver } from '@hookform/resolvers/zod'
 import {
   type CreateLocationInput,
+  MIN_TURNAROUND_MINUTES,
   type UpdateLocationInput,
   createLocationSchema,
   updateLocationSchema,
@@ -164,7 +165,7 @@ export function LocationForm(props: LocationFormProps) {
           <Input
             id="location-turnaround"
             type="number"
-            min={0}
+            min={MIN_TURNAROUND_MINUTES}
             {...register('defaultTurnaroundMinutes', { valueAsNumber: true })}
           />
           <p className="text-xs text-muted-foreground mt-1">{t('form.turnaroundHint')}</p>
