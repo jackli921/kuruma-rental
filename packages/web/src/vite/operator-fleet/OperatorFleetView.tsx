@@ -1,10 +1,13 @@
+import { Button } from '@/components/ui/button'
 import { type FleetFilterState, filterVehicles } from '@/lib/fleet-filters'
 import { formatVehicleRate } from '@/lib/format'
 import { BulkActionBar } from '@/vite/operator-fleet/BulkActionBar'
+import { EditVehicleSheet } from '@/vite/operator-fleet/EditVehicleSheet'
 import { FleetFilters } from '@/vite/operator-fleet/FleetFilters'
+import { FleetRowActions } from '@/vite/operator-fleet/FleetRowActions'
 import type { OperatorFleetVehicle, VehicleStatus } from '@/vite/operator-fleet/api'
 import { type ExpiryStatus, computeExpiryStatus } from '@kuruma/shared/lib/expiry'
-import { CarFront } from 'lucide-react'
+import { CarFront, Plus } from 'lucide-react'
 import { useState } from 'react'
 import { useTranslations } from 'use-intl'
 
@@ -24,6 +27,7 @@ export function OperatorFleetView({ vehicles, locale: _locale }: OperatorFleetVi
   const todayIso = new Date().toISOString().slice(0, 10)
   const [selectedIds, setSelectedIds] = useState<readonly string[]>([])
   const [filters, setFilters] = useState<FleetFilterState>({})
+  const [sheet, setSheet] = useState<{ vehicle: OperatorFleetVehicle | null } | null>(null)
 
   const visibleVehicles = filterVehicles([...vehicles], filters)
   const visibleIds = visibleVehicles.map((v) => v.id)
@@ -33,91 +37,111 @@ export function OperatorFleetView({ vehicles, locale: _locale }: OperatorFleetVi
   const toggleOne = (id: string) =>
     setSelectedIds((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]))
 
-  if (vehicles.length === 0) {
-    return (
-      <div className="flex flex-col items-center justify-center rounded-xl border border-border py-20">
-        <CarFront className="mb-4 size-12 text-muted-foreground/30" />
-        <p className="text-lg text-muted-foreground">{t('empty')}</p>
-      </div>
-    )
-  }
-
   return (
-    <div className="flex flex-col gap-6 lg:flex-row">
-      <aside className="lg:w-64 lg:shrink-0">
-        <FleetFilters vehicles={vehicles} value={filters} onChange={setFilters} />
-      </aside>
-      <div className="min-w-0 flex-1 overflow-x-auto rounded-xl border border-border">
-        <table className="w-full text-left text-sm">
-          <thead className="border-b border-border bg-muted/40 text-muted-foreground">
-            <tr>
-              <th className="w-10 px-4 py-3">
-                <input
-                  type="checkbox"
-                  aria-label={tBulk('selectAll')}
-                  checked={allSelected}
-                  onChange={toggleAll}
-                />
-              </th>
-              <th className="px-4 py-3 font-medium">{t('columns.vehicle')}</th>
-              <th className="px-4 py-3 font-medium">{t('columns.status')}</th>
-              <th className="px-4 py-3 text-right font-medium">{t('columns.seats')}</th>
-              <th className="px-4 py-3 text-right font-medium">{t('columns.luggage')}</th>
-              <th className="px-4 py-3 text-right font-medium">{t('columns.price')}</th>
-              <th className="px-4 py-3 font-medium">{t('columns.shaken')}</th>
-            </tr>
-          </thead>
-          <tbody>
-            {visibleVehicles.map((v) => (
-              <tr
-                key={v.id}
-                className="border-b border-border transition-colors last:border-0 hover:bg-muted/40"
-              >
-                <td className="px-4 py-3">
-                  <input
-                    type="checkbox"
-                    aria-label={tBulk('selectRow', { name: v.name })}
-                    checked={selectedIds.includes(v.id)}
-                    onChange={() => toggleOne(v.id)}
-                  />
-                </td>
-                <td className="px-4 py-3">
-                  <div className="font-medium">{v.name}</div>
-                  <div className="text-xs text-muted-foreground">
-                    <span>{v.licensePlate ?? t('none')}</span>
-                    {v.make != null && (
-                      <span>{` · ${[v.make, v.model, v.year].filter(Boolean).join(' ')}`}</span>
-                    )}
-                  </div>
-                </td>
-                <td className="px-4 py-3">
-                  <StatusPill status={v.status} label={t(`status.${v.status}`)} />
-                </td>
-                <td className="px-4 py-3 text-right tabular-nums">{v.seats}</td>
-                <td className="px-4 py-3 text-right tabular-nums">
-                  {v.luggageCapacity ?? t('none')}
-                </td>
-                <td className="px-4 py-3 text-right tabular-nums">{priceLabel(v, t)}</td>
-                <td className="px-4 py-3">
-                  <ExpiryPill
-                    status={computeExpiryStatus(v.shakenExpiryDate, todayIso)}
-                    labels={{
-                      OK: t('expiry.OK'),
-                      EXPIRING_SOON: t('expiry.EXPIRING_SOON'),
-                      EXPIRED: t('expiry.EXPIRED'),
-                      UNKNOWN: t('expiry.UNKNOWN'),
-                    }}
-                  />
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+    <div className="space-y-6">
+      <div className="flex justify-end">
+        <Button onClick={() => setSheet({ vehicle: null })}>
+          <Plus className="size-4" />
+          {t('addVehicle')}
+        </Button>
       </div>
+
+      {vehicles.length === 0 ? (
+        <div className="flex flex-col items-center justify-center rounded-xl border border-border py-20">
+          <CarFront className="mb-4 size-12 text-muted-foreground/30" />
+          <p className="text-lg text-muted-foreground">{t('empty')}</p>
+        </div>
+      ) : (
+        <div className="flex flex-col gap-6 lg:flex-row">
+          <aside className="lg:w-64 lg:shrink-0">
+            <FleetFilters vehicles={vehicles} value={filters} onChange={setFilters} />
+          </aside>
+          <div className="min-w-0 flex-1 overflow-x-auto rounded-xl border border-border">
+            <table className="w-full text-left text-sm">
+              <thead className="border-b border-border bg-muted/40 text-muted-foreground">
+                <tr>
+                  <th className="w-10 px-4 py-3">
+                    <input
+                      type="checkbox"
+                      aria-label={tBulk('selectAll')}
+                      checked={allSelected}
+                      onChange={toggleAll}
+                    />
+                  </th>
+                  <th className="px-4 py-3 font-medium">{t('columns.vehicle')}</th>
+                  <th className="px-4 py-3 font-medium">{t('columns.status')}</th>
+                  <th className="px-4 py-3 text-right font-medium">{t('columns.seats')}</th>
+                  <th className="px-4 py-3 text-right font-medium">{t('columns.luggage')}</th>
+                  <th className="px-4 py-3 text-right font-medium">{t('columns.price')}</th>
+                  <th className="px-4 py-3 font-medium">{t('columns.shaken')}</th>
+                  <th className="px-4 py-3 text-right font-medium">{t('columns.actions')}</th>
+                </tr>
+              </thead>
+              <tbody>
+                {visibleVehicles.map((v) => (
+                  <tr
+                    key={v.id}
+                    className="border-b border-border transition-colors last:border-0 hover:bg-muted/40"
+                  >
+                    <td className="px-4 py-3">
+                      <input
+                        type="checkbox"
+                        aria-label={tBulk('selectRow', { name: v.name })}
+                        checked={selectedIds.includes(v.id)}
+                        onChange={() => toggleOne(v.id)}
+                      />
+                    </td>
+                    <td className="px-4 py-3">
+                      <div className="font-medium">{v.name}</div>
+                      <div className="text-xs text-muted-foreground">
+                        <span>{v.licensePlate ?? t('none')}</span>
+                        {v.make != null && (
+                          <span>{` · ${[v.make, v.model, v.year].filter(Boolean).join(' ')}`}</span>
+                        )}
+                      </div>
+                    </td>
+                    <td className="px-4 py-3">
+                      <StatusPill status={v.status} label={t(`status.${v.status}`)} />
+                    </td>
+                    <td className="px-4 py-3 text-right tabular-nums">{v.seats}</td>
+                    <td className="px-4 py-3 text-right tabular-nums">
+                      {v.luggageCapacity ?? t('none')}
+                    </td>
+                    <td className="px-4 py-3 text-right tabular-nums">{priceLabel(v, t)}</td>
+                    <td className="px-4 py-3">
+                      <ExpiryPill
+                        status={computeExpiryStatus(v.shakenExpiryDate, todayIso)}
+                        labels={{
+                          OK: t('expiry.OK'),
+                          EXPIRING_SOON: t('expiry.EXPIRING_SOON'),
+                          EXPIRED: t('expiry.EXPIRED'),
+                          UNKNOWN: t('expiry.UNKNOWN'),
+                        }}
+                      />
+                    </td>
+                    <td className="px-4 py-3 text-right">
+                      <FleetRowActions vehicle={v} onEdit={() => setSheet({ vehicle: v })} />
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
       <BulkActionBar
         selectedIds={[...selectedIds]}
         onDone={clearSelection}
         onClear={clearSelection}
+      />
+      <EditVehicleSheet
+        open={sheet !== null}
+        vehicle={sheet?.vehicle ?? null}
+        onOpenChange={(next) => {
+          if (!next) setSheet(null)
+        }}
+        onSaved={() => setSheet(null)}
       />
     </div>
   )

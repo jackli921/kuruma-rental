@@ -5,13 +5,31 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { IntlProvider } from 'use-intl'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import enMessages from '../../../messages/en.json'
+
+// The edit sheet lazily loads vehicle-class options; stub the query so it never
+// hits the network and resolves to an empty list (the form's class dropdown is
+// then simply hidden — out of scope here).
+vi.mock('@/vite/operator-fleet/api', async () => {
+  const actual = await vi.importActual<typeof import('@/vite/operator-fleet/api')>(
+    '@/vite/operator-fleet/api',
+  )
+  return {
+    ...actual,
+    vehicleClassOptionsQueryOptions: () => ({
+      queryKey: ['operator-fleet', 'class-options'],
+      queryFn: async () => [],
+    }),
+  }
+})
 
 const en = enMessages.business.vehicles.fleet
 const bulk = enMessages.business.vehicles.bulk
 const filter = enMessages.business.vehicles.filter
 const statusLabels = enMessages.business.vehicles.status
+const form = enMessages.business.vehicles.form
+const editVehicleLabel = enMessages.business.vehicles.editVehicle
 
 function vehicle(overrides: Partial<OperatorFleetVehicle> = {}): OperatorFleetVehicle {
   return {
@@ -145,5 +163,25 @@ describe('OperatorFleetView', () => {
 
     expect(screen.getByText('Retired Car')).toBeInTheDocument()
     expect(screen.queryByText('Available Car')).not.toBeInTheDocument()
+  })
+
+  it('opens an empty create sheet when Add vehicle is clicked', async () => {
+    const user = userEvent.setup()
+    renderView([vehicle({ id: 'a', name: 'Toyota Aqua' })])
+    expect(screen.queryByLabelText(form.name)).not.toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: en.addVehicle }))
+
+    expect(await screen.findByLabelText(form.name)).toHaveValue('')
+  })
+
+  it('opens the edit sheet prefilled when a row Edit action is used', async () => {
+    const user = userEvent.setup()
+    renderView([vehicle({ id: 'a', name: 'Toyota Aqua' })])
+
+    await user.click(screen.getByRole('button', { name: en.columns.actions }))
+    await user.click(screen.getByRole('menuitem', { name: editVehicleLabel }))
+
+    expect(await screen.findByLabelText(form.name)).toHaveValue('Toyota Aqua')
   })
 })
