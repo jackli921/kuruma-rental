@@ -779,6 +779,24 @@
         "ACTIVE": "进行中",
         "COMPLETED": "已完成",
         "CANCELLED": "已取消"
+      },
+      "viewAria": "查看预订 {code} 的详情",
+      "detail": {
+        "heading": "预订详情",
+        "status": "状态",
+        "vehicle": "车辆",
+        "renter": "租客",
+        "pickup": "取车",
+        "return": "还车",
+        "insurance": "保险",
+        "deductible": "免赔额",
+        "addOns": "附加项",
+        "charges": "可能产生的费用",
+        "notes": "备注",
+        "total": "合计",
+        "loading": "正在加载预订…",
+        "loadError": "无法加载此预订",
+        "missing": "未找到预订"
       }
     }
   },

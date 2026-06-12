@@ -779,6 +779,24 @@
         "ACTIVE": "Active",
         "COMPLETED": "Completed",
         "CANCELLED": "Cancelled"
+      },
+      "viewAria": "View details for booking {code}",
+      "detail": {
+        "heading": "Booking details",
+        "status": "Status",
+        "vehicle": "Vehicle",
+        "renter": "Renter",
+        "pickup": "Pick-up",
+        "return": "Return",
+        "insurance": "Insurance",
+        "deductible": "Deductible",
+        "addOns": "Add-ons",
+        "charges": "Potential charges",
+        "notes": "Notes",
+        "total": "Total",
+        "loading": "Loading booking…",
+        "loadError": "Couldn't load this booking",
+        "missing": "Booking not found"
       }
     }
   },
