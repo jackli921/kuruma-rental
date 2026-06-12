@@ -31,6 +31,8 @@ export interface StorefrontCardData {
   name: string
   address: string
   operatingHours: OperatingHoursData | null
+  /** #551: operator turnaround buffer (minutes) between rentals at this store. */
+  turnaroundMinutes: number
   classSummaries: ClassSummaryData[]
   fromDailyPriceJpy: number | null
   fromHourlyPriceJpy: number | null
@@ -66,6 +68,8 @@ export interface StorefrontSummaryData {
   address: string
   operatorName: string
   operatingHours: OperatingHoursData | null
+  /** #551: operator turnaround buffer (minutes) between rentals at this store. */
+  turnaroundMinutes: number
 }
 
 export interface StorefrontDetailData {

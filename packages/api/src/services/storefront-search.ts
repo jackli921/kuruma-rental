@@ -33,6 +33,9 @@ export interface StorefrontCard {
   name: string
   address: string
   operatingHours: LocationOperatingHours
+  /** #551: operator turnaround buffer, surfaced on the card so renters see the
+   *  ~Nh service-quality floor between rentals at this store. */
+  turnaroundMinutes: number
   classSummaries: ClassSummary[]
   /** min dailyRateJpy over available vehicles, or null when none are daily-priced. */
   fromDailyPriceJpy: number | null
@@ -160,6 +163,7 @@ function buildCard(
     name: storefront.name,
     address: storefront.address,
     operatingHours: storefront.operatingHours,
+    turnaroundMinutes: storefront.defaultTurnaroundMinutes,
     classSummaries: summarizeByClass(relevant, classById),
     fromDailyPriceJpy: minRate(relevant.map((v) => v.dailyRateJpy)),
     fromHourlyPriceJpy: minRate(relevant.map((v) => v.hourlyRateJpy)),
