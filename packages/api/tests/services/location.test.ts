@@ -3,8 +3,22 @@ import type { CallerContext } from '../../src/middleware/auth'
 import { PG_ERROR } from '../../src/pg-errors'
 import { InMemoryLocationRepository } from '../../src/repositories/in-memory'
 import { InMemoryBookingRepository } from '../../src/repositories/in-memory/booking'
+import type { Geocoder } from '../../src/services/geocoding/types'
 import { LocationService } from '../../src/services/location'
 import type { Booking } from '../../src/stores'
+
+// Fake Geocoders for the #531 write-decision matrix. The real adapter never
+// throws; `throwingGeocoder` proves the service is resilient even if a future
+// adapter (or a transient bug) lets one escape — a save must never be blocked.
+const hitGeocoder = (lat: number, lng: number): Geocoder => ({
+  geocode: async () => ({ lat, lng }),
+})
+const missGeocoder: Geocoder = { geocode: async () => null }
+const throwingGeocoder: Geocoder = {
+  geocode: async () => {
+    throw new Error('geocoder exploded')
+  },
+}
 
 const uniqueViolation = () =>
   Object.assign(new Error('duplicate key value violates unique constraint'), {
@@ -72,10 +86,16 @@ describe('LocationService', () => {
   let bookingStore: Map<string, Booking>
   let service: LocationService
 
+  // Build a service wired to a specific Geocoder; the matrix tests vary it.
+  const build = (geocoder: Geocoder = missGeocoder) =>
+    new LocationService(repo, new InMemoryBookingRepository(bookingStore), geocoder)
+
   beforeEach(() => {
     repo = new InMemoryLocationRepository()
     bookingStore = new Map()
-    service = new LocationService(repo, new InMemoryBookingRepository(bookingStore))
+    // Default: a Geocoder that never resolves coords, so the existing
+    // name/scope tests (which omit coords) are unaffected by geocode-on-save.
+    service = build(missGeocoder)
   })
 
   describe('create', () => {
@@ -249,6 +269,190 @@ describe('LocationService', () => {
       const result = await service.archive(ctxFor(opA), created.location.id)
       expect(result.ok).toBe(true)
       if (result.ok) expect(result.location.status).toBe('ARCHIVED')
+    })
+  })
+
+  // #531 geocode-on-save decision matrix. coordinateSource is server-derived:
+  // MANUAL (operator pin), GEOCODED (derived from address), or null (none).
+  describe('geocode-on-save (#531 matrix)', () => {
+    const seed = (coords: {
+      latitude: number | null
+      longitude: number | null
+      coordinateSource: 'GEOCODED' | 'MANUAL' | null
+    }) => repo.create({ ...createInput(opA, 'Namba'), ...coords })
+
+    describe('create', () => {
+      it('an explicit coord pair is stored verbatim as MANUAL, without geocoding', async () => {
+        const geocode = vi.fn(async () => ({ lat: 0, lng: 0 }))
+        const result = await build({ geocode }).create(ctxFor(opA), {
+          ...createInput(opA, 'Namba'),
+          latitude: 34.5,
+          longitude: 135.5,
+        })
+        expect(result.ok).toBe(true)
+        if (result.ok) {
+          expect(result.location.latitude).toBe(34.5)
+          expect(result.location.longitude).toBe(135.5)
+          expect(result.location.coordinateSource).toBe('MANUAL')
+        }
+        expect(geocode).not.toHaveBeenCalled()
+      })
+
+      it('an explicit null pair clears coords (source null), without geocoding', async () => {
+        const geocode = vi.fn(async () => ({ lat: 0, lng: 0 }))
+        const result = await build({ geocode }).create(ctxFor(opA), {
+          ...createInput(opA, 'Namba'),
+          latitude: null,
+          longitude: null,
+        })
+        expect(result.ok).toBe(true)
+        if (result.ok) {
+          expect(result.location.latitude).toBeNull()
+          expect(result.location.coordinateSource).toBeNull()
+        }
+        expect(geocode).not.toHaveBeenCalled()
+      })
+
+      it('an address-only create geocodes the address → GEOCODED', async () => {
+        const result = await build(hitGeocoder(34.69, 135.5)).create(
+          ctxFor(opA),
+          createInput(opA, 'Namba'),
+        )
+        expect(result.ok).toBe(true)
+        if (result.ok) {
+          expect(result.location.latitude).toBe(34.69)
+          expect(result.location.longitude).toBe(135.5)
+          expect(result.location.coordinateSource).toBe('GEOCODED')
+        }
+      })
+
+      it('an address-only create whose geocode misses persists with null coords', async () => {
+        const result = await build(missGeocoder).create(ctxFor(opA), createInput(opA, 'Namba'))
+        expect(result.ok).toBe(true)
+        if (result.ok) {
+          expect(result.location.latitude).toBeNull()
+          expect(result.location.coordinateSource).toBeNull()
+        }
+      })
+
+      it('a throwing geocoder never blocks the save (persists with null coords)', async () => {
+        const result = await build(throwingGeocoder).create(ctxFor(opA), createInput(opA, 'Namba'))
+        expect(result.ok).toBe(true)
+        if (result.ok) expect(result.location.coordinateSource).toBeNull()
+      })
+    })
+
+    describe('update', () => {
+      it('an explicit coord pair overrides to MANUAL', async () => {
+        const loc = await seed({ latitude: 1, longitude: 2, coordinateSource: 'GEOCODED' })
+        const geocode = vi.fn(async () => ({ lat: 0, lng: 0 }))
+        const result = await build({ geocode }).update(ctxFor(opA), loc.id, {
+          latitude: 35,
+          longitude: 139,
+        })
+        expect(result.ok).toBe(true)
+        if (result.ok) {
+          expect(result.location.latitude).toBe(35)
+          expect(result.location.coordinateSource).toBe('MANUAL')
+        }
+        expect(geocode).not.toHaveBeenCalled()
+      })
+
+      it('an explicit null pair clears a MANUAL pin', async () => {
+        const loc = await seed({ latitude: 1, longitude: 2, coordinateSource: 'MANUAL' })
+        const result = await build(missGeocoder).update(ctxFor(opA), loc.id, {
+          latitude: null,
+          longitude: null,
+        })
+        expect(result.ok).toBe(true)
+        if (result.ok) {
+          expect(result.location.latitude).toBeNull()
+          expect(result.location.coordinateSource).toBeNull()
+        }
+      })
+
+      it('a changed address over GEOCODED coords re-geocodes → GEOCODED', async () => {
+        const loc = await seed({ latitude: 1, longitude: 2, coordinateSource: 'GEOCODED' })
+        const result = await build(hitGeocoder(36, 140)).update(ctxFor(opA), loc.id, {
+          address: 'New address, Kyoto',
+        })
+        expect(result.ok).toBe(true)
+        if (result.ok) {
+          expect(result.location.latitude).toBe(36)
+          expect(result.location.coordinateSource).toBe('GEOCODED')
+        }
+      })
+
+      it('a changed address whose geocode fails CLEARS non-manual coords (no stale pin)', async () => {
+        const loc = await seed({ latitude: 1, longitude: 2, coordinateSource: 'GEOCODED' })
+        const result = await build(missGeocoder).update(ctxFor(opA), loc.id, {
+          address: 'New address, Kyoto',
+        })
+        expect(result.ok).toBe(true)
+        if (result.ok) {
+          expect(result.location.latitude).toBeNull()
+          expect(result.location.longitude).toBeNull()
+          expect(result.location.coordinateSource).toBeNull()
+        }
+      })
+
+      it('a changed address PRESERVES a MANUAL pin (manual wins, no geocode)', async () => {
+        const loc = await seed({ latitude: 1, longitude: 2, coordinateSource: 'MANUAL' })
+        const geocode = vi.fn(async () => ({ lat: 9, lng: 9 }))
+        const result = await build({ geocode }).update(ctxFor(opA), loc.id, {
+          address: 'New address, Kyoto',
+        })
+        expect(result.ok).toBe(true)
+        if (result.ok) {
+          expect(result.location.latitude).toBe(1)
+          expect(result.location.coordinateSource).toBe('MANUAL')
+        }
+        expect(geocode).not.toHaveBeenCalled()
+      })
+
+      it('regeocode:true over a MANUAL pin replaces it with GEOCODED on success', async () => {
+        const loc = await seed({ latitude: 1, longitude: 2, coordinateSource: 'MANUAL' })
+        const result = await build(hitGeocoder(36, 140)).update(ctxFor(opA), loc.id, {
+          regeocode: true,
+        })
+        expect(result.ok).toBe(true)
+        if (result.ok) {
+          expect(result.location.latitude).toBe(36)
+          expect(result.location.coordinateSource).toBe('GEOCODED')
+        }
+      })
+
+      it('regeocode:true that fails PRESERVES a MANUAL pin (explicit assertion, not stale)', async () => {
+        const loc = await seed({ latitude: 1, longitude: 2, coordinateSource: 'MANUAL' })
+        const result = await build(missGeocoder).update(ctxFor(opA), loc.id, { regeocode: true })
+        expect(result.ok).toBe(true)
+        if (result.ok) {
+          expect(result.location.latitude).toBe(1)
+          expect(result.location.coordinateSource).toBe('MANUAL')
+        }
+      })
+
+      it('an unrelated edit (unchanged address) preserves existing coords', async () => {
+        const loc = await seed({ latitude: 1, longitude: 2, coordinateSource: 'GEOCODED' })
+        const geocode = vi.fn(async () => ({ lat: 0, lng: 0 }))
+        const result = await build({ geocode }).update(ctxFor(opA), loc.id, {
+          defaultTurnaroundMinutes: 60,
+        })
+        expect(result.ok).toBe(true)
+        if (result.ok) {
+          expect(result.location.latitude).toBe(1)
+          expect(result.location.coordinateSource).toBe('GEOCODED')
+          expect(result.location.defaultTurnaroundMinutes).toBe(60)
+        }
+        expect(geocode).not.toHaveBeenCalled()
+      })
+
+      it('never persists a client-sent regeocode flag as a column', async () => {
+        const loc = await seed({ latitude: 1, longitude: 2, coordinateSource: 'MANUAL' })
+        const result = await build(missGeocoder).update(ctxFor(opA), loc.id, { regeocode: true })
+        expect(result.ok).toBe(true)
+        if (result.ok) expect('regeocode' in result.location).toBe(false)
+      })
     })
   })
 })
