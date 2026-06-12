@@ -1,9 +1,35 @@
 import { OperatorBookingsView } from '@/vite/operator-bookings/OperatorBookingsView'
 import type { OperatorBookingRow } from '@/vite/operator-bookings/api'
-import { fireEvent, render, screen, within } from '@testing-library/react'
+import { render, screen, within } from '@testing-library/react'
+import type { ReactNode } from 'react'
 import { IntlProvider } from 'use-intl'
 import { describe, expect, it, vi } from 'vitest'
 import en from '../../../messages/en.json'
+
+// The code cell is now a typed router Link to the trip-detail page (#549). Mock
+// it to a plain anchor so the presentational table renders without a router.
+vi.mock('@tanstack/react-router', () => ({
+  Link: ({
+    to,
+    params,
+    children,
+    ...rest
+  }: {
+    to: string
+    params?: { locale?: string; bookingId?: string }
+    children: ReactNode
+  }) => (
+    <a
+      href={to}
+      data-to={to}
+      data-locale={params?.locale}
+      data-booking-id={params?.bookingId}
+      {...rest}
+    >
+      {children}
+    </a>
+  ),
+}))
 
 function makeRow(over: Partial<OperatorBookingRow> = {}): OperatorBookingRow {
   return {
@@ -69,18 +95,12 @@ describe('OperatorBookingsView', () => {
     expect(screen.queryByRole('table')).not.toBeInTheDocument()
   })
 
-  it('calls onSelectBooking with the row when the booking code button is clicked', () => {
-    const onSelectBooking = vi.fn()
-    const row = makeRow()
-    render(
-      <IntlProvider locale="en" messages={en}>
-        <OperatorBookingsView bookings={[row]} locale="en" onSelectBooking={onSelectBooking} />
-      </IntlProvider>,
-    )
+  it('links each booking code to its locale-scoped trip detail page', () => {
+    renderView([makeRow()])
 
-    fireEvent.click(screen.getByRole('button', { name: /View details for booking ABCD2345/ }))
-
-    expect(onSelectBooking).toHaveBeenCalledTimes(1)
-    expect(onSelectBooking).toHaveBeenCalledWith(row)
+    const link = screen.getByRole('link', { name: /View details for booking ABCD2345/ })
+    expect(link).toHaveAttribute('data-to', '/$locale/manage/bookings/$bookingId')
+    expect(link).toHaveAttribute('data-locale', 'en')
+    expect(link).toHaveAttribute('data-booking-id', 'bk-1')
   })
 })

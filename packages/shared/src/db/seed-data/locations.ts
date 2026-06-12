@@ -3,8 +3,10 @@ import type { locations } from '../schema'
 /**
  * Slice 8 demo locations (#390, §3.2). Three real Kansai pickup points per
  * operator (9 total) so the storefront map and per-location turnaround read as
- * credible. Turnaround defaults to 48h (2880m); Kansai Airport (KIX) overrides
- * to 24h to demo per-location configurability (§3.2). Names are unique within
+ * credible. Turnaround VARIES per location (#551): central stores turn cars in
+ * 60-180m, the airport in 24h, and only Osaka Castle keeps the 48h max — so a
+ * single booking no longer cools a whole storefront for ~5 days. All values sit
+ * at or above the 60m floor (locations_turnaround_min_60). Names are unique within
  * an operator (locations_operatorId_name_unique) but may repeat across operators.
  */
 export type DemoLocation = Pick<
@@ -42,7 +44,8 @@ export const DEMO_LOCATIONS: readonly DemoLocation[] = [
     address: '2-10-70 Nanba, Chuo-ku, Osaka 542-0076',
     latitude: 34.6627,
     longitude: 135.5012,
-    defaultTurnaroundMinutes: DEFAULT_TURNAROUND_MINUTES,
+    // Busy central branch — quick same-day turnaround.
+    defaultTurnaroundMinutes: 60,
     timezone: TIMEZONE,
   },
   {
@@ -52,7 +55,7 @@ export const DEMO_LOCATIONS: readonly DemoLocation[] = [
     address: '5-16-1 Nishinakajima, Yodogawa-ku, Osaka 532-0011',
     latitude: 34.7338,
     longitude: 135.5003,
-    defaultTurnaroundMinutes: DEFAULT_TURNAROUND_MINUTES,
+    defaultTurnaroundMinutes: 90,
     timezone: TIMEZONE,
   },
   {
@@ -74,7 +77,7 @@ export const DEMO_LOCATIONS: readonly DemoLocation[] = [
     address: '3-1-1 Umeda, Kita-ku, Osaka 530-0001',
     latitude: 34.7025,
     longitude: 135.4959,
-    defaultTurnaroundMinutes: DEFAULT_TURNAROUND_MINUTES,
+    defaultTurnaroundMinutes: 120,
     timezone: TIMEZONE,
   },
   {
@@ -84,7 +87,7 @@ export const DEMO_LOCATIONS: readonly DemoLocation[] = [
     address: '10-48 Hidenin-cho, Tennoji-ku, Osaka 543-0055',
     latitude: 34.6463,
     longitude: 135.5135,
-    defaultTurnaroundMinutes: DEFAULT_TURNAROUND_MINUTES,
+    defaultTurnaroundMinutes: 90,
     timezone: TIMEZONE,
   },
   {
@@ -94,7 +97,7 @@ export const DEMO_LOCATIONS: readonly DemoLocation[] = [
     address: '1-8-1 Kumoidori, Chuo-ku, Kobe 651-0096',
     latitude: 34.6946,
     longitude: 135.1956,
-    defaultTurnaroundMinutes: DEFAULT_TURNAROUND_MINUTES,
+    defaultTurnaroundMinutes: 180,
     timezone: TIMEZONE,
   },
   // Sakura Mobility — Kyoto/Nara + Osaka Castle
@@ -105,7 +108,7 @@ export const DEMO_LOCATIONS: readonly DemoLocation[] = [
     address: 'Higashishiokoji-cho, Shimogyo-ku, Kyoto 600-8216',
     latitude: 34.9858,
     longitude: 135.7588,
-    defaultTurnaroundMinutes: DEFAULT_TURNAROUND_MINUTES,
+    defaultTurnaroundMinutes: 120,
     timezone: TIMEZONE,
   },
   {
@@ -115,7 +118,7 @@ export const DEMO_LOCATIONS: readonly DemoLocation[] = [
     address: '1-1 Sanjohoncho, Nara 630-8122',
     latitude: 34.6803,
     longitude: 135.8174,
-    defaultTurnaroundMinutes: DEFAULT_TURNAROUND_MINUTES,
+    defaultTurnaroundMinutes: 180,
     timezone: TIMEZONE,
   },
   {

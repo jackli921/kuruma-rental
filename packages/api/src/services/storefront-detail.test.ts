@@ -215,8 +215,26 @@ describe('StorefrontDetailService.getDetail (#391)', () => {
       address: '1-1 Namba, Osaka',
       operatorName: 'Best Car Rental',
       operatingHours: { openTime: '09:00', closeTime: '20:00' },
+      turnaroundMinutes: 60,
     })
     expect(data.vehicles).toEqual([])
+  })
+
+  it('surfaces the location turnaround minutes on the storefront summary (#551)', async () => {
+    const op = await makeOperator('Best Car Rental', 'best')
+    const compact = await makeClass({ operatorId: op.id })
+    const namba = await makeLocation({
+      operatorId: op.id,
+      name: 'Namba',
+      defaultTurnaroundMinutes: 90,
+    })
+    await makeVehicle({ operatorId: op.id, classId: compact.id, pickupLocationId: namba.id })
+
+    const data = await okData(
+      await service.getDetail(PUBLIC_CONTEXT, { locationId: namba.id, from: FROM, to: TO }),
+    )
+
+    expect(data.storefront.turnaroundMinutes).toBe(90)
   })
 
   it('lists only AVAILABLE, non-overlapping vehicles — excludes MAINTENANCE and booked', async () => {
