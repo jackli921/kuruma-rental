@@ -19,11 +19,11 @@ import { useTranslations } from 'use-intl'
 
 interface BulkActionBarProps {
   /** Ids the parent has selected. The bar is controlled — it owns no selection state. */
-  selectedIds: string[]
+  readonly selectedIds: string[]
   /** Called after a successful bulk update (parent clears selection + refetches its view). */
-  onDone: () => void
+  readonly onDone: () => void
   /** Called when the operator dismisses the selection without acting. */
-  onClear: () => void
+  readonly onClear: () => void
 }
 
 /**
