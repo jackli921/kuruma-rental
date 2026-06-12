@@ -22,6 +22,7 @@ export type { FleetVehicleOverview, FleetBookingSummary } from '@kuruma/shared/t
 export type { VehicleDetail } from '@kuruma/shared/types/vehicle-detail'
 export type { Customer, CustomerSort, CustomerWithBookings } from '@kuruma/shared/types/customer'
 
+import type { CoordinateSource } from '@kuruma/shared/db/schema'
 import type { Customer, CustomerSort, CustomerWithBookings } from '@kuruma/shared/types/customer'
 import type { FleetVehicleOverview } from '@kuruma/shared/types/fleet'
 import type { DashboardStats } from '@kuruma/shared/types/stats'
@@ -101,12 +102,17 @@ export interface LocationRepository {
    * `(operatorId, name)` unique constraint is the real seal).
    */
   findByOperatorAndName(operatorId: string, name: string): Promise<Location | undefined>
-  // lat/lng are optional on create (default null): the location form does not
-  // capture coordinates yet (#458 §4 follow-up). The DB column is nullable.
+  // lat/lng + coordinateSource are optional on create (default null). The service
+  // derives them via the Geocoder (#531); callers that already have coords (e.g.
+  // a MANUAL pin) pass all three. All three DB columns are nullable.
   create(
-    data: Omit<Location, 'id' | 'createdAt' | 'updatedAt' | 'latitude' | 'longitude'> & {
+    data: Omit<
+      Location,
+      'id' | 'createdAt' | 'updatedAt' | 'latitude' | 'longitude' | 'coordinateSource'
+    > & {
       latitude?: number | null
       longitude?: number | null
+      coordinateSource?: CoordinateSource | null
     },
   ): Promise<Location>
   update(id: string, data: Partial<Location>): Promise<Location | undefined>

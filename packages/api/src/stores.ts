@@ -3,6 +3,7 @@ import type {
   BookingEventPayload,
   BookingEventType,
   BookingFulfillmentMode,
+  CoordinateSource,
   FeeSnapshotItem,
   InsuranceSnapshot,
 } from '@kuruma/shared/db/schema'
@@ -201,6 +202,8 @@ export interface Location {
    *  degrades that row to list-only. */
   latitude: number | null
   longitude: number | null
+  /** Provenance of the coords above (#531). null = none captured. Server-derived. */
+  coordinateSource: CoordinateSource | null
   operatingHours: LocationOperatingHours
   timezone: string
   defaultTurnaroundMinutes: number
