@@ -6,7 +6,7 @@ import { PG_ERROR, pgErrorCode } from '../../src/pg-errors'
 import { db } from './setup'
 
 // #551: the `locations_turnaround_min_60` CHECK (defaultTurnaroundMinutes >= 60,
-// migration 0048) is the DB-level backstop behind the Zod 400 (turnaroundSchema
+// migration 0050) is the DB-level backstop behind the Zod 400 (turnaroundSchema
 // `.min(60)`). The route rejects a sub-floor turnaround first, but a direct
 // INSERT (seed, import, raw SQL, admin tooling) must still bounce off the CHECK
 // with Postgres 23514 (check_violation). In-memory repos cannot exercise a
