@@ -13,7 +13,6 @@ import { useTranslations } from 'use-intl'
 
 interface OperatorFleetViewProps {
   readonly vehicles: readonly OperatorFleetVehicle[]
-  readonly locale: string
 }
 
 // Stateful fleet management container. The route owns the loader /
@@ -21,7 +20,7 @@ interface OperatorFleetViewProps {
 // state (selection, filters, the edit sheet) and mounts the controlled CRUD /
 // bulk / photo / filter slices (#526). Decision logic stays in the pure
 // fleet-filters lib (FC/IS); this is the imperative shell that holds UI state.
-export function OperatorFleetView({ vehicles, locale: _locale }: OperatorFleetViewProps) {
+export function OperatorFleetView({ vehicles }: OperatorFleetViewProps) {
   const t = useTranslations('business.vehicles.fleet')
   const tBulk = useTranslations('business.vehicles.bulk')
   const todayIso = new Date().toISOString().slice(0, 10)
@@ -31,8 +30,13 @@ export function OperatorFleetView({ vehicles, locale: _locale }: OperatorFleetVi
 
   const visibleVehicles = filterVehicles([...vehicles], filters)
   const visibleIds = visibleVehicles.map((v) => v.id)
+  // Selection is reconciled against the visible rows: a row hidden by a filter
+  // drops out of the effective selection so a bulk action can never touch a row
+  // the operator can't see.
+  const effectiveSelectedIds = visibleIds.filter((id) => selectedIds.includes(id))
   const clearSelection = () => setSelectedIds([])
-  const allSelected = visibleIds.length > 0 && visibleIds.every((id) => selectedIds.includes(id))
+  const allSelected = visibleIds.length > 0 && effectiveSelectedIds.length === visibleIds.length
+  const someSelected = effectiveSelectedIds.length > 0 && !allSelected
   const toggleAll = () => setSelectedIds(allSelected ? [] : visibleIds)
   const toggleOne = (id: string) =>
     setSelectedIds((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]))
@@ -63,6 +67,9 @@ export function OperatorFleetView({ vehicles, locale: _locale }: OperatorFleetVi
                   <th className="w-10 px-4 py-3">
                     <input
                       type="checkbox"
+                      ref={(el) => {
+                        if (el) el.indeterminate = someSelected
+                      }}
                       aria-label={tBulk('selectAll')}
                       checked={allSelected}
                       onChange={toggleAll}
@@ -131,7 +138,7 @@ export function OperatorFleetView({ vehicles, locale: _locale }: OperatorFleetVi
       )}
 
       <BulkActionBar
-        selectedIds={[...selectedIds]}
+        selectedIds={effectiveSelectedIds}
         onDone={clearSelection}
         onClear={clearSelection}
       />

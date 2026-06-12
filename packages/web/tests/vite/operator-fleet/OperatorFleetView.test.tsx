@@ -74,7 +74,7 @@ function renderView(vehicles: OperatorFleetVehicle[]) {
   return render(
     <QueryClientProvider client={queryClient}>
       <IntlProvider locale="en" messages={enMessages}>
-        <OperatorFleetView vehicles={vehicles} locale="en" />
+        <OperatorFleetView vehicles={vehicles} />
       </IntlProvider>
     </QueryClientProvider>,
   )
@@ -163,6 +163,18 @@ describe('OperatorFleetView', () => {
 
     expect(screen.getByText('Retired Car')).toBeInTheDocument()
     expect(screen.queryByText('Available Car')).not.toBeInTheDocument()
+  })
+
+  it('drops hidden rows from the bulk selection when a filter excludes them', async () => {
+    const user = userEvent.setup()
+    renderView([vehicle({ id: 'a', name: 'Toyota Aqua' }), vehicle({ id: 'b', name: 'Honda Fit' })])
+
+    await user.click(screen.getByRole('checkbox', { name: bulk.selectAll }))
+    expect(screen.getByText('2 vehicles selected')).toBeInTheDocument()
+
+    await user.type(screen.getByPlaceholderText(filter.searchPlaceholder), 'Aqua')
+
+    expect(screen.getByText('1 vehicle selected')).toBeInTheDocument()
   })
 
   it('opens an empty create sheet when Add vehicle is clicked', async () => {
