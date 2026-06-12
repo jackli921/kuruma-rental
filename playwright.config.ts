@@ -11,10 +11,11 @@ export default defineConfig({
   // with real servers + a seeded Neon branch. Exclude it here so the mock track
   // never tries to run those specs against the unauthenticated mock API.
   //
-  // admin-portal + booking specs exercise /en/admin and /manage/bookings, routes
-  // the Vite shell does not serve yet (#378 migration is public-flow first).
-  // Re-enable each when its flow is ported. Tracked in #501.
-  testIgnore: ['**/real-db/**', '**/admin-portal.spec.ts', '**/booking.spec.ts'],
+  // The booking spec exercises the slice-6 flow not yet ported to the Vite shell —
+  // re-enable when that lands (#501). The admin-portal spec IS re-enabled here
+  // (#541): /admin is now served on Vite and mock-api.ts resolves a role from the
+  // `e2e-mock-role` cookie, so the authenticated guard cases run in the mock track.
+  testIgnore: ['**/real-db/**', '**/booking.spec.ts'],
   fullyParallel: true,
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 2 : 0,
