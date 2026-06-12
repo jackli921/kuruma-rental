@@ -3,7 +3,7 @@ import { createProviderInviteSchema } from '@kuruma/shared/validators/provider-i
 import { Hono } from 'hono'
 import { requireUser, toCallerContext } from '../middleware/auth'
 import type { OperatorService } from '../services/operator'
-import type { ProviderInviteService } from '../services/provider-invite'
+import { OperatorNotFoundError, type ProviderInviteService } from '../services/provider-invite'
 import { fail, ok, parseBody } from './helpers'
 
 export function createAdminRoutes(
@@ -33,8 +33,13 @@ export function createAdminRoutes(
         const parsed = await parseBody(c, createProviderInviteSchema)
         if (!parsed.ok) return parsed.response
 
-        const created = await providerInviteService.createInvite(parsed.data, requireUser(c).id)
-        return ok(c, created, 201)
+        try {
+          const created = await providerInviteService.createInvite(parsed.data, requireUser(c).id)
+          return ok(c, created, 201)
+        } catch (e) {
+          if (e instanceof OperatorNotFoundError) return fail(c, 'Operator not found', 404)
+          throw e
+        }
       })
   )
 }
