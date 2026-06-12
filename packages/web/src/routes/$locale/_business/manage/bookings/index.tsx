@@ -1,5 +1,6 @@
 import { PageSkeleton } from '@/vite/PageSkeleton'
 import { BookingsCalendar } from '@/vite/operator-bookings/BookingsCalendar'
+import { CalendarSidebar } from '@/vite/operator-bookings/CalendarSidebar'
 import { operatorCalendarQueryOptions } from '@/vite/operator-bookings/api'
 import {
   type CalendarView,
@@ -10,6 +11,7 @@ import {
   parseCalendarView,
   toCalendarEvents,
 } from '@/vite/operator-bookings/calendar-events'
+import { useCalendarFilters } from '@/vite/operator-bookings/useCalendarFilters'
 import { operatorFleetQueryOptions } from '@/vite/operator-fleet/api'
 import { useSuspenseQuery } from '@tanstack/react-query'
 import { type ErrorComponentProps, createFileRoute, useRouter } from '@tanstack/react-router'
@@ -69,6 +71,11 @@ function OperatorBookingsRoute() {
   const events = useMemo(() => toCalendarEvents(bookings), [bookings])
   const resources = useMemo(() => fleetToResources(fleet), [fleet])
 
+  const vehicleIds = useMemo(() => fleet.map((v) => v.id), [fleet])
+  const filters = useCalendarFilters(vehicleIds)
+  const visibleEvents = useMemo(() => filters.filterEvents(events), [filters, events])
+  const visibleResources = useMemo(() => filters.filterResources(resources), [filters, resources])
+
   const handleViewChange = useCallback(
     (next: CalendarView) => {
       navigate({ search: (prev) => ({ ...prev, view: next }) })
@@ -97,16 +104,21 @@ function OperatorBookingsRoute() {
           <h1 className="text-3xl font-bold tracking-tight sm:text-4xl">{t('title')}</h1>
           <p className="mt-2 text-lg text-muted-foreground">{t('subtitle')}</p>
         </header>
-        <BookingsCalendar
-          events={events}
-          resources={resources}
-          view={view}
-          date={anchorDate}
-          locale={locale}
-          onViewChange={handleViewChange}
-          onDateChange={handleDateChange}
-          onSelectEvent={handleSelectEvent}
-        />
+        <div className="flex gap-6">
+          <CalendarSidebar vehicles={fleet} filters={filters} />
+          <div className="min-w-0 flex-1">
+            <BookingsCalendar
+              events={visibleEvents}
+              resources={visibleResources}
+              view={view}
+              date={anchorDate}
+              locale={locale}
+              onViewChange={handleViewChange}
+              onDateChange={handleDateChange}
+              onSelectEvent={handleSelectEvent}
+            />
+          </div>
+        </div>
       </div>
     </main>
   )
