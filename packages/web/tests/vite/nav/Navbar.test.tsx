@@ -82,7 +82,7 @@ describe('Navbar', () => {
     expect(screen.getByTestId('mobile-menu')).toHaveAttribute('data-nav-count', '0')
   })
 
-  it('shows the dashboard, operator bookings + fleet + classes links and business markers for a business user', () => {
+  it('shows the dashboard, operator bookings + fleet + classes + insurance links and business markers for a business user', () => {
     const { container } = renderNavbar(business)
     expect(screen.getByText('Dashboard').closest('a')).toHaveAttribute(
       'data-to',
@@ -104,11 +104,23 @@ describe('Navbar', () => {
       'data-to',
       '/$locale/manage/classes',
     )
+    // #529: the operator locations/storefronts view lives at /manage/locations.
+    expect(screen.getByText('Locations').closest('a')).toHaveAttribute(
+      'data-to',
+      '/$locale/manage/locations',
+    )
+    // #530: operator pricing config (insurance) lives at /manage/insurance.
+    expect(screen.getByText('Insurance').closest('a')).toHaveAttribute(
+      'data-to',
+      '/$locale/manage/insurance',
+    )
+    // #530: operator pricing config (fees) lives at /manage/fees.
+    expect(screen.getByText('Fees').closest('a')).toHaveAttribute('data-to', '/$locale/manage/fees')
     expect(container.querySelector('nav')?.hasAttribute('data-business-nav')).toBe(true)
     const client = screen.getByTestId('navbar-client')
     expect(client).toHaveAttribute('data-view-mode', 'business')
     expect(client).toHaveAttribute('data-can-switch', 'true')
-    expect(screen.getByTestId('mobile-menu')).toHaveAttribute('data-nav-count', '4')
+    expect(screen.getByTestId('mobile-menu')).toHaveAttribute('data-nav-count', '7')
   })
 
   it('shows Browse, My Bookings, and Documents (no business markers) for a signed-in renter', () => {

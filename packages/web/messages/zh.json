@@ -608,6 +608,7 @@
       "archiveDescription": "这将归档该取还点。它仍会显示在列表中，但不会用于新的取车。",
       "archiveConfirm": "归档",
       "archiving": "归档中...",
+      "archiveBlocked": "无法归档 — 请先重新分配或取消{count, plural, other {# 个有效预约}}。",
       "empty": "暂无取还点。添加第一个取车地点。",
       "loadError": "无法加载取还点",
       "retry": "重试",
