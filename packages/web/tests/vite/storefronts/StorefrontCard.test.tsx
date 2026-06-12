@@ -39,6 +39,7 @@ function makeStorefront(overrides: Partial<StorefrontCardData> = {}): Storefront
     name: 'Best Car Rental Osaka',
     address: '1-2-3 Namba, Osaka',
     operatingHours: null,
+    turnaroundMinutes: 120,
     classSummaries: [{ acrissCode: null, label: 'Compact', availableCount: 4 }],
     fromDailyPriceJpy: 4500,
     fromHourlyPriceJpy: null,
@@ -62,6 +63,11 @@ describe('StorefrontCard', () => {
     expect(screen.getByText('Best Car Rental')).toBeInTheDocument()
     expect(screen.getByText('Compact ×4')).toBeInTheDocument()
     expect(screen.getByText('From ¥4,500 / day')).toBeInTheDocument()
+  })
+
+  it('surfaces the turnaround buffer as hours between rentals (#551)', () => {
+    renderCard(makeStorefront({ turnaroundMinutes: 90 }))
+    expect(screen.getByText('~1.5h turnaround between rentals')).toBeInTheDocument()
   })
 
   it('falls back to the hourly from-price when no daily price exists', () => {

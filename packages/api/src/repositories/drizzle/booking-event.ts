@@ -34,7 +34,10 @@ export class DrizzleBookingEventRepository implements BookingEventRepository {
       .select(bookingEventColumns)
       .from(bookingEvents)
       .where(eq(bookingEvents.bookingId, bookingId))
-      .orderBy(asc(bookingEvents.createdAt))
+      // `id` tiebreaker (#549): same-transaction appends can share a createdAt
+      // (ms precision), so createdAt alone is non-deterministic. Adding id makes
+      // the timeline order stable + test-safe.
+      .orderBy(asc(bookingEvents.createdAt), asc(bookingEvents.id))
 
     return rows.map(toBookingEvent)
   }

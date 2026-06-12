@@ -191,6 +191,12 @@ export const vehicleClasses = pgTable(
 
 export const locationStatusEnum = pgEnum('location_status', ['ACTIVE', 'ARCHIVED'])
 
+// Provenance of a location's lat/lng (#531). GEOCODED = derived from `address`
+// by the Geocoder; MANUAL = an operator-supplied pin that wins over geocoding.
+// Nullable column: null = no coords captured. Server-derived only — never
+// accepted from the client (the validators omit it).
+export const coordinateSourceEnum = pgEnum('coordinate_source', ['GEOCODED', 'MANUAL'])
+
 // Operator-owned pickup/return storefronts (epic #385, slice 2 / #387).
 // Vehicles anchor to a pickup location; renter search (slice 5) returns
 // storefront cards; bookings (slice 6) carry pickup/dropoff FKs. Every row
@@ -213,6 +219,10 @@ export const locations = pgTable(
     // Rationale + precision choice: design doc §3.3.
     latitude: doublePrecision('latitude'),
     longitude: doublePrecision('longitude'),
+    // Provenance of the coords above (#531). null = none captured. Drives the
+    // geocode-on-save precedence: MANUAL pins survive an address change, GEOCODED
+    // coords are re-derived (or cleared if re-geocoding fails).
+    coordinateSource: coordinateSourceEnum('coordinate_source'),
     // MVP shape (locked, see LocationOperatingHours): a single
     // { openTime, closeTime } pair applied to all weekdays, or null. Per-weekday
     // schedules ship as a separate migration + validator change (proposal §9 #4).
@@ -238,7 +248,11 @@ export const locations = pgTable(
     // (operatorId, id) so a vehicle can only point at a location in its own
     // tenant (slice 2 migration #2). Mirrors vehicle_classes_operatorId_id_unique.
     unique('locations_operatorId_id_unique').on(table.operatorId, table.id),
-    check('locations_turnaround_non_negative', sql`${table.defaultTurnaroundMinutes} >= 0`),
+    // #551: 60-min floor guarantees a real servicing gap between rentals. Mirrors
+    // the Zod `turnaroundSchema.min(60)`; this is the DB-level backstop for any
+    // Zod-bypassed write (seed, import, raw SQL). Not overlap-safety — overlap is
+    // already impossible at any turnaround via bookings_no_overlap.
+    check('locations_turnaround_min_60', sql`${table.defaultTurnaroundMinutes} >= 60`),
   ],
 )
 
@@ -761,6 +775,7 @@ export { documentStatusEnum, documentTypeEnum, renterDocuments } from './renter-
 
 export type BookingStatus = (typeof bookingStatusEnum.enumValues)[number]
 export type BookingFulfillmentMode = (typeof bookingFulfillmentModeEnum.enumValues)[number]
+export type CoordinateSource = (typeof coordinateSourceEnum.enumValues)[number]
 
 export const VALID_BOOKING_TRANSITIONS: Record<BookingStatus, BookingStatus[]> = {
   CONFIRMED: ['ACTIVE', 'CANCELLED'],

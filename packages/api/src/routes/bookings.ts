@@ -4,7 +4,13 @@ import {
   updateBookingStatusSchema,
 } from '@kuruma/shared/validators/booking'
 import { Hono } from 'hono'
-import { STAFF_ROLES, isOperatorRole, requireUser, toCallerContext } from '../middleware/auth'
+import {
+  MANAGEMENT_READ_ROLES,
+  STAFF_ROLES,
+  isOperatorRole,
+  requireUser,
+  toCallerContext,
+} from '../middleware/auth'
 import type { BookingFilters } from '../repositories/types'
 import type { BookingService } from '../services/booking'
 import { fail, ok, parseBody, parseDateRange, parseLimit } from './helpers'
@@ -66,13 +72,45 @@ export function createBookingRoutes(service: BookingService) {
     })
     .get('/bookings/:id', async (c) => {
       const ctx = toCallerContext(requireUser(c))
+      const id = c.req.param('id')
 
-      const booking = await service.findById(ctx, c.req.param('id'))
+      // Mirror the list endpoint's `expand` parsing. A deep-linked trip-detail
+      // page (#549) has no list-row data, so it requests `vehicle,renter` to
+      // carry the assigned car + renter; the operator projection is preserved.
+      const expand = new Set(
+        (c.req.query('expand') ?? '')
+          .split(',')
+          .map((token) => token.trim())
+          .filter(Boolean),
+      )
+
+      const booking =
+        expand.has('vehicle') && expand.has('renter')
+          ? await service.findByIdWithVehicleAndRenter(ctx, id)
+          : await service.findById(ctx, id)
       if (!booking) {
         return fail(c, 'Booking not found', 404)
       }
 
       return ok(c, booking)
+    })
+    .get('/bookings/:id/events', async (c) => {
+      const ctx = toCallerContext(requireUser(c))
+
+      // §549: operator/management-only. The lifecycle log exposes actorId,
+      // internal vehicle ids and the substitution reason; no renter UI consumes
+      // a timeline today, so renters are rejected here (403) rather than served a
+      // sanitized projection. Cross-tenant reads still 404 at the service.
+      if (!MANAGEMENT_READ_ROLES.has(ctx.role)) {
+        return fail(c, 'Only operators can view booking events', 403)
+      }
+
+      const events = await service.findEvents(ctx, c.req.param('id'))
+      if (!events) {
+        return fail(c, 'Booking not found', 404)
+      }
+
+      return ok(c, events)
     })
     .post('/bookings', async (c) => {
       const ctx = toCallerContext(requireUser(c))
