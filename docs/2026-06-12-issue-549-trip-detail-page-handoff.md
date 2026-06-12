@@ -104,6 +104,29 @@ Slice-1 role-gate + ordering + tenant-isolation can be done with **in-memory rep
 - biome import-sort is an **assist** action — fix with `bunx biome check --write`, not `format`.
 - Issue #549 is claimed (`in-progress` label). On finish: PR `Closes #549`, drop label, remove worktree.
 
+## SESSION 2 PROGRESS (2026-06-12) — resume here
+
+Branch tip `63b075e`. Commits added this session (on top of `30b7c40` handoff):
+1. `791e214` **Slice 1 DONE** — `GET /bookings/:id/events`, role-gated, with ordering + tenant tests.
+2. `3a11c8b` **Slice 2 DONE** — `expand=vehicle,renter` on `GET /bookings/:id` (enriches, keeps operator block).
+3. `63b075e` **Web data layer (part of Slice 3) DONE** — operator single-booking + events query clients.
+
+**Gates green now:** api 1082 pass · web vitest (operator-bookings/api 17 pass) · api+web typecheck 0 · DI boundaries OK · lint:modules OK. NOT pushed. NOT rebased (branch is 1 behind origin/marketplace-pivot — rebase before push in Slice 5).
+
+### Decisions/facts discovered this session (don't re-derive)
+- **Role gate = `MANAGEMENT_READ_ROLES`** (middleware/auth.ts) = STAFF_ROLES ∪ OPERATOR_ROLES = the set allowed into `/manage`. RENTER → 403. Imported into `routes/bookings.ts`.
+- **BookingService constructor gained `bookingEventRepo?` at position 8** (after `operatorRepo`, before `generateCode`/`verificationGate`). Composition root `index.ts` hoists `let bookingEventRepo` and wires it in all 3 branches (overrides / DB=`new DrizzleBookingEventRepository(db)` / in-memory) and passes it at arg 8 of `new BookingService(...)`. **The 2 positional `new BookingService(...)` call sites in `tests/services/booking.test.ts` were realigned** (insert `bookingEventRepo` before the generateCode arg) — if you add another call site, mind the new arg order.
+- **Ordering tiebreaker:** ONLY the Drizzle repo got `asc(createdAt), asc(id)`. In-memory keeps its stable append-order sort (its existing test `booking-event.test.ts:37` asserts append order for same-ms events; sorting by random UUID id would flake it). Endpoint contract tested = "chronological by distinct timestamp."
+- **OperatorBookingDetail panel is REUSED UNCHANGED** (its 10 tests untouched). It takes `row: OperatorBookingRow` + `booking: BookingDto`. The page has no list row, so `operatorRowFromDetail(dto)` (new, tested) derives the row from the expanded single read. `OperatorBookingDetailDto extends BookingDto` with `vehicle?`/`renter?`.
+- **Typed `Link` `to` = fullPath `/$locale/manage/bookings/$bookingId`** (pathless `_business` is stripped from `to`, only in the `id`). params `{ locale, bookingId }`.
+- Web Link mock pattern (mirror landing tests): `vi.mock('@tanstack/react-router', () => ({ Link: ({to,params,children,...rest}) => <a href={to} data-to={to} data-locale={params?.locale} {...rest}>{children}</a> }))`.
+- Event payload union is NOT discriminated — timeline must `switch(event.type)` and treat `payload` as the matching shape (`StatusChangedPayload{from,to}`, `VehicleSubstitutedPayload{reason}`, `BookingCancelledPayload{cancellationFee}`).
+
+### REMAINING
+- **Slice 3 (rest):** route split `routes/$locale/_business/manage/bookings.tsx` → `bookings/index.tsx` (list, drop `selected` state + Sheet) + `bookings/$bookingId.tsx` (page). `OperatorBookingsView`: code button → typed `<Link to="/$locale/manage/bookings/$bookingId" params={{locale,bookingId:booking.id}}>`, drop `onSelectBooking` (update `OperatorBookingsView.test.tsx`: assert the link `to`/`bookingId` instead of the onSelect callback). **DELETE** `OperatorBookingDetailSheet.tsx` + its test. **Regen + STAGE `routeTree.gen.ts`** (run `vite build` BEFORE typecheck — typed Links resolve against the gen).
+- **Slice 4:** `BookingTimeline.tsx` (+ test) vertical stepper oldest→newest from `bookingEventsQueryOptions`; compose `$bookingId.tsx` = loader prefetches `operatorBookingDetailQueryOptions(id)` + `bookingEventsQueryOptions(id)`, `notFound()` on null detail; left = OperatorBookingDetail (via `operatorRowFromDetail`), right = BookingTimeline, empty Actions placeholder (phase 2). i18n `bookings.operator.timeline.*` in en/ja/zh (parity test enforces all 3).
+- **Slice 5:** full gate (web vitest · api test · integration · typecheck-all · build [regens routeTree] · biome · i18n parity · lint:modules · db-drift) → rebase onto origin/marketplace-pivot (no force) → push → PR `Closes #549` → drop in-progress label → remove worktree.
+
 ## Open product note (deferred, designed in #549)
 
 Phase 2 = operator **action buttons** (cancel / substitute / start-complete) wired to existing
