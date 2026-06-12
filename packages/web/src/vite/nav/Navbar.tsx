@@ -37,6 +37,7 @@ export function Navbar() {
           { to: '/$locale/dashboard', label: t('dashboard') },
           { to: '/$locale/manage/bookings', label: t('bookings') },
           { to: '/$locale/manage/fleet', label: t('fleet') },
+          { to: '/$locale/manage/insurance', label: t('insurance') },
         ]
       : session?.user
         ? [{ to: '/$locale/search', label: t('browse') }, ...renterNavItems]
