@@ -167,6 +167,8 @@ export class LocationService {
     }
   }
 
+  // Create always *sets* a triple (there is nothing to preserve), so this returns
+  // a CoordTriple directly rather than the set/preserve CoordResolution of update.
   private async resolveCreateCoords(data: LocationCreateData): Promise<CoordTriple> {
     const { latitude, longitude } = data
     if (latitude != null && longitude != null) {
@@ -182,6 +184,10 @@ export class LocationService {
     data: LocationUpdateData,
   ): Promise<CoordResolution> {
     const { latitude, longitude, regeocode } = data
+    // An explicit pin is the strongest signal: it outranks both `regeocode` and
+    // any address change, so a `{ lat, lng, regeocode: true }` request pins MANUAL
+    // and never geocodes. Precedence order below: explicit pair > clear > regeocode
+    // > address-changed > unrelated-edit.
     if (latitude != null && longitude != null) {
       return { kind: 'set', coords: { latitude, longitude, coordinateSource: 'MANUAL' } }
     }

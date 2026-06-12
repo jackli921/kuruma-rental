@@ -358,6 +358,22 @@ describe('LocationService', () => {
         expect(geocode).not.toHaveBeenCalled()
       })
 
+      it('an explicit coord pair outranks regeocode:true (pins MANUAL, no geocode)', async () => {
+        const loc = await seed({ latitude: 1, longitude: 2, coordinateSource: 'GEOCODED' })
+        const geocode = vi.fn(async () => ({ lat: 0, lng: 0 }))
+        const result = await build({ geocode }).update(ctxFor(opA), loc.id, {
+          latitude: 35,
+          longitude: 139,
+          regeocode: true,
+        })
+        expect(result.ok).toBe(true)
+        if (result.ok) {
+          expect(result.location.latitude).toBe(35)
+          expect(result.location.coordinateSource).toBe('MANUAL')
+        }
+        expect(geocode).not.toHaveBeenCalled()
+      })
+
       it('an explicit null pair clears a MANUAL pin', async () => {
         const loc = await seed({ latitude: 1, longitude: 2, coordinateSource: 'MANUAL' })
         const result = await build(missGeocoder).update(ctxFor(opA), loc.id, {
