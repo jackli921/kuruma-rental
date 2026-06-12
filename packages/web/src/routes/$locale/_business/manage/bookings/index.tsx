@@ -1,18 +1,54 @@
 import { PageSkeleton } from '@/vite/PageSkeleton'
-import { OperatorBookingsView } from '@/vite/operator-bookings/OperatorBookingsView'
-import { operatorBookingsQueryOptions } from '@/vite/operator-bookings/api'
+import { BookingsCalendar } from '@/vite/operator-bookings/BookingsCalendar'
+import { operatorCalendarQueryOptions } from '@/vite/operator-bookings/api'
+import {
+  type CalendarView,
+  calendarRange,
+  fleetToResources,
+  formatCalendarDate,
+  parseCalendarDate,
+  parseCalendarView,
+  toCalendarEvents,
+} from '@/vite/operator-bookings/calendar-events'
+import { operatorFleetQueryOptions } from '@/vite/operator-fleet/api'
 import { useSuspenseQuery } from '@tanstack/react-query'
 import { type ErrorComponentProps, createFileRoute, useRouter } from '@tanstack/react-router'
+import { useCallback, useMemo } from 'react'
 import { useTranslations } from 'use-intl'
 
-// Operator booking list (#512). URL `/<locale>/manage/bookings` — the renter owns
-// `/<locale>/bookings` (#511), so the operator view lives under the business
-// `manage/` segment. Behind the `_business` guard (only business roles reach it);
-// tenant scoping is server-side (CallerContext), the client passes no operatorId.
-// Each booking code links to its trip-detail page `manage/bookings/:id` (#549) —
-// the read-only drawer it replaced is gone.
+interface BookingsCalendarSearch {
+  view?: CalendarView | undefined
+  date?: string | undefined
+}
+
+const DEFAULT_VIEW: CalendarView = 'week'
+
+// Operator booking *calendar* (#525). URL `/<locale>/manage/bookings`, behind the
+// `_business` guard; tenant scoping is server-side (CallerContext), so the client
+// passes no operatorId. The view + anchor day live in the URL (`?view=&date=`) so
+// a calendar position is shareable and survives reload. Events bind to vehicle
+// columns (day view) by their assigned-vehicle id; clicking one opens the existing
+// trip-detail page (#549). The renter owns `/<locale>/bookings` (#511).
 export const Route = createFileRoute('/$locale/_business/manage/bookings/')({
-  loader: ({ context }) => context.queryClient.ensureQueryData(operatorBookingsQueryOptions()),
+  // Search params are optional so links to the calendar need no search (the
+  // component/loader default to this week, today). When present, normalize them to
+  // a known view and a canonical local day so the URL stays clean and the
+  // loader/component agree on the fetched range.
+  validateSearch: (search: Record<string, unknown>): BookingsCalendarSearch => ({
+    view: typeof search.view === 'string' ? parseCalendarView(search.view) : undefined,
+    date:
+      typeof search.date === 'string'
+        ? formatCalendarDate(parseCalendarDate(search.date))
+        : undefined,
+  }),
+  loaderDeps: ({ search }) => ({ view: search.view ?? DEFAULT_VIEW, date: search.date }),
+  loader: ({ context, deps }) => {
+    const { from, to } = calendarRange(deps.view, parseCalendarDate(deps.date))
+    return Promise.all([
+      context.queryClient.ensureQueryData(operatorCalendarQueryOptions(from, to)),
+      context.queryClient.ensureQueryData(operatorFleetQueryOptions()),
+    ])
+  },
   pendingComponent: PageSkeleton,
   errorComponent: OperatorBookingsError,
   component: OperatorBookingsRoute,
@@ -21,7 +57,38 @@ export const Route = createFileRoute('/$locale/_business/manage/bookings/')({
 function OperatorBookingsRoute() {
   const t = useTranslations('bookings.operator')
   const { locale } = Route.useParams()
-  const { data: bookings } = useSuspenseQuery(operatorBookingsQueryOptions())
+  const { view: viewParam, date } = Route.useSearch()
+  const navigate = Route.useNavigate()
+
+  const view = viewParam ?? DEFAULT_VIEW
+  const anchorDate = useMemo(() => parseCalendarDate(date), [date])
+  const { from, to } = calendarRange(view, anchorDate)
+  const { data: bookings } = useSuspenseQuery(operatorCalendarQueryOptions(from, to))
+  const { data: fleet } = useSuspenseQuery(operatorFleetQueryOptions())
+
+  const events = useMemo(() => toCalendarEvents(bookings), [bookings])
+  const resources = useMemo(() => fleetToResources(fleet), [fleet])
+
+  const handleViewChange = useCallback(
+    (next: CalendarView) => {
+      navigate({ search: (prev) => ({ ...prev, view: next }) })
+    },
+    [navigate],
+  )
+
+  const handleDateChange = useCallback(
+    (next: Date) => {
+      navigate({ search: (prev) => ({ ...prev, date: formatCalendarDate(next) }) })
+    },
+    [navigate],
+  )
+
+  const handleSelectEvent = useCallback(
+    (bookingId: string) => {
+      navigate({ to: '/$locale/manage/bookings/$bookingId', params: { locale, bookingId } })
+    },
+    [navigate, locale],
+  )
 
   return (
     <main className="flex-1 px-4 py-10 sm:px-6 lg:px-8">
@@ -30,7 +97,16 @@ function OperatorBookingsRoute() {
           <h1 className="text-3xl font-bold tracking-tight sm:text-4xl">{t('title')}</h1>
           <p className="mt-2 text-lg text-muted-foreground">{t('subtitle')}</p>
         </header>
-        <OperatorBookingsView bookings={bookings} locale={locale} />
+        <BookingsCalendar
+          events={events}
+          resources={resources}
+          view={view}
+          date={anchorDate}
+          locale={locale}
+          onViewChange={handleViewChange}
+          onDateChange={handleDateChange}
+          onSelectEvent={handleSelectEvent}
+        />
       </div>
     </main>
   )
