@@ -7,6 +7,7 @@ import { generateBookingCode } from '../lib/booking-code'
 import { type CallerContext, SYSTEM_CONTEXT } from '../middleware/auth'
 import { BOOKING_CODE_CONSTRAINT, PG_ERROR, pgConstraintName, pgErrorCode } from '../pg-errors'
 import type {
+  BookingEventRepository,
   BookingFilters,
   BookingRepository,
   OperatorRepository,
@@ -16,7 +17,7 @@ import type {
   VehicleClassRepository,
   VehicleRepository,
 } from '../repositories/types'
-import type { Booking } from '../stores'
+import type { Booking, BookingEvent } from '../stores'
 import type { BookingPostCommitDispatcher } from './booking-post-commit-dispatcher'
 
 /** Renter-safe operator projection attached to a single booking read (§4h). */
@@ -111,6 +112,10 @@ export class BookingService {
     // read — the booking is already tenant-checked, and only name + handoff URL
     // are exposed, so no cross-tenant leak.
     private readonly operatorRepo?: OperatorRepository,
+    // #549: read side of the append-only lifecycle log, surfaced to the operator
+    // trip-detail timeline via findEvents. Distinct from the transactional
+    // bookingEventRepo used for appends inside runInTransaction.
+    private readonly bookingEventRepo?: BookingEventRepository,
     // Injectable so the collision-retry path is deterministically testable.
     private readonly generateCode: () => string = generateBookingCode,
     // #459: optional document-verification gate, wired only when the
@@ -234,6 +239,19 @@ export class BookingService {
       ...booking,
       operator: { name: operator.name, preAuthHandoffUrl: operator.preAuthHandoffUrl },
     }
+  }
+
+  /**
+   * #549: the operator trip-detail timeline. Authorize via findById first — its
+   * tenant read-scope means operator A reading operator B's booking gets
+   * `undefined` (→ 404, no leak), not just an empty list. Returns the events in
+   * the repository's deterministic order (createdAt asc, id tiebreaker).
+   */
+  async findEvents(ctx: CallerContext, id: string): Promise<BookingEvent[] | undefined> {
+    const booking = await this.findById(ctx, id)
+    if (!booking) return undefined
+    if (!this.bookingEventRepo) return []
+    return this.bookingEventRepo.findByBookingId(ctx, id)
   }
 
   async create(

@@ -4,7 +4,13 @@ import {
   updateBookingStatusSchema,
 } from '@kuruma/shared/validators/booking'
 import { Hono } from 'hono'
-import { STAFF_ROLES, isOperatorRole, requireUser, toCallerContext } from '../middleware/auth'
+import {
+  MANAGEMENT_READ_ROLES,
+  STAFF_ROLES,
+  isOperatorRole,
+  requireUser,
+  toCallerContext,
+} from '../middleware/auth'
 import type { BookingFilters } from '../repositories/types'
 import type { BookingService } from '../services/booking'
 import { fail, ok, parseBody, parseDateRange, parseLimit } from './helpers'
@@ -73,6 +79,24 @@ export function createBookingRoutes(service: BookingService) {
       }
 
       return ok(c, booking)
+    })
+    .get('/bookings/:id/events', async (c) => {
+      const ctx = toCallerContext(requireUser(c))
+
+      // §549: operator/management-only. The lifecycle log exposes actorId,
+      // internal vehicle ids and the substitution reason; no renter UI consumes
+      // a timeline today, so renters are rejected here (403) rather than served a
+      // sanitized projection. Cross-tenant reads still 404 at the service.
+      if (!MANAGEMENT_READ_ROLES.has(ctx.role)) {
+        return fail(c, 'Only operators can view booking events', 403)
+      }
+
+      const events = await service.findEvents(ctx, c.req.param('id'))
+      if (!events) {
+        return fail(c, 'Booking not found', 404)
+      }
+
+      return ok(c, events)
     })
     .post('/bookings', async (c) => {
       const ctx = toCallerContext(requireUser(c))
