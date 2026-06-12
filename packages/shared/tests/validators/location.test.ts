@@ -69,10 +69,23 @@ describe('createLocationSchema', () => {
     expect(result.success).toBe(false)
   })
 
-  it('accepts zero turnaround (no cooldown)', () => {
-    const result = createLocationSchema.safeParse({ ...validInput(), defaultTurnaroundMinutes: 0 })
+  it('rejects turnaround below the 60-minute floor', () => {
+    for (const minutes of [0, 30, 59]) {
+      const result = createLocationSchema.safeParse({
+        ...validInput(),
+        defaultTurnaroundMinutes: minutes,
+      })
+      expect(result.success).toBe(false)
+      if (!result.success) {
+        expect(result.error.issues[0]?.message).toBe('Turnaround must be at least 60 minutes')
+      }
+    }
+  })
+
+  it('accepts turnaround at the 60-minute floor', () => {
+    const result = createLocationSchema.safeParse({ ...validInput(), defaultTurnaroundMinutes: 60 })
     expect(result.success).toBe(true)
-    if (result.success) expect(result.data.defaultTurnaroundMinutes).toBe(0)
+    if (result.success) expect(result.data.defaultTurnaroundMinutes).toBe(60)
   })
 
   it('rejects an invalid IANA timezone', () => {
