@@ -450,6 +450,35 @@
         "noMaintenanceHistory": "メンテナンス記録なし"
       },
       "fleet": {
+        "title": "車両",
+        "subtitle": "全店舗の車両",
+        "addVehicle": "車両を追加",
+        "empty": "車両がまだありません。最初の車両を追加して貸出を始めましょう。",
+        "loadError": "車両の読み込みに失敗しました",
+        "retry": "再試行",
+        "none": "—",
+        "perDay": "/日",
+        "perHour": "/時間",
+        "columns": {
+          "vehicle": "車両",
+          "status": "ステータス",
+          "seats": "座席",
+          "luggage": "荷物",
+          "price": "料金",
+          "shaken": "車検",
+          "actions": "操作"
+        },
+        "status": {
+          "AVAILABLE": "利用可能",
+          "MAINTENANCE": "整備中",
+          "RETIRED": "廃車"
+        },
+        "expiry": {
+          "OK": "有効",
+          "EXPIRING_SOON": "まもなく期限切れ",
+          "EXPIRED": "期限切れ",
+          "UNKNOWN": "—"
+        },
         "rowView": "リスト表示",
         "gridView": "グリッド表示",
         "moreActions": "その他の操作",
