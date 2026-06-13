@@ -128,6 +128,61 @@ describe('GET /admin/revenue — aggregation', () => {
   })
 })
 
+describe('GET /admin/revenue — month filter (#628)', () => {
+  it('returns the full matrix and a null selectedMonth when no month is given', async () => {
+    const res = await mount('PLATFORM_ADMIN').request('/admin/revenue')
+    const { data } = await res.json()
+    expect(data.selectedMonth).toBeNull()
+    expect(data.availableMonths).toEqual(['2026-04', '2026-03'])
+    expect(data.totals.grossJpy).toBe(80_000)
+  })
+
+  it('scopes the report to ?month=YYYY-MM (totals + partners reflect only that month)', async () => {
+    const res = await mount('PLATFORM_ADMIN').request('/admin/revenue?month=2026-04')
+    const { data } = await res.json()
+    // April: OP_A 20,000 + OP_B 50,000 = 70,000 over 2 payments.
+    expect(data.selectedMonth).toBe('2026-04')
+    expect(data.totals).toEqual({
+      grossJpy: 70_000,
+      platformFeeJpy: 2_800,
+      netToPartnerJpy: 67_200,
+      paymentCount: 2,
+    })
+    // Each partner now carries only the April month row.
+    for (const p of data.partners) {
+      expect(p.months.map((m: { month: string }) => m.month)).toEqual(['2026-04'])
+    }
+  })
+
+  it('keeps availableMonths the full set even while a single month is selected', async () => {
+    const res = await mount('PLATFORM_ADMIN').request('/admin/revenue?month=2026-03')
+    const { data } = await res.json()
+    expect(data.selectedMonth).toBe('2026-03')
+    expect(data.availableMonths).toEqual(['2026-04', '2026-03']) // not just March
+    // March: OP_A only, 10,000.
+    expect(data.partners.map((p: { operatorId: string }) => p.operatorId)).toEqual([OP_A])
+    expect(data.totals.grossJpy).toBe(10_000)
+  })
+
+  it('returns an empty partner list for a valid month with no payments', async () => {
+    const res = await mount('PLATFORM_ADMIN').request('/admin/revenue?month=2026-01')
+    const { data } = await res.json()
+    expect(res.status).toBe(200)
+    expect(data.partners).toEqual([])
+    expect(data.totals.grossJpy).toBe(0)
+  })
+
+  it.each(['2026-13', '2026-1', '202604', 'June', ''])(
+    '400 for a malformed month %p',
+    async (month) => {
+      const res = await mount('PLATFORM_ADMIN').request(
+        `/admin/revenue?month=${encodeURIComponent(month)}`,
+      )
+      expect(res.status).toBe(400)
+    },
+  )
+})
+
 describe('AdminRevenueService — defence-in-depth seal', () => {
   it.each(['OPERATOR_OWNER', 'RENTER', 'PARTNER'] as const)(
     'throws ForbiddenError for %s even if the route gate were bypassed',

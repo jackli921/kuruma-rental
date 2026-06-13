@@ -5,19 +5,40 @@ import { useSuspenseQuery } from '@tanstack/react-query'
 import { type ErrorComponentProps, createFileRoute, useRouter } from '@tanstack/react-router'
 import { useTranslations } from 'use-intl'
 
-// Platform-admin partner revenue tab (#462). The `_admin` parent layout already
-// gates on platform-admin membership, so this only owns the data: prefetch in
-// the loader, read via useSuspenseQuery, render the pure RevenueView.
+// `YYYY-MM` (JST) payout-month filter (#628); an invalid value is dropped so the
+// tab falls back to the all-months matrix rather than erroring.
+const MONTH_RE = /^\d{4}-(0[1-9]|1[0-2])$/
+
+function validateSearch(search: Record<string, unknown>): { month?: string } {
+  const month =
+    typeof search.month === 'string' && MONTH_RE.test(search.month) ? search.month : undefined
+  return month ? { month } : {}
+}
+
+// Platform-admin partner revenue tab (#462, month filter #628). The `_admin`
+// parent layout already gates on platform-admin membership, so this only owns the
+// data: read the `?month` search param, prefetch in the loader, render the pure
+// RevenueView and turn its picker into a URL navigation.
 export const Route = createFileRoute('/$locale/_admin/admin/revenue')({
-  loader: ({ context }) => context.queryClient.ensureQueryData(adminRevenueQueryOptions()),
+  validateSearch,
+  loaderDeps: ({ search }) => ({ month: search.month }),
+  loader: ({ context, deps }) =>
+    context.queryClient.ensureQueryData(adminRevenueQueryOptions(deps.month)),
   pendingComponent: PageSkeleton,
   errorComponent: RevenueError,
   component: RevenueRoute,
 })
 
 function RevenueRoute() {
-  const { data } = useSuspenseQuery(adminRevenueQueryOptions())
-  return <RevenueView report={data} />
+  const { month } = Route.useSearch()
+  const navigate = Route.useNavigate()
+  const { data } = useSuspenseQuery(adminRevenueQueryOptions(month))
+  return (
+    <RevenueView
+      report={data}
+      onSelectMonth={(next) => navigate({ search: () => (next ? { month: next } : {}) })}
+    />
+  )
 }
 
 function RevenueError(_props: ErrorComponentProps) {

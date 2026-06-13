@@ -39,6 +39,26 @@ export function jstYearMonth(date: Date): string {
   return new Date(date.getTime() + JST_OFFSET_MS).toISOString().slice(0, 7)
 }
 
+/**
+ * Scope events to a single JST payout month (`YYYY-MM`, #628). A pure pre-filter
+ * for {@link aggregateRevenueByPartner}: filtering events first means the
+ * resulting partner subtotals and grand totals all reflect just that month,
+ * without the aggregator needing to know about filtering.
+ */
+export function filterEventsByMonth(
+  events: readonly RevenueEvent[],
+  month: string,
+): RevenueEvent[] {
+  return events.filter((e) => jstYearMonth(e.createdAt) === month)
+}
+
+/** The distinct JST months that have at least one payment, newest first (#628). */
+export function availableRevenueMonths(events: readonly RevenueEvent[]): string[] {
+  return [...new Set(events.map((e) => jstYearMonth(e.createdAt)))].sort((a, b) =>
+    b.localeCompare(a),
+  )
+}
+
 interface MonthAccumulator {
   grossJpy: number
   platformFeeJpy: number

@@ -1023,6 +1023,8 @@
       "payments": "決済件数",
       "total": "合計",
       "allPartners": "全パートナー",
+      "allMonths": "すべての月",
+      "monthFilterLabel": "支払月で絞り込み",
       "loadError": "パートナー収益を読み込めませんでした。",
       "retry": "再試行"
     }

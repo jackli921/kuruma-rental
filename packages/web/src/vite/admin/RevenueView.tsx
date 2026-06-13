@@ -1,25 +1,49 @@
+import { NativeSelect } from '@/components/ui/native-select'
 import { formatJpy } from '@/lib/format'
-import type { AdminRevenuePartner, AdminRevenueReport } from '@kuruma/shared/types/admin-revenue'
+import type { AdminRevenuePartner, AdminRevenueResponse } from '@kuruma/shared/types/admin-revenue'
 import { useTranslations } from 'use-intl'
 
 interface RevenueViewProps {
-  readonly report: AdminRevenueReport
+  readonly report: AdminRevenueResponse
+  /** Apply (or clear, with `null`) the JST month filter — the route navigates. */
+  readonly onSelectMonth: (month: string | null) => void
 }
 
-// Presentational partner-revenue report (#462). The route owns the loader /
-// useSuspenseQuery + boundaries; this is a pure function of the resolved report
-// so it is unit-testable (FC/IS — the shell does I/O, this only renders). Every
-// figure is summed server-side from `payment_events` rows; we never recompute the
-// 4% here — the row is the contract.
-export function RevenueView({ report }: RevenueViewProps) {
+// Presentational partner-revenue report (#462, month filter #628). The route owns
+// the loader / useSuspenseQuery + boundaries and turns onSelectMonth into a URL
+// navigation; this stays a pure function of props (FC/IS — the shell does I/O,
+// this only renders + calls back). Every figure is summed server-side from
+// `payment_events` rows; we never recompute the 4% here — the row is the contract.
+export function RevenueView({ report, onSelectMonth }: RevenueViewProps) {
   const t = useTranslations('admin.revenue')
-  const { partners, totals } = report
+  const { partners, totals, availableMonths, selectedMonth } = report
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
       <h1 className="text-3xl font-semibold tracking-tight">{t('title')}</h1>
       <p className="text-sm text-muted-foreground mt-1">{t('subtitle')}</p>
       <p className="text-sm text-muted-foreground mt-3 max-w-3xl">{t('model')}</p>
+
+      {availableMonths.length > 0 && (
+        <div className="mt-5 flex items-center gap-2">
+          <label htmlFor="revenue-month" className="text-sm text-muted-foreground">
+            {t('monthFilterLabel')}
+          </label>
+          <NativeSelect
+            id="revenue-month"
+            className="w-auto tabular-nums"
+            value={selectedMonth ?? ''}
+            onChange={(e) => onSelectMonth(e.target.value || null)}
+          >
+            <option value="">{t('allMonths')}</option>
+            {availableMonths.map((m) => (
+              <option key={m} value={m}>
+                {m}
+              </option>
+            ))}
+          </NativeSelect>
+        </div>
+      )}
 
       {partners.length === 0 ? (
         <p className="mt-8 text-sm text-muted-foreground">{t('empty')}</p>

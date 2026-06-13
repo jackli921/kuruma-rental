@@ -46,3 +46,16 @@ export interface AdminRevenueReport {
   partners: AdminRevenuePartner[]
   totals: AdminRevenueTotals
 }
+
+/**
+ * The API response for the revenue tab (#628). Wraps the aggregated report with
+ * the month-filter context: `availableMonths` is the full set of payout months
+ * (independent of the filter, so the picker can always offer every month), and
+ * `selectedMonth` echoes the applied `?month` filter (`null` = all months).
+ */
+export interface AdminRevenueResponse extends AdminRevenueReport {
+  /** Every JST month with at least one payment, newest first. */
+  availableMonths: string[]
+  /** The `YYYY-MM` the report is scoped to, or `null` for the all-months matrix. */
+  selectedMonth: string | null
+}

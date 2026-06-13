@@ -1,5 +1,9 @@
-import { aggregateRevenueByPartner } from '@kuruma/shared/lib/admin-revenue'
-import type { AdminRevenueReport } from '@kuruma/shared/types/admin-revenue'
+import {
+  aggregateRevenueByPartner,
+  availableRevenueMonths,
+  filterEventsByMonth,
+} from '@kuruma/shared/lib/admin-revenue'
+import type { AdminRevenueResponse } from '@kuruma/shared/types/admin-revenue'
 import { type CallerContext, requirePlatformRead } from '../middleware/auth'
 import type { OperatorRepository, PaymentEventRepository } from '../repositories/types'
 
@@ -17,12 +21,22 @@ export class AdminRevenueService {
     private readonly operators: OperatorRepository,
   ) {}
 
-  async getReport(ctx: CallerContext): Promise<AdminRevenueReport> {
+  /**
+   * @param month optional `YYYY-MM` (JST) — scopes the report to that payout
+   *   month. `availableMonths` is always the full set (so the picker can offer
+   *   every month regardless of the current filter).
+   */
+  async getReport(ctx: CallerContext, month?: string): Promise<AdminRevenueResponse> {
     requirePlatformRead(ctx)
     const [events, operators] = await Promise.all([
       this.paymentEvents.listSucceeded(),
       this.operators.list(),
     ])
-    return aggregateRevenueByPartner(events, operators)
+    const scoped = month ? filterEventsByMonth(events, month) : events
+    return {
+      ...aggregateRevenueByPartner(scoped, operators),
+      availableMonths: availableRevenueMonths(events),
+      selectedMonth: month ?? null,
+    }
   }
 }
