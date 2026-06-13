@@ -188,11 +188,19 @@ export function decodeFlowPayload(raw: string | undefined): FlowPayload {
   }
 }
 
-function parseFlowJson(raw: string | undefined): Record<string, string | undefined> {
+function parseFlowJson(raw: string | undefined): Record<string, string> {
   if (!raw) return {}
   try {
     const value: unknown = JSON.parse(Buffer.from(raw, 'base64url').toString('utf8'))
-    return value && typeof value === 'object' ? (value as Record<string, string>) : {}
+    if (!value || typeof value !== 'object') return {}
+    // Keep only string-valued keys: the field guards (safeReturnPath, etc.) annotate
+    // `string | undefined`, and RegExp.test coerces, so an un-filtered non-string
+    // (a forged `{invite: 12345}`) would slip through and later throw in sha256Hex.
+    return Object.fromEntries(
+      Object.entries(value as Record<string, unknown>).filter(
+        (entry): entry is [string, string] => typeof entry[1] === 'string',
+      ),
+    )
   } catch {
     return {}
   }

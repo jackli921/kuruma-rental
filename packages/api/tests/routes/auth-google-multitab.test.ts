@@ -1,4 +1,5 @@
 import { describe, expect, test } from 'vitest'
+import { decodeFlowPayload } from '../../src/auth/google'
 import { createAuthRoutes } from '../../src/routes/auth'
 import { setupAuthEnv } from '../helpers/auth'
 
@@ -73,5 +74,31 @@ describe('multi-tab Google login (issue #519)', () => {
     })
     expect(cbB.status).toBe(302)
     expect(cbB.headers.get('location')).toBe('https://web.example.test/en/b')
+  })
+})
+
+// Hardening from the #519 code review: the per-flow cookie value and the `state`
+// query are both attacker-influenceable (a forged cookie / a crafted callback
+// URL), so neither may crash the auth boundary or smuggle a non-string through.
+describe('forged-input hardening (issue #519 review)', () => {
+  test('decodeFlowPayload drops non-string fields — a forged cookie can not smuggle a number', () => {
+    // RegExp.test() coerces its argument, so an un-filtered `{invite: 12345}`
+    // would slip a *number* past safeInviteToken and later throw in sha256Hex.
+    const raw = Buffer.from(
+      JSON.stringify({ returnTo: 1, intent: ['provider'], invite: 12345 }),
+    ).toString('base64url')
+    const payload = decodeFlowPayload(raw)
+    expect(payload.returnTo).toBeUndefined()
+    expect(payload.invite).toBeUndefined()
+    expect(payload.intent).toBe('renter')
+  })
+
+  test('a hostile state with invalid cookie-name chars → 400, never a 500', async () => {
+    setupAuthEnv()
+    const app = createAuthRoutes(config, makeRuntime())
+    // A space is not a valid cookie-name token char; the bad-state path must not
+    // try to delete a cookie by this name (which would throw → 500).
+    const res = await app.request('/auth/google/callback?state=abc%20def&code=c1')
+    expect(res.status).toBe(400)
   })
 })

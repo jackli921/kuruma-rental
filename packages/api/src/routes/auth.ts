@@ -119,7 +119,8 @@ export function createAuthRoutes(
       const state = c.req.query('state')
       const flowCookie = state ? getCookie(c, flowCookieName(state)) : undefined
       if (!state || flowCookie === undefined) {
-        if (state) deleteCookie(c, flowCookieName(state), { path: '/' })
+        // No cookie matched this state ⇒ nothing to clear. (Don't try to delete a
+        // cookie named after a hostile `state` — invalid name chars would throw.)
         return fail(c, 'Invalid OAuth state', 400)
       }
       const code = c.req.query('code')
