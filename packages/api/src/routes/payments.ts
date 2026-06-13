@@ -39,10 +39,13 @@ export function createPaymentRoutes(service: PaymentService) {
       const rawBody = await c.req.text()
       const result = await service.handleWebhook(rawBody, signature)
 
-      // The shell logs; the service core stays side-effect-free. A double charge
-      // or an amount mismatch needs an operator's eyes — log the FULL context
-      // (event/session/paymentIntent/booking/amounts) so they can reconcile or
-      // refund, since the 200 ack persists nothing for these (#461 P1b).
+      // A double charge or an amount mismatch needs an operator's eyes. The
+      // service now PERSISTS these to payment_anomalies (#508 P2, idempotent on
+      // stripeEventId); this log is supplementary real-time signal carrying the
+      // FULL context (event/session/paymentIntent/booking/amounts). NOTE: because
+      // persistence happens before the 200 ack, a transient insert failure rejects
+      // here → 500 → Stripe retry, which re-converges (the insert is idempotent) —
+      // an intentional trade-off favouring durable capture over a silent log-only ack.
       if (result.outcome === 'double_payment' || result.outcome === 'amount_mismatch') {
         console.error('[payment:webhook] anomaly', {
           outcome: result.outcome,

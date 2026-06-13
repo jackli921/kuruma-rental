@@ -9,6 +9,7 @@ import {
   locations,
   maintenanceLogs,
   messages,
+  paymentAnomalies,
   paymentEvents,
   threadParticipants,
   threads,
@@ -25,6 +26,7 @@ import type {
   Location,
   MaintenanceLog,
   Message,
+  PaymentAnomaly,
   PaymentEvent,
   Thread,
   ThreadParticipant,
@@ -148,6 +150,21 @@ export const paymentEventColumns = {
   createdAt: paymentEvents.createdAt,
 }
 
+export const paymentAnomalyColumns = {
+  id: paymentAnomalies.id,
+  operatorId: paymentAnomalies.operatorId,
+  bookingId: paymentAnomalies.bookingId,
+  kind: paymentAnomalies.kind,
+  stripeEventId: paymentAnomalies.stripeEventId,
+  stripeCheckoutSessionId: paymentAnomalies.stripeCheckoutSessionId,
+  stripePaymentIntentId: paymentAnomalies.stripePaymentIntentId,
+  receivedAmountJpy: paymentAnomalies.receivedAmountJpy,
+  expectedAmountJpy: paymentAnomalies.expectedAmountJpy,
+  currency: paymentAnomalies.currency,
+  resolvedAt: paymentAnomalies.resolvedAt,
+  createdAt: paymentAnomalies.createdAt,
+}
+
 export const bookingColumns = {
   id: bookings.id,
   operatorId: bookings.operatorId,
@@ -263,6 +280,7 @@ type InsuranceOptionRow = ColumnRow<typeof insuranceOptionColumns>
 type AddOnOptionRow = ColumnRow<typeof addOnOptionColumns>
 type FeeScheduleRow = ColumnRow<typeof feeScheduleColumns>
 type PaymentEventRow = ColumnRow<typeof paymentEventColumns>
+type PaymentAnomalyRow = ColumnRow<typeof paymentAnomalyColumns>
 type BookingRow = ColumnRow<typeof bookingColumns>
 type BookingEventRow = ColumnRow<typeof bookingEventColumns>
 type ThreadRow = ColumnRow<typeof threadColumns>
@@ -362,6 +380,23 @@ export function toPaymentEvent(r: PaymentEventRow): PaymentEvent {
     netToPartnerJpy: r.netToPartnerJpy,
     currency: r.currency,
     status: r.status,
+    createdAt: r.createdAt,
+  }
+}
+
+export function toPaymentAnomaly(r: PaymentAnomalyRow): PaymentAnomaly {
+  return {
+    id: r.id,
+    operatorId: r.operatorId,
+    bookingId: r.bookingId,
+    kind: r.kind,
+    stripeEventId: r.stripeEventId,
+    stripeCheckoutSessionId: r.stripeCheckoutSessionId,
+    stripePaymentIntentId: r.stripePaymentIntentId,
+    receivedAmountJpy: r.receivedAmountJpy,
+    expectedAmountJpy: r.expectedAmountJpy,
+    currency: r.currency,
+    resolvedAt: r.resolvedAt,
     createdAt: r.createdAt,
   }
 }

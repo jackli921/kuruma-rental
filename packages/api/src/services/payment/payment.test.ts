@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it } from 'vitest'
 import type { CallerContext } from '../../middleware/auth'
 import { InMemoryBookingRepository } from '../../repositories/in-memory/booking'
+import { InMemoryPaymentAnomalyRepository } from '../../repositories/in-memory/payment-anomaly'
 import { InMemoryPaymentEventRepository } from '../../repositories/in-memory/payment-event'
 import type { Booking } from '../../stores'
 import { PaymentService } from './payment'
@@ -88,6 +89,7 @@ describe('PaymentService.createCheckoutSession', () => {
   let bookings: Map<string, Booking>
   let bookingRepo: InMemoryBookingRepository
   let paymentRepo: InMemoryPaymentEventRepository
+  let anomalyRepo: InMemoryPaymentAnomalyRepository
   let gateway: FakeGateway
   let service: PaymentService
 
@@ -95,8 +97,11 @@ describe('PaymentService.createCheckoutSession', () => {
     bookings = new Map([['bk-1', makeBooking()]])
     bookingRepo = new InMemoryBookingRepository(bookings)
     paymentRepo = new InMemoryPaymentEventRepository()
+    anomalyRepo = new InMemoryPaymentAnomalyRepository()
     gateway = new FakeGateway()
-    service = new PaymentService(paymentRepo, bookingRepo, gateway, { webBaseUrl: WEB_BASE })
+    service = new PaymentService(paymentRepo, bookingRepo, gateway, anomalyRepo, {
+      webBaseUrl: WEB_BASE,
+    })
   })
 
   it('creates a session for the booking total with bookingId + operatorId metadata', async () => {
@@ -171,6 +176,7 @@ describe('PaymentService.handleWebhook', () => {
   let bookings: Map<string, Booking>
   let bookingRepo: InMemoryBookingRepository
   let paymentRepo: InMemoryPaymentEventRepository
+  let anomalyRepo: InMemoryPaymentAnomalyRepository
   let gateway: FakeGateway
   let service: PaymentService
 
@@ -178,8 +184,11 @@ describe('PaymentService.handleWebhook', () => {
     bookings = new Map([['bk-1', makeBooking()]])
     bookingRepo = new InMemoryBookingRepository(bookings)
     paymentRepo = new InMemoryPaymentEventRepository()
+    anomalyRepo = new InMemoryPaymentAnomalyRepository()
     gateway = new FakeGateway()
-    service = new PaymentService(paymentRepo, bookingRepo, gateway, { webBaseUrl: WEB_BASE })
+    service = new PaymentService(paymentRepo, bookingRepo, gateway, anomalyRepo, {
+      webBaseUrl: WEB_BASE,
+    })
   })
 
   it('records a payment_events row with re-derived operator + 4% commission', async () => {
@@ -278,6 +287,87 @@ describe('PaymentService.handleWebhook', () => {
       checkoutSessionId: 'cs_test_2',
     })
   })
+
+  // #508 P2: anomalies are now PERSISTED (not just logged), so the admin surface
+  // can list duplicate charges to refund instead of scraping logs.
+  it('persists an AMOUNT_MISMATCH anomaly carrying received + expected amounts', async () => {
+    gateway.nextEvent = completedEvent({ amountTotal: 99_999 })
+    await service.handleWebhook('raw', 'sig')
+
+    const anomalies = await anomalyRepo.listUnresolved()
+    expect(anomalies).toHaveLength(1)
+    expect(anomalies[0]).toMatchObject({
+      kind: 'AMOUNT_MISMATCH',
+      operatorId: 'op-1', // re-derived from the booking, never the spoofed metadata
+      bookingId: 'bk-1',
+      stripeEventId: 'evt_1',
+      stripeCheckoutSessionId: 'cs_test_1',
+      stripePaymentIntentId: 'pi_1',
+      receivedAmountJpy: 99_999,
+      expectedAmountJpy: 100_000,
+      currency: 'jpy',
+    })
+  })
+
+  it('persists a DOUBLE_PAYMENT anomaly carrying the duplicate paymentIntent to refund', async () => {
+    gateway.nextEvent = completedEvent()
+    await service.handleWebhook('raw', 'sig')
+    gateway.nextEvent = completedEvent({
+      eventId: 'evt_2',
+      checkoutSessionId: 'cs_test_2',
+      paymentIntentId: 'pi_2',
+    })
+    await service.handleWebhook('raw', 'sig')
+
+    const anomalies = await anomalyRepo.listUnresolved()
+    expect(anomalies).toHaveLength(1)
+    expect(anomalies[0]).toMatchObject({
+      kind: 'DOUBLE_PAYMENT',
+      operatorId: 'op-1',
+      bookingId: 'bk-1',
+      stripeEventId: 'evt_2',
+      stripeCheckoutSessionId: 'cs_test_2',
+      stripePaymentIntentId: 'pi_2',
+      receivedAmountJpy: 100_000,
+      expectedAmountJpy: 100_000,
+    })
+  })
+
+  it('records a single anomaly when an amount_mismatch webhook is redelivered (idempotent)', async () => {
+    gateway.nextEvent = completedEvent({ amountTotal: 99_999 })
+    await service.handleWebhook('raw', 'sig')
+    await service.handleWebhook('raw', 'sig') // same evt_1 redelivered
+    expect(await anomalyRepo.listUnresolved()).toHaveLength(1)
+  })
+
+  it('records a single anomaly when a double_payment webhook is redelivered (idempotent)', async () => {
+    gateway.nextEvent = completedEvent()
+    await service.handleWebhook('raw', 'sig') // evt_1 recorded
+    const second = completedEvent({
+      eventId: 'evt_2',
+      checkoutSessionId: 'cs_test_2',
+      paymentIntentId: 'pi_2',
+    })
+    gateway.nextEvent = second
+    await service.handleWebhook('raw', 'sig') // evt_2 → double_payment, 1 anomaly
+    await service.handleWebhook('raw', 'sig') // evt_2 redelivered → no stack
+
+    const anomalies = await anomalyRepo.listUnresolved()
+    expect(anomalies).toHaveLength(1)
+    expect(anomalies[0]).toMatchObject({ kind: 'DOUBLE_PAYMENT', stripeEventId: 'evt_2' })
+  })
+
+  it('records no anomaly for a clean recorded payment', async () => {
+    gateway.nextEvent = completedEvent()
+    await service.handleWebhook('raw', 'sig')
+    expect(await anomalyRepo.listUnresolved()).toEqual([])
+  })
+
+  it('records no anomaly for an ignored (unpaid) event', async () => {
+    gateway.nextEvent = completedEvent({ paymentStatus: 'unpaid' })
+    await service.handleWebhook('raw', 'sig')
+    expect(await anomalyRepo.listUnresolved()).toEqual([])
+  })
 })
 
 describe('PaymentService.getBookingPaymentStatus', () => {
@@ -285,8 +375,11 @@ describe('PaymentService.getBookingPaymentStatus', () => {
     const bookings = new Map([['bk-1', makeBooking()]])
     const bookingRepo = new InMemoryBookingRepository(bookings)
     const paymentRepo = new InMemoryPaymentEventRepository()
+    const anomalyRepo = new InMemoryPaymentAnomalyRepository()
     const gateway = new FakeGateway()
-    const service = new PaymentService(paymentRepo, bookingRepo, gateway, { webBaseUrl: WEB_BASE })
+    const service = new PaymentService(paymentRepo, bookingRepo, gateway, anomalyRepo, {
+      webBaseUrl: WEB_BASE,
+    })
 
     expect(await service.getBookingPaymentStatus(RENTER, 'bk-1')).toEqual({ status: 'UNPAID' })
     gateway.nextEvent = completedEvent()

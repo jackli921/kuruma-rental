@@ -1,5 +1,5 @@
 import { BEST_CAR_RENTAL_OPERATOR_ID } from '@kuruma/shared/db/constants'
-import { paymentEvents, users } from '@kuruma/shared/db/schema'
+import { paymentAnomalies, paymentEvents, users } from '@kuruma/shared/db/schema'
 import { eq } from 'drizzle-orm'
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest'
 import { SYSTEM_CONTEXT } from '../../src/middleware/auth'
@@ -13,10 +13,11 @@ import {
 } from '../../src/pg-errors'
 import {
   DrizzleBookingRepository,
+  DrizzlePaymentAnomalyRepository,
   DrizzlePaymentEventRepository,
   DrizzleVehicleRepository,
 } from '../../src/repositories/drizzle'
-import type { NewPaymentEvent } from '../../src/repositories/types'
+import type { NewPaymentAnomaly, NewPaymentEvent } from '../../src/repositories/types'
 import { bookingInput } from '../helpers/booking'
 import {
   DEFAULT_DAILY_RATE_JPY,
@@ -35,6 +36,7 @@ import {
 // only mirrors them) cannot prove. A drift between the migration's index names
 // and the constants would silently break the webhook idempotency branch.
 const paymentRepo = new DrizzlePaymentEventRepository(db)
+const anomalyRepo = new DrizzlePaymentAnomalyRepository(db)
 const bookingRepo = new DrizzleBookingRepository(db)
 const vehicleRepo = new DrizzleVehicleRepository(db)
 
@@ -116,6 +118,8 @@ beforeAll(async () => {
 afterEach(async () => {
   await db.delete(paymentEvents).where(eq(paymentEvents.bookingId, bookingA))
   await db.delete(paymentEvents).where(eq(paymentEvents.bookingId, bookingB))
+  await db.delete(paymentAnomalies).where(eq(paymentAnomalies.bookingId, bookingA))
+  await db.delete(paymentAnomalies).where(eq(paymentAnomalies.bookingId, bookingB))
 })
 
 afterAll(async () => {
@@ -175,5 +179,47 @@ describe('DrizzlePaymentEventRepository (real Postgres)', () => {
       .insert(event(bookingA, { stripeEventId: 'evt_other', stripeCheckoutSessionId: 'cs_other' }))
       .catch((e) => e)
     expect(pgConstraintName(err)).toBe(PAYMENT_EVENT_ONE_SUCCESS_CONSTRAINT)
+  })
+})
+
+function anomaly(bookingId: string, overrides: Partial<NewPaymentAnomaly> = {}): NewPaymentAnomaly {
+  return {
+    operatorId: BEST_CAR_RENTAL_OPERATOR_ID,
+    bookingId,
+    kind: 'DOUBLE_PAYMENT',
+    stripeEventId: 'evt_anom',
+    stripeCheckoutSessionId: 'cs_anom',
+    stripePaymentIntentId: 'pi_anom',
+    receivedAmountJpy: 100_000,
+    expectedAmountJpy: 100_000,
+    currency: 'jpy',
+    ...overrides,
+  }
+}
+
+describe('DrizzlePaymentAnomalyRepository (real Postgres)', () => {
+  it('persists an anomaly and surfaces it as unresolved', async () => {
+    await anomalyRepo.record(
+      anomaly(bookingA, { kind: 'AMOUNT_MISMATCH', receivedAmountJpy: 99_999 }),
+    )
+    const mine = (await anomalyRepo.listUnresolved()).filter((a) => a.bookingId === bookingA)
+    expect(mine).toHaveLength(1)
+    expect(mine[0]).toMatchObject({
+      kind: 'AMOUNT_MISMATCH',
+      receivedAmountJpy: 99_999,
+      expectedAmountJpy: 100_000,
+      resolvedAt: null,
+    })
+  })
+
+  // The real reason for a Postgres test: ON CONFLICT against the
+  // payment_anomalies_stripeEventId_unique index must make a redelivered webhook a
+  // no-op. The in-memory repo only mirrors this; a wrong index name or conflict
+  // target would silently double-insert here while in-memory stays green.
+  it('is idempotent on a redelivered event id (real ON CONFLICT DO NOTHING)', async () => {
+    await anomalyRepo.record(anomaly(bookingA, { stripeEventId: 'evt_dup' }))
+    await anomalyRepo.record(anomaly(bookingA, { stripeEventId: 'evt_dup' }))
+    const dupes = (await anomalyRepo.listUnresolved()).filter((a) => a.stripeEventId === 'evt_dup')
+    expect(dupes).toHaveLength(1)
   })
 })

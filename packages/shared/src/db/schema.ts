@@ -674,6 +674,52 @@ export const paymentEvents = pgTable(
   ],
 )
 
+// Payment anomalies needing operator/admin review (#508 P2). A verified webhook can
+// report a charge that does NOT become a clean payment_events row: a second distinct
+// Session paying an already-paid booking (DOUBLE_PAYMENT — refund the duplicate) or a
+// session whose amount/currency != the booking snapshot (AMOUNT_MISMATCH — investigate).
+// Persisted (not just logged, #461 P1b) so the admin surface can list duplicates to
+// refund rather than scrape logs. Kept OUT of payment_events so revenue math (which sums
+// SUCCEEDED rows) is never polluted by a flagged-for-review charge.
+export const paymentAnomalyKindEnum = pgEnum('payment_anomaly_kind', [
+  'DOUBLE_PAYMENT',
+  'AMOUNT_MISMATCH',
+])
+export const paymentAnomalies = pgTable(
+  'payment_anomalies',
+  {
+    id: text('id')
+      .primaryKey()
+      .$defaultFn(() => crypto.randomUUID()),
+    // Partner attribution, RE-DERIVED from the booking on the webhook — never the Stripe metadata (mirrors payment_events).
+    operatorId: text('operatorId')
+      .notNull()
+      .references(() => operators.id),
+    bookingId: text('bookingId')
+      .notNull()
+      .references(() => bookings.id),
+    kind: paymentAnomalyKindEnum('kind').notNull(),
+    // Stripe ids carried so an operator can reconcile/refund. stripeEventId is the redelivery fence.
+    stripeEventId: text('stripeEventId').notNull(),
+    stripeCheckoutSessionId: text('stripeCheckoutSessionId').notNull(),
+    stripePaymentIntentId: text('stripePaymentIntentId'),
+    // Whole JPY. received = Stripe amount_total (nullable — Stripe may omit it on a malformed event); expected = the booking total snapshot at webhook time.
+    receivedAmountJpy: integer('receivedAmountJpy'),
+    expectedAmountJpy: integer('expectedAmountJpy'),
+    currency: text('currency'),
+    // Set once an operator actions it (refunded / dismissed). NULL = still needs review.
+    resolvedAt: timestamp('resolvedAt', { withTimezone: true }),
+    createdAt: timestamp('createdAt', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    // FK cover (lint:fk-indexes) + admin listing by partner.
+    index('idx_payment_anomalies_operatorId').on(table.operatorId),
+    index('idx_payment_anomalies_bookingId').on(table.bookingId),
+    // Redelivery fence: the same webhook event records at most one anomaly (idempotent record()).
+    uniqueIndex('payment_anomalies_stripeEventId_unique').on(table.stripeEventId),
+  ],
+)
+
 // Issue #225: maintenance log and notes per vehicle. Tracks why a vehicle
 // entered MAINTENANCE, with optional cost tracking and resolution timestamp.
 export const maintenanceLogs = pgTable(

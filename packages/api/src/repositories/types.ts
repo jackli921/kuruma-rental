@@ -43,6 +43,7 @@ import type {
   NotificationLog,
   Operator,
   OperatorMembership,
+  PaymentAnomaly,
   PaymentEvent,
   ProviderInvite,
   RenterDocument,
@@ -70,6 +71,19 @@ export interface PaymentEventRepository {
   // Every SUCCEEDED payment across all operators, for the platform-admin revenue
   // report (#462). Unscoped by design — authz lives in AdminRevenueService.
   listSucceeded(): Promise<PaymentEvent[]>
+}
+
+/** A payment anomaly to persist. id/createdAt/resolvedAt are store-assigned (#508 P2). */
+export type NewPaymentAnomaly = Omit<PaymentAnomaly, 'id' | 'createdAt' | 'resolvedAt'>
+
+/** payment_anomalies data access (#508 P2). The webhook is the only writer. */
+export interface PaymentAnomalyRepository {
+  // Persist an anomaly for operator review. IDEMPOTENT on stripeEventId: a
+  // redelivered webhook (which re-derives the same anomaly) must not stack rows.
+  record(anomaly: NewPaymentAnomaly): Promise<void>
+  // Unresolved anomalies across all operators for the platform-admin surface.
+  // Unscoped by design — authz lives in the service (mirrors listSucceeded).
+  listUnresolved(): Promise<PaymentAnomaly[]>
 }
 
 /** Operator (tenant) data access. Admin bootstrap (#386) + slug/id resolution (#387). */

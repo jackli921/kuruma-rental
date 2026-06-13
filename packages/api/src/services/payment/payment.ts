@@ -6,8 +6,13 @@ import {
   pgConstraintName,
   pgErrorCode,
 } from '../../pg-errors'
-import type { BookingRepository, PaymentEventRepository } from '../../repositories/types'
-import type { PaymentGateway } from './payment-gateway'
+import type {
+  BookingRepository,
+  PaymentAnomalyRepository,
+  PaymentEventRepository,
+} from '../../repositories/types'
+import type { Booking, PaymentAnomalyKind } from '../../stores'
+import type { PaymentGateway, VerifiedPaymentEvent } from './payment-gateway'
 
 const CURRENCY = 'jpy'
 const COMPLETED_EVENT = 'checkout.session.completed'
@@ -67,8 +72,30 @@ export class PaymentService {
     private readonly paymentEvents: PaymentEventRepository,
     private readonly bookings: BookingRepository,
     private readonly gateway: PaymentGateway,
+    private readonly anomalies: PaymentAnomalyRepository,
     private readonly config: PaymentConfig,
   ) {}
+
+  /** Persist an anomaly for operator review (#508 P2). operator + amounts are
+   *  re-derived from the booking/event, never trusted from Stripe metadata. The
+   *  record is idempotent on stripeEventId, so a redelivered webhook is a no-op. */
+  private async recordAnomaly(
+    kind: PaymentAnomalyKind,
+    booking: Booking,
+    event: VerifiedPaymentEvent,
+  ): Promise<void> {
+    await this.anomalies.record({
+      operatorId: booking.operatorId,
+      bookingId: booking.id,
+      kind,
+      stripeEventId: event.eventId,
+      stripeCheckoutSessionId: event.checkoutSessionId,
+      stripePaymentIntentId: event.paymentIntentId,
+      receivedAmountJpy: event.amountTotal,
+      expectedAmountJpy: booking.totalPrice,
+      currency: event.currency,
+    })
+  }
 
   async createCheckoutSession(
     ctx: CallerContext,
@@ -157,6 +184,7 @@ export class PaymentService {
       event.amountTotal !== booking.totalPrice ||
       event.currency !== CURRENCY
     ) {
+      await this.recordAnomaly('AMOUNT_MISMATCH', booking, event)
       return { status: 200, outcome: 'amount_mismatch', context }
     }
 
@@ -185,6 +213,11 @@ export class PaymentService {
         pgConstraintName(err) === PAYMENT_EVENT_ONE_SUCCESS_CONSTRAINT
           ? 'double_payment'
           : 'duplicate'
+      if (outcome === 'double_payment') {
+        // A genuine second charge to refund — persist it (with pi to act on),
+        // unlike a benign redelivery which is already sealed by the unique index.
+        await this.recordAnomaly('DOUBLE_PAYMENT', booking, event)
+      }
       return { status: 200, outcome, context }
     }
   }

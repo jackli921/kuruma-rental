@@ -30,6 +30,7 @@ import {
   DrizzleOperatorMembershipRepository,
   DrizzleOperatorRepository,
   DrizzleOverviewRepository,
+  DrizzlePaymentAnomalyRepository,
   DrizzlePaymentEventRepository,
   DrizzleProviderInviteRepository,
   DrizzleRenterDocumentRepository,
@@ -60,6 +61,7 @@ import {
   InMemoryOperatorMembershipRepository,
   InMemoryOperatorRepository,
   InMemoryOverviewRepository,
+  InMemoryPaymentAnomalyRepository,
   InMemoryPaymentEventRepository,
   InMemoryProviderInviteRepository,
   InMemoryRenterDocumentRepository,
@@ -91,6 +93,7 @@ import type {
   OperatorMembershipRepository,
   OperatorRepository,
   OverviewRepository,
+  PaymentAnomalyRepository,
   PaymentEventRepository,
   PhotoStorage,
   ProviderInviteRepository,
@@ -123,6 +126,7 @@ import { createMessageRoutes } from './routes/messages'
 import { createNotificationRoutes } from './routes/notifications'
 import { createOperatorRoutes } from './routes/operators'
 import { createOverviewRoutes } from './routes/overview'
+import { createPaymentAnomalyRoutes } from './routes/payment-anomalies'
 import { createPaymentRoutes } from './routes/payments'
 import { createProviderInviteRoutes } from './routes/provider-invites'
 import { rateLimitByIp } from './routes/rate-limit'
@@ -160,6 +164,7 @@ import { NotificationDispatcher } from './services/notification-dispatcher'
 import { OperatorService } from './services/operator'
 import { createOperatorGrantService } from './services/operator-grant'
 import { OverviewService } from './services/overview'
+import { PaymentAnomalyService } from './services/payment-anomaly'
 import { PaymentService } from './services/payment/payment'
 import type { PaymentGateway } from './services/payment/payment-gateway'
 import { StripePaymentGateway } from './services/payment/stripe-payment-gateway'
@@ -199,6 +204,7 @@ export function createApp(overrides?: AppOverrides) {
   let notificationLogRepo: NotificationLogRepository
   let storefrontRepo: StorefrontRepository
   let paymentEventRepo: PaymentEventRepository
+  let paymentAnomalyRepo: PaymentAnomalyRepository
   let providerInviteRepo: ProviderInviteRepository
   let operatorMembershipRepo: OperatorMembershipRepository
   // #549: read side of the booking lifecycle log, injected into BookingService
@@ -266,6 +272,7 @@ export function createApp(overrides?: AppOverrides) {
     storefrontRepo =
       overrides.storefrontRepo ?? new InMemoryStorefrontRepository(locationRepo, operatorRepo)
     paymentEventRepo = overrides.paymentEventRepo ?? new InMemoryPaymentEventRepository()
+    paymentAnomalyRepo = overrides.paymentAnomalyRepo ?? new InMemoryPaymentAnomalyRepository()
     providerInviteRepo = overrides.providerInviteRepo ?? new InMemoryProviderInviteRepository()
     operatorMembershipRepo =
       overrides.operatorMembershipRepo ?? new InMemoryOperatorMembershipRepository()
@@ -297,6 +304,7 @@ export function createApp(overrides?: AppOverrides) {
     notificationLogRepo = new DrizzleNotificationLogRepository(db)
     storefrontRepo = new DrizzleStorefrontRepository(db)
     paymentEventRepo = new DrizzlePaymentEventRepository(db)
+    paymentAnomalyRepo = new DrizzlePaymentAnomalyRepository(db)
     providerInviteRepo = new DrizzleProviderInviteRepository(db)
     operatorMembershipRepo = new DrizzleOperatorMembershipRepository(db)
     // Real interactive tx (#493): membership INSERT first so the partial-unique-
@@ -379,6 +387,7 @@ export function createApp(overrides?: AppOverrides) {
     notificationLogRepo = new InMemoryNotificationLogRepository()
     storefrontRepo = new InMemoryStorefrontRepository(locationRepo, operatorRepo)
     paymentEventRepo = new InMemoryPaymentEventRepository()
+    paymentAnomalyRepo = new InMemoryPaymentAnomalyRepository()
     providerInviteRepo = new InMemoryProviderInviteRepository()
     operatorMembershipRepo = new InMemoryOperatorMembershipRepository()
     runOperatorGrant = (fn) =>
@@ -489,9 +498,13 @@ export function createApp(overrides?: AppOverrides) {
   // First allowed web origin — where the browser is sent back to after Stripe
   // Checkout and the base of the one-time provider-invite link (#521 §7).
   const webBaseUrl = resolveAllowedOrigins(process.env.WEB_ORIGIN)[0] ?? ''
-  const paymentService = new PaymentService(paymentEventRepo, bookingRepo, paymentGateway, {
-    webBaseUrl,
-  })
+  const paymentService = new PaymentService(
+    paymentEventRepo,
+    bookingRepo,
+    paymentGateway,
+    paymentAnomalyRepo,
+    { webBaseUrl },
+  )
   const providerInviteService = new ProviderInviteService(
     providerInviteRepo,
     operatorRepo,
@@ -635,6 +648,7 @@ export function createApp(overrides?: AppOverrides) {
   const fleetOverviewService = new FleetOverviewService(fleetOverviewRepo)
   const overviewService = new OverviewService(overviewRepo)
   const adminRevenueService = new AdminRevenueService(paymentEventRepo, operatorRepo)
+  const paymentAnomalyService = new PaymentAnomalyService(paymentAnomalyRepo)
   const vehicleDetailService = new VehicleDetailService(vehicleDetailRepo)
   const operatorService = new OperatorService(operatorRepo)
   // #407: the write-operator resolver is a pure policy function — sole-operator
@@ -713,6 +727,7 @@ export function createApp(overrides?: AppOverrides) {
     .route('/', createStatsRoutes(statsRepo))
     .route('/', createOverviewRoutes(overviewService))
     .route('/', createAdminRevenueRoutes(adminRevenueService))
+    .route('/', createPaymentAnomalyRoutes(paymentAnomalyService))
     .route('/', createMessageRoutes(threadRepo, messageRepo))
     .route(
       '/',
