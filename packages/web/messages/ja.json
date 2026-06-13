@@ -162,11 +162,16 @@
   "business": {
     "dashboard": {
       "title": "ダッシュボード",
-      "subtitle": "レンタル事業の概要"
+      "subtitle": "レンタル事業の概要",
+      "viewBookings": "予約を見る",
+      "manageFleet": "車両を管理",
+      "loadError": "ダッシュボードを読み込めませんでした。",
+      "retry": "再試行"
     },
     "stats": {
       "totalBookings": "予約総数",
       "activeVehicles": "稼働中の車両",
+      "upcomingBookings": "今後の予約",
       "totalCustomers": "顧客総数",
       "unreadMessages": "未読メッセージ"
     },

@@ -162,11 +162,16 @@
   "business": {
     "dashboard": {
       "title": "仪表盘",
-      "subtitle": "租车业务概览"
+      "subtitle": "租车业务概览",
+      "viewBookings": "查看预订",
+      "manageFleet": "管理车辆",
+      "loadError": "无法加载仪表盘。",
+      "retry": "重试"
     },
     "stats": {
       "totalBookings": "总预订数",
       "activeVehicles": "运营中车辆",
+      "upcomingBookings": "即将到来的预订",
       "totalCustomers": "总客户数",
       "unreadMessages": "未读消息"
     },
