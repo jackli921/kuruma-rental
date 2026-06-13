@@ -4,14 +4,34 @@ import { InMemoryAvailabilityRepository } from '../repositories/in-memory/availa
 import { InMemoryBookingRepository } from '../repositories/in-memory/booking'
 import { InMemoryLocationRepository } from '../repositories/in-memory/location'
 import { InMemoryOperatorRepository } from '../repositories/in-memory/operator'
+import { InMemoryRegionRepository } from '../repositories/in-memory/region'
 import { InMemoryStorefrontRepository } from '../repositories/in-memory/storefront'
 import { InMemoryVehicleRepository } from '../repositories/in-memory/vehicle'
 import { InMemoryVehicleClassRepository } from '../repositories/in-memory/vehicle-class'
-import type { Location, Operator, Vehicle, VehicleClass } from '../stores'
+import type { AvailabilityFilters, AvailabilityRepository } from '../repositories/types'
+import type { Location, Operator, Region, Vehicle, VehicleClass } from '../stores'
 import { FlatSearchService } from './flat-search'
 
 const FROM = new Date('2026-08-01T10:00:00Z')
 const TO = new Date('2026-08-01T14:00:00Z')
+
+// #394: osaka -> osaka_city -> namba; kyoto -> kyoto_city -> kyoto_station.
+const reg = (id: string, parentId: string | null): Region => ({
+  id,
+  parentId,
+  nameEn: id,
+  nameJa: id,
+  nameZh: id,
+  sortOrder: 0,
+})
+const REGIONS: Region[] = [
+  reg('reg_osaka', null),
+  reg('reg_osaka_city', 'reg_osaka'),
+  reg('reg_namba', 'reg_osaka_city'),
+  reg('reg_kyoto', null),
+  reg('reg_kyoto_city', 'reg_kyoto'),
+  reg('reg_kyoto_station', 'reg_kyoto_city'),
+]
 
 let operatorRepo: InMemoryOperatorRepository
 let locationRepo: InMemoryLocationRepository
@@ -28,7 +48,8 @@ beforeEach(() => {
   classRepo = new InMemoryVehicleClassRepository()
   const storefrontRepo = new InMemoryStorefrontRepository(locationRepo, operatorRepo)
   const availabilityRepo = new InMemoryAvailabilityRepository(vehicleRepo, bookingRepo)
-  service = new FlatSearchService(storefrontRepo, availabilityRepo, classRepo)
+  const regionRepo = new InMemoryRegionRepository(REGIONS)
+  service = new FlatSearchService(storefrontRepo, availabilityRepo, classRepo, regionRepo)
 })
 
 function makeOperator(name: string, slug: string): Promise<Operator> {
@@ -102,6 +123,22 @@ function makeVehicle(overrides: Partial<Omit<Vehicle, 'id' | 'createdAt' | 'upda
 async function ok(result: Awaited<ReturnType<FlatSearchService['search']>>) {
   if (!result.ok) throw new Error(`expected ok, got ${result.error}`)
   return result.data
+}
+
+// Records the filters handed to the availability port. Scan-bounding (#651 §1c)
+// is invisible in the OUTPUT (out-of-region cars are dropped by the location map
+// anyway), so the observable is the scope the service requests of its injected
+// repository — a legitimate port-contract assertion, not an internal mock.
+class RecordingAvailabilityRepository implements AvailabilityRepository {
+  lastFilters: AvailabilityFilters | undefined
+  constructor(private readonly inner: AvailabilityRepository) {}
+  findAvailableVehicles(from: Date, to: Date, filters?: AvailabilityFilters) {
+    this.lastFilters = filters
+    return this.inner.findAvailableVehicles(from, to, filters)
+  }
+  checkVehicleAvailability(vehicleId: string, from: Date, to: Date) {
+    return this.inner.checkVehicleAvailability(vehicleId, from, to)
+  }
 }
 
 describe('FlatSearchService.search (#458)', () => {
@@ -267,5 +304,73 @@ describe('FlatSearchService.search (#458)', () => {
     if (result.ok) throw new Error('expected a failure result for a malformed cursor')
     expect(result.status).toBe(400)
     expect(result.error).toMatch(/cursor/i)
+  })
+})
+
+describe('FlatSearchService.search region filter (#394)', () => {
+  async function seedTwoRegions() {
+    const a = await makeOperator('A Rentals', 'a')
+    const klass = await makeClass({ operatorId: a.id, acrissCode: 'CCAR' })
+    const namba = await makeLocation({ operatorId: a.id, name: 'Namba', regionId: 'reg_namba' })
+    const kyoto = await makeLocation({
+      operatorId: a.id,
+      name: 'Kyoto Station',
+      regionId: 'reg_kyoto_station',
+    })
+    await makeVehicle({
+      operatorId: a.id,
+      classId: klass.id,
+      pickupLocationId: namba.id,
+      name: 'Osaka Car',
+    })
+    await makeVehicle({
+      operatorId: a.id,
+      classId: klass.id,
+      pickupLocationId: kyoto.id,
+      name: 'Kyoto Car',
+    })
+  }
+
+  it('narrows the flat results to a selected prefecture (node + descendants)', async () => {
+    await seedTwoRegions()
+    const data = await ok(
+      await service.search(PUBLIC_CONTEXT, { from: FROM, to: TO, regionId: 'reg_osaka' }),
+    )
+    expect(data.items.map((i) => (i.kind === 'SPECIFIC' ? i.name : null))).toEqual(['Osaka Car'])
+  })
+
+  it('bounds the availability scan to the in-region storefronts, not the whole fleet (#651 §1c)', async () => {
+    const a = await makeOperator('A Rentals', 'a')
+    const klass = await makeClass({ operatorId: a.id, acrissCode: 'CCAR' })
+    const namba = await makeLocation({ operatorId: a.id, name: 'Namba', regionId: 'reg_namba' })
+    const kyoto = await makeLocation({
+      operatorId: a.id,
+      name: 'Kyoto Station',
+      regionId: 'reg_kyoto_station',
+    })
+    await makeVehicle({ operatorId: a.id, classId: klass.id, pickupLocationId: namba.id })
+    await makeVehicle({ operatorId: a.id, classId: klass.id, pickupLocationId: kyoto.id })
+
+    const recording = new RecordingAvailabilityRepository(
+      new InMemoryAvailabilityRepository(vehicleRepo, bookingRepo),
+    )
+    const scoped = new FlatSearchService(
+      new InMemoryStorefrontRepository(locationRepo, operatorRepo),
+      recording,
+      classRepo,
+      new InMemoryRegionRepository(REGIONS),
+    )
+
+    await scoped.search(PUBLIC_CONTEXT, { from: FROM, to: TO, regionId: 'reg_osaka' })
+
+    expect(recording.lastFilters?.locationIds).toEqual([namba.id])
+  })
+
+  it('returns nothing for an unknown regionId (not the whole catalog)', async () => {
+    await seedTwoRegions()
+    const data = await ok(
+      await service.search(PUBLIC_CONTEXT, { from: FROM, to: TO, regionId: 'reg_nope' }),
+    )
+    expect(data.items).toEqual([])
   })
 })

@@ -1,5 +1,5 @@
 import { locations, operators } from '@kuruma/shared/db/schema'
-import { type SQL, and, asc, eq } from 'drizzle-orm'
+import { type SQL, and, asc, eq, inArray } from 'drizzle-orm'
 import type { CallerContext } from '../../middleware/auth'
 import { operatorReadScope } from '../../tenancy'
 import type { Storefront, StorefrontFilters, StorefrontRepository } from '../types'
@@ -26,6 +26,12 @@ export class DrizzleStorefrontRepository implements StorefrontRepository {
     const conditions: SQL[] = [eq(locations.status, 'ACTIVE')]
     if (scope.kind === 'operator') conditions.push(eq(locations.operatorId, scope.operatorId))
     if (filters?.pickupLocationId) conditions.push(eq(locations.id, filters.pickupLocationId))
+    // #394: an empty regionIds set means "no region matched" -> no storefronts.
+    // Short-circuit so we don't emit `IN ()` (and a null regionId never matches).
+    if (filters?.regionIds) {
+      if (filters.regionIds.length === 0) return []
+      conditions.push(inArray(locations.regionId, filters.regionIds))
+    }
 
     const rows = await this.db
       .select({ ...locationColumns, operatorName: operators.name })

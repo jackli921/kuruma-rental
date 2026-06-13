@@ -1,6 +1,6 @@
 {
-  "id": "d22e8d62-4cbc-4c1a-8955-13f937b794b9",
-  "prevId": "e8bea415-adab-4f66-94e8-3fb02abd7c74",
+  "id": "6570b618-f661-4d99-aadb-474d570d4f5d",
+  "prevId": "d22e8d62-4cbc-4c1a-8955-13f937b794b9",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -1586,6 +1586,166 @@
           ]
         }
       },
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.payment_anomalies": {
+      "name": "payment_anomalies",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "operatorId": {
+          "name": "operatorId",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "bookingId": {
+          "name": "bookingId",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "kind": {
+          "name": "kind",
+          "type": "payment_anomaly_kind",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "stripeEventId": {
+          "name": "stripeEventId",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "stripeCheckoutSessionId": {
+          "name": "stripeCheckoutSessionId",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "stripePaymentIntentId": {
+          "name": "stripePaymentIntentId",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "receivedAmountJpy": {
+          "name": "receivedAmountJpy",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "expectedAmountJpy": {
+          "name": "expectedAmountJpy",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "currency": {
+          "name": "currency",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "resolvedAt": {
+          "name": "resolvedAt",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "createdAt": {
+          "name": "createdAt",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "idx_payment_anomalies_operatorId": {
+          "name": "idx_payment_anomalies_operatorId",
+          "columns": [
+            {
+              "expression": "operatorId",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "idx_payment_anomalies_bookingId": {
+          "name": "idx_payment_anomalies_bookingId",
+          "columns": [
+            {
+              "expression": "bookingId",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "payment_anomalies_stripeEventId_unique": {
+          "name": "payment_anomalies_stripeEventId_unique",
+          "columns": [
+            {
+              "expression": "stripeEventId",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "payment_anomalies_operatorId_operators_id_fk": {
+          "name": "payment_anomalies_operatorId_operators_id_fk",
+          "tableFrom": "payment_anomalies",
+          "tableTo": "operators",
+          "columnsFrom": [
+            "operatorId"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "payment_anomalies_bookingId_bookings_id_fk": {
+          "name": "payment_anomalies_bookingId_bookings_id_fk",
+          "tableFrom": "payment_anomalies",
+          "tableTo": "bookings",
+          "columnsFrom": [
+            "bookingId"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
       "policies": {},
       "checkConstraints": {},
       "isRLSEnabled": false
@@ -3353,6 +3513,14 @@
         "SENT",
         "FAILED",
         "DEAD"
+      ]
+    },
+    "public.payment_anomaly_kind": {
+      "name": "payment_anomaly_kind",
+      "schema": "public",
+      "values": [
+        "DOUBLE_PAYMENT",
+        "AMOUNT_MISMATCH"
       ]
     },
     "public.payment_event_status": {

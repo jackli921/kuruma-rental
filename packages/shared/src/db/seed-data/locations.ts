@@ -19,6 +19,7 @@ export type DemoLocation = Pick<
   | 'timezone'
   | 'latitude'
   | 'longitude'
+  | 'regionId'
 > & {
   readonly id: string
   readonly operatorId: string
@@ -30,6 +31,9 @@ export type DemoLocation = Pick<
   // pins; refine if needed. Real coords so the search map demos with real pins.
   readonly latitude: number
   readonly longitude: number
+  // #394 deepest (area) region node this location sits in. Slug id resolved
+  // through seedId() in seed.ts, mirroring operatorId.
+  readonly regionId: string
 }
 
 const DEFAULT_TURNAROUND_MINUTES = 2880
@@ -39,6 +43,7 @@ export const DEMO_LOCATIONS: readonly DemoLocation[] = [
   // Best Car Rental — central Osaka + airport
   {
     id: 'loc_best_namba',
+    regionId: 'reg_namba',
     operatorId: 'op_best_car_rental',
     name: 'Namba',
     address: '2-10-70 Nanba, Chuo-ku, Osaka 542-0076',
@@ -50,6 +55,7 @@ export const DEMO_LOCATIONS: readonly DemoLocation[] = [
   },
   {
     id: 'loc_best_shin_osaka',
+    regionId: 'reg_shin_osaka',
     operatorId: 'op_best_car_rental',
     name: 'Shin-Osaka',
     address: '5-16-1 Nishinakajima, Yodogawa-ku, Osaka 532-0011',
@@ -61,6 +67,7 @@ export const DEMO_LOCATIONS: readonly DemoLocation[] = [
   {
     // Airport branch turns cars faster — demo of per-location turnaround override.
     id: 'loc_best_kix',
+    regionId: 'reg_kix',
     operatorId: 'op_best_car_rental',
     name: 'Kansai Airport (KIX)',
     address: '1 Senshukukokita, Izumisano, Osaka 549-0001',
@@ -72,6 +79,7 @@ export const DEMO_LOCATIONS: readonly DemoLocation[] = [
   // Kansai Drive — Osaka/Kobe
   {
     id: 'loc_kansai_umeda',
+    regionId: 'reg_umeda',
     operatorId: 'op_kansai_drive',
     name: 'Umeda',
     address: '3-1-1 Umeda, Kita-ku, Osaka 530-0001',
@@ -82,6 +90,7 @@ export const DEMO_LOCATIONS: readonly DemoLocation[] = [
   },
   {
     id: 'loc_kansai_tennoji',
+    regionId: 'reg_tennoji',
     operatorId: 'op_kansai_drive',
     name: 'Tennoji',
     address: '10-48 Hidenin-cho, Tennoji-ku, Osaka 543-0055',
@@ -92,6 +101,7 @@ export const DEMO_LOCATIONS: readonly DemoLocation[] = [
   },
   {
     id: 'loc_kansai_sannomiya',
+    regionId: 'reg_sannomiya',
     operatorId: 'op_kansai_drive',
     name: 'Kobe Sannomiya',
     address: '1-8-1 Kumoidori, Chuo-ku, Kobe 651-0096',
@@ -103,6 +113,7 @@ export const DEMO_LOCATIONS: readonly DemoLocation[] = [
   // Sakura Mobility — Kyoto/Nara + Osaka Castle
   {
     id: 'loc_sakura_kyoto',
+    regionId: 'reg_kyoto_station',
     operatorId: 'op_sakura_mobility',
     name: 'Kyoto Station',
     address: 'Higashishiokoji-cho, Shimogyo-ku, Kyoto 600-8216',
@@ -113,6 +124,7 @@ export const DEMO_LOCATIONS: readonly DemoLocation[] = [
   },
   {
     id: 'loc_sakura_nara',
+    regionId: 'reg_nara_area',
     operatorId: 'op_sakura_mobility',
     name: 'Nara',
     address: '1-1 Sanjohoncho, Nara 630-8122',
@@ -123,6 +135,7 @@ export const DEMO_LOCATIONS: readonly DemoLocation[] = [
   },
   {
     id: 'loc_sakura_osaka_castle',
+    regionId: 'reg_osaka_castle',
     operatorId: 'op_sakura_mobility',
     name: 'Osaka Castle',
     address: '1-1 Osakajo, Chuo-ku, Osaka 540-0002',

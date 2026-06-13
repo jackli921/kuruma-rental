@@ -33,6 +33,7 @@ import {
   DrizzlePaymentAnomalyRepository,
   DrizzlePaymentEventRepository,
   DrizzleProviderInviteRepository,
+  DrizzleRegionRepository,
   DrizzleRenterDocumentRepository,
   DrizzleStatsRepository,
   DrizzleStorefrontRepository,
@@ -64,6 +65,7 @@ import {
   InMemoryPaymentAnomalyRepository,
   InMemoryPaymentEventRepository,
   InMemoryProviderInviteRepository,
+  InMemoryRegionRepository,
   InMemoryRenterDocumentRepository,
   InMemoryStatsRepository,
   InMemoryStorefrontRepository,
@@ -97,6 +99,7 @@ import type {
   PaymentEventRepository,
   PhotoStorage,
   ProviderInviteRepository,
+  RegionRepository,
   RenterDocumentRepository,
   RunInTransaction,
   RunOperatorGrant,
@@ -130,6 +133,7 @@ import { createPaymentAnomalyRoutes } from './routes/payment-anomalies'
 import { createPaymentRoutes } from './routes/payments'
 import { createProviderInviteRoutes } from './routes/provider-invites'
 import { rateLimitByIp } from './routes/rate-limit'
+import { createRegionRoutes } from './routes/regions'
 import { createFlatSearchRoutes } from './routes/search'
 import { createStatsRoutes } from './routes/stats'
 import { createStorefrontRoutes } from './routes/storefronts'
@@ -154,7 +158,6 @@ import { FleetOverviewService } from './services/fleet-overview'
 import { NominatimGeocoder } from './services/geocoding/nominatim-geocoder'
 import { ThrottledGeocoder } from './services/geocoding/throttled-geocoder'
 import type { Geocoder } from './services/geocoding/types'
-import { GoogleTranslationProvider } from './services/google-translation-provider'
 import { InsuranceOptionService } from './services/insurance-option'
 import { LocationService } from './services/location'
 import { MaintenanceService } from './services/maintenance'
@@ -172,7 +175,7 @@ import { ProviderInviteService } from './services/provider-invite'
 import { RenterDocumentService } from './services/renter-document'
 import { StorefrontDetailService } from './services/storefront-detail'
 import { StorefrontSearchService } from './services/storefront-search'
-import type { TranslationProvider } from './services/translation-provider'
+import { createTranslationProvider } from './services/translation-provider-factory'
 import { VehicleClassService } from './services/vehicle-class'
 import { VehicleClassAvailabilityService } from './services/vehicle-class-availability'
 import { VehicleDetailService } from './services/vehicle-detail'
@@ -203,6 +206,7 @@ export function createApp(overrides?: AppOverrides) {
   let feeScheduleRepo: FeeScheduleRepository
   let notificationLogRepo: NotificationLogRepository
   let storefrontRepo: StorefrontRepository
+  let regionRepo: RegionRepository
   let paymentEventRepo: PaymentEventRepository
   let paymentAnomalyRepo: PaymentAnomalyRepository
   let providerInviteRepo: ProviderInviteRepository
@@ -271,6 +275,7 @@ export function createApp(overrides?: AppOverrides) {
     notificationLogRepo = overrides.notificationLogRepo ?? new InMemoryNotificationLogRepository()
     storefrontRepo =
       overrides.storefrontRepo ?? new InMemoryStorefrontRepository(locationRepo, operatorRepo)
+    regionRepo = overrides.regionRepo ?? new InMemoryRegionRepository()
     paymentEventRepo = overrides.paymentEventRepo ?? new InMemoryPaymentEventRepository()
     paymentAnomalyRepo = overrides.paymentAnomalyRepo ?? new InMemoryPaymentAnomalyRepository()
     providerInviteRepo = overrides.providerInviteRepo ?? new InMemoryProviderInviteRepository()
@@ -303,6 +308,7 @@ export function createApp(overrides?: AppOverrides) {
     feeScheduleRepo = new DrizzleFeeScheduleRepository(db)
     notificationLogRepo = new DrizzleNotificationLogRepository(db)
     storefrontRepo = new DrizzleStorefrontRepository(db)
+    regionRepo = new DrizzleRegionRepository(db)
     paymentEventRepo = new DrizzlePaymentEventRepository(db)
     paymentAnomalyRepo = new DrizzlePaymentAnomalyRepository(db)
     providerInviteRepo = new DrizzleProviderInviteRepository(db)
@@ -386,6 +392,7 @@ export function createApp(overrides?: AppOverrides) {
     feeScheduleRepo = new InMemoryFeeScheduleRepository()
     notificationLogRepo = new InMemoryNotificationLogRepository()
     storefrontRepo = new InMemoryStorefrontRepository(locationRepo, operatorRepo)
+    regionRepo = new InMemoryRegionRepository()
     paymentEventRepo = new InMemoryPaymentEventRepository()
     paymentAnomalyRepo = new InMemoryPaymentAnomalyRepository()
     providerInviteRepo = new InMemoryProviderInviteRepository()
@@ -394,27 +401,7 @@ export function createApp(overrides?: AppOverrides) {
       fn({ memberships: operatorMembershipRepo, users: userRepo, invites: providerInviteRepo })
   }
 
-  // Translation provider: real Google when the key is set. In production
-  // without a key, a sentinel provider throws on first use (not at boot,
-  // so unrelated tests can still run createApp). The stub is dev-only
-  // so a secret drift can't ship working translations silently.
-  const translationProvider: TranslationProvider = (() => {
-    const key = process.env.GOOGLE_TRANSLATE_API_KEY
-    if (key) return new GoogleTranslationProvider(key)
-    if (process.env.NODE_ENV === 'production') {
-      return {
-        translate: async () => {
-          throw new Error('GOOGLE_TRANSLATE_API_KEY not configured')
-        },
-      }
-    }
-    return {
-      translate: async (text, source, targetLanguage) => ({
-        translatedText: `[${targetLanguage}] ${text}`,
-        detectedLanguage: source ?? targetLanguage,
-      }),
-    }
-  })()
+  const translationProvider = createTranslationProvider()
 
   // Outbound email: real Resend when the key is set. In production without a key,
   // a sentinel throws on first use (not at boot). In dev, a console stub logs the
@@ -663,6 +650,7 @@ export function createApp(overrides?: AppOverrides) {
     storefrontRepo,
     availabilityRepo,
     vehicleClassRepo,
+    regionRepo,
   )
   const storefrontDetailService = new StorefrontDetailService(
     storefrontRepo,
@@ -675,6 +663,7 @@ export function createApp(overrides?: AppOverrides) {
     storefrontRepo,
     availabilityRepo,
     vehicleClassRepo,
+    regionRepo,
   )
 
   // Chain .route() calls so TypeScript infers the full route type tree.
@@ -711,6 +700,7 @@ export function createApp(overrides?: AppOverrides) {
     )
     .route('/', createFlatSearchRoutes(flatSearchService, publicCatalogLimiter))
     .route('/', createProviderInviteRoutes(providerInviteService, publicCatalogLimiter))
+    .route('/', createRegionRoutes(regionRepo))
     .route('/', createVehicleRoutes(vehicleRepo, maintenanceService, resolveWriteOperatorId))
     .route(
       '/',

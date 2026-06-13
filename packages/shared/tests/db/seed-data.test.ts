@@ -8,6 +8,7 @@ import {
   DEMO_INSURANCE_OPTIONS,
   DEMO_LOCATIONS,
   DEMO_OPERATORS,
+  DEMO_REGIONS,
   DEMO_RENTERS,
   DEMO_VEHICLES,
   DEMO_VEHICLE_CLASSES,
@@ -105,6 +106,66 @@ describe('seed-data demo locations (slice 8 §3.2)', () => {
       (l) => l.defaultTurnaroundMinutes >= 60 && l.defaultTurnaroundMinutes <= 180,
     )
     expect(central.length).toBeGreaterThanOrEqual(1)
+  })
+})
+
+// #394 — hierarchical region taxonomy (prefecture -> city -> area, adjacency
+// list). Platform-global reference data: no operatorId. Demo seed scope is
+// Kansai only — every region node must contain a seeded location, so we seed the
+// four prefectures that own the 9 demo locations and nothing else (§3 seed-scope).
+describe('seed-data demo regions (#394)', () => {
+  const regionsById = new Map(DEMO_REGIONS.map((r) => [r.id, r]))
+  const parentIds = new Set(
+    DEMO_REGIONS.map((r) => r.parentId).filter((p): p is string => p !== null),
+  )
+
+  it('has unique region ids', () => {
+    expect(new Set(DEMO_REGIONS.map((r) => r.id)).size).toBe(DEMO_REGIONS.length)
+  })
+
+  it('points every non-root parentId at a defined region', () => {
+    for (const r of DEMO_REGIONS) {
+      if (r.parentId !== null) expect(regionsById.has(r.parentId)).toBe(true)
+    }
+  })
+
+  it('resolves every region to a prefecture root, with no cycles', () => {
+    for (const start of DEMO_REGIONS) {
+      const seen = new Set<string>()
+      let node: (typeof DEMO_REGIONS)[number] | undefined = start
+      while (node && node.parentId !== null) {
+        expect(seen.has(node.id)).toBe(false) // a repeat = cycle
+        seen.add(node.id)
+        node = regionsById.get(node.parentId)
+      }
+      expect(node).toBeDefined() // chain never dangled
+      expect(node?.parentId).toBeNull() // terminated at a root
+    }
+  })
+
+  it('roots are exactly the four Kansai prefectures (demo seed scope §3)', () => {
+    const roots = DEMO_REGIONS.filter((r) => r.parentId === null)
+      .map((r) => r.nameEn)
+      .sort()
+    expect(roots).toEqual(['Hyogo', 'Kyoto', 'Nara', 'Osaka'])
+  })
+
+  it('gives every region a non-empty trilingual name (nameEn/nameJa/nameZh)', () => {
+    for (const r of DEMO_REGIONS) {
+      expect(r.nameEn.length).toBeGreaterThan(0)
+      expect(r.nameJa.length).toBeGreaterThan(0)
+      expect(r.nameZh.length).toBeGreaterThan(0)
+    }
+  })
+
+  it('maps every location to a leaf (area) region (locations.regionId FK, #394)', () => {
+    for (const loc of DEMO_LOCATIONS) {
+      // FK resolves to a defined region...
+      expect(regionsById.has(loc.regionId)).toBe(true)
+      // ...and that region is a leaf: no other region descends from it, so it is
+      // the deepest (area) node, per "region_id points at the deepest node".
+      expect(parentIds.has(loc.regionId)).toBe(false)
+    }
   })
 })
 

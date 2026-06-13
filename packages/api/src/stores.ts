@@ -251,9 +251,25 @@ export interface Location {
   operatingHours: LocationOperatingHours
   timezone: string
   defaultTurnaroundMinutes: number
+  /** #394 deepest (area) region node, or null (not-yet-assigned, NOT NULL
+   *  deferred — D1). Drives the recursive-descendant storefront filter. */
+  regionId: string | null
   status: 'ACTIVE' | 'ARCHIVED'
   createdAt: Date
   updatedAt: Date
+}
+
+export interface Region {
+  id: string
+  /** Self-ref adjacency edge; null = a root (a prefecture). #394. */
+  parentId: string | null
+  /** Trilingual names — the API is locale-agnostic; the web client picks one
+   *  by route locale (renter UI is en/ja/zh). */
+  nameEn: string
+  nameJa: string
+  nameZh: string
+  /** Stable ordering within a level for the cascading dropdowns. */
+  sortOrder: number
 }
 
 export interface InsuranceOption {

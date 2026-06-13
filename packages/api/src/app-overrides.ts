@@ -20,6 +20,7 @@ import type {
   PaymentEventRepository,
   PhotoStorage,
   ProviderInviteRepository,
+  RegionRepository,
   RenterDocumentRepository,
   StatsRepository,
   StorefrontRepository,
@@ -61,6 +62,7 @@ export type AppOverrides = {
   feeScheduleRepo?: FeeScheduleRepository
   notificationLogRepo?: NotificationLogRepository
   storefrontRepo?: StorefrontRepository
+  regionRepo?: RegionRepository
   paymentEventRepo?: PaymentEventRepository
   paymentAnomalyRepo?: PaymentAnomalyRepository
   providerInviteRepo?: ProviderInviteRepository
