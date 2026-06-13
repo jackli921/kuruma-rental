@@ -1,126 +1,111 @@
-import { formatVehicleRate } from '@/lib/format'
-import type { OperatorFleetVehicle, VehicleStatus } from '@/vite/operator-fleet/api'
-import { type ExpiryStatus, computeExpiryStatus } from '@kuruma/shared/lib/expiry'
-import { CarFront } from 'lucide-react'
+import { Button } from '@/components/ui/button'
+import { type FleetFilterState, filterVehicles } from '@/lib/fleet-filters'
+import { BulkActionBar } from '@/vite/operator-fleet/BulkActionBar'
+import { EditVehicleSheet } from '@/vite/operator-fleet/EditVehicleSheet'
+import { FleetFilters } from '@/vite/operator-fleet/FleetFilters'
+import { FleetGrid } from '@/vite/operator-fleet/FleetGrid'
+import { FleetSummaryBar } from '@/vite/operator-fleet/FleetSummaryBar'
+import { FleetTable } from '@/vite/operator-fleet/FleetTable'
+import { FleetViewToggle } from '@/vite/operator-fleet/FleetViewToggle'
+import type { OperatorFleetVehicle, VehicleClassOption } from '@/vite/operator-fleet/api'
+import { useFleetViewMode } from '@/vite/operator-fleet/useFleetViewMode'
+import { CarFront, Plus } from 'lucide-react'
+import { useState } from 'react'
 import { useTranslations } from 'use-intl'
 
 interface OperatorFleetViewProps {
   readonly vehicles: readonly OperatorFleetVehicle[]
-  readonly locale: string
+  readonly classOptions: readonly VehicleClassOption[]
 }
 
-// Presentational fleet table + empty state. The route owns the loader /
-// useSuspenseQuery and the pending/error boundaries; this stays a pure function
-// of the resolved rows so it is unit-testable (FC/IS — the shell does I/O, this
-// renders). The CRUD / filters / bulk / photo affordances land as separate
-// controlled components in follow-up slices (#526) and are mounted here at
-// integration; this foundation ships the read-only list only.
-export function OperatorFleetView({ vehicles, locale: _locale }: OperatorFleetViewProps) {
+// Stateful fleet management container. The route owns the loader /
+// useSuspenseQuery and the pending/error boundaries; this owns the interaction
+// state (selection, filters, view mode, the edit sheet) and picks the row
+// (FleetTable) or grid (FleetGrid) presentation (#561). Decision logic stays in
+// the pure fleet-filters / fleet-grouping libs (FC/IS); this is the imperative
+// shell that holds UI state.
+export function OperatorFleetView({ vehicles, classOptions }: OperatorFleetViewProps) {
   const t = useTranslations('business.vehicles.fleet')
   const todayIso = new Date().toISOString().slice(0, 10)
+  const [view, setView] = useFleetViewMode()
+  const [selectedIds, setSelectedIds] = useState<readonly string[]>([])
+  const [filters, setFilters] = useState<FleetFilterState>({})
+  const [sheet, setSheet] = useState<{ vehicle: OperatorFleetVehicle | null } | null>(null)
 
-  if (vehicles.length === 0) {
-    return (
-      <div className="flex flex-col items-center justify-center rounded-xl border border-border py-20">
-        <CarFront className="mb-4 size-12 text-muted-foreground/30" />
-        <p className="text-lg text-muted-foreground">{t('empty')}</p>
-      </div>
-    )
-  }
+  const visibleVehicles = filterVehicles([...vehicles], filters)
+  const visibleIds = visibleVehicles.map((v) => v.id)
+  // Selection is reconciled against the visible rows: a row hidden by a filter
+  // drops out of the effective selection so a bulk action can never touch a row
+  // the operator can't see.
+  const effectiveSelectedIds = visibleIds.filter((id) => selectedIds.includes(id))
+  const clearSelection = () => setSelectedIds([])
+  const allSelected = visibleIds.length > 0 && effectiveSelectedIds.length === visibleIds.length
+  const someSelected = effectiveSelectedIds.length > 0 && !allSelected
+  const toggleAll = () => setSelectedIds(allSelected ? [] : visibleIds)
+  const toggleOne = (id: string) =>
+    setSelectedIds((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]))
+  const openEdit = (vehicle: OperatorFleetVehicle) => setSheet({ vehicle })
 
   return (
-    <div className="overflow-x-auto rounded-xl border border-border">
-      <table className="w-full text-left text-sm">
-        <thead className="border-b border-border bg-muted/40 text-muted-foreground">
-          <tr>
-            <th className="px-4 py-3 font-medium">{t('columns.vehicle')}</th>
-            <th className="px-4 py-3 font-medium">{t('columns.status')}</th>
-            <th className="px-4 py-3 text-right font-medium">{t('columns.seats')}</th>
-            <th className="px-4 py-3 text-right font-medium">{t('columns.luggage')}</th>
-            <th className="px-4 py-3 text-right font-medium">{t('columns.price')}</th>
-            <th className="px-4 py-3 font-medium">{t('columns.shaken')}</th>
-          </tr>
-        </thead>
-        <tbody>
-          {vehicles.map((v) => (
-            <tr
-              key={v.id}
-              className="border-b border-border transition-colors last:border-0 hover:bg-muted/40"
-            >
-              <td className="px-4 py-3">
-                <div className="font-medium">{v.name}</div>
-                <div className="text-xs text-muted-foreground">
-                  <span>{v.licensePlate ?? t('none')}</span>
-                  {v.make != null && (
-                    <span>{` · ${[v.make, v.model, v.year].filter(Boolean).join(' ')}`}</span>
-                  )}
-                </div>
-              </td>
-              <td className="px-4 py-3">
-                <StatusPill status={v.status} label={t(`status.${v.status}`)} />
-              </td>
-              <td className="px-4 py-3 text-right tabular-nums">{v.seats}</td>
-              <td className="px-4 py-3 text-right tabular-nums">
-                {v.luggageCapacity ?? t('none')}
-              </td>
-              <td className="px-4 py-3 text-right tabular-nums">{priceLabel(v, t)}</td>
-              <td className="px-4 py-3">
-                <ExpiryPill
-                  status={computeExpiryStatus(v.shakenExpiryDate, todayIso)}
-                  labels={{
-                    OK: t('expiry.OK'),
-                    EXPIRING_SOON: t('expiry.EXPIRING_SOON'),
-                    EXPIRED: t('expiry.EXPIRED'),
-                    UNKNOWN: t('expiry.UNKNOWN'),
-                  }}
-                />
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
+    <div className="space-y-6">
+      <div className="flex items-center justify-between gap-3">
+        <FleetViewToggle value={view} onChange={setView} />
+        <Button onClick={() => setSheet({ vehicle: null })}>
+          <Plus className="size-4" />
+          {t('addVehicle')}
+        </Button>
+      </div>
+
+      {vehicles.length === 0 ? (
+        <div className="flex flex-col items-center justify-center rounded-xl border border-border py-20">
+          <CarFront className="mb-4 size-12 text-muted-foreground/30" />
+          <p className="text-lg text-muted-foreground">{t('empty')}</p>
+        </div>
+      ) : (
+        <>
+          <FleetSummaryBar vehicles={vehicles} todayIso={todayIso} />
+          <div className="flex flex-col gap-6 lg:flex-row">
+            <aside className="lg:w-64 lg:shrink-0">
+              <FleetFilters vehicles={vehicles} value={filters} onChange={setFilters} />
+            </aside>
+            {view === 'grid' ? (
+              <FleetGrid
+                vehicles={visibleVehicles}
+                classOptions={classOptions}
+                selectedIds={selectedIds}
+                onToggleSelect={toggleOne}
+                onEdit={openEdit}
+                todayIso={todayIso}
+              />
+            ) : (
+              <FleetTable
+                vehicles={visibleVehicles}
+                selectedIds={selectedIds}
+                allSelected={allSelected}
+                someSelected={someSelected}
+                onToggleAll={toggleAll}
+                onToggleOne={toggleOne}
+                onEdit={openEdit}
+                todayIso={todayIso}
+              />
+            )}
+          </div>
+        </>
+      )}
+
+      <BulkActionBar
+        selectedIds={effectiveSelectedIds}
+        onDone={clearSelection}
+        onClear={clearSelection}
+      />
+      <EditVehicleSheet
+        open={sheet !== null}
+        vehicle={sheet?.vehicle ?? null}
+        onOpenChange={(next) => {
+          if (!next) setSheet(null)
+        }}
+        onSaved={() => setSheet(null)}
+      />
     </div>
   )
-}
-
-function priceLabel(v: OperatorFleetVehicle, t: (k: string) => string) {
-  return (
-    formatVehicleRate(v.dailyRateJpy, v.hourlyRateJpy, {
-      perDay: t('perDay'),
-      perHour: t('perHour'),
-    }) ?? t('none')
-  )
-}
-
-const STATUS_PILL: Record<VehicleStatus, string> = {
-  AVAILABLE: 'border-transparent bg-muted text-foreground',
-  MAINTENANCE: 'border-amber-300 text-amber-700 dark:text-amber-400',
-  RETIRED: 'border-transparent bg-muted text-muted-foreground',
-}
-
-function StatusPill({ status, label }: { status: VehicleStatus; label: string }) {
-  return (
-    <span
-      className={`inline-flex items-center rounded-full border px-2 py-0.5 text-xs font-medium ${STATUS_PILL[status]}`}
-    >
-      {label}
-    </span>
-  )
-}
-
-const EXPIRY_PILL: Record<ExpiryStatus, string> = {
-  OK: 'text-muted-foreground',
-  EXPIRING_SOON: 'text-amber-700 dark:text-amber-400',
-  EXPIRED: 'text-destructive font-medium',
-  UNKNOWN: 'text-muted-foreground',
-}
-
-function ExpiryPill({
-  status,
-  labels,
-}: {
-  status: ExpiryStatus
-  labels: Record<ExpiryStatus, string>
-}) {
-  return <span className={`text-xs ${EXPIRY_PILL[status]}`}>{labels[status]}</span>
 }

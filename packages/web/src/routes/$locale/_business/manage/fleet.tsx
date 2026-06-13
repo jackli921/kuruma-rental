@@ -1,6 +1,9 @@
 import { PageSkeleton } from '@/vite/PageSkeleton'
 import { OperatorFleetView } from '@/vite/operator-fleet/OperatorFleetView'
-import { operatorFleetQueryOptions } from '@/vite/operator-fleet/api'
+import {
+  operatorFleetQueryOptions,
+  vehicleClassOptionsQueryOptions,
+} from '@/vite/operator-fleet/api'
 import { useSuspenseQuery } from '@tanstack/react-query'
 import { type ErrorComponentProps, createFileRoute, useRouter } from '@tanstack/react-router'
 import { useTranslations } from 'use-intl'
@@ -11,8 +14,16 @@ import { useTranslations } from 'use-intl'
 // prefetches into the query cache (no FOUC); the component reads the same
 // options via useSuspenseQuery. This foundation ships the read-only list; the
 // CRUD / filters / bulk / photo slices are mounted here at integration (#526).
+// The loader also prefetches the operator's vehicle-class options so the grid
+// view (#561) can group by class with no "Unassigned" flash, and so the edit
+// sheet's class dropdown is a warm-cache read — both behind this route's
+// pendingComponent rather than each component owning its own loading state.
 export const Route = createFileRoute('/$locale/_business/manage/fleet')({
-  loader: ({ context }) => context.queryClient.ensureQueryData(operatorFleetQueryOptions()),
+  loader: ({ context }) =>
+    Promise.all([
+      context.queryClient.ensureQueryData(operatorFleetQueryOptions()),
+      context.queryClient.ensureQueryData(vehicleClassOptionsQueryOptions()),
+    ]),
   pendingComponent: PageSkeleton,
   errorComponent: OperatorFleetError,
   component: OperatorFleetRoute,
@@ -20,8 +31,8 @@ export const Route = createFileRoute('/$locale/_business/manage/fleet')({
 
 function OperatorFleetRoute() {
   const t = useTranslations('business.vehicles.fleet')
-  const { locale } = Route.useParams()
   const { data: vehicles } = useSuspenseQuery(operatorFleetQueryOptions())
+  const { data: classOptions } = useSuspenseQuery(vehicleClassOptionsQueryOptions())
 
   return (
     <main className="flex-1 px-4 py-10 sm:px-6 lg:px-8">
@@ -30,7 +41,7 @@ function OperatorFleetRoute() {
           <h1 className="text-3xl font-bold tracking-tight sm:text-4xl">{t('title')}</h1>
           <p className="mt-2 text-lg text-muted-foreground">{t('subtitle')}</p>
         </header>
-        <OperatorFleetView vehicles={vehicles} locale={locale} />
+        <OperatorFleetView vehicles={vehicles} classOptions={classOptions} />
       </div>
     </main>
   )

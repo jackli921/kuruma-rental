@@ -50,4 +50,37 @@ describe('Geocoder DI — provider swap touches only index.ts (#531)', () => {
     })
     expect(geocode).toHaveBeenCalledWith('1-2-3 Namba, Osaka')
   })
+
+  test('an over-limit GEOCODE_LIMITER skips the lookup: location still saves, with no coords (#574)', async () => {
+    setupAuthEnv()
+    const vehicleRepo = new InMemoryVehicleRepository()
+    const bookingRepo = new InMemoryBookingRepository()
+    const availabilityRepo = new InMemoryAvailabilityRepository(vehicleRepo, bookingRepo)
+    const geocode = vi.fn(async () => ({ lat: 34.6937, lng: 135.5023 }))
+    // Native CF binding shape (limit({ key }) → { success }); index.ts adapts it.
+    const geocodeLimiter = { limit: vi.fn(async () => ({ success: false })) }
+    const app = createApp({
+      vehicleRepo,
+      bookingRepo,
+      availabilityRepo,
+      geocoder: { geocode },
+      geocodeLimiter,
+    })
+
+    const res = await app.request('/locations', {
+      method: 'POST',
+      headers: await ownerHeaders('op_a'),
+      body: JSON.stringify({ name: 'Namba HQ', address: '1-2-3 Namba, Osaka' }),
+    })
+
+    expect(res.status).toBe(201)
+    const body = await res.json()
+    expect(body.data).toMatchObject({
+      coordinateSource: null,
+      latitude: null,
+      longitude: null,
+    })
+    expect(geocode).not.toHaveBeenCalled()
+    expect(geocodeLimiter.limit).toHaveBeenCalledWith({ key: 'geocode:global' })
+  })
 })
