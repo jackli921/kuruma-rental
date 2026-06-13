@@ -5,6 +5,7 @@ import postgres from 'postgres'
 import { createApp } from '../../packages/api/src/index'
 import {
   type Db,
+  DrizzleAddOnRepository,
   DrizzleAvailabilityRepository,
   DrizzleBookingRepository,
   DrizzleCustomerRepository,
@@ -73,6 +74,7 @@ const app = createApp({
   operatorRepo: new DrizzleOperatorRepository(db),
   locationRepo: new DrizzleLocationRepository(db),
   insuranceOptionRepo: new DrizzleInsuranceOptionRepository(db),
+  addOnRepo: new DrizzleAddOnRepository(db),
   feeScheduleRepo: new DrizzleFeeScheduleRepository(db),
   notificationLogRepo: new DrizzleNotificationLogRepository(db),
   storefrontRepo: new DrizzleStorefrontRepository(db),
