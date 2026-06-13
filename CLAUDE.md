@@ -120,13 +120,16 @@ bun run db:verify   # must show 3 green checks
 
 ---
 
-# Architecture Rules (Feature Modules)
+# Architecture Rules
 
-Feature code lives under `src/modules/<feature>/`. Canonical rules: `docs/architecture/modules.md`.
+Canonical rules: `docs/architecture/modules.md`.
 
-**Grandfather policy:** before non-trivial changes to code in `lib/` or `components/<feature>/`, land a migration PR first.
+- **`packages/api`** is layered MVC + DI: `routes/` → `services/` → `repositories/`, wired in `index.ts`. Import direction never goes backwards. Details in AGENTS.md ("API Layer Architecture").
+- **`packages/web`** organizes UI by feature under `src/modules/<feature>/`; import only from the `@/modules/<feature>` barrel.
 
-Enforcement: `bun run lint:size`, `bun run lint:modules`, `.husky/pre-commit`.
+**Grandfather policy (web):** before non-trivial changes to code in `lib/` or `components/<feature>/`, land a migration PR first.
+
+Enforcement: `bun run --filter @kuruma/api lint:boundaries` (api layers), `bun run lint:modules` (web barrels), `bun run lint:size` (file size), `.husky/pre-commit`.
 
 ---
 
