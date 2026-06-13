@@ -988,6 +988,7 @@
     "fromLabel": "取车日期与时间",
     "toLabel": "还车日期与时间",
     "submit": "搜索",
+    "classFilterLabel": "车型类别",
     "needDates": "选择取车和还车时间即可查看有空车的门店。",
     "empty": "所选时间内没有门店有可用车辆。",
     "fromDaily": "¥{price}起／天",

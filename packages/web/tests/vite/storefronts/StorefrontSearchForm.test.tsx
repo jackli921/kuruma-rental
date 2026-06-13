@@ -3,7 +3,8 @@
 // Here submit drives TanStack `navigate` instead of next-intl `router.push`.
 import { StorefrontSearchForm } from '@/vite/storefronts/StorefrontSearchForm'
 import { readPersistedRange } from '@/vite/storefronts/storage'
-import { cleanup, fireEvent, render } from '@testing-library/react'
+import { ACRISS_CODES } from '@kuruma/shared'
+import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { IntlProvider } from 'use-intl'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import en from '../../../messages/en.json'
@@ -11,7 +12,9 @@ import en from '../../../messages/en.json'
 const { mockNavigate } = vi.hoisted(() => ({ mockNavigate: vi.fn() }))
 vi.mock('@tanstack/react-router', () => ({ useNavigate: () => mockNavigate }))
 
-function renderForm(props: { defaultFrom?: string; defaultTo?: string } = {}) {
+function renderForm(
+  props: { defaultFrom?: string; defaultTo?: string; classFilter?: string | string[] } = {},
+) {
   return render(
     <IntlProvider locale="en" messages={en}>
       <StorefrontSearchForm {...props} />
@@ -67,5 +70,52 @@ describe('StorefrontSearchForm', () => {
     fireEvent.submit(container.querySelector('form') as HTMLFormElement)
 
     expect(readPersistedRange()).toEqual({ from: '2026-09-10T12:00', to: '2026-09-13T12:00' })
+  })
+
+  it('renders a selectable class chip for each ACRISS code, labeled from the acriss namespace', () => {
+    renderForm()
+
+    expect(screen.getAllByRole('checkbox')).toHaveLength(Object.keys(ACRISS_CODES).length)
+    expect(screen.getByRole('checkbox', { name: 'Compact' })).toBeInTheDocument()
+    expect(screen.getByRole('checkbox', { name: 'SUV' })).toBeInTheDocument()
+  })
+
+  it('pre-checks the chips named by the classFilter prop (round-trip from the URL)', () => {
+    renderForm({ classFilter: ['CCAR'] })
+
+    expect(screen.getByRole('checkbox', { name: 'Compact' })).toBeChecked()
+    expect(screen.getByRole('checkbox', { name: 'SUV' })).not.toBeChecked()
+  })
+
+  it('pushes the checked class codes as the repeatable class param on submit', () => {
+    const { container } = renderForm({
+      defaultFrom: '2026-07-01T10:00',
+      defaultTo: '2026-07-03T10:00',
+    })
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Compact' }))
+    fireEvent.click(screen.getByRole('checkbox', { name: 'SUV' }))
+
+    fireEvent.submit(container.querySelector('form') as HTMLFormElement)
+
+    expect(mockNavigate).toHaveBeenCalledWith({
+      to: '/$locale/search',
+      params: { locale: 'en' },
+      search: { from: '2026-07-01T10:00', to: '2026-07-03T10:00', class: ['CCAR', 'SUVR'] },
+    })
+  })
+
+  it('omits the class param when no chip is checked (clean URL)', () => {
+    const { container } = renderForm({
+      defaultFrom: '2026-07-01T10:00',
+      defaultTo: '2026-07-03T10:00',
+    })
+
+    fireEvent.submit(container.querySelector('form') as HTMLFormElement)
+
+    expect(mockNavigate).toHaveBeenCalledWith({
+      to: '/$locale/search',
+      params: { locale: 'en' },
+      search: { from: '2026-07-01T10:00', to: '2026-07-03T10:00' },
+    })
   })
 })
