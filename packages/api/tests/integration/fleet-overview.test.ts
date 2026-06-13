@@ -31,6 +31,7 @@ describe('fleet-overview is operator-scoped (Drizzle, real Postgres)', () => {
   const NOW = new Date('2027-09-10T12:00:00Z')
   let vehicleAId: string
   let vehicleBId: string
+  let retiredVehicleAId: string
 
   const ctxFor = (operatorId: string): CallerContext => ({
     userId: 'owner',
@@ -113,6 +114,32 @@ describe('fleet-overview is operator-scoped (Drizzle, real Postgres)', () => {
     })
     vehicleAId = await seedTenant(opAId, 'a')
     vehicleBId = await seedTenant(opBId, 'b')
+    // A RETIRED car for operator A (#600): the overview must still surface it.
+    // classId null is fine — vehicles.classId is nullable (unassigned vehicle).
+    const retired = await vehicleRepo.create(SYSTEM_CONTEXT, {
+      operatorId: opAId,
+      classId: null,
+      name: `FO Retired ${uniq}`,
+      description: null,
+      photos: [],
+      seats: 5,
+      transmission: 'AUTO',
+      fuelType: null,
+      licensePlate: null,
+      status: 'RETIRED',
+      minRentalHours: null,
+      maxRentalHours: null,
+      advanceBookingHours: null,
+      make: null,
+      model: null,
+      year: null,
+      color: null,
+      dailyRateJpy: DEFAULT_DAILY_RATE_JPY,
+      hourlyRateJpy: null,
+      shakenExpiryDate: null,
+      insuranceExpiryDate: null,
+    })
+    retiredVehicleAId = retired.id
   })
 
   afterAll(async () => {
@@ -153,5 +180,12 @@ describe('fleet-overview is operator-scoped (Drizzle, real Postgres)', () => {
     const ids = (await fleetRepo.findFleetOverview(SYSTEM_CONTEXT, NOW)).map((r) => r.id)
     expect(ids).toContain(vehicleAId)
     expect(ids).toContain(vehicleBId)
+  })
+
+  it('includes the operator’s RETIRED vehicles (#600 — parity with in-memory)', async () => {
+    const rows = await fleetRepo.findFleetOverview(ctxFor(opAId), NOW)
+    const retired = rows.find((r) => r.id === retiredVehicleAId)
+    expect(retired).toBeDefined()
+    expect(retired!.status).toBe('RETIRED')
   })
 })

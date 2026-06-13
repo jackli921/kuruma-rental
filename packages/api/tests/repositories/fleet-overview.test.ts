@@ -340,4 +340,26 @@ describe('InMemoryFleetOverviewRepository', () => {
     expect(second!.dailyRateJpy).toBeNull()
     expect(second!.hourlyRateJpy).toBe(1200)
   })
+
+  it('includes RETIRED vehicles so the operator Fleet page can still see and manage them (#600)', async () => {
+    // The Fleet page (OperatorFleetView) lists every status — RETIRED is a
+    // first-class filter facet and shows by default — so the overview must
+    // include retired cars. The production Drizzle repo already does; the
+    // in-memory repo must match it (parity asserted in the integration test).
+    await vehicleRepo.create(
+      SYSTEM_CONTEXT,
+      baseVehicleInput({ name: 'Active', status: 'AVAILABLE' }),
+    )
+    const retired = await vehicleRepo.create(
+      SYSTEM_CONTEXT,
+      baseVehicleInput({ name: 'Retired Car', status: 'RETIRED' }),
+    )
+
+    const overviews = await fleetRepo.findFleetOverview(SYSTEM_CONTEXT, FIXED_NOW)
+
+    expect(overviews).toHaveLength(2)
+    const retiredOverview = overviews.find((o) => o.id === retired.id)
+    expect(retiredOverview).toBeDefined()
+    expect(retiredOverview!.status).toBe('RETIRED')
+  })
 })
