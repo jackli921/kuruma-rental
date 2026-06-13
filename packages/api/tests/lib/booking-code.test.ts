@@ -21,11 +21,20 @@ describe('generateBookingCode', () => {
     expect(BOOKING_CODE_PATTERN.test('HACKED01')).toBe(false) // contains 0, 1
   })
 
-  it('generates 10k codes that all match the pattern and are unique', () => {
+  it('generates 10k well-formed codes with negligible collisions', () => {
     const codes = Array.from({ length: 10_000 }, () => generateBookingCode())
     for (const code of codes) {
       expect(code).toMatch(/^[2-9A-HJ-NP-Z]{8}$/)
     }
-    expect(new Set(codes).size).toBe(codes.length)
+    // Codes are crypto-random over a 32^8 (~2^40) space, so demanding ZERO
+    // collisions in 10k draws is a birthday-paradox flake (~1/22k runs, #672).
+    // Real uniqueness is the `bookingCode UNIQUE` constraint + regenerate-on-23505
+    // retry in booking.ts, not a generator guarantee. Tolerating <=1 collision keeps
+    // the false-failure probability ~1e-9. The real entropy guard is the per-code
+    // {8}-length/alphabet assertion above (any shrunk length or alphabet fails it
+    // deterministically); this count only catches a same-shape RNG whose effective
+    // range has collapsed.
+    const collisions = codes.length - new Set(codes).size
+    expect(collisions, 'unexpected booking-code collisions in 10k draws').toBeLessThanOrEqual(1)
   })
 })
