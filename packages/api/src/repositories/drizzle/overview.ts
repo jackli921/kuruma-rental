@@ -1,7 +1,7 @@
 import { bookings, vehicles } from '@kuruma/shared/db/schema'
 import type { OperatorOverview } from '@kuruma/shared/types/overview'
 import { and, count, eq, gte, inArray, ne } from 'drizzle-orm'
-import type { CallerContext } from '../../middleware/auth'
+import { type CallerContext, requireManagementRead } from '../../middleware/auth'
 import { bookingReadScope } from '../../tenancy'
 import type { OverviewRepository } from '../types'
 import type { Db } from './shared'
@@ -18,6 +18,10 @@ export class DrizzleOverviewRepository implements OverviewRepository {
   constructor(private readonly db: Db) {}
 
   async getOperatorOverview(ctx: CallerContext, now: Date): Promise<OperatorOverview> {
+    // Defence-in-depth (mirrors insurance/fees repos): reject RENTER/PARTNER
+    // here too, since bookingReadScope maps PARTNER to `all` — without this seal
+    // a PARTNER bypassing the route would read every operator's counts.
+    requireManagementRead(ctx)
     const scope = bookingReadScope(ctx)
     if (scope.kind === 'none' || scope.kind === 'renter') return { ...ZERO }
     const opId = scope.kind === 'operator' ? scope.operatorId : undefined

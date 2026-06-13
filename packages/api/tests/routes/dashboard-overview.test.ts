@@ -1,7 +1,7 @@
 import { Hono } from 'hono'
 import { describe, expect, it } from 'vitest'
 import { setupGlobalHandlers } from '../../src/error-handlers'
-import { SYSTEM_CONTEXT, type UserRole } from '../../src/middleware/auth'
+import { ForbiddenError, SYSTEM_CONTEXT, type UserRole } from '../../src/middleware/auth'
 import {
   InMemoryBookingRepository,
   InMemoryVehicleRepository,
@@ -120,6 +120,18 @@ describe('GET /dashboard/overview — auth', () => {
     const app = mount(vehicleRepo, bookingRepo, 'PARTNER')
     expect((await app.request('/dashboard/overview')).status).toBe(403)
   })
+})
+
+describe('InMemoryOverviewRepository — repo-layer seal (defence-in-depth)', () => {
+  it.each(['PARTNER', 'RENTER'] as const)(
+    'throws ForbiddenError for %s even if the route gate were bypassed',
+    async (role) => {
+      const { vehicleRepo, bookingRepo } = await seeded()
+      const repo = new InMemoryOverviewRepository(vehicleRepo, bookingRepo)
+      const ctx = { userId: `${role}-user`, role }
+      await expect(repo.getOperatorOverview(ctx, FUTURE)).rejects.toThrow(ForbiddenError)
+    },
+  )
 })
 
 describe('GET /dashboard/overview — operator scoping', () => {

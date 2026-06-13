@@ -1,5 +1,5 @@
 import type { OperatorOverview } from '@kuruma/shared/types/overview'
-import { type CallerContext, SYSTEM_CONTEXT } from '../../middleware/auth'
+import { type CallerContext, SYSTEM_CONTEXT, requireManagementRead } from '../../middleware/auth'
 import { bookingReadScope } from '../../tenancy'
 import type { BookingRepository, OverviewRepository, VehicleRepository } from '../types'
 
@@ -18,6 +18,10 @@ export class InMemoryOverviewRepository implements OverviewRepository {
   ) {}
 
   async getOperatorOverview(ctx: CallerContext, now: Date): Promise<OperatorOverview> {
+    // Defence-in-depth (mirrors insurance/fees repos): reject RENTER/PARTNER
+    // here too, since bookingReadScope maps PARTNER to `all` — without this seal
+    // a PARTNER bypassing the route would read every operator's counts.
+    requireManagementRead(ctx)
     const scope = bookingReadScope(ctx)
     // `none` (operator without operatorId) + `renter` never see operator data.
     if (scope.kind === 'none' || scope.kind === 'renter') return { ...ZERO }
