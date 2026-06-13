@@ -1,15 +1,23 @@
 import { ApiError } from '@/lib/api-error'
 import {
   type OperatorBookingDetailDto,
+  PENDING_BOOKINGS_BADGE_LIMIT,
   bookingEventsQueryOptions,
+  cancelBooking,
   fetchBookingEvents,
   fetchCalendarBookings,
   fetchOperatorBookingDetail,
   fetchOperatorBookings,
+  fetchPendingBookingsCount,
+  fetchSubstitutionCandidates,
   operatorBookingDetailQueryOptions,
   operatorBookingsQueryOptions,
   operatorCalendarQueryOptions,
   operatorRowFromDetail,
+  pendingBookingsCountQueryOptions,
+  substituteVehicle,
+  substitutionCandidatesQueryOptions,
+  updateBookingStatus,
 } from '@/vite/operator-bookings/api'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
@@ -398,6 +406,121 @@ describe('operatorCalendarQueryOptions', () => {
       'calendar',
       '2026-07-01',
       '2026-07-31',
+    ])
+  })
+})
+
+// #616: operator order actions — substitute / cancel / status + new-order badge.
+describe('operator order actions (#616)', () => {
+  const headersOf = (init: unknown) => (init as RequestInit).headers as Record<string, string>
+  const bodyOf = (init: unknown) => JSON.parse((init as RequestInit).body as string)
+
+  it('updateBookingStatus PATCHes /status with the CSRF token, body and credentials', async () => {
+    const fetchMock = vi.fn(async () =>
+      jsonResponse({ success: true, data: rawBooking({ status: 'ACTIVE' }) }),
+    )
+    vi.stubGlobal('fetch', fetchMock)
+
+    await updateBookingStatus('bk-1', 'ACTIVE', 'csrf-tok')
+
+    const [url, init] = fetchMock.mock.calls[0]!
+    expect(new URL(url as string, 'http://x').pathname).toBe('/api/bookings/bk-1/status')
+    expect((init as RequestInit).method).toBe('PATCH')
+    expect((init as RequestInit).credentials).toBe('include')
+    expect(headersOf(init)['X-CSRF-Token']).toBe('csrf-tok')
+    expect(bodyOf(init)).toEqual({ status: 'ACTIVE' })
+  })
+
+  it('substituteVehicle POSTs /substitute with newVehicleId + reason', async () => {
+    const fetchMock = vi.fn(async () => jsonResponse({ success: true, data: rawBooking() }))
+    vi.stubGlobal('fetch', fetchMock)
+
+    await substituteVehicle('bk-1', 'veh-2', 'maintenance', 'csrf-tok')
+
+    const [url, init] = fetchMock.mock.calls[0]!
+    expect(new URL(url as string, 'http://x').pathname).toBe('/api/bookings/bk-1/substitute')
+    expect(headersOf(init)['X-CSRF-Token']).toBe('csrf-tok')
+    expect(bodyOf(init)).toEqual({ newVehicleId: 'veh-2', reason: 'maintenance' })
+  })
+
+  it('substituteVehicle omits reason when null', async () => {
+    const fetchMock = vi.fn(async () => jsonResponse({ success: true, data: rawBooking() }))
+    vi.stubGlobal('fetch', fetchMock)
+
+    await substituteVehicle('bk-1', 'veh-2', null, 'csrf-tok')
+
+    expect(bodyOf(fetchMock.mock.calls[0]![1])).toEqual({ newVehicleId: 'veh-2' })
+  })
+
+  it('cancelBooking surfaces the booking and the fee tier from the envelope meta', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () =>
+        jsonResponse({
+          success: true,
+          data: rawBooking({ status: 'CANCELLED' }),
+          cancellation: { tier: 'FREE', feePercentage: 0, feeAmount: 0, refundAmount: 24000 },
+        }),
+      ),
+    )
+
+    const result = await cancelBooking('bk-1', 'csrf-tok')
+
+    expect(result.booking.status).toBe('CANCELLED')
+    expect(result.cancellation).toEqual({
+      tier: 'FREE',
+      feePercentage: 0,
+      feeAmount: 0,
+      refundAmount: 24000,
+    })
+  })
+
+  it('cancelBooking throws ApiError on a non-CONFIRMED 409', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => jsonResponse({ success: false, error: 'Cannot cancel' }, 409)),
+    )
+
+    await expect(cancelBooking('bk-1', 'csrf-tok')).rejects.toBeInstanceOf(ApiError)
+  })
+
+  it('fetchSubstitutionCandidates GETs the candidates endpoint and returns the list', async () => {
+    const fetchMock = vi.fn(async () =>
+      jsonResponse({ success: true, data: [{ id: 'veh-2', name: 'Toyota Aqua' }] }),
+    )
+    vi.stubGlobal('fetch', fetchMock)
+
+    const out = await fetchSubstitutionCandidates('bk-1')
+
+    expect(new URL(fetchMock.mock.calls[0]![0] as string, 'http://x').pathname).toBe(
+      '/api/bookings/bk-1/substitution-candidates',
+    )
+    expect(out).toEqual([{ id: 'veh-2', name: 'Toyota Aqua' }])
+  })
+
+  it('fetchPendingBookingsCount returns the CONFIRMED list length, capped by limit', async () => {
+    const fetchMock = vi.fn(async () =>
+      jsonResponse({ success: true, data: [rawBooking(), rawBooking()], nextCursor: null }),
+    )
+    vi.stubGlobal('fetch', fetchMock)
+
+    const count = await fetchPendingBookingsCount()
+
+    expect(count).toBe(2)
+    const parsed = new URL(fetchMock.mock.calls[0]![0] as string, 'http://x')
+    expect(parsed.searchParams.get('status')).toBe('CONFIRMED')
+    expect(parsed.searchParams.get('limit')).toBe(String(PENDING_BOOKINGS_BADGE_LIMIT))
+  })
+
+  it('keys candidates + pending-count under the operator-bookings prefix', () => {
+    expect(substitutionCandidatesQueryOptions('bk-1').queryKey).toEqual([
+      'operator-bookings',
+      'substitution-candidates',
+      'bk-1',
+    ])
+    expect(pendingBookingsCountQueryOptions().queryKey).toEqual([
+      'operator-bookings',
+      'pending-count',
     ])
   })
 })

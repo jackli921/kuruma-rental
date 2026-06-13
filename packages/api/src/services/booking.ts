@@ -19,6 +19,19 @@ import type {
 } from '../repositories/types'
 import type { Booking, BookingEvent } from '../stores'
 import type { BookingPostCommitDispatcher } from './booking-post-commit-dispatcher'
+import type {
+  BookingVerificationGate,
+  CancelResult,
+  CreateBookingInput,
+  CreateBookingResult,
+  StatusTransitionResult,
+  SubstituteResult,
+  SubstitutionCandidatesResult,
+} from './booking-results'
+
+// Re-exported so existing importers of these service-layer types keep their
+// `from '.../services/booking'` path after the #616 split into booking-results.ts.
+export type { CreateBookingInput, BookingVerificationGate } from './booking-results'
 
 /** Renter-safe operator projection attached to a single booking read (§4h). */
 export type BookingWithOperator = Booking & {
@@ -34,64 +47,8 @@ const DEFAULT_TURNAROUND_MINUTES = 2880 // 48h
 // A booking_code collision is ~2^-40 per attempt; a few retries is plenty.
 const MAX_BOOKING_CODE_ATTEMPTS = 3
 
-// Slice 6 (#392): the renter books a CONCRETE vehicle chosen in the storefront
-// (slice 5). operatorId / classId / assignedVehicleId / totalPrice are all
-// server-derived from that vehicle — never client fields (proposal §6.2, §4.1).
-export interface CreateBookingInput {
-  requestedVehicleId: string
-  pickupLocationId: string
-  dropoffLocationId: string
-  insuranceOptionId?: string | null
-  // Selected paid add-on ids (#460). Required at the service boundary (the
-  // validator defaults it to []); the route forwards parsed.data.addOnIds.
-  addOnIds: string[]
-  renterId: string
-  startAt: Date
-  endAt: Date
-  source: Booking['source']
-  externalId?: string | null
-  notes?: string | null
-  idempotencyKey?: string | null
-}
-
-export type CreateBookingResult =
-  | { ok: true; booking: Booking; status?: 200 }
-  | {
-      ok: false
-      status: 400 | 403 | 409
-      error: string | Record<string, string[]>
-      code?: string
-      details?: { required: number; actual: number }
-    }
-
-/**
- * Optional pre-transaction authorization gate (#459). When injected, `create`
- * runs it after idempotency replay and before the booking transaction; a denial
- * short-circuits with 403. BookingService stays decoupled from the document
- * domain — it only knows "there may be a gate" (DIP).
- */
-export type BookingVerificationGate = (
-  ctx: CallerContext,
-  input: CreateBookingInput,
-) => Promise<
-  { ok: true } | { ok: false; status: 403; error: string; code: 'DOCUMENT_VERIFICATION_REQUIRED' }
->
-
-export type SubstituteResult =
-  | { ok: true; booking: Booking }
-  | { ok: false; status: 400 | 404 | 409; error: string }
-
-export type StatusTransitionResult =
-  | { ok: true; booking: Booking }
-  | { ok: false; status: 400 | 404 | 409; error: string }
-
-export type CancelResult =
-  | {
-      ok: true
-      booking: Booking
-      cancellation: ReturnType<typeof calculateCancellationFee>
-    }
-  | { ok: false; status: 404 | 409; error: string }
+// One page covers an operator's fleet (~40-50 cars; the vehicles read caps at 100).
+const SUBSTITUTION_CANDIDATE_LIMIT = 100
 
 /**
  * Opt-in messaging hook. When supplied, every confirmed booking also creates
@@ -679,6 +636,57 @@ export class BookingService {
       this.vehicleClassRepo.findById(SYSTEM_CONTEXT, newClassId),
     ])
     return !!bookingClass?.acrissCode && bookingClass.acrissCode === newClass?.acrissCode
+  }
+
+  /**
+   * #616: the eligible replacement vehicles for the operator's substitute action —
+   * SAME store + SAME ACRISS class + AVAILABLE, minus the currently-assigned car.
+   * The eligibility rule mirrors substitute() so the picker never offers a vehicle
+   * the write would reject; it lives here (not the client) because the rule keys
+   * off the class ACRISS code, which the vehicle list response does not carry. The
+   * booking read is caller-scoped, so a cross-tenant id resolves to 404.
+   */
+  async substitutionCandidates(
+    ctx: CallerContext,
+    bookingId: string,
+  ): Promise<SubstitutionCandidatesResult> {
+    if (!this.vehicleRepo || !this.vehicleClassRepo) {
+      throw new Error('BookingService missing vehicle repos; check DI wiring')
+    }
+    const booking = await this.bookingRepo.findById(ctx, bookingId)
+    if (!booking) {
+      return { ok: false, status: 404, error: 'Booking not found' }
+    }
+
+    // An unmapped (null-ACRISS) booking class has no substitute target, matching
+    // sameAcrissClass()'s non-null requirement.
+    const bookingClass = await this.vehicleClassRepo.findById(SYSTEM_CONTEXT, booking.classId)
+    const acrissCode = bookingClass?.acrissCode
+    if (!acrissCode) {
+      return { ok: true, candidates: [] }
+    }
+
+    // The operator's own classes sharing that ACRISS code — multiple classIds may
+    // map to one code (schema allows a non-unique acrissCode), so collect the set.
+    const classes = await this.vehicleClassRepo.findAll(ctx)
+    const sameAcrissClassIds = new Set(
+      classes.filter((cls) => cls.acrissCode === acrissCode).map((cls) => cls.id),
+    )
+
+    const { data } = await this.vehicleRepo.findAll(ctx, {
+      status: 'AVAILABLE',
+      limit: SUBSTITUTION_CANDIDATE_LIMIT,
+    })
+    const candidates = data
+      .filter(
+        (v) =>
+          v.id !== booking.assignedVehicleId &&
+          (v.pickupLocationId ?? null) === booking.pickupLocationId &&
+          !!v.classId &&
+          sameAcrissClassIds.has(v.classId),
+      )
+      .map((v) => ({ id: v.id, name: v.name }))
+    return { ok: true, candidates }
   }
 
   async updateStatus(
