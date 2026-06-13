@@ -1,5 +1,6 @@
 import { formatJpy } from '@/lib/format'
 import { useTranslations } from 'use-intl'
+import { CancellationPolicy } from './CancellationPolicy'
 import type { ReservationAddOn } from './api'
 import type { ReservationEstimate } from './pricing'
 
@@ -8,6 +9,8 @@ interface ConfirmStepProps {
   readonly selectedAddOns: ReservationAddOn[]
   /** Name of the chosen insurance option, or null when coverage was declined. */
   readonly insuranceName: string | null
+  /** Pickup time — drives which cancellation tier is highlighted (#657). */
+  readonly pickupAt: Date
 }
 
 /**
@@ -16,7 +19,12 @@ interface ConfirmStepProps {
  * informational and not part of `totalPrice`. The note flags that the
  * authoritative charge (taxes, operator fees) is computed at payment (#461).
  */
-export function ConfirmStep({ estimate, selectedAddOns, insuranceName }: ConfirmStepProps) {
+export function ConfirmStep({
+  estimate,
+  selectedAddOns,
+  insuranceName,
+  pickupAt,
+}: ConfirmStepProps) {
   const t = useTranslations('reservation')
 
   return (
@@ -58,6 +66,7 @@ export function ConfirmStep({ estimate, selectedAddOns, insuranceName }: Confirm
         </div>
       </dl>
       <p className="text-sm text-muted-foreground">{t('confirm.note')}</p>
+      <CancellationPolicy pickupAt={pickupAt} />
     </section>
   )
 }

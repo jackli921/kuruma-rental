@@ -1,5 +1,9 @@
 import { describe, expect, test } from 'vitest'
-import { calculateCancellationFee } from '../../src/lib/cancellation-policy'
+import {
+  CANCELLATION_TIERS,
+  calculateCancellationFee,
+  getCancellationTier,
+} from '../../src/lib/cancellation-policy'
 
 describe('calculateCancellationFee', () => {
   const totalPrice = 10000 // ¥10,000
@@ -120,5 +124,50 @@ describe('calculateCancellationFee', () => {
 
     expect(result.feeAmount).toBe(0)
     expect(result.refundAmount).toBe(0)
+  })
+})
+
+describe('getCancellationTier', () => {
+  const pickupAt = new Date('2026-05-10T10:00:00Z')
+
+  test('72h+ before pickup → FREE', () => {
+    expect(getCancellationTier(pickupAt, new Date('2026-05-07T09:00:00Z'))).toBe('FREE') // 73h
+  })
+
+  test('48-72h before pickup → LOW', () => {
+    expect(getCancellationTier(pickupAt, new Date('2026-05-08T00:00:00Z'))).toBe('LOW') // 58h
+  })
+
+  test('24-48h before pickup → MEDIUM', () => {
+    expect(getCancellationTier(pickupAt, new Date('2026-05-09T00:00:00Z'))).toBe('MEDIUM') // 34h
+  })
+
+  test('< 24h before pickup → FULL', () => {
+    expect(getCancellationTier(pickupAt, new Date('2026-05-10T00:00:00Z'))).toBe('FULL') // 10h
+  })
+
+  test('after pickup → FULL', () => {
+    expect(getCancellationTier(pickupAt, new Date('2026-05-10T12:00:00Z'))).toBe('FULL') // 2h after
+  })
+
+  test('agrees with calculateCancellationFee.tier across tiers', () => {
+    for (const now of [
+      new Date('2026-05-07T09:00:00Z'),
+      new Date('2026-05-08T00:00:00Z'),
+      new Date('2026-05-09T00:00:00Z'),
+      new Date('2026-05-10T00:00:00Z'),
+    ]) {
+      expect(getCancellationTier(pickupAt, now)).toBe(
+        calculateCancellationFee(pickupAt, now, 1000).tier,
+      )
+    }
+  })
+})
+
+describe('CANCELLATION_TIERS', () => {
+  test('is the ordered FREE→LOW→MEDIUM→FULL schedule with the documented thresholds', () => {
+    expect(CANCELLATION_TIERS.map((t) => t.tier)).toEqual(['FREE', 'LOW', 'MEDIUM', 'FULL'])
+    expect(CANCELLATION_TIERS.map((t) => t.minHours)).toEqual([72, 48, 24, 0])
+    expect(CANCELLATION_TIERS.map((t) => t.feePercentage)).toEqual([0, 0.3, 0.7, 1])
   })
 })
