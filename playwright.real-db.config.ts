@@ -10,9 +10,14 @@ const API_PORT = 8788
 const BASE_URL = `http://localhost:${WEB_PORT}`
 const API_URL = `http://localhost:${API_PORT}`
 
-const AUTH_SECRET = process.env.AUTH_SECRET
-const DATABASE_URL = process.env.DATABASE_URL
-if (!AUTH_SECRET || !DATABASE_URL) {
+// knip (lint:deps) imports this module to resolve its entry points (webServer
+// command, setup project). It never runs the track, so skip the fail-fast guard
+// when statically analyzed — otherwise the import-time throw crashes knip before
+// it can traverse the graph (#708). lint:deps sets KNIP=1.
+const ANALYZING = process.env.KNIP === '1'
+const AUTH_SECRET = process.env.AUTH_SECRET ?? (ANALYZING ? '' : undefined)
+const DATABASE_URL = process.env.DATABASE_URL ?? (ANALYZING ? '' : undefined)
+if (AUTH_SECRET === undefined || DATABASE_URL === undefined) {
   throw new Error(
     'The real-DB e2e track needs AUTH_SECRET + DATABASE_URL (a seeded Neon branch). ' +
       'Run: AUTH_SECRET=<secret> DATABASE_URL=<neon-branch-url> bun run test:e2e:real-db',
