@@ -37,7 +37,12 @@ interface PageFinding {
 
 const findings: PageFinding[] = []
 
-async function capture(page: Page, name: string, url: string): Promise<void> {
+async function capture(
+  page: Page,
+  name: string,
+  url: string,
+  readySelector = 'main h1, h1',
+): Promise<void> {
   const httpErrors: string[] = []
   const consoleErrors: string[] = []
   const pageErrors: string[] = []
@@ -75,11 +80,12 @@ async function capture(page: Page, name: string, url: string): Promise<void> {
     await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 30_000 })
     // Let route-level lazy chunks + react-query fetches settle. On a cold Vite
     // dev server the FIRST route hit compiles its chunk on demand, so wait for
-    // the page's own <h1> to mount before judging it blank — networkidle alone
-    // races the compile + first cold-pool DB round-trip.
+    // the page's ready-selector (its <h1> by default) to mount before judging it
+    // blank — networkidle alone races the compile + first cold-pool DB round-trip.
+    // Pages without an <h1> (e.g. the trip-detail page) pass their own selector.
     await page.waitForLoadState('networkidle', { timeout: 15_000 }).catch(() => {})
     headingRendered = await page
-      .locator('main h1, h1')
+      .locator(readySelector)
       .first()
       .waitFor({ state: 'visible', timeout: 20_000 })
       .then(() => true)
@@ -88,7 +94,8 @@ async function capture(page: Page, name: string, url: string): Promise<void> {
   } catch (e) {
     pageErrors.push(`goto failed: ${(e as Error).message}`.slice(0, 300))
   }
-  if (!headingRendered) pageErrors.push('NO <h1> rendered within 20s (blank/stuck page)')
+  if (!headingRendered)
+    pageErrors.push(`NO "${readySelector}" rendered within 20s (blank/stuck page)`)
 
   const finalUrl = page.url().replace(/^https?:\/\/[^/]+/, '')
   await page.screenshot({ path: `${SHOTS_DIR}/${name}.png`, fullPage: true }).catch(() => {})
@@ -116,6 +123,19 @@ async function capture(page: Page, name: string, url: string): Promise<void> {
   expect.soft(finding.httpErrors, `${name} hit /api 4xx/5xx (e.g. operator 403)`).toEqual([])
   expect.soft(finding.consoleErrors, `${name} console errors (e.g. missing i18n key)`).toEqual([])
   expect.soft(finding.pageErrors, `${name} blank/stuck or threw`).toEqual([])
+}
+
+// The detail pages (#527 vehicle-detail, #610 trip-detail) are keyed by a UUID.
+// Read a REAL id from the same tenant-scoped API the list pages use — over the
+// operator session, through the /api proxy, so the id belongs to this tenant and
+// the tenant-scoped detail route resolves (a hardcoded UUID would rot when the
+// seed re-mints ids, and a foreign id would 404). Returns null only if the seed
+// gave this operator zero rows; the caller asserts that loudly rather than skip.
+async function firstId(page: Page, apiPath: string): Promise<string | null> {
+  const res = await page.request.get(apiPath)
+  if (!res.ok()) return null
+  const body = (await res.json()) as { data?: Array<{ id?: string }> }
+  return body.data?.[0]?.id ?? null
 }
 
 test.describe('#509 demo walkthrough — capture every page', () => {
@@ -152,7 +172,24 @@ test.describe('#509 demo walkthrough — capture every page', () => {
         .screenshot({ path: `${SHOTS_DIR}/03-op-fleet-grid.png`, fullPage: true })
         .catch(() => {})
     }
+    // #527 — vehicle-detail (calendar-lite + utilization). Operator session;
+    // fleet-overview is tenant-scoped since #594, so the first row is this
+    // operator's own car.
+    const vehicleId = await firstId(page, '/api/vehicles/fleet-overview')
+    expect(vehicleId, 'seed must provide an operator vehicle for #527 detail').toBeTruthy()
+    if (vehicleId) await capture(page, '03b-op-vehicle-detail', `/en/manage/fleet/${vehicleId}`)
+
     await capture(page, '04-op-bookings', '/en/manage/bookings')
+
+    // #610 — operator trip-detail page (hosts the substitution UI). Keyed by a
+    // real booking id from the tenant-scoped GET /bookings.
+    const bookingId = await firstId(page, '/api/bookings?expand=renter&limit=1')
+    expect(bookingId, 'seed must provide an operator booking for #610 trip-detail').toBeTruthy()
+    // This page has no <h1> — the booking code is a <p> and the timeline heading
+    // is an <h2>. Wait on that <h2> instead of the default h1 ready-selector.
+    if (bookingId)
+      await capture(page, '04b-op-trip-detail', `/en/manage/bookings/${bookingId}`, 'main h2')
+
     await capture(page, '05-op-classes', '/en/manage/classes')
     await capture(page, '06-op-insurance', '/en/manage/insurance')
     await capture(page, '07-op-fees', '/en/manage/fees')
