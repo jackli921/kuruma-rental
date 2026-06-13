@@ -79,6 +79,10 @@ export interface Booking {
   cancellationFee: number | null
   cancelledAt: Date | null
   idempotencyKey: string | null
+  // #613: renter liability-disclaimer consent, server-stamped at booking time.
+  // Null for staff/manual/Trip.com + historical bookings (no renter consent).
+  disclaimerAcknowledgedAt: Date | null
+  disclaimerTermsVersion: string | null
   createdAt: Date
   updatedAt: Date
 }

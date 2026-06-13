@@ -59,7 +59,9 @@ export function ReservationWizard({
     insuranceDailyPriceJpy: insurance?.dailyPriceJpy ?? null,
     addOnPricesJpy: selectedAddOns.map((addOn) => addOn.priceJpy),
   })
-  const bookingInput: CreateBookingInput = {
+  // `disclaimerAccepted` is intentionally absent — consent is a payment-step gate
+  // (#613), supplied by PaymentStep at submit, not a wizard selection.
+  const bookingInput: Omit<CreateBookingInput, 'disclaimerAccepted'> = {
     requestedVehicleId: vehicle.id,
     pickupLocationId: locationId,
     dropoffLocationId: locationId,

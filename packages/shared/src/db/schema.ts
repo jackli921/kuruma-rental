@@ -192,10 +192,12 @@ export const vehicleClasses = pgTable(
 export const locationStatusEnum = pgEnum('location_status', ['ACTIVE', 'ARCHIVED'])
 
 // Provenance of a location's lat/lng (#531). GEOCODED = derived from `address`
-// by the Geocoder; MANUAL = an operator-supplied pin that wins over geocoding.
-// Nullable column: null = no coords captured. Server-derived only — never
-// accepted from the client (the validators omit it).
-export const coordinateSourceEnum = pgEnum('coordinate_source', ['GEOCODED', 'MANUAL'])
+// by the Geocoder; MANUAL = an operator-supplied pin that wins over geocoding;
+// PENDING = geocoding was rate-limit-skipped (#601/#574 — coords still null, but
+// a retry will resolve them, so the bulk re-geocode can enumerate these).
+// Nullable column: null = no coords captured AND none pending (un-geocodable).
+// Server-derived only — never accepted from the client (the validators omit it).
+export const coordinateSourceEnum = pgEnum('coordinate_source', ['GEOCODED', 'MANUAL', 'PENDING'])
 
 // Operator-owned pickup/return storefronts (epic #385, slice 2 / #387).
 // Vehicles anchor to a pickup location; renter search (slice 5) returns
@@ -542,6 +544,16 @@ export const bookings = pgTable(
     cancellationFee: integer('cancellationFee'), // whole JPY, set on cancellation
     cancelledAt: timestamp('cancelledAt', { withTimezone: true, mode: 'date' }),
     idempotencyKey: text('idempotencyKey'),
+    // #613: renter liability-disclaimer (免责声明) consent recorded at booking time.
+    // Server-stamped when a renter accepts the terms at checkout (the IDP/license
+    // must be valid at pickup or the non-refundable order fails) — this replaces the
+    // dropped online document upload. Nullable: staff/manual/Trip.com + historical
+    // rows carry no renter consent. Version tracks the wording the renter agreed to.
+    disclaimerAcknowledgedAt: timestamp('disclaimerAcknowledgedAt', {
+      withTimezone: true,
+      mode: 'date',
+    }),
+    disclaimerTermsVersion: text('disclaimerTermsVersion'),
     createdAt: timestamp('createdAt', { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp('updatedAt', { withTimezone: true }).notNull().defaultNow(),
   },

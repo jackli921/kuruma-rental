@@ -10,10 +10,12 @@ import type { Booking } from '../../src/stores'
 // Fake Geocoders for the #531 write-decision matrix. The real adapter never
 // throws; `throwingGeocoder` proves the service is resilient even if a future
 // adapter (or a transient bug) lets one escape — a save must never be blocked.
+// `throttledGeocoder` is the #601/#574 rate-limit-skip path (retryable → PENDING).
 const hitGeocoder = (lat: number, lng: number): Geocoder => ({
-  geocode: async () => ({ lat, lng }),
+  geocode: async () => ({ status: 'ok', lat, lng }),
 })
-const missGeocoder: Geocoder = { geocode: async () => null }
+const missGeocoder: Geocoder = { geocode: async () => ({ status: 'notFound' }) }
+const throttledGeocoder: Geocoder = { geocode: async () => ({ status: 'throttled' }) }
 const throwingGeocoder: Geocoder = {
   geocode: async () => {
     throw new Error('geocoder exploded')
@@ -278,7 +280,7 @@ describe('LocationService', () => {
     const seed = (coords: {
       latitude: number | null
       longitude: number | null
-      coordinateSource: 'GEOCODED' | 'MANUAL' | null
+      coordinateSource: 'GEOCODED' | 'MANUAL' | 'PENDING' | null
     }) => repo.create({ ...createInput(opA, 'Namba'), ...coords })
 
     describe('create', () => {
@@ -339,6 +341,18 @@ describe('LocationService', () => {
         const result = await build(throwingGeocoder).create(ctxFor(opA), createInput(opA, 'Namba'))
         expect(result.ok).toBe(true)
         if (result.ok) expect(result.location.coordinateSource).toBeNull()
+      })
+
+      it('an address-only create that is throttle-skipped persists PENDING (retryable, #601)', async () => {
+        const result = await build(throttledGeocoder).create(ctxFor(opA), createInput(opA, 'Namba'))
+        expect(result.ok).toBe(true)
+        if (result.ok) {
+          // Distinguishable from a genuine miss (null): coords unknown for now, but
+          // a retry will resolve them — the bulk re-geocode enumerates PENDING.
+          expect(result.location.latitude).toBeNull()
+          expect(result.location.longitude).toBeNull()
+          expect(result.location.coordinateSource).toBe('PENDING')
+        }
       })
     })
 
@@ -409,6 +423,51 @@ describe('LocationService', () => {
           expect(result.location.latitude).toBeNull()
           expect(result.location.longitude).toBeNull()
           expect(result.location.coordinateSource).toBeNull()
+        }
+      })
+
+      it('a changed address that is throttle-skipped marks GEOCODED coords PENDING, not null (#601 F6)', async () => {
+        const loc = await seed({ latitude: 1, longitude: 2, coordinateSource: 'GEOCODED' })
+        const result = await build(throttledGeocoder).update(ctxFor(opA), loc.id, {
+          address: 'New address, Kyoto',
+        })
+        expect(result.ok).toBe(true)
+        if (result.ok) {
+          // The new address invalidates the stale pin, but unlike a genuine miss
+          // (which CLEARS to null) a throttle-skip is retryable → PENDING.
+          expect(result.location.latitude).toBeNull()
+          expect(result.location.longitude).toBeNull()
+          expect(result.location.coordinateSource).toBe('PENDING')
+        }
+      })
+
+      it('regeocode:true that is throttle-skipped on an UNCHANGED address still preserves valid coords', async () => {
+        const loc = await seed({ latitude: 1, longitude: 2, coordinateSource: 'GEOCODED' })
+        const result = await build(throttledGeocoder).update(ctxFor(opA), loc.id, {
+          regeocode: true,
+        })
+        expect(result.ok).toBe(true)
+        if (result.ok) {
+          // Address still supports the old pin — a throttle-skip must not downgrade
+          // valid GEOCODED coords to PENDING; only a stale pin becomes pending.
+          expect(result.location.latitude).toBe(1)
+          expect(result.location.coordinateSource).toBe('GEOCODED')
+        }
+      })
+
+      it('regeocode:true on an UNCHANGED address downgrades a PENDING pin to CLEARED on a genuine miss (#601)', async () => {
+        // A PENDING pin holds NO coords, so the "unchanged address preserves
+        // valid coords" guard doesn't apply — once a real lookup confirms a
+        // genuine miss, the address is un-geocodable and must CLEAR, not linger
+        // as forever-retryable PENDING the bulk re-geocode keeps re-trying.
+        const loc = await seed({ latitude: null, longitude: null, coordinateSource: 'PENDING' })
+        const result = await build(missGeocoder).update(ctxFor(opA), loc.id, {
+          regeocode: true,
+        })
+        expect(result.ok).toBe(true)
+        if (result.ok) {
+          expect(result.location.coordinateSource).toBeNull()
+          expect(result.location.latitude).toBeNull()
         }
       })
 

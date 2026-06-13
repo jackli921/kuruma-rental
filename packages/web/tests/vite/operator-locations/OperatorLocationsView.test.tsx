@@ -18,6 +18,7 @@ function location(overrides: Partial<OperatorLocation> = {}): OperatorLocation {
     timezone: 'Asia/Tokyo',
     defaultTurnaroundMinutes: 2880,
     status: 'ACTIVE',
+    coordinateSource: 'GEOCODED',
     createdAt: '2026-01-01T00:00:00.000Z',
     updatedAt: '2026-01-01T00:00:00.000Z',
     ...overrides,
@@ -98,6 +99,25 @@ describe('OperatorLocationsView', () => {
     renderView([location({ id: 'l4', status: 'ARCHIVED' })])
     expect(screen.getByRole('button', { name: en.archiveAction })).toBeDisabled()
   })
+
+  it('flags a throttle-skipped location with a "pin pending" badge (#601)', () => {
+    renderView([location({ id: 'lp', coordinateSource: 'PENDING' })])
+    expect(screen.getByText(en.pin.pending)).toBeInTheDocument()
+  })
+
+  it('flags a location with no geocode result as "no map pin" (#601)', () => {
+    renderView([location({ id: 'ln', coordinateSource: null })])
+    expect(screen.getByText(en.pin.missing)).toBeInTheDocument()
+  })
+
+  it.each(['GEOCODED', 'MANUAL'] as const)(
+    'shows no pin-state badge for a %s location (#601)',
+    (coordinateSource) => {
+      renderView([location({ id: 'lg', coordinateSource })])
+      expect(screen.queryByText(en.pin.pending)).not.toBeInTheDocument()
+      expect(screen.queryByText(en.pin.missing)).not.toBeInTheDocument()
+    },
+  )
 
   it('omits the edit/archive row actions in read-only mode (no handlers — bypass roles)', () => {
     render(

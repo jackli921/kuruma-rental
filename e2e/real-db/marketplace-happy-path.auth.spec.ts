@@ -109,6 +109,9 @@ test.describe('marketplace happy path — renter books, operator sees it (real D
 
       await renter.getByRole('button', { name: 'Continue to payment' }).click() // confirm → payment
       await expect(renter.getByRole('heading', { name: 'Confirm and reserve' })).toBeVisible()
+      // Reserve is gated on the liability-disclaimer consent (#613) — acknowledge
+      // before the instant-book submit, or the button stays disabled.
+      await renter.getByRole('checkbox').check()
       await renter.getByRole('button', { name: 'Reserve now' }).click() // instant-book submit
 
       await expect(renter).toHaveURL(/\/bookings\/confirmation\?bookingId=.+/)
