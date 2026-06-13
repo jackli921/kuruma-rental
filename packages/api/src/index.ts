@@ -107,6 +107,7 @@ import type {
 } from './repositories/types'
 import { createAddOnRoutes } from './routes/add-ons'
 import { createAdminRoutes } from './routes/admin'
+import { createAdminRevenueRoutes } from './routes/admin-revenue'
 import { createAuthRoutes } from './routes/auth'
 import { createAvailabilityRoutes } from './routes/availability'
 import { createBookingRoutes } from './routes/bookings'
@@ -135,6 +136,7 @@ import { createVehicleDetailRoutes } from './routes/vehicle-detail'
 import { createVehiclePhotoRoutes } from './routes/vehicle-photos'
 import { createVehicleRoutes } from './routes/vehicles'
 import { AddOnService } from './services/add-on'
+import { AdminRevenueService } from './services/admin-revenue'
 import { BookingService } from './services/booking'
 import { BookingPostCommitDispatcher } from './services/booking-post-commit-dispatcher'
 import { CustomerService } from './services/customer'
@@ -630,6 +632,7 @@ export function createApp(overrides?: AppOverrides) {
   )
   const fleetOverviewService = new FleetOverviewService(fleetOverviewRepo)
   const overviewService = new OverviewService(overviewRepo)
+  const adminRevenueService = new AdminRevenueService(paymentEventRepo, operatorRepo)
   const vehicleDetailService = new VehicleDetailService(vehicleDetailRepo)
   const operatorService = new OperatorService(operatorRepo)
   // #407: the write-operator resolver is a pure policy function — sole-operator
@@ -707,6 +710,7 @@ export function createApp(overrides?: AppOverrides) {
     .route('/', createAvailabilityRoutes(availabilityRepo))
     .route('/', createStatsRoutes(statsRepo))
     .route('/', createOverviewRoutes(overviewService))
+    .route('/', createAdminRevenueRoutes(adminRevenueService))
     .route('/', createMessageRoutes(threadRepo, messageRepo))
     .route(
       '/',
