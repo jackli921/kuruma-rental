@@ -4,17 +4,24 @@
  *
  * Context: we have had two incidents where a schema change was committed without
  * its migration being generated or applied, crashing the booking page at runtime.
- * This script runs three checks; any failure exits non-zero and blocks CI / commits.
+ * This script runs five checks; any failure exits non-zero and blocks CI / commits.
  *
  * Checks:
- *  1. Schema ↔ snapshot sync (drizzle-kit check) — editing schema.ts without
- *     running db:generate is detected here. No DB connection required.
+ *  1. Schema ↔ snapshot sync (drizzle-kit) — editing schema.ts without running
+ *     db:generate is detected here. No DB connection required.
  *  2. Journal ↔ disk sync — every `_journal.json` entry must map to an on-disk
  *     `.sql` file and vice versa. No DB connection required.
- *  3. Journal ↔ DB sync — the number of applied migrations in
+ *  3. Journal `when` monotonicity — out-of-order timestamps are silently skipped
+ *     by drizzle-kit migrate. No DB connection required.
+ *  4. Journal ↔ DB sync — the number of applied migrations in
  *     `drizzle.__drizzle_migrations` must equal the number of journal entries.
- *     Only runs when DATABASE_URL is set (skipped cleanly otherwise so the other
- *     two checks still gate local commits).
+ *  5. Critical custom DB objects exist — the double-booking EXCLUDE constraint,
+ *     the effective-end trigger + CHECK, and the idempotency unique index live
+ *     only in raw SQL (no drizzle snapshot), so the count checks above cannot see
+ *     them. Assert each exists by name. See issue #702.
+ *
+ * Checks 4 and 5 need a DB; both are skipped cleanly when DATABASE_URL is unset
+ * so the three static checks still gate local commits.
  */
 
 import { execSync } from 'node:child_process'
@@ -196,6 +203,90 @@ Run \`bun run db:migrate\` to apply pending migrations.`,
   } catch (err) {
     fail(
       'journal ↔ DB sync',
+      `Failed to query DB: ${(err as Error).message}
+If the DB is intentionally unavailable, unset DATABASE_URL to skip this check.`,
+    )
+  }
+}
+
+// ---- Check 5: critical custom DB objects exist (only if DATABASE_URL set) ----
+//
+// The anti-double-booking EXCLUDE constraint, the effective-end trigger, its
+// CHECK, and the idempotency unique index live ONLY in raw SQL (drizzle/0006,
+// 0012, 0015, 0037). They appear in no drizzle snapshot, and Checks 1-4 compare
+// only migration COUNTS — never object parity. A bad restore, a silently skipped
+// migration (the 2026-04-17 incident), or a hand-edit can drop the only
+// race-proof double-booking guard while every count check stays green, letting
+// two paid bookings land on one car for one window. Assert each object by name,
+// scoped to the bookings table.
+type CriticalObject = {
+  name: string
+  kind: 'constraint' | 'trigger' | 'index'
+  label: string
+}
+
+const CRITICAL_DB_OBJECTS: readonly CriticalObject[] = [
+  { name: 'bookings_no_overlap', kind: 'constraint', label: 'double-booking EXCLUDE constraint' },
+  {
+    name: 'effective_end_at_after_end_at',
+    kind: 'constraint',
+    label: 'effective_end_at >= end_at CHECK',
+  },
+  {
+    name: 'bookings_set_effective_end_at',
+    kind: 'trigger',
+    label: 'compute_effective_end_at trigger',
+  },
+  { name: 'bookings_idempotency_key', kind: 'index', label: 'idempotency partial unique index' },
+]
+
+if (!process.env.DATABASE_URL) {
+  console.log('• critical DB objects — skipped (no DATABASE_URL)')
+} else {
+  try {
+    const names = CRITICAL_DB_OBJECTS.map((o) => o.name)
+    const postgres = (await import('postgres')).default
+    const sql = postgres(process.env.DATABASE_URL, { max: 1 })
+    try {
+      // to_regclass is NULL-safe: it returns NULL instead of throwing if the
+      // bookings table is absent, so a missing table reads as "all objects
+      // missing" rather than crashing. `NOT tgisinternal` excludes the internal
+      // triggers Postgres auto-creates for FK/CHECK enforcement.
+      const constraints = await sql<{ name: string }[]>`
+        SELECT conname AS name FROM pg_constraint
+        WHERE conrelid = to_regclass('public.bookings') AND conname = ANY(${names})`
+      const triggers = await sql<{ name: string }[]>`
+        SELECT tgname AS name FROM pg_trigger
+        WHERE tgrelid = to_regclass('public.bookings')
+          AND NOT tgisinternal AND tgname = ANY(${names})`
+      const indexes = await sql<{ name: string }[]>`
+        SELECT indexname AS name FROM pg_indexes
+        WHERE schemaname = 'public' AND tablename = 'bookings' AND indexname = ANY(${names})`
+      const present = new Set<string>([...constraints, ...triggers, ...indexes].map((r) => r.name))
+      const missing = CRITICAL_DB_OBJECTS.filter((o) => !present.has(o.name))
+      if (missing.length > 0) {
+        fail(
+          'critical DB objects',
+          `Snapshot-invisible objects MISSING from the bookings table:
+${missing.map((o) => `  - ${o.name} (${o.label})`).join('\n')}
+
+These are defined only in raw-SQL migrations (drizzle/0006, 0012, 0015, 0037) and
+are the race-proof guards behind instant-book. A skipped/out-of-order migration or
+a bad restore can drop them while the count checks stay green. Restore them by
+re-running \`bun run db:migrate\` against a clean DB, or re-applying the object SQL.`,
+        )
+      } else {
+        pass(
+          'critical DB objects',
+          `${CRITICAL_DB_OBJECTS.length} present (exclusion, check, trigger, idempotency)`,
+        )
+      }
+    } finally {
+      await sql.end()
+    }
+  } catch (err) {
+    fail(
+      'critical DB objects',
       `Failed to query DB: ${(err as Error).message}
 If the DB is intentionally unavailable, unset DATABASE_URL to skip this check.`,
     )
