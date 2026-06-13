@@ -988,6 +988,10 @@
     "fromLabel": "Pickup date & time",
     "toLabel": "Return date & time",
     "submit": "Search",
+    "classFilterLabel": "Vehicle class",
+    "photoPrev": "Previous photo",
+    "photoNext": "Next photo",
+    "photoGoTo": "Go to photo {n}",
     "needDates": "Choose a pickup and return time to see available stores.",
     "empty": "No stores have cars available for these dates.",
     "fromDaily": "From ¥{price} / day",
@@ -1100,6 +1104,16 @@
       "addOns": "Extras",
       "total": "Estimated total",
       "note": "Taxes and any operator fees are calculated at payment."
+    },
+    "cancellation": {
+      "heading": "Cancellation policy",
+      "appliesNow": "Applies now",
+      "tiers": {
+        "FREE": "72+ hours before pickup — free cancellation",
+        "LOW": "48–72 hours before pickup — 30% fee",
+        "MEDIUM": "24–48 hours before pickup — 70% fee",
+        "FULL": "Within 24 hours or after pickup — no refund"
+      }
     },
     "payment": {
       "heading": "Confirm and reserve",

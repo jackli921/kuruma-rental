@@ -1,13 +1,28 @@
-import { PigeonMapAdapter } from '@/vite/search/PigeonMapAdapter'
+import { PigeonMapAdapter, gsiTileProvider } from '@/vite/search/PigeonMapAdapter'
 import type { SpecificSearchResult } from '@kuruma/shared/types/search-result'
 import { fireEvent, render, screen } from '@testing-library/react'
 import type { ReactNode } from 'react'
 import { describe, expect, it, vi } from 'vitest'
 
-// Mock pigeon-maps → no real tiles in happy-dom. Assert only the adapter's
-// mapping of props → <Marker> components (the design's seam, not tile rendering).
+// Mock pigeon-maps → no real tiles in happy-dom. Assert the adapter's mapping of
+// props → <Marker> components (the design's seam) plus the tile `provider` +
+// `attribution` it configures (#660). The fake Map calls `provider` with a sample
+// z/x/y so the test can read back the URL the real library would request.
 vi.mock('pigeon-maps', () => ({
-  Map: ({ children }: { children: ReactNode }) => <div data-testid="pigeon-map">{children}</div>,
+  Map: ({
+    children,
+    provider,
+    attribution,
+  }: {
+    children: ReactNode
+    provider?: (x: number, y: number, z: number) => string
+    attribution?: ReactNode
+  }) => (
+    <div data-testid="pigeon-map" data-tile-url={provider ? provider(3, 5, 12) : ''}>
+      {attribution}
+      {children}
+    </div>
+  ),
   Marker: ({
     anchor,
     onClick,
@@ -120,5 +135,38 @@ describe('PigeonMapAdapter', () => {
 
     const markers = screen.getAllByTestId('marker')
     expect(markers[0]?.getAttribute('data-color')).not.toBe(markers[1]?.getAttribute('data-color'))
+  })
+
+  it('configures an explicit GSI tile provider, not the default public OSM server (#660)', () => {
+    render(
+      <PigeonMapAdapter
+        items={[carAt('loc_namba', { latitude: 34.6627, longitude: 135.5023 })]}
+        selectedId={null}
+        onSelect={() => {}}
+      />,
+    )
+
+    const tileUrl = screen.getByTestId('pigeon-map').getAttribute('data-tile-url') ?? ''
+    expect(tileUrl).toContain('cyberjapandata.gsi.go.jp')
+    expect(tileUrl).not.toContain('tile.openstreetmap.org')
+  })
+
+  it('renders a visible basemap attribution crediting the tile source (#660)', () => {
+    render(
+      <PigeonMapAdapter
+        items={[carAt('loc_namba', { latitude: 34.6627, longitude: 135.5023 })]}
+        selectedId={null}
+        onSelect={() => {}}
+      />,
+    )
+
+    const credit = screen.getByRole('link', { name: '国土地理院' })
+    expect(credit.getAttribute('href')).toContain('gsi.go.jp')
+  })
+})
+
+describe('gsiTileProvider', () => {
+  it('builds the GSI std raster tile URL in {z}/{x}/{y} order', () => {
+    expect(gsiTileProvider(3, 5, 12)).toBe('https://cyberjapandata.gsi.go.jp/xyz/std/12/3/5.png')
   })
 })

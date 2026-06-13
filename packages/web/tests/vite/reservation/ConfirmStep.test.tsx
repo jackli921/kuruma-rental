@@ -16,6 +16,7 @@ function renderStep(overrides: Partial<Parameters<typeof ConfirmStep>[0]> = {}) 
         estimate={{ baseJpy: 16000, insuranceJpy: 3000, addOnsJpy: 2000, totalJpy: 21000 }}
         selectedAddOns={addOns}
         insuranceName="Full coverage"
+        pickupAt={new Date('2026-12-01T10:00:00Z')}
         {...overrides}
       />
     </IntlProvider>,
