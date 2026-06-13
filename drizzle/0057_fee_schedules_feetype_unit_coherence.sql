@@ -1,0 +1,1 @@
+ALTER TABLE "fee_schedules" ADD CONSTRAINT "fee_schedules_feetype_unit_coherent" CHECK (("fee_schedules"."feeType" = 'OVERTIME_HOURLY' AND "fee_schedules"."unit" = 'PER_HOUR') OR ("fee_schedules"."feeType" = 'CLEANING_FLAT' AND "fee_schedules"."unit" = 'FLAT') OR ("fee_schedules"."feeType" = 'NO_FUEL_FLAT' AND "fee_schedules"."unit" = 'FLAT'));
