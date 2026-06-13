@@ -1,12 +1,13 @@
 import { Hono } from 'hono'
 import { beforeEach, describe, expect, it } from 'vitest'
-import { SYSTEM_CONTEXT } from '../../src/middleware/auth'
+import { SYSTEM_CONTEXT, type UserRole } from '../../src/middleware/auth'
 import { InMemoryMaintenanceLogRepository } from '../../src/repositories/in-memory'
 import { InMemoryVehicleRepository } from '../../src/repositories/in-memory'
 import type { RunInTransaction } from '../../src/repositories/types'
 import { createMaintenanceLogRoutes } from '../../src/routes/maintenance-logs'
 import { createVehicleRoutes } from '../../src/routes/vehicles'
 import { MaintenanceService } from '../../src/services/maintenance'
+import type { Vehicle } from '../../src/stores'
 import { testAuthMiddleware } from '../helpers/auth'
 import { TEST_OPERATOR_ID, testResolveWriteOperatorId } from '../helpers/operator'
 
@@ -287,5 +288,168 @@ describe('Maintenance Logs', () => {
 
       expect(res.status).toBe(403)
     })
+  })
+})
+
+// Operator tenant-scoping (#705). The maintenance-logs read is the last
+// vehicle-management read still on the pre-#594 STAFF-only pattern. Admit
+// tenant-scoped OPERATOR_* callers (MANAGEMENT_READ_ROLES) but bound each to
+// their own fleet: a foreign-tenant vehicleId must resolve to [] (never a
+// cross-tenant maintenance-history leak), while platform STAFF/ADMIN retain
+// full read. RENTER / PARTNER stay rejected.
+describe('GET /vehicles/:vehicleId/maintenance-logs — operator scoping', () => {
+  type VehicleInput = Omit<Vehicle, 'id' | 'createdAt' | 'updatedAt'>
+  function vehicleInput(operatorId: string): VehicleInput {
+    return {
+      operatorId,
+      name: 'Car',
+      classId: null,
+      description: null,
+      photos: [],
+      seats: 5,
+      transmission: 'AUTO',
+      fuelType: null,
+      licensePlate: null,
+      status: 'AVAILABLE',
+      bufferMinutes: 60,
+      minRentalHours: null,
+      maxRentalHours: null,
+      advanceBookingHours: null,
+      make: null,
+      model: null,
+      year: null,
+      color: null,
+      dailyRateJpy: 8000,
+      hourlyRateJpy: null,
+      shakenExpiryDate: null,
+      insuranceExpiryDate: null,
+    }
+  }
+
+  let scopeVehicleRepo: InMemoryVehicleRepository
+  let scopeMaintenanceLogRepo: InMemoryMaintenanceLogRepository
+
+  function appAs(role: UserRole, operatorId?: string): Hono {
+    const a = new Hono()
+    a.use('*', testAuthMiddleware('caller', role, operatorId))
+    const runInTransaction = createInMemoryTransaction(scopeVehicleRepo, scopeMaintenanceLogRepo)
+    a.route(
+      '/',
+      createMaintenanceLogRoutes(
+        new MaintenanceService(scopeVehicleRepo, scopeMaintenanceLogRepo, runInTransaction),
+      ),
+    )
+    return a
+  }
+
+  // Seed one vehicle per operator, each with a distinct maintenance log.
+  async function seedTenants(): Promise<{ aVehicleId: string; bVehicleId: string }> {
+    const aVehicle = await scopeVehicleRepo.create(SYSTEM_CONTEXT, vehicleInput('op-a'))
+    const bVehicle = await scopeVehicleRepo.create(SYSTEM_CONTEXT, vehicleInput('op-b'))
+    await scopeMaintenanceLogRepo.create({
+      vehicleId: aVehicle.id,
+      reason: 'A oil change',
+      notes: null,
+      costJpy: null,
+      startedAt: new Date(),
+      resolvedAt: null,
+    })
+    await scopeMaintenanceLogRepo.create({
+      vehicleId: bVehicle.id,
+      reason: 'B brake pads',
+      notes: null,
+      costJpy: null,
+      startedAt: new Date(),
+      resolvedAt: null,
+    })
+    return { aVehicleId: aVehicle.id, bVehicleId: bVehicle.id }
+  }
+
+  beforeEach(() => {
+    scopeVehicleRepo = new InMemoryVehicleRepository()
+    scopeMaintenanceLogRepo = new InMemoryMaintenanceLogRepository()
+  })
+
+  it('admits an OPERATOR_OWNER and returns only their own vehicle’s logs', async () => {
+    const { aVehicleId } = await seedTenants()
+
+    const res = await appAs('OPERATOR_OWNER', 'op-a').request(
+      `/vehicles/${aVehicleId}/maintenance-logs`,
+    )
+
+    expect(res.status).toBe(200)
+    const body = (await res.json()) as { data: Array<{ reason: string }> }
+    expect(body.data.map((l) => l.reason)).toEqual(['A oil change'])
+  })
+
+  it('returns [] when an OPERATOR_OWNER reads another tenant’s vehicleId', async () => {
+    const { bVehicleId } = await seedTenants()
+
+    const res = await appAs('OPERATOR_OWNER', 'op-a').request(
+      `/vehicles/${bVehicleId}/maintenance-logs`,
+    )
+
+    expect(res.status).toBe(200)
+    const body = (await res.json()) as { success: boolean; data: unknown[] }
+    expect(body.success).toBe(true)
+    expect(body.data).toEqual([])
+  })
+
+  it('isolates an OPERATOR_STAFF to their own tenant', async () => {
+    const { aVehicleId, bVehicleId } = await seedTenants()
+
+    const own = await appAs('OPERATOR_STAFF', 'op-b').request(
+      `/vehicles/${bVehicleId}/maintenance-logs`,
+    )
+    const foreign = await appAs('OPERATOR_STAFF', 'op-b').request(
+      `/vehicles/${aVehicleId}/maintenance-logs`,
+    )
+
+    expect(
+      ((await own.json()) as { data: Array<{ reason: string }> }).data.map((l) => l.reason),
+    ).toEqual(['B brake pads'])
+    expect(((await foreign.json()) as { data: unknown[] }).data).toEqual([])
+  })
+
+  it('fails closed for an OPERATOR_* caller missing its operatorId', async () => {
+    const { aVehicleId } = await seedTenants()
+
+    const res = await appAs('OPERATOR_OWNER').request(`/vehicles/${aVehicleId}/maintenance-logs`)
+
+    expect(res.status).toBe(200)
+    expect(((await res.json()) as { data: unknown[] }).data).toEqual([])
+  })
+
+  it('lets a platform STAFF read any tenant’s logs (bypass)', async () => {
+    const { aVehicleId, bVehicleId } = await seedTenants()
+
+    const a = await appAs('STAFF').request(`/vehicles/${aVehicleId}/maintenance-logs`)
+    const b = await appAs('STAFF').request(`/vehicles/${bVehicleId}/maintenance-logs`)
+
+    expect(
+      ((await a.json()) as { data: Array<{ reason: string }> }).data.map((l) => l.reason),
+    ).toEqual(['A oil change'])
+    expect(
+      ((await b.json()) as { data: Array<{ reason: string }> }).data.map((l) => l.reason),
+    ).toEqual(['B brake pads'])
+  })
+
+  it('lets a PLATFORM_ADMIN read any tenant’s logs (bypass)', async () => {
+    const { bVehicleId } = await seedTenants()
+
+    const res = await appAs('PLATFORM_ADMIN').request(`/vehicles/${bVehicleId}/maintenance-logs`)
+
+    expect(res.status).toBe(200)
+    expect(
+      ((await res.json()) as { data: Array<{ reason: string }> }).data.map((l) => l.reason),
+    ).toEqual(['B brake pads'])
+  })
+
+  it('rejects a PARTNER (3rd-party API caller) with 403', async () => {
+    const { aVehicleId } = await seedTenants()
+
+    const res = await appAs('PARTNER').request(`/vehicles/${aVehicleId}/maintenance-logs`)
+
+    expect(res.status).toBe(403)
   })
 })
