@@ -365,6 +365,13 @@
       "when": 1781303301951,
       "tag": "0051_add_location_coordinate_source",
       "breakpoints": true
+    },
+    {
+      "idx": 52,
+      "version": "7",
+      "when": 1781315525491,
+      "tag": "0052_add_booking_disclaimer_consent",
+      "breakpoints": true
     }
   ]
 }

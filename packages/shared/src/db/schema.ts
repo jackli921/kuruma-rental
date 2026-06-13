@@ -542,6 +542,16 @@ export const bookings = pgTable(
     cancellationFee: integer('cancellationFee'), // whole JPY, set on cancellation
     cancelledAt: timestamp('cancelledAt', { withTimezone: true, mode: 'date' }),
     idempotencyKey: text('idempotencyKey'),
+    // #613: renter liability-disclaimer (免责声明) consent recorded at booking time.
+    // Server-stamped when a renter accepts the terms at checkout (the IDP/license
+    // must be valid at pickup or the non-refundable order fails) — this replaces the
+    // dropped online document upload. Nullable: staff/manual/Trip.com + historical
+    // rows carry no renter consent. Version tracks the wording the renter agreed to.
+    disclaimerAcknowledgedAt: timestamp('disclaimerAcknowledgedAt', {
+      withTimezone: true,
+      mode: 'date',
+    }),
+    disclaimerTermsVersion: text('disclaimerTermsVersion'),
     createdAt: timestamp('createdAt', { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp('updatedAt', { withTimezone: true }).notNull().defaultNow(),
   },

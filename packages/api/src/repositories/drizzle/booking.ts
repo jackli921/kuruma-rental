@@ -172,6 +172,8 @@ export class DrizzleBookingRepository implements BookingRepository {
         cancellationFee: data.cancellationFee,
         cancelledAt: data.cancelledAt,
         idempotencyKey: data.idempotencyKey,
+        disclaimerAcknowledgedAt: data.disclaimerAcknowledgedAt,
+        disclaimerTermsVersion: data.disclaimerTermsVersion,
       })
       .returning()
 

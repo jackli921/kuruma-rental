@@ -102,6 +102,7 @@ describe('actor derivation from JWT', () => {
         startAt: futureDate(24),
         endAt: futureDate(48),
         source: 'DIRECT',
+        disclaimerAccepted: true,
       }),
     })
 
@@ -149,6 +150,7 @@ describe('actor derivation from JWT', () => {
         startAt: futureDate(24),
         endAt: futureDate(48),
         source: 'DIRECT',
+        disclaimerAccepted: true,
       }),
     })
     const booking = await createRes.json()
@@ -236,6 +238,7 @@ describe('actor derivation from JWT', () => {
         startAt: futureDate(24),
         endAt: futureDate(48),
         source: 'DIRECT',
+        disclaimerAccepted: true,
       }),
     })
     const booking = await createRes.json()
