@@ -11,6 +11,8 @@ interface FleetGridProps {
   readonly selectedIds: readonly string[]
   readonly onToggleSelect: (id: string) => void
   readonly onEdit: (vehicle: OperatorFleetVehicle) => void
+  // False for bypass roles: cards drop their checkbox + actions (#598).
+  readonly canWrite: boolean
   readonly todayIso: string
 }
 
@@ -26,6 +28,7 @@ export function FleetGrid({
   selectedIds,
   onToggleSelect,
   onEdit,
+  canWrite,
   todayIso,
 }: FleetGridProps) {
   const t = useTranslations('business.vehicles.group')
@@ -78,6 +81,7 @@ export function FleetGrid({
                     selected={selectedIds.includes(vehicle.id)}
                     onToggleSelect={onToggleSelect}
                     onEdit={() => onEdit(vehicle)}
+                    canWrite={canWrite}
                     todayIso={todayIso}
                   />
                 ))}

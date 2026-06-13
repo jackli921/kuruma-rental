@@ -1,9 +1,11 @@
 import { PageSkeleton } from '@/vite/PageSkeleton'
+import { isOperatorSession } from '@/vite/guards'
 import { OperatorFleetView } from '@/vite/operator-fleet/OperatorFleetView'
 import {
   operatorFleetQueryOptions,
   vehicleClassOptionsQueryOptions,
 } from '@/vite/operator-fleet/api'
+import { sessionQueryOptions } from '@/vite/session'
 import { useSuspenseQuery } from '@tanstack/react-query'
 import { type ErrorComponentProps, createFileRoute, useRouter } from '@tanstack/react-router'
 import { useTranslations } from 'use-intl'
@@ -29,10 +31,18 @@ export const Route = createFileRoute('/$locale/_business/manage/fleet')({
   component: OperatorFleetRoute,
 })
 
-function OperatorFleetRoute() {
+export function OperatorFleetRoute() {
   const t = useTranslations('business.vehicles.fleet')
   const { data: vehicles } = useSuspenseQuery(operatorFleetQueryOptions())
   const { data: classOptions } = useSuspenseQuery(vehicleClassOptionsQueryOptions())
+  const { data: session } = useSuspenseQuery(sessionQueryOptions())
+
+  // Bypass roles (PLATFORM_ADMIN / legacy STAFF·ADMIN — no operatorId) read the
+  // fleet cross-operator for oversight but cannot write: every create/edit/bulk
+  // write needs a single target tenant they don't carry, and the form has no
+  // operator picker (the API 422s such a write). So the page is read-only for
+  // them, mirroring classes (#583) and locations (#581).
+  const canWrite = isOperatorSession(session)
 
   return (
     <main className="flex-1 px-4 py-10 sm:px-6 lg:px-8">
@@ -41,7 +51,7 @@ function OperatorFleetRoute() {
           <h1 className="text-3xl font-bold tracking-tight sm:text-4xl">{t('title')}</h1>
           <p className="mt-2 text-lg text-muted-foreground">{t('subtitle')}</p>
         </header>
-        <OperatorFleetView vehicles={vehicles} classOptions={classOptions} />
+        <OperatorFleetView vehicles={vehicles} classOptions={classOptions} canWrite={canWrite} />
       </div>
     </main>
   )

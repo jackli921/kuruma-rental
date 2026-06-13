@@ -12,6 +12,9 @@ interface FleetTableProps {
   readonly onToggleAll: () => void
   readonly onToggleOne: (id: string) => void
   readonly onEdit: (vehicle: OperatorFleetVehicle) => void
+  // False for bypass roles: the select + actions columns are dropped so the
+  // table is a read-only oversight view (#598).
+  readonly canWrite: boolean
   readonly todayIso: string
 }
 
@@ -29,6 +32,7 @@ export function FleetTable({
   onToggleAll,
   onToggleOne,
   onEdit,
+  canWrite,
   todayIso,
 }: FleetTableProps) {
   const t = useTranslations('business.vehicles.fleet')
@@ -39,24 +43,28 @@ export function FleetTable({
       <table className="w-full text-left text-sm">
         <thead className="border-border border-b bg-muted/40 text-muted-foreground">
           <tr>
-            <th className="w-10 px-4 py-3">
-              <input
-                type="checkbox"
-                ref={(el) => {
-                  if (el) el.indeterminate = someSelected
-                }}
-                aria-label={tBulk('selectAll')}
-                checked={allSelected}
-                onChange={onToggleAll}
-              />
-            </th>
+            {canWrite && (
+              <th className="w-10 px-4 py-3">
+                <input
+                  type="checkbox"
+                  ref={(el) => {
+                    if (el) el.indeterminate = someSelected
+                  }}
+                  aria-label={tBulk('selectAll')}
+                  checked={allSelected}
+                  onChange={onToggleAll}
+                />
+              </th>
+            )}
             <th className="px-4 py-3 font-medium">{t('columns.vehicle')}</th>
             <th className="px-4 py-3 font-medium">{t('columns.status')}</th>
             <th className="px-4 py-3 text-right font-medium">{t('columns.seats')}</th>
             <th className="px-4 py-3 text-right font-medium">{t('columns.luggage')}</th>
             <th className="px-4 py-3 text-right font-medium">{t('columns.price')}</th>
             <th className="px-4 py-3 font-medium">{t('columns.shaken')}</th>
-            <th className="px-4 py-3 text-right font-medium">{t('columns.actions')}</th>
+            {canWrite && (
+              <th className="px-4 py-3 text-right font-medium">{t('columns.actions')}</th>
+            )}
           </tr>
         </thead>
         <tbody>
@@ -65,14 +73,16 @@ export function FleetTable({
               key={v.id}
               className="border-border border-b transition-colors last:border-0 hover:bg-muted/40"
             >
-              <td className="px-4 py-3">
-                <input
-                  type="checkbox"
-                  aria-label={tBulk('selectRow', { name: v.name })}
-                  checked={selectedIds.includes(v.id)}
-                  onChange={() => onToggleOne(v.id)}
-                />
-              </td>
+              {canWrite && (
+                <td className="px-4 py-3">
+                  <input
+                    type="checkbox"
+                    aria-label={tBulk('selectRow', { name: v.name })}
+                    checked={selectedIds.includes(v.id)}
+                    onChange={() => onToggleOne(v.id)}
+                  />
+                </td>
+              )}
               <td className="px-4 py-3">
                 <div className="font-medium">{v.name}</div>
                 <div className="text-muted-foreground text-xs">
@@ -101,9 +111,11 @@ export function FleetTable({
                   }}
                 />
               </td>
-              <td className="px-4 py-3 text-right">
-                <FleetRowActions vehicle={v} onEdit={() => onEdit(v)} />
-              </td>
+              {canWrite && (
+                <td className="px-4 py-3 text-right">
+                  <FleetRowActions vehicle={v} onEdit={() => onEdit(v)} />
+                </td>
+              )}
             </tr>
           ))}
         </tbody>

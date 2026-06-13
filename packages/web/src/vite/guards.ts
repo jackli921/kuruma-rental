@@ -28,11 +28,14 @@ export function manageGuard(session: Session | null, operatorSlug: string): Guar
 }
 
 // A *tenant-scoped* operator session carries an operatorId (#521); bypass business
-// roles (PLATFORM_ADMIN, legacy STAFF/ADMIN) do not. This is the exact mirror of the
-// API's non-bypass write branch — `operatorReadScope(ctx).kind !== 'all'` — so it gates
-// the operator-portal write affordances (Add/Edit/Archive): a write needs a single
-// target tenant, which only an operator session supplies. Bypass roles still read
-// cross-operator (#387 oversight), so the page renders read-only for them (#529 review).
+// roles (PLATFORM_ADMIN, legacy STAFF/ADMIN) do not. This mirrors the API's read scope
+// (`operatorReadScope(ctx).kind !== 'all'`) and gates the operator-portal write
+// affordances (Add/Edit/Archive) because those forms carry no operator picker: a write
+// needs a single target tenant, which only an operator session supplies. It is
+// deliberately STRICTER than the API write resolver, which also admits a bypass role
+// that supplies an explicit operatorId — so do NOT reuse this to gate a future surface
+// that lets an admin pick a tenant. Bypass roles still read cross-operator (#387
+// oversight), so the page renders read-only for them (#529/#583/#598 review).
 export function isOperatorSession(session: Session | null): boolean {
   return Boolean(session?.user.operatorId)
 }

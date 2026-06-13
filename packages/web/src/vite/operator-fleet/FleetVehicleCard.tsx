@@ -10,6 +10,8 @@ interface FleetVehicleCardProps {
   readonly selected: boolean
   readonly onToggleSelect: (id: string) => void
   readonly onEdit: () => void
+  // False for bypass roles: the card drops its checkbox + actions menu (#598).
+  readonly canWrite: boolean
   readonly todayIso: string
 }
 
@@ -23,6 +25,7 @@ export function FleetVehicleCard({
   selected,
   onToggleSelect,
   onEdit,
+  canWrite,
   todayIso,
 }: FleetVehicleCardProps) {
   const t = useTranslations('business.vehicles.fleet')
@@ -32,13 +35,15 @@ export function FleetVehicleCard({
   return (
     <div className="flex flex-col gap-3 rounded-xl border border-border bg-card p-3">
       <div className="flex items-start gap-3">
-        <input
-          type="checkbox"
-          aria-label={tBulk('selectRow', { name: vehicle.name })}
-          checked={selected}
-          onChange={() => onToggleSelect(vehicle.id)}
-          className="mt-1 shrink-0"
-        />
+        {canWrite && (
+          <input
+            type="checkbox"
+            aria-label={tBulk('selectRow', { name: vehicle.name })}
+            checked={selected}
+            onChange={() => onToggleSelect(vehicle.id)}
+            className="mt-1 shrink-0"
+          />
+        )}
         <div className="relative h-16 w-24 shrink-0 overflow-hidden rounded-lg bg-muted">
           {photo ? (
             <img src={photo} alt={vehicle.name} className="h-full w-full object-cover" />
@@ -57,7 +62,7 @@ export function FleetVehicleCard({
             <StatusPill status={vehicle.status} label={t(`status.${vehicle.status}`)} />
           </div>
         </div>
-        <FleetRowActions vehicle={vehicle} onEdit={onEdit} />
+        {canWrite && <FleetRowActions vehicle={vehicle} onEdit={onEdit} />}
       </div>
 
       <div className="flex items-center justify-between text-sm">
