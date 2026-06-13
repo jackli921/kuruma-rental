@@ -195,6 +195,33 @@ export function operatorRowFromDetail(dto: OperatorBookingDetailDto): OperatorBo
   }
 }
 
+// #610: operator vehicle substitution. POST /bookings/:id/substitute swaps the
+// booking's assigned car for another AVAILABLE vehicle of the SAME operator,
+// pickup location and ACRISS class (the server enforces all three). The renter's
+// `requestedVehicleId` is preserved; only `assignedVehicleId` + a re-snapshotted
+// totalPrice change, and a VEHICLE_SUBSTITUTED audit event (系统留痕) is appended,
+// which the existing timeline renders once the events query is invalidated. As a
+// cookie-authed POST it is CSRF-gated (global csrf()), so the caller echoes the
+// session token. `reason` is optional in the schema, so it is omitted when blank.
+export async function substituteBooking(
+  bookingId: string,
+  newVehicleId: string,
+  reason: string | null,
+  csrfToken: string,
+): Promise<BookingDto> {
+  const body = reason != null ? { newVehicleId, reason } : { newVehicleId }
+  const res = await fetch(
+    `${getApiBaseUrl()}/bookings/${encodeURIComponent(bookingId)}/substitute`,
+    {
+      method: 'POST',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrfToken },
+      body: JSON.stringify(body),
+    },
+  )
+  return unwrap<BookingDto>(res)
+}
+
 /** One lifecycle event as the operator timeline reads it (dates are ISO JSON). */
 export interface BookingEventDto {
   id: string
