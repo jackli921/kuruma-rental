@@ -19,6 +19,7 @@
     "@auth/drizzle-adapter": "^1.11.1",
     "@elithrar/workers-hono-rate-limit": "^0.5.1",
     "@kuruma/shared": "workspace:*",
+    "@sentry/cloudflare": "^10.57.0",
     "hono": "^4",
     "nanoid": "^5.1.11",
     "stripe": "^22.2.0"

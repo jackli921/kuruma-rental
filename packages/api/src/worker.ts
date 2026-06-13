@@ -9,7 +9,9 @@
  * is the rule CLAUDE.md calls out for CF Workers (#327).
  */
 
+import * as Sentry from '@sentry/cloudflare'
 import { type AppType, createApp } from './index'
+import { type SentryRuntimeEnv, resolveSentryOptions } from './observability/sentry-options'
 
 let cachedApp: AppType | null = null
 
@@ -20,8 +22,14 @@ function getApp(): AppType {
   return cachedApp
 }
 
-export default {
+const handler = {
   fetch(request: Request, env?: unknown, ctx?: ExecutionContext): Response | Promise<Response> {
     return getApp().fetch(request, env, ctx)
   },
 }
+
+// Wrap the fetch handler so Sentry (#361) gets per-request async context and
+// auto-captures anything that escapes the handler. `resolveSentryOptions` gates
+// it off (enabled: false) when no SENTRY_DSN is present, so local/CI/unset
+// deploys send nothing.
+export default Sentry.withSentry((env: SentryRuntimeEnv) => resolveSentryOptions(env), handler)
