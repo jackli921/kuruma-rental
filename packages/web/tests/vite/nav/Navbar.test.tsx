@@ -116,11 +116,16 @@ describe('Navbar', () => {
     )
     // #530: operator pricing config (fees) lives at /manage/fees.
     expect(screen.getByText('Fees').closest('a')).toHaveAttribute('data-to', '/$locale/manage/fees')
+    // #585: operator add-on management lives at /manage/add-ons.
+    expect(screen.getByText('Add-ons').closest('a')).toHaveAttribute(
+      'data-to',
+      '/$locale/manage/add-ons',
+    )
     expect(container.querySelector('nav')?.hasAttribute('data-business-nav')).toBe(true)
     const client = screen.getByTestId('navbar-client')
     expect(client).toHaveAttribute('data-view-mode', 'business')
     expect(client).toHaveAttribute('data-can-switch', 'true')
-    expect(screen.getByTestId('mobile-menu')).toHaveAttribute('data-nav-count', '7')
+    expect(screen.getByTestId('mobile-menu')).toHaveAttribute('data-nav-count', '8')
   })
 
   it('shows Browse, My Bookings, and Documents (no business markers) for a signed-in renter', () => {

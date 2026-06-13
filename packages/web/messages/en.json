@@ -64,6 +64,7 @@
     "locations": "Locations",
     "insurance": "Insurance",
     "fees": "Fees",
+    "addOns": "Add-ons",
     "menu": "Menu",
     "close": "Close menu",
     "switchToRenter": "Switch to renter view",
@@ -673,6 +674,39 @@
         "deductibleHint": "Leave off for full cover with no deductible.",
         "deductible": "Deductible (yen)",
         "save": "Save option",
+        "saving": "Saving...",
+        "cancel": "Cancel"
+      }
+    },
+    "addOns": {
+      "title": "Add-ons",
+      "subtitle": "Manage the paid add-ons renters can choose during booking.",
+      "addOption": "Add add-on",
+      "addSubtitle": "Create a new add-on.",
+      "editOption": "Edit add-on",
+      "archiveAction": "Archive add-on",
+      "archiveTitle": "Archive {name}?",
+      "archiveDescription": "This archives the add-on. It stays in the list, but won't be offered for new bookings.",
+      "archiveConfirm": "Archive",
+      "archiving": "Archiving...",
+      "empty": "No add-ons yet. Add your first one.",
+      "loadError": "Couldn't load add-ons",
+      "retry": "Try again",
+      "status": {
+        "ACTIVE": "Active",
+        "ARCHIVED": "Archived"
+      },
+      "row": {
+        "price": "{price} per booking"
+      },
+      "form": {
+        "name": "Add-on name",
+        "namePlaceholder": "e.g. Child seat",
+        "description": "Description",
+        "descriptionPlaceholder": "e.g. Rear-facing child seat for toddlers.",
+        "price": "Price (yen)",
+        "priceHint": "Charged once per booking when the renter selects this add-on.",
+        "save": "Save add-on",
         "saving": "Saving...",
         "cancel": "Cancel"
       }
