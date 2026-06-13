@@ -70,7 +70,8 @@ describe('GET /auth/google/callback', () => {
 
     // Session minted with the resolved user + a fresh csrf claim.
     const token = getSetCookie(res, 'kuruma_session')
-    expect(token).toBeTruthy()
+    // Compact JWS: three base64url segments (header.payload.signature).
+    expect(token).toMatch(/^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/)
     const { payload } = await jwtVerify(token!, new TextEncoder().encode(TEST_AUTH_SECRET), {
       issuer: 'kuruma-web',
       audience: 'kuruma-api',
@@ -163,7 +164,8 @@ describe('GET /auth/google/callback', () => {
     expect(res.headers.get('location')).toBe('https://web.example.test/ja/dashboard')
 
     const token = getSetCookie(res, 'kuruma_session')
-    expect(token).toBeTruthy()
+    // Compact JWS: three base64url segments (header.payload.signature).
+    expect(token).toMatch(/^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/)
     const { payload } = await jwtVerify(token!, new TextEncoder().encode(TEST_AUTH_SECRET), {
       issuer: 'kuruma-web',
       audience: 'kuruma-api',

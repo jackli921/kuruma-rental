@@ -1239,7 +1239,8 @@ describe('Booking Routes', () => {
       const body = await res.json()
       expect(body.data.status).toBe('CANCELLED')
       expect(body.data.cancellationFee).toBe(0)
-      expect(body.data.cancelledAt).toBeTruthy()
+      // JSON-serialized over the wire → ISO-8601 timestamp string, not a Date.
+      expect(body.data.cancelledAt).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}/)
       expect(body.cancellation.tier).toBe('FREE')
       expect(body.cancellation.feePercentage).toBe(0)
       expect(body.cancellation.refundAmount).toBe(10000)
