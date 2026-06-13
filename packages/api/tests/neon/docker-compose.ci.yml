@@ -1,0 +1,36 @@
+# Local Neon-proxy stack for the neon-serverless transaction lane (#493/#496).
+#
+# Exercises the production runTx (neon-serverless WebSocket) AND getDb
+# (neon-http) code paths against a LOCAL postgres — zero Neon usage, no secrets
+# (same ethos as the #445 e2e-real-db lane). The proxy serves BOTH the HTTP
+# `/sql` endpoint (neon-http reads) and the WebSocket `/v2` endpoint
+# (neon-serverless transactions); Neon's own wsproxy only does WS, so it cannot
+# drive getDb()'s reads — hence this combined proxy.
+services:
+  postgres:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: kuruma
+      POSTGRES_PASSWORD: kuruma
+      POSTGRES_DB: kuruma_neon
+    ports:
+      # CI uses the 5432 default (clean runner); local runs override to dodge a
+      # busy port (see scripts/test-neon-local.ts).
+      - "${NEON_PG_PORT:-5432}:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U kuruma -d kuruma_neon"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  neon-proxy:
+    # Pinned by digest (not the mutable `:main` tag) for reproducibility and
+    # supply-chain safety. Tag at pin time: local-neon-http-proxy:main.
+    image: ghcr.io/timowilhelm/local-neon-http-proxy@sha256:cd2ae14edf2feafbc3330492de5c80506f77274c3bd013154cdef697bdeb768a
+    environment:
+      PG_CONNECTION_STRING: postgres://kuruma:kuruma@postgres:5432/kuruma_neon
+    ports:
+      - "${NEON_PROXY_PORT:-4444}:4444"
+    depends_on:
+      postgres:
+        condition: service_healthy
