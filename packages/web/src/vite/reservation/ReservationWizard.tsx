@@ -124,6 +124,7 @@ export function ReservationWizard({
           estimate={estimate}
           selectedAddOns={selectedAddOns}
           insuranceName={insurance?.name ?? null}
+          pickupAt={from}
         />
       ) : null}
       {step === 'payment' ? (
