@@ -11,9 +11,6 @@ import type { Booking } from '../../src/stores'
 // throws; `throwingGeocoder` proves the service is resilient even if a future
 // adapter (or a transient bug) lets one escape — a save must never be blocked.
 // `throttledGeocoder` is the #601/#574 rate-limit-skip path (retryable → PENDING).
-const hitGeocoder = (lat: number, lng: number): Geocoder => ({
-  geocode: async () => ({ status: 'ok', lat, lng }),
-})
 const missGeocoder: Geocoder = { geocode: async () => ({ status: 'notFound' }) }
 const throttledGeocoder: Geocoder = { geocode: async () => ({ status: 'throttled' }) }
 const throwingGeocoder: Geocoder = {
@@ -316,16 +313,16 @@ describe('LocationService', () => {
       })
 
       it('an address-only create geocodes the address → GEOCODED', async () => {
-        const result = await build(hitGeocoder(34.69, 135.5)).create(
-          ctxFor(opA),
-          createInput(opA, 'Namba'),
-        )
+        const geocode = vi.fn(async () => ({ status: 'ok' as const, lat: 34.69, lng: 135.5 }))
+        const result = await build({ geocode }).create(ctxFor(opA), createInput(opA, 'Namba'))
         expect(result.ok).toBe(true)
         if (result.ok) {
           expect(result.location.latitude).toBe(34.69)
           expect(result.location.longitude).toBe(135.5)
           expect(result.location.coordinateSource).toBe('GEOCODED')
         }
+        // The location's address — not some other field — is what gets geocoded.
+        expect(geocode).toHaveBeenCalledWith('1-2-3 Somewhere')
       })
 
       it('an address-only create whose geocode misses persists with null coords', async () => {
@@ -403,7 +400,8 @@ describe('LocationService', () => {
 
       it('a changed address over GEOCODED coords re-geocodes → GEOCODED', async () => {
         const loc = await seed({ latitude: 1, longitude: 2, coordinateSource: 'GEOCODED' })
-        const result = await build(hitGeocoder(36, 140)).update(ctxFor(opA), loc.id, {
+        const geocode = vi.fn(async () => ({ status: 'ok' as const, lat: 36, lng: 140 }))
+        const result = await build({ geocode }).update(ctxFor(opA), loc.id, {
           address: 'New address, Kyoto',
         })
         expect(result.ok).toBe(true)
@@ -411,6 +409,8 @@ describe('LocationService', () => {
           expect(result.location.latitude).toBe(36)
           expect(result.location.coordinateSource).toBe('GEOCODED')
         }
+        // The NEW address is what gets re-geocoded, not the stale stored one.
+        expect(geocode).toHaveBeenCalledWith('New address, Kyoto')
       })
 
       it('a changed address whose geocode fails CLEARS non-manual coords (no stale pin)', async () => {
@@ -487,7 +487,8 @@ describe('LocationService', () => {
 
       it('regeocode:true over a MANUAL pin replaces it with GEOCODED on success', async () => {
         const loc = await seed({ latitude: 1, longitude: 2, coordinateSource: 'MANUAL' })
-        const result = await build(hitGeocoder(36, 140)).update(ctxFor(opA), loc.id, {
+        const geocode = vi.fn(async () => ({ status: 'ok' as const, lat: 36, lng: 140 }))
+        const result = await build({ geocode }).update(ctxFor(opA), loc.id, {
           regeocode: true,
         })
         expect(result.ok).toBe(true)
@@ -495,6 +496,8 @@ describe('LocationService', () => {
           expect(result.location.latitude).toBe(36)
           expect(result.location.coordinateSource).toBe('GEOCODED')
         }
+        // regeocode re-derives from the (unchanged) stored address.
+        expect(geocode).toHaveBeenCalledWith('1-2-3 Somewhere')
       })
 
       it('regeocode:true that fails PRESERVES a MANUAL pin (explicit assertion, not stale)', async () => {
