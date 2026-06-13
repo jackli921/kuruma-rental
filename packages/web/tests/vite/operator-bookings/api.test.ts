@@ -3,10 +3,12 @@ import {
   type OperatorBookingDetailDto,
   bookingEventsQueryOptions,
   fetchBookingEvents,
+  fetchCalendarBookings,
   fetchOperatorBookingDetail,
   fetchOperatorBookings,
   operatorBookingDetailQueryOptions,
   operatorBookingsQueryOptions,
+  operatorCalendarQueryOptions,
   operatorRowFromDetail,
 } from '@/vite/operator-bookings/api'
 import { afterEach, describe, expect, it, vi } from 'vitest'
@@ -282,6 +284,120 @@ describe('bookingEventsQueryOptions', () => {
       'operator-bookings',
       'events',
       'bk-1',
+    ])
+  })
+})
+
+// Slice A (#525): the operator *calendar* reads bookings over a date range. It
+// needs the assigned vehicle id (the resource-column key the list row #512
+// deliberately omits) and the turnaround-aware effectiveEndAt for the event end.
+
+const calendarRaw = (over: Record<string, unknown> = {}) => ({
+  id: 'bk-1',
+  operatorId: 'op-1',
+  renterId: 'r-1',
+  assignedVehicleId: 'veh-1',
+  bookingCode: 'ABCD2345',
+  status: 'CONFIRMED',
+  startAt: '2026-07-01T01:00:00.000Z',
+  endAt: '2026-07-03T01:00:00.000Z',
+  effectiveEndAt: '2026-07-03T02:00:00.000Z',
+  totalPrice: 24000,
+  renter: { id: 'r-1', name: 'Jane', email: 'jane@example.com', language: 'en' },
+  ...over,
+})
+
+describe('fetchCalendarBookings', () => {
+  it('requests the range expanding renter with a high limit and credentials', async () => {
+    const fetchMock = vi.fn(async () => jsonResponse({ success: true, data: [], nextCursor: null }))
+    vi.stubGlobal('fetch', fetchMock)
+
+    await fetchCalendarBookings('2026-07-01T00:00:00.000Z', '2026-07-31T23:59:59.999Z')
+
+    const [url, init] = fetchMock.mock.calls[0]!
+    const parsed = new URL(url as string, 'http://x')
+    expect(parsed.pathname).toBe('/api/bookings')
+    expect(parsed.searchParams.get('from')).toBe('2026-07-01T00:00:00.000Z')
+    expect(parsed.searchParams.get('to')).toBe('2026-07-31T23:59:59.999Z')
+    expect(parsed.searchParams.get('expand')).toBe('renter')
+    expect(parsed.searchParams.get('limit')).toBe('100')
+    expect((init as RequestInit).credentials).toBe('include')
+  })
+
+  it('maps raw bookings to calendar rows (vehicleId from assignedVehicleId, turnaround end)', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => jsonResponse({ success: true, data: [calendarRaw()], nextCursor: null })),
+    )
+
+    const rows = await fetchCalendarBookings('2026-07-01T00:00:00.000Z', '2026-07-31T23:59:59.999Z')
+
+    expect(rows).toEqual([
+      {
+        id: 'bk-1',
+        bookingCode: 'ABCD2345',
+        status: 'CONFIRMED',
+        startAt: '2026-07-01T01:00:00.000Z',
+        effectiveEndAt: '2026-07-03T02:00:00.000Z',
+        vehicleId: 'veh-1',
+        renterName: 'Jane',
+        renterEmail: 'jane@example.com',
+        totalPrice: 24000,
+      },
+    ])
+  })
+
+  it('falls back to endAt when effectiveEndAt is absent', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () =>
+        jsonResponse({
+          success: true,
+          data: [calendarRaw({ effectiveEndAt: undefined })],
+          nextCursor: null,
+        }),
+      ),
+    )
+
+    const [row] = await fetchCalendarBookings('a', 'b')
+    expect(row!.effectiveEndAt).toBe('2026-07-03T01:00:00.000Z')
+  })
+
+  it('nulls vehicleId + renter fields when absent (class-only / unexpanded)', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () =>
+        jsonResponse({
+          success: true,
+          data: [calendarRaw({ assignedVehicleId: undefined, renter: undefined })],
+          nextCursor: null,
+        }),
+      ),
+    )
+
+    const [row] = await fetchCalendarBookings('a', 'b')
+    expect(row!.vehicleId).toBeNull()
+    expect(row!.renterName).toBeNull()
+    expect(row!.renterEmail).toBeNull()
+  })
+
+  it('throws ApiError on a failure envelope', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => jsonResponse({ success: false, error: 'Unauthorized' }, 401)),
+    )
+
+    await expect(fetchCalendarBookings('a', 'b')).rejects.toBeInstanceOf(ApiError)
+  })
+})
+
+describe('operatorCalendarQueryOptions', () => {
+  it('keys by the calendar range (from + to)', () => {
+    expect(operatorCalendarQueryOptions('2026-07-01', '2026-07-31').queryKey).toEqual([
+      'operator-bookings',
+      'calendar',
+      '2026-07-01',
+      '2026-07-31',
     ])
   })
 })
