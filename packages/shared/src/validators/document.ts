@@ -1,15 +1,14 @@
 import { z } from 'zod'
+import { DOCUMENT_STATUSES, DOCUMENT_TYPES, type DocumentStatus, type DocumentType } from '../enums'
 
 /**
  * Renter identity documents (#459). Metadata only — the image bytes live in R2,
  * never in Postgres. `IDP` (International Driving Permit) is the booking-gating
- * document; `PASSPORT` is optional/supporting in MVP.
+ * document; `PASSPORT` is optional/supporting in MVP. Values sourced from the
+ * enum SSoT (#688) so the `document_type`/`document_status` pgEnums and these
+ * constants can never drift; re-exported for the existing import sites/tests.
  */
-export const DOCUMENT_TYPES = ['IDP', 'PASSPORT'] as const
-export const DOCUMENT_STATUSES = ['PENDING', 'APPROVED', 'REJECTED'] as const
-
-export type DocumentType = (typeof DOCUMENT_TYPES)[number]
-export type DocumentStatus = (typeof DOCUMENT_STATUSES)[number]
+export { DOCUMENT_STATUSES, DOCUMENT_TYPES, type DocumentStatus, type DocumentType }
 
 /**
  * Allowed image formats for an uploaded scan. The declared MIME is NOT trusted —

@@ -1,10 +1,12 @@
 import { z } from 'zod'
+import { OPERATOR_ROLES } from '../enums'
 
-// Operator-role values mirror the `operator_role` pgEnum (shared/db/provider-access).
-// Kept as a standalone z.enum so this validator stays drizzle-free. The typed
-// projection onto users.role lives in api (operatorRoleToUserRole) so a future
-// enum drift is a compile error, not a silent bad row (#521 §4).
-export const operatorRoleSchema = z.enum(['OPERATOR_OWNER', 'OPERATOR_STAFF'])
+// Operator-role values come from the enum SSoT (#688), which the `operator_role`
+// pgEnum also consumes — so the validator and the column can never drift. The
+// `../enums` subpath is zero-import (no drizzle), keeping this validator
+// DB-free. The typed projection onto users.role lives in api
+// (operatorRoleToUserRole) so a future enum drift is a compile error (#521 §4).
+export const operatorRoleSchema = z.enum(OPERATOR_ROLES)
 export type OperatorRole = z.infer<typeof operatorRoleSchema>
 
 // Platform-admin mints a provider invite (#521 §7). Email is lowercased here so

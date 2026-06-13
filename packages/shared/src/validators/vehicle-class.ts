@@ -1,5 +1,6 @@
 import { z } from 'zod'
 import { ACRISS_PATTERN } from '../acriss'
+import { TRANSMISSIONS } from '../enums'
 import { LUGGAGE_SIZES } from '../lib/luggage'
 
 // photos/sortOrder carry .default()s only on create. Kept off the base because
@@ -26,7 +27,7 @@ const vehicleClassObjectSchema = z.object({
   // its size blank. Optional on the base (no default) so a partial PATCH never
   // re-injects it; the create .extend() supplies the default (#430 pattern).
   luggageSize: z.enum(LUGGAGE_SIZES).optional(),
-  transmission: z.enum(['AUTO', 'MANUAL']),
+  transmission: z.enum(TRANSMISSIONS),
   fuelType: z.string().trim().max(50).optional(),
   // ACRISS taxonomy code (#388). Format-only validation against the single
   // ACRISS_PATTERN source — the value is normalised to upper-case so 'ccar'
