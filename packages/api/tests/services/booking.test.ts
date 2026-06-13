@@ -22,7 +22,11 @@ import {
 } from '../../src/repositories/in-memory'
 import { InMemoryBookingRepository } from '../../src/repositories/in-memory/booking'
 import { InMemoryBookingEventRepository } from '../../src/repositories/in-memory/booking-event'
-import type { RunInTransaction, TransactionRepos } from '../../src/repositories/types'
+import type {
+  RunInTransaction,
+  TransactionRepos,
+  VehicleClassRepository,
+} from '../../src/repositories/types'
 import {
   BookingService,
   type BookingVerificationGate,
@@ -854,7 +858,11 @@ interface SubHarness {
 
 // Seeds a confirmed operator-A booking on vehicle V1 (class A @ ACRISS_A, the
 // Osaka location) via the real submit path, ready for substitution tests.
-async function setupSub(postCommit?: BookingPostCommitDispatcher): Promise<SubHarness> {
+// The class repo is injectable so #709's call-count test can wrap it in a spy.
+async function setupSub(
+  postCommit?: BookingPostCommitDispatcher,
+  vehicleClassRepo: VehicleClassRepository = new InMemoryVehicleClassRepository(),
+): Promise<SubHarness> {
   const events: BookingEvent[] = []
   const bookingRepo = new InMemoryBookingRepository()
   const bookingEventRepo = new InMemoryBookingEventRepository(events)
@@ -864,7 +872,6 @@ async function setupSub(postCommit?: BookingPostCommitDispatcher): Promise<SubHa
   const addOnRepo = new InMemoryAddOnRepository()
   const feeScheduleRepo = new InMemoryFeeScheduleRepository()
   const maintenanceLogRepo = new InMemoryMaintenanceLogRepository()
-  const vehicleClassRepo = new InMemoryVehicleClassRepository()
   const userRepo = new InMemoryUserRepository(
     new Map<string, User>([
       [
@@ -1042,6 +1049,85 @@ describe('BookingService.substitute — operator vehicle swap (#392 §5.5)', () 
     expect(result.ok).toBe(false)
     if (result.ok) return
     expect(result.status).toBe(404)
+  })
+})
+
+// Counts every read against the wrapped class repo so a test can assert the
+// substitution path resolves classes in a constant number of queries (#709) —
+// not the per-candidate `findById` fan-out it used to do.
+class CountingVehicleClassRepository implements VehicleClassRepository {
+  findByIdCalls = 0
+  findAllCalls = 0
+  constructor(private readonly inner: VehicleClassRepository) {}
+  findAll(...args: Parameters<VehicleClassRepository['findAll']>) {
+    this.findAllCalls += 1
+    return this.inner.findAll(...args)
+  }
+  findById(...args: Parameters<VehicleClassRepository['findById']>) {
+    this.findByIdCalls += 1
+    return this.inner.findById(...args)
+  }
+  findBySlug(...args: Parameters<VehicleClassRepository['findBySlug']>) {
+    return this.inner.findBySlug(...args)
+  }
+  create(...args: Parameters<VehicleClassRepository['create']>) {
+    return this.inner.create(...args)
+  }
+  update(...args: Parameters<VehicleClassRepository['update']>) {
+    return this.inner.update(...args)
+  }
+  archive(...args: Parameters<VehicleClassRepository['archive']>) {
+    return this.inner.archive(...args)
+  }
+}
+
+describe('BookingService.findSubstitutionCandidates — batched class lookups (#709)', () => {
+  // Same-operator, same-location candidate. Class defaults to A (matches the
+  // seeded booking) so it qualifies unless an off-class override is passed.
+  const addVehicle = (h: SubHarness, o: Partial<Vehicle> = {}) =>
+    h.repos.vehicleRepo.create(
+      SYSTEM_CONTEXT,
+      vehicleData({
+        classId: h.classA.id,
+        pickupLocationId: h.locationId,
+        dailyRateJpy: 15000,
+        ...o,
+      }),
+    )
+
+  it('resolves classes in a constant number of queries regardless of candidate count', async () => {
+    const counting = new CountingVehicleClassRepository(new InMemoryVehicleClassRepository())
+    const h = await setupSub(undefined, counting)
+    // 6 same-class peers — the old path fired 2 findById each (re-fetching the
+    // booking class every time): 12+ findById for 6 candidates. Batched: zero.
+    const N = 6
+    for (let i = 0; i < N; i += 1) await addVehicle(h)
+    counting.findByIdCalls = 0
+    counting.findAllCalls = 0
+
+    const candidates = await h.service.findSubstitutionCandidates(opCtxA, h.bookingId)
+
+    expect(candidates).toHaveLength(N)
+    // The N+1 signal: per-candidate findById is gone entirely.
+    expect(counting.findByIdCalls).toBe(0)
+    // Classes resolved once in a single batch read, not per candidate.
+    expect(counting.findAllCalls).toBe(1)
+  })
+
+  it('preserves the same-ACRISS filter: keeps same-class peers, drops an off-class vehicle', async () => {
+    const counting = new CountingVehicleClassRepository(new InMemoryVehicleClassRepository())
+    const h = await setupSub(undefined, counting)
+    const keep1 = await addVehicle(h)
+    const keep2 = await addVehicle(h)
+    await addVehicle(h, { classId: h.classB.id }) // different ACRISS -> excluded
+
+    const candidates = await h.service.findSubstitutionCandidates(opCtxA, h.bookingId)
+    const ids = (candidates ?? []).map((v) => v.id).sort()
+
+    expect(ids).toEqual([keep1.id, keep2.id].sort())
+    // Even with a mix of classes, lookups stay constant.
+    expect(counting.findByIdCalls).toBe(0)
+    expect(counting.findAllCalls).toBe(1)
   })
 })
 

@@ -1,10 +1,10 @@
 import { z } from 'zod'
+import { FEE_TYPES, FEE_UNITS, type FeeType, type FeeUnit } from '../enums'
 
-export const FEE_TYPES = ['OVERTIME_HOURLY', 'CLEANING_FLAT', 'NO_FUEL_FLAT'] as const
-export const FEE_UNITS = ['PER_HOUR', 'PER_DAY', 'PER_KM', 'FLAT'] as const
-
-export type FeeType = (typeof FEE_TYPES)[number]
-export type FeeUnit = (typeof FEE_UNITS)[number]
+// Re-exported from the enum SSoT (#688) under their original names so the
+// `fee_type`/`fee_unit` pgEnums, this validator, and every existing consumer all
+// share one declaration.
+export { FEE_TYPES, FEE_UNITS, type FeeType, type FeeUnit }
 
 /**
  * The unit each fee type must use (slice 4b / #405). MVP fee types map 1:1 to a

@@ -16,6 +16,26 @@ import {
   uniqueIndex,
 } from 'drizzle-orm/pg-core'
 import type { AdapterAccountType } from 'next-auth/adapters'
+// Enum value sets are declared ONCE in ../enums (zero-import, no-DB subpath) so
+// the DB pgEnums, the Zod validators, and the web type imports all share one
+// source (#688). The pgEnums below feed these arrays into `pgEnum(...)`.
+import {
+  BOOKING_EVENT_TYPES,
+  BOOKING_FULFILLMENT_MODES,
+  BOOKING_SOURCES,
+  BOOKING_STATUSES,
+  COORDINATE_SOURCES,
+  FEE_SCHEDULE_STATUSES,
+  FEE_TYPES,
+  FEE_UNITS,
+  INSURANCE_STATUSES,
+  LOCATION_STATUSES,
+  PAYMENT_EVENT_STATUSES,
+  ROLES,
+  TRANSMISSIONS,
+  VEHICLE_CLASS_STATUSES,
+  VEHICLE_STATUSES,
+} from '../enums'
 import { LUGGAGE_SIZES } from '../lib/luggage'
 import type { LocationOperatingHours } from '../types/location'
 // Booking snapshot/event payload types live in ./booking-types (file-size split,
@@ -35,14 +55,7 @@ import { regions } from './regions'
 // PLATFORM_ADMIN is the only role allowed to bypass (env-gated).
 // Legacy STAFF / ADMIN remain as temporary platform-admin equivalents
 // during the transition — no new users get them. See proposal §6.2.
-export const roleEnum = pgEnum('role', [
-  'RENTER',
-  'STAFF',
-  'ADMIN',
-  'OPERATOR_OWNER',
-  'OPERATOR_STAFF',
-  'PLATFORM_ADMIN',
-])
+export const roleEnum = pgEnum('role', ROLES)
 
 // Operators are the marketplace tenants (e.g. Best Car Rental). Every
 // operator-owned entity (vehicles, classes, later locations/insurance/fees)
@@ -104,38 +117,28 @@ export const accounts = pgTable(
   (account) => [primaryKey({ columns: [account.provider, account.providerAccountId] })],
 )
 
-export const transmissionEnum = pgEnum('transmission', ['AUTO', 'MANUAL'])
+export const transmissionEnum = pgEnum('transmission', TRANSMISSIONS)
 // #457: standardized luggage-size taxonomy. Values declared once in lib/luggage.ts
 // (shared by the Zod enum, the resolver, and this pgEnum).
 export const luggageSizeEnum = pgEnum('luggage_size', LUGGAGE_SIZES)
-export const vehicleClassStatusEnum = pgEnum('vehicle_class_status', ['ACTIVE', 'ARCHIVED'])
-export const vehicleStatusEnum = pgEnum('vehicle_status', ['AVAILABLE', 'MAINTENANCE', 'RETIRED'])
-export const bookingStatusEnum = pgEnum('booking_status', [
-  'CONFIRMED',
-  'ACTIVE',
-  'COMPLETED',
-  'CANCELLED',
-])
-export const bookingSourceEnum = pgEnum('booking_source', ['DIRECT', 'TRIP_COM', 'MANUAL', 'OTHER'])
+export const vehicleClassStatusEnum = pgEnum('vehicle_class_status', VEHICLE_CLASS_STATUSES)
+export const vehicleStatusEnum = pgEnum('vehicle_status', VEHICLE_STATUSES)
+export const bookingStatusEnum = pgEnum('booking_status', BOOKING_STATUSES)
+export const bookingSourceEnum = pgEnum('booking_source', BOOKING_SOURCES)
 // #463 (§5 "design-for-later"): how a booking is fulfilled. SPECIFIC = a concrete
 // requested/assigned vehicle (the only mode exercised pre-demo). CLASS_COMBO = book a
 // class, operator assigns a car later — the post-demo fast-follow (#464), which also
 // needs its own schema work (no assigned vehicle at booking time). Landing the
 // discriminator now keeps #464 from retrofitting a flag onto a table full of demo rows.
-export const bookingFulfillmentModeEnum = pgEnum('booking_fulfillment_mode', [
-  'SPECIFIC',
-  'CLASS_COMBO',
-])
+export const bookingFulfillmentModeEnum = pgEnum(
+  'booking_fulfillment_mode',
+  BOOKING_FULFILLMENT_MODES,
+)
 // Append-only booking lifecycle events (epic #385, slice 6 / #392). bookings.status
 // is the write-through projection of the latest lifecycle event. BOOKING_CREATED +
 // VEHICLE_SUBSTITUTED are new this slice; CANCELLED/STATUS_CHANGED make the existing
 // transitions also append an event so the log is complete. See proposal §2.
-export const bookingEventTypeEnum = pgEnum('booking_event_type', [
-  'BOOKING_CREATED',
-  'VEHICLE_SUBSTITUTED',
-  'BOOKING_CANCELLED',
-  'STATUS_CHANGED',
-])
+export const bookingEventTypeEnum = pgEnum('booking_event_type', BOOKING_EVENT_TYPES)
 
 // Issue #247: vehicle classes — renter-facing catalog categories.
 // Renters browse and book classes (e.g. "Compact"); owner manages
@@ -192,7 +195,7 @@ export const vehicleClasses = pgTable(
   ],
 )
 
-export const locationStatusEnum = pgEnum('location_status', ['ACTIVE', 'ARCHIVED'])
+export const locationStatusEnum = pgEnum('location_status', LOCATION_STATUSES)
 
 // Provenance of a location's lat/lng (#531). GEOCODED = derived from `address`
 // by the Geocoder; MANUAL = an operator-supplied pin that wins over geocoding;
@@ -200,7 +203,7 @@ export const locationStatusEnum = pgEnum('location_status', ['ACTIVE', 'ARCHIVED
 // a retry will resolve them, so the bulk re-geocode can enumerate these).
 // Nullable column: null = no coords captured AND none pending (un-geocodable).
 // Server-derived only — never accepted from the client (the validators omit it).
-export const coordinateSourceEnum = pgEnum('coordinate_source', ['GEOCODED', 'MANUAL', 'PENDING'])
+export const coordinateSourceEnum = pgEnum('coordinate_source', COORDINATE_SOURCES)
 
 // Operator-owned pickup/return storefronts (epic #385, slice 2 / #387).
 // Vehicles anchor to a pickup location; renter search (slice 5) returns
@@ -269,7 +272,7 @@ export const locations = pgTable(
   ],
 )
 
-export const insuranceStatusEnum = pgEnum('insurance_status', ['ACTIVE', 'ARCHIVED'])
+export const insuranceStatusEnum = pgEnum('insurance_status', INSURANCE_STATUSES)
 
 // Operator-owned insurance options (epic #385, slice 4a / #404). Per-operator
 // CRUD only — no vehicle_insurance_options join table in MVP. At booking
@@ -319,9 +322,9 @@ export const insuranceOptions = pgTable(
 // optionally per vehicle class (null vehicleClassId = operator-wide). MVP fee
 // types: overtime (hourly), cleaning (flat), no-fuel (flat). 4b stores the
 // schedules only — booking snapshot + overtime compute land in slice 6 (#392).
-export const feeTypeEnum = pgEnum('fee_type', ['OVERTIME_HOURLY', 'CLEANING_FLAT', 'NO_FUEL_FLAT'])
-export const feeUnitEnum = pgEnum('fee_unit', ['PER_HOUR', 'PER_DAY', 'PER_KM', 'FLAT'])
-export const feeScheduleStatusEnum = pgEnum('fee_schedule_status', ['ACTIVE', 'ARCHIVED'])
+export const feeTypeEnum = pgEnum('fee_type', FEE_TYPES)
+export const feeUnitEnum = pgEnum('fee_unit', FEE_UNITS)
+export const feeScheduleStatusEnum = pgEnum('fee_schedule_status', FEE_SCHEDULE_STATUSES)
 
 // Slice 7 (#393) outbound notifications.
 export const notificationKindEnum = pgEnum('notification_kind', [
@@ -656,7 +659,7 @@ export const bookingEvents = pgTable(
 
 // In-app Stripe payment of the rental total (epic #385, slice payment / #461; 2026-06-05 scope addendum §2). The signed checkout.session.completed webhook is the SOURCE OF TRUTH — a row exists only after a verified, paid session.
 // MVP records only the success event; REFUNDED/DISPUTED are post-MVP (YAGNI).
-export const paymentEventStatusEnum = pgEnum('payment_event_status', ['SUCCEEDED'])
+export const paymentEventStatusEnum = pgEnum('payment_event_status', PAYMENT_EVENT_STATUSES)
 export const paymentEvents = pgTable(
   'payment_events',
   {
@@ -856,9 +859,29 @@ export const notificationLog = pgTable(
 export { documentStatusEnum, documentTypeEnum, renterDocuments } from './renter-documents'
 export { regions } from './regions'
 
-export type BookingStatus = (typeof bookingStatusEnum.enumValues)[number]
-export type BookingFulfillmentMode = (typeof bookingFulfillmentModeEnum.enumValues)[number]
-export type CoordinateSource = (typeof coordinateSourceEnum.enumValues)[number]
+// Enum string-union types are derived ONCE in ../enums from the same value arrays
+// the pgEnums above consume (#688). Re-exported here so existing
+// `@kuruma/shared/db/schema` importers keep their type names while web can also
+// import them DB-free via `@kuruma/shared/enums`. Notification enum types are
+// deliberately excluded — owned by #710. LuggageSize stays sourced from lib/luggage.
+export type {
+  BookingEventType,
+  BookingFulfillmentMode,
+  BookingSource,
+  BookingStatus,
+  CoordinateSource,
+  FeeScheduleStatus,
+  FeeType,
+  FeeUnit,
+  InsuranceStatus,
+  LocationStatus,
+  PaymentEventStatus,
+  Role,
+  Transmission,
+  VehicleClassStatus,
+  VehicleStatus,
+} from '../enums'
+import type { BookingStatus } from '../enums'
 
 export const VALID_BOOKING_TRANSITIONS: Record<BookingStatus, BookingStatus[]> = {
   CONFIRMED: ['ACTIVE', 'CANCELLED'],
@@ -866,13 +889,6 @@ export const VALID_BOOKING_TRANSITIONS: Record<BookingStatus, BookingStatus[]> =
   COMPLETED: [],
   CANCELLED: [],
 }
-
-// ---- Slice 6 (#392) booking snapshot + event payload types ----
-// Snapshots lock rates at booking time; operator edits to the live
-// insurance_options / fee_schedules rows never rewrite a booked snapshot.
-export type FeeType = (typeof feeTypeEnum.enumValues)[number]
-export type FeeUnit = (typeof feeUnitEnum.enumValues)[number]
-export type BookingEventType = (typeof bookingEventTypeEnum.enumValues)[number]
 
 // #710: derive the notification kind/status unions from their pgEnum single
 // source so adding/renaming a value can only be done in one place. A
@@ -882,7 +898,6 @@ export type BookingEventType = (typeof bookingEventTypeEnum.enumValues)[number]
 // the enum column. Importing these into the api turns that into a build error.
 export type NotificationKind = (typeof notificationKindEnum.enumValues)[number]
 export type NotificationStatus = (typeof notificationStatusEnum.enumValues)[number]
-
 // add_on_options table + status enum live in ./add-on; booking snapshot/event
 // payload types live in ./booking-types. Both re-exported so drizzle-kit (which
 // only loads this module) and existing `@kuruma/shared/db/schema` importers see
