@@ -4,11 +4,13 @@ import { type CreateBookingInput, createBooking } from '@/vite/bookings/api'
 import { useSession } from '@/vite/session'
 import { useMutation } from '@tanstack/react-query'
 import { useNavigate } from '@tanstack/react-router'
+import { useState } from 'react'
 import { useTranslations } from 'use-intl'
 
 interface PaymentStepProps {
   readonly locale: string
-  readonly bookingInput: CreateBookingInput
+  /** Consent is supplied here, not by the wizard — see `disclaimerAccepted` below. */
+  readonly bookingInput: Omit<CreateBookingInput, 'disclaimerAccepted'>
   readonly onBack: () => void
 }
 
@@ -25,11 +27,14 @@ export function PaymentStep({ locale, bookingInput, onBack }: PaymentStepProps) 
   const navigate = useNavigate()
   const session = useSession()
   const csrfToken = session.data?.csrfToken
+  // Liability-disclaimer consent (#613) replaces the dropped online document upload:
+  // the renter acknowledges in-person verification at pickup before instant-booking.
+  const [accepted, setAccepted] = useState(false)
 
   const mutation = useMutation({
     mutationFn: (): Promise<{ id: string }> => {
       if (!csrfToken) throw new ApiError('Not signed in', 401)
-      return createBooking(bookingInput, csrfToken)
+      return createBooking({ ...bookingInput, disclaimerAccepted: accepted }, csrfToken)
     },
     onSuccess: (booking) => {
       // Navigate with only the id — do NOT seed the ['bookings', id] cache with
@@ -71,6 +76,21 @@ export function PaymentStep({ locale, bookingInput, onBack }: PaymentStepProps) 
           {message}
         </p>
       ) : null}
+      <div className="space-y-3 rounded-lg border border-border bg-muted/30 p-4">
+        <p id="disclaimer-terms" className="text-sm text-muted-foreground">
+          {t('disclaimer.terms')}
+        </p>
+        <label className="flex items-start gap-3 text-sm">
+          <input
+            type="checkbox"
+            checked={accepted}
+            onChange={(event) => setAccepted(event.target.checked)}
+            aria-describedby="disclaimer-terms"
+            className="mt-0.5 h-4 w-4 shrink-0 rounded border-input"
+          />
+          <span className="text-foreground">{t('disclaimer.label')}</span>
+        </label>
+      </div>
       <div className="flex items-center justify-between gap-4">
         <Button type="button" variant="outline" onClick={onBack} disabled={mutation.isPending}>
           {t('nav.back')}
@@ -78,7 +98,7 @@ export function PaymentStep({ locale, bookingInput, onBack }: PaymentStepProps) 
         <Button
           type="button"
           onClick={() => mutation.mutate()}
-          disabled={mutation.isPending || !csrfToken}
+          disabled={mutation.isPending || !csrfToken || !accepted}
         >
           {mutation.isPending ? t('payment.submitting') : t('payment.submit')}
         </Button>
