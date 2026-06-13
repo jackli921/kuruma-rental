@@ -10,7 +10,7 @@ const renterCtx = (id: string): CallerContext => ({
   role: 'RENTER',
   bypassScope: false,
 })
-const staffCtx: CallerContext = { userId: 'staff_1', role: 'STAFF', bypassScope: true }
+const adminCtx: CallerContext = { userId: 'admin_1', role: 'PLATFORM_ADMIN', bypassScope: true }
 const operatorCtx: CallerContext = {
   userId: 'op_owner',
   role: 'OPERATOR_OWNER',
@@ -45,8 +45,8 @@ describe('InMemoryRenterDocumentRepository — create', () => {
     )
   })
 
-  it('staff may create a document on behalf of a renter', async () => {
-    const doc = await repo.create(staffCtx, idpInput(OTHER_RENTER))
+  it('a platform admin may create a document on behalf of a renter', async () => {
+    const doc = await repo.create(adminCtx, idpInput(OTHER_RENTER))
     expect(doc.renterId).toBe(OTHER_RENTER)
   })
 })
@@ -56,7 +56,7 @@ describe('InMemoryRenterDocumentRepository — read scoping', () => {
   beforeEach(async () => {
     repo = new InMemoryRenterDocumentRepository()
     await repo.create(renterCtx(RENTER), idpInput(RENTER))
-    await repo.create(staffCtx, idpInput(OTHER_RENTER))
+    await repo.create(adminCtx, idpInput(OTHER_RENTER))
   })
 
   it('findByRenter returns a renter their own documents', async () => {
@@ -70,8 +70,8 @@ describe('InMemoryRenterDocumentRepository — read scoping', () => {
     expect(docs).toEqual([])
   })
 
-  it('staff can read any renter documents', async () => {
-    const docs = await repo.findByRenter(staffCtx, OTHER_RENTER)
+  it('a platform admin can read any renter documents', async () => {
+    const docs = await repo.findByRenter(adminCtx, OTHER_RENTER)
     expect(docs).toHaveLength(1)
   })
 })
@@ -84,22 +84,22 @@ describe('InMemoryRenterDocumentRepository — verify', () => {
     docId = (await repo.create(renterCtx(RENTER), idpInput())).id
   })
 
-  it('staff approval records expiry, verifier and verifiedAt', async () => {
-    const verified = await repo.verify(staffCtx, docId, {
+  it('platform-admin approval records expiry, verifier and verifiedAt', async () => {
+    const verified = await repo.verify(adminCtx, docId, {
       status: 'APPROVED',
-      verifierId: staffCtx.userId,
+      verifierId: adminCtx.userId,
       expiryDate: '2030-01-31',
     })
     expect(verified?.status).toBe('APPROVED')
     expect(verified?.expiryDate).toBe('2030-01-31')
-    expect(verified?.verifierId).toBe('staff_1')
+    expect(verified?.verifierId).toBe('admin_1')
     expect(verified?.verifiedAt).toBeInstanceOf(Date)
   })
 
-  it('staff rejection records the reason', async () => {
-    const rejected = await repo.verify(staffCtx, docId, {
+  it('platform-admin rejection records the reason', async () => {
+    const rejected = await repo.verify(adminCtx, docId, {
       status: 'REJECTED',
-      verifierId: staffCtx.userId,
+      verifierId: adminCtx.userId,
       rejectionReason: 'Blurry',
     })
     expect(rejected?.status).toBe('REJECTED')
@@ -127,14 +127,14 @@ describe('InMemoryRenterDocumentRepository — verify', () => {
   })
 
   it('treats a verdict as terminal — re-verifying a decided doc returns undefined', async () => {
-    await repo.verify(staffCtx, docId, {
+    await repo.verify(adminCtx, docId, {
       status: 'APPROVED',
-      verifierId: staffCtx.userId,
+      verifierId: adminCtx.userId,
       expiryDate: '2030-01-31',
     })
-    const reVerify = await repo.verify(staffCtx, docId, {
+    const reVerify = await repo.verify(adminCtx, docId, {
       status: 'REJECTED',
-      verifierId: staffCtx.userId,
+      verifierId: adminCtx.userId,
       rejectionReason: 'changed my mind',
     })
     expect(reVerify).toBeUndefined()
@@ -146,16 +146,16 @@ describe('InMemoryRenterDocumentRepository — pending queue + gate lookup', () 
   beforeEach(async () => {
     repo = new InMemoryRenterDocumentRepository()
     const a = await repo.create(renterCtx(RENTER), idpInput(RENTER))
-    await repo.create(staffCtx, idpInput(OTHER_RENTER))
-    await repo.verify(staffCtx, a.id, {
+    await repo.create(adminCtx, idpInput(OTHER_RENTER))
+    await repo.verify(adminCtx, a.id, {
       status: 'APPROVED',
-      verifierId: staffCtx.userId,
+      verifierId: adminCtx.userId,
       expiryDate: '2030-01-31',
     })
   })
 
   it('listPending returns only PENDING docs with a total', async () => {
-    const page = await repo.listPending(staffCtx)
+    const page = await repo.listPending(adminCtx)
     expect(page.total).toBe(1)
     expect(page.data.every((d) => d.status === 'PENDING')).toBe(true)
   })

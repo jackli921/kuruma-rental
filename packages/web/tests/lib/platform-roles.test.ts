@@ -6,9 +6,9 @@ describe('isPlatformAdmin', () => {
     expect(isPlatformAdmin('PLATFORM_ADMIN')).toBe(true)
   })
 
-  test('admits legacy STAFF/ADMIN (transitional super-admins, schema.ts:23)', () => {
-    expect(isPlatformAdmin('STAFF')).toBe(true)
-    expect(isPlatformAdmin('ADMIN')).toBe(true)
+  test('rejects legacy STAFF/ADMIN — platform-admin access revoked (#487)', () => {
+    expect(isPlatformAdmin('STAFF')).toBe(false)
+    expect(isPlatformAdmin('ADMIN')).toBe(false)
   })
 
   test('rejects operator and renter roles', () => {

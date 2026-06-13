@@ -39,7 +39,7 @@ beforeEach(() => {
     maintenanceLogRepo,
   )
   app = new Hono()
-  app.use('*', testAuthMiddleware('staff-user', 'STAFF'))
+  app.use('*', testAuthMiddleware('staff-user', 'PLATFORM_ADMIN'))
   app.route('/', createFleetOverviewRoutes(new FleetOverviewService(fleetRepo)))
 })
 

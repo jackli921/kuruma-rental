@@ -75,16 +75,28 @@ describe('AvailabilityService.checkVehicleAvailability', () => {
     expect(Object.keys(result.conflicts[0]!)).toEqual(['startAt', 'effectiveEndAt'])
   })
 
-  it('returns full conflict rows for a staff viewer', async () => {
+  it('returns full conflict rows for a platform-staff viewer (PLATFORM_ADMIN after #487)', async () => {
     const vehicle = await seedVehicle()
     const booking = await seedBooking(vehicle.id, { notes: 'secret internal note' })
+
+    const result = await service.checkVehicleAvailability(vehicle.id, FROM, TO, 'PLATFORM_ADMIN')
+
+    expect(result.kind).toBe('unavailable')
+    if (result.kind !== 'unavailable') throw new Error('expected unavailable')
+    expect(result.conflicts).toHaveLength(1)
+    expect(result.conflicts[0]).toMatchObject({ id: booking.id, notes: 'secret internal note' })
+  })
+
+  it('redacts conflicts for a legacy STAFF viewer — platform access revoked by #487', async () => {
+    const vehicle = await seedVehicle()
+    await seedBooking(vehicle.id, { notes: 'secret internal note' })
 
     const result = await service.checkVehicleAvailability(vehicle.id, FROM, TO, 'STAFF')
 
     expect(result.kind).toBe('unavailable')
     if (result.kind !== 'unavailable') throw new Error('expected unavailable')
     expect(result.conflicts).toHaveLength(1)
-    expect(result.conflicts[0]).toMatchObject({ id: booking.id, notes: 'secret internal note' })
+    expect(Object.keys(result.conflicts[0]!)).toEqual(['startAt', 'effectiveEndAt'])
   })
 
   it('returns available with the vehicle when the window is free', async () => {

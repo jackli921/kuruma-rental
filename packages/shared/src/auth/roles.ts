@@ -45,15 +45,19 @@ export const OPERATOR_ROLES = roleSet('OPERATOR_OWNER', 'OPERATOR_STAFF')
 
 /**
  * Platform-admin tier — the cross-tenant admin portal (`/admin/*`), the revenue
- * report, and the platform-staff route gates. PLATFORM_ADMIN is the sanctioned
- * super-admin; legacy STAFF/ADMIN are transitional equivalents.
+ * report, and the platform-staff route gates (aliased as STAFF_ROLES in the API:
+ * customers, documents, maintenance logs, vehicle photos, etc.). PLATFORM_ADMIN
+ * is now the SOLE platform-staff role.
  *
- * #487 tightens THIS set to `{PLATFORM_ADMIN}`. Kept a SEPARATE instance from
- * {@link MANAGEMENT_BASE_ROLES} (identical members today) precisely so that
- * tightening does not also strip legacy admins from business management — the two
- * policies must move independently. Do NOT merge them.
+ * #487 tightened THIS set to `{PLATFORM_ADMIN}`, revoking the legacy transitional
+ * STAFF/ADMIN from every platform-staff gate at once. Kept a SEPARATE instance
+ * from {@link MANAGEMENT_BASE_ROLES} precisely so this did NOT strip legacy admins
+ * from business management — the two policies move independently. Do NOT merge.
+ * #487 also tightened {@link SCOPE_BYPASS_ROLES} / {@link PRIVILEGED_ROLES} to
+ * `{PARTNER, PLATFORM_ADMIN}`, so legacy STAFF/ADMIN no longer bypass operator
+ * scope or read cross-tenant private data either — the revocation is complete.
  */
-export const PLATFORM_ROLES = roleSet('STAFF', 'ADMIN', 'PLATFORM_ADMIN')
+export const PLATFORM_ROLES = roleSet('PLATFORM_ADMIN')
 
 /**
  * Base of the business-management tier (fleet write + operator-private config
@@ -72,13 +76,13 @@ export const BUSINESS_ROLES = union(MANAGEMENT_BASE_ROLES, OPERATOR_ROLES)
 /**
  * Cross-tenant read bypass — the platform tier PLUS PARTNER (Trip.com reads
  * bookings across tenants). Drives `CallerContext.bypassScope`. A distinct
- * instance from {@link PRIVILEGED_ROLES} (same members today) because the two gate
- * different things and may diverge under #487.
+ * instance from {@link PRIVILEGED_ROLES} (same members) because the two gate
+ * different things and may still diverge later.
  */
-export const SCOPE_BYPASS_ROLES = roleSet('STAFF', 'ADMIN', 'PARTNER', 'PLATFORM_ADMIN')
+export const SCOPE_BYPASS_ROLES = roleSet('PARTNER', 'PLATFORM_ADMIN')
 
 /**
  * Roles permitted to read cross-tenant private data (message threads, user lists).
  * Platform tier PLUS PARTNER. Distinct instance from {@link SCOPE_BYPASS_ROLES}.
  */
-export const PRIVILEGED_ROLES = roleSet('STAFF', 'ADMIN', 'PARTNER', 'PLATFORM_ADMIN')
+export const PRIVILEGED_ROLES = roleSet('PARTNER', 'PLATFORM_ADMIN')

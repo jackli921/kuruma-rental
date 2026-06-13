@@ -105,8 +105,8 @@ describe('photo upload rate limiting', () => {
     const ctx = createTestApp({ photoUploadLimiter: createFakeLimiter(1) })
     const v1 = await ctx.vehicleRepo.create(SYSTEM_CONTEXT, vehicleInput())
     const v2 = await ctx.vehicleRepo.create(SYSTEM_CONTEXT, vehicleInput())
-    const headersUserA = await authHeaders({ sub: 'user-a', role: 'ADMIN' })
-    const headersUserB = await authHeaders({ sub: 'user-b', role: 'ADMIN' })
+    const headersUserA = await authHeaders({ sub: 'user-a', role: 'PLATFORM_ADMIN' })
+    const headersUserB = await authHeaders({ sub: 'user-b', role: 'PLATFORM_ADMIN' })
 
     const userAv1 = await ctx.app.request(`/vehicles/${v1.id}/photos`, {
       method: 'POST',

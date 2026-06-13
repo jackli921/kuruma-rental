@@ -88,16 +88,19 @@ describe('GET /admin/revenue — auth', () => {
     expect((await app.request('/admin/revenue')).status).toBe(401)
   })
 
-  it.each(['RENTER', 'PARTNER'] as const)('403 for %s (not a platform admin)', async (role) => {
-    expect((await mount(role).request('/admin/revenue')).status).toBe(403)
-  })
+  it.each(['RENTER', 'PARTNER', 'STAFF', 'ADMIN'] as const)(
+    '403 for %s (not a platform admin — legacy STAFF/ADMIN revoked #487)',
+    async (role) => {
+      expect((await mount(role).request('/admin/revenue')).status).toBe(403)
+    },
+  )
 
   it('403 for an OPERATOR_OWNER (must never see another partner revenue)', async () => {
     expect((await mount('OPERATOR_OWNER', OP_A).request('/admin/revenue')).status).toBe(403)
   })
 
-  it.each(['PLATFORM_ADMIN', 'STAFF', 'ADMIN'] as const)('200 for %s', async (role) => {
-    expect((await mount(role).request('/admin/revenue')).status).toBe(200)
+  it('200 for PLATFORM_ADMIN (the only platform-admin role)', async () => {
+    expect((await mount('PLATFORM_ADMIN').request('/admin/revenue')).status).toBe(200)
   })
 })
 

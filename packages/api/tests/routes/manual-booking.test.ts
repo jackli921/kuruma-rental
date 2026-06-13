@@ -66,7 +66,7 @@ function makeRenter(id: string): User {
   }
 }
 
-describe('Manual booking (staff/admin renterId override + advance rule skip)', () => {
+describe('Manual booking (platform-admin renterId override + advance rule skip)', () => {
   let vehicleRepo: InMemoryVehicleRepository
   let bookingRepo: InMemoryBookingRepository
   let userStore: Map<string, User>
@@ -127,11 +127,11 @@ describe('Manual booking (staff/admin renterId override + advance rule skip)', (
     })
   })
 
-  it('staff can create booking with custom renterId', async () => {
+  it('a platform admin can create a booking with a custom renterId', async () => {
     const staffId = crypto.randomUUID()
     const customerId = crypto.randomUUID()
     userStore.set(customerId, makeRenter(customerId))
-    const token = await createTestToken({ id: staffId, role: 'STAFF' })
+    const token = await createTestToken({ id: staffId, role: 'PLATFORM_ADMIN' })
 
     // Start 48 hours from now to satisfy advance booking rule
     const startAt = new Date(Date.now() + 48 * 60 * 60 * 1000)
@@ -201,7 +201,7 @@ describe('Manual booking (staff/admin renterId override + advance rule skip)', (
 
   it('manual booking skips advance booking rule', async () => {
     const staffId = crypto.randomUUID()
-    const token = await createTestToken({ id: staffId, role: 'STAFF' })
+    const token = await createTestToken({ id: staffId, role: 'PLATFORM_ADMIN' })
 
     // Start 1 hour from now — violates the 24h advance booking rule
     const startAt = new Date(Date.now() + 1 * 60 * 60 * 1000)
@@ -232,7 +232,7 @@ describe('Manual booking (staff/admin renterId override + advance rule skip)', (
 
   it('manual booking still enforces min rental duration', async () => {
     const staffId = crypto.randomUUID()
-    const token = await createTestToken({ id: staffId, role: 'STAFF' })
+    const token = await createTestToken({ id: staffId, role: 'PLATFORM_ADMIN' })
 
     // Duration = 30 minutes, below minRentalHours (2h)
     const startAt = new Date(Date.now() + 1 * 60 * 60 * 1000)
@@ -294,7 +294,7 @@ describe('Manual booking (staff/admin renterId override + advance rule skip)', (
 
   it('rejects manual booking when target renterId does not exist', async () => {
     const staffId = crypto.randomUUID()
-    const token = await createTestToken({ id: staffId, role: 'STAFF' })
+    const token = await createTestToken({ id: staffId, role: 'PLATFORM_ADMIN' })
     const startAt = new Date(Date.now() + 48 * 60 * 60 * 1000)
     const endAt = new Date(startAt.getTime() + 4 * 60 * 60 * 1000)
 
@@ -325,7 +325,7 @@ describe('Manual booking (staff/admin renterId override + advance rule skip)', (
     const staffId = crypto.randomUUID()
     const otherStaffId = crypto.randomUUID()
     userStore.set(otherStaffId, { ...makeRenter(otherStaffId), role: 'STAFF' })
-    const token = await createTestToken({ id: staffId, role: 'STAFF' })
+    const token = await createTestToken({ id: staffId, role: 'PLATFORM_ADMIN' })
     const startAt = new Date(Date.now() + 48 * 60 * 60 * 1000)
     const endAt = new Date(startAt.getTime() + 4 * 60 * 60 * 1000)
 
