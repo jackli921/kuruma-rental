@@ -2,6 +2,7 @@ import type { RateLimitBinding } from '@elithrar/workers-hono-rate-limit'
 import { getDb, runTx } from '@kuruma/shared/db'
 import { Hono } from 'hono'
 import { cors } from 'hono/cors'
+import type { AppOverrides } from './app-overrides'
 import { DrizzleOAuthAccountStore } from './auth/drizzle-oauth-account-store'
 import { FetchGoogleOAuthProvider } from './auth/fetch-google-oauth-provider'
 import type { GoogleAuthRuntime, GoogleOAuthConfig } from './auth/google'
@@ -28,6 +29,7 @@ import {
   DrizzleNotificationLogRepository,
   DrizzleOperatorMembershipRepository,
   DrizzleOperatorRepository,
+  DrizzleOverviewRepository,
   DrizzlePaymentEventRepository,
   DrizzleProviderInviteRepository,
   DrizzleRenterDocumentRepository,
@@ -57,6 +59,7 @@ import {
   InMemoryNotificationLogRepository,
   InMemoryOperatorMembershipRepository,
   InMemoryOperatorRepository,
+  InMemoryOverviewRepository,
   InMemoryPaymentEventRepository,
   InMemoryProviderInviteRepository,
   InMemoryRenterDocumentRepository,
@@ -87,6 +90,7 @@ import type {
   NotificationLogRepository,
   OperatorMembershipRepository,
   OperatorRepository,
+  OverviewRepository,
   PaymentEventRepository,
   PhotoStorage,
   ProviderInviteRepository,
@@ -117,6 +121,7 @@ import { createMaintenanceLogRoutes } from './routes/maintenance-logs'
 import { createMessageRoutes } from './routes/messages'
 import { createNotificationRoutes } from './routes/notifications'
 import { createOperatorRoutes } from './routes/operators'
+import { createOverviewRoutes } from './routes/overview'
 import { createPaymentRoutes } from './routes/payments'
 import { createProviderInviteRoutes } from './routes/provider-invites'
 import { rateLimitByIp } from './routes/rate-limit'
@@ -141,6 +146,7 @@ import { FeeScheduleService } from './services/fee-schedule'
 import { FlatSearchService } from './services/flat-search'
 import { FleetOverviewService } from './services/fleet-overview'
 import { NominatimGeocoder } from './services/geocoding/nominatim-geocoder'
+import { ThrottledGeocoder } from './services/geocoding/throttled-geocoder'
 import type { Geocoder } from './services/geocoding/types'
 import { GoogleTranslationProvider } from './services/google-translation-provider'
 import { InsuranceOptionService } from './services/insurance-option'
@@ -151,6 +157,7 @@ import { NotificationService } from './services/notification'
 import { NotificationDispatcher } from './services/notification-dispatcher'
 import { OperatorService } from './services/operator'
 import { createOperatorGrantService } from './services/operator-grant'
+import { OverviewService } from './services/overview'
 import { PaymentService } from './services/payment/payment'
 import type { PaymentGateway } from './services/payment/payment-gateway'
 import { StripePaymentGateway } from './services/payment/stripe-payment-gateway'
@@ -165,44 +172,7 @@ import { VehicleDetailService } from './services/vehicle-detail'
 import { VehiclePhotoService } from './services/vehicle-photo'
 import { type ResolveWriteOperatorId, resolveOperatorIdForWrite } from './tenancy'
 
-export function createApp(overrides?: {
-  vehicleRepo: VehicleRepository
-  bookingRepo: BookingRepository
-  availabilityRepo: AvailabilityRepository
-  fleetOverviewRepo?: FleetOverviewRepository
-  vehicleDetailRepo?: VehicleDetailRepository
-  statsRepo?: StatsRepository
-  threadRepo?: ThreadRepository
-  messageRepo?: MessageRepository
-  vehicleClassRepo?: VehicleClassRepository
-  maintenanceLogRepo?: MaintenanceLogRepository
-  photoStorage?: PhotoStorage
-  renterDocumentRepo?: RenterDocumentRepository
-  documentStorage?: DocumentStorage
-  userRepo?: UserRepository
-  customerRepo?: CustomerRepository
-  operatorRepo?: OperatorRepository
-  locationRepo?: LocationRepository
-  insuranceOptionRepo?: InsuranceOptionRepository
-  addOnRepo?: AddOnRepository
-  feeScheduleRepo?: FeeScheduleRepository
-  notificationLogRepo?: NotificationLogRepository
-  storefrontRepo?: StorefrontRepository
-  paymentEventRepo?: PaymentEventRepository
-  providerInviteRepo?: ProviderInviteRepository
-  operatorMembershipRepo?: OperatorMembershipRepository
-  // Inject a fake gateway in tests; absent ⇒ the env-resolved Stripe/sentinel.
-  paymentGateway?: PaymentGateway
-  // Inject a fake Geocoder in tests (proves a provider swap touches only here);
-  // absent ⇒ the env-resolved Nominatim/null-stub.
-  geocoder?: Geocoder
-  photoUploadLimiter?: RateLimitBinding
-  photoUploadUserLimiter?: RateLimitBinding
-  publicCatalogLimiter?: RateLimitBinding
-  // Injected Google OAuth runtime (provider + account store). Integration tests
-  // pass a fake so the callback can be exercised without a live Google/DB.
-  googleAuthRuntime?: GoogleAuthRuntime
-}) {
+export function createApp(overrides?: AppOverrides) {
   let vehicleClassRepo: VehicleClassRepository
   let vehicleRepo: VehicleRepository
   let bookingRepo: BookingRepository
@@ -211,6 +181,7 @@ export function createApp(overrides?: {
   let fleetOverviewRepo: FleetOverviewRepository
   let vehicleDetailRepo: VehicleDetailRepository
   let statsRepo: StatsRepository
+  let overviewRepo: OverviewRepository
   let threadRepo: ThreadRepository
   let messageRepo: MessageRepository
   let maintenanceLogRepo: MaintenanceLogRepository
@@ -274,6 +245,8 @@ export function createApp(overrides?: {
       overrides.vehicleDetailRepo ??
       new InMemoryVehicleDetailRepository(vehicleRepo, bookingRepo, new Map(), maintenanceLogRepo)
     statsRepo = overrides.statsRepo ?? new InMemoryStatsRepository(vehicleRepo, bookingRepo)
+    overviewRepo =
+      overrides.overviewRepo ?? new InMemoryOverviewRepository(vehicleRepo, bookingRepo)
     threadRepo = overrides.threadRepo ?? new InMemoryThreadRepository()
     messageRepo =
       overrides.messageRepo ?? new InMemoryMessageRepository(threadRepo as InMemoryThreadRepository)
@@ -309,6 +282,7 @@ export function createApp(overrides?: {
     fleetOverviewRepo = new DrizzleFleetOverviewRepository(db)
     vehicleDetailRepo = new DrizzleVehicleDetailRepository(db)
     statsRepo = new DrizzleStatsRepository(db)
+    overviewRepo = new DrizzleOverviewRepository(db)
     threadRepo = new DrizzleThreadRepository(db, runTx)
     messageRepo = new DrizzleMessageRepository(db, runTx)
     userRepo = new DrizzleUserRepository(db)
@@ -375,6 +349,7 @@ export function createApp(overrides?: {
       maintenanceLogRepo,
     )
     statsRepo = new InMemoryStatsRepository(vehicleRepo, bookingRepo)
+    overviewRepo = new InMemoryOverviewRepository(vehicleRepo, bookingRepo)
     threadRepo = new InMemoryThreadRepository()
     messageRepo = new InMemoryMessageRepository(threadRepo as InMemoryThreadRepository)
     bookingEventRepo = new InMemoryBookingEventRepository()
@@ -452,24 +427,26 @@ export function createApp(overrides?: {
     }
   })()
 
-  // Forward geocoder (#531): disabled by default — returns null (no coords)
-  // unless BOTH a descriptive User-Agent AND an explicit endpoint are set. We do
-  // NOT default to the public OSM endpoint: its usage policy caps the WHOLE app
-  // at 1 req/s and there is no app-side throttle/cache here yet (#574), so a
-  // burst of operator saves would breach it. Production must point
-  // NOMINATIM_API_URL at a self-hosted / proxied / quota-backed instance (or
-  // swap in a different provider adapter on this one line). Geocoding is
-  // best-effort — the service treats null as "no coordinates" and the location
-  // still saves — so the null stub is safe and there is no loud prod sentinel.
-  // A test override wins outright, proving a provider swap touches only here.
-  const geocoder: Geocoder =
+  // Forward geocoder (#531): disabled by default (null stub) unless BOTH a
+  // User-Agent and an endpoint are set; prod = LocationIQ (Nominatim-compatible,
+  // + NOMINATIM_API_KEY) or self-host. The resolved geocoder is wrapped in a
+  // ThrottledGeocoder keyed off GEOCODE_LIMITER (#574) — best-effort global cap so
+  // a burst can't breach OSMF's 1 req/s. A test override wins outright.
+  const innerGeocoder: Geocoder =
     overrides?.geocoder ??
     (() => {
       const userAgent = process.env.NOMINATIM_USER_AGENT
       const baseUrl = process.env.NOMINATIM_API_URL
       if (!userAgent || !baseUrl) return { geocode: async () => null }
-      return new NominatimGeocoder(baseUrl, userAgent)
+      return new NominatimGeocoder(baseUrl, userAgent, undefined, process.env.NOMINATIM_API_KEY)
     })()
+  // Adapt the native binding's `limit({ key })` to the RateLimiter port here.
+  const geocodeLimiter =
+    overrides?.geocodeLimiter ??
+    ((globalThis as Record<string, unknown>).GEOCODE_LIMITER as RateLimitBinding | undefined)
+  const geocoder: Geocoder = geocodeLimiter
+    ? new ThrottledGeocoder(innerGeocoder, { limit: (key) => geocodeLimiter.limit({ key }) })
+    : innerGeocoder
 
   // In-app Stripe payment (#461). Real gateway when BOTH secrets are set; in
   // production without them a sentinel throws on first use (not at boot, so
@@ -652,6 +629,7 @@ export function createApp(overrides?: {
     runInTransaction,
   )
   const fleetOverviewService = new FleetOverviewService(fleetOverviewRepo)
+  const overviewService = new OverviewService(overviewRepo)
   const vehicleDetailService = new VehicleDetailService(vehicleDetailRepo)
   const operatorService = new OperatorService(operatorRepo)
   // #407: the write-operator resolver is a pure policy function — sole-operator
@@ -728,6 +706,7 @@ export function createApp(overrides?: {
     .route('/', createPaymentRoutes(paymentService))
     .route('/', createAvailabilityRoutes(availabilityRepo))
     .route('/', createStatsRoutes(statsRepo))
+    .route('/', createOverviewRoutes(overviewService))
     .route('/', createMessageRoutes(threadRepo, messageRepo))
     .route(
       '/',
