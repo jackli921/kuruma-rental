@@ -1,4 +1,5 @@
 import { and, eq, inArray, isNotNull } from 'drizzle-orm'
+import { computePlatformCommission } from '../lib/commission'
 import type { getDb } from './index'
 import {
   type BookingCreatedPayload,
@@ -8,6 +9,7 @@ import {
   bookingEvents,
   bookings,
   notificationLog,
+  paymentEvents,
   users,
   vehicles,
 } from './schema'
@@ -17,6 +19,7 @@ import {
   DEMO_INSURANCE_OPTIONS,
   DEMO_OPERATORS,
   DEMO_RENTERS,
+  type DemoBooking,
 } from './seed-data'
 import { seedId } from './seed-id'
 
@@ -43,6 +46,66 @@ function dayAt(dayOffset: number, hour: number): Date {
   d.setDate(d.getDate() + dayOffset)
   d.setHours(hour, 0, 0, 0)
   return d
+}
+
+// Demo payment_events for the #462 admin revenue tab (#627). Each non-cancelled
+// booking gets one SUCCEEDED payment so the tab shows real figures on a freshly
+// seeded DB (otherwise it sits empty until a live Stripe webhook fires). Each
+// partner's payments are stepped ~a month apart so the per-partner monthly
+// breakdown is non-trivial. A CANCELLED booking earns no revenue — it stays
+// unpaid, which also demonstrates the tab's SUCCEEDED-only filter.
+const PAYMENT_LEAD_DAYS = 10 // most recent payment ~10 days ago
+const PAYMENT_MONTH_STEP_DAYS = 35 // each older payment another ~month back
+
+export interface DemoPaymentRow {
+  /** Raw operator slug — the shell maps it through `seedId` to the FK. */
+  readonly operatorId: string
+  /** Raw booking slug — likewise mapped through `seedId`. */
+  readonly bookingId: string
+  readonly stripeEventId: string
+  readonly stripeCheckoutSessionId: string
+  readonly stripePaymentIntentId: string
+  readonly grossJpy: number
+  readonly platformFeeJpy: number
+  readonly netToPartnerJpy: number
+  readonly status: 'SUCCEEDED'
+  readonly createdAt: Date
+}
+
+// `now` is injected so the JST-month spread is testable without a wall clock
+// (FC/IS: pure decision, the seed shell supplies `new Date()`).
+function paymentDate(now: Date, partnerSeq: number): Date {
+  const d = new Date(now)
+  d.setDate(d.getDate() - (PAYMENT_LEAD_DAYS + partnerSeq * PAYMENT_MONTH_STEP_DAYS))
+  d.setHours(12, 0, 0, 0)
+  return d
+}
+
+export function demoPaymentRows(
+  bookingDescriptors: readonly DemoBooking[],
+  now: Date,
+): DemoPaymentRow[] {
+  const seqByOperator = new Map<string, number>()
+  return bookingDescriptors.flatMap((b) => {
+    if (b.status === 'CANCELLED') return []
+    const seq = seqByOperator.get(b.operatorId) ?? 0
+    seqByOperator.set(b.operatorId, seq + 1)
+    const { platformFeeJpy, netToPartnerJpy } = computePlatformCommission(b.totalPriceJpy)
+    return [
+      {
+        operatorId: b.operatorId,
+        bookingId: b.id,
+        stripeEventId: `seed-evt-${b.bookingCode}`,
+        stripeCheckoutSessionId: `seed-cs-${b.bookingCode}`,
+        stripePaymentIntentId: `seed-pi-${b.bookingCode}`,
+        grossJpy: b.totalPriceJpy,
+        platformFeeJpy,
+        netToPartnerJpy,
+        status: 'SUCCEEDED' as const,
+        createdAt: paymentDate(now, seq),
+      },
+    ]
+  })
 }
 
 const insuranceById = new Map(DEMO_INSURANCE_OPTIONS.map((o) => [o.id, o]))
@@ -94,6 +157,7 @@ export async function seedBookings(db: ReturnType<typeof getDb>) {
     if (ownedIds.length > 0) {
       await db.delete(notificationLog).where(inArray(notificationLog.bookingId, ownedIds))
       await db.delete(bookingEvents).where(inArray(bookingEvents.bookingId, ownedIds))
+      await db.delete(paymentEvents).where(inArray(paymentEvents.bookingId, ownedIds))
       await db.delete(bookings).where(inArray(bookings.id, ownedIds))
     }
     await db.delete(users).where(inArray(users.id, renterIds))
@@ -228,12 +292,28 @@ export async function seedBookings(db: ReturnType<typeof getDb>) {
     })
   }
 
+  // Payments reference bookings (FK), so insert after them.
+  const paymentValues = demoPaymentRows(DEMO_BOOKINGS, new Date()).map((p) => ({
+    operatorId: seedId(p.operatorId),
+    bookingId: seedId(p.bookingId),
+    stripeEventId: p.stripeEventId,
+    stripeCheckoutSessionId: p.stripeCheckoutSessionId,
+    stripePaymentIntentId: p.stripePaymentIntentId,
+    grossJpy: p.grossJpy,
+    platformFeeJpy: p.platformFeeJpy,
+    netToPartnerJpy: p.netToPartnerJpy,
+    status: p.status,
+    createdAt: p.createdAt,
+  }))
+
   await db.insert(bookings).values(bookingValues)
   await db.insert(bookingEvents).values(eventValues)
   await db.insert(notificationLog).values(notificationValues)
+  await db.insert(paymentEvents).values(paymentValues)
 
   console.log(
     `\nSeeded ${DEMO_RENTERS.length} renters, ${bookingValues.length} bookings, ` +
-      `${eventValues.length} events, ${notificationValues.length} notifications.`,
+      `${eventValues.length} events, ${notificationValues.length} notifications, ` +
+      `${paymentValues.length} payments.`,
   )
 }
