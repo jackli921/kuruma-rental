@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { ACRISS_PATTERN } from '../../src/acriss'
 import { BEST_CAR_RENTAL_OPERATOR_ID, BEST_CAR_RENTAL_OWNER_EMAIL } from '../../src/db/constants'
 import {
+  DEMO_ADD_ON_OPTIONS,
   DEMO_BOOKINGS,
   DEMO_FEE_SCHEDULES,
   DEMO_INSURANCE_OPTIONS,
@@ -173,6 +174,42 @@ describe('seed-data demo insurance options (slice 8 §3.4)', () => {
     for (const operatorId of operatorIds) {
       const names = DEMO_INSURANCE_OPTIONS.filter((o) => o.operatorId === operatorId).map(
         (o) => o.name,
+      )
+      expect(new Set(names).size).toBe(names.length)
+    }
+  })
+})
+
+// Demo polish (#509 follow-up) — operator add-on catalog so the Add-ons page and
+// the booking wizard "extras" step show real data instead of an empty state.
+// priceJpy is a FLAT per-booking charge; name is unique per operator while ACTIVE
+// (add_on_options_active_name_unique). Structure mirrors insurance options.
+describe('seed-data demo add-on options', () => {
+  const operatorIds = new Set(DEMO_OPERATORS.map((o) => o.id))
+
+  it('gives every operator at least 3 add-ons (no empty Add-ons page)', () => {
+    for (const operatorId of operatorIds) {
+      const count = DEMO_ADD_ON_OPTIONS.filter((a) => a.operatorId === operatorId).length
+      expect(count).toBeGreaterThanOrEqual(3)
+    }
+  })
+
+  it('references only defined operators', () => {
+    for (const a of DEMO_ADD_ON_OPTIONS) expect(operatorIds.has(a.operatorId)).toBe(true)
+  })
+
+  it('has globally-unique ids', () => {
+    expect(new Set(DEMO_ADD_ON_OPTIONS.map((a) => a.id)).size).toBe(DEMO_ADD_ON_OPTIONS.length)
+  })
+
+  it('prices every add-on at a non-negative flat rate (add_on_options_price_non_negative)', () => {
+    for (const a of DEMO_ADD_ON_OPTIONS) expect(a.priceJpy).toBeGreaterThanOrEqual(0)
+  })
+
+  it('keeps add-on names unique within an operator (add_on_options_active_name_unique)', () => {
+    for (const operatorId of operatorIds) {
+      const names = DEMO_ADD_ON_OPTIONS.filter((a) => a.operatorId === operatorId).map(
+        (a) => a.name,
       )
       expect(new Set(names).size).toBe(names.length)
     }
