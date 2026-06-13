@@ -3,6 +3,8 @@ import {
   type RevenueEvent,
   type RevenueOperator,
   aggregateRevenueByPartner,
+  availableRevenueMonths,
+  filterEventsByMonth,
   jstYearMonth,
 } from '../../src/lib/admin-revenue'
 
@@ -143,5 +145,40 @@ describe('aggregateRevenueByPartner', () => {
       operatorName: 'ghost',
       operatorSlug: 'ghost',
     })
+  })
+})
+
+describe('filterEventsByMonth', () => {
+  it('keeps only events whose JST month matches (drops other months)', () => {
+    const march = event({ operatorId: 'op-a', createdAt: new Date('2026-03-10T03:00:00Z') })
+    const april = event({ operatorId: 'op-a', createdAt: new Date('2026-04-10T03:00:00Z') })
+    expect(filterEventsByMonth([march, april], '2026-03')).toEqual([march])
+  })
+
+  it('matches on the JST boundary, not UTC (late-UTC payment counts as next month)', () => {
+    // 2026-03-31T16:00Z is already 2026-04-01 01:00 in Tokyo -> April payout.
+    const jstApril = event({ operatorId: 'op-a', createdAt: new Date('2026-03-31T16:00:00Z') })
+    expect(filterEventsByMonth([jstApril], '2026-04')).toEqual([jstApril])
+    expect(filterEventsByMonth([jstApril], '2026-03')).toEqual([])
+  })
+
+  it('returns an empty array when no event falls in the month', () => {
+    const march = event({ operatorId: 'op-a', createdAt: new Date('2026-03-10T03:00:00Z') })
+    expect(filterEventsByMonth([march], '2026-05')).toEqual([])
+  })
+})
+
+describe('availableRevenueMonths', () => {
+  it('lists the distinct JST months that have payments, newest first', () => {
+    const events = [
+      event({ operatorId: 'op-a', createdAt: new Date('2026-02-15T03:00:00Z') }),
+      event({ operatorId: 'op-b', createdAt: new Date('2026-04-15T03:00:00Z') }),
+      event({ operatorId: 'op-a', createdAt: new Date('2026-04-20T03:00:00Z') }), // dup month
+    ]
+    expect(availableRevenueMonths(events)).toEqual(['2026-04', '2026-02'])
+  })
+
+  it('returns an empty array when there are no payments', () => {
+    expect(availableRevenueMonths([])).toEqual([])
   })
 })

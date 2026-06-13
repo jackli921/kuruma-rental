@@ -1039,6 +1039,8 @@
       "payments": "支付笔数",
       "total": "合计",
       "allPartners": "所有合作伙伴",
+      "allMonths": "全部月份",
+      "monthFilterLabel": "按结算月份筛选",
       "loadError": "无法加载合作伙伴收益。",
       "retry": "重试"
     }
