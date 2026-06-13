@@ -29,6 +29,7 @@
     "db:seed": "bun run scripts/seed.ts",
     "db:seed-bookings": "bun run scripts/seed-bookings.ts",
     "db:seed:tcp": "bun run scripts/seed-tcp.ts",
+    "db:backfill-regions": "bun run scripts/backfill-location-regions.ts",
     "db:verify": "bun run scripts/db-verify.ts",
     "prepare": "husky"
   },
