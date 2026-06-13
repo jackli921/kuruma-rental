@@ -3,8 +3,9 @@
 ## Status: PR #588 OPEN → `marketplace-pivot` (Closes #496). Code-review done + fixes pushed. NOT merged.
 
 - Worktree: `~/Dev/kuruma-496-ci-neon`, branch `chore/496-ci-neon-lane` (off mp, rebased clean).
-- Tip: `aaa1ef8` (review fixes) on top of `8ef8c1e` (initial impl). 2 commits.
-- **First CI pass (commit before review fixes): all 5/5 green** (test-and-build, db-drift, e2e, e2e-real-db, neon-tx). The review-fix push triggered a re-run — **verify it's green before merge** (`gh pr checks 588`).
+- Tip: `12fa2de` (handoff) / `aaa1ef8` (review fixes) / `8ef8c1e` (impl). 3 commits.
+- **CI is GREEN 5/5 on the latest commit incl. review fixes** (test-and-build, db-drift, e2e, e2e-real-db, neon-tx — re-run `27450582374`/`27450582389`). Re-confirm with `gh pr checks 588` since trunk moves fast.
+- **Branch is ~1 behind trunk** (parallel merges). Left intentionally un-updated to avoid burning CI; run `gh pr update-branch` at merge time if "require up-to-date" trips.
 
 ## What this PR does
 Wires the #493 self-skipping `packages/api/tests/neon` lane into CI **without using Neon** (user constraint: free-tier branch cap). A local `postgres:16` + `local-neon-http-proxy` (digest-pinned) exercises the real `runTx` (neon-serverless WS `/v2`) + `getDb` (neon-http `/sql`) path. Zero Neon usage, no new secrets — same ethos as #445's `e2e-real-db`.
