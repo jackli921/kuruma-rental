@@ -999,7 +999,15 @@
       "title": "Partner Revenue",
       "subtitle": "Monthly payout per partner",
       "comingSoon": "Coming soon — depends on payment events (#461)",
-      "model": "Renter pays the listed price; the platform keeps 4%; remittance = paid − 4%, aggregated per business for monthly payout."
+      "model": "Renter pays the listed price; the platform keeps 4%; remittance = paid − 4%, aggregated per business for monthly payout.",
+      "empty": "No partner revenue recorded yet.",
+      "month": "Month",
+      "gross": "Gross",
+      "platformFee": "Platform fee (4%)",
+      "netPayable": "Net payable",
+      "payments": "Payments",
+      "total": "Total",
+      "allPartners": "All partners"
     }
   },
   "documents": {
