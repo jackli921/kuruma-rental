@@ -91,6 +91,14 @@ export function PaymentStep({ locale, bookingInput, onBack }: PaymentStepProps) 
           <span className="text-foreground">{t('disclaimer.label')}</span>
         </label>
       </div>
+      {accepted ? null : (
+        // a11y (#638): a disabled submit gives a screen-reader user no reason it
+        // is dead. Tie the button to this hint via aria-describedby so the
+        // "consent required" explanation is announced on focus.
+        <p id="disclaimer-consent-hint" className="text-sm text-muted-foreground">
+          {t('disclaimer.consentRequired')}
+        </p>
+      )}
       <div className="flex items-center justify-between gap-4">
         <Button type="button" variant="outline" onClick={onBack} disabled={mutation.isPending}>
           {t('nav.back')}
@@ -99,6 +107,7 @@ export function PaymentStep({ locale, bookingInput, onBack }: PaymentStepProps) 
           type="button"
           onClick={() => mutation.mutate()}
           disabled={mutation.isPending || !csrfToken || !accepted}
+          aria-describedby={accepted ? undefined : 'disclaimer-consent-hint'}
         >
           {mutation.isPending ? t('payment.submitting') : t('payment.submit')}
         </Button>

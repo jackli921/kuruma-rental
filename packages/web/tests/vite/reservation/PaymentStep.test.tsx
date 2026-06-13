@@ -58,6 +58,24 @@ describe('PaymentStep (instant-book submit, #511)', () => {
     expect(submit).toBeEnabled()
   })
 
+  it('explains via aria why Reserve now is disabled until consent is given (a11y, #638)', async () => {
+    const user = userEvent.setup()
+    renderStep()
+
+    const submit = screen.getByRole('button', { name: 'Reserve now' })
+    const hintId = submit.getAttribute('aria-describedby')
+    expect(hintId).toBeTruthy()
+
+    // The referenced element must carry the "consent required" explanation, so a
+    // screen-reader user on the dead button hears why it's unavailable.
+    const hint = document.getElementById(hintId as string)
+    expect(hint?.textContent).toBe('Accept the disclaimer to continue.')
+
+    // Once consent is given the button is no longer described as blocked.
+    await user.click(screen.getByRole('checkbox'))
+    expect(submit).not.toHaveAttribute('aria-describedby')
+  })
+
   it('creates the booking with the CSRF token then navigates to confirmation on success', async () => {
     const booking = { id: 'b-9', bookingCode: 'CODE9' }
     mockCreateBooking.mockResolvedValue(booking)
