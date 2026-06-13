@@ -219,3 +219,110 @@ export function bookingEventsQueryOptions(id: string) {
     queryFn: () => fetchBookingEvents(id),
   })
 }
+
+// #616: the stable prefix every operator-bookings query is keyed under. A write
+// invalidates THIS key; React Query's prefix match cascades to the calendar,
+// detail, events, pending-count and substitution-candidates entries in one call,
+// so no mutation has to enumerate the sub-keys it touched.
+export const OPERATOR_BOOKINGS_KEY = ['operator-bookings'] as const
+
+// --- Substitution candidates (#616) -----------------------------------------
+// The operator-only GET returns the same-store, same-ACRISS AVAILABLE vehicles
+// that can replace the booking's assigned car. The server enforces the match
+// (slice 1); the client just lists what it returns. Minimal {id,name} — the
+// dialog picks by id and shows the name, mirroring fetchCalendarVehicles.
+export interface SubstitutionCandidate {
+  id: string
+  name: string
+}
+
+export async function fetchSubstitutionCandidates(id: string): Promise<SubstitutionCandidate[]> {
+  const res = await fetch(
+    `${getApiBaseUrl()}/bookings/${encodeURIComponent(id)}/substitution-candidates`,
+    { credentials: 'include' },
+  )
+  const data = await unwrap<Array<{ id: string; name: string }>>(res)
+  return data.map((v) => ({ id: v.id, name: v.name }))
+}
+
+export function substitutionCandidatesQueryOptions(id: string) {
+  return queryOptions({
+    queryKey: ['operator-bookings', 'substitution-candidates', id],
+    queryFn: () => fetchSubstitutionCandidates(id),
+  })
+}
+
+// --- Pending-orders count (#616 nav badge) ----------------------------------
+// Instant-booked orders sit at CONFIRMED until the operator marks them
+// active/completed, so the count of CONFIRMED bookings IS the "new orders
+// awaiting action" signal the nav badge surfaces. Reuses the list endpoint with
+// NO expansion (the lightest rows) and returns the row count; the badge view
+// owns its display cap. The scan limit keeps the request cheap — an operator
+// runs ~40-50 cars, so a real pending queue never approaches it.
+const PENDING_SCAN_LIMIT = 50
+
+export async function fetchPendingBookingsCount(): Promise<number> {
+  const sp = new URLSearchParams({ status: 'CONFIRMED', limit: String(PENDING_SCAN_LIMIT) })
+  const res = await fetch(`${getApiBaseUrl()}/bookings?${sp.toString()}`, {
+    credentials: 'include',
+  })
+  const data = await unwrap<unknown[]>(res)
+  return data.length
+}
+
+export function pendingBookingsCountQueryOptions() {
+  return queryOptions({
+    queryKey: ['operator-bookings', 'pending-count'],
+    queryFn: fetchPendingBookingsCount,
+  })
+}
+
+// --- Mutations (cookie-based, CSRF-gated) -----------------------------------
+// Operator booking actions (#616): status transitions, cancel, and vehicle
+// substitution. The global csrf() middleware rejects a cookie-authed mutation
+// that omits a matching X-CSRF-Token, so every write threads the session token.
+// Content-Type is set only when there's a body (a bodyless POST must not claim
+// JSON). Each unwraps the updated booking; the component wires useMutation and
+// invalidates OPERATOR_BOOKINGS_KEY on success (no optimistic UI).
+async function writeBooking(
+  path: string,
+  method: 'POST' | 'PATCH',
+  csrfToken: string,
+  body?: unknown,
+): Promise<BookingDto> {
+  const res = await fetch(`${getApiBaseUrl()}${path}`, {
+    method,
+    credentials: 'include',
+    headers: {
+      'X-CSRF-Token': csrfToken,
+      ...(body === undefined ? {} : { 'Content-Type': 'application/json' }),
+    },
+    ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+  })
+  return unwrap<BookingDto>(res)
+}
+
+export function updateBookingStatus(
+  id: string,
+  status: OperatorBookingStatus,
+  csrfToken: string,
+): Promise<BookingDto> {
+  return writeBooking(`/bookings/${encodeURIComponent(id)}/status`, 'PATCH', csrfToken, { status })
+}
+
+// DELETE-equivalent (the API models cancel as a POST that records a cancellation
+// fee in the meta); the projection in `data` is the now-CANCELLED booking.
+export function cancelBooking(id: string, csrfToken: string): Promise<BookingDto> {
+  return writeBooking(`/bookings/${encodeURIComponent(id)}/cancel`, 'POST', csrfToken)
+}
+
+export function substituteVehicle(
+  id: string,
+  newVehicleId: string,
+  reason: string | null,
+  csrfToken: string,
+): Promise<BookingDto> {
+  const body: { newVehicleId: string; reason?: string } = { newVehicleId }
+  if (reason) body.reason = reason
+  return writeBooking(`/bookings/${encodeURIComponent(id)}/substitute`, 'POST', csrfToken, body)
+}
