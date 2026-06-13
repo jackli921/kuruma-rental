@@ -1,0 +1,1 @@
+ALTER TYPE "public"."coordinate_source" ADD VALUE 'PENDING';

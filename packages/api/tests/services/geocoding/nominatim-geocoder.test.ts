@@ -32,39 +32,49 @@ describe('NominatimGeocoder', () => {
     expect(init?.signal).toBeInstanceOf(AbortSignal)
   })
 
-  it('maps the first result lat/lon (strings) to numeric {lat,lng}', async () => {
+  it('maps the first result lat/lon (strings) to an ok outcome with numeric {lat,lng}', async () => {
     const fetchFn = vi.fn(async () => jsonResponse(osakaHit))
     const result = await new NominatimGeocoder(BASE, UA, fetchFn).geocode('Osaka')
-    expect(result).toEqual({ lat: 34.6937, lng: 135.5023 })
+    expect(result).toEqual({ status: 'ok', lat: 34.6937, lng: 135.5023 })
   })
 
-  it('returns null on an empty result array (address not found)', async () => {
+  it('returns notFound on an empty result array (address not found)', async () => {
     const fetchFn = vi.fn(async () => jsonResponse([]))
-    expect(await new NominatimGeocoder(BASE, UA, fetchFn).geocode('nowhere')).toBeNull()
+    expect(await new NominatimGeocoder(BASE, UA, fetchFn).geocode('nowhere')).toEqual({
+      status: 'notFound',
+    })
   })
 
-  it('returns null on a non-OK response (does not throw)', async () => {
+  it('returns notFound on a non-OK response (does not throw)', async () => {
     const fetchFn = vi.fn(async () => jsonResponse({ error: 'oops' }, { status: 500 }))
-    expect(await new NominatimGeocoder(BASE, UA, fetchFn).geocode('Osaka')).toBeNull()
+    expect(await new NominatimGeocoder(BASE, UA, fetchFn).geocode('Osaka')).toEqual({
+      status: 'notFound',
+    })
   })
 
-  it('returns null when lat/lon are not finite numbers (parse failure)', async () => {
+  it('returns notFound when lat/lon are not finite numbers (parse failure)', async () => {
     const fetchFn = vi.fn(async () => jsonResponse([{ lat: 'NaN', lon: '135' }]))
-    expect(await new NominatimGeocoder(BASE, UA, fetchFn).geocode('Osaka')).toBeNull()
+    expect(await new NominatimGeocoder(BASE, UA, fetchFn).geocode('Osaka')).toEqual({
+      status: 'notFound',
+    })
   })
 
-  it('returns null on a network error instead of throwing', async () => {
+  it('returns notFound on a network error instead of throwing', async () => {
     const fetchFn = vi.fn(async () => {
       throw new TypeError('fetch failed')
     })
-    expect(await new NominatimGeocoder(BASE, UA, fetchFn).geocode('Osaka')).toBeNull()
+    expect(await new NominatimGeocoder(BASE, UA, fetchFn).geocode('Osaka')).toEqual({
+      status: 'notFound',
+    })
   })
 
-  it('returns null on a timeout (AbortSignal.timeout fires) instead of throwing', async () => {
+  it('returns notFound on a timeout (AbortSignal.timeout fires) instead of throwing', async () => {
     const fetchFn = vi.fn(async () => {
       throw new DOMException('The operation timed out', 'TimeoutError')
     })
-    expect(await new NominatimGeocoder(BASE, UA, fetchFn).geocode('Osaka')).toBeNull()
+    expect(await new NominatimGeocoder(BASE, UA, fetchFn).geocode('Osaka')).toEqual({
+      status: 'notFound',
+    })
   })
 
   it('makes a single request — no retries, no autocomplete bursts (OSMF policy)', async () => {

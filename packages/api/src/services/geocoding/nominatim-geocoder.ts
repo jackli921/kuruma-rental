@@ -1,4 +1,9 @@
-import type { GeocodeResult, Geocoder } from './types'
+import type { GeocodeOutcome, Geocoder } from './types'
+
+// A provider miss/error is un-geocodable as far as this adapter knows — retrying
+// won't help. The app-side throttle (ThrottledGeocoder) owns the 'throttled'
+// outcome; a bare adapter never emits it.
+const NOT_FOUND: GeocodeOutcome = { status: 'notFound' }
 
 // OSMF Nominatim usage policy (https://operations.osmfoundation.org/policies/nominatim/):
 // ≤1 req/s, a descriptive User-Agent, no autocomplete, results cached. Geocode-
@@ -27,7 +32,7 @@ export class NominatimGeocoder implements Geocoder {
     private readonly apiKey?: string,
   ) {}
 
-  async geocode(address: string): Promise<GeocodeResult | null> {
+  async geocode(address: string): Promise<GeocodeOutcome> {
     const url = new URL('/search', this.baseUrl)
     url.searchParams.set('format', 'jsonv2')
     url.searchParams.set('limit', '1')
@@ -45,24 +50,24 @@ export class NominatimGeocoder implements Geocoder {
         console.warn('[geocode] provider returned non-OK; persisting without coords', {
           status: response.status,
         })
-        return null
+        return NOT_FOUND
       }
 
       const hits = (await response.json()) as NominatimHit[]
       const first = hits[0]
-      if (!first) return null // a genuine no-match is normal, not a failure
+      if (!first) return NOT_FOUND // a genuine no-match is normal, not a failure
 
       const lat = Number(first.lat)
       const lng = Number(first.lon)
-      if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null
-      return { lat, lng }
+      if (!Number.isFinite(lat) || !Number.isFinite(lng)) return NOT_FOUND
+      return { status: 'ok', lat, lng }
     } catch (err) {
       // Network error, timeout (TimeoutError/AbortError), or a malformed body.
       // Best-effort: log and report "no coordinates" so the save proceeds.
       console.warn('[geocode] lookup failed; persisting without coords', {
         error: err instanceof Error ? err.message : String(err),
       })
-      return null
+      return NOT_FOUND
     }
   }
 }
