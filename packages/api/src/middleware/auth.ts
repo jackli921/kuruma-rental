@@ -111,6 +111,9 @@ export const PUBLIC_CONTEXT: CallerContext = {
  * operators; each admitted operator is still bounded to its own tenant by the
  * repository's operator predicate (#386 F2 / #397), and RENTER / PARTNER are
  * excluded so operator-private config (insurance/fees) never leaks (slice-4 [P0]).
+ * These INTENTIONALLY alias BUSINESS_ROLES, not PLATFORM_ROLES: #487 narrows the
+ * platform tier only, so do NOT "harmonize" these onto PLATFORM_ROLES — that
+ * would silently strip tenant operators from fleet management.
  */
 export const STAFF_ROLES = PLATFORM_ROLES
 export const FLEET_WRITE_ROLES = BUSINESS_ROLES
