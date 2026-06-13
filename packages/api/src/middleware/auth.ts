@@ -1,20 +1,24 @@
 import { timingSafeEqual } from 'node:crypto'
+import {
+  ALL_ROLES,
+  BUSINESS_ROLES,
+  OPERATOR_ROLES,
+  PLATFORM_ROLES,
+  SCOPE_BYPASS_ROLES,
+  type UserRole,
+} from '@kuruma/shared/auth/roles'
 import type { Context, MiddlewareHandler } from 'hono'
 import { getCookie } from 'hono/cookie'
 import { SignJWT, jwtVerify } from 'jose'
 import { fail } from '../routes/helpers'
 
-// PARTNER is API-key-only (3rd-party callers) — not a DB role. OPERATOR_* and
-// PLATFORM_ADMIN are the marketplace roles (epic #385); they exist in the DB
-// roleEnum. See packages/shared/src/db/schema.ts.
-export type UserRole =
-  | 'RENTER'
-  | 'STAFF'
-  | 'ADMIN'
-  | 'PARTNER'
-  | 'OPERATOR_OWNER'
-  | 'OPERATOR_STAFF'
-  | 'PLATFORM_ADMIN'
+// Role identifiers + membership sets are single-sourced in @kuruma/shared/auth/
+// roles (edge-safe, zero-import) so the API and the web edge middleware can't
+// drift (#387). Re-exported here so the existing API import surface is unchanged.
+// PARTNER is API-key-only (3rd-party callers), not a DB role; OPERATOR_* and
+// PLATFORM_ADMIN are the marketplace roles (epic #385) and exist in the DB enum.
+export type { UserRole }
+export { PRIVILEGED_ROLES } from '@kuruma/shared/auth/roles'
 
 export interface AuthUser {
   id: string
@@ -35,36 +39,10 @@ export const API_TOKEN_AUDIENCE = 'kuruma-api'
 // middleware, and GET /auth/session. See design spec §5.3.
 export const SESSION_COOKIE = 'kuruma_session'
 
-const ALL_ROLES: ReadonlySet<string> = new Set<string>([
-  'RENTER',
-  'STAFF',
-  'ADMIN',
-  'PARTNER',
-  'OPERATOR_OWNER',
-  'OPERATOR_STAFF',
-  'PLATFORM_ADMIN',
-])
-
-/** Tenant-scoped roles. They NEVER bypass operator scope (proposal §6.2). */
-const OPERATOR_ROLES: ReadonlySet<UserRole> = new Set(['OPERATOR_OWNER', 'OPERATOR_STAFF'])
-
 /** True for tenant-scoped roles (OPERATOR_OWNER / OPERATOR_STAFF). */
 export function isOperatorRole(role: UserRole): boolean {
   return OPERATOR_ROLES.has(role)
 }
-
-/**
- * Roles that see across all operators. PLATFORM_ADMIN is the sanctioned bypass;
- * legacy STAFF / ADMIN / PARTNER are treated as temporary platform-admin
- * equivalents during the marketplace transition (proposal §6.2). OPERATOR_*
- * are deliberately excluded — they are always tenant-scoped.
- */
-const SCOPE_BYPASS_ROLES: ReadonlySet<UserRole> = new Set([
-  'STAFF',
-  'ADMIN',
-  'PARTNER',
-  'PLATFORM_ADMIN',
-])
 
 function isValidRole(value: string): value is UserRole {
   return ALL_ROLES.has(value)
@@ -121,50 +99,22 @@ export const PUBLIC_CONTEXT: CallerContext = {
 } as const
 
 /**
- * DEPRECATED — legacy global-bypass roles. Treated as temporary platform-admin
- * equivalents during the marketplace transition (proposal §6.2). Do NOT add new
- * users to these roles, and OPERATOR_OWNER / OPERATOR_STAFF must NEVER inherit
- * this bypass — use `requireOperatorScope` / `rejectOperatorContextUntilScoped`.
+ * Consumer-facing aliases of the single-sourced sets in @kuruma/shared/auth/roles.
+ * The names are kept so the ~25 existing route/repo gates import unchanged, but
+ * the platform tier (STAFF_ROLES → PLATFORM_ROLES) is now a SEPARATE set from the
+ * business tier (FLEET_WRITE/MANAGEMENT_READ → BUSINESS_ROLES). That split lets
+ * #487 tighten platform-admin access (PLATFORM_ROLES → {PLATFORM_ADMIN}) without
+ * touching business management. Members are identical to before — behavior-preserving.
+ *
+ * STAFF_ROLES: platform-staff tier (no operators) — STAFF / ADMIN / PLATFORM_ADMIN.
+ * FLEET_WRITE_ROLES / MANAGEMENT_READ_ROLES: the platform base PLUS tenant
+ * operators; each admitted operator is still bounded to its own tenant by the
+ * repository's operator predicate (#386 F2 / #397), and RENTER / PARTNER are
+ * excluded so operator-private config (insurance/fees) never leaks (slice-4 [P0]).
  */
-export const PRIVILEGED_ROLES: ReadonlySet<UserRole> = new Set([
-  'STAFF',
-  'ADMIN',
-  'PARTNER',
-  // PLATFORM_ADMIN is the most-privileged role and SYSTEM_CONTEXT's role; it
-  // must pass every gate ADMIN passed (stats / fleet-overview / availability
-  // read SYSTEM_CONTEXT). OPERATOR_* are NOT here — they are tenant-scoped.
-  'PLATFORM_ADMIN',
-])
-
-/**
- * Roles that can manage vehicles. PARTNER is deliberately excluded —
- * 3rd-party API callers (Trip.com) manage bookings, not fleet inventory.
- * PLATFORM_ADMIN included as the platform super-admin (and SYSTEM_CONTEXT role).
- */
-export const STAFF_ROLES: ReadonlySet<UserRole> = new Set(['STAFF', 'ADMIN', 'PLATFORM_ADMIN'])
-
-/**
- * Roles permitted to mutate fleet inventory: STAFF roles PLUS tenant-scoped
- * operators (OPERATOR_OWNER / OPERATOR_STAFF). Operators are further bounded to
- * their own tenant by the repository's operator predicate — the repo, not the
- * route, is the tenant boundary (#386 F2 / #397).
- */
-export const FLEET_WRITE_ROLES: ReadonlySet<UserRole> = new Set<UserRole>([
-  ...STAFF_ROLES,
-  ...OPERATOR_ROLES,
-])
-
-/**
- * Roles permitted to READ operator-private config (insurance options, fee
- * schedules). STAFF roles (incl. PLATFORM_ADMIN) PLUS tenant-scoped operators.
- * Deliberately EXCLUDES RENTER and PARTNER: unlike the public vehicle catalog,
- * insurance/fees are operator-private, so they must never reach a renter or a
- * 3rd-party API caller (slice-4 plan §2 [P0]).
- */
-export const MANAGEMENT_READ_ROLES: ReadonlySet<UserRole> = new Set<UserRole>([
-  ...STAFF_ROLES,
-  ...OPERATOR_ROLES,
-])
+export const STAFF_ROLES = PLATFORM_ROLES
+export const FLEET_WRITE_ROLES = BUSINESS_ROLES
+export const MANAGEMENT_READ_ROLES = BUSINESS_ROLES
 
 /**
  * Repo-layer read guard for operator-private config. Must be called BEFORE
@@ -181,14 +131,16 @@ export function requireManagementRead(ctx: CallerContext): void {
 
 /**
  * Gate for PLATFORM-level reads that span every operator — the #462 admin
- * revenue tab. Admits only platform-admin-equivalent roles (`STAFF_ROLES` =
- * STAFF / ADMIN / PLATFORM_ADMIN), the exact set the web `_admin` portal admits.
- * Deliberately EXCLUDES OPERATOR_* (a tenant must never see another partner's
- * revenue) and RENTER / PARTNER. Note this is narrower than `bypassScope`, which
- * also covers PARTNER (Trip.com) — a 3rd-party caller must not read revenue.
+ * revenue tab. Admits only the platform tier (`PLATFORM_ROLES` = STAFF / ADMIN /
+ * PLATFORM_ADMIN today), the exact set the web `_admin` portal admits. References
+ * PLATFORM_ROLES directly (not the STAFF_ROLES alias) so #487's tightening of
+ * PLATFORM_ROLES → {PLATFORM_ADMIN} narrows this gate automatically. Deliberately
+ * EXCLUDES OPERATOR_* (a tenant must never see another partner's revenue) and
+ * RENTER / PARTNER. Narrower than `bypassScope`, which also covers PARTNER
+ * (Trip.com) — a 3rd-party caller must not read revenue.
  */
 export function requirePlatformRead(ctx: CallerContext): void {
-  if (!STAFF_ROLES.has(ctx.role)) {
+  if (!PLATFORM_ROLES.has(ctx.role)) {
     throw new ForbiddenError('platform admin scope required')
   }
 }
