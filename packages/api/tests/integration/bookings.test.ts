@@ -522,6 +522,9 @@ describe('POST /bookings overlap via HTTP (real Postgres)', () => {
       startAt: '2027-03-01T10:00:00Z',
       endAt: '2027-03-01T14:00:00Z',
       source: 'DIRECT',
+      // RENTER self-serve bookings must carry the liability-disclaimer consent
+      // (#613) or the route rejects them with 400 CONSENT_REQUIRED.
+      disclaimerAccepted: true,
     }
 
     const first = await app.request('/bookings', {

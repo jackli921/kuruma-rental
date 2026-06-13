@@ -174,6 +174,8 @@ export const bookingColumns = {
   cancellationFee: bookings.cancellationFee,
   cancelledAt: bookings.cancelledAt,
   idempotencyKey: bookings.idempotencyKey,
+  disclaimerAcknowledgedAt: bookings.disclaimerAcknowledgedAt,
+  disclaimerTermsVersion: bookings.disclaimerTermsVersion,
   createdAt: bookings.createdAt,
   updatedAt: bookings.updatedAt,
 }
@@ -423,6 +425,8 @@ export function toBooking(r: BookingRow): Booking {
     cancellationFee: r.cancellationFee,
     cancelledAt: r.cancelledAt,
     idempotencyKey: r.idempotencyKey,
+    disclaimerAcknowledgedAt: r.disclaimerAcknowledgedAt,
+    disclaimerTermsVersion: r.disclaimerTermsVersion,
     createdAt: r.createdAt,
     updatedAt: r.updatedAt,
   }

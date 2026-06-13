@@ -187,6 +187,7 @@ describe('Manual booking (staff/admin renterId override + advance rule skip)', (
         startAt: startAt.toISOString(),
         endAt: endAt.toISOString(),
         source: 'DIRECT',
+        disclaimerAccepted: true,
       }),
     })
 
@@ -280,6 +281,7 @@ describe('Manual booking (staff/admin renterId override + advance rule skip)', (
         startAt: startAt.toISOString(),
         endAt: endAt.toISOString(),
         source: 'MANUAL',
+        disclaimerAccepted: true,
       }),
     })
 

@@ -53,6 +53,8 @@ export function bookingInput(overrides: Partial<NewBooking> = {}): NewBooking {
     cancellationFee: null,
     cancelledAt: null,
     idempotencyKey: null,
+    disclaimerAcknowledgedAt: null,
+    disclaimerTermsVersion: null,
     ...overrides,
   }
 }

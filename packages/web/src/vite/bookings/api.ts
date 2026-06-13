@@ -47,6 +47,10 @@ export interface CreateBookingInput {
   addOnIds: string[]
   /** Generated once per wizard mount so a double-submit replays, not double-books. */
   idempotencyKey: string
+  /** Renter consent to the liability disclaimer (#613), recorded on the booking.
+   *  Supplied at the payment step; the server rejects a RENTER booking without it
+   *  (400 CONSENT_REQUIRED). Replaces the dropped online document upload. */
+  disclaimerAccepted: boolean
 }
 
 // Instant-book (#511): POST /bookings creates a CONFIRMED booking — no online
@@ -72,6 +76,7 @@ export async function createBooking(
       ...(input.insuranceOptionId ? { insuranceOptionId: input.insuranceOptionId } : {}),
       addOnIds: input.addOnIds,
       idempotencyKey: input.idempotencyKey,
+      disclaimerAccepted: input.disclaimerAccepted,
     }),
   })
   return unwrap<BookingDto>(res)

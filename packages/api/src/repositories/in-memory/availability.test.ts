@@ -121,6 +121,8 @@ describe('InMemoryAvailabilityRepository.findAvailableVehicles — storefront fi
       cancellationFee: null,
       cancelledAt: null,
       idempotencyKey: null,
+      disclaimerAcknowledgedAt: null,
+      disclaimerTermsVersion: null,
     })
 
     const result = await availabilityRepo.findAvailableVehicles(FROM, TO, {

@@ -64,6 +64,8 @@ function validBookingInput(overrides: Record<string, unknown> = {}) {
     startAt: new Date(now + 24 * HOUR).toISOString(),
     endAt: new Date(now + 48 * HOUR).toISOString(),
     source: 'DIRECT' as const,
+    // #613: a valid renter submit accepts the liability disclaimer at checkout.
+    disclaimerAccepted: true,
     ...overrides,
   }
 }
@@ -627,6 +629,51 @@ describe('Booking Routes', () => {
       expect(body.data.totalPrice).toBe(8000)
       expect(typeof body.data.bookingCode).toBe('string')
       expect(body.data.bookingCode.length).toBeGreaterThan(0)
+    })
+
+    // #613 consent gate keys on RENTER role; the default test app authenticates
+    // as ADMIN (staff), so these mount a renter-authed app over the same service.
+    function renterRequest(input: Record<string, unknown>) {
+      const renterApp = new Hono()
+      renterApp.use('*', testAuthMiddleware(USER1, 'RENTER'))
+      renterApp.route('/', createBookingRoutes(service))
+      return renterApp.request('/bookings', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(input),
+      })
+    }
+
+    it('rejects a renter booking without disclaimer consent: 400 CONSENT_REQUIRED (#613)', async () => {
+      const res = await renterRequest(validBookingInput({ disclaimerAccepted: false }))
+
+      expect(res.status).toBe(400)
+      const body = await res.json()
+      expect(body.success).toBe(false)
+      expect(body.code).toBe('CONSENT_REQUIRED')
+      expect(body.error).toMatch(/disclaimer/i)
+    })
+
+    it('stamps the consent (acknowledgedAt + terms version) on an accepted renter booking (#613)', async () => {
+      const res = await renterRequest(validBookingInput())
+
+      expect(res.status).toBe(201)
+      const body = await res.json()
+      expect(body.data.disclaimerTermsVersion).toBe('2026-06-13')
+      // Server-stamped timestamp, not a client value — present and ISO-parseable.
+      expect(typeof body.data.disclaimerAcknowledgedAt).toBe('string')
+      expect(Number.isNaN(Date.parse(body.data.disclaimerAcknowledgedAt))).toBe(false)
+    })
+
+    it('exempts a staff/admin booking from the consent gate; leaves stamps null (#613)', async () => {
+      // Default app is ADMIN: a manual booking needs no renter consent and the
+      // disclaimer columns stay null (no renter acknowledgement was captured).
+      const res = await createBooking(validBookingInput({ disclaimerAccepted: false }))
+
+      expect(res.status).toBe(201)
+      const body = await res.json()
+      expect(body.data.disclaimerAcknowledgedAt).toBeNull()
+      expect(body.data.disclaimerTermsVersion).toBeNull()
     })
 
     it('rejects an unknown requestedVehicleId with 400', async () => {
