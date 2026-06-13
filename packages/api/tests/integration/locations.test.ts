@@ -175,9 +175,9 @@ describe('archiving a location frees its name for re-creation (#410)', () => {
 // Resolves to 404 (no cross-tenant existence leak), leaving the row untouched.
 describe('cross-operator location WRITE denial (service seal, #387)', () => {
   const repo = new DrizzleLocationRepository(db)
-  // Geocoding is irrelevant to this tenant-seal probe; stub it (returns null).
+  // Geocoding is irrelevant to this tenant-seal probe; stub it (returns notFound).
   const service = new LocationService(repo, new DrizzleBookingRepository(db), {
-    geocode: async () => null,
+    geocode: async () => ({ status: 'notFound' }),
   })
   const uniq = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
   const opAId = `op_locw_a_${uniq}`

@@ -28,6 +28,11 @@ export const createBookingSchema = z
     source: z.enum(['DIRECT', 'TRIP_COM', 'MANUAL', 'OTHER']).default('DIRECT'),
     externalId: z.string().optional(),
     idempotencyKey: z.string().uuid('Must be a valid UUID').optional(),
+    // #613: renter liability-disclaimer (免责声明) consent. The renter ticks the
+    // checkbox at checkout; the server stamps acknowledgedAt + the terms version.
+    // Optional here because the route forces source=DIRECT for renters and exempts
+    // staff/manual bookings — the service requires it by caller role, not source.
+    disclaimerAccepted: z.boolean().optional(),
   })
   .refine((data) => new Date(data.endAt) > new Date(data.startAt), {
     message: 'End time must be after start time',

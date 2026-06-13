@@ -33,6 +33,10 @@ const MS_PER_DAY = 24 * 60 * MS_PER_MINUTE
 const DEFAULT_TURNAROUND_MINUTES = 2880 // 48h
 // A booking_code collision is ~2^-40 per attempt; a few retries is plenty.
 const MAX_BOOKING_CODE_ATTEMPTS = 3
+// #613: version of the liability-disclaimer (免责声明) wording a renter agreed to,
+// stamped onto the booking. Bump when the localized terms text changes materially
+// (the renter-facing copy lives in web i18n; this is the server-authoritative tag).
+export const DISCLAIMER_TERMS_VERSION = '2026-06-13'
 
 // Slice 6 (#392): the renter books a CONCRETE vehicle chosen in the storefront
 // (slice 5). operatorId / classId / assignedVehicleId / totalPrice are all
@@ -52,6 +56,10 @@ export interface CreateBookingInput {
   externalId?: string | null
   notes?: string | null
   idempotencyKey?: string | null
+  // #613: renter ticked the liability-disclaimer (免责声明) checkbox at checkout.
+  // Required for renter self-serve bookings (enforced by caller role in `create`);
+  // staff/manual bookings are exempt. The server stamps the timestamp + version.
+  disclaimerAccepted?: boolean
 }
 
 export type CreateBookingResult =
@@ -538,6 +546,11 @@ export class BookingService {
       cancellationFee: null,
       cancelledAt: null,
       idempotencyKey: input.idempotencyKey ?? null,
+      // #613: stamp the liability-disclaimer consent server-side (never trust a
+      // client timestamp). Set only when the renter accepted; null for staff/
+      // manual bookings (the route exempts non-renter callers from the gate).
+      disclaimerAcknowledgedAt: input.disclaimerAccepted ? now : null,
+      disclaimerTermsVersion: input.disclaimerAccepted ? DISCLAIMER_TERMS_VERSION : null,
     })
 
     await repos.bookingEventRepo.append(ctx, {

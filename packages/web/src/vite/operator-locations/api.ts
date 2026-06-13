@@ -8,9 +8,10 @@ import { queryOptions } from '@tanstack/react-query'
 // #529: operator locations/storefronts management — Vite port of the frozen
 // `modules/locations` admin. Cookie-based and operator-scoped server-side (the
 // client passes NO operatorId, so a cross-tenant read is impossible here by
-// construction), mirroring `operator-fleet`. Geocoding / lat-lng is out of scope
-// for this slice — that is #531; the create/update validators on trunk carry no
-// coordinate fields, so this DTO omits them too.
+// construction), mirroring `operator-fleet`. Write inputs carry no coordinate
+// fields — provenance is server-derived (#531). The DTO surfaces the read-only
+// `coordinateSource` so the list can flag a missing or pending map pin (#601);
+// lat/lng stay omitted until a map view needs them.
 
 /** JSON-serialized Location — dates arrive as ISO strings from the API. */
 export interface OperatorLocation {
@@ -22,6 +23,10 @@ export interface OperatorLocation {
   timezone: string
   defaultTurnaroundMinutes: number
   status: 'ACTIVE' | 'ARCHIVED'
+  // Server-derived geocoding provenance (#531/#601): GEOCODED/MANUAL = a usable
+  // pin; PENDING = a throttle-skipped retry (#574); null = no pin found. Drives
+  // the list's pin-state badge.
+  coordinateSource: 'GEOCODED' | 'MANUAL' | 'PENDING' | null
   createdAt: string
   updatedAt: string
 }

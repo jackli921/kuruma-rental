@@ -14,9 +14,9 @@ const OP_A = 'operator-aaaaaaaa'
 const OP_B = 'operator-bbbbbbbb'
 
 // These route tests exercise auth/validation/routing, not geocoding; a stub
-// Geocoder keeps the write path total. The #531 matrix is covered in the
-// service test, and the provider-swap contract in the createApp DI test.
-const nullGeocoder: Geocoder = { geocode: async () => null }
+// Geocoder (notFound) keeps the write path total. The #531 matrix is covered in
+// the service test, and the provider-swap contract in the createApp DI test.
+const nullGeocoder: Geocoder = { geocode: async () => ({ status: 'notFound' }) }
 
 function mountFor(
   repo: InMemoryLocationRepository,
