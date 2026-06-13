@@ -67,6 +67,9 @@ export interface PaymentEventRepository {
   // The recorded SUCCEEDED payment for a booking, or null. Powers both the
   // already-paid guard at checkout and the derived "is this booking paid?" read.
   findSucceededByBookingId(bookingId: string): Promise<PaymentEvent | null>
+  // Every SUCCEEDED payment across all operators, for the platform-admin revenue
+  // report (#462). Unscoped by design — authz lives in AdminRevenueService.
+  listSucceeded(): Promise<PaymentEvent[]>
 }
 
 /** Operator (tenant) data access. Admin bootstrap (#386) + slug/id resolution (#387). */
