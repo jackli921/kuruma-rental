@@ -1017,10 +1017,11 @@ describe('Booking Routes', () => {
         ).id
 
         const res = await createBooking(
+          // Use validBookingInput's single-`now` anchored 24h window. Overriding
+          // with two separate futureDate() calls reintroduces the few-ms gap that
+          // Math.ceil() in pricing rounds up to 2 days (see the helper comment).
           validBookingInput({
             requestedVehicleId: vehicleId,
-            startAt: futureDate(48),
-            endAt: futureDate(72),
             totalPrice: 1, // attacker-controlled — must be stripped + ignored
           }),
         )
@@ -1344,6 +1345,134 @@ describe('Booking Routes', () => {
       expect(res.status).toBe(400)
       const body = await res.json()
       expect(body.success).toBe(false)
+    })
+  })
+
+  // #647: the booking-write authorization model as an executable table. Each row
+  // is one (role, route) -> outcome cell of the policy documented in
+  // docs/architecture/booking-authz.md: status advance is management-wide
+  // (operators + platform staff/admin); substitution and its candidate feed are
+  // operator-only (choosing which car serves a booking is a fleet-ownership
+  // decision). The matrix is the single source for the asymmetry — a future
+  // change that "aligns" the gates turns exactly the offending row red.
+  describe('booking-write authorization model (#647)', () => {
+    function operatorApp() {
+      const a = new Hono()
+      a.use('*', testAuthMiddleware(OP_USER, 'OPERATOR_OWNER', OPERATOR))
+      a.route('/', createBookingRoutes(service))
+      return a
+    }
+    function renterApp() {
+      const a = new Hono()
+      a.use('*', testAuthMiddleware(USER1, 'RENTER'))
+      a.route('/', createBookingRoutes(service))
+      return a
+    }
+    async function freshBookingId(): Promise<string> {
+      const res = await createBooking(validBookingInput())
+      const body = await res.json()
+      return body.data.id as string
+    }
+
+    // `gate` is the authorization outcome only: 'deny' MUST 403 at the route gate
+    // before any business logic; 'allow' MUST pass the gate (any non-403 — the
+    // 200/400/404 business result is covered by the dedicated route tests above).
+    // Coupling an authz assertion to vehicle-availability would make the policy
+    // test brittle, so we assert the gate decision, nothing more.
+    const MODEL: ReadonlyArray<{
+      label: string
+      app: () => Hono
+      method: string
+      path: (id: string) => string
+      body?: Record<string, unknown>
+      gate: 'allow' | 'deny'
+    }> = [
+      // PATCH /status — management-wide (operators + platform staff/admin)
+      {
+        label: 'ADMIN (management) is allowed status advance',
+        app: () => app,
+        method: 'PATCH',
+        path: (id) => `/bookings/${id}/status`,
+        body: { status: 'ACTIVE' },
+        gate: 'allow',
+      },
+      {
+        label: 'OPERATOR is allowed status advance',
+        app: operatorApp,
+        method: 'PATCH',
+        path: (id) => `/bookings/${id}/status`,
+        body: { status: 'ACTIVE' },
+        gate: 'allow',
+      },
+      {
+        label: 'RENTER is denied status advance on own booking',
+        app: renterApp,
+        method: 'PATCH',
+        path: (id) => `/bookings/${id}/status`,
+        body: { status: 'ACTIVE' },
+        gate: 'deny',
+      },
+      // POST /substitute — operator-only (fleet-ownership decision)
+      {
+        label: 'ADMIN (management) is denied substitute',
+        app: () => app,
+        method: 'POST',
+        path: (id) => `/bookings/${id}/substitute`,
+        body: { newVehicleId: seededVehicle2Id },
+        gate: 'deny',
+      },
+      {
+        label: 'OPERATOR is allowed substitute',
+        app: operatorApp,
+        method: 'POST',
+        path: (id) => `/bookings/${id}/substitute`,
+        body: { newVehicleId: seededVehicle2Id },
+        gate: 'allow',
+      },
+      {
+        label: 'RENTER is denied substitute',
+        app: renterApp,
+        method: 'POST',
+        path: (id) => `/bookings/${id}/substitute`,
+        body: { newVehicleId: seededVehicle2Id },
+        gate: 'deny',
+      },
+      // GET /substitution-candidates — operator-only (inherits substitute's gate)
+      {
+        label: 'ADMIN (management) is denied candidate list',
+        app: () => app,
+        method: 'GET',
+        path: (id) => `/bookings/${id}/substitution-candidates`,
+        gate: 'deny',
+      },
+      {
+        label: 'OPERATOR is allowed candidate list',
+        app: operatorApp,
+        method: 'GET',
+        path: (id) => `/bookings/${id}/substitution-candidates`,
+        gate: 'allow',
+      },
+      {
+        label: 'RENTER is denied candidate list',
+        app: renterApp,
+        method: 'GET',
+        path: (id) => `/bookings/${id}/substitution-candidates`,
+        gate: 'deny',
+      },
+    ]
+
+    it.each(MODEL)('$label ($gate)', async ({ app: makeApp, method, path, body, gate }) => {
+      const id = await freshBookingId()
+      const res = await makeApp().request(path(id), {
+        method,
+        headers: { 'Content-Type': 'application/json' },
+        ...(body ? { body: JSON.stringify(body) } : {}),
+      })
+      if (gate === 'deny') {
+        expect(res.status).toBe(403)
+      } else {
+        expect(res.status).not.toBe(403)
+      }
     })
   })
 

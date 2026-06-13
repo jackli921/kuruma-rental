@@ -101,6 +101,7 @@ export function createBookingRoutes(service: BookingService) {
       // internal vehicle ids and the substitution reason; no renter UI consumes
       // a timeline today, so renters are rejected here (403) rather than served a
       // sanitized projection. Cross-tenant reads still 404 at the service.
+      // authz model: docs/architecture/booking-authz.md
       if (!MANAGEMENT_READ_ROLES.has(ctx.role)) {
         return fail(c, 'Only operators can view booking events', 403)
       }
@@ -117,6 +118,7 @@ export function createBookingRoutes(service: BookingService) {
 
       // §A: operator-only, mirroring the substitute route. Renters never browse
       // the fleet (403); a foreign/missing booking 404s at the service (no leak).
+      // authz model: docs/architecture/booking-authz.md (feeder-read inherits its write's gate)
       if (!isOperatorRole(ctx.role)) {
         return fail(c, 'Only operators can view substitution candidates', 403)
       }
@@ -187,6 +189,7 @@ export function createBookingRoutes(service: BookingService) {
       // skewing operator dashboards and any settlement keyed off status. Gate on
       // management roles (operators + staff/admin); renter self-cancel stays open
       // on /cancel by design (tiered cancellation is a renter-facing feature).
+      // authz model: docs/architecture/booking-authz.md
       if (!MANAGEMENT_READ_ROLES.has(ctx.role)) {
         return fail(c, 'Only operators can update booking status', 403)
       }
@@ -216,6 +219,7 @@ export function createBookingRoutes(service: BookingService) {
 
       // §5.5: substitution is operator-only. Renters never reassign their own
       // vehicle (403). Cross-operator bookings 404 at the service (no leak).
+      // authz model: docs/architecture/booking-authz.md (deliberately stricter than /status)
       if (!isOperatorRole(ctx.role)) {
         return fail(c, 'Only operators can substitute a vehicle', 403)
       }
