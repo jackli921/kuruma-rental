@@ -1,3 +1,4 @@
+import type { SubstitutionVehicle } from '@/lib/substitution'
 import { SubstituteVehicleAction } from '@/vite/operator-bookings/SubstituteVehicleAction'
 import type { OperatorBookingDetailDto } from '@/vite/operator-bookings/api'
 import { substituteBooking } from '@/vite/operator-bookings/api'
@@ -5,7 +6,6 @@ import {
   bookingEventsQueryOptions,
   operatorBookingDetailQueryOptions,
 } from '@/vite/operator-bookings/api'
-import type { OperatorFleetVehicle } from '@/vite/operator-fleet/api'
 import type { Session } from '@/vite/session'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { render, screen, waitFor } from '@testing-library/react'
@@ -22,40 +22,14 @@ const substituteBookingMock = vi.mocked(substituteBooking)
 
 const sub = enMessages.bookings.operator.substitute
 
-function fleetVehicle(over: Partial<OperatorFleetVehicle> = {}): OperatorFleetVehicle {
+function candidateVehicle(over: Partial<SubstitutionVehicle> = {}): SubstitutionVehicle {
   return {
     id: 'veh-2',
-    operatorId: 'op_1',
     classId: 'c1',
     pickupLocationId: 'l1',
     name: 'Honda Fit',
-    description: null,
-    photos: [],
-    seats: 5,
-    luggageCapacity: 2,
-    luggageSize: 'MEDIUM',
-    transmission: 'AUTO',
-    fuelType: null,
     licensePlate: 'OSAKA 5678',
     status: 'AVAILABLE',
-    minRentalHours: null,
-    maxRentalHours: null,
-    advanceBookingHours: null,
-    make: null,
-    model: null,
-    year: null,
-    color: null,
-    dailyRateJpy: 8000,
-    hourlyRateJpy: null,
-    shakenExpiryDate: null,
-    insuranceExpiryDate: null,
-    createdAt: '2026-01-01T00:00:00.000Z',
-    updatedAt: '2026-01-01T00:00:00.000Z',
-    utilization: 0,
-    bookingCountLast30Days: 0,
-    currentBooking: null,
-    nextBooking: null,
-    activeMaintenanceReason: null,
     ...over,
   }
 }
@@ -96,13 +70,13 @@ const bypassSession: Session = { user: { id: 'u', role: 'PLATFORM_ADMIN' }, csrf
 function renderAction(
   session: Session | null,
   booking: OperatorBookingDetailDto,
-  fleet: OperatorFleetVehicle[],
+  vehicles: SubstitutionVehicle[],
 ) {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
   render(
     <QueryClientProvider client={queryClient}>
       <IntlProvider locale="en" messages={enMessages}>
-        <SubstituteVehicleAction booking={booking} fleet={fleet} session={session} />
+        <SubstituteVehicleAction booking={booking} vehicles={vehicles} session={session} />
       </IntlProvider>
     </QueryClientProvider>,
   )
@@ -116,18 +90,18 @@ describe('SubstituteVehicleAction', () => {
   })
 
   it('shows the Substitute action for a tenant-scoped operator on a confirmed booking', () => {
-    renderAction(operatorSession, bookingDetail(), [fleetVehicle()])
+    renderAction(operatorSession, bookingDetail(), [candidateVehicle()])
     expect(screen.getByRole('button', { name: sub.action })).toBeInTheDocument()
   })
 
   it('hides the action and shows a read-only note for a bypass role with no operatorId', () => {
-    renderAction(bypassSession, bookingDetail(), [fleetVehicle()])
+    renderAction(bypassSession, bookingDetail(), [candidateVehicle()])
     expect(screen.queryByRole('button', { name: sub.action })).not.toBeInTheDocument()
     expect(screen.getByText(sub.readOnly)).toBeInTheDocument()
   })
 
   it('hides the action and explains it is unavailable for a completed booking', () => {
-    renderAction(operatorSession, bookingDetail({ status: 'COMPLETED' }), [fleetVehicle()])
+    renderAction(operatorSession, bookingDetail({ status: 'COMPLETED' }), [candidateVehicle()])
     expect(screen.queryByRole('button', { name: sub.action })).not.toBeInTheDocument()
     expect(screen.getByText(sub.unavailable)).toBeInTheDocument()
   })
@@ -135,10 +109,10 @@ describe('SubstituteVehicleAction', () => {
   it('lists only same-class, same-location, available cars (excluding the current one)', async () => {
     const user = userEvent.setup()
     renderAction(operatorSession, bookingDetail(), [
-      fleetVehicle({ id: 'veh-1', name: 'Current Car' }), // assigned -> excluded
-      fleetVehicle({ id: 'veh-2', name: 'Honda Fit' }), // match
-      fleetVehicle({ id: 'veh-3', name: 'Big Van', classId: 'c2' }), // wrong class
-      fleetVehicle({ id: 'veh-4', name: 'Broken Car', status: 'MAINTENANCE' }), // unavailable
+      candidateVehicle({ id: 'veh-1', name: 'Current Car' }), // assigned -> excluded
+      candidateVehicle({ id: 'veh-2', name: 'Honda Fit' }), // match
+      candidateVehicle({ id: 'veh-3', name: 'Big Van', classId: 'c2' }), // wrong class
+      candidateVehicle({ id: 'veh-4', name: 'Broken Car', status: 'MAINTENANCE' }), // unavailable
     ])
 
     await user.click(screen.getByRole('button', { name: sub.action }))
@@ -152,7 +126,7 @@ describe('SubstituteVehicleAction', () => {
   it('substitutes the picked car, sending its id + reason + the session CSRF token', async () => {
     const user = userEvent.setup()
     renderAction(operatorSession, bookingDetail(), [
-      fleetVehicle({ id: 'veh-2', name: 'Honda Fit' }),
+      candidateVehicle({ id: 'veh-2', name: 'Honda Fit' }),
     ])
 
     await user.click(screen.getByRole('button', { name: sub.action }))
@@ -173,7 +147,7 @@ describe('SubstituteVehicleAction', () => {
   it('shows the empty-candidate state and disables submit when no replacement exists', async () => {
     const user = userEvent.setup()
     renderAction(operatorSession, bookingDetail(), [
-      fleetVehicle({ id: 'veh-1', name: 'Current Car' }),
+      candidateVehicle({ id: 'veh-1', name: 'Current Car' }),
     ])
 
     await user.click(screen.getByRole('button', { name: sub.action }))
@@ -186,7 +160,7 @@ describe('SubstituteVehicleAction', () => {
     const user = userEvent.setup()
     substituteBookingMock.mockRejectedValue(new Error('Vehicle is no longer available'))
     renderAction(operatorSession, bookingDetail(), [
-      fleetVehicle({ id: 'veh-2', name: 'Honda Fit' }),
+      candidateVehicle({ id: 'veh-2', name: 'Honda Fit' }),
     ])
 
     await user.click(screen.getByRole('button', { name: sub.action }))
@@ -199,7 +173,7 @@ describe('SubstituteVehicleAction', () => {
   it('invalidates the booking detail and events queries on success', async () => {
     const user = userEvent.setup()
     const queryClient = renderAction(operatorSession, bookingDetail(), [
-      fleetVehicle({ id: 'veh-2', name: 'Honda Fit' }),
+      candidateVehicle({ id: 'veh-2', name: 'Honda Fit' }),
     ])
     const invalidateSpy = vi.spyOn(queryClient, 'invalidateQueries')
 

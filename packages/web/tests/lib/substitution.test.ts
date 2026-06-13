@@ -5,9 +5,11 @@ import {
 } from '@/lib/substitution'
 import { describe, expect, it } from 'vitest'
 
-// The candidate filter MUST mirror the server's substitution rules exactly
-// (same operator + class + pickup location, AVAILABLE, not the current car) so
-// an operator can never pick a car the POST would 400/409 on (#610).
+// The candidate filter is stricter-or-equal to the server's substitution rules
+// (same class + pickup location, AVAILABLE, not the current car): exact classId
+// is a subset of the server's ACRISS-code match, so an operator can never pick a
+// car the POST would 400/409 on (#610). See lib/substitution.ts for why classId
+// proxies the ACRISS code here.
 function candidate(over: Partial<SubstitutionCandidate> = {}): SubstitutionCandidate {
   return {
     id: 'veh-2',

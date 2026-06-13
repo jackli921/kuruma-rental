@@ -10,7 +10,7 @@ import {
 } from '@/components/ui/dialog'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
-import { selectSubstitutionCandidates } from '@/lib/substitution'
+import { type SubstitutionVehicle, selectSubstitutionCandidates } from '@/lib/substitution'
 import { isOperatorSession } from '@/vite/guards'
 import type { OperatorBookingDetailDto } from '@/vite/operator-bookings/api'
 import {
@@ -18,7 +18,6 @@ import {
   operatorBookingDetailQueryOptions,
   substituteBooking,
 } from '@/vite/operator-bookings/api'
-import type { OperatorFleetVehicle } from '@/vite/operator-fleet/api'
 import type { Session } from '@/vite/session'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { useState } from 'react'
@@ -26,7 +25,7 @@ import { useTranslations } from 'use-intl'
 
 interface SubstituteVehicleActionProps {
   readonly booking: OperatorBookingDetailDto
-  readonly fleet: readonly OperatorFleetVehicle[]
+  readonly vehicles: readonly SubstitutionVehicle[]
   readonly session: Session | null
 }
 
@@ -39,7 +38,11 @@ interface SubstituteVehicleActionProps {
 // would reject. Gated like every operator write surface (#581/#583/#598): only
 // a tenant-scoped operator session writes; a bypass role (no operatorId) gets a
 // read-only note, and a terminal booking explains the action is unavailable.
-export function SubstituteVehicleAction({ booking, fleet, session }: SubstituteVehicleActionProps) {
+export function SubstituteVehicleAction({
+  booking,
+  vehicles,
+  session,
+}: SubstituteVehicleActionProps) {
   const t = useTranslations('bookings.operator')
   const queryClient = useQueryClient()
   const [open, setOpen] = useState(false)
@@ -49,7 +52,7 @@ export function SubstituteVehicleAction({ booking, fleet, session }: SubstituteV
   const canWrite = isOperatorSession(session)
   const isActionable = booking.status === 'CONFIRMED' || booking.status === 'ACTIVE'
   const csrfToken = session?.csrfToken ?? ''
-  const candidates = selectSubstitutionCandidates(fleet, booking)
+  const candidates = selectSubstitutionCandidates(vehicles, booking)
 
   const mutation = useMutation({
     mutationFn: (input: { newVehicleId: string; reason: string }) =>

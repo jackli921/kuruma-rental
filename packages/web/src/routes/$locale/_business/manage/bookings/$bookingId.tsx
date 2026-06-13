@@ -6,8 +6,8 @@ import {
   bookingEventsQueryOptions,
   operatorBookingDetailQueryOptions,
   operatorRowFromDetail,
+  substitutionCandidatesQueryOptions,
 } from '@/vite/operator-bookings/api'
-import { operatorFleetQueryOptions } from '@/vite/operator-fleet/api'
 import { sessionQueryOptions } from '@/vite/session'
 import { useSuspenseQuery } from '@tanstack/react-query'
 import {
@@ -32,12 +32,13 @@ export const Route = createFileRoute('/$locale/_business/manage/bookings/$bookin
       operatorBookingDetailQueryOptions(params.bookingId),
     )
     if (!detail) throw notFound()
-    // Warm the timeline cache plus the fleet (substitution candidates) and the
+    // Warm the timeline cache plus the substitution candidate list and the
     // session (write gating) so the page — and its Actions panel (#610) — render
-    // without a second waterfall.
+    // without a second waterfall. The candidate read degrades to [] on failure,
+    // so a vehicle-list error can never reject this Promise.all and blank the page.
     await Promise.all([
       context.queryClient.ensureQueryData(bookingEventsQueryOptions(params.bookingId)),
-      context.queryClient.ensureQueryData(operatorFleetQueryOptions()),
+      context.queryClient.ensureQueryData(substitutionCandidatesQueryOptions()),
       context.queryClient.ensureQueryData(sessionQueryOptions()),
     ])
     return { detail }
@@ -52,7 +53,7 @@ function TripDetailRoute() {
   const { locale, bookingId } = Route.useParams()
   const { detail } = Route.useLoaderData()
   const { data: events } = useSuspenseQuery(bookingEventsQueryOptions(bookingId))
-  const { data: fleet } = useSuspenseQuery(operatorFleetQueryOptions())
+  const { data: vehicles } = useSuspenseQuery(substitutionCandidatesQueryOptions())
   const { data: session } = useSuspenseQuery(sessionQueryOptions())
   const row = operatorRowFromDetail(detail)
 
@@ -75,7 +76,7 @@ function TripDetailRoute() {
             {/* Actions panel: vehicle substitution (#610); cancel / status follow. */}
             <div className="space-y-4 rounded-xl border border-border px-4 py-6">
               <h2 className="text-sm font-semibold text-muted-foreground">{t('detail.actions')}</h2>
-              <SubstituteVehicleAction booking={detail} fleet={fleet} session={session} />
+              <SubstituteVehicleAction booking={detail} vehicles={vehicles} session={session} />
             </div>
           </section>
           <aside className="rounded-xl border border-border px-4 py-6">

@@ -1,4 +1,5 @@
 import { unwrap } from '@/lib/api-error'
+import type { SubstitutionVehicle } from '@/lib/substitution'
 import { getApiBaseUrl } from '@/vite/api-base'
 import type { BookingDto } from '@/vite/bookings/api'
 import type { BookingEventPayload, BookingEventType } from '@kuruma/shared/db/schema'
@@ -246,4 +247,47 @@ export async function substituteBooking(
     },
   )
   return unwrap<BookingDto>(res)
+}
+
+// #610: the substitution picker needs the operator's own vehicles with the four
+// fields the candidate rule reads (classId, pickupLocationId, status) plus name +
+// plate for display. Read them from the lean tenant-scoped `GET /vehicles` (the
+// same operator-accessible list the calendar uses), NOT the heavy STAFF-only
+// `/vehicles/fleet-overview` — and degrade to [] on failure so a vehicle-list
+// error never blanks the trip-detail page (timeline included). The pure
+// `selectSubstitutionCandidates` filter is the single rule authority, so this
+// fetches the whole page and lets the filter narrow it.
+type RawSubstitutionVehicle = {
+  id: string
+  name: string
+  licensePlate: string | null
+  classId: string | null
+  pickupLocationId: string | null
+  status: string
+}
+
+export async function fetchSubstitutionCandidates(): Promise<SubstitutionVehicle[]> {
+  try {
+    const res = await fetch(`${getApiBaseUrl()}/vehicles?limit=${VEHICLES_PAGE_LIMIT}`, {
+      credentials: 'include',
+    })
+    const data = await unwrap<RawSubstitutionVehicle[]>(res)
+    return data.map((v) => ({
+      id: v.id,
+      name: v.name,
+      licensePlate: v.licensePlate,
+      classId: v.classId,
+      pickupLocationId: v.pickupLocationId,
+      status: v.status,
+    }))
+  } catch {
+    return []
+  }
+}
+
+export function substitutionCandidatesQueryOptions() {
+  return queryOptions({
+    queryKey: ['operator-bookings', 'substitution-candidates'],
+    queryFn: fetchSubstitutionCandidates,
+  })
 }

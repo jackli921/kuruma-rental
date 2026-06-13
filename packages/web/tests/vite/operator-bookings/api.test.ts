@@ -6,11 +6,13 @@ import {
   fetchCalendarBookings,
   fetchCalendarVehicles,
   fetchOperatorBookingDetail,
+  fetchSubstitutionCandidates,
   operatorBookingDetailQueryOptions,
   operatorCalendarQueryOptions,
   operatorCalendarVehiclesQueryOptions,
   operatorRowFromDetail,
   substituteBooking,
+  substitutionCandidatesQueryOptions,
 } from '@/vite/operator-bookings/api'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
@@ -402,6 +404,89 @@ describe('operatorCalendarVehiclesQueryOptions', () => {
       'operator-bookings',
       'calendar',
       'vehicles',
+    ])
+  })
+})
+
+// #610: the substitution picker reads the operator's own vehicles from the lean
+// tenant-scoped GET /vehicles (NOT the heavy STAFF-only fleet-overview), carrying
+// the rule fields (classId, pickupLocationId, status) plus name + plate. It must
+// degrade to [] on failure so a vehicle-list error never blanks the trip page.
+
+const vehicleRaw = (over: Record<string, unknown> = {}) => ({
+  id: 'veh-2',
+  name: 'Honda Fit',
+  licensePlate: 'OSAKA 5678',
+  classId: 'c1',
+  pickupLocationId: 'l1',
+  status: 'AVAILABLE',
+  ...over,
+})
+
+describe('fetchSubstitutionCandidates', () => {
+  it('requests the operator vehicles with a bounded limit and credentials', async () => {
+    const fetchMock = vi.fn(async () => jsonResponse({ success: true, data: [] }))
+    vi.stubGlobal('fetch', fetchMock)
+
+    await fetchSubstitutionCandidates()
+
+    const [url, init] = fetchMock.mock.calls[0]!
+    const parsed = new URL(url as string, 'http://x')
+    expect(parsed.pathname).toBe('/api/vehicles')
+    expect(parsed.searchParams.get('limit')).toBe('100')
+    expect((init as RequestInit).credentials).toBe('include')
+  })
+
+  it('maps rows to the candidate shape (rule fields + name + plate)', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () =>
+        jsonResponse({
+          success: true,
+          data: [vehicleRaw({ seats: 5, dailyRateJpy: 8000 })],
+        }),
+      ),
+    )
+
+    const vehicles = await fetchSubstitutionCandidates()
+    expect(vehicles).toEqual([
+      {
+        id: 'veh-2',
+        name: 'Honda Fit',
+        licensePlate: 'OSAKA 5678',
+        classId: 'c1',
+        pickupLocationId: 'l1',
+        status: 'AVAILABLE',
+      },
+    ])
+  })
+
+  it('degrades to [] on a failure envelope (must not blank the trip page)', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => jsonResponse({ success: false, error: 'Forbidden' }, 403)),
+    )
+
+    expect(await fetchSubstitutionCandidates()).toEqual([])
+  })
+
+  it('degrades to [] when the request itself rejects (network error)', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => {
+        throw new TypeError('network down')
+      }),
+    )
+
+    expect(await fetchSubstitutionCandidates()).toEqual([])
+  })
+})
+
+describe('substitutionCandidatesQueryOptions', () => {
+  it('keys by the substitution candidate list', () => {
+    expect(substitutionCandidatesQueryOptions().queryKey).toEqual([
+      'operator-bookings',
+      'substitution-candidates',
     ])
   })
 })
