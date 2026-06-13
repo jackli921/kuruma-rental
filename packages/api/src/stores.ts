@@ -8,6 +8,24 @@ import type {
   FeeSnapshotItem,
   InsuranceSnapshot,
 } from '@kuruma/shared/db/schema'
+import type {
+  AddOnStatus,
+  BookingSource,
+  BookingStatus,
+  DocumentStatus,
+  DocumentType,
+  FeeScheduleStatus,
+  FeeType,
+  FeeUnit,
+  InsuranceStatus,
+  LocationStatus,
+  OperatorMembershipStatus,
+  OperatorRole,
+  PaymentEventStatus,
+  ProviderInviteStatus,
+  Transmission,
+  VehicleClassStatus,
+} from '@kuruma/shared/enums'
 import type { LuggageSize } from '@kuruma/shared/lib/luggage'
 import type { LocationOperatingHours } from '@kuruma/shared/types/location'
 
@@ -30,12 +48,12 @@ export interface VehicleClass {
   seats: number
   luggageCapacity: number
   luggageSize: LuggageSize
-  transmission: 'AUTO' | 'MANUAL'
+  transmission: Transmission
   fuelType: string | null
   /** ACRISS taxonomy code (#388). Null when the class has no mapped code. */
   acrissCode: string | null
   sortOrder: number
-  status: 'ACTIVE' | 'ARCHIVED'
+  status: VehicleClassStatus
   createdAt: Date
   updatedAt: Date
 }
@@ -59,8 +77,8 @@ export interface Booking {
   startAt: Date
   endAt: Date
   effectiveEndAt: Date
-  status: 'CONFIRMED' | 'ACTIVE' | 'COMPLETED' | 'CANCELLED'
-  source: 'DIRECT' | 'TRIP_COM' | 'MANUAL' | 'OTHER'
+  status: BookingStatus
+  source: BookingSource
   // #463: how the booking is fulfilled. Server-derived SPECIFIC pre-demo;
   // CLASS_COMBO is #464. Always written explicitly by app code (Option B).
   fulfillmentMode: BookingFulfillmentMode
@@ -114,7 +132,7 @@ export interface PaymentEvent {
   platformFeeJpy: number
   netToPartnerJpy: number
   currency: string
-  status: 'SUCCEEDED'
+  status: PaymentEventStatus
   createdAt: Date
 }
 
@@ -254,7 +272,7 @@ export interface Location {
   /** #394 deepest (area) region node, or null (not-yet-assigned, NOT NULL
    *  deferred — D1). Drives the recursive-descendant storefront filter. */
   regionId: string | null
-  status: 'ACTIVE' | 'ARCHIVED'
+  status: LocationStatus
   createdAt: Date
   updatedAt: Date
 }
@@ -281,7 +299,7 @@ export interface InsuranceOption {
   dailyPriceJpy: number
   /** null = no deductible (full cover). */
   deductibleJpy: number | null
-  status: 'ACTIVE' | 'ARCHIVED'
+  status: InsuranceStatus
   createdAt: Date
   updatedAt: Date
 }
@@ -293,7 +311,7 @@ export interface AddOn {
   name: string
   description: string | null
   priceJpy: number
-  status: 'ACTIVE' | 'ARCHIVED'
+  status: AddOnStatus
   createdAt: Date
   updatedAt: Date
 }
@@ -304,10 +322,10 @@ export interface FeeSchedule {
   operatorId: string
   /** null = operator-wide fee; non-null = scoped to one vehicle class. */
   vehicleClassId: string | null
-  feeType: 'OVERTIME_HOURLY' | 'CLEANING_FLAT' | 'NO_FUEL_FLAT'
-  unit: 'PER_HOUR' | 'PER_DAY' | 'PER_KM' | 'FLAT'
+  feeType: FeeType
+  unit: FeeUnit
   amountJpy: number
-  status: 'ACTIVE' | 'ARCHIVED'
+  status: FeeScheduleStatus
   createdAt: Date
   updatedAt: Date
 }
@@ -317,9 +335,9 @@ export interface FeeSchedule {
 export interface RenterDocument {
   id: string
   renterId: string
-  type: 'IDP' | 'PASSPORT'
+  type: DocumentType
   storageKey: string
-  status: 'PENDING' | 'APPROVED' | 'REJECTED'
+  status: DocumentStatus
   expiryDate: string | null
   verifiedAt: Date | null
   verifierId: string | null
@@ -335,8 +353,8 @@ export interface OperatorMembership {
   id: string
   userId: string
   operatorId: string
-  role: 'OPERATOR_OWNER' | 'OPERATOR_STAFF'
-  status: 'ACTIVE' | 'REVOKED'
+  role: OperatorRole
+  status: OperatorMembershipStatus
   createdAt: Date
   updatedAt: Date
 }
@@ -348,9 +366,9 @@ export interface ProviderInvite {
   id: string
   email: string
   operatorId: string
-  role: 'OPERATOR_OWNER' | 'OPERATOR_STAFF'
+  role: OperatorRole
   tokenHash: string
-  status: 'PENDING' | 'ACCEPTED'
+  status: ProviderInviteStatus
   expiresAt: Date
   invitedByUserId: string | null
   acceptedByUserId: string | null
