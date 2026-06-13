@@ -72,4 +72,18 @@ describe('NominatimGeocoder', () => {
     await new NominatimGeocoder(BASE, UA, fetchFn).geocode('Osaka')
     expect(fetchFn).toHaveBeenCalledTimes(1)
   })
+
+  it('appends ?key= when an API key is set, making LocationIQ a drop-in (#574)', async () => {
+    const fetchFn = vi.fn(async () => jsonResponse(osakaHit))
+    await new NominatimGeocoder(BASE, UA, fetchFn, 'pk.test-token').geocode('Osaka')
+    const parsed = new URL(fetchFn.mock.calls[0]![0] as string)
+    expect(parsed.searchParams.get('key')).toBe('pk.test-token')
+  })
+
+  it('omits the key param entirely when no API key is set (public OSM)', async () => {
+    const fetchFn = vi.fn(async () => jsonResponse(osakaHit))
+    await new NominatimGeocoder(BASE, UA, fetchFn).geocode('Osaka')
+    const parsed = new URL(fetchFn.mock.calls[0]![0] as string)
+    expect(parsed.searchParams.has('key')).toBe(false)
+  })
 })

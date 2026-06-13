@@ -200,8 +200,11 @@ export class LocationService {
     if (regeocode === true) {
       const hit = await this.safeGeocode(address)
       if (hit) return { kind: 'set', coords: hit }
-      // Manual coords survive a transient outage; derived coords are cleared.
-      return isManual ? { kind: 'preserve' } : { kind: 'set', coords: CLEARED }
+      // A miss clears coords only when they are genuinely stale — i.e. the address
+      // changed and re-derivation failed. A MANUAL pin, or a GEOCODED pin whose
+      // address is unchanged, is NOT stale, so a transient miss (incl. a #574
+      // rate-limit skip) must preserve it rather than destroy valid coordinates.
+      return isManual || !addressChanged ? { kind: 'preserve' } : { kind: 'set', coords: CLEARED }
     }
 
     if (addressChanged) {
