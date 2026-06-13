@@ -11,6 +11,7 @@ export type {
   NotificationLog,
   Operator,
   Location,
+  Region,
   InsuranceOption,
   AddOn,
   FeeSchedule,
@@ -45,6 +46,7 @@ import type {
   OperatorMembership,
   PaymentEvent,
   ProviderInvite,
+  Region,
   RenterDocument,
   Thread,
   ThreadParticipant,
@@ -110,17 +112,18 @@ export interface LocationRepository {
    * `(operatorId, name)` unique constraint is the real seal).
    */
   findByOperatorAndName(operatorId: string, name: string): Promise<Location | undefined>
-  // lat/lng + coordinateSource are optional on create (default null). The service
-  // derives them via the Geocoder (#531); callers that already have coords (e.g.
-  // a MANUAL pin) pass all three. All three DB columns are nullable.
+  // lat/lng + coordinateSource (#531) and regionId (#394) are optional on create
+  // (default null). The service derives lat/lng + coordinateSource via the
+  // Geocoder; callers with a MANUAL pin pass coords. All four DB columns nullable.
   create(
     data: Omit<
       Location,
-      'id' | 'createdAt' | 'updatedAt' | 'latitude' | 'longitude' | 'coordinateSource'
+      'id' | 'createdAt' | 'updatedAt' | 'latitude' | 'longitude' | 'coordinateSource' | 'regionId'
     > & {
       latitude?: number | null
       longitude?: number | null
       coordinateSource?: CoordinateSource | null
+      regionId?: string | null
     },
   ): Promise<Location>
   update(id: string, data: Partial<Location>): Promise<Location | undefined>
@@ -517,6 +520,29 @@ export type Storefront = Location & { operatorName: string }
 export interface StorefrontFilters {
   /** Narrow to a single storefront — the degenerate single-card search. */
   pickupLocationId?: string
+  /**
+   * #394: keep only storefronts whose location.regionId is in this set (a region
+   * node + its recursive descendants, resolved by RegionRepository). An EMPTY
+   * array means "no region matched" → no storefronts (an unknown region id, or a
+   * region with no locations). Locations with a null regionId never match.
+   */
+  regionIds?: string[]
+}
+
+/**
+ * #394 hierarchical region taxonomy read. Platform-global reference data (no
+ * CallerContext — regions are not tenant-scoped). `findDescendantIds` owns the
+ * recursive tree walk in ONE place: BOTH impls delegate to the shared app-code BFS
+ * in region-tree.ts (the Drizzle repo loads the tiny tree via findAll, then walks
+ * it — see region-tree.ts for why a raw WITH RECURSIVE CTE is avoided). So search
+ * services stay dumb: resolve a regionId to a flat id list and hand it to the plain
+ * StorefrontFilters.regionIds filter.
+ */
+export interface RegionRepository {
+  /** The whole tree as a flat list; the web client builds the cascade from it. */
+  findAll(): Promise<Region[]>
+  /** `rootId` plus every descendant id (inclusive). Empty when `rootId` is unknown. */
+  findDescendantIds(rootId: string): Promise<string[]>
 }
 
 /**

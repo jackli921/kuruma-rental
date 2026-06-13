@@ -38,6 +38,7 @@ export function createFlatSearchRoutes(
     if (!limit.ok) return limit.response
 
     const pickupLocationId = c.req.query('pickupLocationId')
+    const regionId = c.req.query('regionId')
     const operatorId = c.req.query('operatorId')
     const classes = c.req.queries('class')
     const cursor = c.req.query('cursor')
@@ -47,6 +48,7 @@ export function createFlatSearchRoutes(
       to: range.to,
       limit: limit.limit,
       ...(pickupLocationId ? { pickupLocationId } : {}),
+      ...(regionId ? { regionId } : {}),
       ...(operatorId ? { operatorId } : {}),
       ...(classes && classes.length > 0 ? { classes } : {}),
       ...(cursor ? { cursor } : {}),

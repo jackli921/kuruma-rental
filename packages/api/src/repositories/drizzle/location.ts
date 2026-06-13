@@ -69,11 +69,18 @@ export class DrizzleLocationRepository implements LocationRepository {
   async create(
     data: Omit<
       Location,
-      'id' | 'createdAt' | 'updatedAt' | 'latitude' | 'longitude' | 'coordinateSource'
+      | 'id'
+      | 'createdAt'
+      | 'updatedAt'
+      | 'latitude'
+      | 'longitude'
+      | 'coordinateSource'
+      | 'regionId'
     > & {
       latitude?: number | null
       longitude?: number | null
       coordinateSource?: CoordinateSource | null
+      regionId?: string | null
     },
   ): Promise<Location> {
     const [inserted] = await this.db
@@ -88,6 +95,7 @@ export class DrizzleLocationRepository implements LocationRepository {
         operatingHours: data.operatingHours,
         timezone: data.timezone,
         defaultTurnaroundMinutes: data.defaultTurnaroundMinutes,
+        regionId: data.regionId ?? null,
         status: data.status,
       })
       .returning()

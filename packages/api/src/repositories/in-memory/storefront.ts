@@ -25,9 +25,16 @@ export class InMemoryStorefrontRepository implements StorefrontRepository {
     filters?: StorefrontFilters,
   ): Promise<Storefront[]> {
     const active = await this.locationRepo.findAll(ctx, { status: 'ACTIVE' })
-    const locations = filters?.pickupLocationId
+    let locations = filters?.pickupLocationId
       ? active.filter((l) => l.id === filters.pickupLocationId)
       : active
+    // #394: keep only locations whose region is in the resolved descendant set.
+    // An empty set (unknown region / region with no locations) matches nothing; a
+    // null regionId never matches a region filter.
+    if (filters?.regionIds) {
+      const regionIds = new Set(filters.regionIds)
+      locations = locations.filter((l) => l.regionId !== null && regionIds.has(l.regionId))
+    }
 
     const joined = await Promise.all(
       locations.map(async (location) => {

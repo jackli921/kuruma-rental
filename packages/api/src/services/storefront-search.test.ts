@@ -4,14 +4,35 @@ import { InMemoryAvailabilityRepository } from '../repositories/in-memory/availa
 import { InMemoryBookingRepository } from '../repositories/in-memory/booking'
 import { InMemoryLocationRepository } from '../repositories/in-memory/location'
 import { InMemoryOperatorRepository } from '../repositories/in-memory/operator'
+import { InMemoryRegionRepository } from '../repositories/in-memory/region'
 import { InMemoryStorefrontRepository } from '../repositories/in-memory/storefront'
 import { InMemoryVehicleRepository } from '../repositories/in-memory/vehicle'
 import { InMemoryVehicleClassRepository } from '../repositories/in-memory/vehicle-class'
-import type { Location, Operator, Vehicle, VehicleClass } from '../stores'
+import type { Location, Operator, Region, Vehicle, VehicleClass } from '../stores'
 import { StorefrontSearchService } from './storefront-search'
 
 const FROM = new Date('2026-08-01T10:00:00Z')
 const TO = new Date('2026-08-01T14:00:00Z')
+
+// #394 region tree: osaka -> osaka_city -> {namba, umeda}; kyoto -> kyoto_city
+//                  -> kyoto_station. umeda is a leaf with no seeded location.
+const reg = (id: string, parentId: string | null): Region => ({
+  id,
+  parentId,
+  nameEn: id,
+  nameJa: id,
+  nameZh: id,
+  sortOrder: 0,
+})
+const REGIONS: Region[] = [
+  reg('reg_osaka', null),
+  reg('reg_osaka_city', 'reg_osaka'),
+  reg('reg_namba', 'reg_osaka_city'),
+  reg('reg_umeda', 'reg_osaka_city'),
+  reg('reg_kyoto', null),
+  reg('reg_kyoto_city', 'reg_kyoto'),
+  reg('reg_kyoto_station', 'reg_kyoto_city'),
+]
 
 let operatorRepo: InMemoryOperatorRepository
 let locationRepo: InMemoryLocationRepository
@@ -28,7 +49,8 @@ beforeEach(() => {
   classRepo = new InMemoryVehicleClassRepository()
   const storefrontRepo = new InMemoryStorefrontRepository(locationRepo, operatorRepo)
   const availabilityRepo = new InMemoryAvailabilityRepository(vehicleRepo, bookingRepo)
-  service = new StorefrontSearchService(storefrontRepo, availabilityRepo, classRepo)
+  const regionRepo = new InMemoryRegionRepository(REGIONS)
+  service = new StorefrontSearchService(storefrontRepo, availabilityRepo, classRepo, regionRepo)
 })
 
 function makeOperator(name: string, slug: string): Promise<Operator> {
@@ -317,5 +339,74 @@ describe('StorefrontSearchService.search (#391)', () => {
     if (result.ok) throw new Error('expected a failure result for a malformed cursor')
     expect(result.status).toBe(400)
     expect(result.error).toMatch(/cursor/i)
+  })
+})
+
+describe('StorefrontSearchService.search region filter (#394)', () => {
+  // Two storefronts in different prefectures: Namba (Osaka) + Kyoto Station (Kyoto).
+  async function seedTwoRegions() {
+    const op = await makeOperator('Best Car Rental', 'best')
+    const compact = await makeClass({ operatorId: op.id, acrissCode: 'CCAR' })
+    const namba = await makeLocation({ operatorId: op.id, name: 'Namba', regionId: 'reg_namba' })
+    const kyoto = await makeLocation({
+      operatorId: op.id,
+      name: 'Kyoto Station',
+      regionId: 'reg_kyoto_station',
+    })
+    await makeVehicle({ operatorId: op.id, classId: compact.id, pickupLocationId: namba.id })
+    await makeVehicle({ operatorId: op.id, classId: compact.id, pickupLocationId: kyoto.id })
+  }
+
+  it('returns storefronts in every region when no regionId is given', async () => {
+    await seedTwoRegions()
+    const data = await ok(await service.search(PUBLIC_CONTEXT, { from: FROM, to: TO }))
+    expect(data.storefronts.map((s) => s.name).sort()).toEqual(['Kyoto Station', 'Namba'])
+  })
+
+  it('keeps only a prefecture’s storefronts (node + recursive descendants)', async () => {
+    await seedTwoRegions()
+    const data = await ok(
+      await service.search(PUBLIC_CONTEXT, { from: FROM, to: TO, regionId: 'reg_osaka' }),
+    )
+    expect(data.storefronts.map((s) => s.name)).toEqual(['Namba'])
+  })
+
+  it('keeps only the storefront in a selected leaf (area)', async () => {
+    await seedTwoRegions()
+    const data = await ok(
+      await service.search(PUBLIC_CONTEXT, { from: FROM, to: TO, regionId: 'reg_kyoto_station' }),
+    )
+    expect(data.storefronts.map((s) => s.name)).toEqual(['Kyoto Station'])
+  })
+
+  it('returns no storefronts for a region that has no locations', async () => {
+    await seedTwoRegions()
+    const data = await ok(
+      await service.search(PUBLIC_CONTEXT, { from: FROM, to: TO, regionId: 'reg_umeda' }),
+    )
+    expect(data.storefronts).toEqual([])
+  })
+
+  it('returns no storefronts for an unknown regionId (not all of them)', async () => {
+    await seedTwoRegions()
+    const data = await ok(
+      await service.search(PUBLIC_CONTEXT, { from: FROM, to: TO, regionId: 'reg_nope' }),
+    )
+    expect(data.storefronts).toEqual([])
+  })
+
+  it('excludes a null-region location from a region filter but shows it unfiltered', async () => {
+    const op = await makeOperator('Best Car Rental', 'best')
+    const compact = await makeClass({ operatorId: op.id, acrissCode: 'CCAR' })
+    const noRegion = await makeLocation({ operatorId: op.id, name: 'No Region' }) // regionId null
+    await makeVehicle({ operatorId: op.id, classId: compact.id, pickupLocationId: noRegion.id })
+
+    const filtered = await ok(
+      await service.search(PUBLIC_CONTEXT, { from: FROM, to: TO, regionId: 'reg_osaka' }),
+    )
+    expect(filtered.storefronts).toEqual([])
+
+    const unfiltered = await ok(await service.search(PUBLIC_CONTEXT, { from: FROM, to: TO }))
+    expect(unfiltered.storefronts.map((s) => s.name)).toEqual(['No Region'])
   })
 })
