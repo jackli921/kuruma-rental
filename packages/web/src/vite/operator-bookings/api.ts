@@ -47,47 +47,6 @@ interface RawOperatorBooking {
   renter?: { id: string; name: string | null; email: string | null; language: string } | undefined
 }
 
-export interface OperatorBookingFilters {
-  status?: OperatorBookingStatus
-  limit?: number
-}
-
-function toRow(b: RawOperatorBooking): OperatorBookingRow {
-  return {
-    id: b.id,
-    bookingCode: b.bookingCode,
-    status: b.status,
-    startAt: b.startAt,
-    endAt: b.endAt,
-    totalPrice: b.totalPrice,
-    vehicleName: b.vehicle?.name ?? null,
-    renter: b.renter ? { id: b.renter.id, name: b.renter.name, email: b.renter.email } : null,
-  }
-}
-
-export async function fetchOperatorBookings(
-  filters: OperatorBookingFilters = {},
-): Promise<OperatorBookingRow[]> {
-  const sp = new URLSearchParams({ expand: 'vehicle,renter' })
-  if (filters.status) sp.set('status', filters.status)
-  if (filters.limit) sp.set('limit', String(filters.limit))
-
-  const res = await fetch(`${getApiBaseUrl()}/bookings?${sp.toString()}`, {
-    credentials: 'include',
-  })
-  const data = await unwrap<RawOperatorBooking[]>(res)
-  return data.map(toRow)
-}
-
-export function operatorBookingsQueryOptions(filters: OperatorBookingFilters = {}) {
-  return queryOptions({
-    // Key on every filter that changes the response (status + limit) so two
-    // callers with different limits never collide on a stale cache entry.
-    queryKey: ['operator-bookings', filters.status, filters.limit],
-    queryFn: () => fetchOperatorBookings(filters),
-  })
-}
-
 // #525: the operator calendar reads bookings over a date range. Unlike the list
 // row, it carries the assigned vehicle id (the resource-column key) and the
 // turnaround-aware end so a booking's block spans its real off-fleet window.
@@ -166,11 +125,20 @@ export interface CalendarVehicle {
 }
 
 export async function fetchCalendarVehicles(): Promise<CalendarVehicle[]> {
-  const res = await fetch(`${getApiBaseUrl()}/vehicles?limit=${VEHICLES_PAGE_LIMIT}`, {
-    credentials: 'include',
-  })
-  const data = await unwrap<Array<{ id: string; name: string }>>(res)
-  return data.map((v) => ({ id: v.id, name: v.name }))
+  // Degrade to an empty list on failure: the vehicle columns + sidebar filter are
+  // a day-view convenience, so a vehicle-list error must NOT take down the whole
+  // bookings calendar (week/month render fine without columns, and the route's
+  // loader Promise.all would otherwise reject and blank the page — the exact
+  // coupling that broke the operator portal when this read /vehicles/fleet-overview).
+  try {
+    const res = await fetch(`${getApiBaseUrl()}/vehicles?limit=${VEHICLES_PAGE_LIMIT}`, {
+      credentials: 'include',
+    })
+    const data = await unwrap<Array<{ id: string; name: string }>>(res)
+    return data.map((v) => ({ id: v.id, name: v.name }))
+  } catch {
+    return []
+  }
 }
 
 export function operatorCalendarVehiclesQueryOptions() {
@@ -225,6 +193,33 @@ export function operatorRowFromDetail(dto: OperatorBookingDetailDto): OperatorBo
       ? { id: dto.renter.id, name: dto.renter.name, email: dto.renter.email }
       : null,
   }
+}
+
+// #610: operator vehicle substitution. POST /bookings/:id/substitute swaps the
+// booking's assigned car for another AVAILABLE vehicle of the SAME operator,
+// pickup location and ACRISS class (the server enforces all three). The renter's
+// `requestedVehicleId` is preserved; only `assignedVehicleId` + a re-snapshotted
+// totalPrice change, and a VEHICLE_SUBSTITUTED audit event (系统留痕) is appended,
+// which the existing timeline renders once the events query is invalidated. As a
+// cookie-authed POST it is CSRF-gated (global csrf()), so the caller echoes the
+// session token. `reason` is optional in the schema, so it is omitted when blank.
+export async function substituteBooking(
+  bookingId: string,
+  newVehicleId: string,
+  reason: string | null,
+  csrfToken: string,
+): Promise<BookingDto> {
+  const body = reason != null ? { newVehicleId, reason } : { newVehicleId }
+  const res = await fetch(
+    `${getApiBaseUrl()}/bookings/${encodeURIComponent(bookingId)}/substitute`,
+    {
+      method: 'POST',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrfToken },
+      body: JSON.stringify(body),
+    },
+  )
+  return unwrap<BookingDto>(res)
 }
 
 /** One lifecycle event as the operator timeline reads it (dates are ISO JSON). */

@@ -2,8 +2,10 @@ import { buttonVariants } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import { LocaleSwitcher } from '@/vite/nav/LocaleSwitcher'
 import { MobileMenu, type NavItem } from '@/vite/nav/MobileMenu'
+import { NavBadge } from '@/vite/nav/NavBadge'
 import { NavbarClient } from '@/vite/nav/NavbarClient'
 import { businessNavItems } from '@/vite/nav/business-nav-items'
+import { useNewBookingsBadge } from '@/vite/operator-bookings/useNewBookingsBadge'
 import { useSession } from '@/vite/session'
 import { getViewMode, isBusiness } from '@/vite/view-mode'
 import { Link } from '@tanstack/react-router'
@@ -25,6 +27,11 @@ export function Navbar() {
   const viewMode = getViewMode(role)
   const isRenter = role === 'RENTER'
 
+  // #611: in-app "new order" alert. Only an operator (business view) scans for
+  // new bookings; the count rides the Bookings nav item as a red dot.
+  const isBusinessView = viewMode === 'business'
+  const { count: newBookingsCount } = useNewBookingsBadge({ enabled: isBusinessView })
+
   const renterNavItems: readonly NavItem[] = isRenter
     ? [
         { to: '/$locale/bookings', label: t('myBookings') },
@@ -32,12 +39,18 @@ export function Navbar() {
       ]
     : []
 
-  const navItems: readonly NavItem[] =
-    viewMode === 'business'
-      ? businessNavItems.map((item) => ({ to: item.to, label: t(item.labelKey) }))
-      : session?.user
-        ? [{ to: '/$locale/search', label: t('browse') }, ...renterNavItems]
-        : []
+  const navItems: readonly NavItem[] = isBusinessView
+    ? businessNavItems.map((item) => ({
+        to: item.to,
+        label: t(item.labelKey),
+        // exactOptionalPropertyTypes: only attach `badge` when there is one.
+        ...(item.to === '/$locale/manage/bookings' && newBookingsCount > 0
+          ? { badge: newBookingsCount }
+          : {}),
+      }))
+    : session?.user
+      ? [{ to: '/$locale/search', label: t('browse') }, ...renterNavItems]
+      : []
 
   return (
     <header className="sticky top-0 z-50 border-b border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
@@ -68,6 +81,9 @@ export function Navbar() {
                 className={cn(buttonVariants({ variant: 'ghost', size: 'sm' }))}
               >
                 {item.label}
+                {item.badge ? (
+                  <NavBadge count={item.badge} label={t('newBookings', { count: item.badge })} />
+                ) : null}
               </Link>
             ))}
           </nav>
