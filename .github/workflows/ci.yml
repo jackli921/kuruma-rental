@@ -111,6 +111,19 @@ jobs:
         # test files use postgres-js (TCP) via pg-test-client.ts.
         run: bun run --filter @kuruma/api test:integration
 
+      - name: Prove db:verify fails when the double-booking guard is dropped
+        # Regression guard for #702 (Check 5): db:verify MUST exit non-zero when a
+        # critical custom DB object is missing. Runs LAST in this job — it drops a
+        # constraint on the ephemeral CI database, so no later step may depend on
+        # the schema. Uses postgres-js (a guaranteed dep), not psql.
+        run: |
+          bun -e 'import postgres from "postgres"; const sql = postgres(process.env.DATABASE_URL, { max: 1 }); await sql.unsafe("ALTER TABLE bookings DROP CONSTRAINT bookings_no_overlap"); await sql.end();'
+          if bun run db:verify; then
+            echo "::error::db:verify passed with bookings_no_overlap dropped — Check 5 (critical DB objects) is broken"
+            exit 1
+          fi
+          echo "OK: db:verify correctly failed when the double-booking guard was dropped"
+
   e2e:
     runs-on: ubuntu-latest
 
