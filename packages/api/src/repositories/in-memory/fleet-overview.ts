@@ -1,5 +1,5 @@
 import type { FleetVehicleOverview } from '@kuruma/shared/types/fleet'
-import { type CallerContext, SYSTEM_CONTEXT } from '../../middleware/auth'
+import type { CallerContext } from '../../middleware/auth'
 import type {
   BookingRepository,
   FleetOverviewRepository,
@@ -39,13 +39,13 @@ export class InMemoryFleetOverviewRepository implements FleetOverviewRepository 
   async findFleetOverview(ctx: CallerContext, now: Date): Promise<FleetVehicleOverview[]> {
     const windowStart = new Date(now.getTime() - UTILIZATION_WINDOW_HOURS * 60 * 60 * 1000)
 
-    // Scope vehicles to the caller's tenant (#594). VehicleRepository.findAll
-    // already applies operatorReadScope, so an OPERATOR_* caller sees only their
-    // own cars while bypass roles see all. Bookings are read with SYSTEM_CONTEXT
-    // but each output row only surfaces bookings keyed to a vehicle in this
-    // (already tenant-scoped) set, so no cross-tenant booking can leak.
+    // Scope BOTH reads to the caller's tenant (#594). VehicleRepository.findAll
+    // and BookingRepository.findAll each apply their own operator scope, so an
+    // OPERATOR_* caller never reads another tenant's rows (isolation at the read,
+    // not the projection) while bypass roles see all. Mirrors the Drizzle repo,
+    // which scopes vehicles by operatorId and bookings to those vehicle ids.
     const { data: vehicles } = await this.vehicleRepo.findAll(ctx)
-    const allBookings = await this.bookingRepo.findAll(SYSTEM_CONTEXT)
+    const allBookings = await this.bookingRepo.findAll(ctx)
 
     return Promise.all(
       vehicles.map(async (vehicle) => {
