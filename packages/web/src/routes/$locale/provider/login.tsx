@@ -28,10 +28,7 @@ export const Route = createFileRoute('/$locale/provider/login')({
   beforeLoad: async ({ context, params }) => {
     const session = await context.queryClient.ensureQueryData(sessionQueryOptions())
     if (session?.user.operatorSlug) {
-      throw redirect({
-        to: '/$locale/manage/$operatorSlug/dashboard',
-        params: { locale: params.locale, operatorSlug: session.user.operatorSlug },
-      })
+      throw redirect({ to: '/$locale/dashboard', params: { locale: params.locale } })
     }
   },
   component: ProviderLoginPage,
@@ -44,5 +41,5 @@ function ProviderLoginPage() {
   // A denied provider attempt arrives signed-out (no session minted), so the
   // not-authorized panel replaces the sign-in card rather than sitting beside it.
   if (error) return <ProviderAccessDeniedPanel error={error} />
-  return <ProviderLoginCard returnTo={`/${locale}/manage`} />
+  return <ProviderLoginCard returnTo={`/${locale}/dashboard`} />
 }
