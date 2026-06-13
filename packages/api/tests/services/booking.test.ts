@@ -28,6 +28,7 @@ import {
   type BookingVerificationGate,
   type CreateBookingInput,
 } from '../../src/services/booking'
+import type { BookingPostCommitDispatcher } from '../../src/services/booking-post-commit-dispatcher'
 import { documentVerificationGate } from '../../src/services/document-verification-gate'
 import { RenterDocumentService } from '../../src/services/renter-document'
 import type { Booking, BookingEvent, User, Vehicle, VehicleClass } from '../../src/stores'
@@ -853,7 +854,7 @@ interface SubHarness {
 
 // Seeds a confirmed operator-A booking on vehicle V1 (class A @ ACRISS_A, the
 // Osaka location) via the real submit path, ready for substitution tests.
-async function setupSub(): Promise<SubHarness> {
+async function setupSub(postCommit?: BookingPostCommitDispatcher): Promise<SubHarness> {
   const events: BookingEvent[] = []
   const bookingRepo = new InMemoryBookingRepository()
   const bookingEventRepo = new InMemoryBookingEventRepository(events)
@@ -918,7 +919,7 @@ async function setupSub(): Promise<SubHarness> {
     vehicleRepo,
     userRepo,
     vehicleClassRepo,
-    undefined,
+    postCommit,
     undefined,
     bookingEventRepo,
     () => 'SUBSEED1',
@@ -1107,5 +1108,70 @@ describe('BookingService lifecycle events (#392 §3.1)', () => {
       actorId: RENTER,
       payload: { cancellationFee: res.cancellation.feeAmount, cancelledAt: NOW.toISOString() },
     })
+  })
+})
+
+describe('BookingService — renter lifecycle notifications (#664)', () => {
+  // The post-commit seam is a spy. We assert each operator action hands off to it
+  // with the correct trigger AFTER the write commits. setupSub seeds via create(),
+  // which fires a CREATED dispatch — cleared so each test counts only its action.
+  // The dispatcher's own routing + non-fatal behavior is covered in its suites.
+  function spyPostCommit() {
+    const run = vi.fn(async () => {})
+    return { postCommit: { run } as unknown as BookingPostCommitDispatcher, run }
+  }
+  // A same-operator, same-class candidate at the seeded location (cf. setupSub).
+  const addVehicle = (h: SubHarness) =>
+    h.repos.vehicleRepo.create(
+      SYSTEM_CONTEXT,
+      vehicleData({ classId: h.classA.id, pickupLocationId: h.locationId, dailyRateJpy: 15000 }),
+    )
+
+  it('substitute hands off with the SUBSTITUTED trigger', async () => {
+    const { postCommit, run } = spyPostCommit()
+    const h = await setupSub(postCommit)
+    run.mockClear()
+    const replacement = await addVehicle(h)
+    const result = await h.service.substitute(opCtxA, h.bookingId, replacement.id, 'maintenance')
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+    expect(run).toHaveBeenCalledTimes(1)
+    expect(run).toHaveBeenCalledWith(opCtxA, result.booking, 'SUBSTITUTED')
+  })
+
+  it('updateStatus maps ACTIVE -> ACTIVATED and COMPLETED -> COMPLETED', async () => {
+    const { postCommit, run } = spyPostCommit()
+    const h = await setupSub(postCommit)
+    run.mockClear()
+    const active = await h.service.updateStatus(opCtxA, h.bookingId, 'ACTIVE')
+    expect(active.ok).toBe(true)
+    if (!active.ok) return
+    expect(run).toHaveBeenNthCalledWith(1, opCtxA, active.booking, 'ACTIVATED')
+    const completed = await h.service.updateStatus(opCtxA, h.bookingId, 'COMPLETED')
+    expect(completed.ok).toBe(true)
+    if (!completed.ok) return
+    expect(run).toHaveBeenNthCalledWith(2, opCtxA, completed.booking, 'COMPLETED')
+  })
+
+  it('cancel hands off with the CANCELLED trigger', async () => {
+    const { postCommit, run } = spyPostCommit()
+    const h = await setupSub(postCommit)
+    run.mockClear()
+    const result = await h.service.cancel(renterCtx, h.bookingId, NOW)
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+    expect(run).toHaveBeenCalledTimes(1)
+    expect(run).toHaveBeenCalledWith(renterCtx, result.booking, 'CANCELLED')
+  })
+
+  it('does not notify on a rejected action (no commit -> no email)', async () => {
+    const { postCommit, run } = spyPostCommit()
+    const h = await setupSub(postCommit)
+    run.mockClear()
+    const replacement = await addVehicle(h)
+    // Operator B cannot touch operator A's booking -> 404, nothing commits.
+    const result = await h.service.substitute(opCtxB, h.bookingId, replacement.id, null)
+    expect(result.ok).toBe(false)
+    expect(run).not.toHaveBeenCalled()
   })
 })
