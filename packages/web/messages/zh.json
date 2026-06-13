@@ -72,7 +72,8 @@
     "search": "搜索",
     "browse": "浏览车辆",
     "myBookings": "我的预订",
-    "documents": "证件"
+    "documents": "证件",
+    "newBookings": "{count} 个新订单"
   },
   "acriss": {
     "MCAR": "微型车",

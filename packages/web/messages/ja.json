@@ -72,7 +72,8 @@
     "search": "検索",
     "browse": "車を探す",
     "myBookings": "予約一覧",
-    "documents": "書類"
+    "documents": "書類",
+    "newBookings": "新規予約 {count}件"
   },
   "acriss": {
     "MCAR": "ミニ",

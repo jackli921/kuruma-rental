@@ -1,0 +1,24 @@
+import {
+  countNewBookings,
+  lastSeenQueryOptions,
+  newOrderBookingsQueryOptions,
+} from '@/vite/operator-bookings/new-bookings'
+import { useQuery } from '@tanstack/react-query'
+import { useMemo } from 'react'
+
+// #611: the count behind the operator's "new order" nav badge. Derived from two
+// cache entries so it stays reactive: the CONFIRMED-orders scan (refetched on
+// focus / slow poll) and `lastSeenAt` (advanced when the operator opens the
+// orders list — see markBookingsSeen). `enabled` is false in renter view-mode so
+// a renter never fires the operator-scoped scan.
+export function useNewBookingsBadge({ enabled }: { enabled: boolean }): { count: number } {
+  const { data: lastSeenAt } = useQuery(lastSeenQueryOptions())
+  const { data: bookings } = useQuery(newOrderBookingsQueryOptions(enabled))
+
+  const count = useMemo(
+    () => (enabled && lastSeenAt ? countNewBookings(bookings ?? [], lastSeenAt) : 0),
+    [enabled, bookings, lastSeenAt],
+  )
+
+  return { count }
+}

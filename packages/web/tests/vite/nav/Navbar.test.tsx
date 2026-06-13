@@ -1,9 +1,10 @@
 import type { NavItem } from '@/vite/nav/MobileMenu'
 import { Navbar } from '@/vite/nav/Navbar'
 import { businessNavItems } from '@/vite/nav/business-nav-items'
+import { useNewBookingsBadge } from '@/vite/operator-bookings/useNewBookingsBadge'
 import type { Session } from '@/vite/session'
 import { useSession } from '@/vite/session'
-import { render, screen } from '@testing-library/react'
+import { render, screen, within } from '@testing-library/react'
 import type { ReactNode } from 'react'
 import { IntlProvider } from 'use-intl'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
@@ -48,8 +49,14 @@ vi.mock('@/vite/nav/MobileMenu', () => ({
 vi.mock('@/vite/nav/LocaleSwitcher', () => ({
   LocaleSwitcher: () => <div data-testid="locale-switcher" />,
 }))
+// #611: the new-order badge count is a data hook; Navbar's job is to render the
+// dot on the Bookings item in business view only. Stub the count source.
+vi.mock('@/vite/operator-bookings/useNewBookingsBadge', () => ({
+  useNewBookingsBadge: vi.fn(() => ({ count: 0 })),
+}))
 
 const mockUseSession = vi.mocked(useSession)
+const mockUseBadge = vi.mocked(useNewBookingsBadge)
 const business: Session = {
   user: { id: 'u1', role: 'OPERATOR_OWNER', name: 'Aiko', email: 'aiko@example.com' },
   csrfToken: 'csrf-1',
@@ -70,6 +77,7 @@ function renderNavbar(data: Session | undefined) {
 
 beforeEach(() => {
   vi.clearAllMocks()
+  mockUseBadge.mockReturnValue({ count: 0 })
   document.cookie = 'kuruma-view=; max-age=0; path=/'
 })
 
@@ -84,6 +92,7 @@ describe('Navbar', () => {
   })
 
   it('shows the dashboard, operator bookings + fleet + classes + insurance links and business markers for a business user', () => {
+    mockUseBadge.mockReturnValue({ count: 3 })
     const { container } = renderNavbar(business)
     expect(screen.getByText('Dashboard').closest('a')).toHaveAttribute(
       'data-to',
@@ -132,9 +141,18 @@ describe('Navbar', () => {
       'data-nav-count',
       String(businessNavItems.length),
     )
+    // #611: a red-dot count rides the Bookings item (and only that item).
+    const bookingsLink = screen.getByText('Bookings').closest('a') as HTMLElement
+    const badge = within(bookingsLink).getByRole('status')
+    expect(badge).toHaveTextContent('3')
+    expect(badge).toHaveAttribute('aria-label', '3 new bookings')
+    // It is not duplicated onto another nav item.
+    expect(screen.getAllByRole('status')).toHaveLength(1)
   })
 
   it('shows Browse, My Bookings, and Documents (no business markers) for a signed-in renter', () => {
+    // Even with a non-zero count, the operator badge is gated to business view.
+    mockUseBadge.mockReturnValue({ count: 5 })
     const { container } = renderNavbar(renter)
     expect(screen.getByText('Browse').closest('a')).toHaveAttribute('data-to', '/$locale/search')
     expect(screen.getByText('My Bookings').closest('a')).toHaveAttribute(
@@ -146,6 +164,7 @@ describe('Navbar', () => {
       '/$locale/documents',
     )
     expect(container.querySelector('nav')?.hasAttribute('data-business-nav')).toBe(false)
+    expect(screen.queryByRole('status')).toBeNull()
     const client = screen.getByTestId('navbar-client')
     expect(client).toHaveAttribute('data-view-mode', 'renter')
     expect(client).toHaveAttribute('data-can-switch', 'false')
