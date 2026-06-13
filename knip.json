@@ -2,25 +2,24 @@
   "$schema": "https://unpkg.com/knip@6/schema.json",
   "workspaces": {
     ".": {
-      "entry": ["scripts/*.ts", "e2e/mock-api.ts"],
+      "entry": [
+        "scripts/*.ts",
+        "e2e/mock-api.ts",
+        "e2e/real-db/auth.setup.ts",
+        "e2e/real-db/real-api-server.ts"
+      ],
       "ignore": ["scripts/__fixtures__/**"],
-      "ignoreDependencies": ["postgres", "drizzle-orm", "@auth/core"]
+      "ignoreDependencies": ["postgres", "drizzle-orm", "@auth/core", "jose", "@kuruma/shared"]
     },
     "packages/api": {
       "ignore": ["tests/**"],
-      "ignoreDependencies": ["jose", "drizzle-orm", "zod"]
+      "ignoreDependencies": ["jose", "drizzle-orm", "zod", "ws", "@types/ws"]
     },
     "packages/web": {
-      "entry": [
-        "src/app/**/page.tsx",
-        "src/app/**/layout.tsx",
-        "src/app/**/loading.tsx",
-        "src/app/**/error.tsx",
-        "src/app/**/not-found.tsx",
-        "src/i18n/**/*.ts"
-      ],
-      "ignore": ["src/components/ui/**"],
-      "ignoreDependencies": ["postcss", "@kuruma/api", "drizzle-orm", "zod"]
+      "entry": ["src/routes/**/*.{ts,tsx}", "functions/**/*.ts", "src/i18n/**/*.ts"],
+      "ignore": ["src/components/ui/**", "src/vite/vite-env.d.ts"],
+      "ignoreDependencies": ["postcss", "@kuruma/api", "drizzle-orm", "zod"],
+      "next": false
     },
     "packages/shared": {}
   },
