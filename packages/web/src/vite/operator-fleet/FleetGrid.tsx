@@ -21,6 +21,8 @@ interface FleetGridProps {
   // False for bypass roles: cards drop their checkbox + actions (#598).
   readonly canWrite: boolean
   readonly todayIso: string
+  // Threaded to each card for the name → detail link (#527).
+  readonly locale: string
 }
 
 // Grid mode for the operator fleet (#561): vehicles grouped by class into
@@ -41,6 +43,7 @@ export function FleetGrid({
   onEdit,
   canWrite,
   todayIso,
+  locale,
 }: FleetGridProps) {
   const t = useTranslations('business.vehicles.group')
   const tBulk = useTranslations('business.vehicles.bulk')
@@ -130,6 +133,7 @@ export function FleetGrid({
                     onEdit={() => onEdit(vehicle)}
                     canWrite={canWrite}
                     todayIso={todayIso}
+                    locale={locale}
                   />
                 ))}
               </div>

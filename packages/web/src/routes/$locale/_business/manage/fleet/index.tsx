@@ -20,7 +20,9 @@ import { useTranslations } from 'use-intl'
 // view (#561) can group by class with no "Unassigned" flash, and so the edit
 // sheet's class dropdown is a warm-cache read — both behind this route's
 // pendingComponent rather than each component owning its own loading state.
-export const Route = createFileRoute('/$locale/_business/manage/fleet')({
+// Lives at `fleet/index` (not `fleet.tsx`) so the sibling `fleet/$vehicleId`
+// detail route (#527) can coexist; the URL is unchanged.
+export const Route = createFileRoute('/$locale/_business/manage/fleet/')({
   loader: ({ context }) =>
     Promise.all([
       context.queryClient.ensureQueryData(operatorFleetQueryOptions()),
@@ -33,6 +35,7 @@ export const Route = createFileRoute('/$locale/_business/manage/fleet')({
 
 export function OperatorFleetRoute() {
   const t = useTranslations('business.vehicles.fleet')
+  const { locale } = Route.useParams()
   const { data: vehicles } = useSuspenseQuery(operatorFleetQueryOptions())
   const { data: classOptions } = useSuspenseQuery(vehicleClassOptionsQueryOptions())
   const { data: session } = useSuspenseQuery(sessionQueryOptions())
@@ -51,7 +54,12 @@ export function OperatorFleetRoute() {
           <h1 className="text-3xl font-bold tracking-tight sm:text-4xl">{t('title')}</h1>
           <p className="mt-2 text-lg text-muted-foreground">{t('subtitle')}</p>
         </header>
-        <OperatorFleetView vehicles={vehicles} classOptions={classOptions} canWrite={canWrite} />
+        <OperatorFleetView
+          vehicles={vehicles}
+          classOptions={classOptions}
+          canWrite={canWrite}
+          locale={locale}
+        />
       </div>
     </main>
   )
