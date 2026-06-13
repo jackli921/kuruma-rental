@@ -246,3 +246,77 @@ export function bookingEventsQueryOptions(id: string) {
     queryFn: () => fetchBookingEvents(id),
   })
 }
+
+// #616: the stable prefix every operator-bookings query is keyed under. A write
+// invalidates THIS key; React Query's prefix match cascades to the calendar,
+// detail, events and substitution-candidates entries in one call, so no mutation
+// has to enumerate the sub-keys it touched.
+export const OPERATOR_BOOKINGS_KEY = ['operator-bookings'] as const
+
+// --- Substitution candidates (#616, closes #621) ----------------------------
+// The operator-only GET returns the same-store, same-ACRISS AVAILABLE vehicles
+// that can replace the booking's assigned car. The server enforces the match by
+// ACRISS *code* — the authoritative rule #610's client-side classId filter only
+// approximated (#621); this endpoint is that fix. The client just lists what it
+// returns: name + plate for the picker label.
+export interface SubstitutionCandidate {
+  id: string
+  name: string
+  licensePlate: string | null
+}
+
+export async function fetchSubstitutionCandidates(id: string): Promise<SubstitutionCandidate[]> {
+  const res = await fetch(
+    `${getApiBaseUrl()}/bookings/${encodeURIComponent(id)}/substitution-candidates`,
+    { credentials: 'include' },
+  )
+  const data = await unwrap<Array<{ id: string; name: string; licensePlate?: string | null }>>(res)
+  return data.map((v) => ({ id: v.id, name: v.name, licensePlate: v.licensePlate ?? null }))
+}
+
+export function substitutionCandidatesQueryOptions(id: string) {
+  return queryOptions({
+    queryKey: ['operator-bookings', 'substitution-candidates', id],
+    queryFn: () => fetchSubstitutionCandidates(id),
+  })
+}
+
+// --- Status mutations (cookie-based, CSRF-gated) ----------------------------
+// Operator booking lifecycle actions (#616): status transitions + cancel.
+// (Vehicle substitution lives in substituteBooking above, shipped with #610.)
+// The global csrf() middleware rejects a cookie-authed mutation that omits a
+// matching X-CSRF-Token, so every write threads the session token. Content-Type
+// is set only when there's a body (a bodyless POST must not claim JSON). Each
+// unwraps the updated booking; the component wires useMutation and invalidates
+// OPERATOR_BOOKINGS_KEY on success (no optimistic UI).
+async function writeBooking(
+  path: string,
+  method: 'POST' | 'PATCH',
+  csrfToken: string,
+  body?: unknown,
+): Promise<BookingDto> {
+  const res = await fetch(`${getApiBaseUrl()}${path}`, {
+    method,
+    credentials: 'include',
+    headers: {
+      'X-CSRF-Token': csrfToken,
+      ...(body === undefined ? {} : { 'Content-Type': 'application/json' }),
+    },
+    ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+  })
+  return unwrap<BookingDto>(res)
+}
+
+export function updateBookingStatus(
+  id: string,
+  status: OperatorBookingStatus,
+  csrfToken: string,
+): Promise<BookingDto> {
+  return writeBooking(`/bookings/${encodeURIComponent(id)}/status`, 'PATCH', csrfToken, { status })
+}
+
+// DELETE-equivalent (the API models cancel as a POST that records a cancellation
+// fee in the meta); the projection in `data` is the now-CANCELLED booking.
+export function cancelBooking(id: string, csrfToken: string): Promise<BookingDto> {
+  return writeBooking(`/bookings/${encodeURIComponent(id)}/cancel`, 'POST', csrfToken)
+}

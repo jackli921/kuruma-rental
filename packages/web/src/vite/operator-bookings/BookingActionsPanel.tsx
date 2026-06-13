@@ -1,65 +1,96 @@
+import { Button } from '@/components/ui/button'
 import { isOperatorSession } from '@/vite/guards'
+import { CancelBookingDialog } from '@/vite/operator-bookings/CancelBookingDialog'
 import { SubstituteVehicleDialog } from '@/vite/operator-bookings/SubstituteVehicleDialog'
-import type { OperatorBookingDetailDto } from '@/vite/operator-bookings/api'
-import type { OperatorFleetVehicle } from '@/vite/operator-fleet/api'
+import {
+  OPERATOR_BOOKINGS_KEY,
+  type OperatorBookingDetailDto,
+  type OperatorBookingStatus,
+  type SubstitutionCandidate,
+  updateBookingStatus,
+} from '@/vite/operator-bookings/api'
 import type { Session } from '@/vite/session'
+import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { useTranslations } from 'use-intl'
 
 interface BookingActionsPanelProps {
   readonly detail: OperatorBookingDetailDto
   readonly session: Session | null
-  readonly fleet: readonly OperatorFleetVehicle[]
+  /**
+   * Server-matched replacement vehicles (#616/#621) for the Substitute dialog.
+   * Empty for a terminal booking (the route only fetches them while live).
+   */
+  readonly candidates: readonly SubstitutionCandidate[]
 }
 
-// #610: the operator Actions panel on the trip-detail page. Today it owns one
-// action — vehicle substitution (故障车换同店同级别车) — but it is the home for cancel /
-// status transitions next. Kept router-free (props in, no useSuspenseQuery) so the
-// route owns data + chrome and this stays a pure, directly-testable unit.
+// The status a one-click "advance" moves a live booking to: CONFIRMED -> ACTIVE
+// (picked up) -> COMPLETED (returned). This mirrors the server's
+// VALID_BOOKING_TRANSITIONS (schema.ts) but is restated here rather than imported:
+// that const lives in the drizzle schema module, and a runtime import would drag
+// its pgTable() side effects into the browser bundle. The API rejects any invalid
+// transition with 400, so this only governs which button we OFFER.
+const ADVANCE_TARGET: Partial<Record<OperatorBookingStatus, OperatorBookingStatus>> = {
+  CONFIRMED: 'ACTIVE',
+  ACTIVE: 'COMPLETED',
+}
+
+// #610/#616: the operator Actions panel on the trip-detail page. It owns the
+// booking lifecycle actions — advance the status (mark picked-up / returned),
+// substitute the vehicle (故障车换同店同级别车), and cancel — for a LIVE booking.
 //
 // Bypass roles (PLATFORM_ADMIN / legacy STAFF·ADMIN — no operatorId) read the
-// booking cross-operator for oversight but cannot act on it: substitution needs a
+// booking cross-operator for oversight but cannot act on it: every action needs a
 // single target tenant they don't carry. So the panel is operator-only, mirroring
 // fleet/classes (#581/#583/#598). The `_business` shell guard admits the page; this
-// gates the action by role + capability (the API is the real boundary).
-export function BookingActionsPanel({ detail, session, fleet }: BookingActionsPanelProps) {
+// gates the actions by role (the API is the real boundary). Kept presentational —
+// data (detail, session, candidates) arrives as props from the route.
+export function BookingActionsPanel({ detail, session, candidates }: BookingActionsPanelProps) {
   const t = useTranslations('bookings.operator.detail')
+  const queryClient = useQueryClient()
+  const csrfToken = session?.csrfToken ?? ''
+
+  const statusMutation = useMutation({
+    mutationFn: (next: OperatorBookingStatus) => updateBookingStatus(detail.id, next, csrfToken),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: OPERATOR_BOOKINGS_KEY }),
+  })
 
   if (!isOperatorSession(session)) return null
 
-  // The server only substitutes a live booking (409 otherwise); the renter's slot
-  // is gone once the trip is completed or cancelled.
-  const isSubstitutable = detail.status === 'CONFIRMED' || detail.status === 'ACTIVE'
-
-  // Mirror the server's substitution rules so a picked car never 400s: same operator
-  // (the scoped fleet read), same class, same pickup location, AVAILABLE, and not the
-  // car already on the booking. `classId != null` makes the (server-impossible) null-
-  // class booking explicit — the server derives a class at create time and rejects a
-  // classless replacement, so we never surface unassigned cars.
-  // NOTE: the server matches by *ACRISS code*, not classId (two classes may share a
-  // code — schema.ts "ACRISS is a category"). Filtering on classId is a strict subset:
-  // it never offers a car the server rejects, but can hide a same-ACRISS replacement
-  // in a different class. The fleet row carries no ACRISS code today; widening to a
-  // code-based match is a follow-up (#610 review). Conservative on purpose.
-  const candidates = fleet.filter(
-    (v) =>
-      v.status === 'AVAILABLE' &&
-      detail.classId != null &&
-      v.classId === detail.classId &&
-      v.pickupLocationId === detail.pickupLocationId &&
-      v.id !== detail.assignedVehicleId,
-  )
+  // A live booking (CONFIRMED/ACTIVE) is the only one with anything to act on; a
+  // COMPLETED/CANCELLED trip is settled, so the panel just explains the absence.
+  const advanceTarget = ADVANCE_TARGET[detail.status]
 
   return (
     <div className="rounded-xl border border-border px-4 py-6">
       <h2 className="mb-4 text-sm font-semibold text-muted-foreground">{t('actions')}</h2>
-      {isSubstitutable ? (
-        <SubstituteVehicleDialog
-          bookingId={detail.id}
-          candidates={candidates}
-          csrfToken={session?.csrfToken ?? ''}
-        />
+      {advanceTarget ? (
+        <div className="flex flex-wrap gap-2">
+          <Button
+            size="sm"
+            disabled={statusMutation.isPending}
+            onClick={() => {
+              if (!statusMutation.isPending) statusMutation.mutate(advanceTarget)
+            }}
+          >
+            {advanceTarget === 'ACTIVE' ? t('markActive') : t('markCompleted')}
+          </Button>
+          <SubstituteVehicleDialog
+            bookingId={detail.id}
+            candidates={candidates}
+            csrfToken={csrfToken}
+          />
+          {/* Only CONFIRMED bookings can be cancelled — the server 409s any other
+              status. An ACTIVE (picked-up) trip is past the cancellation window, so
+              we hide the button rather than offer a dead-end action. */}
+          {detail.status === 'CONFIRMED' && (
+            <CancelBookingDialog bookingId={detail.id} csrfToken={csrfToken} />
+          )}
+        </div>
       ) : (
-        <p className="text-sm text-muted-foreground">{t('substitute.unavailable')}</p>
+        <p className="text-sm text-muted-foreground">{t('settled')}</p>
+      )}
+      {statusMutation.isError && (
+        <output className="mt-3 block text-sm text-destructive">{t('statusError')}</output>
       )}
     </div>
   )

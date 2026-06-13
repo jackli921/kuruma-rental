@@ -2,15 +2,19 @@ import { ApiError } from '@/lib/api-error'
 import {
   type OperatorBookingDetailDto,
   bookingEventsQueryOptions,
+  cancelBooking,
   fetchBookingEvents,
   fetchCalendarBookings,
   fetchCalendarVehicles,
   fetchOperatorBookingDetail,
+  fetchSubstitutionCandidates,
   operatorBookingDetailQueryOptions,
   operatorCalendarQueryOptions,
   operatorCalendarVehiclesQueryOptions,
   operatorRowFromDetail,
   substituteBooking,
+  substitutionCandidatesQueryOptions,
+  updateBookingStatus,
 } from '@/vite/operator-bookings/api'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
@@ -346,6 +350,133 @@ describe('operatorCalendarVehiclesQueryOptions', () => {
       'calendar',
       'vehicles',
     ])
+  })
+})
+
+// Slice 2 (#616): operator booking actions — substitution candidates + the
+// CSRF-gated status mutations the BookingActionsPanel + SubstituteVehicleDialog
+// drive (no optimistic UI; the component invalidates the `operator-bookings`
+// prefix on success). Vehicle substitution itself shipped with #610 below.
+
+describe('fetchSubstitutionCandidates', () => {
+  it('GETs the operator-only candidates endpoint with credentials and maps to {id,name,plate}', async () => {
+    const fetchMock = vi.fn(async () =>
+      jsonResponse({
+        success: true,
+        data: [{ id: 'veh-2', name: 'Honda Fit', licensePlate: 'OSAKA 1234', status: 'AVAILABLE' }],
+      }),
+    )
+    vi.stubGlobal('fetch', fetchMock)
+
+    const candidates = await fetchSubstitutionCandidates('bk-1')
+
+    const [url, init] = fetchMock.mock.calls[0]!
+    expect(new URL(url as string, 'http://x').pathname).toBe(
+      '/api/bookings/bk-1/substitution-candidates',
+    )
+    expect((init as RequestInit).credentials).toBe('include')
+    expect(candidates).toEqual([{ id: 'veh-2', name: 'Honda Fit', licensePlate: 'OSAKA 1234' }])
+  })
+
+  it('defaults licensePlate to null when the field is absent', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () =>
+        jsonResponse({ success: true, data: [{ id: 'veh-2', name: 'Honda Fit' }] }),
+      ),
+    )
+
+    const [candidate] = await fetchSubstitutionCandidates('bk-1')
+    expect(candidate).toEqual({ id: 'veh-2', name: 'Honda Fit', licensePlate: null })
+  })
+
+  it('encodes the booking id into the path', async () => {
+    const fetchMock = vi.fn(async () => jsonResponse({ success: true, data: [] }))
+    vi.stubGlobal('fetch', fetchMock)
+
+    await fetchSubstitutionCandidates('a/b')
+
+    const [url] = fetchMock.mock.calls[0]!
+    expect(new URL(url as string, 'http://x').pathname).toBe(
+      '/api/bookings/a%2Fb/substitution-candidates',
+    )
+  })
+
+  it('throws ApiError on a failure envelope (e.g. a renter 403)', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => jsonResponse({ success: false, error: 'Only operators' }, 403)),
+    )
+
+    await expect(fetchSubstitutionCandidates('bk-1')).rejects.toBeInstanceOf(ApiError)
+  })
+})
+
+describe('substitutionCandidatesQueryOptions', () => {
+  it('keys by the booking substitution-candidates id', () => {
+    expect(substitutionCandidatesQueryOptions('bk-1').queryKey).toEqual([
+      'operator-bookings',
+      'substitution-candidates',
+      'bk-1',
+    ])
+  })
+})
+
+describe('updateBookingStatus', () => {
+  it('PATCHes /bookings/:id/status with the status body, CSRF + JSON headers, credentials', async () => {
+    const fetchMock = vi.fn(async () =>
+      jsonResponse({ success: true, data: { id: 'bk-1', status: 'ACTIVE' } }),
+    )
+    vi.stubGlobal('fetch', fetchMock)
+
+    const result = await updateBookingStatus('bk-1', 'ACTIVE', 'csrf-1')
+
+    const [url, init] = fetchMock.mock.calls[0]! as [string, RequestInit]
+    expect(new URL(url, 'http://x').pathname).toBe('/api/bookings/bk-1/status')
+    expect(init.method).toBe('PATCH')
+    expect(init.credentials).toBe('include')
+    expect(init.headers).toEqual({ 'Content-Type': 'application/json', 'X-CSRF-Token': 'csrf-1' })
+    expect(JSON.parse(init.body as string)).toEqual({ status: 'ACTIVE' })
+    expect(result).toMatchObject({ id: 'bk-1', status: 'ACTIVE' })
+  })
+
+  it('throws ApiError on an invalid-transition 400', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () =>
+        jsonResponse(
+          { success: false, error: 'Invalid status transition from COMPLETED to ACTIVE' },
+          400,
+        ),
+      ),
+    )
+
+    await expect(updateBookingStatus('bk-1', 'ACTIVE', 'csrf')).rejects.toThrow(
+      'Invalid status transition',
+    )
+  })
+})
+
+describe('cancelBooking', () => {
+  it('POSTs /bookings/:id/cancel with the CSRF header and no body', async () => {
+    const fetchMock = vi.fn(async () =>
+      jsonResponse({
+        success: true,
+        data: { id: 'bk-1', status: 'CANCELLED' },
+        cancellation: { feeJpy: 0 },
+      }),
+    )
+    vi.stubGlobal('fetch', fetchMock)
+
+    const result = await cancelBooking('bk-1', 'csrf-2')
+
+    const [url, init] = fetchMock.mock.calls[0]! as [string, RequestInit]
+    expect(new URL(url, 'http://x').pathname).toBe('/api/bookings/bk-1/cancel')
+    expect(init.method).toBe('POST')
+    expect(init.credentials).toBe('include')
+    expect(init.headers).toEqual({ 'X-CSRF-Token': 'csrf-2' })
+    expect(init.body).toBeUndefined()
+    expect(result).toMatchObject({ id: 'bk-1', status: 'CANCELLED' })
   })
 })
 

@@ -17,8 +17,16 @@ import type {
   VehicleClassRepository,
   VehicleRepository,
 } from '../repositories/types'
-import type { Booking, BookingEvent } from '../stores'
+import type { Booking, BookingEvent, Vehicle } from '../stores'
 import type { BookingPostCommitDispatcher } from './booking-post-commit-dispatcher'
+import type {
+  BookingVerificationGate,
+  CancelResult,
+  CreateBookingInput,
+  CreateBookingResult,
+  StatusTransitionResult,
+  SubstituteResult,
+} from './booking-types'
 
 /** Renter-safe operator projection attached to a single booking read (§4h). */
 export type BookingWithOperator = Booking & {
@@ -33,73 +41,14 @@ const MS_PER_DAY = 24 * 60 * MS_PER_MINUTE
 const DEFAULT_TURNAROUND_MINUTES = 2880 // 48h
 // A booking_code collision is ~2^-40 per attempt; a few retries is plenty.
 const MAX_BOOKING_CODE_ATTEMPTS = 3
+// #616 §A: an operator fleet is ~40-50 vehicles; the AVAILABLE same-store subset
+// is far smaller. Scan generously so the substitute picker never silently drops a
+// candidate, while still bounding the read.
+const SUBSTITUTION_CANDIDATE_SCAN_LIMIT = 200
 // #613: version of the liability-disclaimer (免责声明) wording a renter agreed to,
 // stamped onto the booking. Bump when the localized terms text changes materially
 // (the renter-facing copy lives in web i18n; this is the server-authoritative tag).
 export const DISCLAIMER_TERMS_VERSION = '2026-06-13'
-
-// Slice 6 (#392): the renter books a CONCRETE vehicle chosen in the storefront
-// (slice 5). operatorId / classId / assignedVehicleId / totalPrice are all
-// server-derived from that vehicle — never client fields (proposal §6.2, §4.1).
-export interface CreateBookingInput {
-  requestedVehicleId: string
-  pickupLocationId: string
-  dropoffLocationId: string
-  insuranceOptionId?: string | null
-  // Selected paid add-on ids (#460). Required at the service boundary (the
-  // validator defaults it to []); the route forwards parsed.data.addOnIds.
-  addOnIds: string[]
-  renterId: string
-  startAt: Date
-  endAt: Date
-  source: Booking['source']
-  externalId?: string | null
-  notes?: string | null
-  idempotencyKey?: string | null
-  // #613: renter ticked the liability-disclaimer (免责声明) checkbox at checkout.
-  // Required for renter self-serve bookings (enforced by caller role in `create`);
-  // staff/manual bookings are exempt. The server stamps the timestamp + version.
-  disclaimerAccepted?: boolean
-}
-
-export type CreateBookingResult =
-  | { ok: true; booking: Booking; status?: 200 }
-  | {
-      ok: false
-      status: 400 | 403 | 409
-      error: string | Record<string, string[]>
-      code?: string
-      details?: { required: number; actual: number }
-    }
-
-/**
- * Optional pre-transaction authorization gate (#459). When injected, `create`
- * runs it after idempotency replay and before the booking transaction; a denial
- * short-circuits with 403. BookingService stays decoupled from the document
- * domain — it only knows "there may be a gate" (DIP).
- */
-export type BookingVerificationGate = (
-  ctx: CallerContext,
-  input: CreateBookingInput,
-) => Promise<
-  { ok: true } | { ok: false; status: 403; error: string; code: 'DOCUMENT_VERIFICATION_REQUIRED' }
->
-
-export type SubstituteResult =
-  | { ok: true; booking: Booking }
-  | { ok: false; status: 400 | 404 | 409; error: string }
-
-export type StatusTransitionResult =
-  | { ok: true; booking: Booking }
-  | { ok: false; status: 400 | 404 | 409; error: string }
-
-export type CancelResult =
-  | {
-      ok: true
-      booking: Booking
-      cancellation: ReturnType<typeof calculateCancellationFee>
-    }
-  | { ok: false; status: 404 | 409; error: string }
 
 /**
  * Opt-in messaging hook. When supplied, every confirmed booking also creates
@@ -692,6 +641,41 @@ export class BookingService {
       this.vehicleClassRepo.findById(SYSTEM_CONTEXT, newClassId),
     ])
     return !!bookingClass?.acrissCode && bookingClass.acrissCode === newClass?.acrissCode
+  }
+
+  /**
+   * #616 §A: the vehicles eligible to replace a booking's assigned car. Same
+   * eligibility rule `substitute()` enforces, expressed once via
+   * `sameAcrissClass()`: AVAILABLE (findAll status filter), same pickup location,
+   * same ACRISS code, excluding the currently assigned vehicle. Authorizes via
+   * the tenant-scoped `findById` (a foreign/missing booking -> undefined -> the
+   * route 404s, no existence leak). `findAll` already operator-scopes the fleet,
+   * so same-operator is implicit.
+   */
+  async findSubstitutionCandidates(
+    ctx: CallerContext,
+    bookingId: string,
+  ): Promise<Vehicle[] | undefined> {
+    if (!this.vehicleRepo) {
+      throw new Error('BookingService missing vehicleRepo; check DI wiring')
+    }
+    const booking = await this.bookingRepo.findById(ctx, bookingId)
+    if (!booking) return undefined
+
+    const { data: available } = await this.vehicleRepo.findAll(ctx, {
+      status: 'AVAILABLE',
+      limit: SUBSTITUTION_CANDIDATE_SCAN_LIMIT,
+    })
+    const sameStore = available.filter(
+      (v): v is Vehicle & { classId: string } =>
+        v.id !== booking.assignedVehicleId &&
+        (v.pickupLocationId ?? null) === booking.pickupLocationId &&
+        !!v.classId,
+    )
+    const sameClass = await Promise.all(
+      sameStore.map((v) => this.sameAcrissClass(booking.classId, v.classId)),
+    )
+    return sameStore.filter((_, index) => sameClass[index])
   }
 
   async updateStatus(

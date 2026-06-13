@@ -1,4 +1,4 @@
-import type { BookingVerificationGate } from './booking'
+import type { BookingVerificationGate } from './booking-types'
 import type { RenterDocumentService } from './renter-document'
 
 /**
