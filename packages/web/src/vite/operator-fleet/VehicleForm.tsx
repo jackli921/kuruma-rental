@@ -11,6 +11,7 @@ import {
   updateVehicle,
 } from '@/vite/operator-fleet/api'
 import { zodResolver } from '@hookform/resolvers/zod'
+import { LUGGAGE_SIZES } from '@kuruma/shared/lib/luggage'
 import { type CreateVehicleInput, createVehicleSchema } from '@kuruma/shared/validators/vehicle'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { useForm } from 'react-hook-form'
@@ -78,12 +79,17 @@ function defaultsFromVehicle(vehicle: OperatorFleetVehicle | null): Partial<Vehi
       maxRentalHours: 72,
       advanceBookingHours: null,
       classId: null,
+      // Blank by default — both fields inherit the class luggage when null.
+      luggageCapacity: null,
+      luggageSize: null,
     }
   }
   return {
     name: vehicle.name,
     description: vehicle.description ?? '',
     seats: vehicle.seats,
+    luggageCapacity: vehicle.luggageCapacity,
+    luggageSize: vehicle.luggageSize,
     transmission: vehicle.transmission,
     fuelType: vehicle.fuelType ?? '',
     licensePlate: vehicle.licensePlate ?? '',
@@ -105,6 +111,8 @@ function defaultsFromVehicle(vehicle: OperatorFleetVehicle | null): Partial<Vehi
 
 export function VehicleForm({ vehicle, classOptions, onSaved, onCancel }: VehicleFormProps) {
   const t = useTranslations('business.vehicles.form')
+  // Luggage-size option labels live under the top-level `luggageSize.*` namespace.
+  const tLuggage = useTranslations('luggageSize')
   const queryClient = useQueryClient()
   const isEditMode = vehicle != null
 
@@ -220,6 +228,38 @@ export function VehicleForm({ vehicle, classOptions, onSaved, onCancel }: Vehicl
             placeholder={t('licensePlatePlaceholder')}
             {...register('licensePlate')}
           />
+        </div>
+      </div>
+
+      <div className="grid grid-cols-2 gap-4">
+        <div>
+          <Label htmlFor="luggageCapacity">{t('luggageCapacity')}</Label>
+          <Input
+            id="luggageCapacity"
+            type="number"
+            inputMode="numeric"
+            min={0}
+            placeholder={t('luggageInheritPlaceholder')}
+            {...register('luggageCapacity', { setValueAs: nullableNumber })}
+          />
+          {errors.luggageCapacity && (
+            <p className="mt-1 text-sm text-destructive">{errors.luggageCapacity.message}</p>
+          )}
+        </div>
+        <div>
+          <Label htmlFor="luggageSize">{t('luggageSize')}</Label>
+          <select
+            id="luggageSize"
+            className={SELECT_CLASS}
+            {...register('luggageSize', { setValueAs: emptyToNull })}
+          >
+            <option value="">{t('luggageSizeInherit')}</option>
+            {LUGGAGE_SIZES.map((size) => (
+              <option key={size} value={size}>
+                {tLuggage(size)}
+              </option>
+            ))}
+          </select>
         </div>
       </div>
 
