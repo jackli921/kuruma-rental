@@ -181,6 +181,16 @@ export function createBookingRoutes(service: BookingService) {
     .patch('/bookings/:id/status', async (c) => {
       const ctx = toCallerContext(requireUser(c))
 
+      // #643: status transitions (CONFIRMED -> ACTIVE -> COMPLETED) are physical
+      // pickup/return events driven by the operator, not the renter. Row-scoping
+      // alone would let a renter self-advance their own booking via the raw API,
+      // skewing operator dashboards and any settlement keyed off status. Gate on
+      // management roles (operators + staff/admin); renter self-cancel stays open
+      // on /cancel by design (tiered cancellation is a renter-facing feature).
+      if (!MANAGEMENT_READ_ROLES.has(ctx.role)) {
+        return fail(c, 'Only operators can update booking status', 403)
+      }
+
       const parsed = await parseBody(c, updateBookingStatusSchema)
       if (!parsed.ok) return parsed.response
 

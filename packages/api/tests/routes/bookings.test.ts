@@ -1127,6 +1127,33 @@ describe('Booking Routes', () => {
       expect(body.success).toBe(false)
       expect(body.error).toBe('Booking not found')
     })
+
+    it('forbids a RENTER from advancing status on their own booking (403, #643)', async () => {
+      // Booking is owned by USER1 (the renter), so row-scoping admits the call —
+      // a 403 can therefore only come from the function-level role gate, not from
+      // ownership. Pickup/return (CONFIRMED -> ACTIVE -> COMPLETED) are physical
+      // operator events; a renter must not self-advance via the raw API.
+      const created = await (await createBooking()).json()
+
+      const renterApp = new Hono()
+      renterApp.use('*', testAuthMiddleware(USER1, 'RENTER'))
+      renterApp.route('/', createBookingRoutes(service))
+
+      const res = await renterApp.request(`/bookings/${created.data.id}/status`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: 'ACTIVE' }),
+      })
+
+      expect(res.status).toBe(403)
+      const body = await res.json()
+      expect(body.success).toBe(false)
+
+      // The transition must not have been applied — proves the gate blocks the
+      // action, not just the response code.
+      const after = await (await app.request(`/bookings/${created.data.id}`)).json()
+      expect(after.data.status).toBe('CONFIRMED')
+    })
   })
 
   describe('POST /bookings/:id/cancel', () => {
