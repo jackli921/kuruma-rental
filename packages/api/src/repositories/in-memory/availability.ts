@@ -19,6 +19,10 @@ export class InMemoryAvailabilityRepository implements AvailabilityRepository {
     to: Date,
     filters?: AvailabilityFilters,
   ): Promise<Vehicle[]> {
+    // Region scope (#651 §1c): an empty set means "no in-region storefront" → no
+    // vehicles; short-circuit before loading (mirrors the Drizzle path).
+    if (filters?.locationIds?.length === 0) return []
+
     const { data: vehicles } = await this.vehicleRepo.findAll(SYSTEM_CONTEXT, {
       status: 'AVAILABLE',
     })
@@ -28,8 +32,8 @@ export class InMemoryAvailabilityRepository implements AvailabilityRepository {
       // Storefront scope (#391): a null pickupLocationId never matches a
       // locationId filter, so unassigned vehicles are invisible to search.
       if (filters?.locationId && vehicle.pickupLocationId !== filters.locationId) return false
-      // Region scope (#651 §1c): bound to a set of locations. Empty set or a null
-      // pickupLocationId matches nothing — mirrors the singular locationId above.
+      // Region scope (#651 §1c): a null pickupLocationId is never in the set; the
+      // empty-set case is short-circuited above.
       if (
         filters?.locationIds &&
         (!vehicle.pickupLocationId || !filters.locationIds.includes(vehicle.pickupLocationId))
