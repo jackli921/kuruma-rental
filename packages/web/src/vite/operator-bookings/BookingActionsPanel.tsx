@@ -79,7 +79,12 @@ export function BookingActionsPanel({ detail, session, candidates }: BookingActi
             candidates={candidates}
             csrfToken={csrfToken}
           />
-          <CancelBookingDialog bookingId={detail.id} csrfToken={csrfToken} />
+          {/* Only CONFIRMED bookings can be cancelled — the server 409s any other
+              status. An ACTIVE (picked-up) trip is past the cancellation window, so
+              we hide the button rather than offer a dead-end action. */}
+          {detail.status === 'CONFIRMED' && (
+            <CancelBookingDialog bookingId={detail.id} csrfToken={csrfToken} />
+          )}
         </div>
       ) : (
         <p className="text-sm text-muted-foreground">{t('settled')}</p>

@@ -105,12 +105,15 @@ describe('BookingActionsPanel actions by status', () => {
     expect(screen.queryByRole('button', { name: d.markCompleted })).not.toBeInTheDocument()
   })
 
-  it('offers mark-returned (not mark-picked-up) on an ACTIVE booking', () => {
+  it('offers mark-returned and substitute, but NOT cancel, on an ACTIVE booking', () => {
+    // An ACTIVE booking is already picked up: the server only cancels CONFIRMED
+    // bookings (409 otherwise), so the panel must not offer a dead-end Cancel.
+    // Substitute stays — the broken-car mid-rental swap allows CONFIRMED or ACTIVE.
     renderPanel(operatorSession, detail({ status: 'ACTIVE' }))
     expect(screen.getByRole('button', { name: d.markCompleted })).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: d.markActive })).not.toBeInTheDocument()
     expect(screen.getByRole('button', { name: sub.action })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: d.cancelBooking.action })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: d.cancelBooking.action })).not.toBeInTheDocument()
   })
 
   it('shows the settled message and no actions on a COMPLETED booking', () => {
