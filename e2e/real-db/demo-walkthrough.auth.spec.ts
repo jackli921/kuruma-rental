@@ -195,6 +195,13 @@ test.describe('#509 demo walkthrough — capture every page', () => {
     await capture(page, '07-op-fees', '/en/manage/fees')
     await capture(page, '08-op-locations', '/en/manage/locations')
     await capture(page, '09-op-addons', '/en/manage/add-ons')
+    // The page above renders "clean" even when the add-on list is empty (a 200
+    // [] trips none of the soft checks). Assert a SEEDED row is actually shown:
+    // every operator seeds a "Child seat" add-on, so this is session-agnostic.
+    // This is the check that catches a demo-data-wired-but-not-displayed gap —
+    // e.g. the real-api-server omitting addOnRepo and falling back to an empty
+    // in-memory store while insurance (Drizzle-wired) rendered fine.
+    await expect(page.getByText('Child seat').first()).toBeVisible()
   })
 
   test('renter surface — home, search, my bookings', async ({ browser, baseURL }) => {
