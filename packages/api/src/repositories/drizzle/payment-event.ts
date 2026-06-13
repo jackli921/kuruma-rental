@@ -1,8 +1,13 @@
 import { paymentEvents } from '@kuruma/shared/db/schema'
-import { and, eq } from 'drizzle-orm'
+import { type SQL, and, eq, sql } from 'drizzle-orm'
 import type { PaymentEvent } from '../../stores'
 import type { NewPaymentEvent, PaymentEventRepository } from '../types'
 import { type Db, paymentEventColumns, toPaymentEvent } from './shared'
+
+// The JST (`Asia/Tokyo`) payout month of a row, as `YYYY-MM`. Japan observes no
+// DST, so `AT TIME ZONE` is a constant +9 shift — byte-identical to the pure
+// `jstYearMonth` (UTC+9 then slice) the report aggregation uses (#462/#717).
+const jstMonthExpr = sql<string>`to_char(${paymentEvents.createdAt} AT TIME ZONE 'Asia/Tokyo', 'YYYY-MM')`
 
 export class DrizzlePaymentEventRepository implements PaymentEventRepository {
   constructor(private readonly db: Db) {}
@@ -29,12 +34,25 @@ export class DrizzlePaymentEventRepository implements PaymentEventRepository {
   }
 
   // Platform-admin revenue report (#462). Cross-operator by design; the
-  // AdminRevenueService gates the caller before this runs.
-  async listSucceeded(): Promise<PaymentEvent[]> {
+  // AdminRevenueService gates the caller before this runs. `month` (`YYYY-MM`,
+  // JST) bounds the scan to one payout month so the Worker never materializes the
+  // whole monotonically growing table (#717). The bind is parameterized.
+  async listSucceeded(month?: string): Promise<PaymentEvent[]> {
+    const status = eq(paymentEvents.status, 'SUCCEEDED')
+    const where: SQL | undefined =
+      month === undefined ? status : and(status, sql`${jstMonthExpr} = ${month}`)
+    const rows = await this.db.select(paymentEventColumns).from(paymentEvents).where(where)
+    return rows.map(toPaymentEvent)
+  }
+
+  // Distinct JST payout months with >=1 SUCCEEDED payment, newest first — a cheap
+  // DISTINCT instead of pulling every row to derive the picker options (#717).
+  async listSucceededMonths(): Promise<string[]> {
     const rows = await this.db
-      .select(paymentEventColumns)
+      .selectDistinct({ month: jstMonthExpr })
       .from(paymentEvents)
       .where(eq(paymentEvents.status, 'SUCCEEDED'))
-    return rows.map(toPaymentEvent)
+      .orderBy(sql`${jstMonthExpr} desc`)
+    return rows.map((r) => r.month)
   }
 }

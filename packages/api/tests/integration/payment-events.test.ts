@@ -180,6 +180,51 @@ describe('DrizzlePaymentEventRepository (real Postgres)', () => {
       .catch((e) => e)
     expect(pgConstraintName(err)).toBe(PAYMENT_EVENT_ONE_SUCCESS_CONSTRAINT)
   })
+
+  // #717: the month filter + available-months are pushed into SQL. The one thing
+  // in-memory cannot prove is that the SQL JST boundary (`AT TIME ZONE
+  // 'Asia/Tokyo'`) matches the pure jstYearMonth: a payment at 15:30 UTC on Jul
+  // 31 is already 00:30 JST on Aug 1, so it must report as 2026-08, not 2026-07.
+  describe('JST-bounded reads (#717)', () => {
+    // createdAt is store-assigned, so the public insert can't set it; write the
+    // boundary instants directly. afterEach cleans these (keyed by bookingA/B).
+    async function seedAtJstBoundary(): Promise<void> {
+      await db.insert(paymentEvents).values([
+        {
+          ...event(bookingA, { stripeEventId: 'evt_aug', stripeCheckoutSessionId: 'cs_aug' }),
+          // 2026-07-31T15:30:00Z === 2026-08-01T00:30:00 JST -> month 2026-08.
+          createdAt: new Date('2026-07-31T15:30:00Z'),
+        },
+        {
+          ...event(bookingB, { stripeEventId: 'evt_jul', stripeCheckoutSessionId: 'cs_jul' }),
+          createdAt: new Date('2026-07-10T03:00:00Z'), // 2026-07 in both UTC and JST.
+        },
+      ])
+    }
+
+    it('listSucceeded(month) returns only that JST payout month (boundary-correct)', async () => {
+      await seedAtJstBoundary()
+      const aug = (await paymentRepo.listSucceeded('2026-08')).filter(
+        (e) => e.bookingId === bookingA || e.bookingId === bookingB,
+      )
+      expect(aug.map((e) => e.stripeEventId)).toEqual(['evt_aug'])
+
+      const jul = (await paymentRepo.listSucceeded('2026-07')).filter(
+        (e) => e.bookingId === bookingA || e.bookingId === bookingB,
+      )
+      expect(jul.map((e) => e.stripeEventId)).toEqual(['evt_jul'])
+    })
+
+    it('listSucceededMonths returns distinct JST months newest-first', async () => {
+      await seedAtJstBoundary()
+      const months = await paymentRepo.listSucceededMonths()
+      // Cross-operator table -> assert OUR two months are present in newest-first order.
+      const mine = months.filter((m) => m === '2026-08' || m === '2026-07')
+      expect(mine).toEqual(['2026-08', '2026-07'])
+      // DISTINCT: a month appears at most once even with multiple rows.
+      expect(new Set(months).size).toBe(months.length)
+    })
+  })
 })
 
 function anomaly(bookingId: string, overrides: Partial<NewPaymentAnomaly> = {}): NewPaymentAnomaly {
