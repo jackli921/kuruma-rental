@@ -1,4 +1,4 @@
-import { OperatorFleetRoute } from '@/routes/$locale/_business/manage/fleet'
+import { OperatorFleetRoute } from '@/routes/$locale/_business/manage/fleet/index'
 import {
   type OperatorFleetVehicle,
   operatorFleetQueryOptions,
@@ -7,9 +7,29 @@ import {
 import type { Session } from '@/vite/session'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { render, screen } from '@testing-library/react'
+import type { ReactNode } from 'react'
 import { IntlProvider } from 'use-intl'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import enMessages from '../../../messages/en.json'
+
+// The route component now reads `locale` via Route.useParams and links rows to
+// the detail route (#527). This test renders the component outside a
+// RouterProvider, so stub createFileRoute (Route.useParams -> a fixed locale) and
+// Link (-> an anchor). Keep everything else real.
+vi.mock('@tanstack/react-router', async () => ({
+  ...(await vi.importActual<typeof import('@tanstack/react-router')>('@tanstack/react-router')),
+  createFileRoute: () => () => ({ useParams: () => ({ locale: 'en' }) }),
+  Link: ({
+    to,
+    params: _params,
+    children,
+    ...rest
+  }: { to: string; params?: unknown; children: ReactNode }) => (
+    <a href={to} {...rest}>
+      {children}
+    </a>
+  ),
+}))
 
 const fleet = enMessages.business.vehicles.fleet
 const addVehicle = fleet.addVehicle

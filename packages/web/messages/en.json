@@ -890,7 +890,20 @@
         "loading": "Loading booking…",
         "loadError": "Couldn't load this booking",
         "missing": "Booking not found",
-        "actions": "Actions"
+        "actions": "Actions",
+        "substitute": {
+          "action": "Substitute vehicle",
+          "dialogTitle": "Substitute vehicle",
+          "dialogDescription": "Swap in another available car of the same class at this pickup location. The renter keeps their original booking; the change is recorded.",
+          "vehicleLabel": "Replacement vehicle",
+          "reasonLabel": "Reason (optional)",
+          "reasonPlaceholder": "e.g. original car in for repair",
+          "noCandidates": "No same-class vehicle is available at this pickup location.",
+          "submit": "Confirm substitution",
+          "cancel": "Cancel",
+          "error": "Couldn't substitute the vehicle. It may have just been booked.",
+          "unavailable": "Vehicle substitution is only available for confirmed or active bookings."
+        }
       },
       "timeline": {
         "heading": "Timeline",
@@ -1005,7 +1018,17 @@
       "title": "Partner Revenue",
       "subtitle": "Monthly payout per partner",
       "comingSoon": "Coming soon — depends on payment events (#461)",
-      "model": "Renter pays the listed price; the platform keeps 4%; remittance = paid − 4%, aggregated per business for monthly payout."
+      "model": "Renter pays the listed price; the platform keeps 4%; remittance = paid − 4%, aggregated per business for monthly payout.",
+      "empty": "No partner revenue recorded yet.",
+      "month": "Month",
+      "gross": "Gross",
+      "platformFee": "Platform fee (4%)",
+      "netPayable": "Net payable",
+      "payments": "Payments",
+      "total": "Total",
+      "allPartners": "All partners",
+      "loadError": "Couldn't load partner revenue.",
+      "retry": "Retry"
     }
   },
   "documents": {

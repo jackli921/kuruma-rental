@@ -2,6 +2,7 @@ import { FleetRowActions } from '@/vite/operator-fleet/FleetRowActions'
 import type { OperatorFleetVehicle } from '@/vite/operator-fleet/api'
 import { ExpiryPill, StatusPill, priceLabel } from '@/vite/operator-fleet/cells'
 import { computeExpiryStatus } from '@kuruma/shared/lib/expiry'
+import { Link } from '@tanstack/react-router'
 import { Car } from 'lucide-react'
 import { useTranslations } from 'use-intl'
 
@@ -13,6 +14,8 @@ interface FleetVehicleCardProps {
   // False for bypass roles: the card drops its checkbox + actions menu (#598).
   readonly canWrite: boolean
   readonly todayIso: string
+  // For the name → detail link (#527). An anchor, rendered for read-only roles too.
+  readonly locale: string
 }
 
 // Grid-mode card for one fleet vehicle (#561). Carries the same per-row
@@ -27,6 +30,7 @@ export function FleetVehicleCard({
   onEdit,
   canWrite,
   todayIso,
+  locale,
 }: FleetVehicleCardProps) {
   const t = useTranslations('business.vehicles.fleet')
   const tBulk = useTranslations('business.vehicles.bulk')
@@ -54,7 +58,13 @@ export function FleetVehicleCard({
           )}
         </div>
         <div className="min-w-0 flex-1">
-          <div className="truncate font-medium">{vehicle.name}</div>
+          <Link
+            to="/$locale/manage/fleet/$vehicleId"
+            params={{ locale, vehicleId: vehicle.id }}
+            className="block truncate font-medium hover:underline"
+          >
+            {vehicle.name}
+          </Link>
           <div className="truncate text-xs text-muted-foreground">
             {vehicle.licensePlate ?? t('none')}
           </div>

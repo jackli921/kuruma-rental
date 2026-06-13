@@ -890,7 +890,20 @@
         "loading": "正在加载预订…",
         "loadError": "无法加载此预订",
         "missing": "未找到预订",
-        "actions": "操作"
+        "actions": "操作",
+        "substitute": {
+          "action": "更换车辆",
+          "dialogTitle": "更换车辆",
+          "dialogDescription": "在同一取车点更换为同级别的另一辆可用车辆。租客的原始预订保持不变，变更将被记录。",
+          "vehicleLabel": "替换车辆",
+          "reasonLabel": "原因（可选）",
+          "reasonPlaceholder": "例如：原车辆正在维修",
+          "noCandidates": "该取车点暂无可用的同级别车辆。",
+          "submit": "确认更换",
+          "cancel": "取消",
+          "error": "无法更换车辆，该车辆可能刚被预订。",
+          "unavailable": "仅确认或进行中的预订可更换车辆。"
+        }
       },
       "timeline": {
         "heading": "时间线",
@@ -1005,7 +1018,17 @@
       "title": "合作伙伴收益",
       "subtitle": "按合作伙伴的月度结算",
       "comingSoon": "即将推出 — 依赖支付事件（#461）",
-      "model": "租客支付标价；平台保留 4%；汇款 = 已付 − 4%，按业务方汇总，按月结算。"
+      "model": "租客支付标价；平台保留 4%；汇款 = 已付 − 4%，按业务方汇总，按月结算。",
+      "empty": "尚无合作伙伴收益记录。",
+      "month": "月份",
+      "gross": "总额",
+      "platformFee": "平台费（4%）",
+      "netPayable": "应付净额",
+      "payments": "支付笔数",
+      "total": "合计",
+      "allPartners": "所有合作伙伴",
+      "loadError": "无法加载合作伙伴收益。",
+      "retry": "重试"
     }
   },
   "documents": {

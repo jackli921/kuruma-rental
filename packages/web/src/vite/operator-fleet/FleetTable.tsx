@@ -2,6 +2,7 @@ import { FleetRowActions } from '@/vite/operator-fleet/FleetRowActions'
 import type { OperatorFleetVehicle } from '@/vite/operator-fleet/api'
 import { ExpiryPill, StatusPill, priceLabel } from '@/vite/operator-fleet/cells'
 import { computeExpiryStatus } from '@kuruma/shared/lib/expiry'
+import { Link } from '@tanstack/react-router'
 import { useTranslations } from 'use-intl'
 
 interface FleetTableProps {
@@ -16,6 +17,9 @@ interface FleetTableProps {
   // table is a read-only oversight view (#598).
   readonly canWrite: boolean
   readonly todayIso: string
+  // For the per-row name → detail link (#527). An anchor (not a button) so it
+  // is keyboard/right-click navigable; rendered for read-only roles too.
+  readonly locale: string
 }
 
 // Row mode for the operator fleet (#561): the original table, extracted from
@@ -33,6 +37,7 @@ export function FleetTable({
   onEdit,
   canWrite,
   todayIso,
+  locale,
 }: FleetTableProps) {
   const t = useTranslations('business.vehicles.fleet')
   const tBulk = useTranslations('business.vehicles.bulk')
@@ -83,7 +88,13 @@ export function FleetTable({
                 </td>
               )}
               <td className="px-4 py-3">
-                <div className="font-medium">{v.name}</div>
+                <Link
+                  to="/$locale/manage/fleet/$vehicleId"
+                  params={{ locale, vehicleId: v.id }}
+                  className="font-medium hover:underline"
+                >
+                  {v.name}
+                </Link>
                 <div className="text-muted-foreground text-xs">
                   <span>{v.licensePlate ?? t('none')}</span>
                   {v.make != null && (

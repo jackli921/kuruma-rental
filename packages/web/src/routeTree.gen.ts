@@ -21,7 +21,6 @@ import { Route as LocaleVehiclesIndexRouteImport } from './routes/$locale/vehicl
 import { Route as ProviderInviteTokenRouteImport } from './routes/provider/invite/$token'
 import { Route as LocaleStorefrontsLocationIdRouteImport } from './routes/$locale/storefronts/$locationId'
 import { Route as LocaleProviderLoginRouteImport } from './routes/$locale/provider/login'
-import { Route as LocaleManageOperatorSlugRouteImport } from './routes/$locale/manage/$operatorSlug'
 import { Route as LocaleRenterDocumentsRouteImport } from './routes/$locale/_renter/documents'
 import { Route as LocaleRenterBookingsRouteImport } from './routes/$locale/_renter/bookings'
 import { Route as LocaleBusinessDashboardRouteImport } from './routes/$locale/_business/dashboard'
@@ -29,17 +28,17 @@ import { Route as LocaleRenterBookingsIndexRouteImport } from './routes/$locale/
 import { Route as LocaleAdminAdminIndexRouteImport } from './routes/$locale/_admin/admin/index'
 import { Route as LocaleVehiclesClassesSlugRouteImport } from './routes/$locale/vehicles/classes/$slug'
 import { Route as LocaleProviderInviteTokenRouteImport } from './routes/$locale/provider/invite/$token'
-import { Route as LocaleManageOperatorSlugDashboardRouteImport } from './routes/$locale/manage/$operatorSlug/dashboard'
 import { Route as LocaleRenterBookingsNewRouteImport } from './routes/$locale/_renter/bookings/new'
 import { Route as LocaleRenterBookingsConfirmationRouteImport } from './routes/$locale/_renter/bookings/confirmation'
 import { Route as LocaleBusinessManageLocationsRouteImport } from './routes/$locale/_business/manage/locations'
 import { Route as LocaleBusinessManageInsuranceRouteImport } from './routes/$locale/_business/manage/insurance'
-import { Route as LocaleBusinessManageFleetRouteImport } from './routes/$locale/_business/manage/fleet'
 import { Route as LocaleBusinessManageFeesRouteImport } from './routes/$locale/_business/manage/fees'
 import { Route as LocaleBusinessManageClassesRouteImport } from './routes/$locale/_business/manage/classes'
 import { Route as LocaleBusinessManageAddOnsRouteImport } from './routes/$locale/_business/manage/add-ons'
 import { Route as LocaleAdminAdminRevenueRouteImport } from './routes/$locale/_admin/admin/revenue'
+import { Route as LocaleBusinessManageFleetIndexRouteImport } from './routes/$locale/_business/manage/fleet/index'
 import { Route as LocaleBusinessManageBookingsIndexRouteImport } from './routes/$locale/_business/manage/bookings/index'
+import { Route as LocaleBusinessManageFleetVehicleIdRouteImport } from './routes/$locale/_business/manage/fleet/$vehicleId'
 import { Route as LocaleBusinessManageBookingsBookingIdRouteImport } from './routes/$locale/_business/manage/bookings/$bookingId'
 
 const LocaleRoute = LocaleRouteImport.update({
@@ -100,12 +99,6 @@ const LocaleProviderLoginRoute = LocaleProviderLoginRouteImport.update({
   path: '/provider/login',
   getParentRoute: () => LocaleRoute,
 } as any)
-const LocaleManageOperatorSlugRoute =
-  LocaleManageOperatorSlugRouteImport.update({
-    id: '/manage/$operatorSlug',
-    path: '/manage/$operatorSlug',
-    getParentRoute: () => LocaleRoute,
-  } as any)
 const LocaleRenterDocumentsRoute = LocaleRenterDocumentsRouteImport.update({
   id: '/documents',
   path: '/documents',
@@ -144,12 +137,6 @@ const LocaleProviderInviteTokenRoute =
     path: '/provider/invite/$token',
     getParentRoute: () => LocaleRoute,
   } as any)
-const LocaleManageOperatorSlugDashboardRoute =
-  LocaleManageOperatorSlugDashboardRouteImport.update({
-    id: '/dashboard',
-    path: '/dashboard',
-    getParentRoute: () => LocaleManageOperatorSlugRoute,
-  } as any)
 const LocaleRenterBookingsNewRoute = LocaleRenterBookingsNewRouteImport.update({
   id: '/new',
   path: '/new',
@@ -171,12 +158,6 @@ const LocaleBusinessManageInsuranceRoute =
   LocaleBusinessManageInsuranceRouteImport.update({
     id: '/manage/insurance',
     path: '/manage/insurance',
-    getParentRoute: () => LocaleBusinessRoute,
-  } as any)
-const LocaleBusinessManageFleetRoute =
-  LocaleBusinessManageFleetRouteImport.update({
-    id: '/manage/fleet',
-    path: '/manage/fleet',
     getParentRoute: () => LocaleBusinessRoute,
   } as any)
 const LocaleBusinessManageFeesRoute =
@@ -202,10 +183,22 @@ const LocaleAdminAdminRevenueRoute = LocaleAdminAdminRevenueRouteImport.update({
   path: '/admin/revenue',
   getParentRoute: () => LocaleAdminRoute,
 } as any)
+const LocaleBusinessManageFleetIndexRoute =
+  LocaleBusinessManageFleetIndexRouteImport.update({
+    id: '/manage/fleet/',
+    path: '/manage/fleet/',
+    getParentRoute: () => LocaleBusinessRoute,
+  } as any)
 const LocaleBusinessManageBookingsIndexRoute =
   LocaleBusinessManageBookingsIndexRouteImport.update({
     id: '/manage/bookings/',
     path: '/manage/bookings/',
+    getParentRoute: () => LocaleBusinessRoute,
+  } as any)
+const LocaleBusinessManageFleetVehicleIdRoute =
+  LocaleBusinessManageFleetVehicleIdRouteImport.update({
+    id: '/manage/fleet/$vehicleId',
+    path: '/manage/fleet/$vehicleId',
     getParentRoute: () => LocaleBusinessRoute,
   } as any)
 const LocaleBusinessManageBookingsBookingIdRoute =
@@ -224,7 +217,6 @@ export interface FileRoutesByFullPath {
   '/$locale/dashboard': typeof LocaleBusinessDashboardRoute
   '/$locale/bookings': typeof LocaleRenterBookingsRouteWithChildren
   '/$locale/documents': typeof LocaleRenterDocumentsRoute
-  '/$locale/manage/$operatorSlug': typeof LocaleManageOperatorSlugRouteWithChildren
   '/$locale/provider/login': typeof LocaleProviderLoginRoute
   '/$locale/storefronts/$locationId': typeof LocaleStorefrontsLocationIdRoute
   '/provider/invite/$token': typeof ProviderInviteTokenRoute
@@ -233,18 +225,18 @@ export interface FileRoutesByFullPath {
   '/$locale/manage/add-ons': typeof LocaleBusinessManageAddOnsRoute
   '/$locale/manage/classes': typeof LocaleBusinessManageClassesRoute
   '/$locale/manage/fees': typeof LocaleBusinessManageFeesRoute
-  '/$locale/manage/fleet': typeof LocaleBusinessManageFleetRoute
   '/$locale/manage/insurance': typeof LocaleBusinessManageInsuranceRoute
   '/$locale/manage/locations': typeof LocaleBusinessManageLocationsRoute
   '/$locale/bookings/confirmation': typeof LocaleRenterBookingsConfirmationRoute
   '/$locale/bookings/new': typeof LocaleRenterBookingsNewRoute
-  '/$locale/manage/$operatorSlug/dashboard': typeof LocaleManageOperatorSlugDashboardRoute
   '/$locale/provider/invite/$token': typeof LocaleProviderInviteTokenRoute
   '/$locale/vehicles/classes/$slug': typeof LocaleVehiclesClassesSlugRoute
   '/$locale/admin/': typeof LocaleAdminAdminIndexRoute
   '/$locale/bookings/': typeof LocaleRenterBookingsIndexRoute
   '/$locale/manage/bookings/$bookingId': typeof LocaleBusinessManageBookingsBookingIdRoute
+  '/$locale/manage/fleet/$vehicleId': typeof LocaleBusinessManageFleetVehicleIdRoute
   '/$locale/manage/bookings/': typeof LocaleBusinessManageBookingsIndexRoute
+  '/$locale/manage/fleet/': typeof LocaleBusinessManageFleetIndexRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -253,7 +245,6 @@ export interface FileRoutesByTo {
   '/$locale/search': typeof LocaleSearchRoute
   '/$locale/dashboard': typeof LocaleBusinessDashboardRoute
   '/$locale/documents': typeof LocaleRenterDocumentsRoute
-  '/$locale/manage/$operatorSlug': typeof LocaleManageOperatorSlugRouteWithChildren
   '/$locale/provider/login': typeof LocaleProviderLoginRoute
   '/$locale/storefronts/$locationId': typeof LocaleStorefrontsLocationIdRoute
   '/provider/invite/$token': typeof ProviderInviteTokenRoute
@@ -262,18 +253,18 @@ export interface FileRoutesByTo {
   '/$locale/manage/add-ons': typeof LocaleBusinessManageAddOnsRoute
   '/$locale/manage/classes': typeof LocaleBusinessManageClassesRoute
   '/$locale/manage/fees': typeof LocaleBusinessManageFeesRoute
-  '/$locale/manage/fleet': typeof LocaleBusinessManageFleetRoute
   '/$locale/manage/insurance': typeof LocaleBusinessManageInsuranceRoute
   '/$locale/manage/locations': typeof LocaleBusinessManageLocationsRoute
   '/$locale/bookings/confirmation': typeof LocaleRenterBookingsConfirmationRoute
   '/$locale/bookings/new': typeof LocaleRenterBookingsNewRoute
-  '/$locale/manage/$operatorSlug/dashboard': typeof LocaleManageOperatorSlugDashboardRoute
   '/$locale/provider/invite/$token': typeof LocaleProviderInviteTokenRoute
   '/$locale/vehicles/classes/$slug': typeof LocaleVehiclesClassesSlugRoute
   '/$locale/admin': typeof LocaleAdminAdminIndexRoute
   '/$locale/bookings': typeof LocaleRenterBookingsIndexRoute
   '/$locale/manage/bookings/$bookingId': typeof LocaleBusinessManageBookingsBookingIdRoute
+  '/$locale/manage/fleet/$vehicleId': typeof LocaleBusinessManageFleetVehicleIdRoute
   '/$locale/manage/bookings': typeof LocaleBusinessManageBookingsIndexRoute
+  '/$locale/manage/fleet': typeof LocaleBusinessManageFleetIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -288,7 +279,6 @@ export interface FileRoutesById {
   '/$locale/_business/dashboard': typeof LocaleBusinessDashboardRoute
   '/$locale/_renter/bookings': typeof LocaleRenterBookingsRouteWithChildren
   '/$locale/_renter/documents': typeof LocaleRenterDocumentsRoute
-  '/$locale/manage/$operatorSlug': typeof LocaleManageOperatorSlugRouteWithChildren
   '/$locale/provider/login': typeof LocaleProviderLoginRoute
   '/$locale/storefronts/$locationId': typeof LocaleStorefrontsLocationIdRoute
   '/provider/invite/$token': typeof ProviderInviteTokenRoute
@@ -297,18 +287,18 @@ export interface FileRoutesById {
   '/$locale/_business/manage/add-ons': typeof LocaleBusinessManageAddOnsRoute
   '/$locale/_business/manage/classes': typeof LocaleBusinessManageClassesRoute
   '/$locale/_business/manage/fees': typeof LocaleBusinessManageFeesRoute
-  '/$locale/_business/manage/fleet': typeof LocaleBusinessManageFleetRoute
   '/$locale/_business/manage/insurance': typeof LocaleBusinessManageInsuranceRoute
   '/$locale/_business/manage/locations': typeof LocaleBusinessManageLocationsRoute
   '/$locale/_renter/bookings/confirmation': typeof LocaleRenterBookingsConfirmationRoute
   '/$locale/_renter/bookings/new': typeof LocaleRenterBookingsNewRoute
-  '/$locale/manage/$operatorSlug/dashboard': typeof LocaleManageOperatorSlugDashboardRoute
   '/$locale/provider/invite/$token': typeof LocaleProviderInviteTokenRoute
   '/$locale/vehicles/classes/$slug': typeof LocaleVehiclesClassesSlugRoute
   '/$locale/_admin/admin/': typeof LocaleAdminAdminIndexRoute
   '/$locale/_renter/bookings/': typeof LocaleRenterBookingsIndexRoute
   '/$locale/_business/manage/bookings/$bookingId': typeof LocaleBusinessManageBookingsBookingIdRoute
+  '/$locale/_business/manage/fleet/$vehicleId': typeof LocaleBusinessManageFleetVehicleIdRoute
   '/$locale/_business/manage/bookings/': typeof LocaleBusinessManageBookingsIndexRoute
+  '/$locale/_business/manage/fleet/': typeof LocaleBusinessManageFleetIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -321,7 +311,6 @@ export interface FileRouteTypes {
     | '/$locale/dashboard'
     | '/$locale/bookings'
     | '/$locale/documents'
-    | '/$locale/manage/$operatorSlug'
     | '/$locale/provider/login'
     | '/$locale/storefronts/$locationId'
     | '/provider/invite/$token'
@@ -330,18 +319,18 @@ export interface FileRouteTypes {
     | '/$locale/manage/add-ons'
     | '/$locale/manage/classes'
     | '/$locale/manage/fees'
-    | '/$locale/manage/fleet'
     | '/$locale/manage/insurance'
     | '/$locale/manage/locations'
     | '/$locale/bookings/confirmation'
     | '/$locale/bookings/new'
-    | '/$locale/manage/$operatorSlug/dashboard'
     | '/$locale/provider/invite/$token'
     | '/$locale/vehicles/classes/$slug'
     | '/$locale/admin/'
     | '/$locale/bookings/'
     | '/$locale/manage/bookings/$bookingId'
+    | '/$locale/manage/fleet/$vehicleId'
     | '/$locale/manage/bookings/'
+    | '/$locale/manage/fleet/'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -350,7 +339,6 @@ export interface FileRouteTypes {
     | '/$locale/search'
     | '/$locale/dashboard'
     | '/$locale/documents'
-    | '/$locale/manage/$operatorSlug'
     | '/$locale/provider/login'
     | '/$locale/storefronts/$locationId'
     | '/provider/invite/$token'
@@ -359,18 +347,18 @@ export interface FileRouteTypes {
     | '/$locale/manage/add-ons'
     | '/$locale/manage/classes'
     | '/$locale/manage/fees'
-    | '/$locale/manage/fleet'
     | '/$locale/manage/insurance'
     | '/$locale/manage/locations'
     | '/$locale/bookings/confirmation'
     | '/$locale/bookings/new'
-    | '/$locale/manage/$operatorSlug/dashboard'
     | '/$locale/provider/invite/$token'
     | '/$locale/vehicles/classes/$slug'
     | '/$locale/admin'
     | '/$locale/bookings'
     | '/$locale/manage/bookings/$bookingId'
+    | '/$locale/manage/fleet/$vehicleId'
     | '/$locale/manage/bookings'
+    | '/$locale/manage/fleet'
   id:
     | '__root__'
     | '/'
@@ -384,7 +372,6 @@ export interface FileRouteTypes {
     | '/$locale/_business/dashboard'
     | '/$locale/_renter/bookings'
     | '/$locale/_renter/documents'
-    | '/$locale/manage/$operatorSlug'
     | '/$locale/provider/login'
     | '/$locale/storefronts/$locationId'
     | '/provider/invite/$token'
@@ -393,18 +380,18 @@ export interface FileRouteTypes {
     | '/$locale/_business/manage/add-ons'
     | '/$locale/_business/manage/classes'
     | '/$locale/_business/manage/fees'
-    | '/$locale/_business/manage/fleet'
     | '/$locale/_business/manage/insurance'
     | '/$locale/_business/manage/locations'
     | '/$locale/_renter/bookings/confirmation'
     | '/$locale/_renter/bookings/new'
-    | '/$locale/manage/$operatorSlug/dashboard'
     | '/$locale/provider/invite/$token'
     | '/$locale/vehicles/classes/$slug'
     | '/$locale/_admin/admin/'
     | '/$locale/_renter/bookings/'
     | '/$locale/_business/manage/bookings/$bookingId'
+    | '/$locale/_business/manage/fleet/$vehicleId'
     | '/$locale/_business/manage/bookings/'
+    | '/$locale/_business/manage/fleet/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -499,13 +486,6 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof LocaleProviderLoginRouteImport
       parentRoute: typeof LocaleRoute
     }
-    '/$locale/manage/$operatorSlug': {
-      id: '/$locale/manage/$operatorSlug'
-      path: '/manage/$operatorSlug'
-      fullPath: '/$locale/manage/$operatorSlug'
-      preLoaderRoute: typeof LocaleManageOperatorSlugRouteImport
-      parentRoute: typeof LocaleRoute
-    }
     '/$locale/_renter/documents': {
       id: '/$locale/_renter/documents'
       path: '/documents'
@@ -555,13 +535,6 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof LocaleProviderInviteTokenRouteImport
       parentRoute: typeof LocaleRoute
     }
-    '/$locale/manage/$operatorSlug/dashboard': {
-      id: '/$locale/manage/$operatorSlug/dashboard'
-      path: '/dashboard'
-      fullPath: '/$locale/manage/$operatorSlug/dashboard'
-      preLoaderRoute: typeof LocaleManageOperatorSlugDashboardRouteImport
-      parentRoute: typeof LocaleManageOperatorSlugRoute
-    }
     '/$locale/_renter/bookings/new': {
       id: '/$locale/_renter/bookings/new'
       path: '/new'
@@ -588,13 +561,6 @@ declare module '@tanstack/react-router' {
       path: '/manage/insurance'
       fullPath: '/$locale/manage/insurance'
       preLoaderRoute: typeof LocaleBusinessManageInsuranceRouteImport
-      parentRoute: typeof LocaleBusinessRoute
-    }
-    '/$locale/_business/manage/fleet': {
-      id: '/$locale/_business/manage/fleet'
-      path: '/manage/fleet'
-      fullPath: '/$locale/manage/fleet'
-      preLoaderRoute: typeof LocaleBusinessManageFleetRouteImport
       parentRoute: typeof LocaleBusinessRoute
     }
     '/$locale/_business/manage/fees': {
@@ -625,11 +591,25 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof LocaleAdminAdminRevenueRouteImport
       parentRoute: typeof LocaleAdminRoute
     }
+    '/$locale/_business/manage/fleet/': {
+      id: '/$locale/_business/manage/fleet/'
+      path: '/manage/fleet'
+      fullPath: '/$locale/manage/fleet/'
+      preLoaderRoute: typeof LocaleBusinessManageFleetIndexRouteImport
+      parentRoute: typeof LocaleBusinessRoute
+    }
     '/$locale/_business/manage/bookings/': {
       id: '/$locale/_business/manage/bookings/'
       path: '/manage/bookings'
       fullPath: '/$locale/manage/bookings/'
       preLoaderRoute: typeof LocaleBusinessManageBookingsIndexRouteImport
+      parentRoute: typeof LocaleBusinessRoute
+    }
+    '/$locale/_business/manage/fleet/$vehicleId': {
+      id: '/$locale/_business/manage/fleet/$vehicleId'
+      path: '/manage/fleet/$vehicleId'
+      fullPath: '/$locale/manage/fleet/$vehicleId'
+      preLoaderRoute: typeof LocaleBusinessManageFleetVehicleIdRouteImport
       parentRoute: typeof LocaleBusinessRoute
     }
     '/$locale/_business/manage/bookings/$bookingId': {
@@ -661,11 +641,12 @@ interface LocaleBusinessRouteChildren {
   LocaleBusinessManageAddOnsRoute: typeof LocaleBusinessManageAddOnsRoute
   LocaleBusinessManageClassesRoute: typeof LocaleBusinessManageClassesRoute
   LocaleBusinessManageFeesRoute: typeof LocaleBusinessManageFeesRoute
-  LocaleBusinessManageFleetRoute: typeof LocaleBusinessManageFleetRoute
   LocaleBusinessManageInsuranceRoute: typeof LocaleBusinessManageInsuranceRoute
   LocaleBusinessManageLocationsRoute: typeof LocaleBusinessManageLocationsRoute
   LocaleBusinessManageBookingsBookingIdRoute: typeof LocaleBusinessManageBookingsBookingIdRoute
+  LocaleBusinessManageFleetVehicleIdRoute: typeof LocaleBusinessManageFleetVehicleIdRoute
   LocaleBusinessManageBookingsIndexRoute: typeof LocaleBusinessManageBookingsIndexRoute
+  LocaleBusinessManageFleetIndexRoute: typeof LocaleBusinessManageFleetIndexRoute
 }
 
 const LocaleBusinessRouteChildren: LocaleBusinessRouteChildren = {
@@ -673,13 +654,15 @@ const LocaleBusinessRouteChildren: LocaleBusinessRouteChildren = {
   LocaleBusinessManageAddOnsRoute: LocaleBusinessManageAddOnsRoute,
   LocaleBusinessManageClassesRoute: LocaleBusinessManageClassesRoute,
   LocaleBusinessManageFeesRoute: LocaleBusinessManageFeesRoute,
-  LocaleBusinessManageFleetRoute: LocaleBusinessManageFleetRoute,
   LocaleBusinessManageInsuranceRoute: LocaleBusinessManageInsuranceRoute,
   LocaleBusinessManageLocationsRoute: LocaleBusinessManageLocationsRoute,
   LocaleBusinessManageBookingsBookingIdRoute:
     LocaleBusinessManageBookingsBookingIdRoute,
+  LocaleBusinessManageFleetVehicleIdRoute:
+    LocaleBusinessManageFleetVehicleIdRoute,
   LocaleBusinessManageBookingsIndexRoute:
     LocaleBusinessManageBookingsIndexRoute,
+  LocaleBusinessManageFleetIndexRoute: LocaleBusinessManageFleetIndexRoute,
 }
 
 const LocaleBusinessRouteWithChildren = LocaleBusinessRoute._addFileChildren(
@@ -715,21 +698,6 @@ const LocaleRenterRouteWithChildren = LocaleRenterRoute._addFileChildren(
   LocaleRenterRouteChildren,
 )
 
-interface LocaleManageOperatorSlugRouteChildren {
-  LocaleManageOperatorSlugDashboardRoute: typeof LocaleManageOperatorSlugDashboardRoute
-}
-
-const LocaleManageOperatorSlugRouteChildren: LocaleManageOperatorSlugRouteChildren =
-  {
-    LocaleManageOperatorSlugDashboardRoute:
-      LocaleManageOperatorSlugDashboardRoute,
-  }
-
-const LocaleManageOperatorSlugRouteWithChildren =
-  LocaleManageOperatorSlugRoute._addFileChildren(
-    LocaleManageOperatorSlugRouteChildren,
-  )
-
 interface LocaleRouteChildren {
   LocaleAdminRoute: typeof LocaleAdminRouteWithChildren
   LocaleBusinessRoute: typeof LocaleBusinessRouteWithChildren
@@ -737,7 +705,6 @@ interface LocaleRouteChildren {
   LocaleLoginRoute: typeof LocaleLoginRoute
   LocaleSearchRoute: typeof LocaleSearchRoute
   LocaleIndexRoute: typeof LocaleIndexRoute
-  LocaleManageOperatorSlugRoute: typeof LocaleManageOperatorSlugRouteWithChildren
   LocaleProviderLoginRoute: typeof LocaleProviderLoginRoute
   LocaleStorefrontsLocationIdRoute: typeof LocaleStorefrontsLocationIdRoute
   LocaleVehiclesIndexRoute: typeof LocaleVehiclesIndexRoute
@@ -752,7 +719,6 @@ const LocaleRouteChildren: LocaleRouteChildren = {
   LocaleLoginRoute: LocaleLoginRoute,
   LocaleSearchRoute: LocaleSearchRoute,
   LocaleIndexRoute: LocaleIndexRoute,
-  LocaleManageOperatorSlugRoute: LocaleManageOperatorSlugRouteWithChildren,
   LocaleProviderLoginRoute: LocaleProviderLoginRoute,
   LocaleStorefrontsLocationIdRoute: LocaleStorefrontsLocationIdRoute,
   LocaleVehiclesIndexRoute: LocaleVehiclesIndexRoute,

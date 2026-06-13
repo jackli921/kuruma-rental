@@ -1,6 +1,6 @@
 import { Hono } from 'hono'
 import { beforeEach, describe, expect, it } from 'vitest'
-import { SYSTEM_CONTEXT } from '../../src/middleware/auth'
+import { SYSTEM_CONTEXT, type UserRole } from '../../src/middleware/auth'
 import {
   InMemoryBookingRepository,
   InMemoryVehicleRepository,
@@ -88,6 +88,16 @@ describe('GET /vehicles/:id/detail', () => {
     app.use('*', testAuthMiddleware('staff-user', 'STAFF'))
     app.route('/', createVehicleDetailRoutes(new VehicleDetailService(detailRepo)))
   })
+
+  /** A detail app whose caller has the given role (+ optional tenant), sharing
+   *  the same seeded repos as `app`. Used to assert role/scope behaviour. */
+  function roleApp(id: string, role: UserRole, operatorId?: string): Hono {
+    const a = new Hono()
+    a.use('*', testAuthMiddleware(id, role, operatorId))
+    const repo = new InMemoryVehicleDetailRepository(vehicleRepo, bookingRepo, renterNames)
+    a.route('/', createVehicleDetailRoutes(new VehicleDetailService(repo)))
+    return a
+  }
 
   it('returns 404 for nonexistent vehicle', async () => {
     const res = await app.request('/vehicles/nonexistent/detail')
@@ -274,6 +284,36 @@ describe('GET /vehicles/:id/detail', () => {
     renterApp.route('/', createVehicleDetailRoutes(new VehicleDetailService(repo)))
     const res = await renterApp.request(`/vehicles/${vehicle.id}/detail`)
     expect(res.status).toBe(403)
+  })
+
+  it('returns 403 for PARTNER role (management-read excludes 3rd-party callers)', async () => {
+    const vehicle = await seedVehicle({ operatorId: 'op-a' })
+    const res = await roleApp('partner-1', 'PARTNER').request(`/vehicles/${vehicle.id}/detail`)
+    expect(res.status).toBe(403)
+  })
+
+  it('lets an operator read a vehicle in its own tenant', async () => {
+    const vehicle = await seedVehicle({ operatorId: 'op-a' })
+    const res = await roleApp('owner-a', 'OPERATOR_OWNER', 'op-a').request(
+      `/vehicles/${vehicle.id}/detail`,
+    )
+    expect(res.status).toBe(200)
+    const body = await res.json()
+    expect(body.data.id).toBe(vehicle.id)
+  })
+
+  it('returns 404 when an operator reads another tenant vehicle (no cross-tenant leak)', async () => {
+    const vehicle = await seedVehicle({ operatorId: 'op-a' })
+    const res = await roleApp('owner-b', 'OPERATOR_OWNER', 'op-b').request(
+      `/vehicles/${vehicle.id}/detail`,
+    )
+    expect(res.status).toBe(404)
+  })
+
+  it('returns 404 for an operator caller missing its operatorId (fail-closed)', async () => {
+    const vehicle = await seedVehicle({ operatorId: 'op-a' })
+    const res = await roleApp('owner-x', 'OPERATOR_OWNER').request(`/vehicles/${vehicle.id}/detail`)
+    expect(res.status).toBe(404)
   })
 
   it('fails closed when no auth middleware is present', async () => {
