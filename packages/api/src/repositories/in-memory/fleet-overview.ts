@@ -44,7 +44,12 @@ export class InMemoryFleetOverviewRepository implements FleetOverviewRepository 
     // OPERATOR_* caller never reads another tenant's rows (isolation at the read,
     // not the projection) while bypass roles see all. Mirrors the Drizzle repo,
     // which scopes vehicles by operatorId and bookings to those vehicle ids.
-    const { data: vehicles } = await this.vehicleRepo.findAll(ctx)
+    //
+    // includeRetired (#600): the Fleet page lists every status (RETIRED is a
+    // first-class filter facet, shown by default), so the overview must include
+    // retired cars. findAll hides RETIRED by default; the Drizzle overview repo
+    // applies no status filter, so this flag keeps the two repos in parity.
+    const { data: vehicles } = await this.vehicleRepo.findAll(ctx, { includeRetired: true })
     const allBookings = await this.bookingRepo.findAll(ctx)
 
     return Promise.all(
