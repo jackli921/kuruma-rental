@@ -549,9 +549,9 @@ export function createApp(overrides?: AppOverrides) {
   // with sub-ms latency, no KV race conditions. Gracefully skipped in local
   // dev (binding absent). When present it fails closed on an unresolvable IP
   // (#580) rather than bypassing via a shared "" key.
-  const rateLimiter = (globalThis as Record<string, unknown>).RATE_LIMITER as
-    | RateLimitBinding
-    | undefined
+  const rateLimiter =
+    overrides?.globalRateLimiter ??
+    ((globalThis as Record<string, unknown>).RATE_LIMITER as RateLimitBinding | undefined)
   if (rateLimiter) {
     app.use('*', rateLimitByIp(rateLimiter))
   }

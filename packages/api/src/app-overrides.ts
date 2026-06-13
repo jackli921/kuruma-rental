@@ -73,6 +73,11 @@ export type AppOverrides = {
   photoUploadLimiter?: RateLimitBinding
   photoUploadUserLimiter?: RateLimitBinding
   publicCatalogLimiter?: RateLimitBinding
+  // App-wide IP limiter (the CF `RATE_LIMITER` binding) applied to every route.
+  // Inject in tests instead of mutating the shared globalThis.RATE_LIMITER, which
+  // races parallel suites that build their own app (#672); absent ⇒ the
+  // globalThis-resolved binding.
+  globalRateLimiter?: RateLimitBinding
   // Over-limit ⇒ the geocoder skips the lookup (#574). Inject a deny-binding in
   // tests; absent ⇒ the globalThis-resolved GEOCODE_LIMITER (or unthrottled dev).
   geocodeLimiter?: RateLimitBinding
