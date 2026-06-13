@@ -483,15 +483,15 @@ export interface OverviewRepository {
   getOperatorOverview(ctx: CallerContext, now: Date): Promise<OperatorOverview>
 }
 
-/**
- * Optional scoping for {@link AvailabilityRepository.findAvailableVehicles}.
- * Storefront search (#391) needs availability scoped to one location/class;
- * every field defaults to "no filter" so existing callers are unaffected.
- */
+/** Optional scoping for {@link AvailabilityRepository.findAvailableVehicles};
+ *  every field defaults to "no filter" so existing callers are unaffected (#391). */
 export interface AvailabilityFilters {
   locationId?: string
   operatorId?: string
   classId?: string
+  /** #394 §7: scope the scan to a SET of region-matched pickup-location ids; an
+   *  EMPTY array short-circuits to NO vehicles, never a widen to the whole fleet. */
+  locationIds?: string[]
 }
 
 export interface AvailabilityRepository {
@@ -533,9 +533,9 @@ export interface StorefrontFilters {
 /**
  * #394 hierarchical region taxonomy read. Platform-global reference data (no
  * CallerContext — regions are not tenant-scoped). `findDescendantIds` owns the
- * recursive tree walk in ONE place (Drizzle: a WITH RECURSIVE CTE; InMemory: a
- * BFS over parentId), so search services stay dumb: resolve a regionId to a flat
- * id list and hand it to the plain StorefrontFilters.regionIds filter.
+ * tree walk in ONE place: BOTH impls delegate to the shared pure BFS in
+ * region-tree.ts over a single findAll() read (no DB recursion; a raw CTE's result
+ * shape differs across drivers). Returns a flat id list for StorefrontFilters.
  */
 export interface RegionRepository {
   /** The whole tree as a flat list; the web client builds the cascade from it. */

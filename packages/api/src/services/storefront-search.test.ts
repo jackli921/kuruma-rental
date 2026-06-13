@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { PUBLIC_CONTEXT, SYSTEM_CONTEXT } from '../middleware/auth'
 import { InMemoryAvailabilityRepository } from '../repositories/in-memory/availability'
 import { InMemoryBookingRepository } from '../repositories/in-memory/booking'
@@ -39,6 +39,7 @@ let locationRepo: InMemoryLocationRepository
 let vehicleRepo: InMemoryVehicleRepository
 let bookingRepo: InMemoryBookingRepository
 let classRepo: InMemoryVehicleClassRepository
+let availabilityRepo: InMemoryAvailabilityRepository
 let service: StorefrontSearchService
 
 beforeEach(() => {
@@ -48,7 +49,7 @@ beforeEach(() => {
   bookingRepo = new InMemoryBookingRepository()
   classRepo = new InMemoryVehicleClassRepository()
   const storefrontRepo = new InMemoryStorefrontRepository(locationRepo, operatorRepo)
-  const availabilityRepo = new InMemoryAvailabilityRepository(vehicleRepo, bookingRepo)
+  availabilityRepo = new InMemoryAvailabilityRepository(vehicleRepo, bookingRepo)
   const regionRepo = new InMemoryRegionRepository(REGIONS)
   service = new StorefrontSearchService(storefrontRepo, availabilityRepo, classRepo, regionRepo)
 })
@@ -355,6 +356,7 @@ describe('StorefrontSearchService.search region filter (#394)', () => {
     })
     await makeVehicle({ operatorId: op.id, classId: compact.id, pickupLocationId: namba.id })
     await makeVehicle({ operatorId: op.id, classId: compact.id, pickupLocationId: kyoto.id })
+    return { namba, kyoto }
   }
 
   it('returns storefronts in every region when no regionId is given', async () => {
@@ -393,6 +395,29 @@ describe('StorefrontSearchService.search region filter (#394)', () => {
       await service.search(PUBLIC_CONTEXT, { from: FROM, to: TO, regionId: 'reg_nope' }),
     )
     expect(data.storefronts).toEqual([])
+  })
+
+  it('bounds the availability scan to the region’s storefronts — not a whole-fleet scan (#394 §7)', async () => {
+    const { namba, kyoto } = await seedTwoRegions()
+    const spy = vi.spyOn(availabilityRepo, 'findAvailableVehicles')
+
+    await ok(await service.search(PUBLIC_CONTEXT, { from: FROM, to: TO, regionId: 'reg_osaka' }))
+
+    const scanFilters = spy.mock.calls[0]?.[2]
+    expect(scanFilters?.locationIds).toEqual([namba.id])
+    expect(scanFilters?.locationIds).not.toContain(kyoto.id)
+  })
+
+  it('scans an EMPTY location set (never the whole fleet) when no storefront matches (#394 §7)', async () => {
+    await seedTwoRegions()
+    const spy = vi.spyOn(availabilityRepo, 'findAvailableVehicles')
+
+    const data = await ok(
+      await service.search(PUBLIC_CONTEXT, { from: FROM, to: TO, regionId: 'reg_umeda' }),
+    )
+
+    expect(data.storefronts).toEqual([])
+    expect(spy.mock.calls[0]?.[2]?.locationIds).toEqual([])
   })
 
   it('excludes a null-region location from a region filter but shows it unfiltered', async () => {

@@ -1,6 +1,6 @@
 import { BEST_CAR_RENTAL_OPERATOR_ID } from '@kuruma/shared/db/constants'
 import { users } from '@kuruma/shared/db/schema'
-import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest'
+import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
 import { SYSTEM_CONTEXT } from '../../src/middleware/auth'
 import {
   DrizzleAvailabilityRepository,
@@ -79,6 +79,7 @@ function createTestVehicle(
   return vehicleRepo.create(SYSTEM_CONTEXT, {
     operatorId: overrides.operatorId ?? BEST_CAR_RENTAL_OPERATOR_ID,
     classId: overrides.classId ?? testClassId,
+    pickupLocationId: overrides.pickupLocationId ?? null,
     name: overrides.name ?? 'Avail Test Car',
     description: overrides.description ?? null,
     seats: overrides.seats ?? 5,
@@ -269,6 +270,59 @@ describe('DrizzleAvailabilityRepository', () => {
       const resultIds = result.map((v) => v.id)
       expect(resultIds).not.toContain(maintenanceVehicle.id)
       expect(resultIds).not.toContain(retiredVehicle.id)
+    })
+  })
+
+  describe('findAvailableVehicles — region scan bound (#394 §7)', () => {
+    it('{ locationIds } scopes the scan to those pickup locations only', async () => {
+      const otherLocation = await seedLocation('avail-region', TURNAROUND_MINUTES)
+      createdLocationIds.push(otherLocation.id)
+
+      const here = await createTestVehicle({
+        name: 'In-Region Car',
+        pickupLocationId: testLocationId,
+      })
+      createdVehicleIds.push(here.id)
+      const elsewhere = await createTestVehicle({
+        name: 'Out-Region Car',
+        pickupLocationId: otherLocation.id,
+      })
+      createdVehicleIds.push(elsewhere.id)
+
+      const result = await availabilityRepo.findAvailableVehicles(
+        new Date('2026-08-01T10:00:00Z'),
+        new Date('2026-08-01T14:00:00Z'),
+        { locationIds: [testLocationId] },
+      )
+
+      const resultIds = result.map((v) => v.id)
+      expect(resultIds).toContain(here.id)
+      expect(resultIds).not.toContain(elsewhere.id)
+    })
+
+    it('an EMPTY { locationIds } returns [] WITHOUT issuing a query — never a whole-fleet scan', async () => {
+      const vehicle = await createTestVehicle({
+        name: 'Should Not Surface',
+        pickupLocationId: testLocationId,
+      })
+      createdVehicleIds.push(vehicle.id)
+
+      // The guard must short-circuit BEFORE building a query. drizzle's
+      // inArray(col, []) compiles to `false` (safe zero rows), so a result-only
+      // assertion would pass with OR without the guard — spying on db.select pins
+      // the early return: deleting `if (length === 0) return []` makes this fail.
+      const selectSpy = vi.spyOn(db, 'select')
+      try {
+        const result = await availabilityRepo.findAvailableVehicles(
+          new Date('2026-08-01T10:00:00Z'),
+          new Date('2026-08-01T14:00:00Z'),
+          { locationIds: [] },
+        )
+        expect(result).toEqual([])
+        expect(selectSpy).not.toHaveBeenCalled()
+      } finally {
+        selectSpy.mockRestore()
+      }
     })
   })
 

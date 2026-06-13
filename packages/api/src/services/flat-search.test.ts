@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { PUBLIC_CONTEXT, SYSTEM_CONTEXT } from '../middleware/auth'
 import { InMemoryAvailabilityRepository } from '../repositories/in-memory/availability'
 import { InMemoryBookingRepository } from '../repositories/in-memory/booking'
@@ -37,6 +37,7 @@ let locationRepo: InMemoryLocationRepository
 let vehicleRepo: InMemoryVehicleRepository
 let bookingRepo: InMemoryBookingRepository
 let classRepo: InMemoryVehicleClassRepository
+let availabilityRepo: InMemoryAvailabilityRepository
 let service: FlatSearchService
 
 beforeEach(() => {
@@ -46,7 +47,7 @@ beforeEach(() => {
   bookingRepo = new InMemoryBookingRepository()
   classRepo = new InMemoryVehicleClassRepository()
   const storefrontRepo = new InMemoryStorefrontRepository(locationRepo, operatorRepo)
-  const availabilityRepo = new InMemoryAvailabilityRepository(vehicleRepo, bookingRepo)
+  availabilityRepo = new InMemoryAvailabilityRepository(vehicleRepo, bookingRepo)
   const regionRepo = new InMemoryRegionRepository(REGIONS)
   service = new FlatSearchService(storefrontRepo, availabilityRepo, classRepo, regionRepo)
 })
@@ -312,6 +313,7 @@ describe('FlatSearchService.search region filter (#394)', () => {
       pickupLocationId: kyoto.id,
       name: 'Kyoto Car',
     })
+    return { namba, kyoto }
   }
 
   it('narrows the flat results to a selected prefecture (node + descendants)', async () => {
@@ -328,5 +330,28 @@ describe('FlatSearchService.search region filter (#394)', () => {
       await service.search(PUBLIC_CONTEXT, { from: FROM, to: TO, regionId: 'reg_nope' }),
     )
     expect(data.items).toEqual([])
+  })
+
+  it('bounds the availability scan to the region’s storefronts — not a whole-fleet scan (#394 §7)', async () => {
+    const { namba, kyoto } = await seedTwoRegions()
+    const spy = vi.spyOn(availabilityRepo, 'findAvailableVehicles')
+
+    await ok(await service.search(PUBLIC_CONTEXT, { from: FROM, to: TO, regionId: 'reg_osaka' }))
+
+    const scanFilters = spy.mock.calls[0]?.[2]
+    expect(scanFilters?.locationIds).toEqual([namba.id])
+    expect(scanFilters?.locationIds).not.toContain(kyoto.id)
+  })
+
+  it('scans an EMPTY location set (never the whole fleet) for an unknown region (#394 §7)', async () => {
+    await seedTwoRegions()
+    const spy = vi.spyOn(availabilityRepo, 'findAvailableVehicles')
+
+    const data = await ok(
+      await service.search(PUBLIC_CONTEXT, { from: FROM, to: TO, regionId: 'reg_nope' }),
+    )
+
+    expect(data.items).toEqual([])
+    expect(spy.mock.calls[0]?.[2]?.locationIds).toEqual([])
   })
 })

@@ -101,12 +101,13 @@ export class StorefrontSearchService {
       ctx,
       regionId || pickupLocationId ? filters : undefined,
     )
+    // Region scan bound (#394 §7): scope the availability scan to exactly the
+    // storefronts we will render. An empty set short-circuits to zero vehicles —
+    // NEVER a whole-fleet scan. Subsumes the old single-locationId filter
+    // (findActiveStorefronts already narrowed to the pickupLocationId).
+    const locationIds = storefronts.map((sf) => sf.id)
     // ONE availability scan per page — group in memory, never a query per store (N+1 guard, §3).
-    const available = await this.availabilityRepo.findAvailableVehicles(
-      from,
-      to,
-      pickupLocationId ? { locationId: pickupLocationId } : undefined,
-    )
+    const available = await this.availabilityRepo.findAvailableVehicles(from, to, { locationIds })
     const classById = new Map(
       (await this.classRepo.findAll(ctx, { includeArchived: true })).map((vc) => [vc.id, vc]),
     )

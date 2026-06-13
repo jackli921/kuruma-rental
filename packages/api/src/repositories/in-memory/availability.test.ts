@@ -93,6 +93,27 @@ describe('InMemoryAvailabilityRepository.findAvailableVehicles — storefront fi
     expect(result).toHaveLength(2)
   })
 
+  it('with { locationIds } returns only vehicles at those locations (region scan bound, #394 §7)', async () => {
+    const namba = await makeVehicle({ pickupLocationId: 'loc_namba' })
+    await makeVehicle({ pickupLocationId: 'loc_kyoto' })
+    await makeVehicle({ pickupLocationId: null })
+
+    const result = await availabilityRepo.findAvailableVehicles(FROM, TO, {
+      locationIds: ['loc_namba'],
+    })
+
+    expect(result.map((v) => v.id)).toEqual([namba.id])
+  })
+
+  it('with an EMPTY { locationIds } returns nothing — never widens to a whole-fleet scan (#394 §7)', async () => {
+    await makeVehicle({ pickupLocationId: 'loc_namba' })
+    await makeVehicle({ pickupLocationId: 'loc_kyoto' })
+
+    const result = await availabilityRepo.findAvailableVehicles(FROM, TO, { locationIds: [] })
+
+    expect(result).toEqual([])
+  })
+
   it('composes the location filter with overlap exclusion', async () => {
     const booked = await makeVehicle({ pickupLocationId: 'loc_osaka' })
     const free = await makeVehicle({ pickupLocationId: 'loc_osaka' })

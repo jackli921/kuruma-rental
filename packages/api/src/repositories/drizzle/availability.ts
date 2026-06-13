@@ -1,5 +1,5 @@
 import { bookings, vehicles } from '@kuruma/shared/db/schema'
-import { type SQL, and, eq, sql } from 'drizzle-orm'
+import { type SQL, and, eq, inArray, sql } from 'drizzle-orm'
 import type { Booking, Vehicle } from '../../stores'
 import type { AvailabilityFilters, AvailabilityRepository } from '../types'
 import { type Db, bookingColumns, toBooking, toVehicle, vehicleColumns } from './shared'
@@ -29,6 +29,15 @@ export class DrizzleAvailabilityRepository implements AvailabilityRepository {
     // invisible to storefront search (§9 item 8). Additive; existing callers
     // pass no filter and scan the whole fleet unchanged.
     if (filters?.locationId) conditions.push(eq(vehicles.pickupLocationId, filters.locationId))
+    // Region scan bound (#394 §7): scope the scan to the region-matched storefront
+    // ids. An EMPTY array means "no location matched" -> zero vehicles; return early
+    // to skip a pointless round-trip. (drizzle's inArray(col, []) already compiles to
+    // `false`/zero rows, so this is also robust if a future driver ever widened on
+    // empty.) Either way it is NEVER a widen to the whole fleet.
+    if (filters?.locationIds) {
+      if (filters.locationIds.length === 0) return []
+      conditions.push(inArray(vehicles.pickupLocationId, filters.locationIds))
+    }
     if (filters?.operatorId) conditions.push(eq(vehicles.operatorId, filters.operatorId))
     if (filters?.classId) conditions.push(eq(vehicles.classId, filters.classId))
 

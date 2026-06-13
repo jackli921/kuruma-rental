@@ -3,8 +3,9 @@ import { type AnyPgColumn, index, integer, pgTable, text, timestamp } from 'driz
 // #394 hierarchical region taxonomy (prefecture -> city -> area). PLATFORM-GLOBAL
 // reference data — NO operatorId: every operator searches the same tree. Adjacency
 // list: `parentId` self-refs `regions.id`; null = a root (a prefecture). Renter
-// search filters by a selected node + all its recursive descendants (WITH RECURSIVE
-// CTE in DrizzleRegionRepository). Names are stored trilingual (the renter UI is
+// search filters by a selected node + all its descendants, resolved by an app-side
+// BFS over a single SELECT (see repositories/region-tree.ts — no DB recursion, the
+// tree is a few dozen rows). Names are stored trilingual (the renter UI is
 // en/ja/zh) so the API stays locale-agnostic and the client picks by route locale.
 //
 // Lives in its own module (not schema.ts) so the aggregate schema file stays under
