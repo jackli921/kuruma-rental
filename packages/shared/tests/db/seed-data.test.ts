@@ -167,6 +167,46 @@ describe('seed-data demo regions (#394)', () => {
       expect(parentIds.has(loc.regionId)).toBe(false)
     }
   })
+
+  // #651 Slice 1 — region coordinates + taxonomy + slugs.
+  const isLeaf = (id: string) => !parentIds.has(id)
+
+  it('types every region by tree position (root=PREFECTURE, leaf=AREA, else CITY)', () => {
+    for (const r of DEMO_REGIONS) {
+      const expected = r.parentId === null ? 'PREFECTURE' : isLeaf(r.id) ? 'AREA' : 'CITY'
+      expect(r.type).toBe(expected)
+    }
+  })
+
+  it('marks a region assignable iff it is an AREA (leaf) node', () => {
+    for (const r of DEMO_REGIONS) expect(r.assignable).toBe(r.type === 'AREA')
+  })
+
+  it('gives every assignable (area) region real coordinates', () => {
+    for (const r of DEMO_REGIONS.filter((r) => r.assignable)) {
+      expect(typeof r.latitude).toBe('number')
+      expect(typeof r.longitude).toBe('number')
+    }
+  })
+
+  it("centres each area region on its anchor location's coordinates", () => {
+    for (const loc of DEMO_LOCATIONS) {
+      const region = regionsById.get(loc.regionId)
+      expect(region?.latitude).toBe(loc.latitude)
+      expect(region?.longitude).toBe(loc.longitude)
+    }
+  })
+
+  it('gives every region a unique, kebab-case slug', () => {
+    const slugs = DEMO_REGIONS.map((r) => r.slug)
+    expect(new Set(slugs).size).toBe(DEMO_REGIONS.length)
+    for (const slug of slugs) expect(slug).toMatch(KEBAB)
+  })
+
+  it('exposes the renter quick-chip slugs (namba / umeda / kix)', () => {
+    const slugs = new Set(DEMO_REGIONS.map((r) => r.slug))
+    for (const chip of ['namba', 'umeda', 'kix']) expect(slugs.has(chip)).toBe(true)
+  })
 })
 
 // Slice 8 §3.3 — ACRISS class taxonomy; no operator has a single-class fleet.
