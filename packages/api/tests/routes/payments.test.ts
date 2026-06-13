@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest'
 import { setupGlobalHandlers } from '../../src/error-handlers'
 import { type UserRole, requireAuth } from '../../src/middleware/auth'
 import { InMemoryBookingRepository } from '../../src/repositories/in-memory/booking'
+import { InMemoryPaymentAnomalyRepository } from '../../src/repositories/in-memory/payment-anomaly'
 import { InMemoryPaymentEventRepository } from '../../src/repositories/in-memory/payment-event'
 import { createPaymentRoutes } from '../../src/routes/payments'
 import { PaymentService } from '../../src/services/payment/payment'
@@ -62,9 +63,13 @@ function setup(role: UserRole = 'RENTER', userId = 'renter-1') {
   const bookingRepo = new InMemoryBookingRepository(bookings)
   const paymentRepo = new InMemoryPaymentEventRepository()
   const gateway = new StubGateway()
-  const service = new PaymentService(paymentRepo, bookingRepo, gateway, {
-    webBaseUrl: 'https://app.example.com',
-  })
+  const service = new PaymentService(
+    paymentRepo,
+    bookingRepo,
+    gateway,
+    new InMemoryPaymentAnomalyRepository(),
+    { webBaseUrl: 'https://app.example.com' },
+  )
   const app = new Hono()
   setupGlobalHandlers(app)
   app.use('*', testAuthMiddleware(userId, role))
@@ -77,9 +82,13 @@ function publicApp() {
   const bookingRepo = new InMemoryBookingRepository(new Map([['bk-1', makeBooking()]]))
   const paymentRepo = new InMemoryPaymentEventRepository()
   const gateway = new StubGateway()
-  const service = new PaymentService(paymentRepo, bookingRepo, gateway, {
-    webBaseUrl: 'https://app.example.com',
-  })
+  const service = new PaymentService(
+    paymentRepo,
+    bookingRepo,
+    gateway,
+    new InMemoryPaymentAnomalyRepository(),
+    { webBaseUrl: 'https://app.example.com' },
+  )
   const app = new Hono()
   setupGlobalHandlers(app)
   app.route('/', createPaymentRoutes(service))
@@ -105,6 +114,7 @@ describe('POST /bookings/:id/checkout-session', () => {
       new InMemoryPaymentEventRepository(),
       bookingRepo,
       new StubGateway(),
+      new InMemoryPaymentAnomalyRepository(),
       { webBaseUrl: 'https://app.example.com' },
     )
     const app = new Hono()

@@ -16,6 +16,7 @@ import type {
   OperatorMembershipRepository,
   OperatorRepository,
   OverviewRepository,
+  PaymentAnomalyRepository,
   PaymentEventRepository,
   PhotoStorage,
   ProviderInviteRepository,
@@ -63,6 +64,7 @@ export type AppOverrides = {
   storefrontRepo?: StorefrontRepository
   regionRepo?: RegionRepository
   paymentEventRepo?: PaymentEventRepository
+  paymentAnomalyRepo?: PaymentAnomalyRepository
   providerInviteRepo?: ProviderInviteRepository
   operatorMembershipRepo?: OperatorMembershipRepository
   // Inject a fake gateway in tests; absent ⇒ the env-resolved Stripe/sentinel.

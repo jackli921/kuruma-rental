@@ -118,6 +118,30 @@ export interface PaymentEvent {
   createdAt: Date
 }
 
+export type PaymentAnomalyKind = 'DOUBLE_PAYMENT' | 'AMOUNT_MISMATCH'
+
+// A verified Stripe charge that needs human review rather than becoming revenue
+// (#508 P2): a duplicate charge on an already-paid booking (DOUBLE_PAYMENT) or an
+// amount/currency that doesn't match the booking snapshot (AMOUNT_MISMATCH). Kept
+// separate from PaymentEvent so revenue (sum of SUCCEEDED payments) is never polluted.
+export interface PaymentAnomaly {
+  id: string
+  // Partner attribution, re-derived from the booking on the webhook — never Stripe metadata.
+  operatorId: string
+  bookingId: string
+  kind: PaymentAnomalyKind
+  stripeEventId: string
+  stripeCheckoutSessionId: string
+  stripePaymentIntentId: string | null
+  // Whole JPY. received = Stripe amount_total (null if Stripe omitted it); expected = booking total at webhook time.
+  receivedAmountJpy: number | null
+  expectedAmountJpy: number | null
+  currency: string | null
+  // NULL until an operator actions it (refunded / dismissed).
+  resolvedAt: Date | null
+  createdAt: Date
+}
+
 export interface Thread {
   id: string
   bookingId: string | null
