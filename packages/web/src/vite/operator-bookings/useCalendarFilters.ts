@@ -2,10 +2,14 @@ import type { OperatorBookingStatus } from '@/vite/operator-bookings/api'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
 // #525 Slice C: vehicle + status filters for the operator calendar. Ported from
-// the frozen Next hook. Persists to localStorage (filters are a per-user view
+// the frozen Next hook. Persists to localStorage (filters are a device-level view
 // preference, not shareable state — so they live here, not in the URL like
-// view/date). Tracks *hidden* items, not visible ones, so a newly added vehicle
-// defaults to visible (an additive fleet change never retroactively hides a car).
+// view/date). The key is per-browser, NOT per-user: on a shared machine the
+// filters carry across sessions. That is acceptable because they only hide/show
+// rows in the operator's own already-authorized view — no data-access implication;
+// namespacing the key by operator id is a follow-up if shared kiosks materialize.
+// Tracks *hidden* items, not visible ones, so a newly added vehicle defaults to
+// visible (an additive fleet change never retroactively hides a car).
 
 const STORAGE_KEY = 'kuruma.calendar.filters'
 const ALL_STATUSES: readonly OperatorBookingStatus[] = [

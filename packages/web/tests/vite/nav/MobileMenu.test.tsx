@@ -68,6 +68,16 @@ describe('MobileMenu', () => {
     )
   })
 
+  it('renders the new-order red-dot badge on a nav item that carries a count (#611)', () => {
+    renderMenu({
+      session,
+      navItems: [{ to: '/$locale/manage/bookings', label: 'Bookings', badge: 3 }],
+    })
+    const badge = screen.getByRole('status')
+    expect(badge).toHaveTextContent('3')
+    expect(badge).toHaveAttribute('aria-label', '3 new bookings')
+  })
+
   it('signs out with the CSRF token then invalidates the session and router', async () => {
     renderMenu({ session, navItems: bookings })
     fireEvent.click(screen.getByText('Log out'))
