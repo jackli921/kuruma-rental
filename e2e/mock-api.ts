@@ -149,6 +149,41 @@ const TEST_FEE_SNAPSHOT = [
   { feeType: 'OVERTIME_HOURLY', unit: 'PER_HOUR', amountJpy: 1000, vehicleClassId: null },
 ]
 
+// Platform-admin partner revenue (#462). GET /admin/revenue returns a fixed
+// report; the spec asserts these exact figures + the 4% model. Authz is proven
+// separately by the adminGuard unit tests + the guard-redirect specs — forbidden
+// roles never reach this route.
+const TEST_ADMIN_REVENUE = {
+  partners: [
+    {
+      operatorId: 'e2e-operator-1',
+      operatorName: 'Best Car Rental',
+      operatorSlug: 'best-car',
+      grossJpy: 250000,
+      platformFeeJpy: 10000,
+      netToPartnerJpy: 240000,
+      paymentCount: 8,
+      months: [
+        {
+          month: '2026-03',
+          grossJpy: 150000,
+          platformFeeJpy: 6000,
+          netToPartnerJpy: 144000,
+          paymentCount: 5,
+        },
+        {
+          month: '2026-02',
+          grossJpy: 100000,
+          platformFeeJpy: 4000,
+          netToPartnerJpy: 96000,
+          paymentCount: 3,
+        },
+      ],
+    },
+  ],
+  totals: { grossJpy: 250000, platformFeeJpy: 10000, netToPartnerJpy: 240000, paymentCount: 8 },
+}
+
 // POST /bookings creates; GET /bookings/:id reads. In-memory so the confirmation
 // page can re-fetch what the form just created (unique ids keep workers isolated).
 const bookings = new Map<string, unknown>()
@@ -192,6 +227,8 @@ Bun.serve({
         csrfToken: 'e2e-csrf-token',
       })
     }
+
+    if (url.pathname === '/admin/revenue') return ok(TEST_ADMIN_REVENUE)
 
     if (url.pathname === '/vehicles') return ok([TEST_VEHICLE])
 

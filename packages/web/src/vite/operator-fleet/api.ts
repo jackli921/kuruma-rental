@@ -167,6 +167,139 @@ export async function deleteVehiclePhoto(
   return unwrap<PhotoDeleteResult>(res)
 }
 
+// --- Vehicle detail (#527) -----------------------------------------------------
+// The single-vehicle drill-down read. Mirrors @kuruma/shared VehicleDetail
+// (which extends VehicleBase) with every date as an ISO string (JSON transport).
+// The catalog fields are a superset of what the edit form needs, so the detail
+// page hands EditVehicleSheet a row via `vehicleRowFromDetail` with no second
+// fetch. The endpoint is tenant-sealed server-side (#527): a foreign or missing
+// vehicle 404s, mapped to null so the route loader can fire notFound().
+
+/** A maintenance log entry as JSON transport (dates = ISO strings). */
+export interface VehicleMaintenanceLogDto {
+  id: string
+  vehicleId: string
+  reason: string
+  notes: string | null
+  costJpy: number | null
+  startedAt: string
+  resolvedAt: string | null
+  createdAt: string
+}
+
+/** An upcoming booking on the detail page (dates = ISO strings). */
+export interface VehicleDetailBookingDto {
+  id: string
+  startAt: string
+  endAt: string
+  renterName: string | null
+  source: 'DIRECT' | 'TRIP_COM' | 'MANUAL' | 'OTHER'
+  status: 'CONFIRMED' | 'ACTIVE'
+}
+
+/** One day's booked-hours bucket for the 30-day utilization strip. */
+export interface DailyUtilizationDto {
+  date: string // YYYY-MM-DD
+  bookedHours: number
+}
+
+/** `GET /vehicles/:id/detail` response (the shared VehicleDetail over JSON). */
+export interface VehicleDetailResponse {
+  id: string
+  operatorId: string
+  classId: string | null
+  pickupLocationId: string | null
+  name: string
+  description: string | null
+  photos: string[]
+  seats: number
+  luggageCapacity: number | null
+  luggageSize: LuggageSize | null
+  transmission: 'AUTO' | 'MANUAL'
+  fuelType: string | null
+  licensePlate: string | null
+  status: VehicleStatus
+  minRentalHours: number | null
+  maxRentalHours: number | null
+  advanceBookingHours: number | null
+  make: string | null
+  model: string | null
+  year: number | null
+  color: string | null
+  dailyRateJpy: number | null
+  hourlyRateJpy: number | null
+  shakenExpiryDate: string | null
+  insuranceExpiryDate: string | null
+  createdAt: string
+  updatedAt: string
+  maintenanceLogs: VehicleMaintenanceLogDto[]
+  upcomingBookings: VehicleDetailBookingDto[]
+  revenueLast7d: number
+  revenueLast30d: number
+  revenueAllTime: number
+  utilizationLast30Days: DailyUtilizationDto[]
+}
+
+export async function fetchVehicleDetail(id: string): Promise<VehicleDetailResponse | null> {
+  const res = await fetch(`${getApiBaseUrl()}/vehicles/${encodeURIComponent(id)}/detail`, {
+    credentials: 'include',
+  })
+  if (res.status === 404) return null
+  return unwrap<VehicleDetailResponse>(res)
+}
+
+export function vehicleDetailQueryOptions(id: string) {
+  return queryOptions({
+    queryKey: ['operator-fleet', 'detail', id],
+    queryFn: () => fetchVehicleDetail(id),
+  })
+}
+
+/**
+ * Adapt the detail DTO to an `OperatorFleetVehicle` so the detail page can reuse
+ * `EditVehicleSheet` without a second fetch. The five fleet-overview-only fields
+ * (`utilization`, `bookingCountLast30Days`, `currentBooking`, `nextBooking`,
+ * `activeMaintenanceReason`) are absent from the detail DTO; the edit form never
+ * reads them, so they are stubbed with neutral values. A lossy, write-path-only
+ * adapter — never feed the result back into a fleet list.
+ */
+export function vehicleRowFromDetail(d: VehicleDetailResponse): OperatorFleetVehicle {
+  return {
+    id: d.id,
+    operatorId: d.operatorId,
+    classId: d.classId,
+    pickupLocationId: d.pickupLocationId,
+    name: d.name,
+    description: d.description,
+    photos: d.photos,
+    seats: d.seats,
+    luggageCapacity: d.luggageCapacity,
+    luggageSize: d.luggageSize,
+    transmission: d.transmission,
+    fuelType: d.fuelType,
+    licensePlate: d.licensePlate,
+    status: d.status,
+    minRentalHours: d.minRentalHours,
+    maxRentalHours: d.maxRentalHours,
+    advanceBookingHours: d.advanceBookingHours,
+    make: d.make,
+    model: d.model,
+    year: d.year,
+    color: d.color,
+    dailyRateJpy: d.dailyRateJpy,
+    hourlyRateJpy: d.hourlyRateJpy,
+    shakenExpiryDate: d.shakenExpiryDate,
+    insuranceExpiryDate: d.insuranceExpiryDate,
+    createdAt: d.createdAt,
+    updatedAt: d.updatedAt,
+    utilization: 0,
+    bookingCountLast30Days: 0,
+    currentBooking: null,
+    nextBooking: null,
+    activeMaintenanceReason: null,
+  }
+}
+
 // Minimal class list for the Add/Edit form's class dropdown — kept here so the
 // form slice (#526 follow-up) reads it without touching the classes feature
 // (#528). Operator-scoped server-side.

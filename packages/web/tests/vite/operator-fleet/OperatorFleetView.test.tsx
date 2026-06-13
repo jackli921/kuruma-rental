@@ -4,9 +4,30 @@ import type { OperatorFleetVehicle } from '@/vite/operator-fleet/api'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
+import type { ReactNode } from 'react'
 import { IntlProvider } from 'use-intl'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import enMessages from '../../../messages/en.json'
+
+// The fleet rows/cards link the vehicle name to its detail route (#527); stub
+// TanStack's Link as a plain anchor so the view renders without a RouterProvider.
+vi.mock('@tanstack/react-router', async () => ({
+  ...(await vi.importActual<typeof import('@tanstack/react-router')>('@tanstack/react-router')),
+  Link: ({
+    to,
+    params,
+    children,
+    ...rest
+  }: {
+    to: string
+    params?: { locale?: string; vehicleId?: string }
+    children: ReactNode
+  }) => (
+    <a href={to} data-to={to} data-vehicle={params?.vehicleId} {...rest}>
+      {children}
+    </a>
+  ),
+}))
 
 // The edit sheet lazily loads vehicle-class options; stub the query so it never
 // hits the network and resolves to an empty list (the form's class dropdown is
@@ -82,7 +103,12 @@ function renderView(
   return render(
     <QueryClientProvider client={queryClient}>
       <IntlProvider locale="en" messages={enMessages}>
-        <OperatorFleetView vehicles={vehicles} classOptions={classOptions} canWrite={canWrite} />
+        <OperatorFleetView
+          vehicles={vehicles}
+          classOptions={classOptions}
+          canWrite={canWrite}
+          locale="en"
+        />
       </IntlProvider>
     </QueryClientProvider>,
   )
@@ -106,6 +132,11 @@ describe('OperatorFleetView', () => {
     expect(screen.getByText('5')).toBeInTheDocument()
     const price = formatVehicleRate(6800, null, { perDay: en.perDay, perHour: en.perHour })
     expect(screen.getByText(price as string)).toBeInTheDocument()
+  })
+
+  it('links the vehicle name to its detail route (#527)', () => {
+    renderView([vehicle({ id: 'v1', name: 'Toyota Aqua' })])
+    expect(screen.getByText('Toyota Aqua').closest('a')).toHaveAttribute('data-vehicle', 'v1')
   })
 
   it('flags an expired sha-ken certificate', () => {

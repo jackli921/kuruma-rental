@@ -27,4 +27,14 @@ export class DrizzlePaymentEventRepository implements PaymentEventRepository {
       .limit(1)
     return row ? toPaymentEvent(row) : null
   }
+
+  // Platform-admin revenue report (#462). Cross-operator by design; the
+  // AdminRevenueService gates the caller before this runs.
+  async listSucceeded(): Promise<PaymentEvent[]> {
+    const rows = await this.db
+      .select(paymentEventColumns)
+      .from(paymentEvents)
+      .where(eq(paymentEvents.status, 'SUCCEEDED'))
+    return rows.map(toPaymentEvent)
+  }
 }

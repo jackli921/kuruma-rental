@@ -58,4 +58,8 @@ export class InMemoryPaymentEventRepository implements PaymentEventRepository {
       null
     )
   }
+
+  async listSucceeded(): Promise<PaymentEvent[]> {
+    return [...this.store.values()].filter((r) => r.status === 'SUCCEEDED')
+  }
 }

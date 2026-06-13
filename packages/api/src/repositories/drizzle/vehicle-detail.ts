@@ -1,7 +1,9 @@
 import { bookings, maintenanceLogs, users, vehicles } from '@kuruma/shared/db/schema'
 import type { MaintenanceLogSummary } from '@kuruma/shared/types/maintenance-log'
 import type { DailyUtilization, VehicleDetail } from '@kuruma/shared/types/vehicle-detail'
-import { and, eq, gt, inArray, ne, sql } from 'drizzle-orm'
+import { type SQL, and, eq, gt, inArray, ne, sql } from 'drizzle-orm'
+import type { CallerContext } from '../../middleware/auth'
+import { operatorReadScope } from '../../tenancy'
 import type { VehicleDetailRepository } from '../types'
 import {
   type Db,
@@ -37,8 +39,12 @@ function dayStart(d: Date): Date {
 export class DrizzleVehicleDetailRepository implements VehicleDetailRepository {
   constructor(private readonly db: Db) {}
 
-  async findVehicleDetail(vehicleId: string, now: Date): Promise<VehicleDetail | undefined> {
-    const vehicleRow = await this.fetchVehicleRow(vehicleId)
+  async findVehicleDetail(
+    ctx: CallerContext,
+    vehicleId: string,
+    now: Date,
+  ): Promise<VehicleDetail | undefined> {
+    const vehicleRow = await this.fetchVehicleRow(ctx, vehicleId)
     if (!vehicleRow) return undefined
     const vehicle = toVehicle(vehicleRow)
 
@@ -63,11 +69,17 @@ export class DrizzleVehicleDetailRepository implements VehicleDetailRepository {
     }
   }
 
-  private async fetchVehicleRow(vehicleId: string) {
-    const rows = await this.db
-      .select(vehicleColumns)
-      .from(vehicles)
-      .where(eq(vehicles.id, vehicleId))
+  // The tenant boundary. An OPERATOR_* caller only resolves a vehicle in its own
+  // tenant; a foreign id returns no row -> the caller gets a 404, never another
+  // operator's data. Once the vehicle is authorised here, the booking/maintenance
+  // sub-reads are keyed by that vehicleId alone (no further operator predicate) —
+  // they can only return data for the already-authorised vehicle.
+  private async fetchVehicleRow(ctx: CallerContext, vehicleId: string) {
+    const scope = operatorReadScope(ctx)
+    if (scope.kind === 'none') return undefined
+    const conditions: SQL[] = [eq(vehicles.id, vehicleId)]
+    if (scope.kind === 'operator') conditions.push(eq(vehicles.operatorId, scope.operatorId))
+    const rows = await this.db.select(vehicleColumns).from(vehicles).where(and(...conditions))
     return rows[0]
   }
 

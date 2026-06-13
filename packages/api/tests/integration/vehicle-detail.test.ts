@@ -145,14 +145,18 @@ async function createBooking(vehicleId: string, overrides: BookingOverrides) {
 
 describe('DrizzleVehicleDetailRepository.findVehicleDetail', () => {
   it('returns undefined for a nonexistent vehicle', async () => {
-    const detail = await detailRepo.findVehicleDetail('00000000-0000-0000-0000-000000000000', NOW)
+    const detail = await detailRepo.findVehicleDetail(
+      SYSTEM_CONTEXT,
+      '00000000-0000-0000-0000-000000000000',
+      NOW,
+    )
     expect(detail).toBeUndefined()
   })
 
   it('returns zeroed aggregates for a vehicle with no bookings or logs', async () => {
     const vehicle = await createVehicle()
 
-    const detail = await detailRepo.findVehicleDetail(vehicle.id, NOW)
+    const detail = await detailRepo.findVehicleDetail(SYSTEM_CONTEXT, vehicle.id, NOW)
 
     expect(detail).toBeDefined()
     expect(detail!.id).toBe(vehicle.id)
@@ -180,7 +184,7 @@ describe('DrizzleVehicleDetailRepository.findVehicleDetail', () => {
       totalPrice: 12000,
     })
 
-    const detail = await detailRepo.findVehicleDetail(vehicle.id, NOW)
+    const detail = await detailRepo.findVehicleDetail(SYSTEM_CONTEXT, vehicle.id, NOW)
 
     expect(detail!.revenueLast7d).toBe(12000)
     expect(detail!.revenueLast30d).toBe(12000)
@@ -200,7 +204,7 @@ describe('DrizzleVehicleDetailRepository.findVehicleDetail', () => {
       totalPrice: 9000,
     })
 
-    const detail = await detailRepo.findVehicleDetail(vehicle.id, NOW)
+    const detail = await detailRepo.findVehicleDetail(SYSTEM_CONTEXT, vehicle.id, NOW)
 
     expect(detail!.revenueLast7d).toBe(0)
     expect(detail!.revenueLast30d).toBe(9000)
@@ -218,7 +222,7 @@ describe('DrizzleVehicleDetailRepository.findVehicleDetail', () => {
       totalPrice: 5000,
     })
 
-    const detail = await detailRepo.findVehicleDetail(vehicle.id, NOW)
+    const detail = await detailRepo.findVehicleDetail(SYSTEM_CONTEXT, vehicle.id, NOW)
 
     expect(detail!.revenueLast7d).toBe(0)
     expect(detail!.revenueLast30d).toBe(0)
@@ -248,7 +252,7 @@ describe('DrizzleVehicleDetailRepository.findVehicleDetail', () => {
       totalPrice: 2345,
     })
 
-    const detail = await detailRepo.findVehicleDetail(vehicle.id, NOW)
+    const detail = await detailRepo.findVehicleDetail(SYSTEM_CONTEXT, vehicle.id, NOW)
 
     // No revenue: neither booking is COMPLETED.
     expect(detail!.revenueLast7d).toBe(0)
@@ -273,7 +277,7 @@ describe('DrizzleVehicleDetailRepository.findVehicleDetail', () => {
       totalPrice: 8000,
     })
 
-    const detail = await detailRepo.findVehicleDetail(vehicle.id, NOW)
+    const detail = await detailRepo.findVehicleDetail(SYSTEM_CONTEXT, vehicle.id, NOW)
 
     expect(detail!.revenueLast7d).toBe(0)
     expect(detail!.revenueLast30d).toBe(0)
@@ -297,7 +301,7 @@ describe('DrizzleVehicleDetailRepository.findVehicleDetail', () => {
       totalPrice: 7000,
     })
 
-    const detail = await detailRepo.findVehicleDetail(vehicle.id, NOW)
+    const detail = await detailRepo.findVehicleDetail(SYSTEM_CONTEXT, vehicle.id, NOW)
 
     const total = detail!.utilizationLast30Days.reduce((s, d) => s + d.bookedHours, 0)
     // overlap from TODAY_START - 29d (inclusive) to TODAY_START - 28d (exclusive)
@@ -354,7 +358,7 @@ describe('DrizzleVehicleDetailRepository.findVehicleDetail', () => {
     `)
 
     try {
-      const detail = await detailRepo.findVehicleDetail(vehicle.id, NOW)
+      const detail = await detailRepo.findVehicleDetail(SYSTEM_CONTEXT, vehicle.id, NOW)
       expect(detail!.maintenanceLogs).toHaveLength(1)
       const log = detail!.maintenanceLogs[0]!
       expect(log.id).toBe(logId)
