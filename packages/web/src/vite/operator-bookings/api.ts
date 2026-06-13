@@ -251,3 +251,31 @@ export function bookingEventsQueryOptions(id: string) {
     queryFn: () => fetchBookingEvents(id),
   })
 }
+
+// #610: operator-only vehicle substitution (故障车换同级别车). Swaps the assigned
+// car for another AVAILABLE vehicle of the same class + pickup location; the
+// server re-validates those rules, re-snapshots totalPrice and appends the
+// VEHICLE_SUBSTITUTED audit event (which the timeline already renders). Cookie-
+// authed + CSRF-gated, so the caller echoes the session token. An empty reason is
+// dropped so the body carries only what the operator supplied.
+export async function substituteBooking(
+  bookingId: string,
+  newVehicleId: string,
+  reason: string,
+  csrfToken: string,
+): Promise<BookingDto> {
+  const trimmedReason = reason.trim()
+  const res = await fetch(
+    `${getApiBaseUrl()}/bookings/${encodeURIComponent(bookingId)}/substitute`,
+    {
+      method: 'POST',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrfToken },
+      body: JSON.stringify({
+        newVehicleId,
+        ...(trimmedReason ? { reason: trimmedReason } : {}),
+      }),
+    },
+  )
+  return unwrap<BookingDto>(res)
+}

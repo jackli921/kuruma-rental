@@ -896,6 +896,21 @@
         "cancelled": "予約がキャンセルされました",
         "cancellationFee": "キャンセル料 {fee}",
         "empty": "イベントはまだありません"
+      },
+      "substitute": {
+        "action": "車両を変更",
+        "dialogTitle": "車両を変更",
+        "dialogDescription": "同じ受取場所にある同クラスの空き車両に入れ替えます。利用者が選んだ車両の記録は保持され、割り当て車両のみ変更されます。",
+        "pickLabel": "代替車両を選択",
+        "vehicleOption": "{name}・{plate}",
+        "reasonLabel": "理由（任意）",
+        "reasonPlaceholder": "例：機械的な不具合",
+        "noCandidates": "この受取場所に利用可能な同クラスの車両がありません。",
+        "submit": "変更する",
+        "cancel": "キャンセル",
+        "error": "車両を変更できませんでした。直前に予約された可能性があります。別の車両をお試しください。",
+        "unavailable": "車両の変更は確定済みまたは利用中の予約でのみ可能です。",
+        "readOnly": "閲覧のみ — この予約を管理するには事業者としてサインインしてください。"
       }
     }
   },

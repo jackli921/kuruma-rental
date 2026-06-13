@@ -896,6 +896,21 @@
         "cancelled": "预订已取消",
         "cancellationFee": "取消费 {fee}",
         "empty": "暂无事件"
+      },
+      "substitute": {
+        "action": "更换车辆",
+        "dialogTitle": "更换车辆",
+        "dialogDescription": "在同一取车点更换为同级别的其他可用车辆。系统保留租客最初的选择，仅更改已分配的车辆。",
+        "pickLabel": "选择替换车辆",
+        "vehicleOption": "{name} · {plate}",
+        "reasonLabel": "原因（可选）",
+        "reasonPlaceholder": "例如：机械故障",
+        "noCandidates": "该取车点没有可用的同级别车辆。",
+        "submit": "更换",
+        "cancel": "取消",
+        "error": "无法更换车辆，可能刚刚被预订。请尝试其他车辆。",
+        "unavailable": "仅确认或进行中的预订可更换车辆。",
+        "readOnly": "仅查看 — 请以运营商身份登录以管理此预订。"
       }
     }
   },

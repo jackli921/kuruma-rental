@@ -896,6 +896,21 @@
         "cancelled": "Booking cancelled",
         "cancellationFee": "Cancellation fee {fee}",
         "empty": "No events yet"
+      },
+      "substitute": {
+        "action": "Substitute vehicle",
+        "dialogTitle": "Substitute vehicle",
+        "dialogDescription": "Swap in another available car of the same class at this pick-up location. The renter's original choice is preserved; only the assigned car changes.",
+        "pickLabel": "Choose a replacement",
+        "vehicleOption": "{name} · {plate}",
+        "reasonLabel": "Reason (optional)",
+        "reasonPlaceholder": "e.g. mechanical fault",
+        "noCandidates": "No same-class car is available at this pick-up location.",
+        "submit": "Substitute",
+        "cancel": "Cancel",
+        "error": "Couldn't substitute the vehicle — it may have just been booked. Try another.",
+        "unavailable": "Substitution is only available for confirmed or active bookings.",
+        "readOnly": "View only — sign in as the operator to manage this booking."
       }
     }
   },

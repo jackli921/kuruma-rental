@@ -1,11 +1,14 @@
 import { PageSkeleton } from '@/vite/PageSkeleton'
 import { BookingTimeline } from '@/vite/operator-bookings/BookingTimeline'
 import { OperatorBookingDetail } from '@/vite/operator-bookings/OperatorBookingDetail'
+import { SubstituteVehicleAction } from '@/vite/operator-bookings/SubstituteVehicleAction'
 import {
   bookingEventsQueryOptions,
   operatorBookingDetailQueryOptions,
   operatorRowFromDetail,
 } from '@/vite/operator-bookings/api'
+import { operatorFleetQueryOptions } from '@/vite/operator-fleet/api'
+import { sessionQueryOptions } from '@/vite/session'
 import { useSuspenseQuery } from '@tanstack/react-query'
 import {
   type ErrorComponentProps,
@@ -29,8 +32,14 @@ export const Route = createFileRoute('/$locale/_business/manage/bookings/$bookin
       operatorBookingDetailQueryOptions(params.bookingId),
     )
     if (!detail) throw notFound()
-    // Warm the timeline cache so the page renders without a second waterfall.
-    await context.queryClient.ensureQueryData(bookingEventsQueryOptions(params.bookingId))
+    // Warm the timeline cache plus the fleet (substitution candidates) and the
+    // session (write gating) so the page — and its Actions panel (#610) — render
+    // without a second waterfall.
+    await Promise.all([
+      context.queryClient.ensureQueryData(bookingEventsQueryOptions(params.bookingId)),
+      context.queryClient.ensureQueryData(operatorFleetQueryOptions()),
+      context.queryClient.ensureQueryData(sessionQueryOptions()),
+    ])
     return { detail }
   },
   pendingComponent: PageSkeleton,
@@ -43,6 +52,8 @@ function TripDetailRoute() {
   const { locale, bookingId } = Route.useParams()
   const { detail } = Route.useLoaderData()
   const { data: events } = useSuspenseQuery(bookingEventsQueryOptions(bookingId))
+  const { data: fleet } = useSuspenseQuery(operatorFleetQueryOptions())
+  const { data: session } = useSuspenseQuery(sessionQueryOptions())
   const row = operatorRowFromDetail(detail)
 
   return (
@@ -61,9 +72,10 @@ function TripDetailRoute() {
             <div className="rounded-xl border border-border py-6">
               <OperatorBookingDetail row={row} booking={detail} locale={locale} />
             </div>
-            {/* Actions reserved for phase 2 (cancel / substitute / status). */}
-            <div className="rounded-xl border border-dashed border-border px-4 py-6">
+            {/* Actions panel: vehicle substitution (#610); cancel / status follow. */}
+            <div className="space-y-4 rounded-xl border border-border px-4 py-6">
               <h2 className="text-sm font-semibold text-muted-foreground">{t('detail.actions')}</h2>
+              <SubstituteVehicleAction booking={detail} fleet={fleet} session={session} />
             </div>
           </section>
           <aside className="rounded-xl border border-border px-4 py-6">

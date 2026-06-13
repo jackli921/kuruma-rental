@@ -10,6 +10,7 @@ import {
   operatorBookingsQueryOptions,
   operatorCalendarQueryOptions,
   operatorRowFromDetail,
+  substituteBooking,
 } from '@/vite/operator-bookings/api'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
@@ -399,5 +400,62 @@ describe('operatorCalendarQueryOptions', () => {
       '2026-07-01',
       '2026-07-31',
     ])
+  })
+})
+
+// Slice 6 (#610): operator vehicle substitution — POST /bookings/:id/substitute,
+// cookie-authed + CSRF-gated, returns the re-assigned booking.
+describe('substituteBooking', () => {
+  it('POSTs to the substitute endpoint with the CSRF header, JSON body and credentials', async () => {
+    const fetchMock = vi.fn(async () => jsonResponse({ success: true, data: detailRaw() }))
+    vi.stubGlobal('fetch', fetchMock)
+
+    await substituteBooking('bk-1', 'veh-9', 'mechanical fault', 'csrf-token')
+
+    const [url, init] = fetchMock.mock.calls[0]!
+    const request = init as RequestInit
+    expect(new URL(url as string, 'http://x').pathname).toBe('/api/bookings/bk-1/substitute')
+    expect(request.method).toBe('POST')
+    expect(request.credentials).toBe('include')
+    expect(new Headers(request.headers).get('X-CSRF-Token')).toBe('csrf-token')
+    expect(JSON.parse(request.body as string)).toEqual({
+      newVehicleId: 'veh-9',
+      reason: 'mechanical fault',
+    })
+  })
+
+  it('omits an empty reason from the body (sends only newVehicleId)', async () => {
+    const fetchMock = vi.fn(async () => jsonResponse({ success: true, data: detailRaw() }))
+    vi.stubGlobal('fetch', fetchMock)
+
+    await substituteBooking('bk-1', 'veh-9', '', 'csrf-token')
+
+    expect(JSON.parse(fetchMock.mock.calls[0]![1]!.body as string)).toEqual({
+      newVehicleId: 'veh-9',
+    })
+  })
+
+  it('returns the re-assigned booking from the envelope', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () =>
+        jsonResponse({ success: true, data: detailRaw({ assignedVehicleId: 'veh-9' }) }),
+      ),
+    )
+
+    const booking = await substituteBooking('bk-1', 'veh-9', '', 't')
+
+    expect(booking).toMatchObject({ id: 'bk-1', assignedVehicleId: 'veh-9' })
+  })
+
+  it('throws ApiError when the replacement was just booked (409)', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () =>
+        jsonResponse({ success: false, error: 'Vehicle is no longer available' }, 409),
+      ),
+    )
+
+    await expect(substituteBooking('bk-1', 'veh-9', '', 't')).rejects.toBeInstanceOf(ApiError)
   })
 })
