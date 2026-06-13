@@ -41,6 +41,7 @@ export function Navbar() {
           { to: '/$locale/manage/locations', label: t('locations') },
           { to: '/$locale/manage/insurance', label: t('insurance') },
           { to: '/$locale/manage/fees', label: t('fees') },
+          { to: '/$locale/manage/add-ons', label: t('addOns') },
         ]
       : session?.user
         ? [{ to: '/$locale/search', label: t('browse') }, ...renterNavItems]

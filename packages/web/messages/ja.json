@@ -64,6 +64,7 @@
     "locations": "拠点",
     "insurance": "保険",
     "fees": "料金",
+    "addOns": "オプション",
     "menu": "メニュー",
     "close": "メニューを閉じる",
     "switchToRenter": "利用者ビューに切替",
@@ -667,6 +668,39 @@
         "setDeductible": "免責額を設定する",
         "deductibleHint": "免責なしのフルカバーの場合はオフのままにします。",
         "deductible": "免責額（円）",
+        "save": "オプションを保存",
+        "saving": "保存中...",
+        "cancel": "キャンセル"
+      }
+    },
+    "addOns": {
+      "title": "オプション",
+      "subtitle": "お客様が予約時に選択できる有料オプションを管理します。",
+      "addOption": "オプションを追加",
+      "addSubtitle": "新しいオプションを作成します。",
+      "editOption": "オプションを編集",
+      "archiveAction": "オプションをアーカイブ",
+      "archiveTitle": "{name} をアーカイブしますか？",
+      "archiveDescription": "このオプションをアーカイブします。一覧には残りますが、新規予約では提供されません。",
+      "archiveConfirm": "アーカイブ",
+      "archiving": "アーカイブ中...",
+      "empty": "まだオプションがありません。最初のオプションを追加してください。",
+      "loadError": "オプションを読み込めませんでした",
+      "retry": "再試行",
+      "status": {
+        "ACTIVE": "有効",
+        "ARCHIVED": "アーカイブ済み"
+      },
+      "row": {
+        "price": "1予約あたり {price}"
+      },
+      "form": {
+        "name": "オプション名",
+        "namePlaceholder": "例：チャイルドシート",
+        "description": "説明",
+        "descriptionPlaceholder": "例：幼児向けの後ろ向きチャイルドシート。",
+        "price": "料金（円）",
+        "priceHint": "お客様がこのオプションを選択した場合、1予約につき1回請求されます。",
         "save": "オプションを保存",
         "saving": "保存中...",
         "cancel": "キャンセル"
