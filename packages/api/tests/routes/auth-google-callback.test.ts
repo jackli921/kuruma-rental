@@ -1,7 +1,7 @@
 import { jwtVerify } from 'jose'
 import { describe, expect, test } from 'vitest'
 import { createAuthRoutes } from '../../src/routes/auth'
-import { TEST_AUTH_SECRET, setupAuthEnv } from '../helpers/auth'
+import { TEST_AUTH_SECRET, oauthFlowCookie, setupAuthEnv } from '../helpers/auth'
 
 const config = {
   clientId: 'cid',
@@ -43,13 +43,21 @@ function getSetCookie(res: Response, name: string): string | undefined {
   return hit ? hit.slice(name.length + 1).split(';')[0] : undefined
 }
 
+/** True when the response expires this flow's per-flow cookie (empty value +
+ *  Max-Age=0) — the one-time flow cookie is cleared on every terminal path (#519). */
+function erasesFlowCookie(res: Response, state: string): boolean {
+  return (res.headers.getSetCookie?.() ?? []).some(
+    (c) => c.startsWith(`kuruma_oauth_flow_${state}=`) && /Max-Age=0/.test(c),
+  )
+}
+
 describe('GET /auth/google/callback', () => {
   test('valid state → exchanges code, resolves user, mints kuruma_session, redirects', async () => {
     setupAuthEnv()
     const { calls, runtime } = makeRuntime()
     const app = createAuthRoutes(config, runtime)
     const res = await app.request('/auth/google/callback?state=s1&code=c1', {
-      headers: { Cookie: 'kuruma_oauth_state=s1' },
+      headers: { Cookie: oauthFlowCookie('s1') },
     })
 
     expect(res.status).toBe(302)
@@ -77,24 +85,23 @@ describe('GET /auth/google/callback', () => {
     expect(payload.email).toBe('jo@ex.com')
     expect(payload.image).toBe('https://pic/jo.png')
 
-    // The one-time state cookie is cleared.
-    const allCookies = res.headers.getSetCookie?.() ?? []
-    expect(allCookies.some((c) => c.startsWith('kuruma_oauth_state=') && /Max-Age=0/.test(c))).toBe(
-      true,
-    )
+    // The one-time flow cookie is cleared.
+    expect(erasesFlowCookie(res, 's1')).toBe(true)
   })
 
-  test('state query does not match the state cookie → 400', async () => {
+  test('state query has no matching flow cookie → 400', async () => {
     setupAuthEnv()
     const { runtime } = makeRuntime()
     const app = createAuthRoutes(config, runtime)
+    // Browser holds flow s1, but the callback returns state=attacker — no cookie
+    // named for that state exists, so the CSRF binding fails closed.
     const res = await app.request('/auth/google/callback?state=attacker&code=c1', {
-      headers: { Cookie: 'kuruma_oauth_state=s1' },
+      headers: { Cookie: oauthFlowCookie('s1') },
     })
     expect(res.status).toBe(400)
   })
 
-  test('missing state cookie → 400', async () => {
+  test('no flow cookie at all → 400', async () => {
     setupAuthEnv()
     const { runtime } = makeRuntime()
     const app = createAuthRoutes(config, runtime)
@@ -102,28 +109,27 @@ describe('GET /auth/google/callback', () => {
     expect(res.status).toBe(400)
   })
 
-  test('valid return cookie → redirects there (not postLoginRedirect) + clears it', async () => {
+  test('valid returnTo in the flow → redirects there (not postLoginRedirect) + clears it', async () => {
     setupAuthEnv()
     const { runtime } = makeRuntime()
     const app = createAuthRoutes(config, runtime)
     const res = await app.request('/auth/google/callback?state=s1&code=c1', {
-      headers: { Cookie: 'kuruma_oauth_state=s1; kuruma_oauth_return=%2Fja%2Fbookings%2Fnew' },
+      headers: { Cookie: oauthFlowCookie('s1', { returnTo: '/ja/bookings/new' }) },
     })
     expect(res.status).toBe(302)
     // returnTo is resolved against the web origin postLoginRedirect targets.
     expect(res.headers.get('location')).toBe('https://web.example.test/ja/bookings/new')
-    const cleared = (res.headers.getSetCookie?.() ?? []).some(
-      (c) => c.startsWith('kuruma_oauth_return=') && /Max-Age=0/.test(c),
-    )
-    expect(cleared).toBe(true)
+    expect(erasesFlowCookie(res, 's1')).toBe(true)
   })
 
-  test('tampered open-redirect return cookie → falls back to postLoginRedirect', async () => {
+  test('tampered open-redirect returnTo in the flow → falls back to postLoginRedirect', async () => {
     setupAuthEnv()
     const { runtime } = makeRuntime()
     const app = createAuthRoutes(config, runtime)
+    // The cookie carries a hostile returnTo; decodeFlowPayload re-validates it
+    // (defence in depth) and drops it, so the callback can't be open-redirected.
     const res = await app.request('/auth/google/callback?state=s1&code=c1', {
-      headers: { Cookie: 'kuruma_oauth_state=s1; kuruma_oauth_return=%2F%2Fevil.com' },
+      headers: { Cookie: oauthFlowCookie('s1', { returnTo: '//evil.com' }) },
     })
     expect(res.status).toBe(302)
     expect(res.headers.get('location')).toBe('https://web.example.test/en/dashboard')
@@ -149,10 +155,7 @@ describe('GET /auth/google/callback', () => {
     }
     const app = createAuthRoutes(config, runtime, providerAccess, findSlug)
     const res = await app.request('/auth/google/callback?state=s1&code=c1', {
-      headers: {
-        Cookie:
-          'kuruma_oauth_state=s1; kuruma_oauth_intent=provider; kuruma_oauth_return=%2Fja%2Fmanage',
-      },
+      headers: { Cookie: oauthFlowCookie('s1', { intent: 'provider', returnTo: '/ja/manage' }) },
     })
     expect(res.status).toBe(302)
     // Server-computed dashboard (locale from returnTo, slug server-derived) wins over returnTo.
@@ -176,7 +179,7 @@ describe('GET /auth/google/callback', () => {
     const providerAccess = { resolve: async () => ({ type: 'access_not_found' as const }) }
     const app = createAuthRoutes(config, runtime, providerAccess, findSlug)
     const res = await app.request('/auth/google/callback?state=s1&code=c1', {
-      headers: { Cookie: 'kuruma_oauth_state=s1; kuruma_oauth_intent=provider' },
+      headers: { Cookie: oauthFlowCookie('s1', { intent: 'provider' }) },
     })
     expect(res.status).toBe(302)
     expect(res.headers.get('location')).toBe(
@@ -209,9 +212,7 @@ describe('GET /auth/google/callback', () => {
     }
     const app = createAuthRoutes(config, runtime, providerAccess, findSlug)
     const res = await app.request('/auth/google/callback?state=s1&code=c1', {
-      headers: {
-        Cookie: 'kuruma_oauth_state=s1; kuruma_oauth_intent=provider; kuruma_oauth_invite=tok123',
-      },
+      headers: { Cookie: oauthFlowCookie('s1', { intent: 'provider', invite: 'tok123' }) },
     })
     expect(res.status).toBe(302)
     expect(res.headers.get('location')).toBe(
@@ -240,10 +241,10 @@ describe('GET /auth/google/callback', () => {
         }),
       },
     }
-    // No intent cookie = renter door; providerAccess never consulted.
+    // No intent in the flow = renter door; providerAccess never consulted.
     const app = createAuthRoutes(config, runtime, undefined, findSlug)
     const res = await app.request('/auth/google/callback?state=s1&code=c1', {
-      headers: { Cookie: 'kuruma_oauth_state=s1' },
+      headers: { Cookie: oauthFlowCookie('s1') },
     })
     expect(res.status).toBe(302)
     expect(res.headers.get('location')).toBe('https://web.example.test/en/dashboard')
@@ -273,7 +274,7 @@ describe('GET /auth/google/callback', () => {
     }
     const app = createAuthRoutes(config, runtime, providerAccess, findSlug)
     const res = await app.request('/auth/google/callback?state=s1&code=c1', {
-      headers: { Cookie: 'kuruma_oauth_state=s1; kuruma_oauth_intent=provider' },
+      headers: { Cookie: oauthFlowCookie('s1', { intent: 'provider' }) },
     })
     expect(res.status).toBe(302)
     expect(res.headers.get('location')).toBe(

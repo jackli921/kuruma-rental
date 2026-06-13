@@ -1,8 +1,10 @@
 import { bookings, users, vehicles } from '@kuruma/shared/db/schema'
 import type { FleetVehicleOverview } from '@kuruma/shared/types/fleet'
-import { and, ne, sql } from 'drizzle-orm'
+import { and, inArray, ne, sql } from 'drizzle-orm'
 import { eq } from 'drizzle-orm'
+import type { CallerContext } from '../../middleware/auth'
 import type { Vehicle } from '../../stores'
+import { operatorReadScope } from '../../tenancy'
 import type { FleetOverviewRepository } from '../types'
 import { type Db, overlapHours, toVehicle, vehicleColumns } from './shared'
 
@@ -17,14 +19,27 @@ const UTILIZATION_WINDOW_MS = 30 * 24 * 60 * 60 * 1000
 export class DrizzleFleetOverviewRepository implements FleetOverviewRepository {
   constructor(private readonly db: Db) {}
 
-  async findFleetOverview(now: Date): Promise<FleetVehicleOverview[]> {
+  async findFleetOverview(ctx: CallerContext, now: Date): Promise<FleetVehicleOverview[]> {
     const windowStart = new Date(now.getTime() - UTILIZATION_WINDOW_MS)
 
-    // Round-trip 1: all vehicles.
-    const vehicleRows = (await this.db.select(vehicleColumns).from(vehicles)).map(toVehicle)
+    // Tenant scope (#594): operators see only their own vehicles; bypass roles
+    // see all; a scoped caller with no tenant sees nothing. Mirrors
+    // DrizzleVehicleRepository.findAll — the repo is the tenant boundary.
+    const scope = operatorReadScope(ctx)
+    if (scope.kind === 'none') return []
+    const vehicleWhere =
+      scope.kind === 'operator' ? eq(vehicles.operatorId, scope.operatorId) : undefined
 
-    // Round-trip 2: bookings we care about -- non-CANCELLED, and either
-    // overlapping the last-30-day window OR starting in the future.
+    // Round-trip 1: this tenant's vehicles.
+    const vehicleRows = (
+      await this.db.select(vehicleColumns).from(vehicles).where(vehicleWhere)
+    ).map(toVehicle)
+    if (vehicleRows.length === 0) return []
+    const vehicleIds = vehicleRows.map((v) => v.id)
+
+    // Round-trip 2: bookings we care about -- constrained to THIS tenant's
+    // vehicles (so no cross-tenant booking row is ever read), non-CANCELLED, and
+    // either overlapping the last-30-day window OR starting in the future.
     // LEFT JOIN users for the renter name.
     const bookingRows = await this.db
       .select({
@@ -40,6 +55,7 @@ export class DrizzleFleetOverviewRepository implements FleetOverviewRepository {
       .leftJoin(users, eq(bookings.renterId, users.id))
       .where(
         and(
+          inArray(bookings.assignedVehicleId, vehicleIds),
           ne(bookings.status, 'CANCELLED'),
           sql`(${bookings.endAt} > ${windowStart.toISOString()} OR ${bookings.startAt} > ${now.toISOString()})`,
         ),

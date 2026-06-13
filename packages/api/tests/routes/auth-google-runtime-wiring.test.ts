@@ -10,7 +10,7 @@ import {
   InMemoryProviderInviteRepository,
   InMemoryVehicleRepository,
 } from '../../src/repositories/in-memory'
-import { TEST_AUTH_SECRET, setupAuthEnv } from '../helpers/auth'
+import { TEST_AUTH_SECRET, oauthFlowCookie, setupAuthEnv } from '../helpers/auth'
 
 // Records what flowed through the boundary so we assert the runtime was actually
 // invoked, not just that some 302 came back.
@@ -70,7 +70,7 @@ describe('createApp wires a googleAuthRuntime override into /auth/google/callbac
     const app = buildApp(runtime)
 
     const res = await app.request('/auth/google/callback?state=s1&code=c1', {
-      headers: { Cookie: 'kuruma_oauth_state=s1' },
+      headers: { Cookie: oauthFlowCookie('s1') },
     })
 
     expect(res.status).toBe(302)
@@ -143,8 +143,7 @@ describe('createApp wires a googleAuthRuntime override into /auth/google/callbac
 
     const res = await app.request('/auth/google/callback?state=s1&code=c1', {
       headers: {
-        Cookie:
-          'kuruma_oauth_state=s1; kuruma_oauth_intent=provider; kuruma_oauth_invite=invite-tok-123',
+        Cookie: oauthFlowCookie('s1', { intent: 'provider', invite: 'invite-tok-123' }),
       },
     })
 

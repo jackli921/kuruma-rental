@@ -5,7 +5,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { IntlProvider } from 'use-intl'
-import { describe, expect, it, vi } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import enMessages from '../../../messages/en.json'
 
 // The edit sheet lazily loads vehicle-class options; stub the query so it never
@@ -69,18 +69,30 @@ function vehicle(overrides: Partial<OperatorFleetVehicle> = {}): OperatorFleetVe
   }
 }
 
-function renderView(vehicles: OperatorFleetVehicle[]) {
+function renderView(
+  vehicles: OperatorFleetVehicle[],
+  classOptions: ReadonlyArray<{ id: string; name: string }> = [],
+  canWrite = true,
+) {
+  // The route prefetches class options and passes them down as a prop, so the
+  // grid groups synchronously with no fetch of its own — the test mirrors that
+  // by handing classOptions straight to the view. canWrite defaults to true (the
+  // operator case); the read-only bypass case is covered by OperatorFleetRoute.test.
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
   return render(
     <QueryClientProvider client={queryClient}>
       <IntlProvider locale="en" messages={enMessages}>
-        <OperatorFleetView vehicles={vehicles} />
+        <OperatorFleetView vehicles={vehicles} classOptions={classOptions} canWrite={canWrite} />
       </IntlProvider>
     </QueryClientProvider>,
   )
 }
 
 describe('OperatorFleetView', () => {
+  // The view mode persists to localStorage; clear it so each test starts in the
+  // default row view with no cross-test bleed.
+  beforeEach(() => window.localStorage.clear())
+
   it('shows the empty state when there are no vehicles', () => {
     renderView([])
     expect(screen.getByText(en.empty)).toBeInTheDocument()
@@ -195,5 +207,77 @@ describe('OperatorFleetView', () => {
     await user.click(screen.getByRole('menuitem', { name: editVehicleLabel }))
 
     expect(await screen.findByLabelText(form.name)).toHaveValue('Toyota Aqua')
+  })
+
+  it('defaults to row view, showing the table columns', () => {
+    renderView([vehicle()])
+    expect(screen.getByText(en.columns.vehicle)).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: en.rowView })).toHaveAttribute('aria-pressed', 'true')
+  })
+
+  it('switches to grid view, grouping vehicles under their class name', async () => {
+    const user = userEvent.setup()
+    renderView(
+      [vehicle({ id: 'a', name: 'Toyota Aqua', classId: 'c1' })],
+      [{ id: 'c1', name: 'Compact' }],
+    )
+
+    await user.click(screen.getByRole('button', { name: en.gridView }))
+
+    expect(screen.getByRole('heading', { name: 'Compact' })).toBeInTheDocument()
+    expect(screen.getByText('Toyota Aqua')).toBeInTheDocument()
+    // The table is gone in grid view.
+    expect(screen.queryByText(en.columns.vehicle)).not.toBeInTheDocument()
+  })
+
+  it('drops a vehicle with no class into the Unassigned group in grid view', async () => {
+    const user = userEvent.setup()
+    renderView(
+      [vehicle({ id: 'a', name: 'Toyota Aqua', classId: null })],
+      [{ id: 'c1', name: 'Compact' }],
+    )
+
+    await user.click(screen.getByRole('button', { name: en.gridView }))
+
+    expect(
+      screen.getByRole('heading', { name: enMessages.business.vehicles.group.unassigned }),
+    ).toBeInTheDocument()
+  })
+
+  it('keeps selection working in grid view', async () => {
+    const user = userEvent.setup()
+    renderView(
+      [vehicle({ id: 'a', name: 'Toyota Aqua', classId: 'c1' })],
+      [{ id: 'c1', name: 'Compact' }],
+    )
+
+    await user.click(screen.getByRole('button', { name: en.gridView }))
+    await user.click(screen.getByRole('checkbox', { name: 'Select Toyota Aqua' }))
+
+    expect(screen.getByText('1 vehicle selected')).toBeInTheDocument()
+  })
+
+  it('grid view is read-only for a bypass role: no checkbox, no actions, cards still list (#598)', async () => {
+    const user = userEvent.setup()
+    renderView(
+      [vehicle({ id: 'a', name: 'Toyota Aqua', classId: 'c1' })],
+      [{ id: 'c1', name: 'Compact' }],
+      false,
+    )
+
+    await user.click(screen.getByRole('button', { name: en.gridView }))
+
+    expect(screen.queryAllByRole('checkbox')).toHaveLength(0)
+    expect(screen.queryAllByRole('button', { name: en.columns.actions })).toHaveLength(0)
+    expect(screen.getByText('Toyota Aqua')).toBeInTheDocument()
+  })
+
+  it('renders the fleet summary counts strip', () => {
+    renderView([
+      vehicle({ id: 'a', status: 'AVAILABLE' }),
+      vehicle({ id: 'b', status: 'MAINTENANCE' }),
+    ])
+    expect(screen.getByText('2 cars')).toBeInTheDocument()
+    expect(screen.getByText('1 maintenance')).toBeInTheDocument()
   })
 })

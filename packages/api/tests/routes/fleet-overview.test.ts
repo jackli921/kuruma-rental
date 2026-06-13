@@ -6,7 +6,7 @@
 
 import { Hono } from 'hono'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { SYSTEM_CONTEXT } from '../../src/middleware/auth'
+import { SYSTEM_CONTEXT, type UserRole } from '../../src/middleware/auth'
 import {
   InMemoryBookingRepository,
   InMemoryFleetOverviewRepository,
@@ -15,6 +15,7 @@ import {
 } from '../../src/repositories/in-memory'
 import { createFleetOverviewRoutes } from '../../src/routes/fleet-overview'
 import { FleetOverviewService } from '../../src/services/fleet-overview'
+import type { Vehicle } from '../../src/stores'
 import { testAuthMiddleware } from '../helpers/auth'
 import { bookingInput } from '../helpers/booking'
 
@@ -195,5 +196,96 @@ describe('GET /vehicles/fleet-overview', () => {
     const body = await res.json()
 
     expect(body.data[0].activeMaintenanceReason).toBeNull()
+  })
+})
+
+// Operator tenant-scoping (#594). The Fleet page in the operator portal calls
+// this endpoint, so a tenant-scoped OPERATOR_* caller must (a) be admitted, not
+// 403'd, and (b) see ONLY their own vehicles — never another operator's. Renters
+// and 3rd-party PARTNER callers must still be rejected.
+describe('GET /vehicles/fleet-overview — operator scoping', () => {
+  type VehicleInput = Omit<Vehicle, 'id' | 'createdAt' | 'updatedAt'>
+  function vehicleInput(overrides: Partial<VehicleInput> = {}): VehicleInput {
+    return {
+      name: 'Car',
+      description: null,
+      photos: [],
+      seats: 5,
+      transmission: 'AUTO',
+      fuelType: null,
+      licensePlate: null,
+      status: 'AVAILABLE',
+      bufferMinutes: 60,
+      minRentalHours: null,
+      maxRentalHours: null,
+      advanceBookingHours: null,
+      dailyRateJpy: 8000,
+      hourlyRateJpy: null,
+      shakenExpiryDate: null,
+      insuranceExpiryDate: null,
+      ...overrides,
+    }
+  }
+
+  function appAs(role: UserRole, operatorId?: string): Hono {
+    const a = new Hono()
+    a.use('*', testAuthMiddleware('caller', role, operatorId))
+    a.route(
+      '/',
+      createFleetOverviewRoutes(
+        new FleetOverviewService(
+          new InMemoryFleetOverviewRepository(
+            vehicleRepo,
+            bookingRepo,
+            new Map(),
+            maintenanceLogRepo,
+          ),
+        ),
+      ),
+    )
+    return a
+  }
+
+  it('admits an OPERATOR_OWNER and returns only their own vehicles', async () => {
+    await vehicleRepo.create(SYSTEM_CONTEXT, vehicleInput({ name: 'A-Car', operatorId: 'op-a' }))
+    await vehicleRepo.create(SYSTEM_CONTEXT, vehicleInput({ name: 'B-Car', operatorId: 'op-b' }))
+
+    const res = await appAs('OPERATOR_OWNER', 'op-a').request('/vehicles/fleet-overview')
+
+    expect(res.status).toBe(200)
+    const body = (await res.json()) as { data: Array<{ name: string }> }
+    expect(body.data.map((v) => v.name)).toEqual(['A-Car'])
+  })
+
+  it('admits an OPERATOR_STAFF and isolates them from another tenant', async () => {
+    await vehicleRepo.create(SYSTEM_CONTEXT, vehicleInput({ name: 'A-Car', operatorId: 'op-a' }))
+    await vehicleRepo.create(SYSTEM_CONTEXT, vehicleInput({ name: 'B-Car', operatorId: 'op-b' }))
+
+    const res = await appAs('OPERATOR_STAFF', 'op-b').request('/vehicles/fleet-overview')
+
+    expect(res.status).toBe(200)
+    const body = (await res.json()) as { data: Array<{ name: string }> }
+    expect(body.data.map((v) => v.name)).toEqual(['B-Car'])
+  })
+
+  it('lets a PLATFORM_ADMIN see every operator’s vehicles (bypass)', async () => {
+    await vehicleRepo.create(SYSTEM_CONTEXT, vehicleInput({ name: 'A-Car', operatorId: 'op-a' }))
+    await vehicleRepo.create(SYSTEM_CONTEXT, vehicleInput({ name: 'B-Car', operatorId: 'op-b' }))
+
+    const res = await appAs('PLATFORM_ADMIN').request('/vehicles/fleet-overview')
+
+    expect(res.status).toBe(200)
+    const body = (await res.json()) as { data: Array<{ name: string }> }
+    expect(body.data.map((v) => v.name).sort()).toEqual(['A-Car', 'B-Car'])
+  })
+
+  it('rejects a RENTER with 403 (never leaks the operator catalog)', async () => {
+    const res = await appAs('RENTER').request('/vehicles/fleet-overview')
+    expect(res.status).toBe(403)
+  })
+
+  it('rejects a PARTNER (3rd-party API caller) with 403', async () => {
+    const res = await appAs('PARTNER').request('/vehicles/fleet-overview')
+    expect(res.status).toBe(403)
   })
 })

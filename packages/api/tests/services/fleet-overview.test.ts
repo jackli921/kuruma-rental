@@ -81,11 +81,17 @@ describe('FleetOverviewService — clock injection', () => {
     )
 
     // "now" = 2026-04-11 — booking is inside the 30-day window
-    const insideWindow = await service.findFleetOverview(new Date('2026-04-11T00:00:00Z'))
+    const insideWindow = await service.findFleetOverview(
+      SYSTEM_CONTEXT,
+      new Date('2026-04-11T00:00:00Z'),
+    )
     expect(insideWindow[0]?.bookingCountLast30Days).toBe(1)
 
     // "now" = 2026-06-01 — booking is outside the 30-day window (ended ~60d ago)
-    const outsideWindow = await service.findFleetOverview(new Date('2026-06-01T00:00:00Z'))
+    const outsideWindow = await service.findFleetOverview(
+      SYSTEM_CONTEXT,
+      new Date('2026-06-01T00:00:00Z'),
+    )
     expect(outsideWindow[0]?.bookingCountLast30Days).toBe(0)
   })
 
@@ -100,10 +106,16 @@ describe('FleetOverviewService — clock injection', () => {
     const end = new Date('2026-05-01T12:00:00Z')
     await seedBooking(bookingRepo, vehicle.id, start, end)
 
-    const duringBooking = await service.findFleetOverview(new Date('2026-05-01T06:00:00Z'))
+    const duringBooking = await service.findFleetOverview(
+      SYSTEM_CONTEXT,
+      new Date('2026-05-01T06:00:00Z'),
+    )
     expect(duringBooking[0]?.currentBooking).not.toBeNull()
 
-    const afterBooking = await service.findFleetOverview(new Date('2026-05-02T00:00:00Z'))
+    const afterBooking = await service.findFleetOverview(
+      SYSTEM_CONTEXT,
+      new Date('2026-05-02T00:00:00Z'),
+    )
     expect(afterBooking[0]?.currentBooking).toBeNull()
   })
 })
