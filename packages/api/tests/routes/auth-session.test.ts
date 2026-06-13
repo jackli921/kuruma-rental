@@ -1,13 +1,23 @@
 import { SignJWT } from 'jose'
-import { describe, expect, test } from 'vitest'
+import { beforeAll, describe, expect, test } from 'vitest'
 import { createApp } from '../../src/index'
 import { TEST_AUTH_SECRET, setupAuthEnv } from '../helpers/auth'
 
 const SESSION_COOKIE = 'kuruma_session'
 
-function createTestApp() {
+// One app per file (#672): bare createApp() builds the full graph; rebuilding it
+// per test multiplied that cost ~11x and, under 2-core CI contention, tipped
+// these tests past the 5s timeout. AUTH_SECRET is read per request, so a single
+// shared instance is safe; the lone build now runs in beforeAll under the hook timeout.
+// Invariant: AUTH_SECRET is asserted once here — never mutate it in a test body,
+// or every test after that one would verify against the wrong secret.
+let app: ReturnType<typeof createApp>
+beforeAll(() => {
   setupAuthEnv()
-  return createApp()
+  app = createApp()
+})
+function createTestApp() {
+  return app
 }
 
 /** Sign a `kuruma_session` cookie JWT. Mirrors the contract the API mints at

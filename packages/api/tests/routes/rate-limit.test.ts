@@ -8,6 +8,13 @@ import {
 } from '../../src/repositories/in-memory'
 import { authHeaders, setupAuthEnv } from '../helpers/auth'
 
+// #672: each test here needs distinct construction-time wiring (per-test limiter
+// overrides; the global-limiter test reads globalThis.RATE_LIMITER at build time),
+// so one-app-per-file reuse isn't clean. Bare createApp() still builds the full
+// graph, which under 2-core CI contention can tip a request past the default 5s
+// timeout — so widen the budget for this file rather than mask it elsewhere.
+vi.setConfig({ testTimeout: 15_000, hookTimeout: 15_000 })
+
 const fakeLimiter = () => ({ limit: vi.fn(async () => ({ success: true })) })
 
 describe('rate limiting wiring', () => {

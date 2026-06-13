@@ -1,11 +1,22 @@
 import { SignJWT } from 'jose'
-import { describe, expect, test } from 'vitest'
+import { beforeAll, describe, expect, test } from 'vitest'
 import { createApp } from '../../src/index'
 import { TEST_AUTH_SECRET, setupAuthEnv } from '../helpers/auth'
 
-function createTestApp() {
+// One app per file (#672): bare createApp() builds the full graph (~30 repos +
+// every service). Rebuilding it per test multiplied that cost ~10x and, under
+// 2-core CI contention, tipped these tests past the 5s timeout. AUTH_SECRET and
+// PARTNER_API_KEY are read per request, so a single shared instance is safe; the
+// lone build now runs in beforeAll under the more generous hook timeout.
+// Invariant: AUTH_SECRET is asserted once here — never mutate it in a test body,
+// or every test after that one would verify against the wrong secret.
+let app: ReturnType<typeof createApp>
+beforeAll(() => {
   setupAuthEnv()
-  return createApp()
+  app = createApp()
+})
+function createTestApp() {
+  return app
 }
 
 async function signJwt(
