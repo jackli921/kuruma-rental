@@ -148,9 +148,7 @@ describe('createApp wires a googleAuthRuntime override into /auth/google/callbac
     })
 
     expect(res.status).toBe(302)
-    expect(res.headers.get('location')).toBe(
-      'https://web.example.test/en/manage/acme-cars/dashboard',
-    )
+    expect(res.headers.get('location')).toBe('https://web.example.test/en/dashboard')
 
     const setCookies = res.headers.getSetCookie?.() ?? []
     const session = setCookies.find((c) => c.startsWith('kuruma_session='))

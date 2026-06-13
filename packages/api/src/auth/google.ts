@@ -102,8 +102,8 @@ export const FALLBACK_LOCALE = 'en'
 /**
  * The locale segment of a validated root-relative path (`/ja/manage` → `ja`), or
  * FALLBACK_LOCALE when the first segment isn't a known locale. Used by the OAuth
- * callback to build provider redirects (`/<locale>/manage/<slug>/dashboard`) whose
- * destination is computed server-side, not carried in returnTo. Input is already
+ * callback to build the provider redirect (`/<locale>/dashboard`) whose destination
+ * is computed server-side, not carried in returnTo. Input is already
  * safeReturnPath-validated, so this only inspects the first segment.
  */
 export function localeFromReturnPath(path: string | undefined): string {

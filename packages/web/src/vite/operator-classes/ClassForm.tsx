@@ -1,6 +1,7 @@
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { NativeSelect } from '@/components/ui/native-select'
 import { Textarea } from '@/components/ui/textarea'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { ACRISS_CODES } from '@kuruma/shared/acriss'
@@ -143,17 +144,13 @@ export function ClassForm(props: ClassFormProps) {
         {/* No setValueAs/blank option here: the class size is REQUIRED (defaults
             to MEDIUM), unlike the per-vehicle override select in VehicleForm
             which carries a blank "inherit" option. Don't harmonize the two. */}
-        <select
-          id="class-luggageSize"
-          className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-xs"
-          {...register('luggageSize')}
-        >
+        <NativeSelect id="class-luggageSize" {...register('luggageSize')}>
           {LUGGAGE_SIZES.map((size) => (
             <option key={size} value={size}>
               {tLuggage(size)}
             </option>
           ))}
-        </select>
+        </NativeSelect>
         {errors.luggageSize && (
           <p className="mt-1 text-sm text-destructive">{errors.luggageSize.message}</p>
         )}
@@ -162,14 +159,10 @@ export function ClassForm(props: ClassFormProps) {
       <div className="grid grid-cols-2 gap-4">
         <div>
           <Label htmlFor="class-transmission">{t('form.transmission')}</Label>
-          <select
-            id="class-transmission"
-            className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-xs"
-            {...register('transmission')}
-          >
+          <NativeSelect id="class-transmission" {...register('transmission')}>
             <option value="AUTO">{t('form.transmissionAuto')}</option>
             <option value="MANUAL">{t('form.transmissionManual')}</option>
-          </select>
+          </NativeSelect>
         </div>
         <div>
           <Label htmlFor="class-fuelType">{t('form.fuelType')}</Label>
@@ -183,9 +176,8 @@ export function ClassForm(props: ClassFormProps) {
 
       <div>
         <Label htmlFor="class-acrissCode">{t('form.acrissCode')}</Label>
-        <select
+        <NativeSelect
           id="class-acrissCode"
-          className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-xs"
           {...register('acrissCode', { setValueAs: nullableString })}
         >
           <option value="">{t('form.acrissCodeNone')}</option>
@@ -194,7 +186,7 @@ export function ClassForm(props: ClassFormProps) {
               {tAcriss(code)}
             </option>
           ))}
-        </select>
+        </NativeSelect>
         {errors.acrissCode && (
           <p className="mt-1 text-sm text-destructive">{errors.acrissCode.message}</p>
         )}

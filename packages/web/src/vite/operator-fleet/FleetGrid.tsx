@@ -9,6 +9,13 @@ interface FleetGridProps {
   readonly vehicles: readonly OperatorFleetVehicle[]
   readonly classOptions: readonly VehicleClassOption[]
   readonly selectedIds: readonly string[]
+  // Top-level select-all over every visible vehicle, mirroring the row view's
+  // header control (#596). allSelected/someSelected are computed by the parent.
+  readonly allSelected: boolean
+  readonly someSelected: boolean
+  readonly onToggleAll: () => void
+  // Per-group select-all: toggles a whole class on/off together (#596).
+  readonly onToggleGroup: (ids: readonly string[]) => void
   readonly onToggleSelect: (id: string) => void
   readonly onEdit: (vehicle: OperatorFleetVehicle) => void
   // False for bypass roles: cards drop their checkbox + actions (#598).
@@ -26,12 +33,17 @@ export function FleetGrid({
   vehicles,
   classOptions,
   selectedIds,
+  allSelected,
+  someSelected,
+  onToggleAll,
+  onToggleGroup,
   onToggleSelect,
   onEdit,
   canWrite,
   todayIso,
 }: FleetGridProps) {
   const t = useTranslations('business.vehicles.group')
+  const tBulk = useTranslations('business.vehicles.bulk')
 
   const groups = useMemo(() => {
     const classNames = new Map(classOptions.map((c) => [c.id, c.name]))
@@ -51,27 +63,62 @@ export function FleetGrid({
 
   return (
     <div className="min-w-0 flex-1 space-y-6">
+      {canWrite && (
+        <label className="-mx-1 flex items-center gap-2 px-1 font-medium text-muted-foreground text-sm">
+          <input
+            type="checkbox"
+            ref={(el) => {
+              if (el) el.indeterminate = someSelected
+            }}
+            aria-label={tBulk('selectAll')}
+            checked={allSelected}
+            onChange={onToggleAll}
+            className="shrink-0"
+          />
+          {tBulk('selectAll')}
+        </label>
+      )}
       {groups.map((group) => {
         const key = group.classId ?? UNASSIGNED_KEY
         const isCollapsed = collapsed.has(key)
+        // `vehicles` is already filtered to visible rows by the container, so
+        // these ids are always visible and reading raw `selectedIds` (not the
+        // parent's effectiveSelectedIds) can't pick up a stale hidden selection.
+        const ids = group.vehicles.map((v) => v.id)
+        const groupAll = ids.length > 0 && ids.every((id) => selectedIds.includes(id))
+        const groupSome = !groupAll && ids.some((id) => selectedIds.includes(id))
         return (
           <section key={key} aria-label={group.className}>
-            <button
-              type="button"
-              onClick={() => toggle(key)}
-              aria-expanded={!isCollapsed}
-              className="-mx-1 mb-4 flex w-full items-center gap-2 rounded-sm border-border border-b px-1 pb-2 text-left transition-colors hover:bg-muted/30"
-            >
-              {isCollapsed ? (
-                <ChevronRight className="size-4 shrink-0 text-muted-foreground" />
-              ) : (
-                <ChevronDown className="size-4 shrink-0 text-muted-foreground" />
+            <div className="-mx-1 mb-4 flex items-center gap-2 rounded-sm border-border border-b px-1 pb-2">
+              {canWrite && (
+                <input
+                  type="checkbox"
+                  ref={(el) => {
+                    if (el) el.indeterminate = groupSome
+                  }}
+                  aria-label={tBulk('selectGroup', { group: group.className })}
+                  checked={groupAll}
+                  onChange={() => onToggleGroup(ids)}
+                  className="shrink-0"
+                />
               )}
-              <h2 className="flex-1 font-semibold text-lg tracking-tight">{group.className}</h2>
-              <span className="text-muted-foreground text-sm tabular-nums">
-                {t('vehicleCount', { count: group.vehicles.length })}
-              </span>
-            </button>
+              <button
+                type="button"
+                onClick={() => toggle(key)}
+                aria-expanded={!isCollapsed}
+                className="flex flex-1 items-center gap-2 rounded-sm text-left transition-colors hover:bg-muted/30"
+              >
+                {isCollapsed ? (
+                  <ChevronRight className="size-4 shrink-0 text-muted-foreground" />
+                ) : (
+                  <ChevronDown className="size-4 shrink-0 text-muted-foreground" />
+                )}
+                <h2 className="flex-1 font-semibold text-lg tracking-tight">{group.className}</h2>
+                <span className="text-muted-foreground text-sm tabular-nums">
+                  {t('vehicleCount', { count: group.vehicles.length })}
+                </span>
+              </button>
+            </div>
             {!isCollapsed && (
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
                 {group.vehicles.map((vehicle) => (

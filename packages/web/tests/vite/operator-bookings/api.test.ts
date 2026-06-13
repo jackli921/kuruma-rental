@@ -4,12 +4,13 @@ import {
   bookingEventsQueryOptions,
   fetchBookingEvents,
   fetchCalendarBookings,
+  fetchCalendarVehicles,
   fetchOperatorBookingDetail,
-  fetchOperatorBookings,
   operatorBookingDetailQueryOptions,
-  operatorBookingsQueryOptions,
   operatorCalendarQueryOptions,
+  operatorCalendarVehiclesQueryOptions,
   operatorRowFromDetail,
+  substituteBooking,
 } from '@/vite/operator-bookings/api'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
@@ -20,126 +21,8 @@ function jsonResponse(body: unknown, status = 200): Response {
   })
 }
 
-const rawBooking = (over: Record<string, unknown> = {}) => ({
-  id: 'bk-1',
-  operatorId: 'op-1',
-  renterId: 'r-1',
-  assignedVehicleId: 'veh-1',
-  bookingCode: 'ABCD2345',
-  status: 'CONFIRMED',
-  startAt: '2026-07-01T01:00:00.000Z',
-  endAt: '2026-07-03T01:00:00.000Z',
-  totalPrice: 24000,
-  vehicle: { name: 'Toyota Aqua', photos: ['a.jpg'] },
-  renter: { id: 'r-1', name: 'Jane', email: 'jane@example.com', language: 'en' },
-  ...over,
-})
-
 afterEach(() => {
   vi.restoreAllMocks()
-})
-
-describe('fetchOperatorBookings', () => {
-  it('requests the operator-scoped list expanding vehicle and renter, with credentials', async () => {
-    const fetchMock = vi.fn(async () => jsonResponse({ success: true, data: [], nextCursor: null }))
-    vi.stubGlobal('fetch', fetchMock)
-
-    await fetchOperatorBookings()
-
-    const [url, init] = fetchMock.mock.calls[0]!
-    const parsed = new URL(url as string, 'http://x')
-    expect(parsed.pathname).toBe('/api/bookings')
-    expect(parsed.searchParams.get('expand')).toBe('vehicle,renter')
-    expect((init as RequestInit).credentials).toBe('include')
-  })
-
-  it('maps the envelope to rows (code, status, range, total, vehicle name, renter)', async () => {
-    vi.stubGlobal(
-      'fetch',
-      vi.fn(async () => jsonResponse({ success: true, data: [rawBooking()], nextCursor: null })),
-    )
-
-    const rows = await fetchOperatorBookings()
-
-    expect(rows).toEqual([
-      {
-        id: 'bk-1',
-        bookingCode: 'ABCD2345',
-        status: 'CONFIRMED',
-        startAt: '2026-07-01T01:00:00.000Z',
-        endAt: '2026-07-03T01:00:00.000Z',
-        totalPrice: 24000,
-        vehicleName: 'Toyota Aqua',
-        renter: { id: 'r-1', name: 'Jane', email: 'jane@example.com' },
-      },
-    ])
-  })
-
-  it('passes through an optional status filter', async () => {
-    const fetchMock = vi.fn(async () => jsonResponse({ success: true, data: [], nextCursor: null }))
-    vi.stubGlobal('fetch', fetchMock)
-
-    await fetchOperatorBookings({ status: 'ACTIVE' })
-
-    const parsed = new URL(fetchMock.mock.calls[0]![0] as string, 'http://x')
-    expect(parsed.searchParams.get('status')).toBe('ACTIVE')
-  })
-
-  it('normalizes a missing vehicle expansion to null', async () => {
-    vi.stubGlobal(
-      'fetch',
-      vi.fn(async () =>
-        jsonResponse({
-          success: true,
-          data: [rawBooking({ vehicle: undefined })],
-          nextCursor: null,
-        }),
-      ),
-    )
-
-    const [row] = await fetchOperatorBookings()
-    expect(row!.vehicleName).toBeNull()
-  })
-
-  it('normalizes a missing renter expansion to null', async () => {
-    vi.stubGlobal(
-      'fetch',
-      vi.fn(async () =>
-        jsonResponse({
-          success: true,
-          data: [rawBooking({ renter: undefined })],
-          nextCursor: null,
-        }),
-      ),
-    )
-
-    const [row] = await fetchOperatorBookings()
-    expect(row!.renter).toBeNull()
-  })
-
-  it('throws ApiError on a failure envelope', async () => {
-    vi.stubGlobal(
-      'fetch',
-      vi.fn(async () => jsonResponse({ success: false, error: 'Unauthorized' }, 401)),
-    )
-
-    await expect(fetchOperatorBookings()).rejects.toBeInstanceOf(ApiError)
-  })
-})
-
-describe('operatorBookingsQueryOptions', () => {
-  it('keys by the operator-bookings list and the status + limit filters', () => {
-    expect(operatorBookingsQueryOptions().queryKey).toEqual([
-      'operator-bookings',
-      undefined,
-      undefined,
-    ])
-    expect(operatorBookingsQueryOptions({ status: 'ACTIVE', limit: 50 }).queryKey).toEqual([
-      'operator-bookings',
-      'ACTIVE',
-      50,
-    ])
-  })
 })
 
 // #549: the deep-linked trip-detail page reads the single booking WITH expansion
@@ -399,5 +282,114 @@ describe('operatorCalendarQueryOptions', () => {
       '2026-07-01',
       '2026-07-31',
     ])
+  })
+})
+
+// #525: the calendar reads the operator's own vehicles ({id,name}) from the
+// tenant-scoped GET /vehicles for its day-view columns + sidebar filter. It must
+// degrade to [] on failure so a vehicle-list error never blanks the bookings.
+
+describe('fetchCalendarVehicles', () => {
+  it('requests the operator vehicles with a bounded limit and credentials', async () => {
+    const fetchMock = vi.fn(async () => jsonResponse({ success: true, data: [] }))
+    vi.stubGlobal('fetch', fetchMock)
+
+    await fetchCalendarVehicles()
+
+    const [url, init] = fetchMock.mock.calls[0]!
+    const parsed = new URL(url as string, 'http://x')
+    expect(parsed.pathname).toBe('/api/vehicles')
+    expect(parsed.searchParams.get('limit')).toBe('100')
+    expect((init as RequestInit).credentials).toBe('include')
+  })
+
+  it('maps rows to {id, name} only', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () =>
+        jsonResponse({
+          success: true,
+          data: [{ id: 'veh-1', name: 'Toyota Aqua', status: 'ACTIVE', seats: 5 }],
+        }),
+      ),
+    )
+
+    const vehicles = await fetchCalendarVehicles()
+    expect(vehicles).toEqual([{ id: 'veh-1', name: 'Toyota Aqua' }])
+  })
+
+  it('degrades to [] on a failure envelope (must not blank the calendar)', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => jsonResponse({ success: false, error: 'Forbidden' }, 403)),
+    )
+
+    expect(await fetchCalendarVehicles()).toEqual([])
+  })
+
+  it('degrades to [] when the request itself rejects (network error)', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => {
+        throw new TypeError('network down')
+      }),
+    )
+
+    expect(await fetchCalendarVehicles()).toEqual([])
+  })
+})
+
+describe('operatorCalendarVehiclesQueryOptions', () => {
+  it('keys by the calendar vehicles list', () => {
+    expect(operatorCalendarVehiclesQueryOptions().queryKey).toEqual([
+      'operator-bookings',
+      'calendar',
+      'vehicles',
+    ])
+  })
+})
+
+// #610: operator vehicle substitution. POST /bookings/:id/substitute swaps the
+// assigned car for another AVAILABLE same-class, same-location vehicle. Cookie +
+// CSRF-gated (global csrf()), so the caller echoes the session CSRF token.
+describe('substituteBooking', () => {
+  it('POSTs the substitute endpoint with the new vehicle id, reason, csrf header and credentials', async () => {
+    const fetchMock = vi.fn(async () => jsonResponse({ success: true, data: detailRaw() }))
+    vi.stubGlobal('fetch', fetchMock)
+
+    await substituteBooking('bk-1', 'veh-2', 'engine fault', 'csrf-tok')
+
+    const [url, init] = fetchMock.mock.calls[0]!
+    const parsed = new URL(url as string, 'http://x')
+    expect(parsed.pathname).toBe('/api/bookings/bk-1/substitute')
+    const request = init as RequestInit
+    expect(request.method).toBe('POST')
+    expect(request.credentials).toBe('include')
+    expect((request.headers as Record<string, string>)['X-CSRF-Token']).toBe('csrf-tok')
+    expect(JSON.parse(request.body as string)).toEqual({
+      newVehicleId: 'veh-2',
+      reason: 'engine fault',
+    })
+  })
+
+  it('omits the reason field when none is given (schema reason is optional)', async () => {
+    const fetchMock = vi.fn(async () => jsonResponse({ success: true, data: detailRaw() }))
+    vi.stubGlobal('fetch', fetchMock)
+
+    await substituteBooking('bk-1', 'veh-2', null, 'csrf-tok')
+
+    const body = JSON.parse((fetchMock.mock.calls[0]![1] as RequestInit).body as string)
+    expect(body).toEqual({ newVehicleId: 'veh-2' })
+  })
+
+  it('throws ApiError on a domain failure (e.g. 409 replacement just booked)', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => jsonResponse({ success: false, error: 'Vehicle already booked' }, 409)),
+    )
+
+    await expect(substituteBooking('bk-1', 'veh-2', null, 'csrf-tok')).rejects.toBeInstanceOf(
+      ApiError,
+    )
   })
 })
