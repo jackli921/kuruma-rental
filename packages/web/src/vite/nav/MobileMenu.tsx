@@ -21,6 +21,7 @@ export type NavTo =
   | '/$locale/manage/locations'
   | '/$locale/manage/insurance'
   | '/$locale/manage/fees'
+  | '/$locale/manage/add-ons'
   | '/$locale/search'
   | '/$locale/documents'
 
