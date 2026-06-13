@@ -289,7 +289,11 @@ export interface FleetOverviewRepository {
   // `now` is injected so time-based cutoffs (utilization window,
   // current/upcoming filtering) live in callers, not infrastructure.
   // Tests can pass a fixed Date without faking the global clock.
-  findFleetOverview(now: Date): Promise<FleetVehicleOverview[]>
+  //
+  // `ctx` carries the caller's tenant scope (#594): OPERATOR_* see only their
+  // own vehicles; bypass roles (PLATFORM_ADMIN / legacy STAFF/ADMIN) see all.
+  // The route gates out RENTER/PARTNER before this is reached.
+  findFleetOverview(ctx: CallerContext, now: Date): Promise<FleetVehicleOverview[]>
 }
 
 /**

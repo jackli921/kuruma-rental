@@ -79,7 +79,7 @@ describe('InMemoryFleetOverviewRepository', () => {
   it('returns 0% utilization and null bookings for a vehicle with no bookings', async () => {
     const vehicle = await vehicleRepo.create(SYSTEM_CONTEXT, baseVehicleInput({ name: 'Unbooked' }))
 
-    const overviews = await fleetRepo.findFleetOverview(FIXED_NOW)
+    const overviews = await fleetRepo.findFleetOverview(SYSTEM_CONTEXT, FIXED_NOW)
     const overview = overviews[0]
 
     expect(overviews).toHaveLength(1)
@@ -108,7 +108,7 @@ describe('InMemoryFleetOverviewRepository', () => {
       }),
     )
 
-    const [overview] = await fleetRepo.findFleetOverview(FIXED_NOW)
+    const [overview] = await fleetRepo.findFleetOverview(SYSTEM_CONTEXT, FIXED_NOW)
 
     expect(overview!.utilization).toBe(0)
     expect(overview!.bookingCountLast30Days).toBe(0)
@@ -134,7 +134,7 @@ describe('InMemoryFleetOverviewRepository', () => {
       }),
     )
 
-    const [overview] = await fleetRepo.findFleetOverview(FIXED_NOW)
+    const [overview] = await fleetRepo.findFleetOverview(SYSTEM_CONTEXT, FIXED_NOW)
 
     expect(overview!.bookingCountLast30Days).toBe(1)
     expect(overview!.utilization).toBeCloseTo((24 / (30 * 24)) * 100, 5)
@@ -157,7 +157,7 @@ describe('InMemoryFleetOverviewRepository', () => {
       }),
     )
 
-    const [overview] = await fleetRepo.findFleetOverview(FIXED_NOW)
+    const [overview] = await fleetRepo.findFleetOverview(SYSTEM_CONTEXT, FIXED_NOW)
 
     expect(overview!.currentBooking).not.toBeNull()
     expect(overview!.currentBooking!.startAt).toEqual(new Date('2026-04-11T09:00:00Z'))
@@ -193,7 +193,7 @@ describe('InMemoryFleetOverviewRepository', () => {
       }),
     )
 
-    const [overview] = await fleetRepo.findFleetOverview(FIXED_NOW)
+    const [overview] = await fleetRepo.findFleetOverview(SYSTEM_CONTEXT, FIXED_NOW)
 
     expect(overview!.currentBooking).toBeNull()
     expect(overview!.nextBooking).not.toBeNull()
@@ -227,7 +227,7 @@ describe('InMemoryFleetOverviewRepository', () => {
       }),
     )
 
-    const [overview] = await fleetRepo.findFleetOverview(FIXED_NOW)
+    const [overview] = await fleetRepo.findFleetOverview(SYSTEM_CONTEXT, FIXED_NOW)
 
     expect(overview!.currentBooking).toBeNull()
     expect(overview!.nextBooking).toBeNull()
@@ -253,7 +253,7 @@ describe('InMemoryFleetOverviewRepository', () => {
       }),
     )
 
-    const [overview] = await fleetRepo.findFleetOverview(FIXED_NOW)
+    const [overview] = await fleetRepo.findFleetOverview(SYSTEM_CONTEXT, FIXED_NOW)
 
     expect(overview!.currentBooking!.renterName).toBe('Alice Smith')
   })
@@ -283,7 +283,7 @@ describe('InMemoryFleetOverviewRepository', () => {
       }),
     )
 
-    const [overview] = await fleetRepo.findFleetOverview(FIXED_NOW)
+    const [overview] = await fleetRepo.findFleetOverview(SYSTEM_CONTEXT, FIXED_NOW)
 
     expect(overview!.bookingCountLast30Days).toBe(1)
     expect(overview!.utilization).toBeCloseTo((240 / (30 * 24)) * 100, 5)
@@ -314,7 +314,7 @@ describe('InMemoryFleetOverviewRepository', () => {
       }),
     )
 
-    const [overview] = await fleetRepo.findFleetOverview(FIXED_NOW)
+    const [overview] = await fleetRepo.findFleetOverview(SYSTEM_CONTEXT, FIXED_NOW)
 
     expect(overview!.bookingCountLast30Days).toBe(1)
     expect(overview!.utilization).toBeCloseTo((2 / (30 * 24)) * 100, 5)
@@ -330,7 +330,7 @@ describe('InMemoryFleetOverviewRepository', () => {
       baseVehicleInput({ name: 'Second', dailyRateJpy: null, hourlyRateJpy: 1200 }),
     )
 
-    const overviews = await fleetRepo.findFleetOverview(FIXED_NOW)
+    const overviews = await fleetRepo.findFleetOverview(SYSTEM_CONTEXT, FIXED_NOW)
 
     expect(overviews).toHaveLength(2)
     const first = overviews.find((o) => o.id === v1.id)
