@@ -58,6 +58,9 @@ export function EditClassDialog({ vehicleClass, onOpenChange }: EditClassDialogP
               photos: vehicleClass.photos,
               seats: vehicleClass.seats,
               luggageCapacity: vehicleClass.luggageCapacity,
+              // Null only for legacy classes predating #457 — let the form's
+              // MEDIUM default fill in rather than seeding the select with null.
+              ...(vehicleClass.luggageSize != null && { luggageSize: vehicleClass.luggageSize }),
               transmission: vehicleClass.transmission,
               ...(vehicleClass.fuelType != null && { fuelType: vehicleClass.fuelType }),
               ...(vehicleClass.acrissCode != null && { acrissCode: vehicleClass.acrissCode }),

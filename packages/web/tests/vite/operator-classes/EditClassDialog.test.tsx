@@ -58,6 +58,11 @@ describe('EditClassDialog', () => {
     expect(screen.getByLabelText('Slug')).toHaveValue('compact')
   })
 
+  it('prefills the luggage size from the selected class', () => {
+    renderDialog(makeClass({ luggageSize: 'LARGE' }))
+    expect(screen.getByLabelText('Luggage size')).toHaveValue('LARGE')
+  })
+
   it('PATCHes the class id with the edited fields, invalidates, and closes', async () => {
     vi.mocked(updateOperatorClass).mockResolvedValue(makeClass({ name: 'Compact Plus' }))
     const { onOpenChange, invalidate } = renderDialog(makeClass({ id: 'c-42' }))

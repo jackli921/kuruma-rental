@@ -1,5 +1,6 @@
 import type { NavItem } from '@/vite/nav/MobileMenu'
 import { Navbar } from '@/vite/nav/Navbar'
+import { businessNavItems } from '@/vite/nav/business-nav-items'
 import type { Session } from '@/vite/session'
 import { useSession } from '@/vite/session'
 import { render, screen } from '@testing-library/react'
@@ -125,7 +126,12 @@ describe('Navbar', () => {
     const client = screen.getByTestId('navbar-client')
     expect(client).toHaveAttribute('data-view-mode', 'business')
     expect(client).toHaveAttribute('data-can-switch', 'true')
-    expect(screen.getByTestId('mobile-menu')).toHaveAttribute('data-nav-count', '8')
+    // Derived from the shared source of truth, not a magic number — adding a
+    // /manage/* route to businessNavItems keeps this assertion correct (#603).
+    expect(screen.getByTestId('mobile-menu')).toHaveAttribute(
+      'data-nav-count',
+      String(businessNavItems.length),
+    )
   })
 
   it('shows Browse, My Bookings, and Documents (no business markers) for a signed-in renter', () => {

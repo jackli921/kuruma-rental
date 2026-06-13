@@ -4,6 +4,7 @@ import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { ACRISS_CODES } from '@kuruma/shared/acriss'
+import { LUGGAGE_SIZES } from '@kuruma/shared/lib/luggage'
 import {
   type CreateVehicleClassInput,
   type UpdateVehicleClassInput,
@@ -52,6 +53,8 @@ export function ClassForm(props: ClassFormProps) {
   const t = useTranslations('business.classes')
   // ACRISS labels live under the top-level `acriss.*` namespace.
   const tAcriss = useTranslations('acriss')
+  // Luggage-size option labels live under the top-level `luggageSize.*` namespace.
+  const tLuggage = useTranslations('luggageSize')
 
   const {
     register,
@@ -67,6 +70,7 @@ export function ClassForm(props: ClassFormProps) {
       description: '',
       seats: 5,
       luggageCapacity: 2,
+      luggageSize: 'MEDIUM',
       transmission: 'AUTO',
       fuelType: '',
       photos: [],
@@ -132,6 +136,27 @@ export function ClassForm(props: ClassFormProps) {
             <p className="mt-1 text-sm text-destructive">{errors.luggageCapacity.message}</p>
           )}
         </div>
+      </div>
+
+      <div>
+        <Label htmlFor="class-luggageSize">{t('form.luggageSize')}</Label>
+        {/* No setValueAs/blank option here: the class size is REQUIRED (defaults
+            to MEDIUM), unlike the per-vehicle override select in VehicleForm
+            which carries a blank "inherit" option. Don't harmonize the two. */}
+        <select
+          id="class-luggageSize"
+          className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-xs"
+          {...register('luggageSize')}
+        >
+          {LUGGAGE_SIZES.map((size) => (
+            <option key={size} value={size}>
+              {tLuggage(size)}
+            </option>
+          ))}
+        </select>
+        {errors.luggageSize && (
+          <p className="mt-1 text-sm text-destructive">{errors.luggageSize.message}</p>
+        )}
       </div>
 
       <div className="grid grid-cols-2 gap-4">

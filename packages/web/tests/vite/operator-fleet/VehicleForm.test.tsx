@@ -169,6 +169,45 @@ describe('VehicleForm', () => {
     expect(mockedCreate).not.toHaveBeenCalled()
   })
 
+  it('create mode: submits the chosen luggage override (size + capacity)', async () => {
+    const user = userEvent.setup()
+    mockedCreate.mockResolvedValue(existingVehicle())
+    renderForm()
+
+    await user.type(screen.getByLabelText(en.name), 'Honda Fit')
+    await user.type(screen.getByLabelText(en.dailyRate), '7500')
+    await user.selectOptions(screen.getByLabelText(en.luggageSize), 'LARGE')
+    await user.type(screen.getByLabelText(en.luggageCapacity), '3')
+    await user.click(screen.getByRole('button', { name: en.save }))
+
+    await waitFor(() => expect(mockedCreate).toHaveBeenCalledTimes(1))
+    expect(mockedCreate).toHaveBeenCalledWith(
+      expect.objectContaining({ luggageSize: 'LARGE', luggageCapacity: 3 }),
+    )
+  })
+
+  it('create mode: a blank luggage override submits null (inherit from class)', async () => {
+    const user = userEvent.setup()
+    mockedCreate.mockResolvedValue(existingVehicle())
+    renderForm()
+
+    await user.type(screen.getByLabelText(en.name), 'Honda Fit')
+    await user.type(screen.getByLabelText(en.dailyRate), '7500')
+    await user.click(screen.getByRole('button', { name: en.save }))
+
+    await waitFor(() => expect(mockedCreate).toHaveBeenCalledTimes(1))
+    expect(mockedCreate).toHaveBeenCalledWith(
+      expect.objectContaining({ luggageSize: null, luggageCapacity: null }),
+    )
+  })
+
+  it('edit mode: pre-fills the luggage override from the vehicle', () => {
+    renderForm({ vehicle: existingVehicle({ luggageSize: 'LARGE', luggageCapacity: 4 }) })
+
+    expect((screen.getByLabelText(en.luggageSize) as HTMLSelectElement).value).toBe('LARGE')
+    expect((screen.getByLabelText(en.luggageCapacity) as HTMLInputElement).value).toBe('4')
+  })
+
   it('invalidates the fleet query and fires onSaved after a successful create', async () => {
     const user = userEvent.setup()
     mockedCreate.mockResolvedValue(existingVehicle())
