@@ -2,6 +2,7 @@ import { createHash, randomBytes } from 'node:crypto'
 import type { getDb } from './index'
 import { parsePlatformAdminEmails } from './platform-admins'
 import {
+  addOnOptions,
   feeSchedules,
   insuranceOptions,
   locations,
@@ -12,6 +13,7 @@ import {
   vehicles,
 } from './schema'
 import {
+  DEMO_ADD_ON_OPTIONS,
   DEMO_FEE_SCHEDULES,
   DEMO_INSURANCE_OPTIONS,
   DEMO_LOCATIONS,
@@ -215,6 +217,30 @@ export async function seed(db: ReturnType<typeof getDb>) {
       })
   }
 
+  // 6b. Add-on options (#509 demo polish). Operator-owned paid extras the renter
+  // picks in the wizard's "extras" step; only operators are FK-referenced (§3).
+  console.log(`Seeding ${DEMO_ADD_ON_OPTIONS.length} add-on options...`)
+  for (const addOn of DEMO_ADD_ON_OPTIONS) {
+    await db
+      .insert(addOnOptions)
+      .values({
+        id: seedId(addOn.id),
+        operatorId: seedId(addOn.operatorId),
+        name: addOn.name,
+        description: addOn.description,
+        priceJpy: addOn.priceJpy,
+      })
+      .onConflictDoUpdate({
+        target: addOnOptions.id,
+        set: {
+          name: addOn.name,
+          description: addOn.description,
+          priceJpy: addOn.priceJpy,
+          updatedAt: now,
+        },
+      })
+  }
+
   // 7. Fee schedules (slice 4b). Per-class rows seal to a class of the same
   // operator (fee_schedules_operator_class_fk) — classes are already seeded (§4).
   console.log(`Seeding ${DEMO_FEE_SCHEDULES.length} fee schedules...`)
@@ -321,6 +347,7 @@ export async function seed(db: ReturnType<typeof getDb>) {
   console.log(
     `\nSeeded ${DEMO_OPERATORS.length} operators, ${DEMO_LOCATIONS.length} locations, ` +
       `${DEMO_VEHICLE_CLASSES.length} classes, ${DEMO_VEHICLES.length} vehicles, ` +
-      `${DEMO_INSURANCE_OPTIONS.length} insurance options, ${DEMO_FEE_SCHEDULES.length} fee schedules.`,
+      `${DEMO_INSURANCE_OPTIONS.length} insurance options, ${DEMO_ADD_ON_OPTIONS.length} add-on options, ` +
+      `${DEMO_FEE_SCHEDULES.length} fee schedules.`,
   )
 }

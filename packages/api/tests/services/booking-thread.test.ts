@@ -22,8 +22,9 @@ import type {
   ThreadRepository,
   TransactionRepos,
 } from '../../src/repositories/types'
-import { BookingService, type CreateBookingInput } from '../../src/services/booking'
+import { BookingService } from '../../src/services/booking'
 import { BookingPostCommitDispatcher } from '../../src/services/booking-post-commit-dispatcher'
+import type { CreateBookingInput } from '../../src/services/booking-types'
 import { makeEnsureThread } from '../../src/services/ensure-thread'
 import type { Thread, User, Vehicle } from '../../src/stores'
 

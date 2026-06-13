@@ -1,10 +1,10 @@
 import { SubstituteVehicleDialog } from '@/vite/operator-bookings/SubstituteVehicleDialog'
 import * as api from '@/vite/operator-bookings/api'
 import {
+  type SubstitutionCandidate,
   bookingEventsQueryOptions,
   operatorBookingDetailQueryOptions,
 } from '@/vite/operator-bookings/api'
-import type { OperatorFleetVehicle } from '@/vite/operator-fleet/api'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
@@ -14,45 +14,11 @@ import enMessages from '../../../messages/en.json'
 
 const sub = enMessages.bookings.operator.detail.substitute
 
-function candidate(over: Partial<OperatorFleetVehicle> = {}): OperatorFleetVehicle {
-  return {
-    id: 'veh-2',
-    operatorId: 'op-1',
-    classId: 'cls-1',
-    pickupLocationId: 'loc-1',
-    name: 'Toyota Aqua',
-    description: null,
-    photos: [],
-    seats: 5,
-    luggageCapacity: 2,
-    luggageSize: 'MEDIUM',
-    transmission: 'AUTO',
-    fuelType: null,
-    licensePlate: 'OSAKA 5678',
-    status: 'AVAILABLE',
-    minRentalHours: null,
-    maxRentalHours: null,
-    advanceBookingHours: null,
-    make: null,
-    model: null,
-    year: null,
-    color: null,
-    dailyRateJpy: 8000,
-    hourlyRateJpy: null,
-    shakenExpiryDate: null,
-    insuranceExpiryDate: null,
-    createdAt: '2026-01-01T00:00:00.000Z',
-    updatedAt: '2026-01-01T00:00:00.000Z',
-    utilization: 0,
-    bookingCountLast30Days: 0,
-    currentBooking: null,
-    nextBooking: null,
-    activeMaintenanceReason: null,
-    ...over,
-  }
+function candidate(over: Partial<SubstitutionCandidate> = {}): SubstitutionCandidate {
+  return { id: 'veh-2', name: 'Toyota Aqua', licensePlate: 'OSAKA 5678', ...over }
 }
 
-function renderDialog(candidates: OperatorFleetVehicle[], queryClient = new QueryClient()) {
+function renderDialog(candidates: SubstitutionCandidate[], queryClient = new QueryClient()) {
   return render(
     <QueryClientProvider client={queryClient}>
       <IntlProvider locale="en" messages={enMessages}>

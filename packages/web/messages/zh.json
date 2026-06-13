@@ -901,8 +901,20 @@
           "noCandidates": "该取车点暂无可用的同级别车辆。",
           "submit": "确认更换",
           "cancel": "取消",
-          "error": "无法更换车辆，该车辆可能刚被预订。",
-          "unavailable": "仅确认或进行中的预订可更换车辆。"
+          "error": "无法更换车辆，该车辆可能刚被预订。"
+        },
+        "markActive": "标记为已取车",
+        "markCompleted": "标记为已还车",
+        "settled": "该预订已结束，暂无可执行的操作。",
+        "statusError": "无法更新预订状态，请重试。",
+        "cancelBooking": {
+          "action": "取消预订",
+          "dialogTitle": "确定取消此预订吗？",
+          "dialogDescription": "系统将通知租客，并可能根据距取车时间的长短收取取消费用。此操作无法撤销。",
+          "confirm": "确认取消",
+          "pending": "正在取消…",
+          "keep": "保留预订",
+          "error": "无法取消该预订，请重试。"
         }
       },
       "timeline": {
