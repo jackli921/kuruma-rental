@@ -34,7 +34,12 @@ await $`docker run -d --name ${CONTAINER} -e POSTGRES_USER=kuruma -e POSTGRES_PA
 
 console.log('[e2e] waiting for postgres to accept connections...')
 for (let attempt = 1; ; attempt++) {
-  const ready = await $`docker exec ${CONTAINER} pg_isready -U kuruma -d kuruma_e2e`
+  // Probe over TCP (-h), not the default unix socket: postgres:16 runs a
+  // temporary socket-only init server during bootstrap that answers pg_isready
+  // before the real TCP server is up. A socket probe races migrate (which
+  // connects over TCP) and intermittently loses; a TCP probe only passes once
+  // the real server accepts connections.
+  const ready = await $`docker exec ${CONTAINER} pg_isready -h 127.0.0.1 -U kuruma -d kuruma_e2e`
     .nothrow()
     .quiet()
   if (ready.exitCode === 0) break
