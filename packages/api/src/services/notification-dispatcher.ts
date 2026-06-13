@@ -26,7 +26,10 @@ type Kind = NotificationLog['kind']
  */
 export type LifecycleTrigger = 'CREATED' | 'SUBSTITUTED' | 'CANCELLED' | 'ACTIVATED' | 'COMPLETED'
 
-const TRIGGER_KINDS: Record<LifecycleTrigger, Kind[]> = {
+// Exported for the parity test (#720): a renamed enum can leave this hand-map
+// stale, surfacing only as a missing renter notification in prod. Adding a new
+// trigger fails to compile via the Record type; the test guards the rename vector.
+export const TRIGGER_KINDS: Record<LifecycleTrigger, Kind[]> = {
   CREATED: ['RENTER_BOOKING_CONFIRM', 'OPERATOR_BOOKING_ALERT'],
   SUBSTITUTED: ['RENTER_SUBSTITUTION'],
   CANCELLED: ['RENTER_CANCELLATION'],
