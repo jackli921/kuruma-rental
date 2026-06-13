@@ -71,6 +71,9 @@ export type AppOverrides = {
   photoUploadLimiter?: RateLimitBinding
   photoUploadUserLimiter?: RateLimitBinding
   publicCatalogLimiter?: RateLimitBinding
+  // Over-limit ⇒ the geocoder skips the lookup (#574). Inject a deny-binding in
+  // tests; absent ⇒ the globalThis-resolved GEOCODE_LIMITER (or unthrottled dev).
+  geocodeLimiter?: RateLimitBinding
   // Injected Google OAuth runtime (provider + account store). Integration tests
   // pass a fake so the callback can be exercised without a live Google/DB.
   googleAuthRuntime?: GoogleAuthRuntime

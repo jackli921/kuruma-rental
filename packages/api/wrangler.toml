@@ -52,6 +52,20 @@ namespace_id = "1004"
 simple.limit = 30
 simple.period = 60
 
+# Global app-side throttle for forward geocoding (#574). OSM/Nominatim's policy
+# caps the WHOLE app at 1 req/s; the geocoder keys every lookup by one constant
+# ("geocode:global") so this is a single shared bucket, not per-IP. period must be
+# 10 or 60 (CF native limiter), so 1/10s is the tightest legal setting and stays
+# safely under 1 req/s. Best-effort only — the CF limiter is per-colo (per edge
+# region), not cross-region consistent, and a fixed window can admit 2 across a
+# boundary; dev/local has no binding (unthrottled). The production provider's own
+# server-side limit (e.g. LocationIQ) is the real guarantee.
+[[ratelimits]]
+name = "GEOCODE_LIMITER"
+namespace_id = "1005"
+simple.limit = 1
+simple.period = 10
+
 # R2 bucket for vehicle photo uploads — DISABLED.
 # R2 is not enabled on the current Cloudflare account (blocked on #304 account
 # migration). Re-enable by uncommenting once R2 is provisioned:
