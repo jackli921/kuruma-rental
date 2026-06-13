@@ -1,0 +1,78 @@
+name: CI (neon driver lane)
+
+# Guards the production neon-serverless interactive-transaction wiring (#493)
+# WITHOUT using Neon (#496): a local postgres fronted by a Neon proxy exercises
+# the exact runTx (neon-serverless WebSocket) + getDb (neon-http) code path.
+# Separate workflow so the path filter scopes ONLY this lane (ci.yml untouched).
+#
+# Runs on trunk pushes and on PRs that touch the tx wiring, the drizzle repos,
+# this lane, OR the serverless driver version (a @neondatabase/serverless bump
+# is exactly the #493 regression class, so package.json / bun.lock must trigger).
+on:
+  push:
+    branches: [marketplace-pivot, main]
+  pull_request:
+    branches: [marketplace-pivot, main]
+    paths:
+      - packages/shared/src/db/**
+      - packages/api/src/repositories/drizzle/**
+      - packages/api/tests/neon/**
+      - drizzle.config.ts
+      - "**/package.json"
+      - bun.lock
+      - .github/workflows/ci-neon.yml
+
+# Supersede in-flight runs on the same ref: this lane boots Docker containers,
+# so cancelling stale commits saves runner minutes under heavy parallel-PR load.
+concurrency:
+  group: ci-neon-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  BUN_VERSION: "1.2.13"
+
+jobs:
+  neon-tx:
+    runs-on: ubuntu-latest
+
+    env:
+      COMPOSE_FILE: packages/api/tests/neon/docker-compose.ci.yml
+      # Migrations connect directly (drizzle-kit, standard pg protocol); the test
+      # routes through the proxy via the localhost-host neonConfig override.
+      DATABASE_URL: postgres://kuruma:kuruma@localhost:5432/kuruma_neon
+      NEON_TEST_DATABASE_URL: postgres://kuruma:kuruma@localhost:5432/kuruma_neon
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: ${{ env.BUN_VERSION }}
+
+      - run: bun install --frozen-lockfile
+
+      - name: Start local postgres + Neon proxy
+        run: docker compose -f "$COMPOSE_FILE" up -d --wait
+
+      # Migrations connect directly to postgres (healthy after --wait) and don't
+      # need the proxy. Run them before the proxy-wait so a proxy startup failure
+      # can't mask a migration/postgres problem in the logs.
+      - name: Apply migrations against the local postgres
+        run: bun run db:migrate
+
+      - name: Wait for proxy on :4444
+        # The proxy image defines no healthcheck, so `--wait` only guarantees the
+        # container is running, not accepting connections. Poll the port from the
+        # host before the test connects (avoids a startup race).
+        run: timeout 60 bash -c 'until (echo > /dev/tcp/localhost/4444) 2>/dev/null; do sleep 1; done'
+
+      - name: Run the neon-serverless tx lane via the local proxy
+        run: bun run --filter @kuruma/api test:neon
+
+      - name: Dump container logs on failure
+        if: failure()
+        run: docker compose -f "$COMPOSE_FILE" logs
+
+      - name: Tear down the stack
+        if: always()
+        run: docker compose -f "$COMPOSE_FILE" down -v

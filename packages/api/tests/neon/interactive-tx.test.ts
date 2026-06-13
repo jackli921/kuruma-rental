@@ -7,10 +7,12 @@ import { threadParticipants, threads, users } from '@kuruma/shared/db/schema'
 // at runtime -> 500 on CF Workers. This test exercises that exact write
 // through the SAME getDb() wiring production uses (no harness override).
 //
-// Requires a NON-PROD Neon branch in NEON_TEST_DATABASE_URL (never production
-// — see reference_neon-branches). Self-skips otherwise, so it stays out of the
-// unit lane and the docker-Postgres integration lane (neon-serverless can't
-// speak to local Postgres).
+// Set NEON_TEST_DATABASE_URL to run it; self-skips otherwise, so it stays out
+// of the unit lane and the docker-Postgres integration lane. Two ways to run:
+//   - CI (#496): a localhost URL + the local Neon proxy in docker-compose.ci.yml
+//     — exercises this exact serverless driver path with ZERO Neon usage.
+//   - Real Neon: a NON-PROD branch URL (never production — see
+//     reference_neon-branches), driven over secure WebSocket.
 import { neonConfig } from '@neondatabase/serverless'
 import { eq, inArray } from 'drizzle-orm'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
@@ -23,6 +25,20 @@ const NEON_URL = process.env.NEON_TEST_DATABASE_URL
 // Node/vitest has no global WebSocket (verified on Node 20); the serverless
 // driver needs one. Production runs on CF Workers where WebSocket is global.
 neonConfig.webSocketConstructor = ws
+
+// Local-proxy mode (#496): when NEON_TEST_DATABASE_URL points at localhost, the
+// CI stack (docker-compose.ci.yml) fronts a local postgres with a Neon proxy on
+// :4444, so this lane exercises the production neon-serverless tx path with ZERO
+// Neon usage and no secrets. Any other host = a real Neon branch over secure WS.
+// NOTE: the local lane does NOT reproduce prod's pooled-endpoint (`-pooler`)
+// requirement — that is an operational guard, not the driver code-path #493
+// protects.
+if (NEON_URL && new URL(NEON_URL).hostname === 'localhost') {
+  const proxyPort = process.env.NEON_PROXY_PORT ?? '4444'
+  neonConfig.useSecureWebSocket = false
+  neonConfig.wsProxy = (host) => `${host}:${proxyPort}/v2`
+  neonConfig.fetchEndpoint = (host) => `http://${host}:${proxyPort}/sql`
+}
 
 const ctx = (userId: string): CallerContext => ({ userId, role: 'RENTER' })
 

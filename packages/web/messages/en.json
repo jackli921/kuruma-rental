@@ -163,11 +163,16 @@
   "business": {
     "dashboard": {
       "title": "Dashboard",
-      "subtitle": "Overview of your rental business"
+      "subtitle": "Overview of your rental business",
+      "viewBookings": "View bookings",
+      "manageFleet": "Manage fleet",
+      "loadError": "Couldn't load your dashboard.",
+      "retry": "Retry"
     },
     "stats": {
       "totalBookings": "Total Bookings",
       "activeVehicles": "Active Vehicles",
+      "upcomingBookings": "Upcoming Bookings",
       "totalCustomers": "Total Customers",
       "unreadMessages": "Unread Messages"
     },
