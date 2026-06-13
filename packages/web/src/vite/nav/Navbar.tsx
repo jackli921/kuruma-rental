@@ -3,6 +3,7 @@ import { cn } from '@/lib/utils'
 import { LocaleSwitcher } from '@/vite/nav/LocaleSwitcher'
 import { MobileMenu, type NavItem } from '@/vite/nav/MobileMenu'
 import { NavbarClient } from '@/vite/nav/NavbarClient'
+import { businessNavItems } from '@/vite/nav/business-nav-items'
 import { useSession } from '@/vite/session'
 import { getViewMode, isBusiness } from '@/vite/view-mode'
 import { Link } from '@tanstack/react-router'
@@ -33,16 +34,7 @@ export function Navbar() {
 
   const navItems: readonly NavItem[] =
     viewMode === 'business'
-      ? [
-          { to: '/$locale/dashboard', label: t('dashboard') },
-          { to: '/$locale/manage/bookings', label: t('bookings') },
-          { to: '/$locale/manage/fleet', label: t('fleet') },
-          { to: '/$locale/manage/classes', label: t('classes') },
-          { to: '/$locale/manage/locations', label: t('locations') },
-          { to: '/$locale/manage/insurance', label: t('insurance') },
-          { to: '/$locale/manage/fees', label: t('fees') },
-          { to: '/$locale/manage/add-ons', label: t('addOns') },
-        ]
+      ? businessNavItems.map((item) => ({ to: item.to, label: t(item.labelKey) }))
       : session?.user
         ? [{ to: '/$locale/search', label: t('browse') }, ...renterNavItems]
         : []

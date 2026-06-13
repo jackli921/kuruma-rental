@@ -2,6 +2,7 @@ import { Button, buttonVariants } from '@/components/ui/button'
 import { Separator } from '@/components/ui/separator'
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from '@/components/ui/sheet'
 import { cn } from '@/lib/utils'
+import type { BusinessNavTo } from '@/vite/nav/business-nav-items'
 import { type Session, signOut } from '@/vite/session'
 import { useQueryClient } from '@tanstack/react-query'
 import { Link, useRouter } from '@tanstack/react-router'
@@ -10,20 +11,11 @@ import { useState } from 'react'
 import { useLocale, useTranslations } from 'use-intl'
 
 // `to` is a literal union of real routes so the typed TanStack <Link> compiles;
-// a plain `string` here would fail typecheck. Renter nav (#543) adds Browse
-// (-> public search) and Documents alongside My Bookings.
-export type NavTo =
-  | '/$locale/dashboard'
-  | '/$locale/bookings'
-  | '/$locale/manage/bookings'
-  | '/$locale/manage/fleet'
-  | '/$locale/manage/classes'
-  | '/$locale/manage/locations'
-  | '/$locale/manage/insurance'
-  | '/$locale/manage/fees'
-  | '/$locale/manage/add-ons'
-  | '/$locale/search'
-  | '/$locale/documents'
+// a plain `string` here would fail typecheck. The business-view routes come from
+// the shared `businessNavItems` array (#603) so the union can't drift from the
+// list Navbar renders; the renter routes (#543: Browse + Documents alongside My
+// Bookings) are listed inline since they aren't part of the operator portal.
+export type NavTo = BusinessNavTo | '/$locale/bookings' | '/$locale/search' | '/$locale/documents'
 
 export interface NavItem {
   readonly to: NavTo
