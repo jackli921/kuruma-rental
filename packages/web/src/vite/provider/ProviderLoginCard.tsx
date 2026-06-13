@@ -3,7 +3,7 @@ import { GoogleIcon } from '@/vite/auth/GoogleIcon'
 import { useTranslations } from 'use-intl'
 
 interface ProviderLoginCardProps {
-  /** A sanitised local path (the locale-scoped `/manage` landing) forwarded to
+  /** A sanitised local path (the locale-scoped operator dashboard) forwarded to
    *  the API. For provider intent the callback overrides it with the computed
    *  operator dashboard (§6), so it is only a fallback. */
   readonly returnTo: string

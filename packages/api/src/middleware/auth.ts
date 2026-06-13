@@ -180,6 +180,20 @@ export function requireManagementRead(ctx: CallerContext): void {
 }
 
 /**
+ * Gate for PLATFORM-level reads that span every operator — the #462 admin
+ * revenue tab. Admits only platform-admin-equivalent roles (`STAFF_ROLES` =
+ * STAFF / ADMIN / PLATFORM_ADMIN), the exact set the web `_admin` portal admits.
+ * Deliberately EXCLUDES OPERATOR_* (a tenant must never see another partner's
+ * revenue) and RENTER / PARTNER. Note this is narrower than `bypassScope`, which
+ * also covers PARTNER (Trip.com) — a 3rd-party caller must not read revenue.
+ */
+export function requirePlatformRead(ctx: CallerContext): void {
+  if (!STAFF_ROLES.has(ctx.role)) {
+    throw new ForbiddenError('platform admin scope required')
+  }
+}
+
+/**
  * Thrown by repo-layer guards when a non-authorised caller hits a
  * protected method. The global error handler maps this to a 403 response
  * so a bypassed route-level gate surfaces as a policy denial, not a 500.

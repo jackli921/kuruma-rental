@@ -2,6 +2,7 @@ import { Button, buttonVariants } from '@/components/ui/button'
 import { Separator } from '@/components/ui/separator'
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from '@/components/ui/sheet'
 import { cn } from '@/lib/utils'
+import { NavBadge } from '@/vite/nav/NavBadge'
 import type { BusinessNavTo } from '@/vite/nav/business-nav-items'
 import { type Session, signOut } from '@/vite/session'
 import { useQueryClient } from '@tanstack/react-query'
@@ -20,6 +21,8 @@ export type NavTo = BusinessNavTo | '/$locale/bookings' | '/$locale/search' | '/
 export interface NavItem {
   readonly to: NavTo
   readonly label: string
+  // #611: optional red-dot count (the operator "new orders" alert on Bookings).
+  readonly badge?: number
 }
 
 interface MobileMenuProps {
@@ -64,9 +67,12 @@ export function MobileMenu({ session, navItems }: MobileMenuProps) {
               to={item.to}
               params={{ locale }}
               onClick={() => setOpen(false)}
-              className="px-3 py-2 rounded-md text-sm font-medium text-foreground hover:bg-accent transition-colors"
+              className="flex items-center px-3 py-2 rounded-md text-sm font-medium text-foreground hover:bg-accent transition-colors"
             >
               {item.label}
+              {item.badge ? (
+                <NavBadge count={item.badge} label={t('nav.newBookings', { count: item.badge })} />
+              ) : null}
             </Link>
           ))}
         </nav>

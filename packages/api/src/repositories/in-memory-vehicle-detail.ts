@@ -3,7 +3,7 @@ import type {
   VehicleDetail,
   VehicleDetailBooking,
 } from '@kuruma/shared/types/vehicle-detail'
-import { SYSTEM_CONTEXT } from '../middleware/auth'
+import { type CallerContext, SYSTEM_CONTEXT } from '../middleware/auth'
 import type { Booking } from '../stores'
 import type {
   BookingRepository,
@@ -40,10 +40,18 @@ export class InMemoryVehicleDetailRepository implements VehicleDetailRepository 
     private readonly maintenanceLogRepo?: MaintenanceLogRepository,
   ) {}
 
-  async findVehicleDetail(vehicleId: string, now: Date): Promise<VehicleDetail | undefined> {
-    const vehicle = await this.vehicleRepo.findById(SYSTEM_CONTEXT, vehicleId)
+  async findVehicleDetail(
+    ctx: CallerContext,
+    vehicleId: string,
+    now: Date,
+  ): Promise<VehicleDetail | undefined> {
+    // Tenant boundary: the scoped findById returns undefined for a foreign-tenant
+    // (or scope-less operator) caller, so a 404 — never a cross-tenant read.
+    const vehicle = await this.vehicleRepo.findById(ctx, vehicleId)
     if (!vehicle) return undefined
 
+    // Sub-reads are keyed by the already-authorised vehicleId, so SYSTEM_CONTEXT
+    // here cannot leak across tenants (mirrors the Drizzle repo's raw selects).
     const allBookings = await this.bookingRepo.findAll(SYSTEM_CONTEXT, { vehicleId })
 
     const maintenanceLogs = this.maintenanceLogRepo

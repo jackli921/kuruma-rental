@@ -1,14 +1,18 @@
 import { Hono } from 'hono'
-import { STAFF_ROLES, requireUser } from '../middleware/auth'
+import { MANAGEMENT_READ_ROLES, requireUser, toCallerContext } from '../middleware/auth'
 import type { VehicleDetailService } from '../services/vehicle-detail'
 import { fail, ok } from './helpers'
 
 export function createVehicleDetailRoutes(service: VehicleDetailService) {
   return new Hono().get('/vehicles/:id/detail', async (c) => {
+    // Admit STAFF roles AND tenant-scoped operators (MANAGEMENT_READ_ROLES); the
+    // repo is the tenant boundary, so an operator only sees its own vehicle —
+    // a foreign-tenant id resolves to undefined -> 404, never a cross-tenant leak
+    // (same fix class as fleet-overview #594). RENTER / PARTNER are excluded.
     const user = requireUser(c)
-    if (!STAFF_ROLES.has(user.role)) return fail(c, 'Forbidden', 403)
+    if (!MANAGEMENT_READ_ROLES.has(user.role)) return fail(c, 'Forbidden', 403)
 
-    const detail = await service.findVehicleDetail(c.req.param('id'))
+    const detail = await service.findVehicleDetail(toCallerContext(user), c.req.param('id'))
     if (!detail) {
       return fail(c, 'Vehicle not found', 404)
     }

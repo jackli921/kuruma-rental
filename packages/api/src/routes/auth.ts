@@ -202,15 +202,13 @@ export function createAuthRoutes(
       )
       setSessionCookie(c, token)
 
-      // Provider intent lands on the server-computed operator dashboard: the slug is
-      // server-derived, so it can't be steered by returnTo. The slug is guaranteed
-      // present here — the bail above already failed the path closed otherwise.
+      // Provider intent lands on the operator dashboard. The destination is computed
+      // server-side (locale only, never steered by returnTo); the portal is tenant
+      // scoped by the session's operatorId, so the slug isn't part of the URL — the
+      // slug bail above stays as an integrity gate on the resolved grant.
       if (intent === 'provider') {
         return c.redirect(
-          new URL(
-            `/${locale}/manage/${operatorSlug}/dashboard`,
-            googleConfig.postLoginRedirect,
-          ).toString(),
+          new URL(`/${locale}/dashboard`, googleConfig.postLoginRedirect).toString(),
           302,
         )
       }

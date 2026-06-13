@@ -67,6 +67,9 @@ export interface PaymentEventRepository {
   // The recorded SUCCEEDED payment for a booking, or null. Powers both the
   // already-paid guard at checkout and the derived "is this booking paid?" read.
   findSucceededByBookingId(bookingId: string): Promise<PaymentEvent | null>
+  // Every SUCCEEDED payment across all operators, for the platform-admin revenue
+  // report (#462). Unscoped by design — authz lives in AdminRevenueService.
+  listSucceeded(): Promise<PaymentEvent[]>
 }
 
 /** Operator (tenant) data access. Admin bootstrap (#386) + slug/id resolution (#387). */
@@ -535,7 +538,13 @@ export interface VehicleDetailRepository {
   // `now` injected for the same reason as FleetOverviewRepository:
   // revenue window, upcoming-booking filtering, and utilization range
   // are business decisions owned by the service layer.
-  findVehicleDetail(vehicleId: string, now: Date): Promise<VehicleDetail | undefined>
+  // `ctx` is the tenant boundary: an OPERATOR_* caller only resolves a vehicle
+  // in its own tenant (operatorReadScope), so a foreign id returns undefined.
+  findVehicleDetail(
+    ctx: CallerContext,
+    vehicleId: string,
+    now: Date,
+  ): Promise<VehicleDetail | undefined>
 }
 
 export interface ThreadRepository {

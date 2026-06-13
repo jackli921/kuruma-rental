@@ -143,7 +143,7 @@ describe('GET /auth/google/callback', () => {
   const findSlug = async (id: string): Promise<string | undefined> =>
     id === 'op1' ? 'acme' : undefined
 
-  test('provider intent + granted → mints operator session + redirects to /<locale>/manage/<slug>/dashboard', async () => {
+  test('provider intent + granted → mints operator session + redirects to /<locale>/dashboard', async () => {
     setupAuthEnv()
     const { runtime } = makeRuntime()
     const providerAccess = {
@@ -158,8 +158,9 @@ describe('GET /auth/google/callback', () => {
       headers: { Cookie: oauthFlowCookie('s1', { intent: 'provider', returnTo: '/ja/manage' }) },
     })
     expect(res.status).toBe(302)
-    // Server-computed dashboard (locale from returnTo, slug server-derived) wins over returnTo.
-    expect(res.headers.get('location')).toBe('https://web.example.test/ja/manage/acme/dashboard')
+    // Provider intent lands on the real operator dashboard (locale from returnTo);
+    // the server-computed destination still wins over a renter-style returnTo.
+    expect(res.headers.get('location')).toBe('https://web.example.test/ja/dashboard')
 
     const token = getSetCookie(res, 'kuruma_session')
     expect(token).toBeTruthy()

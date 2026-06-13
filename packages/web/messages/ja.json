@@ -72,7 +72,8 @@
     "search": "検索",
     "browse": "車を探す",
     "myBookings": "予約一覧",
-    "documents": "書類"
+    "documents": "書類",
+    "newBookings": "新規予約 {count}件"
   },
   "acriss": {
     "MCAR": "ミニ",
@@ -885,7 +886,20 @@
         "loading": "予約を読み込み中…",
         "loadError": "この予約を読み込めませんでした",
         "missing": "予約が見つかりません",
-        "actions": "操作"
+        "actions": "操作",
+        "substitute": {
+          "action": "車両を変更",
+          "dialogTitle": "車両を変更",
+          "dialogDescription": "同じ受取場所で同クラスの空き車両に振り替えます。お客様の予約はそのまま保持され、変更は記録されます。",
+          "vehicleLabel": "代替車両",
+          "reasonLabel": "理由（任意）",
+          "reasonPlaceholder": "例：元の車両が修理中",
+          "noCandidates": "この受取場所で利用可能な同クラスの車両がありません。",
+          "submit": "変更を確定",
+          "cancel": "キャンセル",
+          "error": "車両を変更できませんでした。直前に予約された可能性があります。",
+          "unavailable": "車両の変更は確定済みまたは利用中の予約でのみ可能です。"
+        }
       },
       "timeline": {
         "heading": "タイムライン",
@@ -1000,7 +1014,17 @@
       "title": "パートナー収益",
       "subtitle": "パートナーごとの月次支払い",
       "comingSoon": "近日公開 — 決済イベント（#461）に依存します",
-      "model": "レンターは表示価格を支払います。プラットフォームは4%を保持し、送金額 = 支払額 − 4% を事業者ごとに集計して月次で支払います。"
+      "model": "レンターは表示価格を支払います。プラットフォームは4%を保持し、送金額 = 支払額 − 4% を事業者ごとに集計して月次で支払います。",
+      "empty": "パートナー収益はまだ記録されていません。",
+      "month": "月",
+      "gross": "総額",
+      "platformFee": "プラットフォーム手数料（4%）",
+      "netPayable": "支払額",
+      "payments": "決済件数",
+      "total": "合計",
+      "allPartners": "全パートナー",
+      "loadError": "パートナー収益を読み込めませんでした。",
+      "retry": "再試行"
     }
   },
   "documents": {

@@ -16,17 +16,6 @@ export function businessGuard(session: Session | null): GuardResult {
   return isBusinessRole(session.user.role) ? { type: 'allow' } : { type: 'forbidden' }
 }
 
-// `/manage/$operatorSlug` access (#521 §8). A business role is necessary but not
-// sufficient: the caller may only enter their OWN operator's space, so the
-// session slug must equal the URL slug. Fail-closed — a business role with no
-// slug (PLATFORM_ADMIN/legacy STAFF use the admin portal) is forbidden, never
-// allowed through. The API is the real boundary; this is UX routing only.
-export function manageGuard(session: Session | null, operatorSlug: string): GuardResult {
-  const business = businessGuard(session)
-  if (business.type !== 'allow') return business
-  return session?.user.operatorSlug === operatorSlug ? { type: 'allow' } : { type: 'forbidden' }
-}
-
 // A *tenant-scoped* operator session carries an operatorId (#521); bypass business
 // roles (PLATFORM_ADMIN, legacy STAFF/ADMIN) do not. This mirrors the API's read scope
 // (`operatorReadScope(ctx).kind !== 'all'`) and gates the operator-portal write

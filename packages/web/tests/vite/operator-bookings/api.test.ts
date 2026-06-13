@@ -7,14 +7,12 @@ import {
   fetchCalendarBookings,
   fetchCalendarVehicles,
   fetchOperatorBookingDetail,
-  fetchPendingBookingsCount,
   fetchSubstitutionCandidates,
   operatorBookingDetailQueryOptions,
   operatorCalendarQueryOptions,
   operatorCalendarVehiclesQueryOptions,
   operatorRowFromDetail,
-  pendingBookingsCountQueryOptions,
-  substituteVehicle,
+  substituteBooking,
   substitutionCandidatesQueryOptions,
   updateBookingStatus,
 } from '@/vite/operator-bookings/api'
@@ -355,10 +353,10 @@ describe('operatorCalendarVehiclesQueryOptions', () => {
   })
 })
 
-// Slice 2 (#616): operator booking actions — substitution candidates, the
-// pending-orders count for the nav badge, and the CSRF-gated mutations the
-// BookingActionsPanel + SubstituteVehicleDialog drive (no optimistic UI; the
-// component invalidates the `operator-bookings` prefix on success).
+// Slice 2 (#616): operator booking actions — substitution candidates + the
+// CSRF-gated status mutations the BookingActionsPanel + SubstituteVehicleDialog
+// drive (no optimistic UI; the component invalidates the `operator-bookings`
+// prefix on success). Vehicle substitution itself shipped with #610 below.
 
 describe('fetchSubstitutionCandidates', () => {
   it('GETs the operator-only candidates endpoint with credentials and maps to {id,name}', async () => {
@@ -408,43 +406,6 @@ describe('substitutionCandidatesQueryOptions', () => {
       'operator-bookings',
       'substitution-candidates',
       'bk-1',
-    ])
-  })
-})
-
-describe('fetchPendingBookingsCount', () => {
-  it('GETs CONFIRMED bookings with a bounded limit and returns the row count', async () => {
-    const fetchMock = vi.fn(async () =>
-      jsonResponse({ success: true, data: [{ id: 'a' }, { id: 'b' }], nextCursor: null }),
-    )
-    vi.stubGlobal('fetch', fetchMock)
-
-    const count = await fetchPendingBookingsCount()
-
-    const [url, init] = fetchMock.mock.calls[0]!
-    const parsed = new URL(url as string, 'http://x')
-    expect(parsed.pathname).toBe('/api/bookings')
-    expect(parsed.searchParams.get('status')).toBe('CONFIRMED')
-    expect(parsed.searchParams.get('limit')).toBe('50')
-    expect((init as RequestInit).credentials).toBe('include')
-    expect(count).toBe(2)
-  })
-
-  it('throws ApiError on a failure envelope', async () => {
-    vi.stubGlobal(
-      'fetch',
-      vi.fn(async () => jsonResponse({ success: false, error: 'Unauthorized' }, 401)),
-    )
-
-    await expect(fetchPendingBookingsCount()).rejects.toBeInstanceOf(ApiError)
-  })
-})
-
-describe('pendingBookingsCountQueryOptions', () => {
-  it('keys by the pending-count list', () => {
-    expect(pendingBookingsCountQueryOptions().queryKey).toEqual([
-      'operator-bookings',
-      'pending-count',
     ])
   })
 })
@@ -507,32 +468,47 @@ describe('cancelBooking', () => {
   })
 })
 
-describe('substituteVehicle', () => {
-  it('POSTs /bookings/:id/substitute with newVehicleId + reason, CSRF + JSON headers', async () => {
-    const fetchMock = vi.fn(async () =>
-      jsonResponse({ success: true, data: { id: 'bk-1', assignedVehicleId: 'veh-2' } }),
-    )
+// #610: operator vehicle substitution. POST /bookings/:id/substitute swaps the
+// assigned car for another AVAILABLE same-class, same-location vehicle. Cookie +
+// CSRF-gated (global csrf()), so the caller echoes the session CSRF token.
+describe('substituteBooking', () => {
+  it('POSTs the substitute endpoint with the new vehicle id, reason, csrf header and credentials', async () => {
+    const fetchMock = vi.fn(async () => jsonResponse({ success: true, data: detailRaw() }))
     vi.stubGlobal('fetch', fetchMock)
 
-    await substituteVehicle('bk-1', 'veh-2', 'Customer requested SUV', 'csrf-3')
+    await substituteBooking('bk-1', 'veh-2', 'engine fault', 'csrf-tok')
 
-    const [url, init] = fetchMock.mock.calls[0]! as [string, RequestInit]
-    expect(new URL(url, 'http://x').pathname).toBe('/api/bookings/bk-1/substitute')
-    expect(init.method).toBe('POST')
-    expect(init.headers).toEqual({ 'Content-Type': 'application/json', 'X-CSRF-Token': 'csrf-3' })
-    expect(JSON.parse(init.body as string)).toEqual({
+    const [url, init] = fetchMock.mock.calls[0]!
+    const parsed = new URL(url as string, 'http://x')
+    expect(parsed.pathname).toBe('/api/bookings/bk-1/substitute')
+    const request = init as RequestInit
+    expect(request.method).toBe('POST')
+    expect(request.credentials).toBe('include')
+    expect((request.headers as Record<string, string>)['X-CSRF-Token']).toBe('csrf-tok')
+    expect(JSON.parse(request.body as string)).toEqual({
       newVehicleId: 'veh-2',
-      reason: 'Customer requested SUV',
+      reason: 'engine fault',
     })
   })
 
-  it('omits reason from the body when null', async () => {
-    const fetchMock = vi.fn(async () => jsonResponse({ success: true, data: { id: 'bk-1' } }))
+  it('omits the reason field when none is given (schema reason is optional)', async () => {
+    const fetchMock = vi.fn(async () => jsonResponse({ success: true, data: detailRaw() }))
     vi.stubGlobal('fetch', fetchMock)
 
-    await substituteVehicle('bk-1', 'veh-2', null, 'csrf')
+    await substituteBooking('bk-1', 'veh-2', null, 'csrf-tok')
 
-    const [, init] = fetchMock.mock.calls[0]! as [string, RequestInit]
-    expect(JSON.parse(init.body as string)).toEqual({ newVehicleId: 'veh-2' })
+    const body = JSON.parse((fetchMock.mock.calls[0]![1] as RequestInit).body as string)
+    expect(body).toEqual({ newVehicleId: 'veh-2' })
+  })
+
+  it('throws ApiError on a domain failure (e.g. 409 replacement just booked)', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => jsonResponse({ success: false, error: 'Vehicle already booked' }, 409)),
+    )
+
+    await expect(substituteBooking('bk-1', 'veh-2', null, 'csrf-tok')).rejects.toBeInstanceOf(
+      ApiError,
+    )
   })
 })
