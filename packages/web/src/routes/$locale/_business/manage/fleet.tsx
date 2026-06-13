@@ -20,7 +20,6 @@ export const Route = createFileRoute('/$locale/_business/manage/fleet')({
 
 function OperatorFleetRoute() {
   const t = useTranslations('business.vehicles.fleet')
-  const { locale } = Route.useParams()
   const { data: vehicles } = useSuspenseQuery(operatorFleetQueryOptions())
 
   return (
@@ -30,7 +29,7 @@ function OperatorFleetRoute() {
           <h1 className="text-3xl font-bold tracking-tight sm:text-4xl">{t('title')}</h1>
           <p className="mt-2 text-lg text-muted-foreground">{t('subtitle')}</p>
         </header>
-        <OperatorFleetView vehicles={vehicles} locale={locale} />
+        <OperatorFleetView vehicles={vehicles} />
       </div>
     </main>
   )

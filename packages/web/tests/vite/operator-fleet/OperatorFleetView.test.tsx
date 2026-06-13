@@ -1,12 +1,35 @@
 import { formatVehicleRate } from '@/lib/format'
 import { OperatorFleetView } from '@/vite/operator-fleet/OperatorFleetView'
 import type { OperatorFleetVehicle } from '@/vite/operator-fleet/api'
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { render, screen } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import { IntlProvider } from 'use-intl'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import enMessages from '../../../messages/en.json'
 
+// The edit sheet lazily loads vehicle-class options; stub the query so it never
+// hits the network and resolves to an empty list (the form's class dropdown is
+// then simply hidden — out of scope here).
+vi.mock('@/vite/operator-fleet/api', async () => {
+  const actual = await vi.importActual<typeof import('@/vite/operator-fleet/api')>(
+    '@/vite/operator-fleet/api',
+  )
+  return {
+    ...actual,
+    vehicleClassOptionsQueryOptions: () => ({
+      queryKey: ['operator-fleet', 'class-options'],
+      queryFn: async () => [],
+    }),
+  }
+})
+
 const en = enMessages.business.vehicles.fleet
+const bulk = enMessages.business.vehicles.bulk
+const filter = enMessages.business.vehicles.filter
+const statusLabels = enMessages.business.vehicles.status
+const form = enMessages.business.vehicles.form
+const editVehicleLabel = enMessages.business.vehicles.editVehicle
 
 function vehicle(overrides: Partial<OperatorFleetVehicle> = {}): OperatorFleetVehicle {
   return {
@@ -47,10 +70,13 @@ function vehicle(overrides: Partial<OperatorFleetVehicle> = {}): OperatorFleetVe
 }
 
 function renderView(vehicles: OperatorFleetVehicle[]) {
+  const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
   return render(
-    <IntlProvider locale="en" messages={enMessages}>
-      <OperatorFleetView vehicles={vehicles} locale="en" />
-    </IntlProvider>,
+    <QueryClientProvider client={queryClient}>
+      <IntlProvider locale="en" messages={enMessages}>
+        <OperatorFleetView vehicles={vehicles} />
+      </IntlProvider>
+    </QueryClientProvider>,
   )
 }
 
@@ -84,5 +110,90 @@ describe('OperatorFleetView', () => {
     renderView([vehicle({ id: 'a', name: 'Car A' }), vehicle({ id: 'b', name: 'Car B' })])
     expect(screen.getByText('Car A')).toBeInTheDocument()
     expect(screen.getByText('Car B')).toBeInTheDocument()
+  })
+
+  it('reveals the bulk action bar with a count when a row is selected', async () => {
+    const user = userEvent.setup()
+    renderView([vehicle({ id: 'a', name: 'Car A' }), vehicle({ id: 'b', name: 'Car B' })])
+
+    expect(screen.queryByText('1 vehicle selected')).not.toBeInTheDocument()
+    await user.click(screen.getByRole('checkbox', { name: 'Select Car A' }))
+
+    expect(screen.getByText('1 vehicle selected')).toBeInTheDocument()
+  })
+
+  it('select-all checkbox selects every visible row', async () => {
+    const user = userEvent.setup()
+    renderView([vehicle({ id: 'a', name: 'Car A' }), vehicle({ id: 'b', name: 'Car B' })])
+
+    await user.click(screen.getByRole('checkbox', { name: bulk.selectAll }))
+
+    expect(screen.getByText('2 vehicles selected')).toBeInTheDocument()
+  })
+
+  it('deselect-all from the bulk bar clears the selection', async () => {
+    const user = userEvent.setup()
+    renderView([vehicle({ id: 'a', name: 'Car A' }), vehicle({ id: 'b', name: 'Car B' })])
+
+    await user.click(screen.getByRole('checkbox', { name: bulk.selectAll }))
+    await user.click(screen.getByRole('button', { name: bulk.deselectAll }))
+
+    expect(screen.queryByText('2 vehicles selected')).not.toBeInTheDocument()
+  })
+
+  it('filters the table to rows matching the search query', async () => {
+    const user = userEvent.setup()
+    renderView([vehicle({ id: 'a', name: 'Toyota Aqua' }), vehicle({ id: 'b', name: 'Honda Fit' })])
+    expect(screen.getByText('Honda Fit')).toBeInTheDocument()
+
+    await user.type(screen.getByPlaceholderText(filter.searchPlaceholder), 'Aqua')
+
+    expect(screen.getByText('Toyota Aqua')).toBeInTheDocument()
+    expect(screen.queryByText('Honda Fit')).not.toBeInTheDocument()
+  })
+
+  it('filters the table by status when a status facet is toggled', async () => {
+    const user = userEvent.setup()
+    renderView([
+      vehicle({ id: 'a', name: 'Available Car', status: 'AVAILABLE' }),
+      vehicle({ id: 'b', name: 'Retired Car', status: 'RETIRED' }),
+    ])
+
+    await user.click(screen.getByRole('button', { name: new RegExp(`^${statusLabels.RETIRED}`) }))
+
+    expect(screen.getByText('Retired Car')).toBeInTheDocument()
+    expect(screen.queryByText('Available Car')).not.toBeInTheDocument()
+  })
+
+  it('drops hidden rows from the bulk selection when a filter excludes them', async () => {
+    const user = userEvent.setup()
+    renderView([vehicle({ id: 'a', name: 'Toyota Aqua' }), vehicle({ id: 'b', name: 'Honda Fit' })])
+
+    await user.click(screen.getByRole('checkbox', { name: bulk.selectAll }))
+    expect(screen.getByText('2 vehicles selected')).toBeInTheDocument()
+
+    await user.type(screen.getByPlaceholderText(filter.searchPlaceholder), 'Aqua')
+
+    expect(screen.getByText('1 vehicle selected')).toBeInTheDocument()
+  })
+
+  it('opens an empty create sheet when Add vehicle is clicked', async () => {
+    const user = userEvent.setup()
+    renderView([vehicle({ id: 'a', name: 'Toyota Aqua' })])
+    expect(screen.queryByLabelText(form.name)).not.toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: en.addVehicle }))
+
+    expect(await screen.findByLabelText(form.name)).toHaveValue('')
+  })
+
+  it('opens the edit sheet prefilled when a row Edit action is used', async () => {
+    const user = userEvent.setup()
+    renderView([vehicle({ id: 'a', name: 'Toyota Aqua' })])
+
+    await user.click(screen.getByRole('button', { name: en.columns.actions }))
+    await user.click(screen.getByRole('menuitem', { name: editVehicleLabel }))
+
+    expect(await screen.findByLabelText(form.name)).toHaveValue('Toyota Aqua')
   })
 })

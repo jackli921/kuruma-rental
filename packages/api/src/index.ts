@@ -1,4 +1,4 @@
-import { type RateLimitBinding, rateLimit } from '@elithrar/workers-hono-rate-limit'
+import type { RateLimitBinding } from '@elithrar/workers-hono-rate-limit'
 import { getDb, runTx } from '@kuruma/shared/db'
 import { Hono } from 'hono'
 import { cors } from 'hono/cors'
@@ -124,6 +124,7 @@ import { createOperatorRoutes } from './routes/operators'
 import { createOverviewRoutes } from './routes/overview'
 import { createPaymentRoutes } from './routes/payments'
 import { createProviderInviteRoutes } from './routes/provider-invites'
+import { rateLimitByIp } from './routes/rate-limit'
 import { createFlatSearchRoutes } from './routes/search'
 import { createStatsRoutes } from './routes/stats'
 import { createStorefrontRoutes } from './routes/storefronts'
@@ -531,14 +532,13 @@ export function createApp(overrides?: AppOverrides) {
 
   // Rate limiting via Cloudflare's native rate limit binding. Atomic counters
   // with sub-ms latency, no KV race conditions. Gracefully skipped in local
-  // dev (binding absent → key returns "" → bypass).
+  // dev (binding absent). When present it fails closed on an unresolvable IP
+  // (#580) rather than bypassing via a shared "" key.
   const rateLimiter = (globalThis as Record<string, unknown>).RATE_LIMITER as
     | RateLimitBinding
     | undefined
   if (rateLimiter) {
-    app.use('*', (c, next) =>
-      rateLimit(rateLimiter, (c) => c.req.header('cf-connecting-ip') ?? '')(c, next),
-    )
+    app.use('*', rateLimitByIp(rateLimiter))
   }
 
   // CSRF guard for the cookie session (design spec §5.4). Must run before the

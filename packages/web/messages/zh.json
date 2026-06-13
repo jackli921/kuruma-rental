@@ -501,6 +501,7 @@
       },
       "bulk": {
         "selectAll": "全选",
+        "selectRow": "选择{name}",
         "deselectAll": "取消全选",
         "selectedCount": "已选择{count}辆车",
         "setAvailable": "设为可用",

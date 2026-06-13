@@ -12,28 +12,19 @@ function ctxWithHeaders(headers: Record<string, string>) {
 }
 
 describe('clientIp', () => {
-  it('prefers cf-connecting-ip over the proxy fallbacks', () => {
-    const ip = clientIp(
-      ctxWithHeaders({
-        'cf-connecting-ip': '203.0.113.7',
-        'x-forwarded-for': '198.51.100.1',
-        'x-real-ip': '192.0.2.5',
-      }),
-    )
-    expect(ip).toBe('203.0.113.7')
+  it('resolves the Cloudflare-injected cf-connecting-ip header', () => {
+    expect(clientIp(ctxWithHeaders({ 'cf-connecting-ip': '203.0.113.7' }))).toBe('203.0.113.7')
   })
 
-  it('falls back to the first x-forwarded-for hop, trimmed', () => {
-    expect(clientIp(ctxWithHeaders({ 'x-forwarded-for': ' 198.51.100.1 , 10.0.0.1 ' }))).toBe(
-      '198.51.100.1',
-    )
+  it('IGNORES client-controlled x-forwarded-for / x-real-ip (spoof-proof key)', () => {
+    // Only the edge-injected header is trusted; forged proxy headers must not
+    // mint a fresh limiter bucket. With no cf-connecting-ip, the IP is null.
+    expect(
+      clientIp(ctxWithHeaders({ 'x-forwarded-for': '198.51.100.1', 'x-real-ip': '192.0.2.5' })),
+    ).toBeNull()
   })
 
-  it('falls back to x-real-ip when no cf/xff header is present', () => {
-    expect(clientIp(ctxWithHeaders({ 'x-real-ip': '192.0.2.5' }))).toBe('192.0.2.5')
-  })
-
-  it('returns null when no IP header is present', () => {
+  it('returns null when cf-connecting-ip is absent', () => {
     expect(clientIp(ctxWithHeaders({}))).toBeNull()
   })
 })

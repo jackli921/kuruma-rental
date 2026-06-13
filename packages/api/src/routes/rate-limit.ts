@@ -3,16 +3,16 @@ import type { Context, MiddlewareHandler } from 'hono'
 import { fail } from './helpers'
 
 /**
- * Resolve the caller's IP: Cloudflare's `cf-connecting-ip` first, then the
- * `x-forwarded-for` lead hop, then `x-real-ip`. Returns null when none is
- * present so callers can decide policy rather than silently coalescing to ''.
+ * Resolve the caller's IP from Cloudflare's edge-injected `cf-connecting-ip`,
+ * or null when absent so callers can decide policy rather than silently
+ * coalescing to ''. We deliberately do NOT fall back to `x-forwarded-for` /
+ * `x-real-ip`: those are client-controlled, so trusting them as a limiter key
+ * would let a caller forge a fresh bucket per request and evade the limit. On
+ * the real CF edge `cf-connecting-ip` is always present; its absence means the
+ * caller is unidentifiable, and a rate limiter should fail closed on that.
  */
 export function clientIp(c: Context): string | null {
-  const cf = c.req.header('cf-connecting-ip')
-  if (cf) return cf
-  const xff = c.req.header('x-forwarded-for')
-  if (xff) return xff.split(',')[0]?.trim() || null
-  return c.req.header('x-real-ip') ?? null
+  return c.req.header('cf-connecting-ip') ?? null
 }
 
 /**
