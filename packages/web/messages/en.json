@@ -620,6 +620,10 @@
         "ACTIVE": "Active",
         "ARCHIVED": "Archived"
       },
+      "pin": {
+        "pending": "Pin pending",
+        "missing": "No map pin"
+      },
       "row": {
         "hours": "{open}–{close}",
         "alwaysOpen": "Hours not set",

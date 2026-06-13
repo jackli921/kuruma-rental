@@ -6,6 +6,7 @@ import {
   InMemoryBookingRepository,
   InMemoryVehicleRepository,
 } from '../../src/repositories/in-memory'
+import type { GeocodeOutcome } from '../../src/services/geocoding/types'
 import { TEST_AUTH_SECRET, setupAuthEnv } from '../helpers/auth'
 
 // Provider-independence proof (#531): the composition root (index.ts) is the
@@ -32,7 +33,9 @@ describe('Geocoder DI — provider swap touches only index.ts (#531)', () => {
     const vehicleRepo = new InMemoryVehicleRepository()
     const bookingRepo = new InMemoryBookingRepository()
     const availabilityRepo = new InMemoryAvailabilityRepository(vehicleRepo, bookingRepo)
-    const geocode = vi.fn(async () => ({ lat: 34.6937, lng: 135.5023 }))
+    const geocode = vi.fn(
+      async (): Promise<GeocodeOutcome> => ({ status: 'ok', lat: 34.6937, lng: 135.5023 }),
+    )
     const app = createApp({ vehicleRepo, bookingRepo, availabilityRepo, geocoder: { geocode } })
 
     const res = await app.request('/locations', {
@@ -51,12 +54,14 @@ describe('Geocoder DI — provider swap touches only index.ts (#531)', () => {
     expect(geocode).toHaveBeenCalledWith('1-2-3 Namba, Osaka')
   })
 
-  test('an over-limit GEOCODE_LIMITER skips the lookup: location still saves, with no coords (#574)', async () => {
+  test('an over-limit GEOCODE_LIMITER skips the lookup: location saves PENDING for retry, no coords (#601)', async () => {
     setupAuthEnv()
     const vehicleRepo = new InMemoryVehicleRepository()
     const bookingRepo = new InMemoryBookingRepository()
     const availabilityRepo = new InMemoryAvailabilityRepository(vehicleRepo, bookingRepo)
-    const geocode = vi.fn(async () => ({ lat: 34.6937, lng: 135.5023 }))
+    const geocode = vi.fn(
+      async (): Promise<GeocodeOutcome> => ({ status: 'ok', lat: 34.6937, lng: 135.5023 }),
+    )
     // Native CF binding shape (limit({ key }) → { success }); index.ts adapts it.
     const geocodeLimiter = { limit: vi.fn(async () => ({ success: false })) }
     const app = createApp({
@@ -76,7 +81,7 @@ describe('Geocoder DI — provider swap touches only index.ts (#531)', () => {
     expect(res.status).toBe(201)
     const body = await res.json()
     expect(body.data).toMatchObject({
-      coordinateSource: null,
+      coordinateSource: 'PENDING',
       latitude: null,
       longitude: null,
     })

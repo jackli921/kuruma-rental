@@ -1,13 +1,11 @@
 import { describe, expect, it, vi } from 'vitest'
 import { ThrottledGeocoder } from '../../../src/services/geocoding/throttled-geocoder'
-import type { GeocodeResult, Geocoder, RateLimiter } from '../../../src/services/geocoding/types'
+import type { GeocodeOutcome, Geocoder, RateLimiter } from '../../../src/services/geocoding/types'
 
-const OSAKA: GeocodeResult = { lat: 34.6937, lng: 135.5023 }
+const OSAKA: GeocodeOutcome = { status: 'ok', lat: 34.6937, lng: 135.5023 }
 
-function fakeGeocoder(
-  result: GeocodeResult | null,
-): Geocoder & { geocode: ReturnType<typeof vi.fn> } {
-  return { geocode: vi.fn(async () => result) }
+function fakeGeocoder(outcome: GeocodeOutcome): Geocoder & { geocode: ReturnType<typeof vi.fn> } {
+  return { geocode: vi.fn(async () => outcome) }
 }
 
 function limiterReturning(success: boolean): RateLimiter & { limit: ReturnType<typeof vi.fn> } {
@@ -15,7 +13,7 @@ function limiterReturning(success: boolean): RateLimiter & { limit: ReturnType<t
 }
 
 describe('ThrottledGeocoder', () => {
-  it('delegates to the inner geocoder and returns its coords when the limiter allows', async () => {
+  it('delegates to the inner geocoder and returns its outcome when the limiter allows', async () => {
     const inner = fakeGeocoder(OSAKA)
     const limiter = limiterReturning(true)
     const result = await new ThrottledGeocoder(inner, limiter).geocode('1-1 Osaka, Japan')
@@ -35,19 +33,19 @@ describe('ThrottledGeocoder', () => {
     expect(limiter.limit).toHaveBeenNthCalledWith(2, 'geocode:global')
   })
 
-  it('skips the lookup and returns null WITHOUT calling the inner geocoder when over the limit', async () => {
+  it('over the limit: returns a distinguishable throttled outcome WITHOUT calling the inner geocoder (#601)', async () => {
     const inner = fakeGeocoder(OSAKA)
     const result = await new ThrottledGeocoder(inner, limiterReturning(false)).geocode('Osaka')
 
-    expect(result).toBeNull()
+    expect(result).toEqual({ status: 'throttled' })
     expect(inner.geocode).not.toHaveBeenCalled()
   })
 
-  it('returns null when allowed but the inner geocoder finds no match', async () => {
-    const inner = fakeGeocoder(null)
+  it('passes through a notFound when allowed but the inner geocoder finds no match', async () => {
+    const inner = fakeGeocoder({ status: 'notFound' })
     const result = await new ThrottledGeocoder(inner, limiterReturning(true)).geocode('nowhere')
 
-    expect(result).toBeNull()
+    expect(result).toEqual({ status: 'notFound' })
     expect(inner.geocode).toHaveBeenCalledTimes(1)
   })
 
@@ -64,12 +62,14 @@ describe('ThrottledGeocoder', () => {
     expect(inner.geocode).toHaveBeenCalledWith('Osaka')
   })
 
-  it('never throws even if the inner geocoder rejects (Geocoder contract)', async () => {
+  it('a rejecting inner geocoder is treated as notFound, not throttled (never throws)', async () => {
     const inner: Geocoder = {
       geocode: vi.fn(async () => {
         throw new Error('boom')
       }),
     }
-    expect(await new ThrottledGeocoder(inner, limiterReturning(true)).geocode('Osaka')).toBeNull()
+    expect(await new ThrottledGeocoder(inner, limiterReturning(true)).geocode('Osaka')).toEqual({
+      status: 'notFound',
+    })
   })
 })
