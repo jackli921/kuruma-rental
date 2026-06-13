@@ -1,5 +1,14 @@
-import type { VehicleData } from '@/lib/vehicle-api'
 import { computeExpiryStatus } from '@kuruma/shared/lib/expiry'
+import type { VehicleBase } from '@kuruma/shared/types/vehicle'
+
+// JSON-serialized Vehicle — dates come as ISO strings from the API. The fleet
+// filter/sort helpers only need the field shape, so the type lives here rather
+// than depending on a fetcher module. Mirrors the API's vehicle projection.
+export type VehicleData = Omit<VehicleBase, 'createdAt' | 'updatedAt'> & {
+  photos?: string[]
+  createdAt: string
+  updatedAt: string
+}
 
 export type VehicleStatus = VehicleData['status']
 export type Transmission = VehicleData['transmission']
