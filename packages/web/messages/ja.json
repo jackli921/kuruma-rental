@@ -988,6 +988,7 @@
     "fromLabel": "受け取り日時",
     "toLabel": "返却日時",
     "submit": "検索",
+    "classFilterLabel": "車種クラス",
     "needDates": "受け取りと返却の日時を選ぶと、空車のある店舗が表示されます。",
     "empty": "選択した日時に空車のある店舗はありません。",
     "fromDaily": "¥{price}〜／日",
