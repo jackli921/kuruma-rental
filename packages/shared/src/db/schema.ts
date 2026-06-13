@@ -366,11 +366,11 @@ export const feeSchedules = pgTable(
     // null = operator-wide fee; non-null = scoped to one vehicle class. The
     // composite FK below seals a per-class fee's class to the SAME operator.
     vehicleClassId: text('vehicleClassId'),
-    // feeType<->unit coherence (OVERTIME_HOURLY=>PER_HOUR, *_FLAT=>FLAT) is NOT
-    // enforced by a DB CHECK — it lives in the Zod schema (create) and
-    // FeeScheduleService (merge-then-validate on update), which is the only
-    // writer. A direct SQL/seed write could persist an incoherent pair; if a
-    // second writer appears (e.g. slice-6 snapshot), add a CHECK here.
+    // feeType<->unit coherence (OVERTIME_HOURLY=>PER_HOUR, *_FLAT=>FLAT) is
+    // enforced BOTH by the Zod schema / FeeScheduleService (the app writer) and,
+    // since #723, by the DB CHECK `fee_schedules_feetype_unit_coherent` below —
+    // the backstop against a direct SQL/seed write persisting an incoherent pair.
+    // The rule mirrors REQUIRED_UNIT_BY_FEE_TYPE (shared/validators/fee-schedule.ts).
     feeType: feeTypeEnum('feeType').notNull(),
     unit: feeUnitEnum('unit').notNull(),
     amountJpy: integer('amountJpy').notNull(),
@@ -398,6 +398,12 @@ export const feeSchedules = pgTable(
       name: 'fee_schedules_operator_class_fk',
     }),
     check('fee_schedules_amount_non_negative', sql`${table.amountJpy} >= 0`),
+    // #723: pair feeType to its required unit (mirrors REQUIRED_UNIT_BY_FEE_TYPE).
+    // The DB backstop for the coherence the Zod layer enforces app-side.
+    check(
+      'fee_schedules_feetype_unit_coherent',
+      sql`(${table.feeType} = 'OVERTIME_HOURLY' AND ${table.unit} = 'PER_HOUR') OR (${table.feeType} = 'CLEANING_FLAT' AND ${table.unit} = 'FLAT') OR (${table.feeType} = 'NO_FUEL_FLAT' AND ${table.unit} = 'FLAT')`,
+    ),
     // Uniqueness: ONE active fee per (operator, type, scope). Two partial
     // indexes because NULL != NULL in a plain UNIQUE — operator-wide rows would
     // otherwise never dedupe. Scoped to status='ACTIVE' so archiving frees the
