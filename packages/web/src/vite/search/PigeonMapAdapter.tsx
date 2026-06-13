@@ -9,6 +9,28 @@ import { type Pin, computeViewport } from './viewport'
 const MARKER_COLOR = '#6b7280'
 const SELECTED_COLOR = '#2563eb'
 
+// Explicit basemap provider (#660). Without one, pigeon-maps falls back to the
+// public OpenStreetMap tile server, which the OSMF tile-usage policy bars from
+// production/commercial reliance (no SLA, requires attribution). GSI (Geospatial
+// Information Authority of Japan) std raster tiles are free for commercial web
+// use with the credit "出典: 国土地理院". https://maps.gsi.go.jp/development/ichiran.html
+export function gsiTileProvider(x: number, y: number, z: number): string {
+  return `https://cyberjapandata.gsi.go.jp/xyz/std/${z}/${x}/${y}.png`
+}
+
+const GSI_ATTRIBUTION = (
+  <span>
+    出典:{' '}
+    <a
+      href="https://maps.gsi.go.jp/development/ichiran.html"
+      target="_blank"
+      rel="noreferrer noopener"
+    >
+      国土地理院
+    </a>
+  </span>
+)
+
 /** Concrete `MapAdapter` (#458). Maps each geocoded result to a pigeon-maps
  *  `<Marker>`; a marker click reports its location id back to the view. The
  *  viewport is fit to ALL pins so a Kansai-wide result set isn't pinned to one
@@ -28,6 +50,9 @@ export function PigeonMapAdapter({ items, selectedId, onSelect }: MapAdapterProp
   return (
     <PigeonMap
       key={pins.map((p) => p.id).join(',')}
+      provider={gsiTileProvider}
+      attribution={GSI_ATTRIBUTION}
+      attributionPrefix={false}
       defaultCenter={viewport.center}
       defaultZoom={viewport.zoom}
     >
