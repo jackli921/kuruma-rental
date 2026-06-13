@@ -1,4 +1,4 @@
-import type { GeocodeResult, Geocoder, RateLimiter } from './types'
+import type { GeocodeOutcome, Geocoder, RateLimiter } from './types'
 
 // One shared bucket across every isolate/request: a constant key makes the
 // native CF rate-limit binding enforce a single GLOBAL rate, not a per-key one.
@@ -12,11 +12,12 @@ const GLOBAL_KEY = 'geocode:global'
  * a window boundary; the production provider's own server-side limit is the real
  * guarantee).
  *
- * Over the limit ⇒ SKIP the lookup and return null. A skip is indistinguishable
- * from a provider miss/outage, which `LocationService` already handles (the save
- * proceeds with no coords; a later edit/`regeocode` fills the pin). Honors the
- * `Geocoder` never-throw contract: a degraded limiter fails OPEN (proceed) so a
- * rate-limit-service blip can't silently kill all geocoding.
+ * Over the limit ⇒ SKIP the lookup and return `{ status: 'throttled' }` (#601,
+ * architect F6). Unlike a provider miss (`notFound`), a throttle-skip is retry-
+ * able, so `LocationService` persists it as a PENDING pin the bulk re-geocode can
+ * enumerate — rather than collapsing it into an indistinguishable null. Honors
+ * the `Geocoder` never-throw contract: a degraded limiter fails OPEN (proceed) so
+ * a rate-limit-service blip can't silently kill all geocoding.
  */
 export class ThrottledGeocoder implements Geocoder {
   constructor(
@@ -25,7 +26,7 @@ export class ThrottledGeocoder implements Geocoder {
     private readonly key: string = GLOBAL_KEY,
   ) {}
 
-  async geocode(address: string): Promise<GeocodeResult | null> {
+  async geocode(address: string): Promise<GeocodeOutcome> {
     let allowed = true
     try {
       ;({ success: allowed } = await this.limiter.limit(this.key))
@@ -40,16 +41,19 @@ export class ThrottledGeocoder implements Geocoder {
     }
 
     if (!allowed) {
-      console.warn('[geocode] global rate limit reached; skipping lookup (no coords)', { address })
-      return null
+      console.warn('[geocode] global rate limit reached; skipping lookup (pin pending)', {
+        address,
+      })
+      return { status: 'throttled' }
     }
 
     try {
       return await this.inner.geocode(address)
     } catch {
       // Inner Geocoders must never throw, but honor the contract defensively so
-      // a misbehaving adapter can't break a save through this decorator either.
-      return null
+      // a misbehaving adapter can't break a save through this decorator either. A
+      // thrown adapter is a failure, not a throttle — treat it as un-geocodable.
+      return { status: 'notFound' }
     }
   }
 }

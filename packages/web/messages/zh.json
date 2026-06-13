@@ -620,6 +620,10 @@
         "ACTIVE": "可用",
         "ARCHIVED": "已归档"
       },
+      "pin": {
+        "pending": "定位待处理",
+        "missing": "无地图定位"
+      },
       "row": {
         "hours": "{open}–{close}",
         "alwaysOpen": "未设置营业时间",

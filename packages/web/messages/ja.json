@@ -620,6 +620,10 @@
         "ACTIVE": "有効",
         "ARCHIVED": "アーカイブ済み"
       },
+      "pin": {
+        "pending": "ピン保留中",
+        "missing": "地図ピンなし"
+      },
       "row": {
         "hours": "{open}–{close}",
         "alwaysOpen": "営業時間未設定",

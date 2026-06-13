@@ -439,7 +439,9 @@ export function createApp(overrides?: AppOverrides) {
     (() => {
       const userAgent = process.env.NOMINATIM_USER_AGENT
       const baseUrl = process.env.NOMINATIM_API_URL
-      if (!userAgent || !baseUrl) return { geocode: async () => null }
+      // Disabled: every address is "un-geocodable" (no provider), so a save
+      // persists with null coords — never PENDING (nothing will ever resolve it).
+      if (!userAgent || !baseUrl) return { geocode: async () => ({ status: 'notFound' as const }) }
       return new NominatimGeocoder(baseUrl, userAgent, undefined, process.env.NOMINATIM_API_KEY)
     })()
   // Adapt the native binding's `limit({ key })` to the RateLimiter port here.
