@@ -383,8 +383,15 @@
     {
       "idx": 54,
       "version": "7",
-      "when": 1781359014159,
-      "tag": "0054_add_regions_and_location_region_id",
+      "when": 1781359675037,
+      "tag": "0054_add_renter_lifecycle_notification_kinds",
+      "breakpoints": true
+    },
+    {
+      "idx": 55,
+      "version": "7",
+      "when": 1781377722235,
+      "tag": "0055_add_regions_and_location_region_id",
       "breakpoints": true
     }
   ]

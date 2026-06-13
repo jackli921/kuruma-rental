@@ -153,7 +153,14 @@ export interface NotificationLog {
   id: string
   bookingId: string
   operatorId: string
-  kind: 'OPERATOR_BOOKING_ALERT' | 'RENTER_BOOKING_CONFIRM'
+  kind:
+    | 'OPERATOR_BOOKING_ALERT'
+    | 'RENTER_BOOKING_CONFIRM'
+    // #664 renter lifecycle pushes (mirror notificationKindEnum order).
+    | 'RENTER_SUBSTITUTION'
+    | 'RENTER_CANCELLATION'
+    | 'RENTER_TRIP_STARTED'
+    | 'RENTER_TRIP_COMPLETED'
   channel: string
   recipient: string
   locale: string

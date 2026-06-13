@@ -27,6 +27,17 @@ export interface EmailStrings {
   operatorSubject: string
   operatorHeading: string
   renterLabel: string
+  // #664 renter lifecycle pushes
+  substitutionSubject: string // booking code appended
+  substitutionHeading: string
+  newVehicleLabel: string
+  cancellationSubject: string
+  cancellationHeading: string
+  cancellationFeeLabel: string
+  tripStartedSubject: string
+  tripStartedHeading: string
+  tripCompletedSubject: string
+  tripCompletedHeading: string
   // Fee-type display names
   feeLabels: Record<FeeType, string>
 }
@@ -52,6 +63,16 @@ const en: EmailStrings = {
   operatorSubject: 'New booking —',
   operatorHeading: 'A new booking has landed:',
   renterLabel: 'Renter',
+  substitutionSubject: 'Vehicle changed —',
+  substitutionHeading: 'The vehicle assigned to your booking has changed. Your new vehicle:',
+  newVehicleLabel: 'New vehicle',
+  cancellationSubject: 'Booking cancelled —',
+  cancellationHeading: 'Your booking has been cancelled.',
+  cancellationFeeLabel: 'Cancellation fee',
+  tripStartedSubject: 'Trip started —',
+  tripStartedHeading: 'Your rental has started. Enjoy the drive!',
+  tripCompletedSubject: 'Trip completed —',
+  tripCompletedHeading: 'Your rental is complete. Thank you for choosing us!',
   feeLabels: {
     OVERTIME_HOURLY: 'Overtime (per hour)',
     CLEANING_FLAT: 'Cleaning',
@@ -80,6 +101,16 @@ const ja: EmailStrings = {
   operatorSubject: '新規予約 —',
   operatorHeading: '新しい予約が入りました:',
   renterLabel: '利用者',
+  substitutionSubject: '車両変更のお知らせ —',
+  substitutionHeading: 'ご予約の車両が変更されました。新しい車両は以下のとおりです:',
+  newVehicleLabel: '新しい車両',
+  cancellationSubject: 'ご予約キャンセルのお知らせ —',
+  cancellationHeading: 'ご予約がキャンセルされました。',
+  cancellationFeeLabel: 'キャンセル料',
+  tripStartedSubject: 'レンタル開始のお知らせ —',
+  tripStartedHeading: 'レンタルが開始されました。よい旅を!',
+  tripCompletedSubject: 'レンタル完了のお知らせ —',
+  tripCompletedHeading: 'レンタルが完了しました。ご利用ありがとうございました!',
   feeLabels: {
     OVERTIME_HOURLY: '延長料金（1時間あたり）',
     CLEANING_FLAT: 'クリーニング',
@@ -108,6 +139,16 @@ const zh: EmailStrings = {
   operatorSubject: '新预订 —',
   operatorHeading: '收到一笔新预订:',
   renterLabel: '租客',
+  substitutionSubject: '车辆变更通知 —',
+  substitutionHeading: '您预订的车辆已变更。您的新车辆为:',
+  newVehicleLabel: '新车辆',
+  cancellationSubject: '预订取消通知 —',
+  cancellationHeading: '您的预订已被取消。',
+  cancellationFeeLabel: '取消费用',
+  tripStartedSubject: '行程开始通知 —',
+  tripStartedHeading: '您的租赁已开始。祝您旅途愉快!',
+  tripCompletedSubject: '行程完成通知 —',
+  tripCompletedHeading: '您的租赁已完成。感谢您的惠顾!',
   feeLabels: {
     OVERTIME_HOURLY: '超时费(每小时)',
     CLEANING_FLAT: '清洁费',

@@ -27,6 +27,7 @@ import type {
   StatusTransitionResult,
   SubstituteResult,
 } from './booking-types'
+import type { LifecycleTrigger } from './notification-dispatcher'
 
 /** Renter-safe operator projection attached to a single booking read (§4h). */
 export type BookingWithOperator = Booking & {
@@ -45,6 +46,13 @@ const MAX_BOOKING_CODE_ATTEMPTS = 3
 // is far smaller. Scan generously so the substitute picker never silently drops a
 // candidate, while still bounding the read.
 const SUBSTITUTION_CANDIDATE_SCAN_LIMIT = 200
+// #664: the renter lifecycle email a status transition triggers. Only renter-
+// visible advances notify; any unlisted transition dispatches nothing.
+const STATUS_TRIGGER: Partial<Record<BookingStatus, LifecycleTrigger>> = {
+  ACTIVE: 'ACTIVATED',
+  COMPLETED: 'COMPLETED',
+  CANCELLED: 'CANCELLED',
+}
 // #613: version of the liability-disclaimer (免责声明) wording a renter agreed to,
 // stamped onto the booking. Bump when the localized terms text changes materially
 // (the renter-facing copy lives in web i18n; this is the server-authoritative tag).
@@ -544,7 +552,7 @@ export class BookingService {
     reason: string | null = null,
   ): Promise<SubstituteResult> {
     try {
-      return await this.runInTransaction(async (repos) => {
+      const result = await this.runInTransaction(async (repos): Promise<SubstituteResult> => {
         const booking = await repos.bookingRepo.findById(ctx, bookingId)
         if (!booking) {
           return { ok: false, status: 404, error: 'Booking not found' }
@@ -617,6 +625,10 @@ export class BookingService {
         })
         return { ok: true, booking: updated }
       })
+      // Post-commit (#664): tell the renter their vehicle was swapped. Outside the
+      // tx, caught-and-logged in the dispatcher — never rolls the substitution back.
+      if (result.ok) await this.postCommit?.run(ctx, result.booking, 'SUBSTITUTED')
+      return result
     } catch (err) {
       if (pgErrorCode(err) === PG_ERROR.EXCLUSION_VIOLATION) {
         return {
@@ -720,6 +732,10 @@ export class BookingService {
         error: 'Booking status was modified by another request. Please retry.',
       }
     }
+    // Post-commit (#664): notify the renter on a renter-visible advance
+    // (ACTIVE/COMPLETED). Unlisted transitions map to undefined → no email.
+    const trigger = STATUS_TRIGGER[newStatus]
+    if (trigger) await this.postCommit?.run(ctx, updated, trigger)
     return { ok: true, booking: updated }
   }
 
@@ -767,6 +783,8 @@ export class BookingService {
         error: 'Booking status was modified by another request. Please retry.',
       }
     }
+    // Post-commit (#664): tell the renter their booking was cancelled.
+    await this.postCommit?.run(ctx, updated, 'CANCELLED')
     return { ok: true, booking: updated, cancellation }
   }
 }
