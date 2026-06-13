@@ -8,6 +8,7 @@ import {
   locations,
   operators,
   providerInvites,
+  regions,
   users,
   vehicleClasses,
   vehicles,
@@ -18,6 +19,7 @@ import {
   DEMO_INSURANCE_OPTIONS,
   DEMO_LOCATIONS,
   DEMO_OPERATORS,
+  DEMO_REGIONS,
   DEMO_VEHICLES,
   DEMO_VEHICLE_CLASSES,
 } from './seed-data'
@@ -159,6 +161,35 @@ export async function seed(db: ReturnType<typeof getDb>) {
       })
   }
 
+  // 4b. Regions (#394) — platform-global FK target for locations.regionId, so
+  // they precede locations. DEMO_REGIONS is ordered parents-before-children, so
+  // the self-referential parentId FK always resolves on insert.
+  console.log(`Seeding ${DEMO_REGIONS.length} regions...`)
+  for (const region of DEMO_REGIONS) {
+    const values = {
+      id: seedId(region.id),
+      parentId: region.parentId ? seedId(region.parentId) : null,
+      nameEn: region.nameEn,
+      nameJa: region.nameJa,
+      nameZh: region.nameZh,
+      sortOrder: region.sortOrder,
+    }
+    await db
+      .insert(regions)
+      .values(values)
+      .onConflictDoUpdate({
+        target: regions.id,
+        set: {
+          parentId: values.parentId,
+          nameEn: region.nameEn,
+          nameJa: region.nameJa,
+          nameZh: region.nameZh,
+          sortOrder: region.sortOrder,
+          updatedAt: now,
+        },
+      })
+  }
+
   // 5. Locations — composite-FK target for vehicles' pickupLocationId.
   console.log(`Seeding ${DEMO_LOCATIONS.length} locations...`)
   for (const loc of DEMO_LOCATIONS) {
@@ -176,6 +207,7 @@ export async function seed(db: ReturnType<typeof getDb>) {
         coordinateSource: 'GEOCODED',
         timezone: loc.timezone,
         defaultTurnaroundMinutes: loc.defaultTurnaroundMinutes,
+        regionId: seedId(loc.regionId),
       })
       .onConflictDoUpdate({
         target: locations.id,
@@ -187,6 +219,7 @@ export async function seed(db: ReturnType<typeof getDb>) {
           coordinateSource: 'GEOCODED',
           timezone: loc.timezone,
           defaultTurnaroundMinutes: loc.defaultTurnaroundMinutes,
+          regionId: seedId(loc.regionId),
           updatedAt: now,
         },
       })

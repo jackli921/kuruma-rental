@@ -175,6 +175,30 @@ describe('createLocationSchema', () => {
     }
   })
 
+  it('defaults regionId to null when omitted (#394)', () => {
+    const result = createLocationSchema.safeParse(validInput())
+    expect(result.success).toBe(true)
+    if (result.success) expect(result.data.regionId).toBeNull()
+  })
+
+  it('accepts a valid uuid regionId (#394)', () => {
+    const regionId = '11111111-1111-4111-8111-111111111111'
+    const result = createLocationSchema.safeParse({ ...validInput(), regionId })
+    expect(result.success).toBe(true)
+    if (result.success) expect(result.data.regionId).toBe(regionId)
+  })
+
+  it('accepts an explicit null regionId (#394)', () => {
+    const result = createLocationSchema.safeParse({ ...validInput(), regionId: null })
+    expect(result.success).toBe(true)
+    if (result.success) expect(result.data.regionId).toBeNull()
+  })
+
+  it('rejects a non-uuid regionId (#394)', () => {
+    const result = createLocationSchema.safeParse({ ...validInput(), regionId: 'reg_osaka' })
+    expect(result.success).toBe(false)
+  })
+
   it('does not accept an operatorId in the operator-caller schema', () => {
     const result = createLocationSchema.safeParse({ ...validInput(), operatorId: 'op_x' })
     // operatorId is stripped (not part of the schema) — the route stamps it.
@@ -240,6 +264,30 @@ describe('updateLocationSchema', () => {
 
   it('still rejects negative turnaround on update', () => {
     const result = updateLocationSchema.safeParse({ defaultTurnaroundMinutes: -5 })
+    expect(result.success).toBe(false)
+  })
+
+  it('accepts a regionId update (#394)', () => {
+    const regionId = '22222222-2222-4222-8222-222222222222'
+    const result = updateLocationSchema.safeParse({ regionId })
+    expect(result.success).toBe(true)
+    if (result.success) expect(result.data.regionId).toBe(regionId)
+  })
+
+  it('accepts a null regionId to clear the region (#394)', () => {
+    const result = updateLocationSchema.safeParse({ regionId: null })
+    expect(result.success).toBe(true)
+    if (result.success) expect(result.data.regionId).toBeNull()
+  })
+
+  it('leaves regionId undefined on an empty patch — no reset (#394)', () => {
+    const result = updateLocationSchema.safeParse({})
+    expect(result.success).toBe(true)
+    if (result.success) expect(result.data.regionId).toBeUndefined()
+  })
+
+  it('rejects a non-uuid regionId on update (#394)', () => {
+    const result = updateLocationSchema.safeParse({ regionId: 'not-a-uuid' })
     expect(result.success).toBe(false)
   })
 })

@@ -31,6 +31,7 @@ function locationInput(overrides: Partial<LocationInput> = {}): LocationInput {
     operatingHours: null,
     timezone: 'Asia/Tokyo',
     defaultTurnaroundMinutes: 2880,
+    regionId: null,
     status: 'ACTIVE',
     ...overrides,
   }

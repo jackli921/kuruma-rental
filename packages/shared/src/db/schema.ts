@@ -26,6 +26,9 @@ import type {
   FeeSnapshotItem,
   InsuranceSnapshot,
 } from './booking-types'
+// Region taxonomy (#394) lives in its own module; imported here for the
+// locations.regionId FK and re-exported below so drizzle-kit discovers it.
+import { regions } from './regions'
 
 // Marketplace tenancy (epic #385, slice 1 / #386).
 // OPERATOR_* roles are tenant-scoped and NEVER bypass operator scope.
@@ -233,12 +236,20 @@ export const locations = pgTable(
     // §9 item 20: turnaround/cooldown buffer before the same vehicle is bookable
     // again after a return. 48h (2880m) default; per-location override here.
     defaultTurnaroundMinutes: integer('defaultTurnaroundMinutes').notNull().default(2880),
+    // #394 hierarchical region node (the deepest/area level). NULLABLE this slice:
+    // the operator location form (frozen Next.js) does not set a region yet, so a
+    // NOT NULL constraint would break new-location inserts — a non-backwards-compat
+    // regression. Tighten to NOT NULL once the operator picker ships (#394 D1). FK
+    // to the platform-global regions tree; null rows never match a region filter.
+    regionId: text('regionId').references(() => regions.id),
     status: locationStatusEnum('status').notNull().default('ACTIVE'),
     createdAt: timestamp('createdAt', { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp('updatedAt', { withTimezone: true }).notNull().defaultNow(),
   },
   (table) => [
     index('idx_locations_operatorId').on(table.operatorId),
+    // Covers the regionId FK (lint-fk-indexes) + the region-filtered storefront scan.
+    index('idx_locations_regionId').on(table.regionId),
     // Name is unique per operator among *non-archived* rows (#410): a storefront
     // name belongs to active inventory, so archiving a location frees its name to
     // be reused. Two operators may both run an active "Namba". Partial unique
@@ -791,6 +802,7 @@ export const notificationLog = pgTable(
 )
 
 export { documentStatusEnum, documentTypeEnum, renterDocuments } from './renter-documents'
+export { regions } from './regions'
 
 export type BookingStatus = (typeof bookingStatusEnum.enumValues)[number]
 export type BookingFulfillmentMode = (typeof bookingFulfillmentModeEnum.enumValues)[number]

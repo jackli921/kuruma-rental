@@ -42,6 +42,7 @@ export function createStorefrontRoutes(
       if (!limit.ok) return limit.response
 
       const pickupLocationId = c.req.query('pickupLocationId')
+      const regionId = c.req.query('regionId')
       const classes = c.req.queries('class')
       const cursor = c.req.query('cursor')
 
@@ -50,6 +51,7 @@ export function createStorefrontRoutes(
         to: range.to,
         limit: limit.limit,
         ...(pickupLocationId ? { pickupLocationId } : {}),
+        ...(regionId ? { regionId } : {}),
         ...(classes && classes.length > 0 ? { classes } : {}),
         ...(cursor ? { cursor } : {}),
       })
