@@ -17,3 +17,14 @@ export interface GeocodeResult {
 export interface Geocoder {
   geocode(address: string): Promise<GeocodeResult | null>
 }
+
+/**
+ * App-side throttle port (#574). A generic "may I proceed?" check keyed by a
+ * caller-chosen string, so the geocoding service stays free of the CF/Hono rate-
+ * limit binding type. `index.ts` adapts the native `[[ratelimits]]` binding
+ * (whose shape is `limit({ key })`) to this `limit(key)` port — the only place
+ * that knows about Cloudflare.
+ */
+export interface RateLimiter {
+  limit(key: string): Promise<{ success: boolean }>
+}

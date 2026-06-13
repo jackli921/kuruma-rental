@@ -448,6 +448,19 @@ describe('LocationService', () => {
         }
       })
 
+      it('regeocode:true that fails PRESERVES a GEOCODED pin when the address is unchanged (transient miss / #574 throttle-skip is not stale)', async () => {
+        const loc = await seed({ latitude: 1, longitude: 2, coordinateSource: 'GEOCODED' })
+        const result = await build(missGeocoder).update(ctxFor(opA), loc.id, { regeocode: true })
+        expect(result.ok).toBe(true)
+        if (result.ok) {
+          // The address still supports the old pin, so a transient re-derivation
+          // miss must not wipe valid coords (#574 makes this miss routine).
+          expect(result.location.latitude).toBe(1)
+          expect(result.location.longitude).toBe(2)
+          expect(result.location.coordinateSource).toBe('GEOCODED')
+        }
+      })
+
       it('an unrelated edit (unchanged address) preserves existing coords', async () => {
         const loc = await seed({ latitude: 1, longitude: 2, coordinateSource: 'GEOCODED' })
         const geocode = vi.fn(async () => ({ lat: 0, lng: 0 }))
