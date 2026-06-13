@@ -18,6 +18,7 @@ export type {
   RenterDocument,
 } from '../stores'
 export type { DashboardStats } from '@kuruma/shared/types/stats'
+export type { OperatorOverview } from '@kuruma/shared/types/overview'
 export type { FleetVehicleOverview, FleetBookingSummary } from '@kuruma/shared/types/fleet'
 export type { VehicleDetail } from '@kuruma/shared/types/vehicle-detail'
 export type { Customer, CustomerSort, CustomerWithBookings } from '@kuruma/shared/types/customer'
@@ -25,6 +26,7 @@ export type { Customer, CustomerSort, CustomerWithBookings } from '@kuruma/share
 import type { CoordinateSource } from '@kuruma/shared/db/schema'
 import type { Customer, CustomerSort, CustomerWithBookings } from '@kuruma/shared/types/customer'
 import type { FleetVehicleOverview } from '@kuruma/shared/types/fleet'
+import type { OperatorOverview } from '@kuruma/shared/types/overview'
 import type { DashboardStats } from '@kuruma/shared/types/stats'
 import type { VehicleDetail } from '@kuruma/shared/types/vehicle-detail'
 import type { OperatorRole } from '@kuruma/shared/validators/provider-invite'
@@ -461,6 +463,17 @@ export interface BookingEventRepository {
 
 export interface StatsRepository {
   getDashboardStats(): Promise<DashboardStats>
+}
+
+/**
+ * Operator-scoped dashboard counts (#524). `ctx` decides the tenant scope via
+ * {@link bookingReadScope}: bypass roles aggregate across all operators, an
+ * OPERATOR_* caller sees only its own tenant, and an operator missing its
+ * operatorId fails closed to zeros (mirrors how its own bookings list behaves).
+ * `now` is injected so "upcoming" is deterministic in tests.
+ */
+export interface OverviewRepository {
+  getOperatorOverview(ctx: CallerContext, now: Date): Promise<OperatorOverview>
 }
 
 /**
