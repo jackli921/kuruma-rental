@@ -60,7 +60,7 @@ export function TripDetailRoute() {
   // live booking, so gate the fetch on both — bypass-role viewers (no operatorId)
   // would 403, and a settled trip can't be substituted.
   const isLive = detail?.status === 'CONFIRMED' || detail?.status === 'ACTIVE'
-  const { data: candidates = [] } = useQuery({
+  const { data: candidates = [], isError: candidatesError } = useQuery({
     ...substitutionCandidatesQueryOptions(bookingId),
     enabled: isOperatorSession(session) && isLive,
   })
@@ -85,7 +85,12 @@ export function TripDetailRoute() {
             <div className="rounded-xl border border-border py-6">
               <OperatorBookingDetail row={row} booking={detail} locale={locale} />
             </div>
-            <BookingActionsPanel detail={detail} session={session} candidates={candidates} />
+            <BookingActionsPanel
+              detail={detail}
+              session={session}
+              candidates={candidates}
+              candidatesError={candidatesError}
+            />
           </section>
           <aside className="rounded-xl border border-border px-4 py-6">
             <h2 className="mb-6 text-sm font-semibold">{t('timeline.heading')}</h2>

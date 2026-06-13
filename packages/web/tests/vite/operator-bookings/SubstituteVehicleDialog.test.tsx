@@ -18,11 +18,20 @@ function candidate(over: Partial<SubstitutionCandidate> = {}): SubstitutionCandi
   return { id: 'veh-2', name: 'Toyota Aqua', licensePlate: 'OSAKA 5678', ...over }
 }
 
-function renderDialog(candidates: SubstitutionCandidate[], queryClient = new QueryClient()) {
+function renderDialog(
+  candidates: SubstitutionCandidate[],
+  queryClient = new QueryClient(),
+  candidatesError = false,
+) {
   return render(
     <QueryClientProvider client={queryClient}>
       <IntlProvider locale="en" messages={enMessages}>
-        <SubstituteVehicleDialog bookingId="bk-1" candidates={candidates} csrfToken="csrf-tok" />
+        <SubstituteVehicleDialog
+          bookingId="bk-1"
+          candidates={candidates}
+          candidatesError={candidatesError}
+          csrfToken="csrf-tok"
+        />
       </IntlProvider>
     </QueryClientProvider>,
   )
@@ -105,6 +114,17 @@ describe('SubstituteVehicleDialog', () => {
     expect(screen.getByText(sub.noCandidates)).toBeInTheDocument()
     expect(screen.getByRole('button', { name: sub.submit })).toBeDisabled()
     expect(spy).not.toHaveBeenCalled()
+  })
+
+  it('shows a load-error message (not the empty state) when the candidate fetch failed', async () => {
+    const user = userEvent.setup()
+    renderDialog([], new QueryClient(), true)
+
+    await user.click(screen.getByRole('button', { name: sub.action }))
+
+    expect(screen.getByText(sub.loadError)).toBeInTheDocument()
+    expect(screen.queryByText(sub.noCandidates)).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: sub.submit })).toBeDisabled()
   })
 
   it('surfaces an error message when the substitution fails', async () => {
