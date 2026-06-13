@@ -47,6 +47,14 @@ export function OperatorFleetView({ vehicles, classOptions, canWrite }: Operator
   const toggleAll = () => setSelectedIds(allSelected ? [] : visibleIds)
   const toggleOne = (id: string) =>
     setSelectedIds((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]))
+  // Grid per-group select-all (#596): select the whole class together, or clear
+  // it when every member is already selected.
+  const toggleGroup = (ids: readonly string[]) =>
+    setSelectedIds((prev) =>
+      ids.every((id) => prev.includes(id))
+        ? prev.filter((id) => !ids.includes(id))
+        : [...prev, ...ids.filter((id) => !prev.includes(id))],
+    )
   const openEdit = (vehicle: OperatorFleetVehicle) => setSheet({ vehicle })
 
   return (
@@ -78,6 +86,10 @@ export function OperatorFleetView({ vehicles, classOptions, canWrite }: Operator
                 vehicles={visibleVehicles}
                 classOptions={classOptions}
                 selectedIds={selectedIds}
+                allSelected={allSelected}
+                someSelected={someSelected}
+                onToggleAll={toggleAll}
+                onToggleGroup={toggleGroup}
                 onToggleSelect={toggleOne}
                 onEdit={openEdit}
                 canWrite={canWrite}
