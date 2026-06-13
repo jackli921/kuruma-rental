@@ -6,6 +6,7 @@
   "exports": {
     ".": "./src/index.ts",
     "./acriss": "./src/acriss.ts",
+    "./auth/roles": "./src/auth/roles.ts",
     "./db": "./src/db/index.ts",
     "./db/schema": "./src/db/schema.ts",
     "./db/constants": "./src/db/constants.ts",
