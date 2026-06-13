@@ -182,10 +182,21 @@ describe('seed-data demo regions (#394)', () => {
     for (const r of DEMO_REGIONS) expect(r.assignable).toBe(r.type === 'AREA')
   })
 
-  it('gives every assignable (area) region real coordinates', () => {
+  it('gives every assignable (area) region valid WGS84 coordinates', () => {
     for (const r of DEMO_REGIONS.filter((r) => r.assignable)) {
-      expect(typeof r.latitude).toBe('number')
-      expect(typeof r.longitude).toBe('number')
+      const lat = r.latitude as number
+      const lng = r.longitude as number
+      // Finite numbers (rejects null / NaN / Infinity)...
+      expect(Number.isFinite(lat)).toBe(true)
+      expect(Number.isFinite(lng)).toBe(true)
+      // ...inside the WGS84 envelope...
+      expect(lat).toBeGreaterThanOrEqual(-90)
+      expect(lat).toBeLessThanOrEqual(90)
+      expect(lng).toBeGreaterThanOrEqual(-180)
+      expect(lng).toBeLessThanOrEqual(180)
+      // ...and not the (0,0) Atlantic-Ocean default (Kansai is firmly NE quadrant).
+      expect(lat).toBeGreaterThan(0)
+      expect(lng).toBeGreaterThan(0)
     }
   })
 

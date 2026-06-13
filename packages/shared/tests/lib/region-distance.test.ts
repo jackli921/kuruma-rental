@@ -84,6 +84,27 @@ describe('nearestAssignableRegion', () => {
     expect(nearestAssignableRegion([area({ id: 'reg_namba', ...NAMBA })], TOKYO)).toBeNull()
   })
 
+  it('skips an out-of-radius region but still selects a nearer one later in the list', () => {
+    // Far region listed FIRST: a `continue`->`break` mutation in the radius guard
+    // would exit before reaching the in-radius region and wrongly return null.
+    const regions = [
+      area({ id: 'reg_tokyo', ...TOKYO }), // ~400 km from NAMBA — beyond radius
+      area({ id: 'reg_umeda', ...UMEDA }), // ~4 km from NAMBA — within radius
+    ]
+    expect(nearestAssignableRegion(regions, NAMBA)?.id).toBe('reg_umeda')
+  })
+
+  it('accepts a region just inside the radius and rejects one just outside it', () => {
+    // On the equator east of (0,0), distance ≈ 6371 km · Δlng(rad). 0.898° ≈ 99.85 km
+    // (inside 100 km); 0.902° ≈ 100.30 km (outside). Straddles REGION_SANITY_RADIUS_KM,
+    // pinning the radius constant + the cutoff direction without a flaky exact-boundary point.
+    const origin = { latitude: 0, longitude: 0 }
+    const justInside = area({ id: 'reg_inside', latitude: 0, longitude: 0.898 })
+    const justOutside = area({ id: 'reg_outside', latitude: 0, longitude: 0.902 })
+    expect(nearestAssignableRegion([justInside], origin)?.id).toBe('reg_inside')
+    expect(nearestAssignableRegion([justOutside], origin)).toBeNull()
+  })
+
   it('breaks ties by sortOrder, then id, when distances are equal', () => {
     const regions = [
       area({ id: 'reg_b', ...NAMBA, sortOrder: 2 }),
