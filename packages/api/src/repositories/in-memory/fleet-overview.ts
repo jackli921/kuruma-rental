@@ -1,5 +1,5 @@
 import type { FleetVehicleOverview } from '@kuruma/shared/types/fleet'
-import { SYSTEM_CONTEXT } from '../../middleware/auth'
+import { type CallerContext, SYSTEM_CONTEXT } from '../../middleware/auth'
 import type {
   BookingRepository,
   FleetOverviewRepository,
@@ -36,10 +36,15 @@ export class InMemoryFleetOverviewRepository implements FleetOverviewRepository 
     private readonly maintenanceLogRepo?: MaintenanceLogRepository,
   ) {}
 
-  async findFleetOverview(now: Date): Promise<FleetVehicleOverview[]> {
+  async findFleetOverview(ctx: CallerContext, now: Date): Promise<FleetVehicleOverview[]> {
     const windowStart = new Date(now.getTime() - UTILIZATION_WINDOW_HOURS * 60 * 60 * 1000)
 
-    const { data: vehicles } = await this.vehicleRepo.findAll(SYSTEM_CONTEXT)
+    // Scope vehicles to the caller's tenant (#594). VehicleRepository.findAll
+    // already applies operatorReadScope, so an OPERATOR_* caller sees only their
+    // own cars while bypass roles see all. Bookings are read with SYSTEM_CONTEXT
+    // but each output row only surfaces bookings keyed to a vehicle in this
+    // (already tenant-scoped) set, so no cross-tenant booking can leak.
+    const { data: vehicles } = await this.vehicleRepo.findAll(ctx)
     const allBookings = await this.bookingRepo.findAll(SYSTEM_CONTEXT)
 
     return Promise.all(
