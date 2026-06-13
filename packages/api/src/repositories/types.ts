@@ -538,7 +538,13 @@ export interface VehicleDetailRepository {
   // `now` injected for the same reason as FleetOverviewRepository:
   // revenue window, upcoming-booking filtering, and utilization range
   // are business decisions owned by the service layer.
-  findVehicleDetail(vehicleId: string, now: Date): Promise<VehicleDetail | undefined>
+  // `ctx` is the tenant boundary: an OPERATOR_* caller only resolves a vehicle
+  // in its own tenant (operatorReadScope), so a foreign id returns undefined.
+  findVehicleDetail(
+    ctx: CallerContext,
+    vehicleId: string,
+    now: Date,
+  ): Promise<VehicleDetail | undefined>
 }
 
 export interface ThreadRepository {

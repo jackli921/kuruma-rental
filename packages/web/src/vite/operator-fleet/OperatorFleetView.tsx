@@ -19,6 +19,10 @@ interface OperatorFleetViewProps {
   // False for bypass roles (no operatorId): the page renders read-only — no Add,
   // no per-row/card actions, no selection, no bulk bar. See the route comment (#598).
   readonly canWrite: boolean
+  // Threaded to the row/card so each vehicle name links to its detail page (#527).
+  // Passed as a prop (not read from a router hook) to keep the view tree
+  // router-free and unit-testable — the bookings locale-as-prop convention.
+  readonly locale: string
 }
 
 // Stateful fleet management container. The route owns the loader /
@@ -27,7 +31,12 @@ interface OperatorFleetViewProps {
 // (FleetTable) or grid (FleetGrid) presentation (#561). Decision logic stays in
 // the pure fleet-filters / fleet-grouping libs (FC/IS); this is the imperative
 // shell that holds UI state.
-export function OperatorFleetView({ vehicles, classOptions, canWrite }: OperatorFleetViewProps) {
+export function OperatorFleetView({
+  vehicles,
+  classOptions,
+  canWrite,
+  locale,
+}: OperatorFleetViewProps) {
   const t = useTranslations('business.vehicles.fleet')
   const todayIso = new Date().toISOString().slice(0, 10)
   const [view, setView] = useFleetViewMode()
@@ -94,6 +103,7 @@ export function OperatorFleetView({ vehicles, classOptions, canWrite }: Operator
                 onEdit={openEdit}
                 canWrite={canWrite}
                 todayIso={todayIso}
+                locale={locale}
               />
             ) : (
               <FleetTable
@@ -106,6 +116,7 @@ export function OperatorFleetView({ vehicles, classOptions, canWrite }: Operator
                 onEdit={openEdit}
                 canWrite={canWrite}
                 todayIso={todayIso}
+                locale={locale}
               />
             )}
           </div>
