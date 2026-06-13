@@ -4,12 +4,11 @@ import { deleteCookie, getCookie, setCookie } from 'hono/cookie'
 import {
   type GoogleAuthRuntime,
   type GoogleOAuthConfig,
-  OAUTH_INTENT_COOKIE,
-  OAUTH_INVITE_COOKIE,
-  OAUTH_RETURN_COOKIE,
-  OAUTH_STATE_COOKIE,
   OAUTH_STATE_TTL_SECONDS,
   buildGoogleAuthorizeUrl,
+  decodeFlowPayload,
+  encodeFlowPayload,
+  flowCookieName,
   localeFromReturnPath,
   parseOAuthIntent,
   randomToken,
@@ -43,10 +42,9 @@ const SESSION_COOKIE_OPTS = {
   path: '/',
 } as const
 
-// Shared attributes for every short-lived OAuth round-trip cookie (state, return,
-// intent, invite). HttpOnly + Secure + SameSite=Lax so they survive Google's
-// top-level GET redirect back to the callback, scoped to '/', expiring with the
-// flow's TTL — one definition keeps the four cookies' security posture in lockstep.
+// Attributes for the per-flow OAuth round-trip cookie (issue #519). HttpOnly +
+// Secure + SameSite=Lax so it survives Google's top-level GET redirect back to the
+// callback, scoped to '/', expiring with the flow's TTL.
 const OAUTH_FLOW_COOKIE_OPTS = {
   httpOnly: true,
   secure: true,
@@ -65,16 +63,6 @@ export function setSessionCookie(c: Context, token: string): void {
  *  so the browser reliably matches and drops it. */
 export function clearSessionCookie(c: Context): void {
   deleteCookie(c, SESSION_COOKIE, SESSION_COOKIE_OPTS)
-}
-
-/** Drop every one-time OAuth-flow cookie (state + return + intent + invite).
- *  Called on every callback failure path so a dead-ended sign-in leaves nothing
- *  behind to expire or leak into a later flow. */
-function clearOAuthFlowCookies(c: Context): void {
-  deleteCookie(c, OAUTH_STATE_COOKIE, { path: '/' })
-  deleteCookie(c, OAUTH_RETURN_COOKIE, { path: '/' })
-  deleteCookie(c, OAUTH_INTENT_COOKIE, { path: '/' })
-  deleteCookie(c, OAUTH_INVITE_COOKIE, { path: '/' })
 }
 
 /** Build the provider-login error redirect (#521). `error` is an OperatorGrantResult
@@ -105,68 +93,49 @@ export function createAuthRoutes(
     .post('/auth/google/start', (c) => {
       if (!googleConfig) return fail(c, 'Google sign-in is not configured', 503)
 
-      // Bind a fresh state to a short-lived cookie; the callback rejects any
-      // response whose state doesn't match (OAuth CSRF defence).
+      // Each sign-in gets its OWN random state + per-flow cookie (issue #519): two
+      // tabs starting at once bind to different cookie names and never clobber one
+      // another, so neither dead-ends on the other's state. The callback validates
+      // by the presence of this cookie (the CSRF binding) — only a flow this browser
+      // started holds it. The validated flow data (a safe returnTo, provider intent,
+      // and any syntactically-acceptable invite token; #521 §5) rides in the HttpOnly
+      // cookie VALUE, not the `state` param, so returnTo never leaks into the URL.
       const state = randomToken()
-      setCookie(c, OAUTH_STATE_COOKIE, state, OAUTH_FLOW_COOKIE_OPTS)
-
-      // Carry a *validated* return path through the round-trip so the callback
-      // can land the user back where the guard intercepted them. Open-redirect
-      // targets are dropped (safeReturnPath → undefined) and simply ignored.
-      const returnTo = safeReturnPath(c.req.query('returnTo'))
-      if (returnTo) {
-        setCookie(c, OAUTH_RETURN_COOKIE, returnTo, OAUTH_FLOW_COOKIE_OPTS)
-      } else {
-        // Bind the return cookie freshly to *this* flow: with no/invalid returnTo,
-        // erase any stale value an aborted earlier flow left behind, so the
-        // callback can't inherit it and redirect a plain login to a stale path.
-        deleteCookie(c, OAUTH_RETURN_COOKIE, { path: '/' })
-      }
-
-      // Provider sign-in door (#521 §5): carry intent + optional invite token to
-      // the callback. Each is bound freshly to *this* flow (set when valid, erase
-      // otherwise) so a stale value from an aborted flow can never leak forward.
-      // Identity is still Google's; these only steer the post-login authz decision.
-      if (parseOAuthIntent(c.req.query('intent')) === 'provider') {
-        setCookie(c, OAUTH_INTENT_COOKIE, 'provider', OAUTH_FLOW_COOKIE_OPTS)
-      } else {
-        deleteCookie(c, OAUTH_INTENT_COOKIE, { path: '/' })
-      }
-      const invite = safeInviteToken(c.req.query('invite'))
-      if (invite) {
-        setCookie(c, OAUTH_INVITE_COOKIE, invite, OAUTH_FLOW_COOKIE_OPTS)
-      } else {
-        deleteCookie(c, OAUTH_INVITE_COOKIE, { path: '/' })
-      }
+      const payload = encodeFlowPayload({
+        returnTo: safeReturnPath(c.req.query('returnTo')),
+        intent: parseOAuthIntent(c.req.query('intent')),
+        invite: safeInviteToken(c.req.query('invite')),
+      })
+      setCookie(c, flowCookieName(state), payload, OAUTH_FLOW_COOKIE_OPTS)
       return c.redirect(buildGoogleAuthorizeUrl(googleConfig, state), 302)
     })
     .get('/auth/google/callback', async (c) => {
       if (!googleConfig || !googleRuntime) return fail(c, 'Google sign-in is not configured', 503)
 
-      // Reject unless the returned state matches the one we bound at /start —
-      // an attacker can neither read nor forge the HttpOnly state cookie.
-      const expectedState = getCookie(c, OAUTH_STATE_COOKIE)
+      // Validate state by the PRESENCE of this flow's own cookie (issue #519): only
+      // a sign-in this browser started holds `<prefix><state>`, and it's HttpOnly so
+      // an attacker can neither read nor forge it. A missing cookie ⇒ forged/expired/
+      // unknown state ⇒ reject. Per-flow naming means a sibling tab's flow is irrelevant.
       const state = c.req.query('state')
-      if (!expectedState || !state || expectedState !== state) {
-        clearOAuthFlowCookies(c)
+      const flowCookie = state ? getCookie(c, flowCookieName(state)) : undefined
+      if (!state || flowCookie === undefined) {
+        // No cookie matched this state ⇒ nothing to clear. (Don't try to delete a
+        // cookie named after a hostile `state` — invalid name chars would throw.)
         return fail(c, 'Invalid OAuth state', 400)
       }
       const code = c.req.query('code')
       if (!code) {
-        clearOAuthFlowCookies(c)
+        deleteCookie(c, flowCookieName(state), { path: '/' })
         return fail(c, 'Missing authorization code', 400)
       }
 
-      // Read the one-time flow cookies into memory, then drop all four (defence in
-      // depth, mirroring the existing return-cookie re-validation): the decision
-      // below works from these values and never reads the cookies again. returnTo is
-      // re-validated so a tampered cookie can't open-redirect; its locale segment
-      // also steers the server-computed provider redirects.
-      const intent = parseOAuthIntent(getCookie(c, OAUTH_INTENT_COOKIE))
-      const inviteToken = safeInviteToken(getCookie(c, OAUTH_INVITE_COOKIE))
-      const returnTo = safeReturnPath(getCookie(c, OAUTH_RETURN_COOKIE))
+      // Read the one-time flow payload into memory, then drop the cookie: the decision
+      // below works from these values and never reads it again. decodeFlowPayload
+      // re-validates every field (defence in depth — a tampered cookie can't
+      // open-redirect); returnTo's locale segment steers server-computed redirects.
+      const { returnTo, intent, invite: inviteToken } = decodeFlowPayload(flowCookie)
       const locale = localeFromReturnPath(returnTo)
-      clearOAuthFlowCookies(c)
+      deleteCookie(c, flowCookieName(state), { path: '/' })
 
       const secret = process.env.AUTH_SECRET
       if (!secret) return fail(c, 'Server auth is not configured', 500)
