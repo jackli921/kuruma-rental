@@ -1,3 +1,4 @@
+import { ADMIN_SEED_EMAIL } from './constants'
 import { testSql } from './pg'
 
 // The Vite/CF-Pages stack (#378) authenticates the browser with the API's own
@@ -38,6 +39,16 @@ const RENTER = {
   role: 'RENTER',
 } as const
 
+// Platform-admin persona (#462 revenue tab). Email mirrors PLATFORM_ADMIN_EMAILS
+// fed to the seed (ADMIN_SEED_EMAIL), which upserts it as role PLATFORM_ADMIN
+// with operatorId = null — so its token omits the tenant claim, matching a real
+// admin who belongs to no operator (proposal §6.2).
+const ADMIN = {
+  email: ADMIN_SEED_EMAIL,
+  name: 'Platform Admin',
+  role: 'PLATFORM_ADMIN',
+} as const
+
 /** Look up a seeded user's id + tenant (operatorId) by its stable seed email. */
 async function findUser(email: string): Promise<{ id: string; operatorId: string | null }> {
   const sql = testSql()
@@ -58,7 +69,7 @@ async function findUser(email: string): Promise<{ id: string; operatorId: string
 interface SessionIdentity {
   email: string
   name: string
-  role: 'RENTER' | 'OPERATOR_OWNER'
+  role: 'RENTER' | 'OPERATOR_OWNER' | 'PLATFORM_ADMIN'
 }
 
 /**
@@ -103,4 +114,9 @@ export function mintOperatorSessionToken(): Promise<string> {
 /** Session cookie value for the seeded RENTER persona (Sarah Smith). */
 export function mintRenterSessionToken(): Promise<string> {
   return mintSession(RENTER)
+}
+
+/** Session cookie value for the seeded PLATFORM_ADMIN persona (#462 revenue tab). */
+export function mintAdminSessionToken(): Promise<string> {
+  return mintSession(ADMIN)
 }

@@ -2,7 +2,7 @@ import { mkdirSync } from 'node:fs'
 import { writeFileSync } from 'node:fs'
 import type { Page } from '@playwright/test'
 import { expect, test } from '@playwright/test'
-import { RENTER_STORAGE_STATE } from './constants'
+import { ADMIN_STORAGE_STATE, RENTER_STORAGE_STATE } from './constants'
 
 // Dev-only console noise that is never a demo defect — exclude so the gate stays
 // mutation-resistant (fails on real regressions, not React/Vite chatter).
@@ -211,6 +211,19 @@ test.describe('#509 demo walkthrough — capture every page', () => {
     await capture(renter, '10-renter-home', '/en')
     await capture(renter, '11-renter-search', '/en/search')
     await capture(renter, '12-renter-mybookings', '/en/bookings')
+    await ctx.close()
+  })
+
+  // #462 — platform-admin partner-revenue tab. Lives behind the _admin guard
+  // (PLATFORM_ADMIN only), so it gets its own env-gated admin context rather than
+  // the default operator/renter sessions. #627 seeds payment_events so the tab
+  // shows real data; an empty payment_events still renders clean, so the gate is
+  // robust either way — the assertion is "renders without guard redirect / 403".
+  test('platform-admin surface — revenue tab', async ({ browser, baseURL }) => {
+    test.setTimeout(120_000)
+    const ctx = await browser.newContext({ storageState: ADMIN_STORAGE_STATE, baseURL })
+    const admin = await ctx.newPage()
+    await capture(admin, '13-admin-revenue', '/en/admin/revenue')
     await ctx.close()
   })
 })

@@ -216,6 +216,11 @@ jobs:
       - name: Seed the marketplace fixture over TCP
         # db:seed:tcp uses postgres-js (TCP); the production neon-http getDb()
         # cannot reach a plain postgres:16 container.
+        env:
+          # Grant the walkthrough admin persona PLATFORM_ADMIN so it can reach the
+          # env-gated /admin/revenue tab (#462). Mirror of ADMIN_SEED_EMAIL in
+          # e2e/real-db/constants.ts — yaml can't import TS; keep them in sync.
+          PLATFORM_ADMIN_EMAILS: platform-admin@kuruma.test
         run: bun run db:seed:tcp
 
       - name: Run authenticated real-DB E2E
