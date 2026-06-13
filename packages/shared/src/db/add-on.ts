@@ -10,9 +10,10 @@ import {
   unique,
   uniqueIndex,
 } from 'drizzle-orm/pg-core'
+import { ADD_ON_STATUSES } from '../enums'
 import { operators } from './schema'
 
-export const addOnStatusEnum = pgEnum('add_on_status', ['ACTIVE', 'ARCHIVED'])
+export const addOnStatusEnum = pgEnum('add_on_status', ADD_ON_STATUSES)
 
 // Operator-owned paid add-ons (epic #385, slice #460). Selectable priced items
 // chosen in the booking wizard (baby seat, ETC card…). priceJpy is a FLAT

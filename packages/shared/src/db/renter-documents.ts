@@ -1,4 +1,5 @@
 import { date, index, pgEnum, pgTable, text, timestamp } from 'drizzle-orm/pg-core'
+import { DOCUMENT_STATUSES, DOCUMENT_TYPES } from '../enums'
 import { users } from './schema'
 
 // Renter identity documents (#459, §1.3/§4). Metadata ONLY — the scan lives in
@@ -12,8 +13,8 @@ import { users } from './schema'
 // under the 800-line cap; re-exported from schema.ts so drizzle-kit (which reads
 // schema.ts) still discovers the table. The `users` FK uses lazy `() =>` thunks,
 // so the schema.ts ⇄ renter-documents circular import resolves cleanly.
-export const documentTypeEnum = pgEnum('document_type', ['IDP', 'PASSPORT'])
-export const documentStatusEnum = pgEnum('document_status', ['PENDING', 'APPROVED', 'REJECTED'])
+export const documentTypeEnum = pgEnum('document_type', DOCUMENT_TYPES)
+export const documentStatusEnum = pgEnum('document_status', DOCUMENT_STATUSES)
 
 export const renterDocuments = pgTable(
   'renter_documents',

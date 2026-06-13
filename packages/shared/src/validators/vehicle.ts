@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { TRANSMISSIONS, VEHICLE_STATUSES } from '../enums'
 import { LUGGAGE_SIZES } from '../lib/luggage'
 
 const MIN_VEHICLE_YEAR = 1900
@@ -37,7 +38,7 @@ const vehicleObjectSchema = z.object({
   // No `.default()` here — the class is the fallback, resolved at read time.
   luggageCapacity: z.number().int().min(0, 'Luggage capacity cannot be negative').nullish(),
   luggageSize: z.enum(LUGGAGE_SIZES).nullish(),
-  transmission: z.enum(['AUTO', 'MANUAL']),
+  transmission: z.enum(TRANSMISSIONS),
   fuelType: z.string().optional(),
   licensePlate: z.string().trim().max(20).nullish(),
   // Issue #50: rental rules. All three are nullish so the form can submit
@@ -128,8 +129,8 @@ export const updateVehicleSchema = vehicleObjectSchema.partial().superRefine((da
 
 // Issue #51: inline status toggle. Kept as its own tiny schema so the
 // fleet list can bind a one-field mutation without sending the full
-// update payload. Mirrors the `vehicle_status` pgEnum in schema.ts.
-export const vehicleStatusEnum = z.enum(['AVAILABLE', 'MAINTENANCE', 'RETIRED'])
+// update payload. Derives from the `vehicle_status` enum SSoT (#688).
+export const vehicleStatusEnum = z.enum(VEHICLE_STATUSES)
 export const updateVehicleStatusSchema = z.object({
   status: vehicleStatusEnum,
 })

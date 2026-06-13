@@ -1,5 +1,6 @@
 import { sql } from 'drizzle-orm'
 import { index, pgEnum, pgTable, text, timestamp, uniqueIndex } from 'drizzle-orm/pg-core'
+import { OPERATOR_MEMBERSHIP_STATUSES, OPERATOR_ROLES, PROVIDER_INVITE_STATUSES } from '../enums'
 import { operators, users } from './schema'
 
 // #521 — provider authorization model. Google proves identity; these tables
@@ -9,14 +10,14 @@ import { operators, users } from './schema'
 // first-login provisioning. See
 // docs/plans/2026-06-10-issue-521-provider-login-operator-access.md.
 
-export const operatorRoleEnum = pgEnum('operator_role', ['OPERATOR_OWNER', 'OPERATOR_STAFF'])
-export const operatorMembershipStatusEnum = pgEnum('operator_membership_status', [
-  'ACTIVE',
-  'REVOKED',
-])
+export const operatorRoleEnum = pgEnum('operator_role', OPERATOR_ROLES)
+export const operatorMembershipStatusEnum = pgEnum(
+  'operator_membership_status',
+  OPERATOR_MEMBERSHIP_STATUSES,
+)
 // PENDING -> ACCEPTED only. Expired-ness is COMPUTED from expiresAt, never
 // stored (YAGNI; REVOKED/EXPIRED land with the revoke/sweep follow-up, §13).
-export const providerInviteStatusEnum = pgEnum('provider_invite_status', ['PENDING', 'ACCEPTED'])
+export const providerInviteStatusEnum = pgEnum('provider_invite_status', PROVIDER_INVITE_STATUSES)
 
 export const operatorMemberships = pgTable(
   'operator_memberships',

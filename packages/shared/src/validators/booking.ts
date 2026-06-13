@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { BOOKING_SOURCES, BOOKING_STATUSES } from '../enums'
 
 // Slice 6 (#392): the renter books a CONCRETE vehicle chosen in the storefront
 // (slice 5) — `requestedVehicleId`. The server derives operatorId, classId,
@@ -25,7 +26,7 @@ export const createBookingSchema = z
     startAt: z.string().datetime({ message: 'Must be ISO datetime' }),
     endAt: z.string().datetime({ message: 'Must be ISO datetime' }),
     notes: z.string().optional(),
-    source: z.enum(['DIRECT', 'TRIP_COM', 'MANUAL', 'OTHER']).default('DIRECT'),
+    source: z.enum(BOOKING_SOURCES).default('DIRECT'),
     externalId: z.string().optional(),
     idempotencyKey: z.string().uuid('Must be a valid UUID').optional(),
     // #613: renter liability-disclaimer (免责声明) consent. The renter ticks the
@@ -40,7 +41,7 @@ export const createBookingSchema = z
   })
 
 export const updateBookingStatusSchema = z.object({
-  status: z.enum(['CONFIRMED', 'ACTIVE', 'COMPLETED', 'CANCELLED'], {
+  status: z.enum(BOOKING_STATUSES, {
     message: 'Status must be CONFIRMED, ACTIVE, COMPLETED, or CANCELLED',
   }),
 })
