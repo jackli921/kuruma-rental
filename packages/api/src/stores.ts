@@ -1,4 +1,3 @@
-import type { notificationStatusEnum } from '@kuruma/shared/db/schema'
 import type {
   AddOnSnapshot,
   BookingEventPayload,
@@ -7,17 +6,21 @@ import type {
   CoordinateSource,
   FeeSnapshotItem,
   InsuranceSnapshot,
+  NotificationKind,
+  NotificationStatus,
 } from '@kuruma/shared/db/schema'
 import type { LuggageSize } from '@kuruma/shared/lib/luggage'
 import type { LocationOperatingHours } from '@kuruma/shared/types/location'
 
 /**
- * Single source of truth for the notification status set is the
- * `notificationStatusEnum` pgEnum in @kuruma/shared. Derive the union here so a
- * new status (e.g. DEAD, #483) added to the enum can't drift from this type
- * without a compile error (#534).
+ * The notification kind/status sets have a single source of truth: the
+ * `notificationKindEnum` / `notificationStatusEnum` pgEnums in @kuruma/shared.
+ * Both are derived there (#710, #534) and re-exported here so a new value (e.g.
+ * DEAD, #483) added to an enum can't drift from these types without a compile
+ * error. Never re-list the literals — that drift only surfaces as a runtime
+ * 22P02 invalid_enum_value on the insert that writes `kind`/`status`.
  */
-export type NotificationStatus = (typeof notificationStatusEnum.enumValues)[number]
+export type { NotificationKind, NotificationStatus }
 
 export interface VehicleClass {
   id: string
@@ -172,19 +175,16 @@ export interface Message {
 // send lifecycle (QUEUED -> SENDING -> SENT/FAILED); idempotencyKey seals one
 // logical notification per (booking, kind). DEAD (#483) is the terminal
 // poison-message sink after MAX_NOTIFICATION_ATTEMPTS failures — claim() never
-// re-arms it. Mirrors notificationStatusEnum in @kuruma/shared/db/schema.
+// re-arms it. kind/status are derived from their pgEnums in
+// @kuruma/shared/db/schema (#710) — never re-list the literals here.
 export interface NotificationLog {
   id: string
   bookingId: string
   operatorId: string
-  kind:
-    | 'OPERATOR_BOOKING_ALERT'
-    | 'RENTER_BOOKING_CONFIRM'
-    // #664 renter lifecycle pushes (mirror notificationKindEnum order).
-    | 'RENTER_SUBSTITUTION'
-    | 'RENTER_CANCELLATION'
-    | 'RENTER_TRIP_STARTED'
-    | 'RENTER_TRIP_COMPLETED'
+  // #710: derived from notificationKindEnum (see NotificationKind re-export
+  // above) — never re-list the literals, or a rename drifts silently into a
+  // runtime 22P02 invalid_enum_value on insert.
+  kind: NotificationKind
   channel: string
   recipient: string
   locale: string

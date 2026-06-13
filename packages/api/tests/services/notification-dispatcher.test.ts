@@ -1,3 +1,4 @@
+import { notificationKindEnum } from '@kuruma/shared/db/schema'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { InMemoryNotificationLogRepository } from '../../src/repositories/in-memory/notification-log'
 import { InMemoryOperatorRepository } from '../../src/repositories/in-memory/operator'
@@ -245,6 +246,22 @@ describe('NotificationDispatcher', () => {
       const rows = await logRepo.findAll({ userId: 'x', role: 'PLATFORM_ADMIN', bypassScope: true })
       return { rows, sender }
     }
+
+    // #710: every kind the dispatcher can emit must be a value of the
+    // notification_kind pgEnum, and every enum value must be reachable from some
+    // trigger. The write path passes `kind` straight to the enum column, so a
+    // kind that drifts from the enum is a runtime 22P02 invalid_enum_value on
+    // insert. Asserting set-equality here (against the enum single source) makes
+    // that drift fail in CI instead of in production.
+    it('emits exactly the notification_kind enum value set across all triggers (#710)', async () => {
+      const triggers = ['CREATED', 'SUBSTITUTED', 'CANCELLED', 'ACTIVATED', 'COMPLETED'] as const
+      const emitted = new Set<string>()
+      for (const trigger of triggers) {
+        const { rows } = await kindsFor(trigger)
+        for (const row of rows) emitted.add(row.kind)
+      }
+      expect([...emitted].sort()).toEqual([...notificationKindEnum.enumValues].sort())
+    })
 
     it('SUBSTITUTED dispatches exactly RENTER_SUBSTITUTION, sent once', async () => {
       const { rows, sender } = await kindsFor('SUBSTITUTED')

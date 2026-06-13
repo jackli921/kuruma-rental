@@ -868,6 +868,15 @@ export type FeeType = (typeof feeTypeEnum.enumValues)[number]
 export type FeeUnit = (typeof feeUnitEnum.enumValues)[number]
 export type BookingEventType = (typeof bookingEventTypeEnum.enumValues)[number]
 
+// #710: derive the notification kind/status unions from their pgEnum single
+// source so adding/renaming a value can only be done in one place. A
+// hand-mirrored literal copy (previously on NotificationLog.kind in
+// packages/api/src/stores.ts) compiled fine when it drifted, then threw a
+// runtime 22P02 invalid_enum_value on the insert that passes `kind` straight to
+// the enum column. Importing these into the api turns that into a build error.
+export type NotificationKind = (typeof notificationKindEnum.enumValues)[number]
+export type NotificationStatus = (typeof notificationStatusEnum.enumValues)[number]
+
 // add_on_options table + status enum live in ./add-on; booking snapshot/event
 // payload types live in ./booking-types. Both re-exported so drizzle-kit (which
 // only loads this module) and existing `@kuruma/shared/db/schema` importers see
