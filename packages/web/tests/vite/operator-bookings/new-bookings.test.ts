@@ -1,5 +1,6 @@
 import {
   LAST_SEEN_STORAGE_KEY,
+  NEW_ORDER_SCAN_QUERY_KEY,
   countNewBookings,
   getStoredLastSeenAt,
   markBookingsSeen,
@@ -49,17 +50,33 @@ describe('getStoredLastSeenAt', () => {
 })
 
 describe('markBookingsSeen', () => {
-  it('advances lastSeenAt to now in both storage and the query cache', () => {
+  it('anchors lastSeenAt to the newest scanned order (server time, skew-immune)', () => {
+    window.localStorage.setItem(LAST_SEEN_STORAGE_KEY, '2020-01-01T00:00:00.000Z')
+    const qc = new QueryClient()
+    // The scan is ordered createdAt DESC, so the head is the newest seen order.
+    qc.setQueryData(NEW_ORDER_SCAN_QUERY_KEY, [
+      { createdAt: '2026-06-13T05:00:00.000Z' },
+      { createdAt: '2026-06-13T04:00:00.000Z' },
+    ])
+
+    markBookingsSeen(qc)
+
+    const stored = window.localStorage.getItem(LAST_SEEN_STORAGE_KEY)
+    // Exactly the newest scanned createdAt — NOT the client clock.
+    expect(stored).toBe('2026-06-13T05:00:00.000Z')
+    // Same value mirrored into the cache so subscribers (the nav badge) re-derive.
+    expect(qc.getQueryData(['operator-bookings', 'last-seen-at'])).toBe(stored)
+  })
+
+  it('falls back to now when no orders have been scanned yet', () => {
     window.localStorage.setItem(LAST_SEEN_STORAGE_KEY, '2020-01-01T00:00:00.000Z')
     const qc = new QueryClient()
     markBookingsSeen(qc)
 
-    const stored = window.localStorage.getItem(LAST_SEEN_STORAGE_KEY)
-    expect(stored).not.toBe('2020-01-01T00:00:00.000Z')
-    expect(new Date(stored as string).getTime()).toBeGreaterThan(
+    const stored = window.localStorage.getItem(LAST_SEEN_STORAGE_KEY) as string
+    expect(new Date(stored).getTime()).toBeGreaterThan(
       new Date('2020-01-01T00:00:00.000Z').getTime(),
     )
-    // Same value mirrored into the cache so subscribers (the nav badge) re-derive.
     expect(qc.getQueryData(['operator-bookings', 'last-seen-at'])).toBe(stored)
   })
 })

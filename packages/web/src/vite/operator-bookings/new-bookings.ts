@@ -11,6 +11,7 @@ import { type QueryClient, queryOptions } from '@tanstack/react-query'
 
 export const LAST_SEEN_STORAGE_KEY = 'kuruma_bookings_last_seen_at'
 export const LAST_SEEN_QUERY_KEY = ['operator-bookings', 'last-seen-at'] as const
+export const NEW_ORDER_SCAN_QUERY_KEY = ['operator-bookings', 'new-order-scan'] as const
 
 // The badge only needs to count, so it pulls the newest page (the list is
 // ordered createdAt DESC, so recent orders are always on page 1) and reads just
@@ -45,7 +46,7 @@ export async function fetchNewOrderBookings(): Promise<NewOrderBooking[]> {
 
 export function newOrderBookingsQueryOptions(enabled: boolean) {
   return queryOptions({
-    queryKey: ['operator-bookings', 'new-order-scan'],
+    queryKey: NEW_ORDER_SCAN_QUERY_KEY,
     queryFn: fetchNewOrderBookings,
     enabled,
     refetchOnWindowFocus: true,
@@ -77,12 +78,19 @@ export function lastSeenQueryOptions() {
 }
 
 /**
- * Mark the orders list as seen: advance `lastSeenAt` to now in both storage and
- * the query cache. Writing to the cache makes the nav badge re-derive its count
- * to 0 immediately (every existing booking is now <= lastSeenAt).
+ * Mark the orders list as seen: advance `lastSeenAt` in both storage and the
+ * query cache so the nav badge re-derives its count to 0 immediately.
+ *
+ * It anchors to the newest order actually scanned (a server-minted `createdAt`)
+ * rather than the client clock: `createdAt` is compared against `lastSeenAt`, so
+ * mixing a client `Date.now()` with server timestamps would mis-clear (clock
+ * behind) or bury new orders (clock ahead) under any skew. The scan is ordered
+ * createdAt DESC, so the head is the newest seen order; fall back to now only
+ * when nothing has been scanned (no orders, or the scan hasn't loaded).
  */
 export function markBookingsSeen(queryClient: QueryClient): void {
-  const now = new Date().toISOString()
-  window.localStorage.setItem(LAST_SEEN_STORAGE_KEY, now)
-  queryClient.setQueryData(LAST_SEEN_QUERY_KEY, now)
+  const scanned = queryClient.getQueryData<NewOrderBooking[]>(NEW_ORDER_SCAN_QUERY_KEY)
+  const seenAt = scanned?.[0]?.createdAt ?? new Date().toISOString()
+  window.localStorage.setItem(LAST_SEEN_STORAGE_KEY, seenAt)
+  queryClient.setQueryData(LAST_SEEN_QUERY_KEY, seenAt)
 }
