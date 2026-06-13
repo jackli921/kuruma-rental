@@ -1017,10 +1017,11 @@ describe('Booking Routes', () => {
         ).id
 
         const res = await createBooking(
+          // Use validBookingInput's single-`now` anchored 24h window. Overriding
+          // with two separate futureDate() calls reintroduces the few-ms gap that
+          // Math.ceil() in pricing rounds up to 2 days (see the helper comment).
           validBookingInput({
             requestedVehicleId: vehicleId,
-            startAt: futureDate(48),
-            endAt: futureDate(72),
             totalPrice: 1, // attacker-controlled — must be stripped + ignored
           }),
         )
