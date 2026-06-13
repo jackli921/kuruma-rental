@@ -144,6 +144,15 @@ export function createBookingRoutes(service: BookingService) {
       const renterId = isStaff && parsed.data.renterId ? parsed.data.renterId : ctx.userId
       const source = isStaff ? parsed.data.source : 'DIRECT'
 
+      // #613: a renter self-serve booking must accept the liability disclaimer
+      // (免责声明) at checkout — the IDP/license must be valid at pickup or the
+      // order is non-refundable (replaces the dropped online document upload).
+      // Staff/manual bookings capture acknowledgement operationally and are exempt.
+      // The service stamps disclaimerAcknowledgedAt + the terms version on the row.
+      if (ctx.role === 'RENTER' && !parsed.data.disclaimerAccepted) {
+        return fail(c, 'Liability disclaimer must be accepted', 400, { code: 'CONSENT_REQUIRED' })
+      }
+
       const createResult = await service.create(ctx, {
         requestedVehicleId: parsed.data.requestedVehicleId,
         pickupLocationId: parsed.data.pickupLocationId,
@@ -157,6 +166,7 @@ export function createBookingRoutes(service: BookingService) {
         externalId: parsed.data.externalId ?? null,
         notes: parsed.data.notes ?? null,
         idempotencyKey: parsed.data.idempotencyKey ?? null,
+        disclaimerAccepted: parsed.data.disclaimerAccepted ?? false,
       })
 
       if (!createResult.ok) {

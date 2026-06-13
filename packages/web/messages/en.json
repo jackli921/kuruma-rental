@@ -620,6 +620,10 @@
         "ACTIVE": "Active",
         "ARCHIVED": "Archived"
       },
+      "pin": {
+        "pending": "Pin pending",
+        "missing": "No map pin"
+      },
       "row": {
         "hours": "{open}–{close}",
         "alwaysOpen": "Hours not set",
@@ -1103,6 +1107,10 @@
       "errorGeneric": "We couldn't create your booking. Please review and try again.",
       "errorDocs": "Document verification is required before you can book. Please upload your documents first.",
       "errorAuth": "Your session has expired. Please sign in again to complete your booking."
+    },
+    "disclaimer": {
+      "label": "I agree to present a valid driver's license and International Driving Permit at pickup, and I accept the rental liability terms.",
+      "terms": "License and International Driving Permit verification is completed in person at pickup, not online. By reserving, you confirm you hold the required documents and accept full responsibility for the vehicle during your rental."
     },
     "nav": {
       "back": "Back",

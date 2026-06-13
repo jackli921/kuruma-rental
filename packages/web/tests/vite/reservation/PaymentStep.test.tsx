@@ -47,15 +47,34 @@ afterEach(() => {
 })
 
 describe('PaymentStep (instant-book submit, #511)', () => {
+  it('keeps Reserve now disabled until the liability disclaimer is acknowledged (#613)', async () => {
+    const user = userEvent.setup()
+    renderStep()
+
+    const submit = screen.getByRole('button', { name: 'Reserve now' })
+    expect(submit).toBeDisabled()
+
+    await user.click(screen.getByRole('checkbox'))
+    expect(submit).toBeEnabled()
+  })
+
   it('creates the booking with the CSRF token then navigates to confirmation on success', async () => {
     const booking = { id: 'b-9', bookingCode: 'CODE9' }
     mockCreateBooking.mockResolvedValue(booking)
     const user = userEvent.setup()
     const { client } = renderStep()
 
+    await user.click(screen.getByRole('checkbox'))
     await user.click(screen.getByRole('button', { name: 'Reserve now' }))
 
-    await waitFor(() => expect(mockCreateBooking).toHaveBeenCalledWith(bookingInput, 'csrf-1'))
+    // The recorded consent (#613) rides on the POST body — the server rejects a
+    // RENTER booking without it (400 CONSENT_REQUIRED).
+    await waitFor(() =>
+      expect(mockCreateBooking).toHaveBeenCalledWith(
+        { ...bookingInput, disclaimerAccepted: true },
+        'csrf-1',
+      ),
+    )
     expect(mockNavigate).toHaveBeenCalledWith({
       to: '/$locale/bookings/confirmation',
       params: { locale: 'en' },
@@ -73,6 +92,7 @@ describe('PaymentStep (instant-book submit, #511)', () => {
     const user = userEvent.setup()
     renderStep()
 
+    await user.click(screen.getByRole('checkbox'))
     await user.click(screen.getByRole('button', { name: 'Reserve now' }))
 
     expect(
@@ -88,6 +108,7 @@ describe('PaymentStep (instant-book submit, #511)', () => {
     const user = userEvent.setup()
     renderStep()
 
+    await user.click(screen.getByRole('checkbox'))
     await user.click(screen.getByRole('button', { name: 'Reserve now' }))
 
     expect(

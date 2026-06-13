@@ -7,7 +7,7 @@ import type {
   LocationFilters,
   LocationRepository,
 } from '../repositories/types'
-import type { Geocoder } from './geocoding/types'
+import type { GeocodeOutcome, Geocoder } from './geocoding/types'
 
 export type LocationResult =
   | { ok: true; location: Location }
@@ -47,11 +47,21 @@ interface CoordTriple {
   coordinateSource: CoordinateSource | null
 }
 const CLEARED: CoordTriple = { latitude: null, longitude: null, coordinateSource: null }
+// #601/#574: geocoding was rate-limit-skipped — coords are unknown (null) but a
+// retry will resolve them, so persist PENDING rather than the indistinguishable
+// CLEARED a genuine miss gets. The bulk re-geocode enumerates exactly these.
+const PENDING: CoordTriple = { latitude: null, longitude: null, coordinateSource: 'PENDING' }
 const geocoded = (lat: number, lng: number): CoordTriple => ({
   latitude: lat,
   longitude: lng,
   coordinateSource: 'GEOCODED',
 })
+
+// The triple to persist for a non-success geocode when there is no valid prior
+// pin to keep: a throttle-skip is retryable (PENDING), a genuine miss is not
+// (CLEARED). 'ok' is handled by callers (they have the coords).
+const failedTriple = (outcome: { status: 'notFound' | 'throttled' }): CoordTriple =>
+  outcome.status === 'throttled' ? PENDING : CLEARED
 
 // On update, coords are either replaced ('set') or left exactly as they are
 // ('preserve'). Distinct from a CLEARED set (which actively nulls them).
@@ -156,14 +166,13 @@ export class LocationService {
   // CLEAR it rather than leave a pin at the wrong place (Denormalization
   // Without Sync). The geocode is best-effort and never blocks the save.
 
-  /** Tolerate a geocoder that throws — the adapter returns null, but a save
-   *  must survive even a misbehaving provider. */
-  private async safeGeocode(address: string): Promise<CoordTriple | null> {
+  /** Tolerate a geocoder that throws — the contract is never-throw, but a save
+   *  must survive even a misbehaving provider, so map a stray throw to notFound. */
+  private async safeGeocode(address: string): Promise<GeocodeOutcome> {
     try {
-      const hit = await this.geocoder.geocode(address)
-      return hit ? geocoded(hit.lat, hit.lng) : null
+      return await this.geocoder.geocode(address)
     } catch {
-      return null
+      return { status: 'notFound' }
     }
   }
 
@@ -176,7 +185,8 @@ export class LocationService {
     }
     // An explicit null pair is "no coordinates"; only an omitted pair geocodes.
     if (latitude === null || longitude === null) return CLEARED
-    return (await this.safeGeocode(data.address)) ?? CLEARED
+    const outcome = await this.safeGeocode(data.address)
+    return outcome.status === 'ok' ? geocoded(outcome.lat, outcome.lng) : failedTriple(outcome)
   }
 
   private async resolveUpdateCoords(
@@ -198,19 +208,30 @@ export class LocationService {
     const isManual = existing.coordinateSource === 'MANUAL'
 
     if (regeocode === true) {
-      const hit = await this.safeGeocode(address)
-      if (hit) return { kind: 'set', coords: hit }
-      // A miss clears coords only when they are genuinely stale — i.e. the address
-      // changed and re-derivation failed. A MANUAL pin, or a GEOCODED pin whose
-      // address is unchanged, is NOT stale, so a transient miss (incl. a #574
-      // rate-limit skip) must preserve it rather than destroy valid coordinates.
-      return isManual || !addressChanged ? { kind: 'preserve' } : { kind: 'set', coords: CLEARED }
+      const outcome = await this.safeGeocode(address)
+      if (outcome.status === 'ok') {
+        return { kind: 'set', coords: geocoded(outcome.lat, outcome.lng) }
+      }
+      // Preserve only a pin worth protecting: a MANUAL pin always wins, and a pin
+      // with real coords on an unchanged address is still valid — a transient miss
+      // must not destroy it. A PENDING/null pin holds NO coords, so there's nothing
+      // to protect; let the outcome decide via the failure triple: a throttle-skip
+      // → PENDING (#601, retryable), a genuine miss → CLEARED. (This stops a once-
+      // throttled, truly un-geocodable address lingering as forever-retryable.)
+      const hasRealCoords = existing.latitude !== null && existing.longitude !== null
+      if (isManual || (!addressChanged && hasRealCoords)) return { kind: 'preserve' }
+      return { kind: 'set', coords: failedTriple(outcome) }
     }
 
     if (addressChanged) {
       if (isManual) return { kind: 'preserve' } // manual pin wins over the new address
-      const hit = await this.safeGeocode(address)
-      return hit ? { kind: 'set', coords: hit } : { kind: 'set', coords: CLEARED } // stale-clear
+      const outcome = await this.safeGeocode(address)
+      if (outcome.status === 'ok') {
+        return { kind: 'set', coords: geocoded(outcome.lat, outcome.lng) }
+      }
+      // The new address invalidates the old pin; a throttle-skip marks it PENDING
+      // (retryable), a genuine miss CLEARS it (no stale pin at the wrong place).
+      return { kind: 'set', coords: failedTriple(outcome) }
     }
 
     return { kind: 'preserve' } // unrelated edit, address unchanged

@@ -45,6 +45,10 @@ const MAX_BOOKING_CODE_ATTEMPTS = 3
 // is far smaller. Scan generously so the substitute picker never silently drops a
 // candidate, while still bounding the read.
 const SUBSTITUTION_CANDIDATE_SCAN_LIMIT = 200
+// #613: version of the liability-disclaimer (免责声明) wording a renter agreed to,
+// stamped onto the booking. Bump when the localized terms text changes materially
+// (the renter-facing copy lives in web i18n; this is the server-authoritative tag).
+export const DISCLAIMER_TERMS_VERSION = '2026-06-13'
 
 /**
  * Opt-in messaging hook. When supplied, every confirmed booking also creates
@@ -491,6 +495,11 @@ export class BookingService {
       cancellationFee: null,
       cancelledAt: null,
       idempotencyKey: input.idempotencyKey ?? null,
+      // #613: stamp the liability-disclaimer consent server-side (never trust a
+      // client timestamp). Set only when the renter accepted; null for staff/
+      // manual bookings (the route exempts non-renter callers from the gate).
+      disclaimerAcknowledgedAt: input.disclaimerAccepted ? now : null,
+      disclaimerTermsVersion: input.disclaimerAccepted ? DISCLAIMER_TERMS_VERSION : null,
     })
 
     await repos.bookingEventRepo.append(ctx, {

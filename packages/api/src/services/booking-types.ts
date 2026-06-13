@@ -20,6 +20,10 @@ export interface CreateBookingInput {
   externalId?: string | null
   notes?: string | null
   idempotencyKey?: string | null
+  // #613: renter ticked the liability-disclaimer (免责声明) checkbox at checkout.
+  // Required for renter self-serve bookings (enforced by caller role in `create`);
+  // staff/manual bookings are exempt. The server stamps the timestamp + version.
+  disclaimerAccepted?: boolean
 }
 
 export type CreateBookingResult =

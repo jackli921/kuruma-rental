@@ -1,4 +1,5 @@
 import { Button } from '@/components/ui/button'
+import { LocationPinBadge } from '@/vite/operator-locations/LocationPinBadge'
 import { LocationStatusBadge } from '@/vite/operator-locations/LocationStatusBadge'
 import type { OperatorLocation } from '@/vite/operator-locations/api'
 import { Clock, MapPin, Pencil, Trash2 } from 'lucide-react'
@@ -67,6 +68,7 @@ function LocationRow({ location: l, onEdit, onArchive }: LocationRowProps) {
         <div className="flex flex-wrap items-center gap-2">
           <h3 className="truncate text-lg font-medium">{l.name}</h3>
           <LocationStatusBadge status={l.status} />
+          <LocationPinBadge coordinateSource={l.coordinateSource} />
         </div>
         <p className="mt-1 flex items-center gap-1.5 text-sm text-muted-foreground">
           <MapPin className="size-3.5 shrink-0" />

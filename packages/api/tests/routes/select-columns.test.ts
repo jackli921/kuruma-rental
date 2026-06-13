@@ -118,6 +118,8 @@ const BOOKING_FIELDS = [
   'cancellationFee',
   'cancelledAt',
   'idempotencyKey',
+  'disclaimerAcknowledgedAt',
+  'disclaimerTermsVersion',
   'createdAt',
   'updatedAt',
 ] as const
@@ -215,6 +217,7 @@ describe('API responses contain only expected fields', () => {
         startAt: '2026-05-01T10:00:00Z',
         endAt: '2026-05-03T10:00:00Z',
         source: 'DIRECT',
+        disclaimerAccepted: true,
       }),
     })
 
