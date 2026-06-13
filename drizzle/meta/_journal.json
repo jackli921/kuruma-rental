@@ -383,8 +383,15 @@
     {
       "idx": 54,
       "version": "7",
-      "when": 1781361008416,
-      "tag": "0054_add_payment_anomalies",
+      "when": 1781359675037,
+      "tag": "0054_add_renter_lifecycle_notification_kinds",
+      "breakpoints": true
+    },
+    {
+      "idx": 55,
+      "version": "7",
+      "when": 1781376966177,
+      "tag": "0055_add_payment_anomalies",
       "breakpoints": true
     }
   ]

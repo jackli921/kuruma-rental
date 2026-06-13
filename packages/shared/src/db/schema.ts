@@ -316,6 +316,13 @@ export const feeScheduleStatusEnum = pgEnum('fee_schedule_status', ['ACTIVE', 'A
 export const notificationKindEnum = pgEnum('notification_kind', [
   'OPERATOR_BOOKING_ALERT', // -> operator: a booking landed
   'RENTER_BOOKING_CONFIRM', // -> renter: confirmation + pre-auth link
+  // #664 renter lifecycle pushes — operator substitute / cancel / status advance.
+  // Distinct kinds (not one generic) so the notify:<booking>:<kind> idempotency
+  // key never collides across an ACTIVATED-then-COMPLETED sequence.
+  'RENTER_SUBSTITUTION', // -> renter: assigned vehicle was swapped
+  'RENTER_CANCELLATION', // -> renter: booking was cancelled
+  'RENTER_TRIP_STARTED', // -> renter: status advanced to ACTIVE
+  'RENTER_TRIP_COMPLETED', // -> renter: status advanced to COMPLETED
 ])
 // SENDING is the in-flight lease between QUEUED and SENT/FAILED — it closes the
 // concurrent-send race (atomic claim, architect P1). Reclaimable ONLY after the

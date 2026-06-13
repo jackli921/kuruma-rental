@@ -10,10 +10,29 @@ import {
 import type { Booking, NotificationLog } from '../stores'
 import type { EmailSender } from './email/email-sender'
 import { renderOperatorAlert } from './email/templates/operator-alert'
+import { renderRenterCancellation } from './email/templates/renter-cancellation'
 import { renderRenterConfirmation } from './email/templates/renter-confirmation'
+import { renderRenterStatusUpdate } from './email/templates/renter-status-update'
+import { renderRenterSubstitution } from './email/templates/renter-substitution'
 
 type Kind = NotificationLog['kind']
-const KINDS: Kind[] = ['RENTER_BOOKING_CONFIRM', 'OPERATOR_BOOKING_ALERT']
+
+/**
+ * #664: the booking lifecycle event that triggered a dispatch. `CREATED` fans
+ * out to the original renter-confirm + operator-alert pair; each operator action
+ * maps to exactly ONE renter kind. Distinct kinds (not a generic status change)
+ * keep the `notify:<booking>:<kind>` idempotency key collision-free across a
+ * sequence like ACTIVATED-then-COMPLETED on the same booking.
+ */
+export type LifecycleTrigger = 'CREATED' | 'SUBSTITUTED' | 'CANCELLED' | 'ACTIVATED' | 'COMPLETED'
+
+const TRIGGER_KINDS: Record<LifecycleTrigger, Kind[]> = {
+  CREATED: ['RENTER_BOOKING_CONFIRM', 'OPERATOR_BOOKING_ALERT'],
+  SUBSTITUTED: ['RENTER_SUBSTITUTION'],
+  CANCELLED: ['RENTER_CANCELLATION'],
+  ACTIVATED: ['RENTER_TRIP_STARTED'],
+  COMPLETED: ['RENTER_TRIP_COMPLETED'],
+}
 const DEFAULT_OPERATOR_LOCALE = 'ja' // §12.2
 
 export interface NotificationDispatcherConfig {
@@ -62,8 +81,8 @@ export class NotificationDispatcher {
     private readonly config: NotificationDispatcherConfig,
   ) {}
 
-  async dispatch(booking: Booking): Promise<void> {
-    for (const kind of KINDS) {
+  async dispatch(booking: Booking, trigger: LifecycleTrigger = 'CREATED'): Promise<void> {
+    for (const kind of TRIGGER_KINDS[trigger]) {
       await this.processOne(booking, kind)
     }
   }
@@ -128,7 +147,8 @@ export class NotificationDispatcher {
   }
 
   private async resolveRecipient(booking: Booking, kind: Kind): Promise<Resolved | undefined> {
-    if (kind === 'RENTER_BOOKING_CONFIRM') {
+    // Every renter-facing kind (#393 confirm + #664 lifecycle) goes to the renter.
+    if (kind.startsWith('RENTER_')) {
       const [renter] = await this.userRepo.findByIds([booking.renterId])
       if (!renter?.email) return undefined
       return { recipient: renter.email, locale: renter.language || 'en' }
@@ -165,45 +185,84 @@ export class NotificationDispatcher {
       totalPriceJpy: booking.totalPrice,
     }
     const replyTo = this.config.emailReplyTo
-
-    if (kind === 'RENTER_BOOKING_CONFIRM') {
-      const { subject, html, text } = renderRenterConfirmation(
-        {
-          ...common,
-          operatorName: operator?.name ?? '',
-          insurance: booking.insuranceSnapshot
-            ? {
-                name: booking.insuranceSnapshot.name,
-                dailyPriceJpy: booking.insuranceSnapshot.dailyPriceJpy,
-              }
-            : null,
-          fees: booking.feeSnapshot,
-          preAuthHandoffUrl: operator?.preAuthHandoffUrl ?? null,
-        },
-        locale,
-      )
-      return {
-        to: recipient,
-        from: this.config.emailFrom,
-        subject,
-        html,
-        text,
-        ...(replyTo ? { replyTo } : {}),
-      }
-    }
-
-    const [renter] = await this.userRepo.findByIds([booking.renterId])
-    const { subject, html, text } = renderOperatorAlert(
-      { ...common, renterName: renter?.name ?? null },
-      locale,
-    )
-    return {
+    const envelope = (r: { subject: string; html: string; text: string }) => ({
       to: recipient,
       from: this.config.emailFrom,
-      subject,
-      html,
-      text,
+      subject: r.subject,
+      html: r.html,
+      text: r.text,
       ...(replyTo ? { replyTo } : {}),
+    })
+
+    switch (kind) {
+      case 'RENTER_BOOKING_CONFIRM':
+        return envelope(
+          renderRenterConfirmation(
+            {
+              ...common,
+              operatorName: operator?.name ?? '',
+              insurance: booking.insuranceSnapshot
+                ? {
+                    name: booking.insuranceSnapshot.name,
+                    dailyPriceJpy: booking.insuranceSnapshot.dailyPriceJpy,
+                  }
+                : null,
+              fees: booking.feeSnapshot,
+              preAuthHandoffUrl: operator?.preAuthHandoffUrl ?? null,
+            },
+            locale,
+          ),
+        )
+      case 'RENTER_SUBSTITUTION':
+        // The NEW assigned vehicle only — reason + actor id are never passed in.
+        return envelope(
+          renderRenterSubstitution(
+            {
+              bookingCode: booking.bookingCode,
+              vehicle: vehicleData,
+              pickupLocationName: pickupName,
+              dropoffLocationName: dropoffName,
+              startAt: booking.startAt,
+              endAt: booking.endAt,
+            },
+            locale,
+          ),
+        )
+      case 'RENTER_CANCELLATION':
+        return envelope(
+          renderRenterCancellation(
+            {
+              bookingCode: booking.bookingCode,
+              startAt: booking.startAt,
+              endAt: booking.endAt,
+              cancellationFeeJpy: booking.cancellationFee,
+            },
+            locale,
+          ),
+        )
+      case 'RENTER_TRIP_STARTED':
+      case 'RENTER_TRIP_COMPLETED':
+        return envelope(
+          renderRenterStatusUpdate(
+            {
+              status: kind === 'RENTER_TRIP_STARTED' ? 'ACTIVE' : 'COMPLETED',
+              bookingCode: booking.bookingCode,
+              vehicle: vehicleData,
+              pickupLocationName: pickupName,
+              dropoffLocationName: dropoffName,
+              startAt: booking.startAt,
+              endAt: booking.endAt,
+            },
+            locale,
+          ),
+        )
+      default: {
+        // OPERATOR_BOOKING_ALERT
+        const [renter] = await this.userRepo.findByIds([booking.renterId])
+        return envelope(
+          renderOperatorAlert({ ...common, renterName: renter?.name ?? null }, locale),
+        )
+      }
     }
   }
 }
