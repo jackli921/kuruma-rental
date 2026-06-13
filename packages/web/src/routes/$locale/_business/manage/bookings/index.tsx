@@ -1,7 +1,10 @@
 import { PageSkeleton } from '@/vite/PageSkeleton'
 import { BookingsCalendar } from '@/vite/operator-bookings/BookingsCalendar'
 import { CalendarSidebar } from '@/vite/operator-bookings/CalendarSidebar'
-import { operatorCalendarQueryOptions } from '@/vite/operator-bookings/api'
+import {
+  operatorCalendarQueryOptions,
+  operatorCalendarVehiclesQueryOptions,
+} from '@/vite/operator-bookings/api'
 import {
   type CalendarView,
   calendarRange,
@@ -12,7 +15,6 @@ import {
   toCalendarEvents,
 } from '@/vite/operator-bookings/calendar-events'
 import { useCalendarFilters } from '@/vite/operator-bookings/useCalendarFilters'
-import { operatorFleetQueryOptions } from '@/vite/operator-fleet/api'
 import { useSuspenseQuery } from '@tanstack/react-query'
 import { type ErrorComponentProps, createFileRoute, useRouter } from '@tanstack/react-router'
 import { useCallback, useMemo } from 'react'
@@ -48,7 +50,7 @@ export const Route = createFileRoute('/$locale/_business/manage/bookings/')({
     const { from, to } = calendarRange(deps.view, parseCalendarDate(deps.date))
     return Promise.all([
       context.queryClient.ensureQueryData(operatorCalendarQueryOptions(from, to)),
-      context.queryClient.ensureQueryData(operatorFleetQueryOptions()),
+      context.queryClient.ensureQueryData(operatorCalendarVehiclesQueryOptions()),
     ])
   },
   pendingComponent: PageSkeleton,
@@ -66,12 +68,12 @@ function OperatorBookingsRoute() {
   const anchorDate = useMemo(() => parseCalendarDate(date), [date])
   const { from, to } = calendarRange(view, anchorDate)
   const { data: bookings } = useSuspenseQuery(operatorCalendarQueryOptions(from, to))
-  const { data: fleet } = useSuspenseQuery(operatorFleetQueryOptions())
+  const { data: vehicles } = useSuspenseQuery(operatorCalendarVehiclesQueryOptions())
 
   const events = useMemo(() => toCalendarEvents(bookings), [bookings])
-  const resources = useMemo(() => fleetToResources(fleet), [fleet])
+  const resources = useMemo(() => fleetToResources(vehicles), [vehicles])
 
-  const vehicleIds = useMemo(() => fleet.map((v) => v.id), [fleet])
+  const vehicleIds = useMemo(() => vehicles.map((v) => v.id), [vehicles])
   const filters = useCalendarFilters(vehicleIds)
   const visibleEvents = useMemo(() => filters.filterEvents(events), [filters, events])
   const visibleResources = useMemo(() => filters.filterResources(resources), [filters, resources])
@@ -105,7 +107,7 @@ function OperatorBookingsRoute() {
           <p className="mt-2 text-lg text-muted-foreground">{t('subtitle')}</p>
         </header>
         <div className="flex gap-6">
-          <CalendarSidebar vehicles={fleet} filters={filters} />
+          <CalendarSidebar vehicles={vehicles} filters={filters} />
           <div className="min-w-0 flex-1">
             <BookingsCalendar
               events={visibleEvents}

@@ -150,6 +150,36 @@ export function operatorCalendarQueryOptions(from: string, to: string) {
   })
 }
 
+// #525: the calendar's day-view columns + sidebar filter need the operator's own
+// vehicles as {id, name}. Read them from the tenant-scoped `GET /vehicles`
+// (operator-accessible — CallerContext scopes the rows to this tenant), NOT
+// `/vehicles/fleet-overview`: that is a STAFF-only, platform-wide endpoint (it
+// 403s for an OPERATOR_* session and isn't tenant-scoped), so the calendar must
+// not depend on it. Operators run ~40-50 cars; one page (the API max, 100)
+// covers the fleet for the columns.
+const VEHICLES_PAGE_LIMIT = 100
+
+/** A fleet vehicle as the calendar consumes it: a day-view column + filter row. */
+export interface CalendarVehicle {
+  id: string
+  name: string
+}
+
+export async function fetchCalendarVehicles(): Promise<CalendarVehicle[]> {
+  const res = await fetch(`${getApiBaseUrl()}/vehicles?limit=${VEHICLES_PAGE_LIMIT}`, {
+    credentials: 'include',
+  })
+  const data = await unwrap<Array<{ id: string; name: string }>>(res)
+  return data.map((v) => ({ id: v.id, name: v.name }))
+}
+
+export function operatorCalendarVehiclesQueryOptions() {
+  return queryOptions({
+    queryKey: ['operator-bookings', 'calendar', 'vehicles'],
+    queryFn: fetchCalendarVehicles,
+  })
+}
+
 // #549: the deep-linked trip-detail page has no list row, so it reads the single
 // booking WITH `expand=vehicle,renter` (slice 2) — a superset of the renter
 // BookingDto carrying the assigned car + renter on top of the operator block.

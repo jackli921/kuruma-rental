@@ -119,14 +119,21 @@ test.describe('marketplace happy path — renter books, operator sees it (real D
       await expect(renter.getByText('Confirmed', { exact: true })).toBeVisible()
     })
 
-    await test.step('6a. operator portal lists the new booking', async () => {
-      // `page` is the project-default OPERATOR_OWNER session. The Vite operator view
-      // is #512. Assert the exact reservation code cell — a per-run unique token, so
-      // it ties the row to THIS run regardless of table ordering — plus Sarah's name.
-      await page.goto('/en/manage/bookings')
+    await test.step('6a. operator calendar shows the new booking', async () => {
+      // `page` is the project-default OPERATOR_OWNER session. The bookings surface is
+      // now a fleet *calendar* (#525), not a table: events are windowed, so anchor on
+      // the booking's far-future month (clear of the seeded ~-5..+7d bookings, so this
+      // run's booking is the only event in view). Month view ignores the day-view
+      // vehicle-resource columns, so the event renders regardless of car assignment.
+      // The event is titled with the renter; clicking it opens the trip detail, which
+      // carries the per-run unique reservation code — the token that ties it to THIS run.
+      await page.goto('/en/manage/bookings?view=month&date=2026-07-15')
       await expect(page.getByRole('heading', { name: 'Bookings' })).toBeVisible()
-      await expect(page.getByRole('cell', { name: bookingCode })).toBeVisible({ timeout: 20_000 })
-      await expect(page.getByRole('cell', { name: RENTER_NAME }).first()).toBeVisible()
+      const event = page.getByText(RENTER_NAME).first()
+      await expect(event).toBeVisible({ timeout: 20_000 })
+      await event.click()
+      await expect(page).toHaveURL(new RegExp(`/manage/bookings/${UUID}`))
+      await expect(page.getByText(bookingCode)).toBeVisible({ timeout: 20_000 })
     })
 
     await test.step('6b. slice-7 wrote the operator notification for this booking', async () => {
