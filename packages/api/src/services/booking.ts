@@ -656,20 +656,20 @@ export class BookingService {
   }
 
   /**
-   * #616 §A: the vehicles eligible to replace a booking's assigned car. Same
-   * eligibility rule `substitute()` enforces, expressed once via
-   * `sameAcrissClass()`: AVAILABLE (findAll status filter), same pickup location,
-   * same ACRISS code, excluding the currently assigned vehicle. Authorizes via
-   * the tenant-scoped `findById` (a foreign/missing booking -> undefined -> the
-   * route 404s, no existence leak). `findAll` already operator-scopes the fleet,
-   * so same-operator is implicit.
+   * #616 §A: the vehicles eligible to replace a booking's assigned car — same
+   * eligibility `substitute()` enforces: AVAILABLE, same pickup location, same
+   * NON-NULL ACRISS code, excluding the assigned vehicle. Authorizes via the
+   * tenant-scoped `findById` (foreign/missing booking -> undefined -> route
+   * 404s, no leak); `findAll` operator-scopes the fleet, so same-operator is
+   * implicit. ACRISS codes are resolved in ONE batch read, not two findById per
+   * candidate (#709) — the classById pattern from storefront-search.ts.
    */
   async findSubstitutionCandidates(
     ctx: CallerContext,
     bookingId: string,
   ): Promise<Vehicle[] | undefined> {
-    if (!this.vehicleRepo) {
-      throw new Error('BookingService missing vehicleRepo; check DI wiring')
+    if (!this.vehicleRepo || !this.vehicleClassRepo) {
+      throw new Error('BookingService missing vehicle/class repo; check DI wiring')
     }
     const booking = await this.bookingRepo.findById(ctx, bookingId)
     if (!booking) return undefined
@@ -678,16 +678,18 @@ export class BookingService {
       status: 'AVAILABLE',
       limit: SUBSTITUTION_CANDIDATE_SCAN_LIMIT,
     })
-    const sameStore = available.filter(
-      (v): v is Vehicle & { classId: string } =>
+    const classes = await this.vehicleClassRepo.findAll(ctx, { includeArchived: true })
+    const acrissById = new Map(classes.map((vc) => [vc.id, vc.acrissCode]))
+    // Unmapped class (null acriss) is never a substitution target (mirrors
+    // sameAcrissClass): both sides must share the same non-null code.
+    const bookingAcriss = acrissById.get(booking.classId)
+    if (!bookingAcriss) return []
+    return available.filter(
+      (v) =>
         v.id !== booking.assignedVehicleId &&
         (v.pickupLocationId ?? null) === booking.pickupLocationId &&
-        !!v.classId,
+        acrissById.get(v.classId ?? '') === bookingAcriss,
     )
-    const sameClass = await Promise.all(
-      sameStore.map((v) => this.sameAcrissClass(booking.classId, v.classId)),
-    )
-    return sameStore.filter((_, index) => sameClass[index])
   }
 
   async updateStatus(
