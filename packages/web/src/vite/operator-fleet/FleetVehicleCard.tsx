@@ -18,8 +18,8 @@ interface FleetVehicleCardProps {
 // Grid-mode card for one fleet vehicle (#561). Carries the same per-row
 // affordances as a table row — a selection checkbox, the per-row actions menu
 // and Edit — so per-vehicle selection and bulk actions behave identically in
-// both views. (Header select-all is row-view only; see FleetTable.) Presentation
-// (status / expiry / price) comes from the shared cells.
+// both views. (Group + top-level select-all live in FleetGrid, #596.)
+// Presentation (status / expiry / price) comes from the shared cells.
 export function FleetVehicleCard({
   vehicle,
   selected,

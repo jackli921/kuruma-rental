@@ -503,6 +503,7 @@
       "bulk": {
         "selectAll": "Select all",
         "selectRow": "Select {name}",
+        "selectGroup": "Select all {group}",
         "deselectAll": "Deselect all",
         "selectedCount": "{count, plural, one {# vehicle selected} other {# vehicles selected}}",
         "setAvailable": "Set Available",

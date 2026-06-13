@@ -280,4 +280,78 @@ describe('OperatorFleetView', () => {
     expect(screen.getByText('2 cars')).toBeInTheDocument()
     expect(screen.getByText('1 maintenance')).toBeInTheDocument()
   })
+
+  const threeAcrossTwoClasses = () =>
+    renderView(
+      [
+        vehicle({ id: 'a', name: 'Aqua', classId: 'c1' }),
+        vehicle({ id: 'b', name: 'Yaris', classId: 'c1' }),
+        vehicle({ id: 'c', name: 'Hiace', classId: 'c2' }),
+      ],
+      [
+        { id: 'c1', name: 'Compact' },
+        { id: 'c2', name: 'Van' },
+      ],
+    )
+
+  it('grid per-group select-all selects every vehicle in that class only (#596)', async () => {
+    const user = userEvent.setup()
+    threeAcrossTwoClasses()
+    await user.click(screen.getByRole('button', { name: en.gridView }))
+
+    await user.click(screen.getByRole('checkbox', { name: 'Select all Compact' }))
+
+    // Compact holds Aqua + Yaris; Van's Hiace stays unselected.
+    expect(screen.getByText('2 vehicles selected')).toBeInTheDocument()
+  })
+
+  it('grid per-group select-all toggles the class back off when all are selected (#596)', async () => {
+    const user = userEvent.setup()
+    threeAcrossTwoClasses()
+    await user.click(screen.getByRole('button', { name: en.gridView }))
+
+    const groupCheckbox = screen.getByRole('checkbox', { name: 'Select all Compact' })
+    await user.click(groupCheckbox)
+    expect(screen.getByText('2 vehicles selected')).toBeInTheDocument()
+    await user.click(groupCheckbox)
+
+    expect(screen.queryByText(/vehicles? selected/)).not.toBeInTheDocument()
+  })
+
+  it('grid per-group checkbox is indeterminate when only some of the class is selected (#596)', async () => {
+    const user = userEvent.setup()
+    threeAcrossTwoClasses()
+    await user.click(screen.getByRole('button', { name: en.gridView }))
+
+    await user.click(screen.getByRole('checkbox', { name: 'Select Aqua' }))
+
+    const groupCheckbox = screen.getByRole('checkbox', {
+      name: 'Select all Compact',
+    }) as HTMLInputElement
+    expect(groupCheckbox.indeterminate).toBe(true)
+    expect(groupCheckbox.checked).toBe(false)
+  })
+
+  it('grid top-level select-all selects every visible vehicle (#596)', async () => {
+    const user = userEvent.setup()
+    threeAcrossTwoClasses()
+    await user.click(screen.getByRole('button', { name: en.gridView }))
+
+    await user.click(screen.getByRole('checkbox', { name: bulk.selectAll }))
+
+    expect(screen.getByText('3 vehicles selected')).toBeInTheDocument()
+  })
+
+  it('grid select-all controls are absent in read-only mode (#596/#598)', async () => {
+    const user = userEvent.setup()
+    renderView(
+      [vehicle({ id: 'a', name: 'Aqua', classId: 'c1' })],
+      [{ id: 'c1', name: 'Compact' }],
+      false,
+    )
+    await user.click(screen.getByRole('button', { name: en.gridView }))
+
+    expect(screen.queryByRole('checkbox', { name: bulk.selectAll })).not.toBeInTheDocument()
+    expect(screen.queryByRole('checkbox', { name: 'Select all Compact' })).not.toBeInTheDocument()
+  })
 })
