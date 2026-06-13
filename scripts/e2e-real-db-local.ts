@@ -1,4 +1,5 @@
 import { $ } from 'bun'
+import { ADMIN_SEED_EMAIL } from '../e2e/real-db/constants'
 
 /**
  * One-shot local real-DB e2e (#542): boots a disposable `postgres:16`, applies
@@ -26,6 +27,9 @@ const env = {
   // Any 32+ char string: the harness mints the session cookie and the API
   // verifies it with the SAME value. Not a secret — the DB is local + disposable.
   AUTH_SECRET: process.env.AUTH_SECRET ?? 'local-real-db-e2e-static-secret-0123456789',
+  // Grant the demo-walkthrough admin persona PLATFORM_ADMIN so it can reach the
+  // env-gated /admin/revenue tab (#462). seed.ts §3 upserts this email as admin.
+  PLATFORM_ADMIN_EMAILS: ADMIN_SEED_EMAIL,
 }
 
 console.log(`[e2e] (re)creating disposable postgres:16 (${CONTAINER}) on :${PORT}`)

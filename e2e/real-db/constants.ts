@@ -8,3 +8,14 @@ export const OPERATOR_STORAGE_STATE = STORAGE_STATE
 // Renter (RENTER) session — the marketplace happy-path spec attaches this to a
 // second browser context so steps 1-5 run as the booking renter (#390).
 export const RENTER_STORAGE_STATE = 'e2e/.auth/renter.json'
+
+// Platform-admin (PLATFORM_ADMIN) session — the demo walkthrough attaches this
+// to a third context so it can capture the env-gated /admin/revenue tab (#462).
+export const ADMIN_STORAGE_STATE = 'e2e/.auth/admin.json'
+
+// The seed grants this email PLATFORM_ADMIN when it appears in PLATFORM_ADMIN_EMAILS
+// (seed.ts §3). SINGLE SOURCE OF TRUTH: the local runner + mint-session read it
+// here so the seeded admin and the minted token never drift. The CI workflow
+// duplicates the literal in ci.yml's seed step (yaml can't import TS) — keep them
+// in sync.
+export const ADMIN_SEED_EMAIL = 'platform-admin@kuruma.test'

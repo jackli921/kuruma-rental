@@ -1,8 +1,9 @@
 import type { BrowserContext } from '@playwright/test'
 import { test as setup } from '@playwright/test'
-import { OPERATOR_STORAGE_STATE, RENTER_STORAGE_STATE } from './constants'
+import { ADMIN_STORAGE_STATE, OPERATOR_STORAGE_STATE, RENTER_STORAGE_STATE } from './constants'
 import {
   SESSION_COOKIE_NAME,
+  mintAdminSessionToken,
   mintOperatorSessionToken,
   mintRenterSessionToken,
 } from './mint-session'
@@ -34,4 +35,8 @@ setup('mint operator session cookie', async ({ context }) => {
 
 setup('mint renter session cookie', async ({ context }) => {
   await saveSession(context, await mintRenterSessionToken(), RENTER_STORAGE_STATE)
+})
+
+setup('mint platform-admin session cookie', async ({ context }) => {
+  await saveSession(context, await mintAdminSessionToken(), ADMIN_STORAGE_STATE)
 })
