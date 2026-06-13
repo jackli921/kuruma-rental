@@ -212,13 +212,14 @@ export class LocationService {
       if (outcome.status === 'ok') {
         return { kind: 'set', coords: geocoded(outcome.lat, outcome.lng) }
       }
-      // A non-success geocode clears coords only when they are genuinely stale —
-      // i.e. the address changed and re-derivation failed. A MANUAL pin, or a
-      // GEOCODED pin whose address is unchanged, is NOT stale, so a miss preserves
-      // it rather than destroy valid coordinates. When the old pin IS stale, store
-      // the failure triple: PENDING if throttle-skipped (#601, retryable), else
-      // CLEARED for a genuine miss.
-      if (isManual || !addressChanged) return { kind: 'preserve' }
+      // Preserve only a pin worth protecting: a MANUAL pin always wins, and a pin
+      // with real coords on an unchanged address is still valid — a transient miss
+      // must not destroy it. A PENDING/null pin holds NO coords, so there's nothing
+      // to protect; let the outcome decide via the failure triple: a throttle-skip
+      // → PENDING (#601, retryable), a genuine miss → CLEARED. (This stops a once-
+      // throttled, truly un-geocodable address lingering as forever-retryable.)
+      const hasRealCoords = existing.latitude !== null && existing.longitude !== null
+      if (isManual || (!addressChanged && hasRealCoords)) return { kind: 'preserve' }
       return { kind: 'set', coords: failedTriple(outcome) }
     }
 

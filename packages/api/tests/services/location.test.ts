@@ -455,6 +455,22 @@ describe('LocationService', () => {
         }
       })
 
+      it('regeocode:true on an UNCHANGED address downgrades a PENDING pin to CLEARED on a genuine miss (#601)', async () => {
+        // A PENDING pin holds NO coords, so the "unchanged address preserves
+        // valid coords" guard doesn't apply — once a real lookup confirms a
+        // genuine miss, the address is un-geocodable and must CLEAR, not linger
+        // as forever-retryable PENDING the bulk re-geocode keeps re-trying.
+        const loc = await seed({ latitude: null, longitude: null, coordinateSource: 'PENDING' })
+        const result = await build(missGeocoder).update(ctxFor(opA), loc.id, {
+          regeocode: true,
+        })
+        expect(result.ok).toBe(true)
+        if (result.ok) {
+          expect(result.location.coordinateSource).toBeNull()
+          expect(result.location.latitude).toBeNull()
+        }
+      })
+
       it('a changed address PRESERVES a MANUAL pin (manual wins, no geocode)', async () => {
         const loc = await seed({ latitude: 1, longitude: 2, coordinateSource: 'MANUAL' })
         const geocode = vi.fn(async () => ({ lat: 9, lng: 9 }))
