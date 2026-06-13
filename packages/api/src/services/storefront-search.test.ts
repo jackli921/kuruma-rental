@@ -123,6 +123,8 @@ function bookOverlapping(vehicleId: string, classId: string) {
     cancellationFee: null,
     cancelledAt: null,
     idempotencyKey: null,
+    disclaimerAcknowledgedAt: null,
+    disclaimerTermsVersion: null,
   })
 }
 

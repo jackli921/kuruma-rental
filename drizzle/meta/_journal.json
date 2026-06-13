@@ -369,8 +369,15 @@
     {
       "idx": 52,
       "version": "7",
-      "when": 1781318357459,
-      "tag": "0052_add_coordinate_source_pending",
+      "when": 1781315525491,
+      "tag": "0052_add_booking_disclaimer_consent",
+      "breakpoints": true
+    },
+    {
+      "idx": 53,
+      "version": "7",
+      "when": 1781321160413,
+      "tag": "0053_add_coordinate_source_pending",
       "breakpoints": true
     }
   ]

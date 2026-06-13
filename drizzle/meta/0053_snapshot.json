@@ -1,6 +1,6 @@
 {
-  "id": "6163136a-054b-4ce2-b365-5eacff413c43",
-  "prevId": "7571eb87-c7be-47e9-b14b-08aca106c16b",
+  "id": "f928d62a-e59b-4d49-bad6-40e5630aefce",
+  "prevId": "6163136a-054b-4ce2-b365-5eacff413c43",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -3131,7 +3131,8 @@
       "schema": "public",
       "values": [
         "GEOCODED",
-        "MANUAL"
+        "MANUAL",
+        "PENDING"
       ]
     },
     "public.document_status": {

@@ -103,6 +103,10 @@ describe('ReservationWizard', () => {
     await user.click(screen.getByRole('button', { name: 'Continue' })) // confirm
     await user.click(screen.getByRole('button', { name: 'Continue to payment' }))
     expect(screen.getByText(/You pay at pickup, not online/)).toBeInTheDocument()
+    // Reserve is gated on the liability-disclaimer consent (#613): live only after
+    // the renter acknowledges in-person verification at pickup.
+    expect(screen.getByRole('button', { name: 'Reserve now' })).toBeDisabled()
+    await user.click(screen.getByRole('checkbox'))
     expect(screen.getByRole('button', { name: 'Reserve now' })).toBeEnabled()
   })
 
