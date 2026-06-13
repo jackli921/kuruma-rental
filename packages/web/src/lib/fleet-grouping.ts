@@ -13,7 +13,10 @@ export interface FleetClassGroup<T> {
   readonly vehicles: readonly T[]
 }
 
-const UNASSIGNED_KEY = '__unassigned__'
+// Stable key for the trailing "no class / archived class" group. Exported so
+// consumers (e.g. the grid's collapse state) key on the same literal the
+// grouping uses, rather than re-typing it and risking silent drift.
+export const UNASSIGNED_KEY = '__unassigned__'
 
 export function groupVehiclesByClassId<T extends { classId: string | null }>(
   vehicles: readonly T[],

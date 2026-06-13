@@ -7,7 +7,7 @@ import { FleetGrid } from '@/vite/operator-fleet/FleetGrid'
 import { FleetSummaryBar } from '@/vite/operator-fleet/FleetSummaryBar'
 import { FleetTable } from '@/vite/operator-fleet/FleetTable'
 import { FleetViewToggle } from '@/vite/operator-fleet/FleetViewToggle'
-import type { OperatorFleetVehicle } from '@/vite/operator-fleet/api'
+import type { OperatorFleetVehicle, VehicleClassOption } from '@/vite/operator-fleet/api'
 import { useFleetViewMode } from '@/vite/operator-fleet/useFleetViewMode'
 import { CarFront, Plus } from 'lucide-react'
 import { useState } from 'react'
@@ -15,6 +15,7 @@ import { useTranslations } from 'use-intl'
 
 interface OperatorFleetViewProps {
   readonly vehicles: readonly OperatorFleetVehicle[]
+  readonly classOptions: readonly VehicleClassOption[]
 }
 
 // Stateful fleet management container. The route owns the loader /
@@ -23,7 +24,7 @@ interface OperatorFleetViewProps {
 // (FleetTable) or grid (FleetGrid) presentation (#561). Decision logic stays in
 // the pure fleet-filters / fleet-grouping libs (FC/IS); this is the imperative
 // shell that holds UI state.
-export function OperatorFleetView({ vehicles }: OperatorFleetViewProps) {
+export function OperatorFleetView({ vehicles, classOptions }: OperatorFleetViewProps) {
   const t = useTranslations('business.vehicles.fleet')
   const todayIso = new Date().toISOString().slice(0, 10)
   const [view, setView] = useFleetViewMode()
@@ -70,6 +71,7 @@ export function OperatorFleetView({ vehicles }: OperatorFleetViewProps) {
             {view === 'grid' ? (
               <FleetGrid
                 vehicles={visibleVehicles}
+                classOptions={classOptions}
                 selectedIds={selectedIds}
                 onToggleSelect={toggleOne}
                 onEdit={openEdit}

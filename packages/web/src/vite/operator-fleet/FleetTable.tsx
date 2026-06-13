@@ -18,7 +18,9 @@ interface FleetTableProps {
 // Row mode for the operator fleet (#561): the original table, extracted from
 // OperatorFleetView so the container can swap it for FleetGrid. Purely
 // presentational — selection state and the edit handler are injected by the
-// parent, identical to the cards' contract so behaviour matches in both views.
+// parent. Per-row affordances (checkbox + FleetRowActions + onEdit) match the
+// grid cards; the header select-all / indeterminate control is row-view only
+// (grid per-group select-all is a #561 follow-up).
 export function FleetTable({
   vehicles,
   selectedIds,

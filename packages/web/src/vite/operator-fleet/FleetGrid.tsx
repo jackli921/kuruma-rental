@@ -1,14 +1,13 @@
-import { groupVehiclesByClassId } from '@/lib/fleet-grouping'
+import { UNASSIGNED_KEY, groupVehiclesByClassId } from '@/lib/fleet-grouping'
 import { FleetVehicleCard } from '@/vite/operator-fleet/FleetVehicleCard'
-import type { OperatorFleetVehicle } from '@/vite/operator-fleet/api'
-import { vehicleClassOptionsQueryOptions } from '@/vite/operator-fleet/api'
-import { useQuery } from '@tanstack/react-query'
+import type { OperatorFleetVehicle, VehicleClassOption } from '@/vite/operator-fleet/api'
 import { ChevronDown, ChevronRight } from 'lucide-react'
 import { useMemo, useState } from 'react'
 import { useTranslations } from 'use-intl'
 
 interface FleetGridProps {
   readonly vehicles: readonly OperatorFleetVehicle[]
+  readonly classOptions: readonly VehicleClassOption[]
   readonly selectedIds: readonly string[]
   readonly onToggleSelect: (id: string) => void
   readonly onEdit: (vehicle: OperatorFleetVehicle) => void
@@ -16,22 +15,23 @@ interface FleetGridProps {
 }
 
 // Grid mode for the operator fleet (#561): vehicles grouped by class into
-// collapsible sections of cards. Class display names come from the same
-// operator-scoped options query the edit form uses (#528); a vehicle with no
-// class — or one whose class is gone — lands in a trailing "Unassigned"
+// collapsible sections of cards. Class display names are supplied by the
+// container (the route prefetches the operator-scoped options, #528), so this
+// stays presentational with no fetch of its own and no loading flash. A vehicle
+// with no class — or one whose class is gone — lands in a trailing "Unassigned"
 // section. Collapse state is per-group and client-local.
 export function FleetGrid({
   vehicles,
+  classOptions,
   selectedIds,
   onToggleSelect,
   onEdit,
   todayIso,
 }: FleetGridProps) {
   const t = useTranslations('business.vehicles.group')
-  const { data: classOptions } = useQuery(vehicleClassOptionsQueryOptions())
 
   const groups = useMemo(() => {
-    const classNames = new Map((classOptions ?? []).map((c) => [c.id, c.name]))
+    const classNames = new Map(classOptions.map((c) => [c.id, c.name]))
     return groupVehiclesByClassId(vehicles, classNames, t('unassigned'))
   }, [vehicles, classOptions, t])
 
@@ -49,7 +49,7 @@ export function FleetGrid({
   return (
     <div className="min-w-0 flex-1 space-y-6">
       {groups.map((group) => {
-        const key = group.classId ?? '__unassigned__'
+        const key = group.classId ?? UNASSIGNED_KEY
         const isCollapsed = collapsed.has(key)
         return (
           <section key={key} aria-label={group.className}>

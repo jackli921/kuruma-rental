@@ -73,16 +73,14 @@ function renderView(
   vehicles: OperatorFleetVehicle[],
   classOptions: ReadonlyArray<{ id: string; name: string }> = [],
 ) {
-  const queryClient = new QueryClient({
-    // staleTime Infinity so the seeded class-options cache is used as-is and the
-    // grid's useQuery never refetches the mocked empty list out from under it.
-    defaultOptions: { queries: { retry: false, staleTime: Number.POSITIVE_INFINITY } },
-  })
-  queryClient.setQueryData(['operator-fleet', 'class-options'], classOptions)
+  // The route prefetches class options and passes them down as a prop, so the
+  // grid groups synchronously with no fetch of its own — the test mirrors that
+  // by handing classOptions straight to the view.
+  const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
   return render(
     <QueryClientProvider client={queryClient}>
       <IntlProvider locale="en" messages={enMessages}>
-        <OperatorFleetView vehicles={vehicles} />
+        <OperatorFleetView vehicles={vehicles} classOptions={classOptions} />
       </IntlProvider>
     </QueryClientProvider>,
   )
