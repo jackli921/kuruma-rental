@@ -112,6 +112,22 @@ export function createBookingRoutes(service: BookingService) {
 
       return ok(c, events)
     })
+    .get('/bookings/:id/substitution-candidates', async (c) => {
+      const ctx = toCallerContext(requireUser(c))
+
+      // §A: operator-only, mirroring the substitute route. Renters never browse
+      // the fleet (403); a foreign/missing booking 404s at the service (no leak).
+      if (!isOperatorRole(ctx.role)) {
+        return fail(c, 'Only operators can view substitution candidates', 403)
+      }
+
+      const candidates = await service.findSubstitutionCandidates(ctx, c.req.param('id'))
+      if (!candidates) {
+        return fail(c, 'Booking not found', 404)
+      }
+
+      return ok(c, candidates)
+    })
     .post('/bookings', async (c) => {
       const ctx = toCallerContext(requireUser(c))
 

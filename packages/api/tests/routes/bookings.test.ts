@@ -1272,4 +1272,121 @@ describe('Booking Routes', () => {
       expect(body.success).toBe(false)
     })
   })
+
+  describe('GET /bookings/:id/substitution-candidates', () => {
+    // An OPERATOR_OWNER app scoped to the booking's operator tenant.
+    function operatorApp() {
+      const opApp = new Hono()
+      opApp.use('*', testAuthMiddleware(OP_USER, 'OPERATOR_OWNER', OPERATOR))
+      opApp.route('/', createBookingRoutes(service))
+      return opApp
+    }
+
+    // A CONFIRMED booking assigned to v1 (seededVehicleId); its only same-class
+    // same-location AVAILABLE peer is v2 (seededVehicle2Id).
+    async function bookingOnV1(): Promise<string> {
+      const createRes = await createBooking(validBookingInput())
+      const created = await createRes.json()
+      return created.data.id as string
+    }
+
+    function candidateIds(body: { data: Array<{ id: string }> }): string[] {
+      return body.data.map((v) => v.id)
+    }
+
+    it('forbids a renter (403)', async () => {
+      const renterApp = new Hono()
+      renterApp.use('*', testAuthMiddleware(USER1, 'RENTER'))
+      renterApp.route('/', createBookingRoutes(service))
+
+      const res = await renterApp.request(
+        `/bookings/${crypto.randomUUID()}/substitution-candidates`,
+      )
+
+      expect(res.status).toBe(403)
+      expect((await res.json()).success).toBe(false)
+    })
+
+    it('returns 404 for a nonexistent / cross-tenant booking', async () => {
+      const res = await operatorApp().request(
+        `/bookings/${crypto.randomUUID()}/substitution-candidates`,
+      )
+
+      expect(res.status).toBe(404)
+    })
+
+    it('lists same-store same-ACRISS AVAILABLE vehicles, excluding the assigned vehicle', async () => {
+      const bookingId = await bookingOnV1()
+
+      const res = await operatorApp().request(`/bookings/${bookingId}/substitution-candidates`)
+
+      expect(res.status).toBe(200)
+      const body = await res.json()
+      expect(body.success).toBe(true)
+      // v2 only — the assigned v1 is excluded so the operator can't "substitute" the same car.
+      expect(candidateIds(body)).toEqual([seededVehicle2Id])
+    })
+
+    it('excludes a vehicle at a different pickup location', async () => {
+      const kyoto = await locationRepo.create({
+        operatorId: OPERATOR,
+        name: 'Kyoto',
+        address: '9-9-9 Kyoto',
+        operatingHours: null,
+        timezone: 'Asia/Tokyo',
+        defaultTurnaroundMinutes: 2880,
+        status: 'ACTIVE',
+      } as Omit<Location, 'id' | 'createdAt' | 'updatedAt'>)
+      await vehicleRepo.create(
+        SYSTEM_CONTEXT,
+        vehicleData({ name: 'Aqua Kyoto', pickupLocationId: kyoto.id }),
+      )
+      const bookingId = await bookingOnV1()
+
+      const res = await operatorApp().request(`/bookings/${bookingId}/substitution-candidates`)
+      const body = await res.json()
+
+      expect(candidateIds(body)).toEqual([seededVehicle2Id])
+    })
+
+    it('excludes a vehicle of a different ACRISS class', async () => {
+      const suvClass = await vehicleClassRepo.create({
+        operatorId: OPERATOR,
+        name: 'SUV',
+        slug: 'suv',
+        description: null,
+        photos: [],
+        seats: 7,
+        luggageCapacity: 4,
+        transmission: 'AUTO',
+        fuelType: null,
+        acrissCode: 'IFAR',
+        sortOrder: 1,
+        status: 'ACTIVE',
+      })
+      await vehicleRepo.create(
+        SYSTEM_CONTEXT,
+        vehicleData({ name: 'Harrier', classId: suvClass.id }),
+      )
+      const bookingId = await bookingOnV1()
+
+      const res = await operatorApp().request(`/bookings/${bookingId}/substitution-candidates`)
+      const body = await res.json()
+
+      expect(candidateIds(body)).toEqual([seededVehicle2Id])
+    })
+
+    it('excludes a non-AVAILABLE vehicle', async () => {
+      await vehicleRepo.create(
+        SYSTEM_CONTEXT,
+        vehicleData({ name: 'Aqua 03 (in shop)', status: 'MAINTENANCE' }),
+      )
+      const bookingId = await bookingOnV1()
+
+      const res = await operatorApp().request(`/bookings/${bookingId}/substitution-candidates`)
+      const body = await res.json()
+
+      expect(candidateIds(body)).toEqual([seededVehicle2Id])
+    })
+  })
 })
