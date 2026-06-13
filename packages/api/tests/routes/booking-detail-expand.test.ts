@@ -63,7 +63,7 @@ let bookingId: string
 
 function app() {
   const a = new Hono()
-  a.use('*', testAuthMiddleware(ADMIN, 'ADMIN'))
+  a.use('*', testAuthMiddleware(ADMIN, 'PLATFORM_ADMIN'))
   a.route('/', createBookingRoutes(service))
   return a
 }

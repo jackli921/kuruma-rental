@@ -55,11 +55,11 @@ function mkBooking(b: Partial<Booking> & { id: string; renterId: string }): Book
 function setup({
   users = [] as User[],
   bookings = [] as Booking[],
-  asRole = 'ADMIN' as const,
+  asRole = 'PLATFORM_ADMIN' as const,
 }: {
   users?: User[]
   bookings?: Booking[]
-  asRole?: 'ADMIN' | 'STAFF' | 'RENTER'
+  asRole?: 'PLATFORM_ADMIN' | 'RENTER'
 } = {}) {
   const userStore = new Map(users.map((u) => [u.id, u]))
   const bookingStore = new Map(bookings.map((b) => [b.id, b]))
@@ -160,7 +160,7 @@ describe('GET /customers', () => {
     expect(body.data[0].id).toBe(USER1)
   })
 
-  it('returns 403 when caller is not STAFF/ADMIN', async () => {
+  it('returns 403 for a non-platform caller (RENTER)', async () => {
     setup({ users: [mkUser(USER1)], asRole: 'RENTER' })
     const res = await app.request('/customers')
     expect(res.status).toBe(403)
@@ -295,7 +295,7 @@ describe('GET /customers/search', () => {
   }
 
   it('returns matching customers by name', async () => {
-    setup({ users: seed(), asRole: 'STAFF' })
+    setup({ users: seed(), asRole: 'PLATFORM_ADMIN' })
     const res = await app.request('/customers/search?q=tanaka')
 
     expect(res.status).toBe(200)
@@ -313,7 +313,7 @@ describe('GET /customers/search', () => {
   })
 
   it('returns 400 when search query is less than 2 characters', async () => {
-    setup({ users: seed(), asRole: 'STAFF' })
+    setup({ users: seed(), asRole: 'PLATFORM_ADMIN' })
     const res = await app.request('/customers/search?q=a')
     expect(res.status).toBe(400)
     const body = await res.json()
@@ -321,13 +321,13 @@ describe('GET /customers/search', () => {
   })
 
   it('returns 400 when search query is missing', async () => {
-    setup({ users: seed(), asRole: 'STAFF' })
+    setup({ users: seed(), asRole: 'PLATFORM_ADMIN' })
     const res = await app.request('/customers/search')
     expect(res.status).toBe(400)
   })
 
   it('matches by email', async () => {
-    setup({ users: seed(), asRole: 'STAFF' })
+    setup({ users: seed(), asRole: 'PLATFORM_ADMIN' })
     const res = await app.request('/customers/search?q=smith@')
     expect(res.status).toBe(200)
     const body = await res.json()
@@ -336,7 +336,7 @@ describe('GET /customers/search', () => {
   })
 
   it('matches by phone', async () => {
-    setup({ users: seed(), asRole: 'STAFF' })
+    setup({ users: seed(), asRole: 'PLATFORM_ADMIN' })
     const res = await app.request('/customers/search?q=1234-5678')
     expect(res.status).toBe(200)
     const body = await res.json()
@@ -345,7 +345,7 @@ describe('GET /customers/search', () => {
   })
 
   it('returns empty array when no matches', async () => {
-    setup({ users: seed(), asRole: 'STAFF' })
+    setup({ users: seed(), asRole: 'PLATFORM_ADMIN' })
     const res = await app.request('/customers/search?q=zzzzz')
     expect(res.status).toBe(200)
     const body = await res.json()
@@ -359,7 +359,7 @@ describe('POST /customers/quick-create', () => {
   })
 
   it('creates a new customer with name and email', async () => {
-    setup({ asRole: 'STAFF' })
+    setup({ asRole: 'PLATFORM_ADMIN' })
     const res = await app.request('/customers/quick-create', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -378,7 +378,7 @@ describe('POST /customers/quick-create', () => {
   })
 
   it('is idempotent on email — returns existing user on second call', async () => {
-    setup({ asRole: 'STAFF' })
+    setup({ asRole: 'PLATFORM_ADMIN' })
     const payload = { name: 'Dup', email: 'dup@example.com', language: 'en' }
 
     const res1 = await app.request('/customers/quick-create', {
@@ -400,7 +400,7 @@ describe('POST /customers/quick-create', () => {
   })
 
   it('is idempotent on email case — Bob@x.com and bob@x.com resolve to one user (#715)', async () => {
-    setup({ asRole: 'STAFF' })
+    setup({ asRole: 'PLATFORM_ADMIN' })
 
     const res1 = await app.request('/customers/quick-create', {
       method: 'POST',
@@ -423,7 +423,7 @@ describe('POST /customers/quick-create', () => {
   })
 
   it('returns 400 when neither email nor phone is provided', async () => {
-    setup({ asRole: 'STAFF' })
+    setup({ asRole: 'PLATFORM_ADMIN' })
     const res = await app.request('/customers/quick-create', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -443,7 +443,7 @@ describe('POST /customers/quick-create', () => {
   })
 
   it('creates customer with phone only (no email)', async () => {
-    setup({ asRole: 'STAFF' })
+    setup({ asRole: 'PLATFORM_ADMIN' })
     const res = await app.request('/customers/quick-create', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -463,7 +463,7 @@ describe('POST /customers/quick-create', () => {
   })
 
   it('is idempotent on phone — returns existing user', async () => {
-    setup({ asRole: 'STAFF' })
+    setup({ asRole: 'PLATFORM_ADMIN' })
     const payload = { name: 'Phone Dup', phone: '+81-90-1111-2222', language: 'ja' }
 
     const res1 = await app.request('/customers/quick-create', {
@@ -485,7 +485,7 @@ describe('POST /customers/quick-create', () => {
   })
 
   it('defaults language to en when not specified', async () => {
-    setup({ asRole: 'STAFF' })
+    setup({ asRole: 'PLATFORM_ADMIN' })
     const res = await app.request('/customers/quick-create', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -497,7 +497,7 @@ describe('POST /customers/quick-create', () => {
   })
 
   it('returns 400 when name is empty', async () => {
-    setup({ asRole: 'STAFF' })
+    setup({ asRole: 'PLATFORM_ADMIN' })
     const res = await app.request('/customers/quick-create', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },

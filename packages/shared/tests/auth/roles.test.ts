@@ -19,14 +19,14 @@ describe('canonical role sets (#487 prep — single source of truth)', () => {
     expect(members(OPERATOR_ROLES)).toEqual(['OPERATOR_OWNER', 'OPERATOR_STAFF'])
   })
 
-  it('PLATFORM_ROLES = STAFF/ADMIN/PLATFORM_ADMIN (the #487 tightening target)', () => {
-    expect(members(PLATFORM_ROLES)).toEqual(['ADMIN', 'PLATFORM_ADMIN', 'STAFF'])
+  it('PLATFORM_ROLES = PLATFORM_ADMIN only — legacy STAFF/ADMIN revoked (#487)', () => {
+    expect(members(PLATFORM_ROLES)).toEqual(['PLATFORM_ADMIN'])
   })
 
-  it('MANAGEMENT_BASE_ROLES mirrors PLATFORM_ROLES today but is a SEPARATE instance', () => {
+  it('MANAGEMENT_BASE_ROLES keeps STAFF/ADMIN — NOT narrowed by #487 (now diverges from PLATFORM_ROLES)', () => {
     expect(members(MANAGEMENT_BASE_ROLES)).toEqual(['ADMIN', 'PLATFORM_ADMIN', 'STAFF'])
-    // The whole point of the split: #487 can tighten PLATFORM_ROLES without
-    // dragging the business-management base with it.
+    // The whole point of the split, now realized: #487 tightened PLATFORM_ROLES
+    // without dragging the business-management base with it.
     expect(MANAGEMENT_BASE_ROLES).not.toBe(PLATFORM_ROLES)
   })
 
@@ -40,13 +40,14 @@ describe('canonical role sets (#487 prep — single source of truth)', () => {
     ])
   })
 
-  it('SCOPE_BYPASS_ROLES and PRIVILEGED_ROLES = platform tier PLUS PARTNER, as distinct instances', () => {
-    const expected = ['ADMIN', 'PARTNER', 'PLATFORM_ADMIN', 'STAFF']
+  it('SCOPE_BYPASS_ROLES and PRIVILEGED_ROLES = PARTNER + PLATFORM_ADMIN — legacy STAFF/ADMIN revoked (#487), distinct instances', () => {
+    const expected = ['PARTNER', 'PLATFORM_ADMIN']
     expect(members(SCOPE_BYPASS_ROLES)).toEqual(expected)
     expect(members(PRIVILEGED_ROLES)).toEqual(expected)
-    // Same members today, but they gate different things (bypass flag vs direct
-    // cross-tenant reads) and may diverge under #487 (e.g. PARTNER kept for
-    // bookings but dropped for message threads).
+    // #487 dropped legacy STAFF/ADMIN from cross-tenant bypass + privileged reads;
+    // PARTNER (Trip.com) stays. Same members today, but kept as distinct instances
+    // because they gate different things (bypass flag vs direct cross-tenant reads)
+    // and may still diverge later (e.g. PARTNER dropped for message threads).
     expect(SCOPE_BYPASS_ROLES).not.toBe(PRIVILEGED_ROLES)
   })
 

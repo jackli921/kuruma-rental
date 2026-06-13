@@ -50,10 +50,10 @@ describe('isOperatorSession', () => {
 })
 
 describe('adminGuard', () => {
-  it('allows platform-admin roles (incl. legacy STAFF/ADMIN)', () => {
+  it('allows only PLATFORM_ADMIN — legacy STAFF/ADMIN revoked (#487)', () => {
     expect(adminGuard(session('PLATFORM_ADMIN'))).toEqual({ type: 'allow' })
-    expect(adminGuard(session('STAFF'))).toEqual({ type: 'allow' })
-    expect(adminGuard(session('ADMIN'))).toEqual({ type: 'allow' })
+    expect(adminGuard(session('STAFF'))).toEqual({ type: 'forbidden' })
+    expect(adminGuard(session('ADMIN'))).toEqual({ type: 'forbidden' })
   })
   it('forbids tenant-scoped operators — admin is narrower than business', () => {
     expect(adminGuard(session('OPERATOR_OWNER'))).toEqual({ type: 'forbidden' })

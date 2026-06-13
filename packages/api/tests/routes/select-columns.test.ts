@@ -184,7 +184,7 @@ describe('API responses contain only expected fields', () => {
 
   it('GET /bookings returns bookings with exact field set', async () => {
     const { app, classId, locationId } = await createTestApp()
-    const staffHeaders = await authHeaders({ sub: 'staff-user', role: 'STAFF' })
+    const staffHeaders = await authHeaders({ sub: 'staff-user', role: 'PLATFORM_ADMIN' })
     const renterHeaders = await authHeaders({ sub: 'renter-user', role: 'RENTER' })
 
     // Create a vehicle first (STAFF)

@@ -195,8 +195,8 @@ describe('Booking Routes', () => {
       vehicleClassRepo,
     )
     app = new Hono()
-    // ADMIN with USER1 identity — mirrors pre-auth test data.
-    app.use('*', testAuthMiddleware(USER1, 'ADMIN'))
+    // PLATFORM_ADMIN with USER1 identity — mirrors pre-auth test data.
+    app.use('*', testAuthMiddleware(USER1, 'PLATFORM_ADMIN'))
     app.route('/', createBookingRoutes(service))
   })
 
