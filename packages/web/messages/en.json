@@ -897,8 +897,20 @@
           "noCandidates": "No same-class vehicle is available at this pickup location.",
           "submit": "Confirm substitution",
           "cancel": "Cancel",
-          "error": "Couldn't substitute the vehicle. It may have just been booked.",
-          "unavailable": "Vehicle substitution is only available for confirmed or active bookings."
+          "error": "Couldn't substitute the vehicle. It may have just been booked."
+        },
+        "markActive": "Mark as picked up",
+        "markCompleted": "Mark as returned",
+        "settled": "This booking is settled — no actions available.",
+        "statusError": "Couldn't update the booking status. Please try again.",
+        "cancelBooking": {
+          "action": "Cancel booking",
+          "dialogTitle": "Cancel this booking?",
+          "dialogDescription": "The renter is notified and a cancellation fee may apply depending on how close to pick-up it is. This can't be undone.",
+          "confirm": "Confirm cancellation",
+          "pending": "Cancelling…",
+          "keep": "Keep booking",
+          "error": "Couldn't cancel the booking. Please try again."
         }
       },
       "timeline": {

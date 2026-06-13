@@ -1,4 +1,5 @@
 import { PageSkeleton } from '@/vite/PageSkeleton'
+import { isOperatorSession } from '@/vite/guards'
 import { BookingActionsPanel } from '@/vite/operator-bookings/BookingActionsPanel'
 import { BookingTimeline } from '@/vite/operator-bookings/BookingTimeline'
 import { OperatorBookingDetail } from '@/vite/operator-bookings/OperatorBookingDetail'
@@ -6,10 +7,10 @@ import {
   bookingEventsQueryOptions,
   operatorBookingDetailQueryOptions,
   operatorRowFromDetail,
+  substitutionCandidatesQueryOptions,
 } from '@/vite/operator-bookings/api'
-import { operatorFleetQueryOptions } from '@/vite/operator-fleet/api'
 import { sessionQueryOptions } from '@/vite/session'
-import { useSuspenseQuery } from '@tanstack/react-query'
+import { useQuery, useSuspenseQuery } from '@tanstack/react-query'
 import {
   type ErrorComponentProps,
   Link,
@@ -32,12 +33,11 @@ export const Route = createFileRoute('/$locale/_business/manage/bookings/$bookin
       operatorBookingDetailQueryOptions(params.bookingId),
     )
     if (!detail) throw notFound()
-    // Warm the timeline + replacement-candidate caches so the page renders without
-    // a second waterfall. The fleet read backs the substitution dialog's picker.
-    await Promise.all([
-      context.queryClient.ensureQueryData(bookingEventsQueryOptions(params.bookingId)),
-      context.queryClient.ensureQueryData(operatorFleetQueryOptions()),
-    ])
+    // Warm the timeline cache so the page renders without a second waterfall.
+    // Substitution candidates are fetched per-role in the component (they are an
+    // operator-only endpoint that 403s for bypass-role oversight viewers), not
+    // here — a loader fetch would reject and blank the page for those roles.
+    await context.queryClient.ensureQueryData(bookingEventsQueryOptions(params.bookingId))
     return { detail }
   },
   pendingComponent: PageSkeleton,
@@ -51,7 +51,14 @@ function TripDetailRoute() {
   const { detail } = Route.useLoaderData()
   const { data: events } = useSuspenseQuery(bookingEventsQueryOptions(bookingId))
   const { data: session } = useSuspenseQuery(sessionQueryOptions())
-  const { data: fleet } = useSuspenseQuery(operatorFleetQueryOptions())
+  // The replacement-candidate endpoint is operator-only and only relevant to a
+  // live booking, so gate the fetch on both — bypass-role viewers (no operatorId)
+  // would 403, and a settled trip can't be substituted.
+  const isLive = detail.status === 'CONFIRMED' || detail.status === 'ACTIVE'
+  const { data: candidates = [] } = useQuery({
+    ...substitutionCandidatesQueryOptions(bookingId),
+    enabled: isOperatorSession(session) && isLive,
+  })
   const row = operatorRowFromDetail(detail)
 
   return (
@@ -70,7 +77,7 @@ function TripDetailRoute() {
             <div className="rounded-xl border border-border py-6">
               <OperatorBookingDetail row={row} booking={detail} locale={locale} />
             </div>
-            <BookingActionsPanel detail={detail} session={session} fleet={fleet} />
+            <BookingActionsPanel detail={detail} session={session} candidates={candidates} />
           </section>
           <aside className="rounded-xl border border-border px-4 py-6">
             <h2 className="mb-6 text-sm font-semibold">{t('timeline.heading')}</h2>

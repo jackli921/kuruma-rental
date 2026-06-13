@@ -12,29 +12,33 @@ import {
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import {
+  type SubstitutionCandidate,
   bookingEventsQueryOptions,
   operatorBookingDetailQueryOptions,
   substituteBooking,
 } from '@/vite/operator-bookings/api'
-import type { OperatorFleetVehicle } from '@/vite/operator-fleet/api'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { type FormEvent, useState } from 'react'
 import { useTranslations } from 'use-intl'
 
 interface SubstituteVehicleDialogProps {
   readonly bookingId: string
-  /** Replacement candidates, already filtered to the booking's class + location. */
-  readonly candidates: readonly OperatorFleetVehicle[]
+  /**
+   * Replacement candidates from GET /bookings/:id/substitution-candidates — the
+   * server has already matched them to the booking's operator + pickup location +
+   * ACRISS code (#616/#621), so the operator can never pick an invalid car.
+   */
+  readonly candidates: readonly SubstitutionCandidate[]
   readonly csrfToken: string
 }
 
 // #610: operator vehicle substitution (故障车换同店同级别车，系统留痕). A dialog that
 // swaps the booking's assigned car for another AVAILABLE same-class, same-location
-// vehicle via POST /bookings/:id/substitute. The candidate list is pre-filtered by
-// the page to mirror the server's rules exactly, so the operator can never pick an
-// invalid car. On success it invalidates the detail (re-fetch the new vehicle) and
-// events (the appended VEHICLE_SUBSTITUTED audit row) queries — the timeline renders
-// the 系统留痕 automatically. CSRF-gated; the session token rides the write.
+// vehicle via POST /bookings/:id/substitute. The candidate list comes pre-matched
+// from the server (#616 endpoint), so the operator can never pick an invalid car.
+// On success it invalidates the detail (re-fetch the new vehicle) and events (the
+// appended VEHICLE_SUBSTITUTED audit row) queries — the timeline renders the
+// 系统留痕 automatically. CSRF-gated; the session token rides the write.
 export function SubstituteVehicleDialog({
   bookingId,
   candidates,

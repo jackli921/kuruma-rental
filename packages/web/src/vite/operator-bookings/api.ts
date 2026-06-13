@@ -253,14 +253,16 @@ export function bookingEventsQueryOptions(id: string) {
 // has to enumerate the sub-keys it touched.
 export const OPERATOR_BOOKINGS_KEY = ['operator-bookings'] as const
 
-// --- Substitution candidates (#616) -----------------------------------------
+// --- Substitution candidates (#616, closes #621) ----------------------------
 // The operator-only GET returns the same-store, same-ACRISS AVAILABLE vehicles
-// that can replace the booking's assigned car. The server enforces the match
-// (slice 1); the client just lists what it returns. Minimal {id,name} — the
-// dialog picks by id and shows the name, mirroring fetchCalendarVehicles.
+// that can replace the booking's assigned car. The server enforces the match by
+// ACRISS *code* — the authoritative rule #610's client-side classId filter only
+// approximated (#621); this endpoint is that fix. The client just lists what it
+// returns: name + plate for the picker label.
 export interface SubstitutionCandidate {
   id: string
   name: string
+  licensePlate: string | null
 }
 
 export async function fetchSubstitutionCandidates(id: string): Promise<SubstitutionCandidate[]> {
@@ -268,8 +270,8 @@ export async function fetchSubstitutionCandidates(id: string): Promise<Substitut
     `${getApiBaseUrl()}/bookings/${encodeURIComponent(id)}/substitution-candidates`,
     { credentials: 'include' },
   )
-  const data = await unwrap<Array<{ id: string; name: string }>>(res)
-  return data.map((v) => ({ id: v.id, name: v.name }))
+  const data = await unwrap<Array<{ id: string; name: string; licensePlate?: string | null }>>(res)
+  return data.map((v) => ({ id: v.id, name: v.name, licensePlate: v.licensePlate ?? null }))
 }
 
 export function substitutionCandidatesQueryOptions(id: string) {

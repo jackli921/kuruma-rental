@@ -1,16 +1,17 @@
 import type { BookingDto } from '@/vite/bookings/api'
 import { BookingActionsPanel } from '@/vite/operator-bookings/BookingActionsPanel'
-import type { OperatorBookingDetailDto } from '@/vite/operator-bookings/api'
-import type { OperatorFleetVehicle } from '@/vite/operator-fleet/api'
+import * as api from '@/vite/operator-bookings/api'
+import type { OperatorBookingDetailDto, SubstitutionCandidate } from '@/vite/operator-bookings/api'
 import type { Session } from '@/vite/session'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { render, screen } from '@testing-library/react'
+import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { IntlProvider } from 'use-intl'
-import { describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import enMessages from '../../../messages/en.json'
 
-const sub = enMessages.bookings.operator.detail.substitute
+const d = enMessages.bookings.operator.detail
+const sub = d.substitute
 
 function detail(over: Partial<BookingDto> = {}): OperatorBookingDetailDto {
   return {
@@ -39,43 +40,7 @@ function detail(over: Partial<BookingDto> = {}): OperatorBookingDetailDto {
   }
 }
 
-function fleetVehicle(over: Partial<OperatorFleetVehicle> = {}): OperatorFleetVehicle {
-  return {
-    id: 'veh-2',
-    operatorId: 'op-1',
-    classId: 'cls-1',
-    pickupLocationId: 'loc-1',
-    name: 'Honda Fit',
-    description: null,
-    photos: [],
-    seats: 5,
-    luggageCapacity: 2,
-    luggageSize: 'MEDIUM',
-    transmission: 'AUTO',
-    fuelType: null,
-    licensePlate: 'OSAKA 9999',
-    status: 'AVAILABLE',
-    minRentalHours: null,
-    maxRentalHours: null,
-    advanceBookingHours: null,
-    make: null,
-    model: null,
-    year: null,
-    color: null,
-    dailyRateJpy: 7000,
-    hourlyRateJpy: null,
-    shakenExpiryDate: null,
-    insuranceExpiryDate: null,
-    createdAt: '2026-01-01T00:00:00.000Z',
-    updatedAt: '2026-01-01T00:00:00.000Z',
-    utilization: 0,
-    bookingCountLast30Days: 0,
-    currentBooking: null,
-    nextBooking: null,
-    activeMaintenanceReason: null,
-    ...over,
-  }
-}
+const candidate: SubstitutionCandidate = { id: 'veh-2', name: 'Honda Fit', licensePlate: 'OSAKA 9' }
 
 const operatorSession: Session = {
   user: { id: 'u', role: 'OPERATOR_OWNER', operatorId: 'op_1', operatorSlug: 'acme' },
@@ -90,23 +55,20 @@ const bypassSession: Session = {
 function renderPanel(
   session: Session | null,
   bookingDetail: OperatorBookingDetailDto,
-  fleet: OperatorFleetVehicle[] = [fleetVehicle({ id: 'veh-1' }), fleetVehicle()],
+  candidates: SubstitutionCandidate[] = [candidate],
 ) {
   render(
     <QueryClientProvider client={new QueryClient()}>
       <IntlProvider locale="en" messages={enMessages}>
-        <BookingActionsPanel detail={bookingDetail} session={session} fleet={fleet} />
+        <BookingActionsPanel detail={bookingDetail} session={session} candidates={candidates} />
       </IntlProvider>
     </QueryClientProvider>,
   )
 }
 
-describe('BookingActionsPanel substitution gating (#610)', () => {
-  it('offers the Substitute action to a tenant-scoped operator on a live booking', () => {
-    renderPanel(operatorSession, detail({ status: 'CONFIRMED' }))
-    expect(screen.getByRole('button', { name: sub.action })).toBeInTheDocument()
-  })
+afterEach(() => vi.restoreAllMocks())
 
+describe('BookingActionsPanel role gating', () => {
   it('renders nothing for a bypass role with no operatorId (read-only oversight)', () => {
     const { container } = render(
       <QueryClientProvider client={new QueryClient()}>
@@ -114,7 +76,7 @@ describe('BookingActionsPanel substitution gating (#610)', () => {
           <BookingActionsPanel
             detail={detail({ status: 'CONFIRMED' })}
             session={bypassSession}
-            fleet={[fleetVehicle()]}
+            candidates={[candidate]}
           />
         </IntlProvider>
       </QueryClientProvider>,
@@ -122,28 +84,77 @@ describe('BookingActionsPanel substitution gating (#610)', () => {
     expect(container).toBeEmptyDOMElement()
   })
 
-  it('disables substitution on a terminal booking, explaining why instead of the action', () => {
-    renderPanel(operatorSession, detail({ status: 'COMPLETED' }))
-    expect(screen.queryByRole('button', { name: sub.action })).not.toBeInTheDocument()
-    expect(screen.getByText(sub.unavailable)).toBeInTheDocument()
+  it('renders nothing when there is no session', () => {
+    const { container } = render(
+      <QueryClientProvider client={new QueryClient()}>
+        <IntlProvider locale="en" messages={enMessages}>
+          <BookingActionsPanel detail={detail()} session={null} candidates={[]} />
+        </IntlProvider>
+      </QueryClientProvider>,
+    )
+    expect(container).toBeEmptyDOMElement()
+  })
+})
+
+describe('BookingActionsPanel actions by status', () => {
+  it('offers mark-picked-up, substitute and cancel on a CONFIRMED booking', () => {
+    renderPanel(operatorSession, detail({ status: 'CONFIRMED' }))
+    expect(screen.getByRole('button', { name: d.markActive })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: sub.action })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: d.cancelBooking.action })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: d.markCompleted })).not.toBeInTheDocument()
   })
 
-  it('only surfaces same-class, same-location, AVAILABLE candidates (never the assigned car)', async () => {
+  it('offers mark-returned (not mark-picked-up) on an ACTIVE booking', () => {
+    renderPanel(operatorSession, detail({ status: 'ACTIVE' }))
+    expect(screen.getByRole('button', { name: d.markCompleted })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: d.markActive })).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: sub.action })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: d.cancelBooking.action })).toBeInTheDocument()
+  })
+
+  it('shows the settled message and no actions on a COMPLETED booking', () => {
+    renderPanel(operatorSession, detail({ status: 'COMPLETED' }))
+    expect(screen.getByText(d.settled)).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: d.markCompleted })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: sub.action })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: d.cancelBooking.action })).not.toBeInTheDocument()
+  })
+
+  it('shows the settled message on a CANCELLED booking', () => {
+    renderPanel(operatorSession, detail({ status: 'CANCELLED' }))
+    expect(screen.getByText(d.settled)).toBeInTheDocument()
+  })
+})
+
+describe('BookingActionsPanel status transition', () => {
+  it('advances CONFIRMED to ACTIVE with the session csrf token when mark-picked-up is clicked', async () => {
     const user = userEvent.setup()
-    renderPanel(operatorSession, detail({ status: 'CONFIRMED' }), [
-      fleetVehicle({ id: 'veh-1', name: 'Assigned Car' }), // the current car — excluded
-      fleetVehicle({ id: 'ok', name: 'Same Class Same Loc' }), // valid
-      fleetVehicle({ id: 'other-class', name: 'Other Class', classId: 'cls-2' }), // wrong class
-      fleetVehicle({ id: 'other-loc', name: 'Other Loc', pickupLocationId: 'loc-9' }), // wrong loc
-      fleetVehicle({ id: 'maint', name: 'In Maintenance', status: 'MAINTENANCE' }), // not available
-    ])
+    const spy = vi.spyOn(api, 'updateBookingStatus').mockResolvedValue({} as never)
+    renderPanel(operatorSession, detail({ id: 'bk-9', status: 'CONFIRMED' }))
 
-    await user.click(screen.getByRole('button', { name: sub.action }))
+    await user.click(screen.getByRole('button', { name: d.markActive }))
 
-    expect(screen.getByRole('option', { name: /Same Class Same Loc/ })).toBeInTheDocument()
-    expect(screen.queryByRole('option', { name: /Assigned Car/ })).not.toBeInTheDocument()
-    expect(screen.queryByRole('option', { name: /Other Class/ })).not.toBeInTheDocument()
-    expect(screen.queryByRole('option', { name: /Other Loc/ })).not.toBeInTheDocument()
-    expect(screen.queryByRole('option', { name: /In Maintenance/ })).not.toBeInTheDocument()
+    await waitFor(() => expect(spy).toHaveBeenCalledWith('bk-9', 'ACTIVE', 't'))
+  })
+
+  it('advances ACTIVE to COMPLETED when mark-returned is clicked', async () => {
+    const user = userEvent.setup()
+    const spy = vi.spyOn(api, 'updateBookingStatus').mockResolvedValue({} as never)
+    renderPanel(operatorSession, detail({ status: 'ACTIVE' }))
+
+    await user.click(screen.getByRole('button', { name: d.markCompleted }))
+
+    await waitFor(() => expect(spy).toHaveBeenCalledWith('bk-1', 'COMPLETED', 't'))
+  })
+
+  it('surfaces a status error when the transition fails', async () => {
+    const user = userEvent.setup()
+    vi.spyOn(api, 'updateBookingStatus').mockRejectedValue(new Error('400'))
+    renderPanel(operatorSession, detail({ status: 'CONFIRMED' }))
+
+    await user.click(screen.getByRole('button', { name: d.markActive }))
+
+    expect(await screen.findByText(d.statusError)).toBeInTheDocument()
   })
 })

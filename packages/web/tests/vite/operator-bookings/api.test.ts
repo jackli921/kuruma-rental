@@ -359,11 +359,11 @@ describe('operatorCalendarVehiclesQueryOptions', () => {
 // prefix on success). Vehicle substitution itself shipped with #610 below.
 
 describe('fetchSubstitutionCandidates', () => {
-  it('GETs the operator-only candidates endpoint with credentials and maps to {id,name}', async () => {
+  it('GETs the operator-only candidates endpoint with credentials and maps to {id,name,plate}', async () => {
     const fetchMock = vi.fn(async () =>
       jsonResponse({
         success: true,
-        data: [{ id: 'veh-2', name: 'Honda Fit', status: 'AVAILABLE', classId: 'c-1' }],
+        data: [{ id: 'veh-2', name: 'Honda Fit', licensePlate: 'OSAKA 1234', status: 'AVAILABLE' }],
       }),
     )
     vi.stubGlobal('fetch', fetchMock)
@@ -375,7 +375,19 @@ describe('fetchSubstitutionCandidates', () => {
       '/api/bookings/bk-1/substitution-candidates',
     )
     expect((init as RequestInit).credentials).toBe('include')
-    expect(candidates).toEqual([{ id: 'veh-2', name: 'Honda Fit' }])
+    expect(candidates).toEqual([{ id: 'veh-2', name: 'Honda Fit', licensePlate: 'OSAKA 1234' }])
+  })
+
+  it('defaults licensePlate to null when the field is absent', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () =>
+        jsonResponse({ success: true, data: [{ id: 'veh-2', name: 'Honda Fit' }] }),
+      ),
+    )
+
+    const [candidate] = await fetchSubstitutionCandidates('bk-1')
+    expect(candidate).toEqual({ id: 'veh-2', name: 'Honda Fit', licensePlate: null })
   })
 
   it('encodes the booking id into the path', async () => {
