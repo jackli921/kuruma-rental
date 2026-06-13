@@ -79,6 +79,7 @@ function createTestVehicle(
   return vehicleRepo.create(SYSTEM_CONTEXT, {
     operatorId: overrides.operatorId ?? BEST_CAR_RENTAL_OPERATOR_ID,
     classId: overrides.classId ?? testClassId,
+    pickupLocationId: overrides.pickupLocationId ?? testLocationId,
     name: overrides.name ?? 'Avail Test Car',
     description: overrides.description ?? null,
     seats: overrides.seats ?? 5,
@@ -250,6 +251,38 @@ describe('DrizzleAvailabilityRepository', () => {
       )
 
       expect(result.map((v) => v.id)).toContain(vehicle.id)
+    })
+
+    it('with { locationIds } returns only vehicles at those locations (#651 §1c)', async () => {
+      const locationB = await seedLocation('avail-b', TURNAROUND_MINUTES)
+      createdLocationIds.push(locationB.id)
+      const atA = await createTestVehicle({ name: 'At A', pickupLocationId: testLocationId })
+      createdVehicleIds.push(atA.id)
+      const atB = await createTestVehicle({ name: 'At B', pickupLocationId: locationB.id })
+      createdVehicleIds.push(atB.id)
+
+      const result = await availabilityRepo.findAvailableVehicles(
+        new Date('2026-08-01T10:00:00Z'),
+        new Date('2026-08-01T14:00:00Z'),
+        { locationIds: [testLocationId] },
+      )
+
+      const ids = result.map((v) => v.id)
+      expect(ids).toContain(atA.id)
+      expect(ids).not.toContain(atB.id)
+    })
+
+    it('with { locationIds: [] } scans nothing (empty region → no vehicles, #651 §1c)', async () => {
+      const atA = await createTestVehicle({ name: 'Empty Scope' })
+      createdVehicleIds.push(atA.id)
+
+      const result = await availabilityRepo.findAvailableVehicles(
+        new Date('2026-08-01T10:00:00Z'),
+        new Date('2026-08-01T14:00:00Z'),
+        { locationIds: [] },
+      )
+
+      expect(result.map((v) => v.id)).not.toContain(atA.id)
     })
 
     it('excludes MAINTENANCE and RETIRED vehicles', async () => {

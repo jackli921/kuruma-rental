@@ -8,6 +8,7 @@ import { InMemoryRegionRepository } from '../repositories/in-memory/region'
 import { InMemoryStorefrontRepository } from '../repositories/in-memory/storefront'
 import { InMemoryVehicleRepository } from '../repositories/in-memory/vehicle'
 import { InMemoryVehicleClassRepository } from '../repositories/in-memory/vehicle-class'
+import type { AvailabilityFilters, AvailabilityRepository } from '../repositories/types'
 import type { Location, Operator, Region, Vehicle, VehicleClass } from '../stores'
 import { FlatSearchService } from './flat-search'
 
@@ -122,6 +123,22 @@ function makeVehicle(overrides: Partial<Omit<Vehicle, 'id' | 'createdAt' | 'upda
 async function ok(result: Awaited<ReturnType<FlatSearchService['search']>>) {
   if (!result.ok) throw new Error(`expected ok, got ${result.error}`)
   return result.data
+}
+
+// Records the filters handed to the availability port. Scan-bounding (#651 §1c)
+// is invisible in the OUTPUT (out-of-region cars are dropped by the location map
+// anyway), so the observable is the scope the service requests of its injected
+// repository — a legitimate port-contract assertion, not an internal mock.
+class RecordingAvailabilityRepository implements AvailabilityRepository {
+  lastFilters: AvailabilityFilters | undefined
+  constructor(private readonly inner: AvailabilityRepository) {}
+  findAvailableVehicles(from: Date, to: Date, filters?: AvailabilityFilters) {
+    this.lastFilters = filters
+    return this.inner.findAvailableVehicles(from, to, filters)
+  }
+  checkVehicleAvailability(vehicleId: string, from: Date, to: Date) {
+    return this.inner.checkVehicleAvailability(vehicleId, from, to)
+  }
 }
 
 describe('FlatSearchService.search (#458)', () => {
@@ -320,6 +337,33 @@ describe('FlatSearchService.search region filter (#394)', () => {
       await service.search(PUBLIC_CONTEXT, { from: FROM, to: TO, regionId: 'reg_osaka' }),
     )
     expect(data.items.map((i) => (i.kind === 'SPECIFIC' ? i.name : null))).toEqual(['Osaka Car'])
+  })
+
+  it('bounds the availability scan to the in-region storefronts, not the whole fleet (#651 §1c)', async () => {
+    const a = await makeOperator('A Rentals', 'a')
+    const klass = await makeClass({ operatorId: a.id, acrissCode: 'CCAR' })
+    const namba = await makeLocation({ operatorId: a.id, name: 'Namba', regionId: 'reg_namba' })
+    const kyoto = await makeLocation({
+      operatorId: a.id,
+      name: 'Kyoto Station',
+      regionId: 'reg_kyoto_station',
+    })
+    await makeVehicle({ operatorId: a.id, classId: klass.id, pickupLocationId: namba.id })
+    await makeVehicle({ operatorId: a.id, classId: klass.id, pickupLocationId: kyoto.id })
+
+    const recording = new RecordingAvailabilityRepository(
+      new InMemoryAvailabilityRepository(vehicleRepo, bookingRepo),
+    )
+    const scoped = new FlatSearchService(
+      new InMemoryStorefrontRepository(locationRepo, operatorRepo),
+      recording,
+      classRepo,
+      new InMemoryRegionRepository(REGIONS),
+    )
+
+    await scoped.search(PUBLIC_CONTEXT, { from: FROM, to: TO, regionId: 'reg_osaka' })
+
+    expect(recording.lastFilters?.locationIds).toEqual([namba.id])
   })
 
   it('returns nothing for an unknown regionId (not the whole catalog)', async () => {

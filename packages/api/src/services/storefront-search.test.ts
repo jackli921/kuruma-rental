@@ -8,6 +8,7 @@ import { InMemoryRegionRepository } from '../repositories/in-memory/region'
 import { InMemoryStorefrontRepository } from '../repositories/in-memory/storefront'
 import { InMemoryVehicleRepository } from '../repositories/in-memory/vehicle'
 import { InMemoryVehicleClassRepository } from '../repositories/in-memory/vehicle-class'
+import type { AvailabilityFilters, AvailabilityRepository } from '../repositories/types'
 import type { Location, Operator, Region, Vehicle, VehicleClass } from '../stores'
 import { StorefrontSearchService } from './storefront-search'
 
@@ -153,6 +154,22 @@ function bookOverlapping(vehicleId: string, classId: string) {
 async function ok(result: Awaited<ReturnType<StorefrontSearchService['search']>>) {
   if (!result.ok) throw new Error(`expected ok, got ${result.error}`)
   return result.data
+}
+
+// Records the filters handed to the availability port. The scan-bounding of
+// #651 §1c is invisible in the search OUTPUT (out-of-region cars are already
+// dropped by storefront grouping), so the only observable is what scope the
+// service asks its injected repository for — a legitimate contract assertion.
+class RecordingAvailabilityRepository implements AvailabilityRepository {
+  lastFilters: AvailabilityFilters | undefined
+  constructor(private readonly inner: AvailabilityRepository) {}
+  findAvailableVehicles(from: Date, to: Date, filters?: AvailabilityFilters) {
+    this.lastFilters = filters
+    return this.inner.findAvailableVehicles(from, to, filters)
+  }
+  checkVehicleAvailability(vehicleId: string, from: Date, to: Date) {
+    return this.inner.checkVehicleAvailability(vehicleId, from, to)
+  }
 }
 
 describe('StorefrontSearchService.search (#391)', () => {
@@ -393,6 +410,35 @@ describe('StorefrontSearchService.search region filter (#394)', () => {
       await service.search(PUBLIC_CONTEXT, { from: FROM, to: TO, regionId: 'reg_nope' }),
     )
     expect(data.storefronts).toEqual([])
+  })
+
+  it('bounds the availability scan to the in-region storefronts, not the whole fleet (#651 §1c)', async () => {
+    const op = await makeOperator('Best Car Rental', 'best')
+    const compact = await makeClass({ operatorId: op.id, acrissCode: 'CCAR' })
+    const namba = await makeLocation({ operatorId: op.id, name: 'Namba', regionId: 'reg_namba' })
+    const kyoto = await makeLocation({
+      operatorId: op.id,
+      name: 'Kyoto Station',
+      regionId: 'reg_kyoto_station',
+    })
+    await makeVehicle({ operatorId: op.id, classId: compact.id, pickupLocationId: namba.id })
+    await makeVehicle({ operatorId: op.id, classId: compact.id, pickupLocationId: kyoto.id })
+
+    const recording = new RecordingAvailabilityRepository(
+      new InMemoryAvailabilityRepository(vehicleRepo, bookingRepo),
+    )
+    const scoped = new StorefrontSearchService(
+      new InMemoryStorefrontRepository(locationRepo, operatorRepo),
+      recording,
+      classRepo,
+      new InMemoryRegionRepository(REGIONS),
+    )
+
+    await scoped.search(PUBLIC_CONTEXT, { from: FROM, to: TO, regionId: 'reg_osaka' })
+
+    // Osaka resolves to exactly one in-region storefront (Namba); Kyoto Station
+    // must never enter the scan. A platform-wide scan would pass `undefined`.
+    expect(recording.lastFilters?.locationIds).toEqual([namba.id])
   })
 
   it('excludes a null-region location from a region filter but shows it unfiltered', async () => {

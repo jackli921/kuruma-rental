@@ -484,11 +484,13 @@ export interface OverviewRepository {
 
 /**
  * Optional scoping for {@link AvailabilityRepository.findAvailableVehicles}.
- * Storefront search (#391) needs availability scoped to one location/class;
- * every field defaults to "no filter" so existing callers are unaffected.
+ * Every field defaults to "no filter" so existing callers are unaffected (#391).
  */
 export interface AvailabilityFilters {
   locationId?: string
+  /** #651 §1c: bound the scan to a region's storefront ids; an empty array and a
+   * null pickupLocationId both match nothing (the {@link StorefrontFilters} twin). */
+  locationIds?: string[]
   operatorId?: string
   classId?: string
 }
@@ -520,12 +522,9 @@ export type Storefront = Location & { operatorName: string }
 export interface StorefrontFilters {
   /** Narrow to a single storefront — the degenerate single-card search. */
   pickupLocationId?: string
-  /**
-   * #394: keep only storefronts whose location.regionId is in this set (a region
-   * node + its recursive descendants, resolved by RegionRepository). An EMPTY
-   * array means "no region matched" → no storefronts (an unknown region id, or a
-   * region with no locations). Locations with a null regionId never match.
-   */
+  /** #394: keep storefronts whose location.regionId is in this set (a region node
+   * + its recursive descendants, via RegionRepository). An EMPTY array means "no
+   * region matched" → no storefronts; a null regionId never matches. */
   regionIds?: string[]
 }
 

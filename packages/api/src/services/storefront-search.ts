@@ -2,6 +2,7 @@ import type { LuggageSize } from '@kuruma/shared/lib/luggage'
 import type { LocationOperatingHours } from '@kuruma/shared/types/location'
 import type { CallerContext } from '../middleware/auth'
 import type {
+  AvailabilityFilters,
   AvailabilityRepository,
   RegionRepository,
   Storefront,
@@ -102,10 +103,16 @@ export class StorefrontSearchService {
       regionId || pickupLocationId ? filters : undefined,
     )
     // ONE availability scan per page — group in memory, never a query per store (N+1 guard, §3).
+    // Bound the scan to the in-region storefronts (#651 §1c): the storefront list
+    // is already region-filtered, so scanning its ids avoids a platform-wide scan
+    // whose out-of-region results would only be discarded by grouping below.
+    const availFilters: AvailabilityFilters = {}
+    if (pickupLocationId) availFilters.locationId = pickupLocationId
+    if (regionId) availFilters.locationIds = storefronts.map((sf) => sf.id)
     const available = await this.availabilityRepo.findAvailableVehicles(
       from,
       to,
-      pickupLocationId ? { locationId: pickupLocationId } : undefined,
+      pickupLocationId || regionId ? availFilters : undefined,
     )
     const classById = new Map(
       (await this.classRepo.findAll(ctx, { includeArchived: true })).map((vc) => [vc.id, vc]),

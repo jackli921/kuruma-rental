@@ -63,6 +63,27 @@ describe('InMemoryAvailabilityRepository.findAvailableVehicles — storefront fi
     expect(result.map((v) => v.id)).toEqual([osaka.id])
   })
 
+  it('with { locationIds } returns only vehicles at those storefronts (#651 §1c)', async () => {
+    const osaka = await makeVehicle({ pickupLocationId: 'loc_osaka' })
+    const kyoto = await makeVehicle({ pickupLocationId: 'loc_kyoto' })
+    await makeVehicle({ pickupLocationId: 'loc_nara' })
+    await makeVehicle({ pickupLocationId: null })
+
+    const result = await availabilityRepo.findAvailableVehicles(FROM, TO, {
+      locationIds: ['loc_osaka', 'loc_kyoto'],
+    })
+
+    expect(result.map((v) => v.id).sort()).toEqual([osaka.id, kyoto.id].sort())
+  })
+
+  it('with { locationIds: [] } returns no vehicles (empty region matches nothing)', async () => {
+    await makeVehicle({ pickupLocationId: 'loc_osaka' })
+
+    const result = await availabilityRepo.findAvailableVehicles(FROM, TO, { locationIds: [] })
+
+    expect(result).toEqual([])
+  })
+
   it('with { classId } narrows to that ACRISS class within the location', async () => {
     const compact = await makeVehicle({ classId: 'class_compact', pickupLocationId: 'loc_osaka' })
     await makeVehicle({ classId: 'class_van', pickupLocationId: 'loc_osaka' })

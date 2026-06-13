@@ -1,5 +1,5 @@
 import { bookings, vehicles } from '@kuruma/shared/db/schema'
-import { type SQL, and, eq, sql } from 'drizzle-orm'
+import { type SQL, and, eq, inArray, sql } from 'drizzle-orm'
 import type { Booking, Vehicle } from '../../stores'
 import type { AvailabilityFilters, AvailabilityRepository } from '../types'
 import { type Db, bookingColumns, toBooking, toVehicle, vehicleColumns } from './shared'
@@ -29,6 +29,17 @@ export class DrizzleAvailabilityRepository implements AvailabilityRepository {
     // invisible to storefront search (§9 item 8). Additive; existing callers
     // pass no filter and scan the whole fleet unchanged.
     if (filters?.locationId) conditions.push(eq(vehicles.pickupLocationId, filters.locationId))
+    // Region scope (#651 §1c): bound the scan to a set of locations via the
+    // idx_vehicles_pickupLocationId index. An empty set matches nothing (the "no
+    // in-region storefront" answer) — guarded so we never lean on drizzle's
+    // empty-inArray behavior. A null pickupLocationId is never IN the set.
+    if (filters?.locationIds) {
+      conditions.push(
+        filters.locationIds.length > 0
+          ? inArray(vehicles.pickupLocationId, filters.locationIds)
+          : sql`false`,
+      )
+    }
     if (filters?.operatorId) conditions.push(eq(vehicles.operatorId, filters.operatorId))
     if (filters?.classId) conditions.push(eq(vehicles.classId, filters.classId))
 

@@ -28,6 +28,13 @@ export class InMemoryAvailabilityRepository implements AvailabilityRepository {
       // Storefront scope (#391): a null pickupLocationId never matches a
       // locationId filter, so unassigned vehicles are invisible to search.
       if (filters?.locationId && vehicle.pickupLocationId !== filters.locationId) return false
+      // Region scope (#651 §1c): bound to a set of locations. Empty set or a null
+      // pickupLocationId matches nothing — mirrors the singular locationId above.
+      if (
+        filters?.locationIds &&
+        (!vehicle.pickupLocationId || !filters.locationIds.includes(vehicle.pickupLocationId))
+      )
+        return false
       if (filters?.operatorId && vehicle.operatorId !== filters.operatorId) return false
       if (filters?.classId && vehicle.classId !== filters.classId) return false
 

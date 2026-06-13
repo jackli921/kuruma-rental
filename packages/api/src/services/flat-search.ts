@@ -79,13 +79,17 @@ export class FlatSearchService {
     )
 
     // ONE availability scan per page — the same call slice 5 makes (N+1 guard).
+    // Bound the scan to the in-region storefronts (#651 §1c): `storefronts` is
+    // already region-filtered, so its ids are the exact location set to scan
+    // instead of the whole platform fleet (out-of-region cars get dropped below).
     const filters: AvailabilityFilters = {}
     if (pickupLocationId) filters.locationId = pickupLocationId
     if (operatorId) filters.operatorId = operatorId
+    if (regionId) filters.locationIds = storefronts.map((sf) => sf.id)
     const available = await this.availabilityRepo.findAvailableVehicles(
       from,
       to,
-      pickupLocationId || operatorId ? filters : undefined,
+      pickupLocationId || operatorId || regionId ? filters : undefined,
     )
 
     const classById = new Map(
