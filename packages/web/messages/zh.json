@@ -64,6 +64,7 @@
     "locations": "取还点",
     "insurance": "保险",
     "fees": "费用",
+    "addOns": "附加项目",
     "menu": "菜单",
     "close": "关闭菜单",
     "switchToRenter": "切换到租客视图",
@@ -162,11 +163,16 @@
   "business": {
     "dashboard": {
       "title": "仪表盘",
-      "subtitle": "租车业务概览"
+      "subtitle": "租车业务概览",
+      "viewBookings": "查看预订",
+      "manageFleet": "管理车辆",
+      "loadError": "无法加载仪表盘。",
+      "retry": "重试"
     },
     "stats": {
       "totalBookings": "总预订数",
       "activeVehicles": "运营中车辆",
+      "upcomingBookings": "即将到来的预订",
       "totalCustomers": "总客户数",
       "unreadMessages": "未读消息"
     },
@@ -668,6 +674,39 @@
         "deductibleHint": "若为无免赔额的全额承保，请保持关闭。",
         "deductible": "免赔额（日元）",
         "save": "保存选项",
+        "saving": "保存中...",
+        "cancel": "取消"
+      }
+    },
+    "addOns": {
+      "title": "附加项目",
+      "subtitle": "管理客户在预订时可选择的付费附加项目。",
+      "addOption": "添加附加项目",
+      "addSubtitle": "创建新的附加项目。",
+      "editOption": "编辑附加项目",
+      "archiveAction": "归档附加项目",
+      "archiveTitle": "归档 {name}？",
+      "archiveDescription": "此操作将归档该附加项目。它仍会显示在列表中，但不会用于新预订。",
+      "archiveConfirm": "归档",
+      "archiving": "归档中...",
+      "empty": "还没有附加项目。请添加第一个。",
+      "loadError": "无法加载附加项目",
+      "retry": "重试",
+      "status": {
+        "ACTIVE": "启用",
+        "ARCHIVED": "已归档"
+      },
+      "row": {
+        "price": "每次预订 {price}"
+      },
+      "form": {
+        "name": "附加项目名称",
+        "namePlaceholder": "例如：儿童座椅",
+        "description": "描述",
+        "descriptionPlaceholder": "例如：适合幼儿的后向式儿童座椅。",
+        "price": "价格（日元）",
+        "priceHint": "客户选择此附加项目时，每次预订收取一次。",
+        "save": "保存附加项目",
         "saving": "保存中...",
         "cancel": "取消"
       }

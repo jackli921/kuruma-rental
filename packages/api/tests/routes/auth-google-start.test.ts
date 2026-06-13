@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'vitest'
 import { createApp } from '../../src/index'
-import { setupAuthEnv } from '../helpers/auth'
+import { readOAuthFlowCookie, setupAuthEnv } from '../helpers/auth'
 
 function setupGoogleEnv() {
   setupAuthEnv()
@@ -9,8 +9,13 @@ function setupGoogleEnv() {
   process.env.AUTH_URL = 'https://api.example.test'
 }
 
+/** The raw Set-Cookie string for this flow's per-flow cookie, or undefined. */
+function rawFlowCookie(res: Response): string | undefined {
+  return (res.headers.getSetCookie?.() ?? []).find((c) => c.startsWith('kuruma_oauth_flow_'))
+}
+
 describe('POST /auth/google/start', () => {
-  test('redirects (302) to Google authorize with state bound to a cookie', async () => {
+  test('redirects (302) to Google authorize with state bound to its own per-flow cookie', async () => {
     setupGoogleEnv()
     const app = createApp()
     const res = await app.request('/auth/google/start', { method: 'POST' })
@@ -28,13 +33,13 @@ describe('POST /auth/google/start', () => {
     const state = url.searchParams.get('state')
     expect(state).toBeTruthy()
 
-    const setCookie = res.headers.get('set-cookie') ?? ''
-    expect(setCookie).toContain('kuruma_oauth_state=')
-    expect(setCookie).toContain('HttpOnly')
-    expect(setCookie).toContain('SameSite=Lax')
-    // The redirect's state MUST equal the cookie's state — that binding is what
-    // makes the callback's state check a real CSRF defence, not theatre.
-    expect(setCookie).toContain(`kuruma_oauth_state=${state}`)
+    const raw = rawFlowCookie(res)
+    expect(raw).toContain('HttpOnly')
+    expect(raw).toContain('SameSite=Lax')
+    // The redirect's state MUST name the cookie that was set — that binding is what
+    // makes the callback's presence check a real CSRF defence, not theatre.
+    expect(raw).toContain(`kuruma_oauth_flow_${state}=`)
+    expect(readOAuthFlowCookie(res)?.state).toBe(state)
   })
 
   test('503 when Google OAuth is not configured', async () => {
@@ -48,149 +53,90 @@ describe('POST /auth/google/start', () => {
     expect(res.status).toBe(503)
   })
 
-  test('stashes a safe returnTo in the kuruma_oauth_return cookie', async () => {
+  test('stashes a safe returnTo in the per-flow cookie payload', async () => {
     setupGoogleEnv()
     const app = createApp()
     const res = await app.request('/auth/google/start?returnTo=%2Fen%2Fbookings%2Fnew', {
       method: 'POST',
     })
     expect(res.status).toBe(302)
-    const setCookie = (res.headers.getSetCookie?.() ?? []).find((c) =>
-      c.startsWith('kuruma_oauth_return='),
-    )
-    expect(setCookie).toBeTruthy()
-    expect(setCookie).toContain('HttpOnly')
-    expect(setCookie).toContain('SameSite=Lax')
-    expect(readReturnCookie(res)).toBe('/en/bookings/new')
+    expect(rawFlowCookie(res)).toContain('HttpOnly')
+    expect(readOAuthFlowCookie(res)?.payload.returnTo).toBe('/en/bookings/new')
   })
 
-  test('ignores an open-redirect returnTo — no return cookie set', async () => {
+  test('ignores an open-redirect returnTo — no returnTo in the flow payload', async () => {
     setupGoogleEnv()
     const app = createApp()
     const res = await app.request('/auth/google/start?returnTo=%2F%2Fevil.com', { method: 'POST' })
     expect(res.status).toBe(302)
-    expect(readReturnCookie(res)).toBeUndefined()
+    expect(readOAuthFlowCookie(res)?.payload.returnTo).toBeUndefined()
   })
 
-  test('no returnTo query → no return cookie', async () => {
+  test('no returnTo query → flow cookie set, but no returnTo in its payload', async () => {
     setupGoogleEnv()
     const app = createApp()
     const res = await app.request('/auth/google/start', { method: 'POST' })
-    expect(readReturnCookie(res)).toBeUndefined()
+    expect(readOAuthFlowCookie(res)?.payload.returnTo).toBeUndefined()
   })
 
-  // A new flow must bind a *fresh* return value. If the browser still holds a
-  // stale kuruma_oauth_return from an aborted flow, a later plain login (no
-  // returnTo) would otherwise inherit it and the callback would redirect to that
-  // stale path. So /start must actively erase the old cookie, not just skip it.
-  test('no returnTo + stale return cookie present → erases the stale cookie', async () => {
+  // The per-flow design (issue #519) makes stale-slot inheritance structurally
+  // impossible: a new flow names its cookie by a FRESH random state, so it can
+  // never overwrite — nor inherit from — a prior flow's cookie. Two starts in the
+  // same browser leave two distinct, independent cookies; neither is erased.
+  test('two starts bind two distinct flow cookies — no shared slot to clobber', async () => {
     setupGoogleEnv()
     const app = createApp()
-    const res = await app.request('/auth/google/start', {
-      method: 'POST',
-      headers: { cookie: 'kuruma_oauth_return=%2Fja%2Fbookings%2Fnew' },
-    })
-    expect(res.status).toBe(302)
-    expect(erasesReturnCookie(res)).toBe(true)
-  })
+    const first = await app.request('/auth/google/start?returnTo=%2Fen%2Fa', { method: 'POST' })
+    const second = await app.request('/auth/google/start?returnTo=%2Fen%2Fb', { method: 'POST' })
 
-  test('open-redirect returnTo + stale return cookie present → erases the stale cookie', async () => {
-    setupGoogleEnv()
-    const app = createApp()
-    const res = await app.request('/auth/google/start?returnTo=%2F%2Fevil.com', {
-      method: 'POST',
-      headers: { cookie: 'kuruma_oauth_return=%2Fja%2Fbookings%2Fnew' },
-    })
-    expect(res.status).toBe(302)
-    expect(erasesReturnCookie(res)).toBe(true)
+    const a = readOAuthFlowCookie(first)
+    const b = readOAuthFlowCookie(second)
+    expect(a?.state).not.toBe(b?.state)
+    expect(a?.payload.returnTo).toBe('/en/a')
+    expect(b?.payload.returnTo).toBe('/en/b')
+    // Neither /start emits a Max-Age=0 erase — there is nothing to erase.
+    for (const res of [first, second]) {
+      expect((res.headers.getSetCookie?.() ?? []).some((c) => /Max-Age=0/.test(c))).toBe(false)
+    }
   })
 
   // Provider sign-in door (#521 §5): intent + optional invite token ride the same
-  // HttpOnly/Lax round-trip cookies as state/return. Identity stays Google's;
-  // these only steer the post-login authz decision the callback makes.
-  test('intent=provider → sets the kuruma_oauth_intent cookie (HttpOnly, Lax)', async () => {
+  // per-flow cookie value as returnTo. Identity stays Google's; these only steer
+  // the post-login authz decision the callback makes.
+  test('intent=provider → flow payload carries provider intent (cookie HttpOnly, Lax)', async () => {
     setupGoogleEnv()
     const app = createApp()
     const res = await app.request('/auth/google/start?intent=provider', { method: 'POST' })
     expect(res.status).toBe(302)
-    const hit = (res.headers.getSetCookie?.() ?? []).find((c) =>
-      c.startsWith('kuruma_oauth_intent='),
-    )
-    expect(hit).toContain('kuruma_oauth_intent=provider')
-    expect(hit).toContain('HttpOnly')
-    expect(hit).toContain('SameSite=Lax')
-    expect(readFlowCookie(res, 'kuruma_oauth_intent')).toBe('provider')
+    expect(rawFlowCookie(res)).toContain('HttpOnly')
+    expect(rawFlowCookie(res)).toContain('SameSite=Lax')
+    expect(readOAuthFlowCookie(res)?.payload.intent).toBe('provider')
   })
 
-  test('absent intent → no provider intent cookie set', async () => {
+  test('absent intent → flow payload defaults to renter', async () => {
     setupGoogleEnv()
     const app = createApp()
     const res = await app.request('/auth/google/start', { method: 'POST' })
-    expect(readFlowCookie(res, 'kuruma_oauth_intent')).toBeUndefined()
+    expect(readOAuthFlowCookie(res)?.payload.intent).toBe('renter')
   })
 
-  // An unknown/renter intent must not leave a stale `provider` cookie alive from
-  // an aborted provider flow — /start binds the cookie freshly (erase otherwise).
-  test('intent=renter + stale provider intent cookie → erases it', async () => {
-    setupGoogleEnv()
-    const app = createApp()
-    const res = await app.request('/auth/google/start?intent=renter', {
-      method: 'POST',
-      headers: { cookie: 'kuruma_oauth_intent=provider' },
-    })
-    expect(res.status).toBe(302)
-    expect(erasesFlowCookie(res, 'kuruma_oauth_intent')).toBe(true)
-  })
-
-  test('valid invite token → sets the kuruma_oauth_invite cookie', async () => {
+  test('valid invite token → flow payload carries it', async () => {
     setupGoogleEnv()
     const app = createApp()
     const res = await app.request('/auth/google/start?intent=provider&invite=Ab3-_xyz09', {
       method: 'POST',
     })
     expect(res.status).toBe(302)
-    expect(readFlowCookie(res, 'kuruma_oauth_invite')).toBe('Ab3-_xyz09')
+    expect(readOAuthFlowCookie(res)?.payload.invite).toBe('Ab3-_xyz09')
   })
 
-  test('malformed invite token → no invite cookie + erases stale', async () => {
+  test('malformed invite token → no invite in the flow payload', async () => {
     setupGoogleEnv()
     const app = createApp()
     const res = await app.request('/auth/google/start?intent=provider&invite=bad!token', {
       method: 'POST',
-      headers: { cookie: 'kuruma_oauth_invite=stale' },
     })
     expect(res.status).toBe(302)
-    expect(readFlowCookie(res, 'kuruma_oauth_invite')).toBeUndefined()
-    expect(erasesFlowCookie(res, 'kuruma_oauth_invite')).toBe(true)
+    expect(readOAuthFlowCookie(res)?.payload.invite).toBeUndefined()
   })
 })
-
-/** Read the decoded value of the kuruma_oauth_return cookie, or undefined. */
-function readReturnCookie(res: Response): string | undefined {
-  const hit = (res.headers.getSetCookie?.() ?? []).find((c) => c.startsWith('kuruma_oauth_return='))
-  if (!hit) return undefined
-  const value = hit.slice('kuruma_oauth_return='.length).split(';')[0] ?? ''
-  return value === '' ? undefined : decodeURIComponent(value)
-}
-
-/** True when the response sends a Set-Cookie that expires kuruma_oauth_return
- *  (empty value + Max-Age=0) — i.e. it tells the browser to drop the stale one. */
-function erasesReturnCookie(res: Response): boolean {
-  return erasesFlowCookie(res, 'kuruma_oauth_return')
-}
-
-/** Read the decoded value of a named flow cookie, or undefined (empty = unset). */
-function readFlowCookie(res: Response, name: string): string | undefined {
-  const hit = (res.headers.getSetCookie?.() ?? []).find((c) => c.startsWith(`${name}=`))
-  if (!hit) return undefined
-  const value = hit.slice(`${name}=`.length).split(';')[0] ?? ''
-  return value === '' ? undefined : decodeURIComponent(value)
-}
-
-/** True when the response expires a named flow cookie (empty value + Max-Age=0). */
-function erasesFlowCookie(res: Response, name: string): boolean {
-  const hit = (res.headers.getSetCookie?.() ?? []).find((c) => c.startsWith(`${name}=`))
-  if (!hit) return false
-  const value = hit.slice(`${name}=`.length).split(';')[0] ?? ''
-  return value === '' && /max-age=0\b/i.test(hit)
-}
