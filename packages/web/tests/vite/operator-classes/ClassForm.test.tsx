@@ -40,6 +40,19 @@ describe('ClassForm (create)', () => {
     )
   })
 
+  it('submits the chosen luggage size (overriding the MEDIUM default)', async () => {
+    const user = userEvent.setup()
+    const onSubmit = renderForm()
+
+    await user.type(screen.getByLabelText('Class name'), 'Large Van')
+    await user.type(screen.getByLabelText('Slug'), 'large-van')
+    await user.selectOptions(screen.getByLabelText('Luggage size'), 'LARGE')
+    await user.click(screen.getByRole('button', { name: 'Save class' }))
+
+    expect(onSubmit).toHaveBeenCalledTimes(1)
+    expect(onSubmit).toHaveBeenCalledWith(expect.objectContaining({ luggageSize: 'LARGE' }))
+  })
+
   it('blocks submit and shows an error when the name is empty', async () => {
     const user = userEvent.setup()
     const onSubmit = renderForm()
