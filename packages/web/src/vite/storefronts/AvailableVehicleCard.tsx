@@ -1,8 +1,9 @@
 import { buttonVariants } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
+import { PhotoGallery } from '@/vite/storefronts/PhotoGallery'
 import type { AvailableVehicleData } from '@/vite/storefronts/api'
 import { Link } from '@tanstack/react-router'
-import { Briefcase, Car, Settings2, Users } from 'lucide-react'
+import { Briefcase, Settings2, Users } from 'lucide-react'
 import { useLocale, useTranslations } from 'use-intl'
 
 interface AvailableVehicleCardProps {
@@ -24,7 +25,6 @@ export function AvailableVehicleCard({ vehicle, locationId, from, to }: Availabl
   const t = useTranslations('search')
   const tSize = useTranslations('luggageSize')
   const locale = useLocale()
-  const photo = vehicle.photos[0]
   const transmissionLabel = vehicle.transmission === 'AUTO' ? t('auto') : t('manual')
 
   const priceLabel =
@@ -36,15 +36,7 @@ export function AvailableVehicleCard({ vehicle, locationId, from, to }: Availabl
 
   return (
     <div className="flex flex-col overflow-hidden rounded-xl border border-border bg-card shadow-sm">
-      <div className="aspect-[4/3] overflow-hidden bg-muted">
-        {photo ? (
-          <img src={photo} alt={vehicle.name} className="h-full w-full object-cover" />
-        ) : (
-          <div className="flex h-full w-full items-center justify-center">
-            <Car className="size-12 text-muted-foreground/30" />
-          </div>
-        )}
-      </div>
+      <PhotoGallery photos={vehicle.photos} alt={vehicle.name} />
       <div className="flex flex-1 flex-col gap-2 p-4">
         <h3 className="text-base font-semibold leading-tight">{vehicle.name}</h3>
         <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-muted-foreground">
