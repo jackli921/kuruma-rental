@@ -1044,6 +1044,61 @@ describe('BookingService.substitute — operator vehicle swap (#392 §5.5)', () 
   })
 })
 
+describe('BookingService.substitutionCandidates — eligible swap targets (#616)', () => {
+  const addVehicle = (h: SubHarness, o: Partial<Vehicle> = {}) =>
+    h.repos.vehicleRepo.create(
+      SYSTEM_CONTEXT,
+      vehicleData({
+        classId: h.classA.id,
+        pickupLocationId: h.locationId,
+        dailyRateJpy: 15000,
+        ...o,
+      }),
+    )
+
+  it('lists same-location same-ACRISS AVAILABLE vehicles, excluding the assigned vehicle', async () => {
+    const h = await setupSub()
+    const r1 = await addVehicle(h)
+    const result = await h.service.substitutionCandidates(opCtxA, h.bookingId)
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+    const ids = result.candidates.map((c) => c.id)
+    expect(ids).toContain(r1.id)
+    expect(ids).not.toContain(h.v1Id) // the currently-assigned car is never its own substitute
+    expect(result.candidates.find((c) => c.id === r1.id)?.name).toEqual(expect.any(String))
+  })
+
+  it('excludes different-location, different-class, and non-AVAILABLE vehicles', async () => {
+    const h = await setupSub()
+    const eligible = await addVehicle(h)
+    const loc2 = await h.repos.locationRepo.create({
+      operatorId: OP_A,
+      name: 'Kyoto',
+      address: '2',
+      operatingHours: null,
+      timezone: 'Asia/Tokyo',
+      defaultTurnaroundMinutes: 2880,
+      status: 'ACTIVE',
+    } as Parameters<typeof h.repos.locationRepo.create>[0])
+    await addVehicle(h, { pickupLocationId: loc2.id }) // wrong location
+    await addVehicle(h, { classId: h.classB.id }) // wrong ACRISS class
+    await addVehicle(h, { status: 'MAINTENANCE' }) // not available
+    const result = await h.service.substitutionCandidates(opCtxA, h.bookingId)
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+    expect(result.candidates.map((c) => c.id)).toEqual([eligible.id])
+  })
+
+  it('returns 404 when the booking belongs to another operator (no cross-tenant read)', async () => {
+    const h = await setupSub()
+    await addVehicle(h)
+    const result = await h.service.substitutionCandidates(opCtxB, h.bookingId)
+    expect(result.ok).toBe(false)
+    if (result.ok) return
+    expect(result.status).toBe(404)
+  })
+})
+
 describe('BookingService lifecycle events (#392 §3.1)', () => {
   it('appends STATUS_CHANGED in the same tx when a booking transitions', async () => {
     const h = await setup({ codes: ['LIFE0001'] })

@@ -1319,4 +1319,46 @@ describe('Booking Routes', () => {
       expect(body.success).toBe(false)
     })
   })
+
+  describe('GET /bookings/:id/substitution-candidates', () => {
+    function operatorApp() {
+      const opApp = new Hono()
+      opApp.use('*', testAuthMiddleware(OP_USER, 'OPERATOR_OWNER', OPERATOR))
+      opApp.route('/', createBookingRoutes(service))
+      return opApp
+    }
+
+    it('forbids a renter (403)', async () => {
+      const renterApp = new Hono()
+      renterApp.use('*', testAuthMiddleware(USER1, 'RENTER'))
+      renterApp.route('/', createBookingRoutes(service))
+
+      const res = await renterApp.request(
+        `/bookings/${crypto.randomUUID()}/substitution-candidates`,
+      )
+      expect(res.status).toBe(403)
+    })
+
+    it('returns 404 for a nonexistent booking', async () => {
+      const res = await operatorApp().request(
+        `/bookings/${crypto.randomUUID()}/substitution-candidates`,
+      )
+      expect(res.status).toBe(404)
+    })
+
+    it('lists eligible same-store same-class vehicles, excluding the assigned car', async () => {
+      const createRes = await createBooking(validBookingInput())
+      const created = await createRes.json()
+
+      const res = await operatorApp().request(
+        `/bookings/${created.data.id}/substitution-candidates`,
+      )
+      expect(res.status).toBe(200)
+      const body = await res.json()
+      expect(body.success).toBe(true)
+      const ids = (body.data as Array<{ id: string }>).map((candidate) => candidate.id)
+      expect(ids).toContain(seededVehicle2Id)
+      expect(ids).not.toContain(seededVehicleId)
+    })
+  })
 })

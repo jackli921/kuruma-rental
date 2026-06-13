@@ -112,6 +112,23 @@ export function createBookingRoutes(service: BookingService) {
 
       return ok(c, events)
     })
+    .get('/bookings/:id/substitution-candidates', async (c) => {
+      const ctx = toCallerContext(requireUser(c))
+
+      // #616: feeds the operator-only substitute action, so it mirrors the
+      // substitute route's gate — renters never swap a vehicle (403). The service
+      // read is caller-scoped, so a cross-operator booking 404s (no leak).
+      if (!isOperatorRole(ctx.role)) {
+        return fail(c, 'Only operators can substitute a vehicle', 403)
+      }
+
+      const result = await service.substitutionCandidates(ctx, c.req.param('id'))
+      if (!result.ok) {
+        return fail(c, result.error, result.status)
+      }
+
+      return ok(c, result.candidates)
+    })
     .post('/bookings', async (c) => {
       const ctx = toCallerContext(requireUser(c))
 
