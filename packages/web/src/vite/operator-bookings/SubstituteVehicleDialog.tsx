@@ -10,6 +10,7 @@ import {
   DialogTrigger,
 } from '@/components/ui/dialog'
 import { Label } from '@/components/ui/label'
+import { NativeSelect } from '@/components/ui/native-select'
 import { Textarea } from '@/components/ui/textarea'
 import {
   type SubstitutionCandidate,
@@ -29,6 +30,12 @@ interface SubstituteVehicleDialogProps {
    * ACRISS code (#616/#621), so the operator can never pick an invalid car.
    */
   readonly candidates: readonly SubstitutionCandidate[]
+  /**
+   * True when the candidate fetch errored. Without it an empty `candidates` from a
+   * 403/500 is indistinguishable from a genuinely empty fleet, so the dialog would
+   * mislabel a load failure as "no same-class vehicle available".
+   */
+  readonly candidatesError?: boolean
   readonly csrfToken: string
 }
 
@@ -42,6 +49,7 @@ interface SubstituteVehicleDialogProps {
 export function SubstituteVehicleDialog({
   bookingId,
   candidates,
+  candidatesError = false,
   csrfToken,
 }: SubstituteVehicleDialogProps) {
   const t = useTranslations('bookings.operator.detail.substitute')
@@ -93,18 +101,17 @@ export function SubstituteVehicleDialog({
             <div className="space-y-4 py-4">
               <div className="space-y-2">
                 <Label htmlFor="substitute-vehicle">{t('vehicleLabel')}</Label>
-                <select
+                <NativeSelect
                   id="substitute-vehicle"
                   value={vehicleId}
                   onChange={(e) => setVehicleId(e.target.value)}
-                  className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
                 >
                   {candidates.map((v) => (
                     <option key={v.id} value={v.id}>
                       {v.licensePlate ? `${v.name} — ${v.licensePlate}` : v.name}
                     </option>
                   ))}
-                </select>
+                </NativeSelect>
               </div>
               <div className="space-y-2">
                 <Label htmlFor="substitute-reason">{t('reasonLabel')}</Label>
@@ -117,7 +124,9 @@ export function SubstituteVehicleDialog({
               </div>
             </div>
           ) : (
-            <p className="py-4 text-sm text-muted-foreground">{t('noCandidates')}</p>
+            <p className="py-4 text-sm text-muted-foreground">
+              {candidatesError ? t('loadError') : t('noCandidates')}
+            </p>
           )}
 
           {mutation.isError && (

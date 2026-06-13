@@ -21,6 +21,9 @@ interface BookingActionsPanelProps {
    * Empty for a terminal booking (the route only fetches them while live).
    */
   readonly candidates: readonly SubstitutionCandidate[]
+  /** True when the candidate fetch errored — forwarded so the Substitute dialog
+   *  can tell a load failure apart from a genuinely empty list. */
+  readonly candidatesError?: boolean
 }
 
 // The status a one-click "advance" moves a live booking to: CONFIRMED -> ACTIVE
@@ -44,7 +47,12 @@ const ADVANCE_TARGET: Partial<Record<OperatorBookingStatus, OperatorBookingStatu
 // fleet/classes (#581/#583/#598). The `_business` shell guard admits the page; this
 // gates the actions by role (the API is the real boundary). Kept presentational —
 // data (detail, session, candidates) arrives as props from the route.
-export function BookingActionsPanel({ detail, session, candidates }: BookingActionsPanelProps) {
+export function BookingActionsPanel({
+  detail,
+  session,
+  candidates,
+  candidatesError = false,
+}: BookingActionsPanelProps) {
   const t = useTranslations('bookings.operator.detail')
   const queryClient = useQueryClient()
   const csrfToken = session?.csrfToken ?? ''
@@ -77,6 +85,7 @@ export function BookingActionsPanel({ detail, session, candidates }: BookingActi
           <SubstituteVehicleDialog
             bookingId={detail.id}
             candidates={candidates}
+            candidatesError={candidatesError}
             csrfToken={csrfToken}
           />
           {/* Only CONFIRMED bookings can be cancelled — the server 409s any other

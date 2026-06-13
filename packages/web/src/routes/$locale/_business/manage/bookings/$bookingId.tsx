@@ -38,27 +38,35 @@ export const Route = createFileRoute('/$locale/_business/manage/bookings/$bookin
     // operator-only endpoint that 403s for bypass-role oversight viewers), not
     // here — a loader fetch would reject and blank the page for those roles.
     await context.queryClient.ensureQueryData(bookingEventsQueryOptions(params.bookingId))
-    return { detail }
   },
   pendingComponent: PageSkeleton,
   errorComponent: TripDetailError,
   component: TripDetailRoute,
 })
 
-function TripDetailRoute() {
+export function TripDetailRoute() {
   const t = useTranslations('bookings.operator')
   const { locale, bookingId } = Route.useParams()
-  const { detail } = Route.useLoaderData()
+  // Read detail from the query cache (not loader data) so the panel's status /
+  // substitute / cancel actions — which invalidateQueries(['operator-bookings']) on
+  // success — re-render this page with the new state. Loader data only refreshes on
+  // a route re-run, so reading it here would leave the panel + buttons stale after
+  // an action while the timeline (a useSuspenseQuery) updated (#616). The loader
+  // still warms this query + fires notFound, so there is no render waterfall.
+  const { data: detail } = useSuspenseQuery(operatorBookingDetailQueryOptions(bookingId))
   const { data: events } = useSuspenseQuery(bookingEventsQueryOptions(bookingId))
   const { data: session } = useSuspenseQuery(sessionQueryOptions())
   // The replacement-candidate endpoint is operator-only and only relevant to a
   // live booking, so gate the fetch on both — bypass-role viewers (no operatorId)
   // would 403, and a settled trip can't be substituted.
-  const isLive = detail.status === 'CONFIRMED' || detail.status === 'ACTIVE'
-  const { data: candidates = [] } = useQuery({
+  const isLive = detail?.status === 'CONFIRMED' || detail?.status === 'ACTIVE'
+  const { data: candidates = [], isError: candidatesError } = useQuery({
     ...substitutionCandidatesQueryOptions(bookingId),
     enabled: isOperatorSession(session) && isLive,
   })
+  // The loader already mapped a missing/foreign booking to notFound; this narrows
+  // the nullable query type for the render below.
+  if (!detail) throw notFound()
   const row = operatorRowFromDetail(detail)
 
   return (
@@ -77,7 +85,12 @@ function TripDetailRoute() {
             <div className="rounded-xl border border-border py-6">
               <OperatorBookingDetail row={row} booking={detail} locale={locale} />
             </div>
-            <BookingActionsPanel detail={detail} session={session} candidates={candidates} />
+            <BookingActionsPanel
+              detail={detail}
+              session={session}
+              candidates={candidates}
+              candidatesError={candidatesError}
+            />
           </section>
           <aside className="rounded-xl border border-border px-4 py-6">
             <h2 className="mb-6 text-sm font-semibold">{t('timeline.heading')}</h2>

@@ -899,6 +899,7 @@
           "reasonLabel": "Reason (optional)",
           "reasonPlaceholder": "e.g. original car in for repair",
           "noCandidates": "No same-class vehicle is available at this pickup location.",
+          "loadError": "Couldn't load replacement vehicles. Please try again.",
           "submit": "Confirm substitution",
           "cancel": "Cancel",
           "error": "Couldn't substitute the vehicle. It may have just been booked."
