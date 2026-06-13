@@ -1,65 +1,179 @@
-import { isOperatorSession } from '@/vite/guards'
+import { Button } from '@/components/ui/button'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
+import { formatJpy } from '@/lib/format'
 import { SubstituteVehicleDialog } from '@/vite/operator-bookings/SubstituteVehicleDialog'
-import type { OperatorBookingDetailDto } from '@/vite/operator-bookings/api'
-import type { OperatorFleetVehicle } from '@/vite/operator-fleet/api'
-import type { Session } from '@/vite/session'
+import {
+  type OperatorBookingStatus,
+  cancelBooking,
+  updateBookingStatus,
+} from '@/vite/operator-bookings/api'
+import { actionsFor } from '@/vite/operator-bookings/booking-actions'
+import { useSession } from '@/vite/session'
+import { useMutation, useQueryClient } from '@tanstack/react-query'
+import { useRouter } from '@tanstack/react-router'
+import { useRef, useState } from 'react'
 import { useTranslations } from 'use-intl'
 
+// #616 step 8 (管理订单): the operator's order-management panel on the trip-detail
+// page. Buttons come from the pure `actionsFor` gate (state machine + the
+// substitute/cancel exceptions), so they can't drift from the backend rules.
+// Every state-changing action confirms first; cancel additionally surfaces the
+// fee tier the server returns. No optimistic UI — the server CAS 409s a lost
+// race, so we disable-while-pending and invalidate on success instead.
+const OPERATOR_BOOKINGS_KEY = ['operator-bookings'] as const
+
+type ConfirmKind = 'markActive' | 'markCompleted' | 'cancel'
+
 interface BookingActionsPanelProps {
-  readonly detail: OperatorBookingDetailDto
-  readonly session: Session | null
-  readonly fleet: readonly OperatorFleetVehicle[]
+  readonly bookingId: string
+  readonly status: OperatorBookingStatus
 }
 
-// #610: the operator Actions panel on the trip-detail page. Today it owns one
-// action — vehicle substitution (故障车换同店同级别车) — but it is the home for cancel /
-// status transitions next. Kept router-free (props in, no useSuspenseQuery) so the
-// route owns data + chrome and this stays a pure, directly-testable unit.
-//
-// Bypass roles (PLATFORM_ADMIN / legacy STAFF·ADMIN — no operatorId) read the
-// booking cross-operator for oversight but cannot act on it: substitution needs a
-// single target tenant they don't carry. So the panel is operator-only, mirroring
-// fleet/classes (#581/#583/#598). The `_business` shell guard admits the page; this
-// gates the action by role + capability (the API is the real boundary).
-export function BookingActionsPanel({ detail, session, fleet }: BookingActionsPanelProps) {
-  const t = useTranslations('bookings.operator.detail')
+export function BookingActionsPanel({ bookingId, status }: BookingActionsPanelProps) {
+  const t = useTranslations('bookings.operator.detail.actions')
+  const queryClient = useQueryClient()
+  const router = useRouter()
+  const csrfToken = useSession().data?.csrfToken ?? ''
+  const actions = actionsFor(status)
 
-  if (!isOperatorSession(session)) return null
+  const [confirm, setConfirm] = useState<ConfirmKind | null>(null)
+  const [substituteOpen, setSubstituteOpen] = useState(false)
 
-  // The server only substitutes a live booking (409 otherwise); the renter's slot
-  // is gone once the trip is completed or cancelled.
-  const isSubstitutable = detail.status === 'CONFIRMED' || detail.status === 'ACTIVE'
+  // Prefix-invalidate (list + calendar + badge + events) then re-run the loader
+  // so the detail + timeline reflect the new state without a manual refresh.
+  async function refresh() {
+    await queryClient.invalidateQueries({ queryKey: OPERATOR_BOOKINGS_KEY })
+    await router.invalidate()
+  }
 
-  // Mirror the server's substitution rules so a picked car never 400s: same operator
-  // (the scoped fleet read), same class, same pickup location, AVAILABLE, and not the
-  // car already on the booking. `classId != null` makes the (server-impossible) null-
-  // class booking explicit — the server derives a class at create time and rejects a
-  // classless replacement, so we never surface unassigned cars.
-  // NOTE: the server matches by *ACRISS code*, not classId (two classes may share a
-  // code — schema.ts "ACRISS is a category"). Filtering on classId is a strict subset:
-  // it never offers a car the server rejects, but can hide a same-ACRISS replacement
-  // in a different class. The fleet row carries no ACRISS code today; widening to a
-  // code-based match is a follow-up (#610 review). Conservative on purpose.
-  const candidates = fleet.filter(
-    (v) =>
-      v.status === 'AVAILABLE' &&
-      detail.classId != null &&
-      v.classId === detail.classId &&
-      v.pickupLocationId === detail.pickupLocationId &&
-      v.id !== detail.assignedVehicleId,
-  )
+  const statusMutation = useMutation({
+    mutationFn: (next: 'ACTIVE' | 'COMPLETED') => updateBookingStatus(bookingId, next, csrfToken),
+    onSuccess: async () => {
+      await refresh()
+      setConfirm(null)
+    },
+  })
+  const cancelMutation = useMutation({
+    mutationFn: () => cancelBooking(bookingId, csrfToken),
+    onSuccess: refresh, // keep the dialog open to show the returned fee tier
+  })
+
+  const isPending = statusMutation.isPending || cancelMutation.isPending
+  const error = statusMutation.error ?? cancelMutation.error
+  const cancelled = cancelMutation.data
+
+  // Synchronous double-submit guard (mirrors AddOnArchiveDialog): isPending only
+  // flips between renders, so two clicks in one frame both read false.
+  const inFlightRef = useRef(false)
+  if (!isPending && inFlightRef.current) inFlightRef.current = false
+
+  function closeConfirm() {
+    setConfirm(null)
+    statusMutation.reset()
+    cancelMutation.reset()
+  }
+
+  function runConfirm() {
+    if (inFlightRef.current || isPending || confirm == null) return
+    inFlightRef.current = true
+    if (confirm === 'cancel') cancelMutation.mutate()
+    else statusMutation.mutate(confirm === 'markActive' ? 'ACTIVE' : 'COMPLETED')
+  }
+
+  const anyAction =
+    actions.markActive || actions.markCompleted || actions.substitute || actions.cancel
 
   return (
-    <div className="rounded-xl border border-border px-4 py-6">
-      <h2 className="mb-4 text-sm font-semibold text-muted-foreground">{t('actions')}</h2>
-      {isSubstitutable ? (
-        <SubstituteVehicleDialog
-          bookingId={detail.id}
-          candidates={candidates}
-          csrfToken={session?.csrfToken ?? ''}
-        />
+    <div>
+      <h2 className="mb-4 text-sm font-semibold">{t('heading')}</h2>
+
+      {anyAction ? (
+        <div className="flex flex-wrap gap-2">
+          {actions.markActive && (
+            <Button onClick={() => setConfirm('markActive')}>{t('markActive')}</Button>
+          )}
+          {actions.markCompleted && (
+            <Button onClick={() => setConfirm('markCompleted')}>{t('markCompleted')}</Button>
+          )}
+          {actions.substitute && (
+            <Button variant="outline" onClick={() => setSubstituteOpen(true)}>
+              {t('substitute')}
+            </Button>
+          )}
+          {actions.cancel && (
+            <Button variant="destructive" onClick={() => setConfirm('cancel')}>
+              {t('cancel')}
+            </Button>
+          )}
+        </div>
       ) : (
-        <p className="text-sm text-muted-foreground">{t('substitute.unavailable')}</p>
+        <p className="text-sm text-muted-foreground">{t('terminal')}</p>
+      )}
+
+      <Dialog
+        open={confirm != null}
+        onOpenChange={(open) => {
+          if (!open) closeConfirm()
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{confirm ? t(confirm) : ''}</DialogTitle>
+            <DialogDescription>{confirm ? t(`${confirm}Confirm`) : ''}</DialogDescription>
+          </DialogHeader>
+
+          {cancelled ? (
+            <div className="space-y-1 text-sm">
+              <p className="font-medium">{t('cancelled')}</p>
+              <p className="text-muted-foreground">
+                {t('cancelTier', {
+                  tier: cancelled.cancellation.tier,
+                  fee: formatJpy(cancelled.cancellation.feeAmount),
+                })}
+              </p>
+            </div>
+          ) : null}
+
+          {error && !cancelled && (
+            <p className="px-1 text-sm text-destructive">
+              {error instanceof Error ? error.message : String(error)}
+            </p>
+          )}
+
+          <DialogFooter>
+            {cancelled ? (
+              <Button onClick={closeConfirm}>{t('close')}</Button>
+            ) : (
+              <>
+                <Button variant="outline" onClick={closeConfirm}>
+                  {t('back')}
+                </Button>
+                <Button
+                  variant={confirm === 'cancel' ? 'destructive' : 'default'}
+                  disabled={isPending}
+                  onClick={runConfirm}
+                >
+                  {isPending ? t('working') : t('confirm')}
+                </Button>
+              </>
+            )}
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {actions.substitute && (
+        <SubstituteVehicleDialog
+          bookingId={bookingId}
+          open={substituteOpen}
+          onOpenChange={setSubstituteOpen}
+        />
       )}
     </div>
   )

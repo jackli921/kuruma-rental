@@ -890,19 +890,29 @@
         "loading": "予約を読み込み中…",
         "loadError": "この予約を読み込めませんでした",
         "missing": "予約が見つかりません",
-        "actions": "操作",
-        "substitute": {
-          "action": "車両を変更",
-          "dialogTitle": "車両を変更",
-          "dialogDescription": "同じ受取場所で同クラスの空き車両に振り替えます。お客様の予約はそのまま保持され、変更は記録されます。",
-          "vehicleLabel": "代替車両",
-          "reasonLabel": "理由（任意）",
-          "reasonPlaceholder": "例：元の車両が修理中",
-          "noCandidates": "この受取場所で利用可能な同クラスの車両がありません。",
-          "submit": "変更を確定",
-          "cancel": "キャンセル",
-          "error": "車両を変更できませんでした。直前に予約された可能性があります。",
-          "unavailable": "車両の変更は確定済みまたは利用中の予約でのみ可能です。"
+        "actions": {
+          "heading": "操作",
+          "markActive": "受け渡し済みにする",
+          "markCompleted": "返却済みにする",
+          "substitute": "車両を変更",
+          "cancel": "予約をキャンセル",
+          "terminal": "この予約に利用できる操作はありません。",
+          "confirm": "確定",
+          "back": "戻る",
+          "close": "閉じる",
+          "working": "処理中…",
+          "markActiveConfirm": "この予約を進行中にしますか？お客様が車両を受け取ったことを記録します。",
+          "markCompletedConfirm": "この予約を完了にしますか？車両が返却されたことを記録します。",
+          "cancelConfirm": "この予約をキャンセルしますか？キャンセルポリシーにより料金が発生する場合があります。",
+          "cancelled": "予約をキャンセルしました。",
+          "cancelTier": "料金区分：{tier} — {fee}",
+          "substituteTitle": "車両を変更",
+          "substituteDescription": "同じ受取場所・同じクラスの利用可能な車両を選択してください。",
+          "substituteEmpty": "この受取場所には条件に合う同クラスの車両がありません。",
+          "substituteVehicleLabel": "代替車両",
+          "substituteReason": "理由（任意）",
+          "substituteSubmit": "変更を確定",
+          "substituteLoading": "利用可能な車両を読み込んでいます…"
         }
       },
       "timeline": {
@@ -1012,8 +1022,14 @@
     }
   },
   "admin": {
-    "nav": { "overview": "概要", "revenue": "パートナー収益" },
-    "home": { "title": "プラットフォーム管理", "subtitle": "プラットフォーム運営" },
+    "nav": {
+      "overview": "概要",
+      "revenue": "パートナー収益"
+    },
+    "home": {
+      "title": "プラットフォーム管理",
+      "subtitle": "プラットフォーム運営"
+    },
     "revenue": {
       "title": "パートナー収益",
       "subtitle": "パートナーごとの月次支払い",

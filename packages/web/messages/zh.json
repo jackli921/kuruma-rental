@@ -890,19 +890,29 @@
         "loading": "正在加载预订…",
         "loadError": "无法加载此预订",
         "missing": "未找到预订",
-        "actions": "操作",
-        "substitute": {
-          "action": "更换车辆",
-          "dialogTitle": "更换车辆",
-          "dialogDescription": "在同一取车点更换为同级别的另一辆可用车辆。租客的原始预订保持不变，变更将被记录。",
-          "vehicleLabel": "替换车辆",
-          "reasonLabel": "原因（可选）",
-          "reasonPlaceholder": "例如：原车辆正在维修",
-          "noCandidates": "该取车点暂无可用的同级别车辆。",
-          "submit": "确认更换",
-          "cancel": "取消",
-          "error": "无法更换车辆，该车辆可能刚被预订。",
-          "unavailable": "仅确认或进行中的预订可更换车辆。"
+        "actions": {
+          "heading": "操作",
+          "markActive": "标记为已取车",
+          "markCompleted": "标记为已还车",
+          "substitute": "更换车辆",
+          "cancel": "取消订单",
+          "terminal": "该订单暂无可用操作。",
+          "confirm": "确认",
+          "back": "返回",
+          "close": "关闭",
+          "working": "处理中…",
+          "markActiveConfirm": "将此订单标记为进行中？这表示客户已取车。",
+          "markCompletedConfirm": "将此订单标记为已完成？这表示车辆已归还。",
+          "cancelConfirm": "取消此订单？根据取消政策可能会收取费用。",
+          "cancelled": "订单已取消。",
+          "cancelTier": "费用档位：{tier} — {fee}",
+          "substituteTitle": "更换车辆",
+          "substituteDescription": "选择同一取车点、同一车型的可用车辆。",
+          "substituteEmpty": "该取车点暂无符合条件的同车型车辆。",
+          "substituteVehicleLabel": "替换车辆",
+          "substituteReason": "原因（可选）",
+          "substituteSubmit": "确认更换",
+          "substituteLoading": "正在加载可用车辆…"
         }
       },
       "timeline": {
@@ -1012,8 +1022,14 @@
     }
   },
   "admin": {
-    "nav": { "overview": "概览", "revenue": "合作伙伴收益" },
-    "home": { "title": "平台管理", "subtitle": "平台运营" },
+    "nav": {
+      "overview": "概览",
+      "revenue": "合作伙伴收益"
+    },
+    "home": {
+      "title": "平台管理",
+      "subtitle": "平台运营"
+    },
     "revenue": {
       "title": "合作伙伴收益",
       "subtitle": "按合作伙伴的月度结算",

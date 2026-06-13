@@ -1,149 +1,105 @@
-import type { BookingDto } from '@/vite/bookings/api'
 import { BookingActionsPanel } from '@/vite/operator-bookings/BookingActionsPanel'
-import type { OperatorBookingDetailDto } from '@/vite/operator-bookings/api'
-import type { OperatorFleetVehicle } from '@/vite/operator-fleet/api'
-import type { Session } from '@/vite/session'
+import type { OperatorBookingStatus } from '@/vite/operator-bookings/api'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { render, screen } from '@testing-library/react'
+import { cleanup, render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { IntlProvider } from 'use-intl'
-import { describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import enMessages from '../../../messages/en.json'
 
-const sub = enMessages.bookings.operator.detail.substitute
+const invalidate = vi.fn().mockResolvedValue(undefined)
+vi.mock('@tanstack/react-router', () => ({ useRouter: () => ({ invalidate }) }))
+vi.mock('@/vite/session', () => ({ useSession: () => ({ data: { csrfToken: 'csrf-1' } }) }))
 
-function detail(over: Partial<BookingDto> = {}): OperatorBookingDetailDto {
-  return {
-    id: 'bk-1',
-    bookingCode: 'H7K2M9PQ',
-    renterId: 'r-1',
-    classId: 'cls-1',
-    requestedVehicleId: 'veh-1',
-    assignedVehicleId: 'veh-1',
-    pickupLocationId: 'loc-1',
-    dropoffLocationId: 'loc-1',
-    startAt: '2026-07-01T01:00:00.000Z',
-    endAt: '2026-07-03T01:00:00.000Z',
-    effectiveEndAt: '2026-07-03T01:00:00.000Z',
-    status: 'CONFIRMED',
-    source: 'DIRECT',
-    insuranceOptionId: null,
-    insuranceSnapshot: null,
-    feeSnapshot: [],
-    addOnSnapshot: [],
-    totalPrice: 18000,
-    notes: null,
-    createdAt: '2026-06-20T00:00:00.000Z',
-    updatedAt: '2026-06-20T00:00:00.000Z',
-    ...over,
-  }
+const en = enMessages.bookings.operator.detail.actions
+
+function jsonResponse(body: unknown, status = 200): Response {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: { 'content-type': 'application/json' },
+  })
 }
 
-function fleetVehicle(over: Partial<OperatorFleetVehicle> = {}): OperatorFleetVehicle {
-  return {
-    id: 'veh-2',
-    operatorId: 'op-1',
-    classId: 'cls-1',
-    pickupLocationId: 'loc-1',
-    name: 'Honda Fit',
-    description: null,
-    photos: [],
-    seats: 5,
-    luggageCapacity: 2,
-    luggageSize: 'MEDIUM',
-    transmission: 'AUTO',
-    fuelType: null,
-    licensePlate: 'OSAKA 9999',
-    status: 'AVAILABLE',
-    minRentalHours: null,
-    maxRentalHours: null,
-    advanceBookingHours: null,
-    make: null,
-    model: null,
-    year: null,
-    color: null,
-    dailyRateJpy: 7000,
-    hourlyRateJpy: null,
-    shakenExpiryDate: null,
-    insuranceExpiryDate: null,
-    createdAt: '2026-01-01T00:00:00.000Z',
-    updatedAt: '2026-01-01T00:00:00.000Z',
-    utilization: 0,
-    bookingCountLast30Days: 0,
-    currentBooking: null,
-    nextBooking: null,
-    activeMaintenanceReason: null,
-    ...over,
-  }
-}
-
-const operatorSession: Session = {
-  user: { id: 'u', role: 'OPERATOR_OWNER', operatorId: 'op_1', operatorSlug: 'acme' },
-  csrfToken: 't',
-}
-
-const bypassSession: Session = {
-  user: { id: 'u', role: 'PLATFORM_ADMIN' },
-  csrfToken: 't',
-}
-
-function renderPanel(
-  session: Session | null,
-  bookingDetail: OperatorBookingDetailDto,
-  fleet: OperatorFleetVehicle[] = [fleetVehicle({ id: 'veh-1' }), fleetVehicle()],
-) {
+function renderPanel(status: OperatorBookingStatus) {
+  const client = new QueryClient({
+    defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
+  })
   render(
-    <QueryClientProvider client={new QueryClient()}>
+    <QueryClientProvider client={client}>
       <IntlProvider locale="en" messages={enMessages}>
-        <BookingActionsPanel detail={bookingDetail} session={session} fleet={fleet} />
+        <BookingActionsPanel bookingId="bk-1" status={status} />
       </IntlProvider>
     </QueryClientProvider>,
   )
 }
 
-describe('BookingActionsPanel substitution gating (#610)', () => {
-  it('offers the Substitute action to a tenant-scoped operator on a live booking', () => {
-    renderPanel(operatorSession, detail({ status: 'CONFIRMED' }))
-    expect(screen.getByRole('button', { name: sub.action })).toBeInTheDocument()
+const button = (name: string) => screen.queryByRole('button', { name })
+
+afterEach(() => {
+  cleanup()
+  vi.restoreAllMocks()
+})
+
+describe('BookingActionsPanel', () => {
+  it('CONFIRMED → mark-active + substitute + cancel, but never mark-completed', () => {
+    renderPanel('CONFIRMED')
+    expect(button(en.markActive)).toBeInTheDocument()
+    expect(button(en.substitute)).toBeInTheDocument()
+    expect(button(en.cancel)).toBeInTheDocument()
+    expect(button(en.markCompleted)).toBeNull()
   })
 
-  it('renders nothing for a bypass role with no operatorId (read-only oversight)', () => {
-    const { container } = render(
-      <QueryClientProvider client={new QueryClient()}>
-        <IntlProvider locale="en" messages={enMessages}>
-          <BookingActionsPanel
-            detail={detail({ status: 'CONFIRMED' })}
-            session={bypassSession}
-            fleet={[fleetVehicle()]}
-          />
-        </IntlProvider>
-      </QueryClientProvider>,
+  it('ACTIVE → mark-completed + substitute, but NOT cancel (the fee endpoint is CONFIRMED-only)', () => {
+    renderPanel('ACTIVE')
+    expect(button(en.markCompleted)).toBeInTheDocument()
+    expect(button(en.substitute)).toBeInTheDocument()
+    expect(button(en.cancel)).toBeNull()
+    expect(button(en.markActive)).toBeNull()
+  })
+
+  it.each(['COMPLETED', 'CANCELLED'] as const)('%s → no action buttons (terminal)', (status) => {
+    renderPanel(status)
+    for (const name of [en.markActive, en.markCompleted, en.substitute, en.cancel]) {
+      expect(button(name)).toBeNull()
+    }
+    expect(screen.getByText(en.terminal)).toBeInTheDocument()
+  })
+
+  it('cancelling a CONFIRMED booking confirms, then surfaces the returned fee tier', async () => {
+    const fetchMock = vi.fn(async () =>
+      jsonResponse({
+        success: true,
+        data: { id: 'bk-1', status: 'CANCELLED' },
+        cancellation: { tier: 'TIER_30', feePercentage: 30, feeAmount: 7200, refundAmount: 16800 },
+      }),
     )
-    expect(container).toBeEmptyDOMElement()
-  })
-
-  it('disables substitution on a terminal booking, explaining why instead of the action', () => {
-    renderPanel(operatorSession, detail({ status: 'COMPLETED' }))
-    expect(screen.queryByRole('button', { name: sub.action })).not.toBeInTheDocument()
-    expect(screen.getByText(sub.unavailable)).toBeInTheDocument()
-  })
-
-  it('only surfaces same-class, same-location, AVAILABLE candidates (never the assigned car)', async () => {
+    vi.stubGlobal('fetch', fetchMock)
     const user = userEvent.setup()
-    renderPanel(operatorSession, detail({ status: 'CONFIRMED' }), [
-      fleetVehicle({ id: 'veh-1', name: 'Assigned Car' }), // the current car — excluded
-      fleetVehicle({ id: 'ok', name: 'Same Class Same Loc' }), // valid
-      fleetVehicle({ id: 'other-class', name: 'Other Class', classId: 'cls-2' }), // wrong class
-      fleetVehicle({ id: 'other-loc', name: 'Other Loc', pickupLocationId: 'loc-9' }), // wrong loc
-      fleetVehicle({ id: 'maint', name: 'In Maintenance', status: 'MAINTENANCE' }), // not available
-    ])
+    renderPanel('CONFIRMED')
 
-    await user.click(screen.getByRole('button', { name: sub.action }))
+    await user.click(screen.getByRole('button', { name: en.cancel }))
+    await user.click(screen.getByRole('button', { name: en.confirm }))
 
-    expect(screen.getByRole('option', { name: /Same Class Same Loc/ })).toBeInTheDocument()
-    expect(screen.queryByRole('option', { name: /Assigned Car/ })).not.toBeInTheDocument()
-    expect(screen.queryByRole('option', { name: /Other Class/ })).not.toBeInTheDocument()
-    expect(screen.queryByRole('option', { name: /Other Loc/ })).not.toBeInTheDocument()
-    expect(screen.queryByRole('option', { name: /In Maintenance/ })).not.toBeInTheDocument()
+    expect(await screen.findByText(en.cancelled)).toBeInTheDocument()
+    expect(screen.getByText(/TIER_30/)).toBeInTheDocument()
+    expect(fetchMock.mock.calls.some(([u]) => String(u).endsWith('/cancel'))).toBe(true)
+  })
+
+  it('marking active PATCHes the status to ACTIVE after the confirm step', async () => {
+    const fetchMock = vi.fn(async () =>
+      jsonResponse({ success: true, data: { id: 'bk-1', status: 'ACTIVE' } }),
+    )
+    vi.stubGlobal('fetch', fetchMock)
+    const user = userEvent.setup()
+    renderPanel('CONFIRMED')
+
+    await user.click(screen.getByRole('button', { name: en.markActive }))
+    await user.click(screen.getByRole('button', { name: en.confirm }))
+
+    await vi.waitFor(() => {
+      const call = fetchMock.mock.calls.find(([u]) => String(u).endsWith('/status'))
+      expect(call).toBeTruthy()
+      expect(JSON.parse((call![1] as RequestInit).body as string)).toEqual({ status: 'ACTIVE' })
+    })
   })
 })

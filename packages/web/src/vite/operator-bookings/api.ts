@@ -1,7 +1,8 @@
-import { unwrap } from '@/lib/api-error'
+import { ApiError, unwrap } from '@/lib/api-error'
 import { getApiBaseUrl } from '@/vite/api-base'
 import type { BookingDto } from '@/vite/bookings/api'
 import type { BookingEventPayload, BookingEventType } from '@kuruma/shared/db/schema'
+import type { CancellationResult } from '@kuruma/shared/lib/cancellation-policy'
 import { queryOptions } from '@tanstack/react-query'
 
 // #512: operator booking view. The Vite shell owns these DTOs (it never imports
@@ -195,33 +196,6 @@ export function operatorRowFromDetail(dto: OperatorBookingDetailDto): OperatorBo
   }
 }
 
-// #610: operator vehicle substitution. POST /bookings/:id/substitute swaps the
-// booking's assigned car for another AVAILABLE vehicle of the SAME operator,
-// pickup location and ACRISS class (the server enforces all three). The renter's
-// `requestedVehicleId` is preserved; only `assignedVehicleId` + a re-snapshotted
-// totalPrice change, and a VEHICLE_SUBSTITUTED audit event (系统留痕) is appended,
-// which the existing timeline renders once the events query is invalidated. As a
-// cookie-authed POST it is CSRF-gated (global csrf()), so the caller echoes the
-// session token. `reason` is optional in the schema, so it is omitted when blank.
-export async function substituteBooking(
-  bookingId: string,
-  newVehicleId: string,
-  reason: string | null,
-  csrfToken: string,
-): Promise<BookingDto> {
-  const body = reason != null ? { newVehicleId, reason } : { newVehicleId }
-  const res = await fetch(
-    `${getApiBaseUrl()}/bookings/${encodeURIComponent(bookingId)}/substitute`,
-    {
-      method: 'POST',
-      credentials: 'include',
-      headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrfToken },
-      body: JSON.stringify(body),
-    },
-  )
-  return unwrap<BookingDto>(res)
-}
-
 /** One lifecycle event as the operator timeline reads it (dates are ISO JSON). */
 export interface BookingEventDto {
   id: string
@@ -244,5 +218,98 @@ export function bookingEventsQueryOptions(id: string) {
   return queryOptions({
     queryKey: ['operator-bookings', 'events', id],
     queryFn: () => fetchBookingEvents(id),
+  })
+}
+
+// --- #616: operator order actions (substitute / cancel / status) -------------
+// Writes are cookie-authed, so each threads the session CSRF token — the global
+// csrf() middleware rejects a mutation without a matching X-CSRF-Token. Mirrors
+// the operator-add-ons client; the bare operator-fleet writeJson omits the
+// header and must not be copied for writes. The trip-detail page wires these
+// into useMutation and invalidates the ['operator-bookings'] prefix on success.
+
+async function writeBooking<T>(
+  path: string,
+  method: 'POST' | 'PATCH',
+  body: unknown,
+  csrfToken: string,
+): Promise<T> {
+  const res = await fetch(`${getApiBaseUrl()}${path}`, {
+    method,
+    credentials: 'include',
+    headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrfToken },
+    body: JSON.stringify(body),
+  })
+  return unwrap<T>(res)
+}
+
+export async function updateBookingStatus(
+  id: string,
+  status: OperatorBookingStatus,
+  csrfToken: string,
+): Promise<BookingDto> {
+  return writeBooking<BookingDto>(
+    `/bookings/${encodeURIComponent(id)}/status`,
+    'PATCH',
+    { status },
+    csrfToken,
+  )
+}
+
+export async function substituteVehicle(
+  id: string,
+  newVehicleId: string,
+  reason: string | null,
+  csrfToken: string,
+): Promise<BookingDto> {
+  return writeBooking<BookingDto>(
+    `/bookings/${encodeURIComponent(id)}/substitute`,
+    'POST',
+    { newVehicleId, ...(reason ? { reason } : {}) },
+    csrfToken,
+  )
+}
+
+export interface CancelBookingResult {
+  booking: BookingDto
+  cancellation: CancellationResult
+}
+
+// Cancel returns the fee tier in the envelope META (alongside `data`), which
+// unwrap() discards — so read the raw envelope to surface { booking, cancellation }.
+export async function cancelBooking(id: string, csrfToken: string): Promise<CancelBookingResult> {
+  const res = await fetch(`${getApiBaseUrl()}/bookings/${encodeURIComponent(id)}/cancel`, {
+    method: 'POST',
+    credentials: 'include',
+    headers: { 'X-CSRF-Token': csrfToken },
+  })
+  const body = (await res.json().catch(() => ({
+    success: false as const,
+    error: `Non-JSON response (HTTP ${res.status})`,
+  }))) as
+    | { success: true; data: BookingDto; cancellation: CancellationResult }
+    | { success: false; error: string }
+  if (!body.success) throw new ApiError(body.error, res.status)
+  return { booking: body.data, cancellation: body.cancellation }
+}
+
+/** A vehicle eligible to replace the assigned car (same store + ACRISS class). */
+export interface SubstitutionCandidate {
+  id: string
+  name: string
+}
+
+export async function fetchSubstitutionCandidates(id: string): Promise<SubstitutionCandidate[]> {
+  const res = await fetch(
+    `${getApiBaseUrl()}/bookings/${encodeURIComponent(id)}/substitution-candidates`,
+    { credentials: 'include' },
+  )
+  return unwrap<SubstitutionCandidate[]>(res)
+}
+
+export function substitutionCandidatesQueryOptions(id: string) {
+  return queryOptions({
+    queryKey: ['operator-bookings', 'substitution-candidates', id],
+    queryFn: () => fetchSubstitutionCandidates(id),
   })
 }

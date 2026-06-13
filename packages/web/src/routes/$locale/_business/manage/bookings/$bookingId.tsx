@@ -7,8 +7,6 @@ import {
   operatorBookingDetailQueryOptions,
   operatorRowFromDetail,
 } from '@/vite/operator-bookings/api'
-import { operatorFleetQueryOptions } from '@/vite/operator-fleet/api'
-import { sessionQueryOptions } from '@/vite/session'
 import { useSuspenseQuery } from '@tanstack/react-query'
 import {
   type ErrorComponentProps,
@@ -24,20 +22,17 @@ import { useTranslations } from 'use-intl'
 // replacement for the #548 drawer — an operator can bookmark/share a reservation.
 // Behind `_business`; the single read is tenant-sealed server-side (404 -> null ->
 // notFound). All data comes from the API, so a hard refresh works (no list row).
-// Two-column layout: booking detail + the Actions panel (#610 vehicle substitution)
-// on the left, the vertical event timeline right.
+// Two-column layout: booking detail + the order-management Actions panel (#616:
+// status transitions, vehicle substitution, cancel) left, the event timeline right.
 export const Route = createFileRoute('/$locale/_business/manage/bookings/$bookingId')({
   loader: async ({ context, params }) => {
     const detail = await context.queryClient.ensureQueryData(
       operatorBookingDetailQueryOptions(params.bookingId),
     )
     if (!detail) throw notFound()
-    // Warm the timeline + replacement-candidate caches so the page renders without
-    // a second waterfall. The fleet read backs the substitution dialog's picker.
-    await Promise.all([
-      context.queryClient.ensureQueryData(bookingEventsQueryOptions(params.bookingId)),
-      context.queryClient.ensureQueryData(operatorFleetQueryOptions()),
-    ])
+    // Warm the timeline cache so the page renders without a second waterfall. The
+    // substitution candidates are fetched lazily by the dialog when it opens.
+    await context.queryClient.ensureQueryData(bookingEventsQueryOptions(params.bookingId))
     return { detail }
   },
   pendingComponent: PageSkeleton,
@@ -50,8 +45,6 @@ function TripDetailRoute() {
   const { locale, bookingId } = Route.useParams()
   const { detail } = Route.useLoaderData()
   const { data: events } = useSuspenseQuery(bookingEventsQueryOptions(bookingId))
-  const { data: session } = useSuspenseQuery(sessionQueryOptions())
-  const { data: fleet } = useSuspenseQuery(operatorFleetQueryOptions())
   const row = operatorRowFromDetail(detail)
 
   return (
@@ -70,7 +63,7 @@ function TripDetailRoute() {
             <div className="rounded-xl border border-border py-6">
               <OperatorBookingDetail row={row} booking={detail} locale={locale} />
             </div>
-            <BookingActionsPanel detail={detail} session={session} fleet={fleet} />
+            <BookingActionsPanel bookingId={bookingId} status={detail.status} />
           </section>
           <aside className="rounded-xl border border-border px-4 py-6">
             <h2 className="mb-6 text-sm font-semibold">{t('timeline.heading')}</h2>

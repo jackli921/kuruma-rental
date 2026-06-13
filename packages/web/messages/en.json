@@ -890,19 +890,29 @@
         "loading": "Loading booking…",
         "loadError": "Couldn't load this booking",
         "missing": "Booking not found",
-        "actions": "Actions",
-        "substitute": {
-          "action": "Substitute vehicle",
-          "dialogTitle": "Substitute vehicle",
-          "dialogDescription": "Swap in another available car of the same class at this pickup location. The renter keeps their original booking; the change is recorded.",
-          "vehicleLabel": "Replacement vehicle",
-          "reasonLabel": "Reason (optional)",
-          "reasonPlaceholder": "e.g. original car in for repair",
-          "noCandidates": "No same-class vehicle is available at this pickup location.",
-          "submit": "Confirm substitution",
-          "cancel": "Cancel",
-          "error": "Couldn't substitute the vehicle. It may have just been booked.",
-          "unavailable": "Vehicle substitution is only available for confirmed or active bookings."
+        "actions": {
+          "heading": "Actions",
+          "markActive": "Mark as picked up",
+          "markCompleted": "Mark as returned",
+          "substitute": "Substitute vehicle",
+          "cancel": "Cancel booking",
+          "terminal": "No actions available for this booking.",
+          "confirm": "Confirm",
+          "back": "Back",
+          "close": "Close",
+          "working": "Working…",
+          "markActiveConfirm": "Mark this booking as active? This records that the customer has picked up the vehicle.",
+          "markCompletedConfirm": "Mark this booking as completed? This records that the vehicle has been returned.",
+          "cancelConfirm": "Cancel this booking? A cancellation fee may apply per the policy.",
+          "cancelled": "Booking cancelled.",
+          "cancelTier": "Fee tier: {tier} — {fee}",
+          "substituteTitle": "Substitute vehicle",
+          "substituteDescription": "Choose an available car of the same class at the same pick-up location.",
+          "substituteEmpty": "No eligible same-class vehicle is available at this location.",
+          "substituteVehicleLabel": "Replacement vehicle",
+          "substituteReason": "Reason (optional)",
+          "substituteSubmit": "Confirm substitution",
+          "substituteLoading": "Loading available vehicles…"
         }
       },
       "timeline": {
@@ -1012,8 +1022,14 @@
     }
   },
   "admin": {
-    "nav": { "overview": "Overview", "revenue": "Partner Revenue" },
-    "home": { "title": "Platform Admin", "subtitle": "Platform operations" },
+    "nav": {
+      "overview": "Overview",
+      "revenue": "Partner Revenue"
+    },
+    "home": {
+      "title": "Platform Admin",
+      "subtitle": "Platform operations"
+    },
     "revenue": {
       "title": "Partner Revenue",
       "subtitle": "Monthly payout per partner",
