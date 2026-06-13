@@ -12,13 +12,21 @@ on:
   push:
     branches: [marketplace-pivot, main]
   pull_request:
+    branches: [marketplace-pivot, main]
     paths:
       - packages/shared/src/db/**
       - packages/api/src/repositories/drizzle/**
       - packages/api/tests/neon/**
+      - drizzle.config.ts
       - "**/package.json"
       - bun.lock
       - .github/workflows/ci-neon.yml
+
+# Supersede in-flight runs on the same ref: this lane boots Docker containers,
+# so cancelling stale commits saves runner minutes under heavy parallel-PR load.
+concurrency:
+  group: ci-neon-${{ github.ref }}
+  cancel-in-progress: true
 
 env:
   BUN_VERSION: "1.2.13"
@@ -46,14 +54,17 @@ jobs:
       - name: Start local postgres + Neon proxy
         run: docker compose -f "$COMPOSE_FILE" up -d --wait
 
+      # Migrations connect directly to postgres (healthy after --wait) and don't
+      # need the proxy. Run them before the proxy-wait so a proxy startup failure
+      # can't mask a migration/postgres problem in the logs.
+      - name: Apply migrations against the local postgres
+        run: bun run db:migrate
+
       - name: Wait for proxy on :4444
         # The proxy image defines no healthcheck, so `--wait` only guarantees the
         # container is running, not accepting connections. Poll the port from the
         # host before the test connects (avoids a startup race).
         run: timeout 60 bash -c 'until (echo > /dev/tcp/localhost/4444) 2>/dev/null; do sleep 1; done'
-
-      - name: Apply migrations against the local postgres
-        run: bun run db:migrate
 
       - name: Run the neon-serverless tx lane via the local proxy
         run: bun run --filter @kuruma/api test:neon

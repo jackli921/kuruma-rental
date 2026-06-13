@@ -20,41 +20,49 @@ const COMPOSE = 'packages/api/tests/neon/docker-compose.ci.yml'
 // override with NEON_PG_PORT / NEON_PROXY_PORT. CI uses the 5432/4444 defaults.
 const PG_PORT = process.env.NEON_PG_PORT ?? '5455'
 const PROXY_PORT = process.env.NEON_PROXY_PORT ?? '4455'
-const URL = `postgres://kuruma:kuruma@localhost:${PG_PORT}/kuruma_neon`
+const DB_URL = `postgres://kuruma:kuruma@localhost:${PG_PORT}/kuruma_neon`
 const PROXY_TIMEOUT_S = 60
 
 const env = {
   ...process.env,
   NEON_PG_PORT: PG_PORT,
   NEON_PROXY_PORT: PROXY_PORT,
-  DATABASE_URL: URL,
-  NEON_TEST_DATABASE_URL: URL,
+  DATABASE_URL: DB_URL,
+  NEON_TEST_DATABASE_URL: DB_URL,
 }
 
-console.log(`[neon] starting local postgres (:${PG_PORT}) + Neon proxy (:${PROXY_PORT})`)
-await $`docker compose -f ${COMPOSE} up -d --wait`.env(env)
-
-console.log(`[neon] waiting for the proxy on :${PROXY_PORT}`)
-for (let attempt = 1; ; attempt++) {
-  const up = await fetch(`http://localhost:${PROXY_PORT}/sql`, { method: 'POST' })
-    .then(() => true)
-    .catch(() => false)
-  if (up) break
-  if (attempt > PROXY_TIMEOUT_S) {
-    await $`docker compose -f ${COMPOSE} logs`.env(env).nothrow()
-    await $`docker compose -f ${COMPOSE} down -v`.env(env).nothrow()
-    throw new Error(`proxy not reachable on :${PROXY_PORT} after ${PROXY_TIMEOUT_S}s`)
-  }
-  await Bun.sleep(1000)
-}
-
+// Everything after the first `up` is inside one try/finally so a failure at any
+// point (including a partial `up`) still tears the stack down — a leaked stack
+// would wedge the next run on the same ports.
 try {
+  console.log(`[neon] starting local postgres (:${PG_PORT}) + Neon proxy (:${PROXY_PORT})`)
+  await $`docker compose -f ${COMPOSE} up -d --wait --remove-orphans`.env(env)
+
+  console.log(`[neon] waiting for the proxy on :${PROXY_PORT}`)
+  for (let attempt = 1; ; attempt++) {
+    // AbortSignal bounds each probe so a hung fetch can't stretch the timeout.
+    const up = await fetch(`http://localhost:${PROXY_PORT}/sql`, {
+      method: 'POST',
+      signal: AbortSignal.timeout(1000),
+    })
+      .then(() => true)
+      .catch(() => false)
+    if (up) break
+    if (attempt > PROXY_TIMEOUT_S) {
+      throw new Error(`proxy not reachable on :${PROXY_PORT} after ${PROXY_TIMEOUT_S}s`)
+    }
+    await Bun.sleep(1000)
+  }
+
   console.log('[neon] applying migrations')
   await $`bun run db:migrate`.env(env)
 
   console.log('[neon] running the neon-serverless tx lane via the local proxy')
   await $`bun run --filter @kuruma/api test:neon`.env(env)
+} catch (err) {
+  await $`docker compose -f ${COMPOSE} logs`.env(env).nothrow()
+  throw err
 } finally {
   console.log('[neon] tearing down the stack')
-  await $`docker compose -f ${COMPOSE} down -v`.env(env).nothrow()
+  await $`docker compose -f ${COMPOSE} down -v --remove-orphans`.env(env).nothrow()
 }
