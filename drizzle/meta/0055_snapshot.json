@@ -1,6 +1,6 @@
 {
-  "id": "e8bea415-adab-4f66-94e8-3fb02abd7c74",
-  "prevId": "f928d62a-e59b-4d49-bad6-40e5630aefce",
+  "id": "40a0784b-89db-4242-883a-7d11471eb61b",
+  "prevId": "e8bea415-adab-4f66-94e8-3fb02abd7c74",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -1051,6 +1051,12 @@
           "notNull": true,
           "default": 2880
         },
+        "regionId": {
+          "name": "regionId",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
         "status": {
           "name": "status",
           "type": "location_status",
@@ -1080,6 +1086,21 @@
           "columns": [
             {
               "expression": "operatorId",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "idx_locations_regionId": {
+          "name": "idx_locations_regionId",
+          "columns": [
+            {
+              "expression": "regionId",
               "isExpression": false,
               "asc": true,
               "nulls": "last"
@@ -1120,6 +1141,19 @@
           "tableTo": "operators",
           "columnsFrom": [
             "operatorId"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "locations_regionId_regions_id_fk": {
+          "name": "locations_regionId_regions_id_fk",
+          "tableFrom": "locations",
+          "tableTo": "regions",
+          "columnsFrom": [
+            "regionId"
           ],
           "columnsTo": [
             "id"
@@ -1734,6 +1768,100 @@
           "tableTo": "bookings",
           "columnsFrom": [
             "bookingId"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.regions": {
+      "name": "regions",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "parentId": {
+          "name": "parentId",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "nameEn": {
+          "name": "nameEn",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "nameJa": {
+          "name": "nameJa",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "nameZh": {
+          "name": "nameZh",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "sortOrder": {
+          "name": "sortOrder",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 0
+        },
+        "createdAt": {
+          "name": "createdAt",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updatedAt": {
+          "name": "updatedAt",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "idx_regions_parentId": {
+          "name": "idx_regions_parentId",
+          "columns": [
+            {
+              "expression": "parentId",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "regions_parentId_regions_id_fk": {
+          "name": "regions_parentId_regions_id_fk",
+          "tableFrom": "regions",
+          "tableTo": "regions",
+          "columnsFrom": [
+            "parentId"
           ],
           "columnsTo": [
             "id"

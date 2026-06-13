@@ -235,4 +235,78 @@ describe('NotificationDispatcher', () => {
       expect(opRow?.recipient).toBe('ops@platform.com')
     })
   })
+
+  // #664: the SAME dispatch path, fanned out by lifecycle trigger. CREATED keeps
+  // the original two kinds; each operator action maps to exactly one renter kind.
+  describe('lifecycle triggers (#664)', () => {
+    async function kindsFor(trigger: Parameters<typeof dispatcher.dispatch>[1]) {
+      const { dispatcher, logRepo, sender } = build()
+      await dispatcher.dispatch(booking, trigger)
+      const rows = await logRepo.findAll({ userId: 'x', role: 'PLATFORM_ADMIN', bypassScope: true })
+      return { rows, sender }
+    }
+
+    it('SUBSTITUTED dispatches exactly RENTER_SUBSTITUTION, sent once', async () => {
+      const { rows, sender } = await kindsFor('SUBSTITUTED')
+      expect(rows.map((r) => r.kind)).toEqual(['RENTER_SUBSTITUTION'])
+      expect(rows[0]!.status).toBe('SENT')
+      expect(sender.send as ReturnType<typeof vi.fn>).toHaveBeenCalledTimes(1)
+    })
+
+    it('maps each trigger to its kind set; CREATED stays the original pair', async () => {
+      expect((await kindsFor('CREATED')).rows.map((r) => r.kind).sort()).toEqual(
+        ['OPERATOR_BOOKING_ALERT', 'RENTER_BOOKING_CONFIRM'].sort(),
+      )
+      expect((await kindsFor('CANCELLED')).rows.map((r) => r.kind)).toEqual(['RENTER_CANCELLATION'])
+      expect((await kindsFor('ACTIVATED')).rows.map((r) => r.kind)).toEqual(['RENTER_TRIP_STARTED'])
+      expect((await kindsFor('COMPLETED')).rows.map((r) => r.kind)).toEqual([
+        'RENTER_TRIP_COMPLETED',
+      ])
+    })
+
+    it('defaults to CREATED when no trigger is passed (back-compat with create + resend)', async () => {
+      const { dispatcher, logRepo } = build()
+      await dispatcher.dispatch(booking)
+      const rows = await logRepo.findAll({ userId: 'x', role: 'PLATFORM_ADMIN', bypassScope: true })
+      expect(rows).toHaveLength(2)
+    })
+
+    // The reason distinct kinds exist: ACTIVATED then COMPLETED on ONE booking must
+    // BOTH send. A single generic kind would share notify:<id>:<kind> and the second
+    // would be swallowed as already_sent.
+    it('ACTIVATED then COMPLETED on the same booking both send (distinct keys)', async () => {
+      const { dispatcher, logRepo, sender } = build()
+      await dispatcher.dispatch(booking, 'ACTIVATED')
+      await dispatcher.dispatch(booking, 'COMPLETED')
+      const rows = await logRepo.findAll({ userId: 'x', role: 'PLATFORM_ADMIN', bypassScope: true })
+      expect(rows.map((r) => r.kind).sort()).toEqual([
+        'RENTER_TRIP_COMPLETED',
+        'RENTER_TRIP_STARTED',
+      ])
+      expect(rows.map((r) => r.idempotencyKey).sort()).toEqual([
+        `notify:${booking.id}:RENTER_TRIP_COMPLETED`,
+        `notify:${booking.id}:RENTER_TRIP_STARTED`,
+      ])
+      expect(sender.send as ReturnType<typeof vi.fn>).toHaveBeenCalledTimes(2)
+    })
+
+    it('substitution email renders the new vehicle and leaks no internal ids', async () => {
+      const sent: Array<{ to: string; subject: string; html: string; text: string }> = []
+      const sender = {
+        send: vi.fn(async (m: (typeof sent)[number]) => {
+          sent.push(m)
+          return { providerMessageId: 'msg-1' }
+        }),
+      }
+      const { dispatcher } = build({ sender: sender as unknown as EmailSender })
+      await dispatcher.dispatch(booking, 'SUBSTITUTED')
+      const msg = sent[0]!
+      expect(msg.to).toBe('jane@example.com')
+      expect(msg.html).toContain('Toyota Aqua') // fakeVehicleRepo name
+      expect(msg.html).toContain('X 12-34') // plate
+      const blob = `${msg.subject}\n${msg.html}\n${msg.text}`
+      expect(blob).not.toContain('veh-1') // assignedVehicleId never rendered
+      expect(blob).not.toContain(OP) // operatorId never rendered
+    })
+  })
 })
