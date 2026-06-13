@@ -31,7 +31,8 @@ describe('POST /auth/google/start', () => {
     expect(url.searchParams.get('response_type')).toBe('code')
     expect(url.searchParams.get('scope')).toBe('openid email profile')
     const state = url.searchParams.get('state')
-    expect(state).toBeTruthy()
+    // 32 random bytes, base64url-encoded → 43 chars in the base64url charset.
+    expect(state).toMatch(/^[A-Za-z0-9_-]{43}$/)
 
     const raw = rawFlowCookie(res)
     expect(raw).toContain('HttpOnly')
