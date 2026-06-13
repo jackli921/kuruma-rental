@@ -57,6 +57,7 @@ next-env.d.ts
 /playwright/.cache/
 e2e/.auth/
 e2e/.demo-screens/
+.gh640art/
 
 # internal / private docs — not for owner or public repo
 docs/internal/
