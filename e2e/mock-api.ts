@@ -149,10 +149,14 @@ const TEST_FEE_SNAPSHOT = [
   { feeType: 'OVERTIME_HOURLY', unit: 'PER_HOUR', amountJpy: 1000, vehicleClassId: null },
 ]
 
-// Platform-admin partner revenue (#462). GET /admin/revenue returns a fixed
-// report; the spec asserts these exact figures + the 4% model. Authz is proven
-// separately by the adminGuard unit tests + the guard-redirect specs — forbidden
-// roles never reach this route.
+// Platform-admin partner revenue (#462, month filter #628). GET /admin/revenue
+// returns a fixed report; the spec asserts these exact figures + the 4% model.
+// `availableMonths` (newest-first) + `selectedMonth` mirror the real service's
+// AdminRevenueResponse so the SPA's month picker renders — omitting them makes
+// RevenueView read `undefined.length` and throw into its error boundary. The mock
+// ignores `?month` (no spec filters); the filtered path is covered by the real-DB
+// lane + unit tests. Authz is proven separately by the adminGuard unit tests + the
+// guard-redirect specs — forbidden roles never reach this route.
 const TEST_ADMIN_REVENUE = {
   partners: [
     {
@@ -182,6 +186,8 @@ const TEST_ADMIN_REVENUE = {
     },
   ],
   totals: { grossJpy: 250000, platformFeeJpy: 10000, netToPartnerJpy: 240000, paymentCount: 8 },
+  availableMonths: ['2026-03', '2026-02'],
+  selectedMonth: null,
 }
 
 // POST /bookings creates; GET /bookings/:id reads. In-memory so the confirmation
