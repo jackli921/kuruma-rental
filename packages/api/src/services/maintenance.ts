@@ -78,7 +78,15 @@ export class MaintenanceService {
     })
   }
 
-  async findLogsByVehicleId(vehicleId: string): Promise<MaintenanceLog[]> {
+  async findLogsByVehicleId(ctx: CallerContext, vehicleId: string): Promise<MaintenanceLog[]> {
+    // Tenant boundary (#705, mirrors vehicle-detail): the scoped findById is the
+    // join on vehicles.operatorId — it returns undefined for a foreign-tenant
+    // (or scope-less OPERATOR_*) caller, so we return [] rather than leaking
+    // another operator's maintenance history. maintenance_logs has no operatorId
+    // column, so scoping flows through the already-authorised vehicle row.
+    const vehicle = await this.vehicleRepo.findById(ctx, vehicleId)
+    if (!vehicle) return []
+
     return this.maintenanceLogRepo.findByVehicleId(vehicleId)
   }
 
