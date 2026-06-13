@@ -1,6 +1,7 @@
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { NativeSelect } from '@/components/ui/native-select'
 import { Separator } from '@/components/ui/separator'
 import { Textarea } from '@/components/ui/textarea'
 import {
@@ -47,9 +48,6 @@ interface VehicleFormProps {
   /** Called when the user cancels without saving. */
   readonly onCancel: () => void
 }
-
-const SELECT_CLASS =
-  'flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-xs'
 
 // Blank numeric inputs must submit `null` (not NaN/undefined) so the nullish
 // validators accept a cleared field. Mirrors the frozen form's pricing pattern.
@@ -158,18 +156,14 @@ export function VehicleForm({ vehicle, classOptions, onSaved, onCancel }: Vehicl
       {classOptions.length > 0 && (
         <div>
           <Label htmlFor="classId">{t('class')}</Label>
-          <select
-            id="classId"
-            className={SELECT_CLASS}
-            {...register('classId', { setValueAs: emptyToNull })}
-          >
+          <NativeSelect id="classId" {...register('classId', { setValueAs: emptyToNull })}>
             <option value="">{t('classNone')}</option>
             {classOptions.map((klass) => (
               <option key={klass.id} value={klass.id}>
                 {klass.name}
               </option>
             ))}
-          </select>
+          </NativeSelect>
         </div>
       )}
 
@@ -209,10 +203,10 @@ export function VehicleForm({ vehicle, classOptions, onSaved, onCancel }: Vehicl
         </div>
         <div>
           <Label htmlFor="transmission">{t('transmission')}</Label>
-          <select id="transmission" className={SELECT_CLASS} {...register('transmission')}>
+          <NativeSelect id="transmission" {...register('transmission')}>
             <option value="AUTO">{t('transmissionAuto')}</option>
             <option value="MANUAL">{t('transmissionManual')}</option>
-          </select>
+          </NativeSelect>
         </div>
       </div>
 
@@ -248,18 +242,14 @@ export function VehicleForm({ vehicle, classOptions, onSaved, onCancel }: Vehicl
         </div>
         <div>
           <Label htmlFor="luggageSize">{t('luggageSize')}</Label>
-          <select
-            id="luggageSize"
-            className={SELECT_CLASS}
-            {...register('luggageSize', { setValueAs: emptyToNull })}
-          >
+          <NativeSelect id="luggageSize" {...register('luggageSize', { setValueAs: emptyToNull })}>
             <option value="">{t('luggageSizeInherit')}</option>
             {LUGGAGE_SIZES.map((size) => (
               <option key={size} value={size}>
                 {tLuggage(size)}
               </option>
             ))}
-          </select>
+          </NativeSelect>
         </div>
       </div>
 
