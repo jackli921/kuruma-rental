@@ -1,5 +1,5 @@
 import { formatDateTime } from './format'
-import { type RenderedBody, renderRowsEmail, vehicleLabel } from './layout'
+import { type RenderedEmail, renderRowsEmail, vehicleLabel } from './layout'
 import { emailStrings } from './messages'
 
 /**
@@ -15,10 +15,6 @@ export interface RenterSubstitutionData {
   dropoffLocationName: string
   startAt: Date
   endAt: Date
-}
-
-export interface RenderedEmail extends RenderedBody {
-  subject: string
 }
 
 export function renderRenterSubstitution(

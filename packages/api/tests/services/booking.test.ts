@@ -1164,6 +1164,22 @@ describe('BookingService — renter lifecycle notifications (#664)', () => {
     expect(run).toHaveBeenCalledWith(renterCtx, result.booking, 'CANCELLED')
   })
 
+  // The renter cancel() path rejects non-CONFIRMED, so an operator cancelling an
+  // ACTIVE booking can ONLY go through updateStatus -> CANCELLED. That path must
+  // still reach the renter (the gap #664 closes), via STATUS_TRIGGER.
+  it('operator cancelling an ACTIVE booking via updateStatus notifies CANCELLED', async () => {
+    const { postCommit, run } = spyPostCommit()
+    const h = await setupSub(postCommit)
+    const active = await h.service.updateStatus(opCtxA, h.bookingId, 'ACTIVE')
+    expect(active.ok).toBe(true)
+    run.mockClear() // isolate the cancel step from create + activate
+    const cancelled = await h.service.updateStatus(opCtxA, h.bookingId, 'CANCELLED')
+    expect(cancelled.ok).toBe(true)
+    if (!cancelled.ok) return
+    expect(run).toHaveBeenCalledTimes(1)
+    expect(run).toHaveBeenCalledWith(opCtxA, cancelled.booking, 'CANCELLED')
+  })
+
   it('does not notify on a rejected action (no commit -> no email)', async () => {
     const { postCommit, run } = spyPostCommit()
     const h = await setupSub(postCommit)

@@ -1,5 +1,5 @@
 import { formatDateTime, formatJpy } from './format'
-import { type RenderedBody, renderRowsEmail } from './layout'
+import { type RenderedEmail, renderRowsEmail } from './layout'
 import { emailStrings } from './messages'
 
 /**
@@ -12,10 +12,6 @@ export interface RenterCancellationData {
   startAt: Date
   endAt: Date
   cancellationFeeJpy: number | null
-}
-
-export interface RenderedEmail extends RenderedBody {
-  subject: string
 }
 
 export function renderRenterCancellation(

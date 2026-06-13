@@ -8,6 +8,11 @@ export interface RenderedBody {
   text: string
 }
 
+/** A fully rendered email: a subject line plus the body. */
+export interface RenderedEmail extends RenderedBody {
+  subject: string
+}
+
 /** "Name (PLATE)" when a plate is present, else just the name. */
 export function vehicleLabel(v: { name: string; licensePlate: string | null }): string {
   return v.licensePlate ? `${v.name} (${v.licensePlate})` : v.name
