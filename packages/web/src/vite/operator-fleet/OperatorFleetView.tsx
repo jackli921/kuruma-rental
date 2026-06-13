@@ -16,6 +16,9 @@ import { useTranslations } from 'use-intl'
 interface OperatorFleetViewProps {
   readonly vehicles: readonly OperatorFleetVehicle[]
   readonly classOptions: readonly VehicleClassOption[]
+  // False for bypass roles (no operatorId): the page renders read-only — no Add,
+  // no per-row/card actions, no selection, no bulk bar. See the route comment (#598).
+  readonly canWrite: boolean
 }
 
 // Stateful fleet management container. The route owns the loader /
@@ -24,7 +27,7 @@ interface OperatorFleetViewProps {
 // (FleetTable) or grid (FleetGrid) presentation (#561). Decision logic stays in
 // the pure fleet-filters / fleet-grouping libs (FC/IS); this is the imperative
 // shell that holds UI state.
-export function OperatorFleetView({ vehicles, classOptions }: OperatorFleetViewProps) {
+export function OperatorFleetView({ vehicles, classOptions, canWrite }: OperatorFleetViewProps) {
   const t = useTranslations('business.vehicles.fleet')
   const todayIso = new Date().toISOString().slice(0, 10)
   const [view, setView] = useFleetViewMode()
@@ -50,10 +53,12 @@ export function OperatorFleetView({ vehicles, classOptions }: OperatorFleetViewP
     <div className="space-y-6">
       <div className="flex items-center justify-between gap-3">
         <FleetViewToggle value={view} onChange={setView} />
-        <Button onClick={() => setSheet({ vehicle: null })}>
-          <Plus className="size-4" />
-          {t('addVehicle')}
-        </Button>
+        {canWrite && (
+          <Button onClick={() => setSheet({ vehicle: null })}>
+            <Plus className="size-4" />
+            {t('addVehicle')}
+          </Button>
+        )}
       </div>
 
       {vehicles.length === 0 ? (
@@ -75,6 +80,7 @@ export function OperatorFleetView({ vehicles, classOptions }: OperatorFleetViewP
                 selectedIds={selectedIds}
                 onToggleSelect={toggleOne}
                 onEdit={openEdit}
+                canWrite={canWrite}
                 todayIso={todayIso}
               />
             ) : (
@@ -86,6 +92,7 @@ export function OperatorFleetView({ vehicles, classOptions }: OperatorFleetViewP
                 onToggleAll={toggleAll}
                 onToggleOne={toggleOne}
                 onEdit={openEdit}
+                canWrite={canWrite}
                 todayIso={todayIso}
               />
             )}
@@ -93,19 +100,23 @@ export function OperatorFleetView({ vehicles, classOptions }: OperatorFleetViewP
         </>
       )}
 
-      <BulkActionBar
-        selectedIds={effectiveSelectedIds}
-        onDone={clearSelection}
-        onClear={clearSelection}
-      />
-      <EditVehicleSheet
-        open={sheet !== null}
-        vehicle={sheet?.vehicle ?? null}
-        onOpenChange={(next) => {
-          if (!next) setSheet(null)
-        }}
-        onSaved={() => setSheet(null)}
-      />
+      {canWrite && (
+        <>
+          <BulkActionBar
+            selectedIds={effectiveSelectedIds}
+            onDone={clearSelection}
+            onClear={clearSelection}
+          />
+          <EditVehicleSheet
+            open={sheet !== null}
+            vehicle={sheet?.vehicle ?? null}
+            onOpenChange={(next) => {
+              if (!next) setSheet(null)
+            }}
+            onSaved={() => setSheet(null)}
+          />
+        </>
+      )}
     </div>
   )
 }

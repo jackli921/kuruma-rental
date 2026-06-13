@@ -72,15 +72,17 @@ function vehicle(overrides: Partial<OperatorFleetVehicle> = {}): OperatorFleetVe
 function renderView(
   vehicles: OperatorFleetVehicle[],
   classOptions: ReadonlyArray<{ id: string; name: string }> = [],
+  canWrite = true,
 ) {
   // The route prefetches class options and passes them down as a prop, so the
   // grid groups synchronously with no fetch of its own — the test mirrors that
-  // by handing classOptions straight to the view.
+  // by handing classOptions straight to the view. canWrite defaults to true (the
+  // operator case); the read-only bypass case is covered by OperatorFleetRoute.test.
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
   return render(
     <QueryClientProvider client={queryClient}>
       <IntlProvider locale="en" messages={enMessages}>
-        <OperatorFleetView vehicles={vehicles} classOptions={classOptions} />
+        <OperatorFleetView vehicles={vehicles} classOptions={classOptions} canWrite={canWrite} />
       </IntlProvider>
     </QueryClientProvider>,
   )
@@ -253,6 +255,21 @@ describe('OperatorFleetView', () => {
     await user.click(screen.getByRole('checkbox', { name: 'Select Toyota Aqua' }))
 
     expect(screen.getByText('1 vehicle selected')).toBeInTheDocument()
+  })
+
+  it('grid view is read-only for a bypass role: no checkbox, no actions, cards still list (#598)', async () => {
+    const user = userEvent.setup()
+    renderView(
+      [vehicle({ id: 'a', name: 'Toyota Aqua', classId: 'c1' })],
+      [{ id: 'c1', name: 'Compact' }],
+      false,
+    )
+
+    await user.click(screen.getByRole('button', { name: en.gridView }))
+
+    expect(screen.queryAllByRole('checkbox')).toHaveLength(0)
+    expect(screen.queryAllByRole('button', { name: en.columns.actions })).toHaveLength(0)
+    expect(screen.getByText('Toyota Aqua')).toBeInTheDocument()
   })
 
   it('renders the fleet summary counts strip', () => {
