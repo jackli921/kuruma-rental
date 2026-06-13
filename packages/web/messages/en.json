@@ -1007,7 +1007,9 @@
       "netPayable": "Net payable",
       "payments": "Payments",
       "total": "Total",
-      "allPartners": "All partners"
+      "allPartners": "All partners",
+      "loadError": "Couldn't load partner revenue.",
+      "retry": "Retry"
     }
   },
   "documents": {

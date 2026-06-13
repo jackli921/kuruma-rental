@@ -43,7 +43,10 @@ test.describe('admin portal guard (#462 / #541)', () => {
     await expect(page).toHaveURL(/\/en\/?$/)
   })
 
-  test('a PLATFORM_ADMIN sees the nav and the revenue placeholder', async ({ context, page }) => {
+  test('a PLATFORM_ADMIN sees the nav and the partner revenue report', async ({
+    context,
+    page,
+  }) => {
     await signInAs(context, 'PLATFORM_ADMIN')
 
     await page.goto('/en/admin')
@@ -54,8 +57,10 @@ test.describe('admin portal guard (#462 / #541)', () => {
     await expect(page.locator('[data-global-nav]')).toBeHidden()
 
     await page.goto('/en/admin/revenue')
-    await expect(page.getByText(/coming soon/i)).toBeVisible()
-    await expect(page.getByText(/4%/)).toBeVisible()
+    await expect(page.getByRole('heading', { level: 1, name: /partner revenue/i })).toBeVisible()
+    // A real aggregated figure (Best Car Rental, March gross) and the 4% model.
+    await expect(page.getByText('150,000')).toBeVisible()
+    await expect(page.getByText(/4%/).first()).toBeVisible()
   })
 
   test('a PLATFORM_ADMIN in renter view gets no global-nav leak on /admin', async ({

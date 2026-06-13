@@ -1007,7 +1007,9 @@
       "netPayable": "支払額",
       "payments": "決済件数",
       "total": "合計",
-      "allPartners": "全パートナー"
+      "allPartners": "全パートナー",
+      "loadError": "パートナー収益を読み込めませんでした。",
+      "retry": "再試行"
     }
   },
   "documents": {
