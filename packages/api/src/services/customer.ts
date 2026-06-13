@@ -46,11 +46,14 @@ export class CustomerService {
     phone?: string | undefined
     language: string
   }): Promise<{ user: User; created: boolean }> {
+    // Email is a case-insensitive identity (#715): normalize at the boundary so
+    // Bob@x.com and bob@x.com resolve to one human, not two rows.
+    const email = input.email?.toLowerCase()
     // Fast-path: if a customer already exists for this email/phone, return it
     // without attempting an insert. The repository also handles concurrent
     // inserts idempotently, but this short-circuits the common case.
-    if (input.email) {
-      const existing = await this.userRepo.findByEmail(input.email)
+    if (email) {
+      const existing = await this.userRepo.findByEmail(email)
       if (existing) return { user: existing, created: false }
     }
     if (input.phone) {
@@ -60,7 +63,7 @@ export class CustomerService {
 
     const user = await this.userRepo.quickCreate({
       name: input.name,
-      email: input.email ?? null,
+      email: email ?? null,
       phone: input.phone ?? null,
       language: input.language,
     })
