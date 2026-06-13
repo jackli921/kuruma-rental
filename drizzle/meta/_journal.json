@@ -407,6 +407,13 @@
       "when": 1781381003516,
       "tag": "0057_fee_schedules_feetype_unit_coherence",
       "breakpoints": true
+    },
+    {
+      "idx": 58,
+      "version": "7",
+      "when": 1781381920311,
+      "tag": "0058_add_region_coords_and_taxonomy",
+      "breakpoints": true
     }
   ]
 }
