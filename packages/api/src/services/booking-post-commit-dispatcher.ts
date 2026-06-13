@@ -1,9 +1,10 @@
 import type { CallerContext } from '../middleware/auth'
 import type { Booking } from '../stores'
+import type { LifecycleTrigger } from './notification-dispatcher'
 
 type EnsureThread = (ctx: CallerContext, booking: Booking) => Promise<void>
 interface NotificationDispatch {
-  dispatch(booking: Booking): Promise<void>
+  dispatch(booking: Booking, trigger?: LifecycleTrigger): Promise<void>
 }
 
 /**
@@ -22,9 +23,13 @@ export class BookingPostCommitDispatcher {
     private readonly notifications: NotificationDispatch,
   ) {}
 
-  async run(ctx: CallerContext, booking: Booking): Promise<void> {
+  async run(
+    ctx: CallerContext,
+    booking: Booking,
+    trigger: LifecycleTrigger = 'CREATED',
+  ): Promise<void> {
     await this.safely('thread', () => this.ensureThread(ctx, booking))
-    await this.safely('notifications', () => this.notifications.dispatch(booking))
+    await this.safely('notifications', () => this.notifications.dispatch(booking, trigger))
   }
 
   private async safely(label: string, fn: () => Promise<void>): Promise<void> {

@@ -42,4 +42,19 @@ describe('BookingPostCommitDispatcher', () => {
       new BookingPostCommitDispatcher(ensureThread, notifications).run(ctx, booking),
     ).resolves.toBeUndefined()
   })
+
+  // #664: the lifecycle trigger flows through to the notification dispatch; an
+  // omitted trigger defaults to CREATED so create()'s existing call sites and the
+  // operator resend are unchanged.
+  it('forwards the lifecycle trigger to notifications.dispatch (defaults to CREATED)', async () => {
+    const ensureThread = vi.fn(async () => {})
+    const notifications = { dispatch: vi.fn(async () => {}) }
+    const dispatcher = new BookingPostCommitDispatcher(ensureThread, notifications)
+
+    await dispatcher.run(ctx, booking)
+    expect(notifications.dispatch).toHaveBeenLastCalledWith(booking, 'CREATED')
+
+    await dispatcher.run(ctx, booking, 'CANCELLED')
+    expect(notifications.dispatch).toHaveBeenLastCalledWith(booking, 'CANCELLED')
+  })
 })
