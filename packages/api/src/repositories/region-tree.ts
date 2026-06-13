@@ -20,10 +20,17 @@ export function collectDescendantIds(regions: readonly Region[], rootId: string)
     childrenByParent.set(r.parentId, [...(childrenByParent.get(r.parentId) ?? []), r.id])
   }
 
+  // Visited guard: the DB self-FK enforces referential integrity but CANNOT
+  // prevent a parentId cycle (a -> b -> a). Without `seen`, a cyclic chain
+  // reachable from a public `?regionId=` search loops forever and hangs the
+  // Worker. Records each id once, so the walk always terminates and de-dupes.
   const collected: string[] = []
+  const seen = new Set<string>()
   const queue = [rootId]
   while (queue.length > 0) {
     const id = queue.shift() as string
+    if (seen.has(id)) continue
+    seen.add(id)
     collected.push(id)
     const children = childrenByParent.get(id)
     if (children) queue.push(...children)
