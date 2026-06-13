@@ -72,7 +72,8 @@
     "search": "Search",
     "browse": "Browse",
     "myBookings": "My Bookings",
-    "documents": "Documents"
+    "documents": "Documents",
+    "newBookings": "{count, plural, one {# new booking} other {# new bookings}}"
   },
   "acriss": {
     "MCAR": "Mini",

@@ -14,10 +14,11 @@ import {
   parseCalendarView,
   toCalendarEvents,
 } from '@/vite/operator-bookings/calendar-events'
+import { markBookingsSeen } from '@/vite/operator-bookings/new-bookings'
 import { useCalendarFilters } from '@/vite/operator-bookings/useCalendarFilters'
-import { useSuspenseQuery } from '@tanstack/react-query'
+import { useQueryClient, useSuspenseQuery } from '@tanstack/react-query'
 import { type ErrorComponentProps, createFileRoute, useRouter } from '@tanstack/react-router'
-import { useCallback, useMemo } from 'react'
+import { useCallback, useEffect, useMemo } from 'react'
 import { useTranslations } from 'use-intl'
 
 interface BookingsCalendarSearch {
@@ -63,6 +64,14 @@ function OperatorBookingsRoute() {
   const { locale } = Route.useParams()
   const { view: viewParam, date } = Route.useSearch()
   const navigate = Route.useNavigate()
+
+  const queryClient = useQueryClient()
+
+  // #611: opening the orders list is "seeing" the new orders — clear the nav
+  // red-dot badge (advance lastSeenAt to now) on every mount of this route.
+  useEffect(() => {
+    markBookingsSeen(queryClient)
+  }, [queryClient])
 
   const view = viewParam ?? DEFAULT_VIEW
   const anchorDate = useMemo(() => parseCalendarDate(date), [date])
