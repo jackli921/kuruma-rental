@@ -78,3 +78,52 @@ describe('check-import-boundaries — construction rule (#721)', () => {
     )
   })
 })
+
+describe('check-import-boundaries — routes/repositories type boundary (#726)', () => {
+  const ROUTE_TYPES_RULE = /Routes must not import from repositories\/types/
+
+  it('flags a service-backed route importing a filter type from repositories/types', () => {
+    const content = "import type { BookingFilters } from '../repositories/types'"
+
+    const violations = checkContent('routes/bookings.ts', content)
+
+    expect(violations).toHaveLength(1)
+    expect(violations[0]).toMatchObject({
+      file: 'routes/bookings.ts',
+      line: 1,
+      rule: expect.stringMatching(ROUTE_TYPES_RULE),
+    })
+  })
+
+  it('allows DI-repo carve-out routes to import their *Repository contract from repositories/types', () => {
+    expect(
+      checkContent(
+        'routes/regions.ts',
+        "import type { RegionRepository } from '../repositories/types'",
+      ),
+    ).toEqual([])
+    expect(
+      checkContent(
+        'routes/stats.ts',
+        "import type { StatsRepository } from '../repositories/types'",
+      ),
+    ).toEqual([])
+    expect(
+      checkContent(
+        'routes/vehicles.ts',
+        "import type { Vehicle, VehicleFilters, VehicleRepository } from '../repositories/types'",
+      ),
+    ).toEqual([])
+  })
+
+  it('still flags a concrete repository import even in a carve-out route', () => {
+    const violations = checkContent(
+      'routes/vehicles.ts',
+      "import { DrizzleVehicleRepository } from '../repositories/drizzle/vehicle'",
+    )
+
+    expect(violations.map((v) => v.rule)).toContainEqual(
+      expect.stringMatching(/must not import concrete repositories/),
+    )
+  })
+})

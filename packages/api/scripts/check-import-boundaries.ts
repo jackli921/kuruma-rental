@@ -57,6 +57,12 @@ export function checkContent(rel: string, content: string): Violation[] {
   const isTxFactory =
     rel === 'repositories/drizzle/transaction.ts' ||
     rel === 'repositories/drizzle/operator-grant-transaction.ts'
+  // DI-repo carve-out: these routes DI a repository as their constructor contract
+  // and have no service layer yet, so they may import that *Repository interface
+  // from repositories/types until their own service extraction lands (#726).
+  // Every other route must source filter/entity types from the service layer.
+  const isDiRepoCarveoutRoute =
+    rel === 'routes/regions.ts' || rel === 'routes/stats.ts' || rel === 'routes/vehicles.ts'
 
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i]!
@@ -95,16 +101,27 @@ export function checkContent(rel: string, content: string): Violation[] {
     // Skip non-import lines for the remaining rules
     if (!trimmed.startsWith('import ') && !trimmed.startsWith('import{')) continue
 
-    // Rule 1: Routes must not import concrete repositories.
-    // Type-only imports from repositories/types are allowed (interfaces for DI).
-    // Concrete imports (drizzle, in-memory) are never allowed in routes.
-    if (isRoute && /from\s+['"]\.\.\/repositories\/(?!types)/.test(trimmed)) {
-      violations.push({
-        file: rel,
-        line: i + 1,
-        text: trimmed,
-        rule: 'Routes must not import concrete repositories. Only type imports from repositories/types are allowed.',
-      })
+    // Rule 1: Routes must not import from repositories/ — neither concrete
+    // implementations nor type contracts. Filter/entity types come from the
+    // service layer (routes -> services -> repositories). The DI-repo carve-out
+    // routes are the one documented exception, and only for their *Repository
+    // interface type, never a concrete (#726).
+    if (isRoute && /from\s+['"]\.\.\/repositories\//.test(trimmed)) {
+      if (/from\s+['"]\.\.\/repositories\/(?!types)/.test(trimmed)) {
+        violations.push({
+          file: rel,
+          line: i + 1,
+          text: trimmed,
+          rule: 'Routes must not import concrete repositories.',
+        })
+      } else if (!isDiRepoCarveoutRoute) {
+        violations.push({
+          file: rel,
+          line: i + 1,
+          text: trimmed,
+          rule: 'Routes must not import from repositories/types; source filter/entity types from the service layer. DI-repo carve-out (regions/stats/vehicles) may import their *Repository contract until service extraction lands.',
+        })
+      }
     }
 
     // Rule 2: Services must not import concrete repository classes

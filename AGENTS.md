@@ -34,7 +34,7 @@ index.ts       → Composition root (constructs concretes, wires DI)
 
 | Rule | Why |
 |------|-----|
-| Routes import services and `routes/helpers.ts` only. Never repositories. | Routes handle HTTP concerns; business logic belongs in services. |
+| Routes import services and `routes/helpers.ts` only — never `repositories/`, not even `types.ts`. | Routes handle HTTP concerns; business logic belongs in services. Filter/entity shapes reach routes through the service layer (e.g. `services/filters.ts`), not the data layer. The lone carve-out is DI-repo routes that have no service yet (`regions`, `stats`, `vehicles`): they may import their `*Repository` interface from `types.ts` as a constructor contract until their service extraction lands (#726). |
 | Services import repository *interfaces* (`types.ts`) only. Never concrete classes. | Enables swapping InMemory ↔ Drizzle without touching business logic. |
 | Only `index.ts` imports concrete classes (`DrizzleBookingRepository`, `InMemoryBookingRepository`, etc.) | Single place to change wiring; the rest of the code is implementation-agnostic. |
 | No `new ConcreteRepository()` outside the composition root (`index.ts` / `composition/`) — except the two transaction factories (`repositories/drizzle/*-transaction.ts`). | Prevents hidden coupling that breaks testability. The tx factories are the lone carve-out: they must rebind every repo to the per-call neon-serverless tx connection, which `index.ts` can't do per call. |
