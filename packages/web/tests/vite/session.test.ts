@@ -113,7 +113,7 @@ describe('fetchSession', () => {
       'fetch',
       vi.fn(async () => jsonResponse({ success: false }, 500)),
     )
-    await expect(fetchSession()).rejects.toThrow()
+    await expect(fetchSession()).rejects.toThrow('Failed to load session: 500')
   })
 })
 

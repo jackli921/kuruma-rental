@@ -104,13 +104,17 @@ describe('fetchVehicleDetail', () => {
     expect(await fetchVehicleDetail('missing')).toBeNull()
   })
 
-  it('throws ApiError on a failure envelope (e.g. a renter 403)', async () => {
+  it('throws ApiError carrying the status and message on a failure envelope (renter 403)', async () => {
     vi.stubGlobal(
       'fetch',
       vi.fn(async () => jsonResponse({ success: false, error: 'Forbidden' }, 403)),
     )
 
     await expect(fetchVehicleDetail('veh-1')).rejects.toBeInstanceOf(ApiError)
+    await expect(fetchVehicleDetail('veh-1')).rejects.toMatchObject({
+      status: 403,
+      message: 'Forbidden',
+    })
   })
 })
 
