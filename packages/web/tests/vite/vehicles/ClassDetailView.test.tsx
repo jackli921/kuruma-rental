@@ -57,4 +57,14 @@ describe('ClassDetailView', () => {
     renderDetail(makeClass({ luggageCapacity: 1, luggageSize: 'SMALL' }))
     expect(screen.getByText('1 bag')).toBeInTheDocument()
   })
+
+  it('gives every gallery image explicit 4:3 dimensions', () => {
+    renderDetail(makeClass({ photos: ['p0.jpg', 'p1.jpg', 'p2.jpg'] }))
+    const images = screen.getAllByRole('img')
+    expect(images.length).toBeGreaterThan(1)
+    for (const img of images) {
+      expect(img).toHaveAttribute('width', '400')
+      expect(img).toHaveAttribute('height', '300')
+    }
+  })
 })

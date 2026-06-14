@@ -77,6 +77,10 @@ export function FeaturedVehicles() {
                 <img
                   src={vehicle.image}
                   alt={vehicle.name}
+                  // 4:3 intrinsic hint lets the browser reserve the box before load (#846);
+                  // h-full/w-full still drive the rendered size inside the aspect wrapper.
+                  width={400}
+                  height={300}
                   className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
                 />
               </div>

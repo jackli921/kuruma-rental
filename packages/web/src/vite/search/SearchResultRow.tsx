@@ -40,7 +40,15 @@ function SpecificRow({ item }: { readonly item: SpecificSearchResult }) {
     <article className="flex gap-4 rounded-xl border border-border bg-card p-4 shadow-sm">
       <div className="size-24 shrink-0 overflow-hidden rounded-lg bg-muted sm:size-28">
         {photo ? (
-          <img src={photo} alt={item.name} className="h-full w-full object-cover" />
+          <img
+            src={photo}
+            alt={item.name}
+            // 1:1 intrinsic hint lets the browser reserve the box before load (#846);
+            // h-full/w-full still drive the rendered size inside the square wrapper.
+            width={300}
+            height={300}
+            className="h-full w-full object-cover"
+          />
         ) : (
           <div className="flex h-full w-full items-center justify-center">
             <Car className="size-8 text-muted-foreground/30" />

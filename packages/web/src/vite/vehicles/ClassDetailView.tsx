@@ -50,13 +50,29 @@ export function ClassDetailView({ vehicleClass: vc }: ClassDetailViewProps) {
           {primaryPhoto ? (
             <div className="space-y-3">
               <div className="aspect-[4/3] overflow-hidden rounded-xl bg-muted">
-                <img src={primaryPhoto} alt={vc.name} className="w-full h-full object-cover" />
+                <img
+                  src={primaryPhoto}
+                  alt={vc.name}
+                  // 4:3 intrinsic hint lets the browser reserve the box before load (#846);
+                  // h-full/w-full still drive the rendered size inside the aspect wrapper.
+                  width={400}
+                  height={300}
+                  className="w-full h-full object-cover"
+                />
               </div>
               {photos.length > 1 && (
                 <div className="grid grid-cols-3 gap-3">
                   {photos.slice(1, 4).map((photo) => (
                     <div key={photo} className="aspect-[4/3] overflow-hidden rounded-lg bg-muted">
-                      <img src={photo} alt={vc.name} className="w-full h-full object-cover" />
+                      <img
+                        src={photo}
+                        alt={vc.name}
+                        // 4:3 intrinsic hint lets the browser reserve the box before load (#846);
+                        // h-full/w-full still drive the rendered size inside the aspect wrapper.
+                        width={400}
+                        height={300}
+                        className="w-full h-full object-cover"
+                      />
                     </div>
                   ))}
                 </div>

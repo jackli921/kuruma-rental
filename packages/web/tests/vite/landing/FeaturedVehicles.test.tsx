@@ -45,4 +45,14 @@ describe('FeaturedVehicles', () => {
       expect(link).toHaveAttribute('data-locale', 'en')
     }
   })
+
+  it('gives every featured image explicit 4:3 dimensions so the box reserves space before load', () => {
+    renderFeatured()
+    const images = screen.getAllByRole('img')
+    expect(images.length).toBeGreaterThan(0)
+    for (const img of images) {
+      expect(img).toHaveAttribute('width', '400')
+      expect(img).toHaveAttribute('height', '300')
+    }
+  })
 })

@@ -50,7 +50,15 @@ export function FleetVehicleCard({
         )}
         <div className="relative h-16 w-24 shrink-0 overflow-hidden rounded-lg bg-muted">
           {photo ? (
-            <img src={photo} alt={vehicle.name} className="h-full w-full object-cover" />
+            <img
+              src={photo}
+              alt={vehicle.name}
+              // 3:2 intrinsic hint lets the browser reserve the box before load (#846);
+              // h-full/w-full still drive the rendered size inside the fixed wrapper.
+              width={300}
+              height={200}
+              className="h-full w-full object-cover"
+            />
           ) : (
             <div className="flex h-full w-full items-center justify-center">
               <Car className="size-6 text-muted-foreground/30" />

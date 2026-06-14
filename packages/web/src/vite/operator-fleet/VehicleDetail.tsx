@@ -61,7 +61,15 @@ export function VehicleDetail({ detail, locale, canWrite }: VehicleDetailProps) 
       <div className="flex items-start gap-4">
         <div className="relative h-16 w-24 shrink-0 overflow-hidden rounded-lg bg-muted">
           {primaryPhoto ? (
-            <img src={primaryPhoto} alt={detail.name} className="h-full w-full object-cover" />
+            <img
+              src={primaryPhoto}
+              alt={detail.name}
+              // 3:2 intrinsic hint lets the browser reserve the box before load (#846);
+              // h-full/w-full still drive the rendered size inside the fixed wrapper.
+              width={300}
+              height={200}
+              className="h-full w-full object-cover"
+            />
           ) : (
             <div className="flex h-full w-full items-center justify-center">
               <Car className="size-6 text-muted-foreground/30" />
@@ -162,6 +170,10 @@ export function VehicleDetail({ detail, locale, canWrite }: VehicleDetailProps) 
                   <img
                     src={url}
                     alt={`${detail.name} ${idx + 1}`}
+                    // 1:1 intrinsic hint lets the browser reserve the box before load (#846);
+                    // h-full/w-full still drive the rendered size inside the square wrapper.
+                    width={300}
+                    height={300}
                     className="h-full w-full rounded-md border object-cover"
                   />
                 </li>

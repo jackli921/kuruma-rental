@@ -115,6 +115,20 @@ describe('VehicleDetail', () => {
     expect(img).toHaveAttribute('src', 'https://cdn.example/aqua-1.jpg')
   })
 
+  it('gives the header thumbnail (3:2) and gallery images (1:1) explicit dimensions', () => {
+    renderDetail(detail({ name: 'Toyota Aqua', photos: ['a.jpg', 'b.jpg'] }), false)
+
+    const header = screen.getByRole('img', { name: 'Toyota Aqua' })
+    expect(header).toHaveAttribute('width', '300')
+    expect(header).toHaveAttribute('height', '200')
+
+    for (const name of ['Toyota Aqua 1', 'Toyota Aqua 2']) {
+      const thumb = screen.getByRole('img', { name })
+      expect(thumb).toHaveAttribute('width', '300')
+      expect(thumb).toHaveAttribute('height', '300')
+    }
+  })
+
   it('renders the empty / zeroed state when there are no bookings or revenue', () => {
     renderDetail(
       detail({
