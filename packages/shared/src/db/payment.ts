@@ -1,0 +1,97 @@
+import { sql } from 'drizzle-orm'
+import { index, integer, pgEnum, pgTable, text, timestamp, uniqueIndex } from 'drizzle-orm/pg-core'
+import { PAYMENT_EVENT_STATUSES } from '../enums'
+import { operators } from './auth'
+import { bookings } from './booking'
+
+// In-app Stripe payment of the rental total (epic #385, slice payment / #461; 2026-06-05 scope addendum §2). The signed checkout.session.completed webhook is the SOURCE OF TRUTH — a row exists only after a verified, paid session.
+// MVP records only the success event; REFUNDED/DISPUTED are post-MVP (YAGNI).
+export const paymentEventStatusEnum = pgEnum('payment_event_status', PAYMENT_EVENT_STATUSES)
+export const paymentEvents = pgTable(
+  'payment_events',
+  {
+    id: text('id')
+      .primaryKey()
+      .$defaultFn(() => crypto.randomUUID()),
+    // Partner attribution for the #462 revenue tab. RE-DERIVED server-side from the booking on the webhook — never trusted from Stripe metadata (#461).
+    operatorId: text('operatorId')
+      .notNull()
+      .references(() => operators.id, { onDelete: 'restrict' }),
+    bookingId: text('bookingId')
+      .notNull()
+      .references(() => bookings.id),
+    // Stripe ids: stripeEventId = redelivery idempotency fence; stripeCheckoutSessionId pins the row to one Session; paymentIntent nullable until it settles.
+    stripeEventId: text('stripeEventId').notNull(),
+    stripeCheckoutSessionId: text('stripeCheckoutSessionId').notNull(),
+    stripePaymentIntentId: text('stripePaymentIntentId'),
+    // Whole JPY (zero-decimal). grossJpy = Stripe amount_total (trusted, not client); platformFee = 4% of gross; net = gross - fee (commission.ts).
+    grossJpy: integer('grossJpy').notNull(),
+    platformFeeJpy: integer('platformFeeJpy').notNull(),
+    netToPartnerJpy: integer('netToPartnerJpy').notNull(),
+    currency: text('currency').notNull().default('jpy'),
+    status: paymentEventStatusEnum('status').notNull(),
+    createdAt: timestamp('createdAt', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    // FK cover (lint:fk-indexes) + #462 revenue aggregation by partner.
+    index('idx_payment_events_operatorId').on(table.operatorId),
+    index('idx_payment_events_bookingId').on(table.bookingId), // FK cover + "is this booking paid?" lookup
+    // Stripe redelivery dedupe: the same event id can never insert twice (#461 P1).
+    uniqueIndex('payment_events_stripeEventId_unique').on(table.stripeEventId),
+    // Defence in depth: one Checkout Session records at most one row.
+    uniqueIndex('payment_events_stripeCheckoutSessionId_unique').on(table.stripeCheckoutSessionId),
+    // The BUSINESS-FACT seal: at most ONE successful payment per booking, even across two valid Sessions both completing — vendor dedupe (above) stops duplicate MESSAGES, this stops a duplicate FACT (#461 P1).
+    // Partial so a future REFUNDED row never collides with the SUCCEEDED one.
+    uniqueIndex('payment_events_one_success_per_booking')
+      .on(table.bookingId)
+      .where(sql`status = 'SUCCEEDED'`),
+  ],
+)
+
+// Payment anomalies needing operator/admin review (#508 P2). A verified webhook can
+// report a charge that does NOT become a clean payment_events row: a second distinct
+// Session paying an already-paid booking (DOUBLE_PAYMENT — refund the duplicate) or a
+// session whose amount/currency != the booking snapshot (AMOUNT_MISMATCH — investigate).
+// Persisted (not just logged, #461 P1b) so the admin surface can list duplicates to
+// refund rather than scrape logs. Kept OUT of payment_events so revenue math (which sums
+// SUCCEEDED rows) is never polluted by a flagged-for-review charge.
+export const paymentAnomalyKindEnum = pgEnum('payment_anomaly_kind', [
+  'DOUBLE_PAYMENT',
+  'AMOUNT_MISMATCH',
+])
+export const paymentAnomalies = pgTable(
+  'payment_anomalies',
+  {
+    id: text('id')
+      .primaryKey()
+      .$defaultFn(() => crypto.randomUUID()),
+    // Partner attribution, RE-DERIVED from the booking on the webhook — never the Stripe metadata (mirrors payment_events).
+    operatorId: text('operatorId')
+      .notNull()
+      .references(() => operators.id, { onDelete: 'restrict' }),
+    bookingId: text('bookingId')
+      .notNull()
+      .references(() => bookings.id),
+    kind: paymentAnomalyKindEnum('kind').notNull(),
+    // Stripe ids carried so an operator can reconcile/refund. stripeEventId is the redelivery fence.
+    stripeEventId: text('stripeEventId').notNull(),
+    stripeCheckoutSessionId: text('stripeCheckoutSessionId').notNull(),
+    stripePaymentIntentId: text('stripePaymentIntentId'),
+    // Whole JPY. received = Stripe amount_total (nullable — Stripe may omit it on a malformed event); expected = the booking total snapshot at webhook time.
+    receivedAmountJpy: integer('receivedAmountJpy'),
+    expectedAmountJpy: integer('expectedAmountJpy'),
+    currency: text('currency'),
+    // Set once an operator actions it (refunded / dismissed). NULL = still needs review.
+    resolvedAt: timestamp('resolvedAt', { withTimezone: true }),
+    createdAt: timestamp('createdAt', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    // FK cover (lint:fk-indexes) + admin listing by partner.
+    index('idx_payment_anomalies_operatorId').on(table.operatorId),
+    index('idx_payment_anomalies_bookingId').on(table.bookingId),
+    // Redelivery fence: the same webhook event records at most one anomaly (idempotent record()).
+    uniqueIndex('payment_anomalies_stripeEventId_unique').on(table.stripeEventId),
+  ],
+)
+
+export type { PaymentEventStatus } from '../enums'

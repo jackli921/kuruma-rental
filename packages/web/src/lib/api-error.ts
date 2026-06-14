@@ -18,24 +18,6 @@ export class ApiError extends Error {
 }
 
 /**
- * Error a mutation hook throws when a server action returns `success: false`.
- * Carries the optional `code` from the {@link ActionResult} (e.g.
- * {@link OPERATOR_REQUIRED}) so React Query's `error` retains it and the dialog
- * can branch on it rather than only on the message string (#407 §3e).
- */
-export class ActionError extends Error {
-  readonly name = 'ActionError'
-  // `string | undefined` (not optional `?`) so the assignment satisfies
-  // exactOptionalPropertyTypes when the source ActionResult carries no code.
-  readonly code: string | undefined
-
-  constructor(message: string, code?: string) {
-    super(message)
-    this.code = code
-  }
-}
-
-/**
  * Error thrown by {@link unwrap} when a *success* response's `data` fails the
  * caller-supplied Zod schema — i.e. the API/web contract drifted (a renamed or
  * missing field). Without a schema such drift returns `undefined` deep in

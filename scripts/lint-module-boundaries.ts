@@ -27,11 +27,11 @@ const INTERNAL_ALIAS_RE = /^@\/modules\/([^/]+)\/(.+)$/
 
 // #722: packages/web has NO direct DB access — all data flows through the Hono
 // API (CLAUDE.md architecture boundary). A runtime import of the web DB client
-// or Drizzle anywhere under packages/web/src is forbidden, EXCEPT the two
-// sanctioned Auth.js files below, which need the Drizzle adapter at runtime.
-// `import type` is always allowed (erased at build, so it creates no DB path).
+// or Drizzle anywhere under packages/web/src is forbidden. `import type` is
+// always allowed (erased at build, so it creates no DB path).
+// #714: the Auth.js carve-out (auth.ts, lib/db.ts) was removed — web no longer
+// runs Auth.js, so the rule is now unconditional.
 const WEB_SRC_MARKER = 'packages/web/src/'
-const WEB_DB_CARVE_OUT = new Set(['auth.ts', 'lib/db.ts'])
 const FORBIDDEN_WEB_DB_PREFIXES = ['@/lib/db', '@kuruma/shared/db', 'drizzle-orm']
 
 function collectImports(source: string): ImportRef[] {
@@ -130,15 +130,14 @@ export function checkImports(files: string[]): Violation[] {
     }
     const importingModule = moduleOfFile(file)
     const webRel = webRelPath(file)
-    const webDbExempt = webRel !== null && WEB_DB_CARVE_OUT.has(webRel)
     for (const { spec, typeOnly } of collectImports(source)) {
       // Rule 1: no cross-module reach into another module's internals.
       const internal = spec.match(INTERNAL_ALIAS_RE)
       if (internal && importingModule !== internal[1]!) {
         violations.push({ file, importPath: spec, reason: 'cross-module-internal' })
       }
-      // Rule 2 (#722): no runtime DB import from the web package (Auth.js aside).
-      if (webRel !== null && !webDbExempt && !typeOnly && isForbiddenWebDbSpec(spec)) {
+      // Rule 2 (#722): no runtime DB import from the web package.
+      if (webRel !== null && !typeOnly && isForbiddenWebDbSpec(spec)) {
         violations.push({ file, importPath: spec, reason: 'web-runtime-db' })
       }
     }
@@ -175,7 +174,7 @@ function discover(): string[] {
 
 function describeViolation(v: Violation): string {
   if (v.reason === 'web-runtime-db') {
-    return `runtime DB import "${v.importPath}" — packages/web has no direct DB access; route through the Hono API. Use 'import type' for types; only auth.ts/lib/db.ts may touch the DB at runtime (Auth.js).`
+    return `runtime DB import "${v.importPath}" — packages/web has no direct DB access; route through the Hono API. Use 'import type' for types.`
   }
   return `imports "${v.importPath}" — cross-module internal import; use the '@/modules/<name>' barrel instead.`
 }

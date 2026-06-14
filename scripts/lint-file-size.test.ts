@@ -97,9 +97,9 @@ describe('capForFile', () => {
     expect(rule.soft).toBe(400)
   })
 
-  test('the central Drizzle schema gets a raised 1000-line cap, soft-warning at 800', () => {
+  test('the Drizzle schema barrel gets the default 800/400 rule (#725 split removed the special cap)', () => {
     const rule = capForFile('packages/shared/src/db/schema.ts')
-    expect(rule.cap).toBe(1000)
-    expect(rule.soft).toBe(800)
+    expect(rule.cap).toBe(800)
+    expect(rule.soft).toBe(400)
   })
 })

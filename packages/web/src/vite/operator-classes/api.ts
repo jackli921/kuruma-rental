@@ -38,7 +38,7 @@ export const operatorClassSchema = z.object({
   photos: z.array(z.string()),
   seats: z.number(),
   luggageCapacity: z.number(),
-  luggageSize: z.enum(['SMALL', 'MEDIUM', 'LARGE']).nullable(),
+  luggageSize: z.enum(['SMALL', 'MEDIUM', 'LARGE']),
   transmission: z.enum(['AUTO', 'MANUAL']),
   fuelType: z.string().nullable(),
   acrissCode: z.string().nullable(),

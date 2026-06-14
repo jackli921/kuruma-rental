@@ -4,11 +4,13 @@ import { deleteCookie, getCookie, setCookie } from 'hono/cookie'
 import {
   type GoogleAuthRuntime,
   type GoogleOAuthConfig,
+  OAUTH_FLOW_COOKIE_PREFIX,
   OAUTH_STATE_TTL_SECONDS,
   buildGoogleAuthorizeUrl,
   decodeFlowPayload,
   encodeFlowPayload,
   flowCookieName,
+  flowCookiesToEvict,
   localeFromReturnPath,
   parseOAuthIntent,
   randomToken,
@@ -106,6 +108,16 @@ export function createAuthRoutes(
         intent: parseOAuthIntent(c.req.query('intent')),
         invite: safeInviteToken(c.req.query('invite')),
       })
+      // Bound the live flow-cookie count before adding this one (issue #592): an
+      // abandoned flow lingers until its 600s TTL, so a rapid abandon — or a
+      // login-CSRF /start flood — could otherwise pile up empty-payload cookies past
+      // the ~4KB header budget and start failing NEW logins. Erase the oldest excess.
+      const liveFlowCookies = Object.keys(getCookie(c)).filter((name) =>
+        name.startsWith(OAUTH_FLOW_COOKIE_PREFIX),
+      )
+      for (const name of flowCookiesToEvict(liveFlowCookies)) {
+        deleteCookie(c, name, { path: '/' })
+      }
       setCookie(c, flowCookieName(state), payload, OAUTH_FLOW_COOKIE_OPTS)
       return c.redirect(buildGoogleAuthorizeUrl(googleConfig, state), 302)
     })
