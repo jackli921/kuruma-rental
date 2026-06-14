@@ -68,6 +68,7 @@ export type {
 export { MAX_NOTIFICATION_ATTEMPTS, SEND_LEASE_MS } from './types-notification'
 export type {
   NotificationLogFilters,
+  NotificationLogNoRecipient,
   NotificationLogRepository,
   NotificationLogUpsert,
 } from './types-notification'

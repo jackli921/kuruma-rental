@@ -133,6 +133,7 @@ describe('schema exports', () => {
       'SENT',
       'FAILED',
       'DEAD',
+      'NO_RECIPIENT', // #681: terminal non-failure skip (no resolvable email)
     ])
   })
 

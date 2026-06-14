@@ -31,6 +31,9 @@ export interface NotificationLogUpsert {
   idempotencyKey: string
 }
 
+// #681: a no-recipient skip has no resolved address or locale — only the keys.
+export type NotificationLogNoRecipient = Omit<NotificationLogUpsert, 'recipient' | 'locale'>
+
 export interface NotificationLogFilters {
   bookingId?: string
   operatorId?: string
@@ -41,6 +44,9 @@ export interface NotificationLogRepository {
   // post-commit replay), return it UNCHANGED — the unique key seals one row per
   // (booking, kind), so a replay never creates a duplicate to double-send.
   upsertQueued(data: NotificationLogUpsert): Promise<NotificationLog>
+  // #681: record a terminal NO_RECIPIENT row when no email resolves; idempotent
+  // on its own key so it never blocks a later real send under the bare key.
+  recordNoRecipient(data: NotificationLogNoRecipient): Promise<NotificationLog>
   // Atomic lease claim (§3): flips QUEUED / FAILED / an EXPIRED SENDING to
   // SENDING and bumps attempts, returning the row. Returns undefined when a LIVE
   // SENDING lease holds it — the concurrent-send guard. Unscoped (keyed by id;
