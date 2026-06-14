@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it } from 'vitest'
 import { createApp } from '../../src/index'
 import { InMemoryThreadRepository, InMemoryUserRepository } from '../../src/repositories/in-memory'
 import { createUserRoutes } from '../../src/routes/users'
+import { UserDirectoryService } from '../../src/services/user-directory'
 import { setupAuthEnv, testAuthMiddleware } from '../helpers/auth'
 
 const U1 = '00000000-0000-4000-8000-0000000000a1'
@@ -15,7 +16,7 @@ let threadRepo: InMemoryThreadRepository
 function appAs(userId: string, role: 'RENTER' | 'STAFF' | 'ADMIN' = 'RENTER'): Hono {
   const a = new Hono()
   a.use('*', testAuthMiddleware(userId, role))
-  a.route('/', createUserRoutes(userRepo, threadRepo))
+  a.route('/', createUserRoutes(new UserDirectoryService(userRepo, threadRepo)))
   return a
 }
 
