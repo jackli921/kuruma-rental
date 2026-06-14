@@ -146,6 +146,7 @@ import { createVehiclePhotoRoutes } from './routes/vehicle-photos'
 import { createVehicleRoutes } from './routes/vehicles'
 import { AddOnService } from './services/add-on'
 import { AdminRevenueService } from './services/admin-revenue'
+import { AvailabilityService } from './services/availability'
 import { BookingService } from './services/booking'
 import { BookingPostCommitDispatcher } from './services/booking-post-commit-dispatcher'
 import { CustomerService } from './services/customer'
@@ -632,6 +633,7 @@ export function createApp(overrides?: AppOverrides) {
     bookingRepo,
     notificationDispatcher,
   )
+  const availabilityService = new AvailabilityService(availabilityRepo)
   const customerService = new CustomerService(customerRepo, userRepo)
   const userDirectoryService = new UserDirectoryService(userRepo, threadRepo)
   const maintenanceService = new MaintenanceService(
@@ -720,7 +722,7 @@ export function createApp(overrides?: AppOverrides) {
     .route('/', createMaintenanceLogRoutes(maintenanceService))
     .route('/', createBookingRoutes(bookingService))
     .route('/', createPaymentRoutes(paymentService))
-    .route('/', createAvailabilityRoutes(availabilityRepo))
+    .route('/', createAvailabilityRoutes(availabilityService))
     .route('/', createStatsRoutes(statsRepo))
     .route('/', createOverviewRoutes(overviewService))
     .route('/', createAdminRevenueRoutes(adminRevenueService))

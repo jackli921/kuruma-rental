@@ -7,6 +7,8 @@ import {
   bookingSourceEnum,
   bookingStatusEnum,
   bookings,
+  notificationKindEnum,
+  notificationStatusEnum,
   roleEnum,
   transmissionEnum,
   users,
@@ -106,6 +108,32 @@ describe('schema exports', () => {
   it('bookings declares the SPECIFIC-requires-assigned-vehicle CHECK (#463)', () => {
     const checkNames = getTableConfig(bookings).checks.map((c) => c.name)
     expect(checkNames).toContain('bookings_specific_requires_assigned')
+  })
+
+  // #710: notification_kind / notification_status are the single source of
+  // truth for their respective TS types. Order is contractual — the CREATE TYPE
+  // migration lists them in this order, so renaming/reordering an enum value is
+  // a deliberate, test-visible change rather than a silent drift that only
+  // surfaces as a runtime 22P02 invalid_enum_value insert.
+  it('notificationKindEnum contains expected values (#710)', () => {
+    expect(notificationKindEnum.enumValues).toEqual([
+      'OPERATOR_BOOKING_ALERT',
+      'RENTER_BOOKING_CONFIRM',
+      'RENTER_SUBSTITUTION',
+      'RENTER_CANCELLATION',
+      'RENTER_TRIP_STARTED',
+      'RENTER_TRIP_COMPLETED',
+    ])
+  })
+
+  it('notificationStatusEnum contains expected values (#710)', () => {
+    expect(notificationStatusEnum.enumValues).toEqual([
+      'QUEUED',
+      'SENDING',
+      'SENT',
+      'FAILED',
+      'DEAD',
+    ])
   })
 
   it('VALID_BOOKING_TRANSITIONS allows CONFIRMED to ACTIVE or CANCELLED', () => {
