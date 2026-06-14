@@ -954,8 +954,6 @@
       "title": "Explore Japan at your own pace",
       "subtitle": "Pick up a car in Osaka and drive anywhere. No approval wait, no hidden fees.",
       "search": {
-        "location": "Location",
-        "locationValue": "Osaka, Japan",
         "dates": "Dates",
         "datesPlaceholder": "Add dates",
         "pickupDate": "Pickup date",

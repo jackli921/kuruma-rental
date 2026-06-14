@@ -954,8 +954,6 @@
       "title": "自分のペースで日本を探索",
       "subtitle": "大阪で車を借りて、どこへでも。承認待ちなし、隠れた料金なし。",
       "search": {
-        "location": "場所",
-        "locationValue": "大阪",
         "dates": "日程",
         "datesPlaceholder": "日程を追加",
         "pickupDate": "乗車日",

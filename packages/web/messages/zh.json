@@ -954,8 +954,6 @@
       "title": "按自己的节奏探索日本",
       "subtitle": "在大阪取车，随心驾驶。无需等待审批，无隐藏费用。",
       "search": {
-        "location": "地点",
-        "locationValue": "大阪",
         "dates": "日期",
         "datesPlaceholder": "添加日期",
         "pickupDate": "取车日期",
