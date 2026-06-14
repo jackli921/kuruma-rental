@@ -114,6 +114,10 @@ describe('SearchWidget', () => {
       params: { locale: 'en' },
       search: { from: '2026-07-01T10:00', to: '2026-07-03T10:00' },
     })
+    // No anchor chosen → carryForwardFilters strips region; guard that no region
+    // key leaks. toHaveBeenCalledWith treats an explicit `region: undefined` as
+    // absent, so a regression dropping carryForwardFilters would pass without this.
+    expect(mockNavigate.mock.calls[0]?.[0].search).not.toHaveProperty('region')
   })
 
   it('threads the chosen region slug through the search navigation', () => {
