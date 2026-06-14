@@ -68,9 +68,16 @@ describe('GET /admin/payment-anomalies — auth', () => {
     )
   })
 
-  it.each(['PLATFORM_ADMIN', 'STAFF', 'ADMIN'] as const)('200 for %s', async (role) => {
-    expect((await mount(role).request('/admin/payment-anomalies')).status).toBe(200)
+  it('200 for PLATFORM_ADMIN', async () => {
+    expect((await mount('PLATFORM_ADMIN').request('/admin/payment-anomalies')).status).toBe(200)
   })
+
+  it.each(['STAFF', 'ADMIN'] as const)(
+    '403 for legacy %s — platform-admin access revoked (#487)',
+    async (role) => {
+      expect((await mount(role).request('/admin/payment-anomalies')).status).toBe(403)
+    },
+  )
 })
 
 describe('GET /admin/payment-anomalies — listing (PaymentAnomalyView contract)', () => {
@@ -99,7 +106,7 @@ describe('GET /admin/payment-anomalies — listing (PaymentAnomalyView contract)
 })
 
 describe('PaymentAnomalyService — defence-in-depth seal', () => {
-  it.each(['OPERATOR_OWNER', 'RENTER', 'PARTNER'] as const)(
+  it.each(['OPERATOR_OWNER', 'RENTER', 'PARTNER', 'STAFF', 'ADMIN'] as const)(
     'throws ForbiddenError for %s even if the route gate were bypassed',
     async (role) => {
       const service = new PaymentAnomalyService(seeded())

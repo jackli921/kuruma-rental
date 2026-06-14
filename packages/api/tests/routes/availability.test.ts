@@ -67,7 +67,7 @@ describe('Availability Routes', () => {
     bookingRepo = new InMemoryBookingRepository()
     availabilityRepo = new InMemoryAvailabilityRepository(vehicleRepo, bookingRepo)
     app = new Hono()
-    app.use('*', testAuthMiddleware('staff-user', 'STAFF'))
+    app.use('*', testAuthMiddleware('staff-user', 'PLATFORM_ADMIN'))
     app.route('/', createAvailabilityRoutes(new AvailabilityService(availabilityRepo)))
   })
 

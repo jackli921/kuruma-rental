@@ -65,7 +65,7 @@ export interface CallerContext {
   readonly role: UserRole
   /** Tenant the caller is scoped to. Set for OPERATOR_* roles. */
   readonly operatorId?: string
-  /** True only for PLATFORM_ADMIN + legacy privileged roles. OPERATOR_* never bypass. */
+  /** True only for PLATFORM_ADMIN + PARTNER (cross-tenant API caller). OPERATOR_* never bypass. */
   readonly bypassScope?: boolean
 }
 
@@ -104,9 +104,10 @@ export const PUBLIC_CONTEXT: CallerContext = {
  * the platform tier (STAFF_ROLES → PLATFORM_ROLES) is now a SEPARATE set from the
  * business tier (FLEET_WRITE/MANAGEMENT_READ → BUSINESS_ROLES). That split lets
  * #487 tighten platform-admin access (PLATFORM_ROLES → {PLATFORM_ADMIN}) without
- * touching business management. Members are identical to before — behavior-preserving.
+ * touching business management — which it now has.
  *
- * STAFF_ROLES: platform-staff tier (no operators) — STAFF / ADMIN / PLATFORM_ADMIN.
+ * STAFF_ROLES: platform-staff tier (no operators) — PLATFORM_ADMIN only (legacy
+ * STAFF / ADMIN revoked by #487).
  * FLEET_WRITE_ROLES / MANAGEMENT_READ_ROLES: the platform base PLUS tenant
  * operators; each admitted operator is still bounded to its own tenant by the
  * repository's operator predicate (#386 F2 / #397), and RENTER / PARTNER are
@@ -134,8 +135,8 @@ export function requireManagementRead(ctx: CallerContext): void {
 
 /**
  * Gate for PLATFORM-level reads that span every operator — the #462 admin
- * revenue tab. Admits only the platform tier (`PLATFORM_ROLES` = STAFF / ADMIN /
- * PLATFORM_ADMIN today), the exact set the web `_admin` portal admits. References
+ * revenue tab. Admits only the platform tier (`PLATFORM_ROLES` = {PLATFORM_ADMIN}
+ * after #487), the exact set the web `_admin` portal admits. References
  * PLATFORM_ROLES directly (not the STAFF_ROLES alias) so #487's tightening of
  * PLATFORM_ROLES → {PLATFORM_ADMIN} narrows this gate automatically. Deliberately
  * EXCLUDES OPERATOR_* (a tenant must never see another partner's revenue) and

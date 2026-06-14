@@ -42,11 +42,19 @@ describe('UserDirectoryService.resolveVisibleUsers', () => {
   })
 
   it('lets a privileged role resolve any user', async () => {
-    const result = await service.resolveVisibleUsers(ctxFor(U1, 'STAFF'), [U2, U3])
+    const result = await service.resolveVisibleUsers(ctxFor(U1, 'PLATFORM_ADMIN'), [U2, U3])
 
     expect(result).toContainEqual({ id: U2, name: 'Bob' })
     expect(result).toContainEqual({ id: U3, name: 'Carol' })
     expect(result).toHaveLength(2)
+  })
+
+  it('restricts a legacy STAFF caller to thread-shared users — cross-user read revoked by #487', async () => {
+    // U1 shares the seeded thread with U2 but not U3; STAFF is no longer privileged,
+    // so it falls through to the renter-style thread lookup (no name-harvest oracle).
+    const result = await service.resolveVisibleUsers(ctxFor(U1, 'STAFF'), [U2, U3])
+
+    expect(result).toEqual([{ id: U2, name: 'Bob' }])
   })
 
   it('restricts an operator to itself, never another tenant via a shared thread (#396)', async () => {

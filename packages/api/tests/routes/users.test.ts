@@ -13,7 +13,7 @@ const U3 = '00000000-0000-4000-8000-0000000000a3' // not a thread participant of
 let userRepo: InMemoryUserRepository
 let threadRepo: InMemoryThreadRepository
 
-function appAs(userId: string, role: 'RENTER' | 'STAFF' | 'ADMIN' = 'RENTER'): Hono {
+function appAs(userId: string, role: 'RENTER' | 'PLATFORM_ADMIN' = 'RENTER'): Hono {
   const a = new Hono()
   a.use('*', testAuthMiddleware(userId, role))
   a.route('/', createUserRoutes(new UserDirectoryService(userRepo, threadRepo)))
@@ -59,8 +59,8 @@ describe('User Routes', () => {
       expect((await res.json()).data).toEqual([])
     })
 
-    it('allows privileged roles (STAFF/ADMIN) to resolve any user', async () => {
-      const res = await appAs(U1, 'STAFF').request(`/users?ids=${U2},${U3}`)
+    it('allows a platform admin to resolve any user', async () => {
+      const res = await appAs(U1, 'PLATFORM_ADMIN').request(`/users?ids=${U2},${U3}`)
       expect(res.status).toBe(200)
       const body = await res.json()
       expect(body.data).toHaveLength(2)

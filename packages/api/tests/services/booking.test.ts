@@ -203,7 +203,7 @@ async function seedReady(h: Harness) {
 }
 
 describe('BookingService.create — document-verification gate (#459)', () => {
-  const staffCtx: CallerContext = { userId: 'staff-9', role: 'STAFF', bypassScope: true }
+  const staffCtx: CallerContext = { userId: 'staff-9', role: 'PLATFORM_ADMIN', bypassScope: true }
 
   // Build the REAL gate from a document service so these exercise the actual
   // eligibility policy (approved IDP valid through the return date), not a stub.
@@ -332,7 +332,7 @@ describe('BookingService.create — single-transaction submit (#392 §4)', () =>
   it('records the acting caller (not the renter) as the BOOKING_CREATED actor for a manual booking', async () => {
     const h = await setup({ codes: ['MANUAL12'] })
     const { vehicleId, locationId } = await seedReady(h)
-    const staffCtx: CallerContext = { userId: 'staff-9', role: 'STAFF', bypassScope: true }
+    const staffCtx: CallerContext = { userId: 'staff-9', role: 'PLATFORM_ADMIN', bypassScope: true }
 
     const result = await h.service.create(
       staffCtx,

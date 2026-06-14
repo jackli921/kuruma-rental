@@ -30,8 +30,8 @@ export class UserDirectoryService {
   }
 
   /**
-   * The set of user ids the caller may resolve. Privileged roles (STAFF/ADMIN/
-   * PARTNER) resolve anyone; renters resolve only users they share a thread with.
+   * The set of user ids the caller may resolve. Privileged roles (PARTNER/
+   * PLATFORM_ADMIN) resolve anyone; renters resolve only users they share a thread with.
    */
   private async allowedUserIds(ctx: CallerContext): Promise<Set<string> | 'all'> {
     if (PRIVILEGED_ROLES.has(ctx.role)) return 'all'

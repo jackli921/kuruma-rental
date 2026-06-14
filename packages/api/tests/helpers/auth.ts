@@ -17,7 +17,7 @@ export const TEST_AUTH_SECRET = 'test-auth-secret-at-least-32-chars-long'
  *  Pass `operatorId` to simulate a tenant-scoped OPERATOR_* caller. */
 export function testAuthMiddleware(
   id = 'test-user',
-  role: UserRole = 'ADMIN',
+  role: UserRole = 'PLATFORM_ADMIN',
   operatorId?: string,
 ): MiddlewareHandler {
   return async (c, next) => {
@@ -27,11 +27,11 @@ export function testAuthMiddleware(
 }
 
 export async function signTestJwt(
-  payload: { sub: string; role?: string } = { sub: 'test-user-id', role: 'ADMIN' },
+  payload: { sub: string; role?: string } = { sub: 'test-user-id', role: 'PLATFORM_ADMIN' },
   secret = TEST_AUTH_SECRET,
 ): Promise<string> {
   const key = new TextEncoder().encode(secret)
-  return new SignJWT({ role: payload.role ?? 'ADMIN', ...payload })
+  return new SignJWT({ role: payload.role ?? 'PLATFORM_ADMIN', ...payload })
     .setProtectedHeader({ alg: 'HS256' })
     .setExpirationTime('1h')
     .setIssuedAt()

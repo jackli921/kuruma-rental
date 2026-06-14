@@ -32,11 +32,19 @@ describe('MessageService.createThread', () => {
   })
 
   it('lets a privileged caller create a thread between other users (status 201)', async () => {
-    const result = await service.createThread(ctxFor(U1, 'STAFF'), { participantIds: [U2, U3] })
+    const result = await service.createThread(ctxFor(U1, 'PLATFORM_ADMIN'), {
+      participantIds: [U2, U3],
+    })
 
     expect(result.kind).toBe('created')
     if (result.kind !== 'created') throw new Error('expected created')
     expect(result.status).toBe(201)
+  })
+
+  it('forbids a legacy STAFF caller from creating a thread between other users — revoked by #487', async () => {
+    const result = await service.createThread(ctxFor(U1, 'STAFF'), { participantIds: [U2, U3] })
+
+    expect(result).toEqual({ kind: 'forbidden' })
   })
 
   it('replays an idempotency key: second create returns status 200 and the same thread', async () => {

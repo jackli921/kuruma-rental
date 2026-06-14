@@ -150,15 +150,15 @@ describe('decideAdminAccess', () => {
     expect(decideAdminAccess(null)).toEqual({ action: 'login' })
   })
 
-  test('authenticated non-admin role -> forbidden', () => {
+  test('authenticated non-admin role -> forbidden (incl. legacy STAFF/ADMIN, revoked #487)', () => {
     expect(decideAdminAccess('RENTER')).toEqual({ action: 'forbidden' })
     expect(decideAdminAccess('OPERATOR_OWNER')).toEqual({ action: 'forbidden' })
     expect(decideAdminAccess('OPERATOR_STAFF')).toEqual({ action: 'forbidden' })
+    expect(decideAdminAccess('STAFF')).toEqual({ action: 'forbidden' })
+    expect(decideAdminAccess('ADMIN')).toEqual({ action: 'forbidden' })
   })
 
-  test('platform-admin roles -> allow', () => {
+  test('only PLATFORM_ADMIN -> allow', () => {
     expect(decideAdminAccess('PLATFORM_ADMIN')).toEqual({ action: 'allow' })
-    expect(decideAdminAccess('STAFF')).toEqual({ action: 'allow' })
-    expect(decideAdminAccess('ADMIN')).toEqual({ action: 'allow' })
   })
 })

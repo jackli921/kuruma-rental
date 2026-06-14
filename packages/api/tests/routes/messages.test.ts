@@ -16,7 +16,7 @@ let threadRepo: InMemoryThreadRepository
 let messageRepo: InMemoryMessageRepository
 
 /** Create a Hono app authenticated as the given user. */
-function appAs(userId: string, role: 'RENTER' | 'STAFF' | 'ADMIN' = 'RENTER'): Hono {
+function appAs(userId: string, role: 'RENTER' | 'PLATFORM_ADMIN' = 'RENTER'): Hono {
   const a = new Hono()
   a.use('*', testAuthMiddleware(userId, role))
   a.route('/', createMessageRoutes(new MessageService(threadRepo, messageRepo)))
@@ -265,8 +265,8 @@ describe('Message Routes', () => {
       expect(body.error).toBe('Caller must be a participant')
     })
 
-    it('STAFF can create thread between arbitrary users', async () => {
-      const res = await appAs(U1, 'STAFF').request('/threads', {
+    it('a platform admin can create a thread between arbitrary users', async () => {
+      const res = await appAs(U1, 'PLATFORM_ADMIN').request('/threads', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ participantIds: [U2, U3] }),
@@ -286,7 +286,7 @@ describe('Message Routes', () => {
       expect(res.status).toBe(404)
     })
 
-    it('STAFF can read any thread regardless of participation', async () => {
+    it('a platform admin can read any thread regardless of participation', async () => {
       const createRes = await appAs(U1).request('/threads', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -294,7 +294,7 @@ describe('Message Routes', () => {
       })
       const threadId = (await createRes.json()).data.id
 
-      const res = await appAs(U3, 'STAFF').request(`/threads/${threadId}`)
+      const res = await appAs(U3, 'PLATFORM_ADMIN').request(`/threads/${threadId}`)
       expect(res.status).toBe(200)
     })
 

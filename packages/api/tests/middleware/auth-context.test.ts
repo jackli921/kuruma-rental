@@ -37,15 +37,15 @@ describe('toCallerContext', () => {
     expect(ctx.operatorId).toBeUndefined()
   })
 
-  test('legacy ADMIN bypasses scope (temporary platform-admin per §6.2)', () => {
+  test('legacy ADMIN no longer bypasses scope — revoked by #487', () => {
     const ctx = toCallerContext(authUser({ role: 'ADMIN' }))
-    expect(ctx.bypassScope).toBe(true)
+    expect(ctx.bypassScope).toBe(false)
     expect(ctx.operatorId).toBeUndefined()
   })
 
-  test('legacy STAFF bypasses scope (temporary platform-admin per §6.2)', () => {
+  test('legacy STAFF no longer bypasses scope — revoked by #487', () => {
     const ctx = toCallerContext(authUser({ role: 'STAFF' }))
-    expect(ctx.bypassScope).toBe(true)
+    expect(ctx.bypassScope).toBe(false)
   })
 
   test('PARTNER (3rd-party API caller) bypasses scope', () => {

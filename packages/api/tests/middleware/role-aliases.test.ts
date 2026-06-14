@@ -13,9 +13,12 @@ import { FLEET_WRITE_ROLES, MANAGEMENT_READ_ROLES, STAFF_ROLES } from '../../src
  * private copy (the #387 drift this PR removed).
  */
 describe('auth role-set aliases (single-source wiring)', () => {
-  it('STAFF_ROLES is the platform tier — same instance as shared PLATFORM_ROLES, no operators', () => {
+  it('STAFF_ROLES is the platform tier — same instance as shared PLATFORM_ROLES, PLATFORM_ADMIN only', () => {
     expect(STAFF_ROLES).toBe(PLATFORM_ROLES)
     expect(STAFF_ROLES.has('PLATFORM_ADMIN')).toBe(true)
+    // #487: the legacy STAFF/ADMIN aliases no longer grant the platform tier.
+    expect(STAFF_ROLES.has('STAFF')).toBe(false)
+    expect(STAFF_ROLES.has('ADMIN')).toBe(false)
     expect(STAFF_ROLES.has('OPERATOR_OWNER')).toBe(false)
     expect(STAFF_ROLES.has('OPERATOR_STAFF')).toBe(false)
   })

@@ -201,10 +201,10 @@ describe('actor derivation from JWT', () => {
     expect(res.status).toBe(201)
   })
 
-  it('STAFF can cancel any booking', async () => {
+  it('a platform admin can cancel any booking', async () => {
     const { app, vehicleRepo, classId, locationId } = await createTestApp()
     const renterHeaders = await authHeaders({ sub: 'renter-user', role: 'RENTER' })
-    const staffHeaders = await authHeaders({ sub: 'staff-user', role: 'STAFF' })
+    const staffHeaders = await authHeaders({ sub: 'staff-user', role: 'PLATFORM_ADMIN' })
 
     const vehicle = await vehicleRepo.create(SYSTEM_CONTEXT, {
       operatorId: TEST_OPERATOR_ID,
