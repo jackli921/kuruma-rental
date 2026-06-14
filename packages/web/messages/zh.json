@@ -1048,6 +1048,21 @@
       "monthFilterLabel": "按结算月份筛选",
       "loadError": "无法加载合作伙伴收益。",
       "retry": "重试"
+    },
+    "anomalies": {
+      "title": "支付异常",
+      "subtitle": "对账时标记的扣款 — 重复扣款应退款，金额不符需核查。",
+      "empty": "没有待处理的支付异常。",
+      "colKind": "类型",
+      "colBooking": "订单",
+      "colReceived": "实收",
+      "colExpected": "应收",
+      "colStripeEvent": "Stripe 事件",
+      "colWhen": "时间",
+      "kind": {
+        "DOUBLE_PAYMENT": "重复支付",
+        "AMOUNT_MISMATCH": "金额不符"
+      }
     }
   },
   "documents": {
