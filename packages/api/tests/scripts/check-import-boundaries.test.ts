@@ -95,7 +95,7 @@ describe('check-import-boundaries — routes/repositories type boundary (#726)',
     })
   })
 
-  it('allows carve-out routes (regions/stats/vehicles) to DI their *Repository interface', () => {
+  it('allows sanctioned thin-read routes (regions/stats) to DI their *Repository interface', () => {
     expect(
       checkContent(
         'routes/regions.ts',
@@ -108,15 +108,9 @@ describe('check-import-boundaries — routes/repositories type boundary (#726)',
         "import type { StatsRepository } from '../repositories/types'",
       ),
     ).toEqual([])
-    expect(
-      checkContent(
-        'routes/vehicles.ts',
-        "import type { Vehicle, VehicleFilters, VehicleRepository } from '../repositories/types'",
-      ),
-    ).toEqual([])
   })
 
-  it('still flags a concrete repository import even in a carve-out route', () => {
+  it('still flags a concrete repository import in any route', () => {
     const violations = checkContent(
       'routes/vehicles.ts',
       "import { DrizzleVehicleRepository } from '../repositories/drizzle/vehicle'",
@@ -154,16 +148,24 @@ describe('check-import-boundaries — routes/repositories type boundary (#726)',
     )
   })
 
-  it('keeps the whole repositories/types path exempt for the extraction-pending route', () => {
-    // vehicles.ts is mid-migration: it may import the entity/filter shapes it
-    // passes the repo until a VehicleService lands and it joins the enforced set.
-    expect(
-      checkContent('routes/vehicles.ts', "import type { Vehicle } from '../repositories/types'"),
-    ).toEqual([])
+  it('enforces vehicles.ts now that VehicleService has landed (#819)', () => {
+    // The path-wide types exemption is gone: vehicles.ts joined the enforced set
+    // when its business policy moved into VehicleService. An entity import is now
+    // a violation, exactly like any other service-backed route.
+    const violations = checkContent(
+      'routes/vehicles.ts',
+      "import type { Vehicle } from '../repositories/types'",
+    )
+    expect(violations).toHaveLength(1)
+    expect(violations[0]).toMatchObject({
+      file: 'routes/vehicles.ts',
+      line: 1,
+      rule: expect.stringMatching(ROUTE_TYPES_RULE),
+    })
   })
 })
 
-describe('check-import-boundaries — #692 sanctioned thin-read vs extraction-pending', () => {
+describe('check-import-boundaries — #692 sanctioned thin-read enforcement', () => {
   const TYPES_RULE = /Routes must not import from repositories\/types/
   const THIN_READ_RULE = /Sanctioned thin-read routes/
 
@@ -226,13 +228,15 @@ describe('check-import-boundaries — #692 sanctioned thin-read vs extraction-pe
     ).toEqual([])
   })
 
-  it('keeps the path-wide types exemption for the extraction-pending route (vehicles)', () => {
-    expect(
-      checkContent(
-        'routes/vehicles.ts',
-        "import type { Vehicle, VehicleFilters, VehicleRepository } from '../repositories/types'",
-      ),
-    ).toEqual([])
+  it('blocks vehicles.ts from importing entity/filter types now its service has landed (#819)', () => {
+    // The mixed entity/filter/Repository import vehicles.ts used to be granted is
+    // now a single violation — it is a fully enforced route, not a carve-out.
+    const violations = checkContent(
+      'routes/vehicles.ts',
+      "import type { Vehicle, VehicleFilters, VehicleRepository } from '../repositories/types'",
+    )
+    expect(violations).toHaveLength(1)
+    expect(violations[0]).toMatchObject({ rule: expect.stringMatching(TYPES_RULE) })
   })
 
   it('still blocks an ordinary (non-carve-out) route from importing repositories/types', () => {
