@@ -96,6 +96,7 @@ canonical home** for a web feature:
 
     src/modules/<feature>/        # CANONICAL — the home for every web feature
       api.ts         # typed hono/client calls to the API (web has NO direct DB access)
+      schema.ts      # Zod schemas for API response bodies — large-DTO clients (#711/#785)
       components/    # feature components (VehicleForm, BookingCard, …)
       hooks.ts       # feature-specific hooks
       types.ts       # feature-local types
@@ -105,6 +106,14 @@ canonical home** for a web feature:
   another feature's internals (`@/modules/foo/components/Bar`).
 - Cross-feature primitives live in `src/lib/`. Design-system primitives stay in
   `src/components/ui/`.
+- **Validate API responses at the seam.** `api.ts` calls `unwrap(res, schema)`
+  (`@/lib/api-error`) so a drifted response body fails fast as a `ParseError`
+  instead of surfacing as `undefined` deep in render (#711). For large-DTO
+  clients (~25+ field responses, e.g. `operator-fleet`) the response schemas
+  live in a sibling **`schema.ts`** with the DTO type inferred from each
+  (`export type X = z.infer<typeof xSchema>`); small clients may keep schemas
+  inline in `api.ts`. Draw enum members from the `@kuruma/shared/enums` tuples,
+  never re-spelled string literals, so a renamed variant fails to compile.
 
 > **`src/modules/` does not exist on disk yet.** Every live feature is still in
 > `src/vite/` (below). The layout above is the *target*; the first feature
