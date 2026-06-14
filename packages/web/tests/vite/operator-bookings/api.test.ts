@@ -1,4 +1,4 @@
-import { ApiError } from '@/lib/api-error'
+import { ApiError, ParseError } from '@/lib/api-error'
 import {
   type OperatorBookingDetailDto,
   bookingEventsQueryOptions,
@@ -32,28 +32,49 @@ afterEach(() => {
 // #549: the deep-linked trip-detail page reads the single booking WITH expansion
 // (it has no list row) plus the lifecycle events for the timeline.
 
-const detailRaw = (over: Record<string, unknown> = {}) => ({
+// A full BookingDto as it arrives over JSON (dates = ISO strings). #711: now that
+// the client validates responses, fixtures must carry every required field — a
+// partial body would (correctly) fail at the seam. The substitute/status/cancel
+// writes return this bare shape (no operator/vehicle/renter block).
+const bookingRaw = (over: Record<string, unknown> = {}) => ({
   id: 'bk-1',
   bookingCode: 'ABCD2345',
   renterId: 'r-1',
-  status: 'CONFIRMED',
+  classId: 'cls-1',
+  requestedVehicleId: 'veh-req',
+  assignedVehicleId: 'veh-1',
+  pickupLocationId: 'loc-1',
+  dropoffLocationId: 'loc-1',
   startAt: '2026-07-01T01:00:00.000Z',
   endAt: '2026-07-03T01:00:00.000Z',
-  totalPrice: 24000,
+  effectiveEndAt: '2026-07-03T02:00:00.000Z',
+  status: 'CONFIRMED',
+  source: 'DIRECT',
+  insuranceOptionId: null,
   insuranceSnapshot: null,
   feeSnapshot: [],
   addOnSnapshot: [],
+  totalPrice: 24000,
   notes: null,
+  createdAt: '2026-06-01T00:00:00.000Z',
+  updatedAt: '2026-06-01T00:00:00.000Z',
+  ...over,
+})
+
+// The expanded single read = the bare booking + operator/vehicle/renter blocks.
+const detailRaw = (over: Record<string, unknown> = {}) => ({
+  ...bookingRaw(),
   operator: { name: 'Op', preAuthHandoffUrl: null },
   vehicle: { name: 'Toyota Aqua', photos: ['a.jpg'] },
   renter: { id: 'r-1', name: 'Jane', email: 'jane@example.com', language: 'en' },
   ...over,
 })
 
+// A valid lifecycle event: payload is the #716 discriminated union keyed on `type`.
 const eventRaw = (over: Record<string, unknown> = {}) => ({
   id: 'evt-1',
-  type: 'BOOKING_CREATED',
-  payload: { from: 'CONFIRMED', to: 'ACTIVE' },
+  type: 'STATUS_CHANGED',
+  payload: { type: 'STATUS_CHANGED', from: 'CONFIRMED', to: 'ACTIVE' },
   actorId: 'r-1',
   createdAt: '2026-07-01T01:00:00.000Z',
   ...over,
@@ -425,7 +446,7 @@ describe('substitutionCandidatesQueryOptions', () => {
 describe('updateBookingStatus', () => {
   it('PATCHes /bookings/:id/status with the status body, CSRF + JSON headers, credentials', async () => {
     const fetchMock = vi.fn(async () =>
-      jsonResponse({ success: true, data: { id: 'bk-1', status: 'ACTIVE' } }),
+      jsonResponse({ success: true, data: bookingRaw({ status: 'ACTIVE' }) }),
     )
     vi.stubGlobal('fetch', fetchMock)
 
@@ -462,7 +483,7 @@ describe('cancelBooking', () => {
     const fetchMock = vi.fn(async () =>
       jsonResponse({
         success: true,
-        data: { id: 'bk-1', status: 'CANCELLED' },
+        data: bookingRaw({ status: 'CANCELLED' }),
         cancellation: { feeJpy: 0 },
       }),
     )
@@ -522,5 +543,69 @@ describe('substituteBooking', () => {
     await expect(substituteBooking('bk-1', 'veh-2', null, 'csrf-tok')).rejects.toBeInstanceOf(
       ApiError,
     )
+  })
+})
+
+// #711 (3b): each read/write now validates its response body at the seam, so a
+// drifted field (renamed/wrong-typed) throws a ParseError here instead of
+// surfacing as `undefined` deep in the calendar / timeline / actions panel.
+describe('response validation (#711)', () => {
+  it('fetchOperatorBookingDetail rejects with ParseError when the booking drifts', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => jsonResponse({ success: true, data: detailRaw({ totalPrice: 'lots' }) })),
+    )
+    await expect(fetchOperatorBookingDetail('bk-1')).rejects.toBeInstanceOf(ParseError)
+  })
+
+  it('fetchCalendarBookings rejects with ParseError when a row drifts', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () =>
+        jsonResponse({
+          success: true,
+          data: [calendarRaw({ totalPrice: 'lots' })],
+          nextCursor: null,
+        }),
+      ),
+    )
+    await expect(fetchCalendarBookings('a', 'b')).rejects.toBeInstanceOf(ParseError)
+  })
+
+  it('fetchBookingEvents rejects with ParseError when the payload discriminant is unknown', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () =>
+        jsonResponse({ success: true, data: [eventRaw({ payload: { type: 'NOT_A_KIND' } })] }),
+      ),
+    )
+    await expect(fetchBookingEvents('bk-1')).rejects.toBeInstanceOf(ParseError)
+  })
+
+  it('fetchSubstitutionCandidates rejects with ParseError when a candidate drifts', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => jsonResponse({ success: true, data: [{ id: 'veh-2', name: 123 }] })),
+    )
+    await expect(fetchSubstitutionCandidates('bk-1')).rejects.toBeInstanceOf(ParseError)
+  })
+
+  it('updateBookingStatus rejects with ParseError when the write body has an invalid status', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => jsonResponse({ success: true, data: bookingRaw({ status: 'PENDING' }) })),
+    )
+    await expect(updateBookingStatus('bk-1', 'ACTIVE', 'csrf')).rejects.toBeInstanceOf(ParseError)
+  })
+
+  it('fetchCalendarVehicles degrades to [] when a row drifts (validation error is caught)', async () => {
+    // The calendar must never blank on a vehicle-list error, so a ParseError here
+    // is swallowed by the same guard that catches network failures — proven by the
+    // empty result (the un-validated code would have returned the drifted row).
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => jsonResponse({ success: true, data: [{ id: 5, name: 'x' }] })),
+    )
+    expect(await fetchCalendarVehicles()).toEqual([])
   })
 })
