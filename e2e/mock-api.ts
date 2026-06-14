@@ -73,18 +73,22 @@ const TEST_STOREFRONT_DETAIL = {
   nextCursor: null,
 }
 
+// Mirrors the real toVehicleClass wire shape (#711 3c-2 validates it with Zod):
+// operatorId (notNull), luggageSize, and acrissCode are all served by the real
+// API, so the fixture must carry them or the catalog query fails its schema.
 const TEST_CLASS = {
   id: TEST_CLASS_ID,
+  operatorId: 'e2e-operator-1',
   name: 'E2E Test Compact',
   slug: TEST_CLASS_SLUG,
   description: 'Compact class used by the Playwright browse-flow spec.',
   photos: ['https://images.unsplash.com/photo-1734857039653-c1b0a4b3422a?w=600&q=80'],
   seats: 4,
   luggageCapacity: 2,
+  luggageSize: 'MEDIUM',
   transmission: 'AUTO',
   fuelType: 'Petrol',
-  dailyRateJpy: 5000,
-  hourlyRateJpy: null,
+  acrissCode: 'CCAR',
   sortOrder: 0,
   status: 'ACTIVE',
   createdAt: FROZEN_TIMESTAMP,

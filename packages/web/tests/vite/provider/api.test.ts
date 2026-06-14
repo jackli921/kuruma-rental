@@ -1,3 +1,4 @@
+import { ParseError } from '@/lib/api-error'
 import { fetchInvitePreview } from '@/vite/provider/api'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
@@ -45,5 +46,25 @@ describe('fetchInvitePreview', () => {
     expect(fetchMock).toHaveBeenCalledWith('/api/provider-invites/a%2Fb%20token/preview', {
       credentials: 'include',
     })
+  })
+
+  it('rejects with a ParseError when the preview is missing `valid` (drift #711)', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => jsonResponse({ success: true, data: { operatorName: 'X' } })),
+    )
+    await expect(fetchInvitePreview('tok')).rejects.toBeInstanceOf(ParseError)
+  })
+
+  it('rejects with a ParseError naming `valid` when it is the wrong type', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => jsonResponse({ success: true, data: { valid: 'yes' } })),
+    )
+    const error = await fetchInvitePreview('tok').catch((e: unknown) => e)
+    expect(error).toBeInstanceOf(ParseError)
+    expect((error as ParseError).issues).toContainEqual(
+      expect.objectContaining({ path: expect.arrayContaining(['valid']) }),
+    )
   })
 })
