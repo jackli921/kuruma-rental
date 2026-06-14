@@ -1,7 +1,7 @@
 <!-- BEGIN:nextjs-agent-rules -->
 # Web is Vite + TanStack Router (NOT Next.js)
 
-`packages/web` was migrated off Next.js to **Vite + TanStack Router** on Cloudflare Pages (epic #378). The live shell lives under `packages/web/src/vite/` + `packages/web/src/routes/`. A **frozen** Next.js tree (`src/app/`, `middleware.ts`, `next.config.ts`, `open-next.config.ts`) is still present but is NOT the build path and is slated for deletion at cut-over — **do not extend it**. Adding a route requires `vite build` to regenerate `routeTree.gen.ts` before typecheck.
+`packages/web` was migrated off Next.js to **Vite + TanStack Router** on Cloudflare Pages (epic #378). The live shell lives under `packages/web/src/vite/` + `packages/web/src/routes/`. The legacy Next.js tree (`src/app/`, `middleware.ts`, `next.config.ts`, `open-next.config.ts`) and all Next/OpenNext/next-intl/next-auth deps were **deleted in #714** — there is no Next.js in this repo anymore. Adding a route requires `vite build` to regenerate `routeTree.gen.ts` before typecheck.
 <!-- END:nextjs-agent-rules -->
 
 # Monorepo Architecture
