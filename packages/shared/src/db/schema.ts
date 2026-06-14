@@ -488,6 +488,17 @@ export const vehicles = pgTable(
     index('idx_vehicles_classId').on(table.classId),
     index('idx_vehicles_operatorId').on(table.operatorId),
     index('idx_vehicles_pickupLocationId').on(table.pickupLocationId),
+    // #736: partial index for the public availability scan (always filters
+    // status='AVAILABLE'). Two independent wins: the partial PREDICATE shrinks the
+    // index to rentable rows — helping every caller, including the bare whole-fleet
+    // scan and operator/class-only filters — while the leading pickupLocationId KEY
+    // adds an index seek only for the storefront (=) and region #651 (IN) location
+    // paths. The booking-overlap NOT EXISTS is served separately by the bookings
+    // GiST exclusion index. Coexists with idx_vehicles_pickupLocationId, which stays
+    // for status-agnostic location lookups + FK-check support.
+    index('idx_vehicles_available')
+      .on(table.pickupLocationId)
+      .where(sql`${table.status} = 'AVAILABLE'`),
     // A vehicle's class must belong to the vehicle's own operator (#395 Phase 2).
     // classId is nullable + MATCH SIMPLE, so an unassigned vehicle (classId NULL)
     // is unconstrained; when set, (operatorId, classId) must match a class row.

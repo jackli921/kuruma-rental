@@ -414,6 +414,13 @@
       "when": 1781381920311,
       "tag": "0058_add_region_coords_and_taxonomy",
       "breakpoints": true
+    },
+    {
+      "idx": 59,
+      "version": "7",
+      "when": 1781405588294,
+      "tag": "0059_add_vehicles_available_partial_index",
+      "breakpoints": true
     }
   ]
 }
