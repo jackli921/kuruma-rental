@@ -69,6 +69,30 @@ export function flowCookieName(state: string): string {
   return `${OAUTH_FLOW_COOKIE_PREFIX}${state}`
 }
 
+/** Cap on concurrent in-flight Google sign-in flows per browser (#592). Each
+ *  abandoned flow leaves a `<prefix><state>` cookie until its 600s TTL self-heals it;
+ *  without a cap, a rapid abandon — or a login-CSRF `/start` flood — accumulates
+ *  empty-payload cookies until they blow the ~4KB per-domain header budget, at which
+ *  point NEW logins start failing. 10 sits far above any real user's tab count, so a
+ *  legitimate multi-tab sign-in is never evicted. */
+export const MAX_CONCURRENT_OAUTH_FLOWS = 10
+
+/** Given the flow-cookie names a browser is currently carrying and the per-flow cap,
+ *  return the names `/start` must erase so that adding ONE new flow keeps the live
+ *  count at or under `cap`. The browser sends only `name=value` (no creation time),
+ *  and `state` is random — so name order carries no age signal. The threat is the
+ *  COUNT (header-budget exhaustion), not which flow dies, so we evict the
+ *  lexicographically-smallest names — an arbitrary but DETERMINISTIC choice — keeping
+ *  `cap-1` to leave room for the incoming flow. */
+export function flowCookiesToEvict(
+  flowCookieNames: readonly string[],
+  cap = MAX_CONCURRENT_OAUTH_FLOWS,
+): string[] {
+  const keep = Math.max(0, cap - 1)
+  const sorted = [...flowCookieNames].sort()
+  return sorted.slice(0, Math.max(0, sorted.length - keep))
+}
+
 /** Which sign-in door the user came through. Identity is shared; only the
  *  post-login authorization decision and destination differ (#521). */
 export const OAUTH_INTENTS = ['renter', 'provider'] as const

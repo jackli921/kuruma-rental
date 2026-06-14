@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'vitest'
 import { createApp } from '../../src/index'
-import { readOAuthFlowCookie, setupAuthEnv } from '../helpers/auth'
+import { oauthFlowCookie, readOAuthFlowCookie, setupAuthEnv } from '../helpers/auth'
 
 function setupGoogleEnv() {
   setupAuthEnv()
@@ -139,5 +139,76 @@ describe('POST /auth/google/start', () => {
     })
     expect(res.status).toBe(302)
     expect(readOAuthFlowCookie(res)?.payload.invite).toBeUndefined()
+  })
+
+  // #592: abandoned sign-ins leave their per-flow cookies until the 600s TTL clears
+  // them. /start must cap the live count so a rapid abandon / login-CSRF flood can't
+  // accumulate cookies past the ~4KB header budget and lock out new logins. The cap
+  // is MAX_CONCURRENT_OAUTH_FLOWS (10): each /start evicts just enough of the oldest
+  // (smallest-named) flows that adding the new one stays at or under the cap.
+
+  /** The flow cookies a /start response Set-Cookie'd, split into erases vs fresh. */
+  function flowSetCookies(res: Response): { erases: string[]; fresh: string[] } {
+    const flow = (res.headers.getSetCookie?.() ?? []).filter((c) =>
+      c.startsWith('kuruma_oauth_flow_'),
+    )
+    return {
+      erases: flow.filter((c) => /Max-Age=0/.test(c)),
+      fresh: flow.filter((c) => !/Max-Age=0/.test(c)),
+    }
+  }
+
+  /** A Cookie header carrying `n` in-flight flows, named old00..old{n-1} (sortable). */
+  function carrying(n: number): string {
+    return Array.from({ length: n }, (_, i) =>
+      oauthFlowCookie(`old${String(i).padStart(2, '0')}`),
+    ).join('; ')
+  }
+
+  test('below the cap: sets the new flow cookie and erases none', async () => {
+    setupGoogleEnv()
+    const app = createApp()
+    const res = await app.request('/auth/google/start', {
+      method: 'POST',
+      headers: { Cookie: carrying(5) },
+    })
+    expect(res.status).toBe(302)
+    const { erases, fresh } = flowSetCookies(res)
+    expect(erases).toHaveLength(0)
+    expect(fresh).toHaveLength(1)
+  })
+
+  test('at the cap (10 in flight): erases exactly one stale flow — the oldest by name', async () => {
+    setupGoogleEnv()
+    const app = createApp()
+    const res = await app.request('/auth/google/start', {
+      method: 'POST',
+      headers: { Cookie: carrying(10) },
+    })
+    expect(res.status).toBe(302)
+    const { erases, fresh } = flowSetCookies(res)
+    // One new flow set, one stale flow erased → live count stays at 10, not 11.
+    expect(fresh).toHaveLength(1)
+    expect(erases).toHaveLength(1)
+    expect(erases[0]).toContain('kuruma_oauth_flow_old00=')
+  })
+
+  test('over the cap (12 in flight): erases down to cap-1 so the post-add total is the cap', async () => {
+    setupGoogleEnv()
+    const app = createApp()
+    const res = await app.request('/auth/google/start', {
+      method: 'POST',
+      headers: { Cookie: carrying(12) },
+    })
+    expect(res.status).toBe(302)
+    const { erases, fresh } = flowSetCookies(res)
+    // 12 existing → keep 9, erase 3, +1 new = 10 = cap.
+    expect(fresh).toHaveLength(1)
+    expect(erases).toHaveLength(3)
+    expect(erases.map((c) => c.split('=')[0]).sort()).toEqual([
+      'kuruma_oauth_flow_old00',
+      'kuruma_oauth_flow_old01',
+      'kuruma_oauth_flow_old02',
+    ])
   })
 })
