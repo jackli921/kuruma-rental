@@ -20,7 +20,7 @@ Airbnb-style car rental platform for a Japan-based company (Osaka) serving inter
 - `packages/web` has **NO direct DB access**. All data flows through the Hono API.
 - `packages/api` has **NO UI rendering**. Pure REST API.
 - `packages/shared` has **NO runtime deps** on api or web.
-- Auth.js lives in `web`. API verifies JWTs independently.
+- OAuth sign-in and session-JWT minting live in `packages/api` (`auth/jwt.ts`); the Vite web holds no Auth.js runtime and reads identity over HTTP (`GET /auth/session`).
 - 3rd-party callers (Trip.com) hit the same API routes as the web frontend.
 
 ## Key Documents
@@ -40,46 +40,40 @@ Airbnb-style car rental platform for a Japan-based company (Osaka) serving inter
 
 > **Rule: Self-document gotchas.** When you hit a surprise, add it here immediately.
 
-## Next.js 16 + shadcn (base-ui) — FROZEN Next.js tree only
+## Web shell: Vite + TanStack Router + shadcn (base-ui)
 
-> The live web shell is **Vite + TanStack Router** (`packages/web/src/vite/`). The notes below apply only to the frozen Next.js tree (`src/app/`), which is not the build path and is slated for deletion at cut-over. Do not apply them to new Vite work.
+> The web is a **Vite SPA** (`packages/web/src/vite/`, build = `vite build` → `dist`). The frozen Next.js tree was deleted in #714 — there is no `src/app/`, `middleware.ts`, `next.config.ts`, or `open-next.config.ts`. The `lint:no-next-app` guard (`scripts/lint-no-next-app.ts`) blocks reintroducing one.
 
-- **No `asChild` prop.** Use `buttonVariants()` on `<Link>`, or `render` prop on triggers. See code examples in `packages/web/src/components/`.
-- **Use `middleware.ts`, NOT `proxy.ts`.** `proxy.ts` forces Node.js runtime; `@opennextjs/cloudflare` is Edge only. The deprecation warning is cosmetic.
-- **Middleware must use `auth.config.ts`** (edge-safe, no DB). NOT `auth.ts` (imports Drizzle/postgres-js, breaks Edge).
+- **No `asChild` on base-ui shadcn primitives.** Use `buttonVariants()` on TanStack Router's `<Link>`, or the `render` prop on triggers.
 - **`noUncheckedIndexedAccess` is on.** `segments[1]` returns `T | undefined`.
-- **Hydration trap with active-link classNames (issue #25).** Use `aria-current="page"` + Tailwind `aria-[current=page]:*` variants. See `BusinessSidebar.tsx` for pattern.
+- **Active links:** `aria-current="page"` + Tailwind `aria-[current=page]:*` variants (still the a11y-correct pattern; no SSR hydration to trip over now).
 
 ## Biome Linter
 
 - Biome auto-sorts imports and reformats. Re-read files after biome runs or Edit tool will fail on stale `old_string`.
 - Biome may remove unused imports aggressively.
 
-## Auth.js v5
+## Auth & session JWTs
 
-- **JWT callback `user` is only present on first sign-in.** Re-fetch role from DB in the `else` branch.
-- **Split auth config:** `auth.config.ts` must mirror callbacks from `auth.ts`. Middleware uses the edge config; any field it needs must have callbacks in BOTH.
+- **The API owns sessions.** OAuth sign-in (Google/Apple, `@auth/drizzle-adapter` tables) runs server-side in `packages/api`, which then mints a custom **`jose` JWT** (`api/src/auth/jwt.ts`) carried in the `kuruma_session` cookie. The Vite web has no Auth.js runtime — it reads identity via **`GET /auth/session`** (`vite/session.ts`, TanStack Query). The old NextAuth JWT-callback / edge `auth.config.ts` split is gone (#378/#714).
+- **`verifyJwt` asserts issuer + audience** so a token minted for any other purpose can't be replayed as an API caller. The role rides in the token; `Session.user.role` on web is still an untyped `string` (maintainability-audit Theme 2).
 
 ## Cloudflare Workers Deployment
 
 > Full post-mortem: `docs/plans/2026-04-09-cloudflare-deployment-lessons.md`
 
 Critical rules:
-1. **Lazy singleton for DB + auth.** Never call `getDb()` or `NextAuth()` at module scope.
-2. **Guard `session?.user` everywhere.** On CF Workers, `auth()` can return session where `user` is undefined.
-3. **`open-next.config.ts` must exist** or the CLI hangs.
-4. **`typescript.ignoreBuildErrors: true`** in `next.config.ts` (tsc runs locally/CI, not during `next build`).
-5. Secrets set via `npx wrangler secret put` — CF dashboard wipes them on redeploy.
-6. **Shared secrets (AUTH_SECRET, DATABASE_URL) must match between API and Web workers.** GitHub Secrets is the source of truth. `deploy.yml` no longer re-asserts secrets every deploy — wrangler 4's gradual deployments refuse `secret put` when a pending version exists (cloudflare/workers-sdk#6763) and the old pattern locked up deploys. Instead: `deploy.yml` runs a read-only `wrangler secret list` presence check; `rotate-secrets.yml` (workflow_dispatch) re-asserts values. Rotate after changing a GitHub Secret, whenever the presence check fails, or if "Unauthorized" starts appearing silently.
-7. **`getDb()` (neon-http) CANNOT run interactive transactions** — `db.transaction(cb)` throws `"No transactions support in neon-http driver"` at runtime (tsc does NOT catch it → it 500s in prod). The HTTP driver is stateless fetch-per-query, safe to reuse across requests. For interactive transactions use **`runTx(fn)`** from `@kuruma/shared/db` (#493): it opens a short-lived **neon-serverless (WebSocket) Pool** per call, runs the tx, closes it — the only Workers-safe lifecycle (a WebSocket Pool can't cross requests: "Cannot perform I/O on behalf of a different request"). Repos take the runner via constructor injection; the composition root wires `runTx`. **`DATABASE_URL` must be the Neon POOLED endpoint** (`-pooler` host) — per-call connections against a direct endpoint exhaust Postgres backends under load.
+1. **Lazy singleton for DB.** Never call `getDb()` at module scope.
+2. Secrets set via `npx wrangler secret put` — CF dashboard wipes them on redeploy.
+3. **Shared secrets (AUTH_SECRET, DATABASE_URL) must match between API and Web workers.** GitHub Secrets is the source of truth. `deploy.yml` no longer re-asserts secrets every deploy — wrangler 4's gradual deployments refuse `secret put` when a pending version exists (cloudflare/workers-sdk#6763) and the old pattern locked up deploys. Instead: `deploy.yml` runs a read-only `wrangler secret list` presence check; `rotate-secrets.yml` (workflow_dispatch) re-asserts values. Rotate after changing a GitHub Secret, whenever the presence check fails, or if "Unauthorized" starts appearing silently.
+4. **`getDb()` (neon-http) CANNOT run interactive transactions** — `db.transaction(cb)` throws `"No transactions support in neon-http driver"` at runtime (tsc does NOT catch it → it 500s in prod). The HTTP driver is stateless fetch-per-query, safe to reuse across requests. For interactive transactions use **`runTx(fn)`** from `@kuruma/shared/db` (#493): it opens a short-lived **neon-serverless (WebSocket) Pool** per call, runs the tx, closes it — the only Workers-safe lifecycle (a WebSocket Pool can't cross requests: "Cannot perform I/O on behalf of a different request"). Repos take the runner via constructor injection; the composition root wires `runTx`. **`DATABASE_URL` must be the Neon POOLED endpoint** (`-pooler` host) — per-call connections against a direct endpoint exhaust Postgres backends under load.
 
-## i18n (next-intl v4) — FROZEN Next.js tree only
+## i18n (use-intl v4)
 
-> The live Vite shell uses **use-intl** with TanStack Router (`$locale` route param, `IntlProvider`, `messages/` served by Vite). The next-intl notes below apply only to the frozen Next.js tree.
+> The Vite shell uses **use-intl** with TanStack Router: a `$locale` route param (en/ja/zh, default en — see `vite/i18n/locale.ts`), an `IntlProvider`, and `messages/` served by Vite. There is no next-intl and no `@/i18n/routing`.
 
-- Import navigation helpers from `@/i18n/routing`, not `next/link`.
-- Business routes use `/manage/` prefix. `/dashboard` has no prefix.
-- **New i18n namespaces require dev server restart** (`rm -rf packages/web/.next && bun run dev`).
+- **Navigate with TanStack Router's `<Link>`** carrying the `$locale` param — never `next/link` or `@/i18n/routing`.
+- **Adding a message file may need a Vite dev restart** to be picked up.
 - **Verify all i18n keys exist after merges.** Conflict resolution silently drops keys.
 
 ## Stripe payments (#461)
@@ -102,7 +96,7 @@ Critical rules:
 
 > Two production-like incidents (issue #27). Follow exactly.
 
-**Workflow when changing `schema.ts`:**
+**Workflow when changing the schema** (tables live in `db/<context>.ts` modules; `schema.ts` is just the `export *` barrel since #725)**:**
 ```bash
 bun run db:generate --name <describe_change>
 bun run db:migrate
@@ -144,7 +138,7 @@ Enforcement: `bun run --filter @kuruma/api lint:boundaries` (api layers), `bun r
 ## Danger zones
 
 - `drizzle/` — append-only, never edit merged migrations.
-- `packages/shared/src/db/schema.ts` — always generate + migrate + verify.
+- `packages/shared/src/db/` schema — tables live in bounded-context `db/<context>.ts` modules (`schema.ts` is the `export *` barrel since #725); always generate + migrate + verify.
 - `packages/shared/src/validators/` — changes affect both api and web.
 - Another session's branch — never touch it.
 - Production secrets — never hardcode or log.
