@@ -206,6 +206,26 @@ describe('check-import-boundaries — #692 sanctioned thin-read vs extraction-pe
     expect(violations.map((v) => v.rule)).toContainEqual(expect.stringMatching(THIN_READ_RULE))
   })
 
+  it('keys the *Repository check on the imported symbol, not its local alias', () => {
+    // The guard must read the source name (`X` in `X as Y`), never the binding —
+    // otherwise an entity aliased `as FooRepository` would launder past the gate.
+    const smuggled = checkContent(
+      'routes/regions.ts',
+      "import type { RegionNode as FakeRepository } from '../repositories/types'",
+    )
+    expect(smuggled).toHaveLength(1)
+    expect(smuggled[0]).toMatchObject({ rule: expect.stringMatching(THIN_READ_RULE) })
+  })
+
+  it('allows a *Repository interface aliased to a non-Repository local name', () => {
+    expect(
+      checkContent(
+        'routes/regions.ts',
+        "import type { RegionRepository as RegionData } from '../repositories/types'",
+      ),
+    ).toEqual([])
+  })
+
   it('keeps the path-wide types exemption for the extraction-pending route (vehicles)', () => {
     expect(
       checkContent(

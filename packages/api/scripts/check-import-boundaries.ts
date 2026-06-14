@@ -12,6 +12,24 @@ import { join, relative } from 'node:path'
 
 const API_SRC = join(import.meta.dirname, '..', 'src')
 
+/**
+ * Routes→repositories carve-out registry (#692). Two deliberately distinct tiers:
+ *
+ * Sanctioned thin-read routes are read-only and hold no business policy, so a
+ * pass-through service would be an anemic layer. A PERMANENT, documented exception —
+ * but narrowed to their *Repository interface only (see importsOnlyRepositoryInterfaces):
+ * an entity/filter import is query-shaping that belongs in a service and stays blocked,
+ * so the sanction can't become a back door for a thin route to grow fat.
+ *
+ * Extraction-pending routes are transitional: each still strands real business policy
+ * in its handler (vehicles: bulk-status guards, patch-merge, rate/rental validation, FK
+ * mapping) and keeps a path-wide types exemption until its service is extracted, at which
+ * point it must be removed from this set and join the enforced routes. Empty this set when
+ * #819 (VehicleService) lands. See AGENTS.md "API Layer Architecture".
+ */
+const SANCTIONED_THIN_READ_ROUTES = new Set(['routes/regions.ts', 'routes/stats.ts'])
+const EXTRACTION_PENDING_ROUTES = new Set(['routes/vehicles.ts'])
+
 interface Violation {
   file: string
   line: number
@@ -95,20 +113,10 @@ export function checkContent(rel: string, content: string): Violation[] {
   const isTxFactory =
     rel === 'repositories/drizzle/transaction.ts' ||
     rel === 'repositories/drizzle/operator-grant-transaction.ts'
-  // Routes→repositories carve-out (#692). Two kinds, deliberately distinct:
-  //
-  // Sanctioned thin-read routes: regions/stats are read-only and hold no business
-  // policy, so a pass-through service would be an anemic layer. They are a
-  // PERMANENT, documented exception — but only for their *Repository interface.
-  // An entity/filter import would be query-shaping that belongs in a service, so
-  // it stays blocked: the sanction must not become a back door for a thin route
-  // to grow fat. See AGENTS.md "API Layer Architecture".
-  const isSanctionedThinReadRoute = rel === 'routes/regions.ts' || rel === 'routes/stats.ts'
-  // Extraction-pending route: vehicles.ts still strands real business policy
-  // (bulk-status guards, patch-merge, rate/rental validation, FK mapping) in the
-  // handler. It keeps a path-wide types exemption transitionally, until a
-  // VehicleService lands (#819) and it joins the enforced set. Tracked, not sanctioned.
-  const isExtractionPendingRoute = rel === 'routes/vehicles.ts'
+  // Routes→repositories carve-out (#692), two distinct tiers. Rationale and the
+  // route set live at SANCTIONED_THIN_READ_ROUTES / EXTRACTION_PENDING_ROUTES (top).
+  const isSanctionedThinReadRoute = SANCTIONED_THIN_READ_ROUTES.has(rel)
+  const isExtractionPendingRoute = EXTRACTION_PENDING_ROUTES.has(rel)
 
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i]!
