@@ -12,6 +12,7 @@ import { requireAuth } from './middleware/auth'
 import { csrf } from './middleware/csrf'
 import { structuredLogger } from './middleware/logger'
 import { requestId } from './middleware/request-id'
+import { observability } from './observability/middleware'
 import { DisabledDocumentStorage } from './repositories/disabled-document-storage'
 import { DisabledPhotoStorage } from './repositories/disabled-photo-storage'
 import {
@@ -519,6 +520,9 @@ export function createApp(overrides?: AppOverrides) {
   // so every request gets a correlation ID and timing.
   app.use('*', requestId())
   app.use('*', structuredLogger())
+  // Observability (#361): time the full request and report raw >=500 / slow
+  // (>2s) responses to Sentry. Early so the timing spans all downstream work.
+  app.use('*', observability())
 
   // CORS. Browser calls from the web package (localhost:3001 in dev, the
   // deployed origin in prod) are same-intent but cross-origin, so without
