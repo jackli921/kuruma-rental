@@ -48,6 +48,17 @@ const vehicleBaseShape = {
   updatedAt: z.string(),
 } as const
 
+/**
+ * The bare vehicle row returned by every *write* endpoint (create / update /
+ * status / bulk-status / retire): the shared `Vehicle` (= `VehicleBase`) over
+ * JSON, with none of the fleet-overview enrichment. #817: the writes used to
+ * pass through unvalidated because the enriched `operatorFleetVehicleSchema`
+ * would reject a bare row — this is the schema that matches their wire body.
+ */
+export const vehicleRowSchema = z.object(vehicleBaseShape)
+export type VehicleRow = z.infer<typeof vehicleRowSchema>
+export const vehicleRowListSchema = z.array(vehicleRowSchema)
+
 /** A booking touching a fleet vehicle (current/next), dates as ISO strings. */
 export const fleetBookingSummarySchema = z.object({
   startAt: z.string(),
