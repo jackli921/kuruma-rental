@@ -294,6 +294,22 @@ describe('AdminRevenueService over real Postgres (#825 / #462)', () => {
     ])
   })
 
+  it('SQL `AT TIME ZONE` buckets the UTC->JST straddling instant into its JST month', async () => {
+    // 2026-04-30T15:30:00Z is 2026-05-01T00:30 JST. listSucceeded(month) filters on
+    // `to_char(createdAt AT TIME ZONE 'Asia/Tokyo')` IN SQL, so this proves the boundary
+    // at the DB layer (not just the JS aggregator's re-bucketing): River's 100k row must
+    // surface under 2026-05, be absent from 2026-04, and never leak into 2026-06.
+    const may = await paymentRepo.listSucceeded('2026-05')
+    expect(may.some((p) => p.operatorId === river.id && p.grossJpy === 100_000)).toBe(true)
+
+    const apr = await paymentRepo.listSucceeded('2026-04')
+    expect(apr.some((p) => p.operatorId === river.id)).toBe(false)
+
+    const jun = await paymentRepo.listSucceeded('2026-06')
+    expect(jun.some((p) => p.operatorId === river.id && p.grossJpy === 50_000)).toBe(true)
+    expect(jun.some((p) => p.operatorId === river.id && p.grossJpy === 100_000)).toBe(false)
+  })
+
   it('orders our partners biggest gross first (River 150k before Summit 30k)', async () => {
     const report = await service.getReport(SYSTEM_CONTEXT)
     const ours = report.partners
