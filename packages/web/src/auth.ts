@@ -1,3 +1,6 @@
+// #722 carve-out: auth.ts is the sanctioned Auth.js DB toucher (Drizzle adapter +
+// session lookup). lint-module-boundaries exempts it from the "web has no direct
+// DB access" rule; all other web code must route through the Hono API.
 import { getDb } from '@/lib/db'
 import { DrizzleAdapter } from '@auth/drizzle-adapter'
 import { accounts, users } from '@kuruma/shared/db/schema'
