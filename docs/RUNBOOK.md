@@ -73,6 +73,25 @@ bunx shadcn@latest add <component> -c packages/web
 - **Neon dashboard**: Query performance, connection count, storage usage
 - **Drizzle Studio**: `bun run db:studio` for inspecting data locally
 
+### Error monitoring — Sentry (API), #361
+
+The API Worker is instrumented with `@sentry/cloudflare`: it captures unhandled
+exceptions (with stack), raw `>=500` responses, and slow requests (`>2s`), tagged
+with the deploy's version id as the Sentry **release**. It is **gated off by
+default** — nothing is sent until a DSN is present (see
+`packages/api/src/observability/`).
+
+To activate (HITL, one-time):
+1. Create a Sentry project (platform: Cloudflare Workers); copy its DSN.
+2. `cd packages/api && npx wrangler secret put SENTRY_DSN` (paste the DSN). Add a
+   matching `SENTRY_DSN` GitHub secret so deploys keep it. Optional:
+   `SENTRY_ENVIRONMENT` (defaults to `production`).
+3. In Sentry, add an **alert rule**: error rate spikes 5× baseline for 10 min →
+   Slack/email. Add an **uptime monitor** pinging `GET /health`.
+
+**Web monitoring is deferred** until the Next→Vite migration (#378/#689) settles —
+tracked separately so we don't instrument code that's being deleted.
+
 ## Rollback
 
 ### Code rollback
