@@ -86,4 +86,29 @@ describe('regionChain', () => {
   test('unknown id yields an empty chain', () => {
     expect(regionChain(tree, 'ghost')).toEqual({ prefecture: null, city: null, area: null })
   })
+
+  // The region taxonomy is a self-FK with no DB-level cycle constraint and feeds
+  // this walk on every render over the public region list — a malformed row must
+  // terminate the walk, not hang the renter's tab.
+  test('terminates on a self-referential parent', () => {
+    const selfCycle: RegionNode[] = [
+      makeRegion({ id: 'reg_loop', slug: 'loop', type: 'PREFECTURE', parentId: 'reg_loop' }),
+    ]
+    const chain = regionChain(selfCycle, 'reg_loop')
+    expect(chain.prefecture?.id).toBe('reg_loop')
+    expect(chain.city).toBeNull()
+    expect(chain.area).toBeNull()
+  })
+
+  test('terminates on a parent cycle (A -> B -> A)', () => {
+    const cycle: RegionNode[] = [
+      makeRegion({ id: 'reg_a', slug: 'a', type: 'CITY', parentId: 'reg_b' }),
+      makeRegion({ id: 'reg_b', slug: 'b', type: 'PREFECTURE', parentId: 'reg_a' }),
+    ]
+    const chain = regionChain(cycle, 'reg_a')
+    // Visits A (city) then B (prefecture), then stops before revisiting A.
+    expect(chain.city?.id).toBe('reg_a')
+    expect(chain.prefecture?.id).toBe('reg_b')
+    expect(chain.area).toBeNull()
+  })
 })

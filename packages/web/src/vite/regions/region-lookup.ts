@@ -38,8 +38,15 @@ export function regionChain(regions: readonly RegionNode[], regionId: string | n
   const chain: RegionChain = { prefecture: null, city: null, area: null }
   if (regionId === null) return chain
   const byId = new Map(regions.map((region) => [region.id, region]))
+  // Bound the upward walk with a visited set: `regions.parentId` is a self-FK with
+  // no DB-level cycle constraint, so a malformed row (self-parent, or A->B->A) is
+  // physically storable. This runs on every RegionPicker render over the public,
+  // unauthenticated region list, so an unguarded walk would spin forever and freeze
+  // the renter's tab. Mirrors the API's collectDescendantIds guard (region-tree.ts).
+  const seen = new Set<string>()
   let node = byId.get(regionId) ?? null
-  while (node) {
+  while (node !== null && !seen.has(node.id)) {
+    seen.add(node.id)
     if (node.type === 'PREFECTURE') chain.prefecture = node
     else if (node.type === 'CITY') chain.city = node
     else if (node.type === 'AREA') chain.area = node
