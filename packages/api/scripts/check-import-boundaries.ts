@@ -32,6 +32,27 @@ function collectTsFiles(dir: string): string[] {
   return files
 }
 
+/**
+ * True if a collapsed `import ... from '../repositories/types'` line pulls in
+ * nothing but `*Repository` interface symbols. Keeps the sanctioned thin-read
+ * carve-out (#692) tight: a route may DI its repository contract but not
+ * entity/filter types, which signal query-shaping that belongs in a service.
+ */
+function importsOnlyRepositoryInterfaces(importLine: string): boolean {
+  const inner = importLine.match(/\{([^}]*)\}/)?.[1]
+  if (inner === undefined) return false
+  const symbols = inner
+    .split(',')
+    .map((s) =>
+      s
+        .trim()
+        .replace(/^type\s+/, '')
+        .replace(/\s+as\s+\w+$/, ''),
+    )
+    .filter(Boolean)
+  return symbols.length > 0 && symbols.every((s) => s.endsWith('Repository'))
+}
+
 export function checkContent(rel: string, content: string): Violation[] {
   const violations: Violation[] = []
 
@@ -74,15 +95,20 @@ export function checkContent(rel: string, content: string): Violation[] {
   const isTxFactory =
     rel === 'repositories/drizzle/transaction.ts' ||
     rel === 'repositories/drizzle/operator-grant-transaction.ts'
-  // DI-repo carve-out: these routes DI a repository as their constructor contract
-  // and have no service layer yet, so they are exempted path-wide from the routes
-  // rule and may import from repositories/types (their *Repository contract plus
-  // the entity/filter shapes they pass it) until their own service extraction
-  // lands and they join the enforced set (#726). The exemption is intentionally
-  // the whole path, not *Repository-only, because it is a temporary migration
-  // bridge. Every other route must source filter/entity types from the service layer.
-  const isDiRepoCarveoutRoute =
-    rel === 'routes/regions.ts' || rel === 'routes/stats.ts' || rel === 'routes/vehicles.ts'
+  // Routes→repositories carve-out (#692). Two kinds, deliberately distinct:
+  //
+  // Sanctioned thin-read routes: regions/stats are read-only and hold no business
+  // policy, so a pass-through service would be an anemic layer. They are a
+  // PERMANENT, documented exception — but only for their *Repository interface.
+  // An entity/filter import would be query-shaping that belongs in a service, so
+  // it stays blocked: the sanction must not become a back door for a thin route
+  // to grow fat. See AGENTS.md "API Layer Architecture".
+  const isSanctionedThinReadRoute = rel === 'routes/regions.ts' || rel === 'routes/stats.ts'
+  // Extraction-pending route: vehicles.ts still strands real business policy
+  // (bulk-status guards, patch-merge, rate/rental validation, FK mapping) in the
+  // handler. It keeps a path-wide types exemption transitionally, until a
+  // VehicleService lands (#819) and it joins the enforced set. Tracked, not sanctioned.
+  const isExtractionPendingRoute = rel === 'routes/vehicles.ts'
 
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i]!
@@ -123,9 +149,9 @@ export function checkContent(rel: string, content: string): Violation[] {
 
     // Rule 1: Routes must not import from repositories/ — neither concrete
     // implementations nor type contracts. Filter/entity types come from the
-    // service layer (routes -> services -> repositories). The DI-repo carve-out
-    // routes are the one documented exception, and only for their *Repository
-    // interface type, never a concrete (#726).
+    // service layer (routes -> services -> repositories). Two scoped carve-outs
+    // exist (#692): sanctioned thin reads may DI only their *Repository
+    // interface; the extraction-pending route keeps a path-wide types exemption.
     if (isRoute && /from\s+['"]\.\.\/repositories\//.test(trimmed)) {
       if (/from\s+['"]\.\.\/repositories\/(?!types)/.test(trimmed)) {
         violations.push({
@@ -134,12 +160,25 @@ export function checkContent(rel: string, content: string): Violation[] {
           text: trimmed,
           rule: 'Routes must not import concrete repositories.',
         })
-      } else if (!isDiRepoCarveoutRoute) {
+      } else if (isSanctionedThinReadRoute) {
+        // regions/stats may DI only their *Repository interface (#692); an
+        // entity/filter import is query-shaping that belongs in a service.
+        if (!importsOnlyRepositoryInterfaces(trimmed)) {
+          violations.push({
+            file: rel,
+            line: i + 1,
+            text: trimmed,
+            rule: 'Sanctioned thin-read routes (regions/stats) may import only their *Repository interface from repositories/types; an entity/filter type signals logic that belongs in a service.',
+          })
+        }
+      } else if (!isExtractionPendingRoute) {
+        // vehicles keeps a transitional path-wide types exemption until its
+        // VehicleService lands (#819); every other route is fully enforced.
         violations.push({
           file: rel,
           line: i + 1,
           text: trimmed,
-          rule: 'Routes must not import from repositories/types; source filter/entity types from the service layer. (DI-repo carve-out routes regions/stats/vehicles are transitionally exempt until their service extraction lands.)',
+          rule: 'Routes must not import from repositories/types; source filter/entity types from the service layer. (Thin-read routes regions/stats may DI their repository; vehicles is the lone route still pending service extraction.)',
         })
       }
     }
