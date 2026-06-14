@@ -2,6 +2,8 @@
 
 **Date:** 2026-06-13 · **Method:** 5 parallel specialist agents (architecture, dead-code, code-quality, type/schema, test-health) over a clean read-only worktree at the real integration branch. Every finding below is grounded in a verified `file:line`; the source tree audited was **mp** (149 commits ahead of `main`), not the stale local checkout.
 
+> **Status update — 2026-06-14.** Two of the three debt themes are now resolved. **Theme 1 (two-headed `web/`) is fully removed:** the frozen Next.js tree (`app/`, `modules/`, `hooks/`, `actions/`, non-`ui/` components), the `next`/`next-intl`/`next-auth`/`@opennextjs` deps, and the 51 frozen test files are gone (#698 tests · #714 runtime+deps · epic #689 verified); only `components/ui/*` remains, as recommended. **Theme 3's `schema.ts` god-file split shipped** (#813, issue #725) — `schema.ts` is now a 25-line `export *` barrel over per-domain `db/<context>.ts` modules and the 800-line cap is restored. Findings below are annotated **✓ DONE** where superseded; the enum-SSoT (partly #688) and role-sets work remain open.
+
 ---
 
 ## Executive summary
@@ -10,9 +12,9 @@
 
 The maintainability debt is **concentrated in three themes**, not spread thin:
 
-1. **A two-headed `web/` package** — a live Vite SPA forked from a frozen Next.js app, leaving **~20,000 LOC of removable dead/duplicate code**. This is the single largest drain.
+1. **A two-headed `web/` package** — a live Vite SPA forked from a frozen Next.js app, leaving **~20,000 LOC of removable dead/duplicate code**. This is the single largest drain. **✓ DONE — removed (#698/#714/#689); only `components/ui/*` kept.**
 2. **Single-source-of-truth drift in closed sets** — roles and DB enums are hand-copied into 3–10 places with only comments linking them. The highest-leverage *correctness-at-scale* hazard.
-3. **A few god-files near the size cap** — `schema.ts` (823, over cap), `booking.ts` (796), `index.ts` (776), `repositories/types.ts` (774) — each with a clear, low-risk split seam.
+3. **A few god-files near the size cap** — `schema.ts` (823, over cap — **split shipped #813**), `booking.ts` (796), `index.ts` (776), `repositories/types.ts` (774) — each with a clear, low-risk split seam.
 
 Everything else is housekeeping.
 
@@ -21,9 +23,9 @@ Everything else is housekeeping.
 | Dimension | Grade | Headline |
 |---|---|---|
 | API architecture & boundaries | **A−** | Layering disciplined; debt is 5 routes bypassing services + a lint weaker than the doc. |
-| Web architecture | **C** | Live Vite vs frozen Next fork; ~20k LOC dead; partition only visible via two tsconfigs. |
+| Web architecture | **C → resolved** | ~~Live Vite vs frozen Next fork; ~20k LOC dead~~ — frozen tree removed (#698/#714); now a single Vite tree. |
 | Code quality | **B** | Role/enum duplication is the wart; error handling has two coexisting channels; 48 unvalidated path params. |
-| Type system & schema | **A−** | `any`≈0, assertions justified; debt = enum→union hand-mirroring + `schema.ts` over cap. |
+| Type system & schema | **A−** | `any`≈0, assertions justified; debt = enum→union hand-mirroring + `schema.ts` over cap (**split shipped #813**). |
 | Test health | **A** | Real-pg integration on every critical flow, 30:1 strong:weak, zero skips/mocks. Only dead-test housekeeping. |
 | Docs accuracy | **C** | `docs/architecture/modules.md` describes an architecture that doesn't exist; `lint:modules` referenced, not wired in api. |
 
@@ -61,7 +63,7 @@ The same closed set is materialized in many hand-maintained copies with no compi
 
 ## Theme 3 — God-files near the cap (clear seams, low risk)
 
-- **`schema.ts` (823, over the 800 cap; #458 raised to 1000 as stopgap → #518).** The per-domain split design is **executable** (see appendix): the lazy-thunk circular-FK + `export *` barrel pattern is already proven by 4 extracted modules (`renter-documents`, `add-on`, `booking-types`, `provider-access`); `db:verify` guarantees migration safety because emitted SQL is byte-identical. **Gated on schema-PR swarm timing** (region #671/#675, etc.) — execute when the file quiets so it goes through last.
+- **✓ DONE (split shipped #813, issue #725 — `schema.ts` is now a barrel over per-domain `db/<context>.ts` modules; 800 cap restored).** ~~`schema.ts` (823, over the 800 cap; #458 raised to 1000 as stopgap → #518).~~ The per-domain split design was **executable** (see appendix): the lazy-thunk circular-FK + `export *` barrel pattern is already proven by 4 extracted modules (`renter-documents`, `add-on`, `booking-types`, `provider-access`); `db:verify` guarantees migration safety because emitted SQL is byte-identical. **Gated on schema-PR swarm timing** (region #671/#675, etc.) — execute when the file quiets so it goes through last.
 - **`BookingService` (796) — genuine god-service.** Split along the visible seam: 4 read-enrichment methods → `BookingQueryService`; keep create/substitute/transition. Lift the 190-line `submitInTx` pricing pipeline's pure steps (`priceInsurance`/`priceAddOns`/`resolveEffectiveEnd`) into a functional core so price math is unit-testable without repos (FC/IS).
 - **`index.ts` (776) — wiring blob.** Extract the three near-identical repo-construction branches into `composition/repositories.ts` (`buildDrizzleRepos`/`buildInMemoryRepos`/`buildOverrideRepos` → one `Repos` bundle). Kills the hand-lockstep that is the real source of "added to Drizzle, forgot in-memory" runtime bugs. Keep the `.route()` chain inline (`hc<AppType>` needs it). **Bonus:** the same bundle lets the e2e real-db harness reuse prod wiring instead of re-listing 20+ repos (already caused bug #635).
 - **`repositories/types.ts` (774) — interface dump.** Navigation/cache cost, not SRP. Split per-domain opportunistically alongside the schema split.
@@ -83,9 +85,9 @@ The same closed set is materialized in many hand-maintained copies with no compi
 |---|---|---|---|
 | S1 | **Enum SSoT sweep** — derive `BookingStatus` etc. from `enumValues`, `z.enum(enum.enumValues)`, fix `stores.ts` unions, replace 10+ literals | M | **Unclaimed, highest-leverage.** Touches api+web+zod — land before the schema split. |
 | S2 | `parseId` helper → validate the 48 unvalidated path params (latent 500s → clean 400s) | M | API-only, mechanical. |
-| S3 | Web dead-code removal PR1 (legacy tests) + PR2 (legacy components/modules/lib leaves) | M | Verify the lib/ui carve-out first. PR3 (Next runtime+deps) **gated on DNS cutover #378**. |
+| S3 | ~~Web dead-code removal PR1/PR2/PR3~~ **✓ DONE** | M | All shipped (#698 tests · #714 runtime+deps+leaves); only `components/ui/*` kept. |
 | S4 | `index.ts` → `composition/repositories.ts` repo bundle (+ reuse in e2e harness, closes #634/#635 class) | M | API-only; low collision. |
-| S5 | `schema.ts` #518 per-domain split (design ready in appendix) | M | **Gated on schema-PR swarm quiet** — go last. |
+| S5 | ~~`schema.ts` #518 per-domain split~~ **✓ DONE (#813/#725)** | M | Shipped — `schema.ts` is now a barrel over `db/<context>.ts`. |
 | S6 | `BookingService` reads/writes split + extract pure pricing core | L | Best correctness payoff; after S1. |
 | S7 | Route→service lint gap: extract `MessageService`/`UserDirectoryService`, make lint match the doc (or sanction thin reads as documented exceptions) | M | Closes documented-vs-enforced divergence. |
 | S8 | Web role-sets → import members from `@kuruma/shared`; type `Session.user.role` | M | **Coordinate with `role-sets` branch.** |
