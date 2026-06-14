@@ -1,7 +1,5 @@
 import { unwrap } from '@/lib/api-error'
 import { getApiBaseUrl } from '@/vite/api-base'
-import type { BookingStatus } from '@kuruma/shared/enums'
-import type { LuggageSize } from '@kuruma/shared/lib/luggage'
 import type {
   BulkVehicleStatus,
   CreateVehicleInput,
@@ -9,6 +7,22 @@ import type {
   VehicleStatus,
 } from '@kuruma/shared/validators/vehicle'
 import { queryOptions } from '@tanstack/react-query'
+import {
+  type DailyUtilizationDto,
+  type FleetBookingSummary,
+  type OperatorFleetVehicle,
+  type PhotoDeleteResult,
+  type PhotoUploadResult,
+  type VehicleClassOption,
+  type VehicleDetailBookingDto,
+  type VehicleDetailResponse,
+  type VehicleMaintenanceLogDto,
+  operatorFleetListSchema,
+  photoDeleteResultSchema,
+  photoUploadResultSchema,
+  vehicleClassOptionsListSchema,
+  vehicleDetailResponseSchema,
+} from './schema'
 
 // #526: operator fleet management. The Vite shell owns this read projection (it
 // never imports the frozen Next module's `vehicle-api.ts`, which is hono-client +
@@ -21,51 +35,19 @@ import { queryOptions } from '@tanstack/react-query'
 
 export type { BulkVehicleStatus, CreateVehicleInput, UpdateVehicleInput, VehicleStatus }
 
-/** A booking touching a fleet vehicle, as the overview needs it. ISO strings. */
-export interface FleetBookingSummary {
-  startAt: string
-  endAt: string
-  renterName: string | null
-}
-
-/**
- * One fleet row from `GET /vehicles/fleet-overview`. Mirrors
- * `@kuruma/shared/types/fleet.FleetVehicleOverview` with dates as ISO strings
- * (JSON-serialized). If a field is added there, add it here too.
- */
-export interface OperatorFleetVehicle {
-  id: string
-  operatorId: string
-  classId: string | null
-  pickupLocationId: string | null
-  name: string
-  description: string | null
-  photos: string[]
-  seats: number
-  luggageCapacity: number | null
-  luggageSize: LuggageSize | null
-  transmission: 'AUTO' | 'MANUAL'
-  fuelType: string | null
-  licensePlate: string | null
-  status: VehicleStatus
-  minRentalHours: number | null
-  maxRentalHours: number | null
-  advanceBookingHours: number | null
-  make: string | null
-  model: string | null
-  year: number | null
-  color: string | null
-  dailyRateJpy: number | null
-  hourlyRateJpy: number | null
-  shakenExpiryDate: string | null
-  insuranceExpiryDate: string | null
-  createdAt: string
-  updatedAt: string
-  utilization: number
-  bookingCountLast30Days: number
-  currentBooking: FleetBookingSummary | null
-  nextBooking: FleetBookingSummary | null
-  activeMaintenanceReason: string | null
+// #711/#785: the response DTO types now live in ./schema, inferred from the Zod
+// schemas that validate each body at the network seam. Re-exported here so
+// consumers keep importing them from this client unchanged.
+export type {
+  DailyUtilizationDto,
+  FleetBookingSummary,
+  OperatorFleetVehicle,
+  PhotoDeleteResult,
+  PhotoUploadResult,
+  VehicleClassOption,
+  VehicleDetailBookingDto,
+  VehicleDetailResponse,
+  VehicleMaintenanceLogDto,
 }
 
 export const FLEET_QUERY_KEY = ['operator-fleet'] as const
@@ -74,7 +56,7 @@ export async function fetchOperatorFleet(): Promise<OperatorFleetVehicle[]> {
   const res = await fetch(`${getApiBaseUrl()}/vehicles/fleet-overview`, {
     credentials: 'include',
   })
-  return unwrap<OperatorFleetVehicle[]>(res)
+  return unwrap(res, operatorFleetListSchema)
 }
 
 export function operatorFleetQueryOptions() {
@@ -88,6 +70,13 @@ export function operatorFleetQueryOptions() {
 // All write paths are operator-scoped server-side; the client never names a
 // tenant. Each unwraps the ok() envelope and throws ApiError on failure so the
 // caller's useMutation onError can surface it.
+//
+// #711 scope note: these write endpoints return the *bare* vehicle row (no
+// fleet-overview enrichment — `utilization`, `currentBooking`, …), so the
+// `OperatorFleetVehicle` return annotation is wider than the wire body.
+// Validating it with `operatorFleetVehicleSchema` would reject every valid
+// write, so the writes keep the legacy passthrough; correcting the return type
+// (and its consumers) to the base-vehicle shape is a tracked follow-up.
 
 async function writeJson<T>(path: string, method: 'POST' | 'PATCH', body: unknown): Promise<T> {
   const res = await fetch(`${getApiBaseUrl()}${path}`, {
@@ -135,16 +124,6 @@ export async function retireVehicle(id: string): Promise<OperatorFleetVehicle> {
   return unwrap<OperatorFleetVehicle>(res)
 }
 
-export interface PhotoUploadResult {
-  uploaded: string[]
-  total: number
-}
-
-export interface PhotoDeleteResult {
-  deleted: string
-  remaining: number
-}
-
 export async function uploadVehiclePhotos(
   vehicleId: string,
   files: readonly File[],
@@ -156,7 +135,7 @@ export async function uploadVehiclePhotos(
     credentials: 'include',
     body: formData,
   })
-  return unwrap<PhotoUploadResult>(res)
+  return unwrap(res, photoUploadResultSchema)
 }
 
 export async function deleteVehiclePhoto(
@@ -165,7 +144,7 @@ export async function deleteVehiclePhoto(
 ): Promise<PhotoDeleteResult> {
   const url = `${getApiBaseUrl()}/vehicles/${encodeURIComponent(vehicleId)}/photos?url=${encodeURIComponent(photoUrl)}`
   const res = await fetch(url, { method: 'DELETE', credentials: 'include' })
-  return unwrap<PhotoDeleteResult>(res)
+  return unwrap(res, photoDeleteResultSchema)
 }
 
 // --- Vehicle detail (#527) -----------------------------------------------------
@@ -176,77 +155,12 @@ export async function deleteVehiclePhoto(
 // fetch. The endpoint is tenant-sealed server-side (#527): a foreign or missing
 // vehicle 404s, mapped to null so the route loader can fire notFound().
 
-/** A maintenance log entry as JSON transport (dates = ISO strings). */
-export interface VehicleMaintenanceLogDto {
-  id: string
-  vehicleId: string
-  reason: string
-  notes: string | null
-  costJpy: number | null
-  startedAt: string
-  resolvedAt: string | null
-  createdAt: string
-}
-
-/** An upcoming booking on the detail page (dates = ISO strings). */
-export interface VehicleDetailBookingDto {
-  id: string
-  startAt: string
-  endAt: string
-  renterName: string | null
-  source: 'DIRECT' | 'TRIP_COM' | 'MANUAL' | 'OTHER'
-  status: Extract<BookingStatus, 'CONFIRMED' | 'ACTIVE'>
-}
-
-/** One day's booked-hours bucket for the 30-day utilization strip. */
-export interface DailyUtilizationDto {
-  date: string // YYYY-MM-DD
-  bookedHours: number
-}
-
-/** `GET /vehicles/:id/detail` response (the shared VehicleDetail over JSON). */
-export interface VehicleDetailResponse {
-  id: string
-  operatorId: string
-  classId: string | null
-  pickupLocationId: string | null
-  name: string
-  description: string | null
-  photos: string[]
-  seats: number
-  luggageCapacity: number | null
-  luggageSize: LuggageSize | null
-  transmission: 'AUTO' | 'MANUAL'
-  fuelType: string | null
-  licensePlate: string | null
-  status: VehicleStatus
-  minRentalHours: number | null
-  maxRentalHours: number | null
-  advanceBookingHours: number | null
-  make: string | null
-  model: string | null
-  year: number | null
-  color: string | null
-  dailyRateJpy: number | null
-  hourlyRateJpy: number | null
-  shakenExpiryDate: string | null
-  insuranceExpiryDate: string | null
-  createdAt: string
-  updatedAt: string
-  maintenanceLogs: VehicleMaintenanceLogDto[]
-  upcomingBookings: VehicleDetailBookingDto[]
-  revenueLast7d: number
-  revenueLast30d: number
-  revenueAllTime: number
-  utilizationLast30Days: DailyUtilizationDto[]
-}
-
 export async function fetchVehicleDetail(id: string): Promise<VehicleDetailResponse | null> {
   const res = await fetch(`${getApiBaseUrl()}/vehicles/${encodeURIComponent(id)}/detail`, {
     credentials: 'include',
   })
   if (res.status === 404) return null
-  return unwrap<VehicleDetailResponse>(res)
+  return unwrap(res, vehicleDetailResponseSchema)
 }
 
 export function vehicleDetailQueryOptions(id: string) {
@@ -304,19 +218,15 @@ export function vehicleRowFromDetail(d: VehicleDetailResponse): OperatorFleetVeh
 // Minimal class list for the Add/Edit form's class dropdown — kept here so the
 // form slice (#526 follow-up) reads it without touching the classes feature
 // (#528). Operator-scoped server-side.
-export interface VehicleClassOption {
-  id: string
-  name: string
-}
 
 export async function fetchVehicleClassOptions(): Promise<VehicleClassOption[]> {
   // `/manage` is the tenant-scoped, session-authed class list (#528). The public
   // `/vehicle-classes` is PUBLIC_CONTEXT 'all'-scope — it would leak every
   // operator's classes into this operator's own form dropdown. Depends on #528
-  // (the /manage route) being on trunk first.
+  // (the /manage route) being on trunk first. The schema strips the full class
+  // rows down to {id,name} for the dropdown.
   const res = await fetch(`${getApiBaseUrl()}/vehicle-classes/manage`, { credentials: 'include' })
-  const data = await unwrap<Array<{ id: string; name: string }>>(res)
-  return data.map((c) => ({ id: c.id, name: c.name }))
+  return unwrap(res, vehicleClassOptionsListSchema)
 }
 
 export function vehicleClassOptionsQueryOptions() {

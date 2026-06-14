@@ -1,6 +1,8 @@
-import { ApiError } from '@/lib/api-error'
+import { ApiError, ParseError } from '@/lib/api-error'
 import {
+  type OperatorFleetVehicle,
   type VehicleDetailResponse,
+  fetchOperatorFleet,
   fetchVehicleDetail,
   vehicleDetailQueryOptions,
   vehicleRowFromDetail,
@@ -58,6 +60,48 @@ const detailRaw = (over: Record<string, unknown> = {}): VehicleDetailResponse =>
   revenueLast30d: 13000,
   revenueAllTime: 25000,
   utilizationLast30Days: [{ date: '2026-06-01', bookedHours: 4 }],
+  ...over,
+})
+
+// A full fleet-overview row as it arrives over JSON (dates = ISO strings,
+// enrichment fields present — unlike the bare-vehicle write responses).
+const fleetRaw = (over: Record<string, unknown> = {}): OperatorFleetVehicle => ({
+  id: 'veh-1',
+  operatorId: 'op-1',
+  classId: 'cls-1',
+  pickupLocationId: 'loc-1',
+  name: 'Toyota Alphard',
+  description: 'Luxury van',
+  photos: ['a.jpg'],
+  seats: 7,
+  luggageCapacity: 4,
+  luggageSize: 'LARGE',
+  transmission: 'AUTO',
+  fuelType: 'Hybrid',
+  licensePlate: 'なにわ 300 あ 12-34',
+  status: 'AVAILABLE',
+  minRentalHours: 4,
+  maxRentalHours: 72,
+  advanceBookingHours: null,
+  make: 'Toyota',
+  model: 'Alphard',
+  year: 2023,
+  color: 'White',
+  dailyRateJpy: 18000,
+  hourlyRateJpy: 2500,
+  shakenExpiryDate: '2027-03-31',
+  insuranceExpiryDate: '2027-03-31',
+  createdAt: '2026-01-01T00:00:00.000Z',
+  updatedAt: '2026-01-02T00:00:00.000Z',
+  utilization: 42,
+  bookingCountLast30Days: 3,
+  currentBooking: {
+    startAt: '2026-06-10T01:00:00.000Z',
+    endAt: '2026-06-12T01:00:00.000Z',
+    renterName: 'Tanaka Taro',
+  },
+  nextBooking: null,
+  activeMaintenanceReason: null,
   ...over,
 })
 
@@ -157,5 +201,58 @@ describe('vehicleRowFromDetail', () => {
     expect(row.currentBooking).toBeNull()
     expect(row.nextBooking).toBeNull()
     expect(row.activeMaintenanceReason).toBeNull()
+  })
+})
+
+describe('fetchOperatorFleet (#711 response validation)', () => {
+  it('requests the fleet-overview endpoint with credentials', async () => {
+    const fetchMock = vi.fn(async () => jsonResponse({ success: true, data: [] }))
+    vi.stubGlobal('fetch', fetchMock)
+
+    await fetchOperatorFleet()
+
+    const [url, init] = fetchMock.mock.calls[0]!
+    expect(new URL(url as string, 'http://x').pathname).toBe('/api/vehicles/fleet-overview')
+    expect((init as RequestInit).credentials).toBe('include')
+  })
+
+  it('unwraps and validates the fleet list (enrichment carried through)', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => jsonResponse({ success: true, data: [fleetRaw()] })),
+    )
+
+    const fleet = await fetchOperatorFleet()
+
+    expect(fleet).toHaveLength(1)
+    expect(fleet[0]).toMatchObject({
+      id: 'veh-1',
+      utilization: 42,
+      bookingCountLast30Days: 3,
+      currentBooking: { renterName: 'Tanaka Taro' },
+      nextBooking: null,
+    })
+  })
+
+  it('rejects with a ParseError when a fleet row drifts (utilization not a number)', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => jsonResponse({ success: true, data: [fleetRaw({ utilization: 'high' })] })),
+    )
+
+    await expect(fetchOperatorFleet()).rejects.toBeInstanceOf(ParseError)
+  })
+})
+
+describe('fetchVehicleDetail (#711 response validation)', () => {
+  it('rejects with a ParseError when the detail body drifts (revenueLast30d not a number)', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () =>
+        jsonResponse({ success: true, data: detailRaw({ revenueLast30d: 'lots' }) }),
+      ),
+    )
+
+    await expect(fetchVehicleDetail('veh-1')).rejects.toBeInstanceOf(ParseError)
   })
 })
