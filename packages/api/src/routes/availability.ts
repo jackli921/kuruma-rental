@@ -1,7 +1,7 @@
 import { Hono } from 'hono'
 import { STAFF_ROLES, getUser } from '../middleware/auth'
 import type { AvailabilityRepository } from '../repositories/types'
-import { fail, ok, parseDateRange } from './helpers'
+import { fail, ok, parseDateRange, parseId } from './helpers'
 
 export function createAvailabilityRoutes(repo: AvailabilityRepository) {
   return new Hono()
@@ -13,11 +13,12 @@ export function createAvailabilityRoutes(repo: AvailabilityRepository) {
       return ok(c, available)
     })
     .get('/availability/:vehicleId', async (c) => {
-      const vehicleId = c.req.param('vehicleId')
+      const idResult = parseId(c, 'vehicleId')
+      if (!idResult.ok) return idResult.response
       const range = parseDateRange(c, true)
       if (!range.ok) return range.response
 
-      const result = await repo.checkVehicleAvailability(vehicleId, range.from, range.to)
+      const result = await repo.checkVehicleAvailability(idResult.id, range.from, range.to)
       if (!result) {
         return fail(c, 'Vehicle not found', 404)
       }

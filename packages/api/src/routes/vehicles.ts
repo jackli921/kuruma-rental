@@ -16,7 +16,7 @@ import {
 import type { Vehicle, VehicleFilters, VehicleRepository } from '../repositories/types'
 import type { MaintenanceService } from '../services/maintenance'
 import type { ResolveWriteOperatorId } from '../tenancy'
-import { fail, ok, parseBody, parsePagination, stripUndefined } from './helpers'
+import { fail, ok, parseBody, parseId, parsePagination, stripUndefined } from './helpers'
 
 // vehicles carries three FKs — composite (operatorId, classId) -> vehicle_classes
 // (#400), composite (operatorId, pickupLocationId) -> locations (#435), and the
@@ -52,7 +52,9 @@ export function createVehicleRoutes(
     })
     .get('/vehicles/:id', async (c) => {
       const ctx = toCallerContext(requireUser(c))
-      const vehicle = await repo.findById(ctx, c.req.param('id'))
+      const idResult = parseId(c)
+      if (!idResult.ok) return idResult.response
+      const vehicle = await repo.findById(ctx, idResult.id)
       if (!vehicle) {
         return fail(c, 'Vehicle not found', 404)
       }
@@ -144,7 +146,10 @@ export function createVehicleRoutes(
       if (!FLEET_WRITE_ROLES.has(user.role)) return fail(c, 'Forbidden', 403)
       const ctx = toCallerContext(user)
 
-      const existing = await repo.findById(ctx, c.req.param('id'))
+      const idResult = parseId(c)
+      if (!idResult.ok) return idResult.response
+
+      const existing = await repo.findById(ctx, idResult.id)
       if (!existing) {
         return fail(c, 'Vehicle not found', 404)
       }
@@ -218,12 +223,15 @@ export function createVehicleRoutes(
       if (!FLEET_WRITE_ROLES.has(user.role)) return fail(c, 'Forbidden', 403)
       const ctx = toCallerContext(user)
 
+      const idResult = parseId(c)
+      if (!idResult.ok) return idResult.response
+
       const parsed = await parseBody(c, updateVehicleStatusWithReasonSchema)
       if (!parsed.ok) return parsed.response
 
       const result = await maintenanceService.toggleStatus(
         ctx,
-        c.req.param('id'),
+        idResult.id,
         parsed.data.status,
         parsed.data.reason,
       )
@@ -235,7 +243,10 @@ export function createVehicleRoutes(
       if (!FLEET_WRITE_ROLES.has(user.role)) return fail(c, 'Forbidden', 403)
       const ctx = toCallerContext(user)
 
-      const existing = await repo.findById(ctx, c.req.param('id'))
+      const idResult = parseId(c)
+      if (!idResult.ok) return idResult.response
+
+      const existing = await repo.findById(ctx, idResult.id)
       if (!existing) {
         return fail(c, 'Vehicle not found', 404)
       }

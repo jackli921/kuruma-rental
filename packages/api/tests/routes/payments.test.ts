@@ -16,10 +16,14 @@ import type {
 import type { Booking } from '../../src/stores'
 import { testAuthMiddleware } from '../helpers/auth'
 
+// Bookings carry DB-generated UUIDs; the route now validates `:bookingId` as a
+// uuid at the boundary (#691), so the fixture id must be a real uuid too.
+const BOOKING_ID = '00000000-0000-4000-8000-0000000000b1'
+
 function makeBooking(): Booking {
   const now = new Date('2026-06-09T00:00:00Z')
   return {
-    id: 'bk-1',
+    id: BOOKING_ID,
     operatorId: 'op-1',
     renterId: 'renter-1',
     classId: 'cls-1',
@@ -59,7 +63,7 @@ class StubGateway implements PaymentGateway {
 }
 
 function setup(role: UserRole = 'RENTER', userId = 'renter-1') {
-  const bookings = new Map([['bk-1', makeBooking()]])
+  const bookings = new Map([[BOOKING_ID, makeBooking()]])
   const bookingRepo = new InMemoryBookingRepository(bookings)
   const paymentRepo = new InMemoryPaymentEventRepository()
   const gateway = new StubGateway()
@@ -79,7 +83,7 @@ function setup(role: UserRole = 'RENTER', userId = 'renter-1') {
 
 function publicApp() {
   // Webhook must work with NO auth middleware mounted (Stripe is unauthenticated).
-  const bookingRepo = new InMemoryBookingRepository(new Map([['bk-1', makeBooking()]]))
+  const bookingRepo = new InMemoryBookingRepository(new Map([[BOOKING_ID, makeBooking()]]))
   const paymentRepo = new InMemoryPaymentEventRepository()
   const gateway = new StubGateway()
   const service = new PaymentService(
@@ -103,13 +107,13 @@ const completed = (): VerifiedPaymentEvent => ({
   amountTotal: 100_000,
   currency: 'jpy',
   paymentStatus: 'paid',
-  metadata: { bookingId: 'bk-1' },
+  metadata: { bookingId: BOOKING_ID },
 })
 
 describe('POST /bookings/:id/checkout-session', () => {
   it('401 when unauthenticated (relies on the app-level /bookings/* guard)', async () => {
     // Mirror index.ts: checkout sits under /bookings/*, guarded by requireAuth().
-    const bookingRepo = new InMemoryBookingRepository(new Map([['bk-1', makeBooking()]]))
+    const bookingRepo = new InMemoryBookingRepository(new Map([[BOOKING_ID, makeBooking()]]))
     const service = new PaymentService(
       new InMemoryPaymentEventRepository(),
       bookingRepo,
@@ -121,13 +125,13 @@ describe('POST /bookings/:id/checkout-session', () => {
     setupGlobalHandlers(app)
     app.use('/bookings/*', requireAuth())
     app.route('/', createPaymentRoutes(service))
-    const res = await app.request('/bookings/bk-1/checkout-session', { method: 'POST' })
+    const res = await app.request(`/bookings/${BOOKING_ID}/checkout-session`, { method: 'POST' })
     expect(res.status).toBe(401)
   })
 
   it('returns the Stripe Checkout URL for the booking owner', async () => {
     const { app } = setup()
-    const res = await app.request('/bookings/bk-1/checkout-session', { method: 'POST' })
+    const res = await app.request(`/bookings/${BOOKING_ID}/checkout-session`, { method: 'POST' })
     expect(res.status).toBe(200)
     expect(await res.json()).toEqual({
       success: true,
@@ -137,7 +141,7 @@ describe('POST /bookings/:id/checkout-session', () => {
 
   it('maps a non-owner to 404', async () => {
     const { app } = setup('RENTER', 'someone-else')
-    const res = await app.request('/bookings/bk-1/checkout-session', { method: 'POST' })
+    const res = await app.request(`/bookings/${BOOKING_ID}/checkout-session`, { method: 'POST' })
     expect(res.status).toBe(404)
   })
 })
@@ -158,7 +162,7 @@ describe('POST /webhooks/stripe (public)', () => {
     })
     expect(res.status).toBe(400)
     expect(await res.json()).toEqual({ received: false })
-    expect(await paymentRepo.findSucceededByBookingId('bk-1')).toBeNull()
+    expect(await paymentRepo.findSucceededByBookingId(BOOKING_ID)).toBeNull()
   })
 
   it('200 + records a payment on a verified completed event', async () => {
@@ -171,14 +175,16 @@ describe('POST /webhooks/stripe (public)', () => {
     })
     expect(res.status).toBe(200)
     expect(await res.json()).toEqual({ received: true })
-    expect(await paymentRepo.findSucceededByBookingId('bk-1')).toMatchObject({ grossJpy: 100_000 })
+    expect(await paymentRepo.findSucceededByBookingId(BOOKING_ID)).toMatchObject({
+      grossJpy: 100_000,
+    })
   })
 })
 
 describe('GET /bookings/:id/payment', () => {
   it('UNPAID before, PAID after the webhook', async () => {
     const { app, gateway } = setup()
-    const before = await app.request('/bookings/bk-1/payment')
+    const before = await app.request(`/bookings/${BOOKING_ID}/payment`)
     expect(await before.json()).toEqual({ success: true, data: { status: 'UNPAID' } })
 
     gateway.event = completed()
@@ -187,7 +193,7 @@ describe('GET /bookings/:id/payment', () => {
       headers: { 'stripe-signature': 't=1,v1=good' },
       body: 'raw',
     })
-    const after = await app.request('/bookings/bk-1/payment')
+    const after = await app.request(`/bookings/${BOOKING_ID}/payment`)
     expect(await after.json()).toEqual({ success: true, data: { status: 'PAID' } })
   })
 })

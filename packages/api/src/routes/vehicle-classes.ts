@@ -16,7 +16,7 @@ import { PG_ERROR, pgErrorCode } from '../pg-errors'
 import type { VehicleClassService } from '../services/vehicle-class'
 import type { VehicleClassAvailabilityService } from '../services/vehicle-class-availability'
 import type { ResolveWriteOperatorId } from '../tenancy'
-import { cachePublic, fail, ok, parseBody, parseDateRange, stripUndefined } from './helpers'
+import { cachePublic, fail, ok, parseBody, parseDateRange, parseId, stripUndefined } from './helpers'
 import { rateLimitByIp } from './rate-limit'
 
 export function createVehicleClassRoutes(
@@ -107,7 +107,9 @@ export function createVehicleClassRoutes(
         // Operator-scoped: an OPERATOR_* caller can only read its own class;
         // bypass roles (STAFF/ADMIN/PLATFORM_ADMIN) read across operators (#395).
         const ctx = toCallerContext(requireUser(c))
-        const vc = await service.findById(ctx, c.req.param('id'))
+        const idResult = parseId(c)
+        if (!idResult.ok) return idResult.response
+        const vc = await service.findById(ctx, idResult.id)
         if (!vc) return fail(c, 'Vehicle class not found', 404)
         return ok(c, vc)
       })
@@ -156,12 +158,15 @@ export function createVehicleClassRoutes(
         const user = requireUser(c)
         if (!FLEET_WRITE_ROLES.has(user.role)) return fail(c, 'Forbidden', 403)
 
+        const idResult = parseId(c)
+        if (!idResult.ok) return idResult.response
+
         const parsed = await parseBody(c, updateVehicleClassSchema)
         if (!parsed.ok) return parsed.response
 
         const result = await service.update(
           toCallerContext(user),
-          c.req.param('id'),
+          idResult.id,
           stripUndefined(parsed.data) as Partial<import('../stores').VehicleClass>,
         )
         if (!result.ok) return fail(c, result.error, result.status)
@@ -171,7 +176,10 @@ export function createVehicleClassRoutes(
         const user = requireUser(c)
         if (!FLEET_WRITE_ROLES.has(user.role)) return fail(c, 'Forbidden', 403)
 
-        const result = await service.archive(toCallerContext(user), c.req.param('id'))
+        const idResult = parseId(c)
+        if (!idResult.ok) return idResult.response
+
+        const result = await service.archive(toCallerContext(user), idResult.id)
         if (!result.ok) {
           const extras: Record<string, unknown> = {}
           if (result.code) extras.code = result.code

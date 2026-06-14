@@ -16,7 +16,7 @@ import type { InsuranceOptionFilters } from '../repositories/types'
 import type { InsuranceOptionService } from '../services/insurance-option'
 import type { InsuranceOption } from '../stores'
 import { type ResolveWriteOperatorId, operatorReadScope } from '../tenancy'
-import { fail, ok, parseBody, stripUndefined } from './helpers'
+import { fail, ok, parseBody, parseId, stripUndefined } from './helpers'
 
 export function createInsuranceOptionRoutes(
   service: InsuranceOptionService,
@@ -63,7 +63,10 @@ export function createInsuranceOptionRoutes(
       const user = requireUser(c)
       if (!MANAGEMENT_READ_ROLES.has(user.role)) return fail(c, 'Forbidden', 403)
 
-      const option = await service.findById(toCallerContext(user), c.req.param('id'))
+      const idResult = parseId(c)
+      if (!idResult.ok) return idResult.response
+
+      const option = await service.findById(toCallerContext(user), idResult.id)
       if (!option) return fail(c, 'Insurance option not found', 404)
       return ok(c, option)
     })
@@ -106,12 +109,15 @@ export function createInsuranceOptionRoutes(
       const user = requireUser(c)
       if (!FLEET_WRITE_ROLES.has(user.role)) return fail(c, 'Forbidden', 403)
 
+      const idResult = parseId(c)
+      if (!idResult.ok) return idResult.response
+
       const parsed = await parseBody(c, updateInsuranceOptionSchema)
       if (!parsed.ok) return parsed.response
 
       const result = await service.update(
         toCallerContext(user),
-        c.req.param('id'),
+        idResult.id,
         stripUndefined(parsed.data) as Partial<InsuranceOption>,
       )
       if (!result.ok) return fail(c, result.error, result.status)
@@ -121,7 +127,10 @@ export function createInsuranceOptionRoutes(
       const user = requireUser(c)
       if (!FLEET_WRITE_ROLES.has(user.role)) return fail(c, 'Forbidden', 403)
 
-      const result = await service.archive(toCallerContext(user), c.req.param('id'))
+      const idResult = parseId(c)
+      if (!idResult.ok) return idResult.response
+
+      const result = await service.archive(toCallerContext(user), idResult.id)
       if (!result.ok) return fail(c, result.error, result.status)
       return ok(c, result.option)
     })

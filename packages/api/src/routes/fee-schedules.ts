@@ -16,7 +16,7 @@ import type { FeeScheduleFilters } from '../repositories/types'
 import type { FeeScheduleService } from '../services/fee-schedule'
 import type { FeeSchedule } from '../stores'
 import { type ResolveWriteOperatorId, operatorReadScope } from '../tenancy'
-import { fail, ok, parseBody, stripUndefined } from './helpers'
+import { fail, ok, parseBody, parseId, stripUndefined } from './helpers'
 
 export function createFeeScheduleRoutes(
   service: FeeScheduleService,
@@ -70,7 +70,10 @@ export function createFeeScheduleRoutes(
       const user = requireUser(c)
       if (!MANAGEMENT_READ_ROLES.has(user.role)) return fail(c, 'Forbidden', 403)
 
-      const feeSchedule = await service.findById(toCallerContext(user), c.req.param('id'))
+      const idResult = parseId(c)
+      if (!idResult.ok) return idResult.response
+
+      const feeSchedule = await service.findById(toCallerContext(user), idResult.id)
       if (!feeSchedule) return fail(c, 'Fee schedule not found', 404)
       return ok(c, feeSchedule)
     })
@@ -113,12 +116,15 @@ export function createFeeScheduleRoutes(
       const user = requireUser(c)
       if (!FLEET_WRITE_ROLES.has(user.role)) return fail(c, 'Forbidden', 403)
 
+      const idResult = parseId(c)
+      if (!idResult.ok) return idResult.response
+
       const parsed = await parseBody(c, updateFeeScheduleSchema)
       if (!parsed.ok) return parsed.response
 
       const result = await service.update(
         toCallerContext(user),
-        c.req.param('id'),
+        idResult.id,
         stripUndefined(parsed.data) as Partial<FeeSchedule>,
       )
       if (!result.ok)
@@ -129,7 +135,10 @@ export function createFeeScheduleRoutes(
       const user = requireUser(c)
       if (!FLEET_WRITE_ROLES.has(user.role)) return fail(c, 'Forbidden', 403)
 
-      const result = await service.archive(toCallerContext(user), c.req.param('id'))
+      const idResult = parseId(c)
+      if (!idResult.ok) return idResult.response
+
+      const result = await service.archive(toCallerContext(user), idResult.id)
       if (!result.ok)
         return fail(c, result.error, result.status, result.code ? { code: result.code } : undefined)
       return ok(c, result.feeSchedule)

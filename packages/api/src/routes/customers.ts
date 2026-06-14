@@ -2,7 +2,7 @@ import { quickCreateCustomerSchema } from '@kuruma/shared/validators/customer'
 import { Hono } from 'hono'
 import { STAFF_ROLES, requireUser } from '../middleware/auth'
 import type { CustomerService } from '../services/customer'
-import { fail, ok, parseBody, parseLimit } from './helpers'
+import { fail, ok, parseBody, parseId, parseLimit } from './helpers'
 
 const ALLOWED_SORTS = new Set(['lastBookingAt', 'bookingCount', 'name'])
 
@@ -51,7 +51,9 @@ export function createCustomerRoutes(service: CustomerService) {
       return ok(c, customer, created ? 201 : 200)
     })
     .get('/customers/:id', async (c) => {
-      const customer = await service.findById(c.req.param('id'))
+      const idResult = parseId(c)
+      if (!idResult.ok) return idResult.response
+      const customer = await service.findById(idResult.id)
       if (!customer) return fail(c, 'Customer not found', 404)
       return ok(c, customer)
     })

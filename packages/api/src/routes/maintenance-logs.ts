@@ -1,7 +1,7 @@
 import { Hono } from 'hono'
 import { MANAGEMENT_READ_ROLES, requireUser, toCallerContext } from '../middleware/auth'
 import type { MaintenanceService } from '../services/maintenance'
-import { fail, ok } from './helpers'
+import { fail, ok, parseId } from './helpers'
 
 export function createMaintenanceLogRoutes(maintenanceService: MaintenanceService) {
   return new Hono().get('/vehicles/:vehicleId/maintenance-logs', async (c) => {
@@ -12,10 +12,10 @@ export function createMaintenanceLogRoutes(maintenanceService: MaintenanceServic
     const user = requireUser(c)
     if (!MANAGEMENT_READ_ROLES.has(user.role)) return fail(c, 'Forbidden', 403)
 
-    const logs = await maintenanceService.findLogsByVehicleId(
-      toCallerContext(user),
-      c.req.param('vehicleId'),
-    )
+    const idResult = parseId(c, 'vehicleId')
+    if (!idResult.ok) return idResult.response
+
+    const logs = await maintenanceService.findLogsByVehicleId(toCallerContext(user), idResult.id)
     return ok(c, logs)
   })
 }

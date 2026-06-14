@@ -234,10 +234,17 @@ describe('GET /customers/:id', () => {
     app = new Hono()
   })
 
-  it('returns 404 for unknown customer', async () => {
+  it('returns 404 for a valid-but-unknown customer id', async () => {
+    setup({ users: [mkUser(USER1)] })
+    const res = await app.request('/customers/00000000-0000-4000-8000-0000000000ff')
+    expect(res.status).toBe(404)
+  })
+
+  it('returns 400 for a malformed (non-uuid) customer id', async () => {
     setup({ users: [mkUser(USER1)] })
     const res = await app.request('/customers/does-not-exist')
-    expect(res.status).toBe(404)
+    expect(res.status).toBe(400)
+    expect((await res.json()).error).toBe('id must be a valid uuid')
   })
 
   it('returns 404 when user exists but has no bookings', async () => {
