@@ -8,6 +8,7 @@ import {
 } from '../../src/repositories/in-memory'
 import type { Booking, Vehicle } from '../../src/repositories/types'
 import { createAvailabilityRoutes } from '../../src/routes/availability'
+import { AvailabilityService } from '../../src/services/availability'
 import { testAuthMiddleware } from '../helpers/auth'
 import { bookingInput } from '../helpers/booking'
 
@@ -67,7 +68,7 @@ describe('Availability Routes', () => {
     availabilityRepo = new InMemoryAvailabilityRepository(vehicleRepo, bookingRepo)
     app = new Hono()
     app.use('*', testAuthMiddleware('staff-user', 'STAFF'))
-    app.route('/', createAvailabilityRoutes(availabilityRepo))
+    app.route('/', createAvailabilityRoutes(new AvailabilityService(availabilityRepo)))
   })
 
   describe('GET /availability', () => {
@@ -297,7 +298,7 @@ describe('Availability Routes', () => {
     it('strips conflict details for RENTER role', async () => {
       const renterApp = new Hono()
       renterApp.use('*', testAuthMiddleware('renter-user', 'RENTER'))
-      renterApp.route('/', createAvailabilityRoutes(availabilityRepo))
+      renterApp.route('/', createAvailabilityRoutes(new AvailabilityService(availabilityRepo)))
 
       const vehicle = await createTestVehicle()
       await createTestBooking({

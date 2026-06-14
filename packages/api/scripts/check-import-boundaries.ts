@@ -46,7 +46,10 @@ function checkFile(filePath: string): Violation[] {
 
   const isRoute = rel.startsWith('routes/')
   const isService = rel.startsWith('services/')
-  const isCompositionRoot = rel === 'index.ts'
+  // The composition root is index.ts plus the composition/ bundle it delegates
+  // repository construction to (#693). Both legitimately import concrete repos;
+  // nothing else may. Keep these the only entries allowed to wire concretes.
+  const isCompositionRoot = rel === 'index.ts' || rel.startsWith('composition/')
   const isHelpers = rel === 'routes/helpers.ts'
 
   for (let i = 0; i < lines.length; i++) {
