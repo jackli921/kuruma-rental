@@ -49,6 +49,16 @@ describe('renderRenterConfirmation', () => {
     expect(text.length).toBeGreaterThan(0)
   })
 
+  it('renders pickup/return in JST wall-clock with a label — incl. the +9h date rollover (#680)', () => {
+    const { html, text } = renderRenterConfirmation(baseRenter, 'en')
+    for (const body of [html, text]) {
+      // startAt 10:00 UTC -> 19:00 JST same day; endAt 18:00 UTC -> 03:00 JST NEXT day.
+      expect(body).toContain('2026-07-01 19:00 JST')
+      expect(body).toContain('2026-07-04 03:00 JST')
+      expect(body).not.toContain('UTC')
+    }
+  })
+
   it('renders the pre-auth CTA with the EXACT handoff URL when present', () => {
     const { html, text } = renderRenterConfirmation(baseRenter, 'en')
     expect(html).toContain('https://pay.bestcarrental.jp/handoff/ABCD2345')
