@@ -17,8 +17,8 @@
     },
     "packages/web": {
       "entry": ["src/routes/**/*.{ts,tsx}", "functions/**/*.ts"],
-      "ignore": ["src/components/ui/**", "src/vite/vite-env.d.ts"],
-      "ignoreDependencies": ["postcss", "@kuruma/api", "drizzle-orm", "zod"]
+      "ignore": ["src/components/ui/**", "src/vite/vite-env.d.ts", "postcss.config.mjs"],
+      "ignoreDependencies": ["postcss", "@tailwindcss/postcss", "@kuruma/api", "drizzle-orm", "zod"]
     },
     "packages/shared": {}
   },
