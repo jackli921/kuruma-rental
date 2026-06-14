@@ -7,7 +7,7 @@ import {
 import { Hono } from 'hono'
 import { FLEET_WRITE_ROLES, requireAuth, requireUser, toCallerContext } from '../middleware/auth'
 import { LOCATIONS_REGION_FK, PG_ERROR, pgConstraintName, pgErrorCode } from '../pg-errors'
-import type { LocationFilters } from '../repositories/types'
+import type { LocationFilters } from '../services/filters'
 import type { LocationService, LocationUpdateData } from '../services/location'
 import { type ResolveWriteOperatorId, operatorReadScope } from '../tenancy'
 import { fail, ok, parseBody, parseId, stripUndefined } from './helpers'

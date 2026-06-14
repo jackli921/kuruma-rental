@@ -12,8 +12,8 @@ import {
   requireUser,
   toCallerContext,
 } from '../middleware/auth'
-import type { FeeScheduleFilters } from '../repositories/types'
 import type { FeeScheduleService } from '../services/fee-schedule'
+import type { FeeScheduleFilters } from '../services/filters'
 import type { FeeSchedule } from '../stores'
 import { type ResolveWriteOperatorId, operatorReadScope } from '../tenancy'
 import { fail, ok, parseBody, parseId, stripUndefined } from './helpers'

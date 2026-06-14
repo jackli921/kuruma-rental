@@ -12,8 +12,8 @@ import {
   requireUser,
   toCallerContext,
 } from '../middleware/auth'
-import type { AddOnFilters } from '../repositories/types'
 import type { AddOnService } from '../services/add-on'
+import type { AddOnFilters } from '../services/filters'
 import type { AddOn } from '../stores'
 import { type ResolveWriteOperatorId, operatorReadScope } from '../tenancy'
 import { fail, ok, parseBody, parseId, stripUndefined } from './helpers'

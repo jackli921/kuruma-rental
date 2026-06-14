@@ -5,7 +5,7 @@ import {
   requireUser,
   toCallerContext,
 } from '../middleware/auth'
-import type { NotificationLogFilters } from '../repositories/types'
+import type { NotificationLogFilters } from '../services/filters'
 import type { NotificationService } from '../services/notification'
 import { operatorReadScope } from '../tenancy'
 import { fail, ok, parseId } from './helpers'
