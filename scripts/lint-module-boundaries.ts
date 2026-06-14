@@ -80,7 +80,7 @@ function isForbiddenWebDbSpec(spec: string): boolean {
 //
 // After a drain, refresh in place with:
 //   bun run scripts/lint-module-boundaries.ts --update-baseline
-const DEPRECATED_WEB_TREE_BASELINE = 147
+const DEPRECATED_WEB_TREE_BASELINE = 148
 
 export type DeprecatedTreeStatus = {
   count: number

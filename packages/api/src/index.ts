@@ -3,7 +3,7 @@ import { Hono } from 'hono'
 import { cors } from 'hono/cors'
 import type { AppOverrides } from './app-overrides'
 import type { GoogleOAuthConfig } from './auth/google'
-import { buildRepos } from './composition/repositories'
+import { type Repos, buildRepos } from './composition/repositories'
 import { setupGlobalHandlers } from './error-handlers'
 import { parseBoolFlag } from './lib/parse-bool-flag'
 import { requireAuth } from './middleware/auth'
@@ -85,11 +85,13 @@ import { VehicleDetailService } from './services/vehicle-detail'
 import { VehiclePhotoService } from './services/vehicle-photo'
 import { type ResolveWriteOperatorId, resolveOperatorIdForWrite } from './tenancy'
 
-export function createApp(overrides?: AppOverrides) {
+export function createApp(overrides?: AppOverrides, repos: Repos = buildRepos(overrides)) {
   // Repository wiring lives in the composition bundle: it selects the same
   // override → Drizzle → in-memory branch this function used inline and returns
   // one compiler-enforced bundle, so a new repo can't be added to one branch
-  // and forgotten in another. See composition/repositories.ts.
+  // and forgotten in another. See composition/repositories.ts. The optional
+  // `repos` lets a caller (the #634 real-db e2e harness) pass a pre-built bundle
+  // — e.g. buildDrizzleRepos backed by a transaction-capable postgres-js db.
   const {
     vehicleClassRepo,
     vehicleRepo,
@@ -123,7 +125,7 @@ export function createApp(overrides?: AppOverrides) {
     runInTransaction,
     runOperatorGrant,
     googleAuthRuntime,
-  } = buildRepos(overrides)
+  } = repos
   const photoUploadLimiter =
     overrides?.photoUploadLimiter ??
     ((globalThis as Record<string, unknown>).PHOTO_UPLOAD_LIMITER as RateLimitBinding | undefined)

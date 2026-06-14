@@ -15,11 +15,14 @@ const API_SRC = join(import.meta.dirname, '..', 'src')
 /**
  * Routes→repositories carve-out registry (#692). Two deliberately distinct tiers:
  *
- * Sanctioned thin-read routes are read-only and hold no business policy, so a
- * pass-through service would be an anemic layer. A PERMANENT, documented exception —
- * but narrowed to their *Repository interface only (see importsOnlyRepositoryInterfaces):
- * an entity/filter import is query-shaping that belongs in a service and stays blocked,
- * so the sanction can't become a back door for a thin route to grow fat.
+ * Sanctioned thin-read routes hold no DOMAIN policy, so a pass-through service would be
+ * an anemic layer (transport-level auth like stats' API-key gate is a route concern and
+ * stays put). A PERMANENT, documented exception — but narrowed to their *Repository
+ * interface only (see importsOnlyRepositoryInterfaces): an entity/filter import is
+ * query-shaping that belongs in a service and stays blocked, so the sanction can't become
+ * a back door for a thin route to grow fat. A sanctioned route that later grows domain
+ * logic (authz scoping, response shaping, orchestration) must graduate to a service —
+ * the vehicles/#819 path — not widen its carve-out.
  *
  * Extraction-pending routes are transitional: each still strands real business policy
  * in its handler (vehicles: bulk-status guards, patch-merge, rate/rental validation, FK

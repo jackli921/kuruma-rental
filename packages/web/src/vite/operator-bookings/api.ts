@@ -1,9 +1,24 @@
 import { unwrap } from '@/lib/api-error'
 import { getApiBaseUrl } from '@/vite/api-base'
-import type { BookingDto } from '@/vite/bookings/api'
-import type { BookingEventPayload, BookingEventType } from '@kuruma/shared/db/schema'
+import { type BookingDto, bookingDtoSchema } from '@/vite/bookings/api'
 import type { BookingStatus } from '@kuruma/shared/enums'
 import { queryOptions } from '@tanstack/react-query'
+import {
+  type BookingEventDto,
+  type OperatorBookingDetailDto,
+  type RawOperatorBooking,
+  bookingEventSchema,
+  calendarVehicleRowSchema,
+  operatorBookingDetailSchema,
+  rawOperatorBookingSchema,
+  substitutionCandidateRowSchema,
+} from './schema'
+
+// #711 (3b): the response DTO types + schemas live in ./schema, inferred from /
+// pinned to the Zod schemas that validate each body at the network seam. The
+// detail + event types are re-exported so consumers import them from here
+// unchanged.
+export type { BookingEventDto, OperatorBookingDetailDto }
 
 // #512: operator booking view. The Vite shell owns these DTOs (it never imports
 // the frozen Next module's copy) so it stays self-contained and process.env-free.
@@ -31,22 +46,8 @@ export interface OperatorBookingRow {
   renter: { id: string; name: string | null; email: string | null } | null
 }
 
-/** The JSON shape of one `GET /bookings?expand=vehicle,renter` item we read. */
-interface RawOperatorBooking {
-  id: string
-  bookingCode: string
-  status: OperatorBookingStatus
-  startAt: string
-  endAt: string
-  // The turnaround-aware end (#551) and the server-assigned vehicle id (#392).
-  // Present on the list response; the calendar binds events to vehicle columns
-  // by `assignedVehicleId`, and draws the block out to `effectiveEndAt`.
-  effectiveEndAt?: string | undefined
-  assignedVehicleId?: string | null | undefined
-  totalPrice: number | null
-  vehicle?: { name: string; photos: string[] } | undefined
-  renter?: { id: string; name: string | null; email: string | null; language: string } | undefined
-}
+// The JSON shape of one `GET /bookings?expand=renter` item (RawOperatorBooking)
+// is validated by `rawOperatorBookingSchema` in ./schema.
 
 // #525: the operator calendar reads bookings over a date range. Unlike the list
 // row, it carries the assigned vehicle id (the resource-column key) and the
@@ -99,7 +100,7 @@ export async function fetchCalendarBookings(
   const res = await fetch(`${getApiBaseUrl()}/bookings?${sp.toString()}`, {
     credentials: 'include',
   })
-  const data = await unwrap<RawOperatorBooking[]>(res)
+  const data = await unwrap(res, rawOperatorBookingSchema.array())
   return data.map(toCalendarRow)
 }
 
@@ -135,7 +136,7 @@ export async function fetchCalendarVehicles(): Promise<CalendarVehicle[]> {
     const res = await fetch(`${getApiBaseUrl()}/vehicles?limit=${VEHICLES_PAGE_LIMIT}`, {
       credentials: 'include',
     })
-    const data = await unwrap<Array<{ id: string; name: string }>>(res)
+    const data = await unwrap(res, calendarVehicleRowSchema.array())
     return data.map((v) => ({ id: v.id, name: v.name }))
   } catch {
     return []
@@ -152,10 +153,7 @@ export function operatorCalendarVehiclesQueryOptions() {
 // #549: the deep-linked trip-detail page has no list row, so it reads the single
 // booking WITH `expand=vehicle,renter` (slice 2) — a superset of the renter
 // BookingDto carrying the assigned car + renter on top of the operator block.
-export interface OperatorBookingDetailDto extends BookingDto {
-  vehicle?: { name: string; photos: string[] } | undefined
-  renter?: { id: string; name: string | null; email: string | null; language: string } | undefined
-}
+// The DTO + its schema (operatorBookingDetailSchema) live in ./schema.
 
 export async function fetchOperatorBookingDetail(
   id: string,
@@ -167,7 +165,7 @@ export async function fetchOperatorBookingDetail(
   // The single read is IDOR/tenant-sealed server-side (404 for a foreign or
   // missing booking); map it to null so the loader can fire notFound().
   if (res.status === 404) return null
-  return unwrap<OperatorBookingDetailDto>(res)
+  return unwrap(res, operatorBookingDetailSchema)
 }
 
 export function operatorBookingDetailQueryOptions(id: string) {
@@ -220,25 +218,18 @@ export async function substituteBooking(
       body: JSON.stringify(body),
     },
   )
-  return unwrap<BookingDto>(res)
+  return unwrap(res, bookingDtoSchema)
 }
 
-/** One lifecycle event as the operator timeline reads it (dates are ISO JSON). */
-export interface BookingEventDto {
-  id: string
-  type: BookingEventType
-  payload: BookingEventPayload
-  actorId: string | null
-  createdAt: string
-}
-
+// The lifecycle-event DTO (BookingEventDto) + its discriminated-payload schema
+// (bookingEventSchema) live in ./schema; the type is re-exported above.
 export async function fetchBookingEvents(id: string): Promise<BookingEventDto[]> {
   // Operator/management-only endpoint (#549) — a renter caller 403s, which
   // unwrap() surfaces as an ApiError to the route's error boundary.
   const res = await fetch(`${getApiBaseUrl()}/bookings/${encodeURIComponent(id)}/events`, {
     credentials: 'include',
   })
-  return unwrap<BookingEventDto[]>(res)
+  return unwrap(res, bookingEventSchema.array())
 }
 
 export function bookingEventsQueryOptions(id: string) {
@@ -271,7 +262,7 @@ export async function fetchSubstitutionCandidates(id: string): Promise<Substitut
     `${getApiBaseUrl()}/bookings/${encodeURIComponent(id)}/substitution-candidates`,
     { credentials: 'include' },
   )
-  const data = await unwrap<Array<{ id: string; name: string; licensePlate?: string | null }>>(res)
+  const data = await unwrap(res, substitutionCandidateRowSchema.array())
   return data.map((v) => ({ id: v.id, name: v.name, licensePlate: v.licensePlate ?? null }))
 }
 
@@ -305,7 +296,7 @@ async function writeBooking(
     },
     ...(body === undefined ? {} : { body: JSON.stringify(body) }),
   })
-  return unwrap<BookingDto>(res)
+  return unwrap(res, bookingDtoSchema)
 }
 
 export function updateBookingStatus(

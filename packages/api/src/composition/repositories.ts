@@ -1,4 +1,4 @@
-import { getDb, runTx } from '@kuruma/shared/db'
+import { type RunTx, getDb, runTx } from '@kuruma/shared/db'
 import type { AppOverrides } from '../app-overrides'
 import { DrizzleOAuthAccountStore } from '../auth/drizzle-oauth-account-store'
 import { FetchGoogleOAuthProvider } from '../auth/fetch-google-oauth-provider'
@@ -6,6 +6,7 @@ import type { GoogleAuthRuntime } from '../auth/google'
 import { DisabledDocumentStorage } from '../repositories/disabled-document-storage'
 import { DisabledPhotoStorage } from '../repositories/disabled-photo-storage'
 import {
+  type Db,
   DrizzleAddOnRepository,
   DrizzleAvailabilityRepository,
   DrizzleBookingEventRepository,
@@ -248,9 +249,16 @@ export function buildOverrideRepos(overrides: AppOverrides): Repos {
  * `getDb()` connection. Storage adapters resolve from R2 bindings, throwing
  * loudly (Disabled*) when a binding is absent so uploads never "succeed" into
  * the void on CF Workers. Builds the real Google OAuth runtime.
+ *
+ * `opts` lets the real-db e2e harness (#634) reuse this exact wiring while
+ * substituting a transaction-capable postgres-js `db` + matching `runTx`
+ * (production's neon-http `getDb()` throws on interactive transactions). The
+ * harness consuming the full bundle is what kills the "added a Drizzle repo,
+ * forgot to hand-mirror it in the harness" omission class.
  */
-export function buildDrizzleRepos(): Repos {
-  const db = getDb()
+export function buildDrizzleRepos(opts?: { db?: Db; runTx?: RunTx }): Repos {
+  const db = opts?.db ?? getDb()
+  const tx = opts?.runTx ?? runTx
   const vehicleRepo = new DrizzleVehicleRepository(db)
   const bookingRepo = new DrizzleBookingRepository(db)
   const userRepo = new DrizzleUserRepository(db)
@@ -293,8 +301,8 @@ export function buildDrizzleRepos(): Repos {
     vehicleDetailRepo: new DrizzleVehicleDetailRepository(db),
     statsRepo: new DrizzleStatsRepository(db),
     overviewRepo: new DrizzleOverviewRepository(db),
-    threadRepo: new DrizzleThreadRepository(db, runTx),
-    messageRepo: new DrizzleMessageRepository(db, runTx),
+    threadRepo: new DrizzleThreadRepository(db, tx),
+    messageRepo: new DrizzleMessageRepository(db, tx),
     maintenanceLogRepo: new DrizzleMaintenanceLogRepository(db),
     photoStorage,
     renterDocumentRepo: new DrizzleRenterDocumentRepository(db),
@@ -313,10 +321,10 @@ export function buildDrizzleRepos(): Repos {
     providerInviteRepo,
     operatorMembershipRepo,
     bookingEventRepo: new DrizzleBookingEventRepository(db),
-    runInTransaction: createDrizzleTransaction(runTx),
+    runInTransaction: createDrizzleTransaction(tx),
     // Real interactive tx (#493): membership INSERT first so the partial-unique-
     // active index aborts the whole grant on a concurrent double-accept.
-    runOperatorGrant: createDrizzleOperatorGrant(runTx),
+    runOperatorGrant: createDrizzleOperatorGrant(tx),
     googleAuthRuntime,
   }
 }

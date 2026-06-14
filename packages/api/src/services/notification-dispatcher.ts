@@ -65,7 +65,8 @@ export type DispatchOutcome =
   // #483: the row is terminal DEAD (failed MAX_NOTIFICATION_ATTEMPTS times); claim()
   // never re-arms it, so neither a replay nor a resend will invoke the provider.
   | { result: 'abandoned'; row: NotificationLog }
-  | { result: 'no_recipient' }
+  // #681: carries the persisted terminal NO_RECIPIENT row (countable skip).
+  | { result: 'no_recipient'; row: NotificationLog }
 
 /**
  * Turns a committed booking into outbound email. Owns the upsert -> atomic claim
@@ -100,8 +101,17 @@ export class NotificationDispatcher {
   async processOne(booking: Booking, kind: Kind): Promise<DispatchOutcome> {
     const resolved = await this.resolveRecipient(booking, kind)
     if (!resolved) {
+      // #681: persist a terminal NO_RECIPIENT row under a SEPARATE key so the skip
+      // is countable for observability, and a later real send (e.g. the renter
+      // adds an email) is never blocked by this record. Never queued, never sent.
+      const row = await this.notificationLogRepo.recordNoRecipient({
+        bookingId: booking.id,
+        operatorId: booking.operatorId,
+        kind,
+        idempotencyKey: `notify:${booking.id}:${kind}:no_recipient`,
+      })
       console.error('[notification] no recipient', { bookingId: booking.id, kind })
-      return { result: 'no_recipient' }
+      return { result: 'no_recipient', row }
     }
 
     const row = await this.notificationLogRepo.upsertQueued({

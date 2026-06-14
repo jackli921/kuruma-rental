@@ -4,6 +4,7 @@ import { operatorReadScope } from '../../tenancy'
 import {
   MAX_NOTIFICATION_ATTEMPTS,
   type NotificationLogFilters,
+  type NotificationLogNoRecipient,
   type NotificationLogRepository,
   type NotificationLogUpsert,
   SEND_LEASE_MS,
@@ -42,6 +43,34 @@ export class InMemoryNotificationLogRepository implements NotificationLogReposit
       recipient: data.recipient,
       locale: data.locale,
       status: 'QUEUED',
+      providerMessageId: null,
+      error: null,
+      attempts: 0,
+      idempotencyKey: data.idempotencyKey,
+      createdAt: ts,
+      updatedAt: ts,
+    }
+    this.store.set(row.id, row)
+    this.byKey.set(row.idempotencyKey, row.id)
+    return row
+  }
+
+  async recordNoRecipient(data: NotificationLogNoRecipient): Promise<NotificationLog> {
+    const existingId = this.byKey.get(data.idempotencyKey)
+    if (existingId) {
+      const existing = this.store.get(existingId)
+      if (existing) return existing // idempotent — one terminal record per skip
+    }
+    const ts = this.now()
+    const row: NotificationLog = {
+      id: crypto.randomUUID(),
+      bookingId: data.bookingId,
+      operatorId: data.operatorId,
+      kind: data.kind,
+      channel: 'EMAIL',
+      recipient: '',
+      locale: '',
+      status: 'NO_RECIPIENT',
       providerMessageId: null,
       error: null,
       attempts: 0,
