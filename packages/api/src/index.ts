@@ -1,11 +1,9 @@
 import type { RateLimitBinding } from '@elithrar/workers-hono-rate-limit'
-import { getDb, runTx } from '@kuruma/shared/db'
 import { Hono } from 'hono'
 import { cors } from 'hono/cors'
 import type { AppOverrides } from './app-overrides'
-import { DrizzleOAuthAccountStore } from './auth/drizzle-oauth-account-store'
-import { FetchGoogleOAuthProvider } from './auth/fetch-google-oauth-provider'
-import type { GoogleAuthRuntime, GoogleOAuthConfig } from './auth/google'
+import type { GoogleOAuthConfig } from './auth/google'
+import { buildRepos } from './composition/repositories'
 import { setupGlobalHandlers } from './error-handlers'
 import { parseBoolFlag } from './lib/parse-bool-flag'
 import { requireAuth } from './middleware/auth'
@@ -13,105 +11,6 @@ import { csrf } from './middleware/csrf'
 import { structuredLogger } from './middleware/logger'
 import { requestId } from './middleware/request-id'
 import { observability } from './observability/middleware'
-import { DisabledDocumentStorage } from './repositories/disabled-document-storage'
-import { DisabledPhotoStorage } from './repositories/disabled-photo-storage'
-import {
-  DrizzleAddOnRepository,
-  DrizzleAvailabilityRepository,
-  DrizzleBookingEventRepository,
-  DrizzleBookingRepository,
-  DrizzleCustomerRepository,
-  DrizzleFeeScheduleRepository,
-  DrizzleFleetOverviewRepository,
-  DrizzleInsuranceOptionRepository,
-  DrizzleLocationRepository,
-  DrizzleMaintenanceLogRepository,
-  DrizzleMessageRepository,
-  DrizzleNotificationLogRepository,
-  DrizzleOperatorMembershipRepository,
-  DrizzleOperatorRepository,
-  DrizzleOverviewRepository,
-  DrizzlePaymentAnomalyRepository,
-  DrizzlePaymentEventRepository,
-  DrizzleProviderInviteRepository,
-  DrizzleRegionRepository,
-  DrizzleRenterDocumentRepository,
-  DrizzleStatsRepository,
-  DrizzleStorefrontRepository,
-  DrizzleThreadRepository,
-  DrizzleUserRepository,
-  DrizzleVehicleClassRepository,
-  DrizzleVehicleDetailRepository,
-  DrizzleVehicleRepository,
-  createDrizzleOperatorGrant,
-  createDrizzleTransaction,
-} from './repositories/drizzle'
-import {
-  InMemoryAddOnRepository,
-  InMemoryAvailabilityRepository,
-  InMemoryBookingEventRepository,
-  InMemoryBookingRepository,
-  InMemoryCustomerRepository,
-  InMemoryDocumentStorage,
-  InMemoryFeeScheduleRepository,
-  InMemoryFleetOverviewRepository,
-  InMemoryInsuranceOptionRepository,
-  InMemoryLocationRepository,
-  InMemoryMaintenanceLogRepository,
-  InMemoryMessageRepository,
-  InMemoryNotificationLogRepository,
-  InMemoryOperatorMembershipRepository,
-  InMemoryOperatorRepository,
-  InMemoryOverviewRepository,
-  InMemoryPaymentAnomalyRepository,
-  InMemoryPaymentEventRepository,
-  InMemoryProviderInviteRepository,
-  InMemoryRegionRepository,
-  InMemoryRenterDocumentRepository,
-  InMemoryStatsRepository,
-  InMemoryStorefrontRepository,
-  InMemoryThreadRepository,
-  InMemoryUserRepository,
-  InMemoryVehicleClassRepository,
-  InMemoryVehicleRepository,
-} from './repositories/in-memory'
-import { InMemoryVehicleDetailRepository } from './repositories/in-memory-vehicle-detail'
-import { InMemoryPhotoStorage } from './repositories/in-memory/photo-storage'
-import { R2DocumentStorage } from './repositories/r2-document-storage'
-import { type R2BucketLike, R2PhotoStorage } from './repositories/r2-photo-storage'
-import type {
-  AddOnRepository,
-  AvailabilityRepository,
-  BookingEventRepository,
-  BookingRepository,
-  CustomerRepository,
-  DocumentStorage,
-  FeeScheduleRepository,
-  FleetOverviewRepository,
-  InsuranceOptionRepository,
-  LocationRepository,
-  MaintenanceLogRepository,
-  MessageRepository,
-  NotificationLogRepository,
-  OperatorMembershipRepository,
-  OperatorRepository,
-  OverviewRepository,
-  PaymentAnomalyRepository,
-  PaymentEventRepository,
-  PhotoStorage,
-  ProviderInviteRepository,
-  RegionRepository,
-  RenterDocumentRepository,
-  RunInTransaction,
-  RunOperatorGrant,
-  StatsRepository,
-  StorefrontRepository,
-  ThreadRepository,
-  UserRepository,
-  VehicleClassRepository,
-  VehicleDetailRepository,
-  VehicleRepository,
-} from './repositories/types'
 import { createAddOnRoutes } from './routes/add-ons'
 import { createAdminRoutes } from './routes/admin'
 import { createAdminRevenueRoutes } from './routes/admin-revenue'
@@ -146,6 +45,7 @@ import { createVehiclePhotoRoutes } from './routes/vehicle-photos'
 import { createVehicleRoutes } from './routes/vehicles'
 import { AddOnService } from './services/add-on'
 import { AdminRevenueService } from './services/admin-revenue'
+import { AvailabilityService } from './services/availability'
 import { BookingService } from './services/booking'
 import { BookingPostCommitDispatcher } from './services/booking-post-commit-dispatcher'
 import { CustomerService } from './services/customer'
@@ -184,45 +84,44 @@ import { VehiclePhotoService } from './services/vehicle-photo'
 import { type ResolveWriteOperatorId, resolveOperatorIdForWrite } from './tenancy'
 
 export function createApp(overrides?: AppOverrides) {
-  let vehicleClassRepo: VehicleClassRepository
-  let vehicleRepo: VehicleRepository
-  let bookingRepo: BookingRepository
-  let availabilityRepo: AvailabilityRepository
-  let userRepo: UserRepository
-  let fleetOverviewRepo: FleetOverviewRepository
-  let vehicleDetailRepo: VehicleDetailRepository
-  let statsRepo: StatsRepository
-  let overviewRepo: OverviewRepository
-  let threadRepo: ThreadRepository
-  let messageRepo: MessageRepository
-  let maintenanceLogRepo: MaintenanceLogRepository
-  let photoStorage: PhotoStorage
-  let renterDocumentRepo: RenterDocumentRepository
-  let documentStorage: DocumentStorage
-  let customerRepo: CustomerRepository
-  let operatorRepo: OperatorRepository
-  let locationRepo: LocationRepository
-  let insuranceOptionRepo: InsuranceOptionRepository
-  let addOnRepo: AddOnRepository
-  let feeScheduleRepo: FeeScheduleRepository
-  let notificationLogRepo: NotificationLogRepository
-  let storefrontRepo: StorefrontRepository
-  let regionRepo: RegionRepository
-  let paymentEventRepo: PaymentEventRepository
-  let paymentAnomalyRepo: PaymentAnomalyRepository
-  let providerInviteRepo: ProviderInviteRepository
-  let operatorMembershipRepo: OperatorMembershipRepository
-  // #549: read side of the booking lifecycle log, injected into BookingService
-  // for findEvents. The transactional append path builds its own inside the
-  // runInTransaction bundle below.
-  let bookingEventRepo: BookingEventRepository
-  let runInTransaction: RunInTransaction
-  // Runs the three operator-grant writes (#521 §6) in one tx: real interactive tx
-  // in the DB branch, an inline passthrough over the in-memory repos otherwise.
-  let runOperatorGrant: RunOperatorGrant
-  // Undefined unless an override injects one (tests) or the DB branch builds the
-  // real one. Absent ⇒ /auth/google/callback 503s (e.g. local dev without a DB).
-  let googleAuthRuntime: GoogleAuthRuntime | undefined
+  // Repository wiring lives in the composition bundle: it selects the same
+  // override → Drizzle → in-memory branch this function used inline and returns
+  // one compiler-enforced bundle, so a new repo can't be added to one branch
+  // and forgotten in another. See composition/repositories.ts.
+  const {
+    vehicleClassRepo,
+    vehicleRepo,
+    bookingRepo,
+    availabilityRepo,
+    userRepo,
+    fleetOverviewRepo,
+    vehicleDetailRepo,
+    statsRepo,
+    overviewRepo,
+    threadRepo,
+    messageRepo,
+    maintenanceLogRepo,
+    photoStorage,
+    renterDocumentRepo,
+    documentStorage,
+    customerRepo,
+    operatorRepo,
+    locationRepo,
+    insuranceOptionRepo,
+    addOnRepo,
+    feeScheduleRepo,
+    notificationLogRepo,
+    storefrontRepo,
+    regionRepo,
+    paymentEventRepo,
+    paymentAnomalyRepo,
+    providerInviteRepo,
+    operatorMembershipRepo,
+    bookingEventRepo,
+    runInTransaction,
+    runOperatorGrant,
+    googleAuthRuntime,
+  } = buildRepos(overrides)
   const photoUploadLimiter =
     overrides?.photoUploadLimiter ??
     ((globalThis as Record<string, unknown>).PHOTO_UPLOAD_LIMITER as RateLimitBinding | undefined)
@@ -234,173 +133,6 @@ export function createApp(overrides?: AppOverrides) {
   const publicCatalogLimiter =
     overrides?.publicCatalogLimiter ??
     ((globalThis as Record<string, unknown>).PUBLIC_CATALOG_LIMITER as RateLimitBinding | undefined)
-
-  if (overrides) {
-    ;({ vehicleRepo, bookingRepo, availabilityRepo } = overrides)
-    vehicleClassRepo = overrides.vehicleClassRepo ?? new InMemoryVehicleClassRepository()
-    maintenanceLogRepo = overrides.maintenanceLogRepo ?? new InMemoryMaintenanceLogRepository()
-    bookingEventRepo = new InMemoryBookingEventRepository()
-    runInTransaction = async (fn) =>
-      fn({
-        vehicleRepo,
-        maintenanceLogRepo,
-        bookingRepo,
-        bookingEventRepo,
-        locationRepo,
-        insuranceOptionRepo,
-        addOnRepo,
-        feeScheduleRepo,
-      })
-    fleetOverviewRepo =
-      overrides.fleetOverviewRepo ??
-      new InMemoryFleetOverviewRepository(vehicleRepo, bookingRepo, new Map(), maintenanceLogRepo)
-    vehicleDetailRepo =
-      overrides.vehicleDetailRepo ??
-      new InMemoryVehicleDetailRepository(vehicleRepo, bookingRepo, new Map(), maintenanceLogRepo)
-    statsRepo = overrides.statsRepo ?? new InMemoryStatsRepository(vehicleRepo, bookingRepo)
-    overviewRepo =
-      overrides.overviewRepo ?? new InMemoryOverviewRepository(vehicleRepo, bookingRepo)
-    threadRepo = overrides.threadRepo ?? new InMemoryThreadRepository()
-    messageRepo =
-      overrides.messageRepo ?? new InMemoryMessageRepository(threadRepo as InMemoryThreadRepository)
-    photoStorage = overrides.photoStorage ?? new InMemoryPhotoStorage()
-    renterDocumentRepo = overrides.renterDocumentRepo ?? new InMemoryRenterDocumentRepository()
-    documentStorage = overrides.documentStorage ?? new InMemoryDocumentStorage()
-    userRepo = overrides.userRepo ?? new InMemoryUserRepository()
-    customerRepo = overrides.customerRepo ?? new InMemoryCustomerRepository(new Map(), new Map())
-    operatorRepo = overrides.operatorRepo ?? new InMemoryOperatorRepository()
-    locationRepo = overrides.locationRepo ?? new InMemoryLocationRepository()
-    insuranceOptionRepo = overrides.insuranceOptionRepo ?? new InMemoryInsuranceOptionRepository()
-    addOnRepo = overrides.addOnRepo ?? new InMemoryAddOnRepository()
-    feeScheduleRepo = overrides.feeScheduleRepo ?? new InMemoryFeeScheduleRepository()
-    notificationLogRepo = overrides.notificationLogRepo ?? new InMemoryNotificationLogRepository()
-    storefrontRepo =
-      overrides.storefrontRepo ?? new InMemoryStorefrontRepository(locationRepo, operatorRepo)
-    regionRepo = overrides.regionRepo ?? new InMemoryRegionRepository()
-    paymentEventRepo = overrides.paymentEventRepo ?? new InMemoryPaymentEventRepository()
-    paymentAnomalyRepo = overrides.paymentAnomalyRepo ?? new InMemoryPaymentAnomalyRepository()
-    providerInviteRepo = overrides.providerInviteRepo ?? new InMemoryProviderInviteRepository()
-    operatorMembershipRepo =
-      overrides.operatorMembershipRepo ?? new InMemoryOperatorMembershipRepository()
-    runOperatorGrant = (fn) =>
-      fn({ memberships: operatorMembershipRepo, users: userRepo, invites: providerInviteRepo })
-    googleAuthRuntime = overrides.googleAuthRuntime
-  } else if (process.env.DATABASE_URL) {
-    const db = getDb()
-    vehicleClassRepo = new DrizzleVehicleClassRepository(db)
-    vehicleRepo = new DrizzleVehicleRepository(db)
-    bookingRepo = new DrizzleBookingRepository(db)
-    bookingEventRepo = new DrizzleBookingEventRepository(db)
-    availabilityRepo = new DrizzleAvailabilityRepository(db)
-    maintenanceLogRepo = new DrizzleMaintenanceLogRepository(db)
-    runInTransaction = createDrizzleTransaction(runTx)
-    fleetOverviewRepo = new DrizzleFleetOverviewRepository(db)
-    vehicleDetailRepo = new DrizzleVehicleDetailRepository(db)
-    statsRepo = new DrizzleStatsRepository(db)
-    overviewRepo = new DrizzleOverviewRepository(db)
-    threadRepo = new DrizzleThreadRepository(db, runTx)
-    messageRepo = new DrizzleMessageRepository(db, runTx)
-    userRepo = new DrizzleUserRepository(db)
-    customerRepo = new DrizzleCustomerRepository(db)
-    operatorRepo = new DrizzleOperatorRepository(db)
-    locationRepo = new DrizzleLocationRepository(db)
-    insuranceOptionRepo = new DrizzleInsuranceOptionRepository(db)
-    addOnRepo = new DrizzleAddOnRepository(db)
-    feeScheduleRepo = new DrizzleFeeScheduleRepository(db)
-    notificationLogRepo = new DrizzleNotificationLogRepository(db)
-    storefrontRepo = new DrizzleStorefrontRepository(db)
-    regionRepo = new DrizzleRegionRepository(db)
-    paymentEventRepo = new DrizzlePaymentEventRepository(db)
-    paymentAnomalyRepo = new DrizzlePaymentAnomalyRepository(db)
-    providerInviteRepo = new DrizzleProviderInviteRepository(db)
-    operatorMembershipRepo = new DrizzleOperatorMembershipRepository(db)
-    // Real interactive tx (#493): membership INSERT first so the partial-unique-
-    // active index aborts the whole grant on a concurrent double-accept.
-    runOperatorGrant = createDrizzleOperatorGrant(runTx)
-    // Real Google OAuth runtime: HTTP provider + Drizzle-backed account store.
-    // Built only here (the composition root) so the route stays adapter-agnostic.
-    googleAuthRuntime = {
-      provider: new FetchGoogleOAuthProvider(),
-      accountStore: new DrizzleOAuthAccountStore(db),
-    }
-    const vehiclePhotosBucket = (globalThis as Record<string, unknown>).VEHICLE_PHOTOS as
-      | R2BucketLike
-      | undefined
-    const photosPublicUrl = process.env.VEHICLE_PHOTOS_PUBLIC_URL ?? ''
-    // In the Drizzle branch (production) an InMemory fallback is dangerous —
-    // each CF Worker request gets a fresh instance, so uploads "succeed" but
-    // return URLs pointing at nothing. DisabledPhotoStorage throws loudly.
-    photoStorage =
-      vehiclePhotosBucket && photosPublicUrl
-        ? new R2PhotoStorage(vehiclePhotosBucket, photosPublicUrl)
-        : new DisabledPhotoStorage()
-    // Renter documents live in a PRIVATE R2 bucket (no public URL). Absent the
-    // binding (local dev / pre-#304), DisabledDocumentStorage throws loudly so
-    // metadata never points at bytes that were never stored.
-    const renterDocumentsBucket = (globalThis as Record<string, unknown>).RENTER_DOCUMENTS as
-      | R2BucketLike
-      | undefined
-    documentStorage = renterDocumentsBucket
-      ? new R2DocumentStorage(renterDocumentsBucket)
-      : new DisabledDocumentStorage()
-    renterDocumentRepo = new DrizzleRenterDocumentRepository(db)
-  } else {
-    vehicleClassRepo = new InMemoryVehicleClassRepository()
-    vehicleRepo = new InMemoryVehicleRepository()
-    bookingRepo = new InMemoryBookingRepository()
-    availabilityRepo = new InMemoryAvailabilityRepository(
-      vehicleRepo as InMemoryVehicleRepository,
-      bookingRepo as InMemoryBookingRepository,
-    )
-    maintenanceLogRepo = new InMemoryMaintenanceLogRepository()
-    fleetOverviewRepo = new InMemoryFleetOverviewRepository(
-      vehicleRepo,
-      bookingRepo,
-      new Map(),
-      maintenanceLogRepo,
-    )
-    vehicleDetailRepo = new InMemoryVehicleDetailRepository(
-      vehicleRepo,
-      bookingRepo,
-      new Map(),
-      maintenanceLogRepo,
-    )
-    statsRepo = new InMemoryStatsRepository(vehicleRepo, bookingRepo)
-    overviewRepo = new InMemoryOverviewRepository(vehicleRepo, bookingRepo)
-    threadRepo = new InMemoryThreadRepository()
-    messageRepo = new InMemoryMessageRepository(threadRepo as InMemoryThreadRepository)
-    bookingEventRepo = new InMemoryBookingEventRepository()
-    runInTransaction = async (fn) =>
-      fn({
-        vehicleRepo,
-        maintenanceLogRepo,
-        bookingRepo,
-        bookingEventRepo,
-        locationRepo,
-        insuranceOptionRepo,
-        addOnRepo,
-        feeScheduleRepo,
-      })
-    userRepo = new InMemoryUserRepository()
-    photoStorage = new InMemoryPhotoStorage()
-    renterDocumentRepo = new InMemoryRenterDocumentRepository()
-    documentStorage = new InMemoryDocumentStorage()
-    customerRepo = new InMemoryCustomerRepository(new Map(), new Map())
-    operatorRepo = new InMemoryOperatorRepository()
-    locationRepo = new InMemoryLocationRepository()
-    insuranceOptionRepo = new InMemoryInsuranceOptionRepository()
-    addOnRepo = new InMemoryAddOnRepository()
-    feeScheduleRepo = new InMemoryFeeScheduleRepository()
-    notificationLogRepo = new InMemoryNotificationLogRepository()
-    storefrontRepo = new InMemoryStorefrontRepository(locationRepo, operatorRepo)
-    regionRepo = new InMemoryRegionRepository()
-    paymentEventRepo = new InMemoryPaymentEventRepository()
-    paymentAnomalyRepo = new InMemoryPaymentAnomalyRepository()
-    providerInviteRepo = new InMemoryProviderInviteRepository()
-    operatorMembershipRepo = new InMemoryOperatorMembershipRepository()
-    runOperatorGrant = (fn) =>
-      fn({ memberships: operatorMembershipRepo, users: userRepo, invites: providerInviteRepo })
-  }
 
   const translationProvider = createTranslationProvider()
 
@@ -631,6 +363,7 @@ export function createApp(overrides?: AppOverrides) {
     bookingRepo,
     notificationDispatcher,
   )
+  const availabilityService = new AvailabilityService(availabilityRepo)
   const customerService = new CustomerService(customerRepo, userRepo)
   const maintenanceService = new MaintenanceService(
     vehicleRepo,
@@ -718,7 +451,7 @@ export function createApp(overrides?: AppOverrides) {
     .route('/', createMaintenanceLogRoutes(maintenanceService))
     .route('/', createBookingRoutes(bookingService))
     .route('/', createPaymentRoutes(paymentService))
-    .route('/', createAvailabilityRoutes(availabilityRepo))
+    .route('/', createAvailabilityRoutes(availabilityService))
     .route('/', createStatsRoutes(statsRepo))
     .route('/', createOverviewRoutes(overviewService))
     .route('/', createAdminRevenueRoutes(adminRevenueService))
