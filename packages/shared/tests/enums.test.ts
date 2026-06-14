@@ -7,6 +7,7 @@ import {
   operatorRoleEnum,
   providerInviteStatusEnum,
 } from '../src/db/provider-access'
+import { regionStatusEnum, regionTypeEnum } from '../src/db/regions'
 import { documentStatusEnum, documentTypeEnum } from '../src/db/renter-documents'
 import {
   bookingEventTypeEnum,
@@ -43,6 +44,8 @@ import {
   OPERATOR_ROLES,
   PAYMENT_EVENT_STATUSES,
   PROVIDER_INVITE_STATUSES,
+  REGION_STATUSES,
+  REGION_TYPES,
   ROLES,
   TRANSMISSIONS,
   VEHICLE_CLASS_STATUSES,
@@ -82,6 +85,8 @@ describe('enum SSoT — pgEnum.enumValues === src/enums.ts array (#688)', () => 
       OPERATOR_MEMBERSHIP_STATUSES,
     ],
     ['provider_invite_status', providerInviteStatusEnum.enumValues, PROVIDER_INVITE_STATUSES],
+    ['region_type', regionTypeEnum.enumValues, REGION_TYPES],
+    ['region_status', regionStatusEnum.enumValues, REGION_STATUSES],
   ]
 
   for (const [name, enumValues, sourceArray] of cases) {

@@ -1,11 +1,10 @@
+import type { RegionType } from '../enums'
 import type { RegionCandidate } from '../lib/region-distance'
 
-/**
- * Taxonomy level of a region node (#651). Mirrors `regionTypeEnum` in
- * `db/regions.ts`. Nullable on a node because the column is nullable-on-add
- * (the seed populates every row).
- */
-export type RegionType = 'PREFECTURE' | 'CITY' | 'AREA'
+// RegionType (PREFECTURE | CITY | AREA) is the enums SSoT (#814); db/regions.ts'
+// regionTypeEnum derives from the same const. Re-exported here so existing
+// `@kuruma/shared/types/region` consumers keep a single import path.
+export type { RegionType }
 
 /**
  * A full region taxonomy row as returned by `GET /regions` (#651 Slice 2b).

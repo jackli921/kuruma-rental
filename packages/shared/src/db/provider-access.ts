@@ -1,7 +1,7 @@
 import { sql } from 'drizzle-orm'
 import { index, pgEnum, pgTable, text, timestamp, uniqueIndex } from 'drizzle-orm/pg-core'
 import { OPERATOR_MEMBERSHIP_STATUSES, OPERATOR_ROLES, PROVIDER_INVITE_STATUSES } from '../enums'
-import { operators, users } from './schema'
+import { operators, users } from './auth'
 
 // #521 — provider authorization model. Google proves identity; these tables
 // grant authority. `operator_memberships` is the source-of-truth grant ledger;
