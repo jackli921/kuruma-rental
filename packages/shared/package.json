@@ -16,6 +16,7 @@
     "./types/stats": "./src/types/stats.ts",
     "./types/overview": "./src/types/overview.ts",
     "./types/admin-revenue": "./src/types/admin-revenue.ts",
+    "./types/payment-anomaly": "./src/types/payment-anomaly.ts",
     "./types/api-response": "./src/types/api-response.ts",
     "./types/fleet": "./src/types/fleet.ts",
     "./types/vehicle": "./src/types/vehicle.ts",

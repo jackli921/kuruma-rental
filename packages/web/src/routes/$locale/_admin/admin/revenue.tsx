@@ -1,5 +1,7 @@
 import { PageSkeleton } from '@/vite/PageSkeleton'
+import { AnomaliesPanel } from '@/vite/admin/AnomaliesPanel'
 import { RevenueView } from '@/vite/admin/RevenueView'
+import { paymentAnomaliesQueryOptions } from '@/vite/admin/anomalies/api'
 import { adminRevenueQueryOptions } from '@/vite/admin/revenue/api'
 import { useSuspenseQuery } from '@tanstack/react-query'
 import { type ErrorComponentProps, createFileRoute, useRouter } from '@tanstack/react-router'
@@ -23,21 +25,33 @@ export const Route = createFileRoute('/$locale/_admin/admin/revenue')({
   validateSearch,
   loaderDeps: ({ search }) => ({ month: search.month }),
   loader: ({ context, deps }) =>
-    context.queryClient.ensureQueryData(adminRevenueQueryOptions(deps.month)),
+    Promise.all([
+      context.queryClient.ensureQueryData(adminRevenueQueryOptions(deps.month)),
+      context.queryClient.ensureQueryData(paymentAnomaliesQueryOptions()),
+    ]),
   pendingComponent: PageSkeleton,
   errorComponent: RevenueError,
   component: RevenueRoute,
 })
 
 function RevenueRoute() {
+  const { locale } = Route.useParams()
   const { month } = Route.useSearch()
   const navigate = Route.useNavigate()
   const { data } = useSuspenseQuery(adminRevenueQueryOptions(month))
+  const { data: anomalyData } = useSuspenseQuery(paymentAnomaliesQueryOptions())
   return (
-    <RevenueView
-      report={data}
-      onSelectMonth={(next) => navigate({ search: () => (next ? { month: next } : {}) })}
-    />
+    <>
+      {/* Anomalies sit above the revenue tables: a duplicate charge to refund or a
+          mismatch to investigate needs the admin's eye before the payout figures. */}
+      <div className="mx-auto max-w-7xl px-4 pt-8 sm:px-6 lg:px-8">
+        <AnomaliesPanel anomalies={anomalyData.anomalies} locale={locale} />
+      </div>
+      <RevenueView
+        report={data}
+        onSelectMonth={(next) => navigate({ search: () => (next ? { month: next } : {}) })}
+      />
+    </>
   )
 }
 

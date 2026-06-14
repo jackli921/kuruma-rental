@@ -73,21 +73,28 @@ describe('GET /admin/payment-anomalies — auth', () => {
   })
 })
 
-describe('GET /admin/payment-anomalies — listing', () => {
-  it('returns only unresolved anomalies with their reconciliation identifiers', async () => {
+describe('GET /admin/payment-anomalies — listing (PaymentAnomalyView contract)', () => {
+  it('returns only unresolved anomalies as views with reconciliation identifiers', async () => {
     const res = await mount('PLATFORM_ADMIN').request('/admin/payment-anomalies')
     const { data } = await res.json()
 
     expect(data.anomalies).toHaveLength(1)
-    expect(data.anomalies[0]).toMatchObject({
+    const [view] = data.anomalies
+    expect(view).toMatchObject({
       kind: 'DOUBLE_PAYMENT',
       operatorId: OP_A,
       stripeEventId: 'evt_unresolved',
       stripePaymentIntentId: 'pi_dup',
       receivedAmountJpy: 100_000,
       expectedAmountJpy: 100_000,
-      resolvedAt: null,
+      currency: 'jpy',
     })
+    // Dates cross the wire as ISO strings (JSON has no Date type).
+    expect(view.createdAt).toBe('2026-06-10T03:00:00.000Z')
+    // Lean admin projection: the internal resolved flag and the checkout-session
+    // id are not part of the unresolved-anomaly view.
+    expect('resolvedAt' in view).toBe(false)
+    expect('stripeCheckoutSessionId' in view).toBe(false)
   })
 })
 
