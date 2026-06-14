@@ -95,7 +95,7 @@ describe('check-import-boundaries — routes/repositories type boundary (#726)',
     })
   })
 
-  it('allows DI-repo carve-out routes to import from repositories/types (transitional, path-wide)', () => {
+  it('allows carve-out routes (regions/stats/vehicles) to DI their *Repository interface', () => {
     expect(
       checkContent(
         'routes/regions.ts',
@@ -154,11 +154,95 @@ describe('check-import-boundaries — routes/repositories type boundary (#726)',
     )
   })
 
-  it('exempts the whole repositories/types path for transitional carve-out routes', () => {
-    // Carve-out is deliberately path-wide (not *Repository-only): these 3 routes
-    // are mid-migration and get full enforcement once their service lands (#726).
+  it('keeps the whole repositories/types path exempt for the extraction-pending route', () => {
+    // vehicles.ts is mid-migration: it may import the entity/filter shapes it
+    // passes the repo until a VehicleService lands and it joins the enforced set.
     expect(
       checkContent('routes/vehicles.ts', "import type { Vehicle } from '../repositories/types'"),
     ).toEqual([])
+  })
+})
+
+describe('check-import-boundaries — #692 sanctioned thin-read vs extraction-pending', () => {
+  const TYPES_RULE = /Routes must not import from repositories\/types/
+  const THIN_READ_RULE = /Sanctioned thin-read routes/
+
+  it('allows a sanctioned thin-read route to DI only its *Repository interface', () => {
+    expect(
+      checkContent(
+        'routes/regions.ts',
+        "import type { RegionRepository } from '../repositories/types'",
+      ),
+    ).toEqual([])
+    expect(
+      checkContent(
+        'routes/stats.ts',
+        "import type { StatsRepository } from '../repositories/types'",
+      ),
+    ).toEqual([])
+  })
+
+  it('flags a sanctioned thin-read route importing a non-Repository entity/filter type', () => {
+    // A thin read needs only the repo contract it is DI'd. Pulling an entity or
+    // filter type is query-shaping that belongs in a service — the sanction must
+    // not let a thin route quietly grow fat behind the carve-out (#692).
+    const violations = checkContent(
+      'routes/regions.ts',
+      "import type { RegionNode } from '../repositories/types'",
+    )
+    expect(violations).toHaveLength(1)
+    expect(violations[0]).toMatchObject({
+      file: 'routes/regions.ts',
+      line: 1,
+      rule: expect.stringMatching(THIN_READ_RULE),
+    })
+  })
+
+  it('flags a sanctioned thin-read route mixing its *Repository with an entity type', () => {
+    const violations = checkContent(
+      'routes/stats.ts',
+      "import type { StatsRepository, DashboardStats } from '../repositories/types'",
+    )
+    expect(violations.map((v) => v.rule)).toContainEqual(expect.stringMatching(THIN_READ_RULE))
+  })
+
+  it('keys the *Repository check on the imported symbol, not its local alias', () => {
+    // The guard must read the source name (`X` in `X as Y`), never the binding —
+    // otherwise an entity aliased `as FooRepository` would launder past the gate.
+    const smuggled = checkContent(
+      'routes/regions.ts',
+      "import type { RegionNode as FakeRepository } from '../repositories/types'",
+    )
+    expect(smuggled).toHaveLength(1)
+    expect(smuggled[0]).toMatchObject({ rule: expect.stringMatching(THIN_READ_RULE) })
+  })
+
+  it('allows a *Repository interface aliased to a non-Repository local name', () => {
+    expect(
+      checkContent(
+        'routes/regions.ts',
+        "import type { RegionRepository as RegionData } from '../repositories/types'",
+      ),
+    ).toEqual([])
+  })
+
+  it('keeps the path-wide types exemption for the extraction-pending route (vehicles)', () => {
+    expect(
+      checkContent(
+        'routes/vehicles.ts',
+        "import type { Vehicle, VehicleFilters, VehicleRepository } from '../repositories/types'",
+      ),
+    ).toEqual([])
+  })
+
+  it('still blocks an ordinary (non-carve-out) route from importing repositories/types', () => {
+    // The *Repository-only allowance is scoped to the sanctioned routes; every
+    // other route sources filter/entity types from the service layer.
+    const violations = checkContent(
+      'routes/bookings.ts',
+      "import type { BookingRepository } from '../repositories/types'",
+    )
+    expect(violations).toHaveLength(1)
+    expect(violations[0]).toMatchObject({ rule: expect.stringMatching(TYPES_RULE) })
   })
 })
