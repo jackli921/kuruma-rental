@@ -11,7 +11,12 @@ import {
   parseSearchRange,
   searchRangeToSeed,
 } from '@/vite/storefronts/params'
-import { createFileRoute, redirect } from '@tanstack/react-router'
+import {
+  type ErrorComponentProps,
+  createFileRoute,
+  redirect,
+  useRouter,
+} from '@tanstack/react-router'
 import { Search } from 'lucide-react'
 import { useTranslations } from 'use-intl'
 
@@ -99,8 +104,32 @@ export const Route = createFileRoute('/$locale/search')({
       : null
     return { view: 'stores' as const, storefronts, flat: null }
   },
+  errorComponent: SearchError,
   component: StorefrontSearchRoute,
 })
+
+// A loader failure (the GET /regions slug resolution or either storefront fetch
+// can throw) degrades in-page here instead of escalating to the app-root Sentry
+// boundary — this is the public search front door, so it gets the same retry UX
+// as every other loader-bearing route (#841 review).
+function SearchError(_props: ErrorComponentProps) {
+  const t = useTranslations('search')
+  const router = useRouter()
+  return (
+    <main className="flex-1 px-4 py-20 sm:px-6 lg:px-8">
+      <div className="mx-auto max-w-7xl text-center">
+        <p className="text-lg text-muted-foreground">{t('loadError')}</p>
+        <button
+          type="button"
+          onClick={() => router.invalidate()}
+          className="mt-4 inline-flex items-center rounded-lg border border-border px-4 py-2 text-sm font-medium hover:bg-muted/50"
+        >
+          {t('retry')}
+        </button>
+      </div>
+    </main>
+  )
+}
 
 function StorefrontSearchRoute() {
   const t = useTranslations('search')

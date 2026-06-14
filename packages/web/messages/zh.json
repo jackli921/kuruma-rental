@@ -1001,6 +1001,8 @@
   },
   "search": {
     "title": "寻找车辆",
+    "loadError": "无法加载搜索结果。请重试。",
+    "retry": "重试",
     "subtitle": "按取车时间搜索所有门店的可用车辆。",
     "fromLabel": "取车日期与时间",
     "toLabel": "还车日期与时间",

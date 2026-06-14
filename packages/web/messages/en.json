@@ -1001,6 +1001,8 @@
   },
   "search": {
     "title": "Find a car",
+    "loadError": "Couldn't load search. Please try again.",
+    "retry": "Retry",
     "subtitle": "Search available cars across every store by pickup date.",
     "fromLabel": "Pickup date & time",
     "toLabel": "Return date & time",
