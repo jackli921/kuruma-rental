@@ -152,8 +152,8 @@ It scans `packages/{api,web,shared}/src` and enforces three rules:
    the web barrel guard.)
 2. **No web runtime DB access (#722)** — a non-`type` import of `@/lib/db`,
    `@kuruma/shared/db`, or `drizzle-orm` anywhere under `packages/web/src`
-   fails, except the Auth.js carve-out (`auth.ts`, `lib/db.ts`). `import type`
-   is always allowed (erased at build).
+   fails, unconditionally (#714 removed the Auth.js carve-out — web no longer
+   runs Auth.js). `import type` is always allowed (erased at build).
 3. **Deprecated-tree ratchet (#719)** — a non-failing warning when the file
    count under `src/vite/` or `src/components/<feature>/` grows past
    `DEPRECATED_WEB_TREE_BASELINE` (see migration status above).

@@ -51,10 +51,6 @@ describe('lint-module-boundaries: web no direct DB access (#722)', () => {
     expect(checkImports([`${WEB}/loaders/good-type-only.ts`])).toHaveLength(0)
   })
 
-  test('exempts the Auth.js carve-out (auth.ts, lib/db.ts)', () => {
-    expect(checkImports([`${WEB}/auth.ts`, `${WEB}/lib/db.ts`])).toHaveLength(0)
-  })
-
   test('does not restrict non-web packages (api may import drizzle at runtime)', () => {
     expect(checkImports([`${FIX}/packages/api/src/uses-drizzle.ts`])).toHaveLength(0)
   })
@@ -77,7 +73,7 @@ describe('lint-module-boundaries: deprecated web tree ratchet (#719)', () => {
       'packages/web/src/vite/bookings/list.tsx',
       'packages/web/src/components/vehicles/Card.tsx',
       'packages/web/src/components/ui/button.tsx', // sanctioned — not counted
-      'packages/web/src/lib/db.ts', // not deprecated
+      'packages/web/src/lib/api-base.ts', // not deprecated
       'packages/api/src/index.ts', // not web
     ]
     expect(countDeprecatedWebFiles(files)).toBe(3)
