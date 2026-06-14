@@ -1,4 +1,3 @@
-import type { RegionCandidate } from '@kuruma/shared/lib/region-distance'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { CallerContext } from '../../src/middleware/auth'
 import { PG_ERROR } from '../../src/pg-errors'
@@ -9,7 +8,7 @@ import {
 import { InMemoryBookingRepository } from '../../src/repositories/in-memory/booking'
 import type { Geocoder } from '../../src/services/geocoding/types'
 import { LocationService } from '../../src/services/location'
-import type { Booking } from '../../src/stores'
+import type { Booking, Region } from '../../src/stores'
 
 // Fake Geocoders for the #531 write-decision matrix. The real adapter never
 // throws; `throwingGeocoder` proves the service is resilient even if a future
@@ -36,13 +35,19 @@ const opB = 'op_b'
 // pre-existing scope/name/geocode tests satisfy "an ACTIVE location needs a region"
 // via the provided-id path — coord-derivation and the 422 no-region paths get their
 // own dedicated guard tests below.
-const SEEDED_AREA: RegionCandidate = {
+const SEEDED_AREA: Region = {
   id: 'reg_namba',
+  parentId: null,
+  nameEn: 'Namba',
+  nameJa: 'Namba',
+  nameZh: 'Namba',
+  type: 'AREA',
   latitude: 34.6627,
   longitude: 135.5012,
   assignable: true,
   status: 'ACTIVE',
   sortOrder: 1,
+  slug: 'namba',
 }
 
 const ctxFor = (operatorId: string): CallerContext => ({
@@ -110,7 +115,7 @@ describe('LocationService', () => {
       repo,
       new InMemoryBookingRepository(bookingStore),
       geocoder,
-      new InMemoryRegionRepository([], [SEEDED_AREA]),
+      new InMemoryRegionRepository([SEEDED_AREA]),
     )
 
   beforeEach(() => {
@@ -577,21 +582,27 @@ describe('LocationService', () => {
   describe('region loop guard (#651 Slice 2)', () => {
     // A region repo seeded with a specific candidate set, for the validation/derivation
     // cases the default single-area seed can't express.
-    const buildWithRegions = (candidates: RegionCandidate[], geocoder: Geocoder = missGeocoder) =>
+    const buildWithRegions = (nodes: Region[], geocoder: Geocoder = missGeocoder) =>
       new LocationService(
         repo,
         new InMemoryBookingRepository(bookingStore),
         geocoder,
-        new InMemoryRegionRepository([], candidates),
+        new InMemoryRegionRepository(nodes),
       )
 
-    const prefecture: RegionCandidate = {
+    const prefecture: Region = {
       id: 'reg_osaka',
+      parentId: null,
+      nameEn: 'Osaka',
+      nameJa: 'Osaka',
+      nameZh: 'Osaka',
+      type: 'PREFECTURE',
       latitude: null,
       longitude: null,
       assignable: false,
       status: 'ACTIVE',
       sortOrder: 0,
+      slug: 'osaka',
     }
 
     describe('create', () => {

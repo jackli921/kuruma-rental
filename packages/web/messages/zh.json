@@ -641,6 +641,14 @@
         "timezone": "时区",
         "turnaround": "周转时间（分钟）",
         "turnaroundHint": "车辆归还后再次可预订前的缓冲。默认 2880（48 小时）。",
+        "region": {
+          "label": "地区",
+          "help": "留空将根据地址自动分配最近的区域。",
+          "prefecture": "都道府县",
+          "city": "城市",
+          "area": "区域",
+          "placeholder": "选择..."
+        },
         "save": "保存取还点",
         "saving": "保存中...",
         "cancel": "取消"

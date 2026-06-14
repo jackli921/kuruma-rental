@@ -277,18 +277,12 @@ export interface Location {
   updatedAt: Date
 }
 
-export interface Region {
-  id: string
-  /** Self-ref adjacency edge; null = a root (a prefecture). #394. */
-  parentId: string | null
-  /** Trilingual names — the API is locale-agnostic; the web client picks one
-   *  by route locale (renter UI is en/ja/zh). */
-  nameEn: string
-  nameJa: string
-  nameZh: string
-  /** Stable ordering within a level for the cascading dropdowns. */
-  sortOrder: number
-}
+// #651 Slice 2b: the api region row IS the full shared taxonomy node. One shape
+// now feeds the GET /regions cascade AND the location-save geo guard, because
+// `RegionNode extends RegionCandidate` — so the lean `findCandidates` projection
+// is gone and `findAll` returns everything (type/lat/lng/assignable/status/slug).
+// Inline-import alias keeps the name + definition site here (no top-of-file churn).
+export type Region = import('@kuruma/shared/types/region').RegionNode
 
 export interface InsuranceOption {
   id: string
