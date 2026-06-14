@@ -184,7 +184,7 @@ export interface Message {
   senderId: string
   content: string
   sourceLanguage: string | null
-  translations: string
+  translations: Record<string, string>
   idempotencyKey: string | null
   createdAt: Date
 }

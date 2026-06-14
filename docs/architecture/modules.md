@@ -91,9 +91,10 @@ It is a CI step (`.github/workflows/ci.yml`) and flags:
 
 ## packages/web — feature folders + barrel imports
 
-The web shell (`packages/web/src/`) organizes UI by feature.
+The web shell (`packages/web/src/`) organizes UI by feature. There is **one
+canonical home** for a web feature:
 
-    src/modules/<feature>/
+    src/modules/<feature>/        # CANONICAL — the home for every web feature
       api.ts         # typed hono/client calls to the API (web has NO direct DB access)
       components/    # feature components (VehicleForm, BookingCard, …)
       hooks.ts       # feature-specific hooks
@@ -105,10 +106,36 @@ The web shell (`packages/web/src/`) organizes UI by feature.
 - Cross-feature primitives live in `src/lib/`. Design-system primitives stay in
   `src/components/ui/`.
 
-> Note: `packages/web` was migrated off Next.js to **Vite + TanStack Router**
-> (epic #378). The live shell is `src/vite/` + `src/routes/`; a frozen Next.js
-> tree (`src/app/`) is still present but is not the build path — do not extend
-> it. See the banner at the top of `AGENTS.md`.
+> **`src/modules/` does not exist on disk yet.** Every live feature is still in
+> `src/vite/` (below). The layout above is the *target*; the first feature
+> drained out of `src/vite/` creates `src/modules/`. Until then, an
+> `ls src/modules` returning nothing is expected — not staleness.
+
+### Migration status: draining `src/vite/` into `src/modules/`
+
+`packages/web` was migrated off Next.js to **Vite + TanStack Router** (epic
+#378). The dead Next.js source trees (`src/app/`, the old `modules/`, dead
+`components/<feature>/`, `nav/`, `actions/`, `hooks/`) were deleted in #704.
+What remains alongside `src/routes/` (TanStack Router) and `src/components/ui/`
+(design-system primitives) is **`src/vite/`** — a time-boxed **migration
+staging tree** that holds live feature code until each feature is moved to its
+canonical `src/modules/<feature>/` home.
+
+**`src/vite/` and `src/components/<feature>/` are deprecated roots — do not add
+new features there.** "Deprecated" means *no new features*, **not** frozen:
+in-place fixes, refactors, and tweaks to existing `src/vite/` code are expected
+and fine until that feature is drained. Drain them per-feature:
+
+1. **One feature at a time.** Move `src/vite/<feature>/` (plus any
+   `src/components/<feature>/` leftovers) into `src/modules/<feature>/` with the
+   barrel layout above. Track each move as its own item.
+2. **Same-PR deletion ratchet.** The PR that creates `src/modules/<feature>/`
+   **deletes** the old `vite/` / `components/<feature>/` copies in the *same*
+   PR — never leave two homes for one feature.
+3. **No regrowth.** `lint:modules` carries a non-failing deprecation ratchet
+   (`DEPRECATED_WEB_TREE_BASELINE`) that warns when the deprecated-tree file
+   count grows past its baseline. After a drain, refresh it in place with
+   `bun run scripts/lint-module-boundaries.ts --update-baseline`.
 
 ### Enforcement
 
@@ -118,10 +145,18 @@ The web shell (`packages/web/src/`) organizes UI by feature.
 bun run lint:modules   # also runs as part of `bun run lint`
 ```
 
-It scans `packages/{api,web,shared}/src` and fails on any cross-module internal
-import — i.e. importing `@/modules/<a>/<internal>` from a file in a different
-module. (Its `@/`-alias matcher only fires for web's barrels; the API has no
-`@/modules` imports, so it is effectively the web barrel guard.)
+It scans `packages/{api,web,shared}/src` and enforces three rules:
+1. **No cross-module internal imports** — importing `@/modules/<a>/<internal>`
+   from a file in a different module fails. (Its `@/`-alias matcher only fires
+   for web's barrels; the API has no `@/modules` imports, so it is effectively
+   the web barrel guard.)
+2. **No web runtime DB access (#722)** — a non-`type` import of `@/lib/db`,
+   `@kuruma/shared/db`, or `drizzle-orm` anywhere under `packages/web/src`
+   fails, except the Auth.js carve-out (`auth.ts`, `lib/db.ts`). `import type`
+   is always allowed (erased at build).
+3. **Deprecated-tree ratchet (#719)** — a non-failing warning when the file
+   count under `src/vite/` or `src/components/<feature>/` grows past
+   `DEPRECATED_WEB_TREE_BASELINE` (see migration status above).
 
 ---
 
@@ -143,17 +178,20 @@ files (`db/schema.ts`, `validators/<feature>.ts`). Import from `@kuruma/shared/*
 
 ## Grandfather / migrate-before-you-modify policy
 
-Some web features still live outside `src/modules/<feature>/` (legacy `lib/`
-and `components/<feature>/` from before the module convention, plus the frozen
-Next.js tree). They are exempt from the barrel rules until migrated. The
-**file-size cap applies everywhere**.
+Most web features currently live in the `src/vite/` staging tree (see migration
+status above); a few legacy bits remain in `src/lib/`. These are exempt from the
+barrel rules until migrated. The **file-size cap applies everywhere**.
 
-**Migrate before you modify.** Before a non-trivial change to a grandfathered
-*web* feature, land a standalone migration PR that moves it into
-`src/modules/<feature>/`. The feature-change PR builds on top. Migrations and
-feature changes never share a PR.
+**Migrate before you modify.** Before a non-trivial change to a feature still in
+`src/vite/` (or a legacy `components/<feature>/` / `lib/` spot), land a
+standalone migration PR that moves it into `src/modules/<feature>/`. The
+feature-change PR builds on top. Migrations and feature changes never share a PR.
 
 Trivial exceptions: typo fixes, one-line string tweaks, dependency bumps.
+
+While `src/modules/` is still empty, "migrate" means creating a feature's first
+canonical home — so this rule activates per-feature as drains begin, not as a
+blanket tax on the whole `src/vite/` tree today.
 
 > This policy is about the **web** module convention. The API is already
 > uniformly layered; "migrating" an API resource means keeping it within the
@@ -177,7 +215,9 @@ Trivial exceptions: typo fixes, one-line string tweaks, dependency bumps.
 
 ## How to add a web feature
 
-1. Create `packages/web/src/modules/<feature>/` with `api.ts`, `components/`,
-   `hooks.ts`, `types.ts`, `index.ts`, and colocated tests.
+1. Create `packages/web/src/modules/<feature>/` (the canonical home — **not**
+   `src/vite/`; you create `src/modules/` itself if you are the first feature
+   drained out) with `api.ts`, `components/`, `hooks.ts`, `types.ts`,
+   `index.ts`, and colocated tests.
 2. Import from `@/modules/<feature>` in routes/pages. Never reach into internals.
 3. Run `bun run lint` (includes `lint:modules` and `lint:size`).

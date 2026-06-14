@@ -52,10 +52,10 @@ export class DrizzleMessageRepository implements MessageRepository {
     // where two concurrent translates would clobber each other at READ
     // COMMITTED isolation. jsonb_set merges the new language in place.
     const nextJson = sql`jsonb_set(
-      COALESCE(NULLIF(${messages.translations}, '')::jsonb, '{}'::jsonb),
+      ${messages.translations},
       ARRAY[${language}],
       to_jsonb(${translatedText}::text)
-    )::text`
+    )`
 
     const setClause = detectedSourceLanguage
       ? {

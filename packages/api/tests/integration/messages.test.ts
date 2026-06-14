@@ -11,6 +11,7 @@
 // CI runs the same flow in the `db-drift` job (see .github/workflows/ci.yml).
 
 import type { RunTx } from '@kuruma/shared/db'
+import { sql } from 'drizzle-orm'
 import { afterEach, beforeAll, describe, expect, it } from 'vitest'
 import type { CallerContext } from '../../src/middleware/auth'
 import { DrizzleMessageRepository, DrizzleThreadRepository } from '../../src/repositories/drizzle'
@@ -206,8 +207,30 @@ describe('DrizzleMessageRepository', () => {
       expect(message.senderId).toBe(alice)
       expect(message.content).toBe('hello world')
       expect(message.sourceLanguage).toBeNull()
-      expect(message.translations).toBe('{}')
+      expect(message.translations).toEqual({})
       expect(message.createdAt).toBeInstanceOf(Date)
+    })
+
+    it('rejects a non-JSON write to the jsonb translations column at the DB', async () => {
+      const [alice, bob] = await createTestUsers(2)
+      createdUserIds.push(alice!, bob!)
+
+      const thread = await threadRepo.create(ctx(alice!), null, [alice!, bob!])
+      const message = await messageRepo.create(ctx(alice!), thread.id, 'hello')
+
+      // The legacy text column silently accepted invalid JSON (every later read
+      // then threw on the ::jsonb cast). The jsonb column rejects it at the write
+      // boundary instead — #729. drizzle wraps the driver error, so the postgres-js
+      // reason (SQLSTATE 22P02) lives on `.cause`.
+      const error = (await txDb
+        .execute(sql`UPDATE messages SET translations = '{not valid json' WHERE id = ${message.id}`)
+        .then(() => null)
+        .catch((e: unknown) => e)) as (Error & { cause?: unknown }) | null
+
+      expect(error).not.toBeNull()
+      // Assert the SQLSTATE, not the English message text (locale-dependent):
+      // 22P02 = invalid_text_representation, i.e. the jsonb column rejected the write.
+      expect((error?.cause as { code?: string })?.code).toBe('22P02')
     })
 
     it('atomically increments unreadCount for every participant except the sender', async () => {

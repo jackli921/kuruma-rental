@@ -1,5 +1,11 @@
 import { describe, expect, test } from 'bun:test'
-import { checkImports } from './lint-module-boundaries'
+import {
+  checkImports,
+  countDeprecatedWebFiles,
+  deprecatedTreeStatus,
+  formatDeprecationNotice,
+  isDeprecatedWebFile,
+} from './lint-module-boundaries'
 
 const FIX = 'scripts/__fixtures__/boundaries'
 
@@ -51,5 +57,44 @@ describe('lint-module-boundaries: web no direct DB access (#722)', () => {
 
   test('does not restrict non-web packages (api may import drizzle at runtime)', () => {
     expect(checkImports([`${FIX}/packages/api/src/uses-drizzle.ts`])).toHaveLength(0)
+  })
+})
+
+describe('lint-module-boundaries: deprecated web tree ratchet (#719)', () => {
+  test('vite/ and components/<feature>/ are deprecated; components/ui/ and other roots are not', () => {
+    expect(isDeprecatedWebFile('vite/search/api.ts')).toBe(true)
+    expect(isDeprecatedWebFile('components/vehicles/Card.tsx')).toBe(true)
+    expect(isDeprecatedWebFile('components/ui/button.tsx')).toBe(false)
+    expect(isDeprecatedWebFile('lib/api-base.ts')).toBe(false)
+    expect(isDeprecatedWebFile('auth.ts')).toBe(false)
+    expect(isDeprecatedWebFile('vite/vite-env.d.ts')).toBe(false) // ambient stub
+    expect(isDeprecatedWebFile(null)).toBe(false)
+  })
+
+  test('counts only files under deprecated web roots', () => {
+    const files = [
+      'packages/web/src/vite/search/api.ts',
+      'packages/web/src/vite/bookings/list.tsx',
+      'packages/web/src/components/vehicles/Card.tsx',
+      'packages/web/src/components/ui/button.tsx', // sanctioned — not counted
+      'packages/web/src/lib/db.ts', // not deprecated
+      'packages/api/src/index.ts', // not web
+    ]
+    expect(countDeprecatedWebFiles(files)).toBe(3)
+  })
+
+  test('status flags growth, shrinkage, or steady against the baseline', () => {
+    expect(deprecatedTreeStatus(146, 145).level).toBe('grew')
+    expect(deprecatedTreeStatus(144, 145).level).toBe('shrank')
+    expect(deprecatedTreeStatus(145, 145).level).toBe('ok')
+  })
+
+  test('notice is silent when steady and names the new baseline when it changes', () => {
+    expect(formatDeprecationNotice({ count: 145, baseline: 145, level: 'ok' })).toBeNull()
+    const grew = formatDeprecationNotice({ count: 146, baseline: 145, level: 'grew' })
+    expect(grew).toContain('src/modules/<feature>/')
+    expect(grew).toContain('DEPRECATED_WEB_TREE_BASELINE=146')
+    const shrank = formatDeprecationNotice({ count: 144, baseline: 145, level: 'shrank' })
+    expect(shrank).toContain('DEPRECATED_WEB_TREE_BASELINE=144')
   })
 })
