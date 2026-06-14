@@ -1,11 +1,14 @@
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { RegionPicker } from '@/vite/regions/RegionPicker'
+import { regionsQueryOptions } from '@/vite/regions/regions-api'
 import { carryForwardFilters, normalizeClassFilter } from '@/vite/storefronts/params'
 import { persistSearchRange } from '@/vite/storefronts/storage'
 import { ACRISS_CODES } from '@kuruma/shared'
+import { useQuery } from '@tanstack/react-query'
 import { useNavigate } from '@tanstack/react-router'
-import type { FormEvent } from 'react'
+import { type FormEvent, useState } from 'react'
 import { useLocale, useTranslations } from 'use-intl'
 
 // The renter-selectable class filter chips: the 8-code MVP ACRISS subset (#388).
@@ -23,6 +26,8 @@ interface StorefrontSearchFormProps {
   /** Active result filters re-emitted so a date refinement preserves them (#499). */
   readonly classFilter?: string | string[] | undefined
   readonly pickupLocationId?: string | undefined
+  /** Current region anchor as a slug (#651 Slice 3), prefilled into the picker. */
+  readonly region?: string | undefined
 }
 
 /**
@@ -37,11 +42,16 @@ export function StorefrontSearchForm({
   defaultTo = '',
   classFilter,
   pickupLocationId,
+  region,
 }: StorefrontSearchFormProps) {
   const t = useTranslations('search')
   const tAcriss = useTranslations('acriss')
   const locale = useLocale()
   const navigate = useNavigate()
+  const { data: regions } = useQuery(regionsQueryOptions())
+  // The region anchor is the form's one piece of controlled state; the date inputs
+  // stay uncontrolled to dodge the #392 pre-hydration reconcile flake (§6 caveat).
+  const [selectedRegion, setSelectedRegion] = useState<string | null>(region ?? null)
 
   const selectedClasses = normalizeClassFilter(classFilter)
 
@@ -60,14 +70,23 @@ export function StorefrontSearchForm({
     navigate({
       to: '/$locale/search',
       params: { locale },
-      // The chips SET the class filter; pickup-location still carries forward so
-      // refining the search doesn't reset it (#499).
-      search: { from, to, ...carryForwardFilters({ class: classes, pickupLocationId }) },
+      // The chips SET the class filter; pickup-location + region carry forward so
+      // refining the search doesn't reset them (#499, #651).
+      search: {
+        from,
+        to,
+        ...carryForwardFilters({
+          class: classes,
+          pickupLocationId,
+          region: selectedRegion ?? undefined,
+        }),
+      },
     })
   }
 
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
+      <RegionPicker regions={regions ?? []} value={selectedRegion} onChange={setSelectedRegion} />
       <div className="flex flex-col gap-4 sm:flex-row sm:items-end">
         <div className="flex-1 space-y-2">
           <Label htmlFor="from">{t('fromLabel')}</Label>

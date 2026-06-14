@@ -1,3 +1,5 @@
+import { resolveSlugToRegionId } from '@/vite/regions/region-lookup'
+import { regionsQueryOptions } from '@/vite/regions/regions-api'
 import { SearchMap } from '@/vite/search/SearchMap'
 import { type ResultView, SearchViewToggle } from '@/vite/search/SearchViewToggle'
 import { fetchSearchResults } from '@/vite/search/api'
@@ -22,6 +24,8 @@ interface StorefrontSearch {
   from?: string | undefined
   to?: string | undefined
   pickupLocationId?: string | undefined
+  /** #651 Slice 3: region anchor as its stable slug (`?region=namba`). */
+  region?: string | undefined
   class?: string | string[] | undefined
   view?: ResultView | undefined
 }
@@ -33,6 +37,7 @@ function validateSearch(search: Record<string, unknown>): StorefrontSearch {
     from: str(search.from),
     to: str(search.to),
     pickupLocationId: str(search.pickupLocationId),
+    region: str(search.region),
     class: Array.isArray(cls) ? cls.filter((c): c is string => typeof c === 'string') : str(cls),
     view: search.view === 'map' ? 'map' : search.view === 'stores' ? 'stores' : undefined,
   }
@@ -62,13 +67,23 @@ export const Route = createFileRoute('/$locale/search')({
     from: search.from,
     to: search.to,
     pickupLocationId: search.pickupLocationId,
+    region: search.region,
     classes: normalizeClassFilter(search.class),
     view: search.view ?? 'stores',
   }),
-  loader: async ({ deps }) => {
+  loader: async ({ deps, context }) => {
     const range = parseSearchRange(deps.from, deps.to)
+    // Resolve the URL region slug (#651 Decision 6) to its stable id against the
+    // edge-cached region list, then filter both searches to that region's subtree.
+    const regionId = deps.region
+      ? resolveSlugToRegionId(
+          await context.queryClient.ensureQueryData(regionsQueryOptions()),
+          deps.region,
+        )
+      : undefined
     const filters = {
       ...(deps.pickupLocationId ? { pickupLocationId: deps.pickupLocationId } : {}),
+      ...(regionId ? { regionId } : {}),
       ...(deps.classes.length > 0 ? { classes: deps.classes } : {}),
     }
 
@@ -90,7 +105,7 @@ export const Route = createFileRoute('/$locale/search')({
 function StorefrontSearchRoute() {
   const t = useTranslations('search')
   const { locale } = Route.useParams()
-  const { from, to, class: classFilter, pickupLocationId } = Route.useSearch()
+  const { from, to, class: classFilter, pickupLocationId, region } = Route.useSearch()
   const data = Route.useLoaderData()
 
   return (
@@ -110,6 +125,7 @@ function StorefrontSearchRoute() {
             defaultTo={to ?? ''}
             classFilter={classFilter}
             pickupLocationId={pickupLocationId}
+            region={region}
           />
         </div>
 
