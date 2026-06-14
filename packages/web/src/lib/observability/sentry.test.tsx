@@ -1,9 +1,10 @@
 import * as Sentry from '@sentry/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { initBrowserSentry } from './sentry'
+import { captureRouteError, initBrowserSentry } from './sentry'
 
 vi.mock('@sentry/react', () => ({
   init: vi.fn(),
+  captureException: vi.fn(),
   ErrorBoundary: ({ children }: { children: unknown }) => children,
 }))
 
@@ -16,6 +17,7 @@ describe('initBrowserSentry', () => {
     const result = initBrowserSentry(undefined)
     expect(Sentry.init).not.toHaveBeenCalled()
     expect(result.enabled).toBe(false)
+    expect(result.dsn).toBeUndefined()
   })
 
   it('calls Sentry.init with the resolved gated options when a DSN is set', () => {
@@ -34,5 +36,17 @@ describe('initBrowserSentry', () => {
         sendDefaultPii: false,
       }),
     )
+  })
+})
+
+describe('captureRouteError', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+  })
+
+  it('reports the route error to Sentry (the TanStack defaultOnCatch seam)', () => {
+    const error = new Error('route loader blew up')
+    captureRouteError(error)
+    expect(Sentry.captureException).toHaveBeenCalledWith(error)
   })
 })

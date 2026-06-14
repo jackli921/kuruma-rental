@@ -27,6 +27,8 @@ export interface ResolvedSentryOptions {
 export function resolveBrowserSentryOptions(
   env: BrowserSentryEnv | undefined,
 ): ResolvedSentryOptions {
+  // `|| undefined`, not `??`: a blank/whitespace-only value trims to '' and must
+  // gate off — `??` would keep the empty string and wrongly enable Sentry.
   const dsn = env?.VITE_SENTRY_DSN?.trim() || undefined
   const release = env?.VITE_SENTRY_RELEASE?.trim() || undefined
   return {

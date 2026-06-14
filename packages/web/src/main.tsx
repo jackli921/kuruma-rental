@@ -1,5 +1,9 @@
 import '@/styles/globals.css'
-import { SentryErrorBoundary, initBrowserSentry } from '@/lib/observability/sentry'
+import {
+  SentryErrorBoundary,
+  captureRouteError,
+  initBrowserSentry,
+} from '@/lib/observability/sentry'
 import { queryClient } from '@/vite/query-client'
 import { RouterProvider, createRouter } from '@tanstack/react-router'
 import { StrictMode } from 'react'
@@ -8,7 +12,11 @@ import { routeTree } from './routeTree.gen'
 
 initBrowserSentry(import.meta.env)
 
-const router = createRouter({ routeTree, context: { queryClient } })
+const router = createRouter({
+  routeTree,
+  context: { queryClient },
+  defaultOnCatch: captureRouteError,
+})
 
 declare module '@tanstack/react-router' {
   interface Register {

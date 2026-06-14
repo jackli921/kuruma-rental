@@ -29,6 +29,17 @@ export function initBrowserSentry(env: BrowserSentryEnv | undefined): ResolvedSe
 }
 
 /**
+ * Reports a route-level error to Sentry. TanStack Router catches loader/render
+ * throws in its own error boundaries (route `errorComponent`s), so they never
+ * propagate to the React `SentryErrorBoundary` at the router root. Wiring this
+ * as the router's `defaultOnCatch` is the seam that captures them (#765). The
+ * SDK no-ops when Sentry is disabled (no DSN).
+ */
+export function captureRouteError(error: Error) {
+  Sentry.captureException(error)
+}
+
+/**
  * Minimal crash fallback rendered when the React tree throws above the router.
  * Inline-styled (no Tailwind/i18n dependency) so it still renders if CSS or the
  * locale provider is what failed. `Sentry.ErrorBoundary` reports the error to
