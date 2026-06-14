@@ -2,7 +2,7 @@
 
 **Date:** 2026-06-13 · **Method:** 5 parallel specialist agents (architecture, dead-code, code-quality, type/schema, test-health) over a clean read-only worktree at the real integration branch. Every finding below is grounded in a verified `file:line`; the source tree audited was **mp** (149 commits ahead of `main`), not the stale local checkout.
 
-> **Status update — 2026-06-14.** Two of the three debt themes are now resolved. **Theme 1 (two-headed `web/`) is fully removed:** the frozen Next.js tree (`app/`, `modules/`, `hooks/`, `actions/`, non-`ui/` components), the `next`/`next-intl`/`next-auth`/`@opennextjs` deps, and the 51 frozen test files are gone (#698 tests · #714 runtime+deps · epic #689 verified); only `components/ui/*` remains, as recommended. **Theme 3's `schema.ts` god-file split shipped** (#813, issue #725) — `schema.ts` is now a 25-line `export *` barrel over per-domain `db/<context>.ts` modules and the 800-line cap is restored. Findings below are annotated **✓ DONE** where superseded; the enum-SSoT (partly #688) and role-sets work remain open.
+> **Status update — 2026-06-14.** Two of the three debt themes are now resolved. **Theme 1 (two-headed `web/`) is fully removed:** the frozen Next.js tree (`app/`, `modules/`, `hooks/`, `actions/`, non-`ui/` components), the `next`/`next-intl`/`next-auth`/`@opennextjs` deps, and the 51 frozen test files are gone (#698 tests · #714 runtime+deps · epic #689 verified); only `components/ui/*` remains, as recommended. **Theme 3's `schema.ts` god-file split shipped** (#813, issue #725) — `schema.ts` is now a 25-line `export *` barrel over per-domain `db/<context>.ts` modules and the 800-line cap is restored. Findings below are annotated **✓ DONE** where superseded. The **enum-SSoT sweep (Theme 2) also largely landed** (#688/#814/#824 — `packages/shared/src/enums.ts` is now the single source and the pgEnums/Zod enums derive from it; only the notification enums remain inline), and several Theme-3 god-file splits shipped too (see S1/S4/S6/S7). Genuinely still open: **role-sets typing** (web `Session.user.role` is still a bare `string`) and the `parseId` path-param validation (S2).
 
 ---
 
@@ -64,8 +64,8 @@ The same closed set is materialized in many hand-maintained copies with no compi
 ## Theme 3 — God-files near the cap (clear seams, low risk)
 
 - **✓ DONE (split shipped #813, issue #725 — `schema.ts` is now a barrel over per-domain `db/<context>.ts` modules; 800 cap restored).** ~~`schema.ts` (823, over the 800 cap; #458 raised to 1000 as stopgap → #518).~~ The per-domain split design was **executable** (see appendix): the lazy-thunk circular-FK + `export *` barrel pattern is already proven by 4 extracted modules (`renter-documents`, `add-on`, `booking-types`, `provider-access`); `db:verify` guarantees migration safety because emitted SQL is byte-identical. **Gated on schema-PR swarm timing** (region #671/#675, etc.) — execute when the file quiets so it goes through last.
-- **`BookingService` (796) — genuine god-service.** Split along the visible seam: 4 read-enrichment methods → `BookingQueryService`; keep create/substitute/transition. Lift the 190-line `submitInTx` pricing pipeline's pure steps (`priceInsurance`/`priceAddOns`/`resolveEffectiveEnd`) into a functional core so price math is unit-testable without repos (FC/IS).
-- **`index.ts` (776) — wiring blob.** Extract the three near-identical repo-construction branches into `composition/repositories.ts` (`buildDrizzleRepos`/`buildInMemoryRepos`/`buildOverrideRepos` → one `Repos` bundle). Kills the hand-lockstep that is the real source of "added to Drizzle, forgot in-memory" runtime bugs. Keep the `.route()` chain inline (`hc<AppType>` needs it). **Bonus:** the same bundle lets the e2e real-db harness reuse prod wiring instead of re-listing 20+ repos (already caused bug #635).
+- **✓ reads-split DONE (#712) — `BookingQueryService` extracted, `booking.ts` 796→190; pure pricing-core lift still pending.** ~~`BookingService` (796) — genuine god-service.~~ Split along the visible seam: 4 read-enrichment methods → `BookingQueryService`; keep create/substitute/transition. Lift the 190-line `submitInTx` pricing pipeline's pure steps (`priceInsurance`/`priceAddOns`/`resolveEffectiveEnd`) into a functional core so price math is unit-testable without repos (FC/IS).
+- **✓ DONE (#827) — `index.ts` 776→526.** ~~`index.ts` (776) — wiring blob.~~ Extract the three near-identical repo-construction branches into `composition/repositories.ts` (`buildDrizzleRepos`/`buildInMemoryRepos`/`buildOverrideRepos` → one `Repos` bundle). Kills the hand-lockstep that is the real source of "added to Drizzle, forgot in-memory" runtime bugs. Keep the `.route()` chain inline (`hc<AppType>` needs it). **Bonus:** the same bundle lets the e2e real-db harness reuse prod wiring instead of re-listing 20+ repos (already caused bug #635).
 - **`repositories/types.ts` (774) — interface dump.** Navigation/cache cost, not SRP. Split per-domain opportunistically alongside the schema split.
 
 ---
@@ -83,13 +83,13 @@ The same closed set is materialized in many hand-maintained copies with no compi
 ### Structural — sequence & gating matter
 | # | Item | Effort | Gating |
 |---|---|---|---|
-| S1 | **Enum SSoT sweep** — derive `BookingStatus` etc. from `enumValues`, `z.enum(enum.enumValues)`, fix `stores.ts` unions, replace 10+ literals | M | **Unclaimed, highest-leverage.** Touches api+web+zod — land before the schema split. |
+| S1 | ~~Enum SSoT sweep~~ **✓ mostly DONE (#688/#814/#824)** — `shared/src/enums.ts` is the SSoT; pgEnums + Zod enums derive from it | M | Shipped for booking/role/fee/etc.; **notification enums still inline** (the one remaining piece). |
 | S2 | `parseId` helper → validate the 48 unvalidated path params (latent 500s → clean 400s) | M | API-only, mechanical. |
 | S3 | ~~Web dead-code removal PR1/PR2/PR3~~ **✓ DONE** | M | All shipped (#698 tests · #714 runtime+deps+leaves); only `components/ui/*` kept. |
-| S4 | `index.ts` → `composition/repositories.ts` repo bundle (+ reuse in e2e harness, closes #634/#635 class) | M | API-only; low collision. |
+| S4 | ~~`index.ts` → `composition/repositories.ts` repo bundle~~ **✓ DONE (#827)** | M | `composition/repositories.ts` ships `buildDrizzleRepos`; `index.ts` 776→526; e2e harness reuses it (closed #634). |
 | S5 | ~~`schema.ts` #518 per-domain split~~ **✓ DONE (#813/#725)** | M | Shipped — `schema.ts` is now a barrel over `db/<context>.ts`. |
-| S6 | `BookingService` reads/writes split + extract pure pricing core | L | Best correctness payoff; after S1. |
-| S7 | Route→service lint gap: extract `MessageService`/`UserDirectoryService`, make lint match the doc (or sanction thin reads as documented exceptions) | M | Closes documented-vs-enforced divergence. |
+| S6 | `BookingService` reads/writes split **✓ DONE (#712)** + extract pure pricing core (FC/IS) — **pending** | L | `BookingQueryService` extracted, `booking.ts` 796→190; the pure pricing-core lift is the remaining piece. |
+| S7 | ~~Route→service lint gap~~ **✓ DONE (#712/#692/#821/#835)** | M | `MessageService`/`UserDirectoryService` extracted (#712); thin-read routes (`regions`/`stats`) sanctioned + documented in AGENTS.md; `vehicles` graduates via #819. |
 | S8 | Web role-sets → import members from `@kuruma/shared`; type `Session.user.role` | M | **Coordinate with `role-sets` branch.** |
 | S9 | drizzle repos → `$inferSelect` rows (the "wide-string" comment is stale for drizzle 0.45.2) | M-L | Fold into S5 per-domain. |
 

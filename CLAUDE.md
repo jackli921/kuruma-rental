@@ -12,7 +12,7 @@ Airbnb-style car rental platform for a Japan-based company (Osaka) serving inter
 | Scheduling | Hourly granularity (`timestamptz`) | Owner needs flexible scheduling for 40-50 cars |
 | Conflict prevention | Postgres exclusion constraint | DB-level double-booking prevention, no app race conditions |
 | API architecture | Hono on CF Workers | Source-agnostic API for web + 3rd-party (Trip.com) callers |
-| Auth | Auth.js v5 (JWT strategy) | Google + Apple OAuth, role in JWT token |
+| Auth | Auth.js v5 (JWT strategy) | Google OAuth (Apple not yet wired), role in JWT token |
 | Cancellation | Tiered: 72h free / 48h 30% / 24h 70% / same-day 100% | From owner |
 
 ## Architecture Boundaries (CRITICAL)
@@ -55,7 +55,7 @@ Airbnb-style car rental platform for a Japan-based company (Osaka) serving inter
 
 ## Auth & session JWTs
 
-- **The API owns sessions.** OAuth sign-in (Google/Apple, `@auth/drizzle-adapter` tables) runs server-side in `packages/api`, which then mints a custom **`jose` JWT** (`api/src/auth/jwt.ts`) carried in the `kuruma_session` cookie. The Vite web has no Auth.js runtime — it reads identity via **`GET /auth/session`** (`vite/session.ts`, TanStack Query). The old NextAuth JWT-callback / edge `auth.config.ts` split is gone (#378/#714).
+- **The API owns sessions.** OAuth sign-in (Google — currently the only wired provider; `@auth/drizzle-adapter` tables) runs server-side in `packages/api`, which then mints a custom **`jose` JWT** (`api/src/auth/jwt.ts`) carried in the `kuruma_session` cookie. The Vite web has no Auth.js runtime — it reads identity via **`GET /auth/session`** (`vite/session.ts`, TanStack Query). The old NextAuth JWT-callback / edge `auth.config.ts` split is gone (#378/#714).
 - **`verifyJwt` asserts issuer + audience** so a token minted for any other purpose can't be replayed as an API caller. The role rides in the token; `Session.user.role` on web is still an untyped `string` (maintainability-audit Theme 2).
 
 ## Cloudflare Workers Deployment
