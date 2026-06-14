@@ -641,6 +641,14 @@
         "timezone": "タイムゾーン",
         "turnaround": "整備時間（分）",
         "turnaroundHint": "返却後、再び予約可能になるまでの猶予。既定 2880（48時間）。",
+        "region": {
+          "label": "地域",
+          "help": "空欄の場合、住所から最寄りのエリアを自動設定します。",
+          "prefecture": "都道府県",
+          "city": "市区町村",
+          "area": "エリア",
+          "placeholder": "選択..."
+        },
         "save": "拠点を保存",
         "saving": "保存中...",
         "cancel": "キャンセル"

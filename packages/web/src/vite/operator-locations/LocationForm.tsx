@@ -2,7 +2,9 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
+import { RegionCascade } from '@/vite/operator-locations/RegionCascade'
 import { zodResolver } from '@hookform/resolvers/zod'
+import type { RegionNode } from '@kuruma/shared/types/region'
 import {
   type CreateLocationInput,
   type UpdateLocationInput,
@@ -26,6 +28,10 @@ type LocationFormBaseProps = {
   onCancel?: () => void
   defaultValues?: Partial<CreateLocationInput>
   isSubmitting?: boolean
+  // #651 2b: the full region taxonomy (GET /regions) for the prefecture->city->area
+  // cascade. Injected by the dialog (which fetches it) so the form stays presentational
+  // and unit-testable without a QueryClient. Defaults to [] for a graceful empty state.
+  regions?: readonly RegionNode[]
 }
 type LocationFormProps =
   | (LocationFormBaseProps & {
@@ -41,7 +47,7 @@ const DEFAULT_OPEN = '09:00'
 const DEFAULT_CLOSE = '18:00'
 
 export function LocationForm(props: LocationFormProps) {
-  const { onCancel, defaultValues, isSubmitting } = props
+  const { onCancel, defaultValues, isSubmitting, regions = [] } = props
   const mode = props.mode ?? 'create'
   const t = useTranslations('business.locations')
 
@@ -54,6 +60,7 @@ export function LocationForm(props: LocationFormProps) {
     register,
     handleSubmit,
     setValue,
+    watch,
     formState: { errors },
   } = useForm<LocationFormValues, unknown, LocationFormOutput>({
     resolver: zodResolver(
@@ -65,6 +72,9 @@ export function LocationForm(props: LocationFormProps) {
       operatingHours: null,
       timezone: 'Asia/Tokyo',
       defaultTurnaroundMinutes: 2880,
+      // Tracked field (no input) so the cascade's setValue flows into submit, and an
+      // untouched cascade submits null — the server then auto-derives from the address.
+      regionId: null,
       ...defaultValues,
     },
   })
@@ -80,6 +90,9 @@ export function LocationForm(props: LocationFormProps) {
       enabled ? { openTime: DEFAULT_OPEN, closeTime: DEFAULT_CLOSE } : null,
     )
   }
+
+  // The selected region (a deepest AREA id) or null; the cascade drives it via setValue.
+  const regionId = watch('regionId') ?? null
 
   return (
     <form
@@ -173,6 +186,19 @@ export function LocationForm(props: LocationFormProps) {
           )}
         </div>
       </div>
+
+      <fieldset className="space-y-2">
+        <legend className="text-sm font-medium">{t('form.region.label')}</legend>
+        {/* key on regions.length: the cascade seeds its prefecture/city chain on
+            mount, so remount once when the async list loads (0 -> N) to prefill edits. */}
+        <RegionCascade
+          key={regions.length}
+          regions={regions}
+          value={regionId}
+          onChange={(id) => setValue('regionId', id, { shouldValidate: true })}
+        />
+        <p className="text-xs text-muted-foreground">{t('form.region.help')}</p>
+      </fieldset>
 
       <div className="flex justify-end gap-2 pt-4">
         {onCancel && (

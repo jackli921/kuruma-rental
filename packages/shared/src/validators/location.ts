@@ -97,7 +97,12 @@ const COORD_PAIR_REFINEMENT = {
 // #394 deepest (area) region node. Nullable FK to the platform-global regions
 // tree; a uuid like every other FK (seed-id.ts). NOT NULL is deferred (D1), so
 // null is a first-class value here, not just an absence.
-const regionIdSchema = z.string().uuid('Region ID must be a valid UUID').nullable()
+// Region ids are TEXT PKs (the seed uses readable ids like 'reg_namba'; only
+// auto-generated rows get a UUID), so accept any non-empty id — NOT .uuid() (#651
+// 2b: the operator cascade submits seeded ids). The location-save guard validates
+// the id exists + is assignable (422 if not), so format strictness here would only
+// reject legitimate seeded regions.
+const regionIdSchema = z.string().trim().min(1, 'Region ID is required').nullable()
 
 // Shared base so create + platform-admin + update derive the same field set
 // (the .refine() below would turn this into a ZodEffects that can't be

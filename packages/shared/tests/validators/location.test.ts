@@ -194,9 +194,20 @@ describe('createLocationSchema', () => {
     if (result.success) expect(result.data.regionId).toBeNull()
   })
 
-  it('rejects a non-uuid regionId (#394)', () => {
+  // #651 2b: region ids are TEXT PKs — the seed uses readable ids like 'reg_osaka',
+  // not UUIDs. The operator cascade submits these, so the schema accepts any
+  // non-empty id; the service guard validates it exists + is assignable (422 if not).
+  it('accepts a text (non-uuid) region id — the seed uses readable ids (#651 2b)', () => {
     const result = createLocationSchema.safeParse({ ...validInput(), regionId: 'reg_osaka' })
-    expect(result.success).toBe(false)
+    expect(result.success).toBe(true)
+    if (result.success) expect(result.data.regionId).toBe('reg_osaka')
+  })
+
+  it('rejects an empty / whitespace regionId (#651 2b)', () => {
+    for (const regionId of ['', '   ']) {
+      const result = createLocationSchema.safeParse({ ...validInput(), regionId })
+      expect(result.success).toBe(false)
+    }
   })
 
   it('does not accept an operatorId in the operator-caller schema', () => {
@@ -286,8 +297,14 @@ describe('updateLocationSchema', () => {
     if (result.success) expect(result.data.regionId).toBeUndefined()
   })
 
-  it('rejects a non-uuid regionId on update (#394)', () => {
-    const result = updateLocationSchema.safeParse({ regionId: 'not-a-uuid' })
+  it('accepts a text (non-uuid) region id on update (#651 2b)', () => {
+    const result = updateLocationSchema.safeParse({ regionId: 'reg_umeda' })
+    expect(result.success).toBe(true)
+    if (result.success) expect(result.data.regionId).toBe('reg_umeda')
+  })
+
+  it('rejects an empty regionId on update (#651 2b)', () => {
+    const result = updateLocationSchema.safeParse({ regionId: '   ' })
     expect(result.success).toBe(false)
   })
 })
