@@ -1,6 +1,6 @@
-import { escapeHtml, formatDateTime, formatJpy } from './format'
+import { formatDateTime, formatJpy } from './format'
+import { type RenderedEmail, renderRowsEmail, vehicleLabel } from './layout'
 import { emailStrings } from './messages'
-import type { RenderedEmail } from './renter-confirmation'
 
 export interface OperatorAlertData {
   bookingCode: string
@@ -11,10 +11,6 @@ export interface OperatorAlertData {
   endAt: Date
   renterName: string | null
   totalPriceJpy: number | null
-}
-
-function vehicleLabel(v: OperatorAlertData['vehicle']): string {
-  return v.licensePlate ? `${v.name} (${v.licensePlate})` : v.name
 }
 
 /**
@@ -33,11 +29,5 @@ export function renderOperatorAlert(data: OperatorAlertData, locale: string): Re
   if (data.totalPriceJpy != null) rows.push([m.totalLabel, formatJpy(data.totalPriceJpy)])
 
   const subject = `${m.operatorSubject} ${data.bookingCode}`
-  const htmlRows = rows
-    .map(([l, v]) => `<tr><td><strong>${escapeHtml(l)}</strong></td><td>${escapeHtml(v)}</td></tr>`)
-    .join('')
-  const html = `<p>${escapeHtml(m.operatorHeading)}</p><table>${htmlRows}</table>`
-  const text = `${m.operatorHeading}\n\n${rows.map(([l, v]) => `${l}: ${v}`).join('\n')}`
-
-  return { subject, html, text }
+  return { subject, ...renderRowsEmail(m.operatorHeading, rows) }
 }
