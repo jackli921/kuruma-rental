@@ -1,10 +1,12 @@
 import { unwrap } from '@/lib/api-error'
 import { getApiBaseUrl } from '@/vite/api-base'
+import { INSURANCE_STATUSES } from '@kuruma/shared/enums'
 import type {
   CreateInsuranceOptionInput,
   UpdateInsuranceOptionInput,
 } from '@kuruma/shared/validators/insurance-option'
 import { queryOptions } from '@tanstack/react-query'
+import { z } from 'zod'
 
 // #530: operator insurance-option management. Mirrors the operator-fleet read
 // projection — the Vite shell owns this cookie-based client and never imports
@@ -16,18 +18,21 @@ import { queryOptions } from '@tanstack/react-query'
 
 export type { CreateInsuranceOptionInput, UpdateInsuranceOptionInput }
 
-/** JSON-serialized InsuranceOption — dates arrive as ISO strings from the API. */
-export interface InsuranceOptionData {
-  id: string
-  operatorId: string
-  name: string
-  description: string | null
-  dailyPriceJpy: number
-  deductibleJpy: number | null
-  status: 'ACTIVE' | 'ARCHIVED'
-  createdAt: string
-  updatedAt: string
-}
+// JSON-serialized InsuranceOption — dates arrive as ISO strings (#711: schema
+// validates `data` at the network seam; the row type is inferred from it).
+const insuranceOptionSchema = z.object({
+  id: z.string(),
+  operatorId: z.string(),
+  name: z.string(),
+  description: z.string().nullable(),
+  dailyPriceJpy: z.number(),
+  // null = full cover (no deductible).
+  deductibleJpy: z.number().nullable(),
+  status: z.enum(INSURANCE_STATUSES),
+  createdAt: z.string(),
+  updatedAt: z.string(),
+})
+export type InsuranceOptionData = z.infer<typeof insuranceOptionSchema>
 
 export const INSURANCE_QUERY_KEY = ['operator-insurance'] as const
 
@@ -37,7 +42,7 @@ export async function fetchInsuranceOptions(): Promise<InsuranceOptionData[]> {
   const res = await fetch(`${getApiBaseUrl()}/insurance-options?includeArchived=true`, {
     credentials: 'include',
   })
-  return unwrap<InsuranceOptionData[]>(res)
+  return unwrap(res, insuranceOptionSchema.array())
 }
 
 export function insuranceOptionsQueryOptions() {
@@ -54,26 +59,26 @@ export function insuranceOptionsQueryOptions() {
 // copy for writes — it omits the header.) Each unwraps ok() and throws ApiError
 // on failure so a useMutation onError can surface it.
 
-async function writeJson<T>(
+async function writeJson(
   path: string,
   method: 'POST' | 'PATCH',
   body: unknown,
   csrfToken: string,
-): Promise<T> {
+): Promise<InsuranceOptionData> {
   const res = await fetch(`${getApiBaseUrl()}${path}`, {
     method,
     credentials: 'include',
     headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrfToken },
     body: JSON.stringify(body),
   })
-  return unwrap<T>(res)
+  return unwrap(res, insuranceOptionSchema)
 }
 
 export async function createInsuranceOption(
   input: CreateInsuranceOptionInput,
   csrfToken: string,
 ): Promise<InsuranceOptionData> {
-  return writeJson<InsuranceOptionData>('/insurance-options', 'POST', input, csrfToken)
+  return writeJson('/insurance-options', 'POST', input, csrfToken)
 }
 
 export async function updateInsuranceOption(
@@ -81,12 +86,7 @@ export async function updateInsuranceOption(
   input: UpdateInsuranceOptionInput,
   csrfToken: string,
 ): Promise<InsuranceOptionData> {
-  return writeJson<InsuranceOptionData>(
-    `/insurance-options/${encodeURIComponent(id)}`,
-    'PATCH',
-    input,
-    csrfToken,
-  )
+  return writeJson(`/insurance-options/${encodeURIComponent(id)}`, 'PATCH', input, csrfToken)
 }
 
 // Soft-archive (DELETE flips status to ARCHIVED). No body — the CSRF header still
@@ -100,5 +100,5 @@ export async function archiveInsuranceOption(
     credentials: 'include',
     headers: { 'X-CSRF-Token': csrfToken },
   })
-  return unwrap<InsuranceOptionData>(res)
+  return unwrap(res, insuranceOptionSchema)
 }

@@ -1,5 +1,6 @@
 import { unwrap } from '@/lib/api-error'
 import { getApiBaseUrl } from '@/vite/api-base'
+import { FEE_SCHEDULE_STATUSES, FEE_TYPES, FEE_UNITS } from '@kuruma/shared/enums'
 import type {
   CreateFeeScheduleInput,
   FeeType,
@@ -7,6 +8,7 @@ import type {
   UpdateFeeScheduleInput,
 } from '@kuruma/shared/validators/fee-schedule'
 import { queryOptions } from '@tanstack/react-query'
+import { z } from 'zod'
 
 // #530: operator fee-schedule management. Mirrors the operator-insurance data
 // layer — cookie-based, operator-scoped server-side (the client passes no
@@ -15,19 +17,21 @@ import { queryOptions } from '@tanstack/react-query'
 
 export type { CreateFeeScheduleInput, UpdateFeeScheduleInput, FeeType, FeeUnit }
 
-/** JSON-serialized FeeSchedule — dates arrive as ISO strings from the API. */
-export interface FeeScheduleData {
-  id: string
-  operatorId: string
-  /** null = operator-wide; otherwise scoped to a single vehicle class. */
-  vehicleClassId: string | null
-  feeType: FeeType
-  unit: FeeUnit
-  amountJpy: number
-  status: 'ACTIVE' | 'ARCHIVED'
-  createdAt: string
-  updatedAt: string
-}
+// JSON-serialized FeeSchedule — dates arrive as ISO strings (#711: the schema
+// validates `data` at the network seam; the row type is inferred from it).
+const feeScheduleSchema = z.object({
+  id: z.string(),
+  operatorId: z.string(),
+  // null = operator-wide; otherwise scoped to a single vehicle class.
+  vehicleClassId: z.string().nullable(),
+  feeType: z.enum(FEE_TYPES),
+  unit: z.enum(FEE_UNITS),
+  amountJpy: z.number(),
+  status: z.enum(FEE_SCHEDULE_STATUSES),
+  createdAt: z.string(),
+  updatedAt: z.string(),
+})
+export type FeeScheduleData = z.infer<typeof feeScheduleSchema>
 
 export const FEE_QUERY_KEY = ['operator-fees'] as const
 
@@ -37,7 +41,7 @@ export async function fetchFeeSchedules(): Promise<FeeScheduleData[]> {
   const res = await fetch(`${getApiBaseUrl()}/fee-schedules?includeArchived=true`, {
     credentials: 'include',
   })
-  return unwrap<FeeScheduleData[]>(res)
+  return unwrap(res, feeScheduleSchema.array())
 }
 
 export function feeSchedulesQueryOptions() {
@@ -49,26 +53,26 @@ export function feeSchedulesQueryOptions() {
 
 // --- Mutations (cookie-based, CSRF-gated) ------------------------------------
 
-async function writeJson<T>(
+async function writeJson(
   path: string,
   method: 'POST' | 'PATCH',
   body: unknown,
   csrfToken: string,
-): Promise<T> {
+): Promise<FeeScheduleData> {
   const res = await fetch(`${getApiBaseUrl()}${path}`, {
     method,
     credentials: 'include',
     headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrfToken },
     body: JSON.stringify(body),
   })
-  return unwrap<T>(res)
+  return unwrap(res, feeScheduleSchema)
 }
 
 export async function createFeeSchedule(
   input: CreateFeeScheduleInput,
   csrfToken: string,
 ): Promise<FeeScheduleData> {
-  return writeJson<FeeScheduleData>('/fee-schedules', 'POST', input, csrfToken)
+  return writeJson('/fee-schedules', 'POST', input, csrfToken)
 }
 
 export async function updateFeeSchedule(
@@ -76,12 +80,7 @@ export async function updateFeeSchedule(
   input: UpdateFeeScheduleInput,
   csrfToken: string,
 ): Promise<FeeScheduleData> {
-  return writeJson<FeeScheduleData>(
-    `/fee-schedules/${encodeURIComponent(id)}`,
-    'PATCH',
-    input,
-    csrfToken,
-  )
+  return writeJson(`/fee-schedules/${encodeURIComponent(id)}`, 'PATCH', input, csrfToken)
 }
 
 // Soft-archive (DELETE flips status to ARCHIVED). The CSRF header still rides
@@ -92,5 +91,5 @@ export async function archiveFeeSchedule(id: string, csrfToken: string): Promise
     credentials: 'include',
     headers: { 'X-CSRF-Token': csrfToken },
   })
-  return unwrap<FeeScheduleData>(res)
+  return unwrap(res, feeScheduleSchema)
 }
