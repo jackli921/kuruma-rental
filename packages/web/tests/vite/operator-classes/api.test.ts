@@ -120,11 +120,17 @@ describe('operator-classes api', () => {
     await expect(fetchOperatorClasses()).rejects.toBeInstanceOf(ParseError)
   })
 
-  it('rejects with a ParseError when luggageSize is null (#789)', async () => {
+  it('rejects with a ParseError naming luggageSize when it is null (#789)', async () => {
     // The class column is NOT NULL DEFAULT 'MEDIUM' and the DTO is non-null
     // LuggageSize, so a null here is contract drift, not a legacy value. The
     // schema must fail at the seam rather than widen OperatorClass to `| null`.
     stubFetch({ success: true, data: [{ ...validClass, luggageSize: null }] })
-    await expect(fetchOperatorClasses()).rejects.toBeInstanceOf(ParseError)
+    const error = await fetchOperatorClasses().catch((e: unknown) => e)
+    expect(error).toBeInstanceOf(ParseError)
+    // Pin the failure to luggageSize so a drifted fixture can't pass for the
+    // wrong reason: the offending Zod issue must name the field.
+    expect((error as ParseError).issues).toContainEqual(
+      expect.objectContaining({ path: expect.arrayContaining(['luggageSize']) }),
+    )
   })
 })
