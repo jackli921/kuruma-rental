@@ -1,5 +1,5 @@
 import type { Column } from 'drizzle-orm'
-import type { getDb } from '@kuruma/shared/db'
+import type { getDb, RunTx } from '@kuruma/shared/db'
 import {
   addOnOptions,
   bookingEvents,
@@ -36,6 +36,23 @@ import type {
 } from '../../stores'
 
 export type Db = ReturnType<typeof getDb>
+
+// The interactive-transaction handle drizzle hands the runTx callback (#493),
+// derived from the same source so it tracks the driver type.
+type TxClient = Parameters<Parameters<RunTx>[0]>[0]
+
+/**
+ * The single sanctioned bridge from an interactive-tx handle to the repo-facing
+ * `Db` type (#733). Drizzle's tx exposes the same query-builder surface
+ * (select/insert/update/delete) as `Db`; the two driver types differ only in
+ * their result HKT (see `runTx`), so this `as unknown as Db` is the ONE place
+ * the unsafe seam lives. Repos use only those methods — if `Db` ever gains one
+ * `tx` lacks (e.g. nested transactions) this fails at runtime; revisit if
+ * Drizzle ships a Transaction utility type.
+ */
+export function asTxDb(tx: TxClient): Db {
+  return tx as unknown as Db
+}
 
 export const vehicleClassColumns = {
   id: vehicleClasses.id,

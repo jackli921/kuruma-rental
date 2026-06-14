@@ -2,7 +2,7 @@ import type { RunTx } from '@kuruma/shared/db'
 import type { RunOperatorGrant } from '../types'
 import { DrizzleOperatorMembershipRepository } from './operator-membership'
 import { DrizzleProviderInviteRepository } from './provider-invite'
-import type { Db } from './shared'
+import { asTxDb } from './shared'
 import { DrizzleUserRepository } from './user'
 
 /**
@@ -18,11 +18,10 @@ import { DrizzleUserRepository } from './user'
  * uses can't run interactive transactions on CF Workers, so the runner is injected.
  */
 export function createDrizzleOperatorGrant(runInteractiveTx: RunTx): RunOperatorGrant {
-  // Drizzle's tx exposes the same query-builder API as db; the cast is safe because
-  // the repos only use select/insert/update (see createDrizzleTransaction's note).
+  // Tx-bound repos via the single asTxDb cast seam (#733).
   return async (fn) =>
     runInteractiveTx(async (tx) => {
-      const txDb = tx as unknown as Db
+      const txDb = asTxDb(tx)
       return fn({
         memberships: new DrizzleOperatorMembershipRepository(txDb),
         users: new DrizzleUserRepository(txDb),
