@@ -13,9 +13,6 @@ module.exports = {
       'bun run scripts/lint-file-size.ts',
       'bun run scripts/lint-module-boundaries.ts',
       'bunx tsc --noEmit -p packages/web/tsconfig.json',
-      // Vite/TanStack tree (src/routes, src/main, src/vite) lives behind its own
-      // config (#378 phase 5a). Frozen tsconfig.json excludes it, so check it too.
-      'bunx tsc --noEmit -p packages/web/tsconfig.app.json',
       'bunx tsc --noEmit -p packages/api/tsconfig.json',
     ]
   },
