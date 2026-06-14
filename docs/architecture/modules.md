@@ -60,9 +60,14 @@ section in `AGENTS.md`.
 - **Services depend on interfaces, not implementations.** A service receives its
   repositories by injection so a test can pass an `InMemory*` double and prod
   can pass a `Drizzle*` one without changing the service.
-- **Only `index.ts` may `new` a concrete repository.** Routes are factory
+- **Only the composition root may `new` a concrete repository.** Routes are factory
   functions (e.g. `createBookingRoutes(bookingService)`) chained onto the app
   via `.route('/', …)` inside `createApp()` in `index.ts`. There is no `app.ts`.
+- **The one carve-out: transaction factories.** `repositories/drizzle/transaction.ts`
+  and `operator-grant-transaction.ts` construct concrete repos directly, because each
+  must rebind to the per-call neon-serverless transaction connection (#493) — something
+  `index.ts` cannot do per call. They are the *only* files outside the composition root
+  allowed to `new` a concrete; the boundary linter flags construction anywhere else.
 
 ### Enforcement
 
@@ -75,8 +80,10 @@ bun run --filter @kuruma/api lint:boundaries
 It is a CI step (`.github/workflows/ci.yml`) and flags:
 1. a `routes/` file importing a concrete repository,
 2. a `services/` file importing a concrete repository,
-3. any non-`index.ts` file importing `repositories/drizzle` or `repositories/in-memory`,
-4. a route calling `c.req.json()` instead of `parseBody()`.
+3. any non-composition-root file importing `repositories/drizzle` or `repositories/in-memory`,
+4. a route calling `c.req.json()` instead of `parseBody()`,
+5. a `new Drizzle*`/`new InMemory*` construction outside the composition root and the
+   sanctioned `repositories/drizzle/*-transaction.ts` factories.
 
 `*.test.ts` files are exempt — they legitimately construct concretes to exercise DI.
 
