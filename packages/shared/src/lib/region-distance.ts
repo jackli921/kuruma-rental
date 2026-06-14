@@ -1,3 +1,5 @@
+import type { RegionStatus } from '../enums'
+
 /**
  * Region geo-matching (#651 Slice 1). Pure functions shared by the one-off
  * location→region backfill (this slice), the operator location-save suggestion
@@ -22,7 +24,7 @@ export interface RegionCandidate {
   latitude: number | null
   longitude: number | null
   assignable: boolean
-  status: 'ACTIVE' | 'INACTIVE'
+  status: RegionStatus
   /** Stable tiebreak when two assignable regions are equidistant. */
   sortOrder: number
 }
