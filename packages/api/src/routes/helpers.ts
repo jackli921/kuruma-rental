@@ -214,16 +214,18 @@ export function parseDateRange(
     return { ok: true, from: undefined, to: undefined }
   }
 
-  // Only one provided
-  if ((fromParam && !toParam) || (!fromParam && toParam)) {
+  // Exactly one provided (both-absent is handled above). A single local guard
+  // both returns the 400 and narrows fromParam/toParam to `string`, so the Date
+  // constructions need no non-null assertions (#732).
+  if (!fromParam || !toParam) {
     return {
       ok: false,
       response: fail(c, 'Both "from" and "to" are required for date range filtering', 400),
     }
   }
 
-  const from = new Date(fromParam!)
-  const to = new Date(toParam!)
+  const from = new Date(fromParam)
+  const to = new Date(toParam)
 
   if (Number.isNaN(from.getTime()) || Number.isNaN(to.getTime())) {
     return {
