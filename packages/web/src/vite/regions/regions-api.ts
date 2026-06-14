@@ -3,10 +3,9 @@ import { getApiBaseUrl } from '@/vite/api-base'
 import type { RegionNode } from '@kuruma/shared/types/region'
 import { queryOptions } from '@tanstack/react-query'
 
-// #651 2b: the public hierarchical region taxonomy (prefecture -> city -> area) —
-// the flat list GET /regions returns. Powers the operator location cascade now; the
-// renter region picker (Slice 3) will reuse it, so lift this to a shared module when
-// that second consumer lands (kept here, beside its only caller, until then).
+// #651: the public hierarchical region taxonomy (prefecture -> city -> area) the
+// flat list GET /regions returns. Shared web data layer for both consumers — the
+// operator location cascade (#651 Slice 2b) and the renter region picker (#651 Slice 3).
 const ONE_HOUR_MS = 60 * 60 * 1000
 
 export const REGIONS_QUERY_KEY = ['regions'] as const
