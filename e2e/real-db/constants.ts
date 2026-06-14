@@ -21,7 +21,7 @@ export const ADMIN_SEED_EMAIL = 'platform-admin@kuruma.test'
 
 // Seeded-persona emails mint-session resolves to a DB user id + tenant. These
 // MIRROR the shared seed (@kuruma/shared db/constants BEST_CAR_RENTAL_OWNER_EMAIL
-// and seed-data/bookings.ts DEMO_RENTERS[0]) but are re-declared here rather than
+// and seed-data/bookings.ts DEMO_RENTERS — Sarah Smith, en) but are re-declared here rather than
 // imported: Playwright's loader transpiles this test dir, not arbitrary
 // packages/shared/**.ts reached via import (same constraint that keeps the JWT
 // minting inlined in mint-session.ts). Single source WITHIN e2e — change here.

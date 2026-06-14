@@ -36,8 +36,10 @@ export const SECOND_OPERATOR_OWNER_NAME = 'Kansai Drive Owner'
 
 /**
  * Second demo renter (Tanaka Yui, ja). Promoted out of the `DEMO_RENTERS` inline
- * literal for the same single-source reason (#654). `@example.test` keeps the
- * `seed-bookings` cleanup grep matching — never change the domain.
+ * literal for the same single-source reason (#654). Keep the `@example.test`
+ * domain: `seed-bookings` cleanup is a destructive `db.delete(users)` keyed off
+ * the exact `DEMO_RENTERS` email set, so a reserved test domain is what
+ * guarantees that delete can never hit a real OAuth user.
  */
 export const SECOND_RENTER_ID = 'usr_renter_yui'
 export const SECOND_RENTER_EMAIL = 'yui@example.test'

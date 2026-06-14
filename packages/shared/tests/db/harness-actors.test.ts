@@ -44,7 +44,7 @@ describe('harness actors are single-sourced into the seed (#654)', () => {
     )
   })
 
-  it('every demo renter email is @example.test (seed-bookings cleanup grep anchor)', () => {
+  it('every demo renter email is @example.test (reserved domain: the destructive renter cleanup never deletes a real user)', () => {
     for (const renter of DEMO_RENTERS) {
       expect(renter.email).toMatch(/@example\.test$/)
     }
