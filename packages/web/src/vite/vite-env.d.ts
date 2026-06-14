@@ -5,6 +5,11 @@
 // app keeps process.env.* typing.
 interface ImportMetaEnv {
   readonly VITE_API_BASE_URL?: string
+  // Browser Sentry (#765). DSN absent → instrumentation is a no-op. Release is
+  // injected by CI at build time; environment defaults to 'production'.
+  readonly VITE_SENTRY_DSN?: string
+  readonly VITE_SENTRY_ENVIRONMENT?: string
+  readonly VITE_SENTRY_RELEASE?: string
 }
 
 interface ImportMeta {
