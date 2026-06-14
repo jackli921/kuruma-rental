@@ -1,3 +1,6 @@
+// #722 carve-out: the web package's sanctioned Drizzle client factory for Auth.js.
+// lint-module-boundaries exempts lib/db.ts from the "web has no direct DB access"
+// rule — do not import getDb() elsewhere in web; route through the Hono API.
 import { getDb as getDbBase } from '@kuruma/shared/db'
 
 // Resolves DATABASE_URL from CF Workers context or process.env.
