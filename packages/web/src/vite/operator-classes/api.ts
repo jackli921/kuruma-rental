@@ -5,6 +5,7 @@ import type {
   UpdateVehicleClassInput,
 } from '@kuruma/shared/validators/vehicle-class'
 import { queryOptions } from '@tanstack/react-query'
+import { z } from 'zod'
 
 // #528: operator vehicle-classes management. Self-contained Vite client — it
 // never imports the frozen Next module's `modules/classes/api.ts` (process.env
@@ -16,27 +17,35 @@ import { queryOptions } from '@tanstack/react-query'
 // `GET /vehicle-classes` is ACTIVE-only, cross-operator, and edge-cached — it
 // can't power an owner's manage screen.
 
-/** A vehicle class as the operator manage screen needs it (JSON: ISO dates). */
-export interface OperatorClass {
-  id: string
+/**
+ * A vehicle class as the operator manage screen needs it (JSON: ISO dates).
+ * The Zod schema is the single source: `OperatorClass` is inferred from it
+ * (#711), so the runtime parse at the seam and the compile-time type cannot
+ * drift apart, and a renamed/missing API field fails in {@link fetchOperatorClasses}
+ * instead of surfacing as `undefined` deep in the grid.
+ */
+export const operatorClassSchema = z.object({
+  id: z.string(),
   // The owning operator. Optional only because legacy fixtures predate it; the
   // API always returns it. Used to scope edit-form options (#456).
-  operatorId?: string
-  name: string
-  slug: string
-  description: string | null
-  photos: string[]
-  seats: number
-  luggageCapacity: number
-  luggageSize: 'SMALL' | 'MEDIUM' | 'LARGE' | null
-  transmission: 'AUTO' | 'MANUAL'
-  fuelType: string | null
-  acrissCode: string | null
-  sortOrder: number
-  status: 'ACTIVE' | 'ARCHIVED'
-  createdAt: string
-  updatedAt: string
-}
+  operatorId: z.string().optional(),
+  name: z.string(),
+  slug: z.string(),
+  description: z.string().nullable(),
+  photos: z.array(z.string()),
+  seats: z.number(),
+  luggageCapacity: z.number(),
+  luggageSize: z.enum(['SMALL', 'MEDIUM', 'LARGE']).nullable(),
+  transmission: z.enum(['AUTO', 'MANUAL']),
+  fuelType: z.string().nullable(),
+  acrissCode: z.string().nullable(),
+  sortOrder: z.number(),
+  status: z.enum(['ACTIVE', 'ARCHIVED']),
+  createdAt: z.string(),
+  updatedAt: z.string(),
+})
+
+export type OperatorClass = z.infer<typeof operatorClassSchema>
 
 export interface OperatorClassFilters {
   includeArchived?: boolean
@@ -51,7 +60,7 @@ export async function fetchOperatorClasses(
   const res = await fetch(`${getApiBaseUrl()}/vehicle-classes/manage${qs}`, {
     credentials: 'include',
   })
-  return unwrap<OperatorClass[]>(res)
+  return unwrap(res, operatorClassSchema.array())
 }
 
 export function operatorClassesQueryOptions(filters: OperatorClassFilters = {}) {
@@ -63,25 +72,30 @@ export function operatorClassesQueryOptions(filters: OperatorClassFilters = {}) 
   })
 }
 
-async function mutateJson<T>(url: string, method: 'POST' | 'PATCH', body: unknown): Promise<T> {
+async function mutateJson<T>(
+  url: string,
+  method: 'POST' | 'PATCH',
+  body: unknown,
+  schema?: z.ZodType<T>,
+): Promise<T> {
   const res = await fetch(url, {
     method,
     credentials: 'include',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
   })
-  return unwrap<T>(res)
+  return unwrap(res, schema)
 }
 
 export function createOperatorClass(input: CreateVehicleClassInput): Promise<OperatorClass> {
-  return mutateJson<OperatorClass>(`${getApiBaseUrl()}/vehicle-classes`, 'POST', input)
+  return mutateJson(`${getApiBaseUrl()}/vehicle-classes`, 'POST', input, operatorClassSchema)
 }
 
 export function updateOperatorClass(
   id: string,
   input: UpdateVehicleClassInput,
 ): Promise<OperatorClass> {
-  return mutateJson<OperatorClass>(`${getApiBaseUrl()}/vehicle-classes/${id}`, 'PATCH', input)
+  return mutateJson(`${getApiBaseUrl()}/vehicle-classes/${id}`, 'PATCH', input, operatorClassSchema)
 }
 
 // API DELETE performs a soft archive (status -> ARCHIVED). Name reflects the
@@ -92,5 +106,5 @@ export async function archiveOperatorClass(id: string): Promise<OperatorClass> {
     method: 'DELETE',
     credentials: 'include',
   })
-  return unwrap<OperatorClass>(res)
+  return unwrap(res, operatorClassSchema)
 }
