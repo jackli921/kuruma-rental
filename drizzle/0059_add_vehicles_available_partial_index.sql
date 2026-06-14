@@ -1,0 +1,1 @@
+CREATE INDEX "idx_vehicles_available" ON "vehicles" USING btree ("pickupLocationId") WHERE "vehicles"."status" = 'AVAILABLE';

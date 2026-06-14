@@ -37,12 +37,12 @@ index.ts       → Composition root (constructs concretes, wires DI)
 | Routes import services and `routes/helpers.ts` only. Never repositories. | Routes handle HTTP concerns; business logic belongs in services. |
 | Services import repository *interfaces* (`types.ts`) only. Never concrete classes. | Enables swapping InMemory ↔ Drizzle without touching business logic. |
 | Only `index.ts` imports concrete classes (`DrizzleBookingRepository`, `InMemoryBookingRepository`, etc.) | Single place to change wiring; the rest of the code is implementation-agnostic. |
-| No `new ConcreteRepository()` outside `index.ts`. | Prevents hidden coupling that breaks testability. |
+| No `new ConcreteRepository()` outside the composition root (`index.ts` / `composition/`) — except the two transaction factories (`repositories/drizzle/*-transaction.ts`). | Prevents hidden coupling that breaks testability. The tx factories are the lone carve-out: they must rebind every repo to the per-call neon-serverless tx connection, which `index.ts` can't do per call. |
 
 Shared helpers live in `routes/helpers.ts`: `ok()`, `fail()`, `parseBody()`, `parseDateRange()`.
 Use them instead of manual `c.json({ success: true/false, ... })` construction.
 
-Enforced by `bun run --filter @kuruma/api lint:boundaries` (CI step).
+Enforced by `bun run --filter @kuruma/api lint:boundaries` (CI step) — which also flags any `new Drizzle*`/`new InMemory*` construction outside the composition root and the sanctioned `*-transaction.ts` factories.
 
 ## Commands
 
