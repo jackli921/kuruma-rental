@@ -6,16 +6,6 @@ export type TranslateResult =
   | { ok: true; translatedText: string; language: string; cached: boolean }
   | { ok: false; status: number; error: string }
 
-function parseCache(raw: string | null | undefined): Record<string, string> {
-  if (!raw) return {}
-  try {
-    const parsed = JSON.parse(raw)
-    return typeof parsed === 'object' && parsed !== null ? (parsed as Record<string, string>) : {}
-  } catch {
-    return {}
-  }
-}
-
 export class MessageTranslationService {
   constructor(
     private readonly messageRepo: MessageRepository,
@@ -32,7 +22,7 @@ export class MessageTranslationService {
     const message = await this.messageRepo.findById(ctx, messageId)
     if (!message) return { ok: false, status: 404, error: 'Message not found' }
 
-    const cache = parseCache(message.translations)
+    const cache = message.translations
     if (cache[targetLanguage]) {
       return {
         ok: true,

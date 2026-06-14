@@ -8,16 +8,6 @@ import type { Message } from '../../stores'
 import type { MessageRepository } from '../types'
 import type { InMemoryThreadRepository } from './thread'
 
-function parseJson(raw: string | null | undefined): Record<string, string> {
-  if (!raw) return {}
-  try {
-    const parsed = JSON.parse(raw)
-    return typeof parsed === 'object' && parsed !== null ? (parsed as Record<string, string>) : {}
-  } catch {
-    return {}
-  }
-}
-
 export class InMemoryMessageRepository implements MessageRepository {
   private readonly idempotencyIndex = new Map<string, Message>()
 
@@ -52,10 +42,9 @@ export class InMemoryMessageRepository implements MessageRepository {
     const existing = this.threadRepo._getMessage(messageId)
     if (!existing) return undefined
 
-    const translations = parseJson(existing.translations)
-    translations[language] = translatedText
+    const translations = { ...existing.translations, [language]: translatedText }
 
-    const patch: Partial<Message> = { translations: JSON.stringify(translations) }
+    const patch: Partial<Message> = { translations }
     if (detectedSourceLanguage && !existing.sourceLanguage) {
       patch.sourceLanguage = detectedSourceLanguage
     }
@@ -81,7 +70,7 @@ export class InMemoryMessageRepository implements MessageRepository {
       senderId: ctx.userId,
       content,
       sourceLanguage: null,
-      translations: '{}',
+      translations: {},
       idempotencyKey: idempotencyKey ?? null,
       createdAt: new Date(),
     }

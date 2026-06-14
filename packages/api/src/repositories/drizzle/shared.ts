@@ -589,14 +589,13 @@ export type RawMessageRow = {
   senderId: string
   content: string
   sourceLanguage: string | null
-  translations: string | null
+  translations: Record<string, string>
   idempotencyKey: string | null
   createdAt: Date
 }
 
-// `messages.translations` is a nullable text column with a default of '{}'.
-// The shared `Message` type declares it as `string` (non-null), so we
-// normalise NULL -> '{}' at the boundary rather than leak the DB nuance.
+// `messages.translations` is a jsonb column (notNull, default {}), so the
+// driver returns a parsed object — pass it straight through, no sentinel.
 export function normaliseMessage(row: RawMessageRow): Message {
   return {
     id: row.id,
@@ -604,7 +603,7 @@ export function normaliseMessage(row: RawMessageRow): Message {
     senderId: row.senderId,
     content: row.content,
     sourceLanguage: row.sourceLanguage,
-    translations: row.translations ?? '{}',
+    translations: row.translations,
     idempotencyKey: row.idempotencyKey ?? null,
     createdAt: row.createdAt,
   }
