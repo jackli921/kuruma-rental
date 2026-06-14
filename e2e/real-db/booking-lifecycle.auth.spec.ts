@@ -25,7 +25,11 @@ import { testSql } from './pg'
 // seeded row is tagged notes=MARKER so afterAll can sweep it (+ FK children) clean.
 
 const OPERATOR_NAME = 'Best Car Rental'
-const RENTER_EMAIL = 'sarah@example.test'
+// Deliberately NOT Sarah: marketplace-happy-path.auth.spec.ts sweeps every Sarah
+// booking with startAt >= 2026-07-01 in its afterAll, which would match this spec's
+// far-future seeds on the shared serial lane. Hiroshi keeps the two specs decoupled;
+// cleanup here is marker-scoped regardless.
+const RENTER_EMAIL = 'hiroshi@example.test'
 const MARKER = 'e2e-655-lifecycle'
 
 // Far-future windows for the lifecycle + substitute journeys — clear of the seeded
@@ -156,7 +160,8 @@ async function resolveActors(
 ): Promise<{ operatorId: string; renterId: string }> {
   const [op] = await sql<{ id: string }[]>`SELECT id FROM operators WHERE name = ${OPERATOR_NAME}`
   const [renter] = await sql<{ id: string }[]>`SELECT id FROM users WHERE email = ${RENTER_EMAIL}`
-  if (!op || !renter) throw new Error('seed missing Best Car Rental operator or Sarah renter')
+  if (!op || !renter)
+    throw new Error(`seed missing operator ${OPERATOR_NAME} or renter ${RENTER_EMAIL}`)
   return { operatorId: op.id, renterId: renter.id }
 }
 
@@ -190,7 +195,7 @@ async function insertBooking(
     dropoffLocationId: row.locationId,
     startAt: row.startAt,
     endAt: row.endAt,
-    effectiveEndAt: row.endAt, // a BEFORE trigger may widen by buffer; this seals NOT NULL
+    effectiveEndAt: row.endAt, // placeholder only — a BEFORE trigger overwrites with endAt + turnaround
     status: 'CONFIRMED',
     bookingCode: newBookingCode(),
     totalPrice: row.totalPrice,
@@ -219,7 +224,12 @@ async function seedFreeVehicleBooking(
           SELECT 1 FROM bookings b
           WHERE b."assignedVehicleId" = v.id
             AND b.status IN ('CONFIRMED', 'ACTIVE')
-            AND tstzrange(b."startAt", b."effectiveEndAt") && tstzrange(${startAt}, ${endAt})
+            -- Probe the FULL effective range, not just [startAt, endAt): the booking we
+            -- insert gets effectiveEndAt = endAt + turnaround (trigger; default 48h, the
+            -- max), and the bookings_no_overlap exclusion keys on that. Widening the probe
+            -- by 48h keeps the picked vehicle clear of that tail so the INSERT can't 23P01.
+            AND tstzrange(b."startAt", b."effectiveEndAt")
+                && tstzrange(${startAt}, ${endAt}::timestamptz + interval '48 hours')
         )
       LIMIT 1`
     if (!v) throw new Error('no free Best Car Rental vehicle for the window')
