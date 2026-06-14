@@ -9,8 +9,8 @@ const ALLOWED_SORTS = new Set(['lastBookingAt', 'bookingCount', 'name'])
 export function createCustomerRoutes(service: CustomerService) {
   const app = new Hono()
 
-  // STAFF-only by design. requireStaff -> STAFF_ROLES admits platform
-  // STAFF/ADMIN/PLATFORM_ADMIN only and excludes OPERATOR_*. These routes are
+  // Platform-staff-only by design. requireStaff -> STAFF_ROLES admits
+  // PLATFORM_ADMIN only (legacy STAFF/ADMIN revoked by #487) and excludes OPERATOR_*. These routes are
   // intentionally unscoped: findById returns full cross-operator booking history
   // and /search is a flat user-table lookup. That is safe ONLY while operators
   // cannot reach them. If operator manual-booking is ever added, thread

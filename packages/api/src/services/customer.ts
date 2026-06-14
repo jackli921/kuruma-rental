@@ -10,11 +10,11 @@ export interface CustomerListQuery {
 }
 
 /**
- * STAFF-only by design — enforced by the requireStaff gate in routes/customers.ts.
+ * Platform-staff-only by design — enforced by the requireStaff gate in routes/customers.ts.
  * findById returns a customer's full cross-operator booking history and search() is
  * a flat user-table lookup; neither takes a CallerContext, so neither is
  * operator-scoped. That is intentional and safe ONLY because the route gate admits
- * platform STAFF/ADMIN/PLATFORM_ADMIN exclusively (never OPERATOR_*). Before any
+ * PLATFORM_ADMIN exclusively (legacy STAFF/ADMIN revoked by #487; never OPERATOR_*). Before any
  * future operator manual-booking access, thread ctx + operator scoping through
  * findById/search first, or every operator's customer list and booking history
  * leaks (the #396 enumeration defense on /users is the precedent to follow).
