@@ -231,7 +231,7 @@ export class LocationService {
     // unknown id (which would otherwise surface as a raw FK 500) nor a navigation-only
     // (prefecture/city) or retired (INACTIVE) node.
     if (providedRegionId != null) {
-      const region = (await this.regionRepo.findCandidates()).find((r) => r.id === providedRegionId)
+      const region = (await this.regionRepo.findAll()).find((r) => r.id === providedRegionId)
       if (!region || !region.assignable || region.status !== 'ACTIVE') {
         return { ok: false, error: INVALID_REGION_MESSAGE, status: 422 }
       }
@@ -255,7 +255,7 @@ export class LocationService {
       coords.latitude != null && coords.longitude != null
         ? { latitude: coords.latitude, longitude: coords.longitude }
         : null
-    const match = nearestAssignableRegion(await this.regionRepo.findCandidates(), point)
+    const match = nearestAssignableRegion(await this.regionRepo.findAll(), point)
     if (match === null) return { ok: false, error: NO_REGION_MESSAGE, status: 422 }
     return { ok: true, regionId: match.id }
   }

@@ -11,6 +11,13 @@ const region = (id: string, parentId: string | null): Region => ({
   nameJa: id,
   nameZh: id,
   sortOrder: 0,
+  // #651 2b: geo/taxonomy fields are unused by these tree-walk fixtures → defaults.
+  type: null,
+  latitude: null,
+  longitude: null,
+  assignable: false,
+  status: 'ACTIVE',
+  slug: null,
 })
 
 const TREE: Region[] = [

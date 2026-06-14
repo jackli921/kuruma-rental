@@ -11,8 +11,9 @@ import {
   type OperatorLocation,
   updateLocation,
 } from '@/vite/operator-locations/api'
+import { regionsQueryOptions } from '@/vite/operator-locations/regions-api'
 import type { UpdateLocationInput } from '@kuruma/shared/validators/location'
-import { useMutation, useQueryClient } from '@tanstack/react-query'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useTranslations } from 'use-intl'
 
 interface EditLocationDialogProps {
@@ -27,6 +28,7 @@ interface EditLocationDialogProps {
 export function EditLocationDialog({ location, onOpenChange }: EditLocationDialogProps) {
   const t = useTranslations('business.locations')
   const queryClient = useQueryClient()
+  const { data: regions } = useQuery(regionsQueryOptions())
   const mutation = useMutation({
     mutationFn: (data: UpdateLocationInput) => updateLocation(location?.id ?? '', data),
     onSuccess: () => {
@@ -59,12 +61,14 @@ export function EditLocationDialog({ location, onOpenChange }: EditLocationDialo
             }}
             onCancel={() => handleOpenChange(false)}
             isSubmitting={mutation.isPending}
+            regions={regions ?? []}
             defaultValues={{
               name: location.name,
               address: location.address,
               operatingHours: location.operatingHours,
               timezone: location.timezone,
               defaultTurnaroundMinutes: location.defaultTurnaroundMinutes,
+              regionId: location.regionId,
             }}
           />
         )}

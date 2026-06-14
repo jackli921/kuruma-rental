@@ -1,11 +1,13 @@
 import { regions } from '@kuruma/shared/db/schema'
-import type { RegionCandidate } from '@kuruma/shared/lib/region-distance'
 import { asc } from 'drizzle-orm'
 import type { Region } from '../../stores'
 import { collectDescendantIds } from '../region-tree'
 import type { RegionRepository } from '../types'
 import type { Db } from './shared'
 
+// The full region row (#651 Slice 2b): one projection feeds both the GET /regions
+// cascade AND the location-save geo guard (a RegionNode is a superset of the geo
+// columns `nearestAssignableRegion` reads), so there is no separate candidate read.
 const regionColumns = {
   id: regions.id,
   parentId: regions.parentId,
@@ -13,18 +15,12 @@ const regionColumns = {
   nameJa: regions.nameJa,
   nameZh: regions.nameZh,
   sortOrder: regions.sortOrder,
-}
-
-// The geo/taxonomy projection (#651 Slice 2) — exactly what `nearestAssignableRegion`
-// needs to match a pickup point to its nearest assignable area + validate a supplied
-// regionId. Mirrors the one-off backfill's projection (backfill-regions.ts).
-const regionCandidateColumns = {
-  id: regions.id,
+  type: regions.type,
   latitude: regions.latitude,
   longitude: regions.longitude,
   assignable: regions.assignable,
   status: regions.status,
-  sortOrder: regions.sortOrder,
+  slug: regions.slug,
 }
 
 /**
@@ -32,6 +28,11 @@ const regionCandidateColumns = {
  * cascading dropdowns render stably without client-side sorting. Descendant
  * resolution loads the (tiny) tree and walks it in app code via the shared pure
  * helper — see region-tree.ts for why we avoid a raw recursive CTE here.
+ *
+ * `findAll` also backs the per-save location loop guard (services/location.ts), so it
+ * runs a fresh SELECT on each location write. Fine at this scale (a few dozen
+ * platform-global rows the public route already edge-caches for 1h); an in-process
+ * cache is deliberately deferred (YAGNI) — revisit if region count or save volume grows.
  */
 export class DrizzleRegionRepository implements RegionRepository {
   constructor(private readonly db: Db) {}
@@ -41,10 +42,6 @@ export class DrizzleRegionRepository implements RegionRepository {
       .select(regionColumns)
       .from(regions)
       .orderBy(asc(regions.sortOrder), asc(regions.nameEn))
-  }
-
-  async findCandidates(): Promise<RegionCandidate[]> {
-    return this.db.select(regionCandidateColumns).from(regions)
   }
 
   async findDescendantIds(rootId: string): Promise<string[]> {
