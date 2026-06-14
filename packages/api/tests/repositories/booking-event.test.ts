@@ -4,6 +4,7 @@ import { SYSTEM_CONTEXT } from '../../src/middleware/auth'
 import { InMemoryBookingEventRepository } from '../../src/repositories/in-memory/booking-event'
 
 const createdPayload: BookingCreatedPayload = {
+  type: 'BOOKING_CREATED',
   requestedVehicleId: 'veh-1',
   assignedVehicleId: 'veh-1',
   classId: 'class-1',
@@ -15,7 +16,11 @@ const createdPayload: BookingCreatedPayload = {
   feeSnapshot: [],
   addOnSnapshot: [],
 }
-const statusPayload: StatusChangedPayload = { from: 'CONFIRMED', to: 'ACTIVE' }
+const statusPayload: StatusChangedPayload = {
+  type: 'STATUS_CHANGED',
+  from: 'CONFIRMED',
+  to: 'ACTIVE',
+}
 
 describe('InMemoryBookingEventRepository', () => {
   it('append assigns an id + createdAt and preserves the event content', async () => {

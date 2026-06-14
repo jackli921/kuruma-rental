@@ -127,6 +127,7 @@ export class BookingLifecycleService {
           type: 'VEHICLE_SUBSTITUTED',
           actorId: ctx.userId,
           payload: {
+            type: 'VEHICLE_SUBSTITUTED',
             fromVehicleId: booking.assignedVehicleId,
             toVehicleId: replacement.id,
             reason,
@@ -232,7 +233,11 @@ export class BookingLifecycleService {
         bookingId: booking.id,
         type: 'STATUS_CHANGED',
         actorId: ctx.userId,
-        payload: { from: booking.status, to: newStatus as Booking['status'] },
+        payload: {
+          type: 'STATUS_CHANGED',
+          from: booking.status,
+          to: newStatus as Booking['status'],
+        },
       })
       return next
     })
@@ -283,7 +288,11 @@ export class BookingLifecycleService {
         bookingId: booking.id,
         type: 'BOOKING_CANCELLED',
         actorId: ctx.userId,
-        payload: { cancellationFee: cancellation.feeAmount, cancelledAt: now.toISOString() },
+        payload: {
+          type: 'BOOKING_CANCELLED',
+          cancellationFee: cancellation.feeAmount,
+          cancelledAt: now.toISOString(),
+        },
       })
       return next
     })

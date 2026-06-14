@@ -1,10 +1,5 @@
 import { formatDateTime, formatJpy } from '@/lib/format'
 import type { BookingEventDto } from '@/vite/operator-bookings/api'
-import type {
-  BookingCancelledPayload,
-  StatusChangedPayload,
-  VehicleSubstitutedPayload,
-} from '@kuruma/shared/db/schema'
 import { useTranslations } from 'use-intl'
 
 interface BookingTimelineProps {
@@ -15,7 +10,8 @@ interface BookingTimelineProps {
 // Vertical audit-trail stepper (#549). Pure presentation (FC/IS): the route owns
 // the events fetch; this renders them oldest -> newest top-to-bottom (the API
 // returns createdAt asc, id asc), with a connecting line down the spine. The
-// payload union is not discriminated, so each branch narrows it off event.type.
+// payload is a discriminated union (#716), so branches narrow on event.payload.type
+// with no casts and an assertNever exhaustiveness guard.
 export function BookingTimeline({ events, locale }: BookingTimelineProps) {
   const t = useTranslations('bookings.operator.timeline')
   const ts = useTranslations('bookings.operator.status')
@@ -52,36 +48,40 @@ export function BookingTimeline({ events, locale }: BookingTimelineProps) {
 type Translate = ReturnType<typeof useTranslations>
 
 function eventLabel(event: BookingEventDto, t: Translate, ts: Translate): string {
-  switch (event.type) {
-    case 'STATUS_CHANGED': {
-      const p = event.payload as StatusChangedPayload
-      return t('statusChanged', { from: ts(p.from), to: ts(p.to) })
-    }
+  const { payload } = event
+  switch (payload.type) {
+    case 'STATUS_CHANGED':
+      return t('statusChanged', { from: ts(payload.from), to: ts(payload.to) })
     case 'VEHICLE_SUBSTITUTED':
       return t('vehicleSubstituted')
     case 'BOOKING_CANCELLED':
       return t('cancelled')
-    default:
+    case 'BOOKING_CREATED':
       return t('created')
+    default:
+      return assertNever(payload)
   }
 }
 
 function EventDetail({ event, t }: { event: BookingEventDto; t: Translate }) {
-  if (event.type === 'VEHICLE_SUBSTITUTED') {
-    const { reason } = event.payload as VehicleSubstitutedPayload
-    if (reason) {
-      return <p className="text-sm text-muted-foreground">{t('reason', { reason })}</p>
-    }
+  const { payload } = event
+  if (payload.type === 'VEHICLE_SUBSTITUTED' && payload.reason) {
+    return (
+      <p className="text-sm text-muted-foreground">{t('reason', { reason: payload.reason })}</p>
+    )
   }
-  if (event.type === 'BOOKING_CANCELLED') {
-    const { cancellationFee } = event.payload as BookingCancelledPayload
-    if (cancellationFee != null) {
-      return (
-        <p className="text-sm text-muted-foreground">
-          {t('cancellationFee', { fee: formatJpy(cancellationFee) })}
-        </p>
-      )
-    }
+  if (payload.type === 'BOOKING_CANCELLED' && payload.cancellationFee != null) {
+    return (
+      <p className="text-sm text-muted-foreground">
+        {t('cancellationFee', { fee: formatJpy(payload.cancellationFee) })}
+      </p>
+    )
   }
   return null
+}
+
+// Compile-time exhaustiveness: a new BookingEventPayload member makes eventLabel a
+// type error until it is handled here (#716).
+function assertNever(value: never): never {
+  throw new Error(`Unhandled booking event payload: ${JSON.stringify(value)}`)
 }

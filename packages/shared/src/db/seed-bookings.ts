@@ -244,6 +244,7 @@ export async function seedBookings(db: ReturnType<typeof getDb>) {
     })
 
     const createdPayload: BookingCreatedPayload = {
+      type: 'BOOKING_CREATED',
       requestedVehicleId: requested.id,
       assignedVehicleId: assigned.id,
       classId: seedId(b.classId),
@@ -263,6 +264,7 @@ export async function seedBookings(db: ReturnType<typeof getDb>) {
     })
     if (b.substitute) {
       const substitutedPayload: VehicleSubstitutedPayload = {
+        type: 'VEHICLE_SUBSTITUTED',
         fromVehicleId: requested.id,
         toVehicleId: assigned.id,
         reason: 'Original vehicle in maintenance — upgraded same class.',
