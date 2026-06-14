@@ -1022,6 +1022,39 @@ describe('BookingService.substitute — operator vehicle swap (#392 §5.5)', () 
     })
   })
 
+  it('backfills totalPrice when a vehicle is assigned to a null-total class-only booking (#429)', async () => {
+    const h = await setupSub()
+    const replacement = await addVehicle(h) // class A @ Osaka, 15000/day
+
+    // A class-only booking (#464 CLASS_COMBO): no vehicle assigned at creation,
+    // so it was never priced (totalPrice null). Assigning a vehicle via
+    // substitute() must SNAPSHOT the price off that vehicle, not preserve null —
+    // a null total would later cancel for a ¥0 fee via the `totalPrice ?? 0`
+    // floor in the cancel path. This is #429's named backfill guard.
+    const classOnly = await h.repos.bookingRepo.create(
+      SYSTEM_CONTEXT,
+      bookingRow({
+        classId: h.classA.id,
+        requestedVehicleId: h.v1Id,
+        assignedVehicleId: null,
+        totalPrice: null,
+        pickupLocationId: h.locationId,
+        dropoffLocationId: h.locationId,
+        bookingCode: 'CLASSONLY',
+      }),
+    )
+
+    const result = await h.service.substitute(opCtxA, classOnly.id, replacement.id, null)
+
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+    expect(result.booking.assignedVehicleId).toBe(replacement.id)
+    expect(result.booking.totalPrice).toBe(30000) // 2 days * 15000, backfilled from null
+    // Persisted, not just returned on the result object.
+    const stored = await h.repos.bookingRepo.findById(opCtxA, classOnly.id)
+    expect(stored?.totalPrice).toBe(30000)
+  })
+
   it('rejects a replacement already booked for the range (409, no event appended)', async () => {
     const h = await setupSub()
     const replacement = await addVehicle(h)
