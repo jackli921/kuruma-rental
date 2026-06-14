@@ -10,7 +10,7 @@ import { LOCATIONS_REGION_FK, PG_ERROR, pgConstraintName, pgErrorCode } from '..
 import type { LocationFilters } from '../repositories/types'
 import type { LocationService, LocationUpdateData } from '../services/location'
 import { type ResolveWriteOperatorId, operatorReadScope } from '../tenancy'
-import { fail, ok, parseBody, stripUndefined } from './helpers'
+import { fail, ok, parseBody, parseId, stripUndefined } from './helpers'
 
 export function createLocationRoutes(
   service: LocationService,
@@ -54,7 +54,10 @@ export function createLocationRoutes(
       const user = requireUser(c)
       if (!FLEET_WRITE_ROLES.has(user.role)) return fail(c, 'Forbidden', 403)
 
-      const location = await service.findById(toCallerContext(user), c.req.param('id'))
+      const idResult = parseId(c)
+      if (!idResult.ok) return idResult.response
+
+      const location = await service.findById(toCallerContext(user), idResult.id)
       if (!location) return fail(c, 'Location not found', 404)
       return ok(c, location)
     })
@@ -115,6 +118,9 @@ export function createLocationRoutes(
       const user = requireUser(c)
       if (!FLEET_WRITE_ROLES.has(user.role)) return fail(c, 'Forbidden', 403)
 
+      const idResult = parseId(c)
+      if (!idResult.ok) return idResult.response
+
       const parsed = await parseBody(c, updateLocationSchema)
       if (!parsed.ok) return parsed.response
 
@@ -123,7 +129,7 @@ export function createLocationRoutes(
       try {
         const result = await service.update(
           toCallerContext(user),
-          c.req.param('id'),
+          idResult.id,
           stripUndefined(parsed.data) as LocationUpdateData,
         )
         if (!result.ok) return fail(c, result.error, result.status)
@@ -141,7 +147,10 @@ export function createLocationRoutes(
       const user = requireUser(c)
       if (!FLEET_WRITE_ROLES.has(user.role)) return fail(c, 'Forbidden', 403)
 
-      const result = await service.archive(toCallerContext(user), c.req.param('id'))
+      const idResult = parseId(c)
+      if (!idResult.ok) return idResult.response
+
+      const result = await service.archive(toCallerContext(user), idResult.id)
       if (!result.ok) {
         // Surface the active-bookings discriminator so the portal can prompt the
         // owner to reassign/cancel first instead of showing a generic 409 (#412).

@@ -273,13 +273,23 @@ describe('Vehicle CRUD Routes', () => {
     })
 
     it('returns 404 for nonexistent vehicle', async () => {
-      const res = await app.request('/vehicles/nonexistent-id')
+      const res = await app.request('/vehicles/00000000-0000-4000-8000-00000000cccc')
 
       expect(res.status).toBe(404)
 
       const body = await res.json()
       expect(body.success).toBe(false)
       expect(body.error).toBe('Vehicle not found')
+    })
+
+    it('returns 400 for a malformed (non-uuid) vehicle id', async () => {
+      const res = await app.request('/vehicles/nonexistent-id')
+
+      expect(res.status).toBe(400)
+
+      const body = await res.json()
+      expect(body.success).toBe(false)
+      expect(body.error).toBe('id must be a valid uuid')
     })
   })
 
@@ -362,7 +372,7 @@ describe('Vehicle CRUD Routes', () => {
     })
 
     it('returns 404 for nonexistent vehicle', async () => {
-      const res = await app.request('/vehicles/nonexistent-id', {
+      const res = await app.request('/vehicles/00000000-0000-4000-8000-00000000cccc', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ name: 'Updated' }),
@@ -636,7 +646,11 @@ describe('Vehicle CRUD Routes', () => {
     })
 
     it('returns 404 for nonexistent vehicle', async () => {
-      const res = await patchStatus('nonexistent-id', 'MAINTENANCE', 'Does not matter')
+      const res = await patchStatus(
+        '00000000-0000-4000-8000-00000000cccc',
+        'MAINTENANCE',
+        'Does not matter',
+      )
 
       expect(res.status).toBe(404)
       const body = await res.json()
@@ -710,7 +724,7 @@ describe('Vehicle CRUD Routes', () => {
     })
 
     it('returns 404 for nonexistent vehicle', async () => {
-      const res = await app.request('/vehicles/nonexistent-id', {
+      const res = await app.request('/vehicles/00000000-0000-4000-8000-00000000cccc', {
         method: 'DELETE',
       })
 

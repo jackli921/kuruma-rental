@@ -236,7 +236,9 @@ describe('storefront routes (#391)', () => {
 
     it('returns 404 for an unknown locationId (does not cache the miss)', async () => {
       const ctx = setup()
-      const res = await ctx.app.request(`/storefronts/loc_nope/vehicles?from=${FROM}&to=${TO}`)
+      const res = await ctx.app.request(
+        `/storefronts/00000000-0000-4000-8000-0000000000ff/vehicles?from=${FROM}&to=${TO}`,
+      )
       expect(res.status).toBe(404)
       expect(res.headers.get('Cache-Control')).toBeNull()
     })
@@ -305,7 +307,9 @@ describe('storefront routes (#391)', () => {
 
     it('returns 404 for an unknown locationId (does not cache the miss)', async () => {
       const ctx = setup()
-      const res = await ctx.app.request('/storefronts/loc_nope/insurance-options')
+      const res = await ctx.app.request(
+        '/storefronts/00000000-0000-4000-8000-0000000000ff/insurance-options',
+      )
       expect(res.status).toBe(404)
       expect(res.headers.get('Cache-Control')).toBeNull()
     })

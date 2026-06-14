@@ -7,6 +7,7 @@ import {
   ok,
   parseBody,
   parseDateRange,
+  parseId,
   parseLimit,
   parsePagination,
   rejectOversizedBody,
@@ -68,6 +69,18 @@ function createTestApp() {
   })
 
   app.post('/guarded', (c) => rejectOversizedBody(c, GUARD_MAX_BYTES) ?? ok(c, { passed: true }))
+
+  app.get('/parse-id/:id', (c) => {
+    const result = parseId(c)
+    if (!result.ok) return result.response
+    return ok(c, { id: result.id })
+  })
+
+  app.get('/parse-id-custom/:vehicleId', (c) => {
+    const result = parseId(c, 'vehicleId')
+    if (!result.ok) return result.response
+    return ok(c, { id: result.id })
+  })
 
   return app
 }
@@ -417,5 +430,39 @@ describe('parsePagination()', () => {
     expect(res.status).toBe(400)
     const body = await res.json()
     expect(body.error).toBe('limit must be between 1 and 50')
+  })
+})
+
+describe('parseId()', () => {
+  const app = createTestApp()
+  const VALID_UUID = '00000000-0000-4000-8000-0000000000a1'
+
+  it('returns 400 with the standard fail envelope on a malformed (non-uuid) id', async () => {
+    const res = await app.request('/parse-id/not-a-uuid')
+
+    expect(res.status).toBe(400)
+    expect(await res.json()).toEqual({ success: false, error: 'id must be a valid uuid' })
+  })
+
+  it('passes a valid uuid through unchanged', async () => {
+    const res = await app.request(`/parse-id/${VALID_UUID}`)
+
+    expect(res.status).toBe(200)
+    expect(await res.json()).toEqual({ success: true, data: { id: VALID_UUID } })
+  })
+
+  it('names the offending param in the error (custom param name)', async () => {
+    const res = await app.request('/parse-id-custom/123')
+
+    expect(res.status).toBe(400)
+    expect(await res.json()).toEqual({ success: false, error: 'vehicleId must be a valid uuid' })
+  })
+
+  it('rejects a uuid with surrounding whitespace rather than trimming it', async () => {
+    const res = await app.request(`/parse-id/${encodeURIComponent(` ${VALID_UUID} `)}`)
+
+    expect(res.status).toBe(400)
+    const body = await res.json()
+    expect(body.success).toBe(false)
   })
 })
