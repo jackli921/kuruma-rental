@@ -1,3 +1,4 @@
+import { ParseError } from '@/lib/api-error'
 import { fetchMyDocuments, uploadDocument } from '@/vite/documents/api'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
@@ -40,6 +41,27 @@ describe('fetchMyDocuments', () => {
     fetchMock.mockResolvedValue(jsonResponse({ success: false, error: 'boom' }, 500))
     await expect(fetchMyDocuments()).rejects.toThrow('boom')
   })
+
+  it('strips server-only fields (storageKey, verifierId) the DTO omits (#711)', async () => {
+    fetchMock.mockResolvedValue(
+      jsonResponse({
+        success: true,
+        data: { documents: [{ ...documentData, storageKey: 'r2/key', verifierId: null }] },
+      }),
+    )
+    // Non-strict schema: only the renter-facing subset comes back, server keys gone.
+    expect(await fetchMyDocuments()).toEqual([documentData])
+  })
+
+  it('rejects with a ParseError when a document has an unknown status (drift #711)', async () => {
+    fetchMock.mockResolvedValue(
+      jsonResponse({
+        success: true,
+        data: { documents: [{ ...documentData, status: 'EXPIRED' }] },
+      }),
+    )
+    await expect(fetchMyDocuments()).rejects.toBeInstanceOf(ParseError)
+  })
 })
 
 describe('uploadDocument', () => {
@@ -70,6 +92,16 @@ describe('uploadDocument', () => {
     const file = new File(['x'], 'x.png', { type: 'image/png' })
     await expect(uploadDocument({ type: 'PASSPORT', file, csrfToken: 't' })).rejects.toThrow(
       'too large',
+    )
+  })
+
+  it('rejects with a ParseError when the uploaded document is malformed (drift #711)', async () => {
+    fetchMock.mockResolvedValue(
+      jsonResponse({ success: true, data: { document: { id: 'd1' } } }, 201),
+    )
+    const file = new File(['x'], 'x.png', { type: 'image/png' })
+    await expect(uploadDocument({ type: 'IDP', file, csrfToken: 't' })).rejects.toBeInstanceOf(
+      ParseError,
     )
   })
 })
