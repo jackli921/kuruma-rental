@@ -23,7 +23,7 @@ export function formatJpy(amountJpy: number): string {
 // location-anchored event the renter acts on while standing in Japan, and email can't
 // detect the recipient's own timezone, so we anchor to the pickup location and always
 // label it — never a bare or UTC time (#680). If operators outside Japan are ever
-// added, source the zone from the pickup location instead of this constant.
+// added, source the zone from the pickup/dropoff location instead of this constant (#818).
 const BOOKING_TIME_ZONE = 'Asia/Tokyo'
 const BOOKING_TIME_ZONE_LABEL = 'JST'
 
