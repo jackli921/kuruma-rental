@@ -7,15 +7,10 @@ import { DrizzleFeeScheduleRepository } from './fee-schedule'
 import { DrizzleInsuranceOptionRepository } from './insurance-option'
 import { DrizzleLocationRepository } from './location'
 import { DrizzleMaintenanceLogRepository } from './maintenance-log'
-import type { Db } from './shared'
+import { asTxDb } from './shared'
 import { DrizzleVehicleRepository } from './vehicle'
 
 export function createDrizzleTransaction(runInteractiveTx: RunTx): RunInTransaction {
-  // Drizzle's tx exposes the same query-builder API (select/insert/update/delete)
-  // as db. The cast is safe because repos only use those methods. If Db ever gains
-  // a method tx lacks (e.g. nested transactions), this will fail at runtime — revisit
-  // if Drizzle ships a Transaction utility type.
-  //
   // Slice 6 (#392) widens the bundle to all 7 tx-bound repos so the single-
   // transaction booking submit (proposal §4) can validate availability, append
   // the BOOKING_CREATED event, and read vehicle/location/insurance/fee rows at a
@@ -25,7 +20,7 @@ export function createDrizzleTransaction(runInteractiveTx: RunTx): RunInTransact
     // transaction (#493): the neon-http driver getDb() uses can't run
     // interactive transactions on CF Workers.
     runInteractiveTx(async (tx) => {
-      const txDb = tx as unknown as Db
+      const txDb = asTxDb(tx)
       return fn({
         vehicleRepo: new DrizzleVehicleRepository(txDb),
         maintenanceLogRepo: new DrizzleMaintenanceLogRepository(txDb),

@@ -7,11 +7,11 @@ import { PLATFORM_ROLES } from '@kuruma/shared/auth/roles'
  * zero imports, so this module stays Edge-safe (no `next/headers`, no DB) —
  * verified: bundling @kuruma/shared/auth/roles pulls in no drizzle/postgres/jose.
  *
- * Deliberately NARROWER than business-roles.ts `BUSINESS_ROLES`: it admits the
- * `PLATFORM_ADMIN` super-admin and the legacy transitional `STAFF`/`ADMIN`
- * (schema.ts:23 — "no new users get them"), but NOT the tenant-scoped
- * `OPERATOR_OWNER`/`OPERATOR_STAFF`. The admin portal is cross-tenant platform
- * ops (#462 §2.3). #487 tightens this to `PLATFORM_ADMIN`-only via one edit in
+ * Deliberately NARROWER than business-roles.ts `BUSINESS_ROLES`: #487 tightened
+ * it to the `PLATFORM_ADMIN` super-admin only — the legacy transitional
+ * `STAFF`/`ADMIN` were revoked from platform access — and it never admitted the
+ * tenant-scoped `OPERATOR_OWNER`/`OPERATOR_STAFF`. The admin portal is
+ * cross-tenant platform ops (#462 §2.3), enforced by one edit in
  * @kuruma/shared, now shared by web + API.
  */
 export const PLATFORM_ADMIN_ROLES = PLATFORM_ROLES

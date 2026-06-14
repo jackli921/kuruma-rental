@@ -1,7 +1,7 @@
 import { cn } from '@/lib/utils'
 import type { SearchResultItem } from '@kuruma/shared/types/search-result'
 import { MapPin } from 'lucide-react'
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { useTranslations } from 'use-intl'
 import type { MapAdapter } from './MapAdapter'
 import { SearchResultRow } from './SearchResultRow'
@@ -23,7 +23,9 @@ interface SearchMapListProps {
 export function SearchMapList({ items, adapter: Adapter }: SearchMapListProps) {
   const t = useTranslations('search')
   const [selectedId, setSelectedId] = useState<string | null>(null)
-  const mapItems = geocodedByLocation(items)
+  // Dedupe is keyed on the loader-stable `items`; memoizing keeps the plotted
+  // array reference stable across selection-only re-renders (#737).
+  const mapItems = useMemo(() => geocodedByLocation(items), [items])
 
   return (
     <div className="grid gap-4 lg:grid-cols-2">

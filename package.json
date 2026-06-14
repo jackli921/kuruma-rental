@@ -4,7 +4,9 @@
   "private": true,
   "workspaces": ["packages/*"],
   "scripts": {
+    "predev": "bun run db:drift-warn",
     "dev": "bun run --filter @kuruma/web dev",
+    "predev:api": "bun run db:drift-warn",
     "dev:api": "bun run --filter @kuruma/api dev",
     "build": "bun run --filter '*' build",
     "test": "bun run --filter '*' test",
@@ -31,6 +33,7 @@
     "db:seed:tcp": "bun run scripts/seed-tcp.ts",
     "db:backfill-regions": "bun run scripts/backfill-location-regions.ts",
     "db:verify": "bun run scripts/db-verify.ts",
+    "db:drift-warn": "bun run scripts/db-drift-warn.ts",
     "prepare": "husky"
   },
   "devDependencies": {

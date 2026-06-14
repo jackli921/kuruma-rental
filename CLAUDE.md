@@ -94,9 +94,9 @@ Critical rules:
 ## Monorepo
 
 - shadcn: `bunx shadcn@latest add <component> -c packages/web`
-- **`.env` lives at repo root; symlinked to `packages/web/.env`.**
+- **`.env` lives at repo root — no `packages/web/.env`.** The API loads root `.env` directly. The Vite web reads only `VITE_*` vars from the shell, each with a safe fallback (`VITE_DEV_API_PROXY`/`VITE_API_BASE_URL` → the `/api` proxy to `localhost:8787`), so it needs no env file. The old `packages/web/.env` symlink was a legacy-Next requirement and is gone.
 - Order: `db:generate` -> `db:migrate` -> `db:seed`.
-- Worktrees: always `bun install` + verify `tsc --noEmit` in a fresh worktree.
+- Worktrees: always `bun install` + `bun run db:migrate` + verify `tsc --noEmit` in a fresh worktree. Each worktree's DB must match *its own* migrations — `bun run dev[:api]` runs a `predev` drift check (`db:drift-warn`) that loudly warns when the DB is behind, so a stale worktree can't silently 500 a page (#740).
 
 ## Database Migrations (drizzle)
 

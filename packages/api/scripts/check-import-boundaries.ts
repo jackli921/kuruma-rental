@@ -32,9 +32,8 @@ function collectTsFiles(dir: string): string[] {
   return files
 }
 
-function checkFile(filePath: string): Violation[] {
+export function checkContent(rel: string, content: string): Violation[] {
   const violations: Violation[] = []
-  const rel = relative(API_SRC, filePath)
 
   // Test files are not part of the production dependency graph. They
   // legitimately construct concrete repositories to exercise the DI wiring
@@ -42,7 +41,7 @@ function checkFile(filePath: string): Violation[] {
   // rules govern production code only, so co-located *.test.ts are exempt.
   if (rel.endsWith('.test.ts') || rel.endsWith('.spec.ts')) return violations
 
-  const lines = readFileSync(filePath, 'utf-8').split('\n')
+  const lines = content.split('\n')
 
   const isRoute = rel.startsWith('routes/')
   const isService = rel.startsWith('services/')
@@ -51,6 +50,13 @@ function checkFile(filePath: string): Violation[] {
   // nothing else may. Keep these the only entries allowed to wire concretes.
   const isCompositionRoot = rel === 'index.ts' || rel.startsWith('composition/')
   const isHelpers = rel === 'routes/helpers.ts'
+  // The two transaction factories are the one sanctioned place outside the
+  // composition root to construct concrete repos. They must rebind every repo to
+  // the per-call neon-serverless tx connection (#493), which index.ts cannot do
+  // per call. Everything else under repositories/drizzle stays construction-free (#721).
+  const isTxFactory =
+    rel === 'repositories/drizzle/transaction.ts' ||
+    rel === 'repositories/drizzle/operator-grant-transaction.ts'
 
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i]!
@@ -66,6 +72,23 @@ function checkFile(filePath: string): Violation[] {
         line: i + 1,
         text: trimmed,
         rule: 'Routes must use parseBody(c, schema) from helpers.ts instead of calling c.req.json() directly.',
+      })
+    }
+
+    // Rule 5: Concrete repositories may only be `new`ed in the composition root
+    // (index.ts / composition/) or the two sanctioned transaction factories. The
+    // import-path rules below never see construction, so a sibling file under
+    // repositories/drizzle could `new DrizzleXRepository()` and slip the net (#721).
+    if (
+      !isCompositionRoot &&
+      !isTxFactory &&
+      /\bnew\s+(?:Drizzle|InMemory)\w*\s*\(/.test(trimmed)
+    ) {
+      violations.push({
+        file: rel,
+        line: i + 1,
+        text: trimmed,
+        rule: 'Concrete repositories may only be constructed in the composition root (index.ts / composition/) or the sanctioned transaction factories (repositories/drizzle/*-transaction.ts).',
       })
     }
 
@@ -123,17 +146,25 @@ function checkFile(filePath: string): Violation[] {
   return violations
 }
 
-const files = collectTsFiles(API_SRC)
-const allViolations = files.flatMap(checkFile)
+function checkFile(filePath: string): Violation[] {
+  return checkContent(relative(API_SRC, filePath), readFileSync(filePath, 'utf-8'))
+}
 
-if (allViolations.length > 0) {
-  console.error('\nImport boundary violations found:\n')
-  for (const v of allViolations) {
-    console.error(`  ${v.file}:${v.line}`)
-    console.error(`    ${v.text}`)
-    console.error(`    Rule: ${v.rule}\n`)
+// Only scan the tree when run as a script. Importing this module (e.g. from a
+// unit test that exercises checkContent) must not trigger the scan or exit.
+if (import.meta.main) {
+  const files = collectTsFiles(API_SRC)
+  const allViolations = files.flatMap(checkFile)
+
+  if (allViolations.length > 0) {
+    console.error('\nImport boundary violations found:\n')
+    for (const v of allViolations) {
+      console.error(`  ${v.file}:${v.line}`)
+      console.error(`    ${v.text}`)
+      console.error(`    Rule: ${v.rule}\n`)
+    }
+    process.exit(1)
+  } else {
+    console.log('Import boundaries OK')
   }
-  process.exit(1)
-} else {
-  console.log('Import boundaries OK')
 }
