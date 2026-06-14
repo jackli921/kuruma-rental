@@ -202,6 +202,14 @@ export class BookingLifecycleService {
     )
   }
 
+  /**
+   * Operator status transition (route-gated to MANAGEMENT_READ_ROLES, #643).
+   * Transitioning to CANCELLED is the operator cancel path and is deliberately
+   * FEE-FREE — operator non-delivery is the operator's fault, so the renter is made
+   * whole, never penalised for it. The tiered cancellation fee lives ONLY on renter
+   * self-cancel (`cancel()`); the two CANCELLED paths are intentionally divergent,
+   * not duplicated (#679) — do not merge them.
+   */
   async updateStatus(
     ctx: CallerContext,
     bookingId: string,
@@ -255,6 +263,13 @@ export class BookingLifecycleService {
     return { ok: true, booking: updated }
   }
 
+  /**
+   * Renter self-cancel — ALWAYS applies the tiered cancellation fee
+   * (`calculateCancellationFee`) and returns the breakdown so the renter sees what
+   * they forfeit vs are refunded. CONFIRMED-only by design; an operator cancels an
+   * ACTIVE booking via `updateStatus(-> CANCELLED)`, which charges nothing (#679).
+   * Keep the two paths separate — the fee asymmetry is the product rule, not dup.
+   */
   async cancel(
     ctx: CallerContext,
     bookingId: string,

@@ -1195,6 +1195,51 @@ describe('BookingService lifecycle events (#392 §3.1)', () => {
       payload: { cancellationFee: res.cancellation.feeAmount, cancelledAt: NOW.toISOString() },
     })
   })
+
+  // #679: the two routes to CANCELLED are intentionally divergent on FEE, not only
+  // on notification. Renter self-cancel (cancel(), tiered fee — asserted above and in
+  // the route suite) ALWAYS applies the cancellation schedule; operator cancel
+  // (updateStatus -> CANCELLED) charges NOTHING. Operator non-delivery is the
+  // operator's fault, so the renter is made whole, never penalised for it. Guards
+  // against a "unify the two cancel paths" refactor silently charging renters.
+  it('operator cancel via updateStatus charges no fee, unlike renter self-cancel (#679)', async () => {
+    const h = await setup({ codes: ['LIFE0679'] })
+    const { vehicleId, locationId } = await seedReady(h)
+    const created = await h.service.create(
+      renterCtx,
+      createInput({
+        requestedVehicleId: vehicleId,
+        pickupLocationId: locationId,
+        dropoffLocationId: locationId,
+      }),
+      NOW,
+    )
+    expect(created.ok).toBe(true)
+    if (!created.ok) return
+
+    // Only updateStatus can cancel a non-CONFIRMED booking, so an operator cancels
+    // by transitioning ACTIVE -> CANCELLED (the path #664 wired the email onto).
+    await h.service.updateStatus(opCtxA, created.booking.id, 'ACTIVE')
+    const cancelled = await h.service.updateStatus(opCtxA, created.booking.id, 'CANCELLED')
+    expect(cancelled.ok).toBe(true)
+    if (!cancelled.ok) return
+
+    expect(cancelled.booking.status).toBe('CANCELLED')
+    // No fee charged, and no fee breakdown returned — the renter owes nothing.
+    expect(cancelled.booking.cancellationFee).toBeNull()
+    expect('cancellation' in cancelled).toBe(false)
+    // Audit trail diverges too: operator cancel appends STATUS_CHANGED, never the
+    // fee-bearing BOOKING_CANCELLED that the renter path records.
+    const events = await h.repos.bookingEventRepo.findByBookingId(
+      SYSTEM_CONTEXT,
+      created.booking.id,
+    )
+    expect(events.map((e) => e.type)).toEqual([
+      'BOOKING_CREATED',
+      'STATUS_CHANGED',
+      'STATUS_CHANGED',
+    ])
+  })
 })
 
 describe('BookingService — renter lifecycle notifications (#664)', () => {
