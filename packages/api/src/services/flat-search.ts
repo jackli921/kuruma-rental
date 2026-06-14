@@ -98,6 +98,14 @@ export class FlatSearchService {
 
     const requested = classes && classes.length > 0 ? new Set(classes) : null
 
+    // Pagination bound (#727, deferred): the page is built in memory — sort the
+    // whole availability scan, then findIndex(cursor)+slice. Each page is O(total):
+    // full sort + linear cursor walk, re-done per request. Fine at MVP scale
+    // (40-50 cars; default browse-all already scans the whole fleet, sort is
+    // microseconds). Not pushed into SQL because the sort key spans joined
+    // operator/location columns the vehicles-only availability query can't ORDER
+    // BY without a join restructure. Revisit if inventory reaches the hundreds or
+    // search p95 regresses: ORDER BY + keyset + LIMIT n+1 on a joined query.
     const items = available
       .map((v) => toSpecific(v, locationById, classById, requested))
       .filter((i): i is SpecificSearchResult => i !== null)

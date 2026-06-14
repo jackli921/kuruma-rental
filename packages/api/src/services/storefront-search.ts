@@ -121,6 +121,14 @@ export class StorefrontSearchService {
     const vehiclesByLocation = groupByLocation(available)
     const requested = classes && classes.length > 0 ? new Set(classes) : null
 
+    // Pagination bound (#727, deferred): the page is built in memory — group the
+    // whole scan into cards, sort, then findIndex(cursor)+slice. Each page is
+    // O(total): full sort + linear cursor walk, re-done per request. Fine at MVP
+    // scale (40-50 cars; default browse-all scans the whole fleet, sort is
+    // microseconds). Not pushed into SQL because the page unit is an aggregated
+    // store CARD (a GROUP BY over availability), not a vehicle row — there is no
+    // per-vehicle keyset LIMIT for it. Revisit if inventory reaches the hundreds
+    // or search p95 regresses: a windowed GROUP BY + keyset on the card sort key.
     const cards = storefronts
       .map((sf) => buildCard(sf, vehiclesByLocation.get(sf.id) ?? [], classById, requested))
       .filter((c): c is StorefrontCard => c !== null)
