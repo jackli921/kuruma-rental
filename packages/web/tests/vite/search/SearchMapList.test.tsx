@@ -1,6 +1,6 @@
 import type { MapAdapter } from '@/vite/search/MapAdapter'
 import { SearchMapList } from '@/vite/search/SearchMapList'
-import type { SpecificSearchResult } from '@kuruma/shared/types/search-result'
+import type { SearchResultItem, SpecificSearchResult } from '@kuruma/shared/types/search-result'
 import { fireEvent, render, screen, within } from '@testing-library/react'
 import { IntlProvider } from 'use-intl'
 import { describe, expect, it } from 'vitest'
@@ -136,5 +136,42 @@ describe('SearchMapList', () => {
   it('offers no "show on map" control for a list-only (null-coord) row', () => {
     renderMapList([carAt('v2', 'Honda Fit', 'loc_umeda', NO_COORDS)])
     expect(screen.queryByRole('button', { name: /show on map/i })).toBeNull()
+  })
+
+  it('does not rebuild the plotted array on a selection-only re-render (#737)', () => {
+    const seen: SearchResultItem[][] = []
+    const CapturingAdapter: MapAdapter = ({ items, selectedId, onSelect }) => {
+      // Record the array reference handed to the adapter on every render.
+      seen.push(items)
+      return (
+        <div data-selected={selectedId ?? ''}>
+          {items.map((item) => (
+            <button
+              key={item.location.locationId}
+              type="button"
+              data-testid={`marker-${item.location.locationId}`}
+              onClick={() => onSelect(item.location.locationId)}
+            >
+              marker
+            </button>
+          ))}
+        </div>
+      )
+    }
+    render(
+      <IntlProvider locale="en" messages={en}>
+        <SearchMapList
+          items={[carAt('v1', 'Toyota Yaris', 'loc_namba', GEOCODED)]}
+          adapter={CapturingAdapter}
+        />
+      </IntlProvider>,
+    )
+
+    const rendersBefore = seen.length
+    // Selection-only state change: selectedId flips, the items prop is untouched.
+    fireEvent.click(screen.getByTestId('marker-loc_namba'))
+
+    expect(seen.length).toBeGreaterThan(rendersBefore) // a re-render did happen
+    expect(new Set(seen).size).toBe(1) // ...but geocodedByLocation was not re-run
   })
 })
