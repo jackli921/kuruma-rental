@@ -26,11 +26,12 @@ import type { z } from 'zod'
 // the session cookie server-side (the client never names a tenant — see api.ts),
 // and locations are a later slice.
 //
-// CAVEAT (#528): the `classOptions` prop is fed by the parent's
-// vehicleClassOptionsQueryOptions(), which currently reads the PUBLIC
-// /vehicle-classes catalog (cross-operator), not a tenant-scoped list. A scoped
-// /vehicle-classes/manage endpoint lands with #528; until then the dropdown can
-// surface classes from other operators. We only consume the prop here.
+// The `classOptions` prop is fed by the parent's vehicleClassOptionsQueryOptions(),
+// which reads the session-scoped /vehicle-classes/manage endpoint (#528) — the
+// editing operator's own classes, not the public cross-tenant catalog. That list
+// omits archived classes, so a vehicle on a since-archived class won't appear; the
+// edit path below preserves it as a "Current class" option (#456) rather than
+// silently clearing classId. We only consume the prop here.
 
 // The form binds to the create schema's INPUT shape (pre-transform) for both
 // modes; edit submits a partial of the same fields, so the wider create schema
@@ -114,6 +115,14 @@ export function VehicleForm({ vehicle, classOptions, onSaved, onCancel }: Vehicl
   const queryClient = useQueryClient()
   const isEditMode = vehicle != null
 
+  // A vehicle assigned to a since-archived class is absent from the active
+  // `classOptions` list (/manage omits archived). Without a matching <option>
+  // the native select falls back to "Unassigned" and a save silently clears
+  // classId (#456), so we preserve the assignment as a "Current class" option.
+  const assignedClassId = vehicle?.classId ?? null
+  const assignedClassMissing =
+    assignedClassId != null && !classOptions.some((klass) => klass.id === assignedClassId)
+
   const {
     register,
     handleSubmit,
@@ -153,11 +162,14 @@ export function VehicleForm({ vehicle, classOptions, onSaved, onCancel }: Vehicl
         />
       </div>
 
-      {classOptions.length > 0 && (
+      {(classOptions.length > 0 || assignedClassMissing) && (
         <div>
           <Label htmlFor="classId">{t('class')}</Label>
           <NativeSelect id="classId" {...register('classId', { setValueAs: emptyToNull })}>
             <option value="">{t('classNone')}</option>
+            {assignedClassMissing && assignedClassId != null && (
+              <option value={assignedClassId}>{t('classCurrent')}</option>
+            )}
             {classOptions.map((klass) => (
               <option key={klass.id} value={klass.id}>
                 {klass.name}
