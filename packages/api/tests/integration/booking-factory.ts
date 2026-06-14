@@ -1,5 +1,12 @@
 import { BEST_CAR_RENTAL_OPERATOR_ID } from '@kuruma/shared/db/constants'
-import { addOnOptions, bookingEvents, insuranceOptions, users } from '@kuruma/shared/db/schema'
+import {
+  addOnOptions,
+  bookingEvents,
+  insuranceOptions,
+  notificationLog,
+  paymentEvents,
+  users,
+} from '@kuruma/shared/db/schema'
 import { eq } from 'drizzle-orm'
 import { SYSTEM_CONTEXT } from '../../src/middleware/auth'
 import {
@@ -110,6 +117,17 @@ export interface CreateSeededBookingOptions {
   insuranceDailyJpy?: number
   withAddOn?: boolean
   addOnPriceJpy?: number
+  /**
+   * ACRISS class code (default 'CCAR'). Must satisfy ^[A-Z9]{4}$. A non-null
+   * code is what makes the booking a valid substitution target (#826).
+   */
+  acrissCode?: string
+  /**
+   * Also seed a SECOND AVAILABLE vehicle in the same class + pickup location —
+   * the same-ACRISS substitution target #826 needs. Returned as
+   * `ids.substituteVehicleId` and removed by `cleanup`.
+   */
+  withSubstituteVehicle?: boolean
 }
 
 export interface SeededBooking {
@@ -123,6 +141,8 @@ export interface SeededBooking {
     renterId: string
     insuranceId?: string
     addOnId?: string
+    /** Set only when `withSubstituteVehicle` — a 2nd AVAILABLE same-class vehicle. */
+    substituteVehicleId?: string
   }
   /** Delete every row this factory created, in FK order. Call in `afterAll`. */
   cleanup: () => Promise<void>
@@ -142,10 +162,11 @@ export async function createSeededBooking(
   const startAt = opts.startAt ?? new Date('2027-01-05T09:00:00Z')
   const endAt = opts.endAt ?? new Date('2027-01-07T09:00:00Z')
   const dailyRateJpy = opts.dailyRateJpy ?? 8000
+  const acrissCode = opts.acrissCode ?? 'CCAR'
   const uniq = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
   const ownsRenter = opts.renterId === undefined
 
-  const klass = await seedVehicleClass(prefix, operatorId)
+  const klass = await seedVehicleClass(prefix, operatorId, acrissCode)
   const location = await seedLocation(prefix, 2880, operatorId)
   const renterId = opts.renterId ?? (await seedRenter(prefix))
   const vehicleId = await seedVehicle({
@@ -155,6 +176,20 @@ export async function createSeededBooking(
     name: `${prefix} car ${uniq}`,
     dailyRateJpy,
   })
+
+  // A 2nd AVAILABLE vehicle in the SAME class + location — the substitution
+  // target #826's success path reassigns the booking to. Same class ⇒ same
+  // ACRISS, so it clears sameAcrissClass + the availability + location checks.
+  let substituteVehicleId: string | undefined
+  if (opts.withSubstituteVehicle) {
+    substituteVehicleId = await seedVehicle({
+      operatorId,
+      classId: klass.id,
+      pickupLocationId: location.id,
+      name: `${prefix} substitute ${uniq}`,
+      dailyRateJpy,
+    })
+  }
 
   let insuranceId: string | undefined
   if (opts.withInsurance) {
@@ -198,10 +233,15 @@ export async function createSeededBooking(
   const booking = res.booking
 
   const cleanup = async (): Promise<void> => {
-    // booking_events FK-reference the booking, so they go before the booking row.
+    // Every bookingId-keyed child table must go before the booking row: none of
+    // booking_events / payment_events / notification_log has ON DELETE CASCADE,
+    // so a dependent that seeds payments (#825) or a substitution notification
+    // (#826) on top of this booking would otherwise 23503 our own teardown.
     await db.delete(bookingEvents).where(eq(bookingEvents.bookingId, booking.id))
+    await db.delete(paymentEvents).where(eq(paymentEvents.bookingId, booking.id))
+    await db.delete(notificationLog).where(eq(notificationLog.bookingId, booking.id))
     await cleanupBookings([booking.id])
-    await cleanupVehicles([vehicleId])
+    await cleanupVehicles(substituteVehicleId ? [vehicleId, substituteVehicleId] : [vehicleId])
     await cleanupVehicleClasses([klass.id])
     await cleanupLocations([location.id])
     if (ownsRenter) await cleanupUsers([renterId])
@@ -213,7 +253,15 @@ export async function createSeededBooking(
     booking,
     operatorId,
     renterId,
-    ids: { classId: klass.id, locationId: location.id, vehicleId, renterId, insuranceId, addOnId },
+    ids: {
+      classId: klass.id,
+      locationId: location.id,
+      vehicleId,
+      renterId,
+      insuranceId,
+      addOnId,
+      substituteVehicleId,
+    },
     cleanup,
   }
 }
