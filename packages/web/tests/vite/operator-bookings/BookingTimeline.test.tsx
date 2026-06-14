@@ -13,6 +13,9 @@ function event(
     actorId: null,
     createdAt: '2026-07-01T01:00:00.000Z',
     ...over,
+    // #716: payload.type mirrors the authoritative event type, exactly as the API's
+    // toBookingEvent backfills it for legacy rows — so a fixture sets only `type`.
+    payload: { ...over.payload, type: over.type } as BookingEventDto['payload'],
   }
 }
 

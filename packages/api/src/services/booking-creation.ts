@@ -316,6 +316,7 @@ export class BookingCreationService {
       // VEHICLE_SUBSTITUTED, which also uses ctx.userId.
       actorId: ctx.userId,
       payload: {
+        type: 'BOOKING_CREATED',
         requestedVehicleId: input.requestedVehicleId,
         assignedVehicleId,
         classId,
