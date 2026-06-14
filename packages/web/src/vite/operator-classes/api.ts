@@ -19,16 +19,19 @@ import { z } from 'zod'
 
 /**
  * A vehicle class as the operator manage screen needs it (JSON: ISO dates).
- * The Zod schema is the single source: `OperatorClass` is inferred from it
- * (#711), so the runtime parse at the seam and the compile-time type cannot
- * drift apart, and a renamed/missing API field fails in {@link fetchOperatorClasses}
- * instead of surfacing as `undefined` deep in the grid.
+ * `OperatorClass` is inferred from this schema (#711), so web's compile-time
+ * type and the runtime parse at the seam derive from one source and cannot drift
+ * apart. The schema still hand-mirrors the API's DTO, so it can't *prove* the
+ * contract — but if the API renames or drops a field it fails as a `ParseError`
+ * in {@link fetchOperatorClasses} (a runtime tripwire) instead of surfacing as
+ * `undefined` deep in the grid.
  */
 export const operatorClassSchema = z.object({
   id: z.string(),
-  // The owning operator. Optional only because legacy fixtures predate it; the
-  // API always returns it. Used to scope edit-form options (#456).
-  operatorId: z.string().optional(),
+  // The owning operator (DB notNull; the manage list and every mutation return
+  // it). Required so an absent operatorId fails as drift here rather than
+  // surfacing as `undefined` in the edit-form scoping (#456) — the #711 point.
+  operatorId: z.string(),
   name: z.string(),
   slug: z.string(),
   description: z.string().nullable(),

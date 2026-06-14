@@ -45,9 +45,9 @@ export class ActionError extends Error {
 export class ParseError extends Error {
   readonly name = 'ParseError'
   readonly status: number
-  readonly issues: z.core.$ZodIssue[]
+  readonly issues: z.ZodError['issues']
 
-  constructor(message: string, status: number, issues: z.core.$ZodIssue[]) {
+  constructor(message: string, status: number, issues: z.ZodError['issues']) {
     super(message)
     this.status = status
     this.issues = issues
@@ -65,6 +65,10 @@ export class ParseError extends Error {
  * passthrough for clients not yet migrated.
  */
 export async function unwrap<T>(res: Response, schema?: z.ZodType<T>): Promise<T> {
+  // The envelope shape (`{ success, data | error }`) is trusted by construction:
+  // every API route emits it through the shared `ok()`/`fail()` helpers, so we
+  // cast it rather than validate it. The optional Zod `schema` below validates
+  // `data` — the part that actually carries the API/web contract (#711).
   const body = (await res.json().catch(() => ({
     success: false as const,
     error: `Non-JSON response (HTTP ${res.status})`,

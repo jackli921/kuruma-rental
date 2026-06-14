@@ -51,6 +51,7 @@ describe('unwrap with a Zod schema', () => {
     const err = (await unwrap(res, vehicleSchema).catch((e) => e)) as ParseError
     expect(err).toBeInstanceOf(ParseError)
     expect(err.status).toBe(200)
+    expect(err.message).toContain('HTTP 200')
     expect(err.issues.some((issue) => issue.path.includes('seats'))).toBe(true)
   })
 
