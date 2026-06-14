@@ -223,3 +223,43 @@ describe('DrizzleNotificationLogRepository DEAD cap (#483)', () => {
     expect((await repo.claim(queued.id))?.status).toBe('SENDING')
   })
 })
+
+// #681: a phone-only renter / contactless operator yields a terminal NO_RECIPIENT
+// row instead of a silent skip. Proves the enum value + empty address/locale write
+// against real pg, and that the separate key never poisons a later real send.
+describe('DrizzleNotificationLogRepository recordNoRecipient (#681)', () => {
+  const repo = new DrizzleNotificationLogRepository(db)
+  const KIND = 'RENTER_TRIP_STARTED' as const
+  const skipKey = `notify:${testBookingId}:${KIND}:no_recipient`
+
+  it('persists a terminal NO_RECIPIENT row with empty address/locale, idempotently', async () => {
+    const a = await repo.recordNoRecipient({
+      bookingId: testBookingId,
+      operatorId: BEST_CAR_RENTAL_OPERATOR_ID,
+      kind: KIND,
+      idempotencyKey: skipKey,
+    })
+    expect(a).toMatchObject({ status: 'NO_RECIPIENT', recipient: '', locale: '', attempts: 0 })
+
+    const b = await repo.recordNoRecipient({
+      bookingId: testBookingId,
+      operatorId: BEST_CAR_RENTAL_OPERATOR_ID,
+      kind: KIND,
+      idempotencyKey: skipKey,
+    })
+    expect(b.id).toBe(a.id) // conflict path returns the existing row, unchanged
+  })
+
+  it('does not block a later real send for the same (booking, kind) — separate key', async () => {
+    const sendRow = await repo.upsertQueued({
+      bookingId: testBookingId,
+      operatorId: BEST_CAR_RENTAL_OPERATOR_ID,
+      kind: KIND,
+      recipient: 'renter@example.com',
+      locale: 'en',
+      idempotencyKey: `notify:${testBookingId}:${KIND}`,
+    })
+    expect(sendRow.status).toBe('QUEUED')
+    expect((await repo.claim(sendRow.id))?.status).toBe('SENDING')
+  })
+})
