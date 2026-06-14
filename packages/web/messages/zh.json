@@ -1,4 +1,15 @@
 {
+  "regionPicker": {
+    "prefecture": "都道府县",
+    "city": "市区町村",
+    "area": "区域",
+    "anywhere": "不限地区",
+    "allCities": "全部市区",
+    "allAreas": "全部区域",
+    "nearMe": "我的附近",
+    "locating": "正在定位…",
+    "popular": "热门区域"
+  },
   "common": {
     "appName": "库鲁马租车",
     "loading": "加载中...",

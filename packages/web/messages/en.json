@@ -1,4 +1,15 @@
 {
+  "regionPicker": {
+    "prefecture": "Prefecture",
+    "city": "City",
+    "area": "Area",
+    "anywhere": "Anywhere",
+    "allCities": "All cities",
+    "allAreas": "All areas",
+    "nearMe": "Near me",
+    "locating": "Locating…",
+    "popular": "Popular areas"
+  },
   "common": {
     "appName": "Kuruma Rental",
     "loading": "Loading...",
