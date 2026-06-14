@@ -16,6 +16,7 @@ import {
   vehicleClasses,
   vehicles,
 } from '@kuruma/shared/db/schema'
+import type { BookingEventPayload } from '@kuruma/shared/db/schema'
 import type { VehicleDetailBooking } from '@kuruma/shared/types/vehicle-detail'
 import type {
   AddOn,
@@ -474,7 +475,10 @@ export function toBookingEvent(r: BookingEventRow): BookingEvent {
     id: r.id,
     bookingId: r.bookingId,
     type: r.type,
-    payload: r.payload,
+    // #716: the `type` column is authoritative; backfill it into the discriminated
+    // payload so rows whose stored jsonb predates the embedded discriminant still
+    // narrow on payload.type.
+    payload: { ...r.payload, type: r.type } as BookingEventPayload,
     actorId: r.actorId,
     createdAt: r.createdAt,
   }

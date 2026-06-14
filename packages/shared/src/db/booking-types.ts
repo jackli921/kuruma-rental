@@ -29,6 +29,7 @@ export type AddOnSnapshot = {
 }
 
 export type BookingCreatedPayload = {
+  type: 'BOOKING_CREATED'
   requestedVehicleId: string
   assignedVehicleId: string
   classId: string
@@ -43,15 +44,26 @@ export type BookingCreatedPayload = {
   addOnSnapshot: AddOnSnapshot[]
 }
 export type VehicleSubstitutedPayload = {
+  type: 'VEHICLE_SUBSTITUTED'
   fromVehicleId: string
   toVehicleId: string
   reason: string | null
 }
 export type BookingCancelledPayload = {
+  type: 'BOOKING_CANCELLED'
   cancellationFee: number | null
   cancelledAt: string
 }
-export type StatusChangedPayload = { from: BookingStatus; to: BookingStatus }
+export type StatusChangedPayload = {
+  type: 'STATUS_CHANGED'
+  from: BookingStatus
+  to: BookingStatus
+}
+// #716: discriminated union keyed on `type`. The literals mirror BOOKING_EVENT_TYPES
+// (booking_events.type is the storage-side discriminant), so consumers narrow on
+// payload.type with zero casts and gain assertNever exhaustiveness. The read mapper
+// (toBookingEvent) backfills the discriminant for legacy rows whose stored jsonb
+// payload predates it.
 export type BookingEventPayload =
   | BookingCreatedPayload
   | VehicleSubstitutedPayload
