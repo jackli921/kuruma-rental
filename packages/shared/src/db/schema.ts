@@ -857,7 +857,7 @@ export const notificationLog = pgTable(
 )
 
 export { documentStatusEnum, documentTypeEnum, renterDocuments } from './renter-documents'
-export { regions } from './regions'
+export { regions, regionTypeEnum, regionStatusEnum } from './regions'
 
 // Enum string-union types are derived ONCE in ../enums from the same value arrays
 // the pgEnums above consume (#688). Re-exported here so existing

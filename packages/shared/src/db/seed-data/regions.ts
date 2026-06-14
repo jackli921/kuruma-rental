@@ -10,10 +10,25 @@ import type { regions } from '../schema'
  *
  * Each `DEMO_LOCATIONS` row points its `regionId` at the deepest (area) node here.
  * `nameZh` uses simplified Chinese where it diverges from the Japanese kanji.
+ *
+ * #651 Slice 1 — every node carries a taxonomy `type`, a URL-stable `slug`, and
+ * (on AREA nodes only) the area's WGS84 centre = its anchor location's coords, so
+ * `nearestAssignableRegion` can match a pickup point. Only AREA nodes are
+ * `assignable`; prefectures/cities are navigation-only and keep null coords.
  */
 export type DemoRegion = Pick<
   typeof regions.$inferInsert,
-  'id' | 'parentId' | 'nameEn' | 'nameJa' | 'nameZh' | 'sortOrder'
+  | 'id'
+  | 'parentId'
+  | 'nameEn'
+  | 'nameJa'
+  | 'nameZh'
+  | 'sortOrder'
+  | 'type'
+  | 'latitude'
+  | 'longitude'
+  | 'assignable'
+  | 'slug'
 > & {
   readonly id: string
   /** null = a root (prefecture); otherwise the parent region's id. */
@@ -22,6 +37,14 @@ export type DemoRegion = Pick<
   readonly nameJa: string
   readonly nameZh: string
   readonly sortOrder: number
+  readonly type: 'PREFECTURE' | 'CITY' | 'AREA'
+  /** Set on AREA nodes (= anchor location centre); null on prefectures/cities. */
+  readonly latitude: number | null
+  readonly longitude: number | null
+  /** Only AREA nodes accept location assignment. */
+  readonly assignable: boolean
+  /** Unique, kebab-case URL handle for renter chips/deep links (?region=namba). */
+  readonly slug: string
 }
 
 export const DEMO_REGIONS: readonly DemoRegion[] = [
@@ -33,6 +56,11 @@ export const DEMO_REGIONS: readonly DemoRegion[] = [
     nameJa: '大阪府',
     nameZh: '大阪府',
     sortOrder: 1,
+    type: 'PREFECTURE',
+    latitude: null,
+    longitude: null,
+    assignable: false,
+    slug: 'osaka',
   },
   {
     id: 'reg_osaka_city',
@@ -41,6 +69,11 @@ export const DEMO_REGIONS: readonly DemoRegion[] = [
     nameJa: '大阪市',
     nameZh: '大阪市',
     sortOrder: 1,
+    type: 'CITY',
+    latitude: null,
+    longitude: null,
+    assignable: false,
+    slug: 'osaka-city',
   },
   {
     id: 'reg_namba',
@@ -49,6 +82,11 @@ export const DEMO_REGIONS: readonly DemoRegion[] = [
     nameJa: '難波',
     nameZh: '难波',
     sortOrder: 1,
+    type: 'AREA',
+    latitude: 34.6627,
+    longitude: 135.5012,
+    assignable: true,
+    slug: 'namba',
   },
   {
     id: 'reg_umeda',
@@ -57,6 +95,11 @@ export const DEMO_REGIONS: readonly DemoRegion[] = [
     nameJa: '梅田',
     nameZh: '梅田',
     sortOrder: 2,
+    type: 'AREA',
+    latitude: 34.7025,
+    longitude: 135.4959,
+    assignable: true,
+    slug: 'umeda',
   },
   {
     id: 'reg_tennoji',
@@ -65,6 +108,11 @@ export const DEMO_REGIONS: readonly DemoRegion[] = [
     nameJa: '天王寺',
     nameZh: '天王寺',
     sortOrder: 3,
+    type: 'AREA',
+    latitude: 34.6463,
+    longitude: 135.5135,
+    assignable: true,
+    slug: 'tennoji',
   },
   {
     id: 'reg_osaka_castle',
@@ -73,6 +121,11 @@ export const DEMO_REGIONS: readonly DemoRegion[] = [
     nameJa: '大阪城',
     nameZh: '大阪城',
     sortOrder: 4,
+    type: 'AREA',
+    latitude: 34.6873,
+    longitude: 135.5259,
+    assignable: true,
+    slug: 'osaka-castle',
   },
   {
     id: 'reg_shin_osaka',
@@ -81,6 +134,11 @@ export const DEMO_REGIONS: readonly DemoRegion[] = [
     nameJa: '新大阪',
     nameZh: '新大阪',
     sortOrder: 5,
+    type: 'AREA',
+    latitude: 34.7338,
+    longitude: 135.5003,
+    assignable: true,
+    slug: 'shin-osaka',
   },
   {
     id: 'reg_izumisano',
@@ -89,6 +147,11 @@ export const DEMO_REGIONS: readonly DemoRegion[] = [
     nameJa: '泉佐野市',
     nameZh: '泉佐野市',
     sortOrder: 2,
+    type: 'CITY',
+    latitude: null,
+    longitude: null,
+    assignable: false,
+    slug: 'izumisano',
   },
   {
     id: 'reg_kix',
@@ -97,6 +160,11 @@ export const DEMO_REGIONS: readonly DemoRegion[] = [
     nameJa: '関西空港',
     nameZh: '关西机场',
     sortOrder: 1,
+    type: 'AREA',
+    latitude: 34.4347,
+    longitude: 135.2441,
+    assignable: true,
+    slug: 'kix',
   },
   // ── Kyoto 京都府 ──────────────────────────────────────────────────────────
   {
@@ -106,6 +174,11 @@ export const DEMO_REGIONS: readonly DemoRegion[] = [
     nameJa: '京都府',
     nameZh: '京都府',
     sortOrder: 2,
+    type: 'PREFECTURE',
+    latitude: null,
+    longitude: null,
+    assignable: false,
+    slug: 'kyoto',
   },
   {
     id: 'reg_kyoto_city',
@@ -114,6 +187,11 @@ export const DEMO_REGIONS: readonly DemoRegion[] = [
     nameJa: '京都市',
     nameZh: '京都市',
     sortOrder: 1,
+    type: 'CITY',
+    latitude: null,
+    longitude: null,
+    assignable: false,
+    slug: 'kyoto-city',
   },
   {
     id: 'reg_kyoto_station',
@@ -122,6 +200,11 @@ export const DEMO_REGIONS: readonly DemoRegion[] = [
     nameJa: '京都駅',
     nameZh: '京都站',
     sortOrder: 1,
+    type: 'AREA',
+    latitude: 34.9858,
+    longitude: 135.7588,
+    assignable: true,
+    slug: 'kyoto-station',
   },
   // ── Hyogo 兵庫県 ──────────────────────────────────────────────────────────
   {
@@ -131,6 +214,11 @@ export const DEMO_REGIONS: readonly DemoRegion[] = [
     nameJa: '兵庫県',
     nameZh: '兵库县',
     sortOrder: 3,
+    type: 'PREFECTURE',
+    latitude: null,
+    longitude: null,
+    assignable: false,
+    slug: 'hyogo',
   },
   {
     id: 'reg_kobe_city',
@@ -139,6 +227,11 @@ export const DEMO_REGIONS: readonly DemoRegion[] = [
     nameJa: '神戸市',
     nameZh: '神户市',
     sortOrder: 1,
+    type: 'CITY',
+    latitude: null,
+    longitude: null,
+    assignable: false,
+    slug: 'kobe-city',
   },
   {
     id: 'reg_sannomiya',
@@ -147,6 +240,11 @@ export const DEMO_REGIONS: readonly DemoRegion[] = [
     nameJa: '三宮',
     nameZh: '三宫',
     sortOrder: 1,
+    type: 'AREA',
+    latitude: 34.6946,
+    longitude: 135.1956,
+    assignable: true,
+    slug: 'sannomiya',
   },
   // ── Nara 奈良県 ───────────────────────────────────────────────────────────
   {
@@ -156,6 +254,11 @@ export const DEMO_REGIONS: readonly DemoRegion[] = [
     nameJa: '奈良県',
     nameZh: '奈良县',
     sortOrder: 4,
+    type: 'PREFECTURE',
+    latitude: null,
+    longitude: null,
+    assignable: false,
+    slug: 'nara',
   },
   {
     id: 'reg_nara_city',
@@ -164,6 +267,11 @@ export const DEMO_REGIONS: readonly DemoRegion[] = [
     nameJa: '奈良市',
     nameZh: '奈良市',
     sortOrder: 1,
+    type: 'CITY',
+    latitude: null,
+    longitude: null,
+    assignable: false,
+    slug: 'nara-city',
   },
   {
     id: 'reg_nara_area',
@@ -172,5 +280,10 @@ export const DEMO_REGIONS: readonly DemoRegion[] = [
     nameJa: '奈良',
     nameZh: '奈良',
     sortOrder: 1,
+    type: 'AREA',
+    latitude: 34.6803,
+    longitude: 135.8174,
+    assignable: true,
+    slug: 'nara-area',
   },
 ] as const

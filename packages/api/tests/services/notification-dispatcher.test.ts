@@ -6,7 +6,11 @@ import { InMemoryUserRepository } from '../../src/repositories/in-memory/user'
 import { MAX_NOTIFICATION_ATTEMPTS, SEND_LEASE_MS } from '../../src/repositories/types'
 import type { LocationRepository, VehicleRepository } from '../../src/repositories/types'
 import type { EmailSender } from '../../src/services/email/email-sender'
-import { NotificationDispatcher } from '../../src/services/notification-dispatcher'
+import {
+  type LifecycleTrigger,
+  NotificationDispatcher,
+  TRIGGER_KINDS,
+} from '../../src/services/notification-dispatcher'
 import type { Booking, User } from '../../src/stores'
 
 const OP = 'op-1'
@@ -325,5 +329,52 @@ describe('NotificationDispatcher', () => {
       expect(blob).not.toContain('veh-1') // assignedVehicleId never rendered
       expect(blob).not.toContain(OP) // operatorId never rendered
     })
+  })
+})
+
+// #720: TRIGGER_KINDS is a hand-map from lifecycle event -> notification kinds.
+// Adding a NEW trigger fails to compile via the Record<LifecycleTrigger, Kind[]>
+// type, so that vector is already guarded. The vectors NOT caught by the compiler
+// are (a) the hand-mirror going stale and (b) a kind literal that drifts from the
+// DB enum after a rename — both surface only in prod as a missing renter email.
+// These parity tests close that gap against the single source of truth
+// (notificationKindEnum.enumValues from @kuruma/shared/db/schema).
+describe('TRIGGER_KINDS parity (#720)', () => {
+  // Runtime oracle for the LifecycleTrigger union. The `satisfies` keeps every
+  // member a real trigger; the round-trip type below makes OMITTING a trigger a
+  // COMPILE error — so the oracle itself can never silently drift out of sync,
+  // which is what would otherwise make the key-set assertion vacuous.
+  const ALL_TRIGGERS = [
+    'CREATED',
+    'SUBSTITUTED',
+    'CANCELLED',
+    'ACTIVATED',
+    'COMPLETED',
+  ] as const satisfies readonly LifecycleTrigger[]
+  // If a trigger is added to the union but not to ALL_TRIGGERS above, `Missing`
+  // becomes a non-`never` union and this line fails `tsc` — forcing the oracle
+  // (and thus the test) to stay exhaustive.
+  type Missing = Exclude<LifecycleTrigger, (typeof ALL_TRIGGERS)[number]>
+  const _exhaustive: Missing extends never ? true : never = true
+  void _exhaustive
+
+  const enumKinds: readonly string[] = notificationKindEnum.enumValues
+
+  it('key set equals the full LifecycleTrigger union exhaustively', () => {
+    expect([...Object.keys(TRIGGER_KINDS)].sort()).toEqual([...ALL_TRIGGERS].sort())
+  })
+
+  it('every flattened kind is a member of notificationKindEnum.enumValues', () => {
+    const usedKinds = [...new Set(Object.values(TRIGGER_KINDS).flat())]
+    const strays = usedKinds.filter((kind) => !enumKinds.includes(kind))
+    // Assert the offending values, not a bare boolean, so a failure names the
+    // stale kind(s) directly.
+    expect(strays).toEqual([])
+  })
+
+  it('maps each trigger to at least one kind (a trigger mapping to [] sends nothing)', () => {
+    for (const trigger of ALL_TRIGGERS) {
+      expect(TRIGGER_KINDS[trigger].length).toBeGreaterThan(0)
+    }
   })
 })

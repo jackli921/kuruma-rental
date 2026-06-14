@@ -1,5 +1,4 @@
-import { filterVehicles, sortVehicles } from '@/lib/fleet-filters'
-import type { VehicleData } from '@/lib/vehicle-api'
+import { type VehicleData, filterVehicles, sortVehicles } from '@/lib/fleet-filters'
 import { describe, expect, it } from 'vitest'
 
 function makeVehicle(overrides: Partial<VehicleData> = {}): VehicleData {

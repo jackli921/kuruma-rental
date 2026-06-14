@@ -62,7 +62,9 @@ export class DrizzleUserRepository implements UserRepository {
     // Insert with ON CONFLICT for email AND phone so concurrent walk-in requests
     // with the same contact info resolve to the same row instead of duplicating.
     // The placeholder email is only used when caller supplied no email.
-    const insertEmail = data.email ?? `phone-${crypto.randomUUID()}${PLACEHOLDER_EMAIL_SUFFIX}`
+    const insertEmail = data.email
+      ? data.email.toLowerCase()
+      : `phone-${crypto.randomUUID()}${PLACEHOLDER_EMAIL_SUFFIX}`
 
     const [inserted] = await this.db
       .insert(users)
@@ -94,7 +96,7 @@ export class DrizzleUserRepository implements UserRepository {
     const [row] = await this.db
       .select(userColumns)
       .from(users)
-      .where(eq(users.email, email))
+      .where(eq(users.email, email.toLowerCase()))
       .limit(1)
     return row ? (maskPlaceholderEmail(row) as User) : undefined
   }

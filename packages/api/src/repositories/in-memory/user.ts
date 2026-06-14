@@ -49,7 +49,7 @@ export class InMemoryUserRepository implements UserRepository {
     const user: User = {
       id: crypto.randomUUID(),
       name: data.name,
-      email: data.email,
+      email: data.email?.toLowerCase() ?? null,
       phone: data.phone,
       language: data.language,
       country: null,
@@ -60,7 +60,8 @@ export class InMemoryUserRepository implements UserRepository {
   }
 
   async findByEmail(email: string): Promise<User | undefined> {
-    return [...this.store.values()].find((u) => u.email === email)
+    const target = email.toLowerCase()
+    return [...this.store.values()].find((u) => u.email?.toLowerCase() === target)
   }
 
   async findByPhone(phone: string): Promise<User | undefined> {

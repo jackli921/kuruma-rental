@@ -1,3 +1,4 @@
+import { availableRevenueMonths, jstYearMonth } from '@kuruma/shared/lib/admin-revenue'
 import {
   PAYMENT_EVENT_ONE_SUCCESS_CONSTRAINT,
   PAYMENT_EVENT_SESSION_CONSTRAINT,
@@ -59,7 +60,16 @@ export class InMemoryPaymentEventRepository implements PaymentEventRepository {
     )
   }
 
-  async listSucceeded(): Promise<PaymentEvent[]> {
-    return [...this.store.values()].filter((r) => r.status === 'SUCCEEDED')
+  // Mirrors the Drizzle date-bounded scan: `month` (JST `YYYY-MM`) narrows to one
+  // payout month using the SAME jstYearMonth boundary the SQL uses (#717).
+  async listSucceeded(month?: string): Promise<PaymentEvent[]> {
+    return [...this.store.values()].filter(
+      (r) =>
+        r.status === 'SUCCEEDED' && (month === undefined || jstYearMonth(r.createdAt) === month),
+    )
+  }
+
+  async listSucceededMonths(): Promise<string[]> {
+    return availableRevenueMonths([...this.store.values()].filter((r) => r.status === 'SUCCEEDED'))
   }
 }
