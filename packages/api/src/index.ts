@@ -384,7 +384,7 @@ export function createApp(overrides?: AppOverrides) {
   // inference is retired, so it no longer needs an operator lookup.
   const resolveWriteOperatorId: ResolveWriteOperatorId = (ctx, inputOperatorId) =>
     resolveOperatorIdForWrite(ctx, inputOperatorId)
-  const locationService = new LocationService(locationRepo, bookingRepo, geocoder)
+  const locationService = new LocationService(locationRepo, bookingRepo, geocoder, regionRepo)
   const insuranceOptionService = new InsuranceOptionService(insuranceOptionRepo)
   const addOnService = new AddOnService(addOnRepo)
   const feeScheduleService = new FeeScheduleService(feeScheduleRepo)
