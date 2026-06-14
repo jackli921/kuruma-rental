@@ -14,9 +14,16 @@ export interface PaymentEventRepository {
   // The recorded SUCCEEDED payment for a booking, or null. Powers both the
   // already-paid guard at checkout and the derived "is this booking paid?" read.
   findSucceededByBookingId(bookingId: string): Promise<PaymentEvent | null>
-  // Every SUCCEEDED payment across all operators, for the platform-admin revenue
+  // SUCCEEDED payments across all operators, for the platform-admin revenue
   // report (#462). Unscoped by design — authz lives in AdminRevenueService.
-  listSucceeded(): Promise<PaymentEvent[]>
+  // `month` (`YYYY-MM`, JST) bounds the scan to one payout month so the Worker
+  // never materializes the whole monotonically growing table (#717); omit it for
+  // the full set.
+  listSucceeded(month?: string): Promise<PaymentEvent[]>
+  // The distinct JST (`Asia/Tokyo`) payout months that have >=1 SUCCEEDED
+  // payment, newest first. Powers the month picker without materializing every
+  // row (#717).
+  listSucceededMonths(): Promise<string[]>
 }
 
 /** A payment anomaly to persist. id/createdAt/resolvedAt are store-assigned (#508 P2). */

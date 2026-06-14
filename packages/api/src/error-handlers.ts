@@ -1,3 +1,4 @@
+import * as Sentry from '@sentry/cloudflare'
 import type { Hono } from 'hono'
 import { HTTPException } from 'hono/http-exception'
 import { ForbiddenError, OperatorRequiredError } from './middleware/auth'
@@ -22,6 +23,11 @@ export function setupGlobalHandlers(app: Hono): void {
     if (err instanceof OperatorRequiredError) {
       return c.json({ success: false, error: err.message }, 422)
     }
+    // Only genuinely-unexpected errors reach here — the handled policy
+    // responses (HTTPException-with-res, Forbidden 403, OperatorRequired 422)
+    // returned above. Capture with the stack for Sentry (#361); no-op when the
+    // SDK is disabled (no DSN) or uninitialised.
+    Sentry.captureException(err)
     console.error(
       JSON.stringify({
         level: 'error',

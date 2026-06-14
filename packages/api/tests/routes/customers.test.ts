@@ -399,6 +399,29 @@ describe('POST /customers/quick-create', () => {
     expect(body2.data.id).toBe(body1.data.id)
   })
 
+  it('is idempotent on email case — Bob@x.com and bob@x.com resolve to one user (#715)', async () => {
+    setup({ asRole: 'STAFF' })
+
+    const res1 = await app.request('/customers/quick-create', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: 'Mixed Case', email: 'Bob@Example.com', language: 'en' }),
+    })
+    expect(res1.status).toBe(201)
+    const body1 = await res1.json()
+    // stored lowercased so the DB unique index can't be defeated by casing
+    expect(body1.data.email).toBe('bob@example.com')
+
+    const res2 = await app.request('/customers/quick-create', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: 'Same Human', email: 'bob@example.com', language: 'en' }),
+    })
+    expect(res2.status).toBe(200) // existing user, not a new row
+    const body2 = await res2.json()
+    expect(body2.data.id).toBe(body1.data.id)
+  })
+
   it('returns 400 when neither email nor phone is provided', async () => {
     setup({ asRole: 'STAFF' })
     const res = await app.request('/customers/quick-create', {
@@ -434,6 +457,9 @@ describe('POST /customers/quick-create', () => {
     const body = await res.json()
     expect(body.data.name).toBe('Phone Only')
     expect(body.data.phone).toBe('+81-90-9999-8888')
+    // phone-only must stay email:null — guards the `data.email?.toLowerCase() ?? null`
+    // branch against a refactor that accidentally lowercases the synthetic placeholder
+    expect(body.data.email).toBeNull()
   })
 
   it('is idempotent on phone — returns existing user', async () => {

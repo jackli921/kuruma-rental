@@ -20,8 +20,8 @@
     "lint:fk-indexes": "bun run scripts/lint-fk-indexes.ts",
     "lint:i18n-parity": "bun run scripts/lint-i18n-parity.ts",
     "lint:dist-size": "bun run scripts/lint-dist-size.ts",
+    "lint:no-next-app": "bun run scripts/lint-no-next-app.ts",
     "lint:deps": "KNIP=1 bun node_modules/.bin/knip",
-    "perf:bundle": "bun run scripts/check-bundle-size.ts",
     "format": "bunx biome format --write .",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
@@ -29,6 +29,7 @@
     "db:seed": "bun run scripts/seed.ts",
     "db:seed-bookings": "bun run scripts/seed-bookings.ts",
     "db:seed:tcp": "bun run scripts/seed-tcp.ts",
+    "db:backfill-regions": "bun run scripts/backfill-location-regions.ts",
     "db:verify": "bun run scripts/db-verify.ts",
     "prepare": "husky"
   },
