@@ -1,7 +1,4 @@
-// Booking status union, mirrored from @kuruma/shared's bookingStatusEnum. Kept
-// as a local literal (like vite/operator-bookings/api.ts) so this web helper
-// stays free of a runtime dependency on the Drizzle schema module.
-type BookingStatus = 'CONFIRMED' | 'ACTIVE' | 'COMPLETED' | 'CANCELLED'
+import type { BookingStatus } from '@kuruma/shared/enums'
 
 export const STATUS_CLASS: Record<BookingStatus, string> = {
   CONFIRMED: 'rbc-event--confirmed',

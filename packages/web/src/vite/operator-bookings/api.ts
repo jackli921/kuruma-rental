@@ -2,6 +2,7 @@ import { unwrap } from '@/lib/api-error'
 import { getApiBaseUrl } from '@/vite/api-base'
 import type { BookingDto } from '@/vite/bookings/api'
 import type { BookingEventPayload, BookingEventType } from '@kuruma/shared/db/schema'
+import type { BookingStatus } from '@kuruma/shared/enums'
 import { queryOptions } from '@tanstack/react-query'
 
 // #512: operator booking view. The Vite shell owns these DTOs (it never imports
@@ -13,7 +14,7 @@ import { queryOptions } from '@tanstack/react-query'
 // (CallerContext in the repo layer), so this client passes NO operatorId — a
 // cross-tenant read is impossible from here by construction.
 
-export type OperatorBookingStatus = 'CONFIRMED' | 'ACTIVE' | 'COMPLETED' | 'CANCELLED'
+export type OperatorBookingStatus = BookingStatus
 
 /** A booking row as the operator view needs it. Dates are ISO strings (JSON). */
 export interface OperatorBookingRow {

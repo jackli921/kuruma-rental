@@ -1,6 +1,7 @@
 import { unwrap } from '@/lib/api-error'
 import { getApiBaseUrl } from '@/vite/api-base'
 import type { AddOnSnapshot, FeeSnapshotItem, InsuranceSnapshot } from '@kuruma/shared/db/schema'
+import type { BookingStatus } from '@kuruma/shared/enums'
 import { queryOptions } from '@tanstack/react-query'
 
 // JSON-serialized booking (#392/#460) as the renter read model sees it — dates
@@ -21,7 +22,7 @@ export interface BookingDto {
   startAt: string
   endAt: string
   effectiveEndAt: string
-  status: 'CONFIRMED' | 'ACTIVE' | 'COMPLETED' | 'CANCELLED'
+  status: BookingStatus
   source: string
   insuranceOptionId: string | null
   insuranceSnapshot: InsuranceSnapshot | null
@@ -105,7 +106,7 @@ export function bookingByIdQueryOptions(id: string) {
 // reads a leaner row shape from `GET /bookings?expand=vehicle`: the assigned car's
 // display name flattened in, dates as ISO strings. Mirrors operator-bookings/api
 // `OperatorBookingRow`/`toRow`, but renter-scoped and without the renter block.
-export type MyBookingStatus = 'CONFIRMED' | 'ACTIVE' | 'COMPLETED' | 'CANCELLED'
+export type MyBookingStatus = BookingStatus
 
 export interface MyBookingRow {
   id: string

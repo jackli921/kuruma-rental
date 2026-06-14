@@ -13,7 +13,7 @@ import {
 } from '../middleware/auth'
 import type { BookingFilters } from '../repositories/types'
 import type { BookingService } from '../services/booking'
-import { fail, ok, parseBody, parseDateRange, parseLimit } from './helpers'
+import { fail, ok, parseBody, parseDateRange, parseId, parseLimit } from './helpers'
 
 export function createBookingRoutes(service: BookingService) {
   return new Hono()
@@ -72,7 +72,9 @@ export function createBookingRoutes(service: BookingService) {
     })
     .get('/bookings/:id', async (c) => {
       const ctx = toCallerContext(requireUser(c))
-      const id = c.req.param('id')
+      const idResult = parseId(c)
+      if (!idResult.ok) return idResult.response
+      const { id } = idResult
 
       // Mirror the list endpoint's `expand` parsing. A deep-linked trip-detail
       // page (#549) has no list-row data, so it requests `vehicle,renter` to
@@ -106,7 +108,10 @@ export function createBookingRoutes(service: BookingService) {
         return fail(c, 'Only operators can view booking events', 403)
       }
 
-      const events = await service.findEvents(ctx, c.req.param('id'))
+      const idResult = parseId(c)
+      if (!idResult.ok) return idResult.response
+
+      const events = await service.findEvents(ctx, idResult.id)
       if (!events) {
         return fail(c, 'Booking not found', 404)
       }
@@ -123,7 +128,10 @@ export function createBookingRoutes(service: BookingService) {
         return fail(c, 'Only operators can view substitution candidates', 403)
       }
 
-      const candidates = await service.findSubstitutionCandidates(ctx, c.req.param('id'))
+      const idResult = parseId(c)
+      if (!idResult.ok) return idResult.response
+
+      const candidates = await service.findSubstitutionCandidates(ctx, idResult.id)
       if (!candidates) {
         return fail(c, 'Booking not found', 404)
       }
@@ -194,10 +202,13 @@ export function createBookingRoutes(service: BookingService) {
         return fail(c, 'Only operators can update booking status', 403)
       }
 
+      const idResult = parseId(c)
+      if (!idResult.ok) return idResult.response
+
       const parsed = await parseBody(c, updateBookingStatusSchema)
       if (!parsed.ok) return parsed.response
 
-      const result = await service.updateStatus(ctx, c.req.param('id'), parsed.data.status)
+      const result = await service.updateStatus(ctx, idResult.id, parsed.data.status)
       if (!result.ok) {
         return fail(c, result.error, result.status)
       }
@@ -207,7 +218,10 @@ export function createBookingRoutes(service: BookingService) {
     .post('/bookings/:id/cancel', async (c) => {
       const ctx = toCallerContext(requireUser(c))
 
-      const result = await service.cancel(ctx, c.req.param('id'))
+      const idResult = parseId(c)
+      if (!idResult.ok) return idResult.response
+
+      const result = await service.cancel(ctx, idResult.id)
       if (!result.ok) {
         return fail(c, result.error, result.status)
       }
@@ -224,12 +238,15 @@ export function createBookingRoutes(service: BookingService) {
         return fail(c, 'Only operators can substitute a vehicle', 403)
       }
 
+      const idResult = parseId(c)
+      if (!idResult.ok) return idResult.response
+
       const parsed = await parseBody(c, substituteVehicleSchema)
       if (!parsed.ok) return parsed.response
 
       const result = await service.substitute(
         ctx,
-        c.req.param('id'),
+        idResult.id,
         parsed.data.newVehicleId,
         parsed.data.reason ?? null,
       )

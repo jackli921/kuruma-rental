@@ -323,9 +323,15 @@ describe('Vehicle Class CRUD Routes', () => {
       expect(data.slug).toBe('compact')
     })
 
-    it('returns 404 for nonexistent', async () => {
-      const res = await app.request('/vehicle-classes/nonexistent-id')
+    it('returns 404 for a valid-but-nonexistent id', async () => {
+      const res = await app.request('/vehicle-classes/00000000-0000-4000-8000-0000000000ff')
       expect(res.status).toBe(404)
+    })
+
+    it('returns 400 for a malformed (non-uuid) id', async () => {
+      const res = await app.request('/vehicle-classes/nonexistent-id')
+      expect(res.status).toBe(400)
+      expect((await res.json()).error).toBe('id must be a valid uuid')
     })
   })
 
@@ -360,7 +366,7 @@ describe('Vehicle Class CRUD Routes', () => {
     })
 
     it('returns 404 for nonexistent', async () => {
-      const res = await app.request('/vehicle-classes/missing-id', {
+      const res = await app.request('/vehicle-classes/00000000-0000-4000-8000-0000000000ff', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ name: 'X' }),
@@ -521,7 +527,9 @@ describe('Vehicle Class CRUD Routes', () => {
     })
 
     it('returns 404 for nonexistent', async () => {
-      const res = await app.request('/vehicle-classes/missing', { method: 'DELETE' })
+      const res = await app.request('/vehicle-classes/00000000-0000-4000-8000-0000000000ff', {
+        method: 'DELETE',
+      })
       expect(res.status).toBe(404)
     })
   })

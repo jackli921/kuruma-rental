@@ -1048,6 +1048,21 @@
       "monthFilterLabel": "Filter by payout month",
       "loadError": "Couldn't load partner revenue.",
       "retry": "Retry"
+    },
+    "anomalies": {
+      "title": "Payment anomalies",
+      "subtitle": "Charges flagged during reconciliation — refund a duplicate or investigate a mismatch.",
+      "empty": "No unresolved payment anomalies.",
+      "colKind": "Type",
+      "colBooking": "Booking",
+      "colReceived": "Received",
+      "colExpected": "Expected",
+      "colStripeEvent": "Stripe event",
+      "colWhen": "When",
+      "kind": {
+        "DOUBLE_PAYMENT": "Double payment",
+        "AMOUNT_MISMATCH": "Amount mismatch"
+      }
     }
   },
   "documents": {

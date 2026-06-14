@@ -1,6 +1,7 @@
 import { Button } from '@/components/ui/button'
 import type { OperatorBookingStatus } from '@/vite/operator-bookings/api'
 import type { CalendarFiltersApi } from '@/vite/operator-bookings/useCalendarFilters'
+import { BOOKING_STATUSES } from '@kuruma/shared/enums'
 import { useTranslations } from 'use-intl'
 
 interface SidebarVehicle {
@@ -13,7 +14,7 @@ interface CalendarSidebarProps {
   readonly filters: CalendarFiltersApi
 }
 
-const STATUSES: readonly OperatorBookingStatus[] = ['CONFIRMED', 'ACTIVE', 'COMPLETED', 'CANCELLED']
+const STATUSES = BOOKING_STATUSES
 
 // Dot color tracks STATUS_CLASS / calendar-theme.css so the sidebar swatch stays
 // in sync with the calendar event color.

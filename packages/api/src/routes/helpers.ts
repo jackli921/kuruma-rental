@@ -1,5 +1,5 @@
 import type { Context } from 'hono'
-import type { z } from 'zod'
+import { z } from 'zod'
 
 // --- Response helpers ---
 
@@ -134,6 +134,38 @@ export function rejectOversizedBody(c: Context, maxBytes: number): Response | un
  */
 export function cachePublic(c: Context, maxAgeSeconds: number): void {
   c.header('Cache-Control', `public, s-maxage=${maxAgeSeconds}`)
+}
+
+// --- Path param helpers ---
+
+type ParseIdSuccess = { ok: true; id: string }
+type ParseIdFailure = { ok: false; response: Response }
+
+// Every entity `id` is a `crypto.randomUUID()` (schema.ts) stored in a `text`
+// column, so a malformed value doesn't fail a DB cast — it silently matches no
+// row and the handler can't tell "bad input" from "not found". Validate the
+// shape at the boundary so a non-uuid path param returns a clean 400 instead of
+// leaking into a service/query. `z.string().uuid()` mirrors users.ts:9.
+const idSchema = z.string().uuid()
+
+/**
+ * Validate a UUID path param at the HTTP boundary. Reads `c.req.param(name)` and
+ * returns the id on success, or a 400 `fail()` envelope to short-circuit:
+ *
+ *   const idResult = parseId(c)
+ *   if (!idResult.ok) return idResult.response
+ *   ... service.findById(ctx, idResult.id)
+ *
+ * `name` defaults to `'id'`; pass the actual param (`'vehicleId'`, `'bookingId'`)
+ * for routes that name it differently. The error names the param so a caller can
+ * tell which segment was malformed. Only for UUID ids — never for `slug`/`token`.
+ */
+export function parseId(c: Context, name = 'id'): ParseIdSuccess | ParseIdFailure {
+  const result = idSchema.safeParse(c.req.param(name))
+  if (!result.success) {
+    return { ok: false, response: fail(c, `${name} must be a valid uuid`, 400) }
+  }
+  return { ok: true, id: result.data }
 }
 
 // --- Body parsing helpers ---

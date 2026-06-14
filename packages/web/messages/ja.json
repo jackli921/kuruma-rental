@@ -1048,6 +1048,21 @@
       "monthFilterLabel": "支払月で絞り込み",
       "loadError": "パートナー収益を読み込めませんでした。",
       "retry": "再試行"
+    },
+    "anomalies": {
+      "title": "決済の異常",
+      "subtitle": "照合中にフラグが付いた請求 — 二重請求は返金、金額不一致は確認してください。",
+      "empty": "未対応の決済異常はありません。",
+      "colKind": "種別",
+      "colBooking": "予約",
+      "colReceived": "受領額",
+      "colExpected": "予定額",
+      "colStripeEvent": "Stripeイベント",
+      "colWhen": "日時",
+      "kind": {
+        "DOUBLE_PAYMENT": "二重決済",
+        "AMOUNT_MISMATCH": "金額不一致"
+      }
     }
   },
   "documents": {

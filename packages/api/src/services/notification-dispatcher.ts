@@ -154,7 +154,7 @@ export class NotificationDispatcher {
     if (kind.startsWith('RENTER_')) {
       const [renter] = await this.userRepo.findByIds([booking.renterId])
       if (!renter?.email) return undefined
-      return { recipient: renter.email, locale: renter.language || 'en' }
+      return { recipient: renter.email, locale: renter.language ?? 'en' }
     }
     // OPERATOR_BOOKING_ALERT — first owner, else the platform ops fallback.
     const owners = await this.userRepo.findOperatorContacts(booking.operatorId)

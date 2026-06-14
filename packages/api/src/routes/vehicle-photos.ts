@@ -6,7 +6,7 @@ import {
   MAX_PHOTOS_PER_VEHICLE,
   type VehiclePhotoService,
 } from '../services/vehicle-photo'
-import { MULTIPART_OVERHEAD_BYTES, fail, ok, rejectOversizedBody } from './helpers'
+import { MULTIPART_OVERHEAD_BYTES, fail, ok, parseId, rejectOversizedBody } from './helpers'
 
 // Up to MAX_PHOTOS_PER_VEHICLE files per request; cap the whole multipart body
 // at that many max-sized files plus framing slack.
@@ -37,6 +37,9 @@ export function createVehiclePhotoRoutes(
       if (!STAFF_ROLES.has(user.role)) return fail(c, 'Forbidden', 403)
       const ctx = toCallerContext(user)
 
+      const idResult = parseId(c)
+      if (!idResult.ok) return idResult.response
+
       const oversized = rejectOversizedBody(c, MAX_PHOTOS_REQUEST_BYTES)
       if (oversized) return oversized
 
@@ -46,7 +49,7 @@ export function createVehiclePhotoRoutes(
         (f): f is File => f instanceof File,
       )
 
-      const result = await service.uploadPhotos(ctx, c.req.param('id'), files)
+      const result = await service.uploadPhotos(ctx, idResult.id, files)
       if (!result.ok) return fail(c, result.error, result.status)
       return ok(c, { uploaded: result.uploaded, total: result.total }, 201)
     })
@@ -55,10 +58,13 @@ export function createVehiclePhotoRoutes(
       if (!STAFF_ROLES.has(user.role)) return fail(c, 'Forbidden', 403)
       const ctx = toCallerContext(user)
 
+      const idResult = parseId(c)
+      if (!idResult.ok) return idResult.response
+
       const url = c.req.query('url')
       if (!url) return fail(c, 'url query parameter required', 400)
 
-      const result = await service.deletePhoto(ctx, c.req.param('id'), url)
+      const result = await service.deletePhoto(ctx, idResult.id, url)
       if (!result.ok) return fail(c, result.error, result.status)
       return ok(c, { deleted: url, remaining: result.remaining })
     })

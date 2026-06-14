@@ -1,7 +1,7 @@
 import { Hono } from 'hono'
 import { MANAGEMENT_READ_ROLES, requireUser, toCallerContext } from '../middleware/auth'
 import type { VehicleDetailService } from '../services/vehicle-detail'
-import { fail, ok } from './helpers'
+import { fail, ok, parseId } from './helpers'
 
 export function createVehicleDetailRoutes(service: VehicleDetailService) {
   return new Hono().get('/vehicles/:id/detail', async (c) => {
@@ -12,7 +12,10 @@ export function createVehicleDetailRoutes(service: VehicleDetailService) {
     const user = requireUser(c)
     if (!MANAGEMENT_READ_ROLES.has(user.role)) return fail(c, 'Forbidden', 403)
 
-    const detail = await service.findVehicleDetail(toCallerContext(user), c.req.param('id'))
+    const idResult = parseId(c)
+    if (!idResult.ok) return idResult.response
+
+    const detail = await service.findVehicleDetail(toCallerContext(user), idResult.id)
     if (!detail) {
       return fail(c, 'Vehicle not found', 404)
     }
