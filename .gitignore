@@ -63,3 +63,9 @@ e2e/.demo-screens/
 docs/internal/
 docs/meeting_notes/
 .superpowers/
+
+# Ephemeral per-session/issue agent handoffs are local working state, not canon
+# (#730). New handoffs go under docs/handoffs/ (ignored); historical handoffs are
+# archived under docs/archive/. Keeps top-level docs/ to source-of-truth only.
+docs/handoffs/
+docs/*-handoff.md
