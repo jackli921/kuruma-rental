@@ -1,5 +1,6 @@
 import type { FeeSnapshotItem } from '@kuruma/shared/db/schema'
 import { escapeHtml, formatDateTime, formatJpy } from './format'
+import { type RenderedEmail, vehicleLabel } from './layout'
 import { emailStrings } from './messages'
 
 export interface RenterConfirmationData {
@@ -14,16 +15,6 @@ export interface RenterConfirmationData {
   fees: FeeSnapshotItem[]
   preAuthHandoffUrl: string | null
   totalPriceJpy: number | null
-}
-
-export interface RenderedEmail {
-  subject: string
-  html: string
-  text: string
-}
-
-function vehicleLabel(v: RenterConfirmationData['vehicle']): string {
-  return v.licensePlate ? `${v.name} (${v.licensePlate})` : v.name
 }
 
 /**
