@@ -99,6 +99,16 @@ export type OperatorMembershipStatus = (typeof OPERATOR_MEMBERSHIP_STATUSES)[num
 export const PROVIDER_INVITE_STATUSES = ['PENDING', 'ACCEPTED'] as const
 export type ProviderInviteStatus = (typeof PROVIDER_INVITE_STATUSES)[number]
 
+// Region taxonomy levels (#394/#651): prefecture -> city -> area. Order is
+// contractual — the region_type CREATE TYPE lists them positionally.
+export const REGION_TYPES = ['PREFECTURE', 'CITY', 'AREA'] as const
+export type RegionType = (typeof REGION_TYPES)[number]
+
+// Region lifecycle. Note INACTIVE (not ARCHIVED): INACTIVE nodes are hidden from
+// search + never matched by nearestAssignableRegion.
+export const REGION_STATUSES = ['ACTIVE', 'INACTIVE'] as const
+export type RegionStatus = (typeof REGION_STATUSES)[number]
+
 // LUGGAGE_SIZES already lives in lib/luggage.ts (#457) — re-exported here so the
 // enum SSoT is reachable from one subpath without duplicating its declaration.
 export { LUGGAGE_SIZES, type LuggageSize } from './lib/luggage'
