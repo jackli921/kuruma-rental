@@ -1,5 +1,5 @@
 #!/usr/bin/env bun
-import { readFileSync } from 'node:fs'
+import { readFileSync, writeFileSync } from 'node:fs'
 import { Glob } from 'bun'
 
 export type Violation = {
@@ -62,6 +62,60 @@ function webRelPath(file: string): string | null {
 
 function isForbiddenWebDbSpec(spec: string): boolean {
   return FORBIDDEN_WEB_DB_PREFIXES.some((p) => spec === p || spec.startsWith(`${p}/`))
+}
+
+// #719: src/modules/<feature>/ is the canonical web feature home (see
+// docs/architecture/modules.md). src/vite/ is a time-boxed migration staging
+// tree to be drained per-feature; src/components/<feature>/ is grandfathered
+// (only src/components/ui/ design-system primitives are sanctioned). This is a
+// NON-FAILING ratchet: it warns only when the count of migratable files under
+// the deprecated roots grows past the baseline, so the swarm still working in
+// src/vite/ today is not blocked. The count mirrors the failing-rule scan
+// (tests and fixtures excluded) and skips ambient .d.ts stubs.
+//
+// Known gap (accepted): being count-based, a same-PR delete+add nets zero and
+// slips past this. That is fine — this is a soft tripwire, not a gate; the
+// binding rule is the doc's "no new features in src/vite/". Upgrade to a path
+// manifest only if net-zero regressions actually happen in practice.
+//
+// After a drain, refresh in place with:
+//   bun run scripts/lint-module-boundaries.ts --update-baseline
+const DEPRECATED_WEB_TREE_BASELINE = 144
+
+export type DeprecatedTreeStatus = {
+  count: number
+  baseline: number
+  level: 'ok' | 'grew' | 'shrank'
+}
+
+// A web file under a deprecated root: anything in vite/, or a feature subdir of
+// components/ other than the sanctioned ui/ primitives. `webRel` is the path
+// under packages/web/src, or null for non-web files.
+export function isDeprecatedWebFile(webRel: string | null): boolean {
+  if (webRel === null) return false
+  // Ambient type stubs (e.g. vite-env.d.ts) are not migratable feature code.
+  if (webRel.endsWith('.d.ts')) return false
+  if (webRel.startsWith('vite/')) return true
+  const feature = webRel.match(/^components\/([^/]+)\//)
+  return feature !== null && feature[1] !== 'ui'
+}
+
+export function countDeprecatedWebFiles(files: string[]): number {
+  return files.filter((f) => isDeprecatedWebFile(webRelPath(f))).length
+}
+
+export function deprecatedTreeStatus(count: number, baseline: number): DeprecatedTreeStatus {
+  const level = count > baseline ? 'grew' : count < baseline ? 'shrank' : 'ok'
+  return { count, baseline, level }
+}
+
+export function formatDeprecationNotice(status: DeprecatedTreeStatus): string | null {
+  if (status.level === 'ok') return null
+  const refresh = `run \`bun run scripts/lint-module-boundaries.ts --update-baseline\` to set DEPRECATED_WEB_TREE_BASELINE=${status.count}`
+  if (status.level === 'grew') {
+    return `${status.count} source file(s) under deprecated web trees (src/vite/, src/components/<feature>/), up from baseline ${status.baseline}. New web features belong in src/modules/<feature>/ — see docs/architecture/modules.md. If intentional, ${refresh}.`
+  }
+  return `deprecated web tree shrank to ${status.count} (baseline ${status.baseline}) — lock in the migration: ${refresh}.`
 }
 
 export function checkImports(files: string[]): Violation[] {
@@ -132,6 +186,12 @@ function main(): number {
   for (const v of violations) {
     process.stderr.write(`[lint-module-boundaries] ERROR ${v.file}: ${describeViolation(v)}\n`)
   }
+  // Warning only — the deprecation ratchet must NEVER affect the exit code;
+  // only real violations below fail the build. Keep this above the return.
+  const notice = formatDeprecationNotice(
+    deprecatedTreeStatus(countDeprecatedWebFiles(files), DEPRECATED_WEB_TREE_BASELINE),
+  )
+  if (notice) process.stderr.write(`[lint-module-boundaries] WARNING ${notice}\n`)
   if (violations.length > 0) {
     process.stderr.write(`[lint-module-boundaries] ${violations.length} violation(s).\n`)
     return 1
@@ -140,5 +200,15 @@ function main(): number {
 }
 
 if (import.meta.main) {
+  if (process.argv.includes('--update-baseline')) {
+    const count = countDeprecatedWebFiles(discover())
+    const updated = readFileSync(import.meta.path, 'utf8').replace(
+      /(const DEPRECATED_WEB_TREE_BASELINE = )\d+/,
+      `$1${count}`,
+    )
+    writeFileSync(import.meta.path, updated)
+    process.stdout.write(`[lint-module-boundaries] DEPRECATED_WEB_TREE_BASELINE set to ${count}.\n`)
+    process.exit(0)
+  }
   process.exit(main())
 }
