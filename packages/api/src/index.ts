@@ -79,6 +79,7 @@ import { StorefrontDetailService } from './services/storefront-detail'
 import { StorefrontSearchService } from './services/storefront-search'
 import { createTranslationProvider } from './services/translation-provider-factory'
 import { UserDirectoryService } from './services/user-directory'
+import { VehicleService } from './services/vehicle'
 import { VehicleClassService } from './services/vehicle-class'
 import { VehicleClassAvailabilityService } from './services/vehicle-class-availability'
 import { VehicleDetailService } from './services/vehicle-detail'
@@ -387,6 +388,7 @@ export function createApp(overrides?: AppOverrides, repos: Repos = buildRepos(ov
   // inference is retired, so it no longer needs an operator lookup.
   const resolveWriteOperatorId: ResolveWriteOperatorId = (ctx, inputOperatorId) =>
     resolveOperatorIdForWrite(ctx, inputOperatorId)
+  const vehicleService = new VehicleService(vehicleRepo, resolveWriteOperatorId)
   const locationService = new LocationService(locationRepo, bookingRepo, geocoder, regionRepo)
   const insuranceOptionService = new InsuranceOptionService(insuranceOptionRepo)
   const addOnService = new AddOnService(addOnRepo)
@@ -446,7 +448,7 @@ export function createApp(overrides?: AppOverrides, repos: Repos = buildRepos(ov
     .route('/', createFlatSearchRoutes(flatSearchService, publicCatalogLimiter))
     .route('/', createProviderInviteRoutes(providerInviteService, publicCatalogLimiter))
     .route('/', createRegionRoutes(regionRepo))
-    .route('/', createVehicleRoutes(vehicleRepo, maintenanceService, resolveWriteOperatorId))
+    .route('/', createVehicleRoutes(vehicleService, maintenanceService))
     .route(
       '/',
       createVehiclePhotoRoutes(

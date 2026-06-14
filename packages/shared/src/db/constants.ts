@@ -19,3 +19,29 @@ export const BEST_CAR_RENTAL_NAME = 'Best Car Rental'
  */
 export const BEST_CAR_RENTAL_OWNER_EMAIL = 'owner@best-car-rental.local'
 export const BEST_CAR_RENTAL_OWNER_NAME = 'Best Car Rental Owner'
+
+/**
+ * Second demo tenant (Kansai Drive). Promoted out of the `DEMO_OPERATORS` inline
+ * literal so the multi-actor real-DB test harness (#654) and the seed share ONE
+ * source for the second operator: integration `global-setup` seeds it by id and
+ * cross-tenant tests scope to it via `ctxFor`, while the e2e harness mints a
+ * token off the owner email. Drift here would silently scope a fixture/token to
+ * a non-existent operator (a 404 with no error) — see `harness-actors.test.ts`.
+ */
+export const SECOND_OPERATOR_ID = 'op_kansai_drive'
+export const SECOND_OPERATOR_SLUG = 'kansai-drive'
+export const SECOND_OPERATOR_NAME = 'Kansai Drive'
+export const SECOND_OPERATOR_OWNER_EMAIL = 'owner@kansai-drive.example.test'
+export const SECOND_OPERATOR_OWNER_NAME = 'Kansai Drive Owner'
+
+/**
+ * Second demo renter (Tanaka Yui, ja). Promoted out of the `DEMO_RENTERS` inline
+ * literal for the same single-source reason (#654). Keep the `@example.test`
+ * domain: `seed-bookings` cleanup is a destructive `db.delete(users)` keyed off
+ * the exact `DEMO_RENTERS` email set, so a reserved test domain is what
+ * guarantees that delete can never hit a real OAuth user.
+ */
+export const SECOND_RENTER_ID = 'usr_renter_yui'
+export const SECOND_RENTER_EMAIL = 'yui@example.test'
+export const SECOND_RENTER_NAME = 'Tanaka Yui'
+export const SECOND_RENTER_LANGUAGE = 'ja'

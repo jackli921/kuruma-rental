@@ -34,6 +34,13 @@ describe('PhotoGallery', () => {
     expect(screen.getByRole('img')).toHaveAttribute('loading', 'lazy')
   })
 
+  it('declares explicit 4:3 width and height so the browser reserves the box (#440)', () => {
+    renderGallery(['/photos/a.jpg'])
+    const img = screen.getByRole('img')
+    expect(img).toHaveAttribute('width', '400')
+    expect(img).toHaveAttribute('height', '300')
+  })
+
   it('shows the first photo and advances to the next on Next', () => {
     renderGallery(['/photos/a.jpg', '/photos/b.jpg', '/photos/c.jpg'])
     expect(screen.getByRole('img')).toHaveAttribute('src', '/photos/a.jpg')

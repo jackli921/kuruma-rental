@@ -1,4 +1,4 @@
-import { ADMIN_SEED_EMAIL } from './constants'
+import { ADMIN_SEED_EMAIL, OPERATOR_SEED_EMAIL, RENTER_SEED_EMAIL } from './constants'
 import { testSql } from './pg'
 
 // The Vite/CF-Pages stack (#378) authenticates the browser with the API's own
@@ -25,7 +25,7 @@ const SESSION_TTL = '7d'
 // owner's actual operatorId off the user row below. A stale slug here would scope
 // the operator token to the wrong tenant and the portal would show no data.
 const OPERATOR = {
-  email: 'owner@best-car-rental.local',
+  email: OPERATOR_SEED_EMAIL,
   name: 'Best Car Rental Owner',
   role: 'OPERATOR_OWNER',
 } as const
@@ -34,7 +34,7 @@ const OPERATOR = {
 // has operatorId = null in the DB, so its token omits the claim: the booking API
 // forces renterId = ctx.userId for non-staff, so this owns a self-service booking.
 const RENTER = {
-  email: 'sarah@example.test',
+  email: RENTER_SEED_EMAIL,
   name: 'Sarah Smith',
   role: 'RENTER',
 } as const

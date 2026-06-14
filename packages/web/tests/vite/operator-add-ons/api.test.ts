@@ -1,3 +1,4 @@
+import { ParseError } from '@/lib/api-error'
 import {
   ADDON_QUERY_KEY,
   addOnsQueryOptions,
@@ -54,6 +55,13 @@ describe('fetchAddOns', () => {
   it('throws an ApiError carrying the status on a failure envelope', async () => {
     fetchMock.mockResolvedValue(jsonResponse({ success: false, error: 'Forbidden' }, 403))
     await expect(fetchAddOns()).rejects.toThrow('Forbidden')
+  })
+
+  it('throws a ParseError when a row drifts from the schema (#711)', async () => {
+    fetchMock.mockResolvedValue(
+      jsonResponse({ success: true, data: [{ ...addOn, priceJpy: 'oops' }] }),
+    )
+    await expect(fetchAddOns()).rejects.toBeInstanceOf(ParseError)
   })
 })
 

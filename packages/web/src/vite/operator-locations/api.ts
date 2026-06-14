@@ -1,9 +1,11 @@
 import { ApiError, unwrap } from '@/lib/api-error'
 import { getApiBaseUrl } from '@/vite/api-base'
+import { COORDINATE_SOURCES, LOCATION_STATUSES } from '@kuruma/shared/enums'
 import type { ApiResponse } from '@kuruma/shared/types/api-response'
 import type { LocationOperatingHours } from '@kuruma/shared/types/location'
 import type { CreateLocationInput, UpdateLocationInput } from '@kuruma/shared/validators/location'
 import { queryOptions } from '@tanstack/react-query'
+import { z } from 'zod'
 
 // #529: operator locations/storefronts management — Vite port of the frozen
 // `modules/locations` admin. Cookie-based and operator-scoped server-side (the
@@ -35,6 +37,25 @@ export interface OperatorLocation {
   updatedAt: string
 }
 
+// Network-seam validator for the read/write shape above (#711). Pinned to
+// OperatorLocation with `satisfies` so a field drift fails to compile here, not
+// silently in render. Non-strict, so the wire's server-only latitude/longitude
+// (#531) are dropped — the DTO deliberately omits them until a map view needs them.
+const locationSchema = z.object({
+  id: z.string(),
+  operatorId: z.string(),
+  name: z.string(),
+  address: z.string(),
+  operatingHours: z.object({ openTime: z.string(), closeTime: z.string() }).nullable(),
+  timezone: z.string(),
+  defaultTurnaroundMinutes: z.number(),
+  status: z.enum(LOCATION_STATUSES),
+  coordinateSource: z.enum(COORDINATE_SOURCES).nullable(),
+  regionId: z.string().nullable(),
+  createdAt: z.string(),
+  updatedAt: z.string(),
+}) satisfies z.ZodType<OperatorLocation>
+
 export const LOCATIONS_QUERY_KEY = ['operator-locations'] as const
 
 export async function fetchOperatorLocations(): Promise<OperatorLocation[]> {
@@ -50,7 +71,7 @@ export async function fetchOperatorLocations(): Promise<OperatorLocation[]> {
   const res = await fetch(`${getApiBaseUrl()}/locations?includeArchived=true&includeAll=true`, {
     credentials: 'include',
   })
-  return unwrap<OperatorLocation[]>(res)
+  return unwrap(res, locationSchema.array())
 }
 
 export function operatorLocationsQueryOptions() {
@@ -76,7 +97,7 @@ async function writeJson(
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
   })
-  return unwrap<OperatorLocation>(res)
+  return unwrap(res, locationSchema)
 }
 
 export function createLocation(data: CreateLocationInput): Promise<OperatorLocation> {

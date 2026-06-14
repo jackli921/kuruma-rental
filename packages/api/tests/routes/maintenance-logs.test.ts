@@ -7,6 +7,7 @@ import type { RunInTransaction } from '../../src/repositories/types'
 import { createMaintenanceLogRoutes } from '../../src/routes/maintenance-logs'
 import { createVehicleRoutes } from '../../src/routes/vehicles'
 import { MaintenanceService } from '../../src/services/maintenance'
+import { VehicleService } from '../../src/services/vehicle'
 import type { Vehicle } from '../../src/stores'
 import { testAuthMiddleware } from '../helpers/auth'
 import { TEST_OPERATOR_ID, testResolveWriteOperatorId } from '../helpers/operator'
@@ -58,12 +59,10 @@ describe('Maintenance Logs', () => {
     const runInTransaction = createInMemoryTransaction(vehicleRepo, maintenanceLogRepo)
     maintenanceService = new MaintenanceService(vehicleRepo, maintenanceLogRepo, runInTransaction)
 
+    const vehicleService = new VehicleService(vehicleRepo, testResolveWriteOperatorId())
     app = new Hono()
     app.use('*', testAuthMiddleware('staff-user', 'STAFF'))
-    app.route(
-      '/',
-      createVehicleRoutes(vehicleRepo, maintenanceService, testResolveWriteOperatorId()),
-    )
+    app.route('/', createVehicleRoutes(vehicleService, maintenanceService))
     app.route('/', createMaintenanceLogRoutes(maintenanceService))
   })
 

@@ -1,3 +1,4 @@
+import { ParseError } from '@/lib/api-error'
 import { fetchOperatorLocations } from '@/vite/operator-locations/api'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
@@ -6,6 +7,21 @@ function jsonResponse(body: unknown): Response {
     status: 200,
     headers: { 'Content-Type': 'application/json' },
   })
+}
+
+const location = {
+  id: 'loc_1',
+  operatorId: 'op_1',
+  name: 'Namba Hub',
+  address: '1-1 Namba, Osaka',
+  operatingHours: { openTime: '09:00', closeTime: '18:00' },
+  timezone: 'Asia/Tokyo',
+  defaultTurnaroundMinutes: 60,
+  status: 'ACTIVE',
+  coordinateSource: 'GEOCODED',
+  regionId: null,
+  createdAt: '2026-01-01T00:00:00Z',
+  updatedAt: '2026-01-01T00:00:00Z',
 }
 
 describe('fetchOperatorLocations', () => {
@@ -28,5 +44,22 @@ describe('fetchOperatorLocations', () => {
     // Cookie carries the tenant — the client never names an operator.
     expect(url).not.toContain('operatorId')
     expect(fetchSpy.mock.calls[0]?.[1]).toMatchObject({ credentials: 'include' })
+  })
+
+  it('strips the wire latitude/longitude the projection deliberately omits (#711)', async () => {
+    // The API row carries lat/lng (#531); the DTO omits them until a map view
+    // needs them. The schema is non-strict, so those keys are dropped at the seam.
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+      jsonResponse({ success: true, data: [{ ...location, latitude: 34.66, longitude: 135.5 }] }),
+    )
+    const result = await fetchOperatorLocations()
+    expect(result).toEqual([location])
+  })
+
+  it('throws a ParseError when a row drifts from the schema (#711)', async () => {
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+      jsonResponse({ success: true, data: [{ ...location, defaultTurnaroundMinutes: 'oops' }] }),
+    )
+    await expect(fetchOperatorLocations()).rejects.toBeInstanceOf(ParseError)
   })
 })

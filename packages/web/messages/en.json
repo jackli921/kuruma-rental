@@ -380,6 +380,7 @@
         "colorPlaceholder": "e.g. White",
         "class": "Class",
         "classNone": "Unassigned",
+        "classCurrent": "Current class",
         "pickupLocation": "Pickup location",
         "pickupLocationNone": "No pickup location",
         "pickupLocationCurrent": "Current pickup location",

@@ -1,3 +1,4 @@
+import { ParseError } from '@/lib/api-error'
 import {
   INSURANCE_QUERY_KEY,
   archiveInsuranceOption,
@@ -55,6 +56,13 @@ describe('fetchInsuranceOptions', () => {
   it('throws an ApiError carrying the status on a failure envelope', async () => {
     fetchMock.mockResolvedValue(jsonResponse({ success: false, error: 'Forbidden' }, 403))
     await expect(fetchInsuranceOptions()).rejects.toThrow('Forbidden')
+  })
+
+  it('throws a ParseError when a row drifts from the schema (#711)', async () => {
+    fetchMock.mockResolvedValue(
+      jsonResponse({ success: true, data: [{ ...option, dailyPriceJpy: 'oops' }] }),
+    )
+    await expect(fetchInsuranceOptions()).rejects.toBeInstanceOf(ParseError)
   })
 })
 
