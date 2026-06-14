@@ -9,6 +9,7 @@ import {
 import type { RunInTransaction } from '../../src/repositories/types'
 import { createVehicleRoutes } from '../../src/routes/vehicles'
 import { MaintenanceService } from '../../src/services/maintenance'
+import { VehicleService } from '../../src/services/vehicle'
 import { testAuthMiddleware } from '../helpers/auth'
 import { TEST_OPERATOR_ID, testResolveWriteOperatorId } from '../helpers/operator'
 
@@ -45,9 +46,10 @@ describe('Vehicle CRUD Routes', () => {
     const runInTransaction: RunInTransaction = async (fn) =>
       fn({ vehicleRepo: repo, maintenanceLogRepo })
     const maintenanceService = new MaintenanceService(repo, maintenanceLogRepo, runInTransaction)
+    const vehicleService = new VehicleService(repo, testResolveWriteOperatorId())
     app = new Hono()
     app.use('*', testAuthMiddleware('staff-user', 'STAFF'))
-    app.route('/', createVehicleRoutes(repo, maintenanceService, testResolveWriteOperatorId()))
+    app.route('/', createVehicleRoutes(vehicleService, maintenanceService))
   })
 
   describe('GET /vehicles', () => {
@@ -799,10 +801,11 @@ describe('Vehicle CRUD Routes', () => {
       const runInTransaction: RunInTransaction = async (fn) =>
         fn({ vehicleRepo: repo, maintenanceLogRepo })
       const maintenanceService = new MaintenanceService(repo, maintenanceLogRepo, runInTransaction)
+      const vehicleService = new VehicleService(repo, resolve)
       const a = new Hono()
       setupGlobalHandlers(a)
       a.use('*', testAuthMiddleware(`${role}-user`, role, operatorId))
-      a.route('/', createVehicleRoutes(repo, maintenanceService, resolve))
+      a.route('/', createVehicleRoutes(vehicleService, maintenanceService))
       return a
     }
 
@@ -883,10 +886,11 @@ describe('Vehicle CRUD Routes', () => {
       const runInTransaction: RunInTransaction = async (fn) =>
         fn({ vehicleRepo: repo, maintenanceLogRepo })
       const maintenanceService = new MaintenanceService(repo, maintenanceLogRepo, runInTransaction)
+      const vehicleService = new VehicleService(repo, resolve)
       const a = new Hono()
       setupGlobalHandlers(a)
       a.use('*', testAuthMiddleware('staff-user', 'STAFF'))
-      a.route('/', createVehicleRoutes(repo, maintenanceService, resolve))
+      a.route('/', createVehicleRoutes(vehicleService, maintenanceService))
       return a
     }
 
