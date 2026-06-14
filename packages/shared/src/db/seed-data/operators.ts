@@ -4,6 +4,11 @@ import {
   BEST_CAR_RENTAL_OWNER_EMAIL,
   BEST_CAR_RENTAL_OWNER_NAME,
   BEST_CAR_RENTAL_SLUG,
+  SECOND_OPERATOR_ID,
+  SECOND_OPERATOR_NAME,
+  SECOND_OPERATOR_OWNER_EMAIL,
+  SECOND_OPERATOR_OWNER_NAME,
+  SECOND_OPERATOR_SLUG,
 } from '../constants'
 import type { operators } from '../schema'
 
@@ -39,11 +44,11 @@ export const DEMO_OPERATORS: readonly DemoOperator[] = [
     owner: { email: BEST_CAR_RENTAL_OWNER_EMAIL, name: BEST_CAR_RENTAL_OWNER_NAME },
   },
   {
-    id: 'op_kansai_drive',
-    slug: 'kansai-drive',
-    name: 'Kansai Drive',
+    id: SECOND_OPERATOR_ID,
+    slug: SECOND_OPERATOR_SLUG,
+    name: SECOND_OPERATOR_NAME,
     preAuthHandoffUrl: 'https://preauth.kansai-drive.example/stripe',
-    owner: { email: 'owner@kansai-drive.example.test', name: 'Kansai Drive Owner' },
+    owner: { email: SECOND_OPERATOR_OWNER_EMAIL, name: SECOND_OPERATOR_OWNER_NAME },
   },
   {
     id: 'op_sakura_mobility',

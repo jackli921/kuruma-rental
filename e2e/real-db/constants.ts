@@ -18,3 +18,12 @@ export const ADMIN_STORAGE_STATE = 'e2e/.auth/admin.json'
 // duplicates the literal in ci.yml's seed step (yaml can't import TS) — keep them
 // in sync.
 export const ADMIN_SEED_EMAIL = 'platform-admin@kuruma.test'
+
+// Seeded-persona emails mint-session resolves to a DB user id + tenant. These
+// MIRROR the shared seed (@kuruma/shared db/constants BEST_CAR_RENTAL_OWNER_EMAIL
+// and seed-data/bookings.ts DEMO_RENTERS — Sarah Smith, en) but are re-declared here rather than
+// imported: Playwright's loader transpiles this test dir, not arbitrary
+// packages/shared/**.ts reached via import (same constraint that keeps the JWT
+// minting inlined in mint-session.ts). Single source WITHIN e2e — change here.
+export const OPERATOR_SEED_EMAIL = 'owner@best-car-rental.local'
+export const RENTER_SEED_EMAIL = 'sarah@example.test'

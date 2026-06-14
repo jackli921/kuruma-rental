@@ -17,6 +17,11 @@ export const DEFAULT_DAILY_RATE_JPY = 5000
  */
 export async function seedVehicleClass(
   prefix = 'test',
+  operatorId: string = BEST_CAR_RENTAL_OPERATOR_ID,
+  // Default NULL (current behavior for every existing caller). Pass a valid
+  // ACRISS (^[A-Z9]{4}$) to make the class substitutable — substitution
+  // eligibility requires a non-null code shared by both vehicles (#826).
+  acrissCode: string | null = null,
 ): Promise<{ id: string; name: string; slug: string }> {
   const uniq = `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
   const [row] = await db
@@ -24,10 +29,12 @@ export async function seedVehicleClass(
     .values({
       id: crypto.randomUUID(),
       // Transitional tenant (#386). Seeded by global-setup; vehicle_classes is
-      // not operator-scoped yet (deferred follow-up), so set it directly here.
-      operatorId: BEST_CAR_RENTAL_OPERATOR_ID,
+      // not operator-scoped yet (deferred follow-up). The composite FK
+      // vehicles(operatorId, classId) requires this operator to exist first.
+      operatorId,
       name: `Class ${uniq}`,
       slug: `class-${uniq}`,
+      acrissCode,
       description: null,
       photos: [],
       seats: 5,
