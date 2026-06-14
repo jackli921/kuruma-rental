@@ -369,6 +369,7 @@
         "colorPlaceholder": "例: ホワイト",
         "class": "クラス",
         "classNone": "未割り当て",
+        "classCurrent": "現在のクラス",
         "pickupLocation": "受取場所",
         "pickupLocationNone": "受取場所なし",
         "pickupLocationCurrent": "現在の受取場所",

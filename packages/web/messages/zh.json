@@ -369,6 +369,7 @@
         "colorPlaceholder": "例如 白色",
         "class": "类别",
         "classNone": "未分配",
+        "classCurrent": "当前类别",
         "pickupLocation": "取车地点",
         "pickupLocationNone": "无取车地点",
         "pickupLocationCurrent": "当前取车地点",

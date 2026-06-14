@@ -22,7 +22,8 @@ interface EditVehicleSheetProps {
 // Slide-over host that composes the add/edit form with photo management (#560).
 // It owns no fleet state — the parent passes the target vehicle (null = create)
 // and the open flag. Class options are fetched lazily (only while open) and the
-// dropdown is hidden when empty, so a failed/absent class list never blocks the
+// dropdown is hidden when empty (unless the edited vehicle's class was archived
+// and must be preserved — #456), so a failed/absent class list never blocks the
 // form. PhotoUpload renders in both modes: in create mode it shows its own
 // "save the vehicle first" hint, since photos attach to a persisted vehicle id.
 export function EditVehicleSheet({ open, vehicle, onOpenChange, onSaved }: EditVehicleSheetProps) {
