@@ -1,3 +1,4 @@
+import { ParseError } from '@/lib/api-error'
 import { fetchAddOns, fetchInsuranceOptions } from '@/vite/reservation/api'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
@@ -81,5 +82,37 @@ describe('fetchInsuranceOptions', () => {
     expect(fetchMock).toHaveBeenCalledWith('/api/storefronts/loc-1/insurance-options', {
       credentials: 'include',
     })
+  })
+})
+
+// #711: validate the response body at the network seam. A renamed/dropped field
+// must fail here as a ParseError, not surface as `undefined` deep in the wizard.
+describe('reservation response validation (#711)', () => {
+  afterEach(() => vi.unstubAllGlobals())
+
+  it('rejects with a ParseError when an add-on row drifts (priceJpy renamed)', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () =>
+        jsonResponse({
+          success: true,
+          data: [{ id: 'a1', name: 'Baby seat', description: null, priceAmount: 2000 }],
+        }),
+      ),
+    )
+    await expect(fetchAddOns('loc-1')).rejects.toBeInstanceOf(ParseError)
+  })
+
+  it('rejects with a ParseError when an insurance row omits dailyPriceJpy (drift)', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () =>
+        jsonResponse({
+          success: true,
+          data: [{ id: 'i1', name: 'Basic', description: null, deductibleJpy: 50000 }],
+        }),
+      ),
+    )
+    await expect(fetchInsuranceOptions('loc-1')).rejects.toBeInstanceOf(ParseError)
   })
 })

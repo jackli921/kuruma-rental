@@ -1,4 +1,4 @@
-import { ApiError } from '@/lib/api-error'
+import { ApiError, ParseError } from '@/lib/api-error'
 import {
   createBooking,
   fetchBookingById,
@@ -230,5 +230,39 @@ describe('fetchMyBookings', () => {
 describe('myBookingsQueryOptions', () => {
   it('keys by the renter so two principals never collide on cache', () => {
     expect(myBookingsQueryOptions('me-42').queryKey).toEqual(['bookings', 'mine', 'me-42'])
+  })
+})
+
+// #711: validate the response body at the seam. Drift (a renamed/dropped field)
+// must fail here as a ParseError, not surface as `undefined` on the confirmation
+// page or in the My Bookings list.
+describe('bookings response validation (#711)', () => {
+  afterEach(() => vi.unstubAllGlobals())
+
+  it('fetchBookingById rejects with a ParseError when the booking body drifts', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () =>
+        jsonResponse({
+          success: true,
+          data: { id: 'b-1', bookingCode: 'ABCD1234', status: 'CONFIRMED' },
+        }),
+      ),
+    )
+    await expect(fetchBookingById('b-1')).rejects.toBeInstanceOf(ParseError)
+  })
+
+  it('fetchMyBookings rejects with a ParseError when a row omits bookingCode', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () =>
+        jsonResponse({
+          success: true,
+          data: [rawMyBooking({ bookingCode: undefined })],
+          nextCursor: null,
+        }),
+      ),
+    )
+    await expect(fetchMyBookings('me-42')).rejects.toBeInstanceOf(ParseError)
   })
 })

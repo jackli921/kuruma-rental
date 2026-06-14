@@ -25,6 +25,7 @@ export type { VehicleDetail } from '@kuruma/shared/types/vehicle-detail'
 export type { Customer, CustomerSort, CustomerWithBookings } from '@kuruma/shared/types/customer'
 
 import type { CoordinateSource } from '@kuruma/shared/db/schema'
+import type { RegionCandidate } from '@kuruma/shared/lib/region-distance'
 import type { Customer, CustomerSort, CustomerWithBookings } from '@kuruma/shared/types/customer'
 import type { FleetVehicleOverview } from '@kuruma/shared/types/fleet'
 import type { OperatorOverview } from '@kuruma/shared/types/overview'
@@ -531,6 +532,16 @@ export interface RegionRepository {
   findAll(): Promise<Region[]>
   /** `rootId` plus every descendant id (inclusive). Empty when `rootId` is unknown. */
   findDescendantIds(rootId: string): Promise<string[]>
+  /**
+   * Every region projected to the geo/taxonomy columns needed to match a pickup
+   * point to its nearest assignable area (#651 Slice 2): the operator location-save
+   * loop guard derives a region from coords via `nearestAssignableRegion`, and
+   * validates that an operator-supplied regionId is assignable + ACTIVE. Returns
+   * ALL regions (matching + validation filter as needed), mirroring the one-off
+   * backfill's projection. Kept separate from the lean `findAll` cascade projection
+   * so the cached public taxonomy read stays minimal.
+   */
+  findCandidates(): Promise<RegionCandidate[]>
 }
 
 /**
