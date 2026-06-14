@@ -1,85 +1,27 @@
 import { unwrap } from '@/lib/api-error'
 import { getApiBaseUrl } from '@/vite/api-base'
-import type { LuggageSize } from '@kuruma/shared/lib/luggage'
+import {
+  type StorefrontDetailData,
+  type StorefrontSearchResultData,
+  storefrontDetailResultSchema,
+  storefrontSearchResultSchema,
+} from '@/vite/storefronts/schema'
 
-// JSON-serialized shapes returned by the public storefront endpoints (#391).
-// The Vite shell owns these DTOs (rather than importing the frozen Next module's
-// copy) so it stays self-contained and free of that module's process.env path.
-// These supersede `modules/storefronts/api.ts` — delete that file at cutover
-// (#378). The API serializes everything to JSON, so there are no Date instances.
-
-export interface OperatingHoursData {
-  openTime: string
-  closeTime: string
-}
-
-export interface ClassSummaryData {
-  /** ACRISS code, or null when the class has no mapped code (#388). */
-  acrissCode: string | null
-  /** Operator-entered class name; the web localizes via acrissCode. */
-  label: string
-  // #457 D6: class-default luggage for compare-on-search badges.
-  luggageCapacity: number | null
-  luggageSize: LuggageSize | null
-  availableCount: number
-}
-
-export interface StorefrontCardData {
-  locationId: string
-  operatorId: string
-  operatorName: string
-  name: string
-  address: string
-  operatingHours: OperatingHoursData | null
-  /** #551: operator turnaround buffer (minutes) between rentals at this store. */
-  turnaroundMinutes: number
-  classSummaries: ClassSummaryData[]
-  fromDailyPriceJpy: number | null
-  fromHourlyPriceJpy: number | null
-  representativePhotos: string[]
-  /** #651 Slice 3: store coords (WGS84) for distance labels + nearest-first sort. */
-  latitude: number | null
-  longitude: number | null
-}
-
-export interface StorefrontSearchResultData {
-  storefronts: StorefrontCardData[]
-  nextCursor: string | null
-}
-
-export interface AvailableVehicleData {
-  id: string
-  name: string
-  make: string | null
-  model: string | null
-  year: number | null
-  seats: number
-  // #457: effective luggage (vehicle override resolved against the class default).
-  luggageCapacity: number | null
-  luggageSize: LuggageSize | null
-  transmission: 'AUTO' | 'MANUAL'
-  acrissCode: string | null
-  classLabel: string
-  dailyRateJpy: number | null
-  hourlyRateJpy: number | null
-  photos: string[]
-}
-
-export interface StorefrontSummaryData {
-  locationId: string
-  name: string
-  address: string
-  operatorName: string
-  operatingHours: OperatingHoursData | null
-  /** #551: operator turnaround buffer (minutes) between rentals at this store. */
-  turnaroundMinutes: number
-}
-
-export interface StorefrontDetailData {
-  storefront: StorefrontSummaryData
-  vehicles: AvailableVehicleData[]
-  nextCursor: string | null
-}
+// JSON-serialized shapes returned by the public storefront endpoints (#391) are
+// defined as Zod schemas in ./schema (the #711/#785 convention) and inferred into
+// the DTO types re-exported below, so existing consumers keep importing them from
+// this client. The API serializes everything to JSON, so there are no Date
+// instances. This module supersedes `modules/storefronts/api.ts` — delete that
+// file at cutover (#378).
+export type {
+  AvailableVehicleData,
+  ClassSummaryData,
+  OperatingHoursData,
+  StorefrontCardData,
+  StorefrontDetailData,
+  StorefrontSearchResultData,
+  StorefrontSummaryData,
+} from '@/vite/storefronts/schema'
 
 export interface StorefrontSearchParams {
   from: Date
@@ -131,7 +73,7 @@ export async function fetchStorefronts(
   const res = await fetch(`${getApiBaseUrl()}/storefronts/search?${sp.toString()}`, {
     credentials: 'include',
   })
-  return unwrap<StorefrontSearchResultData>(res)
+  return unwrap(res, storefrontSearchResultSchema)
 }
 
 // Public endpoint — returns null on 404 (unknown/archived store) so the route
@@ -147,5 +89,5 @@ export async function fetchStorefrontDetail(
     { credentials: 'include' },
   )
   if (res.status === 404) return null
-  return unwrap<StorefrontDetailData>(res)
+  return unwrap(res, storefrontDetailResultSchema)
 }
