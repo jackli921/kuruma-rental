@@ -1055,6 +1055,43 @@ describe('BookingService.substitute — operator vehicle swap (#392 §5.5)', () 
     expect(stored?.totalPrice).toBe(30000)
   })
 
+  it('folds locked add-on charges into the re-snapshotted total on substitute (#855)', async () => {
+    const h = await setupSub()
+    const original = await addVehicle(h) // the add-on booking sits on its own vehicle
+    const replacement = await addVehicle(h) // class A @ Osaka, 15000/day
+
+    // A booking carrying paid add-ons (#460): their flat charges are locked into
+    // addOnSnapshot at creation. substitute() re-prices the base off the new
+    // vehicle and must re-add those charges — the canonical composition is
+    // base + insurance + Σ add-ons (booking-creation.ts). Dropping the add-ons
+    // silently undercharges the renter by their total on every vehicle swap.
+    const withAddOns = await h.repos.bookingRepo.create(
+      SYSTEM_CONTEXT,
+      bookingRow({
+        classId: h.classA.id,
+        requestedVehicleId: original.id,
+        assignedVehicleId: original.id,
+        pickupLocationId: h.locationId,
+        dropoffLocationId: h.locationId,
+        bookingCode: 'ADDONS01',
+        addOnSnapshot: [
+          { addOnId: 'a-gps', name: 'GPS', priceJpy: 3000 },
+          { addOnId: 'a-seat', name: 'Child seat', priceJpy: 2000 },
+        ],
+      }),
+    )
+
+    const result = await h.service.substitute(opCtxA, withAddOns.id, replacement.id, null)
+
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+    // 2 days * 15000 (new vehicle base) + 5000 (Σ add-on priceJpy). Insurance null.
+    expect(result.booking.totalPrice).toBe(35000)
+    // Persisted, not just returned.
+    const stored = await h.repos.bookingRepo.findById(opCtxA, withAddOns.id)
+    expect(stored?.totalPrice).toBe(35000)
+  })
+
   it('rejects a replacement already booked for the range (409, no event appended)', async () => {
     const h = await setupSub()
     const replacement = await addVehicle(h)
