@@ -1,7 +1,7 @@
 import { Hono } from 'hono'
 import { getUser } from '../middleware/auth'
 import type { AvailabilityService } from '../services/availability'
-import { fail, ok, parseDateRange } from './helpers'
+import { fail, ok, parseDateRange, parseId } from './helpers'
 
 export function createAvailabilityRoutes(service: AvailabilityService) {
   return new Hono()
@@ -13,14 +13,15 @@ export function createAvailabilityRoutes(service: AvailabilityService) {
       return ok(c, available)
     })
     .get('/availability/:vehicleId', async (c) => {
-      const vehicleId = c.req.param('vehicleId')
+      const idResult = parseId(c, 'vehicleId')
+      if (!idResult.ok) return idResult.response
       const range = parseDateRange(c, true)
       if (!range.ok) return range.response
 
       // Role is the only authz input; extracting it here keeps getUser (a context
       // concern) out of the service, which stays a pure policy core (FC/IS).
       const result = await service.checkVehicleAvailability(
-        vehicleId,
+        idResult.id,
         range.from,
         range.to,
         getUser(c)?.role,

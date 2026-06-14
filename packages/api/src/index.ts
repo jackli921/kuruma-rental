@@ -78,6 +78,7 @@ import { RenterDocumentService } from './services/renter-document'
 import { StorefrontDetailService } from './services/storefront-detail'
 import { StorefrontSearchService } from './services/storefront-search'
 import { createTranslationProvider } from './services/translation-provider-factory'
+import { UserDirectoryService } from './services/user-directory'
 import { VehicleClassService } from './services/vehicle-class'
 import { VehicleClassAvailabilityService } from './services/vehicle-class-availability'
 import { VehicleDetailService } from './services/vehicle-detail'
@@ -367,6 +368,7 @@ export function createApp(overrides?: AppOverrides) {
   const availabilityService = new AvailabilityService(availabilityRepo)
   const customerService = new CustomerService(customerRepo, userRepo)
   const messageService = new MessageService(threadRepo, messageRepo)
+  const userDirectoryService = new UserDirectoryService(userRepo, threadRepo)
   const maintenanceService = new MaintenanceService(
     vehicleRepo,
     maintenanceLogRepo,
@@ -464,7 +466,7 @@ export function createApp(overrides?: AppOverrides) {
       createTranslateRoutes(new MessageTranslationService(messageRepo, translationProvider)),
     )
     .route('/', createCustomerRoutes(customerService))
-    .route('/', createUserRoutes(userRepo, threadRepo))
+    .route('/', createUserRoutes(userDirectoryService))
     .route('/', createAdminRoutes(operatorService, providerInviteService))
     .route('/', createLocationRoutes(locationService, resolveWriteOperatorId))
     .route('/', createInsuranceOptionRoutes(insuranceOptionService, resolveWriteOperatorId))

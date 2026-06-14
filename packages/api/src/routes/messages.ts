@@ -2,7 +2,7 @@ import { createThreadSchema, sendMessageSchema } from '@kuruma/shared/validators
 import { Hono } from 'hono'
 import { requireUser, toCallerContext } from '../middleware/auth'
 import type { MessageService } from '../services/message'
-import { fail, ok, parseBody, parsePagination } from './helpers'
+import { fail, ok, parseBody, parseId, parsePagination } from './helpers'
 
 export function createMessageRoutes(service: MessageService) {
   return new Hono()
@@ -19,7 +19,10 @@ export function createMessageRoutes(service: MessageService) {
     .get('/threads/:id', async (c) => {
       const ctx = toCallerContext(requireUser(c))
 
-      const thread = await service.getThread(ctx, c.req.param('id'))
+      const idResult = parseId(c)
+      if (!idResult.ok) return idResult.response
+
+      const thread = await service.getThread(ctx, idResult.id)
       if (!thread) return fail(c, 'Thread not found', 404)
 
       return ok(c, thread)
@@ -37,9 +40,12 @@ export function createMessageRoutes(service: MessageService) {
     .post('/threads/:id/messages', async (c) => {
       const ctx = toCallerContext(requireUser(c))
 
+      const idResult = parseId(c)
+      if (!idResult.ok) return idResult.response
+
       // Existence/scope (404) is checked BEFORE body validation (400) to preserve
       // the original ordering; createMessage then reuses this confirmed thread id.
-      const thread = await service.getThread(ctx, c.req.param('id'))
+      const thread = await service.getThread(ctx, idResult.id)
       if (!thread) return fail(c, 'Thread not found', 404)
 
       const parsed = await parseBody(c, sendMessageSchema)
@@ -56,7 +62,10 @@ export function createMessageRoutes(service: MessageService) {
     .post('/threads/:id/read', async (c) => {
       const ctx = toCallerContext(requireUser(c))
 
-      const result = await service.markRead(ctx, c.req.param('id'))
+      const idResult = parseId(c)
+      if (!idResult.ok) return idResult.response
+
+      const result = await service.markRead(ctx, idResult.id)
       if (result.kind === 'thread_not_found') return fail(c, 'Thread not found', 404)
       return ok(c, null)
     })

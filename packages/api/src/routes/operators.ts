@@ -1,7 +1,7 @@
 import { Hono } from 'hono'
 import { FLEET_WRITE_ROLES, requireAuth, requireUser, toCallerContext } from '../middleware/auth'
 import type { OperatorService } from '../services/operator'
-import { fail, ok } from './helpers'
+import { fail, ok, parseId } from './helpers'
 
 /**
  * Read-only operator resolution for the business portal (#387). The web layout
@@ -45,7 +45,10 @@ export function createOperatorRoutes(service: OperatorService) {
         const user = requireUser(c)
         if (!FLEET_WRITE_ROLES.has(user.role)) return fail(c, 'Forbidden', 403)
 
-        const operator = await service.getById(toCallerContext(user), c.req.param('id'))
+        const idResult = parseId(c)
+        if (!idResult.ok) return idResult.response
+
+        const operator = await service.getById(toCallerContext(user), idResult.id)
         if (!operator) return fail(c, 'Operator not found', 404)
         return ok(c, operator)
       })

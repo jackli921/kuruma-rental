@@ -554,14 +554,24 @@ describe('Message Routes', () => {
       expect(body.data.messages[1].senderId).toBe(U2)
     })
 
-    it('returns 404 for nonexistent thread', async () => {
-      const res = await app.request('/threads/nonexistent-id')
+    it('returns 404 for a valid-but-nonexistent thread id', async () => {
+      const res = await app.request('/threads/00000000-0000-4000-8000-0000000000ff')
 
       expect(res.status).toBe(404)
 
       const body = await res.json()
       expect(body.success).toBe(false)
       expect(body.error).toBe('Thread not found')
+    })
+
+    it('returns 400 for a malformed (non-uuid) thread id', async () => {
+      const res = await app.request('/threads/nonexistent-id')
+
+      expect(res.status).toBe(400)
+
+      const body = await res.json()
+      expect(body.success).toBe(false)
+      expect(body.error).toBe('id must be a valid uuid')
     })
   })
 

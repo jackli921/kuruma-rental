@@ -274,9 +274,9 @@ describe('Availability Routes', () => {
       expect(body.data.conflicts[0].id).toBe(booking.id)
     })
 
-    it('returns 404 for nonexistent vehicle', async () => {
+    it('returns 404 for a valid-but-nonexistent vehicle id', async () => {
       const res = await app.request(
-        '/availability/nonexistent?from=2026-06-01T10:00:00Z&to=2026-06-01T14:00:00Z',
+        '/availability/00000000-0000-4000-8000-0000000000ff?from=2026-06-01T10:00:00Z&to=2026-06-01T14:00:00Z',
       )
 
       expect(res.status).toBe(404)
@@ -284,6 +284,15 @@ describe('Availability Routes', () => {
       const body = await res.json()
       expect(body.success).toBe(false)
       expect(body.error).toBe('Vehicle not found')
+    })
+
+    it('returns 400 for a malformed (non-uuid) vehicle id', async () => {
+      const res = await app.request(
+        '/availability/nonexistent?from=2026-06-01T10:00:00Z&to=2026-06-01T14:00:00Z',
+      )
+
+      expect(res.status).toBe(400)
+      expect((await res.json()).error).toBe('vehicleId must be a valid uuid')
     })
 
     it('strips conflict details for RENTER role', async () => {

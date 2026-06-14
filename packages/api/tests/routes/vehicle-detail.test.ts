@@ -99,13 +99,20 @@ describe('GET /vehicles/:id/detail', () => {
     return a
   }
 
-  it('returns 404 for nonexistent vehicle', async () => {
-    const res = await app.request('/vehicles/nonexistent/detail')
+  it('returns 404 for a valid-but-nonexistent vehicle id', async () => {
+    const res = await app.request('/vehicles/00000000-0000-4000-8000-0000000000ff/detail')
 
     expect(res.status).toBe(404)
     const body = await res.json()
     expect(body.success).toBe(false)
     expect(body.error).toBe('Vehicle not found')
+  })
+
+  it('returns 400 for a malformed (non-uuid) vehicle id', async () => {
+    const res = await app.request('/vehicles/nonexistent/detail')
+
+    expect(res.status).toBe(400)
+    expect((await res.json()).error).toBe('id must be a valid uuid')
   })
 
   it('returns vehicle with empty enrichment when no bookings exist', async () => {

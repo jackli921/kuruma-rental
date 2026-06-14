@@ -3,7 +3,7 @@ import { Hono } from 'hono'
 import { PUBLIC_CONTEXT } from '../middleware/auth'
 import type { StorefrontDetailService } from '../services/storefront-detail'
 import type { StorefrontSearchService } from '../services/storefront-search'
-import { cachePublic, fail, ok, parseDateRange, parseLimit } from './helpers'
+import { cachePublic, fail, ok, parseDateRange, parseId, parseLimit } from './helpers'
 import { rateLimitByIp } from './rate-limit'
 
 const DEFAULT_LIMIT = 25
@@ -60,6 +60,8 @@ export function createStorefrontRoutes(
       return ok(c, result.data)
     })
     .get('/storefronts/:locationId/vehicles', async (c) => {
+      const idResult = parseId(c, 'locationId')
+      if (!idResult.ok) return idResult.response
       const range = parseDateRange(c, true)
       if (!range.ok) return range.response
       const limit = parseLimit(c, { defaultLimit: DEFAULT_LIMIT, maxLimit: MAX_LIMIT })
@@ -69,7 +71,7 @@ export function createStorefrontRoutes(
       const cursor = c.req.query('cursor')
 
       const result = await detailService.getDetail(PUBLIC_CONTEXT, {
-        locationId: c.req.param('locationId'),
+        locationId: idResult.id,
         from: range.from,
         to: range.to,
         limit: limit.limit,
@@ -83,22 +85,25 @@ export function createStorefrontRoutes(
       return ok(c, result.data)
     })
     .get('/storefronts/:locationId/insurance-options', async (c) => {
+      const idResult = parseId(c, 'locationId')
+      if (!idResult.ok) return idResult.response
+
       // The ACTIVE coverage a renter can add when booking at this storefront
       // (#392). Public + active-only + single-operator — see the service for the
       // [P0] seal rationale. 404 mirrors the vehicles route (unknown/archived).
-      const result = await detailService.getInsuranceOptions(
-        PUBLIC_CONTEXT,
-        c.req.param('locationId'),
-      )
+      const result = await detailService.getInsuranceOptions(PUBLIC_CONTEXT, idResult.id)
       if (!result.ok) return fail(c, result.error, result.status)
       cachePublic(c, CACHE_SECONDS)
       return ok(c, result.data)
     })
     .get('/storefronts/:locationId/add-ons', async (c) => {
+      const idResult = parseId(c, 'locationId')
+      if (!idResult.ok) return idResult.response
+
       // The ACTIVE paid add-ons a renter can pick when booking at this storefront
       // (#460). Public + active-only + single-operator — see the service for the
       // [P0] seal rationale. 404 mirrors the vehicles route (unknown/archived).
-      const result = await detailService.getAddOns(PUBLIC_CONTEXT, c.req.param('locationId'))
+      const result = await detailService.getAddOns(PUBLIC_CONTEXT, idResult.id)
       if (!result.ok) return fail(c, result.error, result.status)
       cachePublic(c, CACHE_SECONDS)
       return ok(c, result.data)

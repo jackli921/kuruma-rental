@@ -86,8 +86,15 @@ describe('GET /operators/:id', () => {
     expect((await mountFor('RENTER').request(`/operators/${opA.id}`)).status).toBe(403)
   })
 
-  it('returns 404 for an unknown id (admin)', async () => {
-    expect((await mountFor('PLATFORM_ADMIN').request('/operators/nope')).status).toBe(404)
+  it('returns 404 for a valid-but-unknown id (admin)', async () => {
+    expect(
+      (await mountFor('PLATFORM_ADMIN').request('/operators/00000000-0000-4000-8000-0000000000ff'))
+        .status,
+    ).toBe(404)
+  })
+
+  it('returns 400 for a malformed (non-uuid) id (admin)', async () => {
+    expect((await mountFor('PLATFORM_ADMIN').request('/operators/nope')).status).toBe(400)
   })
 })
 

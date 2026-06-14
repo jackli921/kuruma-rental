@@ -8,7 +8,7 @@ import {
 import type { NotificationLogFilters } from '../repositories/types'
 import type { NotificationService } from '../services/notification'
 import { operatorReadScope } from '../tenancy'
-import { fail, ok } from './helpers'
+import { fail, ok, parseId } from './helpers'
 
 /**
  * Operator-portal surface for the outbound-notification ledger (#393): a scoped
@@ -50,9 +50,12 @@ export function createNotificationRoutes(service: NotificationService) {
       const user = requireUser(c)
       if (!MANAGEMENT_READ_ROLES.has(user.role)) return fail(c, 'Forbidden', 403)
 
+      const idResult = parseId(c)
+      if (!idResult.ok) return idResult.response
+
       // A cross-operator id resolves to 404 (not 403) in the service — no
       // tenant-existence leak. The atomic claim makes a double-click send once.
-      const result = await service.resend(toCallerContext(user), c.req.param('id'))
+      const result = await service.resend(toCallerContext(user), idResult.id)
       if (!result.ok) return fail(c, result.error, result.status)
       // `outcome` lets the portal distinguish a real re-send from a no-op
       // ("already in progress" / "already sent") instead of a blanket green (#485).

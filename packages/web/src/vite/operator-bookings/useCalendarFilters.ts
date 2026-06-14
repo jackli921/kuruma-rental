@@ -1,4 +1,5 @@
 import type { OperatorBookingStatus } from '@/vite/operator-bookings/api'
+import { BOOKING_STATUSES } from '@kuruma/shared/enums'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
 // #525 Slice C: vehicle + status filters for the operator calendar. Ported from
@@ -12,12 +13,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 // visible (an additive fleet change never retroactively hides a car).
 
 const STORAGE_KEY = 'kuruma.calendar.filters'
-const ALL_STATUSES: readonly OperatorBookingStatus[] = [
-  'CONFIRMED',
-  'ACTIVE',
-  'COMPLETED',
-  'CANCELLED',
-]
+const ALL_STATUSES = BOOKING_STATUSES
 
 interface StoredState {
   uncheckedVehicles: string[]
