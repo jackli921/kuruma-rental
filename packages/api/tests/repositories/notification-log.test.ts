@@ -57,6 +57,38 @@ describe('InMemoryNotificationLogRepository', () => {
     expect(replay.status).toBe('SENT') // NOT reset to QUEUED
   })
 
+  // #681: a no-recipient skip is persisted as a terminal NO_RECIPIENT row.
+  const noRecipient = (over: Record<string, unknown> = {}) => ({
+    bookingId: 'bk-1',
+    operatorId: OP1,
+    kind: 'RENTER_BOOKING_CONFIRM' as const,
+    idempotencyKey: 'notify:bk-1:RENTER_BOOKING_CONFIRM:no_recipient',
+    ...over,
+  })
+
+  it('recordNoRecipient inserts a terminal NO_RECIPIENT row with empty address/locale', async () => {
+    const row = await repo.recordNoRecipient(noRecipient())
+    expect(row.status).toBe('NO_RECIPIENT')
+    expect(row.recipient).toBe('')
+    expect(row.locale).toBe('')
+    expect(row.attempts).toBe(0)
+  })
+
+  it('recordNoRecipient is idempotent on its key', async () => {
+    const a = await repo.recordNoRecipient(noRecipient())
+    const b = await repo.recordNoRecipient(noRecipient())
+    expect(b.id).toBe(a.id)
+  })
+
+  it('a NO_RECIPIENT record coexists with a real send row for the same (booking, kind)', async () => {
+    await repo.recordNoRecipient(noRecipient())
+    const sendRow = await repo.upsertQueued(seed()) // bare key — not poisoned by the skip
+    expect(sendRow.status).toBe('QUEUED')
+    const all = await repo.findAll(operatorCtx)
+    expect(all).toHaveLength(2)
+    expect(all.map((r) => r.status).sort()).toEqual(['NO_RECIPIENT', 'QUEUED'])
+  })
+
   it('claim flips QUEUED -> SENDING and bumps attempts', async () => {
     const row = await repo.upsertQueued(seed())
     const claimed = await repo.claim(row.id)

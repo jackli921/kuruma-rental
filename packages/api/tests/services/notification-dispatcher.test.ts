@@ -66,9 +66,17 @@ const fakeLocationRepo = {
 } as unknown as LocationRepository
 
 function build(
-  opts: { now?: () => Date; sender?: EmailSender; owners?: User[]; fallback?: string } = {},
+  opts: {
+    now?: () => Date
+    sender?: EmailSender
+    owners?: User[]
+    fallback?: string
+    renterEmail?: string | null
+    logRepo?: InMemoryNotificationLogRepository
+  } = {},
 ) {
-  const logRepo = new InMemoryNotificationLogRepository(undefined, opts.now ?? (() => new Date()))
+  const logRepo =
+    opts.logRepo ?? new InMemoryNotificationLogRepository(undefined, opts.now ?? (() => new Date()))
   const ts = new Date('2026-06-01T00:00:00Z')
   const operatorRepo = new InMemoryOperatorRepository(
     new Map([
@@ -91,7 +99,7 @@ function build(
       {
         id: RENTER,
         name: 'Jane',
-        email: 'jane@example.com',
+        email: opts.renterEmail === undefined ? 'jane@example.com' : opts.renterEmail,
         phone: null,
         language: 'ja',
         country: null,
@@ -238,6 +246,71 @@ describe('NotificationDispatcher', () => {
       const rows = await logRepo.findAll({ userId: 'x', role: 'PLATFORM_ADMIN', bypassScope: true })
       const opRow = rows.find((r) => r.kind === 'OPERATOR_BOOKING_ALERT')
       expect(opRow?.recipient).toBe('ops@platform.com')
+    })
+  })
+
+  // #681: a phone-only renter (or an operator with no contact) has no resolvable
+  // email. Instead of silently skipping, persist a terminal NO_RECIPIENT row so
+  // the skip is countable for observability — never queued, never sent.
+  describe('no resolvable recipient (#681)', () => {
+    it('persists a terminal NO_RECIPIENT row for a phone-only renter, sending nothing', async () => {
+      const { dispatcher, logRepo, sender } = build({ renterEmail: null })
+      const outcome = await dispatcher.processOne(booking, 'RENTER_BOOKING_CONFIRM')
+
+      expect(outcome.result).toBe('no_recipient')
+      const rows = await logRepo.findAll({ userId: 'x', role: 'PLATFORM_ADMIN', bypassScope: true })
+      expect(rows).toHaveLength(1)
+      expect(rows[0]).toMatchObject({
+        kind: 'RENTER_BOOKING_CONFIRM',
+        status: 'NO_RECIPIENT',
+        recipient: '',
+        bookingId: booking.id,
+        operatorId: OP,
+      })
+      expect(sender.send as ReturnType<typeof vi.fn>).not.toHaveBeenCalled()
+    })
+
+    it('keys the NO_RECIPIENT row separately so a later real send is never blocked', async () => {
+      const { dispatcher, logRepo } = build({ renterEmail: null })
+      await dispatcher.processOne(booking, 'RENTER_BOOKING_CONFIRM')
+      const rows = await logRepo.findAll({ userId: 'x', role: 'PLATFORM_ADMIN', bypassScope: true })
+      expect(rows[0]!.idempotencyKey).toBe(
+        `notify:${booking.id}:RENTER_BOOKING_CONFIRM:no_recipient`,
+      )
+    })
+
+    it('is idempotent — repeated no-recipient dispatches keep exactly one row', async () => {
+      const { dispatcher, logRepo } = build({ renterEmail: null })
+      await dispatcher.processOne(booking, 'RENTER_BOOKING_CONFIRM')
+      await dispatcher.processOne(booking, 'RENTER_BOOKING_CONFIRM')
+      const rows = await logRepo.findAll({ userId: 'x', role: 'PLATFORM_ADMIN', bypassScope: true })
+      expect(rows).toHaveLength(1)
+      expect(rows[0]!.status).toBe('NO_RECIPIENT')
+    })
+
+    // The invariant the separate key buys (architect review): a skip must not
+    // poison a LATER real send once the renter supplies an email — the two rows
+    // coexist and the send path stays idempotent against its own bare key.
+    it('a later real send coexists with the skip and stays idempotent (separate keys, no poison)', async () => {
+      const logRepo = new InMemoryNotificationLogRepository()
+      // 1. Phone-only at first dispatch -> NO_RECIPIENT record (`:no_recipient` key).
+      await build({ renterEmail: null, logRepo }).dispatcher.processOne(
+        booking,
+        'RENTER_BOOKING_CONFIRM',
+      )
+      // 2. Renter adds an email -> the real send lands on the bare key, unblocked.
+      const send = build({ renterEmail: 'jane@example.com', logRepo })
+      expect((await send.dispatcher.processOne(booking, 'RENTER_BOOKING_CONFIRM')).result).toBe(
+        'sent',
+      )
+      // 3. A resend is idempotent against the SENT row, NOT the parallel skip —
+      //    no fresh skip, no double-send.
+      expect((await send.dispatcher.processOne(booking, 'RENTER_BOOKING_CONFIRM')).result).toBe(
+        'already_sent',
+      )
+
+      const rows = await logRepo.findAll({ userId: 'x', role: 'PLATFORM_ADMIN', bypassScope: true })
+      expect(rows.map((r) => r.status).sort()).toEqual(['NO_RECIPIENT', 'SENT'])
     })
   })
 

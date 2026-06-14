@@ -20,12 +20,17 @@ export const notificationKindEnum = pgEnum('notification_kind', [
 // DEAD is the terminal poison-message sink (#483): a row that has FAILED
 // MAX_NOTIFICATION_ATTEMPTS times. The claim predicate never re-arms it, so a
 // hard-bounce recipient stops being re-sent on every replay/resend.
+// NO_RECIPIENT is a terminal NON-failure state (#681): the dispatcher resolved no
+// email for a renter (phone-only) or operator, so nothing was ever queued or sent.
+// Persisted purely so the silent skip is countable for observability; the claim
+// predicate never lists it, so it is never claimable.
 export const notificationStatusEnum = pgEnum('notification_status', [
   'QUEUED',
   'SENDING',
   'SENT',
   'FAILED',
   'DEAD',
+  'NO_RECIPIENT',
 ])
 
 // Slice 7 (#393): durable outbound-email ledger. A row is inserted QUEUED; the

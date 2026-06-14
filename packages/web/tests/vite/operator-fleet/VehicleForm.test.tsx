@@ -208,6 +208,32 @@ describe('VehicleForm', () => {
     expect((screen.getByLabelText(en.luggageCapacity) as HTMLInputElement).value).toBe('4')
   })
 
+  it('edit mode: preserves a since-archived class that is missing from the active options', async () => {
+    const user = userEvent.setup()
+    mockedUpdate.mockResolvedValue(existingVehicle())
+    // The vehicle's class was archived, so it is absent from the active
+    // `classOptions` the parent fetches (/manage without includeArchived).
+    const archivedClassId = '99999999-9999-4999-8999-999999999999'
+    renderForm({ vehicle: existingVehicle({ classId: archivedClassId }) })
+
+    // The picker keeps the assigned class selected via a preserved option
+    // instead of silently falling back to "Unassigned".
+    const classSelect = screen.getByLabelText(en.class) as HTMLSelectElement
+    expect(classSelect.value).toBe(archivedClassId)
+
+    // Editing an unrelated field and saving must NOT clear the classId.
+    const nameInput = screen.getByLabelText(en.name)
+    await user.clear(nameInput)
+    await user.type(nameInput, 'Toyota Aqua G')
+    await user.click(screen.getByRole('button', { name: en.save }))
+
+    await waitFor(() => expect(mockedUpdate).toHaveBeenCalledTimes(1))
+    expect(mockedUpdate).toHaveBeenCalledWith(
+      'veh_1',
+      expect.objectContaining({ classId: archivedClassId }),
+    )
+  })
+
   it('invalidates the fleet query and fires onSaved after a successful create', async () => {
     const user = userEvent.setup()
     mockedCreate.mockResolvedValue(existingVehicle())

@@ -6,6 +6,7 @@ import { operatorReadScope } from '../../tenancy'
 import {
   MAX_NOTIFICATION_ATTEMPTS,
   type NotificationLogFilters,
+  type NotificationLogNoRecipient,
   type NotificationLogRepository,
   type NotificationLogUpsert,
   SEND_LEASE_MS,
@@ -60,6 +61,32 @@ export class DrizzleNotificationLogRepository implements NotificationLogReposito
       .from(notificationLog)
       .where(eq(notificationLog.idempotencyKey, data.idempotencyKey))
     if (!existing) throw new Error('notification_log upsert lost the row after conflict')
+    return toNotificationLog(existing)
+  }
+
+  async recordNoRecipient(data: NotificationLogNoRecipient): Promise<NotificationLog> {
+    // #681: terminal NO_RECIPIENT row — empty address/locale (none resolved),
+    // idempotent on its own key so exactly one record survives per skip.
+    const [inserted] = await this.db
+      .insert(notificationLog)
+      .values({
+        bookingId: data.bookingId,
+        operatorId: data.operatorId,
+        kind: data.kind,
+        recipient: '',
+        locale: '',
+        status: 'NO_RECIPIENT',
+        idempotencyKey: data.idempotencyKey,
+      })
+      .onConflictDoNothing({ target: notificationLog.idempotencyKey })
+      .returning()
+    if (inserted) return toNotificationLog(inserted)
+
+    const [existing] = await this.db
+      .select()
+      .from(notificationLog)
+      .where(eq(notificationLog.idempotencyKey, data.idempotencyKey))
+    if (!existing) throw new Error('notification_log recordNoRecipient lost the row after conflict')
     return toNotificationLog(existing)
   }
 
