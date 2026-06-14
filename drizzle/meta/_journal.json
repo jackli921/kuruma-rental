@@ -428,6 +428,13 @@
       "when": 1781407618144,
       "tag": "0060_operatorid_fks_on_delete_restrict",
       "breakpoints": true
+    },
+    {
+      "idx": 61,
+      "version": "7",
+      "when": 1781408846937,
+      "tag": "0061_messages_translations_jsonb",
+      "breakpoints": true
     }
   ]
 }

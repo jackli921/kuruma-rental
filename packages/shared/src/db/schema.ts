@@ -821,7 +821,7 @@ export const messages = pgTable('messages', {
     .references(() => users.id),
   content: text('content').notNull(),
   sourceLanguage: text('sourceLanguage'),
-  translations: text('translations').default('{}'),
+  translations: jsonb('translations').$type<Record<string, string>>().notNull().default({}),
   idempotencyKey: text('idempotencyKey'),
   createdAt: timestamp('createdAt', { withTimezone: true }).notNull().defaultNow(),
 })
