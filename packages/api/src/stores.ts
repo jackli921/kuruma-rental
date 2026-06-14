@@ -191,9 +191,11 @@ export interface Message {
 
 // Slice 7 (#393): one row per outbound email. status drives the lease-bounded
 // send lifecycle (QUEUED -> SENDING -> SENT/FAILED); idempotencyKey seals one
-// logical notification per (booking, kind). DEAD (#483) is the terminal
-// poison-message sink after MAX_NOTIFICATION_ATTEMPTS failures — claim() never
-// re-arms it. kind/status are derived from their pgEnums in
+// SEND per (booking, kind) under the `notify:<id>:<kind>` key. DEAD (#483) is the
+// terminal poison-message sink after MAX_NOTIFICATION_ATTEMPTS failures — claim()
+// never re-arms it. #681: a NO_RECIPIENT skip is a PARALLEL terminal row keyed
+// `:no_recipient`, so it coexists with — and never poisons — a later real send
+// for the same (booking, kind). kind/status are derived from their pgEnums in
 // @kuruma/shared/db/schema (#710) — never re-list the literals here.
 export interface NotificationLog {
   id: string
