@@ -4,22 +4,15 @@
   "private": true,
   "scripts": {
     "dev": "vite --port 3001",
-    "dev:next": "next dev -p 3001",
     "build": "vite build",
-    "build:next": "next build",
-    "build:worker": "opennextjs-cloudflare build",
     "preview": "vite preview --port 3001",
-    "preview:worker": "opennextjs-cloudflare build && wrangler dev",
-    "deploy": "opennextjs-cloudflare build && wrangler deploy",
     "pages:create-project": "wrangler pages project create kuruma-web-pages --production-branch=production --compatibility-date=2025-04-01 --compatibility-flag=nodejs_compat --compatibility-flag=global_fetch_strictly_public",
     "deploy:pages": "wrangler pages deploy dist --project-name=kuruma-web-pages --branch=production --commit-dirty=true",
-    "start": "next start",
     "test": "vitest run",
     "test:watch": "vitest",
-    "typecheck": "tsc --noEmit && tsc -p tsconfig.app.json --noEmit"
+    "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@auth/drizzle-adapter": "^1.11.1",
     "@base-ui/react": "^1.3.0",
     "@hookform/resolvers": "^5.2.2",
     "@kuruma/shared": "workspace:*",
@@ -31,11 +24,7 @@
     "clsx": "^2.1.1",
     "date-fns": "^4.1.0",
     "hono": "^4.12.12",
-    "jose": "^6.2.2",
     "lucide-react": "^1.7.0",
-    "next": "16.2.2",
-    "next-auth": "^5.0.0-beta.30",
-    "next-intl": "^4.9.0",
     "pigeon-maps": "^0.22.1",
     "react": "19.2.4",
     "react-big-calendar": "^1.19.4",
@@ -46,7 +35,6 @@
     "use-intl": "^4.13.0"
   },
   "devDependencies": {
-    "@opennextjs/cloudflare": "^1.18.0",
     "@tailwindcss/postcss": "^4",
     "@tailwindcss/vite": "^4.3.0",
     "@tanstack/router-plugin": "^1.168.18",
