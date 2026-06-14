@@ -37,6 +37,9 @@ export interface StorefrontCardData {
   fromDailyPriceJpy: number | null
   fromHourlyPriceJpy: number | null
   representativePhotos: string[]
+  /** #651 Slice 3: store coords (WGS84) for distance labels + nearest-first sort. */
+  latitude: number | null
+  longitude: number | null
 }
 
 export interface StorefrontSearchResultData {

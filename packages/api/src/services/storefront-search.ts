@@ -45,6 +45,10 @@ export interface StorefrontCard {
   /** min hourlyRateJpy over available vehicles, or null when none are hourly-priced. */
   fromHourlyPriceJpy: number | null
   representativePhotos: string[]
+  /** #651 Slice 3: store coords (WGS84) for renter distance labels + nearest-first
+   *  ranking. Null when the location is ungeocoded — such stores rank last. */
+  latitude: number | null
+  longitude: number | null
 }
 
 export interface StorefrontSearchData {
@@ -196,6 +200,8 @@ function buildCard(
     fromDailyPriceJpy: minRate(relevant.map((v) => v.dailyRateJpy)),
     fromHourlyPriceJpy: minRate(relevant.map((v) => v.hourlyRateJpy)),
     representativePhotos: relevant.flatMap((v) => v.photos).slice(0, REPRESENTATIVE_PHOTO_CAP),
+    latitude: storefront.latitude,
+    longitude: storefront.longitude,
   }
 }
 
