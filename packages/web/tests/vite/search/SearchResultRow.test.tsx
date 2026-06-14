@@ -67,6 +67,13 @@ describe('SearchResultRow', () => {
     expect(screen.getByText('Price on request')).toBeInTheDocument()
   })
 
+  it('gives the thumbnail explicit square dimensions when a photo is present', () => {
+    renderRow(makeSpecific({ photos: ['https://cdn.example/yaris.jpg'] }))
+    const img = screen.getByRole('img')
+    expect(img).toHaveAttribute('width', '300')
+    expect(img).toHaveAttribute('height', '300')
+  })
+
   it('renders the select CTA as an inert disabled button (booking deferred)', () => {
     renderRow(makeSpecific())
     const select = screen.getByRole('button', { name: 'Select' })
