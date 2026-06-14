@@ -31,7 +31,7 @@ export const addOnOptions = pgTable(
     // insuranceOptions.operatorId (#404); no nullable tenancy debt.
     operatorId: text('operatorId')
       .notNull()
-      .references(() => operators.id),
+      .references(() => operators.id, { onDelete: 'restrict' }),
     name: text('name').notNull(),
     description: text('description'),
     priceJpy: integer('priceJpy').notNull(),

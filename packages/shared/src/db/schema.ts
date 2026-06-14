@@ -87,7 +87,7 @@ export const users = pgTable(
     image: text('image'),
     role: roleEnum('role').notNull().default('RENTER'),
     // NULL = renter or platform admin (both legitimate). Set for OPERATOR_*.
-    operatorId: text('operatorId').references(() => operators.id),
+    operatorId: text('operatorId').references(() => operators.id, { onDelete: 'restrict' }),
     phone: text('phone'),
     language: text('language').notNull().default('en'),
     country: text('country'),
@@ -154,7 +154,7 @@ export const vehicleClasses = pgTable(
     // Best Car Rental immediately, so no nullable debt. See #386 plan v2 P1b.
     operatorId: text('operatorId')
       .notNull()
-      .references(() => operators.id),
+      .references(() => operators.id, { onDelete: 'restrict' }),
     name: text('name').notNull(),
     slug: text('slug').unique().notNull(),
     description: text('description'),
@@ -219,7 +219,7 @@ export const locations = pgTable(
     // vehicleClasses.operatorId (#386 P1b); no nullable tenancy debt.
     operatorId: text('operatorId')
       .notNull()
-      .references(() => operators.id),
+      .references(() => operators.id, { onDelete: 'restrict' }),
     name: text('name').notNull(),
     address: text('address').notNull(),
     // WGS84 decimal degrees, nullable (#458 D2). null = not-yet-geocoded → that
@@ -289,7 +289,7 @@ export const insuranceOptions = pgTable(
     // locations.operatorId (#387); no nullable tenancy debt.
     operatorId: text('operatorId')
       .notNull()
-      .references(() => operators.id),
+      .references(() => operators.id, { onDelete: 'restrict' }),
     name: text('name').notNull(),
     description: text('description'),
     dailyPriceJpy: integer('dailyPriceJpy').notNull(),
@@ -362,7 +362,7 @@ export const feeSchedules = pgTable(
     // vehicleClasses.operatorId (#386 P1b); no nullable tenancy debt.
     operatorId: text('operatorId')
       .notNull()
-      .references(() => operators.id),
+      .references(() => operators.id, { onDelete: 'restrict' }),
     // null = operator-wide fee; non-null = scoped to one vehicle class. The
     // composite FK below seals a per-class fee's class to the SAME operator.
     vehicleClassId: text('vehicleClassId'),
@@ -426,7 +426,7 @@ export const vehicles = pgTable(
     // Tenant owner. NOT NULL — see vehicleClasses.operatorId rationale (#386 P1b).
     operatorId: text('operatorId')
       .notNull()
-      .references(() => operators.id),
+      .references(() => operators.id, { onDelete: 'restrict' }),
     // FK is composite (operatorId, classId) -> vehicle_classes(operatorId, id),
     // declared in the table extras below — NOT a single-column reference. This
     // seals a vehicle's class to its own operator at the DB (#395 Phase 2).
@@ -535,7 +535,7 @@ export const bookings = pgTable(
     // reseeded at the marketplace cutover, no nullable tenancy debt (#386 P1b).
     operatorId: text('operatorId')
       .notNull()
-      .references(() => operators.id),
+      .references(() => operators.id, { onDelete: 'restrict' }),
     renterId: text('renterId')
       .notNull()
       .references(() => users.id),
@@ -680,7 +680,7 @@ export const paymentEvents = pgTable(
     // Partner attribution for the #462 revenue tab. RE-DERIVED server-side from the booking on the webhook — never trusted from Stripe metadata (#461).
     operatorId: text('operatorId')
       .notNull()
-      .references(() => operators.id),
+      .references(() => operators.id, { onDelete: 'restrict' }),
     bookingId: text('bookingId')
       .notNull()
       .references(() => bookings.id),
@@ -732,7 +732,7 @@ export const paymentAnomalies = pgTable(
     // Partner attribution, RE-DERIVED from the booking on the webhook — never the Stripe metadata (mirrors payment_events).
     operatorId: text('operatorId')
       .notNull()
-      .references(() => operators.id),
+      .references(() => operators.id, { onDelete: 'restrict' }),
     bookingId: text('bookingId')
       .notNull()
       .references(() => bookings.id),
@@ -843,7 +843,7 @@ export const notificationLog = pgTable(
     // operator-portal reads can scope by operatorId without a join (§6.2).
     operatorId: text('operatorId')
       .notNull()
-      .references(() => operators.id),
+      .references(() => operators.id, { onDelete: 'restrict' }),
     kind: notificationKindEnum('kind').notNull(),
     channel: text('channel').notNull().default('EMAIL'), // future: SMS/LINE without schema churn
     recipient: text('recipient').notNull(), // resolved address at claim time
