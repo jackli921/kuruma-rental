@@ -28,6 +28,11 @@ const regionColumns = {
  * cascading dropdowns render stably without client-side sorting. Descendant
  * resolution loads the (tiny) tree and walks it in app code via the shared pure
  * helper — see region-tree.ts for why we avoid a raw recursive CTE here.
+ *
+ * `findAll` also backs the per-save location loop guard (services/location.ts), so it
+ * runs a fresh SELECT on each location write. Fine at this scale (a few dozen
+ * platform-global rows the public route already edge-caches for 1h); an in-process
+ * cache is deliberately deferred (YAGNI) — revisit if region count or save volume grows.
  */
 export class DrizzleRegionRepository implements RegionRepository {
   constructor(private readonly db: Db) {}

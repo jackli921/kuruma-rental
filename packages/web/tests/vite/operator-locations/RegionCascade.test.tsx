@@ -100,11 +100,24 @@ describe('RegionCascade (#651 Slice 2b)', () => {
     expect(screen.getByLabelText('Area')).toHaveValue('reg_namba')
   })
 
-  it('clears the value to null when the prefecture changes', async () => {
+  it('clears the value to null and resets the city when the prefecture changes', async () => {
     const user = userEvent.setup()
     const onChange = setup('reg_namba')
     await user.selectOptions(screen.getByLabelText('Prefecture'), 'reg_kyoto')
+    // Emits null (the parent then feeds value=null; here onChange is a stub, so we
+    // assert the cascade's own reset rather than a re-render that never happens).
     expect(onChange).toHaveBeenLastCalledWith(null)
-    expect(screen.getByLabelText('Area')).toHaveValue('')
+    expect(screen.getByLabelText('City')).toHaveValue('')
+  })
+
+  it('keeps a now-unselectable assigned region visible (INACTIVE) instead of blanking', () => {
+    setup('reg_retired')
+    expect(screen.getByLabelText('Area')).toHaveValue('reg_retired')
+    expect(screen.getByRole('option', { name: 'Retired' })).toBeInTheDocument()
+  })
+
+  it('renders without crashing when the assigned region is unknown (since deleted)', () => {
+    setup('reg_gone')
+    expect(screen.getByLabelText('Area')).toHaveValue('reg_gone')
   })
 })

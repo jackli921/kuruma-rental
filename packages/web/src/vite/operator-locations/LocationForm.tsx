@@ -189,10 +189,12 @@ export function LocationForm(props: LocationFormProps) {
 
       <fieldset className="space-y-2">
         <legend className="text-sm font-medium">{t('form.region.label')}</legend>
-        {/* key on regions.length: the cascade seeds its prefecture/city chain on
-            mount, so remount once when the async list loads (0 -> N) to prefill edits. */}
+        {/* The cascade seeds its prefecture/city chain from `value` on mount, so it
+            must remount once when the async region list first arrives (empty -> loaded)
+            to prefill an edit. Key on that transition only — NOT on length, which would
+            also remount (and wipe in-progress navigation) on an unrelated refetch. */}
         <RegionCascade
-          key={regions.length}
+          key={regions.length > 0 ? 'loaded' : 'empty'}
           regions={regions}
           value={regionId}
           onChange={(id) => setValue('regionId', id, { shouldValidate: true })}

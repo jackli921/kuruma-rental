@@ -52,6 +52,12 @@ export function RegionCascade({ regions, value, onChange, disabled }: RegionCasc
   const areas = regions.filter(
     (r) => r.type === 'AREA' && r.parentId === cityId && r.assignable && r.status === 'ACTIVE',
   )
+  // A previously-assigned region that is no longer selectable (went INACTIVE or was
+  // removed) still arrives as `value`; keep it visible as a fallback option so an edit
+  // shows the current assignment instead of a misleading blank that a blind re-save
+  // could misread.
+  const current = value !== null ? regions.find((r) => r.id === value) : undefined
+  const showCurrentFallback = value !== null && !areas.some((a) => a.id === value)
 
   const handlePrefecture = (next: string) => {
     setPrefectureId(next || null)
@@ -106,6 +112,9 @@ export function RegionCascade({ regions, value, onChange, disabled }: RegionCasc
           onChange={(e) => onChange(e.target.value || null)}
         >
           <option value="">{t('placeholder')}</option>
+          {showCurrentFallback && (
+            <option value={value ?? ''}>{current ? nameOf(current, locale) : (value ?? '')}</option>
+          )}
           {areas.map((r) => (
             <option key={r.id} value={r.id}>
               {nameOf(r, locale)}

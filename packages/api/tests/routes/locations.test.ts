@@ -25,7 +25,8 @@ const nullGeocoder: Geocoder = { geocode: async () => ({ status: 'notFound' }) }
 // #651 Slice 2: an ACTIVE create must resolve a region. These routing/auth tests pin
 // every location at one seeded assignable area via a provided regionId in body(), so
 // the loop guard is satisfied and the create succeeds — region behavior itself is
-// covered in the service test. The id is a real UUID (regionIdSchema enforces it).
+// covered in the service test. regionIdSchema accepts any non-empty id (region ids
+// are text PKs); the service guard validates existence + assignability.
 const SEEDED_AREA: Region = {
   id: '00000000-0000-4000-8000-000000000001',
   parentId: null,
