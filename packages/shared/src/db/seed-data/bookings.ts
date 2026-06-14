@@ -1,4 +1,10 @@
-import { BEST_CAR_RENTAL_OPERATOR_ID } from '../constants'
+import {
+  BEST_CAR_RENTAL_OPERATOR_ID,
+  SECOND_RENTER_EMAIL,
+  SECOND_RENTER_ID,
+  SECOND_RENTER_LANGUAGE,
+  SECOND_RENTER_NAME,
+} from '../constants'
 import type { BookingStatus } from '../schema'
 
 /**
@@ -25,7 +31,12 @@ export interface DemoRenter {
 // OAuth users (same convention as the legacy seed). Stable ids so bookings
 // reference renterId deterministically.
 export const DEMO_RENTERS: readonly DemoRenter[] = [
-  { id: 'usr_renter_yui', email: 'yui@example.test', name: 'Tanaka Yui', language: 'ja' },
+  {
+    id: SECOND_RENTER_ID,
+    email: SECOND_RENTER_EMAIL,
+    name: SECOND_RENTER_NAME,
+    language: SECOND_RENTER_LANGUAGE,
+  },
   { id: 'usr_renter_wei', email: 'wei@example.test', name: 'Chen Wei', language: 'zh' },
   { id: 'usr_renter_sarah', email: 'sarah@example.test', name: 'Sarah Smith', language: 'en' },
   { id: 'usr_renter_hiroshi', email: 'hiroshi@example.test', name: 'Sato Hiroshi', language: 'ja' },
