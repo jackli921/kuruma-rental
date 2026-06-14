@@ -12,7 +12,11 @@ function NativeSelect({ className, ...props }: React.ComponentProps<'select'>) {
     <select
       data-slot="native-select"
       className={cn(
-        'flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-xs',
+        // #622: interaction-state parity with ui/input.tsx (focus / disabled /
+        // aria-invalid + their dark variants). The select keeps its own h-9
+        // rounded-md dimensions and bg-transparent resting state — only the
+        // missing interaction-state styling is harmonized.
+        'flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-xs transition-colors outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 disabled:pointer-events-none disabled:cursor-not-allowed disabled:bg-input/50 disabled:opacity-50 aria-invalid:border-destructive aria-invalid:ring-3 aria-invalid:ring-destructive/20 dark:disabled:bg-input/80 dark:aria-invalid:border-destructive/50 dark:aria-invalid:ring-destructive/40',
         className,
       )}
       {...props}
