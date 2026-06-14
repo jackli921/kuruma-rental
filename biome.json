@@ -46,8 +46,7 @@
       "playwright-report",
       "blob-report",
       "e2e/.auth",
-      "e2e/.demo-screens",
-      "scripts/__fixtures__/bundle"
+      "e2e/.demo-screens"
     ]
   }
 }

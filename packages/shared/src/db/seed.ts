@@ -173,6 +173,11 @@ export async function seed(db: ReturnType<typeof getDb>) {
       nameJa: region.nameJa,
       nameZh: region.nameZh,
       sortOrder: region.sortOrder,
+      type: region.type,
+      latitude: region.latitude,
+      longitude: region.longitude,
+      assignable: region.assignable,
+      slug: region.slug,
     }
     await db
       .insert(regions)
@@ -185,6 +190,11 @@ export async function seed(db: ReturnType<typeof getDb>) {
           nameJa: region.nameJa,
           nameZh: region.nameZh,
           sortOrder: region.sortOrder,
+          type: region.type,
+          latitude: region.latitude,
+          longitude: region.longitude,
+          assignable: region.assignable,
+          slug: region.slug,
           updatedAt: now,
         },
       })
