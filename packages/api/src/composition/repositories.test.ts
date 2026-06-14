@@ -22,40 +22,45 @@ import {
 // builder must populate the identical key set — so that divergence fails at
 // test time, not at dev-server runtime.
 
-const EXPECTED_KEYS: ReadonlyArray<keyof Repos> = [
-  'vehicleClassRepo',
-  'vehicleRepo',
-  'bookingRepo',
-  'availabilityRepo',
-  'userRepo',
-  'fleetOverviewRepo',
-  'vehicleDetailRepo',
-  'statsRepo',
-  'overviewRepo',
-  'threadRepo',
-  'messageRepo',
-  'maintenanceLogRepo',
-  'photoStorage',
-  'renterDocumentRepo',
-  'documentStorage',
-  'customerRepo',
-  'operatorRepo',
-  'locationRepo',
-  'insuranceOptionRepo',
-  'addOnRepo',
-  'feeScheduleRepo',
-  'notificationLogRepo',
-  'storefrontRepo',
-  'regionRepo',
-  'paymentEventRepo',
-  'paymentAnomalyRepo',
-  'providerInviteRepo',
-  'operatorMembershipRepo',
-  'bookingEventRepo',
-  'runInTransaction',
-  'runOperatorGrant',
-  'googleAuthRuntime',
-]
+// `Record<keyof Repos, true>` makes the expected set exhaustive: adding a member
+// to `Repos` without listing it here is a compile error, so the contract these
+// tests pin can't silently fall behind the bundle it guards.
+const EXPECTED_KEY_MAP: Record<keyof Repos, true> = {
+  vehicleClassRepo: true,
+  vehicleRepo: true,
+  bookingRepo: true,
+  availabilityRepo: true,
+  userRepo: true,
+  fleetOverviewRepo: true,
+  vehicleDetailRepo: true,
+  statsRepo: true,
+  overviewRepo: true,
+  threadRepo: true,
+  messageRepo: true,
+  maintenanceLogRepo: true,
+  photoStorage: true,
+  renterDocumentRepo: true,
+  documentStorage: true,
+  customerRepo: true,
+  operatorRepo: true,
+  locationRepo: true,
+  insuranceOptionRepo: true,
+  addOnRepo: true,
+  feeScheduleRepo: true,
+  notificationLogRepo: true,
+  storefrontRepo: true,
+  regionRepo: true,
+  paymentEventRepo: true,
+  paymentAnomalyRepo: true,
+  providerInviteRepo: true,
+  operatorMembershipRepo: true,
+  bookingEventRepo: true,
+  runInTransaction: true,
+  runOperatorGrant: true,
+  googleAuthRuntime: true,
+}
+
+const EXPECTED_KEYS = Object.keys(EXPECTED_KEY_MAP) as ReadonlyArray<keyof Repos>
 
 function minimalOverrides() {
   const vehicleRepo = new InMemoryVehicleRepository()
