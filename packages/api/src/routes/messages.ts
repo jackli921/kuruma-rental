@@ -3,7 +3,7 @@ import { Hono } from 'hono'
 import { PRIVILEGED_ROLES, requireUser, toCallerContext } from '../middleware/auth'
 import { PG_ERROR, pgErrorCode } from '../pg-errors'
 import type { MessageRepository, ThreadRepository } from '../repositories/types'
-import { fail, ok, parseBody, parsePagination } from './helpers'
+import { fail, ok, parseBody, parseId, parsePagination } from './helpers'
 
 /**
  * Idempotent create: check for existing record by key, attempt insert,
@@ -47,8 +47,11 @@ export function createMessageRoutes(threadRepo: ThreadRepository, messageRepo: M
     .get('/threads/:id', async (c) => {
       const ctx = toCallerContext(requireUser(c))
 
+      const idResult = parseId(c)
+      if (!idResult.ok) return idResult.response
+
       // CallerContext scoping in repo handles participant check for renters
-      const thread = await threadRepo.findById(ctx, c.req.param('id'))
+      const thread = await threadRepo.findById(ctx, idResult.id)
       if (!thread) return fail(c, 'Thread not found', 404)
 
       return ok(c, thread)
@@ -80,8 +83,11 @@ export function createMessageRoutes(threadRepo: ThreadRepository, messageRepo: M
     .post('/threads/:id/messages', async (c) => {
       const ctx = toCallerContext(requireUser(c))
 
+      const idResult = parseId(c)
+      if (!idResult.ok) return idResult.response
+
       // CallerContext scoping in repo handles participant check
-      const thread = await threadRepo.findById(ctx, c.req.param('id'))
+      const thread = await threadRepo.findById(ctx, idResult.id)
       if (!thread) return fail(c, 'Thread not found', 404)
 
       const parsed = await parseBody(c, sendMessageSchema)
@@ -98,7 +104,10 @@ export function createMessageRoutes(threadRepo: ThreadRepository, messageRepo: M
     .post('/threads/:id/read', async (c) => {
       const ctx = toCallerContext(requireUser(c))
 
-      const thread = await threadRepo.findById(ctx, c.req.param('id'))
+      const idResult = parseId(c)
+      if (!idResult.ok) return idResult.response
+
+      const thread = await threadRepo.findById(ctx, idResult.id)
       if (!thread) return fail(c, 'Thread not found', 404)
 
       await threadRepo.markAsRead(ctx, thread.id)

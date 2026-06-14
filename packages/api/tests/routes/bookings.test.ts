@@ -1049,14 +1049,24 @@ describe('Booking Routes', () => {
       expect(body.data.assignedVehicleId).toBe(seededVehicleId)
     })
 
-    it('returns 404 for nonexistent booking', async () => {
-      const res = await app.request('/bookings/nonexistent-id')
+    it('returns 404 for a valid-but-nonexistent booking id', async () => {
+      const res = await app.request('/bookings/00000000-0000-4000-8000-00000000bbbb')
 
       expect(res.status).toBe(404)
 
       const body = await res.json()
       expect(body.success).toBe(false)
       expect(body.error).toBe('Booking not found')
+    })
+
+    it('returns 400 for a malformed (non-uuid) booking id', async () => {
+      const res = await app.request('/bookings/nonexistent-id')
+
+      expect(res.status).toBe(400)
+
+      const body = await res.json()
+      expect(body.success).toBe(false)
+      expect(body.error).toBe('id must be a valid uuid')
     })
   })
 
@@ -1116,7 +1126,7 @@ describe('Booking Routes', () => {
     })
 
     it('returns 404 for nonexistent booking', async () => {
-      const res = await app.request('/bookings/nonexistent-id/status', {
+      const res = await app.request('/bookings/00000000-0000-4000-8000-00000000bbbb/status', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ status: 'ACTIVE' }),
@@ -1197,7 +1207,9 @@ describe('Booking Routes', () => {
     })
 
     it('returns 404 for nonexistent booking', async () => {
-      const res = await app.request('/bookings/nonexistent-id/cancel', { method: 'POST' })
+      const res = await app.request('/bookings/00000000-0000-4000-8000-00000000bbbb/cancel', {
+        method: 'POST',
+      })
 
       expect(res.status).toBe(404)
 

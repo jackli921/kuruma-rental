@@ -206,7 +206,20 @@ describe('POST /vehicles/:id/photos', () => {
     expect(body.error).toContain('10')
   })
 
-  it('returns 404 for nonexistent vehicle', async () => {
+  it('returns 404 for a valid-but-nonexistent vehicle id', async () => {
+    const headers = await authHeaders()
+    const form = makeFormData('car.jpg', 'image/jpeg', 1024)
+
+    const res = await app.request('/vehicles/00000000-0000-4000-8000-0000000000ff/photos', {
+      method: 'POST',
+      headers,
+      body: form,
+    })
+
+    expect(res.status).toBe(404)
+  })
+
+  it('returns 400 for a malformed (non-uuid) vehicle id', async () => {
     const headers = await authHeaders()
     const form = makeFormData('car.jpg', 'image/jpeg', 1024)
 
@@ -216,7 +229,8 @@ describe('POST /vehicles/:id/photos', () => {
       body: form,
     })
 
-    expect(res.status).toBe(404)
+    expect(res.status).toBe(400)
+    expect((await res.json()).error).toBe('id must be a valid uuid')
   })
 
   it('returns 403 for RENTER role', async () => {
@@ -353,11 +367,11 @@ describe('DELETE /vehicles/:id/photos?url=', () => {
     expect(res.status).toBe(404)
   })
 
-  it('returns 404 for nonexistent vehicle', async () => {
+  it('returns 404 for a valid-but-nonexistent vehicle id', async () => {
     const headers = await authHeaders()
 
     const res = await app.request(
-      `/vehicles/nonexistent/photos?url=${encodeURIComponent('https://test.com/a.jpg')}`,
+      `/vehicles/00000000-0000-4000-8000-0000000000ff/photos?url=${encodeURIComponent('https://test.com/a.jpg')}`,
       { method: 'DELETE', headers },
     )
 

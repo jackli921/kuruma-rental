@@ -171,7 +171,7 @@ describe('POST /documents/:id/verify', () => {
 
   it('returns 404 verifying a document that does not exist', async () => {
     const app = createTestApp().app
-    const res = await app.request('/documents/nope/verify', {
+    const res = await app.request('/documents/00000000-0000-4000-8000-0000000000ff/verify', {
       method: 'POST',
       headers: { ...(await authHeaders()), 'Content-Type': 'application/json' },
       body: JSON.stringify({ status: 'APPROVED', expiryDate: '2027-01-01' }),
