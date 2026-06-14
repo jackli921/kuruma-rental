@@ -1,4 +1,3 @@
-import type { RegionCandidate } from '@kuruma/shared/lib/region-distance'
 import { SignJWT } from 'jose'
 import { describe, expect, test, vi } from 'vitest'
 import { createApp } from '../../src/index'
@@ -9,20 +8,27 @@ import {
   InMemoryVehicleRepository,
 } from '../../src/repositories/in-memory'
 import type { GeocodeOutcome } from '../../src/services/geocoding/types'
+import type { Region } from '../../src/stores'
 
 // #651 Slice 2: createApp's default region repo is empty, so an ACTIVE create can't
 // derive a region. Seed one assignable area AT the fake geocoder's coords so the
 // address-only create still resolves a region (test 1); the PENDING test has no coords
 // to derive from, so it supplies the regionId explicitly (test 2).
-const AREA: RegionCandidate = {
+const AREA: Region = {
   id: '00000000-0000-4000-8000-000000000002',
+  parentId: null,
+  nameEn: 'Umeda',
+  nameJa: 'Umeda',
+  nameZh: 'Umeda',
+  type: 'AREA',
   latitude: 34.6937,
   longitude: 135.5023,
   assignable: true,
   status: 'ACTIVE',
   sortOrder: 1,
+  slug: 'umeda',
 }
-const regionRepo = () => new InMemoryRegionRepository([], [AREA])
+const regionRepo = () => new InMemoryRegionRepository([AREA])
 import { TEST_AUTH_SECRET, setupAuthEnv } from '../helpers/auth'
 
 // Provider-independence proof (#531): the composition root (index.ts) is the

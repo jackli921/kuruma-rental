@@ -1,4 +1,3 @@
-import type { RegionCandidate } from '@kuruma/shared/lib/region-distance'
 import { Hono } from 'hono'
 import { describe, expect, it } from 'vitest'
 import { setupGlobalHandlers } from '../../src/error-handlers'
@@ -11,6 +10,7 @@ import { InMemoryBookingRepository } from '../../src/repositories/in-memory/book
 import { createLocationRoutes } from '../../src/routes/locations'
 import type { Geocoder } from '../../src/services/geocoding/types'
 import { LocationService } from '../../src/services/location'
+import type { Region } from '../../src/stores'
 import { testAuthMiddleware } from '../helpers/auth'
 import { testResolveWriteOperatorId } from '../helpers/operator'
 
@@ -26,15 +26,21 @@ const nullGeocoder: Geocoder = { geocode: async () => ({ status: 'notFound' }) }
 // every location at one seeded assignable area via a provided regionId in body(), so
 // the loop guard is satisfied and the create succeeds — region behavior itself is
 // covered in the service test. The id is a real UUID (regionIdSchema enforces it).
-const SEEDED_AREA: RegionCandidate = {
+const SEEDED_AREA: Region = {
   id: '00000000-0000-4000-8000-000000000001',
+  parentId: null,
+  nameEn: 'Namba',
+  nameJa: 'Namba',
+  nameZh: 'Namba',
+  type: 'AREA',
   latitude: 34.6627,
   longitude: 135.5012,
   assignable: true,
   status: 'ACTIVE',
   sortOrder: 1,
+  slug: 'namba',
 }
-const regionRepo = () => new InMemoryRegionRepository([], [SEEDED_AREA])
+const regionRepo = () => new InMemoryRegionRepository([SEEDED_AREA])
 
 function mountFor(
   repo: InMemoryLocationRepository,
