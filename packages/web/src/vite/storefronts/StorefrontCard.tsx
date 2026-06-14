@@ -52,6 +52,10 @@ export function StorefrontCard({
           <img
             src={photo}
             alt={storefront.name}
+            // 4:3 intrinsic hint lets the browser reserve the box before load (#440);
+            // h-full/w-full still drive the rendered size inside the aspect wrapper.
+            width={400}
+            height={300}
             className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
           />
         ) : (

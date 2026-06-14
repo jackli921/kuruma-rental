@@ -83,4 +83,11 @@ describe('StorefrontCard', () => {
     expect(link).toHaveAttribute('data-from', '2026-07-01T10:00')
     expect(link).toHaveAttribute('data-rangeto', '2026-07-03T10:00')
   })
+
+  it('declares explicit 4:3 width and height on the photo so the browser reserves the box (#440)', () => {
+    renderCard(makeStorefront({ representativePhotos: ['/photos/store.jpg'] }))
+    const img = screen.getByRole('img')
+    expect(img).toHaveAttribute('width', '400')
+    expect(img).toHaveAttribute('height', '300')
+  })
 })
