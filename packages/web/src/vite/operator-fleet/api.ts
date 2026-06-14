@@ -1,5 +1,6 @@
 import { unwrap } from '@/lib/api-error'
 import { getApiBaseUrl } from '@/vite/api-base'
+import type { BookingStatus } from '@kuruma/shared/enums'
 import type { LuggageSize } from '@kuruma/shared/lib/luggage'
 import type {
   BulkVehicleStatus,
@@ -194,7 +195,7 @@ export interface VehicleDetailBookingDto {
   endAt: string
   renterName: string | null
   source: 'DIRECT' | 'TRIP_COM' | 'MANUAL' | 'OTHER'
-  status: 'CONFIRMED' | 'ACTIVE'
+  status: Extract<BookingStatus, 'CONFIRMED' | 'ACTIVE'>
 }
 
 /** One day's booked-hours bucket for the 30-day utilization strip. */
