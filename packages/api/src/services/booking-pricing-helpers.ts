@@ -3,7 +3,8 @@
 // round insurance days identically.
 
 export const MS_PER_MINUTE = 60 * 1000
-export const MS_PER_DAY = 24 * 60 * MS_PER_MINUTE
+// Module-local: only rentalDays() below needs it; other modules define their own.
+const MS_PER_DAY = 24 * 60 * MS_PER_MINUTE
 
 // Insurance is priced per rental day (ceil), min 1 — matches the daily-rate
 // rounding the base price uses for whole-day rentals.
