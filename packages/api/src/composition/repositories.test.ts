@@ -1,4 +1,9 @@
+import type { RunTx } from '@kuruma/shared/db'
+import * as schema from '@kuruma/shared/db/schema'
+import { drizzle } from 'drizzle-orm/postgres-js'
+import postgres from 'postgres'
 import { describe, expect, test, vi } from 'vitest'
+import type { Db } from '../repositories/drizzle'
 import {
   InMemoryAvailabilityRepository,
   InMemoryBookingRepository,
@@ -114,10 +119,39 @@ describe('repository bundle builders', () => {
     }
   })
 
-  // The Drizzle branch is exercised by the integration suite (real Postgres);
-  // calling buildDrizzleRepos here would require a live connection. We assert it
-  // is exported so the e2e real-db harness (#634) can reuse prod wiring.
-  test('buildDrizzleRepos is exported for harness reuse', () => {
-    expect(typeof buildDrizzleRepos).toBe('function')
+  // #634: the e2e real-db harness reuses this factory instead of hand-listing
+  // every Drizzle repo (the omission that silently emptied the operator add-ons
+  // page). Construction needs no live connection — repos only store the db — so
+  // we inject a stub db + recording tx runner and assert the full bundle wires
+  // through them. The Drizzle branch's real queries stay covered by the
+  // integration suite (real Postgres).
+  test('buildDrizzleRepos populates every member from an injected db + runTx', async () => {
+    const calls: string[] = []
+    // A real postgres-js drizzle instance: lazy, so no socket opens at
+    // construction (mirrors the harness). The Auth.js DrizzleAdapter validates
+    // the db's type, so a bare {} won't do — but the connection is never used,
+    // because the recording runTx below never executes a query.
+    const client = postgres('postgres://u:p@127.0.0.1:1/none', { max: 1 })
+    const stubDb = drizzle(client, { schema }) as unknown as Db
+    const recordingRunTx = (() => {
+      calls.push('runTx')
+      return Promise.resolve(undefined)
+    }) as unknown as RunTx
+
+    try {
+      const repos = buildDrizzleRepos({ db: stubDb, runTx: recordingRunTx })
+
+      // No repo silently omitted — the harness-omission landmine #634 closes.
+      expect(Object.keys(repos).sort()).toEqual([...EXPECTED_KEYS].sort())
+      for (const key of ALWAYS_DEFINED) {
+        expect(repos[key], `drizzle ${key}`).toBeDefined()
+      }
+
+      // tx-bound paths delegate to the INJECTED runner, not getDb()/prod runTx.
+      await repos.runInTransaction(async () => undefined as never)
+      expect(calls).toEqual(['runTx'])
+    } finally {
+      await client.end({ timeout: 0 })
+    }
   })
 })

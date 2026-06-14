@@ -2,29 +2,9 @@ import type { RunTx } from '@kuruma/shared/db'
 import * as schema from '@kuruma/shared/db/schema'
 import { drizzle } from 'drizzle-orm/postgres-js'
 import postgres from 'postgres'
+import { buildDrizzleRepos } from '../../packages/api/src/composition/repositories'
 import { createApp } from '../../packages/api/src/index'
-import {
-  type Db,
-  DrizzleAddOnRepository,
-  DrizzleAvailabilityRepository,
-  DrizzleBookingRepository,
-  DrizzleCustomerRepository,
-  DrizzleFeeScheduleRepository,
-  DrizzleFleetOverviewRepository,
-  DrizzleInsuranceOptionRepository,
-  DrizzleLocationRepository,
-  DrizzleMaintenanceLogRepository,
-  DrizzleMessageRepository,
-  DrizzleNotificationLogRepository,
-  DrizzleOperatorRepository,
-  DrizzleStatsRepository,
-  DrizzleStorefrontRepository,
-  DrizzleThreadRepository,
-  DrizzleUserRepository,
-  DrizzleVehicleClassRepository,
-  DrizzleVehicleDetailRepository,
-  DrizzleVehicleRepository,
-} from '../../packages/api/src/repositories/drizzle'
+import type { Db } from '../../packages/api/src/repositories/drizzle'
 import { pgConnectOptions } from './pg-connect-options'
 
 // Driver note: production's getDb() uses @neondatabase/serverless (HTTP), whose
@@ -53,32 +33,15 @@ const db = drizzle(client, { schema }) as unknown as Db
 // of the production default (per-call neon-serverless runTx).
 const runOnTestDb: RunTx = (fn) => db.transaction(fn)
 
-// Full Drizzle repo wiring (the production composition root, but off postgres-js).
-// createApp's override branch swaps runInTransaction for an in-memory passthrough,
-// so the booking submit's atomic wrap is relaxed (booking_events land in memory) —
-// fine for this journey, which asserts the booking, confirmation, and the slice-7
-// operator notification, none of which read the event log.
-const app = createApp({
-  vehicleRepo: new DrizzleVehicleRepository(db),
-  bookingRepo: new DrizzleBookingRepository(db),
-  availabilityRepo: new DrizzleAvailabilityRepository(db),
-  vehicleClassRepo: new DrizzleVehicleClassRepository(db),
-  fleetOverviewRepo: new DrizzleFleetOverviewRepository(db),
-  vehicleDetailRepo: new DrizzleVehicleDetailRepository(db),
-  statsRepo: new DrizzleStatsRepository(db),
-  threadRepo: new DrizzleThreadRepository(db, runOnTestDb),
-  messageRepo: new DrizzleMessageRepository(db, runOnTestDb),
-  maintenanceLogRepo: new DrizzleMaintenanceLogRepository(db),
-  userRepo: new DrizzleUserRepository(db),
-  customerRepo: new DrizzleCustomerRepository(db),
-  operatorRepo: new DrizzleOperatorRepository(db),
-  locationRepo: new DrizzleLocationRepository(db),
-  insuranceOptionRepo: new DrizzleInsuranceOptionRepository(db),
-  addOnRepo: new DrizzleAddOnRepository(db),
-  feeScheduleRepo: new DrizzleFeeScheduleRepository(db),
-  notificationLogRepo: new DrizzleNotificationLogRepository(db),
-  storefrontRepo: new DrizzleStorefrontRepository(db),
-})
+// Reuse the production composition root (buildDrizzleRepos) instead of hand-
+// listing every repo. The old hand-mirror silently omitted addOnRepo, so the
+// operator add-ons page rendered empty under e2e while every other page read the
+// seeded DB (#634) — and each new Drizzle repo had to be added here or the e2e
+// would lie. Injecting our postgres-js db + interactive-tx runner keeps the e2e
+// on TCP Postgres (production's neon-http getDb() throws on db.transaction())
+// while every repo, booking_events, and the atomic booking submit stay Drizzle-
+// backed against the real test database.
+const app = createApp(undefined, buildDrizzleRepos({ db, runTx: runOnTestDb }))
 
 Bun.serve({ port, fetch: app.fetch })
 console.log(`[e2e] real API listening on http://localhost:${port}`)
