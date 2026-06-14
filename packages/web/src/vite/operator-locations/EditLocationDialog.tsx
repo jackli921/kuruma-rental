@@ -11,7 +11,7 @@ import {
   type OperatorLocation,
   updateLocation,
 } from '@/vite/operator-locations/api'
-import { regionsQueryOptions } from '@/vite/operator-locations/regions-api'
+import { regionsQueryOptions } from '@/vite/regions/regions-api'
 import type { UpdateLocationInput } from '@kuruma/shared/validators/location'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useTranslations } from 'use-intl'

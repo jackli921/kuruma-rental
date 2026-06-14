@@ -74,11 +74,13 @@ export function normalizeClassFilter(value?: string | string[]): string[] {
 export function carryForwardFilters(filters: {
   class?: string | string[] | undefined
   pickupLocationId?: string | undefined
-}): { class?: string | string[]; pickupLocationId?: string } {
+  region?: string | undefined
+}): { class?: string | string[]; pickupLocationId?: string; region?: string } {
   const cls = filters.class
   const keepClass = Array.isArray(cls) ? cls.length > 0 : Boolean(cls)
   return {
     ...(keepClass && cls !== undefined ? { class: cls } : {}),
     ...(filters.pickupLocationId ? { pickupLocationId: filters.pickupLocationId } : {}),
+    ...(filters.region ? { region: filters.region } : {}),
   }
 }

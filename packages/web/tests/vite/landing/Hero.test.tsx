@@ -1,17 +1,25 @@
 import { Hero } from '@/vite/landing/Hero'
+import { REGIONS_QUERY_KEY } from '@/vite/regions/regions-api'
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { render, screen } from '@testing-library/react'
 import { IntlProvider } from 'use-intl'
 import { describe, expect, it, vi } from 'vitest'
 import en from '../../../messages/en.json'
 
-// Hero embeds SearchWidget, which reaches for TanStack navigation.
+// Hero embeds SearchWidget, which reaches for TanStack navigation and the
+// regions query; provide both so the widget mounts as it does in the app root.
 vi.mock('@tanstack/react-router', () => ({ useNavigate: () => vi.fn() }))
 
 function renderHero() {
+  const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+  // Seed the cache so the region query resolves without a network call.
+  queryClient.setQueryData(REGIONS_QUERY_KEY, [])
   return render(
-    <IntlProvider locale="en" messages={en}>
-      <Hero />
-    </IntlProvider>,
+    <QueryClientProvider client={queryClient}>
+      <IntlProvider locale="en" messages={en}>
+        <Hero />
+      </IntlProvider>
+    </QueryClientProvider>,
   )
 }
 

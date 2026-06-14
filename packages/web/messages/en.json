@@ -1,4 +1,15 @@
 {
+  "regionPicker": {
+    "prefecture": "Prefecture",
+    "city": "City",
+    "area": "Area",
+    "anywhere": "Anywhere",
+    "allCities": "All cities",
+    "allAreas": "All areas",
+    "nearMe": "Near me",
+    "locating": "Locating…",
+    "popular": "Popular areas"
+  },
   "common": {
     "appName": "Kuruma Rental",
     "loading": "Loading...",
@@ -944,8 +955,6 @@
       "title": "Explore Japan at your own pace",
       "subtitle": "Pick up a car in Osaka and drive anywhere. No approval wait, no hidden fees.",
       "search": {
-        "location": "Location",
-        "locationValue": "Osaka, Japan",
         "dates": "Dates",
         "datesPlaceholder": "Add dates",
         "pickupDate": "Pickup date",
@@ -993,6 +1002,8 @@
   },
   "search": {
     "title": "Find a car",
+    "loadError": "Couldn't load search. Please try again.",
+    "retry": "Retry",
     "subtitle": "Search available cars across every store by pickup date.",
     "fromLabel": "Pickup date & time",
     "toLabel": "Return date & time",

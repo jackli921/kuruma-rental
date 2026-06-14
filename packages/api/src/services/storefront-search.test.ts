@@ -221,6 +221,33 @@ describe('StorefrontSearchService.search (#391)', () => {
     expect(data.storefronts[0]?.turnaroundMinutes).toBe(120)
   })
 
+  it('surfaces the storefront coordinates on the card for distance ranking (#651 Slice 3)', async () => {
+    const op = await makeOperator('Best Car Rental', 'best')
+    const compact = await makeClass({ operatorId: op.id, acrissCode: 'CCAR' })
+    const namba = await makeLocation({
+      operatorId: op.id,
+      name: 'Namba',
+      latitude: 34.6657,
+      longitude: 135.5013,
+    })
+    await makeVehicle({ operatorId: op.id, classId: compact.id, pickupLocationId: namba.id })
+
+    const data = await ok(await service.search(PUBLIC_CONTEXT, { from: FROM, to: TO }))
+
+    expect(data.storefronts[0]).toMatchObject({ latitude: 34.6657, longitude: 135.5013 })
+  })
+
+  it('carries null coordinates through to the card for an ungeocoded store (ranks last, #651 Slice 3)', async () => {
+    const op = await makeOperator('Best Car Rental', 'best')
+    const compact = await makeClass({ operatorId: op.id, acrissCode: 'CCAR' })
+    const namba = await makeLocation({ operatorId: op.id, name: 'Namba' }) // no coords
+    await makeVehicle({ operatorId: op.id, classId: compact.id, pickupLocationId: namba.id })
+
+    const data = await ok(await service.search(PUBLIC_CONTEXT, { from: FROM, to: TO }))
+
+    expect(data.storefronts[0]).toMatchObject({ latitude: null, longitude: null })
+  })
+
   it('classSummaries carry the class default luggage for compare-on-search (#457 D6)', async () => {
     const op = await makeOperator('Best Car Rental', 'best')
     const compact = await makeClass({

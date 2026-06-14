@@ -37,6 +37,9 @@ export interface StorefrontCardData {
   fromDailyPriceJpy: number | null
   fromHourlyPriceJpy: number | null
   representativePhotos: string[]
+  /** #651 Slice 3: store coords (WGS84) for distance labels + nearest-first sort. */
+  latitude: number | null
+  longitude: number | null
 }
 
 export interface StorefrontSearchResultData {
@@ -83,6 +86,8 @@ export interface StorefrontSearchParams {
   to: Date
   /** Narrow to a single storefront. */
   pickupLocationId?: string
+  /** #651 Slice 3: filter to a region subtree (resolved from the URL slug to its id). */
+  regionId?: string
   /** ACRISS codes (repeatable `class` search param). */
   classes?: string[]
   limit?: number
@@ -122,6 +127,7 @@ export async function fetchStorefronts(
 ): Promise<StorefrontSearchResultData> {
   const sp = commonSearchParams(params)
   if (params.pickupLocationId) sp.set('pickupLocationId', params.pickupLocationId)
+  if (params.regionId) sp.set('regionId', params.regionId)
   const res = await fetch(`${getApiBaseUrl()}/storefronts/search?${sp.toString()}`, {
     credentials: 'include',
   })

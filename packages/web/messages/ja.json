@@ -1,4 +1,15 @@
 {
+  "regionPicker": {
+    "prefecture": "都道府県",
+    "city": "市区町村",
+    "area": "エリア",
+    "anywhere": "指定なし",
+    "allCities": "すべての市区町村",
+    "allAreas": "すべてのエリア",
+    "nearMe": "現在地から",
+    "locating": "現在地を取得中…",
+    "popular": "人気のエリア"
+  },
   "common": {
     "appName": "クルマレンタル",
     "loading": "読み込み中...",
@@ -944,8 +955,6 @@
       "title": "自分のペースで日本を探索",
       "subtitle": "大阪で車を借りて、どこへでも。承認待ちなし、隠れた料金なし。",
       "search": {
-        "location": "場所",
-        "locationValue": "大阪",
         "dates": "日程",
         "datesPlaceholder": "日程を追加",
         "pickupDate": "乗車日",
@@ -993,6 +1002,8 @@
   },
   "search": {
     "title": "クルマを探す",
+    "loadError": "検索を読み込めませんでした。もう一度お試しください。",
+    "retry": "再試行",
     "subtitle": "受け取り日時で全店舗の空車を検索できます。",
     "fromLabel": "受け取り日時",
     "toLabel": "返却日時",

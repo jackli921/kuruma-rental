@@ -64,6 +64,8 @@ export interface FlatSearchParams {
   pickupLocationId?: string
   /** Narrow to one operator's inventory. */
   operatorId?: string
+  /** #651 Slice 3: filter to a region subtree (resolved from the URL slug to its id). */
+  regionId?: string
   /** ACRISS codes (repeatable `class` search param). */
   classes?: string[]
   limit?: number
@@ -78,6 +80,7 @@ export async function fetchSearchResults(params: FlatSearchParams): Promise<Sear
   sp.set('to', params.to.toISOString())
   if (params.pickupLocationId) sp.set('pickupLocationId', params.pickupLocationId)
   if (params.operatorId) sp.set('operatorId', params.operatorId)
+  if (params.regionId) sp.set('regionId', params.regionId)
   for (const code of params.classes ?? []) sp.append('class', code)
   if (params.limit) sp.set('limit', String(params.limit))
   if (params.cursor) sp.set('cursor', params.cursor)

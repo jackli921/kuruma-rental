@@ -1,3 +1,5 @@
+import { resolveSlugToRegionId } from '@/vite/regions/region-lookup'
+import { regionsQueryOptions } from '@/vite/regions/regions-api'
 import { SearchMap } from '@/vite/search/SearchMap'
 import { type ResultView, SearchViewToggle } from '@/vite/search/SearchViewToggle'
 import { fetchSearchResults } from '@/vite/search/api'
@@ -9,7 +11,12 @@ import {
   parseSearchRange,
   searchRangeToSeed,
 } from '@/vite/storefronts/params'
-import { createFileRoute, redirect } from '@tanstack/react-router'
+import {
+  type ErrorComponentProps,
+  createFileRoute,
+  redirect,
+  useRouter,
+} from '@tanstack/react-router'
 import { Search } from 'lucide-react'
 import { useTranslations } from 'use-intl'
 
@@ -22,6 +29,8 @@ interface StorefrontSearch {
   from?: string | undefined
   to?: string | undefined
   pickupLocationId?: string | undefined
+  /** #651 Slice 3: region anchor as its stable slug (`?region=namba`). */
+  region?: string | undefined
   class?: string | string[] | undefined
   view?: ResultView | undefined
 }
@@ -33,6 +42,7 @@ function validateSearch(search: Record<string, unknown>): StorefrontSearch {
     from: str(search.from),
     to: str(search.to),
     pickupLocationId: str(search.pickupLocationId),
+    region: str(search.region),
     class: Array.isArray(cls) ? cls.filter((c): c is string => typeof c === 'string') : str(cls),
     view: search.view === 'map' ? 'map' : search.view === 'stores' ? 'stores' : undefined,
   }
@@ -62,13 +72,23 @@ export const Route = createFileRoute('/$locale/search')({
     from: search.from,
     to: search.to,
     pickupLocationId: search.pickupLocationId,
+    region: search.region,
     classes: normalizeClassFilter(search.class),
     view: search.view ?? 'stores',
   }),
-  loader: async ({ deps }) => {
+  loader: async ({ deps, context }) => {
     const range = parseSearchRange(deps.from, deps.to)
+    // Resolve the URL region slug (#651 Decision 6) to its stable id against the
+    // edge-cached region list, then filter both searches to that region's subtree.
+    const regionId = deps.region
+      ? resolveSlugToRegionId(
+          await context.queryClient.ensureQueryData(regionsQueryOptions()),
+          deps.region,
+        )
+      : undefined
     const filters = {
       ...(deps.pickupLocationId ? { pickupLocationId: deps.pickupLocationId } : {}),
+      ...(regionId ? { regionId } : {}),
       ...(deps.classes.length > 0 ? { classes: deps.classes } : {}),
     }
 
@@ -84,13 +104,37 @@ export const Route = createFileRoute('/$locale/search')({
       : null
     return { view: 'stores' as const, storefronts, flat: null }
   },
+  errorComponent: SearchError,
   component: StorefrontSearchRoute,
 })
+
+// A loader failure (the GET /regions slug resolution or either storefront fetch
+// can throw) degrades in-page here instead of escalating to the app-root Sentry
+// boundary — this is the public search front door, so it gets the same retry UX
+// as every other loader-bearing route (#841 review).
+function SearchError(_props: ErrorComponentProps) {
+  const t = useTranslations('search')
+  const router = useRouter()
+  return (
+    <main className="flex-1 px-4 py-20 sm:px-6 lg:px-8">
+      <div className="mx-auto max-w-7xl text-center">
+        <p className="text-lg text-muted-foreground">{t('loadError')}</p>
+        <button
+          type="button"
+          onClick={() => router.invalidate()}
+          className="mt-4 inline-flex items-center rounded-lg border border-border px-4 py-2 text-sm font-medium hover:bg-muted/50"
+        >
+          {t('retry')}
+        </button>
+      </div>
+    </main>
+  )
+}
 
 function StorefrontSearchRoute() {
   const t = useTranslations('search')
   const { locale } = Route.useParams()
-  const { from, to, class: classFilter, pickupLocationId } = Route.useSearch()
+  const { from, to, class: classFilter, pickupLocationId, region } = Route.useSearch()
   const data = Route.useLoaderData()
 
   return (
@@ -110,6 +154,7 @@ function StorefrontSearchRoute() {
             defaultTo={to ?? ''}
             classFilter={classFilter}
             pickupLocationId={pickupLocationId}
+            region={region}
           />
         </div>
 

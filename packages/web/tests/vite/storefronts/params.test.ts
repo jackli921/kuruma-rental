@@ -111,4 +111,19 @@ describe('carryForwardFilters (#499)', () => {
     expect(carryForwardFilters({ class: [] })).toEqual({})
     expect(carryForwardFilters({ class: undefined, pickupLocationId: undefined })).toEqual({})
   })
+
+  it('keeps the region slug (#651 Slice 3)', () => {
+    expect(carryForwardFilters({ region: 'namba' })).toEqual({ region: 'namba' })
+  })
+
+  it('threads region alongside class and pickupLocationId', () => {
+    expect(
+      carryForwardFilters({ class: 'CCAR', pickupLocationId: 'loc_1', region: 'namba' }),
+    ).toEqual({ class: 'CCAR', pickupLocationId: 'loc_1', region: 'namba' })
+  })
+
+  it('drops an absent or empty region', () => {
+    expect(carryForwardFilters({ region: '' })).toEqual({})
+    expect(carryForwardFilters({ region: undefined })).toEqual({})
+  })
 })
