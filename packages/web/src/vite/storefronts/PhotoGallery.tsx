@@ -45,7 +45,16 @@ export function PhotoGallery({ photos, alt }: PhotoGalleryProps) {
       {...(count > 1 ? { role: 'group', 'aria-label': alt } : {})}
     >
       {current && (
-        <img src={current} alt={alt} loading="lazy" className="h-full w-full object-cover" />
+        // 4:3 intrinsic hint lets the browser reserve the box before load (#440);
+        // h-full/w-full still drive the rendered size inside the aspect wrapper.
+        <img
+          src={current}
+          alt={alt}
+          loading="lazy"
+          width={400}
+          height={300}
+          className="h-full w-full object-cover"
+        />
       )}
       {count > 1 && (
         <>
