@@ -150,4 +150,26 @@ describe('auth middleware', () => {
     expect(res.status).toBe(401)
     process.env.PARTNER_API_KEY = undefined
   })
+
+  // #739: the bare /availability path must be gated explicitly, not by relying on
+  // the /availability/* wildcard incidentally matching it.
+  test('GET /availability (bare path) returns 401 without auth (#739)', async () => {
+    const app = createTestApp()
+    const res = await app.request('/availability')
+    expect(res.status).toBe(401)
+    const body = await res.json()
+    expect(body.success).toBe(false)
+    expect(body.error).toContain('Unauthorized')
+  })
+
+  test('GET /availability (bare path) passes the auth gate with a valid JWT (#739)', async () => {
+    const app = createTestApp()
+    const token = await signJwt({ sub: 'user_123', role: 'RENTER' })
+    const res = await app.request(
+      '/availability?from=2026-06-01T10:00:00Z&to=2026-06-01T14:00:00Z',
+      { headers: { Authorization: `Bearer ${token}` } },
+    )
+    // Past the auth gate (not 401) — the route returns 200 for a valid window.
+    expect(res.status).toBe(200)
+  })
 })

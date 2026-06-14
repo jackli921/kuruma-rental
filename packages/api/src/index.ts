@@ -299,6 +299,9 @@ export function createApp(overrides?: AppOverrides) {
   app.use('/vehicles/*', requireAuth())
   app.use('/bookings/*', requireAuth())
   app.use('/availability/*', requireAuth())
+  // Bare path explicit (don't rely on the wildcard matching it) — same
+  // bare+wildcard pattern as /customers and /documents below (#739).
+  app.use('/availability', requireAuth())
   app.use('/threads/*', requireAuth())
   app.use('/messages/*', requireAuth())
   app.use('/customers/*', requireAuth())
