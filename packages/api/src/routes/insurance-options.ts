@@ -12,7 +12,7 @@ import {
   requireUser,
   toCallerContext,
 } from '../middleware/auth'
-import type { InsuranceOptionFilters } from '../repositories/types'
+import type { InsuranceOptionFilters } from '../services/filters'
 import type { InsuranceOptionService } from '../services/insurance-option'
 import type { InsuranceOption } from '../stores'
 import { type ResolveWriteOperatorId, operatorReadScope } from '../tenancy'

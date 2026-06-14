@@ -11,8 +11,8 @@ import {
   requireUser,
   toCallerContext,
 } from '../middleware/auth'
-import type { BookingFilters } from '../repositories/types'
 import type { BookingService } from '../services/booking'
+import type { BookingFilters } from '../services/filters'
 import { fail, ok, parseBody, parseDateRange, parseId, parseLimit } from './helpers'
 
 export function createBookingRoutes(service: BookingService) {

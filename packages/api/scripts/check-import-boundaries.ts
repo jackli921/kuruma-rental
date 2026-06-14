@@ -41,7 +41,24 @@ export function checkContent(rel: string, content: string): Violation[] {
   // rules govern production code only, so co-located *.test.ts are exempt.
   if (rel.endsWith('.test.ts') || rel.endsWith('.spec.ts')) return violations
 
+  // Collapse formatter-wrapped imports onto their opening line so the per-line
+  // import rules below can't be bypassed by a multi-symbol import split across
+  // lines — biome wraps exactly those (e.g. `import {\n  X,\n} from '...'`).
+  // Continuation lines are blanked to keep 1-based line numbers stable for
+  // violation reporting.
   const lines = content.split('\n')
+  for (let i = 0; i < lines.length; i++) {
+    const open = lines[i]!
+    if (!/^\s*import\b/.test(open) || /\bfrom\s+['"]/.test(open) || !open.includes('{')) continue
+    let joined = open
+    for (let j = i + 1; j < lines.length; j++) {
+      const cont = lines[j]!
+      joined += ` ${cont.trim()}`
+      lines[j] = ''
+      if (/\bfrom\s+['"]/.test(cont)) break
+    }
+    lines[i] = joined.replace(/\s+/g, ' ')
+  }
 
   const isRoute = rel.startsWith('routes/')
   const isService = rel.startsWith('services/')
@@ -57,6 +74,15 @@ export function checkContent(rel: string, content: string): Violation[] {
   const isTxFactory =
     rel === 'repositories/drizzle/transaction.ts' ||
     rel === 'repositories/drizzle/operator-grant-transaction.ts'
+  // DI-repo carve-out: these routes DI a repository as their constructor contract
+  // and have no service layer yet, so they are exempted path-wide from the routes
+  // rule and may import from repositories/types (their *Repository contract plus
+  // the entity/filter shapes they pass it) until their own service extraction
+  // lands and they join the enforced set (#726). The exemption is intentionally
+  // the whole path, not *Repository-only, because it is a temporary migration
+  // bridge. Every other route must source filter/entity types from the service layer.
+  const isDiRepoCarveoutRoute =
+    rel === 'routes/regions.ts' || rel === 'routes/stats.ts' || rel === 'routes/vehicles.ts'
 
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i]!
@@ -95,16 +121,27 @@ export function checkContent(rel: string, content: string): Violation[] {
     // Skip non-import lines for the remaining rules
     if (!trimmed.startsWith('import ') && !trimmed.startsWith('import{')) continue
 
-    // Rule 1: Routes must not import concrete repositories.
-    // Type-only imports from repositories/types are allowed (interfaces for DI).
-    // Concrete imports (drizzle, in-memory) are never allowed in routes.
-    if (isRoute && /from\s+['"]\.\.\/repositories\/(?!types)/.test(trimmed)) {
-      violations.push({
-        file: rel,
-        line: i + 1,
-        text: trimmed,
-        rule: 'Routes must not import concrete repositories. Only type imports from repositories/types are allowed.',
-      })
+    // Rule 1: Routes must not import from repositories/ — neither concrete
+    // implementations nor type contracts. Filter/entity types come from the
+    // service layer (routes -> services -> repositories). The DI-repo carve-out
+    // routes are the one documented exception, and only for their *Repository
+    // interface type, never a concrete (#726).
+    if (isRoute && /from\s+['"]\.\.\/repositories\//.test(trimmed)) {
+      if (/from\s+['"]\.\.\/repositories\/(?!types)/.test(trimmed)) {
+        violations.push({
+          file: rel,
+          line: i + 1,
+          text: trimmed,
+          rule: 'Routes must not import concrete repositories.',
+        })
+      } else if (!isDiRepoCarveoutRoute) {
+        violations.push({
+          file: rel,
+          line: i + 1,
+          text: trimmed,
+          rule: 'Routes must not import from repositories/types; source filter/entity types from the service layer. (DI-repo carve-out routes regions/stats/vehicles are transitionally exempt until their service extraction lands.)',
+        })
+      }
     }
 
     // Rule 2: Services must not import concrete repository classes
