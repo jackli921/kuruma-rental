@@ -1,3 +1,4 @@
+import type { RegionType } from '../../enums'
 import type { regions } from '../schema'
 
 /**
@@ -37,7 +38,7 @@ export type DemoRegion = Pick<
   readonly nameJa: string
   readonly nameZh: string
   readonly sortOrder: number
-  readonly type: 'PREFECTURE' | 'CITY' | 'AREA'
+  readonly type: RegionType
   /** Set on AREA nodes (= anchor location centre); null on prefectures/cities. */
   readonly latitude: number | null
   readonly longitude: number | null
