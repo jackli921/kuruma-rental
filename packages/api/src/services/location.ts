@@ -1,4 +1,5 @@
 import type { CoordinateSource } from '@kuruma/shared/db/schema'
+import { nearestAssignableRegion } from '@kuruma/shared/lib/region-distance'
 import type { CallerContext } from '../middleware/auth'
 import { PG_ERROR, pgErrorCode } from '../pg-errors'
 import type {
@@ -6,6 +7,7 @@ import type {
   Location,
   LocationFilters,
   LocationRepository,
+  RegionRepository,
 } from '../repositories/types'
 import type { GeocodeOutcome, Geocoder } from './geocoding/types'
 
@@ -36,6 +38,13 @@ export type LocationUpdateData = Partial<
 
 const DUPLICATE_NAME_MESSAGE = 'A location with this name already exists'
 const NOT_FOUND_MESSAGE = 'Location not found'
+// #651 Slice 2: an ACTIVE location with no derivable region is refused rather than
+// saved invisible to renter region search — the operator must pick a region.
+const NO_REGION_MESSAGE =
+  'This location needs a region; none could be matched to its address — please select one'
+// Matches the route's existing FK->422 message so a service-level rejection and the
+// DB-level FK seal read identically to the client.
+const INVALID_REGION_MESSAGE = 'Invalid region'
 
 const isDuplicateName = (err: unknown): boolean => pgErrorCode(err) === PG_ERROR.UNIQUE_VIOLATION
 
@@ -72,6 +81,7 @@ export class LocationService {
     private readonly repo: LocationRepository,
     private readonly bookingRepo: BookingRepository,
     private readonly geocoder: Geocoder,
+    private readonly regionRepo: RegionRepository,
   ) {}
 
   async findAll(ctx: CallerContext, filters?: LocationFilters): Promise<Location[]> {
@@ -93,11 +103,19 @@ export class LocationService {
 
     const coords = await this.resolveCreateCoords(data)
 
+    const region = await this.resolveRegionId({
+      status: data.status,
+      providedRegionId: data.regionId,
+      existingRegionId: null,
+      coords,
+    })
+    if (!region.ok) return region
+
     // The pre-check is a UX nicety; the unique constraint is the real seal.
     // A concurrent insert can win the race after the check passes, so map the
     // resulting unique-violation to the same friendly 409 instead of a 500.
     try {
-      const location = await this.repo.create({ ...data, ...coords })
+      const location = await this.repo.create({ ...data, ...coords, regionId: region.regionId })
       return { ok: true, location }
     } catch (err) {
       if (isDuplicateName(err)) return { ok: false, error: DUPLICATE_NAME_MESSAGE, status: 409 }
@@ -120,9 +138,25 @@ export class LocationService {
     }
 
     const resolution = await this.resolveUpdateCoords(existing, data)
+    // The coords the region is derived against: the freshly-resolved triple when the
+    // edit set them, otherwise the ones already on the row (a 'preserve').
+    const effectiveCoords =
+      resolution.kind === 'set'
+        ? resolution.coords
+        : { latitude: existing.latitude, longitude: existing.longitude }
+    const region = await this.resolveRegionId({
+      status: data.status ?? existing.status,
+      providedRegionId: data.regionId,
+      existingRegionId: existing.regionId,
+      coords: effectiveCoords,
+    })
+    if (!region.ok) return region
 
     try {
-      const updated = await this.repo.update(id, this.toPatch(data, resolution))
+      const updated = await this.repo.update(id, {
+        ...this.toPatch(data, resolution),
+        regionId: region.regionId,
+      })
       if (!updated) return { ok: false, error: NOT_FOUND_MESSAGE, status: 404 }
       return { ok: true, location: updated }
     } catch (err) {
@@ -174,6 +208,56 @@ export class LocationService {
     } catch {
       return { status: 'notFound' }
     }
+  }
+
+  // #651 Slice 2 — resolve the regionId a save persists, applying the operator->region
+  // loop guard. An ACTIVE location with no region is assigned its nearest assignable
+  // area (derived from the effective coords); when none is in range the save is refused
+  // (422) so the storefront can't vanish from renter region search. ARCHIVED locations
+  // are exempt, and a region already chosen (non-null) is kept as-is.
+  private async resolveRegionId(args: {
+    status: 'ACTIVE' | 'ARCHIVED'
+    // The operator's intent: a real id = set, explicit null = clear, undefined = leave
+    // unchanged (only meaningful on update; create always passes a value or null).
+    providedRegionId: string | null | undefined
+    existingRegionId: string | null
+    coords: { latitude: number | null; longitude: number | null }
+  }): Promise<
+    { ok: true; regionId: string | null } | { ok: false; error: string; status: number }
+  > {
+    const { status, providedRegionId, existingRegionId, coords } = args
+
+    // An explicitly provided region must reference an assignable, ACTIVE area — never an
+    // unknown id (which would otherwise surface as a raw FK 500) nor a navigation-only
+    // (prefecture/city) or retired (INACTIVE) node.
+    if (providedRegionId != null) {
+      const region = (await this.regionRepo.findCandidates()).find((r) => r.id === providedRegionId)
+      if (!region || !region.assignable || region.status !== 'ACTIVE') {
+        return { ok: false, error: INVALID_REGION_MESSAGE, status: 422 }
+      }
+      return { ok: true, regionId: providedRegionId }
+    }
+
+    // No region explicitly provided: `undefined` keeps the existing one (an unrelated
+    // edit), explicit `null` clears it. The existing region is trusted as-is (it was
+    // validated when set) so an unrelated edit never 422s on a region that has since
+    // gone INACTIVE; only a NEW region is re-validated above.
+    const effectiveRegionId = providedRegionId === undefined ? existingRegionId : null
+
+    // ARCHIVED is exempt; an ACTIVE location that still has a region keeps it.
+    if (status !== 'ACTIVE' || effectiveRegionId !== null) {
+      return { ok: true, regionId: effectiveRegionId }
+    }
+
+    // ACTIVE + no region: derive the nearest assignable area from the effective coords,
+    // or refuse so the storefront can't vanish from renter region search.
+    const point =
+      coords.latitude != null && coords.longitude != null
+        ? { latitude: coords.latitude, longitude: coords.longitude }
+        : null
+    const match = nearestAssignableRegion(await this.regionRepo.findCandidates(), point)
+    if (match === null) return { ok: false, error: NO_REGION_MESSAGE, status: 422 }
+    return { ok: true, regionId: match.id }
   }
 
   // Create always *sets* a triple (there is nothing to preserve), so this returns

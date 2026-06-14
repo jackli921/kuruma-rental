@@ -1,11 +1,12 @@
-import { locations, operators, users } from '@kuruma/shared/db/schema'
-import { inArray } from 'drizzle-orm'
+import { locations, operators, regions, users } from '@kuruma/shared/db/schema'
+import { eq, inArray } from 'drizzle-orm'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { createApp } from '../../src/index'
 import {
   DrizzleAvailabilityRepository,
   DrizzleBookingRepository,
   DrizzleLocationRepository,
+  DrizzleRegionRepository,
   DrizzleVehicleRepository,
 } from '../../src/repositories/drizzle'
 import { authHeaders, setupAuthEnv } from '../helpers/auth'
@@ -21,14 +22,17 @@ describe('POST /locations maps a non-existent operatorId to 422 (#411)', () => {
   const uniq = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
   const opId = `op_loc_fk_${uniq}`
   const staffUserId = crypto.randomUUID()
+  const regionId = crypto.randomUUID()
   let app: ReturnType<typeof createApp>
   let headers: Record<string, string>
 
-  // Bypass caller (STAFF) names the operator explicitly via the body.
+  // Bypass caller (STAFF) names the operator explicitly via the body. A valid region
+  // satisfies the #651 loop guard so the create reaches the operator FK under test.
   const locationBody = (operatorId: string, name: string) => ({
     operatorId,
     name,
     address: '1-1 Namba, Chuo-ku, Osaka',
+    regionId,
   })
 
   beforeAll(async () => {
@@ -40,17 +44,30 @@ describe('POST /locations maps a non-existent operatorId to 422 (#411)', () => {
       role: 'STAFF',
       language: 'en',
     })
+    await db.insert(regions).values({
+      id: regionId,
+      parentId: null,
+      nameEn: 'Namba',
+      nameJa: '難波',
+      nameZh: '难波',
+      type: 'AREA',
+      latitude: 34.6627,
+      longitude: 135.5012,
+      assignable: true,
+    })
     app = createApp({
       vehicleRepo: new DrizzleVehicleRepository(db),
       bookingRepo: new DrizzleBookingRepository(db),
       availabilityRepo: new DrizzleAvailabilityRepository(db),
       locationRepo: new DrizzleLocationRepository(db),
+      regionRepo: new DrizzleRegionRepository(db),
     })
     headers = await authHeaders({ sub: staffUserId, role: 'STAFF' })
   })
 
   afterAll(async () => {
     await db.delete(locations).where(inArray(locations.operatorId, [opId]))
+    await db.delete(regions).where(eq(regions.id, regionId))
     await db.delete(operators).where(inArray(operators.id, [opId]))
     await db.delete(users).where(inArray(users.id, [staffUserId]))
   })

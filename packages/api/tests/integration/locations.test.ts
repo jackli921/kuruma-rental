@@ -1,9 +1,9 @@
-import { locations, operators } from '@kuruma/shared/db/schema'
-import { inArray } from 'drizzle-orm'
+import { locations, operators, regions } from '@kuruma/shared/db/schema'
+import { eq, inArray } from 'drizzle-orm'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { type CallerContext, SYSTEM_CONTEXT } from '../../src/middleware/auth'
 import { pgErrorCode } from '../../src/pg-errors'
-import { DrizzleLocationRepository } from '../../src/repositories/drizzle'
+import { DrizzleLocationRepository, DrizzleRegionRepository } from '../../src/repositories/drizzle'
 import { DrizzleBookingRepository } from '../../src/repositories/drizzle/booking'
 import { LocationService } from '../../src/services/location'
 import type { Location } from '../../src/stores'
@@ -176,12 +176,18 @@ describe('archiving a location frees its name for re-creation (#410)', () => {
 describe('cross-operator location WRITE denial (service seal, #387)', () => {
   const repo = new DrizzleLocationRepository(db)
   // Geocoding is irrelevant to this tenant-seal probe; stub it (returns notFound).
-  const service = new LocationService(repo, new DrizzleBookingRepository(db), {
-    geocode: async () => ({ status: 'notFound' }),
-  })
+  // The region repo reads real regions — locationA carries one so an own-tenant edit
+  // keeps it and the #651 loop guard never has to re-derive for this probe.
+  const service = new LocationService(
+    repo,
+    new DrizzleBookingRepository(db),
+    { geocode: async () => ({ status: 'notFound' }) },
+    new DrizzleRegionRepository(db),
+  )
   const uniq = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
   const opAId = `op_locw_a_${uniq}`
   const opBId = `op_locw_b_${uniq}`
+  const regionId = crypto.randomUUID()
   let locationA: Location
 
   beforeAll(async () => {
@@ -189,12 +195,24 @@ describe('cross-operator location WRITE denial (service seal, #387)', () => {
       { id: opAId, slug: `locw-a-${uniq}`, name: 'LocW Operator A' },
       { id: opBId, slug: `locw-b-${uniq}`, name: 'LocW Operator B' },
     ])
-    locationA = await repo.create(locationInput(opAId, 'Umeda'))
+    await db.insert(regions).values({
+      id: regionId,
+      parentId: null,
+      nameEn: 'Umeda',
+      nameJa: '梅田',
+      nameZh: '梅田',
+      type: 'AREA',
+      latitude: 34.7025,
+      longitude: 135.4959,
+      assignable: true,
+    })
+    locationA = await repo.create({ ...locationInput(opAId, 'Umeda'), regionId })
   })
 
   afterAll(async () => {
     await db.delete(locations).where(inArray(locations.operatorId, [opAId, opBId]))
     await db.delete(operators).where(inArray(operators.id, [opAId, opBId]))
+    await db.delete(regions).where(eq(regions.id, regionId))
   })
 
   it('operator B cannot update operator A location (404, row untouched)', async () => {

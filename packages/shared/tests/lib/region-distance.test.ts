@@ -167,4 +167,23 @@ describe('planRegionBackfill', () => {
     expect(plan.assignments).toEqual([])
     expect(plan.unassigned).toEqual([])
   })
+
+  it('handles a mixed batch in one pass: assigns the eligible, buckets the far, skips the rest', () => {
+    // >1 location exercises loop accumulation + ordering that a single-location
+    // case can't: an early-skip (already-assigned) must not drop a later
+    // assignment, and assignments preserve input order alongside the unassigned bucket.
+    const plan = planRegionBackfill(areas, [
+      { id: 'loc_umeda', ...UMEDA, regionId: null, status: 'ACTIVE' }, // -> reg_umeda
+      { id: 'loc_done', ...NAMBA, regionId: 'reg_namba', status: 'ACTIVE' }, // already assigned -> skip
+      { id: 'loc_kix', ...KIX, regionId: null, status: 'ACTIVE' }, // -> reg_kix
+      { id: 'loc_tokyo', ...TOKYO, regionId: null, status: 'ACTIVE' }, // far -> unassigned
+      { id: 'loc_arch', ...UMEDA, regionId: null, status: 'ARCHIVED' }, // archived -> skip
+      { id: 'loc_nogeo', latitude: null, longitude: null, regionId: null, status: 'ACTIVE' }, // no coords -> skip
+    ])
+    expect(plan.assignments).toEqual([
+      { locationId: 'loc_umeda', regionId: 'reg_umeda' },
+      { locationId: 'loc_kix', regionId: 'reg_kix' },
+    ])
+    expect(plan.unassigned).toEqual(['loc_tokyo'])
+  })
 })

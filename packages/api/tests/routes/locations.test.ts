@@ -1,8 +1,12 @@
+import type { RegionCandidate } from '@kuruma/shared/lib/region-distance'
 import { Hono } from 'hono'
 import { describe, expect, it } from 'vitest'
 import { setupGlobalHandlers } from '../../src/error-handlers'
 import type { UserRole } from '../../src/middleware/auth'
-import { InMemoryLocationRepository } from '../../src/repositories/in-memory'
+import {
+  InMemoryLocationRepository,
+  InMemoryRegionRepository,
+} from '../../src/repositories/in-memory'
 import { InMemoryBookingRepository } from '../../src/repositories/in-memory/booking'
 import { createLocationRoutes } from '../../src/routes/locations'
 import type { Geocoder } from '../../src/services/geocoding/types'
@@ -18,6 +22,20 @@ const OP_B = 'operator-bbbbbbbb'
 // the service test, and the provider-swap contract in the createApp DI test.
 const nullGeocoder: Geocoder = { geocode: async () => ({ status: 'notFound' }) }
 
+// #651 Slice 2: an ACTIVE create must resolve a region. These routing/auth tests pin
+// every location at one seeded assignable area via a provided regionId in body(), so
+// the loop guard is satisfied and the create succeeds — region behavior itself is
+// covered in the service test. The id is a real UUID (regionIdSchema enforces it).
+const SEEDED_AREA: RegionCandidate = {
+  id: '00000000-0000-4000-8000-000000000001',
+  latitude: 34.6627,
+  longitude: 135.5012,
+  assignable: true,
+  status: 'ACTIVE',
+  sortOrder: 1,
+}
+const regionRepo = () => new InMemoryRegionRepository([], [SEEDED_AREA])
+
 function mountFor(
   repo: InMemoryLocationRepository,
   role: UserRole,
@@ -30,7 +48,7 @@ function mountFor(
   app.route(
     '/',
     createLocationRoutes(
-      new LocationService(repo, bookingRepo, nullGeocoder),
+      new LocationService(repo, bookingRepo, nullGeocoder, regionRepo()),
       testResolveWriteOperatorId(),
     ),
   )
@@ -38,7 +56,13 @@ function mountFor(
 }
 
 function body(extra: Record<string, unknown> = {}) {
-  return JSON.stringify({ name: 'Osaka Namba', address: '1-2-3 Namba', ...extra })
+  // A valid assignable region satisfies the #651 loop guard so an ACTIVE create succeeds.
+  return JSON.stringify({
+    name: 'Osaka Namba',
+    address: '1-2-3 Namba',
+    regionId: SEEDED_AREA.id,
+    ...extra,
+  })
 }
 
 const POST = (app: Hono, b = body()) =>
@@ -58,6 +82,7 @@ describe('Location routes — auth', () => {
           new InMemoryLocationRepository(),
           new InMemoryBookingRepository(),
           nullGeocoder,
+          regionRepo(),
         ),
         testResolveWriteOperatorId(),
       ),

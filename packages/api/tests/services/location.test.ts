@@ -1,7 +1,11 @@
+import type { RegionCandidate } from '@kuruma/shared/lib/region-distance'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { CallerContext } from '../../src/middleware/auth'
 import { PG_ERROR } from '../../src/pg-errors'
-import { InMemoryLocationRepository } from '../../src/repositories/in-memory'
+import {
+  InMemoryLocationRepository,
+  InMemoryRegionRepository,
+} from '../../src/repositories/in-memory'
 import { InMemoryBookingRepository } from '../../src/repositories/in-memory/booking'
 import type { Geocoder } from '../../src/services/geocoding/types'
 import { LocationService } from '../../src/services/location'
@@ -27,6 +31,20 @@ const uniqueViolation = () =>
 const opA = 'op_a'
 const opB = 'op_b'
 
+// One assignable, ACTIVE area (Namba coords) the loop guard can both derive to and
+// validate a provided regionId against. createInput pins every location to it, so the
+// pre-existing scope/name/geocode tests satisfy "an ACTIVE location needs a region"
+// via the provided-id path — coord-derivation and the 422 no-region paths get their
+// own dedicated guard tests below.
+const SEEDED_AREA: RegionCandidate = {
+  id: 'reg_namba',
+  latitude: 34.6627,
+  longitude: 135.5012,
+  assignable: true,
+  status: 'ACTIVE',
+  sortOrder: 1,
+}
+
 const ctxFor = (operatorId: string): CallerContext => ({
   userId: 'owner',
   role: 'OPERATOR_OWNER',
@@ -43,6 +61,7 @@ function createInput(operatorId: string, name: string) {
     timezone: 'Asia/Tokyo',
     defaultTurnaroundMinutes: 2880,
     status: 'ACTIVE' as const,
+    regionId: SEEDED_AREA.id,
   }
 }
 
@@ -87,7 +106,12 @@ describe('LocationService', () => {
 
   // Build a service wired to a specific Geocoder; the matrix tests vary it.
   const build = (geocoder: Geocoder = missGeocoder) =>
-    new LocationService(repo, new InMemoryBookingRepository(bookingStore), geocoder)
+    new LocationService(
+      repo,
+      new InMemoryBookingRepository(bookingStore),
+      geocoder,
+      new InMemoryRegionRepository([], [SEEDED_AREA]),
+    )
 
   beforeEach(() => {
     repo = new InMemoryLocationRepository()
@@ -543,6 +567,185 @@ describe('LocationService', () => {
         const result = await build(missGeocoder).update(ctxFor(opA), loc.id, { regeocode: true })
         expect(result.ok).toBe(true)
         if (result.ok) expect('regeocode' in result.location).toBe(false)
+      })
+    })
+  })
+
+  // #651 Slice 2 — operator->region loop guard. An ACTIVE location must end with a
+  // region so it surfaces in renter region search; the service derives one from the
+  // effective coords, or 422s asking the operator to pick a region. ARCHIVED is exempt.
+  describe('region loop guard (#651 Slice 2)', () => {
+    // A region repo seeded with a specific candidate set, for the validation/derivation
+    // cases the default single-area seed can't express.
+    const buildWithRegions = (candidates: RegionCandidate[], geocoder: Geocoder = missGeocoder) =>
+      new LocationService(
+        repo,
+        new InMemoryBookingRepository(bookingStore),
+        geocoder,
+        new InMemoryRegionRepository([], candidates),
+      )
+
+    const prefecture: RegionCandidate = {
+      id: 'reg_osaka',
+      latitude: null,
+      longitude: null,
+      assignable: false,
+      status: 'ACTIVE',
+      sortOrder: 0,
+    }
+
+    describe('create', () => {
+      it('rejects an ACTIVE location whose coords resolve near no assignable region (422)', async () => {
+        const result = await service.create(ctxFor(opA), {
+          ...createInput(opA, 'Lost'),
+          regionId: null,
+          latitude: 35.6812, // Tokyo — ~400 km from the only seeded area (Namba)
+          longitude: 139.7671,
+        })
+        expect(result.ok).toBe(false)
+        if (!result.ok) expect(result.status).toBe(422)
+      })
+
+      it('rejects a create whose provided regionId is unknown (422, not a raw FK error)', async () => {
+        const result = await service.create(ctxFor(opA), {
+          ...createInput(opA, 'UnknownRegion'),
+          regionId: '11111111-1111-1111-1111-111111111111',
+        })
+        expect(result.ok).toBe(false)
+        if (!result.ok) expect(result.status).toBe(422)
+      })
+
+      it('rejects a create whose provided regionId is a non-assignable navigation node (422)', async () => {
+        const result = await buildWithRegions([SEEDED_AREA, prefecture]).create(ctxFor(opA), {
+          ...createInput(opA, 'PrefRegion'),
+          regionId: 'reg_osaka',
+        })
+        expect(result.ok).toBe(false)
+        if (!result.ok) expect(result.status).toBe(422)
+      })
+
+      it('derives and stamps the nearest assignable region when an ACTIVE create omits one', async () => {
+        const result = await service.create(ctxFor(opA), {
+          ...createInput(opA, 'NearNamba'),
+          regionId: null,
+          latitude: 34.6627, // sitting on Namba, the only seeded assignable area
+          longitude: 135.5012,
+        })
+        expect(result.ok).toBe(true)
+        if (result.ok) expect(result.location.regionId).toBe('reg_namba')
+      })
+
+      it('keeps a provided assignable region as-is and does not override it by deriving', async () => {
+        const result = await service.create(ctxFor(opA), {
+          ...createInput(opA, 'Provided'),
+          regionId: SEEDED_AREA.id,
+          latitude: 35.6812, // far from Namba — proves the provided id wins over derivation
+          longitude: 139.7671,
+        })
+        expect(result.ok).toBe(true)
+        if (result.ok) expect(result.location.regionId).toBe('reg_namba')
+      })
+
+      it('rejects an ACTIVE create with no region and an unresolvable address (422)', async () => {
+        // missGeocoder -> null coords -> nothing to derive from -> refused.
+        const result = await build(missGeocoder).create(ctxFor(opA), {
+          ...createInput(opA, 'NoCoords'),
+          regionId: null,
+        })
+        expect(result.ok).toBe(false)
+        if (!result.ok) expect(result.status).toBe(422)
+      })
+    })
+
+    describe('update', () => {
+      // Seed a row directly (bypassing the service guard) so each update test starts
+      // from a known region/coords state.
+      const seedLoc = (over: Partial<Parameters<typeof repo.create>[0]>) =>
+        repo.create({ ...createInput(opA, `Seed ${Math.random()}`), ...over })
+
+      it('refuses to clear the region of an ACTIVE location when none can be re-derived (422)', async () => {
+        // Far coords + an existing region; clearing the region re-derives from the
+        // PRESERVED coords, finds no area in range, and refuses.
+        const loc = await seedLoc({
+          latitude: 35.6812,
+          longitude: 139.7671,
+          coordinateSource: 'MANUAL',
+        })
+        const result = await service.update(ctxFor(opA), loc.id, { regionId: null })
+        expect(result.ok).toBe(false)
+        if (!result.ok) expect(result.status).toBe(422)
+      })
+
+      it('re-derives a region (never leaves null) when an ACTIVE location clears its region over good coords', async () => {
+        const loc = await seedLoc({
+          latitude: 34.6627,
+          longitude: 135.5012,
+          coordinateSource: 'MANUAL',
+        })
+        const result = await service.update(ctxFor(opA), loc.id, { regionId: null })
+        expect(result.ok).toBe(true)
+        if (result.ok) expect(result.location.regionId).toBe('reg_namba')
+      })
+
+      it('lets an ARCHIVED location clear its region (exempt from the guard)', async () => {
+        const loc = await seedLoc({
+          status: 'ARCHIVED',
+          latitude: 35.6812, // far coords would 422 an ACTIVE location; ARCHIVED is exempt
+          longitude: 139.7671,
+          coordinateSource: 'MANUAL',
+        })
+        const result = await service.update(ctxFor(opA), loc.id, { regionId: null })
+        expect(result.ok).toBe(true)
+        if (result.ok) expect(result.location.regionId).toBeNull()
+      })
+
+      it('rejects an update whose provided regionId is not an assignable, ACTIVE region (422)', async () => {
+        const loc = await seedLoc({})
+        const result = await service.update(ctxFor(opA), loc.id, {
+          regionId: '11111111-1111-1111-1111-111111111111',
+        })
+        expect(result.ok).toBe(false)
+        if (!result.ok) expect(result.status).toBe(422)
+      })
+
+      it('stamps a provided assignable region, overriding what derivation would pick', async () => {
+        // Region-less + far coords: derivation would 422, but an explicit valid region wins.
+        const loc = await seedLoc({
+          regionId: null,
+          latitude: 35.6812,
+          longitude: 139.7671,
+          coordinateSource: 'MANUAL',
+        })
+        const result = await service.update(ctxFor(opA), loc.id, { regionId: SEEDED_AREA.id })
+        expect(result.ok).toBe(true)
+        if (result.ok) expect(result.location.regionId).toBe('reg_namba')
+      })
+
+      it('backfills a region on an unrelated edit to a region-less ACTIVE location with good coords', async () => {
+        const loc = await seedLoc({
+          regionId: null,
+          latitude: 34.6627,
+          longitude: 135.5012,
+          coordinateSource: 'MANUAL',
+        })
+        const result = await service.update(ctxFor(opA), loc.id, { defaultTurnaroundMinutes: 3600 })
+        expect(result.ok).toBe(true)
+        if (result.ok) {
+          expect(result.location.regionId).toBe('reg_namba')
+          expect(result.location.defaultTurnaroundMinutes).toBe(3600)
+        }
+      })
+
+      it('refuses an unrelated edit to a region-less ACTIVE location whose coords match no area (422)', async () => {
+        const loc = await seedLoc({
+          regionId: null,
+          latitude: 35.6812,
+          longitude: 139.7671,
+          coordinateSource: 'MANUAL',
+        })
+        const result = await service.update(ctxFor(opA), loc.id, { defaultTurnaroundMinutes: 3600 })
+        expect(result.ok).toBe(false)
+        if (!result.ok) expect(result.status).toBe(422)
       })
     })
   })

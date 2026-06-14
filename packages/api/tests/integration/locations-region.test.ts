@@ -6,22 +6,30 @@ import {
   DrizzleAvailabilityRepository,
   DrizzleBookingRepository,
   DrizzleLocationRepository,
+  DrizzleRegionRepository,
   DrizzleVehicleRepository,
 } from '../../src/repositories/drizzle'
 import { authHeaders, setupAuthEnv } from '../helpers/auth'
 import { db } from './setup'
 
-// #394: locations.regionId is a client-supplied FK to the platform-global regions
-// tree. Adding it means POST /locations now carries TWO client FKs (operatorId +
-// regionId), so the 23503->422 mapping must disambiguate on the constraint name
-// ("Invalid region" vs "Invalid operator"). Only the real DB exercises the FK, so
-// this drives the full HTTP app against Postgres. Also proves the column is
-// settable end-to-end (create + PATCH) and defaults to null when omitted.
-describe('locations.regionId write-path (#394)', () => {
+// #651 Slice 2 — the operator->region loop guard, end-to-end against Postgres. An
+// ACTIVE location must resolve a region so it surfaces in renter region search: the
+// service validates a provided one (assignable + ACTIVE, else 422 — never a raw FK
+// 500), derives the nearest assignable area from the location's coords, or refuses
+// (422). The two client FKs (operatorId + regionId) must still disambiguate. The
+// Drizzle findCandidates projection + the FK are only exercised by the real DB, so
+// this drives the full HTTP app against Postgres with an explicit null geocoder
+// (deterministic: addresses never resolve, so derivation hinges only on sent coords).
+describe('locations region loop guard write-path (#651 Slice 2)', () => {
   const uniq = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
   const opId = `op_loc_region_${uniq}`
   const staffUserId = crypto.randomUUID()
-  const validRegionId = crypto.randomUUID()
+  const nambaId = crypto.randomUUID()
+  const umedaId = crypto.randomUUID()
+  const prefectureId = crypto.randomUUID()
+  // Mirror the demo geography so derivation reads against credible coords.
+  const NAMBA = { latitude: 34.6627, longitude: 135.5012 }
+  const UMEDA = { latitude: 34.7025, longitude: 135.4959 }
   let app: ReturnType<typeof createApp>
   let headers: Record<string, string>
 
@@ -29,6 +37,8 @@ describe('locations.regionId write-path (#394)', () => {
     operatorId: opId,
     name: `Region Loc ${uniq} ${Math.random().toString(36).slice(2, 6)}`,
     address: '1-1 Namba, Chuo-ku, Osaka',
+    // Default to the seeded assignable area; derivation/rejection tests override it.
+    regionId: nambaId,
     ...extra,
   })
 
@@ -41,18 +51,46 @@ describe('locations.regionId write-path (#394)', () => {
       role: 'STAFF',
       language: 'en',
     })
-    await db.insert(regions).values({
-      id: validRegionId,
-      parentId: null,
-      nameEn: 'Osaka',
-      nameJa: '大阪府',
-      nameZh: '大阪府',
-    })
+    await db.insert(regions).values([
+      // Two assignable AREA nodes (provided / derive / PATCH-between cases)...
+      {
+        id: nambaId,
+        parentId: null,
+        nameEn: 'Namba',
+        nameJa: '難波',
+        nameZh: '难波',
+        type: 'AREA',
+        assignable: true,
+        ...NAMBA,
+      },
+      {
+        id: umedaId,
+        parentId: null,
+        nameEn: 'Umeda',
+        nameJa: '梅田',
+        nameZh: '梅田',
+        type: 'AREA',
+        assignable: true,
+        ...UMEDA,
+      },
+      // ...and one navigation-only PREFECTURE (assignable defaults false, no coords).
+      {
+        id: prefectureId,
+        parentId: null,
+        nameEn: 'Osaka',
+        nameJa: '大阪府',
+        nameZh: '大阪府',
+        type: 'PREFECTURE',
+      },
+    ])
     app = createApp({
       vehicleRepo: new DrizzleVehicleRepository(db),
       bookingRepo: new DrizzleBookingRepository(db),
       availabilityRepo: new DrizzleAvailabilityRepository(db),
       locationRepo: new DrizzleLocationRepository(db),
+      regionRepo: new DrizzleRegionRepository(db),
+      // Deterministic: addresses never geocode, so derivation depends only on coords sent.
+      geocoder: { geocode: async () => ({ status: 'notFound' }) },
     })
     headers = await authHeaders({ sub: staffUserId, role: 'STAFF' })
   })
@@ -60,7 +98,7 @@ describe('locations.regionId write-path (#394)', () => {
   afterAll(async () => {
     // locations FK regions, so delete locations before regions.
     await db.delete(locations).where(inArray(locations.operatorId, [opId]))
-    await db.delete(regions).where(inArray(regions.id, [validRegionId]))
+    await db.delete(regions).where(inArray(regions.id, [nambaId, umedaId, prefectureId]))
     await db.delete(operators).where(inArray(operators.id, [opId]))
     await db.delete(users).where(inArray(users.id, [staffUserId]))
   })
@@ -78,42 +116,55 @@ describe('locations.regionId write-path (#394)', () => {
       body: JSON.stringify(b),
     })
 
-  it('creates a location without a region — regionId defaults to null', async () => {
+  it('creates a location with a provided assignable region', async () => {
     const res = await post(body())
     expect(res.status).toBe(201)
-    expect((await res.json()).data.regionId).toBeNull()
+    expect((await res.json()).data.regionId).toBe(nambaId)
   })
 
-  it('creates a location with a valid regionId', async () => {
-    const res = await post(body({ regionId: validRegionId }))
+  it('derives the nearest assignable area when an ACTIVE create omits the region', async () => {
+    // No region, but coords sit on Namba -> the guard derives it through the real DB.
+    const res = await post(body({ regionId: undefined, ...NAMBA }))
     expect(res.status).toBe(201)
-    expect((await res.json()).data.regionId).toBe(validRegionId)
+    expect((await res.json()).data.regionId).toBe(nambaId)
   })
 
-  it('maps an unknown regionId to 422 "Invalid region"', async () => {
+  it('refuses an ACTIVE create with no region and no derivable coords (422)', async () => {
+    const res = await post(body({ regionId: undefined }))
+    expect(res.status).toBe(422)
+  })
+
+  it('maps an unknown regionId to 422 "Invalid region" (service guard, not a raw FK)', async () => {
     const res = await post(body({ regionId: crypto.randomUUID() }))
     expect(res.status).toBe(422)
     expect((await res.json()).error).toBe('Invalid region')
   })
 
-  it('still maps an unknown operatorId to 422 "Invalid operator" (disambiguation guard)', async () => {
+  it('maps a non-assignable (navigation-only) regionId to 422 "Invalid region"', async () => {
+    const res = await post(body({ regionId: prefectureId }))
+    expect(res.status).toBe(422)
+    expect((await res.json()).error).toBe('Invalid region')
+  })
+
+  it('still maps an unknown operatorId to 422 "Invalid operator" (FK disambiguation holds)', async () => {
     const res = await post(body({ operatorId: `op_missing_${uniq}` }))
     expect(res.status).toBe(422)
     expect((await res.json()).error).toBe('Invalid operator')
   })
 
-  it('PATCH sets a regionId on an existing location', async () => {
+  it('PATCH moves a location to another assignable region', async () => {
     const created = await (await post(body())).json()
-    const res = await patch(created.data.id, { regionId: validRegionId })
+    const res = await patch(created.data.id, { regionId: umedaId })
     expect(res.status).toBe(200)
-    expect((await res.json()).data.regionId).toBe(validRegionId)
+    expect((await res.json()).data.regionId).toBe(umedaId)
   })
 
-  it('PATCH clears a regionId when sent null', async () => {
-    const created = await (await post(body({ regionId: validRegionId }))).json()
+  it('PATCH clearing the region of an ACTIVE location re-derives it (never null)', async () => {
+    // Coords on Namba, so clearing the region re-derives Namba rather than nulling it.
+    const created = await (await post(body({ ...NAMBA }))).json()
     const res = await patch(created.data.id, { regionId: null })
     expect(res.status).toBe(200)
-    expect((await res.json()).data.regionId).toBeNull()
+    expect((await res.json()).data.regionId).toBe(nambaId)
   })
 
   it('PATCH maps an unknown regionId to 422 "Invalid region"', async () => {
@@ -124,8 +175,8 @@ describe('locations.regionId write-path (#394)', () => {
   })
 
   it('persists the assigned region to the row (DB projection)', async () => {
-    const created = await (await post(body({ regionId: validRegionId }))).json()
+    const created = await (await post(body({ regionId: umedaId }))).json()
     const [row] = await db.select().from(locations).where(eq(locations.id, created.data.id))
-    expect(row?.regionId).toBe(validRegionId)
+    expect(row?.regionId).toBe(umedaId)
   })
 })

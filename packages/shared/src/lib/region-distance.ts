@@ -49,22 +49,29 @@ export function haversineKm(a: GeoPoint, b: GeoPoint): number {
   return 2 * EARTH_RADIUS_KM * Math.asin(Math.sqrt(h))
 }
 
+// `Number.isFinite` over a bare `!== null` so a NaN/Infinity coordinate is
+// rejected too, not just null — a non-finite latitude would make every haversine
+// distance NaN and can never be selected, but the predicate should still tell the
+// truth: a `GeoPoint` carries real, finite degrees.
 function hasCoords(r: RegionCandidate): r is RegionCandidate & GeoPoint {
-  return r.latitude !== null && r.longitude !== null
+  return Number.isFinite(r.latitude) && Number.isFinite(r.longitude)
 }
 
 /**
  * The nearest assignable, ACTIVE, coordinate-bearing region to `point`, or null
  * when there is no point, no eligible region, or the closest one sits beyond
  * REGION_SANITY_RADIUS_KM. Ties break by sortOrder then id for determinism.
+ *
+ * The return is narrowed to `(T & GeoPoint)` (never just `T`): a match always has
+ * finite coords, so callers can read `.latitude/.longitude` without a non-null `!`.
  */
 export function nearestAssignableRegion<T extends RegionCandidate>(
   regions: readonly T[],
   point: GeoPoint | null,
-): T | null {
+): (T & GeoPoint) | null {
   if (point === null) return null
 
-  let best: T | null = null
+  let best: (T & GeoPoint) | null = null
   let bestKm = Number.POSITIVE_INFINITY
   for (const region of regions) {
     if (!region.assignable || region.status !== 'ACTIVE' || !hasCoords(region)) continue
