@@ -88,11 +88,8 @@ describe('GET /operators/:id', () => {
 
   it('returns 404 for a valid-but-unknown id (admin)', async () => {
     expect(
-      (
-        await mountFor('PLATFORM_ADMIN').request(
-          '/operators/00000000-0000-4000-8000-0000000000ff',
-        )
-      ).status,
+      (await mountFor('PLATFORM_ADMIN').request('/operators/00000000-0000-4000-8000-0000000000ff'))
+        .status,
     ).toBe(404)
   })
 

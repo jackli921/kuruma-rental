@@ -16,7 +16,15 @@ import { PG_ERROR, pgErrorCode } from '../pg-errors'
 import type { VehicleClassService } from '../services/vehicle-class'
 import type { VehicleClassAvailabilityService } from '../services/vehicle-class-availability'
 import type { ResolveWriteOperatorId } from '../tenancy'
-import { cachePublic, fail, ok, parseBody, parseDateRange, parseId, stripUndefined } from './helpers'
+import {
+  cachePublic,
+  fail,
+  ok,
+  parseBody,
+  parseDateRange,
+  parseId,
+  stripUndefined,
+} from './helpers'
 import { rateLimitByIp } from './rate-limit'
 
 export function createVehicleClassRoutes(
