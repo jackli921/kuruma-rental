@@ -7,6 +7,7 @@ import type {
   VehicleStatus,
 } from '@kuruma/shared/validators/vehicle'
 import { queryOptions } from '@tanstack/react-query'
+import type { ZodType } from 'zod'
 import {
   type DailyUtilizationDto,
   type FleetBookingSummary,
@@ -17,11 +18,14 @@ import {
   type VehicleDetailBookingDto,
   type VehicleDetailResponse,
   type VehicleMaintenanceLogDto,
+  type VehicleRow,
   operatorFleetListSchema,
   photoDeleteResultSchema,
   photoUploadResultSchema,
   vehicleClassOptionsListSchema,
   vehicleDetailResponseSchema,
+  vehicleRowListSchema,
+  vehicleRowSchema,
 } from './schema'
 
 // #526: operator fleet management. The Vite shell owns this read projection (it
@@ -48,6 +52,7 @@ export type {
   VehicleDetailBookingDto,
   VehicleDetailResponse,
   VehicleMaintenanceLogDto,
+  VehicleRow,
 }
 
 export const FLEET_QUERY_KEY = ['operator-fleet'] as const
@@ -71,57 +76,58 @@ export function operatorFleetQueryOptions() {
 // tenant. Each unwraps the ok() envelope and throws ApiError on failure so the
 // caller's useMutation onError can surface it.
 //
-// #711 scope note: these write endpoints return the *bare* vehicle row (no
-// fleet-overview enrichment — `utilization`, `currentBooking`, …), so the
-// `OperatorFleetVehicle` return annotation is wider than the wire body.
-// Validating it with `operatorFleetVehicleSchema` would reject every valid
-// write, so the writes keep the legacy passthrough; correcting the return type
-// (and its consumers) to the base-vehicle shape is a tracked follow-up.
+// #817: these write endpoints return the *bare* vehicle row (shared `Vehicle` =
+// `VehicleBase`, with none of the fleet-overview enrichment — `utilization`,
+// `currentBooking`, …). Each is therefore typed `VehicleRow` and validated with
+// `vehicleRowSchema`; the enriched `operatorFleetVehicleSchema` would reject
+// every valid write. The four mutation `onSuccess` handlers ignore the result,
+// so narrowing the return type from `OperatorFleetVehicle` is consumer-safe.
 
-async function writeJson<T>(path: string, method: 'POST' | 'PATCH', body: unknown): Promise<T> {
+async function writeJson<T>(
+  path: string,
+  method: 'POST' | 'PATCH',
+  body: unknown,
+  schema: ZodType<T>,
+): Promise<T> {
   const res = await fetch(`${getApiBaseUrl()}${path}`, {
     method,
     credentials: 'include',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
   })
-  return unwrap<T>(res)
+  return unwrap(res, schema)
 }
 
-export function createVehicle(data: CreateVehicleInput): Promise<OperatorFleetVehicle> {
-  return writeJson<OperatorFleetVehicle>('/vehicles', 'POST', data)
+export function createVehicle(data: CreateVehicleInput): Promise<VehicleRow> {
+  return writeJson('/vehicles', 'POST', data, vehicleRowSchema)
 }
 
-export function updateVehicle(id: string, data: UpdateVehicleInput): Promise<OperatorFleetVehicle> {
-  return writeJson<OperatorFleetVehicle>(`/vehicles/${encodeURIComponent(id)}`, 'PATCH', data)
+export function updateVehicle(id: string, data: UpdateVehicleInput): Promise<VehicleRow> {
+  return writeJson(`/vehicles/${encodeURIComponent(id)}`, 'PATCH', data, vehicleRowSchema)
 }
 
 export function updateVehicleStatus(
   id: string,
   status: VehicleStatus,
   reason?: string,
-): Promise<OperatorFleetVehicle> {
+): Promise<VehicleRow> {
   const body = reason != null ? { status, reason } : { status }
-  return writeJson<OperatorFleetVehicle>(
-    `/vehicles/${encodeURIComponent(id)}/status`,
-    'PATCH',
-    body,
-  )
+  return writeJson(`/vehicles/${encodeURIComponent(id)}/status`, 'PATCH', body, vehicleRowSchema)
 }
 
 export function bulkUpdateVehicleStatus(
   vehicleIds: string[],
   status: BulkVehicleStatus,
-): Promise<OperatorFleetVehicle[]> {
-  return writeJson<OperatorFleetVehicle[]>('/vehicles/bulk-status', 'PATCH', { vehicleIds, status })
+): Promise<VehicleRow[]> {
+  return writeJson('/vehicles/bulk-status', 'PATCH', { vehicleIds, status }, vehicleRowListSchema)
 }
 
-export async function retireVehicle(id: string): Promise<OperatorFleetVehicle> {
+export async function retireVehicle(id: string): Promise<VehicleRow> {
   const res = await fetch(`${getApiBaseUrl()}/vehicles/${encodeURIComponent(id)}`, {
     method: 'DELETE',
     credentials: 'include',
   })
-  return unwrap<OperatorFleetVehicle>(res)
+  return unwrap(res, vehicleRowSchema)
 }
 
 export async function uploadVehiclePhotos(
