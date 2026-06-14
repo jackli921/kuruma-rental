@@ -11,7 +11,7 @@ import {
   uniqueIndex,
 } from 'drizzle-orm/pg-core'
 import { ADD_ON_STATUSES } from '../enums'
-import { operators } from './schema'
+import { operators } from './auth'
 
 export const addOnStatusEnum = pgEnum('add_on_status', ADD_ON_STATUSES)
 

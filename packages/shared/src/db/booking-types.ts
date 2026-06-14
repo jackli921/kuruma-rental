@@ -1,4 +1,4 @@
-import type { BookingFulfillmentMode, BookingStatus, FeeType, FeeUnit } from './schema'
+import type { BookingFulfillmentMode, BookingStatus, FeeType, FeeUnit } from '../enums'
 
 // ---- Slice 6 (#392) booking snapshot + event payload types ----
 // Snapshots lock rates at booking time; operator edits to the live

@@ -10,13 +10,16 @@ import {
   timestamp,
   uniqueIndex,
 } from 'drizzle-orm/pg-core'
+// Enum value sets sourced from the zero-import ../enums SSoT (#688/#814) so the
+// pgEnum, validators, and web type imports all share one declaration.
+import { REGION_STATUSES, REGION_TYPES } from '../enums'
 
 // Taxonomy level of a region node (#651 Slice 1). Drives the renter cascade
 // (prefecture -> city -> area dropdowns) and marks which level is assignable.
-export const regionTypeEnum = pgEnum('region_type', ['PREFECTURE', 'CITY', 'AREA'])
+export const regionTypeEnum = pgEnum('region_type', REGION_TYPES)
 // Lifecycle of a region node. INACTIVE nodes are hidden from search + never
 // matched by `nearestAssignableRegion` (assignment requires ACTIVE).
-export const regionStatusEnum = pgEnum('region_status', ['ACTIVE', 'INACTIVE'])
+export const regionStatusEnum = pgEnum('region_status', REGION_STATUSES)
 
 // #394 hierarchical region taxonomy (prefecture -> city -> area). PLATFORM-GLOBAL
 // reference data — NO operatorId: every operator searches the same tree. Adjacency
