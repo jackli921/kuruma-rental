@@ -1,6 +1,6 @@
 import { date, index, pgEnum, pgTable, text, timestamp } from 'drizzle-orm/pg-core'
 import { DOCUMENT_STATUSES, DOCUMENT_TYPES } from '../enums'
-import { users } from './schema'
+import { users } from './auth'
 
 // Renter identity documents (#459, §1.3/§4). Metadata ONLY — the scan lives in
 // Cloudflare R2; we keep the verdict (status + expiry), never the bytes or a URL
