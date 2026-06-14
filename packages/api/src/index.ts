@@ -62,6 +62,7 @@ import type { Geocoder } from './services/geocoding/types'
 import { InsuranceOptionService } from './services/insurance-option'
 import { LocationService } from './services/location'
 import { MaintenanceService } from './services/maintenance'
+import { MessageService } from './services/message'
 import { MessageTranslationService } from './services/message-translation'
 import { NotificationService } from './services/notification'
 import { NotificationDispatcher } from './services/notification-dispatcher'
@@ -366,6 +367,7 @@ export function createApp(overrides?: AppOverrides) {
   )
   const availabilityService = new AvailabilityService(availabilityRepo)
   const customerService = new CustomerService(customerRepo, userRepo)
+  const messageService = new MessageService(threadRepo, messageRepo)
   const userDirectoryService = new UserDirectoryService(userRepo, threadRepo)
   const maintenanceService = new MaintenanceService(
     vehicleRepo,
@@ -458,7 +460,7 @@ export function createApp(overrides?: AppOverrides) {
     .route('/', createOverviewRoutes(overviewService))
     .route('/', createAdminRevenueRoutes(adminRevenueService))
     .route('/', createPaymentAnomalyRoutes(paymentAnomalyService))
-    .route('/', createMessageRoutes(threadRepo, messageRepo))
+    .route('/', createMessageRoutes(messageService))
     .route(
       '/',
       createTranslateRoutes(new MessageTranslationService(messageRepo, translationProvider)),

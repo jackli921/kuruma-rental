@@ -5,6 +5,7 @@ import {
   InMemoryThreadRepository,
 } from '../../src/repositories/in-memory'
 import { createMessageRoutes } from '../../src/routes/messages'
+import { MessageService } from '../../src/services/message'
 import { testAuthMiddleware } from '../helpers/auth'
 
 const U1 = '00000000-0000-4000-8000-0000000000a1'
@@ -18,7 +19,7 @@ let messageRepo: InMemoryMessageRepository
 function appAs(userId: string, role: 'RENTER' | 'STAFF' | 'ADMIN' = 'RENTER'): Hono {
   const a = new Hono()
   a.use('*', testAuthMiddleware(userId, role))
-  a.route('/', createMessageRoutes(threadRepo, messageRepo))
+  a.route('/', createMessageRoutes(new MessageService(threadRepo, messageRepo)))
   return a
 }
 
