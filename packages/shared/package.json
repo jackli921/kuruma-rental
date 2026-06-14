@@ -26,6 +26,7 @@
     "./types/customer": "./src/types/customer.ts",
     "./types/location": "./src/types/location.ts",
     "./types/search-result": "./src/types/search-result.ts",
+    "./types/region": "./src/types/region.ts",
     "./lib/cancellation-policy": "./src/lib/cancellation-policy.ts",
     "./lib/commission": "./src/lib/commission.ts",
     "./lib/admin-revenue": "./src/lib/admin-revenue.ts",

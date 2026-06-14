@@ -27,6 +27,10 @@ export interface OperatorLocation {
   // pin; PENDING = a throttle-skipped retry (#574); null = no pin found. Drives
   // the list's pin-state badge.
   coordinateSource: 'GEOCODED' | 'MANUAL' | 'PENDING' | null
+  // #651 2b: the assigned region (deepest AREA node id) or null when unassigned.
+  // Prefills the location form's prefecture->city->area cascade on edit; the
+  // server loop guard derives one from the address when the operator leaves it null.
+  regionId: string | null
   createdAt: string
   updatedAt: string
 }

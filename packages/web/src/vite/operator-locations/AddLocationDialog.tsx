@@ -7,7 +7,8 @@ import {
 } from '@/components/ui/dialog'
 import { LocationForm } from '@/vite/operator-locations/LocationForm'
 import { LOCATIONS_QUERY_KEY, createLocation } from '@/vite/operator-locations/api'
-import { useMutation, useQueryClient } from '@tanstack/react-query'
+import { regionsQueryOptions } from '@/vite/operator-locations/regions-api'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useTranslations } from 'use-intl'
 
 interface AddLocationDialogProps {
@@ -22,6 +23,7 @@ interface AddLocationDialogProps {
 export function AddLocationDialog({ open, onOpenChange }: AddLocationDialogProps) {
   const t = useTranslations('business.locations')
   const queryClient = useQueryClient()
+  const { data: regions } = useQuery(regionsQueryOptions())
   const mutation = useMutation({
     mutationFn: createLocation,
     onSuccess: () => {
@@ -53,6 +55,7 @@ export function AddLocationDialog({ open, onOpenChange }: AddLocationDialogProps
           }}
           onCancel={() => handleOpenChange(false)}
           isSubmitting={mutation.isPending}
+          regions={regions ?? []}
         />
       </DialogContent>
     </Dialog>

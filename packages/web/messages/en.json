@@ -641,6 +641,14 @@
         "timezone": "Timezone",
         "turnaround": "Turnaround (minutes)",
         "turnaroundHint": "Buffer before a returned vehicle is bookable again. Default 2880 (48h).",
+        "region": {
+          "label": "Region",
+          "help": "Leave blank to auto-assign the nearest area from the address.",
+          "prefecture": "Prefecture",
+          "city": "City",
+          "area": "Area",
+          "placeholder": "Select..."
+        },
         "save": "Save location",
         "saving": "Saving...",
         "cancel": "Cancel"

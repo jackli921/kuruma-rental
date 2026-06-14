@@ -51,7 +51,20 @@ describe('region taxonomy against Postgres (#394)', () => {
         sortOrder: 1,
       },
       { id: OSAKA_CITY, parentId: OSAKA, nameEn: 'Osaka City', nameJa: '大阪市', nameZh: '大阪市' },
-      { id: NAMBA, parentId: OSAKA_CITY, nameEn: 'Namba', nameJa: '難波', nameZh: '难波' },
+      {
+        id: NAMBA,
+        parentId: OSAKA_CITY,
+        nameEn: 'Namba',
+        nameJa: '難波',
+        nameZh: '难波',
+        // #651 2b: an assignable AREA leaf with coords + slug, so the GET /regions
+        // enrichment (type/assignable/lat/lng/status/slug) is asserted end-to-end.
+        type: 'AREA',
+        latitude: 34.6627,
+        longitude: 135.5012,
+        assignable: true,
+        slug: `namba-${uniq}`,
+      },
       { id: UMEDA, parentId: OSAKA_CITY, nameEn: 'Umeda', nameJa: '梅田', nameZh: '梅田' },
       {
         id: KYOTO,
@@ -125,7 +138,7 @@ describe('region taxonomy against Postgres (#394)', () => {
     expect(result).toEqual([])
   })
 
-  it('GET /regions returns the flat tree with trilingual names', async () => {
+  it('GET /regions returns the flat tree with trilingual names + geo/taxonomy enrichment (#651 2b)', async () => {
     const app = createApp({
       vehicleRepo: new DrizzleVehicleRepository(db),
       bookingRepo: new DrizzleBookingRepository(db),
@@ -136,11 +149,19 @@ describe('region taxonomy against Postgres (#394)', () => {
     expect(res.status).toBe(200)
     const body = await res.json()
     const namba = body.data.find((r: { id: string }) => r.id === NAMBA)
+    // The cascade + renter picker need type/assignable/slug; the geo guard reads
+    // lat/lng/status off the same rows — all must survive the GET /regions projection.
     expect(namba).toMatchObject({
       parentId: OSAKA_CITY,
       nameEn: 'Namba',
       nameJa: '難波',
       nameZh: '难波',
+      type: 'AREA',
+      assignable: true,
+      status: 'ACTIVE',
+      latitude: 34.6627,
+      longitude: 135.5012,
+      slug: `namba-${uniq}`,
     })
   })
 })

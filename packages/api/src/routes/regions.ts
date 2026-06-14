@@ -12,6 +12,10 @@ const CACHE_SECONDS = 3600
  * the renter search dropdowns load before login. A flat list (parentId edges);
  * the cascade is built client-side. No pagination: the whole tree is a few dozen
  * rows. HTTP in/out only; the repo owns the read.
+ *
+ * #651 2b: the payload carries the full RegionNode — type/slug/assignable/status +
+ * area centroid lat/lng — to anonymous callers. Intentional: the operator cascade
+ * and the renter map (Slice 3) need them, and region centroids aren't sensitive.
  */
 export function createRegionRoutes(regionRepo: RegionRepository) {
   return new Hono().get('/regions', async (c) => {

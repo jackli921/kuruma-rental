@@ -17,7 +17,7 @@ import { db } from './setup'
 // service validates a provided one (assignable + ACTIVE, else 422 — never a raw FK
 // 500), derives the nearest assignable area from the location's coords, or refuses
 // (422). The two client FKs (operatorId + regionId) must still disambiguate. The
-// Drizzle findCandidates projection + the FK are only exercised by the real DB, so
+// Drizzle findAll projection + the FK are only exercised by the real DB, so
 // this drives the full HTTP app against Postgres with an explicit null geocoder
 // (deterministic: addresses never resolve, so derivation hinges only on sent coords).
 describe('locations region loop guard write-path (#651 Slice 2)', () => {
