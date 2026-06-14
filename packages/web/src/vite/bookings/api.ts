@@ -40,27 +40,34 @@ export interface BookingDto {
 // z.ZodType<...>` — the interfaces stay the single source for the shape, while a
 // drifted/dropped field now fails as a ParseError at the seam instead of
 // surfacing as `undefined` on the confirmation page or in My Bookings.
-const insuranceSnapshotSchema = z.object({
+// Exported (#711, 3b): the operator-bookings event-timeline payload schema reuses
+// these snapshot shapes — they are the SAME shared types embedded in a
+// BOOKING_CREATED audit payload, so it composes them rather than re-declaring.
+export const insuranceSnapshotSchema = z.object({
   insuranceOptionId: z.string(),
   name: z.string(),
   dailyPriceJpy: z.number(),
   deductibleJpy: z.number().nullable(),
 }) satisfies z.ZodType<InsuranceSnapshot>
 
-const feeSnapshotItemSchema = z.object({
+export const feeSnapshotItemSchema = z.object({
   feeType: z.enum(FEE_TYPES),
   unit: z.enum(FEE_UNITS),
   amountJpy: z.number(),
   vehicleClassId: z.string().nullable(),
 }) satisfies z.ZodType<FeeSnapshotItem>
 
-const addOnSnapshotSchema = z.object({
+export const addOnSnapshotSchema = z.object({
   addOnId: z.string(),
   name: z.string(),
   priceJpy: z.number(),
 }) satisfies z.ZodType<AddOnSnapshot>
 
-const bookingDtoSchema = z.object({
+// Exported (#711, 3b): operator-bookings reuses this as the base for its expanded
+// detail DTO (bookingDtoSchema.extend) and to validate its write responses (the
+// bare booking the substitute/status/cancel endpoints return — `operator` is
+// optional here, so a write body with no operator block validates cleanly).
+export const bookingDtoSchema = z.object({
   id: z.string(),
   bookingCode: z.string(),
   renterId: z.string(),
