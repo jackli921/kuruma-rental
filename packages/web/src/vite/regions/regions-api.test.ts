@@ -1,11 +1,7 @@
 import { ParseError } from '@/lib/api-error'
-import {
-  REGIONS_QUERY_KEY,
-  fetchRegions,
-  regionsQueryOptions,
-} from '@/vite/operator-locations/regions-api'
 import type { RegionNode } from '@kuruma/shared/types/region'
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import { REGIONS_QUERY_KEY, fetchRegions, regionsQueryOptions } from './regions-api'
 
 function jsonResponse(body: unknown, status = 200): Response {
   return {
