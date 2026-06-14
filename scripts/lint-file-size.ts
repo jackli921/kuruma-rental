@@ -43,14 +43,6 @@ export function capForFile(path: string, exemptPages: ReadonlySet<string> = PAGE
   if (/\/app\/.+\/page\.tsx$/.test(p) && !exemptPages.has(p)) {
     return { cap: PAGE_CAP, soft: null }
   }
-  // The central Drizzle schema is one cohesive declarative file (one table per
-  // ~30-50 lines). It crossed the 800 hard cap as tables accrued across slices;
-  // splitting it is a danger-zone migration deferred to its own PR (#458
-  // follow-up). Higher cap, soft-warn at the old hard limit so growth stays
-  // visible until the split lands.
-  if (/\/db\/schema\.ts$/.test(p)) {
-    return { cap: 1000, soft: HARD_FAIL }
-  }
   return { cap: HARD_FAIL, soft: SOFT_WARN }
 }
 
