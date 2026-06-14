@@ -95,7 +95,7 @@ describe('check-import-boundaries — routes/repositories type boundary (#726)',
     })
   })
 
-  it('allows DI-repo carve-out routes to import their *Repository contract from repositories/types', () => {
+  it('allows DI-repo carve-out routes to import from repositories/types (transitional, path-wide)', () => {
     expect(
       checkContent(
         'routes/regions.ts',
@@ -125,5 +125,40 @@ describe('check-import-boundaries — routes/repositories type boundary (#726)',
     expect(violations.map((v) => v.rule)).toContainEqual(
       expect.stringMatching(/must not import concrete repositories/),
     )
+  })
+
+  it('flags a formatter-wrapped (multiline) filter import in a service-backed route', () => {
+    const content = ['import type {', '  BookingFilters,', "} from '../repositories/types'"].join(
+      '\n',
+    )
+
+    const violations = checkContent('routes/bookings.ts', content)
+
+    expect(violations).toHaveLength(1)
+    expect(violations[0]).toMatchObject({
+      file: 'routes/bookings.ts',
+      line: 1,
+      rule: expect.stringMatching(ROUTE_TYPES_RULE),
+    })
+  })
+
+  it('flags a formatter-wrapped (multiline) concrete repository import in a route', () => {
+    const content = [
+      'import {',
+      '  DrizzleBookingRepository,',
+      "} from '../repositories/drizzle/booking'",
+    ].join('\n')
+
+    expect(checkContent('routes/bookings.ts', content).map((v) => v.rule)).toContainEqual(
+      expect.stringMatching(/must not import concrete repositories/),
+    )
+  })
+
+  it('exempts the whole repositories/types path for transitional carve-out routes', () => {
+    // Carve-out is deliberately path-wide (not *Repository-only): these 3 routes
+    // are mid-migration and get full enforcement once their service lands (#726).
+    expect(
+      checkContent('routes/vehicles.ts', "import type { Vehicle } from '../repositories/types'"),
+    ).toEqual([])
   })
 })
