@@ -1,5 +1,6 @@
 import { Hono } from 'hono'
 import { beforeEach, describe, expect, it } from 'vitest'
+import { createApp } from '../../src/index'
 import { SYSTEM_CONTEXT } from '../../src/middleware/auth'
 import {
   InMemoryAvailabilityRepository,
@@ -9,8 +10,10 @@ import {
 import type { Booking, Vehicle } from '../../src/repositories/types'
 import { createAvailabilityRoutes } from '../../src/routes/availability'
 import { AvailabilityService } from '../../src/services/availability'
-import { testAuthMiddleware } from '../helpers/auth'
+import { authHeaders, setupAuthEnv, testAuthMiddleware } from '../helpers/auth'
 import { bookingInput } from '../helpers/booking'
+
+const AVAIL_QUERY = '/availability?from=2026-06-01T10:00:00Z&to=2026-06-01T14:00:00Z'
 
 let app: Hono
 let vehicleRepo: InMemoryVehicleRepository
@@ -330,5 +333,27 @@ describe('Availability Routes', () => {
       expect(conflict).not.toHaveProperty('notes')
       expect(conflict).not.toHaveProperty('status')
     })
+  })
+})
+
+// The bare GET /availability path is gated by index.ts composition wiring, not the
+// route layer above. Pin it through the real createApp() so the requireAuth mount
+// can't silently regress (e.g. if the /availability/* wildcard it currently leans
+// on were ever removed). See #739.
+describe('GET /availability auth mount (#739)', () => {
+  beforeEach(() => {
+    setupAuthEnv()
+  })
+
+  it('401s an unauthenticated request to the bare /availability path', async () => {
+    const res = await createApp().request(AVAIL_QUERY)
+
+    expect(res.status).toBe(401)
+  })
+
+  it('does not 401 an authenticated request to the bare /availability path', async () => {
+    const res = await createApp().request(AVAIL_QUERY, { headers: await authHeaders() })
+
+    expect(res.status).not.toBe(401)
   })
 })
