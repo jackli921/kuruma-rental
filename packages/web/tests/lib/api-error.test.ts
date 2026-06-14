@@ -1,5 +1,6 @@
-import { ApiError, operatorRequiredCode, unwrap } from '@/lib/api-error'
+import { ApiError, ParseError, operatorRequiredCode, unwrap } from '@/lib/api-error'
 import { describe, expect, it } from 'vitest'
+import { z } from 'zod'
 
 function jsonResponse(body: unknown, status: number): Response {
   return new Response(JSON.stringify(body), {
@@ -32,6 +33,35 @@ describe('unwrap', () => {
   it('throws an ApiError with the status when the body is not JSON', async () => {
     const res = new Response('<html>502</html>', { status: 502 })
     await expect(unwrap(res)).rejects.toMatchObject({ status: 502 })
+  })
+})
+
+describe('unwrap with a Zod schema', () => {
+  const vehicleSchema = z.object({ id: z.string(), seats: z.number() })
+
+  it('returns the parsed data when body.data matches the schema', async () => {
+    const res = jsonResponse({ success: true, data: { id: 'v1', seats: 5 } }, 200)
+    await expect(unwrap(res, vehicleSchema)).resolves.toEqual({ id: 'v1', seats: 5 })
+  })
+
+  it('throws a ParseError at the seam when body.data drifts (renamed field)', async () => {
+    // API renamed `seats` -> `seatCount`: the legacy cast returns an object whose
+    // `seats` is undefined, surfacing deep in render. With a schema it fails here.
+    const res = jsonResponse({ success: true, data: { id: 'v1', seatCount: 5 } }, 200)
+    const err = (await unwrap(res, vehicleSchema).catch((e) => e)) as ParseError
+    expect(err).toBeInstanceOf(ParseError)
+    expect(err.status).toBe(200)
+    expect(err.issues.some((issue) => issue.path.includes('seats'))).toBe(true)
+  })
+
+  it('does not consult the schema on a failure envelope (still throws ApiError)', async () => {
+    const res = jsonResponse({ success: false, error: 'boom' }, 500)
+    await expect(unwrap(res, vehicleSchema)).rejects.toBeInstanceOf(ApiError)
+  })
+
+  it('passes data through unchanged when no schema is supplied (back-compat)', async () => {
+    const res = jsonResponse({ success: true, data: { anything: true } }, 200)
+    await expect(unwrap(res)).resolves.toEqual({ anything: true })
   })
 })
 

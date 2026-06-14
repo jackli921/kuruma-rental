@@ -1,4 +1,5 @@
 import type { ApiResponse } from '@kuruma/shared/types/api-response'
+import type { z } from 'zod'
 
 /**
  * Error thrown by {@link unwrap} when the API returns a non-success body.
@@ -35,11 +36,35 @@ export class ActionError extends Error {
 }
 
 /**
+ * Error thrown by {@link unwrap} when a *success* response's `data` fails the
+ * caller-supplied Zod schema — i.e. the API/web contract drifted (a renamed or
+ * missing field). Without a schema such drift returns `undefined` deep in
+ * render; validating at the seam turns it into a clean failure here (#711).
+ * Carries the HTTP `status` (the response itself was 2xx) and the Zod `issues`.
+ */
+export class ParseError extends Error {
+  readonly name = 'ParseError'
+  readonly status: number
+  readonly issues: z.core.$ZodIssue[]
+
+  constructor(message: string, status: number, issues: z.core.$ZodIssue[]) {
+    super(message)
+    this.status = status
+    this.issues = issues
+  }
+}
+
+/**
  * Shared response unwrapper for the web-side API clients. On a success body
  * returns `data`; on a failure body throws an {@link ApiError} carrying the
  * status. Replaces the per-module copies that discarded the status.
+ *
+ * Pass a Zod `schema` to validate `data` at the network seam instead of trusting
+ * the phantom `T` cast — drift then throws a {@link ParseError} rather than
+ * surfacing as `undefined` in render (#711). Omitting it preserves the legacy
+ * passthrough for clients not yet migrated.
  */
-export async function unwrap<T>(res: Response): Promise<T> {
+export async function unwrap<T>(res: Response, schema?: z.ZodType<T>): Promise<T> {
   const body = (await res.json().catch(() => ({
     success: false as const,
     error: `Non-JSON response (HTTP ${res.status})`,
@@ -49,7 +74,17 @@ export async function unwrap<T>(res: Response): Promise<T> {
     throw new ApiError(body.error ?? `HTTP ${res.status}`, res.status)
   }
 
-  return body.data
+  if (!schema) return body.data
+
+  const parsed = schema.safeParse(body.data)
+  if (!parsed.success) {
+    throw new ParseError(
+      `API response body failed validation (HTTP ${res.status})`,
+      res.status,
+      parsed.error.issues,
+    )
+  }
+  return parsed.data
 }
 
 export const OPERATOR_REQUIRED = 'OPERATOR_REQUIRED'
