@@ -1,5 +1,6 @@
 import { quickCreateCustomerSchema } from '@kuruma/shared/validators/customer'
 import { Hono } from 'hono'
+import { toCallerContext } from '../auth/context'
 import { STAFF_ROLES, requireUser } from '../middleware/auth'
 import type { CustomerService } from '../services/customer'
 import { fail, ok, parseBody, parseId, parseLimit } from './helpers'
@@ -9,17 +10,19 @@ const ALLOWED_SORTS = new Set(['lastBookingAt', 'bookingCount', 'name'])
 export function createCustomerRoutes(service: CustomerService) {
   const app = new Hono()
 
-  // Platform-staff-only by design. requireStaff -> STAFF_ROLES admits
-  // PLATFORM_ADMIN only (legacy STAFF/ADMIN revoked by #487) and excludes OPERATOR_*. These routes are
-  // intentionally unscoped: findById returns full cross-operator booking history
-  // and /search is a flat user-table lookup. That is safe ONLY while operators
-  // cannot reach them. If operator manual-booking is ever added, thread
-  // CallerContext + operator scoping (bookingReadScope-style) through
-  // service.findById/search BEFORE widening this gate — otherwise every operator's
-  // customer list and booking history leaks (cf. #396, which already defended
-  // /users against this same enumeration vector).
+  // /customers (full list) and /customers/:id return cross-operator data and stay
+  // PLATFORM_ADMIN-only; /customers/quick-create likewise (operator walk-ins are
+  // created atomically via POST /bookings instead — #589). /customers/search is
+  // the ONE operator-reachable route: CustomerService.search scopes an OPERATOR_*
+  // caller to its own renters (prior-booking), so it can't enumerate the global
+  // user table (cf. #396/#475). Anything not explicitly operator-allowed → 403.
   app.use('/customers', requireStaff)
-  app.use('/customers/*', requireStaff)
+  app.use('/customers/*', async (c, next) => {
+    const ctx = toCallerContext(requireUser(c))
+    if (STAFF_ROLES.has(ctx.role)) return next()
+    if (c.req.path.endsWith('/customers/search') && ctx.operatorId) return next()
+    return fail(c, 'Forbidden', 403)
+  })
 
   return app
     .get('/customers', async (c) => {
@@ -48,7 +51,7 @@ export function createCustomerRoutes(service: CustomerService) {
       if (!q || q.length < 2) {
         return fail(c, 'Search query must be at least 2 characters', 400)
       }
-      const customers = await service.search(q)
+      const customers = await service.search(q, toCallerContext(requireUser(c)))
       return ok(c, customers)
     })
     .post('/customers/quick-create', async (c) => {

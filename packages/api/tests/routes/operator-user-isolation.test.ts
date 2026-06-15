@@ -170,10 +170,45 @@ describe('#396 — OPERATOR_* cannot enumerate users via any current ingress', (
     expect(res.status).toBe(403)
   })
 
-  it('GET /customers/search is STAFF-gated — operator gets 403', async () => {
-    const res = await app.request('/customers/search?q=re', {
+  it('GET /customers/search returns only the operator’s own-tenant (prior-booking) renters, never a foreign tenant’s', async () => {
+    // #589: operator manual-booking needs to find an existing customer, but the
+    // search MUST stay #396-safe — scoped to renters who have booked with THIS
+    // operator. OWN_RENTER booked with OPERATOR_ID (in scope); FOREIGN booked with
+    // another tenant (out of scope). Both mkUser names contain "User", so a hit on
+    // FOREIGN would prove an enumeration leak, not an incidental text match.
+    await bookingRepo.create(
+      SYSTEM_CONTEXT,
+      bookingInput({
+        operatorId: OPERATOR_ID,
+        renterId: OWN_RENTER_ID,
+        requestedVehicleId: vehicle.id,
+        assignedVehicleId: vehicle.id,
+        pickupLocationId: locationId,
+        dropoffLocationId: locationId,
+      }),
+    )
+    await bookingRepo.create(
+      SYSTEM_CONTEXT,
+      bookingInput({
+        operatorId: OTHER_OPERATOR_ID,
+        renterId: FOREIGN_ID,
+        requestedVehicleId: 'veh-foreign',
+        assignedVehicleId: 'veh-foreign',
+      }),
+    )
+
+    const res = await app.request('/customers/search?q=User', {
       headers: await operatorBearer(SELF_ID),
     })
+
+    expect(res.status).toBe(200)
+    const ids = ((await res.json()) as { data: { id: string }[] }).data.map((u) => u.id)
+    expect(ids).toContain(OWN_RENTER_ID)
+    expect(ids).not.toContain(FOREIGN_ID)
+  })
+
+  it('GET /customers (full list) stays STAFF-gated — operator still gets 403', async () => {
+    const res = await app.request('/customers', { headers: await operatorBearer(SELF_ID) })
     expect(res.status).toBe(403)
   })
 

@@ -370,7 +370,7 @@ export function createApp(overrides?: AppOverrides, repos: Repos = buildRepos(ov
     notificationDispatcher,
   )
   const availabilityService = new AvailabilityService(availabilityRepo)
-  const customerService = new CustomerService(customerRepo, userRepo)
+  const customerService = new CustomerService(customerRepo, userRepo, bookingRepo)
   const messageService = new MessageService(threadRepo, messageRepo)
   const userDirectoryService = new UserDirectoryService(userRepo, threadRepo)
   const maintenanceService = new MaintenanceService(
