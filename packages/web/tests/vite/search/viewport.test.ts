@@ -1,4 +1,4 @@
-import { type Pin, SINGLE_PIN_ZOOM, computeViewport } from '@/vite/search/viewport'
+import { type Pin, REGION_ZOOM, SINGLE_PIN_ZOOM, computeViewport } from '@/vite/search/viewport'
 import { describe, expect, it } from 'vitest'
 
 const pin = (id: string, lat: number, lng: number): Pin => ({ id, lat, lng })
@@ -41,5 +41,33 @@ describe('computeViewport', () => {
     for (let i = 1; i < spans.length; i++) {
       expect(spans[i]!).toBeLessThanOrEqual(spans[i - 1]!)
     }
+  })
+})
+
+// #840 Slice B: a chosen region centers the map on its coords; a null anchor keeps
+// the existing fit-all-pins behavior. The anchor [lat, lng] is the region center.
+describe('computeViewport with a region anchor (#840)', () => {
+  const NAMBA_CENTER: [number, number] = [34.6655, 135.5023]
+
+  it('centers on the anchor at the region zoom, ignoring the pin bounding box', () => {
+    const vp = computeViewport([OSAKA, KYOTO, NARA, KIX], NAMBA_CENTER)
+    expect(vp.center).toEqual(NAMBA_CENTER)
+    expect(vp.zoom).toBe(REGION_ZOOM)
+    // The fit-all midpoint would land between Osaka and Kyoto — prove we overrode it.
+    expect(vp.center).not.toEqual(computeViewport([OSAKA, KYOTO, NARA, KIX]).center)
+  })
+
+  it('centers on the anchor even when no pin is geocoded (region chosen, empty map)', () => {
+    const vp = computeViewport([], NAMBA_CENTER)
+    expect(vp.center).toEqual(NAMBA_CENTER)
+    expect(vp.zoom).toBe(REGION_ZOOM)
+  })
+
+  it('falls back to fitting all pins when the anchor is null', () => {
+    expect(computeViewport([OSAKA, KYOTO], null)).toEqual(computeViewport([OSAKA, KYOTO]))
+  })
+
+  it('frames a region broader than a single store (region zoom < single-pin zoom)', () => {
+    expect(REGION_ZOOM).toBeLessThan(SINGLE_PIN_ZOOM)
   })
 })

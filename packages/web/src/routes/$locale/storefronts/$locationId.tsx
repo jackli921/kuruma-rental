@@ -12,8 +12,9 @@ interface StorefrontDetailSearch {
   to?: string | undefined
   class?: string | string[] | undefined
   // Carried through (not used by the detail fetch) so the back link and the
-  // invalid-range redirect can restore the active search filters (#499).
+  // invalid-range redirect can restore the active search filters (#499, #840).
   pickupLocationId?: string | undefined
+  region?: string | undefined
 }
 
 function validateSearch(search: Record<string, unknown>): StorefrontDetailSearch {
@@ -24,6 +25,7 @@ function validateSearch(search: Record<string, unknown>): StorefrontDetailSearch
     to: str(search.to),
     class: Array.isArray(cls) ? cls.filter((c): c is string => typeof c === 'string') : str(cls),
     pickupLocationId: str(search.pickupLocationId),
+    region: str(search.region),
   }
 }
 
@@ -39,6 +41,7 @@ export const Route = createFileRoute('/$locale/storefronts/$locationId')({
     to: search.to,
     classes: normalizeClassFilter(search.class),
     pickupLocationId: search.pickupLocationId,
+    region: search.region,
   }),
   loader: async ({ params, deps }) => {
     const range = parseSearchRange(deps.from, deps.to)
@@ -51,6 +54,7 @@ export const Route = createFileRoute('/$locale/storefronts/$locationId')({
         search: carryForwardFilters({
           class: deps.classes,
           pickupLocationId: deps.pickupLocationId,
+          region: deps.region,
         }),
       })
     const detail = await fetchStorefrontDetail(params.locationId, {
@@ -66,7 +70,7 @@ export const Route = createFileRoute('/$locale/storefronts/$locationId')({
 
 function StorefrontDetailRoute() {
   const detail = Route.useLoaderData()
-  const { from, to, class: classFilter, pickupLocationId } = Route.useSearch()
+  const { from, to, class: classFilter, pickupLocationId, region } = Route.useSearch()
 
   return (
     <main className="flex-1 px-4 py-10 sm:px-6 lg:px-8">
@@ -76,6 +80,7 @@ function StorefrontDetailRoute() {
         to={to ?? ''}
         classFilter={classFilter}
         pickupLocationId={pickupLocationId}
+        region={region}
       />
     </main>
   )

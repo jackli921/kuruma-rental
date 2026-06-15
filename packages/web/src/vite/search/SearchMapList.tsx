@@ -11,6 +11,8 @@ interface SearchMapListProps {
   readonly items: SearchResultItem[]
   /** The concrete map component, injected (#458 D1). Tests pass a fake. */
   readonly adapter: MapAdapter
+  /** Chosen region center to focus the map on; null = fit all pins (#840). */
+  readonly anchor?: [number, number] | null
 }
 
 /**
@@ -20,7 +22,7 @@ interface SearchMapListProps {
  * only (D1), never a map library. The map plots geocoded, deduped-by-location
  * rows; null-coord rows stay in the list (graceful degrade).
  */
-export function SearchMapList({ items, adapter: Adapter }: SearchMapListProps) {
+export function SearchMapList({ items, adapter: Adapter, anchor = null }: SearchMapListProps) {
   const t = useTranslations('search')
   const [selectedId, setSelectedId] = useState<string | null>(null)
   // Dedupe is keyed on the loader-stable `items`; memoizing keeps the plotted
@@ -72,7 +74,12 @@ export function SearchMapList({ items, adapter: Adapter }: SearchMapListProps) {
             {t('map.noCoordinates')}
           </p>
         ) : (
-          <Adapter items={mapItems} selectedId={selectedId} onSelect={setSelectedId} />
+          <Adapter
+            items={mapItems}
+            selectedId={selectedId}
+            onSelect={setSelectedId}
+            anchor={anchor}
+          />
         )}
       </div>
     </div>

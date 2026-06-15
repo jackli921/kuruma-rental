@@ -13,12 +13,21 @@ vi.mock('pigeon-maps', () => ({
     children,
     provider,
     attribution,
+    defaultCenter,
+    defaultZoom,
   }: {
     children: ReactNode
     provider?: (x: number, y: number, z: number) => string
     attribution?: ReactNode
+    defaultCenter?: [number, number]
+    defaultZoom?: number
   }) => (
-    <div data-testid="pigeon-map" data-tile-url={provider ? provider(3, 5, 12) : ''}>
+    <div
+      data-testid="pigeon-map"
+      data-tile-url={provider ? provider(3, 5, 12) : ''}
+      data-center={defaultCenter ? defaultCenter.join(',') : ''}
+      data-zoom={defaultZoom ?? ''}
+    >
       {attribution}
       {children}
     </div>
@@ -162,6 +171,34 @@ describe('PigeonMapAdapter', () => {
 
     const credit = screen.getByRole('link', { name: '国土地理院' })
     expect(credit.getAttribute('href')).toContain('gsi.go.jp')
+  })
+
+  it('centers on the region anchor at the region zoom when one is given (#840)', () => {
+    render(
+      <PigeonMapAdapter
+        // Pin sits away from the anchor: the anchor must win over the pin-derived fit.
+        items={[carAt('loc_namba', { latitude: 34.7025, longitude: 135.4959 })]}
+        selectedId={null}
+        onSelect={() => {}}
+        anchor={[34.6655, 135.5023]}
+      />,
+    )
+
+    const map = screen.getByTestId('pigeon-map')
+    expect(map).toHaveAttribute('data-center', '34.6655,135.5023')
+    expect(map).toHaveAttribute('data-zoom', '11')
+  })
+
+  it('fits the pins (centers a lone pin on itself) when no anchor is given (#840 fallback)', () => {
+    render(
+      <PigeonMapAdapter
+        items={[carAt('loc_namba', { latitude: 34.66, longitude: 135.5 })]}
+        selectedId={null}
+        onSelect={() => {}}
+      />,
+    )
+
+    expect(screen.getByTestId('pigeon-map')).toHaveAttribute('data-center', '34.66,135.5')
   })
 })
 

@@ -1,3 +1,4 @@
+import type { GeoPoint } from '@kuruma/shared/lib/region-distance'
 import type { RegionNode } from '@kuruma/shared/types/region'
 
 /**
@@ -19,6 +20,22 @@ export function findRegionBySlug(
   slug: string,
 ): RegionNode | undefined {
   return regions.find((region) => region.slug === slug)
+}
+
+/**
+ * The chosen region's center as a distance/centering anchor, or null when no region
+ * is chosen, the slug is unknown, or the region has no coordinates (#840). Shared by
+ * the store grid (nearest-first ranking + distance labels) and the map view
+ * (region-centering), so both resolve the anchor identically from the cached list.
+ */
+export function resolveRegionAnchor(
+  regions: readonly RegionNode[] | undefined,
+  slug: string | undefined,
+): GeoPoint | null {
+  if (!regions || !slug) return null
+  const region = findRegionBySlug(regions, slug)
+  if (!region || region.latitude === null || region.longitude === null) return null
+  return { latitude: region.latitude, longitude: region.longitude }
 }
 
 /** The prefecture -> city -> area lineage of a region, any slot null when absent. */

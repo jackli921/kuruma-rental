@@ -14,6 +14,8 @@ interface StorefrontDetailViewProps {
   /** Active result filters preserved on the "back to search" link (#499). */
   readonly classFilter?: string | string[] | undefined
   readonly pickupLocationId?: string | undefined
+  /** Chosen region slug preserved on the back link so nearest-first survives a return (#840). */
+  readonly region?: string | undefined
 }
 
 /**
@@ -28,6 +30,7 @@ export function StorefrontDetailView({
   to,
   classFilter,
   pickupLocationId,
+  region,
 }: StorefrontDetailViewProps) {
   const t = useTranslations('search')
   const locale = useLocale()
@@ -38,7 +41,11 @@ export function StorefrontDetailView({
       <Link
         to="/$locale/search"
         params={{ locale }}
-        search={{ from, to, ...carryForwardFilters({ class: classFilter, pickupLocationId }) }}
+        search={{
+          from,
+          to,
+          ...carryForwardFilters({ class: classFilter, pickupLocationId, region }),
+        }}
         className="mb-6 inline-flex items-center gap-1.5 text-sm font-medium text-muted-foreground transition-colors hover:text-foreground"
       >
         <ArrowLeft className="size-4" />

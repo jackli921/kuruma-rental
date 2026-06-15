@@ -14,6 +14,10 @@ interface StorefrontCardProps {
   /** Active result filters forwarded so they survive the drill-down (#499). */
   readonly classFilter?: string | string[] | undefined
   readonly pickupLocationId?: string | undefined
+  /** Chosen region slug forwarded so the nearest-first context survives the drill-down (#840). */
+  readonly region?: string | undefined
+  /** Great-circle km from the search anchor (#840); null/absent hides the label. */
+  readonly distanceKm?: number | null
 }
 
 /**
@@ -28,6 +32,8 @@ export function StorefrontCard({
   to,
   classFilter,
   pickupLocationId,
+  region,
+  distanceKm,
 }: StorefrontCardProps) {
   const t = useTranslations('search')
   const locale = useLocale()
@@ -44,7 +50,11 @@ export function StorefrontCard({
     <Link
       to="/$locale/storefronts/$locationId"
       params={{ locale, locationId: storefront.locationId }}
-      search={{ from, to, ...carryForwardFilters({ class: classFilter, pickupLocationId }) }}
+      search={{
+        from,
+        to,
+        ...carryForwardFilters({ class: classFilter, pickupLocationId, region }),
+      }}
       className="group flex flex-col overflow-hidden rounded-xl border border-border bg-card shadow-sm transition-shadow hover:shadow-md"
     >
       <div className="aspect-[4/3] overflow-hidden bg-muted">
@@ -72,6 +82,11 @@ export function StorefrontCard({
             <MapPin className="size-3.5 shrink-0" />
             <span className="line-clamp-1">{storefront.address}</span>
           </p>
+          {distanceKm != null && (
+            <p className="mt-1 text-xs font-medium text-foreground">
+              {t('distance', { km: distanceKm.toFixed(1) })}
+            </p>
+          )}
         </div>
         <ClassSummaryBadges summaries={storefront.classSummaries} />
         <p className="flex items-center gap-1 text-xs text-muted-foreground">

@@ -9,6 +9,9 @@ export interface Pin {
 export const OSAKA_FALLBACK: [number, number] = [34.6937, 135.5023]
 /** Zoom for a single store / a tight cluster (neighborhood level). */
 export const SINGLE_PIN_ZOOM = 12
+/** Zoom when a region is chosen (#840). City level — deliberately broader than a
+ *  single store, since a region (area/city/prefecture) frames an area, not a point. */
+export const REGION_ZOOM = 11
 
 /**
  * Fit all pins in view (#458). Centers on the bounding-box midpoint — NOT the
@@ -16,8 +19,17 @@ export const SINGLE_PIN_ZOOM = 12
  * markers off-screen and made the map read as "only one area has cars". Zoom steps
  * out as the span grows. Uncontrolled (`defaultCenter`/`defaultZoom`) so the user
  * can still pan/zoom; the adapter re-fits on a new result set via a remount key.
+ *
+ * When a region `anchor` ([lat, lng]) is given (#840), center on it at `REGION_ZOOM`
+ * instead — a chosen area wins over the pin spread, so the renter lands on the place
+ * they picked even if the geocoded results sprawl. A null anchor (no region, or a
+ * coord-less region) keeps the fit-all-pins behavior.
  */
-export function computeViewport(pins: Pin[]): { center: [number, number]; zoom: number } {
+export function computeViewport(
+  pins: Pin[],
+  anchor: [number, number] | null = null,
+): { center: [number, number]; zoom: number } {
+  if (anchor !== null) return { center: anchor, zoom: REGION_ZOOM }
   if (pins.length === 0) return { center: OSAKA_FALLBACK, zoom: 11 }
 
   let minLat = Number.POSITIVE_INFINITY
