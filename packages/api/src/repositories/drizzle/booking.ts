@@ -21,6 +21,14 @@ export class DrizzleBookingRepository implements BookingRepository {
     return []
   }
 
+  async listRenterIdsForOperator(operatorId: string): Promise<string[]> {
+    const rows = await this.db
+      .selectDistinct({ renterId: bookings.renterId })
+      .from(bookings)
+      .where(eq(bookings.operatorId, operatorId))
+    return rows.map((r) => r.renterId)
+  }
+
   async findAll(ctx: CallerContext, filters?: BookingFilters): Promise<Booking[]> {
     const scoped = this.scopeConditions(ctx)
     if (scoped === null) return []

@@ -1,5 +1,11 @@
 import type { Customer, CustomerSort, CustomerWithBookings } from '@kuruma/shared/types/customer'
-import type { CustomerListFilters, CustomerRepository, UserRepository } from '../repositories/types'
+import type { CallerContext } from '../auth/context'
+import type {
+  BookingRepository,
+  CustomerListFilters,
+  CustomerRepository,
+  UserRepository,
+} from '../repositories/types'
 import type { User } from '../stores'
 
 export interface CustomerListQuery {
@@ -10,19 +16,21 @@ export interface CustomerListQuery {
 }
 
 /**
- * Platform-staff-only by design — enforced by the requireStaff gate in routes/customers.ts.
- * findById returns a customer's full cross-operator booking history and search() is
- * a flat user-table lookup; neither takes a CallerContext, so neither is
- * operator-scoped. That is intentional and safe ONLY because the route gate admits
- * PLATFORM_ADMIN exclusively (legacy STAFF/ADMIN revoked by #487; never OPERATOR_*). Before any
- * future operator manual-booking access, thread ctx + operator scoping through
- * findById/search first, or every operator's customer list and booking history
- * leaks (the #396 enumeration defense on /users is the precedent to follow).
+ * Customer directory for the platform screen + operator manual booking (#589).
+ *
+ * findAllPaginated (full list) and findById (cross-operator booking history) stay
+ * PLATFORM_ADMIN-only — they take no scope and would leak every operator's
+ * customers if widened. search() is the ONE operator-reachable method: it threads
+ * CallerContext and scopes an OPERATOR_* caller to renters within its own tenant
+ * boundary (those with a prior booking with it), so manual-booking can't become a
+ * global user-enumeration vector (#396/#475). Bypass roles still search the full
+ * user table. The route gate (routes/customers.ts) mirrors this split.
  */
 export class CustomerService {
   constructor(
     private readonly customerRepo: CustomerRepository,
     private readonly userRepo: UserRepository,
+    private readonly bookingRepo: BookingRepository,
   ) {}
 
   async findAllPaginated(
@@ -46,8 +54,20 @@ export class CustomerService {
     return this.customerRepo.findByIdWithBookings(id)
   }
 
-  async search(query: string): Promise<User[]> {
-    return this.userRepo.search(query)
+  async search(query: string, ctx: CallerContext): Promise<User[]> {
+    const matches = await this.userRepo.search(query)
+    // Bypass roles (PLATFORM_ADMIN/PARTNER) search the full user table.
+    if (ctx.bypassScope) return matches
+    // An operator only resolves renters within its own tenant boundary — those
+    // with a prior booking with it — so manual-booking can't enumerate the global
+    // user table (#396/#475). Fail closed if somehow operator-less.
+    if (!ctx.operatorId) return []
+    const allowed = new Set(await this.bookingRepo.listRenterIdsForOperator(ctx.operatorId))
+    // NOTE (MVP): userRepo.search caps at 20 by text first, so for an operator
+    // with a very large customer base an in-scope name past that cap could be
+    // missed. Fine for the picker at MVP scale; push the operator filter into the
+    // query if it ever bites.
+    return matches.filter((u) => allowed.has(u.id))
   }
 
   async quickCreate(input: {
