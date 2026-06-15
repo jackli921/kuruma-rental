@@ -144,15 +144,16 @@ export function createBookingRoutes(service: BookingService) {
       const parsed = await parseBody(c, createBookingSchema)
       if (!parsed.ok) return parsed.response
 
-      // Staff/admin can create bookings on behalf of a customer (manual bookings).
-      // Non-staff always book as themselves and source is forced to DIRECT to
-      // prevent advance-booking-hours bypass via source=MANUAL. OPERATOR_* are
-      // deliberately NOT manual bookers: UserRepository is not tenant-scoped, so
-      // letting an operator resolve an arbitrary renterId reopens the #396
-      // cross-tenant user-enumeration vector (operator-user-isolation.test.ts).
-      const isStaff = STAFF_ROLES.has(ctx.role)
-      const renterId = isStaff && parsed.data.renterId ? parsed.data.renterId : ctx.userId
-      const source = isStaff ? parsed.data.source : 'DIRECT'
+      // #589: STAFF and OPERATOR_* are "manual bookers" — they may book on behalf
+      // of a renter (renterId) and set source=MANUAL. An operator's renterId is
+      // authorized in the service against its OWN customer scope (renters with a
+      // prior booking with it), scope-first so it never probes the user table for
+      // an arbitrary id — preserving the #396/#475 enumeration defense
+      // (operator-user-isolation.test.ts). Everyone else books as themselves with
+      // source forced to DIRECT (no advance-booking-hours bypass via MANUAL).
+      const isManualBooker = STAFF_ROLES.has(ctx.role) || isOperatorRole(ctx.role)
+      const renterId = isManualBooker && parsed.data.renterId ? parsed.data.renterId : ctx.userId
+      const source = isManualBooker ? parsed.data.source : 'DIRECT'
 
       // #613: a renter self-serve booking must accept the liability disclaimer
       // (免责声明) at checkout — the IDP/license must be valid at pickup or the

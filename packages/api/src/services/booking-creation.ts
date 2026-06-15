@@ -1,6 +1,7 @@
 import type { AddOnSnapshot, InsuranceSnapshot } from '@kuruma/shared/db/schema'
 import { calculateBookingPrice } from '@kuruma/shared/lib/pricing'
 import { checkRentalRules } from '@kuruma/shared/lib/rental-rules'
+import { isOperatorRole } from '../auth/roles'
 import { generateBookingCode } from '../lib/booking-code'
 import { type CallerContext, SYSTEM_CONTEXT } from '../middleware/auth'
 import { BOOKING_CODE_CONSTRAINT, PG_ERROR, pgConstraintName, pgErrorCode } from '../pg-errors'
@@ -56,16 +57,33 @@ export class BookingCreationService {
     input: CreateBookingInput,
     now: Date = new Date(),
   ): Promise<CreateBookingResult> {
-    // Staff/admin override path: validate the target renterId exists and is a
-    // RENTER — prevents bookings attached to other staff/admin accounts and
-    // surfaces FK failures as a friendly 400 rather than a generic 500.
-    if (input.renterId !== ctx.userId && this.userRepo) {
-      const [renter] = await this.userRepo.findByIds([input.renterId])
-      if (!renter) {
-        return { ok: false, status: 400, error: 'Renter not found' }
-      }
-      if ((renter.role ?? 'RENTER') !== 'RENTER') {
-        return { ok: false, status: 400, error: 'Target user is not a renter' }
+    // Manual-booking on behalf of a renter (#314, #589). For an OPERATOR_* caller
+    // the check is scope-FIRST: the renter must be in the operator's own customer
+    // set (a prior booking with it). Membership IS the authorization + existence
+    // check (a prior-booking renter necessarily exists), and any out-of-scope id
+    // returns a uniform 403 WITHOUT touching the user table — so it never leaks
+    // whether an arbitrary renterId exists (#396/#475). Staff/bypass keep the
+    // existence + role probe (surfaces FK failures as a friendly 400, not a 500).
+    if (input.renterId !== ctx.userId) {
+      if (isOperatorRole(ctx.role)) {
+        const scoped = ctx.operatorId
+          ? await this.bookingRepo.listRenterIdsForOperator(ctx.operatorId)
+          : []
+        if (!scoped.includes(input.renterId)) {
+          return {
+            ok: false,
+            status: 403,
+            error: 'Cannot book for a renter outside your customers',
+          }
+        }
+      } else if (this.userRepo) {
+        const [renter] = await this.userRepo.findByIds([input.renterId])
+        if (!renter) {
+          return { ok: false, status: 400, error: 'Renter not found' }
+        }
+        if ((renter.role ?? 'RENTER') !== 'RENTER') {
+          return { ok: false, status: 400, error: 'Target user is not a renter' }
+        }
       }
     }
 
