@@ -11,7 +11,7 @@ import type {
 } from '../repositories/types'
 import type { Booking, Vehicle } from '../stores'
 import type { BookingPostCommitDispatcher } from './booking-post-commit-dispatcher'
-import { rentalDays } from './booking-pricing-helpers'
+import { composeBookingTotal, rentalDays } from './booking-pricing-helpers'
 import type { CancelResult, StatusTransitionResult, SubstituteResult } from './booking-types'
 import type { LifecycleTrigger } from './notification-dispatcher'
 
@@ -106,9 +106,16 @@ export class BookingLifecycleService {
             error: 'Replacement vehicle has no usable rate',
           }
         }
-        const insurancePerDay = booking.insuranceSnapshot?.dailyPriceJpy ?? 0
-        const totalPrice =
-          pricing.totalPriceJpy + insurancePerDay * rentalDays(booking.startAt, booking.endAt)
+        // Re-compose off the new vehicle's base through the SAME helper as
+        // creation so a swap can never desync: locked insurance + locked add-ons
+        // (#460) ride along unchanged, only the base re-prices. #855 was the
+        // missing add-on term here; #862 makes divergence structurally impossible.
+        const totalPrice = composeBookingTotal({
+          baseJpy: pricing.totalPriceJpy,
+          insurancePerDayJpy: booking.insuranceSnapshot?.dailyPriceJpy ?? 0,
+          days: rentalDays(booking.startAt, booking.endAt),
+          addOns: booking.addOnSnapshot,
+        })
 
         // Turnaround is location-only and the pickup location is unchanged, so
         // effectiveEndAt is preserved; the repo re-runs the exclusion check for

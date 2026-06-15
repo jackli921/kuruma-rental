@@ -1,6 +1,7 @@
 import { unwrap } from '@/lib/api-error'
 import { getApiBaseUrl } from '@/vite/api-base'
 import { ADD_ON_STATUSES } from '@kuruma/shared/enums'
+import type { AddOnData } from '@kuruma/shared/types/add-on'
 import type { CreateAddOnInput, UpdateAddOnInput } from '@kuruma/shared/validators/add-on'
 import { queryOptions } from '@tanstack/react-query'
 import { z } from 'zod'
@@ -16,8 +17,10 @@ import { z } from 'zod'
 
 export type { CreateAddOnInput, UpdateAddOnInput }
 
-// JSON-serialized AddOn — dates arrive as ISO strings (#711: schema validates
-// `data` at the network seam; the row type is inferred from it).
+// JSON-serialized AddOn — dates arrive as ISO strings. Pinned to the shared wire
+// DTO with `satisfies` (#847) so a producer-side field drift fails to compile
+// here, not silently as a runtime ParseError. The API row type is fenced to the
+// same DTO in api `wire-contract.test.ts`, closing the seam at both ends.
 const addOnSchema = z.object({
   id: z.string(),
   operatorId: z.string(),
@@ -27,8 +30,8 @@ const addOnSchema = z.object({
   status: z.enum(ADD_ON_STATUSES),
   createdAt: z.string(),
   updatedAt: z.string(),
-})
-export type AddOnData = z.infer<typeof addOnSchema>
+}) satisfies z.ZodType<AddOnData>
+export type { AddOnData }
 
 export const ADDON_QUERY_KEY = ['operator-add-ons'] as const
 

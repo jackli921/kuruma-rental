@@ -1,29 +1,39 @@
 import { unwrap } from '@/lib/api-error'
 import { getApiBaseUrl } from '@/vite/api-base'
-import type { LuggageSize } from '@kuruma/shared/lib/luggage'
+import { LUGGAGE_SIZES, TRANSMISSIONS, VEHICLE_CLASS_STATUSES } from '@kuruma/shared/enums'
 import { queryOptions } from '@tanstack/react-query'
+import { z } from 'zod'
 
 // JSON-serialized VehicleClass — dates arrive as ISO strings from the API. The
 // Vite shell owns this DTO (rather than importing the frozen Next module's copy)
 // so it stays self-contained once `modules/classes` is deleted at cutover.
-export interface VehicleClassData {
-  id: string
-  operatorId?: string
-  name: string
-  slug: string
-  description: string | null
-  photos: string[]
-  seats: number
-  luggageCapacity: number
-  luggageSize: LuggageSize
-  transmission: 'AUTO' | 'MANUAL'
-  fuelType: string | null
-  acrissCode: string | null
-  sortOrder: number
-  status: 'ACTIVE' | 'ARCHIVED'
-  createdAt: string
-  updatedAt: string
-}
+// Inferred from the schema (#711) so the compile-time type and the runtime parse
+// at the seam share one source. Mirrors operator-classes/api.ts — the same
+// `toVehicleClass` producer feeds both. Enum domains anchor to the shared
+// @kuruma/shared/enums SSoT so they can't drift from the DB pgEnums (#688).
+// operatorId is pinned required (DB notNull; all three read endpoints serialize
+// it, incl. the public ones), so an absent value fails as drift here rather than
+// as `undefined` deep in render.
+const vehicleClassSchema = z.object({
+  id: z.string(),
+  operatorId: z.string(),
+  name: z.string(),
+  slug: z.string(),
+  description: z.string().nullable(),
+  photos: z.array(z.string()),
+  seats: z.number(),
+  luggageCapacity: z.number(),
+  luggageSize: z.enum(LUGGAGE_SIZES),
+  transmission: z.enum(TRANSMISSIONS),
+  fuelType: z.string().nullable(),
+  acrissCode: z.string().nullable(),
+  sortOrder: z.number(),
+  status: z.enum(VEHICLE_CLASS_STATUSES),
+  createdAt: z.string(),
+  updatedAt: z.string(),
+})
+
+export type VehicleClassData = z.infer<typeof vehicleClassSchema>
 
 // Renter-facing catalog: the public /vehicle-classes endpoint, status-filtered to
 // ACTIVE and sorted server-side by sortOrder. No auth — anonymous visitors browse.
@@ -31,7 +41,7 @@ export async function fetchActiveClasses(): Promise<VehicleClassData[]> {
   const res = await fetch(`${getApiBaseUrl()}/vehicle-classes?status=ACTIVE`, {
     credentials: 'include',
   })
-  return unwrap<VehicleClassData[]>(res)
+  return unwrap(res, vehicleClassSchema.array())
 }
 
 // Public slug lookup. A 404 is "no such class" (returns null so the route renders
@@ -44,7 +54,7 @@ export async function fetchClassBySlug(slug: string): Promise<VehicleClassData |
     },
   )
   if (res.status === 404) return null
-  return unwrap<VehicleClassData>(res)
+  return unwrap(res, vehicleClassSchema)
 }
 
 // Protected single-class read for the booking confirmation label (#511). Unlike
@@ -58,7 +68,7 @@ export async function fetchClassById(id: string): Promise<VehicleClassData | nul
     credentials: 'include',
   })
   if (res.status === 404) return null
-  return unwrap<VehicleClassData>(res)
+  return unwrap(res, vehicleClassSchema)
 }
 
 export function activeClassesQueryOptions() {

@@ -1,6 +1,7 @@
 import { unwrap } from '@/lib/api-error'
 import { getApiBaseUrl } from '@/vite/api-base'
 import { FEE_SCHEDULE_STATUSES, FEE_TYPES, FEE_UNITS } from '@kuruma/shared/enums'
+import type { FeeScheduleData } from '@kuruma/shared/types/fee-schedule'
 import type {
   CreateFeeScheduleInput,
   FeeType,
@@ -17,8 +18,10 @@ import { z } from 'zod'
 
 export type { CreateFeeScheduleInput, UpdateFeeScheduleInput, FeeType, FeeUnit }
 
-// JSON-serialized FeeSchedule — dates arrive as ISO strings (#711: the schema
-// validates `data` at the network seam; the row type is inferred from it).
+// JSON-serialized FeeSchedule — dates arrive as ISO strings. Pinned to the shared
+// wire DTO with `satisfies` (#847) so a producer-side field drift fails to compile
+// here, not silently as a runtime ParseError. The API row type is fenced to the
+// same DTO in api `wire-contract.test.ts`, closing the seam at both ends.
 const feeScheduleSchema = z.object({
   id: z.string(),
   operatorId: z.string(),
@@ -30,8 +33,8 @@ const feeScheduleSchema = z.object({
   status: z.enum(FEE_SCHEDULE_STATUSES),
   createdAt: z.string(),
   updatedAt: z.string(),
-})
-export type FeeScheduleData = z.infer<typeof feeScheduleSchema>
+}) satisfies z.ZodType<FeeScheduleData>
+export type { FeeScheduleData }
 
 export const FEE_QUERY_KEY = ['operator-fees'] as const
 

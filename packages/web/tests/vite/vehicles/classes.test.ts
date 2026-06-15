@@ -1,3 +1,4 @@
+import { ParseError } from '@/lib/api-error'
 import { fetchActiveClasses, fetchClassById, fetchClassBySlug } from '@/vite/vehicles/classes'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
@@ -14,14 +15,19 @@ vi.stubGlobal('fetch', fetchMock)
 
 afterEach(() => fetchMock.mockReset())
 
+// A complete VehicleClassData row — the response schema (#711) now rejects
+// partials, so a fixture exercising a validated path must carry every field
+// (operatorId + luggageSize included, both required).
 const classData = {
   id: 'c1',
+  operatorId: 'op1',
   name: 'Compact',
   slug: 'compact',
   description: null,
   photos: [],
   seats: 5,
   luggageCapacity: 2,
+  luggageSize: 'MEDIUM',
   transmission: 'AUTO',
   fuelType: null,
   acrissCode: 'CDAR',
@@ -97,5 +103,31 @@ describe('fetchClassById', () => {
     expect(fetchMock).toHaveBeenCalledWith('/api/vehicle-classes/a%2Fb', {
       credentials: 'include',
     })
+  })
+})
+
+describe('vehicle-class response validation (#711)', () => {
+  it('rejects the list naming `operatorId` when the producer omits it (drift)', async () => {
+    // operatorId is DB notNull and served on every endpoint; an absent value is
+    // contract drift, not a legacy shape — the schema must fail at the seam.
+    fetchMock.mockResolvedValue(
+      jsonResponse({ success: true, data: [{ ...classData, operatorId: undefined }] }),
+    )
+    const error = await fetchActiveClasses().catch((e: unknown) => e)
+    expect(error).toBeInstanceOf(ParseError)
+    expect((error as ParseError).issues).toContainEqual(
+      expect.objectContaining({ path: expect.arrayContaining(['operatorId']) }),
+    )
+  })
+
+  it('rejects a single class naming `status` when it is an unknown enum value', async () => {
+    fetchMock.mockResolvedValue(
+      jsonResponse({ success: true, data: { ...classData, status: 'DELETED' } }),
+    )
+    const error = await fetchClassBySlug('compact').catch((e: unknown) => e)
+    expect(error).toBeInstanceOf(ParseError)
+    expect((error as ParseError).issues).toContainEqual(
+      expect.objectContaining({ path: expect.arrayContaining(['status']) }),
+    )
   })
 })

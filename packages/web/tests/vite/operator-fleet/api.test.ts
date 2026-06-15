@@ -1,9 +1,17 @@
 import { ApiError, ParseError } from '@/lib/api-error'
 import {
+  type CreateVehicleInput,
   type OperatorFleetVehicle,
+  type UpdateVehicleInput,
   type VehicleDetailResponse,
+  type VehicleRow,
+  bulkUpdateVehicleStatus,
+  createVehicle,
   fetchOperatorFleet,
   fetchVehicleDetail,
+  retireVehicle,
+  updateVehicle,
+  updateVehicleStatus,
   vehicleDetailQueryOptions,
   vehicleRowFromDetail,
 } from '@/vite/operator-fleet/api'
@@ -102,6 +110,40 @@ const fleetRaw = (over: Record<string, unknown> = {}): OperatorFleetVehicle => (
   },
   nextBooking: null,
   activeMaintenanceReason: null,
+  ...over,
+})
+
+// A bare vehicle row as the write endpoints (create/update/status/bulk/retire)
+// return it (#817): shared `VehicleBase` over JSON, WITHOUT the five
+// fleet-overview enrichment fields that `fleetRaw` carries.
+const vehicleRowRaw = (over: Record<string, unknown> = {}): VehicleRow => ({
+  id: 'veh-1',
+  operatorId: 'op-1',
+  classId: 'cls-1',
+  pickupLocationId: 'loc-1',
+  name: 'Toyota Alphard',
+  description: 'Luxury van',
+  photos: ['a.jpg'],
+  seats: 7,
+  luggageCapacity: 4,
+  luggageSize: 'LARGE',
+  transmission: 'AUTO',
+  fuelType: 'Hybrid',
+  licensePlate: 'なにわ 300 あ 12-34',
+  status: 'AVAILABLE',
+  minRentalHours: 4,
+  maxRentalHours: 72,
+  advanceBookingHours: null,
+  make: 'Toyota',
+  model: 'Alphard',
+  year: 2023,
+  color: 'White',
+  dailyRateJpy: 18000,
+  hourlyRateJpy: 2500,
+  shakenExpiryDate: '2027-03-31',
+  insuranceExpiryDate: '2027-03-31',
+  createdAt: '2026-01-01T00:00:00.000Z',
+  updatedAt: '2026-01-02T00:00:00.000Z',
   ...over,
 })
 
@@ -254,5 +296,129 @@ describe('fetchVehicleDetail (#711 response validation)', () => {
     )
 
     await expect(fetchVehicleDetail('veh-1')).rejects.toBeInstanceOf(ParseError)
+  })
+})
+
+describe('operator-fleet writes (#817 response validation)', () => {
+  it('createVehicle POSTs to /vehicles and returns the bare validated row', async () => {
+    const fetchMock = vi.fn(async () => jsonResponse({ success: true, data: vehicleRowRaw() }, 201))
+    vi.stubGlobal('fetch', fetchMock)
+
+    const row = await createVehicle({} as CreateVehicleInput)
+
+    const [url, init] = fetchMock.mock.calls[0]!
+    expect(new URL(url as string, 'http://x').pathname).toBe('/api/vehicles')
+    expect((init as RequestInit).method).toBe('POST')
+    expect(row).toMatchObject({ id: 'veh-1', name: 'Toyota Alphard', status: 'AVAILABLE' })
+  })
+
+  it('createVehicle strips fleet-overview enrichment (bare schema, not the enriched one)', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () =>
+        jsonResponse({ success: true, data: { ...vehicleRowRaw(), utilization: 99 } }, 201),
+      ),
+    )
+
+    const row = await createVehicle({} as CreateVehicleInput)
+
+    expect(row).not.toHaveProperty('utilization')
+  })
+
+  it('updateVehicle PATCHes /vehicles/:id and returns the bare validated row', async () => {
+    const fetchMock = vi.fn(async () => jsonResponse({ success: true, data: vehicleRowRaw() }))
+    vi.stubGlobal('fetch', fetchMock)
+
+    const row = await updateVehicle('veh-1', {} as UpdateVehicleInput)
+
+    const [url, init] = fetchMock.mock.calls[0]!
+    expect(new URL(url as string, 'http://x').pathname).toBe('/api/vehicles/veh-1')
+    expect((init as RequestInit).method).toBe('PATCH')
+    expect(row).toMatchObject({ id: 'veh-1', status: 'AVAILABLE' })
+  })
+
+  it('updateVehicleStatus PATCHes /vehicles/:id/status with the new status and reason', async () => {
+    const fetchMock = vi.fn(async () =>
+      jsonResponse({ success: true, data: vehicleRowRaw({ status: 'MAINTENANCE' }) }),
+    )
+    vi.stubGlobal('fetch', fetchMock)
+
+    const row = await updateVehicleStatus('veh-1', 'MAINTENANCE', 'Oil change')
+
+    const [url, init] = fetchMock.mock.calls[0]!
+    expect(new URL(url as string, 'http://x').pathname).toBe('/api/vehicles/veh-1/status')
+    expect(JSON.parse((init as RequestInit).body as string)).toEqual({
+      status: 'MAINTENANCE',
+      reason: 'Oil change',
+    })
+    expect(row.status).toBe('MAINTENANCE')
+  })
+
+  it('bulkUpdateVehicleStatus PATCHes /vehicles/bulk-status and validates every row', async () => {
+    const fetchMock = vi.fn(async () =>
+      jsonResponse({
+        success: true,
+        data: [vehicleRowRaw({ id: 'veh-1' }), vehicleRowRaw({ id: 'veh-2' })],
+      }),
+    )
+    vi.stubGlobal('fetch', fetchMock)
+
+    const rows = await bulkUpdateVehicleStatus(['veh-1', 'veh-2'], 'MAINTENANCE')
+
+    expect(new URL(fetchMock.mock.calls[0]![0] as string, 'http://x').pathname).toBe(
+      '/api/vehicles/bulk-status',
+    )
+    expect(rows.map((r) => r.id)).toEqual(['veh-1', 'veh-2'])
+  })
+
+  it('retireVehicle DELETEs /vehicles/:id and returns the bare validated row', async () => {
+    const fetchMock = vi.fn(async () =>
+      jsonResponse({ success: true, data: vehicleRowRaw({ status: 'RETIRED' }) }),
+    )
+    vi.stubGlobal('fetch', fetchMock)
+
+    const row = await retireVehicle('veh-1')
+
+    const [url, init] = fetchMock.mock.calls[0]!
+    expect(new URL(url as string, 'http://x').pathname).toBe('/api/vehicles/veh-1')
+    expect((init as RequestInit).method).toBe('DELETE')
+    expect(row.status).toBe('RETIRED')
+  })
+
+  // Each of the three distinct unwrap paths must reject a drifted row:
+  it('createVehicle rejects with ParseError on a drifted row (single body via writeJson)', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () =>
+        jsonResponse({ success: true, data: vehicleRowRaw({ seats: 'lots' }) }, 201),
+      ),
+    )
+
+    await expect(createVehicle({} as CreateVehicleInput)).rejects.toBeInstanceOf(ParseError)
+  })
+
+  it('bulkUpdateVehicleStatus rejects with ParseError when one row drifts (array via writeJson)', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () =>
+        jsonResponse({
+          success: true,
+          data: [vehicleRowRaw(), vehicleRowRaw({ transmission: 'WARP' })],
+        }),
+      ),
+    )
+
+    await expect(bulkUpdateVehicleStatus(['veh-1', 'veh-2'], 'MAINTENANCE')).rejects.toBeInstanceOf(
+      ParseError,
+    )
+  })
+
+  it('retireVehicle rejects with ParseError on a drifted row (inline unwrap path)', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => jsonResponse({ success: true, data: vehicleRowRaw({ createdAt: 42 }) })),
+    )
+
+    await expect(retireVehicle('veh-1')).rejects.toBeInstanceOf(ParseError)
   })
 })

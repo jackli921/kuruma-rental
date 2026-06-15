@@ -1,6 +1,7 @@
 import { unwrap } from '@/lib/api-error'
 import { getApiBaseUrl } from '@/vite/api-base'
 import { type QueryClient, queryOptions } from '@tanstack/react-query'
+import { z } from 'zod'
 
 // #611: operator in-app "new order" red-dot badge. There is no server-side
 // unread/seen state (`/notifications` is an email-delivery log, not an inbox),
@@ -22,10 +23,14 @@ const NEW_ORDER_SCAN_LIMIT = 50
 // plenty; a tight loop would hammer the API for a cosmetic dot.
 const NEW_ORDER_REFETCH_MS = 60_000
 
-/** Minimal row the badge needs: just the creation timestamp (ISO JSON). */
-export interface NewOrderBooking {
-  createdAt: string
-}
+/** Minimal row the badge needs: just the creation timestamp (ISO JSON). The
+ *  /bookings rows carry ~25 other fields; this non-strict schema validates only
+ *  createdAt (always a non-null timestamptz) and strips the rest (#711). */
+const newOrderBookingSchema = z.object({
+  createdAt: z.string(),
+})
+
+export type NewOrderBooking = z.infer<typeof newOrderBookingSchema>
 
 /** Pure: how many bookings were created strictly after the last-seen instant. */
 export function countNewBookings(bookings: readonly NewOrderBooking[], lastSeenAt: string): number {
@@ -40,8 +45,9 @@ export async function fetchNewOrderBookings(): Promise<NewOrderBooking[]> {
   const res = await fetch(`${getApiBaseUrl()}/bookings?${sp.toString()}`, {
     credentials: 'include',
   })
-  const data = await unwrap<NewOrderBooking[]>(res)
-  return data.map((b) => ({ createdAt: b.createdAt }))
+  // The schema strips every field but createdAt, so the parsed rows already are
+  // the minimal NewOrderBooking shape — no post-map narrowing needed.
+  return unwrap(res, newOrderBookingSchema.array())
 }
 
 export function newOrderBookingsQueryOptions(enabled: boolean) {

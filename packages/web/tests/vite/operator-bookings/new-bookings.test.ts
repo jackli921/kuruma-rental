@@ -1,12 +1,22 @@
+import { ParseError } from '@/lib/api-error'
 import {
   LAST_SEEN_STORAGE_KEY,
   NEW_ORDER_SCAN_QUERY_KEY,
   countNewBookings,
+  fetchNewOrderBookings,
   getStoredLastSeenAt,
   markBookingsSeen,
 } from '@/vite/operator-bookings/new-bookings'
 import { QueryClient } from '@tanstack/react-query'
-import { beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+
+function jsonResponse(body: unknown, status = 200): Response {
+  return {
+    ok: status >= 200 && status < 300,
+    status,
+    json: async () => body,
+  } as Response
+}
 
 beforeEach(() => {
   window.localStorage.clear()
@@ -78,5 +88,42 @@ describe('markBookingsSeen', () => {
       new Date('2020-01-01T00:00:00.000Z').getTime(),
     )
     expect(qc.getQueryData(['operator-bookings', 'last-seen-at'])).toBe(stored)
+  })
+})
+
+describe('fetchNewOrderBookings', () => {
+  afterEach(() => vi.unstubAllGlobals())
+
+  it('requests CONFIRMED bookings (limit 50) and strips every field but createdAt', async () => {
+    const fetchMock = vi.fn(async () =>
+      jsonResponse({
+        success: true,
+        data: [
+          {
+            id: 'b1',
+            status: 'CONFIRMED',
+            totalPrice: 30000,
+            createdAt: '2026-06-13T05:00:00.000Z',
+          },
+        ],
+      }),
+    )
+    vi.stubGlobal('fetch', fetchMock)
+
+    const result = await fetchNewOrderBookings()
+
+    expect(fetchMock).toHaveBeenCalledWith('/api/bookings?status=CONFIRMED&limit=50', {
+      credentials: 'include',
+    })
+    // The badge only needs createdAt; the ~25 other booking fields are stripped.
+    expect(result).toEqual([{ createdAt: '2026-06-13T05:00:00.000Z' }])
+  })
+
+  it('rejects with a ParseError when a row lacks createdAt (drift #711)', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => jsonResponse({ success: true, data: [{ id: 'b1', status: 'CONFIRMED' }] })),
+    )
+    await expect(fetchNewOrderBookings()).rejects.toBeInstanceOf(ParseError)
   })
 })

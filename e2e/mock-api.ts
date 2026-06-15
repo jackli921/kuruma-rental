@@ -23,13 +23,31 @@ const TEST_STOREFRONT_CARD = {
   name: 'Best Car Rental Osaka',
   address: '1-2-3 Namba, Chuo-ku, Osaka',
   operatingHours: TEST_OPERATING_HOURS,
+  // #711 3d: the real /storefronts/search wire carries turnaround, per-class
+  // luggage, and store coords — the storefront response schema validates them
+  // now, so the fixture must carry them too (a missing key ParseErrors → 0 cards).
+  turnaroundMinutes: 180,
   classSummaries: [
-    { acrissCode: 'CCAR', label: 'Compact', availableCount: 4 },
-    { acrissCode: 'MVAR', label: 'Minivan', availableCount: 2 },
+    {
+      acrissCode: 'CCAR',
+      label: 'Compact',
+      luggageCapacity: 2,
+      luggageSize: 'SMALL',
+      availableCount: 4,
+    },
+    {
+      acrissCode: 'MVAR',
+      label: 'Minivan',
+      luggageCapacity: 4,
+      luggageSize: 'LARGE',
+      availableCount: 2,
+    },
   ],
   fromDailyPriceJpy: 4500,
   fromHourlyPriceJpy: null,
   representativePhotos: [TEST_STORE_PHOTO],
+  latitude: 34.6658,
+  longitude: 135.5022,
 }
 
 const TEST_STOREFRONT_DETAIL = {
@@ -39,6 +57,10 @@ const TEST_STOREFRONT_DETAIL = {
     address: '1-2-3 Namba, Chuo-ku, Osaka',
     operatorName: 'Best Car Rental',
     operatingHours: TEST_OPERATING_HOURS,
+    // #711 3d: real /storefronts/:id/vehicles sends turnaround on the summary and
+    // per-vehicle luggage; the detail schema validates both (missing key → 404-ish
+    // empty render via ParseError), so the fixture mirrors the wire.
+    turnaroundMinutes: 180,
   },
   vehicles: [
     {
@@ -48,6 +70,8 @@ const TEST_STOREFRONT_DETAIL = {
       model: 'Fit',
       year: 2024,
       seats: 5,
+      luggageCapacity: 2,
+      luggageSize: 'SMALL',
       transmission: 'AUTO',
       acrissCode: 'CCAR',
       classLabel: 'Compact',
@@ -62,6 +86,8 @@ const TEST_STOREFRONT_DETAIL = {
       model: 'Sienta',
       year: 2023,
       seats: 7,
+      luggageCapacity: 4,
+      luggageSize: 'LARGE',
       transmission: 'AUTO',
       acrissCode: 'MVAR',
       classLabel: 'Minivan',
@@ -73,18 +99,22 @@ const TEST_STOREFRONT_DETAIL = {
   nextCursor: null,
 }
 
+// Mirrors the real toVehicleClass wire shape (#711 3c-2 validates it with Zod):
+// operatorId (notNull), luggageSize, and acrissCode are all served by the real
+// API, so the fixture must carry them or the catalog query fails its schema.
 const TEST_CLASS = {
   id: TEST_CLASS_ID,
+  operatorId: 'e2e-operator-1',
   name: 'E2E Test Compact',
   slug: TEST_CLASS_SLUG,
   description: 'Compact class used by the Playwright browse-flow spec.',
   photos: ['https://images.unsplash.com/photo-1734857039653-c1b0a4b3422a?w=600&q=80'],
   seats: 4,
   luggageCapacity: 2,
+  luggageSize: 'MEDIUM',
   transmission: 'AUTO',
   fuelType: 'Petrol',
-  dailyRateJpy: 5000,
-  hourlyRateJpy: null,
+  acrissCode: 'CCAR',
   sortOrder: 0,
   status: 'ACTIVE',
   createdAt: FROZEN_TIMESTAMP,
