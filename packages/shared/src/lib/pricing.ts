@@ -70,3 +70,26 @@ export function calculateBookingPrice(
     breakdown: { days, remainderHours, dailyRateJpy: daily, hourlyRateJpy: hourly },
   }
 }
+
+// Rental length in whole days (ceil, min 1) — the unit insurance is billed in,
+// matching the daily-rate rounding the base price uses for whole-day rentals.
+export function rentalDays(startAt: Date, endAt: Date): number {
+  return Math.max(1, Math.ceil((endAt.getTime() - startAt.getTime()) / (HOURS_PER_DAY * HOUR_MS)))
+}
+
+// The single composition of a booking's totalPrice: base + insurance-per-day ×
+// days + every selected add-on's flat charge. The API (initial creation and
+// substitute() re-pricing) and the web reservation estimate BOTH compose through
+// here so the renter's up-front quote can never desync from the server's
+// authoritative charge — #855 was a silent undercharge when the add-on term was
+// folded into one path and not the other (#862, #867). Pure (FC/IS): unit-tested
+// once, every call site provably identical.
+export function composeBookingTotal(input: {
+  baseJpy: number
+  insurancePerDayJpy: number
+  days: number
+  addOns: ReadonlyArray<{ priceJpy: number }>
+}): number {
+  const addOnsJpy = input.addOns.reduce((sum, addOn) => sum + addOn.priceJpy, 0)
+  return input.baseJpy + input.insurancePerDayJpy * input.days + addOnsJpy
+}
