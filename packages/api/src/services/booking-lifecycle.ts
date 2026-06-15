@@ -107,8 +107,15 @@ export class BookingLifecycleService {
           }
         }
         const insurancePerDay = booking.insuranceSnapshot?.dailyPriceJpy ?? 0
+        // Locked add-on charges (#460) ride along unchanged on a swap — the new
+        // base re-prices, but the renter still owes the same add-ons. Mirrors the
+        // canonical composition in booking-creation.ts (base + insurance + add-ons);
+        // omitting this undercharged by the add-on total on every swap (#855).
+        const addOnsTotal = booking.addOnSnapshot.reduce((sum, a) => sum + a.priceJpy, 0)
         const totalPrice =
-          pricing.totalPriceJpy + insurancePerDay * rentalDays(booking.startAt, booking.endAt)
+          pricing.totalPriceJpy +
+          insurancePerDay * rentalDays(booking.startAt, booking.endAt) +
+          addOnsTotal
 
         // Turnaround is location-only and the pickup location is unchanged, so
         // effectiveEndAt is preserved; the repo re-runs the exclusion check for
