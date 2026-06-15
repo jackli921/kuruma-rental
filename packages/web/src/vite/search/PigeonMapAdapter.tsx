@@ -33,10 +33,12 @@ const GSI_ATTRIBUTION = (
 
 /** Concrete `MapAdapter` (#458). Maps each geocoded result to a pigeon-maps
  *  `<Marker>`; a marker click reports its location id back to the view. The
- *  viewport is fit to ALL pins so a Kansai-wide result set isn't pinned to one
- *  store. `key` on the map remounts it when the result set changes so the fit
- *  recomputes, while leaving the user free to pan/zoom within a result set. */
-export function PigeonMapAdapter({ items, selectedId, onSelect }: MapAdapterProps) {
+ *  viewport fits ALL pins so a Kansai-wide result set isn't pinned to one store —
+ *  unless a region `anchor` is given (#840), which centers the map on the chosen
+ *  area instead. `key` on the map remounts it when the result set OR the anchor
+ *  changes so the fit/center recomputes (region filtering keeps the same pins, so
+ *  the anchor must be in the key), while leaving the user free to pan/zoom. */
+export function PigeonMapAdapter({ items, selectedId, onSelect, anchor = null }: MapAdapterProps) {
   const pins = items
     .map((item) => ({
       id: item.location.locationId,
@@ -45,11 +47,11 @@ export function PigeonMapAdapter({ items, selectedId, onSelect }: MapAdapterProp
     }))
     .filter((p): p is Pin => p.lat !== null && p.lng !== null)
 
-  const viewport = computeViewport(pins)
+  const viewport = computeViewport(pins, anchor)
 
   return (
     <PigeonMap
-      key={pins.map((p) => p.id).join(',')}
+      key={`${anchor ? anchor.join(',') : 'fit'}:${pins.map((p) => p.id).join(',')}`}
       provider={gsiTileProvider}
       attribution={GSI_ATTRIBUTION}
       attributionPrefix={false}

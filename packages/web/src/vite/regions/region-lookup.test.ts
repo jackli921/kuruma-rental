@@ -1,6 +1,11 @@
 import type { RegionNode } from '@kuruma/shared/types/region'
 import { describe, expect, test } from 'vitest'
-import { findRegionBySlug, regionChain, resolveSlugToRegionId } from './region-lookup'
+import {
+  findRegionBySlug,
+  regionChain,
+  resolveRegionAnchor,
+  resolveSlugToRegionId,
+} from './region-lookup'
 
 // A full RegionNode is wide (geo + tree + trilingual-name fields); this factory
 // keeps each case to the only fields under test (id, slug, type, parentId).
@@ -54,6 +59,36 @@ describe('findRegionBySlug', () => {
 
   test('returns undefined for an unknown slug', () => {
     expect(findRegionBySlug(tree, 'nope')).toBeUndefined()
+  })
+})
+
+describe('resolveRegionAnchor', () => {
+  const located: RegionNode[] = [
+    makeRegion({ id: 'reg_namba', slug: 'namba', latitude: 34.6655, longitude: 135.5023 }),
+    makeRegion({ id: 'reg_unlocated', slug: 'unlocated', latitude: null, longitude: null }),
+  ]
+
+  test("returns the region's center as a GeoPoint for a known, located slug", () => {
+    expect(resolveRegionAnchor(located, 'namba')).toEqual({
+      latitude: 34.6655,
+      longitude: 135.5023,
+    })
+  })
+
+  test('returns null when the region exists but has no coordinates', () => {
+    expect(resolveRegionAnchor(located, 'unlocated')).toBeNull()
+  })
+
+  test('returns null for an unknown slug', () => {
+    expect(resolveRegionAnchor(located, 'kyoto')).toBeNull()
+  })
+
+  test('returns null when no slug is chosen (no anchor)', () => {
+    expect(resolveRegionAnchor(located, undefined)).toBeNull()
+  })
+
+  test('returns null before the region list has loaded', () => {
+    expect(resolveRegionAnchor(undefined, 'namba')).toBeNull()
   })
 })
 

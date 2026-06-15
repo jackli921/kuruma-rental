@@ -16,6 +16,10 @@ export interface MapAdapterProps {
   selectedId: string | null
   /** Fired when a marker is clicked, with the selected location's id. */
   onSelect: (selectedId: string) => void
+  /** Chosen region center `[lat, lng]` to focus the map on; null/absent = fit all
+   *  pins (#840). A view concern (where to look), so it rides the adapter contract
+   *  alongside the pins the adapter plots. */
+  anchor?: [number, number] | null
 }
 
 export type MapAdapter = ComponentType<MapAdapterProps>

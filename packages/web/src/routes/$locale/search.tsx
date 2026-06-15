@@ -1,4 +1,4 @@
-import { resolveSlugToRegionId } from '@/vite/regions/region-lookup'
+import { resolveRegionAnchor, resolveSlugToRegionId } from '@/vite/regions/region-lookup'
 import { regionsQueryOptions } from '@/vite/regions/regions-api'
 import { SearchMap } from '@/vite/search/SearchMap'
 import { type ResultView, SearchViewToggle } from '@/vite/search/SearchViewToggle'
@@ -11,6 +11,7 @@ import {
   parseSearchRange,
   searchRangeToSeed,
 } from '@/vite/storefronts/params'
+import { useQuery } from '@tanstack/react-query'
 import {
   type ErrorComponentProps,
   createFileRoute,
@@ -135,6 +136,14 @@ function StorefrontSearchRoute() {
   const { locale } = Route.useParams()
   const { from, to, class: classFilter, pickupLocationId, region } = Route.useSearch()
   const data = Route.useLoaderData()
+  // Resolve the chosen region's center once from the edge-cached list (already
+  // ensured by the loader) so the map can focus on the picked area (#840). The grid
+  // resolves the same anchor internally for ranking — both share resolveRegionAnchor.
+  const { data: regions } = useQuery(regionsQueryOptions())
+  const regionAnchor = resolveRegionAnchor(regions, region)
+  const mapAnchor: [number, number] | null = regionAnchor
+    ? [regionAnchor.latitude, regionAnchor.longitude]
+    : null
 
   return (
     <main className="flex-1 px-4 py-10 sm:px-6 lg:px-8">
@@ -162,7 +171,7 @@ function StorefrontSearchRoute() {
         </div>
 
         {data.view === 'map' ? (
-          <SearchMap result={data.flat} />
+          <SearchMap result={data.flat} anchor={mapAnchor} />
         ) : (
           <StoreGrid
             result={data.storefronts}

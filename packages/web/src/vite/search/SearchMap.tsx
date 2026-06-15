@@ -7,6 +7,8 @@ import { SearchMapList } from './SearchMapList'
 interface SearchMapProps {
   /** null = no valid date range yet → show the date prompt. */
   readonly result: SearchResultsData | null
+  /** Chosen region center to focus the map on; null = fit all pins (#840). */
+  readonly anchor?: [number, number] | null
 }
 
 /**
@@ -15,7 +17,7 @@ interface SearchMapProps {
  * the two-pane layout only renders once there are results. No `dynamic ssr:false`
  * — the Vite shell is a client SPA, so the map host is a plain component.
  */
-export function SearchMap({ result }: SearchMapProps) {
+export function SearchMap({ result, anchor = null }: SearchMapProps) {
   const t = useTranslations('search')
 
   if (result === null) {
@@ -31,5 +33,5 @@ export function SearchMap({ result }: SearchMapProps) {
     )
   }
 
-  return <SearchMapList items={result.items} adapter={PigeonMapAdapter} />
+  return <SearchMapList items={result.items} adapter={PigeonMapAdapter} anchor={anchor} />
 }

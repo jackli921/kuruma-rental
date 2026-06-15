@@ -1,10 +1,8 @@
-import { findRegionBySlug } from '@/vite/regions/region-lookup'
+import { resolveRegionAnchor } from '@/vite/regions/region-lookup'
 import { regionsQueryOptions } from '@/vite/regions/regions-api'
 import { StorefrontCard } from '@/vite/storefronts/StorefrontCard'
 import type { StorefrontSearchResultData } from '@/vite/storefronts/api'
 import { rankStorefronts } from '@/vite/storefronts/rank'
-import type { GeoPoint } from '@kuruma/shared/lib/region-distance'
-import type { RegionNode } from '@kuruma/shared/types/region'
 import { useQuery } from '@tanstack/react-query'
 import { Search } from 'lucide-react'
 import { useTranslations } from 'use-intl'
@@ -38,7 +36,7 @@ export function StoreGrid({
   // Edge-cached and already ensured by the loader, so this resolves synchronously
   // from cache; used only to read the chosen region's centre as the sort anchor.
   const { data: regions } = useQuery(regionsQueryOptions())
-  const anchor = resolveAnchor(regions, region)
+  const anchor = resolveRegionAnchor(regions, region)
 
   if (result === null) {
     return <p className="py-12 text-center text-muted-foreground">{t('needDates')}</p>
@@ -69,15 +67,4 @@ export function StoreGrid({
       ))}
     </div>
   )
-}
-
-/** The chosen region's centre as the distance anchor, or null when absent/coord-less. */
-function resolveAnchor(
-  regions: readonly RegionNode[] | undefined,
-  slug: string | undefined,
-): GeoPoint | null {
-  if (!regions || !slug) return null
-  const region = findRegionBySlug(regions, slug)
-  if (!region || region.latitude === null || region.longitude === null) return null
-  return { latitude: region.latitude, longitude: region.longitude }
 }

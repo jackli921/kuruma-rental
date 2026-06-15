@@ -8,8 +8,12 @@ import en from '../../../messages/en.json'
 
 // Fake adapter standing in for any map library: one button per plotted item,
 // click → onSelect(locationId). Asserts the MapAdapterProps seam — no real tiles.
-const FakeMapAdapter: MapAdapter = ({ items, selectedId, onSelect }) => (
-  <div data-testid="fake-map" data-selected={selectedId ?? ''}>
+const FakeMapAdapter: MapAdapter = ({ items, selectedId, onSelect, anchor }) => (
+  <div
+    data-testid="fake-map"
+    data-selected={selectedId ?? ''}
+    data-anchor={anchor?.join(',') ?? ''}
+  >
     {items.map((item) => (
       <button
         key={item.location.locationId}
@@ -55,10 +59,10 @@ function carAt(
   }
 }
 
-function renderMapList(items: SpecificSearchResult[]) {
+function renderMapList(items: SpecificSearchResult[], anchor?: [number, number] | null) {
   return render(
     <IntlProvider locale="en" messages={en}>
-      <SearchMapList items={items} adapter={FakeMapAdapter} />
+      <SearchMapList items={items} adapter={FakeMapAdapter} anchor={anchor} />
     </IntlProvider>,
   )
 }
@@ -136,6 +140,11 @@ describe('SearchMapList', () => {
   it('offers no "show on map" control for a list-only (null-coord) row', () => {
     renderMapList([carAt('v2', 'Honda Fit', 'loc_umeda', NO_COORDS)])
     expect(screen.queryByRole('button', { name: /show on map/i })).toBeNull()
+  })
+
+  it('threads the region anchor through to the map adapter (#840)', () => {
+    renderMapList([carAt('v1', 'Toyota Yaris', 'loc_namba', GEOCODED)], [34.6655, 135.5023])
+    expect(screen.getByTestId('fake-map')).toHaveAttribute('data-anchor', '34.6655,135.5023')
   })
 
   it('does not rebuild the plotted array on a selection-only re-render (#737)', () => {

@@ -8,7 +8,11 @@ import en from '../../../messages/en.json'
 
 // The host injects the real PigeonMapAdapter → mock pigeon-maps so no tiles load.
 vi.mock('pigeon-maps', () => ({
-  Map: ({ children }: { children: ReactNode }) => <div data-testid="pigeon-map">{children}</div>,
+  Map: ({ children, defaultCenter }: { children: ReactNode; defaultCenter?: [number, number] }) => (
+    <div data-testid="pigeon-map" data-center={defaultCenter ? defaultCenter.join(',') : ''}>
+      {children}
+    </div>
+  ),
   Marker: () => <button type="button" data-testid="marker" />,
 }))
 
@@ -39,10 +43,10 @@ function specific(id: string, name: string): SpecificSearchResult {
   }
 }
 
-function renderMap(result: SearchResultsData | null) {
+function renderMap(result: SearchResultsData | null, anchor?: [number, number] | null) {
   return render(
     <IntlProvider locale="en" messages={en}>
-      <SearchMap result={result} />
+      <SearchMap result={result} anchor={anchor} />
     </IntlProvider>,
   )
 }
@@ -66,5 +70,12 @@ describe('SearchMap', () => {
     renderMap({ items: [specific('v1', 'Toyota Yaris')], nextCursor: null })
     expect(screen.getByText('Toyota Yaris')).toBeInTheDocument()
     expect(screen.getByTestId('pigeon-map')).toBeInTheDocument()
+  })
+
+  it('centers the map on the chosen region anchor (#840)', () => {
+    // The result pin is loc_namba at 34.66,135.5; the anchor differs, so a match
+    // proves the host forwarded the region anchor down to the map, not the pin fit.
+    renderMap({ items: [specific('v1', 'Toyota Yaris')], nextCursor: null }, [34.6655, 135.5023])
+    expect(screen.getByTestId('pigeon-map')).toHaveAttribute('data-center', '34.6655,135.5023')
   })
 })
