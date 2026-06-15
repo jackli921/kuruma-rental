@@ -48,10 +48,18 @@ function makeStorefront(overrides: Partial<StorefrontCardData> = {}): Storefront
   }
 }
 
-function renderCard(storefront: StorefrontCardData) {
+function renderCard(
+  storefront: StorefrontCardData,
+  extra: { distanceKm?: number | null; region?: string } = {},
+) {
   return render(
     <IntlProvider locale="en" messages={en}>
-      <StorefrontCard storefront={storefront} from="2026-07-01T10:00" to="2026-07-03T10:00" />
+      <StorefrontCard
+        storefront={storefront}
+        from="2026-07-01T10:00"
+        to="2026-07-03T10:00"
+        {...extra}
+      />
     </IntlProvider>,
   )
 }
@@ -82,6 +90,16 @@ describe('StorefrontCard', () => {
     expect(link).toHaveAttribute('data-locationid', 'loc-1')
     expect(link).toHaveAttribute('data-from', '2026-07-01T10:00')
     expect(link).toHaveAttribute('data-rangeto', '2026-07-03T10:00')
+  })
+
+  it('shows the great-circle distance label, rounded to one decimal, when a distance is given (#840)', () => {
+    renderCard(makeStorefront(), { distanceKm: 2.14 })
+    expect(screen.getByText('~2.1 km')).toBeInTheDocument()
+  })
+
+  it('omits the distance label when no anchor distance is provided (#840)', () => {
+    renderCard(makeStorefront(), { distanceKm: null })
+    expect(screen.queryByText(/km$/)).not.toBeInTheDocument()
   })
 
   it('declares explicit 4:3 width and height on the photo so the browser reserves the box (#440)', () => {

@@ -14,6 +14,8 @@ interface StorefrontCardProps {
   /** Active result filters forwarded so they survive the drill-down (#499). */
   readonly classFilter?: string | string[] | undefined
   readonly pickupLocationId?: string | undefined
+  /** Great-circle km from the search anchor (#840); null/absent hides the label. */
+  readonly distanceKm?: number | null
 }
 
 /**
@@ -28,6 +30,7 @@ export function StorefrontCard({
   to,
   classFilter,
   pickupLocationId,
+  distanceKm,
 }: StorefrontCardProps) {
   const t = useTranslations('search')
   const locale = useLocale()
@@ -72,6 +75,11 @@ export function StorefrontCard({
             <MapPin className="size-3.5 shrink-0" />
             <span className="line-clamp-1">{storefront.address}</span>
           </p>
+          {distanceKm != null && (
+            <p className="mt-1 text-xs font-medium text-foreground">
+              {t('distance', { km: distanceKm.toFixed(1) })}
+            </p>
+          )}
         </div>
         <ClassSummaryBadges summaries={storefront.classSummaries} />
         <p className="flex items-center gap-1 text-xs text-muted-foreground">

@@ -1018,6 +1018,7 @@
     "fromHourly": "¥{price}起／小时",
     "noPrice": "价格请咨询",
     "turnaround": "两次租赁间隔约{hours}小时",
+    "distance": "约{km} km",
     "emptyTurnaroundHint": "车辆在两次租赁之间需要准备时间，紧接着可能无法预订。请尝试选择较晚的取车日期。",
     "classCount": "{label} {count}辆",
     "seats": "{count}座",

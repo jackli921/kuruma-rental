@@ -3,9 +3,9 @@ import { regionsQueryOptions } from '@/vite/regions/regions-api'
 import { SearchMap } from '@/vite/search/SearchMap'
 import { type ResultView, SearchViewToggle } from '@/vite/search/SearchViewToggle'
 import { fetchSearchResults } from '@/vite/search/api'
-import { StorefrontCard } from '@/vite/storefronts/StorefrontCard'
+import { StoreGrid } from '@/vite/storefronts/StoreGrid'
 import { StorefrontSearchForm } from '@/vite/storefronts/StorefrontSearchForm'
-import { type StorefrontSearchResultData, fetchStorefronts } from '@/vite/storefronts/api'
+import { fetchStorefronts } from '@/vite/storefronts/api'
 import {
   normalizeClassFilter,
   parseSearchRange,
@@ -17,7 +17,6 @@ import {
   redirect,
   useRouter,
 } from '@tanstack/react-router'
-import { Search } from 'lucide-react'
 import { useTranslations } from 'use-intl'
 
 // All optional (`?: T | undefined`): callers (StorefrontCard, the search form,
@@ -171,53 +170,10 @@ function StorefrontSearchRoute() {
             to={to ?? ''}
             classFilter={classFilter}
             pickupLocationId={pickupLocationId}
+            region={region}
           />
         )}
       </div>
     </main>
-  )
-}
-
-/** Slice-5 storefront grid — the default view. Forwards active filters (#499). */
-function StoreGrid({
-  result,
-  from,
-  to,
-  classFilter,
-  pickupLocationId,
-}: {
-  readonly result: StorefrontSearchResultData | null
-  readonly from: string
-  readonly to: string
-  readonly classFilter?: string | string[] | undefined
-  readonly pickupLocationId?: string | undefined
-}) {
-  const t = useTranslations('search')
-
-  if (result === null) {
-    return <p className="py-12 text-center text-muted-foreground">{t('needDates')}</p>
-  }
-  if (result.storefronts.length === 0) {
-    return (
-      <div className="flex flex-col items-center justify-center py-20 text-center">
-        <Search className="mb-4 size-12 text-muted-foreground/30" />
-        <p className="text-lg text-muted-foreground">{t('empty')}</p>
-        <p className="mt-2 max-w-md text-sm text-muted-foreground/80">{t('emptyTurnaroundHint')}</p>
-      </div>
-    )
-  }
-  return (
-    <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
-      {result.storefronts.map((storefront) => (
-        <StorefrontCard
-          key={storefront.locationId}
-          storefront={storefront}
-          from={from}
-          to={to}
-          classFilter={classFilter}
-          pickupLocationId={pickupLocationId}
-        />
-      ))}
-    </div>
   )
 }
