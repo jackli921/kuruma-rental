@@ -11,7 +11,7 @@ import type {
   UserRepository,
 } from '../repositories/types'
 import type { BookingPostCommitDispatcher } from './booking-post-commit-dispatcher'
-import { MS_PER_MINUTE, rentalDays } from './booking-pricing-helpers'
+import { MS_PER_MINUTE, composeBookingTotal, rentalDays } from './booking-pricing-helpers'
 import type {
   BookingVerificationGate,
   CreateBookingInput,
@@ -219,8 +219,6 @@ export class BookingCreationService {
         code: pricing.code,
       }
     }
-    let totalPrice = pricing.totalPriceJpy
-
     // Selected insurance: snapshot the chosen ACTIVE option from THIS operator.
     let insuranceOptionId: string | null = null
     let insuranceSnapshot: InsuranceSnapshot | null = null
@@ -236,7 +234,6 @@ export class BookingCreationService {
         dailyPriceJpy: opt.dailyPriceJpy,
         deductibleJpy: opt.deductibleJpy,
       }
-      totalPrice += opt.dailyPriceJpy * rentalDays(input.startAt, input.endAt)
     }
 
     // Fee snapshot: this operator's ACTIVE fees that are operator-wide or match
@@ -254,9 +251,10 @@ export class BookingCreationService {
         vehicleClassId: f.vehicleClassId,
       }))
 
-    // Selected paid add-ons (#460): each flat priceJpy is added to totalPrice and
-    // snapshotted. One ACTIVE-only, this-operator read validates membership +
-    // tenant + active in a single query (a foreign/archived id is simply absent
+    // Selected paid add-ons (#460): each flat priceJpy is snapshotted here and
+    // folded into the total below via composeBookingTotal. One ACTIVE-only,
+    // this-operator read validates membership + tenant + active in a single
+    // query (a foreign/archived id is simply absent
     // -> 400). De-dup so a repeated id is charged once (quantity is out of MVP).
     const addOnSnapshot: AddOnSnapshot[] = []
     if (input.addOnIds.length > 0) {
@@ -266,9 +264,16 @@ export class BookingCreationService {
         const addOn = availableById.get(addOnId)
         if (!addOn) return { ok: false, status: 400, error: 'Add-on is not available' }
         addOnSnapshot.push({ addOnId: addOn.id, name: addOn.name, priceJpy: addOn.priceJpy })
-        totalPrice += addOn.priceJpy
       }
     }
+
+    // One composition for create AND substitute() — never hand-summed twice (#862).
+    const totalPrice = composeBookingTotal({
+      baseJpy: pricing.totalPriceJpy,
+      insurancePerDayJpy: insuranceSnapshot?.dailyPriceJpy ?? 0,
+      days: rentalDays(input.startAt, input.endAt),
+      addOns: addOnSnapshot,
+    })
 
     const bookingCode = this.generateCode()
 
