@@ -1,6 +1,7 @@
 import { unwrap } from '@/lib/api-error'
 import { getApiBaseUrl } from '@/vite/api-base'
 import { INSURANCE_STATUSES } from '@kuruma/shared/enums'
+import type { InsuranceOptionData } from '@kuruma/shared/types/insurance-option'
 import type {
   CreateInsuranceOptionInput,
   UpdateInsuranceOptionInput,
@@ -18,8 +19,10 @@ import { z } from 'zod'
 
 export type { CreateInsuranceOptionInput, UpdateInsuranceOptionInput }
 
-// JSON-serialized InsuranceOption — dates arrive as ISO strings (#711: schema
-// validates `data` at the network seam; the row type is inferred from it).
+// JSON-serialized InsuranceOption — dates arrive as ISO strings. Pinned to the
+// shared wire DTO with `satisfies` (#847) so a producer-side field drift fails to
+// compile here, not silently as a runtime ParseError. The API row type is fenced
+// to the same DTO in api `wire-contract.test.ts`, closing the seam at both ends.
 const insuranceOptionSchema = z.object({
   id: z.string(),
   operatorId: z.string(),
@@ -31,8 +34,8 @@ const insuranceOptionSchema = z.object({
   status: z.enum(INSURANCE_STATUSES),
   createdAt: z.string(),
   updatedAt: z.string(),
-})
-export type InsuranceOptionData = z.infer<typeof insuranceOptionSchema>
+}) satisfies z.ZodType<InsuranceOptionData>
+export type { InsuranceOptionData }
 
 export const INSURANCE_QUERY_KEY = ['operator-insurance'] as const
 
