@@ -62,6 +62,7 @@ export function StoreGrid({
           to={to}
           classFilter={classFilter}
           pickupLocationId={pickupLocationId}
+          region={region}
           distanceKm={storefront.distanceKm}
         />
       ))}

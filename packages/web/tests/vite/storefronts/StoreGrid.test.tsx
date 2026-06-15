@@ -9,7 +9,15 @@ import { describe, expect, it, vi } from 'vitest'
 import en from '../../../messages/en.json'
 
 vi.mock('@tanstack/react-router', () => ({
-  Link: ({ to, children }: { to: string; children: ReactNode }) => <a href={to}>{children}</a>,
+  Link: ({
+    to,
+    search,
+    children,
+  }: { to: string; search?: { region?: string }; children: ReactNode }) => (
+    <a href={to} data-region={search?.region}>
+      {children}
+    </a>
+  ),
 }))
 
 function card(name: string, latitude: number | null, longitude: number | null): StorefrontCardData {
@@ -69,6 +77,15 @@ describe('StoreGrid', () => {
     const order = screen.getAllByRole('heading', { level: 2 }).map((h) => h.textContent)
     expect(order).toEqual(['Near Store', 'Far Store'])
     expect(screen.getAllByText(/ km$/)).toHaveLength(2)
+  })
+
+  it('forwards the chosen region into every card link so the drill-down keeps its context (#840)', () => {
+    renderGrid({ storefronts: [NEAR, FAR], nextCursor: null }, 'namba')
+    const links = screen.getAllByRole('link')
+    expect(links).toHaveLength(2)
+    for (const link of links) {
+      expect(link).toHaveAttribute('data-region', 'namba')
+    }
   })
 
   it('with no region: keeps the API order and shows no distance labels (#840)', () => {

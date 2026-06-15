@@ -15,7 +15,13 @@ vi.mock('@tanstack/react-router', () => ({
   }: {
     to: string
     params?: { locale?: string }
-    search?: { vehicleId?: string; locationId?: string; from?: string; to?: string }
+    search?: {
+      vehicleId?: string
+      locationId?: string
+      from?: string
+      to?: string
+      region?: string
+    }
     children: ReactNode
   }) => (
     <a
@@ -26,6 +32,7 @@ vi.mock('@tanstack/react-router', () => ({
       data-location={search?.locationId}
       data-from={search?.from}
       data-rangeto={search?.to}
+      data-region={search?.region}
     >
       {children}
     </a>
@@ -65,10 +72,15 @@ function makeDetail(vehicles: AvailableVehicleData[]): StorefrontDetailData {
   }
 }
 
-function renderDetail(detail: StorefrontDetailData) {
+function renderDetail(detail: StorefrontDetailData, extra: { region?: string } = {}) {
   return render(
     <IntlProvider locale="en" messages={en}>
-      <StorefrontDetailView detail={detail} from="2026-07-01T10:00" to="2026-07-03T10:00" />
+      <StorefrontDetailView
+        detail={detail}
+        from="2026-07-01T10:00"
+        to="2026-07-03T10:00"
+        {...extra}
+      />
     </IntlProvider>,
   )
 }
@@ -102,6 +114,18 @@ describe('StorefrontDetailView', () => {
     expect(back).toHaveAttribute('data-locale', 'en')
     expect(back).toHaveAttribute('data-from', '2026-07-01T10:00')
     expect(back).toHaveAttribute('data-rangeto', '2026-07-03T10:00')
+  })
+
+  it('carries the chosen region on the back-to-search link so nearest-first survives a return (#840)', () => {
+    renderDetail(makeDetail([]), { region: 'namba' })
+    const back = screen.getByText('Back to search').closest('a')
+    expect(back).toHaveAttribute('data-region', 'namba')
+  })
+
+  it('omits the region param from the back link when no region was chosen (#840)', () => {
+    renderDetail(makeDetail([]))
+    const back = screen.getByText('Back to search').closest('a')
+    expect(back).not.toHaveAttribute('data-region')
   })
 
   it("carries the storefront location and date range into each car's booking CTA", () => {
