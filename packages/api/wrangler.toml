@@ -66,21 +66,31 @@ namespace_id = "1005"
 simple.limit = 1
 simple.period = 10
 
-# R2 bucket for vehicle photo uploads — DISABLED.
-# R2 is not enabled on the current Cloudflare account (blocked on #304 account
-# migration). Re-enable by uncommenting once R2 is provisioned:
-#   npx wrangler r2 bucket create kuruma-vehicle-photos
-#   npx wrangler r2 bucket dev-url-enable kuruma-vehicle-photos
-# With the binding commented out, wrangler deploy no longer calls the R2 API
-# (which was returning 10042 "Please enable R2"). Runtime: the composition
-# root falls back to DisabledPhotoStorage, which returns a clear 500 on any
-# upload attempt instead of silently accepting into ephemeral per-request memory.
-# [[r2_buckets]]
-# binding = "VEHICLE_PHOTOS"
-# bucket_name = "kuruma-vehicle-photos"
+# R2 buckets — R2 enabled on the account + buckets created 2026-06-14.
+# VEHICLE_PHOTOS: public car photos, served via VEHICLE_PHOTOS_PUBLIC_URL (below).
+# The composition root uses R2PhotoStorage only when BOTH the binding and that var
+# are present; otherwise DisabledPhotoStorage throws on upload (repositories.ts:281).
+# RENTER_DOCUMENTS: private renter ID docs, served through the Worker (no public URL).
+[[r2_buckets]]
+binding = "VEHICLE_PHOTOS"
+bucket_name = "kuruma-vehicle-photos"
+
+[[r2_buckets]]
+binding = "RENTER_DOCUMENTS"
+bucket_name = "kuruma-renter-documents"
 
 [vars]
 WEB_ORIGIN = "https://kuruma-rental.kanata-studio-dev.workers.dev"
+
+# Transactional email (Resend). EMAIL_FROM is the public "from" address (not a
+# secret), so it lives here as a var. RESEND_API_KEY is a Worker secret set via
+# rotate-secrets.yml. Must be on the Resend-verified sending domain.
+EMAIL_FROM = "noreply@mail.jack-li.dev"
+
+# Public base URL for vehicle photos (r2.dev public access on kuruma-vehicle-photos).
+# Required non-empty or photo upload falls back to DisabledPhotoStorage
+# (repositories.ts:281, r2-photo-storage.ts:38).
+VEHICLE_PHOTOS_PUBLIC_URL = "https://pub-a6e9e98522e945a7aa1871f4fe741448.r2.dev"
 
 # Monitoring (#361). The deployed version id is exposed as CF_VERSION_METADATA
 # and used as the Sentry release tag so errors group per deploy.
