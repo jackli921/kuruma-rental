@@ -152,6 +152,9 @@ export function createBookingRoutes(service: BookingService) {
       // (operator-user-isolation.test.ts). Everyone else books as themselves with
       // source forced to DIRECT (no advance-booking-hours bypass via MANUAL).
       const isManualBooker = STAFF_ROLES.has(ctx.role) || isOperatorRole(ctx.role)
+      // #589 1c: only manual bookers may register a walk-in customer inline; a
+      // renter's walkInCustomer is ignored (they book as themselves).
+      const walkInCustomer = isManualBooker ? parsed.data.walkInCustomer : undefined
       const renterId = isManualBooker && parsed.data.renterId ? parsed.data.renterId : ctx.userId
       const source = isManualBooker ? parsed.data.source : 'DIRECT'
 
@@ -171,6 +174,9 @@ export function createBookingRoutes(service: BookingService) {
         insuranceOptionId: parsed.data.insuranceOptionId ?? null,
         addOnIds: parsed.data.addOnIds,
         renterId,
+        // #589 1c: include walkInCustomer only when present, never as explicit
+        // undefined (exactOptionalPropertyTypes); the service prefers it over renterId.
+        ...(walkInCustomer ? { walkInCustomer } : {}),
         startAt: new Date(parsed.data.startAt),
         endAt: new Date(parsed.data.endAt),
         source,

@@ -13,7 +13,14 @@ export interface CreateBookingInput {
   // Selected paid add-on ids (#460). Required at the service boundary (the
   // validator defaults it to []); the route forwards parsed.data.addOnIds.
   addOnIds: string[]
+  // The booking's renter — the route always fills it: the authenticated caller for
+  // a self-serve booking, or a target renter for a staff/operator manual booking.
+  // For a walk-in (#589 1c) it is ignored: walkInCustomer takes over and the
+  // service creates + uses a fresh renter instead.
   renterId: string
+  // #589 1c: operator walk-in — create a fresh renter (name + phone, no email)
+  // and book for them. The service resolves this to the concrete renterId it uses.
+  walkInCustomer?: { name: string; phone: string }
   startAt: Date
   endAt: Date
   source: Booking['source']
