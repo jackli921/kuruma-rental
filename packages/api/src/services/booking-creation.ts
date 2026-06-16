@@ -57,32 +57,50 @@ export class BookingCreationService {
     input: CreateBookingInput,
     now: Date = new Date(),
   ): Promise<CreateBookingResult> {
-    // Manual-booking on behalf of a renter (#314, #589). For an OPERATOR_* caller
-    // the check is scope-FIRST: the renter must be in the operator's own customer
-    // set (a prior booking with it). Membership IS the authorization + existence
-    // check (a prior-booking renter necessarily exists), and any out-of-scope id
-    // returns a uniform 403 WITHOUT touching the user table — so it never leaks
-    // whether an arbitrary renterId exists (#396/#475). Staff/bypass keep the
-    // existence + role probe (surfaces FK failures as a friendly 400, not a 500).
-    if (input.renterId !== ctx.userId) {
-      if (isOperatorRole(ctx.role)) {
-        const scoped = ctx.operatorId
-          ? await this.bookingRepo.listRenterIdsForOperator(ctx.operatorId)
-          : []
-        if (!scoped.includes(input.renterId)) {
-          return {
-            ok: false,
-            status: 403,
-            error: 'Cannot book for a renter outside your customers',
+    // Resolve the booking's renter (#314, #589). Three cases:
+    //  - WALK-IN (1c): the operator registers a brand-new customer inline.
+    //    createWalkInRenter ALWAYS makes a fresh renter (never deduped by phone),
+    //    so a booking can't be attached to — nor the existence probed of — another
+    //    tenant's customer (#396/#475). The walk-in IS the authorization, so it
+    //    skips the scope check below. Created pre-tx: a rare failed booking orphans
+    //    a childless renter, which is invisible (no booking => never in operator
+    //    scope) — YAGNI vs widening TransactionRepos with a userRepo for this.
+    //  - EXISTING renter (1b): operator authz is scope-FIRST — membership IS the
+    //    authorization + existence check; any out-of-scope id returns a uniform
+    //    403 WITHOUT touching the user table (no enumeration oracle). Staff/bypass
+    //    keep the exists+role probe (FK failures => friendly 400, not 500).
+    //  - SELF: renterId === ctx.userId (renter self-serve).
+    let renterId: string
+    if (input.walkInCustomer) {
+      if (!this.userRepo) {
+        // Invariant: the composition root always wires userRepo. Throw (→ 500 at
+        // the boundary) rather than silently book without creating the renter.
+        throw new Error('createWalkInRenter requires a userRepo (composition wiring)')
+      }
+      const renter = await this.userRepo.createWalkInRenter(input.walkInCustomer)
+      renterId = renter.id
+    } else {
+      renterId = input.renterId
+      if (renterId !== ctx.userId) {
+        if (isOperatorRole(ctx.role)) {
+          const scoped = ctx.operatorId
+            ? await this.bookingRepo.listRenterIdsForOperator(ctx.operatorId)
+            : []
+          if (!scoped.includes(renterId)) {
+            return {
+              ok: false,
+              status: 403,
+              error: 'Cannot book for a renter outside your customers',
+            }
           }
-        }
-      } else if (this.userRepo) {
-        const [renter] = await this.userRepo.findByIds([input.renterId])
-        if (!renter) {
-          return { ok: false, status: 400, error: 'Renter not found' }
-        }
-        if ((renter.role ?? 'RENTER') !== 'RENTER') {
-          return { ok: false, status: 400, error: 'Target user is not a renter' }
+        } else if (this.userRepo) {
+          const [renter] = await this.userRepo.findByIds([renterId])
+          if (!renter) {
+            return { ok: false, status: 400, error: 'Renter not found' }
+          }
+          if ((renter.role ?? 'RENTER') !== 'RENTER') {
+            return { ok: false, status: 400, error: 'Target user is not a renter' }
+          }
         }
       }
     }
@@ -100,7 +118,10 @@ export class BookingCreationService {
     // on), an unverified renter is blocked here — before any booking work. Runs
     // AFTER idempotency replay so a previously-accepted booking stays replayable
     // even if the renter's document later expires.
-    if (this.verificationGate) {
+    // #589 1c: a walk-in is an operator-initiated manual booking — like other
+    // manual bookings it captures verification operationally at pickup, not via the
+    // renter document gate (the freshly-created customer has no documents on file).
+    if (this.verificationGate && !input.walkInCustomer) {
       const gate = await this.verificationGate(ctx, input)
       if (!gate.ok) return gate
     }
@@ -113,7 +134,7 @@ export class BookingCreationService {
     for (let attempt = 0; attempt < MAX_BOOKING_CODE_ATTEMPTS; attempt++) {
       try {
         const result = await this.runInTransaction((repos) =>
-          this.submitInTx(ctx, input, now, repos),
+          this.submitInTx(ctx, input, renterId, now, repos),
         )
         if (!result.ok) return result // domain validation failure — never retried
         // Post-commit side effects (#335 thread + #393 notifications) — never in
@@ -160,6 +181,9 @@ export class BookingCreationService {
   private async submitInTx(
     ctx: CallerContext,
     input: CreateBookingInput,
+    // Resolved in `create` (walk-in → freshly created renter; otherwise the
+    // authorized existing renter or self). Never input.renterId, which is optional.
+    renterId: string,
     now: Date,
     repos: TransactionRepos,
   ): Promise<CreateBookingResult> {
@@ -299,7 +323,7 @@ export class BookingCreationService {
     // event append, so a rolled-back insert leaves no orphan event (atomicity).
     const booking = await repos.bookingRepo.create(ctx, {
       operatorId,
-      renterId: input.renterId,
+      renterId,
       classId,
       requestedVehicleId: input.requestedVehicleId,
       assignedVehicleId,
