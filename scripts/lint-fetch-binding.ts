@@ -31,12 +31,16 @@ const RUNTIME_ROOTS = [
 ]
 
 // A default initializer set to the bare global fetch: `= fetch` (optionally
-// `globalThis.`/`self.`-qualified — `= globalThis.fetch` captures it just as
-// detached) followed by a `,` / `)` that closes the param, or end-of-line when
-// the `)` is on the next line (a last param without a trailing comma).
-// `= fetch.bind(...)` has a `.` after `fetch` and `= fetch(url)` has a `(`, so
-// neither matches — only the un-bound capture does.
-const DETACHED_FETCH_DEFAULT = /=\s*(?:globalThis\.|self\.)?fetch\s*(?:[,)]|$)/
+// `globalThis.`/`self.`/`window.`-qualified — each captures it just as detached),
+// with an OPTIONAL `as <type>` cast, followed by a `,` / `)` that closes the
+// param, or end-of-line when the `)` is on the next line (a last param without a
+// trailing comma). The `(?!\s*[.(])` right after `fetch` rejects the safe forms:
+// `= fetch.bind(...)` (a `.`) and `= fetch(url)` (a `(`). A cast does NOT launder
+// the bug — `= fetch as typeof fetch` is still an unbound capture (and that exact
+// `as typeof fetch` shape already rides on the bound fix, one copy-paste away) —
+// so the cast is matched and flagged unless `.bind` precedes it.
+const DETACHED_FETCH_DEFAULT =
+  /=\s*(?:globalThis\.|self\.|window\.)?fetch\b(?!\s*[.(])(?:\s+as\s+[^,)]+?)?\s*(?:[,)]|$)/
 
 /**
  * Blanks line comments, block comments, and string/template literals while
@@ -102,7 +106,7 @@ function collectTsFiles(dir: string): string[] {
     if (statSync(full).isDirectory()) {
       if (entry === 'tests' || entry === '__tests__') continue
       files.push(...collectTsFiles(full))
-    } else if (/\.(ts|tsx|mts)$/.test(entry) && !/\.test\.(ts|tsx)$/.test(entry)) {
+    } else if (/\.(c|m)?[jt]sx?$/.test(entry) && !/\.test\.(c|m)?[jt]sx?$/.test(entry)) {
       files.push(full)
     }
   }
