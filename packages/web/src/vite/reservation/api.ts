@@ -1,25 +1,28 @@
 import { unwrap } from '@/lib/api-error'
 import { getApiBaseUrl } from '@/vite/api-base'
+import type { StorefrontAddOnData, StorefrontInsuranceData } from '@kuruma/shared/types/storefront'
 import { z } from 'zod'
 
 // JSON shapes returned by the public storefront endpoints the reservation wizard
-// consumes (#460/#392). The Vite shell owns these DTOs so it stays free of the
-// frozen Next module's process.env path. The API serializes to JSON, so there
-// are no Date instances. These mirror the renter-safe projections in
-// services/storefront-detail.ts (StorefrontAddOn / StorefrontInsuranceOption).
+// consumes (#460/#392). The Vite shell owns the runtime schema so it stays free
+// of the frozen Next module's process.env path. The API serializes to JSON, so
+// there are no Date instances.
 
-// #711: the schema is the single source — the DTO type is inferred from it, so
-// web's compile-time shape and the runtime parse at the seam derive from one
-// definition and cannot drift. A renamed/dropped field fails as a ParseError in
-// the fetch helpers below instead of surfacing as `undefined` deep in the wizard.
+// #711/#864: the shared `Storefront*Data` DTO is the single source. The schema
+// pins to it with `satisfies z.ZodType<…>`, and the API producer (storefront-
+// detail.ts) aliases the SAME DTO, so web's compile-time shape and the producer
+// derive from one definition and cannot drift. A producer-side field rename
+// fails `typecheck` on both ends; a runtime body that drifts fails as a
+// ParseError in the fetch helpers below instead of surfacing as `undefined` deep
+// in the wizard.
 export const reservationAddOnSchema = z.object({
   id: z.string(),
   name: z.string(),
   description: z.string().nullable(),
   /** Flat price charged once per booking (not per-day). */
   priceJpy: z.number(),
-})
-export type ReservationAddOn = z.infer<typeof reservationAddOnSchema>
+}) satisfies z.ZodType<StorefrontAddOnData>
+export type ReservationAddOn = StorefrontAddOnData
 
 export const reservationInsuranceOptionSchema = z.object({
   id: z.string(),
@@ -28,8 +31,8 @@ export const reservationInsuranceOptionSchema = z.object({
   /** Per-day coverage price (billed × rental days). */
   dailyPriceJpy: z.number(),
   deductibleJpy: z.number().nullable(),
-})
-export type ReservationInsuranceOption = z.infer<typeof reservationInsuranceOptionSchema>
+}) satisfies z.ZodType<StorefrontInsuranceData>
+export type ReservationInsuranceOption = StorefrontInsuranceData
 
 // Public endpoints — no auth. ACTIVE-only, single-operator reads (the API seals
 // cross-tenant leaks). A 404 (unknown/archived storefront) surfaces as an
