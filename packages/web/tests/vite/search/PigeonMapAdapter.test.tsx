@@ -49,6 +49,11 @@ vi.mock('pigeon-maps', () => ({
       onClick={() => onClick?.({})}
     />
   ),
+  Overlay: ({ children, anchor }: { children: ReactNode; anchor: [number, number] }) => (
+    <div data-testid="overlay" data-anchor={anchor.join(',')}>
+      {children}
+    </div>
+  ),
 }))
 
 function carAt(
@@ -215,6 +220,24 @@ describe('PigeonMapAdapter', () => {
     const map = screen.getByTestId('pigeon-map')
     expect(map).toHaveAttribute('data-center', '34.7025,135.4959')
     expect(map).toHaveAttribute('data-zoom', '12') // SINGLE_PIN_ZOOM
+  })
+
+  it('renders the selected popup at its pin via renderSelected, and nothing when unselected', () => {
+    const renderSelected = (item: SpecificSearchResult) => (
+      <div data-testid="popup">{item.location.locationId}</div>
+    )
+    const props = {
+      items: [carAt('loc_namba', { latitude: 34.6627, longitude: 135.5023 })],
+      onSelect: () => {},
+      renderSelected,
+    }
+    const { rerender } = render(<PigeonMapAdapter {...props} selectedId={null} />)
+    expect(screen.queryByTestId('popup')).toBeNull()
+
+    rerender(<PigeonMapAdapter {...props} selectedId="loc_namba" />)
+    const overlay = screen.getByTestId('overlay')
+    expect(overlay).toHaveAttribute('data-anchor', '34.6627,135.5023')
+    expect(screen.getByTestId('popup')).toHaveTextContent('loc_namba')
   })
 })
 

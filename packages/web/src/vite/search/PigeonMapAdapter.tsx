@@ -1,4 +1,4 @@
-import { Marker, Map as PigeonMap } from 'pigeon-maps'
+import { Marker, Overlay, Map as PigeonMap } from 'pigeon-maps'
 import type { MapAdapterProps } from './MapAdapter'
 import { type Pin, focusViewport } from './viewport'
 
@@ -38,7 +38,13 @@ const GSI_ATTRIBUTION = (
  *  area instead. `key` on the map remounts it when the result set OR the anchor
  *  changes so the fit/center recomputes (region filtering keeps the same pins, so
  *  the anchor must be in the key), while leaving the user free to pan/zoom. */
-export function PigeonMapAdapter({ items, selectedId, onSelect, anchor = null }: MapAdapterProps) {
+export function PigeonMapAdapter({
+  items,
+  selectedId,
+  onSelect,
+  anchor = null,
+  renderSelected,
+}: MapAdapterProps) {
   const pins = items
     .map((item) => ({
       id: item.location.locationId,
@@ -48,6 +54,10 @@ export function PigeonMapAdapter({ items, selectedId, onSelect, anchor = null }:
     .filter((p): p is Pin => p.lat !== null && p.lng !== null)
 
   const viewport = focusViewport(pins, anchor, selectedId)
+
+  const selectedPin = selectedId === null ? null : (pins.find((p) => p.id === selectedId) ?? null)
+  const selectedItem =
+    selectedId === null ? null : (items.find((i) => i.location.locationId === selectedId) ?? null)
 
   return (
     <PigeonMap
@@ -66,6 +76,11 @@ export function PigeonMapAdapter({ items, selectedId, onSelect, anchor = null }:
           onClick={() => onSelect(pin.id)}
         />
       ))}
+      {selectedPin && selectedItem && renderSelected && (
+        <Overlay anchor={[selectedPin.lat, selectedPin.lng]} offset={[120, 20]}>
+          {renderSelected(selectedItem)}
+        </Overlay>
+      )}
     </PigeonMap>
   )
 }
