@@ -2,6 +2,7 @@ import { buttonVariants } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { formatDateTime, formatJpy } from '@/lib/format'
 import { cn } from '@/lib/utils'
+import { CancelBookingDialog } from '@/vite/bookings/CancelBookingDialog'
 import { PreAuthHandoffCard } from '@/vite/bookings/PreAuthHandoffCard'
 import type { BookingDto } from '@/vite/bookings/api'
 import type { VehicleClassData } from '@/vite/vehicles/classes'
@@ -13,6 +14,8 @@ interface BookingConfirmationViewProps {
   readonly booking: BookingDto
   /** Resolved class label, or `null` when archived/unknown — the row is omitted. */
   readonly vehicleClass: VehicleClassData | null
+  /** Session CSRF token for the self-cancel write; `null` hides the cancel control (#856). */
+  readonly csrfToken: string | null
 }
 
 // Instant-book confirmation (#511, ported from the frozen Next page). Pure
@@ -21,7 +24,11 @@ interface BookingConfirmationViewProps {
 // the operator pre-auth handoff CTA, and any drop-off fees (feeSnapshot — empty
 // => no block). Ownership is server-enforced (GET /bookings/:id is IDOR-sealed,
 // #396), so there is no client-side renter check.
-export function BookingConfirmationView({ booking, vehicleClass }: BookingConfirmationViewProps) {
+export function BookingConfirmationView({
+  booking,
+  vehicleClass,
+  csrfToken,
+}: BookingConfirmationViewProps) {
   const t = useTranslations('bookings.confirmation')
   const locale = useLocale()
 
@@ -114,6 +121,21 @@ export function BookingConfirmationView({ booking, vehicleClass }: BookingConfir
           {t('backToVehicles')}
         </Link>
       </div>
+
+      {/* #856: self-cancel is offered only for a CONFIRMED booking (an ACTIVE/
+          COMPLETED/CANCELLED one is past the renter's reach) and only when a CSRF
+          token is present to authorize the write. */}
+      {booking.status === 'CONFIRMED' && csrfToken && (
+        <div className="mt-8 flex justify-center border-t border-border pt-6">
+          <CancelBookingDialog
+            bookingId={booking.id}
+            csrfToken={csrfToken}
+            startAt={booking.startAt}
+            totalPrice={booking.totalPrice}
+            operatorName={booking.operator?.name ?? null}
+          />
+        </div>
+      )}
     </div>
   )
 }
