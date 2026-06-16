@@ -4,7 +4,7 @@
 |---|---|
 | **Issue** | #464 — `feat(marketplace): class-combo deals + inventory-count availability (post-demo)` |
 | **Date** | 2026-06-15 |
-| **Status** | Architect-reviewed (**GO-WITH-CHANGES**) + colleague-reviewed (3 findings folded in) → pricing DECIDED → **§7 signed off (2026-06-15)** → **building slices 0–1** |
+| **Status** | Architect-reviewed (**GO-WITH-CHANGES**) + colleague-reviewed (3 findings folded in) → pricing DECIDED → **§7 signed off (2026-06-15)** → **slices 0–1 BUILT (2026-06-15, unpushed); slice 2 next** |
 | **Priority** | P2, post-demo |
 | **Branch / worktree** | `feat/464-class-combo` / `~/Dev/kuruma-464-class-combo` (off trunk `marketplace-pivot`) |
 | **Prior art** | Design comment on #464; architect review `#464#issuecomment-4713568339`; colleague review (payment guard / discriminated input / per-location table); memory `project_464-class-combo-design.md` |
@@ -133,6 +133,16 @@ The rate plan makes the combo `totalPrice` **final at book time**, so the live #
 | **7. E2E** | Book a class deal → operator assigns a car → it shows on the calendar/booking. | all |
 
 **Later (not blocking the core):** the deferred rate-plan columns (date-range / length-tier / channel) when a 2nd pricing axis is genuinely needed.
+
+### Build progress (2026-06-15, branch `feat/464-class-combo`, unpushed)
+
+- **Slice 0 ✅** — `classRatePlans` table (mig 0063) + repo contract + in-memory impl + seed. Drizzle repo + DI/tx wiring **deferred to slice 2** (first consumer).
+- **Slice 1 ✅** — three TDD verticals:
+  - `0b14a0b9` schema: `bookings.{requested,assigned}VehicleId` nullable + parallel `bookings_specific_requires_requested` CHECK (mig 0064); honest type ripple (`Booking`/`VehicleSubstitutedPayload.fromVehicleId` → `string | null`; null-skip vehicle enrichment; web wire schema widened).
+  - `516091bc` discriminated `createBookingSchema` (SPECIFIC | CLASS_COMBO, defaults to SPECIFIC); route gates combo → **501 NOT_IMPLEMENTED** until slice 2.
+  - `fe068f6c` `AvailabilityRepository.countClassDemand(operator, class, location, from, to)` (in-memory + drizzle), reusing the exact `status IN ('CONFIRMED','ACTIVE')` + `tstzrange(startAt, effectiveEndAt)` predicate; counts SPECIFIC + floats.
+  - Gates: shared 568 / api 1532 / web 909 green; api tsc + boundary lint clean; db:verify 65 migrations.
+- **Slice 2 next** — drizzle `ClassRatePlanRepository` + DI/tx wiring; advisory lock + `countClassDemand`-backed 409 capacity guard + rate-plan pricing in `booking-creation.ts`; flip the route's 501 to real combo creation; real-pg concurrency test.
 
 ---
 
