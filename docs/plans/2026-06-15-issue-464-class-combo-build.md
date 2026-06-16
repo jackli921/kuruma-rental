@@ -4,7 +4,7 @@
 |---|---|
 | **Issue** | #464 — `feat(marketplace): class-combo deals + inventory-count availability (post-demo)` |
 | **Date** | 2026-06-15 |
-| **Status** | Architect-reviewed (**GO-WITH-CHANGES**) + colleague-reviewed (3 findings folded in) → **pricing DECIDED: industry-standard class rate-plan table** → ready to build pending §7 sign-off |
+| **Status** | Architect-reviewed (**GO-WITH-CHANGES**) + colleague-reviewed (3 findings folded in) → pricing DECIDED → **§7 signed off (2026-06-15)** → **building slices 0–1** |
 | **Priority** | P2, post-demo |
 | **Branch / worktree** | `feat/464-class-combo` / `~/Dev/kuruma-464-class-combo` (off trunk `marketplace-pivot`) |
 | **Prior art** | Design comment on #464; architect review `#464#issuecomment-4713568339`; colleague review (payment guard / discriminated input / per-location table); memory `project_464-class-combo-design.md` |
@@ -15,7 +15,7 @@
 
 The concurrency mechanism is **sound and verified against the real code**. **Pricing is decided (§5):** follow the battle-tested **fleet-rental** model — a combo is priced by a **dedicated class rate-plan table** (`classRatePlans`), keyed by `(operator, location, class)` — *not* a column on the class, *not* a representative-car quote. The combo price is therefore **final and deterministic at book time** (no #429-style backfill, and no mutable-price hazard against the #461 Stripe path — §5.4).
 
-Remaining for your sign-off (§7): the per-car boundary (combo-only vs. fuller migration — I recommend **combo-only**), the starting column set, and a greenlight to build slices 0–1 (two danger-zone migrations).
+**§7 signed off (2026-06-15):** combo-only boundary, minimal columns, `classRatePlans`, **operator CRUD in the DoD** (new slice 6), and **allow-prepay** checkout (no pay-gate — §4.2 #7). Building slices 0–1 (two danger-zone migrations) now.
 
 ---
 
@@ -79,7 +79,7 @@ Server validates the combo's `classId`+`pickupLocationId` belong to a real opera
 4. **Advisory key: two-`int4` form** with a dedicated namespace constant (not single `bigint hashtext()`).
 5. **Wire raw-SQL `pg_advisory_xact_lock` into the tx repo bundle** (`transaction.ts`) **and simulate the capacity guard in the in-memory repo** — the in-memory `runInTransaction` is a no-op pass-through; the lock is Postgres-only, so unit tests must still cover the invariant in memory while the real-pg concurrency test exercises the actual lock.
 6. **Reuse the exact predicate trio** already in `0037.sql` + `findAvailableVehicles` (`status IN ('CONFIRMED','ACTIVE') AND tstzrange && range`). Note at all copies: if a payment-HOLD state is ever introduced (#851), they move together.
-7. **Block checkout for an unassigned combo (colleague P1).** The live #461 path: `createCheckoutSession` charges `booking.totalPrice` and 422s a null total (`payment/payment.ts:109–110`); the webhook flags `amountTotal !== booking.totalPrice` as an anomaly (`:184`). Our rate-plan price is **final + non-null at book time**, so there's no mismatch hazard — but a *car-less* booking still shouldn't take money. Add: `createCheckoutSession` returns **409 for `CLASS_COMBO` with `assignedVehicleId IS NULL`**. Fits pay-at-pickup (car assigned by pickup, before payment) and dodges the #851 refund-on-unfulfillable risk.
+7. **Checkout: allow prepay of a car-less combo — NO pay-gate (owner decision §7.5).** The live #461 path charges `booking.totalPrice` and 422s a null total (`payment/payment.ts:109–110`); the webhook flags `amountTotal !== booking.totalPrice` as an anomaly (`:184`). The rate-plan price is **final + non-null at book time**, so checkout works unchanged for combos. Industry-standard prepaid rates charge against the *guaranteed class* (Hertz/Avis/Expedia "Pay Now"; hotel room-type prepay) with the specific unit assigned later, and the slice-2 inventory guard (`demand ≤ totalCars`) guarantees a car exists — so prepay is safe **without** a block. **No code change to `createCheckoutSession`.** *(The conservative 409-on-unassigned-combo proposal was considered and rejected: it adds non-standard friction the guard makes unnecessary. Residual refund-on-cancel uses the existing operator-manual path until #851 — already true for SPECIFIC bookings.)*
 
 ---
 
@@ -109,7 +109,7 @@ Server validates the combo's `classId`+`pickupLocationId` belong to a real opera
 - A "deal" is just a row (operator sets `dayRateJpy`). The discount-vs-convenience question **dissolves** — a rate set below the cheapest specific car *is* the discount.
 - No active rate plan for `(operator, location, class)` ⇒ that class simply isn't offered as a combo. Clean fallback.
 
-### 5.3 The boundary I'm recommending (your call — §7)
+### 5.3 The boundary — DECIDED: combo-only (§7.1)
 Keep **#406 per-car pricing for SPECIFIC bookings**; the rate plan prices **combos only**. Two coherent paths: SPECIFIC = marketplace per-car (#406); CLASS_COMBO = fleet class-rate (this table). The *full* industry-standard would price everything off the class rate plan, but that reverses your deliberate marketplace per-car model — almost certainly not what you want.
 
 ### 5.4 Payment interaction (colleague P1 — why the rate-plan choice is also the safe one)
@@ -123,22 +123,28 @@ The rate plan makes the combo `totalPrice` **final at book time**, so the live #
 
 | Slice | Work | Gated by |
 |---|---|---|
-| **0. Rate-plan table** | `classRatePlans` migration (§5.1) + repo + seed a few deal rates. **Danger zone (schema):** `db:generate` → `db:migrate` → `db:verify`. Operator management UI deferred (seed-only to start). | §5 (done) |
+| **0. Rate-plan table** | `classRatePlans` migration (§5.1) + repo + seed a few deal rates. **Danger zone (schema):** `db:generate` → `db:migrate` → `db:verify`. Seed bootstraps; full operator CRUD is **slice 6** (in DoD per §7.3). | §5 (done) |
 | **1. Booking schema + create contract** | `assignedVehicleId`/`requestedVehicleId` nullable; CHECKs; FK MATCH SIMPLE; migrate → verify (**danger zone**). **Discriminated `createBookingSchema`** (§4.1). Add availability-repo `countClassDemand(...)`. | greenlight |
-| **2. Write guard + pricing + pay-gate** | Advisory lock + demand count + 409 in `booking-creation.ts`; combo prices off the rate plan via `composeBookingTotal`; **block unassigned-combo checkout** (#7); **real-pg concurrency test** (two floats for the last car → exactly one 409); in-memory simulation. | slices 0–1 |
+| **2. Write guard + pricing** | Advisory lock + demand count + **409 (capacity)** in `booking-creation.ts`; combo prices off the rate plan via `composeBookingTotal`. **No checkout pay-gate** (§4.2 #7 — prepay allowed). **Real-pg concurrency test** (two floats for the last car → exactly one 409); in-memory simulation of the invariant. | slices 0–1 |
 | **3. Read** | Location-aware `getAvailabilityForClass` subtracts floats; over-count fix test. | slice 1 |
 | **4. Assignment** | float→specific via substitution path **+ class lock**; exclusion-constraint test (assign an occupied car → reject). **No price backfill** — combo price already final. | slice 1 |
 | **5. Search card** | `ClassComboSearchResult` producer with `availableCount` + rate-plan `dayRateJpy`; web `case 'CLASS_COMBO'` card. | slices 0, 2, 3 |
-| **6. E2E** | Book a class deal → operator assigns a car → it shows on the calendar/booking. | all |
+| **6. Operator deal-rate CRUD** (DoD §7.3) | api: list/create/update/deactivate `classRatePlans` rows scoped to the operator's locations/classes (repo writes + service + routes, `ok()/fail()`). web: operator surface to set `dayRateJpy` / toggle `isActive` / edit `label` per (location, class). | slice 0 |
+| **7. E2E** | Book a class deal → operator assigns a car → it shows on the calendar/booking. | all |
 
-**Later (not blocking the core):** operator UI to CRUD deal rates; the deferred rate-plan columns when a 2nd pricing axis is genuinely needed.
+**Later (not blocking the core):** the deferred rate-plan columns (date-range / length-tier / channel) when a 2nd pricing axis is genuinely needed.
 
 ---
 
-## 7. For your sign-off
-1. **Boundary (§5.3):** rate plan prices **combos only**, SPECIFIC stays on #406 per-car? *(Recommended.)* Or a fuller migration to class-rate for everything?
-2. **Starting columns:** minimal set (`dayRateJpy` + `isActive` + `label`) now, date-range/length-tier later? Or include any from the start?
-3. **Operator management:** seed deal rates initially (UI later), or is an operator CRUD surface part of this feature's definition of done?
-4. **Name:** `classRatePlans`, or the colleague's `class_deal_rates` (more specific to the deal use), or `comboRates`?
-5. **Checkout policy (§5.4 / #7):** confirm — **block payment until a combo has an assigned car** (recommended), vs. allow prepay of a car-less combo (price is final, so technically safe, but adds #851 refund exposure)?
-6. **Greenlight** slices 0–1 (both danger-zone migrations) to start the TDD build?
+## 7. Owner sign-off — RESOLVED (2026-06-15)
+
+| # | Decision | Resolution |
+|---|---|---|
+| 1 | Pricing boundary (§5.3) | **Combo-only** — `classRatePlans` prices CLASS_COMBO; SPECIFIC keeps #406 per-car pricing |
+| 2 | Starting columns | **Minimal** — `dayRateJpy` + `isActive` + `label`; date-range / length-tier deferred (table-ready) |
+| 3 | Operator management | **CRUD UI is in the DoD** — operator deal-rate management ships with this feature (new **slice 6**); seeded rates bootstrap it |
+| 4 | Table name | **`classRatePlans`** |
+| 5 | Checkout policy | **Allow prepay, guard-gated** — reverses the conservative pay-gate; see §4.2 #7. Industry-standard (prepaid charges the guaranteed class), and the slice-2 inventory guard makes it safe |
+| 6 | Greenlight | **Yes** — slices 0–1 building now |
+
+> Posted to #464 (`#issuecomment-4713864154`).
