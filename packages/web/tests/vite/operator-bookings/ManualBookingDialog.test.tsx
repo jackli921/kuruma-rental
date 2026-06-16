@@ -1,43 +1,160 @@
 import { ManualBookingDialog } from '@/vite/operator-bookings/ManualBookingDialog'
+import { createManualBooking } from '@/vite/operator-bookings/api'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { render, screen } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { IntlProvider } from 'use-intl'
-import { describe, expect, it, vi } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import enMessages from '../../../messages/en.json'
 
-const c = enMessages.bookings.operator.newBooking
+// Only the network write is faked; OPERATOR_BOOKINGS_KEY + types stay real so the
+// success path invalidates the genuine query key the calendar reads.
+vi.mock('@/vite/operator-bookings/api', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/vite/operator-bookings/api')>()),
+  createManualBooking: vi.fn(),
+}))
 
-function renderDialog(open = true) {
+const c = enMessages.bookings.operator.newBooking
+const vehicles = [
+  { id: 'veh-1', name: 'Toyota Aqua' },
+  { id: 'veh-2', name: 'Honda Fit' },
+]
+const locations = [
+  { id: 'loc-1', name: 'Namba Store' },
+  { id: 'loc-2', name: 'Kansai Airport' },
+]
+
+// 2026-07-01T01:00Z / 2026-07-03T01:00Z are 10:00 JST — the form shows + round-trips
+// wall-clock Tokyo, so a prefill from these instants submits the same ISO back.
+const initialRange = {
+  start: new Date('2026-07-01T01:00:00.000Z'),
+  end: new Date('2026-07-03T01:00:00.000Z'),
+}
+
+function renderDialog(props: Record<string, unknown> = {}) {
   const onOpenChange = vi.fn()
+  const queryClient = new QueryClient()
   render(
-    <QueryClientProvider client={new QueryClient()}>
+    <QueryClientProvider client={queryClient}>
       <IntlProvider locale="en" messages={enMessages}>
-        <ManualBookingDialog open={open} onOpenChange={onOpenChange} />
+        <ManualBookingDialog
+          open
+          onOpenChange={onOpenChange}
+          vehicles={vehicles}
+          locations={locations}
+          csrfToken="csrf-tok"
+          {...props}
+        />
       </IntlProvider>
     </QueryClientProvider>,
   )
-  return { onOpenChange }
+  return { onOpenChange, queryClient }
 }
+
+beforeEach(() => {
+  vi.mocked(createManualBooking)
+    .mockReset()
+    .mockResolvedValue({ id: 'bk-new' } as never)
+})
 
 describe('ManualBookingDialog', () => {
   it('renders the dialog title and description when open', () => {
-    renderDialog(true)
+    renderDialog()
     expect(screen.getByRole('heading', { name: c.dialogTitle })).toBeInTheDocument()
     expect(screen.getByText(c.dialogDescription)).toBeInTheDocument()
   })
 
   it('renders no dialog content when closed', () => {
-    renderDialog(false)
+    renderDialog({ open: false })
     expect(screen.queryByRole('heading', { name: c.dialogTitle })).not.toBeInTheDocument()
   })
 
   it('requests close (onOpenChange false) when the cancel button is clicked', async () => {
     const user = userEvent.setup()
-    const { onOpenChange } = renderDialog(true)
+    const { onOpenChange } = renderDialog()
     await user.click(screen.getByRole('button', { name: c.cancel }))
     // base-ui calls onOpenChange(open, event, reason) — assert the first arg only.
     expect(onOpenChange).toHaveBeenCalledTimes(1)
     expect(onOpenChange.mock.calls[0]?.[0]).toBe(false)
+  })
+
+  it('renders the walk-in form controls when open', () => {
+    renderDialog()
+    expect(screen.getByLabelText(c.vehicleLabel)).toBeInTheDocument()
+    expect(screen.getByLabelText(c.locationLabel)).toBeInTheDocument()
+    expect(screen.getByLabelText(c.startLabel)).toBeInTheDocument()
+    expect(screen.getByLabelText(c.endLabel)).toBeInTheDocument()
+    expect(screen.getByLabelText(c.nameLabel)).toBeInTheDocument()
+    expect(screen.getByLabelText(c.phoneLabel)).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: c.submit })).toBeInTheDocument()
+  })
+
+  it('prefills pickup and return from the clicked slot range (wall-clock JST)', () => {
+    renderDialog({ initialRange })
+    expect(screen.getByLabelText(c.startLabel)).toHaveValue('2026-07-01T10:00')
+    expect(screen.getByLabelText(c.endLabel)).toHaveValue('2026-07-03T10:00')
+  })
+
+  it('submits the walk-in booking: vehicle/location defaults, ISO times, name+phone, CSRF', async () => {
+    const user = userEvent.setup()
+    renderDialog({ initialRange })
+
+    await user.type(screen.getByLabelText(c.nameLabel), 'Taro Yamada')
+    await user.type(screen.getByLabelText(c.phoneLabel), '09012345678')
+    await user.click(screen.getByRole('button', { name: c.submit }))
+
+    expect(createManualBooking).toHaveBeenCalledTimes(1)
+    expect(createManualBooking).toHaveBeenCalledWith(
+      {
+        requestedVehicleId: 'veh-1',
+        pickupLocationId: 'loc-1',
+        dropoffLocationId: 'loc-1',
+        startAt: '2026-07-01T01:00:00.000Z',
+        endAt: '2026-07-03T01:00:00.000Z',
+        customer: { kind: 'walk-in', name: 'Taro Yamada', phone: '09012345678' },
+      },
+      'csrf-tok',
+    )
+  })
+
+  it('invalidates the operator-bookings queries and closes on success', async () => {
+    const user = userEvent.setup()
+    const { onOpenChange, queryClient } = renderDialog({ initialRange })
+    const invalidate = vi.spyOn(queryClient, 'invalidateQueries')
+
+    await user.type(screen.getByLabelText(c.nameLabel), 'Taro Yamada')
+    await user.type(screen.getByLabelText(c.phoneLabel), '09012345678')
+    await user.click(screen.getByRole('button', { name: c.submit }))
+
+    await waitFor(() => expect(onOpenChange).toHaveBeenCalledWith(false))
+    expect(invalidate).toHaveBeenCalledWith({ queryKey: ['operator-bookings'] })
+  })
+
+  it('disables submit until vehicle, location, times, name and phone are all present', async () => {
+    const user = userEvent.setup()
+    renderDialog() // no initialRange -> pickup/return start empty
+
+    const submit = screen.getByRole('button', { name: c.submit })
+    expect(submit).toBeDisabled()
+
+    fireEvent.change(screen.getByLabelText(c.startLabel), { target: { value: '2026-07-01T10:00' } })
+    fireEvent.change(screen.getByLabelText(c.endLabel), { target: { value: '2026-07-03T10:00' } })
+    await user.type(screen.getByLabelText(c.nameLabel), 'Taro Yamada')
+    expect(submit).toBeDisabled() // phone still missing
+
+    await user.type(screen.getByLabelText(c.phoneLabel), '09012345678')
+    expect(submit).toBeEnabled()
+  })
+
+  it('shows an error message when the create fails', async () => {
+    vi.mocked(createManualBooking).mockRejectedValue(new Error('boom'))
+    const user = userEvent.setup()
+    renderDialog({ initialRange })
+
+    await user.type(screen.getByLabelText(c.nameLabel), 'Taro Yamada')
+    await user.type(screen.getByLabelText(c.phoneLabel), '09012345678')
+    await user.click(screen.getByRole('button', { name: c.submit }))
+
+    expect(await screen.findByText(c.error)).toBeInTheDocument()
   })
 })

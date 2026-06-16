@@ -19,8 +19,9 @@ import {
 } from '@/vite/operator-bookings/calendar-events'
 import { markBookingsSeen } from '@/vite/operator-bookings/new-bookings'
 import { useCalendarFilters } from '@/vite/operator-bookings/useCalendarFilters'
+import { operatorLocationsQueryOptions } from '@/vite/operator-locations/api'
 import { useSession } from '@/vite/session'
-import { useQueryClient, useSuspenseQuery } from '@tanstack/react-query'
+import { useQuery, useQueryClient, useSuspenseQuery } from '@tanstack/react-query'
 import { type ErrorComponentProps, createFileRoute, useRouter } from '@tanstack/react-router'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useTranslations } from 'use-intl'
@@ -72,11 +73,21 @@ export function OperatorBookingsRoute() {
   const queryClient = useQueryClient()
   const { data: session } = useSession()
   const [bookingDialogOpen, setBookingDialogOpen] = useState(false)
+  // The clicked slot's range (null when opened from the header button), threaded to
+  // the dialog so a slot-click prefills its pickup/return times.
+  const [slotRange, setSlotRange] = useState<{ start: Date; end: Date } | null>(null)
 
   // Operator-only write affordance: a manual booking needs a single target tenant,
   // which only a tenant-scoped operator session supplies (bypass roles read
   // cross-tenant and get a view-only calendar). The API re-enforces this (#589 §4.3).
   const canManualBook = isOperatorSession(session ?? null)
+
+  // The dialog's pickup/return store list, fetched lazily — only once the operator
+  // opens the dialog — so the read-only calendar view never pays for it.
+  const { data: locationRows } = useQuery({
+    ...operatorLocationsQueryOptions(),
+    enabled: bookingDialogOpen,
+  })
 
   // #611: opening the orders list is "seeing" the new orders — clear the nav
   // red-dot badge (advance lastSeenAt to now) on every mount of this route.
@@ -92,6 +103,10 @@ export function OperatorBookingsRoute() {
 
   const events = useMemo(() => toCalendarEvents(bookings), [bookings])
   const resources = useMemo(() => fleetToResources(vehicles), [vehicles])
+  const manualBookingLocations = useMemo(
+    () => (locationRows ?? []).map((l) => ({ id: l.id, name: l.name })),
+    [locationRows],
+  )
 
   const vehicleIds = useMemo(() => vehicles.map((v) => v.id), [vehicles])
   const filters = useCalendarFilters(vehicleIds)
@@ -119,9 +134,12 @@ export function OperatorBookingsRoute() {
     [navigate, locale],
   )
 
-  // Both the header button and a calendar slot-click open the dialog. Slice 2 will
-  // prefill the form from a clicked slot's range; slice 1 just surfaces the dialog.
-  const handleOpenManualBooking = useCallback(() => setBookingDialogOpen(true), [])
+  // Both the header button and a calendar slot-click open the dialog; a slot also
+  // prefills the pickup/return range (the button opens an empty range).
+  const handleOpenManualBooking = useCallback((range?: { start: Date; end: Date }) => {
+    setSlotRange(range ?? null)
+    setBookingDialogOpen(true)
+  }, [])
 
   return (
     <main className="flex-1 px-4 py-10 sm:px-6 lg:px-8">
@@ -132,7 +150,7 @@ export function OperatorBookingsRoute() {
             <p className="mt-2 text-lg text-muted-foreground">{t('subtitle')}</p>
           </div>
           {canManualBook && (
-            <Button type="button" onClick={handleOpenManualBooking}>
+            <Button type="button" onClick={() => handleOpenManualBooking()}>
               {t('newBooking.action')}
             </Button>
           )}
@@ -154,7 +172,14 @@ export function OperatorBookingsRoute() {
           </div>
         </div>
       </div>
-      <ManualBookingDialog open={bookingDialogOpen} onOpenChange={setBookingDialogOpen} />
+      <ManualBookingDialog
+        open={bookingDialogOpen}
+        onOpenChange={setBookingDialogOpen}
+        vehicles={vehicles}
+        locations={manualBookingLocations}
+        csrfToken={session?.csrfToken ?? ''}
+        initialRange={slotRange ?? undefined}
+      />
     </main>
   )
 }

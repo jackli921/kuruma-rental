@@ -877,7 +877,15 @@
         "action": "新建预订",
         "dialogTitle": "新建预订",
         "dialogDescription": "为到店客户或老客户创建预订。",
-        "cancel": "取消"
+        "cancel": "取消",
+        "vehicleLabel": "车辆",
+        "locationLabel": "取还车门店",
+        "startLabel": "取车时间",
+        "endLabel": "还车时间",
+        "nameLabel": "客户姓名",
+        "phoneLabel": "电话",
+        "submit": "创建预订",
+        "error": "无法创建预订，请重试。"
       },
       "title": "预订",
       "subtitle": "各门店的预订",

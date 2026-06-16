@@ -1,9 +1,10 @@
 import { OperatorBookingsRoute } from '@/routes/$locale/_business/manage/bookings/index'
 import * as api from '@/vite/operator-bookings/api'
 import { calendarRange, parseCalendarDate } from '@/vite/operator-bookings/calendar-events'
+import { operatorLocationsQueryOptions } from '@/vite/operator-locations/api'
 import type { Session } from '@/vite/session'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { render, screen } from '@testing-library/react'
+import { act, render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { IntlProvider } from 'use-intl'
 import { afterEach, describe, expect, it, vi } from 'vitest'
@@ -62,6 +63,9 @@ function renderRoute(session: Session) {
   queryClient.setQueryData(['session'], session)
   queryClient.setQueryData(api.operatorCalendarQueryOptions(from, to).queryKey, [])
   queryClient.setQueryData(api.operatorCalendarVehiclesQueryOptions().queryKey, [])
+  // The dialog reads pickup/return stores lazily on open; seed [] so the test stays
+  // hermetic (staleTime is infinite, so no network fetch fires).
+  queryClient.setQueryData(operatorLocationsQueryOptions().queryKey, [])
   render(
     <QueryClientProvider client={queryClient}>
       <IntlProvider locale="en" messages={enMessages}>
@@ -105,5 +109,21 @@ describe('OperatorBookingsRoute manual-booking affordance (#589 1d)', () => {
   it('disables calendar slot-selection for a bypass (non-operator) session', () => {
     renderRoute(bypassSession)
     expect(calendarProps.selectable).toBe(false)
+  })
+
+  it('opens the dialog with the clicked calendar slot prefilled (wall-clock JST)', async () => {
+    renderRoute(operatorSession)
+    // rbc hands a SlotInfo to BookingsCalendar's adapter (captured here); it surfaces
+    // {start,end}, which the route threads to the dialog as initialRange. 01:00Z is
+    // 10:00 JST — the form shows wall-clock Tokyo.
+    await act(async () => {
+      ;(calendarProps.onSelectSlot as (s: { start: Date; end: Date }) => void)({
+        start: new Date('2026-07-01T01:00:00.000Z'),
+        end: new Date('2026-07-03T01:00:00.000Z'),
+      })
+    })
+    expect(await screen.findByRole('heading', { name: c.dialogTitle })).toBeInTheDocument()
+    expect(screen.getByLabelText(c.startLabel)).toHaveValue('2026-07-01T10:00')
+    expect(screen.getByLabelText(c.endLabel)).toHaveValue('2026-07-03T10:00')
   })
 })

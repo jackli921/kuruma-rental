@@ -877,7 +877,15 @@
         "action": "New booking",
         "dialogTitle": "New booking",
         "dialogDescription": "Create a booking for a walk-in or existing customer.",
-        "cancel": "Cancel"
+        "cancel": "Cancel",
+        "vehicleLabel": "Vehicle",
+        "locationLabel": "Pickup & return location",
+        "startLabel": "Pickup",
+        "endLabel": "Return",
+        "nameLabel": "Customer name",
+        "phoneLabel": "Phone",
+        "submit": "Create booking",
+        "error": "Could not create the booking. Please try again."
       },
       "title": "Bookings",
       "subtitle": "Reservations across your storefronts",
