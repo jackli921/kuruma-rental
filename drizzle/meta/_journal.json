@@ -442,6 +442,20 @@
       "when": 1781447659793,
       "tag": "0062_add_no_recipient_notification_status",
       "breakpoints": true
+    },
+    {
+      "idx": 63,
+      "version": "7",
+      "when": 1781651389850,
+      "tag": "0063_add_consent_ledger",
+      "breakpoints": true
+    },
+    {
+      "idx": 64,
+      "version": "7",
+      "when": 1781651439365,
+      "tag": "0064_add_consent_ledger",
+      "breakpoints": true
     }
   ]
 }

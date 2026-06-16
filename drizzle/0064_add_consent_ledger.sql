@@ -1,0 +1,1 @@
+CREATE INDEX "consent_acceptances_consent_type_idx" ON "consent_acceptances" USING btree ("consentType");
