@@ -1,6 +1,6 @@
 import { Marker, Map as PigeonMap } from 'pigeon-maps'
 import type { MapAdapterProps } from './MapAdapter'
-import { type Pin, computeViewport } from './viewport'
+import { type Pin, focusViewport } from './viewport'
 
 // The ONLY file that imports the map library (#458 D1). Everything else depends
 // on the MapAdapter contract, so swapping pigeon-maps for MapLibre later is a
@@ -47,11 +47,11 @@ export function PigeonMapAdapter({ items, selectedId, onSelect, anchor = null }:
     }))
     .filter((p): p is Pin => p.lat !== null && p.lng !== null)
 
-  const viewport = computeViewport(pins, anchor)
+  const viewport = focusViewport(pins, anchor, selectedId)
 
   return (
     <PigeonMap
-      key={`${anchor ? anchor.join(',') : 'fit'}:${pins.map((p) => p.id).join(',')}`}
+      key={`${selectedId ?? ''}:${anchor ? anchor.join(',') : 'fit'}:${pins.map((p) => p.id).join(',')}`}
       provider={gsiTileProvider}
       attribution={GSI_ATTRIBUTION}
       attributionPrefix={false}

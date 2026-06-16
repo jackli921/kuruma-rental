@@ -200,6 +200,22 @@ describe('PigeonMapAdapter', () => {
 
     expect(screen.getByTestId('pigeon-map')).toHaveAttribute('data-center', '34.66,135.5')
   })
+
+  it('recenters on the selected pin (fly-to) when one is selected', () => {
+    render(
+      <PigeonMapAdapter
+        items={[
+          carAt('loc_namba', { latitude: 34.6627, longitude: 135.5023 }),
+          carAt('loc_umeda', { latitude: 34.7025, longitude: 135.4959 }),
+        ]}
+        selectedId="loc_umeda"
+        onSelect={() => {}}
+      />,
+    )
+    const map = screen.getByTestId('pigeon-map')
+    expect(map).toHaveAttribute('data-center', '34.7025,135.4959')
+    expect(map).toHaveAttribute('data-zoom', '12') // SINGLE_PIN_ZOOM
+  })
 })
 
 describe('gsiTileProvider', () => {
