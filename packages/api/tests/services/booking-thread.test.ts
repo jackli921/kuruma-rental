@@ -7,8 +7,10 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { type CallerContext, SYSTEM_CONTEXT } from '../../src/middleware/auth'
 import {
   InMemoryAddOnRepository,
+  InMemoryAvailabilityRepository,
   InMemoryBookingEventRepository,
   InMemoryBookingRepository,
+  InMemoryClassRatePlanRepository,
   InMemoryFeeScheduleRepository,
   InMemoryInsuranceOptionRepository,
   InMemoryLocationRepository,
@@ -167,6 +169,9 @@ async function makeService(threadRepo?: ThreadRepository, staffUserId?: string) 
     insuranceOptionRepo,
     addOnRepo,
     feeScheduleRepo,
+    availabilityRepo: new InMemoryAvailabilityRepository(vehicleRepo, bookingRepo),
+    classRatePlanRepo: new InMemoryClassRatePlanRepository(),
+    acquireClassCapacityLock: async () => {},
   }
   const runInTransaction: RunInTransaction = async (fn) => fn(repos)
 

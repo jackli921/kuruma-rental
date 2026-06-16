@@ -186,6 +186,9 @@ class RecordingAvailabilityRepository implements AvailabilityRepository {
   ) {
     return this.inner.countClassDemand(operatorId, classId, pickupLocationId, from, to)
   }
+  countClassCapacity(operatorId: string, classId: string, pickupLocationId: string) {
+    return this.inner.countClassCapacity(operatorId, classId, pickupLocationId)
+  }
 }
 
 describe('StorefrontSearchService.search (#391)', () => {

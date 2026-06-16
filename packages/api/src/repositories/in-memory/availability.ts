@@ -94,4 +94,22 @@ export class InMemoryAvailabilityRepository implements AvailabilityRepository {
         b.effectiveEndAt > from,
     ).length
   }
+
+  async countClassCapacity(
+    operatorId: string,
+    classId: string,
+    pickupLocationId: string,
+  ): Promise<number> {
+    // Only AVAILABLE cars are bookable supply (mirrors VehicleClassAvailability):
+    // MAINTENANCE/RETIRED are filtered out at the repo via the status filter.
+    const { data: vehicles } = await this.vehicleRepo.findAll(SYSTEM_CONTEXT, {
+      status: 'AVAILABLE',
+    })
+    return vehicles.filter(
+      (v) =>
+        v.operatorId === operatorId &&
+        v.classId === classId &&
+        v.pickupLocationId === pickupLocationId,
+    ).length
+  }
 }

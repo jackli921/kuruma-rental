@@ -106,4 +106,25 @@ export class DrizzleAvailabilityRepository implements AvailabilityRepository {
       )
     return row?.count ?? 0
   }
+
+  async countClassCapacity(
+    operatorId: string,
+    classId: string,
+    pickupLocationId: string,
+  ): Promise<number> {
+    // The AVAILABLE-car supply for the (operator, class, location) triple — the
+    // capacity side of slice 2's write guard. MAINTENANCE/RETIRED never count.
+    const [row] = await this.db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(vehicles)
+      .where(
+        and(
+          eq(vehicles.operatorId, operatorId),
+          eq(vehicles.classId, classId),
+          eq(vehicles.pickupLocationId, pickupLocationId),
+          eq(vehicles.status, 'AVAILABLE'),
+        ),
+      )
+    return row?.count ?? 0
+  }
 }

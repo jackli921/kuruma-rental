@@ -11,6 +11,7 @@ import {
   DrizzleAvailabilityRepository,
   DrizzleBookingEventRepository,
   DrizzleBookingRepository,
+  DrizzleClassRatePlanRepository,
   DrizzleCustomerRepository,
   DrizzleFeeScheduleRepository,
   DrizzleFleetOverviewRepository,
@@ -42,6 +43,7 @@ import {
   InMemoryAvailabilityRepository,
   InMemoryBookingEventRepository,
   InMemoryBookingRepository,
+  InMemoryClassRatePlanRepository,
   InMemoryCustomerRepository,
   InMemoryDocumentStorage,
   InMemoryFeeScheduleRepository,
@@ -75,6 +77,7 @@ import type {
   AvailabilityRepository,
   BookingEventRepository,
   BookingRepository,
+  ClassRatePlanRepository,
   CustomerRepository,
   DocumentStorage,
   FeeScheduleRepository,
@@ -136,6 +139,7 @@ export type Repos = {
   locationRepo: LocationRepository
   insuranceOptionRepo: InsuranceOptionRepository
   addOnRepo: AddOnRepository
+  classRatePlanRepo: ClassRatePlanRepository
   feeScheduleRepo: FeeScheduleRepository
   notificationLogRepo: NotificationLogRepository
   storefrontRepo: StorefrontRepository
@@ -166,6 +170,7 @@ export function buildOverrideRepos(overrides: AppOverrides): Repos {
   const insuranceOptionRepo =
     overrides.insuranceOptionRepo ?? new InMemoryInsuranceOptionRepository()
   const addOnRepo = overrides.addOnRepo ?? new InMemoryAddOnRepository()
+  const classRatePlanRepo = overrides.classRatePlanRepo ?? new InMemoryClassRatePlanRepository()
   const feeScheduleRepo = overrides.feeScheduleRepo ?? new InMemoryFeeScheduleRepository()
   const runInTransaction: RunInTransaction = async (fn) =>
     fn({
@@ -177,6 +182,11 @@ export function buildOverrideRepos(overrides: AppOverrides): Repos {
       insuranceOptionRepo,
       addOnRepo,
       feeScheduleRepo,
+      availabilityRepo,
+      classRatePlanRepo,
+      // #464: the advisory lock is Postgres-only; in-memory is single-threaded so
+      // the guard's count-then-insert can't interleave — a no-op is correct here.
+      acquireClassCapacityLock: async () => {},
     })
   const fleetOverviewRepo =
     overrides.fleetOverviewRepo ??
@@ -229,6 +239,7 @@ export function buildOverrideRepos(overrides: AppOverrides): Repos {
     locationRepo,
     insuranceOptionRepo,
     addOnRepo,
+    classRatePlanRepo,
     feeScheduleRepo,
     notificationLogRepo,
     storefrontRepo,
@@ -312,6 +323,7 @@ export function buildDrizzleRepos(opts?: { db?: Db; runTx?: RunTx }): Repos {
     locationRepo: new DrizzleLocationRepository(db),
     insuranceOptionRepo: new DrizzleInsuranceOptionRepository(db),
     addOnRepo: new DrizzleAddOnRepository(db),
+    classRatePlanRepo: new DrizzleClassRatePlanRepository(db),
     feeScheduleRepo: new DrizzleFeeScheduleRepository(db),
     notificationLogRepo: new DrizzleNotificationLogRepository(db),
     storefrontRepo: new DrizzleStorefrontRepository(db),
@@ -343,6 +355,7 @@ export function buildInMemoryRepos(): Repos {
   const locationRepo = new InMemoryLocationRepository()
   const insuranceOptionRepo = new InMemoryInsuranceOptionRepository()
   const addOnRepo = new InMemoryAddOnRepository()
+  const classRatePlanRepo = new InMemoryClassRatePlanRepository()
   const feeScheduleRepo = new InMemoryFeeScheduleRepository()
   const operatorRepo = new InMemoryOperatorRepository()
   const operatorMembershipRepo = new InMemoryOperatorMembershipRepository()
@@ -361,6 +374,9 @@ export function buildInMemoryRepos(): Repos {
       insuranceOptionRepo,
       addOnRepo,
       feeScheduleRepo,
+      availabilityRepo,
+      classRatePlanRepo,
+      acquireClassCapacityLock: async () => {},
     })
   const runOperatorGrant: RunOperatorGrant = (fn) =>
     fn({ memberships: operatorMembershipRepo, users: userRepo, invites: providerInviteRepo })
@@ -395,6 +411,7 @@ export function buildInMemoryRepos(): Repos {
     locationRepo,
     insuranceOptionRepo,
     addOnRepo,
+    classRatePlanRepo,
     feeScheduleRepo,
     notificationLogRepo: new InMemoryNotificationLogRepository(),
     storefrontRepo: new InMemoryStorefrontRepository(locationRepo, operatorRepo),

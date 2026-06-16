@@ -4,6 +4,7 @@ import {
   addOnOptions,
   bookingEvents,
   bookings,
+  classRatePlans,
   insuranceOptions,
   feeSchedules,
   locations,
@@ -22,6 +23,7 @@ import type {
   AddOn,
   Booking,
   BookingEvent,
+  ClassRatePlan,
   InsuranceOption,
   FeeSchedule,
   Location,
@@ -141,6 +143,18 @@ export const addOnOptionColumns = {
   status: addOnOptions.status,
   createdAt: addOnOptions.createdAt,
   updatedAt: addOnOptions.updatedAt,
+}
+
+export const classRatePlanColumns = {
+  id: classRatePlans.id,
+  operatorId: classRatePlans.operatorId,
+  classId: classRatePlans.classId,
+  pickupLocationId: classRatePlans.pickupLocationId,
+  dayRateJpy: classRatePlans.dayRateJpy,
+  isActive: classRatePlans.isActive,
+  label: classRatePlans.label,
+  createdAt: classRatePlans.createdAt,
+  updatedAt: classRatePlans.updatedAt,
 }
 
 export const feeScheduleColumns = {
@@ -297,6 +311,7 @@ type VehicleRow = ColumnRow<typeof vehicleColumns>
 type LocationRow = ColumnRow<typeof locationColumns>
 type InsuranceOptionRow = ColumnRow<typeof insuranceOptionColumns>
 type AddOnOptionRow = ColumnRow<typeof addOnOptionColumns>
+type ClassRatePlanRow = ColumnRow<typeof classRatePlanColumns>
 type FeeScheduleRow = ColumnRow<typeof feeScheduleColumns>
 type PaymentEventRow = ColumnRow<typeof paymentEventColumns>
 type PaymentAnomalyRow = ColumnRow<typeof paymentAnomalyColumns>
@@ -355,6 +370,20 @@ export function toInsuranceOption(r: InsuranceOptionRow): InsuranceOption {
     dailyPriceJpy: r.dailyPriceJpy,
     deductibleJpy: r.deductibleJpy,
     status: r.status,
+    createdAt: r.createdAt,
+    updatedAt: r.updatedAt,
+  }
+}
+
+export function toClassRatePlan(r: ClassRatePlanRow): ClassRatePlan {
+  return {
+    id: r.id,
+    operatorId: r.operatorId,
+    classId: r.classId,
+    pickupLocationId: r.pickupLocationId,
+    dayRateJpy: r.dayRateJpy,
+    isActive: r.isActive,
+    label: r.label,
     createdAt: r.createdAt,
     updatedAt: r.updatedAt,
   }

@@ -3,8 +3,10 @@ import { beforeEach, describe, expect, it } from 'vitest'
 import { SYSTEM_CONTEXT } from '../../src/middleware/auth'
 import {
   InMemoryAddOnRepository,
+  InMemoryAvailabilityRepository,
   InMemoryBookingEventRepository,
   InMemoryBookingRepository,
+  InMemoryClassRatePlanRepository,
   InMemoryFeeScheduleRepository,
   InMemoryInsuranceOptionRepository,
   InMemoryLocationRepository,
@@ -184,6 +186,9 @@ describe('Booking Routes', () => {
       insuranceOptionRepo,
       addOnRepo,
       feeScheduleRepo,
+      availabilityRepo: new InMemoryAvailabilityRepository(vehicleRepo, bookingRepo),
+      classRatePlanRepo: new InMemoryClassRatePlanRepository(),
+      acquireClassCapacityLock: async () => {},
     }
     const runInTransaction: RunInTransaction = async (fn) => fn(repos)
 

@@ -10,6 +10,8 @@ import { type CallerContext, SYSTEM_CONTEXT } from '../../src/middleware/auth'
 import { PG_ERROR } from '../../src/pg-errors'
 import {
   InMemoryAddOnRepository,
+  InMemoryAvailabilityRepository,
+  InMemoryClassRatePlanRepository,
   InMemoryDocumentStorage,
   InMemoryFeeScheduleRepository,
   InMemoryInsuranceOptionRepository,
@@ -146,6 +148,9 @@ async function setup(
     insuranceOptionRepo,
     addOnRepo,
     feeScheduleRepo,
+    availabilityRepo: new InMemoryAvailabilityRepository(vehicleRepo, bookingRepo),
+    classRatePlanRepo: new InMemoryClassRatePlanRepository(),
+    acquireClassCapacityLock: async () => {},
   }
   const runInTransaction: RunInTransaction = async (fn) => fn(repos)
 
@@ -918,6 +923,9 @@ async function setupSub(
     insuranceOptionRepo,
     addOnRepo,
     feeScheduleRepo,
+    availabilityRepo: new InMemoryAvailabilityRepository(vehicleRepo, bookingRepo),
+    classRatePlanRepo: new InMemoryClassRatePlanRepository(),
+    acquireClassCapacityLock: async () => {},
   }
   const runInTransaction: RunInTransaction = async (fn) => fn(repos)
   const service = new BookingService(

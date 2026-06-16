@@ -504,6 +504,14 @@ export interface AvailabilityRepository {
     from: Date,
     to: Date,
   ): Promise<number>
+  /**
+   * #464 slice 2: the AVAILABLE-car supply for one (operator, location, class) —
+   * the right-hand side of the write guard's `demand < capacity` admission test.
+   * Counts physical cars only (MAINTENANCE/RETIRED excluded — never bookable,
+   * matching {@link VehicleClassAvailabilityService} totalCars); the occupancy
+   * side is {@link countClassDemand}. No date range: supply is time-invariant.
+   */
+  countClassCapacity(operatorId: string, classId: string, pickupLocationId: string): Promise<number>
 }
 
 /**
@@ -631,44 +639,15 @@ export interface MessageRepository {
   ): Promise<Message | undefined>
 }
 
-// Transaction boundary for operations spanning multiple repositories.
-// Drizzle: wraps db.transaction(), creating repos bound to the tx handle.
-// InMemory: passes repos through (JS event loop is single-threaded).
-//
-// Slice 6 (#392) widens the bundle so the single-transaction booking submit
-// (proposal §4) can — atomically — validate availability (booking insert ->
-// exclusion constraint), append the BOOKING_CREATED event, and read the
-// vehicle / location / insurance / fee rows for the price + snapshots at a
-// consistent point-in-time. MaintenanceService still uses only the first two.
-export interface TransactionRepos {
-  vehicleRepo: VehicleRepository
-  maintenanceLogRepo: MaintenanceLogRepository
-  bookingRepo: BookingRepository
-  bookingEventRepo: BookingEventRepository
-  locationRepo: LocationRepository
-  insuranceOptionRepo: InsuranceOptionRepository
-  addOnRepo: AddOnRepository
-  feeScheduleRepo: FeeScheduleRepository
-}
-
-export type RunInTransaction = <T>(fn: (repos: TransactionRepos) => Promise<T>) => Promise<T>
-
-// #521 §6: the minimal write surface the atomic operator-grant transaction needs —
-// the membership ledger INSERT, the denormalised users projection, and invite
-// consumption. Run together in ONE tx so a mid-sequence failure can't leave a partial
-// grant (membership without projection, or invite consumed without a membership row).
-// The membership INSERT goes first so the partial-unique-active index aborts the WHOLE
-// tx on a concurrent double-accept; the service then re-reads the winner.
-export interface OperatorGrantRepos {
-  memberships: Pick<OperatorMembershipRepository, 'create'>
-  users: Pick<UserRepository, 'setOperatorAccess'>
-  invites: Pick<ProviderInviteRepository, 'markAccepted'>
-}
-
-// Drizzle wires the real per-call neon-serverless tx (#493, pooled DATABASE_URL);
-// InMemory passes the plain repos (single-threaded, no real tx). Mirrors
-// RunInTransaction (the booking bundle) but scoped to the grant's three tables.
-export type RunOperatorGrant = <T>(fn: (repos: OperatorGrantRepos) => Promise<T>) => Promise<T>
+// The cross-repository transaction bundles (booking submit + operator grant)
+// live in ./types-transaction to keep this file under the size cap; re-exported
+// here so every existing `from '../repositories/types'` import stays unchanged.
+export type {
+  OperatorGrantRepos,
+  RunInTransaction,
+  RunOperatorGrant,
+  TransactionRepos,
+} from './types-transaction'
 
 export interface TransitionLogsResult {
   resolved?: MaintenanceLog

@@ -251,3 +251,47 @@ describe('InMemoryAvailabilityRepository.countClassDemand (#464)', () => {
     expect(await demand()).toBe(1)
   })
 })
+
+// #464 slice 2: countClassCapacity is the right-hand side of the inventory guard
+// (demand < capacity → admit). It counts the AVAILABLE cars of a class at a
+// location — the physical supply a float or specific booking draws from.
+// MAINTENANCE/RETIRED cars are never bookable, so they never count (matches
+// VehicleClassAvailabilityService's totalCars).
+describe('InMemoryAvailabilityRepository.countClassCapacity (#464)', () => {
+  const capacity = () => availabilityRepo.countClassCapacity('op_a', 'class_compact', 'loc_osaka')
+
+  it('counts AVAILABLE cars of the class at the location', async () => {
+    await makeVehicle({})
+    await makeVehicle({})
+    expect(await capacity()).toBe(2)
+  })
+
+  it('excludes a different class', async () => {
+    await makeVehicle({})
+    await makeVehicle({ classId: 'class_van' })
+    expect(await capacity()).toBe(1)
+  })
+
+  it('excludes a different pickup location (capacity is per-store)', async () => {
+    await makeVehicle({})
+    await makeVehicle({ pickupLocationId: 'loc_kyoto' })
+    expect(await capacity()).toBe(1)
+  })
+
+  it('excludes a different operator', async () => {
+    await makeVehicle({})
+    await makeVehicle({ operatorId: 'op_b' })
+    expect(await capacity()).toBe(1)
+  })
+
+  it('excludes MAINTENANCE and RETIRED cars — never bookable', async () => {
+    await makeVehicle({})
+    await makeVehicle({ status: 'MAINTENANCE' })
+    await makeVehicle({ status: 'RETIRED' })
+    expect(await capacity()).toBe(1)
+  })
+
+  it('returns 0 when the class has no cars at the location', async () => {
+    expect(await capacity()).toBe(0)
+  })
+})
