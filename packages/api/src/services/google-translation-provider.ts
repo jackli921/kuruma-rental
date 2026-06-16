@@ -22,7 +22,10 @@ interface GoogleResponse {
 export class GoogleTranslationProvider implements TranslationProvider {
   constructor(
     private readonly apiKey: string,
-    private readonly fetchFn: typeof fetch = fetch,
+    // CF Workers: the global fetch must be called with this===globalThis, else
+    // `this.fetchFn(...)` throws "Illegal invocation" (#887). Bind the default;
+    // the injectable param keeps the test mock seam intact.
+    private readonly fetchFn: typeof fetch = fetch.bind(globalThis) as typeof fetch,
   ) {}
 
   async translate(
