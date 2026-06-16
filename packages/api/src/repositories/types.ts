@@ -342,6 +342,12 @@ export interface UserRepository {
     phone: string | null
     language: string
   }): Promise<User>
+  // #589 1c: register a brand-new walk-in/phone customer. ALWAYS inserts a fresh
+  // RENTER (random synthetic placeholder email; phone stored as-is) and NEVER
+  // dedups by phone/email — distinct from quickCreate's get-or-create. Critical:
+  // deduping a walk-in onto an existing user would let an operator attach a
+  // booking to (or probe the existence of) another tenant's customer (#396/#475).
+  createWalkInRenter(data: { name: string; phone: string }): Promise<User>
   findByEmail(email: string): Promise<User | undefined>
   findByPhone(phone: string): Promise<User | undefined>
   // Slice 7 (#393): the operator's OPERATOR_OWNER contact users, for the booking

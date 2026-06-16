@@ -383,4 +383,74 @@ describe('#396 — OPERATOR_* cannot enumerate users via any current ingress', (
     expect(body.data.renterId).toBe(OWN_RENTER_ID)
     expect(body.data.source).toBe('MANUAL')
   })
+
+  it('operator walk-in booking creates a fresh RENTER and books for them (#589 1c, source=MANUAL)', async () => {
+    // A brand-new walk-in/phone customer the operator registers inline: no prior
+    // booking, no renterId — the walk-in itself is the authorization.
+    const startAt = new Date(Date.now() + 48 * 60 * 60 * 1000)
+    const endAt = new Date(startAt.getTime() + 4 * 60 * 60 * 1000)
+
+    const res = await app.request('/bookings', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...(await operatorBearer(SELF_ID)) },
+      body: JSON.stringify({
+        requestedVehicleId: vehicle.id,
+        pickupLocationId: locationId,
+        dropoffLocationId: locationId,
+        walkInCustomer: { name: 'Hanako Tourist', phone: '+81-90-0000-1111' },
+        startAt: startAt.toISOString(),
+        endAt: endAt.toISOString(),
+        source: 'MANUAL',
+      }),
+    })
+
+    expect(res.status).toBe(201)
+    const body = (await res.json()) as { data: { renterId: string; source: string } }
+    expect(body.data.source).toBe('MANUAL')
+    // A brand-new renter — not the operator, not any seeded user.
+    expect(body.data.renterId).not.toBe(SELF_ID)
+    expect([OWN_RENTER_ID, FOREIGN_ID]).not.toContain(body.data.renterId)
+    const [created] = await userRepo.findByIds([body.data.renterId])
+    expect(created?.role).toBe('RENTER')
+    expect(created?.name).toBe('Hanako Tourist')
+    expect(created?.phone).toBe('+81-90-0000-1111')
+  })
+
+  it('walk-in never attaches to an existing phone holder — fresh row even on a phone match (#396/#475)', async () => {
+    // An existing renter (think: ANOTHER tenant's customer) already has this phone.
+    // A walk-in with the SAME phone must NOT dedup onto them — that would attach a
+    // booking to a foreign user and leak that the phone exists.
+    const SHARED_PHONE = '+81-90-9999-0000'
+    const existing = await userRepo.quickCreate({
+      name: 'Existing Person',
+      email: null,
+      phone: SHARED_PHONE,
+      language: 'en',
+    })
+
+    const startAt = new Date(Date.now() + 48 * 60 * 60 * 1000)
+    const endAt = new Date(startAt.getTime() + 4 * 60 * 60 * 1000)
+    const res = await app.request('/bookings', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...(await operatorBearer(SELF_ID)) },
+      body: JSON.stringify({
+        requestedVehicleId: vehicle.id,
+        pickupLocationId: locationId,
+        dropoffLocationId: locationId,
+        walkInCustomer: { name: 'Different Person', phone: SHARED_PHONE },
+        startAt: startAt.toISOString(),
+        endAt: endAt.toISOString(),
+        source: 'MANUAL',
+      }),
+    })
+
+    expect(res.status).toBe(201)
+    const body = (await res.json()) as { data: { renterId: string } }
+    expect(body.data.renterId).not.toBe(existing.id) // fresh row, no dedup-attach
+    const [created] = await userRepo.findByIds([body.data.renterId])
+    expect(created?.name).toBe('Different Person')
+    // The pre-existing phone holder is untouched.
+    const [foreign] = await userRepo.findByIds([existing.id])
+    expect(foreign?.name).toBe('Existing Person')
+  })
 })

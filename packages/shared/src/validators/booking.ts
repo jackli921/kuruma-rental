@@ -23,6 +23,18 @@ const bookingCommonFields = {
   // Staff-override path only: book on behalf of a renter (#314). Non-staff
   // routes ignore this and use the authenticated user.
   renterId: z.string().uuid('Renter ID must be a valid UUID').optional(),
+  // #589 1c: operator walk-in path — book for a brand-new customer inline by
+  // name + phone. NO email field by design: email is globally unique, so a
+  // create-by-email would leak whether an address already exists (#396/#475);
+  // phone → synthetic placeholder email avoids the oracle. Used in place of
+  // renterId (mutually exclusive — see refine below); the service creates a
+  // fresh renter, then books (pre-tx ordering / orphan tradeoff: #875).
+  walkInCustomer: z
+    .object({
+      name: z.string().trim().min(1, 'Name is required'),
+      phone: z.string().trim().min(1, 'Phone is required'),
+    })
+    .optional(),
   startAt: z.string().datetime({ message: 'Must be ISO datetime' }),
   endAt: z.string().datetime({ message: 'Must be ISO datetime' }),
   notes: z.string().optional(),
@@ -66,6 +78,13 @@ export const createBookingSchema = z
   .refine((data) => new Date(data.endAt) > new Date(data.startAt), {
     message: 'End time must be after start time',
     path: ['endAt'],
+  })
+  // #589 1c: renterId (book for an existing customer) and walkInCustomer (create
+  // a brand-new one inline) are two mutually exclusive customer sources — never
+  // both on one request.
+  .refine((data) => !(data.renterId && data.walkInCustomer), {
+    message: 'Provide either renterId or walkInCustomer, not both',
+    path: ['walkInCustomer'],
   })
 
 export const updateBookingStatusSchema = z.object({

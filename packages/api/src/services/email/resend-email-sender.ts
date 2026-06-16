@@ -22,7 +22,9 @@ export class ResendEmailSender implements EmailSender {
   constructor(
     private readonly apiKey: string,
     private readonly defaultFrom: string,
-    private readonly fetchFn: typeof fetch = fetch,
+    // Bound to globalThis: CF Workers' global fetch is a branded builtin that
+    // throws "Illegal invocation" if called detached (here, as this.fetchFn). #887
+    private readonly fetchFn: typeof fetch = fetch.bind(globalThis),
   ) {}
 
   async send(message: EmailMessage): Promise<SendResult> {

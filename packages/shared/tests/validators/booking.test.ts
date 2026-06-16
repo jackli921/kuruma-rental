@@ -153,6 +153,74 @@ describe('updateBookingStatusSchema', () => {
 
 // Paid add-ons (#460): the renter selects 0+ of the operator's active add-ons in
 // the wizard. The server validates each against the operator + snapshots them.
+describe('createBookingSchema walk-in customer (#589 1c)', () => {
+  const base = {
+    requestedVehicleId: VALID_UUID,
+    pickupLocationId: PICKUP_UUID,
+    dropoffLocationId: DROPOFF_UUID,
+    startAt: '2026-04-10T09:00:00Z',
+    endAt: '2026-04-10T17:00:00Z',
+  }
+
+  it('accepts an inline walk-in customer (name + phone) in place of renterId', () => {
+    const result = createBookingSchema.safeParse({
+      ...base,
+      source: 'MANUAL',
+      walkInCustomer: { name: 'Taro Yamada', phone: '+81-90-1234-5678' },
+    })
+    expect(result.success).toBe(true)
+    if (result.success) {
+      expect(result.data.walkInCustomer).toEqual({
+        name: 'Taro Yamada',
+        phone: '+81-90-1234-5678',
+      })
+      expect(result.data.renterId).toBeUndefined()
+    }
+  })
+
+  it('rejects renterId and walkInCustomer together (one customer source, not both)', () => {
+    const result = createBookingSchema.safeParse({
+      ...base,
+      source: 'MANUAL',
+      renterId: RENTER_UUID,
+      walkInCustomer: { name: 'Taro Yamada', phone: '+81-90-1234-5678' },
+    })
+    expect(result.success).toBe(false)
+  })
+
+  // The mutual-exclusion refine blocks BOTH sources; it must still permit NEITHER —
+  // that is the renter self-serve case (the route defaults renterId to ctx.userId).
+  it('accepts neither renterId nor walkInCustomer (renter self-serve books as themselves)', () => {
+    const result = createBookingSchema.safeParse({ ...base, source: 'DIRECT' })
+    expect(result.success).toBe(true)
+    if (result.success) {
+      expect(result.data.renterId).toBeUndefined()
+      expect(result.data.walkInCustomer).toBeUndefined()
+    }
+  })
+
+  it('strips an email injected into walkInCustomer (no create-by-email oracle)', () => {
+    const result = createBookingSchema.safeParse({
+      ...base,
+      source: 'MANUAL',
+      walkInCustomer: { name: 'Taro', phone: '+81-90-1234-5678', email: 'probe@victim.com' },
+    })
+    expect(result.success).toBe(true)
+    if (result.success) {
+      expect(result.data.walkInCustomer).not.toHaveProperty('email')
+    }
+  })
+
+  it('requires a non-empty phone on a walk-in customer', () => {
+    const result = createBookingSchema.safeParse({
+      ...base,
+      source: 'MANUAL',
+      walkInCustomer: { name: 'Taro', phone: '  ' },
+    })
+    expect(result.success).toBe(false)
+  })
+})
+
 describe('createBookingSchema addOnIds (#460)', () => {
   const validInput = {
     requestedVehicleId: VALID_UUID,
