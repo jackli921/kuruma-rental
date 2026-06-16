@@ -222,6 +222,10 @@ export interface ProviderInviteRepository {
 // (query filters status='ACTIVE'). `create` is fenced by that same index.
 export interface OperatorMembershipRepository {
   findActiveByUserId(userId: string): Promise<OperatorMembership | undefined>
+  // #878: every ACTIVE member (owner + staff) of an operator — the booking-alert
+  // recipient set. Ledger-sourced (status='ACTIVE'), so it is revocation-aware and
+  // never reads the stale users.role/operatorId projection.
+  findActiveByOperator(operatorId: string): Promise<OperatorMembership[]>
   create(
     data: Omit<OperatorMembership, 'id' | 'createdAt' | 'updatedAt'>,
   ): Promise<OperatorMembership>

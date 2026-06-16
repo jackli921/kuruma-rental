@@ -24,6 +24,14 @@ export class InMemoryOperatorMembershipRepository implements OperatorMembershipR
     return [...this.store.values()].find((m) => m.userId === userId && m.status === 'ACTIVE')
   }
 
+  // #878: the operator's ACTIVE members (owner + staff) — the booking-alert
+  // recipient set, sourced from the grant ledger (REVOKED rows excluded).
+  async findActiveByOperator(operatorId: string): Promise<OperatorMembership[]> {
+    return [...this.store.values()].filter(
+      (m) => m.operatorId === operatorId && m.status === 'ACTIVE',
+    )
+  }
+
   async create(
     data: Omit<OperatorMembership, 'id' | 'createdAt' | 'updatedAt'>,
   ): Promise<OperatorMembership> {

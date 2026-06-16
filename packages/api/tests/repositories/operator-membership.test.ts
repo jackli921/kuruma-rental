@@ -55,4 +55,37 @@ describe('InMemoryOperatorMembershipRepository', () => {
     const m = await repo.create(membershipInput({ userId: 'u' }))
     expect(m.status).toBe('ACTIVE')
   })
+
+  // #878: the booking-alert recipient set. Owner AND staff, ACTIVE only, scoped
+  // to one operator — sourced from the ledger (not the stale users.role projection).
+  describe('findActiveByOperator', () => {
+    it('returns every ACTIVE member of the operator — owner and staff', async () => {
+      const owner = await repo.create(
+        membershipInput({ userId: 'u_owner', role: 'OPERATOR_OWNER' }),
+      )
+      const staff = await repo.create(
+        membershipInput({ userId: 'u_staff', role: 'OPERATOR_STAFF' }),
+      )
+      const members = await repo.findActiveByOperator('op_test')
+      expect(members.map((m) => m.id).sort()).toEqual([owner.id, staff.id].sort())
+    })
+
+    it('excludes REVOKED members', async () => {
+      await repo.create(membershipInput({ userId: 'u_active' }))
+      await repo.create(membershipInput({ userId: 'u_gone', status: 'REVOKED' }))
+      const members = await repo.findActiveByOperator('op_test')
+      expect(members.map((m) => m.userId)).toEqual(['u_active'])
+    })
+
+    it('excludes members of other operators', async () => {
+      await repo.create(membershipInput({ userId: 'u_mine' }))
+      await repo.create(membershipInput({ userId: 'u_theirs', operatorId: 'op_other' }))
+      const members = await repo.findActiveByOperator('op_test')
+      expect(members.map((m) => m.userId)).toEqual(['u_mine'])
+    })
+
+    it('returns [] for an operator with no members', async () => {
+      expect(await repo.findActiveByOperator('op_empty')).toEqual([])
+    })
+  })
 })

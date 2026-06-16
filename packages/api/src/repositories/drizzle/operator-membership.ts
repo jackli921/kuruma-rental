@@ -31,6 +31,22 @@ export class DrizzleOperatorMembershipRepository implements OperatorMembershipRe
     return row ? toOperatorMembership(row) : undefined
   }
 
+  // #878: the operator's ACTIVE members (owner + staff), for the booking alert
+  // fan-out. Scoped read over (operatorId, status='ACTIVE') — ledger-sourced so a
+  // revoked member drops out immediately, unlike the users.role projection.
+  async findActiveByOperator(operatorId: string): Promise<OperatorMembership[]> {
+    const rows = await this.db
+      .select()
+      .from(operatorMemberships)
+      .where(
+        and(
+          eq(operatorMemberships.operatorId, operatorId),
+          eq(operatorMemberships.status, 'ACTIVE'),
+        ),
+      )
+    return rows.map(toOperatorMembership)
+  }
+
   // A concurrent double-accept that inserts a second ACTIVE row for one user
   // hits operator_memberships_active_user_unique (23505) — the race fence. The
   // caller (OperatorGrantService, Slice B) re-reads the winner on conflict.
