@@ -5,7 +5,7 @@ import { useMemo, useState } from 'react'
 import { useTranslations } from 'use-intl'
 import type { MapAdapter } from './MapAdapter'
 import { SearchResultRow } from './SearchResultRow'
-import { searchResultKey } from './result'
+import { resultPriceLabel, resultTitle, searchResultKey } from './result'
 
 interface SearchMapListProps {
   readonly items: SearchResultItem[]
@@ -79,6 +79,15 @@ export function SearchMapList({ items, adapter: Adapter, anchor = null }: Search
             selectedId={selectedId}
             onSelect={setSelectedId}
             anchor={anchor}
+            renderSelected={(item) => (
+              <div className="min-w-44 rounded-lg border border-border bg-card p-3 text-sm shadow-md">
+                <p className="font-semibold leading-tight">{resultTitle(item)}</p>
+                <p className="mt-0.5 text-muted-foreground">
+                  {item.location.operatorName} · {item.location.name}
+                </p>
+                <p className="mt-1 font-medium text-foreground">{resultPriceLabel(item, t)}</p>
+              </div>
+            )}
           />
         )}
       </div>
