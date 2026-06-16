@@ -26,10 +26,9 @@ export class NominatimGeocoder implements Geocoder {
   constructor(
     private readonly baseUrl: string,
     private readonly userAgent: string,
-    // CF Workers: the global fetch must be called with this===globalThis, else
-    // `this.fetchFn(...)` throws "Illegal invocation" (#887). Bind the default;
-    // the injectable param keeps the test mock seam intact.
-    private readonly fetchFn: typeof fetch = fetch.bind(globalThis) as typeof fetch,
+    // Bound to globalThis: CF Workers' global fetch is a branded builtin that
+    // throws "Illegal invocation" if called detached (here, as this.fetchFn). #887
+    private readonly fetchFn: typeof fetch = fetch.bind(globalThis),
     // Optional auth token. LocationIQ is Nominatim-compatible but key-gated via
     // `?key=` (#574), so providing one makes it a pure env-var swap from public OSM.
     private readonly apiKey?: string,
