@@ -1,6 +1,6 @@
 # Search results: map ↔ list interaction redesign
 
-**Status:** DIRECTION AGREED — **Option B (car-first)**, pending final colleague sign-off · updated 2026-06-15
+**Status:** SIGNED OFF — **Option B (car-first)**, §5 resolved (colleague review 2026-06-15); ready for the implementation plan · updated 2026-06-15
 **Author:** (Jack + Claude)
 **Decision owner:** Jack + colleague
 **Supersedes the UX of:** #458 (`feat: map + flat-list search results`, closed — original build)
@@ -88,23 +88,23 @@ The map is primary: panning/zooming re-filters the list, with a "Search this are
 
 **Concretely, B is:** per-car / per-combo cards (name · class · price · pickup store + geo-context); a **sticky** map with price-labeled pins (selected inverts); a **pin popup carousel** for co-located results; **bidirectional hover/selection sync** + **fly-to on focus**; on mobile, a **Map toggle** + bottom-sheet card on pin tap.
 
+**Interaction precision (review note — prevents a regression):** the card's **hover/focus drives the map** (highlight the pin → fly-to → open the popup); navigation to the **detail page happens *only* via an explicit CTA** ("View details" / "Select") on the card *and* in the popup. **Do NOT wrap the whole card in a navigation link** — today's `StorefrontCard` is a whole-card `<Link>`, and carrying that pattern over would swallow the card-focuses-pin behavior. The card and popup *are* the quick preview (photo · price · pickup landmark · key specs · CTA) — so there is **no separate inline quick-view**.
+
 *Revisit Option A only if* the catalog grows to many stores with one car each (grouping then adds nothing anyway) **or** store-pickup convenience eclipses model choice in user testing.
 
 ---
 
-## 5. Decisions & remaining open questions
+## 5. Decisions (all resolved — colleague sign-off 2026-06-15)
 
-**Resolved:**
-- **Result granularity → individual cars + combos** (Option B). *[decided]*
-- **Store-vs-car result → car**, for the foreigner geo-feedback goal. *[decided]*
-- **Pin click with N co-located cars → Airbnb-style swipeable carousel popup.** *[decided — industry standard]*
-- **Pin label → price** ("¥8,000" / "from ¥6,500"), the scannable Airbnb/Zillow standard. *[leaning — industry standard]*
-- **Mobile → Map toggle + bottom sheet.** *[leaning — industry standard]*
+- **Result granularity → individual cars + combos** (Option B).
+- **Store-vs-car result → car**, for the foreigner geo-feedback goal.
+- **Pin click with N co-located cars → Airbnb-style swipeable carousel popup** (industry standard).
+- **Pin label → price** ("¥8,000" / "from ¥6,500"), the scannable Airbnb/Zillow standard.
+- **Card / popup target → detail page via an explicit CTA** (no inline quick-view). The card/popup are the quick preview (photo · price · pickup landmark · key specs · CTA); **card hover/focus drives the map, only the CTA navigates** — see §4 *Interaction precision*.
+- **Retire the 门店/地图 data-mode toggle → one unified desktop map+list default.** If a control is wanted, a quiet **"Hide map / Show map" *presentation* toggle** — never a data-mode switch.
+- **Mobile → list default with a sticky "Map" button**; tapping it opens a **full-screen map + bottom-sheet carousel** on pin tap.
 
-**Still open:**
-1. **Card / popup target:** link to the vehicle/combo detail page, or an inline quick-view? *(Lean: link to existing detail.)*
-2. **Keep the 门店/地图 toggle**, or make one unified map+list the default with a "hide map" option? *(Lean: unified default.)*
-3. **Later enhancements, designed-for not built-now:** "Search this area" (Option C → #883) and **one-way rentals** (§6 → #882).
+**Deferred to their own issues (designed-for, not built now):** "Search this area" (Option C → #883), one-way rentals (§6 → #882).
 
 ---
 
@@ -127,6 +127,8 @@ A renter picks up at store A and drops off at store B (a.k.a. one-way / relocati
 ## 7. Scope & impact (rough — for cost sense, not a plan)
 
 **Mostly web** (`packages/web/src/vite/search/*`, the search route). Likely **no schema change** for the core redesign.
+
+> **Stack / paths — verified against `marketplace-pivot` 2026-06-15.** Web is a **Vite SPA + TanStack Router**. File routes live under `packages/web/src/routes/$locale/*.tsx`; feature code under `packages/web/src/vite/*`. Concretely: search route `packages/web/src/routes/$locale/search.tsx`; map/list `packages/web/src/vite/search/{SearchMap,SearchMapList,PigeonMapAdapter,SearchResultRow,SearchViewToggle,viewport,result,api}`; cards `packages/web/src/vite/storefronts/{StorefrontCard,StoreGrid}.tsx`. **There is no `packages/web/src/app/[locale]/…`** — the Next.js App Router tree was removed in #714 (epic #689) when web migrated to Vite. Any `app/[locale]` path is the *pre-migration* structure (a 259-commits-behind checkout shows it); confirm with `git ls-tree origin/marketplace-pivot:packages/web/src`.
 
 - **New:** a real **pin popup / carousel** in/around `PigeonMapAdapter` (pigeon-maps `<Overlay>`); **fly-to / recenter on focus** (`viewport.ts` already centers on a region anchor — extend to per-selection); **bidirectional sync** (`SearchMapList` already tracks a `locationId` selection — extend to fly + popup + scroll-into-view); **price-labeled pins**; **geo-context labels** (landmark/station · distance · prefecture) on card + popup.
 - **Verify (API):** the flat search payload (`SearchResultsData`) carries **lat/lng per pickup location** (it does — pins render today) and that a **min/representative price** is available for pin labels. Geo-context (nearest landmark/region name) may reuse the region data from #651.
