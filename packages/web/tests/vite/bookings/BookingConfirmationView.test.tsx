@@ -2,6 +2,7 @@ import { formatDateTime, formatJpy } from '@/lib/format'
 import { BookingConfirmationView } from '@/vite/bookings/BookingConfirmationView'
 import type { BookingDto } from '@/vite/bookings/api'
 import type { VehicleClassData } from '@/vite/vehicles/classes'
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { render, screen } from '@testing-library/react'
 import type { ReactNode } from 'react'
 import { IntlProvider } from 'use-intl'
@@ -54,11 +55,21 @@ function makeBooking(overrides: Partial<BookingDto> = {}): BookingDto {
   }
 }
 
-function renderView(booking: BookingDto, vehicleClass: VehicleClassData | null = null) {
+function renderView(
+  booking: BookingDto,
+  vehicleClass: VehicleClassData | null = null,
+  csrfToken: string | null = 'csrf-tok',
+) {
   return render(
-    <IntlProvider locale="en" messages={en}>
-      <BookingConfirmationView booking={booking} vehicleClass={vehicleClass} />
-    </IntlProvider>,
+    <QueryClientProvider client={new QueryClient()}>
+      <IntlProvider locale="en" messages={en}>
+        <BookingConfirmationView
+          booking={booking}
+          vehicleClass={vehicleClass}
+          csrfToken={csrfToken}
+        />
+      </IntlProvider>
+    </QueryClientProvider>,
   )
 }
 
@@ -139,5 +150,26 @@ describe('BookingConfirmationView', () => {
       'data-to',
       '/$locale/vehicles',
     )
+  })
+
+  // #856: the renter can self-cancel only a CONFIRMED booking they own, and only
+  // when a CSRF token is available to authorize the write.
+  it('offers a cancel control for a confirmed booking', () => {
+    renderView(makeBooking({ status: 'CONFIRMED' }))
+    expect(screen.getByRole('button', { name: en.bookings.cancel.action })).toBeInTheDocument()
+  })
+
+  it('hides the cancel control once the booking is no longer confirmed', () => {
+    renderView(makeBooking({ status: 'ACTIVE' }))
+    expect(
+      screen.queryByRole('button', { name: en.bookings.cancel.action }),
+    ).not.toBeInTheDocument()
+  })
+
+  it('hides the cancel control when no CSRF token is available', () => {
+    renderView(makeBooking({ status: 'CONFIRMED' }), null, null)
+    expect(
+      screen.queryByRole('button', { name: en.bookings.cancel.action }),
+    ).not.toBeInTheDocument()
   })
 })

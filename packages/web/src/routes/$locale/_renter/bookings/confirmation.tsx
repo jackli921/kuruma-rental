@@ -1,6 +1,8 @@
 import { BookingConfirmationView } from '@/vite/bookings/BookingConfirmationView'
 import { bookingByIdQueryOptions } from '@/vite/bookings/api'
+import { useSession } from '@/vite/session'
 import { classByIdQueryOptions } from '@/vite/vehicles/classes'
+import { useSuspenseQuery } from '@tanstack/react-query'
 import { createFileRoute, notFound } from '@tanstack/react-router'
 
 interface ConfirmationSearch {
@@ -34,11 +36,24 @@ export const Route = createFileRoute('/$locale/_renter/bookings/confirmation')({
 })
 
 function BookingConfirmationRoute() {
-  const { booking, vehicleClass } = Route.useLoaderData()
+  const { booking: initialBooking, vehicleClass } = Route.useLoaderData()
+  // Re-read the booking from the query cache the loader warmed, so a successful
+  // self-cancel — which invalidates ['bookings'] — re-renders this page in its
+  // CANCELLED state and drops the cancel control (mirrors the operator trip-detail
+  // page, #616). Loader data is a one-shot snapshot that would stay stale.
+  const { data: booking } = useSuspenseQuery(bookingByIdQueryOptions(initialBooking.id))
+  // CSRF for the self-cancel write; cached by the `_renter` layout, so this reads
+  // instantly. `null` (signed-out edge) simply hides the cancel control.
+  const { data: session } = useSession()
+  if (!booking) throw notFound()
 
   return (
     <main className="flex-1 px-4 py-10 sm:px-6 lg:px-8">
-      <BookingConfirmationView booking={booking} vehicleClass={vehicleClass} />
+      <BookingConfirmationView
+        booking={booking}
+        vehicleClass={vehicleClass}
+        csrfToken={session?.csrfToken ?? null}
+      />
     </main>
   )
 }
