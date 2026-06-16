@@ -177,6 +177,7 @@ export function buildOverrideRepos(overrides: AppOverrides): Repos {
       insuranceOptionRepo,
       addOnRepo,
       feeScheduleRepo,
+      userRepo,
     })
   const fleetOverviewRepo =
     overrides.fleetOverviewRepo ??
@@ -361,6 +362,7 @@ export function buildInMemoryRepos(): Repos {
       insuranceOptionRepo,
       addOnRepo,
       feeScheduleRepo,
+      userRepo,
     })
   const runOperatorGrant: RunOperatorGrant = (fn) =>
     fn({ memberships: operatorMembershipRepo, users: userRepo, invites: providerInviteRepo })

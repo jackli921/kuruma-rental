@@ -616,6 +616,10 @@ export interface TransactionRepos {
   insuranceOptionRepo: InsuranceOptionRepository
   addOnRepo: AddOnRepository
   feeScheduleRepo: FeeScheduleRepository
+  // #875: the operator walk-in (#589 1c) creates its fresh renter INSIDE the
+  // booking tx, so a failed booking rolls the renter back with it (no orphan).
+  // Narrowed to that one write — the rest of UserRepository isn't tx-bound here.
+  userRepo: Pick<UserRepository, 'createWalkInRenter'>
 }
 
 export type RunInTransaction = <T>(fn: (repos: TransactionRepos) => Promise<T>) => Promise<T>

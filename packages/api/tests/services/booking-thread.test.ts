@@ -167,6 +167,7 @@ async function makeService(threadRepo?: ThreadRepository, staffUserId?: string) 
     insuranceOptionRepo,
     addOnRepo,
     feeScheduleRepo,
+    userRepo,
   }
   const runInTransaction: RunInTransaction = async (fn) => fn(repos)
 
