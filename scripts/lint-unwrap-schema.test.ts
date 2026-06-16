@@ -64,6 +64,17 @@ describe('countSchemalessUnwraps', () => {
     const src = 'return unwrap(\n  res,\n  fooSchema,\n)'
     expect(countSchemalessUnwraps(src)).toBe(0)
   })
+
+  test('a trailing comma after a single arg is still schemaless (no second arg)', () => {
+    // biome adds a trailing comma to multi-line calls; it must not read as validated
+    expect(countSchemalessUnwraps('unwrap(res,)')).toBe(1)
+    expect(countSchemalessUnwraps('unwrap(\n  res,\n)')).toBe(1)
+  })
+
+  test('member-access .unwrap(res) is not the helper and is ignored', () => {
+    expect(countSchemalessUnwraps('return result.unwrap(res)')).toBe(0)
+    expect(countSchemalessUnwraps('return result?.unwrap(res)')).toBe(0)
+  })
 })
 
 describe('reconcile', () => {

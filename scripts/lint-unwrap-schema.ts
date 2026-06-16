@@ -17,13 +17,16 @@
  * balances brackets). It does not handle `unwrap` inside `${}` template
  * interpolation or inside regex literals — neither occurs in the web clients.
  */
-import { execSync } from 'node:child_process'
-import { readFileSync } from 'node:fs'
-import { relative } from 'node:path'
+import { readFileSync, readdirSync } from 'node:fs'
+import { join, relative } from 'node:path'
 
 const VITE_DIR = 'packages/web/src/vite'
 
-/** Files permitted to contain schemaless `unwrap()` calls, with their exact count. */
+/**
+ * Files permitted to contain schemaless `unwrap()` calls, with their exact count.
+ * When this empties, delete the count machinery and collapse the rule to a flat
+ * "no schemaless unwrap anywhere" check — the invariant it's ratcheting toward.
+ */
 const ALLOW: Record<string, number> = {
   'admin/revenue/api.ts': 1,
   'admin/anomalies/api.ts': 1,
@@ -75,9 +78,42 @@ export function stripCommentsAndStrings(source: string): string {
 const isSpace = (ch: string | undefined): boolean => ch !== undefined && /\s/.test(ch)
 
 /**
- * Counts `unwrap(...)` calls that pass no second argument (no schema). Skips an
- * optional `<...>` generic type-argument list, then balances brackets to decide
- * whether the call's argument list has a top-level comma (a second argument).
+ * Counts the non-empty, comma-separated top-level arguments of the call whose
+ * `(` is at `open`. A trailing comma yields no extra argument, so `f(a,)` is
+ * arity 1 — not 2. Used to tell `unwrap(res)` (schemaless) from
+ * `unwrap(res, schema)` (validated).
+ */
+function topLevelArity(code: string, open: number): number {
+  let depth = 1
+  let args = 0
+  let segmentHasContent = false
+  let j = open + 1
+  while (j < code.length && depth > 0) {
+    const ch = code[j]
+    if (ch === '(' || ch === '[' || ch === '{') {
+      depth++
+      segmentHasContent = true
+    } else if (ch === ')' || ch === ']' || ch === '}') {
+      depth--
+      if (depth === 0) break
+      segmentHasContent = true
+    } else if (ch === ',' && depth === 1) {
+      if (segmentHasContent) args++
+      segmentHasContent = false
+    } else if (!isSpace(ch)) {
+      segmentHasContent = true
+    }
+    j++
+  }
+  if (segmentHasContent) args++
+  return args
+}
+
+/**
+ * Counts `unwrap(...)` calls that pass no Zod schema (fewer than two arguments).
+ * Skips an optional `<...>` generic type-argument list before the call, and
+ * ignores member access (`x.unwrap(...)`) since only the free `unwrap` helper
+ * carries the schema contract.
  */
 export function countSchemalessUnwraps(source: string): number {
   const code = stripCommentsAndStrings(source)
@@ -85,6 +121,10 @@ export function countSchemalessUnwraps(source: string): number {
   let count = 0
   let m: RegExpExecArray | null = re.exec(code)
   while (m !== null) {
+    if (code[m.index - 1] === '.') {
+      m = re.exec(code)
+      continue
+    }
     let j = m.index + 'unwrap'.length
     while (isSpace(code[j])) j++
     if (code[j] === '<') {
@@ -102,19 +142,7 @@ export function countSchemalessUnwraps(source: string): number {
       }
       while (isSpace(code[j])) j++
     }
-    if (code[j] === '(') {
-      j++
-      let depth = 1
-      let hasTopLevelComma = false
-      while (j < code.length && depth > 0) {
-        const ch = code[j]
-        if (ch === '(' || ch === '[' || ch === '{') depth++
-        else if (ch === ')' || ch === ']' || ch === '}') depth--
-        else if (ch === ',' && depth === 1) hasTopLevelComma = true
-        j++
-      }
-      if (!hasTopLevelComma) count++
-    }
+    if (code[j] === '(' && topLevelArity(code, j) < 2) count++
     m = re.exec(code)
   }
   return count
@@ -128,13 +156,14 @@ export function reconcile(actual: Record<string, number>, allow: Record<string, 
   const messages: string[] = []
   for (const [file, count] of Object.entries(actual)) {
     if (count <= 0) continue
-    if (!(file in allow)) {
+    const expected = allow[file]
+    if (expected === undefined) {
       messages.push(
         `${file}: ${count} schemaless unwrap() call(s) but the file is not on the allow-list. Pass a Zod schema to unwrap(), or add it to ALLOW if intentionally deferred.`,
       )
-    } else if (count > allow[file]) {
+    } else if (count > expected) {
       messages.push(
-        `${file}: expected ${allow[file]} schemaless unwrap() call(s) but found ${count}. New unvalidated debt — validate the added call(s).`,
+        `${file}: expected ${expected} schemaless unwrap() call(s) but found ${count}. New unvalidated debt — validate the added call(s).`,
       )
     }
   }
@@ -149,13 +178,13 @@ export function reconcile(actual: Record<string, number>, allow: Record<string, 
   return messages
 }
 
-function scanTree(dir: string): Record<string, number> {
-  const files = execSync(
-    `grep -rl "unwrap" ${dir} --include="*.ts" --include="*.tsx" 2>/dev/null || true`,
-    { encoding: 'utf-8' },
-  )
-    .split('\n')
-    .filter(Boolean)
+function listSourceFiles(dir: string): string[] {
+  return readdirSync(dir, { recursive: true, encoding: 'utf-8' })
+    .filter((p) => p.endsWith('.ts') || p.endsWith('.tsx'))
+    .map((p) => join(dir, p))
+}
+
+function scanFiles(dir: string, files: readonly string[]): Record<string, number> {
   const counts: Record<string, number> = {}
   for (const file of files) {
     const n = countSchemalessUnwraps(readFileSync(file, 'utf-8'))
@@ -165,7 +194,16 @@ function scanTree(dir: string): Record<string, number> {
 }
 
 if (import.meta.main) {
-  const actual = scanTree(VITE_DIR)
+  // Fail closed: an empty scan would otherwise pass vacuously and hide that the
+  // ratchet stopped looking at anything (e.g. a moved tree).
+  const sourceFiles = listSourceFiles(VITE_DIR)
+  if (sourceFiles.length === 0) {
+    console.error(
+      `lint-unwrap-schema: found 0 source files under ${VITE_DIR} — refusing to pass vacuously.`,
+    )
+    process.exit(1)
+  }
+  const actual = scanFiles(VITE_DIR, sourceFiles)
   const messages = reconcile(actual, ALLOW)
   if (messages.length > 0) {
     console.error('Unwrap-schema ratchet violations:\n')
