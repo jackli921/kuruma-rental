@@ -92,6 +92,28 @@ export class DrizzleUserRepository implements UserRepository {
     return existing
   }
 
+  async createWalkInRenter(data: { name: string; phone: string }): Promise<User> {
+    // #589 1c: ALWAYS a fresh renter — never dedup by phone, so an operator can't
+    // attach a booking to (or probe the existence of) another tenant's customer
+    // (#396/#475). The placeholder email is random (never collides → no
+    // ON CONFLICT path); phone is stored as-is (not a unique column); role
+    // defaults to RENTER so the customer is findable in the operator's later
+    // scoped search (#589 1a).
+    const [inserted] = await this.db
+      .insert(users)
+      .values({
+        name: data.name,
+        email: `walkin-${crypto.randomUUID()}${PLACEHOLDER_EMAIL_SUFFIX}`,
+        phone: data.phone,
+        language: 'en',
+      })
+      .returning(userColumns)
+    if (!inserted) {
+      throw new Error('createWalkInRenter: insert returned no row')
+    }
+    return maskPlaceholderEmail(inserted) as User
+  }
+
   async findByEmail(email: string): Promise<User | undefined> {
     const [row] = await this.db
       .select(userColumns)
