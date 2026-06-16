@@ -30,6 +30,7 @@
     "./types/fee-schedule": "./src/types/fee-schedule.ts",
     "./types/add-on": "./src/types/add-on.ts",
     "./types/insurance-option": "./src/types/insurance-option.ts",
+    "./types/storefront": "./src/types/storefront.ts",
     "./lib/cancellation-policy": "./src/lib/cancellation-policy.ts",
     "./lib/commission": "./src/lib/commission.ts",
     "./lib/admin-revenue": "./src/lib/admin-revenue.ts",

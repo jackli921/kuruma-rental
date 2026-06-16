@@ -1,5 +1,6 @@
 import { type LuggageSize, resolveLuggage } from '@kuruma/shared/lib/luggage'
 import type { LocationOperatingHours } from '@kuruma/shared/types/location'
+import type { StorefrontAddOnData, StorefrontInsuranceData } from '@kuruma/shared/types/storefront'
 import type { CallerContext } from '../middleware/auth'
 import type {
   AddOnRepository,
@@ -61,35 +62,25 @@ export type StorefrontDetailResult =
   | { ok: false; error: string; status: number }
 
 /**
- * Renter-safe insurance projection (#392): the four fields a renter needs to
- * choose coverage at booking. Operator-internal columns (operatorId, status,
- * timestamps) are intentionally absent — same column-whitelist discipline as
- * the public vehicle catalog.
+ * Renter-safe insurance projection (#392). Anchored to the shared wire DTO (#864)
+ * so a field rename fails `typecheck` on both producer and the web reservation
+ * schema, not as a render-time ParseError. Operator-internal columns (operatorId,
+ * status, timestamps) stay absent — same column-whitelist discipline as the
+ * public vehicle catalog.
  */
-export interface StorefrontInsuranceOption {
-  id: string
-  name: string
-  description: string | null
-  dailyPriceJpy: number
-  deductibleJpy: number | null
-}
+export type StorefrontInsuranceOption = StorefrontInsuranceData
 
 export type StorefrontInsuranceResult =
   | { ok: true; data: StorefrontInsuranceOption[] }
   | { ok: false; error: string; status: number }
 
 /**
- * Renter-safe add-on projection (#460): the fields a renter needs to pick paid
- * extras (baby seat etc.) at booking. Operator-internal columns (operatorId,
- * status, timestamps) are intentionally absent — same column-whitelist
- * discipline as the public vehicle catalog + insurance options.
+ * Renter-safe add-on projection (#460). Anchored to the shared wire DTO (#864):
+ * the fields a renter needs to pick paid extras (baby seat etc.) at booking.
+ * Operator-internal columns (operatorId, status, timestamps) stay absent — same
+ * column-whitelist discipline as the public vehicle catalog + insurance options.
  */
-export interface StorefrontAddOn {
-  id: string
-  name: string
-  description: string | null
-  priceJpy: number
-}
+export type StorefrontAddOn = StorefrontAddOnData
 
 export type StorefrontAddOnResult =
   | { ok: true; data: StorefrontAddOn[] }
