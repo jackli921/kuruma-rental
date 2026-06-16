@@ -145,3 +145,27 @@ export type CancellationReasonCode = (typeof CANCELLATION_REASON_CODES)[number]
 // LUGGAGE_SIZES already lives in lib/luggage.ts (#457) — re-exported here so the
 // enum SSoT is reachable from one subpath without duplicating its declaration.
 export { LUGGAGE_SIZES, type LuggageSize } from './lib/luggage'
+
+// --- Consent ledger (issue #877) ---
+export const CONSENT_TYPES = [
+  'RENTER_TOS',
+  'PRIVACY_POLICY',
+  'RENTER_LIABILITY',
+  'OPERATOR_AGREEMENT',
+] as const
+export type ConsentType = (typeof CONSENT_TYPES)[number]
+
+export const CONSENT_DOC_STATUSES = ['DRAFT', 'PUBLISHED', 'ARCHIVED'] as const
+export type ConsentDocStatus = (typeof CONSENT_DOC_STATUSES)[number]
+
+export const CONSENT_METHODS = ['CLICKWRAP', 'ESIGN', 'IMPORTED'] as const
+export type ConsentMethod = (typeof CONSENT_METHODS)[number]
+
+/** §4.2 — derived config, never a stored column. Drives the re-consent query. */
+export type ConsentCardinality = 'ONCE_PER_SUBJECT' | 'PER_EVENT'
+export const CONSENT_CARDINALITY: Record<ConsentType, ConsentCardinality> = {
+  RENTER_TOS: 'ONCE_PER_SUBJECT',
+  PRIVACY_POLICY: 'ONCE_PER_SUBJECT',
+  OPERATOR_AGREEMENT: 'ONCE_PER_SUBJECT',
+  RENTER_LIABILITY: 'PER_EVENT',
+}
