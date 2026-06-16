@@ -3,6 +3,7 @@ import {
   type LocationRepository,
   MAX_NOTIFICATION_ATTEMPTS,
   type NotificationLogRepository,
+  type OperatorMembershipRepository,
   type OperatorRepository,
   type UserRepository,
   type VehicleRepository,
@@ -46,6 +47,14 @@ export interface NotificationDispatcherConfig {
 }
 
 interface Resolved {
+  // Envelope `To` — a single visible address. For the operator alert this is the
+  // platform `from` (send-to-self), never a member, so members stay undisclosed.
+  to: string
+  // #878: blind-copied recipients (the operator's active members). Carried only
+  // in-memory — the notification_log row persists one `recipient` audit string.
+  bcc?: string[] | undefined
+  // The value persisted to notification_log.recipient (single text column, no
+  // migration): the renter email, the joined member list, or the fallback inbox.
   recipient: string
   locale: string
 }
@@ -80,6 +89,7 @@ export class NotificationDispatcher {
     private readonly operatorRepo: OperatorRepository,
     private readonly vehicleRepo: VehicleRepository,
     private readonly userRepo: UserRepository,
+    private readonly membershipRepo: OperatorMembershipRepository,
     private readonly locationRepo: LocationRepository,
     private readonly emailSender: EmailSender,
     private readonly config: NotificationDispatcherConfig,
@@ -134,7 +144,9 @@ export class NotificationDispatcher {
     }
 
     try {
-      const message = await this.buildMessage(booking, kind, claimed.recipient, claimed.locale)
+      // Address from the in-memory `resolved` (it carries the Bcc list the
+      // single-column log row can't); `claimed` only confirms we won the claim.
+      const message = await this.buildMessage(booking, kind, resolved)
       const { providerMessageId } = await this.emailSender.send(message)
       await this.notificationLogRepo.markSent(claimed.id, providerMessageId)
       return { result: 'sent', row: { ...claimed, status: 'SENT', providerMessageId } }
@@ -164,16 +176,46 @@ export class NotificationDispatcher {
     if (kind.startsWith('RENTER_')) {
       const [renter] = await this.userRepo.findByIds([booking.renterId])
       if (!renter?.email) return undefined
-      return { recipient: renter.email, locale: renter.language ?? 'en' }
+      return { to: renter.email, recipient: renter.email, locale: renter.language ?? 'en' }
     }
-    // OPERATOR_BOOKING_ALERT — first owner, else the platform ops fallback.
-    const owners = await this.userRepo.findOperatorContacts(booking.operatorId)
-    const recipient = owners[0]?.email ?? this.config.fallbackOperatorEmail
-    if (!recipient) return undefined
-    return { recipient, locale: DEFAULT_OPERATOR_LOCALE }
+    // OPERATOR_BOOKING_ALERT (#878) — every ACTIVE member (owner + staff) of the
+    // operator, sourced from the grant ledger so a revoked member never lingers.
+    const members = await this.resolveActiveMemberEmails(booking.operatorId)
+    if (members.length > 0) {
+      // Bcc all members; `to` is the platform `from` (send-to-self) so no member's
+      // address is disclosed to the others. The audit recipient is the full list.
+      return {
+        to: this.config.emailFrom,
+        bcc: members,
+        recipient: members.join(', '),
+        locale: DEFAULT_OPERATOR_LOCALE,
+      }
+    }
+    // No active members — fall back to the platform ops inbox of last resort.
+    const fallback = this.config.fallbackOperatorEmail
+    if (!fallback) return undefined
+    return { to: fallback, recipient: fallback, locale: DEFAULT_OPERATOR_LOCALE }
   }
 
-  private async buildMessage(booking: Booking, kind: Kind, recipient: string, locale: string) {
+  /**
+   * #878: the operator's active-member email set. Memberships are the recipient
+   * source of truth; users.findByIds resolves the addresses and masks the
+   * synthetic placeholder email to null (a seeded placeholder owner is dropped,
+   * not emailed). Order is preserved for a stable audit string.
+   */
+  private async resolveActiveMemberEmails(operatorId: string): Promise<string[]> {
+    const members = await this.membershipRepo.findActiveByOperator(operatorId)
+    if (members.length === 0) return []
+    const users = await this.userRepo.findByIds(members.map((m) => m.userId))
+    const emailByUserId = new Map(users.map((u) => [u.id, u.email]))
+    return members.flatMap((m) => {
+      const email = emailByUserId.get(m.userId)
+      return email ? [email] : []
+    })
+  }
+
+  private async buildMessage(booking: Booking, kind: Kind, resolved: Resolved) {
+    const { to, bcc, locale } = resolved
     const [operator, vehicle, pickup, dropoff] = await Promise.all([
       this.operatorRepo.findById(booking.operatorId),
       this.vehicleRepo.findById(SYSTEM_CONTEXT, booking.assignedVehicleId),
@@ -199,7 +241,8 @@ export class NotificationDispatcher {
     }
     const replyTo = this.config.emailReplyTo
     const envelope = (r: { subject: string; html: string; text: string }) => ({
-      to: recipient,
+      to,
+      ...(bcc?.length ? { bcc } : {}),
       from: this.config.emailFrom,
       subject: r.subject,
       html: r.html,

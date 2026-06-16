@@ -110,16 +110,6 @@ export class DrizzleUserRepository implements UserRepository {
     return row ? (maskPlaceholderEmail(row) as User) : undefined
   }
 
-  async findOperatorContacts(operatorId: string): Promise<User[]> {
-    // Platform-internal scoped read over idx_users_operatorId (#393 P1a). Owner
-    // only — no OPERATOR_STAFF fallback in MVP.
-    const rows = await this.db
-      .select(userColumns)
-      .from(users)
-      .where(and(eq(users.operatorId, operatorId), eq(users.role, 'OPERATOR_OWNER')))
-    return rows.map(maskPlaceholderEmail) as User[]
-  }
-
   // #521 §6: the operator-grant projection write. Runs tx-bound inside the grant
   // transaction (membership INSERT first is the race fence). The OperatorRole
   // subset maps 1:1 onto the `role` enum, so no widening cast is needed.

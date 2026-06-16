@@ -330,11 +330,6 @@ export interface UserRepository {
   }): Promise<User>
   findByEmail(email: string): Promise<User | undefined>
   findByPhone(phone: string): Promise<User | undefined>
-  // Slice 7 (#393): the operator's OPERATOR_OWNER contact users, for the booking
-  // alert recipient. A fixed-purpose PLATFORM-INTERNAL read over the indexed
-  // users.operatorId — NOT a caller-facing lookup, so it does NOT reopen the #396
-  // renter-enumeration vector. Owner-only by design (no OPERATOR_STAFF in MVP).
-  findOperatorContacts(operatorId: string): Promise<User[]>
   // #521 Decision 1: project an accepted operator grant onto users.role +
   // users.operatorId — the single-active denormalisation the JWT reads. One of
   // the three writes in the grant transaction; the OperatorRole subset is exactly
