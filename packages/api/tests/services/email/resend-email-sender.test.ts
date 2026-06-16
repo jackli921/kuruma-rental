@@ -93,4 +93,23 @@ describe('ResendEmailSender', () => {
     const body = JSON.parse(fetchFn.mock.calls[0]![1]!.body as string)
     expect(body.from).toBe('configured@from')
   })
+
+  it('binds the default fetch to globalThis so a CF Workers send does not throw Illegal invocation (#887)', async () => {
+    // CF Workers' global fetch is a branded builtin that throws unless called with
+    // this === globalThis. Node/vitest don't brand it, so simulate the branding and
+    // exercise the DEFAULT fetchFn — the prod path that silently killed every email.
+    const brandedFetch = async function (this: unknown): Promise<Response> {
+      if (this !== globalThis) {
+        throw new TypeError("Illegal invocation: function called with incorrect 'this' reference")
+      }
+      return jsonResponse({ id: 'resend-bound' })
+    }
+    vi.stubGlobal('fetch', brandedFetch)
+    try {
+      const result = await new ResendEmailSender('re_key', 'noreply@from').send(message)
+      expect(result).toEqual({ providerMessageId: 'resend-bound' })
+    } finally {
+      vi.unstubAllGlobals()
+    }
+  })
 })

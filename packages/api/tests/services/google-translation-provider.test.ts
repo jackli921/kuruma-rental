@@ -117,4 +117,24 @@ describe('GoogleTranslationProvider', () => {
     await expect(provider.translate('x', null, 'en')).rejects.toThrow('still down')
     expect(fetchFn).toHaveBeenCalledTimes(2)
   })
+
+  it('binds the default fetch to globalThis so a CF Workers translate does not throw Illegal invocation (#887)', async () => {
+    // CF Workers brands the global fetch: calling it detached (this !== globalThis) throws.
+    // Exercise the DEFAULT fetchFn against a this-sensitive (branded) fetch stub.
+    const brandedFetch = async function (this: unknown): Promise<Response> {
+      if (this !== globalThis) {
+        throw new TypeError("Illegal invocation: function called with incorrect 'this' reference")
+      }
+      return jsonResponse({
+        data: { translations: [{ translatedText: 'Hello', detectedSourceLanguage: 'ja' }] },
+      })
+    }
+    vi.stubGlobal('fetch', brandedFetch)
+    try {
+      const result = await new GoogleTranslationProvider('key').translate('こんにちは', null, 'en')
+      expect(result).toEqual({ translatedText: 'Hello', detectedLanguage: 'ja' })
+    } finally {
+      vi.unstubAllGlobals()
+    }
+  })
 })
