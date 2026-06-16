@@ -4,6 +4,7 @@ import {
   bookingEventsQueryOptions,
   cancelBooking,
   createManualBooking,
+  customerSearchQueryOptions,
   fetchBookingEvents,
   fetchCalendarBookings,
   fetchCalendarVehicles,
@@ -13,6 +14,7 @@ import {
   operatorCalendarQueryOptions,
   operatorCalendarVehiclesQueryOptions,
   operatorRowFromDetail,
+  searchCustomers,
   substituteBooking,
   substitutionCandidatesQueryOptions,
   updateBookingStatus,
@@ -592,6 +594,34 @@ describe('createManualBooking', () => {
     expect(result).toMatchObject({ id: 'bk-1', source: 'MANUAL' })
   })
 
+  it('POSTs an EXISTING-customer body with renterId and NO walkInCustomer', async () => {
+    const fetchMock = vi.fn(async () =>
+      jsonResponse({ success: true, data: bookingRaw({ source: 'MANUAL' }) }, 201),
+    )
+    vi.stubGlobal('fetch', fetchMock)
+
+    await createManualBooking(
+      { ...walkInInput, customer: { kind: 'existing', renterId: 'r-9' } },
+      'csrf-tok',
+    )
+
+    const [, init] = fetchMock.mock.calls[0]! as [string, RequestInit]
+    const body = JSON.parse(init.body as string)
+    // The XOR is honored on the wire: renterId present, walkInCustomer absent —
+    // mirroring the server's mutually-exclusive customer-source refine.
+    expect(body).toEqual({
+      requestedVehicleId: 'veh-1',
+      pickupLocationId: 'loc-1',
+      dropoffLocationId: 'loc-1',
+      startAt: '2026-07-01T01:00:00.000Z',
+      endAt: '2026-07-03T01:00:00.000Z',
+      source: 'MANUAL',
+      renterId: 'r-9',
+      idempotencyKey: '11111111-2222-4333-8444-555555555555',
+    })
+    expect(body).not.toHaveProperty('walkInCustomer')
+  })
+
   it('throws ApiError on a domain failure (e.g. 409 vehicle just booked)', async () => {
     vi.stubGlobal(
       'fetch',
@@ -608,6 +638,95 @@ describe('createManualBooking', () => {
     )
 
     await expect(createManualBooking(walkInInput, 'csrf-tok')).rejects.toBeInstanceOf(ParseError)
+  })
+})
+
+// #589 1d (slice 3): the manual-booking dialog can attach an EXISTING renter.
+// searchCustomers reads the one operator-reachable customer route — the server
+// scopes an OPERATOR_* caller to its own prior renters, so the client sends only
+// the query `q` (a cross-tenant or global-enumeration read is impossible here).
+describe('searchCustomers', () => {
+  it('GETs /customers/search?q= with credentials and maps to {id,name,email,phone}', async () => {
+    const fetchMock = vi.fn(async () =>
+      jsonResponse({
+        success: true,
+        data: [
+          {
+            id: 'r-9',
+            name: 'Tanaka Hiro',
+            email: 'tanaka@example.com',
+            phone: '+81-90-1234-5678',
+          },
+        ],
+      }),
+    )
+    vi.stubGlobal('fetch', fetchMock)
+
+    const results = await searchCustomers('tanaka')
+
+    const [url, init] = fetchMock.mock.calls[0]! as [string, RequestInit]
+    const parsed = new URL(url, 'http://x')
+    expect(parsed.pathname).toBe('/api/customers/search')
+    expect(parsed.searchParams.get('q')).toBe('tanaka')
+    expect(init.credentials).toBe('include')
+    expect(results).toEqual([
+      { id: 'r-9', name: 'Tanaka Hiro', email: 'tanaka@example.com', phone: '+81-90-1234-5678' },
+    ])
+  })
+
+  it('url-encodes a query with spaces and slashes', async () => {
+    const fetchMock = vi.fn(async () => jsonResponse({ success: true, data: [] }))
+    vi.stubGlobal('fetch', fetchMock)
+
+    await searchCustomers('a b/c')
+
+    const [url] = fetchMock.mock.calls[0]!
+    expect(new URL(url as string, 'http://x').searchParams.get('q')).toBe('a b/c')
+  })
+
+  it('tolerates null name/email/phone (phone-only or nameless rows)', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () =>
+        jsonResponse({
+          success: true,
+          data: [{ id: 'r-1', name: null, email: null, phone: '+81-1' }],
+        }),
+      ),
+    )
+
+    const [customer] = await searchCustomers('x')
+    expect(customer).toEqual({ id: 'r-1', name: null, email: null, phone: '+81-1' })
+  })
+
+  it('throws ApiError on a failure envelope (renter 403 / too-short 400)', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => jsonResponse({ success: false, error: 'Forbidden' }, 403)),
+    )
+
+    await expect(searchCustomers('ab')).rejects.toBeInstanceOf(ApiError)
+  })
+
+  it('rejects with ParseError when a row drifts (missing id)', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () =>
+        jsonResponse({ success: true, data: [{ name: 'No Id', email: null, phone: null }] }),
+      ),
+    )
+
+    await expect(searchCustomers('ab')).rejects.toBeInstanceOf(ParseError)
+  })
+})
+
+describe('customerSearchQueryOptions', () => {
+  it('keys by the query and is enabled only at >=2 non-space chars', () => {
+    const opts = customerSearchQueryOptions('tan')
+    expect(opts.queryKey).toEqual(['operator-bookings', 'customer-search', 'tan'])
+    expect(opts.enabled).toBe(true)
+    expect(customerSearchQueryOptions(' a ').enabled).toBe(false)
+    expect(customerSearchQueryOptions('').enabled).toBe(false)
   })
 })
 
