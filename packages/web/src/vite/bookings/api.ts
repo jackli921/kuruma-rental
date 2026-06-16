@@ -229,3 +229,26 @@ export function myBookingsQueryOptions(renterId: string) {
     queryFn: () => fetchMyBookings(renterId),
   })
 }
+
+// #856: the stable prefix every renter bookings query is keyed under
+// (`['bookings', id]` for the detail/confirmation read, `['bookings', 'mine',
+// renterId]` for My Bookings). A self-cancel invalidates THIS key; React Query's
+// prefix match refreshes both in one call, so the mutation never enumerates the
+// sub-keys it touched (mirrors operator OPERATOR_BOOKINGS_KEY).
+export const BOOKINGS_KEY = ['bookings'] as const
+
+// #856: renter self-cancellation. POST /bookings/:id/cancel is IDOR-sealed and
+// caller-scoped server-side, so the renter hits the SAME endpoint the operator
+// does — no renter id is passed (ownership is the server's call, not ours). The
+// cancel is modelled as a bodyless, cookie-authed, CSRF-gated POST, so the caller
+// echoes the session token and sets no Content-Type (there is no JSON body to
+// declare). `unwrap` returns the now-CANCELLED booking, or throws an ApiError
+// carrying the status so the dialog can treat 409 (already cancelled) as benign.
+export async function cancelBooking(id: string, csrfToken: string): Promise<BookingDto> {
+  const res = await fetch(`${getApiBaseUrl()}/bookings/${encodeURIComponent(id)}/cancel`, {
+    method: 'POST',
+    credentials: 'include',
+    headers: { 'X-CSRF-Token': csrfToken },
+  })
+  return unwrap(res, bookingDtoSchema)
+}

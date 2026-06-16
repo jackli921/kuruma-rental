@@ -857,6 +857,19 @@
       "viewBookings": "查看我的预订",
       "backToVehicles": "浏览更多车辆"
     },
+    "cancel": {
+      "action": "取消预订",
+      "dialogTitle": "取消此预订？",
+      "dialogDescription": "请查看下方的取消费用，然后确认。此操作无法撤销。",
+      "feeLine": "取消费用：{fee}（{percent}%）",
+      "refundLine": "预计退款：{refund}",
+      "noShowNotice": "取车时间已过，将收取全额费用（{fee}）。",
+      "advisory": "费用将在取车时与 {operator} 结算，现在不会在线收取。",
+      "keep": "保留预订",
+      "confirm": "确认取消",
+      "pending": "取消中…",
+      "error": "无法取消您的预订。请重试，或联系运营商。"
+    },
     "list": {
       "title": "我的预订",
       "subtitle": "您的即将到来和过去的预订",
