@@ -66,7 +66,7 @@ Result = **car / combo**. One card per vehicle or class-combo. Map pin per **pic
 
 ### Option C — Map-driven list ("search this area")
 
-The map is primary: panning/zooming re-filters the list, with a "Search this area" button. *Largely redundant with our region picker + chips.* **Deferred** — an enhancement on top of B, not a base choice.
+The map is primary: panning/zooming re-filters the list, with a "Search this area" button. *Largely redundant with our region picker + chips.* **Deferred** — an enhancement on top of B, not a base choice. *(tracked as #883.)*
 
 ---
 
@@ -104,11 +104,11 @@ The map is primary: panning/zooming re-filters the list, with a "Search this are
 **Still open:**
 1. **Card / popup target:** link to the vehicle/combo detail page, or an inline quick-view? *(Lean: link to existing detail.)*
 2. **Keep the 门店/地图 toggle**, or make one unified map+list the default with a "hide map" option? *(Lean: unified default.)*
-3. **Later enhancements, designed-for not built-now:** "Search this area" (Option C) and **one-way rentals** (§6).
+3. **Later enhancements, designed-for not built-now:** "Search this area" (Option C → #883) and **one-way rentals** (§6 → #882).
 
 ---
 
-## 6. Future consideration: one-way rentals (pickup ≠ dropoff)
+## 6. Future consideration: one-way rentals (pickup ≠ dropoff) — tracked as #882
 
 A renter picks up at store A and drops off at store B (a.k.a. one-way / relocation rental). **Not in scope now**, but the redesign should not preclude it.
 
