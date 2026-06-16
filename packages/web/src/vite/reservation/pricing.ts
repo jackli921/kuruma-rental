@@ -1,15 +1,12 @@
-import { type VehicleRates, calculateBookingPrice } from '@kuruma/shared/lib/pricing'
+import {
+  type VehicleRates,
+  calculateBookingPrice,
+  composeBookingTotal,
+  rentalDays,
+} from '@kuruma/shared/lib/pricing'
 
-const MS_PER_DAY = 24 * 60 * 60 * 1000
-
-/**
- * Rental length in whole days (ceil, min 1) — the unit insurance is billed in.
- * Mirrors the API's private `rentalDays` (services/booking.ts) so the wizard's
- * insurance line matches the eventual server charge.
- */
-export function rentalDays(from: Date, to: Date): number {
-  return Math.max(1, Math.ceil((to.getTime() - from.getTime()) / MS_PER_DAY))
-}
+// Re-exported so DateRangeStep can keep importing rentalDays from this module.
+export { rentalDays }
 
 export interface ReservationEstimateInput {
   vehicle: VehicleRates
@@ -30,8 +27,10 @@ export interface ReservationEstimate {
 
 /**
  * Client-side price estimate for the reservation wizard (#460). Mirrors the
- * server total (services/booking.ts `submitInTx`): base off the assigned
- * vehicle's rates, insurance at `dailyPrice × rentalDays`, each add-on flat.
+ * server total: base off the assigned vehicle's rates, insurance at
+ * `dailyPrice × rentalDays`, each add-on flat. The total is composed through the
+ * shared `composeBookingTotal` (#867) — the same function the API uses for the
+ * authoritative charge — so the renter's up-front quote can never desync from it.
  *
  * Fees are intentionally excluded — they live on `feeSnapshot` as informational
  * post-rental charges and are never added to `totalPrice`. The authoritative
@@ -41,10 +40,15 @@ export interface ReservationEstimate {
 export function estimateReservation(input: ReservationEstimateInput): ReservationEstimate {
   const pricing = calculateBookingPrice(input.vehicle, input.from, input.to)
   const baseJpy = pricing.ok ? pricing.totalPriceJpy : 0
-  const insuranceJpy =
-    input.insuranceDailyPriceJpy != null
-      ? input.insuranceDailyPriceJpy * rentalDays(input.from, input.to)
-      : 0
+  const days = rentalDays(input.from, input.to)
+  const insurancePerDayJpy = input.insuranceDailyPriceJpy ?? 0
+  const insuranceJpy = insurancePerDayJpy * days
   const addOnsJpy = input.addOnPricesJpy.reduce((sum, price) => sum + price, 0)
-  return { baseJpy, insuranceJpy, addOnsJpy, totalJpy: baseJpy + insuranceJpy + addOnsJpy }
+  const totalJpy = composeBookingTotal({
+    baseJpy,
+    insurancePerDayJpy,
+    days,
+    addOns: input.addOnPricesJpy.map((priceJpy) => ({ priceJpy })),
+  })
+  return { baseJpy, insuranceJpy, addOnsJpy, totalJpy }
 }
