@@ -170,10 +170,45 @@ describe('#396 — OPERATOR_* cannot enumerate users via any current ingress', (
     expect(res.status).toBe(403)
   })
 
-  it('GET /customers/search is STAFF-gated — operator gets 403', async () => {
-    const res = await app.request('/customers/search?q=re', {
+  it('GET /customers/search returns only the operator’s own-tenant (prior-booking) renters, never a foreign tenant’s', async () => {
+    // #589: operator manual-booking needs to find an existing customer, but the
+    // search MUST stay #396-safe — scoped to renters who have booked with THIS
+    // operator. OWN_RENTER booked with OPERATOR_ID (in scope); FOREIGN booked with
+    // another tenant (out of scope). Both mkUser names contain "User", so a hit on
+    // FOREIGN would prove an enumeration leak, not an incidental text match.
+    await bookingRepo.create(
+      SYSTEM_CONTEXT,
+      bookingInput({
+        operatorId: OPERATOR_ID,
+        renterId: OWN_RENTER_ID,
+        requestedVehicleId: vehicle.id,
+        assignedVehicleId: vehicle.id,
+        pickupLocationId: locationId,
+        dropoffLocationId: locationId,
+      }),
+    )
+    await bookingRepo.create(
+      SYSTEM_CONTEXT,
+      bookingInput({
+        operatorId: OTHER_OPERATOR_ID,
+        renterId: FOREIGN_ID,
+        requestedVehicleId: 'veh-foreign',
+        assignedVehicleId: 'veh-foreign',
+      }),
+    )
+
+    const res = await app.request('/customers/search?q=User', {
       headers: await operatorBearer(SELF_ID),
     })
+
+    expect(res.status).toBe(200)
+    const ids = ((await res.json()) as { data: { id: string }[] }).data.map((u) => u.id)
+    expect(ids).toContain(OWN_RENTER_ID)
+    expect(ids).not.toContain(FOREIGN_ID)
+  })
+
+  it('GET /customers (full list) stays STAFF-gated — operator still gets 403', async () => {
+    const res = await app.request('/customers', { headers: await operatorBearer(SELF_ID) })
     expect(res.status).toBe(403)
   })
 
@@ -287,7 +322,12 @@ describe('#396 — OPERATOR_* cannot enumerate users via any current ingress', (
     expect(userRepo.findByIdsArgs.flat()).not.toContain(FOREIGN_ID)
   })
 
-  it('POST /bookings forces renterId to self — no arbitrary user lookup for a foreign renterId', async () => {
+  it('POST /bookings rejects an operator booking for a renter outside its customers — uniform 403, no user-table probe', async () => {
+    // #589: the operator is now a manual booker, so the route lets renterId
+    // through — but FOREIGN has never booked with this operator, so the service
+    // 403s on scope membership. The check is scope-FIRST (prior-booking set), so
+    // it never probes the user table for FOREIGN: a real vs non-existent id are
+    // indistinguishable (no enumeration oracle, #396/#475).
     const startAt = new Date(Date.now() + 48 * 60 * 60 * 1000)
     const endAt = new Date(startAt.getTime() + 4 * 60 * 60 * 1000)
 
@@ -298,21 +338,49 @@ describe('#396 — OPERATOR_* cannot enumerate users via any current ingress', (
         requestedVehicleId: vehicle.id,
         pickupLocationId: locationId,
         dropoffLocationId: locationId,
-        renterId: FOREIGN_ID, // attempt to book on behalf of another user
+        renterId: FOREIGN_ID,
         startAt: startAt.toISOString(),
         endAt: endAt.toISOString(),
-        source: 'DIRECT',
+        source: 'MANUAL',
       }),
     })
 
-    // OPERATOR_* is not a STAFF role, so the route forces renterId = ctx.userId
-    // (the operator's own id). The booking is created for SELF, not FOREIGN...
-    expect(res.status).toBe(201)
-    const body = (await res.json()) as { data: { renterId: string } }
-    expect(body.data.renterId).toBe(SELF_ID)
-    expect(body.data.renterId).not.toBe(FOREIGN_ID)
-    // ...and the service's staff-override branch (userRepo.findByIds([renterId]))
-    // never ran for the foreign id. If the route forcing regresses, this catches it.
+    expect(res.status).toBe(403)
     expect(userRepo.findByIdsArgs.flat()).not.toContain(FOREIGN_ID)
+  })
+
+  it('POST /bookings lets an operator manually book for its own prior-booking customer (source=MANUAL)', async () => {
+    // OWN_RENTER has a prior booking with this operator → a customer in scope.
+    await bookingRepo.create(
+      SYSTEM_CONTEXT,
+      bookingInput({
+        operatorId: OPERATOR_ID,
+        renterId: OWN_RENTER_ID,
+        requestedVehicleId: 'veh-prior',
+        assignedVehicleId: 'veh-prior',
+      }),
+    )
+
+    const startAt = new Date(Date.now() + 48 * 60 * 60 * 1000)
+    const endAt = new Date(startAt.getTime() + 4 * 60 * 60 * 1000)
+
+    const res = await app.request('/bookings', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...(await operatorBearer(SELF_ID)) },
+      body: JSON.stringify({
+        requestedVehicleId: vehicle.id,
+        pickupLocationId: locationId,
+        dropoffLocationId: locationId,
+        renterId: OWN_RENTER_ID,
+        startAt: startAt.toISOString(),
+        endAt: endAt.toISOString(),
+        source: 'MANUAL',
+      }),
+    })
+
+    expect(res.status).toBe(201)
+    const body = (await res.json()) as { data: { renterId: string; source: string } }
+    expect(body.data.renterId).toBe(OWN_RENTER_ID)
+    expect(body.data.source).toBe('MANUAL')
   })
 })

@@ -377,6 +377,12 @@ export interface BookingRepository {
    *  given location as pickup OR dropoff. Guards archiving a location still in
    *  live use (#412). */
   countActiveForLocation(locationId: string): Promise<number>
+  /** Distinct renter IDs with at least one booking with the given operator.
+   *  Powers the #589 operator manual-booking customer picker: an operator may
+   *  only resolve renters within its own tenant boundary (a prior booking with
+   *  it), never enumerate the global user table (#396/#475). operatorId comes
+   *  from the caller's own validated context, never from client input. */
+  listRenterIdsForOperator(operatorId: string): Promise<string[]>
   create(
     ctx: CallerContext,
     data: Omit<Booking, 'id' | 'createdAt' | 'updatedAt'>,

@@ -53,6 +53,14 @@ export class InMemoryBookingRepository implements BookingRepository {
     return all
   }
 
+  async listRenterIdsForOperator(operatorId: string): Promise<string[]> {
+    const ids = new Set<string>()
+    for (const b of this.store.values()) {
+      if (b.operatorId === operatorId) ids.add(b.renterId)
+    }
+    return [...ids]
+  }
+
   private isVisible(ctx: CallerContext, booking: Booking): boolean {
     const scope = bookingReadScope(ctx)
     if (scope.kind === 'none') return false
