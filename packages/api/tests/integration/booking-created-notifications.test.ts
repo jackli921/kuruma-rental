@@ -1,6 +1,11 @@
 import type { RunTx } from '@kuruma/shared/db'
 import { BEST_CAR_RENTAL_OPERATOR_ID } from '@kuruma/shared/db/constants'
-import { bookingEvents, notificationLog, users } from '@kuruma/shared/db/schema'
+import {
+  bookingEvents,
+  notificationLog,
+  operatorMemberships,
+  users,
+} from '@kuruma/shared/db/schema'
 import { and, eq } from 'drizzle-orm'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { type CallerContext, SYSTEM_CONTEXT } from '../../src/middleware/auth'
@@ -8,6 +13,7 @@ import {
   DrizzleBookingRepository,
   DrizzleLocationRepository,
   DrizzleNotificationLogRepository,
+  DrizzleOperatorMembershipRepository,
   DrizzleOperatorRepository,
   DrizzleUserRepository,
   DrizzleVehicleClassRepository,
@@ -48,15 +54,16 @@ const vehicleClassRepo = new DrizzleVehicleClassRepository(db)
 const notificationLogRepo = new DrizzleNotificationLogRepository(db)
 const operatorRepo = new DrizzleOperatorRepository(db)
 const userRepo = new DrizzleUserRepository(db)
+const membershipRepo = new DrizzleOperatorMembershipRepository(db)
 const locationRepo = new DrizzleLocationRepository(db)
 
 // Captures every outbound message instead of hitting a provider, so the dispatcher
 // runs its full upsert -> claim -> send -> markSent unit and each notification_log
 // row lands as SENT. Mirrors the fake in booking-substitution.test.ts.
-const sentMessages: { to: string; subject: string }[] = []
+const sentMessages: { to: string; bcc?: string[]; subject: string }[] = []
 const fakeEmailSender: EmailSender = {
   async send(message) {
-    sentMessages.push({ to: message.to, subject: message.subject })
+    sentMessages.push({ to: message.to, bcc: message.bcc, subject: message.subject })
     return { providerMessageId: `msg-${sentMessages.length}` }
   },
 }
@@ -66,6 +73,7 @@ const notificationDispatcher = new NotificationDispatcher(
   operatorRepo,
   vehicleRepo,
   userRepo,
+  membershipRepo,
   locationRepo,
   fakeEmailSender,
   { emailFrom: 'noreply@kuruma-test.com' },
@@ -95,9 +103,11 @@ async function seedRenter(prefix: string): Promise<{ id: string; email: string }
   return { id, email }
 }
 
-// The operator owner MUST carry operatorId = this booking's operator, or
-// findOperatorContacts (user.ts: role=OPERATOR_OWNER AND operatorId=...) returns
-// [] and OPERATOR_BOOKING_ALERT falls back to fallbackOperatorEmail (unset here).
+// #878: the OPERATOR_BOOKING_ALERT recipient is sourced from the operator_memberships
+// ledger (status='ACTIVE'), not the users.role projection — so seed BOTH an owner
+// user AND an ACTIVE membership, or the alert falls back to fallbackOperatorEmail
+// (unset here). The membership is the authoritative grant; the user row carries the
+// email findByIds resolves.
 async function seedOperatorOwner(prefix: string): Promise<{ id: string; email: string }> {
   const id = crypto.randomUUID()
   const email = `${prefix}-${id.slice(0, 8)}@kuruma-test.com`
@@ -107,6 +117,12 @@ async function seedOperatorOwner(prefix: string): Promise<{ id: string; email: s
     role: 'OPERATOR_OWNER',
     operatorId: BEST_CAR_RENTAL_OPERATOR_ID,
     language: 'ja',
+  })
+  await db.insert(operatorMemberships).values({
+    userId: id,
+    operatorId: BEST_CAR_RENTAL_OPERATOR_ID,
+    role: 'OPERATOR_OWNER',
+    status: 'ACTIVE',
   })
   return { id, email }
 }
@@ -200,6 +216,9 @@ describe('booking CREATE notification fan-out (real pg)', () => {
       await db.delete(bookingEvents).where(eq(bookingEvents.bookingId, bookingId))
     }
     await cleanupVehicles([vehicleId])
+    // #878: operator_memberships FK -> users is ON DELETE restrict (#728), so drop
+    // the membership before the owner user or cleanupUsers would 23503.
+    await db.delete(operatorMemberships).where(eq(operatorMemberships.userId, operatorOwner.id))
     await cleanupUsers([renter.id, operatorOwner.id])
     await cleanupVehicleClasses([classId])
     await cleanupLocations([locationId])
@@ -236,23 +255,23 @@ describe('booking CREATE notification fan-out (real pg)', () => {
     expect(renterRow?.channel).toBe('EMAIL')
     expect(renterRow?.idempotencyKey).toBe(`notify:${bookingId}:RENTER_BOOKING_CONFIRM`)
 
-    // (2) OPERATOR_BOOKING_ALERT was queued for the SAME booking and SENT to the
-    // operator OWNER. The dispatcher resolves the recipient via findOperatorContacts
-    // -> owners[0].email (resolveRecipient in notification-dispatcher.ts). Re-resolve
-    // through that exact production path so the assertion is deterministic even if
-    // another test file seeds a second owner for this operator (no ORDER BY there).
-    const owners = await userRepo.findOperatorContacts(BEST_CAR_RENTAL_OPERATOR_ID)
-    expect(owners.map((o) => o.email)).toContain(operatorOwner.email)
-    const expectedOperatorRecipient = owners[0]?.email
-    expect(expectedOperatorRecipient).toBeDefined()
+    // (2) OPERATOR_BOOKING_ALERT (#878) was queued for the SAME booking and SENT to
+    // the operator's ACTIVE members. The dispatcher resolves them from the
+    // operator_memberships ledger -> userRepo.findByIds -> emails. Re-resolve through
+    // that exact production path so the assertion is deterministic even if another
+    // file seeds a second member for this operator (the audit recipient lists all).
+    const members = await membershipRepo.findActiveByOperator(BEST_CAR_RENTAL_OPERATOR_ID)
+    const memberUsers = await userRepo.findByIds(members.map((m) => m.userId))
+    const memberEmails = memberUsers.map((u) => u.email).filter((e): e is string => Boolean(e))
+    expect(memberEmails).toContain(operatorOwner.email)
 
     const operatorRow = await readNotification(bookingId, 'OPERATOR_BOOKING_ALERT')
     expect(operatorRow).toBeDefined()
     expect(operatorRow?.kind).toBe('OPERATOR_BOOKING_ALERT')
     expect(operatorRow?.status).toBe('SENT')
-    expect(operatorRow?.recipient).toBe(expectedOperatorRecipient)
-    // It is an operator OWNER address — never the renter's.
-    expect(owners.map((o) => o.email)).toContain(operatorRow?.recipient)
+    // The audit recipient lists every notified member; the seeded owner is among them.
+    expect(operatorRow?.recipient).toContain(operatorOwner.email)
+    // It is an operator member address — never the renter's.
     expect(operatorRow?.recipient).not.toBe(renter.email)
     expect(operatorRow?.operatorId).toBe(BEST_CAR_RENTAL_OPERATOR_ID)
     expect(operatorRow?.channel).toBe('EMAIL')
@@ -262,8 +281,9 @@ describe('booking CREATE notification fan-out (real pg)', () => {
     // audience rather than double-sending one address.
     expect(renterRow?.recipient).not.toBe(operatorRow?.recipient)
 
-    // The fake provider received exactly one email per audience, no more.
+    // The fake provider received exactly one email per audience, no more. The
+    // renter mail is addressed in `to`; the operator alert (#878) Bcc's the member.
     expect(sentMessages.filter((m) => m.to === renter.email)).toHaveLength(1)
-    expect(sentMessages.filter((m) => m.to === expectedOperatorRecipient)).toHaveLength(1)
+    expect(sentMessages.filter((m) => m.bcc?.includes(operatorOwner.email))).toHaveLength(1)
   })
 })

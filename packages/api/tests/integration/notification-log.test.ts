@@ -179,13 +179,41 @@ describe('DrizzleNotificationLogRepository claim lease (§3)', () => {
     expect(reclaimed?.attempts).toBe(2)
   })
 
-  it('upsertQueued returns the existing row unchanged on idempotency conflict', async () => {
-    const first = await repo.upsertQueued(row({ idempotencyKey: keyFor('idem') }))
+  it('upsertQueued leaves a terminal SENT row unchanged on idempotency conflict', async () => {
+    const first = await repo.upsertQueued(
+      row({ idempotencyKey: keyFor('idem'), recipient: 'sent@op.com' }),
+    )
     await repo.claim(first.id)
     await repo.markSent(first.id, 'msg-x')
-    const replay = await repo.upsertQueued(row({ idempotencyKey: keyFor('idem') }))
+    const replay = await repo.upsertQueued(
+      row({ idempotencyKey: keyFor('idem'), recipient: 'changed@op.com', locale: 'ja' }),
+    )
     expect(replay.id).toBe(first.id)
-    expect(replay.status).toBe('SENT')
+    expect(replay.status).toBe('SENT') // setWhere skips the update; lifecycle frozen
+    expect(replay.recipient).toBe('sent@op.com') // audit reflects who was actually sent
+    expect(replay.locale).toBe('en')
+  })
+
+  // #878: the operator-alert recipient set is recomputed at each send, so a row that
+  // has not yet sent must refresh its audit recipient/locale to match the resend.
+  it('upsertQueued refreshes recipient/locale on a re-sendable FAILED row', async () => {
+    const first = await repo.upsertQueued(
+      row({ idempotencyKey: keyFor('refresh'), recipient: 'owner@op.com', locale: 'en' }),
+    )
+    await repo.claim(first.id)
+    await repo.markFailed(first.id, 'transient') // non-terminal, still reclaimable
+    const refreshed = await repo.upsertQueued(
+      row({
+        idempotencyKey: keyFor('refresh'),
+        recipient: 'owner@op.com, staff@op.com',
+        locale: 'ja',
+      }),
+    )
+    expect(refreshed.id).toBe(first.id)
+    expect(refreshed.status).toBe('FAILED') // lifecycle untouched
+    expect(refreshed.attempts).toBe(1) // attempts NOT reset
+    expect(refreshed.recipient).toBe('owner@op.com, staff@op.com')
+    expect(refreshed.locale).toBe('ja')
   })
 })
 
