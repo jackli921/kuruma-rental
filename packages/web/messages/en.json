@@ -873,6 +873,12 @@
       "retry": "Try again"
     },
     "operator": {
+      "newBooking": {
+        "action": "New booking",
+        "dialogTitle": "New booking",
+        "dialogDescription": "Create a booking for a walk-in or existing customer.",
+        "cancel": "Cancel"
+      },
       "title": "Bookings",
       "subtitle": "Reservations across your storefronts",
       "empty": "No bookings yet",

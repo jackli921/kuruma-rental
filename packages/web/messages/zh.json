@@ -873,6 +873,12 @@
       "retry": "重试"
     },
     "operator": {
+      "newBooking": {
+        "action": "新建预订",
+        "dialogTitle": "新建预订",
+        "dialogDescription": "为到店客户或老客户创建预订。",
+        "cancel": "取消"
+      },
       "title": "预订",
       "subtitle": "各门店的预订",
       "empty": "暂无预订",

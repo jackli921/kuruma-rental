@@ -873,6 +873,12 @@
       "retry": "再試行"
     },
     "operator": {
+      "newBooking": {
+        "action": "新規予約",
+        "dialogTitle": "新規予約",
+        "dialogDescription": "ウォークインのお客様または既存のお客様の予約を作成します。",
+        "cancel": "キャンセル"
+      },
       "title": "予約",
       "subtitle": "各店舗の予約状況",
       "empty": "予約はまだありません",
