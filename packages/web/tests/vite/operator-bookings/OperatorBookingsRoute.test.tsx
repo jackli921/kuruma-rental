@@ -1,0 +1,109 @@
+import { OperatorBookingsRoute } from '@/routes/$locale/_business/manage/bookings/index'
+import * as api from '@/vite/operator-bookings/api'
+import { calendarRange, parseCalendarDate } from '@/vite/operator-bookings/calendar-events'
+import type { Session } from '@/vite/session'
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { render, screen } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
+import { IntlProvider } from 'use-intl'
+import { afterEach, describe, expect, it, vi } from 'vitest'
+import enMessages from '../../../messages/en.json'
+
+const c = enMessages.bookings.operator.newBooking
+
+// Render the route component outside a RouterProvider: stub createFileRoute
+// (Route.useParams/useSearch/useNavigate) + useRouter, and seed the suspense
+// calendar reads + session from cache. Mirrors TripDetailRoute.test.tsx.
+vi.mock('@tanstack/react-router', async () => ({
+  ...(await vi.importActual<typeof import('@tanstack/react-router')>('@tanstack/react-router')),
+  createFileRoute: () => () => ({
+    useParams: () => ({ locale: 'en' }),
+    useSearch: () => ({ view: 'week', date: '2026-07-01' }),
+    useNavigate: () => vi.fn(),
+  }),
+  useRouter: () => ({ invalidate: vi.fn() }),
+}))
+
+// Capture the props BookingsCalendar hands to rbc's <Calendar> so the route's
+// operator-only gate on slot-selection can be asserted end-to-end (route ->
+// BookingsCalendar -> rbc `selectable`). The button gate and the slot gate are
+// independent expressions sharing `canManualBook`; this pins the slot half so a
+// mutation can't ungate slot-click manual booking for a non-operator. Only
+// Calendar is replaced; the real dateFnsLocalizer stays so the localizer loads.
+let calendarProps: Record<string, unknown> = {}
+vi.mock('react-big-calendar', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('react-big-calendar')>()),
+  Calendar: (props: Record<string, unknown>) => {
+    calendarProps = props
+    return null
+  },
+}))
+
+const ANCHOR = '2026-07-01'
+const { from, to } = calendarRange('week', parseCalendarDate(ANCHOR))
+
+const operatorSession: Session = {
+  user: { id: 'u', role: 'OPERATOR_OWNER', operatorId: 'op_1', operatorSlug: 'acme' },
+  csrfToken: 't',
+}
+
+// A bypass role (PLATFORM_ADMIN) clears the _business guard but carries no
+// operatorId, so it reads the calendar cross-tenant and must NOT see the write
+// affordance (no operator picker on the form -> no single target tenant). #589/§4.3.
+const bypassSession: Session = {
+  user: { id: 'admin', role: 'PLATFORM_ADMIN' },
+  csrfToken: 't',
+}
+
+function renderRoute(session: Session) {
+  const queryClient = new QueryClient({
+    defaultOptions: { queries: { staleTime: Number.POSITIVE_INFINITY, retry: false } },
+  })
+  queryClient.setQueryData(['session'], session)
+  queryClient.setQueryData(api.operatorCalendarQueryOptions(from, to).queryKey, [])
+  queryClient.setQueryData(api.operatorCalendarVehiclesQueryOptions().queryKey, [])
+  render(
+    <QueryClientProvider client={queryClient}>
+      <IntlProvider locale="en" messages={enMessages}>
+        <OperatorBookingsRoute />
+      </IntlProvider>
+    </QueryClientProvider>,
+  )
+}
+
+afterEach(() => {
+  vi.restoreAllMocks()
+  calendarProps = {}
+})
+
+describe('OperatorBookingsRoute manual-booking affordance (#589 1d)', () => {
+  it('shows the New Booking button for a tenant-scoped operator session', () => {
+    renderRoute(operatorSession)
+    expect(screen.getByRole('button', { name: c.action })).toBeInTheDocument()
+  })
+
+  it('hides the New Booking button for a bypass (non-operator) session', () => {
+    renderRoute(bypassSession)
+    expect(screen.queryByRole('button', { name: c.action })).not.toBeInTheDocument()
+  })
+
+  it('opens the manual-booking dialog when New Booking is clicked', async () => {
+    const user = userEvent.setup()
+    renderRoute(operatorSession)
+    expect(screen.queryByRole('heading', { name: c.dialogTitle })).not.toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: c.action }))
+
+    expect(await screen.findByRole('heading', { name: c.dialogTitle })).toBeInTheDocument()
+  })
+
+  it('enables calendar slot-selection for an operator session', () => {
+    renderRoute(operatorSession)
+    expect(calendarProps.selectable).toBe(true)
+  })
+
+  it('disables calendar slot-selection for a bypass (non-operator) session', () => {
+    renderRoute(bypassSession)
+    expect(calendarProps.selectable).toBe(false)
+  })
+})
