@@ -8,6 +8,8 @@ import { type Pin, focusViewport } from './viewport'
 // parent container (the view gives it a fixed-height box).
 const MARKER_COLOR = '#6b7280'
 const SELECTED_COLOR = '#2563eb'
+/** Pixel nudge so the popup clears the marker: [px right, px up] from the pin. */
+const OVERLAY_OFFSET: [number, number] = [120, 20]
 
 // Explicit basemap provider (#660). Without one, pigeon-maps falls back to the
 // public OpenStreetMap tile server, which the OSMF tile-usage policy bars from
@@ -37,7 +39,10 @@ const GSI_ATTRIBUTION = (
  *  unless a region `anchor` is given (#840), which centers the map on the chosen
  *  area instead. `key` on the map remounts it when the result set OR the anchor
  *  changes so the fit/center recomputes (region filtering keeps the same pins, so
- *  the anchor must be in the key), while leaving the user free to pan/zoom. */
+ *  the anchor must be in the key), while leaving the user free to pan/zoom.
+ *  Selecting a result is also in the key: each new selection remounts to recenter
+ *  on that pin and reopen its popup (costs a tile re-fetch; animated fly-to is a
+ *  Slice-1 follow-up, #885). */
 export function PigeonMapAdapter({
   items,
   selectedId,
@@ -77,7 +82,7 @@ export function PigeonMapAdapter({
         />
       ))}
       {selectedPin && selectedItem && renderSelected && (
-        <Overlay anchor={[selectedPin.lat, selectedPin.lng]} offset={[120, 20]}>
+        <Overlay anchor={[selectedPin.lat, selectedPin.lng]} offset={OVERLAY_OFFSET}>
           {renderSelected(selectedItem)}
         </Overlay>
       )}
