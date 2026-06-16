@@ -56,6 +56,9 @@ jobs:
       - name: Test (all packages)
         run: bun run test
 
+      - name: Test repo lint scripts
+        run: bun test scripts/
+
       - name: Build web
         run: bun run --filter @kuruma/web build
         env:

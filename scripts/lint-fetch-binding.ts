@@ -30,21 +30,66 @@ const RUNTIME_ROOTS = [
   'packages/shared/src',
 ]
 
-// A default initializer set to the bare `fetch` identifier: `= fetch` followed by
-// a `,` / `)` that closes the param, or end-of-line when the `)` is on the next
-// line (a last param without a trailing comma). `= fetch.bind(...)` has a `.`
-// after `fetch` and `= fetch(url)` has a `(`, so neither matches — only the
-// un-bound capture does.
-const DETACHED_FETCH_DEFAULT = /=\s*fetch\s*(?:[,)]|$)/
+// A default initializer set to the bare global fetch: `= fetch` (optionally
+// `globalThis.`/`self.`-qualified — `= globalThis.fetch` captures it just as
+// detached) followed by a `,` / `)` that closes the param, or end-of-line when
+// the `)` is on the next line (a last param without a trailing comma).
+// `= fetch.bind(...)` has a `.` after `fetch` and `= fetch(url)` has a `(`, so
+// neither matches — only the un-bound capture does.
+const DETACHED_FETCH_DEFAULT = /=\s*(?:globalThis\.|self\.)?fetch\s*(?:[,)]|$)/
+
+/**
+ * Blanks line comments, block comments, and string/template literals while
+ * preserving newlines (so line numbers stay accurate), so a `= fetch,` mentioned
+ * in prose or a string literal is never mistaken for code. Template `${}`
+ * interpolations are blanked too — a detached-fetch default never lives there.
+ */
+export function stripCommentsAndStrings(source: string): string {
+  let out = ''
+  let i = 0
+  const n = source.length
+  while (i < n) {
+    const c = source[i]
+    const next = source[i + 1]
+    if (c === '/' && next === '/') {
+      while (i < n && source[i] !== '\n') i++
+      continue
+    }
+    if (c === '/' && next === '*') {
+      i += 2
+      while (i < n && !(source[i] === '*' && source[i + 1] === '/')) {
+        out += source[i] === '\n' ? '\n' : ' '
+        i++
+      }
+      i += 2
+      continue
+    }
+    if (c === '"' || c === "'" || c === '`') {
+      const quote = c
+      i++
+      while (i < n && source[i] !== quote) {
+        if (source[i] === '\\') {
+          i += 2
+          continue
+        }
+        out += source[i] === '\n' ? '\n' : ' '
+        i++
+      }
+      i++
+      continue
+    }
+    out += c
+    i++
+  }
+  return out
+}
 
 /** 1-based line numbers whose line opens a detached `= fetch` default. */
 export function findDetachedFetchDefaults(source: string): number[] {
   const offending: number[] = []
-  const lines = source.split('\n')
+  const lines = stripCommentsAndStrings(source).split('\n')
   for (let i = 0; i < lines.length; i++) {
-    // Drop a trailing line comment so prose mentioning `= fetch,` never counts.
-    const code = (lines[i] ?? '').replace(/\/\/.*$/, '')
-    if (DETACHED_FETCH_DEFAULT.test(code)) offending.push(i + 1)
+    if (DETACHED_FETCH_DEFAULT.test(lines[i] ?? '')) offending.push(i + 1)
   }
   return offending
 }
@@ -57,7 +102,7 @@ function collectTsFiles(dir: string): string[] {
     if (statSync(full).isDirectory()) {
       if (entry === 'tests' || entry === '__tests__') continue
       files.push(...collectTsFiles(full))
-    } else if (entry.endsWith('.ts') && !entry.endsWith('.test.ts')) {
+    } else if (/\.(ts|tsx|mts)$/.test(entry) && !/\.test\.(ts|tsx)$/.test(entry)) {
       files.push(full)
     }
   }

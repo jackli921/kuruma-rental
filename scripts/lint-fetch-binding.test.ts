@@ -1,5 +1,8 @@
-import { describe, expect, test } from 'bun:test'
-import { findDetachedFetchDefaults } from './lint-fetch-binding'
+import { afterAll, beforeAll, describe, expect, test } from 'bun:test'
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+import { findDetachedFetchDefaults, scanRoots } from './lint-fetch-binding'
 
 describe('findDetachedFetchDefaults', () => {
   test('flags a class field defaulted to the bare global fetch', () => {
@@ -17,9 +20,19 @@ describe('findDetachedFetchDefaults', () => {
     expect(findDetachedFetchDefaults(src)).toEqual([2])
   })
 
+  test('flags the `= globalThis.fetch` / `= self.fetch` capture — same detached bug', () => {
+    const src = ['a: typeof fetch = globalThis.fetch,', 'b: typeof fetch = self.fetch)'].join('\n')
+    expect(findDetachedFetchDefaults(src)).toEqual([1, 2])
+  })
+
   test('does NOT flag the bound form `= fetch.bind(globalThis)`', () => {
     const src =
       '    private readonly fetchFn: typeof fetch = fetch.bind(globalThis) as typeof fetch,'
+    expect(findDetachedFetchDefaults(src)).toEqual([])
+  })
+
+  test('does NOT flag `= globalThis.fetch.bind(globalThis)` (bound, qualified)', () => {
+    const src = 'fetchFn: typeof fetch = globalThis.fetch.bind(globalThis) as typeof fetch,'
     expect(findDetachedFetchDefaults(src)).toEqual([])
   })
 
@@ -38,6 +51,21 @@ describe('findDetachedFetchDefaults', () => {
     expect(findDetachedFetchDefaults(src)).toEqual([])
   })
 
+  test('does NOT flag the pattern inside a block comment (line numbers preserved)', () => {
+    const src = [
+      '/**',
+      ' * the old default: = fetch, broke on Workers',
+      ' */',
+      'const ok = 1',
+    ].join('\n')
+    expect(findDetachedFetchDefaults(src)).toEqual([])
+  })
+
+  test('does NOT flag the pattern inside a string literal', () => {
+    const src = 'const msg = "change : typeof fetch = fetch, to a bound default"'
+    expect(findDetachedFetchDefaults(src)).toEqual([])
+  })
+
   test('reports every offending line in a multi-default source', () => {
     const src = [
       'a: typeof fetch = fetch,',
@@ -45,5 +73,38 @@ describe('findDetachedFetchDefaults', () => {
       'b: typeof fetch = fetch)',
     ].join('\n')
     expect(findDetachedFetchDefaults(src)).toEqual([1, 3])
+  })
+})
+
+describe('scanRoots', () => {
+  let cwd: string
+  const BAD = 'fetchFn: typeof fetch = fetch,'
+
+  beforeAll(() => {
+    cwd = mkdtempSync(join(tmpdir(), 'lint-fetch-binding-'))
+    const root = join(cwd, 'src')
+    mkdirSync(join(root, 'tests'), { recursive: true })
+    writeFileSync(join(root, 'service.ts'), BAD) // scanned -> violation
+    writeFileSync(join(root, 'widget.tsx'), BAD) // .tsx scanned -> violation
+    writeFileSync(join(root, 'service.test.ts'), BAD) // excluded (real fetch ok in tests)
+    writeFileSync(join(root, 'tests', 'helper.ts'), BAD) // excluded (tests/ dir)
+    writeFileSync(join(root, 'clean.ts'), 'const ok = fetch.bind(globalThis)') // bound -> clean
+  })
+
+  afterAll(() => rmSync(cwd, { recursive: true, force: true }))
+
+  test('reports prod .ts/.tsx violations and skips tests + bound files', () => {
+    const files = scanRoots(['src'], cwd)
+      .map((v) => v.file)
+      .sort()
+    expect(files).toEqual(['src/service.ts', 'src/widget.tsx'])
+  })
+
+  test('returns the offending line number for each violation', () => {
+    expect(scanRoots(['src'], cwd).every((v) => v.line === 1)).toBe(true)
+  })
+
+  test('silently skips a root that does not exist', () => {
+    expect(scanRoots(['nope'], cwd)).toEqual([])
   })
 })
