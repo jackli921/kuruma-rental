@@ -483,6 +483,21 @@ export interface AvailabilityRepository {
       }
     | undefined
   >
+  /**
+   * #464: total class demand overlapping [from, to) at one (operator, location,
+   * class) — SPECIFIC bookings occupying a class car PLUS floating CLASS_COMBO of
+   * that class, both carried in bookings.classId. Filters status IN
+   * ('CONFIRMED','ACTIVE') + tstzrange(startAt, effectiveEndAt) overlap, reusing
+   * the exact findAvailableVehicles / 0037.sql predicate. Slice 2's write guard
+   * asserts demand < totalCars under an advisory lock before inserting a float.
+   */
+  countClassDemand(
+    operatorId: string,
+    classId: string,
+    pickupLocationId: string,
+    from: Date,
+    to: Date,
+  ): Promise<number>
 }
 
 /**

@@ -6,7 +6,7 @@ import type {
   BookingRepository,
   VehicleRepository,
 } from '../types'
-import { getConflictingBookings } from './booking'
+import { BLOCKING_STATUSES, getConflictingBookings } from './booking'
 
 export class InMemoryAvailabilityRepository implements AvailabilityRepository {
   constructor(
@@ -71,5 +71,27 @@ export class InMemoryAvailabilityRepository implements AvailabilityRepository {
       vehicle,
       conflicts,
     }
+  }
+
+  async countClassDemand(
+    operatorId: string,
+    classId: string,
+    pickupLocationId: string,
+    from: Date,
+    to: Date,
+  ): Promise<number> {
+    const allBookings = await this.bookingRepo.findAll(SYSTEM_CONTEXT)
+    // Same blocking-status + half-open overlap as getConflictingBookings, but
+    // keyed on the (operator, class, location) triple instead of a single car —
+    // so a floating CLASS_COMBO (null assignedVehicleId) still counts.
+    return allBookings.filter(
+      (b) =>
+        b.operatorId === operatorId &&
+        b.classId === classId &&
+        b.pickupLocationId === pickupLocationId &&
+        BLOCKING_STATUSES.has(b.status) &&
+        b.startAt < to &&
+        b.effectiveEndAt > from,
+    ).length
   }
 }
