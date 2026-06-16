@@ -1,5 +1,6 @@
 import { unwrap } from '@/lib/api-error'
 import { getApiBaseUrl } from '@/vite/api-base'
+import { LUGGAGE_SIZES, TRANSMISSIONS, VEHICLE_CLASS_STATUSES } from '@kuruma/shared/enums'
 import type {
   CreateVehicleClassInput,
   UpdateVehicleClassInput,
@@ -38,12 +39,12 @@ export const operatorClassSchema = z.object({
   photos: z.array(z.string()),
   seats: z.number(),
   luggageCapacity: z.number(),
-  luggageSize: z.enum(['SMALL', 'MEDIUM', 'LARGE']),
-  transmission: z.enum(['AUTO', 'MANUAL']),
+  luggageSize: z.enum(LUGGAGE_SIZES),
+  transmission: z.enum(TRANSMISSIONS),
   fuelType: z.string().nullable(),
   acrissCode: z.string().nullable(),
   sortOrder: z.number(),
-  status: z.enum(['ACTIVE', 'ARCHIVED']),
+  status: z.enum(VEHICLE_CLASS_STATUSES),
   createdAt: z.string(),
   updatedAt: z.string(),
 })
