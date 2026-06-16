@@ -1,6 +1,6 @@
 # Search results: map ↔ list interaction redesign
 
-**Status:** PROPOSAL — for review & decision (not yet approved) · 2026-06-15
+**Status:** DIRECTION AGREED — **Option B (car-first)**, pending final colleague sign-off · updated 2026-06-15
 **Author:** (Jack + Claude)
 **Decision owner:** Jack + colleague
 **Supersedes the UX of:** #458 (`feat: map + flat-list search results`, closed — original build)
@@ -11,7 +11,7 @@
 
 ## 1. Why we're touching this
 
-The search-results screen is the core of the renter funnel: it's where "I need a car in Kyoto on these dates" turns into a booking. Today it under-delivers, and the problems are structural, not cosmetic.
+The search-results screen is the core of the renter funnel: it's where "I need a car in Kyoto on these dates" turns into a booking. Today it under-delivers, and the problems are structural, not cosmetic. **The renter is a foreign tourist** — they don't read store names or know Osaka-vs-Kyoto geography, so seeing *where in Japan* a car is picked up is a primary need, not a nicety.
 
 ### What exists today (two half-views behind one toggle)
 
@@ -19,10 +19,10 @@ The top-right **门店 / 地图** control is **not a layout toggle — it swaps 
 
 | View (`?view=`) | Component | Card granularity | Map? |
 |---|---|---|---|
-| `stores` (default) | `StoreGrid` → `StorefrontCard` | **one card per store** (location) | **no map** |
+| `stores` (default) | `StoreGrid` → `StorefrontCard` | one card per store (location) | **no map** |
 | `map` | `SearchMap` → `SearchMapList` → `PigeonMapAdapter` | **one card per vehicle** | yes (right side) |
 
-So a renter gets *either* a store list with no map, *or* a car list with a map — never a coherent "browse on the map" experience. The screenshot bugs are all in the **`map`** view.
+So a renter gets *either* a store list with no map, *or* a car list with a map — never a coherent "browse cars on the map" experience. The screenshot bugs are all in the **`map`** view.
 
 ### The root mismatch
 
@@ -45,106 +45,101 @@ The established pattern is the **synchronized list–map split view**, used by A
 2. **Bidirectional sync** — hover/select a card → its pin enlarges/recolors; click a pin → its card highlights and **scrolls into view**. The link is always **1:1 and visible**.
 3. **Informative pins** — show **price** ("¥8,000" pills, à la Airbnb/Zillow) or a count, not generic dots. Selected pin inverts color.
 4. **Pin → mini-card popup** — clicking a pin opens a callout (photo · price · name) linking to detail. *(We have none — the biggest single gap.)*
-5. **Clustering for co-located results** — several results at one spot collapse to **one marker with a count**, clicking it expands to a popup carousel/list. *(Our exact "3 cars at Kyoto Station" case.)*
+5. **Clustering / carousel for co-located results** — results at one *point* collapse to a popup **carousel**; distinct results *near* each other collapse to a numbered cluster that **splits on zoom**.
 6. **List drives the decision; the map answers "where / how convenient."**
 
 The standard is not a single layout — it's *how you execute* whatever you decide a "result" is:
 - **Booking.com / hotels model** = result is a **property** → one card per property, pin per property (1:1).
-- **Turo / car model** = result is a **car** → one card per car, **map clusters** co-located cars.
+- **Turo / car model** = result is a **car** → one card per car, **map carousel/cluster** for co-located cars. ← **our choice**
 
 ---
 
-## 3. Options
+## 3. Options considered
 
-### Option A — Store-first grouping  ⭐ recommended
+### Option A — Store-first grouping
 
-Result = **store**. Unify the two views into one synchronized map+list. Card = storefront (name · area · distance · available class chips · "from ¥X/day"), expandable or linking to the **existing** storefront detail page to pick a car. Map = **one price-labeled pin per store, 1:1 with a card.**
+Result = **store**. One card *and* one pin per store (1:1), expandable/linking to the storefront detail page to pick a car. *Pros:* 1:1 pin↔card dissolves the bugs by construction; short list; clean map. *Cons:* the bookable unit (a specific car) is one level down — weaker for a foreigner who wants to see *this car* on the map.
 
-```
-LIST (per store)            MAP
-┌──────────────────────┐   ┌─────────────────┐
-│ Sakura Mobility       │   │   ╭────────────╮│
-│ Kyoto Station · 2.1km │◄─►│   │Sakura Mob. ││
-│ Compact·Kei·SUV       │   │   │3 cars ¥6.5k+││
-│ from ¥6,500/day       │   │   ╰──📍─────────╯│
-│ [View cars ▾]         │   │  📍   📍         │
-└──────────────────────┘   └─────────────────┘
-click card → map flies + popup ·  click pin → its one card
-```
+### Option B — Car-first + co-location carousel (Turo model)  ⭐ chosen
 
-- **Pros:** 1:1 pin↔card **dissolves the bugs by construction** (no clustering needed); short, scannable list (kills the repeated "Sakura Mobility · Kyoto Station ×3" noise visible today); matches the store-pickup business and the existing `门店` view + storefront detail page; clean, uncrowded map.
-- **Cons:** the bookable unit (a specific car) is one level down — renter expands or opens store detail to compare cars.
-
-### Option B — Car-first + clustering (Turo model)
-
-Result = **car**. Keep one card per vehicle. Map clusters co-located cars into a numbered marker; clicking a cluster opens a **popup carousel** of those cars. Add fly-to-pin on card click and hover sync.
-
-- **Pros:** the thing they book is always visible; matches Turo; good when comparing specific models/prices across stores is the main job.
-- **Cons:** pin↔cards stays **many-to-1** (needs real clustering + a carousel popup — more to build); long, repetitive list with many cars per store; busier map.
+Result = **car / combo**. One card per vehicle or class-combo. Map pin per **pickup store**; co-located cars share a pin whose click opens a **swipeable carousel**. Card focus flies the map to + opens a popup on its pickup pin. *Pros:* the bookable thing is always visible and instantly placed on a map of Japan — exactly the foreigner geo-feedback goal; matches Turo. *Cons:* pin↔cards is many-to-1 (handled by the carousel, not a blocker).
 
 ### Option C — Map-driven list ("search this area")
 
-The map is the primary control: panning/zooming re-filters the list to what's in view, with a "Search this area" button (Airbnb's move-map-to-search).
-
-- **Pros:** powerful for area browsing.
-- **Cons:** biggest behavior change; re-query plumbing; **largely redundant with our region picker + chips**, which already scope the search. **Recommend deferring** — it's an enhancement layered on A or B, not a base choice.
+The map is primary: panning/zooming re-filters the list, with a "Search this area" button. *Largely redundant with our region picker + chips.* **Deferred** — an enhancement on top of B, not a base choice.
 
 ---
 
-## 4. Recommendation: Option A (Store-first)
+## 4. Decision: Option B (car-first)
 
-**Reasoning, in priority order:**
+**Chosen 2026-06-15** for one overriding reason the store-first analysis under-weighted: **the renter is a foreign tourist who needs instant "where in Japan can I pick this up?" feedback.** Seeing the specific car they're considering pinned on a map beats a tidy store list for that user. Result granularity = **individual cars + class-combos**, each tied to its pickup-store pin.
 
-1. **Store-pickup is the real-world unit.** The renter physically collects the car at a 门店; the store is where the transaction happens. Our platform is operators-with-storefronts.
-2. **It reuses the architecture we already have.** The default `门店` view is already store-grouped, and the storefront detail page (`/$locale/storefronts/$locationId`) already exists to list/select cars. Store-first *unifies* these; car-first fights them.
-3. **Few stores, many cars per store.** With ~40–50 vehicles across a handful of stores, car-first means a long, repetitive list and a crowded/clustered map. Store-first keeps the list to a few cards and the map clean.
-4. **1:1 pin↔card fixes the bugs structurally** — no clustering machinery. Pin = card = store; the "selects all" condition literally cannot arise; the popup carries real info; card-click moves the map.
-5. **One coherent screen** replaces two confusing half-views and the data-swapping toggle.
+**The co-location mechanic (the one real constraint):** a car's "where" *is* its pickup store's coordinates, so cars at the same store share one pin — there is nothing to geographically separate. "Show where *this* car is" = focus a card → the map **flies to + highlights + opens a popup** on that car's **pickup** pin. Clicking a pin that holds N cars opens an **Airbnb-style swipeable carousel** of those cars/combos (industry standard for multiple results on one point). Distinct *nearby* stores still cluster and **split on zoom**.
 
-**How A fixes each reported bug:**
+**How B fixes each reported bug:**
 
-| Reported | Fix under A |
+| Reported | Fix under B |
 |---|---|
-| Clicking a card does nothing | Card click flies the map to its pin + opens the popup (and "View cars" → store detail) |
-| "在地图上显示" does nothing | Replaced: the whole card is the affordance; the map visibly responds |
-| Pin highlights all cards, no info | Pin is now 1:1 with one store card; click opens an informative popup; highlights exactly that card |
+| Clicking a card does nothing | Card focus flies the map to its pickup pin + opens the popup |
+| "在地图上显示" does nothing | Replaced: focusing the card is the affordance; the map visibly responds (fly + popup) |
+| Pin highlights all cards, no info | Pin click opens a **carousel popup** of exactly the cars/combos at that store — no more silent "all highlighted" |
 
-**Concretely, A is:** store cards with class chips + "from ¥X" + distance; a **sticky** map with price-labeled pins (selected inverts); a **pin popup** (store · N cars · from ¥X · "View cars"); **bidirectional hover/selection sync** + **fly-to on select**; on mobile, a **Map toggle** with a bottom-sheet card on pin tap. Car comparison happens on the existing storefront detail page (or an optional inline expand of the top 2–3 classes).
+**The real geo-feedback win is context, not the dot:** each card + popup shows nearest **landmark/station · distance · prefecture** (e.g. "Kyoto Station · 2.1 km from downtown"). For a foreigner that conveys "where" far better than a pin alone.
 
----
+**Concretely, B is:** per-car / per-combo cards (name · class · price · pickup store + geo-context); a **sticky** map with price-labeled pins (selected inverts); a **pin popup carousel** for co-located results; **bidirectional hover/selection sync** + **fly-to on focus**; on mobile, a **Map toggle** + bottom-sheet card on pin tap.
 
-## 5. The decision for you + colleague
-
-**The one fork that changes everything:** *Is the renter's result a STORE (pick a place, then a car) or a CAR (compare cars; location is an attribute)?*
-
-- **Store → Option A** (recommended).
-- **Car → Option B** (Turo-style + clustering). Pick this if comparing specific models/prices across stores is the primary job, **or** if you expect many single-car stores (then grouping adds nothing).
-
-**Secondary questions to settle in review:**
-
-1. **Card depth:** store card links straight to the detail page, or inline-expands the top 2–3 classes with a Select button (Booking.com "rooms from" pattern)?
-2. **Pin label:** price ("¥6,500+", scannable, our standard recommendation) vs a count ("3") vs plain selected/unselected dots?
-3. **Mobile:** Map toggle + bottom sheet (recommended) vs a shrunk split.
-4. **Keep the 门店/地图 toggle**, or replace with one unified view + a "hide map" option?
-5. **"Search this area" (Option C):** in scope now, or a later enhancement? (Recommend later.)
+*Revisit Option A only if* the catalog grows to many stores with one car each (grouping then adds nothing anyway) **or** store-pickup convenience eclipses model choice in user testing.
 
 ---
 
-## 6. Scope & impact (rough — for cost sense, not a plan)
+## 5. Decisions & remaining open questions
 
-**Mostly web** (`packages/web/src/vite/search/*`, `…/storefronts/*`, the search route). Likely **no schema change**.
+**Resolved:**
+- **Result granularity → individual cars + combos** (Option B). *[decided]*
+- **Store-vs-car result → car**, for the foreigner geo-feedback goal. *[decided]*
+- **Pin click with N co-located cars → Airbnb-style swipeable carousel popup.** *[decided — industry standard]*
+- **Pin label → price** ("¥8,000" / "from ¥6,500"), the scannable Airbnb/Zillow standard. *[leaning — industry standard]*
+- **Mobile → Map toggle + bottom sheet.** *[leaning — industry standard]*
 
-- **New:** a real **pin popup/callout** in `PigeonMapAdapter` (pigeon-maps `<Overlay>`); **fly-to / recenter on selection** (`viewport.ts` already centers on a region anchor — extend to per-selection); **store-grouped cards in the map view** (reuse the `StorefrontCard` / `StoreGrid` model); **bidirectional sync** (`SearchMapList` already tracks a `locationId` selection — extend to fly + popup + scroll-into-view).
-- **Verify (API):** the storefront-grouped search payload (`StorefrontSearchResultData`) carries **lat/lng + min price + class counts per store** (the stores view already renders min price + class counts, so likely present — confirm lat/lng).
-- **Tests:** extend `SearchMapList.test`, `viewport.test`, `StoreGrid.test`; add popup, fly-to, and sync tests. Don't regress the region anchor (#840) or `e2e/real-db/region-search.auth.spec.ts`.
-- **Suggested slicing:** (1) unify to a store-grouped synchronized map+list with 1:1 sync + pin popup + fly-to; (2) price-labeled pins + mobile Map toggle; (3) optional inline car expand. Each is an independent vertical slice / PR.
-
-**Risks:** storefront search must carry coordinates + min price (verify); pigeon-maps overlay ergonomics; preserving region-centering and the existing e2e.
+**Still open:**
+1. **Card / popup target:** link to the vehicle/combo detail page, or an inline quick-view? *(Lean: link to existing detail.)*
+2. **Keep the 门店/地图 toggle**, or make one unified map+list the default with a "hide map" option? *(Lean: unified default.)*
+3. **Later enhancements, designed-for not built-now:** "Search this area" (Option C) and **one-way rentals** (§6).
 
 ---
 
-## 7. Next steps
+## 6. Future consideration: one-way rentals (pickup ≠ dropoff)
 
-1. Review this with the colleague; settle §5 (mainly: store-result vs car-result).
-2. On decision, file a tracking issue (the redesign of closed #458) with the chosen option.
-3. Finalize the approved design → implementation plan (vertical slices above) → TDD build.
+A renter picks up at store A and drops off at store B (a.k.a. one-way / relocation rental). **Not in scope now**, but the redesign should not preclude it.
+
+**Industry-standard UX** (Hertz/Avis/Kayak/Turo): the search form gains a **"Return to a different location"** toggle that reveals a **dropoff** field (default off = same location); results show cars valid for that pickup→dropoff route; a **one-way / drop fee** is added; the card shows a "One-way OK · drop fee ¥X" badge.
+
+**Forward-compat guardrails to bake into THIS build (cheap now, expensive to retrofit):**
+1. **Label the pin/popup as the _pickup_ pin explicitly**; treat `result.location` as pickup-specific, not "the location."
+2. **Map adapter takes a _list of points / an optional route_ per selection**, even though today it's always one pin — so a future dropoff pin or a pickup→dropoff route line is additive (pigeon-maps supports multiple markers + overlays).
+3. **Result DTO leaves room for an optional dropoff dimension**; don't bake a "one location per car" assumption into the card/popup types.
+4. **Pricing is already extensible** — a drop/relocation fee is just another fee term (`feeSnapshot` + the shared `composeBookingTotal`), no architectural change.
+
+**Honest cost split:** the map UX above is the easy part. One-way's real cost is the **inventory/fleet model** — a vehicle now *ends* at a different location, so availability becomes per-location-over-time and the Postgres exclusion constraint (double-booking prevention) must account for relocation and rebalancing. That's a backend epic, largely orthogonal to this redesign. **So: design the UI to not block it; defer the inventory work to its own project.**
+
+---
+
+## 7. Scope & impact (rough — for cost sense, not a plan)
+
+**Mostly web** (`packages/web/src/vite/search/*`, the search route). Likely **no schema change** for the core redesign.
+
+- **New:** a real **pin popup / carousel** in/around `PigeonMapAdapter` (pigeon-maps `<Overlay>`); **fly-to / recenter on focus** (`viewport.ts` already centers on a region anchor — extend to per-selection); **bidirectional sync** (`SearchMapList` already tracks a `locationId` selection — extend to fly + popup + scroll-into-view); **price-labeled pins**; **geo-context labels** (landmark/station · distance · prefecture) on card + popup.
+- **Verify (API):** the flat search payload (`SearchResultsData`) carries **lat/lng per pickup location** (it does — pins render today) and that a **min/representative price** is available for pin labels. Geo-context (nearest landmark/region name) may reuse the region data from #651.
+- **Build with the §6 guardrails** so one-way is additive later (pickup-labeled pins; multi-point-capable adapter; dropoff-open DTO).
+- **Tests:** extend `SearchMapList.test`, `viewport.test`, `PigeonMapAdapter.test`; add carousel, fly-to, and sync tests. Don't regress the region anchor (#840) or `e2e/real-db/region-search.auth.spec.ts`.
+- **Suggested slicing (independent vertical PRs):** (1) card↔pin sync + fly-to + pin popup (single-car case); (2) co-location **carousel** + price pins; (3) **geo-context** labels + mobile Map toggle.
+
+**Risks:** pigeon-maps overlay/carousel ergonomics; preserving region-centering + the existing e2e; sourcing a clean "nearest landmark" label for geo-context.
+
+---
+
+## 8. Next steps
+
+1. Final colleague sign-off on §5 (mostly the two "leaning" calls + the two still-open questions).
+2. File a tracking issue (UX redesign of closed #458) referencing this brief and the chosen Option B.
+3. Finalize the approved design → implementation plan (the vertical slices in §7) → TDD build.
