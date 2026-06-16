@@ -8,6 +8,7 @@ import { DrizzleInsuranceOptionRepository } from './insurance-option'
 import { DrizzleLocationRepository } from './location'
 import { DrizzleMaintenanceLogRepository } from './maintenance-log'
 import { asTxDb } from './shared'
+import { DrizzleUserRepository } from './user'
 import { DrizzleVehicleRepository } from './vehicle'
 
 export function createDrizzleTransaction(runInteractiveTx: RunTx): RunInTransaction {
@@ -30,6 +31,7 @@ export function createDrizzleTransaction(runInteractiveTx: RunTx): RunInTransact
         insuranceOptionRepo: new DrizzleInsuranceOptionRepository(txDb),
         addOnRepo: new DrizzleAddOnRepository(txDb),
         feeScheduleRepo: new DrizzleFeeScheduleRepository(txDb),
+        userRepo: new DrizzleUserRepository(txDb), // #875: walk-in renter, tx-bound
       })
     })
 }
