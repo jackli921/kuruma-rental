@@ -13,6 +13,7 @@ export type {
   Location,
   Region,
   InsuranceOption,
+  ClassRatePlan,
   AddOn,
   FeeSchedule,
   PaymentEvent,
@@ -36,6 +37,7 @@ import type {
   AddOn,
   Booking,
   BookingEvent,
+  ClassRatePlan,
   FeeSchedule,
   InsuranceOption,
   Location,
@@ -167,6 +169,22 @@ export interface InsuranceOptionRepository {
   create(data: Omit<InsuranceOption, 'id' | 'createdAt' | 'updatedAt'>): Promise<InsuranceOption>
   update(id: string, data: Partial<InsuranceOption>): Promise<InsuranceOption | undefined>
   archive(id: string): Promise<InsuranceOption | undefined>
+}
+
+export interface ClassRatePlanRepository {
+  /**
+   * The active deal rate for a (operator, class, pickupLocation) triple, or
+   * undefined if none exists / it is inactive. Prices a CLASS_COMBO booking at
+   * creation (#464 slice 2). NOT ctx-scoped — the caller passes an
+   * already-resolved operatorId (the booking's own tenant). Returns at most one
+   * row; the DB UNIQUE on the triple guarantees uniqueness.
+   */
+  findActiveByClassAndLocation(
+    operatorId: string,
+    classId: string,
+    pickupLocationId: string,
+  ): Promise<ClassRatePlan | undefined>
+  create(data: Omit<ClassRatePlan, 'id' | 'createdAt' | 'updatedAt'>): Promise<ClassRatePlan>
 }
 
 export interface AddOnFilters {

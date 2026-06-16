@@ -3,6 +3,7 @@ import type { getDb } from './index'
 import { parsePlatformAdminEmails } from './platform-admins'
 import {
   addOnOptions,
+  classRatePlans,
   feeSchedules,
   insuranceOptions,
   locations,
@@ -15,6 +16,7 @@ import {
 } from './schema'
 import {
   DEMO_ADD_ON_OPTIONS,
+  DEMO_CLASS_RATE_PLANS,
   DEMO_FEE_SCHEDULES,
   DEMO_INSURANCE_OPTIONS,
   DEMO_LOCATIONS,
@@ -301,6 +303,28 @@ export async function seed(db: ReturnType<typeof getDb>) {
       .onConflictDoUpdate({
         target: feeSchedules.id,
         set: { feeType: fee.feeType, unit: fee.unit, amountJpy: fee.amountJpy, updatedAt: now },
+      })
+  }
+
+  // 7b. Class-combo deal rates (#464). Price a CLASS_COMBO booking on its class
+  // at a store. The composite FK seals each rate to a class of the same operator
+  // (classes seeded §4); a simple FK points pickupLocationId at a location
+  // (seeded before vehicles, §8 below).
+  console.log(`Seeding ${DEMO_CLASS_RATE_PLANS.length} class rate plans...`)
+  for (const plan of DEMO_CLASS_RATE_PLANS) {
+    await db
+      .insert(classRatePlans)
+      .values({
+        id: seedId(plan.id),
+        operatorId: seedId(plan.operatorId),
+        classId: seedId(plan.classId),
+        pickupLocationId: seedId(plan.pickupLocationId),
+        dayRateJpy: plan.dayRateJpy,
+        label: plan.label,
+      })
+      .onConflictDoUpdate({
+        target: classRatePlans.id,
+        set: { dayRateJpy: plan.dayRateJpy, label: plan.label, updatedAt: now },
       })
   }
 

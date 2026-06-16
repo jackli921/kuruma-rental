@@ -300,6 +300,29 @@ export interface InsuranceOption {
   updatedAt: Date
 }
 
+/**
+ * A class-combo deal rate (#464). Prices a CLASS_COMBO booking on its *class*
+ * at a given store (the fleet-rental model). Singleton per (operator, class,
+ * pickupLocation) — `isActive` toggles it in place. See db/pricing.ts.
+ */
+export interface ClassRatePlan {
+  id: string
+  /** Owning operator (marketplace tenant, #464). NOT NULL in the DB. */
+  operatorId: string
+  /** The priced vehicle class. NOT NULL. */
+  classId: string
+  /** The store this rate applies at — the same class can differ by location. */
+  pickupLocationId: string
+  /** The combo's day rate (JPY). */
+  dayRateJpy: number
+  /** Toggle a deal on/off without deleting it. */
+  isActive: boolean
+  /** Optional operator-facing display label ("Weekend Compact Deal"). */
+  label: string | null
+  createdAt: Date
+  updatedAt: Date
+}
+
 export interface AddOn {
   id: string
   /** Owning operator (marketplace tenant, #460). NOT NULL in the DB. */
