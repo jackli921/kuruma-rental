@@ -201,7 +201,8 @@ export class NotificationDispatcher {
    * #878: the operator's active-member email set. Memberships are the recipient
    * source of truth; users.findByIds resolves the addresses and masks the
    * synthetic placeholder email to null (a seeded placeholder owner is dropped,
-   * not emailed). Order is preserved for a stable audit string.
+   * not emailed). findActiveByOperator returns a deterministic (createdAt, id)
+   * order, preserved through the flatMap so the joined audit string is stable.
    */
   private async resolveActiveMemberEmails(operatorId: string): Promise<string[]> {
     const members = await this.membershipRepo.findActiveByOperator(operatorId)

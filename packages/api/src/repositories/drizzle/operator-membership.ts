@@ -44,6 +44,9 @@ export class DrizzleOperatorMembershipRepository implements OperatorMembershipRe
           eq(operatorMemberships.status, 'ACTIVE'),
         ),
       )
+      // Deterministic order (createdAt, id tiebreak) so the joined recipient audit
+      // string in notification_log is stable across resends. #878.
+      .orderBy(operatorMemberships.createdAt, operatorMemberships.id)
     return rows.map(toOperatorMembership)
   }
 

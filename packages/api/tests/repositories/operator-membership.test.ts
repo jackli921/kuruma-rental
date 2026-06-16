@@ -87,5 +87,31 @@ describe('InMemoryOperatorMembershipRepository', () => {
     it('returns [] for an operator with no members', async () => {
       expect(await repo.findActiveByOperator('op_empty')).toEqual([])
     })
+
+    // #878: the joined recipient list is written to a single notification_log audit
+    // column, so the order must be deterministic (by membership createdAt), not
+    // insertion/Map order — otherwise the audit string churns between resends.
+    it('orders members by createdAt so the audit string is stable', async () => {
+      const earlier = new Date('2026-01-01T00:00:00Z')
+      const later = new Date('2026-02-01T00:00:00Z')
+      const mk = (userId: string, createdAt: Date): OperatorMembership => ({
+        id: `mem-${userId}`,
+        userId,
+        operatorId: 'op_test',
+        role: 'OPERATOR_OWNER',
+        status: 'ACTIVE',
+        createdAt,
+        updatedAt: createdAt,
+      })
+      // Seed with the newer membership FIRST so Map insertion order is the reverse
+      // of the expected createdAt order — a missing ORDER BY would surface here.
+      const store = new Map<string, OperatorMembership>([
+        ['mem-newer', mk('u_newer', later)],
+        ['mem-older', mk('u_older', earlier)],
+      ])
+      const seeded = new InMemoryOperatorMembershipRepository(store)
+      const members = await seeded.findActiveByOperator('op_test')
+      expect(members.map((m) => m.userId)).toEqual(['u_older', 'u_newer'])
+    })
   })
 })

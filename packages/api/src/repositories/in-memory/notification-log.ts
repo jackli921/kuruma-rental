@@ -31,7 +31,18 @@ export class InMemoryNotificationLogRepository implements NotificationLogReposit
     const existingId = this.byKey.get(data.idempotencyKey)
     if (existingId) {
       const existing = this.store.get(existingId)
-      if (existing) return existing // replay no-op — never reset a row's lifecycle
+      if (existing) {
+        // A row that has not yet sent recomputes its recipient set at each send
+        // (#878 member fan-out), so refresh the audit recipient/locale to match the
+        // address the resend will use. Never touch a terminal/in-flight row: its
+        // recorded recipient must reflect who the mail was actually sent to.
+        if (existing.status === 'QUEUED' || existing.status === 'FAILED') {
+          const refreshed = { ...existing, recipient: data.recipient, locale: data.locale }
+          this.store.set(existing.id, refreshed)
+          return refreshed
+        }
+        return existing // never reset a row's lifecycle
+      }
     }
     const ts = this.now()
     const row: NotificationLog = {
