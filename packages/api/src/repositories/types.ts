@@ -391,7 +391,9 @@ export interface BookingRepository {
   listRenterIdsForOperator(operatorId: string): Promise<string[]>
   create(
     ctx: CallerContext,
-    data: Omit<Booking, 'id' | 'createdAt' | 'updatedAt'>,
+    // cancellationFeeSettlement is server-derived (defaults 'ADVISORY', #868 3a),
+    // never a create input — mirrors Location's geocode-field omission above.
+    data: Omit<Booking, 'id' | 'createdAt' | 'updatedAt' | 'cancellationFeeSettlement'>,
   ): Promise<Booking>
   updateStatus(
     ctx: CallerContext,

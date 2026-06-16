@@ -41,6 +41,7 @@ function makeBooking(overrides: Partial<Booking> = {}): Booking {
     notes: null,
     totalPrice: 100_000,
     cancellationFee: null,
+    cancellationFeeSettlement: 'ADVISORY',
     cancelledAt: null,
     idempotencyKey: null,
     disclaimerAcknowledgedAt: null,

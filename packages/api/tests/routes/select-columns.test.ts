@@ -116,6 +116,7 @@ const BOOKING_FIELDS = [
   'notes',
   'totalPrice',
   'cancellationFee',
+  'cancellationFeeSettlement',
   'cancelledAt',
   'idempotencyKey',
   'disclaimerAcknowledgedAt',

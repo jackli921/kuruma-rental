@@ -109,6 +109,22 @@ export type RegionType = (typeof REGION_TYPES)[number]
 export const REGION_STATUSES = ['ACTIVE', 'INACTIVE'] as const
 export type RegionStatus = (typeof REGION_STATUSES)[number]
 
+// Settlement status of a recorded cancellation fee (#868 Slice 3a). Stored as a
+// `text` column (NOT a pgEnum — review M4: the lifecycle churns toward #851), so
+// it is absent from the pgEnum SSoT tripwire; the membership is pinned by
+// enums.test.ts instead. Today (pay-at-pickup) every renter cancellation is
+// ADVISORY — recorded for audit, zero money moved. The ADVISORY -> CAPTURED |
+// REFUND_DUE | REFUNDED | WAIVED transitions are the TARGET for #851's real
+// money movement, not implemented here. ADVISORY is the column default.
+export const CANCELLATION_FEE_SETTLEMENT_STATES = [
+  'ADVISORY',
+  'CAPTURED',
+  'REFUND_DUE',
+  'REFUNDED',
+  'WAIVED',
+] as const
+export type CancellationFeeSettlement = (typeof CANCELLATION_FEE_SETTLEMENT_STATES)[number]
+
 // LUGGAGE_SIZES already lives in lib/luggage.ts (#457) — re-exported here so the
 // enum SSoT is reachable from one subpath without duplicating its declaration.
 export { LUGGAGE_SIZES, type LuggageSize } from './lib/luggage'
