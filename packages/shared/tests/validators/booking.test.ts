@@ -181,3 +181,98 @@ describe('createBookingSchema addOnIds (#460)', () => {
     expect(result.success).toBe(false)
   })
 })
+
+// #464: createBookingSchema becomes a discriminated union on fulfillmentMode.
+// SPECIFIC keeps the per-car contract (requestedVehicleId); CLASS_COMBO books a
+// class at a location (classId). A fulfillmentMode-less body defaults to SPECIFIC
+// so existing clients are unchanged (§4.1).
+describe('createBookingSchema — fulfillment discriminator (#464)', () => {
+  const CLASS_UUID = '550e8400-e29b-41d4-a716-446655440020'
+  const common = {
+    pickupLocationId: PICKUP_UUID,
+    dropoffLocationId: DROPOFF_UUID,
+    startAt: '2026-04-10T09:00:00Z',
+    endAt: '2026-04-10T17:00:00Z',
+  }
+
+  it('defaults a fulfillmentMode-less body to SPECIFIC (back-compat)', () => {
+    const result = createBookingSchema.safeParse({ ...common, requestedVehicleId: VALID_UUID })
+    expect(result.success).toBe(true)
+    if (result.success && result.data.fulfillmentMode === 'SPECIFIC') {
+      expect(result.data.fulfillmentMode).toBe('SPECIFIC')
+      expect(result.data.requestedVehicleId).toBe(VALID_UUID)
+    } else {
+      throw new Error('expected SPECIFIC default')
+    }
+  })
+
+  it('accepts an explicit SPECIFIC booking with a requested vehicle', () => {
+    const result = createBookingSchema.safeParse({
+      ...common,
+      fulfillmentMode: 'SPECIFIC',
+      requestedVehicleId: VALID_UUID,
+    })
+    expect(result.success).toBe(true)
+    if (result.success && result.data.fulfillmentMode === 'SPECIFIC') {
+      expect(result.data.requestedVehicleId).toBe(VALID_UUID)
+    }
+  })
+
+  it('rejects a SPECIFIC booking missing requestedVehicleId', () => {
+    const result = createBookingSchema.safeParse({ ...common, fulfillmentMode: 'SPECIFIC' })
+    expect(result.success).toBe(false)
+  })
+
+  it('accepts a CLASS_COMBO booking with a classId', () => {
+    const result = createBookingSchema.safeParse({
+      ...common,
+      fulfillmentMode: 'CLASS_COMBO',
+      classId: CLASS_UUID,
+    })
+    expect(result.success).toBe(true)
+    if (result.success && result.data.fulfillmentMode === 'CLASS_COMBO') {
+      expect(result.data.classId).toBe(CLASS_UUID)
+      expect(result.data.pickupLocationId).toBe(PICKUP_UUID)
+    } else {
+      throw new Error('expected CLASS_COMBO')
+    }
+  })
+
+  it('rejects a CLASS_COMBO booking missing classId', () => {
+    const result = createBookingSchema.safeParse({ ...common, fulfillmentMode: 'CLASS_COMBO' })
+    expect(result.success).toBe(false)
+  })
+
+  it('drops requestedVehicleId from a CLASS_COMBO booking (not a SPECIFIC field)', () => {
+    const result = createBookingSchema.safeParse({
+      ...common,
+      fulfillmentMode: 'CLASS_COMBO',
+      classId: CLASS_UUID,
+      requestedVehicleId: VALID_UUID,
+    })
+    expect(result.success).toBe(true)
+    if (result.success) {
+      expect((result.data as Record<string, unknown>).requestedVehicleId).toBeUndefined()
+    }
+  })
+
+  it('rejects an unknown fulfillmentMode', () => {
+    const result = createBookingSchema.safeParse({
+      ...common,
+      fulfillmentMode: 'WHATEVER',
+      requestedVehicleId: VALID_UUID,
+    })
+    expect(result.success).toBe(false)
+  })
+
+  it('still enforces endAt > startAt across the discriminator', () => {
+    const result = createBookingSchema.safeParse({
+      ...common,
+      fulfillmentMode: 'CLASS_COMBO',
+      classId: CLASS_UUID,
+      startAt: '2026-04-10T17:00:00Z',
+      endAt: '2026-04-10T09:00:00Z',
+    })
+    expect(result.success).toBe(false)
+  })
+})
