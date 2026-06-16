@@ -71,10 +71,12 @@ export interface Booking {
   // classId stays for discovery/grouping; sealed to operatorId by composite FK.
   classId: string
   // What the renter selected in storefront (slice 5) — immutable audit trail.
-  requestedVehicleId: string
+  // #464: null for a CLASS_COMBO float (renter picked a class, not a car).
+  requestedVehicleId: string | null
   // What the operator fulfills; the exclusion constraint keys on this. Server-
   // derived = requestedVehicleId at submit; operator may substitute (#392).
-  assignedVehicleId: string
+  // #464: null while a CLASS_COMBO float is unassigned; set when a car is given.
+  assignedVehicleId: string | null
   pickupLocationId: string
   dropoffLocationId: string
   startAt: Date

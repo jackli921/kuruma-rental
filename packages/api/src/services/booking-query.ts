@@ -64,14 +64,17 @@ export class BookingQueryService {
     if (!this.vehicleRepo) return { data, nextCursor }
 
     // The fulfilling car is the assigned vehicle (#392 — vehicleId is gone).
-    const vehicleIds = [...new Set(data.map((b) => b.assignedVehicleId))]
+    // #464: CLASS_COMBO floats have no assigned car — drop nulls before lookup.
+    const vehicleIds = [
+      ...new Set(data.map((b) => b.assignedVehicleId).filter((id): id is string => id !== null)),
+    ]
     const vehicleList = await this.vehicleRepo.findByIds(ctx, vehicleIds)
     const vehicleMap = new Map(vehicleList.map((v) => [v.id, { name: v.name, photos: v.photos }]))
 
     return {
       data: data.map((booking) => ({
         ...booking,
-        vehicle: vehicleMap.get(booking.assignedVehicleId),
+        vehicle: booking.assignedVehicleId ? vehicleMap.get(booking.assignedVehicleId) : undefined,
       })),
       nextCursor,
     }
@@ -120,7 +123,10 @@ export class BookingQueryService {
   }> {
     const { data, nextCursor } = await this.findAllPaginated(ctx, filters)
 
-    const vehicleIds = [...new Set(data.map((b) => b.assignedVehicleId))]
+    // #464: CLASS_COMBO floats have no assigned car — drop nulls before lookup.
+    const vehicleIds = [
+      ...new Set(data.map((b) => b.assignedVehicleId).filter((id): id is string => id !== null)),
+    ]
     const vehicleList = this.vehicleRepo ? await this.vehicleRepo.findByIds(ctx, vehicleIds) : []
     const vehicleMap = new Map(vehicleList.map((v) => [v.id, { name: v.name, photos: v.photos }]))
 
@@ -133,7 +139,7 @@ export class BookingQueryService {
     return {
       data: data.map((booking) => ({
         ...booking,
-        vehicle: vehicleMap.get(booking.assignedVehicleId),
+        vehicle: booking.assignedVehicleId ? vehicleMap.get(booking.assignedVehicleId) : undefined,
         renter: renterMap.get(booking.renterId),
       })),
       nextCursor,
@@ -174,9 +180,10 @@ export class BookingQueryService {
     const booking = await this.findById(ctx, id)
     if (!booking) return booking
 
-    const [vehicle] = this.vehicleRepo
-      ? await this.vehicleRepo.findByIds(ctx, [booking.assignedVehicleId])
-      : []
+    const [vehicle] =
+      this.vehicleRepo && booking.assignedVehicleId
+        ? await this.vehicleRepo.findByIds(ctx, [booking.assignedVehicleId])
+        : []
     const [renter] = this.userRepo ? await this.userRepo.findByIds([booking.renterId]) : []
 
     return {

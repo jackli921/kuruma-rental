@@ -176,7 +176,11 @@ export class NotificationDispatcher {
   private async buildMessage(booking: Booking, kind: Kind, recipient: string, locale: string) {
     const [operator, vehicle, pickup, dropoff] = await Promise.all([
       this.operatorRepo.findById(booking.operatorId),
-      this.vehicleRepo.findById(SYSTEM_CONTEXT, booking.assignedVehicleId),
+      // #464: an unassigned CLASS_COMBO float has no car yet — skip the lookup;
+      // vehicleData below falls back to a generic label (vehicle?.name ?? 'Vehicle').
+      booking.assignedVehicleId
+        ? this.vehicleRepo.findById(SYSTEM_CONTEXT, booking.assignedVehicleId)
+        : Promise.resolve(undefined),
       this.locationRepo.findById(SYSTEM_CONTEXT, booking.pickupLocationId),
       this.locationRepo.findById(SYSTEM_CONTEXT, booking.dropoffLocationId),
     ])

@@ -449,6 +449,13 @@
       "when": 1781571872477,
       "tag": "0063_add_class_rate_plans",
       "breakpoints": true
+    },
+    {
+      "idx": 64,
+      "version": "7",
+      "when": 1781575339557,
+      "tag": "0064_bookings_nullable_vehicle_ids_for_class_combo",
+      "breakpoints": true
     }
   ]
 }

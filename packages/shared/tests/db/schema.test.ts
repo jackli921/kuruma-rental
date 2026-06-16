@@ -110,6 +110,26 @@ describe('schema exports', () => {
     expect(checkNames).toContain('bookings_specific_requires_assigned')
   })
 
+  // #464: a CLASS_COMBO booking "floats" — the renter picks a class, not a car —
+  // so it has neither a requested nor an assigned vehicle at book time. Both FK
+  // columns therefore go nullable; the SPECIFIC-requires-* CHECKs (not column
+  // NOT NULL) are what keep SPECIFIC rows honest once nulls are allowed.
+  it('bookings.requestedVehicleId is nullable for CLASS_COMBO floats (#464)', () => {
+    expect(bookings.requestedVehicleId.notNull).toBe(false)
+  })
+
+  it('bookings.assignedVehicleId is nullable for unassigned CLASS_COMBO floats (#464)', () => {
+    expect(bookings.assignedVehicleId.notNull).toBe(false)
+  })
+
+  // Parallel to bookings_specific_requires_assigned: a SPECIFIC booking must also
+  // name the vehicle the renter requested. Locking presence here means a later
+  // migration can't silently drop the discriminator-backing invariant.
+  it('bookings declares the SPECIFIC-requires-requested-vehicle CHECK (#464)', () => {
+    const checkNames = getTableConfig(bookings).checks.map((c) => c.name)
+    expect(checkNames).toContain('bookings_specific_requires_requested')
+  })
+
   // #710: notification_kind / notification_status are the single source of
   // truth for their respective TS types. Order is contractual — the CREATE TYPE
   // migration lists them in this order, so renaming/reordering an enum value is

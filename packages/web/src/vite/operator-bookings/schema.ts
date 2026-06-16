@@ -105,7 +105,9 @@ const bookingCreatedPayloadSchema = z.object({
 })
 const vehicleSubstitutedPayloadSchema = z.object({
   type: z.literal('VEHICLE_SUBSTITUTED'),
-  fromVehicleId: z.string(),
+  // #464: null when a CLASS_COMBO float gets its first car assigned (slice 4) —
+  // matches the API wire type (VehicleSubstitutedPayload.fromVehicleId).
+  fromVehicleId: z.string().nullable(),
   toVehicleId: z.string(),
   reason: z.string().nullable(),
 })

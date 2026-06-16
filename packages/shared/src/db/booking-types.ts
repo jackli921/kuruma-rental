@@ -45,7 +45,9 @@ export type BookingCreatedPayload = {
 }
 export type VehicleSubstitutedPayload = {
   type: 'VEHICLE_SUBSTITUTED'
-  fromVehicleId: string
+  // #464: null when a CLASS_COMBO float is assigned its FIRST car via the
+  // substitution path (slice 4) — there is no prior vehicle to swap from.
+  fromVehicleId: string | null
   toVehicleId: string
   reason: string | null
 }
