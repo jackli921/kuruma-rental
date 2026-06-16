@@ -3,6 +3,7 @@ import {
   type OperatorBookingDetailDto,
   bookingEventsQueryOptions,
   cancelBooking,
+  createManualBooking,
   fetchBookingEvents,
   fetchCalendarBookings,
   fetchCalendarVehicles,
@@ -543,6 +544,68 @@ describe('substituteBooking', () => {
     await expect(substituteBooking('bk-1', 'veh-2', null, 'csrf-tok')).rejects.toBeInstanceOf(
       ApiError,
     )
+  })
+})
+
+// #589 1d (slice 2): operator manual booking — the walk-in path. POST /bookings
+// with an inline `walkInCustomer {name, phone}` (no email — the #396/#475
+// enumeration defense) and `source=MANUAL` (the route honors a manual booker's
+// source; default DIRECT would mislabel it). No `renterId` (mutually exclusive
+// with walkInCustomer) and no `disclaimerAccepted` (operators are consent-exempt;
+// only a RENTER self-serve booking must accept). CSRF-gated like every cookie write.
+describe('createManualBooking', () => {
+  const walkInInput = {
+    requestedVehicleId: 'veh-1',
+    pickupLocationId: 'loc-1',
+    dropoffLocationId: 'loc-1',
+    startAt: '2026-07-01T01:00:00.000Z',
+    endAt: '2026-07-03T01:00:00.000Z',
+    customer: { kind: 'walk-in' as const, name: 'Taro Yamada', phone: '+81 90 1234 5678' },
+  }
+
+  it('POSTs /bookings with the walk-in body, source MANUAL, CSRF + JSON headers, credentials', async () => {
+    const fetchMock = vi.fn(async () =>
+      jsonResponse({ success: true, data: bookingRaw({ source: 'MANUAL' }) }, 201),
+    )
+    vi.stubGlobal('fetch', fetchMock)
+
+    const result = await createManualBooking(walkInInput, 'csrf-tok')
+
+    const [url, init] = fetchMock.mock.calls[0]! as [string, RequestInit]
+    expect(new URL(url, 'http://x').pathname).toBe('/api/bookings')
+    expect(init.method).toBe('POST')
+    expect(init.credentials).toBe('include')
+    expect(init.headers).toEqual({ 'Content-Type': 'application/json', 'X-CSRF-Token': 'csrf-tok' })
+    // The whole body is pinned: walkInCustomer (not renterId), source MANUAL, the
+    // pickup/dropoff pair, ISO times — and NO disclaimerAccepted key.
+    expect(JSON.parse(init.body as string)).toEqual({
+      requestedVehicleId: 'veh-1',
+      pickupLocationId: 'loc-1',
+      dropoffLocationId: 'loc-1',
+      startAt: '2026-07-01T01:00:00.000Z',
+      endAt: '2026-07-03T01:00:00.000Z',
+      source: 'MANUAL',
+      walkInCustomer: { name: 'Taro Yamada', phone: '+81 90 1234 5678' },
+    })
+    expect(result).toMatchObject({ id: 'bk-1', source: 'MANUAL' })
+  })
+
+  it('throws ApiError on a domain failure (e.g. 409 vehicle just booked)', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => jsonResponse({ success: false, error: 'Vehicle already booked' }, 409)),
+    )
+
+    await expect(createManualBooking(walkInInput, 'csrf-tok')).rejects.toBeInstanceOf(ApiError)
+  })
+
+  it('rejects with ParseError when the created booking drifts', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => jsonResponse({ success: true, data: bookingRaw({ totalPrice: 'lots' }) })),
+    )
+
+    await expect(createManualBooking(walkInInput, 'csrf-tok')).rejects.toBeInstanceOf(ParseError)
   })
 })
 

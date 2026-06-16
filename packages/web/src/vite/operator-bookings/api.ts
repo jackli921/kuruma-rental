@@ -312,3 +312,54 @@ export function updateBookingStatus(
 export function cancelBooking(id: string, csrfToken: string): Promise<BookingDto> {
   return writeBooking(`/bookings/${encodeURIComponent(id)}/cancel`, 'POST', csrfToken)
 }
+
+// --- Manual booking creation (#589 1d) --------------------------------------
+// An operator books on behalf of a customer from the calendar. The customer is a
+// discriminated union, never a flag-bag: a brand-new *walk-in* (inline name +
+// phone) — slice 3 adds an existing renter by id. Modeling it as `{ kind }` makes
+// the impossible "both/neither customer" state unrepresentable and mirrors the
+// server's mutually-exclusive walkInCustomer/renterId refine. NO email is ever
+// sent for a walk-in: email is globally unique, so a create-by-email would leak
+// whether an address exists (#396/#475); the server mints a synthetic placeholder.
+export type ManualBookingCustomer = { kind: 'walk-in'; name: string; phone: string }
+
+export interface CreateManualBookingInput {
+  requestedVehicleId: string
+  // Pickup and dropoff are separate ids (the form sets both from one select today;
+  // one-way rentals are a later track) so the wire contract already carries both.
+  pickupLocationId: string
+  dropoffLocationId: string
+  /** ISO datetime — the form converts its JST datetime-local via parseJstDateTimeLocal. */
+  startAt: string
+  endAt: string
+  customer: ManualBookingCustomer
+}
+
+// Instant-book on the operator side. `source=MANUAL` so the booking is attributed
+// correctly — the route honors a manual booker's source but defaults to DIRECT,
+// which would mislabel it. `disclaimerAccepted` is omitted: operators are
+// consent-exempt (the route requires it only for a RENTER self-serve booking).
+// Cookie + CSRF-gated, so the session token rides the write; unwrap throws an
+// ApiError on a domain failure (409 just-booked / 400 bad range / 403 scope) for
+// the dialog to surface.
+export async function createManualBooking(
+  input: CreateManualBookingInput,
+  csrfToken: string,
+): Promise<BookingDto> {
+  const res = await fetch(`${getApiBaseUrl()}/bookings`, {
+    method: 'POST',
+    credentials: 'include',
+    headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrfToken },
+    body: JSON.stringify({
+      requestedVehicleId: input.requestedVehicleId,
+      pickupLocationId: input.pickupLocationId,
+      dropoffLocationId: input.dropoffLocationId,
+      startAt: input.startAt,
+      endAt: input.endAt,
+      source: 'MANUAL',
+      // slice 3 branches on input.customer.kind to send { renterId } instead.
+      walkInCustomer: { name: input.customer.name, phone: input.customer.phone },
+    }),
+  })
+  return unwrap(res, bookingDtoSchema)
+}
