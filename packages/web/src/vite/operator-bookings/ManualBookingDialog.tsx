@@ -18,7 +18,7 @@ import {
   createManualBooking,
 } from '@/vite/operator-bookings/api'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
-import { type FormEvent, useEffect, useState } from 'react'
+import { type FormEvent, useEffect, useRef, useState } from 'react'
 import { useTranslations } from 'use-intl'
 
 export interface ManualBookingDialogProps {
@@ -55,6 +55,11 @@ export function ManualBookingDialog({
   const [end, setEnd] = useState('')
   const [name, setName] = useState('')
   const [phone, setPhone] = useState('')
+  // Minted per booking attempt (reset on each open) so a double-submit or network
+  // retry REPLAYS server-side (booking-creation's idempotency guard) rather than
+  // creating a second booking — the client `disabled` flag alone can't cover a
+  // network-layer retry. Mirrors the renter wizard's per-mount key.
+  const [idempotencyKey, setIdempotencyKey] = useState(() => crypto.randomUUID())
 
   const mutation = useMutation({
     mutationFn: () =>
@@ -66,6 +71,7 @@ export function ManualBookingDialog({
           startAt: parseJstDateTimeLocal(start).toISOString(),
           endAt: parseJstDateTimeLocal(end).toISOString(),
           customer: { kind: 'walk-in', name: name.trim(), phone: phone.trim() },
+          idempotencyKey,
         },
         csrfToken,
       ),
@@ -77,20 +83,24 @@ export function ManualBookingDialog({
     },
   })
 
-  // Reset the form whenever the dialog opens: default the vehicle/store to the
-  // first option (a single-option list then submits in one click) and prefill the
-  // range from a clicked slot. Depends only on the open/range transition — the
-  // data props are referentially stable per open — so a reset never clobbers typing.
+  // Reset the form once each time the dialog opens — keyed on the open transition
+  // via a ref, so a store-list refetch while the dialog is open never clobbers a
+  // half-filled form. Defaults the vehicle/store to the first option (a one-option
+  // list then submits in a click) and prefills the range from a clicked slot.
+  const wasOpen = useRef(false)
   useEffect(() => {
-    if (!open) return
-    setVehicleId(vehicles[0]?.id ?? '')
-    setLocationId(locations[0]?.id ?? '')
-    setStart(initialRange ? formatJstDateTimeLocal(initialRange.start) : '')
-    setEnd(initialRange ? formatJstDateTimeLocal(initialRange.end) : '')
-    setName('')
-    setPhone('')
-    mutation.reset()
-  }, [open, initialRange, vehicles, locations, mutation.reset])
+    if (open && !wasOpen.current) {
+      setVehicleId(vehicles[0]?.id ?? '')
+      setLocationId(locations[0]?.id ?? '')
+      setStart(initialRange ? formatJstDateTimeLocal(initialRange.start) : '')
+      setEnd(initialRange ? formatJstDateTimeLocal(initialRange.end) : '')
+      setName('')
+      setPhone('')
+      setIdempotencyKey(crypto.randomUUID())
+      mutation.reset()
+    }
+    wasOpen.current = open
+  }, [open, vehicles, locations, initialRange, mutation.reset])
 
   const canSubmit =
     Boolean(vehicleId && locationId && start && end && name.trim() && phone.trim()) &&

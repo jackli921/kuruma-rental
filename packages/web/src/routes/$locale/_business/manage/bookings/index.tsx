@@ -82,11 +82,12 @@ export function OperatorBookingsRoute() {
   // cross-tenant and get a view-only calendar). The API re-enforces this (#589 §4.3).
   const canManualBook = isOperatorSession(session ?? null)
 
-  // The dialog's pickup/return store list, fetched lazily — only once the operator
-  // opens the dialog — so the read-only calendar view never pays for it.
+  // The dialog's pickup/return store list — fetched for operators (the only role
+  // that can manual-book), so it's ready the moment they open the dialog and a
+  // read-only viewer never pays for it.
   const { data: locationRows } = useQuery({
     ...operatorLocationsQueryOptions(),
-    enabled: bookingDialogOpen,
+    enabled: canManualBook,
   })
 
   // #611: opening the orders list is "seeing" the new orders — clear the nav

@@ -561,6 +561,7 @@ describe('createManualBooking', () => {
     startAt: '2026-07-01T01:00:00.000Z',
     endAt: '2026-07-03T01:00:00.000Z',
     customer: { kind: 'walk-in' as const, name: 'Taro Yamada', phone: '+81 90 1234 5678' },
+    idempotencyKey: '11111111-2222-4333-8444-555555555555',
   }
 
   it('POSTs /bookings with the walk-in body, source MANUAL, CSRF + JSON headers, credentials', async () => {
@@ -586,6 +587,7 @@ describe('createManualBooking', () => {
       endAt: '2026-07-03T01:00:00.000Z',
       source: 'MANUAL',
       walkInCustomer: { name: 'Taro Yamada', phone: '+81 90 1234 5678' },
+      idempotencyKey: '11111111-2222-4333-8444-555555555555',
     })
     expect(result).toMatchObject({ id: 'bk-1', source: 'MANUAL' })
   })

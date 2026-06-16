@@ -333,6 +333,9 @@ export interface CreateManualBookingInput {
   startAt: string
   endAt: string
   customer: ManualBookingCustomer
+  /** Client-minted per attempt so a double-submit/retry replays server-side
+   *  (booking-creation's idempotency guard) instead of creating a duplicate. */
+  idempotencyKey: string
 }
 
 // Instant-book on the operator side. `source=MANUAL` so the booking is attributed
@@ -342,24 +345,21 @@ export interface CreateManualBookingInput {
 // Cookie + CSRF-gated, so the session token rides the write; unwrap throws an
 // ApiError on a domain failure (409 just-booked / 400 bad range / 403 scope) for
 // the dialog to surface.
-export async function createManualBooking(
+export function createManualBooking(
   input: CreateManualBookingInput,
   csrfToken: string,
 ): Promise<BookingDto> {
-  const res = await fetch(`${getApiBaseUrl()}/bookings`, {
-    method: 'POST',
-    credentials: 'include',
-    headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrfToken },
-    body: JSON.stringify({
-      requestedVehicleId: input.requestedVehicleId,
-      pickupLocationId: input.pickupLocationId,
-      dropoffLocationId: input.dropoffLocationId,
-      startAt: input.startAt,
-      endAt: input.endAt,
-      source: 'MANUAL',
-      // slice 3 branches on input.customer.kind to send { renterId } instead.
-      walkInCustomer: { name: input.customer.name, phone: input.customer.phone },
-    }),
+  // Composes the shared writeBooking helper (credentials + X-CSRF-Token + JSON +
+  // unwrap in one auditable place). The body always exists, so JSON is sent.
+  return writeBooking('/bookings', 'POST', csrfToken, {
+    requestedVehicleId: input.requestedVehicleId,
+    pickupLocationId: input.pickupLocationId,
+    dropoffLocationId: input.dropoffLocationId,
+    startAt: input.startAt,
+    endAt: input.endAt,
+    source: 'MANUAL',
+    idempotencyKey: input.idempotencyKey,
+    // slice 3 branches on input.customer.kind to send { renterId } instead.
+    walkInCustomer: { name: input.customer.name, phone: input.customer.phone },
   })
-  return unwrap(res, bookingDtoSchema)
 }

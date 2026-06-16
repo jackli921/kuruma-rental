@@ -70,7 +70,7 @@ describe('ManualBookingDialog', () => {
   })
 
   it('requests close (onOpenChange false) when the cancel button is clicked', async () => {
-    const user = userEvent.setup()
+    const user = userEvent.setup({ delay: null })
     const { onOpenChange } = renderDialog()
     await user.click(screen.getByRole('button', { name: c.cancel }))
     // base-ui calls onOpenChange(open, event, reason) — assert the first arg only.
@@ -96,7 +96,7 @@ describe('ManualBookingDialog', () => {
   })
 
   it('submits the walk-in booking: vehicle/location defaults, ISO times, name+phone, CSRF', async () => {
-    const user = userEvent.setup()
+    const user = userEvent.setup({ delay: null })
     renderDialog({ initialRange })
 
     await user.type(screen.getByLabelText(c.nameLabel), 'Taro Yamada')
@@ -104,21 +104,25 @@ describe('ManualBookingDialog', () => {
     await user.click(screen.getByRole('button', { name: c.submit }))
 
     expect(createManualBooking).toHaveBeenCalledTimes(1)
-    expect(createManualBooking).toHaveBeenCalledWith(
-      {
-        requestedVehicleId: 'veh-1',
-        pickupLocationId: 'loc-1',
-        dropoffLocationId: 'loc-1',
-        startAt: '2026-07-01T01:00:00.000Z',
-        endAt: '2026-07-03T01:00:00.000Z',
-        customer: { kind: 'walk-in', name: 'Taro Yamada', phone: '09012345678' },
-      },
-      'csrf-tok',
-    )
+    const [input, token] = vi.mocked(createManualBooking).mock.calls[0]!
+    expect(token).toBe('csrf-tok')
+    // A fresh idempotency key is minted per dialog-open so a double-submit replays
+    // server-side instead of double-booking; it is a uuid, not a fixed value.
+    expect(input).toEqual({
+      requestedVehicleId: 'veh-1',
+      pickupLocationId: 'loc-1',
+      dropoffLocationId: 'loc-1',
+      startAt: '2026-07-01T01:00:00.000Z',
+      endAt: '2026-07-03T01:00:00.000Z',
+      customer: { kind: 'walk-in', name: 'Taro Yamada', phone: '09012345678' },
+      idempotencyKey: expect.stringMatching(
+        /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i,
+      ),
+    })
   })
 
   it('invalidates the operator-bookings queries and closes on success', async () => {
-    const user = userEvent.setup()
+    const user = userEvent.setup({ delay: null })
     const { onOpenChange, queryClient } = renderDialog({ initialRange })
     const invalidate = vi.spyOn(queryClient, 'invalidateQueries')
 
@@ -131,7 +135,7 @@ describe('ManualBookingDialog', () => {
   })
 
   it('disables submit until vehicle, location, times, name and phone are all present', async () => {
-    const user = userEvent.setup()
+    const user = userEvent.setup({ delay: null })
     renderDialog() // no initialRange -> pickup/return start empty
 
     const submit = screen.getByRole('button', { name: c.submit })
@@ -148,7 +152,7 @@ describe('ManualBookingDialog', () => {
 
   it('shows an error message when the create fails', async () => {
     vi.mocked(createManualBooking).mockRejectedValue(new Error('boom'))
-    const user = userEvent.setup()
+    const user = userEvent.setup({ delay: null })
     renderDialog({ initialRange })
 
     await user.type(screen.getByLabelText(c.nameLabel), 'Taro Yamada')
