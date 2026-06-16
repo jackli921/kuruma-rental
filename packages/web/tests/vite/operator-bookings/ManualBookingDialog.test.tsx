@@ -4,7 +4,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { IntlProvider } from 'use-intl'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import enMessages from '../../../messages/en.json'
 
 // Only the network write is faked; OPERATOR_BOOKINGS_KEY + types stay real so the
@@ -23,6 +23,21 @@ const locations = [
   { id: 'loc-1', name: 'Namba Store' },
   { id: 'loc-2', name: 'Kansai Airport' },
 ]
+
+// The existing-customer picker reads /customers/search; stub the envelope so the
+// real searchCustomers + queryOptions run end to end with only the network faked.
+function jsonResponse(body: unknown, status = 200): Response {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: { 'content-type': 'application/json' },
+  })
+}
+const tanaka = {
+  id: 'r-9',
+  name: 'Tanaka Hiro',
+  email: 'tanaka@example.com',
+  phone: '+81-90-1234-5678',
+}
 
 // 2026-07-01T01:00Z / 2026-07-03T01:00Z are 10:00 JST — the form shows + round-trips
 // wall-clock Tokyo, so a prefill from these instants submits the same ISO back.
@@ -55,6 +70,10 @@ beforeEach(() => {
   vi.mocked(createManualBooking)
     .mockReset()
     .mockResolvedValue({ id: 'bk-new' } as never)
+})
+
+afterEach(() => {
+  vi.unstubAllGlobals()
 })
 
 describe('ManualBookingDialog', () => {
@@ -160,5 +179,64 @@ describe('ManualBookingDialog', () => {
     await user.click(screen.getByRole('button', { name: c.submit }))
 
     expect(await screen.findByText(c.error)).toBeInTheDocument()
+  })
+
+  it('swaps the walk-in name/phone inputs for the customer search in existing mode', async () => {
+    const user = userEvent.setup({ delay: null })
+    renderDialog()
+
+    expect(screen.getByLabelText(c.nameLabel)).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: c.customerExistingTab }))
+
+    expect(screen.queryByLabelText(c.nameLabel)).not.toBeInTheDocument()
+    expect(screen.queryByLabelText(c.phoneLabel)).not.toBeInTheDocument()
+    expect(screen.getByLabelText(c.customerSearchLabel)).toBeInTheDocument()
+  })
+
+  it('keeps submit disabled in existing mode until a customer is selected', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => jsonResponse({ success: true, data: [tanaka] })),
+    )
+    const user = userEvent.setup({ delay: null })
+    renderDialog({ initialRange })
+
+    await user.click(screen.getByRole('button', { name: c.customerExistingTab }))
+    const submit = screen.getByRole('button', { name: c.submit })
+    expect(submit).toBeDisabled()
+
+    await user.type(screen.getByLabelText(c.customerSearchLabel), 'tan')
+    await user.click(await screen.findByText('Tanaka Hiro'))
+
+    expect(submit).toBeEnabled()
+  })
+
+  it('submits an existing-customer booking carrying renterId (not walkInCustomer)', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => jsonResponse({ success: true, data: [tanaka] })),
+    )
+    const user = userEvent.setup({ delay: null })
+    renderDialog({ initialRange })
+
+    await user.click(screen.getByRole('button', { name: c.customerExistingTab }))
+    await user.type(screen.getByLabelText(c.customerSearchLabel), 'tan')
+    await user.click(await screen.findByText('Tanaka Hiro'))
+    await user.click(screen.getByRole('button', { name: c.submit }))
+
+    expect(createManualBooking).toHaveBeenCalledTimes(1)
+    const [input, token] = vi.mocked(createManualBooking).mock.calls[0]!
+    expect(token).toBe('csrf-tok')
+    expect(input).toMatchObject({
+      requestedVehicleId: 'veh-1',
+      pickupLocationId: 'loc-1',
+      dropoffLocationId: 'loc-1',
+      startAt: '2026-07-01T01:00:00.000Z',
+      endAt: '2026-07-03T01:00:00.000Z',
+      customer: { kind: 'existing', renterId: 'r-9' },
+      idempotencyKey: expect.stringMatching(
+        /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i,
+      ),
+    })
   })
 })

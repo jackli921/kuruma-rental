@@ -12,8 +12,10 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { NativeSelect } from '@/components/ui/native-select'
 import { formatJstDateTimeLocal, parseJstDateTimeLocal } from '@/lib/datetime'
+import { CustomerPicker } from '@/vite/operator-bookings/CustomerPicker'
 import {
   type CalendarVehicle,
+  type CustomerSearchResult,
   OPERATOR_BOOKINGS_KEY,
   createManualBooking,
 } from '@/vite/operator-bookings/api'
@@ -32,12 +34,13 @@ export interface ManualBookingDialogProps {
   readonly initialRange?: { start: Date; end: Date } | undefined
 }
 
-// #589 1d (slice 2): the walk-in manual-booking form. A *controlled* dialog — the
-// route lifts `open` so a header button and a calendar slot-click both drive it.
-// The operator picks a vehicle + store, a pickup/return range, and the customer's
-// name + phone, then POSTs a source=MANUAL booking. The existing-customer search
-// (CustomerPicker) is slice 3; today the customer is always a walk-in. Pickup and
-// dropoff share one store (one-way rentals are a later track).
+// #589 1d: the manual-booking form. A *controlled* dialog — the route lifts `open`
+// so a header button and a calendar slot-click both drive it. The operator picks a
+// vehicle + store, a pickup/return range, and a customer: either a brand-new
+// *walk-in* (inline name + phone) or an *existing* renter found via CustomerPicker
+// (slice 3). The customer source is a discriminated union, so the POSTed body
+// carries renterId XOR walkInCustomer. Pickup and dropoff share one store (one-way
+// rentals are a later track).
 export function ManualBookingDialog({
   open,
   onOpenChange,
@@ -55,6 +58,11 @@ export function ManualBookingDialog({
   const [end, setEnd] = useState('')
   const [name, setName] = useState('')
   const [phone, setPhone] = useState('')
+  // The customer source: a walk-in (inline name + phone) or an existing renter
+  // picked by id. Modeled as a mode + optional selection so the POST body is the
+  // matching arm of the discriminated union — never both, never neither.
+  const [customerMode, setCustomerMode] = useState<'walk-in' | 'existing'>('walk-in')
+  const [selectedCustomer, setSelectedCustomer] = useState<CustomerSearchResult | null>(null)
   // Minted per booking attempt (reset on each open) so a double-submit or network
   // retry REPLAYS server-side (booking-creation's idempotency guard) rather than
   // creating a second booking — the client `disabled` flag alone can't cover a
@@ -70,7 +78,10 @@ export function ManualBookingDialog({
           dropoffLocationId: locationId,
           startAt: parseJstDateTimeLocal(start).toISOString(),
           endAt: parseJstDateTimeLocal(end).toISOString(),
-          customer: { kind: 'walk-in', name: name.trim(), phone: phone.trim() },
+          customer:
+            customerMode === 'existing' && selectedCustomer
+              ? { kind: 'existing', renterId: selectedCustomer.id }
+              : { kind: 'walk-in', name: name.trim(), phone: phone.trim() },
           idempotencyKey,
         },
         csrfToken,
@@ -96,15 +107,20 @@ export function ManualBookingDialog({
       setEnd(initialRange ? formatJstDateTimeLocal(initialRange.end) : '')
       setName('')
       setPhone('')
+      setCustomerMode('walk-in')
+      setSelectedCustomer(null)
       setIdempotencyKey(crypto.randomUUID())
       mutation.reset()
     }
     wasOpen.current = open
   }, [open, vehicles, locations, initialRange, mutation.reset])
 
+  // A walk-in needs name + phone; an existing customer needs a selection. The
+  // vehicle/store/range are required either way.
+  const hasCustomer =
+    customerMode === 'existing' ? selectedCustomer !== null : Boolean(name.trim() && phone.trim())
   const canSubmit =
-    Boolean(vehicleId && locationId && start && end && name.trim() && phone.trim()) &&
-    !mutation.isPending
+    Boolean(vehicleId && locationId && start && end) && hasCustomer && !mutation.isPending
 
   function handleSubmit(e: FormEvent) {
     e.preventDefault()
@@ -173,20 +189,50 @@ export function ManualBookingDialog({
               </div>
             </div>
 
-            <div className="space-y-2">
-              <Label htmlFor="manual-name">{t('nameLabel')}</Label>
-              <Input id="manual-name" value={name} onChange={(e) => setName(e.target.value)} />
-            </div>
+            <fieldset className="space-y-2">
+              <legend className="block text-sm font-medium">{t('customerSectionLabel')}</legend>
+              <div className="flex gap-2">
+                <Button
+                  type="button"
+                  variant={customerMode === 'walk-in' ? 'default' : 'outline'}
+                  size="sm"
+                  aria-pressed={customerMode === 'walk-in'}
+                  onClick={() => setCustomerMode('walk-in')}
+                >
+                  {t('customerNewTab')}
+                </Button>
+                <Button
+                  type="button"
+                  variant={customerMode === 'existing' ? 'default' : 'outline'}
+                  size="sm"
+                  aria-pressed={customerMode === 'existing'}
+                  onClick={() => setCustomerMode('existing')}
+                >
+                  {t('customerExistingTab')}
+                </Button>
+              </div>
+            </fieldset>
 
-            <div className="space-y-2">
-              <Label htmlFor="manual-phone">{t('phoneLabel')}</Label>
-              <Input
-                id="manual-phone"
-                type="tel"
-                value={phone}
-                onChange={(e) => setPhone(e.target.value)}
-              />
-            </div>
+            {customerMode === 'walk-in' ? (
+              <>
+                <div className="space-y-2">
+                  <Label htmlFor="manual-name">{t('nameLabel')}</Label>
+                  <Input id="manual-name" value={name} onChange={(e) => setName(e.target.value)} />
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="manual-phone">{t('phoneLabel')}</Label>
+                  <Input
+                    id="manual-phone"
+                    type="tel"
+                    value={phone}
+                    onChange={(e) => setPhone(e.target.value)}
+                  />
+                </div>
+              </>
+            ) : (
+              <CustomerPicker selected={selectedCustomer} onSelect={setSelectedCustomer} />
+            )}
           </div>
 
           {mutation.isError && (
