@@ -243,7 +243,8 @@ export interface User {
   country: string | null
   role: UserRole
   // Owning operator for OPERATOR_* users; null/undefined for renters + platform
-  // admins. Optional because most reads don't project it (#393 findOperatorContacts).
+  // admins. Optional because most reads don't project it. Operator-alert recipients
+  // now come from the operator_memberships ledger (#878), not this field.
   operatorId?: string | null
 }
 
