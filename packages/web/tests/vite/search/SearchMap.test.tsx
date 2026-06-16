@@ -16,6 +16,28 @@ vi.mock('pigeon-maps', () => ({
   Marker: () => <button type="button" data-testid="marker" />,
 }))
 
+// Rows carry a detail-CTA Link (#885 1b); stub it so the host renders router-free.
+// Drop the router-only props (to/params/search) so they never reach the DOM <a>.
+vi.mock('@tanstack/react-router', async () => ({
+  ...(await vi.importActual<typeof import('@tanstack/react-router')>('@tanstack/react-router')),
+  Link: ({
+    children,
+    to,
+    params,
+    search,
+    ...rest
+  }: {
+    children: ReactNode
+    to?: string
+    params?: unknown
+    search?: unknown
+  }) => (
+    <a href={typeof to === 'string' ? to : undefined} {...rest}>
+      {children}
+    </a>
+  ),
+}))
+
 function specific(id: string, name: string): SpecificSearchResult {
   return {
     kind: 'SPECIFIC',
@@ -46,7 +68,13 @@ function specific(id: string, name: string): SpecificSearchResult {
 function renderMap(result: SearchResultsData | null, anchor?: [number, number] | null) {
   return render(
     <IntlProvider locale="en" messages={en}>
-      <SearchMap result={result} anchor={anchor} />
+      <SearchMap
+        result={result}
+        anchor={anchor}
+        locale="en"
+        from="2026-07-01T10:00"
+        to="2026-07-04T10:00"
+      />
     </IntlProvider>,
   )
 }

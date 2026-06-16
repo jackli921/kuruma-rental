@@ -171,7 +171,16 @@ function StorefrontSearchRoute() {
         </div>
 
         {data.view === 'map' ? (
-          <SearchMap result={data.flat} anchor={mapAnchor} />
+          <SearchMap
+            result={data.flat}
+            anchor={mapAnchor}
+            locale={locale}
+            from={from ?? ''}
+            to={to ?? ''}
+            classFilter={classFilter}
+            pickupLocationId={pickupLocationId}
+            region={region}
+          />
         ) : (
           <StoreGrid
             result={data.storefronts}
