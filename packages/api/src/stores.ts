@@ -15,6 +15,9 @@ import type {
   BookingSource,
   BookingStatus,
   CancellationFeeSettlement,
+  ConsentDocStatus,
+  ConsentMethod,
+  ConsentType,
   DocumentStatus,
   DocumentType,
   FeeScheduleStatus,
@@ -412,6 +415,42 @@ export interface ProviderInvite {
   acceptedByUserId: string | null
   createdAt: Date
   updatedAt: Date
+}
+
+export interface ConsentDocument {
+  id: string
+  type: ConsentType
+  version: string
+  locale: string
+  title: string
+  body: string
+  acceptanceLabel: string
+  contentHash: string
+  status: ConsentDocStatus
+  effectiveFrom: Date
+  publishedAt: Date | null
+  createdAt: Date
+  updatedAt: Date
+}
+
+export interface ConsentAcceptance {
+  id: string
+  documentId: string
+  consentType: ConsentType
+  userId: string
+  operatorId: string | null
+  operatorMembershipId: string | null
+  actorRole: string | null
+  bookingId: string | null
+  acceptedAt: Date
+  context: Record<string, unknown> | null
+  ipAddress: string | null
+  userAgent: string | null
+  method: ConsentMethod
+  recordSignature: string | null
+  signingKeyId: string | null
+  signatureRef: string | null
+  createdAt: Date
 }
 
 // Map stores removed — repositories handle data access now.
