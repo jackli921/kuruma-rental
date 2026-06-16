@@ -886,6 +886,7 @@
         "phoneLabel": "电话",
         "submit": "创建预订",
         "error": "无法创建预订，请重试。",
+        "noInventory": "创建预订前，请至少添加一辆车和一个门店。",
         "customerSectionLabel": "客户",
         "customerNewTab": "新客户",
         "customerExistingTab": "老客户",

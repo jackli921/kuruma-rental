@@ -886,6 +886,7 @@
         "phoneLabel": "Phone",
         "submit": "Create booking",
         "error": "Could not create the booking. Please try again.",
+        "noInventory": "Add at least one vehicle and one store before creating a booking.",
         "customerSectionLabel": "Customer",
         "customerNewTab": "New customer",
         "customerExistingTab": "Existing customer",

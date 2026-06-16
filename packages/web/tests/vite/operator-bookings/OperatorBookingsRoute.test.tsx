@@ -1,7 +1,7 @@
 import { OperatorBookingsRoute } from '@/routes/$locale/_business/manage/bookings/index'
 import * as api from '@/vite/operator-bookings/api'
 import { calendarRange, parseCalendarDate } from '@/vite/operator-bookings/calendar-events'
-import { operatorLocationsQueryOptions } from '@/vite/operator-locations/api'
+import { type OperatorLocation, operatorLocationsQueryOptions } from '@/vite/operator-locations/api'
 import type { Session } from '@/vite/session'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { act, render, screen } from '@testing-library/react'
@@ -56,16 +56,38 @@ const bypassSession: Session = {
   csrfToken: 't',
 }
 
-function renderRoute(session: Session) {
+// A bookable fixture for tests that need the dialog FORM (not the empty-inventory
+// guidance): the form only renders when there is at least one vehicle and one store.
+const bookableVehicles = [{ id: 'veh-1', name: 'Toyota Aqua' }]
+const nambaStore: OperatorLocation = {
+  id: 'loc-1',
+  operatorId: 'op_1',
+  name: 'Namba Store',
+  address: '1-1 Namba, Osaka',
+  operatingHours: null,
+  timezone: 'Asia/Tokyo',
+  defaultTurnaroundMinutes: 60,
+  status: 'ACTIVE',
+  coordinateSource: 'GEOCODED',
+  regionId: null,
+  createdAt: '2026-01-01T00:00:00.000Z',
+  updatedAt: '2026-01-01T00:00:00.000Z',
+}
+
+function renderRoute(
+  session: Session,
+  vehicles: api.CalendarVehicle[] = [],
+  locations: OperatorLocation[] = [],
+) {
   const queryClient = new QueryClient({
     defaultOptions: { queries: { staleTime: Number.POSITIVE_INFINITY, retry: false } },
   })
   queryClient.setQueryData(['session'], session)
   queryClient.setQueryData(api.operatorCalendarQueryOptions(from, to).queryKey, [])
-  queryClient.setQueryData(api.operatorCalendarVehiclesQueryOptions().queryKey, [])
-  // The dialog reads pickup/return stores lazily on open; seed [] so the test stays
-  // hermetic (staleTime is infinite, so no network fetch fires).
-  queryClient.setQueryData(operatorLocationsQueryOptions().queryKey, [])
+  queryClient.setQueryData(api.operatorCalendarVehiclesQueryOptions().queryKey, vehicles)
+  // The dialog reads pickup/return stores lazily on open; seed them (default []) so
+  // the test stays hermetic (staleTime is infinite, so no network fetch fires).
+  queryClient.setQueryData(operatorLocationsQueryOptions().queryKey, locations)
   render(
     <QueryClientProvider client={queryClient}>
       <IntlProvider locale="en" messages={enMessages}>
@@ -112,7 +134,7 @@ describe('OperatorBookingsRoute manual-booking affordance (#589 1d)', () => {
   })
 
   it('opens the dialog with the clicked calendar slot prefilled (wall-clock JST)', async () => {
-    renderRoute(operatorSession)
+    renderRoute(operatorSession, bookableVehicles, [nambaStore])
     // rbc hands a SlotInfo to BookingsCalendar's adapter (captured here); it surfaces
     // {start,end}, which the route threads to the dialog as initialRange. 01:00Z is
     // 10:00 JST — the form shows wall-clock Tokyo.

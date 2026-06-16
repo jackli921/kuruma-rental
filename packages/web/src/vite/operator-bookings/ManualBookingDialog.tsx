@@ -122,132 +122,163 @@ export function ManualBookingDialog({
   const canSubmit =
     Boolean(vehicleId && locationId && start && end) && hasCustomer && !mutation.isPending
 
+  // No vehicle or no store means there is nothing to book against — the form would
+  // render empty selects that can never satisfy `canSubmit`, leaving submit silently
+  // disabled. Show guidance instead (review #589 1d MED-2).
+  const hasInventory = vehicles.length > 0 && locations.length > 0
+
   function handleSubmit(e: FormEvent) {
     e.preventDefault()
     if (!canSubmit) return
     mutation.mutate()
   }
 
+  // Switching customer source clears the other arm's inputs so a half-filled walk-in
+  // never lingers behind an existing-customer selection (or vice versa). The POST
+  // body is derived from the active arm, so this is UX hygiene, not a safety gate.
+  function selectCustomerMode(mode: 'walk-in' | 'existing') {
+    if (mode === customerMode) return
+    setCustomerMode(mode)
+    setName('')
+    setPhone('')
+    setSelectedCustomer(null)
+  }
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent>
-        <form onSubmit={handleSubmit}>
-          <DialogHeader>
-            <DialogTitle>{t('dialogTitle')}</DialogTitle>
-            <DialogDescription>{t('dialogDescription')}</DialogDescription>
-          </DialogHeader>
+        <DialogHeader>
+          <DialogTitle>{t('dialogTitle')}</DialogTitle>
+          <DialogDescription>{t('dialogDescription')}</DialogDescription>
+        </DialogHeader>
 
-          <div className="space-y-4 py-4">
-            <div className="space-y-2">
-              <Label htmlFor="manual-vehicle">{t('vehicleLabel')}</Label>
-              <NativeSelect
-                id="manual-vehicle"
-                value={vehicleId}
-                onChange={(e) => setVehicleId(e.target.value)}
-              >
-                {vehicles.map((v) => (
-                  <option key={v.id} value={v.id}>
-                    {v.name}
-                  </option>
-                ))}
-              </NativeSelect>
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="manual-location">{t('locationLabel')}</Label>
-              <NativeSelect
-                id="manual-location"
-                value={locationId}
-                onChange={(e) => setLocationId(e.target.value)}
-              >
-                {locations.map((l) => (
-                  <option key={l.id} value={l.id}>
-                    {l.name}
-                  </option>
-                ))}
-              </NativeSelect>
-            </div>
-
-            <div className="grid grid-cols-2 gap-4">
+        {hasInventory ? (
+          <form onSubmit={handleSubmit}>
+            <div className="space-y-4 py-4">
               <div className="space-y-2">
-                <Label htmlFor="manual-start">{t('startLabel')}</Label>
-                <Input
-                  id="manual-start"
-                  type="datetime-local"
-                  value={start}
-                  onChange={(e) => setStart(e.target.value)}
-                />
+                <Label htmlFor="manual-vehicle">{t('vehicleLabel')}</Label>
+                <NativeSelect
+                  id="manual-vehicle"
+                  value={vehicleId}
+                  onChange={(e) => setVehicleId(e.target.value)}
+                >
+                  {vehicles.map((v) => (
+                    <option key={v.id} value={v.id}>
+                      {v.name}
+                    </option>
+                  ))}
+                </NativeSelect>
               </div>
+
               <div className="space-y-2">
-                <Label htmlFor="manual-end">{t('endLabel')}</Label>
-                <Input
-                  id="manual-end"
-                  type="datetime-local"
-                  value={end}
-                  onChange={(e) => setEnd(e.target.value)}
-                />
-              </div>
-            </div>
-
-            <fieldset className="space-y-2">
-              <legend className="block text-sm font-medium">{t('customerSectionLabel')}</legend>
-              <div className="flex gap-2">
-                <Button
-                  type="button"
-                  variant={customerMode === 'walk-in' ? 'default' : 'outline'}
-                  size="sm"
-                  aria-pressed={customerMode === 'walk-in'}
-                  onClick={() => setCustomerMode('walk-in')}
+                <Label htmlFor="manual-location">{t('locationLabel')}</Label>
+                <NativeSelect
+                  id="manual-location"
+                  value={locationId}
+                  onChange={(e) => setLocationId(e.target.value)}
                 >
-                  {t('customerNewTab')}
-                </Button>
-                <Button
-                  type="button"
-                  variant={customerMode === 'existing' ? 'default' : 'outline'}
-                  size="sm"
-                  aria-pressed={customerMode === 'existing'}
-                  onClick={() => setCustomerMode('existing')}
-                >
-                  {t('customerExistingTab')}
-                </Button>
+                  {locations.map((l) => (
+                    <option key={l.id} value={l.id}>
+                      {l.name}
+                    </option>
+                  ))}
+                </NativeSelect>
               </div>
-            </fieldset>
 
-            {customerMode === 'walk-in' ? (
-              <>
+              <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
-                  <Label htmlFor="manual-name">{t('nameLabel')}</Label>
-                  <Input id="manual-name" value={name} onChange={(e) => setName(e.target.value)} />
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="manual-phone">{t('phoneLabel')}</Label>
+                  <Label htmlFor="manual-start">{t('startLabel')}</Label>
                   <Input
-                    id="manual-phone"
-                    type="tel"
-                    value={phone}
-                    onChange={(e) => setPhone(e.target.value)}
+                    id="manual-start"
+                    type="datetime-local"
+                    value={start}
+                    onChange={(e) => setStart(e.target.value)}
                   />
                 </div>
-              </>
-            ) : (
-              <CustomerPicker selected={selectedCustomer} onSelect={setSelectedCustomer} />
+                <div className="space-y-2">
+                  <Label htmlFor="manual-end">{t('endLabel')}</Label>
+                  <Input
+                    id="manual-end"
+                    type="datetime-local"
+                    value={end}
+                    onChange={(e) => setEnd(e.target.value)}
+                  />
+                </div>
+              </div>
+
+              <fieldset className="space-y-2">
+                <legend className="block text-sm font-medium">{t('customerSectionLabel')}</legend>
+                <div className="flex gap-2">
+                  <Button
+                    type="button"
+                    variant={customerMode === 'walk-in' ? 'default' : 'outline'}
+                    size="sm"
+                    aria-pressed={customerMode === 'walk-in'}
+                    onClick={() => selectCustomerMode('walk-in')}
+                  >
+                    {t('customerNewTab')}
+                  </Button>
+                  <Button
+                    type="button"
+                    variant={customerMode === 'existing' ? 'default' : 'outline'}
+                    size="sm"
+                    aria-pressed={customerMode === 'existing'}
+                    onClick={() => selectCustomerMode('existing')}
+                  >
+                    {t('customerExistingTab')}
+                  </Button>
+                </div>
+              </fieldset>
+
+              {customerMode === 'walk-in' ? (
+                <>
+                  <div className="space-y-2">
+                    <Label htmlFor="manual-name">{t('nameLabel')}</Label>
+                    <Input
+                      id="manual-name"
+                      value={name}
+                      onChange={(e) => setName(e.target.value)}
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="manual-phone">{t('phoneLabel')}</Label>
+                    <Input
+                      id="manual-phone"
+                      type="tel"
+                      value={phone}
+                      onChange={(e) => setPhone(e.target.value)}
+                    />
+                  </div>
+                </>
+              ) : (
+                <CustomerPicker selected={selectedCustomer} onSelect={setSelectedCustomer} />
+              )}
+            </div>
+
+            {mutation.isError && (
+              <output className="block text-sm text-destructive">{t('error')}</output>
             )}
-          </div>
 
-          {mutation.isError && (
-            <output className="block text-sm text-destructive">{t('error')}</output>
-          )}
-
-          <DialogFooter>
-            <DialogClose render={<Button type="button" variant="outline" />}>
-              {t('cancel')}
-            </DialogClose>
-            <Button type="submit" disabled={!canSubmit}>
-              {t('submit')}
-            </Button>
-          </DialogFooter>
-        </form>
+            <DialogFooter>
+              <DialogClose render={<Button type="button" variant="outline" />}>
+                {t('cancel')}
+              </DialogClose>
+              <Button type="submit" disabled={!canSubmit}>
+                {t('submit')}
+              </Button>
+            </DialogFooter>
+          </form>
+        ) : (
+          <>
+            <p className="py-4 text-sm text-muted-foreground">{t('noInventory')}</p>
+            <DialogFooter>
+              <DialogClose render={<Button type="button" variant="outline" />}>
+                {t('cancel')}
+              </DialogClose>
+            </DialogFooter>
+          </>
+        )}
       </DialogContent>
     </Dialog>
   )

@@ -239,4 +239,53 @@ describe('ManualBookingDialog', () => {
       ),
     })
   })
+
+  it('shows guidance and hides the form when there are no vehicles to book', () => {
+    renderDialog({ vehicles: [] })
+    expect(screen.getByText(c.noInventory)).toBeInTheDocument()
+    expect(screen.queryByLabelText(c.vehicleLabel)).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: c.submit })).not.toBeInTheDocument()
+  })
+
+  it('shows guidance and hides the form when there are no stores to book against', () => {
+    renderDialog({ locations: [] })
+    expect(screen.getByText(c.noInventory)).toBeInTheDocument()
+    expect(screen.queryByLabelText(c.locationLabel)).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: c.submit })).not.toBeInTheDocument()
+  })
+
+  it('clears the typed walk-in name and phone after toggling customer modes', async () => {
+    const user = userEvent.setup({ delay: null })
+    renderDialog()
+
+    await user.type(screen.getByLabelText(c.nameLabel), 'Taro Yamada')
+    await user.type(screen.getByLabelText(c.phoneLabel), '09012345678')
+    await user.click(screen.getByRole('button', { name: c.customerExistingTab }))
+    await user.click(screen.getByRole('button', { name: c.customerNewTab }))
+
+    expect(screen.getByLabelText(c.nameLabel)).toHaveValue('')
+    expect(screen.getByLabelText(c.phoneLabel)).toHaveValue('')
+  })
+
+  it('drops a selected existing customer after toggling away and back', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => jsonResponse({ success: true, data: [tanaka] })),
+    )
+    const user = userEvent.setup({ delay: null })
+    renderDialog({ initialRange })
+
+    await user.click(screen.getByRole('button', { name: c.customerExistingTab }))
+    await user.type(screen.getByLabelText(c.customerSearchLabel), 'tan')
+    await user.click(await screen.findByText('Tanaka Hiro'))
+    // The summary replaces the search box once a customer is attached.
+    expect(screen.queryByLabelText(c.customerSearchLabel)).not.toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: c.customerNewTab }))
+    await user.click(screen.getByRole('button', { name: c.customerExistingTab }))
+
+    // Selection was cleared: the search box is back and no customer is attached.
+    expect(screen.getByLabelText(c.customerSearchLabel)).toBeInTheDocument()
+    expect(screen.queryByText('Tanaka Hiro')).not.toBeInTheDocument()
+  })
 })
