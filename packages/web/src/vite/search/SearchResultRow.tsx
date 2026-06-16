@@ -3,6 +3,7 @@ import { cn } from '@/lib/utils'
 import type { SearchResultItem, SpecificSearchResult } from '@kuruma/shared/types/search-result'
 import { Car, MapPin, Settings2, Users } from 'lucide-react'
 import { useTranslations } from 'use-intl'
+import { resultPriceLabel } from './result'
 
 interface SearchResultRowProps {
   readonly item: SearchResultItem
@@ -29,12 +30,7 @@ function SpecificRow({ item }: { readonly item: SpecificSearchResult }) {
   const photo = item.photos[0]
   const transmissionLabel = item.transmission === 'AUTO' ? t('auto') : t('manual')
 
-  const priceLabel =
-    item.dailyRateJpy != null
-      ? t('fromDaily', { price: item.dailyRateJpy.toLocaleString('en-US') })
-      : item.hourlyRateJpy != null
-        ? t('fromHourly', { price: item.hourlyRateJpy.toLocaleString('en-US') })
-        : t('noPrice')
+  const priceLabel = resultPriceLabel(item, t)
 
   return (
     <article className="flex gap-4 rounded-xl border border-border bg-card p-4 shadow-sm">
