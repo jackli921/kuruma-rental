@@ -188,6 +188,17 @@ describe('createBookingSchema walk-in customer (#589 1c)', () => {
     expect(result.success).toBe(false)
   })
 
+  // The mutual-exclusion refine blocks BOTH sources; it must still permit NEITHER —
+  // that is the renter self-serve case (the route defaults renterId to ctx.userId).
+  it('accepts neither renterId nor walkInCustomer (renter self-serve books as themselves)', () => {
+    const result = createBookingSchema.safeParse({ ...base, source: 'DIRECT' })
+    expect(result.success).toBe(true)
+    if (result.success) {
+      expect(result.data.renterId).toBeUndefined()
+      expect(result.data.walkInCustomer).toBeUndefined()
+    }
+  })
+
   it('strips an email injected into walkInCustomer (no create-by-email oracle)', () => {
     const result = createBookingSchema.safeParse({
       ...base,

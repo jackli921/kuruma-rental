@@ -62,9 +62,12 @@ export class BookingCreationService {
     //    createWalkInRenter ALWAYS makes a fresh renter (never deduped by phone),
     //    so a booking can't be attached to — nor the existence probed of — another
     //    tenant's customer (#396/#475). The walk-in IS the authorization, so it
-    //    skips the scope check below. Created pre-tx: a rare failed booking orphans
-    //    a childless renter, which is invisible (no booking => never in operator
-    //    scope) — YAGNI vs widening TransactionRepos with a userRepo for this.
+    //    skips the scope check below. Created pre-tx (NOT atomic): a failed booking
+    //    (409 double-book / exhausted code-retries) orphans a childless renter. It
+    //    has no operatorId so it can't be mis-scoped, but it IS reachable via the
+    //    operator customer-search, and a retry-on-409 mints a new one each attempt.
+    //    Accepted as low-severity data noise here; atomic creation (userRepo in the
+    //    booking tx) is tracked as #875.
     //  - EXISTING renter (1b): operator authz is scope-FIRST — membership IS the
     //    authorization + existence check; any out-of-scope id returns a uniform
     //    403 WITHOUT touching the user table (no enumeration oracle). Staff/bypass

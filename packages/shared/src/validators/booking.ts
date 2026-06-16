@@ -28,7 +28,7 @@ export const createBookingSchema = z
     // create-by-email would leak whether an address already exists (#396/#475);
     // phone → synthetic placeholder email avoids the oracle. Used in place of
     // renterId (mutually exclusive — see refine below); the service creates a
-    // fresh renter and books atomically.
+    // fresh renter, then books (pre-tx ordering / orphan tradeoff: #875).
     walkInCustomer: z
       .object({
         name: z.string().trim().min(1, 'Name is required'),
