@@ -1153,7 +1153,11 @@
       "pinSelect": "Select {store}, {price}",
       "popupPrev": "Previous car",
       "popupNext": "Next car",
-      "popupPosition": "{n} / {total}"
+      "popupPosition": "{n} / {total}",
+      "geoContext": "{area}, {prefecture} · {km} km away",
+      "geoContextNoDistance": "{area}, {prefecture}",
+      "geoContextAreaOnly": "{area} · {km} km away",
+      "geoContextAreaOnlyNoDistance": "{area}"
     },
     "detail": {
       "backToSearch": "Back to search",

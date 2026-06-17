@@ -1153,7 +1153,11 @@
       "pinSelect": "选择{store}，{price}",
       "popupPrev": "上一辆",
       "popupNext": "下一辆",
-      "popupPosition": "{n} / {total}"
+      "popupPosition": "{n} / {total}",
+      "geoContext": "{prefecture}{area}・{km} km",
+      "geoContextNoDistance": "{prefecture}{area}",
+      "geoContextAreaOnly": "{area}・{km} km",
+      "geoContextAreaOnlyNoDistance": "{area}"
     },
     "detail": {
       "backToSearch": "返回搜索",
