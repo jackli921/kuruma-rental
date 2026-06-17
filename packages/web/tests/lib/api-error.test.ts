@@ -1,4 +1,10 @@
-import { ApiError, ParseError, operatorRequiredCode, unwrap } from '@/lib/api-error'
+import {
+  ApiError,
+  OPERATOR_REQUIRED,
+  ParseError,
+  operatorRequiredCode,
+  unwrap,
+} from '@/lib/api-error'
 import { describe, expect, it } from 'vitest'
 import { z } from 'zod'
 
@@ -92,17 +98,20 @@ describe('unwrap with a Zod schema', () => {
 })
 
 describe('operatorRequiredCode', () => {
-  it('returns OPERATOR_REQUIRED for a 422 ApiError whose message names operatorId', () => {
-    const err = new ApiError('operatorId is required: specify a target operator', 422)
-    expect(operatorRequiredCode(err)).toBe('OPERATOR_REQUIRED')
+  it('returns OPERATOR_REQUIRED off the envelope code, regardless of message (#934)', () => {
+    // Code-driven, not message-driven: a reworded or localized message must not
+    // change the result, now that the API emits a self-describing `code`.
+    const err = new ApiError('Choose a target operator', 422, OPERATOR_REQUIRED)
+    expect(operatorRequiredCode(err)).toBe(OPERATOR_REQUIRED)
   })
 
-  it('returns undefined for a 422 with an unrelated message', () => {
-    expect(operatorRequiredCode(new ApiError('seats must be positive', 422))).toBeUndefined()
+  it('returns undefined when the message names operatorId but carries no code', () => {
+    // The legacy message-regex bridge is retired — only the envelope code counts.
+    expect(operatorRequiredCode(new ApiError('operatorId is required', 422))).toBeUndefined()
   })
 
-  it('returns undefined for a non-422 operatorId error and for non-ApiError values', () => {
-    expect(operatorRequiredCode(new ApiError('operatorId is required', 400))).toBeUndefined()
+  it('returns undefined for a different code and for non-ApiError values', () => {
+    expect(operatorRequiredCode(new ApiError('nope', 422, 'SOMETHING_ELSE'))).toBeUndefined()
     expect(operatorRequiredCode(new Error('operatorId is required'))).toBeUndefined()
     expect(operatorRequiredCode(null)).toBeUndefined()
   })

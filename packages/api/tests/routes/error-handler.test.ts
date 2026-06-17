@@ -72,4 +72,25 @@ describe('Global error handlers', () => {
     expect(body.success).toBe(false)
     expect(body.error).toBe('Not found')
   })
+
+  it('maps OperatorRequiredError to a 422 carrying the OPERATOR_REQUIRED code (#934)', async () => {
+    // A self-describing envelope `code` lets the web discriminate this 422 by code
+    // instead of regex-matching the message (which a reword/i18n change would break).
+    const { setupGlobalHandlers: setup } = await import('../../src/error-handlers')
+    const { OperatorRequiredError } = await import('../../src/middleware/auth')
+
+    const app = new Hono()
+    setup(app)
+    app.get('/op-required', () => {
+      throw new OperatorRequiredError('operatorId is required: specify a target operator')
+    })
+
+    const res = await app.request('/op-required')
+    expect(res.status).toBe(422)
+    expect(await res.json()).toEqual({
+      success: false,
+      error: 'operatorId is required: specify a target operator',
+      code: 'OPERATOR_REQUIRED',
+    })
+  })
 })
