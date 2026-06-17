@@ -1,6 +1,11 @@
 import type { OperatorInviteData, OperatorMemberData } from '@kuruma/shared/types/operator-team'
 import type { CallerContext } from '../auth/context'
-import { ForbiddenError, requireOperatorOwnerWrite, requireOperatorScope } from '../auth/guards'
+import {
+  ForbiddenError,
+  NotFoundError,
+  requireOperatorOwnerWrite,
+  requireOperatorScope,
+} from '../auth/guards'
 import type {
   OperatorMembershipRepository,
   ProviderInviteRepository,
@@ -50,6 +55,19 @@ export class OperatorTeamService {
       (await this.users.findByIds(memberships.map((m) => m.userId))).map((u) => [u.id, u]),
     )
     return memberships.map((m) => toOperatorMemberData(m, usersById.get(m.userId)))
+  }
+
+  /**
+   * #904 slice 2: the owner revokes a pending invite. Owner-only write; the
+   * invite is resolved within the caller's own tenant, so a foreign-tenant or
+   * unknown id reads as `undefined` from the scoped repo and surfaces as a 404 —
+   * never a 403 that would confirm the invite exists elsewhere.
+   */
+  async revokeInvite(ctx: CallerContext, id: string): Promise<void> {
+    requireOperatorOwnerWrite(ctx)
+    const operatorId = this.requireOwnOperator(ctx)
+    const revoked = await this.invites.revoke(id, operatorId)
+    if (!revoked) throw new NotFoundError('invite not found')
   }
 
   /**

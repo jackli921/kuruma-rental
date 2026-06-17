@@ -232,6 +232,10 @@ export interface ProviderInviteRepository {
   /** #904: the operator's actionable (PENDING) invites — the self-service team
    *  page. Scoped by operatorId; non-PENDING (accepted/revoked) rows drop off. */
   listByOperator(operatorId: string): Promise<ProviderInvite[]>
+  /** #904 slice 2: owner revokes a pending invite. Scoped (operatorId, status='PENDING')
+   *  so a tenant can only revoke its own actionable invites; returns the updated row,
+   *  or undefined when nothing matched (already accepted/revoked, or another tenant's). */
+  revoke(id: string, operatorId: string): Promise<ProviderInvite | undefined>
 }
 
 // #521. `findActiveByUserId` is served by the partial-unique-active index

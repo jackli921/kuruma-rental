@@ -106,4 +106,30 @@ describe('InMemoryProviderInviteRepository', () => {
       expect(rows.map((r) => r.email)).toEqual(['pending@x.com'])
     })
   })
+
+  describe('revoke (#904 slice 2)', () => {
+    it('flips a PENDING invite to REVOKED and returns the updated row', async () => {
+      const created = await repo.create(inviteInput({ tokenHash: 'h1' }))
+      const revoked = await repo.revoke(created.id, 'op_test')
+      expect(revoked?.id).toBe(created.id)
+      expect(revoked?.status).toBe('REVOKED')
+      // It drops off the actionable PENDING list.
+      expect(await repo.listByOperator('op_test')).toHaveLength(0)
+    })
+
+    it('is operator-scoped: another tenant cannot revoke this invite', async () => {
+      const created = await repo.create(inviteInput({ tokenHash: 'h1', operatorId: 'op_a' }))
+      const result = await repo.revoke(created.id, 'op_b')
+      expect(result).toBeUndefined()
+      // The invite is untouched — still PENDING for its real operator.
+      const rows = await repo.listByOperator('op_a')
+      expect(rows).toHaveLength(1)
+      expect(rows[0]?.status).toBe('PENDING')
+    })
+
+    it('returns undefined for an already non-PENDING invite (idempotent guard)', async () => {
+      const created = await repo.create(inviteInput({ tokenHash: 'h1', status: 'ACCEPTED' }))
+      expect(await repo.revoke(created.id, 'op_test')).toBeUndefined()
+    })
+  })
 })

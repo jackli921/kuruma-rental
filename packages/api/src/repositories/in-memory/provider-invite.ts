@@ -48,6 +48,17 @@ export class InMemoryProviderInviteRepository implements ProviderInviteRepositor
       .sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime() || a.id.localeCompare(b.id))
   }
 
+  // #904 slice 2: owner revokes a pending invite. Scoped (operatorId, PENDING) so a
+  // tenant can only revoke its own actionable invites; returns the updated row, or
+  // undefined when nothing matched (mirrors the drizzle WHERE on id+operatorId+status).
+  async revoke(id: string, operatorId: string): Promise<ProviderInvite | undefined> {
+    const invite = this.store.get(id)
+    if (!invite || invite.operatorId !== operatorId || invite.status !== 'PENDING') return undefined
+    const revoked: ProviderInvite = { ...invite, status: 'REVOKED', updatedAt: new Date() }
+    this.store.set(id, revoked)
+    return revoked
+  }
+
   // #904 slice 2: PENDING-only guard. A revoke that lands first leaves the invite
   // REVOKED; a racing accept then finds no PENDING row and is a no-op, so it can
   // never flip REVOKED -> ACCEPTED (mirrors the drizzle WHERE status='PENDING').

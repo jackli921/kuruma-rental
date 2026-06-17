@@ -31,6 +31,33 @@ export class OperatorRequiredError extends Error {
 }
 
 /**
+ * Thrown when an operator self-service action names an id that does not resolve
+ * within the caller's own tenant — an unknown invite/member, or one already in a
+ * terminal state. Mapped to 404 by the global handler. Because every #904 path is
+ * operator-scoped, a foreign-tenant id is indistinguishable from a missing one, so
+ * this doubles as the cross-tenant seal (no existence oracle).
+ */
+export class NotFoundError extends Error {
+  readonly name = 'NotFoundError'
+  constructor(message = 'Not found') {
+    super(message)
+  }
+}
+
+/**
+ * Thrown when a request is well-formed and authorized but conflicts with current
+ * state: revoking the last active operator owner (would lock the tenant out), or
+ * inviting an email that already has a pending invite. Mapped to 409 by the global
+ * handler, surfacing `err.message` so the web can show the specific reason.
+ */
+export class ConflictError extends Error {
+  readonly name = 'ConflictError'
+  constructor(message = 'Conflict') {
+    super(message)
+  }
+}
+
+/**
  * Repo-layer read guard for operator-private config. Must be called BEFORE
  * `operatorReadScope(ctx)`, because that helper maps every non-operator role —
  * including RENTER — to `{kind:'all'}` (the vehicle catalog is public). Without

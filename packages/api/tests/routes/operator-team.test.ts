@@ -144,6 +144,52 @@ describe('GET /operators/me/invites', () => {
   })
 })
 
+describe('POST /operators/me/invites/:id/revoke', () => {
+  async function seedInvite(operatorId: string, tokenHash: string): Promise<string> {
+    const invite = await inviteRepo.create({
+      email: `staff@${operatorId}.com`,
+      operatorId,
+      role: 'OPERATOR_STAFF',
+      tokenHash,
+      status: 'PENDING',
+      expiresAt: FUTURE,
+      invitedByUserId: 'u_owner',
+      acceptedByUserId: null,
+    })
+    return invite.id
+  }
+
+  it('revokes the caller own pending invite (200) — it drops off the pending list', async () => {
+    const id = await seedInvite('op_1', 'h1')
+    const res = await mountFor('OPERATOR_OWNER', 'op_1').request(
+      `/operators/me/invites/${id}/revoke`,
+      { method: 'POST' },
+    )
+    expect(res.status).toBe(200)
+    expect(await inviteRepo.listByOperator('op_1')).toHaveLength(0)
+  })
+
+  it('forbids an OPERATOR_STAFF caller (403) and leaves the invite pending', async () => {
+    const id = await seedInvite('op_1', 'h1')
+    const res = await mountFor('OPERATOR_STAFF', 'op_1').request(
+      `/operators/me/invites/${id}/revoke`,
+      { method: 'POST' },
+    )
+    expect(res.status).toBe(403)
+    expect(await inviteRepo.listByOperator('op_1')).toHaveLength(1)
+  })
+
+  it('cannot revoke another tenant invite (404) — it stays pending', async () => {
+    const id = await seedInvite('op_2', 'h2')
+    const res = await mountFor('OPERATOR_OWNER', 'op_1').request(
+      `/operators/me/invites/${id}/revoke`,
+      { method: 'POST' },
+    )
+    expect(res.status).toBe(404)
+    expect(await inviteRepo.listByOperator('op_2')).toHaveLength(1)
+  })
+})
+
 describe('GET /operators/me/members', () => {
   it('returns the caller operator ACTIVE members joined to user name + email', async () => {
     await membershipRepo.create({

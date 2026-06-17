@@ -52,6 +52,25 @@ export class DrizzleProviderInviteRepository implements ProviderInviteRepository
     return rows.map(toProviderInvite)
   }
 
+  // #904 slice 2: owner revokes a pending invite. The WHERE pins all three of
+  // id + operatorId + status='PENDING' so a tenant can only revoke its own
+  // actionable invites; a cross-tenant id or an already-consumed invite matches
+  // zero rows and returns undefined (the route maps that to 404).
+  async revoke(id: string, operatorId: string): Promise<ProviderInvite | undefined> {
+    const [row] = await this.db
+      .update(providerInvites)
+      .set({ status: 'REVOKED', updatedAt: new Date() })
+      .where(
+        and(
+          eq(providerInvites.id, id),
+          eq(providerInvites.operatorId, operatorId),
+          eq(providerInvites.status, 'PENDING'),
+        ),
+      )
+      .returning()
+    return row ? toProviderInvite(row) : undefined
+  }
+
   // Consume the invite at acceptance (#521 §6). Runs tx-bound inside the grant
   // transaction; the membership INSERT (first in that tx) is the primary race
   // fence. The WHERE status='PENDING' is the second fence (#904 slice 2): a

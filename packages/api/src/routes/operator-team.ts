@@ -32,6 +32,13 @@ export function createOperatorTeamRoutes(service: OperatorTeamService) {
       const invites = await service.listInvites(toCallerContext(requireUser(c)))
       return ok(c, invites)
     })
+    .post('/operators/me/invites/:id/revoke', async (c) => {
+      const id = c.req.param('id')
+      // Owner-only + tenant scope live in the service; an unknown/foreign id
+      // throws NotFoundError (-> 404) via the global handler, so no id is leaked.
+      await service.revokeInvite(toCallerContext(requireUser(c)), id)
+      return ok(c, { id })
+    })
     .get('/operators/me/members', async (c) => {
       const members = await service.listMembers(toCallerContext(requireUser(c)))
       return ok(c, members)
