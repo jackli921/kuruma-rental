@@ -33,3 +33,8 @@ export function isOperatorTeamEnabled(): boolean {
 export function isOperatorSettingsEnabled(): boolean {
   return isEnabled(import.meta.env.VITE_FEATURE_OPERATOR_SETTINGS)
 }
+
+/** Renter identity-document upload + verification (#459). Orphaned by instant-book. */
+export function isRenterDocumentsEnabled(): boolean {
+  return isEnabled(import.meta.env.VITE_FEATURE_RENTER_DOCUMENTS)
+}
