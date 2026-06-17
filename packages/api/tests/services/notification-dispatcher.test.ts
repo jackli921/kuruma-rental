@@ -12,6 +12,7 @@ import {
   NotificationDispatcher,
   TRIGGER_KINDS,
 } from '../../src/services/notification-dispatcher'
+import { makeResolveOperatorRecipients } from '../../src/services/operator-recipients'
 import type { Booking, OperatorMembership, User } from '../../src/stores'
 import { makeBooking as makeBookingFixture } from '../helpers/booking'
 
@@ -137,7 +138,7 @@ function build(
     operatorRepo,
     fakeVehicleRepo,
     userRepo,
-    membershipRepo,
+    makeResolveOperatorRecipients({ membershipRepo, userRepo }),
     fakeLocationRepo,
     sender,
     {
