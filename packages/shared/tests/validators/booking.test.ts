@@ -174,6 +174,12 @@ describe('cancelBookingSchema (#868 Slice 3b)', () => {
     if (result.success) expect(result.data.reason?.note).toBe('found a cheaper car')
   })
 
+  it('accepts a null note — the web sends note:null when the renter leaves it blank (#922)', () => {
+    const result = cancelBookingSchema.safeParse({ reason: { code: 'OTHER', note: null } })
+    expect(result.success).toBe(true)
+    if (result.success) expect(result.data.reason).toEqual({ code: 'OTHER', note: null })
+  })
+
   it('rejects a reason code outside the taxonomy', () => {
     expect(cancelBookingSchema.safeParse({ reason: { code: 'BANANA' } }).success).toBe(false)
   })
