@@ -79,8 +79,10 @@ function minRate(
 
 /** Derived "where in Japan" context for a result row, before localization. */
 export interface GeoContext {
-  /** Nearest AREA region to the pickup store (always present when non-null). */
-  area: RegionNode
+  /** Nearest AREA region to the pickup store. Always coordinate-bearing (the
+   *  producer only matches coord-carrying AREA nodes), so callers may read its
+   *  lat/lng without a non-null assertion — banked for a future area-centre pin. */
+  area: RegionNode & GeoPoint
   /** The AREA's prefecture ancestor, or null when the chain is broken. */
   prefecture: RegionNode | null
   /** Anchor -> pickup distance in km, or null with no anchor / no store coords. */
@@ -89,11 +91,16 @@ export interface GeoContext {
 
 /**
  * Locate a pickup store in the region taxonomy (#885 slice 3a). Pure: finds the
- * nearest assignable AREA by coords, derives its prefecture by reusing the already
- * cycle-guarded `regionChain` (do NOT hand-roll a second parent walk — it runs on
- * the public region list and would freeze the tab on a malformed self-FK row), and
- * measures the searched anchor -> store distance. Returns null when the store has no
- * coordinates or sits beyond the area sanity radius (graceful degrade: no label).
+ * nearest assignable AREA by coords — restricted to `type === 'AREA'` so a future
+ * assignable city/prefecture node can never be mislabelled as "the area" (the
+ * "nearest assignable" set coincides with AREAs only by current seed convention, not
+ * by type) — derives its prefecture by reusing the already cycle-guarded
+ * `regionChain` (do NOT hand-roll a second parent walk — it runs on the public
+ * region list and would freeze the tab on a malformed self-FK row), and measures the
+ * searched anchor -> store distance. `location` is the PICKUP store; a one-way
+ * dropoff label (#882) would be an additive second call, not a change here. Returns
+ * null when the store has no coordinates or no AREA sits within the sanity radius
+ * (graceful degrade: no label).
  */
 export function resolveGeoContext(
   location: ResultLocation,
@@ -102,7 +109,10 @@ export function resolveGeoContext(
 ): GeoContext | null {
   if (location.latitude === null || location.longitude === null) return null
   const point: GeoPoint = { latitude: location.latitude, longitude: location.longitude }
-  const area = nearestAssignableRegion(regions, point)
+  const area = nearestAssignableRegion(
+    regions.filter((region) => region.type === 'AREA'),
+    point,
+  )
   if (area === null) return null
   return {
     area,
@@ -131,8 +141,8 @@ export function formatGeoContext(
   if (ctx === null) return null
   const areaName = localizedRegionName(ctx.area, locale)
   const prefectureName = ctx.prefecture ? localizedRegionName(ctx.prefecture, locale) : null
-  const hasDistance = ctx.distanceKm !== null && Number(ctx.distanceKm.toFixed(1)) !== 0
   const km = ctx.distanceKm !== null ? ctx.distanceKm.toFixed(1) : ''
+  const hasDistance = ctx.distanceKm !== null && Number(km) !== 0
   if (prefectureName === null || prefectureName === areaName) {
     return hasDistance
       ? t('map.geoContextAreaOnly', { area: areaName, km })

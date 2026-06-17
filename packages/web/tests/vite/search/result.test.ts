@@ -235,6 +235,23 @@ describe('resolveGeoContext', () => {
     expect(ctx?.area.id).toBe('A')
     expect(ctx?.prefecture).toBeNull()
   })
+
+  it('labels the nearest AREA, never a closer assignable non-AREA node', () => {
+    // The "area" is AREA-scoped. A future assignable CITY sitting right on the store
+    // (0 km) must NOT be picked over Namba — nearest-by-coords alone would grab it.
+    const assignableCity = area({
+      id: 'reg_some_city',
+      nameEn: 'Some City',
+      type: 'CITY',
+      assignable: true,
+      latitude: 34.66,
+      longitude: 135.5,
+      sortOrder: 0,
+    })
+    const ctx = resolveGeoContext(storeAt(34.66, 135.5), [...OSAKA_REGIONS, assignableCity], null)
+    expect(ctx?.area.id).toBe('reg_namba')
+    expect(ctx?.area.type).toBe('AREA')
+  })
 })
 
 describe('formatGeoContext', () => {

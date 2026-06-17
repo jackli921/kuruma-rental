@@ -69,17 +69,17 @@ export function SearchMapList({
   }, [items])
 
   // Derive each location's geo-context label once (the shell), so the leaf row and
-  // popup take a dumb string and `regions` stays out of them. Co-located cars share
-  // one label (keyed by locationId). Absent until the region query resolves.
+  // popup take a dumb string and `regions` stays out of them. Iterate per location
+  // (not per car) — the label is keyed by locationId and co-located cars share it, so
+  // walking the region taxonomy once per group avoids redundant work. Absent until
+  // the region query resolves.
   const geoLabelById = useMemo(() => {
     const byId = new Map<string, string>()
-    for (const item of items) {
-      const label = formatGeoContext(
-        resolveGeoContext(item.location, regions, geoAnchor),
-        locale,
-        t,
-      )
-      if (label) byId.set(item.location.locationId, label)
+    for (const group of groupByLocation(items)) {
+      const location = group.items[0]?.location
+      if (!location) continue
+      const label = formatGeoContext(resolveGeoContext(location, regions, geoAnchor), locale, t)
+      if (label) byId.set(group.locationId, label)
     }
     return byId
   }, [items, regions, geoAnchor, locale, t])
