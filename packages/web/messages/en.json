@@ -84,7 +84,8 @@
     "browse": "Browse",
     "myBookings": "My Bookings",
     "documents": "Documents",
-    "newBookings": "{count, plural, one {# new booking} other {# new bookings}}"
+    "newBookings": "{count, plural, one {# new booking} other {# new bookings}}",
+    "settings": "Settings"
   },
   "acriss": {
     "MCAR": "Mini",
@@ -783,6 +784,24 @@
       "title": "Messages",
       "subtitle": "Customer conversations",
       "empty": "No conversations yet. Messages will appear when customers contact you."
+    },
+    "settings": {
+      "title": "Settings",
+      "subtitle": "Manage your business profile and renter payment handoff.",
+      "loadError": "Couldn't load settings",
+      "retry": "Try again",
+      "saved": "Settings saved.",
+      "noOperatorContext": "This page edits a single operator's profile. Use the admin portal to manage operators.",
+      "form": {
+        "name": "Business name",
+        "namePlaceholder": "e.g. Osaka Car Rental",
+        "handoffUrl": "Payment handoff URL",
+        "handoffUrlPlaceholder": "https://pay.example.com/handoff",
+        "handoffUrlHint": "Where renters are sent to pay at pickup. Must be an http(s) link; leave blank to clear.",
+        "handoffOwnerOnly": "Only an owner can change the payment handoff URL.",
+        "save": "Save changes",
+        "saving": "Saving..."
+      }
     }
   },
   "messaging": {
@@ -1089,8 +1108,14 @@
     }
   },
   "admin": {
-    "nav": { "overview": "Overview", "revenue": "Partner Revenue" },
-    "home": { "title": "Platform Admin", "subtitle": "Platform operations" },
+    "nav": {
+      "overview": "Overview",
+      "revenue": "Partner Revenue"
+    },
+    "home": {
+      "title": "Platform Admin",
+      "subtitle": "Platform operations"
+    },
     "revenue": {
       "title": "Partner Revenue",
       "subtitle": "Monthly payout per partner",

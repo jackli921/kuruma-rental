@@ -29,6 +29,15 @@ export function isOperatorSession(session: Session | null): boolean {
   return Boolean(session?.user.operatorId)
 }
 
+// Owner-tier session — gates the renter-facing `preAuthHandoffUrl` field in the
+// settings UI (#903), mirroring the API's OPERATOR_OWNER_WRITE_ROLES gate. Only an
+// operator OWNER may edit that money-flow control; OPERATOR_STAFF sees it disabled.
+// Bypass roles never reach a writable settings page (they carry no operatorId, so
+// `isOperatorSession` is already false). UX only — the API is the real boundary.
+export function isOperatorOwnerSession(session: Session | null): boolean {
+  return session?.user.role === 'OPERATOR_OWNER'
+}
+
 export function adminGuard(session: Session | null): GuardResult {
   if (!session) return { type: 'login' }
   // Narrower than businessGuard: tenant-scoped OPERATOR_* roles clear the business
