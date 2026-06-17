@@ -257,6 +257,20 @@ describe('BookingService.create — CLASS_COMBO floats (#464 slice 2)', () => {
     // 2-day rental × 8000/day = 16000 (no insurance, no add-ons).
     expect(b.totalPrice).toBe(16000)
   })
+
+  it('refuses a CLASS_COMBO float when no active rate plan covers the class at this location', async () => {
+    const h = await setup({ codes: ['COMBO001'] })
+    const { locationId } = await seedReady(h)
+    // Deliberately NO seedRatePlan: with no active deal rate for this
+    // (operator, class, location), the class simply isn't offered as a combo (§5.2).
+
+    const result = await h.service.create(renterCtx, comboInput(locationId), NOW)
+
+    expect(result.ok).toBe(false)
+    if (result.ok) throw new Error('expected a 400, got ok')
+    expect(result.status).toBe(400)
+    expect(result.error).toBe('This class is not available as a deal at this location')
+  })
 })
 
 describe('BookingService.create — class capacity guard (#464 slice 2)', () => {

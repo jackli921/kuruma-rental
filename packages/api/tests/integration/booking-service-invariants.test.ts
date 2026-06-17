@@ -3,6 +3,7 @@ import { BEST_CAR_RENTAL_OPERATOR_ID } from '@kuruma/shared/db/constants'
 import {
   addOnOptions,
   bookingEvents,
+  classRatePlans,
   insuranceOptions,
   users,
   vehicleClasses,
@@ -15,6 +16,7 @@ import { type CallerContext, SYSTEM_CONTEXT } from '../../src/middleware/auth'
 import {
   DrizzleAddOnRepository,
   DrizzleBookingRepository,
+  DrizzleClassRatePlanRepository,
   DrizzleInsuranceOptionRepository,
   DrizzleVehicleClassRepository,
   DrizzleVehicleRepository,
@@ -51,6 +53,7 @@ const vehicleRepo = new DrizzleVehicleRepository(db)
 const vehicleClassRepo = new DrizzleVehicleClassRepository(db)
 const insuranceRepo = new DrizzleInsuranceOptionRepository(db)
 const addOnRepo = new DrizzleAddOnRepository(db)
+const classRatePlanRepo = new DrizzleClassRatePlanRepository(db)
 
 const service = new BookingService(
   bookingRepo,
@@ -372,5 +375,100 @@ describe('cancel persists the tiered cancellationFee (real pg)', () => {
     expect(fromDb?.cancellationFee).toBe(res.cancellation.feeAmount) // persisted == returned
     expect(fromDb?.status).toBe('CANCELLED')
     expect(fromDb?.cancelledAt).toBeInstanceOf(Date)
+  })
+})
+
+// ── Invariant 4: the capacity guard serialises concurrent floats (real pg) ──
+// A CLASS_COMBO float never claims a car (assignedVehicleId stays null), so the
+// exclusion constraint can NOT catch an overbook — the pg_advisory_xact_lock in
+// booking-creation.ts is the only thing ordering count-then-insert. Two floats
+// race for the last car of a cap-1 class: the lock must admit exactly one and
+// 409 the other. Remove the lock and BOTH transactions read demand=0 under READ
+// COMMITTED and both insert -> two oks (the overbook this guard exists to stop).
+// This is the one surface the in-memory unit tests can't prove (their lock is a
+// no-op; the bundle is single-threaded).
+describe('two CLASS_COMBO floats race the last car -> exactly one 409 (real pg)', () => {
+  let classId: string
+  let locationId: string
+  let renterId: string
+  let vehicleId: string
+  let ratePlanId: string
+  let winnerBookingId: string | undefined
+
+  // Far-future, IDENTICAL window for both floats so they contend for the same
+  // class-capacity slot. Combo pricing needs rentalDays >= 1; 2 days -> 16000.
+  const startAt = new Date('2027-03-01T09:00:00Z')
+  const endAt = new Date('2027-03-03T09:00:00Z')
+  const DAY_RATE = 8000
+
+  beforeAll(async () => {
+    const klass = await seedVehicleClass('cap-race')
+    classId = klass.id
+    const location = await seedLocation('cap-race')
+    locationId = location.id
+    renterId = await seedRenter('cap-race')
+    // Exactly ONE available car of the class at the location => capacity = 1.
+    vehicleId = await seedVehicle(classId, locationId, 'Cap Race Car', DAY_RATE)
+    const plan = await classRatePlanRepo.create({
+      operatorId: BEST_CAR_RENTAL_OPERATOR_ID,
+      classId,
+      pickupLocationId: locationId,
+      dayRateJpy: DAY_RATE,
+      isActive: true,
+      label: null,
+    })
+    ratePlanId = plan.id
+  })
+
+  afterAll(async () => {
+    await cleanupBookingsWithEvents(winnerBookingId ? [winnerBookingId] : [])
+    await db.delete(classRatePlans).where(eq(classRatePlans.id, ratePlanId))
+    await cleanupVehicles([vehicleId])
+    await cleanupVehicleClasses([classId])
+    await cleanupLocations([locationId])
+    await cleanupUsers([renterId])
+  })
+
+  it('admits exactly one float and 409s the other under the advisory lock', async () => {
+    const ctx: CallerContext = { userId: renterId, role: 'RENTER', bypassScope: false }
+    const combo = () =>
+      service.create(ctx, {
+        fulfillmentMode: 'CLASS_COMBO',
+        classId,
+        pickupLocationId: locationId,
+        dropoffLocationId: locationId,
+        renterId,
+        startAt,
+        endAt,
+        source: 'DIRECT',
+        addOnIds: [],
+      })
+
+    // Fire BOTH before awaiting either: with pool max=4 they take two connections,
+    // so the second blocks on pg_advisory_xact_lock until the first commits, then
+    // counts demand=1 >= capacity=1 and is refused.
+    const results = await Promise.all([combo(), combo()])
+
+    const oks = results.filter((r) => r.ok)
+    const conflicts = results.filter((r) => !r.ok && r.status === 409)
+    expect(oks).toHaveLength(1)
+    expect(conflicts).toHaveLength(1)
+
+    const winner = oks[0]
+    if (!winner?.ok) throw new Error('expected exactly one successful float')
+    winnerBookingId = winner.booking.id
+    expect(winner.booking.fulfillmentMode).toBe('CLASS_COMBO')
+    expect(winner.booking.assignedVehicleId).toBeNull()
+
+    const loser = conflicts[0]
+    if (!loser || loser.ok) throw new Error('expected exactly one 409')
+    expect(loser.error).toBe(
+      'No cars of this class are available for the requested time at this location',
+    )
+
+    // The winning float really persisted, so the class slot is genuinely consumed.
+    const fromDb = await bookingRepo.findById(SYSTEM_CONTEXT, winner.booking.id)
+    expect(fromDb?.fulfillmentMode).toBe('CLASS_COMBO')
+    expect(fromDb?.assignedVehicleId).toBeNull()
   })
 })
