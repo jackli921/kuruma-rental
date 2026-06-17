@@ -55,6 +55,7 @@ const EXPECTED_KEY_MAP: Record<keyof Repos, true> = {
   providerInviteRepo: true,
   operatorMembershipRepo: true,
   bookingEventRepo: true,
+  consentRepo: true,
   runInTransaction: true,
   runOperatorGrant: true,
   googleAuthRuntime: true,

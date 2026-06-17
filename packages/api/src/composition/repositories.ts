@@ -37,6 +37,7 @@ import {
   createDrizzleOperatorGrant,
   createDrizzleTransaction,
 } from '../repositories/drizzle'
+import { DrizzleConsentRepository } from '../repositories/drizzle/consent'
 import {
   InMemoryAddOnRepository,
   InMemoryAvailabilityRepository,
@@ -67,6 +68,7 @@ import {
   InMemoryVehicleRepository,
 } from '../repositories/in-memory'
 import { InMemoryVehicleDetailRepository } from '../repositories/in-memory-vehicle-detail'
+import { InMemoryConsentRepository } from '../repositories/in-memory/consent'
 import { InMemoryPhotoStorage } from '../repositories/in-memory/photo-storage'
 import { R2DocumentStorage } from '../repositories/r2-document-storage'
 import { type R2BucketLike, R2PhotoStorage } from '../repositories/r2-photo-storage'
@@ -75,6 +77,7 @@ import type {
   AvailabilityRepository,
   BookingEventRepository,
   BookingRepository,
+  ConsentRepository,
   CustomerRepository,
   DocumentStorage,
   FeeScheduleRepository,
@@ -145,6 +148,7 @@ export type Repos = {
   providerInviteRepo: ProviderInviteRepository
   operatorMembershipRepo: OperatorMembershipRepository
   bookingEventRepo: BookingEventRepository
+  consentRepo: ConsentRepository
   runInTransaction: RunInTransaction
   runOperatorGrant: RunOperatorGrant
   googleAuthRuntime: GoogleAuthRuntime | undefined
@@ -206,6 +210,7 @@ export function buildOverrideRepos(overrides: AppOverrides): Repos {
   const providerInviteRepo = overrides.providerInviteRepo ?? new InMemoryProviderInviteRepository()
   const operatorMembershipRepo =
     overrides.operatorMembershipRepo ?? new InMemoryOperatorMembershipRepository()
+  const consentRepo = new InMemoryConsentRepository()
   const runOperatorGrant: RunOperatorGrant = (fn) =>
     fn({ memberships: operatorMembershipRepo, users: userRepo, invites: providerInviteRepo })
   return {
@@ -238,6 +243,7 @@ export function buildOverrideRepos(overrides: AppOverrides): Repos {
     providerInviteRepo,
     operatorMembershipRepo,
     bookingEventRepo,
+    consentRepo,
     runInTransaction,
     runOperatorGrant,
     googleAuthRuntime: overrides.googleAuthRuntime,
@@ -321,6 +327,7 @@ export function buildDrizzleRepos(opts?: { db?: Db; runTx?: RunTx }): Repos {
     providerInviteRepo,
     operatorMembershipRepo,
     bookingEventRepo: new DrizzleBookingEventRepository(db),
+    consentRepo: new DrizzleConsentRepository(db),
     runInTransaction: createDrizzleTransaction(tx),
     // Real interactive tx (#493): membership INSERT first so the partial-unique-
     // active index aborts the whole grant on a concurrent double-accept.
@@ -404,6 +411,7 @@ export function buildInMemoryRepos(): Repos {
     providerInviteRepo,
     operatorMembershipRepo,
     bookingEventRepo,
+    consentRepo: new InMemoryConsentRepository(),
     runInTransaction,
     runOperatorGrant,
     googleAuthRuntime: undefined,

@@ -764,3 +764,7 @@ export interface DocumentStorage {
   getSignedUrl(key: string): Promise<string>
   delete(key: string): Promise<void>
 }
+
+// Consent data-access interfaces (#613) live in their own module to keep this
+// barrel under the file-size cap; re-exported for callers.
+export type { ConsentRepository, NewConsentAcceptance } from './types-consent'
