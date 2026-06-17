@@ -49,6 +49,9 @@ export type DemoVehicle = Pick<
   readonly licensePlate: string
   readonly dailyRateJpy: number
   readonly hourlyRateJpy: number
+  // Required (not the schema's optional default) so every demo vehicle is forced
+  // to carry at least the placeholder — coverage is a fixture invariant, not luck.
+  readonly photos: readonly string[]
 }
 
 type ModelSpec = { readonly make: string; readonly model: string }
@@ -216,6 +219,118 @@ const CLASS_PROFILE: Record<string, ClassProfile> = {
       { make: 'Toyota', model: 'Granace' },
     ],
   },
+}
+
+/**
+ * Real exterior photos per `${make} ${model}`, sourced from Wikimedia Commons
+ * (file titles verified to name the model; URLs verified HTTP 200 image/jpeg).
+ * Models repeat across the 41-vehicle fleet, so one keyed lookup covers every
+ * instance. Any model absent here falls back to a labeled placeholder via
+ * `photosForModel`, so storefront coverage is always total.
+ *
+ * NOTE: these hotlink Commons' thumb CDN — fine at demo scale, but for production
+ * download + re-host in R2 (Commons discourages bulk hotlinking). See
+ * docs/plans/2026-06-16-vehicle-photo-optimization.md.
+ */
+const MODEL_PHOTOS: Record<string, readonly string[]> = {
+  'Daihatsu Tanto': [
+    'https://upload.wikimedia.org/wikipedia/commons/thumb/3/35/2010-2013_Daihatsu_Tanto_Custom.jpg/960px-2010-2013_Daihatsu_Tanto_Custom.jpg',
+  ],
+  'Honda Fit': [
+    'https://upload.wikimedia.org/wikipedia/commons/thumb/a/a3/2013-2017_Honda_Fit_Hybrid_F_Package.jpg/960px-2013-2017_Honda_Fit_Hybrid_F_Package.jpg',
+  ],
+  'Honda Freed': [
+    'https://upload.wikimedia.org/wikipedia/commons/thumb/a/ab/2019_Honda_Freed%2B_%28ZDC%29_silver_front.jpg/960px-2019_Honda_Freed%2B_%28ZDC%29_silver_front.jpg',
+  ],
+  'Honda N-BOX': [
+    'https://upload.wikimedia.org/wikipedia/commons/thumb/0/03/3rd_generation_Honda_N-BOX_Custom.jpg/960px-3rd_generation_Honda_N-BOX_Custom.jpg',
+  ],
+  'Honda Vezel': [
+    'https://upload.wikimedia.org/wikipedia/commons/thumb/b/b9/2013-2018_Honda_Vezel_Hybrid_X.jpg/960px-2013-2018_Honda_Vezel_Hybrid_X.jpg',
+  ],
+  'Mazda CX-5': [
+    'https://upload.wikimedia.org/wikipedia/commons/thumb/8/85/2017_Mazda_CX-5_%28KF%29_Maxx_2WD_wagon_%282018-11-02%29_01.jpg/960px-2017_Mazda_CX-5_%28KF%29_Maxx_2WD_wagon_%282018-11-02%29_01.jpg',
+  ],
+  'Mazda CX-8': [
+    'https://upload.wikimedia.org/wikipedia/commons/thumb/b/be/2024_Mazda_CX-8_2.5_Signature_in_Jet_Black%2C_front_right.jpg/960px-2024_Mazda_CX-8_2.5_Signature_in_Jet_Black%2C_front_right.jpg',
+  ],
+  'Mazda Mazda2': [
+    'https://upload.wikimedia.org/wikipedia/commons/thumb/5/5d/06-2024_Mazda2_E-Skyactiv-G.jpg/960px-06-2024_Mazda2_E-Skyactiv-G.jpg',
+  ],
+  'Mazda Mazda3': [
+    'https://upload.wikimedia.org/wikipedia/commons/thumb/9/9f/Mazda3_Hatch_%28BP%29_Washington_DC_Metro_Area%2C_USA.jpg/960px-Mazda3_Hatch_%28BP%29_Washington_DC_Metro_Area%2C_USA.jpg',
+  ],
+  'Nissan Note': [
+    'https://upload.wikimedia.org/wikipedia/commons/thumb/4/4b/Nissan_Note_e-POWER_%28E13%29%2C_2021%2C_front.jpg/960px-Nissan_Note_e-POWER_%28E13%29%2C_2021%2C_front.jpg',
+  ],
+  'Nissan Skyline': [
+    'https://upload.wikimedia.org/wikipedia/commons/thumb/c/c4/2019_Nissan_Skyline_400R.jpg/960px-2019_Nissan_Skyline_400R.jpg',
+  ],
+  'Subaru Impreza': [
+    'https://upload.wikimedia.org/wikipedia/commons/thumb/5/59/2021_Subaru_Impreza_Sedan%2C_front_left%2C_02-06-2023.jpg/960px-2021_Subaru_Impreza_Sedan%2C_front_left%2C_02-06-2023.jpg',
+  ],
+  'Suzuki Hustler': [
+    'https://upload.wikimedia.org/wikipedia/commons/thumb/d/d1/2024_Suzuki_Hustler_Hybrid_X.jpg/960px-2024_Suzuki_Hustler_Hybrid_X.jpg',
+  ],
+  'Suzuki Jimny': [
+    'https://upload.wikimedia.org/wikipedia/commons/thumb/4/44/2018-2024_Suzuki_Jimny_Sierra_JC.jpg/960px-2018-2024_Suzuki_Jimny_Sierra_JC.jpg',
+  ],
+  'Suzuki Spacia': [
+    'https://upload.wikimedia.org/wikipedia/commons/thumb/4/40/2017-2021_Suzuki_Spacia_Hybrid.jpg/960px-2017-2021_Suzuki_Spacia_Hybrid.jpg',
+  ],
+  'Suzuki Swift': [
+    'https://upload.wikimedia.org/wikipedia/commons/thumb/9/9a/2018_Suzuki_Swift_SZ5_Boosterjet_SHVS_1.0_Front.jpg/960px-2018_Suzuki_Swift_SZ5_Boosterjet_SHVS_1.0_Front.jpg',
+  ],
+  'Suzuki Wagon R': [
+    'https://upload.wikimedia.org/wikipedia/commons/thumb/b/b7/2017-2022_Suzuki_Wagon_R_Hybrid_FX.jpg/960px-2017-2022_Suzuki_Wagon_R_Hybrid_FX.jpg',
+  ],
+  'Toyota Alphard': [
+    'https://upload.wikimedia.org/wikipedia/commons/thumb/2/2b/2018-2023_Toyota_Alphard_X.jpg/960px-2018-2023_Toyota_Alphard_X.jpg',
+  ],
+  'Toyota Aqua': [
+    'https://upload.wikimedia.org/wikipedia/commons/thumb/b/bb/2025_Toyota_Aqua_Z.jpg/960px-2025_Toyota_Aqua_Z.jpg',
+  ],
+  'Toyota Camry': [
+    'https://upload.wikimedia.org/wikipedia/commons/thumb/a/ac/2018_Toyota_Camry_%28ASV70R%29_Ascent_sedan_%282018-08-27%29_01.jpg/960px-2018_Toyota_Camry_%28ASV70R%29_Ascent_sedan_%282018-08-27%29_01.jpg',
+  ],
+  'Toyota Corolla': [
+    'https://upload.wikimedia.org/wikipedia/commons/thumb/2/24/2018_Toyota_Corolla_%28ZRE172R%29_Ascent_sedan_%282018-11-02%29_02.jpg/960px-2018_Toyota_Corolla_%28ZRE172R%29_Ascent_sedan_%282018-11-02%29_02.jpg',
+  ],
+  'Toyota Crown': [
+    'https://upload.wikimedia.org/wikipedia/commons/thumb/6/66/Toyota_CROWN_3.5HYBRID_RS_Advance_%286AA-GWS224-AEXAB%29_front_%28cropped%29.jpg/960px-Toyota_CROWN_3.5HYBRID_RS_Advance_%286AA-GWS224-AEXAB%29_front_%28cropped%29.jpg',
+  ],
+  'Toyota Granace': [
+    'https://upload.wikimedia.org/wikipedia/commons/thumb/7/76/Toyota_GRANACE_Premium_%283DA-GDH303W-RDTJY%29_front.jpg/960px-Toyota_GRANACE_Premium_%283DA-GDH303W-RDTJY%29_front.jpg',
+  ],
+  'Toyota Harrier': [
+    'https://upload.wikimedia.org/wikipedia/commons/thumb/9/9e/2015_Toyota_Harrier_Premium_2WD_2.0_DBA-ZSU60W_%28190316%29.jpg/960px-2015_Toyota_Harrier_Premium_2WD_2.0_DBA-ZSU60W_%28190316%29.jpg',
+  ],
+  'Toyota Land Cruiser Prado': [
+    'https://upload.wikimedia.org/wikipedia/commons/thumb/2/28/Toyota_Land_Cruiser_Prado%2C_Baku_%28P1090223%29.jpg/960px-Toyota_Land_Cruiser_Prado%2C_Baku_%28P1090223%29.jpg',
+  ],
+  'Toyota RAV4': [
+    'https://upload.wikimedia.org/wikipedia/commons/thumb/1/1c/2025_Toyota_RAV4_Hybrid_Z.jpg/960px-2025_Toyota_RAV4_Hybrid_Z.jpg',
+  ],
+  'Toyota Sienta': [
+    'https://upload.wikimedia.org/wikipedia/commons/thumb/0/0d/2016_Toyota_Sienta_1.5_V_NSP170R_%2820190622%29.jpg/960px-2016_Toyota_Sienta_1.5_V_NSP170R_%2820190622%29.jpg',
+  ],
+  'Toyota Vellfire': [
+    'https://upload.wikimedia.org/wikipedia/commons/thumb/c/c8/2018-2019_Toyota_Vellfire_Hybrid_X.jpg/960px-2018-2019_Toyota_Vellfire_Hybrid_X.jpg',
+  ],
+  'Toyota Voxy': [
+    'https://upload.wikimedia.org/wikipedia/commons/thumb/d/d0/2017-2019_Toyota_Voxy_ZS_Kirameki.jpg/960px-2017-2019_Toyota_Voxy_ZS_Kirameki.jpg',
+  ],
+  'Toyota Yaris': [
+    'https://upload.wikimedia.org/wikipedia/commons/thumb/9/90/2020-2024_Toyota_Yaris.jpg/960px-2020-2024_Toyota_Yaris.jpg',
+  ],
+}
+
+/** Labeled placeholder backstop for any model absent from MODEL_PHOTOS. */
+const placeholderPhoto = (make: string, model: string): string =>
+  `https://placehold.co/960x640?text=${encodeURIComponent(`${make} ${model}`)}`
+
+function photosForModel(make: string, model: string): readonly string[] {
+  return MODEL_PHOTOS[`${make} ${model}`] ?? [placeholderPhoto(make, model)]
 }
 
 type Placement = {
@@ -637,6 +752,7 @@ function expandPlacement(p: Placement): DemoVehicle {
     licensePlate: p.licensePlate,
     dailyRateJpy: profile.dailyRateJpy,
     hourlyRateJpy: profile.hourlyRateJpy,
+    photos: photosForModel(spec.make, spec.model),
   }
 }
 

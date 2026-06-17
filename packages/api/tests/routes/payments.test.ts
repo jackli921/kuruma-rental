@@ -15,6 +15,7 @@ import type {
 } from '../../src/services/payment/payment-gateway'
 import type { Booking } from '../../src/stores'
 import { testAuthMiddleware } from '../helpers/auth'
+import { makeBooking as makeBookingFixture } from '../helpers/booking'
 
 // Bookings carry DB-generated UUIDs; the route now validates `:bookingId` as a
 // uuid at the boundary (#691), so the fixture id must be a real uuid too.
@@ -22,33 +23,17 @@ const BOOKING_ID = '00000000-0000-4000-8000-0000000000b1'
 
 function makeBooking(): Booking {
   const now = new Date('2026-06-09T00:00:00Z')
-  return {
+  return makeBookingFixture({
     id: BOOKING_ID,
-    operatorId: 'op-1',
-    renterId: 'renter-1',
     classId: 'cls-1',
-    requestedVehicleId: 'veh-1',
-    assignedVehicleId: 'veh-1',
-    pickupLocationId: 'loc-1',
-    dropoffLocationId: 'loc-1',
     startAt: now,
     endAt: now,
     effectiveEndAt: now,
-    status: 'CONFIRMED',
-    source: 'DIRECT',
     bookingCode: 'ABCD2345',
-    insuranceOptionId: null,
-    insuranceSnapshot: null,
-    feeSnapshot: [],
-    externalId: null,
-    notes: null,
     totalPrice: 100_000,
-    cancellationFee: null,
-    cancelledAt: null,
-    idempotencyKey: null,
     createdAt: now,
     updatedAt: now,
-  }
+  })
 }
 
 class StubGateway implements PaymentGateway {

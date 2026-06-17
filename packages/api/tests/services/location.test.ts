@@ -9,6 +9,7 @@ import { InMemoryBookingRepository } from '../../src/repositories/in-memory/book
 import type { Geocoder } from '../../src/services/geocoding/types'
 import { LocationService } from '../../src/services/location'
 import type { Booking, Region } from '../../src/stores'
+import { makeBooking as makeBookingFixture } from '../helpers/booking'
 
 // Fake Geocoders for the #531 write-decision matrix. The real adapter never
 // throws; `throwingGeocoder` proves the service is resilient even if a future
@@ -72,35 +73,19 @@ function createInput(operatorId: string, name: string) {
 
 function seedBooking(store: Map<string, Booking>, overrides: Partial<Booking>): void {
   const now = new Date('2026-07-01T00:00:00Z')
-  const booking: Booking = {
-    id: crypto.randomUUID(),
+  const booking = makeBookingFixture({
     operatorId: opA,
-    renterId: 'renter-1',
-    classId: 'cls-1',
-    requestedVehicleId: 'veh-1',
-    assignedVehicleId: 'veh-1',
     pickupLocationId: 'loc-x',
     dropoffLocationId: 'loc-x',
     startAt: now,
     endAt: now,
     effectiveEndAt: now,
-    status: 'CONFIRMED',
-    source: 'DIRECT',
     bookingCode: `BK${store.size}`,
-    insuranceOptionId: null,
-    insuranceSnapshot: null,
-    feeSnapshot: [],
-    addOnSnapshot: [],
-    externalId: null,
-    notes: null,
     totalPrice: 12000,
-    cancellationFee: null,
-    cancelledAt: null,
-    idempotencyKey: null,
     createdAt: now,
     updatedAt: now,
     ...overrides,
-  }
+  })
   store.set(booking.id, booking)
 }
 

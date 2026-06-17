@@ -13,6 +13,7 @@ import { NotificationService } from '../../src/services/notification'
 import { NotificationDispatcher } from '../../src/services/notification-dispatcher'
 import type { Booking, NotificationLog } from '../../src/stores'
 import { testAuthMiddleware } from '../helpers/auth'
+import { makeBooking as makeBookingFixture } from '../helpers/booking'
 
 // HTTP-boundary tests for createNotificationRoutes (#706). The notification
 // ledger is operator-private: the role gate (RENTER/PARTNER -> 403) and the
@@ -26,36 +27,21 @@ const RENTER_ID = 'renter-1'
 const NOW = new Date('2026-07-01T00:00:00Z')
 
 function makeBooking(over: Partial<Booking>): Booking {
-  return {
+  return makeBookingFixture({
     id: 'bk-a',
     operatorId: OP_A,
     renterId: RENTER_ID,
     classId: 'cls-1',
-    requestedVehicleId: 'veh-1',
-    assignedVehicleId: 'veh-1',
-    pickupLocationId: 'loc-1',
     dropoffLocationId: 'loc-2',
     startAt: NOW,
     endAt: NOW,
     effectiveEndAt: NOW,
-    status: 'CONFIRMED',
-    source: 'DIRECT',
-    fulfillmentMode: 'SPECIFIC',
     bookingCode: 'ABCD2345',
-    insuranceOptionId: null,
-    insuranceSnapshot: null,
-    feeSnapshot: [],
-    addOnSnapshot: [],
-    externalId: null,
-    notes: null,
     totalPrice: 24000,
-    cancellationFee: null,
-    cancelledAt: null,
-    idempotencyKey: null,
     createdAt: NOW,
     updatedAt: NOW,
     ...over,
-  }
+  })
 }
 
 /**
