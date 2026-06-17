@@ -28,8 +28,32 @@ export function toOperatorProfile(op: Operator): OperatorProfile {
   return { id: op.id, name: op.name, slug: op.slug, preAuthHandoffUrl: op.preAuthHandoffUrl }
 }
 
+/**
+ * Structured audit of a change to an operator's renter-facing money-flow
+ * controls (#914). `preAuthHandoffUrl` is the pay-at-pickup handoff URL —
+ * owner-only to write (#903) — so each change records who/when and old->new.
+ * Mirrors {@link ProviderInviteAuditEvent}: an injected sink (never hardcoded)
+ * keeps the trail assertable in tests and swappable for a durable store later
+ * without touching the service.
+ */
+export interface OperatorProfileAuditEvent {
+  readonly type: 'OPERATOR_PROFILE_UPDATED'
+  readonly operatorId: string
+  readonly actorUserId: string
+  readonly field: 'preAuthHandoffUrl'
+  readonly oldValue: string | null
+  readonly newValue: string | null
+  readonly changedAt: Date
+}
+
+// index.ts wires a console-backed default.
+export type RecordOperatorProfileAudit = (event: OperatorProfileAuditEvent) => void
+
 export class OperatorService {
-  constructor(private readonly repo: OperatorRepository) {}
+  constructor(
+    private readonly repo: OperatorRepository,
+    private readonly recordAudit: RecordOperatorProfileAudit,
+  ) {}
 
   /**
    * Resolve an operator by id for the business portal (#387). An OPERATOR_*
@@ -110,6 +134,25 @@ export class OperatorService {
         : {}),
       updatedAt: new Date(),
     })
-    return updated ? toOperatorProfile(updated) : undefined
+    if (!updated) return undefined
+
+    // #914: trail the money-flow control change. The owner-gate above already
+    // ran; emit only when the value actually moved, so a no-op re-save stays
+    // silent (and a name-only patch carries no key, so it never emits).
+    if ('preAuthHandoffUrl' in input) {
+      const newValue = input.preAuthHandoffUrl ?? null
+      if (newValue !== existing.preAuthHandoffUrl) {
+        this.recordAudit({
+          type: 'OPERATOR_PROFILE_UPDATED',
+          operatorId: existing.id,
+          actorUserId: ctx.userId,
+          field: 'preAuthHandoffUrl',
+          oldValue: existing.preAuthHandoffUrl,
+          newValue,
+          changedAt: new Date(),
+        })
+      }
+    }
+    return toOperatorProfile(updated)
   }
 }

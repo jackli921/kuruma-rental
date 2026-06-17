@@ -25,7 +25,7 @@ function mountFor(role: UserRole, operatorId?: string) {
   const app = new Hono()
   setupGlobalHandlers(app)
   app.use('*', testAuthMiddleware(`${role}-user`, role, operatorId))
-  app.route('/', createOperatorRoutes(new OperatorService(repo)))
+  app.route('/', createOperatorRoutes(new OperatorService(repo, () => {})))
   return app
 }
 
@@ -59,7 +59,7 @@ describe('GET /operators (list)', () => {
   it('returns 401 when unauthenticated', async () => {
     const app = new Hono()
     setupGlobalHandlers(app)
-    app.route('/', createOperatorRoutes(new OperatorService(repo)))
+    app.route('/', createOperatorRoutes(new OperatorService(repo, () => {})))
     expect((await app.request('/operators')).status).toBe(401)
   })
 })
@@ -143,7 +143,7 @@ describe('GET /operators/by-slug/:slug', () => {
 describe('Operator routes — auth', () => {
   it('401 when unauthenticated', async () => {
     const app = new Hono()
-    app.route('/', createOperatorRoutes(new OperatorService(repo)))
+    app.route('/', createOperatorRoutes(new OperatorService(repo, () => {})))
     expect((await app.request(`/operators/${opA.id}`)).status).toBe(401)
   })
 })
@@ -228,7 +228,7 @@ describe('PATCH /operators/:id', () => {
   it('returns 401 when unauthenticated', async () => {
     const app = new Hono()
     setupGlobalHandlers(app)
-    app.route('/', createOperatorRoutes(new OperatorService(repo)))
+    app.route('/', createOperatorRoutes(new OperatorService(repo, () => {})))
     expect((await patchReq(app, opA.id, { name: 'X' })).status).toBe(401)
   })
 })

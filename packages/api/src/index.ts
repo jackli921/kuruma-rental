@@ -395,7 +395,9 @@ export function createApp(overrides?: AppOverrides, repos: Repos = buildRepos(ov
   const adminRevenueService = new AdminRevenueService(paymentEventRepo, operatorRepo)
   const paymentAnomalyService = new PaymentAnomalyService(paymentAnomalyRepo)
   const vehicleDetailService = new VehicleDetailService(vehicleDetailRepo)
-  const operatorService = new OperatorService(operatorRepo)
+  const operatorService = new OperatorService(operatorRepo, (event) =>
+    console.info('[operator-audit] profile updated', event),
+  )
   // #407: the write-operator resolver is a pure policy function — sole-operator
   // inference is retired, so it no longer needs an operator lookup.
   const resolveWriteOperatorId: ResolveWriteOperatorId = (ctx, inputOperatorId) =>

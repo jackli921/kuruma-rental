@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'vitest'
 import { type CallerContext, ForbiddenError, SYSTEM_CONTEXT } from '../../src/middleware/auth'
 import { InMemoryOperatorRepository } from '../../src/repositories/in-memory'
-import { OperatorService } from '../../src/services/operator'
+import { type OperatorProfileAuditEvent, OperatorService } from '../../src/services/operator'
 
 const ownerCtx: CallerContext = {
   userId: 'u',
@@ -12,7 +12,9 @@ const ownerCtx: CallerContext = {
 
 function makeService() {
   const repo = new InMemoryOperatorRepository()
-  return { repo, service: new OperatorService(repo) }
+  const events: OperatorProfileAuditEvent[] = []
+  const service = new OperatorService(repo, (e) => events.push(e))
+  return { repo, service, events }
 }
 
 describe('InMemoryOperatorRepository.list', () => {
@@ -134,10 +136,10 @@ describe('InMemoryOperatorRepository.update', () => {
 
 describe('OperatorService.update', () => {
   async function seedOne(preAuthHandoffUrl: string | null = null) {
-    const { repo, service } = makeService()
+    const { repo, service, events } = makeService()
     const op = await repo.create({ name: 'Owner Co', slug: 'owner-co', preAuthHandoffUrl })
     const ctx: CallerContext = { ...ownerCtx, operatorId: op.id }
-    return { repo, service, op, ctx }
+    return { repo, service, events, op, ctx }
   }
 
   test('returns a projection (no createdAt/updatedAt) when an owner edits its name', async () => {
@@ -216,5 +218,80 @@ describe('OperatorService.update', () => {
   test('returns undefined for an unknown id', async () => {
     const { service } = await seedOne()
     expect(await service.update(SYSTEM_CONTEXT, 'unknown-id', { name: 'X' })).toBeUndefined()
+  })
+
+  test('an owner changing preAuthHandoffUrl emits one audit event (who/when/old→new)', async () => {
+    const { service, op, ctx, events } = await seedOne('https://old.example/pay')
+    await service.update(ctx, op.id, { preAuthHandoffUrl: 'https://new.example/pay' })
+    expect(events).toEqual([
+      {
+        type: 'OPERATOR_PROFILE_UPDATED',
+        operatorId: op.id,
+        actorUserId: ctx.userId,
+        field: 'preAuthHandoffUrl',
+        oldValue: 'https://old.example/pay',
+        newValue: 'https://new.example/pay',
+        changedAt: expect.any(Date),
+      },
+    ])
+  })
+
+  test('setting preAuthHandoffUrl for the first time (null → value) records oldValue: null', async () => {
+    const { service, op, ctx, events } = await seedOne(null)
+    await service.update(ctx, op.id, { preAuthHandoffUrl: 'https://pay.x/first' })
+    expect(events).toEqual([
+      {
+        type: 'OPERATOR_PROFILE_UPDATED',
+        operatorId: op.id,
+        actorUserId: ctx.userId,
+        field: 'preAuthHandoffUrl',
+        oldValue: null,
+        newValue: 'https://pay.x/first',
+        changedAt: expect.any(Date),
+      },
+    ])
+  })
+
+  test('clearing preAuthHandoffUrl to null emits an event capturing the prior value', async () => {
+    const { service, op, ctx, events } = await seedOne('https://old.example/pay')
+    await service.update(ctx, op.id, { preAuthHandoffUrl: null })
+    expect(events).toEqual([
+      {
+        type: 'OPERATOR_PROFILE_UPDATED',
+        operatorId: op.id,
+        actorUserId: ctx.userId,
+        field: 'preAuthHandoffUrl',
+        oldValue: 'https://old.example/pay',
+        newValue: null,
+        changedAt: expect.any(Date),
+      },
+    ])
+  })
+
+  test('re-saving the SAME preAuthHandoffUrl emits no event (compare-before-emit)', async () => {
+    const { service, op, ctx, events } = await seedOne('https://pay.x/h')
+    await service.update(ctx, op.id, { preAuthHandoffUrl: 'https://pay.x/h' })
+    expect(events).toEqual([])
+  })
+
+  test('a name-only patch emits no event even when a handoff URL is already set', async () => {
+    const { service, op, ctx, events } = await seedOne('https://pay.x/h')
+    await service.update(ctx, op.id, { name: 'Renamed Co' })
+    expect(events).toEqual([])
+  })
+
+  test('a cross-tenant handoff patch (404, owner-gate never reached) emits no event', async () => {
+    const { repo, service, events } = makeService()
+    const a = await repo.create({ name: 'A Co', slug: 'a-co', preAuthHandoffUrl: null })
+    const b = await repo.create({
+      name: 'B Co',
+      slug: 'b-co',
+      preAuthHandoffUrl: 'https://b.pay/h',
+    })
+    const ctxA: CallerContext = { ...ownerCtx, operatorId: a.id }
+    expect(
+      await service.update(ctxA, b.id, { preAuthHandoffUrl: 'https://hijack.example' }),
+    ).toBeUndefined()
+    expect(events).toEqual([])
   })
 })
