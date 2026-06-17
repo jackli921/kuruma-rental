@@ -10,9 +10,9 @@ name: CI (neon driver lane)
 # is exactly the #493 regression class, so package.json / bun.lock must trigger).
 on:
   push:
-    branches: [marketplace-pivot, main]
+    branches: [develop, main]
   pull_request:
-    branches: [marketplace-pivot, main]
+    branches: [develop, main]
     paths:
       - packages/shared/src/db/**
       - packages/api/src/repositories/drizzle/**
