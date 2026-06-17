@@ -24,6 +24,7 @@ import { BookingService } from '../../src/services/booking'
 import { BookingPostCommitDispatcher } from '../../src/services/booking-post-commit-dispatcher'
 import type { EmailSender } from '../../src/services/email/email-sender'
 import { NotificationDispatcher } from '../../src/services/notification-dispatcher'
+import { makeResolveOperatorRecipients } from '../../src/services/operator-recipients'
 import {
   cleanupLocations,
   cleanupUsers,
@@ -73,7 +74,7 @@ const notificationDispatcher = new NotificationDispatcher(
   operatorRepo,
   vehicleRepo,
   userRepo,
-  membershipRepo,
+  makeResolveOperatorRecipients({ membershipRepo, userRepo }),
   locationRepo,
   fakeEmailSender,
   { emailFrom: 'noreply@kuruma-test.com' },
