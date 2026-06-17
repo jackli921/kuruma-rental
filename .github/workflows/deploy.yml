@@ -1,6 +1,8 @@
 name: Deploy
 
-# Runs after CI passes on main, OR manually via the Actions tab (workflow_dispatch).
+# Runs after CI passes on beta, OR manually via the Actions tab (workflow_dispatch).
+# (beta = the live pre-contract environment: kuruma-web-pages.pages.dev + kuruma-api.
+# Production deploy from `main` is a separate, not-yet-wired pipeline.)
 # Deploys both Workers in a single pipeline with migrations applied first,
 # so schema changes always land before the code that depends on them.
 # This solves issue #27 ("apply pending migrations on deploy") and replaces
@@ -10,7 +12,7 @@ on:
   workflow_run:
     workflows: [CI]
     types: [completed]
-    branches: [main]
+    branches: [beta]
   workflow_dispatch:
 
 permissions:
