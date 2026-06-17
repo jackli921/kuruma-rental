@@ -2,6 +2,7 @@ import type { MapAdapter } from '@/vite/search/MapAdapter'
 import { SearchMapList } from '@/vite/search/SearchMapList'
 import type { SearchResultItem, SpecificSearchResult } from '@kuruma/shared/types/search-result'
 import { fireEvent, render, screen, within } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import type { ReactNode } from 'react'
 import { IntlProvider } from 'use-intl'
 import { describe, expect, it, vi } from 'vitest'
@@ -149,7 +150,8 @@ describe('SearchMapList', () => {
     expect(screen.getByTestId('fake-map')).toHaveAttribute('data-selected', 'loc_namba')
   })
 
-  it('selects a row from its accessible "show on map" control (row → marker sync)', () => {
+  it('selects a row from its accessible "show on map" control (row → marker sync)', async () => {
+    const user = userEvent.setup()
     renderMapList([
       carAt('v1', 'Toyota Yaris', 'loc_namba', GEOCODED),
       carAt('v2', 'Honda Fit', 'loc_umeda', NO_COORDS),
@@ -160,27 +162,82 @@ describe('SearchMapList', () => {
     if (!nambaRow) throw new Error('expected the Namba row')
     const showOnMap = within(nambaRow).getByRole('button', { name: /show on map/i })
 
-    fireEvent.click(showOnMap)
+    // Real focus→click order (userEvent): the button focuses first — which selects
+    // the row via its onFocus — then the click lands. Idempotent-select keeps it on.
+    await user.click(showOnMap)
 
-    expect(showOnMap).toHaveAttribute('aria-pressed', 'true')
     expect(nambaRow).toHaveAttribute('aria-current', 'true')
     expect(screen.getByTestId('fake-map')).toHaveAttribute('data-selected', 'loc_namba')
   })
 
-  it('toggles the selection off when the pressed control is clicked again', () => {
+  it('keeps the row selected when the "show on map" control is clicked again (idempotent select, not a toggle)', async () => {
+    const user = userEvent.setup()
     renderMapList([carAt('v1', 'Toyota Yaris', 'loc_namba', GEOCODED)])
     const showOnMap = screen.getByRole('button', { name: /show on map/i })
 
-    fireEvent.click(showOnMap)
-    fireEvent.click(showOnMap)
+    await user.click(showOnMap)
+    await user.click(showOnMap)
 
-    expect(showOnMap).toHaveAttribute('aria-pressed', 'false')
-    expect(screen.getByTestId('fake-map')).toHaveAttribute('data-selected', '')
+    // The old toggle deselected here; combined with the row onFocus that made
+    // focus-then-click flicker the selection off. Idempotent-select stays put.
+    expect(screen.getByTestId('fake-map')).toHaveAttribute('data-selected', 'loc_namba')
+    expect(screen.getByRole('listitem')).toHaveAttribute('aria-current', 'true')
   })
 
   it('offers no "show on map" control for a list-only (null-coord) row', () => {
     renderMapList([carAt('v2', 'Honda Fit', 'loc_umeda', NO_COORDS)])
     expect(screen.queryByRole('button', { name: /show on map/i })).toBeNull()
+  })
+
+  it('selects a geocoded row on hover (card-as-affordance)', async () => {
+    const user = userEvent.setup()
+    renderMapList([
+      carAt('v1', 'Toyota Yaris', 'loc_namba', GEOCODED),
+      carAt('v2', 'Honda Fit', 'loc_umeda', NO_COORDS),
+    ])
+    const rows = screen.getAllByRole('listitem')
+    const nambaRow = rows.find((o) => o.textContent?.includes('Toyota Yaris'))
+    if (!nambaRow) throw new Error('expected the Namba row')
+
+    await user.hover(nambaRow)
+
+    expect(nambaRow).toHaveAttribute('aria-current', 'true')
+    expect(screen.getByTestId('fake-map')).toHaveAttribute('data-selected', 'loc_namba')
+  })
+
+  it('leaves a list-only (null-coord) row inert on hover', async () => {
+    const user = userEvent.setup()
+    renderMapList([
+      carAt('v1', 'Toyota Yaris', 'loc_namba', GEOCODED),
+      carAt('v2', 'Honda Fit', 'loc_umeda', NO_COORDS),
+    ])
+    const rows = screen.getAllByRole('listitem')
+    const umedaRow = rows.find((o) => o.textContent?.includes('Honda Fit'))
+    if (!umedaRow) throw new Error('expected the Umeda row')
+
+    await user.hover(umedaRow)
+
+    expect(umedaRow).not.toHaveAttribute('aria-current')
+    expect(screen.getByTestId('fake-map')).toHaveAttribute('data-selected', '')
+  })
+
+  it('selects the row when keyboard focus reaches its "View cars" link (keyboard parity, P2)', async () => {
+    const user = userEvent.setup()
+    renderMapList([
+      carAt('v1', 'Toyota Yaris', 'loc_namba', GEOCODED),
+      carAt('v2', 'Honda Fit', 'loc_umeda', NO_COORDS),
+    ])
+    const rows = screen.getAllByRole('listitem')
+    const nambaRow = rows.find((o) => o.textContent?.includes('Toyota Yaris'))
+    if (!nambaRow) throw new Error('expected the Namba row')
+
+    // Tab moves keyboard focus to the first control — Namba's real "View cars" link —
+    // and the row's onFocus (focusin bubbles up from the CTA) selects its pin.
+    await user.tab()
+
+    expect(within(nambaRow).getByRole('link', { name: 'View cars' })).toHaveFocus()
+    expect(nambaRow).toHaveAttribute('aria-current', 'true')
+    expect(screen.getByTestId('fake-map')).toHaveAttribute('data-selected', 'loc_namba')
   })
 
   it('threads the region anchor through to the map adapter (#840)', () => {

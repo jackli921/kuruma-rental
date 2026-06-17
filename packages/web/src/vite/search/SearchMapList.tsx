@@ -63,6 +63,13 @@ export function SearchMapList({
               key={searchResultKey(item)}
               data-location={locationId}
               aria-current={selected ? 'true' : undefined}
+              // Card-as-affordance (#885 slice 2): hovering or keyboard-focusing a
+              // geocoded row flies the map to its pin. Idempotent (sets, never clears)
+              // so focus-then-click can't race to a deselect; onFocus bubbles up from
+              // the row's CTA/button (focusin) for keyboard parity. Null-coord rows are
+              // list-only and stay inert.
+              onMouseEnter={geocoded ? () => setSelectedId(locationId) : undefined}
+              onFocus={geocoded ? () => setSelectedId(locationId) : undefined}
               className={cn(
                 'rounded-xl transition-shadow',
                 selected && 'ring-2 ring-primary ring-offset-2',
@@ -80,9 +87,8 @@ export function SearchMapList({
               {geocoded && (
                 <button
                   type="button"
-                  aria-pressed={selected}
-                  onClick={() => setSelectedId(selected ? null : locationId)}
-                  className="mt-2 inline-flex items-center gap-1.5 rounded-md px-2 py-1 text-sm text-muted-foreground transition-colors hover:bg-muted hover:text-foreground aria-[pressed=true]:text-primary"
+                  onClick={() => setSelectedId(locationId)}
+                  className="mt-2 inline-flex items-center gap-1.5 rounded-md px-2 py-1 text-sm text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
                 >
                   <MapPin className="size-4" />
                   {t('showOnMap')}
