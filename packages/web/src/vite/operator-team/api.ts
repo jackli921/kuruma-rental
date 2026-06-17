@@ -82,3 +82,26 @@ export async function inviteStaff(
   })
   return unwrap(res, createdInviteSchema)
 }
+
+// Owner-only writes. Both are cookie-authed POSTs (CSRF double-submit) to
+// `/operators/me/*` id paths — the API derives the tenant from the session, so
+// the client never names an operatorId. unwrap throws an ApiError carrying the
+// server message (404 for an unknown/foreign id, 409 for the last owner) so the
+// confirm dialog can render it. The body { id } is discarded — callers refetch.
+export async function revokeInvite(id: string, csrfToken: string): Promise<void> {
+  const res = await fetch(`${getApiBaseUrl()}/operators/me/invites/${id}/revoke`, {
+    method: 'POST',
+    credentials: 'include',
+    headers: { 'X-CSRF-Token': csrfToken },
+  })
+  await unwrap(res)
+}
+
+export async function deactivateMember(id: string, csrfToken: string): Promise<void> {
+  const res = await fetch(`${getApiBaseUrl()}/operators/me/members/${id}/deactivate`, {
+    method: 'POST',
+    credentials: 'include',
+    headers: { 'X-CSRF-Token': csrfToken },
+  })
+  await unwrap(res)
+}
