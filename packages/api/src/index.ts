@@ -69,6 +69,7 @@ import { NotificationService } from './services/notification'
 import { NotificationDispatcher } from './services/notification-dispatcher'
 import { OperatorService } from './services/operator'
 import { createOperatorGrantService } from './services/operator-grant'
+import { makeResolveOperatorRecipients } from './services/operator-recipients'
 import { OperatorTeamService } from './services/operator-team'
 import { OverviewService } from './services/overview'
 import { PaymentAnomalyService } from './services/payment-anomaly'
@@ -337,12 +338,16 @@ export function createApp(overrides?: AppOverrides, repos: Repos = buildRepos(ov
   const staffUserId = process.env.DEFAULT_STAFF_ID
   // Single post-commit seam (#393): thread autocreate (#335) + outbound
   // notifications, awaited in the service, each caught-and-logged.
+  const resolveOperatorRecipients = makeResolveOperatorRecipients({
+    membershipRepo: operatorMembershipRepo,
+    userRepo,
+  })
   const notificationDispatcher = new NotificationDispatcher(
     notificationLogRepo,
     operatorRepo,
     vehicleRepo,
     userRepo,
-    operatorMembershipRepo,
+    resolveOperatorRecipients,
     locationRepo,
     emailSender,
     {
