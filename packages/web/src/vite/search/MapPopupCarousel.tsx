@@ -3,7 +3,7 @@ import { cn } from '@/lib/utils'
 import { carryForwardFilters } from '@/vite/storefronts/params'
 import type { SearchResultItem } from '@kuruma/shared/types/search-result'
 import { Link } from '@tanstack/react-router'
-import { Car, ChevronLeft, ChevronRight } from 'lucide-react'
+import { Car, ChevronLeft, ChevronRight, Navigation } from 'lucide-react'
 import { useState } from 'react'
 import { useTranslations } from 'use-intl'
 import { resultPriceLabel, resultTitle } from './result'
@@ -21,6 +21,8 @@ interface MapPopupCarouselProps {
   readonly classFilter?: string | string[] | undefined
   readonly pickupLocationId?: string | undefined
   readonly region?: string | undefined
+  /** One-line geo context for this store, shared across its co-located cars (#885 slice 3a). */
+  readonly geoLabel?: string | null
 }
 
 const CONTROL_CLASS =
@@ -42,6 +44,7 @@ export function MapPopupCarousel({
   classFilter,
   pickupLocationId,
   region,
+  geoLabel,
 }: MapPopupCarouselProps) {
   const t = useTranslations('search')
   const [index, setIndex] = useState(0)
@@ -116,6 +119,12 @@ export function MapPopupCarousel({
           </span>
         </div>
         <p className="font-medium text-foreground">{resultPriceLabel(current, t)}</p>
+        {geoLabel && (
+          <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
+            <Navigation className="size-3.5 shrink-0" aria-hidden />
+            <span>{geoLabel}</span>
+          </p>
+        )}
         <Link
           to="/$locale/storefronts/$locationId"
           params={{ locale, locationId: current.location.locationId }}
