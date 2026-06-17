@@ -1163,7 +1163,11 @@
       "pinSelect": "{store}、{price}を選択",
       "popupPrev": "前のクルマ",
       "popupNext": "次のクルマ",
-      "popupPosition": "{n} / {total}"
+      "popupPosition": "{n} / {total}",
+      "geoContext": "{prefecture}{area}・{km} km",
+      "geoContextNoDistance": "{prefecture}{area}",
+      "geoContextAreaOnly": "{area}・{km} km",
+      "geoContextAreaOnlyNoDistance": "{area}"
     },
     "detail": {
       "backToSearch": "検索に戻る",

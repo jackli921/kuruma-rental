@@ -1,3 +1,5 @@
+import type { GeoPoint } from '@kuruma/shared/lib/region-distance'
+import type { RegionNode } from '@kuruma/shared/types/region'
 import type { SearchResultsData } from '@kuruma/shared/types/search-result'
 import { Search } from 'lucide-react'
 import { useTranslations } from 'use-intl'
@@ -9,6 +11,10 @@ interface SearchMapProps {
   readonly result: SearchResultsData | null
   /** Chosen region center to focus the map on; null = fit all pins (#840). */
   readonly anchor?: [number, number] | null
+  /** Region taxonomy for geo-context labels, forwarded to the list (#885 slice 3a). */
+  readonly regions?: readonly RegionNode[]
+  /** Searched region centre — the distance reference for each geo label (#885 slice 3a). */
+  readonly geoAnchor?: GeoPoint | null
   /** Search context threaded into each row's detail CTA so dates + filters survive the drill-down (#885 1b). */
   readonly locale: string
   readonly from: string
@@ -27,6 +33,8 @@ interface SearchMapProps {
 export function SearchMap({
   result,
   anchor = null,
+  regions = [],
+  geoAnchor = null,
   locale,
   from,
   to,
@@ -54,6 +62,8 @@ export function SearchMap({
       items={result.items}
       adapter={PigeonMapAdapter}
       anchor={anchor}
+      regions={regions}
+      geoAnchor={geoAnchor}
       locale={locale}
       from={from}
       to={to}

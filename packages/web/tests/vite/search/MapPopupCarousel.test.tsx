@@ -64,7 +64,7 @@ function carAt(vehicleId: string, name: string): SpecificSearchResult {
 
 function renderCarousel(
   items: SpecificSearchResult[],
-  ctx?: { classFilter?: string | string[]; region?: string },
+  ctx?: { classFilter?: string | string[]; region?: string; geoLabel?: string | null },
 ) {
   return render(
     <IntlProvider locale="en" messages={en}>
@@ -75,6 +75,7 @@ function renderCarousel(
         to="2026-07-04T10:00"
         classFilter={ctx?.classFilter}
         region={ctx?.region}
+        geoLabel={ctx?.geoLabel}
       />
     </IntlProvider>,
   )
@@ -157,5 +158,10 @@ describe('MapPopupCarousel', () => {
 
     expect(cta).toHaveAttribute('data-to', '/$locale/storefronts/$locationId')
     expect(cta).toHaveAttribute('data-location', 'loc_namba')
+  })
+
+  it('renders the geo-context line when a label is provided', () => {
+    renderCarousel([carAt('v1', 'Toyota Yaris')], { geoLabel: 'Namba, Osaka · 1.2 km away' })
+    expect(screen.getByText('Namba, Osaka · 1.2 km away')).toBeInTheDocument()
   })
 })

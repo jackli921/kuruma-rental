@@ -1,4 +1,5 @@
 import { SearchMap } from '@/vite/search/SearchMap'
+import type { RegionNode } from '@kuruma/shared/types/region'
 import type { SearchResultsData, SpecificSearchResult } from '@kuruma/shared/types/search-result'
 import { render, screen } from '@testing-library/react'
 import type { ReactNode } from 'react'
@@ -68,12 +69,21 @@ function specific(id: string, name: string): SpecificSearchResult {
   }
 }
 
-function renderMap(result: SearchResultsData | null, anchor?: [number, number] | null) {
+function renderMap(
+  result: SearchResultsData | null,
+  opts: {
+    anchor?: [number, number] | null
+    regions?: RegionNode[]
+    geoAnchor?: { latitude: number; longitude: number } | null
+  } = {},
+) {
   return render(
     <IntlProvider locale="en" messages={en}>
       <SearchMap
         result={result}
-        anchor={anchor}
+        anchor={opts.anchor}
+        regions={opts.regions}
+        geoAnchor={opts.geoAnchor ?? null}
         locale="en"
         from="2026-07-01T10:00"
         to="2026-07-04T10:00"
@@ -81,6 +91,38 @@ function renderMap(result: SearchResultsData | null, anchor?: [number, number] |
     </IntlProvider>,
   )
 }
+
+function areaNode(o: Partial<RegionNode> & Pick<RegionNode, 'id'>): RegionNode {
+  return {
+    latitude: null,
+    longitude: null,
+    assignable: false,
+    status: 'ACTIVE',
+    sortOrder: 0,
+    parentId: null,
+    nameEn: 'X',
+    nameJa: 'X',
+    nameZh: 'X',
+    type: null,
+    slug: null,
+    ...o,
+  }
+}
+const OSAKA_REGIONS: RegionNode[] = [
+  areaNode({ id: 'reg_osaka', nameEn: 'Osaka', type: 'PREFECTURE', slug: 'osaka' }),
+  areaNode({ id: 'reg_osaka_city', nameEn: 'Osaka City', type: 'CITY', parentId: 'reg_osaka' }),
+  areaNode({
+    id: 'reg_namba',
+    nameEn: 'Namba',
+    type: 'AREA',
+    slug: 'namba',
+    parentId: 'reg_osaka_city',
+    assignable: true,
+    latitude: 34.6627,
+    longitude: 135.5023,
+    sortOrder: 1,
+  }),
+]
 
 describe('SearchMap', () => {
   it('prompts for dates when no range is chosen (result=null)', () => {
@@ -106,7 +148,23 @@ describe('SearchMap', () => {
   it('centers the map on the chosen region anchor (#840)', () => {
     // The result pin is loc_namba at 34.66,135.5; the anchor differs, so a match
     // proves the host forwarded the region anchor down to the map, not the pin fit.
-    renderMap({ items: [specific('v1', 'Toyota Yaris')], nextCursor: null }, [34.6655, 135.5023])
+    renderMap(
+      { items: [specific('v1', 'Toyota Yaris')], nextCursor: null },
+      { anchor: [34.6655, 135.5023] },
+    )
     expect(screen.getByTestId('pigeon-map')).toHaveAttribute('data-center', '34.6655,135.5023')
+  })
+
+  it('forwards regions + geoAnchor down so rows show geo context (#885 slice 3a)', () => {
+    // The result pin is loc_namba (34.66,135.5); the anchor at Umeda is a few km off,
+    // so the label rendering proves SearchMap forwarded regions + geoAnchor to the list.
+    renderMap(
+      { items: [specific('v1', 'Toyota Yaris')], nextCursor: null },
+      {
+        regions: OSAKA_REGIONS,
+        geoAnchor: { latitude: 34.7025, longitude: 135.4959 },
+      },
+    )
+    expect(screen.getByText(/Namba, Osaka · \d+\.\d+ km away/)).toBeInTheDocument()
   })
 })

@@ -1,5 +1,6 @@
 import type { MapAdapter } from '@/vite/search/MapAdapter'
 import { SearchMapList } from '@/vite/search/SearchMapList'
+import type { RegionNode } from '@kuruma/shared/types/region'
 import type { SearchResultItem, SpecificSearchResult } from '@kuruma/shared/types/search-result'
 import { fireEvent, render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
@@ -90,13 +91,54 @@ function carAt(
   }
 }
 
-function renderMapList(items: SpecificSearchResult[], anchor?: [number, number] | null) {
+function areaNode(o: Partial<RegionNode> & Pick<RegionNode, 'id'>): RegionNode {
+  return {
+    latitude: null,
+    longitude: null,
+    assignable: false,
+    status: 'ACTIVE',
+    sortOrder: 0,
+    parentId: null,
+    nameEn: 'X',
+    nameJa: 'X',
+    nameZh: 'X',
+    type: null,
+    slug: null,
+    ...o,
+  }
+}
+const OSAKA_REGIONS: RegionNode[] = [
+  areaNode({ id: 'reg_osaka', nameEn: 'Osaka', type: 'PREFECTURE', slug: 'osaka' }),
+  areaNode({ id: 'reg_osaka_city', nameEn: 'Osaka City', type: 'CITY', parentId: 'reg_osaka' }),
+  areaNode({
+    id: 'reg_umeda',
+    nameEn: 'Umeda',
+    type: 'AREA',
+    slug: 'umeda',
+    parentId: 'reg_osaka_city',
+    assignable: true,
+    latitude: 34.7025,
+    longitude: 135.4959,
+    sortOrder: 1,
+  }),
+]
+
+function renderMapList(
+  items: SpecificSearchResult[],
+  opts: {
+    anchor?: [number, number] | null
+    regions?: RegionNode[]
+    geoAnchor?: { latitude: number; longitude: number } | null
+  } = {},
+) {
   return render(
     <IntlProvider locale="en" messages={en}>
       <SearchMapList
         items={items}
         adapter={FakeMapAdapter}
-        anchor={anchor}
+        anchor={opts.anchor}
+        regions={opts.regions}
+        geoAnchor={opts.geoAnchor ?? null}
         locale="en"
         from="2026-07-01T10:00"
         to="2026-07-04T10:00"
@@ -237,7 +279,9 @@ describe('SearchMapList', () => {
   })
 
   it('threads the region anchor through to the map adapter (#840)', () => {
-    renderMapList([carAt('v1', 'Toyota Yaris', 'loc_namba', GEOCODED)], [34.6655, 135.5023])
+    renderMapList([carAt('v1', 'Toyota Yaris', 'loc_namba', GEOCODED)], {
+      anchor: [34.6655, 135.5023],
+    })
     expect(screen.getByTestId('fake-map')).toHaveAttribute('data-anchor', '34.6655,135.5023')
   })
 
@@ -348,6 +392,31 @@ describe('SearchMapList', () => {
     expect(cta).toHaveAttribute('data-location', 'loc_namba')
     const search = JSON.parse(cta.getAttribute('data-search') ?? '{}')
     expect(search).toMatchObject({ from: '2026-07-01T10:00', to: '2026-07-04T10:00' })
+  })
+
+  it('labels a geocoded row with its area, prefecture, and distance from the anchor', () => {
+    renderMapList(
+      [carAt('v1', 'Toyota Yaris', 'loc_umeda', { latitude: 34.7025, longitude: 135.4959 })],
+      {
+        regions: OSAKA_REGIONS,
+        geoAnchor: { latitude: 34.6627, longitude: 135.5023 }, // Namba centre
+      },
+    )
+    // Umeda store, Namba anchor ~ a few km apart -> "Umeda, Osaka · X.X km away".
+    expect(screen.getByText(/Umeda, Osaka · \d+\.\d+ km away/)).toBeInTheDocument()
+  })
+
+  it('carries the geo label into the selected map popup', () => {
+    renderMapList(
+      [carAt('v1', 'Toyota Yaris', 'loc_umeda', { latitude: 34.7025, longitude: 135.4959 })],
+      {
+        regions: OSAKA_REGIONS,
+        geoAnchor: null,
+      },
+    )
+    fireEvent.click(within(screen.getByTestId('pin-loc_umeda')).getByRole('button'))
+    // No anchor -> place-only label, present in both the row and the popup.
+    expect(screen.getAllByText('Umeda, Osaka').length).toBeGreaterThanOrEqual(2)
   })
 
   it('does not rebuild the plotted array on a selection-only re-render (#737)', () => {
