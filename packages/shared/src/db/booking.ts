@@ -16,7 +16,7 @@ import {
   BOOKING_SOURCES,
   BOOKING_STATUSES,
 } from '../enums'
-import type { BookingStatus } from '../enums'
+import type { BookingStatus, CancellationFeeSettlement } from '../enums'
 import { operators, users } from './auth'
 // Booking snapshot/event payload types live in ./booking-types (file-size split,
 // #460); imported here for the jsonb $type<> column annotations below.
@@ -103,6 +103,15 @@ export const bookings = pgTable(
     notes: text('notes'),
     totalPrice: integer('totalPrice'), // whole JPY; non-null on every slice-6 submit (#429)
     cancellationFee: integer('cancellationFee'), // whole JPY, set on cancellation
+    // #868 Slice 3a: settlement status of the cancellation fee. Meaningful once a
+    // fee is recorded (status CANCELLED); the NOT NULL default 'ADVISORY' backfills
+    // every existing row — incl. historical cancellations — so advisory fees read
+    // unambiguously without a data migration. text (not pgEnum, review M4); the
+    // ADVISORY -> CAPTURED|REFUND_DUE|REFUNDED|WAIVED state machine is #851.
+    cancellationFeeSettlement: text('cancellationFeeSettlement')
+      .$type<CancellationFeeSettlement>()
+      .notNull()
+      .default('ADVISORY'),
     cancelledAt: timestamp('cancelledAt', { withTimezone: true, mode: 'date' }),
     idempotencyKey: text('idempotencyKey'),
     // #613: renter liability-disclaimer (免责声明) consent recorded at booking time.

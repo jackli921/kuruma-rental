@@ -364,6 +364,11 @@ describe('DrizzleBookingRepository', () => {
     })
     expect(cancelled).toBeDefined()
     expect(cancelled!.status).toBe('CANCELLED')
+    // #868 Slice 3a: a fresh cancel records the fee but never moves money — the
+    // drizzle read path must carry the column default through unchanged. Pins the
+    // drizzle side of the seam (the in-memory side is pinned in booking.test.ts);
+    // a future cancel() that sets a non-ADVISORY state must do so via #851, not here.
+    expect(cancelled!.cancellationFeeSettlement).toBe('ADVISORY')
 
     // Overlapping booking should now succeed — exclusion constraint
     // only applies to CONFIRMED/ACTIVE

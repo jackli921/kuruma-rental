@@ -442,6 +442,13 @@
       "when": 1781447659793,
       "tag": "0062_add_no_recipient_notification_status",
       "breakpoints": true
+    },
+    {
+      "idx": 63,
+      "version": "7",
+      "when": 1781652186818,
+      "tag": "0063_add_cancellation_fee_settlement",
+      "breakpoints": true
     }
   ]
 }
