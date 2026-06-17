@@ -110,3 +110,35 @@ export function resolveGeoContext(
     distanceKm: anchor === null ? null : haversineKm(anchor, point),
   }
 }
+
+function localizedRegionName(region: RegionNode, locale: string): string {
+  if (locale === 'ja') return region.nameJa
+  if (locale === 'zh') return region.nameZh
+  return region.nameEn
+}
+
+/**
+ * Localize + format a `GeoContext` into the one-line label (#885 slice 3a). Pure
+ * given `t`. Picks the area-only template when there is no prefecture or it equals
+ * the area name (Nara/Nara), and drops the distance clause when there is no anchor
+ * or the distance rounds to 0.0 km. `km` is `.toFixed(1)` (mirrors `StorefrontCard`).
+ */
+export function formatGeoContext(
+  ctx: GeoContext | null,
+  locale: string,
+  t: Translate,
+): string | null {
+  if (ctx === null) return null
+  const areaName = localizedRegionName(ctx.area, locale)
+  const prefectureName = ctx.prefecture ? localizedRegionName(ctx.prefecture, locale) : null
+  const hasDistance = ctx.distanceKm !== null && Number(ctx.distanceKm.toFixed(1)) !== 0
+  const km = ctx.distanceKm !== null ? ctx.distanceKm.toFixed(1) : ''
+  if (prefectureName === null || prefectureName === areaName) {
+    return hasDistance
+      ? t('map.geoContextAreaOnly', { area: areaName, km })
+      : t('map.geoContextAreaOnlyNoDistance', { area: areaName })
+  }
+  return hasDistance
+    ? t('map.geoContext', { area: areaName, prefecture: prefectureName, km })
+    : t('map.geoContextNoDistance', { area: areaName, prefecture: prefectureName })
+}

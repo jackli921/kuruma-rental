@@ -1,4 +1,5 @@
 import {
+  formatGeoContext,
   groupByLocation,
   pinPriceLabel,
   resolveGeoContext,
@@ -233,5 +234,61 @@ describe('resolveGeoContext', () => {
     const ctx = resolveGeoContext(storeAt(34.66, 135.5), [a, b], null)
     expect(ctx?.area.id).toBe('A')
     expect(ctx?.prefecture).toBeNull()
+  })
+})
+
+describe('formatGeoContext', () => {
+  // Fake translator that renders the template key with its interpolated values so
+  // we assert template selection + value wiring without depending on en.json here.
+  const tt = (key: string, values?: Record<string, string | number>) =>
+    `${key}(${Object.entries(values ?? {})
+      .map(([k, v]) => `${k}=${v}`)
+      .join(',')})`
+
+  it('returns null for a null context', () => {
+    expect(formatGeoContext(null, 'en', tt)).toBeNull()
+  })
+
+  it('formats area + prefecture + distance', () => {
+    const ctx = { area: namba, prefecture: osaka, distanceKm: 3.48 }
+    expect(formatGeoContext(ctx, 'en', tt)).toBe(
+      'map.geoContext(area=Namba,prefecture=Osaka,km=3.5)',
+    )
+  })
+
+  it('drops the distance clause when there is no anchor (null distance)', () => {
+    const ctx = { area: namba, prefecture: osaka, distanceKm: null }
+    expect(formatGeoContext(ctx, 'en', tt)).toBe(
+      'map.geoContextNoDistance(area=Namba,prefecture=Osaka)',
+    )
+  })
+
+  it('drops the distance clause when distance rounds to 0.0 km', () => {
+    const ctx = { area: namba, prefecture: osaka, distanceKm: 0.04 }
+    expect(formatGeoContext(ctx, 'en', tt)).toBe(
+      'map.geoContextNoDistance(area=Namba,prefecture=Osaka)',
+    )
+  })
+
+  it('uses the area-only template when the prefecture is null', () => {
+    const ctx = { area: namba, prefecture: null, distanceKm: 3.48 }
+    expect(formatGeoContext(ctx, 'en', tt)).toBe('map.geoContextAreaOnly(area=Namba,km=3.5)')
+  })
+
+  it('uses the area-only template when area and prefecture share a name (Nara/Nara)', () => {
+    const naraPref = area({ id: 'reg_nara_p', nameEn: 'Nara', type: 'PREFECTURE' })
+    const naraArea = area({ id: 'reg_nara_a', nameEn: 'Nara', type: 'AREA' })
+    const ctx = { area: naraArea, prefecture: naraPref, distanceKm: null }
+    expect(formatGeoContext(ctx, 'en', tt)).toBe('map.geoContextAreaOnlyNoDistance(area=Nara)')
+  })
+
+  it('picks localized names by locale', () => {
+    const ctx = { area: namba, prefecture: osaka, distanceKm: null }
+    expect(formatGeoContext(ctx, 'ja', tt)).toBe(
+      'map.geoContextNoDistance(area=難波,prefecture=大阪府)',
+    )
+    expect(formatGeoContext(ctx, 'zh', tt)).toBe(
+      'map.geoContextNoDistance(area=难波,prefecture=大阪府)',
+    )
   })
 })
