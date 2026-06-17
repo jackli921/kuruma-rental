@@ -3,6 +3,7 @@ import { regionsQueryOptions } from '@/vite/regions/regions-api'
 import { SearchMap } from '@/vite/search/SearchMap'
 import { type ResultView, SearchViewToggle } from '@/vite/search/SearchViewToggle'
 import { fetchSearchResults } from '@/vite/search/api'
+import { isSearchMapEnabled, resolveResultView } from '@/vite/search/flags'
 import { StoreGrid } from '@/vite/storefronts/StoreGrid'
 import { StorefrontSearchForm } from '@/vite/storefronts/StorefrontSearchForm'
 import { fetchStorefronts } from '@/vite/storefronts/api'
@@ -74,7 +75,9 @@ export const Route = createFileRoute('/$locale/search')({
     pickupLocationId: search.pickupLocationId,
     region: search.region,
     classes: normalizeClassFilter(search.class),
-    view: search.view ?? 'stores',
+    // Map gated off (beta) → a stale ?view=map link collapses to the store list so
+    // the loader never fetches flat results with no map to render them (#885 Task 0).
+    view: resolveResultView(search.view, isSearchMapEnabled()),
   }),
   loader: async ({ deps, context }) => {
     const range = parseSearchRange(deps.from, deps.to)
@@ -131,7 +134,7 @@ function SearchError(_props: ErrorComponentProps) {
   )
 }
 
-function StorefrontSearchRoute() {
+export function StorefrontSearchRoute() {
   const t = useTranslations('search')
   const { locale } = Route.useParams()
   const { from, to, class: classFilter, pickupLocationId, region } = Route.useSearch()
@@ -166,9 +169,13 @@ function StorefrontSearchRoute() {
           />
         </div>
 
-        <div className="mb-8 flex justify-end">
-          <SearchViewToggle view={data.view} locale={locale} />
-        </div>
+        {/* The Stores|Map data-mode toggle is a map-only affordance — hidden in
+            beta where the map is gated off, so search is a pure store list (#885). */}
+        {isSearchMapEnabled() && (
+          <div className="mb-8 flex justify-end">
+            <SearchViewToggle view={data.view} locale={locale} />
+          </div>
+        )}
 
         {data.view === 'map' ? (
           <SearchMap
