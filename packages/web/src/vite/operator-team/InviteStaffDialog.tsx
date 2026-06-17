@@ -50,8 +50,14 @@ export function InviteStaffDialog({ open, onOpenChange, csrfToken }: InviteStaff
 
   const handleCopy = async () => {
     if (!created) return
-    await navigator.clipboard.writeText(created.inviteUrl)
-    setCopied(true)
+    try {
+      await navigator.clipboard.writeText(created.inviteUrl)
+      setCopied(true)
+    } catch {
+      // Clipboard can reject on an insecure context or denied permission. The URL
+      // stays visible in the readonly input as the fallback, so swallow rather
+      // than leave an unhandled rejection.
+    }
   }
 
   return (
