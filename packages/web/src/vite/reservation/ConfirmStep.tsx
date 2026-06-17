@@ -1,4 +1,5 @@
 import { formatJpy } from '@/lib/format'
+import { isCancellationEnabled } from '@/vite/config/features'
 import { useTranslations } from 'use-intl'
 import { CancellationPolicy } from './CancellationPolicy'
 import type { ReservationAddOn } from './api'
@@ -66,7 +67,10 @@ export function ConfirmStep({
         </div>
       </dl>
       <p className="text-sm text-muted-foreground">{t('confirm.note')}</p>
-      <CancellationPolicy pickupAt={pickupAt} />
+      {/* #937: self-cancel is gated for the beta demo (#868), so don't advertise the
+          tiered policy at checkout when the feature is OFF — it would promise a flow
+          the booking confirmation then hides. */}
+      {isCancellationEnabled() && <CancellationPolicy pickupAt={pickupAt} />}
     </section>
   )
 }

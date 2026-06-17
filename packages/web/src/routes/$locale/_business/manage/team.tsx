@@ -1,5 +1,6 @@
 import { Button } from '@/components/ui/button'
 import { PageSkeleton } from '@/vite/PageSkeleton'
+import { isOperatorTeamEnabled } from '@/vite/config/features'
 import { isOperatorOwnerSession, isOperatorSession } from '@/vite/guards'
 import { DeactivateMemberDialog } from '@/vite/operator-team/DeactivateMemberDialog'
 import { InviteStaffDialog } from '@/vite/operator-team/InviteStaffDialog'
@@ -9,7 +10,12 @@ import { teamInvitesQueryOptions, teamMembersQueryOptions } from '@/vite/operato
 import { sessionQueryOptions } from '@/vite/session'
 import type { OperatorInviteData, OperatorMemberData } from '@kuruma/shared/types/operator-team'
 import { useSuspenseQuery } from '@tanstack/react-query'
-import { type ErrorComponentProps, createFileRoute, useRouter } from '@tanstack/react-router'
+import {
+  type ErrorComponentProps,
+  createFileRoute,
+  redirect,
+  useRouter,
+} from '@tanstack/react-router'
 import { UserPlus } from 'lucide-react'
 import { useState } from 'react'
 import { useTranslations } from 'use-intl'
@@ -21,6 +27,13 @@ import { useTranslations } from 'use-intl'
 // operatorId). Inviting is owner-only (isOperatorOwnerSession), mirroring the
 // API's requireOperatorOwnerWrite gate; staff and bypass roles see read-only.
 export const Route = createFileRoute('/$locale/_business/manage/team')({
+  // Post-MVP feature (#904), hidden in the beta demo. The nav link is already
+  // filtered out; this blocks a direct URL too, falling back to the bookings page.
+  beforeLoad: ({ params }) => {
+    if (!isOperatorTeamEnabled()) {
+      throw redirect({ to: '/$locale/manage/bookings', params: { locale: params.locale } })
+    }
+  },
   loader: async ({ context }) => {
     await Promise.all([
       context.queryClient.ensureQueryData(sessionQueryOptions()),

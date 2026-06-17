@@ -7,7 +7,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { IntlProvider } from 'use-intl'
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import enMessages from '../../../messages/en.json'
 
 const d = enMessages.bookings.operator.detail
@@ -66,7 +66,16 @@ function renderPanel(
   )
 }
 
-afterEach(() => vi.restoreAllMocks())
+// #868 cancellation is a post-MVP add-on gated behind a flag (OFF in the beta
+// demo). These tests cover the feature, so enable it; the OFF case is its own test.
+beforeEach(() => {
+  vi.stubEnv('VITE_FEATURE_CANCELLATION', 'true')
+})
+
+afterEach(() => {
+  vi.restoreAllMocks()
+  vi.unstubAllEnvs()
+})
 
 describe('BookingActionsPanel role gating', () => {
   it('renders nothing for a bypass role with no operatorId (read-only oversight)', () => {
@@ -103,6 +112,14 @@ describe('BookingActionsPanel actions by status', () => {
     expect(screen.getByRole('button', { name: sub.action })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: d.cancelBooking.action })).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: d.markCompleted })).not.toBeInTheDocument()
+  })
+
+  it('hides cancel in the beta MVP demo (cancellation flag off) but keeps the other actions', () => {
+    vi.stubEnv('VITE_FEATURE_CANCELLATION', undefined)
+    renderPanel(operatorSession, detail({ status: 'CONFIRMED' }))
+    expect(screen.getByRole('button', { name: d.markActive })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: sub.action })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: d.cancelBooking.action })).not.toBeInTheDocument()
   })
 
   it('offers mark-returned and substitute, but NOT cancel, on an ACTIVE booking', () => {
