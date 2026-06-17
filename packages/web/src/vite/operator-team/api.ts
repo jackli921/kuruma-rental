@@ -83,18 +83,23 @@ export async function inviteStaff(
   return unwrap(res, createdInviteSchema)
 }
 
+// Both owner-only writes echo the affected `{ id }`; callers discard it and
+// refetch, but the seam is still validated (#711/#784 ratchet) so a contract
+// drift fails here rather than passing silently.
+const mutatedEntitySchema = z.object({ id: z.string() })
+
 // Owner-only writes. Both are cookie-authed POSTs (CSRF double-submit) to
 // `/operators/me/*` id paths — the API derives the tenant from the session, so
 // the client never names an operatorId. unwrap throws an ApiError carrying the
 // server message (404 for an unknown/foreign id, 409 for the last owner) so the
-// confirm dialog can render it. The body { id } is discarded — callers refetch.
+// confirm dialog can render it.
 export async function revokeInvite(id: string, csrfToken: string): Promise<void> {
   const res = await fetch(`${getApiBaseUrl()}/operators/me/invites/${id}/revoke`, {
     method: 'POST',
     credentials: 'include',
     headers: { 'X-CSRF-Token': csrfToken },
   })
-  await unwrap(res)
+  await unwrap(res, mutatedEntitySchema)
 }
 
 export async function deactivateMember(id: string, csrfToken: string): Promise<void> {
@@ -103,5 +108,5 @@ export async function deactivateMember(id: string, csrfToken: string): Promise<v
     credentials: 'include',
     headers: { 'X-CSRF-Token': csrfToken },
   })
-  await unwrap(res)
+  await unwrap(res, mutatedEntitySchema)
 }
