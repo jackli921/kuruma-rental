@@ -9,8 +9,10 @@
  * don't brand `fetch`, so this is invisible in CI and only bites the live runtime.
  * It already bit 4 sites; this guard keeps it from coming back.
  *
- * The fix the guard enforces: default to `fetch.bind(globalThis) as typeof fetch`
- * (keeps the injectable test mock intact — only the default binds).
+ * The fix: default to the shared `boundFetch` (`@kuruma/shared/lib/bound-fetch`)
+ * instead of the bare global — it keeps `this === globalThis` and the injectable
+ * test mock intact. An inline `fetch.bind(globalThis) as typeof fetch` is still
+ * accepted (boundFetch is defined with it), but the import is the canonical fix.
  *
  * Scope = every DEPLOYED runtime surface (scan by runtime, not by package), and
  * production code only — `*.test.ts` and `tests/` legitimately pass a real fetch.
@@ -145,7 +147,8 @@ function main() {
     for (const v of violations) console.error(`  - ${v.file}:${v.line}`)
     console.error(
       '\nThe global fetch must be called with this===globalThis on CF Workers/Pages.\n' +
-        'Change `: typeof fetch = fetch` to `= fetch.bind(globalThis) as typeof fetch`.',
+        "Import the shared safe default: `import { boundFetch } from '@kuruma/shared/lib/bound-fetch'`\n" +
+        'then change `: typeof fetch = fetch` to `= boundFetch`.',
     )
     process.exit(1)
   }
