@@ -60,3 +60,27 @@ export function bookingInput(overrides: Partial<NewBooking> = {}): NewBooking {
     ...overrides,
   }
 }
+
+/**
+ * Build a COMPLETE persisted `Booking` (#900): `bookingInput` plus the
+ * server-stamped persistence fields (`id`, `createdAt`, `updatedAt`) and the
+ * server-derived `cancellationFeeSettlement` default. Use this anywhere a test
+ * needs a full booking row rather than a create input; callers override only the
+ * fields their assertion cares about.
+ *
+ * This is the single typechecked fixture chokepoint. `tests/helpers/**` is in the
+ * api typecheck project (tsconfig.json), so the `: Booking` return type means a
+ * NEW required field on `Booking` fails `tsc` HERE — instead of silently leaving
+ * an untypechecked test-body fixture incomplete, which is the drift #900 closes.
+ */
+export function makeBooking(overrides: Partial<Booking> = {}): Booking {
+  const stampedAt = new Date('2026-04-09T00:00:00Z')
+  return {
+    ...bookingInput(overrides),
+    id: crypto.randomUUID(),
+    createdAt: stampedAt,
+    updatedAt: stampedAt,
+    cancellationFeeSettlement: 'ADVISORY',
+    ...overrides,
+  }
+}

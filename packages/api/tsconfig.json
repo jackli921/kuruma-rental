@@ -6,6 +6,10 @@
       "@kuruma/shared/*": ["../shared/src/*"]
     }
   },
-  "include": ["src/**/*.ts"],
+  // tests/** is broadly NOT typechecked (it carries pre-existing type drift, #900),
+  // but tests/helpers/** IS — it is the typechecked chokepoint for shared fixture
+  // factories (e.g. makeBooking). A required field added to a domain type then fails
+  // `tsc` at the factory instead of silently drifting an untypechecked test body.
+  "include": ["src/**/*.ts", "tests/helpers/**/*.ts"],
   "exclude": ["node_modules"]
 }
