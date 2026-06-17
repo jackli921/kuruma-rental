@@ -259,6 +259,60 @@ describe('BookingService.create — CLASS_COMBO floats (#464 slice 2)', () => {
   })
 })
 
+describe('BookingService.create — class capacity guard (#464 slice 2)', () => {
+  it('refuses a SPECIFIC booking of the only car once a float holds the class', async () => {
+    const h = await setup({ codes: ['COMBO001', 'SPEC0001'] })
+    const { vehicleId, locationId } = await seedReady(h)
+    await seedRatePlan(h, locationId, 8000)
+
+    // Capacity is 1 (the single seeded car). A float consumes that unit without
+    // ever claiming the car via the exclusion constraint (its assignedVehicleId is
+    // null), so the class guard is the ONLY thing that can catch the overbook.
+    const float = await h.service.create(renterCtx, comboInput(locationId), NOW)
+    expect(float.ok).toBe(true)
+
+    const specific = await h.service.create(
+      renterCtx,
+      createInput({
+        requestedVehicleId: vehicleId,
+        pickupLocationId: locationId,
+        dropoffLocationId: locationId,
+      }),
+      NOW,
+    )
+    expect(specific.ok).toBe(false)
+    if (specific.ok) throw new Error('expected a 409, got ok')
+    expect(specific.status).toBe(409)
+  })
+
+  it('refuses a CLASS_COMBO float once class demand meets capacity', async () => {
+    const h = await setup({ codes: ['COMBO001', 'COMBO002'] })
+    const { locationId } = await seedReady(h)
+    await seedRatePlan(h, locationId, 8000)
+
+    // cap = 1; the first overlapping float fills the class, the second overbooks.
+    const first = await h.service.create(renterCtx, comboInput(locationId), NOW)
+    expect(first.ok).toBe(true)
+    const second = await h.service.create(renterCtx, comboInput(locationId), NOW)
+    expect(second.ok).toBe(false)
+    if (second.ok) throw new Error('expected a 409, got ok')
+    expect(second.status).toBe(409)
+  })
+
+  it('admits two overlapping floats when the class has two cars', async () => {
+    const h = await setup({ codes: ['COMBO001', 'COMBO002'] })
+    const { locationId } = await seedReady(h)
+    // A 2nd AVAILABLE car of the same class/location lifts capacity to 2.
+    await h.repos.vehicleRepo.create(SYSTEM_CONTEXT, vehicleData({ pickupLocationId: locationId }))
+    await seedRatePlan(h, locationId, 8000)
+
+    const first = await h.service.create(renterCtx, comboInput(locationId), NOW)
+    const second = await h.service.create(renterCtx, comboInput(locationId), NOW)
+    expect(first.ok).toBe(true)
+    expect(second.ok).toBe(true)
+  })
+})
+
 describe('BookingService.create — document-verification gate (#459)', () => {
   const staffCtx: CallerContext = { userId: 'staff-9', role: 'PLATFORM_ADMIN', bypassScope: true }
 
@@ -733,7 +787,11 @@ describe('BookingService.create — single-transaction submit (#392 §4)', () =>
   it('regenerates the booking_code on a UNIQUE clash and retries (bounded)', async () => {
     const h = await setup({ codes: ['COLLIDE1', 'FRESH001'] })
     const { vehicleId, locationId } = await seedReady(h)
-    // Seed a non-overlapping booking on a different vehicle that owns COLLIDE1.
+    // A 2nd car of the class so the #464 capacity guard admits this create (the
+    // code-owner seeded below occupies one unit) — this test isolates booking_code
+    // retry, not capacity.
+    await h.repos.vehicleRepo.create(SYSTEM_CONTEXT, vehicleData({ pickupLocationId: locationId }))
+    // Seed an overlapping booking on a different vehicle that owns COLLIDE1.
     await h.repos.bookingRepo.create(SYSTEM_CONTEXT, {
       operatorId: OP_A,
       renterId: 'x',
@@ -778,6 +836,10 @@ describe('BookingService.create — single-transaction submit (#392 §4)', () =>
   it('surfaces an error when booking_code retries are exhausted', async () => {
     const h = await setup({ codes: ['DUP00001', 'DUP00001', 'DUP00001', 'DUP00001'] })
     const { vehicleId, locationId } = await seedReady(h)
+    // A 2nd car of the class so the #464 capacity guard admits this create (the
+    // code-owner seeded below occupies one unit) — this test isolates the
+    // booking_code retry-exhaustion path, not capacity.
+    await h.repos.vehicleRepo.create(SYSTEM_CONTEXT, vehicleData({ pickupLocationId: locationId }))
     await h.repos.bookingRepo.create(SYSTEM_CONTEXT, {
       operatorId: OP_A,
       renterId: 'x',

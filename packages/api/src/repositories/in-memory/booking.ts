@@ -165,9 +165,12 @@ export class InMemoryBookingRepository implements BookingRepository {
     }
 
     // Mirror the DB `bookings_no_overlap` exclusion on the ASSIGNED vehicle.
-    // assignedVehicleId is NOT NULL post-slice-6, so every CONFIRMED/ACTIVE row
-    // occupies its car — the old "null operand skips exclusion" loophole is gone.
-    if (BLOCKING_STATUSES.has(data.status)) {
+    // #464: a CLASS_COMBO float has a NULL assignedVehicleId, and Postgres skips
+    // the exclusion check whenever the operand is NULL — so a float never conflicts
+    // with anything here. Its class capacity is enforced separately by the
+    // booking-creation advisory-lock guard. Only a row that actually claims a car
+    // participates in the per-car exclusion.
+    if (data.assignedVehicleId !== null && BLOCKING_STATUSES.has(data.status)) {
       for (const existing of this.store.values()) {
         if (existing.assignedVehicleId !== data.assignedVehicleId) continue
         if (!BLOCKING_STATUSES.has(existing.status)) continue

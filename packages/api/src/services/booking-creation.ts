@@ -310,6 +310,37 @@ export class BookingCreationService {
     }
     const turnaroundMinutes = pickup.defaultTurnaroundMinutes ?? DEFAULT_TURNAROUND_MINUTES
     const effectiveEndAt = new Date(input.endAt.getTime() + turnaroundMinutes * MS_PER_MINUTE)
+
+    // #464 §4.2: class-capacity admission guard, BOTH modes. A new SPECIFIC of a
+    // free car can steal the last unit from a float, so the lock + count run for
+    // every create — not just combos. Hold the per-(operator, location, class)
+    // advisory lock for the rest of the tx, then admit only if inserting this
+    // booking keeps class demand within the class's available cars. Correct under
+    // READ COMMITTED because the lock orders concurrent count-then-insert (real in
+    // Drizzle; a no-op in the single-threaded in-memory bundles).
+    await repos.acquireClassCapacityLock(operatorId, input.pickupLocationId, classId)
+    const classDemand = await repos.availabilityRepo.countClassDemand(
+      operatorId,
+      classId,
+      input.pickupLocationId,
+      input.startAt,
+      effectiveEndAt,
+    )
+    const classCapacity = await repos.availabilityRepo.countClassCapacity(
+      operatorId,
+      classId,
+      input.pickupLocationId,
+    )
+    // demand counts EXISTING blocking bookings (this one is not inserted yet), so
+    // demand === capacity already means every car of the class is taken for the window.
+    if (classDemand >= classCapacity) {
+      return {
+        ok: false,
+        status: 409,
+        error: 'No cars of this class are available for the requested time at this location',
+      }
+    }
+
     // Selected insurance: snapshot the chosen ACTIVE option from THIS operator.
     let insuranceOptionId: string | null = null
     let insuranceSnapshot: InsuranceSnapshot | null = null
