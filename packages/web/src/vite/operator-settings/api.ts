@@ -14,8 +14,9 @@ export type { UpdateOperatorInput }
 /**
  * The settings projection the API returns from GET and PATCH `/operators/:id`
  * (the deliberate `{ id, name, slug, preAuthHandoffUrl }` shape — no timestamps).
- * Pinned with `satisfies` so a field drift fails to compile here. The GET read
- * returns the full operator row; this non-strict schema drops the extra columns.
+ * The API projects reads and writes through one shape (#903), so GET and PATCH
+ * agree. Pinned with `satisfies` so a field drift fails to compile here; the
+ * schema stays non-strict as defence in depth against an unexpected extra column.
  */
 export interface OperatorProfile {
   id: string

@@ -9,10 +9,13 @@ import type { Operator, OperatorRepository } from '../repositories/types'
 import { resolveUniqueSlug, slugify } from './slug'
 
 /**
- * Deliberate wire projection for the operator profile (#903) — the settings
- * response. Excludes `createdAt`/`updatedAt` (Date fields that would leak as raw
- * timestamps) so the contract is exactly the editable surface plus the
- * read-only slug.
+ * The canonical operator wire shape (#903) — the SINGLE shape every detail
+ * endpoint for an operator returns: `GET /operators/:id`, `GET /operators/by-slug/
+ * :slug`, and `PATCH /operators/:id` all project through {@link toOperatorProfile}.
+ * Excludes `createdAt`/`updatedAt` (raw Date columns) so reads and writes agree on
+ * one contract instead of the route leaking the full row on read and a projection
+ * on write. The admin picker `list` returns a leaner `{id,name,slug}` summary by
+ * design (collection vs detail), which is the expected REST asymmetry.
  */
 export interface OperatorProfile {
   id: string
@@ -21,7 +24,7 @@ export interface OperatorProfile {
   preAuthHandoffUrl: string | null
 }
 
-function toProfile(op: Operator): OperatorProfile {
+export function toOperatorProfile(op: Operator): OperatorProfile {
   return { id: op.id, name: op.name, slug: op.slug, preAuthHandoffUrl: op.preAuthHandoffUrl }
 }
 
@@ -107,6 +110,6 @@ export class OperatorService {
         : {}),
       updatedAt: new Date(),
     })
-    return updated ? toProfile(updated) : undefined
+    return updated ? toOperatorProfile(updated) : undefined
   }
 }

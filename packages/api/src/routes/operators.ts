@@ -1,7 +1,7 @@
 import { updateOperatorSchema } from '@kuruma/shared/validators/operator'
 import { Hono } from 'hono'
 import { FLEET_WRITE_ROLES, requireAuth, requireUser, toCallerContext } from '../middleware/auth'
-import type { OperatorService } from '../services/operator'
+import { type OperatorService, toOperatorProfile } from '../services/operator'
 import { fail, ok, parseBody, parseId } from './helpers'
 
 /**
@@ -40,7 +40,7 @@ export function createOperatorRoutes(service: OperatorService) {
 
         const operator = await service.getBySlug(toCallerContext(user), c.req.param('slug'))
         if (!operator) return fail(c, 'Operator not found', 404)
-        return ok(c, operator)
+        return ok(c, toOperatorProfile(operator))
       })
       .get('/operators/:id', async (c) => {
         const user = requireUser(c)
@@ -51,7 +51,7 @@ export function createOperatorRoutes(service: OperatorService) {
 
         const operator = await service.getById(toCallerContext(user), idResult.id)
         if (!operator) return fail(c, 'Operator not found', 404)
-        return ok(c, operator)
+        return ok(c, toOperatorProfile(operator))
       })
       // Operator self-service profile update (#903). FLEET_WRITE gate is the
       // baseline (an OPERATOR_STAFF may edit the display name); the owner-only

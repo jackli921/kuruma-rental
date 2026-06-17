@@ -71,6 +71,21 @@ describe('GET /operators/:id', () => {
     expect((await res.json()).data.slug).toBe('best-car-rental')
   })
 
+  it('returns the operator profile projection — same shape as PATCH, no raw timestamps', async () => {
+    const res = await mountFor('OPERATOR_STAFF', opA.id).request(`/operators/${opA.id}`)
+    const { data } = await res.json()
+    // One resource, one wire shape: the read must match the PATCH projection
+    // exactly (#903 arch review) — never the full row with createdAt/updatedAt.
+    expect(data).toEqual({
+      id: opA.id,
+      name: 'Best Car Rental',
+      slug: 'best-car-rental',
+      preAuthHandoffUrl: null,
+    })
+    expect(data).not.toHaveProperty('createdAt')
+    expect(data).not.toHaveProperty('updatedAt')
+  })
+
   it('returns 404 when an OPERATOR_STAFF reads another operator', async () => {
     const res = await mountFor('OPERATOR_STAFF', opA.id).request(`/operators/${opB.id}`)
     expect(res.status).toBe(404)
