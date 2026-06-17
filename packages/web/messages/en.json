@@ -85,7 +85,8 @@
     "myBookings": "My Bookings",
     "documents": "Documents",
     "newBookings": "{count, plural, one {# new booking} other {# new bookings}}",
-    "settings": "Settings"
+    "settings": "Settings",
+    "team": "Team"
   },
   "acriss": {
     "MCAR": "Mini",
@@ -802,6 +803,44 @@
         "save": "Save changes",
         "saving": "Saving..."
       }
+    },
+    "team": {
+      "title": "Team",
+      "subtitle": "Invite staff and manage who can access your operator account.",
+      "invite": "Invite staff",
+      "inviteTitle": "Invite a staff member",
+      "inviteSubtitle": "They'll get access to your operator portal after accepting.",
+      "inviteSuccessTitle": "Invite created",
+      "inviteSuccessSubtitle": "Share this one-time link with your staff member. It expires in 7 days.",
+      "inviteUrlLabel": "Invite link",
+      "copy": "Copy link",
+      "copied": "Copied",
+      "done": "Done",
+      "staffNotice": "Only an owner can invite staff.",
+      "noOperatorContext": "This page manages a single operator's team. Use the admin portal to manage operators.",
+      "unknownName": "Unnamed",
+      "roleOwner": "Owner",
+      "roleStaff": "Staff",
+      "members": {
+        "title": "Members",
+        "empty": "No members yet.",
+        "joined": "Joined {date}"
+      },
+      "invites": {
+        "title": "Pending invites",
+        "empty": "No pending invites.",
+        "expires": "Expires {date}",
+        "pending": "Pending"
+      },
+      "form": {
+        "email": "Email",
+        "emailPlaceholder": "staff@example.com",
+        "cancel": "Cancel",
+        "submit": "Send invite",
+        "submitting": "Sending..."
+      },
+      "loadError": "Couldn't load your team",
+      "retry": "Try again"
     }
   },
   "messaging": {

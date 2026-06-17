@@ -85,7 +85,8 @@
     "myBookings": "予約一覧",
     "documents": "書類",
     "newBookings": "新規予約 {count}件",
-    "settings": "設定"
+    "settings": "設定",
+    "team": "チーム"
   },
   "acriss": {
     "MCAR": "ミニ",
@@ -802,6 +803,44 @@
         "save": "変更を保存",
         "saving": "保存中..."
       }
+    },
+    "team": {
+      "title": "チーム",
+      "subtitle": "スタッフを招待し、事業者アカウントにアクセスできるメンバーを管理します。",
+      "invite": "スタッフを招待",
+      "inviteTitle": "スタッフを招待する",
+      "inviteSubtitle": "承認後、事業者ポータルにアクセスできるようになります。",
+      "inviteSuccessTitle": "招待を作成しました",
+      "inviteSuccessSubtitle": "このワンタイムリンクをスタッフに共有してください。7日間有効です。",
+      "inviteUrlLabel": "招待リンク",
+      "copy": "リンクをコピー",
+      "copied": "コピーしました",
+      "done": "完了",
+      "staffNotice": "スタッフを招待できるのはオーナーのみです。",
+      "noOperatorContext": "このページは単一の事業者のチームを管理します。事業者の管理は管理ポータルを使用してください。",
+      "unknownName": "名前未設定",
+      "roleOwner": "オーナー",
+      "roleStaff": "スタッフ",
+      "members": {
+        "title": "メンバー",
+        "empty": "メンバーはまだいません。",
+        "joined": "{date} に参加"
+      },
+      "invites": {
+        "title": "保留中の招待",
+        "empty": "保留中の招待はありません。",
+        "expires": "{date} に期限切れ",
+        "pending": "保留中"
+      },
+      "form": {
+        "email": "メールアドレス",
+        "emailPlaceholder": "staff@example.com",
+        "cancel": "キャンセル",
+        "submit": "招待を送信",
+        "submitting": "送信中..."
+      },
+      "loadError": "チームを読み込めませんでした",
+      "retry": "再試行"
     }
   },
   "messaging": {

@@ -17,6 +17,7 @@ export const businessNavItems = [
   { to: '/$locale/manage/insurance', labelKey: 'insurance' },
   { to: '/$locale/manage/fees', labelKey: 'fees' },
   { to: '/$locale/manage/add-ons', labelKey: 'addOns' },
+  { to: '/$locale/manage/team', labelKey: 'team' },
   { to: '/$locale/manage/settings', labelKey: 'settings' },
 ] as const
 
