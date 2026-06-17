@@ -1,6 +1,6 @@
-import { Marker, Map as PigeonMap } from 'pigeon-maps'
+import { Marker, Overlay, Map as PigeonMap } from 'pigeon-maps'
 import type { MapAdapterProps } from './MapAdapter'
-import { type Pin, computeViewport } from './viewport'
+import { type Pin, focusViewport } from './viewport'
 
 // The ONLY file that imports the map library (#458 D1). Everything else depends
 // on the MapAdapter contract, so swapping pigeon-maps for MapLibre later is a
@@ -8,6 +8,8 @@ import { type Pin, computeViewport } from './viewport'
 // parent container (the view gives it a fixed-height box).
 const MARKER_COLOR = '#6b7280'
 const SELECTED_COLOR = '#2563eb'
+/** Pixel nudge so the popup clears the marker: [px right, px up] from the pin. */
+const OVERLAY_OFFSET: [number, number] = [120, 20]
 
 // Explicit basemap provider (#660). Without one, pigeon-maps falls back to the
 // public OpenStreetMap tile server, which the OSMF tile-usage policy bars from
@@ -37,8 +39,17 @@ const GSI_ATTRIBUTION = (
  *  unless a region `anchor` is given (#840), which centers the map on the chosen
  *  area instead. `key` on the map remounts it when the result set OR the anchor
  *  changes so the fit/center recomputes (region filtering keeps the same pins, so
- *  the anchor must be in the key), while leaving the user free to pan/zoom. */
-export function PigeonMapAdapter({ items, selectedId, onSelect, anchor = null }: MapAdapterProps) {
+ *  the anchor must be in the key), while leaving the user free to pan/zoom.
+ *  Selecting a result is also in the key: each new selection remounts to recenter
+ *  on that pin and reopen its popup (costs a tile re-fetch; animated fly-to is a
+ *  Slice-1 follow-up, #885). */
+export function PigeonMapAdapter({
+  items,
+  selectedId,
+  onSelect,
+  anchor = null,
+  renderSelected,
+}: MapAdapterProps) {
   const pins = items
     .map((item) => ({
       id: item.location.locationId,
@@ -47,11 +58,15 @@ export function PigeonMapAdapter({ items, selectedId, onSelect, anchor = null }:
     }))
     .filter((p): p is Pin => p.lat !== null && p.lng !== null)
 
-  const viewport = computeViewport(pins, anchor)
+  const viewport = focusViewport(pins, anchor, selectedId)
+
+  const selectedPin = selectedId === null ? null : (pins.find((p) => p.id === selectedId) ?? null)
+  const selectedItem =
+    selectedId === null ? null : (items.find((i) => i.location.locationId === selectedId) ?? null)
 
   return (
     <PigeonMap
-      key={`${anchor ? anchor.join(',') : 'fit'}:${pins.map((p) => p.id).join(',')}`}
+      key={`${selectedId ?? ''}:${anchor ? anchor.join(',') : 'fit'}:${pins.map((p) => p.id).join(',')}`}
       provider={gsiTileProvider}
       attribution={GSI_ATTRIBUTION}
       attributionPrefix={false}
@@ -66,6 +81,11 @@ export function PigeonMapAdapter({ items, selectedId, onSelect, anchor = null }:
           onClick={() => onSelect(pin.id)}
         />
       ))}
+      {selectedPin && selectedItem && renderSelected && (
+        <Overlay anchor={[selectedPin.lat, selectedPin.lng]} offset={OVERLAY_OFFSET}>
+          {renderSelected(selectedItem)}
+        </Overlay>
+      )}
     </PigeonMap>
   )
 }

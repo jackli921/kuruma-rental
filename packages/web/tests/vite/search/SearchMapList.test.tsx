@@ -8,24 +8,28 @@ import en from '../../../messages/en.json'
 
 // Fake adapter standing in for any map library: one button per plotted item,
 // click → onSelect(locationId). Asserts the MapAdapterProps seam — no real tiles.
-const FakeMapAdapter: MapAdapter = ({ items, selectedId, onSelect, anchor }) => (
-  <div
-    data-testid="fake-map"
-    data-selected={selectedId ?? ''}
-    data-anchor={anchor?.join(',') ?? ''}
-  >
-    {items.map((item) => (
-      <button
-        key={item.location.locationId}
-        type="button"
-        data-testid={`marker-${item.location.locationId}`}
-        onClick={() => onSelect(item.location.locationId)}
-      >
-        marker
-      </button>
-    ))}
-  </div>
-)
+const FakeMapAdapter: MapAdapter = ({ items, selectedId, onSelect, anchor, renderSelected }) => {
+  const selected = items.find((i) => i.location.locationId === selectedId) ?? null
+  return (
+    <div
+      data-testid="fake-map"
+      data-selected={selectedId ?? ''}
+      data-anchor={anchor?.join(',') ?? ''}
+    >
+      {items.map((item) => (
+        <button
+          key={item.location.locationId}
+          type="button"
+          data-testid={`marker-${item.location.locationId}`}
+          onClick={() => onSelect(item.location.locationId)}
+        >
+          marker
+        </button>
+      ))}
+      {selected && renderSelected && <div data-testid="map-popup">{renderSelected(selected)}</div>}
+    </div>
+  )
+}
 
 function carAt(
   vehicleId: string,
@@ -145,6 +149,18 @@ describe('SearchMapList', () => {
   it('threads the region anchor through to the map adapter (#840)', () => {
     renderMapList([carAt('v1', 'Toyota Yaris', 'loc_namba', GEOCODED)], [34.6655, 135.5023])
     expect(screen.getByTestId('fake-map')).toHaveAttribute('data-anchor', '34.6655,135.5023')
+  })
+
+  it('renders a map popup (title · store · price) for the selected location', () => {
+    renderMapList([carAt('v1', 'Toyota Yaris', 'loc_namba', GEOCODED)])
+    expect(screen.queryByTestId('map-popup')).toBeNull()
+
+    fireEvent.click(screen.getByRole('button', { name: /show on map/i }))
+
+    const popup = screen.getByTestId('map-popup')
+    expect(popup).toHaveTextContent('Toyota Yaris')
+    expect(popup).toHaveTextContent('Best Car Rental')
+    expect(popup).toHaveTextContent(/8,000/)
   })
 
   it('does not rebuild the plotted array on a selection-only re-render (#737)', () => {

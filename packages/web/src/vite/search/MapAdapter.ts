@@ -1,5 +1,5 @@
 import type { SearchResultItem } from '@kuruma/shared/types/search-result'
-import type { ComponentType } from 'react'
+import type { ComponentType, ReactNode } from 'react'
 
 /**
  * The map view's only dependency on a map library (#458 D1), expressed as a React
@@ -20,6 +20,10 @@ export interface MapAdapterProps {
    *  pins (#840). A view concern (where to look), so it rides the adapter contract
    *  alongside the pins the adapter plots. */
   anchor?: [number, number] | null
+  /** Renders the popup body for the selected location. The VIEW owns presentation
+   *  (i18n, router links); the adapter only positions it at the pin. Absent = no
+   *  popup. */
+  renderSelected?: (item: SearchResultItem) => ReactNode
 }
 
 export type MapAdapter = ComponentType<MapAdapterProps>

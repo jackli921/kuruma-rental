@@ -1,4 +1,10 @@
-import { type Pin, REGION_ZOOM, SINGLE_PIN_ZOOM, computeViewport } from '@/vite/search/viewport'
+import {
+  type Pin,
+  REGION_ZOOM,
+  SINGLE_PIN_ZOOM,
+  computeViewport,
+  focusViewport,
+} from '@/vite/search/viewport'
 import { describe, expect, it } from 'vitest'
 
 const pin = (id: string, lat: number, lng: number): Pin => ({ id, lat, lng })
@@ -69,5 +75,31 @@ describe('computeViewport with a region anchor (#840)', () => {
 
   it('frames a region broader than a single store (region zoom < single-pin zoom)', () => {
     expect(REGION_ZOOM).toBeLessThan(SINGLE_PIN_ZOOM)
+  })
+})
+
+describe('focusViewport', () => {
+  const pins = [
+    { id: 'loc_namba', lat: 34.6627, lng: 135.5023 },
+    { id: 'loc_umeda', lat: 34.7025, lng: 135.4959 },
+  ]
+
+  it('centers on the selected pin at the single-pin zoom', () => {
+    expect(focusViewport(pins, null, 'loc_umeda')).toEqual({
+      center: [34.7025, 135.4959],
+      zoom: SINGLE_PIN_ZOOM,
+    })
+  })
+
+  it('overrides the region anchor when a pin is selected (the selection wins)', () => {
+    expect(focusViewport(pins, [34.99, 135.99], 'loc_namba').center).toEqual([34.6627, 135.5023])
+  })
+
+  it('falls back to computeViewport when nothing is selected', () => {
+    expect(focusViewport(pins, null, null)).toEqual(computeViewport(pins, null))
+  })
+
+  it('falls back to computeViewport when the selected id matches no pin', () => {
+    expect(focusViewport(pins, null, 'loc_ghost')).toEqual(computeViewport(pins, null))
   })
 })

@@ -48,6 +48,20 @@ export function computeViewport(
   return { center, zoom: zoomForSpan(span) }
 }
 
+/** Viewport when a result is selected: center on its pin at a close zoom so the
+ *  renter sees exactly where that car is picked up. The selection wins over the
+ *  fit-all / region-anchor viewport; with nothing selected (or an unknown id) it
+ *  defers to computeViewport. Pure. */
+export function focusViewport(
+  pins: Pin[],
+  anchor: [number, number] | null,
+  selectedId: string | null,
+): { center: [number, number]; zoom: number } {
+  const selected = selectedId === null ? null : (pins.find((p) => p.id === selectedId) ?? null)
+  if (selected) return { center: [selected.lat, selected.lng], zoom: SINGLE_PIN_ZOOM }
+  return computeViewport(pins, anchor)
+}
+
 /** Map a lat/lng degree span to a Web-Mercator zoom that keeps it in frame.
  *  Heuristic tiers (one step per ~2x span); the test pins the monotonic property,
  *  not the exact breakpoints. */
