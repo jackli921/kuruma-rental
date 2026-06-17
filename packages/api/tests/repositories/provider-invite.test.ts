@@ -70,6 +70,18 @@ describe('InMemoryProviderInviteRepository', () => {
     expect(found?.acceptedByUserId).toBe('user_42')
   })
 
+  // #904 slice 2: a revoke racing an accept must not resurrect the invite. The
+  // PENDING-only guard means accepting an already-REVOKED invite is a no-op — the
+  // status stays REVOKED and no redeemer is stamped.
+  it('markAccepted is a no-op on a non-PENDING invite (revoke wins the race)', async () => {
+    const revoked = await repo.create(inviteInput({ tokenHash: 'h1', status: 'REVOKED' }))
+    await repo.markAccepted(revoked.id, 'user_42')
+
+    const found = await repo.findByTokenHash('h1')
+    expect(found?.status).toBe('REVOKED')
+    expect(found?.acceptedByUserId).toBeNull()
+  })
+
   describe('listByOperator (#904)', () => {
     it('returns all PENDING invites for the operator', async () => {
       await repo.create(inviteInput({ tokenHash: 'h1', email: 'a@x.com' }))
@@ -92,6 +104,57 @@ describe('InMemoryProviderInviteRepository', () => {
       await repo.create(inviteInput({ tokenHash: 'h2', email: 'pending@x.com' }))
       const rows = await repo.listByOperator('op_test')
       expect(rows.map((r) => r.email)).toEqual(['pending@x.com'])
+    })
+  })
+
+  describe('revoke (#904 slice 2)', () => {
+    it('flips a PENDING invite to REVOKED and returns the updated row', async () => {
+      const created = await repo.create(inviteInput({ tokenHash: 'h1' }))
+      const revoked = await repo.revoke(created.id, 'op_test')
+      expect(revoked?.id).toBe(created.id)
+      expect(revoked?.status).toBe('REVOKED')
+      // It drops off the actionable PENDING list.
+      expect(await repo.listByOperator('op_test')).toHaveLength(0)
+    })
+
+    it('is operator-scoped: another tenant cannot revoke this invite', async () => {
+      const created = await repo.create(inviteInput({ tokenHash: 'h1', operatorId: 'op_a' }))
+      const result = await repo.revoke(created.id, 'op_b')
+      expect(result).toBeUndefined()
+      // The invite is untouched — still PENDING for its real operator.
+      const rows = await repo.listByOperator('op_a')
+      expect(rows).toHaveLength(1)
+      expect(rows[0]?.status).toBe('PENDING')
+    })
+
+    it('returns undefined for an already non-PENDING invite (idempotent guard)', async () => {
+      const created = await repo.create(inviteInput({ tokenHash: 'h1', status: 'ACCEPTED' }))
+      expect(await repo.revoke(created.id, 'op_test')).toBeUndefined()
+    })
+  })
+
+  // #904 slice 2: at most one PENDING invite per (operatorId, email) — mirrors the
+  // partial unique index. REVOKED/ACCEPTED rows free the slot so a re-invite works.
+  describe('pending-email uniqueness (#904 slice 2)', () => {
+    it('rejects a second PENDING invite for the same operator+email (23505, named constraint)', async () => {
+      await repo.create(inviteInput({ tokenHash: 'h1' }))
+      await expect(repo.create(inviteInput({ tokenHash: 'h2' }))).rejects.toMatchObject({
+        code: PG_ERROR.UNIQUE_VIOLATION,
+        constraint_name: 'provider_invites_pending_email_unique',
+      })
+    })
+
+    it('allows a fresh PENDING invite once the prior one is REVOKED (the slot frees up)', async () => {
+      const first = await repo.create(inviteInput({ tokenHash: 'h1' }))
+      await repo.revoke(first.id, 'op_test')
+      const second = await repo.create(inviteInput({ tokenHash: 'h2' }))
+      expect(second.status).toBe('PENDING')
+    })
+
+    it('allows the same email as a PENDING invite for a different operator (tenant scoped)', async () => {
+      await repo.create(inviteInput({ tokenHash: 'h1', operatorId: 'op_a' }))
+      const other = await repo.create(inviteInput({ tokenHash: 'h2', operatorId: 'op_b' }))
+      expect(other.operatorId).toBe('op_b')
     })
   })
 })

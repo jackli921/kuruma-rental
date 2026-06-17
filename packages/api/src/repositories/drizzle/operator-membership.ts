@@ -60,4 +60,23 @@ export class DrizzleOperatorMembershipRepository implements OperatorMembershipRe
     if (!inserted) throw new Error('Failed to insert operator membership')
     return toOperatorMembership(inserted)
   }
+
+  // #904 slice 2: ACTIVE -> REVOKED, scoped to (id, operatorId). The status='ACTIVE'
+  // predicate makes it idempotent (a re-deactivate matches nothing) and the partial-
+  // unique-active index then frees the user's slot for a re-invite. No-match returns
+  // undefined -> the service surfaces a 404 (no cross-tenant existence oracle).
+  async deactivate(id: string, operatorId: string): Promise<OperatorMembership | undefined> {
+    const [row] = await this.db
+      .update(operatorMemberships)
+      .set({ status: 'REVOKED', updatedAt: new Date() })
+      .where(
+        and(
+          eq(operatorMemberships.id, id),
+          eq(operatorMemberships.operatorId, operatorId),
+          eq(operatorMemberships.status, 'ACTIVE'),
+        ),
+      )
+      .returning()
+    return row ? toOperatorMembership(row) : undefined
+  }
 }

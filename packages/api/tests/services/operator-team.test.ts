@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from 'vitest'
 import type { CallerContext } from '../../src/auth/context'
-import { ForbiddenError } from '../../src/auth/guards'
+import { ConflictError, ForbiddenError, NotFoundError } from '../../src/auth/guards'
 import { InMemoryOperatorRepository } from '../../src/repositories/in-memory/operator'
 import { InMemoryOperatorMembershipRepository } from '../../src/repositories/in-memory/operator-membership'
 import { InMemoryProviderInviteRepository } from '../../src/repositories/in-memory/provider-invite'
@@ -33,6 +33,18 @@ function makeUser(id: string, name: string, email: string): User {
   return { id, name, email, phone: null, language: 'en', country: null, role: 'OPERATOR_OWNER' }
 }
 
+// A member carries the operator projection (role + operatorId) that the deactivate
+// path must tear back down to a plain RENTER.
+function makeMember(
+  id: string,
+  name: string,
+  email: string,
+  role: 'OPERATOR_OWNER' | 'OPERATOR_STAFF',
+  operatorId = 'op_1',
+): User {
+  return { id, name, email, phone: null, language: 'en', country: null, role, operatorId }
+}
+
 let inviteRepo: InMemoryProviderInviteRepository
 let membershipRepo: InMemoryOperatorMembershipRepository
 let userRepo: InMemoryUserRepository
@@ -43,8 +55,10 @@ beforeEach(() => {
   membershipRepo = new InMemoryOperatorMembershipRepository()
   userRepo = new InMemoryUserRepository(
     new Map([
-      ['u_owner', makeUser('u_owner', 'Olive Owner', 'owner@x.com')],
+      ['u_owner', makeMember('u_owner', 'Olive Owner', 'owner@x.com', 'OPERATOR_OWNER')],
       ['u_other', makeUser('u_other', 'Otto Other', 'other@x.com')],
+      ['u_staffm', makeMember('u_staffm', 'Mia Staff', 'staffm@x.com', 'OPERATOR_STAFF')],
+      ['u_owner2', makeMember('u_owner2', 'Owen Owner', 'owner2@x.com', 'OPERATOR_OWNER')],
     ]),
   )
   const operatorRepo = new InMemoryOperatorRepository(
@@ -147,5 +161,123 @@ describe('OperatorTeamService.listMembers', () => {
 
   it('refuses a caller with no operatorId (403)', async () => {
     await expect(service.listMembers(ADMIN_CTX)).rejects.toThrow(ForbiddenError)
+  })
+})
+
+describe('OperatorTeamService.revokeInvite', () => {
+  async function seedInvite(operatorId: string, tokenHash: string): Promise<string> {
+    const invite = await inviteRepo.create({
+      email: `staff@${operatorId}.com`,
+      operatorId,
+      role: 'OPERATOR_STAFF',
+      tokenHash,
+      status: 'PENDING',
+      expiresAt: FUTURE,
+      invitedByUserId: 'u_owner',
+      acceptedByUserId: null,
+    })
+    return invite.id
+  }
+
+  it('lets the owner revoke their own pending invite — it drops off the team page', async () => {
+    const id = await seedInvite('op_1', 'h_mine')
+    await service.revokeInvite(OWNER_CTX, id)
+    expect(await service.listInvites(OWNER_CTX)).toHaveLength(0)
+  })
+
+  it('refuses an OPERATOR_STAFF caller (403) and leaves the invite pending', async () => {
+    const id = await seedInvite('op_1', 'h_mine')
+    await expect(service.revokeInvite(STAFF_CTX, id)).rejects.toThrow(ForbiddenError)
+    expect(await service.listInvites(OWNER_CTX)).toHaveLength(1)
+  })
+
+  it('refuses a caller with no operatorId (403)', async () => {
+    const id = await seedInvite('op_1', 'h_mine')
+    await expect(service.revokeInvite(ADMIN_CTX, id)).rejects.toThrow(ForbiddenError)
+  })
+
+  it('cannot revoke another tenant invite (404) — the target stays pending', async () => {
+    const otherId = await seedInvite('op_2', 'h_theirs')
+    await expect(service.revokeInvite(OWNER_CTX, otherId)).rejects.toThrow(NotFoundError)
+    expect(await inviteRepo.listByOperator('op_2')).toHaveLength(1)
+  })
+
+  it('throws NotFoundError for an unknown invite id (404)', async () => {
+    await expect(service.revokeInvite(OWNER_CTX, 'nope')).rejects.toThrow(NotFoundError)
+  })
+})
+
+describe('OperatorTeamService.deactivateMember', () => {
+  async function seedMember(
+    userId: string,
+    role: 'OPERATOR_OWNER' | 'OPERATOR_STAFF',
+    operatorId = 'op_1',
+  ): Promise<string> {
+    const m = await membershipRepo.create({ userId, operatorId, role, status: 'ACTIVE' })
+    return m.id
+  }
+
+  async function projectionOf(userId: string) {
+    const [u] = await userRepo.findByIds([userId])
+    return { role: u?.role, operatorId: u?.operatorId }
+  }
+
+  it('deactivates a staff member: drops off the team AND clears their access projection', async () => {
+    await seedMember('u_owner', 'OPERATOR_OWNER')
+    const staffId = await seedMember('u_staffm', 'OPERATOR_STAFF')
+
+    await service.deactivateMember(OWNER_CTX, staffId)
+
+    const remaining = await service.listMembers(OWNER_CTX)
+    expect(remaining.map((m) => m.userId)).toEqual(['u_owner'])
+    // The projection is torn down so a renter-door sign-in can't re-mint operator access.
+    expect(await projectionOf('u_staffm')).toEqual({ role: 'RENTER', operatorId: null })
+  })
+
+  it('refuses an OPERATOR_STAFF caller (403) — member stays active, projection intact', async () => {
+    await seedMember('u_owner', 'OPERATOR_OWNER')
+    const staffId = await seedMember('u_staffm', 'OPERATOR_STAFF')
+
+    await expect(service.deactivateMember(STAFF_CTX, staffId)).rejects.toThrow(ForbiddenError)
+    expect((await service.listMembers(OWNER_CTX)).map((m) => m.userId).sort()).toEqual([
+      'u_owner',
+      'u_staffm',
+    ])
+    expect(await projectionOf('u_staffm')).toEqual({ role: 'OPERATOR_STAFF', operatorId: 'op_1' })
+  })
+
+  it('refuses a caller with no operatorId (e.g. PLATFORM_ADMIN) (403)', async () => {
+    const staffId = await seedMember('u_staffm', 'OPERATOR_STAFF')
+    await expect(service.deactivateMember(ADMIN_CTX, staffId)).rejects.toThrow(ForbiddenError)
+  })
+
+  it('cannot deactivate another tenant member (404) — target stays active', async () => {
+    const otherId = await seedMember('u_other', 'OPERATOR_STAFF', 'op_2')
+    await expect(service.deactivateMember(OWNER_CTX, otherId)).rejects.toThrow(NotFoundError)
+    expect((await membershipRepo.findActiveByOperator('op_2')).map((m) => m.userId)).toEqual([
+      'u_other',
+    ])
+  })
+
+  it('throws NotFoundError for an unknown member id (404)', async () => {
+    await expect(service.deactivateMember(OWNER_CTX, 'nope')).rejects.toThrow(NotFoundError)
+  })
+
+  it('refuses deactivating the last active OPERATOR_OWNER (409) — owner + projection intact', async () => {
+    const ownerId = await seedMember('u_owner', 'OPERATOR_OWNER')
+
+    await expect(service.deactivateMember(OWNER_CTX, ownerId)).rejects.toThrow(ConflictError)
+    expect((await service.listMembers(OWNER_CTX)).map((m) => m.userId)).toEqual(['u_owner'])
+    expect(await projectionOf('u_owner')).toEqual({ role: 'OPERATOR_OWNER', operatorId: 'op_1' })
+  })
+
+  it('deactivates an owner when a second active owner remains (not the last)', async () => {
+    await seedMember('u_owner', 'OPERATOR_OWNER')
+    const owner2Id = await seedMember('u_owner2', 'OPERATOR_OWNER')
+
+    await service.deactivateMember(OWNER_CTX, owner2Id)
+
+    expect((await service.listMembers(OWNER_CTX)).map((m) => m.userId)).toEqual(['u_owner'])
+    expect(await projectionOf('u_owner2')).toEqual({ role: 'RENTER', operatorId: null })
   })
 })

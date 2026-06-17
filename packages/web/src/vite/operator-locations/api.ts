@@ -141,5 +141,7 @@ export async function archiveLocation(id: string): Promise<OperatorLocation> {
   if (body.code === 'LOCATION_HAS_ACTIVE_BOOKINGS') {
     throw new LocationArchiveBlockedError(body.activeBookingsCount ?? 0)
   }
-  throw new ApiError(body.error ?? `HTTP ${res.status}`, res.status)
+  // Preserve the envelope `code` like `unwrap` does, so a non-active-bookings
+  // failure stays discriminable by code rather than collapsing to a message (#934).
+  throw new ApiError(body.error ?? `HTTP ${res.status}`, res.status, body.code)
 }

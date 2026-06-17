@@ -1,0 +1,1 @@
+CREATE UNIQUE INDEX "provider_invites_pending_email_unique" ON "provider_invites" USING btree ("operatorId","email") WHERE status = 'PENDING';

@@ -15,8 +15,9 @@ export const operatorMembershipStatusEnum = pgEnum(
   'operator_membership_status',
   OPERATOR_MEMBERSHIP_STATUSES,
 )
-// PENDING -> ACCEPTED only. Expired-ness is COMPUTED from expiresAt, never
-// stored (YAGNI; REVOKED/EXPIRED land with the revoke/sweep follow-up, §13).
+// PENDING -> ACCEPTED, or PENDING -> REVOKED (owner self-service revoke, #904).
+// Both are terminal. Expired-ness stays COMPUTED from expiresAt, never stored
+// (YAGNI; the EXPIRED sweep is still a follow-up, §13).
 export const providerInviteStatusEnum = pgEnum('provider_invite_status', PROVIDER_INVITE_STATUSES)
 
 export const operatorMemberships = pgTable(
@@ -74,6 +75,12 @@ export const providerInvites = pgTable(
   },
   (t) => [
     uniqueIndex('provider_invites_tokenHash_unique').on(t.tokenHash),
+    // #904 slice 2: at most one LIVE invite per operator+email. PARTIAL on
+    // status='PENDING' so a REVOKED/ACCEPTED row frees the slot and a re-invite
+    // works. Emails are stored lowercased at the boundary, so plain columns suffice.
+    uniqueIndex('provider_invites_pending_email_unique')
+      .on(t.operatorId, t.email)
+      .where(sql`status = 'PENDING'`),
     index('idx_provider_invites_email').on(t.email),
     // FK-covering indexes (lint:fk-indexes): keep operator-scoped listing and the
     // set-null cascades on actor deletion from doing sequential scans.
