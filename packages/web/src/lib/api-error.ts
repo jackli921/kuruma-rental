@@ -85,13 +85,12 @@ export const OPERATOR_REQUIRED = 'OPERATOR_REQUIRED'
 export const DOCUMENT_VERIFICATION_REQUIRED = 'DOCUMENT_VERIFICATION_REQUIRED'
 
 /**
- * Recognises the write-path "operator must be named" rejection: a 422 whose
- * message names `operatorId` (the only 422 a vehicle/class create raises, from
- * `OperatorRequiredError`). Returns the {@link OPERATOR_REQUIRED} code so the
- * UI can refetch operators and reveal the picker, or `undefined` otherwise.
+ * Recognises the write-path "operator must be named" rejection (a vehicle/class
+ * create from `OperatorRequiredError`) by its self-describing envelope `code`,
+ * so the UI can refetch operators and reveal the picker. Reads `error.code`
+ * rather than regex-matching the message — copy or i18n changes can't break it
+ * (#934). Matches the `OPERATOR_REQUIRED` code emitted by the API error handler.
  */
 export function operatorRequiredCode(e: unknown): string | undefined {
-  return e instanceof ApiError && e.status === 422 && /operatorId is required/i.test(e.message)
-    ? OPERATOR_REQUIRED
-    : undefined
+  return e instanceof ApiError && e.code === OPERATOR_REQUIRED ? OPERATOR_REQUIRED : undefined
 }

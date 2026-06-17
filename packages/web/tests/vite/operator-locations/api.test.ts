@@ -1,10 +1,21 @@
-import { ParseError } from '@/lib/api-error'
-import { fetchOperatorLocations } from '@/vite/operator-locations/api'
+import { ApiError, ParseError } from '@/lib/api-error'
+import {
+  LocationArchiveBlockedError,
+  archiveLocation,
+  fetchOperatorLocations,
+} from '@/vite/operator-locations/api'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 function jsonResponse(body: unknown): Response {
   return new Response(JSON.stringify(body), {
     status: 200,
+    headers: { 'Content-Type': 'application/json' },
+  })
+}
+
+function failResponse(body: unknown, status: number): Response {
+  return new Response(JSON.stringify(body), {
+    status,
     headers: { 'Content-Type': 'application/json' },
   })
 }
@@ -61,5 +72,41 @@ describe('fetchOperatorLocations', () => {
       jsonResponse({ success: true, data: [{ ...location, defaultTurnaroundMinutes: 'oops' }] }),
     )
     await expect(fetchOperatorLocations()).rejects.toBeInstanceOf(ParseError)
+  })
+})
+
+describe('archiveLocation', () => {
+  afterEach(() => vi.restoreAllMocks())
+
+  it('routes the active-bookings 409 to a typed error carrying the count', async () => {
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+      failResponse(
+        {
+          success: false,
+          error: 'has bookings',
+          code: 'LOCATION_HAS_ACTIVE_BOOKINGS',
+          activeBookingsCount: 3,
+        },
+        409,
+      ),
+    )
+    const err = (await archiveLocation('loc_1').catch((e) => e)) as LocationArchiveBlockedError
+    expect(err).toBeInstanceOf(LocationArchiveBlockedError)
+    expect(err.activeBookingsCount).toBe(3)
+  })
+
+  it('preserves the failure body `code` on the generic ApiError fallthrough (#934)', async () => {
+    // Mirrors `unwrap`: a non-active-bookings failure must keep its machine-readable
+    // `code` so callers can discriminate same-status failures, not just read the message.
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+      failResponse(
+        { success: false, error: 'Operator mismatch', code: 'OPERATOR_SCOPE_DENIED' },
+        403,
+      ),
+    )
+    const err = (await archiveLocation('loc_1').catch((e) => e)) as ApiError
+    expect(err).toBeInstanceOf(ApiError)
+    expect(err.status).toBe(403)
+    expect(err.code).toBe('OPERATOR_SCOPE_DENIED')
   })
 })

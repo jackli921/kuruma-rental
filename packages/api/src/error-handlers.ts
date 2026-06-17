@@ -21,7 +21,9 @@ export function setupGlobalHandlers(app: Hono): void {
     // A non-operator write that named no target operator and could not be
     // inferred (zero or 2+ operators). Well-formed but unprocessable (#401).
     if (err instanceof OperatorRequiredError) {
-      return c.json({ success: false, error: err.message }, 422)
+      // Self-describing envelope code so the web discriminates this 422 by `code`
+      // rather than regex-matching the message (a reword/i18n change can't break it) (#934).
+      return c.json({ success: false, error: err.message, code: 'OPERATOR_REQUIRED' }, 422)
     }
     // Only genuinely-unexpected errors reach here — the handled policy
     // responses (HTTPException-with-res, Forbidden 403, OperatorRequired 422)
