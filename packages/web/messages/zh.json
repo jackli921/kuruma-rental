@@ -887,7 +887,19 @@
       "keep": "保留预订",
       "confirm": "确认取消",
       "pending": "取消中…",
-      "error": "无法取消您的预订。请重试，或联系运营商。"
+      "error": "无法取消您的预订。请重试，或联系运营商。",
+      "reason": {
+        "legend": "取消原因（可选）",
+        "notePlaceholder": "如有其他说明，请填写",
+        "noteLabel": "补充说明",
+        "options": {
+          "CHANGE_OF_PLANS": "我的计划有变",
+          "FOUND_ALTERNATIVE": "我找到了其他选择",
+          "TRIP_CANCELLED": "我的行程已取消",
+          "VEHICLE_OR_PRICE_CONCERN": "对车辆或价格有顾虑",
+          "OTHER": "其他原因"
+        }
+      }
     },
     "list": {
       "title": "我的预订",

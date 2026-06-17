@@ -1183,6 +1183,35 @@ describe('Booking Routes', () => {
       expect(body.data.id).toBe(created.data.id)
     })
 
+    it('accepts an optional cancellation reason in the body (#868 3b)', async () => {
+      const createRes = await createBooking()
+      const created = await createRes.json()
+
+      const res = await app.request(`/bookings/${created.data.id}/cancel`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ reason: { code: 'TRIP_CANCELLED', note: 'flight cancelled' } }),
+      })
+
+      expect(res.status).toBe(200)
+      const body = await res.json()
+      expect(body.data.status).toBe('CANCELLED')
+    })
+
+    it('rejects a cancellation reason outside the taxonomy with 400 (#868 3b)', async () => {
+      const createRes = await createBooking()
+      const created = await createRes.json()
+
+      const res = await app.request(`/bookings/${created.data.id}/cancel`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ reason: { code: 'NOT_A_REASON' } }),
+      })
+
+      expect(res.status).toBe(400)
+      expect((await res.json()).success).toBe(false)
+    })
+
     it('rejects cancelling an already COMPLETED booking with 409', async () => {
       const createRes = await createBooking()
       const created = await createRes.json()

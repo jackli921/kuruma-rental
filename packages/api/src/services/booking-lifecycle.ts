@@ -1,4 +1,8 @@
-import { type BookingStatus, VALID_BOOKING_TRANSITIONS } from '@kuruma/shared/db/schema'
+import {
+  type BookingStatus,
+  type CancellationReason,
+  VALID_BOOKING_TRANSITIONS,
+} from '@kuruma/shared/db/schema'
 import { calculateCancellationFee } from '@kuruma/shared/lib/cancellation-policy'
 import { calculateBookingPrice } from '@kuruma/shared/lib/pricing'
 import { type CallerContext, SYSTEM_CONTEXT } from '../middleware/auth'
@@ -280,6 +284,7 @@ export class BookingLifecycleService {
   async cancel(
     ctx: CallerContext,
     bookingId: string,
+    reason: CancellationReason | null = null,
     now: Date = new Date(),
   ): Promise<CancelResult> {
     const booking = await this.bookingRepo.findById(ctx, bookingId)
@@ -314,6 +319,7 @@ export class BookingLifecycleService {
           type: 'BOOKING_CANCELLED',
           cancellationFee: cancellation.feeAmount,
           cancelledAt: now.toISOString(),
+          cancellationReason: reason,
         },
       })
       return next

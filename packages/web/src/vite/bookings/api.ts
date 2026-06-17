@@ -1,6 +1,11 @@
 import { unwrap } from '@/lib/api-error'
 import { getApiBaseUrl } from '@/vite/api-base'
-import type { AddOnSnapshot, FeeSnapshotItem, InsuranceSnapshot } from '@kuruma/shared/db/schema'
+import type {
+  AddOnSnapshot,
+  CancellationReason,
+  FeeSnapshotItem,
+  InsuranceSnapshot,
+} from '@kuruma/shared/db/schema'
 import { BOOKING_STATUSES, type BookingStatus, FEE_TYPES, FEE_UNITS } from '@kuruma/shared/enums'
 import { queryOptions } from '@tanstack/react-query'
 import { z } from 'zod'
@@ -239,16 +244,25 @@ export const BOOKINGS_KEY = ['bookings'] as const
 
 // #856: renter self-cancellation. POST /bookings/:id/cancel is IDOR-sealed and
 // caller-scoped server-side, so the renter hits the SAME endpoint the operator
-// does — no renter id is passed (ownership is the server's call, not ours). The
-// cancel is modelled as a bodyless, cookie-authed, CSRF-gated POST, so the caller
-// echoes the session token and sets no Content-Type (there is no JSON body to
-// declare). `unwrap` returns the now-CANCELLED booking, or throws an ApiError
-// carrying the status so the dialog can treat 409 (already cancelled) as benign.
-export async function cancelBooking(id: string, csrfToken: string): Promise<BookingDto> {
+// does — no renter id is passed (ownership is the server's call, not ours).
+// #868 3b: an OPTIONAL cancellation reason. When absent (the default, and the
+// operator-cancel path) the POST stays bodyless with no Content-Type — preserving
+// the original wire shape; when present it carries `{ reason }` as JSON. `unwrap`
+// returns the now-CANCELLED booking, or throws an ApiError carrying the status so
+// the dialog can treat 409 (already cancelled) as benign.
+export async function cancelBooking(
+  id: string,
+  csrfToken: string,
+  reason: CancellationReason | null = null,
+): Promise<BookingDto> {
   const res = await fetch(`${getApiBaseUrl()}/bookings/${encodeURIComponent(id)}/cancel`, {
     method: 'POST',
     credentials: 'include',
-    headers: { 'X-CSRF-Token': csrfToken },
+    headers: {
+      'X-CSRF-Token': csrfToken,
+      ...(reason ? { 'Content-Type': 'application/json' } : {}),
+    },
+    ...(reason ? { body: JSON.stringify({ reason }) } : {}),
   })
   return unwrap(res, bookingDtoSchema)
 }

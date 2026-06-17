@@ -56,7 +56,27 @@ describe('CancelBookingDialog (renter, #856)', () => {
     expect(spy).not.toHaveBeenCalled()
 
     await user.click(screen.getByRole('button', { name: c.confirm }))
-    await waitFor(() => expect(spy).toHaveBeenCalledWith('bk-1', 'csrf-tok'))
+    // #868 3b: no reason picked -> the third arg is null (bodyless cancel preserved).
+    await waitFor(() => expect(spy).toHaveBeenCalledWith('bk-1', 'csrf-tok', null))
+  })
+
+  it('passes the selected reason and trimmed note to the cancel call (#868 3b)', async () => {
+    const user = userEvent.setup()
+    const spy = vi.spyOn(api, 'cancelBooking').mockResolvedValue({} as never)
+    renderDialog()
+
+    await user.click(screen.getByRole('button', { name: c.action }))
+    // The note field only appears once a reason category is chosen.
+    await user.click(screen.getByRole('radio', { name: c.reason.options.FOUND_ALTERNATIVE }))
+    await user.type(screen.getByLabelText(c.reason.noteLabel), '  cheaper nearby  ')
+    await user.click(screen.getByRole('button', { name: c.confirm }))
+
+    await waitFor(() =>
+      expect(spy).toHaveBeenCalledWith('bk-1', 'csrf-tok', {
+        code: 'FOUND_ALTERNATIVE',
+        note: 'cheaper nearby',
+      }),
+    )
   })
 
   it('previews the tiered fee and estimated refund for a cancellation before pickup', async () => {

@@ -125,6 +125,20 @@ export const CANCELLATION_FEE_SETTLEMENT_STATES = [
 ] as const
 export type CancellationFeeSettlement = (typeof CANCELLATION_FEE_SETTLEMENT_STATES)[number]
 
+// Renter cancellation reason (#868 Slice 3b). ALWAYS optional — it never gates the
+// cancel, never triggers approval; captured purely for operator/analytics insight
+// and stored event-payload-only (no bookings column — add one only if a query
+// needs it later). `text` + Zod union, NOT a pgEnum (the taxonomy churns; review
+// M4), so it is absent from the pgEnum SSoT tripwire and pinned by enums.test.ts.
+export const CANCELLATION_REASON_CODES = [
+  'CHANGE_OF_PLANS',
+  'FOUND_ALTERNATIVE',
+  'TRIP_CANCELLED',
+  'VEHICLE_OR_PRICE_CONCERN',
+  'OTHER',
+] as const
+export type CancellationReasonCode = (typeof CANCELLATION_REASON_CODES)[number]
+
 // LUGGAGE_SIZES already lives in lib/luggage.ts (#457) — re-exported here so the
 // enum SSoT is reachable from one subpath without duplicating its declaration.
 export { LUGGAGE_SIZES, type LuggageSize } from './lib/luggage'

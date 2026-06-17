@@ -176,8 +176,23 @@ type ParseBodyFailure = { ok: false; response: Response }
 export async function parseBody<T>(
   c: Context,
   schema: z.ZodType<T>,
+  opts?: { allowEmpty?: boolean },
 ): Promise<ParseBodySuccess<T> | ParseBodyFailure> {
-  const body = await c.req.json()
+  let body: unknown
+  try {
+    body = await c.req.json()
+  } catch (err) {
+    // A missing or non-JSON body is only tolerated when the caller opts in
+    // (an endpoint whose whole payload is optional); otherwise propagate.
+    if (!opts?.allowEmpty) throw err
+    body = undefined
+  }
+  // With allowEmpty, an absent body or literal JSON `null` parses as `{}`, so a
+  // schema of all-optional fields yields its defaults instead of a 400.
+  if (opts?.allowEmpty && (body === undefined || body === null)) {
+    body = {}
+  }
+
   const result = schema.safeParse(body)
 
   if (!result.success) {

@@ -1,4 +1,10 @@
-import type { BookingFulfillmentMode, BookingStatus, FeeType, FeeUnit } from '../enums'
+import type {
+  BookingFulfillmentMode,
+  BookingStatus,
+  CancellationReasonCode,
+  FeeType,
+  FeeUnit,
+} from '../enums'
 
 // ---- Slice 6 (#392) booking snapshot + event payload types ----
 // Snapshots lock rates at booking time; operator edits to the live
@@ -49,10 +55,22 @@ export type VehicleSubstitutedPayload = {
   toVehicleId: string
   reason: string | null
 }
+// #868 Slice 3b: the optional renter-supplied reason, captured at cancel time and
+// stored ONLY inside the BOOKING_CANCELLED event payload (no bookings column).
+// `note` is a short freeform elaboration; `null` when the renter left it blank.
+export type CancellationReason = {
+  code: CancellationReasonCode
+  note: string | null
+}
 export type BookingCancelledPayload = {
   type: 'BOOKING_CANCELLED'
   cancellationFee: number | null
   cancelledAt: string
+  // #868 3b: null when the renter picked no reason. Legacy BOOKING_CANCELLED rows
+  // predate this field and simply omit it from their stored jsonb — no consumer
+  // reads it yet (the operator timeline shows only the fee), so the absence is
+  // benign and treated the same as "no reason given".
+  cancellationReason: CancellationReason | null
 }
 export type StatusChangedPayload = {
   type: 'STATUS_CHANGED'

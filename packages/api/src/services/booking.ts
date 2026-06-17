@@ -1,4 +1,4 @@
-import type { BookingStatus } from '@kuruma/shared/db/schema'
+import type { BookingStatus, CancellationReason } from '@kuruma/shared/db/schema'
 import { generateBookingCode } from '../lib/booking-code'
 import type { CallerContext } from '../middleware/auth'
 import type {
@@ -184,7 +184,12 @@ export class BookingService {
     return this.lifecycle.updateStatus(ctx, bookingId, newStatus)
   }
 
-  cancel(ctx: CallerContext, bookingId: string, now: Date = new Date()): Promise<CancelResult> {
-    return this.lifecycle.cancel(ctx, bookingId, now)
+  cancel(
+    ctx: CallerContext,
+    bookingId: string,
+    reason: CancellationReason | null = null,
+    now: Date = new Date(),
+  ): Promise<CancelResult> {
+    return this.lifecycle.cancel(ctx, bookingId, reason, now)
   }
 }

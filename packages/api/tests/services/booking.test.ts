@@ -1289,7 +1289,7 @@ describe('BookingService lifecycle events (#392 §3.1)', () => {
     expect(created.ok).toBe(true)
     if (!created.ok) return
 
-    const res = await h.service.cancel(renterCtx, created.booking.id, NOW)
+    const res = await h.service.cancel(renterCtx, created.booking.id, null, NOW)
     expect(res.ok).toBe(true)
     if (!res.ok) return
 
@@ -1301,7 +1301,46 @@ describe('BookingService lifecycle events (#392 §3.1)', () => {
     expect(events[1]).toMatchObject({
       type: 'BOOKING_CANCELLED',
       actorId: RENTER,
-      payload: { cancellationFee: res.cancellation.feeAmount, cancelledAt: NOW.toISOString() },
+      payload: {
+        cancellationFee: res.cancellation.feeAmount,
+        cancelledAt: NOW.toISOString(),
+        // #868 3b: a cancel with no reason supplied records null, not a missing key.
+        cancellationReason: null,
+      },
+    })
+  })
+
+  // #868 Slice 3b: an optional renter reason is captured into the BOOKING_CANCELLED
+  // event payload (operator/analytics insight). It never affects the fee or whether
+  // the cancel succeeds — only the audit record. Mutation guard: drop the reason in
+  // cancel() and this fails (the payload would carry null instead of the object).
+  it('records the renter cancellation reason in the BOOKING_CANCELLED payload (#868 3b)', async () => {
+    const h = await setup({ codes: ['LIFE3B01'] })
+    const { vehicleId, locationId } = await seedReady(h)
+    const created = await h.service.create(
+      renterCtx,
+      createInput({
+        requestedVehicleId: vehicleId,
+        pickupLocationId: locationId,
+        dropoffLocationId: locationId,
+      }),
+      NOW,
+    )
+    expect(created.ok).toBe(true)
+    if (!created.ok) return
+
+    const reason = { code: 'FOUND_ALTERNATIVE', note: 'cheaper nearby' } as const
+    const res = await h.service.cancel(renterCtx, created.booking.id, reason, NOW)
+    expect(res.ok).toBe(true)
+    if (!res.ok) return
+
+    const events = await h.repos.bookingEventRepo.findByBookingId(
+      SYSTEM_CONTEXT,
+      created.booking.id,
+    )
+    expect(events[1]).toMatchObject({
+      type: 'BOOKING_CANCELLED',
+      payload: { cancellationReason: { code: 'FOUND_ALTERNATIVE', note: 'cheaper nearby' } },
     })
   })
 
@@ -1397,7 +1436,7 @@ describe('BookingService — renter lifecycle notifications (#664)', () => {
     const { postCommit, run } = spyPostCommit()
     const h = await setupSub(postCommit)
     run.mockClear()
-    const result = await h.service.cancel(renterCtx, h.bookingId, NOW)
+    const result = await h.service.cancel(renterCtx, h.bookingId, null, NOW)
     expect(result.ok).toBe(true)
     if (!result.ok) return
     expect(run).toHaveBeenCalledTimes(1)

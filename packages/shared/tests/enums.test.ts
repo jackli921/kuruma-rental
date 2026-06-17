@@ -33,6 +33,7 @@ import {
   BOOKING_SOURCES,
   BOOKING_STATUSES,
   CANCELLATION_FEE_SETTLEMENT_STATES,
+  CANCELLATION_REASON_CODES,
   COORDINATE_SOURCES,
   DOCUMENT_STATUSES,
   DOCUMENT_TYPES,
@@ -131,6 +132,21 @@ describe('cancellation fee settlement states (#868 Slice 3a)', () => {
       'REFUND_DUE',
       'REFUNDED',
       'WAIVED',
+    ])
+  })
+})
+
+// Pins the renter reason taxonomy (#868 Slice 3b). It is a text union, not a
+// pgEnum, so nothing else guards it — adding/removing a code here is a deliberate
+// product change, and the web reason labels (i18n) must move with it.
+describe('cancellation reason codes (#868 Slice 3b)', () => {
+  it('lists the owner-approved renter reason taxonomy', () => {
+    expect([...CANCELLATION_REASON_CODES]).toEqual([
+      'CHANGE_OF_PLANS',
+      'FOUND_ALTERNATIVE',
+      'TRIP_CANCELLED',
+      'VEHICLE_OR_PRICE_CONCERN',
+      'OTHER',
     ])
   })
 })

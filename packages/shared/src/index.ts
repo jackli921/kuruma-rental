@@ -9,8 +9,10 @@ export {
   type UpdateVehicleInput,
 } from './validators/vehicle'
 export {
+  cancelBookingSchema,
   createBookingSchema,
   updateBookingStatusSchema,
+  type CancelBookingInput,
   type CreateBookingInput,
   type UpdateBookingStatusInput,
 } from './validators/booking'

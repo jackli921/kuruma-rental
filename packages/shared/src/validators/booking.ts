@@ -1,5 +1,5 @@
 import { z } from 'zod'
-import { BOOKING_SOURCES, BOOKING_STATUSES } from '../enums'
+import { BOOKING_SOURCES, BOOKING_STATUSES, CANCELLATION_REASON_CODES } from '../enums'
 
 // Slice 6 (#392): the renter books a CONCRETE vehicle chosen in the storefront
 // (slice 5) — `requestedVehicleId`. The server derives operatorId, classId,
@@ -73,6 +73,19 @@ export const substituteVehicleSchema = z.object({
   reason: z.string().optional(),
 })
 
+// #868 Slice 3b: optional renter cancellation reason on POST /bookings/:id/cancel.
+// ALWAYS optional — the cancel succeeds with or without it (the body may even be
+// absent: the operator cancel sends none). `note` is a short freeform elaboration,
+// trimmed + capped; an empty/whitespace note normalises away at the route.
+export const cancellationReasonSchema = z.object({
+  code: z.enum(CANCELLATION_REASON_CODES),
+  note: z.string().trim().max(500, 'Note must be 500 characters or fewer').optional(),
+})
+export const cancelBookingSchema = z.object({
+  reason: cancellationReasonSchema.optional(),
+})
+
 export type CreateBookingInput = z.infer<typeof createBookingSchema>
 export type UpdateBookingStatusInput = z.infer<typeof updateBookingStatusSchema>
 export type SubstituteVehicleInput = z.infer<typeof substituteVehicleSchema>
+export type CancelBookingInput = z.infer<typeof cancelBookingSchema>

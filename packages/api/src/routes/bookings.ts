@@ -1,4 +1,5 @@
 import {
+  cancelBookingSchema,
   createBookingSchema,
   substituteVehicleSchema,
   updateBookingStatusSchema,
@@ -228,7 +229,19 @@ export function createBookingRoutes(service: BookingService) {
       const idResult = parseId(c)
       if (!idResult.ok) return idResult.response
 
-      const result = await service.cancel(ctx, idResult.id)
+      // #868 3b: the renter may attach an OPTIONAL cancellation reason. The body
+      // can be absent entirely — the operator cancel client sends none, and a
+      // renter who picks no reason sends `{}` — so allowEmpty treats a missing
+      // body as "no reason"; a present-but-malformed reason is still a 400. The
+      // reason never blocks the cancel itself.
+      const parsed = await parseBody(c, cancelBookingSchema, { allowEmpty: true })
+      if (!parsed.ok) return parsed.response
+
+      const reason = parsed.data.reason
+        ? { code: parsed.data.reason.code, note: parsed.data.reason.note ?? null }
+        : null
+
+      const result = await service.cancel(ctx, idResult.id, reason)
       if (!result.ok) {
         return fail(c, result.error, result.status)
       }

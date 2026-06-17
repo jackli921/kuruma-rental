@@ -10,6 +10,7 @@ import {
   BOOKING_EVENT_TYPES,
   BOOKING_FULFILLMENT_MODES,
   BOOKING_STATUSES,
+  CANCELLATION_REASON_CODES,
 } from '@kuruma/shared/enums'
 import { z } from 'zod'
 
@@ -127,6 +128,13 @@ const bookingCancelledPayloadSchema = z.object({
   type: z.literal('BOOKING_CANCELLED'),
   cancellationFee: z.number().nullable(),
   cancelledAt: z.string(),
+  // #868 3b: the optional renter reason. `.default(null)` is load-bearing —
+  // BOOKING_CANCELLED events stored before this slice have no such key, so the
+  // operator timeline must read them as "no reason" rather than fail to parse.
+  cancellationReason: z
+    .object({ code: z.enum(CANCELLATION_REASON_CODES), note: z.string().nullable() })
+    .nullable()
+    .default(null),
 })
 const statusChangedPayloadSchema = z.object({
   type: z.literal('STATUS_CHANGED'),

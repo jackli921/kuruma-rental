@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest'
-import { createBookingSchema, updateBookingStatusSchema } from '../../src/validators/booking'
+import {
+  cancelBookingSchema,
+  createBookingSchema,
+  updateBookingStatusSchema,
+} from '../../src/validators/booking'
 
 const VALID_UUID = '550e8400-e29b-41d4-a716-446655440000'
 const PICKUP_UUID = '550e8400-e29b-41d4-a716-446655440002'
@@ -148,6 +152,35 @@ describe('updateBookingStatusSchema', () => {
 
   it('rejects empty status', () => {
     expect(updateBookingStatusSchema.safeParse({ status: '' }).success).toBe(false)
+  })
+})
+
+describe('cancelBookingSchema (#868 Slice 3b)', () => {
+  it('accepts an empty body — the reason is always optional', () => {
+    expect(cancelBookingSchema.safeParse({}).success).toBe(true)
+  })
+
+  it('accepts a reason code alone (note omitted)', () => {
+    const result = cancelBookingSchema.safeParse({ reason: { code: 'CHANGE_OF_PLANS' } })
+    expect(result.success).toBe(true)
+    if (result.success) expect(result.data.reason).toEqual({ code: 'CHANGE_OF_PLANS' })
+  })
+
+  it('accepts a reason code with a freeform note, trimmed', () => {
+    const result = cancelBookingSchema.safeParse({
+      reason: { code: 'OTHER', note: '  found a cheaper car  ' },
+    })
+    expect(result.success).toBe(true)
+    if (result.success) expect(result.data.reason?.note).toBe('found a cheaper car')
+  })
+
+  it('rejects a reason code outside the taxonomy', () => {
+    expect(cancelBookingSchema.safeParse({ reason: { code: 'BANANA' } }).success).toBe(false)
+  })
+
+  it('rejects a note longer than 500 characters', () => {
+    const note = 'x'.repeat(501)
+    expect(cancelBookingSchema.safeParse({ reason: { code: 'OTHER', note } }).success).toBe(false)
   })
 })
 
