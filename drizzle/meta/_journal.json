@@ -449,6 +449,13 @@
       "when": 1781652186818,
       "tag": "0063_add_cancellation_fee_settlement",
       "breakpoints": true
+    },
+    {
+      "idx": 64,
+      "version": "7",
+      "when": 1781731271558,
+      "tag": "0064_add_provider_invite_revoked",
+      "breakpoints": true
     }
   ]
 }
