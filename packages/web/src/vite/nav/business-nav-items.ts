@@ -1,3 +1,5 @@
+import { isOperatorSettingsEnabled, isOperatorTeamEnabled } from '@/vite/config/features'
+
 // Single source of truth for the business-view (operator) nav (#603). Both
 // Navbar (which builds the desktop list and passes it to MobileMenu) and
 // MobileMenu's `NavTo` union derive from THIS array, so adding a `/manage/*`
@@ -23,3 +25,16 @@ export const businessNavItems = [
 
 // Derived so the union can never drift from the array above.
 export type BusinessNavTo = (typeof businessNavItems)[number]['to']
+
+// Post-MVP routes the beta demo hides behind a feature flag (billable add-ons).
+// The array above stays the full source of truth so the `BusinessNavTo` union and
+// the nav-count test never drift; only the RENDERED list is filtered. The routes
+// themselves also redirect when their flag is OFF, so a direct URL can't reach them.
+const navItemGates: Partial<Record<BusinessNavTo, () => boolean>> = {
+  '/$locale/manage/team': isOperatorTeamEnabled,
+  '/$locale/manage/settings': isOperatorSettingsEnabled,
+}
+
+export function visibleBusinessNavItems(): readonly (typeof businessNavItems)[number][] {
+  return businessNavItems.filter((item) => navItemGates[item.to]?.() ?? true)
+}

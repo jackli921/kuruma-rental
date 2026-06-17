@@ -1,4 +1,5 @@
 import { PageSkeleton } from '@/vite/PageSkeleton'
+import { isOperatorSettingsEnabled } from '@/vite/config/features'
 import { isOperatorOwnerSession } from '@/vite/guards'
 import { SettingsForm } from '@/vite/operator-settings/SettingsForm'
 import {
@@ -9,7 +10,12 @@ import {
 import { sessionQueryOptions } from '@/vite/session'
 import type { UpdateOperatorInput } from '@kuruma/shared/validators/operator'
 import { useMutation, useQueryClient, useSuspenseQuery } from '@tanstack/react-query'
-import { type ErrorComponentProps, createFileRoute, useRouter } from '@tanstack/react-router'
+import {
+  type ErrorComponentProps,
+  createFileRoute,
+  redirect,
+  useRouter,
+} from '@tanstack/react-router'
 import { useState } from 'react'
 import { useTranslations } from 'use-intl'
 
@@ -20,6 +26,13 @@ import { useTranslations } from 'use-intl'
 // useSuspenseQuery. A bypass role (no operatorId) sees a not-applicable notice —
 // it has no single operator to edit and manages operators via the admin portal.
 export const Route = createFileRoute('/$locale/_business/manage/settings')({
+  // Post-MVP feature (#903), hidden in the beta demo. The nav link is already
+  // filtered out; this blocks a direct URL too, falling back to the bookings page.
+  beforeLoad: ({ params }) => {
+    if (!isOperatorSettingsEnabled()) {
+      throw redirect({ to: '/$locale/manage/bookings', params: { locale: params.locale } })
+    }
+  },
   loader: async ({ context }) => {
     const session = await context.queryClient.ensureQueryData(sessionQueryOptions())
     const operatorId = session?.user.operatorId

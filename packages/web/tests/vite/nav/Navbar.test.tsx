@@ -7,7 +7,7 @@ import { useSession } from '@/vite/session'
 import { render, screen, within } from '@testing-library/react'
 import type { ReactNode } from 'react'
 import { IntlProvider } from 'use-intl'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import en from '../../../messages/en.json'
 
 vi.mock('@/vite/session', () => ({ useSession: vi.fn() }))
@@ -81,6 +81,10 @@ beforeEach(() => {
   document.cookie = 'kuruma-view=; max-age=0; path=/'
 })
 
+afterEach(() => {
+  vi.unstubAllEnvs()
+})
+
 describe('Navbar', () => {
   it('links the logo to the locale home and shows no nav links when signed out', () => {
     renderNavbar(undefined)
@@ -93,6 +97,10 @@ describe('Navbar', () => {
 
   it('shows the dashboard, operator bookings + fleet + classes + insurance links and business markers for a business user', () => {
     mockUseBadge.mockReturnValue({ count: 3 })
+    // Team + Settings are post-MVP add-ons gated behind feature flags; turn them
+    // on so this "full operator nav" assertion sees every route.
+    vi.stubEnv('VITE_FEATURE_OPERATOR_TEAM', 'true')
+    vi.stubEnv('VITE_FEATURE_OPERATOR_SETTINGS', 'true')
     const { container } = renderNavbar(business)
     expect(screen.getByText('Dashboard').closest('a')).toHaveAttribute(
       'data-to',
@@ -131,6 +139,12 @@ describe('Navbar', () => {
       'data-to',
       '/$locale/manage/add-ons',
     )
+    // #904 / #903: shown only because the flags above are on (full build).
+    expect(screen.getByText('Team').closest('a')).toHaveAttribute('data-to', '/$locale/manage/team')
+    expect(screen.getByText('Settings').closest('a')).toHaveAttribute(
+      'data-to',
+      '/$locale/manage/settings',
+    )
     expect(container.querySelector('nav')?.hasAttribute('data-business-nav')).toBe(true)
     const client = screen.getByTestId('navbar-client')
     expect(client).toHaveAttribute('data-view-mode', 'business')
@@ -148,6 +162,22 @@ describe('Navbar', () => {
     expect(badge).toHaveAttribute('aria-label', '3 new bookings')
     // It is not duplicated onto another nav item.
     expect(screen.getAllByRole('status')).toHaveLength(1)
+  })
+
+  it('hides Team + Settings nav in the beta MVP demo (their post-MVP flags are off)', () => {
+    vi.stubEnv('VITE_FEATURE_OPERATOR_TEAM', undefined)
+    vi.stubEnv('VITE_FEATURE_OPERATOR_SETTINGS', undefined)
+    renderNavbar(business)
+    // The MVP operator routes still render…
+    expect(screen.getByText('Dashboard')).toBeInTheDocument()
+    expect(screen.getByText('Bookings')).toBeInTheDocument()
+    // …but the two add-on routes are filtered out of the rendered nav.
+    expect(screen.queryByText('Team')).toBeNull()
+    expect(screen.queryByText('Settings')).toBeNull()
+    expect(screen.getByTestId('mobile-menu')).toHaveAttribute(
+      'data-nav-count',
+      String(businessNavItems.length - 2),
+    )
   })
 
   it('shows Browse, My Bookings, and Documents (no business markers) for a signed-in renter', () => {
