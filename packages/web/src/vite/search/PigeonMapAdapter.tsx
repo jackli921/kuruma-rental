@@ -1,4 +1,5 @@
 import { Marker, Overlay, Map as PigeonMap } from 'pigeon-maps'
+import { useEffect, useState } from 'react'
 import type { MapAdapterProps } from './MapAdapter'
 import { type Pin, focusViewport } from './viewport'
 
@@ -36,13 +37,16 @@ const GSI_ATTRIBUTION = (
 /** Concrete `MapAdapter` (#458). Maps each geocoded result to a pigeon-maps
  *  `<Marker>`; a marker click reports its location id back to the view. The
  *  viewport fits ALL pins so a Kansai-wide result set isn't pinned to one store —
- *  unless a region `anchor` is given (#840), which centers the map on the chosen
- *  area instead. `key` on the map remounts it when the result set OR the anchor
- *  changes so the fit/center recomputes (region filtering keeps the same pins, so
- *  the anchor must be in the key), while leaving the user free to pan/zoom.
- *  Selecting a result is also in the key: each new selection remounts to recenter
- *  on that pin and reopen its popup (costs a tile re-fetch; animated fly-to is a
- *  Slice-1 follow-up, #885). */
+ *  unless a region `anchor` is given (#840), which centers on the chosen area, or a
+ *  result is selected, which flies to its pin (#885).
+ *
+ *  Controlled viewport (#885 slice 2): `center`/`zoom` live in state, synced from
+ *  `onBoundsChanged` so a user pan/zoom sticks. A single precedence effect retargets
+ *  on selection/anchor/pin changes via `focusViewport` (selected pin → region anchor
+ *  → fit-all). There is deliberately NO remount `key`: the old key remounted `<Map>`
+ *  on every selection, re-fetching all tiles. Controlled props animate an in-place
+ *  fly-to instead (pigeon `setCenterZoomTarget`), so per-row interaction never
+ *  thrashes tiles. */
 export function PigeonMapAdapter({
   items,
   selectedId,
@@ -58,7 +62,22 @@ export function PigeonMapAdapter({
     }))
     .filter((p): p is Pin => p.lat !== null && p.lng !== null)
 
-  const viewport = focusViewport(pins, anchor, selectedId)
+  // Controlled viewport: initial fit on mount, then synced from user pan/zoom
+  // (onBoundsChanged) and re-targeted by the precedence effect below.
+  const [view, setView] = useState(() => focusViewport(pins, anchor, selectedId))
+
+  // One precedence function (focusViewport) drives every programmatic recenter, so
+  // two effects can never disagree (selection vs anchor). The signature serializes
+  // exactly the inputs focusViewport reads — selection, anchor, and each pin's
+  // id:lat:lng — so a coord move for a stable location id still recenters (P2), while
+  // a manual pan (which changes none of them) is never clobbered.
+  const targetSignature = `${selectedId ?? ''}|${anchor ? anchor.join(',') : 'fit'}|${pins
+    .map((p) => `${p.id}:${p.lat}:${p.lng}`)
+    .join(',')}`
+  // biome-ignore lint/correctness/useExhaustiveDependencies: targetSignature serializes pins/anchor/selectedId — the real reactive inputs.
+  useEffect(() => {
+    setView(focusViewport(pins, anchor, selectedId))
+  }, [targetSignature])
 
   const selectedPin = selectedId === null ? null : (pins.find((p) => p.id === selectedId) ?? null)
   const selectedItem =
@@ -66,12 +85,12 @@ export function PigeonMapAdapter({
 
   return (
     <PigeonMap
-      key={`${selectedId ?? ''}:${anchor ? anchor.join(',') : 'fit'}:${pins.map((p) => p.id).join(',')}`}
       provider={gsiTileProvider}
       attribution={GSI_ATTRIBUTION}
       attributionPrefix={false}
-      defaultCenter={viewport.center}
-      defaultZoom={viewport.zoom}
+      center={view.center}
+      zoom={view.zoom}
+      onBoundsChanged={({ center, zoom }) => setView({ center, zoom })}
     >
       {pins.map((pin) => (
         <Marker
