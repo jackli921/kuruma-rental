@@ -1,6 +1,9 @@
+import { Button } from '@/components/ui/button'
 import { PageSkeleton } from '@/vite/PageSkeleton'
+import { isOperatorSession } from '@/vite/guards'
 import { BookingsCalendar } from '@/vite/operator-bookings/BookingsCalendar'
 import { CalendarSidebar } from '@/vite/operator-bookings/CalendarSidebar'
+import { ManualBookingDialog } from '@/vite/operator-bookings/ManualBookingDialog'
 import {
   operatorCalendarQueryOptions,
   operatorCalendarVehiclesQueryOptions,
@@ -16,9 +19,11 @@ import {
 } from '@/vite/operator-bookings/calendar-events'
 import { markBookingsSeen } from '@/vite/operator-bookings/new-bookings'
 import { useCalendarFilters } from '@/vite/operator-bookings/useCalendarFilters'
-import { useQueryClient, useSuspenseQuery } from '@tanstack/react-query'
+import { operatorLocationsQueryOptions } from '@/vite/operator-locations/api'
+import { useSession } from '@/vite/session'
+import { useQuery, useQueryClient, useSuspenseQuery } from '@tanstack/react-query'
 import { type ErrorComponentProps, createFileRoute, useRouter } from '@tanstack/react-router'
-import { useCallback, useEffect, useMemo } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useTranslations } from 'use-intl'
 
 interface BookingsCalendarSearch {
@@ -59,13 +64,31 @@ export const Route = createFileRoute('/$locale/_business/manage/bookings/')({
   component: OperatorBookingsRoute,
 })
 
-function OperatorBookingsRoute() {
+export function OperatorBookingsRoute() {
   const t = useTranslations('bookings.operator')
   const { locale } = Route.useParams()
   const { view: viewParam, date } = Route.useSearch()
   const navigate = Route.useNavigate()
 
   const queryClient = useQueryClient()
+  const { data: session } = useSession()
+  const [bookingDialogOpen, setBookingDialogOpen] = useState(false)
+  // The clicked slot's range (null when opened from the header button), threaded to
+  // the dialog so a slot-click prefills its pickup/return times.
+  const [slotRange, setSlotRange] = useState<{ start: Date; end: Date } | null>(null)
+
+  // Operator-only write affordance: a manual booking needs a single target tenant,
+  // which only a tenant-scoped operator session supplies (bypass roles read
+  // cross-tenant and get a view-only calendar). The API re-enforces this (#589 §4.3).
+  const canManualBook = isOperatorSession(session ?? null)
+
+  // The dialog's pickup/return store list — fetched for operators (the only role
+  // that can manual-book), so it's ready the moment they open the dialog and a
+  // read-only viewer never pays for it.
+  const { data: locationRows } = useQuery({
+    ...operatorLocationsQueryOptions(),
+    enabled: canManualBook,
+  })
 
   // #611: opening the orders list is "seeing" the new orders — clear the nav
   // red-dot badge (advance lastSeenAt to now) on every mount of this route.
@@ -81,6 +104,10 @@ function OperatorBookingsRoute() {
 
   const events = useMemo(() => toCalendarEvents(bookings), [bookings])
   const resources = useMemo(() => fleetToResources(vehicles), [vehicles])
+  const manualBookingLocations = useMemo(
+    () => (locationRows ?? []).map((l) => ({ id: l.id, name: l.name })),
+    [locationRows],
+  )
 
   const vehicleIds = useMemo(() => vehicles.map((v) => v.id), [vehicles])
   const filters = useCalendarFilters(vehicleIds)
@@ -108,12 +135,26 @@ function OperatorBookingsRoute() {
     [navigate, locale],
   )
 
+  // Both the header button and a calendar slot-click open the dialog; a slot also
+  // prefills the pickup/return range (the button opens an empty range).
+  const handleOpenManualBooking = useCallback((range?: { start: Date; end: Date }) => {
+    setSlotRange(range ?? null)
+    setBookingDialogOpen(true)
+  }, [])
+
   return (
     <main className="flex-1 px-4 py-10 sm:px-6 lg:px-8">
       <div className="mx-auto max-w-7xl">
-        <header className="mb-8">
-          <h1 className="text-3xl font-bold tracking-tight sm:text-4xl">{t('title')}</h1>
-          <p className="mt-2 text-lg text-muted-foreground">{t('subtitle')}</p>
+        <header className="mb-8 flex items-start justify-between gap-4">
+          <div>
+            <h1 className="text-3xl font-bold tracking-tight sm:text-4xl">{t('title')}</h1>
+            <p className="mt-2 text-lg text-muted-foreground">{t('subtitle')}</p>
+          </div>
+          {canManualBook && (
+            <Button type="button" onClick={() => handleOpenManualBooking()}>
+              {t('newBooking.action')}
+            </Button>
+          )}
         </header>
         <div className="flex gap-6">
           <CalendarSidebar vehicles={vehicles} filters={filters} />
@@ -127,10 +168,19 @@ function OperatorBookingsRoute() {
               onViewChange={handleViewChange}
               onDateChange={handleDateChange}
               onSelectEvent={handleSelectEvent}
+              onSelectSlot={canManualBook ? handleOpenManualBooking : undefined}
             />
           </div>
         </div>
       </div>
+      <ManualBookingDialog
+        open={bookingDialogOpen}
+        onOpenChange={setBookingDialogOpen}
+        vehicles={vehicles}
+        locations={manualBookingLocations}
+        csrfToken={session?.csrfToken ?? ''}
+        initialRange={slotRange ?? undefined}
+      />
     </main>
   )
 }

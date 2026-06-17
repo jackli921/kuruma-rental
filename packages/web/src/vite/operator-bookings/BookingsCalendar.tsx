@@ -8,7 +8,7 @@ import type {
 } from '@/vite/operator-bookings/calendar-events'
 import { endOfWeek, startOfWeek } from 'date-fns'
 import { useCallback, useMemo } from 'react'
-import { Calendar } from 'react-big-calendar'
+import { Calendar, type SlotInfo } from 'react-big-calendar'
 import { useTranslations } from 'use-intl'
 import 'react-big-calendar/lib/css/react-big-calendar.css'
 import './calendar-theme.css'
@@ -29,8 +29,12 @@ interface BookingsCalendarProps {
   readonly onViewChange: (view: CalendarView) => void
   readonly onDateChange: (date: Date) => void
   // Slice D wires this to the existing trip-detail page; Slice B just surfaces the
-  // clicked booking id. (Slot-selection / manual booking is the deferred Slice E.)
+  // clicked booking id.
   readonly onSelectEvent: (bookingId: string) => void
+  // #589 1d: when provided, the calendar becomes selectable and a clicked time slot
+  // surfaces its range so the route can open the manual-booking dialog. Omitted for
+  // read-only viewers (non-operator sessions), keeping the calendar view-only.
+  readonly onSelectSlot?: ((range: { start: Date; end: Date }) => void) | undefined
 }
 
 // Presentational calendar over the operator's bookings. State (view/date) is owned
@@ -45,6 +49,7 @@ export function BookingsCalendar({
   onViewChange,
   onDateChange,
   onSelectEvent,
+  onSelectSlot,
 }: BookingsCalendarProps) {
   const t = useTranslations('business.bookings.calendar')
   const culture = locale === 'zh' ? 'zh-CN' : locale
@@ -89,6 +94,11 @@ export function BookingsCalendar({
     [onSelectEvent],
   )
 
+  const handleSelectSlot = useCallback(
+    (slot: SlotInfo) => onSelectSlot?.({ start: slot.start, end: slot.end }),
+    [onSelectSlot],
+  )
+
   const eventPropGetter = useCallback(
     (event: CalendarEvent) => ({ className: STATUS_CLASS[event.status] ?? '' }),
     [],
@@ -131,6 +141,8 @@ export function BookingsCalendar({
         onView={(v) => onViewChange(v as CalendarView)}
         onNavigate={onDateChange}
         onSelectEvent={handleSelectEvent}
+        selectable={Boolean(onSelectSlot)}
+        onSelectSlot={handleSelectSlot}
         eventPropGetter={eventPropGetter}
         views={VIEWS}
         step={60}

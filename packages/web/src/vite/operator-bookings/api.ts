@@ -5,10 +5,12 @@ import type { BookingStatus } from '@kuruma/shared/enums'
 import { queryOptions } from '@tanstack/react-query'
 import {
   type BookingEventDto,
+  type CustomerSearchResult,
   type OperatorBookingDetailDto,
   type RawOperatorBooking,
   bookingEventSchema,
   calendarVehicleRowSchema,
+  customerSearchResultSchema,
   operatorBookingDetailSchema,
   rawOperatorBookingSchema,
   substitutionCandidateRowSchema,
@@ -18,7 +20,7 @@ import {
 // pinned to the Zod schemas that validate each body at the network seam. The
 // detail + event types are re-exported so consumers import them from here
 // unchanged.
-export type { BookingEventDto, OperatorBookingDetailDto }
+export type { BookingEventDto, CustomerSearchResult, OperatorBookingDetailDto }
 
 // #512: operator booking view. The Vite shell owns these DTOs (it never imports
 // the frozen Next module's copy) so it stays self-contained and process.env-free.
@@ -311,4 +313,89 @@ export function updateBookingStatus(
 // fee in the meta); the projection in `data` is the now-CANCELLED booking.
 export function cancelBooking(id: string, csrfToken: string): Promise<BookingDto> {
   return writeBooking(`/bookings/${encodeURIComponent(id)}/cancel`, 'POST', csrfToken)
+}
+
+// --- Existing-customer search (#589 1d slice 3) ------------------------------
+// The dialog can attach an EXISTING renter instead of creating a walk-in. This
+// reads the one operator-reachable customer route: CustomerService.search scopes
+// an OPERATOR_* caller to renters within its own tenant (prior-booking), so the
+// picker can't enumerate the global user table (#396/#475) — the client passes
+// only `q`, never an operatorId; the session cookie carries the tenant scope.
+export async function searchCustomers(q: string): Promise<CustomerSearchResult[]> {
+  const sp = new URLSearchParams({ q })
+  const res = await fetch(`${getApiBaseUrl()}/customers/search?${sp.toString()}`, {
+    credentials: 'include',
+  })
+  return unwrap(res, customerSearchResultSchema.array())
+}
+
+// The picker drives this with its debounced query. `enabled` mirrors the server's
+// 2-char minimum so an under-length term never fires a guaranteed-400 request.
+const CUSTOMER_SEARCH_MIN_CHARS = 2
+export function customerSearchQueryOptions(q: string) {
+  return queryOptions({
+    queryKey: ['operator-bookings', 'customer-search', q],
+    queryFn: () => searchCustomers(q),
+    enabled: q.trim().length >= CUSTOMER_SEARCH_MIN_CHARS,
+  })
+}
+
+// --- Manual booking creation (#589 1d) --------------------------------------
+// An operator books on behalf of a customer from the calendar. The customer is a
+// discriminated union, never a flag-bag: a brand-new *walk-in* (inline name +
+// phone) or an *existing* renter by id. Modeling it as `{ kind }` makes
+// the impossible "both/neither customer" state unrepresentable and mirrors the
+// server's mutually-exclusive walkInCustomer/renterId refine. NO email is ever
+// sent for a walk-in: email is globally unique, so a create-by-email would leak
+// whether an address exists (#396/#475); the server mints a synthetic placeholder.
+export type ManualBookingCustomer =
+  | { kind: 'walk-in'; name: string; phone: string }
+  | { kind: 'existing'; renterId: string }
+
+export interface CreateManualBookingInput {
+  requestedVehicleId: string
+  // Pickup and dropoff are separate ids (the form sets both from one select today;
+  // one-way rentals are a later track) so the wire contract already carries both.
+  pickupLocationId: string
+  dropoffLocationId: string
+  /** ISO datetime — the form converts its JST datetime-local via parseJstDateTimeLocal. */
+  startAt: string
+  endAt: string
+  customer: ManualBookingCustomer
+  /** Client-minted per attempt so a double-submit/retry replays server-side
+   *  (booking-creation's idempotency guard) instead of creating a duplicate. */
+  idempotencyKey: string
+}
+
+// Instant-book on the operator side. `source=MANUAL` so the booking is attributed
+// correctly — the route honors a manual booker's source but defaults to DIRECT,
+// which would mislabel it. `disclaimerAccepted` is omitted: operators are
+// consent-exempt (the route requires it only for a RENTER self-serve booking).
+// Cookie + CSRF-gated, so the session token rides the write; unwrap throws an
+// ApiError on a domain failure (409 just-booked / 400 bad range / 403 scope) for
+// the dialog to surface.
+export function createManualBooking(
+  input: CreateManualBookingInput,
+  csrfToken: string,
+): Promise<BookingDto> {
+  // The customer source is XOR: an existing renter sends `renterId`, a walk-in
+  // sends inline `walkInCustomer`. Building exactly one block keeps the wire body
+  // mutually exclusive — mirroring the server's createBookingSchema refine, so the
+  // "both/neither" 400 is unreachable from this client by construction.
+  const customerBody =
+    input.customer.kind === 'existing'
+      ? { renterId: input.customer.renterId }
+      : { walkInCustomer: { name: input.customer.name, phone: input.customer.phone } }
+  // Composes the shared writeBooking helper (credentials + X-CSRF-Token + JSON +
+  // unwrap in one auditable place). The body always exists, so JSON is sent.
+  return writeBooking('/bookings', 'POST', csrfToken, {
+    requestedVehicleId: input.requestedVehicleId,
+    pickupLocationId: input.pickupLocationId,
+    dropoffLocationId: input.dropoffLocationId,
+    startAt: input.startAt,
+    endAt: input.endAt,
+    source: 'MANUAL',
+    idempotencyKey: input.idempotencyKey,
+    ...customerBody,
+  })
 }
