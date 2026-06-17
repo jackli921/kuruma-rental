@@ -132,4 +132,29 @@ describe('InMemoryProviderInviteRepository', () => {
       expect(await repo.revoke(created.id, 'op_test')).toBeUndefined()
     })
   })
+
+  // #904 slice 2: at most one PENDING invite per (operatorId, email) — mirrors the
+  // partial unique index. REVOKED/ACCEPTED rows free the slot so a re-invite works.
+  describe('pending-email uniqueness (#904 slice 2)', () => {
+    it('rejects a second PENDING invite for the same operator+email (23505, named constraint)', async () => {
+      await repo.create(inviteInput({ tokenHash: 'h1' }))
+      await expect(repo.create(inviteInput({ tokenHash: 'h2' }))).rejects.toMatchObject({
+        code: PG_ERROR.UNIQUE_VIOLATION,
+        constraint_name: 'provider_invites_pending_email_unique',
+      })
+    })
+
+    it('allows a fresh PENDING invite once the prior one is REVOKED (the slot frees up)', async () => {
+      const first = await repo.create(inviteInput({ tokenHash: 'h1' }))
+      await repo.revoke(first.id, 'op_test')
+      const second = await repo.create(inviteInput({ tokenHash: 'h2' }))
+      expect(second.status).toBe('PENDING')
+    })
+
+    it('allows the same email as a PENDING invite for a different operator (tenant scoped)', async () => {
+      await repo.create(inviteInput({ tokenHash: 'h1', operatorId: 'op_a' }))
+      const other = await repo.create(inviteInput({ tokenHash: 'h2', operatorId: 'op_b' }))
+      expect(other.operatorId).toBe('op_b')
+    })
+  })
 })

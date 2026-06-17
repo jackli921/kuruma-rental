@@ -456,6 +456,13 @@
       "when": 1781731271558,
       "tag": "0064_add_provider_invite_revoked",
       "breakpoints": true
+    },
+    {
+      "idx": 65,
+      "version": "7",
+      "when": 1781737244610,
+      "tag": "0065_add_pending_invite_email_unique",
+      "breakpoints": true
     }
   ]
 }

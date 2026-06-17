@@ -1,6 +1,13 @@
 import type { CreateProviderInviteInput } from '@kuruma/shared/validators/provider-invite'
 import { randomToken } from '../auth/google'
+import { ConflictError } from '../auth/guards'
 import { sha256Hex } from '../auth/token-hash'
+import {
+  PG_ERROR,
+  PROVIDER_INVITE_PENDING_EMAIL_CONSTRAINT,
+  pgConstraintName,
+  pgErrorCode,
+} from '../pg-errors'
 import type { OperatorRepository, ProviderInviteRepository } from '../repositories/types'
 
 // Invites are short-lived: a leaked link is only useful for a week, and the
@@ -75,16 +82,30 @@ export class ProviderInviteService {
 
     const token = randomToken(32)
     const expiresAt = new Date(Date.now() + (this.config.ttlMs ?? INVITE_TTL_MS))
-    await this.repo.create({
-      email: input.email,
-      operatorId: input.operatorId,
-      role: input.role,
-      tokenHash: sha256Hex(token),
-      status: 'PENDING',
-      expiresAt,
-      invitedByUserId,
-      acceptedByUserId: null,
-    })
+    try {
+      await this.repo.create({
+        email: input.email,
+        operatorId: input.operatorId,
+        role: input.role,
+        tokenHash: sha256Hex(token),
+        status: 'PENDING',
+        expiresAt,
+        invitedByUserId,
+        acceptedByUserId: null,
+      })
+    } catch (err) {
+      // The owner re-invited an email that already has a live invite. The partial-
+      // unique index is the race fence; translate its 23505 to a 409 ConflictError
+      // (matched by name so a tokenHash collision still surfaces as the original
+      // unexpected error). A revoke frees the slot, so the message points there.
+      if (
+        pgErrorCode(err) === PG_ERROR.UNIQUE_VIOLATION &&
+        pgConstraintName(err) === PROVIDER_INVITE_PENDING_EMAIL_CONSTRAINT
+      ) {
+        throw new ConflictError('an invite for this email is already pending; revoke it first')
+      }
+      throw err
+    }
     this.recordAudit({
       type: 'PROVIDER_INVITE_CREATED',
       invitedByUserId,

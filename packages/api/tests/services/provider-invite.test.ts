@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto'
 import { beforeEach, describe, expect, it } from 'vitest'
+import { ConflictError } from '../../src/auth/guards'
 import { InMemoryOperatorRepository } from '../../src/repositories/in-memory/operator'
 import { InMemoryProviderInviteRepository } from '../../src/repositories/in-memory/provider-invite'
 import {
@@ -91,6 +92,27 @@ describe('ProviderInviteService.createInvite', () => {
       },
     ])
     expect(JSON.stringify(audits)).not.toContain(result.token)
+  })
+
+  // #904 slice 2: the partial-unique index (mirrored in-memory) makes a second
+  // PENDING invite for the same operator+email a 23505; createInvite translates it
+  // to a ConflictError the route maps to 409 — not a raw 500.
+  it('throws ConflictError when a PENDING invite for the same operator+email exists', async () => {
+    await service.createInvite(INPUT, INVITED_BY)
+    await expect(service.createInvite(INPUT, INVITED_BY)).rejects.toThrow(ConflictError)
+    // The failed mint adds no second row and emits no audit for the rejected attempt.
+    expect(await repo.listByOperator('op_1')).toHaveLength(1)
+    expect(audits).toHaveLength(1)
+  })
+
+  it('lets the same email be re-invited once the prior invite is revoked', async () => {
+    const first = await service.createInvite(INPUT, INVITED_BY)
+    const stored = await repo.findByTokenHash(sha256Hex(first.token))
+    await repo.revoke(stored?.id ?? '', 'op_1')
+
+    const second = await service.createInvite(INPUT, INVITED_BY)
+    expect(second.token).not.toBe(first.token)
+    expect(await repo.listByOperator('op_1')).toHaveLength(1)
   })
 })
 

@@ -87,6 +87,37 @@ describe('DrizzleProviderInviteRepository (postgres)', () => {
   it('findByTokenHash returns undefined for an unknown hash', async () => {
     expect(await invites.findByTokenHash('no-such-hash')).toBeUndefined()
   })
+
+  // #904 slice 2: the partial-unique index is the real race fence — an in-memory
+  // map only mimics it. A second PENDING invite for the same (operatorId, email)
+  // aborts; revoking the first frees the slot so a re-invite then succeeds.
+  it('partial-unique pending-email fence: a duplicate PENDING invite aborts, a revoke frees the slot', async () => {
+    const email = `dup-${crypto.randomUUID()}@example.com`
+    const mk = () => ({
+      email,
+      operatorId: BEST_CAR_RENTAL_OPERATOR_ID,
+      role: 'OPERATOR_STAFF' as const,
+      tokenHash: `hash-${crypto.randomUUID()}`,
+      status: 'PENDING' as const,
+      expiresAt: new Date(Date.now() + 86_400_000),
+      invitedByUserId: userId,
+      acceptedByUserId: null,
+    })
+    const first = await invites.create(mk())
+
+    let thrown: unknown
+    try {
+      await invites.create(mk())
+    } catch (err) {
+      thrown = err
+    }
+    expect(pgErrorCode(thrown)).toBe(PG_ERROR.UNIQUE_VIOLATION)
+    expect(pgConstraintName(thrown)).toBe('provider_invites_pending_email_unique')
+
+    await invites.revoke(first.id, BEST_CAR_RENTAL_OPERATOR_ID)
+    const reinvite = await invites.create(mk())
+    expect(reinvite.status).toBe('PENDING')
+  })
 })
 
 describe('DrizzleOperatorMembershipRepository (postgres)', () => {
