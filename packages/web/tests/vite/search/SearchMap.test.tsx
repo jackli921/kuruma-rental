@@ -7,13 +7,16 @@ import { describe, expect, it, vi } from 'vitest'
 import en from '../../../messages/en.json'
 
 // The host injects the real PigeonMapAdapter → mock pigeon-maps so no tiles load.
+// The adapter drives the viewport with controlled `center`/`zoom` (#885 slice 2),
+// and positions price pills + the selected popup in <Overlay>s.
 vi.mock('pigeon-maps', () => ({
-  Map: ({ children, defaultCenter }: { children: ReactNode; defaultCenter?: [number, number] }) => (
-    <div data-testid="pigeon-map" data-center={defaultCenter ? defaultCenter.join(',') : ''}>
+  Map: ({ children, center }: { children: ReactNode; center?: [number, number] }) => (
+    <div data-testid="pigeon-map" data-center={center ? center.join(',') : ''}>
       {children}
     </div>
   ),
   Marker: () => <button type="button" data-testid="marker" />,
+  Overlay: ({ children }: { children: ReactNode }) => <div data-testid="overlay">{children}</div>,
 }))
 
 // Rows carry a detail-CTA Link (#885 1b); stub it so the host renders router-free.
