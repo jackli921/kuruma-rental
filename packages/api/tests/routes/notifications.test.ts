@@ -4,6 +4,7 @@ import { setupGlobalHandlers } from '../../src/error-handlers'
 import type { UserRole } from '../../src/middleware/auth'
 import { InMemoryNotificationLogRepository } from '../../src/repositories/in-memory/notification-log'
 import { InMemoryOperatorRepository } from '../../src/repositories/in-memory/operator'
+import { InMemoryOperatorMembershipRepository } from '../../src/repositories/in-memory/operator-membership'
 import { InMemoryUserRepository } from '../../src/repositories/in-memory/user'
 import type { BookingRepository } from '../../src/repositories/types'
 import { createNotificationRoutes } from '../../src/routes/notifications'
@@ -129,7 +130,7 @@ async function setup() {
   } as unknown as ConstructorParameters<typeof NotificationDispatcher>[2]
   const fakeLocationRepo = {
     findById: async (_c: unknown, id: string) => ({ id, name: id }),
-  } as unknown as ConstructorParameters<typeof NotificationDispatcher>[4]
+  } as unknown as ConstructorParameters<typeof NotificationDispatcher>[5]
   const sender: EmailSender = { send: vi.fn(async () => ({ providerMessageId: 'msg-1' })) }
 
   const dispatcher = new NotificationDispatcher(
@@ -137,6 +138,36 @@ async function setup() {
     operatorRepo,
     fakeVehicleRepo,
     userRepo,
+    // #878: the operator alert resolves recipients from the membership ledger —
+    // seed each operator's owner as an ACTIVE member so the seeded alert rows land.
+    new InMemoryOperatorMembershipRepository(
+      new Map([
+        [
+          'mem-a',
+          {
+            id: 'mem-a',
+            userId: 'owner-a',
+            operatorId: OP_A,
+            role: 'OPERATOR_OWNER' as const,
+            status: 'ACTIVE' as const,
+            createdAt: NOW,
+            updatedAt: NOW,
+          },
+        ],
+        [
+          'mem-b',
+          {
+            id: 'mem-b',
+            userId: 'owner-b',
+            operatorId: OP_B,
+            role: 'OPERATOR_OWNER' as const,
+            status: 'ACTIVE' as const,
+            createdAt: NOW,
+            updatedAt: NOW,
+          },
+        ],
+      ]),
+    ),
     fakeLocationRepo,
     sender,
     { emailFrom: 'noreply@kuruma.jp' },

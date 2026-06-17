@@ -139,7 +139,9 @@ export class DrizzleBookingRepository implements BookingRepository {
 
   async create(
     ctx: CallerContext,
-    data: Omit<Booking, 'id' | 'createdAt' | 'updatedAt'>,
+    // cancellationFeeSettlement omitted: the DB column default ('ADVISORY', #868
+    // 3a) fills it on insert; .returning() carries it back through toBooking.
+    data: Omit<Booking, 'id' | 'createdAt' | 'updatedAt' | 'cancellationFeeSettlement'>,
   ): Promise<Booking> {
     const scope = bookingReadScope(ctx)
     if (scope.kind === 'none') throw new ForbiddenError('operator scope required')

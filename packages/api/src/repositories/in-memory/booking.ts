@@ -150,7 +150,7 @@ export class InMemoryBookingRepository implements BookingRepository {
 
   async create(
     ctx: CallerContext,
-    data: Omit<Booking, 'id' | 'createdAt' | 'updatedAt'>,
+    data: Omit<Booking, 'id' | 'createdAt' | 'updatedAt' | 'cancellationFeeSettlement'>,
   ): Promise<Booking> {
     const scope = bookingReadScope(ctx)
     if (scope.kind === 'none') throw new ForbiddenError('operator scope required')
@@ -187,7 +187,15 @@ export class InMemoryBookingRepository implements BookingRepository {
     }
 
     const now = new Date()
-    const booking: Booking = { ...data, id: crypto.randomUUID(), createdAt: now, updatedAt: now }
+    // Mirror the DB column default (#868 3a): a fresh booking carries no fee yet,
+    // so its settlement starts ADVISORY. cancel() leaves this untouched (#851 flips it).
+    const booking: Booking = {
+      ...data,
+      cancellationFeeSettlement: 'ADVISORY',
+      id: crypto.randomUUID(),
+      createdAt: now,
+      updatedAt: now,
+    }
     this.store.set(booking.id, booking)
     return booking
   }

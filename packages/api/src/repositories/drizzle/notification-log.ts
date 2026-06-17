@@ -40,7 +40,7 @@ export class DrizzleNotificationLogRepository implements NotificationLogReposito
   constructor(private readonly db: Db) {}
 
   async upsertQueued(data: NotificationLogUpsert): Promise<NotificationLog> {
-    const [inserted] = await this.db
+    const [upserted] = await this.db
       .insert(notificationLog)
       .values({
         bookingId: data.bookingId,
@@ -50,12 +50,21 @@ export class DrizzleNotificationLogRepository implements NotificationLogReposito
         locale: data.locale,
         idempotencyKey: data.idempotencyKey,
       })
-      .onConflictDoNothing({ target: notificationLog.idempotencyKey })
+      .onConflictDoUpdate({
+        target: notificationLog.idempotencyKey,
+        // The recipient set is recomputed at each send (#878 member fan-out), so a
+        // row that has NOT yet sent refreshes its audit recipient/locale to match
+        // the address the resend will use. `setWhere` confines this to re-sendable
+        // rows: a terminal (SENT/DEAD/NO_RECIPIENT) or in-flight (SENDING) row keeps
+        // the address it was actually sent to, and the send LIFECYCLE is never reset.
+        set: { recipient: data.recipient, locale: data.locale },
+        setWhere: inArray(notificationLog.status, ['QUEUED', 'FAILED']),
+      })
       .returning()
-    if (inserted) return toNotificationLog(inserted)
+    if (upserted) return toNotificationLog(upserted)
 
-    // Conflict: a row already exists for this (booking, kind). Return it
-    // UNCHANGED — a post-commit replay must never reset the send lifecycle.
+    // `setWhere` skipped the update (the existing row is terminal or in-flight), so
+    // RETURNING yielded nothing — read the untouched row back for the caller.
     const [existing] = await this.db
       .select()
       .from(notificationLog)

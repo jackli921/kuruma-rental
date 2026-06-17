@@ -16,6 +16,7 @@ import {
   DrizzleAddOnRepository,
   DrizzleBookingRepository,
   DrizzleInsuranceOptionRepository,
+  DrizzleUserRepository,
   DrizzleVehicleClassRepository,
   DrizzleVehicleRepository,
   createDrizzleTransaction,
@@ -372,5 +373,87 @@ describe('cancel persists the tiered cancellationFee (real pg)', () => {
     expect(fromDb?.cancellationFee).toBe(res.cancellation.feeAmount) // persisted == returned
     expect(fromDb?.status).toBe('CANCELLED')
     expect(fromDb?.cancelledAt).toBeInstanceOf(Date)
+  })
+})
+
+// ── Invariant 4: a walk-in renter is atomic with the booking (#875) ─────────
+// The walk-in customer (#589 1c) is created INSIDE the booking tx, so a failed
+// booking (here: an exclusion-constraint 409 on a double-booked vehicle) rolls
+// the fresh renter back with it — no orphan customer reachable via the operator
+// customer-search. Pre-#875 the renter was created before the tx and leaked on
+// every failed attempt. Needs a userRepo-wired service to exercise the walk-in.
+describe('walk-in renter rolls back when the booking fails (real pg, #875)', () => {
+  const walkInService = new BookingService(
+    bookingRepo,
+    runInTransaction,
+    vehicleRepo,
+    new DrizzleUserRepository(db),
+    vehicleClassRepo,
+  )
+
+  let classId: string
+  let locationId: string
+  let renterId: string
+  let vehicleId: string
+  let seededBookingId: string
+  const WALK_IN_PHONE = `+81-90-875-${Date.now().toString().slice(-7)}`
+
+  const startAt = new Date('2027-01-05T09:00:00Z')
+  const endAt = new Date('2027-01-06T09:00:00Z')
+
+  beforeAll(async () => {
+    const klass = await seedVehicleClass('walkin')
+    classId = klass.id
+    const location = await seedLocation('walkin')
+    locationId = location.id
+    renterId = await seedRenter('walkin')
+    vehicleId = await seedVehicle(classId, locationId, 'Walk-in Car', 6000)
+    // Occupy the vehicle's window so a second booking on the same car + window
+    // trips the exclusion constraint -> 409 (the failure that must roll back).
+    const seeded = await bookingRepo.create(
+      SYSTEM_CONTEXT,
+      bookingInput({
+        operatorId: BEST_CAR_RENTAL_OPERATOR_ID,
+        renterId,
+        classId,
+        requestedVehicleId: vehicleId,
+        assignedVehicleId: vehicleId,
+        pickupLocationId: locationId,
+        dropoffLocationId: locationId,
+        startAt,
+        endAt,
+        status: 'CONFIRMED',
+      }),
+    )
+    seededBookingId = seeded.id
+  })
+
+  afterAll(async () => {
+    await cleanupBookingsWithEvents([seededBookingId])
+    await cleanupVehicles([vehicleId])
+    await cleanupVehicleClasses([classId])
+    await cleanupLocations([locationId])
+    // Sweep any leaked walk-in renter too, so a pre-fix run cleans up after itself.
+    await db.delete(users).where(eq(users.phone, WALK_IN_PHONE))
+    await cleanupUsers([renterId])
+  })
+
+  it('does not persist the fresh renter when the booking 409s', async () => {
+    const res = await walkInService.create(operatorCtx(), {
+      requestedVehicleId: vehicleId,
+      pickupLocationId: locationId,
+      dropoffLocationId: locationId,
+      addOnIds: [],
+      renterId: '', // ignored for a walk-in
+      walkInCustomer: { name: 'Orphan Probe', phone: WALK_IN_PHONE },
+      startAt,
+      endAt,
+      source: 'MANUAL',
+    })
+    expect(res).toMatchObject({ ok: false, status: 409 })
+
+    // The fresh walk-in renter must NOT survive — rolled back with the booking.
+    const leaked = await db.select().from(users).where(eq(users.phone, WALK_IN_PHONE))
+    expect(leaked).toHaveLength(0)
   })
 })
