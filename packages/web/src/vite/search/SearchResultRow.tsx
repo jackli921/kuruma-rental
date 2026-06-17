@@ -3,7 +3,7 @@ import { cn } from '@/lib/utils'
 import { carryForwardFilters } from '@/vite/storefronts/params'
 import type { SearchResultItem, SpecificSearchResult } from '@kuruma/shared/types/search-result'
 import { Link } from '@tanstack/react-router'
-import { Car, MapPin, Settings2, Users } from 'lucide-react'
+import { Car, MapPin, Navigation, Settings2, Users } from 'lucide-react'
 import { useTranslations } from 'use-intl'
 import { resultPriceLabel } from './result'
 
@@ -16,6 +16,8 @@ interface SearchResultRowProps {
   readonly classFilter?: string | string[] | undefined
   readonly pickupLocationId?: string | undefined
   readonly region?: string | undefined
+  /** One-line "{area}, {prefecture} · {km} km away" geo context (#885 slice 3a). */
+  readonly geoLabel?: string | null
 }
 
 /**
@@ -43,6 +45,7 @@ function SpecificRow({
   classFilter,
   pickupLocationId,
   region,
+  geoLabel,
 }: { readonly item: SpecificSearchResult } & Omit<SearchResultRowProps, 'item'>) {
   const t = useTranslations('search')
   const photo = item.photos[0]
@@ -84,6 +87,13 @@ function SpecificRow({
           <span aria-hidden="true">·</span>
           <span>{item.location.name}</span>
         </p>
+
+        {geoLabel && (
+          <p className="flex items-center gap-1.5 text-sm text-muted-foreground">
+            <Navigation className="size-4 shrink-0" aria-hidden />
+            <span>{geoLabel}</span>
+          </p>
+        )}
 
         <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-muted-foreground">
           <span className="flex items-center gap-1.5">

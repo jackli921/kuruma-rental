@@ -74,6 +74,7 @@ function renderRow(
     classFilter?: string | string[] | undefined
     pickupLocationId?: string | undefined
     region?: string | undefined
+    geoLabel?: string | null
   } = {},
 ) {
   return render(
@@ -86,6 +87,7 @@ function renderRow(
         classFilter={ctx.classFilter}
         pickupLocationId={ctx.pickupLocationId}
         region={ctx.region}
+        geoLabel={ctx.geoLabel}
       />
     </IntlProvider>,
   )
@@ -144,5 +146,15 @@ describe('SearchResultRow', () => {
       screen.getByRole('link', { name: 'View cars' }).getAttribute('data-search') ?? '{}',
     )
     expect(search).toMatchObject({ class: 'compact', region: 'namba', pickupLocationId: 'loc_x' })
+  })
+
+  it('renders the geo-context line when a label is provided', () => {
+    renderRow(makeSpecific(), { geoLabel: 'Umeda, Osaka · 3.5 km away' })
+    expect(screen.getByText('Umeda, Osaka · 3.5 km away')).toBeInTheDocument()
+  })
+
+  it('omits the geo-context line when no label is provided', () => {
+    renderRow(makeSpecific(), { geoLabel: null })
+    expect(screen.queryByText(/km away/)).toBeNull()
   })
 })
