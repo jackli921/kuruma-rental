@@ -5,6 +5,7 @@ import { cn } from '@/lib/utils'
 import { CancelBookingDialog } from '@/vite/bookings/CancelBookingDialog'
 import { PreAuthHandoffCard } from '@/vite/bookings/PreAuthHandoffCard'
 import type { BookingDto } from '@/vite/bookings/api'
+import { isCancellationEnabled } from '@/vite/config/features'
 import type { VehicleClassData } from '@/vite/vehicles/classes'
 import { Link } from '@tanstack/react-router'
 import { CheckCircle } from 'lucide-react'
@@ -125,7 +126,7 @@ export function BookingConfirmationView({
       {/* #856: self-cancel is offered only for a CONFIRMED booking (an ACTIVE/
           COMPLETED/CANCELLED one is past the renter's reach) and only when a CSRF
           token is present to authorize the write. */}
-      {booking.status === 'CONFIRMED' && csrfToken && (
+      {isCancellationEnabled() && booking.status === 'CONFIRMED' && csrfToken && (
         <div className="mt-8 flex justify-center border-t border-border pt-6">
           <CancelBookingDialog
             bookingId={booking.id}
