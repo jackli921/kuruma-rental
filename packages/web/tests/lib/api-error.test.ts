@@ -34,6 +34,31 @@ describe('unwrap', () => {
     const res = new Response('<html>502</html>', { status: 502 })
     await expect(unwrap(res)).rejects.toMatchObject({ status: 502 })
   })
+
+  it('carries the failure body `code` so callers can discriminate failures', async () => {
+    // The document-gate 403 and an operator-scope 403 share a status; only the
+    // machine-readable `code` distinguishes "upload documents" from a plain deny.
+    const res = jsonResponse(
+      {
+        success: false,
+        error: 'An approved International Driving Permit is required to book.',
+        code: 'DOCUMENT_VERIFICATION_REQUIRED',
+      },
+      403,
+    )
+    const err = (await unwrap(res).catch((e) => e)) as ApiError
+    expect(err).toBeInstanceOf(ApiError)
+    expect(err.status).toBe(403)
+    expect(err.code).toBe('DOCUMENT_VERIFICATION_REQUIRED')
+  })
+
+  it('leaves `code` undefined when the failure body carries none', async () => {
+    const err = (await unwrap(jsonResponse({ success: false, error: 'nope' }, 403)).catch(
+      (e) => e,
+    )) as ApiError
+    expect(err).toBeInstanceOf(ApiError)
+    expect(err.code).toBeUndefined()
+  })
 })
 
 describe('unwrap with a Zod schema', () => {
