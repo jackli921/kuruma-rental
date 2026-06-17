@@ -37,9 +37,10 @@ vi.mock('@tanstack/react-router', async () => ({
   ),
 }))
 
-// Fake adapter standing in for any map library: one button per plotted item,
-// click → onSelect(locationId). Asserts the MapAdapterProps seam — no real tiles.
-const FakeMapAdapter: MapAdapter = ({ items, selectedId, onSelect, anchor, renderSelected }) => {
+// Fake adapter standing in for any map library: one `pin-<id>` slot per plotted
+// item, filled by the view's `renderPin` (the price pill). Asserts the
+// MapAdapterProps seam — no real tiles.
+const FakeMapAdapter: MapAdapter = ({ items, selectedId, anchor, renderSelected, renderPin }) => {
   const selected = items.find((i) => i.location.locationId === selectedId) ?? null
   return (
     <div
@@ -48,14 +49,9 @@ const FakeMapAdapter: MapAdapter = ({ items, selectedId, onSelect, anchor, rende
       data-anchor={anchor?.join(',') ?? ''}
     >
       {items.map((item) => (
-        <button
-          key={item.location.locationId}
-          type="button"
-          data-testid={`marker-${item.location.locationId}`}
-          onClick={() => onSelect(item.location.locationId)}
-        >
-          marker
-        </button>
+        <div key={item.location.locationId} data-testid={`pin-${item.location.locationId}`}>
+          {renderPin?.(item, { selected: item.location.locationId === selectedId })}
+        </div>
       ))}
       {selected && renderSelected && <div data-testid="map-popup">{renderSelected(selected)}</div>}
     </div>
@@ -120,18 +116,18 @@ describe('SearchMapList', () => {
     ])
 
     expect(screen.getAllByRole('listitem')).toHaveLength(2)
-    expect(screen.getByTestId('marker-loc_namba')).toBeInTheDocument()
-    expect(screen.queryByTestId('marker-loc_umeda')).toBeNull()
+    expect(screen.getByTestId('pin-loc_namba')).toBeInTheDocument()
+    expect(screen.queryByTestId('pin-loc_umeda')).toBeNull()
   })
 
-  it('dedups markers by location (two cars at one store → one marker)', () => {
+  it('dedups markers by location (two cars at one store → one pin)', () => {
     renderMapList([
       carAt('v1', 'Toyota Yaris', 'loc_namba', GEOCODED),
       carAt('v2', 'Honda Fit', 'loc_namba', GEOCODED),
     ])
 
     expect(screen.getAllByRole('listitem')).toHaveLength(2)
-    expect(screen.getByTestId('fake-map').querySelectorAll('button')).toHaveLength(1)
+    expect(screen.getByTestId('fake-map').querySelectorAll('[data-testid^="pin-"]')).toHaveLength(1)
   })
 
   it('highlights the matching rows when a marker is clicked and feeds selectedId back to the adapter', () => {
@@ -140,7 +136,7 @@ describe('SearchMapList', () => {
       carAt('v2', 'Honda Fit', 'loc_umeda', NO_COORDS),
     ])
 
-    fireEvent.click(screen.getByTestId('marker-loc_namba'))
+    fireEvent.click(within(screen.getByTestId('pin-loc_namba')).getByRole('button'))
 
     const rows = screen.getAllByRole('listitem')
     const nambaRow = rows.find((o) => o.textContent?.includes('Toyota Yaris'))
@@ -255,6 +251,52 @@ describe('SearchMapList', () => {
     expect(popup).toHaveTextContent('Toyota Yaris')
     expect(popup).toHaveTextContent('Best Car Rental')
     expect(popup).toHaveTextContent(/8,000/)
+  })
+
+  it('plots a price-pill pin showing the bare price for a single-car location', () => {
+    renderMapList([carAt('v1', 'Toyota Yaris', 'loc_namba', GEOCODED)])
+    const pin = within(screen.getByTestId('pin-loc_namba')).getByRole('button')
+    expect(pin).toHaveTextContent('¥8,000')
+  })
+
+  it('labels a multi-car pin "From ¥{min}" using the cheapest car in the group', () => {
+    renderMapList([
+      { ...carAt('v1', 'Toyota Yaris', 'loc_namba', GEOCODED), dailyRateJpy: 8000 },
+      { ...carAt('v2', 'Honda Fit', 'loc_namba', GEOCODED), dailyRateJpy: 6000 },
+    ])
+    const pin = within(screen.getByTestId('pin-loc_namba')).getByRole('button')
+    expect(pin).toHaveTextContent('From ¥6,000')
+  })
+
+  it('selects a location when its price pin is clicked (pin → row sync)', () => {
+    renderMapList([
+      carAt('v1', 'Toyota Yaris', 'loc_namba', GEOCODED),
+      carAt('v2', 'Honda Fit', 'loc_umeda', NO_COORDS),
+    ])
+
+    fireEvent.click(within(screen.getByTestId('pin-loc_namba')).getByRole('button'))
+
+    const nambaRow = screen
+      .getAllByRole('listitem')
+      .find((o) => o.textContent?.includes('Toyota Yaris'))
+    expect(nambaRow).toHaveAttribute('aria-current', 'true')
+    expect(screen.getByTestId('fake-map')).toHaveAttribute('data-selected', 'loc_namba')
+  })
+
+  it('gives each price pin an accessible name of store + price so identical prices stay distinguishable (P2)', () => {
+    renderMapList([carAt('v1', 'Toyota Yaris', 'loc_namba', GEOCODED)])
+    const pin = within(screen.getByTestId('pin-loc_namba')).getByRole('button')
+    expect(pin).toHaveAccessibleName('Select Best Car Rental · Namba, ¥8,000')
+  })
+
+  it('marks the selected pin as current so it can invert its colors', () => {
+    renderMapList([carAt('v1', 'Toyota Yaris', 'loc_namba', GEOCODED)])
+    const pin = () => within(screen.getByTestId('pin-loc_namba')).getByRole('button')
+    expect(pin()).not.toHaveAttribute('aria-current')
+
+    fireEvent.click(pin())
+
+    expect(pin()).toHaveAttribute('aria-current', 'true')
   })
 
   it('threads the search context into each row CTA so the date range survives the drill-down', () => {
