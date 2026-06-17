@@ -1,0 +1,172 @@
+import { Hono } from 'hono'
+import { beforeEach, describe, expect, it } from 'vitest'
+import { setupGlobalHandlers } from '../../src/error-handlers'
+import type { UserRole } from '../../src/middleware/auth'
+import { InMemoryOperatorRepository } from '../../src/repositories/in-memory/operator'
+import { InMemoryOperatorMembershipRepository } from '../../src/repositories/in-memory/operator-membership'
+import { InMemoryProviderInviteRepository } from '../../src/repositories/in-memory/provider-invite'
+import { InMemoryUserRepository } from '../../src/repositories/in-memory/user'
+import { createOperatorTeamRoutes } from '../../src/routes/operator-team'
+import { OperatorTeamService } from '../../src/services/operator-team'
+import { ProviderInviteService } from '../../src/services/provider-invite'
+import type { User } from '../../src/stores'
+import { testAuthMiddleware } from '../helpers/auth'
+
+const FUTURE = new Date('2099-01-01T00:00:00Z')
+
+let inviteRepo: InMemoryProviderInviteRepository
+let membershipRepo: InMemoryOperatorMembershipRepository
+let userRepo: InMemoryUserRepository
+
+beforeEach(async () => {
+  inviteRepo = new InMemoryProviderInviteRepository()
+  membershipRepo = new InMemoryOperatorMembershipRepository()
+  userRepo = new InMemoryUserRepository(
+    new Map<string, User>([
+      ['u_owner', user('u_owner', 'Olive Owner', 'owner@op1.com')],
+      ['u_b', user('u_b', 'Bob B', 'bob@op2.com')],
+    ]),
+  )
+})
+
+function user(id: string, name: string, email: string): User {
+  return { id, name, email, phone: null, language: 'en', country: null, role: 'OPERATOR_OWNER' }
+}
+
+function mountFor(role: UserRole, operatorId?: string) {
+  const operatorRepo = new InMemoryOperatorRepository(
+    new Map([
+      [
+        'op_1',
+        {
+          id: 'op_1',
+          slug: 'one',
+          name: 'Op One',
+          preAuthHandoffUrl: null,
+          createdAt: FUTURE,
+          updatedAt: FUTURE,
+        },
+      ],
+      [
+        'op_2',
+        {
+          id: 'op_2',
+          slug: 'two',
+          name: 'Op Two',
+          preAuthHandoffUrl: null,
+          createdAt: FUTURE,
+          updatedAt: FUTURE,
+        },
+      ],
+    ]),
+  )
+  const inviteService = new ProviderInviteService(
+    inviteRepo,
+    operatorRepo,
+    { webBaseUrl: 'https://app.example.com' },
+    () => {},
+  )
+  const service = new OperatorTeamService(inviteRepo, membershipRepo, userRepo, inviteService)
+  const app = new Hono()
+  setupGlobalHandlers(app)
+  app.use('*', testAuthMiddleware(`${role}-user`, role, operatorId))
+  app.route('/', createOperatorTeamRoutes(service))
+  return app
+}
+
+describe('POST /operators/me/invites', () => {
+  it('mints an OPERATOR_STAFF invite for the caller operator (201) and returns the share URL', async () => {
+    const res = await mountFor('OPERATOR_OWNER', 'op_1').request('/operators/me/invites', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ email: 'New.Staff@op1.com' }),
+    })
+    expect(res.status).toBe(201)
+    const { data } = await res.json()
+    expect(data.inviteUrl).toContain('/provider/invite/')
+    expect(typeof data.expiresAt).toBe('string')
+
+    const stored = await inviteRepo.listByOperator('op_1')
+    expect(stored).toHaveLength(1)
+    expect(stored[0]?.role).toBe('OPERATOR_STAFF')
+    expect(stored[0]?.email).toBe('new.staff@op1.com')
+  })
+
+  it('forbids an OPERATOR_STAFF caller (403)', async () => {
+    const res = await mountFor('OPERATOR_STAFF', 'op_1').request('/operators/me/invites', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ email: 'x@op1.com' }),
+    })
+    expect(res.status).toBe(403)
+    expect(await inviteRepo.listByOperator('op_1')).toHaveLength(0)
+  })
+
+  it('rejects a malformed email (400)', async () => {
+    const res = await mountFor('OPERATOR_OWNER', 'op_1').request('/operators/me/invites', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ email: 'not-an-email' }),
+    })
+    expect(res.status).toBe(400)
+  })
+})
+
+describe('GET /operators/me/invites', () => {
+  it('returns only the caller operator pending invites, projected without the token', async () => {
+    await inviteRepo.create({
+      email: 'mine@op1.com',
+      operatorId: 'op_1',
+      role: 'OPERATOR_STAFF',
+      tokenHash: 'h1',
+      status: 'PENDING',
+      expiresAt: FUTURE,
+      invitedByUserId: 'u_owner',
+      acceptedByUserId: null,
+    })
+    await inviteRepo.create({
+      email: 'theirs@op2.com',
+      operatorId: 'op_2',
+      role: 'OPERATOR_STAFF',
+      tokenHash: 'h2',
+      status: 'PENDING',
+      expiresAt: FUTURE,
+      invitedByUserId: 'u_b',
+      acceptedByUserId: null,
+    })
+    const res = await mountFor('OPERATOR_OWNER', 'op_1').request('/operators/me/invites')
+    expect(res.status).toBe(200)
+    const { data } = await res.json()
+    expect(data).toHaveLength(1)
+    expect(data[0].email).toBe('mine@op1.com')
+    expect(data[0]).not.toHaveProperty('tokenHash')
+    expect(data[0]).not.toHaveProperty('invitedByUserId')
+  })
+})
+
+describe('GET /operators/me/members', () => {
+  it('returns the caller operator ACTIVE members joined to user name + email', async () => {
+    await membershipRepo.create({
+      userId: 'u_owner',
+      operatorId: 'op_1',
+      role: 'OPERATOR_OWNER',
+      status: 'ACTIVE',
+    })
+    await membershipRepo.create({
+      userId: 'u_b',
+      operatorId: 'op_2',
+      role: 'OPERATOR_OWNER',
+      status: 'ACTIVE',
+    })
+    const res = await mountFor('OPERATOR_STAFF', 'op_1').request('/operators/me/members')
+    expect(res.status).toBe(200)
+    const { data } = await res.json()
+    expect(data).toHaveLength(1)
+    expect(data[0]).toMatchObject({
+      userId: 'u_owner',
+      name: 'Olive Owner',
+      email: 'owner@op1.com',
+      role: 'OPERATOR_OWNER',
+    })
+  })
+})

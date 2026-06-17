@@ -27,6 +27,7 @@ import { createLocationRoutes } from './routes/locations'
 import { createMaintenanceLogRoutes } from './routes/maintenance-logs'
 import { createMessageRoutes } from './routes/messages'
 import { createNotificationRoutes } from './routes/notifications'
+import { createOperatorTeamRoutes } from './routes/operator-team'
 import { createOperatorRoutes } from './routes/operators'
 import { createOverviewRoutes } from './routes/overview'
 import { createPaymentAnomalyRoutes } from './routes/payment-anomalies'
@@ -68,6 +69,7 @@ import { NotificationService } from './services/notification'
 import { NotificationDispatcher } from './services/notification-dispatcher'
 import { OperatorService } from './services/operator'
 import { createOperatorGrantService } from './services/operator-grant'
+import { OperatorTeamService } from './services/operator-team'
 import { OverviewService } from './services/overview'
 import { PaymentAnomalyService } from './services/payment-anomaly'
 import { PaymentService } from './services/payment/payment'
@@ -235,6 +237,15 @@ export function createApp(overrides?: AppOverrides, repos: Repos = buildRepos(ov
     operatorRepo,
     { webBaseUrl },
     (event) => console.info('[provider-invite] created', event),
+  )
+  // #904: operator self-service team page. Reuses providerInviteService to mint
+  // (so the audit trail + TTL stay single-sourced); reads invites + members
+  // scoped to the caller's own operatorId.
+  const operatorTeamService = new OperatorTeamService(
+    providerInviteRepo,
+    operatorMembershipRepo,
+    userRepo,
+    providerInviteService,
   )
   // Operator-access grant decision (#521 §6) + slug resolver for the OAuth callback.
   // The slug is read from the STORED operators.slug (never re-derived from the name),
@@ -480,6 +491,7 @@ export function createApp(overrides?: AppOverrides, repos: Repos = buildRepos(ov
     .route('/', createFeeScheduleRoutes(feeScheduleService, resolveWriteOperatorId))
     .route('/', createNotificationRoutes(notificationService))
     .route('/', createOperatorRoutes(operatorService))
+    .route('/', createOperatorTeamRoutes(operatorTeamService))
     .route('/', createDocumentRoutes(renterDocumentService))
 }
 

@@ -229,6 +229,9 @@ export interface ProviderInviteRepository {
   /** Consume the invite at acceptance: PENDING -> ACCEPTED + stamp the redeemer.
    *  One of the three writes in the grant transaction (#521 §6). */
   markAccepted(id: string, acceptedByUserId: string): Promise<void>
+  /** #904: the operator's actionable (PENDING) invites — the self-service team
+   *  page. Scoped by operatorId; non-PENDING (accepted/revoked) rows drop off. */
+  listByOperator(operatorId: string): Promise<ProviderInvite[]>
 }
 
 // #521. `findActiveByUserId` is served by the partial-unique-active index
