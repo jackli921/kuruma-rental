@@ -3,12 +3,14 @@ import { describe, expect, it, vi } from 'vitest'
 import { boundFetch } from '../../src/lib/bound-fetch'
 
 describe('boundFetch', () => {
-  it('calls the global fetch with this === globalThis even when invoked detached (#887/#893)', async () => {
+  it('invokes the global fetch with this === globalThis even when called detached (#887/#893)', async () => {
     // CF Workers' global fetch is a branded builtin that throws "Illegal invocation"
-    // unless called with this === globalThis. Node/vitest don't brand it, so simulate
-    // the brand and prove boundFetch survives a DETACHED call (this = some other object)
-    // — the prod failure mode that silently killed every email/geocode/translate (#887).
+    // unless called with this === globalThis. Node/vitest don't brand it, so capture
+    // the `this` the wrapper forwards and assert it directly — the brand survival is
+    // the load-bearing assertion, not an incidental network failure on the mutant.
+    let observedThis: unknown = 'unset'
     const brandedFetch = async function (this: unknown): Promise<Response> {
+      observedThis = this
       if (this !== globalThis) {
         throw new TypeError("Illegal invocation: function called with incorrect 'this' reference")
       }
@@ -17,9 +19,10 @@ describe('boundFetch', () => {
     vi.stubGlobal('fetch', brandedFetch)
     try {
       // Invoke detached: as a property of an unrelated object, so `this` is that object.
-      // A bare `= fetch` capture would call brandedFetch with this = holder and throw.
+      // A bare `= fetch` capture would forward this = holder (or miss the stub entirely).
       const holder = { fetchFn: boundFetch }
       const response = await holder.fetchFn('https://example.test')
+      expect(observedThis).toBe(globalThis)
       expect(await response.text()).toBe('ok')
     } finally {
       vi.unstubAllGlobals()

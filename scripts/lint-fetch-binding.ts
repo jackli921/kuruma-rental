@@ -11,8 +11,8 @@
  *
  * The fix: default to the shared `boundFetch` (`@kuruma/shared/lib/bound-fetch`)
  * instead of the bare global — it keeps `this === globalThis` and the injectable
- * test mock intact. An inline `fetch.bind(globalThis) as typeof fetch` is still
- * accepted (boundFetch is defined with it), but the import is the canonical fix.
+ * test mock intact. An inline `fetch.bind(globalThis) as typeof fetch` also passes
+ * the guard (a legacy spelling of the same safety), but the import is canonical.
  *
  * Scope = every DEPLOYED runtime surface (scan by runtime, not by package), and
  * production code only — `*.test.ts` and `tests/` legitimately pass a real fetch.
