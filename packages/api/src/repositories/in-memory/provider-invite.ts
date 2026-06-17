@@ -39,6 +39,15 @@ export class InMemoryProviderInviteRepository implements ProviderInviteRepositor
     return [...this.store.values()].find((i) => i.tokenHash === tokenHash)
   }
 
+  // #904: the operator's PENDING invites for the self-service team page.
+  // Ordered by (createdAt, id) — mirrors the drizzle ORDER BY so list output is
+  // stable, not Map-insertion order.
+  async listByOperator(operatorId: string): Promise<ProviderInvite[]> {
+    return [...this.store.values()]
+      .filter((i) => i.operatorId === operatorId && i.status === 'PENDING')
+      .sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime() || a.id.localeCompare(b.id))
+  }
+
   async markAccepted(id: string, acceptedByUserId: string): Promise<void> {
     const invite = this.store.get(id)
     if (!invite) return

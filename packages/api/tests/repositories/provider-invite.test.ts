@@ -69,4 +69,29 @@ describe('InMemoryProviderInviteRepository', () => {
     expect(found?.status).toBe('ACCEPTED')
     expect(found?.acceptedByUserId).toBe('user_42')
   })
+
+  describe('listByOperator (#904)', () => {
+    it('returns all PENDING invites for the operator', async () => {
+      await repo.create(inviteInput({ tokenHash: 'h1', email: 'a@x.com' }))
+      await repo.create(inviteInput({ tokenHash: 'h2', email: 'b@x.com' }))
+      const rows = await repo.listByOperator('op_test')
+      expect(rows.map((r) => r.email).sort()).toEqual(['a@x.com', 'b@x.com'])
+    })
+
+    it('excludes other operators (tenant scope)', async () => {
+      await repo.create(inviteInput({ tokenHash: 'h1', operatorId: 'op_a' }))
+      await repo.create(inviteInput({ tokenHash: 'h2', operatorId: 'op_b' }))
+      const rows = await repo.listByOperator('op_a')
+      expect(rows).toHaveLength(1)
+      expect(rows[0]?.operatorId).toBe('op_a')
+    })
+
+    it('excludes non-PENDING invites (accepted/redeemed drop off the actionable list)', async () => {
+      const accepted = await repo.create(inviteInput({ tokenHash: 'h1' }))
+      await repo.markAccepted(accepted.id, 'user_1')
+      await repo.create(inviteInput({ tokenHash: 'h2', email: 'pending@x.com' }))
+      const rows = await repo.listByOperator('op_test')
+      expect(rows.map((r) => r.email)).toEqual(['pending@x.com'])
+    })
+  })
 })

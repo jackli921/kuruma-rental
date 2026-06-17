@@ -85,7 +85,8 @@
     "myBookings": "我的预订",
     "documents": "证件",
     "newBookings": "{count} 个新订单",
-    "settings": "设置"
+    "settings": "设置",
+    "team": "团队"
   },
   "acriss": {
     "MCAR": "微型车",
@@ -802,6 +803,44 @@
         "save": "保存更改",
         "saving": "保存中..."
       }
+    },
+    "team": {
+      "title": "团队",
+      "subtitle": "邀请员工并管理可以访问您运营商账户的成员。",
+      "invite": "邀请员工",
+      "inviteTitle": "邀请员工",
+      "inviteSubtitle": "接受邀请后，他们将可以访问您的运营商门户。",
+      "inviteSuccessTitle": "邀请已创建",
+      "inviteSuccessSubtitle": "请将此一次性链接分享给您的员工。链接7天后失效。",
+      "inviteUrlLabel": "邀请链接",
+      "copy": "复制链接",
+      "copied": "已复制",
+      "done": "完成",
+      "staffNotice": "只有所有者才能邀请员工。",
+      "noOperatorContext": "此页面管理单个运营商的团队。请使用管理门户来管理运营商。",
+      "unknownName": "未命名",
+      "roleOwner": "所有者",
+      "roleStaff": "员工",
+      "members": {
+        "title": "成员",
+        "empty": "暂无成员。",
+        "joined": "加入于 {date}"
+      },
+      "invites": {
+        "title": "待处理邀请",
+        "empty": "暂无待处理邀请。",
+        "expires": "{date} 到期",
+        "pending": "待处理"
+      },
+      "form": {
+        "email": "邮箱",
+        "emailPlaceholder": "staff@example.com",
+        "cancel": "取消",
+        "submit": "发送邀请",
+        "submitting": "发送中..."
+      },
+      "loadError": "无法加载您的团队",
+      "retry": "重试"
     }
   },
   "messaging": {

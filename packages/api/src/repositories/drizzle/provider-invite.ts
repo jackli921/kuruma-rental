@@ -1,5 +1,5 @@
 import { providerInvites } from '@kuruma/shared/db/schema'
-import { eq } from 'drizzle-orm'
+import { and, eq } from 'drizzle-orm'
 import type { ProviderInvite } from '../../stores'
 import type { ProviderInviteRepository } from '../types'
 import type { Db } from './shared'
@@ -39,6 +39,17 @@ export class DrizzleProviderInviteRepository implements ProviderInviteRepository
       .from(providerInvites)
       .where(eq(providerInvites.tokenHash, tokenHash))
     return row ? toProviderInvite(row) : undefined
+  }
+
+  // #904: the operator's PENDING invites for the self-service team page. Scoped
+  // (operatorId, status='PENDING'); ordered (createdAt, id) for a stable list.
+  async listByOperator(operatorId: string): Promise<ProviderInvite[]> {
+    const rows = await this.db
+      .select()
+      .from(providerInvites)
+      .where(and(eq(providerInvites.operatorId, operatorId), eq(providerInvites.status, 'PENDING')))
+      .orderBy(providerInvites.createdAt, providerInvites.id)
+    return rows.map(toProviderInvite)
   }
 
   // Consume the invite at acceptance (#521 §6). Runs tx-bound inside the grant

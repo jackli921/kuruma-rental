@@ -9,18 +9,30 @@ import { OPERATOR_ROLES } from '../enums'
 export const operatorRoleSchema = z.enum(OPERATOR_ROLES)
 export type OperatorRole = z.infer<typeof operatorRoleSchema>
 
-// Platform-admin mints a provider invite (#521 §7). Email is lowercased here so
-// the stored value and the verified-email compare at accept both use one form
-// (emails treated as opaque — no Gmail dot canonicalization).
+// Email is lowercased here so the stored value and the verified-email compare at
+// accept both use one form (emails treated as opaque — no Gmail dot
+// canonicalization). Shared by the platform-admin and operator-self invite paths.
+const inviteEmailSchema = z
+  .string()
+  .trim()
+  .min(1, 'Email is required')
+  .email('Must be a valid email')
+  .transform((value) => value.toLowerCase())
+
+// Platform-admin mints a provider invite (#521 §7).
 export const createProviderInviteSchema = z.object({
-  email: z
-    .string()
-    .trim()
-    .min(1, 'Email is required')
-    .email('Must be a valid email')
-    .transform((value) => value.toLowerCase()),
+  email: inviteEmailSchema,
   operatorId: z.string().trim().min(1, 'operatorId is required'),
   role: operatorRoleSchema,
 })
 
 export type CreateProviderInviteInput = z.infer<typeof createProviderInviteSchema>
+
+// #904: an operator OWNER self-invites staff. Email only — the operatorId comes
+// from the session and the role is hard-coded OPERATOR_STAFF in the service, so
+// the client can neither target another tenant nor escalate the grant.
+export const inviteStaffSchema = z.object({
+  email: inviteEmailSchema,
+})
+
+export type InviteStaffInput = z.infer<typeof inviteStaffSchema>
