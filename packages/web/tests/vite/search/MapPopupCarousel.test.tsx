@@ -112,6 +112,19 @@ describe('MapPopupCarousel', () => {
     expect(screen.getByText('2 / 2')).toBeInTheDocument()
   })
 
+  it('announces the active car via a polite live region so advancing is not silent for screen readers', async () => {
+    const user = userEvent.setup()
+    renderCarousel([carAt('v1', 'Toyota Yaris'), carAt('v2', 'Honda Fit')])
+
+    // The car details sit in an aria-live region: clicking next swaps the card in
+    // place, so without it a SR user hears nothing about which car they landed on.
+    const live = screen.getByText('Toyota Yaris').closest('[aria-live="polite"]')
+    expect(live).not.toBeNull()
+
+    await user.click(screen.getByRole('button', { name: /next car/i }))
+    expect(live).toHaveTextContent('Honda Fit')
+  })
+
   it('carries from/to and filters into whichever slide is visible', async () => {
     const user = userEvent.setup()
     renderCarousel([carAt('v1', 'Toyota Yaris'), carAt('v2', 'Honda Fit')], {
