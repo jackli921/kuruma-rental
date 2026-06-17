@@ -177,6 +177,22 @@ describe('PaymentStep (instant-book submit, #511)', () => {
     expect(screen.queryByText(/upload your documents first/)).not.toBeInTheDocument()
   })
 
+  it('routes a 403 carrying a DIFFERENT code to the generic message, not the docs prompt', async () => {
+    // Pins the check to `=== DOCUMENT_VERIFICATION_REQUIRED`, not merely "a code
+    // is present": some other coded 403 must still fall through to generic.
+    mockCreateBooking.mockRejectedValue(new ApiError('forbidden', 403, 'SOME_OTHER_CODE'))
+    const user = userEvent.setup()
+    renderStep()
+
+    await user.click(screen.getByRole('checkbox'))
+    await user.click(screen.getByRole('button', { name: 'Reserve now' }))
+
+    expect(
+      await screen.findByText("We couldn't create your booking. Please review and try again."),
+    ).toBeInTheDocument()
+    expect(screen.queryByText(/upload your documents first/)).not.toBeInTheDocument()
+  })
+
   it('calls onBack when the back button is pressed', async () => {
     const { onBack } = renderStep()
     await userEvent.setup().click(screen.getByRole('button', { name: 'Back' }))
