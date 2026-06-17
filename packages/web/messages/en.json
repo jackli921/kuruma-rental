@@ -1077,7 +1077,13 @@
       "empty": "No cars are available for these dates."
     },
     "map": {
-      "noCoordinates": "Map view isn't available for these results yet."
+      "noCoordinates": "Map view isn't available for these results yet.",
+      "pinPrice": "¥{price}",
+      "pinPriceFrom": "From ¥{price}",
+      "pinSelect": "Select {store}, {price}",
+      "popupPrev": "Previous car",
+      "popupNext": "Next car",
+      "popupPosition": "{n} / {total}"
     },
     "detail": {
       "backToSearch": "Back to search",

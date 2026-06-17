@@ -1,4 +1,4 @@
-import { resultPriceLabel, resultTitle } from '@/vite/search/result'
+import { groupByLocation, pinPriceLabel, resultPriceLabel, resultTitle } from '@/vite/search/result'
 import type {
   ClassComboSearchResult,
   SpecificSearchResult,
@@ -65,5 +65,50 @@ describe('resultPriceLabel', () => {
     expect(resultPriceLabel({ ...base, dailyRateJpy: null, hourlyRateJpy: null }, t)).toBe(
       'noPrice',
     )
+  })
+})
+
+describe('groupByLocation', () => {
+  it('groups results by pickup location, preserving first-seen order', () => {
+    const a1 = { ...base, vehicleId: 'a1', location: { ...base.location, locationId: 'loc_a' } }
+    const b1 = { ...base, vehicleId: 'b1', location: { ...base.location, locationId: 'loc_b' } }
+    const a2 = { ...base, vehicleId: 'a2', location: { ...base.location, locationId: 'loc_a' } }
+
+    const groups = groupByLocation([a1, b1, a2])
+
+    expect(groups.map((g) => g.locationId)).toEqual(['loc_a', 'loc_b'])
+    expect(groups[0]?.items.map((i) => (i.kind === 'SPECIFIC' ? i.vehicleId : ''))).toEqual([
+      'a1',
+      'a2',
+    ])
+    expect(groups[1]?.items).toHaveLength(1)
+  })
+})
+
+describe('pinPriceLabel', () => {
+  it('shows the bare price for a single-car pin', () => {
+    expect(pinPriceLabel([base], t)).toBe('map.pinPrice:8,000')
+  })
+
+  it('shows the group minimum with a "From" prefix for a multi-car pin', () => {
+    const cheap = { ...base, vehicleId: 'v2', dailyRateJpy: 6500 }
+    const dear = { ...base, vehicleId: 'v3', dailyRateJpy: 12000 }
+    expect(pinPriceLabel([dear, cheap], t)).toBe('map.pinPriceFrom:6,500')
+  })
+
+  it('prefers a daily rate over hourly even when an hourly car is cheaper', () => {
+    const daily = { ...base, dailyRateJpy: 8000, hourlyRateJpy: null }
+    const hourly = { ...base, vehicleId: 'v2', dailyRateJpy: null, hourlyRateJpy: 500 }
+    expect(pinPriceLabel([daily, hourly], t)).toBe('map.pinPriceFrom:8,000')
+  })
+
+  it('falls back to the cheapest hourly rate when no car has a daily rate', () => {
+    const h1 = { ...base, dailyRateJpy: null, hourlyRateJpy: 700 }
+    const h2 = { ...base, vehicleId: 'v2', dailyRateJpy: null, hourlyRateJpy: 500 }
+    expect(pinPriceLabel([h1, h2], t)).toBe('map.pinPriceFrom:500')
+  })
+
+  it('returns price-on-request when no car in the group is priced', () => {
+    expect(pinPriceLabel([{ ...base, dailyRateJpy: null, hourlyRateJpy: null }], t)).toBe('noPrice')
   })
 })

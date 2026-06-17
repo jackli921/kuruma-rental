@@ -24,6 +24,10 @@ export interface MapAdapterProps {
    *  (i18n, router links); the adapter only positions it at the pin. Absent = no
    *  popup. */
   renderSelected?: (item: SearchResultItem) => ReactNode
+  /** Renders the interactive pin for a location (e.g. a price pill). The VIEW owns
+   *  the whole control — i18n, min-price, onClick, aria-label, styling — and the
+   *  adapter only positions it at the pin. Absent = the adapter's default dot. */
+  renderPin?: (item: SearchResultItem, state: { selected: boolean }) => ReactNode
 }
 
 export type MapAdapter = ComponentType<MapAdapterProps>

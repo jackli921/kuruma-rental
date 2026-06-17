@@ -1,6 +1,6 @@
 import { PigeonMapAdapter, gsiTileProvider } from '@/vite/search/PigeonMapAdapter'
 import type { SpecificSearchResult } from '@kuruma/shared/types/search-result'
-import { fireEvent, render, screen } from '@testing-library/react'
+import { fireEvent, render, screen, within } from '@testing-library/react'
 import type { ReactNode } from 'react'
 import { describe, expect, it, vi } from 'vitest'
 
@@ -13,22 +13,44 @@ vi.mock('pigeon-maps', () => ({
     children,
     provider,
     attribution,
-    defaultCenter,
-    defaultZoom,
+    center,
+    zoom,
+    onBoundsChanged,
   }: {
     children: ReactNode
     provider?: (x: number, y: number, z: number) => string
     attribution?: ReactNode
-    defaultCenter?: [number, number]
-    defaultZoom?: number
+    center?: [number, number]
+    zoom?: number
+    onBoundsChanged?: (state: {
+      center: [number, number]
+      zoom: number
+      bounds: { ne: [number, number]; sw: [number, number] }
+      initial: boolean
+    }) => void
   }) => (
     <div
       data-testid="pigeon-map"
       data-tile-url={provider ? provider(3, 5, 12) : ''}
-      data-center={defaultCenter ? defaultCenter.join(',') : ''}
-      data-zoom={defaultZoom ?? ''}
+      data-center={center ? center.join(',') : ''}
+      data-zoom={zoom ?? ''}
     >
       {attribution}
+      {/* Controlled-mode sync: the real lib reports viewport moves (incl. user
+          pan/zoom) here, debounced 60ms. Tests fire it to assert the adapter folds
+          a manual pan into state without remounting. */}
+      <button
+        type="button"
+        data-testid="pan-map"
+        onClick={() =>
+          onBoundsChanged?.({
+            center: [10, 10],
+            zoom: 5,
+            bounds: { ne: [11, 11], sw: [9, 9] },
+            initial: false,
+          })
+        }
+      />
       {children}
     </div>
   ),
@@ -238,6 +260,159 @@ describe('PigeonMapAdapter', () => {
     const overlay = screen.getByTestId('overlay')
     expect(overlay).toHaveAttribute('data-anchor', '34.6627,135.5023')
     expect(screen.getByTestId('popup')).toHaveTextContent('loc_namba')
+  })
+
+  it('renders a custom pin node per location via renderPin (replacing the dot), flagging the selected one', () => {
+    render(
+      <PigeonMapAdapter
+        items={[
+          carAt('loc_namba', { latitude: 34.66, longitude: 135.5 }),
+          carAt('loc_umeda', { latitude: 34.7, longitude: 135.49 }),
+        ]}
+        selectedId="loc_umeda"
+        onSelect={() => {}}
+        renderPin={(item, { selected }) => (
+          <span data-testid={`pin-${item.location.locationId}`} data-selected={selected}>
+            {item.location.locationId}
+          </span>
+        )}
+      />,
+    )
+
+    // Custom pins render in place of the default marker dots, with the selected flag.
+    expect(screen.getByTestId('pin-loc_umeda')).toHaveAttribute('data-selected', 'true')
+    expect(screen.getByTestId('pin-loc_namba')).toHaveAttribute('data-selected', 'false')
+    expect(screen.queryAllByTestId('marker')).toHaveLength(0)
+  })
+
+  it('anchors each renderPin node at its location coordinates', () => {
+    render(
+      <PigeonMapAdapter
+        items={[carAt('loc_namba', { latitude: 34.66, longitude: 135.5 })]}
+        selectedId={null}
+        onSelect={() => {}}
+        renderPin={(item) => <span data-testid={`pin-${item.location.locationId}`} />}
+      />,
+    )
+
+    const overlay = screen.getByTestId('overlay')
+    expect(overlay).toHaveAttribute('data-anchor', '34.66,135.5')
+    expect(within(overlay).getByTestId('pin-loc_namba')).toBeInTheDocument()
+  })
+
+  it('flies to a newly selected pin without remounting the map (no tile-thrash)', () => {
+    const props = {
+      items: [
+        carAt('loc_namba', { latitude: 34.6627, longitude: 135.5023 }),
+        carAt('loc_umeda', { latitude: 34.7025, longitude: 135.4959 }),
+      ],
+      onSelect: () => {},
+    }
+    const { rerender } = render(<PigeonMapAdapter {...props} selectedId={null} />)
+    const before = screen.getByTestId('pigeon-map')
+
+    rerender(<PigeonMapAdapter {...props} selectedId="loc_umeda" />)
+    const after = screen.getByTestId('pigeon-map')
+
+    // Same DOM node across the selection = React never remounted <Map>. The old
+    // remount-key impl replaced the node, re-fetching every tile on each select.
+    expect(after).toBe(before)
+    // ...and it still flew to the selected pin (controlled center/zoom).
+    expect(after).toHaveAttribute('data-center', '34.7025,135.4959')
+    expect(after).toHaveAttribute('data-zoom', '12') // SINGLE_PIN_ZOOM
+  })
+
+  it('folds a manual pan into state, then recenters on a new region without remounting (no drift)', () => {
+    const { rerender } = render(
+      <PigeonMapAdapter
+        items={[carAt('loc_a', { latitude: 34.7025, longitude: 135.4959 })]}
+        selectedId={null}
+        onSelect={() => {}}
+        anchor={[34.6655, 135.5023]}
+      />,
+    )
+    const node = screen.getByTestId('pigeon-map')
+    expect(node).toHaveAttribute('data-center', '34.6655,135.5023') // region A
+
+    fireEvent.click(screen.getByTestId('pan-map')) // user pans away
+    expect(node).toHaveAttribute('data-center', '10,10') // pan synced into controlled state
+
+    rerender(
+      <PigeonMapAdapter
+        items={[carAt('loc_b', { latitude: 35.0, longitude: 135.8 })]}
+        selectedId={null}
+        onSelect={() => {}}
+        anchor={[34.9, 135.9]}
+      />,
+    )
+    const after = screen.getByTestId('pigeon-map')
+    expect(after).toBe(node) // still no remount
+    expect(after).toHaveAttribute('data-center', '34.9,135.9') // reset to region B, pan discarded
+    expect(after).toHaveAttribute('data-zoom', '11') // REGION_ZOOM
+  })
+
+  it('keeps the map on a still-present selection when the result set changes', () => {
+    const loc1 = carAt('loc_1', { latitude: 34.5, longitude: 135.4 })
+    const { rerender } = render(
+      <PigeonMapAdapter items={[loc1]} selectedId="loc_1" onSelect={() => {}} />,
+    )
+    expect(screen.getByTestId('pigeon-map')).toHaveAttribute('data-center', '34.5,135.4')
+
+    // New result set still contains loc_1, plus a region anchor that must NOT win.
+    rerender(
+      <PigeonMapAdapter
+        items={[loc1, carAt('loc_2', { latitude: 35.0, longitude: 135.8 })]}
+        selectedId="loc_1"
+        onSelect={() => {}}
+        anchor={[34.9, 135.9]}
+      />,
+    )
+    const map = screen.getByTestId('pigeon-map')
+    expect(map).toHaveAttribute('data-center', '34.5,135.4') // selection beats the new anchor
+    expect(map).toHaveAttribute('data-zoom', '12') // SINGLE_PIN_ZOOM
+  })
+
+  it('falls through to the new region when the selection vanishes from the result set', () => {
+    const { rerender } = render(
+      <PigeonMapAdapter
+        items={[carAt('loc_1', { latitude: 34.5, longitude: 135.4 })]}
+        selectedId="loc_1"
+        onSelect={() => {}}
+      />,
+    )
+    // loc_1 is gone from the next set; the stale selection must not pin the viewport.
+    rerender(
+      <PigeonMapAdapter
+        items={[carAt('loc_2', { latitude: 35.0, longitude: 135.8 })]}
+        selectedId="loc_1"
+        onSelect={() => {}}
+        anchor={[34.9, 135.9]}
+      />,
+    )
+    const map = screen.getByTestId('pigeon-map')
+    expect(map).toHaveAttribute('data-center', '34.9,135.9') // stale selection → region B
+    expect(map).toHaveAttribute('data-zoom', '11') // REGION_ZOOM
+  })
+
+  it('recenters when the same location id reports new coordinates (P2)', () => {
+    const { rerender } = render(
+      <PigeonMapAdapter
+        items={[carAt('loc_1', { latitude: 34.5, longitude: 135.4 })]}
+        selectedId="loc_1"
+        onSelect={() => {}}
+      />,
+    )
+    expect(screen.getByTestId('pigeon-map')).toHaveAttribute('data-center', '34.5,135.4')
+
+    // Same id, moved coords: the target signature must include lat:lng or this drifts.
+    rerender(
+      <PigeonMapAdapter
+        items={[carAt('loc_1', { latitude: 35.1, longitude: 135.9 })]}
+        selectedId="loc_1"
+        onSelect={() => {}}
+      />,
+    )
+    expect(screen.getByTestId('pigeon-map')).toHaveAttribute('data-center', '35.1,135.9')
   })
 })
 

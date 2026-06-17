@@ -1077,7 +1077,13 @@
       "empty": "所选日期没有可用车辆。"
     },
     "map": {
-      "noCoordinates": "这些结果暂时无法在地图上显示。"
+      "noCoordinates": "这些结果暂时无法在地图上显示。",
+      "pinPrice": "¥{price}",
+      "pinPriceFrom": "¥{price}起",
+      "pinSelect": "选择{store}，{price}",
+      "popupPrev": "上一辆",
+      "popupNext": "下一辆",
+      "popupPosition": "{n} / {total}"
     },
     "detail": {
       "backToSearch": "返回搜索",

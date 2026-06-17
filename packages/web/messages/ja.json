@@ -1077,7 +1077,13 @@
       "empty": "選択した日程で利用できるクルマがありません。"
     },
     "map": {
-      "noCoordinates": "これらの結果はまだ地図に表示できません。"
+      "noCoordinates": "これらの結果はまだ地図に表示できません。",
+      "pinPrice": "¥{price}",
+      "pinPriceFrom": "¥{price}〜",
+      "pinSelect": "{store}、{price}を選択",
+      "popupPrev": "前のクルマ",
+      "popupNext": "次のクルマ",
+      "popupPosition": "{n} / {total}"
     },
     "detail": {
       "backToSearch": "検索に戻る",
