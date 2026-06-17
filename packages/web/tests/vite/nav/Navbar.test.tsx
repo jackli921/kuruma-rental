@@ -183,6 +183,9 @@ describe('Navbar', () => {
   it('shows Browse, My Bookings, and Documents (no business markers) for a signed-in renter', () => {
     // Even with a non-zero count, the operator badge is gated to business view.
     mockUseBadge.mockReturnValue({ count: 5 })
+    // Documents is a post-MVP add-on gated behind a flag; enable it so this
+    // "full renter nav" assertion sees it (the OFF case is its own test below).
+    vi.stubEnv('VITE_FEATURE_RENTER_DOCUMENTS', 'true')
     const { container } = renderNavbar(renter)
     expect(screen.getByText('Browse').closest('a')).toHaveAttribute('data-to', '/$locale/search')
     expect(screen.getByText('My Bookings').closest('a')).toHaveAttribute(
@@ -200,6 +203,15 @@ describe('Navbar', () => {
     expect(client).toHaveAttribute('data-can-switch', 'false')
     // Desktop + mobile share the same derived navItems (Browse + 2 renter-only).
     expect(screen.getByTestId('mobile-menu')).toHaveAttribute('data-nav-count', '3')
+  })
+
+  it('hides Documents in the beta MVP demo (renter-documents flag off)', () => {
+    renderNavbar(renter)
+    expect(screen.getByText('Browse')).toBeInTheDocument()
+    expect(screen.getByText('My Bookings')).toBeInTheDocument()
+    // The orphaned IDP-upload page is filtered out — Browse + My Bookings only.
+    expect(screen.queryByText('Documents')).toBeNull()
+    expect(screen.getByTestId('mobile-menu')).toHaveAttribute('data-nav-count', '2')
   })
 
   it('hides My Bookings/Documents for an operator in renter view — gating is by role, not view (P1, AC6)', () => {

@@ -144,4 +144,14 @@ export class DrizzleUserRepository implements UserRepository {
       .set({ role: access.role, operatorId: access.operatorId, updatedAt: new Date() })
       .where(eq(users.id, userId))
   }
+
+  // #904 slice 2: tear the operator projection back down on deactivate. Sets the
+  // FK column null (not a dangling operatorId) and the role to RENTER so the next
+  // renter-door sign-in mints a plain renter session, not a stale operator one.
+  async clearOperatorAccess(userId: string): Promise<void> {
+    await this.db
+      .update(users)
+      .set({ role: 'RENTER', operatorId: null, updatedAt: new Date() })
+      .where(eq(users.id, userId))
+  }
 }

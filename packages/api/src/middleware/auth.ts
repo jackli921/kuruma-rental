@@ -28,7 +28,9 @@ export {
   toCallerContext,
 } from '../auth/context'
 export {
+  ConflictError,
   ForbiddenError,
+  NotFoundError,
   OperatorRequiredError,
   rejectOperatorContextUntilScoped,
   requireFleetWriteScope,
