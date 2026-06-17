@@ -1,7 +1,8 @@
+import { updateOperatorSchema } from '@kuruma/shared/validators/operator'
 import { Hono } from 'hono'
 import { FLEET_WRITE_ROLES, requireAuth, requireUser, toCallerContext } from '../middleware/auth'
 import type { OperatorService } from '../services/operator'
-import { fail, ok, parseId } from './helpers'
+import { fail, ok, parseBody, parseId } from './helpers'
 
 /**
  * Read-only operator resolution for the business portal (#387). The web layout
@@ -51,6 +52,24 @@ export function createOperatorRoutes(service: OperatorService) {
         const operator = await service.getById(toCallerContext(user), idResult.id)
         if (!operator) return fail(c, 'Operator not found', 404)
         return ok(c, operator)
+      })
+      // Operator self-service profile update (#903). FLEET_WRITE gate is the
+      // baseline (an OPERATOR_STAFF may edit the display name); the owner-only
+      // `preAuthHandoffUrl` is enforced in the service AFTER the 404 check, so a
+      // foreign id never surfaces as a 403. The service projects the response.
+      .patch('/operators/:id', async (c) => {
+        const user = requireUser(c)
+        if (!FLEET_WRITE_ROLES.has(user.role)) return fail(c, 'Forbidden', 403)
+
+        const idResult = parseId(c)
+        if (!idResult.ok) return idResult.response
+
+        const parsed = await parseBody(c, updateOperatorSchema)
+        if (!parsed.ok) return parsed.response
+
+        const profile = await service.update(toCallerContext(user), idResult.id, parsed.data)
+        if (!profile) return fail(c, 'Operator not found', 404)
+        return ok(c, profile)
       })
   )
 }

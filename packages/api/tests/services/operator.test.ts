@@ -90,3 +90,131 @@ describe('OperatorService.create', () => {
     await expect(service.create(ownerCtx, { name: 'Sneaky' })).rejects.toThrow(ForbiddenError)
   })
 })
+
+describe('InMemoryOperatorRepository.update', () => {
+  test('applies a partial patch, preserves untouched fields, and returns the row', async () => {
+    const repo = new InMemoryOperatorRepository()
+    const op = await repo.create({
+      name: 'Old Name',
+      slug: 'old-slug',
+      preAuthHandoffUrl: 'https://old.example',
+    })
+    const at = new Date('2030-01-01T00:00:00.000Z')
+    const updated = await repo.update(op.id, { name: 'New Name', updatedAt: at })
+    expect(updated).toMatchObject({
+      id: op.id,
+      name: 'New Name',
+      slug: 'old-slug', // untouched
+      preAuthHandoffUrl: 'https://old.example', // untouched (absent key)
+      updatedAt: at,
+    })
+  })
+
+  test('clears preAuthHandoffUrl when the patch carries null', async () => {
+    const repo = new InMemoryOperatorRepository()
+    const op = await repo.create({ name: 'A', slug: 'a', preAuthHandoffUrl: 'https://x.example' })
+    const updated = await repo.update(op.id, { preAuthHandoffUrl: null, updatedAt: new Date() })
+    expect(updated?.preAuthHandoffUrl).toBeNull()
+  })
+
+  test('returns undefined for an unknown id (no insert)', async () => {
+    const repo = new InMemoryOperatorRepository()
+    expect(await repo.update('nope', { name: 'X', updatedAt: new Date() })).toBeUndefined()
+    expect(await repo.list()).toEqual([])
+  })
+
+  test('does not mutate the stored object in place (immutability)', async () => {
+    const repo = new InMemoryOperatorRepository()
+    const op = await repo.create({ name: 'A', slug: 'a', preAuthHandoffUrl: null })
+    const before = await repo.findById(op.id)
+    await repo.update(op.id, { name: 'B', updatedAt: new Date() })
+    expect(before?.name).toBe('A') // the snapshot read earlier is unchanged
+  })
+})
+
+describe('OperatorService.update', () => {
+  async function seedOne(preAuthHandoffUrl: string | null = null) {
+    const { repo, service } = makeService()
+    const op = await repo.create({ name: 'Owner Co', slug: 'owner-co', preAuthHandoffUrl })
+    const ctx: CallerContext = { ...ownerCtx, operatorId: op.id }
+    return { repo, service, op, ctx }
+  }
+
+  test('returns a projection (no createdAt/updatedAt) when an owner edits its name', async () => {
+    const { service, op, ctx } = await seedOne()
+    const result = await service.update(ctx, op.id, { name: 'Renamed Co' })
+    expect(result).toEqual({
+      id: op.id,
+      name: 'Renamed Co',
+      slug: 'owner-co',
+      preAuthHandoffUrl: null,
+    })
+    expect(result).not.toHaveProperty('createdAt')
+    expect(result).not.toHaveProperty('updatedAt')
+  })
+
+  test('an owner can set preAuthHandoffUrl, and it persists', async () => {
+    const { repo, service, op, ctx } = await seedOne()
+    const result = await service.update(ctx, op.id, { preAuthHandoffUrl: 'https://pay.x/h' })
+    expect(result?.preAuthHandoffUrl).toBe('https://pay.x/h')
+    expect((await repo.findById(op.id))?.preAuthHandoffUrl).toBe('https://pay.x/h')
+  })
+
+  test('an owner can clear preAuthHandoffUrl to null', async () => {
+    const { repo, service, op, ctx } = await seedOne('https://pay.x/h')
+    await service.update(ctx, op.id, { preAuthHandoffUrl: null })
+    expect((await repo.findById(op.id))?.preAuthHandoffUrl).toBeNull()
+  })
+
+  test('bumps updatedAt on a successful patch', async () => {
+    const { repo, service, op, ctx } = await seedOne()
+    const before = (await repo.findById(op.id))?.updatedAt
+    await new Promise((r) => setTimeout(r, 2))
+    await service.update(ctx, op.id, { name: 'Bumped' })
+    const after = (await repo.findById(op.id))?.updatedAt
+    expect(after?.getTime()).toBeGreaterThan(before?.getTime() ?? 0)
+  })
+
+  test('OPERATOR_STAFF cannot change preAuthHandoffUrl (owner-only) — ForbiddenError', async () => {
+    const { repo, service, op } = await seedOne()
+    const staffCtx: CallerContext = { ...ownerCtx, role: 'OPERATOR_STAFF', operatorId: op.id }
+    await expect(
+      service.update(staffCtx, op.id, { preAuthHandoffUrl: 'https://evil.example' }),
+    ).rejects.toThrow(ForbiddenError)
+    // and the field is unchanged
+    expect((await repo.findById(op.id))?.preAuthHandoffUrl).toBeNull()
+  })
+
+  test('OPERATOR_STAFF may still edit the display name', async () => {
+    const { service, op } = await seedOne()
+    const staffCtx: CallerContext = { ...ownerCtx, role: 'OPERATOR_STAFF', operatorId: op.id }
+    const result = await service.update(staffCtx, op.id, { name: 'Staff Renamed' })
+    expect(result?.name).toBe('Staff Renamed')
+  })
+
+  test('a cross-tenant patch resolves to undefined (404) and leaves the target row unchanged', async () => {
+    const { repo, service } = makeService()
+    const a = await repo.create({ name: 'A Co', slug: 'a-co', preAuthHandoffUrl: null })
+    const b = await repo.create({ name: 'B Co', slug: 'b-co', preAuthHandoffUrl: null })
+    const ctxA: CallerContext = { ...ownerCtx, operatorId: a.id }
+    expect(await service.update(ctxA, b.id, { name: 'Hijacked' })).toBeUndefined()
+    expect((await repo.findById(b.id))?.name).toBe('B Co')
+  })
+
+  test('a cross-tenant handoff patch 404s BEFORE the owner-gate (no 403 existence leak)', async () => {
+    const { repo, service } = makeService()
+    const a = await repo.create({ name: 'A Co', slug: 'a-co', preAuthHandoffUrl: null })
+    const b = await repo.create({ name: 'B Co', slug: 'b-co', preAuthHandoffUrl: null })
+    // A staff of tenant A patches tenant B's money-flow field: must read as 404
+    // (undefined), never a 403 that would confirm B exists.
+    const staffA: CallerContext = { ...ownerCtx, role: 'OPERATOR_STAFF', operatorId: a.id }
+    expect(
+      await service.update(staffA, b.id, { preAuthHandoffUrl: 'https://evil.example' }),
+    ).toBeUndefined()
+  })
+
+  test('returns undefined for an unknown id', async () => {
+    const { service } = await seedOne()
+    expect(await service.update(SYSTEM_CONTEXT, 'unknown-id', { name: 'X' })).toBeUndefined()
+  })
+})

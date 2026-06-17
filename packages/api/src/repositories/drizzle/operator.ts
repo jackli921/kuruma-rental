@@ -1,7 +1,7 @@
 import { operators } from '@kuruma/shared/db/schema'
 import { asc, eq } from 'drizzle-orm'
 import type { Operator } from '../../stores'
-import type { OperatorRepository } from '../types'
+import type { OperatorRepository, OperatorUpdatePatch } from '../types'
 import type { Db } from './shared'
 
 export class DrizzleOperatorRepository implements OperatorRepository {
@@ -42,6 +42,18 @@ export class DrizzleOperatorRepository implements OperatorRepository {
       .values({ name: data.name, slug: data.slug, preAuthHandoffUrl: data.preAuthHandoffUrl })
       .returning()
     if (!row) throw new Error('Failed to create operator')
+    return row
+  }
+
+  async update(id: string, patch: OperatorUpdatePatch): Promise<Operator | undefined> {
+    // `set(patch)` only writes the keys present (an absent field is left
+    // unchanged; `preAuthHandoffUrl: null` clears the column). RETURNING gives
+    // the post-update row, or nothing when the id matched no operator.
+    const [row] = await this.db
+      .update(operators)
+      .set(patch)
+      .where(eq(operators.id, id))
+      .returning()
     return row
   }
 }

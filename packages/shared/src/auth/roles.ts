@@ -74,6 +74,16 @@ export const MANAGEMENT_BASE_ROLES = roleSet('STAFF', 'ADMIN', 'PLATFORM_ADMIN')
 export const BUSINESS_ROLES = union(MANAGEMENT_BASE_ROLES, OPERATOR_ROLES)
 
 /**
+ * Owner-tier writes — operator-profile money-flow fields, currently
+ * `preAuthHandoffUrl` (#903). Business management MINUS the OPERATOR_STAFF role:
+ * one staff edit could redirect every renter's pre-auth pay-at-pickup handoff to
+ * a phishing page, so the field is gated to the operator OWNER (plus the platform
+ * tier, which can already act on any tenant). Composed from MANAGEMENT_BASE_ROLES
+ * so it tracks the platform/legacy base automatically. Do NOT add OPERATOR_STAFF.
+ */
+export const OPERATOR_OWNER_WRITE_ROLES = union(MANAGEMENT_BASE_ROLES, roleSet('OPERATOR_OWNER'))
+
+/**
  * Cross-tenant read bypass — the platform tier PLUS PARTNER (Trip.com reads
  * bookings across tenants). Drives `CallerContext.bypassScope`. A distinct
  * instance from {@link PRIVILEGED_ROLES} (same members) because the two gate
