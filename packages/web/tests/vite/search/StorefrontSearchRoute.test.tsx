@@ -108,4 +108,15 @@ describe('StorefrontSearchRoute — search map gating (#885 Task 0)', () => {
     expect(screen.queryByTestId('store-grid')).not.toBeInTheDocument()
     expect(screen.getByRole('link', { name: 'Map' })).toBeInTheDocument()
   })
+
+  it('map gated off + forced view=map (stale loader data): render stays on the store list', () => {
+    // Defense in depth: even if a future loader change leaked view='map' through with
+    // the flag off, the render-site guard keeps the premium map from mounting (#885).
+    state.mapEnabled = false
+    state.view = 'map'
+    renderRoute()
+
+    expect(screen.getByTestId('store-grid')).toBeInTheDocument()
+    expect(screen.queryByTestId('search-map')).not.toBeInTheDocument()
+  })
 })

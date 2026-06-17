@@ -25,7 +25,8 @@ import { useTranslations } from 'use-intl'
 // the view toggle) link with only the fields they have, and `| undefined` keeps
 // validateSearch's undefined values assignable under exactOptionalPropertyTypes.
 // `class` keeps the repeatable string|string[] shape so it round-trips the URL.
-// `view` toggles the flat-map list against the slice-5 store grid (#458).
+// `view` toggles the flat-map list against the slice-5 store grid (#458), but only
+// when the search map flag is enabled (#885) — otherwise it's always the grid.
 interface StorefrontSearch {
   from?: string | undefined
   to?: string | undefined
@@ -51,8 +52,8 @@ function validateSearch(search: Record<string, unknown>): StorefrontSearch {
 
 // Renter search (#391, #458). Public — no auth. The form pushes wall-clock JST
 // date strings; without a valid range the loader returns null (the views render
-// the date prompt). `view=map` runs the cross-operator flat search (#458);
-// otherwise the slice-5 storefront grid. Only one of the two fetches runs.
+// the date prompt). `view=map` runs the cross-operator flat search (#458) when the
+// map flag is on (#885); otherwise the storefront grid. Only one fetch runs.
 export const Route = createFileRoute('/$locale/search')({
   validateSearch,
   // Seed a default range (next JST hour -> +3 days) when the renter arrives
@@ -177,7 +178,13 @@ export function StorefrontSearchRoute() {
           </div>
         )}
 
-        {data.view === 'map' ? (
+        {/* Defense in depth: the toggle is hidden and the loader collapses `view`
+            to 'stores' when the map is off, but gate the render too so the premium
+            map can never mount by accident (#885) — the no-leak guarantee lives at
+            the render site, not only in the loader. SearchMap still ships in the
+            bundle (static import, unreachable in beta); lazy-load only if a build
+            that strips it is ever required. */}
+        {isSearchMapEnabled() && data.view === 'map' ? (
           <SearchMap
             result={data.flat}
             anchor={mapAnchor}
