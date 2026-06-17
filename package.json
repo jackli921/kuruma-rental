@@ -33,6 +33,7 @@
     "db:seed": "bun run scripts/seed.ts",
     "db:seed-bookings": "bun run scripts/seed-bookings.ts",
     "db:seed:tcp": "bun run scripts/seed-tcp.ts",
+    "db:invite-empty-operator": "bun run scripts/invite-empty-operator.ts",
     "db:backfill-regions": "bun run scripts/backfill-location-regions.ts",
     "db:verify": "bun run scripts/db-verify.ts",
     "db:drift-warn": "bun run scripts/db-drift-warn.ts",

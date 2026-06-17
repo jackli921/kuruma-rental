@@ -1,4 +1,5 @@
 import { createHash, randomBytes } from 'node:crypto'
+import { mintEmptyOperatorInvite } from './empty-operator-invite'
 import type { getDb } from './index'
 import { parsePlatformAdminEmails } from './platform-admins'
 import {
@@ -385,6 +386,25 @@ export async function seed(db: ReturnType<typeof getDb>) {
       })
     console.log(`\nDemo provider invite for ${demoInviteEmail} (operator: ${demoOperator.slug}):`)
     console.log(`  ${webBase}/provider/invite/${token}`)
+  }
+
+  // 10. Empty operator for cold-start testing (#902) — env-driven, shared with
+  // scripts/invite-empty-operator.ts (which can target beta). When
+  // EMPTY_OPERATOR_INVITE_EMAIL is set, mint a blank "Test Operator" + a one-time
+  // owner invite so a business owner can configure a cold-start portal by hand.
+  // No-op when unset.
+  const emptyInviteEmail = process.env.EMPTY_OPERATOR_INVITE_EMAIL?.trim()
+  if (emptyInviteEmail) {
+    const webBase = process.env.WEB_ORIGIN?.split(',')[0]?.trim() || 'http://localhost:3001'
+    const { inviteUrl } = await mintEmptyOperatorInvite(db, {
+      email: emptyInviteEmail,
+      webOrigin: webBase,
+      now,
+    })
+    console.log(
+      `\nEmpty operator invite for ${emptyInviteEmail.toLowerCase()} (operator: test-operator):`,
+    )
+    console.log(`  ${inviteUrl}`)
   }
 
   console.log(
