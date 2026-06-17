@@ -188,6 +188,8 @@ export function StorefrontSearchRoute() {
           <SearchMap
             result={data.flat}
             anchor={mapAnchor}
+            regions={regions ?? []}
+            geoAnchor={regionAnchor}
             locale={locale}
             from={from ?? ''}
             to={to ?? ''}

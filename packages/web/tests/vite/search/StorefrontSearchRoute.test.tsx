@@ -11,6 +11,7 @@ import en from '../../../messages/en.json'
 const state = vi.hoisted(() => ({
   mapEnabled: false,
   view: 'stores' as 'stores' | 'map',
+  region: undefined as string | undefined,
 }))
 
 // Drive the build-time gate directly (the route's single source of truth) instead
@@ -20,13 +21,20 @@ vi.mock('@/vite/search/flags', async () => ({
   isSearchMapEnabled: () => state.mapEnabled,
 }))
 
+// Hoisted captor: upgraded SearchMap mock records props so seam tests can assert
+// the route forwarded the right values (regions, geoAnchor) without a full render.
+const captured = vi.hoisted(() => ({ props: null as Record<string, unknown> | null }))
+
 // Stand in for the heavy views + form — their own tests cover internals; here we
 // only assert which view the route mounts and whether the toggle is gated.
 vi.mock('@/vite/storefronts/StoreGrid', () => ({
   StoreGrid: () => <div data-testid="store-grid" />,
 }))
 vi.mock('@/vite/search/SearchMap', () => ({
-  SearchMap: () => <div data-testid="search-map" />,
+  SearchMap: (props: Record<string, unknown>) => {
+    captured.props = props
+    return <div data-testid="search-map" />
+  },
 }))
 vi.mock('@/vite/storefronts/StorefrontSearchForm', () => ({
   StorefrontSearchForm: () => <form data-testid="search-form" />,
@@ -38,7 +46,7 @@ vi.mock('@tanstack/react-router', async () => ({
   ...(await vi.importActual<typeof import('@tanstack/react-router')>('@tanstack/react-router')),
   createFileRoute: () => () => ({
     useParams: () => ({ locale: 'en' }),
-    useSearch: () => ({ from: '2026-07-01T10:00', to: '2026-07-03T10:00' }),
+    useSearch: () => ({ from: '2026-07-01T10:00', to: '2026-07-03T10:00', region: state.region }),
     useLoaderData: () => ({ view: state.view, storefronts: null, flat: null }),
   }),
   Link: ({
@@ -57,11 +65,11 @@ vi.mock('@tanstack/react-router', async () => ({
 // Imported after the mocks (vitest hoists vi.mock above imports).
 import { StorefrontSearchRoute } from '@/routes/$locale/search'
 
-function renderRoute() {
+function renderRoute(regions: unknown[] = []) {
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false, staleTime: Number.POSITIVE_INFINITY } },
   })
-  queryClient.setQueryData(regionsQueryOptions().queryKey, [])
+  queryClient.setQueryData(regionsQueryOptions().queryKey, regions)
   return render(
     <QueryClientProvider client={queryClient}>
       <IntlProvider locale="en" messages={en}>
@@ -75,6 +83,8 @@ describe('StorefrontSearchRoute — search map gating (#885 Task 0)', () => {
   afterEach(() => {
     state.mapEnabled = false
     state.view = 'stores'
+    state.region = undefined
+    captured.props = null
   })
 
   it('beta (map gated off): renders the store list with no map and no view toggle', () => {
@@ -118,5 +128,30 @@ describe('StorefrontSearchRoute — search map gating (#885 Task 0)', () => {
 
     expect(screen.getByTestId('store-grid')).toBeInTheDocument()
     expect(screen.queryByTestId('search-map')).not.toBeInTheDocument()
+  })
+
+  it('forwards the region list and resolved anchor into the map (#885 slice 3a seam)', () => {
+    const namba = {
+      id: 'reg_namba',
+      nameEn: 'Namba',
+      nameJa: '難波',
+      nameZh: '难波',
+      type: 'AREA',
+      slug: 'namba',
+      parentId: null,
+      assignable: true,
+      status: 'ACTIVE',
+      sortOrder: 1,
+      latitude: 34.6627,
+      longitude: 135.5023,
+    }
+    state.mapEnabled = true
+    state.view = 'map'
+    state.region = 'namba'
+    renderRoute([namba])
+
+    expect(Array.isArray(captured.props?.regions)).toBe(true)
+    expect((captured.props?.regions as unknown[]).length).toBe(1)
+    expect(captured.props?.geoAnchor).toEqual({ latitude: 34.6627, longitude: 135.5023 })
   })
 })
