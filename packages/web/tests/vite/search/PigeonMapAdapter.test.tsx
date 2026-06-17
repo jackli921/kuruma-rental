@@ -1,6 +1,6 @@
 import { PigeonMapAdapter, gsiTileProvider } from '@/vite/search/PigeonMapAdapter'
 import type { SpecificSearchResult } from '@kuruma/shared/types/search-result'
-import { fireEvent, render, screen } from '@testing-library/react'
+import { fireEvent, render, screen, within } from '@testing-library/react'
 import type { ReactNode } from 'react'
 import { describe, expect, it, vi } from 'vitest'
 
@@ -260,6 +260,44 @@ describe('PigeonMapAdapter', () => {
     const overlay = screen.getByTestId('overlay')
     expect(overlay).toHaveAttribute('data-anchor', '34.6627,135.5023')
     expect(screen.getByTestId('popup')).toHaveTextContent('loc_namba')
+  })
+
+  it('renders a custom pin node per location via renderPin (replacing the dot), flagging the selected one', () => {
+    render(
+      <PigeonMapAdapter
+        items={[
+          carAt('loc_namba', { latitude: 34.66, longitude: 135.5 }),
+          carAt('loc_umeda', { latitude: 34.7, longitude: 135.49 }),
+        ]}
+        selectedId="loc_umeda"
+        onSelect={() => {}}
+        renderPin={(item, { selected }) => (
+          <span data-testid={`pin-${item.location.locationId}`} data-selected={selected}>
+            {item.location.locationId}
+          </span>
+        )}
+      />,
+    )
+
+    // Custom pins render in place of the default marker dots, with the selected flag.
+    expect(screen.getByTestId('pin-loc_umeda')).toHaveAttribute('data-selected', 'true')
+    expect(screen.getByTestId('pin-loc_namba')).toHaveAttribute('data-selected', 'false')
+    expect(screen.queryAllByTestId('marker')).toHaveLength(0)
+  })
+
+  it('anchors each renderPin node at its location coordinates', () => {
+    render(
+      <PigeonMapAdapter
+        items={[carAt('loc_namba', { latitude: 34.66, longitude: 135.5 })]}
+        selectedId={null}
+        onSelect={() => {}}
+        renderPin={(item) => <span data-testid={`pin-${item.location.locationId}`} />}
+      />,
+    )
+
+    const overlay = screen.getByTestId('overlay')
+    expect(overlay).toHaveAttribute('data-anchor', '34.66,135.5')
+    expect(within(overlay).getByTestId('pin-loc_namba')).toBeInTheDocument()
   })
 
   it('flies to a newly selected pin without remounting the map (no tile-thrash)', () => {

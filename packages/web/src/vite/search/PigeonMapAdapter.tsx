@@ -53,6 +53,7 @@ export function PigeonMapAdapter({
   onSelect,
   anchor = null,
   renderSelected,
+  renderPin,
 }: MapAdapterProps) {
   const pins = items
     .map((item) => ({
@@ -92,14 +93,27 @@ export function PigeonMapAdapter({
       zoom={view.zoom}
       onBoundsChanged={({ center, zoom }) => setView({ center, zoom })}
     >
-      {pins.map((pin) => (
-        <Marker
-          key={pin.id}
-          anchor={[pin.lat, pin.lng]}
-          color={pin.id === selectedId ? SELECTED_COLOR : MARKER_COLOR}
-          onClick={() => onSelect(pin.id)}
-        />
-      ))}
+      {pins.map((pin) => {
+        // renderPin (#885 slice 2): the view supplies the whole interactive pill
+        // (price, onClick, aria-label) and the adapter only anchors it; without it,
+        // fall back to the default marker dot wired to onSelect.
+        const item = renderPin ? items.find((i) => i.location.locationId === pin.id) : undefined
+        if (renderPin && item) {
+          return (
+            <Overlay key={pin.id} anchor={[pin.lat, pin.lng]}>
+              {renderPin(item, { selected: pin.id === selectedId })}
+            </Overlay>
+          )
+        }
+        return (
+          <Marker
+            key={pin.id}
+            anchor={[pin.lat, pin.lng]}
+            color={pin.id === selectedId ? SELECTED_COLOR : MARKER_COLOR}
+            onClick={() => onSelect(pin.id)}
+          />
+        )
+      })}
       {selectedPin && selectedItem && renderSelected && (
         <Overlay anchor={[selectedPin.lat, selectedPin.lng]} offset={OVERLAY_OFFSET}>
           {renderSelected(selectedItem)}
