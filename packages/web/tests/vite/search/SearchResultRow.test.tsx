@@ -1,9 +1,40 @@
 import { SearchResultRow } from '@/vite/search/SearchResultRow'
 import type { SpecificSearchResult } from '@kuruma/shared/types/search-result'
 import { render, screen } from '@testing-library/react'
+import type { ReactNode } from 'react'
 import { IntlProvider } from 'use-intl'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import en from '../../../messages/en.json'
+
+// The detail CTA is a TanStack Link (#885 slice 1b); stub it as a plain anchor
+// so the row renders without a RouterProvider, exposing its target + carried
+// search params for assertion.
+vi.mock('@tanstack/react-router', async () => ({
+  ...(await vi.importActual<typeof import('@tanstack/react-router')>('@tanstack/react-router')),
+  Link: ({
+    to,
+    params,
+    search,
+    children,
+    ...rest
+  }: {
+    to: string
+    params?: { locale?: string; locationId?: string }
+    search?: Record<string, unknown>
+    children: ReactNode
+  }) => (
+    <a
+      href={to}
+      data-to={to}
+      data-locale={params?.locale}
+      data-location={params?.locationId}
+      data-search={JSON.stringify(search ?? {})}
+      {...rest}
+    >
+      {children}
+    </a>
+  ),
+}))
 
 function makeSpecific(overrides: Partial<SpecificSearchResult> = {}): SpecificSearchResult {
   return {
@@ -33,10 +64,29 @@ function makeSpecific(overrides: Partial<SpecificSearchResult> = {}): SpecificSe
   }
 }
 
-function renderRow(item: SpecificSearchResult) {
+// Search context defaults so the CTA renders; individual tests override what they assert.
+function renderRow(
+  item: SpecificSearchResult,
+  ctx: {
+    locale?: string
+    from?: string
+    to?: string
+    classFilter?: string | string[] | undefined
+    pickupLocationId?: string | undefined
+    region?: string | undefined
+  } = {},
+) {
   return render(
     <IntlProvider locale="en" messages={en}>
-      <SearchResultRow item={item} />
+      <SearchResultRow
+        item={item}
+        locale={ctx.locale ?? 'en'}
+        from={ctx.from ?? '2026-07-01T10:00'}
+        to={ctx.to ?? '2026-07-04T10:00'}
+        classFilter={ctx.classFilter}
+        pickupLocationId={ctx.pickupLocationId}
+        region={ctx.region}
+      />
     </IntlProvider>,
   )
 }
@@ -74,10 +124,25 @@ describe('SearchResultRow', () => {
     expect(img).toHaveAttribute('height', '300')
   })
 
-  it('renders the select CTA as an inert disabled button (booking deferred)', () => {
-    renderRow(makeSpecific())
-    const select = screen.getByRole('button', { name: 'Select' })
-    expect(select).toBeDisabled()
-    expect(screen.queryByRole('link')).toBeNull()
+  it('navigates to the pickup-store detail route via an explicit CTA, preserving the date range', () => {
+    renderRow(makeSpecific(), { locale: 'en', from: '2026-07-01T10:00', to: '2026-07-04T10:00' })
+    const cta = screen.getByRole('link', { name: 'View cars' })
+    expect(cta).toHaveAttribute('data-to', '/$locale/storefronts/$locationId')
+    expect(cta).toHaveAttribute('data-locale', 'en')
+    expect(cta).toHaveAttribute('data-location', 'loc_namba')
+    const search = JSON.parse(cta.getAttribute('data-search') ?? '{}')
+    expect(search).toMatchObject({ from: '2026-07-01T10:00', to: '2026-07-04T10:00' })
+  })
+
+  it('carries the active class/region filters forward through the detail CTA (#499)', () => {
+    renderRow(makeSpecific(), {
+      classFilter: 'compact',
+      region: 'namba',
+      pickupLocationId: 'loc_x',
+    })
+    const search = JSON.parse(
+      screen.getByRole('link', { name: 'View cars' }).getAttribute('data-search') ?? '{}',
+    )
+    expect(search).toMatchObject({ class: 'compact', region: 'namba', pickupLocationId: 'loc_x' })
   })
 })

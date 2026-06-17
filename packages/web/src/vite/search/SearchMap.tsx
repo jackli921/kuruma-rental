@@ -9,6 +9,13 @@ interface SearchMapProps {
   readonly result: SearchResultsData | null
   /** Chosen region center to focus the map on; null = fit all pins (#840). */
   readonly anchor?: [number, number] | null
+  /** Search context threaded into each row's detail CTA so dates + filters survive the drill-down (#885 1b). */
+  readonly locale: string
+  readonly from: string
+  readonly to: string
+  readonly classFilter?: string | string[] | undefined
+  readonly pickupLocationId?: string | undefined
+  readonly region?: string | undefined
 }
 
 /**
@@ -17,7 +24,16 @@ interface SearchMapProps {
  * the two-pane layout only renders once there are results. No `dynamic ssr:false`
  * — the Vite shell is a client SPA, so the map host is a plain component.
  */
-export function SearchMap({ result, anchor = null }: SearchMapProps) {
+export function SearchMap({
+  result,
+  anchor = null,
+  locale,
+  from,
+  to,
+  classFilter,
+  pickupLocationId,
+  region,
+}: SearchMapProps) {
   const t = useTranslations('search')
 
   if (result === null) {
@@ -33,5 +49,17 @@ export function SearchMap({ result, anchor = null }: SearchMapProps) {
     )
   }
 
-  return <SearchMapList items={result.items} adapter={PigeonMapAdapter} anchor={anchor} />
+  return (
+    <SearchMapList
+      items={result.items}
+      adapter={PigeonMapAdapter}
+      anchor={anchor}
+      locale={locale}
+      from={from}
+      to={to}
+      classFilter={classFilter}
+      pickupLocationId={pickupLocationId}
+      region={region}
+    />
+  )
 }

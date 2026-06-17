@@ -13,6 +13,13 @@ interface SearchMapListProps {
   readonly adapter: MapAdapter
   /** Chosen region center to focus the map on; null = fit all pins (#840). */
   readonly anchor?: [number, number] | null
+  /** Search context threaded into each row's detail CTA so dates + filters survive the drill-down (#885 1b). */
+  readonly locale: string
+  readonly from: string
+  readonly to: string
+  readonly classFilter?: string | string[] | undefined
+  readonly pickupLocationId?: string | undefined
+  readonly region?: string | undefined
 }
 
 /**
@@ -22,7 +29,17 @@ interface SearchMapListProps {
  * only (D1), never a map library. The map plots geocoded, deduped-by-location
  * rows; null-coord rows stay in the list (graceful degrade).
  */
-export function SearchMapList({ items, adapter: Adapter, anchor = null }: SearchMapListProps) {
+export function SearchMapList({
+  items,
+  adapter: Adapter,
+  anchor = null,
+  locale,
+  from,
+  to,
+  classFilter,
+  pickupLocationId,
+  region,
+}: SearchMapListProps) {
   const t = useTranslations('search')
   const [selectedId, setSelectedId] = useState<string | null>(null)
   // Dedupe is keyed on the loader-stable `items`; memoizing keeps the plotted
@@ -51,7 +68,15 @@ export function SearchMapList({ items, adapter: Adapter, anchor = null }: Search
                 selected && 'ring-2 ring-primary ring-offset-2',
               )}
             >
-              <SearchResultRow item={item} />
+              <SearchResultRow
+                item={item}
+                locale={locale}
+                from={from}
+                to={to}
+                classFilter={classFilter}
+                pickupLocationId={pickupLocationId}
+                region={region}
+              />
               {geocoded && (
                 <button
                   type="button"

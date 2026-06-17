@@ -1,31 +1,49 @@
 import { buttonVariants } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
+import { carryForwardFilters } from '@/vite/storefronts/params'
 import type { SearchResultItem, SpecificSearchResult } from '@kuruma/shared/types/search-result'
+import { Link } from '@tanstack/react-router'
 import { Car, MapPin, Settings2, Users } from 'lucide-react'
 import { useTranslations } from 'use-intl'
 import { resultPriceLabel } from './result'
 
 interface SearchResultRowProps {
   readonly item: SearchResultItem
+  /** Search context carried into the detail CTA so dates + filters survive the drill-down (#885 1b). */
+  readonly locale: string
+  readonly from: string
+  readonly to: string
+  readonly classFilter?: string | string[] | undefined
+  readonly pickupLocationId?: string | undefined
+  readonly region?: string | undefined
 }
 
 /**
  * One flat-list row in the cross-operator vehicle search (#458). Switches on the
  * result `kind` so the CLASS_COMBO variant (#464, fast-follow) drops in without
  * touching callers — only SPECIFIC is built this slice. The projection is already
- * renter-safe (the API drops operator internals, D3); the "select" CTA is inert
- * while the booking flow is deferred (mirrors slice-5 AvailableVehicleCard).
+ * renter-safe (the API drops operator internals, D3). The CTA navigates to the
+ * pickup store's detail page (the only detail surface today, #885 1b); card
+ * focus/hover drives the map while the CTA is the sole navigation affordance.
  */
-export function SearchResultRow({ item }: SearchResultRowProps) {
+export function SearchResultRow({ item, ...ctx }: SearchResultRowProps) {
   switch (item.kind) {
     case 'SPECIFIC':
-      return <SpecificRow item={item} />
+      return <SpecificRow item={item} {...ctx} />
     default:
       return null
   }
 }
 
-function SpecificRow({ item }: { readonly item: SpecificSearchResult }) {
+function SpecificRow({
+  item,
+  locale,
+  from,
+  to,
+  classFilter,
+  pickupLocationId,
+  region,
+}: { readonly item: SpecificSearchResult } & Omit<SearchResultRowProps, 'item'>) {
   const t = useTranslations('search')
   const photo = item.photos[0]
   const transmissionLabel = item.transmission === 'AUTO' ? t('auto') : t('manual')
@@ -80,13 +98,18 @@ function SpecificRow({ item }: { readonly item: SpecificSearchResult }) {
 
         <div className="mt-auto flex items-end justify-between gap-2 pt-1">
           <p className="text-base font-semibold text-foreground">{priceLabel}</p>
-          <button
-            type="button"
-            disabled
+          <Link
+            to="/$locale/storefronts/$locationId"
+            params={{ locale, locationId: item.location.locationId }}
+            search={{
+              from,
+              to,
+              ...carryForwardFilters({ class: classFilter, pickupLocationId, region }),
+            }}
             className={cn(buttonVariants({ variant: 'default', size: 'sm' }))}
           >
-            {t('select')}
-          </button>
+            {t('viewStore')}
+          </Link>
         </div>
       </div>
     </article>
