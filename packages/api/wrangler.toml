@@ -80,4 +80,8 @@ simple.period = 10
 # bucket_name = "kuruma-vehicle-photos"
 
 [vars]
-WEB_ORIGIN = "https://kuruma-rental.kanata-studio-dev.workers.dev"
+# The live web origin. First entry feeds CORS AND the post-login redirect,
+# Stripe return base, and provider-invite links (see resolveGoogleOAuthConfig
+# / webBaseUrl in src/index.ts). Must be the deployed Pages origin, not a
+# stale host, or those URLs send users to the wrong site.
+WEB_ORIGIN = "https://kuruma-web-pages.pages.dev"
