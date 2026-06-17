@@ -144,6 +144,52 @@ describe('GET /operators/me/invites', () => {
   })
 })
 
+describe('POST /operators/me/invites/:id/revoke', () => {
+  async function seedInvite(operatorId: string, tokenHash: string): Promise<string> {
+    const invite = await inviteRepo.create({
+      email: `staff@${operatorId}.com`,
+      operatorId,
+      role: 'OPERATOR_STAFF',
+      tokenHash,
+      status: 'PENDING',
+      expiresAt: FUTURE,
+      invitedByUserId: 'u_owner',
+      acceptedByUserId: null,
+    })
+    return invite.id
+  }
+
+  it('revokes the caller own pending invite (200) — it drops off the pending list', async () => {
+    const id = await seedInvite('op_1', 'h1')
+    const res = await mountFor('OPERATOR_OWNER', 'op_1').request(
+      `/operators/me/invites/${id}/revoke`,
+      { method: 'POST' },
+    )
+    expect(res.status).toBe(200)
+    expect(await inviteRepo.listByOperator('op_1')).toHaveLength(0)
+  })
+
+  it('forbids an OPERATOR_STAFF caller (403) and leaves the invite pending', async () => {
+    const id = await seedInvite('op_1', 'h1')
+    const res = await mountFor('OPERATOR_STAFF', 'op_1').request(
+      `/operators/me/invites/${id}/revoke`,
+      { method: 'POST' },
+    )
+    expect(res.status).toBe(403)
+    expect(await inviteRepo.listByOperator('op_1')).toHaveLength(1)
+  })
+
+  it('cannot revoke another tenant invite (404) — it stays pending', async () => {
+    const id = await seedInvite('op_2', 'h2')
+    const res = await mountFor('OPERATOR_OWNER', 'op_1').request(
+      `/operators/me/invites/${id}/revoke`,
+      { method: 'POST' },
+    )
+    expect(res.status).toBe(404)
+    expect(await inviteRepo.listByOperator('op_2')).toHaveLength(1)
+  })
+})
+
 describe('GET /operators/me/members', () => {
   it('returns the caller operator ACTIVE members joined to user name + email', async () => {
     await membershipRepo.create({
@@ -168,5 +214,62 @@ describe('GET /operators/me/members', () => {
       email: 'owner@op1.com',
       role: 'OPERATOR_OWNER',
     })
+  })
+})
+
+describe('POST /operators/me/members/:id/deactivate', () => {
+  async function seedMember(
+    userId: string,
+    operatorId: string,
+    role: 'OPERATOR_OWNER' | 'OPERATOR_STAFF',
+  ): Promise<string> {
+    const m = await membershipRepo.create({ userId, operatorId, role, status: 'ACTIVE' })
+    return m.id
+  }
+
+  it('deactivates an active member (200) — they drop off the roster', async () => {
+    await seedMember('u_owner', 'op_1', 'OPERATOR_OWNER')
+    const staffId = await seedMember('u_staff', 'op_1', 'OPERATOR_STAFF')
+    const res = await mountFor('OPERATOR_OWNER', 'op_1').request(
+      `/operators/me/members/${staffId}/deactivate`,
+      { method: 'POST' },
+    )
+    expect(res.status).toBe(200)
+    const { data } = await res.json()
+    expect(data).toEqual({ id: staffId })
+    expect((await membershipRepo.findActiveByOperator('op_1')).map((m) => m.userId)).toEqual([
+      'u_owner',
+    ])
+  })
+
+  it('forbids an OPERATOR_STAFF caller (403) — both members stay active', async () => {
+    await seedMember('u_owner', 'op_1', 'OPERATOR_OWNER')
+    const staffId = await seedMember('u_staff', 'op_1', 'OPERATOR_STAFF')
+    const res = await mountFor('OPERATOR_STAFF', 'op_1').request(
+      `/operators/me/members/${staffId}/deactivate`,
+      { method: 'POST' },
+    )
+    expect(res.status).toBe(403)
+    expect(await membershipRepo.findActiveByOperator('op_1')).toHaveLength(2)
+  })
+
+  it('refuses deactivating the last active owner (409) — the owner stays active', async () => {
+    const ownerId = await seedMember('u_owner', 'op_1', 'OPERATOR_OWNER')
+    const res = await mountFor('OPERATOR_OWNER', 'op_1').request(
+      `/operators/me/members/${ownerId}/deactivate`,
+      { method: 'POST' },
+    )
+    expect(res.status).toBe(409)
+    expect(await membershipRepo.findActiveByOperator('op_1')).toHaveLength(1)
+  })
+
+  it('cannot deactivate another tenant member (404) — it stays active', async () => {
+    const otherId = await seedMember('u_b', 'op_2', 'OPERATOR_OWNER')
+    const res = await mountFor('OPERATOR_OWNER', 'op_1').request(
+      `/operators/me/members/${otherId}/deactivate`,
+      { method: 'POST' },
+    )
+    expect(res.status).toBe(404)
+    expect(await membershipRepo.findActiveByOperator('op_2')).toHaveLength(1)
   })
 })

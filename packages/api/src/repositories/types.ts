@@ -232,6 +232,10 @@ export interface ProviderInviteRepository {
   /** #904: the operator's actionable (PENDING) invites — the self-service team
    *  page. Scoped by operatorId; non-PENDING (accepted/revoked) rows drop off. */
   listByOperator(operatorId: string): Promise<ProviderInvite[]>
+  /** #904 slice 2: owner revokes a pending invite. Scoped (operatorId, status='PENDING')
+   *  so a tenant can only revoke its own actionable invites; returns the updated row,
+   *  or undefined when nothing matched (already accepted/revoked, or another tenant's). */
+  revoke(id: string, operatorId: string): Promise<ProviderInvite | undefined>
 }
 
 // #521. `findActiveByUserId` is served by the partial-unique-active index
@@ -245,6 +249,9 @@ export interface OperatorMembershipRepository {
   create(
     data: Omit<OperatorMembership, 'id' | 'createdAt' | 'updatedAt'>,
   ): Promise<OperatorMembership>
+  // #904 slice 2: owner deactivates a member. Scoped (id, operatorId, status=
+  // 'ACTIVE'); returns the row, or undefined on no-match (foreign/unknown/revoked).
+  deactivate(id: string, operatorId: string): Promise<OperatorMembership | undefined>
 }
 
 export interface VehicleFilters {
@@ -360,6 +367,9 @@ export interface UserRepository {
     userId: string,
     access: { role: OperatorRole; operatorId: string },
   ): Promise<void>
+  // #904 slice 2: inverse of setOperatorAccess. Tears the projection back down to a
+  // plain RENTER (role + null operatorId) on deactivate; silent no-op if absent.
+  clearOperatorAccess(userId: string): Promise<void>
 }
 
 export interface CustomerListFilters {

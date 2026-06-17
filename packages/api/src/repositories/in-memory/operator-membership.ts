@@ -48,4 +48,15 @@ export class InMemoryOperatorMembershipRepository implements OperatorMembershipR
     this.store.set(membership.id, membership)
     return membership
   }
+
+  // #904 slice 2: ACTIVE -> REVOKED, scoped to (id, operatorId). Only an ACTIVE
+  // row transitions, so a re-deactivate (or a foreign/unknown id) is a no-op that
+  // returns undefined — the service maps that to a 404.
+  async deactivate(id: string, operatorId: string): Promise<OperatorMembership | undefined> {
+    const m = this.store.get(id)
+    if (!m || m.operatorId !== operatorId || m.status !== 'ACTIVE') return undefined
+    const revoked: OperatorMembership = { ...m, status: 'REVOKED', updatedAt: new Date() }
+    this.store.set(id, revoked)
+    return revoked
+  }
 }

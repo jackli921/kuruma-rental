@@ -92,4 +92,10 @@ export class InMemoryUserRepository implements UserRepository {
     if (!user) return
     this.store.set(userId, { ...user, role: access.role, operatorId: access.operatorId })
   }
+
+  async clearOperatorAccess(userId: string): Promise<void> {
+    const user = this.store.get(userId)
+    if (!user) return
+    this.store.set(userId, { ...user, role: 'RENTER', operatorId: null })
+  }
 }

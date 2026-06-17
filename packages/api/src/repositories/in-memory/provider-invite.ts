@@ -1,4 +1,4 @@
-import { PG_ERROR } from '../../pg-errors'
+import { PG_ERROR, PROVIDER_INVITE_PENDING_EMAIL_CONSTRAINT } from '../../pg-errors'
 import type { ProviderInvite } from '../../stores'
 import type { ProviderInviteRepository } from '../types'
 
@@ -20,10 +20,29 @@ export class InMemoryProviderInviteRepository implements ProviderInviteRepositor
     }
   }
 
+  // Mirror provider_invites_pending_email_unique (PARTIAL on status='PENDING'):
+  // at most one live invite per (operatorId, email). REVOKED/ACCEPTED rows don't
+  // occupy the slot, so a re-invite after revoke succeeds. Emails are stored
+  // lowercased, but compare case-insensitively to be safe.
+  private assertNoPendingDuplicate(operatorId: string, email: string): void {
+    const target = email.toLowerCase()
+    const clash = [...this.store.values()].some(
+      (i) =>
+        i.status === 'PENDING' && i.operatorId === operatorId && i.email.toLowerCase() === target,
+    )
+    if (clash) {
+      throw Object.assign(new Error('duplicate key value violates unique constraint'), {
+        code: PG_ERROR.UNIQUE_VIOLATION,
+        constraint_name: PROVIDER_INVITE_PENDING_EMAIL_CONSTRAINT,
+      })
+    }
+  }
+
   async create(
     data: Omit<ProviderInvite, 'id' | 'createdAt' | 'updatedAt'>,
   ): Promise<ProviderInvite> {
     this.assertTokenHashFree(data.tokenHash)
+    if (data.status === 'PENDING') this.assertNoPendingDuplicate(data.operatorId, data.email)
     const now = new Date()
     const invite: ProviderInvite = {
       ...data,
@@ -48,9 +67,23 @@ export class InMemoryProviderInviteRepository implements ProviderInviteRepositor
       .sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime() || a.id.localeCompare(b.id))
   }
 
+  // #904 slice 2: owner revokes a pending invite. Scoped (operatorId, PENDING) so a
+  // tenant can only revoke its own actionable invites; returns the updated row, or
+  // undefined when nothing matched (mirrors the drizzle WHERE on id+operatorId+status).
+  async revoke(id: string, operatorId: string): Promise<ProviderInvite | undefined> {
+    const invite = this.store.get(id)
+    if (!invite || invite.operatorId !== operatorId || invite.status !== 'PENDING') return undefined
+    const revoked: ProviderInvite = { ...invite, status: 'REVOKED', updatedAt: new Date() }
+    this.store.set(id, revoked)
+    return revoked
+  }
+
+  // #904 slice 2: PENDING-only guard. A revoke that lands first leaves the invite
+  // REVOKED; a racing accept then finds no PENDING row and is a no-op, so it can
+  // never flip REVOKED -> ACCEPTED (mirrors the drizzle WHERE status='PENDING').
   async markAccepted(id: string, acceptedByUserId: string): Promise<void> {
     const invite = this.store.get(id)
-    if (!invite) return
+    if (!invite || invite.status !== 'PENDING') return
     this.store.set(id, {
       ...invite,
       status: 'ACCEPTED',

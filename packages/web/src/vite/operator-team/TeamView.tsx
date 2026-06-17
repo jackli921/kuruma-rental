@@ -1,16 +1,28 @@
 import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
 import type { OperatorInviteData, OperatorMemberData } from '@kuruma/shared/types/operator-team'
 import { useFormatter, useTranslations } from 'use-intl'
 
 interface TeamViewProps {
   members: OperatorMemberData[]
   invites: OperatorInviteData[]
+  canManage: boolean
+  onRevokeInvite: (invite: OperatorInviteData) => void
+  onDeactivateMember: (member: OperatorMemberData) => void
 }
 
-// #904: read-only projection of the operator's team — active members and the
-// pending staff invites. Owner-only write affordances live on the route; this
-// component stays a pure render of the rows.
-export function TeamView({ members, invites }: TeamViewProps) {
+// #904: projection of the operator's team — active members and pending staff
+// invites. The owner-only write affordances (revoke / deactivate) render per-row
+// when canManage; the confirm dialogs and tenant-scoping live on the route. The
+// row buttons label themselves with the row subject (email / name) so each has a
+// distinct accessible name and the parent learns which row was acted on.
+export function TeamView({
+  members,
+  invites,
+  canManage,
+  onRevokeInvite,
+  onDeactivateMember,
+}: TeamViewProps) {
   const t = useTranslations('business.team')
   const f = useFormatter()
 
@@ -37,6 +49,16 @@ export function TeamView({ members, invites }: TeamViewProps) {
                       date: f.dateTime(new Date(m.joinedAt), { dateStyle: 'medium' }),
                     })}
                   </span>
+                  {canManage && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      aria-label={t('deactivateTitle', { name: m.name ?? t('unknownName') })}
+                      onClick={() => onDeactivateMember(m)}
+                    >
+                      {t('deactivate')}
+                    </Button>
+                  )}
                 </div>
               </li>
             ))}
@@ -62,9 +84,19 @@ export function TeamView({ members, invites }: TeamViewProps) {
                     })}
                   </p>
                 </div>
-                <Badge variant="outline" className="shrink-0">
-                  {t('invites.pending')}
-                </Badge>
+                <div className="flex shrink-0 items-center gap-3">
+                  <Badge variant="outline">{t('invites.pending')}</Badge>
+                  {canManage && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      aria-label={t('revokeTitle', { email: i.email })}
+                      onClick={() => onRevokeInvite(i)}
+                    >
+                      {t('revoke')}
+                    </Button>
+                  )}
+                </div>
               </li>
             ))}
           </ul>
