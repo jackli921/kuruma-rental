@@ -58,6 +58,7 @@ const EXPECTED_KEY_MAP: Record<keyof Repos, true> = {
   operatorMembershipRepo: true,
   auditLogRepo: true,
   bookingEventRepo: true,
+  consentRepo: true,
   runInTransaction: true,
   runOperatorGrant: true,
   photosPublicUrl: true,
