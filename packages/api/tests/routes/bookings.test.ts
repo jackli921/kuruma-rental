@@ -38,6 +38,7 @@ let locationRepo: InMemoryLocationRepository
 let insuranceOptionRepo: InMemoryInsuranceOptionRepository
 let addOnRepo: InMemoryAddOnRepository
 let feeScheduleRepo: InMemoryFeeScheduleRepository
+let classRatePlanRepo: InMemoryClassRatePlanRepository
 let service: BookingService
 let testClassId: string
 let locationId: string
@@ -177,6 +178,7 @@ describe('Booking Routes', () => {
     seededVehicleId = v1.id
     seededVehicle2Id = v2.id
 
+    classRatePlanRepo = new InMemoryClassRatePlanRepository()
     const repos: TransactionRepos = {
       vehicleRepo,
       maintenanceLogRepo: new InMemoryMaintenanceLogRepository(),
@@ -187,7 +189,7 @@ describe('Booking Routes', () => {
       addOnRepo,
       feeScheduleRepo,
       availabilityRepo: new InMemoryAvailabilityRepository(vehicleRepo, bookingRepo),
-      classRatePlanRepo: new InMemoryClassRatePlanRepository(),
+      classRatePlanRepo,
       acquireClassCapacityLock: async () => {},
     }
     const runInTransaction: RunInTransaction = async (fn) => fn(repos)
@@ -636,11 +638,18 @@ describe('Booking Routes', () => {
       expect(body.data.bookingCode.length).toBeGreaterThan(0)
     })
 
-    // #464 slice 1: the validator accepts the CLASS_COMBO contract, but combo
-    // creation (inventory guard + rate-plan pricing) lands in slice 2. Until then
-    // the route rejects it explicitly rather than silently mis-handling a car-less
-    // body — proving the discriminator is wired end-to-end through the route.
-    it('rejects a CLASS_COMBO booking with 501 NOT_IMPLEMENTED (slice 1)', async () => {
+    // #464 slice 2: the route now creates a CLASS_COMBO float — no car is chosen at
+    // book time, priced off the seeded class rate plan. Proves the discriminator +
+    // classId are wired end-to-end through the route into the service combo branch.
+    it('creates a CLASS_COMBO float priced off the class rate plan (slice 2)', async () => {
+      await classRatePlanRepo.create({
+        operatorId: OPERATOR,
+        classId: testClassId,
+        pickupLocationId: locationId,
+        dayRateJpy: 6000,
+        isActive: true,
+        label: null,
+      })
       const { requestedVehicleId: _drop, ...rest } = validBookingInput()
       const res = await createBooking({
         ...rest,
@@ -648,10 +657,17 @@ describe('Booking Routes', () => {
         classId: testClassId,
       })
 
-      expect(res.status).toBe(501)
+      expect(res.status).toBe(201)
       const body = await res.json()
-      expect(body.success).toBe(false)
-      expect(body.code).toBe('NOT_IMPLEMENTED')
+      expect(body.success).toBe(true)
+      expect(body.data.fulfillmentMode).toBe('CLASS_COMBO')
+      // A float carries no car until the operator assigns one (slice 4).
+      expect(body.data.requestedVehicleId).toBeNull()
+      expect(body.data.assignedVehicleId).toBeNull()
+      expect(body.data.classId).toBe(testClassId)
+      expect(body.data.operatorId).toBe(OPERATOR)
+      // 24h rental x 6000/day = 6000 (no insurance, no add-ons).
+      expect(body.data.totalPrice).toBe(6000)
     })
 
     // #613 consent gate keys on RENTER role; the default test app authenticates

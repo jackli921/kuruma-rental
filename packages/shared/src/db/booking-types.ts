@@ -30,8 +30,11 @@ export type AddOnSnapshot = {
 
 export type BookingCreatedPayload = {
   type: 'BOOKING_CREATED'
-  requestedVehicleId: string
-  assignedVehicleId: string
+  // #464: null for a CLASS_COMBO float — no car is chosen at book time (the
+  // operator assigns one later via the substitution path, which appends its own
+  // VEHICLE_SUBSTITUTED event). Both NOT NULL for a SPECIFIC booking.
+  requestedVehicleId: string | null
+  assignedVehicleId: string | null
   classId: string
   // #463: the discriminator is a defining booking attribute, so the self-contained
   // CREATED audit snapshot records it alongside the vehicle/class it mirrors.

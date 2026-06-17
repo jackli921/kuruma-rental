@@ -11,7 +11,7 @@ import {
   requireUser,
   toCallerContext,
 } from '../middleware/auth'
-import type { BookingService } from '../services/booking'
+import type { BookingService, CreateBookingInput } from '../services/booking'
 import type { BookingFilters } from '../services/filters'
 import { fail, ok, parseBody, parseDateRange, parseId, parseLimit } from './helpers'
 
@@ -144,16 +144,6 @@ export function createBookingRoutes(service: BookingService) {
       const parsed = await parseBody(c, createBookingSchema)
       if (!parsed.ok) return parsed.response
 
-      // #464 slice 1: the validator accepts the CLASS_COMBO create contract, but
-      // combo creation (inventory guard + rate-plan pricing) lands in slice 2.
-      // Reject it explicitly until then — this also narrows parsed.data to the
-      // SPECIFIC member, so requestedVehicleId is available below.
-      if (parsed.data.fulfillmentMode === 'CLASS_COMBO') {
-        return fail(c, 'Class-combo bookings are not yet available', 501, {
-          code: 'NOT_IMPLEMENTED',
-        })
-      }
-
       // #589: STAFF and OPERATOR_* are "manual bookers" — they may book on behalf
       // of a renter (renterId) and set source=MANUAL. An operator's renterId is
       // authorized in the service against its OWN customer scope (renters with a
@@ -177,8 +167,10 @@ export function createBookingRoutes(service: BookingService) {
         return fail(c, 'Liability disclaimer must be accepted', 400, { code: 'CONSENT_REQUIRED' })
       }
 
-      const createResult = await service.create(ctx, {
-        requestedVehicleId: parsed.data.requestedVehicleId,
+      // Fields shared by both fulfillment modes; the mode-specific id — a concrete
+      // requestedVehicleId (SPECIFIC) or a classId for a floating CLASS_COMBO (#464)
+      // — is grafted on per mode so the service receives a typed discriminated input.
+      const common = {
         pickupLocationId: parsed.data.pickupLocationId,
         dropoffLocationId: parsed.data.dropoffLocationId,
         insuranceOptionId: parsed.data.insuranceOptionId ?? null,
@@ -194,7 +186,17 @@ export function createBookingRoutes(service: BookingService) {
         notes: parsed.data.notes ?? null,
         idempotencyKey: parsed.data.idempotencyKey ?? null,
         disclaimerAccepted: parsed.data.disclaimerAccepted ?? false,
-      })
+      }
+      const createInput: CreateBookingInput =
+        parsed.data.fulfillmentMode === 'CLASS_COMBO'
+          ? { ...common, fulfillmentMode: 'CLASS_COMBO', classId: parsed.data.classId }
+          : {
+              ...common,
+              fulfillmentMode: 'SPECIFIC',
+              requestedVehicleId: parsed.data.requestedVehicleId,
+            }
+
+      const createResult = await service.create(ctx, createInput)
 
       if (!createResult.ok) {
         return fail(c, createResult.error, createResult.status, {

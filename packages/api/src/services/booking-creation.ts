@@ -11,6 +11,7 @@ import type {
   TransactionRepos,
   UserRepository,
 } from '../repositories/types'
+import type { Location } from '../stores'
 import type { BookingPostCommitDispatcher } from './booking-post-commit-dispatcher'
 import { MS_PER_MINUTE, composeBookingTotal, rentalDays } from './booking-pricing-helpers'
 import type {
@@ -178,9 +179,9 @@ export class BookingCreationService {
   // The atomic decision-and-record (FC/IS: the decision; ensureThread is the
   // imperative shell). Resolution reads run as SYSTEM_CONTEXT — these are
   // internal pricing/snapshot reads, and insurance/fee reads reject RENTER
-  // callers by design; the booking's tenant is derived from the vehicle, not
-  // the caller. The booking + event WRITES use the caller's ctx (renter-own /
-  // operator scope is enforced at the repo).
+  // callers by design; the booking's tenant is derived from the vehicle (SPECIFIC)
+  // or the pickup location (CLASS_COMBO, #464), not the caller. The booking + event
+  // WRITES use the caller's ctx (renter-own / operator scope is enforced at the repo).
   private async submitInTx(
     ctx: CallerContext,
     input: CreateBookingInput,
@@ -190,53 +191,117 @@ export class BookingCreationService {
     now: Date,
     repos: TransactionRepos,
   ): Promise<CreateBookingResult> {
-    const vehicle = await repos.vehicleRepo.findById(SYSTEM_CONTEXT, input.requestedVehicleId)
-    if (!vehicle) {
-      return { ok: false, status: 400, error: 'Vehicle not found' }
-    }
-    if (vehicle.status !== 'AVAILABLE') {
-      return { ok: false, status: 400, error: 'Vehicle is not available' }
-    }
-    if (!vehicle.classId) {
-      return { ok: false, status: 400, error: 'Vehicle has no class' }
-    }
-    const operatorId = vehicle.operatorId
-    const classId = vehicle.classId
-    const assignedVehicleId = vehicle.id // server-derived = requested at submit
+    // Resolve the mode-specific facts the rest of the submit needs: the booking's
+    // tenant + class, the (possibly null) car ids, and the priced base. SPECIFIC
+    // derives them from the chosen vehicle (#406 per-car pricing); a CLASS_COMBO
+    // float (#464) has no car — its operator comes from the pickup location and its
+    // base is priced off the class rate plan (§5). The dropoff/turnaround + snapshot
+    // tail below is mode-agnostic.
+    let operatorId: string
+    let classId: string
+    let requestedVehicleId: string | null
+    let assignedVehicleId: string | null
+    let baseJpy: number
+    let pickup: Location
 
-    const ruleCheck = checkRentalRules(
-      {
-        minRentalHours: vehicle.minRentalHours,
-        maxRentalHours: vehicle.maxRentalHours,
-        advanceBookingHours: input.source === 'MANUAL' ? null : vehicle.advanceBookingHours,
-      },
-      input.startAt,
-      input.endAt,
-      now,
-    )
-    if (!ruleCheck.ok) {
-      return {
-        ok: false,
-        status: 400,
-        error: 'Booking violates a rental rule on this vehicle',
-        code: ruleCheck.code,
-        details: { required: ruleCheck.required, actual: ruleCheck.actual },
+    if (input.fulfillmentMode === 'CLASS_COMBO') {
+      const loc = await repos.locationRepo.findById(SYSTEM_CONTEXT, input.pickupLocationId)
+      if (!loc) {
+        return { ok: false, status: 400, error: 'Pickup location is not available' }
       }
-    }
+      operatorId = loc.operatorId
+      classId = input.classId
+      // The booking floats: no car until the operator assigns one (slice 4).
+      requestedVehicleId = null
+      assignedVehicleId = null
+      // Price off the class rate plan (#464 §5): no active plan for this
+      // (operator, class, location) ⇒ the class simply isn't offered as a deal.
+      const plan = await repos.classRatePlanRepo.findActiveByClassAndLocation(
+        operatorId,
+        classId,
+        input.pickupLocationId,
+      )
+      if (!plan) {
+        return {
+          ok: false,
+          status: 400,
+          error: 'This class is not available as a deal at this location',
+        }
+      }
+      baseJpy = plan.dayRateJpy * rentalDays(input.startAt, input.endAt)
+      pickup = loc
+    } else {
+      const vehicle = await repos.vehicleRepo.findById(SYSTEM_CONTEXT, input.requestedVehicleId)
+      if (!vehicle) {
+        return { ok: false, status: 400, error: 'Vehicle not found' }
+      }
+      if (vehicle.status !== 'AVAILABLE') {
+        return { ok: false, status: 400, error: 'Vehicle is not available' }
+      }
+      if (!vehicle.classId) {
+        return { ok: false, status: 400, error: 'Vehicle has no class' }
+      }
+      operatorId = vehicle.operatorId
+      classId = vehicle.classId
+      requestedVehicleId = input.requestedVehicleId
+      assignedVehicleId = vehicle.id // server-derived = requested at submit
 
-    // The car physically lives at its own storefront, so a booking can only pick
-    // it up there. Without this, a forged body could pair a vehicle with another
-    // of the operator's locations — the operator check below passes (same tenant)
-    // but the stamped pickup/turnaround would lie about where the car is (#392).
-    if (vehicle.pickupLocationId !== input.pickupLocationId) {
-      return { ok: false, status: 400, error: 'Pickup location does not match the vehicle' }
+      const ruleCheck = checkRentalRules(
+        {
+          minRentalHours: vehicle.minRentalHours,
+          maxRentalHours: vehicle.maxRentalHours,
+          advanceBookingHours: input.source === 'MANUAL' ? null : vehicle.advanceBookingHours,
+        },
+        input.startAt,
+        input.endAt,
+        now,
+      )
+      if (!ruleCheck.ok) {
+        return {
+          ok: false,
+          status: 400,
+          error: 'Booking violates a rental rule on this vehicle',
+          code: ruleCheck.code,
+          details: { required: ruleCheck.required, actual: ruleCheck.actual },
+        }
+      }
+
+      // The car physically lives at its own storefront, so a booking can only pick
+      // it up there. Without this, a forged body could pair a vehicle with another
+      // of the operator's locations — the operator check below passes (same tenant)
+      // but the stamped pickup/turnaround would lie about where the car is (#392).
+      if (vehicle.pickupLocationId !== input.pickupLocationId) {
+        return { ok: false, status: 400, error: 'Pickup location does not match the vehicle' }
+      }
+
+      const loc = await repos.locationRepo.findById(SYSTEM_CONTEXT, input.pickupLocationId)
+      if (!loc || loc.operatorId !== operatorId) {
+        return { ok: false, status: 400, error: 'Pickup location is not available' }
+      }
+
+      // Price off the ASSIGNED vehicle's rates — never class-level (#406), never
+      // client-supplied (#74), non-null on every submit (#429 backfill guard).
+      const pricing = calculateBookingPrice(
+        { dailyRateJpy: vehicle.dailyRateJpy, hourlyRateJpy: vehicle.hourlyRateJpy },
+        input.startAt,
+        input.endAt,
+      )
+      if (!pricing.ok) {
+        return {
+          ok: false,
+          status: 400,
+          error:
+            pricing.code === 'NO_RATES_SET'
+              ? 'No daily or hourly rate configured'
+              : 'Invalid booking duration',
+          code: pricing.code,
+        }
+      }
+      baseJpy = pricing.totalPriceJpy
+      pickup = loc
     }
 
     // Turnaround is location-only (§5.3): pickup location's default, 48h fallback.
-    const pickup = await repos.locationRepo.findById(SYSTEM_CONTEXT, input.pickupLocationId)
-    if (!pickup || pickup.operatorId !== operatorId) {
-      return { ok: false, status: 400, error: 'Pickup location is not available' }
-    }
     if (input.dropoffLocationId !== input.pickupLocationId) {
       const dropoff = await repos.locationRepo.findById(SYSTEM_CONTEXT, input.dropoffLocationId)
       if (!dropoff || dropoff.operatorId !== operatorId) {
@@ -245,25 +310,6 @@ export class BookingCreationService {
     }
     const turnaroundMinutes = pickup.defaultTurnaroundMinutes ?? DEFAULT_TURNAROUND_MINUTES
     const effectiveEndAt = new Date(input.endAt.getTime() + turnaroundMinutes * MS_PER_MINUTE)
-
-    // Price off the ASSIGNED vehicle's rates — never class-level (#406), never
-    // client-supplied (#74), non-null on every submit (#429 backfill guard).
-    const pricing = calculateBookingPrice(
-      { dailyRateJpy: vehicle.dailyRateJpy, hourlyRateJpy: vehicle.hourlyRateJpy },
-      input.startAt,
-      input.endAt,
-    )
-    if (!pricing.ok) {
-      return {
-        ok: false,
-        status: 400,
-        error:
-          pricing.code === 'NO_RATES_SET'
-            ? 'No daily or hourly rate configured'
-            : 'Invalid booking duration',
-        code: pricing.code,
-      }
-    }
     // Selected insurance: snapshot the chosen ACTIVE option from THIS operator.
     let insuranceOptionId: string | null = null
     let insuranceSnapshot: InsuranceSnapshot | null = null
@@ -314,7 +360,7 @@ export class BookingCreationService {
 
     // One composition for create AND substitute() — never hand-summed twice (#862).
     const totalPrice = composeBookingTotal({
-      baseJpy: pricing.totalPriceJpy,
+      baseJpy,
       insurancePerDayJpy: insuranceSnapshot?.dailyPriceJpy ?? 0,
       days: rentalDays(input.startAt, input.endAt),
       addOns: addOnSnapshot,
@@ -328,7 +374,7 @@ export class BookingCreationService {
       operatorId,
       renterId,
       classId,
-      requestedVehicleId: input.requestedVehicleId,
+      requestedVehicleId,
       assignedVehicleId,
       pickupLocationId: input.pickupLocationId,
       dropoffLocationId: input.dropoffLocationId,
@@ -337,8 +383,8 @@ export class BookingCreationService {
       effectiveEndAt,
       status: 'CONFIRMED',
       source: input.source,
-      // #463: server-derived. Every pre-demo submit is SPECIFIC; CLASS_COMBO is #464.
-      fulfillmentMode: 'SPECIFIC',
+      // #463/#464: the resolved fulfillment mode (SPECIFIC car or CLASS_COMBO float).
+      fulfillmentMode: input.fulfillmentMode,
       bookingCode,
       insuranceOptionId,
       insuranceSnapshot,
@@ -367,10 +413,10 @@ export class BookingCreationService {
       actorId: ctx.userId,
       payload: {
         type: 'BOOKING_CREATED',
-        requestedVehicleId: input.requestedVehicleId,
+        requestedVehicleId,
         assignedVehicleId,
         classId,
-        fulfillmentMode: 'SPECIFIC', // #463: mirror the booking's discriminator in the audit snapshot
+        fulfillmentMode: input.fulfillmentMode, // #463/#464: mirror the booking's discriminator
         startAt: input.startAt.toISOString(),
         endAt: input.endAt.toISOString(),
         totalPrice,

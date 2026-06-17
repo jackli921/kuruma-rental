@@ -184,6 +184,7 @@ async function setup(
 
 function createInput(o: Partial<CreateBookingInput> = {}): CreateBookingInput {
   return {
+    fulfillmentMode: 'SPECIFIC',
     requestedVehicleId: '',
     pickupLocationId: '',
     dropoffLocationId: '',
@@ -193,7 +194,7 @@ function createInput(o: Partial<CreateBookingInput> = {}): CreateBookingInput {
     source: 'DIRECT',
     addOnIds: [],
     ...o,
-  }
+  } as CreateBookingInput
 }
 
 // Resolve the real seeded location id (InMemory repos assign UUIDs) and align
@@ -206,6 +207,57 @@ async function seedReady(h: Harness) {
   ;(veh as Vehicle).pickupLocationId = locationId
   return { vehicleId: h.vehicleId, locationId }
 }
+
+// #464 slice 2: an active deal rate for the seeded (operator, class, location)
+// so a CLASS_COMBO float can be priced at creation.
+async function seedRatePlan(h: Harness, locationId: string, dayRateJpy = 8000) {
+  return h.repos.classRatePlanRepo.create({
+    operatorId: OP_A,
+    classId: CLASS_COMPACT,
+    pickupLocationId: locationId,
+    dayRateJpy,
+    isActive: true,
+    label: null,
+  })
+}
+
+// A CLASS_COMBO create input (no requestedVehicleId — the booking floats; the
+// server derives operator from the pickup location and prices off the rate plan).
+function comboInput(locationId: string, o: Partial<CreateBookingInput> = {}): CreateBookingInput {
+  return {
+    fulfillmentMode: 'CLASS_COMBO',
+    classId: CLASS_COMPACT,
+    pickupLocationId: locationId,
+    dropoffLocationId: locationId,
+    renterId: RENTER,
+    startAt: START,
+    endAt: END,
+    source: 'DIRECT',
+    addOnIds: [],
+    ...o,
+  } as CreateBookingInput
+}
+
+describe('BookingService.create — CLASS_COMBO floats (#464 slice 2)', () => {
+  it('books a float priced off the class rate plan — null car ids, CLASS_COMBO mode', async () => {
+    const h = await setup({ codes: ['COMBO001'] })
+    const { locationId } = await seedReady(h)
+    await seedRatePlan(h, locationId, 8000)
+
+    const result = await h.service.create(renterCtx, comboInput(locationId), NOW)
+
+    expect(result.ok).toBe(true)
+    if (!result.ok) throw new Error(`expected ok, got ${result.status}: ${String(result.error)}`)
+    const b = result.booking
+    expect(b.fulfillmentMode).toBe('CLASS_COMBO')
+    expect(b.requestedVehicleId).toBeNull()
+    expect(b.assignedVehicleId).toBeNull()
+    expect(b.classId).toBe(CLASS_COMPACT)
+    expect(b.operatorId).toBe(OP_A)
+    // 2-day rental × 8000/day = 16000 (no insurance, no add-ons).
+    expect(b.totalPrice).toBe(16000)
+  })
+})
 
 describe('BookingService.create — document-verification gate (#459)', () => {
   const staffCtx: CallerContext = { userId: 'staff-9', role: 'PLATFORM_ADMIN', bypassScope: true }

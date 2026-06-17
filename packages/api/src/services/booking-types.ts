@@ -2,11 +2,10 @@ import type { calculateCancellationFee } from '@kuruma/shared/lib/cancellation-p
 import type { CallerContext } from '../middleware/auth'
 import type { Booking } from '../stores'
 
-// Slice 6 (#392): the renter books a CONCRETE vehicle chosen in the storefront
-// (slice 5). operatorId / classId / assignedVehicleId / totalPrice are all
-// server-derived from that vehicle — never client fields (proposal §6.2, §4.1).
-export interface CreateBookingInput {
-  requestedVehicleId: string
+// Fields common to every booking regardless of fulfillment mode (#464). The
+// mode-specific id — requestedVehicleId (SPECIFIC) or classId (CLASS_COMBO) —
+// lives on the discriminated members below.
+interface CreateBookingCommon {
   pickupLocationId: string
   dropoffLocationId: string
   insuranceOptionId?: string | null
@@ -32,6 +31,18 @@ export interface CreateBookingInput {
   // staff/manual bookings are exempt. The server stamps the timestamp + version.
   disclaimerAccepted?: boolean
 }
+
+// #464: the two fulfillment modes as a discriminated union (over optional id bags
+// — see typescript.md). The route builds the right member from the validated body.
+//  - SPECIFIC (slice 6, #392): the renter books a CONCRETE vehicle chosen in the
+//    storefront. operatorId / classId / assignedVehicleId / totalPrice are all
+//    server-derived from that vehicle — never client fields (proposal §6.2, §4.1).
+//  - CLASS_COMBO (#464 slice 2): the renter books a vehicle CLASS at a pickup
+//    location; no car is chosen at book time (the booking "floats"). The server
+//    derives operatorId from the location and prices off the class rate plan.
+export type CreateBookingInput =
+  | (CreateBookingCommon & { fulfillmentMode: 'SPECIFIC'; requestedVehicleId: string })
+  | (CreateBookingCommon & { fulfillmentMode: 'CLASS_COMBO'; classId: string })
 
 export type CreateBookingResult =
   | { ok: true; booking: Booking; status?: 200 }
