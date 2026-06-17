@@ -1212,6 +1212,28 @@ describe('Booking Routes', () => {
       expect((await res.json()).data.status).toBe('CANCELLED')
     })
 
+    it('normalises a whitespace-only note to null in the persisted reason (#868 3b)', async () => {
+      const createRes = await createBooking()
+      const created = await createRes.json()
+
+      const res = await app.request(`/bookings/${created.data.id}/cancel`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ reason: { code: 'OTHER', note: '   ' } }),
+      })
+
+      expect(res.status).toBe(200)
+
+      // The SERVER — not just the web dialog — collapses an empty/whitespace note to
+      // null, so a non-web caller (Trip.com) can't persist a meaningless "" note.
+      const events = await bookingEventRepo.findByBookingId(SYSTEM_CONTEXT, created.data.id)
+      const cancelled = events.find((e) => e.type === 'BOOKING_CANCELLED')
+      expect(cancelled).toMatchObject({
+        type: 'BOOKING_CANCELLED',
+        payload: { cancellationReason: { code: 'OTHER', note: null } },
+      })
+    })
+
     it('rejects a cancellation reason outside the taxonomy with 400 (#868 3b)', async () => {
       const createRes = await createBooking()
       const created = await createRes.json()
