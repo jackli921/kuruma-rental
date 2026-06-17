@@ -887,7 +887,19 @@
       "keep": "Keep booking",
       "confirm": "Yes, cancel",
       "pending": "Cancelling…",
-      "error": "We couldn't cancel your booking. Please try again, or contact the operator."
+      "error": "We couldn't cancel your booking. Please try again, or contact the operator.",
+      "reason": {
+        "legend": "Why are you cancelling? (optional)",
+        "notePlaceholder": "Anything you'd like to add?",
+        "noteLabel": "Additional details",
+        "options": {
+          "CHANGE_OF_PLANS": "My plans changed",
+          "FOUND_ALTERNATIVE": "I found another option",
+          "TRIP_CANCELLED": "My trip was cancelled",
+          "VEHICLE_OR_PRICE_CONCERN": "Concern about the vehicle or price",
+          "OTHER": "Another reason"
+        }
+      }
     },
     "list": {
       "title": "My bookings",

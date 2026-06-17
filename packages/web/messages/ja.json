@@ -887,7 +887,19 @@
       "keep": "予約を維持する",
       "confirm": "はい、キャンセルします",
       "pending": "キャンセル中…",
-      "error": "予約をキャンセルできませんでした。もう一度お試しいただくか、オペレーターにご連絡ください。"
+      "error": "予約をキャンセルできませんでした。もう一度お試しいただくか、オペレーターにご連絡ください。",
+      "reason": {
+        "legend": "キャンセルの理由（任意）",
+        "notePlaceholder": "補足があればご記入ください",
+        "noteLabel": "補足",
+        "options": {
+          "CHANGE_OF_PLANS": "予定が変わった",
+          "FOUND_ALTERNATIVE": "他の選択肢が見つかった",
+          "TRIP_CANCELLED": "旅行が中止になった",
+          "VEHICLE_OR_PRICE_CONCERN": "車両または料金への懸念",
+          "OTHER": "その他の理由"
+        }
+      }
     },
     "list": {
       "title": "予約一覧",

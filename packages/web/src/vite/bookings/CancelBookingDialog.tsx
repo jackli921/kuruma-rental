@@ -9,13 +9,20 @@ import {
   DialogTitle,
   DialogTrigger,
 } from '@/components/ui/dialog'
+import { Textarea } from '@/components/ui/textarea'
 import { ApiError } from '@/lib/api-error'
 import { formatJpy } from '@/lib/format'
 import { BOOKINGS_KEY, cancelBooking } from '@/vite/bookings/api'
 import { buildCancellationPreview } from '@/vite/bookings/cancellation-preview'
+import type { CancellationReason } from '@kuruma/shared/db/schema'
+import { CANCELLATION_REASON_CODES, type CancellationReasonCode } from '@kuruma/shared/enums'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { useRef, useState } from 'react'
 import { useTranslations } from 'use-intl'
+
+// Cap mirrors the server's cancellationReasonSchema (#868 3b) so the textarea can't
+// submit a note the API would 400.
+const NOTE_MAX = 500
 
 interface CancelBookingDialogProps {
   readonly bookingId: string
@@ -46,6 +53,10 @@ export function CancelBookingDialog({
   const t = useTranslations('bookings.cancel')
   const queryClient = useQueryClient()
   const [open, setOpen] = useState(false)
+  // #868 3b: an OPTIONAL reason. No selection => no reason sent; the cancel never
+  // depends on it. The freeform note only travels when a category is also chosen.
+  const [reasonCode, setReasonCode] = useState<CancellationReasonCode | null>(null)
+  const [note, setNote] = useState('')
 
   function settle() {
     queryClient.invalidateQueries({ queryKey: BOOKINGS_KEY })
@@ -53,7 +64,7 @@ export function CancelBookingDialog({
   }
 
   const mutation = useMutation({
-    mutationFn: () => cancelBooking(bookingId, csrfToken),
+    mutationFn: (reason: CancellationReason | null) => cancelBooking(bookingId, csrfToken, reason),
     onSuccess: settle,
     onError: (error) => {
       // 409 = no longer cancellable: an operator-cancel (or a double-submit) got
@@ -73,7 +84,20 @@ export function CancelBookingDialog({
 
   function handleOpenChange(next: boolean) {
     setOpen(next)
-    if (next) mutation.reset()
+    if (next) {
+      mutation.reset()
+      setReasonCode(null)
+      setNote('')
+    }
+  }
+
+  function confirmCancel() {
+    if (inFlightRef.current || mutation.isPending) return
+    inFlightRef.current = true
+    const reason: CancellationReason | null = reasonCode
+      ? { code: reasonCode, note: note.trim() || null }
+      : null
+    mutation.mutate(reason)
   }
 
   // Price the cancellation as it stands right now — `new Date()` is read once per
@@ -116,19 +140,40 @@ export function CancelBookingDialog({
           </p>
         </div>
 
+        {/* #868 3b: optional reason capture — never gates the cancel. */}
+        <fieldset className="space-y-2">
+          <legend className="text-sm font-medium">{t('reason.legend')}</legend>
+          <div className="space-y-1.5">
+            {CANCELLATION_REASON_CODES.map((code) => (
+              <label key={code} className="flex cursor-pointer items-center gap-2 text-sm">
+                <input
+                  type="radio"
+                  name="cancel-reason"
+                  className="size-4"
+                  checked={reasonCode === code}
+                  onChange={() => setReasonCode(code)}
+                />
+                <span>{t(`reason.options.${code}`)}</span>
+              </label>
+            ))}
+          </div>
+          {reasonCode && (
+            <Textarea
+              value={note}
+              onChange={(e) => setNote(e.target.value)}
+              placeholder={t('reason.notePlaceholder')}
+              aria-label={t('reason.noteLabel')}
+              rows={2}
+              maxLength={NOTE_MAX}
+            />
+          )}
+        </fieldset>
+
         {showError && <output className="block text-sm text-destructive">{t('error')}</output>}
 
         <DialogFooter>
           <DialogClose render={<Button type="button" variant="outline" />}>{t('keep')}</DialogClose>
-          <Button
-            variant="destructive"
-            disabled={mutation.isPending}
-            onClick={() => {
-              if (inFlightRef.current || mutation.isPending) return
-              inFlightRef.current = true
-              mutation.mutate()
-            }}
-          >
+          <Button variant="destructive" disabled={mutation.isPending} onClick={confirmCancel}>
             {mutation.isPending ? t('pending') : t('confirm')}
           </Button>
         </DialogFooter>

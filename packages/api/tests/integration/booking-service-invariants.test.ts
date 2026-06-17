@@ -363,7 +363,7 @@ describe('cancel persists the tiered cancellationFee (real pg)', () => {
     expect(expected.tier).toBe('MEDIUM')
     expect(expected.feeAmount).toBe(14000)
 
-    const res = await service.cancel(ctx, bookingId, now)
+    const res = await service.cancel(ctx, bookingId, null, now)
     expect(res.ok).toBe(true)
     if (!res.ok) throw new Error('cancel failed')
     expect(res.cancellation.feeAmount).toBe(14000)
