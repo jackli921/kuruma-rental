@@ -41,6 +41,7 @@
     "./lib/rental-rules": "./src/lib/rental-rules.ts",
     "./lib/return-path": "./src/lib/return-path.ts",
     "./lib/region-distance": "./src/lib/region-distance.ts",
+    "./lib/photo-ref": "./src/lib/photo-ref.ts",
     "./validators/booking": "./src/validators/booking.ts",
     "./validators/vehicle": "./src/validators/vehicle.ts",
     "./validators/vehicle-class": "./src/validators/vehicle-class.ts",
