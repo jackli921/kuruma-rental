@@ -31,6 +31,7 @@ export class ResendEmailSender implements EmailSender {
     const body = JSON.stringify({
       from: message.from || this.defaultFrom,
       to: message.to,
+      ...(message.bcc?.length ? { bcc: message.bcc } : {}),
       subject: message.subject,
       html: message.html,
       text: message.text,

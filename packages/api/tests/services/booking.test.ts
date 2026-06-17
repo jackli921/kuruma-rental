@@ -146,6 +146,7 @@ async function setup(
     insuranceOptionRepo,
     addOnRepo,
     feeScheduleRepo,
+    userRepo,
   }
   const runInTransaction: RunInTransaction = async (fn) => fn(repos)
 
@@ -673,6 +674,43 @@ describe('BookingService.create — single-transaction submit (#392 §4)', () =>
     expect(h.bookingStore.size).toBe(1)
   })
 
+  // #875: the walk-in renter is minted INSIDE the tx, after the idempotency-replay
+  // short-circuit — so a replayed walk-in returns the same booking WITHOUT creating
+  // a second orphan renter. Pre-#875 every call minted one before the replay check.
+  it('mints the walk-in renter once across an idempotent replay (#875)', async () => {
+    const h = await setup({ codes: ['WALKIN01', 'WALKIN02'] })
+    const { vehicleId, locationId } = await seedReady(h)
+    const mintSpy = vi.spyOn(h.repos.userRepo, 'createWalkInRenter')
+    const opCtx: CallerContext = {
+      userId: 'op-walkin',
+      role: 'OPERATOR_OWNER',
+      operatorId: OP_A,
+      bypassScope: false,
+    }
+    const input = createInput({
+      requestedVehicleId: vehicleId,
+      pickupLocationId: locationId,
+      dropoffLocationId: locationId,
+      source: 'MANUAL',
+      walkInCustomer: { name: 'Hanako Walk-In', phone: '+81-90-8750-0001' },
+      idempotencyKey: 'walkin-idem-1',
+    })
+
+    const first = await h.service.create(opCtx, input, NOW)
+    const second = await h.service.create(opCtx, input, NOW)
+
+    expect(first.ok && second.ok).toBe(true)
+    if (!first.ok || !second.ok) throw new Error('expected both walk-in creates to succeed')
+    expect(second.booking.id).toBe(first.booking.id) // replayed — same booking
+    expect(second.status).toBe(200)
+    expect(mintSpy).toHaveBeenCalledTimes(1) // renter minted once, not per attempt
+    // The booking attaches to the freshly-minted renter, not the ignored input.renterId.
+    const minted = await mintSpy.mock.results[0]!.value
+    expect(first.booking.renterId).toBe(minted.id)
+    expect(first.booking.renterId).not.toBe(RENTER)
+    expect(h.bookingStore.size).toBe(1)
+  })
+
   it('regenerates the booking_code on a UNIQUE clash and retries (bounded)', async () => {
     const h = await setup({ codes: ['COLLIDE1', 'FRESH001'] })
     const { vehicleId, locationId } = await seedReady(h)
@@ -918,6 +956,7 @@ async function setupSub(
     insuranceOptionRepo,
     addOnRepo,
     feeScheduleRepo,
+    userRepo,
   }
   const runInTransaction: RunInTransaction = async (fn) => fn(repos)
   const service = new BookingService(

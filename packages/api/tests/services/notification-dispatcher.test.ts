@@ -2,6 +2,7 @@ import { notificationKindEnum } from '@kuruma/shared/db/schema'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { InMemoryNotificationLogRepository } from '../../src/repositories/in-memory/notification-log'
 import { InMemoryOperatorRepository } from '../../src/repositories/in-memory/operator'
+import { InMemoryOperatorMembershipRepository } from '../../src/repositories/in-memory/operator-membership'
 import { InMemoryUserRepository } from '../../src/repositories/in-memory/user'
 import { MAX_NOTIFICATION_ATTEMPTS, SEND_LEASE_MS } from '../../src/repositories/types'
 import type { LocationRepository, VehicleRepository } from '../../src/repositories/types'
@@ -11,7 +12,7 @@ import {
   NotificationDispatcher,
   TRIGGER_KINDS,
 } from '../../src/services/notification-dispatcher'
-import type { Booking, User } from '../../src/stores'
+import type { Booking, OperatorMembership, User } from '../../src/stores'
 
 const OP = 'op-1'
 const RENTER = 'renter-1'
@@ -93,6 +94,18 @@ function build(
       ],
     ]),
   )
+  const owners: User[] = opts.owners ?? [
+    {
+      id: 'owner-1',
+      name: 'Op',
+      email: 'owner@op.com',
+      phone: null,
+      language: 'ja',
+      country: null,
+      role: 'OPERATOR_OWNER',
+      operatorId: OP,
+    } as User,
+  ]
   const userStore = new Map<string, User>([
     [
       RENTER,
@@ -107,28 +120,38 @@ function build(
         operatorId: null,
       },
     ],
-    ...(
-      opts.owners ?? [
-        {
-          id: 'owner-1',
-          name: 'Op',
-          email: 'owner@op.com',
-          phone: null,
-          language: 'ja',
-          country: null,
-          role: 'OPERATOR_OWNER',
-          operatorId: OP,
-        } as User,
-      ]
-    ).map((u): [string, User] => [u.id, u]),
+    ...owners.map((u): [string, User] => [u.id, u]),
   ])
   const userRepo = new InMemoryUserRepository(userStore)
+  // #878: memberships are the recipient ledger — seed one ACTIVE row per owner so
+  // the dispatcher resolves members from the grant ledger, not users.role.
+  const membershipStore = new Map<string, OperatorMembership>(
+    owners
+      .filter((u) => u.operatorId)
+      .map((u): [string, OperatorMembership] => {
+        const id = `mem-${u.id}`
+        return [
+          id,
+          {
+            id,
+            userId: u.id,
+            operatorId: u.operatorId as string,
+            role: u.role === 'OPERATOR_STAFF' ? 'OPERATOR_STAFF' : 'OPERATOR_OWNER',
+            status: 'ACTIVE',
+            createdAt: ts,
+            updatedAt: ts,
+          },
+        ]
+      }),
+  )
+  const membershipRepo = new InMemoryOperatorMembershipRepository(membershipStore)
   const sender = opts.sender ?? { send: vi.fn(async () => ({ providerMessageId: 'msg-1' })) }
   const dispatcher = new NotificationDispatcher(
     logRepo,
     operatorRepo,
     fakeVehicleRepo,
     userRepo,
+    membershipRepo,
     fakeLocationRepo,
     sender,
     {
@@ -230,7 +253,26 @@ describe('NotificationDispatcher', () => {
   })
 
   describe('recipient resolution', () => {
-    it('renter confirm goes to the renter email; operator alert to the first OPERATOR_OWNER', async () => {
+    // #878: a Best Car Rental owner + staff member. Same operator, distinct users.
+    const owner = {
+      id: 'owner-1',
+      name: 'Owner',
+      email: 'owner@op.com',
+      phone: null,
+      language: 'ja',
+      country: null,
+      role: 'OPERATOR_OWNER',
+      operatorId: OP,
+    } as User
+    const staff = {
+      ...owner,
+      id: 'staff-1',
+      name: 'Staff',
+      email: 'staff@op.com',
+      role: 'OPERATOR_STAFF',
+    } as User
+
+    it('renter confirm goes to the renter email; operator alert to the active members', async () => {
       const { dispatcher, logRepo } = build()
       await dispatcher.dispatch(booking)
       const rows = await logRepo.findAll({ userId: 'x', role: 'PLATFORM_ADMIN', bypassScope: true })
@@ -240,12 +282,55 @@ describe('NotificationDispatcher', () => {
       expect(opRow?.recipient).toBe('owner@op.com')
     })
 
-    it('falls back to OPERATOR_ALERT_FALLBACK_EMAIL when the operator has no owner', async () => {
+    // #878: the core change — owner AND staff both notified, by ONE Bcc send.
+    it('OPERATOR_BOOKING_ALERT Bcc-fans-out to every ACTIVE member (owner + staff)', async () => {
+      const sent: Array<{
+        to: string
+        bcc?: string[]
+        subject: string
+        html: string
+        text: string
+      }> = []
+      const sender = {
+        send: vi.fn(async (m: (typeof sent)[number]) => {
+          sent.push(m)
+          return { providerMessageId: 'msg-1' }
+        }),
+      }
+      const { dispatcher, logRepo } = build({
+        owners: [owner, staff],
+        sender: sender as unknown as EmailSender,
+      })
+      await dispatcher.dispatch(booking)
+
+      const alert = sent.find((m) => m.bcc !== undefined)
+      expect(alert?.bcc).toEqual(['owner@op.com', 'staff@op.com'])
+      // Privacy: no member address in the visible `to` — no cross-disclosure.
+      expect(alert?.to).toBe('noreply@bcr.jp')
+      expect(alert?.to).not.toContain('@op.com')
+      // The audit row records the full member list; the renter mail stays single.
+      const rows = await logRepo.findAll({ userId: 'x', role: 'PLATFORM_ADMIN', bypassScope: true })
+      const opRow = rows.find((r) => r.kind === 'OPERATOR_BOOKING_ALERT')
+      expect(opRow?.recipient).toBe('owner@op.com, staff@op.com')
+      const renterMsg = sent.find((m) => m.bcc === undefined)
+      expect(renterMsg?.to).toBe('jane@example.com')
+    })
+
+    it('falls back to OPERATOR_ALERT_FALLBACK_EMAIL when the operator has no active members', async () => {
       const { dispatcher, logRepo } = build({ owners: [], fallback: 'ops@platform.com' })
       await dispatcher.dispatch(booking)
       const rows = await logRepo.findAll({ userId: 'x', role: 'PLATFORM_ADMIN', bypassScope: true })
       const opRow = rows.find((r) => r.kind === 'OPERATOR_BOOKING_ALERT')
       expect(opRow?.recipient).toBe('ops@platform.com')
+      // Fallback is a single visible recipient — no Bcc list when there are no members.
+      expect(rows.find((r) => r.kind === 'OPERATOR_BOOKING_ALERT')?.recipient).not.toContain(',')
+    })
+
+    it('persists a terminal NO_RECIPIENT row for the operator alert when there are no members and no fallback', async () => {
+      const { dispatcher, sender } = build({ owners: [] })
+      const outcome = await dispatcher.processOne(booking, 'OPERATOR_BOOKING_ALERT')
+      expect(outcome.result).toBe('no_recipient')
+      expect(sender.send as ReturnType<typeof vi.fn>).not.toHaveBeenCalled()
     })
   })
 

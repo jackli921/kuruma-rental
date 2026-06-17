@@ -59,7 +59,10 @@ export async function proxyRequest(
   request: Request,
   apiOrigin: string,
   stripPrefix: string,
-  fetchImpl: typeof fetch = fetch,
+  // CF Pages runtime: the global fetch must be called with this===globalThis.
+  // Bound here for uniformity with the API services (#887) — the param stays
+  // injectable for tests.
+  fetchImpl: typeof fetch = fetch.bind(globalThis) as typeof fetch,
 ): Promise<Response> {
   const upstreamUrl = resolveUpstreamUrl(request.url, apiOrigin, stripPrefix)
 

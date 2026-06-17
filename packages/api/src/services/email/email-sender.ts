@@ -1,5 +1,9 @@
 export interface EmailMessage {
   to: string
+  // #878: blind-copy recipients. Used for the operator booking alert so every
+  // active member is notified by ONE send without disclosing teammates' addresses
+  // to each other (they never appear in `to`/`cc`).
+  bcc?: string[]
   from: string
   subject: string
   html: string

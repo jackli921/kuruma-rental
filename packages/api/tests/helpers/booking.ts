@@ -1,6 +1,8 @@
 import type { Booking } from '../../src/stores'
 
-type NewBooking = Omit<Booking, 'id' | 'createdAt' | 'updatedAt'>
+// cancellationFeeSettlement is server-derived (#868 3a) — omitted from create
+// input, so fixtures never set it; the repo stamps the 'ADVISORY' default.
+type NewBooking = Omit<Booking, 'id' | 'createdAt' | 'updatedAt' | 'cancellationFeeSettlement'>
 
 // Process-unique prefix (random per vitest worker) so parallel integration test
 // files sharing one Postgres branch never collide on the bookingCode UNIQUE

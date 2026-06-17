@@ -1,0 +1,1 @@
+ALTER TABLE "bookings" ADD COLUMN "cancellationFeeSettlement" text DEFAULT 'ADVISORY' NOT NULL;

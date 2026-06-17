@@ -32,6 +32,7 @@ import {
   BOOKING_FULFILLMENT_MODES,
   BOOKING_SOURCES,
   BOOKING_STATUSES,
+  CANCELLATION_FEE_SETTLEMENT_STATES,
   COORDINATE_SOURCES,
   DOCUMENT_STATUSES,
   DOCUMENT_TYPES,
@@ -114,5 +115,22 @@ describe('src/enums.ts edge-safety (#688)', () => {
     expect(importLines[0]).toContain('./lib/luggage')
     // No import line may reach into drizzle / the DB layer (prose may mention it).
     expect(importLines.join('\n')).not.toMatch(/drizzle|\.\/db\/|\.\.\/db\//)
+  })
+})
+
+// #868 Slice 3a: settlement status of a recorded cancellation fee. Stored as a
+// `text` column (NOT a pgEnum — review M4, the lifecycle target churns toward
+// #851), so there is no enumValues tripwire; pin the membership + order here.
+// ADVISORY is first and load-bearing: it is the column default and every
+// pay-at-pickup cancellation today, so reordering must not move it.
+describe('cancellation fee settlement states (#868 Slice 3a)', () => {
+  it('lists the advisory -> settlement lifecycle, ADVISORY first (the default)', () => {
+    expect([...CANCELLATION_FEE_SETTLEMENT_STATES]).toEqual([
+      'ADVISORY',
+      'CAPTURED',
+      'REFUND_DUE',
+      'REFUNDED',
+      'WAIVED',
+    ])
   })
 })

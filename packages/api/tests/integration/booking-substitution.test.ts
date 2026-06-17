@@ -8,6 +8,7 @@ import {
   DrizzleBookingRepository,
   DrizzleLocationRepository,
   DrizzleNotificationLogRepository,
+  DrizzleOperatorMembershipRepository,
   DrizzleOperatorRepository,
   DrizzleUserRepository,
   DrizzleVehicleClassRepository,
@@ -49,6 +50,7 @@ const vehicleClassRepo = new DrizzleVehicleClassRepository(db)
 const notificationLogRepo = new DrizzleNotificationLogRepository(db)
 const operatorRepo = new DrizzleOperatorRepository(db)
 const userRepo = new DrizzleUserRepository(db)
+const membershipRepo = new DrizzleOperatorMembershipRepository(db)
 const locationRepo = new DrizzleLocationRepository(db)
 
 // Captures every outbound message instead of hitting a provider, so the dispatcher
@@ -67,6 +69,7 @@ const notificationDispatcher = new NotificationDispatcher(
   operatorRepo,
   vehicleRepo,
   userRepo,
+  membershipRepo,
   locationRepo,
   fakeEmailSender,
   { emailFrom: 'noreply@kuruma-test.com' },

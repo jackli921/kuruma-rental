@@ -13,6 +13,7 @@ import type {
   AddOnStatus,
   BookingSource,
   BookingStatus,
+  CancellationFeeSettlement,
   DocumentStatus,
   DocumentType,
   FeeScheduleStatus,
@@ -98,6 +99,9 @@ export interface Booking {
   notes: string | null
   totalPrice: number | null
   cancellationFee: number | null
+  // #868 Slice 3a: settlement status of the cancellation fee. Server-derived
+  // (not a create input), defaults to 'ADVISORY' until #851 moves money.
+  cancellationFeeSettlement: CancellationFeeSettlement
   cancelledAt: Date | null
   idempotencyKey: string | null
   // #613: renter liability-disclaimer consent, server-stamped at booking time.
@@ -243,7 +247,8 @@ export interface User {
   country: string | null
   role: UserRole
   // Owning operator for OPERATOR_* users; null/undefined for renters + platform
-  // admins. Optional because most reads don't project it (#393 findOperatorContacts).
+  // admins. Optional because most reads don't project it. Operator-alert recipients
+  // now come from the operator_memberships ledger (#878), not this field.
   operatorId?: string | null
 }
 
