@@ -1198,6 +1198,20 @@ describe('Booking Routes', () => {
       expect(body.data.status).toBe('CANCELLED')
     })
 
+    it('accepts a reason with a null note — the web sends note:null when blank (#922)', async () => {
+      const createRes = await createBooking()
+      const created = await createRes.json()
+
+      const res = await app.request(`/bookings/${created.data.id}/cancel`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ reason: { code: 'CHANGE_OF_PLANS', note: null } }),
+      })
+
+      expect(res.status).toBe(200)
+      expect((await res.json()).data.status).toBe('CANCELLED')
+    })
+
     it('rejects a cancellation reason outside the taxonomy with 400 (#868 3b)', async () => {
       const createRes = await createBooking()
       const created = await createRes.json()
