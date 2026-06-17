@@ -238,7 +238,7 @@ export function createBookingRoutes(service: BookingService) {
       if (!parsed.ok) return parsed.response
 
       const reason = parsed.data.reason
-        ? { code: parsed.data.reason.code, note: parsed.data.reason.note ?? null }
+        ? { code: parsed.data.reason.code, note: parsed.data.reason.note || null }
         : null
 
       const result = await service.cancel(ctx, idResult.id, reason)

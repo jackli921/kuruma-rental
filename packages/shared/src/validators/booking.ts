@@ -78,8 +78,9 @@ export const substituteVehicleSchema = z.object({
 // absent: the operator cancel sends none). `note` is a short freeform elaboration,
 // trimmed + capped. `nullish`, not `optional`: the web sends `note: null` (not an
 // absent key) when the renter leaves it blank — matching CancellationReason.note's
-// `string | null` — so the validator must accept null too. An empty/whitespace/null
-// note normalises away at the route (`note ?? null`).
+// `string | null` — so the validator must accept null too. The validator trims, then
+// the route collapses an empty/whitespace/null note to null (`note || null`) so no
+// caller — web or Trip.com — can persist a meaningless "" note.
 export const cancellationReasonSchema = z.object({
   code: z.enum(CANCELLATION_REASON_CODES),
   note: z.string().trim().max(500, 'Note must be 500 characters or fewer').nullish(),
