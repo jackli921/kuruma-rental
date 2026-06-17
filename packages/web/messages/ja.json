@@ -84,7 +84,8 @@
     "browse": "車を探す",
     "myBookings": "予約一覧",
     "documents": "書類",
-    "newBookings": "新規予約 {count}件"
+    "newBookings": "新規予約 {count}件",
+    "settings": "設定"
   },
   "acriss": {
     "MCAR": "ミニ",
@@ -783,6 +784,24 @@
       "title": "メッセージ",
       "subtitle": "お客様との会話",
       "empty": "まだ会話はありません。お客様からの連絡があるとここに表示されます。"
+    },
+    "settings": {
+      "title": "設定",
+      "subtitle": "事業者プロフィールと利用者の支払い受け渡し先を管理します。",
+      "loadError": "設定を読み込めませんでした",
+      "retry": "再試行",
+      "saved": "設定を保存しました。",
+      "noOperatorContext": "このページは単一の事業者プロフィールを編集します。事業者の管理は管理ポータルをご利用ください。",
+      "form": {
+        "name": "事業者名",
+        "namePlaceholder": "例：大阪レンタカー",
+        "handoffUrl": "支払い受け渡しURL",
+        "handoffUrlPlaceholder": "https://pay.example.com/handoff",
+        "handoffUrlHint": "受取時に利用者を支払いへ誘導するURL。http(s)リンクが必要です。空欄にすると解除されます。",
+        "handoffOwnerOnly": "支払い受け渡しURLを変更できるのはオーナーのみです。",
+        "save": "変更を保存",
+        "saving": "保存中..."
+      }
     }
   },
   "messaging": {
@@ -1095,8 +1114,14 @@
     }
   },
   "admin": {
-    "nav": { "overview": "概要", "revenue": "パートナー収益" },
-    "home": { "title": "プラットフォーム管理", "subtitle": "プラットフォーム運営" },
+    "nav": {
+      "overview": "概要",
+      "revenue": "パートナー収益"
+    },
+    "home": {
+      "title": "プラットフォーム管理",
+      "subtitle": "プラットフォーム運営"
+    },
     "revenue": {
       "title": "パートナー収益",
       "subtitle": "パートナーごとの月次支払い",

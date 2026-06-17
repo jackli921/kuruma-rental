@@ -18,6 +18,7 @@ describe('businessNavItems', () => {
       '/$locale/manage/insurance',
       '/$locale/manage/fees',
       '/$locale/manage/add-ons',
+      '/$locale/manage/settings',
     ])
   })
 

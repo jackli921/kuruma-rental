@@ -3,6 +3,7 @@ import {
   ALL_ROLES,
   BUSINESS_ROLES,
   MANAGEMENT_BASE_ROLES,
+  OPERATOR_OWNER_WRITE_ROLES,
   OPERATOR_ROLES,
   PLATFORM_ROLES,
   PRIVILEGED_ROLES,
@@ -38,6 +39,19 @@ describe('canonical role sets (#487 prep — single source of truth)', () => {
       'PLATFORM_ADMIN',
       'STAFF',
     ])
+  })
+
+  it('OPERATOR_OWNER_WRITE_ROLES = BUSINESS_ROLES minus OPERATOR_STAFF (owner-tier money-flow writes — #903)', () => {
+    expect(members(OPERATOR_OWNER_WRITE_ROLES)).toEqual([
+      'ADMIN',
+      'OPERATOR_OWNER',
+      'PLATFORM_ADMIN',
+      'STAFF',
+    ])
+    // OPERATOR_STAFF is the one business role excluded — it must not redirect the
+    // renter-facing pre-auth payment handoff.
+    expect(OPERATOR_OWNER_WRITE_ROLES.has('OPERATOR_STAFF')).toBe(false)
+    expect(BUSINESS_ROLES.has('OPERATOR_STAFF')).toBe(true)
   })
 
   it('SCOPE_BYPASS_ROLES and PRIVILEGED_ROLES = PARTNER + PLATFORM_ADMIN — legacy STAFF/ADMIN revoked (#487), distinct instances', () => {

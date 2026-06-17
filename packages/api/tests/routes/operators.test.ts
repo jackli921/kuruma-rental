@@ -71,6 +71,21 @@ describe('GET /operators/:id', () => {
     expect((await res.json()).data.slug).toBe('best-car-rental')
   })
 
+  it('returns the operator profile projection — same shape as PATCH, no raw timestamps', async () => {
+    const res = await mountFor('OPERATOR_STAFF', opA.id).request(`/operators/${opA.id}`)
+    const { data } = await res.json()
+    // One resource, one wire shape: the read must match the PATCH projection
+    // exactly (#903 arch review) — never the full row with createdAt/updatedAt.
+    expect(data).toEqual({
+      id: opA.id,
+      name: 'Best Car Rental',
+      slug: 'best-car-rental',
+      preAuthHandoffUrl: null,
+    })
+    expect(data).not.toHaveProperty('createdAt')
+    expect(data).not.toHaveProperty('updatedAt')
+  })
+
   it('returns 404 when an OPERATOR_STAFF reads another operator', async () => {
     const res = await mountFor('OPERATOR_STAFF', opA.id).request(`/operators/${opB.id}`)
     expect(res.status).toBe(404)
@@ -130,5 +145,90 @@ describe('Operator routes — auth', () => {
     const app = new Hono()
     app.route('/', createOperatorRoutes(new OperatorService(repo)))
     expect((await app.request(`/operators/${opA.id}`)).status).toBe(401)
+  })
+})
+
+function patchReq(app: Hono, id: string, body: unknown) {
+  return app.request(`/operators/${id}`, {
+    method: 'PATCH',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(body),
+  })
+}
+
+describe('PATCH /operators/:id', () => {
+  it('lets an owner rename its own operator and returns the projection', async () => {
+    const res = await patchReq(mountFor('OPERATOR_OWNER', opA.id), opA.id, { name: 'Renamed' })
+    expect(res.status).toBe(200)
+    expect((await res.json()).data).toEqual({
+      id: opA.id,
+      name: 'Renamed',
+      slug: 'best-car-rental',
+      preAuthHandoffUrl: null,
+    })
+  })
+
+  it('lets an owner set the preAuthHandoffUrl', async () => {
+    const res = await patchReq(mountFor('OPERATOR_OWNER', opA.id), opA.id, {
+      preAuthHandoffUrl: 'https://pay.best.example/h',
+    })
+    expect(res.status).toBe(200)
+    expect((await res.json()).data.preAuthHandoffUrl).toBe('https://pay.best.example/h')
+  })
+
+  it('lets an OPERATOR_STAFF edit the display name', async () => {
+    const res = await patchReq(mountFor('OPERATOR_STAFF', opA.id), opA.id, { name: 'Staff Edit' })
+    expect(res.status).toBe(200)
+    expect((await res.json()).data.name).toBe('Staff Edit')
+  })
+
+  it('forbids an OPERATOR_STAFF from changing preAuthHandoffUrl (403)', async () => {
+    const res = await patchReq(mountFor('OPERATOR_STAFF', opA.id), opA.id, {
+      preAuthHandoffUrl: 'https://evil.example',
+    })
+    expect(res.status).toBe(403)
+    expect((await repo.findById(opA.id))?.preAuthHandoffUrl).toBeNull()
+  })
+
+  it('returns 404 for a cross-tenant patch AND leaves the target row unchanged', async () => {
+    const res = await patchReq(mountFor('OPERATOR_OWNER', opA.id), opB.id, { name: 'Hijacked' })
+    expect(res.status).toBe(404)
+    expect((await repo.findById(opB.id))?.name).toBe('Acme Cars')
+  })
+
+  it('rejects a javascript: scheme handoff URL with 400', async () => {
+    const res = await patchReq(mountFor('OPERATOR_OWNER', opA.id), opA.id, {
+      preAuthHandoffUrl: 'javascript:alert(1)',
+    })
+    expect(res.status).toBe(400)
+  })
+
+  it('rejects an empty patch with 400', async () => {
+    const res = await patchReq(mountFor('OPERATOR_OWNER', opA.id), opA.id, {})
+    expect(res.status).toBe(400)
+  })
+
+  it('returns 403 for a RENTER', async () => {
+    const res = await patchReq(mountFor('RENTER'), opA.id, { name: 'X' })
+    expect(res.status).toBe(403)
+  })
+
+  it('returns 400 for a malformed (non-uuid) id', async () => {
+    const res = await patchReq(mountFor('PLATFORM_ADMIN'), 'nope', { name: 'X' })
+    expect(res.status).toBe(400)
+  })
+
+  it('returns 404 for a valid-but-unknown id (admin)', async () => {
+    const res = await patchReq(mountFor('PLATFORM_ADMIN'), '00000000-0000-4000-8000-0000000000ff', {
+      name: 'X',
+    })
+    expect(res.status).toBe(404)
+  })
+
+  it('returns 401 when unauthenticated', async () => {
+    const app = new Hono()
+    setupGlobalHandlers(app)
+    app.route('/', createOperatorRoutes(new OperatorService(repo)))
+    expect((await patchReq(app, opA.id, { name: 'X' })).status).toBe(401)
   })
 })

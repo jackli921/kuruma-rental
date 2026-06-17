@@ -84,7 +84,8 @@
     "browse": "浏览车辆",
     "myBookings": "我的预订",
     "documents": "证件",
-    "newBookings": "{count} 个新订单"
+    "newBookings": "{count} 个新订单",
+    "settings": "设置"
   },
   "acriss": {
     "MCAR": "微型车",
@@ -783,6 +784,24 @@
       "title": "消息",
       "subtitle": "客户对话",
       "empty": "暂无对话。客户联系您时消息会显示在这里。"
+    },
+    "settings": {
+      "title": "设置",
+      "subtitle": "管理您的商家资料与租客支付跳转。",
+      "loadError": "无法加载设置",
+      "retry": "重试",
+      "saved": "设置已保存。",
+      "noOperatorContext": "此页面用于编辑单个运营商的资料。请使用管理门户来管理运营商。",
+      "form": {
+        "name": "商家名称",
+        "namePlaceholder": "例如：大阪租车",
+        "handoffUrl": "支付跳转链接",
+        "handoffUrlPlaceholder": "https://pay.example.com/handoff",
+        "handoffUrlHint": "取车时引导租客前往支付的链接。必须为 http(s) 链接；留空则清除。",
+        "handoffOwnerOnly": "只有所有者可以更改支付跳转链接。",
+        "save": "保存更改",
+        "saving": "保存中..."
+      }
     }
   },
   "messaging": {
@@ -1095,8 +1114,14 @@
     }
   },
   "admin": {
-    "nav": { "overview": "概览", "revenue": "合作伙伴收益" },
-    "home": { "title": "平台管理", "subtitle": "平台运营" },
+    "nav": {
+      "overview": "概览",
+      "revenue": "合作伙伴收益"
+    },
+    "home": {
+      "title": "平台管理",
+      "subtitle": "平台运营"
+    },
     "revenue": {
       "title": "合作伙伴收益",
       "subtitle": "按合作伙伴的月度结算",

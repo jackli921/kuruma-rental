@@ -21,9 +21,28 @@ const httpUrl = z
     { message: 'must be an http(s) URL' },
   )
 
+// Single source for the operator display-name rule so create and update can't
+// drift (#903). Trimmed, 1–100 chars.
+const nameSchema = z.string().trim().min(1).max(100)
+
 export const createOperatorSchema = z.object({
-  name: z.string().trim().min(1).max(100),
+  name: nameSchema,
   preAuthHandoffUrl: httpUrl.optional(),
 })
 
 export type CreateOperatorInput = z.infer<typeof createOperatorSchema>
+
+// Operator self-service profile patch (#903). Every field is optional, but an
+// empty patch is rejected (nothing to do). preAuthHandoffUrl is 3-state: key
+// absent -> leave column unchanged; explicit null -> clear to NULL; string ->
+// must pass the http(s) refine (it is a renter-facing money-flow control).
+export const updateOperatorSchema = z
+  .object({
+    name: nameSchema.optional(),
+    preAuthHandoffUrl: httpUrl.nullable().optional(),
+  })
+  .refine((patch) => Object.keys(patch).length > 0, {
+    message: 'at least one field is required',
+  })
+
+export type UpdateOperatorInput = z.infer<typeof updateOperatorSchema>

@@ -1,7 +1,32 @@
-import type { CreateOperatorInput } from '@kuruma/shared/validators/operator'
-import { type CallerContext, isOperatorRole, requirePlatformAdmin } from '../middleware/auth'
+import type { CreateOperatorInput, UpdateOperatorInput } from '@kuruma/shared/validators/operator'
+import {
+  type CallerContext,
+  isOperatorRole,
+  requireOperatorOwnerWrite,
+  requirePlatformAdmin,
+} from '../middleware/auth'
 import type { Operator, OperatorRepository } from '../repositories/types'
 import { resolveUniqueSlug, slugify } from './slug'
+
+/**
+ * The canonical operator wire shape (#903) — the SINGLE shape every detail
+ * endpoint for an operator returns: `GET /operators/:id`, `GET /operators/by-slug/
+ * :slug`, and `PATCH /operators/:id` all project through {@link toOperatorProfile}.
+ * Excludes `createdAt`/`updatedAt` (raw Date columns) so reads and writes agree on
+ * one contract instead of the route leaking the full row on read and a projection
+ * on write. The admin picker `list` returns a leaner `{id,name,slug}` summary by
+ * design (collection vs detail), which is the expected REST asymmetry.
+ */
+export interface OperatorProfile {
+  id: string
+  name: string
+  slug: string
+  preAuthHandoffUrl: string | null
+}
+
+export function toOperatorProfile(op: Operator): OperatorProfile {
+  return { id: op.id, name: op.name, slug: op.slug, preAuthHandoffUrl: op.preAuthHandoffUrl }
+}
 
 export class OperatorService {
   constructor(private readonly repo: OperatorRepository) {}
@@ -52,5 +77,39 @@ export class OperatorService {
       slug,
       preAuthHandoffUrl: input.preAuthHandoffUrl ?? null,
     })
+  }
+
+  /**
+   * Self-service operator profile update (#903). Load-then-authorize: resolve the
+   * row through `scopeToCaller` first so a foreign/absent id reads as `undefined`
+   * (the route 404s, never leaking existence) BEFORE any field-level gate runs.
+   * Only then is the owner-only `preAuthHandoffUrl` gate applied — so a staff
+   * caller patching another tenant's handoff still gets a 404, not a 403 that
+   * would confirm the tenant exists. Writes `updatedAt` (the column has no
+   * `$onUpdate`). Returns the wire projection, or `undefined` when not found.
+   */
+  async update(
+    ctx: CallerContext,
+    id: string,
+    input: UpdateOperatorInput,
+  ): Promise<OperatorProfile | undefined> {
+    const existing = this.scopeToCaller(ctx, await this.repo.findById(id))
+    if (!existing) return undefined
+
+    // `preAuthHandoffUrl` is a renter-facing money-flow control — owner-only,
+    // even though `name` is open to all fleet-write roles. The key being present
+    // (string OR explicit null) is the write attempt; an absent key is not.
+    if ('preAuthHandoffUrl' in input) requireOperatorOwnerWrite(ctx)
+
+    // Spread only the keys the patch actually carries — passing `name: undefined`
+    // would overwrite the column (in-memory) and breaks exactOptionalPropertyTypes.
+    const updated = await this.repo.update(id, {
+      ...(input.name !== undefined ? { name: input.name } : {}),
+      ...('preAuthHandoffUrl' in input
+        ? { preAuthHandoffUrl: input.preAuthHandoffUrl ?? null }
+        : {}),
+      updatedAt: new Date(),
+    })
+    return updated ? toOperatorProfile(updated) : undefined
   }
 }

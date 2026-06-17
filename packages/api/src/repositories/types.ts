@@ -74,6 +74,16 @@ export type {
 } from './types-notification'
 
 /** Operator (tenant) data access. Admin bootstrap (#386) + slug/id resolution (#387). */
+// Partial profile patch (#903). Only the keys present are written; an absent key
+// leaves the column unchanged, `preAuthHandoffUrl: null` clears it. `updatedAt`
+// is always supplied by the service (the column has no `$onUpdate`). Caller
+// scoping (operator may only patch its own) is decided in OperatorService.
+export interface OperatorUpdatePatch {
+  name?: string
+  preAuthHandoffUrl?: string | null
+  updatedAt: Date
+}
+
 export interface OperatorRepository {
   create(data: {
     name: string
@@ -89,6 +99,9 @@ export interface OperatorRepository {
   // Caller scoping (operator sees only its own) is applied in OperatorService.
   list(): Promise<Operator[]>
   findBySlug(slug: string): Promise<Operator | undefined>
+  // #903: apply a partial profile patch and return the updated row, or undefined
+  // if no operator has that id (never inserts).
+  update(id: string, patch: OperatorUpdatePatch): Promise<Operator | undefined>
 }
 
 export interface LocationFilters {

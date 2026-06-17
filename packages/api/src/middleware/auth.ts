@@ -33,6 +33,7 @@ export {
   rejectOperatorContextUntilScoped,
   requireFleetWriteScope,
   requireManagementRead,
+  requireOperatorOwnerWrite,
   requireOperatorScope,
   requirePlatformAdmin,
   requirePlatformRead,

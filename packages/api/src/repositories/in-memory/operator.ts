@@ -1,5 +1,5 @@
 import type { Operator } from '../../stores'
-import type { OperatorRepository } from '../types'
+import type { OperatorRepository, OperatorUpdatePatch } from '../types'
 
 export class InMemoryOperatorRepository implements OperatorRepository {
   private readonly store: Map<string, Operator>
@@ -44,5 +44,16 @@ export class InMemoryOperatorRepository implements OperatorRepository {
     }
     this.store.set(operator.id, operator)
     return operator
+  }
+
+  async update(id: string, patch: OperatorUpdatePatch): Promise<Operator | undefined> {
+    const existing = this.store.get(id)
+    if (!existing) return undefined
+    // New object, never a mutation of the stored row (mirrors the immutability
+    // a Drizzle `UPDATE ... RETURNING` gives). Spreading `patch` only overwrites
+    // the keys present, so an absent field is left at its existing value.
+    const updated: Operator = { ...existing, ...patch }
+    this.store.set(id, updated)
+    return updated
   }
 }

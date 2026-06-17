@@ -1,6 +1,7 @@
 import {
   ALL_ROLES,
   BUSINESS_ROLES,
+  OPERATOR_OWNER_WRITE_ROLES,
   OPERATOR_ROLES,
   PLATFORM_ROLES,
   type UserRole,
@@ -63,3 +64,10 @@ export function isAuthUser(v: unknown): v is AuthUser {
 export const STAFF_ROLES = PLATFORM_ROLES
 export const FLEET_WRITE_ROLES = BUSINESS_ROLES
 export const MANAGEMENT_READ_ROLES = BUSINESS_ROLES
+
+/**
+ * Owner-tier writes for operator money-flow fields (`preAuthHandoffUrl`, #903) —
+ * FLEET_WRITE_ROLES minus OPERATOR_STAFF. Re-exported from the single source so
+ * the api gate can't drift from the web's owner-gating of the same field.
+ */
+export { OPERATOR_OWNER_WRITE_ROLES }

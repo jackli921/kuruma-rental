@@ -1,7 +1,7 @@
 import { OPERATOR_ROLES, PLATFORM_ROLES } from '@kuruma/shared/auth/roles'
 
 import type { CallerContext } from './context'
-import { FLEET_WRITE_ROLES, MANAGEMENT_READ_ROLES } from './roles'
+import { FLEET_WRITE_ROLES, MANAGEMENT_READ_ROLES, OPERATOR_OWNER_WRITE_ROLES } from './roles'
 
 /**
  * Thrown by repo-layer guards when a non-authorised caller hits a
@@ -70,6 +70,23 @@ export function requirePlatformRead(ctx: CallerContext): void {
 export function requireFleetWriteScope(ctx: CallerContext): void {
   if (!FLEET_WRITE_ROLES.has(ctx.role)) {
     throw new ForbiddenError('fleet write scope required')
+  }
+  requireOperatorScope(ctx)
+}
+
+/**
+ * Guard for owner-tier writes to operator money-flow fields (`preAuthHandoffUrl`,
+ * #903). Admits `OPERATOR_OWNER_WRITE_ROLES` (the operator OWNER plus the
+ * platform/legacy base) and EXCLUDES OPERATOR_STAFF — a staff edit could redirect
+ * every renter's pre-auth payment handoff to a phishing page (the #386 http(s)
+ * refine blocks `javascript:`/`ftp:` but NOT `https://attacker.example`). A
+ * tenant-scoped owner missing its operatorId still fails closed via
+ * `requireOperatorScope`. Throws `ForbiddenError` (-> 403). Call AFTER the
+ * load-then-authorize 404 check so a foreign id never reveals a 403.
+ */
+export function requireOperatorOwnerWrite(ctx: CallerContext): void {
+  if (!OPERATOR_OWNER_WRITE_ROLES.has(ctx.role)) {
+    throw new ForbiddenError('operator owner scope required')
   }
   requireOperatorScope(ctx)
 }
