@@ -327,6 +327,7 @@ export async function seed(db: ReturnType<typeof getDb>) {
         licensePlate: v.licensePlate,
         dailyRateJpy: v.dailyRateJpy,
         hourlyRateJpy: v.hourlyRateJpy,
+        photos: [...v.photos],
         shakenExpiryDate,
       })
       .onConflictDoUpdate({
@@ -337,6 +338,7 @@ export async function seed(db: ReturnType<typeof getDb>) {
           name: v.name,
           dailyRateJpy: v.dailyRateJpy,
           hourlyRateJpy: v.hourlyRateJpy,
+          photos: [...v.photos],
           shakenExpiryDate,
           updatedAt: now,
         },
