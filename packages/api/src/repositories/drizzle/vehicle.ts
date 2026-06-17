@@ -9,10 +9,13 @@ import type {
   VehicleRepository,
   VehicleUpdateOptions,
 } from '../types'
-import { type Db, toVehicle, vehicleColumns } from './shared'
+import { type Db, type PhotoDecoder, identityPhotoDecoder, toVehicle, vehicleColumns } from './shared'
 
 export class DrizzleVehicleRepository implements VehicleRepository {
-  constructor(private readonly db: Db) {}
+  constructor(
+    private readonly db: Db,
+    private readonly decodePhotos: PhotoDecoder = identityPhotoDecoder,
+  ) {}
 
   async findAll(ctx: CallerContext, filters?: VehicleFilters): Promise<PaginatedResult<Vehicle>> {
     const conditions: SQL[] = []
@@ -49,7 +52,7 @@ export class DrizzleVehicleRepository implements VehicleRepository {
     ])
 
     return {
-      data: rows.map(toVehicle),
+      data: rows.map((r) => toVehicle(r, this.decodePhotos)),
       total: countResult[0]?.value ?? 0,
     }
   }
@@ -65,7 +68,7 @@ export class DrizzleVehicleRepository implements VehicleRepository {
       .from(vehicles)
       .where(and(...conditions))
 
-    return row ? toVehicle(row) : undefined
+    return row ? toVehicle(row, this.decodePhotos) : undefined
   }
 
   async findByIds(ctx: CallerContext, ids: string[]): Promise<Vehicle[]> {
@@ -78,7 +81,7 @@ export class DrizzleVehicleRepository implements VehicleRepository {
       .select(vehicleColumns)
       .from(vehicles)
       .where(and(...conditions))
-    return rows.map(toVehicle)
+    return rows.map((r) => toVehicle(r, this.decodePhotos))
   }
 
   async create(
@@ -119,7 +122,7 @@ export class DrizzleVehicleRepository implements VehicleRepository {
       .returning()
 
     if (!inserted) throw new Error('Failed to insert vehicle')
-    return toVehicle(inserted)
+    return toVehicle(inserted, this.decodePhotos)
   }
 
   async update(
@@ -144,7 +147,7 @@ export class DrizzleVehicleRepository implements VehicleRepository {
       .where(and(...conditions))
       .returning()
 
-    return updated ? toVehicle(updated) : undefined
+    return updated ? toVehicle(updated, this.decodePhotos) : undefined
   }
 
   async softDelete(ctx: CallerContext, id: string): Promise<Vehicle | undefined> {
@@ -158,7 +161,7 @@ export class DrizzleVehicleRepository implements VehicleRepository {
       .where(and(...conditions))
       .returning()
 
-    return retired ? toVehicle(retired) : undefined
+    return retired ? toVehicle(retired, this.decodePhotos) : undefined
   }
 
   async bulkUpdateStatus(
@@ -176,7 +179,7 @@ export class DrizzleVehicleRepository implements VehicleRepository {
       .set({ status, updatedAt: sql`now()` })
       .where(and(...conditions))
       .returning()
-    return rows.map(toVehicle)
+    return rows.map((r) => toVehicle(r, this.decodePhotos))
   }
 
   async appendPhotos(
@@ -209,7 +212,7 @@ export class DrizzleVehicleRepository implements VehicleRepository {
       .where(and(...conditions))
       .returning()
 
-    if (updated) return { outcome: 'ok', vehicle: toVehicle(updated) }
+    if (updated) return { outcome: 'ok', vehicle: toVehicle(updated, this.decodePhotos) }
     const existing = await this.findById(ctx, id)
     return existing ? { outcome: 'cap_exceeded' } : { outcome: 'not_found' }
   }
@@ -232,6 +235,6 @@ export class DrizzleVehicleRepository implements VehicleRepository {
       })
       .where(and(...conditions))
       .returning()
-    return updated ? toVehicle(updated) : undefined
+    return updated ? toVehicle(updated, this.decodePhotos) : undefined
   }
 }

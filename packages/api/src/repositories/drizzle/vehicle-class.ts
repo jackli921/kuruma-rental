@@ -4,10 +4,19 @@ import type { CallerContext } from '../../middleware/auth'
 import type { VehicleClass } from '../../stores'
 import { operatorReadScope } from '../../tenancy'
 import type { VehicleClassFilters, VehicleClassRepository } from '../types'
-import { type Db, toVehicleClass, vehicleClassColumns } from './shared'
+import {
+  type Db,
+  type PhotoDecoder,
+  identityPhotoDecoder,
+  toVehicleClass,
+  vehicleClassColumns,
+} from './shared'
 
 export class DrizzleVehicleClassRepository implements VehicleClassRepository {
-  constructor(private readonly db: Db) {}
+  constructor(
+    private readonly db: Db,
+    private readonly decodePhotos: PhotoDecoder = identityPhotoDecoder,
+  ) {}
 
   async findAll(ctx: CallerContext, filters?: VehicleClassFilters): Promise<VehicleClass[]> {
     const scope = operatorReadScope(ctx)
@@ -31,7 +40,7 @@ export class DrizzleVehicleClassRepository implements VehicleClassRepository {
       .where(where)
       .orderBy(asc(vehicleClasses.sortOrder))
 
-    return rows.map(toVehicleClass)
+    return rows.map((r) => toVehicleClass(r, this.decodePhotos))
   }
 
   async findById(ctx: CallerContext, id: string): Promise<VehicleClass | undefined> {
@@ -42,7 +51,7 @@ export class DrizzleVehicleClassRepository implements VehicleClassRepository {
 
     const [row] = await this.db.select(vehicleClassColumns).from(vehicleClasses).where(and(...conditions))
 
-    return row ? toVehicleClass(row) : undefined
+    return row ? toVehicleClass(row, this.decodePhotos) : undefined
   }
 
   async findBySlug(ctx: CallerContext, slug: string): Promise<VehicleClass | undefined> {
@@ -53,7 +62,7 @@ export class DrizzleVehicleClassRepository implements VehicleClassRepository {
 
     const [row] = await this.db.select(vehicleClassColumns).from(vehicleClasses).where(and(...conditions))
 
-    return row ? toVehicleClass(row) : undefined
+    return row ? toVehicleClass(row, this.decodePhotos) : undefined
   }
 
   async create(
@@ -79,7 +88,7 @@ export class DrizzleVehicleClassRepository implements VehicleClassRepository {
       .returning()
 
     if (!inserted) throw new Error('Failed to insert vehicle class')
-    return toVehicleClass(inserted)
+    return toVehicleClass(inserted, this.decodePhotos)
   }
 
   async update(
@@ -93,7 +102,7 @@ export class DrizzleVehicleClassRepository implements VehicleClassRepository {
       .where(eq(vehicleClasses.id, id))
       .returning()
 
-    return updated ? toVehicleClass(updated) : undefined
+    return updated ? toVehicleClass(updated, this.decodePhotos) : undefined
   }
 
   async archive(id: string): Promise<VehicleClass | undefined> {
@@ -103,6 +112,6 @@ export class DrizzleVehicleClassRepository implements VehicleClassRepository {
       .where(eq(vehicleClasses.id, id))
       .returning()
 
-    return archived ? toVehicleClass(archived) : undefined
+    return archived ? toVehicleClass(archived, this.decodePhotos) : undefined
   }
 }

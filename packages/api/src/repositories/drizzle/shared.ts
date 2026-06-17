@@ -307,14 +307,26 @@ type ThreadRow = ColumnRow<typeof threadColumns>
 type ThreadParticipantRow = ColumnRow<typeof participantColumns>
 type MaintenanceLogRow = ColumnRow<typeof maintenanceLogColumns>
 
-export function toVehicleClass(r: VehicleClassRow): VehicleClass {
+/**
+ * Decodes stored `photos` entries to wire URLs (#879). The composition root
+ * builds the real decoder from `VEHICLE_PHOTOS_PUBLIC_URL` (r2:<key> -> URL,
+ * external URLs pass through) and injects it into the read-serving repos;
+ * `identityPhotoDecoder` is the no-op fallback for paths that never carry r2:
+ * refs (the in-memory repos store domain objects directly; the tx-bound vehicle
+ * repo reads for consistency, not photo serving).
+ */
+export type PhotoDecoder = (photos: readonly string[]) => string[]
+
+export const identityPhotoDecoder: PhotoDecoder = (photos) => [...photos]
+
+export function toVehicleClass(r: VehicleClassRow, decodePhotos: PhotoDecoder): VehicleClass {
   return {
     id: r.id,
     operatorId: r.operatorId,
     name: r.name,
     slug: r.slug,
     description: r.description,
-    photos: r.photos,
+    photos: decodePhotos(r.photos),
     seats: r.seats,
     luggageCapacity: r.luggageCapacity,
     luggageSize: r.luggageSize,
@@ -422,7 +434,7 @@ export function toPaymentAnomaly(r: PaymentAnomalyRow): PaymentAnomaly {
   }
 }
 
-export function toVehicle(r: VehicleRow): Vehicle {
+export function toVehicle(r: VehicleRow, decodePhotos: PhotoDecoder): Vehicle {
   return {
     id: r.id,
     operatorId: r.operatorId,
@@ -430,7 +442,7 @@ export function toVehicle(r: VehicleRow): Vehicle {
     pickupLocationId: r.pickupLocationId,
     name: r.name,
     description: r.description,
-    photos: r.photos,
+    photos: decodePhotos(r.photos),
     seats: r.seats,
     luggageCapacity: r.luggageCapacity,
     luggageSize: r.luggageSize,
