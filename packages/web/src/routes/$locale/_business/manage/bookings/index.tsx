@@ -1,5 +1,6 @@
 import { Button } from '@/components/ui/button'
 import { PageSkeleton } from '@/vite/PageSkeleton'
+import { isOperatorManualBookingEnabled } from '@/vite/config/features'
 import { isOperatorSession } from '@/vite/guards'
 import { BookingsCalendar } from '@/vite/operator-bookings/BookingsCalendar'
 import { CalendarSidebar } from '@/vite/operator-bookings/CalendarSidebar'
@@ -80,7 +81,9 @@ export function OperatorBookingsRoute() {
   // Operator-only write affordance: a manual booking needs a single target tenant,
   // which only a tenant-scoped operator session supplies (bypass roles read
   // cross-tenant and get a view-only calendar). The API re-enforces this (#589 §4.3).
-  const canManualBook = isOperatorSession(session ?? null)
+  // Manual/walk-in booking is a post-MVP add-on (#589): gated behind the feature
+  // flag AND the operator-session permission. OFF in the beta demo (flag unset).
+  const canManualBook = isOperatorManualBookingEnabled() && isOperatorSession(session ?? null)
 
   // The dialog's pickup/return store list — fetched for operators (the only role
   // that can manual-book), so it's ready the moment they open the dialog and a
@@ -173,14 +176,16 @@ export function OperatorBookingsRoute() {
           </div>
         </div>
       </div>
-      <ManualBookingDialog
-        open={bookingDialogOpen}
-        onOpenChange={setBookingDialogOpen}
-        vehicles={vehicles}
-        locations={manualBookingLocations}
-        csrfToken={session?.csrfToken ?? ''}
-        initialRange={slotRange ?? undefined}
-      />
+      {canManualBook && (
+        <ManualBookingDialog
+          open={bookingDialogOpen}
+          onOpenChange={setBookingDialogOpen}
+          vehicles={vehicles}
+          locations={manualBookingLocations}
+          csrfToken={session?.csrfToken ?? ''}
+          initialRange={slotRange ?? undefined}
+        />
+      )}
     </main>
   )
 }

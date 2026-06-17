@@ -2,7 +2,7 @@ import { ConfirmStep } from '@/vite/reservation/ConfirmStep'
 import type { ReservationAddOn } from '@/vite/reservation/api'
 import { render, screen } from '@testing-library/react'
 import { IntlProvider } from 'use-intl'
-import { describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import en from '../../../messages/en.json'
 
 const addOns: ReservationAddOn[] = [
@@ -57,5 +57,26 @@ describe('ConfirmStep', () => {
     renderStep()
     expect(screen.getByText('Estimated total')).toBeInTheDocument()
     expect(screen.getByText('￥21,000')).toBeInTheDocument()
+  })
+
+  // #868 self-cancellation ships behind a feature flag (OFF for the beta demo).
+  // The policy schedule is part of that flow, so the checkout must not advertise a
+  // self-cancel tier table it then hides post-booking (#937 follow-up).
+  describe('cancellation policy (feature flag)', () => {
+    afterEach(() => {
+      vi.unstubAllEnvs()
+    })
+
+    it('hides the cancellation policy when the feature flag is OFF (beta demo)', () => {
+      vi.stubEnv('VITE_FEATURE_CANCELLATION', 'false')
+      renderStep()
+      expect(screen.queryByRole('heading', { name: 'Cancellation policy' })).toBeNull()
+    })
+
+    it('shows the cancellation policy when the feature flag is ON', () => {
+      vi.stubEnv('VITE_FEATURE_CANCELLATION', 'true')
+      renderStep()
+      expect(screen.getByRole('heading', { name: 'Cancellation policy' })).toBeInTheDocument()
+    })
   })
 })

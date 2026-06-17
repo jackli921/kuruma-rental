@@ -4,7 +4,7 @@ import { LocaleSwitcher } from '@/vite/nav/LocaleSwitcher'
 import { MobileMenu, type NavItem } from '@/vite/nav/MobileMenu'
 import { NavBadge } from '@/vite/nav/NavBadge'
 import { NavbarClient } from '@/vite/nav/NavbarClient'
-import { businessNavItems } from '@/vite/nav/business-nav-items'
+import { visibleBusinessNavItems } from '@/vite/nav/business-nav-items'
 import { useNewBookingsBadge } from '@/vite/operator-bookings/useNewBookingsBadge'
 import { useSession } from '@/vite/session'
 import { getViewMode, isBusiness } from '@/vite/view-mode'
@@ -40,7 +40,7 @@ export function Navbar() {
     : []
 
   const navItems: readonly NavItem[] = isBusinessView
-    ? businessNavItems.map((item) => ({
+    ? visibleBusinessNavItems().map((item) => ({
         to: item.to,
         label: t(item.labelKey),
         // exactOptionalPropertyTypes: only attach `badge` when there is one.
