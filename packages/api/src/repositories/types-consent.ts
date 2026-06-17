@@ -1,3 +1,5 @@
+// Consent data-access contract (#877, extends epic #613). Extracted so types.ts stays under
+// the file-size cap; re-exported from that barrel for callers.
 import type { ConsentType } from '@kuruma/shared/enums'
 import type { ConsentAcceptance, ConsentDocument } from '../stores'
 

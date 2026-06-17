@@ -164,7 +164,7 @@ export class DrizzleConsentRepository implements ConsentRepository {
   async createAcceptance(data: NewConsentAcceptance): Promise<ConsentAcceptance> {
     const [row] = await this.db
       .insert(consentAcceptances)
-      .values({ id: crypto.randomUUID(), ...data })
+      .values({ ...data, id: crypto.randomUUID() })
       .returning()
     if (!row) throw new Error('Failed to insert consent acceptance')
     return toAcceptance(row)

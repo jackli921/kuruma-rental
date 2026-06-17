@@ -91,6 +91,12 @@ export class InMemoryConsentRepository implements ConsentRepository {
     return row
   }
 
+  // Priority early-returns are correct ONLY because the DB CHECK constraints
+  // consent_liability_booking_chk and consent_operator_agreement_chk make the three
+  // partial-unique predicates mutually disjoint: bookingId≠null implies RENTER_LIABILITY,
+  // operatorId≠null implies OPERATOR_AGREEMENT, and the two are mutually exclusive.
+  // This in-memory double does NOT re-enforce those CHECKs — it assumes callers construct
+  // shape-valid rows. The Task 9 ConsentService subject-shape pre-check is the enforcing guard.
   private assertUnique(d: NewConsentAcceptance): void {
     if (d.bookingId !== null) {
       if (this.acceptances.some((a) => a.bookingId === d.bookingId))
