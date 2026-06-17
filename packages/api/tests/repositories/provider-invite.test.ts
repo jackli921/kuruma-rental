@@ -70,6 +70,18 @@ describe('InMemoryProviderInviteRepository', () => {
     expect(found?.acceptedByUserId).toBe('user_42')
   })
 
+  // #904 slice 2: a revoke racing an accept must not resurrect the invite. The
+  // PENDING-only guard means accepting an already-REVOKED invite is a no-op — the
+  // status stays REVOKED and no redeemer is stamped.
+  it('markAccepted is a no-op on a non-PENDING invite (revoke wins the race)', async () => {
+    const revoked = await repo.create(inviteInput({ tokenHash: 'h1', status: 'REVOKED' }))
+    await repo.markAccepted(revoked.id, 'user_42')
+
+    const found = await repo.findByTokenHash('h1')
+    expect(found?.status).toBe('REVOKED')
+    expect(found?.acceptedByUserId).toBeNull()
+  })
+
   describe('listByOperator (#904)', () => {
     it('returns all PENDING invites for the operator', async () => {
       await repo.create(inviteInput({ tokenHash: 'h1', email: 'a@x.com' }))

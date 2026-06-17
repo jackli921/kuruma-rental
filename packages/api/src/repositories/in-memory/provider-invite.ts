@@ -48,9 +48,12 @@ export class InMemoryProviderInviteRepository implements ProviderInviteRepositor
       .sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime() || a.id.localeCompare(b.id))
   }
 
+  // #904 slice 2: PENDING-only guard. A revoke that lands first leaves the invite
+  // REVOKED; a racing accept then finds no PENDING row and is a no-op, so it can
+  // never flip REVOKED -> ACCEPTED (mirrors the drizzle WHERE status='PENDING').
   async markAccepted(id: string, acceptedByUserId: string): Promise<void> {
     const invite = this.store.get(id)
-    if (!invite) return
+    if (!invite || invite.status !== 'PENDING') return
     this.store.set(id, {
       ...invite,
       status: 'ACCEPTED',

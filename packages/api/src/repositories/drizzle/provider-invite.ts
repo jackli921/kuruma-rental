@@ -53,12 +53,14 @@ export class DrizzleProviderInviteRepository implements ProviderInviteRepository
   }
 
   // Consume the invite at acceptance (#521 §6). Runs tx-bound inside the grant
-  // transaction; the membership INSERT (first in that tx) is the race fence, so
-  // this is an unconditional id update — no status guard needed.
+  // transaction; the membership INSERT (first in that tx) is the primary race
+  // fence. The WHERE status='PENDING' is the second fence (#904 slice 2): a
+  // self-service revoke (PENDING -> REVOKED) that commits first makes this match
+  // zero rows, so a racing accept can never resurrect a revoked invite.
   async markAccepted(id: string, acceptedByUserId: string): Promise<void> {
     await this.db
       .update(providerInvites)
       .set({ status: 'ACCEPTED', acceptedByUserId, updatedAt: new Date() })
-      .where(eq(providerInvites.id, id))
+      .where(and(eq(providerInvites.id, id), eq(providerInvites.status, 'PENDING')))
   }
 }
