@@ -4,14 +4,9 @@ import { MapPin } from 'lucide-react'
 import { useMemo, useState } from 'react'
 import { useTranslations } from 'use-intl'
 import type { MapAdapter } from './MapAdapter'
+import { MapPopupCarousel } from './MapPopupCarousel'
 import { SearchResultRow } from './SearchResultRow'
-import {
-  groupByLocation,
-  pinPriceLabel,
-  resultPriceLabel,
-  resultTitle,
-  searchResultKey,
-} from './result'
+import { groupByLocation, pinPriceLabel, searchResultKey } from './result'
 
 interface SearchMapListProps {
   readonly items: SearchResultItem[]
@@ -148,14 +143,21 @@ export function SearchMapList({
                 </button>
               )
             }}
+            // The popup walks the full co-located group (#885 slice 2 task 4), not
+            // just the representative pin item — the view's closure holds every car.
+            // Key on the location so selecting a different pin remounts the carousel
+            // at its first car instead of leaking the previous slide index.
             renderSelected={(item) => (
-              <div className="min-w-44 rounded-lg border border-border bg-card p-3 text-sm shadow-md">
-                <p className="font-semibold leading-tight">{resultTitle(item)}</p>
-                <p className="mt-0.5 text-muted-foreground">
-                  {item.location.operatorName} · {item.location.name}
-                </p>
-                <p className="mt-1 font-medium text-foreground">{resultPriceLabel(item, t)}</p>
-              </div>
+              <MapPopupCarousel
+                key={item.location.locationId}
+                items={groupItemsById.get(item.location.locationId) ?? [item]}
+                locale={locale}
+                from={from}
+                to={to}
+                classFilter={classFilter}
+                pickupLocationId={pickupLocationId}
+                region={region}
+              />
             )}
           />
         )}

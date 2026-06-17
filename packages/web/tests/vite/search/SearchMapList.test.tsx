@@ -241,7 +241,7 @@ describe('SearchMapList', () => {
     expect(screen.getByTestId('fake-map')).toHaveAttribute('data-anchor', '34.6655,135.5023')
   })
 
-  it('renders a map popup (title · store · price) for the selected location', () => {
+  it('opens a co-location carousel popup for the selected location', () => {
     renderMapList([carAt('v1', 'Toyota Yaris', 'loc_namba', GEOCODED)])
     expect(screen.queryByTestId('map-popup')).toBeNull()
 
@@ -249,8 +249,50 @@ describe('SearchMapList', () => {
 
     const popup = screen.getByTestId('map-popup')
     expect(popup).toHaveTextContent('Toyota Yaris')
-    expect(popup).toHaveTextContent('Best Car Rental')
     expect(popup).toHaveTextContent(/8,000/)
+    // One car at this store → a static card, no carousel arrows.
+    expect(within(popup).queryByRole('button', { name: /next car/i })).toBeNull()
+  })
+
+  it('threads the whole co-located group into the popup carousel (not just the pin item)', () => {
+    renderMapList([
+      carAt('v1', 'Toyota Yaris', 'loc_namba', GEOCODED),
+      carAt('v2', 'Honda Fit', 'loc_namba', GEOCODED),
+    ])
+
+    fireEvent.click(within(screen.getByTestId('pin-loc_namba')).getByRole('button'))
+
+    const popup = screen.getByTestId('map-popup')
+    expect(popup).toHaveTextContent('Toyota Yaris')
+    expect(within(popup).getByText('1 / 2')).toBeInTheDocument()
+    // The carousel cycles to the second co-located car — proof the group, not just
+    // the representative pin item, was threaded into renderSelected.
+    fireEvent.click(within(popup).getByRole('button', { name: /next car/i }))
+    expect(popup).toHaveTextContent('Honda Fit')
+  })
+
+  it('opens a freshly selected pin at its first car, not the previous carousel position', async () => {
+    const user = userEvent.setup()
+    renderMapList([
+      carAt('v1', 'Toyota Yaris', 'loc_namba', GEOCODED),
+      carAt('v2', 'Honda Fit', 'loc_namba', GEOCODED),
+      carAt('v3', 'Mazda Demio', 'loc_umeda', GEOCODED),
+      carAt('v4', 'Nissan Note', 'loc_umeda', GEOCODED),
+    ])
+
+    // Open Namba's popup and advance to its second car.
+    fireEvent.click(within(screen.getByTestId('pin-loc_namba')).getByRole('button'))
+    await user.click(
+      within(screen.getByTestId('map-popup')).getByRole('button', { name: /next car/i }),
+    )
+    expect(screen.getByTestId('map-popup')).toHaveTextContent('2 / 2')
+
+    // Switch to Umeda's pin: its popup must open at the first car. Without keying the
+    // carousel to the location the stale index leaks and it opens mid-carousel.
+    fireEvent.click(within(screen.getByTestId('pin-loc_umeda')).getByRole('button'))
+    const popup = screen.getByTestId('map-popup')
+    expect(within(popup).getByText('1 / 2')).toBeInTheDocument()
+    expect(popup).toHaveTextContent('Mazda Demio')
   })
 
   it('plots a price-pill pin showing the bare price for a single-car location', () => {
