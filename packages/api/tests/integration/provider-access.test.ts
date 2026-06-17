@@ -8,6 +8,7 @@ import { PG_ERROR, pgConstraintName, pgErrorCode } from '../../src/pg-errors'
 import {
   DrizzleOperatorMembershipRepository,
   DrizzleProviderInviteRepository,
+  DrizzleUserRepository,
   createDrizzleOperatorGrant,
 } from '../../src/repositories/drizzle'
 import type { Db } from '../../src/repositories/drizzle/shared'
@@ -21,6 +22,7 @@ import { db } from './setup'
 const txDb = db as unknown as Db
 const invites = new DrizzleProviderInviteRepository(txDb)
 const memberships = new DrizzleOperatorMembershipRepository(txDb)
+const userRepo = new DrizzleUserRepository(txDb)
 
 // Slice B (B5) — the grant runs through a postgres-js interactive tx: the default
 // neon-serverless runTx can't reach docker Postgres (#493), so inject one backed by
@@ -226,5 +228,59 @@ describe('OperatorGrantService accept (postgres)', () => {
         and(eq(operatorMemberships.userId, renterId), eq(operatorMemberships.status, 'ACTIVE')),
       )
     expect(activeRows).toHaveLength(1)
+  })
+})
+
+// #904 slice 2 — the deactivate path against real Postgres: the in-memory map can
+// only mimic the scoped UPDATE...RETURNING and the FK-nulling projection clear;
+// here we prove the DB does it (enum value, scoped WHERE, null operatorId FK).
+describe('DrizzleOperatorMembershipRepository.deactivate + clearOperatorAccess (postgres)', () => {
+  let memberUserId: string
+  let membershipId: string
+
+  beforeAll(async () => {
+    const [u] = await db
+      .insert(users)
+      .values({
+        id: crypto.randomUUID(),
+        email: `deact-${crypto.randomUUID()}@kuruma-test.com`,
+        role: 'OPERATOR_STAFF',
+        operatorId: BEST_CAR_RENTAL_OPERATOR_ID,
+        language: 'en',
+      })
+      .returning()
+    if (!u) throw new Error('failed to seed member')
+    memberUserId = u.id
+    grantUserIds.push(memberUserId)
+    const m = await memberships.create({
+      userId: memberUserId,
+      operatorId: BEST_CAR_RENTAL_OPERATOR_ID,
+      role: 'OPERATOR_STAFF',
+      status: 'ACTIVE',
+    })
+    membershipId = m.id
+  })
+
+  it('is a no-op for a foreign operatorId (scoped) — the row stays ACTIVE', async () => {
+    expect(await memberships.deactivate(membershipId, 'op_not_mine')).toBeUndefined()
+    expect((await memberships.findActiveByUserId(memberUserId))?.status).toBe('ACTIVE')
+  })
+
+  it('flips ACTIVE -> REVOKED, returns the row, frees the active slot, and is idempotent', async () => {
+    const revoked = await memberships.deactivate(membershipId, BEST_CAR_RENTAL_OPERATOR_ID)
+    expect(revoked?.id).toBe(membershipId)
+    expect(revoked?.status).toBe('REVOKED')
+    expect(await memberships.findActiveByUserId(memberUserId)).toBeUndefined()
+    // Only an ACTIVE row transitions, so a second deactivate matches nothing.
+    expect(await memberships.deactivate(membershipId, BEST_CAR_RENTAL_OPERATOR_ID)).toBeUndefined()
+  })
+
+  it('clearOperatorAccess tears the projection down to a plain RENTER (null operatorId)', async () => {
+    await userRepo.clearOperatorAccess(memberUserId)
+    const [projected] = await db
+      .select({ role: users.role, operatorId: users.operatorId })
+      .from(users)
+      .where(eq(users.id, memberUserId))
+    expect(projected).toEqual({ role: 'RENTER', operatorId: null })
   })
 })

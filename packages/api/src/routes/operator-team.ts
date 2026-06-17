@@ -43,4 +43,12 @@ export function createOperatorTeamRoutes(service: OperatorTeamService) {
       const members = await service.listMembers(toCallerContext(requireUser(c)))
       return ok(c, members)
     })
+    .post('/operators/me/members/:id/deactivate', async (c) => {
+      const id = c.req.param('id')
+      // Owner-only + tenant scope + last-owner lockout live in the service: an
+      // unknown/foreign id throws NotFoundError (-> 404) and the last owner throws
+      // ConflictError (-> 409), both via the global handler, so no id is leaked.
+      await service.deactivateMember(toCallerContext(requireUser(c)), id)
+      return ok(c, { id })
+    })
 }
