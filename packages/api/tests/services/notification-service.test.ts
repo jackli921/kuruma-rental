@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest'
 import type { CallerContext } from '../../src/middleware/auth'
 import { InMemoryNotificationLogRepository } from '../../src/repositories/in-memory/notification-log'
 import { InMemoryOperatorRepository } from '../../src/repositories/in-memory/operator'
+import { InMemoryOperatorMembershipRepository } from '../../src/repositories/in-memory/operator-membership'
 import { InMemoryUserRepository } from '../../src/repositories/in-memory/user'
 import {
   type BookingRepository,
@@ -122,11 +123,30 @@ function build(sender?: EmailSender) {
   const okSender: EmailSender = sender ?? {
     send: vi.fn(async () => ({ providerMessageId: 'msg-1' })),
   }
+  // #878: the operator alert resolves recipients from the membership ledger — seed
+  // owner-1 as an ACTIVE member so dispatch produces a real operator-alert row.
+  const membershipRepo = new InMemoryOperatorMembershipRepository(
+    new Map([
+      [
+        'mem-owner-1',
+        {
+          id: 'mem-owner-1',
+          userId: 'owner-1',
+          operatorId: OP1,
+          role: 'OPERATOR_OWNER' as const,
+          status: 'ACTIVE' as const,
+          createdAt: ts,
+          updatedAt: ts,
+        },
+      ],
+    ]),
+  )
   const dispatcher = new NotificationDispatcher(
     logRepo,
     operatorRepo,
     fakeVehicleRepo,
     userRepo,
+    membershipRepo,
     fakeLocationRepo,
     okSender,
     { emailFrom: 'noreply@bcr.jp' },

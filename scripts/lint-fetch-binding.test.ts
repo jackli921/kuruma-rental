@@ -74,6 +74,32 @@ describe('findDetachedFetchDefaults', () => {
     ].join('\n')
     expect(findDetachedFetchDefaults(src)).toEqual([1, 3])
   })
+
+  // #892 follow-up: a TS cast must not let the unbound capture slip past — and
+  // `as typeof fetch` already appears (correctly) on the bound form, so the
+  // cast-without-bind shape is one copy-paste away.
+  test('flags `= fetch as typeof fetch` — an unbound cast must not bypass the guard', () => {
+    const src = '    private readonly fetchFn: typeof fetch = fetch as typeof fetch,'
+    expect(findDetachedFetchDefaults(src)).toEqual([1])
+  })
+
+  test('flags a qualified unbound cast `= globalThis.fetch as typeof fetch`', () => {
+    const src = 'fetchFn: typeof fetch = globalThis.fetch as typeof fetch,'
+    expect(findDetachedFetchDefaults(src)).toEqual([1])
+  })
+
+  test('flags an unbound cast when the closing paren is on the next line', () => {
+    const src = 'function f(\n  fetchImpl: typeof fetch = fetch as typeof fetch\n) {}'
+    expect(findDetachedFetchDefaults(src)).toEqual([2])
+  })
+
+  test('flags the `= window.fetch` capture (DOM-typed web alias of the global)', () => {
+    const src = [
+      'a: typeof fetch = window.fetch,',
+      'b: typeof fetch = window.fetch as typeof fetch)',
+    ].join('\n')
+    expect(findDetachedFetchDefaults(src)).toEqual([1, 2])
+  })
 })
 
 describe('scanRoots', () => {
@@ -86,6 +112,8 @@ describe('scanRoots', () => {
     mkdirSync(join(root, 'tests'), { recursive: true })
     writeFileSync(join(root, 'service.ts'), BAD) // scanned -> violation
     writeFileSync(join(root, 'widget.tsx'), BAD) // .tsx scanned -> violation
+    writeFileSync(join(root, 'edge.cts'), BAD) // .cts scanned -> violation
+    writeFileSync(join(root, 'legacy.js'), BAD) // .js scanned -> violation
     writeFileSync(join(root, 'service.test.ts'), BAD) // excluded (real fetch ok in tests)
     writeFileSync(join(root, 'tests', 'helper.ts'), BAD) // excluded (tests/ dir)
     writeFileSync(join(root, 'clean.ts'), 'const ok = fetch.bind(globalThis)') // bound -> clean
@@ -93,11 +121,11 @@ describe('scanRoots', () => {
 
   afterAll(() => rmSync(cwd, { recursive: true, force: true }))
 
-  test('reports prod .ts/.tsx violations and skips tests + bound files', () => {
+  test('reports prod .ts/.tsx/.cts/.js violations and skips tests + bound files', () => {
     const files = scanRoots(['src'], cwd)
       .map((v) => v.file)
       .sort()
-    expect(files).toEqual(['src/service.ts', 'src/widget.tsx'])
+    expect(files).toEqual(['src/edge.cts', 'src/legacy.js', 'src/service.ts', 'src/widget.tsx'])
   })
 
   test('returns the offending line number for each violation', () => {

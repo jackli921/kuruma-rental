@@ -184,6 +184,7 @@ describe('Booking Routes', () => {
       insuranceOptionRepo,
       addOnRepo,
       feeScheduleRepo,
+      userRepo,
     }
     const runInTransaction: RunInTransaction = async (fn) => fn(repos)
 

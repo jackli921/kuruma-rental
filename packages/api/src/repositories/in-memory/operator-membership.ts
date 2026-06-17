@@ -24,6 +24,16 @@ export class InMemoryOperatorMembershipRepository implements OperatorMembershipR
     return [...this.store.values()].find((m) => m.userId === userId && m.status === 'ACTIVE')
   }
 
+  // #878: the operator's ACTIVE members (owner + staff) — the booking-alert
+  // recipient set, sourced from the grant ledger (REVOKED rows excluded).
+  async findActiveByOperator(operatorId: string): Promise<OperatorMembership[]> {
+    // Order by (createdAt, id) — mirrors the drizzle ORDER BY so the joined audit
+    // recipient string is deterministic across resends, not Map-insertion order. #878.
+    return [...this.store.values()]
+      .filter((m) => m.operatorId === operatorId && m.status === 'ACTIVE')
+      .sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime() || a.id.localeCompare(b.id))
+  }
+
   async create(
     data: Omit<OperatorMembership, 'id' | 'createdAt' | 'updatedAt'>,
   ): Promise<OperatorMembership> {
