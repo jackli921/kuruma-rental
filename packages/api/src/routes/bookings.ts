@@ -1,4 +1,3 @@
-import type { CancellationReason } from '@kuruma/shared/db/schema'
 import {
   cancelBookingSchema,
   createBookingSchema,
@@ -230,27 +229,17 @@ export function createBookingRoutes(service: BookingService) {
       const idResult = parseId(c)
       if (!idResult.ok) return idResult.response
 
-      // #868 3b: an OPTIONAL renter cancellation reason. The body may be absent
-      // entirely — the operator cancel client sends none, and a renter who picks no
-      // reason sends `{}` — so parse defensively: a missing/non-JSON body means "no
-      // reason", while a present-but-malformed reason is a 400. The reason is never
-      // allowed to block the cancel itself.
-      let reason: CancellationReason | null = null
-      let rawBody: unknown
-      try {
-        rawBody = await c.req.json()
-      } catch {
-        rawBody = undefined
-      }
-      if (rawBody !== undefined && rawBody !== null) {
-        const parsed = cancelBookingSchema.safeParse(rawBody)
-        if (!parsed.success) {
-          return fail(c, parsed.error.flatten().fieldErrors as Record<string, unknown>, 400)
-        }
-        reason = parsed.data.reason
-          ? { code: parsed.data.reason.code, note: parsed.data.reason.note ?? null }
-          : null
-      }
+      // #868 3b: the renter may attach an OPTIONAL cancellation reason. The body
+      // can be absent entirely — the operator cancel client sends none, and a
+      // renter who picks no reason sends `{}` — so allowEmpty treats a missing
+      // body as "no reason"; a present-but-malformed reason is still a 400. The
+      // reason never blocks the cancel itself.
+      const parsed = await parseBody(c, cancelBookingSchema, { allowEmpty: true })
+      if (!parsed.ok) return parsed.response
+
+      const reason = parsed.data.reason
+        ? { code: parsed.data.reason.code, note: parsed.data.reason.note ?? null }
+        : null
 
       const result = await service.cancel(ctx, idResult.id, reason)
       if (!result.ok) {
