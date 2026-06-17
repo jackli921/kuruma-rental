@@ -429,6 +429,32 @@ describe('seed-data demo vehicles (slice 8 §3.3)', () => {
   it('sets positive seats (notNull integer column)', () => {
     for (const v of DEMO_VEHICLES) expect(v.seats).toBeGreaterThan(0)
   })
+
+  // Every storefront card must show a car, not an empty frame. Photos are keyed
+  // per make+model (models repeat across the fleet) with a labeled-placeholder
+  // backstop, so coverage is total regardless of source availability.
+  it('gives every vehicle at least one photo (no imageless storefront card)', () => {
+    for (const v of DEMO_VEHICLES) {
+      expect(v.photos.length).toBeGreaterThanOrEqual(1)
+    }
+  })
+
+  it('uses only well-formed https image URLs for every photo (no mixed content)', () => {
+    for (const v of DEMO_VEHICLES) {
+      for (const photo of v.photos) {
+        expect(() => new URL(photo)).not.toThrow()
+        expect(photo.startsWith('https://')).toBe(true)
+      }
+    }
+  })
+
+  it('covers every distinct model in the fleet with a photo set', () => {
+    const models = new Set(DEMO_VEHICLES.map((v) => v.name))
+    for (const model of models) {
+      const sample = DEMO_VEHICLES.find((v) => v.name === model)
+      expect(sample?.photos.length).toBeGreaterThanOrEqual(1)
+    }
+  })
 })
 
 // Slice 8 §3.5 — demo renter personas covering all three locales.
