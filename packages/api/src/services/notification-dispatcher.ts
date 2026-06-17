@@ -3,7 +3,6 @@ import {
   type LocationRepository,
   MAX_NOTIFICATION_ATTEMPTS,
   type NotificationLogRepository,
-  type OperatorMembershipRepository,
   type OperatorRepository,
   type UserRepository,
   type VehicleRepository,
@@ -15,6 +14,7 @@ import { renderRenterCancellation } from './email/templates/renter-cancellation'
 import { renderRenterConfirmation } from './email/templates/renter-confirmation'
 import { renderRenterStatusUpdate } from './email/templates/renter-status-update'
 import { renderRenterSubstitution } from './email/templates/renter-substitution'
+import type { ResolveOperatorRecipients } from './operator-recipients'
 
 type Kind = NotificationLog['kind']
 
@@ -89,7 +89,10 @@ export class NotificationDispatcher {
     private readonly operatorRepo: OperatorRepository,
     private readonly vehicleRepo: VehicleRepository,
     private readonly userRepo: UserRepository,
-    private readonly membershipRepo: OperatorMembershipRepository,
+    // #889: the operator-alert recipient set, injected as a single function so the
+    // dispatcher no longer depends on the membership ledger (ISP). Wired in the
+    // composition root from membershipRepo + userRepo via makeResolveOperatorRecipients.
+    private readonly resolveOperatorRecipients: ResolveOperatorRecipients,
     private readonly locationRepo: LocationRepository,
     private readonly emailSender: EmailSender,
     private readonly config: NotificationDispatcherConfig,
@@ -180,7 +183,7 @@ export class NotificationDispatcher {
     }
     // OPERATOR_BOOKING_ALERT (#878) — every ACTIVE member (owner + staff) of the
     // operator, sourced from the grant ledger so a revoked member never lingers.
-    const members = await this.resolveActiveMemberEmails(booking.operatorId)
+    const members = await this.resolveOperatorRecipients(booking.operatorId)
     if (members.length > 0) {
       // Bcc all members; `to` is the platform `from` (send-to-self) so no member's
       // address is disclosed to the others. The audit recipient is the full list.
@@ -195,24 +198,6 @@ export class NotificationDispatcher {
     const fallback = this.config.fallbackOperatorEmail
     if (!fallback) return undefined
     return { to: fallback, recipient: fallback, locale: DEFAULT_OPERATOR_LOCALE }
-  }
-
-  /**
-   * #878: the operator's active-member email set. Memberships are the recipient
-   * source of truth; users.findByIds resolves the addresses and masks the
-   * synthetic placeholder email to null (a seeded placeholder owner is dropped,
-   * not emailed). findActiveByOperator returns a deterministic (createdAt, id)
-   * order, preserved through the flatMap so the joined audit string is stable.
-   */
-  private async resolveActiveMemberEmails(operatorId: string): Promise<string[]> {
-    const members = await this.membershipRepo.findActiveByOperator(operatorId)
-    if (members.length === 0) return []
-    const users = await this.userRepo.findByIds(members.map((m) => m.userId))
-    const emailByUserId = new Map(users.map((u) => [u.id, u.email]))
-    return members.flatMap((m) => {
-      const email = emailByUserId.get(m.userId)
-      return email ? [email] : []
-    })
   }
 
   private async buildMessage(booking: Booking, kind: Kind, resolved: Resolved) {

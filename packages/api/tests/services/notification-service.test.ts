@@ -13,6 +13,7 @@ import {
 import type { EmailSender } from '../../src/services/email/email-sender'
 import { NotificationService } from '../../src/services/notification'
 import { NotificationDispatcher } from '../../src/services/notification-dispatcher'
+import { makeResolveOperatorRecipients } from '../../src/services/operator-recipients'
 import type { Booking, User } from '../../src/stores'
 import { makeBooking as makeBookingFixture } from '../helpers/booking'
 
@@ -132,7 +133,7 @@ function build(sender?: EmailSender) {
     operatorRepo,
     fakeVehicleRepo,
     userRepo,
-    membershipRepo,
+    makeResolveOperatorRecipients({ membershipRepo, userRepo }),
     fakeLocationRepo,
     okSender,
     { emailFrom: 'noreply@bcr.jp' },
