@@ -87,6 +87,7 @@ export default defineConfig({
         VITE_FEATURE_OPERATOR_MANUAL_BOOKING: 'true',
         VITE_FEATURE_OPERATOR_TEAM: 'true',
         VITE_FEATURE_OPERATOR_SETTINGS: 'true',
+        VITE_FEATURE_RENTER_DOCUMENTS: 'true',
       },
     },
   ],

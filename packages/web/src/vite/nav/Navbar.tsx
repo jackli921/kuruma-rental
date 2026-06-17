@@ -1,5 +1,6 @@
 import { buttonVariants } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
+import { isRenterDocumentsEnabled } from '@/vite/config/features'
 import { LocaleSwitcher } from '@/vite/nav/LocaleSwitcher'
 import { MobileMenu, type NavItem } from '@/vite/nav/MobileMenu'
 import { NavBadge } from '@/vite/nav/NavBadge'
@@ -35,7 +36,11 @@ export function Navbar() {
   const renterNavItems: readonly NavItem[] = isRenter
     ? [
         { to: '/$locale/bookings', label: t('myBookings') },
-        { to: '/$locale/documents', label: t('documents') },
+        // Documents (IDP upload, #459) is gated OFF for the beta demo: the
+        // instant-book flow no longer requires it. See vite/config/features.ts.
+        ...(isRenterDocumentsEnabled()
+          ? [{ to: '/$locale/documents' as const, label: t('documents') }]
+          : []),
       ]
     : []
 
