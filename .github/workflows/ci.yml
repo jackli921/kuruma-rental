@@ -43,12 +43,21 @@ jobs:
       - name: Check i18n locale parity
         run: bun run lint:i18n-parity
 
+      - name: Check web API clients validate unwrap() responses
+        run: bun run lint:unwrap-schema
+
+      - name: Check global fetch is bound on runtime surfaces
+        run: bun run lint:fetch-binding
+
       - name: Check unused deps and exports
         run: bun run lint:deps
         continue-on-error: true
 
       - name: Test (all packages)
         run: bun run test
+
+      - name: Test repo lint scripts
+        run: bun test scripts/
 
       - name: Build web
         run: bun run --filter @kuruma/web build

@@ -331,6 +331,7 @@ export function createApp(overrides?: AppOverrides, repos: Repos = buildRepos(ov
     operatorRepo,
     vehicleRepo,
     userRepo,
+    operatorMembershipRepo,
     locationRepo,
     emailSender,
     {

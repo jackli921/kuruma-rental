@@ -857,6 +857,19 @@
       "viewBookings": "予約一覧を見る",
       "backToVehicles": "他の車両を見る"
     },
+    "cancel": {
+      "action": "予約をキャンセル",
+      "dialogTitle": "この予約をキャンセルしますか？",
+      "dialogDescription": "下記のキャンセル料をご確認のうえ、確定してください。この操作は取り消せません。",
+      "feeLine": "キャンセル料：{fee}（{percent}%）",
+      "refundLine": "返金見込み：{refund}",
+      "noShowNotice": "受取時刻を過ぎています。全額のキャンセル料（{fee}）が適用されます。",
+      "advisory": "キャンセル料は受取時に {operator} とのあいだで精算されます。オンラインでの請求はありません。",
+      "keep": "予約を維持する",
+      "confirm": "はい、キャンセルします",
+      "pending": "キャンセル中…",
+      "error": "予約をキャンセルできませんでした。もう一度お試しいただくか、オペレーターにご連絡ください。"
+    },
     "list": {
       "title": "予約一覧",
       "subtitle": "今後の予約と過去の予約",

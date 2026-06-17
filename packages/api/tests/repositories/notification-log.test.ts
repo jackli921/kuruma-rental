@@ -48,13 +48,42 @@ describe('InMemoryNotificationLogRepository', () => {
     expect(row.recipient).toBe('renter@example.com')
   })
 
-  it('upsertQueued is idempotent — a replay returns the existing row unchanged', async () => {
-    const first = await repo.upsertQueued(seed())
+  it('upsertQueued is idempotent — a replay returns a terminal SENT row unchanged', async () => {
+    const first = await repo.upsertQueued(seed({ recipient: 'sent@op.com' }))
     await repo.claim(first.id)
     await repo.markSent(first.id, 'msg-1')
-    const replay = await repo.upsertQueued(seed())
+    const replay = await repo.upsertQueued(seed({ recipient: 'changed@op.com', locale: 'ja' }))
     expect(replay.id).toBe(first.id)
     expect(replay.status).toBe('SENT') // NOT reset to QUEUED
+    // The audit recipient/locale must reflect who the mail was ACTUALLY sent to —
+    // a post-send replay never rewrites a terminal row's address.
+    expect(replay.recipient).toBe('sent@op.com')
+    expect(replay.locale).toBe('en')
+  })
+
+  // The operator-alert recipient set (#878) is recomputed at each send; a row that
+  // has not yet sent (QUEUED/FAILED) must refresh its audit recipient/locale so the
+  // notification_log column matches the Bcc list the resend actually used.
+  it('upsertQueued refreshes recipient/locale on a re-sendable FAILED row', async () => {
+    const first = await repo.upsertQueued(seed({ recipient: 'owner@op.com', locale: 'en' }))
+    await repo.claim(first.id)
+    await repo.markFailed(first.id, 'transient') // non-terminal, still reclaimable
+    const refreshed = await repo.upsertQueued(
+      seed({ recipient: 'owner@op.com, staff@op.com', locale: 'ja' }),
+    )
+    expect(refreshed.id).toBe(first.id)
+    expect(refreshed.status).toBe('FAILED') // lifecycle untouched
+    expect(refreshed.attempts).toBe(1) // attempts NOT reset
+    expect(refreshed.recipient).toBe('owner@op.com, staff@op.com')
+    expect(refreshed.locale).toBe('ja')
+  })
+
+  it('upsertQueued refreshes recipient/locale on a still-QUEUED row', async () => {
+    const first = await repo.upsertQueued(seed({ recipient: 'owner@op.com' }))
+    const refreshed = await repo.upsertQueued(seed({ recipient: 'owner@op.com, staff@op.com' }))
+    expect(refreshed.id).toBe(first.id)
+    expect(refreshed.status).toBe('QUEUED')
+    expect(refreshed.recipient).toBe('owner@op.com, staff@op.com')
   })
 
   // #681: a no-recipient skip is persisted as a terminal NO_RECIPIENT row.

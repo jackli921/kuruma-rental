@@ -1,5 +1,8 @@
 import { ApiError, ParseError } from '@/lib/api-error'
 import {
+  BOOKINGS_KEY,
+  bookingByIdQueryOptions,
+  cancelBooking,
   createBooking,
   fetchBookingById,
   fetchMyBookings,
@@ -230,6 +233,47 @@ describe('fetchMyBookings', () => {
 describe('myBookingsQueryOptions', () => {
   it('keys by the renter so two principals never collide on cache', () => {
     expect(myBookingsQueryOptions('me-42').queryKey).toEqual(['bookings', 'mine', 'me-42'])
+  })
+})
+
+// #856: renter self-cancellation. Wires to the SAME IDOR-sealed POST
+// /bookings/:id/cancel the operator uses — the server scopes the action to the
+// caller, so this client passes no renter id. Mirrors the operator writeBooking
+// shape (bodyless CSRF-gated POST) but stays in the renter `vite/bookings` client.
+describe('cancelBooking', () => {
+  afterEach(() => vi.unstubAllGlobals())
+
+  it('POSTs /api/bookings/:id/cancel bodyless with credentials + CSRF and unwraps the cancelled booking', async () => {
+    const cancelled = { ...sampleBooking, status: 'CANCELLED' as const }
+    const fetchMock = vi.fn(async () => jsonResponse({ success: true, data: cancelled }))
+    vi.stubGlobal('fetch', fetchMock)
+
+    await expect(cancelBooking('b-1', 'csrf-9')).resolves.toEqual(cancelled)
+
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit]
+    expect(url).toBe('/api/bookings/b-1/cancel')
+    expect(init.method).toBe('POST')
+    expect(init.credentials).toBe('include')
+    expect(init.headers).toMatchObject({ 'X-CSRF-Token': 'csrf-9' })
+    // Bodyless POST: it must not claim a JSON body it isn't sending.
+    expect(init.body).toBeUndefined()
+    expect((init.headers as Record<string, string>)['Content-Type']).toBeUndefined()
+  })
+
+  it('propagates a 409 as an ApiError so the dialog can treat an already-cancelled booking as benign', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => jsonResponse({ success: false, error: 'Booking is not cancellable' }, 409)),
+    )
+    await expect(cancelBooking('b-1', 'c')).rejects.toMatchObject({ status: 409 })
+  })
+})
+
+describe('BOOKINGS_KEY', () => {
+  it('prefixes every renter bookings query so one invalidation cascades to the list + detail', () => {
+    expect(BOOKINGS_KEY).toEqual(['bookings'])
+    expect(myBookingsQueryOptions('me-42').queryKey.slice(0, 1)).toEqual(BOOKINGS_KEY)
+    expect(bookingByIdQueryOptions('b-1').queryKey.slice(0, 1)).toEqual(BOOKINGS_KEY)
   })
 })
 

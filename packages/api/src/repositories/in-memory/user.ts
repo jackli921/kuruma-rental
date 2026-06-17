@@ -59,6 +59,22 @@ export class InMemoryUserRepository implements UserRepository {
     return user
   }
 
+  async createWalkInRenter(data: { name: string; phone: string }): Promise<User> {
+    // #589 1c: ALWAYS a fresh renter — never dedup (mirrors the Drizzle impl's
+    // random-placeholder-email insert). See UserRepository for the security note.
+    const user: User = {
+      id: crypto.randomUUID(),
+      name: data.name,
+      email: null,
+      phone: data.phone,
+      language: 'en',
+      country: null,
+      role: 'RENTER',
+    }
+    this.store.set(user.id, user)
+    return user
+  }
+
   async findByEmail(email: string): Promise<User | undefined> {
     const target = email.toLowerCase()
     return [...this.store.values()].find((u) => u.email?.toLowerCase() === target)
@@ -66,12 +82,6 @@ export class InMemoryUserRepository implements UserRepository {
 
   async findByPhone(phone: string): Promise<User | undefined> {
     return [...this.store.values()].find((u) => u.phone === phone)
-  }
-
-  async findOperatorContacts(operatorId: string): Promise<User[]> {
-    return [...this.store.values()].filter(
-      (u) => u.role === 'OPERATOR_OWNER' && u.operatorId === operatorId,
-    )
   }
 
   async setOperatorAccess(

@@ -57,32 +57,43 @@ export class BookingCreationService {
     input: CreateBookingInput,
     now: Date = new Date(),
   ): Promise<CreateBookingResult> {
-    // Manual-booking on behalf of a renter (#314, #589). For an OPERATOR_* caller
-    // the check is scope-FIRST: the renter must be in the operator's own customer
-    // set (a prior booking with it). Membership IS the authorization + existence
-    // check (a prior-booking renter necessarily exists), and any out-of-scope id
-    // returns a uniform 403 WITHOUT touching the user table — so it never leaks
-    // whether an arbitrary renterId exists (#396/#475). Staff/bypass keep the
-    // existence + role probe (surfaces FK failures as a friendly 400, not a 500).
-    if (input.renterId !== ctx.userId) {
-      if (isOperatorRole(ctx.role)) {
-        const scoped = ctx.operatorId
-          ? await this.bookingRepo.listRenterIdsForOperator(ctx.operatorId)
-          : []
-        if (!scoped.includes(input.renterId)) {
-          return {
-            ok: false,
-            status: 403,
-            error: 'Cannot book for a renter outside your customers',
+    // Resolve the booking's renter (#314, #589). Three cases:
+    //  - WALK-IN (1c): the operator registers a brand-new customer inline.
+    //    createWalkInRenter ALWAYS makes a fresh renter (never deduped by phone),
+    //    so a booking can't be attached to — nor the existence probed of — another
+    //    tenant's customer (#396/#475). The walk-in IS the authorization, so it
+    //    skips the scope check. renterId stays null here: submitInTx creates the
+    //    renter INSIDE the booking tx (#875), so a failed booking (409 double-book /
+    //    exhausted code-retries) rolls it back — no orphan customer — and the
+    //    idempotent replay below short-circuits before ever minting one.
+    //  - EXISTING renter (1b): operator authz is scope-FIRST — membership IS the
+    //    authorization + existence check; any out-of-scope id returns a uniform
+    //    403 WITHOUT touching the user table (no enumeration oracle). Staff/bypass
+    //    keep the exists+role probe (FK failures => friendly 400, not 500).
+    //  - SELF: renterId === ctx.userId (renter self-serve).
+    let renterId: string | null = null
+    if (!input.walkInCustomer) {
+      renterId = input.renterId
+      if (renterId !== ctx.userId) {
+        if (isOperatorRole(ctx.role)) {
+          const scoped = ctx.operatorId
+            ? await this.bookingRepo.listRenterIdsForOperator(ctx.operatorId)
+            : []
+          if (!scoped.includes(renterId)) {
+            return {
+              ok: false,
+              status: 403,
+              error: 'Cannot book for a renter outside your customers',
+            }
           }
-        }
-      } else if (this.userRepo) {
-        const [renter] = await this.userRepo.findByIds([input.renterId])
-        if (!renter) {
-          return { ok: false, status: 400, error: 'Renter not found' }
-        }
-        if ((renter.role ?? 'RENTER') !== 'RENTER') {
-          return { ok: false, status: 400, error: 'Target user is not a renter' }
+        } else if (this.userRepo) {
+          const [renter] = await this.userRepo.findByIds([renterId])
+          if (!renter) {
+            return { ok: false, status: 400, error: 'Renter not found' }
+          }
+          if ((renter.role ?? 'RENTER') !== 'RENTER') {
+            return { ok: false, status: 400, error: 'Target user is not a renter' }
+          }
         }
       }
     }
@@ -100,7 +111,10 @@ export class BookingCreationService {
     // on), an unverified renter is blocked here — before any booking work. Runs
     // AFTER idempotency replay so a previously-accepted booking stays replayable
     // even if the renter's document later expires.
-    if (this.verificationGate) {
+    // #589 1c: a walk-in is an operator-initiated manual booking — like other
+    // manual bookings it captures verification operationally at pickup, not via the
+    // renter document gate (the freshly-created customer has no documents on file).
+    if (this.verificationGate && !input.walkInCustomer) {
       const gate = await this.verificationGate(ctx, input)
       if (!gate.ok) return gate
     }
@@ -113,7 +127,7 @@ export class BookingCreationService {
     for (let attempt = 0; attempt < MAX_BOOKING_CODE_ATTEMPTS; attempt++) {
       try {
         const result = await this.runInTransaction((repos) =>
-          this.submitInTx(ctx, input, now, repos),
+          this.submitInTx(ctx, input, renterId, now, repos),
         )
         if (!result.ok) return result // domain validation failure — never retried
         // Post-commit side effects (#335 thread + #393 notifications) — never in
@@ -160,6 +174,10 @@ export class BookingCreationService {
   private async submitInTx(
     ctx: CallerContext,
     input: CreateBookingInput,
+    // Non-walk-in: the existing renter / self, resolved + authorized in `create`.
+    // Walk-in (#875): null — the fresh renter is minted below, inside this tx, just
+    // before the booking insert (after every validation `return`, which would commit).
+    renterId: string | null,
     now: Date,
     repos: TransactionRepos,
   ): Promise<CreateBookingResult> {
@@ -295,11 +313,23 @@ export class BookingCreationService {
 
     const bookingCode = this.generateCode()
 
+    // #875: mint the walk-in renter HERE — past every validation `return` above (a
+    // return COMMITS the tx, so an earlier insert would orphan on a 400), and right
+    // before the booking insert whose 409 / booking_code-collision THROW rolls this
+    // back with it. Atomic: a failed attempt leaves no orphan customer.
+    const bookingRenterId = input.walkInCustomer
+      ? (await repos.userRepo.createWalkInRenter(input.walkInCustomer)).id
+      : renterId
+    if (bookingRenterId === null) {
+      // Invariant: a non-walk-in booking always resolves renterId in `create`.
+      throw new Error('booking submit: renterId unresolved (non-walk-in)')
+    }
+
     // Insert FIRST: the exclusion / unique constraints fire here, BEFORE the
     // event append, so a rolled-back insert leaves no orphan event (atomicity).
     const booking = await repos.bookingRepo.create(ctx, {
       operatorId,
-      renterId: input.renterId,
+      renterId: bookingRenterId,
       classId,
       requestedVehicleId: input.requestedVehicleId,
       assignedVehicleId,

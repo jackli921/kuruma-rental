@@ -96,4 +96,23 @@ describe('NominatimGeocoder', () => {
     const parsed = new URL(fetchFn.mock.calls[0]![0] as string)
     expect(parsed.searchParams.has('key')).toBe(false)
   })
+
+  it('binds the default fetch to globalThis so a CF Workers geocode does not silently miss (#887)', async () => {
+    // On CF Workers the global fetch throws "Illegal invocation" unless this === globalThis.
+    // geocode() swallows that as a network error and returns notFound, silently dropping
+    // coordinates. Exercise the DEFAULT fetchFn against a this-sensitive (branded) fetch.
+    const brandedFetch = async function (this: unknown): Promise<Response> {
+      if (this !== globalThis) {
+        throw new TypeError("Illegal invocation: function called with incorrect 'this' reference")
+      }
+      return jsonResponse(osakaHit)
+    }
+    vi.stubGlobal('fetch', brandedFetch)
+    try {
+      const result = await new NominatimGeocoder(BASE, UA).geocode('Osaka')
+      expect(result).toEqual({ status: 'ok', lat: 34.6937, lng: 135.5023 })
+    } finally {
+      vi.unstubAllGlobals()
+    }
+  })
 })

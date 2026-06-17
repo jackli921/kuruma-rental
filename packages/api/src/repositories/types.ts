@@ -222,6 +222,10 @@ export interface ProviderInviteRepository {
 // (query filters status='ACTIVE'). `create` is fenced by that same index.
 export interface OperatorMembershipRepository {
   findActiveByUserId(userId: string): Promise<OperatorMembership | undefined>
+  // #878: every ACTIVE member (owner + staff) of an operator — the booking-alert
+  // recipient set. Ledger-sourced (status='ACTIVE'), so it is revocation-aware and
+  // never reads the stale users.role/operatorId projection.
+  findActiveByOperator(operatorId: string): Promise<OperatorMembership[]>
   create(
     data: Omit<OperatorMembership, 'id' | 'createdAt' | 'updatedAt'>,
   ): Promise<OperatorMembership>
@@ -324,13 +328,14 @@ export interface UserRepository {
     phone: string | null
     language: string
   }): Promise<User>
+  // #589 1c: register a brand-new walk-in/phone customer. ALWAYS inserts a fresh
+  // RENTER (random synthetic placeholder email; phone stored as-is) and NEVER
+  // dedups by phone/email — distinct from quickCreate's get-or-create. Critical:
+  // deduping a walk-in onto an existing user would let an operator attach a
+  // booking to (or probe the existence of) another tenant's customer (#396/#475).
+  createWalkInRenter(data: { name: string; phone: string }): Promise<User>
   findByEmail(email: string): Promise<User | undefined>
   findByPhone(phone: string): Promise<User | undefined>
-  // Slice 7 (#393): the operator's OPERATOR_OWNER contact users, for the booking
-  // alert recipient. A fixed-purpose PLATFORM-INTERNAL read over the indexed
-  // users.operatorId — NOT a caller-facing lookup, so it does NOT reopen the #396
-  // renter-enumeration vector. Owner-only by design (no OPERATOR_STAFF in MVP).
-  findOperatorContacts(operatorId: string): Promise<User[]>
   // #521 Decision 1: project an accepted operator grant onto users.role +
   // users.operatorId — the single-active denormalisation the JWT reads. One of
   // the three writes in the grant transaction; the OperatorRole subset is exactly
@@ -610,6 +615,10 @@ export interface TransactionRepos {
   insuranceOptionRepo: InsuranceOptionRepository
   addOnRepo: AddOnRepository
   feeScheduleRepo: FeeScheduleRepository
+  // #875: the operator walk-in (#589 1c) creates its fresh renter INSIDE the
+  // booking tx, so a failed booking rolls the renter back with it (no orphan).
+  // Narrowed to that one write — the rest of UserRepository isn't tx-bound here.
+  userRepo: Pick<UserRepository, 'createWalkInRenter'>
 }
 
 export type RunInTransaction = <T>(fn: (repos: TransactionRepos) => Promise<T>) => Promise<T>

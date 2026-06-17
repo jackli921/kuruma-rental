@@ -857,6 +857,19 @@
       "viewBookings": "View my bookings",
       "backToVehicles": "Browse more vehicles"
     },
+    "cancel": {
+      "action": "Cancel booking",
+      "dialogTitle": "Cancel this booking?",
+      "dialogDescription": "Review the cancellation fee below, then confirm. This can't be undone.",
+      "feeLine": "Cancellation fee: {fee} ({percent}%)",
+      "refundLine": "Estimated refund: {refund}",
+      "noShowNotice": "The pickup time has passed. The full fee ({fee}) applies.",
+      "advisory": "The fee is settled with {operator} at pickup. Nothing is charged online now.",
+      "keep": "Keep booking",
+      "confirm": "Yes, cancel",
+      "pending": "Cancelling…",
+      "error": "We couldn't cancel your booking. Please try again, or contact the operator."
+    },
     "list": {
       "title": "My bookings",
       "subtitle": "Your upcoming and past reservations",
