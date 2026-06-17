@@ -5,6 +5,7 @@ import { InMemoryOperatorRepository } from '../../src/repositories/in-memory/ope
 import type { RunInTransaction, TransactionRepos } from '../../src/repositories/types'
 import { BookingService } from '../../src/services/booking'
 import type { Booking } from '../../src/stores'
+import { makeBooking as makeBookingFixture } from '../helpers/booking'
 
 // §4h: the web confirmation page needs the operator's pre-auth URL, but it has no
 // DB access and /operators/:id is management-gated. So BookingService.findById
@@ -17,35 +18,19 @@ const runInTransaction: RunInTransaction = async (fn) => fn({} as TransactionRep
 
 function makeBooking(operatorId: string): Booking {
   const now = new Date('2026-07-01T00:00:00Z')
-  return {
+  return makeBookingFixture({
     id: 'bk-1',
     operatorId,
     renterId: RENTER,
     classId: 'cls-1',
-    requestedVehicleId: 'veh-1',
-    assignedVehicleId: 'veh-1',
-    pickupLocationId: 'loc-1',
-    dropoffLocationId: 'loc-1',
     startAt: now,
     endAt: now,
     effectiveEndAt: now,
-    status: 'CONFIRMED',
-    source: 'DIRECT',
-    fulfillmentMode: 'SPECIFIC',
     bookingCode: 'ABCD2345',
-    insuranceOptionId: null,
-    insuranceSnapshot: null,
-    feeSnapshot: [],
-    addOnSnapshot: [],
-    externalId: null,
-    notes: null,
     totalPrice: 24000,
-    cancellationFee: null,
-    cancelledAt: null,
-    idempotencyKey: null,
     createdAt: now,
     updatedAt: now,
-  }
+  })
 }
 
 async function setup() {
