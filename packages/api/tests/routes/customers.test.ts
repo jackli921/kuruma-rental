@@ -6,12 +6,12 @@ import { createCustomerRoutes } from '../../src/routes/customers'
 import { CustomerService } from '../../src/services/customer'
 import type { Booking, User } from '../../src/stores'
 import { testAuthMiddleware } from '../helpers/auth'
+import { makeBooking as makeBookingFixture } from '../helpers/booking'
 
 const USER1 = '00000000-0000-4000-8000-0000000000a1'
 const USER2 = '00000000-0000-4000-8000-0000000000a2'
 const USER3 = '00000000-0000-4000-8000-0000000000a3'
 const ADMIN = '00000000-0000-4000-8000-0000000000ad'
-const V1 = '00000000-0000-4000-8000-000000000001'
 
 let app: Hono
 
@@ -31,25 +31,16 @@ function mkUser(id: string, overrides: Partial<User> = {}): User {
 function mkBooking(b: Partial<Booking> & { id: string; renterId: string }): Booking {
   const startAt = b.startAt ?? new Date('2026-04-01T00:00:00Z')
   const endAt = b.endAt ?? new Date('2026-04-02T00:00:00Z')
-  return {
-    id: b.id,
-    renterId: b.renterId,
-    vehicleId: V1,
+  return makeBookingFixture({
+    status: 'COMPLETED',
     startAt,
     endAt,
     effectiveEndAt: endAt,
-    status: 'COMPLETED',
-    source: 'DIRECT',
-    externalId: null,
-    notes: null,
     totalPrice: 10000,
-    cancellationFee: null,
-    cancelledAt: null,
-    idempotencyKey: null,
     createdAt: startAt,
     updatedAt: startAt,
     ...b,
-  }
+  })
 }
 
 function setup({

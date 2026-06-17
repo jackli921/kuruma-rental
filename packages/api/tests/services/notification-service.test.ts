@@ -14,6 +14,7 @@ import type { EmailSender } from '../../src/services/email/email-sender'
 import { NotificationService } from '../../src/services/notification'
 import { NotificationDispatcher } from '../../src/services/notification-dispatcher'
 import type { Booking, User } from '../../src/stores'
+import { makeBooking as makeBookingFixture } from '../helpers/booking'
 
 const OP1 = 'op-1'
 const OP2 = 'op-2'
@@ -33,35 +34,20 @@ const op2Ctx: CallerContext = {
 
 function makeBooking(): Booking {
   const now = new Date('2026-07-01T00:00:00Z')
-  return {
+  return makeBookingFixture({
     id: 'bk-1',
     operatorId: OP1,
     renterId: RENTER,
     classId: 'cls-1',
-    requestedVehicleId: 'veh-1',
-    assignedVehicleId: 'veh-1',
-    pickupLocationId: 'loc-1',
     dropoffLocationId: 'loc-2',
     startAt: now,
     endAt: now,
     effectiveEndAt: now,
-    status: 'CONFIRMED',
-    source: 'DIRECT',
-    fulfillmentMode: 'SPECIFIC',
     bookingCode: 'ABCD2345',
-    insuranceOptionId: null,
-    insuranceSnapshot: null,
-    feeSnapshot: [],
-    addOnSnapshot: [],
-    externalId: null,
-    notes: null,
     totalPrice: 24000,
-    cancellationFee: null,
-    cancelledAt: null,
-    idempotencyKey: null,
     createdAt: now,
     updatedAt: now,
-  }
+  })
 }
 
 const fakeVehicleRepo = {
