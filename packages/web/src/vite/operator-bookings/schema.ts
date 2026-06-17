@@ -84,6 +84,20 @@ export const substitutionCandidateRowSchema = z.object({
   licensePlate: z.string().nullable().optional(),
 })
 
+/**
+ * One `GET /customers/search` row the manual-booking picker (#589 1d slice 3)
+ * reads. The API returns a full User; this pins only the four fields the picker
+ * shows — Zod strips the rest at the seam. name/email/phone are nullable (a
+ * phone-only walk-in has no email; a quick-created row may have no name).
+ */
+export const customerSearchResultSchema = z.object({
+  id: z.string(),
+  name: z.string().nullable(),
+  email: z.string().nullable(),
+  phone: z.string().nullable(),
+})
+export type CustomerSearchResult = z.infer<typeof customerSearchResultSchema>
+
 // --- Lifecycle events (#716 discriminated payload) ---------------------------
 // `payload` is the shared `BookingEventPayload`, a union keyed on `type` (the
 // storage-side discriminant the read mapper backfills). Each variant is pinned to
