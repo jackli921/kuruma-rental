@@ -470,6 +470,13 @@
       "when": 1781745415865,
       "tag": "0066_add_audit_log",
       "breakpoints": true
+    },
+    {
+      "idx": 67,
+      "version": "7",
+      "when": 1781751530189,
+      "tag": "0067_compliance_alert_log",
+      "breakpoints": true
     }
   ]
 }
