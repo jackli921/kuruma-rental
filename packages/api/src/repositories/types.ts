@@ -787,11 +787,7 @@ export interface RenterDocumentRepository {
 
 export type CreateRenterDocumentData = Pick<RenterDocument, 'renterId' | 'type' | 'storageKey'>
 
-/**
- * Private object storage for renter document scans (#459). Unlike `PhotoStorage`
- * (public vehicle photos), documents are private — access is via a short-lived
- * signed URL, never a public base URL.
- */
+/** Private object storage for renter document scans (#459) — private, not public-URL addressable (cf. `PhotoStorage`). */
 export interface DocumentStorage {
   put(renterId: string, file: File): Promise<{ key: string }>
   /** @deprecated Dormant pending #304; superseded by getFile(). Signed URL to view a scan. */
