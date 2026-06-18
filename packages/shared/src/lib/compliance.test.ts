@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'vitest'
 
-import { isDocCurrent, isRoadLegal } from './compliance'
+import { isDocCurrent, isRoadLegal, jstDateString } from './compliance'
 
 /**
  * §5.1 compliance predicate. A shaken/insurance certificate is valid THROUGH
@@ -45,5 +45,28 @@ describe('isRoadLegal', () => {
     expect(isRoadLegal({ shakenExpiryDate: '2026-07-01', insuranceExpiryDate: null }, asOf)).toBe(
       false,
     )
+  })
+})
+
+/**
+ * §4 "one clock" — the gates compare a rental instant (timestamptz) against a
+ * `date` certificate, so the instant is projected to its JST calendar day
+ * (UTC+9) before comparison. All operators are Japan/JST.
+ */
+describe('jstDateString', () => {
+  test('an evening-UTC instant rolls into the next JST day', () => {
+    expect(jstDateString(new Date('2026-06-30T20:00:00Z'))).toBe('2026-07-01')
+  })
+
+  test('an afternoon-UTC instant stays on the same JST day', () => {
+    expect(jstDateString(new Date('2026-06-30T14:00:00Z'))).toBe('2026-06-30')
+  })
+
+  test('15:00Z is exactly JST midnight — the next day', () => {
+    expect(jstDateString(new Date('2026-06-30T15:00:00Z'))).toBe('2026-07-01')
+  })
+
+  test('one second before JST midnight is still the same day', () => {
+    expect(jstDateString(new Date('2026-06-30T14:59:59Z'))).toBe('2026-06-30')
   })
 })

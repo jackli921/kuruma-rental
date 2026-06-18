@@ -1,3 +1,4 @@
+import { isRoadLegal, jstDateString } from '@kuruma/shared/lib/compliance'
 import { SYSTEM_CONTEXT } from '../../middleware/auth'
 import type { Booking, Vehicle } from '../../stores'
 import type {
@@ -27,8 +28,13 @@ export class InMemoryAvailabilityRepository implements AvailabilityRepository {
       status: 'AVAILABLE',
     })
     const allBookings = await this.bookingRepo.findAll(SYSTEM_CONTEXT)
+    // §5.2 (#916): the car must be road-legal THROUGH the requested return date —
+    // the same JST clock as the direct/create gates, so a future-dated search
+    // never surfaces a car whose docs lapse before `to`.
+    const asOf = jstDateString(to)
 
     return vehicles.filter((vehicle) => {
+      if (!isRoadLegal(vehicle, asOf)) return false
       // Storefront scope (#391): a null pickupLocationId never matches a
       // locationId filter, so unassigned vehicles are invisible to search.
       if (filters?.locationId && vehicle.pickupLocationId !== filters.locationId) return false

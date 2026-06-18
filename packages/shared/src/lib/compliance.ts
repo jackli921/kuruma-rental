@@ -1,5 +1,17 @@
 import { computeExpiryStatus } from './expiry'
 
+const JST_OFFSET_MS = 9 * 60 * 60 * 1000
+
+/**
+ * §4 "one clock". Project a rental instant (timestamptz) to its JST calendar
+ * day (YYYY-MM-DD) — the `asOf` every gate compares against a `date`-typed
+ * certificate. All operators are Japan/JST, so a single fixed +9h offset is
+ * correct (no DST in Japan).
+ */
+export function jstDateString(instant: Date): string {
+  return new Date(instant.getTime() + JST_OFFSET_MS).toISOString().slice(0, 10)
+}
+
 /**
  * §5.1 compliance predicate (pure). Whether a shaken/insurance certificate is
  * still valid as of `asOfIso` (a YYYY-MM-DD JST date). Built on
