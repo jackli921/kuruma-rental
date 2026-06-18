@@ -144,8 +144,8 @@ describe('#396 — OPERATOR_* cannot enumerate users via any current ingress', (
       color: 'White',
       dailyRateJpy: 8000,
       hourlyRateJpy: 1500,
-      shakenExpiryDate: null,
-      insuranceExpiryDate: null,
+      shakenExpiryDate: '2099-06-15',
+      insuranceExpiryDate: '2099-01-01',
       createdAt: now,
       updatedAt: now,
     }
