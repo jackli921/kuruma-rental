@@ -34,10 +34,9 @@ const PREAUTH_URL = 'https://pay.example.com/preauth/e2e-booking-1'
 // confirmation so step 5 can match it in the operator portal.
 async function bookThroughStorefront(page: Page): Promise<string> {
   await test.step('1. Search surfaces the operator storefront card', async () => {
-    await page.goto('/en/search')
-    await page.locator('#from').fill(PICKUP)
-    await page.locator('#to').fill(RETURN)
-    await page.getByRole('button', { name: 'Search' }).click()
+    // Seed the JST range via the URL (the route prefills the refine form from
+    // it, #965); from/to then carry through the storefront + booking links.
+    await page.goto(`/en/search?from=${PICKUP}&to=${RETURN}`)
 
     await expect(page).toHaveURL(/\/en\/search\?from=.+&to=.+/)
     const card = page.getByRole('link', { name: new RegExp(STORE_NAME) })
