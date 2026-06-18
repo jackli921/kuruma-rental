@@ -7,6 +7,8 @@ import { operatorReadScope } from '../../tenancy'
 import type { VehicleDetailRepository } from '../types'
 import {
   type Db,
+  type PhotoDecoder,
+  identityPhotoDecoder,
   maintenanceLogColumns,
   overlapHours,
   toMaintenanceLog,
@@ -37,7 +39,10 @@ function dayStart(d: Date): Date {
 }
 
 export class DrizzleVehicleDetailRepository implements VehicleDetailRepository {
-  constructor(private readonly db: Db) {}
+  constructor(
+    private readonly db: Db,
+    private readonly decodePhotos: PhotoDecoder = identityPhotoDecoder,
+  ) {}
 
   async findVehicleDetail(
     ctx: CallerContext,
@@ -46,7 +51,7 @@ export class DrizzleVehicleDetailRepository implements VehicleDetailRepository {
   ): Promise<VehicleDetail | undefined> {
     const vehicleRow = await this.fetchVehicleRow(ctx, vehicleId)
     if (!vehicleRow) return undefined
-    const vehicle = toVehicle(vehicleRow)
+    const vehicle = toVehicle(vehicleRow, this.decodePhotos)
 
     const todayStart = dayStart(now)
     const windowStart = new Date(todayStart.getTime() - (UTILIZATION_WINDOW_DAYS - 1) * MS_PER_DAY)
