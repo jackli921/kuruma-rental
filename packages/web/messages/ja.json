@@ -927,6 +927,8 @@
           "FLAT": "一律"
         }
       },
+      "rentalCompany": "レンタル会社",
+      "viewStorefront": "店舗を見る",
       "viewBookings": "予約一覧を見る",
       "backToVehicles": "他の車両を見る"
     },

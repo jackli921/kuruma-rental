@@ -927,6 +927,8 @@
           "FLAT": "flat"
         }
       },
+      "rentalCompany": "Rental company",
+      "viewStorefront": "View storefront",
       "viewBookings": "View my bookings",
       "backToVehicles": "Browse more vehicles"
     },
