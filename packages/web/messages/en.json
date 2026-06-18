@@ -80,6 +80,8 @@
     "close": "Close menu",
     "switchToRenter": "Switch to renter view",
     "switchToBusiness": "Switch to business view",
+    "switchToSidebar": "Switch to sidebar",
+    "switchToTopNav": "Switch to top navigation",
     "search": "Search",
     "browse": "Browse",
     "myBookings": "My Bookings",

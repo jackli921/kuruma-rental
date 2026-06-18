@@ -80,6 +80,8 @@
     "close": "关闭菜单",
     "switchToRenter": "切换到租客视图",
     "switchToBusiness": "切换到管理视图",
+    "switchToSidebar": "切换到侧边栏",
+    "switchToTopNav": "切换到顶部导航",
     "search": "搜索",
     "browse": "浏览车辆",
     "myBookings": "我的预订",
