@@ -922,6 +922,8 @@
           "FLAT": "固定"
         }
       },
+      "rentalCompany": "租车公司",
+      "viewStorefront": "查看门店",
       "viewBookings": "查看我的预订",
       "backToVehicles": "浏览更多车辆"
     },
