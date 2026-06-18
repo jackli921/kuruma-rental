@@ -114,10 +114,15 @@ async function seedOperatorUser(prefix: string): Promise<string> {
   return id
 }
 
+// Far-future = road-legal through any test booking window. §5.3b: override with a
+// past date to seed a replacement whose docs lapse before the booking ends.
+const ROAD_LEGAL_FAR_FUTURE = '2099-12-31'
+
 async function seedVehicle(
   classId: string,
   pickupLocationId: string,
   name: string,
+  expiry: { shakenExpiryDate?: string; insuranceExpiryDate?: string } = {},
 ): Promise<string> {
   const vehicle = await vehicleRepo.create(SYSTEM_CONTEXT, {
     operatorId: BEST_CAR_RENTAL_OPERATOR_ID,
@@ -142,8 +147,8 @@ async function seedVehicle(
     color: null,
     dailyRateJpy: 6000,
     hourlyRateJpy: null,
-    shakenExpiryDate: null,
-    insuranceExpiryDate: null,
+    shakenExpiryDate: expiry.shakenExpiryDate ?? ROAD_LEGAL_FAR_FUTURE,
+    insuranceExpiryDate: expiry.insuranceExpiryDate ?? ROAD_LEGAL_FAR_FUTURE,
   })
   return vehicle.id
 }
@@ -295,5 +300,93 @@ describe('operator vehicle substitution SUCCESS path (real pg)', () => {
 
     // The fake provider actually received exactly one substitution email for the renter.
     expect(sentMessages).toContainEqual(expect.objectContaining({ to: renter.email }))
+  })
+})
+
+// §5.3b (#916): substitution is an assign path independent of create, so the
+// road-legal gate must live here too — otherwise an expired car can be swapped
+// in even though create/availability would never surface it (policy drift).
+describe('substitution compliance gate — expired replacement (real pg, §5.3b #916)', () => {
+  let classId: string
+  let locationId: string
+  let renter: { id: string; email: string }
+  let operatorUserId: string
+  let assignedVehicleId: string
+  let roadLegalAlternateId: string
+  let expiredAlternateId: string
+  let bookingId: string
+
+  const startAt = new Date('2027-05-01T09:00:00Z')
+  const endAt = new Date('2027-05-03T09:00:00Z')
+
+  beforeAll(async () => {
+    const klass = await seedVehicleClass('subst-gate')
+    classId = klass.id
+    await db
+      .update(vehicleClasses)
+      .set({ acrissCode: 'IDAR' })
+      .where(eq(vehicleClasses.id, classId))
+
+    const location = await seedLocation('subst-gate')
+    locationId = location.id
+    renter = await seedRenter('subst-gate-renter')
+    operatorUserId = await seedOperatorUser('subst-gate-op')
+
+    assignedVehicleId = await seedVehicle(classId, locationId, 'Gate Assigned')
+    roadLegalAlternateId = await seedVehicle(classId, locationId, 'Gate Road-Legal Alt')
+    // Shaken lapses in 2026 — well before the 2027 booking ends, so not road-legal.
+    expiredAlternateId = await seedVehicle(classId, locationId, 'Gate Expired Alt', {
+      shakenExpiryDate: '2026-01-01',
+    })
+
+    const booking = await bookingRepo.create(
+      SYSTEM_CONTEXT,
+      bookingInput({
+        operatorId: BEST_CAR_RENTAL_OPERATOR_ID,
+        renterId: renter.id,
+        classId,
+        requestedVehicleId: assignedVehicleId,
+        assignedVehicleId,
+        pickupLocationId: locationId,
+        dropoffLocationId: locationId,
+        startAt,
+        endAt,
+        status: 'CONFIRMED',
+        totalPrice: 12000,
+      }),
+    )
+    bookingId = booking.id
+  })
+
+  afterAll(async () => {
+    await db.delete(bookingEvents).where(eq(bookingEvents.bookingId, bookingId))
+    await cleanupVehicles([assignedVehicleId, roadLegalAlternateId, expiredAlternateId])
+    await cleanupUsers([renter.id, operatorUserId])
+    await cleanupVehicleClasses([classId])
+    await cleanupLocations([locationId])
+  })
+
+  it('rejects substituting in a replacement whose shaken expires before the booking ends with 400', async () => {
+    const res = await service.substitute(operatorCtx(operatorUserId), bookingId, expiredAlternateId)
+
+    expect(res.ok).toBe(false)
+    if (res.ok) throw new Error('expected the expired replacement to be rejected')
+    expect(res.status).toBe(400)
+    expect(res.error).toMatch(/expires before the booking ends/i)
+
+    // The booking stays on its original vehicle — the rejected swap never landed.
+    const fromDb = await bookingRepo.findById(SYSTEM_CONTEXT, bookingId)
+    expect(fromDb?.assignedVehicleId).toBe(assignedVehicleId)
+  })
+
+  it('omits the expired vehicle from findSubstitutionCandidates but keeps the road-legal one', async () => {
+    const candidates = await service.findSubstitutionCandidates(
+      operatorCtx(operatorUserId),
+      bookingId,
+    )
+
+    const ids = (candidates ?? []).map((v) => v.id)
+    expect(ids).toContain(roadLegalAlternateId)
+    expect(ids).not.toContain(expiredAlternateId)
   })
 })
