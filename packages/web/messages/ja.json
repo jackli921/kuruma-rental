@@ -1137,6 +1137,7 @@
     "fromDaily": "¥{price}〜／日",
     "fromHourly": "¥{price}〜／時間",
     "noPrice": "料金はお問い合わせください",
+    "storeImagePlaceholder": "店舗の所在地",
     "turnaround": "貸出間隔 約{hours}時間",
     "distance": "約{km} km",
     "emptyTurnaroundHint": "車両は貸出の合間に準備時間が必要なため、直後はご利用いただけない場合があります。受け取り日を遅らせてお試しください。",
