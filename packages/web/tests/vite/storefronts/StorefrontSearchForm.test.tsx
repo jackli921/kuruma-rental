@@ -1,6 +1,6 @@
-// Mirrors the Next #391/#392 hydration-race pin: the form must read submitted
-// values from the FORM (DOM), not React state, so a pre-hydration fill survives.
-// Here submit drives TanStack `navigate` instead of next-intl `router.push`.
+// #965 replaced the two raw `datetime-local` inputs with the controlled
+// DateTimeRangePicker. The old #392 pre-hydration DOM-read hack is retired (the
+// web is a pure Vite SPA now), so the form reads the range from React state.
 import { REGIONS_QUERY_KEY } from '@/vite/regions/regions-api'
 import { StorefrontSearchForm } from '@/vite/storefronts/StorefrontSearchForm'
 import { readPersistedRange } from '@/vite/storefronts/storage'
@@ -71,21 +71,17 @@ describe('StorefrontSearchForm', () => {
     cleanup()
   })
 
-  it('navigates with the range read from the DOM even when state never updated', () => {
-    const { container } = renderForm()
-    const from = container.querySelector('#from') as HTMLInputElement
-    const to = container.querySelector('#to') as HTMLInputElement
-    from.value = '2026-07-01T10:00'
-    to.value = '2026-07-03T10:00'
-
-    fireEvent.submit(container.querySelector('form') as HTMLFormElement)
-
-    expect(mockNavigate).toHaveBeenCalledTimes(1)
-    expect(mockNavigate).toHaveBeenCalledWith({
-      to: '/$locale/search',
-      params: { locale: 'en' },
-      search: { from: '2026-07-01T10:00', to: '2026-07-03T10:00' },
+  it('renders the controlled picker seeded from the prefill, not raw datetime inputs', () => {
+    const { container } = renderForm({
+      defaultFrom: '2026-07-01T10:00',
+      defaultTo: '2026-07-03T10:00',
     })
+    // The native inputs are gone; the picker trigger (labeled "Pickup & return")
+    // summarizes the seeded range as its visible content.
+    expect(container.querySelector('input[type="datetime-local"]')).toBeNull()
+    expect(container.querySelector('#from')).toBeNull()
+    expect(screen.getByRole('button', { name: 'Pickup & return' })).toBeInTheDocument()
+    expect(screen.getByText(/Jul 1 10:00 → Jul 3 10:00/)).toBeInTheDocument()
   })
 
   it('prefills from defaults and carries them on submit', () => {
@@ -103,11 +99,10 @@ describe('StorefrontSearchForm', () => {
   })
 
   it('persists the submitted range so the hero remembers a refinement made here', () => {
-    const { container } = renderForm()
-    const from = container.querySelector('#from') as HTMLInputElement
-    const to = container.querySelector('#to') as HTMLInputElement
-    from.value = '2026-09-10T12:00'
-    to.value = '2026-09-13T12:00'
+    const { container } = renderForm({
+      defaultFrom: '2026-09-10T12:00',
+      defaultTo: '2026-09-13T12:00',
+    })
 
     fireEvent.submit(container.querySelector('form') as HTMLFormElement)
 

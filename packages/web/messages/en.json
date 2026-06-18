@@ -927,6 +927,8 @@
           "FLAT": "flat"
         }
       },
+      "rentalCompany": "Rental company",
+      "viewStorefront": "View storefront",
       "viewBookings": "View my bookings",
       "backToVehicles": "Browse more vehicles"
     },
@@ -1134,6 +1136,16 @@
     "toLabel": "Return date & time",
     "submit": "Search",
     "classFilterLabel": "Vehicle class",
+    "picker": {
+      "label": "Pickup & return",
+      "placeholder": "Add dates & times",
+      "pickup": "Pickup",
+      "return": "Return",
+      "pickupTime": "Pickup time",
+      "returnTime": "Return time",
+      "days": "{count, plural, one {# day} other {# days}}",
+      "done": "Done"
+    },
     "photoPrev": "Previous photo",
     "photoNext": "Next photo",
     "photoGoTo": "Go to photo {n}",
@@ -1142,6 +1154,7 @@
     "fromDaily": "From ¥{price} / day",
     "fromHourly": "From ¥{price} / hour",
     "noPrice": "Price on request",
+    "storeImagePlaceholder": "Store location",
     "turnaround": "~{hours}h turnaround between rentals",
     "distance": "~{km} km",
     "emptyTurnaroundHint": "Cars need preparation time between rentals, so they can be unavailable right after another booking. Try a later pickup date.",

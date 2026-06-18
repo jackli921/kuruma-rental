@@ -113,10 +113,13 @@ describe('StorefrontCard', () => {
     expect(screen.queryByText(/km$/)).not.toBeInTheDocument()
   })
 
-  it('declares explicit 4:3 width and height on the photo so the browser reserves the box (#440)', () => {
-    renderCard(makeStorefront({ representativePhotos: ['/photos/store.jpg'] }))
-    const img = screen.getByRole('img')
-    expect(img).toHaveAttribute('width', '400')
-    expect(img).toHaveAttribute('height', '300')
+  it('never renders a vehicle photo as the store hero, even when photos exist (#955)', () => {
+    const { container } = renderCard(makeStorefront({ representativePhotos: ['/photos/car.jpg'] }))
+    expect(container.querySelector('img')).toBeNull()
+  })
+
+  it('shows a store/location placeholder with an accessible label instead of a car photo (#955)', () => {
+    renderCard(makeStorefront({ representativePhotos: ['/photos/car.jpg'] }))
+    expect(screen.getByRole('img', { name: 'Store location' })).toBeInTheDocument()
   })
 })

@@ -48,9 +48,9 @@ test.describe('renter region search — subtree filter + nav threading + book (r
     const renter = await renterContext.newPage()
 
     await test.step('1. pick the KIX area chip, then search', async () => {
-      await renter.goto('/en/search')
-      await renter.locator('#from').fill(FROM)
-      await renter.locator('#to').fill(TO)
+      // Seed the pickup/return range via the URL (the route prefills the refine
+      // form from it, #965) so this step exercises the region chip + Search.
+      await renter.goto(`/en/search?from=${FROM}&to=${TO}`)
       // The quick-pick chip resolves to ?region=kix (the slug, never the re-seed-
       // unstable UUID — §6 Decision 6). It is a type="button", so it never submits.
       await renter.getByRole('button', { name: KIX_STORE }).click()
@@ -120,9 +120,7 @@ test.describe('renter region search — subtree filter + nav threading + book (r
     const renterContext = await browser.newContext({ storageState: RENTER_STORAGE_STATE, baseURL })
     const renter = await renterContext.newPage()
 
-    await renter.goto('/en/search')
-    await renter.locator('#from').fill(FROM)
-    await renter.locator('#to').fill(TO)
+    await renter.goto(`/en/search?from=${FROM}&to=${TO}`)
     // Anchor at the prefecture level (coordless): a subtree filter only, no ranking.
     // The cascade emits that node's slug at any level (§6).
     await renter.getByLabel('Prefecture').selectOption({ label: 'Osaka' })

@@ -82,7 +82,10 @@ describe('#396 — OPERATOR_* cannot enumerate users via any current ingress', (
     setupAuthEnv()
 
     const userStore = new Map<string, User>([
-      [SELF_ID, mkUser(SELF_ID, 'OPERATOR_OWNER')],
+      // The operator's own users row carries its operatorId (set at sign-in via
+      // setOperatorAccess) — the #939 session-revocation check re-reads it, so the
+      // projection must match the operatorId the token claims.
+      [SELF_ID, { ...mkUser(SELF_ID, 'OPERATOR_OWNER'), operatorId: OPERATOR_ID }],
       [OWN_RENTER_ID, mkUser(OWN_RENTER_ID, 'RENTER')],
       [FOREIGN_ID, mkUser(FOREIGN_ID, 'RENTER')],
     ])

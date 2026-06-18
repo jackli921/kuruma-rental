@@ -203,6 +203,47 @@ async function seedReady(h: Harness) {
   return { vehicleId: h.vehicleId, locationId }
 }
 
+describe('BookingService.create — past-start floor (#954)', () => {
+  // The seeded vehicle has advanceBookingHours: null (the default + forced for
+  // MANUAL), so the universal past-start floor in checkRentalRules is the only
+  // thing standing between a renter and booking a car for a time already gone.
+  it('rejects a booking whose start is in the past with a specific code', async () => {
+    const h = await setup()
+    const { vehicleId, locationId } = await seedReady(h)
+    const result = await h.service.create(
+      renterCtx,
+      createInput({
+        requestedVehicleId: vehicleId,
+        pickupLocationId: locationId,
+        dropoffLocationId: locationId,
+        startAt: new Date(NOW.getTime() - 2 * 60 * 60 * 1000), // 2h before now
+        endAt: END,
+      }),
+      NOW,
+    )
+    expect(result.ok).toBe(false)
+    expect(result.status).toBe(400)
+    if (!result.ok) expect(result.code).toBe('RENTAL_RULE_START_IN_PAST')
+  })
+
+  it('accepts a booking whose start is now or later', async () => {
+    const h = await setup()
+    const { vehicleId, locationId } = await seedReady(h)
+    const result = await h.service.create(
+      renterCtx,
+      createInput({
+        requestedVehicleId: vehicleId,
+        pickupLocationId: locationId,
+        dropoffLocationId: locationId,
+        startAt: START, // +24h from now
+        endAt: END,
+      }),
+      NOW,
+    )
+    expect(result.ok).toBe(true)
+  })
+})
+
 describe('BookingService.create — document-verification gate (#459)', () => {
   const staffCtx: CallerContext = { userId: 'staff-9', role: 'PLATFORM_ADMIN', bypassScope: true }
 
