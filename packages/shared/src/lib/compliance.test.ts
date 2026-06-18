@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'vitest'
 
-import { isDocCurrent, isRoadLegal, jstDateString } from './compliance'
+import { complianceThresholdBand, isDocCurrent, isRoadLegal, jstDateString } from './compliance'
 
 /**
  * §5.1 compliance predicate. A shaken/insurance certificate is valid THROUGH
@@ -68,5 +68,60 @@ describe('jstDateString', () => {
 
   test('one second before JST midnight is still the same day', () => {
     expect(jstDateString(new Date('2026-06-30T14:59:59Z'))).toBe('2026-06-30')
+  })
+})
+
+/**
+ * §5.4 digest band mapping (pure). Which alert band a certificate's expiry falls
+ * into as of a JST `today`. Bands are mutually exclusive and tighten as the date
+ * nears (30 -> 14 -> 7 -> 1 -> EXPIRED), so a vehicle fires at most once per band
+ * — idempotency is keyed on the band. A missing date is MISSING (§11.1); more
+ * than 30 days out is null (no alert yet).
+ */
+describe('complianceThresholdBand', () => {
+  const today = '2026-06-17'
+
+  test('a missing date is MISSING', () => {
+    expect(complianceThresholdBand(null, today)).toBe('MISSING')
+  })
+
+  test('a date in the past is EXPIRED', () => {
+    expect(complianceThresholdBand('2026-06-16', today)).toBe('EXPIRED')
+  })
+
+  test('expiring today is the tightest day-band D1 (not yet expired)', () => {
+    expect(complianceThresholdBand('2026-06-17', today)).toBe('D1')
+  })
+
+  test('expiring tomorrow is D1', () => {
+    expect(complianceThresholdBand('2026-06-18', today)).toBe('D1')
+  })
+
+  test('two days out crosses into D7', () => {
+    expect(complianceThresholdBand('2026-06-19', today)).toBe('D7')
+  })
+
+  test('exactly 7 days out is D7', () => {
+    expect(complianceThresholdBand('2026-06-24', today)).toBe('D7')
+  })
+
+  test('8 days out is D14', () => {
+    expect(complianceThresholdBand('2026-06-25', today)).toBe('D14')
+  })
+
+  test('exactly 14 days out is D14', () => {
+    expect(complianceThresholdBand('2026-07-01', today)).toBe('D14')
+  })
+
+  test('15 days out is D30', () => {
+    expect(complianceThresholdBand('2026-07-02', today)).toBe('D30')
+  })
+
+  test('exactly 30 days out is D30', () => {
+    expect(complianceThresholdBand('2026-07-17', today)).toBe('D30')
+  })
+
+  test('31 days out is null — no alert yet', () => {
+    expect(complianceThresholdBand('2026-07-18', today)).toBeNull()
   })
 })

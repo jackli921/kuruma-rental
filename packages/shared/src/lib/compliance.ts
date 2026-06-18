@@ -37,3 +37,47 @@ export function isRoadLegal(
     isDocCurrent(vehicle.insuranceExpiryDate, asOfIso)
   )
 }
+
+/**
+ * §5.4 digest alert bands. MISSING (no recorded date) and EXPIRED (already past)
+ * are the two terminal states; D30/D14/D7/D1 are the "days remaining" reminder
+ * bands. Idempotency is keyed on the band so a vehicle is alerted at most once
+ * per band as its date counts down.
+ */
+export const COMPLIANCE_ALERT_BANDS = ['MISSING', 'EXPIRED', 'D30', 'D14', 'D7', 'D1'] as const
+export type ComplianceAlertBand = (typeof COMPLIANCE_ALERT_BANDS)[number]
+
+// Ordered tightest-first: the first threshold the date falls within wins, so the
+// bands stay mutually exclusive as the expiry nears.
+const BAND_THRESHOLD_DAYS = [
+  ['D1', 1],
+  ['D7', 7],
+  ['D14', 14],
+  ['D30', 30],
+] as const
+
+const MS_PER_DAY = 24 * 60 * 60 * 1000
+
+/** Whole calendar days between two YYYY-MM-DD dates (both parsed as UTC midnight,
+ *  so no DST drift). Positive when `toIso` is after `fromIso`. */
+function daysBetween(fromIso: string, toIso: string): number {
+  return Math.round((Date.parse(toIso) - Date.parse(fromIso)) / MS_PER_DAY)
+}
+
+/**
+ * The alert band a shaken/insurance expiry falls into as of `todayIso` (a JST
+ * YYYY-MM-DD date), or null when it is more than 30 days out (no alert yet). A
+ * date *on* `todayIso` is not yet expired but is the most urgent reminder (D1).
+ */
+export function complianceThresholdBand(
+  expiryDate: string | null,
+  todayIso: string,
+): ComplianceAlertBand | null {
+  if (expiryDate == null) return 'MISSING'
+  if (expiryDate < todayIso) return 'EXPIRED'
+  const daysRemaining = daysBetween(todayIso, expiryDate)
+  for (const [band, threshold] of BAND_THRESHOLD_DAYS) {
+    if (daysRemaining <= threshold) return band
+  }
+  return null
+}
