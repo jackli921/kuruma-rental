@@ -1,9 +1,10 @@
 import { cpSync, existsSync, readFileSync } from 'node:fs'
 import path from 'node:path'
+import { sentryVitePlugin } from '@sentry/vite-plugin'
 import tailwindcss from '@tailwindcss/vite'
 import { tanstackRouter } from '@tanstack/router-plugin/vite'
 import react from '@vitejs/plugin-react'
-import { type Plugin, defineConfig } from 'vite'
+import { type Plugin, type PluginOption, defineConfig } from 'vite'
 
 const MESSAGES_DIR = path.resolve(__dirname, 'messages')
 
@@ -34,9 +35,46 @@ function messagesPlugin(): Plugin {
   }
 }
 
+// Sentry source-map upload (#361). Gated on the build-time auth token + org +
+// project so dormant builds are a TRUE no-op: with any missing, NO source maps
+// are emitted (byte-identical output) and the plugin is skipped. SENTRY_AUTH_TOKEN
+// is a real secret and must NEVER be a VITE_* var — it must not reach the bundle.
+const uploadSourcemaps = Boolean(
+  process.env.SENTRY_AUTH_TOKEN && process.env.SENTRY_ORG && process.env.SENTRY_PROJECT,
+)
+
+// When active, maps are emitted 'hidden' (not referenced by the shipped JS),
+// uploaded to Sentry keyed to the same release as the runtime client
+// (VITE_SENTRY_RELEASE), then deleted so they never ship in the Pages artifact.
+function sentrySourcemapPlugin(): PluginOption {
+  const authToken = process.env.SENTRY_AUTH_TOKEN
+  const org = process.env.SENTRY_ORG
+  const project = process.env.SENTRY_PROJECT
+  if (!authToken || !org || !project) return null
+  const release = process.env.VITE_SENTRY_RELEASE
+  return sentryVitePlugin({
+    authToken,
+    org,
+    project,
+    ...(release ? { release: { name: release } } : {}),
+    // Absolute glob anchored to THIS config dir, not process.cwd(): the plugin
+    // resolves filesToDeleteAfterUpload against cwd, so a root-level
+    // `bun run --filter @kuruma/web build` would resolve './dist' to the repo
+    // root, match nothing, and silently leave maps in packages/web/dist.
+    sourcemaps: { filesToDeleteAfterUpload: [path.resolve(__dirname, 'dist/**/*.map')] },
+    // Non-fatal upload failures. The API Worker deploys earlier in the pipeline,
+    // so a hard throw here would strand a half-deploy (new API, stale web). A
+    // transient flake (bad token, network, quota) degrades to "this release isn't
+    // symbolicated" instead of breaking the web deploy. Verified: even on a failed
+    // upload the plugin still deletes the maps (0 .map left in dist), so a flake
+    // never leaks maps into the Pages artifact nor trips the size budget.
+    errorHandler: (err: Error) => {
+      console.warn('[sentry-vite-plugin] source-map upload failed (non-fatal):', err.message)
+    },
+  })
+}
+
 // Vite + TanStack Router shell for CF Pages (#378, slice 0 phase 5).
-// Coexists with the frozen Next.js app until DNS cutover (spec §7.5):
-// `vite build` is the Pages primary; `build:worker` still emits the Next Worker.
 export default defineConfig({
   base: '/',
   plugins: [
@@ -47,9 +85,15 @@ export default defineConfig({
     // main.tsx imports. Without this the Vite shell ships unstyled (#510).
     tailwindcss(),
     messagesPlugin(),
+    // Must be last so it sees the final emitted bundle + maps (Sentry docs).
+    // No-op unless SENTRY_AUTH_TOKEN/ORG/PROJECT are all set.
+    sentrySourcemapPlugin(),
   ],
   publicDir: 'public',
-  build: { outDir: 'dist' },
+  // 'hidden' only when uploading: emit maps for Sentry but don't reference them
+  // from the shipped JS; the plugin deletes them post-upload. Off otherwise so
+  // the default Pages build is unchanged.
+  build: { outDir: 'dist', sourcemap: uploadSourcemaps ? 'hidden' : false },
   // Dev-only (ignored by `vite build`). `/api/*` is stripped (the Hono API has no
   // /api prefix); `/auth/*` is forwarded verbatim — matching the Pages Functions.
   server: {

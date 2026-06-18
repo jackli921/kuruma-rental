@@ -73,24 +73,50 @@ bunx shadcn@latest add <component> -c packages/web
 - **Neon dashboard**: Query performance, connection count, storage usage
 - **Drizzle Studio**: `bun run db:studio` for inspecting data locally
 
-### Error monitoring — Sentry (API), #361
+### Error monitoring — Sentry (API + web), #361
 
-The API Worker is instrumented with `@sentry/cloudflare`: it captures unhandled
-exceptions (with stack), raw `>=500` responses, and slow requests (`>2s`), tagged
-with the deploy's version id as the Sentry **release**. It is **gated off by
-default** — nothing is sent until a DSN is present (see
-`packages/api/src/observability/`).
+Both surfaces are instrumented and **gated off by default** — nothing is sent
+until a DSN is present. Plan: `docs/plans/2026-06-17-issue-361-monitoring-activation.md`.
+
+- **API** (`@sentry/cloudflare`, `packages/api/src/observability/`): captures
+  unhandled exceptions (with stack), raw `>=500` responses, and slow requests
+  (`>2s`), tagged with the deploy's version id (`CF_VERSION_METADATA`) as the
+  **release**. Gated on the `SENTRY_DSN` Worker secret.
+- **Web** (`@sentry/react`, `packages/web/src/lib/observability/`, #765): captures
+  React render crashes + TanStack route errors, tagged with the deploy commit SHA
+  (`VITE_SENTRY_RELEASE`) as the release. Gated on the public `VITE_SENTRY_DSN`.
+  Source maps upload on the deploying build (`vite.config` `sentrySourcemapPlugin`,
+  gated on `SENTRY_AUTH_TOKEN`) so web stack traces are de-minified — without it
+  every browser error is unreadable minified gibberish.
+
+CI is already wired: `rotate-secrets.yml` rotates `SENTRY_DSN`; `deploy.yml`'s web
+build injects `VITE_SENTRY_*` + `SENTRY_AUTH_TOKEN/ORG/PROJECT`. Until those
+secrets exist, every build is byte-identical (no maps emitted, SDKs `enabled:false`).
 
 To activate (HITL, one-time):
-1. Create a Sentry project (platform: Cloudflare Workers); copy its DSN.
-2. `cd packages/api && npx wrangler secret put SENTRY_DSN` (paste the DSN). Add a
-   matching `SENTRY_DSN` GitHub secret so deploys keep it. Optional:
-   `SENTRY_ENVIRONMENT` (defaults to `production`).
-3. In Sentry, add an **alert rule**: error rate spikes 5× baseline for 10 min →
-   Slack/email. Add an **uptime monitor** pinging `GET /health`.
+1. Create **two** Sentry projects: platform **Cloudflare Workers** (API) and
+   **React** (web). Copy each DSN. Note your Sentry **org** + **project** slugs.
+2. Add GitHub secrets: `SENTRY_DSN` (API), `VITE_SENTRY_DSN` (web — public key,
+   safe to bake into the SPA), `SENTRY_AUTH_TOKEN` (web source-map upload — a real
+   secret). Add repo **variables** `SENTRY_ORG`, `SENTRY_PROJECT`, and
+   `SENTRY_ENVIRONMENT` (set to `beta`; the API Worker also reads it from
+   `wrangler.toml` `[vars]`). Unset env defaults to `production` and would
+   mis-tag beta errors — don't skip it.
+3. Run the **Rotate Worker Secrets** workflow (sets the API `SENTRY_DSN`); the next
+   web deploy bakes the web DSN + release and uploads source maps.
+4. In Sentry: add an **alert rule** — *error* events spike 5× baseline for 10 min →
+   Slack/email (page on errors only; the `>2s` slow-request warnings are
+   dashboard-only — Neon cold starts trip 2s, so paging on them is alert fatigue).
+   Add an **uptime monitor** pinging `GET /health`. The monitor only proves the
+   Worker is routable; **DB-down is caught by the error alerts**, not `/health`.
+5. Verify: trigger a test error on each surface; confirm it lands grouped under the
+   deploy's release, with a **readable (de-minified)** web stack trace.
 
-**Web monitoring is deferred** until the Next→Vite migration (#378/#689) settles —
-tracked separately so we don't instrument code that's being deleted.
+> **At real-prod launch, flip BOTH `SENTRY_ENVIRONMENT` homes together** or the two
+> surfaces tag differently: the **web** reads the `SENTRY_ENVIRONMENT` *repo
+> variable* (`deploy.yml`, default `beta`), the **API** reads the committed
+> `wrangler.toml` `[vars]` value. Changing only one tags web `production` while the
+> API stays `beta` (or vice-versa).
 
 ## Rollback
 
