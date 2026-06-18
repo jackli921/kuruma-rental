@@ -35,6 +35,7 @@
     "./types/operator-team": "./src/types/operator-team.ts",
     "./lib/bound-fetch": "./src/lib/bound-fetch.ts",
     "./lib/cancellation-policy": "./src/lib/cancellation-policy.ts",
+    "./lib/error-codes": "./src/lib/error-codes.ts",
     "./lib/commission": "./src/lib/commission.ts",
     "./lib/admin-revenue": "./src/lib/admin-revenue.ts",
     "./lib/luggage": "./src/lib/luggage.ts",

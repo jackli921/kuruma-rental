@@ -7,11 +7,13 @@
  *
  * Consumer migration tracked in the feature-modules PR-2/PR-3 plan.
  */
+import type { ErrorCode } from '../lib/error-codes'
+
 export type ApiResponse<T> =
   | { success: true; data: T }
   | {
       success: false
       error: string
-      code?: string
+      code?: ErrorCode
       details?: Record<string, string[]>
     }

@@ -1,4 +1,5 @@
 import type { CoordinateSource } from '@kuruma/shared/db/schema'
+import type { ErrorCode } from '@kuruma/shared/lib/error-codes'
 import { nearestAssignableRegion } from '@kuruma/shared/lib/region-distance'
 import type { CallerContext } from '../middleware/auth'
 import { PG_ERROR, pgErrorCode } from '../pg-errors'
@@ -183,7 +184,7 @@ export class LocationService {
         ok: false,
         error: 'Cannot archive a location with active bookings',
         status: 409,
-        code: 'LOCATION_HAS_ACTIVE_BOOKINGS',
+        code: 'LOCATION_HAS_ACTIVE_BOOKINGS' satisfies ErrorCode,
         activeBookingsCount,
       }
     }

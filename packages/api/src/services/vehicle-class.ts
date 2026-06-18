@@ -1,3 +1,4 @@
+import type { ErrorCode } from '@kuruma/shared/lib/error-codes'
 import { type CallerContext, SYSTEM_CONTEXT } from '../middleware/auth'
 import type {
   BookingRepository,
@@ -106,7 +107,7 @@ export class VehicleClassService {
           ok: false,
           error: 'Cannot archive a class with active bookings',
           status: 409,
-          code: 'CLASS_HAS_ACTIVE_BOOKINGS',
+          code: 'CLASS_HAS_ACTIVE_BOOKINGS' satisfies ErrorCode,
           activeBookingsCount,
         }
       }
