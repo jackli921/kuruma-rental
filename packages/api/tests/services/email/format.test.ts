@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { formatDateTime } from '../../../src/services/email/templates/format'
+import { formatDateTime, formatDuration } from '../../../src/services/email/templates/format'
 
 // #680: a pickup/return is a location-anchored event the renter acts on while standing
 // in Japan, and email can't detect the recipient's own timezone — so booking datetimes
@@ -28,5 +28,41 @@ describe('formatDateTime', () => {
     const out = formatDateTime(new Date('2026-07-01T10:00:00Z'))
     expect(out).not.toContain('UTC')
     expect(out).toMatch(/^\d{4}-\d{2}-\d{2} \d{2}:\d{2} JST$/)
+  })
+})
+
+// #960: the operator alert shows the rental LENGTH (not just the start/end range).
+// Hourly granularity -> whole days + leftover hours, with locale unit labels, and
+// a zero component dropped so a clean 3-day rental reads "3d", not "3d 0h".
+const UNITS = { dayUnit: 'd', hourUnit: 'h' }
+
+describe('formatDuration', () => {
+  it('renders days and leftover hours together', () => {
+    // 2026-07-01 10:00Z -> 2026-07-03 18:00Z = 56h = 2 days 8 hours
+    expect(
+      formatDuration(new Date('2026-07-01T10:00:00Z'), new Date('2026-07-03T18:00:00Z'), UNITS),
+    ).toBe('2d 8h')
+  })
+
+  it('drops the hour component for a whole-day span', () => {
+    // exactly 72h
+    expect(
+      formatDuration(new Date('2026-07-01T09:00:00Z'), new Date('2026-07-04T09:00:00Z'), UNITS),
+    ).toBe('3d')
+  })
+
+  it('renders hours only for a sub-day span', () => {
+    expect(
+      formatDuration(new Date('2026-07-01T09:00:00Z'), new Date('2026-07-01T18:00:00Z'), UNITS),
+    ).toBe('9h')
+  })
+
+  it('uses the supplied locale unit labels', () => {
+    expect(
+      formatDuration(new Date('2026-07-01T10:00:00Z'), new Date('2026-07-03T18:00:00Z'), {
+        dayUnit: '日',
+        hourUnit: '時間',
+      }),
+    ).toBe('2日 8時間')
   })
 })
