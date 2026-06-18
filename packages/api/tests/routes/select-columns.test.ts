@@ -215,8 +215,10 @@ describe('API responses contain only expected fields', () => {
         requestedVehicleId: vehicle.data.id,
         pickupLocationId: locationId,
         dropoffLocationId: locationId,
-        startAt: '2026-05-01T10:00:00Z',
-        endAt: '2026-05-03T10:00:00Z',
+        // Future dates: the #954 past-start floor rejects a booking whose start
+        // has already passed, and this fixture only needs a valid booking to list.
+        startAt: '2027-05-01T10:00:00Z',
+        endAt: '2027-05-03T10:00:00Z',
         source: 'DIRECT',
         disclaimerAccepted: true,
       }),
