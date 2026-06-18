@@ -21,6 +21,8 @@ const LINK_CLASSNAME =
 export function BusinessSidebar() {
   const t = useTranslations('nav')
   const locale = useLocale()
+  // Always business view here: BusinessLayout only mounts this in business view,
+  // so the operator-scoped badge scan is safe to enable unconditionally.
   const { count: newBookingsCount } = useNewBookingsBadge({ enabled: true })
 
   return (
