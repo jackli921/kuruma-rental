@@ -13,7 +13,7 @@ function renderStep(overrides: Partial<Parameters<typeof ConfirmStep>[0]> = {}) 
   render(
     <IntlProvider locale="en" messages={en}>
       <ConfirmStep
-        estimate={{ baseJpy: 16000, insuranceJpy: 3000, addOnsJpy: 2000, totalJpy: 21000 }}
+        estimate={{ baseJpy: 16000, insuranceJpy: 3000, totalJpy: 21000 }}
         selectedAddOns={addOns}
         insuranceName="Full coverage"
         pickupAt={new Date('2026-12-01T10:00:00Z')}
@@ -40,17 +40,26 @@ describe('ConfirmStep', () => {
   it('omits the insurance line when no coverage is selected', () => {
     renderStep({
       insuranceName: null,
-      estimate: { baseJpy: 16000, insuranceJpy: 0, addOnsJpy: 2000, totalJpy: 18000 },
+      estimate: { baseJpy: 16000, insuranceJpy: 0, totalJpy: 18000 },
     })
     expect(screen.queryByText('Insurance')).toBeNull()
     expect(screen.queryByText('Full coverage')).toBeNull()
   })
 
-  it('lists the selected add-ons and their subtotal', () => {
-    renderStep()
-    expect(screen.getByText('Extras')).toBeInTheDocument()
+  it('lists each selected add-on as its own priced line, not a collapsed subtotal', () => {
+    renderStep({
+      selectedAddOns: [
+        { id: 'a1', name: 'Baby seat', description: null, priceJpy: 2000 },
+        { id: 'a2', name: 'GPS unit', description: null, priceJpy: 4500 },
+      ],
+    })
     expect(screen.getByText('Baby seat')).toBeInTheDocument()
     expect(screen.getByText('￥2,000')).toBeInTheDocument()
+    expect(screen.getByText('GPS unit')).toBeInTheDocument()
+    expect(screen.getByText('￥4,500')).toBeInTheDocument()
+    // The old "Extras" group header + single subtotal is gone — each add-on
+    // now stands on its own line with its own price (#963).
+    expect(screen.queryByText('Extras')).toBeNull()
   })
 
   it('shows the estimated grand total', () => {

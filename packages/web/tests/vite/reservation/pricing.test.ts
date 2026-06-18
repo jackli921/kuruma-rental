@@ -32,7 +32,7 @@ describe('estimateReservation', () => {
         insuranceDailyPriceJpy: null,
         addOnPricesJpy: [],
       }),
-    ).toEqual({ baseJpy: 16000, insuranceJpy: 0, addOnsJpy: 0, totalJpy: 16000 })
+    ).toEqual({ baseJpy: 16000, insuranceJpy: 0, totalJpy: 16000 })
   })
 
   it('bills insurance at dailyPrice × rentalDays', () => {
@@ -44,7 +44,7 @@ describe('estimateReservation', () => {
         insuranceDailyPriceJpy: 1500,
         addOnPricesJpy: [],
       }),
-    ).toEqual({ baseJpy: 16000, insuranceJpy: 3000, addOnsJpy: 0, totalJpy: 19000 })
+    ).toEqual({ baseJpy: 16000, insuranceJpy: 3000, totalJpy: 19000 })
   })
 
   it('sums add-on flat prices once each, regardless of rental length', () => {
@@ -56,7 +56,7 @@ describe('estimateReservation', () => {
         insuranceDailyPriceJpy: null,
         addOnPricesJpy: [2000, 500],
       }),
-    ).toEqual({ baseJpy: 16000, insuranceJpy: 0, addOnsJpy: 2500, totalJpy: 18500 })
+    ).toEqual({ baseJpy: 16000, insuranceJpy: 0, totalJpy: 18500 })
   })
 
   it('combines base + insurance + add-ons into the grand total', () => {
@@ -68,7 +68,7 @@ describe('estimateReservation', () => {
         insuranceDailyPriceJpy: 1500,
         addOnPricesJpy: [2000, 500],
       }),
-    ).toEqual({ baseJpy: 16000, insuranceJpy: 3000, addOnsJpy: 2500, totalJpy: 21500 })
+    ).toEqual({ baseJpy: 16000, insuranceJpy: 3000, totalJpy: 21500 })
   })
 
   it('uses rental DAYS for insurance even when the vehicle is priced hourly', () => {
@@ -82,6 +82,6 @@ describe('estimateReservation', () => {
         insuranceDailyPriceJpy: 1500,
         addOnPricesJpy: [],
       }),
-    ).toEqual({ baseJpy: 25000, insuranceJpy: 3000, addOnsJpy: 0, totalJpy: 28000 })
+    ).toEqual({ baseJpy: 25000, insuranceJpy: 3000, totalJpy: 28000 })
   })
 })
