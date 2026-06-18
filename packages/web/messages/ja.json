@@ -1136,6 +1136,16 @@
     "toLabel": "返却日時",
     "submit": "検索",
     "classFilterLabel": "車種クラス",
+    "picker": {
+      "label": "貸出・返却",
+      "placeholder": "日時を追加",
+      "pickup": "貸出",
+      "return": "返却",
+      "pickupTime": "貸出時刻",
+      "returnTime": "返却時刻",
+      "days": "{count}日間",
+      "done": "完了"
+    },
     "photoPrev": "前の写真",
     "photoNext": "次の写真",
     "photoGoTo": "写真{n}枚目へ",
