@@ -477,6 +477,13 @@
       "when": 1781751530189,
       "tag": "0067_compliance_alert_log",
       "breakpoints": true
+    },
+    {
+      "idx": 68,
+      "version": "7",
+      "when": 1781752208311,
+      "tag": "0068_compliance_vehicleId_fk_index",
+      "breakpoints": true
     }
   ]
 }

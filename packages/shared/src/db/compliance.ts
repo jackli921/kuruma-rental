@@ -33,6 +33,9 @@ export const complianceAlertLog = pgTable(
   },
   (t) => [
     index('idx_compliance_alert_log_operatorId').on(t.operatorId),
+    // Covers the vehicleId FK (lint:fk-indexes; the composite unique below leads
+    // with vehicleId but the gate credits only declared indexes / PKs).
+    index('idx_compliance_alert_log_vehicleId').on(t.vehicleId),
     // Idempotency seal: one alert per (vehicle, document, band) across daily runs.
     unique('compliance_alert_log_band_unique').on(t.vehicleId, t.documentType, t.thresholdBand),
   ],
