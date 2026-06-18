@@ -218,14 +218,16 @@ export class DrizzleVehicleRepository implements VehicleRepository {
     // URLs are chained via array_append to keep them as bound parameters
     // rather than interpolated literals. #879: store the encoded ref (our own
     // uploads collapse to r2:<key>; external URLs pass through) so the column
-    // holds stored refs, never resolved wire URLs.
+    // holds stored refs, never resolved wire URLs. Encode once so the cap guard
+    // and the append agree on cardinality.
+    const refs = this.encodePhotos(urls)
     let photosExpr: SQL = sql`${vehicles.photos}`
-    for (const entry of this.encodePhotos(urls)) {
+    for (const entry of refs) {
       photosExpr = sql`array_append(${photosExpr}, ${entry})`
     }
     const conditions: SQL[] = [
       eq(vehicles.id, id),
-      sql`cardinality(${vehicles.photos}) + ${urls.length} <= ${maxPhotos}`,
+      sql`cardinality(${vehicles.photos}) + ${refs.length} <= ${maxPhotos}`,
     ]
     if (scope.kind === 'operator') conditions.push(eq(vehicles.operatorId, scope.operatorId))
     const [updated] = await this.db
