@@ -98,8 +98,13 @@ VEHICLE_PHOTOS_PUBLIC_URL = "https://pub-a6e9e98522e945a7aa1871f4fe741448.r2.dev
 
 # Monitoring (#361). The deployed version id is exposed as CF_VERSION_METADATA
 # and used as the Sentry release tag so errors group per deploy.
-# SENTRY_DSN is a SECRET, not a var: `wrangler secret put SENTRY_DSN` (+ the
+# SENTRY_DSN is a SECRET, not a var: rotated via rotate-secrets.yml (+ the
 # matching GitHub secret). Absent it, Sentry is gated off (no-op) — see
-# src/observability/sentry-options.ts. Optional: SENTRY_ENVIRONMENT.
+# src/observability/sentry-options.ts.
+# SENTRY_ENVIRONMENT is non-secret and set here so activation can't forget it:
+# this Worker serves the beta deploy, and unset would default to "production"
+# (sentry-options.ts), mis-tagging beta errors. Change at real prod launch.
+SENTRY_ENVIRONMENT = "beta"
+
 [version_metadata]
 binding = "CF_VERSION_METADATA"
