@@ -39,7 +39,13 @@ export class R2PhotoStorage implements PhotoStorage {
     return { key, url: `${this.publicBaseUrl}/${key}` }
   }
 
-  async delete(keyOrUrl: string): Promise<void> {
-    await this.bucket.delete(toObjectKey(keyOrUrl, this.publicBaseUrl))
+  async delete(keyOrUrl: string, ownerVehicleId: string): Promise<void> {
+    const key = toObjectKey(keyOrUrl, this.publicBaseUrl)
+    // A photo on vehicle X is always stored under `vehicles/X/` (see put), so a
+    // key outside the owner's prefix is not this vehicle's to delete. Refuse it
+    // fail-closed — this is what stops a cross-referenced URL from reaching
+    // another tenant's object (#952).
+    if (!key.startsWith(`vehicles/${ownerVehicleId}/`)) return
+    await this.bucket.delete(key)
   }
 }

@@ -60,6 +60,7 @@ function build(
     owners?: User[]
     fallback?: string
     renterEmail?: string | null
+    webBaseUrl?: string
     logRepo?: InMemoryNotificationLogRepository
   } = {},
 ) {
@@ -144,6 +145,7 @@ function build(
     {
       emailFrom: 'noreply@bcr.jp',
       fallbackOperatorEmail: opts.fallback,
+      webBaseUrl: opts.webBaseUrl,
     },
   )
   return { dispatcher, logRepo, sender }
@@ -311,6 +313,63 @@ describe('NotificationDispatcher', () => {
       expect(opRow?.recipient).toBe('ops@platform.com')
       // Fallback is a single visible recipient — no Bcc list when there are no members.
       expect(rows.find((r) => r.kind === 'OPERATOR_BOOKING_ALERT')?.recipient).not.toContain(',')
+    })
+
+    // #960: the operator alert carries a deep link to the booking (WEB_ORIGIN +
+    // operator locale + booking id) and the renter's contact, so the operator can
+    // open it and reach the renter straight from the email.
+    it('builds the operator-alert deep link from webBaseUrl, locale, and booking id, and threads renter contact', async () => {
+      const sent: Array<{ to: string; bcc?: string[]; html: string; text: string }> = []
+      const sender = {
+        send: vi.fn(async (m: (typeof sent)[number]) => {
+          sent.push(m)
+          return { providerMessageId: 'msg-1' }
+        }),
+      }
+      const { dispatcher } = build({
+        webBaseUrl: 'https://app.example.com',
+        sender: sender as unknown as EmailSender,
+      })
+      await dispatcher.dispatch(booking)
+
+      const alert = sent.find((m) => m.bcc !== undefined)
+      // operator locale is ja (§12.2); the route is /{locale}/manage/bookings/{id}
+      expect(alert?.html).toContain('href="https://app.example.com/ja/manage/bookings/bk-1"')
+      expect(alert?.text).toContain('https://app.example.com/ja/manage/bookings/bk-1')
+      expect(alert?.html).toContain('jane@example.com')
+    })
+
+    it('normalizes a trailing slash on webBaseUrl so the deep link has no double slash', async () => {
+      const sent: Array<{ bcc?: string[]; html: string }> = []
+      const sender = {
+        send: vi.fn(async (m: (typeof sent)[number]) => {
+          sent.push(m)
+          return { providerMessageId: 'msg-1' }
+        }),
+      }
+      const { dispatcher } = build({
+        webBaseUrl: 'https://app.example.com/',
+        sender: sender as unknown as EmailSender,
+      })
+      await dispatcher.dispatch(booking)
+
+      const alert = sent.find((m) => m.bcc !== undefined)
+      expect(alert?.html).toContain('href="https://app.example.com/ja/manage/bookings/bk-1"')
+      expect(alert?.html).not.toContain('app.example.com//ja')
+    })
+
+    it('omits the deep link when webBaseUrl is unset', async () => {
+      const sent: Array<{ bcc?: string[]; html: string }> = []
+      const sender = {
+        send: vi.fn(async (m: (typeof sent)[number]) => {
+          sent.push(m)
+          return { providerMessageId: 'msg-1' }
+        }),
+      }
+      const { dispatcher } = build({ sender: sender as unknown as EmailSender })
+      await dispatcher.dispatch(booking)
+      const alert = sent.find((m) => m.bcc !== undefined)
+      expect(alert?.html).not.toContain('manage/bookings')
     })
 
     it('persists a terminal NO_RECIPIENT row for the operator alert when there are no members and no fallback', async () => {
