@@ -17,13 +17,16 @@ interface NavbarClientProps {
 export function LayoutToggle() {
   const { preference, toggle } = useLayoutPreference()
   const t = useTranslations('nav')
+  const label = preference === 'sidebar' ? t('switchToTopNav') : t('switchToSidebar')
 
   return (
     <button
       type="button"
       onClick={toggle}
       className="hidden md:inline-flex items-center justify-center rounded-lg p-2 text-muted-foreground hover:bg-accent hover:text-accent-foreground transition-colors"
-      title={preference === 'sidebar' ? t('switchToTopNav') : t('switchToSidebar')}
+      title={label}
+      aria-label={label}
+      aria-expanded={preference === 'sidebar'}
     >
       <PanelLeft className={cn('size-4', preference === 'sidebar' && 'text-foreground')} />
     </button>

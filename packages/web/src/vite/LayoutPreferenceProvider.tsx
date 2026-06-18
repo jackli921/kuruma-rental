@@ -1,5 +1,5 @@
 import type { LayoutPreference } from '@/vite/nav/business-sidebar-visibility'
-import { createContext, useCallback, useContext, useState } from 'react'
+import { createContext, useCallback, useContext, useMemo, useState } from 'react'
 
 interface LayoutPreferenceContextValue {
   readonly preference: LayoutPreference
@@ -34,10 +34,12 @@ export function LayoutPreferenceProvider({ children }: { readonly children: Reac
     })
   }, [])
 
+  // This provider sits at the $locale root and re-renders on every navigation,
+  // so memoize the value or every useLayoutPreference consumer re-renders needlessly.
+  const value = useMemo(() => ({ preference, toggle }), [preference, toggle])
+
   return (
-    <LayoutPreferenceContext.Provider value={{ preference, toggle }}>
-      {children}
-    </LayoutPreferenceContext.Provider>
+    <LayoutPreferenceContext.Provider value={value}>{children}</LayoutPreferenceContext.Provider>
   )
 }
 
