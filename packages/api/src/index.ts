@@ -369,6 +369,8 @@ export function createApp(overrides?: AppOverrides, repos: Repos = buildRepos(ov
         process.env.OPERATOR_ALERT_FALLBACK_EMAIL ??
         process.env.EMAIL_REPLY_TO ??
         process.env.EMAIL_FROM,
+      // #960: empty string (WEB_ORIGIN unset) -> the dispatcher omits the deep link.
+      webBaseUrl,
     },
   )
   const ensureThread = staffUserId ? makeEnsureThread({ threadRepo, staffUserId }) : async () => {}

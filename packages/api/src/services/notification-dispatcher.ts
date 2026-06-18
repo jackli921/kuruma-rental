@@ -44,6 +44,9 @@ export interface NotificationDispatcherConfig {
   emailReplyTo?: string | undefined
   // Operator-alert recipient of last resort when an operator has no owner user.
   fallbackOperatorEmail?: string | undefined
+  // #960: WEB_ORIGIN, used to build the operator-alert deep link to the booking.
+  // Absent -> no link (the operator email still sends, just without the CTA).
+  webBaseUrl?: string | undefined
 }
 
 interface Resolved {
@@ -301,8 +304,29 @@ export class NotificationDispatcher {
       default: {
         // OPERATOR_BOOKING_ALERT
         const [renter] = await this.userRepo.findByIds([booking.renterId])
+        // Strip a trailing slash so a misconfigured WEB_ORIGIN can't emit a
+        // `//{locale}` path that fails the SPA's `/$locale/...` route match.
+        const base = this.config.webBaseUrl?.replace(/\/+$/, '')
+        const manageBookingUrl = base ? `${base}/${locale}/manage/bookings/${booking.id}` : null
         return envelope(
-          renderOperatorAlert({ ...common, renterName: renter?.name ?? null }, locale),
+          renderOperatorAlert(
+            {
+              ...common,
+              renterName: renter?.name ?? null,
+              renterEmail: renter?.email ?? null,
+              renterPhone: renter?.phone ?? null,
+              insurance: booking.insuranceSnapshot
+                ? {
+                    name: booking.insuranceSnapshot.name,
+                    dailyPriceJpy: booking.insuranceSnapshot.dailyPriceJpy,
+                  }
+                : null,
+              addOns: booking.addOnSnapshot,
+              source: booking.source,
+              manageBookingUrl,
+            },
+            locale,
+          ),
         )
       }
     }
