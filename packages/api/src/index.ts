@@ -1,4 +1,5 @@
 import type { RateLimitBinding } from '@elithrar/workers-hono-rate-limit'
+import { jstDateString } from '@kuruma/shared/lib/compliance'
 import { Hono } from 'hono'
 import { cors } from 'hono/cors'
 import type { AppOverrides } from './app-overrides'
@@ -50,6 +51,7 @@ import { type RecordAuditEvent, toAuditRow } from './services/audit'
 import { AvailabilityService } from './services/availability'
 import { BookingService } from './services/booking'
 import { BookingPostCommitDispatcher } from './services/booking-post-commit-dispatcher'
+import { ComplianceDigestService } from './services/compliance-digest'
 import { CustomerService } from './services/customer'
 import { documentVerificationGate } from './services/document-verification-gate'
 import type { EmailSender } from './services/email/email-sender'
@@ -146,27 +148,7 @@ export function createApp(overrides?: AppOverrides, repos: Repos = buildRepos(ov
 
   const translationProvider = createTranslationProvider()
 
-  // Outbound email: real Resend when the key is set. In production without a key,
-  // a sentinel throws on first use (not at boot). In dev, a console stub logs the
-  // send so flows work end-to-end without a vendor account. Mirrors translationProvider.
-  const emailSender: EmailSender = (() => {
-    const key = process.env.RESEND_API_KEY
-    const from = process.env.EMAIL_FROM ?? ''
-    if (key) return new ResendEmailSender(key, from)
-    if (process.env.NODE_ENV === 'production') {
-      return {
-        send: async () => {
-          throw new Error('RESEND_API_KEY not configured')
-        },
-      }
-    }
-    return {
-      send: async (m) => {
-        console.info('[email:dev]', m.to, m.subject)
-        return { providerMessageId: 'dev' }
-      },
-    }
-  })()
+  const emailSender = resolveEmailSender(overrides)
 
   // Forward geocoder (#531): disabled by default (null stub) unless BOTH a
   // User-Agent and an endpoint are set; prod = LocationIQ (Nominatim-compatible,
@@ -550,6 +532,59 @@ function resolveAllowedOrigins(envValue: string | undefined): string[] {
   // out of the box without leaking localhost to prod.
   const devOrigins = process.env.NODE_ENV === 'production' ? [] : DEV_WEB_ORIGINS
   return [...new Set([...devOrigins, ...fromEnv])]
+}
+
+/**
+ * Resolve the outbound email port (#916 DRY): an injected override wins (tests),
+ * else real Resend when RESEND_API_KEY is set, else a throwing sentinel in
+ * production and a console stub in dev — so flows work end-to-end without a
+ * vendor account. Shared by createApp's dispatcher and buildComplianceDigestService.
+ */
+function resolveEmailSender(overrides?: AppOverrides): EmailSender {
+  if (overrides?.emailSender) return overrides.emailSender
+  const key = process.env.RESEND_API_KEY
+  const from = process.env.EMAIL_FROM ?? ''
+  if (key) return new ResendEmailSender(key, from)
+  if (process.env.NODE_ENV === 'production') {
+    return {
+      send: async () => {
+        throw new Error('RESEND_API_KEY not configured')
+      },
+    }
+  }
+  return {
+    send: async (m) => {
+      console.info('[email:dev]', m.to, m.subject)
+      return { providerMessageId: 'dev' }
+    },
+  }
+}
+
+/**
+ * Composition seam for the #916 §5.4 daily compliance digest, resolved by the
+ * Workers `scheduled` cron the same way routes resolve `createApp`. Wires the
+ * fleet scan, the idempotency ledger, the active-member recipient resolver
+ * (reused from the booking dispatcher), the JST clock, and the email sender.
+ */
+export function buildComplianceDigestService(
+  overrides?: AppOverrides,
+  repos: Repos = buildRepos(overrides),
+): ComplianceDigestService {
+  const { vehicleRepo, complianceAlertLogRepo, operatorMembershipRepo, userRepo } = repos
+  return new ComplianceDigestService({
+    vehicleRepo,
+    alertLogRepo: complianceAlertLogRepo,
+    resolveRecipients: makeResolveOperatorRecipients({
+      membershipRepo: operatorMembershipRepo,
+      userRepo,
+    }),
+    emailSender: resolveEmailSender(overrides),
+    today: () => jstDateString(new Date()),
+    config: {
+      emailFrom: process.env.EMAIL_FROM ?? '',
+      emailReplyTo: process.env.EMAIL_REPLY_TO,
+    },
+  })
 }
 
 /**

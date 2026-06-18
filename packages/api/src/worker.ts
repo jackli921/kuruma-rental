@@ -10,7 +10,7 @@
  */
 
 import * as Sentry from '@sentry/cloudflare'
-import { type AppType, createApp } from './index'
+import { type AppType, buildComplianceDigestService, createApp } from './index'
 import { type SentryRuntimeEnv, resolveSentryOptions } from './observability/sentry-options'
 
 let cachedApp: AppType | null = null
@@ -25,6 +25,18 @@ function getApp(): AppType {
 const handler = {
   fetch(request: Request, env?: unknown, ctx?: ExecutionContext): Response | Promise<Response> {
     return getApp().fetch(request, env, ctx)
+  },
+  // #916 §5.4: the daily compliance-digest cron (crons = ["0 23 * * *"]). On the
+  // SAME handler object so Sentry's withSentry instruments it and it shares the
+  // per-isolate async context. buildComplianceDigestService composes a fresh
+  // service from the env-resolved repos — the same source routes resolve through.
+  async scheduled(
+    _controller: ScheduledController,
+    _env?: unknown,
+    _ctx?: ExecutionContext,
+  ): Promise<void> {
+    const summary = await buildComplianceDigestService().run()
+    console.info('[cron:compliance-digest]', JSON.stringify(summary))
   },
 }
 
