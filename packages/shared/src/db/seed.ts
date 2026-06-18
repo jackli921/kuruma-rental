@@ -43,13 +43,18 @@ import { seedId } from './seed-id'
  */
 
 const SHAKEN_VALIDITY_DAYS = 365
+// Insurance renews on its own cycle; a slightly different horizon keeps the two
+// documents visibly independent in the demo data.
+const INSURANCE_VALIDITY_DAYS = 400
 // Mirrors ProviderInviteService.INVITE_TTL_MS — a demo link is good for a week.
 const DEMO_INVITE_TTL_MS = 7 * 24 * 60 * 60 * 1000
 
-/** Demo-time-relative shaken expiry — a frozen fixture date would go stale. */
-function demoShakenExpiry(): string {
+/** Demo-time-relative document expiry — a frozen fixture date would go stale,
+ *  and #916's road-legal gate hides any car whose shaken OR insurance is in the
+ *  past or null, so both must be stamped future-dated for the storefront. */
+function demoExpiry(daysOut: number): string {
   const expiry = new Date()
-  expiry.setDate(expiry.getDate() + SHAKEN_VALIDITY_DAYS)
+  expiry.setDate(expiry.getDate() + daysOut)
   return expiry.toISOString().slice(0, 10)
 }
 
@@ -307,7 +312,8 @@ export async function seed(db: ReturnType<typeof getDb>) {
   // 8. Vehicles — both composite FKs resolve now (classes + locations seeded).
   // shakenExpiryDate is stamped demo-time-relative (fixtures omit it, §3.3).
   console.log(`Seeding ${DEMO_VEHICLES.length} vehicles...`)
-  const shakenExpiryDate = demoShakenExpiry()
+  const shakenExpiryDate = demoExpiry(SHAKEN_VALIDITY_DAYS)
+  const insuranceExpiryDate = demoExpiry(INSURANCE_VALIDITY_DAYS)
   for (const v of DEMO_VEHICLES) {
     await db
       .insert(vehicles)
@@ -329,6 +335,7 @@ export async function seed(db: ReturnType<typeof getDb>) {
         hourlyRateJpy: v.hourlyRateJpy,
         photos: [...v.photos],
         shakenExpiryDate,
+        insuranceExpiryDate,
       })
       .onConflictDoUpdate({
         target: vehicles.id,
@@ -340,6 +347,7 @@ export async function seed(db: ReturnType<typeof getDb>) {
           hourlyRateJpy: v.hourlyRateJpy,
           photos: [...v.photos],
           shakenExpiryDate,
+          insuranceExpiryDate,
           updatedAt: now,
         },
       })
