@@ -80,6 +80,8 @@
     "close": "メニューを閉じる",
     "switchToRenter": "利用者ビューに切替",
     "switchToBusiness": "管理者ビューに切替",
+    "switchToSidebar": "サイドバーに切替",
+    "switchToTopNav": "トップナビに切替",
     "search": "検索",
     "browse": "車を探す",
     "myBookings": "予約一覧",

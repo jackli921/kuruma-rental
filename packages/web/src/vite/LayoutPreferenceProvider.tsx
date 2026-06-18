@@ -1,6 +1,5 @@
-import { createContext, useCallback, useContext, useEffect, useState } from 'react'
-
-type LayoutPreference = 'sidebar' | 'topnav'
+import type { LayoutPreference } from '@/vite/nav/business-sidebar-visibility'
+import { createContext, useCallback, useContext, useState } from 'react'
 
 interface LayoutPreferenceContextValue {
   readonly preference: LayoutPreference
@@ -15,15 +14,17 @@ const LayoutPreferenceContext = createContext<LayoutPreferenceContextValue>({
   toggle: () => {},
 })
 
-export function LayoutPreferenceProvider({ children }: { readonly children: React.ReactNode }) {
-  const [preference, setPreference] = useState<LayoutPreference>(DEFAULT_PREFERENCE)
+// Read synchronously at init so a consumer (BusinessLayout) never renders the
+// default first and flips after mount — that flash is visible now that something
+// consumes the preference. Safe because this is a client-only SPA render (no SSR,
+// so no hydration mismatch).
+function readStoredPreference(): LayoutPreference {
+  const stored = localStorage.getItem(STORAGE_KEY)
+  return stored === 'sidebar' || stored === 'topnav' ? stored : DEFAULT_PREFERENCE
+}
 
-  useEffect(() => {
-    const stored = localStorage.getItem(STORAGE_KEY)
-    if (stored === 'sidebar' || stored === 'topnav') {
-      setPreference(stored)
-    }
-  }, [])
+export function LayoutPreferenceProvider({ children }: { readonly children: React.ReactNode }) {
+  const [preference, setPreference] = useState<LayoutPreference>(readStoredPreference)
 
   const toggle = useCallback(() => {
     setPreference((prev) => {
