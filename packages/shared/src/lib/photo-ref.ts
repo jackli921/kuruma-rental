@@ -49,3 +49,57 @@ export function photoRefToWireUrl(stored: string, publicBaseUrl: string): string
 export function photoRefsToWireUrls(stored: readonly string[], publicBaseUrl: string): string[] {
   return stored.map((entry) => photoRefToWireUrl(entry, publicBaseUrl))
 }
+
+/**
+ * Recover the R2 object key from one of our public wire URLs, or return the
+ * input unchanged when it is not one of ours (a bare key, an external image, a
+ * foreign origin). The inverse of {@link photoRefToWireUrl}'s `${base}/${key}`
+ * expansion, and the primitive {@link R2PhotoStorage.delete} needs to address an
+ * object in the bucket.
+ *
+ * Exact origin + base-path matching via URL parsing — NOT a loose string
+ * prefix. A raw `startsWith(publicBaseUrl)` mis-handled a base with a trailing
+ * slash (sliced one character into the key) and a look-alike host
+ * (`https://cdn.example.com.evil/...` satisfies `startsWith` and got
+ * mis-sliced). See #678 review.
+ */
+export function toObjectKey(keyOrUrl: string, publicBaseUrl: string): string {
+  let target: URL
+  try {
+    target = new URL(keyOrUrl)
+  } catch {
+    return keyOrUrl // relative value — already a key
+  }
+  let base: URL
+  try {
+    base = new URL(publicBaseUrl)
+  } catch {
+    return keyOrUrl // base not a URL (e.g. empty in dev) — can't be our URL
+  }
+  if (target.origin !== base.origin) return keyOrUrl
+  const basePath = base.pathname.replace(/\/+$/, '') // '' or '/sub'
+  const prefix = `${basePath}/`
+  if (!target.pathname.startsWith(prefix)) return keyOrUrl
+  return target.pathname.slice(prefix.length)
+}
+
+/**
+ * Encode a wire URL to its stored form (the write-side inverse of decode): one
+ * of our public URLs becomes `r2:<key>`; anything else (an external image)
+ * passes through unchanged. Repositories call this on write so an `r2:` ref is
+ * minted in exactly one place and external URLs are never mistaken for ours —
+ * a client cannot inject a key, since only a URL resolving to our own bucket
+ * origin is ever re-encoded.
+ */
+export function wireUrlToStoredRef(wireUrl: string, publicBaseUrl: string): string {
+  const key = toObjectKey(wireUrl, publicBaseUrl)
+  // toObjectKey returns the input verbatim when it is not one of our URLs; a
+  // matched URL is always strictly longer than its sliced key, so inequality
+  // is a sound "this was ours" signal.
+  return key === wireUrl ? wireUrl : encodeR2Ref(key)
+}
+
+/** Encode a wire-URL `photos` array to stored refs, preserving order. */
+export function wireUrlsToStoredRefs(wireUrls: readonly string[], publicBaseUrl: string): string[] {
+  return wireUrls.map((url) => wireUrlToStoredRef(url, publicBaseUrl))
+}
