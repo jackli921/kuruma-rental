@@ -64,6 +64,25 @@ export function createDocumentRoutes(service: RenterDocumentService) {
       })
       return ok(c, { documents: result.data, total: result.total })
     })
+    .get('/documents/:id/file', async (c) => {
+      const user = requireUser(c)
+      if (!STAFF_ROLES.has(user.role)) return fail(c, 'Forbidden', 403)
+      const ctx = toCallerContext(user)
+
+      const idResult = parseId(c)
+      if (!idResult.ok) return idResult.response
+
+      const file = await service.getFile(ctx, idResult.id)
+      if (!file) return fail(c, 'Document not found', 404)
+
+      // Private identity scan: stream inline, never cache, no MIME sniffing.
+      return c.body(file.body, 200, {
+        'Content-Type': file.contentType,
+        'Content-Disposition': 'inline',
+        'Cache-Control': 'no-store',
+        'X-Content-Type-Options': 'nosniff',
+      })
+    })
     .post('/documents/:id/verify', async (c) => {
       const user = requireUser(c)
       if (!STAFF_ROLES.has(user.role)) return fail(c, 'Forbidden', 403)

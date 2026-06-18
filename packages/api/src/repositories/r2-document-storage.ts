@@ -38,6 +38,15 @@ export class R2DocumentStorage implements DocumentStorage {
     )
   }
 
+  async getFile(key: string): Promise<{ body: ReadableStream; contentType: string } | null> {
+    const obj = await this.bucket.get(key)
+    if (!obj) return null
+    return {
+      body: obj.body,
+      contentType: obj.httpMetadata?.contentType ?? 'application/octet-stream',
+    }
+  }
+
   async delete(key: string): Promise<void> {
     await this.bucket.delete(key)
   }
