@@ -1,5 +1,6 @@
 import type {
   AddOnSnapshot,
+  AuditEventKind,
   BookingEventPayload,
   BookingEventType,
   BookingFulfillmentMode,
@@ -40,6 +41,30 @@ import type { LocationOperatingHours } from '@kuruma/shared/types/location'
  * 22P02 invalid_enum_value on the insert that writes `kind`/`status`.
  */
 export type { NotificationKind, NotificationStatus }
+
+/**
+ * #930: the audit-event kind set is sourced from the `auditEventKindEnum` pgEnum
+ * in @kuruma/shared (derived there, mirroring NotificationKind above) and
+ * re-exported here so a new kind can't drift from this type without a compile
+ * error — drift would otherwise only surface as a runtime 22P02 on insert.
+ */
+export type { AuditEventKind }
+
+// #930: one row of the durable audit ledger (see db/audit.ts). Append-only —
+// rows are inserted, never updated or deleted. Common fields are typed columns;
+// the nullable ones carry kind-specific detail (operatorId/targetId for scope,
+// field/oldValue/newValue for OPERATOR_PROFILE_UPDATED diffs).
+export interface AuditLogEntry {
+  id: string
+  kind: AuditEventKind
+  actorUserId: string
+  operatorId: string | null
+  targetId: string | null
+  field: string | null
+  oldValue: string | null
+  newValue: string | null
+  createdAt: Date
+}
 
 export interface VehicleClass {
   id: string

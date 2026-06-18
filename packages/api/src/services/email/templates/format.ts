@@ -18,6 +18,26 @@ export function formatJpy(amountJpy: number): string {
   return `¥${new Intl.NumberFormat('en-US').format(amountJpy)}`
 }
 
+const MS_PER_HOUR = 3_600_000
+const HOURS_PER_DAY = 24
+
+/** Rental length from start->end as whole days + leftover hours, with caller-
+ *  supplied (localized) unit labels — e.g. "2d 8h", "3d", "9h". A zero component
+ *  is dropped. Bookings are hourly-granular (#960), so hours are the smallest unit. */
+export function formatDuration(
+  start: Date,
+  end: Date,
+  units: { dayUnit: string; hourUnit: string },
+): string {
+  const totalHours = Math.round((end.getTime() - start.getTime()) / MS_PER_HOUR)
+  const days = Math.floor(totalHours / HOURS_PER_DAY)
+  const hours = totalHours % HOURS_PER_DAY
+  const parts: string[] = []
+  if (days > 0) parts.push(`${days}${units.dayUnit}`)
+  if (hours > 0 || days === 0) parts.push(`${hours}${units.hourUnit}`)
+  return parts.join(' ')
+}
+
 // Every operator is Japan-based, so booking datetimes render in Japan Standard Time
 // (Asia/Tokyo — a fixed UTC+9; Japan observes no DST). A pickup/return is a
 // location-anchored event the renter acts on while standing in Japan, and email can't
