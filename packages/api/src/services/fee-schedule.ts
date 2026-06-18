@@ -1,3 +1,4 @@
+import type { ErrorCode } from '@kuruma/shared/lib/error-codes'
 import {
   type FeeType,
   type FeeUnit,
@@ -32,7 +33,7 @@ const invalidVehicleClassResult = (): FeeScheduleResult => ({
   ok: false,
   error: INVALID_VEHICLE_CLASS_MESSAGE,
   status: 400,
-  code: 'INVALID_VEHICLE_CLASS',
+  code: 'INVALID_VEHICLE_CLASS' satisfies ErrorCode,
 })
 
 export class FeeScheduleService {
