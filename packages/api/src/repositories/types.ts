@@ -735,8 +735,8 @@ export interface FeeScheduleRepository {
 
 export interface PhotoStorage {
   put(vehicleId: string, file: File): Promise<{ key: string; url: string }>
-  /** Accepts either a key or full URL — implementations strip the base URL prefix. */
-  delete(keyOrUrl: string): Promise<void>
+  /** Accepts a key or full URL. `ownerVehicleId` scopes the delete to that vehicle's key prefix, so a cross-referenced URL can't reach another vehicle's object (cross-tenant IDOR guard, #952). */
+  delete(keyOrUrl: string, ownerVehicleId: string): Promise<void>
 }
 
 export interface RenterDocumentFilters {
