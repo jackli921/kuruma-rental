@@ -793,5 +793,7 @@ export interface DocumentStorage {
   put(renterId: string, file: File): Promise<{ key: string }>
   /** Short-lived signed URL for a verifier to view the scan. */
   getSignedUrl(key: string): Promise<string>
+  /** Stream a stored scan's bytes + content-type for an authenticated viewer (#932). */
+  getFile(key: string): Promise<{ body: ReadableStream; contentType: string } | null>
   delete(key: string): Promise<void>
 }
