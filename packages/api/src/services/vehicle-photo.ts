@@ -50,7 +50,10 @@ export class VehiclePhotoService {
     const anyFailed = uploadResults.some((r) => r.status === 'rejected')
 
     if (anyFailed) {
-      await this.rollback(succeeded.map((r) => r.url))
+      await this.rollback(
+        vehicleId,
+        succeeded.map((r) => r.url),
+      )
       return { ok: false, status: 500, error: 'One or more uploads failed' }
     }
 
@@ -62,11 +65,17 @@ export class VehiclePhotoService {
     )
 
     if (appendResult.outcome === 'not_found') {
-      await this.rollback(succeeded.map((r) => r.url))
+      await this.rollback(
+        vehicleId,
+        succeeded.map((r) => r.url),
+      )
       return { ok: false, status: 404, error: 'Vehicle not found' }
     }
     if (appendResult.outcome === 'cap_exceeded') {
-      await this.rollback(succeeded.map((r) => r.url))
+      await this.rollback(
+        vehicleId,
+        succeeded.map((r) => r.url),
+      )
       return {
         ok: false,
         status: 400,
@@ -89,9 +98,11 @@ export class VehiclePhotoService {
       return { ok: false, status: 404, error: 'Photo not found' }
     }
 
-    // Best-effort R2 cleanup after the authoritative DB write succeeds.
+    // Best-effort R2 cleanup after the authoritative DB write succeeds. Scoped
+    // to this vehicle's key prefix so a cross-referenced URL cannot delete
+    // another vehicle's object (#952).
     try {
-      await this.storage.delete(url)
+      await this.storage.delete(url, vehicleId)
     } catch (e) {
       console.warn('R2 photo cleanup failed, orphan left:', url, e)
     }
@@ -99,8 +110,8 @@ export class VehiclePhotoService {
     return { ok: true, remaining: updated.photos.length }
   }
 
-  private async rollback(urls: string[]): Promise<void> {
-    await Promise.all(urls.map((url) => this.storage.delete(url).catch(() => {})))
+  private async rollback(vehicleId: string, urls: string[]): Promise<void> {
+    await Promise.all(urls.map((url) => this.storage.delete(url, vehicleId).catch(() => {})))
   }
 }
 

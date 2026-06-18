@@ -33,7 +33,7 @@ describe('InMemoryPhotoStorage', () => {
     const file = makeFile('car.jpg', 'image/jpeg', 1024)
     const { key } = await storage.put('v1', file)
 
-    await storage.delete(key)
+    await storage.delete(key, 'v1')
 
     expect(storage.has(key)).toBe(false)
   })
@@ -43,13 +43,23 @@ describe('InMemoryPhotoStorage', () => {
     const file = makeFile('car.jpg', 'image/jpeg', 1024)
     const { key, url } = await storage.put('v1', file)
 
-    await storage.delete(url)
+    await storage.delete(url, 'v1')
 
     expect(storage.has(key)).toBe(false)
   })
 
   it('delete() is idempotent for missing keys', async () => {
     const storage = new InMemoryPhotoStorage()
-    await expect(storage.delete('nonexistent')).resolves.toBeUndefined()
+    await expect(storage.delete('vehicles/v1/missing.jpg', 'v1')).resolves.toBeUndefined()
+  })
+
+  it('delete() does not remove an object owned by a different vehicle', async () => {
+    const storage = new InMemoryPhotoStorage()
+    const { key } = await storage.put('victim', makeFile('v.jpg', 'image/jpeg', 1024))
+
+    // A delete scoped to a different vehicle must not reach victim's object.
+    await storage.delete(key, 'attacker')
+
+    expect(storage.has(key)).toBe(true)
   })
 })
