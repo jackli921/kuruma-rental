@@ -339,6 +339,25 @@ describe('NotificationDispatcher', () => {
       expect(alert?.html).toContain('jane@example.com')
     })
 
+    it('normalizes a trailing slash on webBaseUrl so the deep link has no double slash', async () => {
+      const sent: Array<{ bcc?: string[]; html: string }> = []
+      const sender = {
+        send: vi.fn(async (m: (typeof sent)[number]) => {
+          sent.push(m)
+          return { providerMessageId: 'msg-1' }
+        }),
+      }
+      const { dispatcher } = build({
+        webBaseUrl: 'https://app.example.com/',
+        sender: sender as unknown as EmailSender,
+      })
+      await dispatcher.dispatch(booking)
+
+      const alert = sent.find((m) => m.bcc !== undefined)
+      expect(alert?.html).toContain('href="https://app.example.com/ja/manage/bookings/bk-1"')
+      expect(alert?.html).not.toContain('app.example.com//ja')
+    })
+
     it('omits the deep link when webBaseUrl is unset', async () => {
       const sent: Array<{ bcc?: string[]; html: string }> = []
       const sender = {

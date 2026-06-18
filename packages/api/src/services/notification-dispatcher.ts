@@ -304,9 +304,10 @@ export class NotificationDispatcher {
       default: {
         // OPERATOR_BOOKING_ALERT
         const [renter] = await this.userRepo.findByIds([booking.renterId])
-        const manageBookingUrl = this.config.webBaseUrl
-          ? `${this.config.webBaseUrl}/${locale}/manage/bookings/${booking.id}`
-          : null
+        // Strip a trailing slash so a misconfigured WEB_ORIGIN can't emit a
+        // `//{locale}` path that fails the SPA's `/$locale/...` route match.
+        const base = this.config.webBaseUrl?.replace(/\/+$/, '')
+        const manageBookingUrl = base ? `${base}/${locale}/manage/bookings/${booking.id}` : null
         return envelope(
           renderOperatorAlert(
             {
