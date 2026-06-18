@@ -80,6 +80,8 @@
     "close": "关闭菜单",
     "switchToRenter": "切换到租客视图",
     "switchToBusiness": "切换到管理视图",
+    "switchToSidebar": "切换到侧边栏",
+    "switchToTopNav": "切换到顶部导航",
     "search": "搜索",
     "browse": "浏览车辆",
     "myBookings": "我的预订",
@@ -903,6 +905,9 @@
       "insurance": "保险",
       "insuranceDeclined": "未购买",
       "perDay": "/ 天",
+      "priceBreakdown": "费用明细",
+      "basePrice": "租车费用",
+      "total": "合计",
       "preAuthTitle": "保障您的预订",
       "preAuthExplain": "运营商会在取车时对您的卡进行临时冻结（预授权）作为押金，这不是实际扣款。在到店前完成可以加快交车手续。",
       "preAuthCta": "完成预授权",
@@ -922,6 +927,8 @@
           "FLAT": "固定"
         }
       },
+      "rentalCompany": "租车公司",
+      "viewStorefront": "查看门店",
       "viewBookings": "查看我的预订",
       "backToVehicles": "浏览更多车辆"
     },
@@ -1129,6 +1136,16 @@
     "toLabel": "还车日期与时间",
     "submit": "搜索",
     "classFilterLabel": "车型类别",
+    "picker": {
+      "label": "取车与还车",
+      "placeholder": "添加日期和时间",
+      "pickup": "取车",
+      "return": "还车",
+      "pickupTime": "取车时间",
+      "returnTime": "还车时间",
+      "days": "{count} 天",
+      "done": "完成"
+    },
     "photoPrev": "上一张照片",
     "photoNext": "下一张照片",
     "photoGoTo": "跳转到第 {n} 张照片",
@@ -1137,6 +1154,7 @@
     "fromDaily": "¥{price}起／天",
     "fromHourly": "¥{price}起／小时",
     "noPrice": "价格请咨询",
+    "storeImagePlaceholder": "门店位置",
     "turnaround": "两次租赁间隔约{hours}小时",
     "distance": "约{km} km",
     "emptyTurnaroundHint": "车辆在两次租赁之间需要准备时间，紧接着可能无法预订。请尝试选择较晚的取车日期。",
@@ -1181,7 +1199,8 @@
   "admin": {
     "nav": {
       "overview": "概览",
-      "revenue": "合作伙伴收益"
+      "revenue": "合作伙伴收益",
+      "documents": "证件"
     },
     "home": {
       "title": "平台管理",
@@ -1219,6 +1238,23 @@
         "DOUBLE_PAYMENT": "重复支付",
         "AMOUNT_MISMATCH": "金额不符"
       }
+    },
+    "documents": {
+      "title": "证件审核",
+      "subtitle": "审核并核验租客的身份证件。",
+      "empty": "暂无待审核的证件。",
+      "renterLabel": "租客",
+      "uploadedLabel": "上传日期",
+      "viewerAlt": "租客身份证件扫描件",
+      "viewerFallback": "无法预览。",
+      "viewerOpen": "在新标签页中打开扫描件",
+      "expiryLabel": "有效期",
+      "reasonLabel": "拒绝原因",
+      "approve": "批准",
+      "reject": "拒绝",
+      "error": "无法记录审核结果，请重试。",
+      "loadError": "无法加载审核队列。",
+      "retry": "重试"
     }
   },
   "documents": {
@@ -1272,7 +1308,6 @@
       "heading": "查看您的预订",
       "base": "租车费",
       "insurance": "保险",
-      "addOns": "附加项",
       "total": "预计总额",
       "note": "税费及任何运营商费用将在支付时计算。"
     },

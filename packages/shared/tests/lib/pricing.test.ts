@@ -1,5 +1,10 @@
 import { describe, expect, test } from 'vitest'
-import { calculateBookingPrice, composeBookingTotal, rentalDays } from '../../src/lib/pricing'
+import {
+  calculateBookingPrice,
+  composeBookingTotal,
+  deriveBaseJpy,
+  rentalDays,
+} from '../../src/lib/pricing'
 
 describe('calculateBookingPrice', () => {
   test('hourly-only rate, 1h duration → 1 × hourly rate', () => {
@@ -188,5 +193,49 @@ describe('composeBookingTotal', () => {
         addOns: [{ priceJpy: 2500 }],
       }),
     ).toBe(35500)
+  })
+})
+
+describe('deriveBaseJpy', () => {
+  test('inverts composeBookingTotal back to the original base price', () => {
+    const baseJpy = 30000
+    const total = composeBookingTotal({
+      baseJpy,
+      insurancePerDayJpy: 1500,
+      days: 3,
+      addOns: [{ priceJpy: 2000 }, { priceJpy: 3000 }],
+    })
+    expect(
+      deriveBaseJpy({
+        totalPriceJpy: total,
+        insurancePerDayJpy: 1500,
+        days: 3,
+        addOns: [{ priceJpy: 2000 }, { priceJpy: 3000 }],
+      }),
+    ).toBe(baseJpy)
+  })
+
+  test('returns the bare total when there is no insurance and no add-ons', () => {
+    expect(
+      deriveBaseJpy({ totalPriceJpy: 30000, insurancePerDayJpy: 0, days: 3, addOns: [] }),
+    ).toBe(30000)
+  })
+
+  test('subtracts insurance-per-day × days and every add-on', () => {
+    // 35500 - 1500*2 - 2500 = 30000
+    expect(
+      deriveBaseJpy({
+        totalPriceJpy: 35500,
+        insurancePerDayJpy: 1500,
+        days: 2,
+        addOns: [{ priceJpy: 2500 }],
+      }),
+    ).toBe(30000)
+  })
+
+  test('returns null when the total price is unknown (cannot be derived)', () => {
+    expect(
+      deriveBaseJpy({ totalPriceJpy: null, insurancePerDayJpy: 1500, days: 3, addOns: [] }),
+    ).toBeNull()
   })
 })

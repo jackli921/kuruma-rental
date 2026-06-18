@@ -93,3 +93,21 @@ export function composeBookingTotal(input: {
   const addOnsJpy = input.addOns.reduce((sum, addOn) => sum + addOn.priceJpy, 0)
   return input.baseJpy + input.insurancePerDayJpy * input.days + addOnsJpy
 }
+
+// The exact inverse of composeBookingTotal: recover the base (vehicle-rental)
+// charge from a booking's stored total by subtracting the insurance-per-day ×
+// days and every add-on's flat charge. The base is never stored on its own —
+// only composed in — so the confirmation receipt derives it here to show a
+// per-item breakdown. Returns null when the total is unknown (totalPrice is
+// nullable pre-pricing) so callers omit the breakdown instead of rendering a
+// wrong number. Pure (FC/IS): the receipt's money math is unit-tested once.
+export function deriveBaseJpy(input: {
+  totalPriceJpy: number | null
+  insurancePerDayJpy: number
+  days: number
+  addOns: ReadonlyArray<{ priceJpy: number }>
+}): number | null {
+  if (input.totalPriceJpy === null) return null
+  const addOnsJpy = input.addOns.reduce((sum, addOn) => sum + addOn.priceJpy, 0)
+  return input.totalPriceJpy - input.insurancePerDayJpy * input.days - addOnsJpy
+}

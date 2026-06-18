@@ -1,5 +1,6 @@
 import { PageSkeleton } from '@/vite/PageSkeleton'
 import { businessGuard } from '@/vite/guards'
+import { BusinessLayout } from '@/vite/nav/BusinessLayout'
 import { sessionQueryOptions } from '@/vite/session'
 import { Outlet, createFileRoute, redirect } from '@tanstack/react-router'
 
@@ -21,5 +22,15 @@ export const Route = createFileRoute('/$locale/_business')({
     }
   },
   pendingComponent: PageSkeleton,
-  component: Outlet,
+  component: BusinessRoute,
 })
+
+// Wraps the nested business pages in the view-aware layout. Kept as a component
+// (not an inline arrow) so the sidebar consumer is named in React devtools.
+function BusinessRoute() {
+  return (
+    <BusinessLayout>
+      <Outlet />
+    </BusinessLayout>
+  )
+}

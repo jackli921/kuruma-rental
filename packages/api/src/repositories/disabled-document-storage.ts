@@ -17,6 +17,10 @@ export class DisabledDocumentStorage implements DocumentStorage {
     throw new Error(MESSAGE)
   }
 
+  async getFile(): Promise<{ body: ReadableStream; contentType: string } | null> {
+    throw new Error(MESSAGE)
+  }
+
   async delete(): Promise<void> {
     throw new Error(MESSAGE)
   }
