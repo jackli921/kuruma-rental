@@ -110,8 +110,11 @@ export class ComplianceDigestService {
 
       try {
         await this.deps.emailSender.send(this.buildMessage(items, recipients))
-      } catch {
+      } catch (err) {
         // Send failed → leave the bands unrecorded so tomorrow's run retries.
+        // Log the operator + cause so a chronically-failing recipient is visible
+        // in the cron output, not silently masked by the daily retry.
+        console.error('[cron:compliance-digest] send failed', { operatorId, err })
         operatorsFailed++
         continue
       }

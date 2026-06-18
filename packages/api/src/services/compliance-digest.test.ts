@@ -110,6 +110,20 @@ describe('ComplianceDigestService.run (#916 §5.4)', () => {
     expect(keys).toContain(complianceAlertKey(v2.id, 'INSURANCE', 'D7'))
   })
 
+  it('flags a vehicle with no recorded document date (MISSING band)', async () => {
+    const { vehicleRepo, alertLogRepo, sent, service } = setup()
+    const v = await makeVehicle(vehicleRepo, { name: 'LegacyVan', shakenExpiryDate: null })
+
+    const summary = await service.run()
+
+    expect(summary).toMatchObject({ operatorsNotified: 1, alertsRecorded: 1 })
+    expect(sent).toHaveLength(1)
+    expect(sent[0]!.html).toContain('LegacyVan')
+    expect(sent[0]!.html).toContain('証明書未登録') // MISSING band, ja default
+    const keys = await alertLogRepo.findAlertedKeys([v.id])
+    expect(keys).toContain(complianceAlertKey(v.id, 'SHAKEN', 'MISSING'))
+  })
+
   it('sends nothing when every document is outside all alert bands', async () => {
     const { vehicleRepo, sent, service } = setup()
     await makeVehicle(vehicleRepo, {}) // both FAR
