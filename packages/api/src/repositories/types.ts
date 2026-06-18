@@ -791,7 +791,7 @@ export type CreateRenterDocumentData = Pick<RenterDocument, 'renterId' | 'type' 
  */
 export interface DocumentStorage {
   put(renterId: string, file: File): Promise<{ key: string }>
-  /** Short-lived signed URL for a verifier to view the scan. */
+  /** @deprecated Dormant pending #304; superseded by getFile(). Signed URL to view a scan. */
   getSignedUrl(key: string): Promise<string>
   /** Stream a stored scan's bytes + content-type for an authenticated viewer (#932). */
   getFile(key: string): Promise<{ body: ReadableStream; contentType: string } | null>
