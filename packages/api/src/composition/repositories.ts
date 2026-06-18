@@ -1,5 +1,5 @@
 import { type RunTx, getDb, runTx } from '@kuruma/shared/db'
-import { photoRefsToWireUrls } from '@kuruma/shared/lib/photo-ref'
+import { photoRefsToWireUrls, wireUrlsToStoredRefs } from '@kuruma/shared/lib/photo-ref'
 import type { AppOverrides } from '../app-overrides'
 import { DrizzleOAuthAccountStore } from '../auth/drizzle-oauth-account-store'
 import { FetchGoogleOAuthProvider } from '../auth/fetch-google-oauth-provider'
@@ -267,7 +267,12 @@ export function buildDrizzleRepos(opts?: { db?: Db; runTx?: RunTx }): Repos {
   // escape a repo and every read surface emits resolvable URLs.
   const photosPublicUrl = process.env.VEHICLE_PHOTOS_PUBLIC_URL ?? ''
   const decodePhotos = (photos: readonly string[]) => photoRefsToWireUrls(photos, photosPublicUrl)
-  const vehicleRepo = new DrizzleVehicleRepository(db, decodePhotos)
+  // The write-side inverse (#879 Slice 3): collapse our own public URLs back to
+  // r2:<key> before they hit the column, so stored rows hold refs and the same
+  // base round-trips losslessly. R2 storage is only constructed when
+  // photosPublicUrl is set, so the encoder and the bucket share one base.
+  const encodePhotos = (photos: readonly string[]) => wireUrlsToStoredRefs(photos, photosPublicUrl)
+  const vehicleRepo = new DrizzleVehicleRepository(db, decodePhotos, encodePhotos)
   const bookingRepo = new DrizzleBookingRepository(db)
   const userRepo = new DrizzleUserRepository(db)
   const operatorRepo = new DrizzleOperatorRepository(db)
@@ -299,7 +304,7 @@ export function buildDrizzleRepos(opts?: { db?: Db; runTx?: RunTx }): Repos {
     ? new R2DocumentStorage(renterDocumentsBucket)
     : new DisabledDocumentStorage()
   return {
-    vehicleClassRepo: new DrizzleVehicleClassRepository(db, decodePhotos),
+    vehicleClassRepo: new DrizzleVehicleClassRepository(db, decodePhotos, encodePhotos),
     vehicleRepo,
     bookingRepo,
     availabilityRepo: new DrizzleAvailabilityRepository(db, decodePhotos),

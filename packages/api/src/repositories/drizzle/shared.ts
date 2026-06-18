@@ -319,6 +319,20 @@ export type PhotoDecoder = (photos: readonly string[]) => string[]
 
 export const identityPhotoDecoder: PhotoDecoder = (photos) => [...photos]
 
+/**
+ * Encodes wire-URL `photos` entries to their stored form (#879) — the write-side
+ * inverse of {@link PhotoDecoder}. The composition root builds the real encoder
+ * from `VEHICLE_PHOTOS_PUBLIC_URL` (our public URL -> r2:<key>, external URLs
+ * pass through) and injects it into the photo-writing repos (vehicle +
+ * vehicle-class). `identityPhotoEncoder` is the no-op default for paths that
+ * never mint r2: refs (the in-memory repos store domain objects directly; the
+ * tx-bound vehicle repo never writes photos). Keeping encode here means r2:
+ * refs are minted in exactly one place — symmetric with decode on read.
+ */
+export type PhotoEncoder = (photos: readonly string[]) => string[]
+
+export const identityPhotoEncoder: PhotoEncoder = (photos) => [...photos]
+
 export function toVehicleClass(r: VehicleClassRow, decodePhotos: PhotoDecoder): VehicleClass {
   return {
     id: r.id,

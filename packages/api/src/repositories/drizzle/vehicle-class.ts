@@ -7,7 +7,9 @@ import type { VehicleClassFilters, VehicleClassRepository } from '../types'
 import {
   type Db,
   type PhotoDecoder,
+  type PhotoEncoder,
   identityPhotoDecoder,
+  identityPhotoEncoder,
   toVehicleClass,
   vehicleClassColumns,
 } from './shared'
@@ -16,6 +18,8 @@ export class DrizzleVehicleClassRepository implements VehicleClassRepository {
   constructor(
     private readonly db: Db,
     private readonly decodePhotos: PhotoDecoder = identityPhotoDecoder,
+    // #879: wire URLs -> stored refs (r2:<key>) on write, symmetric with decode.
+    private readonly encodePhotos: PhotoEncoder = identityPhotoEncoder,
   ) {}
 
   async findAll(ctx: CallerContext, filters?: VehicleClassFilters): Promise<VehicleClass[]> {
@@ -75,7 +79,9 @@ export class DrizzleVehicleClassRepository implements VehicleClassRepository {
         name: data.name,
         slug: data.slug,
         description: data.description,
-        photos: data.photos,
+        // undefined => omit so the column DB default ([]) applies; defined =>
+        // encode wire URLs to stored refs.
+        photos: data.photos === undefined ? undefined : this.encodePhotos(data.photos),
         seats: data.seats,
         luggageCapacity: data.luggageCapacity,
         luggageSize: data.luggageSize,
@@ -96,9 +102,14 @@ export class DrizzleVehicleClassRepository implements VehicleClassRepository {
     data: Partial<VehicleClass>,
   ): Promise<VehicleClass | undefined> {
     const { id: _id, createdAt: _createdAt, ...fields } = data
+    // #879: re-encode an edited photos array; absent key leaves it untouched.
+    const set =
+      fields.photos === undefined
+        ? fields
+        : { ...fields, photos: this.encodePhotos(fields.photos) }
     const [updated] = await this.db
       .update(vehicleClasses)
-      .set({ ...fields, updatedAt: sql`now()` })
+      .set({ ...set, updatedAt: sql`now()` })
       .where(eq(vehicleClasses.id, id))
       .returning()
 
