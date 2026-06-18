@@ -903,6 +903,9 @@
       "insurance": "Insurance",
       "insuranceDeclined": "Declined",
       "perDay": "/ day",
+      "priceBreakdown": "Price breakdown",
+      "basePrice": "Car rental",
+      "total": "Total",
       "preAuthTitle": "Secure your booking",
       "preAuthExplain": "Your operator places a temporary hold (pre-authorization) on your card as a security deposit. This is not a charge; completing it before pickup speeds up your handover.",
       "preAuthCta": "Complete pre-authorization",
@@ -1274,7 +1277,6 @@
       "heading": "Review your booking",
       "base": "Car rental",
       "insurance": "Insurance",
-      "addOns": "Extras",
       "total": "Estimated total",
       "note": "Taxes and any operator fees are calculated at payment."
     },
@@ -1305,6 +1307,7 @@
     },
     "nav": {
       "back": "Back",
+      "backToListing": "Back to listing",
       "continue": "Continue",
       "toPayment": "Continue to payment"
     }

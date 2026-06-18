@@ -47,19 +47,12 @@ export function ConfirmStep({
           </div>
         ) : null}
 
-        {selectedAddOns.length > 0 ? (
-          <div className="flex items-start justify-between gap-4 p-4">
-            <dt className="flex flex-col">
-              <span>{t('confirm.addOns')}</span>
-              <ul className="text-sm text-muted-foreground">
-                {selectedAddOns.map((addOn) => (
-                  <li key={addOn.id}>{addOn.name}</li>
-                ))}
-              </ul>
-            </dt>
-            <dd className="font-medium">{formatJpy(estimate.addOnsJpy)}</dd>
+        {selectedAddOns.map((addOn) => (
+          <div key={addOn.id} className="flex items-center justify-between gap-4 p-4">
+            <dt>{addOn.name}</dt>
+            <dd className="font-medium">{formatJpy(addOn.priceJpy)}</dd>
           </div>
-        ) : null}
+        ))}
 
         <div className="flex items-center justify-between gap-4 p-4 font-semibold">
           <dt>{t('confirm.total')}</dt>

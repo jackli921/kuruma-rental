@@ -8,6 +8,7 @@ import type { BookingDto } from '@/vite/bookings/api'
 import { buildStorefrontSearch } from '@/vite/bookings/storefront-link'
 import { isCancellationEnabled } from '@/vite/config/features'
 import type { VehicleClassData } from '@/vite/vehicles/classes'
+import { deriveBaseJpy, rentalDays } from '@kuruma/shared/lib/pricing'
 import { Link } from '@tanstack/react-router'
 import { CheckCircle } from 'lucide-react'
 import { useLocale, useTranslations } from 'use-intl'
@@ -33,6 +34,17 @@ export function BookingConfirmationView({
 }: BookingConfirmationViewProps) {
   const t = useTranslations('bookings.confirmation')
   const locale = useLocale()
+
+  // The base (vehicle-rental) charge is never stored — only composed into
+  // totalPrice — so recover it via the documented inverse for the itemised
+  // breakdown (#963). A null total can't be decomposed, so the block is omitted.
+  const days = rentalDays(new Date(booking.startAt), new Date(booking.endAt))
+  const baseJpy = deriveBaseJpy({
+    totalPriceJpy: booking.totalPrice,
+    insurancePerDayJpy: booking.insuranceSnapshot?.dailyPriceJpy ?? 0,
+    days,
+    addOns: booking.addOnSnapshot,
+  })
 
   return (
     <div className="mx-auto max-w-2xl">
@@ -92,6 +104,36 @@ export function BookingConfirmationView({
             >
               {t('viewStorefront')}
             </Link>
+          </CardContent>
+        </Card>
+      )}
+
+      {baseJpy !== null && booking.totalPrice !== null && (
+        <Card className="mt-4">
+          <CardContent className="space-y-3 pt-2">
+            <h2 className="text-sm font-semibold">{t('priceBreakdown')}</h2>
+            <dl className="space-y-2">
+              <div className="flex justify-between text-sm">
+                <dt className="text-muted-foreground">{t('basePrice')}</dt>
+                <dd>{formatJpy(baseJpy)}</dd>
+              </div>
+              {booking.insuranceSnapshot && (
+                <div className="flex justify-between text-sm">
+                  <dt className="text-muted-foreground">{t('insurance')}</dt>
+                  <dd>{formatJpy(booking.insuranceSnapshot.dailyPriceJpy * days)}</dd>
+                </div>
+              )}
+              {booking.addOnSnapshot.map((addOn) => (
+                <div key={addOn.addOnId} className="flex justify-between text-sm">
+                  <dt className="text-muted-foreground">{addOn.name}</dt>
+                  <dd>{formatJpy(addOn.priceJpy)}</dd>
+                </div>
+              ))}
+              <div className="flex justify-between border-t border-border pt-2 text-sm font-semibold">
+                <dt>{t('total')}</dt>
+                <dd>{formatJpy(booking.totalPrice)}</dd>
+              </div>
+            </dl>
           </CardContent>
         </Card>
       )}

@@ -46,6 +46,7 @@ import { createVehiclePhotoRoutes } from './routes/vehicle-photos'
 import { createVehicleRoutes } from './routes/vehicles'
 import { AddOnService } from './services/add-on'
 import { AdminRevenueService } from './services/admin-revenue'
+import { type RecordAuditEvent, toAuditRow } from './services/audit'
 import { AvailabilityService } from './services/availability'
 import { BookingService } from './services/booking'
 import { BookingPostCommitDispatcher } from './services/booking-post-commit-dispatcher'
@@ -125,6 +126,7 @@ export function createApp(overrides?: AppOverrides, repos: Repos = buildRepos(ov
     paymentAnomalyRepo,
     providerInviteRepo,
     operatorMembershipRepo,
+    auditLogRepo,
     bookingEventRepo,
     runInTransaction,
     runOperatorGrant,
@@ -233,11 +235,20 @@ export function createApp(overrides?: AppOverrides, repos: Repos = buildRepos(ov
     paymentAnomalyRepo,
     { webBaseUrl },
   )
+  // #930: one durable audit sink for every #914 service seam. Each service emits
+  // its narrow event; this funnels them through the pure toAuditRow mapper into
+  // the append-only ledger. Fire-and-forget — a failed audit write must never
+  // break the user action that triggered it, so it's logged, never awaited/thrown.
+  const recordAudit: RecordAuditEvent = (event) => {
+    void auditLogRepo.insert(toAuditRow(event)).catch((error) => {
+      console.error('[audit] failed to persist event', event.type, error)
+    })
+  }
   const providerInviteService = new ProviderInviteService(
     providerInviteRepo,
     operatorRepo,
     { webBaseUrl },
-    (event) => console.info('[provider-invite] created', event),
+    recordAudit,
   )
   // #904: operator self-service team page. Reuses providerInviteService to mint
   // (so the audit trail + TTL stay single-sourced); reads invites + members
@@ -247,6 +258,7 @@ export function createApp(overrides?: AppOverrides, repos: Repos = buildRepos(ov
     operatorMembershipRepo,
     userRepo,
     providerInviteService,
+    recordAudit,
   )
   // Operator-access grant decision (#521 §6) + slug resolver for the OAuth callback.
   // The slug is read from the STORED operators.slug (never re-derived from the name),
@@ -402,9 +414,7 @@ export function createApp(overrides?: AppOverrides, repos: Repos = buildRepos(ov
   const adminRevenueService = new AdminRevenueService(paymentEventRepo, operatorRepo)
   const paymentAnomalyService = new PaymentAnomalyService(paymentAnomalyRepo)
   const vehicleDetailService = new VehicleDetailService(vehicleDetailRepo)
-  const operatorService = new OperatorService(operatorRepo, (event) =>
-    console.info('[operator-audit] profile updated', event),
-  )
+  const operatorService = new OperatorService(operatorRepo, recordAudit)
   // #407: the write-operator resolver is a pure policy function — sole-operator
   // inference is retired, so it no longer needs an operator lookup.
   const resolveWriteOperatorId: ResolveWriteOperatorId = (ctx, inputOperatorId) =>

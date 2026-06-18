@@ -224,6 +224,16 @@
   html {
     @apply font-sans;
   }
+  /* Tailwind v4 Preflight dropped the default `cursor: pointer` on <button>.
+     Restore it app-wide for native <button>/[role=button] (#961). buttonVariants
+     ALSO sets it inline — needed for its <Link>/<a> call sites, which this
+     selector intentionally doesn't match; the overlap on native buttons is
+     harmless. Disabled controls (real or ARIA) keep the default cursor so they
+     don't invite a click; any explicit cursor-* utility still wins (later layer). */
+  button:not(:disabled):not([aria-disabled="true"]),
+  [role="button"]:not([aria-disabled="true"]) {
+    @apply cursor-pointer;
+  }
 }
 
 /* Hide duplicate business nav links in Navbar when sidebar is present */

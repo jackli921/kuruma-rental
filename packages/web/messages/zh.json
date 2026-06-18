@@ -903,6 +903,9 @@
       "insurance": "保险",
       "insuranceDeclined": "未购买",
       "perDay": "/ 天",
+      "priceBreakdown": "费用明细",
+      "basePrice": "租车费用",
+      "total": "合计",
       "preAuthTitle": "保障您的预订",
       "preAuthExplain": "运营商会在取车时对您的卡进行临时冻结（预授权）作为押金，这不是实际扣款。在到店前完成可以加快交车手续。",
       "preAuthCta": "完成预授权",
@@ -1274,7 +1277,6 @@
       "heading": "查看您的预订",
       "base": "租车费",
       "insurance": "保险",
-      "addOns": "附加项",
       "total": "预计总额",
       "note": "税费及任何运营商费用将在支付时计算。"
     },
@@ -1305,6 +1307,7 @@
     },
     "nav": {
       "back": "返回",
+      "backToListing": "返回列表",
       "continue": "继续",
       "toPayment": "继续支付"
     }
