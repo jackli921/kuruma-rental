@@ -4,10 +4,23 @@ import type { CallerContext } from '../../middleware/auth'
 import type { VehicleClass } from '../../stores'
 import { operatorReadScope } from '../../tenancy'
 import type { VehicleClassFilters, VehicleClassRepository } from '../types'
-import { type Db, toVehicleClass, vehicleClassColumns } from './shared'
+import {
+  type Db,
+  type PhotoDecoder,
+  type PhotoEncoder,
+  identityPhotoDecoder,
+  identityPhotoEncoder,
+  toVehicleClass,
+  vehicleClassColumns,
+} from './shared'
 
 export class DrizzleVehicleClassRepository implements VehicleClassRepository {
-  constructor(private readonly db: Db) {}
+  constructor(
+    private readonly db: Db,
+    private readonly decodePhotos: PhotoDecoder = identityPhotoDecoder,
+    // #879: wire URLs -> stored refs (r2:<key>) on write, symmetric with decode.
+    private readonly encodePhotos: PhotoEncoder = identityPhotoEncoder,
+  ) {}
 
   async findAll(ctx: CallerContext, filters?: VehicleClassFilters): Promise<VehicleClass[]> {
     const scope = operatorReadScope(ctx)
@@ -31,7 +44,7 @@ export class DrizzleVehicleClassRepository implements VehicleClassRepository {
       .where(where)
       .orderBy(asc(vehicleClasses.sortOrder))
 
-    return rows.map(toVehicleClass)
+    return rows.map((r) => toVehicleClass(r, this.decodePhotos))
   }
 
   async findById(ctx: CallerContext, id: string): Promise<VehicleClass | undefined> {
@@ -42,7 +55,7 @@ export class DrizzleVehicleClassRepository implements VehicleClassRepository {
 
     const [row] = await this.db.select(vehicleClassColumns).from(vehicleClasses).where(and(...conditions))
 
-    return row ? toVehicleClass(row) : undefined
+    return row ? toVehicleClass(row, this.decodePhotos) : undefined
   }
 
   async findBySlug(ctx: CallerContext, slug: string): Promise<VehicleClass | undefined> {
@@ -53,7 +66,7 @@ export class DrizzleVehicleClassRepository implements VehicleClassRepository {
 
     const [row] = await this.db.select(vehicleClassColumns).from(vehicleClasses).where(and(...conditions))
 
-    return row ? toVehicleClass(row) : undefined
+    return row ? toVehicleClass(row, this.decodePhotos) : undefined
   }
 
   async create(
@@ -66,7 +79,9 @@ export class DrizzleVehicleClassRepository implements VehicleClassRepository {
         name: data.name,
         slug: data.slug,
         description: data.description,
-        photos: data.photos,
+        // undefined => omit so the column DB default ([]) applies; defined =>
+        // encode wire URLs to stored refs.
+        photos: data.photos === undefined ? undefined : this.encodePhotos(data.photos),
         seats: data.seats,
         luggageCapacity: data.luggageCapacity,
         luggageSize: data.luggageSize,
@@ -79,7 +94,7 @@ export class DrizzleVehicleClassRepository implements VehicleClassRepository {
       .returning()
 
     if (!inserted) throw new Error('Failed to insert vehicle class')
-    return toVehicleClass(inserted)
+    return toVehicleClass(inserted, this.decodePhotos)
   }
 
   async update(
@@ -87,13 +102,18 @@ export class DrizzleVehicleClassRepository implements VehicleClassRepository {
     data: Partial<VehicleClass>,
   ): Promise<VehicleClass | undefined> {
     const { id: _id, createdAt: _createdAt, ...fields } = data
+    // #879: re-encode an edited photos array; absent key leaves it untouched.
+    const set =
+      fields.photos === undefined
+        ? fields
+        : { ...fields, photos: this.encodePhotos(fields.photos) }
     const [updated] = await this.db
       .update(vehicleClasses)
-      .set({ ...fields, updatedAt: sql`now()` })
+      .set({ ...set, updatedAt: sql`now()` })
       .where(eq(vehicleClasses.id, id))
       .returning()
 
-    return updated ? toVehicleClass(updated) : undefined
+    return updated ? toVehicleClass(updated, this.decodePhotos) : undefined
   }
 
   async archive(id: string): Promise<VehicleClass | undefined> {
@@ -103,6 +123,6 @@ export class DrizzleVehicleClassRepository implements VehicleClassRepository {
       .where(eq(vehicleClasses.id, id))
       .returning()
 
-    return archived ? toVehicleClass(archived) : undefined
+    return archived ? toVehicleClass(archived, this.decodePhotos) : undefined
   }
 }

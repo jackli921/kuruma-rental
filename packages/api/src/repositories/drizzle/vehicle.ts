@@ -9,10 +9,24 @@ import type {
   VehicleRepository,
   VehicleUpdateOptions,
 } from '../types'
-import { type Db, toVehicle, vehicleColumns } from './shared'
+import {
+  type Db,
+  type PhotoDecoder,
+  type PhotoEncoder,
+  identityPhotoDecoder,
+  identityPhotoEncoder,
+  toVehicle,
+  vehicleColumns,
+} from './shared'
 
 export class DrizzleVehicleRepository implements VehicleRepository {
-  constructor(private readonly db: Db) {}
+  constructor(
+    private readonly db: Db,
+    private readonly decodePhotos: PhotoDecoder = identityPhotoDecoder,
+    // #879: wire URLs -> stored refs (r2:<key>) on write. Identity by default so
+    // the tx-bound vehicle repo (never writes photos) and tests stay unaffected.
+    private readonly encodePhotos: PhotoEncoder = identityPhotoEncoder,
+  ) {}
 
   async findAll(ctx: CallerContext, filters?: VehicleFilters): Promise<PaginatedResult<Vehicle>> {
     const conditions: SQL[] = []
@@ -49,7 +63,7 @@ export class DrizzleVehicleRepository implements VehicleRepository {
     ])
 
     return {
-      data: rows.map(toVehicle),
+      data: rows.map((r) => toVehicle(r, this.decodePhotos)),
       total: countResult[0]?.value ?? 0,
     }
   }
@@ -65,7 +79,7 @@ export class DrizzleVehicleRepository implements VehicleRepository {
       .from(vehicles)
       .where(and(...conditions))
 
-    return row ? toVehicle(row) : undefined
+    return row ? toVehicle(row, this.decodePhotos) : undefined
   }
 
   async findByIds(ctx: CallerContext, ids: string[]): Promise<Vehicle[]> {
@@ -78,7 +92,7 @@ export class DrizzleVehicleRepository implements VehicleRepository {
       .select(vehicleColumns)
       .from(vehicles)
       .where(and(...conditions))
-    return rows.map(toVehicle)
+    return rows.map((r) => toVehicle(r, this.decodePhotos))
   }
 
   async create(
@@ -100,7 +114,9 @@ export class DrizzleVehicleRepository implements VehicleRepository {
         pickupLocationId: data.pickupLocationId,
         name: data.name,
         description: data.description,
-        photos: data.photos,
+        // undefined => omit so the column DB default ([]) applies; defined =>
+        // encode wire URLs to stored refs.
+        photos: data.photos === undefined ? undefined : this.encodePhotos(data.photos),
         seats: data.seats,
         luggageCapacity: data.luggageCapacity,
         luggageSize: data.luggageSize,
@@ -119,7 +135,7 @@ export class DrizzleVehicleRepository implements VehicleRepository {
       .returning()
 
     if (!inserted) throw new Error('Failed to insert vehicle')
-    return toVehicle(inserted)
+    return toVehicle(inserted, this.decodePhotos)
   }
 
   async update(
@@ -132,6 +148,13 @@ export class DrizzleVehicleRepository implements VehicleRepository {
     // operatorId is the tenant anchor — never reassignable via an update, or a
     // caller could move a vehicle to another tenant (#386 F2). Strip it here.
     const { id: _id, createdAt: _createdAt, operatorId: _operatorId, ...fields } = data
+    // #879: re-encode an edited photos array (wire URLs -> stored refs) so an
+    // edit round-trip never bakes the public host into the stored value. Absent
+    // key => leave the column untouched.
+    const set =
+      fields.photos === undefined
+        ? fields
+        : { ...fields, photos: this.encodePhotos(fields.photos) }
     const scope = operatorReadScope(ctx)
     const conditions = [eq(vehicles.id, id)]
     if (scope.kind === 'operator') conditions.push(eq(vehicles.operatorId, scope.operatorId))
@@ -140,11 +163,11 @@ export class DrizzleVehicleRepository implements VehicleRepository {
     }
     const [updated] = await this.db
       .update(vehicles)
-      .set({ ...fields, updatedAt: sql`now()` })
+      .set({ ...set, updatedAt: sql`now()` })
       .where(and(...conditions))
       .returning()
 
-    return updated ? toVehicle(updated) : undefined
+    return updated ? toVehicle(updated, this.decodePhotos) : undefined
   }
 
   async softDelete(ctx: CallerContext, id: string): Promise<Vehicle | undefined> {
@@ -158,7 +181,7 @@ export class DrizzleVehicleRepository implements VehicleRepository {
       .where(and(...conditions))
       .returning()
 
-    return retired ? toVehicle(retired) : undefined
+    return retired ? toVehicle(retired, this.decodePhotos) : undefined
   }
 
   async bulkUpdateStatus(
@@ -176,7 +199,7 @@ export class DrizzleVehicleRepository implements VehicleRepository {
       .set({ status, updatedAt: sql`now()` })
       .where(and(...conditions))
       .returning()
-    return rows.map(toVehicle)
+    return rows.map((r) => toVehicle(r, this.decodePhotos))
   }
 
   async appendPhotos(
@@ -193,14 +216,18 @@ export class DrizzleVehicleRepository implements VehicleRepository {
     // cardinality stays within the cap. Concurrent callers serialize at
     // the row level, so two racing uploads cannot both pass the guard.
     // URLs are chained via array_append to keep them as bound parameters
-    // rather than interpolated literals.
+    // rather than interpolated literals. #879: store the encoded ref (our own
+    // uploads collapse to r2:<key>; external URLs pass through) so the column
+    // holds stored refs, never resolved wire URLs. Encode once so the cap guard
+    // and the append agree on cardinality.
+    const refs = this.encodePhotos(urls)
     let photosExpr: SQL = sql`${vehicles.photos}`
-    for (const url of urls) {
-      photosExpr = sql`array_append(${photosExpr}, ${url})`
+    for (const entry of refs) {
+      photosExpr = sql`array_append(${photosExpr}, ${entry})`
     }
     const conditions: SQL[] = [
       eq(vehicles.id, id),
-      sql`cardinality(${vehicles.photos}) + ${urls.length} <= ${maxPhotos}`,
+      sql`cardinality(${vehicles.photos}) + ${refs.length} <= ${maxPhotos}`,
     ]
     if (scope.kind === 'operator') conditions.push(eq(vehicles.operatorId, scope.operatorId))
     const [updated] = await this.db
@@ -209,7 +236,7 @@ export class DrizzleVehicleRepository implements VehicleRepository {
       .where(and(...conditions))
       .returning()
 
-    if (updated) return { outcome: 'ok', vehicle: toVehicle(updated) }
+    if (updated) return { outcome: 'ok', vehicle: toVehicle(updated, this.decodePhotos) }
     const existing = await this.findById(ctx, id)
     return existing ? { outcome: 'cap_exceeded' } : { outcome: 'not_found' }
   }
@@ -221,17 +248,21 @@ export class DrizzleVehicleRepository implements VehicleRepository {
   ): Promise<Vehicle | undefined> {
     requireFleetWriteScope(ctx)
     const scope = operatorReadScope(ctx)
+    // #879: the caller passes a wire URL, but the column stores refs — encode it
+    // back to its stored form so array_remove/ANY match an r2:<key> row (the
+    // resolved URL never appears in the column).
+    const ref = this.encodePhotos([url])[0] ?? url
     // array_remove is atomic — no TOCTOU between read of photos and write.
-    const conditions: SQL[] = [eq(vehicles.id, id), sql`${url} = ANY(${vehicles.photos})`]
+    const conditions: SQL[] = [eq(vehicles.id, id), sql`${ref} = ANY(${vehicles.photos})`]
     if (scope.kind === 'operator') conditions.push(eq(vehicles.operatorId, scope.operatorId))
     const [updated] = await this.db
       .update(vehicles)
       .set({
-        photos: sql`array_remove(${vehicles.photos}, ${url})`,
+        photos: sql`array_remove(${vehicles.photos}, ${ref})`,
         updatedAt: sql`now()`,
       })
       .where(and(...conditions))
       .returning()
-    return updated ? toVehicle(updated) : undefined
+    return updated ? toVehicle(updated, this.decodePhotos) : undefined
   }
 }

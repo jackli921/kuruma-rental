@@ -6,7 +6,14 @@ import type { CallerContext } from '../../middleware/auth'
 import type { Vehicle } from '../../stores'
 import { operatorReadScope } from '../../tenancy'
 import type { FleetOverviewRepository } from '../types'
-import { type Db, overlapHours, toVehicle, vehicleColumns } from './shared'
+import {
+  type Db,
+  type PhotoDecoder,
+  identityPhotoDecoder,
+  overlapHours,
+  toVehicle,
+  vehicleColumns,
+} from './shared'
 
 // Fleet overview: owner-facing aggregated read. Two round-trips instead
 // of N+1 -- one SELECT for all vehicles, one SELECT for all relevant
@@ -17,7 +24,10 @@ import { type Db, overlapHours, toVehicle, vehicleColumns } from './shared'
 const UTILIZATION_WINDOW_MS = 30 * 24 * 60 * 60 * 1000
 
 export class DrizzleFleetOverviewRepository implements FleetOverviewRepository {
-  constructor(private readonly db: Db) {}
+  constructor(
+    private readonly db: Db,
+    private readonly decodePhotos: PhotoDecoder = identityPhotoDecoder,
+  ) {}
 
   async findFleetOverview(ctx: CallerContext, now: Date): Promise<FleetVehicleOverview[]> {
     const windowStart = new Date(now.getTime() - UTILIZATION_WINDOW_MS)
@@ -33,7 +43,7 @@ export class DrizzleFleetOverviewRepository implements FleetOverviewRepository {
     // Round-trip 1: this tenant's vehicles.
     const vehicleRows = (
       await this.db.select(vehicleColumns).from(vehicles).where(vehicleWhere)
-    ).map(toVehicle)
+    ).map((r) => toVehicle(r, this.decodePhotos))
     if (vehicleRows.length === 0) return []
     const vehicleIds = vehicleRows.map((v) => v.id)
 

@@ -1,4 +1,5 @@
 import { type RunTx, getDb, runTx } from '@kuruma/shared/db'
+import { photoRefsToWireUrls, wireUrlsToStoredRefs } from '@kuruma/shared/lib/photo-ref'
 import type { AppOverrides } from '../app-overrides'
 import { DrizzleOAuthAccountStore } from '../auth/drizzle-oauth-account-store'
 import { FetchGoogleOAuthProvider } from '../auth/fetch-google-oauth-provider'
@@ -260,7 +261,18 @@ export function buildOverrideRepos(overrides: AppOverrides): Repos {
 export function buildDrizzleRepos(opts?: { db?: Db; runTx?: RunTx }): Repos {
   const db = opts?.db ?? getDb()
   const tx = opts?.runTx ?? runTx
-  const vehicleRepo = new DrizzleVehicleRepository(db)
+  // #879: stored photos are R2 keys (r2:<key>) or external URLs. The read-
+  // serving repos decode them to wire URLs via this injected decoder — built
+  // here, the only place the public bucket base is known — so r2: refs never
+  // escape a repo and every read surface emits resolvable URLs.
+  const photosPublicUrl = process.env.VEHICLE_PHOTOS_PUBLIC_URL ?? ''
+  const decodePhotos = (photos: readonly string[]) => photoRefsToWireUrls(photos, photosPublicUrl)
+  // The write-side inverse (#879 Slice 3): collapse our own public URLs back to
+  // r2:<key> before they hit the column, so stored rows hold refs and the same
+  // base round-trips losslessly. R2 storage is only constructed when
+  // photosPublicUrl is set, so the encoder and the bucket share one base.
+  const encodePhotos = (photos: readonly string[]) => wireUrlsToStoredRefs(photos, photosPublicUrl)
+  const vehicleRepo = new DrizzleVehicleRepository(db, decodePhotos, encodePhotos)
   const bookingRepo = new DrizzleBookingRepository(db)
   const userRepo = new DrizzleUserRepository(db)
   const operatorRepo = new DrizzleOperatorRepository(db)
@@ -275,7 +287,6 @@ export function buildDrizzleRepos(opts?: { db?: Db; runTx?: RunTx }): Repos {
   const vehiclePhotosBucket = (globalThis as Record<string, unknown>).VEHICLE_PHOTOS as
     | R2BucketLike
     | undefined
-  const photosPublicUrl = process.env.VEHICLE_PHOTOS_PUBLIC_URL ?? ''
   // In the Drizzle branch (production) an InMemory fallback is dangerous —
   // each CF Worker request gets a fresh instance, so uploads "succeed" but
   // return URLs pointing at nothing. DisabledPhotoStorage throws loudly.
@@ -293,13 +304,13 @@ export function buildDrizzleRepos(opts?: { db?: Db; runTx?: RunTx }): Repos {
     ? new R2DocumentStorage(renterDocumentsBucket)
     : new DisabledDocumentStorage()
   return {
-    vehicleClassRepo: new DrizzleVehicleClassRepository(db),
+    vehicleClassRepo: new DrizzleVehicleClassRepository(db, decodePhotos, encodePhotos),
     vehicleRepo,
     bookingRepo,
-    availabilityRepo: new DrizzleAvailabilityRepository(db),
+    availabilityRepo: new DrizzleAvailabilityRepository(db, decodePhotos),
     userRepo,
-    fleetOverviewRepo: new DrizzleFleetOverviewRepository(db),
-    vehicleDetailRepo: new DrizzleVehicleDetailRepository(db),
+    fleetOverviewRepo: new DrizzleFleetOverviewRepository(db, decodePhotos),
+    vehicleDetailRepo: new DrizzleVehicleDetailRepository(db, decodePhotos),
     statsRepo: new DrizzleStatsRepository(db),
     overviewRepo: new DrizzleOverviewRepository(db),
     threadRepo: new DrizzleThreadRepository(db, tx),

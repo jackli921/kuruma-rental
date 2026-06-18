@@ -2,10 +2,21 @@ import { bookings, vehicles } from '@kuruma/shared/db/schema'
 import { type SQL, and, eq, inArray, sql } from 'drizzle-orm'
 import type { Booking, Vehicle } from '../../stores'
 import type { AvailabilityFilters, AvailabilityRepository } from '../types'
-import { type Db, bookingColumns, toBooking, toVehicle, vehicleColumns } from './shared'
+import {
+  type Db,
+  type PhotoDecoder,
+  bookingColumns,
+  identityPhotoDecoder,
+  toBooking,
+  toVehicle,
+  vehicleColumns,
+} from './shared'
 
 export class DrizzleAvailabilityRepository implements AvailabilityRepository {
-  constructor(private readonly db: Db) {}
+  constructor(
+    private readonly db: Db,
+    private readonly decodePhotos: PhotoDecoder = identityPhotoDecoder,
+  ) {}
 
   async findAvailableVehicles(
     from: Date,
@@ -44,7 +55,7 @@ export class DrizzleAvailabilityRepository implements AvailabilityRepository {
       .select(vehicleColumns)
       .from(vehicles)
       .where(and(...conditions))
-    return rows.map(toVehicle)
+    return rows.map((r) => toVehicle(r, this.decodePhotos))
   }
 
   async checkVehicleAvailability(
@@ -75,7 +86,7 @@ export class DrizzleAvailabilityRepository implements AvailabilityRepository {
 
     return {
       available: conflicts.length === 0,
-      vehicle: toVehicle(vehicle),
+      vehicle: toVehicle(vehicle, this.decodePhotos),
       conflicts: conflicts.map(toBooking),
     }
   }
