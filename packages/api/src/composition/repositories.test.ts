@@ -54,6 +54,7 @@ const EXPECTED_KEY_MAP: Record<keyof Repos, true> = {
   paymentAnomalyRepo: true,
   providerInviteRepo: true,
   operatorMembershipRepo: true,
+  auditLogRepo: true,
   bookingEventRepo: true,
   runInTransaction: true,
   runOperatorGrant: true,

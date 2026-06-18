@@ -73,6 +73,9 @@ export type {
   NotificationLogUpsert,
 } from './types-notification'
 
+// Audit ledger entity + insert-only persistence (#930), own module per #837 cap.
+export type { AuditLogEntry, AuditLogRepository } from './types-audit'
+
 /** Operator (tenant) data access. Admin bootstrap (#386) + slug/id resolution (#387). */
 // Partial profile patch (#903). Only the keys present are written; an absent key
 // leaves the column unchanged, `preAuthHandoffUrl: null` clears it. `updatedAt`
@@ -784,14 +787,12 @@ export interface RenterDocumentRepository {
 
 export type CreateRenterDocumentData = Pick<RenterDocument, 'renterId' | 'type' | 'storageKey'>
 
-/**
- * Private object storage for renter document scans (#459). Unlike `PhotoStorage`
- * (public vehicle photos), documents are private — access is via a short-lived
- * signed URL, never a public base URL.
- */
+/** Private object storage for renter document scans (#459) — private, not public-URL addressable (cf. `PhotoStorage`). */
 export interface DocumentStorage {
   put(renterId: string, file: File): Promise<{ key: string }>
-  /** Short-lived signed URL for a verifier to view the scan. */
+  /** @deprecated Dormant pending #304; superseded by getFile(). Signed URL to view a scan. */
   getSignedUrl(key: string): Promise<string>
+  /** Stream a stored scan's bytes + content-type for an authenticated viewer (#932). */
+  getFile(key: string): Promise<{ body: ReadableStream; contentType: string } | null>
   delete(key: string): Promise<void>
 }

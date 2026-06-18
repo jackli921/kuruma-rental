@@ -21,7 +21,6 @@ export interface ReservationEstimateInput {
 export interface ReservationEstimate {
   baseJpy: number
   insuranceJpy: number
-  addOnsJpy: number
   totalJpy: number
 }
 
@@ -43,12 +42,11 @@ export function estimateReservation(input: ReservationEstimateInput): Reservatio
   const days = rentalDays(input.from, input.to)
   const insurancePerDayJpy = input.insuranceDailyPriceJpy ?? 0
   const insuranceJpy = insurancePerDayJpy * days
-  const addOnsJpy = input.addOnPricesJpy.reduce((sum, price) => sum + price, 0)
   const totalJpy = composeBookingTotal({
     baseJpy,
     insurancePerDayJpy,
     days,
     addOns: input.addOnPricesJpy.map((priceJpy) => ({ priceJpy })),
   })
-  return { baseJpy, insuranceJpy, addOnsJpy, totalJpy }
+  return { baseJpy, insuranceJpy, totalJpy }
 }

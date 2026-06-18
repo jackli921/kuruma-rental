@@ -13,6 +13,7 @@ export * from './booking'
 export * from './payment'
 export * from './messaging'
 export * from './notification'
+export * from './audit'
 
 // Sibling schema fragments split out before #725. add_on_options + payload types
 // (#460); operator_memberships + provider_invites + their enums (#521);

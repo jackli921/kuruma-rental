@@ -111,6 +111,20 @@ export function mintOperatorSessionToken(): Promise<string> {
   return mintSession(OPERATOR)
 }
 
+/**
+ * Session cookie value for an ARBITRARY OPERATOR_OWNER email — used by the
+ * cold-start spec, which inserts a throwaway empty operator + owner at runtime
+ * (not in the seed) and needs to swap the project storageState onto it. The
+ * tenant claim is resolved from that owner's freshly-inserted `users` row, so
+ * the token is scoped to the new operator exactly like a seeded one.
+ */
+export function mintOperatorSessionTokenFor(
+  email: string,
+  name = 'Cold Start Owner',
+): Promise<string> {
+  return mintSession({ email, name, role: 'OPERATOR_OWNER' })
+}
+
 /** Session cookie value for the seeded RENTER persona (Sarah Smith). */
 export function mintRenterSessionToken(): Promise<string> {
   return mintSession(RENTER)

@@ -196,3 +196,37 @@ describe('POST /documents/:id/verify', () => {
     expect(res.status).toBe(403)
   })
 })
+
+describe('GET /documents/:id/file', () => {
+  async function uploadAsRenter(app: ReturnType<typeof createTestApp>['app']): Promise<string> {
+    const upload = await app.request('/documents', {
+      method: 'POST',
+      headers: await authHeaders(RENTER),
+      body: uploadForm('IDP'),
+    })
+    return (await upload.json()).data.document.id
+  }
+
+  it('streams the stored scan to staff with no-store + nosniff headers', async () => {
+    const app = createTestApp().app
+    const id = await uploadAsRenter(app)
+
+    const res = await app.request(`/documents/${id}/file`, { headers: await authHeaders() })
+
+    expect(res.status).toBe(200)
+    expect(res.headers.get('Content-Type')).toBe('image/jpeg')
+    expect(res.headers.get('Cache-Control')).toBe('no-store')
+    expect(res.headers.get('X-Content-Type-Options')).toBe('nosniff')
+    const bytes = new Uint8Array(await res.arrayBuffer())
+    expect([...bytes.slice(0, JPEG_HEADER.length)]).toEqual(JPEG_HEADER)
+  })
+
+  it('forbids a non-staff caller (renter) with 403', async () => {
+    const app = createTestApp().app
+    const id = await uploadAsRenter(app)
+
+    const res = await app.request(`/documents/${id}/file`, { headers: await authHeaders(RENTER) })
+
+    expect(res.status).toBe(403)
+  })
+})
