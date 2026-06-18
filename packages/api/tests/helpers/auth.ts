@@ -27,7 +27,10 @@ export function testAuthMiddleware(
 }
 
 export async function signTestJwt(
-  payload: { sub: string; role?: string } = { sub: 'test-user-id', role: 'PLATFORM_ADMIN' },
+  payload: { sub: string; role?: string; operatorId?: string } = {
+    sub: 'test-user-id',
+    role: 'PLATFORM_ADMIN',
+  },
   secret = TEST_AUTH_SECRET,
 ): Promise<string> {
   const key = new TextEncoder().encode(secret)

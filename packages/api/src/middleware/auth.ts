@@ -2,7 +2,7 @@ import type { Context, MiddlewareHandler } from 'hono'
 import { getCookie } from 'hono/cookie'
 
 import { SESSION_COOKIE, verifyApiKey, verifyJwt } from '../auth/jwt'
-import { type AuthUser, isAuthUser } from '../auth/roles'
+import { type AuthUser, isAuthUser, isOperatorRole } from '../auth/roles'
 import { fail } from '../routes/helpers'
 
 // The auth concerns are split across cohesive auth/ modules (#724); this file is
@@ -62,6 +62,63 @@ export function requireUser(c: { get: (key: string) => unknown }): AuthUser {
   return user
 }
 
+// #939: a verified signature is necessary but not sufficient for operator roles.
+// verifyJwt is pure crypto, so a deactivated member keeps valid operator claims
+// for the whole <=7d token TTL. The composition root supplies this per-request
+// check (closing over the users projection the JWT is minted from); requireAuth
+// rejects the token when it returns true so the caller must re-auth.
+const OPERATOR_REVOCATION_CHECK = 'operatorSessionRevocationCheck'
+
+/** Returns true when an operator caller's session has been revoked since the JWT
+ *  was minted (member deactivated, moved tenant, or role changed). */
+export type OperatorSessionRevocationCheck = (user: AuthUser) => Promise<boolean>
+
+/** Registers the operator-session revocation check on the request context so the
+ *  per-prefix AND factory-internal requireAuth instances all consult one source
+ *  (#939). Register app-wide in createApp before any requireAuth runs. */
+export function provideOperatorSessionRevocation(
+  check: OperatorSessionRevocationCheck,
+): MiddlewareHandler {
+  return async (c: Context, next) => {
+    c.set(OPERATOR_REVOCATION_CHECK, check)
+    return next()
+  }
+}
+
+/** Consult the context-supplied revocation check, but only for operator roles —
+ *  renter/admin/partner traffic does zero extra work (the common-case latency AC).
+ *  Fail-open when no check is registered (e.g. unit apps that don't wire it). */
+async function isOperatorSessionRevoked(
+  c: { get: (key: string) => unknown },
+  user: AuthUser,
+): Promise<boolean> {
+  if (!isOperatorRole(user.role)) return false
+  const check = c.get(OPERATOR_REVOCATION_CHECK)
+  return typeof check === 'function' ? Boolean(await check(user)) : false
+}
+
+async function resolveCaller(c: Context): Promise<AuthUser | null> {
+  const authHeader = c.req.header('Authorization')
+  if (authHeader?.startsWith('Bearer ')) {
+    const user = await verifyJwt(authHeader.slice(7))
+    if (user) return user
+  }
+  // Browser callers authenticate with the HttpOnly kuruma_session cookie
+  // (Vite/CF Pages migration, #378). CSRF for these is enforced separately by
+  // the csrf middleware; here we only establish identity.
+  const cookieToken = getCookie(c, SESSION_COOKIE)
+  if (cookieToken) {
+    const user = await verifyJwt(cookieToken)
+    if (user) return user
+  }
+  const apiKey = c.req.header('X-API-Key')
+  if (apiKey) {
+    const user = verifyApiKey(apiKey)
+    if (user) return user
+  }
+  return null
+}
+
 export function requireAuth(): MiddlewareHandler {
   return async (c: Context, next) => {
     // Skip if an upstream middleware already authenticated (e.g. createApp's
@@ -69,38 +126,11 @@ export function requireAuth(): MiddlewareHandler {
     // when public + protected routes are mounted in the same Hono instance.
     if (getUser(c)) return next()
 
-    const authHeader = c.req.header('Authorization')
+    const user = await resolveCaller(c)
+    if (!user) return fail(c, 'Unauthorized', 401)
+    if (await isOperatorSessionRevoked(c, user)) return fail(c, 'Unauthorized', 401)
 
-    if (authHeader?.startsWith('Bearer ')) {
-      const token = authHeader.slice(7)
-      const user = await verifyJwt(token)
-      if (user) {
-        c.set('user', user)
-        return next()
-      }
-    }
-
-    // Browser callers authenticate with the HttpOnly kuruma_session cookie
-    // (Vite/CF Pages migration, #378). CSRF for these is enforced separately by
-    // the csrf middleware; here we only establish identity.
-    const cookieToken = getCookie(c, SESSION_COOKIE)
-    if (cookieToken) {
-      const user = await verifyJwt(cookieToken)
-      if (user) {
-        c.set('user', user)
-        return next()
-      }
-    }
-
-    const apiKey = c.req.header('X-API-Key')
-    if (apiKey) {
-      const user = verifyApiKey(apiKey)
-      if (user) {
-        c.set('user', user)
-        return next()
-      }
-    }
-
-    return fail(c, 'Unauthorized', 401)
+    c.set('user', user)
+    return next()
   }
 }

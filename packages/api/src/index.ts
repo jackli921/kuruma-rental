@@ -3,10 +3,11 @@ import { Hono } from 'hono'
 import { cors } from 'hono/cors'
 import type { AppOverrides } from './app-overrides'
 import type { GoogleOAuthConfig } from './auth/google'
+import { isStaleOperatorSession } from './auth/session-freshness'
 import { type Repos, buildRepos } from './composition/repositories'
 import { setupGlobalHandlers } from './error-handlers'
 import { parseBoolFlag } from './lib/parse-bool-flag'
-import { requireAuth } from './middleware/auth'
+import { provideOperatorSessionRevocation, requireAuth } from './middleware/auth'
 import { csrf } from './middleware/csrf'
 import { structuredLogger } from './middleware/logger'
 import { requestId } from './middleware/request-id'
@@ -306,6 +307,19 @@ export function createApp(overrides?: AppOverrides, repos: Repos = buildRepos(ov
   // (403) before any handler work. No-op for safe methods and cookie-less
   // Bearer/API-key callers — see middleware/csrf.ts.
   app.use('*', csrf())
+
+  // #939: instant operator-session revocation. A deactivated member keeps a valid
+  // JWT for the <=7d TTL because verifyJwt is pure crypto; re-read the users
+  // projection the token was minted from and reject any operator token that no
+  // longer matches. Operator roles only — renter/admin/partner callers skip the
+  // read. Registered before every requireAuth (app-level + factory-internal) so
+  // the check reaches all operator-reachable routes.
+  app.use(
+    '*',
+    provideOperatorSessionRevocation(async (user) =>
+      isStaleOperatorSession(user, (await userRepo.findByIds([user.id]))[0]),
+    ),
+  )
 
   // Auth middleware on all protected paths.
   // vehicle-classes: public GETs for renter catalog (list, by-slug, availability)
