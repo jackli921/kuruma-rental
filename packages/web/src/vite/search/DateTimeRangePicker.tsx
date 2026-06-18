@@ -16,6 +16,7 @@ import {
   type DateTimeRange,
   combineDateTime,
   fromLocalDate,
+  isPastDate,
   jstNowParts,
   rentalDays,
   resolveSlot,
@@ -79,6 +80,14 @@ export function DateTimeRangePicker({
 
   const now = minDate ?? new Date()
 
+  // Re-seed the working draft from the committed `value` each time the panel
+  // opens, so an externally-changed value (e.g. a parent "clear dates", or #955
+  // pushing a value in) is reflected instead of showing stale draft state.
+  function handleOpenChange(next: boolean): void {
+    if (next) setDraft(toDraft(value))
+    setOpen(next)
+  }
+
   // Commit a draft; surface a complete range to the parent (drop-in contract).
   function commit(next: Draft): void {
     setDraft(next)
@@ -109,7 +118,7 @@ export function DateTimeRangePicker({
         }
       : undefined
 
-  const disabledBefore = toLocalDate(jstNowParts(now).date)
+  const jstToday = toLocalDate(jstNowParts(now).date)
   const days =
     draft.from && draft.to
       ? rentalDays({
@@ -118,10 +127,12 @@ export function DateTimeRangePicker({
         })
       : 0
 
-  const triggerLabel =
-    draft.from || draft.to
-      ? `${formatPart(draft.from, locale) || t('pickup')} → ${formatPart(draft.to, locale) || t('return')}`
-      : t('placeholder')
+  // Trigger reflects the COMMITTED value (not the in-flight draft), so the closed
+  // control always tracks its controlled prop. value is null or a complete range.
+  const committed = toDraft(value)
+  const triggerLabel = value
+    ? `${formatPart(committed.from, locale)} → ${formatPart(committed.to, locale)}`
+    : t('placeholder')
 
   const panel = (
     <div className="flex flex-col gap-3">
@@ -129,8 +140,8 @@ export function DateTimeRangePicker({
         mode="range"
         selected={selected}
         onSelect={handleSelect}
-        disabled={{ before: disabledBefore }}
-        defaultMonth={selected?.from ?? disabledBefore}
+        disabled={(d) => isPastDate(fromLocalDate(d), now)}
+        defaultMonth={selected?.from ?? jstToday}
         autoFocus
         className="mx-auto"
       />
@@ -174,7 +185,7 @@ export function DateTimeRangePicker({
 
   if (isDesktop) {
     return (
-      <Popover open={open} onOpenChange={setOpen}>
+      <Popover open={open} onOpenChange={handleOpenChange}>
         <PopoverTrigger render={triggerButton}>{trigger}</PopoverTrigger>
         <PopoverContent className="w-auto" align="start">
           {panel}
@@ -184,7 +195,7 @@ export function DateTimeRangePicker({
   }
 
   return (
-    <Sheet open={open} onOpenChange={setOpen}>
+    <Sheet open={open} onOpenChange={handleOpenChange}>
       <SheetTrigger render={triggerButton}>{trigger}</SheetTrigger>
       <SheetContent side="bottom" className="max-h-[90vh] overflow-y-auto p-4">
         <SheetTitle>{t('placeholder')}</SheetTitle>
