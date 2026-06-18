@@ -905,6 +905,9 @@
       "insurance": "保険",
       "insuranceDeclined": "なし",
       "perDay": "/ 日",
+      "priceBreakdown": "料金内訳",
+      "basePrice": "レンタル料金",
+      "total": "合計",
       "preAuthTitle": "ご予約の事前承認",
       "preAuthExplain": "オペレーターは保証金として、受取時にお客様のカードへ一時的な与信枠（事前承認）を設定します。これは請求ではありません。受取前に完了すると、引き渡しがスムーズになります。",
       "preAuthCta": "事前承認を完了する",
@@ -1274,7 +1277,6 @@
       "heading": "予約内容の確認",
       "base": "レンタル料金",
       "insurance": "保険",
-      "addOns": "オプション",
       "total": "推定合計",
       "note": "税金および事業者手数料はお支払い時に計算されます。"
     },
