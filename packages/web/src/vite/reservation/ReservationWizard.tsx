@@ -1,6 +1,9 @@
-import { Button } from '@/components/ui/button'
+import { Button, buttonVariants } from '@/components/ui/button'
+import { formatJstDateTimeLocal } from '@/lib/datetime'
 import type { CreateBookingInput } from '@/vite/bookings/api'
 import type { AvailableVehicleData } from '@/vite/storefronts/api'
+import { Link } from '@tanstack/react-router'
+import { ArrowLeft } from 'lucide-react'
 import { useState } from 'react'
 import { useTranslations } from 'use-intl'
 import { AddOnsStep } from './AddOnsStep'
@@ -138,7 +141,19 @@ export function ReservationWizard({
               {t('nav.back')}
             </Button>
           ) : (
-            <span />
+            // First step has no in-wizard back; link out to the storefront the
+            // renter came from so they're never stranded (#962). Dates are
+            // reformatted to JST datetime-local — the storefront route redirects
+            // to /search if parseSearchRange can't read a raw ISO instant.
+            <Link
+              to="/$locale/storefronts/$locationId"
+              params={{ locale, locationId }}
+              search={{ from: formatJstDateTimeLocal(from), to: formatJstDateTimeLocal(to) }}
+              className={buttonVariants({ variant: 'outline' })}
+            >
+              <ArrowLeft className="size-4" />
+              {t('nav.backToListing')}
+            </Link>
           )}
           <Button type="button" onClick={goNext}>
             {step === 'confirm' ? t('nav.toPayment') : t('nav.continue')}

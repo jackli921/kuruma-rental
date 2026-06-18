@@ -1,4 +1,4 @@
-import type { FeeType } from '@kuruma/shared/db/schema'
+import type { BookingSource, FeeType } from '@kuruma/shared/db/schema'
 
 // Outbound email i18n. Distinct from the web `next-intl` namespaces (these render
 // in the API), so adding a key here needs no dev-server restart. Keep all three
@@ -27,6 +27,15 @@ export interface EmailStrings {
   operatorSubject: string
   operatorHeading: string
   renterLabel: string
+  // #960 operator-alert enrichment: contact, duration units, source, add-ons, deep link
+  contactLabel: string
+  sourceLabel: string
+  addOnsLabel: string
+  manageBookingTitle: string
+  manageBookingCta: string
+  dayUnit: string
+  hourUnit: string
+  sourceNames: Record<BookingSource, string>
   // #664 renter lifecycle pushes
   substitutionSubject: string // booking code appended
   substitutionHeading: string
@@ -63,6 +72,14 @@ const en: EmailStrings = {
   operatorSubject: 'New booking —',
   operatorHeading: 'A new booking has landed:',
   renterLabel: 'Renter',
+  contactLabel: 'Contact',
+  sourceLabel: 'Source',
+  addOnsLabel: 'Add-ons',
+  manageBookingTitle: 'Manage this booking',
+  manageBookingCta: 'Open booking in your dashboard',
+  dayUnit: 'd',
+  hourUnit: 'h',
+  sourceNames: { DIRECT: 'Direct', TRIP_COM: 'Trip.com', MANUAL: 'Manual', OTHER: 'Other' },
   substitutionSubject: 'Vehicle changed —',
   substitutionHeading: 'The vehicle assigned to your booking has changed. Your new vehicle:',
   newVehicleLabel: 'New vehicle',
@@ -101,6 +118,14 @@ const ja: EmailStrings = {
   operatorSubject: '新規予約 —',
   operatorHeading: '新しい予約が入りました:',
   renterLabel: '利用者',
+  contactLabel: '連絡先',
+  sourceLabel: '予約元',
+  addOnsLabel: 'オプション',
+  manageBookingTitle: '予約の管理',
+  manageBookingCta: 'ダッシュボードで予約を開く',
+  dayUnit: '日',
+  hourUnit: '時間',
+  sourceNames: { DIRECT: '直接', TRIP_COM: 'Trip.com', MANUAL: '手動', OTHER: 'その他' },
   substitutionSubject: '車両変更のお知らせ —',
   substitutionHeading: 'ご予約の車両が変更されました。新しい車両は以下のとおりです:',
   newVehicleLabel: '新しい車両',
@@ -139,6 +164,14 @@ const zh: EmailStrings = {
   operatorSubject: '新预订 —',
   operatorHeading: '收到一笔新预订:',
   renterLabel: '租客',
+  contactLabel: '联系方式',
+  sourceLabel: '预订来源',
+  addOnsLabel: '附加项目',
+  manageBookingTitle: '管理此预订',
+  manageBookingCta: '在仪表板中打开预订',
+  dayUnit: '天',
+  hourUnit: '小时',
+  sourceNames: { DIRECT: '直接', TRIP_COM: 'Trip.com', MANUAL: '手动', OTHER: '其他' },
   substitutionSubject: '车辆变更通知 —',
   substitutionHeading: '您预订的车辆已变更。您的新车辆为:',
   newVehicleLabel: '新车辆',
