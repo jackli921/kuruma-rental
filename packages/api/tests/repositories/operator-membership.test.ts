@@ -114,4 +114,36 @@ describe('InMemoryOperatorMembershipRepository', () => {
       expect(members.map((m) => m.userId)).toEqual(['u_older', 'u_newer'])
     })
   })
+
+  // #904 slice 2: the owner deactivates a member. ACTIVE -> REVOKED, scoped to
+  // (id, operatorId) so a tenant can only touch its own rows; a no-match reads as
+  // undefined (the service maps that to a 404, never a cross-tenant oracle).
+  describe('deactivate', () => {
+    it('flips an ACTIVE membership to REVOKED, frees the active slot, and returns the row', async () => {
+      const m = await repo.create(membershipInput({ userId: 'u' }))
+      const before = m.updatedAt
+      const revoked = await repo.deactivate(m.id, 'op_test')
+      expect(revoked?.id).toBe(m.id)
+      expect(revoked?.status).toBe('REVOKED')
+      expect(revoked?.updatedAt.getTime()).toBeGreaterThanOrEqual(before.getTime())
+      // Drops off the active set + frees the partial-unique slot for a re-invite.
+      expect(await repo.findActiveByUserId('u')).toBeUndefined()
+      expect(await repo.findActiveByOperator('op_test')).toEqual([])
+    })
+
+    it('returns undefined for another operator id (scoped) and leaves the row ACTIVE', async () => {
+      const m = await repo.create(membershipInput({ userId: 'u' }))
+      expect(await repo.deactivate(m.id, 'op_other')).toBeUndefined()
+      expect((await repo.findActiveByUserId('u'))?.status).toBe('ACTIVE')
+    })
+
+    it('returns undefined for an unknown id', async () => {
+      expect(await repo.deactivate('nope', 'op_test')).toBeUndefined()
+    })
+
+    it('returns undefined when the membership is already REVOKED (only ACTIVE transitions)', async () => {
+      const m = await repo.create(membershipInput({ userId: 'u', status: 'REVOKED' }))
+      expect(await repo.deactivate(m.id, 'op_test')).toBeUndefined()
+    })
+  })
 })

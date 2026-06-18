@@ -7,7 +7,7 @@ import { useSession } from '@/vite/session'
 import { render, screen, within } from '@testing-library/react'
 import type { ReactNode } from 'react'
 import { IntlProvider } from 'use-intl'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import en from '../../../messages/en.json'
 
 vi.mock('@/vite/session', () => ({ useSession: vi.fn() }))
@@ -81,6 +81,10 @@ beforeEach(() => {
   document.cookie = 'kuruma-view=; max-age=0; path=/'
 })
 
+afterEach(() => {
+  vi.unstubAllEnvs()
+})
+
 describe('Navbar', () => {
   it('links the logo to the locale home and shows no nav links when signed out', () => {
     renderNavbar(undefined)
@@ -93,6 +97,10 @@ describe('Navbar', () => {
 
   it('shows the dashboard, operator bookings + fleet + classes + insurance links and business markers for a business user', () => {
     mockUseBadge.mockReturnValue({ count: 3 })
+    // Team + Settings are post-MVP add-ons gated behind feature flags; turn them
+    // on so this "full operator nav" assertion sees every route.
+    vi.stubEnv('VITE_FEATURE_OPERATOR_TEAM', 'true')
+    vi.stubEnv('VITE_FEATURE_OPERATOR_SETTINGS', 'true')
     const { container } = renderNavbar(business)
     expect(screen.getByText('Dashboard').closest('a')).toHaveAttribute(
       'data-to',
@@ -131,6 +139,12 @@ describe('Navbar', () => {
       'data-to',
       '/$locale/manage/add-ons',
     )
+    // #904 / #903: shown only because the flags above are on (full build).
+    expect(screen.getByText('Team').closest('a')).toHaveAttribute('data-to', '/$locale/manage/team')
+    expect(screen.getByText('Settings').closest('a')).toHaveAttribute(
+      'data-to',
+      '/$locale/manage/settings',
+    )
     expect(container.querySelector('nav')?.hasAttribute('data-business-nav')).toBe(true)
     const client = screen.getByTestId('navbar-client')
     expect(client).toHaveAttribute('data-view-mode', 'business')
@@ -150,9 +164,28 @@ describe('Navbar', () => {
     expect(screen.getAllByRole('status')).toHaveLength(1)
   })
 
+  it('hides Team + Settings nav in the beta MVP demo (their post-MVP flags are off)', () => {
+    vi.stubEnv('VITE_FEATURE_OPERATOR_TEAM', undefined)
+    vi.stubEnv('VITE_FEATURE_OPERATOR_SETTINGS', undefined)
+    renderNavbar(business)
+    // The MVP operator routes still render…
+    expect(screen.getByText('Dashboard')).toBeInTheDocument()
+    expect(screen.getByText('Bookings')).toBeInTheDocument()
+    // …but the two add-on routes are filtered out of the rendered nav.
+    expect(screen.queryByText('Team')).toBeNull()
+    expect(screen.queryByText('Settings')).toBeNull()
+    expect(screen.getByTestId('mobile-menu')).toHaveAttribute(
+      'data-nav-count',
+      String(businessNavItems.length - 2),
+    )
+  })
+
   it('shows Browse, My Bookings, and Documents (no business markers) for a signed-in renter', () => {
     // Even with a non-zero count, the operator badge is gated to business view.
     mockUseBadge.mockReturnValue({ count: 5 })
+    // Documents is a post-MVP add-on gated behind a flag; enable it so this
+    // "full renter nav" assertion sees it (the OFF case is its own test below).
+    vi.stubEnv('VITE_FEATURE_RENTER_DOCUMENTS', 'true')
     const { container } = renderNavbar(renter)
     expect(screen.getByText('Browse').closest('a')).toHaveAttribute('data-to', '/$locale/search')
     expect(screen.getByText('My Bookings').closest('a')).toHaveAttribute(
@@ -170,6 +203,15 @@ describe('Navbar', () => {
     expect(client).toHaveAttribute('data-can-switch', 'false')
     // Desktop + mobile share the same derived navItems (Browse + 2 renter-only).
     expect(screen.getByTestId('mobile-menu')).toHaveAttribute('data-nav-count', '3')
+  })
+
+  it('hides Documents in the beta MVP demo (renter-documents flag off)', () => {
+    renderNavbar(renter)
+    expect(screen.getByText('Browse')).toBeInTheDocument()
+    expect(screen.getByText('My Bookings')).toBeInTheDocument()
+    // The orphaned IDP-upload page is filtered out — Browse + My Bookings only.
+    expect(screen.queryByText('Documents')).toBeNull()
+    expect(screen.getByTestId('mobile-menu')).toHaveAttribute('data-nav-count', '2')
   })
 
   it('hides My Bookings/Documents for an operator in renter view — gating is by role, not view (P1, AC6)', () => {

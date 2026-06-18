@@ -1,3 +1,5 @@
+import { boundFetch } from '@kuruma/shared/lib/bound-fetch'
+
 import type { EmailMessage, EmailSender, SendResult } from './email-sender'
 
 const ENDPOINT = 'https://api.resend.com/emails'
@@ -22,9 +24,9 @@ export class ResendEmailSender implements EmailSender {
   constructor(
     private readonly apiKey: string,
     private readonly defaultFrom: string,
-    // Bound to globalThis: CF Workers' global fetch is a branded builtin that
-    // throws "Illegal invocation" if called detached (here, as this.fetchFn). #887
-    private readonly fetchFn: typeof fetch = fetch.bind(globalThis),
+    // boundFetch keeps this === globalThis when called detached as this.fetchFn;
+    // a bare global fetch throws "Illegal invocation" on CF Workers (#887/#893).
+    private readonly fetchFn: typeof fetch = boundFetch,
   ) {}
 
   async send(message: EmailMessage): Promise<SendResult> {

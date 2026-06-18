@@ -1,10 +1,11 @@
 import { buttonVariants } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
+import { isRenterDocumentsEnabled } from '@/vite/config/features'
 import { LocaleSwitcher } from '@/vite/nav/LocaleSwitcher'
 import { MobileMenu, type NavItem } from '@/vite/nav/MobileMenu'
 import { NavBadge } from '@/vite/nav/NavBadge'
 import { NavbarClient } from '@/vite/nav/NavbarClient'
-import { businessNavItems } from '@/vite/nav/business-nav-items'
+import { visibleBusinessNavItems } from '@/vite/nav/business-nav-items'
 import { useNewBookingsBadge } from '@/vite/operator-bookings/useNewBookingsBadge'
 import { useSession } from '@/vite/session'
 import { getViewMode, isBusiness } from '@/vite/view-mode'
@@ -35,12 +36,16 @@ export function Navbar() {
   const renterNavItems: readonly NavItem[] = isRenter
     ? [
         { to: '/$locale/bookings', label: t('myBookings') },
-        { to: '/$locale/documents', label: t('documents') },
+        // Documents (IDP upload, #459) is gated OFF for the beta demo: the
+        // instant-book flow no longer requires it. See vite/config/features.ts.
+        ...(isRenterDocumentsEnabled()
+          ? [{ to: '/$locale/documents' as const, label: t('documents') }]
+          : []),
       ]
     : []
 
   const navItems: readonly NavItem[] = isBusinessView
-    ? businessNavItems.map((item) => ({
+    ? visibleBusinessNavItems().map((item) => ({
         to: item.to,
         label: t(item.labelKey),
         // exactOptionalPropertyTypes: only attach `badge` when there is one.

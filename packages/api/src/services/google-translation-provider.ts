@@ -1,3 +1,5 @@
+import { boundFetch } from '@kuruma/shared/lib/bound-fetch'
+
 import type { TranslationProvider } from './translation-provider'
 
 const ENDPOINT = 'https://translation.googleapis.com/language/translate/v2'
@@ -22,9 +24,9 @@ interface GoogleResponse {
 export class GoogleTranslationProvider implements TranslationProvider {
   constructor(
     private readonly apiKey: string,
-    // Bound to globalThis: CF Workers' global fetch is a branded builtin that
-    // throws "Illegal invocation" if called detached (here, as this.fetchFn). #887
-    private readonly fetchFn: typeof fetch = fetch.bind(globalThis),
+    // boundFetch keeps this === globalThis when called detached as this.fetchFn;
+    // a bare global fetch throws "Illegal invocation" on CF Workers (#887/#893).
+    private readonly fetchFn: typeof fetch = boundFetch,
   ) {}
 
   async translate(

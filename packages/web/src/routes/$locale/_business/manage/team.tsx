@@ -1,12 +1,21 @@
 import { Button } from '@/components/ui/button'
 import { PageSkeleton } from '@/vite/PageSkeleton'
+import { isOperatorTeamEnabled } from '@/vite/config/features'
 import { isOperatorOwnerSession, isOperatorSession } from '@/vite/guards'
+import { DeactivateMemberDialog } from '@/vite/operator-team/DeactivateMemberDialog'
 import { InviteStaffDialog } from '@/vite/operator-team/InviteStaffDialog'
+import { RevokeInviteDialog } from '@/vite/operator-team/RevokeInviteDialog'
 import { TeamView } from '@/vite/operator-team/TeamView'
 import { teamInvitesQueryOptions, teamMembersQueryOptions } from '@/vite/operator-team/api'
 import { sessionQueryOptions } from '@/vite/session'
+import type { OperatorInviteData, OperatorMemberData } from '@kuruma/shared/types/operator-team'
 import { useSuspenseQuery } from '@tanstack/react-query'
-import { type ErrorComponentProps, createFileRoute, useRouter } from '@tanstack/react-router'
+import {
+  type ErrorComponentProps,
+  createFileRoute,
+  redirect,
+  useRouter,
+} from '@tanstack/react-router'
 import { UserPlus } from 'lucide-react'
 import { useState } from 'react'
 import { useTranslations } from 'use-intl'
@@ -18,6 +27,13 @@ import { useTranslations } from 'use-intl'
 // operatorId). Inviting is owner-only (isOperatorOwnerSession), mirroring the
 // API's requireOperatorOwnerWrite gate; staff and bypass roles see read-only.
 export const Route = createFileRoute('/$locale/_business/manage/team')({
+  // Post-MVP feature (#904), hidden in the beta demo. The nav link is already
+  // filtered out; this blocks a direct URL too, falling back to the bookings page.
+  beforeLoad: ({ params }) => {
+    if (!isOperatorTeamEnabled()) {
+      throw redirect({ to: '/$locale/manage/bookings', params: { locale: params.locale } })
+    }
+  },
   loader: async ({ context }) => {
     await Promise.all([
       context.queryClient.ensureQueryData(sessionQueryOptions()),
@@ -36,12 +52,15 @@ export function OperatorTeamRoute() {
   const { data: members } = useSuspenseQuery(teamMembersQueryOptions())
   const { data: invites } = useSuspenseQuery(teamInvitesQueryOptions())
   const [inviteOpen, setInviteOpen] = useState(false)
+  const [selectedInvite, setSelectedInvite] = useState<OperatorInviteData | null>(null)
+  const [selectedMember, setSelectedMember] = useState<OperatorMemberData | null>(null)
 
   // A bypass role (PLATFORM_ADMIN / legacy STAFF·ADMIN) carries no operatorId and
   // has no single team to manage — it onboards operators via the admin portal.
   const hasOperator = isOperatorSession(session)
-  // Inviting is owner-only; staff see the team read-only (API is the real gate).
-  const canInvite = isOperatorOwnerSession(session)
+  // Managing (invite / revoke / deactivate) is owner-only; staff see the team
+  // read-only (the API's requireOperatorOwnerWrite gate is the real enforcement).
+  const canManage = isOperatorOwnerSession(session)
 
   return (
     <main className="flex-1 px-4 py-10 sm:px-6 lg:px-8">
@@ -51,7 +70,7 @@ export function OperatorTeamRoute() {
             <h1 className="text-3xl font-bold tracking-tight sm:text-4xl">{t('title')}</h1>
             <p className="mt-2 text-lg text-muted-foreground">{t('subtitle')}</p>
           </div>
-          {canInvite && (
+          {canManage && (
             <Button onClick={() => setInviteOpen(true)} className="shrink-0">
               <UserPlus className="size-4" />
               {t('invite')}
@@ -61,19 +80,37 @@ export function OperatorTeamRoute() {
 
         {hasOperator ? (
           <>
-            {!canInvite && <p className="mb-6 text-sm text-muted-foreground">{t('staffNotice')}</p>}
-            <TeamView members={members} invites={invites} />
+            {!canManage && <p className="mb-6 text-sm text-muted-foreground">{t('staffNotice')}</p>}
+            <TeamView
+              members={members}
+              invites={invites}
+              canManage={canManage}
+              onRevokeInvite={setSelectedInvite}
+              onDeactivateMember={setSelectedMember}
+            />
           </>
         ) : (
           <p className="text-muted-foreground">{t('noOperatorContext')}</p>
         )}
 
-        {canInvite && session && (
-          <InviteStaffDialog
-            open={inviteOpen}
-            onOpenChange={setInviteOpen}
-            csrfToken={session.csrfToken}
-          />
+        {canManage && session && (
+          <>
+            <InviteStaffDialog
+              open={inviteOpen}
+              onOpenChange={setInviteOpen}
+              csrfToken={session.csrfToken}
+            />
+            <RevokeInviteDialog
+              invite={selectedInvite}
+              onOpenChange={(open) => !open && setSelectedInvite(null)}
+              csrfToken={session.csrfToken}
+            />
+            <DeactivateMemberDialog
+              member={selectedMember}
+              onOpenChange={(open) => !open && setSelectedMember(null)}
+              csrfToken={session.csrfToken}
+            />
+          </>
         )}
       </div>
     </main>

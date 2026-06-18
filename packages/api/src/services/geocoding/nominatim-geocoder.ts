@@ -1,3 +1,5 @@
+import { boundFetch } from '@kuruma/shared/lib/bound-fetch'
+
 import type { GeocodeOutcome, Geocoder } from './types'
 
 // A provider miss/error is un-geocodable as far as this adapter knows — retrying
@@ -26,9 +28,9 @@ export class NominatimGeocoder implements Geocoder {
   constructor(
     private readonly baseUrl: string,
     private readonly userAgent: string,
-    // Bound to globalThis: CF Workers' global fetch is a branded builtin that
-    // throws "Illegal invocation" if called detached (here, as this.fetchFn). #887
-    private readonly fetchFn: typeof fetch = fetch.bind(globalThis),
+    // boundFetch keeps this === globalThis when called detached as this.fetchFn;
+    // a bare global fetch throws "Illegal invocation" on CF Workers (#887/#893).
+    private readonly fetchFn: typeof fetch = boundFetch,
     // Optional auth token. LocationIQ is Nominatim-compatible but key-gated via
     // `?key=` (#574), so providing one makes it a pure env-var swap from public OSM.
     private readonly apiKey?: string,

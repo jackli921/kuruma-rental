@@ -7,7 +7,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { act, render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { IntlProvider } from 'use-intl'
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import enMessages from '../../../messages/en.json'
 
 const c = enMessages.bookings.operator.newBooking
@@ -97,8 +97,16 @@ function renderRoute(
   )
 }
 
+// Manual/walk-in booking (#589) is a post-MVP add-on gated behind a flag (OFF in
+// the beta demo). These tests cover the feature, so enable it; the OFF case below
+// asserts the affordance disappears entirely.
+beforeEach(() => {
+  vi.stubEnv('VITE_FEATURE_OPERATOR_MANUAL_BOOKING', 'true')
+})
+
 afterEach(() => {
   vi.restoreAllMocks()
+  vi.unstubAllEnvs()
   calendarProps = {}
 })
 
@@ -106,6 +114,13 @@ describe('OperatorBookingsRoute manual-booking affordance (#589 1d)', () => {
   it('shows the New Booking button for a tenant-scoped operator session', () => {
     renderRoute(operatorSession)
     expect(screen.getByRole('button', { name: c.action })).toBeInTheDocument()
+  })
+
+  it('hides the New Booking affordance in the beta MVP demo (manual-booking flag off)', () => {
+    vi.stubEnv('VITE_FEATURE_OPERATOR_MANUAL_BOOKING', undefined)
+    renderRoute(operatorSession)
+    expect(screen.queryByRole('button', { name: c.action })).not.toBeInTheDocument()
+    expect(calendarProps.selectable).toBe(false)
   })
 
   it('hides the New Booking button for a bypass (non-operator) session', () => {

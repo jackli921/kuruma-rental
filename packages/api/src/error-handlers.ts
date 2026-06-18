@@ -1,7 +1,12 @@
 import * as Sentry from '@sentry/cloudflare'
 import type { Hono } from 'hono'
 import { HTTPException } from 'hono/http-exception'
-import { ForbiddenError, OperatorRequiredError } from './middleware/auth'
+import {
+  ConflictError,
+  ForbiddenError,
+  NotFoundError,
+  OperatorRequiredError,
+} from './middleware/auth'
 
 export function setupGlobalHandlers(app: Hono): void {
   app.onError((err, c) => {
@@ -21,7 +26,19 @@ export function setupGlobalHandlers(app: Hono): void {
     // A non-operator write that named no target operator and could not be
     // inferred (zero or 2+ operators). Well-formed but unprocessable (#401).
     if (err instanceof OperatorRequiredError) {
-      return c.json({ success: false, error: err.message }, 422)
+      // Self-describing envelope code so the web discriminates this 422 by `code`
+      // rather than regex-matching the message (a reword/i18n change can't break it) (#934).
+      return c.json({ success: false, error: err.message, code: 'OPERATOR_REQUIRED' }, 422)
+    }
+    // #904: operator self-service action against an id that doesn't resolve in
+    // the caller's own tenant (unknown/terminal invite or member). 404.
+    if (err instanceof NotFoundError) {
+      return c.json({ success: false, error: err.message }, 404)
+    }
+    // #904: well-formed, authorized request that conflicts with current state —
+    // last-owner lockout or a duplicate pending invite. 409 with the reason.
+    if (err instanceof ConflictError) {
+      return c.json({ success: false, error: err.message }, 409)
     }
     // Only genuinely-unexpected errors reach here — the handled policy
     // responses (HTTPException-with-res, Forbidden 403, OperatorRequired 422)

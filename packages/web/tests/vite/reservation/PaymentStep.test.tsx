@@ -137,6 +137,62 @@ describe('PaymentStep (instant-book submit, #511)', () => {
     expect(mockNavigate).not.toHaveBeenCalled()
   })
 
+  it('shows the upload-documents message only for a 403 carrying DOCUMENT_VERIFICATION_REQUIRED', async () => {
+    mockCreateBooking.mockRejectedValue(
+      new ApiError(
+        'An approved International Driving Permit is required to book.',
+        403,
+        'DOCUMENT_VERIFICATION_REQUIRED',
+      ),
+    )
+    const user = userEvent.setup()
+    renderStep()
+
+    await user.click(screen.getByRole('checkbox'))
+    await user.click(screen.getByRole('button', { name: 'Reserve now' }))
+
+    expect(
+      await screen.findByText(
+        'Document verification is required before you can book. Please upload your documents first.',
+      ),
+    ).toBeInTheDocument()
+    expect(mockNavigate).not.toHaveBeenCalled()
+  })
+
+  it('routes an unrelated 403 (no document code) to the generic message, not the docs prompt', async () => {
+    // e.g. an operator-scope deny: same status, but the renter has no documents
+    // to upload — telling them to "upload documents" would be a dead end.
+    mockCreateBooking.mockRejectedValue(
+      new ApiError('Cannot book for a renter outside your customers', 403),
+    )
+    const user = userEvent.setup()
+    renderStep()
+
+    await user.click(screen.getByRole('checkbox'))
+    await user.click(screen.getByRole('button', { name: 'Reserve now' }))
+
+    expect(
+      await screen.findByText("We couldn't create your booking. Please review and try again."),
+    ).toBeInTheDocument()
+    expect(screen.queryByText(/upload your documents first/)).not.toBeInTheDocument()
+  })
+
+  it('routes a 403 carrying a DIFFERENT code to the generic message, not the docs prompt', async () => {
+    // Pins the check to `=== DOCUMENT_VERIFICATION_REQUIRED`, not merely "a code
+    // is present": some other coded 403 must still fall through to generic.
+    mockCreateBooking.mockRejectedValue(new ApiError('forbidden', 403, 'SOME_OTHER_CODE'))
+    const user = userEvent.setup()
+    renderStep()
+
+    await user.click(screen.getByRole('checkbox'))
+    await user.click(screen.getByRole('button', { name: 'Reserve now' }))
+
+    expect(
+      await screen.findByText("We couldn't create your booking. Please review and try again."),
+    ).toBeInTheDocument()
+    expect(screen.queryByText(/upload your documents first/)).not.toBeInTheDocument()
+  })
+
   it('calls onBack when the back button is pressed', async () => {
     const { onBack } = renderStep()
     await userEvent.setup().click(screen.getByRole('button', { name: 'Back' }))

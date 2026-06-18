@@ -1,0 +1,1 @@
+ALTER TYPE "public"."provider_invite_status" ADD VALUE 'REVOKED';

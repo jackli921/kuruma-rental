@@ -1,4 +1,5 @@
 import { Button } from '@/components/ui/button'
+import { isCancellationEnabled } from '@/vite/config/features'
 import { isOperatorSession } from '@/vite/guards'
 import { CancelBookingDialog } from '@/vite/operator-bookings/CancelBookingDialog'
 import { SubstituteVehicleDialog } from '@/vite/operator-bookings/SubstituteVehicleDialog'
@@ -91,7 +92,7 @@ export function BookingActionsPanel({
           {/* Only CONFIRMED bookings can be cancelled — the server 409s any other
               status. An ACTIVE (picked-up) trip is past the cancellation window, so
               we hide the button rather than offer a dead-end action. */}
-          {detail.status === 'CONFIRMED' && (
+          {isCancellationEnabled() && detail.status === 'CONFIRMED' && (
             <CancelBookingDialog bookingId={detail.id} csrfToken={csrfToken} />
           )}
         </div>

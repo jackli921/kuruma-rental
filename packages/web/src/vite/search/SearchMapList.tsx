@@ -1,4 +1,6 @@
 import { cn } from '@/lib/utils'
+import type { GeoPoint } from '@kuruma/shared/lib/region-distance'
+import type { RegionNode } from '@kuruma/shared/types/region'
 import type { SearchResultItem } from '@kuruma/shared/types/search-result'
 import { MapPin } from 'lucide-react'
 import { useMemo, useState } from 'react'
@@ -6,7 +8,13 @@ import { useTranslations } from 'use-intl'
 import type { MapAdapter } from './MapAdapter'
 import { MapPopupCarousel } from './MapPopupCarousel'
 import { SearchResultRow } from './SearchResultRow'
-import { groupByLocation, pinPriceLabel, searchResultKey } from './result'
+import {
+  formatGeoContext,
+  groupByLocation,
+  pinPriceLabel,
+  resolveGeoContext,
+  searchResultKey,
+} from './result'
 
 interface SearchMapListProps {
   readonly items: SearchResultItem[]
@@ -21,6 +29,10 @@ interface SearchMapListProps {
   readonly classFilter?: string | string[] | undefined
   readonly pickupLocationId?: string | undefined
   readonly region?: string | undefined
+  /** Region taxonomy (cached `GET /regions`) for deriving geo-context labels (#885 slice 3a). */
+  readonly regions?: readonly RegionNode[]
+  /** Searched region centre; the distance reference for each label, null when none (#885 slice 3a). */
+  readonly geoAnchor?: GeoPoint | null
 }
 
 /**
@@ -34,6 +46,8 @@ export function SearchMapList({
   items,
   adapter: Adapter,
   anchor = null,
+  regions = [],
+  geoAnchor = null,
   locale,
   from,
   to,
@@ -53,6 +67,22 @@ export function SearchMapList({
     for (const group of groupByLocation(items)) byId.set(group.locationId, group.items)
     return byId
   }, [items])
+
+  // Derive each location's geo-context label once (the shell), so the leaf row and
+  // popup take a dumb string and `regions` stays out of them. Iterate per location
+  // (not per car) — the label is keyed by locationId and co-located cars share it, so
+  // walking the region taxonomy once per group avoids redundant work. Absent until
+  // the region query resolves.
+  const geoLabelById = useMemo(() => {
+    const byId = new Map<string, string>()
+    for (const group of groupByLocation(items)) {
+      const location = group.items[0]?.location
+      if (!location) continue
+      const label = formatGeoContext(resolveGeoContext(location, regions, geoAnchor), locale, t)
+      if (label) byId.set(group.locationId, label)
+    }
+    return byId
+  }, [items, regions, geoAnchor, locale, t])
 
   return (
     <div className="grid gap-4 lg:grid-cols-2">
@@ -91,6 +121,7 @@ export function SearchMapList({
                 classFilter={classFilter}
                 pickupLocationId={pickupLocationId}
                 region={region}
+                geoLabel={geoLabelById.get(locationId) ?? null}
               />
               {geocoded && (
                 <button
@@ -157,6 +188,7 @@ export function SearchMapList({
                 classFilter={classFilter}
                 pickupLocationId={pickupLocationId}
                 region={region}
+                geoLabel={geoLabelById.get(item.location.locationId) ?? null}
               />
             )}
           />

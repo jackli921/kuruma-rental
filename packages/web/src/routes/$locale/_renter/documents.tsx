@@ -1,9 +1,18 @@
+import { isRenterDocumentsEnabled } from '@/vite/config/features'
 import { DocumentUploadCard } from '@/vite/documents/DocumentUploadCard'
-import { createFileRoute } from '@tanstack/react-router'
+import { createFileRoute, redirect } from '@tanstack/react-router'
 
 // Renter document upload (#459). Sits under `_renter`, so it inherits the
-// session guard (redirect to login if signed out) without its own beforeLoad.
+// session guard (redirect to login if signed out).
 export const Route = createFileRoute('/$locale/_renter/documents')({
+  // Post-MVP feature, hidden in the beta demo: the instant-book flow doesn't
+  // gate on uploaded documents, so this page is orphaned. The nav link is
+  // filtered out; this blocks a direct URL too, falling back to search.
+  beforeLoad: ({ params }) => {
+    if (!isRenterDocumentsEnabled()) {
+      throw redirect({ to: '/$locale/search', params: { locale: params.locale } })
+    }
+  },
   component: DocumentsRoute,
 })
 

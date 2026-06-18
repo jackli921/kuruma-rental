@@ -11,6 +11,7 @@ import { createNotificationRoutes } from '../../src/routes/notifications'
 import type { EmailSender } from '../../src/services/email/email-sender'
 import { NotificationService } from '../../src/services/notification'
 import { NotificationDispatcher } from '../../src/services/notification-dispatcher'
+import { makeResolveOperatorRecipients } from '../../src/services/operator-recipients'
 import type { Booking, NotificationLog } from '../../src/stores'
 import { testAuthMiddleware } from '../helpers/auth'
 import { makeBooking as makeBookingFixture } from '../helpers/booking'
@@ -126,34 +127,37 @@ async function setup() {
     userRepo,
     // #878: the operator alert resolves recipients from the membership ledger —
     // seed each operator's owner as an ACTIVE member so the seeded alert rows land.
-    new InMemoryOperatorMembershipRepository(
-      new Map([
-        [
-          'mem-a',
-          {
-            id: 'mem-a',
-            userId: 'owner-a',
-            operatorId: OP_A,
-            role: 'OPERATOR_OWNER' as const,
-            status: 'ACTIVE' as const,
-            createdAt: NOW,
-            updatedAt: NOW,
-          },
-        ],
-        [
-          'mem-b',
-          {
-            id: 'mem-b',
-            userId: 'owner-b',
-            operatorId: OP_B,
-            role: 'OPERATOR_OWNER' as const,
-            status: 'ACTIVE' as const,
-            createdAt: NOW,
-            updatedAt: NOW,
-          },
-        ],
-      ]),
-    ),
+    makeResolveOperatorRecipients({
+      userRepo,
+      membershipRepo: new InMemoryOperatorMembershipRepository(
+        new Map([
+          [
+            'mem-a',
+            {
+              id: 'mem-a',
+              userId: 'owner-a',
+              operatorId: OP_A,
+              role: 'OPERATOR_OWNER' as const,
+              status: 'ACTIVE' as const,
+              createdAt: NOW,
+              updatedAt: NOW,
+            },
+          ],
+          [
+            'mem-b',
+            {
+              id: 'mem-b',
+              userId: 'owner-b',
+              operatorId: OP_B,
+              role: 'OPERATOR_OWNER' as const,
+              status: 'ACTIVE' as const,
+              createdAt: NOW,
+              updatedAt: NOW,
+            },
+          ],
+        ]),
+      ),
+    }),
     fakeLocationRepo,
     sender,
     { emailFrom: 'noreply@kuruma.jp' },

@@ -96,7 +96,10 @@ export type OperatorRole = (typeof OPERATOR_ROLES)[number]
 export const OPERATOR_MEMBERSHIP_STATUSES = ['ACTIVE', 'REVOKED'] as const
 export type OperatorMembershipStatus = (typeof OPERATOR_MEMBERSHIP_STATUSES)[number]
 
-export const PROVIDER_INVITE_STATUSES = ['PENDING', 'ACCEPTED'] as const
+// #904: REVOKED appended last — ALTER TYPE ADD VALUE appends positionally and
+// enums.test.ts pins order contractually. An owner-revoked invite is terminal,
+// distinct from ACCEPTED; listByOperator (PENDING-only) drops it off the team page.
+export const PROVIDER_INVITE_STATUSES = ['PENDING', 'ACCEPTED', 'REVOKED'] as const
 export type ProviderInviteStatus = (typeof PROVIDER_INVITE_STATUSES)[number]
 
 // Region taxonomy levels (#394/#651): prefecture -> city -> area. Order is

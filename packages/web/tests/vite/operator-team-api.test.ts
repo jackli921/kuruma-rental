@@ -1,4 +1,10 @@
-import { fetchTeamInvites, fetchTeamMembers, inviteStaff } from '@/vite/operator-team/api'
+import {
+  deactivateMember,
+  fetchTeamInvites,
+  fetchTeamMembers,
+  inviteStaff,
+  revokeInvite,
+} from '@/vite/operator-team/api'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 function jsonResponse(body: unknown, status = 200): Response {
@@ -43,6 +49,56 @@ describe('inviteStaff', () => {
       vi.fn(async () => jsonResponse({ success: false, error: 'CSRF token mismatch' }, 403)),
     )
     await expect(inviteStaff({ email: 'x@x.com' }, 'stale')).rejects.toThrow()
+  })
+})
+
+describe('revokeInvite', () => {
+  it('POSTs to the scoped revoke path with the CSRF header', async () => {
+    const fetchMock = vi.fn(async () => jsonResponse({ success: true, data: { id: 'i1' } }))
+    vi.stubGlobal('fetch', fetchMock)
+
+    await revokeInvite('i1', 'csrf-1')
+
+    const [url, opts] = fetchMock.mock.calls[0] as [string, RequestInit]
+    expect(url).toContain('/operators/me/invites/i1/revoke')
+    expect(opts.method).toBe('POST')
+    expect((opts.headers as Record<string, string>)['X-CSRF-Token']).toBe('csrf-1')
+    expect(opts.credentials).toBe('include')
+  })
+
+  it('throws on a 404 (already revoked / foreign tenant)', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => jsonResponse({ success: false, error: 'invite not found' }, 404)),
+    )
+    await expect(revokeInvite('nope', 'csrf-1')).rejects.toThrow('invite not found')
+  })
+})
+
+describe('deactivateMember', () => {
+  it('POSTs to the scoped deactivate path with the CSRF header', async () => {
+    const fetchMock = vi.fn(async () => jsonResponse({ success: true, data: { id: 'm1' } }))
+    vi.stubGlobal('fetch', fetchMock)
+
+    await deactivateMember('m1', 'csrf-1')
+
+    const [url, opts] = fetchMock.mock.calls[0] as [string, RequestInit]
+    expect(url).toContain('/operators/me/members/m1/deactivate')
+    expect(opts.method).toBe('POST')
+    expect((opts.headers as Record<string, string>)['X-CSRF-Token']).toBe('csrf-1')
+    expect(opts.credentials).toBe('include')
+  })
+
+  it('surfaces the 409 last-owner message so the dialog can show it', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () =>
+        jsonResponse({ success: false, error: 'cannot deactivate the last operator owner' }, 409),
+      ),
+    )
+    await expect(deactivateMember('m1', 'csrf-1')).rejects.toThrow(
+      'cannot deactivate the last operator owner',
+    )
   })
 })
 

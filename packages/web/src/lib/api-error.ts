@@ -10,10 +10,15 @@ import type { z } from 'zod'
 export class ApiError extends Error {
   readonly name = 'ApiError'
   readonly status: number
+  /** Machine-readable failure code from the envelope (`fail(c, …, { code })`),
+   *  when present. Lets callers distinguish same-status failures (e.g. a
+   *  document-gate 403 vs a plain authorization deny) without parsing messages. */
+  readonly code: string | undefined
 
-  constructor(message: string, status: number) {
+  constructor(message: string, status: number, code?: string) {
     super(message)
     this.status = status
+    this.code = code
   }
 }
 
@@ -57,7 +62,7 @@ export async function unwrap<T>(res: Response, schema?: z.ZodType<T>): Promise<T
   }))) as ApiResponse<T>
 
   if (!body.success) {
-    throw new ApiError(body.error ?? `HTTP ${res.status}`, res.status)
+    throw new ApiError(body.error ?? `HTTP ${res.status}`, res.status, body.code)
   }
 
   if (!schema) return body.data
@@ -75,14 +80,17 @@ export async function unwrap<T>(res: Response, schema?: z.ZodType<T>): Promise<T
 
 export const OPERATOR_REQUIRED = 'OPERATOR_REQUIRED'
 
+/** Envelope `code` the booking API returns when the #459 document-verification
+ *  gate blocks a booking. Matches `documentVerificationGate` on the API side. */
+export const DOCUMENT_VERIFICATION_REQUIRED = 'DOCUMENT_VERIFICATION_REQUIRED'
+
 /**
- * Recognises the write-path "operator must be named" rejection: a 422 whose
- * message names `operatorId` (the only 422 a vehicle/class create raises, from
- * `OperatorRequiredError`). Returns the {@link OPERATOR_REQUIRED} code so the
- * UI can refetch operators and reveal the picker, or `undefined` otherwise.
+ * Recognises the write-path "operator must be named" rejection (a vehicle/class
+ * create from `OperatorRequiredError`) by its self-describing envelope `code`,
+ * so the UI can refetch operators and reveal the picker. Reads `error.code`
+ * rather than regex-matching the message — copy or i18n changes can't break it
+ * (#934). Matches the `OPERATOR_REQUIRED` code emitted by the API error handler.
  */
 export function operatorRequiredCode(e: unknown): string | undefined {
-  return e instanceof ApiError && e.status === 422 && /operatorId is required/i.test(e.message)
-    ? OPERATOR_REQUIRED
-    : undefined
+  return e instanceof ApiError && e.code === OPERATOR_REQUIRED ? OPERATOR_REQUIRED : undefined
 }

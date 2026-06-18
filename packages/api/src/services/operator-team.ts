@@ -1,6 +1,12 @@
 import type { OperatorInviteData, OperatorMemberData } from '@kuruma/shared/types/operator-team'
 import type { CallerContext } from '../auth/context'
-import { ForbiddenError, requireOperatorOwnerWrite, requireOperatorScope } from '../auth/guards'
+import {
+  ConflictError,
+  ForbiddenError,
+  NotFoundError,
+  requireOperatorOwnerWrite,
+  requireOperatorScope,
+} from '../auth/guards'
 import type {
   OperatorMembershipRepository,
   ProviderInviteRepository,
@@ -50,6 +56,51 @@ export class OperatorTeamService {
       (await this.users.findByIds(memberships.map((m) => m.userId))).map((u) => [u.id, u]),
     )
     return memberships.map((m) => toOperatorMemberData(m, usersById.get(m.userId)))
+  }
+
+  /**
+   * #904 slice 2: the owner revokes a pending invite. Owner-only write; the
+   * invite is resolved within the caller's own tenant, so a foreign-tenant or
+   * unknown id reads as `undefined` from the scoped repo and surfaces as a 404 —
+   * never a 403 that would confirm the invite exists elsewhere.
+   */
+  async revokeInvite(ctx: CallerContext, id: string): Promise<void> {
+    requireOperatorOwnerWrite(ctx)
+    const operatorId = this.requireOwnOperator(ctx)
+    const revoked = await this.invites.revoke(id, operatorId)
+    if (!revoked) throw new NotFoundError('invite not found')
+  }
+
+  /**
+   * #904 slice 2: the owner deactivates a member. One scoped read of the active
+   * roster resolves the target, the cross-tenant 404, AND the last-owner lockout
+   * (a tenant must always keep one owner who can administer it). On success the two
+   * writes run projection-FIRST: clearing `users.role`/`operatorId` before revoking
+   * the ledger row makes every partial failure fail-safe — if the ledger write then
+   * fails the member simply stays active (re-granted on their next provider login),
+   * never silently re-granted via the stale renter-door projection (the JWT mints
+   * role straight from that projection on non-provider intent). A real tx is
+   * unnecessary: there is no unique-index race here (unlike the grant), and this
+   * ordering removes the only dangerous half-state. The small-N owner-count
+   * check-then-act race (two owners deactivated at once) is accepted for a tenant of
+   * a handful of people. Clearing the live JWT is a separate concern — a deactivated
+   * member keeps access until their token expires; see the #904 session-revocation
+   * follow-up.
+   */
+  async deactivateMember(ctx: CallerContext, id: string): Promise<void> {
+    requireOperatorOwnerWrite(ctx)
+    const operatorId = this.requireOwnOperator(ctx)
+    const members = await this.memberships.findActiveByOperator(operatorId)
+    const target = members.find((m) => m.id === id)
+    if (!target) throw new NotFoundError('member not found')
+    if (
+      target.role === 'OPERATOR_OWNER' &&
+      members.filter((m) => m.role === 'OPERATOR_OWNER').length === 1
+    ) {
+      throw new ConflictError('cannot deactivate the last operator owner')
+    }
+    await this.users.clearOperatorAccess(target.userId)
+    await this.memberships.deactivate(id, operatorId)
   }
 
   /**

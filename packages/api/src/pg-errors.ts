@@ -64,6 +64,15 @@ export const PAYMENT_EVENT_STRIPE_EVENT_CONSTRAINT = 'payment_events_stripeEvent
 export const PAYMENT_EVENT_SESSION_CONSTRAINT = 'payment_events_stripeCheckoutSessionId_unique'
 export const PAYMENT_EVENT_ONE_SUCCESS_CONSTRAINT = 'payment_events_one_success_per_booking'
 
+/**
+ * Partial unique index on provider_invites (operatorId, email) WHERE status=
+ * 'PENDING' (#904 slice 2). At most one live invite per operator+email; REVOKED/
+ * ACCEPTED rows free the slot so a re-invite works. A 23505 on this name means the
+ * owner re-invited an already-pending email -> translated to a 409 ConflictError,
+ * kept apart from the (astronomically unlikely) tokenHash collision.
+ */
+export const PROVIDER_INVITE_PENDING_EMAIL_CONSTRAINT = 'provider_invites_pending_email_unique'
+
 /** Extract the Postgres error code from an unknown thrown value, or null.
  *
  * Drizzle + postgres-js wraps the raw PostgresError inside `err.cause`,

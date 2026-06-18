@@ -1,3 +1,5 @@
+import { boundFetch } from '@kuruma/shared/lib/bound-fetch'
+
 // Shared logic for the CF Pages Functions proxy (#378 Slice 0, Phase 4). The
 // `_shared` dir is underscore-prefixed and exports no onRequest handler, so CF
 // Pages never routes it — it's a plain helper module imported by the route
@@ -59,10 +61,10 @@ export async function proxyRequest(
   request: Request,
   apiOrigin: string,
   stripPrefix: string,
-  // CF Pages runtime: the global fetch must be called with this===globalThis.
-  // Bound here for uniformity with the API services (#887) — the param stays
-  // injectable for tests.
-  fetchImpl: typeof fetch = fetch.bind(globalThis) as typeof fetch,
+  // CF Pages runs with global_fetch_strictly_public, so the global fetch must be
+  // called with this===globalThis or it throws "Illegal invocation". boundFetch
+  // guarantees that (#887/#893); the param stays injectable for tests.
+  fetchImpl: typeof fetch = boundFetch,
 ): Promise<Response> {
   const upstreamUrl = resolveUpstreamUrl(request.url, apiOrigin, stripPrefix)
 

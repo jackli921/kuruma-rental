@@ -6,7 +6,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { render, screen } from '@testing-library/react'
 import type { ReactNode } from 'react'
 import { IntlProvider } from 'use-intl'
-import { describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import en from '../../../messages/en.json'
 
 vi.mock('@tanstack/react-router', () => ({
@@ -24,6 +24,17 @@ vi.mock('@tanstack/react-router', () => ({
     </a>
   ),
 }))
+
+// #868 cancellation ships behind a feature flag (OFF for the beta MVP demo). These
+// tests cover the feature's behaviour, so they enable it; the OFF case is asserted
+// in its own test below.
+beforeEach(() => {
+  vi.stubEnv('VITE_FEATURE_CANCELLATION', 'true')
+})
+
+afterEach(() => {
+  vi.unstubAllEnvs()
+})
 
 const START = '2026-07-01T01:00:00.000Z'
 const END = '2026-07-03T01:00:00.000Z'
@@ -157,6 +168,14 @@ describe('BookingConfirmationView', () => {
   it('offers a cancel control for a confirmed booking', () => {
     renderView(makeBooking({ status: 'CONFIRMED' }))
     expect(screen.getByRole('button', { name: en.bookings.cancel.action })).toBeInTheDocument()
+  })
+
+  it('hides the cancel control in the beta MVP demo (cancellation feature flag off)', () => {
+    vi.stubEnv('VITE_FEATURE_CANCELLATION', undefined)
+    renderView(makeBooking({ status: 'CONFIRMED' }))
+    expect(
+      screen.queryByRole('button', { name: en.bookings.cancel.action }),
+    ).not.toBeInTheDocument()
   })
 
   it('hides the cancel control once the booking is no longer confirmed', () => {
