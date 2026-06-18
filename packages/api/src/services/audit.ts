@@ -1,12 +1,16 @@
 import type { AuditLogEntry } from '../stores'
 import type { OperatorProfileAuditEvent } from './operator'
+import type { OperatorMemberDeactivatedAuditEvent } from './operator-team'
 import type { ProviderInviteAuditEvent } from './provider-invite'
 
 // #930: the closed set of audited domain events. Each variant is already defined
 // at the service that raises it (the seams #914 shipped); this union is the
 // single type the durable sink accepts, so adding an audited action = adding a
 // member here + a `toAuditRow` case (exhaustive-checked).
-export type AuditEvent = ProviderInviteAuditEvent | OperatorProfileAuditEvent
+export type AuditEvent =
+  | ProviderInviteAuditEvent
+  | OperatorProfileAuditEvent
+  | OperatorMemberDeactivatedAuditEvent
 
 // The injected sink the composition root wires to a fire-and-forget durable
 // insert. Wider than the per-service ports (RecordProviderInviteAudit etc.), so
@@ -40,6 +44,16 @@ export function toAuditRow(event: AuditEvent): AuditRow {
         field: event.field,
         oldValue: event.oldValue,
         newValue: event.newValue,
+      }
+    case 'OPERATOR_MEMBER_DEACTIVATED':
+      return {
+        kind: 'OPERATOR_MEMBER_DEACTIVATED',
+        actorUserId: event.actorUserId,
+        operatorId: event.operatorId,
+        targetId: event.targetUserId,
+        field: null,
+        oldValue: null,
+        newValue: null,
       }
   }
 }

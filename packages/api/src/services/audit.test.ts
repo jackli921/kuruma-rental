@@ -42,4 +42,23 @@ describe('toAuditRow', () => {
       newValue: 'https://handoff.example',
     })
   })
+
+  it('maps an OPERATOR_MEMBER_DEACTIVATED event, routing the revoked member to targetId', () => {
+    const event: AuditEvent = {
+      type: 'OPERATOR_MEMBER_DEACTIVATED',
+      operatorId: 'op-3',
+      actorUserId: 'user-owner',
+      targetUserId: 'user-staff',
+    }
+
+    expect(toAuditRow(event)).toEqual({
+      kind: 'OPERATOR_MEMBER_DEACTIVATED',
+      actorUserId: 'user-owner',
+      operatorId: 'op-3',
+      targetId: 'user-staff',
+      field: null,
+      oldValue: null,
+      newValue: null,
+    })
+  })
 })

@@ -258,6 +258,7 @@ export function createApp(overrides?: AppOverrides, repos: Repos = buildRepos(ov
     operatorMembershipRepo,
     userRepo,
     providerInviteService,
+    recordAudit,
   )
   // Operator-access grant decision (#521 §6) + slug resolver for the OAuth callback.
   // The slug is read from the STORED operators.slug (never re-derived from the name),
