@@ -163,3 +163,48 @@ describe('RenterDocumentService — isRenterEligible (type + date aware)', () =>
     })
   })
 })
+
+describe('RenterDocumentService — getFile', () => {
+  const staffCtx: CallerContext = { userId: 'admin_1', role: 'PLATFORM_ADMIN', bypassScope: false }
+  const otherRenterCtx: CallerContext = { userId: 'renter_2', role: 'RENTER', bypassScope: false }
+
+  async function uploadIdp(): Promise<string> {
+    const up = await service.upload(
+      renterCtx,
+      { renterId: RENTER, type: 'IDP' },
+      makeFile('idp.jpg', 'image/jpeg', JPEG),
+    )
+    if (!up.ok) throw new Error('upload failed')
+    return up.document.id
+  }
+
+  it('streams any renter scan for platform staff with the stored content-type', async () => {
+    const id = await uploadIdp()
+
+    const file = await service.getFile(staffCtx, id)
+
+    if (!file) throw new Error('expected a file for platform staff')
+    expect(file.contentType).toBe('image/jpeg')
+    expect(file.type).toBe('IDP')
+    const bytes = new Uint8Array(await new Response(file.body).arrayBuffer())
+    expect([...bytes.slice(0, JPEG.length)]).toEqual(JPEG)
+  })
+
+  it('returns undefined when a renter requests another renter scan (sealed)', async () => {
+    const id = await uploadIdp()
+    expect(await service.getFile(otherRenterCtx, id)).toBeUndefined()
+  })
+
+  it('returns undefined for an unknown document id', async () => {
+    expect(await service.getFile(staffCtx, 'does-not-exist')).toBeUndefined()
+  })
+
+  it('returns undefined when the stored object is missing', async () => {
+    const doc = await repo.create(staffCtx, {
+      renterId: RENTER,
+      type: 'IDP',
+      storageKey: 'renter-documents/renter_1/never-stored.jpg',
+    })
+    expect(await service.getFile(staffCtx, doc.id)).toBeUndefined()
+  })
+})

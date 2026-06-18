@@ -80,6 +80,8 @@
     "close": "メニューを閉じる",
     "switchToRenter": "利用者ビューに切替",
     "switchToBusiness": "管理者ビューに切替",
+    "switchToSidebar": "サイドバーに切替",
+    "switchToTopNav": "トップナビに切替",
     "search": "検索",
     "browse": "車を探す",
     "myBookings": "予約一覧",
@@ -1142,6 +1144,7 @@
     "fromDaily": "¥{price}〜／日",
     "fromHourly": "¥{price}〜／時間",
     "noPrice": "料金はお問い合わせください",
+    "storeImagePlaceholder": "店舗の所在地",
     "turnaround": "貸出間隔 約{hours}時間",
     "distance": "約{km} km",
     "emptyTurnaroundHint": "車両は貸出の合間に準備時間が必要なため、直後はご利用いただけない場合があります。受け取り日を遅らせてお試しください。",
@@ -1186,7 +1189,8 @@
   "admin": {
     "nav": {
       "overview": "概要",
-      "revenue": "パートナー収益"
+      "revenue": "パートナー収益",
+      "documents": "書類"
     },
     "home": {
       "title": "プラットフォーム管理",
@@ -1224,6 +1228,23 @@
         "DOUBLE_PAYMENT": "二重決済",
         "AMOUNT_MISMATCH": "金額不一致"
       }
+    },
+    "documents": {
+      "title": "書類審査",
+      "subtitle": "レンターの本人確認書類を確認・承認します。",
+      "empty": "審査待ちの書類はありません。",
+      "renterLabel": "レンター",
+      "uploadedLabel": "アップロード日",
+      "viewerAlt": "レンターの本人確認書類のスキャン",
+      "viewerFallback": "プレビューを表示できません。",
+      "viewerOpen": "スキャンを新しいタブで開く",
+      "expiryLabel": "有効期限",
+      "reasonLabel": "却下理由",
+      "approve": "承認",
+      "reject": "却下",
+      "error": "判定を記録できませんでした。もう一度お試しください。",
+      "loadError": "審査キューを読み込めませんでした。",
+      "retry": "再試行"
     }
   },
   "documents": {
