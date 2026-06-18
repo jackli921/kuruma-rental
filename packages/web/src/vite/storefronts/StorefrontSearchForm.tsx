@@ -1,9 +1,14 @@
 import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { RegionPicker } from '@/vite/regions/RegionPicker'
 import { regionsQueryOptions } from '@/vite/regions/regions-api'
-import { carryForwardFilters, normalizeClassFilter } from '@/vite/storefronts/params'
+import { DateTimeRangePicker } from '@/vite/search/DateTimeRangePicker'
+import type { DateTimeRange } from '@/vite/search/datetime-range'
+import {
+  carryForwardFilters,
+  defaultSearchRange,
+  normalizeClassFilter,
+} from '@/vite/storefronts/params'
 import { persistSearchRange } from '@/vite/storefronts/storage'
 import { ACRISS_CODES } from '@kuruma/shared'
 import { useQuery } from '@tanstack/react-query'
@@ -49,32 +54,31 @@ export function StorefrontSearchForm({
   const locale = useLocale()
   const navigate = useNavigate()
   const { data: regions } = useQuery(regionsQueryOptions())
-  // The region anchor is the form's one piece of controlled state; the date inputs
-  // stay uncontrolled to dodge the #392 pre-hydration reconcile flake (§6 caveat).
   const [selectedRegion, setSelectedRegion] = useState<string | null>(region ?? null)
+  // The pickup/return range is controlled (#965). Seeded from the URL prefill, or
+  // the next-hour default when this form mounts without one. The web is a pure
+  // Vite SPA now, so the old #392 pre-hydration reconcile flake no longer applies.
+  const [range, setRange] = useState<DateTimeRange | null>(() =>
+    defaultFrom && defaultTo ? { from: defaultFrom, to: defaultTo } : defaultSearchRange(),
+  )
 
   const selectedClasses = normalizeClassFilter(classFilter)
 
-  // Read the range from the FORM (DOM), not React state. Uncontrolled inputs
-  // survive a pre-hydration fill on slow CI runners; a controlled form would
-  // reconcile them back to empty on hydrate and block submit (#392 E2E flake).
   function handleSubmit(e: FormEvent<HTMLFormElement>): void {
     e.preventDefault()
-    const data = new FormData(e.currentTarget)
-    const from = String(data.get('from') ?? '')
-    const to = String(data.get('to') ?? '')
+    if (!range) return
     // Repeatable `class` checkboxes → an ACRISS code array the API filters on.
-    const classes = data.getAll('class').map(String)
+    const classes = new FormData(e.currentTarget).getAll('class').map(String)
     // Remember the range so the landing hero restores a refinement made here.
-    persistSearchRange(from, to)
+    persistSearchRange(range.from, range.to)
     navigate({
       to: '/$locale/search',
       params: { locale },
       // The chips SET the class filter; pickup-location + region carry forward so
       // refining the search doesn't reset them (#499, #651).
       search: {
-        from,
-        to,
+        from: range.from,
+        to: range.to,
         ...carryForwardFilters({
           class: classes,
           pickupLocationId,
@@ -89,12 +93,8 @@ export function StorefrontSearchForm({
       <RegionPicker regions={regions ?? []} value={selectedRegion} onChange={setSelectedRegion} />
       <div className="flex flex-col gap-4 sm:flex-row sm:items-end">
         <div className="flex-1 space-y-2">
-          <Label htmlFor="from">{t('fromLabel')}</Label>
-          <Input id="from" name="from" type="datetime-local" defaultValue={defaultFrom} required />
-        </div>
-        <div className="flex-1 space-y-2">
-          <Label htmlFor="to">{t('toLabel')}</Label>
-          <Input id="to" name="to" type="datetime-local" defaultValue={defaultTo} required />
+          <Label htmlFor="datetime-range">{t('picker.label')}</Label>
+          <DateTimeRangePicker id="datetime-range" value={range} onChange={setRange} />
         </div>
         <Button type="submit" className="sm:w-auto">
           {t('submit')}

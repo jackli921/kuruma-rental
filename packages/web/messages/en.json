@@ -1129,6 +1129,16 @@
     "toLabel": "Return date & time",
     "submit": "Search",
     "classFilterLabel": "Vehicle class",
+    "picker": {
+      "label": "Pickup & return",
+      "placeholder": "Add dates & times",
+      "pickup": "Pickup",
+      "return": "Return",
+      "pickupTime": "Pickup time",
+      "returnTime": "Return time",
+      "days": "{count, plural, one {# day} other {# days}}",
+      "done": "Done"
+    },
     "photoPrev": "Previous photo",
     "photoNext": "Next photo",
     "photoGoTo": "Go to photo {n}",

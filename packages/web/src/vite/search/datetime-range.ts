@@ -81,6 +81,24 @@ export function slotsForDate(
 }
 
 /**
+ * Pick a valid "HH:mm" for a calendar date: keep `prevTime` if it is still
+ * selectable on that date, else fall back to the date's first selectable slot
+ * (or "00:00" if the date is fully past — defensive; the calendar disables it).
+ * This is the past-clamp the picker applies when the day changes under a chosen
+ * time, so a range can never resolve to an already-past pickup/return slot.
+ */
+export function resolveSlot(
+  date: string,
+  prevTime: string | null,
+  now: Date = new Date(),
+  stepMinutes: number = DEFAULT_STEP_MINUTES,
+): string {
+  const slots = slotsForDate(date, now, stepMinutes)
+  if (prevTime && slots.includes(prevTime)) return prevTime
+  return slots[0] ?? '00:00'
+}
+
+/**
  * Map a "YYYY-MM-DD" string to a local-midnight Date and back. react-day-picker
  * works in local-time Date objects, so we read/write its days via local fields
  * (never UTC) — the day the user clicked is the day we store.

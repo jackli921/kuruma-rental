@@ -5,6 +5,7 @@ import {
   isPastDate,
   jstNowParts,
   rentalDays,
+  resolveSlot,
   slotsForDate,
   splitDateTime,
   toLocalDate,
@@ -107,6 +108,27 @@ describe('toLocalDate / fromLocalDate', () => {
     expect(d.getMonth()).toBe(5)
     expect(d.getDate()).toBe(17)
     expect(fromLocalDate(d)).toBe('2026-06-17')
+  })
+})
+
+describe('resolveSlot', () => {
+  const now = new Date('2026-06-17T01:15:00Z') // JST 10:15
+
+  it('keeps a still-selectable time on a future date', () => {
+    expect(resolveSlot('2026-06-18', '08:00', now, 30)).toBe('08:00')
+  })
+
+  it('clamps a now-past time to the first selectable slot on today', () => {
+    // 08:00 is earlier than now (10:15) on today → first slot is 10:30.
+    expect(resolveSlot('2026-06-17', '08:00', now, 30)).toBe('10:30')
+  })
+
+  it('falls back to the first slot when there is no prior time', () => {
+    expect(resolveSlot('2026-06-18', null, now, 30)).toBe('00:00')
+  })
+
+  it('returns "00:00" defensively for a fully-past date with no slots', () => {
+    expect(resolveSlot('2026-06-16', '08:00', now, 30)).toBe('00:00')
   })
 })
 
