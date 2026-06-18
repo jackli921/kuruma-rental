@@ -73,6 +73,9 @@ export type {
   NotificationLogUpsert,
 } from './types-notification'
 
+// Audit ledger entity + insert-only persistence (#930), own module per #837 cap.
+export type { AuditLogEntry, AuditLogRepository } from './types-audit'
+
 /** Operator (tenant) data access. Admin bootstrap (#386) + slug/id resolution (#387). */
 // Partial profile patch (#903). Only the keys present are written; an absent key
 // leaves the column unchanged, `preAuthHandoffUrl: null` clears it. `updatedAt`
@@ -735,8 +738,8 @@ export interface FeeScheduleRepository {
 
 export interface PhotoStorage {
   put(vehicleId: string, file: File): Promise<{ key: string; url: string }>
-  /** Accepts either a key or full URL — implementations strip the base URL prefix. */
-  delete(keyOrUrl: string): Promise<void>
+  /** Accepts a key or full URL. `ownerVehicleId` scopes the delete to that vehicle's key prefix, so a cross-referenced URL can't reach another vehicle's object (cross-tenant IDOR guard, #952). */
+  delete(keyOrUrl: string, ownerVehicleId: string): Promise<void>
 }
 
 export interface RenterDocumentFilters {

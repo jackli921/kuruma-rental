@@ -66,7 +66,13 @@ function mountFor(role: UserRole, operatorId?: string) {
     { webBaseUrl: 'https://app.example.com' },
     () => {},
   )
-  const service = new OperatorTeamService(inviteRepo, membershipRepo, userRepo, inviteService)
+  const service = new OperatorTeamService(
+    inviteRepo,
+    membershipRepo,
+    userRepo,
+    inviteService,
+    () => {},
+  )
   const app = new Hono()
   setupGlobalHandlers(app)
   app.use('*', testAuthMiddleware(`${role}-user`, role, operatorId))

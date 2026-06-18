@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import type { OperatorAlertData } from '../../../src/services/email/templates/operator-alert'
 import { renderOperatorAlert } from '../../../src/services/email/templates/operator-alert'
 import type { RenterCancellationData } from '../../../src/services/email/templates/renter-cancellation'
 import { renderRenterCancellation } from '../../../src/services/email/templates/renter-cancellation'
@@ -86,15 +87,21 @@ describe('renderRenterConfirmation', () => {
 })
 
 describe('renderOperatorAlert', () => {
-  const baseOp = {
+  const baseOp: OperatorAlertData = {
     bookingCode: 'ABCD2345',
     vehicle: baseRenter.vehicle,
     pickupLocationName: 'Namba Station Lot',
     dropoffLocationName: 'Kansai Airport Lot',
-    startAt: baseRenter.startAt,
-    endAt: baseRenter.endAt,
+    startAt: baseRenter.startAt, // 2026-07-01T10:00Z
+    endAt: baseRenter.endAt, // 2026-07-03T18:00Z -> 56h = 2d 8h
     renterName: 'Jane Tourist',
+    renterEmail: 'jane@example.com',
+    renterPhone: '+81 90-1234-5678',
+    insurance: { name: 'Full Cover', dailyPriceJpy: 1500 },
+    addOns: [{ addOnId: 'ao-1', name: 'Child Seat', priceJpy: 2000 }],
+    source: 'DIRECT',
     totalPriceJpy: 24000,
+    manageBookingUrl: 'https://app.kuruma.jp/ja/manage/bookings/bk-1',
   }
 
   it('includes booking code, vehicle, renter, and location names (ja default)', () => {
@@ -112,6 +119,66 @@ describe('renderOperatorAlert', () => {
 
   it('renders en when requested', () => {
     expect(renderOperatorAlert(baseOp, 'en').subject).toContain('New booking')
+  })
+
+  it('includes the renter contact (email + phone) so the operator can reach them', () => {
+    const { html, text } = renderOperatorAlert(baseOp, 'en')
+    for (const body of [html, text]) {
+      expect(body).toContain('Contact')
+      expect(body).toContain('jane@example.com')
+      expect(body).toContain('+81 90-1234-5678')
+    }
+  })
+
+  it('omits the contact row entirely when the renter has neither email nor phone', () => {
+    const { html, text } = renderOperatorAlert(
+      { ...baseOp, renterEmail: null, renterPhone: null },
+      'en',
+    )
+    for (const body of [html, text]) {
+      expect(body).not.toContain('Contact')
+      expect(body).not.toContain('jane@example.com')
+    }
+  })
+
+  it('shows the rental duration, insurance, and source', () => {
+    const { html, text } = renderOperatorAlert(baseOp, 'en')
+    for (const body of [html, text]) {
+      expect(body).toContain('2d 8h') // 56h
+      expect(body).toContain('Full Cover')
+      expect(body).toContain('Direct') // DIRECT source label
+    }
+  })
+
+  it('maps the Trip.com source to its display name', () => {
+    expect(renderOperatorAlert({ ...baseOp, source: 'TRIP_COM' }, 'en').html).toContain('Trip.com')
+  })
+
+  it('localizes the duration units (ja -> 日/時間)', () => {
+    expect(renderOperatorAlert(baseOp, 'ja').text).toContain('2日 8時間')
+  })
+
+  it('lists paid add-ons with their prices, and omits the section when there are none', () => {
+    const withAddOns = renderOperatorAlert(baseOp, 'en')
+    expect(withAddOns.html).toContain('Child Seat')
+    expect(withAddOns.text).toContain('Child Seat')
+    expect(withAddOns.text).toContain('¥2,000')
+
+    const none = renderOperatorAlert({ ...baseOp, addOns: [] }, 'en')
+    expect(none.html).not.toContain('Child Seat')
+    expect(none.html).not.toContain('Add-ons')
+  })
+
+  it('renders a deep link with the EXACT manage-booking URL when present', () => {
+    const { html, text } = renderOperatorAlert(baseOp, 'en')
+    expect(html).toContain('href="https://app.kuruma.jp/ja/manage/bookings/bk-1"')
+    expect(text).toContain('https://app.kuruma.jp/ja/manage/bookings/bk-1')
+  })
+
+  it('omits the deep link entirely when the URL is null', () => {
+    const { html, text } = renderOperatorAlert({ ...baseOp, manageBookingUrl: null }, 'en')
+    expect(html).not.toContain('manage/bookings')
+    expect(text).not.toContain('manage/bookings')
   })
 })
 
