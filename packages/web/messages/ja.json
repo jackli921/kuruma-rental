@@ -80,6 +80,8 @@
     "close": "メニューを閉じる",
     "switchToRenter": "利用者ビューに切替",
     "switchToBusiness": "管理者ビューに切替",
+    "switchToSidebar": "サイドバーに切替",
+    "switchToTopNav": "トップナビに切替",
     "search": "検索",
     "browse": "車を探す",
     "myBookings": "予約一覧",
@@ -903,6 +905,9 @@
       "insurance": "保険",
       "insuranceDeclined": "なし",
       "perDay": "/ 日",
+      "priceBreakdown": "料金内訳",
+      "basePrice": "レンタル料金",
+      "total": "合計",
       "preAuthTitle": "ご予約の事前承認",
       "preAuthExplain": "オペレーターは保証金として、受取時にお客様のカードへ一時的な与信枠（事前承認）を設定します。これは請求ではありません。受取前に完了すると、引き渡しがスムーズになります。",
       "preAuthCta": "事前承認を完了する",
@@ -1181,7 +1186,8 @@
   "admin": {
     "nav": {
       "overview": "概要",
-      "revenue": "パートナー収益"
+      "revenue": "パートナー収益",
+      "documents": "書類"
     },
     "home": {
       "title": "プラットフォーム管理",
@@ -1219,6 +1225,23 @@
         "DOUBLE_PAYMENT": "二重決済",
         "AMOUNT_MISMATCH": "金額不一致"
       }
+    },
+    "documents": {
+      "title": "書類審査",
+      "subtitle": "レンターの本人確認書類を確認・承認します。",
+      "empty": "審査待ちの書類はありません。",
+      "renterLabel": "レンター",
+      "uploadedLabel": "アップロード日",
+      "viewerAlt": "レンターの本人確認書類のスキャン",
+      "viewerFallback": "プレビューを表示できません。",
+      "viewerOpen": "スキャンを新しいタブで開く",
+      "expiryLabel": "有効期限",
+      "reasonLabel": "却下理由",
+      "approve": "承認",
+      "reject": "却下",
+      "error": "判定を記録できませんでした。もう一度お試しください。",
+      "loadError": "審査キューを読み込めませんでした。",
+      "retry": "再試行"
     }
   },
   "documents": {
@@ -1272,7 +1295,6 @@
       "heading": "予約内容の確認",
       "base": "レンタル料金",
       "insurance": "保険",
-      "addOns": "オプション",
       "total": "推定合計",
       "note": "税金および事業者手数料はお支払い時に計算されます。"
     },
