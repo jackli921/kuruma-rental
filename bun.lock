@@ -63,11 +63,12 @@
         "@types/react-big-calendar": "^1.16.3",
         "class-variance-authority": "^0.7.1",
         "clsx": "^2.1.1",
-        "date-fns": "^4.1.0",
+        "date-fns": "^4.4.0",
         "lucide-react": "^1.7.0",
         "pigeon-maps": "^0.22.1",
         "react": "19.2.4",
         "react-big-calendar": "^1.19.4",
+        "react-day-picker": "^10.0.1",
         "react-dom": "19.2.4",
         "react-hook-form": "^7.72.1",
         "tailwind-merge": "^3.5.0",
@@ -205,6 +206,8 @@
     "@csstools/css-syntax-patches-for-csstree": ["@csstools/css-syntax-patches-for-csstree@1.1.2", "", { "peerDependencies": { "css-tree": "^3.2.1" }, "optionalPeers": ["css-tree"] }, "sha512-5GkLzz4prTIpoyeUiIu3iV6CSG3Plo7xRVOFPKI7FVEJ3mZ0A8SwK0XU3Gl7xAkiQ+mDyam+NNp875/C5y+jSA=="],
 
     "@csstools/css-tokenizer": ["@csstools/css-tokenizer@4.0.0", "", {}, "sha512-QxULHAm7cNu72w97JUNCBFODFaXpbDg+dP8b/oWFAZ2MTRppA3U00Y2L1HqaS4J6yBqxwa/Y3nMBaxVKbB/NsA=="],
+
+    "@date-fns/tz": ["@date-fns/tz@1.5.0", "", {}, "sha512-lwYN/vDPeNRULcepoE/LO2Pgx+7/RV+S9ARfbc9lr2DtGkOD7pAiruHvbR1RX3Qyf6ja47EWJDMsNK5vK08DJg=="],
 
     "@drizzle-team/brocli": ["@drizzle-team/brocli@0.10.2", "", {}, "sha512-z33Il7l5dKjUgGULTqBsQBQwckHh5AbIuxhdsIxDDiZAzBOrZO6q9ogcWC65kU382AfynTfgNumVcNIjuIua6w=="],
 
@@ -814,7 +817,7 @@
 
     "date-arithmetic": ["date-arithmetic@4.1.0", "", {}, "sha512-QWxYLR5P/6GStZcdem+V1xoto6DMadYWpMXU82ES3/RfR3Wdwr3D0+be7mgOJ+Ov0G9D5Dmb9T17sNLQYj9XOg=="],
 
-    "date-fns": ["date-fns@4.1.0", "", {}, "sha512-Ukq0owbQXxa/U3EGtsdVBkR1w7KOQ5gIBqdH2hkvknzZPYvBxb/aa6E8L7tmjFtkwZBu3UXBbjIgPo/Ez4xaNg=="],
+    "date-fns": ["date-fns@4.4.0", "", {}, "sha512-+1UMbeh68lH1SegH83CGWwpb6OHHbpSgr3+s5Eww5M4CAgswBpoWS0AjTOfEJ33HiYKz1hdj/KTFprzXHmq/6w=="],
 
     "dayjs": ["dayjs@1.11.20", "", {}, "sha512-YbwwqR/uYpeoP4pu043q+LTDLFBLApUP6VxRihdfNTqu4ubqMlGDLd6ErXhEgsyvY0K6nCs7nggYumAN+9uEuQ=="],
 
@@ -1117,6 +1120,8 @@
     "react": ["react@19.2.4", "", {}, "sha512-9nfp2hYpCwOjAN+8TZFGhtWEwgvWHXqESH8qT89AT/lWklpLON22Lc8pEtnpsZz7VmawabSU0gCjnj8aC0euHQ=="],
 
     "react-big-calendar": ["react-big-calendar@1.19.4", "", { "dependencies": { "@babel/runtime": "^7.20.7", "clsx": "^1.2.1", "date-arithmetic": "^4.1.0", "dayjs": "^1.11.7", "dom-helpers": "^5.2.1", "globalize": "^0.1.1", "invariant": "^2.2.4", "lodash": "^4.17.21", "lodash-es": "^4.17.21", "luxon": "^3.2.1", "memoize-one": "^6.0.0", "moment": "^2.29.4", "moment-timezone": "^0.5.40", "prop-types": "^15.8.1", "react-overlays": "^5.2.1", "uncontrollable": "^7.2.1" }, "peerDependencies": { "react": "^16.14.0 || ^17 || ^18 || ^19", "react-dom": "^16.14.0 || ^17 || ^18 || ^19" } }, "sha512-FrvbDx2LF6JAWFD96LU1jjloppC5OgIvMYUYIPzAw5Aq+ArYFPxAjLqXc4DyxfsQDN0TJTMuS/BIbcSB7Pg0YA=="],
+
+    "react-day-picker": ["react-day-picker@10.0.1", "", { "dependencies": { "@date-fns/tz": "^1.4.1", "date-fns": "^4.1.0" }, "peerDependencies": { "@types/react": ">=16.8.0", "react": ">=16.8.0" }, "optionalPeers": ["@types/react"] }, "sha512-eNh6BlwcYInWaJtRv18mXQ06Ys/H6rdTZAnTaSdOYJuTpwP1JMCHNd1FDRadA+gbeinq+psdULN5Xnowy9mV8w=="],
 
     "react-dom": ["react-dom@19.2.4", "", { "dependencies": { "scheduler": "^0.27.0" }, "peerDependencies": { "react": "^19.2.4" } }, "sha512-AXJdLo8kgMbimY95O2aKQqsz2iWi9jMgKJhRBAxECE4IFxfcazB2LmzloIoibJI3C12IlY20+KFaLv+71bUJeQ=="],
 
