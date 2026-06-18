@@ -83,8 +83,15 @@ describe('BookingConfirmationView', () => {
       makeBooking({ operator: { name: 'Best Car Rental', preAuthHandoffUrl: null } }),
     )
     expect(await screen.findByText('Rental company')).toBeInTheDocument()
-    // Bare name node — distinct from the cancellation-contact sentence.
+    // Operator name renders once: the pre-auth card that also shows it is hidden
+    // here because the fixture's preAuthHandoffUrl is null.
     expect(screen.getByText('Best Car Rental')).toBeInTheDocument()
+  })
+
+  it('omits the rental company block when the booking has no operator', async () => {
+    renderConfirmation(makeBooking({ operator: undefined }))
+    await screen.findByText('KX-ABC123') // ensure the view mounted before asserting absence
+    expect(screen.queryByText('Rental company')).toBeNull()
   })
 
   it('links to the storefront with a JST range the route parser accepts', async () => {
