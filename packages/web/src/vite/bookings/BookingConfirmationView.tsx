@@ -5,6 +5,7 @@ import { cn } from '@/lib/utils'
 import { CancelBookingDialog } from '@/vite/bookings/CancelBookingDialog'
 import { PreAuthHandoffCard } from '@/vite/bookings/PreAuthHandoffCard'
 import type { BookingDto } from '@/vite/bookings/api'
+import { buildStorefrontSearch } from '@/vite/bookings/storefront-link'
 import { isCancellationEnabled } from '@/vite/config/features'
 import type { VehicleClassData } from '@/vite/vehicles/classes'
 import { deriveBaseJpy, rentalDays } from '@kuruma/shared/lib/pricing'
@@ -87,6 +88,25 @@ export function BookingConfirmationView({
           </div>
         </CardContent>
       </Card>
+
+      {booking.operator?.name && (
+        <Card className="mt-4">
+          <CardContent className="flex items-center justify-between gap-4 pt-2">
+            <div>
+              <p className="text-sm text-muted-foreground">{t('rentalCompany')}</p>
+              <p className="font-medium">{booking.operator.name}</p>
+            </div>
+            <Link
+              to="/$locale/storefronts/$locationId"
+              params={{ locale, locationId: booking.pickupLocationId }}
+              search={buildStorefrontSearch(booking)}
+              className={cn(buttonVariants({ variant: 'outline' }), 'shrink-0')}
+            >
+              {t('viewStorefront')}
+            </Link>
+          </CardContent>
+        </Card>
+      )}
 
       {baseJpy !== null && booking.totalPrice !== null && (
         <Card className="mt-4">
