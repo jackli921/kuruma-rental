@@ -12,6 +12,7 @@
     "./db/schema": "./src/db/schema.ts",
     "./db/constants": "./src/db/constants.ts",
     "./db/backfill-regions": "./src/db/backfill-regions.ts",
+    "./db/backfill-photo-refs": "./src/db/backfill-photo-refs.ts",
     "./validators/auth": "./src/validators/auth.ts",
     "./validators/message": "./src/validators/message.ts",
     "./types/stats": "./src/types/stats.ts",
