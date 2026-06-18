@@ -132,6 +132,35 @@ describe('BookingConfirmationView', () => {
     expect(screen.getByText(`${formatJpy(500)} per hour`)).toBeInTheDocument()
   })
 
+  it('shows an itemised price breakdown: derived base, insurance, each add-on, and total', () => {
+    renderView(
+      makeBooking({
+        insuranceSnapshot: { name: 'Basic', dailyPriceJpy: 1500 } as never,
+        addOnSnapshot: [
+          { addOnId: 'a1', name: 'Baby seat', priceJpy: 2000 },
+          { addOnId: 'a2', name: 'GPS unit', priceJpy: 4500 },
+        ],
+        // START..END is 2 rental days: base 20000 + insurance 1500×2 + add-ons 6500 = 29500.
+        totalPrice: 29500,
+      }),
+    )
+    expect(screen.getByText('Price breakdown')).toBeInTheDocument()
+    expect(screen.getByText('Car rental')).toBeInTheDocument()
+    expect(screen.getByText(formatJpy(20000))).toBeInTheDocument() // base derived by inverse
+    expect(screen.getByText(formatJpy(3000))).toBeInTheDocument() // insurance 1500 × 2 days
+    expect(screen.getByText('Baby seat')).toBeInTheDocument()
+    expect(screen.getByText(formatJpy(2000))).toBeInTheDocument()
+    expect(screen.getByText('GPS unit')).toBeInTheDocument()
+    expect(screen.getByText(formatJpy(4500))).toBeInTheDocument()
+    expect(screen.getByText('Total')).toBeInTheDocument()
+    expect(screen.getByText(formatJpy(29500))).toBeInTheDocument()
+  })
+
+  it('omits the price breakdown when the total price is unknown', () => {
+    renderView(makeBooking({ totalPrice: null }))
+    expect(screen.queryByText('Price breakdown')).not.toBeInTheDocument()
+  })
+
   it('renders the operator pre-auth handoff link when present', () => {
     renderView(
       makeBooking({
