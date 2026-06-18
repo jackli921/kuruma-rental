@@ -57,7 +57,20 @@ function sentrySourcemapPlugin(): PluginOption {
     org,
     project,
     ...(release ? { release: { name: release } } : {}),
-    sourcemaps: { filesToDeleteAfterUpload: ['./dist/**/*.map'] },
+    // Absolute glob anchored to THIS config dir, not process.cwd(): the plugin
+    // resolves filesToDeleteAfterUpload against cwd, so a root-level
+    // `bun run --filter @kuruma/web build` would resolve './dist' to the repo
+    // root, match nothing, and silently leave maps in packages/web/dist.
+    sourcemaps: { filesToDeleteAfterUpload: [path.resolve(__dirname, 'dist/**/*.map')] },
+    // Non-fatal upload failures. The API Worker deploys earlier in the pipeline,
+    // so a hard throw here would strand a half-deploy (new API, stale web). A
+    // transient flake (bad token, network, quota) degrades to "this release isn't
+    // symbolicated" instead of breaking the web deploy. Verified: even on a failed
+    // upload the plugin still deletes the maps (0 .map left in dist), so a flake
+    // never leaks maps into the Pages artifact nor trips the size budget.
+    errorHandler: (err: Error) => {
+      console.warn('[sentry-vite-plugin] source-map upload failed (non-fatal):', err.message)
+    },
   })
 }
 

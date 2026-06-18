@@ -112,6 +112,12 @@ To activate (HITL, one-time):
 5. Verify: trigger a test error on each surface; confirm it lands grouped under the
    deploy's release, with a **readable (de-minified)** web stack trace.
 
+> **At real-prod launch, flip BOTH `SENTRY_ENVIRONMENT` homes together** or the two
+> surfaces tag differently: the **web** reads the `SENTRY_ENVIRONMENT` *repo
+> variable* (`deploy.yml`, default `beta`), the **API** reads the committed
+> `wrangler.toml` `[vars]` value. Changing only one tags web `production` while the
+> API stays `beta` (or vice-versa).
+
 ## Rollback
 
 ### Code rollback
