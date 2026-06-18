@@ -15,21 +15,27 @@ import {
   type DateTimePart,
   type DateTimeRange,
   combineDateTime,
+  ensureEndAfterStart,
   fromLocalDate,
   isPastDate,
   jstNowParts,
   rentalDays,
   resolveSlot,
+  returnSlotsForDate,
   slotsForDate,
   splitDateTime,
   toLocalDate,
 } from '@/vite/search/datetime-range'
 import { CalendarIcon } from 'lucide-react'
 import { useState } from 'react'
-import type { DateRange } from 'react-day-picker'
+import type { DateRange, Locale } from 'react-day-picker'
+import { enUS, ja, zhCN } from 'react-day-picker/locale'
 import { useLocale, useTranslations } from 'use-intl'
 
 const DESKTOP_QUERY = '(min-width: 768px)'
+
+/** Calendar grid localization per app locale; falls back to English. */
+const CALENDAR_LOCALES: Record<string, Locale> = { en: enUS, ja, zh: zhCN }
 
 interface DateTimeRangePickerProps {
   /** Committed JST wall-clock range, or null when nothing is chosen yet. */
@@ -90,13 +96,19 @@ export function DateTimeRangePicker({
 
   // Commit a draft; surface a complete range to the parent (drop-in contract).
   function commit(next: Draft): void {
-    setDraft(next)
     if (next.from && next.to) {
+      // Guarantee `to > from` before surfacing the range: a single-day pick or an
+      // inverted same-day time resolves to `to <= from`, which parseSearchRange
+      // rejects — silently rendering zero results despite the renter picking dates.
+      const to = ensureEndAfterStart(next.from, next.to, now)
+      setDraft({ from: next.from, to })
       onChange({
         from: combineDateTime(next.from.date, next.from.time),
-        to: combineDateTime(next.to.date, next.to.time),
+        to: combineDateTime(to.date, to.time),
       })
+      return
     }
+    setDraft(next)
   }
 
   function handleSelect(range: DateRange | undefined): void {
@@ -142,6 +154,7 @@ export function DateTimeRangePicker({
         onSelect={handleSelect}
         disabled={(d) => isPastDate(fromLocalDate(d), now)}
         defaultMonth={selected?.from ?? jstToday}
+        locale={CALENDAR_LOCALES[locale] ?? enUS}
         autoFocus
         className="mx-auto"
       />
@@ -155,7 +168,13 @@ export function DateTimeRangePicker({
         <TimeField
           label={t('returnTime')}
           time={draft.to?.time ?? null}
-          slots={draft.to ? slotsForDate(draft.to.date, now) : []}
+          slots={
+            draft.to
+              ? draft.from
+                ? returnSlotsForDate(draft.to.date, draft.from, now)
+                : slotsForDate(draft.to.date, now)
+              : []
+          }
           onChange={(time) => draft.to && commit({ ...draft, to: { ...draft.to, time } })}
         />
       </div>
