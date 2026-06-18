@@ -103,8 +103,9 @@ function seedVehicle(operatorId: string, classId: string, name: string): Promise
       color: null,
       dailyRateJpy: DEFAULT_DAILY_RATE_JPY,
       hourlyRateJpy: null,
-      shakenExpiryDate: null,
-      insuranceExpiryDate: null,
+      // #916: road-legal so the §5.2 availability gate keeps them searchable.
+      shakenExpiryDate: '2099-06-15',
+      insuranceExpiryDate: '2099-01-01',
     })
     .then((v) => v.id)
 }
