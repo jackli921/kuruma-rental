@@ -4,6 +4,7 @@ import { beforeEach, describe, expect, it } from 'vitest'
 import { createApp } from '../../src/index'
 import { InMemoryAvailabilityRepository } from '../../src/repositories/in-memory/availability'
 import { InMemoryBookingRepository } from '../../src/repositories/in-memory/booking'
+import { InMemoryOperatorRepository } from '../../src/repositories/in-memory/operator'
 import { InMemoryUserRepository } from '../../src/repositories/in-memory/user'
 import { InMemoryVehicleRepository } from '../../src/repositories/in-memory/vehicle'
 import type { User } from '../../src/stores'
@@ -59,7 +60,11 @@ describe('createApp wires operator-session revocation (#939)', () => {
     const vehicleRepo = new InMemoryVehicleRepository()
     const bookingRepo = new InMemoryBookingRepository()
     const availabilityRepo = new InMemoryAvailabilityRepository(vehicleRepo, bookingRepo)
-    app = createApp({ vehicleRepo, bookingRepo, availabilityRepo, userRepo })
+    // operatorRepo backs /operators, a FACTORY-INTERNAL requireAuth route (its auth
+    // is mounted inside createOperatorRoutes, not as an app-level prefix) — an empty
+    // repo still 200s an active operator (the service scopes the list to self).
+    const operatorRepo = new InMemoryOperatorRepository()
+    app = createApp({ vehicleRepo, bookingRepo, availabilityRepo, userRepo, operatorRepo })
   })
 
   it('accepts an operator token while the users projection still matches', async () => {
@@ -78,6 +83,22 @@ describe('createApp wires operator-session revocation (#939)', () => {
 
     // Same still-valid signature, but the projection no longer matches -> revoked.
     const res = await app.request(`/users?ids=${SELF_ID}`, { headers })
+    expect(res.status).toBe(401)
+    expect(((await res.json()) as { error: string }).error).toBe('Unauthorized')
+  })
+
+  // The case above hits /users, gated by an APP-LEVEL `app.use('/users/*', requireAuth())`.
+  // /operators mounts its OWN requireAuth INSIDE createOperatorRoutes (no app-level
+  // prefix). The context-provided check exists precisely to reach both styles uniformly;
+  // without this case a refactor that broke context inheritance into a factory sub-app
+  // would keep the /users test green while the actual operator portal routes fail-open.
+  it('401s a revoked operator on a factory-internal requireAuth route (/operators), not just app-level prefixes', async () => {
+    const headers = await operatorBearer()
+    expect((await app.request('/operators', { headers })).status).toBe(200)
+
+    await userRepo.clearOperatorAccess(SELF_ID)
+
+    const res = await app.request('/operators', { headers })
     expect(res.status).toBe(401)
     expect(((await res.json()) as { error: string }).error).toBe('Unauthorized')
   })

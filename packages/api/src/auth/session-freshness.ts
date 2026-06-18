@@ -38,12 +38,13 @@ export function isStaleOperatorSession(
   projection: UserProjection | undefined,
 ): boolean {
   if (!isOperatorRole(claims.role)) return false
-  // No projection row means we can't re-verify the grant. Deactivation never gets
-  // here: clearOperatorAccess KEEPS the row (role→RENTER, operatorId→null), so a
-  // deactivated member is always caught by the mismatch branches below. A missing
-  // row is only a hard-deleted user — out of #939 scope, and revoking it is left
-  // to token expiry rather than failing closed here (avoids denying fabricated
-  // service tokens that carry no users row).
+  // SECURITY: this is the fail-OPEN branch. It is safe ONLY because no flow deletes a
+  // users row today — clearOperatorAccess KEEPS the row (role→RENTER, operatorId→null),
+  // so a deactivated member is always caught by the mismatch branches below. A missing
+  // row is therefore only a hard-deleted user (out of #939 scope) or a fabricated
+  // service token that carries no users row; revoking those is left to token expiry
+  // rather than failing closed here. If a hard-delete flow is ever added, revisit this
+  // branch — it must fail CLOSED for deleted operators.
   if (!projection) return false
   if (projection.role !== claims.role) return true
   return (projection.operatorId ?? undefined) !== claims.operatorId
