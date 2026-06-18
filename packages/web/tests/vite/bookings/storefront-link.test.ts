@@ -1,6 +1,6 @@
+import { buildStorefrontSearch } from '@/vite/bookings/storefront-link'
 import { parseSearchRange } from '@/vite/storefronts/params'
 import { describe, expect, it } from 'vitest'
-import { buildStorefrontSearch } from './storefront-link'
 
 describe('buildStorefrontSearch', () => {
   it('converts the booking ISO instants to wall-clock JST datetime-local strings', () => {

@@ -13,13 +13,21 @@ vi.mock('@tanstack/react-router', () => ({
   Link: ({
     to,
     params,
+    search,
     children,
   }: {
     to: string
-    params?: { locale?: string }
+    params?: { locale?: string; locationId?: string }
+    search?: Record<string, string>
     children: ReactNode
   }) => (
-    <a href={to} data-to={to} data-locale={params?.locale}>
+    <a
+      href={to}
+      data-to={to}
+      data-locale={params?.locale}
+      data-location={params?.locationId}
+      data-search={search ? new URLSearchParams(search).toString() : undefined}
+    >
       {children}
     </a>
   ),
@@ -149,6 +157,38 @@ describe('BookingConfirmationView', () => {
     expect(
       screen.queryByRole('link', { name: /Complete pre-authorization/ }),
     ).not.toBeInTheDocument()
+  })
+
+  // #964: the confirmation surfaces which rental company the renter booked with,
+  // plus a link back to that operator's storefront pre-filled with the booked dates.
+  it('shows the rental company name when the booking has an operator', () => {
+    renderView(makeBooking({ operator: { name: 'Best Car Rental', preAuthHandoffUrl: null } }))
+    expect(screen.getByText('Rental company')).toBeInTheDocument()
+    expect(screen.getByText('Best Car Rental')).toBeInTheDocument()
+  })
+
+  it('omits the rental company block when the booking has no operator', () => {
+    renderView(makeBooking({ operator: undefined }))
+    expect(screen.getByText('ABCD1234')).toBeInTheDocument() // view mounted
+    expect(screen.queryByText('Rental company')).not.toBeInTheDocument()
+  })
+
+  it('links to the storefront with a JST range the route parser accepts', () => {
+    // startAt 00:00Z -> 09:00 JST, endAt 01:30Z -> 10:30 JST (uses endAt, not effectiveEndAt).
+    renderView(
+      makeBooking({
+        operator: { name: 'Best Car Rental', preAuthHandoffUrl: null },
+        pickupLocationId: 'loc_kix',
+        startAt: '2026-07-01T00:00:00.000Z',
+        endAt: '2026-07-03T01:30:00.000Z',
+      }),
+    )
+    const link = screen.getByText('View storefront').closest('a')
+    expect(link).toHaveAttribute('data-to', '/$locale/storefronts/$locationId')
+    expect(link).toHaveAttribute('data-location', 'loc_kix')
+    const search = new URLSearchParams(link?.getAttribute('data-search') ?? '')
+    expect(search.get('from')).toBe('2026-07-01T09:00')
+    expect(search.get('to')).toBe('2026-07-03T10:30')
   })
 
   it('links back to my bookings and to the catalog', () => {
