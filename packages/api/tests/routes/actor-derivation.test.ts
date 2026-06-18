@@ -196,6 +196,8 @@ describe('actor derivation from JWT', () => {
         seats: 5,
         transmission: 'AUTO',
         dailyRateJpy: 8000,
+        shakenExpiryDate: '2099-06-15',
+        insuranceExpiryDate: '2099-01-01',
       }),
     })
     expect(res.status).toBe(201)

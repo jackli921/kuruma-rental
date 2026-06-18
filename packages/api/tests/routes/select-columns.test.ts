@@ -141,6 +141,8 @@ describe('API responses contain only expected fields', () => {
         seats: 5,
         transmission: 'AUTO',
         dailyRateJpy: 8000,
+        shakenExpiryDate: '2099-06-15',
+        insuranceExpiryDate: '2099-01-01',
       }),
     })
 
@@ -170,6 +172,8 @@ describe('API responses contain only expected fields', () => {
         seats: 5,
         transmission: 'AUTO',
         dailyRateJpy: 8000,
+        shakenExpiryDate: '2099-06-15',
+        insuranceExpiryDate: '2099-01-01',
       }),
     })
     const created = await createRes.json()
@@ -201,6 +205,8 @@ describe('API responses contain only expected fields', () => {
         seats: 5,
         transmission: 'AUTO',
         dailyRateJpy: 8000,
+        shakenExpiryDate: '2099-06-15',
+        insuranceExpiryDate: '2099-01-01',
       }),
     })
     const vehicle = await vRes.json()
