@@ -8,6 +8,9 @@ export interface R2BucketLike {
     value: ReadableStream | ArrayBuffer | string,
     options?: { httpMetadata?: { contentType?: string } },
   ): Promise<unknown>
+  get(
+    key: string,
+  ): Promise<{ body: ReadableStream; httpMetadata?: { contentType?: string } } | null>
   delete(key: string | string[]): Promise<void>
 }
 

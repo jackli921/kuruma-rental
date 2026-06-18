@@ -1186,7 +1186,8 @@
   "admin": {
     "nav": {
       "overview": "概览",
-      "revenue": "合作伙伴收益"
+      "revenue": "合作伙伴收益",
+      "documents": "证件"
     },
     "home": {
       "title": "平台管理",
@@ -1224,6 +1225,23 @@
         "DOUBLE_PAYMENT": "重复支付",
         "AMOUNT_MISMATCH": "金额不符"
       }
+    },
+    "documents": {
+      "title": "证件审核",
+      "subtitle": "审核并核验租客的身份证件。",
+      "empty": "暂无待审核的证件。",
+      "renterLabel": "租客",
+      "uploadedLabel": "上传日期",
+      "viewerAlt": "租客身份证件扫描件",
+      "viewerFallback": "无法预览。",
+      "viewerOpen": "在新标签页中打开扫描件",
+      "expiryLabel": "有效期",
+      "reasonLabel": "拒绝原因",
+      "approve": "批准",
+      "reject": "拒绝",
+      "error": "无法记录审核结果，请重试。",
+      "loadError": "无法加载审核队列。",
+      "retry": "重试"
     }
   },
   "documents": {
