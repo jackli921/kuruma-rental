@@ -1,3 +1,4 @@
+import type { ErrorCode } from '@kuruma/shared/lib/error-codes'
 import {
   cancelBookingSchema,
   createBookingSchema,
@@ -165,7 +166,9 @@ export function createBookingRoutes(service: BookingService) {
       // Staff/manual bookings capture acknowledgement operationally and are exempt.
       // The service stamps disclaimerAcknowledgedAt + the terms version on the row.
       if (ctx.role === 'RENTER' && !parsed.data.disclaimerAccepted) {
-        return fail(c, 'Liability disclaimer must be accepted', 400, { code: 'CONSENT_REQUIRED' })
+        return fail(c, 'Liability disclaimer must be accepted', 400, {
+          code: 'CONSENT_REQUIRED' satisfies ErrorCode,
+        })
       }
 
       const createResult = await service.create(ctx, {
