@@ -1181,7 +1181,8 @@
   "admin": {
     "nav": {
       "overview": "概要",
-      "revenue": "パートナー収益"
+      "revenue": "パートナー収益",
+      "documents": "書類"
     },
     "home": {
       "title": "プラットフォーム管理",
@@ -1219,6 +1220,23 @@
         "DOUBLE_PAYMENT": "二重決済",
         "AMOUNT_MISMATCH": "金額不一致"
       }
+    },
+    "documents": {
+      "title": "書類審査",
+      "subtitle": "レンターの本人確認書類を確認・承認します。",
+      "empty": "審査待ちの書類はありません。",
+      "renterLabel": "レンター",
+      "uploadedLabel": "アップロード日",
+      "viewerAlt": "レンターの本人確認書類のスキャン",
+      "viewerFallback": "プレビューを表示できません。",
+      "viewerOpen": "スキャンを新しいタブで開く",
+      "expiryLabel": "有効期限",
+      "reasonLabel": "却下理由",
+      "approve": "承認",
+      "reject": "却下",
+      "error": "判定を記録できませんでした。もう一度お試しください。",
+      "loadError": "審査キューを読み込めませんでした。",
+      "retry": "再試行"
     }
   },
   "documents": {
