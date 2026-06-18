@@ -1321,6 +1321,7 @@
     },
     "nav": {
       "back": "Back",
+      "backToListing": "Back to listing",
       "continue": "Continue",
       "toPayment": "Continue to payment"
     }

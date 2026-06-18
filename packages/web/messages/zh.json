@@ -1321,6 +1321,7 @@
     },
     "nav": {
       "back": "返回",
+      "backToListing": "返回列表",
       "continue": "继续",
       "toPayment": "继续支付"
     }

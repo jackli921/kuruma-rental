@@ -1321,6 +1321,7 @@
     },
     "nav": {
       "back": "戻る",
+      "backToListing": "一覧に戻る",
       "continue": "次へ",
       "toPayment": "お支払いへ進む"
     }

@@ -5,7 +5,10 @@ import { InMemoryOperatorRepository } from '../../src/repositories/in-memory/ope
 import { InMemoryOperatorMembershipRepository } from '../../src/repositories/in-memory/operator-membership'
 import { InMemoryProviderInviteRepository } from '../../src/repositories/in-memory/provider-invite'
 import { InMemoryUserRepository } from '../../src/repositories/in-memory/user'
-import { OperatorTeamService } from '../../src/services/operator-team'
+import {
+  type OperatorMemberDeactivatedAuditEvent,
+  OperatorTeamService,
+} from '../../src/services/operator-team'
 import { ProviderInviteService } from '../../src/services/provider-invite'
 import type { Operator, User } from '../../src/stores'
 
@@ -49,8 +52,10 @@ let inviteRepo: InMemoryProviderInviteRepository
 let membershipRepo: InMemoryOperatorMembershipRepository
 let userRepo: InMemoryUserRepository
 let service: OperatorTeamService
+let recordedAudits: OperatorMemberDeactivatedAuditEvent[]
 
 beforeEach(() => {
+  recordedAudits = []
   inviteRepo = new InMemoryProviderInviteRepository()
   membershipRepo = new InMemoryOperatorMembershipRepository()
   userRepo = new InMemoryUserRepository(
@@ -73,7 +78,9 @@ beforeEach(() => {
     { webBaseUrl: 'https://app.example.com' },
     () => {},
   )
-  service = new OperatorTeamService(inviteRepo, membershipRepo, userRepo, inviteService)
+  service = new OperatorTeamService(inviteRepo, membershipRepo, userRepo, inviteService, (e) =>
+    recordedAudits.push(e),
+  )
 })
 
 describe('OperatorTeamService.inviteStaff', () => {
@@ -232,6 +239,30 @@ describe('OperatorTeamService.deactivateMember', () => {
     expect(remaining.map((m) => m.userId)).toEqual(['u_owner'])
     // The projection is torn down so a renter-door sign-in can't re-mint operator access.
     expect(await projectionOf('u_staffm')).toEqual({ role: 'RENTER', operatorId: null })
+  })
+
+  it('records an OPERATOR_MEMBER_DEACTIVATED audit event naming the actor and target', async () => {
+    await seedMember('u_owner', 'OPERATOR_OWNER')
+    const staffId = await seedMember('u_staffm', 'OPERATOR_STAFF')
+
+    await service.deactivateMember(OWNER_CTX, staffId)
+
+    expect(recordedAudits).toEqual([
+      {
+        type: 'OPERATOR_MEMBER_DEACTIVATED',
+        operatorId: 'op_1',
+        actorUserId: 'u_owner',
+        targetUserId: 'u_staffm',
+      },
+    ])
+  })
+
+  it('emits no audit event when deactivation is refused (403)', async () => {
+    await seedMember('u_owner', 'OPERATOR_OWNER')
+    const staffId = await seedMember('u_staffm', 'OPERATOR_STAFF')
+
+    await expect(service.deactivateMember(STAFF_CTX, staffId)).rejects.toThrow(ForbiddenError)
+    expect(recordedAudits).toEqual([])
   })
 
   it('refuses an OPERATOR_STAFF caller (403) — member stays active, projection intact', async () => {
