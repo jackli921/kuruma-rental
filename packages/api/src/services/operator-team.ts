@@ -16,6 +16,25 @@ import type { OperatorMembership, ProviderInvite, User } from '../stores'
 import type { CreatedInvite, ProviderInviteService } from './provider-invite'
 
 /**
+ * #930: structured audit of an owner deactivating a staff member — the third
+ * privilege-changing event behind the durable ledger (Rule of Three with
+ * {@link ProviderInviteAuditEvent} / {@link OperatorProfileAuditEvent}). Records
+ * who revoked whom, within which tenant. An injected sink (never hardcoded) keeps
+ * the trail assertable in tests and swappable for the durable store at the root.
+ */
+export interface OperatorMemberDeactivatedAuditEvent {
+  readonly type: 'OPERATOR_MEMBER_DEACTIVATED'
+  readonly operatorId: string
+  readonly actorUserId: string
+  readonly targetUserId: string
+}
+
+// index.ts wires the shared durable sink.
+export type RecordOperatorMemberDeactivatedAudit = (
+  event: OperatorMemberDeactivatedAuditEvent,
+) => void
+
+/**
  * #904: operator self-service staff management. Every method derives the tenant
  * from the caller's session (`ctx.operatorId`) — there is no foreign-id surface,
  * so a tenant can only ever see or mutate its own team. Writes are owner-only;
@@ -28,6 +47,7 @@ export class OperatorTeamService {
     private readonly memberships: OperatorMembershipRepository,
     private readonly users: UserRepository,
     private readonly inviteService: ProviderInviteService,
+    private readonly recordAudit: RecordOperatorMemberDeactivatedAudit,
   ) {}
 
   async inviteStaff(ctx: CallerContext, input: { email: string }): Promise<CreatedInvite> {
@@ -100,7 +120,17 @@ export class OperatorTeamService {
       throw new ConflictError('cannot deactivate the last operator owner')
     }
     await this.users.clearOperatorAccess(target.userId)
-    await this.memberships.deactivate(id, operatorId)
+    const deactivated = await this.memberships.deactivate(id, operatorId)
+    // Audit only a real state change: a no-op deactivate (lost the small-N race)
+    // returns undefined and must not record a revocation that didn't happen.
+    if (deactivated) {
+      this.recordAudit({
+        type: 'OPERATOR_MEMBER_DEACTIVATED',
+        operatorId,
+        actorUserId: ctx.userId,
+        targetUserId: target.userId,
+      })
+    }
   }
 
   /**
