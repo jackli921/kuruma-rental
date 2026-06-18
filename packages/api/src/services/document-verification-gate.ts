@@ -1,3 +1,4 @@
+import type { ErrorCode } from '@kuruma/shared/lib/error-codes'
 import type { BookingVerificationGate } from './booking-types'
 import type { RenterDocumentService } from './renter-document'
 
@@ -16,7 +17,7 @@ export function documentVerificationGate(service: RenterDocumentService): Bookin
       status: 403,
       error:
         'An approved International Driving Permit valid through your return date is required to book.',
-      code: 'DOCUMENT_VERIFICATION_REQUIRED',
+      code: 'DOCUMENT_VERIFICATION_REQUIRED' satisfies ErrorCode,
     }
   }
 }

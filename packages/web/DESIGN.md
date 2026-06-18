@@ -42,7 +42,7 @@ All colors, radii, and spacing are defined as CSS custom properties in `src/app/
 | Label | `text-sm font-medium` | Form labels |
 | Code / mono | `font-mono text-sm` | |
 
-**Fonts**: Geist Sans (body) + Geist Mono (code), loaded via `next/font/google` in locale layout. No other fonts.
+**Fonts**: Geist Sans (body) + Geist Mono (code), self-hosted via `@fontsource-variable/geist{,-mono}` and imported in `main.tsx`; exposed as the `--font-geist-sans` / `--font-geist-mono` CSS variables in `globals.css`. No other fonts.
 
 ## Spacing
 

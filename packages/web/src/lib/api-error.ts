@@ -1,3 +1,4 @@
+import type { ErrorCode } from '@kuruma/shared/lib/error-codes'
 import type { ApiResponse } from '@kuruma/shared/types/api-response'
 import type { z } from 'zod'
 
@@ -13,9 +14,9 @@ export class ApiError extends Error {
   /** Machine-readable failure code from the envelope (`fail(c, …, { code })`),
    *  when present. Lets callers distinguish same-status failures (e.g. a
    *  document-gate 403 vs a plain authorization deny) without parsing messages. */
-  readonly code: string | undefined
+  readonly code: ErrorCode | undefined
 
-  constructor(message: string, status: number, code?: string) {
+  constructor(message: string, status: number, code?: ErrorCode) {
     super(message)
     this.status = status
     this.code = code
@@ -78,11 +79,11 @@ export async function unwrap<T>(res: Response, schema?: z.ZodType<T>): Promise<T
   return parsed.data
 }
 
-export const OPERATOR_REQUIRED = 'OPERATOR_REQUIRED'
+export const OPERATOR_REQUIRED: ErrorCode = 'OPERATOR_REQUIRED'
 
 /** Envelope `code` the booking API returns when the #459 document-verification
  *  gate blocks a booking. Matches `documentVerificationGate` on the API side. */
-export const DOCUMENT_VERIFICATION_REQUIRED = 'DOCUMENT_VERIFICATION_REQUIRED'
+export const DOCUMENT_VERIFICATION_REQUIRED: ErrorCode = 'DOCUMENT_VERIFICATION_REQUIRED'
 
 /**
  * Recognises the write-path "operator must be named" rejection (a vehicle/class
@@ -91,6 +92,6 @@ export const DOCUMENT_VERIFICATION_REQUIRED = 'DOCUMENT_VERIFICATION_REQUIRED'
  * rather than regex-matching the message — copy or i18n changes can't break it
  * (#934). Matches the `OPERATOR_REQUIRED` code emitted by the API error handler.
  */
-export function operatorRequiredCode(e: unknown): string | undefined {
+export function operatorRequiredCode(e: unknown): ErrorCode | undefined {
   return e instanceof ApiError && e.code === OPERATOR_REQUIRED ? OPERATOR_REQUIRED : undefined
 }

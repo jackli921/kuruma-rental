@@ -1,4 +1,5 @@
 import type { calculateCancellationFee } from '@kuruma/shared/lib/cancellation-policy'
+import type { ErrorCode } from '@kuruma/shared/lib/error-codes'
 import type { CallerContext } from '../middleware/auth'
 import type { Booking } from '../stores'
 
@@ -39,7 +40,7 @@ export type CreateBookingResult =
       ok: false
       status: 400 | 403 | 409
       error: string | Record<string, string[]>
-      code?: string
+      code?: ErrorCode
       details?: { required: number; actual: number }
     }
 

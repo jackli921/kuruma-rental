@@ -1,3 +1,4 @@
+import type { ErrorCode } from '@kuruma/shared/lib/error-codes'
 import * as Sentry from '@sentry/cloudflare'
 import type { Hono } from 'hono'
 import { HTTPException } from 'hono/http-exception'
@@ -28,7 +29,10 @@ export function setupGlobalHandlers(app: Hono): void {
     if (err instanceof OperatorRequiredError) {
       // Self-describing envelope code so the web discriminates this 422 by `code`
       // rather than regex-matching the message (a reword/i18n change can't break it) (#934).
-      return c.json({ success: false, error: err.message, code: 'OPERATOR_REQUIRED' }, 422)
+      return c.json(
+        { success: false, error: err.message, code: 'OPERATOR_REQUIRED' satisfies ErrorCode },
+        422,
+      )
     }
     // #904: operator self-service action against an id that doesn't resolve in
     // the caller's own tenant (unknown/terminal invite or member). 404.
