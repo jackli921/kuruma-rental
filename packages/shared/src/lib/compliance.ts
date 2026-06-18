@@ -47,6 +47,10 @@ export function isRoadLegal(
 export const COMPLIANCE_ALERT_BANDS = ['MISSING', 'EXPIRED', 'D30', 'D14', 'D7', 'D1'] as const
 export type ComplianceAlertBand = (typeof COMPLIANCE_ALERT_BANDS)[number]
 
+/** The two documents the gate + digest treat identically (§D4). */
+export const COMPLIANCE_DOCUMENT_TYPES = ['SHAKEN', 'INSURANCE'] as const
+export type ComplianceDocumentType = (typeof COMPLIANCE_DOCUMENT_TYPES)[number]
+
 // Ordered tightest-first: the first threshold the date falls within wins, so the
 // bands stay mutually exclusive as the expiry nears.
 const BAND_THRESHOLD_DAYS = [

@@ -72,6 +72,8 @@ export type {
   NotificationLogRepository,
   NotificationLogUpsert,
 } from './types-notification'
+export { complianceAlertKey } from './types-compliance'
+export type { ComplianceAlertLogRepository, RecordComplianceAlert } from './types-compliance'
 
 // Audit ledger entity + insert-only persistence (#930), own module per #837 cap.
 export type { AuditLogEntry, AuditLogRepository } from './types-audit'

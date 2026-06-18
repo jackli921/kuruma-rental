@@ -4,6 +4,7 @@ import type {
   AddOnRepository,
   AvailabilityRepository,
   BookingRepository,
+  ComplianceAlertLogRepository,
   CustomerRepository,
   DocumentStorage,
   FeeScheduleRepository,
@@ -61,6 +62,7 @@ export type AppOverrides = {
   addOnRepo?: AddOnRepository
   feeScheduleRepo?: FeeScheduleRepository
   notificationLogRepo?: NotificationLogRepository
+  complianceAlertLogRepo?: ComplianceAlertLogRepository
   storefrontRepo?: StorefrontRepository
   regionRepo?: RegionRepository
   paymentEventRepo?: PaymentEventRepository
