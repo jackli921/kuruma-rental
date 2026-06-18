@@ -41,6 +41,7 @@
     "./lib/luggage": "./src/lib/luggage.ts",
     "./lib/pricing": "./src/lib/pricing.ts",
     "./lib/expiry": "./src/lib/expiry.ts",
+    "./lib/compliance": "./src/lib/compliance.ts",
     "./lib/rental-rules": "./src/lib/rental-rules.ts",
     "./lib/return-path": "./src/lib/return-path.ts",
     "./lib/region-distance": "./src/lib/region-distance.ts",

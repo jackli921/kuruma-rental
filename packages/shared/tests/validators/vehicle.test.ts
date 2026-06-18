@@ -13,6 +13,9 @@ describe('createVehicleSchema', () => {
     // Issue #48: at least one of dailyRateJpy / hourlyRateJpy is required,
     // so the canonical "valid" fixture must include a rate.
     dailyRateJpy: 8000,
+    // §5.0 / #916: a create now requires future-dated shaken + insurance.
+    shakenExpiryDate: '2099-06-15',
+    insuranceExpiryDate: '2099-01-01',
   }
 
   it('accepts valid input with required fields only', () => {
@@ -403,6 +406,9 @@ describe('vehicle luggage (#457)', () => {
     seats: 5,
     transmission: 'AUTO' as const,
     dailyRateJpy: 8000,
+    // §5.0 / #916: a create now requires future-dated shaken + insurance.
+    shakenExpiryDate: '2099-06-15',
+    insuranceExpiryDate: '2099-01-01',
   }
 
   it('create accepts a per-vehicle luggage override', () => {

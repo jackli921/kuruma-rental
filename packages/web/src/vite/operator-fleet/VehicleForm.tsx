@@ -103,8 +103,12 @@ function defaultsFromVehicle(vehicle: OperatorFleetVehicle | null): Partial<Vehi
     minRentalHours: vehicle.minRentalHours,
     maxRentalHours: vehicle.maxRentalHours,
     advanceBookingHours: vehicle.advanceBookingHours,
-    shakenExpiryDate: vehicle.shakenExpiryDate,
-    insuranceExpiryDate: vehicle.insuranceExpiryDate,
+    // §5.0 / #916: docs are required strings on the form. A legacy vehicle with
+    // null docs renders blank inputs; the resolver then forces the operator to
+    // enter valid, future-dated dates before the edit can save (emptyToNull
+    // maps a still-blank field back to null → a clear validation error).
+    shakenExpiryDate: vehicle.shakenExpiryDate ?? '',
+    insuranceExpiryDate: vehicle.insuranceExpiryDate ?? '',
   }
 }
 
