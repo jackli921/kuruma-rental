@@ -13,9 +13,13 @@ import {
 } from '@/vite/operator-fleet/api'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { LUGGAGE_SIZES } from '@kuruma/shared/lib/luggage'
-import { type CreateVehicleInput, createVehicleSchema } from '@kuruma/shared/validators/vehicle'
+import {
+  type CreateVehicleInput,
+  createVehicleSchema,
+  updateVehicleSchema,
+} from '@kuruma/shared/validators/vehicle'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
-import { useForm } from 'react-hook-form'
+import { type Resolver, useForm } from 'react-hook-form'
 import { useTranslations } from 'use-intl'
 import type { z } from 'zod'
 
@@ -34,9 +38,11 @@ import type { z } from 'zod'
 // silently clearing classId. We only consume the prop here.
 
 // The form binds to the create schema's INPUT shape (pre-transform) for both
-// modes; edit submits a partial of the same fields, so the wider create schema
-// validates a superset safely. react-hook-form emits string values that the
-// schema/setValueAs coerce to the parsed CreateVehicleInput on submit.
+// modes; react-hook-form emits string values that the schema/setValueAs coerce
+// to the parsed CreateVehicleInput on submit. The *resolver*, however, is chosen
+// by mode (see below): edit must use updateVehicleSchema, because #916 made
+// shaken/insurance required + future-dated on createVehicleSchema — a create-only
+// rule that would otherwise block any edit to a legacy/lapsed-doc car (#986).
 type VehicleFormValues = z.input<typeof createVehicleSchema>
 
 interface VehicleFormProps {
@@ -103,10 +109,10 @@ function defaultsFromVehicle(vehicle: OperatorFleetVehicle | null): Partial<Vehi
     minRentalHours: vehicle.minRentalHours,
     maxRentalHours: vehicle.maxRentalHours,
     advanceBookingHours: vehicle.advanceBookingHours,
-    // §5.0 / #916: docs are required strings on the form. A legacy vehicle with
-    // null docs renders blank inputs; the resolver then forces the operator to
-    // enter valid, future-dated dates before the edit can save (emptyToNull
-    // maps a still-blank field back to null → a clear validation error).
+    // A legacy/lapsed vehicle with null docs renders blank inputs. In edit mode
+    // updateVehicleSchema tolerates that (emptyToNull → null → accepted), so the
+    // operator can still save other fields (#986); a doc value they *do* enter
+    // must be future-dated. Create mode requires both via createVehicleSchema.
     shakenExpiryDate: vehicle.shakenExpiryDate ?? '',
     insuranceExpiryDate: vehicle.insuranceExpiryDate ?? '',
   }
@@ -132,7 +138,16 @@ export function VehicleForm({ vehicle, classOptions, onSaved, onCancel }: Vehicl
     handleSubmit,
     formState: { errors },
   } = useForm<VehicleFormValues, unknown, CreateVehicleInput>({
-    resolver: zodResolver(createVehicleSchema),
+    // Edit tolerates legacy/lapsed (or omitted) docs via updateVehicleSchema's
+    // .partial()/.nullish() shape; the cast bridges only that narrowing — the
+    // partial output is sent to updateVehicle, which accepts it (#986).
+    resolver: isEditMode
+      ? (zodResolver(updateVehicleSchema) as Resolver<
+          VehicleFormValues,
+          unknown,
+          CreateVehicleInput
+        >)
+      : zodResolver(createVehicleSchema),
     defaultValues: defaultsFromVehicle(vehicle),
   })
 

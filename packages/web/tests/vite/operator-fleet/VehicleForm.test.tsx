@@ -158,6 +158,26 @@ describe('VehicleForm', () => {
     expect(mockedCreate).not.toHaveBeenCalled()
   })
 
+  it('edit mode: saves a legacy vehicle with null shaken/insurance docs (#986)', async () => {
+    const user = userEvent.setup()
+    mockedUpdate.mockResolvedValue(existingVehicle())
+    // A legacy/lapsed car has null docs. Edit must tolerate them: the create-only
+    // required-docs rule (#916) must not leak into the edit resolver, or the
+    // operator can't change *any* field until they back-fill both documents.
+    renderForm({ vehicle: existingVehicle({ shakenExpiryDate: null, insuranceExpiryDate: null }) })
+
+    const nameInput = screen.getByLabelText(en.name) as HTMLInputElement
+    await user.clear(nameInput)
+    await user.type(nameInput, 'Toyota Aqua Legacy')
+    await user.click(screen.getByRole('button', { name: en.save }))
+
+    await waitFor(() => expect(mockedUpdate).toHaveBeenCalledTimes(1))
+    expect(mockedUpdate).toHaveBeenCalledWith(
+      'veh_1',
+      expect.objectContaining({ name: 'Toyota Aqua Legacy' }),
+    )
+  })
+
   it('blocks submit and shows a field error when required input is invalid', async () => {
     const user = userEvent.setup()
     // Create mode: name is blank and no rate is set -> two validation failures.
