@@ -24,6 +24,7 @@ describe('ERROR_CODES', () => {
       'RENTAL_RULE_MAX_DURATION',
       'RENTAL_RULE_MIN_DURATION',
       'RENTAL_RULE_START_IN_PAST',
+      'VEHICLE_DOCS_EXPIRE_BEFORE_RETURN',
     ])
   })
 

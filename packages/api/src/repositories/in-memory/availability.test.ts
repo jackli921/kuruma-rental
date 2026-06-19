@@ -44,8 +44,11 @@ function makeVehicle(
     color: null,
     dailyRateJpy: 8000,
     hourlyRateJpy: null,
-    shakenExpiryDate: null,
-    insuranceExpiryDate: null,
+    // Road-legal by default (well after TO) so the storefront-filter tests below
+    // exercise filtering, not the #916 compliance gate. The gate has its own
+    // describe block, which overrides these per case.
+    shakenExpiryDate: '2027-01-01',
+    insuranceExpiryDate: '2027-01-01',
     ...overrides,
   })
 }
@@ -151,5 +154,40 @@ describe('InMemoryAvailabilityRepository.findAvailableVehicles — storefront fi
     })
 
     expect(result.map((v) => v.id)).toEqual([free.id])
+  })
+})
+
+// §5.2 (#916): the road-legal gate hides a car whose shaken OR insurance is not
+// valid through the requested `to` JST date — the same clock as direct/create.
+// TO is 2026-08-01T14:00Z → JST 2026-08-01, so a doc dated 2026-08-01 is valid
+// THROUGH `to` (boundary allowed) and 2026-07-31 is not.
+describe('InMemoryAvailabilityRepository.findAvailableVehicles — compliance gate (#916)', () => {
+  it('excludes a vehicle whose shaken expires before the requested return date', async () => {
+    const current = await makeVehicle({})
+    await makeVehicle({ shakenExpiryDate: '2026-07-31' })
+
+    const result = await availabilityRepo.findAvailableVehicles(FROM, TO)
+
+    expect(result.map((v) => v.id)).toEqual([current.id])
+  })
+
+  it('excludes a vehicle with no recorded insurance date (UNKNOWN)', async () => {
+    const current = await makeVehicle({})
+    await makeVehicle({ insuranceExpiryDate: null })
+
+    const result = await availabilityRepo.findAvailableVehicles(FROM, TO)
+
+    expect(result.map((v) => v.id)).toEqual([current.id])
+  })
+
+  it('includes a vehicle whose documents are valid exactly through the return date', async () => {
+    const boundary = await makeVehicle({
+      shakenExpiryDate: '2026-08-01',
+      insuranceExpiryDate: '2026-08-01',
+    })
+
+    const result = await availabilityRepo.findAvailableVehicles(FROM, TO)
+
+    expect(result.map((v) => v.id)).toEqual([boundary.id])
   })
 })

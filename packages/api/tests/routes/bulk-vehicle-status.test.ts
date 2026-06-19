@@ -18,6 +18,8 @@ function validVehicleInput(overrides: Record<string, unknown> = {}) {
     transmission: 'AUTO' as const,
     bufferMinutes: 60,
     dailyRateJpy: 8000,
+    shakenExpiryDate: '2099-06-15',
+    insuranceExpiryDate: '2099-01-01',
     ...overrides,
   }
 }

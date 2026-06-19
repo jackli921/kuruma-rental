@@ -4,6 +4,7 @@ import type {
   AddOnRepository,
   AvailabilityRepository,
   BookingRepository,
+  ComplianceAlertLogRepository,
   CustomerRepository,
   DocumentStorage,
   FeeScheduleRepository,
@@ -30,6 +31,7 @@ import type {
   VehicleDetailRepository,
   VehicleRepository,
 } from './repositories/types'
+import type { EmailSender } from './services/email/email-sender'
 import type { Geocoder } from './services/geocoding/types'
 import type { PaymentGateway } from './services/payment/payment-gateway'
 
@@ -61,12 +63,17 @@ export type AppOverrides = {
   addOnRepo?: AddOnRepository
   feeScheduleRepo?: FeeScheduleRepository
   notificationLogRepo?: NotificationLogRepository
+  complianceAlertLogRepo?: ComplianceAlertLogRepository
   storefrontRepo?: StorefrontRepository
   regionRepo?: RegionRepository
   paymentEventRepo?: PaymentEventRepository
   paymentAnomalyRepo?: PaymentAnomalyRepository
   providerInviteRepo?: ProviderInviteRepository
   operatorMembershipRepo?: OperatorMembershipRepository
+  // Inject a fake outbound email port in tests; absent ⇒ the env-resolved
+  // Resend/dev-stub/sentinel (resolveEmailSender). Shared by the booking
+  // dispatcher and the #916 compliance digest.
+  emailSender?: EmailSender
   // Inject a fake gateway in tests; absent ⇒ the env-resolved Stripe/sentinel.
   paymentGateway?: PaymentGateway
   // Inject a fake Geocoder in tests (proves a provider swap touches only here);

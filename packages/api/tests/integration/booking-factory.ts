@@ -66,6 +66,12 @@ export async function seedRenter(prefix: string): Promise<string> {
   return id
 }
 
+// #916 §5.3: the road-legal guard now rejects a booking whose rental ends after
+// the vehicle's shaken/insurance expiry. Default every fixture vehicle to docs
+// valid far past any test rental window so existing bookings stay 201; gate
+// tests override these to seed an expired car.
+export const ROAD_LEGAL_FAR_FUTURE = '2099-12-31'
+
 /** Seed an AVAILABLE vehicle sealed to (operatorId, classId, pickupLocationId). */
 export async function seedVehicle(opts: {
   operatorId: string
@@ -73,6 +79,10 @@ export async function seedVehicle(opts: {
   pickupLocationId: string
   name: string
   dailyRateJpy: number
+  /** Defaults to far-future (road-legal). Pass a past date to seed an expired car. */
+  shakenExpiryDate?: string
+  /** Defaults to far-future (road-legal). Pass a past date to seed an expired car. */
+  insuranceExpiryDate?: string
 }): Promise<string> {
   const vehicle = await vehicleRepo.create(SYSTEM_CONTEXT, {
     operatorId: opts.operatorId,
@@ -97,8 +107,8 @@ export async function seedVehicle(opts: {
     color: null,
     dailyRateJpy: opts.dailyRateJpy,
     hourlyRateJpy: null,
-    shakenExpiryDate: null,
-    insuranceExpiryDate: null,
+    shakenExpiryDate: opts.shakenExpiryDate ?? ROAD_LEGAL_FAR_FUTURE,
+    insuranceExpiryDate: opts.insuranceExpiryDate ?? ROAD_LEGAL_FAR_FUTURE,
   })
   return vehicle.id
 }

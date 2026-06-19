@@ -13,6 +13,7 @@ import {
   DrizzleAvailabilityRepository,
   DrizzleBookingEventRepository,
   DrizzleBookingRepository,
+  DrizzleComplianceAlertLogRepository,
   DrizzleCustomerRepository,
   DrizzleFeeScheduleRepository,
   DrizzleFleetOverviewRepository,
@@ -45,6 +46,7 @@ import {
   InMemoryAvailabilityRepository,
   InMemoryBookingEventRepository,
   InMemoryBookingRepository,
+  InMemoryComplianceAlertLogRepository,
   InMemoryCustomerRepository,
   InMemoryDocumentStorage,
   InMemoryFeeScheduleRepository,
@@ -79,6 +81,7 @@ import type {
   AvailabilityRepository,
   BookingEventRepository,
   BookingRepository,
+  ComplianceAlertLogRepository,
   CustomerRepository,
   DocumentStorage,
   FeeScheduleRepository,
@@ -142,6 +145,7 @@ export type Repos = {
   addOnRepo: AddOnRepository
   feeScheduleRepo: FeeScheduleRepository
   notificationLogRepo: NotificationLogRepository
+  complianceAlertLogRepo: ComplianceAlertLogRepository
   storefrontRepo: StorefrontRepository
   regionRepo: RegionRepository
   paymentEventRepo: PaymentEventRepository
@@ -204,6 +208,8 @@ export function buildOverrideRepos(overrides: AppOverrides): Repos {
   const operatorRepo = overrides.operatorRepo ?? new InMemoryOperatorRepository()
   const notificationLogRepo =
     overrides.notificationLogRepo ?? new InMemoryNotificationLogRepository()
+  const complianceAlertLogRepo =
+    overrides.complianceAlertLogRepo ?? new InMemoryComplianceAlertLogRepository()
   const storefrontRepo =
     overrides.storefrontRepo ?? new InMemoryStorefrontRepository(locationRepo, operatorRepo)
   const regionRepo = overrides.regionRepo ?? new InMemoryRegionRepository()
@@ -238,6 +244,7 @@ export function buildOverrideRepos(overrides: AppOverrides): Repos {
     addOnRepo,
     feeScheduleRepo,
     notificationLogRepo,
+    complianceAlertLogRepo,
     storefrontRepo,
     regionRepo,
     paymentEventRepo,
@@ -333,6 +340,7 @@ export function buildDrizzleRepos(opts?: { db?: Db; runTx?: RunTx }): Repos {
     addOnRepo: new DrizzleAddOnRepository(db),
     feeScheduleRepo: new DrizzleFeeScheduleRepository(db),
     notificationLogRepo: new DrizzleNotificationLogRepository(db),
+    complianceAlertLogRepo: new DrizzleComplianceAlertLogRepository(db),
     storefrontRepo: new DrizzleStorefrontRepository(db),
     regionRepo: new DrizzleRegionRepository(db),
     paymentEventRepo: new DrizzlePaymentEventRepository(db),
@@ -419,6 +427,7 @@ export function buildInMemoryRepos(): Repos {
     addOnRepo,
     feeScheduleRepo,
     notificationLogRepo: new InMemoryNotificationLogRepository(),
+    complianceAlertLogRepo: new InMemoryComplianceAlertLogRepository(),
     storefrontRepo: new InMemoryStorefrontRepository(locationRepo, operatorRepo),
     regionRepo: new InMemoryRegionRepository(),
     paymentEventRepo: new InMemoryPaymentEventRepository(),

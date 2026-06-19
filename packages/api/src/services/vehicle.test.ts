@@ -27,6 +27,9 @@ function createInput(overrides: Record<string, unknown> = {}) {
     seats: 5,
     transmission: 'AUTO',
     dailyRateJpy: 8000,
+    // §5.0 / #916: a create requires future-dated shaken + insurance.
+    shakenExpiryDate: '2099-06-15',
+    insuranceExpiryDate: '2099-01-01',
     ...overrides,
   })
 }

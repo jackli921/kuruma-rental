@@ -1,4 +1,5 @@
 import type { AddOnSnapshot, InsuranceSnapshot } from '@kuruma/shared/db/schema'
+import { isRoadLegal, jstDateString } from '@kuruma/shared/lib/compliance'
 import { calculateBookingPrice } from '@kuruma/shared/lib/pricing'
 import { checkRentalRules } from '@kuruma/shared/lib/rental-rules'
 import { isOperatorRole } from '../auth/roles'
@@ -190,6 +191,19 @@ export class BookingCreationService {
     }
     if (!vehicle.classId) {
       return { ok: false, status: 400, error: 'Vehicle has no class' }
+    }
+    // §5.3 (#916): block a reservation whose rental runs past the car's shaken
+    // or insurance expiry — covers the future-booking legal case the today-only
+    // availability gate misses. Same JST clock as every other gate: a return ON
+    // the expiry date is allowed (isRoadLegal uses `expiry >= asOf`); AFTER it is
+    // rejected. Applies to all create paths (renter, operator manual, walk-in).
+    if (!isRoadLegal(vehicle, jstDateString(input.endAt))) {
+      return {
+        ok: false,
+        status: 400,
+        error: "Vehicle's shaken or insurance expires before the booking ends",
+        code: 'VEHICLE_DOCS_EXPIRE_BEFORE_RETURN',
+      }
     }
     const operatorId = vehicle.operatorId
     const classId = vehicle.classId
