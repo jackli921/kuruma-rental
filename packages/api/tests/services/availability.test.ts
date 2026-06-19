@@ -29,8 +29,10 @@ async function seedVehicle(overrides: Partial<Vehicle> = {}): Promise<Vehicle> {
     advanceBookingHours: null,
     dailyRateJpy: 8000,
     hourlyRateJpy: null,
-    shakenExpiryDate: null,
-    insuranceExpiryDate: null,
+    // #916: default fixtures road-legal so the §5.2 gate doesn't hide them;
+    // gate-specific tests pass expired/null docs via overrides.
+    shakenExpiryDate: '2099-06-15',
+    insuranceExpiryDate: '2099-01-01',
     ...overrides,
   })
 }

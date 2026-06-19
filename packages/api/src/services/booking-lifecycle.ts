@@ -4,6 +4,7 @@ import {
   VALID_BOOKING_TRANSITIONS,
 } from '@kuruma/shared/db/schema'
 import { calculateCancellationFee } from '@kuruma/shared/lib/cancellation-policy'
+import { isRoadLegal, jstDateString } from '@kuruma/shared/lib/compliance'
 import { calculateBookingPrice } from '@kuruma/shared/lib/pricing'
 import { type CallerContext, SYSTEM_CONTEXT } from '../middleware/auth'
 import { PG_ERROR, pgErrorCode } from '../pg-errors'
@@ -94,6 +95,17 @@ export class BookingLifecycleService {
           !(await this.sameAcrissClass(booking.classId, replacement.classId))
         ) {
           return { ok: false, status: 400, error: 'Replacement vehicle is a different class' }
+        }
+        // §5.3b (#916): the swap path is independent of create, so the road-legal
+        // gate must live here too — same JST clock as create (a return ON expiry
+        // is allowed). Without it an expired car create/availability would never
+        // surface could still be substituted in (policy drift).
+        if (!isRoadLegal(replacement, jstDateString(booking.endAt))) {
+          return {
+            ok: false,
+            status: 400,
+            error: "Replacement vehicle's shaken or insurance expires before the booking ends",
+          }
         }
 
         // Re-snapshot price from the new vehicle's rates (#429), preserving any
@@ -205,11 +217,15 @@ export class BookingLifecycleService {
     // sameAcrissClass): both sides must share the same non-null code.
     const bookingAcriss = acrissById.get(booking.classId)
     if (!bookingAcriss) return []
+    // §5.3b (#916): an expired car must never surface as a substitution option —
+    // road-legal through the booking's return date, same clock as substitute().
+    const asOf = jstDateString(booking.endAt)
     return available.filter(
       (v) =>
         v.id !== booking.assignedVehicleId &&
         (v.pickupLocationId ?? null) === booking.pickupLocationId &&
-        acrissById.get(v.classId ?? '') === bookingAcriss,
+        acrissById.get(v.classId ?? '') === bookingAcriss &&
+        isRoadLegal(v, asOf),
     )
   }
 

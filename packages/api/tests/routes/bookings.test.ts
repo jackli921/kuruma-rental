@@ -1,3 +1,4 @@
+import { jstDateString } from '@kuruma/shared/lib/compliance'
 import { Hono } from 'hono'
 import { beforeEach, describe, expect, it } from 'vitest'
 import { SYSTEM_CONTEXT } from '../../src/middleware/auth'
@@ -103,8 +104,8 @@ function vehicleData(
     color: null,
     dailyRateJpy: 8000,
     hourlyRateJpy: null,
-    shakenExpiryDate: null,
-    insuranceExpiryDate: null,
+    shakenExpiryDate: '2099-06-15',
+    insuranceExpiryDate: '2099-01-01',
     ...overrides,
   }
 }
@@ -697,6 +698,48 @@ describe('Booking Routes', () => {
       expect(res.status).toBe(400)
       const body = await res.json()
       expect(body.error).toMatch(/not available/i)
+    })
+
+    it('rejects a booking whose rental ends after shaken/insurance expires with 400 (§5.3 #916)', async () => {
+      const HOUR = 60 * 60 * 1000
+      const now = Date.now()
+      const startAt = new Date(now + 24 * HOUR).toISOString()
+      const endAt = new Date(now + 96 * HOUR).toISOString()
+      // Shaken lapses on the pickup day — the car is not road-legal through return.
+      const lapsing = await vehicleRepo.create(
+        SYSTEM_CONTEXT,
+        vehicleData({
+          name: 'Lapsing',
+          shakenExpiryDate: jstDateString(new Date(now + 24 * HOUR)),
+        }),
+      )
+      const res = await createBooking(
+        validBookingInput({ requestedVehicleId: lapsing.id, startAt, endAt }),
+      )
+
+      expect(res.status).toBe(400)
+      const body = await res.json()
+      expect(body.success).toBe(false)
+      expect(body.code).toBe('VEHICLE_DOCS_EXPIRE_BEFORE_RETURN')
+    })
+
+    it('allows a booking that returns ON the expiry date — valid through expiry (§5.3 #916)', async () => {
+      const HOUR = 60 * 60 * 1000
+      const now = Date.now()
+      const startAt = new Date(now + 24 * HOUR).toISOString()
+      const endAt = new Date(now + 72 * HOUR).toISOString()
+      const endJst = jstDateString(new Date(now + 72 * HOUR))
+      const boundary = await vehicleRepo.create(
+        SYSTEM_CONTEXT,
+        vehicleData({ name: 'Boundary', shakenExpiryDate: endJst, insuranceExpiryDate: endJst }),
+      )
+      const res = await createBooking(
+        validBookingInput({ requestedVehicleId: boundary.id, startAt, endAt }),
+      )
+
+      expect(res.status).toBe(201)
+      const body = await res.json()
+      expect(body.data.status).toBe('CONFIRMED')
     })
 
     it('rejects a pickup location that is not the vehicle’s storefront with 400 (#392)', async () => {

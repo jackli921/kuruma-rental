@@ -111,6 +111,8 @@ describe('GET /stats', () => {
         transmission: 'AUTO',
         fuelType: 'Hybrid',
         dailyRateJpy: 9000,
+        shakenExpiryDate: '2099-06-15',
+        insuranceExpiryDate: '2099-01-01',
       }),
     })
     await app.request('/vehicles', {
@@ -125,6 +127,8 @@ describe('GET /stats', () => {
         transmission: 'AUTO',
         fuelType: 'Gasoline',
         dailyRateJpy: 7500,
+        shakenExpiryDate: '2099-06-15',
+        insuranceExpiryDate: '2099-01-01',
       }),
     })
     const maintenanceRes = await app.request('/vehicles', {
@@ -139,6 +143,8 @@ describe('GET /stats', () => {
         transmission: 'MANUAL',
         fuelType: 'Gasoline',
         dailyRateJpy: 6500,
+        shakenExpiryDate: '2099-06-15',
+        insuranceExpiryDate: '2099-01-01',
       }),
     })
     const maintenanceBody = await maintenanceRes.json()

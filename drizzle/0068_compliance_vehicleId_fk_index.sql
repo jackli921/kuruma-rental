@@ -1,0 +1,1 @@
+CREATE INDEX "idx_compliance_alert_log_vehicleId" ON "compliance_alert_log" USING btree ("vehicleId");

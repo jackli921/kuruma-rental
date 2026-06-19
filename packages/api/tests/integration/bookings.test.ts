@@ -84,8 +84,8 @@ beforeAll(async () => {
     maxRentalHours: null,
     advanceBookingHours: null,
     dailyRateJpy: DEFAULT_DAILY_RATE_JPY,
-    shakenExpiryDate: null,
-    insuranceExpiryDate: null,
+    shakenExpiryDate: '2099-06-15',
+    insuranceExpiryDate: '2099-01-01',
   })
   createdVehicleIds.push(testVehicle.id)
 })
@@ -236,8 +236,8 @@ describe('DrizzleBookingRepository', () => {
       maxRentalHours: null,
       advanceBookingHours: null,
       dailyRateJpy: DEFAULT_DAILY_RATE_JPY,
-      shakenExpiryDate: null,
-      insuranceExpiryDate: null,
+      shakenExpiryDate: '2099-06-15',
+      insuranceExpiryDate: '2099-01-01',
     })
     createdVehicleIds.push(otherVehicle.id)
 
@@ -488,8 +488,8 @@ describe('POST /bookings overlap via HTTP (real Postgres)', () => {
       advanceBookingHours: null,
       dailyRateJpy: 8000,
       hourlyRateJpy: null,
-      shakenExpiryDate: null,
-      insuranceExpiryDate: null,
+      shakenExpiryDate: '2099-06-15',
+      insuranceExpiryDate: '2099-01-01',
     })
 
     // The booking submit reads the pickup location INSIDE the transaction to

@@ -121,8 +121,8 @@ function makeVehicle(overrides: Partial<Omit<Vehicle, 'id' | 'createdAt' | 'upda
     color: null,
     dailyRateJpy: 8000,
     hourlyRateJpy: null,
-    shakenExpiryDate: null,
-    insuranceExpiryDate: null,
+    shakenExpiryDate: '2099-06-15',
+    insuranceExpiryDate: '2099-01-01',
     ...overrides,
   })
 }

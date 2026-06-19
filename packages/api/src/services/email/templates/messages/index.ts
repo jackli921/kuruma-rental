@@ -1,4 +1,5 @@
 import type { BookingSource, FeeType } from '@kuruma/shared/db/schema'
+import type { ComplianceAlertBand, ComplianceDocumentType } from '@kuruma/shared/lib/compliance'
 
 // Outbound email i18n. Distinct from the web `next-intl` namespaces (these render
 // in the API), so adding a key here needs no dev-server restart. Keep all three
@@ -49,6 +50,11 @@ export interface EmailStrings {
   tripCompletedHeading: string
   // Fee-type display names
   feeLabels: Record<FeeType, string>
+  // #916 §5.4 compliance digest (operator-facing fleet reminder)
+  complianceSubject: string // item count appended by the renderer
+  complianceHeading: string
+  complianceDocLabels: Record<ComplianceDocumentType, string>
+  complianceBandLabels: Record<ComplianceAlertBand, string>
 }
 
 const en: EmailStrings = {
@@ -94,6 +100,17 @@ const en: EmailStrings = {
     OVERTIME_HOURLY: 'Overtime (per hour)',
     CLEANING_FLAT: 'Cleaning',
     NO_FUEL_FLAT: 'Refueling',
+  },
+  complianceSubject: 'Fleet compliance —',
+  complianceHeading: 'The following vehicle documents need attention:',
+  complianceDocLabels: { SHAKEN: 'Shaken (inspection)', INSURANCE: 'Insurance' },
+  complianceBandLabels: {
+    MISSING: 'No certificate on file',
+    EXPIRED: 'Expired',
+    D30: 'Expires in 30 days',
+    D14: 'Expires in 14 days',
+    D7: 'Expires in 7 days',
+    D1: 'Expires within 1 day',
   },
 }
 
@@ -141,6 +158,17 @@ const ja: EmailStrings = {
     CLEANING_FLAT: 'クリーニング',
     NO_FUEL_FLAT: '給油',
   },
+  complianceSubject: '車両コンプライアンス —',
+  complianceHeading: '以下の車両書類の対応が必要です:',
+  complianceDocLabels: { SHAKEN: '車検', INSURANCE: '保険' },
+  complianceBandLabels: {
+    MISSING: '証明書未登録',
+    EXPIRED: '期限切れ',
+    D30: 'あと30日で期限切れ',
+    D14: 'あと14日で期限切れ',
+    D7: 'あと7日で期限切れ',
+    D1: '1日以内に期限切れ',
+  },
 }
 
 const zh: EmailStrings = {
@@ -186,6 +214,17 @@ const zh: EmailStrings = {
     OVERTIME_HOURLY: '超时费(每小时)',
     CLEANING_FLAT: '清洁费',
     NO_FUEL_FLAT: '加油费',
+  },
+  complianceSubject: '车辆合规提醒 —',
+  complianceHeading: '以下车辆证件需要处理:',
+  complianceDocLabels: { SHAKEN: '车检', INSURANCE: '保险' },
+  complianceBandLabels: {
+    MISSING: '未登记证件',
+    EXPIRED: '已过期',
+    D30: '30天后到期',
+    D14: '14天后到期',
+    D7: '7天后到期',
+    D1: '1天内到期',
   },
 }
 
