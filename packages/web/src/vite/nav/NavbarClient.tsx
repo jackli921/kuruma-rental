@@ -26,7 +26,7 @@ export function LayoutToggle() {
       className="hidden md:inline-flex items-center justify-center rounded-lg p-2 text-muted-foreground hover:bg-accent hover:text-accent-foreground transition-colors"
       title={label}
       aria-label={label}
-      aria-expanded={preference === 'sidebar'}
+      aria-pressed={preference === 'sidebar'}
     >
       <PanelLeft className={cn('size-4', preference === 'sidebar' && 'text-foreground')} />
     </button>
