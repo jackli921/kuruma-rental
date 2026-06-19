@@ -1,11 +1,13 @@
 import {
   combineDateTime,
+  ensureEndAfterStart,
   fromLocalDate,
   generateTimeSlots,
   isPastDate,
   jstNowParts,
   rentalDays,
   resolveSlot,
+  returnSlotsForDate,
   slotsForDate,
   splitDateTime,
   toLocalDate,
@@ -141,5 +143,60 @@ describe('rentalDays', () => {
   it('returns 0 for a non-positive or invalid range', () => {
     expect(rentalDays({ from: '2026-06-17T10:00', to: '2026-06-17T10:00' })).toBe(0)
     expect(rentalDays({ from: 'bad', to: 'bad' })).toBe(0)
+  })
+})
+
+describe('returnSlotsForDate', () => {
+  const now = new Date('2026-06-17T01:15:00Z') // JST 10:15
+
+  it('returns the full slot list when the return is on a later day than pickup', () => {
+    const slots = returnSlotsForDate('2026-06-19', { date: '2026-06-18', time: '15:00' }, now, 30)
+    expect(slots[0]).toBe('00:00')
+    expect(slots).toHaveLength(48)
+  })
+
+  it('offers only slots strictly after pickup when return is the same day', () => {
+    const slots = returnSlotsForDate('2026-06-19', { date: '2026-06-19', time: '15:00' }, now, 30)
+    expect(slots).not.toContain('15:00')
+    expect(slots[0]).toBe('15:30')
+  })
+
+  it('also honors the now-gate on a same-day return today', () => {
+    // today (JST 10:15): slots start 10:30, then filtered to those after 12:00.
+    const slots = returnSlotsForDate('2026-06-17', { date: '2026-06-17', time: '12:00' }, now, 30)
+    expect(slots).not.toContain('12:00')
+    expect(slots[0]).toBe('12:30')
+  })
+})
+
+describe('ensureEndAfterStart', () => {
+  const now = new Date('2026-06-17T01:15:00Z') // JST 10:15
+
+  it('leaves a valid cross-day return untouched', () => {
+    const from = { date: '2026-06-18', time: '10:00' }
+    const to = { date: '2026-06-20', time: '09:00' }
+    expect(ensureEndAfterStart(from, to, now, 30)).toEqual(to)
+  })
+
+  it('bumps a single-day selection (to === from) to the next same-day slot', () => {
+    const from = { date: '2026-06-19', time: '10:00' }
+    expect(ensureEndAfterStart(from, { ...from }, now, 30)).toEqual({
+      date: '2026-06-19',
+      time: '10:30',
+    })
+  })
+
+  it('bumps an inverted same-day return to the first slot after pickup', () => {
+    const from = { date: '2026-06-19', time: '15:00' }
+    const to = { date: '2026-06-19', time: '09:00' }
+    expect(ensureEndAfterStart(from, to, now, 30)).toEqual({ date: '2026-06-19', time: '15:30' })
+  })
+
+  it('rolls to the next day when pickup is the last slot of its day', () => {
+    const from = { date: '2026-06-19', time: '23:30' }
+    expect(ensureEndAfterStart(from, { ...from }, now, 30)).toEqual({
+      date: '2026-06-20',
+      time: '00:00',
+    })
   })
 })
