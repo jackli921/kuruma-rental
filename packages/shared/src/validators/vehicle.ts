@@ -18,6 +18,20 @@ const jpyRate = z.number().int('Rate must be a whole yen amount').min(0, 'Rate c
 // as #430).
 const photosSchema = z.array(z.string().url())
 
+// Shaken/insurance expiry — a real YYYY-MM-DD calendar date that is not in the
+// past (§5.0 / #916). The runtime road-legal gate treats a certificate as valid
+// THROUGH its printed date, so "not in the past" is `>= today`: a listing can't
+// be created or renewed with an already-expired document. `today` is the
+// request-time date (UTC day is close enough for the create door; the precise
+// JST projection lives in the booking/availability gates). Far-future/far-past
+// fixtures keep tests clock-independent.
+const expiryDate = (label: string) =>
+  z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/, 'Must be YYYY-MM-DD')
+    .refine((s) => !Number.isNaN(Date.parse(s)), 'Invalid calendar date')
+    .refine((s) => s >= new Date().toISOString().slice(0, 10), `${label} must not be in the past`)
+
 // Raw object schema, no cross-field refinements. Kept separate so
 // `updateVehicleSchema` can still be `.partial()` — `superRefine` wraps the
 // result in ZodEffects which doesn't support `.partial()` directly.
@@ -50,16 +64,11 @@ const vehicleObjectSchema = z.object({
   advanceBookingHours: z.number().int().min(0, 'Advance booking cannot be negative').nullish(),
   dailyRateJpy: jpyRate.nullish(),
   hourlyRateJpy: jpyRate.nullish(),
-  shakenExpiryDate: z
-    .string()
-    .regex(/^\d{4}-\d{2}-\d{2}$/, 'Must be YYYY-MM-DD')
-    .refine((s) => !Number.isNaN(Date.parse(s)), 'Invalid calendar date')
-    .nullish(),
-  insuranceExpiryDate: z
-    .string()
-    .regex(/^\d{4}-\d{2}-\d{2}$/, 'Must be YYYY-MM-DD')
-    .refine((s) => !Number.isNaN(Date.parse(s)), 'Invalid calendar date')
-    .nullish(),
+  // Nullish on the base so an update PATCH can omit them; the create schema
+  // below re-declares both as required (§5.0). The not-past refine still runs
+  // on any value present — a renewal must also be future-dated.
+  shakenExpiryDate: expiryDate('Shaken expiry').nullish(),
+  insuranceExpiryDate: expiryDate('Insurance expiry').nullish(),
   // Issue #228: vehicle detail fields for filtering. Nullish so the form
   // can submit `null` when a field is blank (same pattern as pricing #48).
   make: z.string().trim().nullish(),
@@ -72,6 +81,12 @@ export const createVehicleSchema = vehicleObjectSchema
   .extend({
     // Defaults belong on create only — see photosSchema note (#432).
     photos: photosSchema.default([]),
+    // §5.0 / #916: a vehicle can't be listed without valid, future-dated docs.
+    // Required here (overriding the nullish base) so a missing/null/expired
+    // shaken or insurance is a clear 400 at the boundary, not a silently
+    // invisible car. DB column stays nullable for legacy/lapsed rows.
+    shakenExpiryDate: expiryDate('Shaken expiry'),
+    insuranceExpiryDate: expiryDate('Insurance expiry'),
     // #401: a non-operator (platform/legacy admin) caller may name the target
     // operator. OPERATOR_* callers' tenant comes from their token and this is
     // ignored for them. Optional — omit when exactly one operator exists.

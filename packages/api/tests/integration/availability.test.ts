@@ -91,8 +91,13 @@ function createTestVehicle(
     maxRentalHours: overrides.maxRentalHours ?? null,
     advanceBookingHours: overrides.advanceBookingHours ?? null,
     dailyRateJpy: overrides.dailyRateJpy ?? DEFAULT_DAILY_RATE_JPY,
-    shakenExpiryDate: overrides.shakenExpiryDate ?? null,
-    insuranceExpiryDate: overrides.insuranceExpiryDate ?? null,
+    // #916: default fixtures road-legal so the §5.2 gate doesn't hide them. Use
+    // `=== undefined` (not `??`) so a compliance-gate test can still pass an
+    // EXPLICIT null to assert UNKNOWN docs are excluded.
+    shakenExpiryDate:
+      overrides.shakenExpiryDate === undefined ? '2099-06-15' : overrides.shakenExpiryDate,
+    insuranceExpiryDate:
+      overrides.insuranceExpiryDate === undefined ? '2099-01-01' : overrides.insuranceExpiryDate,
   })
 }
 
@@ -302,6 +307,63 @@ describe('DrizzleAvailabilityRepository', () => {
       const resultIds = result.map((v) => v.id)
       expect(resultIds).not.toContain(maintenanceVehicle.id)
       expect(resultIds).not.toContain(retiredVehicle.id)
+    })
+  })
+
+  // §5.2 (#916): the list query must hide non-road-legal cars THROUGH the
+  // requested return date — the same JST clock as the direct/create gates.
+  // jstDateString(2026-08-01T14:00Z) = '2026-08-01' (JST +9h), so a doc valid
+  // THROUGH '2026-08-01' is road-legal for this window; '2026-07-31' is not.
+  describe('findAvailableVehicles — compliance gate (#916)', () => {
+    const FROM = new Date('2026-08-01T10:00:00Z')
+    const TO = new Date('2026-08-01T14:00:00Z')
+
+    it('excludes a vehicle whose shaken is expired before the return date', async () => {
+      const expired = await createTestVehicle({
+        name: 'Expired Shaken',
+        shakenExpiryDate: '2026-07-31',
+        insuranceExpiryDate: '2099-01-01',
+      })
+      createdVehicleIds.push(expired.id)
+
+      const result = await availabilityRepo.findAvailableVehicles(FROM, TO)
+      expect(result.map((v) => v.id)).not.toContain(expired.id)
+    })
+
+    it('excludes a vehicle with missing (null) documents — UNKNOWN is not road-legal', async () => {
+      const unknown = await createTestVehicle({
+        name: 'No Docs',
+        shakenExpiryDate: null,
+        insuranceExpiryDate: null,
+      })
+      createdVehicleIds.push(unknown.id)
+
+      const result = await availabilityRepo.findAvailableVehicles(FROM, TO)
+      expect(result.map((v) => v.id)).not.toContain(unknown.id)
+    })
+
+    it('excludes when only insurance is expired — both documents are required', async () => {
+      const partial = await createTestVehicle({
+        name: 'Expired Insurance Only',
+        shakenExpiryDate: '2099-06-15',
+        insuranceExpiryDate: '2026-07-31',
+      })
+      createdVehicleIds.push(partial.id)
+
+      const result = await availabilityRepo.findAvailableVehicles(FROM, TO)
+      expect(result.map((v) => v.id)).not.toContain(partial.id)
+    })
+
+    it('includes a vehicle whose documents are valid THROUGH the return date (boundary)', async () => {
+      const onBoundary = await createTestVehicle({
+        name: 'Valid Through Return',
+        shakenExpiryDate: '2026-08-01',
+        insuranceExpiryDate: '2026-08-01',
+      })
+      createdVehicleIds.push(onBoundary.id)
+
+      const result = await availabilityRepo.findAvailableVehicles(FROM, TO)
+      expect(result.map((v) => v.id)).toContain(onBoundary.id)
     })
   })
 

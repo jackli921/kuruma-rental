@@ -28,6 +28,9 @@ function validVehicleInput() {
     // #48: at least one rate is required by the validator and the
     // vehicles_pricing_at_least_one DB CHECK.
     dailyRateJpy: 8000,
+    // #916: create now requires future-dated shaken + insurance (§5.0).
+    shakenExpiryDate: '2099-06-15',
+    insuranceExpiryDate: '2099-01-01',
   }
 }
 

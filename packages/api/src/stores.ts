@@ -29,6 +29,7 @@ import type {
   Transmission,
   VehicleClassStatus,
 } from '@kuruma/shared/enums'
+import type { ComplianceAlertBand, ComplianceDocumentType } from '@kuruma/shared/lib/compliance'
 import type { LuggageSize } from '@kuruma/shared/lib/luggage'
 import type { LocationOperatingHours } from '@kuruma/shared/types/location'
 
@@ -244,6 +245,17 @@ export interface NotificationLog {
   idempotencyKey: string
   createdAt: Date
   updatedAt: Date
+}
+
+// §5.4/§7 (#916): one row per (vehicle, document, band) the digest has alerted on.
+export interface ComplianceAlertLog {
+  id: string
+  operatorId: string
+  vehicleId: string
+  documentType: ComplianceDocumentType
+  thresholdBand: ComplianceAlertBand
+  recipient: string
+  sentAt: Date
 }
 
 export interface MaintenanceLog {

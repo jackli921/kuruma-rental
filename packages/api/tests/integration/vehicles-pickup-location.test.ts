@@ -45,8 +45,9 @@ const vehicleInput = (operatorId: string) => ({
   color: null,
   dailyRateJpy: DEFAULT_DAILY_RATE_JPY,
   hourlyRateJpy: null,
-  shakenExpiryDate: null,
-  insuranceExpiryDate: null,
+  // #916: create requires future-dated shaken + insurance (§5.0).
+  shakenExpiryDate: '2099-06-15',
+  insuranceExpiryDate: '2099-01-01',
 })
 
 const locationInput = (
@@ -176,6 +177,9 @@ describe('POST/PATCH /vehicles wires pickupLocationId end-to-end (#435)', () => 
     transmission: 'AUTO' as const,
     bufferMinutes: 60,
     dailyRateJpy: DEFAULT_DAILY_RATE_JPY,
+    // #916: create requires future-dated shaken + insurance (§5.0).
+    shakenExpiryDate: '2099-06-15',
+    insuranceExpiryDate: '2099-01-01',
     ...extra,
   })
 

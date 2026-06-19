@@ -32,12 +32,18 @@ const OPERATOR_NAME = 'Best Car Rental'
 const RENTER_EMAIL = 'hiroshi@example.test'
 const MARKER = 'e2e-655-lifecycle'
 
-// Far-future windows for the lifecycle + substitute journeys — clear of the seeded
+// Far-future window for the lifecycle (advance/cancel) journey — clear of the seeded
 // demo bookings (~ now +/- 7d), so the seeded vehicle is free and no exclusion clash.
+// Advancing status never consults the road-legal gate, so a far-future date is safe here.
 const LIFECYCLE_FROM = new Date('2027-08-01T09:00:00Z')
 const LIFECYCLE_TO = new Date('2027-08-03T09:00:00Z')
-const SUBSTITUTE_FROM = new Date('2027-08-10T09:00:00Z')
-const SUBSTITUTE_TO = new Date('2027-08-12T09:00:00Z')
+// The substitute journey must use a NEAR-future window: #916 §5.3b only offers a
+// replacement whose shaken + insurance stay valid THROUGH the booking end, and the seed
+// stamps docs ~now + 365/400d. A far-future (2027) booking would outlive the seeded docs
+// → zero road-legal candidates → an empty picker. now + ~60d is well inside the doc
+// horizon yet still clear of the ~now +/- 7d demo bookings (no exclusion clash).
+const SUBSTITUTE_FROM = new Date(Date.now() + 60 * 24 * 60 * 60 * 1000)
+const SUBSTITUTE_TO = new Date(SUBSTITUTE_FROM.getTime() + 2 * 24 * 60 * 60 * 1000)
 
 // Journey 3 must land in a NON-free cancellation tier to prove a real fee. The schedule
 // is 72h free / 48h 30% / 24h 70% / same-day 100% (cancellation-policy.ts). ~36h out is
