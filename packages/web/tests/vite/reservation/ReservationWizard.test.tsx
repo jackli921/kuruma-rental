@@ -98,8 +98,9 @@ describe('ReservationWizard', () => {
     expect(back).toHaveAttribute('data-to', '/$locale/storefronts/$locationId')
     expect(back).toHaveAttribute('data-locale', 'en')
     expect(back).toHaveAttribute('data-location', 'loc1')
-    // ISO Dates are reformatted to JST datetime-local so the storefront route's
-    // parseSearchRange accepts them (a raw ISO instant would redirect to /search).
+    // from/to are Date objects, serialized to JST datetime-local so the storefront
+    // route's parseSearchRange accepts them (a raw Date becomes an ISO instant that
+    // would redirect to /search).
     const search = JSON.parse(back.getAttribute('data-search') ?? '{}')
     expect(search).toMatchObject({ from: '2026-07-01T10:00', to: '2026-07-03T10:00' })
   })
