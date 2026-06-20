@@ -84,6 +84,20 @@ bucket_name = "kuruma-vehicle-photos"
 binding = "RENTER_DOCUMENTS"
 bucket_name = "kuruma-renter-documents"
 
+# Geocode result cache (#601, #574 piece 1/2) — a durable, cross-isolate KV cache
+# of `address -> {lat,lng}` so repeated lookups don't spend the 1-req/10s geocode
+# budget (the OSMF policy asks consumers to cache). BLOCKED on #304: KV is not yet
+# provisioned on this account, so the binding stays COMMENTED. Until it exists the
+# composition root falls back to an in-process map (InMemoryGeocodeCache) — safe,
+# just not shared across isolates. To activate post-#304:
+#   1. npx wrangler kv namespace create GEOCODE_CACHE   (note the returned id)
+#   2. uncomment the block below and set id = "<that id>"
+#   3. redeploy — KvGeocodeCache picks it up via the globalThis.GEOCODE_CACHE
+#      binding, no code change.
+# [[kv_namespaces]]
+# binding = "GEOCODE_CACHE"
+# id = "<run: npx wrangler kv namespace create GEOCODE_CACHE>"
+
 [vars]
 # The live web origin. First entry feeds CORS AND the post-login redirect,
 # Stripe return base, and provider-invite links (see resolveGoogleOAuthConfig
