@@ -380,8 +380,7 @@ export function createApp(overrides?: AppOverrides, repos: Repos = buildRepos(ov
     locationRepo,
     emailSender,
     {
-      emailFrom: process.env.EMAIL_FROM ?? '',
-      emailReplyTo: process.env.EMAIL_REPLY_TO,
+      ...resolveEmailConfig(),
       fallbackOperatorEmail:
         process.env.OPERATOR_ALERT_FALLBACK_EMAIL ??
         process.env.EMAIL_REPLY_TO ??
@@ -596,6 +595,17 @@ function resolveEmailSender(overrides?: AppOverrides): EmailSender {
 }
 
 /**
+ * The shared envelope fields (from/reply-to) read from one env in two places —
+ * createApp's notification dispatcher and buildComplianceDigestService (#982 DRY).
+ */
+function resolveEmailConfig(): { emailFrom: string; emailReplyTo: string | undefined } {
+  return {
+    emailFrom: process.env.EMAIL_FROM ?? '',
+    emailReplyTo: process.env.EMAIL_REPLY_TO,
+  }
+}
+
+/**
  * Composition seam for the #916 §5.4 daily compliance digest, resolved by the
  * Workers `scheduled` cron the same way routes resolve `createApp`. Wires the
  * fleet scan, the idempotency ledger, the active-member recipient resolver
@@ -615,10 +625,7 @@ export function buildComplianceDigestService(
     }),
     emailSender: resolveEmailSender(overrides),
     today: () => jstDateString(new Date()),
-    config: {
-      emailFrom: process.env.EMAIL_FROM ?? '',
-      emailReplyTo: process.env.EMAIL_REPLY_TO,
-    },
+    config: resolveEmailConfig(),
   })
 }
 

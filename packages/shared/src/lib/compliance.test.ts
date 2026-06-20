@@ -6,6 +6,7 @@ import {
   isNonCompliant,
   isRoadLegal,
   jstDateString,
+  vehicleAlertCandidates,
 } from './compliance'
 import { EXPIRY_SOON_DAYS, computeExpiryStatus } from './expiry'
 
@@ -193,5 +194,53 @@ describe('compliance horizon is a single source of truth', () => {
 
     expect(computeExpiryStatus(pastHorizon, today)).toBe('OK')
     expect(complianceThresholdBand(pastHorizon, today)).toBeNull()
+  })
+})
+
+/**
+ * #982. The digest's per-vehicle alert derivation (which of shaken/insurance is
+ * in an alert band) as a pure function, so the cron and any other consumer share
+ * one mapping instead of re-deriving the flatMap. SHAKEN is yielded before
+ * INSURANCE (COMPLIANCE_DOCUMENT_TYPES order), and a document with no band (more
+ * than 30 days out) is omitted. MISSING and EXPIRED are bands, so they ARE
+ * yielded — the digest alerts on them.
+ */
+describe('vehicleAlertCandidates', () => {
+  const today = '2026-06-17'
+
+  test('omits a document that is more than 30 days out', () => {
+    expect(
+      vehicleAlertCandidates(
+        { shakenExpiryDate: '2027-01-01', insuranceExpiryDate: '2027-01-01' },
+        today,
+      ),
+    ).toEqual([])
+  })
+
+  test('yields only the document in a band, SHAKEN first', () => {
+    expect(
+      vehicleAlertCandidates(
+        { shakenExpiryDate: '2026-06-24', insuranceExpiryDate: '2027-01-01' },
+        today,
+      ),
+    ).toEqual([{ documentType: 'SHAKEN', band: 'D7' }])
+  })
+
+  test('yields both documents in their own bands, SHAKEN before INSURANCE', () => {
+    expect(
+      vehicleAlertCandidates(
+        { shakenExpiryDate: '2026-06-16', insuranceExpiryDate: '2026-06-24' },
+        today,
+      ),
+    ).toEqual([
+      { documentType: 'SHAKEN', band: 'EXPIRED' },
+      { documentType: 'INSURANCE', band: 'D7' },
+    ])
+  })
+
+  test('a missing date is a MISSING band (the digest alerts on it)', () => {
+    expect(
+      vehicleAlertCandidates({ shakenExpiryDate: null, insuranceExpiryDate: '2027-01-01' }, today),
+    ).toEqual([{ documentType: 'SHAKEN', band: 'MISSING' }])
   })
 })
