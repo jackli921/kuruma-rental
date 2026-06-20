@@ -92,8 +92,15 @@ export class ComplianceDigestService {
     let operatorsSkippedNoRecipients = 0
     let operatorsFailed = 0
 
-    for (const operatorId of [...new Set(fresh.map((c) => c.operatorId))]) {
-      const items = fresh.filter((c) => c.operatorId === operatorId)
+    // Group fresh alerts by operator in one pass (mirrors groupByLocation in
+    // storefront-search) instead of re-scanning `fresh` once per operator.
+    const itemsByOperator = new Map<string, AlertCandidate[]>()
+    for (const c of fresh) {
+      const list = itemsByOperator.get(c.operatorId) ?? []
+      itemsByOperator.set(c.operatorId, [...list, c])
+    }
+
+    for (const [operatorId, items] of itemsByOperator) {
       const recipients = await this.deps.resolveRecipients(operatorId)
       // No recipients → don't send and don't record, so the alert retries once a
       // member exists (record-after-send applies to the empty-audience case too).
