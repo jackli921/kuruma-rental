@@ -1,6 +1,13 @@
 import { describe, expect, test } from 'vitest'
 
 import { complianceThresholdBand, isDocCurrent, isRoadLegal, jstDateString } from './compliance'
+import { EXPIRY_SOON_DAYS, computeExpiryStatus } from './expiry'
+
+function addDays(iso: string, days: number): string {
+  const d = new Date(iso)
+  d.setUTCDate(d.getUTCDate() + days)
+  return d.toISOString().slice(0, 10)
+}
 
 /**
  * §5.1 compliance predicate. A shaken/insurance certificate is valid THROUGH
@@ -123,5 +130,28 @@ describe('complianceThresholdBand', () => {
 
   test('31 days out is null — no alert yet', () => {
     expect(complianceThresholdBand('2026-07-18', today)).toBeNull()
+  })
+})
+
+/**
+ * #998 item 1. The digest's outer reminder band and the dashboard/fleet
+ * "expiring soon" set must share ONE horizon — else an operator gets digest
+ * emails for a window the banner won't reflect (and the deep-link lands on an
+ * empty list). The boundary is computed FROM EXPIRY_SOON_DAYS, so bumping the
+ * constant without re-linking the digest band fails here instead of diverging
+ * silently.
+ */
+describe('compliance horizon is a single source of truth', () => {
+  const today = '2026-06-17'
+
+  test('the outer digest band fires on exactly the banner horizon, not a day off', () => {
+    const atHorizon = addDays(today, EXPIRY_SOON_DAYS)
+    const pastHorizon = addDays(today, EXPIRY_SOON_DAYS + 1)
+
+    expect(computeExpiryStatus(atHorizon, today)).toBe('EXPIRING_SOON')
+    expect(complianceThresholdBand(atHorizon, today)).toBe('D30')
+
+    expect(computeExpiryStatus(pastHorizon, today)).toBe('OK')
+    expect(complianceThresholdBand(pastHorizon, today)).toBeNull()
   })
 })

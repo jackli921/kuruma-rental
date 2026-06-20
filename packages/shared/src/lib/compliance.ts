@@ -1,4 +1,4 @@
-import { computeExpiryStatus } from './expiry'
+import { EXPIRY_SOON_DAYS, computeExpiryStatus } from './expiry'
 
 const JST_OFFSET_MS = 9 * 60 * 60 * 1000
 
@@ -52,12 +52,16 @@ export const COMPLIANCE_DOCUMENT_TYPES = ['SHAKEN', 'INSURANCE'] as const
 export type ComplianceDocumentType = (typeof COMPLIANCE_DOCUMENT_TYPES)[number]
 
 // Ordered tightest-first: the first threshold the date falls within wins, so the
-// bands stay mutually exclusive as the expiry nears.
+// bands stay mutually exclusive as the expiry nears. The outer band's threshold
+// is the shared `EXPIRY_SOON_DAYS` horizon (#998 item 1) so the digest, the
+// dashboard banner, and the fleet `expiringSoon` filter alert on one window — the
+// `'D30'` label is a stable idempotency key (a DB ledger value), so it does not
+// move with the constant; only the threshold value does.
 const BAND_THRESHOLD_DAYS = [
   ['D1', 1],
   ['D7', 7],
   ['D14', 14],
-  ['D30', 30],
+  ['D30', EXPIRY_SOON_DAYS],
 ] as const
 
 const MS_PER_DAY = 24 * 60 * 60 * 1000
