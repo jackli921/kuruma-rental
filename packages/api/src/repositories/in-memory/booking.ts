@@ -133,7 +133,13 @@ export class InMemoryBookingRepository implements BookingRepository {
     const ids = new Set(vehicleIds)
     let count = 0
     for (const booking of this.store.values()) {
-      if (ids.has(booking.assignedVehicleId) && BLOCKING_STATUSES.has(booking.status)) count++
+      // #464: a CLASS_COMBO float (null assignedVehicleId) occupies no specific car.
+      if (
+        booking.assignedVehicleId !== null &&
+        ids.has(booking.assignedVehicleId) &&
+        BLOCKING_STATUSES.has(booking.status)
+      )
+        count++
     }
     return count
   }

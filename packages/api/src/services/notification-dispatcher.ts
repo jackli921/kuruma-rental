@@ -207,7 +207,9 @@ export class NotificationDispatcher {
     const { to, bcc, locale } = resolved
     const [operator, vehicle, pickup, dropoff] = await Promise.all([
       this.operatorRepo.findById(booking.operatorId),
-      this.vehicleRepo.findById(SYSTEM_CONTEXT, booking.assignedVehicleId),
+      booking.assignedVehicleId
+        ? this.vehicleRepo.findById(SYSTEM_CONTEXT, booking.assignedVehicleId)
+        : Promise.resolve(undefined),
       this.locationRepo.findById(SYSTEM_CONTEXT, booking.pickupLocationId),
       this.locationRepo.findById(SYSTEM_CONTEXT, booking.dropoffLocationId),
     ])
