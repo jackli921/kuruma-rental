@@ -61,7 +61,7 @@ describe('Maintenance Logs', () => {
     const runInTransaction = createInMemoryTransaction(vehicleRepo, maintenanceLogRepo)
     maintenanceService = new MaintenanceService(vehicleRepo, maintenanceLogRepo, runInTransaction)
 
-    const vehicleService = new VehicleService(vehicleRepo, testResolveWriteOperatorId())
+    const vehicleService = new VehicleService(vehicleRepo, testResolveWriteOperatorId(), '')
     app = new Hono()
     app.use('*', testAuthMiddleware('staff-user', 'STAFF'))
     app.route('/', createVehicleRoutes(vehicleService, maintenanceService))

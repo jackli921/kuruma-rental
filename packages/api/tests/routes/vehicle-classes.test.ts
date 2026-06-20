@@ -28,7 +28,7 @@ let vehicleRepo: InMemoryVehicleRepository
 let bookingRepo: InMemoryBookingRepository
 
 function makeService() {
-  return new VehicleClassService(classRepo, vehicleRepo, bookingRepo)
+  return new VehicleClassService(classRepo, vehicleRepo, bookingRepo, '')
 }
 
 function validInput() {
@@ -100,7 +100,7 @@ describe('Vehicle Class CRUD Routes', () => {
     function mountFor(repo: InMemoryVehicleClassRepository, role: UserRole, operatorId?: string) {
       const vRepo = new InMemoryVehicleRepository()
       const bRepo = new InMemoryBookingRepository()
-      const service = new VehicleClassService(repo, vRepo, bRepo)
+      const service = new VehicleClassService(repo, vRepo, bRepo, '')
       const availabilityService = buildAvailabilityService(repo)
       const a = new Hono()
       setupGlobalHandlers(a)
@@ -540,7 +540,12 @@ describe('Vehicle Class CRUD Routes', () => {
       const localClassRepo = new InMemoryVehicleClassRepository()
       const localVehicleRepo = new InMemoryVehicleRepository()
       const localBookingRepo = new InMemoryBookingRepository()
-      const service = new VehicleClassService(localClassRepo, localVehicleRepo, localBookingRepo)
+      const service = new VehicleClassService(
+        localClassRepo,
+        localVehicleRepo,
+        localBookingRepo,
+        '',
+      )
       const availabilityService = buildAvailabilityService(localClassRepo)
       renterApp.use('*', testAuthMiddleware('renter-user', 'RENTER'))
       renterApp.route(
@@ -556,7 +561,12 @@ describe('Vehicle Class CRUD Routes', () => {
       const localClassRepo = new InMemoryVehicleClassRepository()
       const localVehicleRepo = new InMemoryVehicleRepository()
       const localBookingRepo = new InMemoryBookingRepository()
-      const service = new VehicleClassService(localClassRepo, localVehicleRepo, localBookingRepo)
+      const service = new VehicleClassService(
+        localClassRepo,
+        localVehicleRepo,
+        localBookingRepo,
+        '',
+      )
       const availabilityService = buildAvailabilityService(localClassRepo)
       renterApp.use('*', testAuthMiddleware('renter-user', 'RENTER'))
       renterApp.route(
@@ -624,7 +634,7 @@ describe('Vehicle Class CRUD Routes', () => {
     function mountFor(repo: InMemoryVehicleClassRepository, role: UserRole, operatorId?: string) {
       const vRepo = new InMemoryVehicleRepository()
       const bRepo = new InMemoryBookingRepository()
-      const service = new VehicleClassService(repo, vRepo, bRepo)
+      const service = new VehicleClassService(repo, vRepo, bRepo, '')
       const availabilityService = buildAvailabilityService(repo)
       const a = new Hono()
       setupGlobalHandlers(a)

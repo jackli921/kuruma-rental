@@ -1,4 +1,5 @@
 import type { ErrorCode } from '@kuruma/shared/lib/error-codes'
+import { isForeignVehiclePhoto } from '@kuruma/shared/lib/photo-ref'
 import { type CallerContext, SYSTEM_CONTEXT } from '../middleware/auth'
 import type {
   BookingRepository,
@@ -29,7 +30,27 @@ export class VehicleClassService {
     private readonly repo: VehicleClassRepository,
     private readonly vehicleRepo: VehicleRepository,
     private readonly bookingRepo: BookingRepository,
+    // Public bucket base — the anchor for the #967 photo-spoof guard. Inert
+    // when empty (dev/in-memory, no R2), matching the no-op encode/decode there.
+    private readonly photosPublicUrl: string,
   ) {}
+
+  // #967: classes run the SAME r2: encode as vehicles but have no
+  // `classes/<id>/` upload prefix — every R2 object lives under
+  // `vehicles/<vehicleId>/`, so a class can never legitimately carry one of OUR
+  // bucket URLs. Reject ANY of-our-origin URL (`isForeignVehiclePhoto` with a
+  // null owner = "no vehicle to anchor against"); external image URLs pass.
+  // Without this an operator's class could render a victim's vehicle photo on
+  // the PUBLIC class-detail page (sibling of the VehicleService guard).
+  private rejectForeignPhotos(photos: readonly string[] | undefined): CreateResult | null {
+    const foreign = photos?.some((p) => isForeignVehiclePhoto(p, null, this.photosPublicUrl))
+    if (!foreign) return null
+    return {
+      ok: false,
+      error: 'Photo URLs must be external image links, not bucket references',
+      status: 400,
+    }
+  }
 
   async findAll(ctx: CallerContext, filters?: VehicleClassFilters): Promise<VehicleClass[]> {
     return this.repo.findAll(ctx, filters)
@@ -50,6 +71,9 @@ export class VehicleClassService {
     _ctx: CallerContext,
     data: Omit<VehicleClass, 'id' | 'createdAt' | 'updatedAt'>,
   ): Promise<CreateResult> {
+    const foreign = this.rejectForeignPhotos(data.photos)
+    if (foreign) return foreign
+
     // Slug uniqueness is global (DB unique constraint), so the collision check
     // must see across operators — scope it to SYSTEM, not the caller (#395).
     const existing = await this.repo.findBySlug(SYSTEM_CONTEXT, data.slug)
@@ -61,6 +85,9 @@ export class VehicleClassService {
   }
 
   async update(ctx: CallerContext, id: string, data: Partial<VehicleClass>): Promise<UpdateResult> {
+    const foreign = this.rejectForeignPhotos(data.photos)
+    if (foreign) return foreign
+
     // Existence is caller-scoped: an operator may only edit its own class.
     const existing = await this.repo.findById(ctx, id)
     if (!existing) {
