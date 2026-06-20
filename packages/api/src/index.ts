@@ -335,7 +335,12 @@ export function createApp(overrides?: AppOverrides, repos: Repos = buildRepos(ov
   // locations + operators are auth-gated inside their factories (no public
   // routes), mirroring createVehicleClassRoutes — no app-level use() needed.
 
-  const vehicleClassService = new VehicleClassService(vehicleClassRepo, vehicleRepo, bookingRepo)
+  const vehicleClassService = new VehicleClassService(
+    vehicleClassRepo,
+    vehicleRepo,
+    bookingRepo,
+    photosPublicUrl,
+  )
   const vehicleClassAvailabilityService = new VehicleClassAvailabilityService(
     vehicleClassRepo,
     vehicleRepo,
