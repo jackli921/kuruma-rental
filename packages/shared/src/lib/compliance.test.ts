@@ -62,12 +62,13 @@ describe('isRoadLegal', () => {
 })
 
 /**
- * #998 item 3. The "needs operator attention" rule (a vehicle whose shaken OR
- * insurance is expiring-soon or already expired) is named once so the dashboard
- * banner, the fleet `expiringSoon` facet, and the fleet filter can't drift. A
- * MISSING (null) date is deliberately NOT counted yet — whether a legacy null-doc
- * car should surface as non-compliant is the open #998 item-2 product call; when
- * decided, this predicate is the single place to change.
+ * #998 item 3 + #1006. The "needs operator attention" rule (a vehicle whose
+ * shaken OR insurance is expiring-soon, already expired, or MISSING) is named
+ * once so the dashboard banner, the fleet `expiringSoon` facet, and the fleet
+ * filter can't drift. A MISSING (null) certificate counts (#1006 product call):
+ * a car with no doc on file is the most non-compliant of all — already hidden
+ * from the storefront — and the digest already alerts on it, so the in-app
+ * surfaces must agree. Only a fully in-date document (OK) is compliant.
  */
 describe('isNonCompliant', () => {
   const TODAY = '2026-04-12'
@@ -89,9 +90,10 @@ describe('isNonCompliant', () => {
     expect(isNonCompliant({ shakenExpiryDate: OK, insuranceExpiryDate: OK }, TODAY)).toBe(false)
   })
 
-  test('does not flag a vehicle with a missing date (UNKNOWN excluded — #998 item 2)', () => {
-    expect(isNonCompliant({ shakenExpiryDate: null, insuranceExpiryDate: OK }, TODAY)).toBe(false)
-    expect(isNonCompliant({ shakenExpiryDate: null, insuranceExpiryDate: null }, TODAY)).toBe(false)
+  test('flags a vehicle with a missing certificate (#1006 — matches the digest)', () => {
+    expect(isNonCompliant({ shakenExpiryDate: null, insuranceExpiryDate: OK }, TODAY)).toBe(true)
+    expect(isNonCompliant({ shakenExpiryDate: OK, insuranceExpiryDate: null }, TODAY)).toBe(true)
+    expect(isNonCompliant({ shakenExpiryDate: null, insuranceExpiryDate: null }, TODAY)).toBe(true)
   })
 })
 
