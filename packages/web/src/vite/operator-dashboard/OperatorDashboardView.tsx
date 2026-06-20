@@ -1,4 +1,4 @@
-import { ComplianceBanner } from '@/vite/operator-dashboard/ComplianceBanner'
+import { ComplianceBanner } from '@/vite/operator-fleet/ComplianceBanner'
 import type { OperatorFleetVehicle } from '@/vite/operator-fleet/api'
 import type { OperatorOverview } from '@kuruma/shared/types/overview'
 import { Link } from '@tanstack/react-router'

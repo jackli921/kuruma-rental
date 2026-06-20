@@ -1,4 +1,4 @@
-import { ComplianceBanner } from '@/vite/operator-dashboard/ComplianceBanner'
+import { ComplianceBanner } from '@/vite/operator-fleet/ComplianceBanner'
 import type { OperatorFleetVehicle } from '@/vite/operator-fleet/api'
 import { render, screen } from '@testing-library/react'
 import type { ReactNode } from 'react'
