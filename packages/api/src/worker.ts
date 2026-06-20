@@ -35,6 +35,8 @@ const handler = {
     _env?: unknown,
     _ctx?: ExecutionContext,
   ): Promise<void> {
+    // No cross-run lock: a daily cron can't overlap itself, and run() is
+    // idempotent regardless (record-after-send + the alert ledger dedupe bands).
     const summary = await buildComplianceDigestService().run()
     console.info('[cron:compliance-digest]', JSON.stringify(summary))
   },
