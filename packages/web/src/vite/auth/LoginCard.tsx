@@ -1,5 +1,6 @@
 import { Button } from '@/components/ui/button'
 import { GoogleIcon } from '@/vite/auth/GoogleIcon'
+import { InAppBrowserNotice } from '@/vite/auth/InAppBrowserNotice'
 import { useTranslations } from 'use-intl'
 
 interface LoginCardProps {
@@ -25,6 +26,7 @@ export function LoginCard({ returnTo }: LoginCardProps) {
           {t('signInTitle')}
         </h1>
         <p className="mt-2 text-center text-sm text-muted-foreground">{t('signInSubtitle')}</p>
+        <InAppBrowserNotice />
         <form method="POST" action={action} className="mt-8">
           <Button type="submit" variant="outline" size="lg" className="w-full gap-3">
             <GoogleIcon className="size-5" />

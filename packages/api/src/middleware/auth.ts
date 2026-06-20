@@ -87,8 +87,10 @@ export function provideOperatorSessionRevocation(
 
 /** Consult the context-supplied revocation check, but only for operator roles —
  *  renter/admin/partner traffic does zero extra work (the common-case latency AC).
- *  Fail-open when no check is registered (e.g. unit apps that don't wire it). */
-async function isOperatorSessionRevoked(
+ *  Fail-open when no check is registered (e.g. unit apps that don't wire it).
+ *  Exported so GET /auth/session reuses the SAME check (#957): the session read
+ *  and the data routes must agree on revocation — one check, never two that drift. */
+export async function isOperatorSessionRevoked(
   c: { get: (key: string) => unknown },
   user: AuthUser,
 ): Promise<boolean> {

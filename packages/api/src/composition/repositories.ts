@@ -112,6 +112,25 @@ import type {
 } from '../repositories/types'
 
 /**
+ * Fail-loud config invariant (#967): when the public photos bucket binding is
+ * present, its public base URL MUST be set. An empty base silently disables BOTH
+ * the `r2:` re-encode AND the cross-tenant photo-spoof guard (both no-op when
+ * `toObjectKey` can't parse the base), so a PATCH'd `${bucketHost}/vehicles/
+ * <victim>/x.jpg` would be stored literally and rendered — reopening the IDOR
+ * while uploads quietly fall back to DisabledPhotoStorage. Throw at the
+ * composition root rather than degrade at runtime (mirrors DisabledPhotoStorage's
+ * loud-failure stance). Pure + exported so the invariant is unit-testable without
+ * a live DB or R2 binding.
+ */
+export function assertPhotosBaseConfigured(hasBucket: boolean, photosPublicUrl: string): void {
+  if (hasBucket && !photosPublicUrl) {
+    throw new Error(
+      'VEHICLE_PHOTOS_PUBLIC_URL must be set when the VEHICLE_PHOTOS bucket binding is present: an empty base disables the #967 cross-tenant photo-spoof guard',
+    )
+  }
+}
+
+/**
  * Compiler-enforced bundle of every repository, storage adapter, and
  * transaction runner the services need. The three builders below
  * ({@link buildOverrideRepos}, {@link buildDrizzleRepos},
@@ -156,6 +175,10 @@ export type Repos = {
   bookingEventRepo: BookingEventRepository
   runInTransaction: RunInTransaction
   runOperatorGrant: RunOperatorGrant
+  // Public R2 bucket base for vehicle photos (#879). Threaded to VehicleService
+  // as the anchor for the #967 cross-tenant photo-spoof guard. '' in dev/test
+  // (no bucket) ⇒ the guard is inert, matching the no-op encode/decode there.
+  photosPublicUrl: string
   googleAuthRuntime: GoogleAuthRuntime | undefined
 }
 
@@ -255,6 +278,7 @@ export function buildOverrideRepos(overrides: AppOverrides): Repos {
     bookingEventRepo,
     runInTransaction,
     runOperatorGrant,
+    photosPublicUrl: process.env.VEHICLE_PHOTOS_PUBLIC_URL ?? '',
     googleAuthRuntime: overrides.googleAuthRuntime,
   }
 }
@@ -301,6 +325,9 @@ export function buildDrizzleRepos(opts?: { db?: Db; runTx?: RunTx }): Repos {
   const vehiclePhotosBucket = (globalThis as Record<string, unknown>).VEHICLE_PHOTOS as
     | R2BucketLike
     | undefined
+  // #967: refuse to boot with a bound bucket but no base — the spoof guard would
+  // be silently inert. Fail loud here, not at the first malicious PATCH.
+  assertPhotosBaseConfigured(Boolean(vehiclePhotosBucket), photosPublicUrl)
   // In the Drizzle branch (production) an InMemory fallback is dangerous —
   // each CF Worker request gets a fresh instance, so uploads "succeed" but
   // return URLs pointing at nothing. DisabledPhotoStorage throws loudly.
@@ -353,6 +380,7 @@ export function buildDrizzleRepos(opts?: { db?: Db; runTx?: RunTx }): Repos {
     // Real interactive tx (#493): membership INSERT first so the partial-unique-
     // active index aborts the whole grant on a concurrent double-accept.
     runOperatorGrant: createDrizzleOperatorGrant(tx),
+    photosPublicUrl,
     googleAuthRuntime,
   }
 }
@@ -438,6 +466,7 @@ export function buildInMemoryRepos(): Repos {
     bookingEventRepo,
     runInTransaction,
     runOperatorGrant,
+    photosPublicUrl: process.env.VEHICLE_PHOTOS_PUBLIC_URL ?? '',
     googleAuthRuntime: undefined,
   }
 }

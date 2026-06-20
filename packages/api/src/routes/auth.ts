@@ -20,6 +20,7 @@ import {
 import {
   SESSION_COOKIE,
   type UserRole,
+  isOperatorSessionRevoked,
   mintSessionToken,
   verifySessionCookie,
 } from '../middleware/auth'
@@ -240,6 +241,13 @@ export function createAuthRoutes(
 
       const session = await verifySessionCookie(token)
       if (!session) return fail(c, 'Unauthorized', 401)
+
+      // #957: verifySessionCookie is pure crypto, so a deactivated operator's
+      // cookie stays valid for its whole TTL. Consult the SAME context-provided
+      // revocation check the data routes use (#939) so a revoked operator's session
+      // read flips to signed-out and the web's _business guard redirects to login —
+      // instead of leaving them on a broken portal where every call 401s.
+      if (await isOperatorSessionRevoked(c, session.user)) return fail(c, 'Unauthorized', 401)
 
       // Spread the display-only profile (name/email/image) the token carries.
       // `profile` holds only the keys actually present, so the user object never

@@ -49,7 +49,7 @@ describe('Vehicle CRUD Routes', () => {
     const runInTransaction: RunInTransaction = async (fn) =>
       fn({ vehicleRepo: repo, maintenanceLogRepo })
     const maintenanceService = new MaintenanceService(repo, maintenanceLogRepo, runInTransaction)
-    const vehicleService = new VehicleService(repo, testResolveWriteOperatorId())
+    const vehicleService = new VehicleService(repo, testResolveWriteOperatorId(), '')
     app = new Hono()
     app.use('*', testAuthMiddleware('staff-user', 'STAFF'))
     app.route('/', createVehicleRoutes(vehicleService, maintenanceService))
@@ -804,7 +804,7 @@ describe('Vehicle CRUD Routes', () => {
       const runInTransaction: RunInTransaction = async (fn) =>
         fn({ vehicleRepo: repo, maintenanceLogRepo })
       const maintenanceService = new MaintenanceService(repo, maintenanceLogRepo, runInTransaction)
-      const vehicleService = new VehicleService(repo, resolve)
+      const vehicleService = new VehicleService(repo, resolve, '')
       const a = new Hono()
       setupGlobalHandlers(a)
       a.use('*', testAuthMiddleware(`${role}-user`, role, operatorId))
@@ -889,7 +889,7 @@ describe('Vehicle CRUD Routes', () => {
       const runInTransaction: RunInTransaction = async (fn) =>
         fn({ vehicleRepo: repo, maintenanceLogRepo })
       const maintenanceService = new MaintenanceService(repo, maintenanceLogRepo, runInTransaction)
-      const vehicleService = new VehicleService(repo, resolve)
+      const vehicleService = new VehicleService(repo, resolve, '')
       const a = new Hono()
       setupGlobalHandlers(a)
       a.use('*', testAuthMiddleware('staff-user', 'STAFF'))

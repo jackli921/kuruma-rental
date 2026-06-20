@@ -37,6 +37,16 @@ describe('createVehicleClassSchema', () => {
     expect(result.success).toBe(false)
   })
 
+  // #967: photos must be http(s) — bare .url() admits the `r2:` sentinel,
+  // `data:`, and `javascript:`, all injection / spoof vectors when rendered.
+  it.each(['r2:vehicles/veh_x/secret.jpg', 'data:image/png;base64,AAAA', 'javascript:alert(1)'])(
+    'rejects non-http(s) photo URL %s',
+    (photo) => {
+      const result = createVehicleClassSchema.safeParse({ ...validInput(), photos: [photo] })
+      expect(result.success).toBe(false)
+    },
+  )
+
   it('rejects slug with uppercase', () => {
     const result = createVehicleClassSchema.safeParse({ ...validInput(), slug: 'Compact' })
     expect(result.success).toBe(false)
