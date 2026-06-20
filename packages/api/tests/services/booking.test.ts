@@ -1083,6 +1083,20 @@ describe('BookingService.substitute — operator vehicle swap (#392 §5.5)', () 
     expect(result.status).toBe(400)
   })
 
+  it('rejects a replacement whose shaken expires before the booking ends (400 + VEHICLE_DOCS_EXPIRE_BEFORE_RETURN)', async () => {
+    const h = await setupSub()
+    // Booking ends 2026-07-04; a shaken lapsing 2026-07-03 is not road-legal for
+    // the return (§5.3b #916). The reject must carry the SAME `code` the create
+    // path emits, so the web branches on it without string-matching (#982 parity).
+    const expired = await addVehicle(h, { shakenExpiryDate: '2026-07-03' })
+    const result = await h.service.substitute(opCtxA, h.bookingId, expired.id, null)
+    expect(result.ok).toBe(false)
+    if (result.ok) return
+    expect(result.status).toBe(400)
+    expect(result.error).toMatch(/expires before the booking ends/i)
+    expect(result.code).toBe('VEHICLE_DOCS_EXPIRE_BEFORE_RETURN')
+  })
+
   it('swaps the vehicle: updates assignedVehicleId, keeps requestedVehicleId, re-snapshots totalPrice, appends VEHICLE_SUBSTITUTED', async () => {
     const h = await setupSub()
     const replacement = await addVehicle(h, { dailyRateJpy: 15000 })

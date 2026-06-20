@@ -115,3 +115,28 @@ export function complianceThresholdBand(
   }
   return null
 }
+
+/** One of a vehicle's documents that has fallen into an alert band. */
+export interface VehicleAlertCandidate {
+  documentType: ComplianceDocumentType
+  band: ComplianceAlertBand
+}
+
+/**
+ * The alert-band derivation for a single vehicle (§5.4 digest, #982): for each of
+ * shaken/insurance, the band its expiry falls into as of `todayIso`, omitting any
+ * document with no band (more than 30 days out). SHAKEN is yielded before
+ * INSURANCE (`COMPLIANCE_DOCUMENT_TYPES` order). Extracted as a pure function so
+ * the cron and any other consumer share one mapping rather than re-deriving it.
+ */
+export function vehicleAlertCandidates(
+  vehicle: { shakenExpiryDate: string | null; insuranceExpiryDate: string | null },
+  todayIso: string,
+): VehicleAlertCandidate[] {
+  return COMPLIANCE_DOCUMENT_TYPES.flatMap((documentType) => {
+    const expiryDate =
+      documentType === 'SHAKEN' ? vehicle.shakenExpiryDate : vehicle.insuranceExpiryDate
+    const band = complianceThresholdBand(expiryDate, todayIso)
+    return band == null ? [] : [{ documentType, band }]
+  })
+}
