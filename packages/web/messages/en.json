@@ -45,6 +45,12 @@
     "signInTitle": "Sign in",
     "signInSubtitle": "Continue to Best Car Rental",
     "continueWithGoogle": "Continue with Google",
+    "inAppBrowser": {
+      "title": "Open this page in your browser",
+      "body": "Google sign-in is blocked inside in-app browsers like WeChat. Open this page in your real browser — open the menu in the top-right corner and choose “Open in Browser”, or copy the link below and paste it into Safari or Chrome.",
+      "copyLink": "Copy link",
+      "copied": "Link copied"
+    },
     "provider": {
       "signInTitle": "Provider sign in",
       "signInSubtitle": "Sign in to manage your fleet",
