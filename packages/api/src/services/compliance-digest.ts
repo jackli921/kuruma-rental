@@ -1,8 +1,7 @@
 import {
-  COMPLIANCE_DOCUMENT_TYPES,
   type ComplianceAlertBand,
   type ComplianceDocumentType,
-  complianceThresholdBand,
+  vehicleAlertCandidates,
 } from '@kuruma/shared/lib/compliance'
 import { SYSTEM_CONTEXT } from '../middleware/auth'
 import {
@@ -70,21 +69,16 @@ export class ComplianceDigestService {
     })
 
     const candidates = vehicles.flatMap((v) =>
-      COMPLIANCE_DOCUMENT_TYPES.flatMap((documentType): AlertCandidate[] => {
-        const expiryDate = documentType === 'SHAKEN' ? v.shakenExpiryDate : v.insuranceExpiryDate
-        const band = complianceThresholdBand(expiryDate, today)
-        if (band == null) return []
-        return [
-          {
-            operatorId: v.operatorId,
-            vehicleId: v.id,
-            vehicleName: v.name,
-            licensePlate: v.licensePlate,
-            documentType,
-            band,
-          },
-        ]
-      }),
+      vehicleAlertCandidates(v, today).map(
+        ({ documentType, band }): AlertCandidate => ({
+          operatorId: v.operatorId,
+          vehicleId: v.id,
+          vehicleName: v.name,
+          licensePlate: v.licensePlate,
+          documentType,
+          band,
+        }),
+      ),
     )
     if (candidates.length === 0) return EMPTY_SUMMARY
 
@@ -98,8 +92,15 @@ export class ComplianceDigestService {
     let operatorsSkippedNoRecipients = 0
     let operatorsFailed = 0
 
-    for (const operatorId of [...new Set(fresh.map((c) => c.operatorId))]) {
-      const items = fresh.filter((c) => c.operatorId === operatorId)
+    // Group fresh alerts by operator in one pass (mirrors groupByLocation in
+    // storefront-search) instead of re-scanning `fresh` once per operator.
+    const itemsByOperator = new Map<string, AlertCandidate[]>()
+    for (const c of fresh) {
+      const list = itemsByOperator.get(c.operatorId) ?? []
+      itemsByOperator.set(c.operatorId, [...list, c])
+    }
+
+    for (const [operatorId, items] of itemsByOperator) {
       const recipients = await this.deps.resolveRecipients(operatorId)
       // No recipients → don't send and don't record, so the alert retries once a
       // member exists (record-after-send applies to the empty-audience case too).

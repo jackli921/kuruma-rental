@@ -310,7 +310,14 @@ describe('OperatorFleetView', () => {
     renderView(
       [
         vehicle({ id: 'exp', name: 'Expiring Car', shakenExpiryDate: '2020-01-01' }),
-        vehicle({ id: 'ok', name: 'Compliant Car', shakenExpiryDate: '2099-01-01' }),
+        // Both docs in-date: genuinely compliant under #1006 (a missing insurance
+        // date would now count as non-compliant and surface in this facet).
+        vehicle({
+          id: 'ok',
+          name: 'Compliant Car',
+          shakenExpiryDate: '2099-01-01',
+          insuranceExpiryDate: '2099-01-01',
+        }),
       ],
       [],
       true,

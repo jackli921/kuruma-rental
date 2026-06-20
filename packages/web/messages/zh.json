@@ -192,7 +192,7 @@
       "retry": "重试",
       "compliance": {
         "heading": "{count, plural, other {# 辆车需要处理}}",
-        "body": "车检或保险已过期或即将到期。",
+        "body": "车检或保险缺失、已过期或即将到期。",
         "action": "查看车队"
       }
     },

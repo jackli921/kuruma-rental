@@ -180,7 +180,7 @@ describe('filterVehicles', () => {
   })
 
   describe('expiringSoon filter', () => {
-    it('returns only vehicles with expiring or expired dates when enabled', () => {
+    it('returns expiring, expired, AND missing-cert vehicles when enabled (#1006)', () => {
       const vehicles = [
         makeVehicle({
           name: 'OK Car',
@@ -192,13 +192,14 @@ describe('filterVehicles', () => {
           shakenExpiryDate: '2020-01-01',
           insuranceExpiryDate: '2028-01-01',
         }),
+        // #1006: a car with no cert on file is the most non-compliant of all — the
+        // digest already alerts on it, so the fleet facet / banner must surface it too.
         makeVehicle({ name: 'No Dates', shakenExpiryDate: null, insuranceExpiryDate: null }),
       ]
 
       const result = filterVehicles(vehicles, { expiringSoon: true })
 
-      expect(result).toHaveLength(1)
-      expect(result[0]?.name).toBe('Expired Shaken')
+      expect(result.map((v) => v.name).sort()).toEqual(['Expired Shaken', 'No Dates'])
     })
 
     it('returns all vehicles when expiringSoon is false', () => {

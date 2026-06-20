@@ -6,6 +6,7 @@ import {
   isNonCompliant,
   isRoadLegal,
   jstDateString,
+  vehicleAlertCandidates,
 } from './compliance'
 import { EXPIRY_SOON_DAYS, computeExpiryStatus } from './expiry'
 
@@ -62,12 +63,13 @@ describe('isRoadLegal', () => {
 })
 
 /**
- * #998 item 3. The "needs operator attention" rule (a vehicle whose shaken OR
- * insurance is expiring-soon or already expired) is named once so the dashboard
- * banner, the fleet `expiringSoon` facet, and the fleet filter can't drift. A
- * MISSING (null) date is deliberately NOT counted yet — whether a legacy null-doc
- * car should surface as non-compliant is the open #998 item-2 product call; when
- * decided, this predicate is the single place to change.
+ * #998 item 3 + #1006. The "needs operator attention" rule (a vehicle whose
+ * shaken OR insurance is expiring-soon, already expired, or MISSING) is named
+ * once so the dashboard banner, the fleet `expiringSoon` facet, and the fleet
+ * filter can't drift. A MISSING (null) certificate counts (#1006 product call):
+ * a car with no doc on file is the most non-compliant of all — already hidden
+ * from the storefront — and the digest already alerts on it, so the in-app
+ * surfaces must agree. Only a fully in-date document (OK) is compliant.
  */
 describe('isNonCompliant', () => {
   const TODAY = '2026-04-12'
@@ -89,9 +91,10 @@ describe('isNonCompliant', () => {
     expect(isNonCompliant({ shakenExpiryDate: OK, insuranceExpiryDate: OK }, TODAY)).toBe(false)
   })
 
-  test('does not flag a vehicle with a missing date (UNKNOWN excluded — #998 item 2)', () => {
-    expect(isNonCompliant({ shakenExpiryDate: null, insuranceExpiryDate: OK }, TODAY)).toBe(false)
-    expect(isNonCompliant({ shakenExpiryDate: null, insuranceExpiryDate: null }, TODAY)).toBe(false)
+  test('flags a vehicle with a missing certificate (#1006 — matches the digest)', () => {
+    expect(isNonCompliant({ shakenExpiryDate: null, insuranceExpiryDate: OK }, TODAY)).toBe(true)
+    expect(isNonCompliant({ shakenExpiryDate: OK, insuranceExpiryDate: null }, TODAY)).toBe(true)
+    expect(isNonCompliant({ shakenExpiryDate: null, insuranceExpiryDate: null }, TODAY)).toBe(true)
   })
 })
 
@@ -193,5 +196,53 @@ describe('compliance horizon is a single source of truth', () => {
 
     expect(computeExpiryStatus(pastHorizon, today)).toBe('OK')
     expect(complianceThresholdBand(pastHorizon, today)).toBeNull()
+  })
+})
+
+/**
+ * #982. The digest's per-vehicle alert derivation (which of shaken/insurance is
+ * in an alert band) as a pure function, so the cron and any other consumer share
+ * one mapping instead of re-deriving the flatMap. SHAKEN is yielded before
+ * INSURANCE (COMPLIANCE_DOCUMENT_TYPES order), and a document with no band (more
+ * than 30 days out) is omitted. MISSING and EXPIRED are bands, so they ARE
+ * yielded — the digest alerts on them.
+ */
+describe('vehicleAlertCandidates', () => {
+  const today = '2026-06-17'
+
+  test('omits a document that is more than 30 days out', () => {
+    expect(
+      vehicleAlertCandidates(
+        { shakenExpiryDate: '2027-01-01', insuranceExpiryDate: '2027-01-01' },
+        today,
+      ),
+    ).toEqual([])
+  })
+
+  test('yields only the document in a band, SHAKEN first', () => {
+    expect(
+      vehicleAlertCandidates(
+        { shakenExpiryDate: '2026-06-24', insuranceExpiryDate: '2027-01-01' },
+        today,
+      ),
+    ).toEqual([{ documentType: 'SHAKEN', band: 'D7' }])
+  })
+
+  test('yields both documents in their own bands, SHAKEN before INSURANCE', () => {
+    expect(
+      vehicleAlertCandidates(
+        { shakenExpiryDate: '2026-06-16', insuranceExpiryDate: '2026-06-24' },
+        today,
+      ),
+    ).toEqual([
+      { documentType: 'SHAKEN', band: 'EXPIRED' },
+      { documentType: 'INSURANCE', band: 'D7' },
+    ])
+  })
+
+  test('a missing date is a MISSING band (the digest alerts on it)', () => {
+    expect(
+      vehicleAlertCandidates({ shakenExpiryDate: null, insuranceExpiryDate: '2027-01-01' }, today),
+    ).toEqual([{ documentType: 'SHAKEN', band: 'MISSING' }])
   })
 })
