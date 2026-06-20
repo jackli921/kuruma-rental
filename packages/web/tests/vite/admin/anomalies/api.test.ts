@@ -1,4 +1,4 @@
-import { ApiError } from '@/lib/api-error'
+import { ApiError, ParseError } from '@/lib/api-error'
 import {
   PAYMENT_ANOMALIES_QUERY_KEY,
   fetchPaymentAnomalies,
@@ -52,6 +52,16 @@ describe('fetchPaymentAnomalies', () => {
     expect(err).toBeInstanceOf(ApiError)
     expect((err as ApiError).status).toBe(403)
     expect((err as ApiError).message).toBe('Forbidden')
+  })
+
+  it('throws a ParseError when the API adds an anomaly kind the web cannot render (#711)', async () => {
+    vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(
+      jsonResponse({
+        success: true,
+        data: { anomalies: [{ ...anomaly, kind: 'REFUND_PENDING' }] },
+      }),
+    )
+    await expect(fetchPaymentAnomalies()).rejects.toBeInstanceOf(ParseError)
   })
 })
 
