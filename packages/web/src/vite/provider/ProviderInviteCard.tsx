@@ -1,5 +1,6 @@
 import { Button } from '@/components/ui/button'
 import { GoogleIcon } from '@/vite/auth/GoogleIcon'
+import { InAppBrowserNotice } from '@/vite/auth/InAppBrowserNotice'
 import type { InvitePreviewData } from '@/vite/provider/api'
 import { useTranslations } from 'use-intl'
 
@@ -44,6 +45,7 @@ export function ProviderInviteCard({ preview, token, returnTo }: ProviderInviteC
           {t('invite.title', { operator: preview.operatorName ?? '' })}
         </h1>
         <p className="mt-2 text-center text-sm text-muted-foreground">{t('invite.subtitle')}</p>
+        <InAppBrowserNotice />
         <form method="POST" action={action} className="mt-8">
           <Button type="submit" variant="outline" size="lg" className="w-full gap-3">
             <GoogleIcon className="size-5" />
