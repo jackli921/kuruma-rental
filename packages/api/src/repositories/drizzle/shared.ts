@@ -4,6 +4,7 @@ import {
   addOnOptions,
   bookingEvents,
   bookings,
+  classRatePlans,
   insuranceOptions,
   feeSchedules,
   locations,
@@ -22,6 +23,7 @@ import type {
   AddOn,
   Booking,
   BookingEvent,
+  ClassRatePlan,
   InsuranceOption,
   FeeSchedule,
   Location,
@@ -153,6 +155,17 @@ export const feeScheduleColumns = {
   status: feeSchedules.status,
   createdAt: feeSchedules.createdAt,
   updatedAt: feeSchedules.updatedAt,
+}
+export const classRatePlanColumns = {
+  id: classRatePlans.id,
+  operatorId: classRatePlans.operatorId,
+  classId: classRatePlans.classId,
+  pickupLocationId: classRatePlans.pickupLocationId,
+  dayRateJpy: classRatePlans.dayRateJpy,
+  isActive: classRatePlans.isActive,
+  label: classRatePlans.label,
+  createdAt: classRatePlans.createdAt,
+  updatedAt: classRatePlans.updatedAt,
 }
 export const paymentEventColumns = {
   id: paymentEvents.id,
@@ -299,6 +312,7 @@ type LocationRow = ColumnRow<typeof locationColumns>
 type InsuranceOptionRow = ColumnRow<typeof insuranceOptionColumns>
 type AddOnOptionRow = ColumnRow<typeof addOnOptionColumns>
 type FeeScheduleRow = ColumnRow<typeof feeScheduleColumns>
+type ClassRatePlanRow = ColumnRow<typeof classRatePlanColumns>
 type PaymentEventRow = ColumnRow<typeof paymentEventColumns>
 type PaymentAnomalyRow = ColumnRow<typeof paymentAnomalyColumns>
 type BookingRow = ColumnRow<typeof bookingColumns>
@@ -409,6 +423,20 @@ export function toFeeSchedule(r: FeeScheduleRow): FeeSchedule {
     unit: r.unit,
     amountJpy: r.amountJpy,
     status: r.status,
+    createdAt: r.createdAt,
+    updatedAt: r.updatedAt,
+  }
+}
+
+export function toClassRatePlan(r: ClassRatePlanRow): ClassRatePlan {
+  return {
+    id: r.id,
+    operatorId: r.operatorId,
+    classId: r.classId,
+    pickupLocationId: r.pickupLocationId,
+    dayRateJpy: r.dayRateJpy,
+    isActive: r.isActive,
+    label: r.label,
     createdAt: r.createdAt,
     updatedAt: r.updatedAt,
   }

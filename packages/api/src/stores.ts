@@ -371,6 +371,26 @@ export interface FeeSchedule {
   updatedAt: Date
 }
 
+/**
+ * The rate plan that prices a CLASS_COMBO booking (#464 §5.1). A combo books a
+ * vehicle *class* (no specific car at book time), so it is priced off the class,
+ * not a car — keyed per (operator, class, pickupLocation) because cars live at
+ * one location and a "deal" is a deliberately-set day rate. SPECIFIC bookings
+ * keep #406 per-car pricing; this table prices combos only (§5.3).
+ */
+export interface ClassRatePlan {
+  id: string
+  operatorId: string
+  classId: string
+  pickupLocationId: string
+  dayRateJpy: number
+  /** Toggle a deal on/off without deleting the row; inactive ⇒ not offered. */
+  isActive: boolean
+  label: string | null
+  createdAt: Date
+  updatedAt: Date
+}
+
 // Renter identity document metadata (#459). Bytes live in R2; this is the
 // verdict + pointer only. `expiryDate` is a YYYY-MM-DD string (DB `date`).
 export interface RenterDocument {
