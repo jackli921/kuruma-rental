@@ -183,7 +183,12 @@
       "viewBookings": "查看预订",
       "manageFleet": "管理车辆",
       "loadError": "无法加载仪表盘。",
-      "retry": "重试"
+      "retry": "重试",
+      "compliance": {
+        "heading": "{count, plural, other {# 辆车需要处理}}",
+        "body": "车检或保险已过期或即将到期。",
+        "action": "查看车队"
+      }
     },
     "stats": {
       "totalBookings": "总预订数",

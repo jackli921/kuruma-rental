@@ -183,7 +183,12 @@
       "viewBookings": "予約を見る",
       "manageFleet": "車両を管理",
       "loadError": "ダッシュボードを読み込めませんでした。",
-      "retry": "再試行"
+      "retry": "再試行",
+      "compliance": {
+        "heading": "{count, plural, other {#台の車両に対応が必要です}}",
+        "body": "車検または保険が期限切れ、または間もなく期限切れです。",
+        "action": "車両を確認"
+      }
     },
     "stats": {
       "totalBookings": "予約総数",

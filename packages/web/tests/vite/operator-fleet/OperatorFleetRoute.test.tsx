@@ -12,13 +12,17 @@ import { IntlProvider } from 'use-intl'
 import { describe, expect, it, vi } from 'vitest'
 import enMessages from '../../../messages/en.json'
 
-// The route component now reads `locale` via Route.useParams and links rows to
-// the detail route (#527). This test renders the component outside a
-// RouterProvider, so stub createFileRoute (Route.useParams -> a fixed locale) and
-// Link (-> an anchor). Keep everything else real.
+// The route component now reads `locale` via Route.useParams, the compliance
+// deep-link filter via Route.useSearch (#916 §5.5), and links rows to the detail
+// route (#527). This test renders the component outside a RouterProvider, so stub
+// createFileRoute (useParams -> a fixed locale, useSearch -> no filter) and Link
+// (-> an anchor). Keep everything else real.
 vi.mock('@tanstack/react-router', async () => ({
   ...(await vi.importActual<typeof import('@tanstack/react-router')>('@tanstack/react-router')),
-  createFileRoute: () => () => ({ useParams: () => ({ locale: 'en' }) }),
+  createFileRoute: () => () => ({
+    useParams: () => ({ locale: 'en' }),
+    useSearch: () => ({}),
+  }),
   Link: ({
     to,
     params: _params,
