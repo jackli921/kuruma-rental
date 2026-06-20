@@ -21,7 +21,7 @@ export function resolveViewMode(
   return cookieValue === 'renter' ? 'renter' : 'business'
 }
 
-function readViewCookie(): string | undefined {
+export function readViewCookie(): string | undefined {
   const match = document.cookie.split('; ').find((pair) => pair.startsWith(`${COOKIE_NAME}=`))
   return match?.slice(COOKIE_NAME.length + 1)
 }

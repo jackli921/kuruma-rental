@@ -49,13 +49,16 @@ describe('NavbarClient', () => {
     expect(screen.queryByRole('link')).toBeNull()
   })
 
-  it('shows the layout toggle only in the business view', () => {
+  it('shows the layout toggle only in the business view, with an accessible name', () => {
     renderClient({ session, viewMode: 'business' })
-    expect(screen.getByTitle('Switch to top navigation')).toBeInTheDocument()
+    const toggle = screen.getByRole('button', { name: 'Switch to top navigation' })
+    // Binary layout toggle, not a disclosure: aria-pressed, never aria-expanded.
+    expect(toggle).toHaveAttribute('aria-pressed', 'true')
+    expect(toggle).not.toHaveAttribute('aria-expanded')
   })
 
   it('hides the layout toggle in the renter view', () => {
     renderClient({ session, viewMode: 'renter' })
-    expect(screen.queryByTitle('Switch to top navigation')).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Switch to top navigation' })).toBeNull()
   })
 })

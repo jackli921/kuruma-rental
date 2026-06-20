@@ -1,3 +1,4 @@
+import type { FleetFilterState } from '@/lib/fleet-filters'
 import { PageSkeleton } from '@/vite/PageSkeleton'
 import { isOperatorSession } from '@/vite/guards'
 import { OperatorFleetView } from '@/vite/operator-fleet/OperatorFleetView'
@@ -9,6 +10,20 @@ import { sessionQueryOptions } from '@/vite/session'
 import { useSuspenseQuery } from '@tanstack/react-query'
 import { type ErrorComponentProps, createFileRoute, useRouter } from '@tanstack/react-router'
 import { useTranslations } from 'use-intl'
+
+// #916 §5.5: the dashboard compliance banner deep-links here with
+// `?expiringSoon=true` to open the fleet already narrowed to the non-compliant
+// set. Accept the flag as a real boolean (in-app navigation) or the string
+// `'true'` (a shared/reloaded URL); anything else opens unfiltered.
+interface FleetSearch {
+  expiringSoon?: boolean | undefined
+}
+
+function validateSearch(search: Record<string, unknown>): FleetSearch {
+  return {
+    expiringSoon: search.expiringSoon === true || search.expiringSoon === 'true' ? true : undefined,
+  }
+}
 
 // Operator fleet management (#526). URL `/<locale>/manage/fleet` — behind the
 // `_business` guard, so only business roles reach it; tenant scoping is
@@ -23,6 +38,7 @@ import { useTranslations } from 'use-intl'
 // Lives at `fleet/index` (not `fleet.tsx`) so the sibling `fleet/$vehicleId`
 // detail route (#527) can coexist; the URL is unchanged.
 export const Route = createFileRoute('/$locale/_business/manage/fleet/')({
+  validateSearch,
   loader: ({ context }) =>
     Promise.all([
       context.queryClient.ensureQueryData(operatorFleetQueryOptions()),
@@ -39,6 +55,8 @@ export function OperatorFleetRoute() {
   const { data: vehicles } = useSuspenseQuery(operatorFleetQueryOptions())
   const { data: classOptions } = useSuspenseQuery(vehicleClassOptionsQueryOptions())
   const { data: session } = useSuspenseQuery(sessionQueryOptions())
+  const { expiringSoon } = Route.useSearch()
+  const initialFilters: FleetFilterState = expiringSoon ? { expiringSoon: true } : {}
 
   // Bypass roles (PLATFORM_ADMIN / legacy STAFF·ADMIN — no operatorId) read the
   // fleet cross-operator for oversight but cannot write: every create/edit/bulk
@@ -59,6 +77,7 @@ export function OperatorFleetRoute() {
           classOptions={classOptions}
           canWrite={canWrite}
           locale={locale}
+          initialFilters={initialFilters}
         />
       </div>
     </main>

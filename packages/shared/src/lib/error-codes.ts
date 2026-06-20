@@ -25,8 +25,11 @@ export const ERROR_CODES = [
   'INVALID_DURATION',
   'NO_RATES_SET',
   'RENTAL_RULE_ADVANCE_BOOKING',
+  'RENTAL_RULE_START_IN_PAST',
   'RENTAL_RULE_MIN_DURATION',
   'RENTAL_RULE_MAX_DURATION',
+  // §5.3 (#916): the rental ends after the vehicle's shaken/insurance expires.
+  'VEHICLE_DOCS_EXPIRE_BEFORE_RETURN',
 ] as const
 
 export type ErrorCode = (typeof ERROR_CODES)[number]

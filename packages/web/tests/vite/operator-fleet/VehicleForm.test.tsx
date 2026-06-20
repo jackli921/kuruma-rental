@@ -53,7 +53,7 @@ function existingVehicle(overrides: Partial<OperatorFleetVehicle> = {}): Operato
     dailyRateJpy: 6800,
     hourlyRateJpy: null,
     shakenExpiryDate: '2099-01-01',
-    insuranceExpiryDate: null,
+    insuranceExpiryDate: '2099-01-01',
     createdAt: '2026-01-01T00:00:00.000Z',
     updatedAt: '2026-01-01T00:00:00.000Z',
     utilization: 0,
@@ -91,6 +91,14 @@ function renderForm({ vehicle = null, onSaved = vi.fn(), onCancel = vi.fn() }: R
   return { ...utils, onSaved, onCancel, invalidateSpy }
 }
 
+// §5.0 / #916: create now requires valid, future-dated shaken + insurance docs.
+// Fill both so happy-path submit tests exercise the mutation instead of tripping
+// the compliance gate. Far-future dates keep the tests clock-independent.
+async function fillRequiredDocs(user: ReturnType<typeof userEvent.setup>) {
+  await user.type(screen.getByLabelText(en.shakenExpiryDate), '2099-01-01')
+  await user.type(screen.getByLabelText(en.insuranceExpiryDate), '2099-01-01')
+}
+
 const mockedCreate = vi.mocked(createVehicle)
 const mockedUpdate = vi.mocked(updateVehicle)
 
@@ -111,6 +119,7 @@ describe('VehicleForm', () => {
 
     await user.type(screen.getByLabelText(en.name), 'Honda Fit')
     await user.type(screen.getByLabelText(en.dailyRate), '7500')
+    await fillRequiredDocs(user)
     await user.click(screen.getByRole('button', { name: en.save }))
 
     await waitFor(() => expect(mockedCreate).toHaveBeenCalledTimes(1))
@@ -121,6 +130,8 @@ describe('VehicleForm', () => {
         transmission: 'AUTO',
         dailyRateJpy: 7500,
         photos: [],
+        shakenExpiryDate: '2099-01-01',
+        insuranceExpiryDate: '2099-01-01',
       }),
     )
   })
@@ -147,6 +158,26 @@ describe('VehicleForm', () => {
     expect(mockedCreate).not.toHaveBeenCalled()
   })
 
+  it('edit mode: saves a legacy vehicle with null shaken/insurance docs (#986)', async () => {
+    const user = userEvent.setup()
+    mockedUpdate.mockResolvedValue(existingVehicle())
+    // A legacy/lapsed car has null docs. Edit must tolerate them: the create-only
+    // required-docs rule (#916) must not leak into the edit resolver, or the
+    // operator can't change *any* field until they back-fill both documents.
+    renderForm({ vehicle: existingVehicle({ shakenExpiryDate: null, insuranceExpiryDate: null }) })
+
+    const nameInput = screen.getByLabelText(en.name) as HTMLInputElement
+    await user.clear(nameInput)
+    await user.type(nameInput, 'Toyota Aqua Legacy')
+    await user.click(screen.getByRole('button', { name: en.save }))
+
+    await waitFor(() => expect(mockedUpdate).toHaveBeenCalledTimes(1))
+    expect(mockedUpdate).toHaveBeenCalledWith(
+      'veh_1',
+      expect.objectContaining({ name: 'Toyota Aqua Legacy' }),
+    )
+  })
+
   it('blocks submit and shows a field error when required input is invalid', async () => {
     const user = userEvent.setup()
     // Create mode: name is blank and no rate is set -> two validation failures.
@@ -156,6 +187,22 @@ describe('VehicleForm', () => {
 
     // Name-required error surfaces; the create mutation never fires.
     expect(await screen.findByText('Name is required')).toBeInTheDocument()
+    expect(mockedCreate).not.toHaveBeenCalled()
+  })
+
+  it('create mode: blocks submit when shaken docs are expired (§5.0)', async () => {
+    const user = userEvent.setup()
+    // Everything else valid; only the shaken cert is back-dated. The create
+    // schema's not-past refine must reject it before the mutation fires.
+    renderForm()
+
+    await user.type(screen.getByLabelText(en.name), 'Honda Fit')
+    await user.type(screen.getByLabelText(en.dailyRate), '7500')
+    await user.type(screen.getByLabelText(en.shakenExpiryDate), '2000-01-01')
+    await user.type(screen.getByLabelText(en.insuranceExpiryDate), '2099-01-01')
+    await user.click(screen.getByRole('button', { name: en.save }))
+
+    expect(await screen.findByText('Shaken expiry must not be in the past')).toBeInTheDocument()
     expect(mockedCreate).not.toHaveBeenCalled()
   })
 
@@ -178,6 +225,7 @@ describe('VehicleForm', () => {
     await user.type(screen.getByLabelText(en.dailyRate), '7500')
     await user.selectOptions(screen.getByLabelText(en.luggageSize), 'LARGE')
     await user.type(screen.getByLabelText(en.luggageCapacity), '3')
+    await fillRequiredDocs(user)
     await user.click(screen.getByRole('button', { name: en.save }))
 
     await waitFor(() => expect(mockedCreate).toHaveBeenCalledTimes(1))
@@ -193,6 +241,7 @@ describe('VehicleForm', () => {
 
     await user.type(screen.getByLabelText(en.name), 'Honda Fit')
     await user.type(screen.getByLabelText(en.dailyRate), '7500')
+    await fillRequiredDocs(user)
     await user.click(screen.getByRole('button', { name: en.save }))
 
     await waitFor(() => expect(mockedCreate).toHaveBeenCalledTimes(1))
@@ -241,6 +290,7 @@ describe('VehicleForm', () => {
 
     await user.type(screen.getByLabelText(en.name), 'Mazda Demio')
     await user.type(screen.getByLabelText(en.hourlyRate), '1200')
+    await fillRequiredDocs(user)
     await user.click(screen.getByRole('button', { name: en.save }))
 
     await waitFor(() => expect(onSaved).toHaveBeenCalledTimes(1))

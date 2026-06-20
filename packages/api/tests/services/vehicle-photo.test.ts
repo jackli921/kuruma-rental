@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it } from 'vitest'
 import { SYSTEM_CONTEXT } from '../../src/middleware/auth'
 import { InMemoryVehicleRepository } from '../../src/repositories/in-memory'
 import { InMemoryPhotoStorage } from '../../src/repositories/in-memory/photo-storage'
-import { VehiclePhotoService } from '../../src/services/vehicle-photo'
+import { MAX_PHOTOS_PER_VEHICLE, VehiclePhotoService } from '../../src/services/vehicle-photo'
 import type { Vehicle } from '../../src/stores'
 
 function vehicleInput(overrides?: Partial<Vehicle>) {
@@ -108,6 +108,7 @@ describe('VehiclePhotoService.uploadPhotos rollback', () => {
     // Stub storage that rejects on the second put. All earlier successes
     // must be deleted; DB should be unchanged.
     const deletedUrls: string[] = []
+    const deletedOwners: string[] = []
     let callCount = 0
     const flakyStorage = {
       put: async (vId: string, _file: File) => {
@@ -115,8 +116,9 @@ describe('VehiclePhotoService.uploadPhotos rollback', () => {
         if (callCount === 2) throw new Error('network blip')
         return { key: `k${callCount}`, url: `https://r2.example/${vId}/p${callCount}.jpg` }
       },
-      delete: async (url: string) => {
+      delete: async (url: string, ownerVehicleId: string) => {
         deletedUrls.push(url)
+        deletedOwners.push(ownerVehicleId)
       },
     }
     const flakyService = new VehiclePhotoService(repo, flakyStorage)
@@ -127,8 +129,9 @@ describe('VehiclePhotoService.uploadPhotos rollback', () => {
     expect(result.ok).toBe(false)
     if (result.ok) return
     expect(result.status).toBe(500)
-    // The one successful upload must have been cleaned up.
+    // The one successful upload must have been cleaned up, scoped to its vehicle.
     expect(deletedUrls).toEqual([`https://r2.example/${vehicleId}/p1.jpg`])
+    expect(deletedOwners).toEqual([vehicleId])
 
     const after = await repo.findById(SYSTEM_CONTEXT, vehicleId)
     expect(after?.photos).toHaveLength(0)
@@ -160,5 +163,27 @@ describe('VehiclePhotoService.deletePhoto', () => {
     expect(result.ok).toBe(false)
     if (result.ok) return
     expect(result.status).toBe(404)
+  })
+
+  it('does not delete another vehicle’s stored object when its URL is cross-referenced', async () => {
+    // Victim vehicle owns a real stored object.
+    const victim = await repo.create(SYSTEM_CONTEXT, vehicleInput())
+    const up = await service.uploadPhotos(SYSTEM_CONTEXT, victim.id, [
+      makeFile('v.jpg', 'image/jpeg', JPEG),
+    ])
+    if (!up.ok) throw new Error('setup failed')
+    const victimUrl = up.uploaded[0]!
+    expect(storage.size()).toBe(1)
+
+    // Attacker references the victim's URL on their OWN row, then deletes it.
+    await repo.appendPhotos(SYSTEM_CONTEXT, vehicleId, [victimUrl], MAX_PHOTOS_PER_VEHICLE)
+    const result = await service.deletePhoto(SYSTEM_CONTEXT, vehicleId, victimUrl)
+
+    expect(result.ok).toBe(true)
+    // The ref is gone from the attacker's row (DB tenant-scoped removal) ...
+    const attacker = await repo.findById(SYSTEM_CONTEXT, vehicleId)
+    expect(attacker?.photos).not.toContain(victimUrl)
+    // ... but the victim's object is untouched in storage.
+    expect(storage.size()).toBe(1)
   })
 })

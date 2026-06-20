@@ -1,12 +1,14 @@
 import type { RateLimitBinding } from '@elithrar/workers-hono-rate-limit'
+import { jstDateString } from '@kuruma/shared/lib/compliance'
 import { Hono } from 'hono'
 import { cors } from 'hono/cors'
 import type { AppOverrides } from './app-overrides'
 import type { GoogleOAuthConfig } from './auth/google'
+import { isStaleOperatorSession } from './auth/session-freshness'
 import { type Repos, buildRepos } from './composition/repositories'
 import { setupGlobalHandlers } from './error-handlers'
 import { parseBoolFlag } from './lib/parse-bool-flag'
-import { requireAuth } from './middleware/auth'
+import { provideOperatorSessionRevocation, requireAuth } from './middleware/auth'
 import { csrf } from './middleware/csrf'
 import { structuredLogger } from './middleware/logger'
 import { requestId } from './middleware/request-id'
@@ -46,9 +48,11 @@ import { createVehiclePhotoRoutes } from './routes/vehicle-photos'
 import { createVehicleRoutes } from './routes/vehicles'
 import { AddOnService } from './services/add-on'
 import { AdminRevenueService } from './services/admin-revenue'
+import { type RecordAuditEvent, toAuditRow } from './services/audit'
 import { AvailabilityService } from './services/availability'
 import { BookingService } from './services/booking'
 import { BookingPostCommitDispatcher } from './services/booking-post-commit-dispatcher'
+import { ComplianceDigestService } from './services/compliance-digest'
 import { CustomerService } from './services/customer'
 import { documentVerificationGate } from './services/document-verification-gate'
 import type { EmailSender } from './services/email/email-sender'
@@ -125,6 +129,7 @@ export function createApp(overrides?: AppOverrides, repos: Repos = buildRepos(ov
     paymentAnomalyRepo,
     providerInviteRepo,
     operatorMembershipRepo,
+    auditLogRepo,
     bookingEventRepo,
     runInTransaction,
     runOperatorGrant,
@@ -144,27 +149,7 @@ export function createApp(overrides?: AppOverrides, repos: Repos = buildRepos(ov
 
   const translationProvider = createTranslationProvider()
 
-  // Outbound email: real Resend when the key is set. In production without a key,
-  // a sentinel throws on first use (not at boot). In dev, a console stub logs the
-  // send so flows work end-to-end without a vendor account. Mirrors translationProvider.
-  const emailSender: EmailSender = (() => {
-    const key = process.env.RESEND_API_KEY
-    const from = process.env.EMAIL_FROM ?? ''
-    if (key) return new ResendEmailSender(key, from)
-    if (process.env.NODE_ENV === 'production') {
-      return {
-        send: async () => {
-          throw new Error('RESEND_API_KEY not configured')
-        },
-      }
-    }
-    return {
-      send: async (m) => {
-        console.info('[email:dev]', m.to, m.subject)
-        return { providerMessageId: 'dev' }
-      },
-    }
-  })()
+  const emailSender = resolveEmailSender(overrides)
 
   // Forward geocoder (#531): disabled by default (null stub) unless BOTH a
   // User-Agent and an endpoint are set; prod = LocationIQ (Nominatim-compatible,
@@ -233,11 +218,20 @@ export function createApp(overrides?: AppOverrides, repos: Repos = buildRepos(ov
     paymentAnomalyRepo,
     { webBaseUrl },
   )
+  // #930: one durable audit sink for every #914 service seam. Each service emits
+  // its narrow event; this funnels them through the pure toAuditRow mapper into
+  // the append-only ledger. Fire-and-forget — a failed audit write must never
+  // break the user action that triggered it, so it's logged, never awaited/thrown.
+  const recordAudit: RecordAuditEvent = (event) => {
+    void auditLogRepo.insert(toAuditRow(event)).catch((error) => {
+      console.error('[audit] failed to persist event', event.type, error)
+    })
+  }
   const providerInviteService = new ProviderInviteService(
     providerInviteRepo,
     operatorRepo,
     { webBaseUrl },
-    (event) => console.info('[provider-invite] created', event),
+    recordAudit,
   )
   // #904: operator self-service team page. Reuses providerInviteService to mint
   // (so the audit trail + TTL stay single-sourced); reads invites + members
@@ -247,6 +241,7 @@ export function createApp(overrides?: AppOverrides, repos: Repos = buildRepos(ov
     operatorMembershipRepo,
     userRepo,
     providerInviteService,
+    recordAudit,
   )
   // Operator-access grant decision (#521 §6) + slug resolver for the OAuth callback.
   // The slug is read from the STORED operators.slug (never re-derived from the name),
@@ -307,6 +302,19 @@ export function createApp(overrides?: AppOverrides, repos: Repos = buildRepos(ov
   // Bearer/API-key callers — see middleware/csrf.ts.
   app.use('*', csrf())
 
+  // #939: instant operator-session revocation. A deactivated member keeps a valid
+  // JWT for the <=7d TTL because verifyJwt is pure crypto; re-read the users
+  // projection the token was minted from and reject any operator token that no
+  // longer matches. Operator roles only — renter/admin/partner callers skip the
+  // read. Registered before every requireAuth (app-level + factory-internal) so
+  // the check reaches all operator-reachable routes.
+  app.use(
+    '*',
+    provideOperatorSessionRevocation(async (user) =>
+      isStaleOperatorSession(user, (await userRepo.findByIds([user.id]))[0]),
+    ),
+  )
+
   // Auth middleware on all protected paths.
   // vehicle-classes: public GETs for renter catalog (list, by-slug, availability)
   // are registered before auth inside createVehicleClassRoutes. Mutations +
@@ -357,6 +365,8 @@ export function createApp(overrides?: AppOverrides, repos: Repos = buildRepos(ov
         process.env.OPERATOR_ALERT_FALLBACK_EMAIL ??
         process.env.EMAIL_REPLY_TO ??
         process.env.EMAIL_FROM,
+      // #960: empty string (WEB_ORIGIN unset) -> the dispatcher omits the deep link.
+      webBaseUrl,
     },
   )
   const ensureThread = staffUserId ? makeEnsureThread({ threadRepo, staffUserId }) : async () => {}
@@ -400,9 +410,7 @@ export function createApp(overrides?: AppOverrides, repos: Repos = buildRepos(ov
   const adminRevenueService = new AdminRevenueService(paymentEventRepo, operatorRepo)
   const paymentAnomalyService = new PaymentAnomalyService(paymentAnomalyRepo)
   const vehicleDetailService = new VehicleDetailService(vehicleDetailRepo)
-  const operatorService = new OperatorService(operatorRepo, (event) =>
-    console.info('[operator-audit] profile updated', event),
-  )
+  const operatorService = new OperatorService(operatorRepo, recordAudit)
   // #407: the write-operator resolver is a pure policy function — sole-operator
   // inference is retired, so it no longer needs an operator lookup.
   const resolveWriteOperatorId: ResolveWriteOperatorId = (ctx, inputOperatorId) =>
@@ -538,6 +546,59 @@ function resolveAllowedOrigins(envValue: string | undefined): string[] {
   // out of the box without leaking localhost to prod.
   const devOrigins = process.env.NODE_ENV === 'production' ? [] : DEV_WEB_ORIGINS
   return [...new Set([...devOrigins, ...fromEnv])]
+}
+
+/**
+ * Resolve the outbound email port (#916 DRY): an injected override wins (tests),
+ * else real Resend when RESEND_API_KEY is set, else a throwing sentinel in
+ * production and a console stub in dev — so flows work end-to-end without a
+ * vendor account. Shared by createApp's dispatcher and buildComplianceDigestService.
+ */
+function resolveEmailSender(overrides?: AppOverrides): EmailSender {
+  if (overrides?.emailSender) return overrides.emailSender
+  const key = process.env.RESEND_API_KEY
+  const from = process.env.EMAIL_FROM ?? ''
+  if (key) return new ResendEmailSender(key, from)
+  if (process.env.NODE_ENV === 'production') {
+    return {
+      send: async () => {
+        throw new Error('RESEND_API_KEY not configured')
+      },
+    }
+  }
+  return {
+    send: async (m) => {
+      console.info('[email:dev]', m.to, m.subject)
+      return { providerMessageId: 'dev' }
+    },
+  }
+}
+
+/**
+ * Composition seam for the #916 §5.4 daily compliance digest, resolved by the
+ * Workers `scheduled` cron the same way routes resolve `createApp`. Wires the
+ * fleet scan, the idempotency ledger, the active-member recipient resolver
+ * (reused from the booking dispatcher), the JST clock, and the email sender.
+ */
+export function buildComplianceDigestService(
+  overrides?: AppOverrides,
+  repos: Repos = buildRepos(overrides),
+): ComplianceDigestService {
+  const { vehicleRepo, complianceAlertLogRepo, operatorMembershipRepo, userRepo } = repos
+  return new ComplianceDigestService({
+    vehicleRepo,
+    alertLogRepo: complianceAlertLogRepo,
+    resolveRecipients: makeResolveOperatorRecipients({
+      membershipRepo: operatorMembershipRepo,
+      userRepo,
+    }),
+    emailSender: resolveEmailSender(overrides),
+    today: () => jstDateString(new Date()),
+    config: {
+      emailFrom: process.env.EMAIL_FROM ?? '',
+      emailReplyTo: process.env.EMAIL_REPLY_TO,
+    },
+  })
 }
 
 /**

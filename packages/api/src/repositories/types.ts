@@ -72,6 +72,11 @@ export type {
   NotificationLogRepository,
   NotificationLogUpsert,
 } from './types-notification'
+export { complianceAlertKey } from './types-compliance'
+export type { ComplianceAlertLogRepository, RecordComplianceAlert } from './types-compliance'
+
+// Audit ledger entity + insert-only persistence (#930), own module per #837 cap.
+export type { AuditLogEntry, AuditLogRepository } from './types-audit'
 
 /** Operator (tenant) data access. Admin bootstrap (#386) + slug/id resolution (#387). */
 // Partial profile patch (#903). Only the keys present are written; an absent key
@@ -735,8 +740,8 @@ export interface FeeScheduleRepository {
 
 export interface PhotoStorage {
   put(vehicleId: string, file: File): Promise<{ key: string; url: string }>
-  /** Accepts either a key or full URL — implementations strip the base URL prefix. */
-  delete(keyOrUrl: string): Promise<void>
+  /** Accepts a key or full URL. `ownerVehicleId` scopes the delete to that vehicle's key prefix, so a cross-referenced URL can't reach another vehicle's object (cross-tenant IDOR guard, #952). */
+  delete(keyOrUrl: string, ownerVehicleId: string): Promise<void>
 }
 
 export interface RenterDocumentFilters {
@@ -784,14 +789,12 @@ export interface RenterDocumentRepository {
 
 export type CreateRenterDocumentData = Pick<RenterDocument, 'renterId' | 'type' | 'storageKey'>
 
-/**
- * Private object storage for renter document scans (#459). Unlike `PhotoStorage`
- * (public vehicle photos), documents are private — access is via a short-lived
- * signed URL, never a public base URL.
- */
+/** Private object storage for renter document scans (#459) — private, not public-URL addressable (cf. `PhotoStorage`). */
 export interface DocumentStorage {
   put(renterId: string, file: File): Promise<{ key: string }>
-  /** Short-lived signed URL for a verifier to view the scan. */
+  /** @deprecated Dormant pending #304; superseded by getFile(). Signed URL to view a scan. */
   getSignedUrl(key: string): Promise<string>
+  /** Stream a stored scan's bytes + content-type for an authenticated viewer (#932). */
+  getFile(key: string): Promise<{ body: ReadableStream; contentType: string } | null>
   delete(key: string): Promise<void>
 }

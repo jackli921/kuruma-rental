@@ -23,6 +23,11 @@ interface OperatorFleetViewProps {
   // Passed as a prop (not read from a router hook) to keep the view tree
   // router-free and unit-testable — the bookings locale-as-prop convention.
   readonly locale: string
+  // Seed filter state from the URL (#916 §5.5): the dashboard compliance banner
+  // deep-links here with `?expiringSoon=true` so the page opens already narrowed
+  // to the non-compliant set. The route reads it via validateSearch and passes
+  // it down; absent ⇒ the page opens unfiltered.
+  readonly initialFilters?: FleetFilterState
 }
 
 // Stateful fleet management container. The route owns the loader /
@@ -36,12 +41,13 @@ export function OperatorFleetView({
   classOptions,
   canWrite,
   locale,
+  initialFilters,
 }: OperatorFleetViewProps) {
   const t = useTranslations('business.vehicles.fleet')
   const todayIso = new Date().toISOString().slice(0, 10)
   const [view, setView] = useFleetViewMode()
   const [selectedIds, setSelectedIds] = useState<readonly string[]>([])
-  const [filters, setFilters] = useState<FleetFilterState>({})
+  const [filters, setFilters] = useState<FleetFilterState>(initialFilters ?? {})
   const [sheet, setSheet] = useState<{ vehicle: OperatorFleetVehicle | null } | null>(null)
 
   const visibleVehicles = filterVehicles([...vehicles], filters)

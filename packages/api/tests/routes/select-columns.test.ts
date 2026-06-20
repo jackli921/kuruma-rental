@@ -141,6 +141,8 @@ describe('API responses contain only expected fields', () => {
         seats: 5,
         transmission: 'AUTO',
         dailyRateJpy: 8000,
+        shakenExpiryDate: '2099-06-15',
+        insuranceExpiryDate: '2099-01-01',
       }),
     })
 
@@ -170,6 +172,8 @@ describe('API responses contain only expected fields', () => {
         seats: 5,
         transmission: 'AUTO',
         dailyRateJpy: 8000,
+        shakenExpiryDate: '2099-06-15',
+        insuranceExpiryDate: '2099-01-01',
       }),
     })
     const created = await createRes.json()
@@ -201,6 +205,8 @@ describe('API responses contain only expected fields', () => {
         seats: 5,
         transmission: 'AUTO',
         dailyRateJpy: 8000,
+        shakenExpiryDate: '2099-06-15',
+        insuranceExpiryDate: '2099-01-01',
       }),
     })
     const vehicle = await vRes.json()
@@ -215,8 +221,10 @@ describe('API responses contain only expected fields', () => {
         requestedVehicleId: vehicle.data.id,
         pickupLocationId: locationId,
         dropoffLocationId: locationId,
-        startAt: '2026-05-01T10:00:00Z',
-        endAt: '2026-05-03T10:00:00Z',
+        // Future dates: the #954 past-start floor rejects a booking whose start
+        // has already passed, and this fixture only needs a valid booking to list.
+        startAt: '2027-05-01T10:00:00Z',
+        endAt: '2027-05-03T10:00:00Z',
         source: 'DIRECT',
         disclaimerAccepted: true,
       }),

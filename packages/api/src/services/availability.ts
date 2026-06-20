@@ -1,4 +1,5 @@
 import type { UserRole } from '@kuruma/shared/auth/roles'
+import { isRoadLegal, jstDateString } from '@kuruma/shared/lib/compliance'
 import { STAFF_ROLES } from '../middleware/auth'
 import type {
   AvailabilityFilters,
@@ -38,7 +39,12 @@ export class AvailabilityService {
   ): Promise<VehicleAvailabilityResult> {
     const result = await this.repo.checkVehicleAvailability(vehicleId, from, to)
     if (!result) return { kind: 'not_found' }
-    if (result.available) return { kind: 'available', vehicle: result.vehicle }
+    // §5.2 (#916): the repo only checks booking conflicts, so an expired car
+    // would report available. Gate on road-legality THROUGH the requested return
+    // (same JST clock as list/create) — a non-road-legal car is unavailable with
+    // no conflicts to disclose.
+    const roadLegal = isRoadLegal(result.vehicle, jstDateString(to))
+    if (result.available && roadLegal) return { kind: 'available', vehicle: result.vehicle }
 
     const isStaff = viewerRole != null && STAFF_ROLES.has(viewerRole)
     const conflicts = isStaff

@@ -85,6 +85,23 @@ export class RenterDocumentService {
   }
 
   /**
+   * Stream a renter's stored scan for an authenticated viewer (#932). Authorization
+   * is delegated to `repo.findById`, which seals cross-renter reads for non-staff —
+   * so a renter can only fetch their own scan, platform staff any. Returns
+   * `undefined` (→ 404) when the document or its stored object is missing.
+   */
+  async getFile(
+    ctx: CallerContext,
+    id: string,
+  ): Promise<{ body: ReadableStream; contentType: string; type: DocumentType } | undefined> {
+    const document = await this.repo.findById(ctx, id)
+    if (!document) return undefined
+    const file = await this.storage.getFile(document.storageKey)
+    if (!file) return undefined
+    return { body: file.body, contentType: file.contentType, type: document.type }
+  }
+
+  /**
    * Verification policy (#459). A renter is eligible to book iff they have an
    * APPROVED IDP whose expiry covers the rental return date. Type + date aware:
    * an approved PASSPORT does NOT satisfy the IDP requirement, and an IDP that

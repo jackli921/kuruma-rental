@@ -9,9 +9,11 @@ import { DisabledPhotoStorage } from '../repositories/disabled-photo-storage'
 import {
   type Db,
   DrizzleAddOnRepository,
+  DrizzleAuditLogRepository,
   DrizzleAvailabilityRepository,
   DrizzleBookingEventRepository,
   DrizzleBookingRepository,
+  DrizzleComplianceAlertLogRepository,
   DrizzleCustomerRepository,
   DrizzleFeeScheduleRepository,
   DrizzleFleetOverviewRepository,
@@ -40,9 +42,11 @@ import {
 } from '../repositories/drizzle'
 import {
   InMemoryAddOnRepository,
+  InMemoryAuditLogRepository,
   InMemoryAvailabilityRepository,
   InMemoryBookingEventRepository,
   InMemoryBookingRepository,
+  InMemoryComplianceAlertLogRepository,
   InMemoryCustomerRepository,
   InMemoryDocumentStorage,
   InMemoryFeeScheduleRepository,
@@ -73,9 +77,11 @@ import { R2DocumentStorage } from '../repositories/r2-document-storage'
 import { type R2BucketLike, R2PhotoStorage } from '../repositories/r2-photo-storage'
 import type {
   AddOnRepository,
+  AuditLogRepository,
   AvailabilityRepository,
   BookingEventRepository,
   BookingRepository,
+  ComplianceAlertLogRepository,
   CustomerRepository,
   DocumentStorage,
   FeeScheduleRepository,
@@ -139,12 +145,14 @@ export type Repos = {
   addOnRepo: AddOnRepository
   feeScheduleRepo: FeeScheduleRepository
   notificationLogRepo: NotificationLogRepository
+  complianceAlertLogRepo: ComplianceAlertLogRepository
   storefrontRepo: StorefrontRepository
   regionRepo: RegionRepository
   paymentEventRepo: PaymentEventRepository
   paymentAnomalyRepo: PaymentAnomalyRepository
   providerInviteRepo: ProviderInviteRepository
   operatorMembershipRepo: OperatorMembershipRepository
+  auditLogRepo: AuditLogRepository
   bookingEventRepo: BookingEventRepository
   runInTransaction: RunInTransaction
   runOperatorGrant: RunOperatorGrant
@@ -200,6 +208,8 @@ export function buildOverrideRepos(overrides: AppOverrides): Repos {
   const operatorRepo = overrides.operatorRepo ?? new InMemoryOperatorRepository()
   const notificationLogRepo =
     overrides.notificationLogRepo ?? new InMemoryNotificationLogRepository()
+  const complianceAlertLogRepo =
+    overrides.complianceAlertLogRepo ?? new InMemoryComplianceAlertLogRepository()
   const storefrontRepo =
     overrides.storefrontRepo ?? new InMemoryStorefrontRepository(locationRepo, operatorRepo)
   const regionRepo = overrides.regionRepo ?? new InMemoryRegionRepository()
@@ -208,6 +218,7 @@ export function buildOverrideRepos(overrides: AppOverrides): Repos {
   const providerInviteRepo = overrides.providerInviteRepo ?? new InMemoryProviderInviteRepository()
   const operatorMembershipRepo =
     overrides.operatorMembershipRepo ?? new InMemoryOperatorMembershipRepository()
+  const auditLogRepo = new InMemoryAuditLogRepository()
   const runOperatorGrant: RunOperatorGrant = (fn) =>
     fn({ memberships: operatorMembershipRepo, users: userRepo, invites: providerInviteRepo })
   return {
@@ -233,12 +244,14 @@ export function buildOverrideRepos(overrides: AppOverrides): Repos {
     addOnRepo,
     feeScheduleRepo,
     notificationLogRepo,
+    complianceAlertLogRepo,
     storefrontRepo,
     regionRepo,
     paymentEventRepo,
     paymentAnomalyRepo,
     providerInviteRepo,
     operatorMembershipRepo,
+    auditLogRepo,
     bookingEventRepo,
     runInTransaction,
     runOperatorGrant,
@@ -278,6 +291,7 @@ export function buildDrizzleRepos(opts?: { db?: Db; runTx?: RunTx }): Repos {
   const operatorRepo = new DrizzleOperatorRepository(db)
   const operatorMembershipRepo = new DrizzleOperatorMembershipRepository(db)
   const providerInviteRepo = new DrizzleProviderInviteRepository(db)
+  const auditLogRepo = new DrizzleAuditLogRepository(db)
   // Real Google OAuth runtime: HTTP provider + Drizzle-backed account store.
   // Built only here (the composition root) so the route stays adapter-agnostic.
   const googleAuthRuntime: GoogleAuthRuntime = {
@@ -326,12 +340,14 @@ export function buildDrizzleRepos(opts?: { db?: Db; runTx?: RunTx }): Repos {
     addOnRepo: new DrizzleAddOnRepository(db),
     feeScheduleRepo: new DrizzleFeeScheduleRepository(db),
     notificationLogRepo: new DrizzleNotificationLogRepository(db),
+    complianceAlertLogRepo: new DrizzleComplianceAlertLogRepository(db),
     storefrontRepo: new DrizzleStorefrontRepository(db),
     regionRepo: new DrizzleRegionRepository(db),
     paymentEventRepo: new DrizzlePaymentEventRepository(db),
     paymentAnomalyRepo: new DrizzlePaymentAnomalyRepository(db),
     providerInviteRepo,
     operatorMembershipRepo,
+    auditLogRepo,
     bookingEventRepo: new DrizzleBookingEventRepository(db),
     runInTransaction: createDrizzleTransaction(tx),
     // Real interactive tx (#493): membership INSERT first so the partial-unique-
@@ -359,6 +375,7 @@ export function buildInMemoryRepos(): Repos {
   const operatorRepo = new InMemoryOperatorRepository()
   const operatorMembershipRepo = new InMemoryOperatorMembershipRepository()
   const providerInviteRepo = new InMemoryProviderInviteRepository()
+  const auditLogRepo = new InMemoryAuditLogRepository()
   // messageRepo wraps the SAME threadRepo instance so reads see threads the
   // message path created (shared in-memory state — matches the prod seam).
   const threadRepo = new InMemoryThreadRepository()
@@ -410,12 +427,14 @@ export function buildInMemoryRepos(): Repos {
     addOnRepo,
     feeScheduleRepo,
     notificationLogRepo: new InMemoryNotificationLogRepository(),
+    complianceAlertLogRepo: new InMemoryComplianceAlertLogRepository(),
     storefrontRepo: new InMemoryStorefrontRepository(locationRepo, operatorRepo),
     regionRepo: new InMemoryRegionRepository(),
     paymentEventRepo: new InMemoryPaymentEventRepository(),
     paymentAnomalyRepo: new InMemoryPaymentAnomalyRepository(),
     providerInviteRepo,
     operatorMembershipRepo,
+    auditLogRepo,
     bookingEventRepo,
     runInTransaction,
     runOperatorGrant,

@@ -149,6 +149,43 @@ describe('checkRentalRules', () => {
     })
   })
 
+  // #954: a universal floor independent of the per-vehicle advanceBookingHours.
+  // advanceBookingHours catches a past start only when it is set; it is null by
+  // default and ALWAYS null for MANUAL bookings, so without this floor a renter
+  // (or walk-in) could book a car for a time already gone.
+  describe('start-in-the-past floor (#954)', () => {
+    const minutesFromNow = (m: number) => new Date(NOW.getTime() + m * 60 * 1000)
+
+    it('rejects a start two hours in the past when no advance rule is set', () => {
+      const result = checkRentalRules(noRules, hoursFromNow(-2), hoursFromNow(4), NOW)
+      expect(result.ok).toBe(false)
+      if (!result.ok) expect(result.code).toBe('RENTAL_RULE_START_IN_PAST')
+    })
+
+    it('rejects a start 30 minutes in the past (beyond the skew grace)', () => {
+      const result = checkRentalRules(noRules, minutesFromNow(-30), hoursFromNow(4), NOW)
+      expect(result.ok).toBe(false)
+      if (!result.ok) expect(result.code).toBe('RENTAL_RULE_START_IN_PAST')
+    })
+
+    it('accepts a start exactly at now', () => {
+      const result = checkRentalRules(noRules, NOW, hoursFromNow(4), NOW)
+      expect(result.ok).toBe(true)
+    })
+
+    it('accepts a start a few minutes in the past, within the clock-skew grace', () => {
+      const result = checkRentalRules(noRules, minutesFromNow(-5), hoursFromNow(4), NOW)
+      expect(result.ok).toBe(true)
+    })
+
+    it('still reports the advance-booking code (not the past floor) when an advance rule is set', () => {
+      const rules = { minRentalHours: null, maxRentalHours: null, advanceBookingHours: 24 }
+      const result = checkRentalRules(rules, hoursFromNow(-2), hoursFromNow(4), NOW)
+      expect(result.ok).toBe(false)
+      if (!result.ok) expect(result.code).toBe('RENTAL_RULE_ADVANCE_BOOKING')
+    })
+  })
+
   describe('all rules set and all satisfied', () => {
     it('accepts a Honda N-BOX booking: 4h minimum, 72h max, no advance, 24h duration', () => {
       const rules = { minRentalHours: 4, maxRentalHours: 72, advanceBookingHours: null }

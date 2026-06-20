@@ -60,10 +60,9 @@ test.describe('marketplace happy path — renter books, operator sees it (real D
     const renter = await renterContext.newPage()
 
     await test.step('1. renter search surfaces the operator storefront', async () => {
-      await renter.goto('/en/search')
-      await renter.locator('#from').fill(FROM)
-      await renter.locator('#to').fill(TO)
-      await renter.getByRole('button', { name: 'Search' }).click()
+      // Seed the JST range via the URL (the route prefills the refine form from
+      // it, #965); from/to then carry through the storefront + booking links.
+      await renter.goto(`/en/search?from=${FROM}&to=${TO}`)
 
       await expect(renter).toHaveURL(/\/search\?from=.+&to=.+/)
       await expect(

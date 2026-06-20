@@ -12,6 +12,12 @@ const userColumns = {
   language: users.language,
   country: users.country,
   role: users.role,
+  // operatorId is the operator-tenant projection (#521). It MUST be selected: the
+  // #939 session-revocation check compares this against the JWT's operatorId claim,
+  // so omitting it makes every operator token look "stale" (projection.operatorId =
+  // undefined != claim) and 401s all operator traffic. The `as User` cast below
+  // would otherwise launder the missing column past tsc. InMemory always returned it.
+  operatorId: users.operatorId,
 }
 
 const PLACEHOLDER_EMAIL_SUFFIX = '@placeholder.kuruma.local'
