@@ -103,3 +103,37 @@ export function wireUrlToStoredRef(wireUrl: string, publicBaseUrl: string): stri
 export function wireUrlsToStoredRefs(wireUrls: readonly string[], publicBaseUrl: string): string[] {
   return wireUrls.map((url) => wireUrlToStoredRef(url, publicBaseUrl))
 }
+
+/**
+ * Cross-tenant photo-spoof guard (#967). True when `url` is one of OUR public
+ * bucket URLs but addresses a vehicle other than `ownerVehicleId`.
+ *
+ * The attack: a stored `photos` entry that is one of our URLs is re-encoded to
+ * `r2:<key>` by {@link wireUrlToStoredRef} on write, so an operator who submits
+ * `${base}/vehicles/<victim>/x.jpg` would mint `r2:vehicles/<victim>/…` on their
+ * OWN row — and a renter read ({@link photoRefToWireUrl}) then renders the
+ * victim's photo as theirs. The repo encode is intentionally permissive (it
+ * trusts validated input); this is the policy that decides ownership.
+ *
+ * - External image URLs (not our origin) and bare keys pass — `toObjectKey`
+ *   returns them verbatim, so `key === url`.
+ * - On create `ownerVehicleId` is null: no vehicle exists yet and uploads mint
+ *   their own keys via `POST /vehicles/:id/photos`, so ANY of-our-origin URL in
+ *   a create payload is foreign.
+ * - On update only the vehicle's own `vehicles/<id>/…` prefix is permitted,
+ *   mirroring {@link R2PhotoStorage.delete}'s own-prefix scoping.
+ *
+ * The raw `r2:` sentinel is blocked upstream by the photo schema's http(s)
+ * refine, not here (an opaque `r2:` URL has no origin, so it can't match ours).
+ * Pure (Functional Core); the VehicleService is the imperative shell.
+ */
+export function isForeignVehiclePhoto(
+  url: string,
+  ownerVehicleId: string | null,
+  publicBaseUrl: string,
+): boolean {
+  const key = toObjectKey(url, publicBaseUrl)
+  if (key === url) return false // not one of our URLs (external / bare key / dev with empty base)
+  if (ownerVehicleId === null) return true // create: no owning vehicle to anchor against
+  return !key.startsWith(`vehicles/${ownerVehicleId}/`)
+}

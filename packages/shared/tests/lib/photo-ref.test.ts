@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import {
   R2_REF_PREFIX,
   encodeR2Ref,
+  isForeignVehiclePhoto,
   parsePhotoRef,
   photoRefToWireUrl,
   photoRefsToWireUrls,
@@ -122,5 +123,43 @@ describe('wireUrlsToStoredRefs', () => {
 
   it('returns an empty array unchanged', () => {
     expect(wireUrlsToStoredRefs([], BASE)).toEqual([])
+  })
+})
+
+// #967: cross-tenant photo-spoof guard. An operator can submit any string that
+// passes `z.string().url()` in a `photos` array; the repo re-encodes one of OUR
+// public URLs back to `r2:<key>` on write. Submitting `${BASE}/vehicles/<victim>
+// /x.jpg` would therefore mint `r2:vehicles/<victim>/…` on the attacker's own
+// row, and a renter read would render the victim's photo as theirs. This pure
+// predicate is the Functional Core the VehicleService shell rejects on.
+describe('isForeignVehiclePhoto', () => {
+  const OWNER = 'veh_123' // R2_KEY lives under vehicles/veh_123/
+  const OWN_PHOTO = `${BASE}/${R2_KEY}` // ${BASE}/vehicles/veh_123/8f3a-9c.jpg
+  const VICTIM_PHOTO = `${BASE}/vehicles/veh_999/secret.jpg`
+
+  it('passes an external image URL — never one of ours, any owner', () => {
+    expect(isForeignVehiclePhoto(EXTERNAL, OWNER, BASE)).toBe(false)
+    expect(isForeignVehiclePhoto(EXTERNAL, null, BASE)).toBe(false)
+  })
+
+  it('passes a bare relative value — already a key, not a foreign URL', () => {
+    expect(isForeignVehiclePhoto(R2_KEY, OWNER, BASE)).toBe(false)
+  })
+
+  it('rejects ANY of-our-origin URL on create (no owning vehicle exists yet)', () => {
+    expect(isForeignVehiclePhoto(OWN_PHOTO, null, BASE)).toBe(true)
+    expect(isForeignVehiclePhoto(VICTIM_PHOTO, null, BASE)).toBe(true)
+  })
+
+  it("passes the vehicle's OWN of-our-origin photo on update", () => {
+    expect(isForeignVehiclePhoto(OWN_PHOTO, OWNER, BASE)).toBe(false)
+  })
+
+  it("rejects another vehicle's of-our-origin photo on update", () => {
+    expect(isForeignVehiclePhoto(VICTIM_PHOTO, OWNER, BASE)).toBe(true)
+  })
+
+  it('is inert when the base is empty (dev/test — no public bucket configured)', () => {
+    expect(isForeignVehiclePhoto(VICTIM_PHOTO, OWNER, '')).toBe(false)
   })
 })
