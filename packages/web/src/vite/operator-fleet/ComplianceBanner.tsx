@@ -9,8 +9,8 @@ interface ComplianceBannerProps {
   readonly locale: string
 }
 
-// §5.5 in-app compliance banner (#916). On the operator dashboard, surfaces how
-// many fleet vehicles have shaken/insurance expired or expiring within 30 days
+// §5.5 in-app compliance banner (#916). Rendered on the operator dashboard,
+// surfaces how many fleet vehicles have shaken/insurance expired or expiring soon
 // and deep-links to the fleet pre-filtered to that same set. The count comes from
 // the shared `filterVehicles({ expiringSoon })` the fleet view uses, so the
 // headline number can never drift from the list the link lands on (FC/IS — pure
