@@ -31,8 +31,8 @@ function vehicleInput(overrides?: Partial<{ classId: string | null; status: stri
     color: null,
     dailyRateJpy: 5000,
     hourlyRateJpy: 1000,
-    shakenExpiryDate: null,
-    insuranceExpiryDate: null,
+    shakenExpiryDate: '2099-06-15',
+    insuranceExpiryDate: '2099-01-01',
     ...overrides,
   }
 }

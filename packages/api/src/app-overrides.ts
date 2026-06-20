@@ -4,6 +4,7 @@ import type {
   AddOnRepository,
   AvailabilityRepository,
   BookingRepository,
+  ComplianceAlertLogRepository,
   CustomerRepository,
   DocumentStorage,
   FeeScheduleRepository,
@@ -30,7 +31,8 @@ import type {
   VehicleDetailRepository,
   VehicleRepository,
 } from './repositories/types'
-import type { Geocoder } from './services/geocoding/types'
+import type { EmailSender } from './services/email/email-sender'
+import type { GeocodeCache, Geocoder } from './services/geocoding/types'
 import type { PaymentGateway } from './services/payment/payment-gateway'
 
 /**
@@ -61,17 +63,27 @@ export type AppOverrides = {
   addOnRepo?: AddOnRepository
   feeScheduleRepo?: FeeScheduleRepository
   notificationLogRepo?: NotificationLogRepository
+  complianceAlertLogRepo?: ComplianceAlertLogRepository
   storefrontRepo?: StorefrontRepository
   regionRepo?: RegionRepository
   paymentEventRepo?: PaymentEventRepository
   paymentAnomalyRepo?: PaymentAnomalyRepository
   providerInviteRepo?: ProviderInviteRepository
   operatorMembershipRepo?: OperatorMembershipRepository
+  // Inject a fake outbound email port in tests; absent ⇒ the env-resolved
+  // Resend/dev-stub/sentinel (resolveEmailSender). Shared by the booking
+  // dispatcher and the #916 compliance digest.
+  emailSender?: EmailSender
   // Inject a fake gateway in tests; absent ⇒ the env-resolved Stripe/sentinel.
   paymentGateway?: PaymentGateway
   // Inject a fake Geocoder in tests (proves a provider swap touches only here);
   // absent ⇒ the env-resolved Nominatim/null-stub.
   geocoder?: Geocoder
+  // Inject a fake geocode cache in tests; absent ⇒ the env-resolved Workers KV
+  // cache (when the GEOCODE_CACHE binding exists, #304) or an in-process map. The
+  // cache wraps the geocoder so a repeated address skips the provider call and the
+  // 1-req/10s budget (#601).
+  geocodeCache?: GeocodeCache
   photoUploadLimiter?: RateLimitBinding
   photoUploadUserLimiter?: RateLimitBinding
   publicCatalogLimiter?: RateLimitBinding

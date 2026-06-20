@@ -152,8 +152,8 @@ async function seedVehicle(classId: string, pickupLocationId: string): Promise<s
     color: null,
     dailyRateJpy: 6000,
     hourlyRateJpy: null,
-    shakenExpiryDate: null,
-    insuranceExpiryDate: null,
+    shakenExpiryDate: '2099-06-15',
+    insuranceExpiryDate: '2099-01-01',
   })
   return vehicle.id
 }

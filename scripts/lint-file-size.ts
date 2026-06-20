@@ -79,6 +79,9 @@ const ROOTS = ['packages/api/src', 'packages/web/src', 'packages/shared/src']
 const INCLUDE_PATTERN = '**/*.{ts,tsx}'
 const EXCLUDE_PATTERNS = [
   /\.test\.tsx?$/,
+  // Generated files (e.g. TanStack Router's routeTree.gen.ts) grow with every
+  // route and are not hand-maintained — a size cap on them is unactionable.
+  /\.gen\.ts$/,
   /\/tests\//,
   /\/__fixtures__\//,
   /\/node_modules\//,

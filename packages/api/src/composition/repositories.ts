@@ -9,9 +9,11 @@ import { DisabledPhotoStorage } from '../repositories/disabled-photo-storage'
 import {
   type Db,
   DrizzleAddOnRepository,
+  DrizzleAuditLogRepository,
   DrizzleAvailabilityRepository,
   DrizzleBookingEventRepository,
   DrizzleBookingRepository,
+  DrizzleComplianceAlertLogRepository,
   DrizzleCustomerRepository,
   DrizzleFeeScheduleRepository,
   DrizzleFleetOverviewRepository,
@@ -40,9 +42,11 @@ import {
 } from '../repositories/drizzle'
 import {
   InMemoryAddOnRepository,
+  InMemoryAuditLogRepository,
   InMemoryAvailabilityRepository,
   InMemoryBookingEventRepository,
   InMemoryBookingRepository,
+  InMemoryComplianceAlertLogRepository,
   InMemoryCustomerRepository,
   InMemoryDocumentStorage,
   InMemoryFeeScheduleRepository,
@@ -73,9 +77,11 @@ import { R2DocumentStorage } from '../repositories/r2-document-storage'
 import { type R2BucketLike, R2PhotoStorage } from '../repositories/r2-photo-storage'
 import type {
   AddOnRepository,
+  AuditLogRepository,
   AvailabilityRepository,
   BookingEventRepository,
   BookingRepository,
+  ComplianceAlertLogRepository,
   CustomerRepository,
   DocumentStorage,
   FeeScheduleRepository,
@@ -104,6 +110,25 @@ import type {
   VehicleDetailRepository,
   VehicleRepository,
 } from '../repositories/types'
+
+/**
+ * Fail-loud config invariant (#967): when the public photos bucket binding is
+ * present, its public base URL MUST be set. An empty base silently disables BOTH
+ * the `r2:` re-encode AND the cross-tenant photo-spoof guard (both no-op when
+ * `toObjectKey` can't parse the base), so a PATCH'd `${bucketHost}/vehicles/
+ * <victim>/x.jpg` would be stored literally and rendered — reopening the IDOR
+ * while uploads quietly fall back to DisabledPhotoStorage. Throw at the
+ * composition root rather than degrade at runtime (mirrors DisabledPhotoStorage's
+ * loud-failure stance). Pure + exported so the invariant is unit-testable without
+ * a live DB or R2 binding.
+ */
+export function assertPhotosBaseConfigured(hasBucket: boolean, photosPublicUrl: string): void {
+  if (hasBucket && !photosPublicUrl) {
+    throw new Error(
+      'VEHICLE_PHOTOS_PUBLIC_URL must be set when the VEHICLE_PHOTOS bucket binding is present: an empty base disables the #967 cross-tenant photo-spoof guard',
+    )
+  }
+}
 
 /**
  * Compiler-enforced bundle of every repository, storage adapter, and
@@ -139,15 +164,21 @@ export type Repos = {
   addOnRepo: AddOnRepository
   feeScheduleRepo: FeeScheduleRepository
   notificationLogRepo: NotificationLogRepository
+  complianceAlertLogRepo: ComplianceAlertLogRepository
   storefrontRepo: StorefrontRepository
   regionRepo: RegionRepository
   paymentEventRepo: PaymentEventRepository
   paymentAnomalyRepo: PaymentAnomalyRepository
   providerInviteRepo: ProviderInviteRepository
   operatorMembershipRepo: OperatorMembershipRepository
+  auditLogRepo: AuditLogRepository
   bookingEventRepo: BookingEventRepository
   runInTransaction: RunInTransaction
   runOperatorGrant: RunOperatorGrant
+  // Public R2 bucket base for vehicle photos (#879). Threaded to VehicleService
+  // as the anchor for the #967 cross-tenant photo-spoof guard. '' in dev/test
+  // (no bucket) ⇒ the guard is inert, matching the no-op encode/decode there.
+  photosPublicUrl: string
   googleAuthRuntime: GoogleAuthRuntime | undefined
 }
 
@@ -200,6 +231,8 @@ export function buildOverrideRepos(overrides: AppOverrides): Repos {
   const operatorRepo = overrides.operatorRepo ?? new InMemoryOperatorRepository()
   const notificationLogRepo =
     overrides.notificationLogRepo ?? new InMemoryNotificationLogRepository()
+  const complianceAlertLogRepo =
+    overrides.complianceAlertLogRepo ?? new InMemoryComplianceAlertLogRepository()
   const storefrontRepo =
     overrides.storefrontRepo ?? new InMemoryStorefrontRepository(locationRepo, operatorRepo)
   const regionRepo = overrides.regionRepo ?? new InMemoryRegionRepository()
@@ -208,6 +241,7 @@ export function buildOverrideRepos(overrides: AppOverrides): Repos {
   const providerInviteRepo = overrides.providerInviteRepo ?? new InMemoryProviderInviteRepository()
   const operatorMembershipRepo =
     overrides.operatorMembershipRepo ?? new InMemoryOperatorMembershipRepository()
+  const auditLogRepo = new InMemoryAuditLogRepository()
   const runOperatorGrant: RunOperatorGrant = (fn) =>
     fn({ memberships: operatorMembershipRepo, users: userRepo, invites: providerInviteRepo })
   return {
@@ -233,15 +267,18 @@ export function buildOverrideRepos(overrides: AppOverrides): Repos {
     addOnRepo,
     feeScheduleRepo,
     notificationLogRepo,
+    complianceAlertLogRepo,
     storefrontRepo,
     regionRepo,
     paymentEventRepo,
     paymentAnomalyRepo,
     providerInviteRepo,
     operatorMembershipRepo,
+    auditLogRepo,
     bookingEventRepo,
     runInTransaction,
     runOperatorGrant,
+    photosPublicUrl: process.env.VEHICLE_PHOTOS_PUBLIC_URL ?? '',
     googleAuthRuntime: overrides.googleAuthRuntime,
   }
 }
@@ -278,6 +315,7 @@ export function buildDrizzleRepos(opts?: { db?: Db; runTx?: RunTx }): Repos {
   const operatorRepo = new DrizzleOperatorRepository(db)
   const operatorMembershipRepo = new DrizzleOperatorMembershipRepository(db)
   const providerInviteRepo = new DrizzleProviderInviteRepository(db)
+  const auditLogRepo = new DrizzleAuditLogRepository(db)
   // Real Google OAuth runtime: HTTP provider + Drizzle-backed account store.
   // Built only here (the composition root) so the route stays adapter-agnostic.
   const googleAuthRuntime: GoogleAuthRuntime = {
@@ -287,6 +325,9 @@ export function buildDrizzleRepos(opts?: { db?: Db; runTx?: RunTx }): Repos {
   const vehiclePhotosBucket = (globalThis as Record<string, unknown>).VEHICLE_PHOTOS as
     | R2BucketLike
     | undefined
+  // #967: refuse to boot with a bound bucket but no base — the spoof guard would
+  // be silently inert. Fail loud here, not at the first malicious PATCH.
+  assertPhotosBaseConfigured(Boolean(vehiclePhotosBucket), photosPublicUrl)
   // In the Drizzle branch (production) an InMemory fallback is dangerous —
   // each CF Worker request gets a fresh instance, so uploads "succeed" but
   // return URLs pointing at nothing. DisabledPhotoStorage throws loudly.
@@ -326,17 +367,20 @@ export function buildDrizzleRepos(opts?: { db?: Db; runTx?: RunTx }): Repos {
     addOnRepo: new DrizzleAddOnRepository(db),
     feeScheduleRepo: new DrizzleFeeScheduleRepository(db),
     notificationLogRepo: new DrizzleNotificationLogRepository(db),
+    complianceAlertLogRepo: new DrizzleComplianceAlertLogRepository(db),
     storefrontRepo: new DrizzleStorefrontRepository(db),
     regionRepo: new DrizzleRegionRepository(db),
     paymentEventRepo: new DrizzlePaymentEventRepository(db),
     paymentAnomalyRepo: new DrizzlePaymentAnomalyRepository(db),
     providerInviteRepo,
     operatorMembershipRepo,
+    auditLogRepo,
     bookingEventRepo: new DrizzleBookingEventRepository(db),
-    runInTransaction: createDrizzleTransaction(tx),
+    runInTransaction: createDrizzleTransaction(tx, decodePhotos, encodePhotos),
     // Real interactive tx (#493): membership INSERT first so the partial-unique-
     // active index aborts the whole grant on a concurrent double-accept.
     runOperatorGrant: createDrizzleOperatorGrant(tx),
+    photosPublicUrl,
     googleAuthRuntime,
   }
 }
@@ -359,6 +403,7 @@ export function buildInMemoryRepos(): Repos {
   const operatorRepo = new InMemoryOperatorRepository()
   const operatorMembershipRepo = new InMemoryOperatorMembershipRepository()
   const providerInviteRepo = new InMemoryProviderInviteRepository()
+  const auditLogRepo = new InMemoryAuditLogRepository()
   // messageRepo wraps the SAME threadRepo instance so reads see threads the
   // message path created (shared in-memory state — matches the prod seam).
   const threadRepo = new InMemoryThreadRepository()
@@ -410,15 +455,18 @@ export function buildInMemoryRepos(): Repos {
     addOnRepo,
     feeScheduleRepo,
     notificationLogRepo: new InMemoryNotificationLogRepository(),
+    complianceAlertLogRepo: new InMemoryComplianceAlertLogRepository(),
     storefrontRepo: new InMemoryStorefrontRepository(locationRepo, operatorRepo),
     regionRepo: new InMemoryRegionRepository(),
     paymentEventRepo: new InMemoryPaymentEventRepository(),
     paymentAnomalyRepo: new InMemoryPaymentAnomalyRepository(),
     providerInviteRepo,
     operatorMembershipRepo,
+    auditLogRepo,
     bookingEventRepo,
     runInTransaction,
     runOperatorGrant,
+    photosPublicUrl: process.env.VEHICLE_PHOTOS_PUBLIC_URL ?? '',
     googleAuthRuntime: undefined,
   }
 }

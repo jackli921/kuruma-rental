@@ -1,20 +1,21 @@
 import { buttonVariants } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { cn } from '@/lib/utils'
 import { RegionPicker } from '@/vite/regions/RegionPicker'
 import { regionsQueryOptions } from '@/vite/regions/regions-api'
+import { DateTimeRangePicker } from '@/vite/search/DateTimeRangePicker'
+import type { DateTimeRange } from '@/vite/search/datetime-range'
 import { carryForwardFilters, defaultSearchRange } from '@/vite/storefronts/params'
 import { persistSearchRange, readPersistedRange } from '@/vite/storefronts/storage'
 import { useQuery } from '@tanstack/react-query'
 import { useNavigate } from '@tanstack/react-router'
-import { Calendar, Search } from 'lucide-react'
+import { Search } from 'lucide-react'
 import { type FormEvent, useState } from 'react'
 import { useLocale, useTranslations } from 'use-intl'
 
-// Prefill the inputs so a renter can search in one click: restore this session's
+// Prefill the picker so a renter can search in one click: restore this session's
 // last range if there is one, otherwise the next-hour / +3 day default.
-function initialRange(): { from: string; to: string } {
+function initialRange(): DateTimeRange {
   return readPersistedRange() ?? defaultSearchRange()
 }
 
@@ -23,30 +24,25 @@ export function SearchWidget() {
   const locale = useLocale()
   const navigate = useNavigate()
   const { data: regions } = useQuery(regionsQueryOptions())
-  // Compute the seed once on mount (reads sessionStorage); the two inputs then
-  // own their own state. Calling initialRange() per useState would read storage
-  // and build a Date twice.
-  const [initial] = useState(initialRange)
-  const [pickupDate, setPickupDate] = useState(initial.from)
-  const [returnDate, setReturnDate] = useState(initial.to)
+  // The pickup/return range is controlled by the shared DateTimeRangePicker (#965),
+  // seeded once on mount (reads sessionStorage). It emits the same JST wall-clock
+  // from/to strings StorefrontSearchForm does, so `/search` parses them directly.
+  const [range, setRange] = useState<DateTimeRange>(initialRange)
   // The region anchor (#651 Slice 3): a slug, or null for "search everywhere".
   // Starts empty on the landing page; a chosen region always wins over geolocation.
   const [region, setRegion] = useState<string | null>(null)
 
-  // Hand the chosen range to the storefront availability search. The inputs are
-  // `datetime-local` (JST wall-clock) to match StorefrontSearchForm, so the
-  // values feed `/search`'s parseSearchRange directly — no format conversion.
   // Persist first so returning to the landing page restores this range; the
   // region slug carries forward so the search route can filter to its subtree.
   function handleSubmit(e: FormEvent) {
     e.preventDefault()
-    persistSearchRange(pickupDate, returnDate)
+    persistSearchRange(range.from, range.to)
     navigate({
       to: '/$locale/search',
       params: { locale },
       search: {
-        from: pickupDate,
-        to: returnDate,
+        from: range.from,
+        to: range.to,
         ...carryForwardFilters({ region: region ?? undefined }),
       },
     })
@@ -60,40 +56,11 @@ export function SearchWidget() {
       </div>
 
       <div className="bg-white rounded-2xl shadow-xl p-2 flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
-        {/* Pickup date */}
-        <div className="flex-1 flex items-center gap-3 px-4 py-2 rounded-xl">
-          <Calendar className="size-5 text-muted-foreground shrink-0" />
-          <div className="flex flex-col gap-0.5">
-            <Label htmlFor="pickup-date" className="text-xs font-medium text-muted-foreground">
-              {t('search.pickupDate')}
-            </Label>
-            <Input
-              id="pickup-date"
-              type="datetime-local"
-              value={pickupDate}
-              onChange={(e) => setPickupDate(e.target.value)}
-              className="h-6 border-0 p-0 text-sm font-semibold shadow-none focus-visible:ring-0"
-            />
-          </div>
-        </div>
-
-        <div className="hidden sm:block w-px h-8 bg-border" />
-
-        {/* Return date */}
-        <div className="flex-1 flex items-center gap-3 px-4 py-2 rounded-xl">
-          <Calendar className="size-5 text-muted-foreground shrink-0" />
-          <div className="flex flex-col gap-0.5">
-            <Label htmlFor="return-date" className="text-xs font-medium text-muted-foreground">
-              {t('search.returnDate')}
-            </Label>
-            <Input
-              id="return-date"
-              type="datetime-local"
-              value={returnDate}
-              onChange={(e) => setReturnDate(e.target.value)}
-              className="h-6 border-0 p-0 text-sm font-semibold shadow-none focus-visible:ring-0"
-            />
-          </div>
+        <div className="flex-1 px-2 py-1">
+          <Label htmlFor="hero-dates" className="sr-only">
+            {t('search.dates')}
+          </Label>
+          <DateTimeRangePicker id="hero-dates" value={range} onChange={setRange} />
         </div>
 
         {/* Search button */}

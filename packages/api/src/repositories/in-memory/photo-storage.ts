@@ -16,8 +16,10 @@ export class InMemoryPhotoStorage implements PhotoStorage {
     return { key, url: `${BASE_URL}/${key}` }
   }
 
-  async delete(keyOrUrl: string): Promise<void> {
+  async delete(keyOrUrl: string, ownerVehicleId: string): Promise<void> {
     const key = keyOrUrl.startsWith(BASE_URL) ? keyOrUrl.slice(BASE_URL.length + 1) : keyOrUrl
+    // Mirror R2PhotoStorage's ownership guard so dev/test behave like prod (#952).
+    if (!key.startsWith(`vehicles/${ownerVehicleId}/`)) return
     this.store.delete(key)
   }
 

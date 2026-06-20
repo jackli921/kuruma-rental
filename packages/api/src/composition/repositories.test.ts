@@ -11,6 +11,7 @@ import {
 } from '../repositories/in-memory'
 import {
   type Repos,
+  assertPhotosBaseConfigured,
   buildDrizzleRepos,
   buildInMemoryRepos,
   buildOverrideRepos,
@@ -48,15 +49,18 @@ const EXPECTED_KEY_MAP: Record<keyof Repos, true> = {
   addOnRepo: true,
   feeScheduleRepo: true,
   notificationLogRepo: true,
+  complianceAlertLogRepo: true,
   storefrontRepo: true,
   regionRepo: true,
   paymentEventRepo: true,
   paymentAnomalyRepo: true,
   providerInviteRepo: true,
   operatorMembershipRepo: true,
+  auditLogRepo: true,
   bookingEventRepo: true,
   runInTransaction: true,
   runOperatorGrant: true,
+  photosPublicUrl: true,
   googleAuthRuntime: true,
 }
 
@@ -158,5 +162,23 @@ describe('repository bundle builders', () => {
     } finally {
       await client.end({ timeout: 0 })
     }
+  })
+})
+
+// #967: an empty photos base silently disables BOTH the r2: re-encode and the
+// cross-tenant photo-spoof guard. When the bucket binding IS present, an empty
+// base reopens the IDOR (a PATCH'd `${bucketHost}/vehicles/<victim>/x.jpg` is
+// stored literally and rendered). Fail loud at the composition root instead.
+describe('assertPhotosBaseConfigured (#967 fail-loud config invariant)', () => {
+  test('throws when the bucket is bound but the public base is empty', () => {
+    expect(() => assertPhotosBaseConfigured(true, '')).toThrow(/VEHICLE_PHOTOS_PUBLIC_URL/)
+  })
+
+  test('passes when the bucket is bound and the base is set', () => {
+    expect(() => assertPhotosBaseConfigured(true, 'https://photos.kuruma.app')).not.toThrow()
+  })
+
+  test('passes when no bucket is bound, regardless of base (dev/in-memory)', () => {
+    expect(() => assertPhotosBaseConfigured(false, '')).not.toThrow()
   })
 })

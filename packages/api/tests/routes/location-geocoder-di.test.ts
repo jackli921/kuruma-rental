@@ -117,4 +117,38 @@ describe('Geocoder DI — provider swap touches only index.ts (#531)', () => {
     expect(geocode).not.toHaveBeenCalled()
     expect(geocodeLimiter.limit).toHaveBeenCalledWith({ key: 'geocode:global' })
   })
+
+  test('an injected geocode cache short-circuits the provider: a cache HIT saves GEOCODED coords without calling the geocoder (#601)', async () => {
+    setupAuthEnv()
+    const vehicleRepo = new InMemoryVehicleRepository()
+    const bookingRepo = new InMemoryBookingRepository()
+    const availabilityRepo = new InMemoryAvailabilityRepository(vehicleRepo, bookingRepo)
+    // The provider would FAIL — proving the GEOCODED result came from the cache.
+    const geocode = vi.fn(async (): Promise<GeocodeOutcome> => ({ status: 'notFound' }))
+    const get = vi.fn(async () => ({ lat: 34.6937, lng: 135.5023 }))
+    const app = createApp({
+      vehicleRepo,
+      bookingRepo,
+      availabilityRepo,
+      geocoder: { geocode },
+      geocodeCache: { get, set: vi.fn(async () => undefined) },
+      regionRepo: regionRepo(),
+    })
+
+    const res = await app.request('/locations', {
+      method: 'POST',
+      headers: await ownerHeaders('op_a'),
+      body: JSON.stringify({ name: 'Namba HQ', address: '1-2-3 Namba, Osaka' }),
+    })
+
+    expect(res.status).toBe(201)
+    const body = await res.json()
+    expect(body.data).toMatchObject({
+      coordinateSource: 'GEOCODED',
+      latitude: 34.6937,
+      longitude: 135.5023,
+    })
+    expect(get).toHaveBeenCalledWith('1-2-3 Namba, Osaka')
+    expect(geocode).not.toHaveBeenCalled()
+  })
 })

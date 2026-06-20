@@ -73,6 +73,16 @@ export type {
   NotificationLogUpsert,
 } from './types-notification'
 
+// Object-storage ports (PhotoStorage #461/#952, DocumentStorage #459) live in
+// their own module to keep this barrel under the file-size cap (#978);
+// re-exported for callers.
+export type { DocumentStorage, PhotoStorage } from './types-storage'
+export { complianceAlertKey } from './types-compliance'
+export type { ComplianceAlertLogRepository, RecordComplianceAlert } from './types-compliance'
+
+// Audit ledger entity + insert-only persistence (#930), own module per #837 cap.
+export type { AuditLogEntry, AuditLogRepository } from './types-audit'
+
 /** Operator (tenant) data access. Admin bootstrap (#386) + slug/id resolution (#387). */
 // Partial profile patch (#903). Only the keys present are written; an absent key
 // leaves the column unchanged, `preAuthHandoffUrl: null` clears it. `updatedAt`
@@ -733,12 +743,6 @@ export interface FeeScheduleRepository {
   archive(id: string): Promise<FeeSchedule | undefined>
 }
 
-export interface PhotoStorage {
-  put(vehicleId: string, file: File): Promise<{ key: string; url: string }>
-  /** Accepts either a key or full URL — implementations strip the base URL prefix. */
-  delete(keyOrUrl: string): Promise<void>
-}
-
 export interface RenterDocumentFilters {
   limit?: number
   offset?: number
@@ -783,15 +787,3 @@ export interface RenterDocumentRepository {
 }
 
 export type CreateRenterDocumentData = Pick<RenterDocument, 'renterId' | 'type' | 'storageKey'>
-
-/**
- * Private object storage for renter document scans (#459). Unlike `PhotoStorage`
- * (public vehicle photos), documents are private — access is via a short-lived
- * signed URL, never a public base URL.
- */
-export interface DocumentStorage {
-  put(renterId: string, file: File): Promise<{ key: string }>
-  /** Short-lived signed URL for a verifier to view the scan. */
-  getSignedUrl(key: string): Promise<string>
-  delete(key: string): Promise<void>
-}

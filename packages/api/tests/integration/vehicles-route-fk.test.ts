@@ -57,6 +57,9 @@ describe('POST/PATCH /vehicles maps a cross-operator classId to 422 (#400)', () 
     transmission: 'AUTO' as const,
     licensePlate: null,
     dailyRateJpy: 8000,
+    // #916: create requires future-dated docs (§5.0) so the FK check is reached.
+    shakenExpiryDate: '2099-06-15',
+    insuranceExpiryDate: '2099-01-01',
     ...(pickupLocationId ? { pickupLocationId } : {}),
   })
 
@@ -134,6 +137,9 @@ describe('POST/PATCH /vehicles maps a cross-operator classId to 422 (#400)', () 
       transmission: 'AUTO' as const,
       licensePlate: null,
       dailyRateJpy: 8000,
+      // #916: valid docs (§5.0) so the operator-FK check is reached, not the validator.
+      shakenExpiryDate: '2099-06-15',
+      insuranceExpiryDate: '2099-01-01',
     })
     expect(res.status).toBe(422)
     expect((await res.json()).error).toBe('Invalid operator')

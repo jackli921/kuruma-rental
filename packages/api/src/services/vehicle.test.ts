@@ -6,6 +6,9 @@ import type { ResolveWriteOperatorId } from '../tenancy'
 import { VehicleService } from './vehicle'
 
 const OPERATOR_ID = 'op_test'
+// A non-empty public bucket base so the #967 cross-tenant photo-spoof guard is
+// active in these tests (it is inert when the base is empty — see isForeignVehiclePhoto).
+const PHOTOS_BASE = 'https://photos.kuruma.test'
 
 // Resolver stub: echoes the seeded operator so create() can prove it both
 // invokes the injected resolver and stamps the resolved id onto the row.
@@ -16,7 +19,7 @@ const resolveTo =
 
 function setup(resolve: ResolveWriteOperatorId = resolveTo(OPERATOR_ID)) {
   const repo = new InMemoryVehicleRepository()
-  const service = new VehicleService(repo, resolve)
+  const service = new VehicleService(repo, resolve, PHOTOS_BASE)
   return { repo, service }
 }
 
@@ -27,6 +30,9 @@ function createInput(overrides: Record<string, unknown> = {}) {
     seats: 5,
     transmission: 'AUTO',
     dailyRateJpy: 8000,
+    // §5.0 / #916: a create requires future-dated shaken + insurance.
+    shakenExpiryDate: '2099-06-15',
+    insuranceExpiryDate: '2099-01-01',
     ...overrides,
   })
 }
@@ -51,6 +57,62 @@ describe('VehicleService.create', () => {
     expect(result.vehicle.operatorId).toBe('op_resolved')
     expect(result.vehicle.status).toBe('AVAILABLE')
     expect(result.vehicle.name).toBe('Toyota Corolla')
+  })
+})
+
+describe('VehicleService — cross-tenant photo-spoof guard (#967)', () => {
+  it('rejects a create whose photos point at our bucket (no own vehicle exists yet)', async () => {
+    const { service } = setup()
+
+    const result = await service.create(
+      SYSTEM_CONTEXT,
+      createInput({ photos: [`${PHOTOS_BASE}/vehicles/veh_victim/secret.jpg`] }),
+    )
+
+    expect(result.ok).toBe(false)
+    if (result.ok) return
+    expect(result.status).toBe(400)
+  })
+
+  it('allows a create with an external (non-bucket) photo URL', async () => {
+    const { service } = setup()
+
+    const result = await service.create(
+      SYSTEM_CONTEXT,
+      createInput({ photos: ['https://images.unsplash.com/photo-123?w=800'] }),
+    )
+
+    expect(result.ok).toBe(true)
+  })
+
+  it("rejects an update pointing at ANOTHER vehicle's bucket photo", async () => {
+    const { service } = setup()
+    const id = await seedVehicle(service)
+
+    const result = await service.update(
+      SYSTEM_CONTEXT,
+      id,
+      updateVehicleSchema.parse({ photos: [`${PHOTOS_BASE}/vehicles/veh_other/x.jpg`] }),
+    )
+
+    expect(result.ok).toBe(false)
+    if (result.ok) return
+    expect(result.status).toBe(400)
+  })
+
+  it("allows an update re-submitting the vehicle's OWN bucket photo", async () => {
+    const { service } = setup()
+    const id = await seedVehicle(service)
+
+    const result = await service.update(
+      SYSTEM_CONTEXT,
+      id,
+      updateVehicleSchema.parse({ photos: [`${PHOTOS_BASE}/vehicles/${id}/x.jpg`] }),
+    )
+
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+    expect(result.vehicle.photos).toEqual([`${PHOTOS_BASE}/vehicles/${id}/x.jpg`])
   })
 })
 

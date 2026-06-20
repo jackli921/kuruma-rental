@@ -3,7 +3,7 @@ import type { StorefrontCardData } from '@/vite/storefronts/api'
 import { carryForwardFilters } from '@/vite/storefronts/params'
 import { turnaroundHours } from '@/vite/storefronts/turnaround'
 import { Link } from '@tanstack/react-router'
-import { Car, Clock, MapPin } from 'lucide-react'
+import { Clock, MapPin, Store } from 'lucide-react'
 import { useLocale, useTranslations } from 'use-intl'
 
 interface StorefrontCardProps {
@@ -37,7 +37,6 @@ export function StorefrontCard({
 }: StorefrontCardProps) {
   const t = useTranslations('search')
   const locale = useLocale()
-  const photo = storefront.representativePhotos[0]
 
   const priceLabel =
     storefront.fromDailyPriceJpy != null
@@ -58,21 +57,19 @@ export function StorefrontCard({
       className="group flex flex-col overflow-hidden rounded-xl border border-border bg-card shadow-sm transition-shadow hover:shadow-md"
     >
       <div className="aspect-[4/3] overflow-hidden bg-muted">
-        {photo ? (
-          <img
-            src={photo}
-            alt={storefront.name}
-            // 4:3 intrinsic hint lets the browser reserve the box before load (#440);
-            // h-full/w-full still drive the rendered size inside the aspect wrapper.
-            width={400}
-            height={300}
-            className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
-          />
-        ) : (
-          <div className="flex h-full w-full items-center justify-center">
-            <Car className="size-12 text-muted-foreground/30" />
-          </div>
-        )}
+        {/*
+          A storefront is a rental location, not a car: showing a vehicle photo here
+          read as "this is the store" (#955). Until a real store image field exists,
+          show a location placeholder — a Store glyph, distinct from the PhotoGallery
+          Car fallback so it unambiguously signals "location".
+        */}
+        <div
+          role="img"
+          aria-label={t('storeImagePlaceholder')}
+          className="flex h-full w-full items-center justify-center"
+        >
+          <Store className="size-12 text-muted-foreground/30" aria-hidden="true" />
+        </div>
       </div>
       <div className="flex flex-1 flex-col gap-3 p-5">
         <div>

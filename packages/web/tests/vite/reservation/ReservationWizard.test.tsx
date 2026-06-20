@@ -4,14 +4,41 @@ import type { AvailableVehicleData } from '@/vite/storefronts/api'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
+import type { ReactNode } from 'react'
 import { IntlProvider } from 'use-intl'
 import { describe, expect, it, vi } from 'vitest'
 import en from '../../../messages/en.json'
 
-// The wizard now renders the live submit step (PaymentStep), which reads the
-// session + router. These tests only care that the wizard reaches that step, so
-// stub the navigation/session seams; the mutation is covered in PaymentStep.test.
-vi.mock('@tanstack/react-router', () => ({ useNavigate: () => vi.fn() }))
+// The wizard renders the live submit step (PaymentStep, which reads the session +
+// router) and a step-1 back-to-listing TanStack Link (#962). Stub useNavigate and
+// Link: the latter as a plain anchor exposing its target + carried search params
+// (mirrors SearchResultRow.test) so the wizard renders without a RouterProvider.
+vi.mock('@tanstack/react-router', () => ({
+  useNavigate: () => vi.fn(),
+  Link: ({
+    to,
+    params,
+    search,
+    children,
+    ...rest
+  }: {
+    to: string
+    params?: { locale?: string; locationId?: string }
+    search?: Record<string, unknown>
+    children: ReactNode
+  }) => (
+    <a
+      href={to}
+      data-to={to}
+      data-locale={params?.locale}
+      data-location={params?.locationId}
+      data-search={JSON.stringify(search ?? {})}
+      {...rest}
+    >
+      {children}
+    </a>
+  ),
+}))
 vi.mock('@/vite/session', () => ({
   useSession: () => ({ data: { user: { id: 'r1', role: 'RENTER' }, csrfToken: 'csrf-1' } }),
 }))
@@ -63,6 +90,19 @@ describe('ReservationWizard', () => {
     renderWizard()
     expect(screen.getByText('Your rental dates')).toBeInTheDocument()
     expect(screen.getByText('Toyota Aqua')).toBeInTheDocument()
+  })
+
+  it('links the first step back to the storefront listing, carrying the date range (#962)', () => {
+    renderWizard()
+    const back = screen.getByRole('link', { name: 'Back to listing' })
+    expect(back).toHaveAttribute('data-to', '/$locale/storefronts/$locationId')
+    expect(back).toHaveAttribute('data-locale', 'en')
+    expect(back).toHaveAttribute('data-location', 'loc1')
+    // from/to are Date objects, serialized to JST datetime-local so the storefront
+    // route's parseSearchRange accepts them (a raw Date becomes an ISO instant that
+    // would redirect to /search).
+    const search = JSON.parse(back.getAttribute('data-search') ?? '{}')
+    expect(search).toMatchObject({ from: '2026-07-01T10:00', to: '2026-07-03T10:00' })
   })
 
   it('walks dates -> add-ons -> insurance -> confirm, accumulating the running total', async () => {

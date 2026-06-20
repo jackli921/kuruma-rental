@@ -1,4 +1,5 @@
 import { bookings, vehicles } from '@kuruma/shared/db/schema'
+import { jstDateString } from '@kuruma/shared/lib/compliance'
 import { type SQL, and, eq, inArray, sql } from 'drizzle-orm'
 import type { Booking, Vehicle } from '../../stores'
 import type { AvailabilityFilters, AvailabilityRepository } from '../types'
@@ -25,9 +26,15 @@ export class DrizzleAvailabilityRepository implements AvailabilityRepository {
   ): Promise<Vehicle[]> {
     const fromIso = from.toISOString()
     const toIso = to.toISOString()
+    // §5.2 (#916): both documents must be valid THROUGH the requested return
+    // date — the same JST clock as the direct/create gates (§4 time basis). A
+    // NULL column yields `NULL >= asOf` = NULL = excluded, so UNKNOWN docs are
+    // gated for free (mirrors `isRoadLegal`'s null handling).
+    const asOf = jstDateString(to)
 
     const conditions: SQL[] = [
       eq(vehicles.status, 'AVAILABLE'),
+      sql`${vehicles.shakenExpiryDate} >= ${asOf}::date AND ${vehicles.insuranceExpiryDate} >= ${asOf}::date`,
       sql`NOT EXISTS (
             SELECT 1 FROM bookings b
             WHERE b."assignedVehicleId" = ${vehicles.id}

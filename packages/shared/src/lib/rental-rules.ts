@@ -7,6 +7,7 @@
 
 export type RentalRuleCode =
   | 'RENTAL_RULE_ADVANCE_BOOKING'
+  | 'RENTAL_RULE_START_IN_PAST'
   | 'RENTAL_RULE_MIN_DURATION'
   | 'RENTAL_RULE_MAX_DURATION'
 
@@ -29,6 +30,13 @@ export interface RentalRules {
 
 const HOURS_MS = 60 * 60 * 1000
 
+// #954: a start is "in the past" only once it falls more than this many minutes
+// before now. The grace absorbs clock skew and the seconds-to-minutes a renter
+// spends between picking a near-now slot and submitting, so a legitimate
+// book-it-now (especially an operator walk-in, where advanceBookingHours is
+// always null) is never rejected for a few seconds of latency.
+const PAST_START_GRACE_MINUTES = 15
+
 export function checkRentalRules(
   rules: RentalRules,
   startAt: Date,
@@ -48,6 +56,19 @@ export function checkRentalRules(
       ok: false,
       code: 'RENTAL_RULE_ADVANCE_BOOKING',
       required: rules.advanceBookingHours,
+      actual: hoursUntilStart,
+    }
+  }
+
+  // #954: universal past-start floor. Checked AFTER advance booking so a vehicle
+  // with an advance rule keeps reporting RENTAL_RULE_ADVANCE_BOOKING (which
+  // already subsumes a past start); this only fills the gap when advanceBookingHours
+  // is null — the default, and forced for MANUAL/walk-in bookings.
+  if (hoursUntilStart < -(PAST_START_GRACE_MINUTES / 60)) {
+    return {
+      ok: false,
+      code: 'RENTAL_RULE_START_IN_PAST',
+      required: 0,
       actual: hoursUntilStart,
     }
   }

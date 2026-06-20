@@ -24,6 +24,8 @@ function validVehicleInput() {
     transmission: 'AUTO' as const,
     bufferMinutes: 60,
     dailyRateJpy: 8000,
+    shakenExpiryDate: '2099-06-15',
+    insuranceExpiryDate: '2099-01-01',
   }
 }
 
@@ -59,7 +61,7 @@ describe('Maintenance Logs', () => {
     const runInTransaction = createInMemoryTransaction(vehicleRepo, maintenanceLogRepo)
     maintenanceService = new MaintenanceService(vehicleRepo, maintenanceLogRepo, runInTransaction)
 
-    const vehicleService = new VehicleService(vehicleRepo, testResolveWriteOperatorId())
+    const vehicleService = new VehicleService(vehicleRepo, testResolveWriteOperatorId(), '')
     app = new Hono()
     app.use('*', testAuthMiddleware('staff-user', 'STAFF'))
     app.route('/', createVehicleRoutes(vehicleService, maintenanceService))
@@ -250,8 +252,8 @@ describe('Maintenance Logs', () => {
         color: null,
         dailyRateJpy: 8000,
         hourlyRateJpy: null,
-        shakenExpiryDate: null,
-        insuranceExpiryDate: null,
+        shakenExpiryDate: '2099-06-15',
+        insuranceExpiryDate: '2099-01-01',
       })
 
       // Guard: snapshot must have captured the vehicle — if store field was renamed,
@@ -320,8 +322,8 @@ describe('GET /vehicles/:vehicleId/maintenance-logs — operator scoping', () =>
       color: null,
       dailyRateJpy: 8000,
       hourlyRateJpy: null,
-      shakenExpiryDate: null,
-      insuranceExpiryDate: null,
+      shakenExpiryDate: '2099-06-15',
+      insuranceExpiryDate: '2099-01-01',
     }
   }
 

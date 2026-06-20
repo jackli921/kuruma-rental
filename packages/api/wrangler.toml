@@ -3,6 +3,11 @@ main = "src/worker.ts"
 compatibility_date = "2025-04-01"
 compatibility_flags = ["nodejs_compat"]
 
+# #916 §5.4: daily fleet-compliance digest. 23:00 UTC = 08:00 JST. Fires the
+# worker.ts `scheduled` handler, which runs ComplianceDigestService once.
+[triggers]
+crons = ["0 23 * * *"]
+
 # CORS allowed origins for browser calls from the web Worker.
 # The dev origins (localhost:3001, 127.0.0.1:3001) are always included in
 # code (see packages/api/src/index.ts resolveAllowedOrigins); this var adds
@@ -79,6 +84,20 @@ bucket_name = "kuruma-vehicle-photos"
 binding = "RENTER_DOCUMENTS"
 bucket_name = "kuruma-renter-documents"
 
+# Geocode result cache (#601, #574 piece 1/2) — a durable, cross-isolate KV cache
+# of `address -> {lat,lng}` so repeated lookups don't spend the 1-req/10s geocode
+# budget (the OSMF policy asks consumers to cache). BLOCKED on #304: KV is not yet
+# provisioned on this account, so the binding stays COMMENTED. Until it exists the
+# composition root falls back to an in-process map (InMemoryGeocodeCache) — safe,
+# just not shared across isolates. To activate post-#304:
+#   1. npx wrangler kv namespace create GEOCODE_CACHE   (note the returned id)
+#   2. uncomment the block below and set id = "<that id>"
+#   3. redeploy — KvGeocodeCache picks it up via the globalThis.GEOCODE_CACHE
+#      binding, no code change.
+# [[kv_namespaces]]
+# binding = "GEOCODE_CACHE"
+# id = "<run: npx wrangler kv namespace create GEOCODE_CACHE>"
+
 [vars]
 # The live web origin. First entry feeds CORS AND the post-login redirect,
 # Stripe return base, and provider-invite links (see resolveGoogleOAuthConfig
@@ -98,8 +117,13 @@ VEHICLE_PHOTOS_PUBLIC_URL = "https://pub-a6e9e98522e945a7aa1871f4fe741448.r2.dev
 
 # Monitoring (#361). The deployed version id is exposed as CF_VERSION_METADATA
 # and used as the Sentry release tag so errors group per deploy.
-# SENTRY_DSN is a SECRET, not a var: `wrangler secret put SENTRY_DSN` (+ the
+# SENTRY_DSN is a SECRET, not a var: rotated via rotate-secrets.yml (+ the
 # matching GitHub secret). Absent it, Sentry is gated off (no-op) — see
-# src/observability/sentry-options.ts. Optional: SENTRY_ENVIRONMENT.
+# src/observability/sentry-options.ts.
+# SENTRY_ENVIRONMENT is non-secret and set here so activation can't forget it:
+# this Worker serves the beta deploy, and unset would default to "production"
+# (sentry-options.ts), mis-tagging beta errors. Change at real prod launch.
+SENTRY_ENVIRONMENT = "beta"
+
 [version_metadata]
 binding = "CF_VERSION_METADATA"

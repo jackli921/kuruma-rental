@@ -108,6 +108,20 @@ jobs:
         env:
           AUTH_SECRET: ci-placeholder-secret-not-real
           DATABASE_URL: postgresql://placeholder:placeholder@localhost:5432/placeholder
+          # Sentry web monitoring (#361). Secrets absent by default → web Sentry
+          # stays gated off (resolveBrowserSentryOptions) and no source maps are
+          # emitted (vite.config sentrySourcemapPlugin) until the DSN/token are
+          # provisioned (HITL). VITE_SENTRY_RELEASE (the commit SHA) is always
+          # baked in — harmless, public, and only read once a DSN enables the SDK.
+          # VITE_SENTRY_DSN is a public
+          # ingestion key (ships in the bundle by design); SENTRY_AUTH_TOKEN is a
+          # real secret used only to UPLOAD maps — never a VITE_* var.
+          VITE_SENTRY_DSN: ${{ secrets.VITE_SENTRY_DSN }}
+          VITE_SENTRY_ENVIRONMENT: ${{ vars.SENTRY_ENVIRONMENT || 'beta' }}
+          VITE_SENTRY_RELEASE: ${{ github.sha }}
+          SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
+          SENTRY_ORG: ${{ vars.SENTRY_ORG }}
+          SENTRY_PROJECT: ${{ vars.SENTRY_PROJECT }}
         run: bun run build
 
       # 6. Enforce the gzip budget on the artifact we're about to ship, even if

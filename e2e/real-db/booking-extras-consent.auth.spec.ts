@@ -50,10 +50,9 @@ test.describe('booking extras + consent (real DB)', () => {
     const renter = await renterContext.newPage()
 
     await test.step('search -> storefront -> vehicle opens the wizard', async () => {
-      await renter.goto('/en/search')
-      await renter.locator('#from').fill(FROM)
-      await renter.locator('#to').fill(TO)
-      await renter.getByRole('button', { name: 'Search' }).click()
+      // Seed the JST range via the URL (the route prefills the refine form from
+      // it, #965); the storefront link then carries from/to into the wizard.
+      await renter.goto(`/en/search?from=${FROM}&to=${TO}`)
 
       // Gate each hop on its own landmark so a slow render fails as "storefront
       // never loaded" / "wizard URL wrong", not an opaque late "Continue missing".

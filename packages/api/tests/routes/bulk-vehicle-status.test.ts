@@ -18,6 +18,8 @@ function validVehicleInput(overrides: Record<string, unknown> = {}) {
     transmission: 'AUTO' as const,
     bufferMinutes: 60,
     dailyRateJpy: 8000,
+    shakenExpiryDate: '2099-06-15',
+    insuranceExpiryDate: '2099-01-01',
     ...overrides,
   }
 }
@@ -46,7 +48,7 @@ describe('PATCH /vehicles/bulk-status', () => {
     app = new Hono()
     app.use('*', testAuthMiddleware('staff-user', 'STAFF'))
     // maintenanceService is unused by the bulk-status + create paths under test.
-    const service = new VehicleService(repo, testResolveWriteOperatorId())
+    const service = new VehicleService(repo, testResolveWriteOperatorId(), '')
     app.route('/', createVehicleRoutes(service, undefined))
   })
 
@@ -121,7 +123,7 @@ describe('PATCH /vehicles/bulk-status', () => {
   it('returns 403 when user is a RENTER', async () => {
     const renterApp = new Hono()
     renterApp.use('*', testAuthMiddleware('renter-user', 'RENTER'))
-    const renterService = new VehicleService(repo, testResolveWriteOperatorId())
+    const renterService = new VehicleService(repo, testResolveWriteOperatorId(), '')
     renterApp.route('/', createVehicleRoutes(renterService, undefined))
 
     const v1 = await createVehicle()

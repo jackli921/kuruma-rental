@@ -66,53 +66,38 @@ describe('SearchWidget', () => {
     cleanup()
   })
 
-  it('prefills both inputs with the next-hour pickup and +3 day return by default', () => {
+  it('seeds the picker with the next-hour pickup and +3 day return by default', () => {
     renderWidget()
-    expect(screen.getByLabelText('Pickup date')).toHaveValue('2026-06-11T15:00')
-    expect(screen.getByLabelText('Return date')).toHaveValue('2026-06-14T15:00')
+    expect(screen.getByText(/Jun 11 15:00 → Jun 14 15:00/)).toBeInTheDocument()
   })
 
   it('restores the persisted range instead of the defaults when one exists', () => {
     persistSearchRange('2026-09-01T08:00', '2026-09-05T08:00')
     renderWidget()
-    expect(screen.getByLabelText('Pickup date')).toHaveValue('2026-09-01T08:00')
-    expect(screen.getByLabelText('Return date')).toHaveValue('2026-09-05T08:00')
+    expect(screen.getByText(/Sep 1 08:00 → Sep 5 08:00/)).toBeInTheDocument()
   })
 
-  it('persists the chosen range on submit so it survives leaving and returning', () => {
+  it('persists the seeded range on submit so it survives leaving and returning', () => {
     renderWidget()
-    fireEvent.change(screen.getByLabelText('Pickup date'), {
-      target: { value: '2026-07-01T10:00' },
-    })
-    fireEvent.change(screen.getByLabelText('Return date'), {
-      target: { value: '2026-07-03T10:00' },
-    })
     fireEvent.click(screen.getByRole('button', { name: /search/i }))
-    expect(readPersistedRange()).toEqual({ from: '2026-07-01T10:00', to: '2026-07-03T10:00' })
+    expect(readPersistedRange()).toEqual({ from: '2026-06-11T15:00', to: '2026-06-14T15:00' })
   })
 
-  it('renders the region picker, both date inputs, and the search button', () => {
+  it('renders the region picker, the date-time picker, and the search button', () => {
     renderWidget()
     expect(screen.getByLabelText('Prefecture')).toBeInTheDocument()
-    expect(screen.getByLabelText('Pickup date')).toBeInTheDocument()
-    expect(screen.getByLabelText('Return date')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Dates' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: /search/i })).toBeInTheDocument()
   })
 
-  it('navigates to the locale-scoped storefront search carrying the chosen range', () => {
+  it('navigates to the locale-scoped storefront search carrying the seeded range', () => {
     renderWidget()
-    fireEvent.change(screen.getByLabelText('Pickup date'), {
-      target: { value: '2026-07-01T10:00' },
-    })
-    fireEvent.change(screen.getByLabelText('Return date'), {
-      target: { value: '2026-07-03T10:00' },
-    })
     fireEvent.click(screen.getByRole('button', { name: /search/i }))
     expect(mockNavigate).toHaveBeenCalledTimes(1)
     expect(mockNavigate).toHaveBeenCalledWith({
       to: '/$locale/search',
       params: { locale: 'en' },
-      search: { from: '2026-07-01T10:00', to: '2026-07-03T10:00' },
+      search: { from: '2026-06-11T15:00', to: '2026-06-14T15:00' },
     })
     // No anchor chosen → carryForwardFilters strips region; guard that no region
     // key leaks. toHaveBeenCalledWith treats an explicit `region: undefined` as

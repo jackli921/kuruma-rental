@@ -1,3 +1,4 @@
+import { isForeignVehiclePhoto } from '@kuruma/shared/lib/photo-ref'
 import type {
   BulkVehicleStatus,
   CreateVehicleInput,
@@ -60,7 +61,32 @@ export class VehicleService {
   constructor(
     private readonly repo: VehicleRepository,
     private readonly resolveWriteOperatorId: ResolveWriteOperatorId,
+    // Public bucket base URL — the anchor for the #967 photo-spoof guard.
+    // Empty in dev/in-memory (no R2), where the guard is inert by design.
+    private readonly photosPublicUrl: string,
   ) {}
+
+  // #967: reject a `photos` array that smuggles in one of OUR bucket URLs for a
+  // DIFFERENT vehicle. A repo re-encodes our URLs to `r2:<key>` on write, so
+  // `${base}/vehicles/<victim>/x.jpg` would mint a cross-tenant ref on the
+  // caller's own row and render the victim's photo as theirs. On create no
+  // vehicle exists yet (ownerVehicleId null) — uploads mint their own keys via
+  // POST /vehicles/:id/photos, so ANY of-our-origin URL is foreign. External
+  // image URLs always pass. Returns a field error (400) so the form can flag it.
+  private rejectForeignPhotos(
+    photos: readonly string[] | undefined,
+    ownerVehicleId: string | null,
+  ): VehicleResult | null {
+    const foreign = photos?.some((p) =>
+      isForeignVehiclePhoto(p, ownerVehicleId, this.photosPublicUrl),
+    )
+    if (!foreign) return null
+    return {
+      ok: false,
+      error: { photos: ["Photo URLs must be external images or this vehicle's own uploads"] },
+      status: 400,
+    }
+  }
 
   async findAll(ctx: CallerContext, filters?: VehicleFilters): Promise<PaginatedResult<Vehicle>> {
     return this.repo.findAll(ctx, filters)
@@ -71,6 +97,10 @@ export class VehicleService {
   }
 
   async create(ctx: CallerContext, input: CreateVehicleInput): Promise<VehicleResult> {
+    // #967: no vehicle exists yet, so any of-our-bucket photo URL is a spoof.
+    const foreign = this.rejectForeignPhotos(input.photos, null)
+    if (foreign) return foreign
+
     // Resolve the target tenant before the insert so a missing/ambiguous
     // operatorId (#401) surfaces as 403/422 from the global handler rather than
     // as a caught DB error below — kept outside the try/catch deliberately.
@@ -114,6 +144,11 @@ export class VehicleService {
   async update(ctx: CallerContext, id: string, input: UpdateVehicleInput): Promise<VehicleResult> {
     const existing = await this.repo.findById(ctx, id)
     if (!existing) return { ok: false, error: 'Vehicle not found', status: 404 }
+
+    // #967: a patched photos array may only carry this vehicle's own bucket
+    // URLs (or external images) — never another vehicle's.
+    const foreign = this.rejectForeignPhotos(input.photos, existing.id)
+    if (foreign) return foreign
 
     // Merge patch with existing: use patch value if key was sent (even null),
     // otherwise keep existing. `??` would swallow explicit nulls.

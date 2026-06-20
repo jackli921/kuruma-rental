@@ -13,6 +13,9 @@ describe('createVehicleSchema', () => {
     // Issue #48: at least one of dailyRateJpy / hourlyRateJpy is required,
     // so the canonical "valid" fixture must include a rate.
     dailyRateJpy: 8000,
+    // §5.0 / #916: a create now requires future-dated shaken + insurance.
+    shakenExpiryDate: '2099-06-15',
+    insuranceExpiryDate: '2099-01-01',
   }
 
   it('accepts valid input with required fields only', () => {
@@ -79,6 +82,17 @@ describe('createVehicleSchema', () => {
     })
     expect(result.success).toBe(false)
   })
+
+  // #967: bare z.string().url() admits the app's own `r2:` photo sentinel as
+  // well as `data:` / `javascript:` — any of which, stored then rendered, is an
+  // injection / cross-tenant-spoof vector. Photos must be http(s) only.
+  it.each(['r2:vehicles/veh_x/secret.jpg', 'data:image/png;base64,AAAA', 'javascript:alert(1)'])(
+    'rejects non-http(s) photo URL %s',
+    (photo) => {
+      const result = createVehicleSchema.safeParse({ ...validInput, photos: [photo] })
+      expect(result.success).toBe(false)
+    },
+  )
 
   // Issue #48: pricing rules.
   describe('pricing (dailyRateJpy / hourlyRateJpy)', () => {
@@ -403,6 +417,9 @@ describe('vehicle luggage (#457)', () => {
     seats: 5,
     transmission: 'AUTO' as const,
     dailyRateJpy: 8000,
+    // §5.0 / #916: a create now requires future-dated shaken + insurance.
+    shakenExpiryDate: '2099-06-15',
+    insuranceExpiryDate: '2099-01-01',
   }
 
   it('create accepts a per-vehicle luggage override', () => {

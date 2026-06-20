@@ -1,3 +1,4 @@
+import type { FleetFilterState } from '@/lib/fleet-filters'
 import { formatVehicleRate } from '@/lib/format'
 import { OperatorFleetView } from '@/vite/operator-fleet/OperatorFleetView'
 import type { OperatorFleetVehicle } from '@/vite/operator-fleet/api'
@@ -94,6 +95,7 @@ function renderView(
   vehicles: OperatorFleetVehicle[],
   classOptions: ReadonlyArray<{ id: string; name: string }> = [],
   canWrite = true,
+  initialFilters: FleetFilterState = {},
 ) {
   // The route prefetches class options and passes them down as a prop, so the
   // grid groups synchronously with no fetch of its own — the test mirrors that
@@ -108,6 +110,7 @@ function renderView(
           classOptions={classOptions}
           canWrite={canWrite}
           locale="en"
+          initialFilters={initialFilters}
         />
       </IntlProvider>
     </QueryClientProvider>,
@@ -301,6 +304,20 @@ describe('OperatorFleetView', () => {
     expect(screen.queryAllByRole('checkbox')).toHaveLength(0)
     expect(screen.queryAllByRole('button', { name: en.columns.actions })).toHaveLength(0)
     expect(screen.getByText('Toyota Aqua')).toBeInTheDocument()
+  })
+
+  it('opens pre-filtered when handed an initial filter (compliance deep-link, #916 §5.5)', () => {
+    renderView(
+      [
+        vehicle({ id: 'exp', name: 'Expiring Car', shakenExpiryDate: '2020-01-01' }),
+        vehicle({ id: 'ok', name: 'Compliant Car', shakenExpiryDate: '2099-01-01' }),
+      ],
+      [],
+      true,
+      { expiringSoon: true },
+    )
+    expect(screen.getByText('Expiring Car')).toBeInTheDocument()
+    expect(screen.queryByText('Compliant Car')).not.toBeInTheDocument()
   })
 
   it('renders the fleet summary counts strip', () => {
