@@ -35,6 +35,20 @@ async function operatorBearer(): Promise<Record<string, string>> {
   return { Authorization: `Bearer ${token}` }
 }
 
+// GET /auth/session reads the kuruma_session COOKIE (not a Bearer header), so the
+// session-read boundary (#957) must be exercised through the cookie path.
+async function sessionCookie(claims: Record<string, unknown>): Promise<Record<string, string>> {
+  const key = new TextEncoder().encode(TEST_AUTH_SECRET)
+  const token = await new SignJWT({ csrf: 'csrf-abc', ...claims })
+    .setProtectedHeader({ alg: 'HS256' })
+    .setIssuedAt()
+    .setExpirationTime('1h')
+    .setIssuer('kuruma-web')
+    .setAudience('kuruma-api')
+    .sign(key)
+  return { Cookie: `kuruma_session=${token}` }
+}
+
 // The operator's own users row, mirroring the projection a renter-door sign-in mints
 // the token from (role + operatorId set by setOperatorAccess).
 function activeOperatorRow(): User {
@@ -101,5 +115,33 @@ describe('createApp wires operator-session revocation (#939)', () => {
     const res = await app.request('/operators', { headers })
     expect(res.status).toBe(401)
     expect(((await res.json()) as { error: string }).error).toBe('Unauthorized')
+  })
+
+  // #957 follow-up: #939 closed the DATA-route boundary (requireAuth), but
+  // GET /auth/session verified by pure crypto only, so a deactivated operator's
+  // session read kept 200ing for the whole TTL and the web never logged them out.
+  // The endpoint now consults the SAME context-provided check.
+  it('401s the GET /auth/session read once deactivation clears the projection (#957)', async () => {
+    const headers = await sessionCookie({
+      sub: SELF_ID,
+      role: 'OPERATOR_OWNER',
+      operatorId: OPERATOR_ID,
+    })
+    expect((await app.request('/auth/session', { headers })).status).toBe(200)
+
+    // deactivateMember -> users.clearOperatorAccess: role RENTER, operatorId null.
+    await userRepo.clearOperatorAccess(SELF_ID)
+
+    const res = await app.request('/auth/session', { headers })
+    expect(res.status).toBe(401)
+    expect(((await res.json()) as { error: string }).error).toBe('Unauthorized')
+  })
+
+  it('leaves a renter session read untouched — revocation is operator-only (#957)', async () => {
+    const headers = await sessionCookie({ sub: 'renter_1', role: 'RENTER' })
+    expect((await app.request('/auth/session', { headers })).status).toBe(200)
+    // Clearing an operator must never sweep up renter sessions.
+    await userRepo.clearOperatorAccess(SELF_ID)
+    expect((await app.request('/auth/session', { headers })).status).toBe(200)
   })
 })
