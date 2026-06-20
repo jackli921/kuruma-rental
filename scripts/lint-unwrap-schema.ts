@@ -9,9 +9,11 @@
  *  - an allow-listed file drops below its recorded count -> migrated, the list
  *    must shrink (the ratchet only goes down).
  *
- * The allow-list is seeded with today's sanctioned deferrals: the admin revenue
- * (#744) and payment-anomalies clients, whose API responses aren't schema-modelled
- * yet. Migrate one and you MUST decrement/remove its entry here, or CI fails.
+ * The allow-list is now EMPTY: every web client passes a schema (#711 complete),
+ * so `reconcile` flags any schemaless call as not-allow-listed — i.e. the rule
+ * enforces the flat "no schemaless unwrap anywhere" invariant it was ratcheting
+ * toward. Re-add an entry only as an explicit, temporary deferral, then migrate
+ * it out.
  *
  * Limitation: the source scanner is lexical (it strips comments/strings, then
  * balances brackets). It does not handle `unwrap` inside `${}` template
@@ -24,13 +26,12 @@ const VITE_DIR = 'packages/web/src/vite'
 
 /**
  * Files permitted to contain schemaless `unwrap()` calls, with their exact count.
- * When this empties, delete the count machinery and collapse the rule to a flat
- * "no schemaless unwrap anywhere" check — the invariant it's ratcheting toward.
+ * Empty since #711 finished migrating every client: with no entries, `reconcile`
+ * fails any schemaless call as not-allow-listed, which is exactly the flat
+ * "no schemaless unwrap anywhere" invariant. Keep it empty; an entry is only ever
+ * a temporary, sanctioned deferral while a new client is being validated.
  */
-const ALLOW: Record<string, number> = {
-  'admin/revenue/api.ts': 1,
-  'admin/anomalies/api.ts': 1,
-}
+const ALLOW: Record<string, number> = {}
 
 /**
  * Blanks line/block comments and string/template literals so an `unwrap(` token
@@ -213,6 +214,6 @@ if (import.meta.main) {
   }
   const total = Object.values(actual).reduce((a, b) => a + b, 0)
   console.log(
-    `unwrap-schema ratchet passed (${total} allow-listed schemaless call(s) across ${Object.keys(actual).length} file(s))`,
+    `unwrap-schema ratchet passed: ${total} schemaless unwrap() call(s) across ${sourceFiles.length} file(s) scanned`,
   )
 }
