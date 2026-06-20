@@ -1176,11 +1176,6 @@
     "manual": "マニュアル",
     "viewStore": "クルマを見る",
     "showOnMap": "地図で表示",
-    "view": {
-      "stores": "店舗",
-      "map": "地図",
-      "label": "表示切り替え"
-    },
     "list": {
       "heading": "空車",
       "empty": "選択した日程で利用できるクルマがありません。"
@@ -1196,7 +1191,9 @@
       "geoContext": "{prefecture}{area}・{km} km",
       "geoContextNoDistance": "{prefecture}{area}",
       "geoContextAreaOnly": "{area}・{km} km",
-      "geoContextAreaOnlyNoDistance": "{area}"
+      "geoContextAreaOnlyNoDistance": "{area}",
+      "hideMap": "地図を隠す",
+      "showMap": "地図を表示"
     },
     "detail": {
       "backToSearch": "検索に戻る",

@@ -14,8 +14,8 @@ const state = vi.hoisted(() => ({
   region: undefined as string | undefined,
 }))
 
-// Drive the build-time gate directly (the route's single source of truth) instead
-// of stubbing import.meta.env — resolveResultView stays real.
+// Drive the build-time gate directly (the route's single source of truth since
+// #885 slice 3b) instead of stubbing import.meta.env.
 vi.mock('@/vite/search/flags', async () => ({
   ...(await vi.importActual<typeof import('@/vite/search/flags')>('@/vite/search/flags')),
   isSearchMapEnabled: () => state.mapEnabled,
@@ -41,7 +41,8 @@ vi.mock('@/vite/storefronts/StorefrontSearchForm', () => ({
 }))
 
 // Render the route component outside a RouterProvider: stub Route.use* via
-// createFileRoute and Link -> anchor (the toggle renders Links).
+// createFileRoute. Link -> anchor is kept for any incidental links in the (mocked)
+// child views; the route itself no longer renders a data-mode toggle (#885 3b).
 vi.mock('@tanstack/react-router', async () => ({
   ...(await vi.importActual<typeof import('@tanstack/react-router')>('@tanstack/react-router')),
   createFileRoute: () => () => ({
@@ -79,7 +80,7 @@ function renderRoute(regions: unknown[] = []) {
   )
 }
 
-describe('StorefrontSearchRoute — search map gating (#885 Task 0)', () => {
+describe('StorefrontSearchRoute — results view gating (#885 slice 3b)', () => {
   afterEach(() => {
     state.mapEnabled = false
     state.view = 'stores'
@@ -87,41 +88,31 @@ describe('StorefrontSearchRoute — search map gating (#885 Task 0)', () => {
     captured.props = null
   })
 
-  it('beta (map gated off): renders the store list with no map and no view toggle', () => {
+  it('beta (map gated off): renders the store grid, no map', () => {
+    // Flag off → the loader returns the storefront view; behavior is unchanged from
+    // before unification (the beta MVP path).
     state.mapEnabled = false
     state.view = 'stores'
     renderRoute()
 
     expect(screen.getByTestId('store-grid')).toBeInTheDocument()
     expect(screen.queryByTestId('search-map')).not.toBeInTheDocument()
-    // The Stores|Map data-mode toggle is hidden entirely in beta.
-    expect(screen.queryByRole('link', { name: 'Map' })).not.toBeInTheDocument()
-    expect(screen.queryByRole('link', { name: 'Stores' })).not.toBeInTheDocument()
   })
 
-  it('map enabled: shows the view toggle alongside the store list', () => {
-    state.mapEnabled = true
-    state.view = 'stores'
-    renderRoute()
-
-    expect(screen.getByTestId('store-grid')).toBeInTheDocument()
-    expect(screen.getByRole('link', { name: 'Stores' })).toBeInTheDocument()
-    expect(screen.getByRole('link', { name: 'Map' })).toBeInTheDocument()
-  })
-
-  it('map enabled + view=map: mounts the map view with the toggle', () => {
+  it('map enabled: the unified car-first map view is the default — no store grid', () => {
+    // Flag on → the loader returns the flat car view; there is no data-mode toggle
+    // and no way to fall back to the grid (#885 3b retires it).
     state.mapEnabled = true
     state.view = 'map'
     renderRoute()
 
     expect(screen.getByTestId('search-map')).toBeInTheDocument()
     expect(screen.queryByTestId('store-grid')).not.toBeInTheDocument()
-    expect(screen.getByRole('link', { name: 'Map' })).toBeInTheDocument()
   })
 
-  it('map gated off + forced view=map (stale loader data): render stays on the store list', () => {
-    // Defense in depth: even if a future loader change leaked view='map' through with
-    // the flag off, the render-site guard keeps the premium map from mounting (#885).
+  it('defense in depth: flag off + stale loader view=map still renders the store grid', () => {
+    // Even if a future loader change leaked view='map' through with the flag off, the
+    // render-site flag guard keeps the premium map from mounting (#885).
     state.mapEnabled = false
     state.view = 'map'
     renderRoute()
