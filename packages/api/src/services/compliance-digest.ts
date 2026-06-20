@@ -1,8 +1,7 @@
 import {
-  COMPLIANCE_DOCUMENT_TYPES,
   type ComplianceAlertBand,
   type ComplianceDocumentType,
-  complianceThresholdBand,
+  vehicleAlertCandidates,
 } from '@kuruma/shared/lib/compliance'
 import { SYSTEM_CONTEXT } from '../middleware/auth'
 import {
@@ -70,21 +69,16 @@ export class ComplianceDigestService {
     })
 
     const candidates = vehicles.flatMap((v) =>
-      COMPLIANCE_DOCUMENT_TYPES.flatMap((documentType): AlertCandidate[] => {
-        const expiryDate = documentType === 'SHAKEN' ? v.shakenExpiryDate : v.insuranceExpiryDate
-        const band = complianceThresholdBand(expiryDate, today)
-        if (band == null) return []
-        return [
-          {
-            operatorId: v.operatorId,
-            vehicleId: v.id,
-            vehicleName: v.name,
-            licensePlate: v.licensePlate,
-            documentType,
-            band,
-          },
-        ]
-      }),
+      vehicleAlertCandidates(v, today).map(
+        ({ documentType, band }): AlertCandidate => ({
+          operatorId: v.operatorId,
+          vehicleId: v.id,
+          vehicleName: v.name,
+          licensePlate: v.licensePlate,
+          documentType,
+          band,
+        }),
+      ),
     )
     if (candidates.length === 0) return EMPTY_SUMMARY
 
