@@ -495,3 +495,18 @@ describe('SearchMapList — map show/hide toggle (#885 slice 3b)', () => {
     expect(screen.getByRole('button', { name: 'Hide map' })).toHaveAttribute('aria-pressed', 'true')
   })
 })
+
+describe('SearchMapList — mobile Map toggle (#885 slice 4)', () => {
+  // The mobile sheet itself is unit-tested in MobileMapSheet.test.tsx (Sheet mocked).
+  // Here we only assert SearchMapList WIRES it: a "Map" trigger renders alongside the
+  // desktop pane when there is something to plot, and is absent when nothing is geocoded.
+  it('offers a mobile "Map" trigger when at least one location is geocoded', () => {
+    renderMapList([carAt('v1', 'Toyota Yaris', 'loc_namba', GEOCODED)])
+    expect(screen.getByRole('button', { name: /^map$/i })).toBeInTheDocument()
+  })
+
+  it('offers no mobile "Map" trigger when every result is list-only (null-coord)', () => {
+    renderMapList([carAt('v2', 'Honda Fit', 'loc_umeda', NO_COORDS)])
+    expect(screen.queryByRole('button', { name: /^map$/i })).toBeNull()
+  })
+})
