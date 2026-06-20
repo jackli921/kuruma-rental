@@ -45,6 +45,12 @@
     "signInTitle": "ログイン",
     "signInSubtitle": "Best Car Rental に続行",
     "continueWithGoogle": "Googleで続行",
+    "inAppBrowser": {
+      "title": "このページをブラウザで開いてください",
+      "body": "WeChat などのアプリ内ブラウザでは Google ログインがご利用いただけません。Safari または Chrome で開いてください。右上の「…」メニューから「ブラウザで開く」を選ぶか、下のリンクをコピーしてブラウザに貼り付けてください。",
+      "copyLink": "リンクをコピー",
+      "copied": "コピーしました"
+    },
     "provider": {
       "signInTitle": "事業者ログイン",
       "signInSubtitle": "車両を管理するにはログインしてください",
