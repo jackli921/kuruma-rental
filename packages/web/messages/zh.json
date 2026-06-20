@@ -1193,7 +1193,9 @@
       "geoContextAreaOnly": "{area}・{km} km",
       "geoContextAreaOnlyNoDistance": "{area}",
       "hideMap": "隐藏地图",
-      "showMap": "显示地图"
+      "showMap": "显示地图",
+      "openMobileMap": "地图",
+      "mobileMapTitle": "在地图上查看"
     },
     "detail": {
       "backToSearch": "返回搜索",
