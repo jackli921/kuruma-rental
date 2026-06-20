@@ -23,8 +23,9 @@ export class DrizzleVehicleRepository implements VehicleRepository {
   constructor(
     private readonly db: Db,
     private readonly decodePhotos: PhotoDecoder = identityPhotoDecoder,
-    // #879: wire URLs -> stored refs (r2:<key>) on write. Identity by default so
-    // the tx-bound vehicle repo (never writes photos) and tests stay unaffected.
+    // #879: wire URLs -> stored refs (r2:<key>) on write. Identity defaults keep
+    // tests that construct the repo bare unaffected; the composition root injects
+    // the real codecs into BOTH the non-tx and the tx-bound repo (#1000).
     private readonly encodePhotos: PhotoEncoder = identityPhotoEncoder,
   ) {}
 

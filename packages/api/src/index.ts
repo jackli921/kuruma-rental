@@ -61,9 +61,12 @@ import { makeEnsureThread } from './services/ensure-thread'
 import { FeeScheduleService } from './services/fee-schedule'
 import { FlatSearchService } from './services/flat-search'
 import { FleetOverviewService } from './services/fleet-overview'
+import { CachingGeocoder } from './services/geocoding/caching-geocoder'
+import { InMemoryGeocodeCache } from './services/geocoding/geocode-cache'
+import { KvGeocodeCache, type KvStore } from './services/geocoding/kv-geocode-cache'
 import { NominatimGeocoder } from './services/geocoding/nominatim-geocoder'
 import { ThrottledGeocoder } from './services/geocoding/throttled-geocoder'
-import type { Geocoder } from './services/geocoding/types'
+import type { GeocodeCache, Geocoder } from './services/geocoding/types'
 import { InsuranceOptionService } from './services/insurance-option'
 import { LocationService } from './services/location'
 import { MaintenanceService } from './services/maintenance'
@@ -174,6 +177,18 @@ export function createApp(overrides?: AppOverrides, repos: Repos = buildRepos(ov
   const geocoder: Geocoder = geocodeLimiter
     ? new ThrottledGeocoder(innerGeocoder, { limit: (key) => geocodeLimiter.limit({ key }) })
     : innerGeocoder
+  // Forward-geocode result cache (#601, #574 piece 1/2). Wraps OUTSIDE the throttle
+  // so a cache HIT spends neither the provider call nor the 1-req/10s budget.
+  // Durable cross-isolate Workers KV when the GEOCODE_CACHE binding is present
+  // (gated on #304); until then an in-process map (dev/test/seed). A test override
+  // wins outright.
+  const geocodeCache: GeocodeCache =
+    overrides?.geocodeCache ??
+    (() => {
+      const kv = (globalThis as Record<string, unknown>).GEOCODE_CACHE as KvStore | undefined
+      return kv ? new KvGeocodeCache(kv) : new InMemoryGeocodeCache()
+    })()
+  const cachedGeocoder: Geocoder = new CachingGeocoder(geocoder, geocodeCache)
 
   // In-app Stripe payment (#461). Real gateway when BOTH secrets are set; in
   // production without them a sentinel throws on first use (not at boot, so
@@ -422,7 +437,7 @@ export function createApp(overrides?: AppOverrides, repos: Repos = buildRepos(ov
   const resolveWriteOperatorId: ResolveWriteOperatorId = (ctx, inputOperatorId) =>
     resolveOperatorIdForWrite(ctx, inputOperatorId)
   const vehicleService = new VehicleService(vehicleRepo, resolveWriteOperatorId, photosPublicUrl)
-  const locationService = new LocationService(locationRepo, bookingRepo, geocoder, regionRepo)
+  const locationService = new LocationService(locationRepo, bookingRepo, cachedGeocoder, regionRepo)
   const insuranceOptionService = new InsuranceOptionService(insuranceOptionRepo)
   const addOnService = new AddOnService(addOnRepo)
   const feeScheduleService = new FeeScheduleService(feeScheduleRepo)
