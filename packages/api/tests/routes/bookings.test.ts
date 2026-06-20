@@ -633,6 +633,24 @@ describe('Booking Routes', () => {
       expect(body.data.bookingCode.length).toBeGreaterThan(0)
     })
 
+    // #464 slice 2b: the validator accepts the CLASS_COMBO contract, but combo
+    // creation (inventory guard + rate-plan pricing) lands in slice 2d. Until then
+    // the route rejects it explicitly rather than silently mis-handling a car-less
+    // body — proving the discriminator is wired end-to-end through the route.
+    it('rejects a CLASS_COMBO booking with 501 NOT_IMPLEMENTED (slice 2b)', async () => {
+      const { requestedVehicleId: _drop, ...rest } = validBookingInput()
+      const res = await createBooking({
+        ...rest,
+        fulfillmentMode: 'CLASS_COMBO',
+        classId: testClassId,
+      })
+
+      expect(res.status).toBe(501)
+      const body = await res.json()
+      expect(body.success).toBe(false)
+      expect(body.code).toBe('NOT_IMPLEMENTED')
+    })
+
     // #613 consent gate keys on RENTER role; the default test app authenticates
     // as ADMIN (staff), so these mount a renter-authed app over the same service.
     function renterRequest(input: Record<string, unknown>) {

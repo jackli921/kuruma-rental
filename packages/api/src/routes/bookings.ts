@@ -146,6 +146,16 @@ export function createBookingRoutes(service: BookingService) {
       const parsed = await parseBody(c, createBookingSchema)
       if (!parsed.ok) return parsed.response
 
+      // #464 slice 2b: the validator accepts the CLASS_COMBO create contract, but
+      // combo creation (inventory guard + rate-plan pricing) lands in slice 2d.
+      // Reject it explicitly until then — this also narrows parsed.data to the
+      // SPECIFIC member, so requestedVehicleId is available below.
+      if (parsed.data.fulfillmentMode === 'CLASS_COMBO') {
+        return fail(c, 'Class-combo bookings are not yet available', 501, {
+          code: 'NOT_IMPLEMENTED' satisfies ErrorCode,
+        })
+      }
+
       // #589: STAFF and OPERATOR_* are "manual bookers" — they may book on behalf
       // of a renter (renterId) and set source=MANUAL. An operator's renterId is
       // authorized in the service against its OWN customer scope (renters with a

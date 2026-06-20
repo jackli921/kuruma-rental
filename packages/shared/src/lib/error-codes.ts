@@ -17,6 +17,9 @@ export const ERROR_CODES = [
   'INVALID_VEHICLE_CLASS',
   'CLASS_HAS_ACTIVE_BOOKINGS',
   'LOCATION_HAS_ACTIVE_BOOKINGS',
+  // #464: a CLASS_COMBO booking is accepted by the validator but combo creation
+  // (inventory guard + rate-plan pricing) is not yet built — POST /bookings 501s.
+  'NOT_IMPLEMENTED',
   // Laundered onto the booking-create envelope via `CreateBookingResult.code`
   // (booking-creation.ts → bookings.ts `fail(c, …, { code: createResult.code })`):
   // pricing (`@kuruma/shared/lib/pricing`) and rental-rule (`…/lib/rental-rules`)
