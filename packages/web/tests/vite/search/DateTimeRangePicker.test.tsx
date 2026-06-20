@@ -6,6 +6,7 @@ import userEvent from '@testing-library/user-event'
 import { IntlProvider } from 'use-intl'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import en from '../../../messages/en.json'
+import ja from '../../../messages/ja.json'
 
 // JST 2026-06-11 14:37 — "now" for past-gating. A range well in the future keeps
 // every 30-min slot selectable so the time dropdowns are deterministic.
@@ -110,5 +111,35 @@ describe('DateTimeRangePicker', () => {
 
     await user.click(screen.getByRole('button', { name: /Jun 20 10:00/ }))
     expect(screen.getByRole('dialog')).toBeInTheDocument()
+  })
+
+  it('offers only return times strictly after pickup on a same-day range', async () => {
+    mockMatchMedia(true)
+    const user = userEvent.setup()
+    // Same-day rental: a return earlier than the 10:00 pickup would make to <= from.
+    renderPicker({ value: { from: '2026-06-20T10:00', to: '2026-06-20T14:00' } })
+
+    await user.click(screen.getByRole('button', { name: /Jun 20 10:00 → Jun 20 14:00/ }))
+    await user.click(screen.getByLabelText('Return time'))
+
+    expect(screen.queryByRole('option', { name: '09:00' })).not.toBeInTheDocument()
+    expect(screen.getByRole('option', { name: '10:30' })).toBeInTheDocument()
+  })
+
+  it('localizes the calendar grid to the active locale', async () => {
+    mockMatchMedia(true)
+    const user = userEvent.setup()
+    render(
+      <IntlProvider locale="ja" messages={ja}>
+        <DateTimeRangePicker value={null} onChange={vi.fn()} minDate={NOW} />
+      </IntlProvider>,
+    )
+    await user.click(screen.getByRole('button', { name: /日時を追加/ }))
+
+    // The calendar grid (caption + weekday headers) renders in Japanese, not the
+    // English fallback. Scope to the rdp root so our own JA i18n strings can't
+    // satisfy the assertion — only the locale-driven calendar text can.
+    const calendar = document.body.querySelector('.rdp-root')
+    expect(calendar?.textContent ?? '').toMatch(/[日月火水木金土年]/)
   })
 })

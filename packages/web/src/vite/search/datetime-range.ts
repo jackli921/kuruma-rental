@@ -112,6 +112,49 @@ export function fromLocalDate(date: Date): string {
   return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`
 }
 
+/**
+ * Selectable RETURN slots for a date, given the chosen pickup. Identical to
+ * slotsForDate, except a same-day return must be strictly later than pickup —
+ * so the dropdown never offers an earlier return time on the pickup day.
+ */
+export function returnSlotsForDate(
+  toDate: string,
+  from: DateTimePart,
+  now: Date = new Date(),
+  stepMinutes: number = DEFAULT_STEP_MINUTES,
+): string[] {
+  const base = slotsForDate(toDate, now, stepMinutes)
+  return toDate === from.date ? base.filter((slot) => slot > from.time) : base
+}
+
+/** The calendar day after `date` ("YYYY-MM-DD"), via local fields (handles rollover). */
+function nextDate(date: string): string {
+  const d = toLocalDate(date)
+  d.setDate(d.getDate() + 1)
+  return fromLocalDate(d)
+}
+
+/**
+ * Guarantee `to` is strictly after `from` — the picker's load-bearing invariant.
+ * parseSearchRange rejects `to <= from`, which would silently render zero results
+ * even though the renter actively picked dates. When the return falls at/before
+ * pickup (single-day selection, or an earlier same-day return), bump it to the
+ * next selectable slot, rolling to the next day's first slot when the pickup day
+ * has none later. Both parts required; callers guard that.
+ */
+export function ensureEndAfterStart(
+  from: DateTimePart,
+  to: DateTimePart,
+  now: Date = new Date(),
+  stepMinutes: number = DEFAULT_STEP_MINUTES,
+): DateTimePart {
+  if (combineDateTime(to.date, to.time) > combineDateTime(from.date, from.time)) return to
+  const laterSameDay = returnSlotsForDate(from.date, from, now, stepMinutes)
+  if (laterSameDay.length > 0) return { date: from.date, time: laterSameDay[0] as string }
+  const next = nextDate(from.date)
+  return { date: next, time: slotsForDate(next, now, stepMinutes)[0] ?? '00:00' }
+}
+
 /** Whole rental days in a range, rounding partial days up; 0 if non-positive/invalid. */
 export function rentalDays(range: DateTimeRange): number {
   try {
