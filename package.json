@@ -35,6 +35,7 @@
     "db:seed:tcp": "bun run scripts/seed-tcp.ts",
     "db:backfill-regions": "bun run scripts/backfill-location-regions.ts",
     "db:backfill-photo-refs": "bun run scripts/backfill-photo-refs.ts",
+    "db:backfill-vehicle-expiry": "bun run scripts/backfill-vehicle-expiry.ts",
     "db:verify": "bun run scripts/db-verify.ts",
     "db:drift-warn": "bun run scripts/db-drift-warn.ts",
     "prepare": "husky"
