@@ -59,6 +59,7 @@ const EXPECTED_KEY_MAP: Record<keyof Repos, true> = {
   bookingEventRepo: true,
   runInTransaction: true,
   runOperatorGrant: true,
+  photosPublicUrl: true,
   googleAuthRuntime: true,
 }
 

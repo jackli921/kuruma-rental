@@ -2,11 +2,16 @@ import { z } from 'zod'
 import { ACRISS_PATTERN } from '../acriss'
 import { TRANSMISSIONS } from '../enums'
 import { LUGGAGE_SIZES } from '../lib/luggage'
+import { HTTP_URL_MESSAGE, isHttpUrl } from './url'
 
 // photos/sortOrder carry .default()s only on create. Kept off the base because
 // Zod .partial() does NOT strip .default(), so a partial PATCH would re-inject
 // { photos: [], sortOrder: 0 } and wipe those columns on write (issue #430).
-const photosSchema = z.array(z.string().url().max(2048)).max(20)
+// Entries are http(s) URLs (#967, see validators/url.ts) — the refine rides
+// after .max(2048) since .max() is a ZodString method, gone once refined.
+const photosSchema = z
+  .array(z.string().url().max(2048).refine(isHttpUrl, { message: HTTP_URL_MESSAGE }))
+  .max(20)
 const sortOrderSchema = z.number().int().min(0)
 
 const SLUG_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+)*$/

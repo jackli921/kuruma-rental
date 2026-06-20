@@ -133,6 +133,7 @@ export function createApp(overrides?: AppOverrides, repos: Repos = buildRepos(ov
     bookingEventRepo,
     runInTransaction,
     runOperatorGrant,
+    photosPublicUrl,
     googleAuthRuntime,
   } = repos
   const photoUploadLimiter =
@@ -415,7 +416,7 @@ export function createApp(overrides?: AppOverrides, repos: Repos = buildRepos(ov
   // inference is retired, so it no longer needs an operator lookup.
   const resolveWriteOperatorId: ResolveWriteOperatorId = (ctx, inputOperatorId) =>
     resolveOperatorIdForWrite(ctx, inputOperatorId)
-  const vehicleService = new VehicleService(vehicleRepo, resolveWriteOperatorId)
+  const vehicleService = new VehicleService(vehicleRepo, resolveWriteOperatorId, photosPublicUrl)
   const locationService = new LocationService(locationRepo, bookingRepo, geocoder, regionRepo)
   const insuranceOptionService = new InsuranceOptionService(insuranceOptionRepo)
   const addOnService = new AddOnService(addOnRepo)

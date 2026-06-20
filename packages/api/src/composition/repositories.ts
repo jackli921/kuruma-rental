@@ -156,6 +156,10 @@ export type Repos = {
   bookingEventRepo: BookingEventRepository
   runInTransaction: RunInTransaction
   runOperatorGrant: RunOperatorGrant
+  // Public R2 bucket base for vehicle photos (#879). Threaded to VehicleService
+  // as the anchor for the #967 cross-tenant photo-spoof guard. '' in dev/test
+  // (no bucket) ⇒ the guard is inert, matching the no-op encode/decode there.
+  photosPublicUrl: string
   googleAuthRuntime: GoogleAuthRuntime | undefined
 }
 
@@ -255,6 +259,7 @@ export function buildOverrideRepos(overrides: AppOverrides): Repos {
     bookingEventRepo,
     runInTransaction,
     runOperatorGrant,
+    photosPublicUrl: process.env.VEHICLE_PHOTOS_PUBLIC_URL ?? '',
     googleAuthRuntime: overrides.googleAuthRuntime,
   }
 }
@@ -353,6 +358,7 @@ export function buildDrizzleRepos(opts?: { db?: Db; runTx?: RunTx }): Repos {
     // Real interactive tx (#493): membership INSERT first so the partial-unique-
     // active index aborts the whole grant on a concurrent double-accept.
     runOperatorGrant: createDrizzleOperatorGrant(tx),
+    photosPublicUrl,
     googleAuthRuntime,
   }
 }
@@ -438,6 +444,7 @@ export function buildInMemoryRepos(): Repos {
     bookingEventRepo,
     runInTransaction,
     runOperatorGrant,
+    photosPublicUrl: process.env.VEHICLE_PHOTOS_PUBLIC_URL ?? '',
     googleAuthRuntime: undefined,
   }
 }

@@ -83,6 +83,17 @@ describe('createVehicleSchema', () => {
     expect(result.success).toBe(false)
   })
 
+  // #967: bare z.string().url() admits the app's own `r2:` photo sentinel as
+  // well as `data:` / `javascript:` — any of which, stored then rendered, is an
+  // injection / cross-tenant-spoof vector. Photos must be http(s) only.
+  it.each(['r2:vehicles/veh_x/secret.jpg', 'data:image/png;base64,AAAA', 'javascript:alert(1)'])(
+    'rejects non-http(s) photo URL %s',
+    (photo) => {
+      const result = createVehicleSchema.safeParse({ ...validInput, photos: [photo] })
+      expect(result.success).toBe(false)
+    },
+  )
+
   // Issue #48: pricing rules.
   describe('pricing (dailyRateJpy / hourlyRateJpy)', () => {
     // Strip the rate from validInput so we can add rates per-test.
