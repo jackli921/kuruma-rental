@@ -1,4 +1,4 @@
-import { isNonCompliant } from '@kuruma/shared/lib/expiry'
+import { isNonCompliant } from '@kuruma/shared/lib/compliance'
 import type { VehicleBase } from '@kuruma/shared/types/vehicle'
 
 // JSON-serialized Vehicle — dates come as ISO strings from the API. The fleet
