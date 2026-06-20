@@ -376,7 +376,7 @@ export function buildDrizzleRepos(opts?: { db?: Db; runTx?: RunTx }): Repos {
     operatorMembershipRepo,
     auditLogRepo,
     bookingEventRepo: new DrizzleBookingEventRepository(db),
-    runInTransaction: createDrizzleTransaction(tx),
+    runInTransaction: createDrizzleTransaction(tx, decodePhotos, encodePhotos),
     // Real interactive tx (#493): membership INSERT first so the partial-unique-
     // active index aborts the whole grant on a concurrent double-accept.
     runOperatorGrant: createDrizzleOperatorGrant(tx),
