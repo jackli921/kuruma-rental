@@ -1,9 +1,8 @@
 import { resolveRegionAnchor, resolveSlugToRegionId } from '@/vite/regions/region-lookup'
 import { regionsQueryOptions } from '@/vite/regions/regions-api'
 import { SearchMap } from '@/vite/search/SearchMap'
-import { type ResultView, SearchViewToggle } from '@/vite/search/SearchViewToggle'
 import { fetchSearchResults } from '@/vite/search/api'
-import { isSearchMapEnabled, resolveResultView } from '@/vite/search/flags'
+import { isSearchMapEnabled } from '@/vite/search/flags'
 import { StoreGrid } from '@/vite/storefronts/StoreGrid'
 import { StorefrontSearchForm } from '@/vite/storefronts/StorefrontSearchForm'
 import { fetchStorefronts } from '@/vite/storefronts/api'
@@ -21,12 +20,13 @@ import {
 } from '@tanstack/react-router'
 import { useTranslations } from 'use-intl'
 
-// All optional (`?: T | undefined`): callers (StorefrontCard, the search form,
-// the view toggle) link with only the fields they have, and `| undefined` keeps
-// validateSearch's undefined values assignable under exactOptionalPropertyTypes.
-// `class` keeps the repeatable string|string[] shape so it round-trips the URL.
-// `view` toggles the flat-map list against the slice-5 store grid (#458), but only
-// when the search map flag is enabled (#885) — otherwise it's always the grid.
+// All optional (`?: T | undefined`): callers (StorefrontCard, the search form)
+// link with only the fields they have, and `| undefined` keeps validateSearch's
+// undefined values assignable under exactOptionalPropertyTypes. `class` keeps the
+// repeatable string|string[] shape so it round-trips the URL. There is no `?view`
+// param since #885 slice 3b — the results view is the unified car-first map+list
+// (or the store grid when the map flag is off), chosen by `isSearchMapEnabled()`,
+// not the URL. A stale `?view=…` link is silently dropped here and self-heals.
 interface StorefrontSearch {
   from?: string | undefined
   to?: string | undefined
@@ -34,7 +34,6 @@ interface StorefrontSearch {
   /** #651 Slice 3: region anchor as its stable slug (`?region=namba`). */
   region?: string | undefined
   class?: string | string[] | undefined
-  view?: ResultView | undefined
 }
 
 function validateSearch(search: Record<string, unknown>): StorefrontSearch {
@@ -46,14 +45,14 @@ function validateSearch(search: Record<string, unknown>): StorefrontSearch {
     pickupLocationId: str(search.pickupLocationId),
     region: str(search.region),
     class: Array.isArray(cls) ? cls.filter((c): c is string => typeof c === 'string') : str(cls),
-    view: search.view === 'map' ? 'map' : search.view === 'stores' ? 'stores' : undefined,
   }
 }
 
 // Renter search (#391, #458). Public — no auth. The form pushes wall-clock JST
 // date strings; without a valid range the loader returns null (the views render
-// the date prompt). `view=map` runs the cross-operator flat search (#458) when the
-// map flag is on (#885); otherwise the storefront grid. Only one fetch runs.
+// the date prompt). The map flag (#885 slice 3b) picks the data shape: ON → the
+// cross-operator flat car search behind the unified map+list; OFF → the storefront
+// grid (beta MVP). Only one fetch runs.
 export const Route = createFileRoute('/$locale/search')({
   validateSearch,
   // Seed a default range (next JST hour -> +3 days) when the renter arrives
@@ -76,9 +75,6 @@ export const Route = createFileRoute('/$locale/search')({
     pickupLocationId: search.pickupLocationId,
     region: search.region,
     classes: normalizeClassFilter(search.class),
-    // Map gated off (beta) → a stale ?view=map link collapses to the store list so
-    // the loader never fetches flat results with no map to render them (#885 Task 0).
-    view: resolveResultView(search.view, isSearchMapEnabled()),
   }),
   loader: async ({ deps, context }) => {
     const range = parseSearchRange(deps.from, deps.to)
@@ -96,7 +92,10 @@ export const Route = createFileRoute('/$locale/search')({
       ...(deps.classes.length > 0 ? { classes: deps.classes } : {}),
     }
 
-    if (deps.view === 'map') {
+    // The map flag is the single source of truth for the results view (#885 3b).
+    // `view` is kept as an internal discriminant on the returned data (flat vs
+    // storefronts narrowing) — it is no longer a URL param.
+    if (isSearchMapEnabled()) {
       const flat = range
         ? await fetchSearchResults({ from: range.from, to: range.to, ...filters })
         : null
@@ -170,20 +169,14 @@ export function StorefrontSearchRoute() {
           />
         </div>
 
-        {/* The Stores|Map data-mode toggle is a map-only affordance — hidden in
-            beta where the map is gated off, so search is a pure store list (#885). */}
-        {isSearchMapEnabled() && (
-          <div className="mb-8 flex justify-end">
-            <SearchViewToggle view={data.view} locale={locale} />
-          </div>
-        )}
-
-        {/* Defense in depth: the toggle is hidden and the loader collapses `view`
-            to 'stores' when the map is off, but gate the render too so the premium
-            map can never mount by accident (#885) — the no-leak guarantee lives at
-            the render site, not only in the loader. SearchMap still ships in the
-            bundle (static import, unreachable in beta); lazy-load only if a build
-            that strips it is ever required. */}
+        {/* The map flag is the single source of truth for the results view since
+            #885 slice 3b: ON → the unified car-first map+list default (its own
+            Hide/Show-map presentation toggle lives inside SearchMapList); OFF →
+            the store grid (beta MVP). The render-site flag guard is belt-and-
+            suspenders alongside the loader so the premium map can never mount by
+            accident even if a future loader change leaked `view:'map'` through.
+            SearchMap still ships in the bundle (static import, unreachable in
+            beta); lazy-load only if a build that strips it is ever required. */}
         {isSearchMapEnabled() && data.view === 'map' ? (
           <SearchMap
             result={data.flat}

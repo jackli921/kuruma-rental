@@ -1170,11 +1170,6 @@
     "manual": "Manual",
     "viewStore": "View cars",
     "showOnMap": "Show on map",
-    "view": {
-      "stores": "Stores",
-      "map": "Map",
-      "label": "Result view"
-    },
     "list": {
       "heading": "Available cars",
       "empty": "No cars are available for these dates."
@@ -1190,7 +1185,9 @@
       "geoContext": "{area}, {prefecture} · {km} km away",
       "geoContextNoDistance": "{area}, {prefecture}",
       "geoContextAreaOnly": "{area} · {km} km away",
-      "geoContextAreaOnlyNoDistance": "{area}"
+      "geoContextAreaOnlyNoDistance": "{area}",
+      "hideMap": "Hide map",
+      "showMap": "Show map"
     },
     "detail": {
       "backToSearch": "Back to search",
