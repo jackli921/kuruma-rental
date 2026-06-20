@@ -32,7 +32,7 @@ import type {
   VehicleRepository,
 } from './repositories/types'
 import type { EmailSender } from './services/email/email-sender'
-import type { Geocoder } from './services/geocoding/types'
+import type { GeocodeCache, Geocoder } from './services/geocoding/types'
 import type { PaymentGateway } from './services/payment/payment-gateway'
 
 /**
@@ -79,6 +79,11 @@ export type AppOverrides = {
   // Inject a fake Geocoder in tests (proves a provider swap touches only here);
   // absent ⇒ the env-resolved Nominatim/null-stub.
   geocoder?: Geocoder
+  // Inject a fake geocode cache in tests; absent ⇒ the env-resolved Workers KV
+  // cache (when the GEOCODE_CACHE binding exists, #304) or an in-process map. The
+  // cache wraps the geocoder so a repeated address skips the provider call and the
+  // 1-req/10s budget (#601).
+  geocodeCache?: GeocodeCache
   photoUploadLimiter?: RateLimitBinding
   photoUploadUserLimiter?: RateLimitBinding
   publicCatalogLimiter?: RateLimitBinding

@@ -32,6 +32,24 @@ export interface Geocoder {
 }
 
 /**
+ * Forward-geocode result cache port (#601, #574 piece 1/2). Caches successful
+ * `address → {lat,lng}` lookups so repeated/identical addresses don't spend the
+ * 1-req/10s global geocode budget (the OSMF policy asks consumers to cache).
+ * Keyed by a normalized address; ONLY successes are stored — a `notFound` can be
+ * a transient provider error (see NominatimGeocoder) and a `throttled` is retry-
+ * able, so neither is cacheable. Like {@link RateLimiter}, the port stays free of
+ * the Cloudflare KV binding type — `index.ts` adapts the native `GEOCODE_CACHE`
+ * KV namespace to it (or an in-memory map in dev/test). A miss — and a corrupt
+ * entry — reads as `null`. Operational failures (KV unavailable) may propagate;
+ * the CachingGeocoder decorator degrades any throw to a miss, so a flaky cache
+ * never blocks a lookup.
+ */
+export interface GeocodeCache {
+  get(address: string): Promise<GeocodeResult | null>
+  set(address: string, result: GeocodeResult): Promise<void>
+}
+
+/**
  * App-side throttle port (#574). A generic "may I proceed?" check keyed by a
  * caller-chosen string, so the geocoding service stays free of the CF/Hono rate-
  * limit binding type. `index.ts` adapts the native `[[ratelimits]]` binding
