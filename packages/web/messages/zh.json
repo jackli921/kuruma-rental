@@ -47,7 +47,7 @@
     "continueWithGoogle": "使用 Google 继续",
     "inAppBrowser": {
       "title": "请在浏览器中打开此页面",
-      "body": "在微信等应用内置浏览器中无法使用 Google 登录。请在 Safari 或 Chrome 中打开本页面：点击右上角「…」选择「在浏览器中打开」，或复制下方链接粘贴到浏览器中。",
+      "body": "在微信等应用内置浏览器中无法使用 Google 登录。请用浏览器打开本页面：点击右上角菜单选择「在浏览器中打开」，或复制下方链接粘贴到 Safari 或 Chrome 中。",
       "copyLink": "复制链接",
       "copied": "已复制链接"
     },
