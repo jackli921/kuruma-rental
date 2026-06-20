@@ -105,6 +105,9 @@ export class BookingLifecycleService {
             ok: false,
             status: 400,
             error: "Replacement vehicle's shaken or insurance expires before the booking ends",
+            // Same code the create path emits (booking-creation.ts) so callers
+            // branch on it instead of string-matching the message (#982 parity).
+            code: 'VEHICLE_DOCS_EXPIRE_BEFORE_RETURN',
           }
         }
 
