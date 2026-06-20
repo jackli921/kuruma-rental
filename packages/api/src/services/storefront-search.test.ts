@@ -177,6 +177,15 @@ class RecordingAvailabilityRepository implements AvailabilityRepository {
   checkVehicleAvailability(vehicleId: string, from: Date, to: Date) {
     return this.inner.checkVehicleAvailability(vehicleId, from, to)
   }
+  countClassDemand(
+    operatorId: string,
+    classId: string,
+    pickupLocationId: string,
+    from: Date,
+    to: Date,
+  ) {
+    return this.inner.countClassDemand(operatorId, classId, pickupLocationId, from, to)
+  }
 }
 
 describe('StorefrontSearchService.search (#391)', () => {

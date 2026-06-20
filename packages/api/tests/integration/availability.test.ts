@@ -425,4 +425,75 @@ describe('DrizzleAvailabilityRepository', () => {
       expect(result).toBeUndefined()
     })
   })
+
+  // #464: countClassDemand backs slice 2's inventory guard — it sums BLOCKING
+  // demand for a class at a location over a window, against the REAL schema
+  // (raw tstzrange + status predicate), so the slice-2d advisory-lock guard can
+  // assert demand < totalCars before inserting a float.
+  describe('countClassDemand (#464)', () => {
+    const FROM = new Date('2026-08-01T10:00:00Z')
+    const TO = new Date('2026-08-01T14:00:00Z')
+    const window = {
+      startAt: new Date('2026-08-01T09:00:00Z'),
+      endAt: new Date('2026-08-01T12:00:00Z'),
+    }
+
+    it('sums a SPECIFIC booking and a floating CLASS_COMBO of the class at the location', async () => {
+      const car = await createTestVehicle({ name: 'Demand Car' })
+      createdVehicleIds.push(car.id)
+      const specific = await seedBooking(car.id, { ...window, status: 'CONFIRMED' })
+      createdBookingIds.push(specific.id)
+      // A float: CLASS_COMBO with no car (null requested/assigned) — the CHECK
+      // only requires the ids for SPECIFIC, so this is a legal car-less row.
+      const float = await bookingRepo.create(
+        SYSTEM_CONTEXT,
+        bookingInput({
+          operatorId: BEST_CAR_RENTAL_OPERATOR_ID,
+          renterId: testUser.id,
+          classId: testClassId,
+          requestedVehicleId: null,
+          assignedVehicleId: null,
+          fulfillmentMode: 'CLASS_COMBO',
+          pickupLocationId: testLocationId,
+          dropoffLocationId: testLocationId,
+          status: 'CONFIRMED',
+          ...window,
+        }),
+      )
+      createdBookingIds.push(float.id)
+
+      const count = await availabilityRepo.countClassDemand(
+        BEST_CAR_RENTAL_OPERATOR_ID,
+        testClassId,
+        testLocationId,
+        FROM,
+        TO,
+      )
+      expect(count).toBe(2)
+    })
+
+    it('excludes CANCELLED bookings and windows that do not overlap', async () => {
+      const car = await createTestVehicle({ name: 'Excluded Car' })
+      createdVehicleIds.push(car.id)
+      // CANCELLED at the window — non-blocking, must not count.
+      const cancelled = await seedBooking(car.id, { ...window, status: 'CANCELLED' })
+      createdBookingIds.push(cancelled.id)
+      // CONFIRMED but starts after TO — its [16:00, …) range never overlaps.
+      const later = await seedBooking(car.id, {
+        startAt: new Date('2026-08-01T16:00:00Z'),
+        endAt: new Date('2026-08-01T17:00:00Z'),
+        status: 'CONFIRMED',
+      })
+      createdBookingIds.push(later.id)
+
+      const count = await availabilityRepo.countClassDemand(
+        BEST_CAR_RENTAL_OPERATOR_ID,
+        testClassId,
+        testLocationId,
+        FROM,
+        TO,
+      )
+      expect(count).toBe(0)
+    })
+  })
 })

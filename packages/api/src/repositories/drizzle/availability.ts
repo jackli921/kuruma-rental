@@ -97,4 +97,31 @@ export class DrizzleAvailabilityRepository implements AvailabilityRepository {
       conflicts: conflicts.map(toBooking),
     }
   }
+
+  async countClassDemand(
+    operatorId: string,
+    classId: string,
+    pickupLocationId: string,
+    from: Date,
+    to: Date,
+  ): Promise<number> {
+    const fromIso = from.toISOString()
+    const toIso = to.toISOString()
+    // Same blocking-status + tstzrange overlap predicate as checkVehicleAvailability
+    // / 0037.sql, keyed on the (operator, class, location) triple — a floating
+    // CLASS_COMBO (null assignedVehicleId) is counted via bookings.classId.
+    const [row] = await this.db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(bookings)
+      .where(
+        and(
+          eq(bookings.operatorId, operatorId),
+          eq(bookings.classId, classId),
+          eq(bookings.pickupLocationId, pickupLocationId),
+          sql`status IN ('CONFIRMED', 'ACTIVE')`,
+          sql`tstzrange("startAt", "effectiveEndAt") && tstzrange(${fromIso}::timestamptz, ${toIso}::timestamptz)`,
+        ),
+      )
+    return row?.count ?? 0
+  }
 }

@@ -509,6 +509,16 @@ export interface AvailabilityRepository {
       }
     | undefined
   >
+  // #464: total CONFIRMED/ACTIVE class demand overlapping [from, to) at one
+  // (operator, location, class) — SPECIFIC occupancy PLUS floating CLASS_COMBO
+  // (both via bookings.classId); slice 2's write guard asserts demand<totalCars.
+  countClassDemand(
+    operatorId: string,
+    classId: string,
+    pickupLocationId: string,
+    from: Date,
+    to: Date,
+  ): Promise<number>
 }
 
 /**

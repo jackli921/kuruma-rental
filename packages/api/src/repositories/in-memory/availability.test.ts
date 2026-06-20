@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from 'vitest'
 import { SYSTEM_CONTEXT } from '../../middleware/auth'
-import type { Vehicle } from '../../stores'
+import type { Booking, Vehicle } from '../../stores'
 import { InMemoryAvailabilityRepository } from './availability'
 import { InMemoryBookingRepository } from './booking'
 import { InMemoryVehicleRepository } from './vehicle'
@@ -189,5 +189,103 @@ describe('InMemoryAvailabilityRepository.findAvailableVehicles — compliance ga
     const result = await availabilityRepo.findAvailableVehicles(FROM, TO)
 
     expect(result.map((v) => v.id)).toEqual([boundary.id])
+  })
+})
+
+// #464: countClassDemand backs slice 2's inventory guard. It counts every
+// BLOCKING booking of a class at a location overlapping the requested window —
+// SPECIFIC bookings occupying a class car AND floating CLASS_COMBO of that class
+// (both carried in bookings.classId) — so demand can be compared to totalCars.
+describe('InMemoryAvailabilityRepository.countClassDemand (#464)', () => {
+  type NewBooking = Parameters<InMemoryBookingRepository['create']>[1]
+  let seq = 0
+  function makeBooking(overrides: Partial<NewBooking> = {}): Promise<Booking> {
+    seq += 1
+    const base: NewBooking = {
+      operatorId: 'op_a',
+      renterId: 'u1',
+      classId: 'class_compact',
+      requestedVehicleId: 'veh_1',
+      assignedVehicleId: 'veh_1',
+      pickupLocationId: 'loc_osaka',
+      dropoffLocationId: 'loc_osaka',
+      startAt: new Date('2026-08-01T09:00:00Z'),
+      endAt: new Date('2026-08-01T12:00:00Z'),
+      effectiveEndAt: new Date('2026-08-01T13:00:00Z'),
+      status: 'CONFIRMED',
+      source: 'DIRECT',
+      fulfillmentMode: 'SPECIFIC',
+      bookingCode: `bk-${seq}`,
+      insuranceOptionId: null,
+      insuranceSnapshot: null,
+      feeSnapshot: [],
+      addOnSnapshot: [],
+      externalId: null,
+      notes: null,
+      totalPrice: null,
+      cancellationFee: null,
+      cancelledAt: null,
+      idempotencyKey: null,
+      disclaimerAcknowledgedAt: null,
+      disclaimerTermsVersion: null,
+    }
+    return bookingRepo.create(SYSTEM_CONTEXT, { ...base, ...overrides })
+  }
+  const demand = () =>
+    availabilityRepo.countClassDemand('op_a', 'class_compact', 'loc_osaka', FROM, TO)
+
+  it('counts a SPECIFIC booking of the class at the location overlapping the window', async () => {
+    await makeBooking()
+    expect(await demand()).toBe(1)
+  })
+
+  it('counts a floating CLASS_COMBO (no assigned car) — floats consume class capacity', async () => {
+    await makeBooking({
+      fulfillmentMode: 'CLASS_COMBO',
+      requestedVehicleId: null,
+      assignedVehicleId: null,
+    })
+    expect(await demand()).toBe(1)
+  })
+
+  it('sums SPECIFIC occupancy and floating combos of the same class (the invariant)', async () => {
+    await makeBooking()
+    await makeBooking({
+      fulfillmentMode: 'CLASS_COMBO',
+      requestedVehicleId: null,
+      assignedVehicleId: null,
+    })
+    expect(await demand()).toBe(2)
+  })
+
+  it('excludes a different class', async () => {
+    await makeBooking({ classId: 'class_van' })
+    expect(await demand()).toBe(0)
+  })
+
+  it('excludes a different pickup location (capacity is per-store)', async () => {
+    await makeBooking({ pickupLocationId: 'loc_kyoto' })
+    expect(await demand()).toBe(0)
+  })
+
+  it('excludes a different operator', async () => {
+    await makeBooking({ operatorId: 'op_b' })
+    expect(await demand()).toBe(0)
+  })
+
+  it('excludes a booking whose window does not overlap', async () => {
+    await makeBooking({
+      startAt: new Date('2026-08-01T15:00:00Z'),
+      endAt: new Date('2026-08-01T16:00:00Z'),
+      effectiveEndAt: new Date('2026-08-01T16:00:00Z'),
+    })
+    expect(await demand()).toBe(0)
+  })
+
+  it('counts only CONFIRMED/ACTIVE — excludes CANCELLED and COMPLETED', async () => {
+    await makeBooking({ status: 'CANCELLED' })
+    await makeBooking({ status: 'COMPLETED' })
+    await makeBooking({ status: 'ACTIVE' })
+    expect(await demand()).toBe(1)
   })
 })
