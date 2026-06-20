@@ -183,7 +183,12 @@
       "viewBookings": "View bookings",
       "manageFleet": "Manage fleet",
       "loadError": "Couldn't load your dashboard.",
-      "retry": "Retry"
+      "retry": "Retry",
+      "compliance": {
+        "heading": "{count, plural, one {# vehicle needs attention} other {# vehicles need attention}}",
+        "body": "Shaken or insurance is expired or expiring soon.",
+        "action": "Review fleet"
+      }
     },
     "stats": {
       "totalBookings": "Total Bookings",
