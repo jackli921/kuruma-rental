@@ -115,6 +115,64 @@ describe('InMemoryOperatorMembershipRepository', () => {
     })
   })
 
+  // #1010: batch sibling of findActiveByOperator. The compliance digest resolves
+  // EVERY alert-band operator's recipients in a constant number of queries, so it
+  // needs the active members of many operators grouped in one call (no per-operator
+  // N+1). Same ledger semantics + (createdAt, id) order as the single-operator read.
+  describe('findActiveByOperators', () => {
+    it('groups each requested operator’s ACTIVE members, keyed by operatorId', async () => {
+      await repo.create(membershipInput({ userId: 'a1', operatorId: 'op_a' }))
+      await repo.create(membershipInput({ userId: 'b1', operatorId: 'op_b' }))
+      const byOp = await repo.findActiveByOperators(['op_a', 'op_b'])
+      expect(byOp.get('op_a')?.map((m) => m.userId)).toEqual(['a1'])
+      expect(byOp.get('op_b')?.map((m) => m.userId)).toEqual(['b1'])
+    })
+
+    it('excludes REVOKED members and operators that were not requested', async () => {
+      await repo.create(membershipInput({ userId: 'live', operatorId: 'op_a' }))
+      await repo.create(membershipInput({ userId: 'gone', operatorId: 'op_a', status: 'REVOKED' }))
+      await repo.create(membershipInput({ userId: 'other', operatorId: 'op_unasked' }))
+      const byOp = await repo.findActiveByOperators(['op_a'])
+      expect(byOp.get('op_a')?.map((m) => m.userId)).toEqual(['live'])
+      expect(byOp.has('op_unasked')).toBe(false)
+    })
+
+    it('omits operators with no active members (absent key, not an empty list)', async () => {
+      await repo.create(membershipInput({ userId: 'x', operatorId: 'op_a' }))
+      const byOp = await repo.findActiveByOperators(['op_a', 'op_empty'])
+      expect(byOp.has('op_empty')).toBe(false)
+    })
+
+    it('returns an empty map for no requested operators', async () => {
+      await repo.create(membershipInput({ userId: 'x', operatorId: 'op_a' }))
+      expect((await repo.findActiveByOperators([])).size).toBe(0)
+    })
+
+    // Same audit-stability guarantee as the single read: each operator’s list is
+    // ordered by (createdAt, id), independent of store insertion order.
+    it('orders each operator’s members by createdAt so the audit string is stable', async () => {
+      const mk = (id: string, userId: string, createdAt: Date): OperatorMembership => ({
+        id,
+        userId,
+        operatorId: 'op_a',
+        role: 'OPERATOR_OWNER',
+        status: 'ACTIVE',
+        createdAt,
+        updatedAt: createdAt,
+      })
+      const early = new Date('2026-01-01T00:00:00Z')
+      const late = new Date('2026-02-01T00:00:00Z')
+      // Newer seeded first, so a missing ORDER BY would surface as reversed output.
+      const store = new Map<string, OperatorMembership>([
+        ['m-newer', mk('m-newer', 'u_newer', late)],
+        ['m-older', mk('m-older', 'u_older', early)],
+      ])
+      const seeded = new InMemoryOperatorMembershipRepository(store)
+      const byOp = await seeded.findActiveByOperators(['op_a'])
+      expect(byOp.get('op_a')?.map((m) => m.userId)).toEqual(['u_older', 'u_newer'])
+    })
+  })
+
   // #904 slice 2: the owner deactivates a member. ACTIVE -> REVOKED, scoped to
   // (id, operatorId) so a tenant can only touch its own rows; a no-match reads as
   // undefined (the service maps that to a 404, never a cross-tenant oracle).

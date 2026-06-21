@@ -1,5 +1,5 @@
 import { operatorMemberships } from '@kuruma/shared/db/schema'
-import { and, eq } from 'drizzle-orm'
+import { and, eq, inArray } from 'drizzle-orm'
 import type { OperatorMembership } from '../../stores'
 import type { OperatorMembershipRepository } from '../types'
 import type { Db } from './shared'
@@ -48,6 +48,31 @@ export class DrizzleOperatorMembershipRepository implements OperatorMembershipRe
       // string in notification_log is stable across resends. #878.
       .orderBy(operatorMemberships.createdAt, operatorMemberships.id)
     return rows.map(toOperatorMembership)
+  }
+
+  // #1010: batch sibling for the digest. One scoped read over (operatorId ∈ ids,
+  // status='ACTIVE') with the same (createdAt, id) ORDER BY, grouped in app — a
+  // constant number of queries regardless of operator count. Empty ids → no query.
+  async findActiveByOperators(
+    operatorIds: string[],
+  ): Promise<Map<string, OperatorMembership[]>> {
+    const byOperator = new Map<string, OperatorMembership[]>()
+    if (operatorIds.length === 0) return byOperator
+    const rows = await this.db
+      .select()
+      .from(operatorMemberships)
+      .where(
+        and(
+          inArray(operatorMemberships.operatorId, operatorIds),
+          eq(operatorMemberships.status, 'ACTIVE'),
+        ),
+      )
+      .orderBy(operatorMemberships.createdAt, operatorMemberships.id)
+    for (const r of rows) {
+      const m = toOperatorMembership(r)
+      byOperator.set(m.operatorId, [...(byOperator.get(m.operatorId) ?? []), m])
+    }
+    return byOperator
   }
 
   // A concurrent double-accept that inserts a second ACTIVE row for one user
