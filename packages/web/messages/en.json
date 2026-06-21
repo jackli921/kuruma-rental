@@ -192,7 +192,7 @@
       "retry": "Retry",
       "compliance": {
         "heading": "{count, plural, one {# vehicle needs attention} other {# vehicles need attention}}",
-        "body": "Shaken or insurance is expired or expiring soon.",
+        "body": "Shaken or insurance is missing, expired, or expiring soon.",
         "action": "Review fleet"
       }
     },
@@ -1176,11 +1176,6 @@
     "manual": "Manual",
     "viewStore": "View cars",
     "showOnMap": "Show on map",
-    "view": {
-      "stores": "Stores",
-      "map": "Map",
-      "label": "Result view"
-    },
     "list": {
       "heading": "Available cars",
       "empty": "No cars are available for these dates."
@@ -1196,7 +1191,11 @@
       "geoContext": "{area}, {prefecture} · {km} km away",
       "geoContextNoDistance": "{area}, {prefecture}",
       "geoContextAreaOnly": "{area} · {km} km away",
-      "geoContextAreaOnlyNoDistance": "{area}"
+      "geoContextAreaOnlyNoDistance": "{area}",
+      "hideMap": "Hide map",
+      "showMap": "Show map",
+      "openMobileMap": "Map",
+      "mobileMapTitle": "Cars on the map"
     },
     "detail": {
       "backToSearch": "Back to search",

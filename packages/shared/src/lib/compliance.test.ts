@@ -1,6 +1,20 @@
 import { describe, expect, test } from 'vitest'
 
-import { complianceThresholdBand, isDocCurrent, isRoadLegal, jstDateString } from './compliance'
+import {
+  complianceThresholdBand,
+  isDocCurrent,
+  isNonCompliant,
+  isRoadLegal,
+  jstDateString,
+  vehicleAlertCandidates,
+} from './compliance'
+import { EXPIRY_SOON_DAYS, computeExpiryStatus } from './expiry'
+
+function addDays(iso: string, days: number): string {
+  const d = new Date(iso)
+  d.setUTCDate(d.getUTCDate() + days)
+  return d.toISOString().slice(0, 10)
+}
 
 /**
  * §5.1 compliance predicate. A shaken/insurance certificate is valid THROUGH
@@ -45,6 +59,42 @@ describe('isRoadLegal', () => {
     expect(isRoadLegal({ shakenExpiryDate: '2026-07-01', insuranceExpiryDate: null }, asOf)).toBe(
       false,
     )
+  })
+})
+
+/**
+ * #998 item 3 + #1006. The "needs operator attention" rule (a vehicle whose
+ * shaken OR insurance is expiring-soon, already expired, or MISSING) is named
+ * once so the dashboard banner, the fleet `expiringSoon` facet, and the fleet
+ * filter can't drift. A MISSING (null) certificate counts (#1006 product call):
+ * a car with no doc on file is the most non-compliant of all — already hidden
+ * from the storefront — and the digest already alerts on it, so the in-app
+ * surfaces must agree. Only a fully in-date document (OK) is compliant.
+ */
+describe('isNonCompliant', () => {
+  const TODAY = '2026-04-12'
+  const OK = '2028-12-31'
+  const EXPIRING = '2026-05-12' // exactly 30 days out
+  const EXPIRED = '2026-04-11' // yesterday
+
+  test('flags a vehicle whose shaken is expiring soon', () => {
+    expect(isNonCompliant({ shakenExpiryDate: EXPIRING, insuranceExpiryDate: OK }, TODAY)).toBe(
+      true,
+    )
+  })
+
+  test('flags a vehicle whose insurance has expired', () => {
+    expect(isNonCompliant({ shakenExpiryDate: OK, insuranceExpiryDate: EXPIRED }, TODAY)).toBe(true)
+  })
+
+  test('does not flag a vehicle with both documents well in date', () => {
+    expect(isNonCompliant({ shakenExpiryDate: OK, insuranceExpiryDate: OK }, TODAY)).toBe(false)
+  })
+
+  test('flags a vehicle with a missing certificate (#1006 — matches the digest)', () => {
+    expect(isNonCompliant({ shakenExpiryDate: null, insuranceExpiryDate: OK }, TODAY)).toBe(true)
+    expect(isNonCompliant({ shakenExpiryDate: OK, insuranceExpiryDate: null }, TODAY)).toBe(true)
+    expect(isNonCompliant({ shakenExpiryDate: null, insuranceExpiryDate: null }, TODAY)).toBe(true)
   })
 })
 
@@ -123,5 +173,76 @@ describe('complianceThresholdBand', () => {
 
   test('31 days out is null — no alert yet', () => {
     expect(complianceThresholdBand('2026-07-18', today)).toBeNull()
+  })
+})
+
+/**
+ * #998 item 1. The digest's outer reminder band and the dashboard/fleet
+ * "expiring soon" set must share ONE horizon — else an operator gets digest
+ * emails for a window the banner won't reflect (and the deep-link lands on an
+ * empty list). The boundary is computed FROM EXPIRY_SOON_DAYS, so bumping the
+ * constant without re-linking the digest band fails here instead of diverging
+ * silently.
+ */
+describe('compliance horizon is a single source of truth', () => {
+  const today = '2026-06-17'
+
+  test('the outer digest band fires on exactly the banner horizon, not a day off', () => {
+    const atHorizon = addDays(today, EXPIRY_SOON_DAYS)
+    const pastHorizon = addDays(today, EXPIRY_SOON_DAYS + 1)
+
+    expect(computeExpiryStatus(atHorizon, today)).toBe('EXPIRING_SOON')
+    expect(complianceThresholdBand(atHorizon, today)).toBe('D30')
+
+    expect(computeExpiryStatus(pastHorizon, today)).toBe('OK')
+    expect(complianceThresholdBand(pastHorizon, today)).toBeNull()
+  })
+})
+
+/**
+ * #982. The digest's per-vehicle alert derivation (which of shaken/insurance is
+ * in an alert band) as a pure function, so the cron and any other consumer share
+ * one mapping instead of re-deriving the flatMap. SHAKEN is yielded before
+ * INSURANCE (COMPLIANCE_DOCUMENT_TYPES order), and a document with no band (more
+ * than 30 days out) is omitted. MISSING and EXPIRED are bands, so they ARE
+ * yielded — the digest alerts on them.
+ */
+describe('vehicleAlertCandidates', () => {
+  const today = '2026-06-17'
+
+  test('omits a document that is more than 30 days out', () => {
+    expect(
+      vehicleAlertCandidates(
+        { shakenExpiryDate: '2027-01-01', insuranceExpiryDate: '2027-01-01' },
+        today,
+      ),
+    ).toEqual([])
+  })
+
+  test('yields only the document in a band, SHAKEN first', () => {
+    expect(
+      vehicleAlertCandidates(
+        { shakenExpiryDate: '2026-06-24', insuranceExpiryDate: '2027-01-01' },
+        today,
+      ),
+    ).toEqual([{ documentType: 'SHAKEN', band: 'D7' }])
+  })
+
+  test('yields both documents in their own bands, SHAKEN before INSURANCE', () => {
+    expect(
+      vehicleAlertCandidates(
+        { shakenExpiryDate: '2026-06-16', insuranceExpiryDate: '2026-06-24' },
+        today,
+      ),
+    ).toEqual([
+      { documentType: 'SHAKEN', band: 'EXPIRED' },
+      { documentType: 'INSURANCE', band: 'D7' },
+    ])
+  })
+
+  test('a missing date is a MISSING band (the digest alerts on it)', () => {
+    expect(
+      vehicleAlertCandidates({ shakenExpiryDate: null, insuranceExpiryDate: '2027-01-01' }, today),
+    ).toEqual([{ documentType: 'SHAKEN', band: 'MISSING' }])
   })
 })

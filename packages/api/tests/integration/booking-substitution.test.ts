@@ -373,6 +373,7 @@ describe('substitution compliance gate — expired replacement (real pg, §5.3b 
     if (res.ok) throw new Error('expected the expired replacement to be rejected')
     expect(res.status).toBe(400)
     expect(res.error).toMatch(/expires before the booking ends/i)
+    expect(res.code).toBe('VEHICLE_DOCS_EXPIRE_BEFORE_RETURN') // #982 parity with create
 
     // The booking stays on its original vehicle — the rejected swap never landed.
     const fromDb = await bookingRepo.findById(SYSTEM_CONTEXT, bookingId)

@@ -269,8 +269,14 @@ describe('SearchMapList', () => {
     const nambaRow = rows.find((o) => o.textContent?.includes('Toyota Yaris'))
     if (!nambaRow) throw new Error('expected the Namba row')
 
-    // Tab moves keyboard focus to the first control — Namba's real "View cars" link —
-    // and the row's onFocus (focusin bubbles up from the CTA) selects its pin.
+    // First Tab lands on the map show/hide toggle (#885 3b — it precedes the list);
+    // assert that named stop so a future control inserted before the list fails
+    // loudly here rather than silently shifting an opaque tab count.
+    await user.tab()
+    expect(screen.getByRole('button', { name: 'Hide map' })).toHaveFocus()
+
+    // The second Tab reaches Namba's real "View cars" link, and the row's onFocus
+    // (focusin bubbles up from the CTA) selects its pin.
     await user.tab()
 
     expect(within(nambaRow).getByRole('link', { name: 'View cars' })).toHaveFocus()
@@ -454,5 +460,53 @@ describe('SearchMapList', () => {
 
     expect(seen.length).toBeGreaterThan(rendersBefore) // a re-render did happen
     expect(new Set(seen).size).toBe(1) // ...but geocodedByLocation was not re-run
+  })
+})
+
+describe('SearchMapList — map show/hide toggle (#885 slice 3b)', () => {
+  it('shows the map by default with a "Hide map" toggle (aria-pressed)', () => {
+    renderMapList([carAt('v1', 'Toyota Yaris', 'loc_namba', GEOCODED)])
+
+    expect(screen.getByTestId('fake-map')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Hide map' })).toHaveAttribute('aria-pressed', 'true')
+  })
+
+  it('hiding the map unmounts the map pane and flips the toggle to "Show map"', async () => {
+    const user = userEvent.setup()
+    renderMapList([carAt('v1', 'Toyota Yaris', 'loc_namba', GEOCODED)])
+
+    await user.click(screen.getByRole('button', { name: 'Hide map' }))
+
+    expect(screen.queryByTestId('fake-map')).not.toBeInTheDocument()
+    const toggle = screen.getByRole('button', { name: 'Show map' })
+    expect(toggle).toHaveAttribute('aria-pressed', 'false')
+    // The per-row "show on map" affordance is gone too — it can't fly to a hidden map.
+    expect(screen.queryByRole('button', { name: 'Show on map' })).not.toBeInTheDocument()
+  })
+
+  it('toggling back re-shows the map (idempotent round-trip)', async () => {
+    const user = userEvent.setup()
+    renderMapList([carAt('v1', 'Toyota Yaris', 'loc_namba', GEOCODED)])
+
+    await user.click(screen.getByRole('button', { name: 'Hide map' }))
+    await user.click(screen.getByRole('button', { name: 'Show map' }))
+
+    expect(screen.getByTestId('fake-map')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Hide map' })).toHaveAttribute('aria-pressed', 'true')
+  })
+})
+
+describe('SearchMapList — mobile Map toggle (#885 slice 4)', () => {
+  // The mobile sheet itself is unit-tested in MobileMapSheet.test.tsx (Sheet mocked).
+  // Here we only assert SearchMapList WIRES it: a "Map" trigger renders alongside the
+  // desktop pane when there is something to plot, and is absent when nothing is geocoded.
+  it('offers a mobile "Map" trigger when at least one location is geocoded', () => {
+    renderMapList([carAt('v1', 'Toyota Yaris', 'loc_namba', GEOCODED)])
+    expect(screen.getByRole('button', { name: /^map$/i })).toBeInTheDocument()
+  })
+
+  it('offers no mobile "Map" trigger when every result is list-only (null-coord)', () => {
+    renderMapList([carAt('v2', 'Honda Fit', 'loc_umeda', NO_COORDS)])
+    expect(screen.queryByRole('button', { name: /^map$/i })).toBeNull()
   })
 })

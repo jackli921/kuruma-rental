@@ -256,6 +256,10 @@ export interface OperatorMembershipRepository {
   // recipient set. Ledger-sourced (status='ACTIVE'), so it is revocation-aware and
   // never reads the stale users.role/operatorId projection.
   findActiveByOperator(operatorId: string): Promise<OperatorMembership[]>
+  // #1010: batch sibling for the compliance digest — every ACTIVE member of each
+  // requested operator, grouped by operatorId in the same (createdAt, id) order, in
+  // one query. Operators with no active members are absent from the map.
+  findActiveByOperators(operatorIds: string[]): Promise<Map<string, OperatorMembership[]>>
   create(
     data: Omit<OperatorMembership, 'id' | 'createdAt' | 'updatedAt'>,
   ): Promise<OperatorMembership>

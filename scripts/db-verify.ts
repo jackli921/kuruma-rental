@@ -1,4 +1,6 @@
 #!/usr/bin/env bun
+// ENFORCES: drizzle migration drift detection (schema<->snapshot, journal<->disk, journal monotonic, journal<->DB, critical DB objects)
+// SSOT: CLAUDE.md § Database Migrations (drizzle)
 /**
  * db:verify — detects drizzle migration drift BEFORE it causes a 500 in prod.
  *

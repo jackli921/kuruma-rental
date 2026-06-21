@@ -1,4 +1,6 @@
 #!/usr/bin/env bun
+// ENFORCES: the deleted Next.js App Router tree (packages/web/src/app/) must not regrow
+// SSOT: AGENTS.md § Web is Vite + TanStack Router (NOT Next.js)
 import { Glob } from 'bun'
 
 /**
