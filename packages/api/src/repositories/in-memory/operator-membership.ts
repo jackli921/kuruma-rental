@@ -34,6 +34,21 @@ export class InMemoryOperatorMembershipRepository implements OperatorMembershipR
       .sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime() || a.id.localeCompare(b.id))
   }
 
+  // #1010: the batch read behind the digest's recipient resolution. Filter the
+  // requested operators, sort ONCE by (createdAt, id), then group — so each
+  // operator's list carries the same deterministic order as findActiveByOperator.
+  async findActiveByOperators(operatorIds: string[]): Promise<Map<string, OperatorMembership[]>> {
+    const wanted = new Set(operatorIds)
+    const sorted = [...this.store.values()]
+      .filter((m) => wanted.has(m.operatorId) && m.status === 'ACTIVE')
+      .sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime() || a.id.localeCompare(b.id))
+    const byOperator = new Map<string, OperatorMembership[]>()
+    for (const m of sorted) {
+      byOperator.set(m.operatorId, [...(byOperator.get(m.operatorId) ?? []), m])
+    }
+    return byOperator
+  }
+
   async create(
     data: Omit<OperatorMembership, 'id' | 'createdAt' | 'updatedAt'>,
   ): Promise<OperatorMembership> {
