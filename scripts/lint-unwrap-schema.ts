@@ -1,5 +1,5 @@
 // ENFORCES: web API clients pass a Zod schema to unwrap() so the network seam is runtime-validated (#711)
-// SSOT: docs/architecture/modules.md § Validate API responses at the seam
+// SSOT: docs/architecture/modules.md § packages/web — feature folders + barrel imports
 /**
  * Ratcheting lint: web API clients must pass a Zod `schema` to `unwrap()` so the
  * network seam is runtime-validated, not a phantom `T` cast (#711). Schemaless

@@ -1,6 +1,6 @@
 #!/usr/bin/env bun
-// ENFORCES: source files <= 800 lines (hard) / soft-warn 400, with route & page sub-caps
-// SSOT: docs/architecture/modules.md § File-size rules (everywhere)
+// ENFORCES: source files <= 800 lines (hard) / soft-warn 400; route (150) & page (80) sub-caps code-only
+// SSOT: docs/architecture/modules.md § File-size rules (everywhere) — sub-caps undocumented, see #1015
 import { readFileSync } from 'node:fs'
 import { Glob } from 'bun'
 

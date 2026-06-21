@@ -1,6 +1,6 @@
 #!/usr/bin/env bun
 // ENFORCES: the Vite/CF Pages SPA bundle stays under the 2 MiB gzipped budget
-// SSOT: docs/plans/2026-06-09-378-pages-cutover.md § dist-size 2 MiB gzip budget
+// SSOT: docs/plans/2026-06-09-378-pages-cutover.md § 1. Context
 import { readFileSync } from 'node:fs'
 import { gzipSync } from 'node:zlib'
 import { Glob } from 'bun'
