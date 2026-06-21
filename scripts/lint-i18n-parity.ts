@@ -1,3 +1,5 @@
+// ENFORCES: every locale's messages/<locale>.json declares the same key set (missing key = MISSING_MESSAGE at runtime)
+// SSOT: CLAUDE.md § i18n (use-intl v4)
 /**
  * Enforce: every configured locale's `messages/<locale>.json` declares the same
  * set of translation keys. Missing keys render a `MISSING_MESSAGE` error at

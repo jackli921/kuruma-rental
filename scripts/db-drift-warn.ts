@@ -1,4 +1,6 @@
 #!/usr/bin/env bun
+// ENFORCES: non-blocking predev warning when the dev DB is behind this worktree's migrations
+// SSOT: CLAUDE.md § Monorepo (#740 predev drift check)
 /**
  * db:drift-warn — a fast, NON-BLOCKING heads-up that the dev DB is behind this
  * worktree's migrations. Wired as `predev` / `predev:api` so `bun run dev[:api]`
