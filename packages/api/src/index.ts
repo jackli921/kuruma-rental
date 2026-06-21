@@ -76,7 +76,10 @@ import { NotificationService } from './services/notification'
 import { NotificationDispatcher } from './services/notification-dispatcher'
 import { OperatorService } from './services/operator'
 import { createOperatorGrantService } from './services/operator-grant'
-import { makeResolveOperatorRecipients } from './services/operator-recipients'
+import {
+  makeResolveOperatorRecipients,
+  makeResolveOperatorRecipientsBatch,
+} from './services/operator-recipients'
 import { OperatorTeamService } from './services/operator-team'
 import { OverviewService } from './services/overview'
 import { PaymentAnomalyService } from './services/payment-anomaly'
@@ -609,7 +612,8 @@ function resolveEmailConfig(): { emailFrom: string; emailReplyTo: string | undef
  * Composition seam for the #916 §5.4 daily compliance digest, resolved by the
  * Workers `scheduled` cron the same way routes resolve `createApp`. Wires the
  * fleet scan, the idempotency ledger, the active-member recipient resolver
- * (reused from the booking dispatcher), the JST clock, and the email sender.
+ * (the batch sibling of the booking dispatcher's, #1010), the JST clock, and
+ * the email sender.
  */
 export function buildComplianceDigestService(
   overrides?: AppOverrides,
@@ -619,7 +623,7 @@ export function buildComplianceDigestService(
   return new ComplianceDigestService({
     vehicleRepo,
     alertLogRepo: complianceAlertLogRepo,
-    resolveRecipients: makeResolveOperatorRecipients({
+    resolveRecipients: makeResolveOperatorRecipientsBatch({
       membershipRepo: operatorMembershipRepo,
       userRepo,
     }),
