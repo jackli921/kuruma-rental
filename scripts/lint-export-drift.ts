@@ -1,3 +1,5 @@
+// ENFORCES: @kuruma/shared/* import paths must match packages/shared/package.json "exports"
+// SSOT: code-only — rule undocumented, see #1015
 /**
  * Detects import paths into @kuruma/shared that have no matching entry
  * in packages/shared/package.json "exports". Bun workspace mode resolves
