@@ -11,7 +11,7 @@ import {
 } from '../repositories/types'
 import type { EmailMessage, EmailSender } from './email/email-sender'
 import { renderComplianceDigest } from './email/templates/compliance-digest'
-import type { ResolveOperatorRecipients } from './operator-recipients'
+import type { ResolveOperatorRecipientsBatch } from './operator-recipients'
 
 // Operators are Japan/JST; the digest is operator-facing (§12.2 working language).
 const DEFAULT_DIGEST_LOCALE = 'ja'
@@ -28,7 +28,7 @@ export interface ComplianceDigestConfig {
 export interface ComplianceDigestDeps {
   vehicleRepo: Pick<VehicleRepository, 'findAll'>
   alertLogRepo: ComplianceAlertLogRepository
-  resolveRecipients: ResolveOperatorRecipients
+  resolveRecipients: ResolveOperatorRecipientsBatch
   emailSender: EmailSender
   /** JST calendar day (YYYY-MM-DD) the bands are computed against — the one clock. */
   today: () => string
@@ -100,8 +100,12 @@ export class ComplianceDigestService {
       itemsByOperator.set(c.operatorId, [...list, c])
     }
 
+    // #1010: resolve every operator's recipients up front in a constant number of
+    // queries (one membership read + one user read), then loop to send — no
+    // per-operator round-trip inside the loop.
+    const recipientsByOperator = await this.deps.resolveRecipients([...itemsByOperator.keys()])
     for (const [operatorId, items] of itemsByOperator) {
-      const recipients = await this.deps.resolveRecipients(operatorId)
+      const recipients = recipientsByOperator.get(operatorId) ?? []
       // No recipients → don't send and don't record, so the alert retries once a
       // member exists (record-after-send applies to the empty-audience case too).
       if (recipients.length === 0) {

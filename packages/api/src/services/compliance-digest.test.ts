@@ -6,7 +6,7 @@ import { complianceAlertKey } from '../repositories/types'
 import type { Vehicle } from '../stores'
 import { ComplianceDigestService } from './compliance-digest'
 import type { EmailMessage } from './email/email-sender'
-import type { ResolveOperatorRecipients } from './operator-recipients'
+import type { ResolveOperatorRecipientsBatch } from './operator-recipients'
 
 const TODAY = '2026-09-01'
 const EXPIRED = '2026-08-01' // before TODAY
@@ -64,7 +64,10 @@ const RECIPIENTS: Record<string, string[]> = {
   op_a: ['owner-a@op.example', 'staff-a@op.example'],
   op_b: ['owner-b@op.example'],
 }
-const resolveRecipients: ResolveOperatorRecipients = async (id) => RECIPIENTS[id] ?? []
+// #1010: the digest now resolves all operators in one batch call — the fake
+// mirrors that shape (ids → map), so the service test exercises the real seam.
+const resolveRecipients: ResolveOperatorRecipientsBatch = async (ids) =>
+  new Map(ids.map((id) => [id, RECIPIENTS[id] ?? []]))
 
 function setup(opts?: {
   ctrl?: { fail: boolean }
