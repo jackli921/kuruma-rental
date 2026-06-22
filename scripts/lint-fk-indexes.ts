@@ -1,5 +1,5 @@
 // ENFORCES: every FK column in the drizzle schema has a covering index (unindexed FK = seq scan, outage-grade at scale)
-// SSOT: code-only — rule undocumented, see #1015
+// SSOT: docs/architecture/modules.md § packages/shared
 /**
  * Enforce: every FK column in the drizzle schema must have a covering index.
  *
