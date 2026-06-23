@@ -1,4 +1,6 @@
 #!/usr/bin/env bun
+// ENFORCES: web feature code imports only via the `@/modules/<feature>` barrel (no cross-module internals); web has no direct DB access
+// SSOT: docs/architecture/modules.md § Enforcement
 import { readFileSync, writeFileSync } from 'node:fs'
 import { Glob } from 'bun'
 
