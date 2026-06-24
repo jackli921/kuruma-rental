@@ -12,6 +12,7 @@ import type {
   TransactionRepos,
   UserRepository,
 } from '../repositories/types'
+import type { Vehicle } from '../stores'
 import type { BookingPostCommitDispatcher } from './booking-post-commit-dispatcher'
 import { MS_PER_MINUTE, composeBookingTotal, rentalDays } from './booking-pricing-helpers'
 import type {
@@ -258,6 +259,73 @@ export class BookingCreationService {
     const turnaroundMinutes = dropoff.defaultTurnaroundMinutes ?? DEFAULT_TURNAROUND_MINUTES
     const effectiveEndAt = new Date(input.endAt.getTime() + turnaroundMinutes * MS_PER_MINUTE)
 
+    // #464: a SPECIFIC booking also consumes a class unit. A CLASS_COMBO float
+    // (null assignedVehicleId) is invisible to the per-vehicle exclusion
+    // constraint (booking.ts), so without this gate a SPECIFIC create could grab
+    // the last car a float already reserved. Same advisory lock + demand/capacity
+    // gate as the combo path; the exclusion constraint stays the per-car backstop.
+    const releaseLock = await repos.availabilityRepo.lockComboCapacity(
+      operatorId,
+      classId,
+      input.pickupLocationId,
+    )
+    try {
+      return await this.submitSpecificInTxLocked(
+        ctx,
+        input,
+        renterId,
+        now,
+        repos,
+        vehicle,
+        operatorId,
+        classId,
+        assignedVehicleId,
+        effectiveEndAt,
+      )
+    } finally {
+      releaseLock()
+    }
+  }
+
+  private async submitSpecificInTxLocked(
+    ctx: CallerContext,
+    input: CreateBookingInput & { fulfillmentMode: 'SPECIFIC' },
+    renterId: string | null,
+    now: Date,
+    repos: TransactionRepos,
+    vehicle: Vehicle,
+    operatorId: string,
+    classId: string,
+    assignedVehicleId: string,
+    effectiveEndAt: Date,
+  ): Promise<CreateBookingResult> {
+    // Demand counts SPECIFIC occupancy + floats on the (op, class, loc) triple;
+    // capacity is the road-legal supply at the requested return. demand >= capacity
+    // means every unit is already claimed → reject before insert. (The exclusion
+    // constraint below still rejects a double-booked specific car while capacity
+    // remains — e.g. a multi-car class where only this car is taken.)
+    const demand = await repos.availabilityRepo.countClassDemand(
+      operatorId,
+      classId,
+      input.pickupLocationId,
+      input.startAt,
+      effectiveEndAt,
+    )
+    const capacity = await repos.availabilityRepo.countClassCapacity(
+      operatorId,
+      classId,
+      input.pickupLocationId,
+      input.endAt,
+    )
+    if (demand >= capacity) {
+      return {
+        ok: false,
+        status: 409,
+        error: 'No cars left in this class at this location for the requested window',
+        code: 'CLASS_COMBO_SOLD_OUT',
+      }
+    }
+
     // Price off the ASSIGNED vehicle's rates — never class-level (#406), never
     // client-supplied (#74), non-null on every submit (#429 backfill guard).
     const pricing = calculateBookingPrice(
@@ -434,6 +502,26 @@ export class BookingCreationService {
     const klass = await repos.vehicleClassRepo.findById(SYSTEM_CONTEXT, classId)
     if (!klass || klass.operatorId !== operatorId) {
       return { ok: false, status: 400, error: 'Vehicle class is not available' }
+    }
+
+    // #464: a combo has no per-vehicle rules (no car at book time), but the
+    // universal past-start floor (#954) still applies. checkRentalRules with all
+    // class rules null fires only RENTAL_RULE_START_IN_PAST — ignoring min/max/
+    // advance — so a start already gone is rejected on this path too.
+    const ruleCheck = checkRentalRules(
+      { minRentalHours: null, maxRentalHours: null, advanceBookingHours: null },
+      input.startAt,
+      input.endAt,
+      now,
+    )
+    if (!ruleCheck.ok) {
+      return {
+        ok: false,
+        status: 400,
+        error: 'Booking violates a rental rule',
+        code: ruleCheck.code,
+        details: { required: ruleCheck.required, actual: ruleCheck.actual },
+      }
     }
 
     if (input.dropoffLocationId !== input.pickupLocationId) {

@@ -7,8 +7,10 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { type CallerContext, SYSTEM_CONTEXT } from '../../src/middleware/auth'
 import {
   InMemoryAddOnRepository,
+  InMemoryAvailabilityRepository,
   InMemoryBookingEventRepository,
   InMemoryBookingRepository,
+  InMemoryClassRatePlanRepository,
   InMemoryFeeScheduleRepository,
   InMemoryInsuranceOptionRepository,
   InMemoryLocationRepository,
@@ -115,6 +117,10 @@ async function makeService(threadRepo?: ThreadRepository, staffUserId?: string) 
   const addOnRepo = new InMemoryAddOnRepository()
   const feeScheduleRepo = new InMemoryFeeScheduleRepository()
   const maintenanceLogRepo = new InMemoryMaintenanceLogRepository()
+  // #464: the SPECIFIC submit now reads demand/capacity + takes the class
+  // advisory lock through availabilityRepo, so this harness must wire it too.
+  const availabilityRepo = new InMemoryAvailabilityRepository(vehicleRepo, bookingRepo)
+  const classRatePlanRepo = new InMemoryClassRatePlanRepository()
 
   const location = await locationRepo.create({
     operatorId: OP,
@@ -168,6 +174,9 @@ async function makeService(threadRepo?: ThreadRepository, staffUserId?: string) 
     addOnRepo,
     feeScheduleRepo,
     userRepo,
+    availabilityRepo,
+    classRatePlanRepo,
+    vehicleClassRepo,
   }
   const runInTransaction: RunInTransaction = async (fn) => fn(repos)
 

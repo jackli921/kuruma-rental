@@ -208,4 +208,62 @@ describe('CLASS_COMBO submit serialization (real pg, #464 slice 2d.5)', () => {
     expect(persisted[0]?.fulfillmentMode).toBe('CLASS_COMBO')
     expect(persisted[0]?.totalPrice).toBe(DAY_RATE_JPY) // 1 day × dayRateJpy
   })
+
+  // #464 (fix(#464) follow-up): the SPECIFIC path is class-capacity guarded too —
+  // a CLASS_COMBO float carries null assignedVehicleId, invisible to the per-car
+  // exclusion constraint, so without the SPECIFIC-path advisory lock + demand/
+  // capacity gate a float and a SPECIFIC booking would both read demand=0 and
+  // oversell the single car. A distinct window (Oct) keeps the first test's Sept
+  // booking out of this demand count.
+  it('serializes a CLASS_COMBO float against a concurrent SPECIFIC booking — exactly one wins the last unit', async () => {
+    const raceStart = new Date('2027-10-01T09:00:00Z')
+    const raceEnd = new Date('2027-10-02T09:00:00Z')
+    const post = (body: object) =>
+      app.request('/bookings', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      })
+
+    const [combo, specific] = await Promise.all([
+      post({
+        fulfillmentMode: 'CLASS_COMBO',
+        classId,
+        pickupLocationId: locationId,
+        dropoffLocationId: locationId,
+        startAt: raceStart.toISOString(),
+        endAt: raceEnd.toISOString(),
+        source: 'DIRECT',
+      }),
+      post({
+        fulfillmentMode: 'SPECIFIC',
+        requestedVehicleId: vehicleId,
+        pickupLocationId: locationId,
+        dropoffLocationId: locationId,
+        startAt: raceStart.toISOString(),
+        endAt: raceEnd.toISOString(),
+        source: 'DIRECT',
+      }),
+    ])
+
+    // Exactly one wins the single class unit; the loser is sold out (without the
+    // SPECIFIC-path guard both would 201 → overbook).
+    expect([combo.status, specific.status].sort()).toEqual([201, 409])
+    const loser = combo.status === 409 ? combo : specific
+    expect(((await loser.json()) as { code?: string }).code).toBe('CLASS_COMBO_SOLD_OUT')
+
+    // Exactly one booking landed in the race window (no oversell).
+    const persisted = await db
+      .select({ id: bookings.id })
+      .from(bookings)
+      .where(
+        and(
+          eq(bookings.operatorId, BEST_CAR_RENTAL_OPERATOR_ID),
+          eq(bookings.classId, classId),
+          eq(bookings.pickupLocationId, locationId),
+          eq(bookings.startAt, raceStart),
+        ),
+      )
+    expect(persisted).toHaveLength(1)
+  })
 })
