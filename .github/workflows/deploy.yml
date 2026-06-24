@@ -59,7 +59,31 @@ jobs:
       # the presence check in step 3 fails the deploy loudly if one is gone.
       - name: Deploy API Worker
         working-directory: packages/api
-        run: npx wrangler deploy
+        # `bun run deploy` is the SINGLE source of the deploy command (package.json):
+        # `wrangler deploy --outdir dist --var SENTRY_RELEASE:$(git rev-parse HEAD)`.
+        # CI, rotate-secrets.yml, and manual `bun run deploy` all go through it, so
+        # the release var + source-map outdir can't drift between them (#959).
+        run: bun run deploy
+
+      # 2b. Upload the API Worker source maps to Sentry (#959) so stack frames
+      # resolve to src/ not bundled worker.js. Gated as a shell no-op: GitHub
+      # Actions forbids secrets in `if:`, so we map the creds to env and skip
+      # cleanly when any is absent (mirrors the web's no-op-without-creds gate).
+      # Release is keyed to the SAME `git rev-parse HEAD` the deploy used, so the
+      # uploaded maps match the runtime release Sentry reports. Non-fatal: the API
+      # is already deployed by here, so a Sentry flake must not strand the deploy.
+      - name: Upload API source maps to Sentry
+        working-directory: packages/api
+        env:
+          SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
+          SENTRY_ORG: ${{ vars.SENTRY_ORG }}
+          SENTRY_PROJECT_API: ${{ vars.SENTRY_PROJECT_API }}
+        run: |
+          if [ -z "$SENTRY_AUTH_TOKEN" ] || [ -z "$SENTRY_ORG" ] || [ -z "$SENTRY_PROJECT_API" ]; then
+            echo "Sentry creds absent — skipping API source-map upload"; exit 0
+          fi
+          SENTRY_RELEASE="$(git rev-parse HEAD)" bun run sentry:sourcemaps \
+            || echo "::warning::API source-map upload to Sentry failed (non-fatal)"
 
       # 3. Verify required secrets exist on the API Worker. Read-only drift
       # detector — catches "secret got deleted or never rotated" but NOT

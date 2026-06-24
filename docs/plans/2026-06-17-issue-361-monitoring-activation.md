@@ -13,7 +13,7 @@ deliver value is a small CI/doc finishing slice plus a HITL activation runbook.
 
 | Surface | Code | Gate | Release tag |
 |---|---|---|---|
-| API (Workers) | `packages/api/src/observability/` (`worker.ts` `Sentry.withSentry`, `middleware.ts`, pure `report-policy.ts` + `sentry-options.ts`, all tested) | `enabled:false` until `SENTRY_DSN` | ✅ `CF_VERSION_METADATA.id` (wrangler.toml `[version_metadata]`) |
+| API (Workers) | `packages/api/src/observability/` (`worker.ts` `Sentry.withSentry`, `middleware.ts`, pure `report-policy.ts` + `sentry-options.ts`, all tested) | `enabled:false` until `SENTRY_DSN` | ✅ `SENTRY_RELEASE` (commit SHA, `--var` at deploy), falling back to `CF_VERSION_METADATA.id`. Source maps upload to Sentry (#959) — see below. |
 | Web (Pages SPA, #765) | `packages/web/src/lib/observability/` (`sentry.tsx` boundary + `captureRouteError`, pure `sentry-options.ts`, tested) + `main.tsx` wiring | `enabled:false` until `VITE_SENTRY_DSN` | ⚠️ reads `VITE_SENTRY_RELEASE` but **CI never injects it** |
 
 Captured today (once a DSN is live): unhandled exceptions w/ stack
@@ -93,12 +93,17 @@ uptime monitor as a healthy stack.
 1. Create two Sentry projects: platform **Cloudflare Workers** (API) and
    **React** (web). Copy each DSN.
 2. GitHub secrets: `SENTRY_DSN` (API), `VITE_SENTRY_DSN` (web),
-   `SENTRY_AUTH_TOKEN` (web source-map upload), and **`SENTRY_ENVIRONMENT=beta`
-   + `VITE_SENTRY_ENVIRONMENT=beta` (required, not optional)** — both
-   `sentry-options.ts` files default unset → `'production'`, which would
-   mis-tag beta errors as prod and pollute the env filter at real launch.
-3. Run `rotate-secrets.yml` (sets the API Worker secret); next web deploy bakes
-   the web DSN + release + uploads source maps.
+   `SENTRY_AUTH_TOKEN` (source-map upload — shared by web *and* API), and
+   **`SENTRY_ENVIRONMENT=beta` + `VITE_SENTRY_ENVIRONMENT=beta` (required, not
+   optional)** — both `sentry-options.ts` files default unset → `'production'`,
+   which would mis-tag beta errors as prod and pollute the env filter at real
+   launch. GitHub **variables**: `SENTRY_ORG`, `SENTRY_PROJECT` (web), and
+   **`SENTRY_PROJECT_API`** (#959 — the API's own Sentry project slug; the API
+   source-map upload no-ops until it is set).
+3. Run `rotate-secrets.yml` (sets the API Worker secret + uploads the API source
+   maps for the promoted version); next web deploy bakes the web DSN + release +
+   uploads web source maps. The API source maps also upload on every `deploy.yml`
+   run (gated on `SENTRY_AUTH_TOKEN`/`SENTRY_ORG`/`SENTRY_PROJECT_API`).
 4. In Sentry: add the alert rule (Part C) and the uptime monitor on `/health`
    (Part B).
 5. Verify: trigger a test error on each surface; confirm it lands grouped under

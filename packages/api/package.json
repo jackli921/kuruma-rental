@@ -7,7 +7,8 @@
   "scripts": {
     "dev": "wrangler dev",
     "build": "wrangler deploy --dry-run",
-    "deploy": "wrangler deploy",
+    "deploy": "wrangler deploy --outdir dist --var SENTRY_RELEASE:$(git rev-parse HEAD)",
+    "sentry:sourcemaps": "sentry-cli sourcemaps upload --org \"$SENTRY_ORG\" --project \"$SENTRY_PROJECT_API\" --release \"$SENTRY_RELEASE\" dist",
     "test": "vitest run",
     "test:watch": "vitest",
     "test:integration": "vitest run --config vitest.integration.config.ts",
@@ -27,6 +28,7 @@
   "devDependencies": {
     "@cloudflare/workers-types": "^4.20260410.1",
     "@neondatabase/serverless": "^1.0.2",
+    "@sentry/cli": "2.58.6",
     "@types/ws": "^8.5.12",
     "postgres": "^3.4.8",
     "vitest": "^2",
