@@ -447,6 +447,40 @@ describe('BookingService.create — single-transaction submit (#392 §4)', () =>
     expect(result.booking.effectiveEndAt.getTime() - END.getTime()).not.toBe(60 * 60 * 1000)
   })
 
+  it('one-way booking: effectiveEndAt follows the DROPOFF location turnaround, not the pickup (#1023)', async () => {
+    const h = await setup()
+    const { vehicleId, locationId } = await seedReady(h) // pickup = vehicle's storefront (2880)
+    // A different same-operator location to return the car to, with a turnaround
+    // distinct from the pickup's 2880 so a pickup-derived result is unambiguous.
+    const ONE_WAY_TURNAROUND_MIN = 1440
+    const dropoff = await h.repos.locationRepo.create({
+      operatorId: OP_A,
+      name: 'Kyoto Return',
+      address: '4-5-6 Kyoto',
+      operatingHours: null,
+      timezone: 'Asia/Tokyo',
+      defaultTurnaroundMinutes: ONE_WAY_TURNAROUND_MIN,
+      status: 'ACTIVE',
+    } as Parameters<typeof h.repos.locationRepo.create>[0])
+
+    const result = await h.service.create(
+      renterCtx,
+      createInput({
+        requestedVehicleId: vehicleId,
+        pickupLocationId: locationId,
+        dropoffLocationId: dropoff.id,
+      }),
+      NOW,
+    )
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+    expect(result.booking.effectiveEndAt.getTime() - END.getTime()).toBe(
+      ONE_WAY_TURNAROUND_MIN * 60 * 1000,
+    )
+    // Mutation guard: must NOT be the pickup location's 2880 turnaround.
+    expect(result.booking.effectiveEndAt.getTime() - END.getTime()).not.toBe(TURNAROUND_MS)
+  })
+
   it('snapshots the selected active insurance option and adds its daily price to totalPrice', async () => {
     const h = await setup()
     const { vehicleId, locationId } = await seedReady(h)

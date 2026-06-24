@@ -157,6 +157,34 @@ describe('DrizzleBookingRepository', () => {
     expect(booking.updatedAt).toBeInstanceOf(Date)
   })
 
+  it('effectiveEndAt follows the DROPOFF location turnaround on a one-way booking (#1023)', async () => {
+    // One-way A->B: the car is returned and cleaned at B, so its next-bookable
+    // window must be B's turnaround, not the pickup's (§6 / F1). B's 180min is
+    // distinct from A's 120 and the 2880 fallback, so a wrong-location or
+    // fallback result is unambiguous.
+    const DROPOFF_TURNAROUND_MINUTES = 180
+    const dropoff = await seedLocation('booking-dropoff', DROPOFF_TURNAROUND_MINUTES)
+    createdLocationIds.push(dropoff.id)
+
+    const endAt = new Date('2026-10-01T14:00:00Z')
+    const booking = await seedBooking({
+      startAt: new Date('2026-10-01T10:00:00Z'),
+      endAt,
+      status: 'CONFIRMED',
+      source: 'DIRECT',
+      externalId: null,
+      notes: null,
+      dropoffLocationId: dropoff.id,
+    })
+    createdBookingIds.push(booking.id)
+
+    expect(booking.pickupLocationId).toBe(testLocationId) // A, turnaround 120
+    expect(booking.dropoffLocationId).toBe(dropoff.id) // B, turnaround 180
+    expect(booking.effectiveEndAt).toEqual(
+      new Date(endAt.getTime() + DROPOFF_TURNAROUND_MINUTES * 60_000),
+    )
+  })
+
   it('findById retrieves a created booking', async () => {
     const endAt = new Date('2026-08-01T12:00:00Z')
     const created = await seedBooking({
