@@ -23,6 +23,35 @@ export type Leg = {
   effectiveEndAt: Date
 }
 
+/**
+ * A `Leg` already filtered to movement-history status (everything except
+ * CANCELLED). The brand is nominal: it cannot be forged with a plain object
+ * literal. Construct one only via `toMovementLegs()`, which performs the
+ * filter — that's the whole point. Pre-#1040 the invariant lived only in
+ * JSDoc, so a caller loading raw DB rows would silently feed CANCELLED rows
+ * into `locationAt`/`assessPickupFeasibility` and get the wrong location.
+ */
+export type MovementLeg = Leg & { readonly __brand: 'movement' }
+
+/** Anything whose status is movement-history-relevant — caller maps to this. */
+export type LegWithStatus = Leg & { status: string }
+
+/**
+ * The single allowed way to produce `MovementLeg[]` from raw rows. CANCELLED
+ * is excluded; COMPLETED is INCLUDED (a finished A→B trip is precisely why
+ * the car is at B). See module-level note on the two status sets.
+ */
+export function toMovementLegs<T extends LegWithStatus>(rows: readonly T[]): MovementLeg[] {
+  return rows
+    .filter((r) => r.status !== 'CANCELLED')
+    .map((r) => ({
+      pickupLocationId: r.pickupLocationId,
+      dropoffLocationId: r.dropoffLocationId,
+      startAt: r.startAt,
+      effectiveEndAt: r.effectiveEndAt,
+    })) as MovementLeg[]
+}
+
 /** The scope dial (design §4). v1 ships tail-only; FULL_CHAIN is the same code, more rules on. */
 export type OneWayPolicy = 'TAIL_ONLY' | 'FULL_CHAIN'
 
@@ -33,16 +62,31 @@ export type OneWayPolicy = 'TAIL_ONLY' | 'FULL_CHAIN'
  */
 export const DEFAULT_POLICY: OneWayPolicy = 'TAIL_ONLY'
 
-export type Feasibility =
-  | { ok: true }
-  | { ok: false; reason: 'PICKUP_NOT_AT_LOCATION' | 'ONEWAY_NOT_TAIL' | 'DROPOFF_DISCONTINUITY' }
+/**
+ * Feasibility-rejection reason codes. Exported as a `const` tuple so callers
+ * (route → error-code map, future i18n table, telemetry) can derive their
+ * coverage from this SSoT — a rename here is a compile error there, not a
+ * silent prod break (maintainability finding #10).
+ */
+export const ONE_WAY_REASONS = [
+  'PICKUP_NOT_AT_LOCATION',
+  'ONEWAY_NOT_TAIL',
+  'DROPOFF_DISCONTINUITY',
+] as const
+export type OneWayReason = (typeof ONE_WAY_REASONS)[number]
+
+export type Feasibility = { ok: true } | { ok: false; reason: OneWayReason }
 
 /**
  * Where the vehicle is at instant `t`: the dropoff of the latest movement leg
  * that has settled (`effectiveEndAt <= t`), else its home. A pure step-function
  * over the booking timeline (design §3).
  */
-export function locationAt(legs: Leg[], homeLocationId: string | null, t: Date): string | null {
+export function locationAt(
+  legs: readonly MovementLeg[],
+  homeLocationId: string | null,
+  t: Date,
+): string | null {
   let settled: Leg | undefined
   for (const leg of legs) {
     if (leg.effectiveEndAt.getTime() <= t.getTime()) {
@@ -61,7 +105,7 @@ export function locationAt(legs: Leg[], homeLocationId: string | null, t: Date):
  * every other leg is wholly before or wholly after this window, never straddling.
  */
 export function assessPickupFeasibility(args: {
-  legs: Leg[]
+  legs: readonly MovementLeg[]
   homeLocationId: string | null
   pickup: string
   dropoff: string
@@ -106,10 +150,10 @@ export function assessPickupFeasibility(args: {
  * element of `legs` (matched by reference).
  */
 export function findStrandedSuccessors(
-  legs: Leg[],
+  legs: readonly MovementLeg[],
   homeLocationId: string | null,
-  cancelledLeg: Leg,
-): Leg[] {
+  cancelledLeg: MovementLeg,
+): MovementLeg[] {
   const remaining = legs.filter((l) => l !== cancelledLeg)
   return remaining.filter(
     (l) =>
