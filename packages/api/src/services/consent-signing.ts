@@ -47,6 +47,9 @@ export function signAcceptanceRecord(
     ['acceptedAt', p.acceptedAt.toISOString()],
     ['ipAddress', p.ipAddress],
     ['userAgent', p.userAgent],
+    // Bind the key identity into the signature so a rotated/relabelled keyId
+    // can't be swapped onto an existing record without invalidating it.
+    ['signingKeyId', signingKey.keyId],
   ])
   const signature = createHmac('sha256', signingKey.key).update(canonical, 'utf8').digest('hex')
   return { signature, signingKeyId: signingKey.keyId }

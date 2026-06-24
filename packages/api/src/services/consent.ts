@@ -1,4 +1,4 @@
-import { CONSENT_CARDINALITY, type ConsentType } from '@kuruma/shared/enums'
+import { CONSENT_CARDINALITY, type ConsentMethod, type ConsentType } from '@kuruma/shared/enums'
 import { PG_ERROR, pgErrorCode } from '../pg-errors'
 import type { ConsentRepository, NewConsentAcceptance } from '../repositories/types'
 import type { ConsentAcceptance } from '../stores'
@@ -92,6 +92,9 @@ export class ConsentService {
     const acceptedAt = meta.now
     const ipAddress = meta.ipAddress ?? null
     const userAgent = meta.userAgent ?? null
+    // Single source of truth: the signed payload and the persisted row must carry
+    // the identical method, or the signature wouldn't cover what's stored.
+    const method: ConsentMethod = 'CLICKWRAP'
     const key = this.getSigningKey()
     const signed = key
       ? signAcceptanceRecord(
@@ -105,7 +108,7 @@ export class ConsentService {
             operatorId,
             operatorMembershipId: input.operatorMembershipId ?? null,
             bookingId,
-            method: 'CLICKWRAP',
+            method,
             acceptedAt,
             ipAddress,
             userAgent,
@@ -125,7 +128,7 @@ export class ConsentService {
       context: null,
       ipAddress,
       userAgent,
-      method: 'CLICKWRAP',
+      method,
       recordSignature: signed?.signature ?? null,
       signingKeyId: signed?.signingKeyId ?? null,
     }

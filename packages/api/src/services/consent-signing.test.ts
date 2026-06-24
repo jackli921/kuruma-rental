@@ -38,4 +38,9 @@ describe('signAcceptanceRecord', () => {
     const base = signAcceptanceRecord(PAYLOAD, { key: 'secret', keyId: 'v1' }).signature
     expect(signAcceptanceRecord(PAYLOAD, { key: 'secret2', keyId: 'v2' }).signature).not.toBe(base)
   })
+
+  it('binds the keyId — the same key under a different keyId signs differently', () => {
+    const base = signAcceptanceRecord(PAYLOAD, { key: 'secret', keyId: 'v1' }).signature
+    expect(signAcceptanceRecord(PAYLOAD, { key: 'secret', keyId: 'v2' }).signature).not.toBe(base)
+  })
 })

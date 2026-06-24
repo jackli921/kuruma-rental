@@ -8,7 +8,11 @@ describe('canonicalizeFields', () => {
         ['a', 'x'],
         ['b', null],
       ]),
-    ).toBe('a\x1f1:x\x1eb\x1f0:\x1e')
+    ).toBe('a\x1f1:x\x1eb\x1fN:\x1e')
+  })
+
+  it('distinguishes null from the empty string', () => {
+    expect(canonicalizeFields([['x', null]])).not.toBe(canonicalizeFields([['x', '']]))
   })
 })
 

@@ -10,8 +10,10 @@ const KV_SEP = '\x1f'
 export function canonicalizeFields(
   fields: ReadonlyArray<readonly [string, string | null]>,
 ): string {
+  // `N:` marks null distinctly from the empty string (`0:`); a real value always
+  // starts with a digit, so the null marker can never collide with one.
   return fields
-    .map(([k, v]) => `${k}${KV_SEP}${v === null ? '0:' : `${byteLen(v)}:${v}`}${FIELD_SEP}`)
+    .map(([k, v]) => `${k}${KV_SEP}${v === null ? 'N:' : `${byteLen(v)}:${v}`}${FIELD_SEP}`)
     .join('')
 }
 
