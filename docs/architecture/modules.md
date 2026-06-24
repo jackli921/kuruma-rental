@@ -213,6 +213,16 @@ The web and API deploy to the Cloudflare Workers/Pages runtime, where the global
   `boundFetch` from `@kuruma/shared/lib/bound-fetch` instead. Guarded by
   `scripts/lint-fetch-binding.ts` (#887).
 
+- **The CSP `script-src` in `packages/web/public/_headers` must pin the inline
+  bootstrap script by its `sha256-…` hash and carry no `'unsafe-inline'`.** The
+  pin must match the script as actually emitted into `dist/index.html` by
+  `vite build` — not just the source shell. Guarded at two altitudes:
+  `tests/deploy/csp-script-hash.test.ts` hashes the source for fast pre-build
+  feedback; `scripts/lint-csp-hash.ts` (run `bun run lint:csp-hash` post-build in
+  CI) hashes the built artifact the browser receives. A Vite upgrade that changed
+  inline-script emission would diverge the served hash from the pin and silently
+  block the bootstrap once the policy flips to enforcing (#500).
+
 ---
 
 ## Grandfather / migrate-before-you-modify policy
