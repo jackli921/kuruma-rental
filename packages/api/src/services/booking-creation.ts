@@ -20,7 +20,7 @@ import type {
   CreateBookingResult,
 } from './booking-types'
 
-// Location-only turnaround fallback when a pickup location has no value set
+// Location-only turnaround fallback when the dropoff location has no value set
 // (§5.3, proposal §9 item 20). The legacy 60-min vehicle buffer is GONE — a
 // 60-min result is a regression the turnaround test pins against.
 const DEFAULT_TURNAROUND_MINUTES = 2880 // 48h
@@ -240,18 +240,22 @@ export class BookingCreationService {
       return { ok: false, status: 400, error: 'Pickup location does not match the vehicle' }
     }
 
-    // Turnaround is location-only (§5.3): pickup location's default, 48h fallback.
     const pickup = await repos.locationRepo.findById(SYSTEM_CONTEXT, input.pickupLocationId)
     if (!pickup || pickup.operatorId !== operatorId) {
       return { ok: false, status: 400, error: 'Pickup location is not available' }
     }
-    if (input.dropoffLocationId !== input.pickupLocationId) {
-      const dropoff = await repos.locationRepo.findById(SYSTEM_CONTEXT, input.dropoffLocationId)
-      if (!dropoff || dropoff.operatorId !== operatorId) {
-        return { ok: false, status: 400, error: 'Dropoff location is not available' }
-      }
+    // Turnaround follows the DROPOFF location: a one-way is returned and cleaned at
+    // B, so its next-bookable window is B's buffer, not the pickup's (#1023, §6).
+    // Same-location reuses pickup (no extra query). Kept identical to the DB trigger
+    // compute_effective_end_at() (migration 0069) — both sides must agree.
+    const dropoff =
+      input.dropoffLocationId === input.pickupLocationId
+        ? pickup
+        : await repos.locationRepo.findById(SYSTEM_CONTEXT, input.dropoffLocationId)
+    if (!dropoff || dropoff.operatorId !== operatorId) {
+      return { ok: false, status: 400, error: 'Dropoff location is not available' }
     }
-    const turnaroundMinutes = pickup.defaultTurnaroundMinutes ?? DEFAULT_TURNAROUND_MINUTES
+    const turnaroundMinutes = dropoff.defaultTurnaroundMinutes ?? DEFAULT_TURNAROUND_MINUTES
     const effectiveEndAt = new Date(input.endAt.getTime() + turnaroundMinutes * MS_PER_MINUTE)
 
     // Price off the ASSIGNED vehicle's rates — never class-level (#406), never

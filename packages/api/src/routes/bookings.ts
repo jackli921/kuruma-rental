@@ -286,7 +286,9 @@ export function createBookingRoutes(service: BookingService) {
         parsed.data.reason ?? null,
       )
       if (!result.ok) {
-        return fail(c, result.error, result.status)
+        return fail(c, result.error, result.status, {
+          ...(result.code ? { code: result.code } : {}),
+        })
       }
 
       return ok(c, result.booking)

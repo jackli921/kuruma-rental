@@ -1,4 +1,4 @@
-import { BEST_CAR_RENTAL_OPERATOR_ID } from '@kuruma/shared/db/constants'
+import { BEST_CAR_RENTAL_OPERATOR_ID, SECOND_OPERATOR_ID } from '@kuruma/shared/db/constants'
 import { users } from '@kuruma/shared/db/schema'
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest'
 import { createApp } from '../../src/index'
@@ -155,6 +155,34 @@ describe('DrizzleBookingRepository', () => {
     expect(booking.feeSnapshot).toEqual([])
     expect(booking.createdAt).toBeInstanceOf(Date)
     expect(booking.updatedAt).toBeInstanceOf(Date)
+  })
+
+  it('effectiveEndAt follows the DROPOFF location turnaround on a one-way booking (#1023)', async () => {
+    // One-way A->B: the car is returned and cleaned at B, so its next-bookable
+    // window must be B's turnaround, not the pickup's (§6 / F1). B's 180min is
+    // distinct from A's 120 and the 2880 fallback, so a wrong-location or
+    // fallback result is unambiguous.
+    const DROPOFF_TURNAROUND_MINUTES = 180
+    const dropoff = await seedLocation('booking-dropoff', DROPOFF_TURNAROUND_MINUTES)
+    createdLocationIds.push(dropoff.id)
+
+    const endAt = new Date('2026-10-01T14:00:00Z')
+    const booking = await seedBooking({
+      startAt: new Date('2026-10-01T10:00:00Z'),
+      endAt,
+      status: 'CONFIRMED',
+      source: 'DIRECT',
+      externalId: null,
+      notes: null,
+      dropoffLocationId: dropoff.id,
+    })
+    createdBookingIds.push(booking.id)
+
+    expect(booking.pickupLocationId).toBe(testLocationId) // A, turnaround 120
+    expect(booking.dropoffLocationId).toBe(dropoff.id) // B, turnaround 180
+    expect(booking.effectiveEndAt).toEqual(
+      new Date(endAt.getTime() + DROPOFF_TURNAROUND_MINUTES * 60_000),
+    )
   })
 
   it('findById retrieves a created booking', async () => {
@@ -446,7 +474,7 @@ describe('DrizzleBookingRepository', () => {
   })
 })
 
-describe('POST /bookings overlap via HTTP (real Postgres)', () => {
+describe('POST /bookings via HTTP (real Postgres)', () => {
   const httpBookingIds: string[] = []
   let httpUser: { id: string; email: string }
   let httpVehicle: Vehicle
@@ -556,5 +584,37 @@ describe('POST /bookings overlap via HTTP (real Postgres)', () => {
     const secondBody = await second.json()
     expect(secondBody.success).toBe(false)
     expect(secondBody.error).toMatch(/already booked/i)
+  })
+
+  it('rejects a cross-operator dropoff with 400 (#882 same-operator one-way guardrail)', async () => {
+    // #882: one-way rentals are SAME-operator only. A dropoff at ANOTHER
+    // operator's location must be rejected — there is no shared rule/custody/
+    // settlement model across operators — until a separate "multi-operator
+    // return network" exists. This locks the guardrail in booking-creation.ts
+    // (a cross-`operatorId` dropoff -> 400) so the boundary can't silently erode.
+    // httpVehicle belongs to Best Car Rental and lives at testLocationId; the
+    // dropoff is a Kansai Drive (SECOND_OPERATOR_ID) location — an EXISTING row,
+    // so this fails on the operator mismatch, not a missing-location check.
+    const foreignDropoff = await seedLocation('xop-dropoff', TURNAROUND_MINUTES, SECOND_OPERATOR_ID)
+    createdLocationIds.push(foreignDropoff.id)
+
+    const res = await app.request('/bookings', {
+      method: 'POST',
+      headers: { ...headers, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        requestedVehicleId: httpVehicle.id,
+        pickupLocationId: testLocationId,
+        dropoffLocationId: foreignDropoff.id,
+        startAt: '2027-04-01T10:00:00Z',
+        endAt: '2027-04-01T14:00:00Z',
+        source: 'DIRECT',
+        disclaimerAccepted: true,
+      }),
+    })
+
+    expect(res.status).toBe(400)
+    const body = await res.json()
+    expect(body.success).toBe(false)
+    expect(body.error).toMatch(/dropoff/i)
   })
 })

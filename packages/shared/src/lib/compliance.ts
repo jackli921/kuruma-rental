@@ -38,20 +38,21 @@ export function isRoadLegal(
   )
 }
 
-/** One document is expiring-soon or already expired as of `todayIso`. A missing
- *  (UNKNOWN) date is excluded — see `isNonCompliant`. */
+/** One document needs the operator's attention as of `todayIso`: anything but a
+ *  fully in-date certificate (`OK`) — i.e. expiring-soon, already expired, OR
+ *  MISSING (null/UNKNOWN). A car with no doc on file is the most non-compliant of
+ *  all (already hidden from the storefront), so it counts too — see `isNonCompliant`. */
 function needsAttention(expiryDate: string | null, todayIso: string): boolean {
-  const status = computeExpiryStatus(expiryDate, todayIso)
-  return status === 'EXPIRING_SOON' || status === 'EXPIRED'
+  return computeExpiryStatus(expiryDate, todayIso) !== 'OK'
 }
 
 /**
  * Whether a vehicle needs the operator's compliance attention: its shaken OR
- * insurance certificate is expiring within `EXPIRY_SOON_DAYS` or already expired.
- * The named rule behind the dashboard banner, the fleet `expiringSoon` facet, and
- * the fleet filter, so all three count the same set. A MISSING (null) date is NOT
- * counted — whether legacy null-doc cars should surface here is the open #998
- * item-2 product call; this is the single place to change it.
+ * insurance certificate is expiring within `EXPIRY_SOON_DAYS`, already expired, or
+ * MISSING (no date on file). The named rule behind the dashboard banner, the fleet
+ * `expiringSoon` facet, and the fleet filter, so all three count the same set —
+ * and the same set the digest alerts on (#1006: a MISSING cert counts here too, so
+ * the in-app surfaces agree with the digest email). This is the single seam.
  */
 export function isNonCompliant(
   vehicle: { shakenExpiryDate: string | null; insuranceExpiryDate: string | null },
@@ -113,4 +114,29 @@ export function complianceThresholdBand(
     if (daysRemaining <= threshold) return band
   }
   return null
+}
+
+/** One of a vehicle's documents that has fallen into an alert band. */
+export interface VehicleAlertCandidate {
+  documentType: ComplianceDocumentType
+  band: ComplianceAlertBand
+}
+
+/**
+ * The alert-band derivation for a single vehicle (§5.4 digest, #982): for each of
+ * shaken/insurance, the band its expiry falls into as of `todayIso`, omitting any
+ * document with no band (more than 30 days out). SHAKEN is yielded before
+ * INSURANCE (`COMPLIANCE_DOCUMENT_TYPES` order). Extracted as a pure function so
+ * the cron and any other consumer share one mapping rather than re-deriving it.
+ */
+export function vehicleAlertCandidates(
+  vehicle: { shakenExpiryDate: string | null; insuranceExpiryDate: string | null },
+  todayIso: string,
+): VehicleAlertCandidate[] {
+  return COMPLIANCE_DOCUMENT_TYPES.flatMap((documentType) => {
+    const expiryDate =
+      documentType === 'SHAKEN' ? vehicle.shakenExpiryDate : vehicle.insuranceExpiryDate
+    const band = complianceThresholdBand(expiryDate, todayIso)
+    return band == null ? [] : [{ documentType, band }]
+  })
 }

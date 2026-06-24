@@ -475,6 +475,40 @@ describe('BookingService.create — single-transaction submit (#392 §4)', () =>
     expect(result.booking.effectiveEndAt.getTime() - END.getTime()).not.toBe(60 * 60 * 1000)
   })
 
+  it('one-way booking: effectiveEndAt follows the DROPOFF location turnaround, not the pickup (#1023)', async () => {
+    const h = await setup()
+    const { vehicleId, locationId } = await seedReady(h) // pickup = vehicle's storefront (2880)
+    // A different same-operator location to return the car to, with a turnaround
+    // distinct from the pickup's 2880 so a pickup-derived result is unambiguous.
+    const ONE_WAY_TURNAROUND_MIN = 1440
+    const dropoff = await h.repos.locationRepo.create({
+      operatorId: OP_A,
+      name: 'Kyoto Return',
+      address: '4-5-6 Kyoto',
+      operatingHours: null,
+      timezone: 'Asia/Tokyo',
+      defaultTurnaroundMinutes: ONE_WAY_TURNAROUND_MIN,
+      status: 'ACTIVE',
+    } as Parameters<typeof h.repos.locationRepo.create>[0])
+
+    const result = await h.service.create(
+      renterCtx,
+      createInput({
+        requestedVehicleId: vehicleId,
+        pickupLocationId: locationId,
+        dropoffLocationId: dropoff.id,
+      }),
+      NOW,
+    )
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+    expect(result.booking.effectiveEndAt.getTime() - END.getTime()).toBe(
+      ONE_WAY_TURNAROUND_MIN * 60 * 1000,
+    )
+    // Mutation guard: must NOT be the pickup location's 2880 turnaround.
+    expect(result.booking.effectiveEndAt.getTime() - END.getTime()).not.toBe(TURNAROUND_MS)
+  })
+
   it('snapshots the selected active insurance option and adds its daily price to totalPrice', async () => {
     const h = await setup()
     const { vehicleId, locationId } = await seedReady(h)
@@ -1313,6 +1347,20 @@ describe('BookingService.substitute — operator vehicle swap (#392 §5.5)', () 
     expect(result.ok).toBe(false)
     if (result.ok) return
     expect(result.status).toBe(400)
+  })
+
+  it('rejects a replacement whose shaken expires before the booking ends (400 + VEHICLE_DOCS_EXPIRE_BEFORE_RETURN)', async () => {
+    const h = await setupSub()
+    // Booking ends 2026-07-04; a shaken lapsing 2026-07-03 is not road-legal for
+    // the return (§5.3b #916). The reject must carry the SAME `code` the create
+    // path emits, so the web branches on it without string-matching (#982 parity).
+    const expired = await addVehicle(h, { shakenExpiryDate: '2026-07-03' })
+    const result = await h.service.substitute(opCtxA, h.bookingId, expired.id, null)
+    expect(result.ok).toBe(false)
+    if (result.ok) return
+    expect(result.status).toBe(400)
+    expect(result.error).toMatch(/expires before the booking ends/i)
+    expect(result.code).toBe('VEHICLE_DOCS_EXPIRE_BEFORE_RETURN')
   })
 
   it('swaps the vehicle: updates assignedVehicleId, keeps requestedVehicleId, re-snapshots totalPrice, appends VEHICLE_SUBSTITUTED', async () => {

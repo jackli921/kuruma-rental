@@ -192,7 +192,7 @@
       "retry": "重试",
       "compliance": {
         "heading": "{count, plural, other {# 辆车需要处理}}",
-        "body": "车检或保险已过期或即将到期。",
+        "body": "车检或保险缺失、已过期或即将到期。",
         "action": "查看车队"
       }
     },
@@ -1193,7 +1193,9 @@
       "geoContextAreaOnly": "{area}・{km} km",
       "geoContextAreaOnlyNoDistance": "{area}",
       "hideMap": "隐藏地图",
-      "showMap": "显示地图"
+      "showMap": "显示地图",
+      "openMobileMap": "地图",
+      "mobileMapTitle": "在地图上查看"
     },
     "detail": {
       "backToSearch": "返回搜索",

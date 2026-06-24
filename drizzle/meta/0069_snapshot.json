@@ -1,5 +1,5 @@
 {
-  "id": "43c10d92-0ee5-4571-9d45-ab1b39e28019",
+  "id": "39b4bc68-2077-4cc3-9f51-a83d73e784cc",
   "prevId": "8048423a-6cff-4a91-a7bc-33cf83fc0585",
   "version": "7",
   "dialect": "postgresql",
@@ -112,9 +112,9 @@
             }
           ],
           "isUnique": false,
-          "concurrently": false,
+          "with": {},
           "method": "btree",
-          "with": {}
+          "concurrently": false
         },
         "regions_slug_unique": {
           "name": "regions_slug_unique",
@@ -127,24 +127,24 @@
             }
           ],
           "isUnique": true,
-          "concurrently": false,
+          "with": {},
           "method": "btree",
-          "with": {}
+          "concurrently": false
         }
       },
       "foreignKeys": {
         "regions_parentId_regions_id_fk": {
           "name": "regions_parentId_regions_id_fk",
           "tableFrom": "regions",
-          "tableTo": "regions",
           "columnsFrom": [
             "parentId"
           ],
+          "tableTo": "regions",
           "columnsTo": [
             "id"
           ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "no action"
         }
       },
       "compositePrimaryKeys": {},
@@ -241,9 +241,9 @@
             }
           ],
           "isUnique": false,
-          "concurrently": false,
+          "with": {},
           "method": "btree",
-          "with": {}
+          "concurrently": false
         },
         "idx_renter_documents_verifierId": {
           "name": "idx_renter_documents_verifierId",
@@ -256,9 +256,9 @@
             }
           ],
           "isUnique": false,
-          "concurrently": false,
+          "with": {},
           "method": "btree",
-          "with": {}
+          "concurrently": false
         },
         "idx_renter_documents_status": {
           "name": "idx_renter_documents_status",
@@ -271,37 +271,37 @@
             }
           ],
           "isUnique": false,
-          "concurrently": false,
+          "with": {},
           "method": "btree",
-          "with": {}
+          "concurrently": false
         }
       },
       "foreignKeys": {
         "renter_documents_renterId_users_id_fk": {
           "name": "renter_documents_renterId_users_id_fk",
           "tableFrom": "renter_documents",
-          "tableTo": "users",
           "columnsFrom": [
             "renterId"
           ],
+          "tableTo": "users",
           "columnsTo": [
             "id"
           ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "no action"
         },
         "renter_documents_verifierId_users_id_fk": {
           "name": "renter_documents_verifierId_users_id_fk",
           "tableFrom": "renter_documents",
-          "tableTo": "users",
           "columnsFrom": [
             "verifierId"
           ],
+          "tableTo": "users",
           "columnsTo": [
             "id"
           ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "no action"
         }
       },
       "compositePrimaryKeys": {},
@@ -386,15 +386,15 @@
         "accounts_userId_users_id_fk": {
           "name": "accounts_userId_users_id_fk",
           "tableFrom": "accounts",
-          "tableTo": "users",
           "columnsFrom": [
             "userId"
           ],
+          "tableTo": "users",
           "columnsTo": [
             "id"
           ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "cascade"
         }
       },
       "compositePrimaryKeys": {
@@ -460,10 +460,10 @@
       "uniqueConstraints": {
         "operators_slug_unique": {
           "name": "operators_slug_unique",
-          "nullsNotDistinct": false,
           "columns": [
             "slug"
-          ]
+          ],
+          "nullsNotDistinct": false
         }
       },
       "policies": {},
@@ -564,34 +564,34 @@
             }
           ],
           "isUnique": false,
-          "concurrently": false,
+          "with": {},
           "method": "btree",
-          "with": {}
+          "concurrently": false
         }
       },
       "foreignKeys": {
         "users_operatorId_operators_id_fk": {
           "name": "users_operatorId_operators_id_fk",
           "tableFrom": "users",
-          "tableTo": "operators",
           "columnsFrom": [
             "operatorId"
           ],
+          "tableTo": "operators",
           "columnsTo": [
             "id"
           ],
-          "onDelete": "restrict",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "restrict"
         }
       },
       "compositePrimaryKeys": {},
       "uniqueConstraints": {
         "users_email_unique": {
           "name": "users_email_unique",
-          "nullsNotDistinct": false,
           "columns": [
             "email"
-          ]
+          ],
+          "nullsNotDistinct": false
         }
       },
       "policies": {},
@@ -706,9 +706,9 @@
             }
           ],
           "isUnique": false,
-          "concurrently": false,
+          "with": {},
           "method": "btree",
-          "with": {}
+          "concurrently": false
         },
         "idx_locations_regionId": {
           "name": "idx_locations_regionId",
@@ -721,9 +721,9 @@
             }
           ],
           "isUnique": false,
-          "concurrently": false,
+          "with": {},
           "method": "btree",
-          "with": {}
+          "concurrently": false
         },
         "locations_operatorId_active_name_unique": {
           "name": "locations_operatorId_active_name_unique",
@@ -742,49 +742,49 @@
             }
           ],
           "isUnique": true,
-          "where": "\"locations\".\"status\" <> 'ARCHIVED'",
-          "concurrently": false,
+          "with": {},
           "method": "btree",
-          "with": {}
+          "where": "\"locations\".\"status\" <> 'ARCHIVED'",
+          "concurrently": false
         }
       },
       "foreignKeys": {
         "locations_operatorId_operators_id_fk": {
           "name": "locations_operatorId_operators_id_fk",
           "tableFrom": "locations",
-          "tableTo": "operators",
           "columnsFrom": [
             "operatorId"
           ],
+          "tableTo": "operators",
           "columnsTo": [
             "id"
           ],
-          "onDelete": "restrict",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "restrict"
         },
         "locations_regionId_regions_id_fk": {
           "name": "locations_regionId_regions_id_fk",
           "tableFrom": "locations",
-          "tableTo": "regions",
           "columnsFrom": [
             "regionId"
           ],
+          "tableTo": "regions",
           "columnsTo": [
             "id"
           ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "no action"
         }
       },
       "compositePrimaryKeys": {},
       "uniqueConstraints": {
         "locations_operatorId_id_unique": {
           "name": "locations_operatorId_id_unique",
-          "nullsNotDistinct": false,
           "columns": [
             "operatorId",
             "id"
-          ]
+          ],
+          "nullsNotDistinct": false
         }
       },
       "policies": {},
@@ -863,15 +863,15 @@
         "maintenance_logs_vehicleId_vehicles_id_fk": {
           "name": "maintenance_logs_vehicleId_vehicles_id_fk",
           "tableFrom": "maintenance_logs",
-          "tableTo": "vehicles",
           "columnsFrom": [
             "vehicleId"
           ],
+          "tableTo": "vehicles",
           "columnsTo": [
             "id"
           ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "no action"
         }
       },
       "compositePrimaryKeys": {},
@@ -1007,42 +1007,42 @@
             }
           ],
           "isUnique": false,
-          "concurrently": false,
+          "with": {},
           "method": "btree",
-          "with": {}
+          "concurrently": false
         }
       },
       "foreignKeys": {
         "vehicle_classes_operatorId_operators_id_fk": {
           "name": "vehicle_classes_operatorId_operators_id_fk",
           "tableFrom": "vehicle_classes",
-          "tableTo": "operators",
           "columnsFrom": [
             "operatorId"
           ],
+          "tableTo": "operators",
           "columnsTo": [
             "id"
           ],
-          "onDelete": "restrict",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "restrict"
         }
       },
       "compositePrimaryKeys": {},
       "uniqueConstraints": {
         "vehicle_classes_slug_unique": {
           "name": "vehicle_classes_slug_unique",
-          "nullsNotDistinct": false,
           "columns": [
             "slug"
-          ]
+          ],
+          "nullsNotDistinct": false
         },
         "vehicle_classes_operatorId_id_unique": {
           "name": "vehicle_classes_operatorId_id_unique",
-          "nullsNotDistinct": false,
           "columns": [
             "operatorId",
             "id"
-          ]
+          ],
+          "nullsNotDistinct": false
         }
       },
       "policies": {},
@@ -1240,9 +1240,9 @@
             }
           ],
           "isUnique": false,
-          "concurrently": false,
+          "with": {},
           "method": "btree",
-          "with": {}
+          "concurrently": false
         },
         "idx_vehicles_operatorId": {
           "name": "idx_vehicles_operatorId",
@@ -1255,9 +1255,9 @@
             }
           ],
           "isUnique": false,
-          "concurrently": false,
+          "with": {},
           "method": "btree",
-          "with": {}
+          "concurrently": false
         },
         "idx_vehicles_pickupLocationId": {
           "name": "idx_vehicles_pickupLocationId",
@@ -1270,9 +1270,9 @@
             }
           ],
           "isUnique": false,
-          "concurrently": false,
+          "with": {},
           "method": "btree",
-          "with": {}
+          "concurrently": false
         },
         "idx_vehicles_available": {
           "name": "idx_vehicles_available",
@@ -1285,73 +1285,73 @@
             }
           ],
           "isUnique": false,
-          "where": "\"vehicles\".\"status\" = 'AVAILABLE'",
-          "concurrently": false,
+          "with": {},
           "method": "btree",
-          "with": {}
+          "where": "\"vehicles\".\"status\" = 'AVAILABLE'",
+          "concurrently": false
         }
       },
       "foreignKeys": {
         "vehicles_operatorId_operators_id_fk": {
           "name": "vehicles_operatorId_operators_id_fk",
           "tableFrom": "vehicles",
-          "tableTo": "operators",
           "columnsFrom": [
             "operatorId"
           ],
+          "tableTo": "operators",
           "columnsTo": [
             "id"
           ],
-          "onDelete": "restrict",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "restrict"
         },
         "vehicles_operatorId_classId_fk": {
           "name": "vehicles_operatorId_classId_fk",
           "tableFrom": "vehicles",
-          "tableTo": "vehicle_classes",
           "columnsFrom": [
             "operatorId",
             "classId"
           ],
+          "tableTo": "vehicle_classes",
           "columnsTo": [
             "operatorId",
             "id"
           ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "no action"
         },
         "vehicles_operatorId_pickupLocationId_fk": {
           "name": "vehicles_operatorId_pickupLocationId_fk",
           "tableFrom": "vehicles",
-          "tableTo": "locations",
           "columnsFrom": [
             "operatorId",
             "pickupLocationId"
           ],
+          "tableTo": "locations",
           "columnsTo": [
             "operatorId",
             "id"
           ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "no action"
         }
       },
       "compositePrimaryKeys": {},
       "uniqueConstraints": {
         "vehicles_licensePlate_unique": {
           "name": "vehicles_licensePlate_unique",
-          "nullsNotDistinct": false,
           "columns": [
             "licensePlate"
-          ]
+          ],
+          "nullsNotDistinct": false
         },
         "vehicles_operatorId_id_unique": {
           "name": "vehicles_operatorId_id_unique",
-          "nullsNotDistinct": false,
           "columns": [
             "operatorId",
             "id"
-          ]
+          ],
+          "nullsNotDistinct": false
         }
       },
       "policies": {},
@@ -1367,149 +1367,6 @@
         "vehicles_hourly_rate_non_negative": {
           "name": "vehicles_hourly_rate_non_negative",
           "value": "\"vehicles\".\"hourlyRateJpy\" IS NULL OR \"vehicles\".\"hourlyRateJpy\" >= 0"
-        }
-      },
-      "isRLSEnabled": false
-    },
-    "public.class_rate_plans": {
-      "name": "class_rate_plans",
-      "schema": "",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "text",
-          "primaryKey": true,
-          "notNull": true
-        },
-        "operatorId": {
-          "name": "operatorId",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "classId": {
-          "name": "classId",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "pickupLocationId": {
-          "name": "pickupLocationId",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "dayRateJpy": {
-          "name": "dayRateJpy",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "isActive": {
-          "name": "isActive",
-          "type": "boolean",
-          "primaryKey": false,
-          "notNull": true,
-          "default": true
-        },
-        "label": {
-          "name": "label",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "createdAt": {
-          "name": "createdAt",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        },
-        "updatedAt": {
-          "name": "updatedAt",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        }
-      },
-      "indexes": {
-        "idx_class_rate_plans_pickup_location": {
-          "name": "idx_class_rate_plans_pickup_location",
-          "columns": [
-            {
-              "expression": "pickupLocationId",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        }
-      },
-      "foreignKeys": {
-        "class_rate_plans_operatorId_operators_id_fk": {
-          "name": "class_rate_plans_operatorId_operators_id_fk",
-          "tableFrom": "class_rate_plans",
-          "tableTo": "operators",
-          "columnsFrom": [
-            "operatorId"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "restrict",
-          "onUpdate": "no action"
-        },
-        "class_rate_plans_pickupLocationId_locations_id_fk": {
-          "name": "class_rate_plans_pickupLocationId_locations_id_fk",
-          "tableFrom": "class_rate_plans",
-          "tableTo": "locations",
-          "columnsFrom": [
-            "pickupLocationId"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        },
-        "class_rate_plans_operator_class_fk": {
-          "name": "class_rate_plans_operator_class_fk",
-          "tableFrom": "class_rate_plans",
-          "tableTo": "vehicle_classes",
-          "columnsFrom": [
-            "operatorId",
-            "classId"
-          ],
-          "columnsTo": [
-            "operatorId",
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {
-        "class_rate_plans_operator_class_location_unique": {
-          "name": "class_rate_plans_operator_class_location_unique",
-          "nullsNotDistinct": false,
-          "columns": [
-            "operatorId",
-            "classId",
-            "pickupLocationId"
-          ]
-        }
-      },
-      "policies": {},
-      "checkConstraints": {
-        "class_rate_plans_day_rate_non_negative": {
-          "name": "class_rate_plans_day_rate_non_negative",
-          "value": "\"class_rate_plans\".\"dayRateJpy\" >= 0"
         }
       },
       "isRLSEnabled": false
@@ -1597,9 +1454,9 @@
             }
           ],
           "isUnique": false,
-          "concurrently": false,
+          "with": {},
           "method": "btree",
-          "with": {}
+          "concurrently": false
         },
         "idx_fee_schedules_vehicle_class": {
           "name": "idx_fee_schedules_vehicle_class",
@@ -1612,9 +1469,9 @@
             }
           ],
           "isUnique": false,
-          "concurrently": false,
+          "with": {},
           "method": "btree",
-          "with": {}
+          "concurrently": false
         },
         "fee_schedules_active_class_unique": {
           "name": "fee_schedules_active_class_unique",
@@ -1639,10 +1496,10 @@
             }
           ],
           "isUnique": true,
-          "where": "status = 'ACTIVE' AND \"vehicleClassId\" IS NOT NULL",
-          "concurrently": false,
+          "with": {},
           "method": "btree",
-          "with": {}
+          "where": "status = 'ACTIVE' AND \"vehicleClassId\" IS NOT NULL",
+          "concurrently": false
         },
         "fee_schedules_active_operatorwide_unique": {
           "name": "fee_schedules_active_operatorwide_unique",
@@ -1661,40 +1518,40 @@
             }
           ],
           "isUnique": true,
-          "where": "status = 'ACTIVE' AND \"vehicleClassId\" IS NULL",
-          "concurrently": false,
+          "with": {},
           "method": "btree",
-          "with": {}
+          "where": "status = 'ACTIVE' AND \"vehicleClassId\" IS NULL",
+          "concurrently": false
         }
       },
       "foreignKeys": {
         "fee_schedules_operatorId_operators_id_fk": {
           "name": "fee_schedules_operatorId_operators_id_fk",
           "tableFrom": "fee_schedules",
-          "tableTo": "operators",
           "columnsFrom": [
             "operatorId"
           ],
+          "tableTo": "operators",
           "columnsTo": [
             "id"
           ],
-          "onDelete": "restrict",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "restrict"
         },
         "fee_schedules_operator_class_fk": {
           "name": "fee_schedules_operator_class_fk",
           "tableFrom": "fee_schedules",
-          "tableTo": "vehicle_classes",
           "columnsFrom": [
             "operatorId",
             "vehicleClassId"
           ],
+          "tableTo": "vehicle_classes",
           "columnsTo": [
             "operatorId",
             "id"
           ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "no action"
         }
       },
       "compositePrimaryKeys": {},
@@ -1787,9 +1644,9 @@
             }
           ],
           "isUnique": false,
-          "concurrently": false,
+          "with": {},
           "method": "btree",
-          "with": {}
+          "concurrently": false
         },
         "insurance_options_active_name_unique": {
           "name": "insurance_options_active_name_unique",
@@ -1808,36 +1665,36 @@
             }
           ],
           "isUnique": true,
-          "where": "status = 'ACTIVE'",
-          "concurrently": false,
+          "with": {},
           "method": "btree",
-          "with": {}
+          "where": "status = 'ACTIVE'",
+          "concurrently": false
         }
       },
       "foreignKeys": {
         "insurance_options_operatorId_operators_id_fk": {
           "name": "insurance_options_operatorId_operators_id_fk",
           "tableFrom": "insurance_options",
-          "tableTo": "operators",
           "columnsFrom": [
             "operatorId"
           ],
+          "tableTo": "operators",
           "columnsTo": [
             "id"
           ],
-          "onDelete": "restrict",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "restrict"
         }
       },
       "compositePrimaryKeys": {},
       "uniqueConstraints": {
         "insurance_options_operatorId_id_unique": {
           "name": "insurance_options_operatorId_id_unique",
-          "nullsNotDistinct": false,
           "columns": [
             "operatorId",
             "id"
-          ]
+          ],
+          "nullsNotDistinct": false
         }
       },
       "policies": {},
@@ -1914,9 +1771,9 @@
             }
           ],
           "isUnique": false,
-          "concurrently": false,
+          "with": {},
           "method": "btree",
-          "with": {}
+          "concurrently": false
         },
         "idx_booking_events_actorId": {
           "name": "idx_booking_events_actorId",
@@ -1929,37 +1786,37 @@
             }
           ],
           "isUnique": false,
-          "concurrently": false,
+          "with": {},
           "method": "btree",
-          "with": {}
+          "concurrently": false
         }
       },
       "foreignKeys": {
         "booking_events_bookingId_bookings_id_fk": {
           "name": "booking_events_bookingId_bookings_id_fk",
           "tableFrom": "booking_events",
-          "tableTo": "bookings",
           "columnsFrom": [
             "bookingId"
           ],
+          "tableTo": "bookings",
           "columnsTo": [
             "id"
           ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "no action"
         },
         "booking_events_actorId_users_id_fk": {
           "name": "booking_events_actorId_users_id_fk",
           "tableFrom": "booking_events",
-          "tableTo": "users",
           "columnsFrom": [
             "actorId"
           ],
+          "tableTo": "users",
           "columnsTo": [
             "id"
           ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "no action"
         }
       },
       "compositePrimaryKeys": {},
@@ -2000,13 +1857,13 @@
           "name": "requestedVehicleId",
           "type": "text",
           "primaryKey": false,
-          "notNull": false
+          "notNull": true
         },
         "assignedVehicleId": {
           "name": "assignedVehicleId",
           "type": "text",
           "primaryKey": false,
-          "notNull": false
+          "notNull": true
         },
         "pickupLocationId": {
           "name": "pickupLocationId",
@@ -2176,9 +2033,9 @@
             }
           ],
           "isUnique": false,
-          "concurrently": false,
+          "with": {},
           "method": "btree",
-          "with": {}
+          "concurrently": false
         },
         "idx_bookings_operatorId": {
           "name": "idx_bookings_operatorId",
@@ -2191,9 +2048,9 @@
             }
           ],
           "isUnique": false,
-          "concurrently": false,
+          "with": {},
           "method": "btree",
-          "with": {}
+          "concurrently": false
         },
         "idx_bookings_requestedVehicleId": {
           "name": "idx_bookings_requestedVehicleId",
@@ -2206,9 +2063,9 @@
             }
           ],
           "isUnique": false,
-          "concurrently": false,
+          "with": {},
           "method": "btree",
-          "with": {}
+          "concurrently": false
         },
         "idx_bookings_assignedVehicleId": {
           "name": "idx_bookings_assignedVehicleId",
@@ -2221,9 +2078,9 @@
             }
           ],
           "isUnique": false,
-          "concurrently": false,
+          "with": {},
           "method": "btree",
-          "with": {}
+          "concurrently": false
         },
         "idx_bookings_pickupLocationId": {
           "name": "idx_bookings_pickupLocationId",
@@ -2236,9 +2093,9 @@
             }
           ],
           "isUnique": false,
-          "concurrently": false,
+          "with": {},
           "method": "btree",
-          "with": {}
+          "concurrently": false
         },
         "idx_bookings_dropoffLocationId": {
           "name": "idx_bookings_dropoffLocationId",
@@ -2251,9 +2108,9 @@
             }
           ],
           "isUnique": false,
-          "concurrently": false,
+          "with": {},
           "method": "btree",
-          "with": {}
+          "concurrently": false
         },
         "idx_bookings_insuranceOptionId": {
           "name": "idx_bookings_insuranceOptionId",
@@ -2266,133 +2123,133 @@
             }
           ],
           "isUnique": false,
-          "concurrently": false,
+          "with": {},
           "method": "btree",
-          "with": {}
+          "concurrently": false
         }
       },
       "foreignKeys": {
         "bookings_operatorId_operators_id_fk": {
           "name": "bookings_operatorId_operators_id_fk",
           "tableFrom": "bookings",
-          "tableTo": "operators",
           "columnsFrom": [
             "operatorId"
           ],
+          "tableTo": "operators",
           "columnsTo": [
             "id"
           ],
-          "onDelete": "restrict",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "restrict"
         },
         "bookings_renterId_users_id_fk": {
           "name": "bookings_renterId_users_id_fk",
           "tableFrom": "bookings",
-          "tableTo": "users",
           "columnsFrom": [
             "renterId"
           ],
+          "tableTo": "users",
           "columnsTo": [
             "id"
           ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "no action"
         },
         "bookings_pickupLocationId_locations_id_fk": {
           "name": "bookings_pickupLocationId_locations_id_fk",
           "tableFrom": "bookings",
-          "tableTo": "locations",
           "columnsFrom": [
             "pickupLocationId"
           ],
+          "tableTo": "locations",
           "columnsTo": [
             "id"
           ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "no action"
         },
         "bookings_dropoffLocationId_locations_id_fk": {
           "name": "bookings_dropoffLocationId_locations_id_fk",
           "tableFrom": "bookings",
-          "tableTo": "locations",
           "columnsFrom": [
             "dropoffLocationId"
           ],
+          "tableTo": "locations",
           "columnsTo": [
             "id"
           ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "no action"
         },
         "bookings_operator_class_fk": {
           "name": "bookings_operator_class_fk",
           "tableFrom": "bookings",
-          "tableTo": "vehicle_classes",
           "columnsFrom": [
             "operatorId",
             "classId"
           ],
+          "tableTo": "vehicle_classes",
           "columnsTo": [
             "operatorId",
             "id"
           ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "no action"
         },
         "bookings_operator_requested_vehicle_fk": {
           "name": "bookings_operator_requested_vehicle_fk",
           "tableFrom": "bookings",
-          "tableTo": "vehicles",
           "columnsFrom": [
             "operatorId",
             "requestedVehicleId"
           ],
+          "tableTo": "vehicles",
           "columnsTo": [
             "operatorId",
             "id"
           ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "no action"
         },
         "bookings_operator_assigned_vehicle_fk": {
           "name": "bookings_operator_assigned_vehicle_fk",
           "tableFrom": "bookings",
-          "tableTo": "vehicles",
           "columnsFrom": [
             "operatorId",
             "assignedVehicleId"
           ],
+          "tableTo": "vehicles",
           "columnsTo": [
             "operatorId",
             "id"
           ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "no action"
         },
         "bookings_operator_insurance_fk": {
           "name": "bookings_operator_insurance_fk",
           "tableFrom": "bookings",
-          "tableTo": "insurance_options",
           "columnsFrom": [
             "operatorId",
             "insuranceOptionId"
           ],
+          "tableTo": "insurance_options",
           "columnsTo": [
             "operatorId",
             "id"
           ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "no action"
         }
       },
       "compositePrimaryKeys": {},
       "uniqueConstraints": {
         "bookings_bookingCode_unique": {
           "name": "bookings_bookingCode_unique",
-          "nullsNotDistinct": false,
           "columns": [
             "bookingCode"
-          ]
+          ],
+          "nullsNotDistinct": false
         }
       },
       "policies": {},
@@ -2400,10 +2257,6 @@
         "bookings_specific_requires_assigned": {
           "name": "bookings_specific_requires_assigned",
           "value": "\"bookings\".\"fulfillmentMode\" <> 'SPECIFIC' OR \"bookings\".\"assignedVehicleId\" IS NOT NULL"
-        },
-        "bookings_specific_requires_requested": {
-          "name": "bookings_specific_requires_requested",
-          "value": "\"bookings\".\"fulfillmentMode\" <> 'SPECIFIC' OR \"bookings\".\"requestedVehicleId\" IS NOT NULL"
         }
       },
       "isRLSEnabled": false
@@ -2499,9 +2352,9 @@
             }
           ],
           "isUnique": false,
-          "concurrently": false,
+          "with": {},
           "method": "btree",
-          "with": {}
+          "concurrently": false
         },
         "idx_payment_anomalies_bookingId": {
           "name": "idx_payment_anomalies_bookingId",
@@ -2514,9 +2367,9 @@
             }
           ],
           "isUnique": false,
-          "concurrently": false,
+          "with": {},
           "method": "btree",
-          "with": {}
+          "concurrently": false
         },
         "payment_anomalies_stripeEventId_unique": {
           "name": "payment_anomalies_stripeEventId_unique",
@@ -2529,37 +2382,37 @@
             }
           ],
           "isUnique": true,
-          "concurrently": false,
+          "with": {},
           "method": "btree",
-          "with": {}
+          "concurrently": false
         }
       },
       "foreignKeys": {
         "payment_anomalies_operatorId_operators_id_fk": {
           "name": "payment_anomalies_operatorId_operators_id_fk",
           "tableFrom": "payment_anomalies",
-          "tableTo": "operators",
           "columnsFrom": [
             "operatorId"
           ],
+          "tableTo": "operators",
           "columnsTo": [
             "id"
           ],
-          "onDelete": "restrict",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "restrict"
         },
         "payment_anomalies_bookingId_bookings_id_fk": {
           "name": "payment_anomalies_bookingId_bookings_id_fk",
           "tableFrom": "payment_anomalies",
-          "tableTo": "bookings",
           "columnsFrom": [
             "bookingId"
           ],
+          "tableTo": "bookings",
           "columnsTo": [
             "id"
           ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "no action"
         }
       },
       "compositePrimaryKeys": {},
@@ -2660,9 +2513,9 @@
             }
           ],
           "isUnique": false,
-          "concurrently": false,
+          "with": {},
           "method": "btree",
-          "with": {}
+          "concurrently": false
         },
         "idx_payment_events_bookingId": {
           "name": "idx_payment_events_bookingId",
@@ -2675,9 +2528,9 @@
             }
           ],
           "isUnique": false,
-          "concurrently": false,
+          "with": {},
           "method": "btree",
-          "with": {}
+          "concurrently": false
         },
         "payment_events_stripeEventId_unique": {
           "name": "payment_events_stripeEventId_unique",
@@ -2690,9 +2543,9 @@
             }
           ],
           "isUnique": true,
-          "concurrently": false,
+          "with": {},
           "method": "btree",
-          "with": {}
+          "concurrently": false
         },
         "payment_events_stripeCheckoutSessionId_unique": {
           "name": "payment_events_stripeCheckoutSessionId_unique",
@@ -2705,9 +2558,9 @@
             }
           ],
           "isUnique": true,
-          "concurrently": false,
+          "with": {},
           "method": "btree",
-          "with": {}
+          "concurrently": false
         },
         "payment_events_one_success_per_booking": {
           "name": "payment_events_one_success_per_booking",
@@ -2720,38 +2573,38 @@
             }
           ],
           "isUnique": true,
-          "where": "status = 'SUCCEEDED'",
-          "concurrently": false,
+          "with": {},
           "method": "btree",
-          "with": {}
+          "where": "status = 'SUCCEEDED'",
+          "concurrently": false
         }
       },
       "foreignKeys": {
         "payment_events_operatorId_operators_id_fk": {
           "name": "payment_events_operatorId_operators_id_fk",
           "tableFrom": "payment_events",
-          "tableTo": "operators",
           "columnsFrom": [
             "operatorId"
           ],
+          "tableTo": "operators",
           "columnsTo": [
             "id"
           ],
-          "onDelete": "restrict",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "restrict"
         },
         "payment_events_bookingId_bookings_id_fk": {
           "name": "payment_events_bookingId_bookings_id_fk",
           "tableFrom": "payment_events",
-          "tableTo": "bookings",
           "columnsFrom": [
             "bookingId"
           ],
+          "tableTo": "bookings",
           "columnsTo": [
             "id"
           ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "no action"
         }
       },
       "compositePrimaryKeys": {},
@@ -2820,28 +2673,28 @@
         "messages_threadId_threads_id_fk": {
           "name": "messages_threadId_threads_id_fk",
           "tableFrom": "messages",
-          "tableTo": "threads",
           "columnsFrom": [
             "threadId"
           ],
+          "tableTo": "threads",
           "columnsTo": [
             "id"
           ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "cascade"
         },
         "messages_senderId_users_id_fk": {
           "name": "messages_senderId_users_id_fk",
           "tableFrom": "messages",
-          "tableTo": "users",
           "columnsFrom": [
             "senderId"
           ],
+          "tableTo": "users",
           "columnsTo": [
             "id"
           ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "no action"
         }
       },
       "compositePrimaryKeys": {},
@@ -2885,39 +2738,39 @@
         "thread_participants_threadId_threads_id_fk": {
           "name": "thread_participants_threadId_threads_id_fk",
           "tableFrom": "thread_participants",
-          "tableTo": "threads",
           "columnsFrom": [
             "threadId"
           ],
+          "tableTo": "threads",
           "columnsTo": [
             "id"
           ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "cascade"
         },
         "thread_participants_userId_users_id_fk": {
           "name": "thread_participants_userId_users_id_fk",
           "tableFrom": "thread_participants",
-          "tableTo": "users",
           "columnsFrom": [
             "userId"
           ],
+          "tableTo": "users",
           "columnsTo": [
             "id"
           ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "no action"
         }
       },
       "compositePrimaryKeys": {},
       "uniqueConstraints": {
         "thread_participants_thread_user": {
           "name": "thread_participants_thread_user",
-          "nullsNotDistinct": false,
           "columns": [
             "threadId",
             "userId"
-          ]
+          ],
+          "nullsNotDistinct": false
         }
       },
       "policies": {},
@@ -2966,15 +2819,15 @@
         "threads_bookingId_bookings_id_fk": {
           "name": "threads_bookingId_bookings_id_fk",
           "tableFrom": "threads",
-          "tableTo": "bookings",
           "columnsFrom": [
             "bookingId"
           ],
+          "tableTo": "bookings",
           "columnsTo": [
             "id"
           ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "no action"
         }
       },
       "compositePrimaryKeys": {},
@@ -3091,9 +2944,9 @@
             }
           ],
           "isUnique": false,
-          "concurrently": false,
+          "with": {},
           "method": "btree",
-          "with": {}
+          "concurrently": false
         },
         "idx_notification_log_operatorId": {
           "name": "idx_notification_log_operatorId",
@@ -3106,47 +2959,47 @@
             }
           ],
           "isUnique": false,
-          "concurrently": false,
+          "with": {},
           "method": "btree",
-          "with": {}
+          "concurrently": false
         }
       },
       "foreignKeys": {
         "notification_log_bookingId_bookings_id_fk": {
           "name": "notification_log_bookingId_bookings_id_fk",
           "tableFrom": "notification_log",
-          "tableTo": "bookings",
           "columnsFrom": [
             "bookingId"
           ],
+          "tableTo": "bookings",
           "columnsTo": [
             "id"
           ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "no action"
         },
         "notification_log_operatorId_operators_id_fk": {
           "name": "notification_log_operatorId_operators_id_fk",
           "tableFrom": "notification_log",
-          "tableTo": "operators",
           "columnsFrom": [
             "operatorId"
           ],
+          "tableTo": "operators",
           "columnsTo": [
             "id"
           ],
-          "onDelete": "restrict",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "restrict"
         }
       },
       "compositePrimaryKeys": {},
       "uniqueConstraints": {
         "notification_log_idempotency_unique": {
           "name": "notification_log_idempotency_unique",
-          "nullsNotDistinct": false,
           "columns": [
             "idempotencyKey"
-          ]
+          ],
+          "nullsNotDistinct": false
         }
       },
       "policies": {},
@@ -3226,9 +3079,9 @@
             }
           ],
           "isUnique": false,
-          "concurrently": false,
+          "with": {},
           "method": "btree",
-          "with": {}
+          "concurrently": false
         },
         "idx_audit_log_kind": {
           "name": "idx_audit_log_kind",
@@ -3241,9 +3094,9 @@
             }
           ],
           "isUnique": false,
-          "concurrently": false,
+          "with": {},
           "method": "btree",
-          "with": {}
+          "concurrently": false
         }
       },
       "foreignKeys": {},
@@ -3313,9 +3166,9 @@
             }
           ],
           "isUnique": false,
-          "concurrently": false,
+          "with": {},
           "method": "btree",
-          "with": {}
+          "concurrently": false
         },
         "idx_compliance_alert_log_vehicleId": {
           "name": "idx_compliance_alert_log_vehicleId",
@@ -3328,49 +3181,49 @@
             }
           ],
           "isUnique": false,
-          "concurrently": false,
+          "with": {},
           "method": "btree",
-          "with": {}
+          "concurrently": false
         }
       },
       "foreignKeys": {
         "compliance_alert_log_operatorId_operators_id_fk": {
           "name": "compliance_alert_log_operatorId_operators_id_fk",
           "tableFrom": "compliance_alert_log",
-          "tableTo": "operators",
           "columnsFrom": [
             "operatorId"
           ],
+          "tableTo": "operators",
           "columnsTo": [
             "id"
           ],
-          "onDelete": "restrict",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "restrict"
         },
         "compliance_alert_log_vehicleId_vehicles_id_fk": {
           "name": "compliance_alert_log_vehicleId_vehicles_id_fk",
           "tableFrom": "compliance_alert_log",
-          "tableTo": "vehicles",
           "columnsFrom": [
             "vehicleId"
           ],
+          "tableTo": "vehicles",
           "columnsTo": [
             "id"
           ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "cascade"
         }
       },
       "compositePrimaryKeys": {},
       "uniqueConstraints": {
         "compliance_alert_log_band_unique": {
           "name": "compliance_alert_log_band_unique",
-          "nullsNotDistinct": false,
           "columns": [
             "vehicleId",
             "documentType",
             "thresholdBand"
-          ]
+          ],
+          "nullsNotDistinct": false
         }
       },
       "policies": {},
@@ -3446,9 +3299,9 @@
             }
           ],
           "isUnique": false,
-          "concurrently": false,
+          "with": {},
           "method": "btree",
-          "with": {}
+          "concurrently": false
         },
         "add_on_options_active_name_unique": {
           "name": "add_on_options_active_name_unique",
@@ -3467,36 +3320,36 @@
             }
           ],
           "isUnique": true,
-          "where": "status = 'ACTIVE'",
-          "concurrently": false,
+          "with": {},
           "method": "btree",
-          "with": {}
+          "where": "status = 'ACTIVE'",
+          "concurrently": false
         }
       },
       "foreignKeys": {
         "add_on_options_operatorId_operators_id_fk": {
           "name": "add_on_options_operatorId_operators_id_fk",
           "tableFrom": "add_on_options",
-          "tableTo": "operators",
           "columnsFrom": [
             "operatorId"
           ],
+          "tableTo": "operators",
           "columnsTo": [
             "id"
           ],
-          "onDelete": "restrict",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "restrict"
         }
       },
       "compositePrimaryKeys": {},
       "uniqueConstraints": {
         "add_on_options_operatorId_id_unique": {
           "name": "add_on_options_operatorId_id_unique",
-          "nullsNotDistinct": false,
           "columns": [
             "operatorId",
             "id"
-          ]
+          ],
+          "nullsNotDistinct": false
         }
       },
       "policies": {},
@@ -3572,10 +3425,10 @@
             }
           ],
           "isUnique": true,
-          "where": "status = 'ACTIVE'",
-          "concurrently": false,
+          "with": {},
           "method": "btree",
-          "with": {}
+          "where": "status = 'ACTIVE'",
+          "concurrently": false
         },
         "idx_operator_memberships_operatorId": {
           "name": "idx_operator_memberships_operatorId",
@@ -3588,37 +3441,37 @@
             }
           ],
           "isUnique": false,
-          "concurrently": false,
+          "with": {},
           "method": "btree",
-          "with": {}
+          "concurrently": false
         }
       },
       "foreignKeys": {
         "operator_memberships_userId_users_id_fk": {
           "name": "operator_memberships_userId_users_id_fk",
           "tableFrom": "operator_memberships",
-          "tableTo": "users",
           "columnsFrom": [
             "userId"
           ],
+          "tableTo": "users",
           "columnsTo": [
             "id"
           ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "cascade"
         },
         "operator_memberships_operatorId_operators_id_fk": {
           "name": "operator_memberships_operatorId_operators_id_fk",
           "tableFrom": "operator_memberships",
-          "tableTo": "operators",
           "columnsFrom": [
             "operatorId"
           ],
+          "tableTo": "operators",
           "columnsTo": [
             "id"
           ],
-          "onDelete": "restrict",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "restrict"
         }
       },
       "compositePrimaryKeys": {},
@@ -3715,9 +3568,9 @@
             }
           ],
           "isUnique": true,
-          "concurrently": false,
+          "with": {},
           "method": "btree",
-          "with": {}
+          "concurrently": false
         },
         "provider_invites_pending_email_unique": {
           "name": "provider_invites_pending_email_unique",
@@ -3736,10 +3589,10 @@
             }
           ],
           "isUnique": true,
-          "where": "status = 'PENDING'",
-          "concurrently": false,
+          "with": {},
           "method": "btree",
-          "with": {}
+          "where": "status = 'PENDING'",
+          "concurrently": false
         },
         "idx_provider_invites_email": {
           "name": "idx_provider_invites_email",
@@ -3752,9 +3605,9 @@
             }
           ],
           "isUnique": false,
-          "concurrently": false,
+          "with": {},
           "method": "btree",
-          "with": {}
+          "concurrently": false
         },
         "idx_provider_invites_operatorId": {
           "name": "idx_provider_invites_operatorId",
@@ -3767,9 +3620,9 @@
             }
           ],
           "isUnique": false,
-          "concurrently": false,
+          "with": {},
           "method": "btree",
-          "with": {}
+          "concurrently": false
         },
         "idx_provider_invites_invitedByUserId": {
           "name": "idx_provider_invites_invitedByUserId",
@@ -3782,9 +3635,9 @@
             }
           ],
           "isUnique": false,
-          "concurrently": false,
+          "with": {},
           "method": "btree",
-          "with": {}
+          "concurrently": false
         },
         "idx_provider_invites_acceptedByUserId": {
           "name": "idx_provider_invites_acceptedByUserId",
@@ -3797,50 +3650,50 @@
             }
           ],
           "isUnique": false,
-          "concurrently": false,
+          "with": {},
           "method": "btree",
-          "with": {}
+          "concurrently": false
         }
       },
       "foreignKeys": {
         "provider_invites_operatorId_operators_id_fk": {
           "name": "provider_invites_operatorId_operators_id_fk",
           "tableFrom": "provider_invites",
-          "tableTo": "operators",
           "columnsFrom": [
             "operatorId"
           ],
+          "tableTo": "operators",
           "columnsTo": [
             "id"
           ],
-          "onDelete": "restrict",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "restrict"
         },
         "provider_invites_invitedByUserId_users_id_fk": {
           "name": "provider_invites_invitedByUserId_users_id_fk",
           "tableFrom": "provider_invites",
-          "tableTo": "users",
           "columnsFrom": [
             "invitedByUserId"
           ],
+          "tableTo": "users",
           "columnsTo": [
             "id"
           ],
-          "onDelete": "set null",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "set null"
         },
         "provider_invites_acceptedByUserId_users_id_fk": {
           "name": "provider_invites_acceptedByUserId_users_id_fk",
           "tableFrom": "provider_invites",
-          "tableTo": "users",
           "columnsFrom": [
             "acceptedByUserId"
           ],
+          "tableTo": "users",
           "columnsTo": [
             "id"
           ],
-          "onDelete": "set null",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "set null"
         }
       },
       "compositePrimaryKeys": {},
@@ -4104,10 +3957,10 @@
     }
   },
   "schemas": {},
+  "views": {},
   "sequences": {},
   "roles": {},
   "policies": {},
-  "views": {},
   "_meta": {
     "columns": {},
     "schemas": {},

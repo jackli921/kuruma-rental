@@ -68,7 +68,7 @@ export type BookingVerificationGate = (
 
 export type SubstituteResult =
   | { ok: true; booking: Booking }
-  | { ok: false; status: 400 | 404 | 409; error: string }
+  | { ok: false; status: 400 | 404 | 409; error: string; code?: ErrorCode }
 
 export type StatusTransitionResult =
   | { ok: true; booking: Booking }

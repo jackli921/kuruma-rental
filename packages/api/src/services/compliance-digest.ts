@@ -1,8 +1,7 @@
 import {
-  COMPLIANCE_DOCUMENT_TYPES,
   type ComplianceAlertBand,
   type ComplianceDocumentType,
-  complianceThresholdBand,
+  vehicleAlertCandidates,
 } from '@kuruma/shared/lib/compliance'
 import { SYSTEM_CONTEXT } from '../middleware/auth'
 import {
@@ -12,7 +11,7 @@ import {
 } from '../repositories/types'
 import type { EmailMessage, EmailSender } from './email/email-sender'
 import { renderComplianceDigest } from './email/templates/compliance-digest'
-import type { ResolveOperatorRecipients } from './operator-recipients'
+import type { ResolveOperatorRecipientsBatch } from './operator-recipients'
 
 // Operators are Japan/JST; the digest is operator-facing (§12.2 working language).
 const DEFAULT_DIGEST_LOCALE = 'ja'
@@ -29,7 +28,7 @@ export interface ComplianceDigestConfig {
 export interface ComplianceDigestDeps {
   vehicleRepo: Pick<VehicleRepository, 'findAll'>
   alertLogRepo: ComplianceAlertLogRepository
-  resolveRecipients: ResolveOperatorRecipients
+  resolveRecipients: ResolveOperatorRecipientsBatch
   emailSender: EmailSender
   /** JST calendar day (YYYY-MM-DD) the bands are computed against — the one clock. */
   today: () => string
@@ -70,21 +69,16 @@ export class ComplianceDigestService {
     })
 
     const candidates = vehicles.flatMap((v) =>
-      COMPLIANCE_DOCUMENT_TYPES.flatMap((documentType): AlertCandidate[] => {
-        const expiryDate = documentType === 'SHAKEN' ? v.shakenExpiryDate : v.insuranceExpiryDate
-        const band = complianceThresholdBand(expiryDate, today)
-        if (band == null) return []
-        return [
-          {
-            operatorId: v.operatorId,
-            vehicleId: v.id,
-            vehicleName: v.name,
-            licensePlate: v.licensePlate,
-            documentType,
-            band,
-          },
-        ]
-      }),
+      vehicleAlertCandidates(v, today).map(
+        ({ documentType, band }): AlertCandidate => ({
+          operatorId: v.operatorId,
+          vehicleId: v.id,
+          vehicleName: v.name,
+          licensePlate: v.licensePlate,
+          documentType,
+          band,
+        }),
+      ),
     )
     if (candidates.length === 0) return EMPTY_SUMMARY
 
@@ -98,9 +92,20 @@ export class ComplianceDigestService {
     let operatorsSkippedNoRecipients = 0
     let operatorsFailed = 0
 
-    for (const operatorId of [...new Set(fresh.map((c) => c.operatorId))]) {
-      const items = fresh.filter((c) => c.operatorId === operatorId)
-      const recipients = await this.deps.resolveRecipients(operatorId)
+    // Group fresh alerts by operator in one pass (mirrors groupByLocation in
+    // storefront-search) instead of re-scanning `fresh` once per operator.
+    const itemsByOperator = new Map<string, AlertCandidate[]>()
+    for (const c of fresh) {
+      const list = itemsByOperator.get(c.operatorId) ?? []
+      itemsByOperator.set(c.operatorId, [...list, c])
+    }
+
+    // #1010: resolve every operator's recipients up front in a constant number of
+    // queries (one membership read + one user read), then loop to send — no
+    // per-operator round-trip inside the loop.
+    const recipientsByOperator = await this.deps.resolveRecipients([...itemsByOperator.keys()])
+    for (const [operatorId, items] of itemsByOperator) {
+      const recipients = recipientsByOperator.get(operatorId) ?? []
       // No recipients → don't send and don't record, so the alert retries once a
       // member exists (record-after-send applies to the empty-audience case too).
       if (recipients.length === 0) {
