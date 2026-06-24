@@ -29,6 +29,7 @@ import {
   DrizzlePaymentEventRepository,
   DrizzlePaymentRefundRepository,
   DrizzleProviderInviteRepository,
+  DrizzleRefundReconcilerRepository,
   DrizzleRegionRepository,
   DrizzleRenterDocumentRepository,
   DrizzleStatsRepository,
@@ -64,6 +65,7 @@ import {
   InMemoryPaymentEventRepository,
   InMemoryPaymentRefundRepository,
   InMemoryProviderInviteRepository,
+  InMemoryRefundReconcilerRepository,
   InMemoryRegionRepository,
   InMemoryRenterDocumentRepository,
   InMemoryStatsRepository,
@@ -101,6 +103,7 @@ import type {
   PaymentRefundRepository,
   PhotoStorage,
   ProviderInviteRepository,
+  RefundReconcilerRepository,
   RegionRepository,
   RenterDocumentRepository,
   RunInTransaction,
@@ -113,6 +116,7 @@ import type {
   VehicleDetailRepository,
   VehicleRepository,
 } from '../repositories/types'
+import type { Booking, PaymentRefund } from '../stores'
 
 /**
  * Fail-loud config invariant (#967): when the public photos bucket binding is
@@ -172,6 +176,7 @@ export type Repos = {
   regionRepo: RegionRepository
   paymentEventRepo: PaymentEventRepository
   paymentRefundRepo: PaymentRefundRepository
+  refundReconcilerRepo: RefundReconcilerRepository
   paymentAnomalyRepo: PaymentAnomalyRepository
   providerInviteRepo: ProviderInviteRepository
   operatorMembershipRepo: OperatorMembershipRepository
@@ -242,6 +247,11 @@ export function buildOverrideRepos(overrides: AppOverrides): Repos {
   const regionRepo = overrides.regionRepo ?? new InMemoryRegionRepository()
   const paymentEventRepo = overrides.paymentEventRepo ?? new InMemoryPaymentEventRepository()
   const paymentRefundRepo = overrides.paymentRefundRepo ?? new InMemoryPaymentRefundRepository()
+  // The reconciler scan spans bookings ⋈ payment_refunds; an override path can't
+  // introspect arbitrary injected repos' stores, so default to an empty scan —
+  // a test exercising the cron injects its own (mirrors paymentRefundRepo above).
+  const refundReconcilerRepo =
+    overrides.refundReconcilerRepo ?? new InMemoryRefundReconcilerRepository(new Map(), new Map())
   const paymentAnomalyRepo = overrides.paymentAnomalyRepo ?? new InMemoryPaymentAnomalyRepository()
   const providerInviteRepo = overrides.providerInviteRepo ?? new InMemoryProviderInviteRepository()
   const operatorMembershipRepo =
@@ -277,6 +287,7 @@ export function buildOverrideRepos(overrides: AppOverrides): Repos {
     regionRepo,
     paymentEventRepo,
     paymentRefundRepo,
+    refundReconcilerRepo,
     paymentAnomalyRepo,
     providerInviteRepo,
     operatorMembershipRepo,
@@ -378,6 +389,7 @@ export function buildDrizzleRepos(opts?: { db?: Db; runTx?: RunTx }): Repos {
     regionRepo: new DrizzleRegionRepository(db),
     paymentEventRepo: new DrizzlePaymentEventRepository(db),
     paymentRefundRepo: new DrizzlePaymentRefundRepository(db),
+    refundReconcilerRepo: new DrizzleRefundReconcilerRepository(db),
     paymentAnomalyRepo: new DrizzlePaymentAnomalyRepository(db),
     providerInviteRepo,
     operatorMembershipRepo,
@@ -399,7 +411,11 @@ export function buildDrizzleRepos(opts?: { db?: Db; runTx?: RunTx }): Repos {
  */
 export function buildInMemoryRepos(): Repos {
   const vehicleRepo = new InMemoryVehicleRepository()
-  const bookingRepo = new InMemoryBookingRepository()
+  // Booking + refund stores are shared so the reconciler scan (below) joins them
+  // exactly as the Drizzle LEFT JOIN does — local-dev parity for the #851 cron.
+  const bookingStore = new Map<string, Booking>()
+  const refundStore = new Map<string, PaymentRefund>()
+  const bookingRepo = new InMemoryBookingRepository(bookingStore)
   const maintenanceLogRepo = new InMemoryMaintenanceLogRepository()
   const bookingEventRepo = new InMemoryBookingEventRepository()
   const userRepo = new InMemoryUserRepository()
@@ -466,7 +482,8 @@ export function buildInMemoryRepos(): Repos {
     storefrontRepo: new InMemoryStorefrontRepository(locationRepo, operatorRepo),
     regionRepo: new InMemoryRegionRepository(),
     paymentEventRepo: new InMemoryPaymentEventRepository(),
-    paymentRefundRepo: new InMemoryPaymentRefundRepository(),
+    paymentRefundRepo: new InMemoryPaymentRefundRepository(refundStore),
+    refundReconcilerRepo: new InMemoryRefundReconcilerRepository(bookingStore, refundStore),
     paymentAnomalyRepo: new InMemoryPaymentAnomalyRepository(),
     providerInviteRepo,
     operatorMembershipRepo,
