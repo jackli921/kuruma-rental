@@ -1,5 +1,5 @@
 import type { PaymentRefundStatus } from '@kuruma/shared/enums'
-import type { PaymentAnomaly, PaymentEvent, PaymentRefund } from '../stores'
+import type { Booking, PaymentAnomaly, PaymentEvent, PaymentRefund } from '../stores'
 
 /** A verified successful payment to persist. id + createdAt are assigned by the
  *  store (DB defaults / in-memory), so the service never invents them (#461). */
@@ -61,4 +61,17 @@ export interface PaymentRefundRepository {
   // Advance the receipt status. Forward-only: a terminal SUCCEEDED/FAILED is immutable.
   markStatus(bookingId: string, status: PaymentRefundStatus): Promise<PaymentRefund | undefined>
   findByBookingId(bookingId: string): Promise<PaymentRefund | null>
+}
+
+/** The reconciler backstop's bounded scan (#851 S4). Separate port (not a
+ *  BookingRepository method) because it spans two aggregates — bookings LEFT JOIN
+ *  payment_refunds — and keeps the central booking repo (+ its 800-line types home)
+ *  unbloated. System-scoped: a cron has no caller, so there is no tenant ctx. */
+export interface RefundReconcilerRepository {
+  // Up to `limit` bookings durably owed a refund (`cancellationFeeSettlement =
+  // 'REFUND_DUE'`) whose receipt is absent (a lost eager-fire — the primary
+  // self-heal case) OR still PENDING. Terminal receipts (SUCCEEDED already-done,
+  // FAILED needs-a-human) are excluded IN-QUERY, before the limit, so they can
+  // never starve retryable work. Oldest cancellation first (fair drain order).
+  listRefundDueNeedingDrive(opts: { limit: number }): Promise<Booking[]>
 }

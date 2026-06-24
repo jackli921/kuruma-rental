@@ -54,8 +54,7 @@ import type {
 // Imported (not just re-exported) because the RepoBundle below references it locally.
 import type { BookingEventRepository } from './types-booking-event'
 
-// Payment persistence interfaces (#461 events, #508 P2 anomalies) live in their
-// own module to keep this barrel under the file-size cap; re-exported for callers.
+// Payment interfaces (#461 events, #508 anomalies, #851 refunds) live in their own module (size cap); re-exported.
 export type {
   ClaimPaymentRefund,
   NewPaymentAnomaly,
@@ -63,6 +62,7 @@ export type {
   PaymentAnomalyRepository,
   PaymentEventRepository,
   PaymentRefundRepository,
+  RefundReconcilerRepository,
 } from './types-payment'
 
 // Notification persistence: SENDING-lease + delivery-cap consts (#393, #483) and
