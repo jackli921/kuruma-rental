@@ -4,6 +4,7 @@ import type {
   AddOnRepository,
   AvailabilityRepository,
   BookingRepository,
+  ClassRatePlanRepository,
   ComplianceAlertLogRepository,
   CustomerRepository,
   DocumentStorage,
@@ -64,6 +65,7 @@ export type AppOverrides = {
   insuranceOptionRepo?: InsuranceOptionRepository
   addOnRepo?: AddOnRepository
   feeScheduleRepo?: FeeScheduleRepository
+  classRatePlanRepo?: ClassRatePlanRepository
   notificationLogRepo?: NotificationLogRepository
   complianceAlertLogRepo?: ComplianceAlertLogRepository
   storefrontRepo?: StorefrontRepository

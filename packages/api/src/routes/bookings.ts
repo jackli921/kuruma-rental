@@ -171,8 +171,10 @@ export function createBookingRoutes(service: BookingService) {
         })
       }
 
-      const createResult = await service.create(ctx, {
-        requestedVehicleId: parsed.data.requestedVehicleId,
+      // #464 2d.4: forward the parsed discriminator to the service. Common
+      // fields are shared; the SPECIFIC member carries requestedVehicleId and
+      // the CLASS_COMBO member carries classId (validator narrowed each).
+      const commonInput = {
         pickupLocationId: parsed.data.pickupLocationId,
         dropoffLocationId: parsed.data.dropoffLocationId,
         insuranceOptionId: parsed.data.insuranceOptionId ?? null,
@@ -188,7 +190,17 @@ export function createBookingRoutes(service: BookingService) {
         notes: parsed.data.notes ?? null,
         idempotencyKey: parsed.data.idempotencyKey ?? null,
         disclaimerAccepted: parsed.data.disclaimerAccepted ?? false,
-      })
+      }
+      const createResult = await service.create(
+        ctx,
+        parsed.data.fulfillmentMode === 'CLASS_COMBO'
+          ? { ...commonInput, fulfillmentMode: 'CLASS_COMBO', classId: parsed.data.classId }
+          : {
+              ...commonInput,
+              fulfillmentMode: 'SPECIFIC',
+              requestedVehicleId: parsed.data.requestedVehicleId,
+            },
+      )
 
       if (!createResult.ok) {
         return fail(c, createResult.error, createResult.status, {

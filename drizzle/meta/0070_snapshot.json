@@ -1,5 +1,5 @@
 {
-  "id": "ade96989-421f-4c13-8cfc-ea874061cb9f",
+  "id": "ca398906-9b61-4ec3-a222-4cb5dc36e11b",
   "prevId": "39b4bc68-2077-4cc3-9f51-a83d73e784cc",
   "version": "7",
   "dialect": "postgresql",
@@ -2613,151 +2613,6 @@
       "checkConstraints": {},
       "isRLSEnabled": false
     },
-    "public.payment_refunds": {
-      "name": "payment_refunds",
-      "schema": "",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "text",
-          "primaryKey": true,
-          "notNull": true
-        },
-        "bookingId": {
-          "name": "bookingId",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "operatorId": {
-          "name": "operatorId",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "stripePaymentIntentId": {
-          "name": "stripePaymentIntentId",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "stripeRefundId": {
-          "name": "stripeRefundId",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "amountJpy": {
-          "name": "amountJpy",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "status": {
-          "name": "status",
-          "type": "payment_refund_status",
-          "typeSchema": "public",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "'PENDING'"
-        },
-        "createdAt": {
-          "name": "createdAt",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        },
-        "updatedAt": {
-          "name": "updatedAt",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        }
-      },
-      "indexes": {
-        "idx_payment_refunds_operatorId": {
-          "name": "idx_payment_refunds_operatorId",
-          "columns": [
-            {
-              "expression": "operatorId",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "payment_refunds_bookingId_unique": {
-          "name": "payment_refunds_bookingId_unique",
-          "columns": [
-            {
-              "expression": "bookingId",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": true,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "payment_refunds_stripeRefundId_unique": {
-          "name": "payment_refunds_stripeRefundId_unique",
-          "columns": [
-            {
-              "expression": "stripeRefundId",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": true,
-          "where": "\"stripeRefundId\" is not null",
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        }
-      },
-      "foreignKeys": {
-        "payment_refunds_bookingId_bookings_id_fk": {
-          "name": "payment_refunds_bookingId_bookings_id_fk",
-          "tableFrom": "payment_refunds",
-          "tableTo": "bookings",
-          "columnsFrom": [
-            "bookingId"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        },
-        "payment_refunds_operatorId_operators_id_fk": {
-          "name": "payment_refunds_operatorId_operators_id_fk",
-          "tableFrom": "payment_refunds",
-          "tableTo": "operators",
-          "columnsFrom": [
-            "operatorId"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "restrict",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "policies": {},
-      "checkConstraints": {},
-      "isRLSEnabled": false
-    },
     "public.messages": {
       "name": "messages",
       "schema": "",
@@ -3846,6 +3701,432 @@
       "policies": {},
       "checkConstraints": {},
       "isRLSEnabled": false
+    },
+    "public.consent_acceptances": {
+      "name": "consent_acceptances",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "documentId": {
+          "name": "documentId",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "consentType": {
+          "name": "consentType",
+          "type": "consent_type",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "userId": {
+          "name": "userId",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "operatorId": {
+          "name": "operatorId",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "operatorMembershipId": {
+          "name": "operatorMembershipId",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "actorRole": {
+          "name": "actorRole",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "bookingId": {
+          "name": "bookingId",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "acceptedAt": {
+          "name": "acceptedAt",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "context": {
+          "name": "context",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "ipAddress": {
+          "name": "ipAddress",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "userAgent": {
+          "name": "userAgent",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "method": {
+          "name": "method",
+          "type": "consent_method",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'CLICKWRAP'"
+        },
+        "recordSignature": {
+          "name": "recordSignature",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "signingKeyId": {
+          "name": "signingKeyId",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "signatureRef": {
+          "name": "signatureRef",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "createdAt": {
+          "name": "createdAt",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "consent_unique_booking_liability": {
+          "name": "consent_unique_booking_liability",
+          "columns": [
+            {
+              "expression": "bookingId",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "where": "\"consent_acceptances\".\"bookingId\" IS NOT NULL",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "consent_unique_user_document": {
+          "name": "consent_unique_user_document",
+          "columns": [
+            {
+              "expression": "userId",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "documentId",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "where": "\"consent_acceptances\".\"bookingId\" IS NULL AND \"consent_acceptances\".\"operatorId\" IS NULL",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "consent_unique_operator_document": {
+          "name": "consent_unique_operator_document",
+          "columns": [
+            {
+              "expression": "operatorId",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "documentId",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "where": "\"consent_acceptances\".\"operatorId\" IS NOT NULL",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "consent_acceptances_document_type_idx": {
+          "name": "consent_acceptances_document_type_idx",
+          "columns": [
+            {
+              "expression": "documentId",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "consentType",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "consent_acceptances_membership_idx": {
+          "name": "consent_acceptances_membership_idx",
+          "columns": [
+            {
+              "expression": "operatorMembershipId",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "consent_acceptances_consent_type_idx": {
+          "name": "consent_acceptances_consent_type_idx",
+          "columns": [
+            {
+              "expression": "consentType",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "consent_acceptances_userId_users_id_fk": {
+          "name": "consent_acceptances_userId_users_id_fk",
+          "tableFrom": "consent_acceptances",
+          "tableTo": "users",
+          "columnsFrom": [
+            "userId"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "consent_acceptances_operatorId_operators_id_fk": {
+          "name": "consent_acceptances_operatorId_operators_id_fk",
+          "tableFrom": "consent_acceptances",
+          "tableTo": "operators",
+          "columnsFrom": [
+            "operatorId"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "consent_acceptances_operatorMembershipId_operator_memberships_id_fk": {
+          "name": "consent_acceptances_operatorMembershipId_operator_memberships_id_fk",
+          "tableFrom": "consent_acceptances",
+          "tableTo": "operator_memberships",
+          "columnsFrom": [
+            "operatorMembershipId"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "consent_acceptances_bookingId_bookings_id_fk": {
+          "name": "consent_acceptances_bookingId_bookings_id_fk",
+          "tableFrom": "consent_acceptances",
+          "tableTo": "bookings",
+          "columnsFrom": [
+            "bookingId"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "consent_acceptances_document_type_fk": {
+          "name": "consent_acceptances_document_type_fk",
+          "tableFrom": "consent_acceptances",
+          "tableTo": "consent_documents",
+          "columnsFrom": [
+            "documentId",
+            "consentType"
+          ],
+          "columnsTo": [
+            "id",
+            "type"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "consent_liability_booking_chk": {
+          "name": "consent_liability_booking_chk",
+          "value": "(\"consent_acceptances\".\"consentType\" = 'RENTER_LIABILITY') = (\"consent_acceptances\".\"bookingId\" IS NOT NULL)"
+        },
+        "consent_operator_agreement_chk": {
+          "name": "consent_operator_agreement_chk",
+          "value": "(\"consent_acceptances\".\"consentType\" = 'OPERATOR_AGREEMENT') = (\"consent_acceptances\".\"operatorId\" IS NOT NULL)"
+        },
+        "consent_membership_implies_operator_chk": {
+          "name": "consent_membership_implies_operator_chk",
+          "value": "\"consent_acceptances\".\"operatorMembershipId\" IS NULL OR \"consent_acceptances\".\"operatorId\" IS NOT NULL"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "public.consent_documents": {
+      "name": "consent_documents",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "type": {
+          "name": "type",
+          "type": "consent_type",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "version": {
+          "name": "version",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "locale": {
+          "name": "locale",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "title": {
+          "name": "title",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "body": {
+          "name": "body",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "acceptanceLabel": {
+          "name": "acceptanceLabel",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "contentHash": {
+          "name": "contentHash",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "status": {
+          "name": "status",
+          "type": "consent_doc_status",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'DRAFT'"
+        },
+        "effectiveFrom": {
+          "name": "effectiveFrom",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "publishedAt": {
+          "name": "publishedAt",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "createdAt": {
+          "name": "createdAt",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updatedAt": {
+          "name": "updatedAt",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "consent_documents_type_version_locale_unique": {
+          "name": "consent_documents_type_version_locale_unique",
+          "nullsNotDistinct": false,
+          "columns": [
+            "type",
+            "version",
+            "locale"
+          ]
+        },
+        "consent_documents_id_type_unique": {
+          "name": "consent_documents_id_type_unique",
+          "nullsNotDistinct": false,
+          "columns": [
+            "id",
+            "type"
+          ]
+        }
+      },
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
     }
   },
   "enums": {
@@ -4034,15 +4315,6 @@
         "SUCCEEDED"
       ]
     },
-    "public.payment_refund_status": {
-      "name": "payment_refund_status",
-      "schema": "public",
-      "values": [
-        "PENDING",
-        "SUCCEEDED",
-        "FAILED"
-      ]
-    },
     "public.notification_kind": {
       "name": "notification_kind",
       "schema": "public",
@@ -4107,6 +4379,34 @@
         "PENDING",
         "ACCEPTED",
         "REVOKED"
+      ]
+    },
+    "public.consent_doc_status": {
+      "name": "consent_doc_status",
+      "schema": "public",
+      "values": [
+        "DRAFT",
+        "PUBLISHED",
+        "ARCHIVED"
+      ]
+    },
+    "public.consent_method": {
+      "name": "consent_method",
+      "schema": "public",
+      "values": [
+        "CLICKWRAP",
+        "ESIGN",
+        "IMPORTED"
+      ]
+    },
+    "public.consent_type": {
+      "name": "consent_type",
+      "schema": "public",
+      "values": [
+        "RENTER_TOS",
+        "PRIVACY_POLICY",
+        "RENTER_LIABILITY",
+        "OPERATOR_AGREEMENT"
       ]
     }
   },

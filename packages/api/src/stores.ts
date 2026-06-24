@@ -15,6 +15,9 @@ import type {
   BookingSource,
   BookingStatus,
   CancellationFeeSettlement,
+  ConsentDocStatus,
+  ConsentMethod,
+  ConsentType,
   DocumentStatus,
   DocumentType,
   FeeScheduleStatus,
@@ -99,10 +102,13 @@ export interface Booking {
   // classId stays for discovery/grouping; sealed to operatorId by composite FK.
   classId: string
   // What the renter selected in storefront (slice 5) — immutable audit trail.
-  requestedVehicleId: string
+  // #464: null for a CLASS_COMBO float (no specific car requested). The
+  // bookings_specific_requires_requested CHECK keeps SPECIFIC rows non-null.
+  requestedVehicleId: string | null
   // What the operator fulfills; the exclusion constraint keys on this. Server-
   // derived = requestedVehicleId at submit; operator may substitute (#392).
-  assignedVehicleId: string
+  // #464: null for an unassigned CLASS_COMBO float until the operator assigns a car.
+  assignedVehicleId: string | null
   pickupLocationId: string
   dropoffLocationId: string
   startAt: Date
@@ -389,6 +395,26 @@ export interface FeeSchedule {
   updatedAt: Date
 }
 
+/**
+ * The rate plan that prices a CLASS_COMBO booking (#464 §5.1). A combo books a
+ * vehicle *class* (no specific car at book time), so it is priced off the class,
+ * not a car — keyed per (operator, class, pickupLocation) because cars live at
+ * one location and a "deal" is a deliberately-set day rate. SPECIFIC bookings
+ * keep #406 per-car pricing; this table prices combos only (§5.3).
+ */
+export interface ClassRatePlan {
+  id: string
+  operatorId: string
+  classId: string
+  pickupLocationId: string
+  dayRateJpy: number
+  /** Toggle a deal on/off without deleting the row; inactive ⇒ not offered. */
+  isActive: boolean
+  label: string | null
+  createdAt: Date
+  updatedAt: Date
+}
+
 // Renter identity document metadata (#459). Bytes live in R2; this is the
 // verdict + pointer only. `expiryDate` is a YYYY-MM-DD string (DB `date`).
 export interface RenterDocument {
@@ -433,6 +459,42 @@ export interface ProviderInvite {
   acceptedByUserId: string | null
   createdAt: Date
   updatedAt: Date
+}
+
+export interface ConsentDocument {
+  id: string
+  type: ConsentType
+  version: string
+  locale: string
+  title: string
+  body: string
+  acceptanceLabel: string
+  contentHash: string
+  status: ConsentDocStatus
+  effectiveFrom: Date
+  publishedAt: Date | null
+  createdAt: Date
+  updatedAt: Date
+}
+
+export interface ConsentAcceptance {
+  id: string
+  documentId: string
+  consentType: ConsentType
+  userId: string
+  operatorId: string | null
+  operatorMembershipId: string | null
+  actorRole: string | null
+  bookingId: string | null
+  acceptedAt: Date
+  context: Record<string, unknown> | null
+  ipAddress: string | null
+  userAgent: string | null
+  method: ConsentMethod
+  recordSignature: string | null
+  signingKeyId: string | null
+  signatureRef: string | null
+  createdAt: Date
 }
 
 // Map stores removed — repositories handle data access now.

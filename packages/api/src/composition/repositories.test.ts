@@ -9,6 +9,7 @@ import {
   InMemoryBookingRepository,
   InMemoryVehicleRepository,
 } from '../repositories/in-memory'
+import type { TransactionRepos } from '../repositories/types'
 import {
   type Repos,
   assertPhotosBaseConfigured,
@@ -48,6 +49,7 @@ const EXPECTED_KEY_MAP: Record<keyof Repos, true> = {
   insuranceOptionRepo: true,
   addOnRepo: true,
   feeScheduleRepo: true,
+  classRatePlanRepo: true,
   notificationLogRepo: true,
   complianceAlertLogRepo: true,
   storefrontRepo: true,
@@ -60,6 +62,7 @@ const EXPECTED_KEY_MAP: Record<keyof Repos, true> = {
   operatorMembershipRepo: true,
   auditLogRepo: true,
   bookingEventRepo: true,
+  consentRepo: true,
   runInTransaction: true,
   runOperatorGrant: true,
   photosPublicUrl: true,
@@ -79,6 +82,36 @@ function minimalOverrides() {
 // and Drizzle branches build one. Every other member must be defined in every
 // branch.
 const ALWAYS_DEFINED = EXPECTED_KEYS.filter((k) => k !== 'googleAuthRuntime')
+
+// #464 2d.1: the inner TransactionRepos bundle must carry every key the
+// CLASS_COMBO submit reads/locks in-tx (availability + classRatePlan +
+// vehicleClass). `Record<keyof TransactionRepos, true>` keeps this exhaustive
+// against the interface so adding a member fails to compile until listed.
+const TX_EXPECTED_KEY_MAP: Record<keyof TransactionRepos, true> = {
+  vehicleRepo: true,
+  maintenanceLogRepo: true,
+  bookingRepo: true,
+  bookingEventRepo: true,
+  locationRepo: true,
+  insuranceOptionRepo: true,
+  addOnRepo: true,
+  feeScheduleRepo: true,
+  userRepo: true,
+  availabilityRepo: true,
+  classRatePlanRepo: true,
+  vehicleClassRepo: true,
+}
+const TX_EXPECTED_KEYS = Object.keys(TX_EXPECTED_KEY_MAP) as ReadonlyArray<keyof TransactionRepos>
+
+async function captureTxBundle(runInTransaction: Repos['runInTransaction']) {
+  let bundle: TransactionRepos | undefined
+  await runInTransaction(async (repos) => {
+    bundle = repos
+    return undefined as never
+  })
+  if (!bundle) throw new Error('runInTransaction did not call its callback')
+  return bundle
+}
 
 describe('repository bundle builders', () => {
   test('in-memory builder populates every repo member', () => {
@@ -130,6 +163,27 @@ describe('repository bundle builders', () => {
     }
   })
 
+  // #464 2d.1: every wiring branch must populate the SAME TransactionRepos keys
+  // inside runInTransaction (the CLASS_COMBO submit reads availability +
+  // classRatePlan + vehicleClass in-tx so concurrent rate edits / class
+  // reassignments can't race the validation). Same #635-style guard as the
+  // outer Repos bundle but scoped to the tx bundle.
+  test('in-memory runInTransaction bundle carries every TransactionRepos key', async () => {
+    const bundle = await captureTxBundle(buildInMemoryRepos().runInTransaction)
+    expect(Object.keys(bundle).sort()).toEqual([...TX_EXPECTED_KEYS].sort())
+    for (const key of TX_EXPECTED_KEYS) {
+      expect(bundle[key], `in-memory tx ${key}`).toBeDefined()
+    }
+  })
+
+  test('override runInTransaction bundle carries every TransactionRepos key', async () => {
+    const bundle = await captureTxBundle(buildOverrideRepos(minimalOverrides()).runInTransaction)
+    expect(Object.keys(bundle).sort()).toEqual([...TX_EXPECTED_KEYS].sort())
+    for (const key of TX_EXPECTED_KEYS) {
+      expect(bundle[key], `override tx ${key}`).toBeDefined()
+    }
+  })
+
   // #634: the e2e real-db harness reuses this factory instead of hand-listing
   // every Drizzle repo (the omission that silently emptied the operator add-ons
   // page). Construction needs no live connection — repos only store the db — so
@@ -161,6 +215,29 @@ describe('repository bundle builders', () => {
       // tx-bound paths delegate to the INJECTED runner, not getDb()/prod runTx.
       await repos.runInTransaction(async () => undefined as never)
       expect(calls).toEqual(['runTx'])
+    } finally {
+      await client.end({ timeout: 0 })
+    }
+  })
+
+  // #464 2d.1: the Drizzle tx bundle must carry the same TransactionRepos keys
+  // as the other branches — adding availabilityRepo / classRatePlanRepo /
+  // vehicleClassRepo to the interface but forgetting to construct them on
+  // txDb would compile (no caller wired yet) but fail at first combo submit.
+  test('Drizzle runInTransaction bundle carries every TransactionRepos key', async () => {
+    const client = postgres('postgres://u:p@127.0.0.1:1/none', { max: 1 })
+    const stubDb = drizzle(client, { schema }) as unknown as Db
+    // Drive the callback synchronously with a stub tx handle. asTxDb is a pure
+    // cast; the repo ctors only stash the db ref, so no SQL is executed.
+    const inlineRunTx = (async (fn: (tx: unknown) => Promise<unknown>) =>
+      fn({} as unknown)) as unknown as RunTx
+    try {
+      const repos = buildDrizzleRepos({ db: stubDb, runTx: inlineRunTx })
+      const bundle = await captureTxBundle(repos.runInTransaction)
+      expect(Object.keys(bundle).sort()).toEqual([...TX_EXPECTED_KEYS].sort())
+      for (const key of TX_EXPECTED_KEYS) {
+        expect(bundle[key], `drizzle tx ${key}`).toBeDefined()
+      }
     } finally {
       await client.end({ timeout: 0 })
     }
