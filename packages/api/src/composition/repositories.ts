@@ -215,6 +215,12 @@ export function buildOverrideRepos(overrides: AppOverrides): Repos {
       addOnRepo,
       feeScheduleRepo,
       userRepo,
+      // #464 2d.1: InMemory has no real transaction isolation (JS event loop is
+      // single-threaded), so we hand the existing singleton instances through —
+      // mirrors the existing pattern for vehicleRepo / bookingRepo above.
+      availabilityRepo,
+      classRatePlanRepo,
+      vehicleClassRepo,
     })
   const fleetOverviewRepo =
     overrides.fleetOverviewRepo ??
@@ -416,6 +422,7 @@ export function buildInMemoryRepos(): Repos {
   // message path created (shared in-memory state — matches the prod seam).
   const threadRepo = new InMemoryThreadRepository()
   const availabilityRepo = new InMemoryAvailabilityRepository(vehicleRepo, bookingRepo)
+  const vehicleClassRepo = new InMemoryVehicleClassRepository()
   const runInTransaction: RunInTransaction = async (fn) =>
     fn({
       vehicleRepo,
@@ -427,11 +434,16 @@ export function buildInMemoryRepos(): Repos {
       addOnRepo,
       feeScheduleRepo,
       userRepo,
+      // #464 2d.1: InMemory has no real transaction isolation (JS event loop is
+      // single-threaded), so we hand the existing singleton instances through.
+      availabilityRepo,
+      classRatePlanRepo,
+      vehicleClassRepo,
     })
   const runOperatorGrant: RunOperatorGrant = (fn) =>
     fn({ memberships: operatorMembershipRepo, users: userRepo, invites: providerInviteRepo })
   return {
-    vehicleClassRepo: new InMemoryVehicleClassRepository(),
+    vehicleClassRepo,
     vehicleRepo,
     bookingRepo,
     availabilityRepo,

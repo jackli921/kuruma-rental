@@ -77,7 +77,9 @@ export type {
 // their own module to keep this barrel under the file-size cap (#978);
 // re-exported for callers.
 export type { DocumentStorage, PhotoStorage } from './types-storage'
-export type { ClassRatePlanRepository } from './types-pricing'
+// #464 2d.1: import + re-export so TransactionRepos can name it.
+import type { ClassRatePlanRepository } from './types-pricing'
+export type { ClassRatePlanRepository }
 export { complianceAlertKey } from './types-compliance'
 export type { ComplianceAlertLogRepository, RecordComplianceAlert } from './types-compliance'
 
@@ -646,15 +648,10 @@ export interface MessageRepository {
   ): Promise<Message | undefined>
 }
 
-// Transaction boundary for operations spanning multiple repositories.
-// Drizzle: wraps db.transaction(), creating repos bound to the tx handle.
-// InMemory: passes repos through (JS event loop is single-threaded).
-//
-// Slice 6 (#392) widens the bundle so the single-transaction booking submit
-// (proposal §4) can — atomically — validate availability (booking insert ->
-// exclusion constraint), append the BOOKING_CREATED event, and read the
-// vehicle / location / insurance / fee rows for the price + snapshots at a
-// consistent point-in-time. MaintenanceService still uses only the first two.
+// Transaction boundary across repos. Drizzle wraps db.transaction() and binds
+// repos to the tx handle; InMemory passes singletons through. Slice 6 (#392)
+// widened the bundle so the booking submit validates availability + appends
+// BOOKING_CREATED + reads vehicle/location/insurance/fee rows in one tx.
 export interface TransactionRepos {
   vehicleRepo: VehicleRepository
   maintenanceLogRepo: MaintenanceLogRepository
@@ -664,20 +661,23 @@ export interface TransactionRepos {
   insuranceOptionRepo: InsuranceOptionRepository
   addOnRepo: AddOnRepository
   feeScheduleRepo: FeeScheduleRepository
-  // #875: the operator walk-in (#589 1c) creates its fresh renter INSIDE the
-  // booking tx, so a failed booking rolls the renter back with it (no orphan).
-  // Narrowed to that one write — the rest of UserRepository isn't tx-bound here.
+  // #875: walk-in renter (#589 1c) is created INSIDE the booking tx so a
+  // failed booking rolls the renter back with it (no orphan).
   userRepo: Pick<UserRepository, 'createWalkInRenter'>
+  // #464 2d: CLASS_COMBO submit reads demand+capacity, acquires the per-triple
+  // advisory lock, prices via findActiveRate, and validates classId↔operator
+  // in-tx — single point-in-time view (2d.2/2d.4 grow AvailabilityRepository).
+  availabilityRepo: AvailabilityRepository
+  classRatePlanRepo: ClassRatePlanRepository
+  vehicleClassRepo: VehicleClassRepository
 }
 
 export type RunInTransaction = <T>(fn: (repos: TransactionRepos) => Promise<T>) => Promise<T>
 
-// #521 §6: the minimal write surface the atomic operator-grant transaction needs —
-// the membership ledger INSERT, the denormalised users projection, and invite
-// consumption. Run together in ONE tx so a mid-sequence failure can't leave a partial
-// grant (membership without projection, or invite consumed without a membership row).
-// The membership INSERT goes first so the partial-unique-active index aborts the WHOLE
-// tx on a concurrent double-accept; the service then re-reads the winner.
+// #521 §6: minimal write surface for the atomic operator-grant tx — membership
+// ledger INSERT, denormalised users projection, invite consumption. Membership
+// INSERT goes first so the partial-unique-active index aborts the whole tx on
+// a concurrent double-accept; the service then re-reads the winner.
 export interface OperatorGrantRepos {
   memberships: Pick<OperatorMembershipRepository, 'create'>
   users: Pick<UserRepository, 'setOperatorAccess'>
