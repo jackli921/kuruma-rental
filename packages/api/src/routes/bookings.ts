@@ -182,6 +182,10 @@ export function createBookingRoutes(service: BookingService) {
       }
 
       const createResult = await service.create(ctx, {
+        // #464 2d.3: the 501 above narrowed parsed.data to the SPECIFIC member.
+        // The slice-2d.4 flip will replace this fixed discriminator with a
+        // forward of the parsed mode + a CLASS_COMBO `{classId, ...}` branch.
+        fulfillmentMode: 'SPECIFIC',
         requestedVehicleId: parsed.data.requestedVehicleId,
         pickupLocationId: parsed.data.pickupLocationId,
         dropoffLocationId: parsed.data.dropoffLocationId,

@@ -12,6 +12,7 @@ import { ERROR_CODES } from './error-codes'
 describe('ERROR_CODES', () => {
   test('is the exhaustive set of envelope failure codes the API emits', () => {
     expect([...ERROR_CODES].sort()).toEqual([
+      'CLASS_COMBO_SOLD_OUT',
       'CLASS_HAS_ACTIVE_BOOKINGS',
       'CONSENT_REQUIRED',
       'DOCUMENT_VERIFICATION_REQUIRED',
@@ -19,6 +20,7 @@ describe('ERROR_CODES', () => {
       'INVALID_VEHICLE_CLASS',
       'LOCATION_HAS_ACTIVE_BOOKINGS',
       'NOT_IMPLEMENTED',
+      'NO_COMBO_RATE_SET',
       'NO_RATES_SET',
       'OPERATOR_REQUIRED',
       'RENTAL_RULE_ADVANCE_BOOKING',

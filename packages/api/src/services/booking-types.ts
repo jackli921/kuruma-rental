@@ -3,11 +3,10 @@ import type { ErrorCode } from '@kuruma/shared/lib/error-codes'
 import type { CallerContext } from '../middleware/auth'
 import type { Booking } from '../stores'
 
-// Slice 6 (#392): the renter books a CONCRETE vehicle chosen in the storefront
-// (slice 5). operatorId / classId / assignedVehicleId / totalPrice are all
-// server-derived from that vehicle — never client fields (proposal §6.2, §4.1).
-export interface CreateBookingInput {
-  requestedVehicleId: string
+// Shared booking fields used by both fulfillment modes (#464). The
+// discriminated union below narrows on `fulfillmentMode` and adds the
+// mode-specific key (a concrete vehicle for SPECIFIC, a class for CLASS_COMBO).
+interface CreateBookingCommon {
   pickupLocationId: string
   dropoffLocationId: string
   insuranceOptionId?: string | null
@@ -33,6 +32,16 @@ export interface CreateBookingInput {
   // staff/manual bookings are exempt. The server stamps the timestamp + version.
   disclaimerAccepted?: boolean
 }
+
+// Slice 6 (#392): the renter books a CONCRETE vehicle chosen in the storefront
+// (slice 5). operatorId / classId / assignedVehicleId / totalPrice are all
+// server-derived from that vehicle — never client fields (proposal §6.2, §4.1).
+// #464 2d.3: promoted to a discriminated union — CLASS_COMBO floats on a class
+// at a pickup location, no car selected at book time (the operator assigns one
+// on/before pickup); priced off the active class rate plan.
+export type CreateBookingInput =
+  | (CreateBookingCommon & { fulfillmentMode: 'SPECIFIC'; requestedVehicleId: string })
+  | (CreateBookingCommon & { fulfillmentMode: 'CLASS_COMBO'; classId: string })
 
 export type CreateBookingResult =
   | { ok: true; booking: Booking; status?: 200 }
