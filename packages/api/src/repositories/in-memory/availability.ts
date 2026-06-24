@@ -118,12 +118,19 @@ export class InMemoryAvailabilityRepository implements AvailabilityRepository {
     const held = new Promise<void>((r) => {
       release = r
     })
-    // Chain THIS holder's tail onto prev → next acquirer waits until we resolve.
-    this.comboLockTails.set(
-      key,
-      prev.then(() => held),
-    )
+    // Tail = `held` (not `prev.then(() => held)`) so the per-key chain stops
+    // growing unboundedly across many acquisitions; the next waiter only needs
+    // to await us, and `prev` ordering is already preserved by `await prev`
+    // below. When we release and nobody has taken over, drop the entry so the
+    // Map doesn't keep stale (op, class, loc) keys forever (maintainability
+    // review 2026-06-24, finding #3).
+    this.comboLockTails.set(key, held)
     await prev
+    void held.then(() => {
+      if (this.comboLockTails.get(key) === held) {
+        this.comboLockTails.delete(key)
+      }
+    })
     return release
   }
 

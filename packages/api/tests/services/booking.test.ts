@@ -997,6 +997,47 @@ describe('BookingService.create — CLASS_COMBO (#464 2d.3)', () => {
     })
   })
 
+  // Maintainability review 2026-06-24 finding #11: cross-PR drift between
+  // #1028 (SPECIFIC turnaround follows dropoff) and #1035 (CLASS_COMBO landed
+  // after, still keyed off pickup). The DB trigger overwrites the persisted
+  // value with the dropoff-derived one, so data wasn't corrupted, but the
+  // service-returned booking and the persisted row disagreed on
+  // `effectiveEndAt` until the next reload. Mirrors the analogous SPECIFIC
+  // test ("one-way booking: effectiveEndAt follows the DROPOFF location
+  // turnaround, not the pickup (#1023)") so the two paths can't drift again.
+  it('one-way CLASS_COMBO: effectiveEndAt follows the DROPOFF location turnaround, not the pickup', async () => {
+    const h = await setup()
+    const { classId, locationId } = await seedComboReady(h)
+    const ONE_WAY_TURNAROUND_MIN = 1440
+    const dropoff = await h.repos.locationRepo.create({
+      operatorId: OP_A,
+      name: 'Combo Kyoto Return',
+      address: '7-8-9 Kyoto',
+      operatingHours: null,
+      timezone: 'Asia/Tokyo',
+      defaultTurnaroundMinutes: ONE_WAY_TURNAROUND_MIN,
+      status: 'ACTIVE',
+    } as Parameters<typeof h.repos.locationRepo.create>[0])
+
+    const result = await h.service.create(
+      renterCtx,
+      comboInput({
+        classId,
+        pickupLocationId: locationId,
+        dropoffLocationId: dropoff.id,
+      }),
+      NOW,
+    )
+
+    expect(result.ok).toBe(true)
+    if (!result.ok) throw new Error(result.error.toString())
+    expect(result.booking.effectiveEndAt.getTime() - END.getTime()).toBe(
+      ONE_WAY_TURNAROUND_MIN * 60 * 1000,
+    )
+    // Mutation guard: must NOT be the pickup location's 2880 turnaround.
+    expect(result.booking.effectiveEndAt.getTime() - END.getTime()).not.toBe(TURNAROUND_MS)
+  })
+
   it('rejects with NO_COMBO_RATE_SET when the operator has not published a rate plan', async () => {
     const h = await setup()
     const { vehicleId, locationId } = await seedReady(h)

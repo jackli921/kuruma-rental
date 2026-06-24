@@ -12,7 +12,7 @@ import type {
   TransactionRepos,
   UserRepository,
 } from '../repositories/types'
-import type { Vehicle } from '../stores'
+import type { Location, Vehicle } from '../stores'
 import type { BookingPostCommitDispatcher } from './booking-post-commit-dispatcher'
 import { MS_PER_MINUTE, composeBookingTotal, rentalDays } from './booking-pricing-helpers'
 import type {
@@ -167,6 +167,35 @@ export class BookingCreationService {
     throw lastErr
   }
 
+  // Both submit paths (SPECIFIC, CLASS_COMBO) must derive `effectiveEndAt`
+  // from the DROPOFF location's turnaround and produce the SAME value the DB
+  // trigger compute_effective_end_at() (migration 0069) will overwrite on
+  // insert. A drift between the two means the API response and the persisted
+  // row disagree on `effectiveEndAt` until the next reload (maintainability
+  // review 2026-06-24, finding #11). Single helper = single seam to keep them
+  // in sync; the trigger-vs-helper parity test pins it.
+  private async resolveDropoffEffectiveEnd(
+    repos: TransactionRepos,
+    operatorId: string,
+    pickup: Location,
+    dropoffLocationId: string,
+    endAt: Date,
+  ): Promise<
+    | { ok: true; dropoff: Location; effectiveEndAt: Date }
+    | { ok: false; status: 400; error: string }
+  > {
+    const dropoff =
+      dropoffLocationId === pickup.id
+        ? pickup
+        : await repos.locationRepo.findById(SYSTEM_CONTEXT, dropoffLocationId)
+    if (!dropoff || dropoff.operatorId !== operatorId) {
+      return { ok: false, status: 400, error: 'Dropoff location is not available' }
+    }
+    const turnaroundMinutes = dropoff.defaultTurnaroundMinutes ?? DEFAULT_TURNAROUND_MINUTES
+    const effectiveEndAt = new Date(endAt.getTime() + turnaroundMinutes * MS_PER_MINUTE)
+    return { ok: true, dropoff, effectiveEndAt }
+  }
+
   // The atomic decision-and-record (FC/IS: the decision; ensureThread is the
   // imperative shell). Resolution reads run as SYSTEM_CONTEXT — these are
   // internal pricing/snapshot reads, and insurance/fee reads reject RENTER
@@ -245,19 +274,15 @@ export class BookingCreationService {
     if (!pickup || pickup.operatorId !== operatorId) {
       return { ok: false, status: 400, error: 'Pickup location is not available' }
     }
-    // Turnaround follows the DROPOFF location: a one-way is returned and cleaned at
-    // B, so its next-bookable window is B's buffer, not the pickup's (#1023, §6).
-    // Same-location reuses pickup (no extra query). Kept identical to the DB trigger
-    // compute_effective_end_at() (migration 0069) — both sides must agree.
-    const dropoff =
-      input.dropoffLocationId === input.pickupLocationId
-        ? pickup
-        : await repos.locationRepo.findById(SYSTEM_CONTEXT, input.dropoffLocationId)
-    if (!dropoff || dropoff.operatorId !== operatorId) {
-      return { ok: false, status: 400, error: 'Dropoff location is not available' }
-    }
-    const turnaroundMinutes = dropoff.defaultTurnaroundMinutes ?? DEFAULT_TURNAROUND_MINUTES
-    const effectiveEndAt = new Date(input.endAt.getTime() + turnaroundMinutes * MS_PER_MINUTE)
+    const eff = await this.resolveDropoffEffectiveEnd(
+      repos,
+      operatorId,
+      pickup,
+      input.dropoffLocationId,
+      input.endAt,
+    )
+    if (!eff.ok) return eff
+    const { effectiveEndAt } = eff
 
     // #464: a SPECIFIC booking also consumes a class unit. A CLASS_COMBO float
     // (null assignedVehicleId) is invisible to the per-vehicle exclusion
@@ -524,14 +549,15 @@ export class BookingCreationService {
       }
     }
 
-    if (input.dropoffLocationId !== input.pickupLocationId) {
-      const dropoff = await repos.locationRepo.findById(SYSTEM_CONTEXT, input.dropoffLocationId)
-      if (!dropoff || dropoff.operatorId !== operatorId) {
-        return { ok: false, status: 400, error: 'Dropoff location is not available' }
-      }
-    }
-    const turnaroundMinutes = pickup.defaultTurnaroundMinutes ?? DEFAULT_TURNAROUND_MINUTES
-    const effectiveEndAt = new Date(input.endAt.getTime() + turnaroundMinutes * MS_PER_MINUTE)
+    const eff = await this.resolveDropoffEffectiveEnd(
+      repos,
+      operatorId,
+      pickup,
+      input.dropoffLocationId,
+      input.endAt,
+    )
+    if (!eff.ok) return eff
+    const { effectiveEndAt } = eff
 
     // #464 2d.4: serialize concurrent CLASS_COMBO submits on this triple.
     // Drizzle's pg_advisory_xact_lock auto-releases at tx end (the returned
