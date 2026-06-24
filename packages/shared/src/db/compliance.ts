@@ -37,6 +37,12 @@ export const complianceAlertLog = pgTable(
     // with vehicleId but the gate credits only declared indexes / PKs).
     index('idx_compliance_alert_log_vehicleId').on(t.vehicleId),
     // Idempotency seal: one alert per (vehicle, document, band) across daily runs.
+    // operatorId is deliberately NOT part of the seal — safe ONLY because a vehicle
+    // can never change operator (the tenant anchor is stripped on update; see
+    // repositories/drizzle/vehicle.ts `update`). If vehicle→operator reassignment is
+    // ever added, this seal must widen to include operatorId, or onConflictDoNothing
+    // will silently suppress the new operator's first alert for any band the old one
+    // already consumed (#1043).
     unique('compliance_alert_log_band_unique').on(t.vehicleId, t.documentType, t.thresholdBand),
   ],
 )
