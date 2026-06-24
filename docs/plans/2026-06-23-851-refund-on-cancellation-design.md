@@ -116,10 +116,16 @@ Current: `cancel(ctx,id,{from,fee,cancelledAt})`, `updateStatus(ctx,id,{from,to}
 - `cancel` gains `settlement` (renter cancel writes status+fee+settlement in-tx).
 - Operator `updateStatus(→ CANCELLED)` tx writes the initial settlement in-tx.
 - NEW `markCancellationSettlement(ctx,id,{from,to})` — guarded conditional transition.
-- NEW `listRefundDueNeedingDrive({limit})` — bounded reconciler scan: bookings
-  `REFUND_DUE` joined to `payment_refunds`, keeping only rows with NO receipt or a
+- NEW **`RefundReconcilerRepository.listRefundDueNeedingDrive({limit})`** — bounded
+  reconciler scan: bookings `REFUND_DUE` LEFT JOINed to `payment_refunds`, keeping
+  only rows with NO receipt (a lost eager-fire — the primary self-heal case) or a
   non-terminal (PENDING) receipt, so terminal-FAILED rows are excluded **before** the
-  limit and can't starve retryable work.
+  limit and can't starve retryable work. System-scoped (a cron has no caller → no
+  tenant ctx). **Its own port, not a `BookingRepository` method** (as first sketched):
+  the scan spans two aggregates, and `repositories/types.ts` is at the 800-line hard
+  cap — a dedicated port in `types-payment.ts` keeps the central barrel unbloated and
+  the read cohesive. InMemory shares the booking + refund maps (composition root) to
+  join them exactly as the SQL does.
 - NEW **`PaymentRefundRepository`**: `claim(bookingId,…)` (idempotent upsert →
   PENDING, **forward-only**), `attachStripeRefund(bookingId, re_…)`,
   `markStatus(bookingId, status)` (forward-only), `findByBookingId`.
@@ -156,7 +162,20 @@ full-tier → `CAPTURED`; operator paid → full total.
 Sweep from `worker.ts scheduled` (next to ComplianceDigest):
 `listRefundDueNeedingDrive({limit:N})` (terminal-FAILED excluded in-query) —
 **bounded batch**, **per-row try/catch**, **summary counters** logged like
-`[cron:compliance-digest]` (`{attempted, succeeded, failed, pending}`). Tests:
+`[cron:compliance-digest]` (`{attempted, succeeded, failed, pending}`). The two
+cron jobs are **isolated** (one throwing can't starve the other) and re-thrown
+together so Sentry still captures them.
+
+**Intended amount (confirmed):** reconstructed from the persisted booking,
+`intended = (totalPrice ?? 0) − (cancellationFee ?? 0)` — the renter's policy
+`refundAmount` (operator-fault rows carry fee 0 → full total). Time-independent (no
+re-deriving the tier at sweep time) and equal to the eager receipt's `amountJpy` for
+already-claimed rows. NOT the receipt's `amountJpy`, which is absent in the primary
+self-heal (lost eager-fire) case. The shared core still clamps to captured gross.
+Outcome is classified by the **durable receipt** after the drive (not the call's
+return), so a transient throw lands as retryable `pending`, not `failed`.
+
+Tests:
 **refund succeeded at Stripe but webhook never arrived → sweep retrieves `succeeded`
 and flips to `REFUNDED`** (the self-heal case); a stuck pre-claim `REFUND_DUE` is
 claimed + driven; **M terminal-FAILED rows ahead of K retryable do NOT starve the
