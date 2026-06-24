@@ -484,6 +484,13 @@
       "when": 1781752208311,
       "tag": "0068_compliance_vehicleId_fk_index",
       "breakpoints": true
+    },
+    {
+      "idx": 69,
+      "version": "7",
+      "when": 1782265541026,
+      "tag": "0069_turnaround_follows_dropoff",
+      "breakpoints": true
     }
   ]
 }
