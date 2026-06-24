@@ -583,7 +583,13 @@ describe('POST /bookings via HTTP (real Postgres)', () => {
     expect(second.status).toBe(409)
     const secondBody = await second.json()
     expect(secondBody.success).toBe(false)
-    expect(secondBody.error).toMatch(/already booked/i)
+    // #464: a SPECIFIC booking is now class-capacity guarded too (a CLASS_COMBO
+    // float is invisible to the per-car exclusion constraint). On a single-car
+    // class+location the capacity guard (demand >= supply) fires before the
+    // exclusion constraint, so an overlapping re-book of the only car reports the
+    // class as sold out rather than "already booked" — both are a 409 double-book
+    // rejection. Accept either so this stays robust to the class car-count.
+    expect(secondBody.error).toMatch(/already booked|No cars left/i)
   })
 
   it('rejects a cross-operator dropoff with 400 (#882 same-operator one-way guardrail)', async () => {

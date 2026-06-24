@@ -826,9 +826,11 @@ describe('BookingService.create — single-transaction submit (#392 §4)', () =>
       assignedVehicleId: 'other-veh',
       pickupLocationId: locationId,
       dropoffLocationId: locationId,
-      startAt: START,
-      endAt: END,
-      effectiveEndAt: new Date(END.getTime() + TURNAROUND_MS),
+      // #464: far-future window so this row owns the booking_code without
+      // consuming the class unit the new (overlapping) booking needs.
+      startAt: new Date(START.getTime() + 60 * 24 * 60 * 60 * 1000),
+      endAt: new Date(END.getTime() + 60 * 24 * 60 * 60 * 1000),
+      effectiveEndAt: new Date(END.getTime() + 60 * 24 * 60 * 60 * 1000 + TURNAROUND_MS),
       status: 'CONFIRMED',
       source: 'DIRECT',
       bookingCode: 'COLLIDE1',
@@ -870,9 +872,11 @@ describe('BookingService.create — single-transaction submit (#392 §4)', () =>
       assignedVehicleId: 'other-veh',
       pickupLocationId: locationId,
       dropoffLocationId: locationId,
-      startAt: START,
-      endAt: END,
-      effectiveEndAt: new Date(END.getTime() + TURNAROUND_MS),
+      // #464: far-future window so this row owns the booking_code without
+      // consuming the class unit the new (overlapping) booking needs.
+      startAt: new Date(START.getTime() + 60 * 24 * 60 * 60 * 1000),
+      endAt: new Date(END.getTime() + 60 * 24 * 60 * 60 * 1000),
+      effectiveEndAt: new Date(END.getTime() + 60 * 24 * 60 * 60 * 1000 + TURNAROUND_MS),
       status: 'CONFIRMED',
       source: 'DIRECT',
       bookingCode: 'DUP00001',
@@ -1114,6 +1118,62 @@ describe('BookingService.create — CLASS_COMBO (#464 2d.3)', () => {
     if (result.ok) return
     expect(result.status).toBe(409)
     expect(result.code).toBe('CLASS_COMBO_SOLD_OUT')
+  })
+
+  // #464: mirror of the test above. The per-vehicle exclusion constraint skips
+  // NULL assignedVehicleId, so a CLASS_COMBO float is invisible to it. Without
+  // lifting the class-capacity gate onto the SPECIFIC path too, a SPECIFIC create
+  // can grab the very car a float already reserved → overbook.
+  it('rejects a SPECIFIC create when a CLASS_COMBO float holds the last class unit → 409', async () => {
+    const h = await setup()
+    const { classId, locationId, vehicleId } = await seedComboReady(h)
+    await h.repos.bookingRepo.create(
+      SYSTEM_CONTEXT,
+      bookingRow({
+        classId,
+        pickupLocationId: locationId,
+        dropoffLocationId: locationId,
+        requestedVehicleId: null,
+        assignedVehicleId: null,
+        fulfillmentMode: 'CLASS_COMBO',
+        bookingCode: 'FLOAT001',
+      }),
+    )
+    const result = await h.service.create(
+      renterCtx,
+      createInput({
+        requestedVehicleId: vehicleId,
+        pickupLocationId: locationId,
+        dropoffLocationId: locationId,
+      }),
+      NOW,
+    )
+    expect(result.ok).toBe(false)
+    if (result.ok) return
+    expect(result.status).toBe(409)
+    expect(result.code).toBe('CLASS_COMBO_SOLD_OUT')
+  })
+
+  // #464 / #954: combos have no per-vehicle rules, but the universal past-start
+  // floor must still fire (checkRentalRules with all class rules null).
+  it('rejects a CLASS_COMBO whose start is in the past → 400 RENTAL_RULE_START_IN_PAST', async () => {
+    const h = await setup()
+    const { classId, locationId } = await seedComboReady(h)
+    const result = await h.service.create(
+      renterCtx,
+      comboInput({
+        classId,
+        pickupLocationId: locationId,
+        dropoffLocationId: locationId,
+        startAt: new Date(NOW.getTime() - 2 * 60 * 60 * 1000), // 2h before now
+        endAt: END,
+      }),
+      NOW,
+    )
+    expect(result.ok).toBe(false)
+    if (result.ok) return
+    expect(result.status).toBe(400)
+    expect(result.code).toBe('RENTAL_RULE_START_IN_PAST')
   })
 })
 
