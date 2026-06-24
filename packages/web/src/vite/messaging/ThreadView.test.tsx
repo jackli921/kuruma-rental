@@ -1,4 +1,5 @@
 import { render, screen, within } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import { IntlProvider } from 'use-intl'
 import { describe, expect, it, vi } from 'vitest'
 import en from '../../../messages/en.json'
@@ -72,5 +73,32 @@ describe('ThreadView', () => {
     })
     expect(bubbleFor('first').getAttribute('data-own')).toBe('false')
     expect(bubbleFor('second').getAttribute('data-own')).toBe('true')
+  })
+
+  it('drops a shown translation when the locale changes, so no stale language lingers', async () => {
+    const user = userEvent.setup()
+    const onTranslate = vi.fn().mockResolvedValue('Hello there')
+    const messages = [message({ id: 'm', content: 'こんにちは' })]
+    const view = (locale: string) => (
+      <IntlProvider locale="en" messages={en}>
+        <ThreadView
+          messages={messages}
+          currentUserId={ME}
+          counterpartName="Kaku Rentals"
+          locale={locale}
+          onTranslate={onTranslate}
+        />
+      </IntlProvider>
+    )
+    const { rerender } = render(view('en'))
+
+    await user.click(screen.getByRole('button', { name: 'Translate' }))
+    expect(await screen.findByText('Hello there')).toBeTruthy()
+
+    // The renter switches UI language; the bubble must reset to the original rather
+    // than keep showing the previously fetched (now wrong-language) translation.
+    rerender(view('ja'))
+    expect(screen.getByText('こんにちは')).toBeTruthy()
+    expect(screen.queryByText('Hello there')).toBeNull()
   })
 })

@@ -32,8 +32,11 @@ export function ThreadView({
   return (
     <ul className="flex flex-col gap-3">
       {messages.map((msg) => (
+        // Key on locale too: a per-message translation is cached in the bubble's
+        // local state and is only valid for one target language, so switching the
+        // UI locale must remount the bubble to drop a now-wrong-language result.
         <MessageBubble
-          key={msg.id}
+          key={`${msg.id}:${locale}`}
           message={msg}
           isOwn={msg.senderId === currentUserId}
           speakerName={counterpartName}

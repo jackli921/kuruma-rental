@@ -76,6 +76,15 @@ describe('ConversationView', () => {
     expect(invalidate).toHaveBeenCalledWith({ queryKey: THREADS_QUERY_KEY })
   })
 
+  it('still renders the transcript when marking the thread read fails', async () => {
+    vi.mocked(markThreadRead).mockReset().mockRejectedValue(new Error('network down'))
+    renderView()
+    await waitFor(() => expect(markThreadRead).toHaveBeenCalledWith(THREAD, 'csrf-tok'))
+    // A failed read is non-critical — the badge just lingers until the next poll;
+    // it must not reject unhandled or tear down the conversation.
+    expect(screen.getByText('welcome')).toBeTruthy()
+  })
+
   it('sends the typed message with a uuid idempotency key + csrf, then refetches', async () => {
     const user = userEvent.setup({ delay: null })
     const { invalidate } = renderView()

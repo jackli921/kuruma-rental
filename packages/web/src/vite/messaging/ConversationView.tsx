@@ -41,9 +41,12 @@ export function ConversationView({
   const queryClient = useQueryClient()
 
   useEffect(() => {
-    void markThreadRead(threadId, csrfToken).then(() =>
-      queryClient.invalidateQueries({ queryKey: THREADS_QUERY_KEY }),
-    )
+    // Marking read is best-effort: a failure is non-critical (the unread badge
+    // just lingers until the next poll), so swallow it rather than leave the
+    // promise to reject unhandled.
+    void markThreadRead(threadId, csrfToken)
+      .then(() => queryClient.invalidateQueries({ queryKey: THREADS_QUERY_KEY }))
+      .catch(() => {})
   }, [threadId, csrfToken, queryClient])
 
   const sendMutation = useMutation({

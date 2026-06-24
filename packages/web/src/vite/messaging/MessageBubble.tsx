@@ -36,6 +36,7 @@ export function MessageBubble({
   const body = showTranslation && translated != null ? translated : message.content
 
   function revealTranslation() {
+    if (status === 'loading') return
     if (translated != null) {
       setShowTranslation(true)
       return
