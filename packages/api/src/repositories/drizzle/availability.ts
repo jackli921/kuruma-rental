@@ -124,4 +124,30 @@ export class DrizzleAvailabilityRepository implements AvailabilityRepository {
       )
     return row?.count ?? 0
   }
+
+  async countClassCapacity(
+    operatorId: string,
+    classId: string,
+    pickupLocationId: string,
+    asOf: Date,
+  ): Promise<number> {
+    // #464 2d.2: road-legal supply side of the combo guard. status<>'RETIRED'
+    // (RETIRED = permanent fleet exit) and both certificates cover THROUGH the
+    // JST asOf day — same NULL≠current handling as findAvailableVehicles
+    // (NULL >= date is NULL, excluded).
+    const asOfIso = jstDateString(asOf)
+    const [row] = await this.db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(vehicles)
+      .where(
+        and(
+          eq(vehicles.operatorId, operatorId),
+          eq(vehicles.classId, classId),
+          eq(vehicles.pickupLocationId, pickupLocationId),
+          sql`${vehicles.status} <> 'RETIRED'`,
+          sql`${vehicles.shakenExpiryDate} >= ${asOfIso}::date AND ${vehicles.insuranceExpiryDate} >= ${asOfIso}::date`,
+        ),
+      )
+    return row?.count ?? 0
+  }
 }

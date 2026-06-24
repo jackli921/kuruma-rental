@@ -100,4 +100,26 @@ export class InMemoryAvailabilityRepository implements AvailabilityRepository {
         b.effectiveEndAt > from,
     ).length
   }
+
+  async countClassCapacity(
+    operatorId: string,
+    classId: string,
+    pickupLocationId: string,
+    asOf: Date,
+  ): Promise<number> {
+    // #464 2d.2: road-legal supply side of the combo guard. RETIRED is the
+    // permanent fleet exit (never counts); MAINTENANCE is temporary and still
+    // belongs to the class fleet (counts). Doc-validity uses the same JST
+    // clock as findAvailableVehicles (§4 "one clock").
+    const { data: vehicles } = await this.vehicleRepo.findAll(SYSTEM_CONTEXT, {})
+    const asOfIso = jstDateString(asOf)
+    return vehicles.filter(
+      (v) =>
+        v.operatorId === operatorId &&
+        v.classId === classId &&
+        v.pickupLocationId === pickupLocationId &&
+        v.status !== 'RETIRED' &&
+        isRoadLegal(v, asOfIso),
+    ).length
+  }
 }

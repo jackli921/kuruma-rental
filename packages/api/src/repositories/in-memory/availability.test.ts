@@ -289,3 +289,61 @@ describe('InMemoryAvailabilityRepository.countClassDemand (#464)', () => {
     expect(await demand()).toBe(1)
   })
 })
+
+// #464 slice 2d.2: countClassCapacity is the road-legal supply side of the
+// combo guard. RETIRED is the permanent fleet exit (never counts);
+// MAINTENANCE is temporary (still belongs to the class fleet, counts) — same
+// stance the existing #916 compliance gate takes for findAvailableVehicles.
+describe('InMemoryAvailabilityRepository.countClassCapacity (#464 slice 2d.2)', () => {
+  const capacity = () =>
+    availabilityRepo.countClassCapacity('op_a', 'class_compact', 'loc_osaka', TO)
+
+  it('counts an AVAILABLE road-legal vehicle in (op, class, loc)', async () => {
+    await makeVehicle({})
+    expect(await capacity()).toBe(1)
+  })
+
+  it('counts a MAINTENANCE vehicle (temporary state, still class fleet)', async () => {
+    await makeVehicle({ status: 'MAINTENANCE' })
+    expect(await capacity()).toBe(1)
+  })
+
+  it('excludes a RETIRED vehicle (permanent fleet exit)', async () => {
+    await makeVehicle({ status: 'RETIRED' })
+    expect(await capacity()).toBe(0)
+  })
+
+  it('excludes a vehicle whose shaken expires before the requested return date', async () => {
+    await makeVehicle({ shakenExpiryDate: '2026-07-31' })
+    expect(await capacity()).toBe(0)
+  })
+
+  it('excludes a vehicle whose insurance expires before the requested return date', async () => {
+    await makeVehicle({ insuranceExpiryDate: '2026-07-31' })
+    expect(await capacity()).toBe(0)
+  })
+
+  it('counts a vehicle whose docs lapse on the same JST day as the return (valid THROUGH)', async () => {
+    // TO is 2026-08-01T14:00Z → 2026-08-01 JST. A cert printed 2026-08-01 is
+    // valid THROUGH that day — same rule as findAvailableVehicles + #916.
+    await makeVehicle({ shakenExpiryDate: '2026-08-01', insuranceExpiryDate: '2026-08-01' })
+    expect(await capacity()).toBe(1)
+  })
+
+  it('excludes a vehicle with a NULL shaken date (UNKNOWN ≠ current)', async () => {
+    await makeVehicle({ shakenExpiryDate: null })
+    expect(await capacity()).toBe(0)
+  })
+
+  it('excludes vehicles in a different operator / class / location', async () => {
+    await makeVehicle({ operatorId: 'op_b' })
+    await makeVehicle({ classId: 'class_van' })
+    await makeVehicle({ pickupLocationId: 'loc_kyoto' })
+    expect(await capacity()).toBe(0)
+  })
+
+  it('excludes a vehicle with null pickupLocationId (no class store, no class supply)', async () => {
+    await makeVehicle({ pickupLocationId: null })
+    expect(await capacity()).toBe(0)
+  })
+})

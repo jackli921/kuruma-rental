@@ -496,4 +496,40 @@ describe('DrizzleAvailabilityRepository', () => {
       expect(count).toBe(0)
     })
   })
+
+  // #464 2d.2: road-legal supply side of the combo guard against the real
+  // schema (status<>'RETIRED' + shaken/insurance >= JST asOf). InMemory pins
+  // the same contract — this proves the SQL emits the same answer.
+  describe('countClassCapacity (#464 slice 2d.2)', () => {
+    const ASOF = new Date('2026-08-01T14:00:00Z') // 2026-08-01 JST
+
+    it('counts AVAILABLE + MAINTENANCE road-legal vehicles, excludes RETIRED', async () => {
+      const available = await createTestVehicle({ name: 'Cap A', status: 'AVAILABLE' })
+      const maintenance = await createTestVehicle({ name: 'Cap M', status: 'MAINTENANCE' })
+      const retired = await createTestVehicle({ name: 'Cap R', status: 'RETIRED' })
+      createdVehicleIds.push(available.id, maintenance.id, retired.id)
+
+      const count = await availabilityRepo.countClassCapacity(
+        BEST_CAR_RENTAL_OPERATOR_ID,
+        testClassId,
+        testLocationId,
+        ASOF,
+      )
+      expect(count).toBe(2)
+    })
+
+    it('excludes vehicles whose shaken/insurance certificate has lapsed at asOf', async () => {
+      const expired = await createTestVehicle({ name: 'Cap E', shakenExpiryDate: '2026-07-31' })
+      const valid = await createTestVehicle({ name: 'Cap V' })
+      createdVehicleIds.push(expired.id, valid.id)
+
+      const count = await availabilityRepo.countClassCapacity(
+        BEST_CAR_RENTAL_OPERATOR_ID,
+        testClassId,
+        testLocationId,
+        ASOF,
+      )
+      expect(count).toBe(1)
+    })
+  })
 })

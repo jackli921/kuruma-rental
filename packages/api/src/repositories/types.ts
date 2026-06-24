@@ -77,9 +77,7 @@ export type {
 // their own module to keep this barrel under the file-size cap (#978);
 // re-exported for callers.
 export type { DocumentStorage, PhotoStorage } from './types-storage'
-// #464 2d.1: import + re-export so TransactionRepos can name it.
-import type { ClassRatePlanRepository } from './types-pricing'
-export type { ClassRatePlanRepository }
+export type { ClassRatePlanRepository } from './types-pricing'
 export { complianceAlertKey } from './types-compliance'
 export type { ComplianceAlertLogRepository, RecordComplianceAlert } from './types-compliance'
 
@@ -521,6 +519,15 @@ export interface AvailabilityRepository {
     from: Date,
     to: Date,
   ): Promise<number>
+  // #464 2d.2: road-legal supply side of the combo guard. Counts vehicles in
+  // (op, class, loc) with status<>'RETIRED' (RETIRED = permanent exit) that
+  // are road-legal at asOf (same JST clock as findAvailableVehicles).
+  countClassCapacity(
+    operatorId: string,
+    classId: string,
+    pickupLocationId: string,
+    asOf: Date,
+  ): Promise<number>
 }
 
 /**
@@ -648,46 +655,15 @@ export interface MessageRepository {
   ): Promise<Message | undefined>
 }
 
-// Transaction boundary across repos. Drizzle wraps db.transaction() and binds
-// repos to the tx handle; InMemory passes singletons through. Slice 6 (#392)
-// widened the bundle so the booking submit validates availability + appends
-// BOOKING_CREATED + reads vehicle/location/insurance/fee rows in one tx.
-export interface TransactionRepos {
-  vehicleRepo: VehicleRepository
-  maintenanceLogRepo: MaintenanceLogRepository
-  bookingRepo: BookingRepository
-  bookingEventRepo: BookingEventRepository
-  locationRepo: LocationRepository
-  insuranceOptionRepo: InsuranceOptionRepository
-  addOnRepo: AddOnRepository
-  feeScheduleRepo: FeeScheduleRepository
-  // #875: walk-in renter (#589 1c) is created INSIDE the booking tx so a
-  // failed booking rolls the renter back with it (no orphan).
-  userRepo: Pick<UserRepository, 'createWalkInRenter'>
-  // #464 2d: CLASS_COMBO submit reads demand+capacity, acquires the per-triple
-  // advisory lock, prices via findActiveRate, and validates classId↔operator
-  // in-tx — single point-in-time view (2d.2/2d.4 grow AvailabilityRepository).
-  availabilityRepo: AvailabilityRepository
-  classRatePlanRepo: ClassRatePlanRepository
-  vehicleClassRepo: VehicleClassRepository
-}
-
-export type RunInTransaction = <T>(fn: (repos: TransactionRepos) => Promise<T>) => Promise<T>
-
-// #521 §6: minimal write surface for the atomic operator-grant tx — membership
-// ledger INSERT, denormalised users projection, invite consumption. Membership
-// INSERT goes first so the partial-unique-active index aborts the whole tx on
-// a concurrent double-accept; the service then re-reads the winner.
-export interface OperatorGrantRepos {
-  memberships: Pick<OperatorMembershipRepository, 'create'>
-  users: Pick<UserRepository, 'setOperatorAccess'>
-  invites: Pick<ProviderInviteRepository, 'markAccepted'>
-}
-
-// Drizzle wires the real per-call neon-serverless tx (#493, pooled DATABASE_URL);
-// InMemory passes the plain repos (single-threaded, no real tx). Mirrors
-// RunInTransaction (the booking bundle) but scoped to the grant's three tables.
-export type RunOperatorGrant = <T>(fn: (repos: OperatorGrantRepos) => Promise<T>) => Promise<T>
+// Transaction-runner ports (#392 booking bundle + #521 operator-grant bundle)
+// live in ./types-transactions to keep this barrel under the file-size cap
+// (#978); re-exported here so callers' imports don't change.
+export type {
+  OperatorGrantRepos,
+  RunInTransaction,
+  RunOperatorGrant,
+  TransactionRepos,
+} from './types-transactions'
 
 export interface TransitionLogsResult {
   resolved?: MaintenanceLog
