@@ -1,13 +1,21 @@
+import type { UserRole } from '@kuruma/shared/auth/roles'
 import { CONSENT_CARDINALITY, type ConsentMethod, type ConsentType } from '@kuruma/shared/enums'
 import { PG_ERROR, pgErrorCode } from '../pg-errors'
 import type { ConsentRepository, NewConsentAcceptance } from '../repositories/types'
 import type { ConsentAcceptance, ConsentDocument } from '../stores'
 import { type SigningKey, resolveSigningKey, signAcceptanceRecord } from './consent-signing'
 
-/** Required once-per-subject document types by role (operator types arrive in Phase 3). */
+/**
+ * Required once-per-subject document types by role (operator types arrive in
+ * Phase 3). The literal is `satisfies`-checked against `UserRole` so a typo'd or
+ * unreal role key fails to COMPILE — without it a misspelled key would silently
+ * mean "owes nothing", i.e. fail OPEN, the wrong default for a legal gate. The
+ * `Record<string, …>` annotation keeps the runtime lookup keyable by a raw JWT
+ * role string (mirrors the `roleSet` idiom in `@kuruma/shared/auth/roles`).
+ */
 const REQUIRED_TYPES: Record<string, ConsentType[]> = {
   RENTER: ['RENTER_TOS', 'PRIVACY_POLICY'],
-}
+} satisfies Partial<Record<UserRole, ConsentType[]>>
 
 /** Locale every published cohort is guaranteed to carry — the fallback when the
  *  caller's locale was never authored for a given (type, version) (#877 Q4). */
