@@ -2,7 +2,7 @@
 // ENFORCES: the CSP script-src hash in packages/web/public/_headers matches the
 //   inline bootstrap script as ACTUALLY EMITTED into packages/web/dist/index.html,
 //   and that script-src carries no 'unsafe-inline'.
-// SSOT: packages/web/public/_headers (the shipped CSP) — issue #500.
+// SSOT: docs/architecture/modules.md § Runtime invariants (Cloudflare Workers) — issue #500.
 //
 // Why this exists alongside the source-level unit test (tests/deploy/
 // csp-script-hash.test.ts): that test hashes the SOURCE index.html for fast
