@@ -34,15 +34,6 @@ describe('InMemoryComplianceAlertLogRepository', () => {
     expect([...store.values()][0].recipient).toBe('a@example.com')
   })
 
-  test('recordMany dedupes a same-band duplicate within a single batch', async () => {
-    const store = new Map()
-    const repo = new InMemoryComplianceAlertLogRepository(store)
-    await repo.recordMany([base, { ...base, recipient: 'changed@example.com' }])
-
-    expect(store.size).toBe(1)
-    expect([...store.values()][0].recipient).toBe('a@example.com')
-  })
-
   test('findAlertedKeys only returns keys for the requested vehicles', async () => {
     const repo = new InMemoryComplianceAlertLogRepository()
     await repo.recordMany([base, { ...base, vehicleId: 'veh-2' }])

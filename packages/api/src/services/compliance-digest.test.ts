@@ -252,11 +252,11 @@ describe('ComplianceDigestService.run (#916 §5.4)', () => {
     })
 
     const summary = await service.run()
-    const warnCalls = warnSpy.mock.calls.length // capture before mockRestore clears it
+    const warnMsg = warnSpy.mock.calls[0]?.[0] // capture before mockRestore clears it
     warnSpy.mockRestore()
 
     expect(summary.fleetScanTruncated).toBe(true)
-    expect(warnCalls).toBe(1)
+    expect(warnMsg).toContain('page cap') // the cron line names the cause, not just a flag
   })
 
   it('does not flag fleetScanTruncated for a sub-cap scan', async () => {
