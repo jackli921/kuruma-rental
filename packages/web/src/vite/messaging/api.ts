@@ -195,10 +195,21 @@ export function threadsQueryOptions() {
   })
 }
 
+// One source for the per-thread cache key so the route's read and the
+// container's post-send invalidation can't drift apart.
+export function threadByIdQueryKey(id: string) {
+  return ['messaging', 'thread', id] as const
+}
+
+// The open conversation polls so a counterpart reply appears without a manual
+// refresh (websockets are out of scope); 60s matches the inbox/badge cadence.
+const THREAD_DETAIL_REFETCH_MS = 60_000
+
 export function threadByIdQueryOptions(id: string) {
   return queryOptions({
-    queryKey: ['messaging', 'thread', id],
+    queryKey: threadByIdQueryKey(id),
     queryFn: () => fetchThreadById(id),
+    refetchInterval: THREAD_DETAIL_REFETCH_MS,
   })
 }
 
