@@ -80,8 +80,11 @@ until a DSN is present. Plan: `docs/plans/2026-06-17-issue-361-monitoring-activa
 
 - **API** (`@sentry/cloudflare`, `packages/api/src/observability/`): captures
   unhandled exceptions (with stack), raw `>=500` responses, and slow requests
-  (`>2s`), tagged with the deploy's version id (`CF_VERSION_METADATA`) as the
-  **release**. Gated on the `SENTRY_DSN` Worker secret.
+  (`>2s`), tagged with the deploy commit SHA (`SENTRY_RELEASE` `--var`, falling
+  back to `CF_VERSION_METADATA.id`) as the **release**. Gated on the `SENTRY_DSN`
+  Worker secret. Source maps upload to Sentry (#959, gated on `SENTRY_AUTH_TOKEN`/
+  `SENTRY_ORG`/`SENTRY_PROJECT_API`) so API stack frames resolve to `src/` not
+  bundled `worker.js`.
 - **Web** (`@sentry/react`, `packages/web/src/lib/observability/`, #765): captures
   React render crashes + TanStack route errors, tagged with the deploy commit SHA
   (`VITE_SENTRY_RELEASE`) as the release. Gated on the public `VITE_SENTRY_DSN`.
@@ -97,13 +100,15 @@ To activate (HITL, one-time):
 1. Create **two** Sentry projects: platform **Cloudflare Workers** (API) and
    **React** (web). Copy each DSN. Note your Sentry **org** + **project** slugs.
 2. Add GitHub secrets: `SENTRY_DSN` (API), `VITE_SENTRY_DSN` (web — public key,
-   safe to bake into the SPA), `SENTRY_AUTH_TOKEN` (web source-map upload — a real
-   secret). Add repo **variables** `SENTRY_ORG`, `SENTRY_PROJECT`, and
-   `SENTRY_ENVIRONMENT` (set to `beta`; the API Worker also reads it from
-   `wrangler.toml` `[vars]`). Unset env defaults to `production` and would
-   mis-tag beta errors — don't skip it.
-3. Run the **Rotate Worker Secrets** workflow (sets the API `SENTRY_DSN`); the next
-   web deploy bakes the web DSN + release and uploads source maps.
+   safe to bake into the SPA), `SENTRY_AUTH_TOKEN` (source-map upload — a real
+   secret, shared by web *and* API). Add repo **variables** `SENTRY_ORG`,
+   `SENTRY_PROJECT` (web), **`SENTRY_PROJECT_API`** (#959 — the API project slug;
+   the API map upload no-ops until it is set), and `SENTRY_ENVIRONMENT` (set to
+   `beta`; the API Worker also reads it from `wrangler.toml` `[vars]`). Unset env
+   defaults to `production` and would mis-tag beta errors — don't skip it.
+3. Run the **Rotate Worker Secrets** workflow (sets the API `SENTRY_DSN` + uploads
+   the API source maps for the promoted version); the next web deploy bakes the web
+   DSN + release and uploads web source maps. API maps also upload on every deploy.
 4. In Sentry: add an **alert rule** — *error* events spike 5× baseline for 10 min →
    Slack/email (page on errors only; the `>2s` slow-request warnings are
    dashboard-only — Neon cold starts trip 2s, so paging on them is alert fatigue).

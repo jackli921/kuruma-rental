@@ -30,6 +30,24 @@ describe('resolveSentryOptions', () => {
     expect(opts.release).toBe('deadbeef-version-id')
   })
 
+  it('prefers an explicit SENTRY_RELEASE over the CF version metadata id', () => {
+    const opts = resolveSentryOptions({
+      SENTRY_DSN: 'https://abc@o1.ingest.sentry.io/42',
+      SENTRY_RELEASE: 'a1b2c3d-commit-sha',
+      CF_VERSION_METADATA: { id: 'deadbeef-version-id', tag: 'v3' },
+    })
+    expect(opts.release).toBe('a1b2c3d-commit-sha')
+  })
+
+  it('falls back to the CF version id when SENTRY_RELEASE is blank/whitespace', () => {
+    const opts = resolveSentryOptions({
+      SENTRY_DSN: 'https://abc@o1.ingest.sentry.io/42',
+      SENTRY_RELEASE: '   ',
+      CF_VERSION_METADATA: { id: 'deadbeef-version-id' },
+    })
+    expect(opts.release).toBe('deadbeef-version-id')
+  })
+
   it('honours an explicit SENTRY_ENVIRONMENT override', () => {
     const opts = resolveSentryOptions({
       SENTRY_DSN: 'https://abc@o1.ingest.sentry.io/42',

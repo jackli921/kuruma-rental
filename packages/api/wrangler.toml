@@ -3,6 +3,13 @@ main = "src/worker.ts"
 compatibility_date = "2025-04-01"
 compatibility_flags = ["nodejs_compat"]
 
+# Source maps (#959). Makes `wrangler deploy` upload Worker source maps to
+# Cloudflare so the CF dashboard de-minifies traces. The Sentry side is separate:
+# the `deploy` script's `--outdir dist` is what writes the local dist/worker.js.map
+# that the gated `sentry:sourcemaps` CI step uploads, keyed to the SENTRY_RELEASE
+# (commit SHA) the runtime reports — see package.json + deploy.yml.
+upload_source_maps = true
+
 # Daily 23:00 UTC = 08:00 JST. Fires the worker.ts `scheduled` handler, which runs
 # two isolated jobs: the #916 §5.4 fleet-compliance digest and the #851
 # refund-on-cancellation reconciler backstop.
