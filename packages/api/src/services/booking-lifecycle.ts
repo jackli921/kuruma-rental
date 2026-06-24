@@ -136,9 +136,10 @@ export class BookingLifecycleService {
           addOns: booking.addOnSnapshot,
         })
 
-        // Turnaround is location-only and the pickup location is unchanged, so
-        // effectiveEndAt is preserved; the repo re-runs the exclusion check for
-        // the NEW assigned vehicle over that window atomically.
+        // Turnaround follows the dropoff location, and substitution changes
+        // neither pickup nor dropoff, so effectiveEndAt is preserved; the repo
+        // re-runs the exclusion check for the NEW assigned vehicle over that
+        // window atomically.
         const updated = await repos.bookingRepo.reassignVehicle(ctx, booking.id, {
           assignedVehicleId: replacement.id,
           totalPrice,
