@@ -500,33 +500,80 @@ describe('DrizzleAvailabilityRepository', () => {
   // #464 2d.2: road-legal supply side of the combo guard against the real
   // schema (status<>'RETIRED' + shaken/insurance >= JST asOf). InMemory pins
   // the same contract — this proves the SQL emits the same answer.
+  //
+  // Capacity counts ALL vehicles tied to (operator, class, location), so this
+  // describe owns its own (capClassId, capLocationId): the outer test* pair
+  // is reused by the demand block above and those vehicles only get cleaned
+  // up in afterAll, which would let prior-test vehicles leak into the count.
+  // The local afterEach keeps each `it` independent.
   describe('countClassCapacity (#464 slice 2d.2)', () => {
     const ASOF = new Date('2026-08-01T14:00:00Z') // 2026-08-01 JST
+    let capClassId: string
+    let capLocationId: string
+    const capVehicleIds: string[] = []
+
+    beforeAll(async () => {
+      const klass = await seedVehicleClass('avail-cap')
+      capClassId = klass.id
+      createdClassIds.push(klass.id)
+      const location = await seedLocation('avail-cap', TURNAROUND_MINUTES)
+      capLocationId = location.id
+      createdLocationIds.push(location.id)
+    })
+
+    afterEach(async () => {
+      await cleanupVehicles(capVehicleIds)
+      capVehicleIds.length = 0
+    })
 
     it('counts AVAILABLE + MAINTENANCE road-legal vehicles, excludes RETIRED', async () => {
-      const available = await createTestVehicle({ name: 'Cap A', status: 'AVAILABLE' })
-      const maintenance = await createTestVehicle({ name: 'Cap M', status: 'MAINTENANCE' })
-      const retired = await createTestVehicle({ name: 'Cap R', status: 'RETIRED' })
-      createdVehicleIds.push(available.id, maintenance.id, retired.id)
+      const available = await createTestVehicle({
+        name: 'Cap A',
+        status: 'AVAILABLE',
+        classId: capClassId,
+        pickupLocationId: capLocationId,
+      })
+      const maintenance = await createTestVehicle({
+        name: 'Cap M',
+        status: 'MAINTENANCE',
+        classId: capClassId,
+        pickupLocationId: capLocationId,
+      })
+      const retired = await createTestVehicle({
+        name: 'Cap R',
+        status: 'RETIRED',
+        classId: capClassId,
+        pickupLocationId: capLocationId,
+      })
+      capVehicleIds.push(available.id, maintenance.id, retired.id)
 
       const count = await availabilityRepo.countClassCapacity(
         BEST_CAR_RENTAL_OPERATOR_ID,
-        testClassId,
-        testLocationId,
+        capClassId,
+        capLocationId,
         ASOF,
       )
       expect(count).toBe(2)
     })
 
     it('excludes vehicles whose shaken/insurance certificate has lapsed at asOf', async () => {
-      const expired = await createTestVehicle({ name: 'Cap E', shakenExpiryDate: '2026-07-31' })
-      const valid = await createTestVehicle({ name: 'Cap V' })
-      createdVehicleIds.push(expired.id, valid.id)
+      const expired = await createTestVehicle({
+        name: 'Cap E',
+        shakenExpiryDate: '2026-07-31',
+        classId: capClassId,
+        pickupLocationId: capLocationId,
+      })
+      const valid = await createTestVehicle({
+        name: 'Cap V',
+        classId: capClassId,
+        pickupLocationId: capLocationId,
+      })
+      capVehicleIds.push(expired.id, valid.id)
 
       const count = await availabilityRepo.countClassCapacity(
         BEST_CAR_RENTAL_OPERATOR_ID,
-        testClassId,
-        testLocationId,
+        capClassId,
+        capLocationId,
         ASOF,
       )
       expect(count).toBe(1)
