@@ -24,6 +24,7 @@
     "lint:unwrap-schema": "bun run scripts/lint-unwrap-schema.ts",
     "lint:fetch-binding": "bun run scripts/lint-fetch-binding.ts",
     "lint:dist-size": "bun run scripts/lint-dist-size.ts",
+    "lint:csp-hash": "bun run scripts/lint-csp-hash.ts",
     "lint:no-next-app": "bun run scripts/lint-no-next-app.ts",
     "lint:deps": "KNIP=1 bun node_modules/.bin/knip",
     "format": "bunx biome format --write .",
