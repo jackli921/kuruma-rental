@@ -253,6 +253,13 @@ export class PaymentService {
     return { status: 200, outcome: 'refund_confirmed' }
   }
 
+  /** Does the booking have a captured (SUCCEEDED) payment? The cancel paths (#851)
+   *  use this to decide settlement. Unscoped by design — the caller already
+   *  authorized the booking; payment_events is keyed by bookingId, not tenant. */
+  async isBookingPaid(bookingId: string): Promise<boolean> {
+    return (await this.paymentEvents.findSucceededByBookingId(bookingId)) !== null
+  }
+
   async getBookingPaymentStatus(
     ctx: CallerContext,
     bookingId: string,

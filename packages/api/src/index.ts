@@ -421,6 +421,9 @@ export function createApp(overrides?: AppOverrides, repos: Repos = buildRepos(ov
     bookingEventRepo,
     undefined,
     verificationGate,
+    // #851: PaymentService coordinates the auto-refund on cancel (isBookingPaid +
+    // initiateCancellationRefund). It's constructed above with the same repos.
+    paymentService,
   )
   const notificationService = new NotificationService(
     notificationLogRepo,

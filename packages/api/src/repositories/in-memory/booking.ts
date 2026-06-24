@@ -217,7 +217,12 @@ export class InMemoryBookingRepository implements BookingRepository {
   async cancel(
     ctx: CallerContext,
     id: string,
-    opts: { from: Booking['status']; fee: number; cancelledAt: Date },
+    opts: {
+      from: Booking['status']
+      fee: number
+      cancelledAt: Date
+      settlement?: Booking['cancellationFeeSettlement']
+    },
   ): Promise<Booking | undefined> {
     const existing = this.store.get(id)
     if (!existing || existing.status !== opts.from) return undefined
@@ -227,6 +232,8 @@ export class InMemoryBookingRepository implements BookingRepository {
       ...existing,
       status: 'CANCELLED',
       cancellationFee: opts.fee,
+      // #851: written atomically with the cancel; defaults to the legacy 'ADVISORY'.
+      cancellationFeeSettlement: opts.settlement ?? 'ADVISORY',
       cancelledAt: opts.cancelledAt,
       updatedAt: new Date(),
     }

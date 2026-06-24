@@ -446,11 +446,17 @@ export interface BookingRepository {
   cancel(
     ctx: CallerContext,
     id: string,
-    opts: { from: Booking['status']; fee: number; cancelledAt: Date },
+    // #851: settlement written atomically with status+fee; optional, defaults 'ADVISORY'.
+    opts: {
+      from: Booking['status']
+      fee: number
+      cancelledAt: Date
+      settlement?: Booking['cancellationFeeSettlement']
+    },
   ): Promise<Booking | undefined>
   /** Guarded settlement transition (#851): matches only when the current value is
    *  `from`, so a redelivered webhook / racing reconciler pull gets undefined (0
-   *  rows) — atomic, idempotent, never a regression. See payment_refunds. */
+   *  rows) — atomic, idempotent, never a regression. */
   markCancellationSettlement(
     ctx: CallerContext,
     id: string,
@@ -459,14 +465,11 @@ export interface BookingRepository {
       to: Booking['cancellationFeeSettlement']
     },
   ): Promise<Booking | undefined>
-  /**
-   * Operator vehicle substitution (#392, §5.5): atomically reassign a booking to
-   * a new vehicle. Re-checks the exclusion constraint for the NEW assigned
-   * vehicle over the booking's [startAt, effectiveEndAt) — throws
-   * EXCLUSION_VIOLATION (23P01) if that car is already booked for the range —
-   * and re-snapshots totalPrice/effectiveEndAt. Returns undefined when the
-   * booking is not visible to the caller. requestedVehicleId is never touched.
-   */
+  /** Operator vehicle substitution (#392, §5.5): atomically reassign a booking to a
+   *  new vehicle. Re-checks the exclusion constraint for the NEW assigned vehicle over
+   *  [startAt, effectiveEndAt) — throws EXCLUSION_VIOLATION (23P01) if it's already
+   *  booked — and re-snapshots totalPrice/effectiveEndAt. Returns undefined when the
+   *  booking is not visible to the caller; requestedVehicleId is never touched. */
   reassignVehicle(
     ctx: CallerContext,
     id: string,

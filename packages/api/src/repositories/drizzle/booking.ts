@@ -210,7 +210,12 @@ export class DrizzleBookingRepository implements BookingRepository {
   async cancel(
     ctx: CallerContext,
     id: string,
-    opts: { from: Booking['status']; fee: number; cancelledAt: Date },
+    opts: {
+      from: Booking['status']
+      fee: number
+      cancelledAt: Date
+      settlement?: Booking['cancellationFeeSettlement']
+    },
   ): Promise<Booking | undefined> {
     const scoped = this.scopeConditions(ctx)
     if (scoped === null) return undefined
@@ -219,6 +224,8 @@ export class DrizzleBookingRepository implements BookingRepository {
       .set({
         status: 'CANCELLED',
         cancellationFee: opts.fee,
+        // #851: settlement written atomically with the cancel; legacy default 'ADVISORY'.
+        cancellationFeeSettlement: opts.settlement ?? 'ADVISORY',
         cancelledAt: opts.cancelledAt,
         updatedAt: sql`now()`,
       })
