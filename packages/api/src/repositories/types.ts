@@ -77,6 +77,7 @@ export type {
 // their own module to keep this barrel under the file-size cap (#978);
 // re-exported for callers.
 export type { DocumentStorage, PhotoStorage } from './types-storage'
+export type { ClassRatePlanRepository } from './types-pricing'
 export { complianceAlertKey } from './types-compliance'
 export type { ComplianceAlertLogRepository, RecordComplianceAlert } from './types-compliance'
 
@@ -512,6 +513,37 @@ export interface AvailabilityRepository {
       }
     | undefined
   >
+  // #464: total CONFIRMED/ACTIVE class demand overlapping [from, to) at one
+  // (operator, location, class) — SPECIFIC occupancy PLUS floating CLASS_COMBO
+  // (both via bookings.classId); slice 2's write guard asserts demand<totalCars.
+  countClassDemand(
+    operatorId: string,
+    classId: string,
+    pickupLocationId: string,
+    from: Date,
+    to: Date,
+  ): Promise<number>
+  // #464 2d.2: road-legal supply side of the combo guard. Counts vehicles in
+  // (op, class, loc) with status<>'RETIRED' (RETIRED = permanent exit) that
+  // are road-legal at asOf (same JST clock as findAvailableVehicles).
+  countClassCapacity(
+    operatorId: string,
+    classId: string,
+    pickupLocationId: string,
+    asOf: Date,
+  ): Promise<number>
+  // #464 2d.4: serializes concurrent CLASS_COMBO submits on one (op, class,
+  // loc) triple — Postgres' pg_advisory_xact_lock keyed on a hashed string,
+  // an InMemory per-key Promise chain in tests. The returned thunk releases:
+  // for Drizzle it is a no-op (advisory_xact_lock auto-releases at tx
+  // commit/rollback); for InMemory it resolves the queue head so the next
+  // waiter advances. The service holds the lock around demand → capacity →
+  // insert so a parallel submit can't slip a car under the gate.
+  lockComboCapacity(
+    operatorId: string,
+    classId: string,
+    pickupLocationId: string,
+  ): Promise<() => void>
 }
 
 /**
@@ -639,48 +671,15 @@ export interface MessageRepository {
   ): Promise<Message | undefined>
 }
 
-// Transaction boundary for operations spanning multiple repositories.
-// Drizzle: wraps db.transaction(), creating repos bound to the tx handle.
-// InMemory: passes repos through (JS event loop is single-threaded).
-//
-// Slice 6 (#392) widens the bundle so the single-transaction booking submit
-// (proposal §4) can — atomically — validate availability (booking insert ->
-// exclusion constraint), append the BOOKING_CREATED event, and read the
-// vehicle / location / insurance / fee rows for the price + snapshots at a
-// consistent point-in-time. MaintenanceService still uses only the first two.
-export interface TransactionRepos {
-  vehicleRepo: VehicleRepository
-  maintenanceLogRepo: MaintenanceLogRepository
-  bookingRepo: BookingRepository
-  bookingEventRepo: BookingEventRepository
-  locationRepo: LocationRepository
-  insuranceOptionRepo: InsuranceOptionRepository
-  addOnRepo: AddOnRepository
-  feeScheduleRepo: FeeScheduleRepository
-  // #875: the operator walk-in (#589 1c) creates its fresh renter INSIDE the
-  // booking tx, so a failed booking rolls the renter back with it (no orphan).
-  // Narrowed to that one write — the rest of UserRepository isn't tx-bound here.
-  userRepo: Pick<UserRepository, 'createWalkInRenter'>
-}
-
-export type RunInTransaction = <T>(fn: (repos: TransactionRepos) => Promise<T>) => Promise<T>
-
-// #521 §6: the minimal write surface the atomic operator-grant transaction needs —
-// the membership ledger INSERT, the denormalised users projection, and invite
-// consumption. Run together in ONE tx so a mid-sequence failure can't leave a partial
-// grant (membership without projection, or invite consumed without a membership row).
-// The membership INSERT goes first so the partial-unique-active index aborts the WHOLE
-// tx on a concurrent double-accept; the service then re-reads the winner.
-export interface OperatorGrantRepos {
-  memberships: Pick<OperatorMembershipRepository, 'create'>
-  users: Pick<UserRepository, 'setOperatorAccess'>
-  invites: Pick<ProviderInviteRepository, 'markAccepted'>
-}
-
-// Drizzle wires the real per-call neon-serverless tx (#493, pooled DATABASE_URL);
-// InMemory passes the plain repos (single-threaded, no real tx). Mirrors
-// RunInTransaction (the booking bundle) but scoped to the grant's three tables.
-export type RunOperatorGrant = <T>(fn: (repos: OperatorGrantRepos) => Promise<T>) => Promise<T>
+// Transaction-runner ports (#392 booking bundle + #521 operator-grant bundle)
+// live in ./types-transactions to keep this barrel under the file-size cap
+// (#978); re-exported here so callers' imports don't change.
+export type {
+  OperatorGrantRepos,
+  RunInTransaction,
+  RunOperatorGrant,
+  TransactionRepos,
+} from './types-transactions'
 
 export interface TransitionLogsResult {
   resolved?: MaintenanceLog

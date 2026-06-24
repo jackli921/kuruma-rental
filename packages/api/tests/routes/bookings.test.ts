@@ -4,8 +4,10 @@ import { beforeEach, describe, expect, it } from 'vitest'
 import { SYSTEM_CONTEXT } from '../../src/middleware/auth'
 import {
   InMemoryAddOnRepository,
+  InMemoryAvailabilityRepository,
   InMemoryBookingEventRepository,
   InMemoryBookingRepository,
+  InMemoryClassRatePlanRepository,
   InMemoryFeeScheduleRepository,
   InMemoryInsuranceOptionRepository,
   InMemoryLocationRepository,
@@ -37,6 +39,8 @@ let locationRepo: InMemoryLocationRepository
 let insuranceOptionRepo: InMemoryInsuranceOptionRepository
 let addOnRepo: InMemoryAddOnRepository
 let feeScheduleRepo: InMemoryFeeScheduleRepository
+let availabilityRepo: InMemoryAvailabilityRepository
+let classRatePlanRepo: InMemoryClassRatePlanRepository
 let service: BookingService
 let testClassId: string
 let locationId: string
@@ -140,6 +144,8 @@ describe('Booking Routes', () => {
     insuranceOptionRepo = new InMemoryInsuranceOptionRepository()
     addOnRepo = new InMemoryAddOnRepository()
     feeScheduleRepo = new InMemoryFeeScheduleRepository()
+    availabilityRepo = new InMemoryAvailabilityRepository(vehicleRepo, bookingRepo)
+    classRatePlanRepo = new InMemoryClassRatePlanRepository()
 
     const klass: VehicleClass = await vehicleClassRepo.create({
       operatorId: OPERATOR,
@@ -186,6 +192,9 @@ describe('Booking Routes', () => {
       addOnRepo,
       feeScheduleRepo,
       userRepo,
+      availabilityRepo,
+      classRatePlanRepo,
+      vehicleClassRepo,
     }
     const runInTransaction: RunInTransaction = async (fn) => fn(repos)
 
@@ -631,6 +640,48 @@ describe('Booking Routes', () => {
       expect(body.data.totalPrice).toBe(8000)
       expect(typeof body.data.bookingCode).toBe('string')
       expect(body.data.bookingCode.length).toBeGreaterThan(0)
+    })
+
+    // #464 slice 2d.4: parallel CLASS_COMBO submits on the same (operator,
+    // class, location) triple must serialize through the advisory lock so the
+    // class can be sold at most once per available car. Five concurrent POSTs
+    // with capacity=1 ⇒ exactly one CONFIRMED, four CLASS_COMBO_SOLD_OUT. The
+    // load-bearing test for the lock contract on the in-memory adapter; the
+    // real-pg parallel test rides slice 2d.5.
+    it('serializes parallel CLASS_COMBO POSTs so at most cars-on-hand 201, the rest 409', async () => {
+      // Capacity=1: retire seededVehicle2 so only seededVehicle1 counts as supply
+      // for the (OPERATOR, testClass, location) triple.
+      const v2 = await vehicleRepo.findById(SYSTEM_CONTEXT, seededVehicle2Id)
+      ;(v2 as Vehicle).status = 'RETIRED'
+      await classRatePlanRepo.create({
+        operatorId: OPERATOR,
+        classId: testClassId,
+        pickupLocationId: locationId,
+        dayRateJpy: 6000,
+        isActive: true,
+        label: null,
+      })
+      const { requestedVehicleId: _drop, ...rest } = validBookingInput()
+      const body = { ...rest, fulfillmentMode: 'CLASS_COMBO', classId: testClassId }
+
+      // Fire five concurrent submits — same body, same triple, same window.
+      const responses = await Promise.all(Array.from({ length: 5 }, () => createBooking(body)))
+      const statuses = responses.map((r) => r.status).sort()
+      expect(statuses).toEqual([201, 409, 409, 409, 409])
+
+      const failed = responses.filter((r) => r.status === 409)
+      const codes = await Promise.all(
+        failed.map(async (r) => {
+          const json = (await r.json()) as { code?: string }
+          return json.code
+        }),
+      )
+      expect(codes).toEqual([
+        'CLASS_COMBO_SOLD_OUT',
+        'CLASS_COMBO_SOLD_OUT',
+        'CLASS_COMBO_SOLD_OUT',
+        'CLASS_COMBO_SOLD_OUT',
+      ])
     })
 
     // #613 consent gate keys on RENTER role; the default test app authenticates

@@ -13,6 +13,7 @@ import {
   DrizzleAvailabilityRepository,
   DrizzleBookingEventRepository,
   DrizzleBookingRepository,
+  DrizzleClassRatePlanRepository,
   DrizzleComplianceAlertLogRepository,
   DrizzleCustomerRepository,
   DrizzleFeeScheduleRepository,
@@ -47,6 +48,7 @@ import {
   InMemoryAvailabilityRepository,
   InMemoryBookingEventRepository,
   InMemoryBookingRepository,
+  InMemoryClassRatePlanRepository,
   InMemoryComplianceAlertLogRepository,
   InMemoryCustomerRepository,
   InMemoryDocumentStorage,
@@ -83,6 +85,7 @@ import type {
   AvailabilityRepository,
   BookingEventRepository,
   BookingRepository,
+  ClassRatePlanRepository,
   ComplianceAlertLogRepository,
   ConsentRepository,
   CustomerRepository,
@@ -166,6 +169,7 @@ export type Repos = {
   insuranceOptionRepo: InsuranceOptionRepository
   addOnRepo: AddOnRepository
   feeScheduleRepo: FeeScheduleRepository
+  classRatePlanRepo: ClassRatePlanRepository
   notificationLogRepo: NotificationLogRepository
   complianceAlertLogRepo: ComplianceAlertLogRepository
   storefrontRepo: StorefrontRepository
@@ -203,6 +207,7 @@ export function buildOverrideRepos(overrides: AppOverrides): Repos {
     overrides.insuranceOptionRepo ?? new InMemoryInsuranceOptionRepository()
   const addOnRepo = overrides.addOnRepo ?? new InMemoryAddOnRepository()
   const feeScheduleRepo = overrides.feeScheduleRepo ?? new InMemoryFeeScheduleRepository()
+  const classRatePlanRepo = overrides.classRatePlanRepo ?? new InMemoryClassRatePlanRepository()
   const runInTransaction: RunInTransaction = async (fn) =>
     fn({
       vehicleRepo,
@@ -214,6 +219,12 @@ export function buildOverrideRepos(overrides: AppOverrides): Repos {
       addOnRepo,
       feeScheduleRepo,
       userRepo,
+      // #464 2d.1: InMemory has no real transaction isolation (JS event loop is
+      // single-threaded), so we hand the existing singleton instances through —
+      // mirrors the existing pattern for vehicleRepo / bookingRepo above.
+      availabilityRepo,
+      classRatePlanRepo,
+      vehicleClassRepo,
     })
   const fleetOverviewRepo =
     overrides.fleetOverviewRepo ??
@@ -271,6 +282,7 @@ export function buildOverrideRepos(overrides: AppOverrides): Repos {
     insuranceOptionRepo,
     addOnRepo,
     feeScheduleRepo,
+    classRatePlanRepo,
     notificationLogRepo,
     complianceAlertLogRepo,
     storefrontRepo,
@@ -372,6 +384,7 @@ export function buildDrizzleRepos(opts?: { db?: Db; runTx?: RunTx }): Repos {
     insuranceOptionRepo: new DrizzleInsuranceOptionRepository(db),
     addOnRepo: new DrizzleAddOnRepository(db),
     feeScheduleRepo: new DrizzleFeeScheduleRepository(db),
+    classRatePlanRepo: new DrizzleClassRatePlanRepository(db),
     notificationLogRepo: new DrizzleNotificationLogRepository(db),
     complianceAlertLogRepo: new DrizzleComplianceAlertLogRepository(db),
     storefrontRepo: new DrizzleStorefrontRepository(db),
@@ -407,6 +420,7 @@ export function buildInMemoryRepos(): Repos {
   const insuranceOptionRepo = new InMemoryInsuranceOptionRepository()
   const addOnRepo = new InMemoryAddOnRepository()
   const feeScheduleRepo = new InMemoryFeeScheduleRepository()
+  const classRatePlanRepo = new InMemoryClassRatePlanRepository()
   const operatorRepo = new InMemoryOperatorRepository()
   const operatorMembershipRepo = new InMemoryOperatorMembershipRepository()
   const providerInviteRepo = new InMemoryProviderInviteRepository()
@@ -415,6 +429,7 @@ export function buildInMemoryRepos(): Repos {
   // message path created (shared in-memory state — matches the prod seam).
   const threadRepo = new InMemoryThreadRepository()
   const availabilityRepo = new InMemoryAvailabilityRepository(vehicleRepo, bookingRepo)
+  const vehicleClassRepo = new InMemoryVehicleClassRepository()
   const runInTransaction: RunInTransaction = async (fn) =>
     fn({
       vehicleRepo,
@@ -426,11 +441,16 @@ export function buildInMemoryRepos(): Repos {
       addOnRepo,
       feeScheduleRepo,
       userRepo,
+      // #464 2d.1: InMemory has no real transaction isolation (JS event loop is
+      // single-threaded), so we hand the existing singleton instances through.
+      availabilityRepo,
+      classRatePlanRepo,
+      vehicleClassRepo,
     })
   const runOperatorGrant: RunOperatorGrant = (fn) =>
     fn({ memberships: operatorMembershipRepo, users: userRepo, invites: providerInviteRepo })
   return {
-    vehicleClassRepo: new InMemoryVehicleClassRepository(),
+    vehicleClassRepo,
     vehicleRepo,
     bookingRepo,
     availabilityRepo,
@@ -461,6 +481,7 @@ export function buildInMemoryRepos(): Repos {
     insuranceOptionRepo,
     addOnRepo,
     feeScheduleRepo,
+    classRatePlanRepo,
     notificationLogRepo: new InMemoryNotificationLogRepository(),
     complianceAlertLogRepo: new InMemoryComplianceAlertLogRepository(),
     storefrontRepo: new InMemoryStorefrontRepository(locationRepo, operatorRepo),

@@ -101,10 +101,13 @@ export interface Booking {
   // classId stays for discovery/grouping; sealed to operatorId by composite FK.
   classId: string
   // What the renter selected in storefront (slice 5) — immutable audit trail.
-  requestedVehicleId: string
+  // #464: null for a CLASS_COMBO float (no specific car requested). The
+  // bookings_specific_requires_requested CHECK keeps SPECIFIC rows non-null.
+  requestedVehicleId: string | null
   // What the operator fulfills; the exclusion constraint keys on this. Server-
   // derived = requestedVehicleId at submit; operator may substitute (#392).
-  assignedVehicleId: string
+  // #464: null for an unassigned CLASS_COMBO float until the operator assigns a car.
+  assignedVehicleId: string | null
   pickupLocationId: string
   dropoffLocationId: string
   startAt: Date
@@ -367,6 +370,26 @@ export interface FeeSchedule {
   unit: FeeUnit
   amountJpy: number
   status: FeeScheduleStatus
+  createdAt: Date
+  updatedAt: Date
+}
+
+/**
+ * The rate plan that prices a CLASS_COMBO booking (#464 §5.1). A combo books a
+ * vehicle *class* (no specific car at book time), so it is priced off the class,
+ * not a car — keyed per (operator, class, pickupLocation) because cars live at
+ * one location and a "deal" is a deliberately-set day rate. SPECIFIC bookings
+ * keep #406 per-car pricing; this table prices combos only (§5.3).
+ */
+export interface ClassRatePlan {
+  id: string
+  operatorId: string
+  classId: string
+  pickupLocationId: string
+  dayRateJpy: number
+  /** Toggle a deal on/off without deleting the row; inactive ⇒ not offered. */
+  isActive: boolean
+  label: string | null
   createdAt: Date
   updatedAt: Date
 }

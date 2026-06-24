@@ -3,6 +3,7 @@ import type { getDb } from './index'
 import { parsePlatformAdminEmails } from './platform-admins'
 import {
   addOnOptions,
+  classRatePlans,
   consentDocuments,
   feeSchedules,
   insuranceOptions,
@@ -16,6 +17,7 @@ import {
 } from './schema'
 import {
   DEMO_ADD_ON_OPTIONS,
+  DEMO_CLASS_RATE_PLANS,
   DEMO_CONSENT_DOCUMENTS,
   DEMO_FEE_SCHEDULES,
   DEMO_INSURANCE_OPTIONS,
@@ -311,6 +313,27 @@ export async function seed(db: ReturnType<typeof getDb>) {
       })
   }
 
+  // 7b. Class rate plans (#464) — price CLASS_COMBO bookings off the class.
+  // Composite FK (operatorId, classId) + pickupLocationId resolve now (classes
+  // + locations seeded above). Best Car Rental's Namba store bootstraps combos.
+  console.log(`Seeding ${DEMO_CLASS_RATE_PLANS.length} class rate plans...`)
+  for (const plan of DEMO_CLASS_RATE_PLANS) {
+    await db
+      .insert(classRatePlans)
+      .values({
+        id: seedId(plan.id),
+        operatorId: seedId(plan.operatorId),
+        classId: seedId(plan.classId),
+        pickupLocationId: seedId(plan.pickupLocationId),
+        dayRateJpy: plan.dayRateJpy,
+        label: plan.label,
+      })
+      .onConflictDoUpdate({
+        target: classRatePlans.id,
+        set: { dayRateJpy: plan.dayRateJpy, label: plan.label, isActive: true, updatedAt: now },
+      })
+  }
+
   // 8. Vehicles — both composite FKs resolve now (classes + locations seeded).
   // shakenExpiryDate is stamped demo-time-relative (fixtures omit it, §3.3).
   console.log(`Seeding ${DEMO_VEHICLES.length} vehicles...`)
@@ -439,6 +462,6 @@ export async function seed(db: ReturnType<typeof getDb>) {
     `\nSeeded ${DEMO_OPERATORS.length} operators, ${DEMO_LOCATIONS.length} locations, ` +
       `${DEMO_VEHICLE_CLASSES.length} classes, ${DEMO_VEHICLES.length} vehicles, ` +
       `${DEMO_INSURANCE_OPTIONS.length} insurance options, ${DEMO_ADD_ON_OPTIONS.length} add-on options, ` +
-      `${DEMO_FEE_SCHEDULES.length} fee schedules.`,
+      `${DEMO_FEE_SCHEDULES.length} fee schedules, ${DEMO_CLASS_RATE_PLANS.length} class rate plans.`,
   )
 }

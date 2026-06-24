@@ -146,6 +146,21 @@ class RecordingAvailabilityRepository implements AvailabilityRepository {
   checkVehicleAvailability(vehicleId: string, from: Date, to: Date) {
     return this.inner.checkVehicleAvailability(vehicleId, from, to)
   }
+  countClassDemand(
+    operatorId: string,
+    classId: string,
+    pickupLocationId: string,
+    from: Date,
+    to: Date,
+  ) {
+    return this.inner.countClassDemand(operatorId, classId, pickupLocationId, from, to)
+  }
+  countClassCapacity(operatorId: string, classId: string, pickupLocationId: string, asOf: Date) {
+    return this.inner.countClassCapacity(operatorId, classId, pickupLocationId, asOf)
+  }
+  lockComboCapacity(operatorId: string, classId: string, pickupLocationId: string) {
+    return this.inner.lockComboCapacity(operatorId, classId, pickupLocationId)
+  }
 }
 
 describe('FlatSearchService.search (#458)', () => {

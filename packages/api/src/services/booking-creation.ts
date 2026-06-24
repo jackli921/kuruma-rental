@@ -182,6 +182,9 @@ export class BookingCreationService {
     now: Date,
     repos: TransactionRepos,
   ): Promise<CreateBookingResult> {
+    if (input.fulfillmentMode === 'CLASS_COMBO') {
+      return this.submitComboInTx(ctx, input, renterId, now, repos)
+    }
     const vehicle = await repos.vehicleRepo.findById(SYSTEM_CONTEXT, input.requestedVehicleId)
     if (!vehicle) {
       return { ok: false, status: 400, error: 'Vehicle not found' }
@@ -392,6 +395,233 @@ export class BookingCreationService {
         assignedVehicleId,
         classId,
         fulfillmentMode: 'SPECIFIC', // #463: mirror the booking's discriminator in the audit snapshot
+        startAt: input.startAt.toISOString(),
+        endAt: input.endAt.toISOString(),
+        totalPrice,
+        insuranceSnapshot,
+        feeSnapshot,
+        addOnSnapshot,
+      },
+    })
+
+    return { ok: true, booking }
+  }
+
+  // #464 2d.3: CLASS_COMBO submit — the renter books a class at a pickup
+  // location, no car selected at book time. The operator assigns a concrete
+  // vehicle on/before pickup (substitute path). Priced off the active class
+  // rate plan, NOT per-car (proposal §5.1). Demand/capacity are checked in-tx
+  // so a concurrent SPECIFIC submit on the same (op, class, loc) can't slip a
+  // car under the gate; slice 2d.4 adds the advisory lock that fully
+  // serializes the demand → capacity → insert window.
+  private async submitComboInTx(
+    ctx: CallerContext,
+    input: CreateBookingInput & { fulfillmentMode: 'CLASS_COMBO' },
+    renterId: string | null,
+    now: Date,
+    repos: TransactionRepos,
+  ): Promise<CreateBookingResult> {
+    // The pickup location anchors the booking's operator + the (op, class, loc)
+    // triple every other read keys off (a forged classId from another tenant
+    // gets rejected at the class-belongs-to-operator gate below).
+    const pickup = await repos.locationRepo.findById(SYSTEM_CONTEXT, input.pickupLocationId)
+    if (!pickup) {
+      return { ok: false, status: 400, error: 'Pickup location is not available' }
+    }
+    const operatorId = pickup.operatorId
+    const classId = input.classId
+
+    const klass = await repos.vehicleClassRepo.findById(SYSTEM_CONTEXT, classId)
+    if (!klass || klass.operatorId !== operatorId) {
+      return { ok: false, status: 400, error: 'Vehicle class is not available' }
+    }
+
+    if (input.dropoffLocationId !== input.pickupLocationId) {
+      const dropoff = await repos.locationRepo.findById(SYSTEM_CONTEXT, input.dropoffLocationId)
+      if (!dropoff || dropoff.operatorId !== operatorId) {
+        return { ok: false, status: 400, error: 'Dropoff location is not available' }
+      }
+    }
+    const turnaroundMinutes = pickup.defaultTurnaroundMinutes ?? DEFAULT_TURNAROUND_MINUTES
+    const effectiveEndAt = new Date(input.endAt.getTime() + turnaroundMinutes * MS_PER_MINUTE)
+
+    // #464 2d.4: serialize concurrent CLASS_COMBO submits on this triple.
+    // Drizzle's pg_advisory_xact_lock auto-releases at tx end (the returned
+    // release is a no-op); InMemory's promise-chain release fires in the
+    // finally so the next waiter advances. Held around demand → capacity →
+    // insert so a parallel submit can't read demand BEFORE our insert lands.
+    const releaseLock = await repos.availabilityRepo.lockComboCapacity(
+      operatorId,
+      classId,
+      input.pickupLocationId,
+    )
+    try {
+      return await this.submitComboInTxLocked(
+        ctx,
+        input,
+        renterId,
+        now,
+        repos,
+        operatorId,
+        classId,
+        effectiveEndAt,
+      )
+    } finally {
+      releaseLock()
+    }
+  }
+
+  private async submitComboInTxLocked(
+    ctx: CallerContext,
+    input: CreateBookingInput & { fulfillmentMode: 'CLASS_COMBO' },
+    renterId: string | null,
+    now: Date,
+    repos: TransactionRepos,
+    operatorId: string,
+    classId: string,
+    effectiveEndAt: Date,
+  ): Promise<CreateBookingResult> {
+    // Demand counts BOTH consumers of the class fleet (SPECIFIC bookings on
+    // any car in the triple PLUS floating combos) — countClassDemand keys on
+    // (operator, class, location), not on assignedVehicleId. Capacity is the
+    // road-legal supply at the requested return.
+    const demand = await repos.availabilityRepo.countClassDemand(
+      operatorId,
+      classId,
+      input.pickupLocationId,
+      input.startAt,
+      effectiveEndAt,
+    )
+    const capacity = await repos.availabilityRepo.countClassCapacity(
+      operatorId,
+      classId,
+      input.pickupLocationId,
+      input.endAt,
+    )
+    if (demand >= capacity) {
+      return {
+        ok: false,
+        status: 409,
+        error: 'No cars left in this class at this location for the requested window',
+        code: 'CLASS_COMBO_SOLD_OUT',
+      }
+    }
+
+    // Priced off the operator's active rate plan for this (class, location).
+    // No plan / inactive plan ⇒ the operator hasn't published a combo deal yet.
+    const ratePlan = await repos.classRatePlanRepo.findActiveRate(
+      operatorId,
+      classId,
+      input.pickupLocationId,
+    )
+    if (!ratePlan) {
+      return {
+        ok: false,
+        status: 400,
+        error: 'No active class rate plan for this combo',
+        code: 'NO_COMBO_RATE_SET',
+      }
+    }
+    const days = rentalDays(input.startAt, input.endAt)
+    const basePrice = ratePlan.dayRateJpy * days
+
+    let insuranceOptionId: string | null = null
+    let insuranceSnapshot: InsuranceSnapshot | null = null
+    if (input.insuranceOptionId) {
+      const opt = await repos.insuranceOptionRepo.findById(SYSTEM_CONTEXT, input.insuranceOptionId)
+      if (!opt || opt.operatorId !== operatorId || opt.status !== 'ACTIVE') {
+        return { ok: false, status: 400, error: 'Insurance option is not available' }
+      }
+      insuranceOptionId = opt.id
+      insuranceSnapshot = {
+        insuranceOptionId: opt.id,
+        name: opt.name,
+        dailyPriceJpy: opt.dailyPriceJpy,
+        deductibleJpy: opt.deductibleJpy,
+      }
+    }
+
+    const fees = await repos.feeScheduleRepo.findAll(SYSTEM_CONTEXT, {
+      operatorId,
+      status: 'ACTIVE',
+    })
+    const feeSnapshot = fees
+      .filter((f) => f.vehicleClassId === null || f.vehicleClassId === classId)
+      .map((f) => ({
+        feeType: f.feeType,
+        unit: f.unit,
+        amountJpy: f.amountJpy,
+        vehicleClassId: f.vehicleClassId,
+      }))
+
+    const addOnSnapshot: AddOnSnapshot[] = []
+    if (input.addOnIds.length > 0) {
+      const available = await repos.addOnRepo.findActiveByOperator(operatorId)
+      const availableById = new Map(available.map((a) => [a.id, a]))
+      for (const addOnId of new Set(input.addOnIds)) {
+        const addOn = availableById.get(addOnId)
+        if (!addOn) return { ok: false, status: 400, error: 'Add-on is not available' }
+        addOnSnapshot.push({ addOnId: addOn.id, name: addOn.name, priceJpy: addOn.priceJpy })
+      }
+    }
+
+    const totalPrice = composeBookingTotal({
+      baseJpy: basePrice,
+      insurancePerDayJpy: insuranceSnapshot?.dailyPriceJpy ?? 0,
+      days,
+      addOns: addOnSnapshot,
+    })
+
+    const bookingCode = this.generateCode()
+
+    const bookingRenterId = input.walkInCustomer
+      ? (await repos.userRepo.createWalkInRenter(input.walkInCustomer)).id
+      : renterId
+    if (bookingRenterId === null) {
+      throw new Error('booking submit: renterId unresolved (non-walk-in)')
+    }
+
+    const booking = await repos.bookingRepo.create(ctx, {
+      operatorId,
+      renterId: bookingRenterId,
+      classId,
+      // CLASS_COMBO floats: neither id is set at book time. The operator stamps
+      // assignedVehicleId on/before pickup via the substitute path (#464 slice 3).
+      requestedVehicleId: null,
+      assignedVehicleId: null,
+      pickupLocationId: input.pickupLocationId,
+      dropoffLocationId: input.dropoffLocationId,
+      startAt: input.startAt,
+      endAt: input.endAt,
+      effectiveEndAt,
+      status: 'CONFIRMED',
+      source: input.source,
+      fulfillmentMode: 'CLASS_COMBO',
+      bookingCode,
+      insuranceOptionId,
+      insuranceSnapshot,
+      feeSnapshot,
+      addOnSnapshot,
+      externalId: input.externalId ?? null,
+      notes: input.notes ?? null,
+      totalPrice,
+      cancellationFee: null,
+      cancelledAt: null,
+      idempotencyKey: input.idempotencyKey ?? null,
+      disclaimerAcknowledgedAt: input.disclaimerAccepted ? now : null,
+      disclaimerTermsVersion: input.disclaimerAccepted ? DISCLAIMER_TERMS_VERSION : null,
+    })
+
+    await repos.bookingEventRepo.append(ctx, {
+      bookingId: booking.id,
+      type: 'BOOKING_CREATED',
+      actorId: ctx.userId,
+      payload: {
+        type: 'BOOKING_CREATED',
+        requestedVehicleId: null,
+        assignedVehicleId: null,
+        classId,
+        fulfillmentMode: 'CLASS_COMBO',
         startAt: input.startAt.toISOString(),
         endAt: input.endAt.toISOString(),
         totalPrice,

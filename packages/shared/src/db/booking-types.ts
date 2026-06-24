@@ -36,8 +36,12 @@ export type AddOnSnapshot = {
 
 export type BookingCreatedPayload = {
   type: 'BOOKING_CREATED'
-  requestedVehicleId: string
-  assignedVehicleId: string
+  // #464: null on a CLASS_COMBO booking — the renter picks a class + location, the
+  // operator assigns a concrete car later. SPECIFIC bookings always carry both ids
+  // (enforced by the bookings_specific_requires_*_vehicle CHECK constraints in
+  // packages/shared/src/db/booking.ts).
+  requestedVehicleId: string | null
+  assignedVehicleId: string | null
   classId: string
   // #463: the discriminator is a defining booking attribute, so the self-contained
   // CREATED audit snapshot records it alongside the vehicle/class it mirrors.
@@ -51,7 +55,10 @@ export type BookingCreatedPayload = {
 }
 export type VehicleSubstitutedPayload = {
   type: 'VEHICLE_SUBSTITUTED'
-  fromVehicleId: string
+  // #464: null when a CLASS_COMBO float is assigned its first car via the
+  // substitution path (null -> car, backfilling price per #429). Non-null for a
+  // true car-to-car swap.
+  fromVehicleId: string | null
   toVehicleId: string
   reason: string | null
 }

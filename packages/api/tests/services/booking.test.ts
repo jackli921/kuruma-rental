@@ -10,6 +10,8 @@ import { type CallerContext, SYSTEM_CONTEXT } from '../../src/middleware/auth'
 import { PG_ERROR } from '../../src/pg-errors'
 import {
   InMemoryAddOnRepository,
+  InMemoryAvailabilityRepository,
+  InMemoryClassRatePlanRepository,
   InMemoryDocumentStorage,
   InMemoryFeeScheduleRepository,
   InMemoryInsuranceOptionRepository,
@@ -107,6 +109,10 @@ async function setup(
   const feeScheduleRepo = new InMemoryFeeScheduleRepository()
   const maintenanceLogRepo = new InMemoryMaintenanceLogRepository()
   const vehicleClassRepo = new InMemoryVehicleClassRepository()
+  // #464 2d.1 widened TransactionRepos; this in-mem harness mirrors the wiring
+  // so the submit's combo branch can read demand/capacity and rate plans in-tx.
+  const availabilityRepo = new InMemoryAvailabilityRepository(vehicleRepo, bookingRepo)
+  const classRatePlanRepo = new InMemoryClassRatePlanRepository()
   const userRepo = new InMemoryUserRepository(
     new Map<string, User>([
       [
@@ -147,6 +153,9 @@ async function setup(
     addOnRepo,
     feeScheduleRepo,
     userRepo,
+    availabilityRepo,
+    classRatePlanRepo,
+    vehicleClassRepo,
   }
   const runInTransaction: RunInTransaction = async (fn) => fn(repos)
 
@@ -180,6 +189,7 @@ async function setup(
 
 function createInput(o: Partial<CreateBookingInput> = {}): CreateBookingInput {
   return {
+    fulfillmentMode: 'SPECIFIC',
     requestedVehicleId: '',
     pickupLocationId: '',
     dropoffLocationId: '',
@@ -189,7 +199,25 @@ function createInput(o: Partial<CreateBookingInput> = {}): CreateBookingInput {
     source: 'DIRECT',
     addOnIds: [],
     ...o,
-  }
+  } as CreateBookingInput
+}
+
+// #464 2d.3: CLASS_COMBO submit input — the renter books a class at a location,
+// no concrete car (the operator assigns one on/before pickup). Mirrors createInput
+// but on the CLASS_COMBO branch of the discriminated union.
+function comboInput(o: Partial<CreateBookingInput> = {}): CreateBookingInput {
+  return {
+    fulfillmentMode: 'CLASS_COMBO',
+    classId: '',
+    pickupLocationId: '',
+    dropoffLocationId: '',
+    renterId: RENTER,
+    startAt: START,
+    endAt: END,
+    source: 'DIRECT',
+    addOnIds: [],
+    ...o,
+  } as CreateBookingInput
 }
 
 // Resolve the real seeded location id (InMemory repos assign UUIDs) and align
@@ -891,6 +919,204 @@ describe('BookingService.create — single-transaction submit (#392 §4)', () =>
   })
 })
 
+describe('BookingService.create — CLASS_COMBO (#464 2d.3)', () => {
+  // Build on seedReady (vehicle + location wired), then attach a fresh class
+  // to the seeded vehicle and publish an ACTIVE class rate plan for the
+  // (operator, class, pickupLocation) triple. The returned ids are what the
+  // combo submit reads.
+  async function seedComboReady(
+    h: Harness,
+    opts: { dayRateJpy?: number; classOperatorId?: string } = {},
+  ): Promise<{ classId: string; locationId: string; vehicleId: string }> {
+    const { vehicleId, locationId } = await seedReady(h)
+    const klass = await h.repos.vehicleClassRepo.create({
+      operatorId: opts.classOperatorId ?? OP_A,
+      name: 'Compact',
+      slug: 'compact',
+      description: null,
+      photos: [],
+      seats: 5,
+      luggageCapacity: 2,
+      transmission: 'AUTO',
+      fuelType: null,
+      acrissCode: null,
+      sortOrder: 0,
+      status: 'ACTIVE',
+    })
+    // Wire the seeded vehicle into the new class so countClassCapacity counts
+    // it as supply for the (op, class, loc) triple.
+    const veh = await h.repos.vehicleRepo.findById(SYSTEM_CONTEXT, vehicleId)
+    ;(veh as Vehicle).classId = klass.id
+    await h.repos.classRatePlanRepo.create({
+      operatorId: OP_A,
+      classId: klass.id,
+      pickupLocationId: locationId,
+      dayRateJpy: opts.dayRateJpy ?? 8000,
+      isActive: true,
+      label: null,
+    })
+    return { classId: klass.id, locationId, vehicleId }
+  }
+
+  it('creates a CLASS_COMBO booking with null vehicle ids + priced off the rate plan', async () => {
+    const h = await setup()
+    const { classId, locationId } = await seedComboReady(h, { dayRateJpy: 8000 })
+
+    const result = await h.service.create(
+      renterCtx,
+      comboInput({
+        classId,
+        pickupLocationId: locationId,
+        dropoffLocationId: locationId,
+      }),
+      NOW,
+    )
+
+    expect(result.ok).toBe(true)
+    if (!result.ok) throw new Error(result.error.toString())
+    expect(result.booking.fulfillmentMode).toBe('CLASS_COMBO')
+    expect(result.booking.requestedVehicleId).toBeNull()
+    expect(result.booking.assignedVehicleId).toBeNull()
+    expect(result.booking.classId).toBe(classId)
+    // 8000 yen/day × 2-day rental = 16000.
+    expect(result.booking.totalPrice).toBe(16000)
+
+    // BOOKING_CREATED event mirrors the discriminator + null vehicle ids.
+    expect(h.events).toHaveLength(1)
+    expect(h.events[0]!.payload).toMatchObject({
+      type: 'BOOKING_CREATED',
+      fulfillmentMode: 'CLASS_COMBO',
+      requestedVehicleId: null,
+      assignedVehicleId: null,
+      classId,
+      totalPrice: 16000,
+    })
+  })
+
+  it('rejects with NO_COMBO_RATE_SET when the operator has not published a rate plan', async () => {
+    const h = await setup()
+    const { vehicleId, locationId } = await seedReady(h)
+    const klass = await h.repos.vehicleClassRepo.create({
+      operatorId: OP_A,
+      name: 'NoRate',
+      slug: 'norate',
+      description: null,
+      photos: [],
+      seats: 5,
+      luggageCapacity: 2,
+      transmission: 'AUTO',
+      fuelType: null,
+      acrissCode: null,
+      sortOrder: 0,
+      status: 'ACTIVE',
+    })
+    const veh = await h.repos.vehicleRepo.findById(SYSTEM_CONTEXT, vehicleId)
+    ;(veh as Vehicle).classId = klass.id
+
+    const result = await h.service.create(
+      renterCtx,
+      comboInput({
+        classId: klass.id,
+        pickupLocationId: locationId,
+        dropoffLocationId: locationId,
+      }),
+      NOW,
+    )
+
+    expect(result.ok).toBe(false)
+    if (result.ok) return
+    expect(result.status).toBe(400)
+    expect(result.code).toBe('NO_COMBO_RATE_SET')
+  })
+
+  it('rejects when the pickup location does not exist', async () => {
+    const h = await setup()
+    const { classId } = await seedComboReady(h)
+    const result = await h.service.create(
+      renterCtx,
+      comboInput({
+        classId,
+        pickupLocationId: '00000000-0000-4000-8000-000000000099',
+        dropoffLocationId: '00000000-0000-4000-8000-000000000099',
+      }),
+      NOW,
+    )
+    expect(result.ok).toBe(false)
+    if (result.ok) return
+    expect(result.status).toBe(400)
+    expect(result.error).toBe('Pickup location is not available')
+  })
+
+  it('rejects when the class belongs to a different operator than the pickup location', async () => {
+    const h = await setup()
+    const { locationId } = await seedReady(h)
+    // Class owned by OP_B; pickup location owned by OP_A. A forged classId from
+    // another tenant must not pass the in-tx ownership gate (#464 plan §2d.3).
+    const foreign = await h.repos.vehicleClassRepo.create({
+      operatorId: OP_B,
+      name: 'Foreign',
+      slug: 'foreign',
+      description: null,
+      photos: [],
+      seats: 5,
+      luggageCapacity: 2,
+      transmission: 'AUTO',
+      fuelType: null,
+      acrissCode: null,
+      sortOrder: 0,
+      status: 'ACTIVE',
+    })
+    const result = await h.service.create(
+      renterCtx,
+      comboInput({
+        classId: foreign.id,
+        pickupLocationId: locationId,
+        dropoffLocationId: locationId,
+      }),
+      NOW,
+    )
+    expect(result.ok).toBe(false)
+    if (result.ok) return
+    expect(result.status).toBe(400)
+    expect(result.error).toBe('Vehicle class is not available')
+  })
+
+  // Plan §2d.3 P1 invariant: demand counts SPECIFIC occupants of the same
+  // (op, class, loc) triple, so a single car booked SPECIFIC by another renter
+  // sells out the combo even though no other CLASS_COMBO exists. Without this
+  // pin the contract is invisible — a regression that drops the SPECIFIC ↔
+  // combo coupling would silently double-book the class.
+  it('counts an overlapping SPECIFIC booking as combo demand → 409 CLASS_COMBO_SOLD_OUT', async () => {
+    const h = await setup()
+    const { classId, locationId, vehicleId } = await seedComboReady(h)
+
+    const existing = await h.service.create(
+      renterCtx,
+      createInput({
+        requestedVehicleId: vehicleId,
+        pickupLocationId: locationId,
+        dropoffLocationId: locationId,
+      }),
+      NOW,
+    )
+    expect(existing.ok).toBe(true)
+
+    const result = await h.service.create(
+      renterCtx,
+      comboInput({
+        classId,
+        pickupLocationId: locationId,
+        dropoffLocationId: locationId,
+      }),
+      NOW,
+    )
+    expect(result.ok).toBe(false)
+    if (result.ok) return
+    expect(result.status).toBe(409)
+    expect(result.code).toBe('CLASS_COMBO_SOLD_OUT')
+  })
+})
+
 // ---- Substitution (#392 §5.5) ----
 
 const ACRISS_A = 'ECMR'
@@ -1022,6 +1248,9 @@ async function setupSub(
     vehicleData({ classId: classA.id, pickupLocationId: location.id, dailyRateJpy: 10000 }),
   )
 
+  const availabilityRepo = new InMemoryAvailabilityRepository(vehicleRepo, bookingRepo)
+  const classRatePlanRepo = new InMemoryClassRatePlanRepository()
+
   const repos: TransactionRepos = {
     vehicleRepo,
     maintenanceLogRepo,
@@ -1032,6 +1261,9 @@ async function setupSub(
     addOnRepo,
     feeScheduleRepo,
     userRepo,
+    availabilityRepo,
+    classRatePlanRepo,
+    vehicleClassRepo,
   }
   const runInTransaction: RunInTransaction = async (fn) => fn(repos)
   const service = new BookingService(

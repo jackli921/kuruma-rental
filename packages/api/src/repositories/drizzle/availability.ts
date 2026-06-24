@@ -97,4 +97,71 @@ export class DrizzleAvailabilityRepository implements AvailabilityRepository {
       conflicts: conflicts.map(toBooking),
     }
   }
+
+  async countClassDemand(
+    operatorId: string,
+    classId: string,
+    pickupLocationId: string,
+    from: Date,
+    to: Date,
+  ): Promise<number> {
+    const fromIso = from.toISOString()
+    const toIso = to.toISOString()
+    // Same blocking-status + tstzrange overlap predicate as checkVehicleAvailability
+    // / 0037.sql, keyed on the (operator, class, location) triple — a floating
+    // CLASS_COMBO (null assignedVehicleId) is counted via bookings.classId.
+    const [row] = await this.db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(bookings)
+      .where(
+        and(
+          eq(bookings.operatorId, operatorId),
+          eq(bookings.classId, classId),
+          eq(bookings.pickupLocationId, pickupLocationId),
+          sql`status IN ('CONFIRMED', 'ACTIVE')`,
+          sql`tstzrange("startAt", "effectiveEndAt") && tstzrange(${fromIso}::timestamptz, ${toIso}::timestamptz)`,
+        ),
+      )
+    return row?.count ?? 0
+  }
+
+  async lockComboCapacity(
+    operatorId: string,
+    classId: string,
+    pickupLocationId: string,
+  ): Promise<() => void> {
+    // #464 2d.4: serialize concurrent CLASS_COMBO submits on the (op, class,
+    // loc) triple. hashtextextended yields a stable 64-bit int from the keyed
+    // string for Postgres' single-arg advisory lock; auto-released at tx
+    // commit/rollback, so the returned thunk is a no-op.
+    const key = `combo:${operatorId}|${classId}|${pickupLocationId}`
+    await this.db.execute(sql`SELECT pg_advisory_xact_lock(hashtextextended(${key}, 0))`)
+    return () => {}
+  }
+
+  async countClassCapacity(
+    operatorId: string,
+    classId: string,
+    pickupLocationId: string,
+    asOf: Date,
+  ): Promise<number> {
+    // #464 2d.2: road-legal supply side of the combo guard. status<>'RETIRED'
+    // (RETIRED = permanent fleet exit) and both certificates cover THROUGH the
+    // JST asOf day — same NULL≠current handling as findAvailableVehicles
+    // (NULL >= date is NULL, excluded).
+    const asOfIso = jstDateString(asOf)
+    const [row] = await this.db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(vehicles)
+      .where(
+        and(
+          eq(vehicles.operatorId, operatorId),
+          eq(vehicles.classId, classId),
+          eq(vehicles.pickupLocationId, pickupLocationId),
+          sql`${vehicles.status} <> 'RETIRED'`,
+          sql`${vehicles.shakenExpiryDate} >= ${asOfIso}::date AND ${vehicles.insuranceExpiryDate} >= ${asOfIso}::date`,
+        ),
+      )
+    return row?.count ?? 0
+  }
 }

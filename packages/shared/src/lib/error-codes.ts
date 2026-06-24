@@ -17,6 +17,9 @@ export const ERROR_CODES = [
   'INVALID_VEHICLE_CLASS',
   'CLASS_HAS_ACTIVE_BOOKINGS',
   'LOCATION_HAS_ACTIVE_BOOKINGS',
+  // #464: a CLASS_COMBO booking is accepted by the validator but combo creation
+  // (inventory guard + rate-plan pricing) is not yet built — POST /bookings 501s.
+  'NOT_IMPLEMENTED',
   // Laundered onto the booking-create envelope via `CreateBookingResult.code`
   // (booking-creation.ts → bookings.ts `fail(c, …, { code: createResult.code })`):
   // pricing (`@kuruma/shared/lib/pricing`) and rental-rule (`…/lib/rental-rules`)
@@ -30,6 +33,14 @@ export const ERROR_CODES = [
   'RENTAL_RULE_MAX_DURATION',
   // §5.3 (#916): the rental ends after the vehicle's shaken/insurance expires.
   'VEHICLE_DOCS_EXPIRE_BEFORE_RETURN',
+  // #464 2d.3 CLASS_COMBO submit codes:
+  //  NO_COMBO_RATE_SET — the (operator, class, pickupLocation) triple has no
+  //   ACTIVE class rate plan, so the deal isn't published; combo create 400s.
+  //  CLASS_COMBO_SOLD_OUT — class fleet supply for the requested window is
+  //   already consumed by overlapping bookings (SPECIFIC + combo both count
+  //   via classId + pickupLocationId); combo create 409s.
+  'NO_COMBO_RATE_SET',
+  'CLASS_COMBO_SOLD_OUT',
 ] as const
 
 export type ErrorCode = (typeof ERROR_CODES)[number]

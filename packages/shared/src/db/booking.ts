@@ -67,10 +67,14 @@ export const bookings = pgTable(
     classId: text('classId').notNull(),
     // What the renter selected in storefront (slice 5). Immutable audit trail —
     // substitution NEVER mutates this (proposal §2 "Vehicle substitution").
-    requestedVehicleId: text('requestedVehicleId').notNull(),
+    // #464: nullable — a CLASS_COMBO float has no requested car. The
+    // bookings_specific_requires_requested CHECK keeps SPECIFIC rows honest.
+    requestedVehicleId: text('requestedVehicleId'),
     // What the operator fulfills; the exclusion constraint keys on THIS column.
     // Server-derived = requestedVehicleId at submit; operator may substitute.
-    assignedVehicleId: text('assignedVehicleId').notNull(),
+    // #464: nullable — an unassigned CLASS_COMBO float has no car yet; the
+    // operator assigns one on/before pickup (the exclusion constraint skips NULLs).
+    assignedVehicleId: text('assignedVehicleId'),
     pickupLocationId: text('pickupLocationId')
       .notNull()
       .references(() => locations.id),
@@ -164,13 +168,17 @@ export const bookings = pgTable(
       foreignColumns: [insuranceOptions.operatorId, insuranceOptions.id],
       name: 'bookings_operator_insurance_fk',
     }),
-    // #463: a SPECIFIC booking MUST name the vehicle it fulfills. A tautology
-    // today (assignedVehicleId is NOT NULL), but #464 makes that column nullable
-    // for CLASS_COMBO — this CHECK then keeps every SPECIFIC row honest instead of
-    // letting the invariant silently evaporate one migration away. #464 relaxes it.
+    // #463/#464: a SPECIFIC booking MUST name both the vehicle it requested and the
+    // one it fulfills. Now that #464 makes both columns nullable for CLASS_COMBO
+    // floats, these CHECKs (not column NOT NULL) are what keep every SPECIFIC row
+    // honest instead of letting the invariant silently evaporate one migration away.
     check(
       'bookings_specific_requires_assigned',
       sql`${table.fulfillmentMode} <> 'SPECIFIC' OR ${table.assignedVehicleId} IS NOT NULL`,
+    ),
+    check(
+      'bookings_specific_requires_requested',
+      sql`${table.fulfillmentMode} <> 'SPECIFIC' OR ${table.requestedVehicleId} IS NOT NULL`,
     ),
   ],
 )
