@@ -9,10 +9,14 @@ import { fail, ok, parseBody } from './helpers'
 // resolves to a published, acceptable document (404/409).
 const acceptSchema = z.object({ documentId: z.string().min(1) })
 
-/** Locale to present consent copy in; the service falls back to `en` when a
- *  (type, version) was never authored for it. */
+/** Consent copy is authored for these locales (the seeded cohorts). An unknown or
+ *  missing `?locale=` resolves to `en` rather than flowing an unvalidated string
+ *  into the repo query (#1036 L2); the service still falls back to `en` per
+ *  (type, version) when a specific cohort was never authored. */
+const presentationLocaleSchema = z.enum(['en', 'ja', 'zh']).catch('en')
+
 function presentationLocale(c: { req: { query: (k: string) => string | undefined } }): string {
-  return c.req.query('locale') ?? 'en'
+  return presentationLocaleSchema.parse(c.req.query('locale'))
 }
 
 /**

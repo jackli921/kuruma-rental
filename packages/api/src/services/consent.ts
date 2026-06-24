@@ -84,16 +84,38 @@ export class ConsentService {
     }
   }
 
-  async getRequiredReconsents(userId: string, role: string, now: Date): Promise<ConsentType[]> {
+  /**
+   * The owed (type, version) pairs for a subject — the single per-type DB walk
+   * that both {@link getRequiredReconsents} and {@link getPendingConsents} consume,
+   * so a status render resolves each version once, not in two passes (#1036 M2).
+   *
+   * Fail-open by design: a required type with NO published version is skipped, so
+   * the subject is treated as current until docs are published. This is the
+   * intentional "inert until published" behaviour (prod runs migrations-only, no
+   * seed). It is deliberately NOT instrumented per call — this runs on every
+   * POST /bookings, so a log line each would be noise; the operational signal that
+   * a required doc is unpublished belongs to the publish workflow, not this
+   * hot-path gate (#1036 M3).
+   */
+  private async resolveMissing(
+    userId: string,
+    role: string,
+    now: Date,
+  ): Promise<{ type: ConsentType; version: string }[]> {
     const required = REQUIRED_TYPES[role] ?? []
-    const missing: ConsentType[] = []
+    const missing: { type: ConsentType; version: string }[] = []
     for (const type of required) {
       if (CONSENT_CARDINALITY[type] !== 'ONCE_PER_SUBJECT') continue
       const version = await this.repo.findLatestPublishedVersion(type, now)
-      if (!version) continue // nothing published yet → cannot block
-      if (!(await this.repo.hasAcceptedVersion(userId, type, version))) missing.push(type)
+      if (!version) continue // nothing published yet → cannot block (fail-open, see above)
+      if (!(await this.repo.hasAcceptedVersion(userId, type, version)))
+        missing.push({ type, version })
     }
     return missing
+  }
+
+  async getRequiredReconsents(userId: string, role: string, now: Date): Promise<ConsentType[]> {
+    return (await this.resolveMissing(userId, role, now)).map((m) => m.type)
   }
 
   async isCurrent(userId: string, role: string, now: Date): Promise<boolean> {
@@ -101,9 +123,10 @@ export class ConsentService {
   }
 
   /**
-   * Presentation view of {@link getRequiredReconsents}: for each type the subject
-   * still owes, resolve the live document to show — the caller's locale, falling
-   * back to `en`. Returns required-order, empty when the subject is current.
+   * Presentation view of {@link getRequiredReconsents}: for each (type, version)
+   * the subject still owes, resolve the live document to show — the caller's
+   * locale, falling back to `en`. Returns required-order, empty when current.
+   * Reuses {@link resolveMissing}'s versions, so it never re-queries them (#1036 M2).
    */
   async getPendingConsents(
     userId: string,
@@ -111,11 +134,9 @@ export class ConsentService {
     locale: string,
     now: Date,
   ): Promise<PendingConsent[]> {
-    const missing = await this.getRequiredReconsents(userId, role, now)
+    const missing = await this.resolveMissing(userId, role, now)
     const pending: PendingConsent[] = []
-    for (const type of missing) {
-      const version = await this.repo.findLatestPublishedVersion(type, now)
-      if (!version) continue // getRequiredReconsents already skips unpublished; stay defensive
+    for (const { type, version } of missing) {
       const document =
         (await this.repo.findPublishedDocument(type, version, locale)) ??
         (await this.repo.findPublishedDocument(type, version, FALLBACK_LOCALE))

@@ -174,19 +174,19 @@ export function createBookingRoutes(service: BookingService, consentGate: Consen
 
       // #877 Flow A: a renter self-serve booking also requires the renter to be
       // current on the platform ToS + privacy policy (once-per-subject, via the
-      // consent ledger). This is the unskippable backstop behind the web
-      // clickwrap — a direct/3rd-party caller can't bypass it. Manual bookers
-      // (staff/operator) and api-key partners book on behalf and are exempt,
-      // mirroring the disclaimer carve-out above. The 403 carries `missing[]` so
-      // the client knows which documents to present.
-      if (ctx.role === 'RENTER') {
-        const gate = await consentGate.assertSubjectCurrent(ctx.userId, ctx.role, new Date())
-        if (!gate.allowed) {
-          return fail(c, 'Consent required', gate.status, {
-            code: gate.code satisfies ErrorCode,
-            missing: gate.missing,
-          })
-        }
+      // consent ledger). The unskippable backstop behind the web clickwrap — a
+      // direct/3rd-party caller can't bypass it. The gate is asked UNCONDITIONALLY:
+      // the role→required-types map in the consent service is the single source of
+      // who is subject, so manual bookers (staff/operator) and api-key partners
+      // resolve to zero required types and pass through for free (no I/O) — no
+      // second `role === 'RENTER'` list here to drift from it (#1036 M1b). The 403
+      // carries `missing[]` so the client knows which documents to present.
+      const gate = await consentGate.assertSubjectCurrent(ctx.userId, ctx.role, new Date())
+      if (!gate.allowed) {
+        return fail(c, 'Consent required', gate.status, {
+          code: gate.code satisfies ErrorCode,
+          missing: gate.missing,
+        })
       }
 
       // #464 2d.4: forward the parsed discriminator to the service. Common

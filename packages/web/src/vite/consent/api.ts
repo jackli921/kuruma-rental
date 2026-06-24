@@ -10,7 +10,11 @@ import { z } from 'zod'
 
 // Validate `data` at the network seam (#711 unwrap-schema ratchet). The document
 // is narrowed to the fields the gate shows; the wire's extra columns (version,
-// contentHash, dates, …) are stripped by the non-strict object.
+// contentHash, dates, …) are stripped by the non-strict object. There is no
+// compile-time link to the API's ConsentDocument across the package boundary (web
+// imports no api types by rule), so this schema IS the contract: a producer-side
+// rename surfaces here as a ParseError at runtime, not silently as undefined in
+// render (#1036 L1).
 const documentSchema = z.object({
   id: z.string(),
   title: z.string(),
