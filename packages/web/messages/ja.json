@@ -889,7 +889,10 @@
       "yesterday": "昨日",
       "back": "受信トレイに戻る",
       "composeLabel": "メッセージを作成",
-      "cancelled": "この予約はキャンセルされました"
+      "cancelled": "この予約はキャンセルされました",
+      "translating": "翻訳中...",
+      "translationUnavailable": "翻訳できませんでした",
+      "retry": "再試行"
     }
   },
   "bookings": {

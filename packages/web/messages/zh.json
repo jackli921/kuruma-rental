@@ -889,7 +889,10 @@
       "yesterday": "昨天",
       "back": "返回收件箱",
       "composeLabel": "撰写消息",
-      "cancelled": "此预订已取消"
+      "cancelled": "此预订已取消",
+      "translating": "翻译中...",
+      "translationUnavailable": "无法翻译",
+      "retry": "重试"
     }
   },
   "bookings": {

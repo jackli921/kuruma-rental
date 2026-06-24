@@ -1,6 +1,6 @@
 import { render, screen, within } from '@testing-library/react'
 import { IntlProvider } from 'use-intl'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import en from '../../../messages/en.json'
 import { ThreadView } from './ThreadView'
 import type { MessageDto } from './api'
@@ -28,6 +28,7 @@ function renderView(props: Partial<Parameters<typeof ThreadView>[0]> = {}) {
         currentUserId={ME}
         counterpartName="Kaku Rentals"
         locale="en"
+        onTranslate={vi.fn()}
         {...props}
       />
     </IntlProvider>,

@@ -889,7 +889,10 @@
       "yesterday": "Yesterday",
       "back": "Back to inbox",
       "composeLabel": "Compose message",
-      "cancelled": "This booking was cancelled"
+      "cancelled": "This booking was cancelled",
+      "translating": "Translating...",
+      "translationUnavailable": "Translation unavailable",
+      "retry": "Retry"
     }
   },
   "bookings": {

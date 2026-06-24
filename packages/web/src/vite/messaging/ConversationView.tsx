@@ -8,6 +8,7 @@ import {
   markThreadRead,
   sendMessage,
   threadByIdQueryKey,
+  translateMessage,
 } from './api'
 
 interface ConversationViewProps {
@@ -60,6 +61,9 @@ export function ConversationView({
         currentUserId={currentUserId}
         counterpartName={counterpartName}
         locale={locale}
+        onTranslate={(messageId, targetLanguage) =>
+          translateMessage(messageId, targetLanguage, csrfToken).then((r) => r.translatedText)
+        }
       />
       <MessageComposer
         onSend={(content) => sendMutation.mutate(content)}
