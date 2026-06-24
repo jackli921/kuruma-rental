@@ -20,7 +20,7 @@ import {
 // #652 S5: the compliance_alert_log idempotency ledger is what stops the digest
 // double-alerting. The InMemory double (compliance-digest.test.ts) covers the
 // contract; ONLY this proves the real `compliance_alert_log_band_unique` seal +
-// record()'s onConflictDoNothing against Postgres. Scoped to freshly-created
+// recordMany()'s onConflictDoNothing against Postgres. Scoped to freshly-created
 // vehicles, so findAlertedKeys([myVehicle]) can never see another file's rows.
 
 const vehicleRepo = new DrizzleVehicleRepository(db)
@@ -81,19 +81,19 @@ const alert = (
 })
 
 describe('DrizzleComplianceAlertLogRepository (#652 S5, real pg)', () => {
-  it('record() then findAlertedKeys round-trips the canonical key', async () => {
-    await repo.record(alert(v1, 'SHAKEN', 'D30'))
+  it('recordMany() then findAlertedKeys round-trips the canonical key', async () => {
+    await repo.recordMany([alert(v1, 'SHAKEN', 'D30')])
     const keys = await repo.findAlertedKeys([v1])
     expect(keys.has(complianceAlertKey(v1, 'SHAKEN', 'D30'))).toBe(true)
   })
 
   it('is idempotent on a duplicate (vehicle, doc, band): no second row, no throw', async () => {
     const dup = alert(v1, 'INSURANCE', 'EXPIRED')
-    await repo.record(dup)
+    await repo.recordMany([dup])
     // A same-band re-run (even with a different recipient) hits the unique seal +
     // onConflictDoNothing — it resolves without throwing and writes nothing new.
     await expect(
-      repo.record({ ...dup, recipient: 'someone-else@op.example' }),
+      repo.recordMany([{ ...dup, recipient: 'someone-else@op.example' }]),
     ).resolves.toBeUndefined()
     const rows = await db
       .select({ id: complianceAlertLog.id, recipient: complianceAlertLog.recipient })
@@ -110,9 +110,12 @@ describe('DrizzleComplianceAlertLogRepository (#652 S5, real pg)', () => {
   })
 
   it('treats each band and document as a distinct alert (a vehicle re-alerts as it counts down)', async () => {
-    await repo.record(alert(v2, 'SHAKEN', 'D30'))
-    await repo.record(alert(v2, 'SHAKEN', 'D14'))
-    await repo.record(alert(v2, 'INSURANCE', 'D30'))
+    // One batch carrying three distinct (doc, band) keys — all seal, none collide.
+    await repo.recordMany([
+      alert(v2, 'SHAKEN', 'D30'),
+      alert(v2, 'SHAKEN', 'D14'),
+      alert(v2, 'INSURANCE', 'D30'),
+    ])
     const keys = await repo.findAlertedKeys([v2])
     expect(keys).toEqual(
       new Set([
