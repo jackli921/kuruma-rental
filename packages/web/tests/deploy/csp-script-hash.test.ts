@@ -8,10 +8,11 @@ import { describe, expect, test } from 'vitest'
 // of allowing 'unsafe-inline'. The hash is a literal in _headers, so if anyone
 // edits the inline script without regenerating it, the browser would silently
 // block the script the moment the policy flips from Report-Only to enforcing.
-// This recomputes the hash from index.html and fails CI on any mismatch.
-//
-// Vite emits this non-module inline script byte-identically into dist/index.html
-// (verified: source and built hashes match), so hashing the source is correct.
+// This recomputes the hash from the SOURCE index.html for fast pre-build
+// feedback (this lane runs before `vite build` in CI). The authoritative check
+// against the BUILT dist/index.html — the bytes the browser receives — is the
+// post-build CI guard scripts/lint-csp-hash.ts, which catches any Vite-emission
+// drift this source-level test cannot see.
 
 const WEB_ROOT = process.cwd() // vitest runs with cwd = packages/web
 const indexHtml = readFileSync(path.join(WEB_ROOT, 'index.html'), 'utf8')
