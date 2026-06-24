@@ -16,21 +16,18 @@ import {
   InMemoryVehicleClassRepository,
   InMemoryVehicleRepository,
 } from '../../src/repositories/in-memory'
-import { InMemoryConsentRepository } from '../../src/repositories/in-memory/consent'
 import type { RunInTransaction, TransactionRepos } from '../../src/repositories/types'
 import { createBookingRoutes } from '../../src/routes/bookings'
 import { BookingService } from '../../src/services/booking'
-import { ConsentService } from '../../src/services/consent'
-import { ConsentGateService } from '../../src/services/consent-gate'
 import type { Location, User, Vehicle, VehicleClass } from '../../src/stores'
 import { testAuthMiddleware } from '../helpers/auth'
 import { bookingInput } from '../helpers/booking'
+import { makeInertConsentGate } from '../helpers/consent'
 
-// #877 2b: an inert consent gate (empty repo ⇒ nothing published ⇒
-// getRequiredReconsents is empty ⇒ allows) so these pre-#877 booking-route tests
-// exercise the create path unchanged. The gate's own blocking behavior is covered
-// in booking-consent-gate.test.ts.
-const inertConsentGate = new ConsentGateService(new ConsentService(new InMemoryConsentRepository()))
+// #877 2b: an inert consent gate (nothing published ⇒ getRequiredReconsents is
+// empty ⇒ allows) so these pre-#877 booking-route tests exercise the create path
+// unchanged. The gate's own blocking behavior is covered in booking-consent-gate.test.ts.
+const inertConsentGate = makeInertConsentGate()
 
 // Slice 6 (#392): a renter books a CONCRETE vehicle chosen in the storefront
 // (slice 5). operatorId / classId / assignedVehicleId / pickup turnaround /
