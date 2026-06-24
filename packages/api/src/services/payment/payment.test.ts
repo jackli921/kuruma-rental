@@ -94,7 +94,26 @@ function completedEvent(overrides: Partial<VerifiedPaymentEvent> = {}): Verified
     amountTotal: 100_000,
     currency: 'jpy',
     paymentStatus: 'paid',
+    refundStatus: null,
     metadata: { bookingId: 'bk-1', operatorId: 'spoofed-operator' },
+    ...overrides,
+  }
+}
+
+// A Stripe `refund.updated` event narrowed to the vendor-neutral view (#851). The
+// refund id rides in the object-id slot; `metadata.bookingId` is the correlation key
+// we set at refundPayment time; `refundStatus` drives the confirm.
+function refundEvent(overrides: Partial<VerifiedPaymentEvent> = {}): VerifiedPaymentEvent {
+  return {
+    eventId: 'evt_refund_1',
+    type: 'refund.updated',
+    checkoutSessionId: 're_1',
+    paymentIntentId: 'pi_1',
+    amountTotal: null,
+    currency: 'jpy',
+    paymentStatus: null,
+    refundStatus: 'succeeded',
+    metadata: { bookingId: 'bk-1' },
     ...overrides,
   }
 }
@@ -395,6 +414,77 @@ describe('PaymentService.handleWebhook', () => {
     gateway.nextEvent = completedEvent({ paymentStatus: 'unpaid' })
     await service.handleWebhook('raw', 'sig')
     expect(await anomalyRepo.listUnresolved()).toEqual([])
+  })
+})
+
+describe('PaymentService.handleWebhook — refund confirmation (#851)', () => {
+  let bookings: Map<string, Booking>
+  let bookingRepo: InMemoryBookingRepository
+  let refundRepo: InMemoryPaymentRefundRepository
+  let gateway: FakeGateway
+  let service: PaymentService
+
+  beforeEach(async () => {
+    bookings = new Map([
+      // The cancel tx (Slice 3) commits REFUND_DUE before any Stripe call.
+      ['bk-1', makeBooking({ status: 'CANCELLED', cancellationFeeSettlement: 'REFUND_DUE' })],
+    ])
+    bookingRepo = new InMemoryBookingRepository(bookings)
+    refundRepo = new InMemoryPaymentRefundRepository()
+    gateway = new FakeGateway()
+    service = new PaymentService(
+      new InMemoryPaymentEventRepository(),
+      refundRepo,
+      bookingRepo,
+      gateway,
+      new InMemoryPaymentAnomalyRepository(),
+      { webBaseUrl: WEB_BASE },
+    )
+    // The eager fire already claimed a PENDING receipt + attached re_1 before Stripe.
+    await refundRepo.claim({
+      bookingId: 'bk-1',
+      operatorId: 'op-1',
+      stripePaymentIntentId: 'pi_1',
+      amountJpy: 70_000,
+    })
+    await refundRepo.attachStripeRefund('bk-1', 're_1')
+  })
+
+  const settlement = async (): Promise<string | undefined> =>
+    (await bookingRepo.findById(RENTER, 'bk-1'))?.cancellationFeeSettlement
+
+  it('confirms a succeeded refund: receipt SUCCEEDED + booking REFUND_DUE → REFUNDED', async () => {
+    gateway.nextEvent = refundEvent()
+    const result = await service.handleWebhook('raw', 'sig')
+    expect(result).toEqual({ status: 200, outcome: 'refund_confirmed' })
+    expect((await refundRepo.findByBookingId('bk-1'))?.status).toBe('SUCCEEDED')
+    expect(await settlement()).toBe('REFUNDED')
+  })
+
+  it('ignores a non-succeeded (pending) refund — leaves the receipt and booking untouched', async () => {
+    gateway.nextEvent = refundEvent({ refundStatus: 'pending' })
+    expect(await service.handleWebhook('raw', 'sig')).toEqual({ status: 200, outcome: 'ignored' })
+    expect((await refundRepo.findByBookingId('bk-1'))?.status).toBe('PENDING')
+    expect(await settlement()).toBe('REFUND_DUE')
+  })
+
+  it('ignores a succeeded refund whose booking does not exist (unknown bookingId)', async () => {
+    gateway.nextEvent = refundEvent({ metadata: { bookingId: 'ghost' } })
+    expect(await service.handleWebhook('raw', 'sig')).toEqual({ status: 200, outcome: 'ignored' })
+    // bk-1 untouched — a foreign refund event can never advance our booking.
+    expect((await refundRepo.findByBookingId('bk-1'))?.status).toBe('PENDING')
+    expect(await settlement()).toBe('REFUND_DUE')
+  })
+
+  it('is idempotent on a redelivered succeeded refund: second delivery flips 0 rows, no regression', async () => {
+    gateway.nextEvent = refundEvent()
+    await service.handleWebhook('raw', 'sig')
+    // Stripe redelivers the same event — the receipt is already SUCCEEDED (forward-only)
+    // and the booking already REFUNDED (the REFUND_DUE guard now matches 0 rows).
+    const second = await service.handleWebhook('raw', 'sig')
+    expect(second).toEqual({ status: 200, outcome: 'refund_confirmed' })
+    expect((await refundRepo.findByBookingId('bk-1'))?.status).toBe('SUCCEEDED')
+    expect(await settlement()).toBe('REFUNDED')
   })
 })
 

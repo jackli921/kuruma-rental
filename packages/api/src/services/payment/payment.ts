@@ -19,6 +19,11 @@ import type { PaymentGateway, StripeRefund, VerifiedPaymentEvent } from './payme
 const CURRENCY = 'jpy'
 const COMPLETED_EVENT = 'checkout.session.completed'
 const PAID = 'paid'
+// Stripe fires `refund.updated` as a refund moves through its lifecycle. Our refund
+// carries `metadata.bookingId` (set at refundPayment), so this event — unlike
+// `charge.refunded` (a Charge whose metadata we never set) — self-correlates (#851).
+const REFUND_EVENT = 'refund.updated'
+const REFUND_SUCCEEDED = 'succeeded'
 
 export interface PaymentConfig {
   /** Origin the renter is redirected back to after Stripe Checkout. */
@@ -36,6 +41,7 @@ export type WebhookOutcome =
   | 'duplicate' // a redelivered event/session — no-op
   | 'double_payment' // a DIFFERENT session already paid this booking — anomaly
   | 'amount_mismatch' // amount/currency != the booking snapshot — rejected
+  | 'refund_confirmed' // a Stripe-verified succeeded refund → booking REFUNDED (#851)
   | 'ignored' // wrong type / unpaid / missing or unknown booking
   | 'invalid_signature' // bad or stale Stripe signature
 
@@ -153,6 +159,13 @@ export class PaymentService {
       return { status: 400, outcome: 'invalid_signature' }
     }
 
+    // A Stripe-verified succeeded refund is the push half of "any verified signal
+    // advances state" (#851); the reconciler pull is the other. Confirm is shared and
+    // idempotent, so a push and a pull racing converge.
+    if (event.type === REFUND_EVENT) {
+      return this.handleRefundWebhook(event)
+    }
+
     if (event.type !== COMPLETED_EVENT || event.paymentStatus !== PAID) {
       return { status: 200, outcome: 'ignored' }
     }
@@ -223,6 +236,21 @@ export class PaymentService {
       }
       return { status: 200, outcome, context }
     }
+  }
+
+  /** A verified `refund.updated` push (#851). Only a `succeeded` refund advances
+   *  state; every other status is left for the next reconciler pass. The booking is
+   *  loaded under SYSTEM_CONTEXT (Stripe is unauthenticated) purely to ignore an
+   *  unknown booking — `confirmRefundSucceeded`'s own guards make this idempotent, so
+   *  a redelivery flips 0 rows and is a safe no-op. */
+  private async handleRefundWebhook(event: VerifiedPaymentEvent): Promise<WebhookResult> {
+    if (event.refundStatus !== REFUND_SUCCEEDED) return { status: 200, outcome: 'ignored' }
+    const bookingId = event.metadata.bookingId
+    if (!bookingId) return { status: 200, outcome: 'ignored' }
+    const booking = await this.bookings.findById(SYSTEM_CONTEXT, bookingId)
+    if (!booking) return { status: 200, outcome: 'ignored' }
+    await this.confirmRefundSucceeded(bookingId)
+    return { status: 200, outcome: 'refund_confirmed' }
   }
 
   async getBookingPaymentStatus(

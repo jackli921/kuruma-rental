@@ -101,6 +101,9 @@ export class StripePaymentGateway implements PaymentGateway {
       amount_total?: number | null
       currency?: string | null
       payment_status?: string | null
+      // A Refund object (refund.updated) carries `status`; a Checkout Session does
+      // too (its lifecycle state) but the service only reads it inside the refund branch.
+      status?: string | null
       metadata?: Record<string, string> | null
     }
     const paymentIntentId =
@@ -113,6 +116,7 @@ export class StripePaymentGateway implements PaymentGateway {
       amountTotal: obj.amount_total ?? null,
       currency: obj.currency ?? null,
       paymentStatus: obj.payment_status ?? null,
+      refundStatus: obj.status ?? null,
       metadata: {
         bookingId: obj.metadata?.bookingId,
         operatorId: obj.metadata?.operatorId,
