@@ -1,7 +1,7 @@
 import { BEST_CAR_RENTAL_OPERATOR_ID } from '@kuruma/shared/db/constants'
 import { bookings, paymentEvents, paymentRefunds, users } from '@kuruma/shared/db/schema'
 import { eq, inArray } from 'drizzle-orm'
-import { afterAll, beforeAll, describe, expect, it } from 'vitest'
+import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest'
 import { SYSTEM_CONTEXT } from '../../src/middleware/auth'
 import {
   DrizzleBookingRepository,
@@ -59,6 +59,9 @@ async function seedConfirmed(): Promise<string> {
     SYSTEM_CONTEXT,
     bookingInput({
       operatorId: BEST_CAR_RENTAL_OPERATOR_ID,
+      // Reference the seeded class — the helper default 'class-1' has no
+      // vehicle_classes row, which violates bookings_operator_class_fk (#392).
+      classId: classIds[0]!,
       renterId: userId,
       requestedVehicleId: vehicleId,
       assignedVehicleId: vehicleId,
@@ -159,6 +162,17 @@ afterAll(async () => {
   await cleanupVehicleClasses(classIds)
   await cleanupLocations(locationIds)
   await cleanupUsers([userId])
+})
+
+// Per-test isolation: each test seeds REFUND_DUE bookings the system-wide scan can
+// see, so without this one test's rows compete for another test's oldest-first/limit
+// slot (year-2000 dates guard only against OTHER files, not intra-file leakage).
+afterEach(async () => {
+  if (bookingIds.length === 0) return
+  await db.delete(paymentRefunds).where(inArray(paymentRefunds.bookingId, bookingIds))
+  await db.delete(paymentEvents).where(inArray(paymentEvents.bookingId, bookingIds))
+  await cleanupBookings(bookingIds)
+  bookingIds.length = 0
 })
 
 // Filter a scan result to the ids this test seeded — the scan is system-wide, so a

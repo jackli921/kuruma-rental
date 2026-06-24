@@ -44,6 +44,9 @@ async function seedConfirmed(): Promise<string> {
     SYSTEM_CONTEXT,
     bookingInput({
       operatorId: BEST_CAR_RENTAL_OPERATOR_ID,
+      // Reference the seeded class — the helper default 'class-1' has no
+      // vehicle_classes row, which violates bookings_operator_class_fk (#392).
+      classId: classIds[0]!,
       renterId: userId,
       requestedVehicleId: vehicleId,
       assignedVehicleId: vehicleId,
