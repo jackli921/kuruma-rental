@@ -1,13 +1,35 @@
 import Stripe from 'stripe'
+import { RefundRejectedError } from './payment-gateway'
 import type {
   CheckoutSession,
   CreateCheckoutParams,
   PaymentGateway,
+  RefundParams,
+  StripeRefund,
   VerifiedPaymentEvent,
 } from './payment-gateway'
 
 // JPY is a Stripe zero-decimal currency: unit_amount is whole yen, NOT yen*100.
 const CURRENCY = 'jpy'
+
+// Stripe `invalid_request` codes that mean the refund can NEVER succeed as-is —
+// the charge is already fully refunded. Mapped to a terminal RefundRejectedError;
+// everything else (network, rate-limit) propagates as transient so the reconciler
+// retries. Bias is deliberate: falsely terminalizing abandons a real refund, which
+// is worse than a cheap daily re-check, so only KNOWN-terminal codes land here.
+const TERMINAL_REFUND_CODES: ReadonlySet<string> = new Set(['charge_already_refunded'])
+
+function toStripeRefund(r: Stripe.Refund): StripeRefund {
+  const pi = r.payment_intent
+  return {
+    id: r.id,
+    amount: r.amount,
+    currency: r.currency,
+    status: r.status ?? 'unknown',
+    paymentIntentId: typeof pi === 'string' ? pi : (pi?.id ?? null),
+    metadata: { bookingId: r.metadata?.bookingId },
+  }
+}
 
 /**
  * Stripe adapter (#461). Confines the Stripe SDK to this file (hexagonal
@@ -96,5 +118,40 @@ export class StripePaymentGateway implements PaymentGateway {
         operatorId: obj.metadata?.operatorId,
       },
     }
+  }
+
+  async refundPayment(p: RefundParams): Promise<StripeRefund> {
+    try {
+      const refund = await this.stripe.refunds.create(
+        {
+          payment_intent: p.paymentIntentId,
+          amount: p.amountJpy,
+          metadata: { bookingId: p.metadata.bookingId },
+        },
+        { idempotencyKey: p.idempotencyKey },
+      )
+      return toStripeRefund(refund)
+    } catch (err) {
+      // Terminal create rejection (already refunded) → a typed signal the service
+      // maps to FAILED. Transient errors propagate untouched for the reconciler.
+      if (
+        err instanceof Stripe.errors.StripeInvalidRequestError &&
+        err.code !== undefined &&
+        TERMINAL_REFUND_CODES.has(err.code)
+      ) {
+        throw new RefundRejectedError(err.message, err.code)
+      }
+      throw err
+    }
+  }
+
+  async retrieveRefund(stripeRefundId: string): Promise<StripeRefund> {
+    return toStripeRefund(await this.stripe.refunds.retrieve(stripeRefundId))
+  }
+
+  async listRefundsByPaymentIntent(paymentIntentId: string): Promise<StripeRefund[]> {
+    // A PaymentIntent has at most a handful of refunds; one page (limit 10) covers it.
+    const page = await this.stripe.refunds.list({ payment_intent: paymentIntentId, limit: 10 })
+    return page.data.map(toStripeRefund)
   }
 }

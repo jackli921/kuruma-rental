@@ -132,6 +132,7 @@ export function createApp(overrides?: AppOverrides, repos: Repos = buildRepos(ov
     storefrontRepo,
     regionRepo,
     paymentEventRepo,
+    paymentRefundRepo,
     paymentAnomalyRepo,
     providerInviteRepo,
     operatorMembershipRepo,
@@ -206,23 +207,29 @@ export function createApp(overrides?: AppOverrides, repos: Repos = buildRepos(ov
       const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET
       if (secretKey && webhookSecret) return new StripePaymentGateway(secretKey, webhookSecret)
       if (process.env.NODE_ENV === 'production') {
-        return {
-          createCheckoutSession: async () => {
-            throw new Error('STRIPE_SECRET_KEY / STRIPE_WEBHOOK_SECRET not configured')
-          },
-          parseWebhookEvent: async () => {
-            throw new Error('STRIPE_WEBHOOK_SECRET not configured')
-          },
+        const notConfigured = () => {
+          throw new Error('STRIPE_SECRET_KEY / STRIPE_WEBHOOK_SECRET not configured')
         }
+        return {
+          createCheckoutSession: async () => notConfigured(),
+          parseWebhookEvent: async () => notConfigured(),
+          refundPayment: async () => notConfigured(),
+          retrieveRefund: async () => notConfigured(),
+          listRefundsByPaymentIntent: async () => notConfigured(),
+        }
+      }
+      const devUnsupported = (op: string) => () => {
+        throw new Error(`Stripe not configured (dev): cannot ${op}`)
       }
       return {
         createCheckoutSession: async (p) => {
           console.info('[payment:dev] checkout session for', p.bookingCode)
           return { sessionId: 'dev', url: p.successUrl }
         },
-        parseWebhookEvent: async () => {
-          throw new Error('Stripe not configured (dev): cannot verify webhook')
-        },
+        parseWebhookEvent: async () => devUnsupported('verify webhook')(),
+        refundPayment: async () => devUnsupported('refund')(),
+        retrieveRefund: async () => devUnsupported('retrieve refund')(),
+        listRefundsByPaymentIntent: async () => devUnsupported('list refunds')(),
       }
     })()
   // Renter is redirected back here after Stripe Checkout — the first allowed web
@@ -232,6 +239,7 @@ export function createApp(overrides?: AppOverrides, repos: Repos = buildRepos(ov
   const webBaseUrl = resolveAllowedOrigins(process.env.WEB_ORIGIN)[0] ?? ''
   const paymentService = new PaymentService(
     paymentEventRepo,
+    paymentRefundRepo,
     bookingRepo,
     paymentGateway,
     paymentAnomalyRepo,

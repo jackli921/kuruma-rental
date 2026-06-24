@@ -35,7 +35,6 @@ import type { CallerContext } from '../middleware/auth'
 import type {
   AddOn,
   Booking,
-  BookingEvent,
   FeeSchedule,
   InsuranceOption,
   Location,
@@ -52,14 +51,18 @@ import type {
   Vehicle,
   VehicleClass,
 } from '../stores'
+// Imported (not just re-exported) because the RepoBundle below references it locally.
+import type { BookingEventRepository } from './types-booking-event'
 
 // Payment persistence interfaces (#461 events, #508 P2 anomalies) live in their
 // own module to keep this barrel under the file-size cap; re-exported for callers.
 export type {
+  ClaimPaymentRefund,
   NewPaymentAnomaly,
   NewPaymentEvent,
   PaymentAnomalyRepository,
   PaymentEventRepository,
+  PaymentRefundRepository,
 } from './types-payment'
 
 // Notification persistence: SENDING-lease + delivery-cap consts (#393, #483) and
@@ -82,6 +85,7 @@ export type { ComplianceAlertLogRepository, RecordComplianceAlert } from './type
 
 // Audit ledger entity + insert-only persistence (#930), own module per #837 cap.
 export type { AuditLogEntry, AuditLogRepository } from './types-audit'
+export type { BookingEventRepository }
 
 /** Operator (tenant) data access. Admin bootstrap (#386) + slug/id resolution (#387). */
 // Partial profile patch (#903). Only the keys present are written; an absent key
@@ -444,6 +448,17 @@ export interface BookingRepository {
     id: string,
     opts: { from: Booking['status']; fee: number; cancelledAt: Date },
   ): Promise<Booking | undefined>
+  /** Guarded settlement transition (#851): matches only when the current value is
+   *  `from`, so a redelivered webhook / racing reconciler pull gets undefined (0
+   *  rows) — atomic, idempotent, never a regression. See payment_refunds. */
+  markCancellationSettlement(
+    ctx: CallerContext,
+    id: string,
+    transition: {
+      from: Booking['cancellationFeeSettlement']
+      to: Booking['cancellationFeeSettlement']
+    },
+  ): Promise<Booking | undefined>
   /**
    * Operator vehicle substitution (#392, §5.5): atomically reassign a booking to
    * a new vehicle. Re-checks the exclusion constraint for the NEW assigned
@@ -457,17 +472,6 @@ export interface BookingRepository {
     id: string,
     data: { assignedVehicleId: string; totalPrice: number | null; effectiveEndAt: Date },
   ): Promise<Booking | undefined>
-}
-
-/**
- * Append-only booking lifecycle log (#392, proposal §5.2). The events are the
- * source of truth; `bookings.status` is the write-through projection. There is
- * deliberately NO update/delete method — immutability is enforced by the
- * interface, not just convention.
- */
-export interface BookingEventRepository {
-  append(ctx: CallerContext, event: Omit<BookingEvent, 'id' | 'createdAt'>): Promise<BookingEvent>
-  findByBookingId(ctx: CallerContext, bookingId: string): Promise<BookingEvent[]>
 }
 
 export interface StatsRepository {

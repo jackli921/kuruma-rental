@@ -57,6 +57,50 @@ export interface VerifiedPaymentEvent {
   metadata: { bookingId?: string | undefined; operatorId?: string | undefined }
 }
 
+/** A narrowed, vendor-neutral view of a Stripe Refund (#851). Only the fields the
+ *  PaymentService needs to correlate (metadata.bookingId + amount + currency + PI)
+ *  and confirm (status) a refund — Stripe's own Refund type stays in the adapter. */
+export interface StripeRefund {
+  /** Stripe refund id (`re_…`). */
+  id: string
+  /** Whole JPY refunded (Stripe `amount`, zero-decimal). */
+  amount: number
+  /** ISO currency (`jpy`). */
+  currency: string
+  /** `succeeded` | `pending` | `failed` | `canceled` | `requires_action`. */
+  status: string
+  /** The PaymentIntent this refund is against (`pi_…`), or null. */
+  paymentIntentId: string | null
+  /** Metadata we set at creation; `bookingId` is our adoption correlation key. */
+  metadata: { bookingId?: string | undefined }
+}
+
+export interface RefundParams {
+  paymentIntentId: string
+  /** Whole JPY to refund — already clamped to the captured amount by the service. */
+  amountJpy: number
+  /** Deterministic per booking (`refund:${bookingId}`): Stripe dedupes the create
+   *  within its ~24h key window; the durable receipt covers re-drives past it. */
+  idempotencyKey: string
+  /** Echoed onto the Refund so a webhook/list can correlate it to our booking. */
+  metadata: { bookingId: string }
+}
+
+/** Thrown by refundPayment when Stripe TERMINALLY rejects the create — the charge
+ *  is already (manually) refunded or the remaining balance is insufficient. The
+ *  service maps this to a FAILED receipt + leaves the booking for the human surface;
+ *  it NEVER confirms REFUNDED. Transient errors propagate instead so the reconciler
+ *  retries. */
+export class RefundRejectedError extends Error {
+  constructor(
+    message: string,
+    readonly code: string,
+  ) {
+    super(message)
+    this.name = 'RefundRejectedError'
+  }
+}
+
 export interface PaymentGateway {
   createCheckoutSession(params: CreateCheckoutParams): Promise<CheckoutSession>
   /**
@@ -65,4 +109,13 @@ export interface PaymentGateway {
    * and records nothing. "Don't trust the client for money."
    */
   parseWebhookEvent(rawBody: string, signature: string): Promise<VerifiedPaymentEvent>
+  /** Create a refund against a captured PaymentIntent (#851). Throws
+   *  RefundRejectedError on a TERMINAL Stripe rejection (already-refunded /
+   *  insufficient balance); transient errors propagate for the reconciler to retry. */
+  refundPayment(params: RefundParams): Promise<StripeRefund>
+  /** Fetch a refund by id (`re_…`) — the pull path that lets a lost webhook self-heal. */
+  retrieveRefund(stripeRefundId: string): Promise<StripeRefund>
+  /** Refunds on a PaymentIntent — used ONLY to adopt a refund we created but failed
+   *  to persist; the service correlates by metadata.bookingId + amount before adopting. */
+  listRefundsByPaymentIntent(paymentIntentId: string): Promise<StripeRefund[]>
 }

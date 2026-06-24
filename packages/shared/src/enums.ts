@@ -81,6 +81,14 @@ export type FeeScheduleStatus = (typeof FEE_SCHEDULE_STATUSES)[number]
 export const PAYMENT_EVENT_STATUSES = ['SUCCEEDED'] as const
 export type PaymentEventStatus = (typeof PAYMENT_EVENT_STATUSES)[number]
 
+// Lifecycle of an automated cancellation refund (#851). PENDING = receipt claimed,
+// refund initiated or still settling at Stripe; SUCCEEDED = Stripe-confirmed (push
+// webhook or pull retrieve); FAILED = terminal Stripe rejection (charge already
+// refunded / insufficient balance), left for the human reconcile surface. The row
+// is FORWARD-ONLY — a terminal status never regresses to PENDING.
+export const PAYMENT_REFUND_STATUSES = ['PENDING', 'SUCCEEDED', 'FAILED'] as const
+export type PaymentRefundStatus = (typeof PAYMENT_REFUND_STATUSES)[number]
+
 export const ADD_ON_STATUSES = ['ACTIVE', 'ARCHIVED'] as const
 export type AddOnStatus = (typeof ADD_ON_STATUSES)[number]
 

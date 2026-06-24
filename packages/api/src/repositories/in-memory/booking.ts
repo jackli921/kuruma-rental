@@ -234,6 +234,28 @@ export class InMemoryBookingRepository implements BookingRepository {
     return cancelled
   }
 
+  async markCancellationSettlement(
+    ctx: CallerContext,
+    id: string,
+    transition: {
+      from: Booking['cancellationFeeSettlement']
+      to: Booking['cancellationFeeSettlement']
+    },
+  ): Promise<Booking | undefined> {
+    const existing = this.store.get(id)
+    // Guarded: only advance when the current value still matches `from` (idempotent).
+    if (!existing || existing.cancellationFeeSettlement !== transition.from) return undefined
+    if (!this.isVisible(ctx, existing)) return undefined
+
+    const updated: Booking = {
+      ...existing,
+      cancellationFeeSettlement: transition.to,
+      updatedAt: new Date(),
+    }
+    this.store.set(updated.id, updated)
+    return updated
+  }
+
   async reassignVehicle(
     ctx: CallerContext,
     id: string,

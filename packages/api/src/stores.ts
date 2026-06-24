@@ -25,6 +25,7 @@ import type {
   OperatorMembershipStatus,
   OperatorRole,
   PaymentEventStatus,
+  PaymentRefundStatus,
   ProviderInviteStatus,
   Transmission,
   VehicleClassStatus,
@@ -167,6 +168,26 @@ export interface PaymentEvent {
   currency: string
   status: PaymentEventStatus
   createdAt: Date
+}
+
+// A durable cancellation-refund receipt (#851): one row per booking (UNIQUE), the
+// "work already started" half of the REFUND_DUE outbox + the create-dedup ledger
+// that carries re_… so a re-drive RETRIEVES instead of re-creating (Stripe
+// idempotency keys prune ~24h; this row is permanent). Status is FORWARD-ONLY.
+export interface PaymentRefund {
+  id: string
+  bookingId: string
+  // Partner attribution, carried for the operator refund surface (mirrors PaymentEvent).
+  operatorId: string
+  // The captured payment's PaymentIntent — what we refund against.
+  stripePaymentIntentId: string
+  // Whole JPY (zero-decimal) to refund: renter = policy refundAmount, operator = full total.
+  amountJpy: number
+  // Stripe refund id (re_…); null until create/adopt attaches it. Partial-UNIQUE when set.
+  stripeRefundId: string | null
+  status: PaymentRefundStatus
+  createdAt: Date
+  updatedAt: Date
 }
 
 export type PaymentAnomalyKind = 'DOUBLE_PAYMENT' | 'AMOUNT_MISMATCH'

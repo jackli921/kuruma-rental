@@ -228,6 +228,33 @@ export class DrizzleBookingRepository implements BookingRepository {
     return cancelled ? toBooking(cancelled) : undefined
   }
 
+  async markCancellationSettlement(
+    ctx: CallerContext,
+    id: string,
+    transition: {
+      from: Booking['cancellationFeeSettlement']
+      to: Booking['cancellationFeeSettlement']
+    },
+  ): Promise<Booking | undefined> {
+    const scoped = this.scopeConditions(ctx)
+    if (scoped === null) return undefined
+    // Guarded conditional transition: the WHERE on the current settlement is the
+    // atomic idempotency fence (a redelivery/parallel pull matches 0 rows → no-op).
+    const [updated] = await this.db
+      .update(bookings)
+      .set({ cancellationFeeSettlement: transition.to, updatedAt: sql`now()` })
+      .where(
+        and(
+          eq(bookings.id, id),
+          eq(bookings.cancellationFeeSettlement, transition.from),
+          ...scoped,
+        ),
+      )
+      .returning()
+
+    return updated ? toBooking(updated) : undefined
+  }
+
   async reassignVehicle(
     ctx: CallerContext,
     id: string,

@@ -11,6 +11,7 @@ import {
   messages,
   paymentAnomalies,
   paymentEvents,
+  paymentRefunds,
   threadParticipants,
   threads,
   vehicleClasses,
@@ -29,6 +30,7 @@ import type {
   Message,
   PaymentAnomaly,
   PaymentEvent,
+  PaymentRefund,
   Thread,
   ThreadParticipant,
   Vehicle,
@@ -168,6 +170,17 @@ export const paymentEventColumns = {
   status: paymentEvents.status,
   createdAt: paymentEvents.createdAt,
 }
+export const paymentRefundColumns = {
+  id: paymentRefunds.id,
+  bookingId: paymentRefunds.bookingId,
+  operatorId: paymentRefunds.operatorId,
+  stripePaymentIntentId: paymentRefunds.stripePaymentIntentId,
+  stripeRefundId: paymentRefunds.stripeRefundId,
+  amountJpy: paymentRefunds.amountJpy,
+  status: paymentRefunds.status,
+  createdAt: paymentRefunds.createdAt,
+  updatedAt: paymentRefunds.updatedAt,
+}
 
 export const paymentAnomalyColumns = {
   id: paymentAnomalies.id,
@@ -300,6 +313,7 @@ type InsuranceOptionRow = ColumnRow<typeof insuranceOptionColumns>
 type AddOnOptionRow = ColumnRow<typeof addOnOptionColumns>
 type FeeScheduleRow = ColumnRow<typeof feeScheduleColumns>
 type PaymentEventRow = ColumnRow<typeof paymentEventColumns>
+type PaymentRefundRow = ColumnRow<typeof paymentRefundColumns>
 type PaymentAnomalyRow = ColumnRow<typeof paymentAnomalyColumns>
 type BookingRow = ColumnRow<typeof bookingColumns>
 type BookingEventRow = ColumnRow<typeof bookingEventColumns>
@@ -428,6 +442,20 @@ export function toPaymentEvent(r: PaymentEventRow): PaymentEvent {
     currency: r.currency,
     status: r.status,
     createdAt: r.createdAt,
+  }
+}
+
+export function toPaymentRefund(r: PaymentRefundRow): PaymentRefund {
+  return {
+    id: r.id,
+    bookingId: r.bookingId,
+    operatorId: r.operatorId,
+    stripePaymentIntentId: r.stripePaymentIntentId,
+    stripeRefundId: r.stripeRefundId,
+    amountJpy: r.amountJpy,
+    status: r.status,
+    createdAt: r.createdAt,
+    updatedAt: r.updatedAt,
   }
 }
 

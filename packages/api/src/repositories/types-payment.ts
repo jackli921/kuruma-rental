@@ -1,4 +1,5 @@
-import type { PaymentAnomaly, PaymentEvent } from '../stores'
+import type { PaymentRefundStatus } from '@kuruma/shared/enums'
+import type { PaymentAnomaly, PaymentEvent, PaymentRefund } from '../stores'
 
 /** A verified successful payment to persist. id + createdAt are assigned by the
  *  store (DB defaults / in-memory), so the service never invents them (#461). */
@@ -37,4 +38,27 @@ export interface PaymentAnomalyRepository {
   // Unresolved anomalies across all operators for the platform-admin surface.
   // Unscoped by design — authz lives in the service (mirrors listSucceeded).
   listUnresolved(): Promise<PaymentAnomaly[]>
+}
+
+/** A refund attempt to claim. id/createdAt/updatedAt are store-assigned; stripeRefundId
+ *  starts null (attached after create/adopt); status starts PENDING (#851). */
+export type ClaimPaymentRefund = Pick<
+  PaymentRefund,
+  'bookingId' | 'operatorId' | 'stripePaymentIntentId' | 'amountJpy'
+>
+
+/** payment_refunds data access (#851) — the durable refund receipt + create-dedup
+ *  ledger. One row per booking; status is FORWARD-ONLY (terminal never regresses). */
+export interface PaymentRefundRepository {
+  // Idempotent upsert: insert a PENDING receipt for the booking, or return the
+  // EXISTING row unchanged — never regressing a SUCCEEDED/FAILED receipt to PENDING.
+  // The durable "refund started" claim, written before any Stripe call.
+  claim(input: ClaimPaymentRefund): Promise<PaymentRefund>
+  // Bind the Stripe refund id (re_…) to the booking's receipt. Throws a PG-shaped
+  // UNIQUE_VIOLATION (PAYMENT_REFUND_STRIPE_REFUND_CONSTRAINT) if that re_ is already
+  // bound to a different booking — an adoption bug, never a silent no-op.
+  attachStripeRefund(bookingId: string, stripeRefundId: string): Promise<PaymentRefund | undefined>
+  // Advance the receipt status. Forward-only: a terminal SUCCEEDED/FAILED is immutable.
+  markStatus(bookingId: string, status: PaymentRefundStatus): Promise<PaymentRefund | undefined>
+  findByBookingId(bookingId: string): Promise<PaymentRefund | null>
 }

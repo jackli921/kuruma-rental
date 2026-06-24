@@ -27,6 +27,7 @@ import {
   DrizzleOverviewRepository,
   DrizzlePaymentAnomalyRepository,
   DrizzlePaymentEventRepository,
+  DrizzlePaymentRefundRepository,
   DrizzleProviderInviteRepository,
   DrizzleRegionRepository,
   DrizzleRenterDocumentRepository,
@@ -61,6 +62,7 @@ import {
   InMemoryOverviewRepository,
   InMemoryPaymentAnomalyRepository,
   InMemoryPaymentEventRepository,
+  InMemoryPaymentRefundRepository,
   InMemoryProviderInviteRepository,
   InMemoryRegionRepository,
   InMemoryRenterDocumentRepository,
@@ -96,6 +98,7 @@ import type {
   OverviewRepository,
   PaymentAnomalyRepository,
   PaymentEventRepository,
+  PaymentRefundRepository,
   PhotoStorage,
   ProviderInviteRepository,
   RegionRepository,
@@ -168,6 +171,7 @@ export type Repos = {
   storefrontRepo: StorefrontRepository
   regionRepo: RegionRepository
   paymentEventRepo: PaymentEventRepository
+  paymentRefundRepo: PaymentRefundRepository
   paymentAnomalyRepo: PaymentAnomalyRepository
   providerInviteRepo: ProviderInviteRepository
   operatorMembershipRepo: OperatorMembershipRepository
@@ -237,6 +241,7 @@ export function buildOverrideRepos(overrides: AppOverrides): Repos {
     overrides.storefrontRepo ?? new InMemoryStorefrontRepository(locationRepo, operatorRepo)
   const regionRepo = overrides.regionRepo ?? new InMemoryRegionRepository()
   const paymentEventRepo = overrides.paymentEventRepo ?? new InMemoryPaymentEventRepository()
+  const paymentRefundRepo = overrides.paymentRefundRepo ?? new InMemoryPaymentRefundRepository()
   const paymentAnomalyRepo = overrides.paymentAnomalyRepo ?? new InMemoryPaymentAnomalyRepository()
   const providerInviteRepo = overrides.providerInviteRepo ?? new InMemoryProviderInviteRepository()
   const operatorMembershipRepo =
@@ -271,6 +276,7 @@ export function buildOverrideRepos(overrides: AppOverrides): Repos {
     storefrontRepo,
     regionRepo,
     paymentEventRepo,
+    paymentRefundRepo,
     paymentAnomalyRepo,
     providerInviteRepo,
     operatorMembershipRepo,
@@ -371,6 +377,7 @@ export function buildDrizzleRepos(opts?: { db?: Db; runTx?: RunTx }): Repos {
     storefrontRepo: new DrizzleStorefrontRepository(db),
     regionRepo: new DrizzleRegionRepository(db),
     paymentEventRepo: new DrizzlePaymentEventRepository(db),
+    paymentRefundRepo: new DrizzlePaymentRefundRepository(db),
     paymentAnomalyRepo: new DrizzlePaymentAnomalyRepository(db),
     providerInviteRepo,
     operatorMembershipRepo,
@@ -459,6 +466,7 @@ export function buildInMemoryRepos(): Repos {
     storefrontRepo: new InMemoryStorefrontRepository(locationRepo, operatorRepo),
     regionRepo: new InMemoryRegionRepository(),
     paymentEventRepo: new InMemoryPaymentEventRepository(),
+    paymentRefundRepo: new InMemoryPaymentRefundRepository(),
     paymentAnomalyRepo: new InMemoryPaymentAnomalyRepository(),
     providerInviteRepo,
     operatorMembershipRepo,

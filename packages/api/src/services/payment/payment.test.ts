@@ -3,6 +3,7 @@ import type { CallerContext } from '../../middleware/auth'
 import { InMemoryBookingRepository } from '../../repositories/in-memory/booking'
 import { InMemoryPaymentAnomalyRepository } from '../../repositories/in-memory/payment-anomaly'
 import { InMemoryPaymentEventRepository } from '../../repositories/in-memory/payment-event'
+import { InMemoryPaymentRefundRepository } from '../../repositories/in-memory/payment-refund'
 import type { Booking } from '../../stores'
 import { PaymentService } from './payment'
 import type {
@@ -70,6 +71,18 @@ class FakeGateway implements PaymentGateway {
     if (typeof ev === 'function') return ev() // throws (simulates bad signature)
     return ev
   }
+
+  // Refund surface (#851) is exercised in payment-refund.test.ts; these checkout/
+  // webhook tests never refund, so the stubs throw if unexpectedly reached.
+  async refundPayment(): Promise<never> {
+    throw new Error('no refund programmed')
+  }
+  async retrieveRefund(): Promise<never> {
+    throw new Error('no refund programmed')
+  }
+  async listRefundsByPaymentIntent(): Promise<never> {
+    throw new Error('no refund programmed')
+  }
 }
 
 function completedEvent(overrides: Partial<VerifiedPaymentEvent> = {}): VerifiedPaymentEvent {
@@ -100,9 +113,16 @@ describe('PaymentService.createCheckoutSession', () => {
     paymentRepo = new InMemoryPaymentEventRepository()
     anomalyRepo = new InMemoryPaymentAnomalyRepository()
     gateway = new FakeGateway()
-    service = new PaymentService(paymentRepo, bookingRepo, gateway, anomalyRepo, {
-      webBaseUrl: WEB_BASE,
-    })
+    service = new PaymentService(
+      paymentRepo,
+      new InMemoryPaymentRefundRepository(),
+      bookingRepo,
+      gateway,
+      anomalyRepo,
+      {
+        webBaseUrl: WEB_BASE,
+      },
+    )
   })
 
   it('creates a session for the booking total with bookingId + operatorId metadata', async () => {
@@ -187,9 +207,16 @@ describe('PaymentService.handleWebhook', () => {
     paymentRepo = new InMemoryPaymentEventRepository()
     anomalyRepo = new InMemoryPaymentAnomalyRepository()
     gateway = new FakeGateway()
-    service = new PaymentService(paymentRepo, bookingRepo, gateway, anomalyRepo, {
-      webBaseUrl: WEB_BASE,
-    })
+    service = new PaymentService(
+      paymentRepo,
+      new InMemoryPaymentRefundRepository(),
+      bookingRepo,
+      gateway,
+      anomalyRepo,
+      {
+        webBaseUrl: WEB_BASE,
+      },
+    )
   })
 
   it('records a payment_events row with re-derived operator + 4% commission', async () => {
@@ -378,9 +405,16 @@ describe('PaymentService.getBookingPaymentStatus', () => {
     const paymentRepo = new InMemoryPaymentEventRepository()
     const anomalyRepo = new InMemoryPaymentAnomalyRepository()
     const gateway = new FakeGateway()
-    const service = new PaymentService(paymentRepo, bookingRepo, gateway, anomalyRepo, {
-      webBaseUrl: WEB_BASE,
-    })
+    const service = new PaymentService(
+      paymentRepo,
+      new InMemoryPaymentRefundRepository(),
+      bookingRepo,
+      gateway,
+      anomalyRepo,
+      {
+        webBaseUrl: WEB_BASE,
+      },
+    )
 
     expect(await service.getBookingPaymentStatus(RENTER, 'bk-1')).toEqual({ status: 'UNPAID' })
     gateway.nextEvent = completedEvent()
