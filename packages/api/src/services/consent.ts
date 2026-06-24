@@ -1,12 +1,22 @@
 import { CONSENT_CARDINALITY, type ConsentMethod, type ConsentType } from '@kuruma/shared/enums'
 import { PG_ERROR, pgErrorCode } from '../pg-errors'
 import type { ConsentRepository, NewConsentAcceptance } from '../repositories/types'
-import type { ConsentAcceptance } from '../stores'
+import type { ConsentAcceptance, ConsentDocument } from '../stores'
 import { type SigningKey, resolveSigningKey, signAcceptanceRecord } from './consent-signing'
 
 /** Required once-per-subject document types by role (operator types arrive in Phase 3). */
 const REQUIRED_TYPES: Record<string, ConsentType[]> = {
   RENTER: ['RENTER_TOS', 'PRIVACY_POLICY'],
+}
+
+/** Locale every published cohort is guaranteed to carry — the fallback when the
+ *  caller's locale was never authored for a given (type, version) (#877 Q4). */
+const FALLBACK_LOCALE = 'en'
+
+/** A consent the subject still owes, paired with the document to present. */
+export interface PendingConsent {
+  type: ConsentType
+  document: ConsentDocument
 }
 
 export interface RecordAcceptanceInput {
@@ -80,6 +90,30 @@ export class ConsentService {
 
   async isCurrent(userId: string, role: string, now: Date): Promise<boolean> {
     return (await this.getRequiredReconsents(userId, role, now)).length === 0
+  }
+
+  /**
+   * Presentation view of {@link getRequiredReconsents}: for each type the subject
+   * still owes, resolve the live document to show — the caller's locale, falling
+   * back to `en`. Returns required-order, empty when the subject is current.
+   */
+  async getPendingConsents(
+    userId: string,
+    role: string,
+    locale: string,
+    now: Date,
+  ): Promise<PendingConsent[]> {
+    const missing = await this.getRequiredReconsents(userId, role, now)
+    const pending: PendingConsent[] = []
+    for (const type of missing) {
+      const version = await this.repo.findLatestPublishedVersion(type, now)
+      if (!version) continue // getRequiredReconsents already skips unpublished; stay defensive
+      const document =
+        (await this.repo.findPublishedDocument(type, version, locale)) ??
+        (await this.repo.findPublishedDocument(type, version, FALLBACK_LOCALE))
+      if (document) pending.push({ type, document })
+    }
+    return pending
   }
 
   private buildRow(
