@@ -146,7 +146,9 @@ export async function markThreadRead(threadId: string, csrfToken: string): Promi
     credentials: 'include',
     headers: jsonHeaders(csrfToken),
   })
-  await unwrap(res)
+  // POST /threads/:id/read returns `ok(null)` — validate the empty payload so the
+  // #711 unwrap-schema ratchet stays satisfied (every web unwrap() passes a schema).
+  await unwrap(res, z.null())
 }
 
 export async function translateMessage(
