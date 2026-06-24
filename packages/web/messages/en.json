@@ -893,6 +893,9 @@
       "translating": "Translating...",
       "translationUnavailable": "Translation unavailable",
       "retry": "Retry"
+    },
+    "entry": {
+      "messageHost": "Message host"
     }
   },
   "bookings": {

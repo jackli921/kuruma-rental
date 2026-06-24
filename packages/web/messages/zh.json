@@ -893,6 +893,9 @@
       "translating": "翻译中...",
       "translationUnavailable": "无法翻译",
       "retry": "重试"
+    },
+    "entry": {
+      "messageHost": "给房东发消息"
     }
   },
   "bookings": {

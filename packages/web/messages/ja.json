@@ -893,6 +893,9 @@
       "translating": "翻訳中...",
       "translationUnavailable": "翻訳できませんでした",
       "retry": "再試行"
+    },
+    "entry": {
+      "messageHost": "ホストにメッセージ"
     }
   },
   "bookings": {
