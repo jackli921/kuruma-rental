@@ -1,5 +1,5 @@
 {
-  "id": "82f82d76-6098-44ab-a6b6-9d03fd6f8272",
+  "id": "6b4f7533-28d1-4074-b034-56355ba12a49",
   "prevId": "ca398906-9b61-4ec3-a222-4cb5dc36e11b",
   "version": "7",
   "dialect": "postgresql",
@@ -1434,6 +1434,36 @@
         }
       },
       "indexes": {
+        "idx_class_rate_plans_operator": {
+          "name": "idx_class_rate_plans_operator",
+          "columns": [
+            {
+              "expression": "operatorId",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "idx_class_rate_plans_class": {
+          "name": "idx_class_rate_plans_class",
+          "columns": [
+            {
+              "expression": "classId",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
         "idx_class_rate_plans_pickup_location": {
           "name": "idx_class_rate_plans_pickup_location",
           "columns": [

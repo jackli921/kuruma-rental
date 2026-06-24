@@ -17,5 +17,7 @@ ALTER TABLE "bookings" ALTER COLUMN "assignedVehicleId" DROP NOT NULL;--> statem
 ALTER TABLE "class_rate_plans" ADD CONSTRAINT "class_rate_plans_operatorId_operators_id_fk" FOREIGN KEY ("operatorId") REFERENCES "public"."operators"("id") ON DELETE restrict ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "class_rate_plans" ADD CONSTRAINT "class_rate_plans_pickupLocationId_locations_id_fk" FOREIGN KEY ("pickupLocationId") REFERENCES "public"."locations"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "class_rate_plans" ADD CONSTRAINT "class_rate_plans_operator_class_fk" FOREIGN KEY ("operatorId","classId") REFERENCES "public"."vehicle_classes"("operatorId","id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
+CREATE INDEX "idx_class_rate_plans_operator" ON "class_rate_plans" USING btree ("operatorId");--> statement-breakpoint
+CREATE INDEX "idx_class_rate_plans_class" ON "class_rate_plans" USING btree ("classId");--> statement-breakpoint
 CREATE INDEX "idx_class_rate_plans_pickup_location" ON "class_rate_plans" USING btree ("pickupLocationId");--> statement-breakpoint
 ALTER TABLE "bookings" ADD CONSTRAINT "bookings_specific_requires_requested" CHECK ("bookings"."fulfillmentMode" <> 'SPECIFIC' OR "bookings"."requestedVehicleId" IS NOT NULL);

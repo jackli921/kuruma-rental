@@ -188,15 +188,17 @@ export const classRatePlans = pgTable(
     updatedAt: timestamp('updatedAt', { withTimezone: true }).notNull().defaultNow(),
   },
   (table) => [
-    // pickupLocationId needs its OWN leading index for FK cover: it is only a
-    // TRAILING column of the UNIQUE below, which lint:fk-indexes does not count
-    // (same reasoning as idx_fee_schedules_vehicle_class).
+    // Each FK column needs an OWN leading index for FK cover. The UNIQUE
+    // constraint below emits an ALTER TABLE ADD CONSTRAINT (not CREATE INDEX),
+    // so lint:fk-indexes does not parse it as a covering index — every FK
+    // column must be the leading column of an explicit `.index(...)` (same
+    // reasoning as idx_fee_schedules_vehicle_class).
+    index('idx_class_rate_plans_operator').on(table.operatorId),
+    index('idx_class_rate_plans_class').on(table.classId),
     index('idx_class_rate_plans_pickup_location').on(table.pickupLocationId),
     // ONE rate plan per (operator, class, location). Plain UNIQUE — isActive
     // toggles the single row in place, so there is never a second row to dedupe
-    // (until date ranges arrive, which the deferred columns will scope). The
-    // leading (operatorId, classId) prefix also covers the composite FK + the
-    // operatorId read-scope, so no separate operatorId/class index is needed.
+    // (until date ranges arrive, which the deferred columns will scope).
     unique('class_rate_plans_operator_class_location_unique').on(
       table.operatorId,
       table.classId,
