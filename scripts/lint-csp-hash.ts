@@ -28,9 +28,16 @@ export function cspHash(scriptContent: string): string {
   return `sha256-${createHash('sha256').update(scriptContent, 'utf8').digest('base64')}`
 }
 
-/** The script-src directive value from the CSP line (enforcing OR Report-Only). */
+/**
+ * The script-src directive value from the CSP line (enforcing OR Report-Only).
+ * Anchored on `^\s+` so it binds to a real indented `_headers` directive, never a
+ * `#` comment that merely mentions the directive name — the guard must survive
+ * future explanatory edits to this file without a comment masking a regression.
+ */
 export function extractScriptSrc(headers: string): string {
-  const line = headers.split('\n').find((l) => /Content-Security-Policy(-Report-Only)?:/.test(l))
+  const line = headers
+    .split('\n')
+    .find((l) => /^\s+Content-Security-Policy(-Report-Only)?:/.test(l))
   return line?.match(/script-src ([^;]*)/)?.[1]?.trim() ?? ''
 }
 

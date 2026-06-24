@@ -41,6 +41,15 @@ describe('extractScriptSrc', () => {
   test('reads script-src from a Report-Only line, stopping at the next directive', () => {
     expect(extractScriptSrc(headersWith(`'self' '${HASH}'`))).toBe(`'self' '${HASH}'`)
   })
+
+  test('binds to the real directive, not a # comment that names it (anti-mask)', () => {
+    const withComment = [
+      '/*',
+      "  # don't put Content-Security-Policy-Report-Only: script-src 'unsafe-inline' in a comment",
+      `  Content-Security-Policy-Report-Only: script-src 'self' '${HASH}'; base-uri 'self'`,
+    ].join('\n')
+    expect(extractScriptSrc(withComment)).toBe(`'self' '${HASH}'`)
+  })
 })
 
 describe('checkCspHash', () => {

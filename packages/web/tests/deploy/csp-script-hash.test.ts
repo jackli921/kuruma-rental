@@ -25,8 +25,11 @@ const inlineSource = inlineScripts[0]?.[1] ?? ''
 const expectedHash = `sha256-${createHash('sha256').update(inlineSource, 'utf8').digest('base64')}`
 
 // Pull the script-src directive out of the CSP line (enforcing OR Report-Only,
-// so this keeps guarding after #1009 flips the header name).
-const cspLine = headers.split('\n').find((l) => /Content-Security-Policy(-Report-Only)?:/.test(l))
+// so this keeps guarding after #1009 flips the header name). Anchored on `^\s+`
+// so a `#` comment mentioning the directive name can't be parsed instead.
+const cspLine = headers
+  .split('\n')
+  .find((l) => /^\s+Content-Security-Policy(-Report-Only)?:/.test(l))
 const scriptSrc = cspLine?.match(/script-src ([^;]*)/)?.[1]?.trim() ?? ''
 
 describe('CSP script-src hash (#500)', () => {
