@@ -24,31 +24,37 @@ const inlineScripts = [...indexHtml.matchAll(/<script(?![^>]*\bsrc=)[^>]*>([\s\S
 const inlineSource = inlineScripts[0]?.[1] ?? ''
 const expectedHash = `sha256-${createHash('sha256').update(inlineSource, 'utf8').digest('base64')}`
 
-// Pull the script-src directive out of the CSP line (enforcing OR Report-Only,
-// so this keeps guarding after #1009 flips the header name). Anchored on `^\s+`
-// so a `#` comment mentioning the directive name can't be parsed instead.
-const cspLine = headers
+// Pull the script-src directive out of EVERY CSP line (enforcing AND
+// Report-Only, so this keeps guarding after #1009 flips the header name and
+// across the enforce-flip rollout where both may briefly coexist — `.find`
+// would silently validate only one of them). Anchored on `^\s+` so a `#`
+// comment mentioning the directive name can't be parsed instead.
+const cspLines = headers
   .split('\n')
-  .find((l) => /^\s+Content-Security-Policy(-Report-Only)?:/.test(l))
-const scriptSrc = cspLine?.match(/script-src ([^;]*)/)?.[1]?.trim() ?? ''
+  .filter((l) => /^\s+Content-Security-Policy(-Report-Only)?:/.test(l))
+const scriptSrcs = cspLines.map((l) => l.match(/script-src ([^;]*)/)?.[1]?.trim() ?? '')
 
 describe('CSP script-src hash (#500)', () => {
   test('index.html has exactly one inline (src-less) script', () => {
     expect(inlineScripts).toHaveLength(1)
   })
 
-  test('_headers pins that inline script by its current sha256', () => {
-    expect(scriptSrc).toContain(`'${expectedHash}'`)
+  test('_headers carries at least one CSP header with a script-src', () => {
+    expect(scriptSrcs.length).toBeGreaterThan(0)
   })
 
-  test("script-src drops 'unsafe-inline' (a hash and 'unsafe-inline' cannot coexist)", () => {
-    // When a hash is present the browser ignores 'unsafe-inline', so leaving it
-    // in is dead config that masks the real policy. Drop it from script-src.
-    expect(scriptSrc).not.toContain("'unsafe-inline'")
+  test('EVERY CSP header pins that inline script by its current sha256', () => {
+    for (const scriptSrc of scriptSrcs) expect(scriptSrc).toContain(`'${expectedHash}'`)
+  })
+
+  test("EVERY CSP header drops 'unsafe-inline' from script-src (cannot coexist with a hash)", () => {
+    for (const scriptSrc of scriptSrcs) expect(scriptSrc).not.toContain("'unsafe-inline'")
   })
 
   test("style-src keeps 'unsafe-inline' (inline style attrs can't be hashed) — #500 note 2", () => {
-    const styleSrc = cspLine?.match(/style-src ([^;]*)/)?.[1]?.trim() ?? ''
-    expect(styleSrc).toContain("'unsafe-inline'")
+    for (const line of cspLines) {
+      const styleSrc = line.match(/style-src ([^;]*)/)?.[1]?.trim() ?? ''
+      expect(styleSrc).toContain("'unsafe-inline'")
+    }
   })
 })
