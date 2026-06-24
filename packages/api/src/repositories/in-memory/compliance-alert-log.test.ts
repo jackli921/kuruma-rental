@@ -11,10 +11,9 @@ const base = {
 }
 
 describe('InMemoryComplianceAlertLogRepository', () => {
-  test('records distinct bands and exposes their keys', async () => {
+  test('records distinct bands (in one batch) and exposes their keys', async () => {
     const repo = new InMemoryComplianceAlertLogRepository()
-    await repo.record(base)
-    await repo.record({ ...base, documentType: 'INSURANCE', thresholdBand: 'D7' })
+    await repo.recordMany([base, { ...base, documentType: 'INSURANCE', thresholdBand: 'D7' }])
 
     const keys = await repo.findAlertedKeys(['veh-1'])
     expect(keys).toEqual(
@@ -25,11 +24,20 @@ describe('InMemoryComplianceAlertLogRepository', () => {
     )
   })
 
-  test('record is idempotent on (vehicle, document, band) — a same-band re-run is a no-op', async () => {
+  test('recordMany is idempotent on (vehicle, document, band) — a same-band re-run is a no-op', async () => {
     const store = new Map()
     const repo = new InMemoryComplianceAlertLogRepository(store)
-    await repo.record(base)
-    await repo.record({ ...base, recipient: 'changed@example.com' })
+    await repo.recordMany([base])
+    await repo.recordMany([{ ...base, recipient: 'changed@example.com' }])
+
+    expect(store.size).toBe(1)
+    expect([...store.values()][0].recipient).toBe('a@example.com')
+  })
+
+  test('recordMany dedupes a same-band duplicate within a single batch', async () => {
+    const store = new Map()
+    const repo = new InMemoryComplianceAlertLogRepository(store)
+    await repo.recordMany([base, { ...base, recipient: 'changed@example.com' }])
 
     expect(store.size).toBe(1)
     expect([...store.values()][0].recipient).toBe('a@example.com')
@@ -37,8 +45,7 @@ describe('InMemoryComplianceAlertLogRepository', () => {
 
   test('findAlertedKeys only returns keys for the requested vehicles', async () => {
     const repo = new InMemoryComplianceAlertLogRepository()
-    await repo.record(base)
-    await repo.record({ ...base, vehicleId: 'veh-2' })
+    await repo.recordMany([base, { ...base, vehicleId: 'veh-2' }])
 
     const keys = await repo.findAlertedKeys(['veh-1'])
     expect(keys).toEqual(new Set([complianceAlertKey('veh-1', 'SHAKEN', 'D30')]))

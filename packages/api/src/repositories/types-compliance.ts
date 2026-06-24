@@ -26,7 +26,10 @@ export interface ComplianceAlertLogRepository {
   // The set of already-sent `complianceAlertKey(...)` values among these vehicles,
   // so the digest knows which bands are new before composing a mail.
   findAlertedKeys(vehicleIds: string[]): Promise<Set<string>>
-  // Idempotent insert — a duplicate (vehicleId, documentType, band) is a no-op
-  // (the unique seal), so a same-band re-run never double-records.
-  record(data: RecordComplianceAlert): Promise<void>
+  // Idempotent BATCH insert — one operator's freshly-sent bands sealed in a single
+  // atomic statement. A duplicate (vehicleId, documentType, band) is a no-op (the
+  // unique seal), so a same-band re-run never double-records. Batched (not one call
+  // per band) so a sent digest is sealed all-or-nothing, and a single write blip
+  // can't cascade past the operator it hit (#1043).
+  recordMany(alerts: RecordComplianceAlert[]): Promise<void>
 }

@@ -1,10 +1,10 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { SYSTEM_CONTEXT } from '../middleware/auth'
 import { InMemoryComplianceAlertLogRepository } from '../repositories/in-memory/compliance-alert-log'
 import { InMemoryVehicleRepository } from '../repositories/in-memory/vehicle'
-import { complianceAlertKey } from '../repositories/types'
+import { type ComplianceAlertLogRepository, complianceAlertKey } from '../repositories/types'
 import type { Vehicle } from '../stores'
-import { ComplianceDigestService } from './compliance-digest'
+import { ComplianceDigestService, SCAN_LIMIT } from './compliance-digest'
 import type { EmailMessage } from './email/email-sender'
 import type { ResolveOperatorRecipientsBatch } from './operator-recipients'
 
@@ -71,7 +71,7 @@ const resolveRecipients: ResolveOperatorRecipientsBatch = async (ids) =>
 
 function setup(opts?: {
   ctrl?: { fail: boolean }
-  alertLogRepo?: InMemoryComplianceAlertLogRepository
+  alertLogRepo?: ComplianceAlertLogRepository
 }) {
   const vehicleRepo = new InMemoryVehicleRepository()
   const alertLogRepo = opts?.alertLogRepo ?? new InMemoryComplianceAlertLogRepository()
@@ -208,5 +208,63 @@ describe('ComplianceDigestService.run (#916 §5.4)', () => {
 
     expect(summary).toMatchObject({ operatorsNotified: 0 })
     expect(sent).toHaveLength(0)
+  })
+
+  it('a ledger-write failure for one operator does not abort the rest of the fleet (#1043)', async () => {
+    // recordMany always rejects: every sent digest fails to seal. The fix guards
+    // the write like the send, so the second operator still gets its mail instead
+    // of the first operator's throw aborting the whole run.
+    const failingLedger: ComplianceAlertLogRepository = {
+      findAlertedKeys: async () => new Set<string>(),
+      recordMany: async () => {
+        throw new Error('ledger down')
+      },
+    }
+    const { vehicleRepo, sent, service } = setup({ alertLogRepo: failingLedger })
+    await makeVehicle(vehicleRepo, { operatorId: 'op_a', shakenExpiryDate: EXPIRED })
+    await makeVehicle(vehicleRepo, { operatorId: 'op_b', shakenExpiryDate: EXPIRED })
+
+    const summary = await service.run() // must not throw
+
+    expect(sent).toHaveLength(2) // both operators emailed despite both seals failing
+    expect(summary).toMatchObject({
+      operatorsNotified: 2,
+      alertsRecorded: 0,
+      operatorsRecordFailed: 2,
+      operatorsFailed: 0,
+    })
+  })
+
+  it('flags fleetScanTruncated and warns when the scan fills the page (silent-cap guard, #1043)', async () => {
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    const seed = await makeVehicle(new InMemoryVehicleRepository(), {}) // both FAR → no candidates
+    const fullPage = Array.from(
+      { length: SCAN_LIMIT },
+      (_, i): Vehicle => ({ ...seed, id: `veh_${i}` }),
+    )
+    const service = new ComplianceDigestService({
+      vehicleRepo: { findAll: async () => ({ data: fullPage, total: SCAN_LIMIT }) },
+      alertLogRepo: new InMemoryComplianceAlertLogRepository(),
+      resolveRecipients,
+      emailSender: fakeSender().sender,
+      today: () => TODAY,
+      config: { emailFrom: 'fleet@platform.example' },
+    })
+
+    const summary = await service.run()
+    const warnCalls = warnSpy.mock.calls.length // capture before mockRestore clears it
+    warnSpy.mockRestore()
+
+    expect(summary.fleetScanTruncated).toBe(true)
+    expect(warnCalls).toBe(1)
+  })
+
+  it('does not flag fleetScanTruncated for a sub-cap scan', async () => {
+    const { vehicleRepo, service } = setup()
+    await makeVehicle(vehicleRepo, { shakenExpiryDate: EXPIRED })
+
+    const summary = await service.run()
+
+    expect(summary.fleetScanTruncated).toBe(false)
   })
 })
