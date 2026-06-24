@@ -125,6 +125,20 @@ export class DrizzleAvailabilityRepository implements AvailabilityRepository {
     return row?.count ?? 0
   }
 
+  async lockComboCapacity(
+    operatorId: string,
+    classId: string,
+    pickupLocationId: string,
+  ): Promise<() => void> {
+    // #464 2d.4: serialize concurrent CLASS_COMBO submits on the (op, class,
+    // loc) triple. hashtextextended yields a stable 64-bit int from the keyed
+    // string for Postgres' single-arg advisory lock; auto-released at tx
+    // commit/rollback, so the returned thunk is a no-op.
+    const key = `combo:${operatorId}|${classId}|${pickupLocationId}`
+    await this.db.execute(sql`SELECT pg_advisory_xact_lock(hashtextextended(${key}, 0))`)
+    return () => {}
+  }
+
   async countClassCapacity(
     operatorId: string,
     classId: string,

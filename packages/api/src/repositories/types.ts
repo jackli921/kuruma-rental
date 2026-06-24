@@ -528,6 +528,18 @@ export interface AvailabilityRepository {
     pickupLocationId: string,
     asOf: Date,
   ): Promise<number>
+  // #464 2d.4: serializes concurrent CLASS_COMBO submits on one (op, class,
+  // loc) triple — Postgres' pg_advisory_xact_lock keyed on a hashed string,
+  // an InMemory per-key Promise chain in tests. The returned thunk releases:
+  // for Drizzle it is a no-op (advisory_xact_lock auto-releases at tx
+  // commit/rollback); for InMemory it resolves the queue head so the next
+  // waiter advances. The service holds the lock around demand → capacity →
+  // insert so a parallel submit can't slip a car under the gate.
+  lockComboCapacity(
+    operatorId: string,
+    classId: string,
+    pickupLocationId: string,
+  ): Promise<() => void>
 }
 
 /**

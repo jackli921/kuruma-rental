@@ -347,3 +347,46 @@ describe('InMemoryAvailabilityRepository.countClassCapacity (#464 slice 2d.2)', 
     expect(await capacity()).toBe(0)
   })
 })
+
+describe('InMemoryAvailabilityRepository.lockComboCapacity (#464 slice 2d.4)', () => {
+  beforeEach(() => {
+    vehicleRepo = new InMemoryVehicleRepository()
+    bookingRepo = new InMemoryBookingRepository()
+    availabilityRepo = new InMemoryAvailabilityRepository(vehicleRepo, bookingRepo)
+  })
+
+  // The combo submit holds this lock around demand → capacity → insert so a
+  // parallel CLASS_COMBO submit on the same triple can't read demand BEFORE
+  // the first submit's insert lands and double-book a class. Test: a second
+  // acquire on the same key must wait until the first releases — Postgres'
+  // pg_advisory_xact_lock semantics, modeled per-key in single-threaded JS.
+  it('serializes per-key acquires: the second waits until the first releases', async () => {
+    const order: string[] = []
+    const release1 = await availabilityRepo.lockComboCapacity('op', 'cls', 'loc')
+    order.push('acquired-1')
+
+    const second = (async () => {
+      const release2 = await availabilityRepo.lockComboCapacity('op', 'cls', 'loc')
+      order.push('acquired-2')
+      release2()
+    })()
+
+    // Give the event loop a tick — `second` MUST still be waiting because lock 1 is held.
+    await new Promise((r) => setTimeout(r, 0))
+    expect(order).toEqual(['acquired-1'])
+
+    release1()
+    await second
+    expect(order).toEqual(['acquired-1', 'acquired-2'])
+  })
+
+  it('does not serialize across different keys', async () => {
+    const release1 = await availabilityRepo.lockComboCapacity('op', 'cls', 'loc-A')
+    // A different (op, class, loc) triple — must acquire independently and
+    // without waiting for the first holder.
+    const release2 = await availabilityRepo.lockComboCapacity('op', 'cls', 'loc-B')
+    release1()
+    release2()
+    expect(true).toBe(true) // both acquires returned without deadlock
+  })
+})

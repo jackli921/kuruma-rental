@@ -10,6 +10,12 @@ import type {
 import { BLOCKING_STATUSES, getConflictingBookings } from './booking'
 
 export class InMemoryAvailabilityRepository implements AvailabilityRepository {
+  // #464 2d.4: per-(op, class, loc) Promise-chain mutex. The tail of each
+  // chain is the in-flight holder's release promise; a new acquire awaits
+  // the tail and replaces it with its own. Models Postgres' advisory-lock
+  // serialize-per-key under a single-threaded event loop.
+  private readonly comboLockTails = new Map<string, Promise<void>>()
+
   constructor(
     private readonly vehicleRepo: VehicleRepository,
     private readonly bookingRepo: BookingRepository,
@@ -99,6 +105,26 @@ export class InMemoryAvailabilityRepository implements AvailabilityRepository {
         b.startAt < to &&
         b.effectiveEndAt > from,
     ).length
+  }
+
+  async lockComboCapacity(
+    operatorId: string,
+    classId: string,
+    pickupLocationId: string,
+  ): Promise<() => void> {
+    const key = `combo:${operatorId}|${classId}|${pickupLocationId}`
+    const prev = this.comboLockTails.get(key) ?? Promise.resolve()
+    let release: () => void = () => {}
+    const held = new Promise<void>((r) => {
+      release = r
+    })
+    // Chain THIS holder's tail onto prev → next acquirer waits until we resolve.
+    this.comboLockTails.set(
+      key,
+      prev.then(() => held),
+    )
+    await prev
+    return release
   }
 
   async countClassCapacity(

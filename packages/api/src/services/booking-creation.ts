@@ -441,11 +441,46 @@ export class BookingCreationService {
     const turnaroundMinutes = pickup.defaultTurnaroundMinutes ?? DEFAULT_TURNAROUND_MINUTES
     const effectiveEndAt = new Date(input.endAt.getTime() + turnaroundMinutes * MS_PER_MINUTE)
 
+    // #464 2d.4: serialize concurrent CLASS_COMBO submits on this triple.
+    // Drizzle's pg_advisory_xact_lock auto-releases at tx end (the returned
+    // release is a no-op); InMemory's promise-chain release fires in the
+    // finally so the next waiter advances. Held around demand → capacity →
+    // insert so a parallel submit can't read demand BEFORE our insert lands.
+    const releaseLock = await repos.availabilityRepo.lockComboCapacity(
+      operatorId,
+      classId,
+      input.pickupLocationId,
+    )
+    try {
+      return await this.submitComboInTxLocked(
+        ctx,
+        input,
+        renterId,
+        now,
+        repos,
+        operatorId,
+        classId,
+        effectiveEndAt,
+      )
+    } finally {
+      releaseLock()
+    }
+  }
+
+  private async submitComboInTxLocked(
+    ctx: CallerContext,
+    input: CreateBookingInput & { fulfillmentMode: 'CLASS_COMBO' },
+    renterId: string | null,
+    now: Date,
+    repos: TransactionRepos,
+    operatorId: string,
+    classId: string,
+    effectiveEndAt: Date,
+  ): Promise<CreateBookingResult> {
     // Demand counts BOTH consumers of the class fleet (SPECIFIC bookings on
     // any car in the triple PLUS floating combos) — countClassDemand keys on
     // (operator, class, location), not on assignedVehicleId. Capacity is the
-    // road-legal supply at the requested return. Slice 2d.4 wraps this in
-    // pg_advisory_xact_lock so a concurrent SPECIFIC can't sneak in.
+    // road-legal supply at the requested return.
     const demand = await repos.availabilityRepo.countClassDemand(
       operatorId,
       classId,
