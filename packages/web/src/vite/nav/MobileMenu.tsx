@@ -16,13 +16,22 @@ import { useLocale, useTranslations } from 'use-intl'
 // the shared `businessNavItems` array (#603) so the union can't drift from the
 // list Navbar renders; the renter routes (#543: Browse + Documents alongside My
 // Bookings) are listed inline since they aren't part of the operator portal.
-export type NavTo = BusinessNavTo | '/$locale/bookings' | '/$locale/search' | '/$locale/documents'
+export type NavTo =
+  | BusinessNavTo
+  | '/$locale/bookings'
+  | '/$locale/messages'
+  | '/$locale/search'
+  | '/$locale/documents'
 
 export interface NavItem {
   readonly to: NavTo
   readonly label: string
-  // #611: optional red-dot count (the operator "new orders" alert on Bookings).
+  // #611: optional red-dot count (the operator "new orders" alert on Bookings,
+  // the renter "unread messages" alert on Messages, #1032).
   readonly badge?: number
+  // Pre-translated aria-label for the badge (e.g. "3 unread messages"); the
+  // producer owns it so each item can describe its own count.
+  readonly badgeLabel?: string
 }
 
 interface MobileMenuProps {
@@ -70,9 +79,7 @@ export function MobileMenu({ session, navItems }: MobileMenuProps) {
               className="flex items-center px-3 py-2 rounded-md text-sm font-medium text-foreground hover:bg-accent transition-colors"
             >
               {item.label}
-              {item.badge ? (
-                <NavBadge count={item.badge} label={t('nav.newBookings', { count: item.badge })} />
-              ) : null}
+              {item.badge ? <NavBadge count={item.badge} label={item.badgeLabel ?? ''} /> : null}
             </Link>
           ))}
         </nav>

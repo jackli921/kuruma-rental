@@ -48,6 +48,14 @@ export interface TranslationDto {
   cached: boolean
 }
 
+// Public projection from `GET /users?ids=` (id + display name only; the API
+// scopes which ids a renter may resolve to their own thread co-participants).
+// Used to label inbox rows with the counterpart's name.
+export interface UserSummaryDto {
+  id: string
+  name: string | null
+}
+
 const messageSchema = z.object({
   id: z.string(),
   threadId: z.string(),
@@ -88,6 +96,11 @@ const translationSchema = z.object({
   language: z.string(),
   cached: z.boolean(),
 }) satisfies z.ZodType<TranslationDto>
+
+const userSummarySchema = z.object({
+  id: z.string(),
+  name: z.string().nullable(),
+}) satisfies z.ZodType<UserSummaryDto>
 
 // Single-owner operation at 40-50 vehicles: a renter has a handful of threads, so
 // the inbox fetches one generous page rather than paginating.
@@ -153,12 +166,32 @@ export async function translateMessage(
   return unwrap(res, translationSchema)
 }
 
+// Resolve display names for a batch of user ids (inbox counterpart labels). An
+// empty list would otherwise issue a pointless `?ids=` request that the API
+// rejects/empties anyway, so short-circuit to [] before touching the network.
+export async function fetchUsersByIds(ids: readonly string[]): Promise<UserSummaryDto[]> {
+  if (ids.length === 0) return []
+  const res = await fetch(`${getApiBaseUrl()}/users?ids=${encodeURIComponent(ids.join(','))}`, {
+    credentials: 'include',
+  })
+  return unwrap(res, z.array(userSummarySchema))
+}
+
 export const THREADS_QUERY_KEY = ['messaging', 'threads'] as const
+
+// The inbox and the nav unread-badge share this one cache entry. A slow poll +
+// refetch-on-focus keeps the badge live without websockets (out of scope); 60s
+// is plenty for a single-owner operation and matches the operator "new order"
+// badge (operator-bookings/new-bookings.ts).
+const THREADS_REFETCH_MS = 60_000
 
 export function threadsQueryOptions() {
   return queryOptions({
     queryKey: THREADS_QUERY_KEY,
     queryFn: fetchThreads,
+    refetchOnWindowFocus: true,
+    refetchInterval: THREADS_REFETCH_MS,
+    staleTime: 30_000,
   })
 }
 
@@ -166,5 +199,17 @@ export function threadByIdQueryOptions(id: string) {
   return queryOptions({
     queryKey: ['messaging', 'thread', id],
     queryFn: () => fetchThreadById(id),
+  })
+}
+
+// Counterpart display names for the inbox, keyed by the (order-independent) id
+// set so the same batch caches across renders. Disabled for an empty set.
+export function usersByIdsQueryOptions(ids: readonly string[]) {
+  const key = [...ids].sort()
+  return queryOptions({
+    queryKey: ['messaging', 'users', key],
+    queryFn: () => fetchUsersByIds(key),
+    enabled: key.length > 0,
+    staleTime: 5 * 60_000,
   })
 }

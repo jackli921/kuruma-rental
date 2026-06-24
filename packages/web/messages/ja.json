@@ -93,6 +93,7 @@
     "myBookings": "予約一覧",
     "documents": "書類",
     "newBookings": "新規予約 {count}件",
+    "unreadMessages": "未読メッセージ {count}件",
     "settings": "設定",
     "team": "チーム"
   },
@@ -872,7 +873,10 @@
       "subtitle": "会話一覧",
       "empty": "メッセージはまだありません",
       "emptyDescription": "会話を始めるか、返信をお待ちください。",
-      "unread": "未読 {count} 件"
+      "unread": "未読 {count} 件",
+      "host": "ホスト",
+      "loadError": "メッセージを読み込めませんでした",
+      "retry": "再試行"
     },
     "thread": {
       "sendPlaceholder": "メッセージを入力...",

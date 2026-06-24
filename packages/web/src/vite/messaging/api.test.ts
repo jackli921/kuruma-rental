@@ -4,8 +4,10 @@ import {
   type MessageDto,
   type ThreadDetailDto,
   type ThreadSummaryDto,
+  type UserSummaryDto,
   fetchThreadById,
   fetchThreads,
+  fetchUsersByIds,
   markThreadRead,
   sendMessage,
   translateMessage,
@@ -130,6 +132,35 @@ describe('markThreadRead', () => {
       credentials: 'include',
       headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': 'csrf-abc' },
     })
+  })
+})
+
+describe('fetchUsersByIds', () => {
+  it('GETs /api/users?ids= (comma-joined, encoded) and unwraps {id,name} summaries', async () => {
+    const users: UserSummaryDto[] = [
+      { id: 'user_op', name: 'Kaku Rentals' },
+      { id: 'user_renter', name: null },
+    ]
+    fetchMock.mockResolvedValue(jsonResponse({ success: true, data: users }))
+
+    const result = await fetchUsersByIds(['user_op', 'user_renter'])
+
+    expect(fetchMock).toHaveBeenCalledWith('/api/users?ids=user_op%2Cuser_renter', {
+      credentials: 'include',
+    })
+    expect(result).toEqual(users)
+  })
+
+  it('returns [] without hitting the network when given no ids', async () => {
+    const result = await fetchUsersByIds([])
+
+    expect(result).toEqual([])
+    expect(fetchMock).not.toHaveBeenCalled()
+  })
+
+  it('throws a ParseError when a user summary omits its id (contract drift)', async () => {
+    fetchMock.mockResolvedValue(jsonResponse({ success: true, data: [{ name: 'No Id' }] }))
+    await expect(fetchUsersByIds(['user_op'])).rejects.toBeInstanceOf(ParseError)
   })
 })
 
