@@ -83,8 +83,9 @@ export const reviews = pgTable(
       'reviews_vehicle_subject_chk',
       sql`(${t.subject} = 'VEHICLE') = (${t.subjectVehicleId} IS NOT NULL)`,
     ),
-    // FK-covering + read indexes (lint:fk-indexes). bookingId is the LEADING column of the
-    // unique above, so it needs no separate index; authorUserId (2nd there) does.
+    // FK-covering + read indexes (lint:fk-indexes treats every FK column as needing
+    // its own index — the unique's leading-column prefix doesn't satisfy the gate).
+    index('idx_reviews_bookingId').on(t.bookingId),
     index('idx_reviews_authorUserId').on(t.authorUserId),
     // operatorId FK cover + the slice-5 published-aggregate scan.
     index('idx_reviews_operator_published').on(t.operatorId, t.publishedAt),
