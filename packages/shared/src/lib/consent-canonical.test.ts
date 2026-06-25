@@ -22,6 +22,16 @@ describe('canonicalizeFields', () => {
       canonicalizeFields([['k', 'v']]).startsWith(`_canon\x1f2:${CANONICAL_VERSION}\x1e`),
     ).toBe(true)
   })
+
+  it('throws if a caller supplies "_canon" — reserved-key guard prevents hash collision', () => {
+    expect(() => canonicalizeFields([['_canon', 'spoofed']])).toThrow(/reserved key/)
+    expect(() =>
+      canonicalizeFields([
+        ['safe', 'v'],
+        ['_canon', 'v1'],
+      ]),
+    ).toThrow(/reserved key/)
+  })
 })
 
 describe('computeContentHash', () => {

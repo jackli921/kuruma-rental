@@ -21,6 +21,13 @@ export const CANONICAL_VERSION = 'v1'
 export function canonicalizeFields(
   fields: ReadonlyArray<readonly [string, string | null]>,
 ): string {
+  // `_canon` is reserved for the version tag; a caller-supplied field with
+  // the same key would emit two `_canon` pairs and yield two valid pre-images
+  // for the same hash. Today's call sites use static literals — this guard
+  // protects future generic callers from a silent crypto regression.
+  for (const [k] of fields) {
+    if (k === '_canon') throw new Error('canonicalizeFields: "_canon" is a reserved key')
+  }
   // `N:` marks null distinctly from the empty string (`0:`); a real value always
   // starts with a digit, so the null marker can never collide with one.
   return [['_canon', CANONICAL_VERSION] as const, ...fields]
