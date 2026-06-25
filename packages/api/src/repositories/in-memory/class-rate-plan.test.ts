@@ -55,4 +55,37 @@ describe('InMemoryClassRatePlanRepository', () => {
 
     expect(await repo.findActiveRate('op-1', 'cls-suv', 'loc-namba')).toBeUndefined()
   })
+
+  // findActiveRatePlans enumerates the combo deals a renter search should surface
+  // (#464 read-side). It mirrors the SPECIFIC availability scan: scoped to a
+  // location/operator set, ACTIVE-only; the service applies the ACRISS class filter.
+  describe('findActiveRatePlans', () => {
+    test('returns every active plan and excludes inactive ones (unfiltered browse-all)', async () => {
+      const repo = new InMemoryClassRatePlanRepository()
+      const compact = await repo.create(baseRate)
+      const suv = await repo.create({ ...baseRate, classId: 'cls-suv', dayRateJpy: 9000 })
+      await repo.create({ ...baseRate, classId: 'cls-van', isActive: false })
+
+      const plans = await repo.findActiveRatePlans()
+      expect(plans.map((p) => p.id).sort()).toEqual([compact.id, suv.id].sort())
+    })
+
+    test('scopes to the given locationIds (a plan at another location is dropped)', async () => {
+      const repo = new InMemoryClassRatePlanRepository()
+      const namba = await repo.create(baseRate)
+      await repo.create({ ...baseRate, pickupLocationId: 'loc-kyoto' })
+
+      const plans = await repo.findActiveRatePlans({ locationIds: ['loc-namba'] })
+      expect(plans.map((p) => p.id)).toEqual([namba.id])
+    })
+
+    test('scopes to a single operator', async () => {
+      const repo = new InMemoryClassRatePlanRepository()
+      const mine = await repo.create(baseRate)
+      await repo.create({ ...baseRate, operatorId: 'op-2' })
+
+      const plans = await repo.findActiveRatePlans({ operatorId: 'op-1' })
+      expect(plans.map((p) => p.id)).toEqual([mine.id])
+    })
+  })
 })
