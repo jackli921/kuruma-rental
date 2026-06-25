@@ -79,7 +79,7 @@ export type {
 // their own module to keep this barrel under the file-size cap (#978);
 // re-exported for callers.
 export type { DocumentStorage, PhotoStorage } from './types-storage'
-export type { ClassRatePlanRepository } from './types-pricing'
+export type { ClassRatePlanFilters, ClassRatePlanRepository } from './types-pricing'
 export { complianceAlertKey } from './types-compliance'
 export type { ComplianceAlertLogRepository, RecordComplianceAlert } from './types-compliance'
 
