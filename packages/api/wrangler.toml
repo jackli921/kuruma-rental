@@ -10,8 +10,9 @@ compatibility_flags = ["nodejs_compat"]
 # (commit SHA) the runtime reports — see package.json + deploy.yml.
 upload_source_maps = true
 
-# #916 §5.4: daily fleet-compliance digest. 23:00 UTC = 08:00 JST. Fires the
-# worker.ts `scheduled` handler, which runs ComplianceDigestService once.
+# Daily 23:00 UTC = 08:00 JST. Fires the worker.ts `scheduled` handler, which runs
+# two isolated jobs: the #916 §5.4 fleet-compliance digest and the #851
+# refund-on-cancellation reconciler backstop.
 [triggers]
 crons = ["0 23 * * *"]
 

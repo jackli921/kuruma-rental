@@ -210,7 +210,12 @@ export class DrizzleBookingRepository implements BookingRepository {
   async cancel(
     ctx: CallerContext,
     id: string,
-    opts: { from: Booking['status']; fee: number; cancelledAt: Date },
+    opts: {
+      from: Booking['status']
+      fee: number
+      cancelledAt: Date
+      settlement?: Booking['cancellationFeeSettlement']
+    },
   ): Promise<Booking | undefined> {
     const scoped = this.scopeConditions(ctx)
     if (scoped === null) return undefined
@@ -219,6 +224,8 @@ export class DrizzleBookingRepository implements BookingRepository {
       .set({
         status: 'CANCELLED',
         cancellationFee: opts.fee,
+        // #851: settlement written atomically with the cancel; legacy default 'ADVISORY'.
+        cancellationFeeSettlement: opts.settlement ?? 'ADVISORY',
         cancelledAt: opts.cancelledAt,
         updatedAt: sql`now()`,
       })
@@ -226,6 +233,33 @@ export class DrizzleBookingRepository implements BookingRepository {
       .returning()
 
     return cancelled ? toBooking(cancelled) : undefined
+  }
+
+  async markCancellationSettlement(
+    ctx: CallerContext,
+    id: string,
+    transition: {
+      from: Booking['cancellationFeeSettlement']
+      to: Booking['cancellationFeeSettlement']
+    },
+  ): Promise<Booking | undefined> {
+    const scoped = this.scopeConditions(ctx)
+    if (scoped === null) return undefined
+    // Guarded conditional transition: the WHERE on the current settlement is the
+    // atomic idempotency fence (a redelivery/parallel pull matches 0 rows → no-op).
+    const [updated] = await this.db
+      .update(bookings)
+      .set({ cancellationFeeSettlement: transition.to, updatedAt: sql`now()` })
+      .where(
+        and(
+          eq(bookings.id, id),
+          eq(bookings.cancellationFeeSettlement, transition.from),
+          ...scoped,
+        ),
+      )
+      .returning()
+
+    return updated ? toBooking(updated) : undefined
   }
 
   async reassignVehicle(

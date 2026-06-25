@@ -10,7 +10,12 @@
  */
 
 import * as Sentry from '@sentry/cloudflare'
-import { type AppType, buildComplianceDigestService, createApp } from './index'
+import {
+  type AppType,
+  buildCancellationRefundReconciler,
+  buildComplianceDigestService,
+  createApp,
+} from './index'
 import { type SentryRuntimeEnv, resolveSentryOptions } from './observability/sentry-options'
 
 let cachedApp: AppType | null = null
@@ -26,19 +31,34 @@ const handler = {
   fetch(request: Request, env?: unknown, ctx?: ExecutionContext): Response | Promise<Response> {
     return getApp().fetch(request, env, ctx)
   },
-  // #916 §5.4: the daily compliance-digest cron (crons = ["0 23 * * *"]). On the
-  // SAME handler object so Sentry's withSentry instruments it and it shares the
-  // per-isolate async context. buildComplianceDigestService composes a fresh
-  // service from the env-resolved repos — the same source routes resolve through.
+  // Daily cron (crons = ["0 23 * * *"]) on the SAME handler object so Sentry's
+  // withSentry instruments it and it shares the per-isolate async context. Each
+  // builder composes a fresh service from the env-resolved repos — the same
+  // source routes resolve through. Two independent jobs: the #916 §5.4 compliance
+  // digest and the #851 refund-on-cancellation reconciler backstop.
   async scheduled(
     _controller: ScheduledController,
     _env?: unknown,
     _ctx?: ExecutionContext,
   ): Promise<void> {
-    // No cross-run lock: a daily cron can't overlap itself, and run() is
-    // idempotent regardless (record-after-send + the alert ledger dedupe bands).
-    const summary = await buildComplianceDigestService().run()
-    console.info('[cron:compliance-digest]', JSON.stringify(summary))
+    // No cross-run lock: a daily cron can't overlap itself, and every run() is
+    // idempotent. The two jobs are isolated — one throwing must not starve the
+    // other (a digest failure can't silence the money backstop, or vice versa) —
+    // and any failures are re-thrown together so withSentry still captures them.
+    const errors: unknown[] = []
+    for (const job of [
+      { name: 'compliance-digest', run: () => buildComplianceDigestService().run() },
+      { name: 'refund-reconciler', run: () => buildCancellationRefundReconciler().run() },
+    ]) {
+      try {
+        const summary = await job.run()
+        console.info(`[cron:${job.name}]`, JSON.stringify(summary))
+      } catch (err) {
+        console.error(`[cron:${job.name}] failed`, err)
+        errors.push(err)
+      }
+    }
+    if (errors.length > 0) throw new AggregateError(errors, 'scheduled cron job(s) failed')
   },
 }
 

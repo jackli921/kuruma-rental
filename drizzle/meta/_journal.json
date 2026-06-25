@@ -505,6 +505,13 @@
       "when": 1782339630877,
       "tag": "0071_class_combo_schema",
       "breakpoints": true
+    },
+    {
+      "idx": 72,
+      "version": "7",
+      "when": 1782341801407,
+      "tag": "0072_add_payment_refunds",
+      "breakpoints": true
     }
   ]
 }
