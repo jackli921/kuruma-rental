@@ -55,6 +55,10 @@ export interface VerifiedPaymentEvent {
    *  `requires_action`) when this is a refund event (`refund.updated`), else null.
    *  The webhook confirms a booking REFUNDED only on `succeeded` (#851). */
   refundStatus: string | null
+  /** Stripe Refund id (`re_…`) on a `refund.updated` event, else null. The webhook
+   *  confirms a booking REFUNDED only when this equals the receipt we recorded — a
+   *  valid signature proves the event is Stripe's, not that the refund is ours (#1056). */
+  refundId: string | null
   /** Metadata we set at session creation. operatorId is ignored on the webhook.
    *  `| undefined` (not just `?`) because a tampered/legacy session may omit a key
    *  under exactOptionalPropertyTypes. */

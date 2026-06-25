@@ -117,6 +117,7 @@ export class StripePaymentGateway implements PaymentGateway {
       currency: obj.currency ?? null,
       paymentStatus: obj.payment_status ?? null,
       refundStatus: obj.status ?? null,
+      refundId: event.type === 'refund.updated' ? (obj.id ?? null) : null,
       metadata: {
         bookingId: obj.metadata?.bookingId,
         operatorId: obj.metadata?.operatorId,
