@@ -43,6 +43,13 @@ export type VehicleClassStatus = (typeof VEHICLE_CLASS_STATUSES)[number]
 export const VEHICLE_STATUSES = ['AVAILABLE', 'MAINTENANCE', 'RETIRED'] as const
 export type VehicleStatus = (typeof VEHICLE_STATUSES)[number]
 
+// #1101: reason a scheduled vehicle_blocks window takes a car off the calendar.
+// MAINTENANCE = in the shop; OUT_OF_SERVICE = damaged/grounded; MANUAL = operator
+// hold (personal use, reserved offline). Distinct from vehicle.status, which is a
+// binary current flag — a block is a future-dated [startAt,endAt) range.
+export const VEHICLE_BLOCK_KINDS = ['MAINTENANCE', 'OUT_OF_SERVICE', 'MANUAL'] as const
+export type VehicleBlockKind = (typeof VEHICLE_BLOCK_KINDS)[number]
+
 export const BOOKING_STATUSES = ['CONFIRMED', 'ACTIVE', 'COMPLETED', 'CANCELLED'] as const
 export type BookingStatus = (typeof BOOKING_STATUSES)[number]
 
