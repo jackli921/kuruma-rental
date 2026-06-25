@@ -1195,6 +1195,9 @@
     "auto": "Automatic",
     "manual": "Manual",
     "viewStore": "View cars",
+    "classDeal": "Class deal",
+    "available": "{count, plural, one {# car available} other {# cars available}}",
+    "comboHint": "Exact car assigned at pickup",
     "showOnMap": "Show on map",
     "list": {
       "heading": "Available cars",

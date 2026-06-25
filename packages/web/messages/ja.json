@@ -1195,6 +1195,9 @@
     "auto": "オートマ",
     "manual": "マニュアル",
     "viewStore": "クルマを見る",
+    "classDeal": "クラス指定プラン",
+    "available": "{count, plural, other {残り#台}}",
+    "comboHint": "車両は受取時に確定します",
     "showOnMap": "地図で表示",
     "list": {
       "heading": "空車",

@@ -58,6 +58,9 @@ export function MapPopupCarousel({
 
   const photo = current.photos[0]
   const title = resultTitle(current)
+  // A combo's badge marks the deal — the class label is already the title, so
+  // repeating it as a badge would read twice. SPECIFIC keeps its class badge.
+  const badge = current.kind === 'CLASS_COMBO' ? t('classDeal') : current.classLabel
 
   return (
     <div
@@ -115,10 +118,15 @@ export function MapPopupCarousel({
         <div className="flex items-baseline justify-between gap-2">
           <p className="font-semibold leading-tight">{title}</p>
           <span className="shrink-0 rounded-full bg-secondary px-2 py-0.5 text-xs font-medium text-secondary-foreground">
-            {current.classLabel}
+            {badge}
           </span>
         </div>
         <p className="font-medium text-foreground">{resultPriceLabel(current, t)}</p>
+        {current.kind === 'CLASS_COMBO' && (
+          <p className="text-xs text-muted-foreground">
+            {t('available', { count: current.availableCount })}
+          </p>
+        )}
         {geoLabel && (
           <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
             <Navigation className="size-3.5 shrink-0" aria-hidden />
