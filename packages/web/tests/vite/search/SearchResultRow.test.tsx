@@ -1,5 +1,9 @@
 import { SearchResultRow } from '@/vite/search/SearchResultRow'
-import type { SpecificSearchResult } from '@kuruma/shared/types/search-result'
+import type {
+  ClassComboSearchResult,
+  SearchResultItem,
+  SpecificSearchResult,
+} from '@kuruma/shared/types/search-result'
 import { render, screen } from '@testing-library/react'
 import type { ReactNode } from 'react'
 import { IntlProvider } from 'use-intl'
@@ -64,9 +68,33 @@ function makeSpecific(overrides: Partial<SpecificSearchResult> = {}): SpecificSe
   }
 }
 
+function makeCombo(overrides: Partial<ClassComboSearchResult> = {}): ClassComboSearchResult {
+  return {
+    kind: 'CLASS_COMBO',
+    location: {
+      locationId: 'loc_namba',
+      operatorId: 'op_best',
+      operatorName: 'Best Car Rental',
+      name: 'Namba',
+      address: '1-1 Namba, Osaka',
+      latitude: 34.6627,
+      longitude: 135.5023,
+    },
+    dailyRateJpy: 6500,
+    hourlyRateJpy: null,
+    classLabel: 'Compact',
+    acrissCode: 'CCAR',
+    seats: 5,
+    photos: [],
+    classId: 'class_compact',
+    availableCount: 3,
+    ...overrides,
+  }
+}
+
 // Search context defaults so the CTA renders; individual tests override what they assert.
 function renderRow(
-  item: SpecificSearchResult,
+  item: SearchResultItem,
   ctx: {
     locale?: string
     from?: string
@@ -156,5 +184,57 @@ describe('SearchResultRow', () => {
   it('omits the geo-context line when no label is provided', () => {
     renderRow(makeSpecific(), { geoLabel: null })
     expect(screen.queryByText(/km away/)).toBeNull()
+  })
+
+  describe('CLASS_COMBO row (#464)', () => {
+    it('titles the card with the class label and a class-deal badge', () => {
+      renderRow(makeCombo())
+      expect(screen.getByRole('heading', { name: 'Compact' })).toBeInTheDocument()
+      expect(screen.getByText('Class deal')).toBeInTheDocument()
+    })
+
+    it('shows the available inventory count and seats, but no transmission', () => {
+      renderRow(makeCombo({ availableCount: 3 }))
+      expect(screen.getByText('3 cars available')).toBeInTheDocument()
+      expect(screen.getByText('5 seats')).toBeInTheDocument()
+      expect(screen.queryByText('Automatic')).toBeNull()
+      expect(screen.queryByText('Manual')).toBeNull()
+    })
+
+    it('singularizes the available count when one car is left', () => {
+      renderRow(makeCombo({ availableCount: 1 }))
+      expect(screen.getByText('1 car available')).toBeInTheDocument()
+    })
+
+    it('explains that the exact car is assigned at pickup', () => {
+      renderRow(makeCombo())
+      expect(screen.getByText('Exact car assigned at pickup')).toBeInTheDocument()
+    })
+
+    it('prices the combo off the daily class rate', () => {
+      renderRow(makeCombo({ dailyRateJpy: 6500 }))
+      expect(screen.getByText('From ¥6,500 / day')).toBeInTheDocument()
+    })
+
+    it('navigates to the pickup store, carrying dates and the active filters forward', () => {
+      renderRow(makeCombo(), {
+        from: '2026-07-01T10:00',
+        to: '2026-07-04T10:00',
+        classFilter: 'compact',
+        region: 'namba',
+        pickupLocationId: 'loc_x',
+      })
+      const cta = screen.getByRole('link', { name: 'View cars' })
+      expect(cta).toHaveAttribute('data-to', '/$locale/storefronts/$locationId')
+      expect(cta).toHaveAttribute('data-location', 'loc_namba')
+      const search = JSON.parse(cta.getAttribute('data-search') ?? '{}')
+      expect(search).toMatchObject({
+        from: '2026-07-01T10:00',
+        to: '2026-07-04T10:00',
+        class: 'compact',
+        region: 'namba',
+        pickupLocationId: 'loc_x',
+      })
+    })
   })
 })
