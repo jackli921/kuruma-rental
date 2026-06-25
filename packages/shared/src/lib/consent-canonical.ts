@@ -15,11 +15,15 @@ export const CANONICAL_VERSION = 'v1'
 /**
  * Deterministic, injection-proof serialization of an ordered field list.
  * Length-prefixing each value removes any delimiter ambiguity (spec §5).
- * `_canon:v1` is prepended internally so every caller (signing + content
- * hashing) is automatically version-tagged — there is no way to opt out.
+ * `_canon:<version>` is prepended internally so every caller (signing +
+ * content hashing) is automatically version-tagged — there is no way to opt
+ * out. The optional `version` argument exists so a future v2 verifier can
+ * re-canonicalize old rows under their original tag for byte-identical
+ * comparison; production call sites must omit it and ride the default.
  */
 export function canonicalizeFields(
   fields: ReadonlyArray<readonly [string, string | null]>,
+  version: string = CANONICAL_VERSION,
 ): string {
   // `_canon` is reserved for the version tag; a caller-supplied field with
   // the same key would emit two `_canon` pairs and yield two valid pre-images
@@ -30,7 +34,7 @@ export function canonicalizeFields(
   }
   // `N:` marks null distinctly from the empty string (`0:`); a real value always
   // starts with a digit, so the null marker can never collide with one.
-  return [['_canon', CANONICAL_VERSION] as const, ...fields]
+  return [['_canon', version] as const, ...fields]
     .map(([k, v]) => `${k}${KV_SEP}${v === null ? 'N:' : `${byteLen(v)}:${v}`}${FIELD_SEP}`)
     .join('')
 }

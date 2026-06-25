@@ -23,6 +23,15 @@ describe('canonicalizeFields', () => {
     ).toBe(true)
   })
 
+  it('accepts an explicit version override (forward seam for a v2 verifier)', () => {
+    expect(canonicalizeFields([], 'v2')).toBe('_canon\x1f2:v2\x1e')
+    expect(canonicalizeFields([['k', 'v']], 'v2').startsWith('_canon\x1f2:v2\x1e')).toBe(true)
+    // omitting the arg must keep producing the current default — no behavior shift
+    expect(canonicalizeFields([['k', 'v']])).toBe(
+      canonicalizeFields([['k', 'v']], CANONICAL_VERSION),
+    )
+  })
+
   it('throws if a caller supplies "_canon" — reserved-key guard prevents hash collision', () => {
     expect(() => canonicalizeFields([['_canon', 'spoofed']])).toThrow(/reserved key/)
     expect(() =>
