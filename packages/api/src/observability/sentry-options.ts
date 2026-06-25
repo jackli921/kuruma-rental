@@ -11,8 +11,15 @@ export interface SentryRuntimeEnv {
   SENTRY_DSN?: string
   SENTRY_ENVIRONMENT?: string
   /**
-   * CF `[version_metadata]` binding — the deployed version id becomes the
-   * Sentry release tag so errors group per deploy (#361 AC).
+   * Explicit release tag, injected as a Worker `--var` at deploy time = the
+   * commit SHA (#959). Preferred over `CF_VERSION_METADATA.id` because the SHA
+   * is known *before* deploy, so the uploaded source maps can be keyed to the
+   * same release the runtime reports (Sentry requires the two to match).
+   */
+  SENTRY_RELEASE?: string
+  /**
+   * CF `[version_metadata]` binding — the deployed version id. Fallback release
+   * tag when `SENTRY_RELEASE` is absent (e.g. a deploy that didn't set the var).
    */
   CF_VERSION_METADATA?: { id?: string; tag?: string }
 }
@@ -28,7 +35,7 @@ export interface ResolvedSentryOptions {
 
 export function resolveSentryOptions(env: SentryRuntimeEnv | undefined): ResolvedSentryOptions {
   const dsn = env?.SENTRY_DSN?.trim() || undefined
-  const release = env?.CF_VERSION_METADATA?.id?.trim() || undefined
+  const release = env?.SENTRY_RELEASE?.trim() || env?.CF_VERSION_METADATA?.id?.trim() || undefined
   return {
     dsn,
     enabled: Boolean(dsn),

@@ -1,10 +1,12 @@
 import { describe, expect, it } from 'vitest'
 import {
   DEFAULT_POLICY,
-  type Leg,
+  type MovementLeg,
+  ONE_WAY_REASONS,
   assessPickupFeasibility,
   findStrandedSuccessors,
   locationAt,
+  toMovementLegs,
 } from '../../src/lib/one-way'
 
 // All times are plain UTC instants; turnaround is already folded into
@@ -15,13 +17,16 @@ const B = 'loc-b'
 const C = 'loc-c'
 
 // A movement leg: car picked up at `pickup` at `startAt`, settled at `dropoff`
-// from `effectiveEndAt` onward. Helper keeps the timelines readable.
-const leg = (pickup: string, dropoff: string, start: string, effEnd: string): Leg => ({
-  pickupLocationId: pickup,
-  dropoffLocationId: dropoff,
-  startAt: at(start),
-  effectiveEndAt: at(effEnd),
-})
+// from `effectiveEndAt` onward. Helper keeps the timelines readable. By
+// construction these are movement legs (no CANCELLED in the literal tests);
+// the cast threads them through the brand without changing runtime behavior.
+const leg = (pickup: string, dropoff: string, start: string, effEnd: string): MovementLeg =>
+  ({
+    pickupLocationId: pickup,
+    dropoffLocationId: dropoff,
+    startAt: at(start),
+    effectiveEndAt: at(effEnd),
+  }) as MovementLeg
 
 describe('locationAt', () => {
   it('empty history → the home location', () => {
@@ -211,5 +216,44 @@ describe('findStrandedSuccessors', () => {
     const earlier = leg(A, A, '10T10', '11T10')
     const cancelled = leg(A, B, '20T10', '22T10')
     expect(findStrandedSuccessors([earlier, cancelled], A, cancelled)).toEqual([])
+  })
+})
+
+// The brand exists to make "filter CANCELLED" unforgettable: pre-#1040 callers
+// loading raw DB rows would silently feed CANCELLED legs into locationAt and
+// get the wrong location. toMovementLegs is the single allowed constructor.
+describe('toMovementLegs', () => {
+  it('drops CANCELLED rows and keeps everything else', () => {
+    const rows = [
+      { ...leg(A, B, '15T10', '16T10'), status: 'CONFIRMED' },
+      { ...leg(B, A, '17T10', '18T10'), status: 'CANCELLED' },
+      { ...leg(A, C, '20T10', '21T10'), status: 'COMPLETED' },
+      { ...leg(C, A, '22T10', '23T10'), status: 'ACTIVE' },
+    ]
+    const moves = toMovementLegs(rows)
+    expect(moves).toHaveLength(3)
+    expect(moves.map((m) => m.dropoffLocationId)).toEqual([B, C, A])
+  })
+
+  it('does not retain extra status field on the branded leg', () => {
+    const [m] = toMovementLegs([{ ...leg(A, B, '15T10', '16T10'), status: 'CONFIRMED' }])
+    expect(m).toBeDefined()
+    expect((m as unknown as { status?: string }).status).toBeUndefined()
+  })
+})
+
+describe('ONE_WAY_REASONS', () => {
+  // The SSoT: routes that map reason→error code, future i18n tables, telemetry
+  // labels all derive coverage from this tuple — a rename here is a compile
+  // error there, not a silent prod break.
+  it('matches the Feasibility reason union exhaustively', () => {
+    // Any rename of a string would compile-error this map; that's the point.
+    const expectedKeys: Record<(typeof ONE_WAY_REASONS)[number], true> = {
+      PICKUP_NOT_AT_LOCATION: true,
+      ONEWAY_NOT_TAIL: true,
+      DROPOFF_DISCONTINUITY: true,
+    }
+    for (const r of ONE_WAY_REASONS) expect(expectedKeys[r]).toBe(true)
+    expect(Object.keys(expectedKeys).sort()).toEqual([...ONE_WAY_REASONS].sort())
   })
 })

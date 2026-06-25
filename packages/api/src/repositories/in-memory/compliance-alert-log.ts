@@ -6,7 +6,7 @@ import {
 } from '../types'
 
 /**
- * In-memory ComplianceAlertLogRepository (#916 §5.4/§7). `record` is idempotent
+ * In-memory ComplianceAlertLogRepository (#916 §5.4/§7). `recordMany` is idempotent
  * on (vehicleId, documentType, thresholdBand) — a duplicate band is a no-op,
  * mirroring the DB unique seal. The `now` clock is injectable for deterministic
  * `sentAt` in tests.
@@ -36,11 +36,13 @@ export class InMemoryComplianceAlertLogRepository implements ComplianceAlertLogR
     return keys
   }
 
-  async record(data: RecordComplianceAlert): Promise<void> {
-    const key = complianceAlertKey(data.vehicleId, data.documentType, data.thresholdBand)
-    if (this.byKey.has(key)) return // unique seal — same-band re-run is a no-op
-    this.byKey.add(key)
-    const id = crypto.randomUUID()
-    this.store.set(id, { id, ...data, sentAt: this.now() })
+  async recordMany(alerts: RecordComplianceAlert[]): Promise<void> {
+    for (const data of alerts) {
+      const key = complianceAlertKey(data.vehicleId, data.documentType, data.thresholdBand)
+      if (this.byKey.has(key)) continue // unique seal — same-band re-run is a no-op
+      this.byKey.add(key)
+      const id = crypto.randomUUID()
+      this.store.set(id, { id, ...data, sentAt: this.now() })
+    }
   }
 }

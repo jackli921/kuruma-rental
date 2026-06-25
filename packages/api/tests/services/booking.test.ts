@@ -826,9 +826,11 @@ describe('BookingService.create — single-transaction submit (#392 §4)', () =>
       assignedVehicleId: 'other-veh',
       pickupLocationId: locationId,
       dropoffLocationId: locationId,
-      startAt: START,
-      endAt: END,
-      effectiveEndAt: new Date(END.getTime() + TURNAROUND_MS),
+      // #464: far-future window so this row owns the booking_code without
+      // consuming the class unit the new (overlapping) booking needs.
+      startAt: new Date(START.getTime() + 60 * 24 * 60 * 60 * 1000),
+      endAt: new Date(END.getTime() + 60 * 24 * 60 * 60 * 1000),
+      effectiveEndAt: new Date(END.getTime() + 60 * 24 * 60 * 60 * 1000 + TURNAROUND_MS),
       status: 'CONFIRMED',
       source: 'DIRECT',
       bookingCode: 'COLLIDE1',
@@ -870,9 +872,11 @@ describe('BookingService.create — single-transaction submit (#392 §4)', () =>
       assignedVehicleId: 'other-veh',
       pickupLocationId: locationId,
       dropoffLocationId: locationId,
-      startAt: START,
-      endAt: END,
-      effectiveEndAt: new Date(END.getTime() + TURNAROUND_MS),
+      // #464: far-future window so this row owns the booking_code without
+      // consuming the class unit the new (overlapping) booking needs.
+      startAt: new Date(START.getTime() + 60 * 24 * 60 * 60 * 1000),
+      endAt: new Date(END.getTime() + 60 * 24 * 60 * 60 * 1000),
+      effectiveEndAt: new Date(END.getTime() + 60 * 24 * 60 * 60 * 1000 + TURNAROUND_MS),
       status: 'CONFIRMED',
       source: 'DIRECT',
       bookingCode: 'DUP00001',
@@ -991,6 +995,47 @@ describe('BookingService.create — CLASS_COMBO (#464 2d.3)', () => {
       classId,
       totalPrice: 16000,
     })
+  })
+
+  // Maintainability review 2026-06-24 finding #11: cross-PR drift between
+  // #1028 (SPECIFIC turnaround follows dropoff) and #1035 (CLASS_COMBO landed
+  // after, still keyed off pickup). The DB trigger overwrites the persisted
+  // value with the dropoff-derived one, so data wasn't corrupted, but the
+  // service-returned booking and the persisted row disagreed on
+  // `effectiveEndAt` until the next reload. Mirrors the analogous SPECIFIC
+  // test ("one-way booking: effectiveEndAt follows the DROPOFF location
+  // turnaround, not the pickup (#1023)") so the two paths can't drift again.
+  it('one-way CLASS_COMBO: effectiveEndAt follows the DROPOFF location turnaround, not the pickup', async () => {
+    const h = await setup()
+    const { classId, locationId } = await seedComboReady(h)
+    const ONE_WAY_TURNAROUND_MIN = 1440
+    const dropoff = await h.repos.locationRepo.create({
+      operatorId: OP_A,
+      name: 'Combo Kyoto Return',
+      address: '7-8-9 Kyoto',
+      operatingHours: null,
+      timezone: 'Asia/Tokyo',
+      defaultTurnaroundMinutes: ONE_WAY_TURNAROUND_MIN,
+      status: 'ACTIVE',
+    } as Parameters<typeof h.repos.locationRepo.create>[0])
+
+    const result = await h.service.create(
+      renterCtx,
+      comboInput({
+        classId,
+        pickupLocationId: locationId,
+        dropoffLocationId: dropoff.id,
+      }),
+      NOW,
+    )
+
+    expect(result.ok).toBe(true)
+    if (!result.ok) throw new Error(result.error.toString())
+    expect(result.booking.effectiveEndAt.getTime() - END.getTime()).toBe(
+      ONE_WAY_TURNAROUND_MIN * 60 * 1000,
+    )
+    // Mutation guard: must NOT be the pickup location's 2880 turnaround.
+    expect(result.booking.effectiveEndAt.getTime() - END.getTime()).not.toBe(TURNAROUND_MS)
   })
 
   it('rejects with NO_COMBO_RATE_SET when the operator has not published a rate plan', async () => {
@@ -1114,6 +1159,62 @@ describe('BookingService.create — CLASS_COMBO (#464 2d.3)', () => {
     if (result.ok) return
     expect(result.status).toBe(409)
     expect(result.code).toBe('CLASS_COMBO_SOLD_OUT')
+  })
+
+  // #464: mirror of the test above. The per-vehicle exclusion constraint skips
+  // NULL assignedVehicleId, so a CLASS_COMBO float is invisible to it. Without
+  // lifting the class-capacity gate onto the SPECIFIC path too, a SPECIFIC create
+  // can grab the very car a float already reserved → overbook.
+  it('rejects a SPECIFIC create when a CLASS_COMBO float holds the last class unit → 409', async () => {
+    const h = await setup()
+    const { classId, locationId, vehicleId } = await seedComboReady(h)
+    await h.repos.bookingRepo.create(
+      SYSTEM_CONTEXT,
+      bookingRow({
+        classId,
+        pickupLocationId: locationId,
+        dropoffLocationId: locationId,
+        requestedVehicleId: null,
+        assignedVehicleId: null,
+        fulfillmentMode: 'CLASS_COMBO',
+        bookingCode: 'FLOAT001',
+      }),
+    )
+    const result = await h.service.create(
+      renterCtx,
+      createInput({
+        requestedVehicleId: vehicleId,
+        pickupLocationId: locationId,
+        dropoffLocationId: locationId,
+      }),
+      NOW,
+    )
+    expect(result.ok).toBe(false)
+    if (result.ok) return
+    expect(result.status).toBe(409)
+    expect(result.code).toBe('CLASS_COMBO_SOLD_OUT')
+  })
+
+  // #464 / #954: combos have no per-vehicle rules, but the universal past-start
+  // floor must still fire (checkRentalRules with all class rules null).
+  it('rejects a CLASS_COMBO whose start is in the past → 400 RENTAL_RULE_START_IN_PAST', async () => {
+    const h = await setup()
+    const { classId, locationId } = await seedComboReady(h)
+    const result = await h.service.create(
+      renterCtx,
+      comboInput({
+        classId,
+        pickupLocationId: locationId,
+        dropoffLocationId: locationId,
+        startAt: new Date(NOW.getTime() - 2 * 60 * 60 * 1000), // 2h before now
+        endAt: END,
+      }),
+      NOW,
+    )
+    expect(result.ok).toBe(false)
+    if (result.ok) return
+    expect(result.status).toBe(400)
+    expect(result.code).toBe('RENTAL_RULE_START_IN_PAST')
   })
 })
 
