@@ -14,10 +14,11 @@ import {
   toCallerContext,
 } from '../middleware/auth'
 import type { BookingService } from '../services/booking'
+import type { ConsentGateService } from '../services/consent-gate'
 import type { BookingFilters } from '../services/filters'
 import { fail, ok, parseBody, parseDateRange, parseId, parseLimit } from './helpers'
 
-export function createBookingRoutes(service: BookingService) {
+export function createBookingRoutes(service: BookingService, consentGate: ConsentGateService) {
   return new Hono()
     .get('/bookings', async (c) => {
       const ctx = toCallerContext(requireUser(c))
@@ -168,6 +169,23 @@ export function createBookingRoutes(service: BookingService) {
       if (ctx.role === 'RENTER' && !parsed.data.disclaimerAccepted) {
         return fail(c, 'Liability disclaimer must be accepted', 400, {
           code: 'CONSENT_REQUIRED' satisfies ErrorCode,
+        })
+      }
+
+      // #877 Flow A: a renter self-serve booking also requires the renter to be
+      // current on the platform ToS + privacy policy (once-per-subject, via the
+      // consent ledger). The unskippable backstop behind the web clickwrap — a
+      // direct/3rd-party caller can't bypass it. The gate is asked UNCONDITIONALLY:
+      // the role→required-types map in the consent service is the single source of
+      // who is subject, so manual bookers (staff/operator) and api-key partners
+      // resolve to zero required types and pass through for free (no I/O) — no
+      // second `role === 'RENTER'` list here to drift from it (#1036 M1b). The 403
+      // carries `missing[]` so the client knows which documents to present.
+      const gate = await consentGate.assertSubjectCurrent(ctx.userId, ctx.role, new Date())
+      if (!gate.allowed) {
+        return fail(c, 'Consent required', gate.status, {
+          code: gate.code satisfies ErrorCode,
+          missing: gate.missing,
         })
       }
 

@@ -1,4 +1,12 @@
 {
+  "consent": {
+    "title": "请阅读并同意后继续",
+    "intro": "为继续使用 Kuruma，请阅读并同意以下内容。",
+    "accept": "同意并继续",
+    "accepting": "保存中…",
+    "hint": "请勾选每一项后继续。",
+    "error": "无法保存您的同意，请重试。"
+  },
   "regionPicker": {
     "prefecture": "都道府县",
     "city": "市区町村",

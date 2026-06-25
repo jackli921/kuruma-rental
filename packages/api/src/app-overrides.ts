@@ -6,6 +6,7 @@ import type {
   BookingRepository,
   ClassRatePlanRepository,
   ComplianceAlertLogRepository,
+  ConsentRepository,
   CustomerRepository,
   DocumentStorage,
   FeeScheduleRepository,
@@ -72,6 +73,7 @@ export type AppOverrides = {
   paymentAnomalyRepo?: PaymentAnomalyRepository
   providerInviteRepo?: ProviderInviteRepository
   operatorMembershipRepo?: OperatorMembershipRepository
+  consentRepo?: ConsentRepository
   // Inject a fake outbound email port in tests; absent ⇒ the env-resolved
   // Resend/dev-stub/sentinel (resolveEmailSender). Shared by the booking
   // dispatcher and the #916 compliance digest.

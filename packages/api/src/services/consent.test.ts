@@ -192,3 +192,44 @@ describe('ConsentService re-consent query (renter)', () => {
     expect(await svc.getRequiredReconsents('user_1', 'RENTER', NOW)).toEqual(['RENTER_TOS'])
   })
 })
+
+describe('ConsentService.getPendingConsents (Flow A presentation)', () => {
+  const docs = [
+    doc(), // RENTER_TOS 1.0 en — doc_tos_v1_en
+    doc({ id: 'doc_tos_v1_ja', locale: 'ja', title: '規約', acceptanceLabel: '同意します' }),
+    doc({ id: 'doc_priv_v1_en', type: 'PRIVACY_POLICY', title: 'Privacy' }),
+    doc({ id: 'doc_priv_v1_ja', type: 'PRIVACY_POLICY', locale: 'ja', title: 'プライバシー' }),
+  ]
+
+  it('returns one pending document per missing type, in the requested locale and required order', async () => {
+    const svc = new ConsentService(new InMemoryConsentRepository(docs), () => KEY)
+    const pending = await svc.getPendingConsents('user_1', 'RENTER', 'ja', NOW)
+    expect(pending.map((p) => p.type)).toEqual(['RENTER_TOS', 'PRIVACY_POLICY'])
+    expect(pending.map((p) => p.document.id)).toEqual(['doc_tos_v1_ja', 'doc_priv_v1_ja'])
+    expect(pending.every((p) => p.document.locale === 'ja')).toBe(true)
+  })
+
+  it('falls back to the en document when the requested locale is unpublished', async () => {
+    // RENTER_TOS published only in en; PRIVACY in both. Request ja.
+    const svc = new ConsentService(
+      new InMemoryConsentRepository([docs[0]!, docs[2]!, docs[3]!]),
+      () => KEY,
+    )
+    const pending = await svc.getPendingConsents('user_1', 'RENTER', 'ja', NOW)
+    expect(pending.map((p) => p.document.id)).toEqual(['doc_tos_v1_en', 'doc_priv_v1_ja'])
+  })
+
+  it('returns an empty list once the subject is current', async () => {
+    const repo = new InMemoryConsentRepository(docs)
+    const svc = new ConsentService(repo, () => KEY)
+    await svc.recordAcceptance(
+      { documentId: 'doc_tos_v1_en', userId: 'user_1', actorRole: 'RENTER' },
+      { now: NOW },
+    )
+    await svc.recordAcceptance(
+      { documentId: 'doc_priv_v1_en', userId: 'user_1', actorRole: 'RENTER' },
+      { now: NOW },
+    )
+    expect(await svc.getPendingConsents('user_1', 'RENTER', 'en', NOW)).toEqual([])
+  })
+})
