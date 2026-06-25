@@ -49,7 +49,10 @@ export class InMemoryFeeScheduleRepository implements FeeScheduleRepository {
       // it. The explicit filter only narrows bypass-role ('all') reads.
       if (scope.kind === 'operator') return f.operatorId === scope.operatorId
       if (filters?.operatorId) return f.operatorId === filters.operatorId
-      return true
+      // scope is 'all' (bypass role): read across tenants ONLY when the route
+      // explicitly opted in. Absent that, read nothing — the safe default lives
+      // here, so a forgotten route guard cannot enumerate every tenant (#1107).
+      return filters?.includeAllOperators === true
     })
 
     const byStatus = filters?.status

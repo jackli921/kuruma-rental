@@ -26,6 +26,11 @@ export class DrizzleInsuranceOptionRepository implements InsuranceOptionReposito
       conditions.push(eq(insuranceOptions.operatorId, scope.operatorId))
     } else if (filters?.operatorId) {
       conditions.push(eq(insuranceOptions.operatorId, filters.operatorId))
+    } else if (!filters?.includeAllOperators) {
+      // scope is 'all' (bypass role) without an explicit platform-wide opt-in:
+      // read nothing. The safe default lives here, so a forgotten route guard
+      // cannot enumerate every tenant's private config (#1107).
+      conditions.push(sql`false`)
     }
 
     if (filters?.status) {

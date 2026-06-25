@@ -150,6 +150,12 @@ export class DrizzleNotificationLogRepository implements NotificationLogReposito
     const conditions: SQL[] = []
     if (scope.kind === 'operator') conditions.push(eq(notificationLog.operatorId, scope.operatorId))
     else if (filters?.operatorId) conditions.push(eq(notificationLog.operatorId, filters.operatorId))
+    else if (!filters?.includeAllOperators) {
+      // scope is 'all' (bypass role) without an explicit platform-wide opt-in:
+      // read nothing. The safe default lives here, so a forgotten route guard
+      // cannot enumerate every tenant's private ledger (#1107).
+      conditions.push(sql`false`)
+    }
     if (filters?.bookingId) conditions.push(eq(notificationLog.bookingId, filters.bookingId))
 
     const rows = await this.db

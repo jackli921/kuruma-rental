@@ -46,6 +46,7 @@ export function createLocationRoutes(
           return fail(c, 'operatorId or includeAll=true is required for cross-operator reads', 400)
         }
         if (operatorIdParam) filters.operatorId = operatorIdParam
+        if (includeAll) filters.includeAllOperators = true
       }
 
       return ok(c, await service.findAll(ctx, filters))

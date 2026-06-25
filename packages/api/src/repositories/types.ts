@@ -127,6 +127,13 @@ export interface LocationFilters {
    * for operator callers — their scope is absolute (see findAll precedence).
    */
   operatorId?: string
+  /**
+   * Explicit platform-wide read (#1107). ONLY the bypass-role route layer sets
+   * this (from `?includeAll=true`). A bypass caller with NEITHER `operatorId`
+   * nor this flag reads nothing — the safe default lives in the repo, so a
+   * forgotten route guard can no longer leak every tenant's private config.
+   */
+  includeAllOperators?: boolean
 }
 
 export interface LocationRepository {
@@ -165,6 +172,13 @@ export interface InsuranceOptionFilters {
    * for operator callers — their scope is absolute (see findAll precedence).
    */
   operatorId?: string
+  /**
+   * Explicit platform-wide read (#1107). ONLY the bypass-role route layer sets
+   * this (from `?includeAll=true`). A bypass caller with NEITHER `operatorId`
+   * nor this flag reads nothing — the safe default lives in the repo, so a
+   * forgotten route guard can no longer leak every tenant's private config.
+   */
+  includeAllOperators?: boolean
 }
 
 export interface InsuranceOptionRepository {
@@ -205,6 +219,13 @@ export interface AddOnFilters {
    * for operator callers — their scope is absolute (see findAll precedence).
    */
   operatorId?: string
+  /**
+   * Explicit platform-wide read (#1107). ONLY the bypass-role route layer sets
+   * this (from `?includeAll=true`). A bypass caller with NEITHER `operatorId`
+   * nor this flag reads nothing — the safe default lives in the repo, so a
+   * forgotten route guard can no longer leak every tenant's private config.
+   */
+  includeAllOperators?: boolean
 }
 
 export interface AddOnRepository {

@@ -13,6 +13,13 @@ export interface FeeScheduleFilters {
    * operator callers — their scope is absolute (see findAll precedence).
    */
   operatorId?: string
+  /**
+   * Explicit platform-wide read (#1107). ONLY the bypass-role route layer sets
+   * this (from `?includeAll=true`). A bypass caller with NEITHER `operatorId`
+   * nor this flag reads nothing — the safe default lives in the repo, so a
+   * forgotten route guard can no longer leak every tenant's private config.
+   */
+  includeAllOperators?: boolean
   feeType?: 'OVERTIME_HOURLY' | 'CLEANING_FLAT' | 'NO_FUEL_FLAT'
   /** Narrow to one vehicle class. The string 'null' / explicit null is not a
    *  filter value here — operator-wide rows surface in an unfiltered list. */

@@ -142,7 +142,10 @@ export class InMemoryNotificationLogRepository implements NotificationLogReposit
       .filter((r) => {
         if (scope.kind === 'operator') return r.operatorId === scope.operatorId
         if (filters?.operatorId) return r.operatorId === filters.operatorId
-        return true
+        // scope is 'all' (bypass role): read across tenants ONLY when the route
+        // explicitly opted in. Absent that, read nothing — the safe default lives
+        // here, so a forgotten route guard cannot enumerate every tenant (#1107).
+        return filters?.includeAllOperators === true
       })
       .filter((r) => (filters?.bookingId ? r.bookingId === filters.bookingId : true))
   }

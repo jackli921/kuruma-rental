@@ -41,7 +41,10 @@ export class InMemoryLocationRepository implements LocationRepository {
       // filter only narrows bypass-role ('all') reads to a single operator.
       if (scope.kind === 'operator') return l.operatorId === scope.operatorId
       if (filters?.operatorId) return l.operatorId === filters.operatorId
-      return true
+      // scope is 'all' (bypass role): read across tenants ONLY when the route
+      // explicitly opted in. Absent that, read nothing — the safe default lives
+      // here, so a forgotten route guard cannot enumerate every tenant (#1107).
+      return filters?.includeAllOperators === true
     })
 
     if (filters?.status) return all.filter((l) => l.status === filters.status)

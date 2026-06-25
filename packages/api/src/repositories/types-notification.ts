@@ -37,6 +37,13 @@ export type NotificationLogNoRecipient = Omit<NotificationLogUpsert, 'recipient'
 export interface NotificationLogFilters {
   bookingId?: string
   operatorId?: string
+  /**
+   * Explicit platform-wide read (#1107). ONLY the bypass-role route layer sets
+   * this (from `?includeAll=true`). A bypass caller with NEITHER `operatorId`
+   * nor this flag reads nothing — the safe default lives in the repo, so a
+   * forgotten route guard can no longer leak every tenant's private config.
+   */
+  includeAllOperators?: boolean
 }
 
 export interface NotificationLogRepository {

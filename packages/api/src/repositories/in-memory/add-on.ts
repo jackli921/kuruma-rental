@@ -42,7 +42,10 @@ export class InMemoryAddOnRepository implements AddOnRepository {
       // it. The explicit filter only narrows a bypass-role ('all') read.
       if (scope.kind === 'operator') return o.operatorId === scope.operatorId
       if (filters?.operatorId) return o.operatorId === filters.operatorId
-      return true
+      // scope is 'all' (bypass role): read across tenants ONLY when the route
+      // explicitly opted in. Absent that, read nothing — the safe default lives
+      // here, so a forgotten route guard cannot enumerate every tenant (#1107).
+      return filters?.includeAllOperators === true
     })
 
     if (filters?.status) return all.filter((o) => o.status === filters.status)

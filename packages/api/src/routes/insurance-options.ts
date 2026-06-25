@@ -45,9 +45,9 @@ export function createInsuranceOptionRoutes(
       if (c.req.query('includeArchived') === 'true') filters.includeArchived = true
 
       // Bypass-scope callers (PLATFORM_ADMIN, legacy STAFF/ADMIN) must scope
-      // explicitly — an accidental unscoped list across every operator is the
-      // exact leak we guard. Operator callers auto-scope, and any operatorId
-      // they pass is ignored here + at the repo.
+      // explicitly. This 400 is now redundant defence-in-depth: the repo reads
+      // nothing for an unscoped bypass caller (#1107), so the real seal is the
+      // threaded intent below — operatorId narrows, includeAllOperators opts in.
       if (operatorReadScope(ctx).kind === 'all') {
         const operatorIdParam = c.req.query('operatorId')
         const includeAll = c.req.query('includeAll') === 'true'
@@ -55,6 +55,7 @@ export function createInsuranceOptionRoutes(
           return fail(c, 'operatorId or includeAll=true is required for cross-operator reads', 400)
         }
         if (operatorIdParam) filters.operatorId = operatorIdParam
+        if (includeAll) filters.includeAllOperators = true
       }
 
       return ok(c, await service.findAll(ctx, filters))
