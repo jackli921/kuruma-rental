@@ -60,7 +60,21 @@ export function MapPopupCarousel({
   const title = resultTitle(current)
   // A combo's badge marks the deal — the class label is already the title, so
   // repeating it as a badge would read twice. SPECIFIC keeps its class badge.
-  const badge = current.kind === 'CLASS_COMBO' ? t('classDeal') : current.classLabel
+  // Switched (vs ternary) so a future `kind` is a tsc error here — the web ships
+  // independently of the API, so a stale bundle can't silently render the wrong
+  // branch.
+  const badge = ((): string => {
+    switch (current.kind) {
+      case 'SPECIFIC':
+        return current.classLabel
+      case 'CLASS_COMBO':
+        return t('classDeal')
+      default: {
+        const _exhaustive: never = current
+        return ''
+      }
+    }
+  })()
 
   return (
     <div

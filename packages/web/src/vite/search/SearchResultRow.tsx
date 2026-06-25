@@ -39,6 +39,14 @@ export function SearchResultRow({ item, ...ctx }: SearchResultRowProps) {
       return <SpecificRow item={item} {...ctx} />
     case 'CLASS_COMBO':
       return <ComboRow item={item} {...ctx} />
+    default: {
+      // Runtime sink: web (CF Pages) and API (CF Workers) deploy independently,
+      // so a future `kind` reaching a stale web bundle wouldn't be caught by the
+      // (compile-time-only) exhaustive narrowing alone. Forces a tsc error here
+      // the moment the union grows; renders nothing instead of silently dropping.
+      const _exhaustive: never = item
+      return null
+    }
   }
 }
 
