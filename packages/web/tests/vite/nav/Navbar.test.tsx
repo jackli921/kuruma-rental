@@ -1,3 +1,4 @@
+import { useUnreadBadge } from '@/vite/messaging/unread-badge'
 import type { NavItem } from '@/vite/nav/MobileMenu'
 import { Navbar } from '@/vite/nav/Navbar'
 import { businessNavItems } from '@/vite/nav/business-nav-items'
@@ -54,9 +55,15 @@ vi.mock('@/vite/nav/LocaleSwitcher', () => ({
 vi.mock('@/vite/operator-bookings/useNewBookingsBadge', () => ({
   useNewBookingsBadge: vi.fn(() => ({ count: 0 })),
 }))
+// #1032: the renter unread-message badge count is a data hook (it polls the
+// threads query); stub the count so the unit scope stays Navbar's derivation.
+vi.mock('@/vite/messaging/unread-badge', () => ({
+  useUnreadBadge: vi.fn(() => ({ count: 0 })),
+}))
 
 const mockUseSession = vi.mocked(useSession)
 const mockUseBadge = vi.mocked(useNewBookingsBadge)
+const mockUnread = vi.mocked(useUnreadBadge)
 const business: Session = {
   user: { id: 'u1', role: 'OPERATOR_OWNER', name: 'Aiko', email: 'aiko@example.com' },
   csrfToken: 'csrf-1',
@@ -78,6 +85,7 @@ function renderNavbar(data: Session | undefined) {
 beforeEach(() => {
   vi.clearAllMocks()
   mockUseBadge.mockReturnValue({ count: 0 })
+  mockUnread.mockReturnValue({ count: 0 })
   document.cookie = 'kuruma-view=; max-age=0; path=/'
 })
 
@@ -192,26 +200,46 @@ describe('Navbar', () => {
       'data-to',
       '/$locale/bookings',
     )
+    // #1032: the renter Messages inbox link.
+    expect(screen.getByText('Messages').closest('a')).toHaveAttribute(
+      'data-to',
+      '/$locale/messages',
+    )
     expect(screen.getByText('Documents').closest('a')).toHaveAttribute(
       'data-to',
       '/$locale/documents',
     )
     expect(container.querySelector('nav')?.hasAttribute('data-business-nav')).toBe(false)
+    // No unread (mocked 0) and the operator badge is gated to business view.
     expect(screen.queryByRole('status')).toBeNull()
     const client = screen.getByTestId('navbar-client')
     expect(client).toHaveAttribute('data-view-mode', 'renter')
     expect(client).toHaveAttribute('data-can-switch', 'false')
-    // Desktop + mobile share the same derived navItems (Browse + 2 renter-only).
-    expect(screen.getByTestId('mobile-menu')).toHaveAttribute('data-nav-count', '3')
+    // Desktop + mobile share the same derived navItems (Browse + 3 renter-only:
+    // My Bookings, Messages, Documents).
+    expect(screen.getByTestId('mobile-menu')).toHaveAttribute('data-nav-count', '4')
   })
 
   it('hides Documents in the beta MVP demo (renter-documents flag off)', () => {
     renderNavbar(renter)
     expect(screen.getByText('Browse')).toBeInTheDocument()
     expect(screen.getByText('My Bookings')).toBeInTheDocument()
-    // The orphaned IDP-upload page is filtered out — Browse + My Bookings only.
+    // Messages stays — it is not gated behind the documents flag (#1032).
+    expect(screen.getByText('Messages')).toBeInTheDocument()
+    // The orphaned IDP-upload page is filtered out — Browse + My Bookings + Messages.
     expect(screen.queryByText('Documents')).toBeNull()
-    expect(screen.getByTestId('mobile-menu')).toHaveAttribute('data-nav-count', '2')
+    expect(screen.getByTestId('mobile-menu')).toHaveAttribute('data-nav-count', '3')
+  })
+
+  it('rides the unread-message count onto the Messages item as a red dot (#1032)', () => {
+    mockUnread.mockReturnValue({ count: 4 })
+    renderNavbar(renter)
+    const messagesLink = screen.getByText('Messages').closest('a') as HTMLElement
+    const badge = within(messagesLink).getByRole('status')
+    expect(badge).toHaveTextContent('4')
+    expect(badge).toHaveAttribute('aria-label', '4 unread messages')
+    // The dot is unique to Messages (no operator badge in renter view).
+    expect(screen.getAllByRole('status')).toHaveLength(1)
   })
 
   it('hides My Bookings/Documents for an operator in renter view — gating is by role, not view (P1, AC6)', () => {

@@ -1,8 +1,10 @@
 import { BookingConfirmationView } from '@/vite/bookings/BookingConfirmationView'
 import { bookingByIdQueryOptions } from '@/vite/bookings/api'
+import { threadsQueryOptions } from '@/vite/messaging/api'
+import { indexThreadIdsByBooking } from '@/vite/messaging/booking-threads'
 import { useSession } from '@/vite/session'
 import { classByIdQueryOptions } from '@/vite/vehicles/classes'
-import { useSuspenseQuery } from '@tanstack/react-query'
+import { useQuery, useSuspenseQuery } from '@tanstack/react-query'
 import { createFileRoute, notFound } from '@tanstack/react-router'
 
 interface ConfirmationSearch {
@@ -45,7 +47,13 @@ function BookingConfirmationRoute() {
   // CSRF for the self-cancel write; cached by the `_renter` layout, so this reads
   // instantly. `null` (signed-out edge) simply hides the cancel control.
   const { data: session } = useSession()
+  // The booking's messaging thread (#1032), resolved without blocking the page —
+  // a non-suspense read so a slow/failing /threads never gates the confirmation;
+  // the "Message host" link simply appears once the thread list loads.
+  const { data: threads } = useQuery(threadsQueryOptions())
   if (!booking) throw notFound()
+
+  const threadId = threads ? (indexThreadIdsByBooking(threads)[booking.id] ?? null) : null
 
   return (
     <main className="flex-1 px-4 py-10 sm:px-6 lg:px-8">
@@ -53,6 +61,7 @@ function BookingConfirmationRoute() {
         booking={booking}
         vehicleClass={vehicleClass}
         csrfToken={session?.csrfToken ?? null}
+        threadId={threadId}
       />
     </main>
   )

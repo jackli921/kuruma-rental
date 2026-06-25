@@ -12,15 +12,16 @@ import en from '../../../messages/en.json'
 vi.mock('@tanstack/react-router', () => ({
   Link: ({
     to,
+    params,
     search,
     children,
   }: {
     to: string
-    params?: unknown
+    params?: { threadId?: string }
     search?: { bookingId?: string }
     children: ReactNode
   }) => (
-    <a data-to={to} data-booking-id={search?.bookingId} href={to}>
+    <a data-to={to} data-booking-id={search?.bookingId} data-thread={params?.threadId} href={to}>
       {children}
     </a>
   ),
@@ -39,10 +40,10 @@ function makeRow(over: Partial<MyBookingRow> = {}): MyBookingRow {
   }
 }
 
-function renderView(bookings: MyBookingRow[]) {
+function renderView(bookings: MyBookingRow[], threadIdByBooking: Record<string, string> = {}) {
   return render(
     <IntlProvider locale="en" messages={en}>
-      <MyBookingsView bookings={bookings} locale="en" />
+      <MyBookingsView bookings={bookings} locale="en" threadIdByBooking={threadIdByBooking} />
     </IntlProvider>,
   )
 }
@@ -65,6 +66,22 @@ describe('MyBookingsView', () => {
     const link = screen.getByRole('link')
     expect(link).toHaveAttribute('data-to', '/$locale/bookings/confirmation')
     expect(link).toHaveAttribute('data-booking-id', 'bk-9')
+  })
+
+  // #1032: a row whose booking has a messaging thread gets a "Message host" deep
+  // link to that conversation; rows without one don't.
+  it('shows a Message host link to the thread on a row whose booking has one', () => {
+    renderView([makeRow({ id: 'bk-9' })], { 'bk-9': 'th-9' })
+    const link = screen.getByRole('link', { name: en.messaging.entry.messageHost })
+    expect(link).toHaveAttribute('data-to', '/$locale/messages/$threadId')
+    expect(link).toHaveAttribute('data-thread', 'th-9')
+  })
+
+  it('omits the Message host link when the booking has no thread', () => {
+    renderView([makeRow({ id: 'bk-9' })], {})
+    expect(
+      screen.queryByRole('link', { name: en.messaging.entry.messageHost }),
+    ).not.toBeInTheDocument()
   })
 
   it('renders the per-status label for a cancelled booking', () => {

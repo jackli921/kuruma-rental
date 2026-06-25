@@ -1,6 +1,12 @@
 import type { AddOnSnapshot, BookingSource } from '@kuruma/shared/db/schema'
 import { escapeHtml, formatDateTime, formatDuration, formatJpy } from './format'
-import { type RenderedEmail, vehicleLabel } from './layout'
+import {
+  type RenderedEmail,
+  renderCtaSection,
+  renderListSection,
+  renderRowsTable,
+  vehicleLabel,
+} from './layout'
 import { emailStrings } from './messages'
 
 export interface OperatorAlertData {
@@ -56,23 +62,15 @@ export function renderOperatorAlert(data: OperatorAlertData, locale: string): Re
 
   const subject = `${m.operatorSubject} ${data.bookingCode}`
 
-  const htmlRows = rows
-    .map(([l, v]) => `<tr><td><strong>${escapeHtml(l)}</strong></td><td>${escapeHtml(v)}</td></tr>`)
-    .join('')
-  const htmlAddOns = addOnLines.length
-    ? `<h3>${escapeHtml(m.addOnsLabel)}</h3><ul>${addOnLines.map((a) => `<li>${escapeHtml(a)}</li>`).join('')}</ul>`
-    : ''
-  const htmlCta = data.manageBookingUrl
-    ? `<h3>${escapeHtml(m.manageBookingTitle)}</h3><p><a href="${escapeHtml(data.manageBookingUrl)}">${escapeHtml(m.manageBookingCta)}</a></p>`
-    : ''
-  const html = `<p>${escapeHtml(m.operatorHeading)}</p><table>${htmlRows}</table>${htmlAddOns}${htmlCta}`
+  // Order: heading, details table, add-on list, manage-booking CTA.
+  const table = renderRowsTable(rows)
+  const addOns = renderListSection(m.addOnsLabel, addOnLines)
+  const cta = data.manageBookingUrl
+    ? renderCtaSection(m.manageBookingTitle, data.manageBookingUrl, m.manageBookingCta)
+    : { html: '', text: '' }
 
-  const textRows = rows.map(([l, v]) => `${l}: ${v}`).join('\n')
-  const textAddOns = addOnLines.length ? `\n\n${m.addOnsLabel}\n${addOnLines.join('\n')}` : ''
-  const textCta = data.manageBookingUrl
-    ? `\n\n${m.manageBookingTitle}\n${m.manageBookingCta}: ${data.manageBookingUrl}`
-    : ''
-  const text = `${m.operatorHeading}\n\n${textRows}${textAddOns}${textCta}`
+  const html = `<p>${escapeHtml(m.operatorHeading)}</p>${table.html}${addOns.html}${cta.html}`
+  const text = `${m.operatorHeading}\n\n${table.text}${addOns.text}${cta.text}`
 
   return { subject, html, text }
 }

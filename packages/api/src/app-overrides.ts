@@ -21,8 +21,10 @@ import type {
   OverviewRepository,
   PaymentAnomalyRepository,
   PaymentEventRepository,
+  PaymentRefundRepository,
   PhotoStorage,
   ProviderInviteRepository,
+  RefundReconcilerRepository,
   RegionRepository,
   RenterDocumentRepository,
   StatsRepository,
@@ -70,6 +72,8 @@ export type AppOverrides = {
   storefrontRepo?: StorefrontRepository
   regionRepo?: RegionRepository
   paymentEventRepo?: PaymentEventRepository
+  paymentRefundRepo?: PaymentRefundRepository
+  refundReconcilerRepo?: RefundReconcilerRepository
   paymentAnomalyRepo?: PaymentAnomalyRepository
   providerInviteRepo?: ProviderInviteRepository
   operatorMembershipRepo?: OperatorMembershipRepository
