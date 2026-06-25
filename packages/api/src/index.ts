@@ -141,6 +141,7 @@ export function createApp(overrides?: AppOverrides, repos: Repos = buildRepos(ov
     auditLogRepo,
     bookingEventRepo,
     consentRepo,
+    classRatePlanRepo,
     runInTransaction,
     runOperatorGrant,
     photosPublicUrl,
@@ -471,6 +472,7 @@ export function createApp(overrides?: AppOverrides, repos: Repos = buildRepos(ov
     availabilityRepo,
     vehicleClassRepo,
     regionRepo,
+    classRatePlanRepo,
   )
 
   // Chain .route() calls so TypeScript infers the full route type tree.
