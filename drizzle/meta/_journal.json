@@ -512,6 +512,13 @@
       "when": 1782341801407,
       "tag": "0072_add_payment_refunds",
       "breakpoints": true
+    },
+    {
+      "idx": 73,
+      "version": "7",
+      "when": 1782355030474,
+      "tag": "0073_payment_refunds_amount_non_negative",
+      "breakpoints": true
     }
   ]
 }
