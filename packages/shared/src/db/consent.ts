@@ -12,6 +12,7 @@ import {
   uniqueIndex,
 } from 'drizzle-orm/pg-core'
 import { CONSENT_DOC_STATUSES, CONSENT_METHODS, CONSENT_TYPES } from '../enums'
+import type { DocumentSnapshot } from '../lib/consent-canonical'
 import { operators, users } from './auth'
 import { bookings } from './booking'
 import { operatorMemberships } from './provider-access'
@@ -70,6 +71,8 @@ export const consentAcceptances = pgTable(
     recordSignature: text('recordSignature'),
     signingKeyId: text('signingKeyId'),
     signatureRef: text('signatureRef'),
+    documentSnapshot: jsonb('documentSnapshot').$type<DocumentSnapshot>(),
+    signatureCanonicalVersion: text('signatureCanonicalVersion'),
     createdAt: timestamp('createdAt', { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [

@@ -79,6 +79,18 @@ export class InMemoryConsentRepository implements ConsentRepository {
     return this.acceptances.find((a) => a.operatorId === operatorId && a.documentId === documentId)
   }
 
+  async findAcceptanceById(id: string): Promise<ConsentAcceptance | undefined> {
+    return this.acceptances.find((a) => a.id === id)
+  }
+
+  async findAcceptancesByUser(userId: string): Promise<ConsentAcceptance[]> {
+    return this.acceptances.filter((a) => a.userId === userId)
+  }
+
+  async findAcceptancesByBooking(bookingId: string): Promise<ConsentAcceptance[]> {
+    return this.acceptances.filter((a) => a.bookingId === bookingId)
+  }
+
   async createAcceptance(data: NewConsentAcceptance): Promise<ConsentAcceptance> {
     this.assertUnique(data)
     const row: ConsentAcceptance = {
