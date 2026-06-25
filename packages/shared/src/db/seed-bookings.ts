@@ -8,6 +8,8 @@ import {
   type VehicleSubstitutedPayload,
   bookingEvents,
   bookings,
+  consentAcceptances,
+  consentDocuments,
   notificationLog,
   paymentEvents,
   users,
@@ -160,6 +162,9 @@ export async function seedBookings(db: ReturnType<typeof getDb>) {
       await db.delete(paymentEvents).where(inArray(paymentEvents.bookingId, ownedIds))
       await db.delete(bookings).where(inArray(bookings.id, ownedIds))
     }
+    // Consent acceptances FK userId with onDelete: restrict, so clear a renter's
+    // ledger rows before the renter row they pin (#877).
+    await db.delete(consentAcceptances).where(inArray(consentAcceptances.userId, renterIds))
     await db.delete(users).where(inArray(users.id, renterIds))
   }
 
@@ -173,6 +178,37 @@ export async function seedBookings(db: ReturnType<typeof getDb>) {
       role: 'RENTER' as const,
     })),
   )
+
+  // #877: mark every demo renter current on the subject-level consent the booking
+  // gate enforces (RENTER_TOS + PRIVACY_POLICY — mirror of the api ConsentService
+  // REQUIRED_TYPES[RENTER]). Demo renters are returning users who already onboarded;
+  // without a ledger row the layout ConsentGate blocks them and every renter e2e
+  // flow 403s at booking. Method IMPORTED — these are backfilled, not live clicks.
+  const RENTER_SUBJECT_CONSENT_TYPES = ['RENTER_TOS', 'PRIVACY_POLICY'] as const
+  const subjectDocs = await db
+    .select({ id: consentDocuments.id, type: consentDocuments.type })
+    .from(consentDocuments)
+    .where(
+      and(
+        eq(consentDocuments.status, 'PUBLISHED'),
+        eq(consentDocuments.locale, 'en'),
+        inArray(consentDocuments.type, [...RENTER_SUBJECT_CONSENT_TYPES]),
+      ),
+    )
+  const acceptedAt = new Date()
+  const acceptanceValues = DEMO_RENTERS.flatMap((r) =>
+    subjectDocs.map((doc) => ({
+      id: seedId(`consent-accept-${r.id}-${doc.type}`),
+      documentId: doc.id,
+      consentType: doc.type,
+      userId: seedId(r.id),
+      acceptedAt,
+      method: 'IMPORTED' as const,
+    })),
+  )
+  if (acceptanceValues.length > 0) {
+    await db.insert(consentAcceptances).values(acceptanceValues)
+  }
 
   // Resolve seeded vehicles into per-(operator,class) queues so each booking can
   // take a DISTINCT car — CONFIRMED/ACTIVE rows occupy their assigned vehicle via

@@ -1,12 +1,30 @@
+import type { UserRole } from '@kuruma/shared/auth/roles'
 import { CONSENT_CARDINALITY, type ConsentMethod, type ConsentType } from '@kuruma/shared/enums'
 import { PG_ERROR, pgErrorCode } from '../pg-errors'
 import type { ConsentRepository, NewConsentAcceptance } from '../repositories/types'
-import type { ConsentAcceptance } from '../stores'
+import type { ConsentAcceptance, ConsentDocument } from '../stores'
 import { type SigningKey, resolveSigningKey, signAcceptanceRecord } from './consent-signing'
 
-/** Required once-per-subject document types by role (operator types arrive in Phase 3). */
+/**
+ * Required once-per-subject document types by role (operator types arrive in
+ * Phase 3). The literal is `satisfies`-checked against `UserRole` so a typo'd or
+ * unreal role key fails to COMPILE — without it a misspelled key would silently
+ * mean "owes nothing", i.e. fail OPEN, the wrong default for a legal gate. The
+ * `Record<string, …>` annotation keeps the runtime lookup keyable by a raw JWT
+ * role string (mirrors the `roleSet` idiom in `@kuruma/shared/auth/roles`).
+ */
 const REQUIRED_TYPES: Record<string, ConsentType[]> = {
   RENTER: ['RENTER_TOS', 'PRIVACY_POLICY'],
+} satisfies Partial<Record<UserRole, ConsentType[]>>
+
+/** Locale every published cohort is guaranteed to carry — the fallback when the
+ *  caller's locale was never authored for a given (type, version) (#877 Q4). */
+const FALLBACK_LOCALE = 'en'
+
+/** A consent the subject still owes, paired with the document to present. */
+export interface PendingConsent {
+  type: ConsentType
+  document: ConsentDocument
 }
 
 export interface RecordAcceptanceInput {
@@ -66,20 +84,65 @@ export class ConsentService {
     }
   }
 
-  async getRequiredReconsents(userId: string, role: string, now: Date): Promise<ConsentType[]> {
+  /**
+   * The owed (type, version) pairs for a subject — the single per-type DB walk
+   * that both {@link getRequiredReconsents} and {@link getPendingConsents} consume,
+   * so a status render resolves each version once, not in two passes (#1036 M2).
+   *
+   * Fail-open by design: a required type with NO published version is skipped, so
+   * the subject is treated as current until docs are published. This is the
+   * intentional "inert until published" behaviour (prod runs migrations-only, no
+   * seed). It is deliberately NOT instrumented per call — this runs on every
+   * POST /bookings, so a log line each would be noise; the operational signal that
+   * a required doc is unpublished belongs to the publish workflow, not this
+   * hot-path gate (#1036 M3).
+   */
+  private async resolveMissing(
+    userId: string,
+    role: string,
+    now: Date,
+  ): Promise<{ type: ConsentType; version: string }[]> {
     const required = REQUIRED_TYPES[role] ?? []
-    const missing: ConsentType[] = []
+    const missing: { type: ConsentType; version: string }[] = []
     for (const type of required) {
       if (CONSENT_CARDINALITY[type] !== 'ONCE_PER_SUBJECT') continue
       const version = await this.repo.findLatestPublishedVersion(type, now)
-      if (!version) continue // nothing published yet → cannot block
-      if (!(await this.repo.hasAcceptedVersion(userId, type, version))) missing.push(type)
+      if (!version) continue // nothing published yet → cannot block (fail-open, see above)
+      if (!(await this.repo.hasAcceptedVersion(userId, type, version)))
+        missing.push({ type, version })
     }
     return missing
   }
 
+  async getRequiredReconsents(userId: string, role: string, now: Date): Promise<ConsentType[]> {
+    return (await this.resolveMissing(userId, role, now)).map((m) => m.type)
+  }
+
   async isCurrent(userId: string, role: string, now: Date): Promise<boolean> {
     return (await this.getRequiredReconsents(userId, role, now)).length === 0
+  }
+
+  /**
+   * Presentation view of {@link getRequiredReconsents}: for each (type, version)
+   * the subject still owes, resolve the live document to show — the caller's
+   * locale, falling back to `en`. Returns required-order, empty when current.
+   * Reuses {@link resolveMissing}'s versions, so it never re-queries them (#1036 M2).
+   */
+  async getPendingConsents(
+    userId: string,
+    role: string,
+    locale: string,
+    now: Date,
+  ): Promise<PendingConsent[]> {
+    const missing = await this.resolveMissing(userId, role, now)
+    const pending: PendingConsent[] = []
+    for (const { type, version } of missing) {
+      const document =
+        (await this.repo.findPublishedDocument(type, version, locale)) ??
+        (await this.repo.findPublishedDocument(type, version, FALLBACK_LOCALE))
+      if (document) pending.push({ type, document })
+    }
+    return pending
   }
 
   private buildRow(
