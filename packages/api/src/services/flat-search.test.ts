@@ -564,4 +564,16 @@ describe('FlatSearchService.search CLASS_COMBO producer (#464)', () => {
     const kinds = [...page1.items, ...page2.items].map((i) => i.kind).sort()
     expect(kinds).toEqual(['CLASS_COMBO', 'SPECIFIC'])
   })
+
+  it('never surfaces a combo whose pickup location is not an active storefront', async () => {
+    const a = await makeOperator('A Rentals', 'a')
+    const klass = await makeClass({ operatorId: a.id, acrissCode: 'CCAR' })
+    await makeLocation({ operatorId: a.id, name: 'Namba' }) // an active storefront exists,
+    // but the plan points at a location that is not one of them (archived / unknown).
+    await makeRatePlan({ operatorId: a.id, classId: klass.id, pickupLocationId: 'loc_ghost' })
+    const { service } = serviceWithCounts(new Map([[klass.id, { capacity: 5, demand: 0 }]]))
+
+    const data = await ok(await service.search(PUBLIC_CONTEXT, { from: FROM, to: TO }))
+    expect(data.items.filter((i) => i.kind === 'CLASS_COMBO')).toEqual([])
+  })
 })
