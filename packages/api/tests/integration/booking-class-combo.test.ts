@@ -267,4 +267,50 @@ describe('CLASS_COMBO submit serialization (real pg, #464 slice 2d.5)', () => {
       )
     expect(persisted).toHaveLength(1)
   })
+
+  // audit H1 / #1117 — conformance parity (audit M2): the DB exclusion
+  // `EXCLUDE USING gist ("assignedVehicleId" WITH =, tstzrange &&)` never
+  // conflicts NULL keys, so two time-overlapping CLASS_COMBO floats (null
+  // vehicle) both insert. This is the prod behaviour the InMemory repo unit
+  // test asserts; here we prove the SQL side directly via the repo (bypassing
+  // the capacity gate) so the two adapters are pinned to the same contract.
+  it('admits two overlapping null-vehicle CLASS_COMBO floats — exclusion skips NULL keys', async () => {
+    const overlapStart = new Date('2027-11-01T09:00:00Z')
+    const overlapEnd = new Date('2027-11-02T09:00:00Z')
+    const floatRow = (bookingCode: string) => ({
+      operatorId: BEST_CAR_RENTAL_OPERATOR_ID,
+      renterId,
+      classId,
+      requestedVehicleId: null,
+      assignedVehicleId: null,
+      pickupLocationId: locationId,
+      dropoffLocationId: locationId,
+      startAt: overlapStart,
+      endAt: overlapEnd,
+      effectiveEndAt: overlapEnd,
+      status: 'CONFIRMED' as const,
+      source: 'DIRECT' as const,
+      fulfillmentMode: 'CLASS_COMBO' as const,
+      bookingCode,
+      insuranceOptionId: null,
+      insuranceSnapshot: null,
+      feeSnapshot: [],
+      addOnSnapshot: [],
+      externalId: null,
+      notes: null,
+      totalPrice: DAY_RATE_JPY,
+      cancellationFee: null,
+      cancelledAt: null,
+      idempotencyKey: null,
+      disclaimerAcknowledgedAt: null,
+      disclaimerTermsVersion: null,
+    })
+
+    const first = await bookingRepo.create(SYSTEM_CONTEXT, floatRow('BK-PARITY-1'))
+    const second = await bookingRepo.create(SYSTEM_CONTEXT, floatRow('BK-PARITY-2'))
+
+    expect(first.assignedVehicleId).toBeNull()
+    expect(second.assignedVehicleId).toBeNull()
+    expect(second.id).not.toBe(first.id)
+  })
 })

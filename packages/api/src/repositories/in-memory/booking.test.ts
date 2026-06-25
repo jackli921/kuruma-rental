@@ -66,3 +66,43 @@ describe('InMemoryBookingRepository — cancellation fee settlement (#868 Slice 
     expect(cancelled?.cancellationFeeSettlement).toBe('ADVISORY')
   })
 })
+
+describe('InMemoryBookingRepository — CLASS_COMBO float exclusion parity (#1117 / audit H1)', () => {
+  const window = {
+    startAt: new Date('2026-08-01T09:00:00Z'),
+    endAt: new Date('2026-08-01T17:00:00Z'),
+    effectiveEndAt: new Date('2026-08-01T17:00:00Z'),
+  }
+  const comboFloat = (bookingCode: string) =>
+    confirmedInput({
+      ...window,
+      fulfillmentMode: 'CLASS_COMBO',
+      requestedVehicleId: null,
+      assignedVehicleId: null,
+      bookingCode,
+    })
+
+  // Postgres `EXCLUDE USING gist ("assignedVehicleId" WITH =, ...)` never conflicts
+  // NULL keys, so two overlapping combo floats both insert in prod. The InMemory
+  // mirror must admit them too, or dev + every in-memory test diverges from prod.
+  it('admits two time-overlapping null-vehicle combo floats, matching Postgres NULL-exclusion', async () => {
+    const repo = new InMemoryBookingRepository()
+
+    const first = await repo.create(SYSTEM_CONTEXT, comboFloat('BK-COMBO-1'))
+    const second = await repo.create(SYSTEM_CONTEXT, comboFloat('BK-COMBO-2'))
+
+    expect(first.assignedVehicleId).toBeNull()
+    expect(second.assignedVehicleId).toBeNull()
+    expect(second.id).not.toBe(first.id)
+  })
+
+  // The fix must stay surgical: a real assigned vehicle still excludes on overlap.
+  it('still rejects two overlapping bookings on the SAME assigned vehicle', async () => {
+    const repo = new InMemoryBookingRepository()
+    await repo.create(SYSTEM_CONTEXT, confirmedInput({ ...window, bookingCode: 'BK-SPEC-1' }))
+
+    await expect(
+      repo.create(SYSTEM_CONTEXT, confirmedInput({ ...window, bookingCode: 'BK-SPEC-2' })),
+    ).rejects.toThrow('bookings_no_overlap violation')
+  })
+})

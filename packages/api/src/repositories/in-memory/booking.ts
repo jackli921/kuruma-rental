@@ -167,10 +167,13 @@ export class InMemoryBookingRepository implements BookingRepository {
       throw new ForbiddenError('Cannot create booking for another operator')
     }
 
-    // Mirror the DB `bookings_no_overlap` exclusion on the ASSIGNED vehicle.
-    // assignedVehicleId is NOT NULL post-slice-6, so every CONFIRMED/ACTIVE row
-    // occupies its car — the old "null operand skips exclusion" loophole is gone.
-    if (BLOCKING_STATUSES.has(data.status)) {
+    // Mirror the DB `bookings_no_overlap` exclusion on the ASSIGNED vehicle:
+    // `EXCLUDE USING gist ("assignedVehicleId" WITH =, tstzrange &&)`. Postgres
+    // never conflicts NULL keys, so a CLASS_COMBO float (null vehicle, #464)
+    // occupies no specific car and is invisible to the exclusion. Guard on a
+    // non-null vehicle first — `null !== null` is false, so without this an
+    // overlapping pair of floats would falsely clash (audit H1 / #1117).
+    if (data.assignedVehicleId !== null && BLOCKING_STATUSES.has(data.status)) {
       for (const existing of this.store.values()) {
         if (existing.assignedVehicleId !== data.assignedVehicleId) continue
         if (!BLOCKING_STATUSES.has(existing.status)) continue
