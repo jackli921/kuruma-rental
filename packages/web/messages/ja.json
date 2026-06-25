@@ -326,6 +326,7 @@
       "retireVehicle": "車両を廃止",
       "retireConfirm": "{name}を廃止しますか？",
       "retireConfirmMessage": "この車両は利用者に表示されなくなります。後で復元できます。",
+      "retireError": "車両を廃止できませんでした。もう一度お試しください。",
       "noPhoto": "写真なし",
       "expiry": {
         "shaken": {

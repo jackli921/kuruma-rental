@@ -326,6 +326,7 @@
       "retireVehicle": "Retire vehicle",
       "retireConfirm": "Retire {name}?",
       "retireConfirmMessage": "This will hide the vehicle from renters. You can restore it later.",
+      "retireError": "Could not retire the vehicle. Please try again.",
       "noPhoto": "No photo",
       "expiry": {
         "shaken": {

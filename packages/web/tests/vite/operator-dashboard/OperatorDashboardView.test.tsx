@@ -79,11 +79,11 @@ describe('OperatorDashboardView', () => {
 
   it('mounts the compliance banner when a fleet vehicle is non-compliant (#916 §5.5)', () => {
     renderDashboard([vehicle({ shakenExpiryDate: '2020-01-01' }), vehicle({ id: 'ok' })])
-    expect(screen.getByRole('alert')).toHaveTextContent('1 vehicle needs attention')
+    expect(screen.getByRole('status')).toHaveTextContent('1 vehicle needs attention')
   })
 
   it('omits the compliance banner when the whole fleet is compliant', () => {
     renderDashboard([vehicle()])
-    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+    expect(screen.queryByRole('status')).not.toBeInTheDocument()
   })
 })
