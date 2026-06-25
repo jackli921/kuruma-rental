@@ -181,7 +181,7 @@ const ours = (rows: { id: string }[], ids: string[]): string[] =>
   rows.map((r) => r.id).filter((id) => ids.includes(id))
 
 describe('DrizzleRefundReconcilerRepository.listRefundDueNeedingDrive (#851 Slice 4, real pg)', () => {
-  it('LEFT JOIN keeps no-receipt + PENDING REFUND_DUE rows; excludes terminal receipts and non-REFUND_DUE', async () => {
+  it('LEFT JOIN keeps no-receipt + PENDING + SUCCEEDED-orphan REFUND_DUE rows; excludes terminal-FAILED and non-REFUND_DUE', async () => {
     const noReceipt = await seedConfirmed()
     const pending = await seedConfirmed()
     const succeeded = await seedConfirmed()
@@ -192,6 +192,9 @@ describe('DrizzleRefundReconcilerRepository.listRefundDueNeedingDrive (#851 Slic
 
     await setSettlement(noReceipt, 'REFUND_DUE', D2000(3))
     await setSettlement(pending, 'REFUND_DUE', D2000(2))
+    // REFUND_DUE + a SUCCEEDED receipt is the crash-between-confirm-writes orphan: a
+    // healthy refund leaves the booking REFUNDED, so this state is ONLY the orphan and
+    // the scan MUST surface it for the booking-side finish (it is NOT excluded).
     await setSettlement(succeeded, 'REFUND_DUE', D2000(4))
     await setSettlement(failed, 'REFUND_DUE', D2000(1))
     await setSettlement(advisory, 'ADVISORY', D2000(5))
@@ -202,8 +205,9 @@ describe('DrizzleRefundReconcilerRepository.listRefundDueNeedingDrive (#851 Slic
 
     const rows = await reconcilerRepo.listRefundDueNeedingDrive({ limit: 1000 })
 
-    // Exactly the two retryable rows, oldest cancellation first (pending D2 < noReceipt D3).
-    expect(ours(rows, seeded)).toEqual([pending, noReceipt])
+    // The three non-FAILED REFUND_DUE rows, oldest cancellation first (D2 < D3 < D4);
+    // FAILED (needs a human) and the non-REFUND_DUE rows are excluded.
+    expect(ours(rows, seeded)).toEqual([pending, noReceipt, succeeded])
   })
 
   it('excludes terminal-FAILED BEFORE the limit so it cannot starve retryable work', async () => {
@@ -251,6 +255,59 @@ class WebhookLostGateway implements PaymentGateway {
     ]
   }
 }
+
+// A gateway that throws on EVERY call: the SUCCEEDED-receipt orphan must finish with
+// zero Stripe traffic — initiateCancellationRefund short-circuits on the SUCCEEDED
+// receipt BEFORE resolveRefund, so any gateway touch here is a regression.
+class NoStripeGateway implements PaymentGateway {
+  async createCheckoutSession(): Promise<never> {
+    throw new Error('no Stripe expected for a SUCCEEDED-receipt orphan')
+  }
+  async parseWebhookEvent(): Promise<never> {
+    throw new Error('no Stripe expected for a SUCCEEDED-receipt orphan')
+  }
+  async refundPayment(): Promise<never> {
+    throw new Error('no Stripe expected for a SUCCEEDED-receipt orphan')
+  }
+  async retrieveRefund(): Promise<never> {
+    throw new Error('no Stripe expected for a SUCCEEDED-receipt orphan')
+  }
+  async listRefundsByPaymentIntent(): Promise<never> {
+    throw new Error('no Stripe expected for a SUCCEEDED-receipt orphan')
+  }
+}
+
+describe('CancellationRefundReconciler orphan self-heal (#851 Slice 4, real pg)', () => {
+  it('REFUND_DUE booking with an already-SUCCEEDED receipt → sweep finishes it REFUNDED with zero Stripe calls', async () => {
+    const service = new PaymentService(
+      eventRepo,
+      refundRepo,
+      bookingRepo,
+      new NoStripeGateway(),
+      new DrizzlePaymentAnomalyRepository(db),
+      { webBaseUrl: 'https://app.example.com' },
+    )
+    const reconciler = new CancellationRefundReconciler({
+      scanRepo: reconcilerRepo,
+      driver: service,
+      refundRepo,
+    })
+
+    // The orphan: receipt SUCCEEDED (refund already moved at Stripe) but the booking's
+    // REFUND_DUE→REFUNDED write never landed. Paid, so initiate's PAID gate passes.
+    const orphan = await seedConfirmed()
+    await setSettlement(orphan, 'REFUND_DUE', D2000(2))
+    await markPaid(orphan)
+    await claimReceipt(orphan, 'SUCCEEDED')
+
+    await reconciler.run({ limit: 1000 })
+
+    expect((await bookingRepo.findById(SYSTEM_CONTEXT, orphan))?.cancellationFeeSettlement).toBe(
+      'REFUNDED',
+    )
+    expect((await refundRepo.findByBookingId(orphan))?.status).toBe('SUCCEEDED')
+  })
+})
 
 describe('CancellationRefundReconciler end-to-end self-heal (#851 Slice 4, real pg)', () => {
   it('a refund succeeded at Stripe with no webhook → sweep adopts, confirms REFUNDED via runTx, never re-issues', async () => {
