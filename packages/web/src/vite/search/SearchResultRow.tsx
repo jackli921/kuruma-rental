@@ -37,8 +37,7 @@ type RowCardProps<T extends SearchResultItem> = { readonly item: T } & Omit<
  * class with an inventory count, exact car assigned on pickup day. The projection is
  * already renter-safe (the API drops operator internals, D3). The CTA navigates to the
  * pickup store's detail page (the only detail surface today, #885 1b); card
- * focus/hover drives the map while the CTA is the sole navigation affordance. A future
- * `kind` renders nothing rather than crash until its row is built.
+ * focus/hover drives the map while the CTA is the sole navigation affordance.
  */
 export function SearchResultRow({ item, ...ctx }: SearchResultRowProps) {
   switch (item.kind) {
@@ -47,6 +46,11 @@ export function SearchResultRow({ item, ...ctx }: SearchResultRowProps) {
     case 'CLASS_COMBO':
       return <ClassComboRow item={item} {...ctx} />
     default:
+      // Exhaustive today: `item` narrows to `never` here. If the union ever grows a
+      // `kind` without a case above, `item satisfies never` turns red in tsc — turning
+      // a silently-dropped row (the very #464 bug) into a compile error. Still returns
+      // null at runtime so a skewed API can never render a raw object.
+      item satisfies never
       return null
   }
 }
@@ -109,7 +113,7 @@ function RowDetailCta({
   classFilter,
   pickupLocationId,
   region,
-}: { readonly location: ResultLocation } & Omit<SearchResultRowProps, 'item'>) {
+}: { readonly location: ResultLocation } & Omit<SearchResultRowProps, 'item' | 'geoLabel'>) {
   const t = useTranslations('search')
   return (
     <Link
