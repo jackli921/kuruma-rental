@@ -1233,7 +1233,8 @@
     "nav": {
       "overview": "概要",
       "revenue": "パートナー収益",
-      "documents": "書類"
+      "documents": "書類",
+      "customers": "顧客"
     },
     "home": {
       "title": "プラットフォーム管理",
@@ -1287,6 +1288,44 @@
       "reject": "却下",
       "error": "判定を記録できませんでした。もう一度お試しください。",
       "loadError": "審査キューを読み込めませんでした。",
+      "retry": "再試行"
+    },
+    "customers": {
+      "title": "顧客",
+      "subtitle": "プラットフォーム全体のレンターを検索・確認します。",
+      "searchLabel": "検索",
+      "searchPlaceholder": "名前またはメールで検索",
+      "sortLabel": "並び替え",
+      "sort": {
+        "lastBookingAt": "最近の予約",
+        "bookingCount": "予約数が多い順",
+        "name": "名前"
+      },
+      "colName": "名前",
+      "colEmail": "メール",
+      "colBookings": "予約数",
+      "colTotalSpent": "利用総額",
+      "colLastBooking": "最終予約",
+      "colCountry": "国",
+      "colLanguage": "言語",
+      "empty": "条件に一致する顧客がいません。",
+      "unnamed": "名前なしの顧客",
+      "noEmail": "メールなし",
+      "noVehicle": "車両未割り当て",
+      "pagination": "顧客ページ",
+      "prev": "前へ",
+      "next": "次へ",
+      "bookingsTitle": "予約履歴",
+      "bookingsEmpty": "予約はまだありません。",
+      "detailLoading": "顧客を読み込み中…",
+      "detailEmpty": "この顧客は利用できなくなりました。",
+      "status": {
+        "CONFIRMED": "確定",
+        "ACTIVE": "利用中",
+        "COMPLETED": "完了",
+        "CANCELLED": "キャンセル"
+      },
+      "loadError": "顧客を読み込めませんでした。",
       "retry": "再試行"
     }
   },
