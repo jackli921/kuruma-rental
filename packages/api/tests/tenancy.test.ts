@@ -1,6 +1,15 @@
 import { describe, expect, test } from 'vitest'
-import { type CallerContext, ForbiddenError, OperatorRequiredError } from '../src/middleware/auth'
-import { operatorReadScope, resolveOperatorIdForWrite } from '../src/tenancy'
+import {
+  type CallerContext,
+  ForbiddenError,
+  OperatorRequiredError,
+  ScopeRequiredError,
+} from '../src/middleware/auth'
+import {
+  applyCrossOperatorReadScope,
+  operatorReadScope,
+  resolveOperatorIdForWrite,
+} from '../src/tenancy'
 
 const operatorCtx = (operatorId?: string): CallerContext =>
   operatorId !== undefined
@@ -60,5 +69,55 @@ describe('resolveOperatorIdForWrite', () => {
     await expect(resolveOperatorIdForWrite(legacyStaffCtx, undefined)).rejects.toBeInstanceOf(
       OperatorRequiredError,
     )
+  })
+})
+
+describe('applyCrossOperatorReadScope', () => {
+  // Operator/none/renter scopes are decided at the repo (operators auto-scope to
+  // their tenant; a tenant-less operator fails closed), so the helper passes
+  // their filters through untouched — it only adjudicates the `all`-scope read.
+  test('operator-scoped caller passes filters through unchanged', () => {
+    expect(
+      applyCrossOperatorReadScope(operatorCtx('op_1'), { includeAll: false }, { status: 'ACTIVE' }),
+    ).toEqual({ status: 'ACTIVE' })
+  })
+
+  test('tenant-less operator (none) passes through — the repo fails it closed', () => {
+    expect(applyCrossOperatorReadScope(operatorCtx(), { includeAll: false }, {})).toEqual({})
+  })
+
+  // The defence-in-depth core: an `all`-scope caller that named neither a target
+  // operator nor includeAll must be rejected, never silently served every tenant.
+  test('all-scope with neither operatorId nor includeAll throws ScopeRequiredError', () => {
+    expect(() => applyCrossOperatorReadScope(adminCtx, { includeAll: false }, {})).toThrow(
+      ScopeRequiredError,
+    )
+    expect(() => applyCrossOperatorReadScope(legacyStaffCtx, { includeAll: false }, {})).toThrow(
+      ScopeRequiredError,
+    )
+  })
+
+  test('all-scope with an explicit operatorId stamps it onto the filters', () => {
+    expect(
+      applyCrossOperatorReadScope(
+        adminCtx,
+        { operatorId: 'op_9', includeAll: false },
+        { status: 'ACTIVE' },
+      ),
+    ).toEqual({ status: 'ACTIVE', operatorId: 'op_9' })
+  })
+
+  test('all-scope with includeAll and no operatorId reads across every tenant (unfiltered)', () => {
+    expect(
+      applyCrossOperatorReadScope(adminCtx, { includeAll: true }, { status: 'ACTIVE' }),
+    ).toEqual({
+      status: 'ACTIVE',
+    })
+  })
+
+  test('an explicit operatorId wins over includeAll', () => {
+    expect(
+      applyCrossOperatorReadScope(adminCtx, { operatorId: 'op_9', includeAll: true }, {}),
+    ).toEqual({ operatorId: 'op_9' })
   })
 })
