@@ -1195,6 +1195,8 @@
     "auto": "自动挡",
     "manual": "手动挡",
     "viewStore": "查看车辆",
+    "comboAvailable": "剩 {count} 辆",
+    "comboSoldOut": "已租罄",
     "showOnMap": "在地图上显示",
     "list": {
       "heading": "可用车辆",

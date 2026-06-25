@@ -1195,6 +1195,8 @@
     "auto": "オートマ",
     "manual": "マニュアル",
     "viewStore": "クルマを見る",
+    "comboAvailable": "残り{count}台",
+    "comboSoldOut": "在庫なし",
     "showOnMap": "地図で表示",
     "list": {
       "heading": "空車",

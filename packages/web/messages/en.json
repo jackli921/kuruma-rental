@@ -1195,6 +1195,8 @@
     "auto": "Automatic",
     "manual": "Manual",
     "viewStore": "View cars",
+    "comboAvailable": "{count} available",
+    "comboSoldOut": "Sold out",
     "showOnMap": "Show on map",
     "list": {
       "heading": "Available cars",

@@ -1,5 +1,9 @@
 import { SearchResultRow } from '@/vite/search/SearchResultRow'
-import type { SpecificSearchResult } from '@kuruma/shared/types/search-result'
+import type {
+  ClassComboSearchResult,
+  SearchResultItem,
+  SpecificSearchResult,
+} from '@kuruma/shared/types/search-result'
 import { render, screen } from '@testing-library/react'
 import type { ReactNode } from 'react'
 import { IntlProvider } from 'use-intl'
@@ -64,9 +68,33 @@ function makeSpecific(overrides: Partial<SpecificSearchResult> = {}): SpecificSe
   }
 }
 
+function makeCombo(overrides: Partial<ClassComboSearchResult> = {}): ClassComboSearchResult {
+  return {
+    kind: 'CLASS_COMBO',
+    location: {
+      locationId: 'loc_kyoto',
+      operatorId: 'op_zen',
+      operatorName: 'Zen Rentals',
+      name: 'Kyoto Station',
+      address: '1 Karasuma, Kyoto',
+      latitude: 34.9858,
+      longitude: 135.7588,
+    },
+    dailyRateJpy: 12000,
+    hourlyRateJpy: null,
+    classLabel: 'SUV',
+    acrissCode: 'IFAR',
+    seats: 7,
+    photos: [],
+    classId: 'cls_suv',
+    availableCount: 3,
+    ...overrides,
+  }
+}
+
 // Search context defaults so the CTA renders; individual tests override what they assert.
 function renderRow(
-  item: SpecificSearchResult,
+  item: SearchResultItem,
   ctx: {
     locale?: string
     from?: string
@@ -156,5 +184,53 @@ describe('SearchResultRow', () => {
   it('omits the geo-context line when no label is provided', () => {
     renderRow(makeSpecific(), { geoLabel: null })
     expect(screen.queryByText(/km away/)).toBeNull()
+  })
+})
+
+describe('SearchResultRow (CLASS_COMBO)', () => {
+  it('renders the class label as the title, plus availability, seats, and price', () => {
+    renderRow(makeCombo())
+    expect(screen.getByRole('heading', { name: 'SUV' })).toBeInTheDocument()
+    expect(screen.getByText('3 available')).toBeInTheDocument()
+    expect(screen.getByText('7 seats')).toBeInTheDocument()
+    expect(screen.getByText('From ¥12,000 / day')).toBeInTheDocument()
+  })
+
+  it('omits the transmission line — a class spans both gearboxes', () => {
+    renderRow(makeCombo())
+    expect(screen.queryByText('Automatic')).toBeNull()
+    expect(screen.queryByText('Manual')).toBeNull()
+  })
+
+  it('shows the operator and pickup store, like the SPECIFIC row', () => {
+    renderRow(makeCombo())
+    expect(screen.getByText('Zen Rentals')).toBeInTheDocument()
+    expect(screen.getByText('Kyoto Station')).toBeInTheDocument()
+  })
+
+  it('navigates to the pickup-store detail via the View cars CTA, preserving dates + filters', () => {
+    renderRow(makeCombo(), {
+      from: '2026-07-01T10:00',
+      to: '2026-07-04T10:00',
+      classFilter: 'suv',
+    })
+    const cta = screen.getByRole('link', { name: 'View cars' })
+    expect(cta).toHaveAttribute('data-to', '/$locale/storefronts/$locationId')
+    expect(cta).toHaveAttribute('data-location', 'loc_kyoto')
+    const search = JSON.parse(cta.getAttribute('data-search') ?? '{}')
+    expect(search).toMatchObject({ from: '2026-07-01T10:00', to: '2026-07-04T10:00', class: 'suv' })
+  })
+
+  it('shows "Sold out" and drops the booking CTA when availableCount is 0', () => {
+    renderRow(makeCombo({ availableCount: 0 }))
+    expect(screen.getByText('Sold out')).toBeInTheDocument()
+    expect(screen.queryByText('0 available')).toBeNull()
+    expect(screen.queryByRole('link', { name: 'View cars' })).toBeNull()
+  })
+
+  it('still shows the class label and store when sold out, so the listing stays legible', () => {
+    renderRow(makeCombo({ availableCount: 0 }))
+    expect(screen.getByRole('heading', { name: 'SUV' })).toBeInTheDocument()
+    expect(screen.getByText('Zen Rentals')).toBeInTheDocument()
   })
 })
