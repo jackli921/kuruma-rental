@@ -61,3 +61,23 @@ fail-closed protection:
 Once a production deploy is gated on this secret, add `CONSENT_SIGNING_KEY` to
 **`deploy.yml`**'s required-secret presence loop so a missing key fails the deploy
 loudly at the presence check instead of waiting for the first accept to 500.
+
+## Producing a consent evidence export (#877)
+
+Each acceptance is a self-contained, replayable evidence record: it snapshots the
+exact disclosed document (`documentSnapshot`) and the signed canonical version, so
+the export reproduces *what the renter actually agreed to*, independent of later
+edits to `consent_documents`.
+
+- **CLI:** `bun run consent:evidence -- <acceptanceId>` (or `--user <id>` / `--booking <id>`)
+  prints a JSON bundle: identity, the frozen document, the signature, and a
+  `verification.status`.
+- **Admin API:** `GET /admin/consent/acceptances/:id/evidence` (platform-admin only).
+- **`verification.status`** is the trust signal. Only `VERIFIED` is proof. Others are
+  honest gaps, surfaced verbatim: `SNAPSHOT_MISSING` (legacy/un-backfilled row),
+  `SNAPSHOT_HASH_MISMATCH` (snapshot text altered), `UNSIGNED`, `KEY_UNAVAILABLE`
+  (signed under a key we no longer hold — see #1050), `SIGNATURE_MISMATCH`.
+- **Backfill legacy rows:** `bun run db:backfill-consent-snapshot` snapshots a null
+  row *only when the current document is provably the signed artifact* (a stale or
+  edited document is skipped and reported, never backfilled with wrong text). Design
+  detail: `docs/superpowers/specs/2026-06-24-consent-evidence-export-design.md`.

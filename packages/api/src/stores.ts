@@ -34,6 +34,7 @@ import type {
   VehicleClassStatus,
 } from '@kuruma/shared/enums'
 import type { ComplianceAlertBand, ComplianceDocumentType } from '@kuruma/shared/lib/compliance'
+import type { DocumentSnapshot } from '@kuruma/shared/lib/consent-canonical'
 import type { LuggageSize } from '@kuruma/shared/lib/luggage'
 import type { LocationOperatingHours } from '@kuruma/shared/types/location'
 
@@ -493,6 +494,8 @@ export interface ConsentAcceptance {
   method: ConsentMethod
   recordSignature: string | null
   signingKeyId: string | null
+  signatureCanonicalVersion: string | null
+  documentSnapshot: DocumentSnapshot | null
   signatureRef: string | null
   createdAt: Date
 }

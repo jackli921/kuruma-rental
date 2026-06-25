@@ -34,6 +34,8 @@ const baseAcceptance: NewConsentAcceptance = {
   method: 'CLICKWRAP' as const,
   recordSignature: 'sig',
   signingKeyId: 'v1',
+  signatureCanonicalVersion: 'v1',
+  documentSnapshot: null,
 }
 
 describe('InMemoryConsentRepository', () => {
@@ -96,5 +98,17 @@ describe('InMemoryConsentRepository', () => {
       repo.createAcceptance({ ...operatorAcceptance, documentId: 'doc_other' }),
     ).resolves.toBeDefined()
     expect((await repo.findOperatorDocumentAcceptance('op_1', DOC.id))?.id).toBe(created.id)
+  })
+
+  it('findAcceptanceById returns the acceptance, findAcceptancesByUser scopes by user, findAcceptancesByBooking returns empty for unknown booking', async () => {
+    const created = await repo.createAcceptance(baseAcceptance)
+    const byId = await repo.findAcceptanceById(created.id)
+    expect(byId?.id).toBe(created.id)
+    expect(byId?.userId).toBe('user_1')
+    const byUser = await repo.findAcceptancesByUser('user_1')
+    expect(byUser).toHaveLength(1)
+    expect(byUser[0]?.id).toBe(created.id)
+    const byBooking = await repo.findAcceptancesByBooking('none')
+    expect(byBooking).toEqual([])
   })
 })

@@ -1,5 +1,6 @@
 import type { UserRole } from '@kuruma/shared/auth/roles'
 import { CONSENT_CARDINALITY, type ConsentMethod, type ConsentType } from '@kuruma/shared/enums'
+import { CANONICAL_VERSION } from '@kuruma/shared/lib/consent-canonical'
 import { PG_ERROR, pgErrorCode } from '../pg-errors'
 import type { ConsentRepository, NewConsentAcceptance } from '../repositories/types'
 import type { ConsentAcceptance, ConsentDocument } from '../stores'
@@ -146,7 +147,16 @@ export class ConsentService {
   }
 
   private buildRow(
-    doc: { id: string; type: ConsentType; version: string; locale: string; contentHash: string },
+    doc: {
+      id: string
+      type: ConsentType
+      version: string
+      locale: string
+      contentHash: string
+      title: string
+      body: string
+      acceptanceLabel: string
+    },
     input: RecordAcceptanceInput,
     meta: RecordAcceptanceMeta,
     operatorId: string | null,
@@ -194,6 +204,15 @@ export class ConsentService {
       method,
       recordSignature: signed?.signature ?? null,
       signingKeyId: signed?.signingKeyId ?? null,
+      signatureCanonicalVersion: signed ? CANONICAL_VERSION : null,
+      documentSnapshot: {
+        version: doc.version,
+        locale: doc.locale,
+        title: doc.title,
+        body: doc.body,
+        acceptanceLabel: doc.acceptanceLabel,
+        contentHash: doc.contentHash,
+      },
     }
   }
 

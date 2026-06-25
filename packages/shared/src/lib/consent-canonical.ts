@@ -49,6 +49,13 @@ export interface DisclosureArtifact {
   acceptanceLabel: string
 }
 
+/** The exact disclosure a subject was shown, frozen onto the acceptance (#877 evidence export). */
+export interface DocumentSnapshot extends DisclosureArtifact {
+  version: string
+  locale: string
+  contentHash: string
+}
+
 /** §5.1 — sha256 over the full disclosure a subject was shown. */
 export function computeContentHash(d: DisclosureArtifact): string {
   const canonical = canonicalizeFields([

@@ -1,3 +1,4 @@
+import { computeContentHash } from '@kuruma/shared/lib/consent-canonical'
 import { beforeEach, describe, expect, it } from 'vitest'
 import { InMemoryConsentRepository } from '../repositories/in-memory/consent'
 import type { ConsentRepository } from '../repositories/types'
@@ -73,6 +74,67 @@ describe('ConsentService.recordAcceptance', () => {
   })
 })
 
+describe('ConsentService.recordAcceptance — document snapshot + canonical version (#877)', () => {
+  it('records documentSnapshot with full disclosure fields and signatureCanonicalVersion=v1 when key configured', async () => {
+    const d = doc()
+    const repo = new InMemoryConsentRepository([d])
+    const svc = new ConsentService(repo, () => KEY)
+    const r = await svc.recordAcceptance(
+      { documentId: d.id, userId: 'user_snap', actorRole: 'RENTER' },
+      { now: NOW },
+    )
+    expect(r.ok).toBe(true)
+    if (!r.ok) return
+    expect(r.acceptance.documentSnapshot).toEqual({
+      version: d.version,
+      locale: d.locale,
+      title: d.title,
+      body: d.body,
+      acceptanceLabel: d.acceptanceLabel,
+      contentHash: d.contentHash,
+    })
+    expect(r.acceptance.signatureCanonicalVersion).toBe('v1')
+  })
+
+  it('records documentSnapshot but sets signatureCanonicalVersion=null when no signing key', async () => {
+    const d = doc()
+    const repo = new InMemoryConsentRepository([d])
+    const svc = new ConsentService(repo, () => undefined)
+    const r = await svc.recordAcceptance(
+      { documentId: d.id, userId: 'user_nokey', actorRole: 'RENTER' },
+      { now: NOW },
+    )
+    expect(r.ok).toBe(true)
+    if (!r.ok) return
+    expect(r.acceptance.documentSnapshot).toEqual({
+      version: d.version,
+      locale: d.locale,
+      title: d.title,
+      body: d.body,
+      acceptanceLabel: d.acceptanceLabel,
+      contentHash: d.contentHash,
+    })
+    expect(r.acceptance.signatureCanonicalVersion).toBeNull()
+  })
+
+  it('documentSnapshot.contentHash matches computeContentHash of the disclosed text', async () => {
+    const title = 'My Title'
+    const body = 'My Body'
+    const acceptanceLabel = 'Agree'
+    const expectedHash = computeContentHash({ title, body, acceptanceLabel })
+    const d = doc({ title, body, acceptanceLabel, contentHash: expectedHash })
+    const repo = new InMemoryConsentRepository([d])
+    const svc = new ConsentService(repo, () => KEY)
+    const r = await svc.recordAcceptance(
+      { documentId: d.id, userId: 'user_hash', actorRole: 'RENTER' },
+      { now: NOW },
+    )
+    expect(r.ok).toBe(true)
+    if (!r.ok) return
+    expect(r.acceptance.documentSnapshot?.contentHash).toBe(expectedHash)
+  })
+})
+
 describe('ConsentService.recordAcceptance — subject-shape validation', () => {
   it('rejects RENTER_LIABILITY accepted without a bookingId → SUBJECT_SHAPE_INVALID', async () => {
     const repo = new InMemoryConsentRepository([
@@ -121,6 +183,8 @@ describe('ConsentService.recordAcceptance — concurrent-race catch path', () =>
       method: 'CLICKWRAP',
       recordSignature: null,
       signingKeyId: null,
+      signatureCanonicalVersion: null,
+      documentSnapshot: null,
     })
 
     // Wrap the repo so the FIRST findUserDocumentAcceptance call returns undefined
@@ -142,6 +206,9 @@ describe('ConsentService.recordAcceptance — concurrent-race catch path', () =>
       findBookingAcceptance: (...args) => realRepo.findBookingAcceptance(...args),
       findOperatorDocumentAcceptance: (...args) => realRepo.findOperatorDocumentAcceptance(...args),
       createAcceptance: (...args) => realRepo.createAcceptance(...args),
+      findAcceptanceById: (...args) => realRepo.findAcceptanceById(...args),
+      findAcceptancesByUser: (...args) => realRepo.findAcceptancesByUser(...args),
+      findAcceptancesByBooking: (...args) => realRepo.findAcceptancesByBooking(...args),
     }
 
     const svc = new ConsentService(wrappedRepo, () => KEY)
