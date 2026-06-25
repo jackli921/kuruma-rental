@@ -4,9 +4,11 @@
 > consent acceptance with an HMAC-SHA256 keyed on `CONSENT_SIGNING_KEY`
 > (`packages/api/src/services/consent-signing.ts`). If the secret is **absent**,
 > `resolveSigningKey()` returns `undefined` and the service writes
-> `recordSignature: null` **silently** — no error, no alert. The moment consent
-> Phase 2 (#1044 / #1033) ships its renter accept endpoint, prod would start
-> recording **unsigned** consent rows. **Set this secret before #1044 merges.**
+> `recordSignature: null` **silently** in non-prod. Consent Phase 2 (#1044 / #1033)
+> has now **merged**, so its renter accept endpoint is live in code. As of this PR
+> (#1052) `resolveSigningKey()` **fails closed in production** — an unset key throws
+> at request time (→ 500) instead of writing unsigned rows. **Set this secret before
+> promoting to a production deploy**, or the consent accept endpoint 500s in prod.
 
 ## What the secret is
 
@@ -43,19 +45,19 @@ key **unless** the old `keyId → key` mapping is retained. Do not rotate until 
 registry exists: then bump `CONSENT_SIGNING_KEY_ID` (e.g. `v2`), keep the `v1` key
 available to the lookup, and only new rows sign under `v2`.
 
-## What this runbook does NOT cover (owned by the consent session — #1048)
+## Scope — what this PR (#1052) delivers vs. what's deferred
 
-This runbook + the `rotate-secrets.yml` wiring are the **infra half**. The code-side
-fail-closed protection stays with the consent workstream:
+This PR ships the `rotate-secrets.yml` wiring, this runbook, **and** the code-side
+fail-closed protection:
 
-- **Item 2** — composition-root presence check that *throws at boot* in non-test
-  envs when `CONSENT_SIGNING_KEY` is missing (mirrors the `STRIPE_SECRET_KEY`
-  sentinel). Lives in `packages/api/src/index.ts`, which consent Phase 2 (#1044) is
-  actively editing — left to that PR to avoid a conflict.
-- **Item 3** — the `signingKeyId → key` registry for rotation.
-- **Item 4** — an integration test asserting `recordSignature` is non-null under a
-  configured key, and that boot throws when unconfigured.
+- **Done (this PR)** — `resolveSigningKey()` *throws in production* when
+  `CONSENT_SIGNING_KEY` is unset (mirrors the `STRIPE_SECRET_KEY` sentinel), with
+  unit tests pinning the contract. Non-prod still returns `undefined` so the legacy
+  IMPORTED-row flows and existing route tests don't all need a secret stub.
+- **Deferred (#1050)** — the `signingKeyId → key` registry for rotation.
+- **Deferred (#1049)** — a real-pg integration test asserting `recordSignature` is
+  non-null under a configured key.
 
-Once item 2 lands, add `CONSENT_SIGNING_KEY` to **`deploy.yml`**'s required-secret
-presence loop so a missing key fails the deploy loudly instead of silently writing
-unsigned rows.
+Once a production deploy is gated on this secret, add `CONSENT_SIGNING_KEY` to
+**`deploy.yml`**'s required-secret presence loop so a missing key fails the deploy
+loudly at the presence check instead of waiting for the first accept to 500.
