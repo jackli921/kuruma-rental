@@ -185,4 +185,35 @@ describe('FleetRowActions', () => {
       expect(screen.getByText(en.statusToggle.error)).toBeInTheDocument()
     })
   })
+
+  it('shows the retire-specific error (not the status copy) when retire fails', async () => {
+    retireVehicle.mockRejectedValueOnce(new Error('network boom'))
+    renderActions(vehicle({ id: 'v8' }))
+
+    fireEvent.click(screen.getByText(en.retireVehicle))
+    fireEvent.click(await screen.findByRole('button', { name: en.retireVehicle }))
+
+    await waitFor(() => {
+      expect(screen.getByText(en.retireError)).toBeInTheDocument()
+    })
+    // The wrong "could not update status" copy must NOT be used for a retire failure.
+    expect(screen.queryByText(en.statusToggle.error)).not.toBeInTheDocument()
+  })
+
+  it('shows the status error inside the maintenance dialog when the reason submit fails', async () => {
+    updateVehicleStatus.mockRejectedValueOnce(new Error('network boom'))
+    renderActions(vehicle({ id: 'v9', status: 'AVAILABLE' }))
+
+    fireEvent.click(screen.getByText(en.actions.setMaintenance))
+    const reason = screen.getByPlaceholderText(en.maintenance.reasonPlaceholder)
+    fireEvent.change(reason, { target: { value: 'Brake inspection' } })
+    fireEvent.click(screen.getByRole('button', { name: en.maintenance.submit }))
+
+    // The maintenance dialog stays open on failure and surfaces the error in-context;
+    // the reason field the operator submitted is still on screen.
+    await waitFor(() => {
+      expect(screen.getByText(en.statusToggle.error)).toBeInTheDocument()
+    })
+    expect(screen.getByPlaceholderText(en.maintenance.reasonPlaceholder)).toBeInTheDocument()
+  })
 })

@@ -109,7 +109,9 @@ export function FleetRowActions({ vehicle, onEdit }: FleetRowActionsProps) {
         </DropdownMenuContent>
       </DropdownMenu>
 
-      {(statusMutation.isError || retireMutation.isError) && (
+      {/* The AVAILABLE toggle fires without a dialog, so its failure needs an
+          inline slot. Errors raised while a dialog is open surface inside it. */}
+      {statusMutation.isError && openDialog === 'none' && (
         <output className="text-[11px] text-destructive">{t('statusToggle.error')}</output>
       )}
 
@@ -119,6 +121,7 @@ export function FleetRowActions({ vehicle, onEdit }: FleetRowActionsProps) {
           if (!open) {
             setOpenDialog('none')
             setReason('')
+            statusMutation.reset()
           }
         }}
       >
@@ -140,6 +143,9 @@ export function FleetRowActions({ vehicle, onEdit }: FleetRowActionsProps) {
                 placeholder={t('maintenance.reasonPlaceholder')}
               />
             </div>
+            {statusMutation.isError && (
+              <p className="px-1 text-sm text-destructive">{t('statusToggle.error')}</p>
+            )}
             <DialogFooter>
               <DialogClose
                 render={
@@ -159,7 +165,10 @@ export function FleetRowActions({ vehicle, onEdit }: FleetRowActionsProps) {
       <Dialog
         open={openDialog === 'retire'}
         onOpenChange={(open) => {
-          if (!open) setOpenDialog('none')
+          if (!open) {
+            setOpenDialog('none')
+            retireMutation.reset()
+          }
         }}
       >
         <DialogContent>
@@ -167,6 +176,9 @@ export function FleetRowActions({ vehicle, onEdit }: FleetRowActionsProps) {
             <DialogTitle>{t('retireConfirm', { name: vehicle.name })}</DialogTitle>
             <DialogDescription>{t('retireConfirmMessage')}</DialogDescription>
           </DialogHeader>
+          {retireMutation.isError && (
+            <p className="px-1 text-sm text-destructive">{t('retireError')}</p>
+          )}
           <DialogFooter>
             <DialogClose
               render={
