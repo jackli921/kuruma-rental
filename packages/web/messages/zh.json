@@ -326,6 +326,7 @@
       "retireVehicle": "停用车辆",
       "retireConfirm": "确定停用{name}？",
       "retireConfirmMessage": "此车辆将对租客隐藏。您可以稍后恢复。",
+      "retireError": "无法停用车辆，请重试。",
       "noPhoto": "无照片",
       "expiry": {
         "shaken": {

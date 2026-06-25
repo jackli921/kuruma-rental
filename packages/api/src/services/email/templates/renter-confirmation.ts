@@ -1,6 +1,12 @@
 import type { FeeSnapshotItem } from '@kuruma/shared/db/schema'
 import { escapeHtml, formatDateTime, formatJpy } from './format'
-import { type RenderedEmail, vehicleLabel } from './layout'
+import {
+  type RenderedEmail,
+  renderCtaSection,
+  renderListSection,
+  renderRowsTable,
+  vehicleLabel,
+} from './layout'
 import { emailStrings } from './messages'
 
 export interface RenterConfirmationData {
@@ -48,23 +54,15 @@ export function renderRenterConfirmation(
 
   const subject = `${m.renterSubject} ${data.bookingCode}`
 
-  const htmlRows = rows
-    .map(([l, v]) => `<tr><td><strong>${escapeHtml(l)}</strong></td><td>${escapeHtml(v)}</td></tr>`)
-    .join('')
-  const htmlFees = feeLines.length
-    ? `<h3>${escapeHtml(m.potentialChargesTitle)}</h3><ul>${feeLines.map((f) => `<li>${escapeHtml(f)}</li>`).join('')}</ul>`
-    : ''
-  const htmlPreAuth = data.preAuthHandoffUrl
-    ? `<h3>${escapeHtml(m.preAuthTitle)}</h3><p>${escapeHtml(m.preAuthExplain)}</p><p><a href="${escapeHtml(data.preAuthHandoffUrl)}">${escapeHtml(m.preAuthCta)}</a></p>`
-    : ''
-  const html = `<p>${escapeHtml(m.renterGreeting)}</p><table>${htmlRows}</table>${htmlPreAuth}${htmlFees}<p>${escapeHtml(m.cancellationContact)}</p>`
+  // Order: greeting, details table, pre-auth CTA, fee list, cancellation footer.
+  const table = renderRowsTable(rows)
+  const preAuth = data.preAuthHandoffUrl
+    ? renderCtaSection(m.preAuthTitle, data.preAuthHandoffUrl, m.preAuthCta, m.preAuthExplain)
+    : { html: '', text: '' }
+  const fees = renderListSection(m.potentialChargesTitle, feeLines)
 
-  const textRows = rows.map(([l, v]) => `${l}: ${v}`).join('\n')
-  const textFees = feeLines.length ? `\n\n${m.potentialChargesTitle}\n${feeLines.join('\n')}` : ''
-  const textPreAuth = data.preAuthHandoffUrl
-    ? `\n\n${m.preAuthTitle}\n${m.preAuthExplain}\n${m.preAuthCta}: ${data.preAuthHandoffUrl}`
-    : ''
-  const text = `${m.renterGreeting}\n\n${textRows}${textPreAuth}${textFees}\n\n${m.cancellationContact}`
+  const html = `<p>${escapeHtml(m.renterGreeting)}</p>${table.html}${preAuth.html}${fees.html}<p>${escapeHtml(m.cancellationContact)}</p>`
+  const text = `${m.renterGreeting}\n\n${table.text}${preAuth.text}${fees.text}\n\n${m.cancellationContact}`
 
   return { subject, html, text }
 }
