@@ -1,6 +1,7 @@
 import { buttonVariants } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import { isRenterDocumentsEnabled } from '@/vite/config/features'
+import { useUnreadBadge } from '@/vite/messaging/unread-badge'
 import { LocaleSwitcher } from '@/vite/nav/LocaleSwitcher'
 import { MobileMenu, type NavItem } from '@/vite/nav/MobileMenu'
 import { NavBadge } from '@/vite/nav/NavBadge'
@@ -32,10 +33,24 @@ export function Navbar() {
   // new bookings; the count rides the Bookings nav item as a red dot.
   const isBusinessView = viewMode === 'business'
   const { count: newBookingsCount } = useNewBookingsBadge({ enabled: isBusinessView })
+  // #1032: renter unread-message badge on the Messages nav item (server-tracked,
+  // unlike the operator badge); only scanned in renter view.
+  const { count: unreadMessages } = useUnreadBadge({ userId: session?.user?.id, enabled: isRenter })
 
   const renterNavItems: readonly NavItem[] = isRenter
     ? [
         { to: '/$locale/bookings', label: t('myBookings') },
+        {
+          to: '/$locale/messages',
+          label: t('messages'),
+          // exactOptionalPropertyTypes: only attach the badge when there is one.
+          ...(unreadMessages > 0
+            ? {
+                badge: unreadMessages,
+                badgeLabel: t('unreadMessages', { count: unreadMessages }),
+              }
+            : {}),
+        },
         // Documents (IDP upload, #459) is gated OFF for the beta demo: the
         // instant-book flow no longer requires it. See vite/config/features.ts.
         ...(isRenterDocumentsEnabled()
@@ -50,7 +65,7 @@ export function Navbar() {
         label: t(item.labelKey),
         // exactOptionalPropertyTypes: only attach `badge` when there is one.
         ...(item.to === '/$locale/manage/bookings' && newBookingsCount > 0
-          ? { badge: newBookingsCount }
+          ? { badge: newBookingsCount, badgeLabel: t('newBookings', { count: newBookingsCount }) }
           : {}),
       }))
     : session?.user
@@ -86,9 +101,7 @@ export function Navbar() {
                 className={cn(buttonVariants({ variant: 'ghost', size: 'sm' }))}
               >
                 {item.label}
-                {item.badge ? (
-                  <NavBadge count={item.badge} label={t('newBookings', { count: item.badge })} />
-                ) : null}
+                {item.badge ? <NavBadge count={item.badge} label={item.badgeLabel ?? ''} /> : null}
               </Link>
             ))}
           </nav>

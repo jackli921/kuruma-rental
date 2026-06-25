@@ -5,6 +5,7 @@ import { type UserRole, requireAuth } from '../../src/middleware/auth'
 import { InMemoryBookingRepository } from '../../src/repositories/in-memory/booking'
 import { InMemoryPaymentAnomalyRepository } from '../../src/repositories/in-memory/payment-anomaly'
 import { InMemoryPaymentEventRepository } from '../../src/repositories/in-memory/payment-event'
+import { InMemoryPaymentRefundRepository } from '../../src/repositories/in-memory/payment-refund'
 import { createPaymentRoutes } from '../../src/routes/payments'
 import { PaymentService } from '../../src/services/payment/payment'
 import type {
@@ -45,6 +46,16 @@ class StubGateway implements PaymentGateway {
     if (!this.event) throw new Error('bad signature')
     return this.event
   }
+  // Refund surface (#851) is unused by these checkout/webhook route tests.
+  async refundPayment(): Promise<never> {
+    throw new Error('no refund programmed')
+  }
+  async retrieveRefund(): Promise<never> {
+    throw new Error('no refund programmed')
+  }
+  async listRefundsByPaymentIntent(): Promise<never> {
+    throw new Error('no refund programmed')
+  }
 }
 
 function setup(role: UserRole = 'RENTER', userId = 'renter-1') {
@@ -54,6 +65,7 @@ function setup(role: UserRole = 'RENTER', userId = 'renter-1') {
   const gateway = new StubGateway()
   const service = new PaymentService(
     paymentRepo,
+    new InMemoryPaymentRefundRepository(),
     bookingRepo,
     gateway,
     new InMemoryPaymentAnomalyRepository(),
@@ -73,6 +85,7 @@ function publicApp() {
   const gateway = new StubGateway()
   const service = new PaymentService(
     paymentRepo,
+    new InMemoryPaymentRefundRepository(),
     bookingRepo,
     gateway,
     new InMemoryPaymentAnomalyRepository(),
@@ -101,6 +114,7 @@ describe('POST /bookings/:id/checkout-session', () => {
     const bookingRepo = new InMemoryBookingRepository(new Map([[BOOKING_ID, makeBooking()]]))
     const service = new PaymentService(
       new InMemoryPaymentEventRepository(),
+      new InMemoryPaymentRefundRepository(),
       bookingRepo,
       new StubGateway(),
       new InMemoryPaymentAnomalyRepository(),

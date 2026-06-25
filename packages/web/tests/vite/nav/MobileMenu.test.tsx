@@ -68,10 +68,17 @@ describe('MobileMenu', () => {
     )
   })
 
-  it('renders the new-order red-dot badge on a nav item that carries a count (#611)', () => {
+  it('renders a red-dot badge with the item-supplied label on a nav item that carries a count (#611)', () => {
     renderMenu({
       session,
-      navItems: [{ to: '/$locale/manage/bookings', label: 'Bookings', badge: 3 }],
+      navItems: [
+        {
+          to: '/$locale/manage/bookings',
+          label: 'Bookings',
+          badge: 3,
+          badgeLabel: '3 new bookings',
+        },
+      ],
     })
     const badge = screen.getByRole('status')
     expect(badge).toHaveTextContent('3')

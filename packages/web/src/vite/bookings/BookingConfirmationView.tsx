@@ -7,6 +7,7 @@ import { PreAuthHandoffCard } from '@/vite/bookings/PreAuthHandoffCard'
 import type { BookingDto } from '@/vite/bookings/api'
 import { buildStorefrontSearch } from '@/vite/bookings/storefront-link'
 import { isCancellationEnabled } from '@/vite/config/features'
+import { MessageHostLink } from '@/vite/messaging/MessageHostLink'
 import type { VehicleClassData } from '@/vite/vehicles/classes'
 import { deriveBaseJpy, rentalDays } from '@kuruma/shared/lib/pricing'
 import { Link } from '@tanstack/react-router'
@@ -19,6 +20,8 @@ interface BookingConfirmationViewProps {
   readonly vehicleClass: VehicleClassData | null
   /** Session CSRF token for the self-cancel write; `null` hides the cancel control (#856). */
   readonly csrfToken: string | null
+  /** The booking's messaging thread (#1032), or `null` when none exists — hides the link. */
+  readonly threadId: string | null
 }
 
 // Instant-book confirmation (#511, ported from the frozen Next page). Pure
@@ -31,6 +34,7 @@ export function BookingConfirmationView({
   booking,
   vehicleClass,
   csrfToken,
+  threadId,
 }: BookingConfirmationViewProps) {
   const t = useTranslations('bookings.confirmation')
   const locale = useLocale()
@@ -96,14 +100,17 @@ export function BookingConfirmationView({
               <p className="text-sm text-muted-foreground">{t('rentalCompany')}</p>
               <p className="font-medium">{booking.operator.name}</p>
             </div>
-            <Link
-              to="/$locale/storefronts/$locationId"
-              params={{ locale, locationId: booking.pickupLocationId }}
-              search={buildStorefrontSearch(booking)}
-              className={cn(buttonVariants({ variant: 'outline' }), 'shrink-0')}
-            >
-              {t('viewStorefront')}
-            </Link>
+            <div className="flex shrink-0 flex-col gap-2 sm:flex-row">
+              {threadId ? <MessageHostLink threadId={threadId} locale={locale} /> : null}
+              <Link
+                to="/$locale/storefronts/$locationId"
+                params={{ locale, locationId: booking.pickupLocationId }}
+                search={buildStorefrontSearch(booking)}
+                className={cn(buttonVariants({ variant: 'outline' }), 'shrink-0')}
+              >
+                {t('viewStorefront')}
+              </Link>
+            </div>
           </CardContent>
         </Card>
       )}

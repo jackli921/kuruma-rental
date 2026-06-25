@@ -101,6 +101,7 @@
     "myBookings": "我的预订",
     "documents": "证件",
     "newBookings": "{count} 个新订单",
+    "unreadMessages": "{count} 条未读消息",
     "settings": "设置",
     "team": "团队"
   },
@@ -880,7 +881,10 @@
       "subtitle": "您的对话",
       "empty": "暂无消息",
       "emptyDescription": "开始对话或等待回复。",
-      "unread": "{count} 条未读"
+      "unread": "{count} 条未读",
+      "host": "房东",
+      "loadError": "无法加载您的消息",
+      "retry": "重试"
     },
     "thread": {
       "sendPlaceholder": "输入消息...",
@@ -892,7 +896,14 @@
       "today": "今天",
       "yesterday": "昨天",
       "back": "返回收件箱",
-      "composeLabel": "撰写消息"
+      "composeLabel": "撰写消息",
+      "cancelled": "此预订已取消",
+      "translating": "翻译中...",
+      "translationUnavailable": "无法翻译",
+      "retry": "重试"
+    },
+    "entry": {
+      "messageHost": "给房东发消息"
     }
   },
   "bookings": {

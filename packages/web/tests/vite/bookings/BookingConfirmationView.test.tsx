@@ -17,7 +17,7 @@ vi.mock('@tanstack/react-router', () => ({
     children,
   }: {
     to: string
-    params?: { locale?: string; locationId?: string }
+    params?: { locale?: string; locationId?: string; threadId?: string }
     search?: Record<string, string>
     children: ReactNode
   }) => (
@@ -26,6 +26,7 @@ vi.mock('@tanstack/react-router', () => ({
       data-to={to}
       data-locale={params?.locale}
       data-location={params?.locationId}
+      data-thread={params?.threadId}
       data-search={search ? new URLSearchParams(search).toString() : undefined}
     >
       {children}
@@ -78,6 +79,7 @@ function renderView(
   booking: BookingDto,
   vehicleClass: VehicleClassData | null = null,
   csrfToken: string | null = 'csrf-tok',
+  threadId: string | null = null,
 ) {
   return render(
     <QueryClientProvider client={new QueryClient()}>
@@ -86,6 +88,7 @@ function renderView(
           booking={booking}
           vehicleClass={vehicleClass}
           csrfToken={csrfToken}
+          threadId={threadId}
         />
       </IntlProvider>
     </QueryClientProvider>,
@@ -200,6 +203,27 @@ describe('BookingConfirmationView', () => {
     renderView(makeBooking({ operator: undefined }))
     expect(screen.getByText('ABCD1234')).toBeInTheDocument() // view mounted
     expect(screen.queryByText('Rental company')).not.toBeInTheDocument()
+  })
+
+  // #1032: when the booking has a messaging thread, the confirmation surfaces a
+  // "Message host" deep link to that conversation beside the storefront link.
+  it('links to the booking thread when a threadId is provided', () => {
+    renderView(
+      makeBooking({ operator: { name: 'Best Car Rental', preAuthHandoffUrl: null } }),
+      null,
+      'csrf-tok',
+      'th-7',
+    )
+    const link = screen.getByRole('link', { name: en.messaging.entry.messageHost })
+    expect(link).toHaveAttribute('data-to', '/$locale/messages/$threadId')
+    expect(link).toHaveAttribute('data-thread', 'th-7')
+  })
+
+  it('omits the Message host link when there is no thread for the booking', () => {
+    renderView(makeBooking({ operator: { name: 'Best Car Rental', preAuthHandoffUrl: null } }))
+    expect(
+      screen.queryByRole('link', { name: en.messaging.entry.messageHost }),
+    ).not.toBeInTheDocument()
   })
 
   it('links to the storefront with a JST range the route parser accepts', () => {

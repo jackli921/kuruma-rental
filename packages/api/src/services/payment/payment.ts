@@ -10,13 +10,20 @@ import type {
   BookingRepository,
   PaymentAnomalyRepository,
   PaymentEventRepository,
+  PaymentRefundRepository,
 } from '../../repositories/types'
-import type { Booking, PaymentAnomalyKind } from '../../stores'
-import type { PaymentGateway, VerifiedPaymentEvent } from './payment-gateway'
+import type { Booking, PaymentAnomalyKind, PaymentRefund } from '../../stores'
+import { RefundRejectedError } from './payment-gateway'
+import type { PaymentGateway, StripeRefund, VerifiedPaymentEvent } from './payment-gateway'
 
 const CURRENCY = 'jpy'
 const COMPLETED_EVENT = 'checkout.session.completed'
 const PAID = 'paid'
+// Stripe fires `refund.updated` as a refund moves through its lifecycle. Our refund
+// carries `metadata.bookingId` (set at refundPayment), so this event — unlike
+// `charge.refunded` (a Charge whose metadata we never set) — self-correlates (#851).
+const REFUND_EVENT = 'refund.updated'
+const REFUND_SUCCEEDED = 'succeeded'
 
 export interface PaymentConfig {
   /** Origin the renter is redirected back to after Stripe Checkout. */
@@ -34,6 +41,7 @@ export type WebhookOutcome =
   | 'duplicate' // a redelivered event/session — no-op
   | 'double_payment' // a DIFFERENT session already paid this booking — anomaly
   | 'amount_mismatch' // amount/currency != the booking snapshot — rejected
+  | 'refund_confirmed' // a Stripe-verified succeeded refund → booking REFUNDED (#851)
   | 'ignored' // wrong type / unpaid / missing or unknown booking
   | 'invalid_signature' // bad or stale Stripe signature
 
@@ -70,6 +78,7 @@ export interface BookingPaymentStatus {
 export class PaymentService {
   constructor(
     private readonly paymentEvents: PaymentEventRepository,
+    private readonly paymentRefunds: PaymentRefundRepository,
     private readonly bookings: BookingRepository,
     private readonly gateway: PaymentGateway,
     private readonly anomalies: PaymentAnomalyRepository,
@@ -150,6 +159,13 @@ export class PaymentService {
       return { status: 400, outcome: 'invalid_signature' }
     }
 
+    // A Stripe-verified succeeded refund is the push half of "any verified signal
+    // advances state" (#851); the reconciler pull is the other. Confirm is shared and
+    // idempotent, so a push and a pull racing converge.
+    if (event.type === REFUND_EVENT) {
+      return this.handleRefundWebhook(event)
+    }
+
     if (event.type !== COMPLETED_EVENT || event.paymentStatus !== PAID) {
       return { status: 200, outcome: 'ignored' }
     }
@@ -222,6 +238,28 @@ export class PaymentService {
     }
   }
 
+  /** A verified `refund.updated` push (#851). Only a `succeeded` refund advances
+   *  state; every other status is left for the next reconciler pass. The booking is
+   *  loaded under SYSTEM_CONTEXT (Stripe is unauthenticated) purely to ignore an
+   *  unknown booking — `confirmRefundSucceeded`'s own guards make this idempotent, so
+   *  a redelivery flips 0 rows and is a safe no-op. */
+  private async handleRefundWebhook(event: VerifiedPaymentEvent): Promise<WebhookResult> {
+    if (event.refundStatus !== REFUND_SUCCEEDED) return { status: 200, outcome: 'ignored' }
+    const bookingId = event.metadata.bookingId
+    if (!bookingId) return { status: 200, outcome: 'ignored' }
+    const booking = await this.bookings.findById(SYSTEM_CONTEXT, bookingId)
+    if (!booking) return { status: 200, outcome: 'ignored' }
+    await this.confirmRefundSucceeded(bookingId)
+    return { status: 200, outcome: 'refund_confirmed' }
+  }
+
+  /** Does the booking have a captured (SUCCEEDED) payment? The cancel paths (#851)
+   *  use this to decide settlement. Unscoped by design — the caller already
+   *  authorized the booking; payment_events is keyed by bookingId, not tenant. */
+  async isBookingPaid(bookingId: string): Promise<boolean> {
+    return (await this.paymentEvents.findSucceededByBookingId(bookingId)) !== null
+  }
+
   async getBookingPaymentStatus(
     ctx: CallerContext,
     bookingId: string,
@@ -230,5 +268,130 @@ export class PaymentService {
     if (!booking) return null
     const paid = await this.paymentEvents.findSucceededByBookingId(bookingId)
     return { status: paid ? 'PAID' : 'UNPAID' }
+  }
+
+  /**
+   * Initiate (or re-drive) the refund for a cancelled, PAID booking (#851). The
+   * single idempotent entry point shared by the eager post-commit fire AND the
+   * reconciler: claim a durable receipt, create-or-retrieve/adopt at Stripe, then
+   * confirm on `succeeded`. No-op when UNPAID, when nothing is owed, or when the
+   * receipt is already terminal. `intendedAmountJpy` seeds a fresh claim (renter =
+   * policy refundAmount, operator = full total) and is clamped to the captured amount.
+   */
+  async initiateCancellationRefund(booking: Booking, intendedAmountJpy: number): Promise<void> {
+    // Only a PAID booking with a settled PaymentIntent has money to move.
+    const payment = await this.paymentEvents.findSucceededByBookingId(booking.id)
+    const paymentIntentId = payment?.stripePaymentIntentId
+    if (!payment || !paymentIntentId) return
+    // Clamp: never refund more than was captured (guards partial captures / drift).
+    const amountJpy = Math.min(intendedAmountJpy, payment.grossJpy)
+    if (amountJpy <= 0) return
+
+    // Durable "work already started" receipt, written BEFORE Stripe. Idempotent and
+    // forward-only: a re-drive returns the existing row (carrying any re_…).
+    const receipt = await this.paymentRefunds.claim({
+      bookingId: booking.id,
+      operatorId: booking.operatorId,
+      stripePaymentIntentId: paymentIntentId,
+      amountJpy,
+    })
+    if (receipt.status === 'FAILED') return // terminal — left for the human surface
+    if (receipt.status === 'SUCCEEDED') {
+      // Receipt settled but the booking may still be REFUND_DUE (a crash between the
+      // two confirm writes) — finish the booking side idempotently.
+      await this.confirmBookingRefunded(booking.id)
+      return
+    }
+
+    const refund = await this.resolveRefund(booking, receipt, amountJpy)
+    if (!refund) return // terminal create rejection — receipt already marked FAILED
+    if (!receipt.stripeRefundId) {
+      await this.paymentRefunds.attachStripeRefund(booking.id, refund.id)
+    }
+    await this.applyRefundStatus(booking.id, refund)
+  }
+
+  /** Resolve the Stripe refund for this booking: an already-attached one (pull —
+   *  self-heals a lost webhook), else a correlation-matching orphan to adopt, else a
+   *  fresh create. Returns null only when create is TERMINALLY rejected. */
+  private async resolveRefund(
+    booking: Booking,
+    receipt: PaymentRefund,
+    amountJpy: number,
+  ): Promise<StripeRefund | null> {
+    if (receipt.stripeRefundId) {
+      return this.gateway.retrieveRefund(receipt.stripeRefundId)
+    }
+    const adoptable = await this.findAdoptableRefund(
+      booking.id,
+      receipt.stripePaymentIntentId,
+      amountJpy,
+    )
+    if (adoptable) return adoptable
+    try {
+      return await this.gateway.refundPayment({
+        paymentIntentId: receipt.stripePaymentIntentId,
+        amountJpy,
+        idempotencyKey: `refund:${booking.id}`,
+        metadata: { bookingId: booking.id },
+      })
+    } catch (err) {
+      // Terminal (already-refunded / insufficient) → FAILED for the human surface.
+      // Transient errors propagate so the reconciler retries (receipt stays PENDING).
+      if (err instanceof RefundRejectedError) {
+        await this.paymentRefunds.markStatus(booking.id, 'FAILED')
+        return null
+      }
+      throw err
+    }
+  }
+
+  /** A refund already on the PI is ours to adopt ONLY when the full business
+   *  correlation matches — bookingId + amount + currency + PI, non-failed. A foreign
+   *  or partial refund (e.g. a manual operator refund) is never adopted (#851). */
+  private async findAdoptableRefund(
+    bookingId: string,
+    paymentIntentId: string,
+    amountJpy: number,
+  ): Promise<StripeRefund | null> {
+    const refunds = await this.gateway.listRefundsByPaymentIntent(paymentIntentId)
+    return (
+      refunds.find(
+        (r) =>
+          r.metadata.bookingId === bookingId &&
+          r.amount === amountJpy &&
+          r.currency === CURRENCY &&
+          r.paymentIntentId === paymentIntentId &&
+          r.status !== 'failed' &&
+          r.status !== 'canceled',
+      ) ?? null
+    )
+  }
+
+  /** Map a Stripe-verified refund status onto our records. A `succeeded` (push or
+   *  pull) advances receipt + booking; terminal `failed`/`canceled` marks FAILED; a
+   *  pending refund is left for the next reconciler pass. */
+  private async applyRefundStatus(bookingId: string, refund: StripeRefund): Promise<void> {
+    if (refund.status === 'succeeded') {
+      await this.confirmRefundSucceeded(bookingId)
+    } else if (refund.status === 'failed' || refund.status === 'canceled') {
+      await this.paymentRefunds.markStatus(bookingId, 'FAILED')
+    }
+    // pending / requires_action → stay PENDING; the reconciler retrieves again later.
+  }
+
+  /** Terminal success: receipt SUCCEEDED + booking REFUND_DUE → REFUNDED. Both writes
+   *  are guarded/forward-only, so a webhook push and a reconciler pull racing converge
+   *  (whoever lands first wins; the other is a no-op). */
+  private async confirmRefundSucceeded(bookingId: string): Promise<void> {
+    await this.paymentRefunds.markStatus(bookingId, 'SUCCEEDED')
+    await this.confirmBookingRefunded(bookingId)
+  }
+
+  private async confirmBookingRefunded(bookingId: string): Promise<void> {
+    await this.bookings.markCancellationSettlement(SYSTEM_CONTEXT, bookingId, {
+      from: 'REFUND_DUE',
+      to: 'REFUNDED',
+    })
   }
 }

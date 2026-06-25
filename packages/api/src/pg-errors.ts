@@ -65,6 +65,14 @@ export const PAYMENT_EVENT_SESSION_CONSTRAINT = 'payment_events_stripeCheckoutSe
 export const PAYMENT_EVENT_ONE_SUCCESS_CONSTRAINT = 'payment_events_one_success_per_booking'
 
 /**
+ * Partial unique index on payment_refunds(stripeRefundId) WHERE stripeRefundId IS
+ * NOT NULL (#851). One Stripe refund (re_…) binds to at most one booking's receipt;
+ * a 23505 on this name means an adoption bug tried to attach the same refund to a
+ * second booking — a loud invariant breach, never a silent no-op.
+ */
+export const PAYMENT_REFUND_STRIPE_REFUND_CONSTRAINT = 'payment_refunds_stripeRefundId_unique'
+
+/**
  * Partial unique index on provider_invites (operatorId, email) WHERE status=
  * 'PENDING' (#904 slice 2). At most one live invite per operator+email; REVOKED/
  * ACCEPTED rows free the slot so a re-invite works. A 23505 on this name means the

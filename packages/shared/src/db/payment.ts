@@ -1,6 +1,6 @@
 import { sql } from 'drizzle-orm'
 import { index, integer, pgEnum, pgTable, text, timestamp, uniqueIndex } from 'drizzle-orm/pg-core'
-import { PAYMENT_EVENT_STATUSES } from '../enums'
+import { PAYMENT_EVENT_STATUSES, PAYMENT_REFUND_STATUSES } from '../enums'
 import { operators } from './auth'
 import { bookings } from './booking'
 
@@ -45,6 +45,49 @@ export const paymentEvents = pgTable(
     uniqueIndex('payment_events_one_success_per_booking')
       .on(table.bookingId)
       .where(sql`status = 'SUCCEEDED'`),
+  ],
+)
+
+// The durable receipt for an automated cancellation refund (#851). One row per
+// booking (UNIQUE) — the "work already started" half of the REFUND_DUE outbox and
+// the create-dedup ledger: it carries re_… so a re-drive RETRIEVES instead of
+// re-creating, surviving Stripe's ~24h idempotency-key pruning. FORWARD-ONLY status.
+export const paymentRefundStatusEnum = pgEnum('payment_refund_status', PAYMENT_REFUND_STATUSES)
+export const paymentRefunds = pgTable(
+  'payment_refunds',
+  {
+    id: text('id')
+      .primaryKey()
+      .$defaultFn(() => crypto.randomUUID()),
+    bookingId: text('bookingId')
+      .notNull()
+      .references(() => bookings.id),
+    // Partner attribution for the operator refund surface — re-derived from the
+    // booking, never trusted from Stripe metadata (mirrors payment_events).
+    operatorId: text('operatorId')
+      .notNull()
+      .references(() => operators.id, { onDelete: 'restrict' }),
+    // The captured payment's PaymentIntent — what we refund against.
+    stripePaymentIntentId: text('stripePaymentIntentId').notNull(),
+    // Stripe refund id (re_…); null until create/adopt attaches it.
+    stripeRefundId: text('stripeRefundId'),
+    // Whole JPY (zero-decimal): renter = policy refundAmount, operator = full total.
+    amountJpy: integer('amountJpy').notNull(),
+    status: paymentRefundStatusEnum('status').notNull().default('PENDING'),
+    createdAt: timestamp('createdAt', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updatedAt', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    // FK cover (lint:fk-indexes) for the operator reference.
+    index('idx_payment_refunds_operatorId').on(table.operatorId),
+    // BUSINESS-FACT seal: at most one refund per booking (the create-dedup ledger).
+    // Also covers the bookingId FK and the findByBookingId lookup.
+    uniqueIndex('payment_refunds_bookingId_unique').on(table.bookingId),
+    // One Stripe refund (re_…) binds to at most one booking — an adoption bug can't
+    // attach the same re_ to two rows. Partial so the null-until-created rows don't collide.
+    uniqueIndex('payment_refunds_stripeRefundId_unique')
+      .on(table.stripeRefundId)
+      .where(sql`"stripeRefundId" is not null`),
   ],
 )
 

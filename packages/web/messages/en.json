@@ -101,6 +101,7 @@
     "myBookings": "My Bookings",
     "documents": "Documents",
     "newBookings": "{count, plural, one {# new booking} other {# new bookings}}",
+    "unreadMessages": "{count, plural, one {# unread message} other {# unread messages}}",
     "settings": "Settings",
     "team": "Team"
   },
@@ -880,7 +881,10 @@
       "subtitle": "Your conversations",
       "empty": "No messages yet",
       "emptyDescription": "Start a conversation or wait for a reply.",
-      "unread": "{count} unread"
+      "unread": "{count} unread",
+      "host": "Host",
+      "loadError": "Couldn't load your messages",
+      "retry": "Try again"
     },
     "thread": {
       "sendPlaceholder": "Type a message...",
@@ -892,7 +896,14 @@
       "today": "Today",
       "yesterday": "Yesterday",
       "back": "Back to inbox",
-      "composeLabel": "Compose message"
+      "composeLabel": "Compose message",
+      "cancelled": "This booking was cancelled",
+      "translating": "Translating...",
+      "translationUnavailable": "Translation unavailable",
+      "retry": "Retry"
+    },
+    "entry": {
+      "messageHost": "Message host"
     }
   },
   "bookings": {
