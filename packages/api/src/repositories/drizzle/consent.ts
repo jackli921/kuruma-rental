@@ -163,6 +163,31 @@ export class DrizzleConsentRepository implements ConsentRepository {
     return row ? toAcceptance(row) : undefined
   }
 
+  async findAcceptanceById(id: string): Promise<ConsentAcceptance | undefined> {
+    const [row] = await this.db
+      .select()
+      .from(consentAcceptances)
+      .where(eq(consentAcceptances.id, id))
+      .limit(1)
+    return row ? toAcceptance(row) : undefined
+  }
+
+  async findAcceptancesByUser(userId: string): Promise<ConsentAcceptance[]> {
+    const rows = await this.db
+      .select()
+      .from(consentAcceptances)
+      .where(eq(consentAcceptances.userId, userId))
+    return rows.map(toAcceptance)
+  }
+
+  async findAcceptancesByBooking(bookingId: string): Promise<ConsentAcceptance[]> {
+    const rows = await this.db
+      .select()
+      .from(consentAcceptances)
+      .where(eq(consentAcceptances.bookingId, bookingId))
+    return rows.map(toAcceptance)
+  }
+
   async createAcceptance(data: NewConsentAcceptance): Promise<ConsentAcceptance> {
     const [row] = await this.db
       .insert(consentAcceptances)

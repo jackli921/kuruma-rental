@@ -46,4 +46,7 @@ export interface ConsentRepository {
     documentId: string,
   ): Promise<ConsentAcceptance | undefined>
   createAcceptance(data: NewConsentAcceptance): Promise<ConsentAcceptance>
+  findAcceptanceById(id: string): Promise<ConsentAcceptance | undefined>
+  findAcceptancesByUser(userId: string): Promise<ConsentAcceptance[]>
+  findAcceptancesByBooking(bookingId: string): Promise<ConsentAcceptance[]>
 }
