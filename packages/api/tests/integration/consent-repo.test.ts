@@ -8,10 +8,10 @@ import { eq, inArray } from 'drizzle-orm'
 import { drizzle } from 'drizzle-orm/postgres-js'
 import postgres from 'postgres'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
-import type { Db } from './shared'
-import { DrizzleConsentRepository } from './consent'
+import { DrizzleConsentRepository } from '../../src/repositories/drizzle/consent'
+import type { Db } from '../../src/repositories/drizzle/shared'
 
-const url = process.env['DATABASE_URL']
+const url = process.env.DATABASE_URL
 if (!url) throw new Error('DATABASE_URL must be set to run this test')
 
 const client = postgres(url, { max: 1 })
@@ -70,9 +70,7 @@ beforeAll(async () => {
 
 afterAll(async () => {
   if (createdAcceptanceIds.length > 0) {
-    await db
-      .delete(consentAcceptances)
-      .where(inArray(consentAcceptances.id, createdAcceptanceIds))
+    await db.delete(consentAcceptances).where(inArray(consentAcceptances.id, createdAcceptanceIds))
   }
   if (createdDocIds.length > 0) {
     await db.delete(consentDocuments).where(inArray(consentDocuments.id, createdDocIds))
