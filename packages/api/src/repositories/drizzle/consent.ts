@@ -46,6 +46,8 @@ function toAcceptance(r: AcceptanceRow): ConsentAcceptance {
     method: r.method,
     recordSignature: r.recordSignature,
     signingKeyId: r.signingKeyId,
+    signatureCanonicalVersion: r.signatureCanonicalVersion,
+    documentSnapshot: r.documentSnapshot,
     signatureRef: r.signatureRef,
     createdAt: r.createdAt,
   }

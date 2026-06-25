@@ -34,6 +34,8 @@ const baseAcceptance: NewConsentAcceptance = {
   method: 'CLICKWRAP' as const,
   recordSignature: 'sig',
   signingKeyId: 'v1',
+  signatureCanonicalVersion: 'v1',
+  documentSnapshot: null,
 }
 
 describe('InMemoryConsentRepository', () => {
