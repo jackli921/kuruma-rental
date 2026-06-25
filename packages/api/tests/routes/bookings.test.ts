@@ -22,6 +22,12 @@ import { BookingService } from '../../src/services/booking'
 import type { Location, User, Vehicle, VehicleClass } from '../../src/stores'
 import { testAuthMiddleware } from '../helpers/auth'
 import { bookingInput } from '../helpers/booking'
+import { makeInertConsentGate } from '../helpers/consent'
+
+// #877 2b: an inert consent gate (nothing published ⇒ getRequiredReconsents is
+// empty ⇒ allows) so these pre-#877 booking-route tests exercise the create path
+// unchanged. The gate's own blocking behavior is covered in booking-consent-gate.test.ts.
+const inertConsentGate = makeInertConsentGate()
 
 // Slice 6 (#392): a renter books a CONCRETE vehicle chosen in the storefront
 // (slice 5). operatorId / classId / assignedVehicleId / pickup turnaround /
@@ -208,7 +214,7 @@ describe('Booking Routes', () => {
     app = new Hono()
     // PLATFORM_ADMIN with USER1 identity — mirrors pre-auth test data.
     app.use('*', testAuthMiddleware(USER1, 'PLATFORM_ADMIN'))
-    app.route('/', createBookingRoutes(service))
+    app.route('/', createBookingRoutes(service, inertConsentGate))
   })
 
   describe('GET /bookings', () => {
@@ -307,7 +313,7 @@ describe('Booking Routes', () => {
       // USER2 creates a booking via a separate app instance, on a 2nd vehicle.
       const app2 = new Hono()
       app2.use('*', testAuthMiddleware(USER2, 'ADMIN'))
-      app2.route('/', createBookingRoutes(service))
+      app2.route('/', createBookingRoutes(service, inertConsentGate))
       await app2.request('/bookings', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -317,7 +323,7 @@ describe('Booking Routes', () => {
       // Query as RENTER — should only see own bookings.
       const renterApp = new Hono()
       renterApp.use('*', testAuthMiddleware(USER1, 'RENTER'))
-      renterApp.route('/', createBookingRoutes(service))
+      renterApp.route('/', createBookingRoutes(service, inertConsentGate))
 
       const res = await renterApp.request('/bookings')
       const body = await res.json()
@@ -689,7 +695,7 @@ describe('Booking Routes', () => {
     function renterRequest(input: Record<string, unknown>) {
       const renterApp = new Hono()
       renterApp.use('*', testAuthMiddleware(USER1, 'RENTER'))
-      renterApp.route('/', createBookingRoutes(service))
+      renterApp.route('/', createBookingRoutes(service, inertConsentGate))
       return renterApp.request('/bookings', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -1243,7 +1249,7 @@ describe('Booking Routes', () => {
 
       const renterApp = new Hono()
       renterApp.use('*', testAuthMiddleware(USER1, 'RENTER'))
-      renterApp.route('/', createBookingRoutes(service))
+      renterApp.route('/', createBookingRoutes(service, inertConsentGate))
 
       const res = await renterApp.request(`/bookings/${created.data.id}/status`, {
         method: 'PATCH',
@@ -1457,14 +1463,14 @@ describe('Booking Routes', () => {
     function operatorApp() {
       const opApp = new Hono()
       opApp.use('*', testAuthMiddleware(OP_USER, 'OPERATOR_OWNER', OPERATOR))
-      opApp.route('/', createBookingRoutes(service))
+      opApp.route('/', createBookingRoutes(service, inertConsentGate))
       return opApp
     }
 
     it('forbids a renter from substituting (403)', async () => {
       const renterApp = new Hono()
       renterApp.use('*', testAuthMiddleware(USER1, 'RENTER'))
-      renterApp.route('/', createBookingRoutes(service))
+      renterApp.route('/', createBookingRoutes(service, inertConsentGate))
 
       const res = await renterApp.request(`/bookings/${crypto.randomUUID()}/substitute`, {
         method: 'POST',
@@ -1532,13 +1538,13 @@ describe('Booking Routes', () => {
     function operatorApp() {
       const a = new Hono()
       a.use('*', testAuthMiddleware(OP_USER, 'OPERATOR_OWNER', OPERATOR))
-      a.route('/', createBookingRoutes(service))
+      a.route('/', createBookingRoutes(service, inertConsentGate))
       return a
     }
     function renterApp() {
       const a = new Hono()
       a.use('*', testAuthMiddleware(USER1, 'RENTER'))
-      a.route('/', createBookingRoutes(service))
+      a.route('/', createBookingRoutes(service, inertConsentGate))
       return a
     }
     async function freshBookingId(): Promise<string> {
@@ -1654,7 +1660,7 @@ describe('Booking Routes', () => {
     function operatorApp() {
       const opApp = new Hono()
       opApp.use('*', testAuthMiddleware(OP_USER, 'OPERATOR_OWNER', OPERATOR))
-      opApp.route('/', createBookingRoutes(service))
+      opApp.route('/', createBookingRoutes(service, inertConsentGate))
       return opApp
     }
 
@@ -1673,7 +1679,7 @@ describe('Booking Routes', () => {
     it('forbids a renter (403)', async () => {
       const renterApp = new Hono()
       renterApp.use('*', testAuthMiddleware(USER1, 'RENTER'))
-      renterApp.route('/', createBookingRoutes(service))
+      renterApp.route('/', createBookingRoutes(service, inertConsentGate))
 
       const res = await renterApp.request(
         `/bookings/${crypto.randomUUID()}/substitution-candidates`,

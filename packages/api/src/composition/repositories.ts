@@ -272,7 +272,7 @@ export function buildOverrideRepos(overrides: AppOverrides): Repos {
   const operatorMembershipRepo =
     overrides.operatorMembershipRepo ?? new InMemoryOperatorMembershipRepository()
   const auditLogRepo = new InMemoryAuditLogRepository()
-  const consentRepo = new InMemoryConsentRepository()
+  const consentRepo = overrides.consentRepo ?? new InMemoryConsentRepository()
   const runOperatorGrant: RunOperatorGrant = (fn) =>
     fn({ memberships: operatorMembershipRepo, users: userRepo, invites: providerInviteRepo })
   return {

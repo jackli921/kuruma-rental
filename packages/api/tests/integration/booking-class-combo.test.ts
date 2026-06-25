@@ -14,6 +14,7 @@ import {
 import { createBookingRoutes } from '../../src/routes/bookings'
 import { BookingService } from '../../src/services/booking'
 import { testAuthMiddleware } from '../helpers/auth'
+import { makeInertConsentGate } from '../helpers/consent'
 import {
   cleanupBookings,
   cleanupLocations,
@@ -132,7 +133,7 @@ describe('CLASS_COMBO submit serialization (real pg, #464 slice 2d.5)', () => {
     // ctx.userId as the booking renterId when no override is passed.
     app = new Hono()
     app.use('*', testAuthMiddleware(renterId, 'PLATFORM_ADMIN'))
-    app.route('/', createBookingRoutes(service))
+    app.route('/', createBookingRoutes(service, makeInertConsentGate()))
   })
 
   afterAll(async () => {
