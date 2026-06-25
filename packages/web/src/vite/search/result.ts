@@ -7,10 +7,12 @@ import {
 import type { RegionNode } from '@kuruma/shared/types/region'
 import type { ResultLocation, SearchResultItem } from '@kuruma/shared/types/search-result'
 
-/** Stable list key — the renter-safe per-car id for SPECIFIC, the class id for a
- *  future CLASS_COMBO row (#464). Shared by the flat list and the map+list view. */
+/** Stable list key — the renter-safe per-car id for SPECIFIC, a location-namespaced
+ *  class id for a CLASS_COMBO row (#464) so the same class offered at two storefronts
+ *  never collides into one React key. Mirrors the API cursor `itemKey` (`c:<loc>:<class>`),
+ *  minus the kind prefix the list doesn't need. Shared by the flat list and map+list view. */
 export function searchResultKey(item: SearchResultItem): string {
-  return item.kind === 'SPECIFIC' ? item.vehicleId : item.classId
+  return item.kind === 'SPECIFIC' ? item.vehicleId : `${item.location.locationId}:${item.classId}`
 }
 
 type Translate = (key: string, values?: Record<string, string | number>) => string
