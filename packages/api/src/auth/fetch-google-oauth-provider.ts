@@ -1,18 +1,26 @@
 // Concrete GoogleOAuthProvider over global fetch (CF Workers + Node). Thin HTTP
 // boundary, deliberately NOT unit-tested — the manual round-trip (#378 Phase 2d)
-// is the real proof; a fetch mock would only restate this file. Constructed in
-// index.ts (composition root); the route depends on the GoogleOAuthProvider port.
+// is the real proof; a fetch mock would only restate this file. The id_token
+// verification LOGIC it delegates to lives in `verifyGoogleIdToken`, which IS unit
+// tested (#1055). Constructed in the composition root; the route depends on the port.
 
+import { createRemoteJWKSet } from 'jose'
 import {
+  GOOGLE_JWKS_ENDPOINT,
   GOOGLE_TOKEN_ENDPOINT,
-  GOOGLE_USERINFO_ENDPOINT,
   type GoogleOAuthConfig,
   type GoogleOAuthProvider,
   type GoogleProfile,
+  verifyGoogleIdToken,
 } from './google'
 
+// Google's JWKS resolver. createRemoteJWKSet caches keys per isolate with a cooldown
+// and only fetches on first verify (no module-scope I/O), so it's safe to build once
+// and reuse — mirroring the lazy-singleton rule for backing services on Workers.
+const googleJwks = createRemoteJWKSet(new URL(GOOGLE_JWKS_ENDPOINT))
+
 export class FetchGoogleOAuthProvider implements GoogleOAuthProvider {
-  async exchangeCode(code: string, config: GoogleOAuthConfig): Promise<{ accessToken: string }> {
+  async exchangeCode(code: string, config: GoogleOAuthConfig): Promise<{ idToken: string }> {
     const res = await fetch(GOOGLE_TOKEN_ENDPOINT, {
       method: 'POST',
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
@@ -25,31 +33,12 @@ export class FetchGoogleOAuthProvider implements GoogleOAuthProvider {
       }).toString(),
     })
     if (!res.ok) throw new Error(`Google token exchange failed (${res.status})`)
-    const data = (await res.json()) as { access_token?: string }
-    if (!data.access_token) throw new Error('Google token response missing access_token')
-    return { accessToken: data.access_token }
+    const data = (await res.json()) as { id_token?: string }
+    if (!data.id_token) throw new Error('Google token response missing id_token')
+    return { idToken: data.id_token }
   }
 
-  async getUserInfo(accessToken: string): Promise<GoogleProfile> {
-    const res = await fetch(GOOGLE_USERINFO_ENDPOINT, {
-      headers: { Authorization: `Bearer ${accessToken}` },
-    })
-    if (!res.ok) throw new Error(`Google userinfo request failed (${res.status})`)
-    const p = (await res.json()) as {
-      sub?: string
-      email?: string
-      email_verified?: boolean
-      name?: string
-      picture?: string
-    }
-    if (!p.sub) throw new Error('Google userinfo response missing sub')
-    // exactOptionalPropertyTypes: omit optional keys rather than set undefined.
-    return {
-      sub: p.sub,
-      ...(p.email !== undefined ? { email: p.email } : {}),
-      ...(p.email_verified !== undefined ? { email_verified: p.email_verified } : {}),
-      ...(p.name !== undefined ? { name: p.name } : {}),
-      ...(p.picture !== undefined ? { picture: p.picture } : {}),
-    }
+  verifyIdToken(idToken: string, config: GoogleOAuthConfig, nonce: string): Promise<GoogleProfile> {
+    return verifyGoogleIdToken(idToken, googleJwks, { clientId: config.clientId, nonce })
   }
 }

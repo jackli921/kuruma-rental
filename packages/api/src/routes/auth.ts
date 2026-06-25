@@ -104,10 +104,14 @@ export function createAuthRoutes(
       // and any syntactically-acceptable invite token; #521 §5) rides in the HttpOnly
       // cookie VALUE, not the `state` param, so returnTo never leaks into the URL.
       const state = randomToken()
+      // A per-flow nonce (#1055): sent in the authorize URL and stashed in this flow's
+      // cookie, so the callback can bind the returned id_token to THIS sign-in.
+      const nonce = randomToken()
       const payload = encodeFlowPayload({
         returnTo: safeReturnPath(c.req.query('returnTo')),
         intent: parseOAuthIntent(c.req.query('intent')),
         invite: safeInviteToken(c.req.query('invite')),
+        nonce,
       })
       // Bound the live flow-cookie count before adding this one (issue #592): an
       // abandoned flow lingers until its 600s TTL, so a rapid abandon — or a
@@ -120,7 +124,7 @@ export function createAuthRoutes(
         deleteCookie(c, name, { path: '/' })
       }
       setCookie(c, flowCookieName(state), payload, OAUTH_FLOW_COOKIE_OPTS)
-      return c.redirect(buildGoogleAuthorizeUrl(googleConfig, state), 302)
+      return c.redirect(buildGoogleAuthorizeUrl(googleConfig, state, nonce), 302)
     })
     .get('/auth/google/callback', async (c) => {
       if (!googleConfig || !googleRuntime) return fail(c, 'Google sign-in is not configured', 503)
@@ -146,15 +150,22 @@ export function createAuthRoutes(
       // below works from these values and never reads it again. decodeFlowPayload
       // re-validates every field (defence in depth — a tampered cookie can't
       // open-redirect); returnTo's locale segment steers server-computed redirects.
-      const { returnTo, intent, invite: inviteToken } = decodeFlowPayload(flowCookie)
+      const { returnTo, intent, invite: inviteToken, nonce } = decodeFlowPayload(flowCookie)
       const locale = localeFromReturnPath(returnTo)
       deleteCookie(c, flowCookieName(state), { path: '/' })
+
+      // A real flow always stashed a nonce; its absence means a malformed/tampered
+      // cookie, so we can't bind the id_token to this flow — fail closed (#1055).
+      if (!nonce) return fail(c, 'Invalid OAuth state', 400)
 
       const secret = process.env.AUTH_SECRET
       if (!secret) return fail(c, 'Server auth is not configured', 500)
 
-      const { accessToken } = await googleRuntime.provider.exchangeCode(code, googleConfig)
-      const profile = await googleRuntime.provider.getUserInfo(accessToken)
+      // Identity from the SIGNED, audience- and nonce-bound id_token (#1055), not an
+      // unsigned /userinfo read. verifyIdToken throws on any failed check, failing
+      // the sign-in closed.
+      const { idToken } = await googleRuntime.provider.exchangeCode(code, googleConfig)
+      const profile = await googleRuntime.provider.verifyIdToken(idToken, googleConfig, nonce)
       const user = await googleRuntime.accountStore.resolveUser(profile)
 
       // Default grant = the user's already-projected identity (a renter, or an

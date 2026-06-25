@@ -11,19 +11,21 @@ const config = {
 }
 
 /** Records what the route passed to the injected boundary so we can assert the
- *  code/profile actually flowed through, not just that a 302 came back. */
+ *  code/id_token/nonce/profile actually flowed through, not just that a 302 came back. */
 function makeRuntime() {
-  const calls: { code?: string; accessToken?: string; profile?: unknown } = {}
+  const calls: { code?: string; idToken?: string; nonce?: string; profile?: unknown } = {}
   return {
     calls,
     runtime: {
       provider: {
         exchangeCode: async (code: string) => {
           calls.code = code
-          return { accessToken: 'access-1' }
+          return { idToken: 'id-token-1' }
         },
-        getUserInfo: async (accessToken: string) => {
-          calls.accessToken = accessToken
+        // #1055: identity now comes from the verified id_token, bound to the flow nonce.
+        verifyIdToken: async (idToken: string, _config: unknown, nonce: string) => {
+          calls.idToken = idToken
+          calls.nonce = nonce
           return { sub: 'g-123', email: 'jo@ex.com', name: 'Jo', picture: 'https://pic/jo.png' }
         },
       },
@@ -63,9 +65,11 @@ describe('GET /auth/google/callback', () => {
     expect(res.status).toBe(302)
     expect(res.headers.get('location')).toBe('https://web.example.test/en/dashboard')
 
-    // The code/profile actually flowed through the boundary.
+    // The code → id_token → profile chain actually flowed through the boundary, and
+    // the flow's nonce was forwarded to the id_token verifier (#1055).
     expect(calls.code).toBe('c1')
-    expect(calls.accessToken).toBe('access-1')
+    expect(calls.idToken).toBe('id-token-1')
+    expect(calls.nonce).toBe('test-nonce')
     expect(calls.profile).toMatchObject({ sub: 'g-123', email: 'jo@ex.com' })
 
     // Session minted with the resolved user + a fresh csrf claim.
@@ -197,8 +201,8 @@ describe('GET /auth/google/callback', () => {
     const calls: Record<string, unknown> = {}
     const runtime = {
       provider: {
-        exchangeCode: async () => ({ accessToken: 'a' }),
-        getUserInfo: async () => ({
+        exchangeCode: async () => ({ idToken: 'id-1' }),
+        verifyIdToken: async () => ({
           sub: 'g-1',
           email: 'JO@ex.com',
           email_verified: true,
@@ -233,8 +237,8 @@ describe('GET /auth/google/callback', () => {
     setupAuthEnv()
     const runtime = {
       provider: {
-        exchangeCode: async () => ({ accessToken: 'a' }),
-        getUserInfo: async () => ({ sub: 'g-1', email: 'o@ex.com' }),
+        exchangeCode: async () => ({ idToken: 'id-1' }),
+        verifyIdToken: async () => ({ sub: 'g-1', email: 'o@ex.com' }),
       },
       accountStore: {
         resolveUser: async () => ({

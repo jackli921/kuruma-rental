@@ -13,8 +13,8 @@ const config = {
 function makeRuntime() {
   return {
     provider: {
-      exchangeCode: async () => ({ accessToken: 'a' }),
-      getUserInfo: async () => ({ sub: 'g-1', email: 'jo@ex.com' }),
+      exchangeCode: async () => ({ idToken: 'id-1' }),
+      verifyIdToken: async () => ({ sub: 'g-1', email: 'jo@ex.com' }),
     },
     accountStore: {
       resolveUser: async () => ({ id: 'user_1', role: 'RENTER' as const }),
