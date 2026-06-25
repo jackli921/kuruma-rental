@@ -1,4 +1,5 @@
 import { PageSkeleton } from '@/vite/PageSkeleton'
+import { ConsentGate } from '@/vite/consent/ConsentGate'
 import { renterGuard } from '@/vite/guards'
 import { sessionQueryOptions } from '@/vite/session'
 import { Outlet, createFileRoute, redirect } from '@tanstack/react-router'
@@ -17,5 +18,17 @@ export const Route = createFileRoute('/$locale/_renter')({
     }
   },
   pendingComponent: PageSkeleton,
-  component: Outlet,
+  component: RenterLayout,
 })
+
+// Clickwrap gate (#877): a renter who owes a once-per-subject consent is blocked
+// across every `_renter` page until they accept. Inert until consent docs are
+// published, so prod/e2e are unaffected.
+function RenterLayout() {
+  const { locale } = Route.useParams()
+  return (
+    <ConsentGate locale={locale}>
+      <Outlet />
+    </ConsentGate>
+  )
+}

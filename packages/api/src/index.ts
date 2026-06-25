@@ -19,6 +19,7 @@ import { createAdminRevenueRoutes } from './routes/admin-revenue'
 import { createAuthRoutes } from './routes/auth'
 import { createAvailabilityRoutes } from './routes/availability'
 import { createBookingRoutes } from './routes/bookings'
+import { createConsentRoutes } from './routes/consent'
 import { createCustomerRoutes } from './routes/customers'
 import { createDocumentRoutes } from './routes/documents'
 import { createFeeScheduleRoutes } from './routes/fee-schedules'
@@ -53,6 +54,8 @@ import { AvailabilityService } from './services/availability'
 import { BookingService } from './services/booking'
 import { BookingPostCommitDispatcher } from './services/booking-post-commit-dispatcher'
 import { ComplianceDigestService } from './services/compliance-digest'
+import { ConsentService } from './services/consent'
+import { ConsentGateService } from './services/consent-gate'
 import { CustomerService } from './services/customer'
 import { documentVerificationGate } from './services/document-verification-gate'
 import type { EmailSender } from './services/email/email-sender'
@@ -137,6 +140,7 @@ export function createApp(overrides?: AppOverrides, repos: Repos = buildRepos(ov
     operatorMembershipRepo,
     auditLogRepo,
     bookingEventRepo,
+    consentRepo,
     runInTransaction,
     runOperatorGrant,
     photosPublicUrl,
@@ -344,6 +348,7 @@ export function createApp(overrides?: AppOverrides, repos: Repos = buildRepos(ov
   app.use('/availability', requireAuth())
   app.use('/threads/*', requireAuth())
   app.use('/messages/*', requireAuth())
+  app.use('/consent/*', requireAuth())
   app.use('/customers/*', requireAuth())
   app.use('/customers', requireAuth())
   app.use('/users/*', requireAuth())
@@ -422,6 +427,11 @@ export function createApp(overrides?: AppOverrides, repos: Repos = buildRepos(ov
   const availabilityService = new AvailabilityService(availabilityRepo)
   const customerService = new CustomerService(customerRepo, userRepo, bookingRepo)
   const messageService = new MessageService(threadRepo, messageRepo)
+  // Default signing key resolves from CONSENT_SIGNING_KEY (absent ⇒ unsigned rows).
+  const consentService = new ConsentService(consentRepo)
+  // #877 2b: pure policy gate over the same re-consent query; renter booking
+  // creation consults it (booking-only scope, the legally load-bearing chokepoint).
+  const consentGate = new ConsentGateService(consentService)
   const userDirectoryService = new UserDirectoryService(userRepo, threadRepo)
   const maintenanceService = new MaintenanceService(
     vehicleRepo,
@@ -508,7 +518,7 @@ export function createApp(overrides?: AppOverrides, repos: Repos = buildRepos(ov
       ),
     )
     .route('/', createMaintenanceLogRoutes(maintenanceService))
-    .route('/', createBookingRoutes(bookingService))
+    .route('/', createBookingRoutes(bookingService, consentGate))
     .route('/', createPaymentRoutes(paymentService))
     .route('/', createAvailabilityRoutes(availabilityService))
     .route('/', createStatsRoutes(statsRepo))
@@ -516,6 +526,7 @@ export function createApp(overrides?: AppOverrides, repos: Repos = buildRepos(ov
     .route('/', createAdminRevenueRoutes(adminRevenueService))
     .route('/', createPaymentAnomalyRoutes(paymentAnomalyService))
     .route('/', createMessageRoutes(messageService))
+    .route('/', createConsentRoutes(consentService))
     .route(
       '/',
       createTranslateRoutes(new MessageTranslationService(messageRepo, translationProvider)),
