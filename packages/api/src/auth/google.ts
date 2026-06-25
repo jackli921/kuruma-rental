@@ -80,6 +80,10 @@ export async function verifyGoogleIdToken(
     algorithms: ['RS256'],
     issuer: [...GOOGLE_ISSUERS],
     audience: opts.clientId,
+    // Require `exp` to be PRESENT, not just valid: jose only enforces exp when the
+    // claim exists, so without this a token that simply omits exp would never expire.
+    // Google always emits it; this makes the lifetime bound independent of that.
+    requiredClaims: ['exp'],
     // Absorb small CF Worker ↔ Google clock drift so a valid login isn't spuriously
     // rejected at the exp/iat boundary; 30s is well under any useful replay window.
     clockTolerance: 30,
