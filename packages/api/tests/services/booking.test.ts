@@ -34,6 +34,7 @@ import {
   type BookingVerificationGate,
   type CreateBookingInput,
 } from '../../src/services/booking'
+import type { CancellationRefundCoordinator } from '../../src/services/booking-lifecycle'
 import type { BookingPostCommitDispatcher } from '../../src/services/booking-post-commit-dispatcher'
 import { documentVerificationGate } from '../../src/services/document-verification-gate'
 import { RenterDocumentService } from '../../src/services/renter-document'
@@ -95,8 +96,28 @@ interface Harness {
 // Drizzle one without real rollback — ordering insert-before-append gives the
 // atomicity the exclusion-failure test asserts). `codes` drives the injectable
 // booking_code generator so the collision-retry path is deterministic.
+// Records what the lifecycle service asks of the payment side (#851): whether the
+// booking is paid, and every eager initiate (booking + intended amount). `failNext`
+// makes initiate throw so the "eager fire is best-effort" guard can be exercised.
+class FakeRefundCoordinator implements CancellationRefundCoordinator {
+  paid = false
+  failNext = false
+  initiateCalls: Array<{ bookingId: string; amountJpy: number }> = []
+  async isBookingPaid(): Promise<boolean> {
+    return this.paid
+  }
+  async initiateCancellationRefund(booking: Booking, amountJpy: number): Promise<void> {
+    this.initiateCalls.push({ bookingId: booking.id, amountJpy })
+    if (this.failNext) throw new Error('stripe transient boom')
+  }
+}
+
 async function setup(
-  opts: { codes?: string[]; verificationGate?: BookingVerificationGate } = {},
+  opts: {
+    codes?: string[]
+    verificationGate?: BookingVerificationGate
+    refundInitiator?: CancellationRefundCoordinator
+  } = {},
 ): Promise<Harness> {
   const bookingStore = new Map<string, Booking>()
   const events: BookingEvent[] = []
@@ -175,6 +196,7 @@ async function setup(
     bookingEventRepo,
     generateMock,
     opts.verificationGate,
+    opts.refundInitiator,
   )
 
   return {
@@ -1890,5 +1912,134 @@ describe('BookingService — renter lifecycle notifications (#664)', () => {
     const result = await h.service.substitute(opCtxB, h.bookingId, replacement.id, null)
     expect(result.ok).toBe(false)
     expect(run).not.toHaveBeenCalled()
+  })
+})
+
+// #851 Slice 3: the cancel tx commits the durable settlement state, and the eager
+// post-commit fire (best-effort) kicks the refund. The settlement decision is the
+// product money policy (design §money): UNPAID→ADVISORY, paid+refundable→REFUND_DUE,
+// paid full-tier→CAPTURED; operator cancel is fee-free → full-total REFUND_DUE.
+describe('BookingService cancel/updateStatus — refund settlement + eager fire (#851 Slice 3)', () => {
+  const H = 60 * 60 * 1000
+  // A CONFIRMED booking on the seeded 10000/day vehicle, ready to cancel. The
+  // start offset picks the cancellation tier the test needs.
+  async function createConfirmed(h: Harness, startAt: Date, endAt: Date): Promise<Booking> {
+    const { vehicleId, locationId } = await seedReady(h)
+    const created = await h.service.create(
+      renterCtx,
+      createInput({
+        requestedVehicleId: vehicleId,
+        pickupLocationId: locationId,
+        dropoffLocationId: locationId,
+        startAt,
+        endAt,
+      }),
+      NOW,
+    )
+    if (!created.ok) throw new Error('createConfirmed: seed booking failed')
+    return created.booking
+  }
+  const lowTier = (h: Harness) =>
+    createConfirmed(h, new Date(NOW.getTime() + 60 * H), new Date(NOW.getTime() + 108 * H))
+
+  it('PAID renter cancel in a refundable tier commits REFUND_DUE and eagerly initiates the refundAmount', async () => {
+    const refunds = new FakeRefundCoordinator()
+    refunds.paid = true
+    const h = await setup({ codes: ['REFUND01'], refundInitiator: refunds })
+    const booking = await lowTier(h) // 60h out → LOW tier, 70% refundable
+
+    const res = await h.service.cancel(renterCtx, booking.id, null, NOW)
+
+    expect(res.ok).toBe(true)
+    if (!res.ok) return
+    expect(res.cancellation.tier).toBe('LOW')
+    expect(res.booking.cancellationFeeSettlement).toBe('REFUND_DUE')
+    // Persisted on the row, not just the returned object.
+    expect(h.bookingStore.get(booking.id)?.cancellationFeeSettlement).toBe('REFUND_DUE')
+    // Eager fire: exactly the tiered refundAmount the renter is owed.
+    expect(refunds.initiateCalls).toEqual([
+      { bookingId: booking.id, amountJpy: res.cancellation.refundAmount },
+    ])
+  })
+
+  it('PAID renter cancel in the FULL tier (nothing refundable) commits CAPTURED and never initiates a refund', async () => {
+    const refunds = new FakeRefundCoordinator()
+    refunds.paid = true
+    const h = await setup({ codes: ['CAPTURE1'], refundInitiator: refunds })
+    // 12h out → FULL tier (100% fee) → refundAmount 0.
+    const booking = await createConfirmed(
+      h,
+      new Date(NOW.getTime() + 12 * H),
+      new Date(NOW.getTime() + 36 * H),
+    )
+
+    const res = await h.service.cancel(renterCtx, booking.id, null, NOW)
+
+    expect(res.ok).toBe(true)
+    if (!res.ok) return
+    expect(res.cancellation.tier).toBe('FULL')
+    expect(res.cancellation.refundAmount).toBe(0)
+    expect(res.booking.cancellationFeeSettlement).toBe('CAPTURED')
+    expect(refunds.initiateCalls).toEqual([])
+  })
+
+  it('UNPAID renter cancel stays ADVISORY and never touches Stripe', async () => {
+    const refunds = new FakeRefundCoordinator() // paid stays false
+    const h = await setup({ codes: ['ADVISRY1'], refundInitiator: refunds })
+    const booking = await lowTier(h)
+
+    const res = await h.service.cancel(renterCtx, booking.id, null, NOW)
+
+    expect(res.ok).toBe(true)
+    if (!res.ok) return
+    expect(res.booking.cancellationFeeSettlement).toBe('ADVISORY')
+    expect(refunds.initiateCalls).toEqual([])
+  })
+
+  it('PAID operator cancel (updateStatus → CANCELLED) commits REFUND_DUE and eagerly refunds the FULL total', async () => {
+    const refunds = new FakeRefundCoordinator()
+    refunds.paid = true
+    const h = await setup({ codes: ['OPREFUND'], refundInitiator: refunds })
+    const booking = await lowTier(h) // 2-day rental → totalPrice 20000
+    await h.service.updateStatus(opCtxA, booking.id, 'ACTIVE')
+
+    const res = await h.service.updateStatus(opCtxA, booking.id, 'CANCELLED')
+
+    expect(res.ok).toBe(true)
+    if (!res.ok) return
+    expect(res.booking.cancellationFeeSettlement).toBe('REFUND_DUE')
+    expect(h.bookingStore.get(booking.id)?.cancellationFeeSettlement).toBe('REFUND_DUE')
+    // Operator fault → full total refunded (fee-free), not a tiered amount.
+    expect(refunds.initiateCalls).toEqual([{ bookingId: booking.id, amountJpy: 20000 }])
+  })
+
+  it('UNPAID operator cancel stays ADVISORY and never touches Stripe', async () => {
+    const refunds = new FakeRefundCoordinator()
+    const h = await setup({ codes: ['OPADVISY'], refundInitiator: refunds })
+    const booking = await lowTier(h)
+    await h.service.updateStatus(opCtxA, booking.id, 'ACTIVE')
+
+    const res = await h.service.updateStatus(opCtxA, booking.id, 'CANCELLED')
+
+    expect(res.ok).toBe(true)
+    if (!res.ok) return
+    expect(res.booking.cancellationFeeSettlement).toBe('ADVISORY')
+    expect(refunds.initiateCalls).toEqual([])
+  })
+
+  it('a throwing eager refund never rolls back the cancel — the booking stays durably REFUND_DUE for the reconciler', async () => {
+    const refunds = new FakeRefundCoordinator()
+    refunds.paid = true
+    refunds.failNext = true // initiate throws
+    const h = await setup({ codes: ['EAGERERR'], refundInitiator: refunds })
+    const booking = await lowTier(h)
+
+    const res = await h.service.cancel(renterCtx, booking.id, null, NOW)
+
+    // The cancel still commits; the durable REFUND_DUE row is the reconciler's queue.
+    expect(res.ok).toBe(true)
+    if (!res.ok) return
+    expect(h.bookingStore.get(booking.id)?.cancellationFeeSettlement).toBe('REFUND_DUE')
+    expect(refunds.initiateCalls).toHaveLength(1)
   })
 })

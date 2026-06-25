@@ -19,6 +19,7 @@ import { createAdminRevenueRoutes } from './routes/admin-revenue'
 import { createAuthRoutes } from './routes/auth'
 import { createAvailabilityRoutes } from './routes/availability'
 import { createBookingRoutes } from './routes/bookings'
+import { createConsentRoutes } from './routes/consent'
 import { createCustomerRoutes } from './routes/customers'
 import { createDocumentRoutes } from './routes/documents'
 import { createFeeScheduleRoutes } from './routes/fee-schedules'
@@ -53,6 +54,8 @@ import { AvailabilityService } from './services/availability'
 import { BookingService } from './services/booking'
 import { BookingPostCommitDispatcher } from './services/booking-post-commit-dispatcher'
 import { ComplianceDigestService } from './services/compliance-digest'
+import { ConsentService } from './services/consent'
+import { ConsentGateService } from './services/consent-gate'
 import { CustomerService } from './services/customer'
 import { documentVerificationGate } from './services/document-verification-gate'
 import type { EmailSender } from './services/email/email-sender'
@@ -83,6 +86,7 @@ import {
 import { OperatorTeamService } from './services/operator-team'
 import { OverviewService } from './services/overview'
 import { PaymentAnomalyService } from './services/payment-anomaly'
+import { CancellationRefundReconciler } from './services/payment/cancellation-refund-reconciler'
 import { PaymentService } from './services/payment/payment'
 import type { PaymentGateway } from './services/payment/payment-gateway'
 import { StripePaymentGateway } from './services/payment/stripe-payment-gateway'
@@ -132,11 +136,13 @@ export function createApp(overrides?: AppOverrides, repos: Repos = buildRepos(ov
     storefrontRepo,
     regionRepo,
     paymentEventRepo,
+    paymentRefundRepo,
     paymentAnomalyRepo,
     providerInviteRepo,
     operatorMembershipRepo,
     auditLogRepo,
     bookingEventRepo,
+    consentRepo,
     runInTransaction,
     runOperatorGrant,
     photosPublicUrl,
@@ -199,32 +205,7 @@ export function createApp(overrides?: AppOverrides, repos: Repos = buildRepos(ov
   // success URL so the flow is navigable, but webhook verification always
   // throws (no secret) so nothing is recorded without real wiring. An override
   // (tests) wins outright. Mirrors emailSender / translationProvider.
-  const paymentGateway: PaymentGateway =
-    overrides?.paymentGateway ??
-    (() => {
-      const secretKey = process.env.STRIPE_SECRET_KEY
-      const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET
-      if (secretKey && webhookSecret) return new StripePaymentGateway(secretKey, webhookSecret)
-      if (process.env.NODE_ENV === 'production') {
-        return {
-          createCheckoutSession: async () => {
-            throw new Error('STRIPE_SECRET_KEY / STRIPE_WEBHOOK_SECRET not configured')
-          },
-          parseWebhookEvent: async () => {
-            throw new Error('STRIPE_WEBHOOK_SECRET not configured')
-          },
-        }
-      }
-      return {
-        createCheckoutSession: async (p) => {
-          console.info('[payment:dev] checkout session for', p.bookingCode)
-          return { sessionId: 'dev', url: p.successUrl }
-        },
-        parseWebhookEvent: async () => {
-          throw new Error('Stripe not configured (dev): cannot verify webhook')
-        },
-      }
-    })()
+  const paymentGateway = resolvePaymentGateway(overrides)
   // Renter is redirected back here after Stripe Checkout — the first allowed web
   // origin (success/cancel paths are appended in the service).
   // First allowed web origin — where the browser is sent back to after Stripe
@@ -232,6 +213,7 @@ export function createApp(overrides?: AppOverrides, repos: Repos = buildRepos(ov
   const webBaseUrl = resolveAllowedOrigins(process.env.WEB_ORIGIN)[0] ?? ''
   const paymentService = new PaymentService(
     paymentEventRepo,
+    paymentRefundRepo,
     bookingRepo,
     paymentGateway,
     paymentAnomalyRepo,
@@ -344,6 +326,7 @@ export function createApp(overrides?: AppOverrides, repos: Repos = buildRepos(ov
   app.use('/availability', requireAuth())
   app.use('/threads/*', requireAuth())
   app.use('/messages/*', requireAuth())
+  app.use('/consent/*', requireAuth())
   app.use('/customers/*', requireAuth())
   app.use('/customers', requireAuth())
   app.use('/users/*', requireAuth())
@@ -413,6 +396,9 @@ export function createApp(overrides?: AppOverrides, repos: Repos = buildRepos(ov
     bookingEventRepo,
     undefined,
     verificationGate,
+    // #851: PaymentService coordinates the auto-refund on cancel (isBookingPaid +
+    // initiateCancellationRefund). It's constructed above with the same repos.
+    paymentService,
   )
   const notificationService = new NotificationService(
     notificationLogRepo,
@@ -422,6 +408,11 @@ export function createApp(overrides?: AppOverrides, repos: Repos = buildRepos(ov
   const availabilityService = new AvailabilityService(availabilityRepo)
   const customerService = new CustomerService(customerRepo, userRepo, bookingRepo)
   const messageService = new MessageService(threadRepo, messageRepo)
+  // Default signing key resolves from CONSENT_SIGNING_KEY (absent ⇒ unsigned rows).
+  const consentService = new ConsentService(consentRepo)
+  // #877 2b: pure policy gate over the same re-consent query; renter booking
+  // creation consults it (booking-only scope, the legally load-bearing chokepoint).
+  const consentGate = new ConsentGateService(consentService)
   const userDirectoryService = new UserDirectoryService(userRepo, threadRepo)
   const maintenanceService = new MaintenanceService(
     vehicleRepo,
@@ -508,7 +499,7 @@ export function createApp(overrides?: AppOverrides, repos: Repos = buildRepos(ov
       ),
     )
     .route('/', createMaintenanceLogRoutes(maintenanceService))
-    .route('/', createBookingRoutes(bookingService))
+    .route('/', createBookingRoutes(bookingService, consentGate))
     .route('/', createPaymentRoutes(paymentService))
     .route('/', createAvailabilityRoutes(availabilityService))
     .route('/', createStatsRoutes(statsRepo))
@@ -516,6 +507,7 @@ export function createApp(overrides?: AppOverrides, repos: Repos = buildRepos(ov
     .route('/', createAdminRevenueRoutes(adminRevenueService))
     .route('/', createPaymentAnomalyRoutes(paymentAnomalyService))
     .route('/', createMessageRoutes(messageService))
+    .route('/', createConsentRoutes(consentService))
     .route(
       '/',
       createTranslateRoutes(new MessageTranslationService(messageRepo, translationProvider)),
@@ -598,6 +590,45 @@ function resolveEmailSender(overrides?: AppOverrides): EmailSender {
 }
 
 /**
+ * Resolve the Stripe gateway (#461), shared by createApp and the #851 refund-
+ * reconciler cron. Real gateway when BOTH secrets are set; an override (tests)
+ * wins; in production without secrets a sentinel throws on first use (not at
+ * boot); in dev a stub yields the success URL but every Stripe op throws so
+ * nothing is recorded without real wiring. Mirrors resolveEmailSender.
+ */
+function resolvePaymentGateway(overrides?: AppOverrides): PaymentGateway {
+  if (overrides?.paymentGateway) return overrides.paymentGateway
+  const secretKey = process.env.STRIPE_SECRET_KEY
+  const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET
+  if (secretKey && webhookSecret) return new StripePaymentGateway(secretKey, webhookSecret)
+  if (process.env.NODE_ENV === 'production') {
+    const notConfigured = () => {
+      throw new Error('STRIPE_SECRET_KEY / STRIPE_WEBHOOK_SECRET not configured')
+    }
+    return {
+      createCheckoutSession: async () => notConfigured(),
+      parseWebhookEvent: async () => notConfigured(),
+      refundPayment: async () => notConfigured(),
+      retrieveRefund: async () => notConfigured(),
+      listRefundsByPaymentIntent: async () => notConfigured(),
+    }
+  }
+  const devUnsupported = (op: string) => () => {
+    throw new Error(`Stripe not configured (dev): cannot ${op}`)
+  }
+  return {
+    createCheckoutSession: async (p) => {
+      console.info('[payment:dev] checkout session for', p.bookingCode)
+      return { sessionId: 'dev', url: p.successUrl }
+    },
+    parseWebhookEvent: async () => devUnsupported('verify webhook')(),
+    refundPayment: async () => devUnsupported('refund')(),
+    retrieveRefund: async () => devUnsupported('retrieve refund')(),
+    listRefundsByPaymentIntent: async () => devUnsupported('list refunds')(),
+  }
+}
+
+/**
  * The shared envelope fields (from/reply-to) read from one env in two places —
  * createApp's notification dispatcher and buildComplianceDigestService (#982 DRY).
  */
@@ -630,6 +661,40 @@ export function buildComplianceDigestService(
     emailSender: resolveEmailSender(overrides),
     today: () => jstDateString(new Date()),
     config: resolveEmailConfig(),
+  })
+}
+
+/**
+ * Composition seam for the #851 refund-on-cancellation reconciler backstop,
+ * resolved by the Workers `scheduled` cron exactly as buildComplianceDigestService
+ * is. Wires the bounded REFUND_DUE scan, the idempotent refund core (PaymentService
+ * as the driver — same Stripe gateway/origin createApp uses), and the refund
+ * receipt repo for the post-drive outcome tally.
+ */
+export function buildCancellationRefundReconciler(
+  overrides?: AppOverrides,
+  repos: Repos = buildRepos(overrides),
+): CancellationRefundReconciler {
+  const {
+    paymentEventRepo,
+    paymentRefundRepo,
+    bookingRepo,
+    paymentAnomalyRepo,
+    refundReconcilerRepo,
+  } = repos
+  const webBaseUrl = resolveAllowedOrigins(process.env.WEB_ORIGIN)[0] ?? ''
+  const driver = new PaymentService(
+    paymentEventRepo,
+    paymentRefundRepo,
+    bookingRepo,
+    resolvePaymentGateway(overrides),
+    paymentAnomalyRepo,
+    { webBaseUrl },
+  )
+  return new CancellationRefundReconciler({
+    scanRepo: refundReconcilerRepo,
+    driver,
+    refundRepo: paymentRefundRepo,
   })
 }
 

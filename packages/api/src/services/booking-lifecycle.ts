@@ -20,6 +20,20 @@ import { composeBookingTotal, rentalDays } from './booking-pricing-helpers'
 import type { CancelResult, StatusTransitionResult, SubstituteResult } from './booking-types'
 import type { LifecycleTrigger } from './notification-dispatcher'
 
+/**
+ * The payment-side capabilities the cancel paths need (#851), owned by the consumer
+ * (DIP) so the lifecycle service never imports PaymentService. The composition root
+ * passes the PaymentService, which structurally satisfies this.
+ */
+export interface CancellationRefundCoordinator {
+  /** Does the booking have a captured (SUCCEEDED) payment? Decides whether a cancel
+   *  owes a refund (REFUND_DUE) or there is nothing to move (ADVISORY). */
+  isBookingPaid(bookingId: string): Promise<boolean>
+  /** Eager, best-effort refund drive after the cancel tx commits REFUND_DUE. A throw
+   *  is the caller's to swallow — the reconciler backstop re-drives from the row. */
+  initiateCancellationRefund(booking: Booking, intendedAmountJpy: number): Promise<void>
+}
+
 // #616 §A: an operator fleet is ~40-50 vehicles; the AVAILABLE same-store subset
 // is far smaller. Scan generously so the substitute picker never silently drops a
 // candidate, while still bounding the read.
@@ -30,6 +44,17 @@ const STATUS_TRIGGER: Partial<Record<BookingStatus, LifecycleTrigger>> = {
   ACTIVE: 'ACTIVATED',
   COMPLETED: 'COMPLETED',
   CANCELLED: 'CANCELLED',
+}
+
+// #851 money policy: an UNPAID cancel has nothing to move (ADVISORY); a PAID cancel
+// owes the tiered refund when any is due (REFUND_DUE) or keeps the whole capture on
+// the FULL tier where nothing is refundable (CAPTURED).
+function renterCancelSettlement(
+  isPaid: boolean,
+  refundAmount: number,
+): Booking['cancellationFeeSettlement'] {
+  if (!isPaid) return 'ADVISORY'
+  return refundAmount > 0 ? 'REFUND_DUE' : 'CAPTURED'
 }
 
 /**
@@ -47,6 +72,9 @@ export class BookingLifecycleService {
     // Single post-commit seam (#393, TODO #300): ensureThread + notifications,
     // each caught-and-logged.
     private readonly postCommit?: BookingPostCommitDispatcher,
+    // #851: payment-side coordinator for the auto-refund. Optional — when unwired
+    // (tests, pre-#851), cancels stay ADVISORY and never touch Stripe.
+    private readonly refunds?: CancellationRefundCoordinator,
   ) {}
 
   /**
@@ -260,6 +288,12 @@ export class BookingLifecycleService {
       }
     }
 
+    // #851: operator cancel of a PAID booking is fee-free → the renter is owed the
+    // FULL total back. The settlement is read before the tx (payment_events is
+    // immutable once SUCCEEDED) and committed REFUND_DUE atomically inside it.
+    const owesRefund =
+      newStatus === 'CANCELLED' && ((await this.refunds?.isBookingPaid(booking.id)) ?? false)
+
     // Projection update + STATUS_CHANGED append in one tx so booking_events stays
     // the source of truth (§3.1) and never drifts from the status column.
     const updated = await this.runInTransaction(async (repos) => {
@@ -278,6 +312,15 @@ export class BookingLifecycleService {
           to: newStatus as Booking['status'],
         },
       })
+      // Commit REFUND_DUE in the same tx (a CANCELLED booking is at the 'ADVISORY'
+      // default). Return the settled projection so callers/emails see REFUND_DUE.
+      if (owesRefund) {
+        const settled = await repos.bookingRepo.markCancellationSettlement(ctx, booking.id, {
+          from: 'ADVISORY',
+          to: 'REFUND_DUE',
+        })
+        if (settled) return settled
+      }
       return next
     })
     if (!updated) {
@@ -291,6 +334,10 @@ export class BookingLifecycleService {
     // (ACTIVE/COMPLETED). Unlisted transitions map to undefined → no email.
     const trigger = STATUS_TRIGGER[newStatus]
     if (trigger) await this.postCommit?.run(ctx, updated, trigger)
+    // Eager refund (#851), best-effort: operator fault → the full total, fee-free.
+    if (owesRefund) {
+      await this.fireEagerRefund(updated, booking.totalPrice ?? 0)
+    }
     return { ok: true, booking: updated }
   }
 
@@ -321,6 +368,10 @@ export class BookingLifecycleService {
     }
 
     const cancellation = calculateCancellationFee(booking.startAt, now, booking.totalPrice ?? 0)
+    // #851: a PAID booking owes a refund; the settlement state is written IN the
+    // cancel tx so the durable work queue can never miss it on a crash.
+    const isPaid = (await this.refunds?.isBookingPaid(booking.id)) ?? false
+    const settlement = renterCancelSettlement(isPaid, cancellation.refundAmount)
 
     // Projection cancel + BOOKING_CANCELLED append in one tx so the event log
     // records every lifecycle transition, not just create/substitute (§3.1).
@@ -329,6 +380,7 @@ export class BookingLifecycleService {
         from: booking.status,
         fee: cancellation.feeAmount,
         cancelledAt: now,
+        settlement,
       })
       if (!next) return undefined
       await repos.bookingEventRepo.append(ctx, {
@@ -353,6 +405,26 @@ export class BookingLifecycleService {
     }
     // Post-commit (#664): tell the renter their booking was cancelled.
     await this.postCommit?.run(ctx, updated, 'CANCELLED')
+    // Eager refund (#851), best-effort: only when we durably committed REFUND_DUE.
+    if (settlement === 'REFUND_DUE') {
+      await this.fireEagerRefund(updated, cancellation.refundAmount)
+    }
     return { ok: true, booking: updated, cancellation }
+  }
+
+  /** Eager, best-effort kick of the refund after a cancel commits REFUND_DUE (#851).
+   *  Caught-and-logged like the post-commit dispatcher: a Stripe hiccup must never
+   *  roll back (or 500) the cancel — the booking is durably REFUND_DUE and the
+   *  reconciler backstop re-drives. */
+  private async fireEagerRefund(booking: Booking, intendedAmountJpy: number): Promise<void> {
+    if (!this.refunds) return
+    try {
+      await this.refunds.initiateCancellationRefund(booking, intendedAmountJpy)
+    } catch (err) {
+      console.error('[refund:eager] initiate failed; left REFUND_DUE for the reconciler', {
+        bookingId: booking.id,
+        error: err instanceof Error ? err.message : String(err),
+      })
+    }
   }
 }

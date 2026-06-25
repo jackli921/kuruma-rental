@@ -1,4 +1,12 @@
 {
+  "consent": {
+    "title": "Please review and accept to continue",
+    "intro": "To keep using Kuruma, review and accept the following.",
+    "accept": "Accept and continue",
+    "accepting": "Saving…",
+    "hint": "Check each box to continue.",
+    "error": "We couldn't save your acceptance. Please try again."
+  },
   "regionPicker": {
     "prefecture": "Prefecture",
     "city": "City",

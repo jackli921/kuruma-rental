@@ -12,6 +12,7 @@ import { BookingService } from '../../src/services/booking'
 import type { User, Vehicle } from '../../src/stores'
 import { testAuthMiddleware } from '../helpers/auth'
 import { bookingInput } from '../helpers/booking'
+import { makeInertConsentGate } from '../helpers/consent'
 import { seededOperatorRepo } from '../helpers/operator'
 
 // #549 slice 2: a deep-linked trip-detail page has no list-row data, so the
@@ -64,7 +65,7 @@ let bookingId: string
 function app() {
   const a = new Hono()
   a.use('*', testAuthMiddleware(ADMIN, 'PLATFORM_ADMIN'))
-  a.route('/', createBookingRoutes(service))
+  a.route('/', createBookingRoutes(service, makeInertConsentGate()))
   return a
 }
 

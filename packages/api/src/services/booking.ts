@@ -13,7 +13,7 @@ import type {
 } from '../repositories/types'
 import type { Booking, BookingEvent, Vehicle } from '../stores'
 import { BookingCreationService } from './booking-creation'
-import { BookingLifecycleService } from './booking-lifecycle'
+import { BookingLifecycleService, type CancellationRefundCoordinator } from './booking-lifecycle'
 import type { BookingPostCommitDispatcher } from './booking-post-commit-dispatcher'
 import { BookingQueryService, type BookingWithOperator } from './booking-query'
 import type {
@@ -74,6 +74,9 @@ export class BookingService {
     // #459: optional document-verification gate, wired only when the
     // REQUIRE_DOCUMENT_VERIFICATION flag is on (see index.ts composition root).
     verificationGate?: BookingVerificationGate,
+    // #851: auto-refund coordinator for the cancel paths (PaymentService at the
+    // composition root). Optional so existing wiring/tests stay unaffected.
+    refundInitiator?: CancellationRefundCoordinator,
   ) {
     this.query = new BookingQueryService(
       bookingRepo,
@@ -96,6 +99,7 @@ export class BookingService {
       vehicleRepo,
       vehicleClassRepo,
       postCommit,
+      refundInitiator,
     )
   }
 
