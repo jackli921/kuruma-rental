@@ -102,6 +102,17 @@ export class BookingLifecycleService {
         if (booking.status !== 'CONFIRMED' && booking.status !== 'ACTIVE') {
           return { ok: false, status: 409, error: `Cannot substitute a ${booking.status} booking` }
         }
+        // #464: CLASS_COMBO price is fixed by the rate plan — re-snapshotting off
+        // the new vehicle's dailyRate would corrupt it. Operators must use
+        // assignVehicle() instead, which leaves totalPrice untouched.
+        if (booking.fulfillmentMode === 'CLASS_COMBO') {
+          return {
+            ok: false,
+            status: 409,
+            error: 'Use assign, not substitute, for a class-deal booking',
+            code: 'USE_ASSIGN_FOR_COMBO' as const,
+          }
+        }
 
         const replacement = await repos.vehicleRepo.findById(SYSTEM_CONTEXT, newVehicleId)
         // Cross-operator (or missing) -> 404, no existence leak (mirrors slice 4).

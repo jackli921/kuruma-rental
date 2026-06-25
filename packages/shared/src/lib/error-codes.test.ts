@@ -22,6 +22,7 @@ describe('ERROR_CODES', () => {
       'LOCATION_HAS_ACTIVE_BOOKINGS',
       'NOT_A_COMBO',
       'NOT_IMPLEMENTED',
+      'USE_ASSIGN_FOR_COMBO',
       'NO_COMBO_RATE_SET',
       'NO_RATES_SET',
       'OPERATOR_REQUIRED',
