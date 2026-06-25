@@ -249,6 +249,16 @@ export class PaymentService {
     if (!bookingId) return { status: 200, outcome: 'ignored' }
     const booking = await this.bookings.findById(SYSTEM_CONTEXT, bookingId)
     if (!booking) return { status: 200, outcome: 'ignored' }
+    // Confirm ONLY the refund we recorded (#1056). A valid signature proves the event
+    // is Stripe's, not that this refund is the one we owe: a partial/foreign refund
+    // tagged with our bookingId carries a different re_ and must not flip the booking
+    // REFUNDED. Correlate against the receipt the eager/reconciler path wrote — which
+    // also owns receipt creation, so a webhook that raced ahead of the claim (no
+    // receipt, or one without our re_ yet) is a safe no-op the pull path finishes.
+    const receipt = await this.paymentRefunds.findByBookingId(bookingId)
+    if (!receipt || receipt.stripeRefundId !== event.refundId) {
+      return { status: 200, outcome: 'ignored' }
+    }
     await this.confirmRefundSucceeded(bookingId)
     return { status: 200, outcome: 'refund_confirmed' }
   }

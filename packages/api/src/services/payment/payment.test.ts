@@ -95,6 +95,7 @@ function completedEvent(overrides: Partial<VerifiedPaymentEvent> = {}): Verified
     currency: 'jpy',
     paymentStatus: 'paid',
     refundStatus: null,
+    refundId: null,
     metadata: { bookingId: 'bk-1', operatorId: 'spoofed-operator' },
     ...overrides,
   }
@@ -113,6 +114,7 @@ function refundEvent(overrides: Partial<VerifiedPaymentEvent> = {}): VerifiedPay
     currency: 'jpy',
     paymentStatus: null,
     refundStatus: 'succeeded',
+    refundId: 're_1',
     metadata: { bookingId: 'bk-1' },
     ...overrides,
   }
@@ -485,6 +487,37 @@ describe('PaymentService.handleWebhook — refund confirmation (#851)', () => {
     expect(second).toEqual({ status: 200, outcome: 'refund_confirmed' })
     expect((await refundRepo.findByBookingId('bk-1'))?.status).toBe('SUCCEEDED')
     expect(await settlement()).toBe('REFUNDED')
+  })
+
+  it('ignores a succeeded refund whose id does not match our receipt — a foreign/partial refund cannot flip the booking (#1056)', async () => {
+    // An operator issues a manual/partial Stripe refund tagged with our bookingId; it
+    // carries a DIFFERENT re_ than the one we recorded. A valid signature proves the
+    // event is Stripe's — not that this refund is the one we owe.
+    gateway.nextEvent = refundEvent({ refundId: 're_foreign', checkoutSessionId: 're_foreign' })
+    expect(await service.handleWebhook('raw', 'sig')).toEqual({ status: 200, outcome: 'ignored' })
+    expect((await refundRepo.findByBookingId('bk-1'))?.status).toBe('PENDING')
+    expect(await settlement()).toBe('REFUND_DUE')
+  })
+
+  it('ignores a succeeded refund when no receipt has been claimed yet — the eager/reconciler path owns confirmation (#1056)', async () => {
+    // Webhook beats the eager claim: there is no receipt to correlate against, so the
+    // booking must NOT be flipped here; the path that creates the receipt confirms it.
+    const fresh = new InMemoryPaymentRefundRepository()
+    const noReceiptService = new PaymentService(
+      new InMemoryPaymentEventRepository(),
+      fresh,
+      bookingRepo,
+      gateway,
+      new InMemoryPaymentAnomalyRepository(),
+      { webBaseUrl: WEB_BASE },
+    )
+    gateway.nextEvent = refundEvent()
+    expect(await noReceiptService.handleWebhook('raw', 'sig')).toEqual({
+      status: 200,
+      outcome: 'ignored',
+    })
+    expect(await fresh.findByBookingId('bk-1')).toBeNull()
+    expect(await settlement()).toBe('REFUND_DUE')
   })
 })
 
