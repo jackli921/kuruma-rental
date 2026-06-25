@@ -334,8 +334,10 @@ export class BookingLifecycleService {
     // (ACTIVE/COMPLETED). Unlisted transitions map to undefined → no email.
     const trigger = STATUS_TRIGGER[newStatus]
     if (trigger) await this.postCommit?.run(ctx, updated, trigger)
-    // Eager refund (#851), best-effort: operator fault → the full total, fee-free.
-    if (owesRefund) {
+    // Eager refund (#851), best-effort. Gate on the COMMITTED settlement, not the pre-tx
+    // `owesRefund` (#1056): if the in-tx REFUND_DUE write no-op'd, firing would refund a
+    // booking the reconciler can't see. Mirrors cancel()'s settlement === 'REFUND_DUE' gate.
+    if (updated.cancellationFeeSettlement === 'REFUND_DUE') {
       await this.fireEagerRefund(updated, booking.totalPrice ?? 0)
     }
     return { ok: true, booking: updated }

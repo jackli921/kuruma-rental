@@ -2042,4 +2042,32 @@ describe('BookingService cancel/updateStatus — refund settlement + eager fire 
     expect(h.bookingStore.get(booking.id)?.cancellationFeeSettlement).toBe('REFUND_DUE')
     expect(refunds.initiateCalls).toHaveLength(1)
   })
+
+  // #1056 follow-up — the eager fire must key off the COMMITTED settlement, not the
+  // pre-tx `owesRefund`. If the in-tx REFUND_DUE write no-ops (booking wasn't ADVISORY),
+  // the status still flips to CANCELLED but nothing is owed via this path, so Stripe must
+  // NOT be touched (else a refund is issued for a booking the reconciler can't see — it
+  // isn't REFUND_DUE). Pre-seeding a non-ADVISORY settlement exercises the otherwise-
+  // unreachable no-op branch.
+  it('operator cancel does NOT eager-fire when the REFUND_DUE commit no-ops (settlement already non-ADVISORY)', async () => {
+    const refunds = new FakeRefundCoordinator()
+    refunds.paid = true
+    const h = await setup({ codes: ['NOOPGATE'], refundInitiator: refunds })
+    const booking = await lowTier(h)
+    await h.service.updateStatus(opCtxA, booking.id, 'ACTIVE')
+    // Force the guarded REFUND_DUE write to no-op: the booking is no longer ADVISORY.
+    const seeded = h.bookingStore.get(booking.id)
+    if (!seeded) throw new Error('seed missing')
+    h.bookingStore.set(booking.id, { ...seeded, cancellationFeeSettlement: 'CAPTURED' })
+
+    const res = await h.service.updateStatus(opCtxA, booking.id, 'CANCELLED')
+
+    expect(res.ok).toBe(true)
+    if (!res.ok) return
+    // Status still transitions; settlement stays CAPTURED (the REFUND_DUE write no-op'd).
+    expect(res.booking.status).toBe('CANCELLED')
+    expect(res.booking.cancellationFeeSettlement).toBe('CAPTURED')
+    // The eager refund must NOT fire — nothing was committed REFUND_DUE for this path.
+    expect(refunds.initiateCalls).toEqual([])
+  })
 })
