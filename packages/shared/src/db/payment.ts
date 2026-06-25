@@ -1,5 +1,14 @@
 import { sql } from 'drizzle-orm'
-import { index, integer, pgEnum, pgTable, text, timestamp, uniqueIndex } from 'drizzle-orm/pg-core'
+import {
+  check,
+  index,
+  integer,
+  pgEnum,
+  pgTable,
+  text,
+  timestamp,
+  uniqueIndex,
+} from 'drizzle-orm/pg-core'
 import { PAYMENT_EVENT_STATUSES, PAYMENT_REFUND_STATUSES } from '../enums'
 import { operators } from './auth'
 import { bookings } from './booking'
@@ -88,6 +97,10 @@ export const paymentRefunds = pgTable(
     uniqueIndex('payment_refunds_stripeRefundId_unique')
       .on(table.stripeRefundId)
       .where(sql`"stripeRefundId" is not null`),
+    // Ledger invariant (#1068): a refund amount is never negative. The service
+    // guards it, but every money column in this schema seals it at the DB too
+    // (mirrors fee_schedules_amount_non_negative). 0 is valid (full-fee, no refund).
+    check('payment_refunds_amount_non_negative', sql`${table.amountJpy} >= 0`),
   ],
 )
 
