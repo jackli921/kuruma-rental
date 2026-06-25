@@ -1,5 +1,5 @@
 import type { ClassRatePlan } from '../../stores'
-import type { ClassRatePlanRepository } from '../types'
+import type { ClassRatePlanFilters, ClassRatePlanRepository } from '../types'
 
 export class InMemoryClassRatePlanRepository implements ClassRatePlanRepository {
   private readonly store: Map<string, ClassRatePlan>
@@ -19,6 +19,16 @@ export class InMemoryClassRatePlanRepository implements ClassRatePlanRepository 
         p.operatorId === operatorId &&
         p.classId === classId &&
         p.pickupLocationId === pickupLocationId,
+    )
+  }
+
+  async findActiveRatePlans(filters?: ClassRatePlanFilters): Promise<ClassRatePlan[]> {
+    const locationIds = filters?.locationIds ? new Set(filters.locationIds) : null
+    return [...this.store.values()].filter(
+      (p) =>
+        p.isActive &&
+        (!filters?.operatorId || p.operatorId === filters.operatorId) &&
+        (!locationIds || locationIds.has(p.pickupLocationId)),
     )
   }
 

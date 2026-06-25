@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it } from 'vitest'
 import { PUBLIC_CONTEXT, SYSTEM_CONTEXT } from '../middleware/auth'
 import { InMemoryAvailabilityRepository } from '../repositories/in-memory/availability'
 import { InMemoryBookingRepository } from '../repositories/in-memory/booking'
+import { InMemoryClassRatePlanRepository } from '../repositories/in-memory/class-rate-plan'
 import { InMemoryLocationRepository } from '../repositories/in-memory/location'
 import { InMemoryOperatorRepository } from '../repositories/in-memory/operator'
 import { InMemoryRegionRepository } from '../repositories/in-memory/region'
@@ -9,7 +10,7 @@ import { InMemoryStorefrontRepository } from '../repositories/in-memory/storefro
 import { InMemoryVehicleRepository } from '../repositories/in-memory/vehicle'
 import { InMemoryVehicleClassRepository } from '../repositories/in-memory/vehicle-class'
 import type { AvailabilityFilters, AvailabilityRepository } from '../repositories/types'
-import type { Location, Operator, Region, Vehicle, VehicleClass } from '../stores'
+import type { ClassRatePlan, Location, Operator, Region, Vehicle, VehicleClass } from '../stores'
 import { FlatSearchService } from './flat-search'
 
 const FROM = new Date('2026-08-01T10:00:00Z')
@@ -45,6 +46,7 @@ let locationRepo: InMemoryLocationRepository
 let vehicleRepo: InMemoryVehicleRepository
 let bookingRepo: InMemoryBookingRepository
 let classRepo: InMemoryVehicleClassRepository
+let classRatePlanRepo: InMemoryClassRatePlanRepository
 let service: FlatSearchService
 
 beforeEach(() => {
@@ -53,10 +55,17 @@ beforeEach(() => {
   vehicleRepo = new InMemoryVehicleRepository()
   bookingRepo = new InMemoryBookingRepository()
   classRepo = new InMemoryVehicleClassRepository()
+  classRatePlanRepo = new InMemoryClassRatePlanRepository()
   const storefrontRepo = new InMemoryStorefrontRepository(locationRepo, operatorRepo)
   const availabilityRepo = new InMemoryAvailabilityRepository(vehicleRepo, bookingRepo)
   const regionRepo = new InMemoryRegionRepository(REGIONS)
-  service = new FlatSearchService(storefrontRepo, availabilityRepo, classRepo, regionRepo)
+  service = new FlatSearchService(
+    storefrontRepo,
+    availabilityRepo,
+    classRepo,
+    regionRepo,
+    classRatePlanRepo,
+  )
 })
 
 function makeOperator(name: string, slug: string): Promise<Operator> {
@@ -381,6 +390,7 @@ describe('FlatSearchService.search region filter (#394)', () => {
       recording,
       classRepo,
       new InMemoryRegionRepository(REGIONS),
+      classRatePlanRepo,
     )
 
     await scoped.search(PUBLIC_CONTEXT, { from: FROM, to: TO, regionId: 'reg_osaka' })
@@ -394,5 +404,176 @@ describe('FlatSearchService.search region filter (#394)', () => {
       await service.search(PUBLIC_CONTEXT, { from: FROM, to: TO, regionId: 'reg_nope' }),
     )
     expect(data.items).toEqual([])
+  })
+})
+
+// Drives the CLASS_COMBO producer with controlled supply/demand so the unit under
+// test is FlatSearchService's availableCount arithmetic + emit threshold — not the
+// repo's road-legal counting (covered by availability.test.ts). Records the asOf
+// clock and [from, to) it was queried with so a wrong-arg regression is caught.
+class ComboCountsAvailabilityRepository implements AvailabilityRepository {
+  capacityAsOf: Date | undefined
+  demandRange: { from: Date; to: Date } | undefined
+  constructor(
+    private readonly inner: AvailabilityRepository,
+    private readonly byClass: Map<string, { capacity: number; demand: number }>,
+  ) {}
+  findAvailableVehicles(from: Date, to: Date, filters?: AvailabilityFilters) {
+    return this.inner.findAvailableVehicles(from, to, filters)
+  }
+  checkVehicleAvailability(vehicleId: string, from: Date, to: Date) {
+    return this.inner.checkVehicleAvailability(vehicleId, from, to)
+  }
+  async countClassDemand(
+    _operatorId: string,
+    classId: string,
+    _pickupLocationId: string,
+    from: Date,
+    to: Date,
+  ) {
+    this.demandRange = { from, to }
+    return this.byClass.get(classId)?.demand ?? 0
+  }
+  async countClassCapacity(
+    _operatorId: string,
+    classId: string,
+    _pickupLocationId: string,
+    asOf: Date,
+  ) {
+    this.capacityAsOf = asOf
+    return this.byClass.get(classId)?.capacity ?? 0
+  }
+  lockComboCapacity(operatorId: string, classId: string, pickupLocationId: string) {
+    return this.inner.lockComboCapacity(operatorId, classId, pickupLocationId)
+  }
+}
+
+describe('FlatSearchService.search CLASS_COMBO producer (#464)', () => {
+  function makeRatePlan(
+    overrides: Partial<Omit<ClassRatePlan, 'id' | 'createdAt' | 'updatedAt'>> = {},
+  ) {
+    return classRatePlanRepo.create({
+      operatorId: 'op_a',
+      classId: 'class_compact',
+      pickupLocationId: 'loc_namba',
+      dayRateJpy: 6000,
+      isActive: true,
+      label: null,
+      ...overrides,
+    })
+  }
+
+  function serviceWithCounts(byClass: Map<string, { capacity: number; demand: number }>) {
+    const repo = new ComboCountsAvailabilityRepository(
+      new InMemoryAvailabilityRepository(vehicleRepo, bookingRepo),
+      byClass,
+    )
+    const service = new FlatSearchService(
+      new InMemoryStorefrontRepository(locationRepo, operatorRepo),
+      repo,
+      classRepo,
+      new InMemoryRegionRepository(REGIONS),
+      classRatePlanRepo,
+    )
+    return { repo, service }
+  }
+
+  it('surfaces an active rate plan as a CLASS_COMBO card with availableCount = capacity − demand', async () => {
+    const a = await makeOperator('A Rentals', 'a')
+    const klass = await makeClass({ operatorId: a.id, name: 'Compact', acrissCode: 'CCAR' })
+    const namba = await makeLocation({ operatorId: a.id, name: 'Namba' })
+    await makeRatePlan({
+      operatorId: a.id,
+      classId: klass.id,
+      pickupLocationId: namba.id,
+      dayRateJpy: 6000,
+    })
+    const { service, repo } = serviceWithCounts(new Map([[klass.id, { capacity: 3, demand: 1 }]]))
+
+    const data = await ok(await service.search(PUBLIC_CONTEXT, { from: FROM, to: TO }))
+    const combos = data.items.filter((i) => i.kind === 'CLASS_COMBO')
+
+    expect(combos).toHaveLength(1)
+    expect(combos[0]).toMatchObject({
+      kind: 'CLASS_COMBO',
+      classId: klass.id,
+      availableCount: 2,
+      dailyRateJpy: 6000,
+      hourlyRateJpy: null,
+      classLabel: 'Compact',
+      acrissCode: 'CCAR',
+      location: { locationId: namba.id, operatorName: 'A Rentals' },
+    })
+    // Road-legal supply is asked as-of the return date — parity with the write guard.
+    expect(repo.capacityAsOf).toEqual(TO)
+    expect(repo.demandRange).toEqual({ from: FROM, to: TO })
+  })
+
+  it('emits no card when demand meets or exceeds capacity (sold out)', async () => {
+    const a = await makeOperator('A Rentals', 'a')
+    const klass = await makeClass({ operatorId: a.id, acrissCode: 'CCAR' })
+    const namba = await makeLocation({ operatorId: a.id })
+    await makeRatePlan({ operatorId: a.id, classId: klass.id, pickupLocationId: namba.id })
+    const { service } = serviceWithCounts(new Map([[klass.id, { capacity: 2, demand: 2 }]]))
+
+    const data = await ok(await service.search(PUBLIC_CONTEXT, { from: FROM, to: TO }))
+    expect(data.items.filter((i) => i.kind === 'CLASS_COMBO')).toEqual([])
+  })
+
+  it('drops a combo whose class is not in the requested ACRISS set', async () => {
+    const a = await makeOperator('A Rentals', 'a')
+    const compact = await makeClass({ operatorId: a.id, name: 'Compact', acrissCode: 'CCAR' })
+    const van = await makeClass({ operatorId: a.id, name: 'Minivan', acrissCode: 'MVAR' })
+    const namba = await makeLocation({ operatorId: a.id })
+    await makeRatePlan({ operatorId: a.id, classId: compact.id, pickupLocationId: namba.id })
+    await makeRatePlan({ operatorId: a.id, classId: van.id, pickupLocationId: namba.id })
+    const { service } = serviceWithCounts(
+      new Map([
+        [compact.id, { capacity: 1, demand: 0 }],
+        [van.id, { capacity: 1, demand: 0 }],
+      ]),
+    )
+
+    const data = await ok(
+      await service.search(PUBLIC_CONTEXT, { from: FROM, to: TO, classes: ['MVAR'] }),
+    )
+    const combos = data.items.filter((i) => i.kind === 'CLASS_COMBO')
+    expect(combos).toHaveLength(1)
+    expect(combos[0]?.acrissCode).toBe('MVAR')
+  })
+
+  it('merges combo and specific rows into one ordered, cursor-paginated list', async () => {
+    const a = await makeOperator('A Rentals', 'a')
+    const klass = await makeClass({ operatorId: a.id, name: 'Compact', acrissCode: 'CCAR' })
+    const namba = await makeLocation({ operatorId: a.id, name: 'Namba' })
+    await makeVehicle({ operatorId: a.id, classId: klass.id, pickupLocationId: namba.id })
+    await makeRatePlan({ operatorId: a.id, classId: klass.id, pickupLocationId: namba.id })
+    const { service } = serviceWithCounts(new Map([[klass.id, { capacity: 2, demand: 0 }]]))
+
+    const page1 = await ok(await service.search(PUBLIC_CONTEXT, { from: FROM, to: TO, limit: 1 }))
+    expect(page1.items).toHaveLength(1)
+    const cursor = page1.nextCursor
+    if (cursor === null) throw new Error('expected a cursor spanning the combo + specific rows')
+
+    const page2 = await ok(
+      await service.search(PUBLIC_CONTEXT, { from: FROM, to: TO, limit: 1, cursor }),
+    )
+    expect(page2.items).toHaveLength(1)
+    expect(page2.nextCursor).toBeNull()
+    // One SPECIFIC + one CLASS_COMBO surface, with no overlap across the two pages.
+    const kinds = [...page1.items, ...page2.items].map((i) => i.kind).sort()
+    expect(kinds).toEqual(['CLASS_COMBO', 'SPECIFIC'])
+  })
+
+  it('never surfaces a combo whose pickup location is not an active storefront', async () => {
+    const a = await makeOperator('A Rentals', 'a')
+    const klass = await makeClass({ operatorId: a.id, acrissCode: 'CCAR' })
+    await makeLocation({ operatorId: a.id, name: 'Namba' }) // an active storefront exists,
+    // but the plan points at a location that is not one of them (archived / unknown).
+    await makeRatePlan({ operatorId: a.id, classId: klass.id, pickupLocationId: 'loc_ghost' })
+    const { service } = serviceWithCounts(new Map([[klass.id, { capacity: 5, demand: 0 }]]))
+
+    const data = await ok(await service.search(PUBLIC_CONTEXT, { from: FROM, to: TO }))
+    expect(data.items.filter((i) => i.kind === 'CLASS_COMBO')).toEqual([])
   })
 })

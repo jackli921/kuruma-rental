@@ -86,6 +86,8 @@ describe('ComplianceBanner', () => {
   it('renders nothing when every vehicle is compliant', () => {
     const { container } = renderBanner([vehicle()])
     expect(container).toBeEmptyDOMElement()
+    // A persistent dashboard advisory is a polite status region, not an assertive alert.
+    expect(screen.queryByRole('status')).not.toBeInTheDocument()
     expect(screen.queryByRole('alert')).not.toBeInTheDocument()
   })
 
@@ -95,12 +97,12 @@ describe('ComplianceBanner', () => {
       vehicle({ id: 'b', insuranceExpiryDate: '2020-01-01' }),
       vehicle({ id: 'c' }),
     ])
-    expect(screen.getByRole('alert')).toHaveTextContent('2 vehicles need attention')
+    expect(screen.getByRole('status')).toHaveTextContent('2 vehicles need attention')
   })
 
   it('uses the singular form for exactly one non-compliant vehicle', () => {
     renderBanner([vehicle({ shakenExpiryDate: '2020-01-01' }), vehicle({ id: 'ok' })])
-    expect(screen.getByRole('alert')).toHaveTextContent('1 vehicle needs attention')
+    expect(screen.getByRole('status')).toHaveTextContent('1 vehicle needs attention')
   })
 
   it('deep-links to the fleet pre-filtered to the expiring set', () => {
