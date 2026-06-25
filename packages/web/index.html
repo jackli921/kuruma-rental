@@ -10,6 +10,14 @@
       used by the `/` redirect); content never flashes wrong because the $locale
       route holds navigation until its messages loader resolves (§4.5).
     -->
+    <!--
+      CSP-pinned (#500): the inline-script element below has its exact bytes
+      hashed and pinned in packages/web/public/_headers. If you edit ANYTHING
+      between its opening and closing tags (including whitespace and
+      indentation), `bun run lint:csp-hash` will fail in CI with the new sha256
+      you need to copy into the _headers script-src directive. Source-level
+      guard: tests/deploy/csp-script-hash.test.ts.
+    -->
     <script>
       (function () {
         var supported = ['en', 'ja', 'zh'];

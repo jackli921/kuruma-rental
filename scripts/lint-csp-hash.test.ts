@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest'
-import { checkCspHash, cspHash, extractInlineScript, extractScriptSrc } from './lint-csp-hash'
+import { checkCspHash, cspHash, extractInlineScript, extractScriptSrcs } from './lint-csp-hash'
 
 const SCRIPT = "\n      document.documentElement.lang = 'en';\n    "
 const HASH = cspHash(SCRIPT)
@@ -37,9 +37,11 @@ describe('cspHash', () => {
   })
 })
 
-describe('extractScriptSrc', () => {
+describe('extractScriptSrcs', () => {
   test('reads script-src from a Report-Only line, stopping at the next directive', () => {
-    expect(extractScriptSrc(headersWith(`'self' '${HASH}'`))).toBe(`'self' '${HASH}'`)
+    expect(extractScriptSrcs(headersWith(`'self' '${HASH}'`))).toEqual([
+      { headerName: 'Content-Security-Policy-Report-Only', scriptSrc: `'self' '${HASH}'` },
+    ])
   })
 
   test('binds to the real directive, not a # comment that names it (anti-mask)', () => {
@@ -48,7 +50,21 @@ describe('extractScriptSrc', () => {
       "  # don't put Content-Security-Policy-Report-Only: script-src 'unsafe-inline' in a comment",
       `  Content-Security-Policy-Report-Only: script-src 'self' '${HASH}'; base-uri 'self'`,
     ].join('\n')
-    expect(extractScriptSrc(withComment)).toBe(`'self' '${HASH}'`)
+    expect(extractScriptSrcs(withComment)).toEqual([
+      { headerName: 'Content-Security-Policy-Report-Only', scriptSrc: `'self' '${HASH}'` },
+    ])
+  })
+
+  test('returns every CSP line during the enforce-flip rollout (both headers may coexist)', () => {
+    const headers = [
+      '/*',
+      `  Content-Security-Policy-Report-Only: script-src 'self' '${HASH}'`,
+      `  Content-Security-Policy: script-src 'self' '${HASH}'`,
+    ].join('\n')
+    expect(extractScriptSrcs(headers).map((d) => d.headerName)).toEqual([
+      'Content-Security-Policy-Report-Only',
+      'Content-Security-Policy',
+    ])
   })
 })
 
@@ -80,5 +96,29 @@ describe('checkCspHash', () => {
       problems: ['dist/index.html must have exactly one inline (src-less) <script>'],
       servedHash: null,
     })
+  })
+
+  // Enforce-flip rollout (#1009): both headers may briefly coexist. The old
+  // `.find()` extractor silently validated only one — a stale-pin enforcing
+  // header would block the script while the Report-Only side passed CI.
+  test('reports stale pins on EVERY CSP header during enforce-flip', () => {
+    const headers = [
+      '/*',
+      `  Content-Security-Policy-Report-Only: script-src 'self' 'sha256-STALE='`,
+      `  Content-Security-Policy: script-src 'self' 'sha256-STALE='`,
+    ].join('\n')
+    const report = checkCspHash(distHtml(SCRIPT), headers)
+    expect(report.ok).toBe(false)
+    const joined = report.problems.join(' ')
+    expect(joined).toContain('Content-Security-Policy-Report-Only')
+    expect(joined).toContain('Content-Security-Policy:')
+    expect(report.problems.filter((p) => p.includes('stale pin'))).toHaveLength(2)
+  })
+
+  test('fails when no CSP directive is present at all', () => {
+    const noCsp = '/*\n  X-Content-Type-Options: nosniff'
+    const report = checkCspHash(distHtml(SCRIPT), noCsp)
+    expect(report.ok).toBe(false)
+    expect(report.problems).toContain('no CSP script-src directive found in _headers')
   })
 })

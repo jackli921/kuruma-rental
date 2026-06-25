@@ -8,10 +8,11 @@ import {
 import type { Db } from './shared'
 
 /**
- * Drizzle ComplianceAlertLogRepository (#916 §5.4/§7). `record` is an idempotent
- * insert — `onConflictDoNothing` on the (vehicleId, documentType, thresholdBand)
- * unique seal makes a same-band re-run a no-op, so the digest can record after a
- * successful send without ever double-writing.
+ * Drizzle ComplianceAlertLogRepository (#916 §5.4/§7). `recordMany` is one
+ * idempotent bulk insert — `onConflictDoNothing` on the (vehicleId, documentType,
+ * thresholdBand) unique seal makes any already-sealed band a no-op, so the digest
+ * can record after a successful send without ever double-writing. A single
+ * statement = one operator's bands seal atomically (#1043).
  */
 export class DrizzleComplianceAlertLogRepository implements ComplianceAlertLogRepository {
   constructor(private readonly db: Db) {}
@@ -29,7 +30,8 @@ export class DrizzleComplianceAlertLogRepository implements ComplianceAlertLogRe
     return new Set(rows.map((r) => complianceAlertKey(r.vehicleId, r.documentType, r.thresholdBand)))
   }
 
-  async record(data: RecordComplianceAlert): Promise<void> {
-    await this.db.insert(complianceAlertLog).values(data).onConflictDoNothing()
+  async recordMany(alerts: RecordComplianceAlert[]): Promise<void> {
+    if (alerts.length === 0) return
+    await this.db.insert(complianceAlertLog).values(alerts).onConflictDoNothing()
   }
 }

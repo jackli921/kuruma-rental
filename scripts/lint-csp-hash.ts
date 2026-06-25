@@ -29,16 +29,26 @@ export function cspHash(scriptContent: string): string {
 }
 
 /**
- * The script-src directive value from the CSP line (enforcing OR Report-Only).
- * Anchored on `^\s+` so it binds to a real indented `_headers` directive, never a
- * `#` comment that merely mentions the directive name — the guard must survive
- * future explanatory edits to this file without a comment masking a regression.
+ * The script-src directive values from EVERY CSP line (enforcing AND
+ * Report-Only). Anchored on `^\s+` so it binds to a real indented `_headers`
+ * directive, never a `#` comment that merely mentions the directive name — the
+ * guard must survive future explanatory edits to this file without a comment
+ * masking a regression. Returns ALL matches because the enforce-flip rollout
+ * (#1009) is expected to temporarily ship BOTH headers side by side, and `.find`
+ * would silently validate only one of them (maintainability finding #4).
  */
-export function extractScriptSrc(headers: string): string {
-  const line = headers
+export function extractScriptSrcs(
+  headers: string,
+): Array<{ headerName: string; scriptSrc: string }> {
+  return headers
     .split('\n')
-    .find((l) => /^\s+Content-Security-Policy(-Report-Only)?:/.test(l))
-  return line?.match(/script-src ([^;]*)/)?.[1]?.trim() ?? ''
+    .map((l) => l.match(/^\s+(Content-Security-Policy(?:-Report-Only)?):\s*(.*)$/))
+    .filter((m): m is RegExpMatchArray => m !== null)
+    .map((m) => ({
+      headerName: m[1] ?? '',
+      scriptSrc: m[2]?.match(/script-src ([^;]*)/)?.[1]?.trim() ?? '',
+    }))
+    .filter((d) => d.scriptSrc.length > 0)
 }
 
 export interface CspHashReport {
@@ -58,12 +68,21 @@ export function checkCspHash(distHtml: string, headers: string): CspHashReport {
     }
 
   const servedHash = cspHash(script)
-  const scriptSrc = extractScriptSrc(headers)
+  const directives = extractScriptSrcs(headers)
   const problems: string[] = []
-  if (!scriptSrc.includes(`'${servedHash}'`))
-    problems.push(`script-src is missing the served inline-script hash '${servedHash}' (stale pin)`)
-  if (scriptSrc.includes("'unsafe-inline'"))
-    problems.push("script-src still allows 'unsafe-inline' (it cannot coexist with a hash)")
+  if (directives.length === 0) {
+    problems.push('no CSP script-src directive found in _headers')
+  }
+  for (const { headerName, scriptSrc } of directives) {
+    if (!scriptSrc.includes(`'${servedHash}'`))
+      problems.push(
+        `${headerName}: script-src is missing the served inline-script hash '${servedHash}' (stale pin)`,
+      )
+    if (scriptSrc.includes("'unsafe-inline'"))
+      problems.push(
+        `${headerName}: script-src still allows 'unsafe-inline' (it cannot coexist with a hash)`,
+      )
+  }
   return { ok: problems.length === 0, problems, servedHash }
 }
 
