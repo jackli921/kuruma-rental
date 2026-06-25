@@ -33,15 +33,17 @@ interface IdClaims {
 
 function mintIdToken(
   claims: IdClaims,
-  opts: { issuer?: string; audience?: string; expiresIn?: string } = {},
+  opts: { issuer?: string; audience?: string; expiresIn?: string; noExp?: boolean } = {},
 ): Promise<string> {
-  return new SignJWT({ ...claims })
+  const builder = new SignJWT({ ...claims })
     .setProtectedHeader({ alg: 'RS256' })
     .setIssuer(opts.issuer ?? 'https://accounts.google.com')
     .setAudience(opts.audience ?? CLIENT_ID)
     .setIssuedAt()
-    .setExpirationTime(opts.expiresIn ?? '5m')
-    .sign(privateKey)
+  // noExp mints a token with NO exp claim — Google always emits one, but jose only
+  // checks exp when present, so we assert our verifier requires its presence (#1055).
+  if (!opts.noExp) builder.setExpirationTime(opts.expiresIn ?? '5m')
+  return builder.sign(privateKey)
 }
 
 const validClaims: IdClaims = {
@@ -102,6 +104,16 @@ describe('verifyGoogleIdToken (#1055)', () => {
 
   it('rejects an expired token', async () => {
     const token = await mintIdToken(validClaims, { expiresIn: '-1m' })
+    await expect(
+      verifyGoogleIdToken(token, publicKey, { clientId: CLIENT_ID, nonce: NONCE }),
+    ).rejects.toThrow()
+  })
+
+  it('rejects a token with no exp claim (presence required, not just validity)', async () => {
+    // jose only enforces exp when it is present; without requiredClaims a token that
+    // simply omits exp would never expire. Google always emits exp, so this guards a
+    // hypothetical malformed/forged token rather than any real Google response.
+    const token = await mintIdToken(validClaims, { noExp: true })
     await expect(
       verifyGoogleIdToken(token, publicKey, { clientId: CLIENT_ID, nonce: NONCE }),
     ).rejects.toThrow()
