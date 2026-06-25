@@ -318,6 +318,33 @@ describe('PaymentService.handleWebhook', () => {
     expect(second).toMatchObject({ status: 200, outcome: 'duplicate' })
   })
 
+  it('records a payment from async_payment_succeeded (konbini/bank transfer)', async () => {
+    // Delayed JP methods complete the Checkout Session `unpaid`, then settle later via
+    // a SEPARATE checkout.session.async_payment_succeeded event whose session is `paid`.
+    // It must record the payment exactly like a card `completed` — else captured funds
+    // never mark the booking paid (#payment-review LOW-1).
+    gateway.nextEvent = completedEvent({
+      type: 'checkout.session.async_payment_succeeded',
+      eventId: 'evt_async',
+      checkoutSessionId: 'cs_async',
+    })
+    const result = await service.handleWebhook('raw', 'sig')
+    expect(result.outcome).toBe('recorded')
+    const paid = await paymentRepo.findSucceededByBookingId('bk-1')
+    expect(paid?.stripeEventId).toBe('evt_async')
+    expect(paid?.grossJpy).toBe(100_000)
+  })
+
+  it('ignores async_payment_failed (delayed payment never settled, no row)', async () => {
+    gateway.nextEvent = completedEvent({
+      type: 'checkout.session.async_payment_failed',
+      paymentStatus: 'unpaid',
+      eventId: 'evt_async_fail',
+    })
+    expect((await service.handleWebhook('raw', 'sig')).outcome).toBe('ignored')
+    expect(await paymentRepo.findSucceededByBookingId('bk-1')).toBeNull()
+  })
+
   it('flags a SECOND distinct session as double-payment, carrying the paymentIntent to refund', async () => {
     gateway.nextEvent = completedEvent()
     await service.handleWebhook('raw', 'sig')

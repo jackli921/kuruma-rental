@@ -18,6 +18,17 @@ import type { PaymentGateway, StripeRefund, VerifiedPaymentEvent } from './payme
 
 const CURRENCY = 'jpy'
 const COMPLETED_EVENT = 'checkout.session.completed'
+// A delayed payment method (JP konbini / bank transfer) completes the Checkout
+// Session as `unpaid`, then settles later via a SEPARATE async_payment_succeeded
+// event whose session is `paid`. Both carry the session's amount + metadata, so
+// either is a valid "this booking was paid" signal; the session-id unique seal keeps
+// a card `completed` and a (never co-occurring) async settle idempotent. Without
+// this, konbini/bank funds are captured but the booking never records paid (#payment-review LOW-1).
+const ASYNC_PAYMENT_SUCCEEDED_EVENT = 'checkout.session.async_payment_succeeded'
+const PAID_SESSION_EVENTS: ReadonlySet<string> = new Set([
+  COMPLETED_EVENT,
+  ASYNC_PAYMENT_SUCCEEDED_EVENT,
+])
 const PAID = 'paid'
 // Stripe fires `refund.updated` as a refund moves through its lifecycle. Our refund
 // carries `metadata.bookingId` (set at refundPayment), so this event — unlike
@@ -166,7 +177,7 @@ export class PaymentService {
       return this.handleRefundWebhook(event)
     }
 
-    if (event.type !== COMPLETED_EVENT || event.paymentStatus !== PAID) {
+    if (!PAID_SESSION_EVENTS.has(event.type) || event.paymentStatus !== PAID) {
       return { status: 200, outcome: 'ignored' }
     }
     const bookingId = event.metadata.bookingId
