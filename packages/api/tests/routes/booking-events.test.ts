@@ -12,6 +12,7 @@ import { BookingService } from '../../src/services/booking'
 import type { BookingEvent } from '../../src/stores'
 import { testAuthMiddleware } from '../helpers/auth'
 import { bookingInput } from '../helpers/booking'
+import { makeInertConsentGate } from '../helpers/consent'
 
 // #549 slice 1: the operator trip-detail page reads a booking's lifecycle log
 // via GET /bookings/:id/events. The endpoint is operator/management-only — the
@@ -57,7 +58,7 @@ function eventsApp(
 ) {
   const app = new Hono()
   app.use('*', testAuthMiddleware(userId, role, operatorId))
-  app.route('/', createBookingRoutes(service))
+  app.route('/', createBookingRoutes(service, makeInertConsentGate()))
   return app
 }
 
