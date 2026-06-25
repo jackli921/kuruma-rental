@@ -56,11 +56,17 @@ of #464. Full vertical slice: API + operator web UI + tests.
 Request: `{ vehicleId: string, reason?: string | null }` (Zod, validators/booking).
 Responses:
 - `200` updated booking (assignedVehicleId set; totalPrice/effectiveEndAt unchanged).
-- `404` booking not found / cross-tenant (no leak).
+- `404` booking not found / cross-tenant (no leak), **OR candidate vehicle missing or
+  foreign** (P1, IDOR/existence leak). The service reads the candidate with
+  `SYSTEM_CONTEXT` (bypassing row scope), so `!vehicle || vehicle.operatorId !==
+  booking.operatorId → 404` ("vehicle not found") — never a distinguishing `400`,
+  which would confirm a foreign id exists. Mirrors `substitute()` (`booking-lifecycle.
+  ts:108-110`, "Cross-operator (or missing) -> 404, no existence leak").
 - `409 NOT_A_COMBO` — `fulfillmentMode !== 'CLASS_COMBO'` (SPECIFIC uses substitute).
 - `409 INVALID_STATUS` — status not in {CONFIRMED, ACTIVE}.
-- `400` candidate invalid (wrong operator/location/class, not AVAILABLE); road-legal
-  rejection reuses the existing **`VEHICLE_DOCS_EXPIRE_BEFORE_RETURN`** code.
+- `400` candidate is **own** but invalid (not AVAILABLE / wrong location / wrong
+  class); road-legal rejection reuses the existing
+  **`VEHICLE_DOCS_EXPIRE_BEFORE_RETURN`** code.
 - `409 VEHICLE_UNAVAILABLE` — exclusion violation (`23P01`): car already booked on
   the overlapping window.
 
@@ -71,11 +77,15 @@ it, so an unlisted code is a `tsc` error. Append the four and pin them in
 `error-codes.test.ts`. Reuse `VEHICLE_DOCS_EXPIRE_BEFORE_RETURN` for road-legal.
 
 **Worklist read (its own data-layer sub-slice — M3, NOT a freebie).** Reuse the
-existing bookings list with a new filter: `GET /bookings?fulfillmentMode=CLASS_COMBO&
-unassigned=true` (operator-scoped; `unassigned` ⇒ `assignedVehicleId IS NULL`). This
-touches 4 files: `BookingFilters` (`repositories/types.ts`, re-exported via
-`services/filters.ts`), the `WHERE` in `DrizzleBookingRepository.findAll` AND
-`InMemoryBookingRepository.findAll`, and the route query parse in `routes/bookings.ts`.
+existing bookings list with a **single `needsAssignment=true` predicate** (P2 — NOT a
+bare `unassigned` flag): `fulfillmentMode = 'CLASS_COMBO' AND assignedVehicleId IS
+NULL AND status IN ('CONFIRMED','ACTIVE')`. Encapsulating the full assignable
+condition server-side (DRY with the service guard) keeps cancelled/completed floats
+out of the sidebar — a bare `unassigned=true` would surface rows the service then
+refuses. `GET /bookings?needsAssignment=true` (operator-scoped). Touches 4 files:
+`BookingFilters` (`repositories/types.ts`, re-exported via `services/filters.ts`), the
+`WHERE` in `DrizzleBookingRepository.findAll` AND `InMemoryBookingRepository.findAll`,
+and the route query parse in `routes/bookings.ts`.
 
 ## Service logic — `BookingLifecycleService.assignVehicle(ctx, id, vehicleId, reason?)`
 
@@ -83,8 +93,10 @@ Runs inside the existing `runInTransaction` runner:
 1. Load booking (scoped by `CallerContext`). Absent → `NotFoundError`.
 2. Guard `fulfillmentMode === 'CLASS_COMBO'` else `ConflictError NOT_A_COMBO`.
 3. Guard `status ∈ {CONFIRMED, ACTIVE}` else `ConflictError INVALID_STATUS`.
-4. Load candidate via `vehicleRepo.findById(SYSTEM_CONTEXT, vehicleId)`. Validate:
-   same `operatorId`, status `AVAILABLE`, same `pickupLocationId`, ACRISS class of the
+4. Load candidate via `vehicleRepo.findById(SYSTEM_CONTEXT, vehicleId)`. **`!vehicle
+   || vehicle.operatorId !== booking.operatorId → 404`** ("vehicle not found") — same
+   response for missing and foreign, no existence leak (P1). Then validate the OWN
+   vehicle (→ `400`): status `AVAILABLE`, same `pickupLocationId`, ACRISS class of the
    vehicle matches the booking's `classId`, and **`isRoadLegal(car, jstDateString(
    booking.endAt))`** — `endAt`, NOT `effectiveEndAt` (M2, Policy Drift). The assign
    dialog is fed by `findSubstitutionCandidates`, which filters road-legal on
@@ -128,14 +140,29 @@ packages, and `assertNever` makes the web fail to build until handled:
 - **`packages/web/.../operator-bookings/BookingTimeline.tsx`:** the `assertNever(
   payload)` becomes a compile error → add a `case 'VEHICLE_ASSIGNED'` render branch
   + en/ja/zh i18n keys. **This is the load-bearing reason the web build gates the slice.**
+- **Web DTO nullability (P1, pre-existing gap the assign response exposes).**
+  `BookingDto` / `bookingDtoSchema` (`web/.../bookings/api.ts:24,80`) pin
+  `requestedVehicleId` and `assignedVehicleId` as non-nullable `z.string()`, but a
+  combo float stores BOTH as `null` (`booking-creation.ts:702`) and after assign
+  `requestedVehicleId` stays `null`. Since `bookingDtoSchema` validates the
+  substitute/status/**assign** write responses (`#711` parse seam), the assign
+  response would throw a `ParseError`. Make both `.nullable()` in `BookingDto`,
+  `bookingDtoSchema`, the operator-bookings `.extend` (`operator-bookings/schema.ts`),
+  AND the `BOOKING_CREATED` timeline payload schema (`operator-bookings/schema.ts:108`).
 - No `bookings`-table change: a `CLASS_COMBO` row with a non-NULL `assignedVehicleId`
   is already valid (`bookings_specific_requires_assigned` only constrains SPECIFIC).
 - `db:generate → db:migrate → db:verify` (3 green) per the migration runbook.
 
 ## Operator UI (`packages/web/src/vite/operator-bookings`)
 
-- **`UnassignedFloatsList`** in `CalendarSidebar`: operator-scoped query of floats
-  awaiting a car; badge via the `useNewBookingsBadge` pattern. Empty state when none.
+- **`UnassignedFloatsList`** in `CalendarSidebar`: operator-scoped query
+  (`needsAssignment=true`) of floats awaiting a car; badge via the
+  `useNewBookingsBadge` pattern. Empty state when none. **Includes ACTIVE floats and
+  flags them "Overdue" (open question, resolved).** An ACTIVE float = pickup has
+  started with no car assigned — the *most* urgent case, never hidden. The row labels
+  `status === 'ACTIVE'` as "Overdue · pickup started" (distinct style) and sorts those
+  to the top; CONFIRMED rows render plain. So the worklist includes both statuses;
+  the UI carries the urgency distinction (not a separate query).
 - **`AssignVehicleDialog`** (mirrors `SubstituteVehicleDialog.tsx`): candidate picker
   fed by the substitution-candidates endpoint (same op/location/class/AVAILABLE/
   road-legal; no current car to exclude), optional reason, submit → `POST .../assign`,
@@ -185,3 +212,9 @@ packages, and `assertNever` makes the web fail to build until handled:
   M2 (road-legal `asOf` = `endAt`, Policy Drift), M3 (worklist filter = 4-file
   sub-slice), L1/L2/L3/L4. Confirmed safe: enum migration, no table change, DI wiring
   (no composition-root/repo change), 4-layer authz, exclusion-race atomicity.
+- **2026-06-25 owner code-review:** folded in P1 (candidate missing/foreign → `404`
+  not `400`, IDOR/existence-leak — mirror `substitute()`), P1 (web DTO nullability:
+  `requestedVehicleId`/`assignedVehicleId` `.nullable()` across `BookingDto`/schema/
+  extend/`BOOKING_CREATED` payload — the assign response would otherwise `ParseError`),
+  P2 (worklist = `needsAssignment` predicate incl. status gate, not bare `unassigned`).
+  Open question resolved: worklist includes ACTIVE floats, UI flags them "Overdue".
