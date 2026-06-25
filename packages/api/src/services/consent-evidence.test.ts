@@ -85,4 +85,31 @@ describe('ConsentEvidenceService', () => {
     expect(evs[0]?.acceptance.id).toBe(acc.id)
     expect(evs[0]?.verification.status).toBe('VERIFIED')
   })
+
+  it('is replayable from the exported bundle alone (no DB read needed)', async () => {
+    const repo = new InMemoryConsentRepository()
+    const acc = await repo.createAcceptance(makeSignedNewAcceptance())
+    const ev = await new ConsentEvidenceService(repo, getKey).getConsentEvidence(acc.id)
+    if (!ev?.document) throw new Error('expected evidence with snapshot')
+    // Recompute the HMAC using ONLY fields carried by the exported bundle.
+    const replay = signAcceptanceRecord(
+      {
+        documentId: ev.acceptance.documentId,
+        contentHash: ev.document.contentHash,
+        consentType: ev.acceptance.consentType,
+        version: ev.document.version,
+        locale: ev.document.locale,
+        userId: ev.acceptance.userId,
+        operatorId: ev.acceptance.operatorId,
+        operatorMembershipId: ev.acceptance.operatorMembershipId,
+        bookingId: ev.acceptance.bookingId,
+        method: ev.acceptance.method,
+        acceptedAt: ev.acceptance.acceptedAt,
+        ipAddress: ev.acceptance.ipAddress,
+        userAgent: ev.acceptance.userAgent,
+      },
+      KEY,
+    ).signature
+    expect(replay).toBe(ev.signature.recordSignature)
+  })
 })

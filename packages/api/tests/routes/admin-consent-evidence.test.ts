@@ -54,7 +54,7 @@ describe('GET /admin/consent/acceptances/:id/evidence', () => {
       context: null,
       ipAddress: '1.2.3.4',
       userAgent: 'test-agent',
-      method: 'EXPLICIT_CHECKBOX',
+      method: 'CLICKWRAP',
       recordSignature: null,
       signingKeyId: null,
       signatureCanonicalVersion: null,
