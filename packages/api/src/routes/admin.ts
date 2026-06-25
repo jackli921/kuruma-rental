@@ -2,6 +2,7 @@ import { createOperatorSchema } from '@kuruma/shared/validators/operator'
 import { createProviderInviteSchema } from '@kuruma/shared/validators/provider-invite'
 import { Hono } from 'hono'
 import { requireUser, toCallerContext } from '../middleware/auth'
+import type { ConsentEvidenceService } from '../services/consent-evidence'
 import type { OperatorService } from '../services/operator'
 import { OperatorNotFoundError, type ProviderInviteService } from '../services/provider-invite'
 import { fail, ok, parseBody } from './helpers'
@@ -9,6 +10,7 @@ import { fail, ok, parseBody } from './helpers'
 export function createAdminRoutes(
   operatorService: OperatorService,
   providerInviteService: ProviderInviteService,
+  consentEvidenceService: ConsentEvidenceService,
 ) {
   const app = new Hono()
 
@@ -40,6 +42,12 @@ export function createAdminRoutes(
           if (e instanceof OperatorNotFoundError) return fail(c, 'Operator not found', 404)
           throw e
         }
+      })
+      // #877 Task 8: platform-admin consent evidence export for legal/audit review.
+      .get('/admin/consent/acceptances/:id/evidence', async (c) => {
+        const evidence = await consentEvidenceService.getConsentEvidence(c.req.param('id'))
+        if (!evidence) return fail(c, 'ACCEPTANCE_NOT_FOUND', 404)
+        return ok(c, evidence)
       })
   )
 }

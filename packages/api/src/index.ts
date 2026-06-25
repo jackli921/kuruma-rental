@@ -416,8 +416,8 @@ export function createApp(overrides?: AppOverrides, repos: Repos = buildRepos(ov
   // #877 2b: pure policy gate over the same re-consent query; renter booking
   // creation consults it (booking-only scope, the legally load-bearing chokepoint).
   const consentGate = new ConsentGateService(consentService)
-  // #877: assembles verified evidence bundles; route wiring deferred to Task 8.
-  const _consentEvidenceService = new ConsentEvidenceService(consentRepo, (keyId) => {
+  // #877: assembles verified evidence bundles; exposed via platform-admin route (Task 8).
+  const consentEvidenceService = new ConsentEvidenceService(consentRepo, (keyId) => {
     const k = resolveSigningKey()
     return k && k.keyId === keyId ? k : undefined
   })
@@ -523,7 +523,7 @@ export function createApp(overrides?: AppOverrides, repos: Repos = buildRepos(ov
     )
     .route('/', createCustomerRoutes(customerService))
     .route('/', createUserRoutes(userDirectoryService))
-    .route('/', createAdminRoutes(operatorService, providerInviteService))
+    .route('/', createAdminRoutes(operatorService, providerInviteService, consentEvidenceService))
     .route('/', createLocationRoutes(locationService, resolveWriteOperatorId))
     .route('/', createInsuranceOptionRoutes(insuranceOptionService, resolveWriteOperatorId))
     .route('/', createAddOnRoutes(addOnService, resolveWriteOperatorId))
