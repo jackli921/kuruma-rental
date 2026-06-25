@@ -519,6 +519,38 @@ describe('PaymentService.handleWebhook — refund confirmation (#851)', () => {
     expect(await fresh.findByBookingId('bk-1')).toBeNull()
     expect(await settlement()).toBe('REFUND_DUE')
   })
+
+  it('ignores a succeeded refund when both ids are null — null !== null is false, the reconciler owns confirmation (#1059 review HIGH)', async () => {
+    // A receipt claimed BEFORE the re_ was attached (pre-PR row, or a webhook race) has
+    // `stripeRefundId: null`. A `refund.updated` body lacking `obj.id` (Stripe API drift,
+    // replay tooling) parses to `event.refundId: null`. Without the explicit null guard,
+    // `receipt.stripeRefundId !== event.refundId` is `null !== null` → false → the
+    // booking would silently flip REFUNDED on an unverifiable refund — exactly the
+    // surface this PR was opened to close.
+    const fresh = new InMemoryPaymentRefundRepository()
+    const noAttachService = new PaymentService(
+      new InMemoryPaymentEventRepository(),
+      fresh,
+      bookingRepo,
+      gateway,
+      new InMemoryPaymentAnomalyRepository(),
+      { webBaseUrl: WEB_BASE },
+    )
+    // Claim WITHOUT attachStripeRefund → receipt.stripeRefundId stays null.
+    await fresh.claim({
+      bookingId: 'bk-1',
+      operatorId: 'op-1',
+      stripePaymentIntentId: 'pi_1',
+      amountJpy: 70_000,
+    })
+    gateway.nextEvent = refundEvent({ refundId: null })
+    expect(await noAttachService.handleWebhook('raw', 'sig')).toEqual({
+      status: 200,
+      outcome: 'ignored',
+    })
+    expect((await fresh.findByBookingId('bk-1'))?.status).toBe('PENDING')
+    expect(await settlement()).toBe('REFUND_DUE')
+  })
 })
 
 describe('PaymentService.getBookingPaymentStatus', () => {
