@@ -84,6 +84,15 @@ export type StatusChangedPayload = {
   from: BookingStatus
   to: BookingStatus
 }
+// #464: operator assigns a concrete car to a CLASS_COMBO float (null -> car, or
+// car -> car on a reassignment). Mirrors VehicleSubstitutedPayload but the price
+// is intentionally NOT re-snapshotted — the class rate plan fixes it at submit.
+export type VehicleAssignedPayload = {
+  type: 'VEHICLE_ASSIGNED'
+  fromVehicleId: string | null // null on first assign; the prior car on a swap
+  toVehicleId: string
+  reason: string | null
+}
 // #716: discriminated union keyed on `type`. The literals mirror BOOKING_EVENT_TYPES
 // (booking_events.type is the storage-side discriminant), so consumers narrow on
 // payload.type with zero casts and gain assertNever exhaustiveness. The read mapper
@@ -92,5 +101,6 @@ export type StatusChangedPayload = {
 export type BookingEventPayload =
   | BookingCreatedPayload
   | VehicleSubstitutedPayload
+  | VehicleAssignedPayload
   | BookingCancelledPayload
   | StatusChangedPayload

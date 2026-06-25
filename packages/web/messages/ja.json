@@ -1101,6 +1101,7 @@
         "created": "予約が作成されました",
         "statusChanged": "ステータスが{from}から{to}に変更されました",
         "vehicleSubstituted": "車両が変更されました",
+        "vehicleAssigned": "車両が割り当てられました",
         "reason": "理由: {reason}",
         "cancelled": "予約がキャンセルされました",
         "cancellationFee": "キャンセル料 {fee}",

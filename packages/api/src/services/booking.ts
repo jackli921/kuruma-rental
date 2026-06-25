@@ -173,6 +173,15 @@ export class BookingService {
     return this.lifecycle.substitute(ctx, bookingId, newVehicleId, reason)
   }
 
+  assignVehicle(
+    ctx: CallerContext,
+    bookingId: string,
+    vehicleId: string,
+    reason: string | null = null,
+  ): Promise<SubstituteResult> {
+    return this.lifecycle.assignVehicle(ctx, bookingId, vehicleId, reason)
+  }
+
   findSubstitutionCandidates(
     ctx: CallerContext,
     bookingId: string,

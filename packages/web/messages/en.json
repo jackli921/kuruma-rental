@@ -1101,6 +1101,7 @@
         "created": "Booking created",
         "statusChanged": "Status changed from {from} to {to}",
         "vehicleSubstituted": "Vehicle substituted",
+        "vehicleAssigned": "Vehicle assigned",
         "reason": "Reason: {reason}",
         "cancelled": "Booking cancelled",
         "cancellationFee": "Cancellation fee {fee}",

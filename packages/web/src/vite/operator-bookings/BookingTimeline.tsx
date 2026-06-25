@@ -54,6 +54,8 @@ function eventLabel(event: BookingEventDto, t: Translate, ts: Translate): string
       return t('statusChanged', { from: ts(payload.from), to: ts(payload.to) })
     case 'VEHICLE_SUBSTITUTED':
       return t('vehicleSubstituted')
+    case 'VEHICLE_ASSIGNED':
+      return t('vehicleAssigned')
     case 'BOOKING_CANCELLED':
       return t('cancelled')
     case 'BOOKING_CREATED':

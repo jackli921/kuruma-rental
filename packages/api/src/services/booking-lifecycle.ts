@@ -206,6 +206,94 @@ export class BookingLifecycleService {
     }
   }
 
+  /**
+   * Operator assigns a concrete car to a CLASS_COMBO float (#464). One transaction:
+   * load the booking (cross-operator -> 404, no leak), validate it is a CLASS_COMBO
+   * in an assignable status, validate the car is AVAILABLE / same operator / same
+   * pickup location / same ACRISS class / road-legal through the booking's endAt,
+   * reassign via bookingRepo.reassignVehicle (exclusion constraint re-checks the
+   * new vehicle atomically -> 409 if it's already booked), and append VEHICLE_ASSIGNED.
+   * Price is intentionally NOT re-snapshotted — the class rate plan fixed it at submit.
+   */
+  async assignVehicle(
+    ctx: CallerContext,
+    bookingId: string,
+    vehicleId: string,
+    reason: string | null,
+  ): Promise<SubstituteResult> {
+    try {
+      const result = await this.runInTransaction(async (repos): Promise<SubstituteResult> => {
+        const booking = await repos.bookingRepo.findById(ctx, bookingId)
+        if (!booking) return { ok: false, status: 404, error: 'Booking not found' }
+        if (booking.fulfillmentMode !== 'CLASS_COMBO')
+          return {
+            ok: false,
+            status: 409,
+            error: 'Only class-deal bookings are assigned a vehicle',
+            code: 'NOT_A_COMBO',
+          }
+        if (booking.status !== 'CONFIRMED' && booking.status !== 'ACTIVE')
+          return {
+            ok: false,
+            status: 409,
+            error: `Cannot assign a vehicle to a ${booking.status} booking`,
+            code: 'INVALID_STATUS',
+          }
+
+        const car = await repos.vehicleRepo.findById(SYSTEM_CONTEXT, vehicleId)
+        // missing OR foreign => 404, no existence leak (mirrors substitute()).
+        if (!car || car.operatorId !== booking.operatorId)
+          return { ok: false, status: 404, error: 'Vehicle not found' }
+        if (car.status !== 'AVAILABLE')
+          return { ok: false, status: 400, error: 'Vehicle is not available' }
+        if ((car.pickupLocationId ?? null) !== booking.pickupLocationId)
+          return { ok: false, status: 400, error: 'Vehicle serves a different pickup location' }
+        if (!car.classId || !(await this.sameAcrissClass(booking.classId, car.classId)))
+          return { ok: false, status: 400, error: 'Vehicle is a different class' }
+        // road-legal asOf = endAt (NOT effectiveEndAt) to match the candidate feeder.
+        if (!isRoadLegal(car, jstDateString(booking.endAt)))
+          return {
+            ok: false,
+            status: 400,
+            error: "Vehicle's shaken or insurance expires before the booking ends",
+            code: 'VEHICLE_DOCS_EXPIRE_BEFORE_RETURN',
+          }
+
+        // No reprice — class-deal price is fixed by the rate plan. effectiveEndAt is
+        // invariant (turnaround follows the dropoff location, unchanged here).
+        const updated = await repos.bookingRepo.reassignVehicle(ctx, booking.id, {
+          assignedVehicleId: car.id,
+          totalPrice: booking.totalPrice,
+          effectiveEndAt: booking.effectiveEndAt,
+        })
+        if (!updated) return { ok: false, status: 404, error: 'Booking not found' }
+
+        await repos.bookingEventRepo.append(ctx, {
+          bookingId: booking.id,
+          type: 'VEHICLE_ASSIGNED',
+          actorId: ctx.userId,
+          payload: {
+            type: 'VEHICLE_ASSIGNED',
+            fromVehicleId: booking.assignedVehicleId,
+            toVehicleId: car.id,
+            reason,
+          },
+        })
+        return { ok: true, booking: updated }
+      })
+      return result
+    } catch (err) {
+      if (pgErrorCode(err) === PG_ERROR.EXCLUSION_VIOLATION)
+        return {
+          ok: false,
+          status: 409,
+          error: 'Vehicle is already booked for this time range',
+          code: 'VEHICLE_UNAVAILABLE',
+        }
+      throw err
+    }
+  }
+
   // Substitution requires the same ACRISS class (§5.5, no rank order in MVP).
   // Both classes must resolve to the same NON-NULL code — an unmapped class
   // (null acriss) can never be a substitution target.
