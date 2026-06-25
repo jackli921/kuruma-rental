@@ -55,7 +55,9 @@ import { BookingService } from './services/booking'
 import { BookingPostCommitDispatcher } from './services/booking-post-commit-dispatcher'
 import { ComplianceDigestService } from './services/compliance-digest'
 import { ConsentService } from './services/consent'
+import { ConsentEvidenceService } from './services/consent-evidence'
 import { ConsentGateService } from './services/consent-gate'
+import { resolveSigningKey } from './services/consent-signing'
 import { CustomerService } from './services/customer'
 import { documentVerificationGate } from './services/document-verification-gate'
 import type { EmailSender } from './services/email/email-sender'
@@ -414,6 +416,11 @@ export function createApp(overrides?: AppOverrides, repos: Repos = buildRepos(ov
   // #877 2b: pure policy gate over the same re-consent query; renter booking
   // creation consults it (booking-only scope, the legally load-bearing chokepoint).
   const consentGate = new ConsentGateService(consentService)
+  // #877: assembles verified evidence bundles; route wiring deferred to Task 8.
+  const _consentEvidenceService = new ConsentEvidenceService(consentRepo, (keyId) => {
+    const k = resolveSigningKey()
+    return k && k.keyId === keyId ? k : undefined
+  })
   const userDirectoryService = new UserDirectoryService(userRepo, threadRepo)
   const maintenanceService = new MaintenanceService(
     vehicleRepo,
