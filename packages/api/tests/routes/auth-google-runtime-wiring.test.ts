@@ -22,9 +22,9 @@ function makeRuntime(): { calls: { code?: string }; runtime: GoogleAuthRuntime }
       provider: {
         exchangeCode: async (code) => {
           calls.code = code
-          return { accessToken: 'access-1' }
+          return { idToken: 'id-token-1' }
         },
-        getUserInfo: async () => ({ sub: 'g-1', email: 'jo@ex.com', name: 'Jo' }),
+        verifyIdToken: async () => ({ sub: 'g-1', email: 'jo@ex.com', name: 'Jo' }),
       },
       accountStore: {
         resolveUser: async () => ({ id: 'user_7', role: 'RENTER' as const }),
@@ -117,8 +117,8 @@ describe('createApp wires a googleAuthRuntime override into /auth/google/callbac
 
     const runtime: GoogleAuthRuntime = {
       provider: {
-        exchangeCode: async () => ({ accessToken: 'a' }),
-        getUserInfo: async () => ({
+        exchangeCode: async () => ({ idToken: 'id-1' }),
+        verifyIdToken: async () => ({
           sub: 'g-op',
           email: 'op@ex.com',
           email_verified: true,

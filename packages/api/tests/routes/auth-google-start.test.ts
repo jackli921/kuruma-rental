@@ -43,6 +43,21 @@ describe('POST /auth/google/start', () => {
     expect(readOAuthFlowCookie(res)?.state).toBe(state)
   })
 
+  test('binds a per-flow nonce: same value in the authorize URL and the flow cookie (#1055)', async () => {
+    setupGoogleEnv()
+    const app = createApp()
+    const res = await app.request('/auth/google/start', { method: 'POST' })
+
+    const url = new URL(res.headers.get('location') ?? '')
+    const urlNonce = url.searchParams.get('nonce')
+    // 32 random bytes, base64url — distinct from state, so the id_token can't be
+    // replayed from another flow even if its state leaked.
+    expect(urlNonce).toMatch(/^[A-Za-z0-9_-]{43}$/)
+    expect(urlNonce).not.toBe(url.searchParams.get('state'))
+    // The callback recovers THIS nonce from the cookie to verify the id_token.
+    expect(readOAuthFlowCookie(res)?.payload.nonce).toBe(urlNonce)
+  })
+
   test('503 when Google OAuth is not configured', async () => {
     setupAuthEnv()
     // Empty (falsy) rather than delete: Node coerces env values to strings, so

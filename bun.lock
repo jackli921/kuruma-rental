@@ -22,6 +22,7 @@
         "@kuruma/shared": "workspace:*",
         "@sentry/cloudflare": "^10.57.0",
         "hono": "^4",
+        "jose": "^6.0.6",
         "nanoid": "^5.1.11",
         "stripe": "^22.2.0",
       },

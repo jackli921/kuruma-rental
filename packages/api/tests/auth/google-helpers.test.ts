@@ -2,8 +2,13 @@ import { describe, expect, it } from 'vitest'
 
 import {
   FALLBACK_LOCALE,
+  type GoogleOAuthConfig,
+  buildGoogleAuthorizeUrl,
+  decodeFlowPayload,
+  encodeFlowPayload,
   localeFromReturnPath,
   parseOAuthIntent,
+  randomToken,
   safeInviteToken,
 } from '../../src/auth/google'
 
@@ -65,6 +70,65 @@ describe('safeInviteToken', () => {
   it('accepts a token exactly at the 128-char boundary', () => {
     const token = 'a'.repeat(128)
     expect(safeInviteToken(token)).toBe(token)
+  })
+})
+
+describe('buildGoogleAuthorizeUrl', () => {
+  const config: GoogleOAuthConfig = {
+    clientId: 'client-123.apps.googleusercontent.com',
+    clientSecret: 'top-secret',
+    redirectUri: 'https://api.example.com/auth/google/callback',
+    postLoginRedirect: 'https://app.example.com',
+  }
+
+  // #1055: the authorize URL must carry a per-flow `nonce` so the id_token returned
+  // by Google can be bound back to THIS sign-in — without it the callback can't
+  // prove the token isn't a replay from another flow.
+  it('binds the per-flow nonce into the authorize URL', () => {
+    const url = new URL(buildGoogleAuthorizeUrl(config, 'state-abc', 'nonce-xyz'))
+    expect(url.searchParams.get('nonce')).toBe('nonce-xyz')
+  })
+
+  it('keeps state and nonce as distinct params', () => {
+    const url = new URL(buildGoogleAuthorizeUrl(config, 'state-abc', 'nonce-xyz'))
+    expect(url.searchParams.get('state')).toBe('state-abc')
+    expect(url.searchParams.get('nonce')).toBe('nonce-xyz')
+  })
+})
+
+describe('flow payload nonce (#1055)', () => {
+  // The per-flow nonce rides in the same HttpOnly flow cookie as returnTo/intent/invite,
+  // so the callback can recover it to bind the id_token to THIS sign-in.
+  it('encodes and recovers the per-flow nonce', () => {
+    const nonce = randomToken()
+    const encoded = encodeFlowPayload({
+      returnTo: undefined,
+      intent: 'renter',
+      invite: undefined,
+      nonce,
+    })
+    expect(decodeFlowPayload(encoded).nonce).toBe(nonce)
+  })
+
+  it('recovers the nonce alongside the other validated fields', () => {
+    const nonce = randomToken()
+    const encoded = encodeFlowPayload({
+      returnTo: '/ja/manage',
+      intent: 'provider',
+      invite: 'inv-token',
+      nonce,
+    })
+    const decoded = decodeFlowPayload(encoded)
+    expect(decoded).toMatchObject({
+      returnTo: '/ja/manage',
+      intent: 'provider',
+      invite: 'inv-token',
+      nonce,
+    })
+  })
+
+  it('yields an undefined nonce for a malformed cookie (fail-closed on verification)', () => {
+    expect(decodeFlowPayload('not-base64url-json').nonce).toBeUndefined()
   })
 })
 
