@@ -107,6 +107,15 @@ describe('verifyGoogleIdToken (#1055)', () => {
     ).rejects.toThrow()
   })
 
+  it('accepts a token expired within the clock-tolerance window (CF↔Google drift)', async () => {
+    const token = await mintIdToken(validClaims, { expiresIn: '-10s' })
+    const profile = await verifyGoogleIdToken(token, publicKey, {
+      clientId: CLIENT_ID,
+      nonce: NONCE,
+    })
+    expect(profile.sub).toBe('google-sub-001')
+  })
+
   it('rejects a token signed by a key outside the trusted JWKS (forged signature)', async () => {
     const token = await mintIdToken(validClaims)
     await expect(

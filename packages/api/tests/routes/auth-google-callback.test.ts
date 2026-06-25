@@ -94,6 +94,27 @@ describe('GET /auth/google/callback', () => {
     expect(erasesFlowCookie(res, 's1')).toBe(true)
   })
 
+  test('id_token verification failure → fails closed, mints NO session (#1055)', async () => {
+    setupAuthEnv()
+    // A token that fails verification (bad sig / wrong aud / nonce mismatch) makes
+    // verifyIdToken throw; the callback must NOT mint a session on that path.
+    const runtime = {
+      provider: {
+        exchangeCode: async () => ({ idToken: 'id-1' }),
+        verifyIdToken: async () => {
+          throw new Error('id_token nonce mismatch')
+        },
+      },
+      accountStore: { resolveUser: async () => ({ id: 'user_42', role: 'RENTER' as const }) },
+    }
+    const app = createAuthRoutes(config, runtime)
+    const res = await app.request('/auth/google/callback?state=s1&code=c1', {
+      headers: { Cookie: oauthFlowCookie('s1') },
+    })
+    expect(res.status).not.toBe(302)
+    expect(getSetCookie(res, 'kuruma_session')).toBeUndefined()
+  })
+
   test('state query has no matching flow cookie → 400', async () => {
     setupAuthEnv()
     const { runtime } = makeRuntime()

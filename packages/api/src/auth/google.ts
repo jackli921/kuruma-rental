@@ -80,6 +80,9 @@ export async function verifyGoogleIdToken(
     algorithms: ['RS256'],
     issuer: [...GOOGLE_ISSUERS],
     audience: opts.clientId,
+    // Absorb small CF Worker ↔ Google clock drift so a valid login isn't spuriously
+    // rejected at the exp/iat boundary; 30s is well under any useful replay window.
+    clockTolerance: 30,
   })
   if (typeof payload.nonce !== 'string' || payload.nonce !== opts.nonce) {
     throw new Error('id_token nonce mismatch')
