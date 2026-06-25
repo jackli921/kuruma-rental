@@ -15,6 +15,7 @@ import { requestId } from './middleware/request-id'
 import { observability } from './observability/middleware'
 import { createAddOnRoutes } from './routes/add-ons'
 import { createAdminRoutes } from './routes/admin'
+import { createAdminBookingRoutes } from './routes/admin-bookings'
 import { createAdminRevenueRoutes } from './routes/admin-revenue'
 import { createAuthRoutes } from './routes/auth'
 import { createAvailabilityRoutes } from './routes/availability'
@@ -48,6 +49,7 @@ import { createVehicleDetailRoutes } from './routes/vehicle-detail'
 import { createVehiclePhotoRoutes } from './routes/vehicle-photos'
 import { createVehicleRoutes } from './routes/vehicles'
 import { AddOnService } from './services/add-on'
+import { AdminBookingService } from './services/admin-booking'
 import { AdminRevenueService } from './services/admin-revenue'
 import { type RecordAuditEvent, toAuditRow } from './services/audit'
 import { AvailabilityService } from './services/availability'
@@ -411,6 +413,7 @@ export function createApp(overrides?: AppOverrides, repos: Repos = buildRepos(ov
   const fleetOverviewService = new FleetOverviewService(fleetOverviewRepo)
   const overviewService = new OverviewService(overviewRepo)
   const adminRevenueService = new AdminRevenueService(paymentEventRepo, operatorRepo)
+  const adminBookingService = new AdminBookingService(bookingRepo, operatorRepo, userRepo)
   const paymentAnomalyService = new PaymentAnomalyService(paymentAnomalyRepo)
   const vehicleDetailService = new VehicleDetailService(vehicleDetailRepo)
   const operatorService = new OperatorService(operatorRepo, recordAudit)
@@ -495,6 +498,7 @@ export function createApp(overrides?: AppOverrides, repos: Repos = buildRepos(ov
     .route('/', createStatsRoutes(statsRepo))
     .route('/', createOverviewRoutes(overviewService))
     .route('/', createAdminRevenueRoutes(adminRevenueService))
+    .route('/', createAdminBookingRoutes(adminBookingService))
     .route('/', createPaymentAnomalyRoutes(paymentAnomalyService))
     .route('/', createMessageRoutes(messageService))
     .route('/', createConsentRoutes(consentService))

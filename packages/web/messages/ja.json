@@ -1232,12 +1232,47 @@
   "admin": {
     "nav": {
       "overview": "概要",
+      "bookings": "予約",
       "revenue": "パートナー収益",
       "documents": "書類"
     },
     "home": {
       "title": "プラットフォーム管理",
       "subtitle": "プラットフォーム運営"
+    },
+    "bookings": {
+      "title": "予約管理",
+      "subtitle": "全事業者の予約を検索・確認します。",
+      "empty": "条件に一致する予約はありません。",
+      "search": "検索",
+      "clear": "クリア",
+      "allStatuses": "すべてのステータス",
+      "filterCustomer": "お客様",
+      "filterCustomerPlaceholder": "氏名またはメール",
+      "filterBookingCode": "予約コード",
+      "filterBookingCodePlaceholder": "例: ALPHA001",
+      "filterStatus": "ステータス",
+      "colOperator": "事業者",
+      "colBookingCode": "コード",
+      "colCustomer": "お客様",
+      "colStatus": "ステータス",
+      "colStart": "開始",
+      "status": {
+        "CONFIRMED": "確定",
+        "ACTIVE": "利用中",
+        "COMPLETED": "完了",
+        "CANCELLED": "キャンセル"
+      },
+      "detailCustomer": "お客様",
+      "detailEmail": "メール",
+      "detailOperatorId": "事業者ID",
+      "detailStart": "貸出",
+      "detailEnd": "返却",
+      "detailTotal": "合計",
+      "detailPickup": "貸出場所",
+      "detailDropoff": "返却場所",
+      "loadError": "予約を読み込めませんでした。",
+      "retry": "再試行"
     },
     "revenue": {
       "title": "パートナー収益",
