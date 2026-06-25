@@ -85,6 +85,10 @@ function refundEvent(bookingId: string, status: string): VerifiedPaymentEvent {
     currency: 'jpy',
     paymentStatus: null,
     refundStatus: status,
+    // The gateway surfaces the Refund id (`re_…`) on refund.updated; the webhook
+    // confirms only when it equals the receipt's recorded re_ (#1056). arm() attaches
+    // this same re_, so a legit event correlates and a foreign re_ would not.
+    refundId: `re_${bookingId}`,
     metadata: { bookingId },
   }
 }
