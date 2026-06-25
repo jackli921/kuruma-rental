@@ -10,6 +10,7 @@ import type { getDb } from '@kuruma/shared/db'
 import { accounts, users } from '@kuruma/shared/db/schema'
 import { eq } from 'drizzle-orm'
 import type { UserRole } from '../middleware/auth'
+import { emailVerifiedAt } from './email-verification'
 import type { GoogleProfile, OAuthAccountStore } from './google'
 
 // Derived from the canonical connection factory (same as repositories/drizzle's
@@ -53,11 +54,13 @@ export class DrizzleOAuthAccountStore implements OAuthAccountStore {
       userId = existing.id
     } else {
       // createUser writes role=RENTER + operatorId=NULL via the schema defaults.
-      // emailVerified=null: Google's email_verified isn't consumed here.
+      // Record Google's email_verified claim (was hard-coded null) so the stored
+      // row reflects whether the email was actually verified — a signal the
+      // provider-grant path already trusts on the live claim (#auth-review).
       const created = await createUser({
         id: crypto.randomUUID(),
         email: profile.email ?? '',
-        emailVerified: null,
+        emailVerified: emailVerifiedAt(profile.email_verified, new Date()),
         name: profile.name ?? null,
         image: profile.picture ?? null,
       })
