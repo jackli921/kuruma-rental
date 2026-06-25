@@ -431,6 +431,50 @@ describe('BookingService.assignVehicle — guard branches (T2)', () => {
   })
 })
 
+describe('BookingService.assignVehicle — car→car reassign (T4)', () => {
+  // Test (a): float already holds car A, reassign to car B — no reprice.
+  it('reassigns car A→B: updates assignedVehicleId, keeps class price, logs VEHICLE_ASSIGNED with fromVehicleId', async () => {
+    const { service, float, carA, carB, bookingEventRepo, operatorCtx } = await setupWithAssigned()
+
+    const res = await service.assignVehicle(operatorCtx, float.id, carB.id, null)
+    expect(res).toMatchObject({ ok: true })
+    if (!res.ok) throw new Error('expected ok')
+    expect(res.booking.assignedVehicleId).toBe(carB.id)
+    expect(res.booking.totalPrice).toBe(TOTAL_PRICE) // class-deal price — UNCHANGED
+    const events = await bookingEventRepo.findByBookingId(SYSTEM_CONTEXT, float.id)
+    expect(events.at(-1)).toMatchObject({
+      type: 'VEHICLE_ASSIGNED',
+      payload: {
+        type: 'VEHICLE_ASSIGNED',
+        fromVehicleId: carA.id,
+        toVehicleId: carB.id,
+        reason: null,
+      },
+    })
+  })
+
+  // Test (b): float already holds car A, reassign to the same car A — self no-op.
+  it('reassigns car A→A (self): returned booking keeps assignedVehicleId, logs VEHICLE_ASSIGNED with same ids', async () => {
+    const { service, float, carA, bookingEventRepo, operatorCtx } = await setupWithAssigned()
+
+    const res = await service.assignVehicle(operatorCtx, float.id, carA.id, null)
+    expect(res).toMatchObject({ ok: true })
+    if (!res.ok) throw new Error('expected ok')
+    // The returned booking must still carry carA — even if the repo no-ops the UPDATE.
+    expect(res.booking.assignedVehicleId).toBe(carA.id)
+    const events = await bookingEventRepo.findByBookingId(SYSTEM_CONTEXT, float.id)
+    expect(events.at(-1)).toMatchObject({
+      type: 'VEHICLE_ASSIGNED',
+      payload: {
+        type: 'VEHICLE_ASSIGNED',
+        fromVehicleId: carA.id,
+        toVehicleId: carA.id,
+        reason: null,
+      },
+    })
+  })
+})
+
 // ---- helpers for guard tests ----
 
 // Returns all mutable repos (not just service) for fixture injection.
@@ -564,6 +608,157 @@ async function setupFull() {
     bookingEventRepo,
     operatorCtx,
   }
+}
+
+// Sets up a float already holding carA, plus an eligible carB for car→car reassign tests.
+async function setupWithAssigned() {
+  const bookingStore = new Map<string, Booking>()
+  const bookingRepo = new InMemoryBookingRepository(bookingStore)
+  const bookingEventRepo = new InMemoryBookingEventRepository()
+  const vehicleRepo = new InMemoryVehicleRepository()
+  const vehicleClassRepo = new InMemoryVehicleClassRepository()
+  const locationRepo = new InMemoryLocationRepository()
+  const insuranceOptionRepo = new InMemoryInsuranceOptionRepository()
+  const addOnRepo = new InMemoryAddOnRepository()
+  const feeScheduleRepo = new InMemoryFeeScheduleRepository()
+  const maintenanceLogRepo = new InMemoryMaintenanceLogRepository()
+  const userRepo = new InMemoryUserRepository()
+  const availabilityRepo = new InMemoryAvailabilityRepository(vehicleRepo, bookingRepo)
+  const classRatePlanRepo = new InMemoryClassRatePlanRepository()
+
+  const vehicleClass = await vehicleClassRepo.create({
+    operatorId: OP_A,
+    name: 'Compact',
+    slug: 'compact-assign-t4',
+    description: null,
+    photos: [],
+    seats: 5,
+    luggageCapacity: 2,
+    luggageSize: 'SMALL',
+    transmission: 'AUTO',
+    fuelType: null,
+    acrissCode: CLASS_ACRISS,
+    sortOrder: 1,
+    status: 'ACTIVE',
+  })
+
+  const carA = await vehicleRepo.create(SYSTEM_CONTEXT, {
+    operatorId: OP_A,
+    classId: vehicleClass.id,
+    pickupLocationId: LOC_ID,
+    name: 'Car A',
+    description: null,
+    photos: [],
+    seats: 5,
+    transmission: 'AUTO',
+    fuelType: null,
+    licensePlate: null,
+    status: 'AVAILABLE',
+    bufferMinutes: 60,
+    minRentalHours: null,
+    maxRentalHours: null,
+    advanceBookingHours: null,
+    make: null,
+    model: null,
+    year: null,
+    color: null,
+    dailyRateJpy: 8000,
+    hourlyRateJpy: null,
+    shakenExpiryDate: '2099-12-31',
+    insuranceExpiryDate: '2099-12-31',
+  })
+
+  const carB = await vehicleRepo.create(SYSTEM_CONTEXT, {
+    operatorId: OP_A,
+    classId: vehicleClass.id,
+    pickupLocationId: LOC_ID,
+    name: 'Car B',
+    description: null,
+    photos: [],
+    seats: 5,
+    transmission: 'AUTO',
+    fuelType: null,
+    licensePlate: null,
+    status: 'AVAILABLE',
+    bufferMinutes: 60,
+    minRentalHours: null,
+    maxRentalHours: null,
+    advanceBookingHours: null,
+    make: null,
+    model: null,
+    year: null,
+    color: null,
+    dailyRateJpy: 9000,
+    hourlyRateJpy: null,
+    shakenExpiryDate: '2099-12-31',
+    insuranceExpiryDate: '2099-12-31',
+  })
+
+  // Float already holds carA — operator is re-assigning it.
+  const float = await bookingRepo.create(SYSTEM_CONTEXT, {
+    operatorId: OP_A,
+    renterId: RENTER_ID,
+    classId: vehicleClass.id,
+    requestedVehicleId: null,
+    assignedVehicleId: carA.id,
+    pickupLocationId: LOC_ID,
+    dropoffLocationId: LOC_ID,
+    startAt: START,
+    endAt: END,
+    effectiveEndAt: EFFECTIVE_END,
+    status: 'CONFIRMED',
+    source: 'DIRECT',
+    fulfillmentMode: 'CLASS_COMBO',
+    bookingCode: 'ASSIGN03',
+    insuranceOptionId: null,
+    insuranceSnapshot: null,
+    feeSnapshot: [],
+    addOnSnapshot: [],
+    externalId: null,
+    notes: null,
+    totalPrice: TOTAL_PRICE,
+    cancellationFee: null,
+    cancelledAt: null,
+    idempotencyKey: null,
+    disclaimerAcknowledgedAt: null,
+    disclaimerTermsVersion: null,
+  })
+
+  const repos: TransactionRepos = {
+    vehicleRepo,
+    maintenanceLogRepo,
+    bookingRepo,
+    bookingEventRepo,
+    locationRepo,
+    insuranceOptionRepo,
+    addOnRepo,
+    feeScheduleRepo,
+    userRepo,
+    availabilityRepo,
+    classRatePlanRepo,
+    vehicleClassRepo,
+  }
+  const runInTransactionFn: RunInTransaction = (fn) => fn(repos)
+
+  const service = new BookingService(
+    bookingRepo,
+    runInTransactionFn,
+    vehicleRepo,
+    userRepo,
+    vehicleClassRepo,
+    undefined,
+    undefined,
+    bookingEventRepo,
+  )
+
+  const operatorCtx: CallerContext = {
+    userId: OPERATOR_USER_ID,
+    role: 'OPERATOR_OWNER',
+    operatorId: OP_A,
+    bypassScope: false,
+  }
+
+  return { service, float, carA, carB, bookingEventRepo, operatorCtx }
 }
 
 // Fields for a SPECIFIC booking (requestedVehicleId is the car, fulfillmentMode='SPECIFIC').
