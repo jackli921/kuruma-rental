@@ -2,6 +2,7 @@ import {
   type CallerContext,
   ForbiddenError,
   OperatorRequiredError,
+  ScopeRequiredError,
   isOperatorRole,
 } from './middleware/auth'
 
@@ -34,6 +35,33 @@ export function operatorReadScope(ctx: CallerContext): OperatorReadScope {
   if (!isOperatorRole(ctx.role)) return { kind: 'all' }
   if (ctx.operatorId) return { kind: 'operator', operatorId: ctx.operatorId }
   return { kind: 'none' }
+}
+
+/**
+ * The two transport-supplied knobs a cross-operator list read carries: an explicit
+ * target `operatorId`, or `includeAll` to opt into reading every tenant at once.
+ */
+export type CrossOperatorRead = { operatorId?: string | undefined; includeAll: boolean }
+
+/**
+ * Adjudicate a scoped list read for an `all`-scope caller and return the filters
+ * the repository should run with. Tenant-scoped (`operator`) and fail-closed
+ * (`none`) callers are decided at the repo, so their filters pass through
+ * untouched — this only governs the bypass/marketplace `all` scope.
+ *
+ * Lives in the service layer (audit M3) so the "bypass caller must scope
+ * explicitly" invariant is enforced once, below the route. A route that lists
+ * tenant-owned inventory can no longer leak every operator's rows by forgetting a
+ * hand-rolled guard: omitting both knobs throws `ScopeRequiredError` (-> 400).
+ */
+export function applyCrossOperatorReadScope<F extends { operatorId?: string }>(
+  ctx: CallerContext,
+  read: CrossOperatorRead,
+  filters: F,
+): F {
+  if (operatorReadScope(ctx).kind !== 'all') return filters
+  if (!read.operatorId && !read.includeAll) throw new ScopeRequiredError()
+  return read.operatorId ? { ...filters, operatorId: read.operatorId } : filters
 }
 
 /**
