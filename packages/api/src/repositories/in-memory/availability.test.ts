@@ -358,7 +358,7 @@ describe('InMemoryAvailabilityRepository.countClassDemand (#464)', () => {
 // stance the existing #916 compliance gate takes for findAvailableVehicles.
 describe('InMemoryAvailabilityRepository.countClassCapacity (#464 slice 2d.2)', () => {
   const capacity = () =>
-    availabilityRepo.countClassCapacity('op_a', 'class_compact', 'loc_osaka', TO, FROM, TO)
+    availabilityRepo.countClassCapacity('op_a', 'class_compact', 'loc_osaka', FROM, TO, TO)
 
   it('counts an AVAILABLE road-legal vehicle in (op, class, loc)', async () => {
     await makeVehicle({})

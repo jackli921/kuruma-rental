@@ -157,9 +157,9 @@ export class InMemoryAvailabilityRepository implements AvailabilityRepository {
     operatorId: string,
     classId: string,
     pickupLocationId: string,
-    asOf: Date,
     from: Date,
     to: Date,
+    asOf: Date,
   ): Promise<number> {
     // #464 2d.2: road-legal supply side of the combo guard. RETIRED is the
     // permanent fleet exit (never counts); MAINTENANCE is temporary and still

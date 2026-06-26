@@ -562,15 +562,17 @@ export interface AvailabilityRepository {
   // #1141: a vehicle with a vehicle_blocks row overlapping the demand window
   // [from, to) is off the calendar and must NOT count toward class capacity —
   // mirroring findAvailableVehicles' NOT EXISTS subtraction and the SPECIFIC
-  // booking guard's per-car block check. asOf (the return date) stays the
-  // road-legal clock; [from, to) is the occupancy window blocks overlap.
+  // booking guard's per-car block check. The (from, to) occupancy window leads
+  // (matching countClassDemand) so callers pass the same pair to both; asOf —
+  // the road-legal clock (the renter's return, distinct from the turnaround-
+  // extended window end) — trails as the odd-one-out.
   countClassCapacity(
     operatorId: string,
     classId: string,
     pickupLocationId: string,
-    asOf: Date,
     from: Date,
     to: Date,
+    asOf: Date,
   ): Promise<number>
   // #464 2d.4: serializes concurrent CLASS_COMBO submits on one (op, class,
   // loc) triple — Postgres' pg_advisory_xact_lock keyed on a hashed string,

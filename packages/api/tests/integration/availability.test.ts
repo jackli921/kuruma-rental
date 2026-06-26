@@ -561,8 +561,8 @@ describe('DrizzleAvailabilityRepository', () => {
         BEST_CAR_RENTAL_OPERATOR_ID,
         capClassId,
         capLocationId,
-        ASOF,
         WINDOW_FROM,
+        ASOF,
         ASOF,
       )
       expect(count).toBe(2)
@@ -586,8 +586,8 @@ describe('DrizzleAvailabilityRepository', () => {
         BEST_CAR_RENTAL_OPERATOR_ID,
         capClassId,
         capLocationId,
-        ASOF,
         WINDOW_FROM,
+        ASOF,
         ASOF,
       )
       expect(count).toBe(1)
@@ -628,8 +628,45 @@ describe('DrizzleAvailabilityRepository', () => {
         BEST_CAR_RENTAL_OPERATOR_ID,
         capClassId,
         capLocationId,
-        ASOF,
         WINDOW_FROM,
+        ASOF,
+        ASOF,
+      )
+      expect(count).toBe(1)
+    })
+
+    // #1141 parity: the whole InMemory↔Drizzle mirror hinges on tstzrange `&&`
+    // excluding adjacency — a block ending EXACTLY at WINDOW_FROM does not
+    // overlap [WINDOW_FROM, ASOF), so the car still counts. Pins the half-open
+    // boundary on the real Postgres path, not just the in-memory one.
+    it('keeps a road-legal car whose block ends exactly at the window start (half-open)', async () => {
+      const adjacent = await createTestVehicle({
+        name: 'Cap Adjacent',
+        classId: capClassId,
+        pickupLocationId: capLocationId,
+      })
+      capVehicleIds.push(adjacent.id)
+
+      const blockId = crypto.randomUUID()
+      await db.insert(vehicleBlocks).values({
+        id: blockId,
+        operatorId: BEST_CAR_RENTAL_OPERATOR_ID,
+        vehicleId: adjacent.id,
+        startAt: new Date('2026-08-01T06:00:00Z'),
+        endAt: WINDOW_FROM, // ends exactly at the window start → no overlap
+        kind: 'MAINTENANCE',
+        reason: 'scheduled service',
+        notes: null,
+        createdBy: 'system',
+      })
+      capBlockIds.push(blockId)
+
+      const count = await availabilityRepo.countClassCapacity(
+        BEST_CAR_RENTAL_OPERATOR_ID,
+        capClassId,
+        capLocationId,
+        WINDOW_FROM,
+        ASOF,
         ASOF,
       )
       expect(count).toBe(1)

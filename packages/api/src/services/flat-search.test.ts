@@ -173,11 +173,11 @@ class RecordingAvailabilityRepository implements AvailabilityRepository {
     operatorId: string,
     classId: string,
     pickupLocationId: string,
-    asOf: Date,
     from: Date,
     to: Date,
+    asOf: Date,
   ) {
-    return this.inner.countClassCapacity(operatorId, classId, pickupLocationId, asOf, from, to)
+    return this.inner.countClassCapacity(operatorId, classId, pickupLocationId, from, to, asOf)
   }
   lockComboCapacity(operatorId: string, classId: string, pickupLocationId: string) {
     return this.inner.lockComboCapacity(operatorId, classId, pickupLocationId)
@@ -455,9 +455,9 @@ class ComboCountsAvailabilityRepository implements AvailabilityRepository {
     _operatorId: string,
     classId: string,
     _pickupLocationId: string,
-    asOf: Date,
     from: Date,
     to: Date,
+    asOf: Date,
   ) {
     this.capacityAsOf = asOf
     // #1141: capacity now subtracts blocks overlapping the demand window — record
