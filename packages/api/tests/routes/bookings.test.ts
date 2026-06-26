@@ -525,6 +525,78 @@ describe('Booking Routes', () => {
         language: 'en',
       })
     })
+
+    it('filters by needsAssignment=true (CLASS_COMBO floats needing a car)', async () => {
+      // Seed a CLASS_COMBO float: CONFIRMED, no assigned vehicle — should appear
+      const float = await bookingRepo.create(SYSTEM_CONTEXT, {
+        operatorId: OPERATOR,
+        renterId: USER1,
+        classId: testClassId,
+        requestedVehicleId: null,
+        assignedVehicleId: null,
+        pickupLocationId: locationId,
+        dropoffLocationId: locationId,
+        startAt: new Date('2029-01-01T09:00:00Z'),
+        endAt: new Date('2029-01-01T17:00:00Z'),
+        effectiveEndAt: new Date('2029-01-01T17:00:00Z'),
+        status: 'CONFIRMED',
+        source: 'DIRECT',
+        fulfillmentMode: 'CLASS_COMBO',
+        bookingCode: 'NEEDS-ASSGN-01',
+        insuranceOptionId: null,
+        insuranceSnapshot: null,
+        feeSnapshot: [],
+        addOnSnapshot: [],
+        externalId: null,
+        notes: null,
+        totalPrice: null,
+        cancellationFee: null,
+        cancelledAt: null,
+        idempotencyKey: null,
+        disclaimerAcknowledgedAt: null,
+        disclaimerTermsVersion: null,
+      })
+
+      // Seed a SPECIFIC booking — should NOT appear in needsAssignment results
+      await bookingRepo.create(SYSTEM_CONTEXT, {
+        operatorId: OPERATOR,
+        renterId: USER1,
+        classId: testClassId,
+        requestedVehicleId: seededVehicleId,
+        assignedVehicleId: seededVehicleId,
+        pickupLocationId: locationId,
+        dropoffLocationId: locationId,
+        startAt: new Date('2029-01-02T09:00:00Z'),
+        endAt: new Date('2029-01-02T17:00:00Z'),
+        effectiveEndAt: new Date('2029-01-02T17:00:00Z'),
+        status: 'CONFIRMED',
+        source: 'DIRECT',
+        fulfillmentMode: 'SPECIFIC',
+        bookingCode: 'NEEDS-ASSGN-02',
+        insuranceOptionId: null,
+        insuranceSnapshot: null,
+        feeSnapshot: [],
+        addOnSnapshot: [],
+        externalId: null,
+        notes: null,
+        totalPrice: null,
+        cancellationFee: null,
+        cancelledAt: null,
+        idempotencyKey: null,
+        disclaimerAcknowledgedAt: null,
+        disclaimerTermsVersion: null,
+      })
+
+      const res = await app.request('/bookings?needsAssignment=true')
+      const body = await res.json()
+
+      expect(res.status).toBe(200)
+      expect(body.success).toBe(true)
+      expect(body.data).toHaveLength(1)
+      expect(body.data[0].id).toBe(float.id)
+      expect(body.data[0].fulfillmentMode).toBe('CLASS_COMBO')
+      expect(body.data[0].assignedVehicleId).toBeNull()
+    })
   })
 
   describe('GET /bookings — cursor pagination', () => {

@@ -410,6 +410,10 @@ export interface BookingFilters {
   to?: Date
   limit?: number
   cursor?: string
+  /** #464 Task 7: operator worklist — return only CLASS_COMBO floats that still
+   *  need a vehicle assigned (fulfillmentMode='CLASS_COMBO' AND assignedVehicleId
+   *  IS NULL AND status IN ('CONFIRMED','ACTIVE')). */
+  needsAssignment?: boolean
 }
 
 export type { CallerContext } from '../middleware/auth'

@@ -1,5 +1,5 @@
 import { bookings } from '@kuruma/shared/db/schema'
-import { type SQL, and, count, desc, eq, inArray, lt, or, sql } from 'drizzle-orm'
+import { type SQL, and, count, desc, eq, inArray, isNull, lt, or, sql } from 'drizzle-orm'
 import { type CallerContext, ForbiddenError } from '../../middleware/auth'
 import type { Booking } from '../../stores'
 import { bookingReadScope } from '../../tenancy'
@@ -49,6 +49,15 @@ export class DrizzleBookingRepository implements BookingRepository {
       const toIso = filters.to.toISOString()
       conditions.push(
         sql`tstzrange("startAt", "effectiveEndAt") && tstzrange(${fromIso}::timestamptz, ${toIso}::timestamptz)`,
+      )
+    }
+    if (filters?.needsAssignment === true) {
+      conditions.push(
+        and(
+          eq(bookings.fulfillmentMode, 'CLASS_COMBO'),
+          isNull(bookings.assignedVehicleId),
+          inArray(bookings.status, ['CONFIRMED', 'ACTIVE']),
+        )!,
       )
     }
 

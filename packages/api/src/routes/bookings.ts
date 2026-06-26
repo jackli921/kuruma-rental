@@ -52,6 +52,7 @@ export function createBookingRoutes(service: BookingService, consentGate: Consen
         filters.from = dateRange.from
         filters.to = dateRange.to
       }
+      if (c.req.query('needsAssignment') === 'true') filters.needsAssignment = true
 
       // Ownership scoping is handled by CallerContext in the repository layer.
       // No manual filtering needed here.
