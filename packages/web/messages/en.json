@@ -1232,6 +1232,7 @@
   "admin": {
     "nav": {
       "overview": "Overview",
+      "bookings": "Bookings",
       "revenue": "Partner Revenue",
       "documents": "Documents",
       "governance": "Consent governance",
@@ -1249,6 +1250,40 @@
         "pendingDocs": "Pending documents"
       },
       "loadError": "Couldn't load the platform overview.",
+      "retry": "Retry"
+    },
+    "bookings": {
+      "title": "Booking oversight",
+      "subtitle": "Search and inspect any booking across every operator.",
+      "empty": "No bookings match these filters.",
+      "search": "Search",
+      "clear": "Clear",
+      "allStatuses": "All statuses",
+      "filterCustomer": "Customer",
+      "filterCustomerPlaceholder": "Name or email",
+      "filterBookingCode": "Booking code",
+      "filterBookingCodePlaceholder": "e.g. ALPHA001",
+      "filterStatus": "Status",
+      "colOperator": "Operator",
+      "colBookingCode": "Code",
+      "colCustomer": "Customer",
+      "colStatus": "Status",
+      "colStart": "Start",
+      "status": {
+        "CONFIRMED": "Confirmed",
+        "ACTIVE": "Active",
+        "COMPLETED": "Completed",
+        "CANCELLED": "Cancelled"
+      },
+      "detailCustomer": "Customer",
+      "detailEmail": "Email",
+      "detailOperatorId": "Operator ID",
+      "detailStart": "Pickup",
+      "detailEnd": "Return",
+      "detailTotal": "Total",
+      "detailPickup": "Pickup location",
+      "detailDropoff": "Dropoff location",
+      "loadError": "Couldn't load bookings.",
       "retry": "Retry"
     },
     "revenue": {

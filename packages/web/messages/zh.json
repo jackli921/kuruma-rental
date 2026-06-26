@@ -1232,6 +1232,7 @@
   "admin": {
     "nav": {
       "overview": "概览",
+      "bookings": "预订",
       "revenue": "合作伙伴收益",
       "documents": "证件",
       "governance": "同意治理",
@@ -1249,6 +1250,40 @@
         "pendingDocs": "待审文件"
       },
       "loadError": "无法加载平台概览。",
+      "retry": "重试"
+    },
+    "bookings": {
+      "title": "预订总览",
+      "subtitle": "搜索并查看所有运营商的任意预订。",
+      "empty": "没有符合筛选条件的预订。",
+      "search": "搜索",
+      "clear": "清除",
+      "allStatuses": "全部状态",
+      "filterCustomer": "客户",
+      "filterCustomerPlaceholder": "姓名或邮箱",
+      "filterBookingCode": "预订编号",
+      "filterBookingCodePlaceholder": "例如 ALPHA001",
+      "filterStatus": "状态",
+      "colOperator": "运营商",
+      "colBookingCode": "编号",
+      "colCustomer": "客户",
+      "colStatus": "状态",
+      "colStart": "开始",
+      "status": {
+        "CONFIRMED": "已确认",
+        "ACTIVE": "进行中",
+        "COMPLETED": "已完成",
+        "CANCELLED": "已取消"
+      },
+      "detailCustomer": "客户",
+      "detailEmail": "邮箱",
+      "detailOperatorId": "运营商 ID",
+      "detailStart": "取车",
+      "detailEnd": "还车",
+      "detailTotal": "总计",
+      "detailPickup": "取车地点",
+      "detailDropoff": "还车地点",
+      "loadError": "无法加载预订。",
       "retry": "重试"
     },
     "revenue": {

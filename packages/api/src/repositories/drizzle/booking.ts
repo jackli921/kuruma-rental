@@ -1,9 +1,9 @@
 import { bookings } from '@kuruma/shared/db/schema'
-import { type SQL, and, count, desc, eq, inArray, lt, or, sql } from 'drizzle-orm'
+import { type SQL, and, count, desc, eq, ilike, inArray, lt, or, sql } from 'drizzle-orm'
 import { type CallerContext, ForbiddenError } from '../../middleware/auth'
 import type { Booking } from '../../stores'
 import { bookingReadScope } from '../../tenancy'
-import type { BookingFilters, BookingRepository } from '../types'
+import type { AdminBookingFilters, BookingFilters, BookingRepository } from '../types'
 import { type Db, bookingColumns, toBooking } from './shared'
 
 export class DrizzleBookingRepository implements BookingRepository {
@@ -78,6 +78,60 @@ export class DrizzleBookingRepository implements BookingRepository {
     }
 
     if (filters?.limit) {
+      query = query.limit(filters.limit) as typeof query
+    }
+
+    const rows = await query
+    return rows.map(toBooking)
+  }
+
+  // #1092: cross-operator oversight read. UNSCOPED — the platform-admin service
+  // gates the caller before this runs (mirrors the in-memory impl). bookingCode
+  // is a case-insensitive substring match; renterIds is a pre-resolved customer
+  // filter; an EMPTY renterIds array matches nothing (inArray over []).
+  async findForAdmin(filters: AdminBookingFilters): Promise<Booking[]> {
+    const conditions: SQL[] = []
+
+    if (filters.operatorId) {
+      conditions.push(eq(bookings.operatorId, filters.operatorId))
+    }
+    if (filters.bookingCode) {
+      conditions.push(ilike(bookings.bookingCode, `%${filters.bookingCode}%`))
+    }
+    if (filters.status) {
+      conditions.push(eq(bookings.status, filters.status as Booking['status']))
+    }
+    if (filters.renterIds) {
+      conditions.push(inArray(bookings.renterId, filters.renterIds))
+    }
+    if (filters.from && filters.to) {
+      const fromIso = filters.from.toISOString()
+      const toIso = filters.to.toISOString()
+      conditions.push(
+        sql`tstzrange("startAt", "effectiveEndAt") && tstzrange(${fromIso}::timestamptz, ${toIso}::timestamptz)`,
+      )
+    }
+    if (filters.cursor) {
+      const sep = filters.cursor.indexOf('_')
+      const cursorTime = filters.cursor.slice(0, sep)
+      const cursorId = filters.cursor.slice(sep + 1)
+      conditions.push(
+        or(
+          lt(bookings.createdAt, sql`${cursorTime}::timestamptz`),
+          and(eq(bookings.createdAt, sql`${cursorTime}::timestamptz`), lt(bookings.id, cursorId)),
+        )!,
+      )
+    }
+
+    let query = this.db
+      .select(bookingColumns)
+      .from(bookings)
+      .orderBy(desc(bookings.createdAt), desc(bookings.id))
+
+    if (conditions.length > 0) {
+      query = query.where(and(...conditions)) as typeof query
+    }
+    if (filters.limit) {
       query = query.limit(filters.limit) as typeof query
     }
 

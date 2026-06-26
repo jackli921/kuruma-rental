@@ -44,6 +44,7 @@ import { Route as LocaleAdminAdminRevenueRouteImport } from './routes/$locale/_a
 import { Route as LocaleAdminAdminGovernanceRouteImport } from './routes/$locale/_admin/admin/governance'
 import { Route as LocaleAdminAdminDocumentsRouteImport } from './routes/$locale/_admin/admin/documents'
 import { Route as LocaleAdminAdminCustomersRouteImport } from './routes/$locale/_admin/admin/customers'
+import { Route as LocaleAdminAdminBookingsRouteImport } from './routes/$locale/_admin/admin/bookings'
 import { Route as LocaleBusinessManageFleetIndexRouteImport } from './routes/$locale/_business/manage/fleet/index'
 import { Route as LocaleBusinessManageBookingsIndexRouteImport } from './routes/$locale/_business/manage/bookings/index'
 import { Route as LocaleBusinessManageFleetVehicleIdRouteImport } from './routes/$locale/_business/manage/fleet/$vehicleId'
@@ -238,6 +239,12 @@ const LocaleAdminAdminCustomersRoute =
     path: '/admin/customers',
     getParentRoute: () => LocaleAdminRoute,
   } as any)
+const LocaleAdminAdminBookingsRoute =
+  LocaleAdminAdminBookingsRouteImport.update({
+    id: '/admin/bookings',
+    path: '/admin/bookings',
+    getParentRoute: () => LocaleAdminRoute,
+  } as any)
 const LocaleBusinessManageFleetIndexRoute =
   LocaleBusinessManageFleetIndexRouteImport.update({
     id: '/manage/fleet/',
@@ -277,6 +284,7 @@ export interface FileRoutesByFullPath {
   '/$locale/storefronts/$locationId': typeof LocaleStorefrontsLocationIdRoute
   '/provider/invite/$token': typeof ProviderInviteTokenRoute
   '/$locale/vehicles/': typeof LocaleVehiclesIndexRoute
+  '/$locale/admin/bookings': typeof LocaleAdminAdminBookingsRoute
   '/$locale/admin/customers': typeof LocaleAdminAdminCustomersRoute
   '/$locale/admin/documents': typeof LocaleAdminAdminDocumentsRoute
   '/$locale/admin/governance': typeof LocaleAdminAdminGovernanceRoute
@@ -312,6 +320,7 @@ export interface FileRoutesByTo {
   '/$locale/storefronts/$locationId': typeof LocaleStorefrontsLocationIdRoute
   '/provider/invite/$token': typeof ProviderInviteTokenRoute
   '/$locale/vehicles': typeof LocaleVehiclesIndexRoute
+  '/$locale/admin/bookings': typeof LocaleAdminAdminBookingsRoute
   '/$locale/admin/customers': typeof LocaleAdminAdminCustomersRoute
   '/$locale/admin/documents': typeof LocaleAdminAdminDocumentsRoute
   '/$locale/admin/governance': typeof LocaleAdminAdminGovernanceRoute
@@ -354,6 +363,7 @@ export interface FileRoutesById {
   '/$locale/storefronts/$locationId': typeof LocaleStorefrontsLocationIdRoute
   '/provider/invite/$token': typeof ProviderInviteTokenRoute
   '/$locale/vehicles/': typeof LocaleVehiclesIndexRoute
+  '/$locale/_admin/admin/bookings': typeof LocaleAdminAdminBookingsRoute
   '/$locale/_admin/admin/customers': typeof LocaleAdminAdminCustomersRoute
   '/$locale/_admin/admin/documents': typeof LocaleAdminAdminDocumentsRoute
   '/$locale/_admin/admin/governance': typeof LocaleAdminAdminGovernanceRoute
@@ -394,6 +404,7 @@ export interface FileRouteTypes {
     | '/$locale/storefronts/$locationId'
     | '/provider/invite/$token'
     | '/$locale/vehicles/'
+    | '/$locale/admin/bookings'
     | '/$locale/admin/customers'
     | '/$locale/admin/documents'
     | '/$locale/admin/governance'
@@ -429,6 +440,7 @@ export interface FileRouteTypes {
     | '/$locale/storefronts/$locationId'
     | '/provider/invite/$token'
     | '/$locale/vehicles'
+    | '/$locale/admin/bookings'
     | '/$locale/admin/customers'
     | '/$locale/admin/documents'
     | '/$locale/admin/governance'
@@ -470,6 +482,7 @@ export interface FileRouteTypes {
     | '/$locale/storefronts/$locationId'
     | '/provider/invite/$token'
     | '/$locale/vehicles/'
+    | '/$locale/_admin/admin/bookings'
     | '/$locale/_admin/admin/customers'
     | '/$locale/_admin/admin/documents'
     | '/$locale/_admin/admin/governance'
@@ -748,6 +761,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof LocaleAdminAdminCustomersRouteImport
       parentRoute: typeof LocaleAdminRoute
     }
+    '/$locale/_admin/admin/bookings': {
+      id: '/$locale/_admin/admin/bookings'
+      path: '/admin/bookings'
+      fullPath: '/$locale/admin/bookings'
+      preLoaderRoute: typeof LocaleAdminAdminBookingsRouteImport
+      parentRoute: typeof LocaleAdminRoute
+    }
     '/$locale/_business/manage/fleet/': {
       id: '/$locale/_business/manage/fleet/'
       path: '/manage/fleet'
@@ -780,6 +800,7 @@ declare module '@tanstack/react-router' {
 }
 
 interface LocaleAdminRouteChildren {
+  LocaleAdminAdminBookingsRoute: typeof LocaleAdminAdminBookingsRoute
   LocaleAdminAdminCustomersRoute: typeof LocaleAdminAdminCustomersRoute
   LocaleAdminAdminDocumentsRoute: typeof LocaleAdminAdminDocumentsRoute
   LocaleAdminAdminGovernanceRoute: typeof LocaleAdminAdminGovernanceRoute
@@ -788,6 +809,7 @@ interface LocaleAdminRouteChildren {
 }
 
 const LocaleAdminRouteChildren: LocaleAdminRouteChildren = {
+  LocaleAdminAdminBookingsRoute: LocaleAdminAdminBookingsRoute,
   LocaleAdminAdminCustomersRoute: LocaleAdminAdminCustomersRoute,
   LocaleAdminAdminDocumentsRoute: LocaleAdminAdminDocumentsRoute,
   LocaleAdminAdminGovernanceRoute: LocaleAdminAdminGovernanceRoute,
