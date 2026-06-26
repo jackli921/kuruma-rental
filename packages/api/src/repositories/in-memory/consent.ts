@@ -1,7 +1,13 @@
 import type { ConsentType } from '@kuruma/shared/enums'
 import { PG_ERROR } from '../../pg-errors'
 import type { ConsentAcceptance, ConsentDocument } from '../../stores'
-import type { ConsentRepository, NewConsentAcceptance } from '../types'
+import type {
+  ConsentAcceptanceListRow,
+  ConsentAcceptanceQuery,
+  ConsentRepository,
+  NewConsentAcceptance,
+} from '../types'
+import { CONSENT_ACCEPTANCE_LIST_LIMIT } from '../types-consent'
 
 // Mirror postgres-js's PostgresError shape (top-level `code` + `constraint_name`) so the
 // service's 23505 catch-path behaves identically against the in-memory and Drizzle repos.
@@ -89,6 +95,35 @@ export class InMemoryConsentRepository implements ConsentRepository {
 
   async findAcceptancesByBooking(bookingId: string): Promise<ConsentAcceptance[]> {
     return this.acceptances.filter((a) => a.bookingId === bookingId)
+  }
+
+  // Mirrors the Drizzle inner join (documentId -> document): an acceptance whose
+  // document is absent is dropped, never surfaced with an empty version.
+  async findAcceptances(q: ConsentAcceptanceQuery): Promise<ConsentAcceptanceListRow[]> {
+    return this.acceptances
+      .flatMap((a) => {
+        const version = this.docs.get(a.documentId)?.version
+        return version === undefined ? [] : [{ a, version }]
+      })
+      .filter(
+        ({ a, version }) =>
+          (q.userId === undefined || a.userId === q.userId) &&
+          (q.consentType === undefined || a.consentType === q.consentType) &&
+          (q.version === undefined || version === q.version) &&
+          (q.acceptedFrom === undefined || a.acceptedAt >= q.acceptedFrom) &&
+          (q.acceptedTo === undefined || a.acceptedAt <= q.acceptedTo),
+      )
+      .map(({ a, version }) => ({
+        id: a.id,
+        userId: a.userId,
+        consentType: a.consentType,
+        version,
+        operatorId: a.operatorId,
+        bookingId: a.bookingId,
+        acceptedAt: a.acceptedAt,
+      }))
+      .sort((x, y) => y.acceptedAt.getTime() - x.acceptedAt.getTime())
+      .slice(0, CONSENT_ACCEPTANCE_LIST_LIMIT)
   }
 
   async createAcceptance(data: NewConsentAcceptance): Promise<ConsentAcceptance> {

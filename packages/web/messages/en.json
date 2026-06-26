@@ -1234,7 +1234,9 @@
       "overview": "Overview",
       "bookings": "Bookings",
       "revenue": "Partner Revenue",
-      "documents": "Documents"
+      "documents": "Documents",
+      "governance": "Consent governance",
+      "customers": "Customers"
     },
     "home": {
       "title": "Platform Admin",
@@ -1332,6 +1334,64 @@
       "reject": "Reject",
       "error": "Couldn't record the verdict. Try again.",
       "loadError": "Couldn't load the review queue.",
+      "retry": "Retry"
+    },
+    "governance": {
+      "title": "Consent governance",
+      "subtitle": "Browse the consent-acceptance ledger across all users.",
+      "empty": "No consent acceptances match these filters.",
+      "colUser": "User",
+      "colType": "Consent type",
+      "colVersion": "Version",
+      "colAccepted": "Accepted",
+      "colEvidence": "Evidence",
+      "viewEvidence": "View evidence",
+      "evidenceLinkLabel": "View consent evidence for {user}",
+      "filterType": "Consent type",
+      "filterUser": "User ID",
+      "filterVersion": "Version",
+      "allTypes": "All types",
+      "apply": "Apply",
+      "clear": "Clear",
+      "loadError": "Couldn't load the consent ledger.",
+      "retry": "Retry"
+    },
+    "customers": {
+      "title": "Customers",
+      "subtitle": "Search and review every renter across the platform.",
+      "searchLabel": "Search",
+      "searchPlaceholder": "Search by name or email",
+      "sortLabel": "Sort by",
+      "sort": {
+        "lastBookingAt": "Recent booking",
+        "bookingCount": "Most bookings",
+        "name": "Name"
+      },
+      "colName": "Name",
+      "colEmail": "Email",
+      "colBookings": "Bookings",
+      "colTotalSpent": "Total spent",
+      "colLastBooking": "Last booking",
+      "colCountry": "Country",
+      "colLanguage": "Language",
+      "empty": "No customers match your search.",
+      "unnamed": "Unnamed customer",
+      "noEmail": "No email",
+      "noVehicle": "No vehicle assigned",
+      "pagination": "Customer pages",
+      "prev": "Previous",
+      "next": "Next",
+      "bookingsTitle": "Booking history",
+      "bookingsEmpty": "No bookings yet.",
+      "detailLoading": "Loading customer…",
+      "detailEmpty": "This customer is no longer available.",
+      "status": {
+        "CONFIRMED": "Confirmed",
+        "ACTIVE": "Active",
+        "COMPLETED": "Completed",
+        "CANCELLED": "Cancelled"
+      },
+      "loadError": "Couldn't load customers.",
       "retry": "Retry"
     }
   },

@@ -753,7 +753,12 @@ export type {
 
 // Consent data-access interfaces (#613) live in their own module to keep this
 // barrel under the file-size cap; re-exported for callers.
-export type { ConsentRepository, NewConsentAcceptance } from './types-consent'
+export type {
+  ConsentAcceptanceListRow,
+  ConsentAcceptanceQuery,
+  ConsentRepository,
+  NewConsentAcceptance,
+} from './types-consent'
 
 // Reviews bounded-context data access (#1067 slice 1) lives in its own module;
 // re-exported for callers (mirrors the payment/consent split above).

@@ -36,6 +36,7 @@
     "./types/storefront": "./src/types/storefront.ts",
     "./types/operator-team": "./src/types/operator-team.ts",
     "./types/admin-booking": "./src/types/admin-booking.ts",
+    "./types/consent-governance": "./src/types/consent-governance.ts",
     "./lib/bound-fetch": "./src/lib/bound-fetch.ts",
     "./lib/cancellation-policy": "./src/lib/cancellation-policy.ts",
     "./lib/error-codes": "./src/lib/error-codes.ts",
