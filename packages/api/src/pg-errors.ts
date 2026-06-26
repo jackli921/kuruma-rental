@@ -46,7 +46,7 @@ export const LOCATIONS_REGION_FK = 'locations_regionId_regions_id_fk'
  * GiST EXCLUDE on vehicle_blocks (operatorId, vehicleId, [startAt,endAt)),
  * named explicitly in migration 0076 (#1101). A 23P01 on this name on the
  * block-create path means an operator scheduled an overlapping block on the
- * same vehicle. The blocks route maps it to a 409 "blocked for maintenance" —
+ * same vehicle. VehicleBlockService maps it to a 409 (VEHICLE_BLOCK_OVERLAP) —
  * kept apart from bookings_no_overlap (a 23P01 meaning "already booked"), which
  * the booking-creation service surfaces as VEHICLE_BLOCKED on the other side.
  */

@@ -1,5 +1,17 @@
+import { PG_ERROR, VEHICLE_BLOCKS_OVERLAP } from '../../pg-errors'
 import type { VehicleBlock } from '../../stores'
 import type { VehicleBlockRepository } from '../types'
+
+// Faithful mirror of the `vehicle_blocks_no_overlap` GiST EXCLUDE (#1101, same
+// policy as the booking repo's bookings_no_overlap mirror, #1106): postgres-js
+// exposes the violated constraint as `constraint_name`, so the service that maps
+// 23P01 → 409 behaves identically against InMemory and Drizzle.
+function exclusionViolation(): Error & { code: string; constraint_name: string } {
+  return Object.assign(
+    new Error(`conflicting key value violates exclusion constraint "${VEHICLE_BLOCKS_OVERLAP}"`),
+    { code: PG_ERROR.EXCLUSION_VIOLATION, constraint_name: VEHICLE_BLOCKS_OVERLAP },
+  )
+}
 
 export class InMemoryVehicleBlockRepository implements VehicleBlockRepository {
   private readonly store: Map<string, VehicleBlock>
@@ -9,6 +21,14 @@ export class InMemoryVehicleBlockRepository implements VehicleBlockRepository {
   }
 
   async create(data: Omit<VehicleBlock, 'id' | 'createdAt'>): Promise<VehicleBlock> {
+    // The GiST EXCLUDE keys on (operatorId, vehicleId, [startAt,endAt)); a vehicle
+    // has exactly one operator, so matching vehicleId + half-open range overlap is
+    // equivalent. Adjacent windows (endAt === startAt) do NOT collide.
+    const overlaps = [...this.store.values()].some(
+      (b) => b.vehicleId === data.vehicleId && b.startAt < data.endAt && b.endAt > data.startAt,
+    )
+    if (overlaps) throw exclusionViolation()
+
     const block: VehicleBlock = {
       ...data,
       id: crypto.randomUUID(),

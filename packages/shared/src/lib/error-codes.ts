@@ -45,6 +45,10 @@ export const ERROR_CODES = [
   // out-of-service / manual hold) on the assigned car over its turnaround-
   // inclusive window; create 409s.
   'VEHICLE_BLOCKED',
+  // #1101: an operator schedules a vehicle block whose window overlaps an
+  // existing block on the same car (the vehicle_blocks_no_overlap GiST EXCLUDE);
+  // block create 409s. Distinct from VEHICLE_BLOCKED (a booking hitting a block).
+  'VEHICLE_BLOCK_OVERLAP',
 ] as const
 
 export type ErrorCode = (typeof ERROR_CODES)[number]
