@@ -5,6 +5,7 @@ import {
   InMemoryAvailabilityRepository,
   InMemoryBookingRepository,
   InMemoryStatsRepository,
+  InMemoryVehicleBlockRepository,
   InMemoryVehicleClassRepository,
   InMemoryVehicleRepository,
 } from '../../src/repositories/in-memory'
@@ -18,7 +19,11 @@ async function createTestApp() {
   setupAuthEnv()
   const vehicleRepo = new InMemoryVehicleRepository()
   const bookingRepo = new InMemoryBookingRepository()
-  const availabilityRepo = new InMemoryAvailabilityRepository(vehicleRepo, bookingRepo)
+  const availabilityRepo = new InMemoryAvailabilityRepository(
+    vehicleRepo,
+    bookingRepo,
+    new InMemoryVehicleBlockRepository(),
+  )
   const statsRepo = new InMemoryStatsRepository(vehicleRepo, bookingRepo)
   const vehicleClassRepo = new InMemoryVehicleClassRepository()
   const klass = await vehicleClassRepo.create({

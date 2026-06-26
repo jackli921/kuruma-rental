@@ -13,6 +13,7 @@ import {
   InMemoryLocationRepository,
   InMemoryMaintenanceLogRepository,
   InMemoryUserRepository,
+  InMemoryVehicleBlockRepository,
   InMemoryVehicleClassRepository,
   InMemoryVehicleRepository,
 } from '../../src/repositories/in-memory'
@@ -46,6 +47,7 @@ let insuranceOptionRepo: InMemoryInsuranceOptionRepository
 let addOnRepo: InMemoryAddOnRepository
 let feeScheduleRepo: InMemoryFeeScheduleRepository
 let availabilityRepo: InMemoryAvailabilityRepository
+let vehicleBlockRepo: InMemoryVehicleBlockRepository
 let classRatePlanRepo: InMemoryClassRatePlanRepository
 let service: BookingService
 let testClassId: string
@@ -150,7 +152,12 @@ describe('Booking Routes', () => {
     insuranceOptionRepo = new InMemoryInsuranceOptionRepository()
     addOnRepo = new InMemoryAddOnRepository()
     feeScheduleRepo = new InMemoryFeeScheduleRepository()
-    availabilityRepo = new InMemoryAvailabilityRepository(vehicleRepo, bookingRepo)
+    vehicleBlockRepo = new InMemoryVehicleBlockRepository()
+    availabilityRepo = new InMemoryAvailabilityRepository(
+      vehicleRepo,
+      bookingRepo,
+      vehicleBlockRepo,
+    )
     classRatePlanRepo = new InMemoryClassRatePlanRepository()
 
     const klass: VehicleClass = await vehicleClassRepo.create({
@@ -201,6 +208,7 @@ describe('Booking Routes', () => {
       availabilityRepo,
       classRatePlanRepo,
       vehicleClassRepo,
+      vehicleBlockRepo,
     }
     const runInTransaction: RunInTransaction = async (fn) => fn(repos)
 

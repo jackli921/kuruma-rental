@@ -7,6 +7,7 @@ import type { Db } from '../repositories/drizzle'
 import {
   InMemoryAvailabilityRepository,
   InMemoryBookingRepository,
+  InMemoryVehicleBlockRepository,
   InMemoryVehicleRepository,
 } from '../repositories/in-memory'
 import type { TransactionRepos } from '../repositories/types'
@@ -40,6 +41,7 @@ const EXPECTED_KEY_MAP: Record<keyof Repos, true> = {
   threadRepo: true,
   messageRepo: true,
   maintenanceLogRepo: true,
+  vehicleBlockRepo: true,
   photoStorage: true,
   renterDocumentRepo: true,
   documentStorage: true,
@@ -75,7 +77,11 @@ const EXPECTED_KEYS = Object.keys(EXPECTED_KEY_MAP) as ReadonlyArray<keyof Repos
 function minimalOverrides() {
   const vehicleRepo = new InMemoryVehicleRepository()
   const bookingRepo = new InMemoryBookingRepository()
-  const availabilityRepo = new InMemoryAvailabilityRepository(vehicleRepo, bookingRepo)
+  const availabilityRepo = new InMemoryAvailabilityRepository(
+    vehicleRepo,
+    bookingRepo,
+    new InMemoryVehicleBlockRepository(),
+  )
   return { vehicleRepo, bookingRepo, availabilityRepo }
 }
 
@@ -101,6 +107,7 @@ const TX_EXPECTED_KEY_MAP: Record<keyof TransactionRepos, true> = {
   availabilityRepo: true,
   classRatePlanRepo: true,
   vehicleClassRepo: true,
+  vehicleBlockRepo: true,
 }
 const TX_EXPECTED_KEYS = Object.keys(TX_EXPECTED_KEY_MAP) as ReadonlyArray<keyof TransactionRepos>
 

@@ -4,18 +4,21 @@ import type { Booking, Vehicle } from '../../stores'
 import { InMemoryAvailabilityRepository } from './availability'
 import { InMemoryBookingRepository } from './booking'
 import { InMemoryVehicleRepository } from './vehicle'
+import { InMemoryVehicleBlockRepository } from './vehicle-block'
 
 const FROM = new Date('2026-08-01T10:00:00Z')
 const TO = new Date('2026-08-01T14:00:00Z')
 
 let vehicleRepo: InMemoryVehicleRepository
 let bookingRepo: InMemoryBookingRepository
+let vehicleBlockRepo: InMemoryVehicleBlockRepository
 let availabilityRepo: InMemoryAvailabilityRepository
 
 beforeEach(() => {
   vehicleRepo = new InMemoryVehicleRepository()
   bookingRepo = new InMemoryBookingRepository()
-  availabilityRepo = new InMemoryAvailabilityRepository(vehicleRepo, bookingRepo)
+  vehicleBlockRepo = new InMemoryVehicleBlockRepository()
+  availabilityRepo = new InMemoryAvailabilityRepository(vehicleRepo, bookingRepo, vehicleBlockRepo)
 })
 
 function makeVehicle(
@@ -192,6 +195,65 @@ describe('InMemoryAvailabilityRepository.findAvailableVehicles — compliance ga
   })
 })
 
+// #1101: a scheduled block subtracts a car from availability/search exactly like
+// a conflicting booking — the in-memory mirror of the Drizzle NOT EXISTS, so the
+// guard can't pass unit tests yet fail in prod (must-fix #2).
+function makeBlock(vehicleId: string, startAt: Date, endAt: Date) {
+  return vehicleBlockRepo.create({
+    operatorId: 'op_a',
+    vehicleId,
+    startAt,
+    endAt,
+    kind: 'MAINTENANCE',
+    reason: 'scheduled service',
+    notes: null,
+    createdBy: 'user_op',
+  })
+}
+
+describe('InMemoryAvailabilityRepository — block subtraction (#1101)', () => {
+  it('excludes a vehicle whose only conflict is a block overlapping the window', async () => {
+    const free = await makeVehicle({})
+    const blocked = await makeVehicle({})
+    // 09:00–12:00 overlaps the 10:00–14:00 request.
+    await makeBlock(blocked.id, new Date('2026-08-01T09:00:00Z'), new Date('2026-08-01T12:00:00Z'))
+
+    const result = await availabilityRepo.findAvailableVehicles(FROM, TO)
+
+    expect(result.map((v) => v.id)).toEqual([free.id])
+  })
+
+  it('keeps a vehicle whose block is adjacent to the window (half-open, no overlap)', async () => {
+    const v = await makeVehicle({})
+    // ends exactly at FROM (10:00) → adjacent, not overlapping.
+    await makeBlock(v.id, new Date('2026-08-01T06:00:00Z'), FROM)
+
+    const result = await availabilityRepo.findAvailableVehicles(FROM, TO)
+
+    expect(result.map((x) => x.id)).toEqual([v.id])
+  })
+
+  it('checkVehicleAvailability reports unavailable for a blocked window with NO booking conflicts', async () => {
+    const v = await makeVehicle({})
+    await makeBlock(v.id, new Date('2026-08-01T09:00:00Z'), new Date('2026-08-01T12:00:00Z'))
+
+    const result = await availabilityRepo.checkVehicleAvailability(v.id, FROM, TO)
+
+    expect(result?.available).toBe(false)
+    // a block is not a booking — it flips availability without polluting conflicts.
+    expect(result?.conflicts).toEqual([])
+  })
+
+  it('checkVehicleAvailability stays available when the block misses the window', async () => {
+    const v = await makeVehicle({})
+    await makeBlock(v.id, new Date('2026-08-01T15:00:00Z'), new Date('2026-08-01T18:00:00Z'))
+
+    const result = await availabilityRepo.checkVehicleAvailability(v.id, FROM, TO)
+
+    expect(result?.available).toBe(true)
+  })
+})
+
 // #464: countClassDemand backs slice 2's inventory guard. It counts every
 // BLOCKING booking of a class at a location overlapping the requested window —
 // SPECIFIC bookings occupying a class car AND floating CLASS_COMBO of that class
@@ -352,7 +414,12 @@ describe('InMemoryAvailabilityRepository.lockComboCapacity (#464 slice 2d.4)', (
   beforeEach(() => {
     vehicleRepo = new InMemoryVehicleRepository()
     bookingRepo = new InMemoryBookingRepository()
-    availabilityRepo = new InMemoryAvailabilityRepository(vehicleRepo, bookingRepo)
+    vehicleBlockRepo = new InMemoryVehicleBlockRepository()
+    availabilityRepo = new InMemoryAvailabilityRepository(
+      vehicleRepo,
+      bookingRepo,
+      vehicleBlockRepo,
+    )
   })
 
   // The combo submit holds this lock around demand → capacity → insert so a

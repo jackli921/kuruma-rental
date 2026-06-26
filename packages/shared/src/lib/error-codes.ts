@@ -41,6 +41,14 @@ export const ERROR_CODES = [
   //   via classId + pickupLocationId); combo create 409s.
   'NO_COMBO_RATE_SET',
   'CLASS_COMBO_SOLD_OUT',
+  // #1101: a SPECIFIC booking overlaps a scheduled vehicle block (maintenance /
+  // out-of-service / manual hold) on the assigned car over its turnaround-
+  // inclusive window; create 409s.
+  'VEHICLE_BLOCKED',
+  // #1101: an operator schedules a vehicle block whose window overlaps an
+  // existing block on the same car (the vehicle_blocks_no_overlap GiST EXCLUDE);
+  // block create 409s. Distinct from VEHICLE_BLOCKED (a booking hitting a block).
+  'VEHICLE_BLOCK_OVERLAP',
   // #464 assign: operator assigns a concrete car to a CLASS_COMBO float.
   //  NOT_A_COMBO         — target booking is not a CLASS_COMBO (e.g. a SPECIFIC booking)
   //  INVALID_STATUS      — booking is in a terminal status (CANCELLED / COMPLETED)

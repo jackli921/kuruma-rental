@@ -17,6 +17,7 @@ export type {
   FeeSchedule,
   PaymentEvent,
   RenterDocument,
+  VehicleBlock,
   Review,
 } from '../stores'
 export type { DashboardStats } from '@kuruma/shared/types/stats'
@@ -729,6 +730,10 @@ export interface MaintenanceLogRepository {
     newLogData?: Omit<MaintenanceLog, 'id' | 'createdAt' | 'updatedAt'>,
   ): Promise<TransitionLogsResult>
 }
+
+// VehicleBlockRepository lives in ./types-vehicle-block to keep this barrel under
+// the file-size cap (same split as types-review / types-fee-schedule).
+export type { VehicleBlockRepository } from './types-vehicle-block'
 
 export interface VehicleClassFilters {
   status?: 'ACTIVE' | 'ARCHIVED'

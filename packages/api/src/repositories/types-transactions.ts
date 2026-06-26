@@ -10,6 +10,7 @@ import type {
   OperatorMembershipRepository,
   ProviderInviteRepository,
   UserRepository,
+  VehicleBlockRepository,
   VehicleClassRepository,
   VehicleRepository,
 } from './types'
@@ -41,6 +42,10 @@ export interface TransactionRepos {
   availabilityRepo: AvailabilityRepository
   classRatePlanRepo: ClassRatePlanRepository
   vehicleClassRepo: VehicleClassRepository
+  // #1101: the SPECIFIC booking submit reads overlapping blocks in-tx to reject a
+  // booking that lands on a scheduled maintenance/hold window (a single GiST
+  // EXCLUDE can't span bookings + vehicle_blocks). Read-only here.
+  vehicleBlockRepo: Pick<VehicleBlockRepository, 'findOverlapping'>
 }
 
 export type RunInTransaction = <T>(fn: (repos: TransactionRepos) => Promise<T>) => Promise<T>

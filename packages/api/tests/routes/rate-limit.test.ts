@@ -4,6 +4,7 @@ import { createApp } from '../../src/index'
 import {
   InMemoryAvailabilityRepository,
   InMemoryBookingRepository,
+  InMemoryVehicleBlockRepository,
   InMemoryVehicleRepository,
 } from '../../src/repositories/in-memory'
 import { authHeaders, setupAuthEnv } from '../helpers/auth'
@@ -44,7 +45,11 @@ describe('fail-closed rate limiting (#580)', () => {
   function appWithCatalogLimiter(limiter: RateLimitBinding) {
     const vehicleRepo = new InMemoryVehicleRepository()
     const bookingRepo = new InMemoryBookingRepository()
-    const availabilityRepo = new InMemoryAvailabilityRepository(vehicleRepo, bookingRepo)
+    const availabilityRepo = new InMemoryAvailabilityRepository(
+      vehicleRepo,
+      bookingRepo,
+      new InMemoryVehicleBlockRepository(),
+    )
     return createApp({ vehicleRepo, bookingRepo, availabilityRepo, publicCatalogLimiter: limiter })
   }
 
