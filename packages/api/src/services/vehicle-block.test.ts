@@ -90,7 +90,7 @@ describe('VehicleBlockService.createBlock', () => {
     expect(result).toMatchObject({ ok: false, status: 404 })
   })
 
-  it('returns 409 VEHICLE_BLOCKED when a block overlaps an existing one on the same vehicle', async () => {
+  it('returns 409 VEHICLE_BLOCK_OVERLAP when a block overlaps an existing one on the same vehicle', async () => {
     const vehicle = await seedVehicle('op_a')
     await service.createBlock(ctxFor('op_a'), vehicle.id, blockInput())
 
