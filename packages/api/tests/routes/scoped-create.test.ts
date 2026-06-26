@@ -1,15 +1,17 @@
 import { Hono } from 'hono'
 import { describe, expect, it } from 'vitest'
 import { z } from 'zod'
-import type { CallerContext } from '../../src/auth/context'
+import type { CallerContext } from '../../src/middleware/auth'
 import { parseScopedCreate } from '../../src/routes/helpers'
 import type { ResolveWriteOperatorId } from '../../src/tenancy'
 
 // The operator schema has NO operatorId; the admin (bypass) schema requires one.
-// This mirrors the real config create/platformAdminCreate pairs: an operator
-// caller can never name a tenant, a bypass caller must.
-const operatorSchema = z.object({ name: z.string() }).strict()
-const adminSchema = z.object({ name: z.string(), operatorId: z.string() }).strict()
+// Both are PLAIN (non-strict) z.object — mirroring the real config
+// create/platformAdminCreate pairs, which strip unknown keys rather than reject.
+// So an operator caller's stray `operatorId` is silently dropped by the schema;
+// the helper — not the schema — is what guarantees the tenant is server-derived.
+const operatorSchema = z.object({ name: z.string() })
+const adminSchema = z.object({ name: z.string(), operatorId: z.string() })
 
 const OPERATOR_CTX: CallerContext = {
   userId: 'u-1',
@@ -62,13 +64,16 @@ describe('parseScopedCreate()', () => {
     expect(calls).toEqual([{ role: 'OPERATOR_OWNER', input: undefined }])
   })
 
-  it('operator caller cannot smuggle a foreign operatorId: the strict operator schema rejects it (400)', async () => {
+  it('operator caller cannot smuggle a foreign operatorId: the body value is neutralized, the tenant wins (200)', async () => {
     const { calls, resolve } = spyResolver()
     const res = await post(appWith(OPERATOR_CTX, resolve), { name: 'Std', operatorId: 'op-victim' })
 
-    expect(res.status).toBe(400)
-    // Rejected before any tenant resolution — no spoof reaches the resolver.
-    expect(calls).toHaveLength(0)
+    // Prod-faithful: the non-strict operator schema strips the stray key, so this
+    // is a 200 — but the resolved operatorId is the server tenant, NEVER the body.
+    expect(res.status).toBe(200)
+    expect(await res.json()).toMatchObject({ operatorId: 'op-self' })
+    // The invariant: the helper handed the resolver NO body operatorId on the operator path.
+    expect(calls).toEqual([{ role: 'OPERATOR_OWNER', input: undefined }])
   })
 
   it('bypass caller: parses with the admin schema and resolves the body-named operatorId', async () => {
