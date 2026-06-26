@@ -1,4 +1,3 @@
-import type { CreateAddOnInput } from '@kuruma/shared/validators/add-on'
 import {
   createAddOnSchema,
   platformAdminCreateAddOnSchema,
@@ -16,7 +15,7 @@ import type { AddOnService } from '../services/add-on'
 import type { AddOnFilters } from '../services/filters'
 import type { AddOn } from '../stores'
 import { type ResolveWriteOperatorId, operatorReadScope } from '../tenancy'
-import { fail, ok, parseBody, parseId, stripUndefined } from './helpers'
+import { fail, ok, parseBody, parseId, parseScopedCreate, stripUndefined } from './helpers'
 
 export function createAddOnRoutes(
   service: AddOnService,
@@ -76,24 +75,19 @@ export function createAddOnRoutes(
       if (!FLEET_WRITE_ROLES.has(user.role)) return fail(c, 'Forbidden', 403)
 
       const ctx = toCallerContext(user)
-      // Bypass callers must name the target operator in the body; operator
-      // callers never send one — their tenant is stamped server-side. Resolve
-      // operatorId inside each branch where the body type is concrete.
-      const isBypass = operatorReadScope(ctx).kind === 'all'
-
-      let d: CreateAddOnInput
-      let operatorId: string
-      if (isBypass) {
-        const parsed = await parseBody(c, platformAdminCreateAddOnSchema)
-        if (!parsed.ok) return parsed.response
-        d = parsed.data
-        operatorId = await resolveWriteOperatorId(ctx, parsed.data.operatorId)
-      } else {
-        const parsed = await parseBody(c, createAddOnSchema)
-        if (!parsed.ok) return parsed.response
-        d = parsed.data
-        operatorId = await resolveWriteOperatorId(ctx)
-      }
+      // Bypass callers name the target operator in the body; operator callers
+      // never send one — their tenant is stamped server-side (#1107).
+      const scoped = await parseScopedCreate(
+        c,
+        ctx,
+        {
+          operatorSchema: createAddOnSchema,
+          adminSchema: platformAdminCreateAddOnSchema,
+        },
+        resolveWriteOperatorId,
+      )
+      if (!scoped.ok) return scoped.response
+      const { data: d, operatorId } = scoped
 
       const result = await service.create(ctx, {
         operatorId,

@@ -72,7 +72,7 @@ describe('InMemoryLocationRepository', () => {
       await repo.create(locationInput({ name: 'Active' }))
       await repo.create(locationInput({ name: 'Gone', status: 'ARCHIVED' }))
 
-      const result = await repo.findAll(SYSTEM_CONTEXT)
+      const result = await repo.findAll(SYSTEM_CONTEXT, { includeAllOperators: true })
 
       expect(result).toHaveLength(1)
       expect(result[0]!.name).toBe('Active')
@@ -82,14 +82,19 @@ describe('InMemoryLocationRepository', () => {
       await repo.create(locationInput({ name: 'Active' }))
       await repo.create(locationInput({ name: 'Gone', status: 'ARCHIVED' }))
 
-      expect(await repo.findAll(SYSTEM_CONTEXT, { includeArchived: true })).toHaveLength(2)
+      expect(
+        await repo.findAll(SYSTEM_CONTEXT, { includeArchived: true, includeAllOperators: true }),
+      ).toHaveLength(2)
     })
 
     it('filters by status', async () => {
       await repo.create(locationInput({ name: 'Active' }))
       await repo.create(locationInput({ name: 'Gone', status: 'ARCHIVED' }))
 
-      const result = await repo.findAll(SYSTEM_CONTEXT, { status: 'ARCHIVED' })
+      const result = await repo.findAll(SYSTEM_CONTEXT, {
+        status: 'ARCHIVED',
+        includeAllOperators: true,
+      })
 
       expect(result).toHaveLength(1)
       expect(result[0]!.name).toBe('Gone')
@@ -196,7 +201,7 @@ describe('InMemoryLocationRepository operator-scopes reads', () => {
 
   it('an admin (SYSTEM_CONTEXT) sees every operator location', async () => {
     const { repo } = await seed()
-    expect(await repo.findAll(SYSTEM_CONTEXT)).toHaveLength(2)
+    expect(await repo.findAll(SYSTEM_CONTEXT, { includeAllOperators: true })).toHaveLength(2)
   })
 
   it('an operator filter narrows a bypass-role read to one tenant', async () => {
@@ -214,6 +219,6 @@ describe('InMemoryLocationRepository operator-scopes reads', () => {
 
   it('the public catalog sees every operator location (slice 5 forward-compat)', async () => {
     const { repo } = await seed()
-    expect(await repo.findAll(PUBLIC_CONTEXT)).toHaveLength(2)
+    expect(await repo.findAll(PUBLIC_CONTEXT, { includeAllOperators: true })).toHaveLength(2)
   })
 })

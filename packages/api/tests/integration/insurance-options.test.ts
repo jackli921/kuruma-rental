@@ -92,10 +92,16 @@ describe('cross-operator insurance-option isolation (Drizzle)', () => {
     expect(await repo.findById(noTenant, optionA.id)).toBeUndefined()
   })
 
-  it('SYSTEM_CONTEXT reads options across operators', async () => {
-    const ids = (await repo.findAll(SYSTEM_CONTEXT)).map((o) => o.id)
+  it('SYSTEM_CONTEXT reads options across operators with includeAllOperators', async () => {
+    const ids = (await repo.findAll(SYSTEM_CONTEXT, { includeAllOperators: true })).map((o) => o.id)
     expect(ids).toContain(optionA.id)
     expect(ids).toContain(optionB.id)
+  })
+
+  // #1107: the Drizzle backstop (`sql\`false\``) — a bypass caller with no
+  // explicit cross-operator opt-in reads nothing.
+  it('SYSTEM_CONTEXT without includeAllOperators reads nothing', async () => {
+    expect(await repo.findAll(SYSTEM_CONTEXT)).toHaveLength(0)
   })
 
   // [P0] a RENTER must be rejected, NOT served every operator's config.

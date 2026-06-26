@@ -189,7 +189,10 @@ function mount(service: NotificationService, role: UserRole, operatorId?: string
 
 /** All rows in the ledger, read with a full-access bypass context. */
 async function allRows(logRepo: InMemoryNotificationLogRepository): Promise<NotificationLog[]> {
-  return logRepo.findAll({ userId: 'sys', role: 'PLATFORM_ADMIN', bypassScope: true })
+  return logRepo.findAll(
+    { userId: 'sys', role: 'PLATFORM_ADMIN', bypassScope: true },
+    { includeAllOperators: true },
+  )
 }
 
 describe('GET /notifications — auth & role gate', () => {

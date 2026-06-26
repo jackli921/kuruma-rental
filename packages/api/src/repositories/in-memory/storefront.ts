@@ -24,7 +24,15 @@ export class InMemoryStorefrontRepository implements StorefrontRepository {
     ctx: CallerContext,
     filters?: StorefrontFilters,
   ): Promise<Storefront[]> {
-    const active = await this.locationRepo.findAll(ctx, { status: 'ACTIVE' })
+    // The marketplace catalog is an explicit platform-wide read: an anonymous
+    // renter (mapped to `all` scope) browses every operator's storefront, so
+    // opt in to the cross-operator read (#1107). An operator ctx still scopes to
+    // its own tenant (operator scope is absolute); this mirrors the Drizzle
+    // storefront query, which pushes no operator condition for `all` scope.
+    const active = await this.locationRepo.findAll(ctx, {
+      status: 'ACTIVE',
+      includeAllOperators: true,
+    })
     let locations = filters?.pickupLocationId
       ? active.filter((l) => l.id === filters.pickupLocationId)
       : active

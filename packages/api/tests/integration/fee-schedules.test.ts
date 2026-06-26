@@ -111,10 +111,16 @@ describe('cross-operator fee-schedule isolation + uniqueness (Drizzle)', () => {
     expect(await repo.findById(noTenant, feeA.id)).toBeUndefined()
   })
 
-  it('SYSTEM_CONTEXT reads fees across operators', async () => {
-    const ids = (await repo.findAll(SYSTEM_CONTEXT)).map((f) => f.id)
+  it('SYSTEM_CONTEXT reads fees across operators with includeAllOperators', async () => {
+    const ids = (await repo.findAll(SYSTEM_CONTEXT, { includeAllOperators: true })).map((f) => f.id)
     expect(ids).toContain(feeA.id)
     expect(ids).toContain(feeB.id)
+  })
+
+  // #1107: the Drizzle backstop (`sql\`false\``) — a bypass caller with no
+  // explicit cross-operator opt-in reads nothing.
+  it('SYSTEM_CONTEXT without includeAllOperators reads nothing', async () => {
+    expect(await repo.findAll(SYSTEM_CONTEXT)).toHaveLength(0)
   })
 })
 

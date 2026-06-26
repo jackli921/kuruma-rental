@@ -245,7 +245,9 @@ function comboInput(o: Partial<CreateBookingInput> = {}): CreateBookingInput {
 // Resolve the real seeded location id (InMemory repos assign UUIDs) and align
 // the vehicle's pickupLocationId to it, returning ids ready for createInput.
 async function seedReady(h: Harness) {
-  const locations = await h.repos.locationRepo.findAll(SYSTEM_CONTEXT)
+  const locations = await h.repos.locationRepo.findAll(SYSTEM_CONTEXT, {
+    includeAllOperators: true,
+  })
   const locationId = locations[0]!.id
   // Point the seeded vehicle at the real location so pickup resolution matches.
   const veh = await h.repos.vehicleRepo.findById(SYSTEM_CONTEXT, h.vehicleId)

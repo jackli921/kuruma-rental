@@ -157,7 +157,10 @@ describe('NotificationService', () => {
   it('resend of a cross-operator id returns 404 (no tenant-existence leak)', async () => {
     const { service, dispatcher, booking, logRepo } = build()
     await dispatcher.dispatch(booking)
-    const [row] = await logRepo.findAll({ userId: 'x', role: 'PLATFORM_ADMIN', bypassScope: true })
+    const [row] = await logRepo.findAll(
+      { userId: 'x', role: 'PLATFORM_ADMIN', bypassScope: true },
+      { includeAllOperators: true },
+    )
     const result = await service.resend(op2Ctx, row!.id)
     expect(result).toEqual({ ok: false, status: 404, error: 'Notification not found' })
   })

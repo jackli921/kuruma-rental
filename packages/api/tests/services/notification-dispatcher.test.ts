@@ -161,7 +161,10 @@ describe('NotificationDispatcher', () => {
     const { dispatcher, logRepo, sender } = build()
     await dispatcher.dispatch(booking)
 
-    const rows = await logRepo.findAll({ userId: 'x', role: 'PLATFORM_ADMIN', bypassScope: true })
+    const rows = await logRepo.findAll(
+      { userId: 'x', role: 'PLATFORM_ADMIN', bypassScope: true },
+      { includeAllOperators: true },
+    )
     expect(rows).toHaveLength(2)
     expect(rows.every((r) => r.status === 'SENT')).toBe(true)
     expect(rows.every((r) => r.providerMessageId === 'msg-1')).toBe(true)
@@ -177,7 +180,10 @@ describe('NotificationDispatcher', () => {
     }
     const { dispatcher, logRepo } = build({ sender })
     await expect(dispatcher.dispatch(booking)).resolves.toBeUndefined()
-    const rows = await logRepo.findAll({ userId: 'x', role: 'PLATFORM_ADMIN', bypassScope: true })
+    const rows = await logRepo.findAll(
+      { userId: 'x', role: 'PLATFORM_ADMIN', bypassScope: true },
+      { includeAllOperators: true },
+    )
     expect(rows.every((r) => r.status === 'FAILED')).toBe(true)
     expect(rows[0]!.error).toContain('SMTP 550')
   })
@@ -264,7 +270,10 @@ describe('NotificationDispatcher', () => {
     it('renter confirm goes to the renter email; operator alert to the active members', async () => {
       const { dispatcher, logRepo } = build()
       await dispatcher.dispatch(booking)
-      const rows = await logRepo.findAll({ userId: 'x', role: 'PLATFORM_ADMIN', bypassScope: true })
+      const rows = await logRepo.findAll(
+        { userId: 'x', role: 'PLATFORM_ADMIN', bypassScope: true },
+        { includeAllOperators: true },
+      )
       const renterRow = rows.find((r) => r.kind === 'RENTER_BOOKING_CONFIRM')
       const opRow = rows.find((r) => r.kind === 'OPERATOR_BOOKING_ALERT')
       expect(renterRow?.recipient).toBe('jane@example.com')
@@ -298,7 +307,10 @@ describe('NotificationDispatcher', () => {
       expect(alert?.to).toBe('noreply@bcr.jp')
       expect(alert?.to).not.toContain('@op.com')
       // The audit row records the full member list; the renter mail stays single.
-      const rows = await logRepo.findAll({ userId: 'x', role: 'PLATFORM_ADMIN', bypassScope: true })
+      const rows = await logRepo.findAll(
+        { userId: 'x', role: 'PLATFORM_ADMIN', bypassScope: true },
+        { includeAllOperators: true },
+      )
       const opRow = rows.find((r) => r.kind === 'OPERATOR_BOOKING_ALERT')
       expect(opRow?.recipient).toBe('owner@op.com, staff@op.com')
       const renterMsg = sent.find((m) => m.bcc === undefined)
@@ -308,7 +320,10 @@ describe('NotificationDispatcher', () => {
     it('falls back to OPERATOR_ALERT_FALLBACK_EMAIL when the operator has no active members', async () => {
       const { dispatcher, logRepo } = build({ owners: [], fallback: 'ops@platform.com' })
       await dispatcher.dispatch(booking)
-      const rows = await logRepo.findAll({ userId: 'x', role: 'PLATFORM_ADMIN', bypassScope: true })
+      const rows = await logRepo.findAll(
+        { userId: 'x', role: 'PLATFORM_ADMIN', bypassScope: true },
+        { includeAllOperators: true },
+      )
       const opRow = rows.find((r) => r.kind === 'OPERATOR_BOOKING_ALERT')
       expect(opRow?.recipient).toBe('ops@platform.com')
       // Fallback is a single visible recipient — no Bcc list when there are no members.
@@ -389,7 +404,10 @@ describe('NotificationDispatcher', () => {
       const outcome = await dispatcher.processOne(booking, 'RENTER_BOOKING_CONFIRM')
 
       expect(outcome.result).toBe('no_recipient')
-      const rows = await logRepo.findAll({ userId: 'x', role: 'PLATFORM_ADMIN', bypassScope: true })
+      const rows = await logRepo.findAll(
+        { userId: 'x', role: 'PLATFORM_ADMIN', bypassScope: true },
+        { includeAllOperators: true },
+      )
       expect(rows).toHaveLength(1)
       expect(rows[0]).toMatchObject({
         kind: 'RENTER_BOOKING_CONFIRM',
@@ -404,7 +422,10 @@ describe('NotificationDispatcher', () => {
     it('keys the NO_RECIPIENT row separately so a later real send is never blocked', async () => {
       const { dispatcher, logRepo } = build({ renterEmail: null })
       await dispatcher.processOne(booking, 'RENTER_BOOKING_CONFIRM')
-      const rows = await logRepo.findAll({ userId: 'x', role: 'PLATFORM_ADMIN', bypassScope: true })
+      const rows = await logRepo.findAll(
+        { userId: 'x', role: 'PLATFORM_ADMIN', bypassScope: true },
+        { includeAllOperators: true },
+      )
       expect(rows[0]!.idempotencyKey).toBe(
         `notify:${booking.id}:RENTER_BOOKING_CONFIRM:no_recipient`,
       )
@@ -414,7 +435,10 @@ describe('NotificationDispatcher', () => {
       const { dispatcher, logRepo } = build({ renterEmail: null })
       await dispatcher.processOne(booking, 'RENTER_BOOKING_CONFIRM')
       await dispatcher.processOne(booking, 'RENTER_BOOKING_CONFIRM')
-      const rows = await logRepo.findAll({ userId: 'x', role: 'PLATFORM_ADMIN', bypassScope: true })
+      const rows = await logRepo.findAll(
+        { userId: 'x', role: 'PLATFORM_ADMIN', bypassScope: true },
+        { includeAllOperators: true },
+      )
       expect(rows).toHaveLength(1)
       expect(rows[0]!.status).toBe('NO_RECIPIENT')
     })
@@ -440,7 +464,10 @@ describe('NotificationDispatcher', () => {
         'already_sent',
       )
 
-      const rows = await logRepo.findAll({ userId: 'x', role: 'PLATFORM_ADMIN', bypassScope: true })
+      const rows = await logRepo.findAll(
+        { userId: 'x', role: 'PLATFORM_ADMIN', bypassScope: true },
+        { includeAllOperators: true },
+      )
       expect(rows.map((r) => r.status).sort()).toEqual(['NO_RECIPIENT', 'SENT'])
     })
   })
@@ -451,7 +478,10 @@ describe('NotificationDispatcher', () => {
     async function kindsFor(trigger: Parameters<typeof dispatcher.dispatch>[1]) {
       const { dispatcher, logRepo, sender } = build()
       await dispatcher.dispatch(booking, trigger)
-      const rows = await logRepo.findAll({ userId: 'x', role: 'PLATFORM_ADMIN', bypassScope: true })
+      const rows = await logRepo.findAll(
+        { userId: 'x', role: 'PLATFORM_ADMIN', bypassScope: true },
+        { includeAllOperators: true },
+      )
       return { rows, sender }
     }
 
@@ -492,7 +522,10 @@ describe('NotificationDispatcher', () => {
     it('defaults to CREATED when no trigger is passed (back-compat with create + resend)', async () => {
       const { dispatcher, logRepo } = build()
       await dispatcher.dispatch(booking)
-      const rows = await logRepo.findAll({ userId: 'x', role: 'PLATFORM_ADMIN', bypassScope: true })
+      const rows = await logRepo.findAll(
+        { userId: 'x', role: 'PLATFORM_ADMIN', bypassScope: true },
+        { includeAllOperators: true },
+      )
       expect(rows).toHaveLength(2)
     })
 
@@ -503,7 +536,10 @@ describe('NotificationDispatcher', () => {
       const { dispatcher, logRepo, sender } = build()
       await dispatcher.dispatch(booking, 'ACTIVATED')
       await dispatcher.dispatch(booking, 'COMPLETED')
-      const rows = await logRepo.findAll({ userId: 'x', role: 'PLATFORM_ADMIN', bypassScope: true })
+      const rows = await logRepo.findAll(
+        { userId: 'x', role: 'PLATFORM_ADMIN', bypassScope: true },
+        { includeAllOperators: true },
+      )
       expect(rows.map((r) => r.kind).sort()).toEqual([
         'RENTER_TRIP_COMPLETED',
         'RENTER_TRIP_STARTED',

@@ -97,10 +97,18 @@ describe('cross-operator location isolation (Drizzle)', () => {
     expect(await repo.findById(noTenant, locationA.id)).toBeUndefined()
   })
 
-  it('SYSTEM_CONTEXT reads locations across operators', async () => {
-    const ids = (await repo.findAll(SYSTEM_CONTEXT)).map((l) => l.id)
+  it('SYSTEM_CONTEXT reads locations across operators with includeAllOperators', async () => {
+    const ids = (await repo.findAll(SYSTEM_CONTEXT, { includeAllOperators: true })).map((l) => l.id)
     expect(ids).toContain(locationA.id)
     expect(ids).toContain(locationB.id)
+  })
+
+  // #1107: the Drizzle backstop (`sql\`false\``) — a bypass caller with no
+  // explicit cross-operator opt-in reads nothing, so a forgotten route guard
+  // can't enumerate every tenant. The `includeAllOperators` test above is the
+  // intentional platform-wide path.
+  it('SYSTEM_CONTEXT without includeAllOperators reads nothing', async () => {
+    expect(await repo.findAll(SYSTEM_CONTEXT)).toHaveLength(0)
   })
 })
 

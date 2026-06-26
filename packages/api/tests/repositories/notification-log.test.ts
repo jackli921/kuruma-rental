@@ -230,8 +230,10 @@ describe('InMemoryNotificationLogRepository', () => {
     })
 
     it('a bypass caller sees all rows, filterable by bookingId', async () => {
-      expect(await repo.findAll(SYSTEM_CONTEXT)).toHaveLength(2)
-      expect(await repo.findAll(SYSTEM_CONTEXT, { bookingId: 'bk-2' })).toHaveLength(1)
+      expect(await repo.findAll(SYSTEM_CONTEXT, { includeAllOperators: true })).toHaveLength(2)
+      expect(
+        await repo.findAll(SYSTEM_CONTEXT, { bookingId: 'bk-2', includeAllOperators: true }),
+      ).toHaveLength(1)
     })
   })
 

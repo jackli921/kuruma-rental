@@ -237,7 +237,7 @@ describe('InMemoryFeeScheduleRepository — operator-scoped reads + filters', ()
 
   it('a bypass admin (SYSTEM_CONTEXT) sees every operator fee', async () => {
     const { repo } = await seed()
-    expect(await repo.findAll(SYSTEM_CONTEXT)).toHaveLength(3)
+    expect(await repo.findAll(SYSTEM_CONTEXT, { includeAllOperators: true })).toHaveLength(3)
   })
 
   it('an operatorId filter narrows a bypass-role read to one tenant', async () => {
