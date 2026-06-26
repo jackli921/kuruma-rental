@@ -121,6 +121,15 @@ describe('VehicleBlockService.createBlock', () => {
 
     expect(adjacent.ok).toBe(true)
   })
+
+  it('rejects a non-fleet-write caller at the service layer (defence in depth, #329)', async () => {
+    const vehicle = await seedVehicle('op_a')
+    const renter: CallerContext = { userId: 'renter', role: 'RENTER' }
+
+    await expect(service.createBlock(renter, vehicle.id, blockInput())).rejects.toThrow(
+      'fleet write scope required',
+    )
+  })
 })
 
 describe('VehicleBlockService.deleteBlock', () => {
@@ -151,5 +160,14 @@ describe('VehicleBlockService.deleteBlock', () => {
 
     expect(result).toMatchObject({ ok: false, status: 404 })
     expect(await blockRepo.findById(created.block.id)).toBeDefined()
+  })
+
+  it('rejects a non-fleet-write caller at the service layer (defence in depth, #329)', async () => {
+    const vehicle = await seedVehicle('op_a')
+    const renter: CallerContext = { userId: 'renter', role: 'RENTER' }
+
+    await expect(service.deleteBlock(renter, vehicle.id, crypto.randomUUID())).rejects.toThrow(
+      'fleet write scope required',
+    )
   })
 })

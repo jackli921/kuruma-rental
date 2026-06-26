@@ -1,12 +1,12 @@
 import type { ErrorCode } from '@kuruma/shared/lib/error-codes'
 import type { CreateVehicleBlockInput } from '@kuruma/shared/validators/vehicle-block'
-import type { CallerContext } from '../middleware/auth'
+import { type CallerContext, requireFleetWriteScope } from '../middleware/auth'
 import { PG_ERROR, VEHICLE_BLOCKS_OVERLAP, pgConstraintName, pgErrorCode } from '../pg-errors'
 import type { VehicleBlock, VehicleBlockRepository, VehicleRepository } from '../repositories/types'
 
 export type VehicleBlockResult =
   | { ok: true; block: VehicleBlock }
-  | { ok: false; error: string; status: number; code?: string }
+  | { ok: false; error: string; status: number; code?: ErrorCode }
 
 const VEHICLE_NOT_FOUND_MESSAGE = 'Vehicle not found'
 const BLOCK_NOT_FOUND_MESSAGE = 'Block not found'
@@ -19,13 +19,16 @@ const isBlockOverlap = (err: unknown): boolean =>
   pgConstraintName(err) === VEHICLE_BLOCKS_OVERLAP
 
 /**
- * #1101: operator-scoped writes for scheduled vehicle blocks. The vehicle is the
- * tenant anchor — `vehicleRepo.findById(ctx, …)` is the authorisation boundary
- * (a foreign-tenant or unknown vehicleId resolves to undefined → 404), and
- * operatorId/createdBy are derived server-side from the resolved vehicle + caller,
- * never client input. Block-vs-block overlap is the DB GiST EXCLUDE, surfaced as a
- * 409; the validator already guarantees endAt > startAt so the CHECK (23514) is a
- * defence-in-depth 400.
+ * #1101: operator-scoped writes for scheduled vehicle blocks. Two independent
+ * seals: `requireFleetWriteScope(ctx)` re-asserts the write role + operator scope
+ * at this layer (defence in depth vs a forgotten route gate, #329 — the
+ * VehicleBlockRepository takes no ctx, so the guard lives here rather than in the
+ * repo like DrizzleVehicleRepository), and `vehicleRepo.findById(ctx, …)` is the
+ * tenant boundary (a foreign-tenant or unknown vehicleId resolves to undefined →
+ * 404). operatorId/createdBy are derived server-side from the resolved vehicle +
+ * caller, never client input. Block-vs-block overlap is the DB GiST EXCLUDE,
+ * surfaced as a 409; the validator already guarantees endAt > startAt so the
+ * CHECK (23514) is a defence-in-depth 400.
  */
 export class VehicleBlockService {
   constructor(
@@ -38,6 +41,8 @@ export class VehicleBlockService {
     vehicleId: string,
     input: CreateVehicleBlockInput,
   ): Promise<VehicleBlockResult> {
+    requireFleetWriteScope(ctx)
+
     const vehicle = await this.vehicleRepo.findById(ctx, vehicleId)
     if (!vehicle) return { ok: false, error: VEHICLE_NOT_FOUND_MESSAGE, status: 404 }
 
@@ -76,6 +81,8 @@ export class VehicleBlockService {
     vehicleId: string,
     blockId: string,
   ): Promise<VehicleBlockResult> {
+    requireFleetWriteScope(ctx)
+
     // Resolve the vehicle in the caller's tenant first: this both authorises the
     // caller and yields the operatorId the scoped delete keys on. A foreign or
     // unknown vehicleId → 404 before any write is attempted.

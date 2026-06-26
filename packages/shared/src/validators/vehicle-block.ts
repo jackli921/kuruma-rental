@@ -15,6 +15,10 @@ export const createVehicleBlockSchema = z
     endAt: z.string().datetime({ message: 'endAt must be an ISO datetime' }),
     notes: z.string().trim().max(2000).optional(),
   })
+  // .strict() rejects unknown keys with a 400 rather than silently stripping them
+  // (#1081 direction). A client that injects operatorId/createdBy/vehicleId — all
+  // server-derived — gets a loud error instead of a silent no-op, surfacing the bug.
+  .strict()
   .refine((data) => new Date(data.endAt) > new Date(data.startAt), {
     message: 'endAt must be after startAt',
     path: ['endAt'],

@@ -18,17 +18,14 @@ describe('createVehicleBlockSchema', () => {
     }
   })
 
-  it('drops a client-supplied operatorId/vehicleId (server-derived, never trusted)', () => {
+  it('rejects a client-supplied operatorId/vehicleId (server-derived, never trusted)', () => {
     const result = createVehicleBlockSchema.safeParse({
       ...validInput,
       operatorId: 'attacker-operator',
       vehicleId: 'attacker-vehicle',
     })
-    expect(result.success).toBe(true)
-    if (result.success) {
-      expect(result.data).not.toHaveProperty('operatorId')
-      expect(result.data).not.toHaveProperty('vehicleId')
-    }
+    // .strict(): injecting a server-derived key is a loud 400, not a silent strip.
+    expect(result.success).toBe(false)
   })
 
   it('accepts a block with no notes (optional)', () => {
