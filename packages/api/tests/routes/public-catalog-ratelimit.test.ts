@@ -4,6 +4,7 @@ import { createApp } from '../../src/index'
 import {
   InMemoryAvailabilityRepository,
   InMemoryBookingRepository,
+  InMemoryVehicleBlockRepository,
   InMemoryVehicleClassRepository,
   InMemoryVehicleRepository,
 } from '../../src/repositories/in-memory'
@@ -24,7 +25,11 @@ function createTestApp(opts?: { publicCatalogLimiter?: RateLimitBinding }) {
   setupAuthEnv()
   const vehicleRepo = new InMemoryVehicleRepository()
   const bookingRepo = new InMemoryBookingRepository()
-  const availabilityRepo = new InMemoryAvailabilityRepository(vehicleRepo, bookingRepo)
+  const availabilityRepo = new InMemoryAvailabilityRepository(
+    vehicleRepo,
+    bookingRepo,
+    new InMemoryVehicleBlockRepository(),
+  )
   const vehicleClassRepo = new InMemoryVehicleClassRepository()
   return {
     app: createApp({

@@ -8,6 +8,7 @@ import { InMemoryOperatorRepository } from '../repositories/in-memory/operator'
 import { InMemoryRegionRepository } from '../repositories/in-memory/region'
 import { InMemoryStorefrontRepository } from '../repositories/in-memory/storefront'
 import { InMemoryVehicleRepository } from '../repositories/in-memory/vehicle'
+import { InMemoryVehicleBlockRepository } from '../repositories/in-memory/vehicle-block'
 import { InMemoryVehicleClassRepository } from '../repositories/in-memory/vehicle-class'
 import type { AvailabilityFilters, AvailabilityRepository } from '../repositories/types'
 import type { ClassRatePlan, Location, Operator, Region, Vehicle, VehicleClass } from '../stores'
@@ -57,7 +58,11 @@ beforeEach(() => {
   classRepo = new InMemoryVehicleClassRepository()
   classRatePlanRepo = new InMemoryClassRatePlanRepository()
   const storefrontRepo = new InMemoryStorefrontRepository(locationRepo, operatorRepo)
-  const availabilityRepo = new InMemoryAvailabilityRepository(vehicleRepo, bookingRepo)
+  const availabilityRepo = new InMemoryAvailabilityRepository(
+    vehicleRepo,
+    bookingRepo,
+    new InMemoryVehicleBlockRepository(),
+  )
   const regionRepo = new InMemoryRegionRepository(REGIONS)
   service = new FlatSearchService(
     storefrontRepo,
@@ -383,7 +388,11 @@ describe('FlatSearchService.search region filter (#394)', () => {
     await makeVehicle({ operatorId: a.id, classId: klass.id, pickupLocationId: kyoto.id })
 
     const recording = new RecordingAvailabilityRepository(
-      new InMemoryAvailabilityRepository(vehicleRepo, bookingRepo),
+      new InMemoryAvailabilityRepository(
+        vehicleRepo,
+        bookingRepo,
+        new InMemoryVehicleBlockRepository(),
+      ),
     )
     const scoped = new FlatSearchService(
       new InMemoryStorefrontRepository(locationRepo, operatorRepo),
@@ -465,7 +474,11 @@ describe('FlatSearchService.search CLASS_COMBO producer (#464)', () => {
 
   function serviceWithCounts(byClass: Map<string, { capacity: number; demand: number }>) {
     const repo = new ComboCountsAvailabilityRepository(
-      new InMemoryAvailabilityRepository(vehicleRepo, bookingRepo),
+      new InMemoryAvailabilityRepository(
+        vehicleRepo,
+        bookingRepo,
+        new InMemoryVehicleBlockRepository(),
+      ),
       byClass,
     )
     const service = new FlatSearchService(

@@ -56,6 +56,7 @@
     "./validators/booking": "./src/validators/booking.ts",
     "./validators/vehicle": "./src/validators/vehicle.ts",
     "./validators/vehicle-class": "./src/validators/vehicle-class.ts",
+    "./validators/vehicle-block": "./src/validators/vehicle-block.ts",
     "./validators/location": "./src/validators/location.ts",
     "./validators/insurance-option": "./src/validators/insurance-option.ts",
     "./validators/add-on": "./src/validators/add-on.ts",

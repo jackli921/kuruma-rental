@@ -5,6 +5,7 @@ import { SYSTEM_CONTEXT } from '../../src/middleware/auth'
 import {
   InMemoryAvailabilityRepository,
   InMemoryBookingRepository,
+  InMemoryVehicleBlockRepository,
   InMemoryVehicleRepository,
 } from '../../src/repositories/in-memory'
 import type { Booking, Vehicle } from '../../src/repositories/types'
@@ -68,7 +69,11 @@ describe('Availability Routes', () => {
   beforeEach(() => {
     vehicleRepo = new InMemoryVehicleRepository()
     bookingRepo = new InMemoryBookingRepository()
-    availabilityRepo = new InMemoryAvailabilityRepository(vehicleRepo, bookingRepo)
+    availabilityRepo = new InMemoryAvailabilityRepository(
+      vehicleRepo,
+      bookingRepo,
+      new InMemoryVehicleBlockRepository(),
+    )
     app = new Hono()
     app.use('*', testAuthMiddleware('staff-user', 'PLATFORM_ADMIN'))
     app.route('/', createAvailabilityRoutes(new AvailabilityService(availabilityRepo)))

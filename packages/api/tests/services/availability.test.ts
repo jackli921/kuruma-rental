@@ -3,6 +3,7 @@ import { SYSTEM_CONTEXT } from '../../src/middleware/auth'
 import {
   InMemoryAvailabilityRepository,
   InMemoryBookingRepository,
+  InMemoryVehicleBlockRepository,
   InMemoryVehicleRepository,
 } from '../../src/repositories/in-memory'
 import type { Booking, Vehicle } from '../../src/repositories/types'
@@ -60,7 +61,11 @@ const TO = new Date('2026-06-01T16:00:00Z')
 beforeEach(() => {
   vehicleRepo = new InMemoryVehicleRepository()
   bookingRepo = new InMemoryBookingRepository()
-  availabilityRepo = new InMemoryAvailabilityRepository(vehicleRepo, bookingRepo)
+  availabilityRepo = new InMemoryAvailabilityRepository(
+    vehicleRepo,
+    bookingRepo,
+    new InMemoryVehicleBlockRepository(),
+  )
   service = new AvailabilityService(availabilityRepo)
 })
 

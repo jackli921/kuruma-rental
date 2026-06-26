@@ -5,6 +5,7 @@ import {
   InMemoryAvailabilityRepository,
   InMemoryBookingRepository,
   InMemoryRegionRepository,
+  InMemoryVehicleBlockRepository,
   InMemoryVehicleRepository,
 } from '../../src/repositories/in-memory'
 import type { GeocodeOutcome } from '../../src/services/geocoding/types'
@@ -54,7 +55,11 @@ describe('Geocoder DI — provider swap touches only index.ts (#531)', () => {
     setupAuthEnv()
     const vehicleRepo = new InMemoryVehicleRepository()
     const bookingRepo = new InMemoryBookingRepository()
-    const availabilityRepo = new InMemoryAvailabilityRepository(vehicleRepo, bookingRepo)
+    const availabilityRepo = new InMemoryAvailabilityRepository(
+      vehicleRepo,
+      bookingRepo,
+      new InMemoryVehicleBlockRepository(),
+    )
     const geocode = vi.fn(
       async (): Promise<GeocodeOutcome> => ({ status: 'ok', lat: 34.6937, lng: 135.5023 }),
     )
@@ -86,7 +91,11 @@ describe('Geocoder DI — provider swap touches only index.ts (#531)', () => {
     setupAuthEnv()
     const vehicleRepo = new InMemoryVehicleRepository()
     const bookingRepo = new InMemoryBookingRepository()
-    const availabilityRepo = new InMemoryAvailabilityRepository(vehicleRepo, bookingRepo)
+    const availabilityRepo = new InMemoryAvailabilityRepository(
+      vehicleRepo,
+      bookingRepo,
+      new InMemoryVehicleBlockRepository(),
+    )
     const geocode = vi.fn(
       async (): Promise<GeocodeOutcome> => ({ status: 'ok', lat: 34.6937, lng: 135.5023 }),
     )
@@ -122,7 +131,11 @@ describe('Geocoder DI — provider swap touches only index.ts (#531)', () => {
     setupAuthEnv()
     const vehicleRepo = new InMemoryVehicleRepository()
     const bookingRepo = new InMemoryBookingRepository()
-    const availabilityRepo = new InMemoryAvailabilityRepository(vehicleRepo, bookingRepo)
+    const availabilityRepo = new InMemoryAvailabilityRepository(
+      vehicleRepo,
+      bookingRepo,
+      new InMemoryVehicleBlockRepository(),
+    )
     // The provider would FAIL — proving the GEOCODED result came from the cache.
     const geocode = vi.fn(async (): Promise<GeocodeOutcome> => ({ status: 'notFound' }))
     const get = vi.fn(async () => ({ lat: 34.6937, lng: 135.5023 }))

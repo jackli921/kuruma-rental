@@ -7,6 +7,7 @@ import { InMemoryBookingRepository } from '../../src/repositories/in-memory/book
 import { InMemoryOperatorRepository } from '../../src/repositories/in-memory/operator'
 import { InMemoryUserRepository } from '../../src/repositories/in-memory/user'
 import { InMemoryVehicleRepository } from '../../src/repositories/in-memory/vehicle'
+import { InMemoryVehicleBlockRepository } from '../../src/repositories/in-memory/vehicle-block'
 import type { User } from '../../src/stores'
 import { TEST_AUTH_SECRET, setupAuthEnv } from '../helpers/auth'
 
@@ -73,7 +74,11 @@ describe('createApp wires operator-session revocation (#939)', () => {
     userRepo = new InMemoryUserRepository(new Map([[SELF_ID, activeOperatorRow()]]))
     const vehicleRepo = new InMemoryVehicleRepository()
     const bookingRepo = new InMemoryBookingRepository()
-    const availabilityRepo = new InMemoryAvailabilityRepository(vehicleRepo, bookingRepo)
+    const availabilityRepo = new InMemoryAvailabilityRepository(
+      vehicleRepo,
+      bookingRepo,
+      new InMemoryVehicleBlockRepository(),
+    )
     // operatorRepo backs /operators, a FACTORY-INTERNAL requireAuth route (its auth
     // is mounted inside createOperatorRoutes, not as an app-level prefix) — an empty
     // repo still 200s an active operator (the service scopes the list to self).

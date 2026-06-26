@@ -16,6 +16,7 @@ import {
   reviews,
   threadParticipants,
   threads,
+  vehicleBlocks,
   vehicleClasses,
   vehicles,
 } from '@kuruma/shared/db/schema'
@@ -38,6 +39,7 @@ import type {
   Thread,
   ThreadParticipant,
   Vehicle,
+  VehicleBlock,
   VehicleClass,
 } from '../../stores'
 
@@ -317,6 +319,19 @@ export const maintenanceLogColumns = {
   updatedAt: maintenanceLogs.updatedAt,
 }
 
+export const vehicleBlockColumns = {
+  id: vehicleBlocks.id,
+  operatorId: vehicleBlocks.operatorId,
+  vehicleId: vehicleBlocks.vehicleId,
+  startAt: vehicleBlocks.startAt,
+  endAt: vehicleBlocks.endAt,
+  kind: vehicleBlocks.kind,
+  reason: vehicleBlocks.reason,
+  notes: vehicleBlocks.notes,
+  createdBy: vehicleBlocks.createdBy,
+  createdAt: vehicleBlocks.createdAt,
+}
+
 // --- Shared date/time helpers ---
 
 export function overlapHours(
@@ -359,6 +374,7 @@ type BookingEventRow = ColumnRow<typeof bookingEventColumns>
 type ThreadRow = ColumnRow<typeof threadColumns>
 type ThreadParticipantRow = ColumnRow<typeof participantColumns>
 type MaintenanceLogRow = ColumnRow<typeof maintenanceLogColumns>
+type VehicleBlockRow = ColumnRow<typeof vehicleBlockColumns>
 
 /**
  * Decodes stored `photos` entries to wire URLs (#879). The composition root
@@ -665,6 +681,21 @@ export function toMaintenanceLog(r: MaintenanceLogRow): MaintenanceLog {
     resolvedAt: r.resolvedAt,
     createdAt: r.createdAt,
     updatedAt: r.updatedAt,
+  }
+}
+
+export function toVehicleBlock(r: VehicleBlockRow): VehicleBlock {
+  return {
+    id: r.id,
+    operatorId: r.operatorId,
+    vehicleId: r.vehicleId,
+    startAt: r.startAt,
+    endAt: r.endAt,
+    kind: r.kind,
+    reason: r.reason,
+    notes: r.notes,
+    createdBy: r.createdBy,
+    createdAt: r.createdAt,
   }
 }
 

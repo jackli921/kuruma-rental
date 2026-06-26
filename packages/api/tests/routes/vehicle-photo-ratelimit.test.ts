@@ -5,6 +5,7 @@ import { SYSTEM_CONTEXT } from '../../src/middleware/auth'
 import {
   InMemoryAvailabilityRepository,
   InMemoryBookingRepository,
+  InMemoryVehicleBlockRepository,
   InMemoryVehicleRepository,
 } from '../../src/repositories/in-memory'
 import { InMemoryPhotoStorage } from '../../src/repositories/in-memory/photo-storage'
@@ -58,7 +59,11 @@ function createTestApp(opts?: {
   setupAuthEnv()
   const vehicleRepo = new InMemoryVehicleRepository()
   const bookingRepo = new InMemoryBookingRepository()
-  const availabilityRepo = new InMemoryAvailabilityRepository(vehicleRepo, bookingRepo)
+  const availabilityRepo = new InMemoryAvailabilityRepository(
+    vehicleRepo,
+    bookingRepo,
+    new InMemoryVehicleBlockRepository(),
+  )
   const photoStorage = new InMemoryPhotoStorage()
 
   return {

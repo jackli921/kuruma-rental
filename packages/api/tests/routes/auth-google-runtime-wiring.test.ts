@@ -8,6 +8,7 @@ import {
   InMemoryBookingRepository,
   InMemoryOperatorRepository,
   InMemoryProviderInviteRepository,
+  InMemoryVehicleBlockRepository,
   InMemoryVehicleRepository,
 } from '../../src/repositories/in-memory'
 import { TEST_AUTH_SECRET, oauthFlowCookie, setupAuthEnv } from '../helpers/auth'
@@ -40,6 +41,7 @@ function buildApp(googleAuthRuntime: GoogleAuthRuntime) {
     availabilityRepo: new InMemoryAvailabilityRepository(
       new InMemoryVehicleRepository(),
       new InMemoryBookingRepository(),
+      new InMemoryVehicleBlockRepository(),
     ),
     googleAuthRuntime,
   })
@@ -135,6 +137,7 @@ describe('createApp wires a googleAuthRuntime override into /auth/google/callbac
       availabilityRepo: new InMemoryAvailabilityRepository(
         new InMemoryVehicleRepository(),
         new InMemoryBookingRepository(),
+        new InMemoryVehicleBlockRepository(),
       ),
       operatorRepo,
       providerInviteRepo,

@@ -4,6 +4,7 @@ import { createApp } from '../../src/index'
 import {
   InMemoryAvailabilityRepository,
   InMemoryBookingRepository,
+  InMemoryVehicleBlockRepository,
   InMemoryVehicleRepository,
 } from '../../src/repositories/in-memory'
 import { InMemoryConsentRepository } from '../../src/repositories/in-memory/consent'
@@ -25,7 +26,11 @@ function makeApp() {
   setupAuthEnv()
   const vehicleRepo = new InMemoryVehicleRepository()
   const bookingRepo = new InMemoryBookingRepository()
-  const availabilityRepo = new InMemoryAvailabilityRepository(vehicleRepo, bookingRepo)
+  const availabilityRepo = new InMemoryAvailabilityRepository(
+    vehicleRepo,
+    bookingRepo,
+    new InMemoryVehicleBlockRepository(),
+  )
   const consentRepo = new InMemoryConsentRepository()
   const app = createApp({ vehicleRepo, bookingRepo, availabilityRepo, consentRepo })
   return { app, consentRepo }

@@ -11,7 +11,12 @@ import {
   timestamp,
   unique,
 } from 'drizzle-orm/pg-core'
-import { TRANSMISSIONS, VEHICLE_CLASS_STATUSES, VEHICLE_STATUSES } from '../enums'
+import {
+  TRANSMISSIONS,
+  VEHICLE_BLOCK_KINDS,
+  VEHICLE_CLASS_STATUSES,
+  VEHICLE_STATUSES,
+} from '../enums'
 import { LUGGAGE_SIZES } from '../lib/luggage'
 import { operators } from './auth'
 import { locations } from './location'
@@ -22,6 +27,7 @@ export const transmissionEnum = pgEnum('transmission', TRANSMISSIONS)
 export const luggageSizeEnum = pgEnum('luggage_size', LUGGAGE_SIZES)
 export const vehicleClassStatusEnum = pgEnum('vehicle_class_status', VEHICLE_CLASS_STATUSES)
 export const vehicleStatusEnum = pgEnum('vehicle_status', VEHICLE_STATUSES)
+export const vehicleBlockKindEnum = pgEnum('vehicle_block_kind', VEHICLE_BLOCK_KINDS)
 
 // Issue #247: vehicle classes — renter-facing catalog categories.
 // Renters browse and book classes (e.g. "Compact"); owner manages
@@ -209,4 +215,54 @@ export const maintenanceLogs = pgTable(
   ],
 )
 
-export type { Transmission, VehicleClassStatus, VehicleStatus } from '../enums'
+// #1101: scheduled blocks take a vehicle off the calendar for a time-ranged
+// [startAt, endAt) window — maintenance, out-of-service, or a manual operator
+// hold. Unlike maintenance_logs (reactive, cost-tracking, welded to the binary
+// vehicle.status=MAINTENANCE toggle), a block is forward-looking and is the
+// availability primitive: a CONFIRMED/ACTIVE booking cannot overlap one. The
+// block-vs-block guarantee is the `vehicle_blocks_no_overlap` GiST EXCLUDE
+// constraint added in a custom migration (EXCLUDE is not expressible in the
+// drizzle table builder — same pattern as bookings_no_overlap). Booking-vs-block
+// is enforced in the service layer (NOT EXISTS + advisory lock), since a single
+// EXCLUDE index cannot span two tables.
+export const vehicleBlocks = pgTable(
+  'vehicle_blocks',
+  {
+    id: text('id')
+      .primaryKey()
+      .$defaultFn(() => crypto.randomUUID()),
+    // Tenant owner. Part of the composite FK below that seals the block's vehicle
+    // to its own operator. Server-derived from the vehicle — never client-supplied.
+    operatorId: text('operatorId')
+      .notNull()
+      .references(() => operators.id, { onDelete: 'restrict' }),
+    vehicleId: text('vehicleId').notNull(),
+    startAt: timestamp('startAt', { withTimezone: true, mode: 'date' }).notNull(),
+    endAt: timestamp('endAt', { withTimezone: true, mode: 'date' }).notNull(),
+    kind: vehicleBlockKindEnum('kind').notNull(),
+    reason: text('reason').notNull(),
+    notes: text('notes'),
+    // User id of the operator who scheduled the block (from the session). Text,
+    // not an FK — the actor is an audit fact, not a referential dependency.
+    createdBy: text('createdBy').notNull(),
+    createdAt: timestamp('createdAt', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    // A zero-or-negative-width block is meaningless and would make the tstzrange
+    // empty (never overlapping) — reject at the DB boundary (mirrored by the Zod
+    // validator). The exclusion constraint relies on non-empty ranges.
+    check('vehicle_blocks_end_after_start', sql`${table.endAt} > ${table.startAt}`),
+    index('idx_vehicle_blocks_vehicleId').on(table.vehicleId),
+    index('idx_vehicle_blocks_operatorId').on(table.operatorId),
+    // A block's vehicle must belong to the block's own operator. vehicleId +
+    // operatorId together reference vehicles(operatorId, id) — the named unique
+    // key vehicles_operatorId_id_unique. Mirrors the bookings/vehicle seal.
+    foreignKey({
+      columns: [table.operatorId, table.vehicleId],
+      foreignColumns: [vehicles.operatorId, vehicles.id],
+      name: 'vehicle_blocks_operatorId_vehicleId_fk',
+    }),
+  ],
+)
+
+export type { Transmission, VehicleBlockKind, VehicleClassStatus, VehicleStatus } from '../enums'
