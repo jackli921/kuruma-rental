@@ -16,6 +16,7 @@ import { observability } from './observability/middleware'
 import { createAddOnRoutes } from './routes/add-ons'
 import { createAdminRoutes } from './routes/admin'
 import { createAdminBookingRoutes } from './routes/admin-bookings'
+import { createAdminOverviewRoutes } from './routes/admin-overview'
 import { createAdminRevenueRoutes } from './routes/admin-revenue'
 import { createAuthRoutes } from './routes/auth'
 import { createAvailabilityRoutes } from './routes/availability'
@@ -50,6 +51,7 @@ import { createVehiclePhotoRoutes } from './routes/vehicle-photos'
 import { createVehicleRoutes } from './routes/vehicles'
 import { AddOnService } from './services/add-on'
 import { AdminBookingService } from './services/admin-booking'
+import { AdminOverviewService } from './services/admin-overview'
 import { AdminRevenueService } from './services/admin-revenue'
 import { type RecordAuditEvent, toAuditRow } from './services/audit'
 import { AvailabilityService } from './services/availability'
@@ -414,6 +416,14 @@ export function createApp(overrides?: AppOverrides, repos: Repos = buildRepos(ov
   const overviewService = new OverviewService(overviewRepo)
   const adminRevenueService = new AdminRevenueService(paymentEventRepo, operatorRepo)
   const adminBookingService = new AdminBookingService(bookingRepo, operatorRepo, userRepo)
+  const adminOverviewService = new AdminOverviewService(
+    bookingRepo,
+    paymentEventRepo,
+    vehicleRepo,
+    operatorRepo,
+    paymentAnomalyRepo,
+    renterDocumentRepo,
+  )
   const paymentAnomalyService = new PaymentAnomalyService(paymentAnomalyRepo)
   const vehicleDetailService = new VehicleDetailService(vehicleDetailRepo)
   const operatorService = new OperatorService(operatorRepo, recordAudit)
@@ -499,6 +509,7 @@ export function createApp(overrides?: AppOverrides, repos: Repos = buildRepos(ov
     .route('/', createOverviewRoutes(overviewService))
     .route('/', createAdminRevenueRoutes(adminRevenueService))
     .route('/', createAdminBookingRoutes(adminBookingService))
+    .route('/', createAdminOverviewRoutes(adminOverviewService))
     .route('/', createPaymentAnomalyRoutes(paymentAnomalyService))
     .route('/', createMessageRoutes(messageService))
     .route('/', createConsentRoutes(consentService))

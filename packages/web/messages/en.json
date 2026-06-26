@@ -1238,7 +1238,17 @@
     },
     "home": {
       "title": "Platform Admin",
-      "subtitle": "Platform operations"
+      "subtitle": "Platform operations",
+      "kpi": {
+        "bookings": "Bookings",
+        "gmv": "GMV",
+        "fleet": "Fleet",
+        "operators": "Operators",
+        "unresolvedAnomalies": "Open anomalies",
+        "pendingDocs": "Pending documents"
+      },
+      "loadError": "Couldn't load the platform overview.",
+      "retry": "Retry"
     },
     "bookings": {
       "title": "Booking oversight",

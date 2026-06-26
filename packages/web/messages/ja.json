@@ -1238,7 +1238,17 @@
     },
     "home": {
       "title": "プラットフォーム管理",
-      "subtitle": "プラットフォーム運営"
+      "subtitle": "プラットフォーム運営",
+      "kpi": {
+        "bookings": "予約数",
+        "gmv": "流通総額",
+        "fleet": "車両数",
+        "operators": "事業者数",
+        "unresolvedAnomalies": "未解決の異常",
+        "pendingDocs": "審査待ち書類"
+      },
+      "loadError": "プラットフォーム概要を読み込めませんでした。",
+      "retry": "再試行"
     },
     "bookings": {
       "title": "予約管理",

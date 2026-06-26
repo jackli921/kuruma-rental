@@ -161,6 +161,12 @@ export class DrizzleBookingRepository implements BookingRepository {
     return row ? toBooking(row) : undefined
   }
 
+  // #1087 platform overview: COUNT(bookings) across all operators (unscoped).
+  async count(): Promise<number> {
+    const [row] = await this.db.select({ value: count() }).from(bookings)
+    return row?.value ?? 0
+  }
+
   async countActiveForVehicles(vehicleIds: string[]): Promise<number> {
     if (vehicleIds.length === 0) return 0
     const [row] = await this.db

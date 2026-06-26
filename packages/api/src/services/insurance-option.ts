@@ -5,6 +5,7 @@ import type {
   InsuranceOptionFilters,
   InsuranceOptionRepository,
 } from '../repositories/types'
+import { type CrossOperatorRead, applyCrossOperatorReadScope } from '../tenancy'
 
 export type InsuranceOptionResult =
   | { ok: true; option: InsuranceOption }
@@ -18,8 +19,12 @@ const isDuplicateName = (err: unknown): boolean => pgErrorCode(err) === PG_ERROR
 export class InsuranceOptionService {
   constructor(private readonly repo: InsuranceOptionRepository) {}
 
-  async findAll(ctx: CallerContext, filters?: InsuranceOptionFilters): Promise<InsuranceOption[]> {
-    return this.repo.findAll(ctx, filters)
+  async findAll(
+    ctx: CallerContext,
+    read: CrossOperatorRead,
+    filters: InsuranceOptionFilters = {},
+  ): Promise<InsuranceOption[]> {
+    return this.repo.findAll(ctx, applyCrossOperatorReadScope(ctx, read, filters))
   }
 
   async findById(ctx: CallerContext, id: string): Promise<InsuranceOption | undefined> {

@@ -25,6 +25,10 @@ export interface PaymentEventRepository {
   // payment, newest first. Powers the month picker without materializing every
   // row (#717).
   listSucceededMonths(): Promise<string[]>
+  // #1087 platform overview: total GMV = `COALESCE(SUM(grossJpy), 0)` over
+  // SUCCEEDED payments, in whole JPY. A DB SUM (mirrors vehicle-detail revenue),
+  // never load-then-sum. Unscoped — authz lives in AdminOverviewService.
+  sumSucceededGrossJpy(): Promise<number>
 }
 
 /** A payment anomaly to persist. id/createdAt/resolvedAt are store-assigned (#508 P2). */
@@ -38,6 +42,9 @@ export interface PaymentAnomalyRepository {
   // Unresolved anomalies across all operators for the platform-admin surface.
   // Unscoped by design — authz lives in the service (mirrors listSucceeded).
   listUnresolved(): Promise<PaymentAnomaly[]>
+  // #1087 platform overview: `COUNT(* WHERE resolvedAt IS NULL)` for the
+  // open-anomalies KPI. COUNT at the DB layer, never load-then-count.
+  countUnresolved(): Promise<number>
 }
 
 /** A refund attempt to claim. id/createdAt/updatedAt are store-assigned; stripeRefundId
