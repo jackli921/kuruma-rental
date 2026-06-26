@@ -33,8 +33,10 @@ export function createNotificationRoutes(service: NotificationService) {
       const bookingId = c.req.query('bookingId')
       if (bookingId) filters.bookingId = bookingId
 
-      // Bypass callers must scope explicitly — an unscoped cross-operator list is
-      // the exact leak we guard. Operator callers auto-scope at the repo.
+      // Bypass callers must scope explicitly. This 400 is now redundant
+      // defence-in-depth: the repo reads nothing for an unscoped bypass caller
+      // (#1107), so the real seal is the threaded intent below. Operator callers
+      // auto-scope at the repo.
       if (operatorReadScope(ctx).kind === 'all') {
         const operatorIdParam = c.req.query('operatorId')
         const includeAll = c.req.query('includeAll') === 'true'

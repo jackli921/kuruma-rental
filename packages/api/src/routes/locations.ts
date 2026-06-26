@@ -35,9 +35,10 @@ export function createLocationRoutes(
       if (c.req.query('includeArchived') === 'true') filters.includeArchived = true
 
       // Bypass-scope callers (PLATFORM_ADMIN, legacy STAFF/ADMIN) must scope
-      // explicitly — an accidental unscoped list across every operator is the
-      // exact leak we guard (#387 amendment item 2). Operator callers
-      // auto-scope, and any operatorId they pass is ignored here + at the repo.
+      // explicitly. This 400 is now redundant defence-in-depth (#387 amendment
+      // item 2): the repo reads nothing for an unscoped bypass caller (#1107),
+      // so the real seal is the threaded intent below — operatorId narrows,
+      // includeAllOperators opts in. Operator callers auto-scope at the repo.
       if (operatorReadScope(ctx).kind === 'all') {
         const operatorIdParam = c.req.query('operatorId')
         const includeAll = c.req.query('includeAll') === 'true'
