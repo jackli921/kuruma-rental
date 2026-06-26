@@ -65,6 +65,16 @@ function cleanSubRatings(raw: Record<string, number | undefined>): Record<string
   return out
 }
 
+// A review may only carry sub-dimensions its direction allows (DIRECTION table). The same
+// invariant gates submit AND edit — an author must not be able to smuggle a foreign-direction
+// dimension in after the fact — so both call this rather than re-spelling the check.
+function hasForeignDimension(
+  subRatings: Record<string, number>,
+  allowedDims: readonly string[],
+): boolean {
+  return Object.keys(subRatings).some((d) => !allowedDims.includes(d))
+}
+
 /**
  * Mutual, double-blind review submission + reveal (#1067 slice 2). Owns the
  * eligibility guard (COMPLETED-only, participant-only), the server-side derivation of
@@ -121,9 +131,7 @@ export class ReviewService {
     if (booking.status !== 'COMPLETED') return fail(409, 'BOOKING_NOT_COMPLETED')
 
     const subRatings = cleanSubRatings(input.subRatings)
-    if (Object.keys(subRatings).some((d) => !allowedDims.includes(d))) {
-      return fail(400, 'INVALID_DIMENSIONS')
-    }
+    if (hasForeignDimension(subRatings, allowedDims)) return fail(400, 'INVALID_DIMENSIONS')
 
     const subjectVehicleId = input.subject === 'VEHICLE' ? booking.assignedVehicleId : null
     if (input.subject === 'VEHICLE' && subjectVehicleId === null) {
@@ -171,13 +179,24 @@ export class ReviewService {
     input: EditReviewInput,
     _now: Date,
   ): Promise<EditResult> {
-    const patch: ReviewEdit = {
-      overall: input.overall,
-      subRatings: cleanSubRatings(input.subRatings),
-      comment: input.comment ?? null,
-    }
-    // update is atomically scoped to (id, author, publishedAt IS NULL); undefined =
-    // absent, already published, or not the caller's — all surfaced as a single 409.
+    // Load first: the row carries the authorRole + subject the dimension rule needs, and
+    // lets a missing OR foreign id collapse to one 404 (no review-id enumeration, and the
+    // honest code instead of a misleading ALREADY_PUBLISHED for a stranger).
+    const review = await this.reviewRepo.findById(reviewId)
+    if (!review || review.authorUserId !== ctx.userId) return fail(404, 'REVIEW_NOT_FOUND')
+    if (review.publishedAt) return fail(409, 'ALREADY_PUBLISHED')
+
+    const subRatings = cleanSubRatings(input.subRatings)
+    // Re-enforce the per-direction dimension invariant on edit, exactly as submit does —
+    // otherwise an author could submit clean then edit in a foreign-direction dimension,
+    // polluting the slice-5 aggregates the rule exists to protect.
+    const allowedDims = DIRECTION[review.authorRole][review.subject] ?? []
+    if (hasForeignDimension(subRatings, allowedDims)) return fail(400, 'INVALID_DIMENSIONS')
+
+    const patch: ReviewEdit = { overall: input.overall, subRatings, comment: input.comment ?? null }
+    // update keeps its own atomic (id, author, publishedAt IS NULL) WHERE as the race guard:
+    // if a concurrent reveal published the row between the read above and here, it returns
+    // undefined — which can now only mean a just-published row, hence the honest 409.
     const updated = await this.reviewRepo.update(reviewId, ctx.userId, patch)
     if (!updated) return fail(409, 'ALREADY_PUBLISHED')
     return { ok: true, review: updated }

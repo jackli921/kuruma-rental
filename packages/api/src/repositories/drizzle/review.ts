@@ -19,6 +19,15 @@ export class DrizzleReviewRepository implements ReviewRepository {
     return toReview(row)
   }
 
+  async findById(id: string): Promise<Review | undefined> {
+    const [row] = await this.db
+      .select(reviewColumns)
+      .from(reviews)
+      .where(eq(reviews.id, id))
+      .limit(1)
+    return row ? toReview(row) : undefined
+  }
+
   async findByBookingId(bookingId: string): Promise<Review[]> {
     const rows = await this.db
       .select(reviewColumns)

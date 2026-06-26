@@ -326,7 +326,7 @@ describe('ReviewService.edit — until published', () => {
     ).toEqual({ ok: false, status: 409, error: 'ALREADY_PUBLISHED' })
   })
 
-  it('does not let a non-author edit (no mutation, rejected)', async () => {
+  it('does not let a non-author edit — uniform 404 (no IDOR oracle, no mutation)', async () => {
     const { service, reviewRepo } = makeHarness()
     const submitted = await service.submit(renterCtx, submitInput({ overall: 5 }), NOW)
     if (!submitted.ok) throw new Error('expected ok')
@@ -336,9 +336,39 @@ describe('ReviewService.edit — until published', () => {
       { overall: 1, subRatings: {}, comment: 'hijacked' },
       NOW,
     )
-    expect(result.ok).toBe(false)
+    // A non-author's edit looks identical to editing a non-existent id (both 404), so a
+    // review id can't be enumerated; and it's the honest code, not a false ALREADY_PUBLISHED.
+    expect(result).toEqual({ ok: false, status: 404, error: 'REVIEW_NOT_FOUND' })
     const rows = await reviewRepo.findByBookingId(BOOKING_ID)
     expect(rows[0]?.overall).toBe(5) // untouched
+  })
+
+  it('404s editing a review id that does not exist', async () => {
+    const { service } = makeHarness()
+    expect(
+      await service.edit(renterCtx, crypto.randomUUID(), { overall: 1, subRatings: {} }, NOW),
+    ).toEqual({ ok: false, status: 404, error: 'REVIEW_NOT_FOUND' })
+  })
+
+  it('rejects an edit that injects an out-of-direction dimension (400 INVALID_DIMENSIONS)', async () => {
+    const { service } = makeHarness()
+    // A valid renter->operator review (operator dims allowed) ...
+    const submitted = await service.submit(
+      renterCtx,
+      submitInput({ subRatings: { cleanliness: 4 } }),
+      NOW,
+    )
+    if (!submitted.ok) throw new Error('expected ok')
+    // ... edited to smuggle in ruleAdherence (a renter-direction dim) must be rejected the
+    // same way submit rejects it — the per-direction rule is an invariant, not a create gate.
+    expect(
+      await service.edit(
+        renterCtx,
+        submitted.review.id,
+        { overall: 3, subRatings: { ruleAdherence: 5 }, comment: 'sneaky' },
+        NOW,
+      ),
+    ).toEqual({ ok: false, status: 400, error: 'INVALID_DIMENSIONS' })
   })
 })
 

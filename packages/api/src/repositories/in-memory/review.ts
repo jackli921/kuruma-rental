@@ -38,6 +38,10 @@ export class InMemoryReviewRepository implements ReviewRepository {
     return review
   }
 
+  async findById(id: string): Promise<Review | undefined> {
+    return this.store.get(id)
+  }
+
   async findByBookingId(bookingId: string): Promise<Review[]> {
     return [...this.store.values()].filter((r) => r.bookingId === bookingId)
   }

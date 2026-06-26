@@ -19,6 +19,10 @@ export interface ReviewRepository {
   // (bookingId, authorUserId, subject) already exists, so the service can tell a
   // resubmission (edit the hidden row) apart from a first submit. See pg-errors.
   insert(review: NewReview): Promise<Review>
+  // A single review by id, or undefined. The edit path loads the row first to re-check
+  // its per-direction dimension rule (the row carries authorRole + subject) and to map a
+  // missing / foreign id to a uniform 404 — neither of which `update`'s WHERE can express.
+  findById(id: string): Promise<Review | undefined>
   // Every review authored for a booking (either side, any subject) — drives the
   // double-blind reveal decision (`summarizeSides` / `decideReveal`) in slice 2.
   findByBookingId(bookingId: string): Promise<Review[]>
