@@ -40,6 +40,7 @@ import type { ComplianceAlertBand, ComplianceDocumentType } from '@kuruma/shared
 import type { DocumentSnapshot } from '@kuruma/shared/lib/consent-canonical'
 import type { LuggageSize } from '@kuruma/shared/lib/luggage'
 import type { LocationOperatingHours } from '@kuruma/shared/types/location'
+import type { PaymentAnomalyResolution } from '@kuruma/shared/types/payment-anomaly'
 
 /**
  * The notification kind/status sets have a single source of truth: the
@@ -219,8 +220,13 @@ export interface PaymentAnomaly {
   receivedAmountJpy: number | null
   expectedAmountJpy: number | null
   currency: string | null
-  // NULL until an operator actions it (refunded / dismissed).
+  // Resolution audit (#1075 slice 3): all four are NULL while the anomaly needs
+  // review and written together when an admin closes it. `resolution` = why it was
+  // closed, `resolvedBy` = the actioning admin's id, `note` = optional free-text.
   resolvedAt: Date | null
+  resolution: PaymentAnomalyResolution | null
+  resolvedBy: string | null
+  note: string | null
   createdAt: Date
 }
 
