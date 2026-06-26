@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { SYSTEM_CONTEXT } from '../../middleware/auth'
+import { PG_ERROR, pgConstraintName, pgErrorCode } from '../../pg-errors'
 import type { Booking } from '../../stores'
 import { InMemoryBookingRepository } from './booking'
 
@@ -97,12 +98,22 @@ describe('InMemoryBookingRepository — CLASS_COMBO float exclusion parity (#111
   })
 
   // The fix must stay surgical: a real assigned vehicle still excludes on overlap.
+  // Assert by (code, constraint_name) rather than message — matches the
+  // conformance-suite contract (#1106) and stays mutation-resistant if the
+  // postgres-js message format evolves.
   it('still rejects two overlapping bookings on the SAME assigned vehicle', async () => {
     const repo = new InMemoryBookingRepository()
     await repo.create(SYSTEM_CONTEXT, confirmedInput({ ...window, bookingCode: 'BK-SPEC-1' }))
 
-    await expect(
-      repo.create(SYSTEM_CONTEXT, confirmedInput({ ...window, bookingCode: 'BK-SPEC-2' })),
-    ).rejects.toThrow('bookings_no_overlap violation')
+    let caught: unknown
+    try {
+      await repo.create(SYSTEM_CONTEXT, confirmedInput({ ...window, bookingCode: 'BK-SPEC-2' }))
+    } catch (err) {
+      caught = err
+    }
+
+    expect(caught).toBeDefined()
+    expect(pgErrorCode(caught)).toBe(PG_ERROR.EXCLUSION_VIOLATION)
+    expect(pgConstraintName(caught)).toBe('bookings_no_overlap')
   })
 })

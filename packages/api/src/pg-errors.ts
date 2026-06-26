@@ -50,7 +50,13 @@ export const LOCATIONS_REGION_FK = 'locations_regionId_regions_id_fk'
  * Matching by name (not just the 23505 code) keeps the two paths apart.
  */
 export const BOOKING_CODE_CONSTRAINT = 'bookings_bookingCode_unique'
-export const IDEMPOTENCY_CONSTRAINT = 'bookings_idempotencyKey_unique'
+// Real PG index name from migration 0012_idempotency-unique-index.sql
+// (`CREATE UNIQUE INDEX "bookings_idempotency_key"`) — NOT the Drizzle-auto
+// camelCase suffix the schema's `.unique()` would have produced. Surfaced by
+// the #1106 conformance suite: the InMemory uniqueViolation interpolates this
+// constant, so it must match the real PG index name byte-for-byte or services
+// that disambiguate by constraint name drift between impls.
+export const IDEMPOTENCY_CONSTRAINT = 'bookings_idempotency_key'
 
 /**
  * payment_events unique constraints the PaymentService distinguishes on (#461).
