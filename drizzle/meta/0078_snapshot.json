@@ -1,5 +1,5 @@
 {
-  "id": "15c2be7f-001b-44ac-9c4c-a4e0a0c346ad",
+  "id": "b4212a18-f3a9-42a9-8eac-0e672799498c",
   "prevId": "13ae4b5e-6eb4-4517-afa8-9d157b76a12a",
   "version": "7",
   "dialect": "postgresql",
@@ -2995,7 +2995,54 @@
           "default": "now()"
         }
       },
-      "indexes": {},
+      "indexes": {
+        "idx_messages_threadId": {
+          "name": "idx_messages_threadId",
+          "columns": [
+            {
+              "expression": "threadId",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "idx_messages_senderId": {
+          "name": "idx_messages_senderId",
+          "columns": [
+            {
+              "expression": "senderId",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "messages_idempotency_key": {
+          "name": "messages_idempotency_key",
+          "columns": [
+            {
+              "expression": "idempotencyKey",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "where": "\"idempotencyKey\" is not null",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
       "foreignKeys": {
         "messages_threadId_threads_id_fk": {
           "name": "messages_threadId_threads_id_fk",
@@ -3060,7 +3107,38 @@
           "default": 0
         }
       },
-      "indexes": {},
+      "indexes": {
+        "idx_thread_participants_threadId": {
+          "name": "idx_thread_participants_threadId",
+          "columns": [
+            {
+              "expression": "threadId",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "idx_thread_participants_userId": {
+          "name": "idx_thread_participants_userId",
+          "columns": [
+            {
+              "expression": "userId",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
       "foreignKeys": {
         "thread_participants_threadId_threads_id_fk": {
           "name": "thread_participants_threadId_threads_id_fk",
@@ -3141,7 +3219,39 @@
           "default": "now()"
         }
       },
-      "indexes": {},
+      "indexes": {
+        "idx_threads_bookingId": {
+          "name": "idx_threads_bookingId",
+          "columns": [
+            {
+              "expression": "bookingId",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "threads_idempotency_key": {
+          "name": "threads_idempotency_key",
+          "columns": [
+            {
+              "expression": "idempotencyKey",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "where": "\"idempotencyKey\" is not null",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
       "foreignKeys": {
         "threads_bookingId_bookings_id_fk": {
           "name": "threads_bookingId_bookings_id_fk",
@@ -4921,7 +5031,6 @@
       "values": [
         "BOOKING_CREATED",
         "VEHICLE_SUBSTITUTED",
-        "VEHICLE_ASSIGNED",
         "BOOKING_CANCELLED",
         "STATUS_CHANGED"
       ]
