@@ -31,6 +31,21 @@ export class OperatorRequiredError extends Error {
 }
 
 /**
+ * Thrown when an `all`-scope reader (PLATFORM_ADMIN / legacy STAFF / ADMIN, or a
+ * renter — though the management routes gate renters out first) lists tenant-owned
+ * inventory without naming a target operator or opting into `includeAll`. Without
+ * this an accidental unscoped read returns every operator's private config — the
+ * cross-tenant leak the 5 read routes used to each guard by hand. Mapped to 400 by
+ * the global handler: the request is malformed (a required scope choice is absent).
+ */
+export class ScopeRequiredError extends Error {
+  readonly name = 'ScopeRequiredError'
+  constructor(message = 'operatorId or includeAll=true is required for cross-operator reads') {
+    super(message)
+  }
+}
+
+/**
  * Thrown when an operator self-service action names an id that does not resolve
  * within the caller's own tenant — an unknown invite/member, or one already in a
  * terminal state. Mapped to 404 by the global handler. Because every #904 path is

@@ -8,6 +8,7 @@ import {
 import type { CallerContext } from '../middleware/auth'
 import { FEE_SCHEDULES_CLASS_FK, PG_ERROR, pgConstraintName, pgErrorCode } from '../pg-errors'
 import type { FeeSchedule, FeeScheduleFilters, FeeScheduleRepository } from '../repositories/types'
+import { type CrossOperatorRead, applyCrossOperatorReadScope } from '../tenancy'
 
 export type FeeScheduleResult =
   | { ok: true; feeSchedule: FeeSchedule }
@@ -39,8 +40,12 @@ const invalidVehicleClassResult = (): FeeScheduleResult => ({
 export class FeeScheduleService {
   constructor(private readonly repo: FeeScheduleRepository) {}
 
-  async findAll(ctx: CallerContext, filters?: FeeScheduleFilters): Promise<FeeSchedule[]> {
-    return this.repo.findAll(ctx, filters)
+  async findAll(
+    ctx: CallerContext,
+    read: CrossOperatorRead,
+    filters: FeeScheduleFilters = {},
+  ): Promise<FeeSchedule[]> {
+    return this.repo.findAll(ctx, applyCrossOperatorReadScope(ctx, read, filters))
   }
 
   async findById(ctx: CallerContext, id: string): Promise<FeeSchedule | undefined> {
