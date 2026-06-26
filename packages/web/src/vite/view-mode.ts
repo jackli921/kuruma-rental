@@ -1,11 +1,12 @@
 import { isBusinessRole } from '@/lib/business-roles'
+import type { UserRole } from '@kuruma/shared/auth/roles'
 
 export type ViewMode = 'renter' | 'business'
 
 const COOKIE_NAME = 'kuruma-view'
 const ONE_YEAR_SECONDS = 60 * 60 * 24 * 365
 
-export function isBusiness(role: string | undefined): boolean {
+export function isBusiness(role: UserRole | undefined): boolean {
   return isBusinessRole(role)
 }
 
@@ -14,7 +15,7 @@ export function isBusiness(role: string | undefined): boolean {
  * users honour their saved preference, defaulting to the business view.
  */
 export function resolveViewMode(
-  role: string | undefined,
+  role: UserRole | undefined,
   cookieValue: string | undefined,
 ): ViewMode {
   if (!isBusiness(role)) return 'renter'
@@ -26,7 +27,7 @@ export function readViewCookie(): string | undefined {
   return match?.slice(COOKIE_NAME.length + 1)
 }
 
-export function getViewMode(role: string | undefined): ViewMode {
+export function getViewMode(role: UserRole | undefined): ViewMode {
   return resolveViewMode(role, readViewCookie())
 }
 

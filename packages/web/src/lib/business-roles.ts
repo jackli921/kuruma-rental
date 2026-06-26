@@ -1,4 +1,4 @@
-import { BUSINESS_ROLES as SHARED_BUSINESS_ROLES } from '@kuruma/shared/auth/roles'
+import { BUSINESS_ROLES as SHARED_BUSINESS_ROLES, type UserRole } from '@kuruma/shared/auth/roles'
 
 /**
  * Roles allowed into the business portal (`/manage/*`). Re-exported from the
@@ -15,6 +15,6 @@ import { BUSINESS_ROLES as SHARED_BUSINESS_ROLES } from '@kuruma/shared/auth/rol
  */
 export const BUSINESS_ROLES = SHARED_BUSINESS_ROLES
 
-export function isBusinessRole(role: string | undefined): boolean {
+export function isBusinessRole(role: UserRole | undefined): boolean {
   return BUSINESS_ROLES.has(role ?? '')
 }
