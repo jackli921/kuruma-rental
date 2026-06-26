@@ -1,8 +1,8 @@
-// Shared paging scaffold for the two public search services (flat per-car and
-// grouped storefront-card). Both gather the same available-inventory slice and
-// page it with an opaque base64 cursor; only the projection differs. Keeping the
-// limit clamp and cursor codec here means a paging/cursor change lives in exactly
-// one place and both search paths react to it. (#1113, audit L1)
+// Shared paging scaffold for the public search surfaces (flat per-car search,
+// grouped storefront-card search, and single-storefront detail). Each pages a
+// list with an opaque base64 cursor; only the projection and the per-item key
+// differ. Keeping the limit clamp and cursor codec here means a paging/cursor
+// change lives in exactly one place and every consumer reacts. (#1113, audit L1)
 
 export const DEFAULT_LIMIT = 25
 export const MAX_LIMIT = 50

@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest'
 import { DEFAULT_LIMIT, MAX_LIMIT, clampLimit, decodeCursor, encodeCursor } from './search-paging'
 
-// The two public search services (flat + storefront) share this paging scaffold.
-// These tests lock the contract so a cursor/limit change lives in exactly one place
-// and both services react to it. (#1113, audit L1)
+// The public search surfaces (flat, storefront, storefront-detail) share this
+// paging scaffold. These tests lock the contract so a cursor/limit change lives in
+// exactly one place and every consumer reacts to it. (#1113, audit L1)
 
 describe('clampLimit', () => {
   it('falls back to DEFAULT_LIMIT for undefined / zero / negative', () => {
