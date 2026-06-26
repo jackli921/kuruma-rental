@@ -3,6 +3,7 @@ import { SYSTEM_CONTEXT } from '../middleware/auth'
 import { InMemoryAvailabilityRepository } from '../repositories/in-memory/availability'
 import { InMemoryBookingRepository } from '../repositories/in-memory/booking'
 import { InMemoryVehicleRepository } from '../repositories/in-memory/vehicle'
+import { InMemoryVehicleBlockRepository } from '../repositories/in-memory/vehicle-block'
 import type { Vehicle } from '../stores'
 import { AvailabilityService } from './availability'
 
@@ -12,7 +13,11 @@ const TO = new Date('2026-08-01T14:00:00Z') // JST 2026-08-01
 function setup() {
   const vehicleRepo = new InMemoryVehicleRepository()
   const bookingRepo = new InMemoryBookingRepository()
-  const repo = new InMemoryAvailabilityRepository(vehicleRepo, bookingRepo)
+  const repo = new InMemoryAvailabilityRepository(
+    vehicleRepo,
+    bookingRepo,
+    new InMemoryVehicleBlockRepository(),
+  )
   const service = new AvailabilityService(repo)
   return { vehicleRepo, service }
 }

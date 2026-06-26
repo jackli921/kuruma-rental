@@ -6,6 +6,7 @@ import { InMemoryBookingRepository } from '../../src/repositories/in-memory/book
 import { InMemoryLocationRepository } from '../../src/repositories/in-memory/location'
 import { InMemoryUserRepository } from '../../src/repositories/in-memory/user'
 import { InMemoryVehicleRepository } from '../../src/repositories/in-memory/vehicle'
+import { InMemoryVehicleBlockRepository } from '../../src/repositories/in-memory/vehicle-block'
 import { InMemoryVehicleClassRepository } from '../../src/repositories/in-memory/vehicle-class'
 import type { Location, User, Vehicle, VehicleClass } from '../../src/stores'
 
@@ -115,7 +116,11 @@ describe('Manual booking (platform-admin renterId override + advance rule skip)'
     bookingRepo = new InMemoryBookingRepository()
     userStore = new Map<string, User>()
     const userRepo = new InMemoryUserRepository(userStore)
-    const availabilityRepo = new InMemoryAvailabilityRepository(vehicleRepo, bookingRepo)
+    const availabilityRepo = new InMemoryAvailabilityRepository(
+      vehicleRepo,
+      bookingRepo,
+      new InMemoryVehicleBlockRepository(),
+    )
 
     app = createApp({
       vehicleRepo,

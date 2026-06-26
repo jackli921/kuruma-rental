@@ -5,6 +5,7 @@ import type {
   AvailabilityFilters,
   AvailabilityRepository,
   BookingRepository,
+  VehicleBlockRepository,
   VehicleRepository,
 } from '../types'
 import { BLOCKING_STATUSES, getConflictingBookings } from './booking'
@@ -19,6 +20,12 @@ export class InMemoryAvailabilityRepository implements AvailabilityRepository {
   constructor(
     private readonly vehicleRepo: VehicleRepository,
     private readonly bookingRepo: BookingRepository,
+    // #1101: the block store availability subtracts from (mirrors the Drizzle
+    // NOT EXISTS — must-fix #2 parity). Required, not defaulted: constructing a
+    // concrete repo here would breach the composition-root boundary, and a
+    // shared instance is what makes a block created via the blocks route visible
+    // to availability. Suites that never schedule a block pass a fresh empty one.
+    private readonly vehicleBlockRepo: VehicleBlockRepository,
   ) {}
 
   async findAvailableVehicles(
@@ -39,7 +46,7 @@ export class InMemoryAvailabilityRepository implements AvailabilityRepository {
     // never surfaces a car whose docs lapse before `to`.
     const asOf = jstDateString(to)
 
-    return vehicles.filter((vehicle) => {
+    const candidates = vehicles.filter((vehicle) => {
       if (!isRoadLegal(vehicle, asOf)) return false
       // Storefront scope (#391): a null pickupLocationId never matches a
       // locationId filter, so unassigned vehicles are invisible to search.
@@ -58,6 +65,15 @@ export class InMemoryAvailabilityRepository implements AvailabilityRepository {
       const conflicts = getConflictingBookings(allBookings, vehicle.id, from, to)
       return conflicts.length === 0
     })
+
+    // #1101: subtract scheduled blocks — a vehicle with ANY block overlapping
+    // [from, to) is off the calendar. Resolved per-candidate (mirrors the
+    // Drizzle NOT EXISTS subquery); Promise.all keeps it off the await-in-loop
+    // path even though the in-memory store is a synchronous Map scan.
+    const blockHits = await Promise.all(
+      candidates.map((v) => this.vehicleBlockRepo.findOverlapping(v.id, from, to)),
+    )
+    return candidates.filter((_, i) => blockHits[i]!.length === 0)
   }
 
   async checkVehicleAvailability(
@@ -77,9 +93,12 @@ export class InMemoryAvailabilityRepository implements AvailabilityRepository {
 
     const allBookings = await this.bookingRepo.findAll(SYSTEM_CONTEXT)
     const conflicts = getConflictingBookings(allBookings, vehicle.id, from, to)
+    // #1101: a scheduled block makes the car unavailable too. Blocks are NOT
+    // bookings, so they stay out of `conflicts` — they only flip `available`.
+    const blocks = await this.vehicleBlockRepo.findOverlapping(vehicle.id, from, to)
 
     return {
-      available: conflicts.length === 0,
+      available: conflicts.length === 0 && blocks.length === 0,
       vehicle,
       conflicts,
     }

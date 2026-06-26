@@ -7,6 +7,7 @@ import { InMemoryComplianceAlertLogRepository } from '../repositories/in-memory/
 import { InMemoryOperatorMembershipRepository } from '../repositories/in-memory/operator-membership'
 import { InMemoryUserRepository } from '../repositories/in-memory/user'
 import { InMemoryVehicleRepository } from '../repositories/in-memory/vehicle'
+import { InMemoryVehicleBlockRepository } from '../repositories/in-memory/vehicle-block'
 import { complianceAlertKey } from '../repositories/types'
 import type { OperatorMembership, User } from '../stores'
 import type { EmailMessage } from './email/email-sender'
@@ -80,7 +81,11 @@ describe('buildComplianceDigestService (composition seam)', () => {
     const service = buildComplianceDigestService({
       vehicleRepo,
       bookingRepo,
-      availabilityRepo: new InMemoryAvailabilityRepository(vehicleRepo, bookingRepo),
+      availabilityRepo: new InMemoryAvailabilityRepository(
+        vehicleRepo,
+        bookingRepo,
+        new InMemoryVehicleBlockRepository(),
+      ),
       userRepo: new InMemoryUserRepository(new Map([[owner.id, owner]])),
       operatorMembershipRepo: new InMemoryOperatorMembershipRepository(
         new Map([[membership.id, membership]]),

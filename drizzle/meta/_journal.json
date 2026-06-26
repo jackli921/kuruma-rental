@@ -568,6 +568,20 @@
       "when": 1782510793826,
       "tag": "0080_add_payment_anomaly_resolution",
       "breakpoints": true
+    },
+    {
+      "idx": 81,
+      "version": "7",
+      "when": 1782511863286,
+      "tag": "0081_vehicle_blocks",
+      "breakpoints": true
+    },
+    {
+      "idx": 82,
+      "version": "7",
+      "when": 1782511881385,
+      "tag": "0082_vehicle_blocks_exclusion",
+      "breakpoints": true
     }
   ]
 }

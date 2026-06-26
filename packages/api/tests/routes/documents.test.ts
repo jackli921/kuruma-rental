@@ -5,6 +5,7 @@ import {
   InMemoryBookingRepository,
   InMemoryDocumentStorage,
   InMemoryRenterDocumentRepository,
+  InMemoryVehicleBlockRepository,
   InMemoryVehicleRepository,
 } from '../../src/repositories/in-memory'
 import { authHeaders, setupAuthEnv } from '../helpers/auth'
@@ -34,6 +35,7 @@ function createTestApp() {
     availabilityRepo: new InMemoryAvailabilityRepository(
       new InMemoryVehicleRepository(),
       new InMemoryBookingRepository(),
+      new InMemoryVehicleBlockRepository(),
     ),
     renterDocumentRepo,
     documentStorage,
