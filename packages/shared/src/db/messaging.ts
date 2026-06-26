@@ -1,16 +1,39 @@
-import { integer, jsonb, pgTable, text, timestamp, unique } from 'drizzle-orm/pg-core'
+import { sql } from 'drizzle-orm'
+import {
+  index,
+  integer,
+  jsonb,
+  pgTable,
+  text,
+  timestamp,
+  unique,
+  uniqueIndex,
+} from 'drizzle-orm/pg-core'
 import { users } from './auth'
 import { bookings } from './booking'
 
-export const threads = pgTable('threads', {
-  id: text('id')
-    .primaryKey()
-    .$defaultFn(() => crypto.randomUUID()),
-  bookingId: text('bookingId').references(() => bookings.id),
-  idempotencyKey: text('idempotencyKey'),
-  createdAt: timestamp('createdAt', { withTimezone: true }).notNull().defaultNow(),
-  updatedAt: timestamp('updatedAt', { withTimezone: true }).notNull().defaultNow(),
-})
+// FK-covering and partial idempotency indexes — declared inline so the module
+// describes the real table (audit M7 / #1112). Migrations 0010 + 0022 already
+// created them in prod; 0075 codifies that state into the drizzle snapshot with
+// `IF NOT EXISTS` so the apply is a no-op everywhere it has already run.
+export const threads = pgTable(
+  'threads',
+  {
+    id: text('id')
+      .primaryKey()
+      .$defaultFn(() => crypto.randomUUID()),
+    bookingId: text('bookingId').references(() => bookings.id),
+    idempotencyKey: text('idempotencyKey'),
+    createdAt: timestamp('createdAt', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updatedAt', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index('idx_threads_bookingId').on(t.bookingId),
+    uniqueIndex('threads_idempotency_key')
+      .on(t.idempotencyKey)
+      .where(sql`"idempotencyKey" is not null`),
+  ],
+)
 
 export const threadParticipants = pgTable(
   'thread_participants',
@@ -26,22 +49,36 @@ export const threadParticipants = pgTable(
       .references(() => users.id),
     unreadCount: integer('unreadCount').notNull().default(0),
   },
-  (t) => [unique('thread_participants_thread_user').on(t.threadId, t.userId)],
+  (t) => [
+    unique('thread_participants_thread_user').on(t.threadId, t.userId),
+    index('idx_thread_participants_threadId').on(t.threadId),
+    index('idx_thread_participants_userId').on(t.userId),
+  ],
 )
 
-export const messages = pgTable('messages', {
-  id: text('id')
-    .primaryKey()
-    .$defaultFn(() => crypto.randomUUID()),
-  threadId: text('threadId')
-    .notNull()
-    .references(() => threads.id, { onDelete: 'cascade' }),
-  senderId: text('senderId')
-    .notNull()
-    .references(() => users.id),
-  content: text('content').notNull(),
-  sourceLanguage: text('sourceLanguage'),
-  translations: jsonb('translations').$type<Record<string, string>>().notNull().default({}),
-  idempotencyKey: text('idempotencyKey'),
-  createdAt: timestamp('createdAt', { withTimezone: true }).notNull().defaultNow(),
-})
+export const messages = pgTable(
+  'messages',
+  {
+    id: text('id')
+      .primaryKey()
+      .$defaultFn(() => crypto.randomUUID()),
+    threadId: text('threadId')
+      .notNull()
+      .references(() => threads.id, { onDelete: 'cascade' }),
+    senderId: text('senderId')
+      .notNull()
+      .references(() => users.id),
+    content: text('content').notNull(),
+    sourceLanguage: text('sourceLanguage'),
+    translations: jsonb('translations').$type<Record<string, string>>().notNull().default({}),
+    idempotencyKey: text('idempotencyKey'),
+    createdAt: timestamp('createdAt', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index('idx_messages_threadId').on(t.threadId),
+    index('idx_messages_senderId').on(t.senderId),
+    uniqueIndex('messages_idempotency_key')
+      .on(t.idempotencyKey)
+      .where(sql`"idempotencyKey" is not null`),
+  ],
+)
