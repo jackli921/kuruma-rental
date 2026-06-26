@@ -1,5 +1,5 @@
 {
-  "id": "060cd212-260a-41ab-8587-5cf61a05dd67",
+  "id": "1fe58850-bcaa-4835-8bab-44fc6525b936",
   "prevId": "b4212a18-f3a9-42a9-8eac-0e672799498c",
   "version": "7",
   "dialect": "postgresql",
@@ -881,146 +881,6 @@
         "maintenance_cost_non_negative": {
           "name": "maintenance_cost_non_negative",
           "value": "\"maintenance_logs\".\"costJpy\" IS NULL OR \"maintenance_logs\".\"costJpy\" >= 0"
-        }
-      },
-      "isRLSEnabled": false
-    },
-    "public.vehicle_blocks": {
-      "name": "vehicle_blocks",
-      "schema": "",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "text",
-          "primaryKey": true,
-          "notNull": true
-        },
-        "operatorId": {
-          "name": "operatorId",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "vehicleId": {
-          "name": "vehicleId",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "startAt": {
-          "name": "startAt",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "endAt": {
-          "name": "endAt",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "kind": {
-          "name": "kind",
-          "type": "vehicle_block_kind",
-          "typeSchema": "public",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "reason": {
-          "name": "reason",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "notes": {
-          "name": "notes",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "createdBy": {
-          "name": "createdBy",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "createdAt": {
-          "name": "createdAt",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        }
-      },
-      "indexes": {
-        "idx_vehicle_blocks_vehicleId": {
-          "name": "idx_vehicle_blocks_vehicleId",
-          "columns": [
-            {
-              "expression": "vehicleId",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "idx_vehicle_blocks_operatorId": {
-          "name": "idx_vehicle_blocks_operatorId",
-          "columns": [
-            {
-              "expression": "operatorId",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        }
-      },
-      "foreignKeys": {
-        "vehicle_blocks_operatorId_operators_id_fk": {
-          "name": "vehicle_blocks_operatorId_operators_id_fk",
-          "tableFrom": "vehicle_blocks",
-          "tableTo": "operators",
-          "columnsFrom": [
-            "operatorId"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "restrict",
-          "onUpdate": "no action"
-        },
-        "vehicle_blocks_operatorId_vehicleId_fk": {
-          "name": "vehicle_blocks_operatorId_vehicleId_fk",
-          "tableFrom": "vehicle_blocks",
-          "tableTo": "vehicles",
-          "columnsFrom": [
-            "operatorId",
-            "vehicleId"
-          ],
-          "columnsTo": [
-            "operatorId",
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "policies": {},
-      "checkConstraints": {
-        "vehicle_blocks_end_after_start": {
-          "name": "vehicle_blocks_end_after_start",
-          "value": "\"vehicle_blocks\".\"endAt\" > \"vehicle_blocks\".\"startAt\""
         }
       },
       "isRLSEnabled": false
@@ -5113,15 +4973,6 @@
         "MANUAL"
       ]
     },
-    "public.vehicle_block_kind": {
-      "name": "vehicle_block_kind",
-      "schema": "public",
-      "values": [
-        "MAINTENANCE",
-        "OUT_OF_SERVICE",
-        "MANUAL"
-      ]
-    },
     "public.vehicle_class_status": {
       "name": "vehicle_class_status",
       "schema": "public",
@@ -5180,6 +5031,7 @@
       "values": [
         "BOOKING_CREATED",
         "VEHICLE_SUBSTITUTED",
+        "VEHICLE_ASSIGNED",
         "BOOKING_CANCELLED",
         "STATUS_CHANGED"
       ]

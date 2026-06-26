@@ -115,6 +115,14 @@ export const paymentAnomalyKindEnum = pgEnum('payment_anomaly_kind', [
   'DOUBLE_PAYMENT',
   'AMOUNT_MISMATCH',
 ])
+// How a platform admin closed a flagged charge (#1075 slice 3). Carries NO money —
+// v1 only clears the review queue; the duplicate's actual refund happens in the
+// Stripe dashboard (REFUNDED_EXTERNALLY) until in-app refund ships as its own slice.
+export const paymentAnomalyResolutionEnum = pgEnum('payment_anomaly_resolution', [
+  'BENIGN',
+  'INVESTIGATED',
+  'REFUNDED_EXTERNALLY',
+])
 export const paymentAnomalies = pgTable(
   'payment_anomalies',
   {
@@ -137,8 +145,13 @@ export const paymentAnomalies = pgTable(
     receivedAmountJpy: integer('receivedAmountJpy'),
     expectedAmountJpy: integer('expectedAmountJpy'),
     currency: text('currency'),
-    // Set once an operator actions it (refunded / dismissed). NULL = still needs review.
+    // Set once an admin closes the review queue item. NULL (with resolution/resolvedBy
+    // /note also NULL) = still needs review; all four are written together (#1075 slice 3).
     resolvedAt: timestamp('resolvedAt', { withTimezone: true }),
+    // Why it was closed; the admin who closed it; their optional note. NULL while unresolved.
+    resolution: paymentAnomalyResolutionEnum('resolution'),
+    resolvedBy: text('resolvedBy'),
+    note: text('note'),
     createdAt: timestamp('createdAt', { withTimezone: true }).notNull().defaultNow(),
   },
   (table) => [

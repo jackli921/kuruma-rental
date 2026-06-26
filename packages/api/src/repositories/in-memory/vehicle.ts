@@ -59,6 +59,15 @@ export class InMemoryVehicleRepository implements VehicleRepository {
     })
   }
 
+  // #1087: platform-overview live-fleet count across all operators (unscoped).
+  async countActive(): Promise<number> {
+    let n = 0
+    for (const v of this.store.values()) {
+      if (v.status !== 'RETIRED') n++
+    }
+    return n
+  }
+
   async create(
     ctx: CallerContext,
     data: Omit<Vehicle, 'id' | 'createdAt' | 'updatedAt'>,

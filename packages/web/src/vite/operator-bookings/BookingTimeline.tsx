@@ -54,6 +54,8 @@ function eventLabel(event: BookingEventDto, t: Translate, ts: Translate): string
       return t('statusChanged', { from: ts(payload.from), to: ts(payload.to) })
     case 'VEHICLE_SUBSTITUTED':
       return t('vehicleSubstituted')
+    case 'VEHICLE_ASSIGNED':
+      return payload.fromVehicleId === null ? t('vehicleAssigned') : t('vehicleAssignedSwapped')
     case 'BOOKING_CANCELLED':
       return t('cancelled')
     case 'BOOKING_CREATED':
@@ -66,6 +68,11 @@ function eventLabel(event: BookingEventDto, t: Translate, ts: Translate): string
 function EventDetail({ event, t }: { event: BookingEventDto; t: Translate }) {
   const { payload } = event
   if (payload.type === 'VEHICLE_SUBSTITUTED' && payload.reason) {
+    return (
+      <p className="text-sm text-muted-foreground">{t('reason', { reason: payload.reason })}</p>
+    )
+  }
+  if (payload.type === 'VEHICLE_ASSIGNED' && payload.reason) {
     return (
       <p className="text-sm text-muted-foreground">{t('reason', { reason: payload.reason })}</p>
     )

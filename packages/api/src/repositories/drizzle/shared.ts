@@ -230,6 +230,9 @@ export const paymentAnomalyColumns = {
   expectedAmountJpy: paymentAnomalies.expectedAmountJpy,
   currency: paymentAnomalies.currency,
   resolvedAt: paymentAnomalies.resolvedAt,
+  resolution: paymentAnomalies.resolution,
+  resolvedBy: paymentAnomalies.resolvedBy,
+  note: paymentAnomalies.note,
   createdAt: paymentAnomalies.createdAt,
 }
 
@@ -560,6 +563,9 @@ export function toPaymentAnomaly(r: PaymentAnomalyRow): PaymentAnomaly {
     expectedAmountJpy: r.expectedAmountJpy,
     currency: r.currency,
     resolvedAt: r.resolvedAt,
+    resolution: r.resolution,
+    resolvedBy: r.resolvedBy,
+    note: r.note,
     createdAt: r.createdAt,
   }
 }

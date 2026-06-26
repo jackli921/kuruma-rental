@@ -45,7 +45,6 @@ import type {
   OperatorMembership,
   ProviderInvite,
   Region,
-  RenterDocument,
   Thread,
   ThreadParticipant,
   User,
@@ -53,6 +52,7 @@ import type {
   VehicleClass,
 } from '../stores'
 // Imported (not just re-exported) because the RepoBundle below references it locally.
+import type { AdminBookingFilters } from './types-admin-booking'
 import type { BookingEventRepository } from './types-booking-event'
 
 // Payment interfaces (#461 events, #508 anomalies, #851 refunds) live in their own module (size cap); re-exported.
@@ -64,6 +64,7 @@ export type {
   PaymentEventRepository,
   PaymentRefundRepository,
   RefundReconcilerRepository,
+  ResolvePaymentAnomalyInput,
 } from './types-payment'
 
 // Notification persistence: SENDING-lease + delivery-cap consts (#393, #483) and
@@ -87,6 +88,7 @@ export type { ComplianceAlertLogRepository, RecordComplianceAlert } from './type
 
 // Audit ledger entity + insert-only persistence (#930), own module per #837 cap.
 export type { AuditLogEntry, AuditLogRepository } from './types-audit'
+export type { AdminBookingFilters }
 export type { BookingEventRepository }
 
 /** Operator (tenant) data access. Admin bootstrap (#386) + slug/id resolution (#387). */
@@ -114,6 +116,10 @@ export interface OperatorRepository {
   // #407: list all operators (name-sorted), powering the admin operator picker.
   // Caller scoping (operator sees only its own) is applied in OperatorService.
   list(): Promise<Operator[]>
+  // #1087 platform overview: `COUNT(operators)` for the platform-owner home KPI.
+  // Unscoped (authz lives in AdminOverviewService). Labelled "Operators" today;
+  // TODO(#1088): tighten to active=true once the `deactivatedAt` column lands.
+  count(): Promise<number>
   findBySlug(slug: string): Promise<Operator | undefined>
   // #903: apply a partial profile patch and return the updated row, or undefined
   // if no operator has that id (never inserts).
@@ -302,6 +308,11 @@ export interface VehicleRepository {
   findAll(ctx: CallerContext, filters?: VehicleFilters): Promise<PaginatedResult<Vehicle>>
   findById(ctx: CallerContext, id: string): Promise<Vehicle | undefined>
   findByIds(ctx: CallerContext, ids: string[]): Promise<Vehicle[]>
+  // #1087 platform overview: `COUNT(vehicles WHERE status != 'RETIRED')` — the
+  // live fleet across all operators. Unscoped (no ctx) by design: this is a
+  // platform-wide KPI; authz lives in AdminOverviewService. COUNT at the DB layer,
+  // never materialize-then-count.
+  countActive(): Promise<number>
   create(
     ctx: CallerContext,
     data: Omit<Vehicle, 'id' | 'createdAt' | 'updatedAt'>,
@@ -412,14 +423,28 @@ export interface BookingFilters {
   to?: Date
   limit?: number
   cursor?: string
+  /** #464 Task 7: operator worklist — return only CLASS_COMBO floats that still
+   *  need a vehicle assigned (fulfillmentMode='CLASS_COMBO' AND assignedVehicleId
+   *  IS NULL AND status IN ('CONFIRMED','ACTIVE')). */
+  needsAssignment?: boolean
 }
 
 export type { CallerContext } from '../middleware/auth'
 
 export interface BookingRepository {
   findAll(ctx: CallerContext, filters?: BookingFilters): Promise<Booking[]>
+  /**
+   * Cross-operator oversight read (#1092). UNSCOPED — returns bookings across
+   * every tenant in (createdAt DESC, id DESC) order. Gate at the service with
+   * `requirePlatformAdmin`; never expose to a tenant or PARTNER caller.
+   */
+  findForAdmin(filters: AdminBookingFilters): Promise<Booking[]>
   findById(ctx: CallerContext, id: string): Promise<Booking | undefined>
   findByIdempotencyKey(ctx: CallerContext, key: string): Promise<Booking | undefined>
+  /** #1087 platform overview: `COUNT(bookings)` across every operator for the
+   *  platform-owner home KPI. Unscoped by design (authz lives in
+   *  AdminOverviewService); COUNT at the DB layer, never load-then-count. */
+  count(): Promise<number>
   /** Counts bookings in BLOCKING_STATUSES (CONFIRMED, ACTIVE) for the given
    *  vehicle set. Used to guard operations that assume no live bookings exist
    *  for those vehicles — e.g. archiving a vehicle class. */
@@ -727,54 +752,23 @@ export interface VehicleClassRepository {
 // Fee-schedule contract lives in its own module (file-size cap, #978); re-exported.
 export type { FeeScheduleFilters, FeeScheduleRepository } from './types-fee-schedule'
 
-export interface RenterDocumentFilters {
-  limit?: number
-  offset?: number
-}
-
-/**
- * The verdict a verifier records (#459). `verifierId` is the reviewing staff
- * user; the repo stamps `verifiedAt` itself. APPROVED carries `expiryDate`,
- * REJECTED carries `rejectionReason` — coherence is enforced upstream by
- * `verifyDocumentSchema` + the service.
- */
-export interface DocumentVerifyInput {
-  status: 'APPROVED' | 'REJECTED'
-  verifierId: string
-  expiryDate?: string | null
-  rejectionReason?: string | null
-}
-
-export interface RenterDocumentRepository {
-  /** Renter uploads their own document. Non-staff callers may only create for themselves. */
-  create(ctx: CallerContext, data: CreateRenterDocumentData): Promise<RenterDocument>
-  /** A renter's own documents (gate + list-mine). Staff may read any renter's. */
-  findByRenter(ctx: CallerContext, renterId: string): Promise<RenterDocument[]>
-  findById(ctx: CallerContext, id: string): Promise<RenterDocument | undefined>
-  /** Platform-staff pending-review queue, oldest first, paginated. */
-  listPending(
-    ctx: CallerContext,
-    filters?: RenterDocumentFilters,
-  ): Promise<PaginatedResult<RenterDocument>>
-  /** Platform-staff records a terminal verdict. */
-  verify(
-    ctx: CallerContext,
-    id: string,
-    verdict: DocumentVerifyInput,
-  ): Promise<RenterDocument | undefined>
-  /**
-   * Gate lookup for the verification policy — NOT ctx-scoped (internal). Returns
-   * the renter's APPROVED documents of a given type; the service decides
-   * eligibility against the rental window (expiry).
-   */
-  findApprovedByType(renterId: string, type: RenterDocument['type']): Promise<RenterDocument[]>
-}
-
-export type CreateRenterDocumentData = Pick<RenterDocument, 'renterId' | 'type' | 'storageKey'>
+// Renter-document (KYC) data-access interfaces (#459) live in their own module
+// to keep this barrel under the file-size cap; re-exported for callers.
+export type {
+  CreateRenterDocumentData,
+  DocumentVerifyInput,
+  RenterDocumentFilters,
+  RenterDocumentRepository,
+} from './types-renter-document'
 
 // Consent data-access interfaces (#613) live in their own module to keep this
 // barrel under the file-size cap; re-exported for callers.
-export type { ConsentRepository, NewConsentAcceptance } from './types-consent'
+export type {
+  ConsentAcceptanceListRow,
+  ConsentAcceptanceQuery,
+  ConsentRepository,
+  NewConsentAcceptance,
+} from './types-consent'
 
 // Reviews bounded-context data access (#1067 slice 1) lives in its own module;
 // re-exported for callers (mirrors the payment/consent split above).

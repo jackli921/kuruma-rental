@@ -62,6 +62,7 @@ export type BookingFulfillmentMode = (typeof BOOKING_FULFILLMENT_MODES)[number]
 export const BOOKING_EVENT_TYPES = [
   'BOOKING_CREATED',
   'VEHICLE_SUBSTITUTED',
+  'VEHICLE_ASSIGNED',
   'BOOKING_CANCELLED',
   'STATUS_CHANGED',
 ] as const

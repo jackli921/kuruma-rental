@@ -97,6 +97,17 @@ export class DrizzleRenterDocumentRepository implements RenterDocumentRepository
     return { data: rows.map(toRenterDocument), total: countResult[0]?.value ?? 0 }
   }
 
+  // #1087 platform overview: pending-queue depth (unscoped; authz in the service).
+  // Pure COUNT — never materializes the queue. Uses the idx_renter_documents_status
+  // partial index the listPending count already relies on.
+  async countPending(): Promise<number> {
+    const [row] = await this.db
+      .select({ value: count() })
+      .from(renterDocuments)
+      .where(eq(renterDocuments.status, 'PENDING'))
+    return row?.value ?? 0
+  }
+
   async verify(
     ctx: CallerContext,
     id: string,
