@@ -360,7 +360,7 @@ describe('GET /customers/search', () => {
   // detail, or quick-create routes. Mutation proof: if the carve-out is restored
   // as `path.endsWith(...)`, a future `/customers/search-*` would silently inherit
   // the operator path — these tests bind the policy to the route.
-  it('admits OPERATOR_OWNER with a tenant on /customers/search (200) — L7', async () => {
+  it('admits OPERATOR_OWNER with a tenant on /customers/search (200, tenant-scoped result) — L7', async () => {
     setup({
       users: seed(),
       asRole: 'OPERATOR_OWNER',
@@ -368,6 +368,11 @@ describe('GET /customers/search', () => {
     })
     const res = await app.request('/customers/search?q=tanaka')
     expect(res.status).toBe(200)
+    // Empty because the tenant has no prior bookings with `tanaka` — locks in
+    // CustomerService.search's per-operator scoping. A regression that returned
+    // the cross-operator matches would surface here, not silently pass on 200.
+    const body = await res.json()
+    expect(body.data).toEqual([])
   })
 
   it('rejects OPERATOR_OWNER on /customers list (403) — L7', async () => {
