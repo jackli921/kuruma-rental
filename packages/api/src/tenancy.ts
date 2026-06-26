@@ -86,8 +86,15 @@ export type BookingReadScope =
   | { kind: 'renter'; renterId: string }
   | { kind: 'none' }
 
+// The single PARTNER role today IS Trip.com, so its channel is TRIP_COM. When a
+// second partner is onboarded this 1:1 must move onto the verified caller
+// identity (CallerContext.partnerSource, set in toCallerContext) — otherwise
+// every partner would share one source and read each other's bookings (#1119
+// follow-up). Named so that future change is one obvious edit, not a hunt.
+const PARTNER_SOURCE: BookingSource = 'TRIP_COM'
+
 export function bookingReadScope(ctx: CallerContext): BookingReadScope {
-  if (ctx.role === 'PARTNER') return { kind: 'partner', source: 'TRIP_COM' }
+  if (ctx.role === 'PARTNER') return { kind: 'partner', source: PARTNER_SOURCE }
   if (ctx.bypassScope) return { kind: 'all' }
   if (isOperatorRole(ctx.role)) {
     return ctx.operatorId ? { kind: 'operator', operatorId: ctx.operatorId } : { kind: 'none' }
