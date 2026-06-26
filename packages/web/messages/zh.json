@@ -1102,6 +1102,7 @@
         "statusChanged": "状态从{from}变更为{to}",
         "vehicleSubstituted": "车辆已更换",
         "vehicleAssigned": "已分配车辆",
+        "vehicleAssignedSwapped": "已重新分配车辆",
         "reason": "原因：{reason}",
         "cancelled": "预订已取消",
         "cancellationFee": "取消费 {fee}",
