@@ -20,9 +20,7 @@ import type {
   VehicleClassRepository,
 } from '../repositories/types'
 import type { ClassRatePlan } from '../stores'
-
-const DEFAULT_LIMIT = 25
-const MAX_LIMIT = 50
+import { clampLimit, decodeCursor, encodeCursor } from './search-paging'
 
 export type FlatSearchResult =
   | { ok: true; data: SearchResultsData }
@@ -146,7 +144,7 @@ export class FlatSearchService {
     }
     const page = items.slice(start, start + limit)
     const last = page.at(-1)
-    const nextCursor = last && start + limit < items.length ? encodeCursor(last) : null
+    const nextCursor = last && start + limit < items.length ? encodeCursor(itemKey(last)) : null
 
     return { ok: true, data: { items: page, nextCursor } }
   }
@@ -225,11 +223,6 @@ export class FlatSearchService {
   }
 }
 
-function clampLimit(limit: number | undefined): number {
-  if (!limit || limit < 1) return DEFAULT_LIMIT
-  return Math.min(limit, MAX_LIMIT)
-}
-
 function toResultLocation(sf: Storefront): ResultLocation {
   return {
     locationId: sf.id,
@@ -299,17 +292,4 @@ function itemKey(item: SearchResultItem): string {
   return item.kind === 'SPECIFIC'
     ? `v:${item.vehicleId}`
     : `c:${item.location.locationId}:${item.classId}`
-}
-
-// Opaque base64 cursor over the itemKey (§3.2 step 6). btoa/atob are Web-standard
-// globals on CF Workers and Bun.
-const encodeCursor = (item: SearchResultItem): string => btoa(itemKey(item))
-// Returns undefined for a malformed (non-base64) cursor so the caller can answer
-// 400 instead of letting atob() throw into a 500 on a public endpoint.
-const decodeCursor = (cursor: string): string | undefined => {
-  try {
-    return atob(cursor)
-  } catch {
-    return undefined
-  }
 }
