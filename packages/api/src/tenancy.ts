@@ -1,3 +1,4 @@
+import type { BookingSource } from '@kuruma/shared/enums'
 import {
   type CallerContext,
   ForbiddenError,
@@ -67,19 +68,26 @@ export function applyCrossOperatorReadScope<F extends { operatorId?: string }>(
 /**
  * How a booking read is scoped (#392, proposal §6.2). Unlike the public vehicle
  * catalog (`operatorReadScope` maps renters to `all`), bookings are private:
- * - `all`      — bypass callers (PLATFORM_ADMIN / legacy STAFF/ADMIN/PARTNER).
- *                Gated on `ctx.bypassScope`, NOT a role string (slice-4 [P1]).
+ * - `all`      — the platform admin tier (PLATFORM_ADMIN). Gated on
+ *                `ctx.bypassScope`, NOT a role string (slice-4 [P1]).
+ * - `partner`  — a PARTNER channel (Trip.com): only the bookings it sourced
+ *                (`source = TRIP_COM`), across operators. NOT operators' DIRECT
+ *                bookings — that was a cross-tenant leak (#1119). Checked before
+ *                `bypassScope` because PARTNER still bypasses for OTHER reads
+ *                (user search, threads) via `SCOPE_BYPASS_ROLES`.
  * - `operator` — OPERATOR_* caller: only this tenant's bookings.
  * - `renter`   — every other caller (RENTER): only their own bookings.
  * - `none`     — OPERATOR_* missing operatorId: fail-closed (read nothing).
  */
 export type BookingReadScope =
   | { kind: 'all' }
+  | { kind: 'partner'; source: BookingSource }
   | { kind: 'operator'; operatorId: string }
   | { kind: 'renter'; renterId: string }
   | { kind: 'none' }
 
 export function bookingReadScope(ctx: CallerContext): BookingReadScope {
+  if (ctx.role === 'PARTNER') return { kind: 'partner', source: 'TRIP_COM' }
   if (ctx.bypassScope) return { kind: 'all' }
   if (isOperatorRole(ctx.role)) {
     return ctx.operatorId ? { kind: 'operator', operatorId: ctx.operatorId } : { kind: 'none' }
