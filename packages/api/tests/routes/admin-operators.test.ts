@@ -153,13 +153,15 @@ describe('POST /admin/operators/:id/{deactivate,reactivate}', () => {
   })
 
   for (const role of ['OPERATOR_OWNER', 'OPERATOR_STAFF', 'RENTER', 'PARTNER'] as const) {
-    test(`${role} cannot deactivate an operator (403)`, async () => {
-      const res = await harness.app.request('/admin/operators/op_x/deactivate', {
-        method: 'POST',
-        headers: await bearer({ sub: `u-${role}`, role, operatorId: 'op_x' }),
+    for (const action of ['deactivate', 'reactivate'] as const) {
+      test(`${role} cannot ${action} an operator (403)`, async () => {
+        const res = await harness.app.request(`/admin/operators/op_x/${action}`, {
+          method: 'POST',
+          headers: await bearer({ sub: `u-${role}`, role, operatorId: 'op_x' }),
+        })
+        expect(res.status).toBe(403)
       })
-      expect(res.status).toBe(403)
-    })
+    }
   }
 
   test('PLATFORM_ADMIN deactivate sets deactivatedAt; reactivate clears it', async () => {
