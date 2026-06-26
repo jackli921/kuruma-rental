@@ -269,6 +269,11 @@
             "ACTIVE": "Active",
             "COMPLETED": "Completed",
             "CANCELLED": "Cancelled"
+          },
+          "floats": {
+            "title": "Needs Assignment",
+            "overdue": "Overdue",
+            "empty": "No floats awaiting assignment"
           }
         }
       },

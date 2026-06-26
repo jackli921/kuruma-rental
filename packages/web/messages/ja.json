@@ -269,6 +269,11 @@
             "ACTIVE": "利用中",
             "COMPLETED": "完了",
             "CANCELLED": "キャンセル"
+          },
+          "floats": {
+            "title": "車両未割当",
+            "overdue": "超過中",
+            "empty": "未割当のフロート予約はありません"
           }
         }
       },
