@@ -106,6 +106,7 @@ const TX_EXPECTED_KEY_MAP: Record<keyof TransactionRepos, true> = {
   availabilityRepo: true,
   classRatePlanRepo: true,
   vehicleClassRepo: true,
+  vehicleBlockRepo: true,
 }
 const TX_EXPECTED_KEYS = Object.keys(TX_EXPECTED_KEY_MAP) as ReadonlyArray<keyof TransactionRepos>
 

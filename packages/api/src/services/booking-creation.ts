@@ -324,6 +324,29 @@ export class BookingCreationService {
     assignedVehicleId: string,
     effectiveEndAt: Date,
   ): Promise<CreateBookingResult> {
+    // #1101: reject a booking that lands on a scheduled block (maintenance /
+    // out-of-service / manual hold) on the assigned car. Compared against
+    // [startAt, effectiveEndAt) — the SAME turnaround-inclusive window as the
+    // booking exclusion — so a block can't be slipped into a car's dropoff tail
+    // (must-fix #1). Booking-vs-block is a service-level NOT EXISTS because a
+    // single GiST EXCLUDE can't span bookings + vehicle_blocks; the residual
+    // schedule-during-checkout race is tiny + operator-recoverable at this scale
+    // (documented PR follow-up). CLASS_COMBO has no car at book time, so this
+    // guard is SPECIFIC-only; the operator assign/substitute path re-checks.
+    const overlappingBlocks = await repos.vehicleBlockRepo.findOverlapping(
+      assignedVehicleId,
+      input.startAt,
+      effectiveEndAt,
+    )
+    if (overlappingBlocks.length > 0) {
+      return {
+        ok: false,
+        status: 409,
+        error: 'Vehicle is blocked (maintenance or hold) for the requested time range',
+        code: 'VEHICLE_BLOCKED',
+      }
+    }
+
     // Demand counts SPECIFIC occupancy + floats on the (op, class, loc) triple;
     // capacity is the road-legal supply at the requested return. demand >= capacity
     // means every unit is already claimed → reject before insert. (The exclusion

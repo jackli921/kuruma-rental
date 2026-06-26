@@ -89,6 +89,9 @@ interface Harness {
   bookingStore: Map<string, Booking>
   events: BookingEvent[]
   vehicleId: string
+  // #1101: exposed concrete (repos.vehicleBlockRepo is the read-only Pick) so a
+  // test can schedule a block and assert the booking-vs-block guard.
+  vehicleBlockRepo: InMemoryVehicleBlockRepository
   generate: { mock: ReturnType<typeof vi.fn> }
 }
 
@@ -133,10 +136,11 @@ async function setup(
   const vehicleClassRepo = new InMemoryVehicleClassRepository()
   // #464 2d.1 widened TransactionRepos; this in-mem harness mirrors the wiring
   // so the submit's combo branch can read demand/capacity and rate plans in-tx.
+  const vehicleBlockRepo = new InMemoryVehicleBlockRepository()
   const availabilityRepo = new InMemoryAvailabilityRepository(
     vehicleRepo,
     bookingRepo,
-    new InMemoryVehicleBlockRepository(),
+    vehicleBlockRepo,
   )
   const classRatePlanRepo = new InMemoryClassRatePlanRepository()
   const userRepo = new InMemoryUserRepository(
@@ -182,6 +186,7 @@ async function setup(
     availabilityRepo,
     classRatePlanRepo,
     vehicleClassRepo,
+    vehicleBlockRepo,
   }
   const runInTransaction: RunInTransaction = async (fn) => fn(repos)
 
@@ -210,6 +215,7 @@ async function setup(
     bookingStore,
     events,
     vehicleId: vehicle.id,
+    vehicleBlockRepo,
     generate: { mock: generateMock },
   }
 }
@@ -295,6 +301,98 @@ describe('BookingService.create — past-start floor (#954)', () => {
       }),
       NOW,
     )
+    expect(result.ok).toBe(true)
+  })
+})
+
+describe('BookingService.create — vehicle-block guard (#1101)', () => {
+  // Seeded location turnaround is 2880m (48h), so a [START, END] rental occupies
+  // [2026-07-02, 2026-07-06) once the dropoff tail is added.
+  function scheduleBlock(h: Harness, vehicleId: string, startAt: Date, endAt: Date) {
+    return h.vehicleBlockRepo.create({
+      operatorId: OP_A,
+      vehicleId,
+      startAt,
+      endAt,
+      kind: 'MAINTENANCE',
+      reason: 'scheduled service',
+      notes: null,
+      createdBy: 'op-user',
+    })
+  }
+
+  function book(h: Harness, vehicleId: string, locationId: string) {
+    return h.service.create(
+      renterCtx,
+      createInput({
+        requestedVehicleId: vehicleId,
+        pickupLocationId: locationId,
+        dropoffLocationId: locationId,
+        startAt: START,
+        endAt: END,
+      }),
+      NOW,
+    )
+  }
+
+  it('rejects a booking that overlaps a block on the rental window (409 VEHICLE_BLOCKED)', async () => {
+    const h = await setup()
+    const { vehicleId, locationId } = await seedReady(h)
+    await scheduleBlock(
+      h,
+      vehicleId,
+      new Date('2026-07-02T12:00:00Z'),
+      new Date('2026-07-03T00:00:00Z'),
+    )
+
+    const result = await book(h, vehicleId, locationId)
+
+    expect(result.ok).toBe(false)
+    expect(result.status).toBe(409)
+    if (!result.ok) expect(result.code).toBe('VEHICLE_BLOCKED')
+  })
+
+  it('rejects a booking when the block only overlaps the dropoff turnaround tail', async () => {
+    const h = await setup()
+    const { vehicleId, locationId } = await seedReady(h)
+    // Between END (07-04) and effectiveEndAt (07-06) — outside the raw rental,
+    // inside the turnaround-inclusive window the guard compares against.
+    await scheduleBlock(
+      h,
+      vehicleId,
+      new Date('2026-07-05T00:00:00Z'),
+      new Date('2026-07-05T12:00:00Z'),
+    )
+
+    const result = await book(h, vehicleId, locationId)
+
+    expect(result.ok).toBe(false)
+    expect(result.status).toBe(409)
+    if (!result.ok) expect(result.code).toBe('VEHICLE_BLOCKED')
+  })
+
+  it('allows a booking when the block sits entirely after the turnaround window', async () => {
+    const h = await setup()
+    const { vehicleId, locationId } = await seedReady(h)
+    await scheduleBlock(
+      h,
+      vehicleId,
+      new Date('2026-07-07T00:00:00Z'),
+      new Date('2026-07-08T00:00:00Z'),
+    )
+
+    const result = await book(h, vehicleId, locationId)
+
+    expect(result.ok).toBe(true)
+  })
+
+  it('allows a booking when the block ends exactly at the rental start (half-open)', async () => {
+    const h = await setup()
+    const { vehicleId, locationId } = await seedReady(h)
+    await scheduleBlock(h, vehicleId, new Date('2026-07-01T12:00:00Z'), START)
+
+    const result = await book(h, vehicleId, locationId)
+
     expect(result.ok).toBe(true)
   })
 })
@@ -1376,10 +1474,11 @@ async function setupSub(
     vehicleData({ classId: classA.id, pickupLocationId: location.id, dailyRateJpy: 10000 }),
   )
 
+  const vehicleBlockRepo = new InMemoryVehicleBlockRepository()
   const availabilityRepo = new InMemoryAvailabilityRepository(
     vehicleRepo,
     bookingRepo,
-    new InMemoryVehicleBlockRepository(),
+    vehicleBlockRepo,
   )
   const classRatePlanRepo = new InMemoryClassRatePlanRepository()
 
@@ -1396,6 +1495,7 @@ async function setupSub(
     availabilityRepo,
     classRatePlanRepo,
     vehicleClassRepo,
+    vehicleBlockRepo,
   }
   const runInTransaction: RunInTransaction = async (fn) => fn(repos)
   const service = new BookingService(

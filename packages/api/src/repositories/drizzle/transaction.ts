@@ -18,6 +18,7 @@ import {
 } from './shared'
 import { DrizzleUserRepository } from './user'
 import { DrizzleVehicleRepository } from './vehicle'
+import { DrizzleVehicleBlockRepository } from './vehicle-block'
 import { DrizzleVehicleClassRepository } from './vehicle-class'
 
 export function createDrizzleTransaction(
@@ -56,6 +57,9 @@ export function createDrizzleTransaction(
         availabilityRepo: new DrizzleAvailabilityRepository(txDb, decodePhotos),
         classRatePlanRepo: new DrizzleClassRatePlanRepository(txDb),
         vehicleClassRepo: new DrizzleVehicleClassRepository(txDb, decodePhotos, encodePhotos),
+        // #1101: tx-bound so the booking-vs-block NOT EXISTS reads the same
+        // point-in-time snapshot as the insert that follows it.
+        vehicleBlockRepo: new DrizzleVehicleBlockRepository(txDb),
       })
     })
 }

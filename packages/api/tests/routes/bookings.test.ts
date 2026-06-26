@@ -47,6 +47,7 @@ let insuranceOptionRepo: InMemoryInsuranceOptionRepository
 let addOnRepo: InMemoryAddOnRepository
 let feeScheduleRepo: InMemoryFeeScheduleRepository
 let availabilityRepo: InMemoryAvailabilityRepository
+let vehicleBlockRepo: InMemoryVehicleBlockRepository
 let classRatePlanRepo: InMemoryClassRatePlanRepository
 let service: BookingService
 let testClassId: string
@@ -151,10 +152,11 @@ describe('Booking Routes', () => {
     insuranceOptionRepo = new InMemoryInsuranceOptionRepository()
     addOnRepo = new InMemoryAddOnRepository()
     feeScheduleRepo = new InMemoryFeeScheduleRepository()
+    vehicleBlockRepo = new InMemoryVehicleBlockRepository()
     availabilityRepo = new InMemoryAvailabilityRepository(
       vehicleRepo,
       bookingRepo,
-      new InMemoryVehicleBlockRepository(),
+      vehicleBlockRepo,
     )
     classRatePlanRepo = new InMemoryClassRatePlanRepository()
 
@@ -206,6 +208,7 @@ describe('Booking Routes', () => {
       availabilityRepo,
       classRatePlanRepo,
       vehicleClassRepo,
+      vehicleBlockRepo,
     }
     const runInTransaction: RunInTransaction = async (fn) => fn(repos)
 

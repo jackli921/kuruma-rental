@@ -41,6 +41,10 @@ export const ERROR_CODES = [
   //   via classId + pickupLocationId); combo create 409s.
   'NO_COMBO_RATE_SET',
   'CLASS_COMBO_SOLD_OUT',
+  // #1101: a SPECIFIC booking overlaps a scheduled vehicle block (maintenance /
+  // out-of-service / manual hold) on the assigned car over its turnaround-
+  // inclusive window; create 409s.
+  'VEHICLE_BLOCKED',
 ] as const
 
 export type ErrorCode = (typeof ERROR_CODES)[number]

@@ -120,10 +120,11 @@ async function makeService(threadRepo?: ThreadRepository, staffUserId?: string) 
   const maintenanceLogRepo = new InMemoryMaintenanceLogRepository()
   // #464: the SPECIFIC submit now reads demand/capacity + takes the class
   // advisory lock through availabilityRepo, so this harness must wire it too.
+  const vehicleBlockRepo = new InMemoryVehicleBlockRepository()
   const availabilityRepo = new InMemoryAvailabilityRepository(
     vehicleRepo,
     bookingRepo,
-    new InMemoryVehicleBlockRepository(),
+    vehicleBlockRepo,
   )
   const classRatePlanRepo = new InMemoryClassRatePlanRepository()
 
@@ -182,6 +183,7 @@ async function makeService(threadRepo?: ThreadRepository, staffUserId?: string) 
     availabilityRepo,
     classRatePlanRepo,
     vehicleClassRepo,
+    vehicleBlockRepo,
   }
   const runInTransaction: RunInTransaction = async (fn) => fn(repos)
 
