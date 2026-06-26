@@ -1082,6 +1082,14 @@
           "cancel": "取消",
           "error": "无法更换车辆，该车辆可能刚被预订。"
         },
+        "assign": {
+          "action": "分配车辆",
+          "dialogTitle": "分配车辆",
+          "dialogDescription": "为此未分配预订选择一辆可用的同级别车辆。选择后，预订将得到满足。",
+          "vehicleLabel": "车辆",
+          "submit": "分配",
+          "error": "无法分配车辆，该车辆可能刚被预订。"
+        },
         "markActive": "标记为已取车",
         "markCompleted": "标记为已还车",
         "settled": "该预订已结束，暂无可执行的操作。",

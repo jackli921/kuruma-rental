@@ -275,6 +275,27 @@ export function substitutionCandidatesQueryOptions(id: string) {
   })
 }
 
+// #464: assign a concrete vehicle to a CLASS_COMBO float booking. The server
+// enforces same-operator / same-pickup-location / same-ACRISS / AVAILABLE /
+// road-legal — the candidate set comes from substitution-candidates. A
+// VEHICLE_ASSIGNED audit event is appended; the booking transitions from a
+// float to a fully-assigned car. CSRF-gated (cookie-authed POST).
+export async function assignVehicle(
+  bookingId: string,
+  vehicleId: string,
+  reason: string | null,
+  csrfToken: string,
+): Promise<BookingDto> {
+  const body = reason != null ? { vehicleId, reason } : { vehicleId }
+  const res = await fetch(`${getApiBaseUrl()}/bookings/${encodeURIComponent(bookingId)}/assign`, {
+    method: 'POST',
+    credentials: 'include',
+    headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrfToken },
+    body: JSON.stringify(body),
+  })
+  return unwrap(res, bookingDtoSchema)
+}
+
 // --- Status mutations (cookie-based, CSRF-gated) ----------------------------
 // Operator booking lifecycle actions (#616): status transitions + cancel.
 // (Vehicle substitution lives in substituteBooking above, shipped with #610.)

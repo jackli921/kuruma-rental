@@ -1082,6 +1082,14 @@
           "cancel": "Cancel",
           "error": "Couldn't substitute the vehicle. It may have just been booked."
         },
+        "assign": {
+          "action": "Assign vehicle",
+          "dialogTitle": "Assign a vehicle",
+          "dialogDescription": "Assign an available same-class vehicle to this unassigned booking. The booking will be fulfilled once a car is selected.",
+          "vehicleLabel": "Vehicle",
+          "submit": "Assign",
+          "error": "Couldn't assign the vehicle. It may have just been booked."
+        },
         "markActive": "Mark as picked up",
         "markCompleted": "Mark as returned",
         "settled": "This booking is settled — no actions available.",
