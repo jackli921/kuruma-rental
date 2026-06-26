@@ -9,6 +9,7 @@ import {
   DrizzleVehicleBlockRepository,
   DrizzleVehicleRepository,
 } from '../../src/repositories/drizzle'
+import { VehicleBlockService } from '../../src/services/vehicle-block'
 import type { Vehicle } from '../../src/stores'
 import {
   DEFAULT_DAILY_RATE_JPY,
@@ -274,5 +275,52 @@ describe('vehicle_blocks availability subtraction', () => {
     expect(after?.available).toBe(false)
     // a block flips availability without polluting the booking conflicts list.
     expect(after?.conflicts).toEqual([])
+  })
+})
+
+// #1101 slice 5: the full service path against REAL Postgres. The unit tests use
+// the InMemory overlap mirror; this proves DrizzleVehicleBlockRepository.create
+// actually bubbles the GiST 23P01 in the shape VehicleBlockService maps to a 409
+// (VEHICLE_BLOCK_OVERLAP). vehicleA persists from the first beforeAll; the
+// top-level afterEach cleans every block this describe creates.
+describe('VehicleBlockService against Postgres', () => {
+  const service = new VehicleBlockService(vehicleRepo, new DrizzleVehicleBlockRepository(db))
+
+  function input(startAt: Date, endAt: Date) {
+    return {
+      kind: 'MAINTENANCE' as const,
+      reason: 'scheduled service',
+      startAt: startAt.toISOString(),
+      endAt: endAt.toISOString(),
+    }
+  }
+
+  it('persists a block with operatorId derived from the vehicle', async () => {
+    const result = await service.createBlock(
+      SYSTEM_CONTEXT,
+      vehicleA,
+      input(hours(200), hours(208)),
+    )
+
+    expect(result.ok).toBe(true)
+    if (result.ok) {
+      createdBlockIds.push(result.block.id)
+      expect(result.block.operatorId).toBe(BEST_CAR_RENTAL_OPERATOR_ID)
+      expect(result.block.createdBy).toBe(SYSTEM_CONTEXT.userId)
+    }
+  })
+
+  it('maps the GiST 23P01 to 409 VEHICLE_BLOCK_OVERLAP on an overlapping window', async () => {
+    const first = await service.createBlock(SYSTEM_CONTEXT, vehicleA, input(hours(300), hours(320)))
+    if (!first.ok) throw new Error('setup block should have been created')
+    createdBlockIds.push(first.block.id)
+
+    const overlap = await service.createBlock(
+      SYSTEM_CONTEXT,
+      vehicleA,
+      input(hours(310), hours(330)),
+    )
+
+    expect(overlap).toMatchObject({ ok: false, status: 409, code: 'VEHICLE_BLOCK_OVERLAP' })
   })
 })
