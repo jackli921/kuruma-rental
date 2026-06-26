@@ -8,6 +8,7 @@ import { InMemoryLocationRepository } from '../../src/repositories/in-memory/loc
 import { InMemoryThreadRepository } from '../../src/repositories/in-memory/thread'
 import { InMemoryUserRepository } from '../../src/repositories/in-memory/user'
 import { InMemoryVehicleRepository } from '../../src/repositories/in-memory/vehicle'
+import { InMemoryVehicleBlockRepository } from '../../src/repositories/in-memory/vehicle-block'
 import { InMemoryVehicleClassRepository } from '../../src/repositories/in-memory/vehicle-class'
 import type { Location, User, Vehicle, VehicleClass } from '../../src/stores'
 import { TEST_AUTH_SECRET, setupAuthEnv } from '../helpers/auth'
@@ -155,7 +156,11 @@ describe('#396 — OPERATOR_* cannot enumerate users via any current ingress', (
     const vehicleRepo = new InMemoryVehicleRepository(new Map([[vehicle.id, vehicle]]))
     bookingRepo = new InMemoryBookingRepository()
     threadRepo = new InMemoryThreadRepository()
-    const availabilityRepo = new InMemoryAvailabilityRepository(vehicleRepo, bookingRepo)
+    const availabilityRepo = new InMemoryAvailabilityRepository(
+      vehicleRepo,
+      bookingRepo,
+      new InMemoryVehicleBlockRepository(),
+    )
 
     app = createApp({
       vehicleRepo,
