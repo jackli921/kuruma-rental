@@ -589,6 +589,13 @@
       "when": 1782516180502,
       "tag": "0083_codify-accounts-index",
       "breakpoints": true
+    },
+    {
+      "idx": 84,
+      "version": "7",
+      "when": 1782516634609,
+      "tag": "0084_codify-maintenance-logs-index",
+      "breakpoints": true
     }
   ]
 }
