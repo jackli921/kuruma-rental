@@ -1,4 +1,4 @@
-import type { UserRole } from '@kuruma/shared/auth/roles'
+import { ALL_ROLES, type UserRole } from '@kuruma/shared/auth/roles'
 import { queryOptions, useQuery } from '@tanstack/react-query'
 
 // The session the browser learns via GET /auth/session (spec §5.3). `id`/`role`
@@ -27,10 +27,22 @@ interface SessionEnvelope {
   data?: Session
 }
 
+function isValidRole(value: unknown): value is UserRole {
+  return typeof value === 'string' && ALL_ROLES.has(value)
+}
+
 function isSessionEnvelope(body: unknown): body is { success: true; data: Session } {
   if (typeof body !== 'object' || body === null) return false
   const envelope = body as SessionEnvelope
-  return envelope.success === true && envelope.data?.user?.id != null
+  // Validate role at the HTTP boundary: the API could add a role tomorrow that
+  // the web's UserRole union doesn't know about (or send a typo'd string). Treat
+  // those as "no session" rather than letting an unvalidated literal into the
+  // compile-time-typed Session.user.role.
+  return (
+    envelope.success === true &&
+    envelope.data?.user?.id != null &&
+    isValidRole(envelope.data.user.role)
+  )
 }
 
 /**
