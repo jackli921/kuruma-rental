@@ -201,8 +201,6 @@ export const BASELINE: ReadonlySet<string> = new Set([
   'bookings.idx_bookings_renterId',
   'bookings.idx_bookings_status',
   'bookings.bookings_idempotency_key',
-  // Created by 0020_add-maintenance-logs-vehicle-index.sql (codify in #1172).
-  'maintenance_logs.idx_maintenance_logs_vehicleId',
 ])
 
 async function main(): Promise<void> {
