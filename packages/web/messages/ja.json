@@ -1233,6 +1233,7 @@
     "nav": {
       "overview": "概要",
       "revenue": "パートナー収益",
+      "anomalies": "決済の異常",
       "documents": "書類"
     },
     "home": {
@@ -1260,16 +1261,39 @@
     "anomalies": {
       "title": "決済の異常",
       "subtitle": "照合中にフラグが付いた請求 — 二重請求は返金、金額不一致は確認してください。",
-      "empty": "未対応の決済異常はありません。",
+      "empty": "表示する決済異常はありません。",
       "colKind": "種別",
       "colBooking": "予約",
       "colReceived": "受領額",
       "colExpected": "予定額",
       "colStripeEvent": "Stripeイベント",
       "colWhen": "日時",
+      "colAction": "操作",
+      "loadError": "決済異常を読み込めませんでした。",
+      "retry": "再試行",
       "kind": {
         "DOUBLE_PAYMENT": "二重決済",
         "AMOUNT_MISMATCH": "金額不一致"
+      },
+      "tab": {
+        "unresolved": "要確認",
+        "resolved": "対応済み"
+      },
+      "resolution": {
+        "BENIGN": "問題なし",
+        "INVESTIGATED": "確認済み — 対応不要",
+        "REFUNDED_EXTERNALLY": "Stripeで返金済み"
+      },
+      "resolve": {
+        "action": "対応する",
+        "title": "異常を解決",
+        "description": "フラグが付いた請求を確認済みにします。判定を記録するだけで、ここでは返金などの処理は行いません。",
+        "resolutionLabel": "対応区分",
+        "noteLabel": "メモ（任意）",
+        "notePlaceholder": "監査用の補足を入力",
+        "cancel": "キャンセル",
+        "submit": "解決する",
+        "submitting": "処理中…"
       }
     },
     "documents": {

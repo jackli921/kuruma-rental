@@ -1233,6 +1233,7 @@
     "nav": {
       "overview": "概览",
       "revenue": "合作伙伴收益",
+      "anomalies": "支付异常",
       "documents": "证件"
     },
     "home": {
@@ -1260,16 +1261,39 @@
     "anomalies": {
       "title": "支付异常",
       "subtitle": "对账时标记的扣款 — 重复扣款应退款，金额不符需核查。",
-      "empty": "没有待处理的支付异常。",
+      "empty": "暂无可显示的支付异常。",
       "colKind": "类型",
       "colBooking": "订单",
       "colReceived": "实收",
       "colExpected": "应收",
       "colStripeEvent": "Stripe 事件",
       "colWhen": "时间",
+      "colAction": "操作",
+      "loadError": "无法加载支付异常。",
+      "retry": "重试",
       "kind": {
         "DOUBLE_PAYMENT": "重复支付",
         "AMOUNT_MISMATCH": "金额不符"
+      },
+      "tab": {
+        "unresolved": "待核查",
+        "resolved": "已处理"
+      },
+      "resolution": {
+        "BENIGN": "无问题",
+        "INVESTIGATED": "已核查 — 无需处理",
+        "REFUNDED_EXTERNALLY": "已在 Stripe 退款"
+      },
+      "resolve": {
+        "action": "处理",
+        "title": "处理异常",
+        "description": "将此标记的扣款标为已审核。此操作仅记录处理结论，不会在此移动任何资金。",
+        "resolutionLabel": "处理结论",
+        "noteLabel": "备注（可选）",
+        "notePlaceholder": "补充说明以便审计追溯",
+        "cancel": "取消",
+        "submit": "处理",
+        "submitting": "处理中…"
       }
     },
     "documents": {

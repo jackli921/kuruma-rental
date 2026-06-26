@@ -63,6 +63,7 @@ export type {
   PaymentEventRepository,
   PaymentRefundRepository,
   RefundReconcilerRepository,
+  ResolvePaymentAnomalyInput,
 } from './types-payment'
 
 // Notification persistence: SENDING-lease + delivery-cap consts (#393, #483) and

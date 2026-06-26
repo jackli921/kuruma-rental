@@ -1,4 +1,5 @@
 import type { PaymentRefundStatus } from '@kuruma/shared/enums'
+import type { PaymentAnomalyResolution } from '@kuruma/shared/types/payment-anomaly'
 import type { Booking, PaymentAnomaly, PaymentEvent, PaymentRefund } from '../stores'
 
 /** A verified successful payment to persist. id + createdAt are assigned by the
@@ -27,10 +28,25 @@ export interface PaymentEventRepository {
   listSucceededMonths(): Promise<string[]>
 }
 
-/** A payment anomaly to persist. id/createdAt/resolvedAt are store-assigned (#508 P2). */
-export type NewPaymentAnomaly = Omit<PaymentAnomaly, 'id' | 'createdAt' | 'resolvedAt'>
+/** A payment anomaly to persist. id/createdAt are store-assigned; the resolution
+ *  audit fields (resolvedAt/resolution/resolvedBy/note) start NULL and are set only
+ *  by `resolve()` — the webhook writer never supplies them (#508 P2, #1075 slice 3). */
+export type NewPaymentAnomaly = Omit<
+  PaymentAnomaly,
+  'id' | 'createdAt' | 'resolvedAt' | 'resolution' | 'resolvedBy' | 'note'
+>
 
-/** payment_anomalies data access (#508 P2). The webhook is the only writer. */
+/** The audit an admin writes to close an anomaly's review-queue item (#1075 slice 3).
+ *  `resolvedBy` is the actioning admin's id (from the caller ctx, never the body);
+ *  `note` is optional free-text. Carries NO money — v1 only clears the queue. */
+export interface ResolvePaymentAnomalyInput {
+  resolution: PaymentAnomalyResolution
+  resolvedBy: string
+  note: string | null
+}
+
+/** payment_anomalies data access (#508 P2). The webhook is the only writer of new
+ *  rows; an admin resolution (#1075 slice 3) is the only other mutation. */
 export interface PaymentAnomalyRepository {
   // Persist an anomaly for operator review. IDEMPOTENT on stripeEventId: a
   // redelivered webhook (which re-derives the same anomaly) must not stack rows.
@@ -38,6 +54,14 @@ export interface PaymentAnomalyRepository {
   // Unresolved anomalies across all operators for the platform-admin surface.
   // Unscoped by design — authz lives in the service (mirrors listSucceeded).
   listUnresolved(): Promise<PaymentAnomaly[]>
+  // Resolved anomalies across all operators (the "resolved" filter tab). Also
+  // unscoped; the service is the authz chokepoint.
+  listResolved(): Promise<PaymentAnomaly[]>
+  // Close an anomaly: set resolvedAt=now plus the audit fields in ONE guarded
+  // UPDATE (WHERE id AND resolvedAt IS NULL). Returns the updated row, or null when
+  // the id is unknown OR already resolved — the resolution audit is write-once, so a
+  // double-resolve is a no-op (=> 404), never a silent overwrite of who closed it.
+  resolve(id: string, input: ResolvePaymentAnomalyInput): Promise<PaymentAnomaly | null>
 }
 
 /** A refund attempt to claim. id/createdAt/updatedAt are store-assigned; stripeRefundId

@@ -1,5 +1,9 @@
 import type { PaymentAnomaly } from '../../stores'
-import type { NewPaymentAnomaly, PaymentAnomalyRepository } from '../types'
+import type {
+  NewPaymentAnomaly,
+  PaymentAnomalyRepository,
+  ResolvePaymentAnomalyInput,
+} from '../types'
 
 export class InMemoryPaymentAnomalyRepository implements PaymentAnomalyRepository {
   private readonly store: Map<string, PaymentAnomaly>
@@ -18,6 +22,9 @@ export class InMemoryPaymentAnomalyRepository implements PaymentAnomalyRepositor
       ...data,
       id: crypto.randomUUID(),
       resolvedAt: null,
+      resolution: null,
+      resolvedBy: null,
+      note: null,
       createdAt: new Date(),
     }
     this.store.set(anomaly.id, anomaly)
@@ -25,5 +32,25 @@ export class InMemoryPaymentAnomalyRepository implements PaymentAnomalyRepositor
 
   async listUnresolved(): Promise<PaymentAnomaly[]> {
     return [...this.store.values()].filter((r) => r.resolvedAt === null)
+  }
+
+  async listResolved(): Promise<PaymentAnomaly[]> {
+    return [...this.store.values()].filter((r) => r.resolvedAt !== null)
+  }
+
+  // Guarded, write-once: mirrors the Drizzle `WHERE id AND resolvedAt IS NULL` so an
+  // already-resolved (or unknown) id is a no-op returning null, not a silent overwrite.
+  async resolve(id: string, input: ResolvePaymentAnomalyInput): Promise<PaymentAnomaly | null> {
+    const existing = this.store.get(id)
+    if (!existing || existing.resolvedAt !== null) return null
+    const resolved: PaymentAnomaly = {
+      ...existing,
+      resolvedAt: new Date(),
+      resolution: input.resolution,
+      resolvedBy: input.resolvedBy,
+      note: input.note,
+    }
+    this.store.set(id, resolved)
+    return resolved
   }
 }

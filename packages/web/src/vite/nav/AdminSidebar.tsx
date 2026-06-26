@@ -1,10 +1,11 @@
 import { Link } from '@tanstack/react-router'
-import { Banknote, FileCheck, LayoutDashboard } from 'lucide-react'
+import { AlertTriangle, Banknote, FileCheck, LayoutDashboard } from 'lucide-react'
 import { useLocale, useTranslations } from 'use-intl'
 
 const SIDEBAR_ITEMS = [
   { to: '/$locale/admin', icon: LayoutDashboard, labelKey: 'nav.overview' },
   { to: '/$locale/admin/revenue', icon: Banknote, labelKey: 'nav.revenue' },
+  { to: '/$locale/admin/anomalies', icon: AlertTriangle, labelKey: 'nav.anomalies' },
   { to: '/$locale/admin/documents', icon: FileCheck, labelKey: 'nav.documents' },
 ] as const
 
