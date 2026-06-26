@@ -79,6 +79,15 @@ export const PAYMENT_EVENT_ONE_SUCCESS_CONSTRAINT = 'payment_events_one_success_
 export const PAYMENT_REFUND_STRIPE_REFUND_CONSTRAINT = 'payment_refunds_stripeRefundId_unique'
 
 /**
+ * reviews unique seal (#1067): one review per author per booking per subject. A
+ * 23505 on this name means the same side re-submitted the same subject — the
+ * submission service edits the existing hidden row instead of inserting a second
+ * (a renter still reviews OPERATOR and VEHICLE separately — different subjects).
+ * Matching by name keeps this apart from any future reviews unique.
+ */
+export const REVIEWS_AUTHOR_SUBJECT_CONSTRAINT = 'reviews_author_subject_per_booking_unique'
+
+/**
  * Partial unique index on provider_invites (operatorId, email) WHERE status=
  * 'PENDING' (#904 slice 2). At most one live invite per operator+email; REVOKED/
  * ACCEPTED rows free the slot so a re-invite works. A 23505 on this name means the

@@ -17,6 +17,7 @@ export type {
   FeeSchedule,
   PaymentEvent,
   RenterDocument,
+  Review,
 } from '../stores'
 export type { DashboardStats } from '@kuruma/shared/types/stats'
 export type { OperatorOverview } from '@kuruma/shared/types/overview'
@@ -769,3 +770,7 @@ export type CreateRenterDocumentData = Pick<RenterDocument, 'renterId' | 'type' 
 // Consent data-access interfaces (#613) live in their own module to keep this
 // barrel under the file-size cap; re-exported for callers.
 export type { ConsentRepository, NewConsentAcceptance } from './types-consent'
+
+// Reviews bounded-context data access (#1067 slice 1) lives in its own module;
+// re-exported for callers (mirrors the payment/consent split above).
+export type { NewReview, ReviewRepository } from './types-review'
