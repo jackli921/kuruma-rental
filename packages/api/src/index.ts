@@ -102,7 +102,7 @@ import type { PaymentGateway } from './services/payment/payment-gateway'
 import { StripePaymentGateway } from './services/payment/stripe-payment-gateway'
 import { ProviderInviteService } from './services/provider-invite'
 import { RenterDocumentService } from './services/renter-document'
-import { ReviewService, type SweepSummary } from './services/review'
+import { ReviewService } from './services/review'
 import { StorefrontDetailService } from './services/storefront-detail'
 import { StorefrontSearchService } from './services/storefront-search'
 import { createTranslationProvider } from './services/translation-provider-factory'
@@ -774,30 +774,6 @@ export function buildNotificationRetryService(
     bookingRepo: repos.bookingRepo,
     redriver: resolveNotificationDispatcher(repos, resolveEmailSender(overrides), webBaseUrl),
   })
-}
-
-// A daily sweep over window-elapsed reviews; far above the per-day reveal volume for a
-// 40-50 vehicle fleet, so a single run drains the backlog. A run that hits the cap just
-// defers the overflow to tomorrow's idempotent run — reveals are never lost, only delayed.
-const REVIEW_SWEEP_LIMIT = 500
-
-/**
- * Composition seam for the #1067 daily review-reveal sweep, resolved by the Workers
- * `scheduled` cron exactly as the other backstops are. Publishes reviews whose 14-day
- * double-blind window has elapsed but which no read settled — the backstop that keeps a
- * one-sided review from staying hidden forever. Idempotent (publishMany first-write-wins).
- */
-export function buildReviewRevealSweep(
-  overrides?: AppOverrides,
-  repos: Repos = buildRepos(overrides),
-): { run: () => Promise<SweepSummary> } {
-  const service = new ReviewService(
-    repos.reviewRepo,
-    repos.bookingRepo,
-    repos.bookingEventRepo,
-    repos.operatorMembershipRepo,
-  )
-  return { run: () => service.sweep(new Date(), REVIEW_SWEEP_LIMIT) }
 }
 
 /**

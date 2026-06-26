@@ -10,12 +10,12 @@
  */
 
 import * as Sentry from '@sentry/cloudflare'
+import { buildReviewRevealSweep } from './composition/review-reveal-sweep'
 import {
   type AppType,
   buildCancellationRefundReconciler,
   buildComplianceDigestService,
   buildNotificationRetryService,
-  buildReviewRevealSweep,
   createApp,
 } from './index'
 import { type SentryRuntimeEnv, resolveSentryOptions } from './observability/sentry-options'
