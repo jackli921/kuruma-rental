@@ -9,11 +9,21 @@
 // This is GUIDANCE plus a recorded declaration, never verification — the operator
 // physically inspects the document at pickup. Functional core: pure, total, no I/O.
 //
-// Sources (lists change rarely; re-verify currency when amending):
-//   - Translation-required set: JAF published list — Switzerland, Germany, France,
-//     Belgium, Monaco, Slovenia, Taiwan. https://www.jaf.or.jp/common/visitor-procedures
-//   - Geneva 1949 contracting parties (IDP accepted): UN Treaty Collection /
-//     Wikipedia "Geneva Convention on Road Traffic" (102 parties, as of 2025-03).
+// SAFE-FAIL PRINCIPLE: when a jurisdiction is genuinely disputed across sources, it
+// is left OFF the IDP_OK set so it classifies NOT_ELIGIBLE → a "verify before
+// booking" warning. Wrongly warning an eligible driver is mild friction; wrongly
+// clearing an ineligible one is a refused car at the counter — the exact failure
+// this feature exists to prevent. Err toward the warning.
+//
+// Sources (lists change rarely; re-verify against Japan's NPA list when amending):
+//   - Translation-required set (7): JAF published list — Switzerland, Germany,
+//     France, Belgium, Monaco, Slovenia, Taiwan.
+//   - IDP-accepted set: Japan-accepted 1949 Geneva Convention parties, cross-checked
+//     across Japan-operational sources (JAF, ToCoo, kart.st, niconico). Vietnam is
+//     DELIBERATELY EXCLUDED — sources conflict (it is a 1968 Vienna party; Japan
+//     guidance commonly rejects its IDP), so per the safe-fail rule it warns.
+//     The full set must be reconciled against the NPA "List of Contracting States
+//     to the Geneva Convention" before slice 2 surfaces this to renters.
 
 export const ELIGIBILITY_CLASSES = [
   'IDP_OK',
@@ -27,7 +37,8 @@ export type EligibilityClass = (typeof ELIGIBILITY_CLASSES)[number]
 // The 7 jurisdictions whose home licenses need a JAF/embassy Japanese translation,
 // NOT a Geneva IDP. This is the binding rule even for the four that are also Geneva
 // parties (FR/BE/MC/SI), so this set is checked FIRST. ISO 3166-1 alpha-2.
-const TRANSLATION_REQUIRED_COUNTRIES: ReadonlySet<string> = new Set([
+// Exported for the contract test that pins the full membership (data IS the feature).
+export const TRANSLATION_REQUIRED_COUNTRIES: ReadonlySet<string> = new Set([
   'CH',
   'DE',
   'FR',
@@ -37,10 +48,11 @@ const TRANSLATION_REQUIRED_COUNTRIES: ReadonlySet<string> = new Set([
   'TW',
 ])
 
-// 1949 Geneva Convention on Road Traffic contracting parties — Japan accepts an IDP
-// issued by these. ISO 3166-1 alpha-2. FR/BE/MC/SI also appear here, but the
-// translation rule above wins. (102 parties.)
-const IDP_OK_COUNTRIES: ReadonlySet<string> = new Set([
+// Japan-accepted 1949 Geneva Convention parties — Japan accepts an IDP issued by
+// these. ISO 3166-1 alpha-2. FR/BE/MC/SI also appear here, but the translation rule
+// above wins. Vietnam is deliberately excluded (see header). (101 entries.)
+// Exported for the contract test that pins the full membership.
+export const IDP_OK_COUNTRIES: ReadonlySet<string> = new Set([
   'AL',
   'DZ',
   'AR',
@@ -141,26 +153,35 @@ const IDP_OK_COUNTRIES: ReadonlySet<string> = new Set([
   'GB',
   'US',
   'VE',
-  'VN',
   'ZW',
 ])
 
 const ALPHA2 = /^[A-Z]{2}$/
 
+// ISO 3166-1 alpha-2 user-assigned / reserved ranges — never a real country, so no
+// renter could legitimately hold a license from one. Reject these up front rather
+// than depend on an ICU display-label (ZZ in particular resolves to a generic label
+// instead of undefined, and that label is locale/version-dependent).
+function isUserAssignedCode(code: string): boolean {
+  return (
+    code === 'AA' ||
+    code === 'ZZ' ||
+    (code >= 'QM' && code <= 'QZ') ||
+    (code >= 'XA' && code <= 'XZ')
+  )
+}
+
 // ICU recognizes the assigned ISO 3166-1 regions; with `fallback: 'none'` an
-// unassigned code returns undefined and a structurally invalid one throws. The lone
-// quirk is the reserved code ZZ ("unknown region"), which ICU labels rather than
-// drops — treat that label as unrecognized too.
+// unassigned code returns undefined and a structurally invalid one throws.
 const regionNames = new Intl.DisplayNames(['en'], { type: 'region', fallback: 'none' })
 
 function isRecognizedCountry(code: string): boolean {
-  let name: string | undefined
+  if (isUserAssignedCode(code)) return false
   try {
-    name = regionNames.of(code)
+    return regionNames.of(code) !== undefined
   } catch {
     return false
   }
-  return name !== undefined && name !== 'Unknown Region'
 }
 
 /**
