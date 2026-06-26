@@ -43,6 +43,16 @@ export const FEE_SCHEDULES_CLASS_FK = 'fee_schedules_operator_class_fk'
 export const LOCATIONS_REGION_FK = 'locations_regionId_regions_id_fk'
 
 /**
+ * GiST EXCLUDE on vehicle_blocks (operatorId, vehicleId, [startAt,endAt)),
+ * named explicitly in migration 0076 (#1101). A 23P01 on this name on the
+ * block-create path means an operator scheduled an overlapping block on the
+ * same vehicle. VehicleBlockService maps it to a 409 (VEHICLE_BLOCK_OVERLAP) —
+ * kept apart from bookings_no_overlap (a 23P01 meaning "already booked"), which
+ * the booking-creation service surfaces as VEHICLE_BLOCKED on the other side.
+ */
+export const VEHICLE_BLOCKS_OVERLAP = 'vehicle_blocks_no_overlap'
+
+/**
  * Booking unique constraints the BookingService distinguishes on (#392, §5.4).
  * A `bookingCode` clash is astronomically rare but recoverable: regenerate the
  * code and retry the whole atomic insert. An `idempotencyKey` clash means a

@@ -1,4 +1,4 @@
-import { PLATFORM_ROLES } from '@kuruma/shared/auth/roles'
+import { PLATFORM_ROLES, type UserRole } from '@kuruma/shared/auth/roles'
 
 /**
  * Roles allowed into the platform admin portal (`/admin/*`). Re-exported from the
@@ -16,6 +16,6 @@ import { PLATFORM_ROLES } from '@kuruma/shared/auth/roles'
  */
 export const PLATFORM_ADMIN_ROLES = PLATFORM_ROLES
 
-export function isPlatformAdmin(role: string | undefined): boolean {
+export function isPlatformAdmin(role: UserRole | undefined): boolean {
   return PLATFORM_ADMIN_ROLES.has(role ?? '')
 }

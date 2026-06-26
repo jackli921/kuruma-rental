@@ -34,6 +34,7 @@ import type {
   ReviewModerationStatus,
   ReviewSubject,
   Transmission,
+  VehicleBlockKind,
   VehicleClassStatus,
 } from '@kuruma/shared/enums'
 import type { ComplianceAlertBand, ComplianceDocumentType } from '@kuruma/shared/lib/compliance'
@@ -305,6 +306,25 @@ export interface MaintenanceLog {
   resolvedAt: Date | null
   createdAt: Date
   updatedAt: Date
+}
+
+// #1101: a scheduled block takes a vehicle off the calendar for a [startAt,endAt)
+// window (maintenance / out-of-service / manual hold). Distinct from
+// MaintenanceLog (reactive, cost-tracking, welded to vehicle.status=MAINTENANCE):
+// a block is forward-looking and is the availability primitive — a CONFIRMED/ACTIVE
+// booking cannot overlap one. operatorId is server-derived from the vehicle. No
+// updatedAt: a block is created and (hard-)deleted, never edited in place.
+export interface VehicleBlock {
+  id: string
+  operatorId: string
+  vehicleId: string
+  startAt: Date
+  endAt: Date
+  kind: VehicleBlockKind
+  reason: string
+  notes: string | null
+  createdBy: string
+  createdAt: Date
 }
 
 import type { UserRole } from './middleware/auth'

@@ -1,4 +1,5 @@
 import { LayoutPreferenceProvider } from '@/vite/LayoutPreferenceProvider'
+import type { UserRole } from '@kuruma/shared/auth/roles'
 import { render, screen } from '@testing-library/react'
 import type { ReactNode } from 'react'
 import { IntlProvider } from 'use-intl'
@@ -8,7 +9,9 @@ import en from '../../../messages/en.json'
 // Drive the signed-in role through the session hook; the sidebar's own seams
 // (router Link, feature flags, badge query) are mocked so this exercises the
 // layout's wiring — preference + view-cookie → render/omit the sidebar.
-const h = vi.hoisted(() => ({ role: 'OPERATOR_OWNER' as string | undefined }))
+// Typed as UserRole | undefined (not string) so a typo'd literal here fails to
+// compile — that's the whole point of #1111's narrowing (audit M6).
+const h = vi.hoisted(() => ({ role: 'OPERATOR_OWNER' as UserRole | undefined }))
 
 vi.mock('@/vite/session', () => ({
   useSession: () => ({ data: { user: { id: 'u1', role: h.role } } }),

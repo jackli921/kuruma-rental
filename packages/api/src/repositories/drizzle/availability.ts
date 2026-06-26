@@ -1,4 +1,4 @@
-import { bookings, vehicles } from '@kuruma/shared/db/schema'
+import { bookings, vehicleBlocks, vehicles } from '@kuruma/shared/db/schema'
 import { jstDateString } from '@kuruma/shared/lib/compliance'
 import { type SQL, and, eq, inArray, sql } from 'drizzle-orm'
 import type { Booking, Vehicle } from '../../stores'
@@ -40,6 +40,15 @@ export class DrizzleAvailabilityRepository implements AvailabilityRepository {
             WHERE b."assignedVehicleId" = ${vehicles.id}
             AND b.status IN ('CONFIRMED', 'ACTIVE')
             AND tstzrange(b."startAt", b."effectiveEndAt") && tstzrange(${fromIso}::timestamptz, ${toIso}::timestamptz)
+          )`,
+      // #1101: subtract scheduled blocks — a vehicle with a block overlapping the
+      // requested window is off the calendar (maintenance / out-of-service /
+      // manual hold). Half-open tstzrange overlap, same shape as the booking
+      // guard above; mirrored by the in-memory path.
+      sql`NOT EXISTS (
+            SELECT 1 FROM vehicle_blocks vb
+            WHERE vb."vehicleId" = ${vehicles.id}
+            AND tstzrange(vb."startAt", vb."endAt") && tstzrange(${fromIso}::timestamptz, ${toIso}::timestamptz)
           )`,
     ]
     // Storefront scope (#391): INNER match on the nullable pickupLocationId — a
@@ -91,8 +100,21 @@ export class DrizzleAvailabilityRepository implements AvailabilityRepository {
         ),
       )
 
+    // #1101: a scheduled block makes the car unavailable too. Counted separately
+    // (blocks are NOT bookings — they stay out of `conflicts`, only flipping
+    // `available`); same half-open overlap as the booking guard.
+    const [blockOverlap] = await this.db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(vehicleBlocks)
+      .where(
+        and(
+          eq(vehicleBlocks.vehicleId, vehicleId),
+          sql`tstzrange("startAt", "endAt") && tstzrange(${fromIso}::timestamptz, ${toIso}::timestamptz)`,
+        ),
+      )
+
     return {
-      available: conflicts.length === 0,
+      available: conflicts.length === 0 && (blockOverlap?.count ?? 0) === 0,
       vehicle: toVehicle(vehicle, this.decodePhotos),
       conflicts: conflicts.map(toBooking),
     }

@@ -5,6 +5,7 @@ import {
   InMemoryAvailabilityRepository,
   InMemoryBookingRepository,
   InMemoryOperatorRepository,
+  InMemoryVehicleBlockRepository,
   InMemoryVehicleRepository,
 } from '../../src/repositories/in-memory'
 import { TEST_AUTH_SECRET, setupAuthEnv } from '../helpers/auth'
@@ -25,7 +26,11 @@ function makeApp() {
   setupAuthEnv()
   const vehicleRepo = new InMemoryVehicleRepository()
   const bookingRepo = new InMemoryBookingRepository()
-  const availabilityRepo = new InMemoryAvailabilityRepository(vehicleRepo, bookingRepo)
+  const availabilityRepo = new InMemoryAvailabilityRepository(
+    vehicleRepo,
+    bookingRepo,
+    new InMemoryVehicleBlockRepository(),
+  )
   const operatorRepo = new InMemoryOperatorRepository()
   const app = createApp({ vehicleRepo, bookingRepo, availabilityRepo, operatorRepo })
   return { app, operatorRepo }

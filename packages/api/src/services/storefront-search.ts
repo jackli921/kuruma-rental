@@ -12,9 +12,8 @@ import type {
   VehicleClass,
   VehicleClassRepository,
 } from '../repositories/types'
+import { clampLimit, decodeCursor, encodeCursor } from './search-paging'
 
-const DEFAULT_LIMIT = 25
-const MAX_LIMIT = 50
 const REPRESENTATIVE_PHOTO_CAP = 4
 
 export interface ClassSummary {
@@ -152,11 +151,6 @@ export class StorefrontSearchService {
   }
 }
 
-function clampLimit(limit: number | undefined): number {
-  if (!limit || limit < 1) return DEFAULT_LIMIT
-  return Math.min(limit, MAX_LIMIT)
-}
-
 function groupByLocation(vehicles: Vehicle[]): Map<string, Vehicle[]> {
   const byLocation = new Map<string, Vehicle[]>()
   for (const vehicle of vehicles) {
@@ -240,17 +234,4 @@ function compareCards(a: StorefrontCard, b: StorefrontCard): number {
     a.name.localeCompare(b.name) ||
     a.locationId.localeCompare(b.locationId)
   )
-}
-
-// Opaque base64 cursor over locationId (§3.3). btoa/atob are Web-standard
-// globals available on CF Workers and Bun.
-const encodeCursor = (locationId: string): string => btoa(locationId)
-// Returns undefined for a malformed (non-base64) cursor so the caller can
-// answer 400 instead of letting atob() throw into a 500 on a public endpoint.
-const decodeCursor = (cursor: string): string | undefined => {
-  try {
-    return atob(cursor)
-  } catch {
-    return undefined
-  }
 }

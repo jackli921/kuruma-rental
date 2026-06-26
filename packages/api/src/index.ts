@@ -46,6 +46,7 @@ import { createStatsRoutes } from './routes/stats'
 import { createStorefrontRoutes } from './routes/storefronts'
 import { createTranslateRoutes } from './routes/translate'
 import { createUserRoutes } from './routes/users'
+import { createVehicleBlockRoutes } from './routes/vehicle-blocks'
 import { createVehicleClassRoutes } from './routes/vehicle-classes'
 import { createVehicleDetailRoutes } from './routes/vehicle-detail'
 import { createVehiclePhotoRoutes } from './routes/vehicle-photos'
@@ -106,6 +107,7 @@ import { StorefrontSearchService } from './services/storefront-search'
 import { createTranslationProvider } from './services/translation-provider-factory'
 import { UserDirectoryService } from './services/user-directory'
 import { VehicleService } from './services/vehicle'
+import { VehicleBlockService } from './services/vehicle-block'
 import { VehicleClassService } from './services/vehicle-class'
 import { VehicleClassAvailabilityService } from './services/vehicle-class-availability'
 import { VehicleDetailService } from './services/vehicle-detail'
@@ -122,6 +124,7 @@ export function createApp(overrides?: AppOverrides, repos: Repos = buildRepos(ov
   const {
     vehicleClassRepo,
     vehicleRepo,
+    vehicleBlockRepo,
     bookingRepo,
     availabilityRepo,
     userRepo,
@@ -416,6 +419,7 @@ export function createApp(overrides?: AppOverrides, repos: Repos = buildRepos(ov
     maintenanceLogRepo,
     runInTransaction,
   )
+  const vehicleBlockService = new VehicleBlockService(vehicleRepo, vehicleBlockRepo)
   const fleetOverviewService = new FleetOverviewService(fleetOverviewRepo)
   const overviewService = new OverviewService(overviewRepo)
   const adminRevenueService = new AdminRevenueService(paymentEventRepo, operatorRepo)
@@ -506,6 +510,7 @@ export function createApp(overrides?: AppOverrides, repos: Repos = buildRepos(ov
       ),
     )
     .route('/', createMaintenanceLogRoutes(maintenanceService))
+    .route('/', createVehicleBlockRoutes(vehicleBlockService))
     .route('/', createBookingRoutes(bookingService, consentGate))
     .route('/', createPaymentRoutes(paymentService))
     .route('/', createAvailabilityRoutes(availabilityService))

@@ -1,4 +1,5 @@
 import { isPlatformAdmin } from '@/lib/platform-roles'
+import type { UserRole } from '@kuruma/shared/auth/roles'
 
 const LOCALES = new Set(['en', 'ja', 'zh'])
 const DEFAULT_LOCALE = 'en'
@@ -59,7 +60,7 @@ type AdminAccessDecision = { action: 'login' | 'forbidden' | 'allow' }
  * to login; an authenticated non-platform-admin -> forbidden; a platform admin ->
  * allow. The redirect I/O itself stays in `middleware.ts`.
  */
-export function decideAdminAccess(role: string | null): AdminAccessDecision {
+export function decideAdminAccess(role: UserRole | null): AdminAccessDecision {
   if (role === null) {
     return { action: 'login' }
   }

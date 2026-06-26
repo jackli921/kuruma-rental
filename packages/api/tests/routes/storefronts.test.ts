@@ -7,6 +7,7 @@ import {
   InMemoryInsuranceOptionRepository,
   InMemoryLocationRepository,
   InMemoryOperatorRepository,
+  InMemoryVehicleBlockRepository,
   InMemoryVehicleClassRepository,
   InMemoryVehicleRepository,
 } from '../../src/repositories/in-memory'
@@ -22,7 +23,11 @@ function setup() {
   const locationRepo = new InMemoryLocationRepository()
   const vehicleRepo = new InMemoryVehicleRepository()
   const bookingRepo = new InMemoryBookingRepository()
-  const availabilityRepo = new InMemoryAvailabilityRepository(vehicleRepo, bookingRepo)
+  const availabilityRepo = new InMemoryAvailabilityRepository(
+    vehicleRepo,
+    bookingRepo,
+    new InMemoryVehicleBlockRepository(),
+  )
   const vehicleClassRepo = new InMemoryVehicleClassRepository()
   const insuranceOptionRepo = new InMemoryInsuranceOptionRepository()
   const app = createApp({
