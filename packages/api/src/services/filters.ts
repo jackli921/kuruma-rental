@@ -16,6 +16,7 @@
  */
 export type {
   AddOnFilters,
+  AdminBookingFilters,
   BookingFilters,
   FeeScheduleFilters,
   InsuranceOptionFilters,

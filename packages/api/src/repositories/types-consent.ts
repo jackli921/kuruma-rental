@@ -23,6 +23,38 @@ export interface NewConsentAcceptance {
   documentSnapshot: DocumentSnapshot | null
 }
 
+/** Filters for the platform-admin governance ledger browse (#1091). All optional;
+ *  an empty query returns the whole ledger. `acceptedFrom`/`acceptedTo` inclusively
+ *  bound `acceptedAt`. */
+export interface ConsentAcceptanceQuery {
+  userId?: string
+  consentType?: ConsentType
+  version?: string
+  acceptedFrom?: Date
+  acceptedTo?: Date
+}
+
+/**
+ * Defensive hard cap on a single ledger browse (#1091). v1 ships no cursor
+ * pagination, and `consent_acceptances` grows per-booking (every booking seals a
+ * RENTER_LIABILITY acceptance), so an uncapped default browse balloons into a
+ * multi-MB response at 2000+ users. Both repo impls slice newest-first to this;
+ * real cursor pagination on `(acceptedAt, id)` is a later slice.
+ */
+export const CONSENT_ACCEPTANCE_LIST_LIMIT = 200
+
+/** A ledger row joined to its document for the accepted `version` label (#1091).
+ *  Read-only projection — carries no computed compliance status. */
+export interface ConsentAcceptanceListRow {
+  id: string
+  userId: string
+  consentType: ConsentType
+  version: string
+  operatorId: string | null
+  bookingId: string | null
+  acceptedAt: Date
+}
+
 export interface ConsentRepository {
   findDocumentById(id: string): Promise<ConsentDocument | undefined>
   /** Latest PUBLISHED+effective version string for a type, independent of locale (§7 cohort). */
@@ -49,4 +81,7 @@ export interface ConsentRepository {
   findAcceptanceById(id: string): Promise<ConsentAcceptance | undefined>
   findAcceptancesByUser(userId: string): Promise<ConsentAcceptance[]>
   findAcceptancesByBooking(bookingId: string): Promise<ConsentAcceptance[]>
+  /** Cross-user governance browse (#1091): one batch read of the ledger, joined to
+   *  documents for the accepted version, filtered + newest-first. Constant queries. */
+  findAcceptances(query: ConsentAcceptanceQuery): Promise<ConsentAcceptanceListRow[]>
 }

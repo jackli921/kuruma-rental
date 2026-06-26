@@ -1,8 +1,14 @@
 import type { ConsentType } from '@kuruma/shared/enums'
 import { consentAcceptances, consentDocuments } from '@kuruma/shared/db/schema'
-import { and, eq, inArray, isNull } from 'drizzle-orm'
+import { type SQL, and, desc, eq, gte, inArray, isNull, lte } from 'drizzle-orm'
 import type { ConsentAcceptance, ConsentDocument } from '../../stores'
-import type { ConsentRepository, NewConsentAcceptance } from '../types'
+import type {
+  ConsentAcceptanceListRow,
+  ConsentAcceptanceQuery,
+  ConsentRepository,
+  NewConsentAcceptance,
+} from '../types'
+import { CONSENT_ACCEPTANCE_LIST_LIMIT } from '../types-consent'
 import type { Db } from './shared'
 
 type DocRow = typeof consentDocuments.$inferSelect
@@ -186,6 +192,32 @@ export class DrizzleConsentRepository implements ConsentRepository {
       .from(consentAcceptances)
       .where(eq(consentAcceptances.bookingId, bookingId))
     return rows.map(toAcceptance)
+  }
+
+  // Governance ledger browse (#1091): one inner join to documents pins the accepted
+  // version (documentId is a single-locale PK, so no fan-out), filtered + newest-first.
+  async findAcceptances(q: ConsentAcceptanceQuery): Promise<ConsentAcceptanceListRow[]> {
+    const conds: SQL[] = []
+    if (q.userId !== undefined) conds.push(eq(consentAcceptances.userId, q.userId))
+    if (q.consentType !== undefined) conds.push(eq(consentAcceptances.consentType, q.consentType))
+    if (q.version !== undefined) conds.push(eq(consentDocuments.version, q.version))
+    if (q.acceptedFrom !== undefined) conds.push(gte(consentAcceptances.acceptedAt, q.acceptedFrom))
+    if (q.acceptedTo !== undefined) conds.push(lte(consentAcceptances.acceptedAt, q.acceptedTo))
+    return this.db
+      .select({
+        id: consentAcceptances.id,
+        userId: consentAcceptances.userId,
+        consentType: consentAcceptances.consentType,
+        version: consentDocuments.version,
+        operatorId: consentAcceptances.operatorId,
+        bookingId: consentAcceptances.bookingId,
+        acceptedAt: consentAcceptances.acceptedAt,
+      })
+      .from(consentAcceptances)
+      .innerJoin(consentDocuments, eq(consentAcceptances.documentId, consentDocuments.id))
+      .where(conds.length > 0 ? and(...conds) : undefined)
+      .orderBy(desc(consentAcceptances.acceptedAt))
+      .limit(CONSENT_ACCEPTANCE_LIST_LIMIT)
   }
 
   async createAcceptance(data: NewConsentAcceptance): Promise<ConsentAcceptance> {
