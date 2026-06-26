@@ -2,9 +2,12 @@ import { describe, expect, test } from 'bun:test'
 import {
   checkImports,
   countDeprecatedWebFiles,
+  countViteCrossFeatureReachIns,
   deprecatedTreeStatus,
   formatDeprecationNotice,
+  formatViteRatchetNotice,
   isDeprecatedWebFile,
+  viteRatchetStatus,
 } from './lint-module-boundaries'
 
 const FIX = 'scripts/__fixtures__/boundaries'
@@ -53,6 +56,48 @@ describe('lint-module-boundaries: web no direct DB access (#722)', () => {
 
   test('does not restrict non-web packages (api may import drizzle at runtime)', () => {
     expect(checkImports([`${FIX}/packages/api/src/uses-drizzle.ts`])).toHaveLength(0)
+  })
+})
+
+describe('lint-module-boundaries: web vite cross-feature reach-ins (#1110)', () => {
+  const WIZARD = `${FIX}/packages/web/src/vite/reservation/ReservationWizard.tsx`
+  const BARREL_CONSUMER = `${FIX}/packages/web/src/vite/reservation/GoodBarrelConsumer.tsx`
+  const SAME_FEATURE = `${FIX}/packages/web/src/vite/bookings/list.tsx`
+
+  test('flags a cross-feature reach-in into another vite feature internals', () => {
+    const report = checkImports([WIZARD])
+    expect(report).toHaveLength(1)
+    expect(report[0]!.file).toBe(WIZARD)
+    expect(report[0]!.importPath).toBe('@/vite/bookings/api')
+    expect(report[0]!.reason).toBe('vite-cross-feature')
+  })
+
+  test('allows cross-feature imports via the per-feature barrel (@/vite/<feature>)', () => {
+    expect(checkImports([BARREL_CONSUMER])).toHaveLength(0)
+  })
+
+  test('allows same-feature deep imports (@/vite/<own>/<internal>)', () => {
+    expect(checkImports([SAME_FEATURE])).toHaveLength(0)
+  })
+
+  test('counts only the cross-feature reach-ins, not same-feature deep imports', () => {
+    expect(countViteCrossFeatureReachIns([WIZARD, BARREL_CONSUMER, SAME_FEATURE])).toBe(1)
+  })
+
+  test('ratchet status reports growth, shrinkage, and steady against the baseline', () => {
+    expect(viteRatchetStatus(159, 158).level).toBe('grew')
+    expect(viteRatchetStatus(157, 158).level).toBe('shrank')
+    expect(viteRatchetStatus(158, 158).level).toBe('ok')
+  })
+
+  test('notice is silent when steady and names the new baseline when it changes', () => {
+    expect(formatViteRatchetNotice({ count: 158, baseline: 158, level: 'ok' })).toBeNull()
+    const grew = formatViteRatchetNotice({ count: 159, baseline: 158, level: 'grew' })
+    expect(grew).toContain('@/vite/<feature>/<internal>')
+    expect(grew).toContain('@/vite/<feature> barrel')
+    expect(grew).toContain('VITE_CROSS_FEATURE_REACH_IN_BASELINE=159')
+    const shrank = formatViteRatchetNotice({ count: 157, baseline: 158, level: 'shrank' })
+    expect(shrank).toContain('VITE_CROSS_FEATURE_REACH_IN_BASELINE=157')
   })
 })
 

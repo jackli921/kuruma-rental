@@ -7,7 +7,7 @@ import { Glob } from 'bun'
 export type Violation = {
   file: string
   importPath: string
-  reason: 'cross-module-internal' | 'web-runtime-db'
+  reason: 'cross-module-internal' | 'web-runtime-db' | 'vite-cross-feature'
 }
 
 type ImportRef = { spec: string; typeOnly: boolean }
@@ -20,12 +20,21 @@ type ImportRef = { spec: string; typeOnly: boolean }
 const IMPORT_RE = /(?:import|export)\s+(type\s+)?[^'"`]*?from\s*['"]([^'"]+)['"]/g
 const BARE_IMPORT_RE = /import\s+['"]([^'"]+)['"]/g
 
-// Alias import reaching into module internals: @/modules/<name>/<sub>
+// Alias import reaching into module internals: @/modules/<name>/<sub>.
+// Today src/modules/ is empty (#1110: web lives in src/vite/), so this rule is
+// a no-op tripwire kept for when feature-drain PRs start migrating code into
+// the documented modules/ tree (see docs/architecture/modules.md).
 // Known limitation: relative imports (e.g. '../../vehicles/api') bypass this
 // check. The codebase convention is @/ aliases, and Biome's import sorting
 // enforces it, so the risk is low. If relative cross-module imports become a
 // real problem, upgrade to an AST-based check or add a relative-path resolver.
 const INTERNAL_ALIAS_RE = /^@\/modules\/([^/]+)\/(.+)$/
+
+// #1110: web feature boundary enforced against the directory we actually use
+// today (`packages/web/src/vite/<feature>/`), not the empty `@/modules/`.
+// Matches `@/vite/<feature>/<sub>` — a deep import. A bare `@/vite/<feature>`
+// (the per-feature barrel) is allowed by intent and not captured here.
+const VITE_FEATURE_DEEP_RE = /^@\/vite\/([^/]+)\/(.+)$/
 
 // #722: packages/web has NO direct DB access — all data flows through the Hono
 // API (CLAUDE.md architecture boundary). A runtime import of the web DB client
@@ -51,6 +60,15 @@ function moduleOfFile(file: string): string | null {
   const p = file.replaceAll('\\', '/')
   const match = p.match(/\/modules\/([^/]+)\//)
   return match ? match[1]! : null
+}
+
+// The web vite feature the file lives in (e.g. 'bookings' for
+// `packages/web/src/vite/bookings/list.tsx`), or null when the file is not
+// inside any `vite/<feature>/` subtree (loose `vite/foo.ts`, routes/, etc.).
+export function viteFeatureOfWebFile(webRel: string | null): string | null {
+  if (webRel === null) return null
+  const m = webRel.match(/^vite\/([^/]+)\//)
+  return m ? m[1]! : null
 }
 
 // The path under packages/web/src (e.g. 'auth.ts', 'vite/bookings/api.ts'), or
@@ -84,6 +102,14 @@ function isForbiddenWebDbSpec(spec: string): boolean {
 //   bun run scripts/lint-module-boundaries.ts --update-baseline
 const DEPRECATED_WEB_TREE_BASELINE = 170
 
+// #1110: cross-feature reach-ins into vite/<feature>/<internal> from outside
+// that feature. Counted globally; the rule is a ratchet (monotonic
+// non-increasing). A new reach-in pushes the count above this baseline and
+// fails CI; draining one shrinks the count and triggers a soft notice to lock
+// in the new baseline. Refresh with --update-baseline (same flag as the tree
+// ratchet above).
+const VITE_CROSS_FEATURE_REACH_IN_BASELINE = 158
+
 export type DeprecatedTreeStatus = {
   count: number
   baseline: number
@@ -109,6 +135,24 @@ export function countDeprecatedWebFiles(files: string[]): number {
 export function deprecatedTreeStatus(count: number, baseline: number): DeprecatedTreeStatus {
   const level = count > baseline ? 'grew' : count < baseline ? 'shrank' : 'ok'
   return { count, baseline, level }
+}
+
+// #1110: vite cross-feature reach-in ratchet — same shape as the tree ratchet,
+// different copy. Re-uses DeprecatedTreeStatus to keep the level enum aligned.
+export const viteRatchetStatus = (count: number, baseline: number): DeprecatedTreeStatus =>
+  deprecatedTreeStatus(count, baseline)
+
+export function countViteCrossFeatureReachIns(files: string[]): number {
+  return checkImports(files).filter((v) => v.reason === 'vite-cross-feature').length
+}
+
+export function formatViteRatchetNotice(status: DeprecatedTreeStatus): string | null {
+  if (status.level === 'ok') return null
+  const refresh = `run \`bun run scripts/lint-module-boundaries.ts --update-baseline\` to set VITE_CROSS_FEATURE_REACH_IN_BASELINE=${status.count}`
+  if (status.level === 'grew') {
+    return `${status.count} cross-feature reach-in(s) into @/vite/<feature>/<internal>, up from baseline ${status.baseline}. Legitimate cross-feature use should go through the @/vite/<feature> barrel — see docs/architecture/modules.md. If intentional, ${refresh}.`
+  }
+  return `cross-feature vite reach-ins shrank to ${status.count} (baseline ${status.baseline}) — lock in the migration: ${refresh}.`
 }
 
 export function formatDeprecationNotice(status: DeprecatedTreeStatus): string | null {
@@ -141,6 +185,21 @@ export function checkImports(files: string[]): Violation[] {
       // Rule 2 (#722): no runtime DB import from the web package.
       if (webRel !== null && !typeOnly && isForbiddenWebDbSpec(spec)) {
         violations.push({ file, importPath: spec, reason: 'web-runtime-db' })
+      }
+      // Rule 3 (#1110): no cross-feature reach into another web vite feature's
+      // internals. `@/vite/<feature>/<sub>` from outside `<feature>` is a deep
+      // import; legitimate cross-feature use goes through the `@/vite/<feature>`
+      // per-feature barrel (which doesn't match the regex). Only enforced for
+      // web files — routes/ and other web roots (no feature of their own) reach
+      // into vite features and count. Type-only imports DO count: cross-feature
+      // type coupling is a real architectural cost (the type lives behind the
+      // barrel for a reason); kept consistent with Rule 1.
+      const vite = spec.match(VITE_FEATURE_DEEP_RE)
+      if (vite && webRel !== null) {
+        const fileFeature = viteFeatureOfWebFile(webRel)
+        if (fileFeature !== vite[1]!) {
+          violations.push({ file, importPath: spec, reason: 'vite-cross-feature' })
+        }
       }
     }
   }
@@ -178,23 +237,55 @@ function describeViolation(v: Violation): string {
   if (v.reason === 'web-runtime-db') {
     return `runtime DB import "${v.importPath}" — packages/web has no direct DB access; route through the Hono API. Use 'import type' for types.`
   }
+  if (v.reason === 'vite-cross-feature') {
+    return `imports "${v.importPath}" — cross-feature reach-in into another web vite feature; use the '@/vite/<feature>' barrel instead.`
+  }
   return `imports "${v.importPath}" — cross-module internal import; use the '@/modules/<name>' barrel instead.`
 }
 
 function main(): number {
   const files = discover()
   const violations = checkImports(files)
-  for (const v of violations) {
+  const hard = violations.filter((v) => v.reason !== 'vite-cross-feature')
+  const viteReachIns = violations.filter((v) => v.reason === 'vite-cross-feature')
+
+  for (const v of hard) {
     process.stderr.write(`[lint-module-boundaries] ERROR ${v.file}: ${describeViolation(v)}\n`)
   }
+
   // Warning only — the deprecation ratchet must NEVER affect the exit code;
   // only real violations below fail the build. Keep this above the return.
-  const notice = formatDeprecationNotice(
+  const deprecationNotice = formatDeprecationNotice(
     deprecatedTreeStatus(countDeprecatedWebFiles(files), DEPRECATED_WEB_TREE_BASELINE),
   )
-  if (notice) process.stderr.write(`[lint-module-boundaries] WARNING ${notice}\n`)
-  if (violations.length > 0) {
-    process.stderr.write(`[lint-module-boundaries] ${violations.length} violation(s).\n`)
+  if (deprecationNotice) {
+    process.stderr.write(`[lint-module-boundaries] WARNING ${deprecationNotice}\n`)
+  }
+
+  // #1110: vite reach-in ratchet — fail only when count grew past the baseline.
+  // When growing, surface every reach-in so the new one is findable; otherwise
+  // keep output quiet (sample of 222 lines per build would be noise).
+  const viteStatus = viteRatchetStatus(viteReachIns.length, VITE_CROSS_FEATURE_REACH_IN_BASELINE)
+  const viteNotice = formatViteRatchetNotice(viteStatus)
+  if (viteStatus.level === 'grew') {
+    for (const v of viteReachIns) {
+      process.stderr.write(`[lint-module-boundaries] ERROR ${v.file}: ${describeViolation(v)}\n`)
+    }
+    if (viteNotice) process.stderr.write(`[lint-module-boundaries] ERROR ${viteNotice}\n`)
+  } else if (viteNotice) {
+    process.stderr.write(`[lint-module-boundaries] WARNING ${viteNotice}\n`)
+  }
+
+  const failed = hard.length > 0 || viteStatus.level === 'grew'
+  if (failed) {
+    const parts: string[] = []
+    if (hard.length > 0) parts.push(`${hard.length} hard violation(s)`)
+    if (viteStatus.level === 'grew') {
+      parts.push(
+        `${viteReachIns.length} vite reach-in(s) (baseline ${VITE_CROSS_FEATURE_REACH_IN_BASELINE})`,
+      )
+    }
+    process.stderr.write(`[lint-module-boundaries] ${parts.join(', ')}.\n`)
     return 1
   }
   return 0
@@ -202,13 +293,16 @@ function main(): number {
 
 if (import.meta.main) {
   if (process.argv.includes('--update-baseline')) {
-    const count = countDeprecatedWebFiles(discover())
-    const updated = readFileSync(import.meta.path, 'utf8').replace(
-      /(const DEPRECATED_WEB_TREE_BASELINE = )\d+/,
-      `$1${count}`,
+    const files = discover()
+    const depCount = countDeprecatedWebFiles(files)
+    const viteCount = countViteCrossFeatureReachIns(files)
+    const src = readFileSync(import.meta.path, 'utf8')
+      .replace(/(const DEPRECATED_WEB_TREE_BASELINE = )\d+/, `$1${depCount}`)
+      .replace(/(const VITE_CROSS_FEATURE_REACH_IN_BASELINE = )\d+/, `$1${viteCount}`)
+    writeFileSync(import.meta.path, src)
+    process.stdout.write(
+      `[lint-module-boundaries] DEPRECATED_WEB_TREE_BASELINE=${depCount}, VITE_CROSS_FEATURE_REACH_IN_BASELINE=${viteCount}.\n`,
     )
-    writeFileSync(import.meta.path, updated)
-    process.stdout.write(`[lint-module-boundaries] DEPRECATED_WEB_TREE_BASELINE set to ${count}.\n`)
     process.exit(0)
   }
   process.exit(main())
