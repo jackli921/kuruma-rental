@@ -14,7 +14,7 @@ import { bookings } from './booking'
 
 // FK-covering and partial idempotency indexes — declared inline so the module
 // describes the real table (audit M7 / #1112). Migrations 0010 + 0022 already
-// created them in prod; 0075 codifies that state into the drizzle snapshot with
+// created them in prod; 0078 codifies that state into the drizzle snapshot with
 // `IF NOT EXISTS` so the apply is a no-op everywhere it has already run.
 export const threads = pgTable(
   'threads',

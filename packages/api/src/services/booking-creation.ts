@@ -46,6 +46,8 @@ export class BookingCreationService {
     private readonly userRepo?: UserRepository,
     // Single post-commit seam (#393, TODO #300): ensureThread + notifications,
     // each caught-and-logged. Replaces the inline ensureThread calls.
+    // Optional is a TEST-ONLY seam: prod always wires it (createApp/index.ts);
+    // omitting it silently disables ALL post-commit effects (threads + emails).
     private readonly postCommit?: BookingPostCommitDispatcher,
     // Injectable so the collision-retry path is deterministically testable.
     private readonly generateCode: () => string = generateBookingCode,

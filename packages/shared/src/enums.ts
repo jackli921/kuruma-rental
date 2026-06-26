@@ -177,3 +177,18 @@ export const CONSENT_CARDINALITY: Record<ConsentType, ConsentCardinality> = {
   OPERATOR_AGREEMENT: 'ONCE_PER_SUBJECT',
   RENTER_LIABILITY: 'PER_EVENT',
 }
+
+// --- Mutual reviews & ratings (issue #1067) ---
+/** Which side wrote a review. Operators review only renters; renters review the
+ *  operator or the vehicle — enforced at the DB by reviews_subject_pairing_chk. */
+export const REVIEW_AUTHOR_ROLES = ['RENTER', 'OPERATOR'] as const
+export type ReviewAuthorRole = (typeof REVIEW_AUTHOR_ROLES)[number]
+
+/** What a review is about. */
+export const REVIEW_SUBJECTS = ['OPERATOR', 'VEHICLE', 'RENTER'] as const
+export type ReviewSubject = (typeof REVIEW_SUBJECTS)[number]
+
+/** Moderation state (#1067 slice 6). HIDDEN reviews drop out of aggregates and
+ *  public reads; VISIBLE is the default. */
+export const REVIEW_MODERATION_STATUSES = ['VISIBLE', 'HIDDEN'] as const
+export type ReviewModerationStatus = (typeof REVIEW_MODERATION_STATUSES)[number]

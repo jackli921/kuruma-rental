@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it } from 'vitest'
 import { ForbiddenError, SYSTEM_CONTEXT } from '../../src/middleware/auth'
 import { InMemoryNotificationLogRepository } from '../../src/repositories/in-memory/notification-log'
 import { MAX_NOTIFICATION_ATTEMPTS, SEND_LEASE_MS } from '../../src/repositories/types'
+import type { NotificationLog } from '../../src/stores'
 
 const OP1 = 'op-1'
 const OP2 = 'op-2'
@@ -240,6 +241,55 @@ describe('InMemoryNotificationLogRepository', () => {
       const row = await repo.upsertQueued(seed())
       expect(await repo.findById(operatorCtx, row.id)).toBeDefined()
       expect(await repo.findById(otherOperatorCtx, row.id)).toBeUndefined()
+    })
+  })
+
+  // #1125: the daily retry sweep re-drives stuck rows. findRetryable returns
+  // EXACTLY the set claim() will accept (QUEUED / FAILED / expired-SENDING) so the
+  // sweep never surfaces a row that would no-op — terminal SENT/DEAD/NO_RECIPIENT
+  // and a LIVE SENDING lease are excluded. Unscoped: it's a system-cron read.
+  describe('findRetryable (#1125 retry sweep)', () => {
+    const seedKind = (kind: NotificationLog['kind'], bookingId: string) =>
+      seed({ kind, bookingId, idempotencyKey: `notify:${bookingId}:${kind}` })
+
+    it('returns QUEUED, FAILED and EXPIRED-SENDING rows — the set claim() accepts', async () => {
+      await repo.upsertQueued(seedKind('RENTER_BOOKING_CONFIRM', 'q')) // QUEUED
+      const f = await repo.upsertQueued(seedKind('RENTER_CANCELLATION', 'f'))
+      await repo.claim(f.id)
+      await repo.markFailed(f.id, 'boom') // FAILED (below cap, reclaimable)
+      const s = await repo.upsertQueued(seedKind('RENTER_SUBSTITUTION', 's'))
+      await repo.claim(s.id) // SENDING; lease lapses below, never marked
+      now = new Date(now.getTime() + SEND_LEASE_MS + 1000)
+
+      const rows = await repo.findRetryable(10)
+      expect(rows.map((r) => r.bookingId).sort()).toEqual(['f', 'q', 's'])
+    })
+
+    it('excludes terminal SENT / DEAD / NO_RECIPIENT and a LIVE SENDING lease', async () => {
+      const sent = await repo.upsertQueued(seedKind('RENTER_BOOKING_CONFIRM', 'sent'))
+      await repo.claim(sent.id)
+      await repo.markSent(sent.id, 'm')
+      const dead = await repo.upsertQueued(seedKind('RENTER_CANCELLATION', 'dead'))
+      for (let i = 0; i < MAX_NOTIFICATION_ATTEMPTS; i++) {
+        await repo.claim(dead.id)
+        await repo.markFailed(dead.id, 'x')
+      }
+      await repo.recordNoRecipient(noRecipient({ bookingId: 'nr', idempotencyKey: 'notify:nr:x' }))
+      const live = await repo.upsertQueued(seedKind('RENTER_SUBSTITUTION', 'live'))
+      await repo.claim(live.id) // live lease, NOT expired
+
+      expect(await repo.findRetryable(10)).toEqual([])
+    })
+
+    it('orders oldest-updatedAt first and respects the limit', async () => {
+      await repo.upsertQueued(seedKind('RENTER_BOOKING_CONFIRM', 'a'))
+      now = new Date(now.getTime() + 1000)
+      await repo.upsertQueued(seedKind('RENTER_CANCELLATION', 'b'))
+      now = new Date(now.getTime() + 1000)
+      await repo.upsertQueued(seedKind('RENTER_SUBSTITUTION', 'c'))
+
+      const rows = await repo.findRetryable(2)
+      expect(rows.map((r) => r.bookingId)).toEqual(['a', 'b']) // oldest two only
     })
   })
 })
