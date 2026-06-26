@@ -105,4 +105,28 @@ describe('ReviewForm', () => {
     const [, init] = fetchMock.mock.calls[0] as [string, { headers: Record<string, string> }]
     expect(init.headers['X-CSRF-Token']).toBe('csrf-xyz')
   })
+
+  it('keeps the form open and surfaces an error when one subject genuinely fails', async () => {
+    // OPERATOR persists, VEHICLE 500s — Promise.allSettled must not let the success
+    // mask the failure: the form stays open (onSubmitted not called) with an error.
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (_url: string, init: { body: string }) => {
+        const subject = (JSON.parse(init.body) as { subject: string }).subject
+        return subject === 'VEHICLE'
+          ? { status: 500, json: async () => ({ success: false, error: 'boom' }) }
+          : {
+              status: 201,
+              json: async () => ({ success: true, data: { review: { subject } } }),
+            }
+      }),
+    )
+    const { onSubmitted } = renderForm()
+    setStars('overall-OPERATOR', 5)
+    setStars('overall-VEHICLE', 4)
+    fireEvent.click(screen.getByRole('button', { name: f.submit }))
+
+    expect(await screen.findByText(f.error)).toBeInTheDocument()
+    expect(onSubmitted).not.toHaveBeenCalled()
+  })
 })

@@ -43,13 +43,26 @@ export function ReviewForm({ bookingId, csrfToken, subjects, onSubmitted }: Revi
   }
 
   const mutation = useMutation({
-    mutationFn: (inputs: SubmitReviewInput[]) =>
-      Promise.all(inputs.map((input) => submitReview(input, csrfToken))),
+    mutationFn: async (inputs: SubmitReviewInput[]) => {
+      // Independent writes (one per subject): settle each on its own. A 409
+      // ALREADY_REVIEWED is benign — that subject is on record — but a real failure
+      // on one must NOT be masked by another's success (Promise.all would collapse
+      // them). allSettled lets a genuine failure surface while keeping saved siblings.
+      const results = await Promise.allSettled(
+        inputs.map((input) => submitReview(input, csrfToken)),
+      )
+      for (const r of results) {
+        if (r.status === 'rejected' && !(r.reason instanceof ApiError && r.reason.status === 409)) {
+          throw r.reason
+        }
+      }
+    },
     onSuccess: settle,
-    onError: (error) => {
-      // 409 ALREADY_REVIEWED: the renter's intent is already on record, so settle
-      // and close rather than surface an error for an idempotent re-submit.
-      if (error instanceof ApiError && error.status === 409) settle()
+    onError: () => {
+      // A sibling may have persisted before another failed — refresh so the prompt
+      // reflects server truth on reopen, but keep THIS form open showing the error
+      // (re-submitting a saved subject just 409s benignly).
+      queryClient.invalidateQueries({ queryKey: REVIEWS_KEY })
     },
   })
 
@@ -83,8 +96,8 @@ export function ReviewForm({ bookingId, csrfToken, subjects, onSubmitted }: Revi
     mutation.mutate(buildInputs())
   }
 
-  const showError =
-    mutation.isError && !(mutation.error instanceof ApiError && mutation.error.status === 409)
+  // Only a genuine failure rejects now (benign 409s resolve inside mutationFn).
+  const showError = mutation.isError
 
   return (
     <form
