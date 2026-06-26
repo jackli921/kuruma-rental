@@ -72,4 +72,14 @@ export class InMemoryPaymentEventRepository implements PaymentEventRepository {
   async listSucceededMonths(): Promise<string[]> {
     return availableRevenueMonths([...this.store.values()].filter((r) => r.status === 'SUCCEEDED'))
   }
+
+  // #1087: platform-overview GMV. Mirrors the Drizzle COALESCE(SUM(grossJpy),0)
+  // over SUCCEEDED rows; an empty store yields 0.
+  async sumSucceededGrossJpy(): Promise<number> {
+    let sum = 0
+    for (const r of this.store.values()) {
+      if (r.status === 'SUCCEEDED') sum += r.grossJpy
+    }
+    return sum
+  }
 }

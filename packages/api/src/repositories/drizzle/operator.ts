@@ -1,5 +1,5 @@
 import { operators } from '@kuruma/shared/db/schema'
-import { asc, eq } from 'drizzle-orm'
+import { asc, count, eq } from 'drizzle-orm'
 import type { Operator } from '../../stores'
 import type { OperatorRepository, OperatorUpdatePatch } from '../types'
 import type { Db } from './shared'
@@ -18,6 +18,13 @@ export class DrizzleOperatorRepository implements OperatorRepository {
 
   async list(): Promise<Operator[]> {
     return this.db.select().from(operators).orderBy(asc(operators.name))
+  }
+
+  // #1087 platform overview: COUNT(operators). TODO(#1088): narrow to active
+  // (deactivatedAt IS NULL) once that column lands.
+  async count(): Promise<number> {
+    const [row] = await this.db.select({ value: count() }).from(operators)
+    return row?.value ?? 0
   }
 
   async findById(id: string): Promise<Operator | undefined> {

@@ -1,5 +1,5 @@
 import { paymentAnomalies } from '@kuruma/shared/db/schema'
-import { isNull } from 'drizzle-orm'
+import { count, isNull } from 'drizzle-orm'
 import type { PaymentAnomaly } from '../../stores'
 import type { NewPaymentAnomaly, PaymentAnomalyRepository } from '../types'
 import { type Db, paymentAnomalyColumns, toPaymentAnomaly } from './shared'
@@ -24,5 +24,14 @@ export class DrizzlePaymentAnomalyRepository implements PaymentAnomalyRepository
       .from(paymentAnomalies)
       .where(isNull(paymentAnomalies.resolvedAt))
     return rows.map(toPaymentAnomaly)
+  }
+
+  // #1087 platform overview: open-anomaly count. COUNT at the DB, never load-then-count.
+  async countUnresolved(): Promise<number> {
+    const [row] = await this.db
+      .select({ value: count() })
+      .from(paymentAnomalies)
+      .where(isNull(paymentAnomalies.resolvedAt))
+    return row?.value ?? 0
   }
 }

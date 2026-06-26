@@ -55,4 +55,16 @@ export class DrizzlePaymentEventRepository implements PaymentEventRepository {
       .orderBy(sql`${jstMonthExpr} desc`)
     return rows.map((r) => r.month)
   }
+
+  // #1087 platform overview: total GMV over SUCCEEDED payments. COALESCE(SUM,0)
+  // at the DB (mirrors vehicle-detail revenue) so the Worker never materializes
+  // the table. Postgres returns SUM as a string (numeric/bigint); the Number()
+  // coercion below is load-bearing — `sql<...>` is a type assertion, not a cast.
+  async sumSucceededGrossJpy(): Promise<number> {
+    const [row] = await this.db
+      .select({ gross: sql<string | number>`COALESCE(SUM(${paymentEvents.grossJpy}), 0)` })
+      .from(paymentEvents)
+      .where(eq(paymentEvents.status, 'SUCCEEDED'))
+    return Number(row?.gross ?? 0)
+  }
 }
