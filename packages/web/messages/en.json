@@ -1249,6 +1249,7 @@
       "overview": "Overview",
       "bookings": "Bookings",
       "revenue": "Partner Revenue",
+      "anomalies": "Payment Anomalies",
       "documents": "Documents",
       "governance": "Consent governance",
       "customers": "Customers"
@@ -1322,16 +1323,39 @@
     "anomalies": {
       "title": "Payment anomalies",
       "subtitle": "Charges flagged during reconciliation — refund a duplicate or investigate a mismatch.",
-      "empty": "No unresolved payment anomalies.",
+      "empty": "No payment anomalies to show.",
       "colKind": "Type",
       "colBooking": "Booking",
       "colReceived": "Received",
       "colExpected": "Expected",
       "colStripeEvent": "Stripe event",
       "colWhen": "When",
+      "colAction": "Action",
+      "loadError": "Couldn't load payment anomalies.",
+      "retry": "Try again",
       "kind": {
         "DOUBLE_PAYMENT": "Double payment",
         "AMOUNT_MISMATCH": "Amount mismatch"
+      },
+      "tab": {
+        "unresolved": "Needs review",
+        "resolved": "Resolved"
+      },
+      "resolution": {
+        "BENIGN": "Not a problem",
+        "INVESTIGATED": "Investigated — no action",
+        "REFUNDED_EXTERNALLY": "Refunded in Stripe"
+      },
+      "resolve": {
+        "action": "Resolve",
+        "title": "Resolve anomaly",
+        "description": "Mark this flagged charge as reviewed. This records a verdict only — no money is moved here.",
+        "resolutionLabel": "Resolution",
+        "noteLabel": "Note (optional)",
+        "notePlaceholder": "Add context for the audit trail",
+        "cancel": "Cancel",
+        "submit": "Resolve",
+        "submitting": "Resolving…"
       }
     },
     "documents": {
