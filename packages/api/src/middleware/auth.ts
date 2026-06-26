@@ -32,6 +32,7 @@ export {
   ForbiddenError,
   NotFoundError,
   OperatorRequiredError,
+  ScopeRequiredError,
   rejectOperatorContextUntilScoped,
   requireFleetWriteScope,
   requireManagementRead,

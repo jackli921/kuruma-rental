@@ -7,7 +7,6 @@ import {
 } from '../middleware/auth'
 import type { NotificationLogFilters } from '../services/filters'
 import type { NotificationService } from '../services/notification'
-import { operatorReadScope } from '../tenancy'
 import { fail, ok, parseId } from './helpers'
 
 /**
@@ -33,18 +32,15 @@ export function createNotificationRoutes(service: NotificationService) {
       const bookingId = c.req.query('bookingId')
       if (bookingId) filters.bookingId = bookingId
 
-      // Bypass callers must scope explicitly — an unscoped cross-operator list is
-      // the exact leak we guard. Operator callers auto-scope at the repo.
-      if (operatorReadScope(ctx).kind === 'all') {
-        const operatorIdParam = c.req.query('operatorId')
-        const includeAll = c.req.query('includeAll') === 'true'
-        if (!operatorIdParam && !includeAll) {
-          return fail(c, 'operatorId or includeAll=true is required for cross-operator reads', 400)
-        }
-        if (operatorIdParam) filters.operatorId = operatorIdParam
+      // Cross-operator read scope is enforced in the service (audit M3): a bypass
+      // caller that names neither operatorId nor includeAll is rejected there, so a
+      // forgotten guard here can't leak every operator's notifications. Operator
+      // callers auto-scope at the repo.
+      const read = {
+        operatorId: c.req.query('operatorId'),
+        includeAll: c.req.query('includeAll') === 'true',
       }
-
-      return ok(c, await service.findAll(ctx, filters))
+      return ok(c, await service.findAll(ctx, read, filters))
     })
     .post('/notifications/:id/resend', async (c) => {
       const user = requireUser(c)
