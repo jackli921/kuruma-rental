@@ -10,6 +10,8 @@ import type { EmailSender } from '../../src/services/email/email-sender'
 import {
   type LifecycleTrigger,
   NotificationDispatcher,
+  type NotificationRelation,
+  RELATIONS_BY_KIND,
   TRIGGER_KINDS,
 } from '../../src/services/notification-dispatcher'
 import { makeResolveOperatorRecipients } from '../../src/services/operator-recipients'
@@ -515,87 +517,122 @@ describe('NotificationDispatcher', () => {
       expect(sender.send as ReturnType<typeof vi.fn>).toHaveBeenCalledTimes(2)
     })
 
-    // #1114: `buildMessage` used to eager-fetch operator+vehicle+pickup+dropoff
-    // for every kind, even though RENTER_CANCELLATION uses none of them. Push
-    // the reads down to the consuming branches.
-    it('RENTER_CANCELLATION skips the 4 unused reads (operator + vehicle + pickup + dropoff)', async () => {
-      const operatorFindById = vi.fn(async () => undefined)
-      const vehicleFindById = vi.fn(async () => undefined)
-      const locationFindById = vi.fn(async (_ctx: unknown, id: string) => ({ id, name: id }))
-      const operatorRepo = { findById: operatorFindById } as unknown as InMemoryOperatorRepository
-      const vehicleRepo = { findById: vehicleFindById } as unknown as VehicleRepository
-      const locationRepo = { findById: locationFindById } as unknown as LocationRepository
+    // #1114/#1151: `buildMessage` once eager-fetched operator+vehicle+pickup+dropoff
+    // for every kind. Reads are now driven by the declarative RELATIONS_BY_KIND table.
+    // This suite pins it to reality per kind WITHOUT tautology — EXPECTED_RENDERED is an
+    // independent, hand-written restatement of what each email must show (the #720
+    // TRIGGER_KINDS parity idea applied to relation loading). Per kind it asserts:
+    //   parity — RELATIONS_BY_KIND equals EXPECTED_RENDERED (any src-table drift fails
+    //            here, unless someone consciously edits BOTH maps), and
+    //   (a)    — the impl reads EXACTLY those relations (no wasted read, no missing read), and
+    //   (b)    — the email renders EXACTLY those relations' names (each present, others
+    //            absent) — the independent rendered-output signal that proves the
+    //            expectation is real, so the two maps can't be silently-wrong-but-equal.
+    describe('RELATIONS_BY_KIND drives exactly the reads each template needs (#1151)', () => {
+      // Each relation's instrumented repo returns a distinct sentinel name, so
+      // "was loaded AND consumed by the template" is observable in the email body.
+      const NAME_BY_RELATION: Record<NotificationRelation, string> = {
+        operator: 'BCR',
+        vehicle: 'Toyota Aqua',
+        pickup: 'Namba Lot', // loc-1
+        dropoff: 'KIX Lot', // loc-2
+      }
 
-      // Reuse the build() rig for everything except the 3 instrumented repos.
-      const { dispatcher: base } = build()
-      const dispatcher = new NotificationDispatcher(
-        // biome-ignore lint/suspicious/noExplicitAny: reaching into the rig only to swap the 3 instrumented repos
-        (base as any).notificationLogRepo,
-        operatorRepo,
-        vehicleRepo,
-        // biome-ignore lint/suspicious/noExplicitAny: see above
-        (base as any).userRepo,
-        // biome-ignore lint/suspicious/noExplicitAny: see above
-        (base as any).resolveOperatorRecipients,
-        locationRepo,
-        // biome-ignore lint/suspicious/noExplicitAny: see above
-        (base as any).emailSender,
-        // biome-ignore lint/suspicious/noExplicitAny: see above
-        (base as any).config,
-      )
+      // Independent oracle: the relations each email is REQUIRED to render, restated
+      // by hand (NOT read from RELATIONS_BY_KIND). A new kind compile-fails here until
+      // its render contract is declared.
+      const EXPECTED_RENDERED: Record<
+        Parameters<NotificationDispatcher['processOne']>[1],
+        readonly NotificationRelation[]
+      > = {
+        RENTER_CANCELLATION: [],
+        RENTER_BOOKING_CONFIRM: ['operator', 'vehicle', 'pickup', 'dropoff'],
+        RENTER_SUBSTITUTION: ['vehicle', 'pickup', 'dropoff'],
+        RENTER_TRIP_STARTED: ['vehicle', 'pickup', 'dropoff'],
+        RENTER_TRIP_COMPLETED: ['vehicle', 'pickup', 'dropoff'],
+        OPERATOR_BOOKING_ALERT: ['vehicle', 'pickup', 'dropoff'],
+      }
 
-      await dispatcher.processOne(booking, 'RENTER_CANCELLATION')
+      function buildInstrumented() {
+        const operatorFindById = vi.fn(async () => ({
+          id: OP,
+          slug: 'bcr',
+          name: 'BCR',
+          preAuthHandoffUrl: null,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        }))
+        const vehicleFindById = vi.fn(async () => ({
+          name: 'Toyota Aqua',
+          make: 'Toyota',
+          model: 'Aqua',
+          licensePlate: 'X 12-34',
+        }))
+        // Names distinct from ids, so an under-read (id fallback) is observable.
+        const locationFindById = vi.fn(async (_ctx: unknown, id: string) => ({
+          id,
+          name: id === 'loc-1' ? 'Namba Lot' : 'KIX Lot',
+        }))
+        const operatorRepo = { findById: operatorFindById } as unknown as InMemoryOperatorRepository
+        const vehicleRepo = { findById: vehicleFindById } as unknown as VehicleRepository
+        const locationRepo = { findById: locationFindById } as unknown as LocationRepository
+        const sent: Array<{ subject: string; html: string; text: string }> = []
+        const sender = {
+          send: vi.fn(async (m: (typeof sent)[number]) => {
+            sent.push(m)
+            return { providerMessageId: 'msg-1' }
+          }),
+        }
 
-      expect(operatorFindById).toHaveBeenCalledTimes(0)
-      expect(vehicleFindById).toHaveBeenCalledTimes(0)
-      expect(locationFindById).toHaveBeenCalledTimes(0)
-    })
+        // Reuse the build() rig for everything except the 3 instrumented repos + sender.
+        const { dispatcher: base } = build()
+        const dispatcher = new NotificationDispatcher(
+          // biome-ignore lint/suspicious/noExplicitAny: reaching into the rig only to swap the instrumented collaborators
+          (base as any).notificationLogRepo,
+          operatorRepo,
+          vehicleRepo,
+          // biome-ignore lint/suspicious/noExplicitAny: see above
+          (base as any).userRepo,
+          // biome-ignore lint/suspicious/noExplicitAny: see above
+          (base as any).resolveOperatorRecipients,
+          locationRepo,
+          sender as unknown as EmailSender,
+          // biome-ignore lint/suspicious/noExplicitAny: see above
+          (base as any).config,
+        )
+        return { dispatcher, operatorFindById, vehicleFindById, locationFindById, sent }
+      }
 
-    // Mutation guard: a consumer branch MUST still issue those reads after the
-    // refactor, otherwise the cancellation savings came at the cost of breaking
-    // confirmation rendering.
-    it('RENTER_BOOKING_CONFIRM still reads operator + vehicle + pickup + dropoff', async () => {
-      const operatorFindById = vi.fn(async () => ({
-        id: OP,
-        slug: 'bcr',
-        name: 'BCR',
-        preAuthHandoffUrl: null,
-        createdAt: new Date(),
-        updatedAt: new Date(),
-      }))
-      const vehicleFindById = vi.fn(async () => ({
-        name: 'Toyota Aqua',
-        make: 'Toyota',
-        model: 'Aqua',
-        licensePlate: 'X 12-34',
-      }))
-      const locationFindById = vi.fn(async (_ctx: unknown, id: string) => ({ id, name: id }))
-      const operatorRepo = { findById: operatorFindById } as unknown as InMemoryOperatorRepository
-      const vehicleRepo = { findById: vehicleFindById } as unknown as VehicleRepository
-      const locationRepo = { findById: locationFindById } as unknown as LocationRepository
+      const KINDS = Object.keys(EXPECTED_RENDERED) as Array<
+        Parameters<NotificationDispatcher['processOne']>[1]
+      >
+      for (const kind of KINDS) {
+        const need = new Set(EXPECTED_RENDERED[kind])
+        const summary = [...need].sort().join(' + ') || 'no relations'
+        it(`${kind} reads + renders exactly ${summary}`, async () => {
+          // parity: the src declaration must equal the independent expectation
+          expect([...RELATIONS_BY_KIND[kind]].sort()).toEqual([...need].sort())
 
-      const { dispatcher: base } = build()
-      const dispatcher = new NotificationDispatcher(
-        // biome-ignore lint/suspicious/noExplicitAny: rig-only swap of the 3 instrumented repos
-        (base as any).notificationLogRepo,
-        operatorRepo,
-        vehicleRepo,
-        // biome-ignore lint/suspicious/noExplicitAny: see above
-        (base as any).userRepo,
-        // biome-ignore lint/suspicious/noExplicitAny: see above
-        (base as any).resolveOperatorRecipients,
-        locationRepo,
-        // biome-ignore lint/suspicious/noExplicitAny: see above
-        (base as any).emailSender,
-        // biome-ignore lint/suspicious/noExplicitAny: see above
-        (base as any).config,
-      )
+          const { dispatcher, operatorFindById, vehicleFindById, locationFindById, sent } =
+            buildInstrumented()
 
-      await dispatcher.processOne(booking, 'RENTER_BOOKING_CONFIRM')
+          await dispatcher.processOne(booking, kind)
 
-      expect(operatorFindById).toHaveBeenCalledTimes(1)
-      expect(vehicleFindById).toHaveBeenCalledTimes(1) // assignedVehicleId = 'veh-1'
-      expect(locationFindById).toHaveBeenCalledTimes(2) // pickup + dropoff
+          // (a) exactly the needed relations are read — no wasted read, no missing read
+          expect(operatorFindById).toHaveBeenCalledTimes(need.has('operator') ? 1 : 0)
+          expect(vehicleFindById).toHaveBeenCalledTimes(need.has('vehicle') ? 1 : 0)
+          const locArgs = locationFindById.mock.calls.map((c) => c[1])
+          expect(locArgs.includes('loc-1')).toBe(need.has('pickup'))
+          expect(locArgs.includes('loc-2')).toBe(need.has('dropoff'))
+
+          // (b) the email renders exactly the needed relations' data: each needed
+          // relation's resolved name present, each other one absent.
+          const blob = sent.map((m) => `${m.subject}\n${m.html}\n${m.text}`).join('\n')
+          for (const [relation, name] of Object.entries(NAME_BY_RELATION)) {
+            expect(blob.includes(name)).toBe(need.has(relation as NotificationRelation))
+          }
+        })
+      }
     })
 
     it('substitution email renders the new vehicle and leaks no internal ids', async () => {
