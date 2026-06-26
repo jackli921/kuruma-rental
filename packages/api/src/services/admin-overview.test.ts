@@ -50,6 +50,9 @@ function anomaly(over: Pick<PaymentAnomaly, 'stripeEventId' | 'resolvedAt'>): Pa
     expectedAmountJpy: 100_000,
     currency: 'jpy',
     createdAt: new Date('2026-06-10T03:00:00Z'),
+    resolution: null,
+    resolvedBy: null,
+    note: null,
     ...over,
   }
 }

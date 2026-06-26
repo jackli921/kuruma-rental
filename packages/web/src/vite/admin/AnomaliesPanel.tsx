@@ -1,3 +1,4 @@
+import { Button } from '@/components/ui/button'
 import { formatDateTime, formatJpy } from '@/lib/format'
 import type { PaymentAnomalyView } from '@kuruma/shared/types/payment-anomaly'
 import { useTranslations } from 'use-intl'
@@ -5,6 +6,11 @@ import { useTranslations } from 'use-intl'
 interface AnomaliesPanelProps {
   readonly anomalies: PaymentAnomalyView[]
   readonly locale: string
+  // Opt-in resolve action (#1075 slice 3). Supplied only on the dedicated admin page;
+  // the revenue tab omits it and stays a read-only oversight panel. When present, each
+  // row gains a trailing cell — a "Resolve" button while unresolved, the recorded
+  // resolution once closed.
+  readonly onResolve?: (anomaly: PaymentAnomalyView) => void
 }
 
 const DASH = '—'
@@ -22,7 +28,7 @@ function money(amount: number | null): string {
  * amount/currency differs from the booking snapshot to investigate. `stripeEventId`
  * is the reconciliation handle the admin carries to Stripe.
  */
-export function AnomaliesPanel({ anomalies, locale }: AnomaliesPanelProps) {
+export function AnomaliesPanel({ anomalies, locale, onResolve }: AnomaliesPanelProps) {
   const t = useTranslations('admin.anomalies')
   const head = 'px-3 py-2 text-left font-medium text-muted-foreground'
   const headNum = 'px-3 py-2 text-right font-medium text-muted-foreground'
@@ -64,6 +70,11 @@ export function AnomaliesPanel({ anomalies, locale }: AnomaliesPanelProps) {
                 <th scope="col" className={head}>
                   {t('colWhen')}
                 </th>
+                {onResolve && (
+                  <th scope="col" className={head}>
+                    {t('colAction')}
+                  </th>
+                )}
               </tr>
             </thead>
             <tbody>
@@ -85,6 +96,24 @@ export function AnomaliesPanel({ anomalies, locale }: AnomaliesPanelProps) {
                   <td className="whitespace-nowrap px-3 py-2 text-muted-foreground">
                     <time dateTime={a.createdAt}>{formatDateTime(a.createdAt, locale)}</time>
                   </td>
+                  {onResolve && (
+                    <td className="px-3 py-2">
+                      {a.resolvedAt === null ? (
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          onClick={() => onResolve(a)}
+                        >
+                          {t('resolve.action')}
+                        </Button>
+                      ) : (
+                        <span className="text-muted-foreground text-xs">
+                          {a.resolution ? t(`resolution.${a.resolution}`) : DASH}
+                        </span>
+                      )}
+                    </td>
+                  )}
                 </tr>
               ))}
             </tbody>
