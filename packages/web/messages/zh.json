@@ -1238,7 +1238,17 @@
     },
     "home": {
       "title": "平台管理",
-      "subtitle": "平台运营"
+      "subtitle": "平台运营",
+      "kpi": {
+        "bookings": "预订量",
+        "gmv": "成交总额",
+        "fleet": "车队规模",
+        "operators": "运营商数量",
+        "unresolvedAnomalies": "未解决异常",
+        "pendingDocs": "待审文件"
+      },
+      "loadError": "无法加载平台概览。",
+      "retry": "重试"
     },
     "revenue": {
       "title": "合作伙伴收益",

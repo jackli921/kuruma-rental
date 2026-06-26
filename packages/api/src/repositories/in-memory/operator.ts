@@ -19,6 +19,12 @@ export class InMemoryOperatorRepository implements OperatorRepository {
     return [...this.store.values()].sort((a, b) => a.name.localeCompare(b.name))
   }
 
+  // #1087: platform-overview COUNT(operators). TODO(#1088): filter active once
+  // the deactivatedAt column lands.
+  async count(): Promise<number> {
+    return this.store.size
+  }
+
   async findById(id: string): Promise<Operator | undefined> {
     return this.store.get(id)
   }

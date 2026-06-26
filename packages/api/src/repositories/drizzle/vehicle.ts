@@ -96,6 +96,16 @@ export class DrizzleVehicleRepository implements VehicleRepository {
     return rows.map((r) => toVehicle(r, this.decodePhotos))
   }
 
+  // #1087 platform overview: live fleet across all operators (unscoped).
+  // COUNT at the DB, never materialize-then-count.
+  async countActive(): Promise<number> {
+    const [row] = await this.db
+      .select({ value: count() })
+      .from(vehicles)
+      .where(ne(vehicles.status, 'RETIRED'))
+    return row?.value ?? 0
+  }
+
   async create(
     ctx: CallerContext,
     data: Omit<Vehicle, 'id' | 'createdAt' | 'updatedAt'>,

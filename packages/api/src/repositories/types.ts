@@ -113,6 +113,10 @@ export interface OperatorRepository {
   // #407: list all operators (name-sorted), powering the admin operator picker.
   // Caller scoping (operator sees only its own) is applied in OperatorService.
   list(): Promise<Operator[]>
+  // #1087 platform overview: `COUNT(operators)` for the platform-owner home KPI.
+  // Unscoped (authz lives in AdminOverviewService). Labelled "Operators" today;
+  // TODO(#1088): tighten to active=true once the `deactivatedAt` column lands.
+  count(): Promise<number>
   findBySlug(slug: string): Promise<Operator | undefined>
   // #903: apply a partial profile patch and return the updated row, or undefined
   // if no operator has that id (never inserts).
@@ -301,6 +305,11 @@ export interface VehicleRepository {
   findAll(ctx: CallerContext, filters?: VehicleFilters): Promise<PaginatedResult<Vehicle>>
   findById(ctx: CallerContext, id: string): Promise<Vehicle | undefined>
   findByIds(ctx: CallerContext, ids: string[]): Promise<Vehicle[]>
+  // #1087 platform overview: `COUNT(vehicles WHERE status != 'RETIRED')` — the
+  // live fleet across all operators. Unscoped (no ctx) by design: this is a
+  // platform-wide KPI; authz lives in AdminOverviewService. COUNT at the DB layer,
+  // never materialize-then-count.
+  countActive(): Promise<number>
   create(
     ctx: CallerContext,
     data: Omit<Vehicle, 'id' | 'createdAt' | 'updatedAt'>,
@@ -419,6 +428,10 @@ export interface BookingRepository {
   findAll(ctx: CallerContext, filters?: BookingFilters): Promise<Booking[]>
   findById(ctx: CallerContext, id: string): Promise<Booking | undefined>
   findByIdempotencyKey(ctx: CallerContext, key: string): Promise<Booking | undefined>
+  /** #1087 platform overview: `COUNT(bookings)` across every operator for the
+   *  platform-owner home KPI. Unscoped by design (authz lives in
+   *  AdminOverviewService); COUNT at the DB layer, never load-then-count. */
+  count(): Promise<number>
   /** Counts bookings in BLOCKING_STATUSES (CONFIRMED, ACTIVE) for the given
    *  vehicle set. Used to guard operations that assume no live bookings exist
    *  for those vehicles — e.g. archiving a vehicle class. */
@@ -751,6 +764,11 @@ export interface RenterDocumentRepository {
     ctx: CallerContext,
     filters?: RenterDocumentFilters,
   ): Promise<PaginatedResult<RenterDocument>>
+  /** #1087 platform overview: `COUNT(renter_documents WHERE status = 'PENDING')`
+   *  for the verification-queue-depth KPI. Unscoped (no ctx) by design — a
+   *  platform-wide count whose authz lives in AdminOverviewService — and a pure
+   *  COUNT so the overview never materializes the queue just to size it. */
+  countPending(): Promise<number>
   /** Platform-staff records a terminal verdict. */
   verify(
     ctx: CallerContext,

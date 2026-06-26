@@ -76,6 +76,16 @@ export class InMemoryRenterDocumentRepository implements RenterDocumentRepositor
     return { data: pending.slice(offset, offset + limit), total: pending.length }
   }
 
+  // #1087: platform-overview pending-document queue depth (unscoped; authz in
+  // AdminOverviewService). Mirrors the Drizzle COUNT — no page materialized.
+  async countPending(): Promise<number> {
+    let n = 0
+    for (const d of this.store.values()) {
+      if (d.status === 'PENDING') n++
+    }
+    return n
+  }
+
   async verify(
     ctx: CallerContext,
     id: string,
