@@ -82,10 +82,21 @@ describe('GET /admin/consent/acceptances/:id/evidence', () => {
     expect(res.status).toBe(403)
   })
 
-  test('returns 404 for an unknown acceptance', async () => {
+  test('returns 404 for a valid-but-unknown acceptance id', async () => {
+    const res = await app.request(
+      '/admin/consent/acceptances/00000000-0000-4000-8000-000000000ace/evidence',
+      {
+        headers: await bearer({ sub: 'admin-1', role: 'PLATFORM_ADMIN' }),
+      },
+    )
+    expect(res.status).toBe(404)
+  })
+
+  test('returns 400 for a malformed (non-uuid) acceptance id (L5)', async () => {
     const res = await app.request('/admin/consent/acceptances/nope/evidence', {
       headers: await bearer({ sub: 'admin-1', role: 'PLATFORM_ADMIN' }),
     })
-    expect(res.status).toBe(404)
+    expect(res.status).toBe(400)
+    expect((await res.json()).error).toBe('id must be a valid uuid')
   })
 })
