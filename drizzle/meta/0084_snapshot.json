@@ -1,6 +1,6 @@
 {
-  "id": "0af9de0d-b0b9-41c8-962e-91d1c82786e8",
-  "prevId": "9913b60f-aa9b-4ad5-a6ac-bc3895e6745c",
+  "id": "bd24c89b-503e-4d8a-9301-7f8797293459",
+  "prevId": "0af9de0d-b0b9-41c8-962e-91d1c82786e8",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -874,7 +874,23 @@
           "default": "now()"
         }
       },
-      "indexes": {},
+      "indexes": {
+        "idx_maintenance_logs_vehicleId": {
+          "name": "idx_maintenance_logs_vehicleId",
+          "columns": [
+            {
+              "expression": "vehicleId",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
       "foreignKeys": {
         "maintenance_logs_vehicleId_vehicles_id_fk": {
           "name": "maintenance_logs_vehicleId_vehicles_id_fk",

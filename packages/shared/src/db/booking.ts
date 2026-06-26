@@ -9,6 +9,7 @@ import {
   pgTable,
   text,
   timestamp,
+  uniqueIndex,
 } from 'drizzle-orm/pg-core'
 import {
   BOOKING_EVENT_TYPES,
@@ -143,6 +144,19 @@ export const bookings = pgTable(
     index('idx_bookings_pickupLocationId').on(table.pickupLocationId),
     index('idx_bookings_dropoffLocationId').on(table.dropoffLocationId),
     index('idx_bookings_insuranceOptionId').on(table.insuranceOptionId),
+    // Three hand-SQL indexes that have existed in prod for a while but were never
+    // echoed here, so the drizzle snapshot didn't carry them — a future
+    // `drizzle-kit pull` would silently drop them (the M7 risk class the
+    // snapshot/index parity lint catches). Codified per #1173 / #1150:
+    // - 0010_add-fk-indexes.sql created idx_bookings_renterId
+    // - 0014_add-bookings-status-index.sql created idx_bookings_status
+    // - 0012_idempotency-unique-index.sql created bookings_idempotency_key
+    //   (partial unique on the non-null subset — idempotency keys are optional)
+    index('idx_bookings_renterId').on(table.renterId),
+    index('idx_bookings_status').on(table.status),
+    uniqueIndex('bookings_idempotency_key')
+      .on(table.idempotencyKey)
+      .where(sql`"idempotencyKey" is not null`),
     // Class must belong to the booking's operator (#392). Composite seal.
     foreignKey({
       columns: [table.operatorId, table.classId],
