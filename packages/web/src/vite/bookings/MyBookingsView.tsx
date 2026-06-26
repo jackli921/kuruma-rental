@@ -3,6 +3,8 @@ import { formatDateTime, formatJpy } from '@/lib/format'
 import { cn } from '@/lib/utils'
 import type { MyBookingRow } from '@/vite/bookings/api'
 import { MessageHostLink } from '@/vite/messaging/MessageHostLink'
+import { ReviewPrompt } from '@/vite/reviews'
+import type { ReviewSubject } from '@kuruma/shared/enums'
 import { Link } from '@tanstack/react-router'
 import { CalendarX } from 'lucide-react'
 import { useTranslations } from 'use-intl'
@@ -12,13 +14,22 @@ interface MyBookingsViewProps {
   readonly locale: string
   /** bookingId -> threadId (#1032); a row links to its conversation when present. */
   readonly threadIdByBooking: Readonly<Record<string, string>>
+  /** #1083: bookingId -> the renter's already-reviewed subjects for a COMPLETED
+   *  booking. A key's presence means the review state has loaded; absent => not yet
+   *  resolved (the post-trip prompt stays hidden until then). */
+  readonly reviewedSubjectsByBooking?: Readonly<Record<string, readonly ReviewSubject[]>>
 }
 
 // Presentational list + empty state for the renter's own bookings (#543). The
 // route owns the loader/useSuspenseQuery and the renterId; this stays a pure
 // function of the resolved rows so it is unit-testable (FC/IS — the shell does
 // I/O, this renders). Each card links to the booking's confirmation/detail page.
-export function MyBookingsView({ bookings, locale, threadIdByBooking }: MyBookingsViewProps) {
+export function MyBookingsView({
+  bookings,
+  locale,
+  threadIdByBooking,
+  reviewedSubjectsByBooking = {},
+}: MyBookingsViewProps) {
   const t = useTranslations('bookings.list')
 
   if (bookings.length === 0) {
@@ -41,6 +52,9 @@ export function MyBookingsView({ bookings, locale, threadIdByBooking }: MyBookin
     <ul className="flex flex-col gap-3">
       {bookings.map((booking) => {
         const threadId = threadIdByBooking[booking.id]
+        // #1083: show the post-trip prompt only once the review state has resolved
+        // (an empty array = loaded, nothing reviewed yet; undefined = still loading).
+        const reviewed = reviewedSubjectsByBooking[booking.id]
         return (
           <li
             key={booking.id}
@@ -70,6 +84,13 @@ export function MyBookingsView({ bookings, locale, threadIdByBooking }: MyBookin
             </Link>
             {threadId ? (
               <MessageHostLink threadId={threadId} locale={locale} className="self-start" />
+            ) : null}
+            {booking.status === 'COMPLETED' && reviewed !== undefined ? (
+              <ReviewPrompt
+                bookingId={booking.id}
+                bookingCode={booking.bookingCode}
+                reviewedSubjects={reviewed}
+              />
             ) : null}
           </li>
         )
