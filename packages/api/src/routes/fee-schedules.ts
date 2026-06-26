@@ -1,4 +1,3 @@
-import type { CreateFeeScheduleInput } from '@kuruma/shared/validators/fee-schedule'
 import {
   createFeeScheduleSchema,
   platformAdminCreateFeeScheduleSchema,
@@ -15,8 +14,8 @@ import {
 import type { FeeScheduleService } from '../services/fee-schedule'
 import type { FeeScheduleFilters } from '../services/filters'
 import type { FeeSchedule } from '../stores'
-import { type ResolveWriteOperatorId, operatorReadScope } from '../tenancy'
-import { fail, ok, parseBody, parseId, stripUndefined } from './helpers'
+import type { ResolveWriteOperatorId } from '../tenancy'
+import { fail, ok, parseBody, parseId, parseScopedCreate, stripUndefined } from './helpers'
 
 export function createFeeScheduleRoutes(
   service: FeeScheduleService,
@@ -77,23 +76,18 @@ export function createFeeScheduleRoutes(
       if (!FLEET_WRITE_ROLES.has(user.role)) return fail(c, 'Forbidden', 403)
 
       const ctx = toCallerContext(user)
-      // Bypass callers must name the target operator in the body; operator
-      // callers never send one — their tenant is stamped server-side.
-      const isBypass = operatorReadScope(ctx).kind === 'all'
-
-      let d: CreateFeeScheduleInput
-      let operatorId: string
-      if (isBypass) {
-        const parsed = await parseBody(c, platformAdminCreateFeeScheduleSchema)
-        if (!parsed.ok) return parsed.response
-        d = parsed.data
-        operatorId = await resolveWriteOperatorId(ctx, parsed.data.operatorId)
-      } else {
-        const parsed = await parseBody(c, createFeeScheduleSchema)
-        if (!parsed.ok) return parsed.response
-        d = parsed.data
-        operatorId = await resolveWriteOperatorId(ctx)
-      }
+      const parsed = await parseScopedCreate(
+        c,
+        ctx,
+        {
+          operatorSchema: createFeeScheduleSchema,
+          adminSchema: platformAdminCreateFeeScheduleSchema,
+        },
+        resolveWriteOperatorId,
+      )
+      if (!parsed.ok) return parsed.response
+      const d = parsed.data
+      const operatorId = parsed.operatorId
 
       const result = await service.create(ctx, {
         operatorId,

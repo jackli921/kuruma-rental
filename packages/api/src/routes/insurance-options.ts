@@ -1,4 +1,3 @@
-import type { CreateInsuranceOptionInput } from '@kuruma/shared/validators/insurance-option'
 import {
   createInsuranceOptionSchema,
   platformAdminCreateInsuranceOptionSchema,
@@ -15,8 +14,8 @@ import {
 import type { InsuranceOptionFilters } from '../services/filters'
 import type { InsuranceOptionService } from '../services/insurance-option'
 import type { InsuranceOption } from '../stores'
-import { type ResolveWriteOperatorId, operatorReadScope } from '../tenancy'
-import { fail, ok, parseBody, parseId, stripUndefined } from './helpers'
+import type { ResolveWriteOperatorId } from '../tenancy'
+import { fail, ok, parseBody, parseId, parseScopedCreate, stripUndefined } from './helpers'
 
 export function createInsuranceOptionRoutes(
   service: InsuranceOptionService,
@@ -70,24 +69,18 @@ export function createInsuranceOptionRoutes(
       if (!FLEET_WRITE_ROLES.has(user.role)) return fail(c, 'Forbidden', 403)
 
       const ctx = toCallerContext(user)
-      // Bypass callers must name the target operator in the body; operator
-      // callers never send one — their tenant is stamped server-side. Resolve
-      // operatorId inside each branch where the body type is concrete.
-      const isBypass = operatorReadScope(ctx).kind === 'all'
-
-      let d: CreateInsuranceOptionInput
-      let operatorId: string
-      if (isBypass) {
-        const parsed = await parseBody(c, platformAdminCreateInsuranceOptionSchema)
-        if (!parsed.ok) return parsed.response
-        d = parsed.data
-        operatorId = await resolveWriteOperatorId(ctx, parsed.data.operatorId)
-      } else {
-        const parsed = await parseBody(c, createInsuranceOptionSchema)
-        if (!parsed.ok) return parsed.response
-        d = parsed.data
-        operatorId = await resolveWriteOperatorId(ctx)
-      }
+      const parsed = await parseScopedCreate(
+        c,
+        ctx,
+        {
+          operatorSchema: createInsuranceOptionSchema,
+          adminSchema: platformAdminCreateInsuranceOptionSchema,
+        },
+        resolveWriteOperatorId,
+      )
+      if (!parsed.ok) return parsed.response
+      const d = parsed.data
+      const operatorId = parsed.operatorId
 
       const result = await service.create(ctx, {
         operatorId,

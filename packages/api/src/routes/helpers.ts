@@ -1,5 +1,7 @@
 import type { Context } from 'hono'
 import { z } from 'zod'
+import type { CallerContext } from '../middleware/auth'
+import { type ResolveWriteOperatorId, operatorReadScope } from '../tenancy'
 
 // --- Response helpers ---
 
@@ -203,6 +205,44 @@ export async function parseBody<T>(
   }
 
   return { ok: true, data: result.data }
+}
+
+// --- Scoped create (write-route operator resolution) ---
+
+type ScopedCreateSuccess<T> = { ok: true; data: T; operatorId: string }
+
+/**
+ * The write-route twin of the cross-operator read-scope guard (#1107 / audit L4).
+ * Centralizes the "resolve operatorId from the caller, never trust body.operatorId
+ * for an operator role" branch that was copy-pasted across the 4 fleet-config
+ * create handlers (add-ons, fee-schedules, insurance-options, locations).
+ *
+ * A bypass (`all`-scope) caller names the target tenant in the body, validated by
+ * `adminSchema`; an operator caller never sends one — its own tenant is stamped
+ * server-side via `operatorSchema` + `resolveWriteOperatorId(ctx)`. Selecting the
+ * schema by scope keeps each parsed body's type concrete for the call site.
+ */
+export async function parseScopedCreate<O extends object>(
+  c: Context,
+  ctx: CallerContext,
+  schemas: {
+    operatorSchema: z.ZodType<O>
+    adminSchema: z.ZodType<O & { operatorId?: string }>
+  },
+  resolveWriteOperatorId: ResolveWriteOperatorId,
+): Promise<ScopedCreateSuccess<O> | ParseBodyFailure> {
+  if (operatorReadScope(ctx).kind === 'all') {
+    const parsed = await parseBody(c, schemas.adminSchema)
+    if (!parsed.ok) return parsed
+    return {
+      ok: true,
+      data: parsed.data,
+      operatorId: await resolveWriteOperatorId(ctx, parsed.data.operatorId),
+    }
+  }
+  const parsed = await parseBody(c, schemas.operatorSchema)
+  if (!parsed.ok) return parsed
+  return { ok: true, data: parsed.data, operatorId: await resolveWriteOperatorId(ctx) }
 }
 
 type DateRangeRequired = { ok: true; from: Date; to: Date }
