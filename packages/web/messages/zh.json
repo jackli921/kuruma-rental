@@ -1248,11 +1248,22 @@
     "nav": {
       "overview": "概览",
       "revenue": "合作伙伴收益",
-      "documents": "证件"
+      "documents": "证件",
+      "customers": "客户"
     },
     "home": {
       "title": "平台管理",
-      "subtitle": "平台运营"
+      "subtitle": "平台运营",
+      "kpi": {
+        "bookings": "预订量",
+        "gmv": "成交总额",
+        "fleet": "车队规模",
+        "operators": "运营商数量",
+        "unresolvedAnomalies": "未解决异常",
+        "pendingDocs": "待审文件"
+      },
+      "loadError": "无法加载平台概览。",
+      "retry": "重试"
     },
     "revenue": {
       "title": "合作伙伴收益",
@@ -1302,6 +1313,44 @@
       "reject": "拒绝",
       "error": "无法记录审核结果，请重试。",
       "loadError": "无法加载审核队列。",
+      "retry": "重试"
+    },
+    "customers": {
+      "title": "客户",
+      "subtitle": "搜索并查看平台上的所有租客。",
+      "searchLabel": "搜索",
+      "searchPlaceholder": "按姓名或邮箱搜索",
+      "sortLabel": "排序方式",
+      "sort": {
+        "lastBookingAt": "最近预订",
+        "bookingCount": "预订最多",
+        "name": "姓名"
+      },
+      "colName": "姓名",
+      "colEmail": "邮箱",
+      "colBookings": "预订数",
+      "colTotalSpent": "消费总额",
+      "colLastBooking": "最近预订",
+      "colCountry": "国家",
+      "colLanguage": "语言",
+      "empty": "没有符合条件的客户。",
+      "unnamed": "未命名客户",
+      "noEmail": "无邮箱",
+      "noVehicle": "未分配车辆",
+      "pagination": "客户分页",
+      "prev": "上一页",
+      "next": "下一页",
+      "bookingsTitle": "预订记录",
+      "bookingsEmpty": "暂无预订。",
+      "detailLoading": "正在加载客户…",
+      "detailEmpty": "该客户已不可用。",
+      "status": {
+        "CONFIRMED": "已确认",
+        "ACTIVE": "进行中",
+        "COMPLETED": "已完成",
+        "CANCELLED": "已取消"
+      },
+      "loadError": "无法加载客户。",
       "retry": "重试"
     }
   },

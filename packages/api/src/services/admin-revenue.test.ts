@@ -88,6 +88,8 @@ class SpyPaymentEventRepository implements PaymentEventRepository {
     this.monthsCallCount += 1
     return this.inner.listSucceededMonths()
   }
+  sumSucceededGrossJpy: PaymentEventRepository['sumSucceededGrossJpy'] = () =>
+    this.inner.sumSucceededGrossJpy()
 }
 
 describe('AdminRevenueService.getReport (#717 — push month filter into the data layer)', () => {
