@@ -596,6 +596,13 @@
       "when": 1782516634609,
       "tag": "0084_codify-maintenance-logs-index",
       "breakpoints": true
+    },
+    {
+      "idx": 85,
+      "version": "7",
+      "when": 1782517065469,
+      "tag": "0085_codify-bookings-indexes",
+      "breakpoints": true
     }
   ]
 }
