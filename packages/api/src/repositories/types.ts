@@ -52,6 +52,7 @@ import type {
   VehicleClass,
 } from '../stores'
 // Imported (not just re-exported) because the RepoBundle below references it locally.
+import type { AdminBookingFilters } from './types-admin-booking'
 import type { BookingEventRepository } from './types-booking-event'
 
 // Payment interfaces (#461 events, #508 anomalies, #851 refunds) live in their own module (size cap); re-exported.
@@ -86,6 +87,7 @@ export type { ComplianceAlertLogRepository, RecordComplianceAlert } from './type
 
 // Audit ledger entity + insert-only persistence (#930), own module per #837 cap.
 export type { AuditLogEntry, AuditLogRepository } from './types-audit'
+export type { AdminBookingFilters }
 export type { BookingEventRepository }
 
 /** Operator (tenant) data access. Admin bootstrap (#386) + slug/id resolution (#387). */
@@ -407,29 +409,6 @@ export interface BookingFilters {
   status?: string
   vehicleId?: string
   renterId?: string
-  from?: Date
-  to?: Date
-  limit?: number
-  cursor?: string
-}
-
-/**
- * Cross-operator oversight filters for the platform-admin booking surface
- * (#1092). UNSCOPED by design — there is no CallerContext here: `findForAdmin`
- * reads across every tenant, so {@link AdminBookingService} is the authz
- * chokepoint (it calls `requirePlatformAdmin` BEFORE this method, mirroring how
- * `paymentEvents.listSucceeded` backs the platform-only revenue report).
- *
- * `renterIds` is a pre-resolved customer filter (the service maps a name/email
- * search to renter ids via UserRepository, never the repo). `bookingCode` is a
- * case-insensitive substring match. An empty `renterIds`/`status` is "match
- * nothing" — the service supplies an absent (not empty) filter to mean "any".
- */
-export interface AdminBookingFilters {
-  operatorId?: string
-  bookingCode?: string
-  status?: string
-  renterIds?: string[]
   from?: Date
   to?: Date
   limit?: number
