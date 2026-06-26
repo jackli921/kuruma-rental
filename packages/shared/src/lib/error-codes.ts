@@ -41,6 +41,15 @@ export const ERROR_CODES = [
   //   via classId + pickupLocationId); combo create 409s.
   'NO_COMBO_RATE_SET',
   'CLASS_COMBO_SOLD_OUT',
+  // #464 assign: operator assigns a concrete car to a CLASS_COMBO float.
+  //  NOT_A_COMBO         — target booking is not a CLASS_COMBO (e.g. a SPECIFIC booking)
+  //  INVALID_STATUS      — booking is in a terminal status (CANCELLED / COMPLETED)
+  //  VEHICLE_UNAVAILABLE — the assigned car is already booked for the window (exclusion)
+  //  USE_ASSIGN_FOR_COMBO — substitute() called on a CLASS_COMBO; use assignVehicle instead
+  'NOT_A_COMBO',
+  'INVALID_STATUS',
+  'VEHICLE_UNAVAILABLE',
+  'USE_ASSIGN_FOR_COMBO',
 ] as const
 
 export type ErrorCode = (typeof ERROR_CODES)[number]

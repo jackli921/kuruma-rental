@@ -525,6 +525,78 @@ describe('Booking Routes', () => {
         language: 'en',
       })
     })
+
+    it('filters by needsAssignment=true (CLASS_COMBO floats needing a car)', async () => {
+      // Seed a CLASS_COMBO float: CONFIRMED, no assigned vehicle — should appear
+      const float = await bookingRepo.create(SYSTEM_CONTEXT, {
+        operatorId: OPERATOR,
+        renterId: USER1,
+        classId: testClassId,
+        requestedVehicleId: null,
+        assignedVehicleId: null,
+        pickupLocationId: locationId,
+        dropoffLocationId: locationId,
+        startAt: new Date('2029-01-01T09:00:00Z'),
+        endAt: new Date('2029-01-01T17:00:00Z'),
+        effectiveEndAt: new Date('2029-01-01T17:00:00Z'),
+        status: 'CONFIRMED',
+        source: 'DIRECT',
+        fulfillmentMode: 'CLASS_COMBO',
+        bookingCode: 'NEEDS-ASSGN-01',
+        insuranceOptionId: null,
+        insuranceSnapshot: null,
+        feeSnapshot: [],
+        addOnSnapshot: [],
+        externalId: null,
+        notes: null,
+        totalPrice: null,
+        cancellationFee: null,
+        cancelledAt: null,
+        idempotencyKey: null,
+        disclaimerAcknowledgedAt: null,
+        disclaimerTermsVersion: null,
+      })
+
+      // Seed a SPECIFIC booking — should NOT appear in needsAssignment results
+      await bookingRepo.create(SYSTEM_CONTEXT, {
+        operatorId: OPERATOR,
+        renterId: USER1,
+        classId: testClassId,
+        requestedVehicleId: seededVehicleId,
+        assignedVehicleId: seededVehicleId,
+        pickupLocationId: locationId,
+        dropoffLocationId: locationId,
+        startAt: new Date('2029-01-02T09:00:00Z'),
+        endAt: new Date('2029-01-02T17:00:00Z'),
+        effectiveEndAt: new Date('2029-01-02T17:00:00Z'),
+        status: 'CONFIRMED',
+        source: 'DIRECT',
+        fulfillmentMode: 'SPECIFIC',
+        bookingCode: 'NEEDS-ASSGN-02',
+        insuranceOptionId: null,
+        insuranceSnapshot: null,
+        feeSnapshot: [],
+        addOnSnapshot: [],
+        externalId: null,
+        notes: null,
+        totalPrice: null,
+        cancellationFee: null,
+        cancelledAt: null,
+        idempotencyKey: null,
+        disclaimerAcknowledgedAt: null,
+        disclaimerTermsVersion: null,
+      })
+
+      const res = await app.request('/bookings?needsAssignment=true')
+      const body = await res.json()
+
+      expect(res.status).toBe(200)
+      expect(body.success).toBe(true)
+      expect(body.data).toHaveLength(1)
+      expect(body.data[0].id).toBe(float.id)
+      expect(body.data[0].fulfillmentMode).toBe('CLASS_COMBO')
+      expect(body.data[0].assignedVehicleId).toBeNull()
+    })
   })
 
   describe('GET /bookings — cursor pagination', () => {
@@ -1519,6 +1591,105 @@ describe('Booking Routes', () => {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ newVehicleId: 'not-a-uuid' }),
+      })
+
+      expect(res.status).toBe(400)
+      const body = await res.json()
+      expect(body.success).toBe(false)
+    })
+  })
+
+  describe('POST /bookings/:id/assign', () => {
+    // An OPERATOR_OWNER app scoped to the booking's operator tenant.
+    function operatorApp() {
+      const opApp = new Hono()
+      opApp.use('*', testAuthMiddleware(OP_USER, 'OPERATOR_OWNER', OPERATOR))
+      opApp.route('/', createBookingRoutes(service, inertConsentGate))
+      return opApp
+    }
+
+    // Seed a CLASS_COMBO float (unassigned) that the operator can assign a car to.
+    // Uses bookingInput() helper for correct field types (Date objects, etc.) then
+    // overrides the CLASS_COMBO-specific fields.
+    async function createComboFloat(): Promise<string> {
+      const HOUR = 60 * 60 * 1000
+      const startAt = new Date(Date.now() + 24 * HOUR)
+      const endAt = new Date(Date.now() + 48 * HOUR)
+      const float = await bookingRepo.create(
+        SYSTEM_CONTEXT,
+        bookingInput({
+          renterId: USER1,
+          operatorId: OPERATOR,
+          classId: testClassId,
+          pickupLocationId: locationId,
+          dropoffLocationId: locationId,
+          requestedVehicleId: null,
+          assignedVehicleId: null,
+          startAt,
+          endAt,
+          effectiveEndAt: endAt,
+          status: 'CONFIRMED',
+          fulfillmentMode: 'CLASS_COMBO',
+          totalPrice: 10000,
+        }),
+      )
+      return float.id
+    }
+
+    it('forbids a renter from assigning (403)', async () => {
+      const renterApp = new Hono()
+      renterApp.use('*', testAuthMiddleware(USER1, 'RENTER'))
+      renterApp.route('/', createBookingRoutes(service, inertConsentGate))
+
+      const res = await renterApp.request(`/bookings/${crypto.randomUUID()}/assign`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ vehicleId: seededVehicleId }),
+      })
+
+      expect(res.status).toBe(403)
+      const body = await res.json()
+      expect(body.success).toBe(false)
+    })
+
+    it('assigns a car to a CLASS_COMBO float (200) and sets assignedVehicleId', async () => {
+      const floatId = await createComboFloat()
+
+      const res = await operatorApp().request(`/bookings/${floatId}/assign`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ vehicleId: seededVehicleId, reason: 'Assigned by operator' }),
+      })
+
+      expect(res.status).toBe(200)
+      const body = await res.json()
+      expect(body.success).toBe(true)
+      expect(body.data.assignedVehicleId).toBe(seededVehicleId)
+    })
+
+    it('returns 409 with code NOT_A_COMBO when booking is a SPECIFIC (non-combo) booking', async () => {
+      const createRes = await createBooking(validBookingInput())
+      const created = await createRes.json()
+
+      const res = await operatorApp().request(`/bookings/${created.data.id}/assign`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ vehicleId: seededVehicle2Id }),
+      })
+
+      expect(res.status).toBe(409)
+      const body = await res.json()
+      expect(body.success).toBe(false)
+      expect(body.code).toBe('NOT_A_COMBO')
+    })
+
+    it('rejects a non-UUID vehicleId with 400', async () => {
+      const floatId = await createComboFloat()
+
+      const res = await operatorApp().request(`/bookings/${floatId}/assign`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ vehicleId: 'not-a-uuid' }),
       })
 
       expect(res.status).toBe(400)

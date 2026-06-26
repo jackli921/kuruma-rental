@@ -766,6 +766,40 @@ describe('response validation (#711)', () => {
     await expect(fetchBookingEvents('bk-1')).rejects.toBeInstanceOf(ParseError)
   })
 
+  it('fetchBookingEvents parses a VEHICLE_ASSIGNED first-assign payload (null→car)', async () => {
+    const payload = {
+      type: 'VEHICLE_ASSIGNED',
+      fromVehicleId: null,
+      toVehicleId: 'v-2',
+      reason: null,
+    }
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () =>
+        jsonResponse({ success: true, data: [eventRaw({ type: 'VEHICLE_ASSIGNED', payload })] }),
+      ),
+    )
+    const events = await fetchBookingEvents('bk-1')
+    expect(events[0]!.payload).toEqual(payload)
+  })
+
+  it('fetchBookingEvents parses a VEHICLE_ASSIGNED swap payload (car→car with reason)', async () => {
+    const payload = {
+      type: 'VEHICLE_ASSIGNED',
+      fromVehicleId: 'v-1',
+      toVehicleId: 'v-2',
+      reason: 'Customer upgrade request',
+    }
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () =>
+        jsonResponse({ success: true, data: [eventRaw({ type: 'VEHICLE_ASSIGNED', payload })] }),
+      ),
+    )
+    const events = await fetchBookingEvents('bk-1')
+    expect(events[0]!.payload).toEqual(payload)
+  })
+
   it('fetchSubstitutionCandidates rejects with ParseError when a candidate drifts', async () => {
     vi.stubGlobal(
       'fetch',

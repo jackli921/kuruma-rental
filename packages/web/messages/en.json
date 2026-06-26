@@ -269,6 +269,11 @@
             "ACTIVE": "Active",
             "COMPLETED": "Completed",
             "CANCELLED": "Cancelled"
+          },
+          "floats": {
+            "title": "Needs Assignment",
+            "overdue": "Overdue",
+            "empty": "No floats awaiting assignment"
           }
         }
       },
@@ -1082,6 +1087,14 @@
           "cancel": "Cancel",
           "error": "Couldn't substitute the vehicle. It may have just been booked."
         },
+        "assign": {
+          "action": "Assign vehicle",
+          "dialogTitle": "Assign a vehicle",
+          "dialogDescription": "Assign an available same-class vehicle to this unassigned booking. The booking will be fulfilled once a car is selected.",
+          "vehicleLabel": "Vehicle",
+          "submit": "Assign",
+          "error": "Couldn't assign the vehicle. It may have just been booked."
+        },
         "markActive": "Mark as picked up",
         "markCompleted": "Mark as returned",
         "settled": "This booking is settled — no actions available.",
@@ -1101,6 +1114,8 @@
         "created": "Booking created",
         "statusChanged": "Status changed from {from} to {to}",
         "vehicleSubstituted": "Vehicle substituted",
+        "vehicleAssigned": "Vehicle assigned",
+        "vehicleAssignedSwapped": "Vehicle reassigned",
         "reason": "Reason: {reason}",
         "cancelled": "Booking cancelled",
         "cancellationFee": "Cancellation fee {fee}",

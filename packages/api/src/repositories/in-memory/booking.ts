@@ -104,6 +104,14 @@ export class InMemoryBookingRepository implements BookingRepository {
       const to = filters.to
       results = results.filter((b) => b.startAt < to && b.effectiveEndAt > from)
     }
+    if (filters?.needsAssignment === true) {
+      results = results.filter(
+        (b) =>
+          b.fulfillmentMode === 'CLASS_COMBO' &&
+          b.assignedVehicleId === null &&
+          (b.status === 'CONFIRMED' || b.status === 'ACTIVE'),
+      )
+    }
 
     // Sort by createdAt DESC, id DESC (matches Drizzle ORDER BY)
     results.sort((a, b) => {
