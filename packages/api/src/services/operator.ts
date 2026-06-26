@@ -5,7 +5,7 @@ import {
   requireOperatorOwnerWrite,
   requirePlatformAdmin,
 } from '../middleware/auth'
-import type { Operator, OperatorRepository } from '../repositories/types'
+import type { Operator, OperatorRepository, VehicleRepository } from '../repositories/types'
 import { resolveUniqueSlug, slugify } from './slug'
 
 /**
@@ -49,10 +49,42 @@ export interface OperatorProfileAuditEvent {
 // index.ts wires a console-backed default.
 export type RecordOperatorProfileAudit = (event: OperatorProfileAuditEvent) => void
 
+/**
+ * Platform-admin operator-directory row (#1088). Richer than the business-tier
+ * `{id,name,slug}` picker: carries `deactivatedAt` (so the admin UI renders
+ * active/deactivated + offers reactivate) and `fleetCount` (live, non-RETIRED
+ * vehicles). `active` is derived client-side from `deactivatedAt === null`.
+ */
+export interface OperatorAdminRow {
+  id: string
+  name: string
+  slug: string
+  deactivatedAt: Date | null
+  createdAt: Date
+  fleetCount: number
+}
+
+/**
+ * The lean echo returned by deactivate/reactivate (#1088): just the toggled
+ * status, so the admin UI can confirm the new state without the route layer ever
+ * naming the `Operator` entity (it refetches the directory for `fleetCount`).
+ */
+export interface OperatorStatus {
+  id: string
+  name: string
+  slug: string
+  deactivatedAt: Date | null
+}
+
+function toOperatorStatus(op: Operator): OperatorStatus {
+  return { id: op.id, name: op.name, slug: op.slug, deactivatedAt: op.deactivatedAt }
+}
+
 export class OperatorService {
   constructor(
     private readonly repo: OperatorRepository,
     private readonly recordAudit: RecordOperatorProfileAudit,
+    private readonly vehicles: Pick<VehicleRepository, 'countByOperator'>,
   ) {}
 
   /**
@@ -80,6 +112,46 @@ export class OperatorService {
     const all = await this.repo.list()
     if (!isOperatorRole(ctx.role)) return all
     return all.filter((o) => o.id === ctx.operatorId)
+  }
+
+  /**
+   * Platform-admin operator directory (#1088). Returns EVERY operator (active +
+   * deactivated) so the admin can see and reactivate deactivated tenants — the
+   * `deactivatedAt` field carries status. Platform-admin only (the route gates
+   * too; this re-assert is the defence-in-depth chokepoint). Enriches each row
+   * with its live fleet size via one grouped count (no N+1).
+   */
+  async listForAdmin(ctx: CallerContext): Promise<OperatorAdminRow[]> {
+    requirePlatformAdmin(ctx)
+    const operators = await this.repo.list()
+    const fleetCounts = await this.vehicles.countByOperator(operators.map((o) => o.id))
+    return operators.map((o) => ({
+      id: o.id,
+      name: o.name,
+      slug: o.slug,
+      deactivatedAt: o.deactivatedAt,
+      createdAt: o.createdAt,
+      fleetCount: fleetCounts.get(o.id) ?? 0,
+    }))
+  }
+
+  /**
+   * Soft-deactivate an operator (#1088). Platform-admin only. Sets
+   * `deactivatedAt` (hides from storefront/search, blocks new bookings; existing
+   * bookings + history untouched). Members go stale on their next request via the
+   * #939 freshness path. Returns the updated row, or undefined when no such id (404).
+   */
+  async deactivate(ctx: CallerContext, id: string): Promise<OperatorStatus | undefined> {
+    requirePlatformAdmin(ctx)
+    const updated = await this.repo.update(id, { deactivatedAt: new Date(), updatedAt: new Date() })
+    return updated ? toOperatorStatus(updated) : undefined
+  }
+
+  /** Reverse {@link deactivate} — clears `deactivatedAt`. Platform-admin only. */
+  async reactivate(ctx: CallerContext, id: string): Promise<OperatorStatus | undefined> {
+    requirePlatformAdmin(ctx)
+    const updated = await this.repo.update(id, { deactivatedAt: null, updatedAt: new Date() })
+    return updated ? toOperatorStatus(updated) : undefined
   }
 
   private scopeToCaller(ctx: CallerContext, operator: Operator | undefined): Operator | undefined {

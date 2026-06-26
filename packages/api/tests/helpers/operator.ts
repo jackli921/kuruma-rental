@@ -31,6 +31,7 @@ export function seededOperatorRepo(id: string = TEST_OPERATOR_ID): InMemoryOpera
     preAuthHandoffUrl: null,
     createdAt: now,
     updatedAt: now,
+    deactivatedAt: null,
   }
   return new InMemoryOperatorRepository(new Map([[id, operator]]))
 }
