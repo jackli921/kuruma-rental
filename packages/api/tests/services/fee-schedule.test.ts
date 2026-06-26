@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import type { CallerContext } from '../../src/middleware/auth'
+import { type CallerContext, ScopeRequiredError } from '../../src/middleware/auth'
 import { PG_ERROR } from '../../src/pg-errors'
 import { InMemoryFeeScheduleRepository } from '../../src/repositories/in-memory'
 import { FeeScheduleService } from '../../src/services/fee-schedule'
@@ -236,5 +236,41 @@ describe('FeeScheduleService — archive', () => {
     expect(result.ok).toBe(false)
     if (!result.ok) expect(result.status).toBe(404)
     expect(archiveSpy).not.toHaveBeenCalled()
+  })
+})
+
+// The cross-operator read guard moved from 5 copy-pasted route blocks into the
+// service (audit M3). These pin the invariant at the service layer, so a future
+// route that forgets a hand-rolled guard still can't leak every operator's fees.
+describe('FeeScheduleService — findAll enforces cross-operator read scope (audit M3)', () => {
+  const adminCtx: CallerContext = { userId: 'admin', role: 'PLATFORM_ADMIN', bypassScope: true }
+  let repo: InMemoryFeeScheduleRepository
+  let service: FeeScheduleService
+
+  beforeEach(() => {
+    repo = new InMemoryFeeScheduleRepository()
+    service = new FeeScheduleService(repo)
+  })
+
+  it('rejects an unscoped bypass read in the service itself, not just at the route', async () => {
+    await expect(service.findAll(adminCtx, { includeAll: false })).rejects.toBeInstanceOf(
+      ScopeRequiredError,
+    )
+  })
+
+  it('scopes a bypass read to an explicit operatorId', async () => {
+    await service.create(ctxFor(opA), createInput(opA))
+    await service.create(ctxFor(opB), createInput(opB))
+
+    const onlyA = await service.findAll(adminCtx, { operatorId: opA, includeAll: false })
+    expect(onlyA.map((f) => f.operatorId)).toEqual([opA])
+  })
+
+  it('an operator reads only its own tenant without naming an operatorId', async () => {
+    await service.create(ctxFor(opA), createInput(opA))
+    await service.create(ctxFor(opB), createInput(opB))
+
+    const mine = await service.findAll(ctxFor(opA), { includeAll: false })
+    expect(mine.map((f) => f.operatorId)).toEqual([opA])
   })
 })

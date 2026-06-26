@@ -87,7 +87,18 @@ const EMPTY_REPORT: AdminRevenueResponse = {
 
 describe('AdminHomeView', () => {
   it('shows the platform admin title + subtitle', () => {
-    renderView(<AdminHomeView />)
+    renderView(
+      <AdminHomeView
+        overview={{
+          bookings: 0,
+          gmvJpy: 0,
+          fleet: 0,
+          operators: 0,
+          unresolvedAnomalies: 0,
+          pendingDocs: 0,
+        }}
+      />,
+    )
     expect(screen.getByRole('heading', { name: 'Platform Admin' })).toBeInTheDocument()
     expect(screen.getByText('Platform operations')).toBeInTheDocument()
   })

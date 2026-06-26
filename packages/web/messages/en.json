@@ -1234,11 +1234,22 @@
       "overview": "Overview",
       "revenue": "Partner Revenue",
       "documents": "Documents",
-      "governance": "Consent governance"
+      "governance": "Consent governance",
+      "customers": "Customers"
     },
     "home": {
       "title": "Platform Admin",
-      "subtitle": "Platform operations"
+      "subtitle": "Platform operations",
+      "kpi": {
+        "bookings": "Bookings",
+        "gmv": "GMV",
+        "fleet": "Fleet",
+        "operators": "Operators",
+        "unresolvedAnomalies": "Open anomalies",
+        "pendingDocs": "Pending documents"
+      },
+      "loadError": "Couldn't load the platform overview.",
+      "retry": "Retry"
     },
     "revenue": {
       "title": "Partner Revenue",
@@ -1308,6 +1319,44 @@
       "apply": "Apply",
       "clear": "Clear",
       "loadError": "Couldn't load the consent ledger.",
+      "retry": "Retry"
+    },
+    "customers": {
+      "title": "Customers",
+      "subtitle": "Search and review every renter across the platform.",
+      "searchLabel": "Search",
+      "searchPlaceholder": "Search by name or email",
+      "sortLabel": "Sort by",
+      "sort": {
+        "lastBookingAt": "Recent booking",
+        "bookingCount": "Most bookings",
+        "name": "Name"
+      },
+      "colName": "Name",
+      "colEmail": "Email",
+      "colBookings": "Bookings",
+      "colTotalSpent": "Total spent",
+      "colLastBooking": "Last booking",
+      "colCountry": "Country",
+      "colLanguage": "Language",
+      "empty": "No customers match your search.",
+      "unnamed": "Unnamed customer",
+      "noEmail": "No email",
+      "noVehicle": "No vehicle assigned",
+      "pagination": "Customer pages",
+      "prev": "Previous",
+      "next": "Next",
+      "bookingsTitle": "Booking history",
+      "bookingsEmpty": "No bookings yet.",
+      "detailLoading": "Loading customer…",
+      "detailEmpty": "This customer is no longer available.",
+      "status": {
+        "CONFIRMED": "Confirmed",
+        "ACTIVE": "Active",
+        "COMPLETED": "Completed",
+        "CANCELLED": "Cancelled"
+      },
+      "loadError": "Couldn't load customers.",
       "retry": "Retry"
     }
   },
