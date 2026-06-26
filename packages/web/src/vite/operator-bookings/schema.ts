@@ -126,6 +126,13 @@ const vehicleSubstitutedPayloadSchema = z.object({
   toVehicleId: z.string(),
   reason: z.string().nullable(),
 })
+const vehicleAssignedPayloadSchema = z.object({
+  type: z.literal('VEHICLE_ASSIGNED'),
+  // #464: null on initial assignment (CLASS_COMBO float gets its first car).
+  fromVehicleId: z.string().nullable(),
+  toVehicleId: z.string(),
+  reason: z.string().nullable(),
+})
 const bookingCancelledPayloadSchema = z.object({
   type: z.literal('BOOKING_CANCELLED'),
   cancellationFee: z.number().nullable(),
@@ -146,6 +153,7 @@ const statusChangedPayloadSchema = z.object({
 const bookingEventPayloadSchema = z.discriminatedUnion('type', [
   bookingCreatedPayloadSchema,
   vehicleSubstitutedPayloadSchema,
+  vehicleAssignedPayloadSchema,
   bookingCancelledPayloadSchema,
   statusChangedPayloadSchema,
 ]) satisfies z.ZodType<BookingEventPayload>
