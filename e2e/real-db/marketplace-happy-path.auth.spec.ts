@@ -154,10 +154,17 @@ test.describe('marketplace happy path — renter books, operator sees it (real D
 async function cleanupFutureSarahBookings(): Promise<void> {
   const sql = testSql()
   try {
+    // Spec-created bookings carry runtime UUIDs; seeded demo rows (bk_demo_*) own
+    // a SUCCEEDED payment_events row this cleanup never deletes. Once the demo-
+    // relative seed window crept past the fixed 2026-07-01 bound (Sarah's
+    // startOffsetDays:+5 reached it on 2026-06-26), the unscoped delete began
+    // FK-failing on the seeded booking's payment_events. Exclude seed rows.
     const ids = await sql<{ id: string }[]>`
       SELECT b.id FROM bookings b
       JOIN users u ON u.id = b."renterId"
-      WHERE u.email = ${RENTER_EMAIL} AND b."startAt" >= '2026-07-01'
+      WHERE u.email = ${RENTER_EMAIL}
+        AND b."startAt" >= '2026-07-01'
+        AND b.id NOT LIKE 'bk_demo_%'
     `
     if (ids.length === 0) return
     const bookingIds = ids.map((r) => r.id)
