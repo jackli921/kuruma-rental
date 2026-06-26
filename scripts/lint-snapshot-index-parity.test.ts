@@ -4,6 +4,7 @@ import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, test } from 'vitest'
 import {
   findDrift,
+  findStaleBaseline,
   parseCreatedIndexes,
   parseDroppedColumns,
   parseDroppedIndexes,
@@ -33,6 +34,11 @@ describe('parseCreatedIndexes', () => {
 
   test('handles unquoted identifiers and USING btree', () => {
     const sql = 'CREATE INDEX idx_x ON t USING btree (c);'
+    expect(parseCreatedIndexes(sql)).toEqual([{ table: 't', name: 'idx_x', columns: ['c'] }])
+  })
+
+  test('handles CONCURRENTLY (hand-SQL avoids the table lock)', () => {
+    const sql = 'CREATE INDEX CONCURRENTLY IF NOT EXISTS "idx_x" ON "t" ("c");'
     expect(parseCreatedIndexes(sql)).toEqual([{ table: 't', name: 'idx_x', columns: ['c'] }])
   })
 
@@ -206,5 +212,43 @@ describe('findDrift', () => {
     const migrations = [ix('orphan', 'idx_orphan_c')]
     const snapshot = { tables: {} }
     expect(findDrift(migrations, snapshot)).toEqual([ix('orphan', 'idx_orphan_c')])
+  })
+})
+
+describe('findStaleBaseline', () => {
+  const ix = (table: string, name: string, columns: string[] = ['c']) => ({
+    table,
+    name,
+    columns,
+  })
+
+  test('flags a baseline entry whose index is no longer in any migration', () => {
+    // The CREATE was reverted (or the entry was always a typo) — baseline now hides nothing.
+    const migrations: never[] = []
+    const snapshot = { tables: {} }
+    const baseline = new Set(['accounts.idx_accounts_userId'])
+    expect(findStaleBaseline(migrations, snapshot, baseline)).toEqual([
+      'accounts.idx_accounts_userId',
+    ])
+  })
+
+  test('flags a baseline entry whose index has been codified into the snapshot', () => {
+    // Codification PR landed: index exists in migrations AND in snapshot. BASELINE
+    // entry now silently swallows a regression if someone removes the inline `.index()`.
+    const migrations = [ix('accounts', 'idx_accounts_userId', ['userId'])]
+    const snapshot = {
+      tables: { 'public.accounts': { indexes: { idx_accounts_userId: {} } } },
+    }
+    const baseline = new Set(['accounts.idx_accounts_userId'])
+    expect(findStaleBaseline(migrations, snapshot, baseline)).toEqual([
+      'accounts.idx_accounts_userId',
+    ])
+  })
+
+  test('returns empty when every baseline entry still corresponds to undeclared drift', () => {
+    const migrations = [ix('accounts', 'idx_accounts_userId', ['userId'])]
+    const snapshot = { tables: { 'public.accounts': { indexes: {} } } }
+    const baseline = new Set(['accounts.idx_accounts_userId'])
+    expect(findStaleBaseline(migrations, snapshot, baseline)).toEqual([])
   })
 })

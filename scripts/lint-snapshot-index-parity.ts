@@ -48,7 +48,7 @@ export interface DroppedColumn {
 export function parseCreatedIndexes(sql: string): MigrationIndex[] {
   const cleaned = sql.replace(/--[^\n]*/g, '')
   const re =
-    /create\s+(?:unique\s+)?index(?:\s+if\s+not\s+exists)?\s+(?:"([^"]+)"|(\w+))\s+on\s+(?:"([^"]+)"|(\w+))\s*(?:using\s+\w+\s*)?\(([^)]+)\)/gi
+    /create\s+(?:unique\s+)?index(?:\s+concurrently)?(?:\s+if\s+not\s+exists)?\s+(?:"([^"]+)"|(\w+))\s+on\s+(?:"([^"]+)"|(\w+))\s*(?:using\s+\w+\s*)?\(([^)]+)\)/gi
   const out: MigrationIndex[] = []
   for (const m of cleaned.matchAll(re)) {
     const name = m[1] ?? m[2]
@@ -98,8 +98,10 @@ export function parseDroppedColumns(sql: string): DroppedColumn[] {
 }
 
 /** Walk drizzle/*.sql in journal order and net every CREATE INDEX against
- *  later DROP INDEX, DROP TABLE, and column-cascade drops, so the result
- *  reflects what's actually live in the DB — not just what was ever created. */
+ *  later DROP INDEX and column-cascade drops, so the result reflects what's
+ *  actually live in the DB — not just what was ever created. (DROP TABLE
+ *  cascade isn't handled today; no dropped table in tree has indexes — if one
+ *  ever does, extend here.) */
 export function readLiveMigrationIndexes(drizzleDir: string): MigrationIndex[] {
   const files = readdirSync(drizzleDir)
     .filter((f) => f.endsWith('.sql'))
@@ -151,6 +153,37 @@ export function findDrift(
   return drift
 }
 
+/** Find BASELINE entries that no longer correspond to live, undeclared drift —
+ *  either the index has been dropped from migrations entirely or it has since
+ *  been codified into the snapshot. A stale entry hides future regressions
+ *  (someone removes the inline `.index()` → snapshot drops it → stale baseline
+ *  silently suppresses the resulting drift), so the lint must surface and
+ *  reject these alongside positive drift. */
+export function findStaleBaseline(
+  migrationIndexes: readonly MigrationIndex[],
+  snapshot: SnapshotShape,
+  baseline: ReadonlySet<string>,
+): string[] {
+  const tables = snapshot.tables ?? {}
+  const liveByKey = new Map(migrationIndexes.map((mi) => [`${mi.table}.${mi.name}`, mi]))
+  const stale: string[] = []
+  for (const key of baseline) {
+    const live = liveByKey.get(key)
+    if (!live) {
+      // No matching CREATE INDEX in the journal at all — the index was dropped
+      // or the entry was malformed.
+      stale.push(key)
+      continue
+    }
+    const t = tables[`public.${live.table}`] ?? tables[live.table]
+    if (t?.indexes && live.name in t.indexes) {
+      // Index now declared in the snapshot — codification landed; remove from BASELINE.
+      stale.push(key)
+    }
+  }
+  return stale
+}
+
 /**
  * Known drift not yet codified (#1150). Each entry is `<table>.<index_name>`.
  * Drain each via a codification PR: add an inline `.index(...)` / `.uniqueIndex(...)`
@@ -182,6 +215,7 @@ async function main(): Promise<void> {
   const live = readLiveMigrationIndexes(drizzleDir)
   const snapshot = readLatestSnapshot(metaDir)
   const drift = findDrift(live, snapshot, BASELINE)
+  const stale = findStaleBaseline(live, snapshot, BASELINE)
 
   if (drift.length > 0) {
     console.error(
@@ -194,6 +228,15 @@ async function main(): Promise<void> {
         '\nintentionally hand-SQL-only and codification is queued, add the key to BASELINE in' +
         '\nscripts/lint-snapshot-index-parity.ts with a comment naming the tracking issue.',
     )
+    process.exit(1)
+  }
+  if (stale.length > 0) {
+    console.error(
+      `[lint-snapshot-index-parity] ${stale.length} stale BASELINE entr${
+        stale.length === 1 ? 'y' : 'ies'
+      } — drift is no longer present (codified or dropped). Remove from BASELINE:`,
+    )
+    for (const k of stale) console.error(`  - ${k}`)
     process.exit(1)
   }
   const inspected = live.length
