@@ -252,6 +252,54 @@ describe('DrizzleNotificationLogRepository DEAD cap (#483)', () => {
   })
 })
 
+// #1125: the daily retry sweep's read. Proves against REAL Postgres that the SQL
+// predicate returns EXACTLY the set claim() accepts (QUEUED / FAILED / expired
+// SENDING) and excludes terminal SENT/DEAD and a live SENDING lease — the InMemory
+// test covers the contract; only this runs the `OR (SENDING AND updatedAt < now()
+// - lease)` SQL + ORDER BY. Isolated by idempotency-key prefix since sibling
+// describes share this booking's rows.
+describe('DrizzleNotificationLogRepository findRetryable (#1125 sweep)', () => {
+  const repo = new DrizzleNotificationLogRepository(db)
+  const expireLease = (id: string) =>
+    db
+      .update(notificationLog)
+      .set({ updatedAt: sql`now() - interval '10 minutes'` })
+      .where(eq(notificationLog.id, id))
+
+  it('returns QUEUED / FAILED / expired-SENDING and excludes SENT / DEAD / live-SENDING', async () => {
+    const P = `notify:${testBookingId}:retryable-`
+    await repo.upsertQueued(row({ idempotencyKey: `${P}queued` })) // QUEUED
+
+    const failed = await repo.upsertQueued(row({ idempotencyKey: `${P}failed` }))
+    await repo.claim(failed.id)
+    await repo.markFailed(failed.id, 'transient') // FAILED (below cap)
+
+    const expired = await repo.upsertQueued(row({ idempotencyKey: `${P}expired` }))
+    await repo.claim(expired.id)
+    await expireLease(expired.id) // SENDING, lease lapsed -> reclaimable
+
+    const live = await repo.upsertQueued(row({ idempotencyKey: `${P}live` }))
+    await repo.claim(live.id) // SENDING, live lease -> excluded
+
+    const sent = await repo.upsertQueued(row({ idempotencyKey: `${P}sent` }))
+    await repo.claim(sent.id)
+    await repo.markSent(sent.id, 'm') // SENT -> excluded
+
+    const dead = await repo.upsertQueued(row({ idempotencyKey: `${P}dead` }))
+    for (let i = 0; i < MAX_NOTIFICATION_ATTEMPTS; i++) {
+      await repo.claim(dead.id)
+      await repo.markFailed(dead.id, 'x') // -> terminal DEAD -> excluded
+    }
+
+    const mine = (await repo.findRetryable(1000)).filter((r) => r.idempotencyKey.startsWith(P))
+    expect(mine.map((r) => r.idempotencyKey.slice(P.length)).sort()).toEqual([
+      'expired',
+      'failed',
+      'queued',
+    ])
+  })
+})
+
 // #681: a phone-only renter / contactless operator yields a terminal NO_RECIPIENT
 // row instead of a silent skip. Proves the enum value + empty address/locale write
 // against real pg, and that the separate key never poisons a later real send.

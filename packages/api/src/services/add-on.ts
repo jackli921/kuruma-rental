@@ -1,6 +1,7 @@
 import type { CallerContext } from '../middleware/auth'
 import { PG_ERROR, pgErrorCode } from '../pg-errors'
 import type { AddOn, AddOnFilters, AddOnRepository } from '../repositories/types'
+import { type CrossOperatorRead, applyCrossOperatorReadScope } from '../tenancy'
 
 export type AddOnResult = { ok: true; option: AddOn } | { ok: false; error: string; status: number }
 
@@ -12,8 +13,12 @@ const isDuplicateName = (err: unknown): boolean => pgErrorCode(err) === PG_ERROR
 export class AddOnService {
   constructor(private readonly repo: AddOnRepository) {}
 
-  async findAll(ctx: CallerContext, filters?: AddOnFilters): Promise<AddOn[]> {
-    return this.repo.findAll(ctx, filters)
+  async findAll(
+    ctx: CallerContext,
+    read: CrossOperatorRead,
+    filters: AddOnFilters = {},
+  ): Promise<AddOn[]> {
+    return this.repo.findAll(ctx, applyCrossOperatorReadScope(ctx, read, filters))
   }
 
   async findById(ctx: CallerContext, id: string): Promise<AddOn | undefined> {

@@ -14,6 +14,7 @@ import {
   type AppType,
   buildCancellationRefundReconciler,
   buildComplianceDigestService,
+  buildNotificationRetryService,
   createApp,
 } from './index'
 import { type SentryRuntimeEnv, resolveSentryOptions } from './observability/sentry-options'
@@ -34,21 +35,24 @@ const handler = {
   // Daily cron (crons = ["0 23 * * *"]) on the SAME handler object so Sentry's
   // withSentry instruments it and it shares the per-isolate async context. Each
   // builder composes a fresh service from the env-resolved repos — the same
-  // source routes resolve through. Two independent jobs: the #916 §5.4 compliance
-  // digest and the #851 refund-on-cancellation reconciler backstop.
+  // source routes resolve through. Three independent jobs: the #916 §5.4 compliance
+  // digest, the #851 refund-on-cancellation reconciler, and the #1125 notification
+  // retry sweep backstops.
   async scheduled(
     _controller: ScheduledController,
     _env?: unknown,
     _ctx?: ExecutionContext,
   ): Promise<void> {
     // No cross-run lock: a daily cron can't overlap itself, and every run() is
-    // idempotent. The two jobs are isolated — one throwing must not starve the
-    // other (a digest failure can't silence the money backstop, or vice versa) —
-    // and any failures are re-thrown together so withSentry still captures them.
+    // idempotent. The jobs are isolated — one throwing must not starve the others
+    // (a digest failure can't silence the money backstop or the notification sweep,
+    // or vice versa) — and any failures are re-thrown together so withSentry still
+    // captures them.
     const errors: unknown[] = []
     for (const job of [
       { name: 'compliance-digest', run: () => buildComplianceDigestService().run() },
       { name: 'refund-reconciler', run: () => buildCancellationRefundReconciler().run() },
+      { name: 'notification-retry', run: () => buildNotificationRetryService().run() },
     ]) {
       try {
         const summary = await job.run()

@@ -10,6 +10,7 @@ import type {
   LocationRepository,
   RegionRepository,
 } from '../repositories/types'
+import { type CrossOperatorRead, applyCrossOperatorReadScope } from '../tenancy'
 import type { GeocodeOutcome, Geocoder } from './geocoding/types'
 
 export type LocationResult =
@@ -85,8 +86,12 @@ export class LocationService {
     private readonly regionRepo: RegionRepository,
   ) {}
 
-  async findAll(ctx: CallerContext, filters?: LocationFilters): Promise<Location[]> {
-    return this.repo.findAll(ctx, filters)
+  async findAll(
+    ctx: CallerContext,
+    read: CrossOperatorRead,
+    filters: LocationFilters = {},
+  ): Promise<Location[]> {
+    return this.repo.findAll(ctx, applyCrossOperatorReadScope(ctx, read, filters))
   }
 
   async findById(ctx: CallerContext, id: string): Promise<Location | undefined> {
