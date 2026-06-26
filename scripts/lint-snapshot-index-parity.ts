@@ -193,18 +193,15 @@ export function findStaleBaseline(
  * declaration on a new migration, and that should fail the lint immediately.
  */
 export const BASELINE: ReadonlySet<string> = new Set([
-  // Created by 0010_add-fk-indexes.sql, never echoed in `accounts` definition.
-  'accounts.idx_accounts_userId',
-  // Three more bookings indexes the audit missed — surfaced by the first run
-  // of this lint. All hand-SQL, none mirrored in packages/shared/src/db/booking.ts:
+  // Three bookings indexes — all hand-SQL, none yet mirrored in
+  // packages/shared/src/db/booking.ts (codify in #1173):
   // - 0010_add-fk-indexes.sql created idx_bookings_renterId
   // - 0014_add-bookings-status-index.sql created idx_bookings_status
   // - 0012_idempotency-unique-index.sql created bookings_idempotency_key (partial unique)
-  // Codify together in the bookings-table follow-up PR.
   'bookings.idx_bookings_renterId',
   'bookings.idx_bookings_status',
   'bookings.bookings_idempotency_key',
-  // Created by 0020_add-maintenance-logs-vehicle-index.sql, never echoed.
+  // Created by 0020_add-maintenance-logs-vehicle-index.sql (codify in #1172).
   'maintenance_logs.idx_maintenance_logs_vehicleId',
 ])
 
