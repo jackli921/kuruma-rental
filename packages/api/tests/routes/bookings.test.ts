@@ -13,6 +13,7 @@ import {
   InMemoryLocationRepository,
   InMemoryMaintenanceLogRepository,
   InMemoryUserRepository,
+  InMemoryVehicleBlockRepository,
   InMemoryVehicleClassRepository,
   InMemoryVehicleRepository,
 } from '../../src/repositories/in-memory'
@@ -150,7 +151,11 @@ describe('Booking Routes', () => {
     insuranceOptionRepo = new InMemoryInsuranceOptionRepository()
     addOnRepo = new InMemoryAddOnRepository()
     feeScheduleRepo = new InMemoryFeeScheduleRepository()
-    availabilityRepo = new InMemoryAvailabilityRepository(vehicleRepo, bookingRepo)
+    availabilityRepo = new InMemoryAvailabilityRepository(
+      vehicleRepo,
+      bookingRepo,
+      new InMemoryVehicleBlockRepository(),
+    )
     classRatePlanRepo = new InMemoryClassRatePlanRepository()
 
     const klass: VehicleClass = await vehicleClassRepo.create({

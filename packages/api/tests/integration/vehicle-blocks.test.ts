@@ -4,7 +4,11 @@ import { inArray } from 'drizzle-orm'
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest'
 import { SYSTEM_CONTEXT } from '../../src/middleware/auth'
 import { pgConstraintName, pgErrorCode } from '../../src/pg-errors'
-import { DrizzleVehicleRepository } from '../../src/repositories/drizzle'
+import {
+  DrizzleAvailabilityRepository,
+  DrizzleVehicleBlockRepository,
+  DrizzleVehicleRepository,
+} from '../../src/repositories/drizzle'
 import type { Vehicle } from '../../src/stores'
 import {
   DEFAULT_DAILY_RATE_JPY,
@@ -146,5 +150,129 @@ describe('vehicle_blocks DB constraints', () => {
     await insertBlock({ vehicleId: vehicleA, startAt: hours(0), endAt: hours(48) })
     const id = await insertBlock({ vehicleId: vehicleB, startAt: hours(0), endAt: hours(48) })
     expect(id).toBeTruthy()
+  })
+})
+
+// #1101 slice 2: proves the Drizzle availability subtraction against REAL Postgres
+// — a road-legal, available car drops out of findAvailableVehicles +
+// checkVehicleAvailability the moment a block overlaps the requested window
+// (the NOT EXISTS vehicle_blocks predicate). Scoped to a dedicated class +
+// location so the global scan isolates exactly the seeded car.
+describe('vehicle_blocks availability subtraction', () => {
+  const availabilityRepo = new DrizzleAvailabilityRepository(db)
+  const blockRepo = new DrizzleVehicleBlockRepository(db)
+
+  const WIN_FROM = hours(100)
+  const WIN_TO = hours(124)
+
+  let avClassId: string
+  let avLocationId: string
+  let roadLegalVehicle: string
+  const avVehicleIds: string[] = []
+  const avClassIds: string[] = []
+  const avLocationIds: string[] = []
+  const avBlockIds: string[] = []
+
+  const scope = () => ({
+    operatorId: BEST_CAR_RENTAL_OPERATOR_ID,
+    classId: avClassId,
+    locationId: avLocationId,
+  })
+
+  beforeAll(async () => {
+    const klass = await seedVehicleClass('block-av')
+    avClassId = klass.id
+    avClassIds.push(klass.id)
+    const location = await seedLocation('block-av')
+    avLocationId = location.id
+    avLocationIds.push(location.id)
+    // Road-legal THROUGH the window (both certs well past WIN_TO) so the #916
+    // compliance gate doesn't exclude it — isolating the block effect.
+    roadLegalVehicle = (
+      await vehicleRepo.create(SYSTEM_CONTEXT, {
+        operatorId: BEST_CAR_RENTAL_OPERATOR_ID,
+        classId: avClassId,
+        pickupLocationId: avLocationId,
+        name: 'Road Legal Block Car',
+        description: null,
+        seats: 5,
+        transmission: 'AUTO',
+        fuelType: null,
+        licensePlate: null,
+        status: 'AVAILABLE',
+        minRentalHours: null,
+        maxRentalHours: null,
+        advanceBookingHours: null,
+        dailyRateJpy: DEFAULT_DAILY_RATE_JPY,
+        shakenExpiryDate: '2027-01-01',
+        insuranceExpiryDate: '2027-01-01',
+      })
+    ).id
+    avVehicleIds.push(roadLegalVehicle)
+  })
+
+  afterEach(async () => {
+    if (avBlockIds.length > 0) {
+      await db.delete(vehicleBlocks).where(inArray(vehicleBlocks.id, avBlockIds))
+      avBlockIds.length = 0
+    }
+  })
+
+  afterAll(async () => {
+    await cleanupVehicles(avVehicleIds)
+    await cleanupVehicleClasses(avClassIds)
+    await cleanupLocations(avLocationIds)
+  })
+
+  async function blockWindow(startAt: Date, endAt: Date): Promise<void> {
+    const block = await blockRepo.create({
+      operatorId: BEST_CAR_RENTAL_OPERATOR_ID,
+      vehicleId: roadLegalVehicle,
+      startAt,
+      endAt,
+      kind: 'MAINTENANCE',
+      reason: 'scheduled service',
+      notes: null,
+      createdBy: 'system',
+    })
+    avBlockIds.push(block.id)
+  }
+
+  it('lists the road-legal car when nothing blocks the window', async () => {
+    const result = await availabilityRepo.findAvailableVehicles(WIN_FROM, WIN_TO, scope())
+    expect(result.map((v) => v.id)).toContain(roadLegalVehicle)
+  })
+
+  it('drops the car from findAvailableVehicles when a block overlaps the window', async () => {
+    await blockWindow(hours(110), hours(130))
+    const result = await availabilityRepo.findAvailableVehicles(WIN_FROM, WIN_TO, scope())
+    expect(result.map((v) => v.id)).not.toContain(roadLegalVehicle)
+  })
+
+  it('keeps the car listed when the block is adjacent (half-open, no overlap)', async () => {
+    // ends exactly at WIN_FROM → adjacent, not overlapping.
+    await blockWindow(hours(76), WIN_FROM)
+    const result = await availabilityRepo.findAvailableVehicles(WIN_FROM, WIN_TO, scope())
+    expect(result.map((v) => v.id)).toContain(roadLegalVehicle)
+  })
+
+  it('flips checkVehicleAvailability to unavailable for a blocked window (block is not a booking)', async () => {
+    const before = await availabilityRepo.checkVehicleAvailability(
+      roadLegalVehicle,
+      WIN_FROM,
+      WIN_TO,
+    )
+    expect(before?.available).toBe(true)
+
+    await blockWindow(hours(110), hours(130))
+
+    const after = await availabilityRepo.checkVehicleAvailability(
+      roadLegalVehicle,
+      WIN_FROM,
+      WIN_TO,
+    )
+    expect(after?.available).toBe(false)
+    // a block flips availability without polluting the booking conflicts list.
+    expect(after?.conflicts).toEqual([])
   })
 })

@@ -31,6 +31,7 @@ import type {
   StorefrontRepository,
   ThreadRepository,
   UserRepository,
+  VehicleBlockRepository,
   VehicleClassRepository,
   VehicleDetailRepository,
   VehicleRepository,
@@ -56,6 +57,7 @@ export type AppOverrides = {
   messageRepo?: MessageRepository
   vehicleClassRepo?: VehicleClassRepository
   maintenanceLogRepo?: MaintenanceLogRepository
+  vehicleBlockRepo?: VehicleBlockRepository
   photoStorage?: PhotoStorage
   renterDocumentRepo?: RenterDocumentRepository
   documentStorage?: DocumentStorage

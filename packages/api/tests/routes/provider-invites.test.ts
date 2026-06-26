@@ -7,6 +7,7 @@ import {
   InMemoryBookingRepository,
   InMemoryOperatorRepository,
   InMemoryProviderInviteRepository,
+  InMemoryVehicleBlockRepository,
   InMemoryVehicleRepository,
 } from '../../src/repositories/in-memory'
 import type { Operator } from '../../src/stores'
@@ -37,7 +38,11 @@ function makeApp() {
   setupAuthEnv()
   const vehicleRepo = new InMemoryVehicleRepository()
   const bookingRepo = new InMemoryBookingRepository()
-  const availabilityRepo = new InMemoryAvailabilityRepository(vehicleRepo, bookingRepo)
+  const availabilityRepo = new InMemoryAvailabilityRepository(
+    vehicleRepo,
+    bookingRepo,
+    new InMemoryVehicleBlockRepository(),
+  )
   const providerInviteRepo = new InMemoryProviderInviteRepository()
   const operatorRepo = new InMemoryOperatorRepository(new Map([[OPERATOR.id, OPERATOR]]))
   const app = createApp({

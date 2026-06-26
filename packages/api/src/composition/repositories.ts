@@ -37,6 +37,7 @@ import {
   DrizzleStorefrontRepository,
   DrizzleThreadRepository,
   DrizzleUserRepository,
+  DrizzleVehicleBlockRepository,
   DrizzleVehicleClassRepository,
   DrizzleVehicleDetailRepository,
   DrizzleVehicleRepository,
@@ -75,6 +76,7 @@ import {
   InMemoryStorefrontRepository,
   InMemoryThreadRepository,
   InMemoryUserRepository,
+  InMemoryVehicleBlockRepository,
   InMemoryVehicleClassRepository,
   InMemoryVehicleRepository,
 } from '../repositories/in-memory'
@@ -118,6 +120,7 @@ import type {
   StorefrontRepository,
   ThreadRepository,
   UserRepository,
+  VehicleBlockRepository,
   VehicleClassRepository,
   VehicleDetailRepository,
   VehicleRepository,
@@ -167,6 +170,7 @@ export type Repos = {
   threadRepo: ThreadRepository
   messageRepo: MessageRepository
   maintenanceLogRepo: MaintenanceLogRepository
+  vehicleBlockRepo: VehicleBlockRepository
   photoStorage: PhotoStorage
   renterDocumentRepo: RenterDocumentRepository
   documentStorage: DocumentStorage
@@ -209,6 +213,10 @@ export function buildOverrideRepos(overrides: AppOverrides): Repos {
   const { vehicleRepo, bookingRepo, availabilityRepo } = overrides
   const vehicleClassRepo = overrides.vehicleClassRepo ?? new InMemoryVehicleClassRepository()
   const maintenanceLogRepo = overrides.maintenanceLogRepo ?? new InMemoryMaintenanceLogRepository()
+  // #1101: a test that exercises block-aware availability passes the SAME
+  // instance both here AND to the availabilityRepo it constructs (mirrors the
+  // bookingRepo sharing pattern); absent ⇒ a fresh empty store (no blocks).
+  const vehicleBlockRepo = overrides.vehicleBlockRepo ?? new InMemoryVehicleBlockRepository()
   const bookingEventRepo = new InMemoryBookingEventRepository()
   const userRepo = overrides.userRepo ?? new InMemoryUserRepository()
   const locationRepo = overrides.locationRepo ?? new InMemoryLocationRepository()
@@ -288,6 +296,7 @@ export function buildOverrideRepos(overrides: AppOverrides): Repos {
     threadRepo,
     messageRepo,
     maintenanceLogRepo,
+    vehicleBlockRepo,
     photoStorage,
     renterDocumentRepo,
     documentStorage,
@@ -392,6 +401,7 @@ export function buildDrizzleRepos(opts?: { db?: Db; runTx?: RunTx }): Repos {
     threadRepo: new DrizzleThreadRepository(db, tx),
     messageRepo: new DrizzleMessageRepository(db, tx),
     maintenanceLogRepo: new DrizzleMaintenanceLogRepository(db),
+    vehicleBlockRepo: new DrizzleVehicleBlockRepository(db),
     photoStorage,
     renterDocumentRepo: new DrizzleRenterDocumentRepository(db),
     documentStorage,
@@ -451,7 +461,15 @@ export function buildInMemoryRepos(): Repos {
   // messageRepo wraps the SAME threadRepo instance so reads see threads the
   // message path created (shared in-memory state — matches the prod seam).
   const threadRepo = new InMemoryThreadRepository()
-  const availabilityRepo = new InMemoryAvailabilityRepository(vehicleRepo, bookingRepo)
+  // #1101: one shared block store so availability subtraction sees blocks the
+  // (slice-5) blocks route created — same instance into both the bundle and the
+  // availability repo (mirrors the bookingRepo wiring above).
+  const vehicleBlockRepo = new InMemoryVehicleBlockRepository()
+  const availabilityRepo = new InMemoryAvailabilityRepository(
+    vehicleRepo,
+    bookingRepo,
+    vehicleBlockRepo,
+  )
   const vehicleClassRepo = new InMemoryVehicleClassRepository()
   const runInTransaction: RunInTransaction = async (fn) =>
     fn({
@@ -495,6 +513,7 @@ export function buildInMemoryRepos(): Repos {
     threadRepo,
     messageRepo: new InMemoryMessageRepository(threadRepo),
     maintenanceLogRepo,
+    vehicleBlockRepo,
     photoStorage: new InMemoryPhotoStorage(),
     renterDocumentRepo: new InMemoryRenterDocumentRepository(),
     documentStorage: new InMemoryDocumentStorage(),

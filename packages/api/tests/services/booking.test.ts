@@ -19,6 +19,7 @@ import {
   InMemoryMaintenanceLogRepository,
   InMemoryRenterDocumentRepository,
   InMemoryUserRepository,
+  InMemoryVehicleBlockRepository,
   InMemoryVehicleClassRepository,
   InMemoryVehicleRepository,
 } from '../../src/repositories/in-memory'
@@ -132,7 +133,11 @@ async function setup(
   const vehicleClassRepo = new InMemoryVehicleClassRepository()
   // #464 2d.1 widened TransactionRepos; this in-mem harness mirrors the wiring
   // so the submit's combo branch can read demand/capacity and rate plans in-tx.
-  const availabilityRepo = new InMemoryAvailabilityRepository(vehicleRepo, bookingRepo)
+  const availabilityRepo = new InMemoryAvailabilityRepository(
+    vehicleRepo,
+    bookingRepo,
+    new InMemoryVehicleBlockRepository(),
+  )
   const classRatePlanRepo = new InMemoryClassRatePlanRepository()
   const userRepo = new InMemoryUserRepository(
     new Map<string, User>([
@@ -1371,7 +1376,11 @@ async function setupSub(
     vehicleData({ classId: classA.id, pickupLocationId: location.id, dailyRateJpy: 10000 }),
   )
 
-  const availabilityRepo = new InMemoryAvailabilityRepository(vehicleRepo, bookingRepo)
+  const availabilityRepo = new InMemoryAvailabilityRepository(
+    vehicleRepo,
+    bookingRepo,
+    new InMemoryVehicleBlockRepository(),
+  )
   const classRatePlanRepo = new InMemoryClassRatePlanRepository()
 
   const repos: TransactionRepos = {
