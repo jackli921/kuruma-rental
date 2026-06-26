@@ -547,6 +547,13 @@
       "when": 1782432393780,
       "tag": "0077_reviews_class_subject_chk",
       "breakpoints": true
+    },
+    {
+      "idx": 78,
+      "version": "7",
+      "when": 1782435524179,
+      "tag": "0078_booking_event_vehicle_assigned",
+      "breakpoints": true
     }
   ]
 }
