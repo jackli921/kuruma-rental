@@ -26,4 +26,14 @@ export class InMemoryPaymentAnomalyRepository implements PaymentAnomalyRepositor
   async listUnresolved(): Promise<PaymentAnomaly[]> {
     return [...this.store.values()].filter((r) => r.resolvedAt === null)
   }
+
+  // #1087: platform-overview open-anomaly KPI. Mirrors the Drizzle COUNT(* WHERE
+  // resolvedAt IS NULL).
+  async countUnresolved(): Promise<number> {
+    let n = 0
+    for (const r of this.store.values()) {
+      if (r.resolvedAt === null) n++
+    }
+    return n
+  }
 }
