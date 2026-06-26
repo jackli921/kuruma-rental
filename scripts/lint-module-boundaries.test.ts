@@ -85,19 +85,19 @@ describe('lint-module-boundaries: web vite cross-feature reach-ins (#1110)', () 
   })
 
   test('ratchet status reports growth, shrinkage, and steady against the baseline', () => {
-    expect(viteRatchetStatus(159, 158).level).toBe('grew')
-    expect(viteRatchetStatus(157, 158).level).toBe('shrank')
-    expect(viteRatchetStatus(158, 158).level).toBe('ok')
+    expect(viteRatchetStatus(162, 161).level).toBe('grew')
+    expect(viteRatchetStatus(160, 161).level).toBe('shrank')
+    expect(viteRatchetStatus(161, 161).level).toBe('ok')
   })
 
   test('notice is silent when steady and names the new baseline when it changes', () => {
-    expect(formatViteRatchetNotice({ count: 158, baseline: 158, level: 'ok' })).toBeNull()
-    const grew = formatViteRatchetNotice({ count: 159, baseline: 158, level: 'grew' })
+    expect(formatViteRatchetNotice({ count: 161, baseline: 161, level: 'ok' })).toBeNull()
+    const grew = formatViteRatchetNotice({ count: 162, baseline: 161, level: 'grew' })
     expect(grew).toContain('@/vite/<feature>/<internal>')
     expect(grew).toContain('@/vite/<feature> barrel')
-    expect(grew).toContain('VITE_CROSS_FEATURE_REACH_IN_BASELINE=159')
-    const shrank = formatViteRatchetNotice({ count: 157, baseline: 158, level: 'shrank' })
-    expect(shrank).toContain('VITE_CROSS_FEATURE_REACH_IN_BASELINE=157')
+    expect(grew).toContain('VITE_CROSS_FEATURE_REACH_IN_BASELINE=162')
+    const shrank = formatViteRatchetNotice({ count: 160, baseline: 161, level: 'shrank' })
+    expect(shrank).toContain('VITE_CROSS_FEATURE_REACH_IN_BASELINE=160')
   })
 })
 
