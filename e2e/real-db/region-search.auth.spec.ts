@@ -144,17 +144,19 @@ test.describe('renter region search — subtree filter + nav threading + book (r
 async function cleanupFutureSarahBookings(): Promise<void> {
   const sql = testSql()
   try {
-    // Spec-created bookings carry runtime UUIDs; seeded demo rows (bk_demo_*) own
-    // a SUCCEEDED payment_events row this cleanup never deletes. Once the demo-
-    // relative seed window crept past the fixed 2026-07-01 bound (Sarah's
-    // startOffsetDays:+5 reached it on 2026-06-26), the unscoped delete began
-    // FK-failing on the seeded booking's payment_events. Exclude seed rows.
+    // Only the instant-book bookings THIS spec created — never seeded demo rows.
+    // Seeded bookings use seedId() UUIDs (no usable id prefix) and each non-
+    // cancelled one carries a SUCCEEDED payment_events row (#627/#639) this cleanup
+    // doesn't delete. Once a demo-relative seed booking (Sarah's +5d) drifted past
+    // the fixed 2026-07-01 bound on 2026-06-26, deleting it FK-failed on that
+    // payment. A paid booking is never ours, so exclude any with a payment_events
+    // row — date-independent, and no real-db spec books through Stripe.
     const ids = await sql<{ id: string }[]>`
       SELECT b.id FROM bookings b
       JOIN users u ON u.id = b."renterId"
       WHERE u.email = ${RENTER_EMAIL}
         AND b."startAt" >= '2026-07-01'
-        AND b.id NOT LIKE 'bk_demo_%'
+        AND NOT EXISTS (SELECT 1 FROM payment_events pe WHERE pe."bookingId" = b.id)
     `
     if (ids.length === 0) return
     const bookingIds = ids.map((r) => r.id)
