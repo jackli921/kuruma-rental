@@ -15,6 +15,7 @@ import { requestId } from './middleware/request-id'
 import { observability } from './observability/middleware'
 import { createAddOnRoutes } from './routes/add-ons'
 import { createAdminRoutes } from './routes/admin'
+import { createAdminConsentRoutes } from './routes/admin-consent'
 import { createAdminOverviewRoutes } from './routes/admin-overview'
 import { createAdminRevenueRoutes } from './routes/admin-revenue'
 import { createAuthRoutes } from './routes/auth'
@@ -59,6 +60,7 @@ import { ComplianceDigestService } from './services/compliance-digest'
 import { ConsentService } from './services/consent'
 import { ConsentEvidenceService } from './services/consent-evidence'
 import { ConsentGateService } from './services/consent-gate'
+import { ConsentGovernanceService } from './services/consent-governance'
 import { resolveSigningKey } from './services/consent-signing'
 import { CustomerService } from './services/customer'
 import { documentVerificationGate } from './services/document-verification-gate'
@@ -404,6 +406,8 @@ export function createApp(overrides?: AppOverrides, repos: Repos = buildRepos(ov
     const k = resolveSigningKey()
     return k && k.keyId === keyId ? k : undefined
   })
+  // #1091: platform-admin read-only governance browse over the same ledger.
+  const consentGovernanceService = new ConsentGovernanceService(consentRepo)
   const userDirectoryService = new UserDirectoryService(userRepo, threadRepo)
   const maintenanceService = new MaintenanceService(
     vehicleRepo,
@@ -509,6 +513,7 @@ export function createApp(overrides?: AppOverrides, repos: Repos = buildRepos(ov
     .route('/', createPaymentAnomalyRoutes(paymentAnomalyService))
     .route('/', createMessageRoutes(messageService))
     .route('/', createConsentRoutes(consentService))
+    .route('/', createAdminConsentRoutes(consentGovernanceService))
     .route(
       '/',
       createTranslateRoutes(new MessageTranslationService(messageRepo, translationProvider)),

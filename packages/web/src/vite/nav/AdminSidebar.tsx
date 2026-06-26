@@ -1,5 +1,5 @@
 import { Link } from '@tanstack/react-router'
-import { Banknote, FileCheck, LayoutDashboard, Users } from 'lucide-react'
+import { Banknote, FileCheck, LayoutDashboard, ShieldCheck, Users } from 'lucide-react'
 import { useLocale, useTranslations } from 'use-intl'
 
 const SIDEBAR_ITEMS = [
@@ -7,6 +7,7 @@ const SIDEBAR_ITEMS = [
   { to: '/$locale/admin/revenue', icon: Banknote, labelKey: 'nav.revenue' },
   { to: '/$locale/admin/documents', icon: FileCheck, labelKey: 'nav.documents' },
   { to: '/$locale/admin/customers', icon: Users, labelKey: 'nav.customers' },
+  { to: '/$locale/admin/governance', icon: ShieldCheck, labelKey: 'nav.governance' },
 ] as const
 
 // Single static className; active state is the `aria-current="page"` attribute

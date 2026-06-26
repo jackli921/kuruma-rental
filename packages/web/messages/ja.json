@@ -1234,6 +1234,7 @@
       "overview": "概要",
       "revenue": "パートナー収益",
       "documents": "書類",
+      "governance": "同意ガバナンス",
       "customers": "顧客"
     },
     "home": {
@@ -1298,6 +1299,26 @@
       "reject": "却下",
       "error": "判定を記録できませんでした。もう一度お試しください。",
       "loadError": "審査キューを読み込めませんでした。",
+      "retry": "再試行"
+    },
+    "governance": {
+      "title": "同意ガバナンス",
+      "subtitle": "全ユーザーの同意受諾履歴を閲覧します。",
+      "empty": "条件に一致する同意受諾はありません。",
+      "colUser": "ユーザー",
+      "colType": "同意種別",
+      "colVersion": "バージョン",
+      "colAccepted": "受諾日時",
+      "colEvidence": "証跡",
+      "viewEvidence": "証跡を表示",
+      "evidenceLinkLabel": "{user} の同意証跡を表示",
+      "filterType": "同意種別",
+      "filterUser": "ユーザーID",
+      "filterVersion": "バージョン",
+      "allTypes": "すべての種別",
+      "apply": "適用",
+      "clear": "クリア",
+      "loadError": "同意履歴を読み込めませんでした。",
       "retry": "再試行"
     },
     "customers": {
