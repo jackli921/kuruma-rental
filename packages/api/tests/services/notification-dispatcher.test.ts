@@ -515,6 +515,89 @@ describe('NotificationDispatcher', () => {
       expect(sender.send as ReturnType<typeof vi.fn>).toHaveBeenCalledTimes(2)
     })
 
+    // #1114: `buildMessage` used to eager-fetch operator+vehicle+pickup+dropoff
+    // for every kind, even though RENTER_CANCELLATION uses none of them. Push
+    // the reads down to the consuming branches.
+    it('RENTER_CANCELLATION skips the 4 unused reads (operator + vehicle + pickup + dropoff)', async () => {
+      const operatorFindById = vi.fn(async () => undefined)
+      const vehicleFindById = vi.fn(async () => undefined)
+      const locationFindById = vi.fn(async (_ctx: unknown, id: string) => ({ id, name: id }))
+      const operatorRepo = { findById: operatorFindById } as unknown as InMemoryOperatorRepository
+      const vehicleRepo = { findById: vehicleFindById } as unknown as VehicleRepository
+      const locationRepo = { findById: locationFindById } as unknown as LocationRepository
+
+      // Reuse the build() rig for everything except the 3 instrumented repos.
+      const { dispatcher: base } = build()
+      const dispatcher = new NotificationDispatcher(
+        // biome-ignore lint/suspicious/noExplicitAny: reaching into the rig only to swap the 3 instrumented repos
+        (base as any).notificationLogRepo,
+        operatorRepo,
+        vehicleRepo,
+        // biome-ignore lint/suspicious/noExplicitAny: see above
+        (base as any).userRepo,
+        // biome-ignore lint/suspicious/noExplicitAny: see above
+        (base as any).resolveOperatorRecipients,
+        locationRepo,
+        // biome-ignore lint/suspicious/noExplicitAny: see above
+        (base as any).emailSender,
+        // biome-ignore lint/suspicious/noExplicitAny: see above
+        (base as any).config,
+      )
+
+      await dispatcher.processOne(booking, 'RENTER_CANCELLATION')
+
+      expect(operatorFindById).toHaveBeenCalledTimes(0)
+      expect(vehicleFindById).toHaveBeenCalledTimes(0)
+      expect(locationFindById).toHaveBeenCalledTimes(0)
+    })
+
+    // Mutation guard: a consumer branch MUST still issue those reads after the
+    // refactor, otherwise the cancellation savings came at the cost of breaking
+    // confirmation rendering.
+    it('RENTER_BOOKING_CONFIRM still reads operator + vehicle + pickup + dropoff', async () => {
+      const operatorFindById = vi.fn(async () => ({
+        id: OP,
+        slug: 'bcr',
+        name: 'BCR',
+        preAuthHandoffUrl: null,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      }))
+      const vehicleFindById = vi.fn(async () => ({
+        name: 'Toyota Aqua',
+        make: 'Toyota',
+        model: 'Aqua',
+        licensePlate: 'X 12-34',
+      }))
+      const locationFindById = vi.fn(async (_ctx: unknown, id: string) => ({ id, name: id }))
+      const operatorRepo = { findById: operatorFindById } as unknown as InMemoryOperatorRepository
+      const vehicleRepo = { findById: vehicleFindById } as unknown as VehicleRepository
+      const locationRepo = { findById: locationFindById } as unknown as LocationRepository
+
+      const { dispatcher: base } = build()
+      const dispatcher = new NotificationDispatcher(
+        // biome-ignore lint/suspicious/noExplicitAny: rig-only swap of the 3 instrumented repos
+        (base as any).notificationLogRepo,
+        operatorRepo,
+        vehicleRepo,
+        // biome-ignore lint/suspicious/noExplicitAny: see above
+        (base as any).userRepo,
+        // biome-ignore lint/suspicious/noExplicitAny: see above
+        (base as any).resolveOperatorRecipients,
+        locationRepo,
+        // biome-ignore lint/suspicious/noExplicitAny: see above
+        (base as any).emailSender,
+        // biome-ignore lint/suspicious/noExplicitAny: see above
+        (base as any).config,
+      )
+
+      await dispatcher.processOne(booking, 'RENTER_BOOKING_CONFIRM')
+
+      expect(operatorFindById).toHaveBeenCalledTimes(1)
+      expect(vehicleFindById).toHaveBeenCalledTimes(1) // assignedVehicleId = 'veh-1'
+      expect(locationFindById).toHaveBeenCalledTimes(2) // pickup + dropoff
+    })
+
     it('substitution email renders the new vehicle and leaks no internal ids', async () => {
       const sent: Array<{ to: string; subject: string; html: string; text: string }> = []
       const sender = {

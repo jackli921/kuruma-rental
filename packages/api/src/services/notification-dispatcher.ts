@@ -203,8 +203,10 @@ export class NotificationDispatcher {
     return { to: fallback, recipient: fallback, locale: DEFAULT_OPERATOR_LOCALE }
   }
 
-  private async buildMessage(booking: Booking, kind: Kind, resolved: Resolved) {
-    const { to, bcc, locale } = resolved
+  // Eager relations used by every kind EXCEPT RENTER_CANCELLATION (which renders
+  // from booking-snapshot fields alone). Pulled into its own method so the
+  // cancellation branch doesn't pay the 4 repo reads it never consumes (#1114).
+  private async loadRelations(booking: Booking) {
     const [operator, vehicle, pickup, dropoff] = await Promise.all([
       this.operatorRepo.findById(booking.operatorId),
       booking.assignedVehicleId
@@ -230,6 +232,11 @@ export class NotificationDispatcher {
       endAt: booking.endAt,
       totalPriceJpy: booking.totalPrice,
     }
+    return { operator, vehicleData, pickupName, dropoffName, common }
+  }
+
+  private async buildMessage(booking: Booking, kind: Kind, resolved: Resolved) {
+    const { to, bcc, locale } = resolved
     const replyTo = this.config.emailReplyTo
     const envelope = (r: { subject: string; html: string; text: string }) => ({
       to,
@@ -240,6 +247,25 @@ export class NotificationDispatcher {
       text: r.text,
       ...(replyTo ? { replyTo } : {}),
     })
+
+    // Branches that render purely from booking-snapshot fields short-circuit
+    // BEFORE the eager relation reads (#1114).
+    if (kind === 'RENTER_CANCELLATION') {
+      return envelope(
+        renderRenterCancellation(
+          {
+            bookingCode: booking.bookingCode,
+            startAt: booking.startAt,
+            endAt: booking.endAt,
+            cancellationFeeJpy: booking.cancellationFee,
+          },
+          locale,
+        ),
+      )
+    }
+
+    const { operator, vehicleData, pickupName, dropoffName, common } =
+      await this.loadRelations(booking)
 
     switch (kind) {
       case 'RENTER_BOOKING_CONFIRM':
@@ -271,18 +297,6 @@ export class NotificationDispatcher {
               dropoffLocationName: dropoffName,
               startAt: booking.startAt,
               endAt: booking.endAt,
-            },
-            locale,
-          ),
-        )
-      case 'RENTER_CANCELLATION':
-        return envelope(
-          renderRenterCancellation(
-            {
-              bookingCode: booking.bookingCode,
-              startAt: booking.startAt,
-              endAt: booking.endAt,
-              cancellationFeeJpy: booking.cancellationFee,
             },
             locale,
           ),

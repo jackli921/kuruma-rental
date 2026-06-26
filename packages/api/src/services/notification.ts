@@ -6,6 +6,7 @@ import type {
   NotificationLogRepository,
 } from '../repositories/types'
 import type { NotificationLog } from '../stores'
+import { type CrossOperatorRead, applyCrossOperatorReadScope } from '../tenancy'
 import type { NotificationDispatcher } from './notification-dispatcher'
 
 export type ResendResult =
@@ -29,8 +30,12 @@ export class NotificationService {
     private readonly dispatcher: NotificationDispatcher,
   ) {}
 
-  findAll(ctx: CallerContext, filters?: NotificationLogFilters): Promise<NotificationLog[]> {
-    return this.notificationLogRepo.findAll(ctx, filters)
+  findAll(
+    ctx: CallerContext,
+    read: CrossOperatorRead,
+    filters: NotificationLogFilters = {},
+  ): Promise<NotificationLog[]> {
+    return this.notificationLogRepo.findAll(ctx, applyCrossOperatorReadScope(ctx, read, filters))
   }
 
   async resend(ctx: CallerContext, id: string): Promise<ResendResult> {
