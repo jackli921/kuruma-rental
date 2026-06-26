@@ -10,6 +10,7 @@
  */
 
 import * as Sentry from '@sentry/cloudflare'
+import { buildReviewRevealSweep } from './composition/review-reveal-sweep'
 import {
   type AppType,
   buildCancellationRefundReconciler,
@@ -35,9 +36,9 @@ const handler = {
   // Daily cron (crons = ["0 23 * * *"]) on the SAME handler object so Sentry's
   // withSentry instruments it and it shares the per-isolate async context. Each
   // builder composes a fresh service from the env-resolved repos — the same
-  // source routes resolve through. Three independent jobs: the #916 §5.4 compliance
-  // digest, the #851 refund-on-cancellation reconciler, and the #1125 notification
-  // retry sweep backstops.
+  // source routes resolve through. Four independent jobs: the #916 §5.4 compliance
+  // digest, the #851 refund-on-cancellation reconciler, the #1125 notification
+  // retry sweep, and the #1067 review-reveal sweep backstops.
   async scheduled(
     _controller: ScheduledController,
     _env?: unknown,
@@ -53,6 +54,7 @@ const handler = {
       { name: 'compliance-digest', run: () => buildComplianceDigestService().run() },
       { name: 'refund-reconciler', run: () => buildCancellationRefundReconciler().run() },
       { name: 'notification-retry', run: () => buildNotificationRetryService().run() },
+      { name: 'review-reveal-sweep', run: () => buildReviewRevealSweep().run() },
     ]) {
       try {
         const summary = await job.run()

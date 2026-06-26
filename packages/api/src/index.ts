@@ -41,6 +41,7 @@ import { createPaymentRoutes } from './routes/payments'
 import { createProviderInviteRoutes } from './routes/provider-invites'
 import { rateLimitByIp } from './routes/rate-limit'
 import { createRegionRoutes } from './routes/regions'
+import { createReviewRoutes } from './routes/reviews'
 import { createFlatSearchRoutes } from './routes/search'
 import { createStatsRoutes } from './routes/stats'
 import { createStorefrontRoutes } from './routes/storefronts'
@@ -102,6 +103,7 @@ import type { PaymentGateway } from './services/payment/payment-gateway'
 import { StripePaymentGateway } from './services/payment/stripe-payment-gateway'
 import { ProviderInviteService } from './services/provider-invite'
 import { RenterDocumentService } from './services/renter-document'
+import { ReviewService } from './services/review'
 import { StorefrontDetailService } from './services/storefront-detail'
 import { StorefrontSearchService } from './services/storefront-search'
 import { createTranslationProvider } from './services/translation-provider-factory'
@@ -154,6 +156,7 @@ export function createApp(overrides?: AppOverrides, repos: Repos = buildRepos(ov
     operatorMembershipRepo,
     auditLogRepo,
     bookingEventRepo,
+    reviewRepo,
     consentRepo,
     classRatePlanRepo,
     runInTransaction,
@@ -464,6 +467,12 @@ export function createApp(overrides?: AppOverrides, repos: Repos = buildRepos(ov
     regionRepo,
     classRatePlanRepo,
   )
+  const reviewService = new ReviewService(
+    reviewRepo,
+    bookingRepo,
+    bookingEventRepo,
+    operatorMembershipRepo,
+  )
 
   // Chain .route() calls so TypeScript infers the full route type tree.
   // hc<AppType> needs this to produce typed client methods.
@@ -512,6 +521,7 @@ export function createApp(overrides?: AppOverrides, repos: Repos = buildRepos(ov
     .route('/', createMaintenanceLogRoutes(maintenanceService))
     .route('/', createVehicleBlockRoutes(vehicleBlockService))
     .route('/', createBookingRoutes(bookingService, consentGate))
+    .route('/', createReviewRoutes(reviewService))
     .route('/', createPaymentRoutes(paymentService))
     .route('/', createAvailabilityRoutes(availabilityService))
     .route('/', createStatsRoutes(statsRepo))
