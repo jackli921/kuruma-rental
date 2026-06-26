@@ -7,6 +7,7 @@ import {
   ForbiddenError,
   NotFoundError,
   OperatorRequiredError,
+  ScopeRequiredError,
 } from './middleware/auth'
 
 export function setupGlobalHandlers(app: Hono): void {
@@ -33,6 +34,12 @@ export function setupGlobalHandlers(app: Hono): void {
         { success: false, error: err.message, code: 'OPERATOR_REQUIRED' satisfies ErrorCode },
         422,
       )
+    }
+    // An `all`-scope reader listed tenant-owned inventory without naming a target
+    // operator or includeAll (audit M3). Malformed — a required scope choice is
+    // absent — so 400, matching the hand-rolled guard the routes used to carry.
+    if (err instanceof ScopeRequiredError) {
+      return c.json({ success: false, error: err.message }, 400)
     }
     // #904: operator self-service action against an id that doesn't resolve in
     // the caller's own tenant (unknown/terminal invite or member). 404.
