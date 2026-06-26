@@ -107,8 +107,9 @@ export type CustomerSearchResult = z.infer<typeof customerSearchResultSchema>
 // variant embeds the same snapshots as a booking, so it reuses their schemas.
 const bookingCreatedPayloadSchema = z.object({
   type: z.literal('BOOKING_CREATED'),
-  requestedVehicleId: z.string(),
-  assignedVehicleId: z.string(),
+  // #464: null on CLASS_COMBO floats — operator assigns a concrete car later.
+  requestedVehicleId: z.string().nullable(),
+  assignedVehicleId: z.string().nullable(),
   classId: z.string(),
   fulfillmentMode: z.enum(BOOKING_FULFILLMENT_MODES),
   startAt: z.string(),
