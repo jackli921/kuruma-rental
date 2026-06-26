@@ -80,6 +80,7 @@ import { MessageService } from './services/message'
 import { MessageTranslationService } from './services/message-translation'
 import { NotificationService } from './services/notification'
 import { NotificationDispatcher } from './services/notification-dispatcher'
+import { NotificationRetryService } from './services/notification-retry'
 import { OperatorService } from './services/operator'
 import { createOperatorGrantService } from './services/operator-grant'
 import {
@@ -358,29 +359,9 @@ export function createApp(overrides?: AppOverrides, repos: Repos = buildRepos(ov
   // `docs/plans/2026-04-14-messaging-design.md`).
   const staffUserId = process.env.DEFAULT_STAFF_ID
   // Single post-commit seam (#393): thread autocreate (#335) + outbound
-  // notifications, awaited in the service, each caught-and-logged.
-  const resolveOperatorRecipients = makeResolveOperatorRecipients({
-    membershipRepo: operatorMembershipRepo,
-    userRepo,
-  })
-  const notificationDispatcher = new NotificationDispatcher(
-    notificationLogRepo,
-    operatorRepo,
-    vehicleRepo,
-    userRepo,
-    resolveOperatorRecipients,
-    locationRepo,
-    emailSender,
-    {
-      ...resolveEmailConfig(),
-      fallbackOperatorEmail:
-        process.env.OPERATOR_ALERT_FALLBACK_EMAIL ??
-        process.env.EMAIL_REPLY_TO ??
-        process.env.EMAIL_FROM,
-      // #960: empty string (WEB_ORIGIN unset) -> the dispatcher omits the deep link.
-      webBaseUrl,
-    },
-  )
+  // notifications, awaited in the service, each caught-and-logged. The dispatcher
+  // wiring is shared with the #1125 retry-sweep cron via resolveNotificationDispatcher.
+  const notificationDispatcher = resolveNotificationDispatcher(repos, emailSender, webBaseUrl)
   const ensureThread = staffUserId ? makeEnsureThread({ threadRepo, staffUserId }) : async () => {}
   const postCommit = new BookingPostCommitDispatcher(ensureThread, notificationDispatcher)
   const renterDocumentService = new RenterDocumentService(renterDocumentRepo, documentStorage)
@@ -654,6 +635,45 @@ function resolveEmailConfig(): { emailFrom: string; emailReplyTo: string | undef
 }
 
 /**
+ * The notification dispatcher wiring, shared by createApp's post-commit seam and
+ * the #1125 retry-sweep cron so the two never drift on recipient resolution,
+ * fallback inbox, or deep-link base. Caller passes the already-resolved email
+ * sender + web origin so createApp reuses its locals (no double-construction).
+ */
+function resolveNotificationDispatcher(
+  repos: Repos,
+  emailSender: EmailSender,
+  webBaseUrl: string,
+): NotificationDispatcher {
+  const {
+    notificationLogRepo,
+    operatorRepo,
+    vehicleRepo,
+    userRepo,
+    operatorMembershipRepo,
+    locationRepo,
+  } = repos
+  return new NotificationDispatcher(
+    notificationLogRepo,
+    operatorRepo,
+    vehicleRepo,
+    userRepo,
+    makeResolveOperatorRecipients({ membershipRepo: operatorMembershipRepo, userRepo }),
+    locationRepo,
+    emailSender,
+    {
+      ...resolveEmailConfig(),
+      fallbackOperatorEmail:
+        process.env.OPERATOR_ALERT_FALLBACK_EMAIL ??
+        process.env.EMAIL_REPLY_TO ??
+        process.env.EMAIL_FROM,
+      // #960: empty string (WEB_ORIGIN unset) -> the dispatcher omits the deep link.
+      webBaseUrl,
+    },
+  )
+}
+
+/**
  * Composition seam for the #916 §5.4 daily compliance digest, resolved by the
  * Workers `scheduled` cron the same way routes resolve `createApp`. Wires the
  * fleet scan, the idempotency ledger, the active-member recipient resolver
@@ -709,6 +729,25 @@ export function buildCancellationRefundReconciler(
     scanRepo: refundReconcilerRepo,
     driver,
     refundRepo: paymentRefundRepo,
+  })
+}
+
+/**
+ * Composition seam for the #1125 daily notification retry sweep, resolved by the
+ * Workers `scheduled` cron exactly as the other backstops are. Re-drives durably
+ * stuck notification_log rows through the SAME dispatcher createApp wires (shared
+ * via resolveNotificationDispatcher), so a one-shot lifecycle email that failed
+ * its first send self-heals instead of waiting on a manual operator resend.
+ */
+export function buildNotificationRetryService(
+  overrides?: AppOverrides,
+  repos: Repos = buildRepos(overrides),
+): NotificationRetryService {
+  const webBaseUrl = resolveAllowedOrigins(process.env.WEB_ORIGIN)[0] ?? ''
+  return new NotificationRetryService({
+    notificationLogRepo: repos.notificationLogRepo,
+    bookingRepo: repos.bookingRepo,
+    redriver: resolveNotificationDispatcher(repos, resolveEmailSender(overrides), webBaseUrl),
   })
 }
 

@@ -1,0 +1,1 @@
+ALTER TABLE "reviews" ADD CONSTRAINT "reviews_class_subject_chk" CHECK ("reviews"."subjectClassId" IS NULL OR "reviews"."subject" = 'VEHICLE');

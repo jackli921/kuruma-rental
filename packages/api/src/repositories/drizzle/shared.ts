@@ -13,6 +13,7 @@ import {
   paymentAnomalies,
   paymentEvents,
   paymentRefunds,
+  reviews,
   threadParticipants,
   threads,
   vehicleBlocks,
@@ -34,6 +35,7 @@ import type {
   PaymentAnomaly,
   PaymentEvent,
   PaymentRefund,
+  Review,
   Thread,
   ThreadParticipant,
   Vehicle,
@@ -196,6 +198,25 @@ export const paymentRefundColumns = {
   createdAt: paymentRefunds.createdAt,
   updatedAt: paymentRefunds.updatedAt,
 }
+export const reviewColumns = {
+  id: reviews.id,
+  bookingId: reviews.bookingId,
+  operatorId: reviews.operatorId,
+  authorUserId: reviews.authorUserId,
+  authorRole: reviews.authorRole,
+  subject: reviews.subject,
+  subjectVehicleId: reviews.subjectVehicleId,
+  subjectClassId: reviews.subjectClassId,
+  overall: reviews.overall,
+  subRatings: reviews.subRatings,
+  comment: reviews.comment,
+  moderationStatus: reviews.moderationStatus,
+  revealDeadlineAt: reviews.revealDeadlineAt,
+  submittedAt: reviews.submittedAt,
+  publishedAt: reviews.publishedAt,
+  createdAt: reviews.createdAt,
+  updatedAt: reviews.updatedAt,
+}
 
 export const paymentAnomalyColumns = {
   id: paymentAnomalies.id,
@@ -344,6 +365,7 @@ type ClassRatePlanRow = ColumnRow<typeof classRatePlanColumns>
 type PaymentEventRow = ColumnRow<typeof paymentEventColumns>
 type PaymentRefundRow = ColumnRow<typeof paymentRefundColumns>
 type PaymentAnomalyRow = ColumnRow<typeof paymentAnomalyColumns>
+type ReviewRow = ColumnRow<typeof reviewColumns>
 type BookingRow = ColumnRow<typeof bookingColumns>
 type BookingEventRow = ColumnRow<typeof bookingEventColumns>
 type ThreadRow = ColumnRow<typeof threadColumns>
@@ -498,6 +520,28 @@ export function toPaymentRefund(r: PaymentRefundRow): PaymentRefund {
     stripeRefundId: r.stripeRefundId,
     amountJpy: r.amountJpy,
     status: r.status,
+    createdAt: r.createdAt,
+    updatedAt: r.updatedAt,
+  }
+}
+
+export function toReview(r: ReviewRow): Review {
+  return {
+    id: r.id,
+    bookingId: r.bookingId,
+    operatorId: r.operatorId,
+    authorUserId: r.authorUserId,
+    authorRole: r.authorRole,
+    subject: r.subject,
+    subjectVehicleId: r.subjectVehicleId,
+    subjectClassId: r.subjectClassId,
+    overall: r.overall,
+    subRatings: r.subRatings,
+    comment: r.comment,
+    moderationStatus: r.moderationStatus,
+    revealDeadlineAt: r.revealDeadlineAt,
+    submittedAt: r.submittedAt,
+    publishedAt: r.publishedAt,
     createdAt: r.createdAt,
     updatedAt: r.updatedAt,
   }

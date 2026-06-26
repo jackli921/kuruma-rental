@@ -30,6 +30,9 @@ import type {
   PaymentEventStatus,
   PaymentRefundStatus,
   ProviderInviteStatus,
+  ReviewAuthorRole,
+  ReviewModerationStatus,
+  ReviewSubject,
   Transmission,
   VehicleBlockKind,
   VehicleClassStatus,
@@ -518,6 +521,40 @@ export interface ConsentAcceptance {
   documentSnapshot: DocumentSnapshot | null
   signatureRef: string | null
   createdAt: Date
+}
+
+// One mutual, double-blind review row (#1067 reviews bounded context, see
+// db/review.ts). A review stays hidden (`publishedAt === null`) until BOTH sides
+// submit OR `revealDeadlineAt` elapses. The row-shape invariants (overall range,
+// author/subject pairing, vehicle pairing, one-per-author-per-subject) are sealed
+// in Postgres; this interface is the in-app projection of a stored row.
+export interface Review {
+  id: string
+  bookingId: string
+  // Denormalized tenant scope (the booking's operator) — operator-scoped reads
+  // and the (operatorId, publishedAt) aggregate never need a bookings join.
+  operatorId: string
+  authorUserId: string
+  authorRole: ReviewAuthorRole
+  subject: ReviewSubject
+  // Set only when subject === 'VEHICLE' / a class aggregate; null otherwise.
+  subjectVehicleId: string | null
+  subjectClassId: string | null
+  // Whole stars 1-5 (reviews_overall_range_chk).
+  overall: number
+  // Optional named sub-dimensions, each 1-5; {} when none given. Keys validated
+  // by @kuruma/shared/validators/review before the write.
+  subRatings: Record<string, number>
+  comment: string | null
+  moderationStatus: ReviewModerationStatus
+  // The fixed double-blind deadline; reveal fires at the earlier of both-submitted
+  // or this instant.
+  revealDeadlineAt: Date
+  submittedAt: Date
+  // The reveal flag: null until published (both submitted OR window elapsed).
+  publishedAt: Date | null
+  createdAt: Date
+  updatedAt: Date
 }
 
 // Map stores removed — repositories handle data access now.

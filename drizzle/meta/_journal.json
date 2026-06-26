@@ -530,15 +530,36 @@
     {
       "idx": 75,
       "version": "7",
-      "when": 1782430539124,
-      "tag": "0075_vehicle_blocks",
+      "when": 1782429611613,
+      "tag": "0075_add_reviews",
       "breakpoints": true
     },
     {
       "idx": 76,
       "version": "7",
-      "when": 1782430551999,
-      "tag": "0076_vehicle_blocks_exclusion",
+      "when": 1782430775334,
+      "tag": "0076_add_reviews_bookingid_index",
+      "breakpoints": true
+    },
+    {
+      "idx": 77,
+      "version": "7",
+      "when": 1782432393780,
+      "tag": "0077_reviews_class_subject_chk",
+      "breakpoints": true
+    },
+    {
+      "idx": 78,
+      "version": "7",
+      "when": 1782435773160,
+      "tag": "0078_vehicle_blocks",
+      "breakpoints": true
+    },
+    {
+      "idx": 79,
+      "version": "7",
+      "when": 1782435784956,
+      "tag": "0079_vehicle_blocks_exclusion",
       "breakpoints": true
     }
   ]
