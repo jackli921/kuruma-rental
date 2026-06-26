@@ -97,6 +97,13 @@ export const substituteVehicleSchema = z.object({
   reason: z.string().optional(),
 })
 
+// #464: operator assigns a concrete car to a CLASS_COMBO float (no reprice).
+// vehicleId is the concrete car to assign; reason is optional operator note.
+export const assignVehicleSchema = z.object({
+  vehicleId: z.string().uuid('Vehicle ID must be a valid UUID'),
+  reason: z.string().optional(),
+})
+
 // #868 Slice 3b: optional renter cancellation reason on POST /bookings/:id/cancel.
 // ALWAYS optional — the cancel succeeds with or without it (the body may even be
 // absent: the operator cancel sends none). `note` is a short freeform elaboration,
@@ -116,4 +123,5 @@ export const cancelBookingSchema = z.object({
 export type CreateBookingInput = z.infer<typeof createBookingSchema>
 export type UpdateBookingStatusInput = z.infer<typeof updateBookingStatusSchema>
 export type SubstituteVehicleInput = z.infer<typeof substituteVehicleSchema>
+export type AssignVehicleInput = z.infer<typeof assignVehicleSchema>
 export type CancelBookingInput = z.infer<typeof cancelBookingSchema>

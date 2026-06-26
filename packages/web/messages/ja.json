@@ -269,6 +269,11 @@
             "ACTIVE": "利用中",
             "COMPLETED": "完了",
             "CANCELLED": "キャンセル"
+          },
+          "floats": {
+            "title": "車両未割当",
+            "overdue": "超過中",
+            "empty": "未割当のフロート予約はありません"
           }
         }
       },
@@ -1082,6 +1087,14 @@
           "cancel": "キャンセル",
           "error": "車両を変更できませんでした。直前に予約された可能性があります。"
         },
+        "assign": {
+          "action": "車両を割り当て",
+          "dialogTitle": "車両を割り当て",
+          "dialogDescription": "この未割り当て予約に利用可能な同クラスの車両を割り当てます。車両を選択すると予約が確定します。",
+          "vehicleLabel": "車両",
+          "submit": "割り当て",
+          "error": "車両を割り当てできませんでした。直前に予約された可能性があります。"
+        },
         "markActive": "受け渡し済みにする",
         "markCompleted": "返却済みにする",
         "settled": "この予約は確定済みのため、操作できる項目はありません。",
@@ -1101,6 +1114,8 @@
         "created": "予約が作成されました",
         "statusChanged": "ステータスが{from}から{to}に変更されました",
         "vehicleSubstituted": "車両が変更されました",
+        "vehicleAssigned": "車両が割り当てられました",
+        "vehicleAssignedSwapped": "車両が再割り当てされました",
         "reason": "理由: {reason}",
         "cancelled": "予約がキャンセルされました",
         "cancellationFee": "キャンセル料 {fee}",
@@ -1232,8 +1247,11 @@
   "admin": {
     "nav": {
       "overview": "概要",
+      "bookings": "予約",
       "revenue": "パートナー収益",
-      "documents": "書類"
+      "documents": "書類",
+      "governance": "同意ガバナンス",
+      "customers": "顧客"
     },
     "home": {
       "title": "プラットフォーム管理",
@@ -1247,6 +1265,40 @@
         "pendingDocs": "審査待ち書類"
       },
       "loadError": "プラットフォーム概要を読み込めませんでした。",
+      "retry": "再試行"
+    },
+    "bookings": {
+      "title": "予約管理",
+      "subtitle": "全事業者の予約を検索・確認します。",
+      "empty": "条件に一致する予約はありません。",
+      "search": "検索",
+      "clear": "クリア",
+      "allStatuses": "すべてのステータス",
+      "filterCustomer": "お客様",
+      "filterCustomerPlaceholder": "氏名またはメール",
+      "filterBookingCode": "予約コード",
+      "filterBookingCodePlaceholder": "例: ALPHA001",
+      "filterStatus": "ステータス",
+      "colOperator": "事業者",
+      "colBookingCode": "コード",
+      "colCustomer": "お客様",
+      "colStatus": "ステータス",
+      "colStart": "開始",
+      "status": {
+        "CONFIRMED": "確定",
+        "ACTIVE": "利用中",
+        "COMPLETED": "完了",
+        "CANCELLED": "キャンセル"
+      },
+      "detailCustomer": "お客様",
+      "detailEmail": "メール",
+      "detailOperatorId": "事業者ID",
+      "detailStart": "貸出",
+      "detailEnd": "返却",
+      "detailTotal": "合計",
+      "detailPickup": "貸出場所",
+      "detailDropoff": "返却場所",
+      "loadError": "予約を読み込めませんでした。",
       "retry": "再試行"
     },
     "revenue": {
@@ -1297,6 +1349,64 @@
       "reject": "却下",
       "error": "判定を記録できませんでした。もう一度お試しください。",
       "loadError": "審査キューを読み込めませんでした。",
+      "retry": "再試行"
+    },
+    "governance": {
+      "title": "同意ガバナンス",
+      "subtitle": "全ユーザーの同意受諾履歴を閲覧します。",
+      "empty": "条件に一致する同意受諾はありません。",
+      "colUser": "ユーザー",
+      "colType": "同意種別",
+      "colVersion": "バージョン",
+      "colAccepted": "受諾日時",
+      "colEvidence": "証跡",
+      "viewEvidence": "証跡を表示",
+      "evidenceLinkLabel": "{user} の同意証跡を表示",
+      "filterType": "同意種別",
+      "filterUser": "ユーザーID",
+      "filterVersion": "バージョン",
+      "allTypes": "すべての種別",
+      "apply": "適用",
+      "clear": "クリア",
+      "loadError": "同意履歴を読み込めませんでした。",
+      "retry": "再試行"
+    },
+    "customers": {
+      "title": "顧客",
+      "subtitle": "プラットフォーム全体のレンターを検索・確認します。",
+      "searchLabel": "検索",
+      "searchPlaceholder": "名前またはメールで検索",
+      "sortLabel": "並び替え",
+      "sort": {
+        "lastBookingAt": "最近の予約",
+        "bookingCount": "予約数が多い順",
+        "name": "名前"
+      },
+      "colName": "名前",
+      "colEmail": "メール",
+      "colBookings": "予約数",
+      "colTotalSpent": "利用総額",
+      "colLastBooking": "最終予約",
+      "colCountry": "国",
+      "colLanguage": "言語",
+      "empty": "条件に一致する顧客がいません。",
+      "unnamed": "名前なしの顧客",
+      "noEmail": "メールなし",
+      "noVehicle": "車両未割り当て",
+      "pagination": "顧客ページ",
+      "prev": "前へ",
+      "next": "次へ",
+      "bookingsTitle": "予約履歴",
+      "bookingsEmpty": "予約はまだありません。",
+      "detailLoading": "顧客を読み込み中…",
+      "detailEmpty": "この顧客は利用できなくなりました。",
+      "status": {
+        "CONFIRMED": "確定",
+        "ACTIVE": "利用中",
+        "COMPLETED": "完了",
+        "CANCELLED": "キャンセル"
+      },
+      "loadError": "顧客を読み込めませんでした。",
       "retry": "再試行"
     }
   },

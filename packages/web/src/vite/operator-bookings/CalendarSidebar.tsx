@@ -1,4 +1,5 @@
 import { Button } from '@/components/ui/button'
+import { UnassignedFloatsList } from '@/vite/operator-bookings/UnassignedFloatsList'
 import type { OperatorBookingStatus } from '@/vite/operator-bookings/api'
 import type { CalendarFiltersApi } from '@/vite/operator-bookings/useCalendarFilters'
 import { BOOKING_STATUSES } from '@kuruma/shared/enums'
@@ -94,6 +95,11 @@ export function CalendarSidebar({ vehicles, filters }: CalendarSidebarProps) {
           ))}
         </div>
       </fieldset>
+
+      {/* #464: unassigned CLASS_COMBO float worklist. Invalidated automatically
+          when AssignVehicleDialog succeeds — the dialog already targets
+          ['operator-bookings','needs-assignment']. */}
+      <UnassignedFloatsList />
     </aside>
   )
 }

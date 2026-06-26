@@ -2,7 +2,7 @@ import { type CallerContext, ForbiddenError } from '../../middleware/auth'
 import { BOOKING_CODE_CONSTRAINT, IDEMPOTENCY_CONSTRAINT, PG_ERROR } from '../../pg-errors'
 import type { Booking } from '../../stores'
 import { bookingReadScope } from '../../tenancy'
-import type { BookingFilters, BookingRepository } from '../types'
+import type { AdminBookingFilters, BookingFilters, BookingRepository } from '../types'
 
 export const BLOCKING_STATUSES: ReadonlySet<Booking['status']> = new Set(['CONFIRMED', 'ACTIVE'])
 
@@ -104,6 +104,14 @@ export class InMemoryBookingRepository implements BookingRepository {
       const to = filters.to
       results = results.filter((b) => b.startAt < to && b.effectiveEndAt > from)
     }
+    if (filters?.needsAssignment === true) {
+      results = results.filter(
+        (b) =>
+          b.fulfillmentMode === 'CLASS_COMBO' &&
+          b.assignedVehicleId === null &&
+          (b.status === 'CONFIRMED' || b.status === 'ACTIVE'),
+      )
+    }
 
     // Sort by createdAt DESC, id DESC (matches Drizzle ORDER BY)
     results.sort((a, b) => {
@@ -124,6 +132,56 @@ export class InMemoryBookingRepository implements BookingRepository {
     }
 
     if (filters?.limit) {
+      results = results.slice(0, filters.limit)
+    }
+
+    return results
+  }
+
+  // #1092: cross-operator oversight read. UNSCOPED on purpose — the
+  // platform-admin service gates the caller before this runs. Mirrors the
+  // Drizzle impl's ordering (createdAt DESC, id DESC) and cursor semantics.
+  async findForAdmin(filters: AdminBookingFilters): Promise<Booking[]> {
+    let results = [...this.store.values()]
+
+    if (filters.operatorId) {
+      results = results.filter((b) => b.operatorId === filters.operatorId)
+    }
+    if (filters.bookingCode) {
+      const needle = filters.bookingCode.toLowerCase()
+      results = results.filter((b) => b.bookingCode.toLowerCase().includes(needle))
+    }
+    if (filters.status) {
+      results = results.filter((b) => b.status === filters.status)
+    }
+    if (filters.renterIds) {
+      const ids = new Set(filters.renterIds)
+      results = results.filter((b) => ids.has(b.renterId))
+    }
+    if (filters.from && filters.to) {
+      const from = filters.from
+      const to = filters.to
+      results = results.filter((b) => b.startAt < to && b.effectiveEndAt > from)
+    }
+
+    results.sort((a, b) => {
+      const timeDiff = b.createdAt.getTime() - a.createdAt.getTime()
+      if (timeDiff !== 0) return timeDiff
+      return b.id < a.id ? -1 : 1
+    })
+
+    if (filters.cursor) {
+      const sep = filters.cursor.indexOf('_')
+      const cursorTime = new Date(filters.cursor.slice(0, sep))
+      const cursorId = filters.cursor.slice(sep + 1)
+      results = results.filter((b) => {
+        if (b.createdAt.getTime() < cursorTime.getTime()) return true
+        if (b.createdAt.getTime() === cursorTime.getTime() && b.id < cursorId) return true
+        return false
+      })
+    }
+
+    if (filters.limit) {
       results = results.slice(0, filters.limit)
     }
 

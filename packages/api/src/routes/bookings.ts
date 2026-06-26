@@ -1,5 +1,6 @@
 import type { ErrorCode } from '@kuruma/shared/lib/error-codes'
 import {
+  assignVehicleSchema,
   cancelBookingSchema,
   createBookingSchema,
   substituteVehicleSchema,
@@ -51,6 +52,7 @@ export function createBookingRoutes(service: BookingService, consentGate: Consen
         filters.from = dateRange.from
         filters.to = dateRange.to
       }
+      if (c.req.query('needsAssignment') === 'true') filters.needsAssignment = true
 
       // Ownership scoping is handled by CallerContext in the repository layer.
       // No manual filtering needed here.
@@ -301,6 +303,35 @@ export function createBookingRoutes(service: BookingService, consentGate: Consen
         ctx,
         idResult.id,
         parsed.data.newVehicleId,
+        parsed.data.reason ?? null,
+      )
+      if (!result.ok) {
+        return fail(c, result.error, result.status, {
+          ...(result.code ? { code: result.code } : {}),
+        })
+      }
+
+      return ok(c, result.booking)
+    })
+    .post('/bookings/:id/assign', async (c) => {
+      const ctx = toCallerContext(requireUser(c))
+
+      // #464: assigning a car to a CLASS_COMBO float is operator-only (fleet
+      // ownership decision, mirrors substitute's gate).
+      if (!isOperatorRole(ctx.role)) {
+        return fail(c, 'Only operators can assign a vehicle', 403)
+      }
+
+      const idResult = parseId(c)
+      if (!idResult.ok) return idResult.response
+
+      const parsed = await parseBody(c, assignVehicleSchema)
+      if (!parsed.ok) return parsed.response
+
+      const result = await service.assignVehicle(
+        ctx,
+        idResult.id,
+        parsed.data.vehicleId,
         parsed.data.reason ?? null,
       )
       if (!result.ok) {

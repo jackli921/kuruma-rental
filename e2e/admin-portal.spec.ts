@@ -84,7 +84,12 @@ test.describe('admin portal guard (#462 / #541)', () => {
     await page.goto('/en/admin')
 
     await expect(page.getByRole('link', { name: /partner revenue/i })).toBeVisible()
-    await expect(page.getByRole('link', { name: 'Bookings' })).toBeHidden()
+    // The renter global-nav's Bookings link must stay suppressed on /admin. Scope
+    // to `[data-global-nav]` so this asserts the global-nav leak only — the
+    // AdminSidebar now carries its own (visible) Bookings link (#1092).
+    await expect(
+      page.locator('[data-global-nav]').getByRole('link', { name: 'Bookings' }),
+    ).toBeHidden()
   })
 })
 

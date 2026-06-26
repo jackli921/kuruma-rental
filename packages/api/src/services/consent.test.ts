@@ -209,6 +209,7 @@ describe('ConsentService.recordAcceptance — concurrent-race catch path', () =>
       findAcceptanceById: (...args) => realRepo.findAcceptanceById(...args),
       findAcceptancesByUser: (...args) => realRepo.findAcceptancesByUser(...args),
       findAcceptancesByBooking: (...args) => realRepo.findAcceptancesByBooking(...args),
+      findAcceptances: (...args) => realRepo.findAcceptances(...args),
     }
 
     const svc = new ConsentService(wrappedRepo, () => KEY)

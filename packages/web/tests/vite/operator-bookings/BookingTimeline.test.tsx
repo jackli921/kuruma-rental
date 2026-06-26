@@ -109,4 +109,72 @@ describe('BookingTimeline', () => {
     // 2026-07-01T01:00:00Z -> Asia/Tokyo Jul 1, 2026 10:00
     expect(screen.getByText(/Jul 1, 2026/)).toBeInTheDocument()
   })
+
+  it('labels a VEHICLE_ASSIGNED first-assign event (null → car)', () => {
+    renderTimeline([
+      event({
+        id: 'e4',
+        type: 'VEHICLE_ASSIGNED',
+        payload: {
+          type: 'VEHICLE_ASSIGNED',
+          fromVehicleId: null,
+          toVehicleId: 'v-1',
+          reason: null,
+        },
+      }),
+    ])
+    expect(screen.getByText(en.bookings.operator.timeline.vehicleAssigned)).toBeInTheDocument()
+  })
+
+  it('labels a VEHICLE_ASSIGNED swap event (car → car)', () => {
+    renderTimeline([
+      event({
+        id: 'e5',
+        type: 'VEHICLE_ASSIGNED',
+        payload: {
+          type: 'VEHICLE_ASSIGNED',
+          fromVehicleId: 'v-old',
+          toVehicleId: 'v-new',
+          reason: null,
+        },
+      }),
+    ])
+    expect(
+      screen.getByText(en.bookings.operator.timeline.vehicleAssignedSwapped),
+    ).toBeInTheDocument()
+  })
+
+  it('swap label differs from first-assign label', () => {
+    expect(en.bookings.operator.timeline.vehicleAssignedSwapped).not.toBe(
+      en.bookings.operator.timeline.vehicleAssigned,
+    )
+  })
+
+  it('shows a reason line for VEHICLE_ASSIGNED when reason is non-null', () => {
+    const reason = 'Customer requested a larger car'
+    renderTimeline([
+      event({
+        id: 'e6',
+        type: 'VEHICLE_ASSIGNED',
+        payload: { type: 'VEHICLE_ASSIGNED', fromVehicleId: null, toVehicleId: 'v-1', reason },
+      }),
+    ])
+    expect(screen.getByText(`Reason: ${reason}`)).toBeInTheDocument()
+  })
+
+  it('does not render a reason line for VEHICLE_ASSIGNED when reason is null', () => {
+    renderTimeline([
+      event({
+        id: 'e7',
+        type: 'VEHICLE_ASSIGNED',
+        payload: {
+          type: 'VEHICLE_ASSIGNED',
+          fromVehicleId: null,
+          toVehicleId: 'v-1',
+          reason: null,
+        },
+      }),
+    ])
+    expect(screen.queryByText(/Reason:/)).toBeNull()
+  })
 })
