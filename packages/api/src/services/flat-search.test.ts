@@ -169,8 +169,15 @@ class RecordingAvailabilityRepository implements AvailabilityRepository {
   ) {
     return this.inner.countClassDemand(operatorId, classId, pickupLocationId, from, to)
   }
-  countClassCapacity(operatorId: string, classId: string, pickupLocationId: string, asOf: Date) {
-    return this.inner.countClassCapacity(operatorId, classId, pickupLocationId, asOf)
+  countClassCapacity(
+    operatorId: string,
+    classId: string,
+    pickupLocationId: string,
+    asOf: Date,
+    from: Date,
+    to: Date,
+  ) {
+    return this.inner.countClassCapacity(operatorId, classId, pickupLocationId, asOf, from, to)
   }
   lockComboCapacity(operatorId: string, classId: string, pickupLocationId: string) {
     return this.inner.lockComboCapacity(operatorId, classId, pickupLocationId)
@@ -422,6 +429,7 @@ describe('FlatSearchService.search region filter (#394)', () => {
 // clock and [from, to) it was queried with so a wrong-arg regression is caught.
 class ComboCountsAvailabilityRepository implements AvailabilityRepository {
   capacityAsOf: Date | undefined
+  capacityRange: { from: Date; to: Date } | undefined
   demandRange: { from: Date; to: Date } | undefined
   constructor(
     private readonly inner: AvailabilityRepository,
@@ -448,8 +456,13 @@ class ComboCountsAvailabilityRepository implements AvailabilityRepository {
     classId: string,
     _pickupLocationId: string,
     asOf: Date,
+    from: Date,
+    to: Date,
   ) {
     this.capacityAsOf = asOf
+    // #1141: capacity now subtracts blocks overlapping the demand window — record
+    // it so a wrong-arg regression (missing/swapped window) is caught.
+    this.capacityRange = { from, to }
     return this.byClass.get(classId)?.capacity ?? 0
   }
   lockComboCapacity(operatorId: string, classId: string, pickupLocationId: string) {
@@ -519,6 +532,7 @@ describe('FlatSearchService.search CLASS_COMBO producer (#464)', () => {
     })
     // Road-legal supply is asked as-of the return date — parity with the write guard.
     expect(repo.capacityAsOf).toEqual(TO)
+    expect(repo.capacityRange).toEqual({ from: FROM, to: TO })
     expect(repo.demandRange).toEqual({ from: FROM, to: TO })
   })
 

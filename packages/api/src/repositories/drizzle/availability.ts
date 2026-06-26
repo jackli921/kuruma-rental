@@ -166,12 +166,16 @@ export class DrizzleAvailabilityRepository implements AvailabilityRepository {
     classId: string,
     pickupLocationId: string,
     asOf: Date,
+    from: Date,
+    to: Date,
   ): Promise<number> {
     // #464 2d.2: road-legal supply side of the combo guard. status<>'RETIRED'
     // (RETIRED = permanent fleet exit) and both certificates cover THROUGH the
     // JST asOf day — same NULL≠current handling as findAvailableVehicles
     // (NULL >= date is NULL, excluded).
     const asOfIso = jstDateString(asOf)
+    const fromIso = from.toISOString()
+    const toIso = to.toISOString()
     const [row] = await this.db
       .select({ count: sql<number>`count(*)::int` })
       .from(vehicles)
@@ -182,6 +186,15 @@ export class DrizzleAvailabilityRepository implements AvailabilityRepository {
           eq(vehicles.pickupLocationId, pickupLocationId),
           sql`${vehicles.status} <> 'RETIRED'`,
           sql`${vehicles.shakenExpiryDate} >= ${asOfIso}::date AND ${vehicles.insuranceExpiryDate} >= ${asOfIso}::date`,
+          // #1141: subtract cars scheduled off for the demand window — a block
+          // overlapping [from, to) makes the car unavailable, so it is not real
+          // class supply. Same NOT EXISTS / half-open tstzrange shape as
+          // findAvailableVehicles; mirrored by the in-memory path.
+          sql`NOT EXISTS (
+                SELECT 1 FROM vehicle_blocks vb
+                WHERE vb."vehicleId" = ${vehicles.id}
+                AND tstzrange(vb."startAt", vb."endAt") && tstzrange(${fromIso}::timestamptz, ${toIso}::timestamptz)
+              )`,
         ),
       )
     return row?.count ?? 0

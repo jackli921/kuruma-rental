@@ -158,6 +158,8 @@ export class InMemoryAvailabilityRepository implements AvailabilityRepository {
     classId: string,
     pickupLocationId: string,
     asOf: Date,
+    from: Date,
+    to: Date,
   ): Promise<number> {
     // #464 2d.2: road-legal supply side of the combo guard. RETIRED is the
     // permanent fleet exit (never counts); MAINTENANCE is temporary and still
@@ -165,13 +167,23 @@ export class InMemoryAvailabilityRepository implements AvailabilityRepository {
     // clock as findAvailableVehicles (§4 "one clock").
     const { data: vehicles } = await this.vehicleRepo.findAll(SYSTEM_CONTEXT, {})
     const asOfIso = jstDateString(asOf)
-    return vehicles.filter(
+    const roadLegal = vehicles.filter(
       (v) =>
         v.operatorId === operatorId &&
         v.classId === classId &&
         v.pickupLocationId === pickupLocationId &&
         v.status !== 'RETIRED' &&
         isRoadLegal(v, asOfIso),
-    ).length
+    )
+
+    // #1141: a car scheduled off for the demand window is not real supply — drop
+    // any vehicle with a block overlapping [from, to). Mirrors the NOT EXISTS in
+    // findAvailableVehicles and the SPECIFIC guard's per-car block check, so the
+    // combo guard can't admit a float with no assignable car. Promise.all keeps
+    // it off the await-in-loop path even on the synchronous Map scan.
+    const blockHits = await Promise.all(
+      roadLegal.map((v) => this.vehicleBlockRepo.findOverlapping(v.id, from, to)),
+    )
+    return roadLegal.filter((_, i) => blockHits[i]!.length === 0).length
   }
 }

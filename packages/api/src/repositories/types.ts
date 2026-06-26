@@ -559,11 +559,18 @@ export interface AvailabilityRepository {
   // #464 2d.2: road-legal supply side of the combo guard. Counts vehicles in
   // (op, class, loc) with status<>'RETIRED' (RETIRED = permanent exit) that
   // are road-legal at asOf (same JST clock as findAvailableVehicles).
+  // #1141: a vehicle with a vehicle_blocks row overlapping the demand window
+  // [from, to) is off the calendar and must NOT count toward class capacity —
+  // mirroring findAvailableVehicles' NOT EXISTS subtraction and the SPECIFIC
+  // booking guard's per-car block check. asOf (the return date) stays the
+  // road-legal clock; [from, to) is the occupancy window blocks overlap.
   countClassCapacity(
     operatorId: string,
     classId: string,
     pickupLocationId: string,
     asOf: Date,
+    from: Date,
+    to: Date,
   ): Promise<number>
   // #464 2d.4: serializes concurrent CLASS_COMBO submits on one (op, class,
   // loc) triple — Postgres' pg_advisory_xact_lock keyed on a hashed string,

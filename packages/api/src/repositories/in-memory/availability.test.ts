@@ -358,7 +358,7 @@ describe('InMemoryAvailabilityRepository.countClassDemand (#464)', () => {
 // stance the existing #916 compliance gate takes for findAvailableVehicles.
 describe('InMemoryAvailabilityRepository.countClassCapacity (#464 slice 2d.2)', () => {
   const capacity = () =>
-    availabilityRepo.countClassCapacity('op_a', 'class_compact', 'loc_osaka', TO)
+    availabilityRepo.countClassCapacity('op_a', 'class_compact', 'loc_osaka', TO, FROM, TO)
 
   it('counts an AVAILABLE road-legal vehicle in (op, class, loc)', async () => {
     await makeVehicle({})
@@ -407,6 +407,32 @@ describe('InMemoryAvailabilityRepository.countClassCapacity (#464 slice 2d.2)', 
   it('excludes a vehicle with null pickupLocationId (no class store, no class supply)', async () => {
     await makeVehicle({ pickupLocationId: null })
     expect(await capacity()).toBe(0)
+  })
+
+  // #1141: a road-legal car scheduled off for the demand window is not real
+  // supply. Without this subtraction the combo guard sees inflated capacity and
+  // admits a float with no car to assign — the overbook only surfaces at
+  // operator-assign time. Mirrors findAvailableVehicles' block subtraction.
+  it('subtracts a vehicle whose block overlaps the demand window', async () => {
+    await makeVehicle({}) // free
+    const blocked = await makeVehicle({})
+    // 09:00–12:00 overlaps the [10:00, 14:00) request window.
+    await makeBlock(blocked.id, new Date('2026-08-01T09:00:00Z'), new Date('2026-08-01T12:00:00Z'))
+    expect(await capacity()).toBe(1)
+  })
+
+  it('keeps a vehicle whose block is adjacent to the window (half-open, no overlap)', async () => {
+    const v = await makeVehicle({})
+    // ends exactly at FROM (10:00) → adjacent, not overlapping.
+    await makeBlock(v.id, new Date('2026-08-01T06:00:00Z'), FROM)
+    expect(await capacity()).toBe(1)
+  })
+
+  it('keeps a vehicle whose block misses the window entirely', async () => {
+    await makeVehicle({})
+    const v = await makeVehicle({})
+    await makeBlock(v.id, new Date('2026-08-01T15:00:00Z'), new Date('2026-08-01T18:00:00Z'))
+    expect(await capacity()).toBe(2)
   })
 })
 

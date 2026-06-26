@@ -366,6 +366,8 @@ export class BookingCreationService {
       classId,
       input.pickupLocationId,
       input.endAt,
+      input.startAt,
+      effectiveEndAt,
     )
     if (demand >= capacity) {
       return {
@@ -636,6 +638,8 @@ export class BookingCreationService {
       classId,
       input.pickupLocationId,
       input.endAt,
+      input.startAt,
+      effectiveEndAt,
     )
     if (demand >= capacity) {
       return {
