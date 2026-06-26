@@ -33,6 +33,7 @@ import {
   DrizzleRefundReconcilerRepository,
   DrizzleRegionRepository,
   DrizzleRenterDocumentRepository,
+  DrizzleReviewRepository,
   DrizzleStatsRepository,
   DrizzleStorefrontRepository,
   DrizzleThreadRepository,
@@ -71,6 +72,7 @@ import {
   InMemoryRefundReconcilerRepository,
   InMemoryRegionRepository,
   InMemoryRenterDocumentRepository,
+  InMemoryReviewRepository,
   InMemoryStatsRepository,
   InMemoryStorefrontRepository,
   InMemoryThreadRepository,
@@ -112,6 +114,7 @@ import type {
   RefundReconcilerRepository,
   RegionRepository,
   RenterDocumentRepository,
+  ReviewRepository,
   RunInTransaction,
   RunOperatorGrant,
   StatsRepository,
@@ -190,6 +193,7 @@ export type Repos = {
   auditLogRepo: AuditLogRepository
   bookingEventRepo: BookingEventRepository
   consentRepo: ConsentRepository
+  reviewRepo: ReviewRepository
   runInTransaction: RunInTransaction
   runOperatorGrant: RunOperatorGrant
   // Public R2 bucket base for vehicle photos (#879). Threaded to VehicleService
@@ -273,6 +277,7 @@ export function buildOverrideRepos(overrides: AppOverrides): Repos {
     overrides.operatorMembershipRepo ?? new InMemoryOperatorMembershipRepository()
   const auditLogRepo = new InMemoryAuditLogRepository()
   const consentRepo = overrides.consentRepo ?? new InMemoryConsentRepository()
+  const reviewRepo = overrides.reviewRepo ?? new InMemoryReviewRepository()
   const runOperatorGrant: RunOperatorGrant = (fn) =>
     fn({ memberships: operatorMembershipRepo, users: userRepo, invites: providerInviteRepo })
   return {
@@ -311,6 +316,7 @@ export function buildOverrideRepos(overrides: AppOverrides): Repos {
     auditLogRepo,
     bookingEventRepo,
     consentRepo,
+    reviewRepo,
     runInTransaction,
     runOperatorGrant,
     photosPublicUrl: process.env.VEHICLE_PHOTOS_PUBLIC_URL ?? '',
@@ -415,6 +421,7 @@ export function buildDrizzleRepos(opts?: { db?: Db; runTx?: RunTx }): Repos {
     auditLogRepo,
     bookingEventRepo: new DrizzleBookingEventRepository(db),
     consentRepo: new DrizzleConsentRepository(db),
+    reviewRepo: new DrizzleReviewRepository(db),
     runInTransaction: createDrizzleTransaction(tx, decodePhotos, encodePhotos),
     // Real interactive tx (#493): membership INSERT first so the partial-unique-
     // active index aborts the whole grant on a concurrent double-accept.
@@ -518,6 +525,7 @@ export function buildInMemoryRepos(): Repos {
     auditLogRepo,
     bookingEventRepo,
     consentRepo: new InMemoryConsentRepository(),
+    reviewRepo: new InMemoryReviewRepository(),
     runInTransaction,
     runOperatorGrant,
     photosPublicUrl: process.env.VEHICLE_PHOTOS_PUBLIC_URL ?? '',

@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { SYSTEM_CONTEXT } from '../../middleware/auth'
+import { PG_ERROR, pgConstraintName, pgErrorCode } from '../../pg-errors'
 import type { Booking } from '../../stores'
 import { InMemoryBookingRepository } from './booking'
 
@@ -176,5 +177,55 @@ describe('InMemoryBookingRepository — cancellation fee settlement (#868 Slice 
     expect(cancelled?.cancellationFee).toBe(9_000)
     // The fee is advisory: recorded for audit, zero money moved until #851.
     expect(cancelled?.cancellationFeeSettlement).toBe('ADVISORY')
+  })
+})
+
+describe('InMemoryBookingRepository — CLASS_COMBO float exclusion parity (#1117 / audit H1)', () => {
+  const window = {
+    startAt: new Date('2026-08-01T09:00:00Z'),
+    endAt: new Date('2026-08-01T17:00:00Z'),
+    effectiveEndAt: new Date('2026-08-01T17:00:00Z'),
+  }
+  const comboFloat = (bookingCode: string) =>
+    confirmedInput({
+      ...window,
+      fulfillmentMode: 'CLASS_COMBO',
+      requestedVehicleId: null,
+      assignedVehicleId: null,
+      bookingCode,
+    })
+
+  // Postgres `EXCLUDE USING gist ("assignedVehicleId" WITH =, ...)` never conflicts
+  // NULL keys, so two overlapping combo floats both insert in prod. The InMemory
+  // mirror must admit them too, or dev + every in-memory test diverges from prod.
+  it('admits two time-overlapping null-vehicle combo floats, matching Postgres NULL-exclusion', async () => {
+    const repo = new InMemoryBookingRepository()
+
+    const first = await repo.create(SYSTEM_CONTEXT, comboFloat('BK-COMBO-1'))
+    const second = await repo.create(SYSTEM_CONTEXT, comboFloat('BK-COMBO-2'))
+
+    expect(first.assignedVehicleId).toBeNull()
+    expect(second.assignedVehicleId).toBeNull()
+    expect(second.id).not.toBe(first.id)
+  })
+
+  // The fix must stay surgical: a real assigned vehicle still excludes on overlap.
+  // Assert by (code, constraint_name) rather than message — matches the
+  // conformance-suite contract (#1106) and stays mutation-resistant if the
+  // postgres-js message format evolves.
+  it('still rejects two overlapping bookings on the SAME assigned vehicle', async () => {
+    const repo = new InMemoryBookingRepository()
+    await repo.create(SYSTEM_CONTEXT, confirmedInput({ ...window, bookingCode: 'BK-SPEC-1' }))
+
+    let caught: unknown
+    try {
+      await repo.create(SYSTEM_CONTEXT, confirmedInput({ ...window, bookingCode: 'BK-SPEC-2' }))
+    } catch (err) {
+      caught = err
+    }
+
+    expect(caught).toBeDefined()
+    expect(pgErrorCode(caught)).toBe(PG_ERROR.EXCLUSION_VIOLATION)
+    expect(pgConstraintName(caught)).toBe('bookings_no_overlap')
   })
 })

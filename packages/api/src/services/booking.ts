@@ -64,6 +64,8 @@ export class BookingService {
     vehicleClassRepo?: VehicleClassRepository,
     // Single post-commit seam (#393, TODO #300): ensureThread + notifications,
     // each caught-and-logged. Shared by the creation and lifecycle services.
+    // Optional is a TEST-ONLY seam: prod always wires it (createApp/index.ts);
+    // omitting it silently disables ALL post-commit effects (threads + emails).
     postCommit?: BookingPostCommitDispatcher,
     // §4h: reads the renter-safe operator projection for findById.
     operatorRepo?: OperatorRepository,

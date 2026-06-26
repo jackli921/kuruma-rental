@@ -50,7 +50,13 @@ export const LOCATIONS_REGION_FK = 'locations_regionId_regions_id_fk'
  * Matching by name (not just the 23505 code) keeps the two paths apart.
  */
 export const BOOKING_CODE_CONSTRAINT = 'bookings_bookingCode_unique'
-export const IDEMPOTENCY_CONSTRAINT = 'bookings_idempotencyKey_unique'
+// Real PG index name from migration 0012_idempotency-unique-index.sql
+// (`CREATE UNIQUE INDEX "bookings_idempotency_key"`) — NOT the Drizzle-auto
+// camelCase suffix the schema's `.unique()` would have produced. Surfaced by
+// the #1106 conformance suite: the InMemory uniqueViolation interpolates this
+// constant, so it must match the real PG index name byte-for-byte or services
+// that disambiguate by constraint name drift between impls.
+export const IDEMPOTENCY_CONSTRAINT = 'bookings_idempotency_key'
 
 /**
  * payment_events unique constraints the PaymentService distinguishes on (#461).
@@ -71,6 +77,15 @@ export const PAYMENT_EVENT_ONE_SUCCESS_CONSTRAINT = 'payment_events_one_success_
  * second booking — a loud invariant breach, never a silent no-op.
  */
 export const PAYMENT_REFUND_STRIPE_REFUND_CONSTRAINT = 'payment_refunds_stripeRefundId_unique'
+
+/**
+ * reviews unique seal (#1067): one review per author per booking per subject. A
+ * 23505 on this name means the same side re-submitted the same subject — the
+ * submission service edits the existing hidden row instead of inserting a second
+ * (a renter still reviews OPERATOR and VEHICLE separately — different subjects).
+ * Matching by name keeps this apart from any future reviews unique.
+ */
+export const REVIEWS_AUTHOR_SUBJECT_CONSTRAINT = 'reviews_author_subject_per_booking_unique'
 
 /**
  * Partial unique index on provider_invites (operatorId, email) WHERE status=

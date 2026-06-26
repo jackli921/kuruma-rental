@@ -73,13 +73,21 @@ describe('InMemoryRefundReconcilerRepository.listRefundDueNeedingDrive', () => {
     expect(due.map((b) => b.id)).toEqual(['bk-1'])
   })
 
-  it('excludes a booking whose receipt is terminal (SUCCEEDED or FAILED)', async () => {
-    const r = repo(
-      [booking('done'), booking('stuck')],
-      [receipt('done', 'SUCCEEDED'), receipt('stuck', 'FAILED')],
-    )
+  it('returns the orphan: a REFUND_DUE booking whose receipt is already SUCCEEDED', async () => {
+    // The crash/transient-error window: confirmRefundSucceeded marks the receipt
+    // SUCCEEDED, then the booking-side REFUND_DUE→REFUNDED write fails. A *healthy*
+    // refunded booking sits at REFUNDED (filtered out above), so REFUND_DUE + a
+    // SUCCEEDED receipt is ONLY this orphan — and the backstop must finish it (the
+    // SUCCEEDED branch of initiateCancellationRefund is a no-Stripe booking-side
+    // confirm), never depend on a Stripe webhook redelivery to heal.
+    const r = repo([booking('orphan')], [receipt('orphan', 'SUCCEEDED')])
     const due = await r.listRefundDueNeedingDrive({ limit: 10 })
-    expect(due).toEqual([])
+    expect(due.map((b) => b.id)).toEqual(['orphan'])
+  })
+
+  it('excludes a booking whose receipt is terminal FAILED (needs a human)', async () => {
+    const r = repo([booking('stuck')], [receipt('stuck', 'FAILED')])
+    expect(await r.listRefundDueNeedingDrive({ limit: 10 })).toEqual([])
   })
 
   it('excludes bookings not in REFUND_DUE (ADVISORY/CAPTURED/REFUNDED)', async () => {

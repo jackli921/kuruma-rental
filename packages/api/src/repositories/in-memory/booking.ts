@@ -19,6 +19,23 @@ function uniqueViolation(
   })
 }
 
+// Same faithful-mirroring policy as uniqueViolation: postgres-js exposes the
+// violated EXCLUDE constraint as `constraint_name`, so a service that disambiguates
+// 23P01 by name behaves identically against either repo (#1106).
+const BOOKINGS_NO_OVERLAP_CONSTRAINT = 'bookings_no_overlap'
+
+function exclusionViolation(): Error & { code: string; constraint_name: string } {
+  return Object.assign(
+    new Error(
+      `conflicting key value violates exclusion constraint "${BOOKINGS_NO_OVERLAP_CONSTRAINT}"`,
+    ),
+    {
+      code: PG_ERROR.EXCLUSION_VIOLATION,
+      constraint_name: BOOKINGS_NO_OVERLAP_CONSTRAINT,
+    },
+  )
+}
+
 export function getConflictingBookings(
   bookings: Booking[],
   vehicleId: string,
@@ -175,19 +192,20 @@ export class InMemoryBookingRepository implements BookingRepository {
       throw new ForbiddenError('Cannot create booking for another operator')
     }
 
-    // Mirror the DB `bookings_no_overlap` exclusion on the ASSIGNED vehicle.
-    // assignedVehicleId is NOT NULL post-slice-6, so every CONFIRMED/ACTIVE row
-    // occupies its car — the old "null operand skips exclusion" loophole is gone.
-    if (BLOCKING_STATUSES.has(data.status)) {
+    // Mirror the DB `bookings_no_overlap` exclusion on the ASSIGNED vehicle:
+    // `EXCLUDE USING gist ("assignedVehicleId" WITH =, tstzrange &&)`. Postgres
+    // never conflicts NULL keys, so a CLASS_COMBO float (null vehicle, #464)
+    // occupies no specific car and is invisible to the exclusion. Guard on a
+    // non-null vehicle first — `null !== null` is false, so without this an
+    // overlapping pair of floats would falsely clash (#1105 / #1117).
+    if (data.assignedVehicleId !== null && BLOCKING_STATUSES.has(data.status)) {
       for (const existing of this.store.values()) {
         if (existing.assignedVehicleId !== data.assignedVehicleId) continue
         if (!BLOCKING_STATUSES.has(existing.status)) continue
         const overlaps =
           data.startAt < existing.effectiveEndAt && existing.startAt < data.effectiveEndAt
         if (overlaps) {
-          throw Object.assign(new Error('bookings_no_overlap violation'), {
-            code: PG_ERROR.EXCLUSION_VIOLATION,
-          })
+          throw exclusionViolation()
         }
       }
     }
@@ -296,9 +314,7 @@ export class InMemoryBookingRepository implements BookingRepository {
         const overlaps =
           existing.startAt < other.effectiveEndAt && other.startAt < data.effectiveEndAt
         if (overlaps) {
-          throw Object.assign(new Error('bookings_no_overlap violation'), {
-            code: PG_ERROR.EXCLUSION_VIOLATION,
-          })
+          throw exclusionViolation()
         }
       }
     }

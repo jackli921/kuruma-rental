@@ -163,6 +163,9 @@ async function cleanupFutureSarahBookings(): Promise<void> {
     const bookingIds = ids.map((r) => r.id)
     await sql`DELETE FROM notification_log WHERE "bookingId" IN ${sql(bookingIds)}`
     await sql`DELETE FROM booking_events WHERE "bookingId" IN ${sql(bookingIds)}`
+    // payment_events has no ON DELETE CASCADE — the confirmation step (#461) writes one
+    // per booking, so it must be cleared before the booking or the DELETE below 23503s.
+    await sql`DELETE FROM payment_events WHERE "bookingId" IN ${sql(bookingIds)}`
     await sql`DELETE FROM threads WHERE "bookingId" IN ${sql(bookingIds)}`
     await sql`DELETE FROM bookings WHERE id IN ${sql(bookingIds)}`
   } finally {

@@ -71,6 +71,8 @@ export class BookingLifecycleService {
     private readonly vehicleClassRepo?: VehicleClassRepository,
     // Single post-commit seam (#393, TODO #300): ensureThread + notifications,
     // each caught-and-logged.
+    // Optional is a TEST-ONLY seam: prod always wires it (createApp/index.ts);
+    // omitting it silently disables ALL post-commit effects (threads + emails).
     private readonly postCommit?: BookingPostCommitDispatcher,
     // #851: payment-side coordinator for the auto-refund. Optional — when unwired
     // (tests, pre-#851), cancels stay ADVISORY and never touch Stripe.

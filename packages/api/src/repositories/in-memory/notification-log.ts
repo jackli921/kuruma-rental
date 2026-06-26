@@ -134,6 +134,19 @@ export class InMemoryNotificationLogRepository implements NotificationLogReposit
     this.store.set(id, { ...row, status, error, updatedAt: this.now() })
   }
 
+  async findRetryable(limit: number): Promise<NotificationLog[]> {
+    const now = this.now().getTime()
+    return [...this.store.values()]
+      .filter(
+        (r) =>
+          r.status === 'QUEUED' ||
+          r.status === 'FAILED' ||
+          (r.status === 'SENDING' && now - r.updatedAt.getTime() >= SEND_LEASE_MS),
+      )
+      .sort((a, b) => a.updatedAt.getTime() - b.updatedAt.getTime())
+      .slice(0, limit)
+  }
+
   async findAll(ctx: CallerContext, filters?: NotificationLogFilters): Promise<NotificationLog[]> {
     requireManagementRead(ctx)
     const scope = operatorReadScope(ctx)
