@@ -10,14 +10,9 @@ import { acceptConsent } from '@/vite/consent/api'
 import { CONSENT_QUERY_KEY, usePendingConsents } from '@/vite/consent/hooks'
 import type { PendingConsent } from '@/vite/consent/types'
 import { useSession } from '@/vite/session'
-import type { UserRole } from '@kuruma/shared/auth/roles'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { type ReactNode, useState } from 'react'
 import { useTranslations } from 'use-intl'
-
-// Tie the web's renter-role literal to the shared authz union so a rename in
-// @kuruma/shared/auth/roles surfaces here at compile time, not as silent drift (#1036 L3).
-const RENTER_ROLE: UserRole = 'RENTER'
 
 interface ConsentGateProps {
   readonly locale: string
@@ -33,7 +28,7 @@ interface ConsentGateProps {
  */
 export function ConsentGate({ locale, children }: ConsentGateProps) {
   const session = useSession()
-  const isRenter = session.data?.user.role === RENTER_ROLE
+  const isRenter = session.data?.user.role === 'RENTER'
   const { data: pending } = usePendingConsents(locale, isRenter)
 
   if (!isRenter || !pending || pending.length === 0) return <>{children}</>

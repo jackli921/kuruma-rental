@@ -1,8 +1,9 @@
+import type { UserRole } from '@kuruma/shared/auth/roles'
 import { describe, expect, it } from 'vitest'
 import { adminGuard } from './guards'
 import type { Session } from './session'
 
-function session(role: string, over: Partial<Session['user']> = {}): Session {
+function session(role: UserRole, over: Partial<Session['user']> = {}): Session {
   return { user: { id: 'usr_1', role, ...over }, csrfToken: 'csrf_1' }
 }
 

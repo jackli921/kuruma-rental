@@ -16,6 +16,7 @@
     "./db/backfill-vehicle-expiry": "./src/db/backfill-vehicle-expiry.ts",
     "./validators/auth": "./src/validators/auth.ts",
     "./validators/message": "./src/validators/message.ts",
+    "./validators/payment-anomaly": "./src/validators/payment-anomaly.ts",
     "./validators/review": "./src/validators/review.ts",
     "./types/stats": "./src/types/stats.ts",
     "./types/overview": "./src/types/overview.ts",

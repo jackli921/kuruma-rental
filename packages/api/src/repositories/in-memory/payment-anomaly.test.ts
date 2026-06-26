@@ -65,6 +65,9 @@ describe('InMemoryPaymentAnomalyRepository', () => {
       expectedAmountJpy: 50_000,
       currency: 'jpy',
       resolvedAt: new Date('2026-06-10T00:00:00Z'),
+      resolution: 'REFUNDED_EXTERNALLY',
+      resolvedBy: 'admin-1',
+      note: null,
       createdAt: new Date('2026-06-09T00:00:00Z'),
     }
     const repo = new InMemoryPaymentAnomalyRepository(new Map([[resolved.id, resolved]]))

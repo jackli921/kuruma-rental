@@ -24,6 +24,9 @@ function anomaly(
     expectedAmountJpy: 100_000,
     currency: 'jpy',
     resolvedAt: null,
+    resolution: null,
+    resolvedBy: null,
+    note: null,
     createdAt: new Date('2026-06-10T03:00:00Z'),
     ...over,
   }
@@ -98,9 +101,12 @@ describe('GET /admin/payment-anomalies — listing (PaymentAnomalyView contract)
     })
     // Dates cross the wire as ISO strings (JSON has no Date type).
     expect(view.createdAt).toBe('2026-06-10T03:00:00.000Z')
-    // Lean admin projection: the internal resolved flag and the checkout-session
-    // id are not part of the unresolved-anomaly view.
-    expect('resolvedAt' in view).toBe(false)
+    // An unresolved view carries the resolution audit fields as null (#1075 slice 3);
+    // the internal resolvedBy and checkout-session id stay off the wire.
+    expect(view.resolvedAt).toBeNull()
+    expect(view.resolution).toBeNull()
+    expect(view.note).toBeNull()
+    expect('resolvedBy' in view).toBe(false)
     expect('stripeCheckoutSessionId' in view).toBe(false)
   })
 })
