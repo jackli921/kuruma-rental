@@ -1,5 +1,7 @@
 import type { Context } from 'hono'
 import { z } from 'zod'
+import type { CallerContext } from '../middleware/auth'
+import { type ResolveWriteOperatorId, operatorReadScope } from '../tenancy'
 
 // --- Response helpers ---
 
@@ -203,6 +205,43 @@ export async function parseBody<T>(
   }
 
   return { ok: true, data: result.data }
+}
+
+type ScopedCreateSuccess<T> = { ok: true; data: T; operatorId: string }
+type ScopedCreateResult<T> = ScopedCreateSuccess<T> | ParseBodyFailure
+
+/**
+ * Parse + authorize a create on an operator-owned config resource (fee-schedules,
+ * insurance-options, add-ons, locations — audit L4). All four shared an identical
+ * ~10-line branch: a bypass caller (PLATFORM_ADMIN / legacy staff — `all` read
+ * scope) names the target operator in the body and is parsed with the
+ * platform-admin schema; an operator caller never sends one, so its tenant is
+ * stamped server-side via `resolveWriteOperatorId(ctx)`. Collapsing it here keeps
+ * the "who can write to which tenant" policy in one place — a new write route
+ * can't silently drift from it, and a bypass caller can never spoof another
+ * operator (operator callers' body `operatorId`, if any, is ignored).
+ *
+ * Returns the parsed `data` (narrowed to the operator schema's `T`) plus the
+ * resolved `operatorId`, or a 400 `response` to short-circuit on a bad body.
+ */
+export async function parseScopedCreate<T>(
+  c: Context,
+  ctx: CallerContext,
+  schemas: { operator: z.ZodType<T>; admin: z.ZodType<T & { operatorId?: string | undefined }> },
+  resolveWriteOperatorId: ResolveWriteOperatorId,
+): Promise<ScopedCreateResult<T>> {
+  if (operatorReadScope(ctx).kind === 'all') {
+    const parsed = await parseBody(c, schemas.admin)
+    if (!parsed.ok) return parsed
+    return {
+      ok: true,
+      data: parsed.data,
+      operatorId: await resolveWriteOperatorId(ctx, parsed.data.operatorId),
+    }
+  }
+  const parsed = await parseBody(c, schemas.operator)
+  if (!parsed.ok) return parsed
+  return { ok: true, data: parsed.data, operatorId: await resolveWriteOperatorId(ctx) }
 }
 
 type DateRangeRequired = { ok: true; from: Date; to: Date }
