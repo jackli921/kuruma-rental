@@ -52,12 +52,18 @@ export const reviews = pgTable(
     subjectVehicleId: text('subjectVehicleId').references(() => vehicles.id, {
       onDelete: 'restrict',
     }),
+    // Denormalized class of the reviewed vehicle for slice-5 class-level aggregates.
+    // Only ever set on a VEHICLE review, and only when the vehicle HAS a class —
+    // vehicles.classId is nullable, so a VEHICLE review of an unclassed car carries NULL
+    // here. NULL on every non-vehicle review (sealed by reviews_class_subject_chk).
     subjectClassId: text('subjectClassId').references(() => vehicleClasses.id, {
       onDelete: 'restrict',
     }),
     overall: integer('overall').notNull(),
-    // Optional named sub-dimensions (cleanliness/communication/...); keys are validated
-    // in @kuruma/shared/validators/review by (authorRole, subject). Default {} = none given.
+    // Optional named sub-dimensions (cleanliness/communication/...). Both the key set and
+    // each 1-5 value are enforced ONLY at the Zod boundary (validators/review) — jsonb
+    // carries no DB CHECK here — so every writer MUST go through the validator. The precise
+    // per-direction key subset is checked by (authorRole, subject). Default {} = none given.
     subRatings: jsonb('subRatings').$type<Record<string, number>>().notNull().default({}),
     comment: text('comment'),
     moderationStatus: reviewModerationStatusEnum('moderationStatus').notNull().default('VISIBLE'),
@@ -82,6 +88,14 @@ export const reviews = pgTable(
     check(
       'reviews_vehicle_subject_chk',
       sql`(${t.subject} = 'VEHICLE') = (${t.subjectVehicleId} IS NOT NULL)`,
+    ),
+    // A class tag only ever rides a VEHICLE review. One-way, NOT a biconditional:
+    // vehicles.classId is nullable, so a VEHICLE review of an unclassed car legitimately
+    // carries no class — this seals stray class ids off non-vehicle reviews without
+    // forcing every vehicle review to have one.
+    check(
+      'reviews_class_subject_chk',
+      sql`${t.subjectClassId} IS NULL OR ${t.subject} = 'VEHICLE'`,
     ),
     // FK-covering + read indexes (lint:fk-indexes treats every FK column as needing
     // its own index — the unique's leading-column prefix doesn't satisfy the gate).

@@ -540,6 +540,13 @@
       "when": 1782430775334,
       "tag": "0076_add_reviews_bookingid_index",
       "breakpoints": true
+    },
+    {
+      "idx": 77,
+      "version": "7",
+      "when": 1782432393780,
+      "tag": "0077_reviews_class_subject_chk",
+      "breakpoints": true
     }
   ]
 }

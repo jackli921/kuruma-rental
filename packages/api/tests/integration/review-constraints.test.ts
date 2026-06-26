@@ -20,6 +20,7 @@ let bookingId: string
 let operatorId: string
 let renterId: string
 let vehicleId: string
+let classId: string
 
 beforeAll(async () => {
   seeded = await createSeededBooking({ prefix: 'review-chk' })
@@ -27,6 +28,7 @@ beforeAll(async () => {
   operatorId = seeded.operatorId
   renterId = seeded.renterId
   vehicleId = seeded.ids.vehicleId
+  classId = seeded.ids.classId
 })
 
 afterEach(async () => {
@@ -83,6 +85,16 @@ describe('reviews table constraints (#1067, real pg)', () => {
     expect(await insertReview({ subject: 'VEHICLE', subjectVehicleId: vehicleId })).toBeNull()
   })
 
+  it('accepts a renter -> vehicle review carrying its denormalized class id', async () => {
+    expect(
+      await insertReview({
+        subject: 'VEHICLE',
+        subjectVehicleId: vehicleId,
+        subjectClassId: classId,
+      }),
+    ).toBeNull()
+  })
+
   it('rejects a duplicate (bookingId, authorUserId, subject) with the unique seal', async () => {
     expect(await insertReview()).toBeNull()
     const err = await insertReview()
@@ -106,6 +118,13 @@ describe('reviews table constraints (#1067, real pg)', () => {
     expect(err, 'a VEHICLE review must carry its vehicle id').not.toBeNull()
     expect(pgErrorCode(err)).toBe(PG_ERROR.CHECK_VIOLATION)
     expect(pgConstraintName(err)).toBe('reviews_vehicle_subject_chk')
+  })
+
+  it('rejects a non-vehicle review carrying a stray class id (reviews_class_subject_chk)', async () => {
+    const err = await insertReview({ subject: 'OPERATOR', subjectClassId: classId })
+    expect(err, 'a class id may only ride a VEHICLE review').not.toBeNull()
+    expect(pgErrorCode(err)).toBe(PG_ERROR.CHECK_VIOLATION)
+    expect(pgConstraintName(err)).toBe('reviews_class_subject_chk')
   })
 
   it('rejects an out-of-range overall rating (reviews_overall_range_chk)', async () => {
