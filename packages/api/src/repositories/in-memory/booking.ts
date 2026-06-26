@@ -145,6 +145,11 @@ export class InMemoryBookingRepository implements BookingRepository {
     return undefined
   }
 
+  // #1087: platform-overview total booking count across all operators (unscoped).
+  async count(): Promise<number> {
+    return this.store.size
+  }
+
   async countActiveForVehicles(vehicleIds: string[]): Promise<number> {
     if (vehicleIds.length === 0) return 0
     const ids = new Set(vehicleIds)
