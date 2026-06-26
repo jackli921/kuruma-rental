@@ -13,6 +13,7 @@ import {
   InMemoryLocationRepository,
   InMemoryMaintenanceLogRepository,
   InMemoryUserRepository,
+  InMemoryVehicleBlockRepository,
   InMemoryVehicleClassRepository,
   InMemoryVehicleRepository,
 } from '../../src/repositories/in-memory'
@@ -49,6 +50,7 @@ async function setup() {
   const userRepo = new InMemoryUserRepository()
   const availabilityRepo = new InMemoryAvailabilityRepository(vehicleRepo, bookingRepo)
   const classRatePlanRepo = new InMemoryClassRatePlanRepository()
+  const vehicleBlockRepo = new InMemoryVehicleBlockRepository()
 
   // Seed a vehicle class with a non-null ACRISS code.
   const vehicleClass = await vehicleClassRepo.create({
@@ -137,6 +139,7 @@ async function setup() {
     availabilityRepo,
     classRatePlanRepo,
     vehicleClassRepo,
+    vehicleBlockRepo,
   }
   // Pass-through: InMemory repos are single-threaded singletons (mirrors booking.test.ts).
   const runInTransactionFn: RunInTransaction = (fn) => fn(repos)
@@ -475,6 +478,70 @@ describe('BookingService.assignVehicle — car→car reassign (T4)', () => {
   })
 })
 
+// #1152: assigning a car onto its OWN scheduled vehicle_block (maintenance/hold)
+// must 409 — the same block guard SPECIFIC creation runs. Mirrors the
+// [startAt, effectiveEndAt) turnaround-inclusive window.
+describe('BookingService.assignVehicle — vehicle-block guard (#1152)', () => {
+  function scheduleBlock(
+    vehicleBlockRepo: InMemoryVehicleBlockRepository,
+    vehicleId: string,
+    startAt: Date,
+    endAt: Date,
+  ) {
+    return vehicleBlockRepo.create({
+      operatorId: OP_A,
+      vehicleId,
+      startAt,
+      endAt,
+      kind: 'MAINTENANCE',
+      reason: 'scheduled service',
+      notes: null,
+      createdBy: OPERATOR_USER_ID,
+    })
+  }
+
+  it('rejects assigning a car blocked during the rental window (409 VEHICLE_BLOCKED)', async () => {
+    const { service, float, car, vehicleBlockRepo, operatorCtx } = await setupFull()
+    // 12:00–18:00 on day 2 sits squarely inside [START, END).
+    await scheduleBlock(
+      vehicleBlockRepo,
+      car.id,
+      new Date('2027-06-02T12:00:00Z'),
+      new Date('2027-06-02T18:00:00Z'),
+    )
+    const res = await service.assignVehicle(operatorCtx, float.id, car.id, null)
+    expect(res).toMatchObject({ ok: false, status: 409, code: 'VEHICLE_BLOCKED' })
+  })
+
+  it('rejects when the block only overlaps the dropoff turnaround tail (proves effectiveEndAt window)', async () => {
+    const { service, float, car, vehicleBlockRepo, operatorCtx } = await setupFull()
+    // END is 2027-06-03T09:00Z, EFFECTIVE_END is 2027-06-05T09:00Z. A block on
+    // 2027-06-04 falls in the turnaround tail — caught only if the guard uses
+    // effectiveEndAt (a mutant using endAt would let this through).
+    await scheduleBlock(
+      vehicleBlockRepo,
+      car.id,
+      new Date('2027-06-04T00:00:00Z'),
+      new Date('2027-06-04T06:00:00Z'),
+    )
+    const res = await service.assignVehicle(operatorCtx, float.id, car.id, null)
+    expect(res).toMatchObject({ ok: false, status: 409, code: 'VEHICLE_BLOCKED' })
+  })
+
+  it('allows assigning when the block sits entirely after the turnaround window', async () => {
+    const { service, float, car, vehicleBlockRepo, operatorCtx } = await setupFull()
+    // Starts after EFFECTIVE_END (2027-06-05T09:00Z) — half-open, no overlap.
+    await scheduleBlock(
+      vehicleBlockRepo,
+      car.id,
+      new Date('2027-06-06T00:00:00Z'),
+      new Date('2027-06-06T06:00:00Z'),
+    )
+    const res = await service.assignVehicle(operatorCtx, float.id, car.id, null)
+    expect(res).toMatchObject({ ok: true })
+  })
+})
+
 // ---- helpers for guard tests ----
 
 // Returns all mutable repos (not just service) for fixture injection.
@@ -492,6 +559,7 @@ async function setupFull() {
   const userRepo = new InMemoryUserRepository()
   const availabilityRepo = new InMemoryAvailabilityRepository(vehicleRepo, bookingRepo)
   const classRatePlanRepo = new InMemoryClassRatePlanRepository()
+  const vehicleBlockRepo = new InMemoryVehicleBlockRepository()
 
   const vehicleClass = await vehicleClassRepo.create({
     operatorId: OP_A,
@@ -577,6 +645,7 @@ async function setupFull() {
     availabilityRepo,
     classRatePlanRepo,
     vehicleClassRepo,
+    vehicleBlockRepo,
   }
   const runInTransactionFn: RunInTransaction = (fn) => fn(repos)
 
@@ -605,6 +674,7 @@ async function setupFull() {
     bookingRepo,
     vehicleRepo,
     vehicleClassRepo,
+    vehicleBlockRepo,
     bookingEventRepo,
     operatorCtx,
   }
@@ -625,6 +695,7 @@ async function setupWithAssigned() {
   const userRepo = new InMemoryUserRepository()
   const availabilityRepo = new InMemoryAvailabilityRepository(vehicleRepo, bookingRepo)
   const classRatePlanRepo = new InMemoryClassRatePlanRepository()
+  const vehicleBlockRepo = new InMemoryVehicleBlockRepository()
 
   const vehicleClass = await vehicleClassRepo.create({
     operatorId: OP_A,
@@ -737,6 +808,7 @@ async function setupWithAssigned() {
     availabilityRepo,
     classRatePlanRepo,
     vehicleClassRepo,
+    vehicleBlockRepo,
   }
   const runInTransactionFn: RunInTransaction = (fn) => fn(repos)
 

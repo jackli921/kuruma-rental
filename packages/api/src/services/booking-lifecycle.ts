@@ -151,6 +151,24 @@ export class BookingLifecycleService {
             code: 'VEHICLE_DOCS_EXPIRE_BEFORE_RETURN',
           }
         }
+        // #1152: same scheduled-block guard as create/assign — a 23P01 EXCLUDE only
+        // covers booking-vs-booking, so reject substituting onto the replacement
+        // car's own maintenance/hold window (over [startAt, effectiveEndAt)) before
+        // we bother repricing.
+        const blockConflicts = await repos.vehicleBlockRepo.findOverlapping(
+          replacement.id,
+          booking.startAt,
+          booking.effectiveEndAt,
+        )
+        if (blockConflicts.length > 0) {
+          return {
+            ok: false,
+            status: 409,
+            error:
+              'Replacement vehicle is blocked (maintenance or hold) for the requested time range',
+            code: 'VEHICLE_BLOCKED',
+          }
+        }
 
         // Re-snapshot price from the new vehicle's rates (#429), preserving any
         // selected-insurance daily price already locked on the booking.
@@ -270,6 +288,22 @@ export class BookingLifecycleService {
             status: 400,
             error: "Vehicle's shaken or insurance expires before the booking ends",
             code: 'VEHICLE_DOCS_EXPIRE_BEFORE_RETURN',
+          }
+        // #1152: a scheduled vehicle_block (maintenance/hold) on the target car is a
+        // hard conflict — the SAME service-level guard SPECIFIC creation runs
+        // (booking-creation.ts). The GiST EXCLUDE spans only bookings, so blocks are
+        // checked here over the [startAt, effectiveEndAt) turnaround-inclusive window.
+        const blockConflicts = await repos.vehicleBlockRepo.findOverlapping(
+          car.id,
+          booking.startAt,
+          booking.effectiveEndAt,
+        )
+        if (blockConflicts.length > 0)
+          return {
+            ok: false,
+            status: 409,
+            error: 'Vehicle is blocked (maintenance or hold) for the requested time range',
+            code: 'VEHICLE_BLOCKED',
           }
 
         // No reprice — class-deal price is fixed by the rate plan. effectiveEndAt is

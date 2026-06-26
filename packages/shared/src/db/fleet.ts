@@ -223,8 +223,9 @@ export const maintenanceLogs = pgTable(
 // block-vs-block guarantee is the `vehicle_blocks_no_overlap` GiST EXCLUDE
 // constraint added in a custom migration (EXCLUDE is not expressible in the
 // drizzle table builder — same pattern as bookings_no_overlap). Booking-vs-block
-// is enforced in the service layer (NOT EXISTS + advisory lock), since a single
-// EXCLUDE index cannot span two tables.
+// is enforced in the service layer (a NOT EXISTS at booking create and on
+// operator assign/substitute, #1152), since a single EXCLUDE index cannot span
+// two tables.
 export const vehicleBlocks = pgTable(
   'vehicle_blocks',
   {
