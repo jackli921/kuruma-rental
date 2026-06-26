@@ -1,3 +1,4 @@
+import type { UserRole } from '@kuruma/shared/auth/roles'
 import { queryOptions, useQuery } from '@tanstack/react-query'
 
 // The session the browser learns via GET /auth/session (spec §5.3). `id`/`role`
@@ -10,7 +11,7 @@ export interface Session {
   // redirects them on to the dashboard); the portal is scoped by `operatorId`.
   user: {
     id: string
-    role: string
+    role: UserRole
     operatorId?: string
     operatorSlug?: string
     name?: string
