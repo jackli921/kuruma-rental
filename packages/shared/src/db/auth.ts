@@ -26,6 +26,9 @@ export const operators = pgTable('operators', {
   preAuthHandoffUrl: text('pre_auth_handoff_url'),
   createdAt: timestamp('createdAt', { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp('updatedAt', { withTimezone: true }).notNull().defaultNow(),
+  // #1088: soft-deactivation. NULL = active; set = deactivated (hidden from
+  // storefront/search, blocks new bookings). `active` is derived, never stored.
+  deactivatedAt: timestamp('deactivatedAt', { withTimezone: true }),
 })
 
 // Auth.js required fields + app profile fields
