@@ -11,9 +11,7 @@ import type {
   VehicleClass,
   VehicleClassRepository,
 } from '../repositories/types'
-
-const DEFAULT_LIMIT = 25
-const MAX_LIMIT = 50
+import { clampLimit, decodeCursor, encodeCursor } from './search-paging'
 
 export interface StorefrontSummary {
   locationId: string
@@ -220,11 +218,6 @@ export class StorefrontDetailService {
   }
 }
 
-function clampLimit(limit: number | undefined): number {
-  if (!limit || limit < 1) return DEFAULT_LIMIT
-  return Math.min(limit, MAX_LIMIT)
-}
-
 function keepClass(
   vehicle: Vehicle,
   classById: Map<string, VehicleClass>,
@@ -266,15 +259,4 @@ function compareVehicles(a: AvailableVehicle, b: AvailableVehicle): number {
     a.name.localeCompare(b.name) ||
     a.id.localeCompare(b.id)
   )
-}
-
-const encodeCursor = (vehicleId: string): string => btoa(vehicleId)
-// Returns undefined for a malformed (non-base64) cursor so the caller can
-// answer 400 instead of letting atob() throw into a 500 on a public endpoint.
-const decodeCursor = (cursor: string): string | undefined => {
-  try {
-    return atob(cursor)
-  } catch {
-    return undefined
-  }
 }
