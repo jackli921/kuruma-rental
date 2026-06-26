@@ -41,6 +41,7 @@ import { createPaymentRoutes } from './routes/payments'
 import { createProviderInviteRoutes } from './routes/provider-invites'
 import { rateLimitByIp } from './routes/rate-limit'
 import { createRegionRoutes } from './routes/regions'
+import { createReviewRoutes } from './routes/reviews'
 import { createFlatSearchRoutes } from './routes/search'
 import { createStatsRoutes } from './routes/stats'
 import { createStorefrontRoutes } from './routes/storefronts'
@@ -101,6 +102,7 @@ import type { PaymentGateway } from './services/payment/payment-gateway'
 import { StripePaymentGateway } from './services/payment/stripe-payment-gateway'
 import { ProviderInviteService } from './services/provider-invite'
 import { RenterDocumentService } from './services/renter-document'
+import { ReviewService, type SweepSummary } from './services/review'
 import { StorefrontDetailService } from './services/storefront-detail'
 import { StorefrontSearchService } from './services/storefront-search'
 import { createTranslationProvider } from './services/translation-provider-factory'
@@ -151,6 +153,7 @@ export function createApp(overrides?: AppOverrides, repos: Repos = buildRepos(ov
     operatorMembershipRepo,
     auditLogRepo,
     bookingEventRepo,
+    reviewRepo,
     consentRepo,
     classRatePlanRepo,
     runInTransaction,
@@ -460,6 +463,12 @@ export function createApp(overrides?: AppOverrides, repos: Repos = buildRepos(ov
     regionRepo,
     classRatePlanRepo,
   )
+  const reviewService = new ReviewService(
+    reviewRepo,
+    bookingRepo,
+    bookingEventRepo,
+    operatorMembershipRepo,
+  )
 
   // Chain .route() calls so TypeScript infers the full route type tree.
   // hc<AppType> needs this to produce typed client methods.
@@ -507,6 +516,7 @@ export function createApp(overrides?: AppOverrides, repos: Repos = buildRepos(ov
     )
     .route('/', createMaintenanceLogRoutes(maintenanceService))
     .route('/', createBookingRoutes(bookingService, consentGate))
+    .route('/', createReviewRoutes(reviewService))
     .route('/', createPaymentRoutes(paymentService))
     .route('/', createAvailabilityRoutes(availabilityService))
     .route('/', createStatsRoutes(statsRepo))
@@ -764,6 +774,30 @@ export function buildNotificationRetryService(
     bookingRepo: repos.bookingRepo,
     redriver: resolveNotificationDispatcher(repos, resolveEmailSender(overrides), webBaseUrl),
   })
+}
+
+// A daily sweep over window-elapsed reviews; far above the per-day reveal volume for a
+// 40-50 vehicle fleet, so a single run drains the backlog. A run that hits the cap just
+// defers the overflow to tomorrow's idempotent run — reveals are never lost, only delayed.
+const REVIEW_SWEEP_LIMIT = 500
+
+/**
+ * Composition seam for the #1067 daily review-reveal sweep, resolved by the Workers
+ * `scheduled` cron exactly as the other backstops are. Publishes reviews whose 14-day
+ * double-blind window has elapsed but which no read settled — the backstop that keeps a
+ * one-sided review from staying hidden forever. Idempotent (publishMany first-write-wins).
+ */
+export function buildReviewRevealSweep(
+  overrides?: AppOverrides,
+  repos: Repos = buildRepos(overrides),
+): { run: () => Promise<SweepSummary> } {
+  const service = new ReviewService(
+    repos.reviewRepo,
+    repos.bookingRepo,
+    repos.bookingEventRepo,
+    repos.operatorMembershipRepo,
+  )
+  return { run: () => service.sweep(new Date(), REVIEW_SWEEP_LIMIT) }
 }
 
 /**

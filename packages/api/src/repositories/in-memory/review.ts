@@ -1,6 +1,6 @@
 import { PG_ERROR, REVIEWS_AUTHOR_SUBJECT_CONSTRAINT } from '../../pg-errors'
 import type { Review } from '../../stores'
-import type { NewReview, ReviewRepository } from '../types'
+import type { NewReview, ReviewEdit, ReviewRepository } from '../types'
 
 // Mirror postgres-js's PostgresError: the violated constraint is exposed as
 // `constraint_name` (what pgConstraintName reads). Faithful mirroring lets the
@@ -40,5 +40,37 @@ export class InMemoryReviewRepository implements ReviewRepository {
 
   async findByBookingId(bookingId: string): Promise<Review[]> {
     return [...this.store.values()].filter((r) => r.bookingId === bookingId)
+  }
+
+  async update(id: string, authorUserId: string, patch: ReviewEdit): Promise<Review | undefined> {
+    const existing = this.store.get(id)
+    // Mirror the Drizzle WHERE: only the author's own, still-hidden row is editable.
+    // Any other case (absent / published / not the caller's) matches nothing here too.
+    if (!existing || existing.authorUserId !== authorUserId || existing.publishedAt) {
+      return undefined
+    }
+    const updated: Review = { ...existing, ...patch, updatedAt: new Date() }
+    this.store.set(id, updated)
+    return updated
+  }
+
+  async publishMany(ids: string[], publishedAt: Date): Promise<number> {
+    const idSet = new Set(ids)
+    let published = 0
+    for (const review of this.store.values()) {
+      // First-write-wins: only flip rows still hidden, so a re-run never re-stamps.
+      if (idSet.has(review.id) && review.publishedAt === null) {
+        this.store.set(review.id, { ...review, publishedAt, updatedAt: new Date() })
+        published += 1
+      }
+    }
+    return published
+  }
+
+  async findRevealDue(now: Date, limit: number): Promise<Review[]> {
+    return [...this.store.values()]
+      .filter((r) => r.publishedAt === null && r.revealDeadlineAt.getTime() <= now.getTime())
+      .sort((a, b) => a.revealDeadlineAt.getTime() - b.revealDeadlineAt.getTime())
+      .slice(0, limit)
   }
 }
