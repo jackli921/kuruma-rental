@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it } from 'vitest'
 import type { ConsentDocument } from '../../stores'
 import type { NewConsentAcceptance } from '../types'
+import { CONSENT_ACCEPTANCE_LIST_LIMIT } from '../types-consent'
 import { InMemoryConsentRepository } from './consent'
 
 const DOC: ConsentDocument = {
@@ -53,6 +54,37 @@ describe('InMemoryConsentRepository', () => {
     await repo.createAcceptance(baseAcceptance)
     expect(await repo.hasAcceptedVersion('user_1', 'RENTER_TOS', '1.0')).toBe(true)
     expect(await repo.hasAcceptedVersion('user_2', 'RENTER_TOS', '1.0')).toBe(false)
+  })
+
+  it('findAcceptances joins the document version and drops rows whose doc is absent', async () => {
+    await repo.createAcceptance(baseAcceptance)
+    // An acceptance pointing at a document not in the repo (mirrors an inner join
+    // miss) must NOT surface with an empty version — it is dropped entirely.
+    await repo.createAcceptance({ ...baseAcceptance, userId: 'user_2', documentId: 'doc_missing' })
+
+    const rows = await repo.findAcceptances({})
+    expect(rows).toHaveLength(1)
+    expect(rows[0]).toMatchObject({ userId: 'user_1', consentType: 'RENTER_TOS', version: '1.0' })
+  })
+
+  it('caps the ledger browse at CONSENT_ACCEPTANCE_LIST_LIMIT, keeping the newest', async () => {
+    // Seed more than the cap, each a distinct user (the composite-unique key) with a
+    // strictly increasing acceptedAt, so newest-first ordering is unambiguous.
+    const overflow = CONSENT_ACCEPTANCE_LIST_LIMIT + 5
+    for (let i = 0; i < overflow; i++) {
+      await repo.createAcceptance({
+        ...baseAcceptance,
+        userId: `user_${String(i).padStart(4, '0')}`,
+        acceptedAt: new Date(Date.UTC(2026, 0, 1) + i * 1000),
+      })
+    }
+
+    const rows = await repo.findAcceptances({})
+
+    expect(rows).toHaveLength(CONSENT_ACCEPTANCE_LIST_LIMIT)
+    // Newest row survives; the 5 oldest (user_0000..user_0004) are dropped by the cap.
+    expect(rows[0]?.userId).toBe(`user_${String(overflow - 1).padStart(4, '0')}`)
+    expect(rows.map((r) => r.userId)).not.toContain('user_0000')
   })
 
   it('seals once-per-user idempotency with constraint_name consent_unique_user_document', async () => {
