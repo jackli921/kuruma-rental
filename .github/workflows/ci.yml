@@ -40,6 +40,9 @@ jobs:
       - name: Check FK indexes
         run: bun run lint:fk-indexes
 
+      - name: Check snapshot/index parity (hand-SQL drift)
+        run: bun run lint:snapshot-index-parity
+
       - name: Check i18n locale parity
         run: bun run lint:i18n-parity
 

@@ -13,10 +13,10 @@ interface CreateBookingCommon {
   // Selected paid add-on ids (#460). Required at the service boundary (the
   // validator defaults it to []); the route forwards parsed.data.addOnIds.
   addOnIds: string[]
-  // The booking's renter — the route always fills it: the authenticated caller for
-  // a self-serve booking, or a target renter for a staff/operator manual booking.
-  // For a walk-in (#589 1c) it is ignored: walkInCustomer takes over and the
-  // service creates + uses a fresh renter instead.
+  // The booking's RESOLVED renter — resolveBookingActor (#1108) has already
+  // derived it: the authenticated caller for self-serve, or a target renter for a
+  // staff/operator manual booking. For a walk-in (#589 1c) it is ignored:
+  // walkInCustomer takes over and the service mints a fresh renter.
   renterId: string
   // #589 1c: operator walk-in — create a fresh renter (name + phone, no email)
   // and book for them. The service resolves this to the concrete renterId it uses.
@@ -42,6 +42,22 @@ interface CreateBookingCommon {
 export type CreateBookingInput =
   | (CreateBookingCommon & { fulfillmentMode: 'SPECIFIC'; requestedVehicleId: string })
   | (CreateBookingCommon & { fulfillmentMode: 'CLASS_COMBO'; classId: string })
+
+// The RAW request from the route (#1108 audit M4). Identical to CreateBookingInput
+// except renterId is optional: the route forwards parsed.data untouched (a
+// self-serve caller omits renterId) and BookingCreationService.create resolves the
+// actor via resolveBookingActor before building the concrete CreateBookingInput.
+export type CreateBookingRequest =
+  | (Omit<CreateBookingCommon, 'renterId'> & {
+      renterId?: string
+      fulfillmentMode: 'SPECIFIC'
+      requestedVehicleId: string
+    })
+  | (Omit<CreateBookingCommon, 'renterId'> & {
+      renterId?: string
+      fulfillmentMode: 'CLASS_COMBO'
+      classId: string
+    })
 
 export type CreateBookingResult =
   | { ok: true; booking: Booking; status?: 200 }

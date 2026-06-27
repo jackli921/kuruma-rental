@@ -212,6 +212,10 @@ export const maintenanceLogs = pgTable(
   },
   (table) => [
     check('maintenance_cost_non_negative', sql`${table.costJpy} IS NULL OR ${table.costJpy} >= 0`),
+    // FK index — exists in prod via 0020_add-maintenance-logs-vehicle-index.sql
+    // but was never echoed here, so the snapshot didn't carry it and a future
+    // `drizzle-kit pull` would silently drop it. Codified per #1172/#1150.
+    index('idx_maintenance_logs_vehicleId').on(table.vehicleId),
   ],
 )
 
@@ -223,8 +227,9 @@ export const maintenanceLogs = pgTable(
 // block-vs-block guarantee is the `vehicle_blocks_no_overlap` GiST EXCLUDE
 // constraint added in a custom migration (EXCLUDE is not expressible in the
 // drizzle table builder — same pattern as bookings_no_overlap). Booking-vs-block
-// is enforced in the service layer (NOT EXISTS + advisory lock), since a single
-// EXCLUDE index cannot span two tables.
+// is enforced in the service layer (a NOT EXISTS at booking create and on
+// operator assign/substitute, #1152), since a single EXCLUDE index cannot span
+// two tables.
 export const vehicleBlocks = pgTable(
   'vehicle_blocks',
   {

@@ -13,6 +13,9 @@ export const notificationKindEnum = pgEnum('notification_kind', [
   'RENTER_CANCELLATION', // -> renter: booking was cancelled
   'RENTER_TRIP_STARTED', // -> renter: status advanced to ACTIVE
   'RENTER_TRIP_COMPLETED', // -> renter: status advanced to COMPLETED
+  // #1083: post-trip review prompt, fired on COMPLETED alongside the trip-completed
+  // notice. Distinct kind so notify:<booking>:<kind> never collides between the two.
+  'RENTER_REVIEW_PROMPT', // -> renter: rate the operator + vehicle after the trip
 ])
 // SENDING is the in-flight lease between QUEUED and SENT/FAILED — it closes the
 // concurrent-send race (atomic claim, architect P1). Reclaimable ONLY after the

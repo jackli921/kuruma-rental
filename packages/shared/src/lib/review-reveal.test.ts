@@ -1,5 +1,12 @@
 import { describe, expect, it } from 'vitest'
-import { type RevealInput, aggregateRatings, decideReveal, summarizeSides } from './review-reveal'
+import {
+  REVIEW_WINDOW_DAYS,
+  type RevealInput,
+  aggregateRatings,
+  computeRevealDeadline,
+  decideReveal,
+  summarizeSides,
+} from './review-reveal'
 
 const DEADLINE = new Date('2026-07-15T00:00:00Z')
 const BEFORE = new Date('2026-07-10T00:00:00Z')
@@ -80,5 +87,19 @@ describe('aggregateRatings (#1067 slice 5 foundation)', () => {
     expect(result.averageOverall).toBe(3)
     // value averaged over ONE review, not divided by 2.
     expect(result.subAverages).toEqual({ value: 4 })
+  })
+})
+
+describe('computeRevealDeadline (#1067 slice 2)', () => {
+  it('adds the fixed 14-day window to the completion instant', () => {
+    expect(REVIEW_WINDOW_DAYS).toBe(14)
+    const completedAt = new Date('2026-07-01T09:30:00Z')
+    expect(computeRevealDeadline(completedAt)).toEqual(new Date('2026-07-15T09:30:00Z'))
+  })
+
+  it('does not mutate the input date', () => {
+    const completedAt = new Date('2026-07-01T00:00:00Z')
+    computeRevealDeadline(completedAt)
+    expect(completedAt).toEqual(new Date('2026-07-01T00:00:00Z'))
   })
 })

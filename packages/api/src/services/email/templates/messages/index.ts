@@ -48,6 +48,12 @@ export interface EmailStrings {
   tripStartedHeading: string
   tripCompletedSubject: string
   tripCompletedHeading: string
+  // #1083 post-trip review prompt
+  reviewPromptSubject: string // booking code appended
+  reviewPromptHeading: string
+  reviewPromptTitle: string
+  reviewPromptExplain: string
+  reviewPromptCta: string
   // Fee-type display names
   feeLabels: Record<FeeType, string>
   // #916 §5.4 compliance digest (operator-facing fleet reminder)
@@ -96,6 +102,12 @@ const en: EmailStrings = {
   tripStartedHeading: 'Your rental has started. Enjoy the drive!',
   tripCompletedSubject: 'Trip completed —',
   tripCompletedHeading: 'Your rental is complete. Thank you for choosing us!',
+  reviewPromptSubject: 'How was your trip? —',
+  reviewPromptHeading: 'Your trip is complete. Share how it went to help fellow travelers.',
+  reviewPromptTitle: 'Rate your trip',
+  reviewPromptExplain:
+    'Rate the operator and the vehicle. Reviews stay hidden until both sides submit or 14 days pass.',
+  reviewPromptCta: 'Write a review',
   feeLabels: {
     OVERTIME_HOURLY: 'Overtime (per hour)',
     CLEANING_FLAT: 'Cleaning',
@@ -153,6 +165,13 @@ const ja: EmailStrings = {
   tripStartedHeading: 'レンタルが開始されました。よい旅を!',
   tripCompletedSubject: 'レンタル完了のお知らせ —',
   tripCompletedHeading: 'レンタルが完了しました。ご利用ありがとうございました!',
+  reviewPromptSubject: 'ご利用はいかがでしたか —',
+  reviewPromptHeading:
+    'ご利用ありがとうございました。体験を共有して、他の旅行者の参考にしましょう。',
+  reviewPromptTitle: '旅行を評価する',
+  reviewPromptExplain:
+    'オペレーターと車両を評価してください。レビューは双方が投稿するか14日が経過するまで公開されません。',
+  reviewPromptCta: 'レビューを書く',
   feeLabels: {
     OVERTIME_HOURLY: '延長料金（1時間あたり）',
     CLEANING_FLAT: 'クリーニング',
@@ -210,6 +229,11 @@ const zh: EmailStrings = {
   tripStartedHeading: '您的租赁已开始。祝您旅途愉快!',
   tripCompletedSubject: '行程完成通知 —',
   tripCompletedHeading: '您的租赁已完成。感谢您的惠顾!',
+  reviewPromptSubject: '您的行程体验如何 —',
+  reviewPromptHeading: '您的行程已完成。分享您的体验，帮助其他旅行者。',
+  reviewPromptTitle: '评价您的行程',
+  reviewPromptExplain: '评价运营商和车辆。在双方都提交或14天后，评价才会公开。',
+  reviewPromptCta: '撰写评价',
   feeLabels: {
     OVERTIME_HOURLY: '超时费(每小时)',
     CLEANING_FLAT: '清洁费',

@@ -58,16 +58,20 @@ export class InMemoryBookingRepository implements BookingRepository {
     this.store = store ?? new Map()
   }
 
-  // Three-way read scope (#392, proposal §6.2): bypass sees all, an operator
-  // sees only its tenant's bookings, a renter sees only their own. Replaces the
-  // legacy renter-vs-PRIVILEGED_ROLES split.
+  // Read scope (#392, proposal §6.2; PARTNER channel scope #1119): the admin
+  // tier sees all, a PARTNER sees only its sourced bookings, an operator sees
+  // only its tenant's, a renter sees only their own. Exhaustive on the union so a
+  // new scope kind can't silently fall through to reading every tenant's rows.
   private scopedValues(ctx: CallerContext): Booking[] {
     const scope = bookingReadScope(ctx)
     if (scope.kind === 'none') return []
     const all = [...this.store.values()]
     if (scope.kind === 'operator') return all.filter((b) => b.operatorId === scope.operatorId)
     if (scope.kind === 'renter') return all.filter((b) => b.renterId === scope.renterId)
-    return all
+    if (scope.kind === 'partner') return all.filter((b) => b.source === scope.source)
+    if (scope.kind === 'all') return all
+    scope satisfies never
+    return []
   }
 
   async listRenterIdsForOperator(operatorId: string): Promise<string[]> {
@@ -83,7 +87,10 @@ export class InMemoryBookingRepository implements BookingRepository {
     if (scope.kind === 'none') return false
     if (scope.kind === 'operator') return booking.operatorId === scope.operatorId
     if (scope.kind === 'renter') return booking.renterId === scope.renterId
-    return true
+    if (scope.kind === 'partner') return booking.source === scope.source
+    if (scope.kind === 'all') return true
+    scope satisfies never
+    return false
   }
 
   async findAll(ctx: CallerContext, filters?: BookingFilters): Promise<Booking[]> {

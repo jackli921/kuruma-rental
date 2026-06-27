@@ -9,16 +9,21 @@ import { type Db, bookingColumns, toBooking } from './shared'
 export class DrizzleBookingRepository implements BookingRepository {
   constructor(private readonly db: Db) {}
 
-  // Three-way read scope (#392, proposal §6.2), mirroring the in-memory repo:
-  // bypass sees all, an operator sees only its tenant, a renter sees only their
-  // own. `null` = the `none` scope (operator missing operatorId) — read nothing.
+  // Read scope (#392, proposal §6.2; PARTNER channel scope #1119), mirroring the
+  // in-memory repo: the admin tier sees all, a PARTNER sees only its sourced
+  // bookings, an operator sees only its tenant, a renter sees only their own.
+  // `null` = the `none` scope (operator missing operatorId) — read nothing.
   // Otherwise returns the conditions to AND into the query (empty = unscoped).
+  // Exhaustive on the union so a new scope kind can't silently read every tenant.
   private scopeConditions(ctx: CallerContext): SQL[] | null {
     const scope = bookingReadScope(ctx)
     if (scope.kind === 'none') return null
     if (scope.kind === 'operator') return [eq(bookings.operatorId, scope.operatorId)]
     if (scope.kind === 'renter') return [eq(bookings.renterId, scope.renterId)]
-    return []
+    if (scope.kind === 'partner') return [eq(bookings.source, scope.source)]
+    if (scope.kind === 'all') return []
+    scope satisfies never
+    return null
   }
 
   async listRenterIdsForOperator(operatorId: string): Promise<string[]> {

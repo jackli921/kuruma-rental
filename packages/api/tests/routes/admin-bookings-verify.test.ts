@@ -16,9 +16,11 @@ import { makeInertConsentGate } from '../helpers/consent'
 // It establishes three code-grounded facts:
 //   1. A PLATFORM_ADMIN's `GET /bookings` DOES already return cross-operator rows
 //      (>=2 distinct operatorId) — cross-operator READ is not the gap.
-//   2. A PARTNER (Trip.com) gets the SAME cross-operator rows — `GET /bookings` is
-//      ungated (requireUser only) and scopes on `bypassScope`, which PARTNER
-//      shares. So it is NOT platform-only (the gap tracked separately as #1119).
+//   2. A PARTNER (Trip.com) is now scoped to its OWN channel (source=TRIP_COM)
+//      and no longer reads operators' DIRECT bookings — the cross-tenant leak
+//      closed in #1119. Either way `GET /bookings` is not platform-only: it
+//      serves renters/operators/partners by scope, so the oversight page still
+//      needs a dedicated platform-gated `GET /admin/bookings`.
 //   3. The raw row carries `operatorId` but NOT operator identity (name) nor any
 //      customer (renter name/email) — an oversight table cannot say WHICH operator
 //      or WHO booked. Plus it offers no operator/bookingCode/customer filters.
@@ -49,6 +51,13 @@ function mountBookingsAs(role: UserRole) {
   for (const b of [
     fullBooking({ operatorId: OP_A, assignedVehicleId: 'veh-a', requestedVehicleId: 'veh-a' }),
     fullBooking({ operatorId: OP_B, assignedVehicleId: 'veh-b', requestedVehicleId: 'veh-b' }),
+    // A Trip.com-sourced booking (on OP_A) — the only row a PARTNER may read (#1119).
+    fullBooking({
+      operatorId: OP_A,
+      source: 'TRIP_COM',
+      assignedVehicleId: 'veh-c',
+      requestedVehicleId: 'veh-c',
+    }),
   ]) {
     store.set(b.id, b)
   }
@@ -69,15 +78,16 @@ describe('#1092 verify-first: GET /bookings cross-operator behaviour', () => {
     expect(operatorIds).toEqual(new Set([OP_A, OP_B]))
   })
 
-  it('PARTNER gets the SAME cross-operator rows — GET /bookings is NOT platform-only (#1119)', async () => {
+  it('PARTNER reads ONLY its own channel (source=TRIP_COM), not operators DIRECT rows (#1119)', async () => {
     const res = await mountBookingsAs('PARTNER').request('/bookings')
     expect(res.status).toBe(200)
     const { data } = await res.json()
-    // PARTNER shares bypassScope (shared/auth/roles.ts SCOPE_BYPASS_ROLES), so it
-    // reaches every tenant's bookings here. This is exactly why platform-owner
-    // oversight cannot ride this endpoint — it needs requirePlatformAdmin.
+    // #1119: PARTNER no longer rides bypassScope for bookings — it reads only the
+    // bookings it sourced. The operators' DIRECT rows (OP_A/OP_B) are invisible;
+    // only the TRIP_COM row (seeded on OP_A) comes back.
+    expect(data.map((b: { source: string }) => b.source)).toEqual(['TRIP_COM'])
     const operatorIds = new Set(data.map((b: { operatorId: string }) => b.operatorId))
-    expect(operatorIds).toEqual(new Set([OP_A, OP_B]))
+    expect(operatorIds).toEqual(new Set([OP_A]))
   })
 
   it('the raw row carries operatorId but NO operator name or customer identity (the DTO gap)', async () => {
