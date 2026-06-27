@@ -1,6 +1,6 @@
 {
-  "id": "723f2412-085f-42c3-9fe3-8a12bd8931c6",
-  "prevId": "6b99426e-b429-48a6-9987-b82562612ab4",
+  "id": "edf04406-44b7-42ce-bf5a-aabbc9182ae7",
+  "prevId": "723f2412-085f-42c3-9fe3-8a12bd8931c6",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -468,6 +468,12 @@
           "primaryKey": false,
           "notNull": true,
           "default": "now()"
+        },
+        "deactivatedAt": {
+          "name": "deactivatedAt",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
         }
       },
       "indexes": {},

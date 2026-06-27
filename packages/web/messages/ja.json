@@ -1253,7 +1253,8 @@
       "documents": "書類",
       "governance": "同意ガバナンス",
       "customers": "顧客",
-      "operators": "事業者"
+      "operators": "事業者",
+      "backToSite": "サイトに戻る"
     },
     "operators": {
       "title": "事業者",
@@ -1609,6 +1610,29 @@
       "submit": "レビューを送信",
       "pending": "送信中…",
       "error": "エラーが発生しました。もう一度お試しください。"
+    },
+    "operatorPanel": {
+      "cta": "この利用者を評価",
+      "title": "利用者を評価する",
+      "description": "ご予約 {code} のお客様はいかがでしたか?",
+      "overall": "総合評価",
+      "starLabel": "星{n}つ",
+      "dimension": {
+        "communication": "コミュニケーション",
+        "cleanliness": "清潔さ",
+        "ruleAdherence": "ルールの遵守"
+      },
+      "commentLabel": "この利用者についてのコメント",
+      "commentPlaceholder": "貸出の詳細をご記入ください(任意)",
+      "submit": "レビューを送信",
+      "pending": "送信中…",
+      "error": "エラーが発生しました。もう一度お試しください。",
+      "reviewed": "この利用者を評価済みです。"
     }
+  },
+  "currency": {
+    "label": "表示通貨",
+    "disclaimer": "目安です — ご請求は日本円（JPY）です",
+    "asOf": "レート基準日 {date}"
   }
 }

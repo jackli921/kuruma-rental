@@ -1,0 +1,1 @@
+CREATE UNIQUE INDEX "reviews_operator_subject_per_booking_unique" ON "reviews" USING btree ("bookingId","operatorId","subject") WHERE "reviews"."authorRole" = 'OPERATOR';

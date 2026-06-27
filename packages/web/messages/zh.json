@@ -1253,7 +1253,8 @@
       "documents": "证件",
       "governance": "同意治理",
       "customers": "客户",
-      "operators": "运营商"
+      "operators": "运营商",
+      "backToSite": "返回网站"
     },
     "operators": {
       "title": "运营商",
@@ -1609,6 +1610,29 @@
       "submit": "提交评价",
       "pending": "提交中…",
       "error": "出现错误，请重试。"
+    },
+    "operatorPanel": {
+      "cta": "评价该租客",
+      "title": "评价您的租客",
+      "description": "预订 {code} 的租客体验如何？",
+      "overall": "总体评分",
+      "starLabel": "{n} 星",
+      "dimension": {
+        "communication": "沟通",
+        "cleanliness": "整洁度",
+        "ruleAdherence": "规则遵守"
+      },
+      "commentLabel": "关于该租客的评论",
+      "commentPlaceholder": "分享租赁体验详情(可选)",
+      "submit": "提交评价",
+      "pending": "提交中…",
+      "error": "出现错误，请重试。",
+      "reviewed": "您已评价该租客。"
     }
+  },
+  "currency": {
+    "label": "显示货币",
+    "disclaimer": "仅供参考 — 实际以日元（JPY）结算",
+    "asOf": "汇率基准日 {date}"
   }
 }

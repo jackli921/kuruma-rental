@@ -9,6 +9,7 @@ import {
   text,
   timestamp,
   unique,
+  uniqueIndex,
 } from 'drizzle-orm/pg-core'
 import { REVIEW_AUTHOR_ROLES, REVIEW_MODERATION_STATUSES, REVIEW_SUBJECTS } from '../enums'
 import { operators, users } from './auth'
@@ -78,6 +79,14 @@ export const reviews = pgTable(
   (t) => [
     // Exactly one review per author per booking per subject — edit-until-published, never re-insert.
     unique('reviews_author_subject_per_booking_unique').on(t.bookingId, t.authorUserId, t.subject),
+    // One operator-side review per booking, keyed on the TENANT not the staff user (#1158):
+    // the operator->renter review represents the operator, so the first staff member to submit
+    // speaks for it. A partial unique index (OPERATOR rows only) seals (booking, operator, subject)
+    // so two staff of one operator can't double-review one booking and skew slice-5 aggregates.
+    // The renter side stays governed by the per-author unique above (there is only ever one renter).
+    uniqueIndex('reviews_operator_subject_per_booking_unique')
+      .on(t.bookingId, t.operatorId, t.subject)
+      .where(sql`${t.authorRole} = 'OPERATOR'`),
     check('reviews_overall_range_chk', sql`${t.overall} BETWEEN 1 AND 5`),
     // Operators review ONLY renters; renters review the operator or a vehicle (never a renter).
     check(

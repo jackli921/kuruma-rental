@@ -32,9 +32,13 @@ const TO = '2026-09-12T10:00'
 
 const UUID_RE = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/
 
-/** Strip yen formatting (¥, commas, spaces) down to the integer amount. */
+/** Strip yen formatting (¥, commas, spaces) down to the integer amount. The
+ *  authoritative JPY figure is always rendered first; an optional indicative
+ *  "≈ $x" note (#1070) may follow it in the same cell, so read only the part
+ *  before the approximation sign — otherwise its digits concatenate onto the yen. */
 function yen(text: string): number {
-  const digits = text.replace(/[^0-9]/g, '')
+  const jpyPart = text.split('≈')[0] ?? text
+  const digits = jpyPart.replace(/[^0-9]/g, '')
   return digits ? Number.parseInt(digits, 10) : Number.NaN
 }
 

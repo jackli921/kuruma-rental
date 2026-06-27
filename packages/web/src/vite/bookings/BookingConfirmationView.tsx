@@ -7,6 +7,7 @@ import { PreAuthHandoffCard } from '@/vite/bookings/PreAuthHandoffCard'
 import type { BookingDto } from '@/vite/bookings/api'
 import { buildStorefrontSearch } from '@/vite/bookings/storefront-link'
 import { isCancellationEnabled } from '@/vite/config/features'
+import { IndicativeNote, useIndicative } from '@/vite/currency'
 import { MessageHostLink } from '@/vite/messaging/MessageHostLink'
 import type { VehicleClassData } from '@/vite/vehicles/classes'
 import { deriveBaseJpy, rentalDays } from '@kuruma/shared/lib/pricing'
@@ -37,7 +38,9 @@ export function BookingConfirmationView({
   threadId,
 }: BookingConfirmationViewProps) {
   const t = useTranslations('bookings.confirmation')
+  const tCurrency = useTranslations('currency')
   const locale = useLocale()
+  const { format: indicativeOf } = useIndicative()
 
   // The base (vehicle-rental) charge is never stored — only composed into
   // totalPrice — so recover it via the documented inverse for the itemised
@@ -138,9 +141,15 @@ export function BookingConfirmationView({
               ))}
               <div className="flex justify-between border-t border-border pt-2 text-sm font-semibold">
                 <dt>{t('total')}</dt>
-                <dd>{formatJpy(booking.totalPrice)}</dd>
+                <dd className="text-right">
+                  {formatJpy(booking.totalPrice)}
+                  <IndicativeNote jpy={booking.totalPrice} />
+                </dd>
               </div>
             </dl>
+            {indicativeOf(booking.totalPrice) !== null && (
+              <p className="text-xs text-muted-foreground">{tCurrency('disclaimer')}</p>
+            )}
           </CardContent>
         </Card>
       )}

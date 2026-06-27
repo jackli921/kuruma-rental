@@ -9,6 +9,7 @@ import {
   operatorRowFromDetail,
   substitutionCandidatesQueryOptions,
 } from '@/vite/operator-bookings/api'
+import { RateRenterPanel } from '@/vite/reviews'
 import { sessionQueryOptions } from '@/vite/session'
 import { useQuery, useSuspenseQuery } from '@tanstack/react-query'
 import {
@@ -91,6 +92,16 @@ export function TripDetailRoute() {
               candidates={candidates}
               candidatesError={candidatesError}
             />
+            {/* #1084: rate the renter once the trip is COMPLETED. Operator sessions only —
+                oversight viewers (PLATFORM_ADMIN, no operatorId) aren't review participants
+                and the API would 403 them. */}
+            {detail.status === 'COMPLETED' && session && isOperatorSession(session) ? (
+              <RateRenterPanel
+                bookingId={bookingId}
+                bookingCode={detail.bookingCode}
+                csrfToken={session.csrfToken}
+              />
+            ) : null}
           </section>
           <aside className="rounded-xl border border-border px-4 py-6">
             <h2 className="mb-6 text-sm font-semibold">{t('timeline.heading')}</h2>
