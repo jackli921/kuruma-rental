@@ -84,10 +84,14 @@ export const BUSINESS_ROLES = union(MANAGEMENT_BASE_ROLES, OPERATOR_ROLES)
 export const OPERATOR_OWNER_WRITE_ROLES = union(MANAGEMENT_BASE_ROLES, roleSet('OPERATOR_OWNER'))
 
 /**
- * Cross-tenant read bypass — the platform tier PLUS PARTNER (Trip.com reads
- * bookings across tenants). Drives `CallerContext.bypassScope`. A distinct
- * instance from {@link PRIVILEGED_ROLES} (same members) because the two gate
- * different things and may still diverge later.
+ * Cross-tenant read bypass — the platform tier PLUS PARTNER. Drives
+ * `CallerContext.bypassScope`. NOTE (#1119): bookings are NO LONGER part of this
+ * bypass for PARTNER — a Trip.com key reads only its own channel
+ * (`bookingReadScope` -> `partner`, source=TRIP_COM), not operators' DIRECT
+ * bookings. `bypassScope` still grants PARTNER cross-tenant reads of the
+ * remaining surfaces it gates (e.g. user search in `customer.ts`); narrowing
+ * those the same way is the tracked follow-up. A distinct instance from
+ * {@link PRIVILEGED_ROLES} (same members) because the two gate different things.
  */
 export const SCOPE_BYPASS_ROLES = roleSet('PARTNER', 'PLATFORM_ADMIN')
 

@@ -38,3 +38,16 @@ export function isOperatorSettingsEnabled(): boolean {
 export function isRenterDocumentsEnabled(): boolean {
   return isEnabled(import.meta.env.VITE_FEATURE_RENTER_DOCUMENTS)
 }
+
+/** In-app renter<->operator messaging (#1032). Hidden in beta; owner previews via admin bypass. */
+export function isMessagingEnabled(): boolean {
+  return isEnabled(import.meta.env.VITE_FEATURE_MESSAGING)
+}
+
+/**
+ * Operator scheduled vehicle blocks (#1101). Backend-only today; reserved so the
+ * operator UI is born gated when it lands. Hidden in beta; owner previews via bypass.
+ */
+export function isOperatorBlocksEnabled(): boolean {
+  return isEnabled(import.meta.env.VITE_FEATURE_OPERATOR_BLOCKS)
+}

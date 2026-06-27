@@ -49,20 +49,29 @@ export interface ResolvePaymentAnomalyInput {
   note: string | null
 }
 
+/** Hard cap on the platform-admin anomaly browse, applied at the data layer
+ *  (newest-first, then limit) — mirrors CONSENT_ACCEPTANCE_LIST_LIMIT. The
+ *  resolved list grows monotonically (rows are never deleted), so an unbounded
+ *  read would scan + ship the whole table; the cap bounds query, payload, and
+ *  Worker memory the same way the revenue/consent admin surfaces do. */
+export const PAYMENT_ANOMALY_LIST_LIMIT = 200
+
 /** payment_anomalies data access (#508 P2). The webhook is the only writer of new
  *  rows; an admin resolution (#1075 slice 3) is the only other mutation. */
 export interface PaymentAnomalyRepository {
   // Persist an anomaly for operator review. IDEMPOTENT on stripeEventId: a
   // redelivered webhook (which re-derives the same anomaly) must not stack rows.
   record(anomaly: NewPaymentAnomaly): Promise<void>
-  // Unresolved anomalies across all operators for the platform-admin surface.
-  // Unscoped by design — authz lives in the service (mirrors listSucceeded).
+  // Unresolved anomalies across all operators for the platform-admin surface,
+  // newest-first and capped at PAYMENT_ANOMALY_LIST_LIMIT. Unscoped by design —
+  // authz lives in the service (mirrors listSucceeded).
   listUnresolved(): Promise<PaymentAnomaly[]>
   // #1087 platform overview: `COUNT(* WHERE resolvedAt IS NULL)` for the
   // open-anomalies KPI. COUNT at the DB layer, never load-then-count.
   countUnresolved(): Promise<number>
-  // Resolved anomalies across all operators (the "resolved" filter tab). Also
-  // unscoped; the service is the authz chokepoint.
+  // Resolved anomalies across all operators (the "resolved" filter tab),
+  // newest-first and capped at PAYMENT_ANOMALY_LIST_LIMIT. Also unscoped; the
+  // service is the authz chokepoint.
   listResolved(): Promise<PaymentAnomaly[]>
   // Close an anomaly: set resolvedAt=now plus the audit fields in ONE guarded
   // UPDATE (WHERE id AND resolvedAt IS NULL). Returns the updated row, or null when
