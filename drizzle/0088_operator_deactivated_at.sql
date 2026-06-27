@@ -1,0 +1,1 @@
+ALTER TABLE "operators" ADD COLUMN "deactivatedAt" timestamp with time zone;

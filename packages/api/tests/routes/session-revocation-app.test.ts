@@ -8,7 +8,7 @@ import { InMemoryOperatorRepository } from '../../src/repositories/in-memory/ope
 import { InMemoryUserRepository } from '../../src/repositories/in-memory/user'
 import { InMemoryVehicleRepository } from '../../src/repositories/in-memory/vehicle'
 import { InMemoryVehicleBlockRepository } from '../../src/repositories/in-memory/vehicle-block'
-import type { User } from '../../src/stores'
+import type { Operator, User } from '../../src/stores'
 import { TEST_AUTH_SECRET, setupAuthEnv } from '../helpers/auth'
 
 // #939 boundary test. The middleware unit test (tests/middleware/session-revocation)
@@ -65,9 +65,24 @@ function activeOperatorRow(): User {
   }
 }
 
+/** The operator the member belongs to, active (deactivatedAt null) by default. */
+function activeOperator(): Operator {
+  const now = new Date()
+  return {
+    id: OPERATOR_ID,
+    name: 'Best Car Rental',
+    slug: 'best-car-rental',
+    preAuthHandoffUrl: null,
+    createdAt: now,
+    updatedAt: now,
+    deactivatedAt: null,
+  }
+}
+
 describe('createApp wires operator-session revocation (#939)', () => {
   let app: ReturnType<typeof createApp>
   let userRepo: InMemoryUserRepository
+  let operatorRepo: InMemoryOperatorRepository
 
   beforeEach(() => {
     setupAuthEnv()
@@ -79,10 +94,10 @@ describe('createApp wires operator-session revocation (#939)', () => {
       bookingRepo,
       new InMemoryVehicleBlockRepository(),
     )
-    // operatorRepo backs /operators, a FACTORY-INTERNAL requireAuth route (its auth
-    // is mounted inside createOperatorRoutes, not as an app-level prefix) — an empty
-    // repo still 200s an active operator (the service scopes the list to self).
-    const operatorRepo = new InMemoryOperatorRepository()
+    // operatorRepo backs /operators AND the #1088 operator-active freshness source.
+    // Seeded with the member's operator (active) so the operator-deactivation cascade
+    // test has a row to toggle; the active row is a no-op for the projection-clear cases.
+    operatorRepo = new InMemoryOperatorRepository(new Map([[OPERATOR_ID, activeOperator()]]))
     app = createApp({ vehicleRepo, bookingRepo, availabilityRepo, userRepo, operatorRepo })
   })
 
@@ -138,6 +153,23 @@ describe('createApp wires operator-session revocation (#939)', () => {
     await userRepo.clearOperatorAccess(SELF_ID)
 
     const res = await app.request('/auth/session', { headers })
+    expect(res.status).toBe(401)
+    expect(((await res.json()) as { error: string }).error).toBe('Unauthorized')
+  })
+
+  // #1088 operator-level cascade: deactivating the WHOLE operator must revoke every
+  // member on next request, even though their users projection is UNCHANGED (still
+  // OPERATOR_OWNER + op_best). This is distinct from #939's per-member deactivation
+  // (which clears the users row). The boundary enriches the projection with the
+  // operator's deactivatedAt so isStaleOperatorSession can trip.
+  it('401s a member the instant their OPERATOR is soft-deactivated (#1088)', async () => {
+    const headers = await operatorBearer()
+    expect((await app.request(`/users?ids=${SELF_ID}`, { headers })).status).toBe(200)
+
+    // Soft-deactivate the operator — the member's own users row is left intact.
+    await operatorRepo.update(OPERATOR_ID, { deactivatedAt: new Date(), updatedAt: new Date() })
+
+    const res = await app.request(`/users?ids=${SELF_ID}`, { headers })
     expect(res.status).toBe(401)
     expect(((await res.json()) as { error: string }).error).toBe('Unauthorized')
   })

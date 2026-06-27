@@ -68,6 +68,19 @@ export class InMemoryVehicleRepository implements VehicleRepository {
     return n
   }
 
+  // #1088: live (non-RETIRED) fleet size per operator. Mirrors the Drizzle
+  // grouped COUNT — operators with no live vehicles never appear in the Map.
+  async countByOperator(operatorIds: string[]): Promise<Map<string, number>> {
+    const wanted = new Set(operatorIds)
+    const counts = new Map<string, number>()
+    for (const v of this.store.values()) {
+      if (v.status === 'RETIRED') continue
+      if (!wanted.has(v.operatorId)) continue
+      counts.set(v.operatorId, (counts.get(v.operatorId) ?? 0) + 1)
+    }
+    return counts
+  }
+
   async create(
     ctx: CallerContext,
     data: Omit<Vehicle, 'id' | 'createdAt' | 'updatedAt'>,

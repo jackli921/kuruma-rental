@@ -1,4 +1,3 @@
-import type { PaymentAnomalyView } from '@kuruma/shared/types/payment-anomaly'
 import { resolvePaymentAnomalySchema } from '@kuruma/shared/validators/payment-anomaly'
 import { Hono } from 'hono'
 import {
@@ -9,30 +8,7 @@ import {
   toCallerContext,
 } from '../middleware/auth'
 import type { PaymentAnomalyService } from '../services/payment-anomaly'
-import type { PaymentAnomaly } from '../stores'
 import { fail, ok, parseBody } from './helpers'
-
-// Project a persisted anomaly onto the admin wire view (@kuruma/shared): drop the
-// internal checkout-session id (refunds are issued against the paymentIntent) and
-// `resolvedBy` (no user-join in v1), and serialize the timestamps as ISO. The
-// resolution audit fields are null exactly while the anomaly is unresolved.
-function toView(a: PaymentAnomaly): PaymentAnomalyView {
-  return {
-    id: a.id,
-    kind: a.kind,
-    operatorId: a.operatorId,
-    bookingId: a.bookingId,
-    receivedAmountJpy: a.receivedAmountJpy,
-    expectedAmountJpy: a.expectedAmountJpy,
-    currency: a.currency,
-    stripeEventId: a.stripeEventId,
-    stripePaymentIntentId: a.stripePaymentIntentId,
-    createdAt: a.createdAt.toISOString(),
-    resolvedAt: a.resolvedAt ? a.resolvedAt.toISOString() : null,
-    resolution: a.resolution,
-    note: a.note,
-  }
-}
 
 /**
  * Platform-admin payment anomalies (#508 P2; resolution UI #1075 slice 3). Cross-tenant
@@ -62,9 +38,8 @@ export function createPaymentAnomalyRoutes(service: PaymentAnomalyService) {
         return fail(c, 'status must be "resolved" or "unresolved"', 400)
       }
 
-      const anomalies = (
+      const anomalies =
         status === 'resolved' ? await service.listResolved(ctx) : await service.listUnresolved(ctx)
-      ).map(toView)
       return ok(c, { anomalies })
     })
     .post('/admin/payment-anomalies/:id/resolve', async (c) => {
@@ -80,6 +55,6 @@ export function createPaymentAnomalyRoutes(service: PaymentAnomalyService) {
         parsed.data.resolution,
         parsed.data.note ?? null,
       )
-      return ok(c, { anomaly: toView(anomaly) })
+      return ok(c, { anomaly })
     })
 }
