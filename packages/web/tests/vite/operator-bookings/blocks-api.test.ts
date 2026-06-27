@@ -1,12 +1,12 @@
-import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
   type CreateBlockInput,
   createBlock,
   deleteBlock,
   fetchCalendarBlocks,
   operatorCalendarBlocksQueryOptions,
-} from './api'
-import { calendarBlockSchema } from './schema'
+} from '@/vite/operator-bookings/api'
+import { calendarBlockSchema } from '@/vite/operator-bookings/schema'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 
 // #1101 Slice B B1: the operator-calendar blocks read/write client. Mirrors the
 // fetch-mock convention in currency-api.test.ts; getApiBaseUrl() is `/api` in test.

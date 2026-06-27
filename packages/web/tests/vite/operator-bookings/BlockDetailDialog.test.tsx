@@ -1,16 +1,16 @@
+import { BlockDetailDialog } from '@/vite/operator-bookings/BlockDetailDialog'
+import { OPERATOR_BOOKINGS_KEY } from '@/vite/operator-bookings/api'
+import type { BlockCalendarEvent } from '@/vite/operator-bookings/calendar-events'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { IntlProvider } from 'use-intl'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import en from '../../../messages/en.json'
-import { BlockDetailDialog } from './BlockDetailDialog'
-import { OPERATOR_BOOKINGS_KEY } from './api'
-import type { BlockCalendarEvent } from './calendar-events'
 
 // #1101 Slice B B5: the view/delete dialog. Mock only the write fn; the key stays real.
 const deleteBlockMock = vi.hoisted(() => vi.fn())
-vi.mock('./api', async (orig) => {
-  const actual = await orig<typeof import('./api')>()
+vi.mock('@/vite/operator-bookings/api', async (orig) => {
+  const actual = await orig<typeof import('@/vite/operator-bookings/api')>()
   return { ...actual, deleteBlock: deleteBlockMock }
 })
 
