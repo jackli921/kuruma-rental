@@ -624,6 +624,13 @@
       "when": 1782532096948,
       "tag": "0088_operator_deactivated_at",
       "breakpoints": true
+    },
+    {
+      "idx": 89,
+      "version": "7",
+      "when": 1782536589596,
+      "tag": "0089_reviews_reseal_subject_per_booking",
+      "breakpoints": true
     }
   ]
 }
