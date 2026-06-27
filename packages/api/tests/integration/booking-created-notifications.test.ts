@@ -227,6 +227,7 @@ describe('booking CREATE notification fan-out (real pg)', () => {
 
   it('fans out to BOTH a renter-confirm AND an operator-alert notification row', async () => {
     const res = await service.create(renterCtx(renter.id), {
+      fulfillmentMode: 'SPECIFIC',
       requestedVehicleId: vehicleId,
       pickupLocationId: locationId,
       dropoffLocationId: locationId,

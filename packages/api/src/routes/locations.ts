@@ -1,4 +1,3 @@
-import type { CreateLocationInput } from '@kuruma/shared/validators/location'
 import {
   createLocationSchema,
   platformAdminCreateLocationSchema,
@@ -9,8 +8,8 @@ import { FLEET_WRITE_ROLES, requireAuth, requireUser, toCallerContext } from '..
 import { LOCATIONS_REGION_FK, PG_ERROR, pgConstraintName, pgErrorCode } from '../pg-errors'
 import type { LocationFilters } from '../services/filters'
 import type { LocationService, LocationUpdateData } from '../services/location'
-import { type ResolveWriteOperatorId, operatorReadScope } from '../tenancy'
-import { fail, ok, parseBody, parseId, stripUndefined } from './helpers'
+import type { ResolveWriteOperatorId } from '../tenancy'
+import { fail, ok, parseBody, parseId, parseScopedCreate, stripUndefined } from './helpers'
 
 export function createLocationRoutes(
   service: LocationService,
@@ -35,20 +34,15 @@ export function createLocationRoutes(
       if (status === 'ACTIVE' || status === 'ARCHIVED') filters.status = status
       if (c.req.query('includeArchived') === 'true') filters.includeArchived = true
 
-      // Bypass-scope callers (PLATFORM_ADMIN, legacy STAFF/ADMIN) must scope
-      // explicitly — an accidental unscoped list across every operator is the
-      // exact leak we guard (#387 amendment item 2). Operator callers
-      // auto-scope, and any operatorId they pass is ignored here + at the repo.
-      if (operatorReadScope(ctx).kind === 'all') {
-        const operatorIdParam = c.req.query('operatorId')
-        const includeAll = c.req.query('includeAll') === 'true'
-        if (!operatorIdParam && !includeAll) {
-          return fail(c, 'operatorId or includeAll=true is required for cross-operator reads', 400)
-        }
-        if (operatorIdParam) filters.operatorId = operatorIdParam
+      // Cross-operator read scope is enforced in the service (audit M3, #387
+      // amendment item 2): a bypass caller that names neither operatorId nor
+      // includeAll is rejected there, so a forgotten guard here can't leak every
+      // operator's config. Operator callers auto-scope; operatorId ignored at repo.
+      const read = {
+        operatorId: c.req.query('operatorId'),
+        includeAll: c.req.query('includeAll') === 'true',
       }
-
-      return ok(c, await service.findAll(ctx, filters))
+      return ok(c, await service.findAll(ctx, read, filters))
     })
     .get('/locations/:id', async (c) => {
       const user = requireUser(c)
@@ -66,24 +60,14 @@ export function createLocationRoutes(
       if (!FLEET_WRITE_ROLES.has(user.role)) return fail(c, 'Forbidden', 403)
 
       const ctx = toCallerContext(user)
-      // Bypass callers must name the target operator in the body; operator
-      // callers never send one — their tenant is stamped server-side. Resolve
-      // operatorId inside each branch where the body type is concrete.
-      const isBypass = operatorReadScope(ctx).kind === 'all'
-
-      let d: CreateLocationInput
-      let operatorId: string
-      if (isBypass) {
-        const parsed = await parseBody(c, platformAdminCreateLocationSchema)
-        if (!parsed.ok) return parsed.response
-        d = parsed.data
-        operatorId = await resolveWriteOperatorId(ctx, parsed.data.operatorId)
-      } else {
-        const parsed = await parseBody(c, createLocationSchema)
-        if (!parsed.ok) return parsed.response
-        d = parsed.data
-        operatorId = await resolveWriteOperatorId(ctx)
-      }
+      const parsed = await parseScopedCreate(
+        c,
+        ctx,
+        { operator: createLocationSchema, admin: platformAdminCreateLocationSchema },
+        resolveWriteOperatorId,
+      )
+      if (!parsed.ok) return parsed.response
+      const { data: d, operatorId } = parsed
 
       try {
         const result = await service.create(ctx, {

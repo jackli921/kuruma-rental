@@ -1,4 +1,4 @@
-import { bookings, vehicles } from '@kuruma/shared/db/schema'
+import { bookings, vehicleBlocks, vehicles } from '@kuruma/shared/db/schema'
 import { jstDateString } from '@kuruma/shared/lib/compliance'
 import { type SQL, and, eq, inArray, sql } from 'drizzle-orm'
 import type { Booking, Vehicle } from '../../stores'
@@ -12,6 +12,20 @@ import {
   toVehicle,
   vehicleColumns,
 } from './shared'
+
+// #1101/#1141: a vehicle is off the calendar when a vehicle_blocks row overlaps
+// the requested window — half-open tstzrange overlap (a block ending exactly at
+// the window start does not overlap), correlated on vehicles.id. Single source
+// of the block-subtraction predicate shared by findAvailableVehicles and
+// countClassCapacity. checkVehicleAvailability needs the count (not existence),
+// so it keeps its own form.
+function blockOverlapNotExists(fromIso: string, toIso: string): SQL {
+  return sql`NOT EXISTS (
+        SELECT 1 FROM vehicle_blocks vb
+        WHERE vb."vehicleId" = ${vehicles.id}
+        AND tstzrange(vb."startAt", vb."endAt") && tstzrange(${fromIso}::timestamptz, ${toIso}::timestamptz)
+      )`
+}
 
 export class DrizzleAvailabilityRepository implements AvailabilityRepository {
   constructor(
@@ -41,6 +55,10 @@ export class DrizzleAvailabilityRepository implements AvailabilityRepository {
             AND b.status IN ('CONFIRMED', 'ACTIVE')
             AND tstzrange(b."startAt", b."effectiveEndAt") && tstzrange(${fromIso}::timestamptz, ${toIso}::timestamptz)
           )`,
+      // #1101: subtract scheduled blocks — a vehicle with a block overlapping the
+      // requested window is off the calendar (maintenance / out-of-service /
+      // manual hold); mirrored by the in-memory path.
+      blockOverlapNotExists(fromIso, toIso),
     ]
     // Storefront scope (#391): INNER match on the nullable pickupLocationId — a
     // vehicle with no assigned location matches no locationId, so it is
@@ -91,10 +109,99 @@ export class DrizzleAvailabilityRepository implements AvailabilityRepository {
         ),
       )
 
+    // #1101: a scheduled block makes the car unavailable too. Counted separately
+    // (blocks are NOT bookings — they stay out of `conflicts`, only flipping
+    // `available`); same half-open overlap as the booking guard.
+    const [blockOverlap] = await this.db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(vehicleBlocks)
+      .where(
+        and(
+          eq(vehicleBlocks.vehicleId, vehicleId),
+          sql`tstzrange("startAt", "endAt") && tstzrange(${fromIso}::timestamptz, ${toIso}::timestamptz)`,
+        ),
+      )
+
     return {
-      available: conflicts.length === 0,
+      available: conflicts.length === 0 && (blockOverlap?.count ?? 0) === 0,
       vehicle: toVehicle(vehicle, this.decodePhotos),
       conflicts: conflicts.map(toBooking),
     }
+  }
+
+  async countClassDemand(
+    operatorId: string,
+    classId: string,
+    pickupLocationId: string,
+    from: Date,
+    to: Date,
+  ): Promise<number> {
+    const fromIso = from.toISOString()
+    const toIso = to.toISOString()
+    // Same blocking-status + tstzrange overlap predicate as checkVehicleAvailability
+    // / 0037.sql, keyed on the (operator, class, location) triple — a floating
+    // CLASS_COMBO (null assignedVehicleId) is counted via bookings.classId.
+    const [row] = await this.db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(bookings)
+      .where(
+        and(
+          eq(bookings.operatorId, operatorId),
+          eq(bookings.classId, classId),
+          eq(bookings.pickupLocationId, pickupLocationId),
+          sql`status IN ('CONFIRMED', 'ACTIVE')`,
+          sql`tstzrange("startAt", "effectiveEndAt") && tstzrange(${fromIso}::timestamptz, ${toIso}::timestamptz)`,
+        ),
+      )
+    return row?.count ?? 0
+  }
+
+  async lockComboCapacity(
+    operatorId: string,
+    classId: string,
+    pickupLocationId: string,
+  ): Promise<() => void> {
+    // #464 2d.4: serialize concurrent CLASS_COMBO submits on the (op, class,
+    // loc) triple. hashtextextended yields a stable 64-bit int from the keyed
+    // string for Postgres' single-arg advisory lock; auto-released at tx
+    // commit/rollback, so the returned thunk is a no-op.
+    const key = `combo:${operatorId}|${classId}|${pickupLocationId}`
+    await this.db.execute(sql`SELECT pg_advisory_xact_lock(hashtextextended(${key}, 0))`)
+    return () => {}
+  }
+
+  async countClassCapacity(
+    operatorId: string,
+    classId: string,
+    pickupLocationId: string,
+    from: Date,
+    to: Date,
+    asOf: Date,
+  ): Promise<number> {
+    // #464 2d.2: road-legal supply side of the combo guard. status<>'RETIRED'
+    // (RETIRED = permanent fleet exit) and both certificates cover THROUGH the
+    // JST asOf day — same NULL≠current handling as findAvailableVehicles
+    // (NULL >= date is NULL, excluded).
+    const asOfIso = jstDateString(asOf)
+    const fromIso = from.toISOString()
+    const toIso = to.toISOString()
+    const [row] = await this.db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(vehicles)
+      .where(
+        and(
+          eq(vehicles.operatorId, operatorId),
+          eq(vehicles.classId, classId),
+          eq(vehicles.pickupLocationId, pickupLocationId),
+          sql`${vehicles.status} <> 'RETIRED'`,
+          sql`${vehicles.shakenExpiryDate} >= ${asOfIso}::date AND ${vehicles.insuranceExpiryDate} >= ${asOfIso}::date`,
+          // #1141: subtract cars scheduled off for the demand window — a block
+          // overlapping [from, to) makes the car unavailable, so it is not real
+          // class supply. Shares the predicate with findAvailableVehicles; the
+          // in-memory path mirrors it.
+          blockOverlapNotExists(fromIso, toIso),
+        ),
+      )
+    return row?.count ?? 0
   }
 }

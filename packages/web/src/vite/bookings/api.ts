@@ -21,8 +21,9 @@ export interface BookingDto {
   bookingCode: string
   renterId: string
   classId: string | null
-  requestedVehicleId: string
-  assignedVehicleId: string
+  // #464: null on CLASS_COMBO floats until the operator assigns a concrete car.
+  requestedVehicleId: string | null
+  assignedVehicleId: string | null
   pickupLocationId: string
   dropoffLocationId: string
   startAt: string
@@ -77,8 +78,8 @@ export const bookingDtoSchema = z.object({
   bookingCode: z.string(),
   renterId: z.string(),
   classId: z.string().nullable(),
-  requestedVehicleId: z.string(),
-  assignedVehicleId: z.string(),
+  requestedVehicleId: z.string().nullable(),
+  assignedVehicleId: z.string().nullable(),
   pickupLocationId: z.string(),
   dropoffLocationId: z.string(),
   startAt: z.string(),

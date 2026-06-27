@@ -54,6 +54,11 @@ export interface NotificationLogRepository {
   claim(id: string): Promise<NotificationLog | undefined>
   markSent(id: string, providerMessageId: string): Promise<void>
   markFailed(id: string, error: string): Promise<void>
+  // #1125: the daily retry sweep's bounded read — exactly the rows claim() will
+  // accept (QUEUED / FAILED / EXPIRED-SENDING), oldest-updatedAt first, capped at
+  // `limit`. Unscoped (system cron); terminal SENT/DEAD/NO_RECIPIENT and live
+  // SENDING leases are excluded so the sweep never surfaces a row claim() no-ops.
+  findRetryable(limit: number): Promise<NotificationLog[]>
   // Operator-portal list (management-read guarded, operator-scoped).
   findAll(ctx: CallerContext, filters?: NotificationLogFilters): Promise<NotificationLog[]>
   // Scoped single read (resend route: cross-operator id -> undefined -> 404).

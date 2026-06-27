@@ -484,6 +484,132 @@
       "when": 1781752208311,
       "tag": "0068_compliance_vehicleId_fk_index",
       "breakpoints": true
+    },
+    {
+      "idx": 69,
+      "version": "7",
+      "when": 1782265541026,
+      "tag": "0069_turnaround_follows_dropoff",
+      "breakpoints": true
+    },
+    {
+      "idx": 70,
+      "version": "7",
+      "when": 1782268711661,
+      "tag": "0070_add_consent_ledger",
+      "breakpoints": true
+    },
+    {
+      "idx": 71,
+      "version": "7",
+      "when": 1782339630877,
+      "tag": "0071_class_combo_schema",
+      "breakpoints": true
+    },
+    {
+      "idx": 72,
+      "version": "7",
+      "when": 1782341801407,
+      "tag": "0072_add_payment_refunds",
+      "breakpoints": true
+    },
+    {
+      "idx": 73,
+      "version": "7",
+      "when": 1782355030474,
+      "tag": "0073_payment_refunds_amount_non_negative",
+      "breakpoints": true
+    },
+    {
+      "idx": 74,
+      "version": "7",
+      "when": 1782396091706,
+      "tag": "0074_add_consent_evidence_snapshot",
+      "breakpoints": true
+    },
+    {
+      "idx": 75,
+      "version": "7",
+      "when": 1782429611613,
+      "tag": "0075_add_reviews",
+      "breakpoints": true
+    },
+    {
+      "idx": 76,
+      "version": "7",
+      "when": 1782430775334,
+      "tag": "0076_add_reviews_bookingid_index",
+      "breakpoints": true
+    },
+    {
+      "idx": 77,
+      "version": "7",
+      "when": 1782432393780,
+      "tag": "0077_reviews_class_subject_chk",
+      "breakpoints": true
+    },
+    {
+      "idx": 78,
+      "version": "7",
+      "when": 1782435139252,
+      "tag": "0078_codify-messaging-indexes",
+      "breakpoints": true
+    },
+    {
+      "idx": 79,
+      "version": "7",
+      "when": 1782438394401,
+      "tag": "0079_booking_event_vehicle_assigned",
+      "breakpoints": true
+    },
+    {
+      "idx": 80,
+      "version": "7",
+      "when": 1782510793826,
+      "tag": "0080_add_payment_anomaly_resolution",
+      "breakpoints": true
+    },
+    {
+      "idx": 81,
+      "version": "7",
+      "when": 1782511863286,
+      "tag": "0081_vehicle_blocks",
+      "breakpoints": true
+    },
+    {
+      "idx": 82,
+      "version": "7",
+      "when": 1782511881385,
+      "tag": "0082_vehicle_blocks_exclusion",
+      "breakpoints": true
+    },
+    {
+      "idx": 83,
+      "version": "7",
+      "when": 1782516180502,
+      "tag": "0083_codify-accounts-index",
+      "breakpoints": true
+    },
+    {
+      "idx": 84,
+      "version": "7",
+      "when": 1782516634609,
+      "tag": "0084_codify-maintenance-logs-index",
+      "breakpoints": true
+    },
+    {
+      "idx": 85,
+      "version": "7",
+      "when": 1782517065469,
+      "tag": "0085_codify-bookings-indexes",
+      "breakpoints": true
+    },
+    {
+      "idx": 86,
+      "version": "7",
+      "when": 1782518014088,
+      "tag": "0086_add_review_prompt_notification_kind",
+      "breakpoints": true
     }
   ]
 }

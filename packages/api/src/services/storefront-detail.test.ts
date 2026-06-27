@@ -8,6 +8,7 @@ import { InMemoryLocationRepository } from '../repositories/in-memory/location'
 import { InMemoryOperatorRepository } from '../repositories/in-memory/operator'
 import { InMemoryStorefrontRepository } from '../repositories/in-memory/storefront'
 import { InMemoryVehicleRepository } from '../repositories/in-memory/vehicle'
+import { InMemoryVehicleBlockRepository } from '../repositories/in-memory/vehicle-block'
 import { InMemoryVehicleClassRepository } from '../repositories/in-memory/vehicle-class'
 import type { AddOn, InsuranceOption, Location, Operator, Vehicle, VehicleClass } from '../stores'
 import { StorefrontDetailService } from './storefront-detail'
@@ -33,7 +34,11 @@ beforeEach(() => {
   insuranceRepo = new InMemoryInsuranceOptionRepository()
   addOnRepo = new InMemoryAddOnRepository()
   const storefrontRepo = new InMemoryStorefrontRepository(locationRepo, operatorRepo)
-  const availabilityRepo = new InMemoryAvailabilityRepository(vehicleRepo, bookingRepo)
+  const availabilityRepo = new InMemoryAvailabilityRepository(
+    vehicleRepo,
+    bookingRepo,
+    new InMemoryVehicleBlockRepository(),
+  )
   service = new StorefrontDetailService(
     storefrontRepo,
     availabilityRepo,

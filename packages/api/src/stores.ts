@@ -15,6 +15,9 @@ import type {
   BookingSource,
   BookingStatus,
   CancellationFeeSettlement,
+  ConsentDocStatus,
+  ConsentMethod,
+  ConsentType,
   DocumentStatus,
   DocumentType,
   FeeScheduleStatus,
@@ -25,13 +28,20 @@ import type {
   OperatorMembershipStatus,
   OperatorRole,
   PaymentEventStatus,
+  PaymentRefundStatus,
   ProviderInviteStatus,
+  ReviewAuthorRole,
+  ReviewModerationStatus,
+  ReviewSubject,
   Transmission,
+  VehicleBlockKind,
   VehicleClassStatus,
 } from '@kuruma/shared/enums'
 import type { ComplianceAlertBand, ComplianceDocumentType } from '@kuruma/shared/lib/compliance'
+import type { DocumentSnapshot } from '@kuruma/shared/lib/consent-canonical'
 import type { LuggageSize } from '@kuruma/shared/lib/luggage'
 import type { LocationOperatingHours } from '@kuruma/shared/types/location'
+import type { PaymentAnomalyResolution } from '@kuruma/shared/types/payment-anomaly'
 
 /**
  * The notification kind/status sets have a single source of truth: the
@@ -98,10 +108,13 @@ export interface Booking {
   // classId stays for discovery/grouping; sealed to operatorId by composite FK.
   classId: string
   // What the renter selected in storefront (slice 5) — immutable audit trail.
-  requestedVehicleId: string
+  // #464: null for a CLASS_COMBO float (no specific car requested). The
+  // bookings_specific_requires_requested CHECK keeps SPECIFIC rows non-null.
+  requestedVehicleId: string | null
   // What the operator fulfills; the exclusion constraint keys on this. Server-
   // derived = requestedVehicleId at submit; operator may substitute (#392).
-  assignedVehicleId: string
+  // #464: null for an unassigned CLASS_COMBO float until the operator assigns a car.
+  assignedVehicleId: string | null
   pickupLocationId: string
   dropoffLocationId: string
   startAt: Date
@@ -169,6 +182,26 @@ export interface PaymentEvent {
   createdAt: Date
 }
 
+// A durable cancellation-refund receipt (#851): one row per booking (UNIQUE), the
+// "work already started" half of the REFUND_DUE outbox + the create-dedup ledger
+// that carries re_… so a re-drive RETRIEVES instead of re-creating (Stripe
+// idempotency keys prune ~24h; this row is permanent). Status is FORWARD-ONLY.
+export interface PaymentRefund {
+  id: string
+  bookingId: string
+  // Partner attribution, carried for the operator refund surface (mirrors PaymentEvent).
+  operatorId: string
+  // The captured payment's PaymentIntent — what we refund against.
+  stripePaymentIntentId: string
+  // Whole JPY (zero-decimal) to refund: renter = policy refundAmount, operator = full total.
+  amountJpy: number
+  // Stripe refund id (re_…); null until create/adopt attaches it. Partial-UNIQUE when set.
+  stripeRefundId: string | null
+  status: PaymentRefundStatus
+  createdAt: Date
+  updatedAt: Date
+}
+
 export type PaymentAnomalyKind = 'DOUBLE_PAYMENT' | 'AMOUNT_MISMATCH'
 
 // A verified Stripe charge that needs human review rather than becoming revenue
@@ -188,8 +221,13 @@ export interface PaymentAnomaly {
   receivedAmountJpy: number | null
   expectedAmountJpy: number | null
   currency: string | null
-  // NULL until an operator actions it (refunded / dismissed).
+  // Resolution audit (#1075 slice 3): all four are NULL while the anomaly needs
+  // review and written together when an admin closes it. `resolution` = why it was
+  // closed, `resolvedBy` = the actioning admin's id, `note` = optional free-text.
   resolvedAt: Date | null
+  resolution: PaymentAnomalyResolution | null
+  resolvedBy: string | null
+  note: string | null
   createdAt: Date
 }
 
@@ -268,6 +306,25 @@ export interface MaintenanceLog {
   resolvedAt: Date | null
   createdAt: Date
   updatedAt: Date
+}
+
+// #1101: a scheduled block takes a vehicle off the calendar for a [startAt,endAt)
+// window (maintenance / out-of-service / manual hold). Distinct from
+// MaintenanceLog (reactive, cost-tracking, welded to vehicle.status=MAINTENANCE):
+// a block is forward-looking and is the availability primitive — a CONFIRMED/ACTIVE
+// booking cannot overlap one. operatorId is server-derived from the vehicle. No
+// updatedAt: a block is created and (hard-)deleted, never edited in place.
+export interface VehicleBlock {
+  id: string
+  operatorId: string
+  vehicleId: string
+  startAt: Date
+  endAt: Date
+  kind: VehicleBlockKind
+  reason: string
+  notes: string | null
+  createdBy: string
+  createdAt: Date
 }
 
 import type { UserRole } from './middleware/auth'
@@ -368,6 +425,26 @@ export interface FeeSchedule {
   updatedAt: Date
 }
 
+/**
+ * The rate plan that prices a CLASS_COMBO booking (#464 §5.1). A combo books a
+ * vehicle *class* (no specific car at book time), so it is priced off the class,
+ * not a car — keyed per (operator, class, pickupLocation) because cars live at
+ * one location and a "deal" is a deliberately-set day rate. SPECIFIC bookings
+ * keep #406 per-car pricing; this table prices combos only (§5.3).
+ */
+export interface ClassRatePlan {
+  id: string
+  operatorId: string
+  classId: string
+  pickupLocationId: string
+  dayRateJpy: number
+  /** Toggle a deal on/off without deleting the row; inactive ⇒ not offered. */
+  isActive: boolean
+  label: string | null
+  createdAt: Date
+  updatedAt: Date
+}
+
 // Renter identity document metadata (#459). Bytes live in R2; this is the
 // verdict + pointer only. `expiryDate` is a YYYY-MM-DD string (DB `date`).
 export interface RenterDocument {
@@ -410,6 +487,78 @@ export interface ProviderInvite {
   expiresAt: Date
   invitedByUserId: string | null
   acceptedByUserId: string | null
+  createdAt: Date
+  updatedAt: Date
+}
+
+export interface ConsentDocument {
+  id: string
+  type: ConsentType
+  version: string
+  locale: string
+  title: string
+  body: string
+  acceptanceLabel: string
+  contentHash: string
+  status: ConsentDocStatus
+  effectiveFrom: Date
+  publishedAt: Date | null
+  createdAt: Date
+  updatedAt: Date
+}
+
+export interface ConsentAcceptance {
+  id: string
+  documentId: string
+  consentType: ConsentType
+  userId: string
+  operatorId: string | null
+  operatorMembershipId: string | null
+  actorRole: string | null
+  bookingId: string | null
+  acceptedAt: Date
+  context: Record<string, unknown> | null
+  ipAddress: string | null
+  userAgent: string | null
+  method: ConsentMethod
+  recordSignature: string | null
+  signingKeyId: string | null
+  signatureCanonicalVersion: string | null
+  documentSnapshot: DocumentSnapshot | null
+  signatureRef: string | null
+  createdAt: Date
+}
+
+// One mutual, double-blind review row (#1067 reviews bounded context, see
+// db/review.ts). A review stays hidden (`publishedAt === null`) until BOTH sides
+// submit OR `revealDeadlineAt` elapses. The row-shape invariants (overall range,
+// author/subject pairing, vehicle pairing, one-per-author-per-subject) are sealed
+// in Postgres; this interface is the in-app projection of a stored row.
+export interface Review {
+  id: string
+  bookingId: string
+  // Denormalized tenant scope (the booking's operator) — operator-scoped reads
+  // and the (operatorId, publishedAt) aggregate never need a bookings join.
+  operatorId: string
+  authorUserId: string
+  authorRole: ReviewAuthorRole
+  subject: ReviewSubject
+  // Set only when subject === 'VEHICLE' / a class aggregate; null otherwise.
+  subjectVehicleId: string | null
+  subjectClassId: string | null
+  // Whole stars 1-5 (reviews_overall_range_chk).
+  overall: number
+  // Optional named sub-dimensions, each 1-5; {} when none given. Keys validated
+  // by @kuruma/shared/validators/review before the write.
+  subRatings: Record<string, number>
+  comment: string | null
+  moderationStatus: ReviewModerationStatus
+  // The fixed double-blind deadline; reveal fires at the earlier of both-submitted
+  // or this instant.
+  revealDeadlineAt: Date
+  submittedAt: Date
+  // The reveal flag: null until published (both submitted OR window elapsed).
+  publishedAt: Date | null
   createdAt: Date
   updatedAt: Date
 }

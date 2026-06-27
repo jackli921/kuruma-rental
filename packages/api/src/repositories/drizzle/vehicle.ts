@@ -96,6 +96,16 @@ export class DrizzleVehicleRepository implements VehicleRepository {
     return rows.map((r) => toVehicle(r, this.decodePhotos))
   }
 
+  // #1087 platform overview: live fleet across all operators (unscoped).
+  // COUNT at the DB, never materialize-then-count.
+  async countActive(): Promise<number> {
+    const [row] = await this.db
+      .select({ value: count() })
+      .from(vehicles)
+      .where(ne(vehicles.status, 'RETIRED'))
+    return row?.value ?? 0
+  }
+
   async create(
     ctx: CallerContext,
     data: Omit<Vehicle, 'id' | 'createdAt' | 'updatedAt'>,
@@ -148,6 +158,9 @@ export class DrizzleVehicleRepository implements VehicleRepository {
     requireFleetWriteScope(ctx)
     // operatorId is the tenant anchor — never reassignable via an update, or a
     // caller could move a vehicle to another tenant (#386 F2). Strip it here.
+    // The compliance-alert idempotency seal (db/compliance.ts) leans on this: it
+    // omits operatorId, which is safe ONLY while a vehicle can't change operator.
+    // If you ever allow reassignment, widen that seal too (#1043).
     const { id: _id, createdAt: _createdAt, operatorId: _operatorId, ...fields } = data
     // #879: re-encode an edited photos array (wire URLs -> stored refs) so an
     // edit round-trip never bakes the public host into the stored value. Absent

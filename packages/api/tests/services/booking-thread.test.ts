@@ -7,16 +7,20 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { type CallerContext, SYSTEM_CONTEXT } from '../../src/middleware/auth'
 import {
   InMemoryAddOnRepository,
+  InMemoryAvailabilityRepository,
   InMemoryBookingEventRepository,
   InMemoryBookingRepository,
+  InMemoryClassRatePlanRepository,
   InMemoryFeeScheduleRepository,
   InMemoryInsuranceOptionRepository,
   InMemoryLocationRepository,
   InMemoryMaintenanceLogRepository,
   InMemoryUserRepository,
+  InMemoryVehicleBlockRepository,
   InMemoryVehicleClassRepository,
   InMemoryVehicleRepository,
 } from '../../src/repositories/in-memory'
+import { InMemoryThreadRepository } from '../../src/repositories/in-memory/thread'
 import type {
   RunInTransaction,
   ThreadRepository,
@@ -26,7 +30,7 @@ import { BookingService } from '../../src/services/booking'
 import { BookingPostCommitDispatcher } from '../../src/services/booking-post-commit-dispatcher'
 import type { CreateBookingInput } from '../../src/services/booking-types'
 import { makeEnsureThread } from '../../src/services/ensure-thread'
-import type { Thread, User, Vehicle } from '../../src/stores'
+import type { Booking, Thread, User, Vehicle } from '../../src/stores'
 
 const RENTER = '00000000-0000-4000-8000-0000000000a1'
 const STAFF = '00000000-0000-4000-8000-0000000000b1'
@@ -115,6 +119,15 @@ async function makeService(threadRepo?: ThreadRepository, staffUserId?: string) 
   const addOnRepo = new InMemoryAddOnRepository()
   const feeScheduleRepo = new InMemoryFeeScheduleRepository()
   const maintenanceLogRepo = new InMemoryMaintenanceLogRepository()
+  // #464: the SPECIFIC submit now reads demand/capacity + takes the class
+  // advisory lock through availabilityRepo, so this harness must wire it too.
+  const vehicleBlockRepo = new InMemoryVehicleBlockRepository()
+  const availabilityRepo = new InMemoryAvailabilityRepository(
+    vehicleRepo,
+    bookingRepo,
+    vehicleBlockRepo,
+  )
+  const classRatePlanRepo = new InMemoryClassRatePlanRepository()
 
   const location = await locationRepo.create({
     operatorId: OP,
@@ -168,6 +181,10 @@ async function makeService(threadRepo?: ThreadRepository, staffUserId?: string) 
     addOnRepo,
     feeScheduleRepo,
     userRepo,
+    availabilityRepo,
+    classRatePlanRepo,
+    vehicleClassRepo,
+    vehicleBlockRepo,
   }
   const runInTransaction: RunInTransaction = async (fn) => fn(repos)
 
@@ -297,6 +314,28 @@ describe('BookingService.create — auto-thread on confirmation', () => {
     expect(second.booking.id).toBe(first.booking.id)
     expect(threadRepo.create).toHaveBeenCalledTimes(2) // second attempt succeeded
 
+    errorSpy.mockRestore()
+  })
+
+  it('runs the idempotency probe under SYSTEM_CONTEXT — a non-participant caller (PARTNER) replay finds the thread, no duplicate insert (#1168)', async () => {
+    // Real repo (not the ctx-blind mock): the thread's participants are
+    // [renter, staff], so a PARTNER caller is NOT a participant. Before #1168 the
+    // probe ran under the caller ctx — PARTNER (no longer privileged) missed the
+    // existing thread on replay and re-fired the insert → a caught, logged
+    // UNIQUE_VIOLATION. Under SYSTEM_CONTEXT the probe is privileged and finds it.
+    const realThreadRepo = new InMemoryThreadRepository()
+    const ensureThread = makeEnsureThread({ threadRepo: realThreadRepo, staffUserId: STAFF })
+    const partnerCtx: CallerContext = { userId: 'trip-partner', role: 'PARTNER', bypassScope: true }
+    const booking = { id: 'bk-1168-partner', renterId: RENTER } as unknown as Booking
+    const createSpy = vi.spyOn(realThreadRepo, 'create')
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+
+    await ensureThread(partnerCtx, booking) // first call: creates the thread
+    await ensureThread(partnerCtx, booking) // replay: probe must FIND it, not re-insert
+
+    expect(createSpy).toHaveBeenCalledTimes(1)
+    const logged = errorSpy.mock.calls.map((c) => c[0] as string).join('\n')
+    expect(logged).not.toContain('thread_autocreate_failed')
     errorSpy.mockRestore()
   })
 })

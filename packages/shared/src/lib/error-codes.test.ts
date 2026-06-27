@@ -12,19 +12,28 @@ import { ERROR_CODES } from './error-codes'
 describe('ERROR_CODES', () => {
   test('is the exhaustive set of envelope failure codes the API emits', () => {
     expect([...ERROR_CODES].sort()).toEqual([
+      'CLASS_COMBO_SOLD_OUT',
       'CLASS_HAS_ACTIVE_BOOKINGS',
       'CONSENT_REQUIRED',
       'DOCUMENT_VERIFICATION_REQUIRED',
       'INVALID_DURATION',
+      'INVALID_STATUS',
       'INVALID_VEHICLE_CLASS',
       'LOCATION_HAS_ACTIVE_BOOKINGS',
+      'NOT_A_COMBO',
+      'NOT_IMPLEMENTED',
+      'NO_COMBO_RATE_SET',
       'NO_RATES_SET',
       'OPERATOR_REQUIRED',
       'RENTAL_RULE_ADVANCE_BOOKING',
       'RENTAL_RULE_MAX_DURATION',
       'RENTAL_RULE_MIN_DURATION',
       'RENTAL_RULE_START_IN_PAST',
+      'USE_ASSIGN_FOR_COMBO',
+      'VEHICLE_BLOCKED',
+      'VEHICLE_BLOCK_OVERLAP',
       'VEHICLE_DOCS_EXPIRE_BEFORE_RETURN',
+      'VEHICLE_UNAVAILABLE',
     ])
   })
 

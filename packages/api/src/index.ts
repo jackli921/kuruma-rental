@@ -3,9 +3,17 @@ import { jstDateString } from '@kuruma/shared/lib/compliance'
 import { Hono } from 'hono'
 import { cors } from 'hono/cors'
 import type { AppOverrides } from './app-overrides'
-import type { GoogleOAuthConfig } from './auth/google'
 import { isStaleOperatorSession } from './auth/session-freshness'
 import { type Repos, buildRepos } from './composition/repositories'
+import {
+  resolveAllowedOrigins,
+  resolveEmailConfig,
+  resolveEmailSender,
+  resolveGeocoder,
+  resolveGoogleOAuthConfig,
+  resolveOperatorAlertEmail,
+  resolvePaymentGateway,
+} from './composition/services'
 import { setupGlobalHandlers } from './error-handlers'
 import { parseBoolFlag } from './lib/parse-bool-flag'
 import { provideOperatorSessionRevocation, requireAuth } from './middleware/auth'
@@ -15,10 +23,14 @@ import { requestId } from './middleware/request-id'
 import { observability } from './observability/middleware'
 import { createAddOnRoutes } from './routes/add-ons'
 import { createAdminRoutes } from './routes/admin'
+import { createAdminBookingRoutes } from './routes/admin-bookings'
+import { createAdminConsentRoutes } from './routes/admin-consent'
+import { createAdminOverviewRoutes } from './routes/admin-overview'
 import { createAdminRevenueRoutes } from './routes/admin-revenue'
 import { createAuthRoutes } from './routes/auth'
 import { createAvailabilityRoutes } from './routes/availability'
 import { createBookingRoutes } from './routes/bookings'
+import { createConsentRoutes } from './routes/consent'
 import { createCustomerRoutes } from './routes/customers'
 import { createDocumentRoutes } from './routes/documents'
 import { createFeeScheduleRoutes } from './routes/fee-schedules'
@@ -37,36 +49,38 @@ import { createPaymentRoutes } from './routes/payments'
 import { createProviderInviteRoutes } from './routes/provider-invites'
 import { rateLimitByIp } from './routes/rate-limit'
 import { createRegionRoutes } from './routes/regions'
+import { createReviewRoutes } from './routes/reviews'
 import { createFlatSearchRoutes } from './routes/search'
 import { createStatsRoutes } from './routes/stats'
 import { createStorefrontRoutes } from './routes/storefronts'
 import { createTranslateRoutes } from './routes/translate'
 import { createUserRoutes } from './routes/users'
+import { createVehicleBlockRoutes } from './routes/vehicle-blocks'
 import { createVehicleClassRoutes } from './routes/vehicle-classes'
 import { createVehicleDetailRoutes } from './routes/vehicle-detail'
 import { createVehiclePhotoRoutes } from './routes/vehicle-photos'
 import { createVehicleRoutes } from './routes/vehicles'
 import { AddOnService } from './services/add-on'
+import { AdminBookingService } from './services/admin-booking'
+import { AdminOverviewService } from './services/admin-overview'
 import { AdminRevenueService } from './services/admin-revenue'
 import { type RecordAuditEvent, toAuditRow } from './services/audit'
 import { AvailabilityService } from './services/availability'
 import { BookingService } from './services/booking'
 import { BookingPostCommitDispatcher } from './services/booking-post-commit-dispatcher'
 import { ComplianceDigestService } from './services/compliance-digest'
+import { ConsentService } from './services/consent'
+import { ConsentEvidenceService } from './services/consent-evidence'
+import { ConsentGateService } from './services/consent-gate'
+import { ConsentGovernanceService } from './services/consent-governance'
+import { resolveSigningKey } from './services/consent-signing'
 import { CustomerService } from './services/customer'
 import { documentVerificationGate } from './services/document-verification-gate'
 import type { EmailSender } from './services/email/email-sender'
-import { ResendEmailSender } from './services/email/resend-email-sender'
 import { makeEnsureThread } from './services/ensure-thread'
 import { FeeScheduleService } from './services/fee-schedule'
 import { FlatSearchService } from './services/flat-search'
 import { FleetOverviewService } from './services/fleet-overview'
-import { CachingGeocoder } from './services/geocoding/caching-geocoder'
-import { InMemoryGeocodeCache } from './services/geocoding/geocode-cache'
-import { KvGeocodeCache, type KvStore } from './services/geocoding/kv-geocode-cache'
-import { NominatimGeocoder } from './services/geocoding/nominatim-geocoder'
-import { ThrottledGeocoder } from './services/geocoding/throttled-geocoder'
-import type { GeocodeCache, Geocoder } from './services/geocoding/types'
 import { InsuranceOptionService } from './services/insurance-option'
 import { LocationService } from './services/location'
 import { MaintenanceService } from './services/maintenance'
@@ -74,6 +88,7 @@ import { MessageService } from './services/message'
 import { MessageTranslationService } from './services/message-translation'
 import { NotificationService } from './services/notification'
 import { NotificationDispatcher } from './services/notification-dispatcher'
+import { NotificationRetryService } from './services/notification-retry'
 import { OperatorService } from './services/operator'
 import { createOperatorGrantService } from './services/operator-grant'
 import {
@@ -83,16 +98,17 @@ import {
 import { OperatorTeamService } from './services/operator-team'
 import { OverviewService } from './services/overview'
 import { PaymentAnomalyService } from './services/payment-anomaly'
+import { CancellationRefundReconciler } from './services/payment/cancellation-refund-reconciler'
 import { PaymentService } from './services/payment/payment'
-import type { PaymentGateway } from './services/payment/payment-gateway'
-import { StripePaymentGateway } from './services/payment/stripe-payment-gateway'
 import { ProviderInviteService } from './services/provider-invite'
 import { RenterDocumentService } from './services/renter-document'
+import { ReviewService } from './services/review'
 import { StorefrontDetailService } from './services/storefront-detail'
 import { StorefrontSearchService } from './services/storefront-search'
 import { createTranslationProvider } from './services/translation-provider-factory'
 import { UserDirectoryService } from './services/user-directory'
 import { VehicleService } from './services/vehicle'
+import { VehicleBlockService } from './services/vehicle-block'
 import { VehicleClassService } from './services/vehicle-class'
 import { VehicleClassAvailabilityService } from './services/vehicle-class-availability'
 import { VehicleDetailService } from './services/vehicle-detail'
@@ -109,6 +125,7 @@ export function createApp(overrides?: AppOverrides, repos: Repos = buildRepos(ov
   const {
     vehicleClassRepo,
     vehicleRepo,
+    vehicleBlockRepo,
     bookingRepo,
     availabilityRepo,
     userRepo,
@@ -132,11 +149,15 @@ export function createApp(overrides?: AppOverrides, repos: Repos = buildRepos(ov
     storefrontRepo,
     regionRepo,
     paymentEventRepo,
+    paymentRefundRepo,
     paymentAnomalyRepo,
     providerInviteRepo,
     operatorMembershipRepo,
     auditLogRepo,
     bookingEventRepo,
+    reviewRepo,
+    consentRepo,
+    classRatePlanRepo,
     runInTransaction,
     runOperatorGrant,
     photosPublicUrl,
@@ -158,40 +179,8 @@ export function createApp(overrides?: AppOverrides, repos: Repos = buildRepos(ov
 
   const emailSender = resolveEmailSender(overrides)
 
-  // Forward geocoder (#531): disabled by default (null stub) unless BOTH a
-  // User-Agent and an endpoint are set; prod = LocationIQ (Nominatim-compatible,
-  // + NOMINATIM_API_KEY) or self-host. The resolved geocoder is wrapped in a
-  // ThrottledGeocoder keyed off GEOCODE_LIMITER (#574) — best-effort global cap so
-  // a burst can't breach OSMF's 1 req/s. A test override wins outright.
-  const innerGeocoder: Geocoder =
-    overrides?.geocoder ??
-    (() => {
-      const userAgent = process.env.NOMINATIM_USER_AGENT
-      const baseUrl = process.env.NOMINATIM_API_URL
-      // Disabled: every address is "un-geocodable" (no provider), so a save
-      // persists with null coords — never PENDING (nothing will ever resolve it).
-      if (!userAgent || !baseUrl) return { geocode: async () => ({ status: 'notFound' as const }) }
-      return new NominatimGeocoder(baseUrl, userAgent, undefined, process.env.NOMINATIM_API_KEY)
-    })()
-  // Adapt the native binding's `limit({ key })` to the RateLimiter port here.
-  const geocodeLimiter =
-    overrides?.geocodeLimiter ??
-    ((globalThis as Record<string, unknown>).GEOCODE_LIMITER as RateLimitBinding | undefined)
-  const geocoder: Geocoder = geocodeLimiter
-    ? new ThrottledGeocoder(innerGeocoder, { limit: (key) => geocodeLimiter.limit({ key }) })
-    : innerGeocoder
-  // Forward-geocode result cache (#601, #574 piece 1/2). Wraps OUTSIDE the throttle
-  // so a cache HIT spends neither the provider call nor the 1-req/10s budget.
-  // Durable cross-isolate Workers KV when the GEOCODE_CACHE binding is present
-  // (gated on #304); until then an in-process map (dev/test/seed). A test override
-  // wins outright.
-  const geocodeCache: GeocodeCache =
-    overrides?.geocodeCache ??
-    (() => {
-      const kv = (globalThis as Record<string, unknown>).GEOCODE_CACHE as KvStore | undefined
-      return kv ? new KvGeocodeCache(kv) : new InMemoryGeocodeCache()
-    })()
-  const cachedGeocoder: Geocoder = new CachingGeocoder(geocoder, geocodeCache)
+  // Geocoder stack (provider + throttle + cache) resolved in composition/services.
+  const cachedGeocoder = resolveGeocoder(overrides)
 
   // In-app Stripe payment (#461). Real gateway when BOTH secrets are set; in
   // production without them a sentinel throws on first use (not at boot, so
@@ -199,32 +188,7 @@ export function createApp(overrides?: AppOverrides, repos: Repos = buildRepos(ov
   // success URL so the flow is navigable, but webhook verification always
   // throws (no secret) so nothing is recorded without real wiring. An override
   // (tests) wins outright. Mirrors emailSender / translationProvider.
-  const paymentGateway: PaymentGateway =
-    overrides?.paymentGateway ??
-    (() => {
-      const secretKey = process.env.STRIPE_SECRET_KEY
-      const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET
-      if (secretKey && webhookSecret) return new StripePaymentGateway(secretKey, webhookSecret)
-      if (process.env.NODE_ENV === 'production') {
-        return {
-          createCheckoutSession: async () => {
-            throw new Error('STRIPE_SECRET_KEY / STRIPE_WEBHOOK_SECRET not configured')
-          },
-          parseWebhookEvent: async () => {
-            throw new Error('STRIPE_WEBHOOK_SECRET not configured')
-          },
-        }
-      }
-      return {
-        createCheckoutSession: async (p) => {
-          console.info('[payment:dev] checkout session for', p.bookingCode)
-          return { sessionId: 'dev', url: p.successUrl }
-        },
-        parseWebhookEvent: async () => {
-          throw new Error('Stripe not configured (dev): cannot verify webhook')
-        },
-      }
-    })()
+  const paymentGateway = resolvePaymentGateway(overrides)
   // Renter is redirected back here after Stripe Checkout — the first allowed web
   // origin (success/cancel paths are appended in the service).
   // First allowed web origin — where the browser is sent back to after Stripe
@@ -232,6 +196,7 @@ export function createApp(overrides?: AppOverrides, repos: Repos = buildRepos(ov
   const webBaseUrl = resolveAllowedOrigins(process.env.WEB_ORIGIN)[0] ?? ''
   const paymentService = new PaymentService(
     paymentEventRepo,
+    paymentRefundRepo,
     bookingRepo,
     paymentGateway,
     paymentAnomalyRepo,
@@ -344,6 +309,7 @@ export function createApp(overrides?: AppOverrides, repos: Repos = buildRepos(ov
   app.use('/availability', requireAuth())
   app.use('/threads/*', requireAuth())
   app.use('/messages/*', requireAuth())
+  app.use('/consent/*', requireAuth())
   app.use('/customers/*', requireAuth())
   app.use('/customers', requireAuth())
   app.use('/users/*', requireAuth())
@@ -369,29 +335,9 @@ export function createApp(overrides?: AppOverrides, repos: Repos = buildRepos(ov
   // `docs/plans/2026-04-14-messaging-design.md`).
   const staffUserId = process.env.DEFAULT_STAFF_ID
   // Single post-commit seam (#393): thread autocreate (#335) + outbound
-  // notifications, awaited in the service, each caught-and-logged.
-  const resolveOperatorRecipients = makeResolveOperatorRecipients({
-    membershipRepo: operatorMembershipRepo,
-    userRepo,
-  })
-  const notificationDispatcher = new NotificationDispatcher(
-    notificationLogRepo,
-    operatorRepo,
-    vehicleRepo,
-    userRepo,
-    resolveOperatorRecipients,
-    locationRepo,
-    emailSender,
-    {
-      ...resolveEmailConfig(),
-      fallbackOperatorEmail:
-        process.env.OPERATOR_ALERT_FALLBACK_EMAIL ??
-        process.env.EMAIL_REPLY_TO ??
-        process.env.EMAIL_FROM,
-      // #960: empty string (WEB_ORIGIN unset) -> the dispatcher omits the deep link.
-      webBaseUrl,
-    },
-  )
+  // notifications, awaited in the service, each caught-and-logged. The dispatcher
+  // wiring is shared with the #1125 retry-sweep cron via resolveNotificationDispatcher.
+  const notificationDispatcher = resolveNotificationDispatcher(repos, emailSender, webBaseUrl)
   const ensureThread = staffUserId ? makeEnsureThread({ threadRepo, staffUserId }) : async () => {}
   const postCommit = new BookingPostCommitDispatcher(ensureThread, notificationDispatcher)
   const renterDocumentService = new RenterDocumentService(renterDocumentRepo, documentStorage)
@@ -413,6 +359,9 @@ export function createApp(overrides?: AppOverrides, repos: Repos = buildRepos(ov
     bookingEventRepo,
     undefined,
     verificationGate,
+    // #851: PaymentService coordinates the auto-refund on cancel (isBookingPaid +
+    // initiateCancellationRefund). It's constructed above with the same repos.
+    paymentService,
   )
   const notificationService = new NotificationService(
     notificationLogRepo,
@@ -422,15 +371,37 @@ export function createApp(overrides?: AppOverrides, repos: Repos = buildRepos(ov
   const availabilityService = new AvailabilityService(availabilityRepo)
   const customerService = new CustomerService(customerRepo, userRepo, bookingRepo)
   const messageService = new MessageService(threadRepo, messageRepo)
+  // Default signing key resolves from CONSENT_SIGNING_KEY (absent ⇒ unsigned rows).
+  const consentService = new ConsentService(consentRepo)
+  // #877 2b: pure policy gate over the same re-consent query; renter booking
+  // creation consults it (booking-only scope, the legally load-bearing chokepoint).
+  const consentGate = new ConsentGateService(consentService)
+  // #877: assembles verified evidence bundles; exposed via platform-admin route (Task 8).
+  const consentEvidenceService = new ConsentEvidenceService(consentRepo, (keyId) => {
+    const k = resolveSigningKey()
+    return k && k.keyId === keyId ? k : undefined
+  })
+  // #1091: platform-admin read-only governance browse over the same ledger.
+  const consentGovernanceService = new ConsentGovernanceService(consentRepo)
   const userDirectoryService = new UserDirectoryService(userRepo, threadRepo)
   const maintenanceService = new MaintenanceService(
     vehicleRepo,
     maintenanceLogRepo,
     runInTransaction,
   )
+  const vehicleBlockService = new VehicleBlockService(vehicleRepo, vehicleBlockRepo)
   const fleetOverviewService = new FleetOverviewService(fleetOverviewRepo)
   const overviewService = new OverviewService(overviewRepo)
   const adminRevenueService = new AdminRevenueService(paymentEventRepo, operatorRepo)
+  const adminBookingService = new AdminBookingService(bookingRepo, operatorRepo, userRepo)
+  const adminOverviewService = new AdminOverviewService(
+    bookingRepo,
+    paymentEventRepo,
+    vehicleRepo,
+    operatorRepo,
+    paymentAnomalyRepo,
+    renterDocumentRepo,
+  )
   const paymentAnomalyService = new PaymentAnomalyService(paymentAnomalyRepo)
   const vehicleDetailService = new VehicleDetailService(vehicleDetailRepo)
   const operatorService = new OperatorService(operatorRepo, recordAudit)
@@ -461,6 +432,13 @@ export function createApp(overrides?: AppOverrides, repos: Repos = buildRepos(ov
     availabilityRepo,
     vehicleClassRepo,
     regionRepo,
+    classRatePlanRepo,
+  )
+  const reviewService = new ReviewService(
+    reviewRepo,
+    bookingRepo,
+    bookingEventRepo,
+    operatorMembershipRepo,
   )
 
   // Chain .route() calls so TypeScript infers the full route type tree.
@@ -508,21 +486,27 @@ export function createApp(overrides?: AppOverrides, repos: Repos = buildRepos(ov
       ),
     )
     .route('/', createMaintenanceLogRoutes(maintenanceService))
-    .route('/', createBookingRoutes(bookingService))
+    .route('/', createVehicleBlockRoutes(vehicleBlockService))
+    .route('/', createBookingRoutes(bookingService, consentGate))
+    .route('/', createReviewRoutes(reviewService))
     .route('/', createPaymentRoutes(paymentService))
     .route('/', createAvailabilityRoutes(availabilityService))
     .route('/', createStatsRoutes(statsRepo))
     .route('/', createOverviewRoutes(overviewService))
     .route('/', createAdminRevenueRoutes(adminRevenueService))
+    .route('/', createAdminBookingRoutes(adminBookingService))
+    .route('/', createAdminOverviewRoutes(adminOverviewService))
     .route('/', createPaymentAnomalyRoutes(paymentAnomalyService))
     .route('/', createMessageRoutes(messageService))
+    .route('/', createConsentRoutes(consentService))
+    .route('/', createAdminConsentRoutes(consentGovernanceService))
     .route(
       '/',
       createTranslateRoutes(new MessageTranslationService(messageRepo, translationProvider)),
     )
     .route('/', createCustomerRoutes(customerService))
     .route('/', createUserRoutes(userDirectoryService))
-    .route('/', createAdminRoutes(operatorService, providerInviteService))
+    .route('/', createAdminRoutes(operatorService, providerInviteService, consentEvidenceService))
     .route('/', createLocationRoutes(locationService, resolveWriteOperatorId))
     .route('/', createInsuranceOptionRoutes(insuranceOptionService, resolveWriteOperatorId))
     .route('/', createAddOnRoutes(addOnService, resolveWriteOperatorId))
@@ -534,78 +518,39 @@ export function createApp(overrides?: AppOverrides, repos: Repos = buildRepos(ov
 }
 
 /**
- * Resolve Google OAuth config from env, or undefined when unconfigured (local
- * dev / CI without secrets) — the /auth/google/* routes then return 503 rather
- * than crashing at boot. redirect_uri is derived from AUTH_URL so it always
- * matches the deployed origin; the post-login target defaults to the first
- * allowed web origin.
+ * The notification dispatcher wiring, shared by createApp's post-commit seam and
+ * the #1125 retry-sweep cron so the two never drift on recipient resolution,
+ * fallback inbox, or deep-link base. Caller passes the already-resolved email
+ * sender + web origin so createApp reuses its locals (no double-construction).
  */
-function resolveGoogleOAuthConfig(): GoogleOAuthConfig | undefined {
-  const clientId = process.env.AUTH_GOOGLE_ID
-  const clientSecret = process.env.AUTH_GOOGLE_SECRET
-  const authUrl = process.env.AUTH_URL
-  if (!clientId || !clientSecret || !authUrl) return undefined
-
-  const base = authUrl.replace(/\/$/, '')
-  const postLoginRedirect =
-    process.env.WEB_POST_LOGIN_URL ?? resolveAllowedOrigins(process.env.WEB_ORIGIN)[0] ?? base
-  return {
-    clientId,
-    clientSecret,
-    redirectUri: `${base}/auth/google/callback`,
-    postLoginRedirect,
-  }
-}
-
-const DEV_WEB_ORIGINS = ['http://localhost:3001', 'http://127.0.0.1:3001']
-
-function resolveAllowedOrigins(envValue: string | undefined): string[] {
-  const fromEnv = (envValue ?? '')
-    .split(',')
-    .map((s) => s.trim())
-    .filter((s) => s.length > 0)
-
-  // Only include dev origins outside production so `bun run dev` works
-  // out of the box without leaking localhost to prod.
-  const devOrigins = process.env.NODE_ENV === 'production' ? [] : DEV_WEB_ORIGINS
-  return [...new Set([...devOrigins, ...fromEnv])]
-}
-
-/**
- * Resolve the outbound email port (#916 DRY): an injected override wins (tests),
- * else real Resend when RESEND_API_KEY is set, else a throwing sentinel in
- * production and a console stub in dev — so flows work end-to-end without a
- * vendor account. Shared by createApp's dispatcher and buildComplianceDigestService.
- */
-function resolveEmailSender(overrides?: AppOverrides): EmailSender {
-  if (overrides?.emailSender) return overrides.emailSender
-  const key = process.env.RESEND_API_KEY
-  const from = process.env.EMAIL_FROM ?? ''
-  if (key) return new ResendEmailSender(key, from)
-  if (process.env.NODE_ENV === 'production') {
-    return {
-      send: async () => {
-        throw new Error('RESEND_API_KEY not configured')
-      },
-    }
-  }
-  return {
-    send: async (m) => {
-      console.info('[email:dev]', m.to, m.subject)
-      return { providerMessageId: 'dev' }
+function resolveNotificationDispatcher(
+  repos: Repos,
+  emailSender: EmailSender,
+  webBaseUrl: string,
+): NotificationDispatcher {
+  const {
+    notificationLogRepo,
+    operatorRepo,
+    vehicleRepo,
+    userRepo,
+    operatorMembershipRepo,
+    locationRepo,
+  } = repos
+  return new NotificationDispatcher(
+    notificationLogRepo,
+    operatorRepo,
+    vehicleRepo,
+    userRepo,
+    makeResolveOperatorRecipients({ membershipRepo: operatorMembershipRepo, userRepo }),
+    locationRepo,
+    emailSender,
+    {
+      ...resolveEmailConfig(),
+      fallbackOperatorEmail: resolveOperatorAlertEmail(),
+      // #960: empty string (WEB_ORIGIN unset) -> the dispatcher omits the deep link.
+      webBaseUrl,
     },
-  }
-}
-
-/**
- * The shared envelope fields (from/reply-to) read from one env in two places —
- * createApp's notification dispatcher and buildComplianceDigestService (#982 DRY).
- */
-function resolveEmailConfig(): { emailFrom: string; emailReplyTo: string | undefined } {
-  return {
-    emailFrom: process.env.EMAIL_FROM ?? '',
-    emailReplyTo: process.env.EMAIL_REPLY_TO,
-  }
+  )
 }
 
 /**
@@ -630,6 +575,59 @@ export function buildComplianceDigestService(
     emailSender: resolveEmailSender(overrides),
     today: () => jstDateString(new Date()),
     config: resolveEmailConfig(),
+  })
+}
+
+/**
+ * Composition seam for the #851 refund-on-cancellation reconciler backstop,
+ * resolved by the Workers `scheduled` cron exactly as buildComplianceDigestService
+ * is. Wires the bounded REFUND_DUE scan, the idempotent refund core (PaymentService
+ * as the driver — same Stripe gateway/origin createApp uses), and the refund
+ * receipt repo for the post-drive outcome tally.
+ */
+export function buildCancellationRefundReconciler(
+  overrides?: AppOverrides,
+  repos: Repos = buildRepos(overrides),
+): CancellationRefundReconciler {
+  const {
+    paymentEventRepo,
+    paymentRefundRepo,
+    bookingRepo,
+    paymentAnomalyRepo,
+    refundReconcilerRepo,
+  } = repos
+  const webBaseUrl = resolveAllowedOrigins(process.env.WEB_ORIGIN)[0] ?? ''
+  const driver = new PaymentService(
+    paymentEventRepo,
+    paymentRefundRepo,
+    bookingRepo,
+    resolvePaymentGateway(overrides),
+    paymentAnomalyRepo,
+    { webBaseUrl },
+  )
+  return new CancellationRefundReconciler({
+    scanRepo: refundReconcilerRepo,
+    driver,
+    refundRepo: paymentRefundRepo,
+  })
+}
+
+/**
+ * Composition seam for the #1125 daily notification retry sweep, resolved by the
+ * Workers `scheduled` cron exactly as the other backstops are. Re-drives durably
+ * stuck notification_log rows through the SAME dispatcher createApp wires (shared
+ * via resolveNotificationDispatcher), so a one-shot lifecycle email that failed
+ * its first send self-heals instead of waiting on a manual operator resend.
+ */
+export function buildNotificationRetryService(
+  overrides?: AppOverrides,
+  repos: Repos = buildRepos(overrides),
+): NotificationRetryService {
+  const webBaseUrl = resolveAllowedOrigins(process.env.WEB_ORIGIN)[0] ?? ''
+  return new NotificationRetryService({
+    notificationLogRepo: repos.notificationLogRepo,
+    bookingRepo: repos.bookingRepo,
+    redriver: resolveNotificationDispatcher(repos, resolveEmailSender(overrides), webBaseUrl),
   })
 }
 

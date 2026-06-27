@@ -40,6 +40,9 @@ jobs:
       - name: Check FK indexes
         run: bun run lint:fk-indexes
 
+      - name: Check snapshot/index parity (hand-SQL drift)
+        run: bun run lint:snapshot-index-parity
+
       - name: Check i18n locale parity
         run: bun run lint:i18n-parity
 
@@ -70,6 +73,13 @@ jobs:
       # "resolved by #378" per that slice. This enforcing gate is its successor.
       - name: Check web dist size budget
         run: bun run lint:dist-size
+
+      # Hash the inline bootstrap script in the BUILT shell and assert the CSP in
+      # _headers pins it (no 'unsafe-inline'). Runs post-build so it checks the
+      # bytes the browser actually receives, catching any Vite-emission drift the
+      # source-level unit test can't see (#500).
+      - name: Check CSP script-src hash matches the built shell
+        run: bun run lint:csp-hash
 
   # Non-bypassable drift gate. See scripts/db-verify.ts and the "Database
   # Migrations" section of CLAUDE.md for why this exists. Two production

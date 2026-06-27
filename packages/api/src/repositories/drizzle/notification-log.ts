@@ -1,5 +1,5 @@
 import { notificationLog } from '@kuruma/shared/db/schema'
-import { type SQL, and, eq, inArray, or, sql } from 'drizzle-orm'
+import { type SQL, and, asc, eq, inArray, or, sql } from 'drizzle-orm'
 import { type CallerContext, requireManagementRead } from '../../middleware/auth'
 import type { NotificationLog } from '../../stores'
 import { operatorReadScope } from '../../tenancy'
@@ -141,6 +141,29 @@ export class DrizzleNotificationLogRepository implements NotificationLogReposito
         updatedAt: sql`now()`,
       })
       .where(eq(notificationLog.id, id))
+  }
+
+  async findRetryable(limit: number): Promise<NotificationLog[]> {
+    // #1125: the same reclaimable predicate as claim() (QUEUED / FAILED / an
+    // EXPIRED SENDING lease), expressed as a bounded read so the daily sweep
+    // surfaces only rows a subsequent claim() will accept. Oldest-updatedAt first
+    // so a backlog drains in age order; terminal SENT/DEAD/NO_RECIPIENT and a live
+    // lease are excluded by construction.
+    const rows = await this.db
+      .select()
+      .from(notificationLog)
+      .where(
+        or(
+          inArray(notificationLog.status, ['QUEUED', 'FAILED']),
+          and(
+            eq(notificationLog.status, 'SENDING'),
+            sql`${notificationLog.updatedAt} < now() - (${LEASE_SECONDS} * interval '1 second')`,
+          ),
+        ),
+      )
+      .orderBy(asc(notificationLog.updatedAt))
+      .limit(limit)
+    return rows.map(toNotificationLog)
   }
 
   async findAll(ctx: CallerContext, filters?: NotificationLogFilters): Promise<NotificationLog[]> {

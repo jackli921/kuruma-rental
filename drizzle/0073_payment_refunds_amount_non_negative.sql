@@ -1,0 +1,1 @@
+ALTER TABLE "payment_refunds" ADD CONSTRAINT "payment_refunds_amount_non_negative" CHECK ("payment_refunds"."amountJpy" >= 0);

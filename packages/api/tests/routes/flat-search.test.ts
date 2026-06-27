@@ -4,8 +4,10 @@ import { SYSTEM_CONTEXT } from '../../src/middleware/auth'
 import {
   InMemoryAvailabilityRepository,
   InMemoryBookingRepository,
+  InMemoryClassRatePlanRepository,
   InMemoryLocationRepository,
   InMemoryOperatorRepository,
+  InMemoryVehicleBlockRepository,
   InMemoryVehicleClassRepository,
   InMemoryVehicleRepository,
 } from '../../src/repositories/in-memory'
@@ -21,8 +23,13 @@ function setup() {
   const locationRepo = new InMemoryLocationRepository()
   const vehicleRepo = new InMemoryVehicleRepository()
   const bookingRepo = new InMemoryBookingRepository()
-  const availabilityRepo = new InMemoryAvailabilityRepository(vehicleRepo, bookingRepo)
+  const availabilityRepo = new InMemoryAvailabilityRepository(
+    vehicleRepo,
+    bookingRepo,
+    new InMemoryVehicleBlockRepository(),
+  )
   const vehicleClassRepo = new InMemoryVehicleClassRepository()
+  const classRatePlanRepo = new InMemoryClassRatePlanRepository()
   const app = createApp({
     vehicleRepo,
     bookingRepo,
@@ -30,8 +37,9 @@ function setup() {
     vehicleClassRepo,
     locationRepo,
     operatorRepo,
+    classRatePlanRepo,
   })
-  return { app, operatorRepo, locationRepo, vehicleRepo, vehicleClassRepo }
+  return { app, operatorRepo, locationRepo, vehicleRepo, vehicleClassRepo, classRatePlanRepo }
 }
 
 type Ctx = ReturnType<typeof setup>
@@ -232,6 +240,39 @@ describe('flat search routes (#458)', () => {
 
       expect(res.status).toBe(400)
       expect((await res.json()).success).toBe(false)
+    })
+
+    it('surfaces an active class rate plan as a CLASS_COMBO card beside the SPECIFIC cars (#464)', async () => {
+      const ctx = setup()
+      const { op, compact, namba } = await seedStorefront(ctx, 2)
+      await ctx.classRatePlanRepo.create({
+        operatorId: op.id,
+        classId: compact.id,
+        pickupLocationId: namba.id,
+        dayRateJpy: 6000,
+        isActive: true,
+        label: 'Compact combo deal',
+      })
+
+      const res = await ctx.app.request(`/search/vehicles?from=${FROM}&to=${TO}`)
+
+      expect(res.status).toBe(200)
+      const body = await res.json()
+      const combos = body.data.items.filter((i: { kind: string }) => i.kind === 'CLASS_COMBO')
+      expect(combos).toHaveLength(1)
+      expect(combos[0]).toMatchObject({
+        kind: 'CLASS_COMBO',
+        classId: compact.id,
+        availableCount: 2,
+        dailyRateJpy: 6000,
+        hourlyRateJpy: null,
+        classLabel: 'Compact',
+        acrissCode: 'CCAR',
+      })
+      expect(combos[0].location).toMatchObject({ name: 'Namba', operatorName: 'Best Car Rental' })
+      expect(combos[0]).not.toHaveProperty('operatorId')
+      // The two physical cars still surface as their own SPECIFIC rows.
+      expect(body.data.items.filter((i: { kind: string }) => i.kind === 'SPECIFIC')).toHaveLength(2)
     })
   })
 })

@@ -8,6 +8,7 @@ import {
   InMemoryBookingRepository,
   InMemoryOperatorRepository,
   InMemoryProviderInviteRepository,
+  InMemoryVehicleBlockRepository,
   InMemoryVehicleRepository,
 } from '../../src/repositories/in-memory'
 import { TEST_AUTH_SECRET, oauthFlowCookie, setupAuthEnv } from '../helpers/auth'
@@ -22,9 +23,9 @@ function makeRuntime(): { calls: { code?: string }; runtime: GoogleAuthRuntime }
       provider: {
         exchangeCode: async (code) => {
           calls.code = code
-          return { accessToken: 'access-1' }
+          return { idToken: 'id-token-1' }
         },
-        getUserInfo: async () => ({ sub: 'g-1', email: 'jo@ex.com', name: 'Jo' }),
+        verifyIdToken: async () => ({ sub: 'g-1', email: 'jo@ex.com', name: 'Jo' }),
       },
       accountStore: {
         resolveUser: async () => ({ id: 'user_7', role: 'RENTER' as const }),
@@ -40,6 +41,7 @@ function buildApp(googleAuthRuntime: GoogleAuthRuntime) {
     availabilityRepo: new InMemoryAvailabilityRepository(
       new InMemoryVehicleRepository(),
       new InMemoryBookingRepository(),
+      new InMemoryVehicleBlockRepository(),
     ),
     googleAuthRuntime,
   })
@@ -117,8 +119,8 @@ describe('createApp wires a googleAuthRuntime override into /auth/google/callbac
 
     const runtime: GoogleAuthRuntime = {
       provider: {
-        exchangeCode: async () => ({ accessToken: 'a' }),
-        getUserInfo: async () => ({
+        exchangeCode: async () => ({ idToken: 'id-1' }),
+        verifyIdToken: async () => ({
           sub: 'g-op',
           email: 'op@ex.com',
           email_verified: true,
@@ -135,6 +137,7 @@ describe('createApp wires a googleAuthRuntime override into /auth/google/callbac
       availabilityRepo: new InMemoryAvailabilityRepository(
         new InMemoryVehicleRepository(),
         new InMemoryBookingRepository(),
+        new InMemoryVehicleBlockRepository(),
       ),
       operatorRepo,
       providerInviteRepo,

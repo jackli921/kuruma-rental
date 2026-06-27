@@ -17,6 +17,8 @@ export type {
   FeeSchedule,
   PaymentEvent,
   RenterDocument,
+  VehicleBlock,
+  Review,
 } from '../stores'
 export type { DashboardStats } from '@kuruma/shared/types/stats'
 export type { OperatorOverview } from '@kuruma/shared/types/overview'
@@ -35,8 +37,6 @@ import type { CallerContext } from '../middleware/auth'
 import type {
   AddOn,
   Booking,
-  BookingEvent,
-  FeeSchedule,
   InsuranceOption,
   Location,
   MaintenanceLog,
@@ -45,21 +45,26 @@ import type {
   OperatorMembership,
   ProviderInvite,
   Region,
-  RenterDocument,
   Thread,
   ThreadParticipant,
   User,
   Vehicle,
   VehicleClass,
 } from '../stores'
+// Imported (not just re-exported) because the RepoBundle below references it locally.
+import type { AdminBookingFilters } from './types-admin-booking'
+import type { BookingEventRepository } from './types-booking-event'
 
-// Payment persistence interfaces (#461 events, #508 P2 anomalies) live in their
-// own module to keep this barrel under the file-size cap; re-exported for callers.
+// Payment interfaces (#461 events, #508 anomalies, #851 refunds) live in their own module (size cap); re-exported.
 export type {
+  ClaimPaymentRefund,
   NewPaymentAnomaly,
   NewPaymentEvent,
   PaymentAnomalyRepository,
   PaymentEventRepository,
+  PaymentRefundRepository,
+  RefundReconcilerRepository,
+  ResolvePaymentAnomalyInput,
 } from './types-payment'
 
 // Notification persistence: SENDING-lease + delivery-cap consts (#393, #483) and
@@ -77,11 +82,14 @@ export type {
 // their own module to keep this barrel under the file-size cap (#978);
 // re-exported for callers.
 export type { DocumentStorage, PhotoStorage } from './types-storage'
+export type { ClassRatePlanFilters, ClassRatePlanRepository } from './types-pricing'
 export { complianceAlertKey } from './types-compliance'
 export type { ComplianceAlertLogRepository, RecordComplianceAlert } from './types-compliance'
 
 // Audit ledger entity + insert-only persistence (#930), own module per #837 cap.
 export type { AuditLogEntry, AuditLogRepository } from './types-audit'
+export type { AdminBookingFilters }
+export type { BookingEventRepository }
 
 /** Operator (tenant) data access. Admin bootstrap (#386) + slug/id resolution (#387). */
 // Partial profile patch (#903). Only the keys present are written; an absent key
@@ -108,6 +116,10 @@ export interface OperatorRepository {
   // #407: list all operators (name-sorted), powering the admin operator picker.
   // Caller scoping (operator sees only its own) is applied in OperatorService.
   list(): Promise<Operator[]>
+  // #1087 platform overview: `COUNT(operators)` for the platform-owner home KPI.
+  // Unscoped (authz lives in AdminOverviewService). Labelled "Operators" today;
+  // TODO(#1088): tighten to active=true once the `deactivatedAt` column lands.
+  count(): Promise<number>
   findBySlug(slug: string): Promise<Operator | undefined>
   // #903: apply a partial profile patch and return the updated row, or undefined
   // if no operator has that id (never inserts).
@@ -296,6 +308,11 @@ export interface VehicleRepository {
   findAll(ctx: CallerContext, filters?: VehicleFilters): Promise<PaginatedResult<Vehicle>>
   findById(ctx: CallerContext, id: string): Promise<Vehicle | undefined>
   findByIds(ctx: CallerContext, ids: string[]): Promise<Vehicle[]>
+  // #1087 platform overview: `COUNT(vehicles WHERE status != 'RETIRED')` — the
+  // live fleet across all operators. Unscoped (no ctx) by design: this is a
+  // platform-wide KPI; authz lives in AdminOverviewService. COUNT at the DB layer,
+  // never materialize-then-count.
+  countActive(): Promise<number>
   create(
     ctx: CallerContext,
     data: Omit<Vehicle, 'id' | 'createdAt' | 'updatedAt'>,
@@ -406,14 +423,28 @@ export interface BookingFilters {
   to?: Date
   limit?: number
   cursor?: string
+  /** #464 Task 7: operator worklist — return only CLASS_COMBO floats that still
+   *  need a vehicle assigned (fulfillmentMode='CLASS_COMBO' AND assignedVehicleId
+   *  IS NULL AND status IN ('CONFIRMED','ACTIVE')). */
+  needsAssignment?: boolean
 }
 
 export type { CallerContext } from '../middleware/auth'
 
 export interface BookingRepository {
   findAll(ctx: CallerContext, filters?: BookingFilters): Promise<Booking[]>
+  /**
+   * Cross-operator oversight read (#1092). UNSCOPED — returns bookings across
+   * every tenant in (createdAt DESC, id DESC) order. Gate at the service with
+   * `requirePlatformAdmin`; never expose to a tenant or PARTNER caller.
+   */
+  findForAdmin(filters: AdminBookingFilters): Promise<Booking[]>
   findById(ctx: CallerContext, id: string): Promise<Booking | undefined>
   findByIdempotencyKey(ctx: CallerContext, key: string): Promise<Booking | undefined>
+  /** #1087 platform overview: `COUNT(bookings)` across every operator for the
+   *  platform-owner home KPI. Unscoped by design (authz lives in
+   *  AdminOverviewService); COUNT at the DB layer, never load-then-count. */
+  count(): Promise<number>
   /** Counts bookings in BLOCKING_STATUSES (CONFIRMED, ACTIVE) for the given
    *  vehicle set. Used to guard operations that assume no live bookings exist
    *  for those vehicles — e.g. archiving a vehicle class. */
@@ -442,32 +473,35 @@ export interface BookingRepository {
   cancel(
     ctx: CallerContext,
     id: string,
-    opts: { from: Booking['status']; fee: number; cancelledAt: Date },
+    // #851: settlement written atomically with status+fee; optional, defaults 'ADVISORY'.
+    opts: {
+      from: Booking['status']
+      fee: number
+      cancelledAt: Date
+      settlement?: Booking['cancellationFeeSettlement']
+    },
   ): Promise<Booking | undefined>
-  /**
-   * Operator vehicle substitution (#392, §5.5): atomically reassign a booking to
-   * a new vehicle. Re-checks the exclusion constraint for the NEW assigned
-   * vehicle over the booking's [startAt, effectiveEndAt) — throws
-   * EXCLUSION_VIOLATION (23P01) if that car is already booked for the range —
-   * and re-snapshots totalPrice/effectiveEndAt. Returns undefined when the
-   * booking is not visible to the caller. requestedVehicleId is never touched.
-   */
+  /** Guarded settlement transition (#851): matches only when the current value is
+   *  `from`, so a redelivered webhook / racing reconciler pull gets undefined (0
+   *  rows) — atomic, idempotent, never a regression. */
+  markCancellationSettlement(
+    ctx: CallerContext,
+    id: string,
+    transition: {
+      from: Booking['cancellationFeeSettlement']
+      to: Booking['cancellationFeeSettlement']
+    },
+  ): Promise<Booking | undefined>
+  /** Operator vehicle substitution (#392, §5.5): atomically reassign a booking to a
+   *  new vehicle. Re-checks the exclusion constraint for the NEW assigned vehicle over
+   *  [startAt, effectiveEndAt) — throws EXCLUSION_VIOLATION (23P01) if it's already
+   *  booked — and re-snapshots totalPrice/effectiveEndAt. Returns undefined when the
+   *  booking is not visible to the caller; requestedVehicleId is never touched. */
   reassignVehicle(
     ctx: CallerContext,
     id: string,
     data: { assignedVehicleId: string; totalPrice: number | null; effectiveEndAt: Date },
   ): Promise<Booking | undefined>
-}
-
-/**
- * Append-only booking lifecycle log (#392, proposal §5.2). The events are the
- * source of truth; `bookings.status` is the write-through projection. There is
- * deliberately NO update/delete method — immutability is enforced by the
- * interface, not just convention.
- */
-export interface BookingEventRepository {
-  append(ctx: CallerContext, event: Omit<BookingEvent, 'id' | 'createdAt'>): Promise<BookingEvent>
-  findByBookingId(ctx: CallerContext, bookingId: string): Promise<BookingEvent[]>
 }
 
 export interface StatsRepository {
@@ -512,6 +546,46 @@ export interface AvailabilityRepository {
       }
     | undefined
   >
+  // #464: total CONFIRMED/ACTIVE class demand overlapping [from, to) at one
+  // (operator, location, class) — SPECIFIC occupancy PLUS floating CLASS_COMBO
+  // (both via bookings.classId); slice 2's write guard asserts demand<totalCars.
+  countClassDemand(
+    operatorId: string,
+    classId: string,
+    pickupLocationId: string,
+    from: Date,
+    to: Date,
+  ): Promise<number>
+  // #464 2d.2: road-legal supply side of the combo guard. Counts vehicles in
+  // (op, class, loc) with status<>'RETIRED' (RETIRED = permanent exit) that
+  // are road-legal at asOf (same JST clock as findAvailableVehicles).
+  // #1141: a vehicle with a vehicle_blocks row overlapping the demand window
+  // [from, to) is off the calendar and must NOT count toward class capacity —
+  // mirroring findAvailableVehicles' NOT EXISTS subtraction and the SPECIFIC
+  // booking guard's per-car block check. The (from, to) occupancy window leads
+  // (matching countClassDemand) so callers pass the same pair to both; asOf —
+  // the road-legal clock (the renter's return, distinct from the turnaround-
+  // extended window end) — trails as the odd-one-out.
+  countClassCapacity(
+    operatorId: string,
+    classId: string,
+    pickupLocationId: string,
+    from: Date,
+    to: Date,
+    asOf: Date,
+  ): Promise<number>
+  // #464 2d.4: serializes concurrent CLASS_COMBO submits on one (op, class,
+  // loc) triple — Postgres' pg_advisory_xact_lock keyed on a hashed string,
+  // an InMemory per-key Promise chain in tests. The returned thunk releases:
+  // for Drizzle it is a no-op (advisory_xact_lock auto-releases at tx
+  // commit/rollback); for InMemory it resolves the queue head so the next
+  // waiter advances. The service holds the lock around demand → capacity →
+  // insert so a parallel submit can't slip a car under the gate.
+  lockComboCapacity(
+    operatorId: string,
+    classId: string,
+    pickupLocationId: string,
+  ): Promise<() => void>
 }
 
 /**
@@ -639,48 +713,15 @@ export interface MessageRepository {
   ): Promise<Message | undefined>
 }
 
-// Transaction boundary for operations spanning multiple repositories.
-// Drizzle: wraps db.transaction(), creating repos bound to the tx handle.
-// InMemory: passes repos through (JS event loop is single-threaded).
-//
-// Slice 6 (#392) widens the bundle so the single-transaction booking submit
-// (proposal §4) can — atomically — validate availability (booking insert ->
-// exclusion constraint), append the BOOKING_CREATED event, and read the
-// vehicle / location / insurance / fee rows for the price + snapshots at a
-// consistent point-in-time. MaintenanceService still uses only the first two.
-export interface TransactionRepos {
-  vehicleRepo: VehicleRepository
-  maintenanceLogRepo: MaintenanceLogRepository
-  bookingRepo: BookingRepository
-  bookingEventRepo: BookingEventRepository
-  locationRepo: LocationRepository
-  insuranceOptionRepo: InsuranceOptionRepository
-  addOnRepo: AddOnRepository
-  feeScheduleRepo: FeeScheduleRepository
-  // #875: the operator walk-in (#589 1c) creates its fresh renter INSIDE the
-  // booking tx, so a failed booking rolls the renter back with it (no orphan).
-  // Narrowed to that one write — the rest of UserRepository isn't tx-bound here.
-  userRepo: Pick<UserRepository, 'createWalkInRenter'>
-}
-
-export type RunInTransaction = <T>(fn: (repos: TransactionRepos) => Promise<T>) => Promise<T>
-
-// #521 §6: the minimal write surface the atomic operator-grant transaction needs —
-// the membership ledger INSERT, the denormalised users projection, and invite
-// consumption. Run together in ONE tx so a mid-sequence failure can't leave a partial
-// grant (membership without projection, or invite consumed without a membership row).
-// The membership INSERT goes first so the partial-unique-active index aborts the WHOLE
-// tx on a concurrent double-accept; the service then re-reads the winner.
-export interface OperatorGrantRepos {
-  memberships: Pick<OperatorMembershipRepository, 'create'>
-  users: Pick<UserRepository, 'setOperatorAccess'>
-  invites: Pick<ProviderInviteRepository, 'markAccepted'>
-}
-
-// Drizzle wires the real per-call neon-serverless tx (#493, pooled DATABASE_URL);
-// InMemory passes the plain repos (single-threaded, no real tx). Mirrors
-// RunInTransaction (the booking bundle) but scoped to the grant's three tables.
-export type RunOperatorGrant = <T>(fn: (repos: OperatorGrantRepos) => Promise<T>) => Promise<T>
+// Transaction-runner ports (#392 booking bundle + #521 operator-grant bundle)
+// live in ./types-transactions to keep this barrel under the file-size cap
+// (#978); re-exported here so callers' imports don't change.
+export type {
+  OperatorGrantRepos,
+  RunInTransaction,
+  RunOperatorGrant,
+  TransactionRepos,
+} from './types-transactions'
 
 export interface TransitionLogsResult {
   resolved?: MaintenanceLog
@@ -699,6 +740,10 @@ export interface MaintenanceLogRepository {
   ): Promise<TransitionLogsResult>
 }
 
+// VehicleBlockRepository lives in ./types-vehicle-block to keep this barrel under
+// the file-size cap (same split as types-review / types-fee-schedule).
+export type { VehicleBlockRepository } from './types-vehicle-block'
+
 export interface VehicleClassFilters {
   status?: 'ACTIVE' | 'ARCHIVED'
   includeArchived?: boolean
@@ -713,81 +758,27 @@ export interface VehicleClassRepository {
   archive(id: string): Promise<VehicleClass | undefined>
 }
 
-export interface FeeScheduleFilters {
-  status?: 'ACTIVE' | 'ARCHIVED'
-  includeArchived?: boolean
-  /**
-   * Explicit tenant filter. ONLY the bypass route layer sets this (from
-   * `?operatorId=`); it narrows a bypass-role read to one tenant. IGNORED for
-   * operator callers — their scope is absolute (see findAll precedence).
-   */
-  operatorId?: string
-  feeType?: 'OVERTIME_HOURLY' | 'CLEANING_FLAT' | 'NO_FUEL_FLAT'
-  /** Narrow to one vehicle class. The string 'null' / explicit null is not a
-   *  filter value here — operator-wide rows surface in an unfiltered list. */
-  vehicleClassId?: string
-}
+// Fee-schedule contract lives in its own module (file-size cap, #978); re-exported.
+export type { FeeScheduleFilters, FeeScheduleRepository } from './types-fee-schedule'
 
-export interface FeeScheduleRepository {
-  findAll(ctx: CallerContext, filters?: FeeScheduleFilters): Promise<FeeSchedule[]>
-  findById(ctx: CallerContext, id: string): Promise<FeeSchedule | undefined>
-  /**
-   * Active-uniqueness pre-check lookup for the service. NOT ctx-scoped — the
-   * caller passes an already-resolved operatorId. Returns the ACTIVE row (if
-   * any) matching (operatorId, feeType, scope) where scope is the per-class id
-   * or `null` (operator-wide). The DB partial unique indexes are the real seal.
-   */
-  findActiveByScope(
-    operatorId: string,
-    feeType: FeeSchedule['feeType'],
-    vehicleClassId: string | null,
-  ): Promise<FeeSchedule | undefined>
-  create(data: Omit<FeeSchedule, 'id' | 'createdAt' | 'updatedAt'>): Promise<FeeSchedule>
-  update(id: string, data: Partial<FeeSchedule>): Promise<FeeSchedule | undefined>
-  archive(id: string): Promise<FeeSchedule | undefined>
-}
+// Renter-document (KYC) data-access interfaces (#459) live in their own module
+// to keep this barrel under the file-size cap; re-exported for callers.
+export type {
+  CreateRenterDocumentData,
+  DocumentVerifyInput,
+  RenterDocumentFilters,
+  RenterDocumentRepository,
+} from './types-renter-document'
 
-export interface RenterDocumentFilters {
-  limit?: number
-  offset?: number
-}
+// Consent data-access interfaces (#613) live in their own module to keep this
+// barrel under the file-size cap; re-exported for callers.
+export type {
+  ConsentAcceptanceListRow,
+  ConsentAcceptanceQuery,
+  ConsentRepository,
+  NewConsentAcceptance,
+} from './types-consent'
 
-/**
- * The verdict a verifier records (#459). `verifierId` is the reviewing staff
- * user; the repo stamps `verifiedAt` itself. APPROVED carries `expiryDate`,
- * REJECTED carries `rejectionReason` — coherence is enforced upstream by
- * `verifyDocumentSchema` + the service.
- */
-export interface DocumentVerifyInput {
-  status: 'APPROVED' | 'REJECTED'
-  verifierId: string
-  expiryDate?: string | null
-  rejectionReason?: string | null
-}
-
-export interface RenterDocumentRepository {
-  /** Renter uploads their own document. Non-staff callers may only create for themselves. */
-  create(ctx: CallerContext, data: CreateRenterDocumentData): Promise<RenterDocument>
-  /** A renter's own documents (gate + list-mine). Staff may read any renter's. */
-  findByRenter(ctx: CallerContext, renterId: string): Promise<RenterDocument[]>
-  findById(ctx: CallerContext, id: string): Promise<RenterDocument | undefined>
-  /** Platform-staff pending-review queue, oldest first, paginated. */
-  listPending(
-    ctx: CallerContext,
-    filters?: RenterDocumentFilters,
-  ): Promise<PaginatedResult<RenterDocument>>
-  /** Platform-staff records a terminal verdict. */
-  verify(
-    ctx: CallerContext,
-    id: string,
-    verdict: DocumentVerifyInput,
-  ): Promise<RenterDocument | undefined>
-  /**
-   * Gate lookup for the verification policy — NOT ctx-scoped (internal). Returns
-   * the renter's APPROVED documents of a given type; the service decides
-   * eligibility against the rental window (expiry).
-   */
-  findApprovedByType(renterId: string, type: RenterDocument['type']): Promise<RenterDocument[]>
-}
-
-export type CreateRenterDocumentData = Pick<RenterDocument, 'renterId' | 'type' | 'storageKey'>
+// Reviews bounded-context data access (#1067 slice 1) lives in its own module;
+// re-exported for callers (mirrors the payment/consent split above).
+export type { NewReview, ReviewEdit, ReviewRepository } from './types-review'

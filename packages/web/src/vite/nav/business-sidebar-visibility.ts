@@ -1,4 +1,5 @@
 import { resolveViewMode } from '@/vite/view-mode'
+import type { UserRole } from '@kuruma/shared/auth/roles'
 
 export type LayoutPreference = 'sidebar' | 'topnav'
 
@@ -10,7 +11,7 @@ export type LayoutPreference = 'sidebar' | 'topnav'
  */
 export function shouldShowBusinessSidebar(
   preference: LayoutPreference,
-  role: string | undefined,
+  role: UserRole | undefined,
   cookieValue: string | undefined,
 ): boolean {
   return preference === 'sidebar' && resolveViewMode(role, cookieValue) === 'business'

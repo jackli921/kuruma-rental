@@ -13,13 +13,13 @@ import type {
 } from '../repositories/types'
 import type { Booking, BookingEvent, Vehicle } from '../stores'
 import { BookingCreationService } from './booking-creation'
-import { BookingLifecycleService } from './booking-lifecycle'
+import { BookingLifecycleService, type CancellationRefundCoordinator } from './booking-lifecycle'
 import type { BookingPostCommitDispatcher } from './booking-post-commit-dispatcher'
 import { BookingQueryService, type BookingWithOperator } from './booking-query'
 import type {
   BookingVerificationGate,
   CancelResult,
-  CreateBookingInput,
+  CreateBookingRequest,
   CreateBookingResult,
   StatusTransitionResult,
   SubstituteResult,
@@ -33,6 +33,7 @@ export type {
   BookingVerificationGate,
   CancelResult,
   CreateBookingInput,
+  CreateBookingRequest,
   CreateBookingResult,
   StatusTransitionResult,
   SubstituteResult,
@@ -64,6 +65,8 @@ export class BookingService {
     vehicleClassRepo?: VehicleClassRepository,
     // Single post-commit seam (#393, TODO #300): ensureThread + notifications,
     // each caught-and-logged. Shared by the creation and lifecycle services.
+    // Optional is a TEST-ONLY seam: prod always wires it (createApp/index.ts);
+    // omitting it silently disables ALL post-commit effects (threads + emails).
     postCommit?: BookingPostCommitDispatcher,
     // §4h: reads the renter-safe operator projection for findById.
     operatorRepo?: OperatorRepository,
@@ -74,6 +77,9 @@ export class BookingService {
     // #459: optional document-verification gate, wired only when the
     // REQUIRE_DOCUMENT_VERIFICATION flag is on (see index.ts composition root).
     verificationGate?: BookingVerificationGate,
+    // #851: auto-refund coordinator for the cancel paths (PaymentService at the
+    // composition root). Optional so existing wiring/tests stay unaffected.
+    refundInitiator?: CancellationRefundCoordinator,
   ) {
     this.query = new BookingQueryService(
       bookingRepo,
@@ -96,6 +102,7 @@ export class BookingService {
       vehicleRepo,
       vehicleClassRepo,
       postCommit,
+      refundInitiator,
     )
   }
 
@@ -152,7 +159,7 @@ export class BookingService {
 
   create(
     ctx: CallerContext,
-    input: CreateBookingInput,
+    input: CreateBookingRequest,
     now: Date = new Date(),
   ): Promise<CreateBookingResult> {
     return this.creation.create(ctx, input, now)
@@ -167,6 +174,15 @@ export class BookingService {
     reason: string | null = null,
   ): Promise<SubstituteResult> {
     return this.lifecycle.substitute(ctx, bookingId, newVehicleId, reason)
+  }
+
+  assignVehicle(
+    ctx: CallerContext,
+    bookingId: string,
+    vehicleId: string,
+    reason: string | null = null,
+  ): Promise<SubstituteResult> {
+    return this.lifecycle.assignVehicle(ctx, bookingId, vehicleId, reason)
   }
 
   findSubstitutionCandidates(

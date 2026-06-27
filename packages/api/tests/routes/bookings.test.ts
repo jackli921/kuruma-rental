@@ -4,13 +4,16 @@ import { beforeEach, describe, expect, it } from 'vitest'
 import { SYSTEM_CONTEXT } from '../../src/middleware/auth'
 import {
   InMemoryAddOnRepository,
+  InMemoryAvailabilityRepository,
   InMemoryBookingEventRepository,
   InMemoryBookingRepository,
+  InMemoryClassRatePlanRepository,
   InMemoryFeeScheduleRepository,
   InMemoryInsuranceOptionRepository,
   InMemoryLocationRepository,
   InMemoryMaintenanceLogRepository,
   InMemoryUserRepository,
+  InMemoryVehicleBlockRepository,
   InMemoryVehicleClassRepository,
   InMemoryVehicleRepository,
 } from '../../src/repositories/in-memory'
@@ -20,6 +23,12 @@ import { BookingService } from '../../src/services/booking'
 import type { Location, User, Vehicle, VehicleClass } from '../../src/stores'
 import { testAuthMiddleware } from '../helpers/auth'
 import { bookingInput } from '../helpers/booking'
+import { makeInertConsentGate } from '../helpers/consent'
+
+// #877 2b: an inert consent gate (nothing published ⇒ getRequiredReconsents is
+// empty ⇒ allows) so these pre-#877 booking-route tests exercise the create path
+// unchanged. The gate's own blocking behavior is covered in booking-consent-gate.test.ts.
+const inertConsentGate = makeInertConsentGate()
 
 // Slice 6 (#392): a renter books a CONCRETE vehicle chosen in the storefront
 // (slice 5). operatorId / classId / assignedVehicleId / pickup turnaround /
@@ -37,6 +46,9 @@ let locationRepo: InMemoryLocationRepository
 let insuranceOptionRepo: InMemoryInsuranceOptionRepository
 let addOnRepo: InMemoryAddOnRepository
 let feeScheduleRepo: InMemoryFeeScheduleRepository
+let availabilityRepo: InMemoryAvailabilityRepository
+let vehicleBlockRepo: InMemoryVehicleBlockRepository
+let classRatePlanRepo: InMemoryClassRatePlanRepository
 let service: BookingService
 let testClassId: string
 let locationId: string
@@ -140,6 +152,13 @@ describe('Booking Routes', () => {
     insuranceOptionRepo = new InMemoryInsuranceOptionRepository()
     addOnRepo = new InMemoryAddOnRepository()
     feeScheduleRepo = new InMemoryFeeScheduleRepository()
+    vehicleBlockRepo = new InMemoryVehicleBlockRepository()
+    availabilityRepo = new InMemoryAvailabilityRepository(
+      vehicleRepo,
+      bookingRepo,
+      vehicleBlockRepo,
+    )
+    classRatePlanRepo = new InMemoryClassRatePlanRepository()
 
     const klass: VehicleClass = await vehicleClassRepo.create({
       operatorId: OPERATOR,
@@ -186,6 +205,10 @@ describe('Booking Routes', () => {
       addOnRepo,
       feeScheduleRepo,
       userRepo,
+      availabilityRepo,
+      classRatePlanRepo,
+      vehicleClassRepo,
+      vehicleBlockRepo,
     }
     const runInTransaction: RunInTransaction = async (fn) => fn(repos)
 
@@ -199,7 +222,7 @@ describe('Booking Routes', () => {
     app = new Hono()
     // PLATFORM_ADMIN with USER1 identity — mirrors pre-auth test data.
     app.use('*', testAuthMiddleware(USER1, 'PLATFORM_ADMIN'))
-    app.route('/', createBookingRoutes(service))
+    app.route('/', createBookingRoutes(service, inertConsentGate))
   })
 
   describe('GET /bookings', () => {
@@ -298,7 +321,7 @@ describe('Booking Routes', () => {
       // USER2 creates a booking via a separate app instance, on a 2nd vehicle.
       const app2 = new Hono()
       app2.use('*', testAuthMiddleware(USER2, 'ADMIN'))
-      app2.route('/', createBookingRoutes(service))
+      app2.route('/', createBookingRoutes(service, inertConsentGate))
       await app2.request('/bookings', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -308,7 +331,7 @@ describe('Booking Routes', () => {
       // Query as RENTER — should only see own bookings.
       const renterApp = new Hono()
       renterApp.use('*', testAuthMiddleware(USER1, 'RENTER'))
-      renterApp.route('/', createBookingRoutes(service))
+      renterApp.route('/', createBookingRoutes(service, inertConsentGate))
 
       const res = await renterApp.request('/bookings')
       const body = await res.json()
@@ -510,6 +533,78 @@ describe('Booking Routes', () => {
         language: 'en',
       })
     })
+
+    it('filters by needsAssignment=true (CLASS_COMBO floats needing a car)', async () => {
+      // Seed a CLASS_COMBO float: CONFIRMED, no assigned vehicle — should appear
+      const float = await bookingRepo.create(SYSTEM_CONTEXT, {
+        operatorId: OPERATOR,
+        renterId: USER1,
+        classId: testClassId,
+        requestedVehicleId: null,
+        assignedVehicleId: null,
+        pickupLocationId: locationId,
+        dropoffLocationId: locationId,
+        startAt: new Date('2029-01-01T09:00:00Z'),
+        endAt: new Date('2029-01-01T17:00:00Z'),
+        effectiveEndAt: new Date('2029-01-01T17:00:00Z'),
+        status: 'CONFIRMED',
+        source: 'DIRECT',
+        fulfillmentMode: 'CLASS_COMBO',
+        bookingCode: 'NEEDS-ASSGN-01',
+        insuranceOptionId: null,
+        insuranceSnapshot: null,
+        feeSnapshot: [],
+        addOnSnapshot: [],
+        externalId: null,
+        notes: null,
+        totalPrice: null,
+        cancellationFee: null,
+        cancelledAt: null,
+        idempotencyKey: null,
+        disclaimerAcknowledgedAt: null,
+        disclaimerTermsVersion: null,
+      })
+
+      // Seed a SPECIFIC booking — should NOT appear in needsAssignment results
+      await bookingRepo.create(SYSTEM_CONTEXT, {
+        operatorId: OPERATOR,
+        renterId: USER1,
+        classId: testClassId,
+        requestedVehicleId: seededVehicleId,
+        assignedVehicleId: seededVehicleId,
+        pickupLocationId: locationId,
+        dropoffLocationId: locationId,
+        startAt: new Date('2029-01-02T09:00:00Z'),
+        endAt: new Date('2029-01-02T17:00:00Z'),
+        effectiveEndAt: new Date('2029-01-02T17:00:00Z'),
+        status: 'CONFIRMED',
+        source: 'DIRECT',
+        fulfillmentMode: 'SPECIFIC',
+        bookingCode: 'NEEDS-ASSGN-02',
+        insuranceOptionId: null,
+        insuranceSnapshot: null,
+        feeSnapshot: [],
+        addOnSnapshot: [],
+        externalId: null,
+        notes: null,
+        totalPrice: null,
+        cancellationFee: null,
+        cancelledAt: null,
+        idempotencyKey: null,
+        disclaimerAcknowledgedAt: null,
+        disclaimerTermsVersion: null,
+      })
+
+      const res = await app.request('/bookings?needsAssignment=true')
+      const body = await res.json()
+
+      expect(res.status).toBe(200)
+      expect(body.success).toBe(true)
+      expect(body.data).toHaveLength(1)
+      expect(body.data[0].id).toBe(float.id)
+      expect(body.data[0].fulfillmentMode).toBe('CLASS_COMBO')
+      expect(body.data[0].assignedVehicleId).toBeNull()
+    })
   })
 
   describe('GET /bookings — cursor pagination', () => {
@@ -633,12 +728,54 @@ describe('Booking Routes', () => {
       expect(body.data.bookingCode.length).toBeGreaterThan(0)
     })
 
+    // #464 slice 2d.4: parallel CLASS_COMBO submits on the same (operator,
+    // class, location) triple must serialize through the advisory lock so the
+    // class can be sold at most once per available car. Five concurrent POSTs
+    // with capacity=1 ⇒ exactly one CONFIRMED, four CLASS_COMBO_SOLD_OUT. The
+    // load-bearing test for the lock contract on the in-memory adapter; the
+    // real-pg parallel test rides slice 2d.5.
+    it('serializes parallel CLASS_COMBO POSTs so at most cars-on-hand 201, the rest 409', async () => {
+      // Capacity=1: retire seededVehicle2 so only seededVehicle1 counts as supply
+      // for the (OPERATOR, testClass, location) triple.
+      const v2 = await vehicleRepo.findById(SYSTEM_CONTEXT, seededVehicle2Id)
+      ;(v2 as Vehicle).status = 'RETIRED'
+      await classRatePlanRepo.create({
+        operatorId: OPERATOR,
+        classId: testClassId,
+        pickupLocationId: locationId,
+        dayRateJpy: 6000,
+        isActive: true,
+        label: null,
+      })
+      const { requestedVehicleId: _drop, ...rest } = validBookingInput()
+      const body = { ...rest, fulfillmentMode: 'CLASS_COMBO', classId: testClassId }
+
+      // Fire five concurrent submits — same body, same triple, same window.
+      const responses = await Promise.all(Array.from({ length: 5 }, () => createBooking(body)))
+      const statuses = responses.map((r) => r.status).sort()
+      expect(statuses).toEqual([201, 409, 409, 409, 409])
+
+      const failed = responses.filter((r) => r.status === 409)
+      const codes = await Promise.all(
+        failed.map(async (r) => {
+          const json = (await r.json()) as { code?: string }
+          return json.code
+        }),
+      )
+      expect(codes).toEqual([
+        'CLASS_COMBO_SOLD_OUT',
+        'CLASS_COMBO_SOLD_OUT',
+        'CLASS_COMBO_SOLD_OUT',
+        'CLASS_COMBO_SOLD_OUT',
+      ])
+    })
+
     // #613 consent gate keys on RENTER role; the default test app authenticates
     // as ADMIN (staff), so these mount a renter-authed app over the same service.
     function renterRequest(input: Record<string, unknown>) {
       const renterApp = new Hono()
       renterApp.use('*', testAuthMiddleware(USER1, 'RENTER'))
-      renterApp.route('/', createBookingRoutes(service))
+      renterApp.route('/', createBookingRoutes(service, inertConsentGate))
       return renterApp.request('/bookings', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -1192,7 +1329,7 @@ describe('Booking Routes', () => {
 
       const renterApp = new Hono()
       renterApp.use('*', testAuthMiddleware(USER1, 'RENTER'))
-      renterApp.route('/', createBookingRoutes(service))
+      renterApp.route('/', createBookingRoutes(service, inertConsentGate))
 
       const res = await renterApp.request(`/bookings/${created.data.id}/status`, {
         method: 'PATCH',
@@ -1406,14 +1543,14 @@ describe('Booking Routes', () => {
     function operatorApp() {
       const opApp = new Hono()
       opApp.use('*', testAuthMiddleware(OP_USER, 'OPERATOR_OWNER', OPERATOR))
-      opApp.route('/', createBookingRoutes(service))
+      opApp.route('/', createBookingRoutes(service, inertConsentGate))
       return opApp
     }
 
     it('forbids a renter from substituting (403)', async () => {
       const renterApp = new Hono()
       renterApp.use('*', testAuthMiddleware(USER1, 'RENTER'))
-      renterApp.route('/', createBookingRoutes(service))
+      renterApp.route('/', createBookingRoutes(service, inertConsentGate))
 
       const res = await renterApp.request(`/bookings/${crypto.randomUUID()}/substitute`, {
         method: 'POST',
@@ -1470,6 +1607,105 @@ describe('Booking Routes', () => {
     })
   })
 
+  describe('POST /bookings/:id/assign', () => {
+    // An OPERATOR_OWNER app scoped to the booking's operator tenant.
+    function operatorApp() {
+      const opApp = new Hono()
+      opApp.use('*', testAuthMiddleware(OP_USER, 'OPERATOR_OWNER', OPERATOR))
+      opApp.route('/', createBookingRoutes(service, inertConsentGate))
+      return opApp
+    }
+
+    // Seed a CLASS_COMBO float (unassigned) that the operator can assign a car to.
+    // Uses bookingInput() helper for correct field types (Date objects, etc.) then
+    // overrides the CLASS_COMBO-specific fields.
+    async function createComboFloat(): Promise<string> {
+      const HOUR = 60 * 60 * 1000
+      const startAt = new Date(Date.now() + 24 * HOUR)
+      const endAt = new Date(Date.now() + 48 * HOUR)
+      const float = await bookingRepo.create(
+        SYSTEM_CONTEXT,
+        bookingInput({
+          renterId: USER1,
+          operatorId: OPERATOR,
+          classId: testClassId,
+          pickupLocationId: locationId,
+          dropoffLocationId: locationId,
+          requestedVehicleId: null,
+          assignedVehicleId: null,
+          startAt,
+          endAt,
+          effectiveEndAt: endAt,
+          status: 'CONFIRMED',
+          fulfillmentMode: 'CLASS_COMBO',
+          totalPrice: 10000,
+        }),
+      )
+      return float.id
+    }
+
+    it('forbids a renter from assigning (403)', async () => {
+      const renterApp = new Hono()
+      renterApp.use('*', testAuthMiddleware(USER1, 'RENTER'))
+      renterApp.route('/', createBookingRoutes(service, inertConsentGate))
+
+      const res = await renterApp.request(`/bookings/${crypto.randomUUID()}/assign`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ vehicleId: seededVehicleId }),
+      })
+
+      expect(res.status).toBe(403)
+      const body = await res.json()
+      expect(body.success).toBe(false)
+    })
+
+    it('assigns a car to a CLASS_COMBO float (200) and sets assignedVehicleId', async () => {
+      const floatId = await createComboFloat()
+
+      const res = await operatorApp().request(`/bookings/${floatId}/assign`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ vehicleId: seededVehicleId, reason: 'Assigned by operator' }),
+      })
+
+      expect(res.status).toBe(200)
+      const body = await res.json()
+      expect(body.success).toBe(true)
+      expect(body.data.assignedVehicleId).toBe(seededVehicleId)
+    })
+
+    it('returns 409 with code NOT_A_COMBO when booking is a SPECIFIC (non-combo) booking', async () => {
+      const createRes = await createBooking(validBookingInput())
+      const created = await createRes.json()
+
+      const res = await operatorApp().request(`/bookings/${created.data.id}/assign`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ vehicleId: seededVehicle2Id }),
+      })
+
+      expect(res.status).toBe(409)
+      const body = await res.json()
+      expect(body.success).toBe(false)
+      expect(body.code).toBe('NOT_A_COMBO')
+    })
+
+    it('rejects a non-UUID vehicleId with 400', async () => {
+      const floatId = await createComboFloat()
+
+      const res = await operatorApp().request(`/bookings/${floatId}/assign`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ vehicleId: 'not-a-uuid' }),
+      })
+
+      expect(res.status).toBe(400)
+      const body = await res.json()
+      expect(body.success).toBe(false)
+    })
+  })
+
   // #647: the booking-write authorization model as an executable table. Each row
   // is one (role, route) -> outcome cell of the policy documented in
   // docs/architecture/booking-authz.md: status advance is management-wide
@@ -1481,13 +1717,13 @@ describe('Booking Routes', () => {
     function operatorApp() {
       const a = new Hono()
       a.use('*', testAuthMiddleware(OP_USER, 'OPERATOR_OWNER', OPERATOR))
-      a.route('/', createBookingRoutes(service))
+      a.route('/', createBookingRoutes(service, inertConsentGate))
       return a
     }
     function renterApp() {
       const a = new Hono()
       a.use('*', testAuthMiddleware(USER1, 'RENTER'))
-      a.route('/', createBookingRoutes(service))
+      a.route('/', createBookingRoutes(service, inertConsentGate))
       return a
     }
     async function freshBookingId(): Promise<string> {
@@ -1603,7 +1839,7 @@ describe('Booking Routes', () => {
     function operatorApp() {
       const opApp = new Hono()
       opApp.use('*', testAuthMiddleware(OP_USER, 'OPERATOR_OWNER', OPERATOR))
-      opApp.route('/', createBookingRoutes(service))
+      opApp.route('/', createBookingRoutes(service, inertConsentGate))
       return opApp
     }
 
@@ -1622,7 +1858,7 @@ describe('Booking Routes', () => {
     it('forbids a renter (403)', async () => {
       const renterApp = new Hono()
       renterApp.use('*', testAuthMiddleware(USER1, 'RENTER'))
-      renterApp.route('/', createBookingRoutes(service))
+      renterApp.route('/', createBookingRoutes(service, inertConsentGate))
 
       const res = await renterApp.request(
         `/bookings/${crypto.randomUUID()}/substitution-candidates`,

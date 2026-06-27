@@ -7,17 +7,39 @@ import {
 import type { RegionNode } from '@kuruma/shared/types/region'
 import type { ResultLocation, SearchResultItem } from '@kuruma/shared/types/search-result'
 
-/** Stable list key — the renter-safe per-car id for SPECIFIC, the class id for a
- *  future CLASS_COMBO row (#464). Shared by the flat list and the map+list view. */
+/** Stable list key — the renter-safe per-car id for SPECIFIC, a location-namespaced
+ *  class id for a CLASS_COMBO row (#464) so the same class offered at two storefronts
+ *  never collides into one React key. Mirrors the API cursor `itemKey` (`c:<loc>:<class>`),
+ *  minus the kind prefix the list doesn't need. Shared by the flat list and map+list view.
+ *  Switched (vs ternary) so a future `kind` is a tsc error here — the web ships
+ *  independently of the API, so a stale bundle can't silently produce a collision-prone
+ *  key for an unknown variant (matches #1094/#1096). */
 export function searchResultKey(item: SearchResultItem): string {
-  return item.kind === 'SPECIFIC' ? item.vehicleId : item.classId
+  switch (item.kind) {
+    case 'SPECIFIC':
+      return item.vehicleId
+    case 'CLASS_COMBO':
+      return `${item.location.locationId}:${item.classId}`
+    default:
+      item satisfies never
+      return ''
+  }
 }
 
 type Translate = (key: string, values?: Record<string, string | number>) => string
 
-/** Human title of a result row: the car name (SPECIFIC) or class label (CLASS_COMBO). */
+/** Human title of a result row: the car name (SPECIFIC) or class label (CLASS_COMBO).
+ *  Switched (vs ternary) so a future `kind` is a tsc error here — see searchResultKey. */
 export function resultTitle(item: SearchResultItem): string {
-  return item.kind === 'SPECIFIC' ? item.name : item.classLabel
+  switch (item.kind) {
+    case 'SPECIFIC':
+      return item.name
+    case 'CLASS_COMBO':
+      return item.classLabel
+    default:
+      item satisfies never
+      return ''
+  }
 }
 
 /** "From ¥X / day" (or hourly, or price-on-request) — shared by the list row and

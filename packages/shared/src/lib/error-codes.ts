@@ -17,6 +17,9 @@ export const ERROR_CODES = [
   'INVALID_VEHICLE_CLASS',
   'CLASS_HAS_ACTIVE_BOOKINGS',
   'LOCATION_HAS_ACTIVE_BOOKINGS',
+  // #464: a CLASS_COMBO booking is accepted by the validator but combo creation
+  // (inventory guard + rate-plan pricing) is not yet built — POST /bookings 501s.
+  'NOT_IMPLEMENTED',
   // Laundered onto the booking-create envelope via `CreateBookingResult.code`
   // (booking-creation.ts → bookings.ts `fail(c, …, { code: createResult.code })`):
   // pricing (`@kuruma/shared/lib/pricing`) and rental-rule (`…/lib/rental-rules`)
@@ -30,6 +33,31 @@ export const ERROR_CODES = [
   'RENTAL_RULE_MAX_DURATION',
   // §5.3 (#916): the rental ends after the vehicle's shaken/insurance expires.
   'VEHICLE_DOCS_EXPIRE_BEFORE_RETURN',
+  // #464 2d.3 CLASS_COMBO submit codes:
+  //  NO_COMBO_RATE_SET — the (operator, class, pickupLocation) triple has no
+  //   ACTIVE class rate plan, so the deal isn't published; combo create 400s.
+  //  CLASS_COMBO_SOLD_OUT — class fleet supply for the requested window is
+  //   already consumed by overlapping bookings (SPECIFIC + combo both count
+  //   via classId + pickupLocationId); combo create 409s.
+  'NO_COMBO_RATE_SET',
+  'CLASS_COMBO_SOLD_OUT',
+  // #1101: a SPECIFIC booking overlaps a scheduled vehicle block (maintenance /
+  // out-of-service / manual hold) on the assigned car over its turnaround-
+  // inclusive window; create 409s.
+  'VEHICLE_BLOCKED',
+  // #1101: an operator schedules a vehicle block whose window overlaps an
+  // existing block on the same car (the vehicle_blocks_no_overlap GiST EXCLUDE);
+  // block create 409s. Distinct from VEHICLE_BLOCKED (a booking hitting a block).
+  'VEHICLE_BLOCK_OVERLAP',
+  // #464 assign: operator assigns a concrete car to a CLASS_COMBO float.
+  //  NOT_A_COMBO         — target booking is not a CLASS_COMBO (e.g. a SPECIFIC booking)
+  //  INVALID_STATUS      — booking is in a terminal status (CANCELLED / COMPLETED)
+  //  VEHICLE_UNAVAILABLE — the assigned car is already booked for the window (exclusion)
+  //  USE_ASSIGN_FOR_COMBO — substitute() called on a CLASS_COMBO; use assignVehicle instead
+  'NOT_A_COMBO',
+  'INVALID_STATUS',
+  'VEHICLE_UNAVAILABLE',
+  'USE_ASSIGN_FOR_COMBO',
 ] as const
 
 export type ErrorCode = (typeof ERROR_CODES)[number]

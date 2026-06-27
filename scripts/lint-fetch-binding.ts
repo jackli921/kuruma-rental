@@ -1,5 +1,5 @@
 // ENFORCES: deployed runtime code uses boundFetch (this===globalThis) — never a detached global `fetch` default (#887)
-// SSOT: code-only — rule undocumented, see #1015
+// SSOT: docs/architecture/modules.md § Runtime invariants (Cloudflare Workers)
 /**
  * Ban detached defaults to the global `fetch` in deployed runtime code (#887).
  *

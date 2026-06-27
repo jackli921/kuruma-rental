@@ -20,6 +20,20 @@ import { composeBookingTotal, rentalDays } from './booking-pricing-helpers'
 import type { CancelResult, StatusTransitionResult, SubstituteResult } from './booking-types'
 import type { LifecycleTrigger } from './notification-dispatcher'
 
+/**
+ * The payment-side capabilities the cancel paths need (#851), owned by the consumer
+ * (DIP) so the lifecycle service never imports PaymentService. The composition root
+ * passes the PaymentService, which structurally satisfies this.
+ */
+export interface CancellationRefundCoordinator {
+  /** Does the booking have a captured (SUCCEEDED) payment? Decides whether a cancel
+   *  owes a refund (REFUND_DUE) or there is nothing to move (ADVISORY). */
+  isBookingPaid(bookingId: string): Promise<boolean>
+  /** Eager, best-effort refund drive after the cancel tx commits REFUND_DUE. A throw
+   *  is the caller's to swallow — the reconciler backstop re-drives from the row. */
+  initiateCancellationRefund(booking: Booking, intendedAmountJpy: number): Promise<void>
+}
+
 // #616 §A: an operator fleet is ~40-50 vehicles; the AVAILABLE same-store subset
 // is far smaller. Scan generously so the substitute picker never silently drops a
 // candidate, while still bounding the read.
@@ -30,6 +44,17 @@ const STATUS_TRIGGER: Partial<Record<BookingStatus, LifecycleTrigger>> = {
   ACTIVE: 'ACTIVATED',
   COMPLETED: 'COMPLETED',
   CANCELLED: 'CANCELLED',
+}
+
+// #851 money policy: an UNPAID cancel has nothing to move (ADVISORY); a PAID cancel
+// owes the tiered refund when any is due (REFUND_DUE) or keeps the whole capture on
+// the FULL tier where nothing is refundable (CAPTURED).
+function renterCancelSettlement(
+  isPaid: boolean,
+  refundAmount: number,
+): Booking['cancellationFeeSettlement'] {
+  if (!isPaid) return 'ADVISORY'
+  return refundAmount > 0 ? 'REFUND_DUE' : 'CAPTURED'
 }
 
 /**
@@ -46,7 +71,12 @@ export class BookingLifecycleService {
     private readonly vehicleClassRepo?: VehicleClassRepository,
     // Single post-commit seam (#393, TODO #300): ensureThread + notifications,
     // each caught-and-logged.
+    // Optional is a TEST-ONLY seam: prod always wires it (createApp/index.ts);
+    // omitting it silently disables ALL post-commit effects (threads + emails).
     private readonly postCommit?: BookingPostCommitDispatcher,
+    // #851: payment-side coordinator for the auto-refund. Optional — when unwired
+    // (tests, pre-#851), cancels stay ADVISORY and never touch Stripe.
+    private readonly refunds?: CancellationRefundCoordinator,
   ) {}
 
   /**
@@ -73,6 +103,17 @@ export class BookingLifecycleService {
         }
         if (booking.status !== 'CONFIRMED' && booking.status !== 'ACTIVE') {
           return { ok: false, status: 409, error: `Cannot substitute a ${booking.status} booking` }
+        }
+        // #464: CLASS_COMBO price is fixed by the rate plan — re-snapshotting off
+        // the new vehicle's dailyRate would corrupt it. Operators must use
+        // assignVehicle() instead, which leaves totalPrice untouched.
+        if (booking.fulfillmentMode === 'CLASS_COMBO') {
+          return {
+            ok: false,
+            status: 409,
+            error: 'Use assign, not substitute, for a class-deal booking',
+            code: 'USE_ASSIGN_FOR_COMBO' as const,
+          }
         }
 
         const replacement = await repos.vehicleRepo.findById(SYSTEM_CONTEXT, newVehicleId)
@@ -110,6 +151,24 @@ export class BookingLifecycleService {
             code: 'VEHICLE_DOCS_EXPIRE_BEFORE_RETURN',
           }
         }
+        // #1152: same scheduled-block guard as create/assign — a 23P01 EXCLUDE only
+        // covers booking-vs-booking, so reject substituting onto the replacement
+        // car's own maintenance/hold window (over [startAt, effectiveEndAt)) before
+        // we bother repricing.
+        const blockConflicts = await repos.vehicleBlockRepo.findOverlapping(
+          replacement.id,
+          booking.startAt,
+          booking.effectiveEndAt,
+        )
+        if (blockConflicts.length > 0) {
+          return {
+            ok: false,
+            status: 409,
+            error:
+              'Replacement vehicle is blocked (maintenance or hold) for the requested time range',
+            code: 'VEHICLE_BLOCKED',
+          }
+        }
 
         // Re-snapshot price from the new vehicle's rates (#429), preserving any
         // selected-insurance daily price already locked on the booking.
@@ -136,9 +195,10 @@ export class BookingLifecycleService {
           addOns: booking.addOnSnapshot,
         })
 
-        // Turnaround is location-only and the pickup location is unchanged, so
-        // effectiveEndAt is preserved; the repo re-runs the exclusion check for
-        // the NEW assigned vehicle over that window atomically.
+        // Turnaround follows the dropoff location, and substitution changes
+        // neither pickup nor dropoff, so effectiveEndAt is preserved; the repo
+        // re-runs the exclusion check for the NEW assigned vehicle over that
+        // window atomically.
         const updated = await repos.bookingRepo.reassignVehicle(ctx, booking.id, {
           assignedVehicleId: replacement.id,
           totalPrice,
@@ -173,6 +233,110 @@ export class BookingLifecycleService {
           error: 'Replacement vehicle is already booked for this time range',
         }
       }
+      throw err
+    }
+  }
+
+  /**
+   * Operator assigns a concrete car to a CLASS_COMBO float (#464). One transaction:
+   * load the booking (cross-operator -> 404, no leak), validate it is a CLASS_COMBO
+   * in an assignable status, validate the car is AVAILABLE / same operator / same
+   * pickup location / same ACRISS class / road-legal through the booking's endAt,
+   * reassign via bookingRepo.reassignVehicle (exclusion constraint re-checks the
+   * new vehicle atomically -> 409 if it's already booked), and append VEHICLE_ASSIGNED.
+   * Price is intentionally NOT re-snapshotted — the class rate plan fixed it at submit.
+   */
+  async assignVehicle(
+    ctx: CallerContext,
+    bookingId: string,
+    vehicleId: string,
+    reason: string | null,
+  ): Promise<SubstituteResult> {
+    try {
+      const result = await this.runInTransaction(async (repos): Promise<SubstituteResult> => {
+        const booking = await repos.bookingRepo.findById(ctx, bookingId)
+        if (!booking) return { ok: false, status: 404, error: 'Booking not found' }
+        if (booking.fulfillmentMode !== 'CLASS_COMBO')
+          return {
+            ok: false,
+            status: 409,
+            error: 'Only class-deal bookings are assigned a vehicle',
+            code: 'NOT_A_COMBO',
+          }
+        if (booking.status !== 'CONFIRMED' && booking.status !== 'ACTIVE')
+          return {
+            ok: false,
+            status: 409,
+            error: `Cannot assign a vehicle to a ${booking.status} booking`,
+            code: 'INVALID_STATUS',
+          }
+
+        const car = await repos.vehicleRepo.findById(SYSTEM_CONTEXT, vehicleId)
+        // missing OR foreign => 404, no existence leak (mirrors substitute()).
+        if (!car || car.operatorId !== booking.operatorId)
+          return { ok: false, status: 404, error: 'Vehicle not found' }
+        if (car.status !== 'AVAILABLE')
+          return { ok: false, status: 400, error: 'Vehicle is not available' }
+        if ((car.pickupLocationId ?? null) !== booking.pickupLocationId)
+          return { ok: false, status: 400, error: 'Vehicle serves a different pickup location' }
+        if (!car.classId || !(await this.sameAcrissClass(booking.classId, car.classId)))
+          return { ok: false, status: 400, error: 'Vehicle is a different class' }
+        // road-legal asOf = endAt (NOT effectiveEndAt) to match the candidate feeder.
+        if (!isRoadLegal(car, jstDateString(booking.endAt)))
+          return {
+            ok: false,
+            status: 400,
+            error: "Vehicle's shaken or insurance expires before the booking ends",
+            code: 'VEHICLE_DOCS_EXPIRE_BEFORE_RETURN',
+          }
+        // #1152: a scheduled vehicle_block (maintenance/hold) on the target car is a
+        // hard conflict — the SAME service-level guard SPECIFIC creation runs
+        // (booking-creation.ts). The GiST EXCLUDE spans only bookings, so blocks are
+        // checked here over the [startAt, effectiveEndAt) turnaround-inclusive window.
+        const blockConflicts = await repos.vehicleBlockRepo.findOverlapping(
+          car.id,
+          booking.startAt,
+          booking.effectiveEndAt,
+        )
+        if (blockConflicts.length > 0)
+          return {
+            ok: false,
+            status: 409,
+            error: 'Vehicle is blocked (maintenance or hold) for the requested time range',
+            code: 'VEHICLE_BLOCKED',
+          }
+
+        // No reprice — class-deal price is fixed by the rate plan. effectiveEndAt is
+        // invariant (turnaround follows the dropoff location, unchanged here).
+        const updated = await repos.bookingRepo.reassignVehicle(ctx, booking.id, {
+          assignedVehicleId: car.id,
+          totalPrice: booking.totalPrice,
+          effectiveEndAt: booking.effectiveEndAt,
+        })
+        if (!updated) return { ok: false, status: 404, error: 'Booking not found' }
+
+        await repos.bookingEventRepo.append(ctx, {
+          bookingId: booking.id,
+          type: 'VEHICLE_ASSIGNED',
+          actorId: ctx.userId,
+          payload: {
+            type: 'VEHICLE_ASSIGNED',
+            fromVehicleId: booking.assignedVehicleId,
+            toVehicleId: car.id,
+            reason,
+          },
+        })
+        return { ok: true, booking: updated }
+      })
+      return result
+    } catch (err) {
+      if (pgErrorCode(err) === PG_ERROR.EXCLUSION_VIOLATION)
+        return {
+          ok: false,
+          status: 409,
+          error: 'Vehicle is already booked for this time range',
+          code: 'VEHICLE_UNAVAILABLE',
+        }
       throw err
     }
   }
@@ -259,6 +423,12 @@ export class BookingLifecycleService {
       }
     }
 
+    // #851: operator cancel of a PAID booking is fee-free → the renter is owed the
+    // FULL total back. The settlement is read before the tx (payment_events is
+    // immutable once SUCCEEDED) and committed REFUND_DUE atomically inside it.
+    const owesRefund =
+      newStatus === 'CANCELLED' && ((await this.refunds?.isBookingPaid(booking.id)) ?? false)
+
     // Projection update + STATUS_CHANGED append in one tx so booking_events stays
     // the source of truth (§3.1) and never drifts from the status column.
     const updated = await this.runInTransaction(async (repos) => {
@@ -277,6 +447,15 @@ export class BookingLifecycleService {
           to: newStatus as Booking['status'],
         },
       })
+      // Commit REFUND_DUE in the same tx (a CANCELLED booking is at the 'ADVISORY'
+      // default). Return the settled projection so callers/emails see REFUND_DUE.
+      if (owesRefund) {
+        const settled = await repos.bookingRepo.markCancellationSettlement(ctx, booking.id, {
+          from: 'ADVISORY',
+          to: 'REFUND_DUE',
+        })
+        if (settled) return settled
+      }
       return next
     })
     if (!updated) {
@@ -290,6 +469,12 @@ export class BookingLifecycleService {
     // (ACTIVE/COMPLETED). Unlisted transitions map to undefined → no email.
     const trigger = STATUS_TRIGGER[newStatus]
     if (trigger) await this.postCommit?.run(ctx, updated, trigger)
+    // Eager refund (#851), best-effort. Gate on the COMMITTED settlement, not the pre-tx
+    // `owesRefund` (#1056): if the in-tx REFUND_DUE write no-op'd, firing would refund a
+    // booking the reconciler can't see. Mirrors cancel()'s settlement === 'REFUND_DUE' gate.
+    if (updated.cancellationFeeSettlement === 'REFUND_DUE') {
+      await this.fireEagerRefund(updated, booking.totalPrice ?? 0)
+    }
     return { ok: true, booking: updated }
   }
 
@@ -320,6 +505,10 @@ export class BookingLifecycleService {
     }
 
     const cancellation = calculateCancellationFee(booking.startAt, now, booking.totalPrice ?? 0)
+    // #851: a PAID booking owes a refund; the settlement state is written IN the
+    // cancel tx so the durable work queue can never miss it on a crash.
+    const isPaid = (await this.refunds?.isBookingPaid(booking.id)) ?? false
+    const settlement = renterCancelSettlement(isPaid, cancellation.refundAmount)
 
     // Projection cancel + BOOKING_CANCELLED append in one tx so the event log
     // records every lifecycle transition, not just create/substitute (§3.1).
@@ -328,6 +517,7 @@ export class BookingLifecycleService {
         from: booking.status,
         fee: cancellation.feeAmount,
         cancelledAt: now,
+        settlement,
       })
       if (!next) return undefined
       await repos.bookingEventRepo.append(ctx, {
@@ -352,6 +542,26 @@ export class BookingLifecycleService {
     }
     // Post-commit (#664): tell the renter their booking was cancelled.
     await this.postCommit?.run(ctx, updated, 'CANCELLED')
+    // Eager refund (#851), best-effort: only when we durably committed REFUND_DUE.
+    if (settlement === 'REFUND_DUE') {
+      await this.fireEagerRefund(updated, cancellation.refundAmount)
+    }
     return { ok: true, booking: updated, cancellation }
+  }
+
+  /** Eager, best-effort kick of the refund after a cancel commits REFUND_DUE (#851).
+   *  Caught-and-logged like the post-commit dispatcher: a Stripe hiccup must never
+   *  roll back (or 500) the cancel — the booking is durably REFUND_DUE and the
+   *  reconciler backstop re-drives. */
+  private async fireEagerRefund(booking: Booking, intendedAmountJpy: number): Promise<void> {
+    if (!this.refunds) return
+    try {
+      await this.refunds.initiateCancellationRefund(booking, intendedAmountJpy)
+    } catch (err) {
+      console.error('[refund:eager] initiate failed; left REFUND_DUE for the reconciler', {
+        bookingId: booking.id,
+        error: err instanceof Error ? err.message : String(err),
+      })
+    }
   }
 }

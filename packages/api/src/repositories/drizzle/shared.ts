@@ -4,6 +4,7 @@ import {
   addOnOptions,
   bookingEvents,
   bookings,
+  classRatePlans,
   insuranceOptions,
   feeSchedules,
   locations,
@@ -11,8 +12,11 @@ import {
   messages,
   paymentAnomalies,
   paymentEvents,
+  paymentRefunds,
+  reviews,
   threadParticipants,
   threads,
+  vehicleBlocks,
   vehicleClasses,
   vehicles,
 } from '@kuruma/shared/db/schema'
@@ -22,6 +26,7 @@ import type {
   AddOn,
   Booking,
   BookingEvent,
+  ClassRatePlan,
   InsuranceOption,
   FeeSchedule,
   Location,
@@ -29,9 +34,12 @@ import type {
   Message,
   PaymentAnomaly,
   PaymentEvent,
+  PaymentRefund,
+  Review,
   Thread,
   ThreadParticipant,
   Vehicle,
+  VehicleBlock,
   VehicleClass,
 } from '../../stores'
 
@@ -154,6 +162,17 @@ export const feeScheduleColumns = {
   createdAt: feeSchedules.createdAt,
   updatedAt: feeSchedules.updatedAt,
 }
+export const classRatePlanColumns = {
+  id: classRatePlans.id,
+  operatorId: classRatePlans.operatorId,
+  classId: classRatePlans.classId,
+  pickupLocationId: classRatePlans.pickupLocationId,
+  dayRateJpy: classRatePlans.dayRateJpy,
+  isActive: classRatePlans.isActive,
+  label: classRatePlans.label,
+  createdAt: classRatePlans.createdAt,
+  updatedAt: classRatePlans.updatedAt,
+}
 export const paymentEventColumns = {
   id: paymentEvents.id,
   operatorId: paymentEvents.operatorId,
@@ -168,6 +187,36 @@ export const paymentEventColumns = {
   status: paymentEvents.status,
   createdAt: paymentEvents.createdAt,
 }
+export const paymentRefundColumns = {
+  id: paymentRefunds.id,
+  bookingId: paymentRefunds.bookingId,
+  operatorId: paymentRefunds.operatorId,
+  stripePaymentIntentId: paymentRefunds.stripePaymentIntentId,
+  stripeRefundId: paymentRefunds.stripeRefundId,
+  amountJpy: paymentRefunds.amountJpy,
+  status: paymentRefunds.status,
+  createdAt: paymentRefunds.createdAt,
+  updatedAt: paymentRefunds.updatedAt,
+}
+export const reviewColumns = {
+  id: reviews.id,
+  bookingId: reviews.bookingId,
+  operatorId: reviews.operatorId,
+  authorUserId: reviews.authorUserId,
+  authorRole: reviews.authorRole,
+  subject: reviews.subject,
+  subjectVehicleId: reviews.subjectVehicleId,
+  subjectClassId: reviews.subjectClassId,
+  overall: reviews.overall,
+  subRatings: reviews.subRatings,
+  comment: reviews.comment,
+  moderationStatus: reviews.moderationStatus,
+  revealDeadlineAt: reviews.revealDeadlineAt,
+  submittedAt: reviews.submittedAt,
+  publishedAt: reviews.publishedAt,
+  createdAt: reviews.createdAt,
+  updatedAt: reviews.updatedAt,
+}
 
 export const paymentAnomalyColumns = {
   id: paymentAnomalies.id,
@@ -181,6 +230,9 @@ export const paymentAnomalyColumns = {
   expectedAmountJpy: paymentAnomalies.expectedAmountJpy,
   currency: paymentAnomalies.currency,
   resolvedAt: paymentAnomalies.resolvedAt,
+  resolution: paymentAnomalies.resolution,
+  resolvedBy: paymentAnomalies.resolvedBy,
+  note: paymentAnomalies.note,
   createdAt: paymentAnomalies.createdAt,
 }
 
@@ -267,6 +319,19 @@ export const maintenanceLogColumns = {
   updatedAt: maintenanceLogs.updatedAt,
 }
 
+export const vehicleBlockColumns = {
+  id: vehicleBlocks.id,
+  operatorId: vehicleBlocks.operatorId,
+  vehicleId: vehicleBlocks.vehicleId,
+  startAt: vehicleBlocks.startAt,
+  endAt: vehicleBlocks.endAt,
+  kind: vehicleBlocks.kind,
+  reason: vehicleBlocks.reason,
+  notes: vehicleBlocks.notes,
+  createdBy: vehicleBlocks.createdBy,
+  createdAt: vehicleBlocks.createdAt,
+}
+
 // --- Shared date/time helpers ---
 
 export function overlapHours(
@@ -299,13 +364,17 @@ type LocationRow = ColumnRow<typeof locationColumns>
 type InsuranceOptionRow = ColumnRow<typeof insuranceOptionColumns>
 type AddOnOptionRow = ColumnRow<typeof addOnOptionColumns>
 type FeeScheduleRow = ColumnRow<typeof feeScheduleColumns>
+type ClassRatePlanRow = ColumnRow<typeof classRatePlanColumns>
 type PaymentEventRow = ColumnRow<typeof paymentEventColumns>
+type PaymentRefundRow = ColumnRow<typeof paymentRefundColumns>
 type PaymentAnomalyRow = ColumnRow<typeof paymentAnomalyColumns>
+type ReviewRow = ColumnRow<typeof reviewColumns>
 type BookingRow = ColumnRow<typeof bookingColumns>
 type BookingEventRow = ColumnRow<typeof bookingEventColumns>
 type ThreadRow = ColumnRow<typeof threadColumns>
 type ThreadParticipantRow = ColumnRow<typeof participantColumns>
 type MaintenanceLogRow = ColumnRow<typeof maintenanceLogColumns>
+type VehicleBlockRow = ColumnRow<typeof vehicleBlockColumns>
 
 /**
  * Decodes stored `photos` entries to wire URLs (#879). The composition root
@@ -414,6 +483,20 @@ export function toFeeSchedule(r: FeeScheduleRow): FeeSchedule {
   }
 }
 
+export function toClassRatePlan(r: ClassRatePlanRow): ClassRatePlan {
+  return {
+    id: r.id,
+    operatorId: r.operatorId,
+    classId: r.classId,
+    pickupLocationId: r.pickupLocationId,
+    dayRateJpy: r.dayRateJpy,
+    isActive: r.isActive,
+    label: r.label,
+    createdAt: r.createdAt,
+    updatedAt: r.updatedAt,
+  }
+}
+
 export function toPaymentEvent(r: PaymentEventRow): PaymentEvent {
   return {
     id: r.id,
@@ -431,6 +514,42 @@ export function toPaymentEvent(r: PaymentEventRow): PaymentEvent {
   }
 }
 
+export function toPaymentRefund(r: PaymentRefundRow): PaymentRefund {
+  return {
+    id: r.id,
+    bookingId: r.bookingId,
+    operatorId: r.operatorId,
+    stripePaymentIntentId: r.stripePaymentIntentId,
+    stripeRefundId: r.stripeRefundId,
+    amountJpy: r.amountJpy,
+    status: r.status,
+    createdAt: r.createdAt,
+    updatedAt: r.updatedAt,
+  }
+}
+
+export function toReview(r: ReviewRow): Review {
+  return {
+    id: r.id,
+    bookingId: r.bookingId,
+    operatorId: r.operatorId,
+    authorUserId: r.authorUserId,
+    authorRole: r.authorRole,
+    subject: r.subject,
+    subjectVehicleId: r.subjectVehicleId,
+    subjectClassId: r.subjectClassId,
+    overall: r.overall,
+    subRatings: r.subRatings,
+    comment: r.comment,
+    moderationStatus: r.moderationStatus,
+    revealDeadlineAt: r.revealDeadlineAt,
+    submittedAt: r.submittedAt,
+    publishedAt: r.publishedAt,
+    createdAt: r.createdAt,
+    updatedAt: r.updatedAt,
+  }
+}
+
 export function toPaymentAnomaly(r: PaymentAnomalyRow): PaymentAnomaly {
   return {
     id: r.id,
@@ -444,6 +563,9 @@ export function toPaymentAnomaly(r: PaymentAnomalyRow): PaymentAnomaly {
     expectedAmountJpy: r.expectedAmountJpy,
     currency: r.currency,
     resolvedAt: r.resolvedAt,
+    resolution: r.resolution,
+    resolvedBy: r.resolvedBy,
+    note: r.note,
     createdAt: r.createdAt,
   }
 }
@@ -559,6 +681,21 @@ export function toMaintenanceLog(r: MaintenanceLogRow): MaintenanceLog {
     resolvedAt: r.resolvedAt,
     createdAt: r.createdAt,
     updatedAt: r.updatedAt,
+  }
+}
+
+export function toVehicleBlock(r: VehicleBlockRow): VehicleBlock {
+  return {
+    id: r.id,
+    operatorId: r.operatorId,
+    vehicleId: r.vehicleId,
+    startAt: r.startAt,
+    endAt: r.endAt,
+    kind: r.kind,
+    reason: r.reason,
+    notes: r.notes,
+    createdBy: r.createdBy,
+    createdAt: r.createdAt,
   }
 }
 

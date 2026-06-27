@@ -5,6 +5,7 @@ import {
   resolveGeoContext,
   resultPriceLabel,
   resultTitle,
+  searchResultKey,
 } from '@/vite/search/result'
 import { haversineKm } from '@kuruma/shared/lib/region-distance'
 import type { RegionNode } from '@kuruma/shared/types/region'
@@ -60,6 +61,23 @@ describe('resultTitle', () => {
   })
   it('uses the class label for a CLASS_COMBO result', () => {
     expect(resultTitle(combo)).toBe('SUV')
+  })
+})
+
+describe('searchResultKey', () => {
+  it('uses the renter-safe per-car vehicleId for a SPECIFIC result', () => {
+    expect(searchResultKey(base)).toBe('v1')
+  })
+
+  it('namespaces a CLASS_COMBO by location so the same class at two stores stays distinct', () => {
+    const here = searchResultKey(combo)
+    const elsewhere = searchResultKey({
+      ...combo,
+      location: { ...combo.location, locationId: 'l2' },
+    })
+    expect(here).toBe('l:cls_suv')
+    expect(elsewhere).toBe('l2:cls_suv')
+    expect(here).not.toBe(elsewhere)
   })
 })
 

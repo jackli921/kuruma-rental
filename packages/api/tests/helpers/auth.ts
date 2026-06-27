@@ -59,12 +59,15 @@ export async function authHeaders(payload?: { sub: string; role?: string }): Pro
  *  `state` names the cookie; returnTo/intent/invite ride in its value (#519). */
 export function oauthFlowCookie(
   state: string,
-  flow: { returnTo?: string; intent?: OAuthIntent; invite?: string } = {},
+  flow: { returnTo?: string; intent?: OAuthIntent; invite?: string; nonce?: string } = {},
 ): string {
   const value = encodeFlowPayload({
     returnTo: flow.returnTo,
     intent: flow.intent ?? 'renter',
     invite: flow.invite,
+    // #1055: every flow carries a nonce the callback binds the id_token to. Default
+    // to a fixed value so a test can assert it reaches the verifier, override per-test.
+    nonce: flow.nonce ?? 'test-nonce',
   })
   return `${flowCookieName(state)}=${value}`
 }

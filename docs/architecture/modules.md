@@ -174,6 +174,18 @@ It scans `packages/{api,web,shared}/src` and enforces three rules:
 No feature-folder structure. Schema and validators already live in per-feature
 files (`db/schema.ts`, `validators/<feature>.ts`). Import from `@kuruma/shared/*`.
 
+**Enforced invariants:**
+
+- **Every `@kuruma/shared/*` import path must have a matching entry in
+  `packages/shared/package.json` "exports".** Bun's workspace mode resolves a
+  missing entry via filesystem fallback, masking it — but stricter bundlers and
+  non-workspace consumers fail. Guarded by `scripts/lint-export-drift.ts`.
+- **Every foreign-key column in the drizzle schema must have a covering index**
+  (the FK column as a primary key, or the leading column of a composite index).
+  Postgres does not auto-index FK columns; an unindexed FK turns every JOIN or
+  WHERE-by-fk into a sequential scan — invisible at 50 rows, outage-grade at 50k.
+  Guarded by `scripts/lint-fk-indexes.ts`.
+
 ---
 
 ## File-size rules (everywhere)
@@ -182,6 +194,34 @@ files (`db/schema.ts`, `validators/<feature>.ts`). Import from `@kuruma/shared/*
 `bun run lint` and the pre-commit hook):
 
 - **Soft warn at 400 lines, hard fail at 800 lines** for source files.
+- **`modules/<feature>/routes.ts` hard-caps at 150 lines** (no soft warn) —
+  route files stay thin; orchestration belongs in the service layer.
+- **`app/**/page.tsx` hard-caps at 80 lines** (no soft warn), outside a frozen
+  pre-R7 exempt list — pages compose modules, they don't hold logic. Never add
+  to the exempt list; refactor into `modules/<feature>/` instead.
+
+---
+
+## Runtime invariants (Cloudflare Workers)
+
+The web and API deploy to the Cloudflare Workers/Pages runtime, where the global
+`fetch` is a branded builtin that throws "Illegal invocation" unless called with
+`this === globalThis`.
+
+- **Deployed runtime code must never default a parameter or field to the bare
+  global `fetch`** — `fetchFn: typeof fetch = fetch` captures it detached. Use
+  `boundFetch` from `@kuruma/shared/lib/bound-fetch` instead. Guarded by
+  `scripts/lint-fetch-binding.ts` (#887).
+
+- **The CSP `script-src` in `packages/web/public/_headers` must pin the inline
+  bootstrap script by its `sha256-…` hash and carry no `'unsafe-inline'`.** The
+  pin must match the script as actually emitted into `dist/index.html` by
+  `vite build` — not just the source shell. Guarded at two altitudes:
+  `tests/deploy/csp-script-hash.test.ts` hashes the source for fast pre-build
+  feedback; `scripts/lint-csp-hash.ts` (run `bun run lint:csp-hash` post-build in
+  CI) hashes the built artifact the browser receives. A Vite upgrade that changed
+  inline-script emission would diverge the served hash from the pin and silently
+  block the bootstrap once the policy flips to enforcing (#500).
 
 ---
 

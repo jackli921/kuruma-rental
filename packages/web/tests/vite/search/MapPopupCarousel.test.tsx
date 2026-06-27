@@ -1,5 +1,9 @@
 import { MapPopupCarousel } from '@/vite/search/MapPopupCarousel'
-import type { SpecificSearchResult } from '@kuruma/shared/types/search-result'
+import type {
+  ClassComboSearchResult,
+  SearchResultItem,
+  SpecificSearchResult,
+} from '@kuruma/shared/types/search-result'
 import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import type { ReactNode } from 'react'
@@ -62,8 +66,35 @@ function carAt(vehicleId: string, name: string): SpecificSearchResult {
   }
 }
 
+function comboAt(
+  classId: string,
+  classLabel: string,
+  availableCount: number,
+): ClassComboSearchResult {
+  return {
+    kind: 'CLASS_COMBO',
+    location: {
+      locationId: 'loc_namba',
+      operatorId: 'op_best',
+      operatorName: 'Best Car Rental',
+      name: 'Namba',
+      address: 'Osaka',
+      latitude: 34.66,
+      longitude: 135.5,
+    },
+    dailyRateJpy: 6500,
+    hourlyRateJpy: null,
+    classLabel,
+    acrissCode: 'CCAR',
+    seats: 5,
+    photos: [],
+    classId,
+    availableCount,
+  }
+}
+
 function renderCarousel(
-  items: SpecificSearchResult[],
+  items: SearchResultItem[],
   ctx?: { classFilter?: string | string[]; region?: string; geoLabel?: string | null },
 ) {
   return render(
@@ -163,5 +194,17 @@ describe('MapPopupCarousel', () => {
   it('renders the geo-context line when a label is provided', () => {
     renderCarousel([carAt('v1', 'Toyota Yaris')], { geoLabel: 'Namba, Osaka · 1.2 km away' })
     expect(screen.getByText('Namba, Osaka · 1.2 km away')).toBeInTheDocument()
+  })
+
+  it('marks a CLASS_COMBO slide as a class deal with its inventory count (#464)', () => {
+    renderCarousel([comboAt('class_compact', 'Compact', 3)])
+    // The class label is the title; the badge says "class deal" (not a redundant
+    // second copy of the label), and the live availability count stands in for a
+    // single car's identity.
+    // The label appears exactly once (the title) — the badge reads "Class deal",
+    // not a redundant second copy of the class label.
+    expect(screen.getAllByText('Compact')).toHaveLength(1)
+    expect(screen.getByText('Class deal')).toBeInTheDocument()
+    expect(screen.getByText('3 cars available')).toBeInTheDocument()
   })
 })

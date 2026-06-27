@@ -43,6 +43,17 @@ export const FEE_SCHEDULES_CLASS_FK = 'fee_schedules_operator_class_fk'
 export const LOCATIONS_REGION_FK = 'locations_regionId_regions_id_fk'
 
 /**
+ * GiST EXCLUDE on vehicle_blocks (operatorId, vehicleId, [startAt,endAt)),
+ * named explicitly in migration 0082 (#1101). A 23P01 on this name on the
+ * block-create path means an operator scheduled an overlapping block on the
+ * same vehicle. VehicleBlockService maps it to a 409 (VEHICLE_BLOCK_OVERLAP) —
+ * kept apart from bookings_no_overlap (a 23P01 meaning "already booked").
+ * VEHICLE_BLOCKED is the distinct service-level NOT EXISTS guard for a booking
+ * landing on a block (create + operator assign/substitute, #1152), not a 23P01.
+ */
+export const VEHICLE_BLOCKS_OVERLAP = 'vehicle_blocks_no_overlap'
+
+/**
  * Booking unique constraints the BookingService distinguishes on (#392, §5.4).
  * A `bookingCode` clash is astronomically rare but recoverable: regenerate the
  * code and retry the whole atomic insert. An `idempotencyKey` clash means a
@@ -50,7 +61,13 @@ export const LOCATIONS_REGION_FK = 'locations_regionId_regions_id_fk'
  * Matching by name (not just the 23505 code) keeps the two paths apart.
  */
 export const BOOKING_CODE_CONSTRAINT = 'bookings_bookingCode_unique'
-export const IDEMPOTENCY_CONSTRAINT = 'bookings_idempotencyKey_unique'
+// Real PG index name from migration 0012_idempotency-unique-index.sql
+// (`CREATE UNIQUE INDEX "bookings_idempotency_key"`) — NOT the Drizzle-auto
+// camelCase suffix the schema's `.unique()` would have produced. Surfaced by
+// the #1106 conformance suite: the InMemory uniqueViolation interpolates this
+// constant, so it must match the real PG index name byte-for-byte or services
+// that disambiguate by constraint name drift between impls.
+export const IDEMPOTENCY_CONSTRAINT = 'bookings_idempotency_key'
 
 /**
  * payment_events unique constraints the PaymentService distinguishes on (#461).
@@ -63,6 +80,23 @@ export const IDEMPOTENCY_CONSTRAINT = 'bookings_idempotencyKey_unique'
 export const PAYMENT_EVENT_STRIPE_EVENT_CONSTRAINT = 'payment_events_stripeEventId_unique'
 export const PAYMENT_EVENT_SESSION_CONSTRAINT = 'payment_events_stripeCheckoutSessionId_unique'
 export const PAYMENT_EVENT_ONE_SUCCESS_CONSTRAINT = 'payment_events_one_success_per_booking'
+
+/**
+ * Partial unique index on payment_refunds(stripeRefundId) WHERE stripeRefundId IS
+ * NOT NULL (#851). One Stripe refund (re_…) binds to at most one booking's receipt;
+ * a 23505 on this name means an adoption bug tried to attach the same refund to a
+ * second booking — a loud invariant breach, never a silent no-op.
+ */
+export const PAYMENT_REFUND_STRIPE_REFUND_CONSTRAINT = 'payment_refunds_stripeRefundId_unique'
+
+/**
+ * reviews unique seal (#1067): one review per author per booking per subject. A
+ * 23505 on this name means the same side re-submitted the same subject — the
+ * submission service edits the existing hidden row instead of inserting a second
+ * (a renter still reviews OPERATOR and VEHICLE separately — different subjects).
+ * Matching by name keeps this apart from any future reviews unique.
+ */
+export const REVIEWS_AUTHOR_SUBJECT_CONSTRAINT = 'reviews_author_subject_per_booking_unique'
 
 /**
  * Partial unique index on provider_invites (operatorId, email) WHERE status=

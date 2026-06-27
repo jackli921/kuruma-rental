@@ -9,6 +9,7 @@ import {
   pgTable,
   text,
   timestamp,
+  uniqueIndex,
 } from 'drizzle-orm/pg-core'
 import {
   BOOKING_EVENT_TYPES,
@@ -67,10 +68,14 @@ export const bookings = pgTable(
     classId: text('classId').notNull(),
     // What the renter selected in storefront (slice 5). Immutable audit trail —
     // substitution NEVER mutates this (proposal §2 "Vehicle substitution").
-    requestedVehicleId: text('requestedVehicleId').notNull(),
+    // #464: nullable — a CLASS_COMBO float has no requested car. The
+    // bookings_specific_requires_requested CHECK keeps SPECIFIC rows honest.
+    requestedVehicleId: text('requestedVehicleId'),
     // What the operator fulfills; the exclusion constraint keys on THIS column.
     // Server-derived = requestedVehicleId at submit; operator may substitute.
-    assignedVehicleId: text('assignedVehicleId').notNull(),
+    // #464: nullable — an unassigned CLASS_COMBO float has no car yet; the
+    // operator assigns one on/before pickup (the exclusion constraint skips NULLs).
+    assignedVehicleId: text('assignedVehicleId'),
     pickupLocationId: text('pickupLocationId')
       .notNull()
       .references(() => locations.id),
@@ -139,6 +144,19 @@ export const bookings = pgTable(
     index('idx_bookings_pickupLocationId').on(table.pickupLocationId),
     index('idx_bookings_dropoffLocationId').on(table.dropoffLocationId),
     index('idx_bookings_insuranceOptionId').on(table.insuranceOptionId),
+    // Three hand-SQL indexes that have existed in prod for a while but were never
+    // echoed here, so the drizzle snapshot didn't carry them — a future
+    // `drizzle-kit pull` would silently drop them (the M7 risk class the
+    // snapshot/index parity lint catches). Codified per #1173 / #1150:
+    // - 0010_add-fk-indexes.sql created idx_bookings_renterId
+    // - 0014_add-bookings-status-index.sql created idx_bookings_status
+    // - 0012_idempotency-unique-index.sql created bookings_idempotency_key
+    //   (partial unique on the non-null subset — idempotency keys are optional)
+    index('idx_bookings_renterId').on(table.renterId),
+    index('idx_bookings_status').on(table.status),
+    uniqueIndex('bookings_idempotency_key')
+      .on(table.idempotencyKey)
+      .where(sql`"idempotencyKey" is not null`),
     // Class must belong to the booking's operator (#392). Composite seal.
     foreignKey({
       columns: [table.operatorId, table.classId],
@@ -164,13 +182,17 @@ export const bookings = pgTable(
       foreignColumns: [insuranceOptions.operatorId, insuranceOptions.id],
       name: 'bookings_operator_insurance_fk',
     }),
-    // #463: a SPECIFIC booking MUST name the vehicle it fulfills. A tautology
-    // today (assignedVehicleId is NOT NULL), but #464 makes that column nullable
-    // for CLASS_COMBO — this CHECK then keeps every SPECIFIC row honest instead of
-    // letting the invariant silently evaporate one migration away. #464 relaxes it.
+    // #463/#464: a SPECIFIC booking MUST name both the vehicle it requested and the
+    // one it fulfills. Now that #464 makes both columns nullable for CLASS_COMBO
+    // floats, these CHECKs (not column NOT NULL) are what keep every SPECIFIC row
+    // honest instead of letting the invariant silently evaporate one migration away.
     check(
       'bookings_specific_requires_assigned',
       sql`${table.fulfillmentMode} <> 'SPECIFIC' OR ${table.assignedVehicleId} IS NOT NULL`,
+    ),
+    check(
+      'bookings_specific_requires_requested',
+      sql`${table.fulfillmentMode} <> 'SPECIFIC' OR ${table.requestedVehicleId} IS NOT NULL`,
     ),
   ],
 )

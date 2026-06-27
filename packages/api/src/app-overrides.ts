@@ -4,7 +4,9 @@ import type {
   AddOnRepository,
   AvailabilityRepository,
   BookingRepository,
+  ClassRatePlanRepository,
   ComplianceAlertLogRepository,
+  ConsentRepository,
   CustomerRepository,
   DocumentStorage,
   FeeScheduleRepository,
@@ -19,14 +21,18 @@ import type {
   OverviewRepository,
   PaymentAnomalyRepository,
   PaymentEventRepository,
+  PaymentRefundRepository,
   PhotoStorage,
   ProviderInviteRepository,
+  RefundReconcilerRepository,
   RegionRepository,
   RenterDocumentRepository,
+  ReviewRepository,
   StatsRepository,
   StorefrontRepository,
   ThreadRepository,
   UserRepository,
+  VehicleBlockRepository,
   VehicleClassRepository,
   VehicleDetailRepository,
   VehicleRepository,
@@ -52,6 +58,7 @@ export type AppOverrides = {
   messageRepo?: MessageRepository
   vehicleClassRepo?: VehicleClassRepository
   maintenanceLogRepo?: MaintenanceLogRepository
+  vehicleBlockRepo?: VehicleBlockRepository
   photoStorage?: PhotoStorage
   renterDocumentRepo?: RenterDocumentRepository
   documentStorage?: DocumentStorage
@@ -62,14 +69,19 @@ export type AppOverrides = {
   insuranceOptionRepo?: InsuranceOptionRepository
   addOnRepo?: AddOnRepository
   feeScheduleRepo?: FeeScheduleRepository
+  classRatePlanRepo?: ClassRatePlanRepository
   notificationLogRepo?: NotificationLogRepository
   complianceAlertLogRepo?: ComplianceAlertLogRepository
   storefrontRepo?: StorefrontRepository
   regionRepo?: RegionRepository
   paymentEventRepo?: PaymentEventRepository
+  paymentRefundRepo?: PaymentRefundRepository
+  refundReconcilerRepo?: RefundReconcilerRepository
   paymentAnomalyRepo?: PaymentAnomalyRepository
   providerInviteRepo?: ProviderInviteRepository
   operatorMembershipRepo?: OperatorMembershipRepository
+  consentRepo?: ConsentRepository
+  reviewRepo?: ReviewRepository
   // Inject a fake outbound email port in tests; absent ⇒ the env-resolved
   // Resend/dev-stub/sentinel (resolveEmailSender). Shared by the booking
   // dispatcher and the #916 compliance digest.

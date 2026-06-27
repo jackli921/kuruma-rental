@@ -1,4 +1,12 @@
 {
+  "consent": {
+    "title": "请阅读并同意后继续",
+    "intro": "为继续使用 Kuruma，请阅读并同意以下内容。",
+    "accept": "同意并继续",
+    "accepting": "保存中…",
+    "hint": "请勾选每一项后继续。",
+    "error": "无法保存您的同意，请重试。"
+  },
   "regionPicker": {
     "prefecture": "都道府县",
     "city": "市区町村",
@@ -93,6 +101,7 @@
     "myBookings": "我的预订",
     "documents": "证件",
     "newBookings": "{count} 个新订单",
+    "unreadMessages": "{count} 条未读消息",
     "settings": "设置",
     "team": "团队"
   },
@@ -260,6 +269,11 @@
             "ACTIVE": "使用中",
             "COMPLETED": "已完成",
             "CANCELLED": "已取消"
+          },
+          "floats": {
+            "title": "待分配车辆",
+            "overdue": "已超时",
+            "empty": "暂无待分配的浮动预订"
           }
         }
       },
@@ -317,6 +331,7 @@
       "retireVehicle": "停用车辆",
       "retireConfirm": "确定停用{name}？",
       "retireConfirmMessage": "此车辆将对租客隐藏。您可以稍后恢复。",
+      "retireError": "无法停用车辆，请重试。",
       "noPhoto": "无照片",
       "expiry": {
         "shaken": {
@@ -872,7 +887,10 @@
       "subtitle": "您的对话",
       "empty": "暂无消息",
       "emptyDescription": "开始对话或等待回复。",
-      "unread": "{count} 条未读"
+      "unread": "{count} 条未读",
+      "host": "房东",
+      "loadError": "无法加载您的消息",
+      "retry": "重试"
     },
     "thread": {
       "sendPlaceholder": "输入消息...",
@@ -884,7 +902,14 @@
       "today": "今天",
       "yesterday": "昨天",
       "back": "返回收件箱",
-      "composeLabel": "撰写消息"
+      "composeLabel": "撰写消息",
+      "cancelled": "此预订已取消",
+      "translating": "翻译中...",
+      "translationUnavailable": "无法翻译",
+      "retry": "重试"
+    },
+    "entry": {
+      "messageHost": "给房东发消息"
     }
   },
   "bookings": {
@@ -1062,6 +1087,14 @@
           "cancel": "取消",
           "error": "无法更换车辆，该车辆可能刚被预订。"
         },
+        "assign": {
+          "action": "分配车辆",
+          "dialogTitle": "分配车辆",
+          "dialogDescription": "为此未分配预订选择一辆可用的同级别车辆。选择后，预订将得到满足。",
+          "vehicleLabel": "车辆",
+          "submit": "分配",
+          "error": "无法分配车辆，该车辆可能刚被预订。"
+        },
         "markActive": "标记为已取车",
         "markCompleted": "标记为已还车",
         "settled": "该预订已结束，暂无可执行的操作。",
@@ -1081,6 +1114,8 @@
         "created": "预订已创建",
         "statusChanged": "状态从{from}变更为{to}",
         "vehicleSubstituted": "车辆已更换",
+        "vehicleAssigned": "已分配车辆",
+        "vehicleAssignedSwapped": "已重新分配车辆",
         "reason": "原因：{reason}",
         "cancelled": "预订已取消",
         "cancellationFee": "取消费 {fee}",
@@ -1175,6 +1210,9 @@
     "auto": "自动挡",
     "manual": "手动挡",
     "viewStore": "查看车辆",
+    "classDeal": "车型套餐",
+    "available": "{count, plural, other {剩余 # 辆}}",
+    "comboHint": "提车时分配具体车辆",
     "showOnMap": "在地图上显示",
     "list": {
       "heading": "可用车辆",
@@ -1209,12 +1247,60 @@
   "admin": {
     "nav": {
       "overview": "概览",
+      "bookings": "预订",
       "revenue": "合作伙伴收益",
-      "documents": "证件"
+      "anomalies": "支付异常",
+      "documents": "证件",
+      "governance": "同意治理",
+      "customers": "客户"
     },
     "home": {
       "title": "平台管理",
-      "subtitle": "平台运营"
+      "subtitle": "平台运营",
+      "kpi": {
+        "bookings": "预订量",
+        "gmv": "成交总额",
+        "fleet": "车队规模",
+        "operators": "运营商数量",
+        "unresolvedAnomalies": "未解决异常",
+        "pendingDocs": "待审文件"
+      },
+      "loadError": "无法加载平台概览。",
+      "retry": "重试"
+    },
+    "bookings": {
+      "title": "预订总览",
+      "subtitle": "搜索并查看所有运营商的任意预订。",
+      "empty": "没有符合筛选条件的预订。",
+      "search": "搜索",
+      "clear": "清除",
+      "allStatuses": "全部状态",
+      "filterCustomer": "客户",
+      "filterCustomerPlaceholder": "姓名或邮箱",
+      "filterBookingCode": "预订编号",
+      "filterBookingCodePlaceholder": "例如 ALPHA001",
+      "filterStatus": "状态",
+      "colOperator": "运营商",
+      "colBookingCode": "编号",
+      "colCustomer": "客户",
+      "colStatus": "状态",
+      "colStart": "开始",
+      "status": {
+        "CONFIRMED": "已确认",
+        "ACTIVE": "进行中",
+        "COMPLETED": "已完成",
+        "CANCELLED": "已取消"
+      },
+      "detailCustomer": "客户",
+      "detailEmail": "邮箱",
+      "detailOperatorId": "运营商 ID",
+      "detailStart": "取车",
+      "detailEnd": "还车",
+      "detailTotal": "总计",
+      "detailPickup": "取车地点",
+      "detailDropoff": "还车地点",
+      "loadError": "无法加载预订。",
+      "retry": "重试"
     },
     "revenue": {
       "title": "合作伙伴收益",
@@ -1237,16 +1323,39 @@
     "anomalies": {
       "title": "支付异常",
       "subtitle": "对账时标记的扣款 — 重复扣款应退款，金额不符需核查。",
-      "empty": "没有待处理的支付异常。",
+      "empty": "暂无可显示的支付异常。",
       "colKind": "类型",
       "colBooking": "订单",
       "colReceived": "实收",
       "colExpected": "应收",
       "colStripeEvent": "Stripe 事件",
       "colWhen": "时间",
+      "colAction": "操作",
+      "loadError": "无法加载支付异常。",
+      "retry": "重试",
       "kind": {
         "DOUBLE_PAYMENT": "重复支付",
         "AMOUNT_MISMATCH": "金额不符"
+      },
+      "tab": {
+        "unresolved": "待核查",
+        "resolved": "已处理"
+      },
+      "resolution": {
+        "BENIGN": "无问题",
+        "INVESTIGATED": "已核查 — 无需处理",
+        "REFUNDED_EXTERNALLY": "已在 Stripe 退款"
+      },
+      "resolve": {
+        "action": "处理",
+        "title": "处理异常",
+        "description": "将此标记的扣款标为已审核。此操作仅记录处理结论，不会在此移动任何资金。",
+        "resolutionLabel": "处理结论",
+        "noteLabel": "备注（可选）",
+        "notePlaceholder": "补充说明以便审计追溯",
+        "cancel": "取消",
+        "submit": "处理",
+        "submitting": "处理中…"
       }
     },
     "documents": {
@@ -1264,6 +1373,64 @@
       "reject": "拒绝",
       "error": "无法记录审核结果，请重试。",
       "loadError": "无法加载审核队列。",
+      "retry": "重试"
+    },
+    "governance": {
+      "title": "同意治理",
+      "subtitle": "浏览所有用户的同意接受记录。",
+      "empty": "没有符合条件的同意接受记录。",
+      "colUser": "用户",
+      "colType": "同意类型",
+      "colVersion": "版本",
+      "colAccepted": "接受时间",
+      "colEvidence": "证据",
+      "viewEvidence": "查看证据",
+      "evidenceLinkLabel": "查看 {user} 的同意证据",
+      "filterType": "同意类型",
+      "filterUser": "用户 ID",
+      "filterVersion": "版本",
+      "allTypes": "所有类型",
+      "apply": "应用",
+      "clear": "清除",
+      "loadError": "无法加载同意记录。",
+      "retry": "重试"
+    },
+    "customers": {
+      "title": "客户",
+      "subtitle": "搜索并查看平台上的所有租客。",
+      "searchLabel": "搜索",
+      "searchPlaceholder": "按姓名或邮箱搜索",
+      "sortLabel": "排序方式",
+      "sort": {
+        "lastBookingAt": "最近预订",
+        "bookingCount": "预订最多",
+        "name": "姓名"
+      },
+      "colName": "姓名",
+      "colEmail": "邮箱",
+      "colBookings": "预订数",
+      "colTotalSpent": "消费总额",
+      "colLastBooking": "最近预订",
+      "colCountry": "国家",
+      "colLanguage": "语言",
+      "empty": "没有符合条件的客户。",
+      "unnamed": "未命名客户",
+      "noEmail": "无邮箱",
+      "noVehicle": "未分配车辆",
+      "pagination": "客户分页",
+      "prev": "上一页",
+      "next": "下一页",
+      "bookingsTitle": "预订记录",
+      "bookingsEmpty": "暂无预订。",
+      "detailLoading": "正在加载客户…",
+      "detailEmpty": "该客户已不可用。",
+      "status": {
+        "CONFIRMED": "已确认",
+        "ACTIVE": "进行中",
+        "COMPLETED": "已完成",
+        "CANCELLED": "已取消"
+      },
+      "loadError": "无法加载客户。",
       "retry": "重试"
     }
   },
@@ -1351,6 +1518,32 @@
       "backToListing": "返回列表",
       "continue": "继续",
       "toPayment": "继续支付"
+    }
+  },
+  "reviews": {
+    "prompt": {
+      "cta": "撰写评价",
+      "title": "评价您的行程",
+      "description": "预订 {code} 的体验如何？您的反馈将帮助其他旅行者。"
+    },
+    "form": {
+      "subject": {
+        "OPERATOR": "运营商",
+        "VEHICLE": "车辆"
+      },
+      "overall": "总体评分",
+      "starLabel": "{n} 星",
+      "dimension": {
+        "cleanliness": "清洁度",
+        "accuracy": "准确性",
+        "communication": "沟通",
+        "value": "性价比"
+      },
+      "commentLabel": "关于{subject}的评论",
+      "commentPlaceholder": "分享您的体验详情(可选)",
+      "submit": "提交评价",
+      "pending": "提交中…",
+      "error": "出现错误，请重试。"
     }
   }
 }

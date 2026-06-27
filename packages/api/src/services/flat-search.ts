@@ -1,5 +1,7 @@
 import type {
+  ClassComboSearchResult,
   ResultLocation,
+  SearchResultItem,
   SearchResultsData,
   SpecificSearchResult,
 } from '@kuruma/shared/types/search-result'
@@ -7,6 +9,8 @@ import type { CallerContext } from '../middleware/auth'
 import type {
   AvailabilityFilters,
   AvailabilityRepository,
+  ClassRatePlanFilters,
+  ClassRatePlanRepository,
   RegionRepository,
   Storefront,
   StorefrontFilters,
@@ -15,9 +19,8 @@ import type {
   VehicleClass,
   VehicleClassRepository,
 } from '../repositories/types'
-
-const DEFAULT_LIMIT = 25
-const MAX_LIMIT = 50
+import type { ClassRatePlan } from '../stores'
+import { clampLimit, decodeCursor, encodeCursor } from './search-paging'
 
 export type FlatSearchResult =
   | { ok: true; data: SearchResultsData }
@@ -47,6 +50,11 @@ export interface FlatSearchParams {
  * Renter-safe: builds the DTO from whitelisted columns only (no licence plate,
  * no operator internals — D3). Reuses the exact same `findAvailableVehicles`
  * scan as slice 5; no new availability model.
+ *
+ * #464: a SECOND producer runs over the same page scope — each active class rate
+ * plan at an in-scope storefront becomes one `ClassComboSearchResult` (an exact car
+ * assigned on pickup day), sized by road-legal supply minus overlapping demand.
+ * Both producers merge into one ordered, cursor-paginated list.
  */
 export class FlatSearchService {
   constructor(
@@ -54,6 +62,7 @@ export class FlatSearchService {
     private readonly availabilityRepo: AvailabilityRepository,
     private readonly classRepo: VehicleClassRepository,
     private readonly regionRepo: RegionRepository,
+    private readonly classRatePlanRepo: ClassRatePlanRepository,
   ) {}
 
   async search(ctx: CallerContext, params: FlatSearchParams): Promise<FlatSearchResult> {
@@ -106,28 +115,114 @@ export class FlatSearchService {
     // operator/location columns the vehicles-only availability query can't ORDER
     // BY without a join restructure. Revisit if inventory reaches the hundreds or
     // search p95 regresses: ORDER BY + keyset + LIMIT n+1 on a joined query.
-    const items = available
+    const specificItems = available
       .map((v) => toSpecific(v, locationById, classById, requested))
       .filter((i): i is SpecificSearchResult => i !== null)
-      .sort(compareItems)
+
+    // #464: combo deals are a SECOND producer over the same page scope. Bound the
+    // active-rate-plan scan to the in-scope storefronts (mirrors locationById), then
+    // price + size each surviving plan into a CLASS_COMBO card and merge both
+    // producers into one ordered, paginated list.
+    const planFilters: ClassRatePlanFilters = { locationIds: storefronts.map((sf) => sf.id) }
+    if (operatorId) planFilters.operatorId = operatorId
+    const comboItems = await this.findComboItems(
+      planFilters,
+      from,
+      to,
+      locationById,
+      classById,
+      requested,
+    )
+
+    const items: SearchResultItem[] = [...specificItems, ...comboItems].sort(compareItems)
 
     let start = 0
     if (cursor) {
       const decoded = decodeCursor(cursor)
       if (decoded === undefined) return { ok: false, error: 'Invalid cursor', status: 400 }
-      start = items.findIndex((i) => i.vehicleId === decoded) + 1
+      start = items.findIndex((i) => itemKey(i) === decoded) + 1
     }
     const page = items.slice(start, start + limit)
-    const nextCursor =
-      start + limit < items.length ? encodeCursor(page[page.length - 1]?.vehicleId ?? '') : null
+    const last = page.at(-1)
+    const nextCursor = last && start + limit < items.length ? encodeCursor(itemKey(last)) : null
 
     return { ok: true, data: { items: page, nextCursor } }
   }
-}
 
-function clampLimit(limit: number | undefined): number {
-  if (!limit || limit < 1) return DEFAULT_LIMIT
-  return Math.min(limit, MAX_LIMIT)
+  // #464: one CLASS_COMBO card per active rate plan whose pickup location is an
+  // in-scope storefront and whose road-legal supply currently exceeds demand.
+  // N+1 note (bounded): two count queries per plan, fired concurrently. A combo is
+  // one row per (operator, class, location) offered, so P stays small at MVP scale;
+  // collapse to one grouped query if plan volume ever grows — the same deferral the
+  // SPECIFIC pagination comment records.
+  private async findComboItems(
+    planFilters: ClassRatePlanFilters,
+    from: Date,
+    to: Date,
+    locationById: Map<string, ResultLocation>,
+    classById: Map<string, VehicleClass>,
+    requested: Set<string> | null,
+  ): Promise<ClassComboSearchResult[]> {
+    const plans = await this.classRatePlanRepo.findActiveRatePlans(planFilters)
+    const cards = await Promise.all(
+      plans.map((plan) => this.toCombo(plan, from, to, locationById, classById, requested)),
+    )
+    return cards.filter((c): c is ClassComboSearchResult => c !== null)
+  }
+
+  private async toCombo(
+    plan: ClassRatePlan,
+    from: Date,
+    to: Date,
+    locationById: Map<string, ResultLocation>,
+    classById: Map<string, VehicleClass>,
+    requested: Set<string> | null,
+  ): Promise<ClassComboSearchResult | null> {
+    // The plan's pickup location must be an in-scope active storefront (mappable).
+    const location = locationById.get(plan.pickupLocationId)
+    if (!location) return null
+
+    const vc = classById.get(plan.classId)
+    const acrissCode = vc?.acrissCode ?? null
+    // Same ACRISS class filter the SPECIFIC producer applies (toSpecific).
+    if (requested && (acrissCode == null || !requested.has(acrissCode))) return null
+
+    // availableCount = road-legal supply − overlapping demand (floating + specific),
+    // both keyed on the (operator, class, location) triple. asOf = the return date,
+    // so a combo never surfaces a class whose only cars lapse before `to` (§5.2).
+    const [capacity, demand] = await Promise.all([
+      this.availabilityRepo.countClassCapacity(
+        plan.operatorId,
+        plan.classId,
+        plan.pickupLocationId,
+        from,
+        to,
+        to,
+      ),
+      this.availabilityRepo.countClassDemand(
+        plan.operatorId,
+        plan.classId,
+        plan.pickupLocationId,
+        from,
+        to,
+      ),
+    ])
+    const availableCount = Math.max(0, capacity - demand)
+    if (availableCount <= 0) return null
+
+    return {
+      kind: 'CLASS_COMBO',
+      location,
+      dailyRateJpy: plan.dayRateJpy,
+      hourlyRateJpy: null,
+      classLabel: vc?.name ?? '',
+      acrissCode,
+      seats: vc?.seats ?? 0,
+      photos: vc?.photos ?? [],
+      classId: plan.classId,
+      availableCount,
+    }
+  }
 }
 
 function toResultLocation(sf: Storefront): ResultLocation {
@@ -181,24 +276,22 @@ function toSpecific(
   }
 }
 
-/** Stable total order so cursor pagination is deterministic (§3.2 step 5). */
-function compareItems(a: SpecificSearchResult, b: SpecificSearchResult): number {
+/** Stable total order across the result union so cursor pagination is deterministic
+ *  (§3.2 step 5). Ties break on the globally-unique itemKey. */
+function compareItems(a: SearchResultItem, b: SearchResultItem): number {
   return (
     a.location.operatorName.localeCompare(b.location.operatorName) ||
     a.location.name.localeCompare(b.location.name) ||
-    a.vehicleId.localeCompare(b.vehicleId)
+    itemKey(a).localeCompare(itemKey(b))
   )
 }
 
-// Opaque base64 cursor over vehicleId (§3.2 step 6). btoa/atob are Web-standard
-// globals on CF Workers and Bun.
-const encodeCursor = (vehicleId: string): string => btoa(vehicleId)
-// Returns undefined for a malformed (non-base64) cursor so the caller can answer
-// 400 instead of letting atob() throw into a 500 on a public endpoint.
-const decodeCursor = (cursor: string): string | undefined => {
-  try {
-    return atob(cursor)
-  } catch {
-    return undefined
-  }
+// Globally-unique, stable sort + cursor key over the union. SPECIFIC is keyed by
+// its renter-safe vehicleId; CLASS_COMBO by (locationId, classId) — a class offered
+// at several storefronts is several cards, so classId alone would collide. The kind
+// prefix also stops a vehicleId and a classId that share a string from aliasing.
+function itemKey(item: SearchResultItem): string {
+  return item.kind === 'SPECIFIC'
+    ? `v:${item.vehicleId}`
+    : `c:${item.location.locationId}:${item.classId}`
 }

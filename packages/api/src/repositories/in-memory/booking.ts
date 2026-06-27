@@ -2,7 +2,7 @@ import { type CallerContext, ForbiddenError } from '../../middleware/auth'
 import { BOOKING_CODE_CONSTRAINT, IDEMPOTENCY_CONSTRAINT, PG_ERROR } from '../../pg-errors'
 import type { Booking } from '../../stores'
 import { bookingReadScope } from '../../tenancy'
-import type { BookingFilters, BookingRepository } from '../types'
+import type { AdminBookingFilters, BookingFilters, BookingRepository } from '../types'
 
 export const BLOCKING_STATUSES: ReadonlySet<Booking['status']> = new Set(['CONFIRMED', 'ACTIVE'])
 
@@ -17,6 +17,23 @@ function uniqueViolation(
     code: PG_ERROR.UNIQUE_VIOLATION,
     constraint_name: constraintName,
   })
+}
+
+// Same faithful-mirroring policy as uniqueViolation: postgres-js exposes the
+// violated EXCLUDE constraint as `constraint_name`, so a service that disambiguates
+// 23P01 by name behaves identically against either repo (#1106).
+const BOOKINGS_NO_OVERLAP_CONSTRAINT = 'bookings_no_overlap'
+
+function exclusionViolation(): Error & { code: string; constraint_name: string } {
+  return Object.assign(
+    new Error(
+      `conflicting key value violates exclusion constraint "${BOOKINGS_NO_OVERLAP_CONSTRAINT}"`,
+    ),
+    {
+      code: PG_ERROR.EXCLUSION_VIOLATION,
+      constraint_name: BOOKINGS_NO_OVERLAP_CONSTRAINT,
+    },
+  )
 }
 
 export function getConflictingBookings(
@@ -41,16 +58,20 @@ export class InMemoryBookingRepository implements BookingRepository {
     this.store = store ?? new Map()
   }
 
-  // Three-way read scope (#392, proposal §6.2): bypass sees all, an operator
-  // sees only its tenant's bookings, a renter sees only their own. Replaces the
-  // legacy renter-vs-PRIVILEGED_ROLES split.
+  // Read scope (#392, proposal §6.2; PARTNER channel scope #1119): the admin
+  // tier sees all, a PARTNER sees only its sourced bookings, an operator sees
+  // only its tenant's, a renter sees only their own. Exhaustive on the union so a
+  // new scope kind can't silently fall through to reading every tenant's rows.
   private scopedValues(ctx: CallerContext): Booking[] {
     const scope = bookingReadScope(ctx)
     if (scope.kind === 'none') return []
     const all = [...this.store.values()]
     if (scope.kind === 'operator') return all.filter((b) => b.operatorId === scope.operatorId)
     if (scope.kind === 'renter') return all.filter((b) => b.renterId === scope.renterId)
-    return all
+    if (scope.kind === 'partner') return all.filter((b) => b.source === scope.source)
+    if (scope.kind === 'all') return all
+    scope satisfies never
+    return []
   }
 
   async listRenterIdsForOperator(operatorId: string): Promise<string[]> {
@@ -66,7 +87,10 @@ export class InMemoryBookingRepository implements BookingRepository {
     if (scope.kind === 'none') return false
     if (scope.kind === 'operator') return booking.operatorId === scope.operatorId
     if (scope.kind === 'renter') return booking.renterId === scope.renterId
-    return true
+    if (scope.kind === 'partner') return booking.source === scope.source
+    if (scope.kind === 'all') return true
+    scope satisfies never
+    return false
   }
 
   async findAll(ctx: CallerContext, filters?: BookingFilters): Promise<Booking[]> {
@@ -86,6 +110,14 @@ export class InMemoryBookingRepository implements BookingRepository {
       const from = filters.from
       const to = filters.to
       results = results.filter((b) => b.startAt < to && b.effectiveEndAt > from)
+    }
+    if (filters?.needsAssignment === true) {
+      results = results.filter(
+        (b) =>
+          b.fulfillmentMode === 'CLASS_COMBO' &&
+          b.assignedVehicleId === null &&
+          (b.status === 'CONFIRMED' || b.status === 'ACTIVE'),
+      )
     }
 
     // Sort by createdAt DESC, id DESC (matches Drizzle ORDER BY)
@@ -113,6 +145,56 @@ export class InMemoryBookingRepository implements BookingRepository {
     return results
   }
 
+  // #1092: cross-operator oversight read. UNSCOPED on purpose — the
+  // platform-admin service gates the caller before this runs. Mirrors the
+  // Drizzle impl's ordering (createdAt DESC, id DESC) and cursor semantics.
+  async findForAdmin(filters: AdminBookingFilters): Promise<Booking[]> {
+    let results = [...this.store.values()]
+
+    if (filters.operatorId) {
+      results = results.filter((b) => b.operatorId === filters.operatorId)
+    }
+    if (filters.bookingCode) {
+      const needle = filters.bookingCode.toLowerCase()
+      results = results.filter((b) => b.bookingCode.toLowerCase().includes(needle))
+    }
+    if (filters.status) {
+      results = results.filter((b) => b.status === filters.status)
+    }
+    if (filters.renterIds) {
+      const ids = new Set(filters.renterIds)
+      results = results.filter((b) => ids.has(b.renterId))
+    }
+    if (filters.from && filters.to) {
+      const from = filters.from
+      const to = filters.to
+      results = results.filter((b) => b.startAt < to && b.effectiveEndAt > from)
+    }
+
+    results.sort((a, b) => {
+      const timeDiff = b.createdAt.getTime() - a.createdAt.getTime()
+      if (timeDiff !== 0) return timeDiff
+      return b.id < a.id ? -1 : 1
+    })
+
+    if (filters.cursor) {
+      const sep = filters.cursor.indexOf('_')
+      const cursorTime = new Date(filters.cursor.slice(0, sep))
+      const cursorId = filters.cursor.slice(sep + 1)
+      results = results.filter((b) => {
+        if (b.createdAt.getTime() < cursorTime.getTime()) return true
+        if (b.createdAt.getTime() === cursorTime.getTime() && b.id < cursorId) return true
+        return false
+      })
+    }
+
+    if (filters.limit) {
+      results = results.slice(0, filters.limit)
+    }
+
+    return results
+  }
+
   async findById(ctx: CallerContext, id: string): Promise<Booking | undefined> {
     const booking = this.store.get(id)
     if (!booking) return undefined
@@ -128,12 +210,23 @@ export class InMemoryBookingRepository implements BookingRepository {
     return undefined
   }
 
+  // #1087: platform-overview total booking count across all operators (unscoped).
+  async count(): Promise<number> {
+    return this.store.size
+  }
+
   async countActiveForVehicles(vehicleIds: string[]): Promise<number> {
     if (vehicleIds.length === 0) return 0
     const ids = new Set(vehicleIds)
     let count = 0
     for (const booking of this.store.values()) {
-      if (ids.has(booking.assignedVehicleId) && BLOCKING_STATUSES.has(booking.status)) count++
+      // #464: a CLASS_COMBO float (null assignedVehicleId) occupies no specific car.
+      if (
+        booking.assignedVehicleId !== null &&
+        ids.has(booking.assignedVehicleId) &&
+        BLOCKING_STATUSES.has(booking.status)
+      )
+        count++
     }
     return count
   }
@@ -161,19 +254,20 @@ export class InMemoryBookingRepository implements BookingRepository {
       throw new ForbiddenError('Cannot create booking for another operator')
     }
 
-    // Mirror the DB `bookings_no_overlap` exclusion on the ASSIGNED vehicle.
-    // assignedVehicleId is NOT NULL post-slice-6, so every CONFIRMED/ACTIVE row
-    // occupies its car — the old "null operand skips exclusion" loophole is gone.
-    if (BLOCKING_STATUSES.has(data.status)) {
+    // Mirror the DB `bookings_no_overlap` exclusion on the ASSIGNED vehicle:
+    // `EXCLUDE USING gist ("assignedVehicleId" WITH =, tstzrange &&)`. Postgres
+    // never conflicts NULL keys, so a CLASS_COMBO float (null vehicle, #464)
+    // occupies no specific car and is invisible to the exclusion. Guard on a
+    // non-null vehicle first — `null !== null` is false, so without this an
+    // overlapping pair of floats would falsely clash (#1105 / #1117).
+    if (data.assignedVehicleId !== null && BLOCKING_STATUSES.has(data.status)) {
       for (const existing of this.store.values()) {
         if (existing.assignedVehicleId !== data.assignedVehicleId) continue
         if (!BLOCKING_STATUSES.has(existing.status)) continue
         const overlaps =
           data.startAt < existing.effectiveEndAt && existing.startAt < data.effectiveEndAt
         if (overlaps) {
-          throw Object.assign(new Error('bookings_no_overlap violation'), {
-            code: PG_ERROR.EXCLUSION_VIOLATION,
-          })
+          throw exclusionViolation()
         }
       }
     }
@@ -217,7 +311,12 @@ export class InMemoryBookingRepository implements BookingRepository {
   async cancel(
     ctx: CallerContext,
     id: string,
-    opts: { from: Booking['status']; fee: number; cancelledAt: Date },
+    opts: {
+      from: Booking['status']
+      fee: number
+      cancelledAt: Date
+      settlement?: Booking['cancellationFeeSettlement']
+    },
   ): Promise<Booking | undefined> {
     const existing = this.store.get(id)
     if (!existing || existing.status !== opts.from) return undefined
@@ -227,11 +326,35 @@ export class InMemoryBookingRepository implements BookingRepository {
       ...existing,
       status: 'CANCELLED',
       cancellationFee: opts.fee,
+      // #851: written atomically with the cancel; defaults to the legacy 'ADVISORY'.
+      cancellationFeeSettlement: opts.settlement ?? 'ADVISORY',
       cancelledAt: opts.cancelledAt,
       updatedAt: new Date(),
     }
     this.store.set(cancelled.id, cancelled)
     return cancelled
+  }
+
+  async markCancellationSettlement(
+    ctx: CallerContext,
+    id: string,
+    transition: {
+      from: Booking['cancellationFeeSettlement']
+      to: Booking['cancellationFeeSettlement']
+    },
+  ): Promise<Booking | undefined> {
+    const existing = this.store.get(id)
+    // Guarded: only advance when the current value still matches `from` (idempotent).
+    if (!existing || existing.cancellationFeeSettlement !== transition.from) return undefined
+    if (!this.isVisible(ctx, existing)) return undefined
+
+    const updated: Booking = {
+      ...existing,
+      cancellationFeeSettlement: transition.to,
+      updatedAt: new Date(),
+    }
+    this.store.set(updated.id, updated)
+    return updated
   }
 
   async reassignVehicle(
@@ -253,9 +376,7 @@ export class InMemoryBookingRepository implements BookingRepository {
         const overlaps =
           existing.startAt < other.effectiveEndAt && other.startAt < data.effectiveEndAt
         if (overlaps) {
-          throw Object.assign(new Error('bookings_no_overlap violation'), {
-            code: PG_ERROR.EXCLUSION_VIOLATION,
-          })
+          throw exclusionViolation()
         }
       }
     }

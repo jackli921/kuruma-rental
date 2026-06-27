@@ -3,6 +3,8 @@ import type { getDb } from './index'
 import { parsePlatformAdminEmails } from './platform-admins'
 import {
   addOnOptions,
+  classRatePlans,
+  consentDocuments,
   feeSchedules,
   insuranceOptions,
   locations,
@@ -15,6 +17,8 @@ import {
 } from './schema'
 import {
   DEMO_ADD_ON_OPTIONS,
+  DEMO_CLASS_RATE_PLANS,
+  DEMO_CONSENT_DOCUMENTS,
   DEMO_FEE_SCHEDULES,
   DEMO_INSURANCE_OPTIONS,
   DEMO_LOCATIONS,
@@ -309,6 +313,27 @@ export async function seed(db: ReturnType<typeof getDb>) {
       })
   }
 
+  // 7b. Class rate plans (#464) — price CLASS_COMBO bookings off the class.
+  // Composite FK (operatorId, classId) + pickupLocationId resolve now (classes
+  // + locations seeded above). Best Car Rental's Namba store bootstraps combos.
+  console.log(`Seeding ${DEMO_CLASS_RATE_PLANS.length} class rate plans...`)
+  for (const plan of DEMO_CLASS_RATE_PLANS) {
+    await db
+      .insert(classRatePlans)
+      .values({
+        id: seedId(plan.id),
+        operatorId: seedId(plan.operatorId),
+        classId: seedId(plan.classId),
+        pickupLocationId: seedId(plan.pickupLocationId),
+        dayRateJpy: plan.dayRateJpy,
+        label: plan.label,
+      })
+      .onConflictDoUpdate({
+        target: classRatePlans.id,
+        set: { dayRateJpy: plan.dayRateJpy, label: plan.label, isActive: true, updatedAt: now },
+      })
+  }
+
   // 8. Vehicles — both composite FKs resolve now (classes + locations seeded).
   // shakenExpiryDate is stamped demo-time-relative (fixtures omit it, §3.3).
   console.log(`Seeding ${DEMO_VEHICLES.length} vehicles...`)
@@ -353,7 +378,43 @@ export async function seed(db: ReturnType<typeof getDb>) {
       })
   }
 
-  // 9. Demo provider invite (#521 §9) — env-driven so no email is hardcoded.
+  // 9. Consent documents (#877). 4 types × 3 locales = 12 PUBLISHED rows.
+  // Idempotent: upsert on stable id. The RENTER_LIABILITY body is verbatim from
+  // the booking i18n so the Phase 4 IMPORTED backfill matches byte-for-byte.
+  console.log(`Seeding ${DEMO_CONSENT_DOCUMENTS.length} consent documents...`)
+  for (const d of DEMO_CONSENT_DOCUMENTS) {
+    await db
+      .insert(consentDocuments)
+      .values({
+        id: d.id,
+        type: d.type,
+        version: d.version,
+        locale: d.locale,
+        title: d.title,
+        body: d.body,
+        acceptanceLabel: d.acceptanceLabel,
+        contentHash: d.contentHash,
+        status: d.status,
+        effectiveFrom: d.effectiveFrom,
+        publishedAt: now,
+      })
+      .onConflictDoUpdate({
+        target: consentDocuments.id,
+        set: {
+          title: d.title,
+          body: d.body,
+          acceptanceLabel: d.acceptanceLabel,
+          contentHash: d.contentHash,
+          status: d.status,
+          effectiveFrom: d.effectiveFrom,
+          // publishedAt intentionally omitted — frozen at first publish (the table is
+          // immutable-once-PUBLISHED); re-seeding must not advance the legal publish stamp.
+          updatedAt: now,
+        },
+      })
+  }
+
+  // 10. Demo provider invite (#521 §9) — env-driven so no email is hardcoded.
   // When DEMO_PROVIDER_INVITE_EMAIL is set, mint a one-time invite for the first
   // demo operator so the runbook (#488) can click through provider sign-up. Only
   // sha256(token) is stored; the plaintext link is printed once here, never
@@ -401,6 +462,6 @@ export async function seed(db: ReturnType<typeof getDb>) {
     `\nSeeded ${DEMO_OPERATORS.length} operators, ${DEMO_LOCATIONS.length} locations, ` +
       `${DEMO_VEHICLE_CLASSES.length} classes, ${DEMO_VEHICLES.length} vehicles, ` +
       `${DEMO_INSURANCE_OPTIONS.length} insurance options, ${DEMO_ADD_ON_OPTIONS.length} add-on options, ` +
-      `${DEMO_FEE_SCHEDULES.length} fee schedules.`,
+      `${DEMO_FEE_SCHEDULES.length} fee schedules, ${DEMO_CLASS_RATE_PLANS.length} class rate plans.`,
   )
 }

@@ -1,5 +1,6 @@
 import type { ErrorCode } from '@kuruma/shared/lib/error-codes'
 import {
+  assignVehicleSchema,
   cancelBookingSchema,
   createBookingSchema,
   substituteVehicleSchema,
@@ -8,16 +9,16 @@ import {
 import { Hono } from 'hono'
 import {
   MANAGEMENT_READ_ROLES,
-  STAFF_ROLES,
   isOperatorRole,
   requireUser,
   toCallerContext,
 } from '../middleware/auth'
 import type { BookingService } from '../services/booking'
+import type { ConsentGateService } from '../services/consent-gate'
 import type { BookingFilters } from '../services/filters'
 import { fail, ok, parseBody, parseDateRange, parseId, parseLimit } from './helpers'
 
-export function createBookingRoutes(service: BookingService) {
+export function createBookingRoutes(service: BookingService, consentGate: ConsentGateService) {
   return new Hono()
     .get('/bookings', async (c) => {
       const ctx = toCallerContext(requireUser(c))
@@ -50,6 +51,7 @@ export function createBookingRoutes(service: BookingService) {
         filters.from = dateRange.from
         filters.to = dateRange.to
       }
+      if (c.req.query('needsAssignment') === 'true') filters.needsAssignment = true
 
       // Ownership scoping is handled by CallerContext in the repository layer.
       // No manual filtering needed here.
@@ -146,19 +148,11 @@ export function createBookingRoutes(service: BookingService) {
       const parsed = await parseBody(c, createBookingSchema)
       if (!parsed.ok) return parsed.response
 
-      // #589: STAFF and OPERATOR_* are "manual bookers" — they may book on behalf
-      // of a renter (renterId) and set source=MANUAL. An operator's renterId is
-      // authorized in the service against its OWN customer scope (renters with a
-      // prior booking with it), scope-first so it never probes the user table for
-      // an arbitrary id — preserving the #396/#475 enumeration defense
-      // (operator-user-isolation.test.ts). Everyone else books as themselves with
-      // source forced to DIRECT (no advance-booking-hours bypass via MANUAL).
-      const isManualBooker = STAFF_ROLES.has(ctx.role) || isOperatorRole(ctx.role)
-      // #589 1c: only manual bookers may register a walk-in customer inline; a
-      // renter's walkInCustomer is ignored (they book as themselves).
-      const walkInCustomer = isManualBooker ? parsed.data.walkInCustomer : undefined
-      const renterId = isManualBooker && parsed.data.renterId ? parsed.data.renterId : ctx.userId
-      const source = isManualBooker ? parsed.data.source : 'DIRECT'
+      // #1108 (audit M4): actor resolution — who may book on behalf of whom and
+      // force source=MANUAL — is domain authz and now lives in the service
+      // (resolveBookingActor, called by BookingCreationService.create). The route
+      // forwards parsed.data untouched. It may still REJECT on role below (the
+      // disclaimer + consent gates); it no longer REWRITES the payload by role.
 
       // #613: a renter self-serve booking must accept the liability disclaimer
       // (免责声明) at checkout — the IDP/license must be valid at pickup or the
@@ -171,24 +165,54 @@ export function createBookingRoutes(service: BookingService) {
         })
       }
 
-      const createResult = await service.create(ctx, {
-        requestedVehicleId: parsed.data.requestedVehicleId,
+      // #877 Flow A: a renter self-serve booking also requires the renter to be
+      // current on the platform ToS + privacy policy (once-per-subject, via the
+      // consent ledger). The unskippable backstop behind the web clickwrap — a
+      // direct/3rd-party caller can't bypass it. The gate is asked UNCONDITIONALLY:
+      // the role→required-types map in the consent service is the single source of
+      // who is subject, so manual bookers (staff/operator) and api-key partners
+      // resolve to zero required types and pass through for free (no I/O) — no
+      // second `role === 'RENTER'` list here to drift from it (#1036 M1b). The 403
+      // carries `missing[]` so the client knows which documents to present.
+      const gate = await consentGate.assertSubjectCurrent(ctx.userId, ctx.role, new Date())
+      if (!gate.allowed) {
+        return fail(c, 'Consent required', gate.status, {
+          code: gate.code satisfies ErrorCode,
+          missing: gate.missing,
+        })
+      }
+
+      // #464 2d.4: forward the parsed discriminator to the service. Common
+      // fields are shared; the SPECIFIC member carries requestedVehicleId and
+      // the CLASS_COMBO member carries classId (validator narrowed each).
+      const commonInput = {
         pickupLocationId: parsed.data.pickupLocationId,
         dropoffLocationId: parsed.data.dropoffLocationId,
         insuranceOptionId: parsed.data.insuranceOptionId ?? null,
         addOnIds: parsed.data.addOnIds,
-        renterId,
-        // #589 1c: include walkInCustomer only when present, never as explicit
-        // undefined (exactOptionalPropertyTypes); the service prefers it over renterId.
-        ...(walkInCustomer ? { walkInCustomer } : {}),
+        // #1108: forward identity fields RAW — resolveBookingActor (service-side)
+        // derives the concrete renterId / source / walk-in from the caller role.
+        // Omit absent optionals (exactOptionalPropertyTypes).
+        ...(parsed.data.renterId ? { renterId: parsed.data.renterId } : {}),
+        ...(parsed.data.walkInCustomer ? { walkInCustomer: parsed.data.walkInCustomer } : {}),
         startAt: new Date(parsed.data.startAt),
         endAt: new Date(parsed.data.endAt),
-        source,
+        source: parsed.data.source,
         externalId: parsed.data.externalId ?? null,
         notes: parsed.data.notes ?? null,
         idempotencyKey: parsed.data.idempotencyKey ?? null,
         disclaimerAccepted: parsed.data.disclaimerAccepted ?? false,
-      })
+      }
+      const createResult = await service.create(
+        ctx,
+        parsed.data.fulfillmentMode === 'CLASS_COMBO'
+          ? { ...commonInput, fulfillmentMode: 'CLASS_COMBO', classId: parsed.data.classId }
+          : {
+              ...commonInput,
+              fulfillmentMode: 'SPECIFIC',
+              requestedVehicleId: parsed.data.requestedVehicleId,
+            },
+      )
 
       if (!createResult.ok) {
         return fail(c, createResult.error, createResult.status, {
@@ -271,6 +295,35 @@ export function createBookingRoutes(service: BookingService) {
         ctx,
         idResult.id,
         parsed.data.newVehicleId,
+        parsed.data.reason ?? null,
+      )
+      if (!result.ok) {
+        return fail(c, result.error, result.status, {
+          ...(result.code ? { code: result.code } : {}),
+        })
+      }
+
+      return ok(c, result.booking)
+    })
+    .post('/bookings/:id/assign', async (c) => {
+      const ctx = toCallerContext(requireUser(c))
+
+      // #464: assigning a car to a CLASS_COMBO float is operator-only (fleet
+      // ownership decision, mirrors substitute's gate).
+      if (!isOperatorRole(ctx.role)) {
+        return fail(c, 'Only operators can assign a vehicle', 403)
+      }
+
+      const idResult = parseId(c)
+      if (!idResult.ok) return idResult.response
+
+      const parsed = await parseBody(c, assignVehicleSchema)
+      if (!parsed.ok) return parsed.response
+
+      const result = await service.assignVehicle(
+        ctx,
+        idResult.id,
+        parsed.data.vehicleId,
         parsed.data.reason ?? null,
       )
       if (!result.ok) {

@@ -1,4 +1,12 @@
 {
+  "consent": {
+    "title": "続行するにはご確認のうえ同意してください",
+    "intro": "Kuruma を引き続きご利用いただくには、以下をご確認のうえ同意してください。",
+    "accept": "同意して続行",
+    "accepting": "保存中…",
+    "hint": "続行するには各項目にチェックを入れてください。",
+    "error": "同意を保存できませんでした。もう一度お試しください。"
+  },
   "regionPicker": {
     "prefecture": "都道府県",
     "city": "市区町村",
@@ -93,6 +101,7 @@
     "myBookings": "予約一覧",
     "documents": "書類",
     "newBookings": "新規予約 {count}件",
+    "unreadMessages": "未読メッセージ {count}件",
     "settings": "設定",
     "team": "チーム"
   },
@@ -260,6 +269,11 @@
             "ACTIVE": "利用中",
             "COMPLETED": "完了",
             "CANCELLED": "キャンセル"
+          },
+          "floats": {
+            "title": "車両未割当",
+            "overdue": "超過中",
+            "empty": "未割当のフロート予約はありません"
           }
         }
       },
@@ -317,6 +331,7 @@
       "retireVehicle": "車両を廃止",
       "retireConfirm": "{name}を廃止しますか？",
       "retireConfirmMessage": "この車両は利用者に表示されなくなります。後で復元できます。",
+      "retireError": "車両を廃止できませんでした。もう一度お試しください。",
       "noPhoto": "写真なし",
       "expiry": {
         "shaken": {
@@ -872,7 +887,10 @@
       "subtitle": "会話一覧",
       "empty": "メッセージはまだありません",
       "emptyDescription": "会話を始めるか、返信をお待ちください。",
-      "unread": "未読 {count} 件"
+      "unread": "未読 {count} 件",
+      "host": "ホスト",
+      "loadError": "メッセージを読み込めませんでした",
+      "retry": "再試行"
     },
     "thread": {
       "sendPlaceholder": "メッセージを入力...",
@@ -884,7 +902,14 @@
       "today": "今日",
       "yesterday": "昨日",
       "back": "受信トレイに戻る",
-      "composeLabel": "メッセージを作成"
+      "composeLabel": "メッセージを作成",
+      "cancelled": "この予約はキャンセルされました",
+      "translating": "翻訳中...",
+      "translationUnavailable": "翻訳できませんでした",
+      "retry": "再試行"
+    },
+    "entry": {
+      "messageHost": "ホストにメッセージ"
     }
   },
   "bookings": {
@@ -1062,6 +1087,14 @@
           "cancel": "キャンセル",
           "error": "車両を変更できませんでした。直前に予約された可能性があります。"
         },
+        "assign": {
+          "action": "車両を割り当て",
+          "dialogTitle": "車両を割り当て",
+          "dialogDescription": "この未割り当て予約に利用可能な同クラスの車両を割り当てます。車両を選択すると予約が確定します。",
+          "vehicleLabel": "車両",
+          "submit": "割り当て",
+          "error": "車両を割り当てできませんでした。直前に予約された可能性があります。"
+        },
         "markActive": "受け渡し済みにする",
         "markCompleted": "返却済みにする",
         "settled": "この予約は確定済みのため、操作できる項目はありません。",
@@ -1081,6 +1114,8 @@
         "created": "予約が作成されました",
         "statusChanged": "ステータスが{from}から{to}に変更されました",
         "vehicleSubstituted": "車両が変更されました",
+        "vehicleAssigned": "車両が割り当てられました",
+        "vehicleAssignedSwapped": "車両が再割り当てされました",
         "reason": "理由: {reason}",
         "cancelled": "予約がキャンセルされました",
         "cancellationFee": "キャンセル料 {fee}",
@@ -1175,6 +1210,9 @@
     "auto": "オートマ",
     "manual": "マニュアル",
     "viewStore": "クルマを見る",
+    "classDeal": "クラス指定プラン",
+    "available": "{count, plural, other {残り#台}}",
+    "comboHint": "車両は受取時に確定します",
     "showOnMap": "地図で表示",
     "list": {
       "heading": "空車",
@@ -1209,12 +1247,60 @@
   "admin": {
     "nav": {
       "overview": "概要",
+      "bookings": "予約",
       "revenue": "パートナー収益",
-      "documents": "書類"
+      "anomalies": "決済の異常",
+      "documents": "書類",
+      "governance": "同意ガバナンス",
+      "customers": "顧客"
     },
     "home": {
       "title": "プラットフォーム管理",
-      "subtitle": "プラットフォーム運営"
+      "subtitle": "プラットフォーム運営",
+      "kpi": {
+        "bookings": "予約数",
+        "gmv": "流通総額",
+        "fleet": "車両数",
+        "operators": "事業者数",
+        "unresolvedAnomalies": "未解決の異常",
+        "pendingDocs": "審査待ち書類"
+      },
+      "loadError": "プラットフォーム概要を読み込めませんでした。",
+      "retry": "再試行"
+    },
+    "bookings": {
+      "title": "予約管理",
+      "subtitle": "全事業者の予約を検索・確認します。",
+      "empty": "条件に一致する予約はありません。",
+      "search": "検索",
+      "clear": "クリア",
+      "allStatuses": "すべてのステータス",
+      "filterCustomer": "お客様",
+      "filterCustomerPlaceholder": "氏名またはメール",
+      "filterBookingCode": "予約コード",
+      "filterBookingCodePlaceholder": "例: ALPHA001",
+      "filterStatus": "ステータス",
+      "colOperator": "事業者",
+      "colBookingCode": "コード",
+      "colCustomer": "お客様",
+      "colStatus": "ステータス",
+      "colStart": "開始",
+      "status": {
+        "CONFIRMED": "確定",
+        "ACTIVE": "利用中",
+        "COMPLETED": "完了",
+        "CANCELLED": "キャンセル"
+      },
+      "detailCustomer": "お客様",
+      "detailEmail": "メール",
+      "detailOperatorId": "事業者ID",
+      "detailStart": "貸出",
+      "detailEnd": "返却",
+      "detailTotal": "合計",
+      "detailPickup": "貸出場所",
+      "detailDropoff": "返却場所",
+      "loadError": "予約を読み込めませんでした。",
+      "retry": "再試行"
     },
     "revenue": {
       "title": "パートナー収益",
@@ -1237,16 +1323,39 @@
     "anomalies": {
       "title": "決済の異常",
       "subtitle": "照合中にフラグが付いた請求 — 二重請求は返金、金額不一致は確認してください。",
-      "empty": "未対応の決済異常はありません。",
+      "empty": "表示する決済異常はありません。",
       "colKind": "種別",
       "colBooking": "予約",
       "colReceived": "受領額",
       "colExpected": "予定額",
       "colStripeEvent": "Stripeイベント",
       "colWhen": "日時",
+      "colAction": "操作",
+      "loadError": "決済異常を読み込めませんでした。",
+      "retry": "再試行",
       "kind": {
         "DOUBLE_PAYMENT": "二重決済",
         "AMOUNT_MISMATCH": "金額不一致"
+      },
+      "tab": {
+        "unresolved": "要確認",
+        "resolved": "対応済み"
+      },
+      "resolution": {
+        "BENIGN": "問題なし",
+        "INVESTIGATED": "確認済み — 対応不要",
+        "REFUNDED_EXTERNALLY": "Stripeで返金済み"
+      },
+      "resolve": {
+        "action": "対応する",
+        "title": "異常を解決",
+        "description": "フラグが付いた請求を確認済みにします。判定を記録するだけで、ここでは返金などの処理は行いません。",
+        "resolutionLabel": "対応区分",
+        "noteLabel": "メモ（任意）",
+        "notePlaceholder": "監査用の補足を入力",
+        "cancel": "キャンセル",
+        "submit": "解決する",
+        "submitting": "処理中…"
       }
     },
     "documents": {
@@ -1264,6 +1373,64 @@
       "reject": "却下",
       "error": "判定を記録できませんでした。もう一度お試しください。",
       "loadError": "審査キューを読み込めませんでした。",
+      "retry": "再試行"
+    },
+    "governance": {
+      "title": "同意ガバナンス",
+      "subtitle": "全ユーザーの同意受諾履歴を閲覧します。",
+      "empty": "条件に一致する同意受諾はありません。",
+      "colUser": "ユーザー",
+      "colType": "同意種別",
+      "colVersion": "バージョン",
+      "colAccepted": "受諾日時",
+      "colEvidence": "証跡",
+      "viewEvidence": "証跡を表示",
+      "evidenceLinkLabel": "{user} の同意証跡を表示",
+      "filterType": "同意種別",
+      "filterUser": "ユーザーID",
+      "filterVersion": "バージョン",
+      "allTypes": "すべての種別",
+      "apply": "適用",
+      "clear": "クリア",
+      "loadError": "同意履歴を読み込めませんでした。",
+      "retry": "再試行"
+    },
+    "customers": {
+      "title": "顧客",
+      "subtitle": "プラットフォーム全体のレンターを検索・確認します。",
+      "searchLabel": "検索",
+      "searchPlaceholder": "名前またはメールで検索",
+      "sortLabel": "並び替え",
+      "sort": {
+        "lastBookingAt": "最近の予約",
+        "bookingCount": "予約数が多い順",
+        "name": "名前"
+      },
+      "colName": "名前",
+      "colEmail": "メール",
+      "colBookings": "予約数",
+      "colTotalSpent": "利用総額",
+      "colLastBooking": "最終予約",
+      "colCountry": "国",
+      "colLanguage": "言語",
+      "empty": "条件に一致する顧客がいません。",
+      "unnamed": "名前なしの顧客",
+      "noEmail": "メールなし",
+      "noVehicle": "車両未割り当て",
+      "pagination": "顧客ページ",
+      "prev": "前へ",
+      "next": "次へ",
+      "bookingsTitle": "予約履歴",
+      "bookingsEmpty": "予約はまだありません。",
+      "detailLoading": "顧客を読み込み中…",
+      "detailEmpty": "この顧客は利用できなくなりました。",
+      "status": {
+        "CONFIRMED": "確定",
+        "ACTIVE": "利用中",
+        "COMPLETED": "完了",
+        "CANCELLED": "キャンセル"
+      },
+      "loadError": "顧客を読み込めませんでした。",
       "retry": "再試行"
     }
   },
@@ -1351,6 +1518,32 @@
       "backToListing": "一覧に戻る",
       "continue": "次へ",
       "toPayment": "お支払いへ進む"
+    }
+  },
+  "reviews": {
+    "prompt": {
+      "cta": "レビューを書く",
+      "title": "旅行を評価する",
+      "description": "ご予約 {code} はいかがでしたか?あなたの声が他の旅行者の参考になります。"
+    },
+    "form": {
+      "subject": {
+        "OPERATOR": "オペレーター",
+        "VEHICLE": "車両"
+      },
+      "overall": "総合評価",
+      "starLabel": "星{n}つ",
+      "dimension": {
+        "cleanliness": "清潔さ",
+        "accuracy": "正確さ",
+        "communication": "コミュニケーション",
+        "value": "価格に見合う価値"
+      },
+      "commentLabel": "{subject}についてのコメント",
+      "commentPlaceholder": "ご利用体験の詳細をご記入ください(任意)",
+      "submit": "レビューを送信",
+      "pending": "送信中…",
+      "error": "エラーが発生しました。もう一度お試しください。"
     }
   }
 }

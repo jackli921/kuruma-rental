@@ -1,24 +1,29 @@
 import { bookings } from '@kuruma/shared/db/schema'
-import { type SQL, and, count, desc, eq, inArray, lt, or, sql } from 'drizzle-orm'
+import { type SQL, and, count, desc, eq, ilike, inArray, isNull, lt, or, sql } from 'drizzle-orm'
 import { type CallerContext, ForbiddenError } from '../../middleware/auth'
 import type { Booking } from '../../stores'
 import { bookingReadScope } from '../../tenancy'
-import type { BookingFilters, BookingRepository } from '../types'
+import type { AdminBookingFilters, BookingFilters, BookingRepository } from '../types'
 import { type Db, bookingColumns, toBooking } from './shared'
 
 export class DrizzleBookingRepository implements BookingRepository {
   constructor(private readonly db: Db) {}
 
-  // Three-way read scope (#392, proposal §6.2), mirroring the in-memory repo:
-  // bypass sees all, an operator sees only its tenant, a renter sees only their
-  // own. `null` = the `none` scope (operator missing operatorId) — read nothing.
+  // Read scope (#392, proposal §6.2; PARTNER channel scope #1119), mirroring the
+  // in-memory repo: the admin tier sees all, a PARTNER sees only its sourced
+  // bookings, an operator sees only its tenant, a renter sees only their own.
+  // `null` = the `none` scope (operator missing operatorId) — read nothing.
   // Otherwise returns the conditions to AND into the query (empty = unscoped).
+  // Exhaustive on the union so a new scope kind can't silently read every tenant.
   private scopeConditions(ctx: CallerContext): SQL[] | null {
     const scope = bookingReadScope(ctx)
     if (scope.kind === 'none') return null
     if (scope.kind === 'operator') return [eq(bookings.operatorId, scope.operatorId)]
     if (scope.kind === 'renter') return [eq(bookings.renterId, scope.renterId)]
-    return []
+    if (scope.kind === 'partner') return [eq(bookings.source, scope.source)]
+    if (scope.kind === 'all') return []
+    scope satisfies never
+    return null
   }
 
   async listRenterIdsForOperator(operatorId: string): Promise<string[]> {
@@ -49,6 +54,15 @@ export class DrizzleBookingRepository implements BookingRepository {
       const toIso = filters.to.toISOString()
       conditions.push(
         sql`tstzrange("startAt", "effectiveEndAt") && tstzrange(${fromIso}::timestamptz, ${toIso}::timestamptz)`,
+      )
+    }
+    if (filters?.needsAssignment === true) {
+      conditions.push(
+        and(
+          eq(bookings.fulfillmentMode, 'CLASS_COMBO'),
+          isNull(bookings.assignedVehicleId),
+          inArray(bookings.status, ['CONFIRMED', 'ACTIVE']),
+        )!,
       )
     }
 
@@ -85,6 +99,60 @@ export class DrizzleBookingRepository implements BookingRepository {
     return rows.map(toBooking)
   }
 
+  // #1092: cross-operator oversight read. UNSCOPED — the platform-admin service
+  // gates the caller before this runs (mirrors the in-memory impl). bookingCode
+  // is a case-insensitive substring match; renterIds is a pre-resolved customer
+  // filter; an EMPTY renterIds array matches nothing (inArray over []).
+  async findForAdmin(filters: AdminBookingFilters): Promise<Booking[]> {
+    const conditions: SQL[] = []
+
+    if (filters.operatorId) {
+      conditions.push(eq(bookings.operatorId, filters.operatorId))
+    }
+    if (filters.bookingCode) {
+      conditions.push(ilike(bookings.bookingCode, `%${filters.bookingCode}%`))
+    }
+    if (filters.status) {
+      conditions.push(eq(bookings.status, filters.status as Booking['status']))
+    }
+    if (filters.renterIds) {
+      conditions.push(inArray(bookings.renterId, filters.renterIds))
+    }
+    if (filters.from && filters.to) {
+      const fromIso = filters.from.toISOString()
+      const toIso = filters.to.toISOString()
+      conditions.push(
+        sql`tstzrange("startAt", "effectiveEndAt") && tstzrange(${fromIso}::timestamptz, ${toIso}::timestamptz)`,
+      )
+    }
+    if (filters.cursor) {
+      const sep = filters.cursor.indexOf('_')
+      const cursorTime = filters.cursor.slice(0, sep)
+      const cursorId = filters.cursor.slice(sep + 1)
+      conditions.push(
+        or(
+          lt(bookings.createdAt, sql`${cursorTime}::timestamptz`),
+          and(eq(bookings.createdAt, sql`${cursorTime}::timestamptz`), lt(bookings.id, cursorId)),
+        )!,
+      )
+    }
+
+    let query = this.db
+      .select(bookingColumns)
+      .from(bookings)
+      .orderBy(desc(bookings.createdAt), desc(bookings.id))
+
+    if (conditions.length > 0) {
+      query = query.where(and(...conditions)) as typeof query
+    }
+    if (filters.limit) {
+      query = query.limit(filters.limit) as typeof query
+    }
+
+    const rows = await query
+    return rows.map(toBooking)
+  }
+
   async findById(ctx: CallerContext, id: string): Promise<Booking | undefined> {
     const scoped = this.scopeConditions(ctx)
     if (scoped === null) return undefined
@@ -105,6 +173,12 @@ export class DrizzleBookingRepository implements BookingRepository {
       .where(and(eq(bookings.idempotencyKey, key), ...scoped))
 
     return row ? toBooking(row) : undefined
+  }
+
+  // #1087 platform overview: COUNT(bookings) across all operators (unscoped).
+  async count(): Promise<number> {
+    const [row] = await this.db.select({ value: count() }).from(bookings)
+    return row?.value ?? 0
   }
 
   async countActiveForVehicles(vehicleIds: string[]): Promise<number> {
@@ -210,7 +284,12 @@ export class DrizzleBookingRepository implements BookingRepository {
   async cancel(
     ctx: CallerContext,
     id: string,
-    opts: { from: Booking['status']; fee: number; cancelledAt: Date },
+    opts: {
+      from: Booking['status']
+      fee: number
+      cancelledAt: Date
+      settlement?: Booking['cancellationFeeSettlement']
+    },
   ): Promise<Booking | undefined> {
     const scoped = this.scopeConditions(ctx)
     if (scoped === null) return undefined
@@ -219,6 +298,8 @@ export class DrizzleBookingRepository implements BookingRepository {
       .set({
         status: 'CANCELLED',
         cancellationFee: opts.fee,
+        // #851: settlement written atomically with the cancel; legacy default 'ADVISORY'.
+        cancellationFeeSettlement: opts.settlement ?? 'ADVISORY',
         cancelledAt: opts.cancelledAt,
         updatedAt: sql`now()`,
       })
@@ -226,6 +307,33 @@ export class DrizzleBookingRepository implements BookingRepository {
       .returning()
 
     return cancelled ? toBooking(cancelled) : undefined
+  }
+
+  async markCancellationSettlement(
+    ctx: CallerContext,
+    id: string,
+    transition: {
+      from: Booking['cancellationFeeSettlement']
+      to: Booking['cancellationFeeSettlement']
+    },
+  ): Promise<Booking | undefined> {
+    const scoped = this.scopeConditions(ctx)
+    if (scoped === null) return undefined
+    // Guarded conditional transition: the WHERE on the current settlement is the
+    // atomic idempotency fence (a redelivery/parallel pull matches 0 rows → no-op).
+    const [updated] = await this.db
+      .update(bookings)
+      .set({ cancellationFeeSettlement: transition.to, updatedAt: sql`now()` })
+      .where(
+        and(
+          eq(bookings.id, id),
+          eq(bookings.cancellationFeeSettlement, transition.from),
+          ...scoped,
+        ),
+      )
+      .returning()
+
+    return updated ? toBooking(updated) : undefined
   }
 
   async reassignVehicle(

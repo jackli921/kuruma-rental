@@ -1,10 +1,11 @@
+import type { UserRole } from '@kuruma/shared/auth/roles'
 import { describe, expect, it } from 'vitest'
 import { shouldShowBusinessSidebar } from './business-sidebar-visibility'
 
 // A real business role (epic #385) and the renter role. Using literals keeps the
 // truth table readable; both are members/non-members of the shared BUSINESS_ROLES set.
-const OPERATOR = 'OPERATOR_OWNER'
-const RENTER = 'RENTER'
+const OPERATOR: UserRole = 'OPERATOR_OWNER'
+const RENTER: UserRole = 'RENTER'
 
 describe('shouldShowBusinessSidebar', () => {
   it('shows the sidebar for a business user in business view who prefers the sidebar', () => {

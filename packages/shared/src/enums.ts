@@ -43,6 +43,13 @@ export type VehicleClassStatus = (typeof VEHICLE_CLASS_STATUSES)[number]
 export const VEHICLE_STATUSES = ['AVAILABLE', 'MAINTENANCE', 'RETIRED'] as const
 export type VehicleStatus = (typeof VEHICLE_STATUSES)[number]
 
+// #1101: reason a scheduled vehicle_blocks window takes a car off the calendar.
+// MAINTENANCE = in the shop; OUT_OF_SERVICE = damaged/grounded; MANUAL = operator
+// hold (personal use, reserved offline). Distinct from vehicle.status, which is a
+// binary current flag — a block is a future-dated [startAt,endAt) range.
+export const VEHICLE_BLOCK_KINDS = ['MAINTENANCE', 'OUT_OF_SERVICE', 'MANUAL'] as const
+export type VehicleBlockKind = (typeof VEHICLE_BLOCK_KINDS)[number]
+
 export const BOOKING_STATUSES = ['CONFIRMED', 'ACTIVE', 'COMPLETED', 'CANCELLED'] as const
 export type BookingStatus = (typeof BOOKING_STATUSES)[number]
 
@@ -55,6 +62,7 @@ export type BookingFulfillmentMode = (typeof BOOKING_FULFILLMENT_MODES)[number]
 export const BOOKING_EVENT_TYPES = [
   'BOOKING_CREATED',
   'VEHICLE_SUBSTITUTED',
+  'VEHICLE_ASSIGNED',
   'BOOKING_CANCELLED',
   'STATUS_CHANGED',
 ] as const
@@ -80,6 +88,14 @@ export type FeeScheduleStatus = (typeof FEE_SCHEDULE_STATUSES)[number]
 
 export const PAYMENT_EVENT_STATUSES = ['SUCCEEDED'] as const
 export type PaymentEventStatus = (typeof PAYMENT_EVENT_STATUSES)[number]
+
+// Lifecycle of an automated cancellation refund (#851). PENDING = receipt claimed,
+// refund initiated or still settling at Stripe; SUCCEEDED = Stripe-confirmed (push
+// webhook or pull retrieve); FAILED = terminal Stripe rejection (charge already
+// refunded / insufficient balance), left for the human reconcile surface. The row
+// is FORWARD-ONLY — a terminal status never regresses to PENDING.
+export const PAYMENT_REFUND_STATUSES = ['PENDING', 'SUCCEEDED', 'FAILED'] as const
+export type PaymentRefundStatus = (typeof PAYMENT_REFUND_STATUSES)[number]
 
 export const ADD_ON_STATUSES = ['ACTIVE', 'ARCHIVED'] as const
 export type AddOnStatus = (typeof ADD_ON_STATUSES)[number]
@@ -145,3 +161,42 @@ export type CancellationReasonCode = (typeof CANCELLATION_REASON_CODES)[number]
 // LUGGAGE_SIZES already lives in lib/luggage.ts (#457) — re-exported here so the
 // enum SSoT is reachable from one subpath without duplicating its declaration.
 export { LUGGAGE_SIZES, type LuggageSize } from './lib/luggage'
+
+// --- Consent ledger (issue #877) ---
+export const CONSENT_TYPES = [
+  'RENTER_TOS',
+  'PRIVACY_POLICY',
+  'RENTER_LIABILITY',
+  'OPERATOR_AGREEMENT',
+] as const
+export type ConsentType = (typeof CONSENT_TYPES)[number]
+
+export const CONSENT_DOC_STATUSES = ['DRAFT', 'PUBLISHED', 'ARCHIVED'] as const
+export type ConsentDocStatus = (typeof CONSENT_DOC_STATUSES)[number]
+
+export const CONSENT_METHODS = ['CLICKWRAP', 'ESIGN', 'IMPORTED'] as const
+export type ConsentMethod = (typeof CONSENT_METHODS)[number]
+
+/** §4.2 — derived config, never a stored column. Drives the re-consent query. */
+export type ConsentCardinality = 'ONCE_PER_SUBJECT' | 'PER_EVENT'
+export const CONSENT_CARDINALITY: Record<ConsentType, ConsentCardinality> = {
+  RENTER_TOS: 'ONCE_PER_SUBJECT',
+  PRIVACY_POLICY: 'ONCE_PER_SUBJECT',
+  OPERATOR_AGREEMENT: 'ONCE_PER_SUBJECT',
+  RENTER_LIABILITY: 'PER_EVENT',
+}
+
+// --- Mutual reviews & ratings (issue #1067) ---
+/** Which side wrote a review. Operators review only renters; renters review the
+ *  operator or the vehicle — enforced at the DB by reviews_subject_pairing_chk. */
+export const REVIEW_AUTHOR_ROLES = ['RENTER', 'OPERATOR'] as const
+export type ReviewAuthorRole = (typeof REVIEW_AUTHOR_ROLES)[number]
+
+/** What a review is about. */
+export const REVIEW_SUBJECTS = ['OPERATOR', 'VEHICLE', 'RENTER'] as const
+export type ReviewSubject = (typeof REVIEW_SUBJECTS)[number]
+
+/** Moderation state (#1067 slice 6). HIDDEN reviews drop out of aggregates and
+ *  public reads; VISIBLE is the default. */
+export const REVIEW_MODERATION_STATUSES = ['VISIBLE', 'HIDDEN'] as const
+export type ReviewModerationStatus = (typeof REVIEW_MODERATION_STATUSES)[number]

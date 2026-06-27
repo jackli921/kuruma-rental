@@ -2,6 +2,9 @@ import { buttonVariants } from '@/components/ui/button'
 import { formatDateTime, formatJpy } from '@/lib/format'
 import { cn } from '@/lib/utils'
 import type { MyBookingRow } from '@/vite/bookings/api'
+import { MessageHostLink } from '@/vite/messaging/MessageHostLink'
+import { ReviewPrompt } from '@/vite/reviews'
+import type { ReviewSubject } from '@kuruma/shared/enums'
 import { Link } from '@tanstack/react-router'
 import { CalendarX } from 'lucide-react'
 import { useTranslations } from 'use-intl'
@@ -9,13 +12,24 @@ import { useTranslations } from 'use-intl'
 interface MyBookingsViewProps {
   readonly bookings: readonly MyBookingRow[]
   readonly locale: string
+  /** bookingId -> threadId (#1032); a row links to its conversation when present. */
+  readonly threadIdByBooking: Readonly<Record<string, string>>
+  /** #1083: bookingId -> the renter's already-reviewed subjects for a COMPLETED
+   *  booking. A key's presence means the review state has loaded; absent => not yet
+   *  resolved (the post-trip prompt stays hidden until then). */
+  readonly reviewedSubjectsByBooking?: Readonly<Record<string, readonly ReviewSubject[]>>
 }
 
 // Presentational list + empty state for the renter's own bookings (#543). The
 // route owns the loader/useSuspenseQuery and the renterId; this stays a pure
 // function of the resolved rows so it is unit-testable (FC/IS — the shell does
 // I/O, this renders). Each card links to the booking's confirmation/detail page.
-export function MyBookingsView({ bookings, locale }: MyBookingsViewProps) {
+export function MyBookingsView({
+  bookings,
+  locale,
+  threadIdByBooking,
+  reviewedSubjectsByBooking = {},
+}: MyBookingsViewProps) {
   const t = useTranslations('bookings.list')
 
   if (bookings.length === 0) {
@@ -36,32 +50,51 @@ export function MyBookingsView({ bookings, locale }: MyBookingsViewProps) {
 
   return (
     <ul className="flex flex-col gap-3">
-      {bookings.map((booking) => (
-        <li key={booking.id}>
-          <Link
-            to="/$locale/bookings/confirmation"
-            params={{ locale }}
-            search={{ bookingId: booking.id }}
-            className="flex flex-col gap-2 rounded-xl border border-border p-4 transition-colors hover:bg-muted/40 sm:flex-row sm:items-center sm:justify-between"
+      {bookings.map((booking) => {
+        const threadId = threadIdByBooking[booking.id]
+        // #1083: show the post-trip prompt only once the review state has resolved
+        // (an empty array = loaded, nothing reviewed yet; undefined = still loading).
+        const reviewed = reviewedSubjectsByBooking[booking.id]
+        return (
+          <li
+            key={booking.id}
+            className="flex flex-col gap-3 rounded-xl border border-border p-4 transition-colors hover:bg-muted/40"
           >
-            <div className="flex flex-col gap-1">
-              <div className="flex items-center gap-3">
-                <span className="font-mono font-medium">{booking.bookingCode}</span>
-                <span className="rounded-full bg-muted px-2.5 py-0.5 text-xs font-medium text-muted-foreground">
-                  {t(booking.status.toLowerCase())}
+            <Link
+              to="/$locale/bookings/confirmation"
+              params={{ locale }}
+              search={{ bookingId: booking.id }}
+              className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between"
+            >
+              <div className="flex flex-col gap-1">
+                <div className="flex items-center gap-3">
+                  <span className="font-mono font-medium">{booking.bookingCode}</span>
+                  <span className="rounded-full bg-muted px-2.5 py-0.5 text-xs font-medium text-muted-foreground">
+                    {t(booking.status.toLowerCase())}
+                  </span>
+                </div>
+                <span className="text-sm text-muted-foreground">{booking.vehicleName ?? '—'}</span>
+                <span className="text-sm whitespace-nowrap text-muted-foreground">
+                  {`${formatDateTime(booking.startAt, locale)} – ${formatDateTime(booking.endAt, locale)}`}
                 </span>
               </div>
-              <span className="text-sm text-muted-foreground">{booking.vehicleName ?? '—'}</span>
-              <span className="text-sm whitespace-nowrap text-muted-foreground">
-                {`${formatDateTime(booking.startAt, locale)} – ${formatDateTime(booking.endAt, locale)}`}
+              <span className="text-right text-lg font-semibold tabular-nums">
+                {booking.totalPrice == null ? '—' : formatJpy(booking.totalPrice)}
               </span>
-            </div>
-            <span className="text-right text-lg font-semibold tabular-nums">
-              {booking.totalPrice == null ? '—' : formatJpy(booking.totalPrice)}
-            </span>
-          </Link>
-        </li>
-      ))}
+            </Link>
+            {threadId ? (
+              <MessageHostLink threadId={threadId} locale={locale} className="self-start" />
+            ) : null}
+            {booking.status === 'COMPLETED' && reviewed !== undefined ? (
+              <ReviewPrompt
+                bookingId={booking.id}
+                bookingCode={booking.bookingCode}
+                reviewedSubjects={reviewed}
+              />
+            ) : null}
+          </li>
+        )
+      })}
     </ul>
   )
 }

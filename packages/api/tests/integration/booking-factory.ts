@@ -227,6 +227,7 @@ export async function createSeededBooking(
   }
 
   const res = await service.create(renterCtx(renterId), {
+    fulfillmentMode: 'SPECIFIC',
     requestedVehicleId: vehicleId,
     pickupLocationId: location.id,
     dropoffLocationId: location.id,

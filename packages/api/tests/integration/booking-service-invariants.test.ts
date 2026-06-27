@@ -271,6 +271,7 @@ describe('create persists the service-composed total (real pg)', () => {
   it('totalPrice = base + insurance*days + add-on, read back from the DB', async () => {
     const ctx: CallerContext = { userId: renterId, role: 'RENTER', bypassScope: false }
     const res = await service.create(ctx, {
+      fulfillmentMode: 'SPECIFIC',
       requestedVehicleId: vehicleId,
       pickupLocationId: locationId,
       dropoffLocationId: locationId,
@@ -440,6 +441,7 @@ describe('walk-in renter rolls back when the booking fails (real pg, #875)', () 
 
   it('does not persist the fresh renter when the booking 409s', async () => {
     const res = await walkInService.create(operatorCtx(), {
+      fulfillmentMode: 'SPECIFIC',
       requestedVehicleId: vehicleId,
       pickupLocationId: locationId,
       dropoffLocationId: locationId,

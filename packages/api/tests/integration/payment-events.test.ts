@@ -181,6 +181,20 @@ describe('DrizzlePaymentEventRepository (real Postgres)', () => {
     expect(pgConstraintName(err)).toBe(PAYMENT_EVENT_ONE_SUCCESS_CONSTRAINT)
   })
 
+  // PRECEDENCE: a redelivered checkout.session.completed for an ALREADY-paid booking
+  // violates BOTH stripeEventId_unique AND one_success_per_booking at once. The webhook
+  // classifies a one-success violation as a DOUBLE_PAYMENT anomaly and everything else
+  // as a benign duplicate, so Postgres MUST surface the event-id seal here (created
+  // before one_success) — otherwise a plain redelivery would be mis-flagged as a double
+  // charge. Append-only migrations fix that creation order; this locks it against drift.
+  it('surfaces the event-id seal (not one-success) on a redelivery of a paid booking', async () => {
+    await paymentRepo.insert(event(bookingA))
+    // Faithful Stripe redelivery: identical event id + session, booking already SUCCEEDED.
+    const err = await paymentRepo.insert(event(bookingA)).catch((e) => e)
+    expect(pgErrorCode(err)).toBe(PG_ERROR.UNIQUE_VIOLATION)
+    expect(pgConstraintName(err)).toBe(PAYMENT_EVENT_STRIPE_EVENT_CONSTRAINT)
+  })
+
   // #717: the month filter + available-months are pushed into SQL. The one thing
   // in-memory cannot prove is that the SQL JST boundary (`AT TIME ZONE
   // 'Asia/Tokyo'`) matches the pure jstYearMonth: a payment at 15:30 UTC on Jul

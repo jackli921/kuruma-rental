@@ -21,8 +21,11 @@ export function ComplianceBanner({ vehicles, locale }: ComplianceBannerProps) {
   if (count === 0) return null
 
   return (
+    // A persistent advisory rendered on dashboard load — role="status" (polite),
+    // not role="alert" (assertive), so screen readers don't interrupt every visit.
+    // biome-ignore lint/a11y/useSemanticElements: <output> is phrasing-only and can't host this banner's heading + body + action-link flow content; role="status" on the container is the correct polite live region.
     <div
-      role="alert"
+      role="status"
       className="mt-6 flex flex-wrap items-center gap-3 rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 text-amber-900 dark:border-amber-500/40 dark:bg-amber-500/10 dark:text-amber-200"
     >
       <TriangleAlert className="size-5 shrink-0" aria-hidden="true" />

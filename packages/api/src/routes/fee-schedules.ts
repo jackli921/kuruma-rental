@@ -1,4 +1,3 @@
-import type { CreateFeeScheduleInput } from '@kuruma/shared/validators/fee-schedule'
 import {
   createFeeScheduleSchema,
   platformAdminCreateFeeScheduleSchema,
@@ -15,8 +14,8 @@ import {
 import type { FeeScheduleService } from '../services/fee-schedule'
 import type { FeeScheduleFilters } from '../services/filters'
 import type { FeeSchedule } from '../stores'
-import { type ResolveWriteOperatorId, operatorReadScope } from '../tenancy'
-import { fail, ok, parseBody, parseId, stripUndefined } from './helpers'
+import type { ResolveWriteOperatorId } from '../tenancy'
+import { fail, ok, parseBody, parseId, parseScopedCreate, stripUndefined } from './helpers'
 
 export function createFeeScheduleRoutes(
   service: FeeScheduleService,
@@ -51,20 +50,15 @@ export function createFeeScheduleRoutes(
       const vehicleClassId = c.req.query('vehicleClassId')
       if (vehicleClassId) filters.vehicleClassId = vehicleClassId
 
-      // Bypass-scope callers (PLATFORM_ADMIN, legacy STAFF/ADMIN) must scope
-      // explicitly — an accidental unscoped list across every operator is the
-      // exact leak we guard. Operator callers auto-scope, and any operatorId
-      // they pass is ignored here + at the repo.
-      if (operatorReadScope(ctx).kind === 'all') {
-        const operatorIdParam = c.req.query('operatorId')
-        const includeAll = c.req.query('includeAll') === 'true'
-        if (!operatorIdParam && !includeAll) {
-          return fail(c, 'operatorId or includeAll=true is required for cross-operator reads', 400)
-        }
-        if (operatorIdParam) filters.operatorId = operatorIdParam
+      // Cross-operator read scope is enforced in the service (audit M3): a bypass
+      // caller that names neither operatorId nor includeAll is rejected there, so a
+      // forgotten guard here can't leak every operator's private config. Operator
+      // callers auto-scope; any operatorId they pass is ignored at the repo.
+      const read = {
+        operatorId: c.req.query('operatorId'),
+        includeAll: c.req.query('includeAll') === 'true',
       }
-
-      return ok(c, await service.findAll(ctx, filters))
+      return ok(c, await service.findAll(ctx, read, filters))
     })
     .get('/fee-schedules/:id', async (c) => {
       const user = requireUser(c)
@@ -82,23 +76,14 @@ export function createFeeScheduleRoutes(
       if (!FLEET_WRITE_ROLES.has(user.role)) return fail(c, 'Forbidden', 403)
 
       const ctx = toCallerContext(user)
-      // Bypass callers must name the target operator in the body; operator
-      // callers never send one — their tenant is stamped server-side.
-      const isBypass = operatorReadScope(ctx).kind === 'all'
-
-      let d: CreateFeeScheduleInput
-      let operatorId: string
-      if (isBypass) {
-        const parsed = await parseBody(c, platformAdminCreateFeeScheduleSchema)
-        if (!parsed.ok) return parsed.response
-        d = parsed.data
-        operatorId = await resolveWriteOperatorId(ctx, parsed.data.operatorId)
-      } else {
-        const parsed = await parseBody(c, createFeeScheduleSchema)
-        if (!parsed.ok) return parsed.response
-        d = parsed.data
-        operatorId = await resolveWriteOperatorId(ctx)
-      }
+      const parsed = await parseScopedCreate(
+        c,
+        ctx,
+        { operator: createFeeScheduleSchema, admin: platformAdminCreateFeeScheduleSchema },
+        resolveWriteOperatorId,
+      )
+      if (!parsed.ok) return parsed.response
+      const { data: d, operatorId } = parsed
 
       const result = await service.create(ctx, {
         operatorId,

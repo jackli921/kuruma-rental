@@ -157,6 +157,34 @@ describe('DrizzleBookingRepository', () => {
     expect(booking.updatedAt).toBeInstanceOf(Date)
   })
 
+  it('effectiveEndAt follows the DROPOFF location turnaround on a one-way booking (#1023)', async () => {
+    // One-way A->B: the car is returned and cleaned at B, so its next-bookable
+    // window must be B's turnaround, not the pickup's (§6 / F1). B's 180min is
+    // distinct from A's 120 and the 2880 fallback, so a wrong-location or
+    // fallback result is unambiguous.
+    const DROPOFF_TURNAROUND_MINUTES = 180
+    const dropoff = await seedLocation('booking-dropoff', DROPOFF_TURNAROUND_MINUTES)
+    createdLocationIds.push(dropoff.id)
+
+    const endAt = new Date('2026-10-01T14:00:00Z')
+    const booking = await seedBooking({
+      startAt: new Date('2026-10-01T10:00:00Z'),
+      endAt,
+      status: 'CONFIRMED',
+      source: 'DIRECT',
+      externalId: null,
+      notes: null,
+      dropoffLocationId: dropoff.id,
+    })
+    createdBookingIds.push(booking.id)
+
+    expect(booking.pickupLocationId).toBe(testLocationId) // A, turnaround 120
+    expect(booking.dropoffLocationId).toBe(dropoff.id) // B, turnaround 180
+    expect(booking.effectiveEndAt).toEqual(
+      new Date(endAt.getTime() + DROPOFF_TURNAROUND_MINUTES * 60_000),
+    )
+  })
+
   it('findById retrieves a created booking', async () => {
     const endAt = new Date('2026-08-01T12:00:00Z')
     const created = await seedBooking({
@@ -555,7 +583,46 @@ describe('POST /bookings via HTTP (real Postgres)', () => {
     expect(second.status).toBe(409)
     const secondBody = await second.json()
     expect(secondBody.success).toBe(false)
-    expect(secondBody.error).toMatch(/already booked/i)
+    // #464: a SPECIFIC booking is now class-capacity guarded too (a CLASS_COMBO
+    // float is invisible to the per-car exclusion constraint). On a single-car
+    // class+location the capacity guard (demand >= supply) fires before the
+    // exclusion constraint, so an overlapping re-book of the only car reports the
+    // class as sold out rather than "already booked" — both are a 409 double-book
+    // rejection. Accept either so this stays robust to the class car-count.
+    expect(secondBody.error).toMatch(/already booked|No cars left/i)
+  })
+
+  it('GET /bookings hides an operator DIRECT booking from a PARTNER key (#1119)', async () => {
+    // A renter books a DIRECT (source defaults to DIRECT) booking on Best Car
+    // Rental. A Trip.com PARTNER key calling the SAME endpoint must NOT see it —
+    // it reads only its own channel (source=TRIP_COM). Closes the cross-tenant
+    // leak where `bypassScope` mapped PARTNER to an unrestricted `all` read.
+    const created = await app.request('/bookings', {
+      method: 'POST',
+      headers: { ...headers, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        requestedVehicleId: httpVehicle.id,
+        pickupLocationId: testLocationId,
+        dropoffLocationId: testLocationId,
+        startAt: '2027-05-01T10:00:00Z',
+        endAt: '2027-05-01T14:00:00Z',
+        source: 'DIRECT',
+        disclaimerAccepted: true,
+      }),
+    })
+    expect(created.status).toBe(201)
+    const directId = (await created.json()).data.id
+    httpBookingIds.push(directId)
+
+    // The owning renter CAN see it — proves the row exists and is readable, so the
+    // PARTNER's absence below is scoping, not a missing booking.
+    const ownerView = await app.request('/bookings', { headers })
+    expect((await ownerView.json()).data.map((b: { id: string }) => b.id)).toContain(directId)
+
+    const partnerHeaders = await authHeaders({ sub: crypto.randomUUID(), role: 'PARTNER' })
+    const partnerView = await app.request('/bookings', { headers: partnerHeaders })
+    expect(partnerView.status).toBe(200)
+    expect((await partnerView.json()).data.map((b: { id: string }) => b.id)).not.toContain(directId)
   })
 
   it('rejects a cross-operator dropoff with 400 (#882 same-operator one-way guardrail)', async () => {

@@ -10,6 +10,8 @@ import { type CallerContext, SYSTEM_CONTEXT } from '../../src/middleware/auth'
 import { PG_ERROR } from '../../src/pg-errors'
 import {
   InMemoryAddOnRepository,
+  InMemoryAvailabilityRepository,
+  InMemoryClassRatePlanRepository,
   InMemoryDocumentStorage,
   InMemoryFeeScheduleRepository,
   InMemoryInsuranceOptionRepository,
@@ -17,6 +19,7 @@ import {
   InMemoryMaintenanceLogRepository,
   InMemoryRenterDocumentRepository,
   InMemoryUserRepository,
+  InMemoryVehicleBlockRepository,
   InMemoryVehicleClassRepository,
   InMemoryVehicleRepository,
 } from '../../src/repositories/in-memory'
@@ -32,6 +35,7 @@ import {
   type BookingVerificationGate,
   type CreateBookingInput,
 } from '../../src/services/booking'
+import type { CancellationRefundCoordinator } from '../../src/services/booking-lifecycle'
 import type { BookingPostCommitDispatcher } from '../../src/services/booking-post-commit-dispatcher'
 import { documentVerificationGate } from '../../src/services/document-verification-gate'
 import { RenterDocumentService } from '../../src/services/renter-document'
@@ -85,6 +89,9 @@ interface Harness {
   bookingStore: Map<string, Booking>
   events: BookingEvent[]
   vehicleId: string
+  // #1101: exposed concrete (repos.vehicleBlockRepo is the read-only Pick) so a
+  // test can schedule a block and assert the booking-vs-block guard.
+  vehicleBlockRepo: InMemoryVehicleBlockRepository
   generate: { mock: ReturnType<typeof vi.fn> }
 }
 
@@ -93,8 +100,28 @@ interface Harness {
 // Drizzle one without real rollback — ordering insert-before-append gives the
 // atomicity the exclusion-failure test asserts). `codes` drives the injectable
 // booking_code generator so the collision-retry path is deterministic.
+// Records what the lifecycle service asks of the payment side (#851): whether the
+// booking is paid, and every eager initiate (booking + intended amount). `failNext`
+// makes initiate throw so the "eager fire is best-effort" guard can be exercised.
+class FakeRefundCoordinator implements CancellationRefundCoordinator {
+  paid = false
+  failNext = false
+  initiateCalls: Array<{ bookingId: string; amountJpy: number }> = []
+  async isBookingPaid(): Promise<boolean> {
+    return this.paid
+  }
+  async initiateCancellationRefund(booking: Booking, amountJpy: number): Promise<void> {
+    this.initiateCalls.push({ bookingId: booking.id, amountJpy })
+    if (this.failNext) throw new Error('stripe transient boom')
+  }
+}
+
 async function setup(
-  opts: { codes?: string[]; verificationGate?: BookingVerificationGate } = {},
+  opts: {
+    codes?: string[]
+    verificationGate?: BookingVerificationGate
+    refundInitiator?: CancellationRefundCoordinator
+  } = {},
 ): Promise<Harness> {
   const bookingStore = new Map<string, Booking>()
   const events: BookingEvent[] = []
@@ -107,6 +134,15 @@ async function setup(
   const feeScheduleRepo = new InMemoryFeeScheduleRepository()
   const maintenanceLogRepo = new InMemoryMaintenanceLogRepository()
   const vehicleClassRepo = new InMemoryVehicleClassRepository()
+  // #464 2d.1 widened TransactionRepos; this in-mem harness mirrors the wiring
+  // so the submit's combo branch can read demand/capacity and rate plans in-tx.
+  const vehicleBlockRepo = new InMemoryVehicleBlockRepository()
+  const availabilityRepo = new InMemoryAvailabilityRepository(
+    vehicleRepo,
+    bookingRepo,
+    vehicleBlockRepo,
+  )
+  const classRatePlanRepo = new InMemoryClassRatePlanRepository()
   const userRepo = new InMemoryUserRepository(
     new Map<string, User>([
       [
@@ -147,6 +183,10 @@ async function setup(
     addOnRepo,
     feeScheduleRepo,
     userRepo,
+    availabilityRepo,
+    classRatePlanRepo,
+    vehicleClassRepo,
+    vehicleBlockRepo,
   }
   const runInTransaction: RunInTransaction = async (fn) => fn(repos)
 
@@ -166,6 +206,7 @@ async function setup(
     bookingEventRepo,
     generateMock,
     opts.verificationGate,
+    opts.refundInitiator,
   )
 
   return {
@@ -174,12 +215,14 @@ async function setup(
     bookingStore,
     events,
     vehicleId: vehicle.id,
+    vehicleBlockRepo,
     generate: { mock: generateMock },
   }
 }
 
 function createInput(o: Partial<CreateBookingInput> = {}): CreateBookingInput {
   return {
+    fulfillmentMode: 'SPECIFIC',
     requestedVehicleId: '',
     pickupLocationId: '',
     dropoffLocationId: '',
@@ -189,7 +232,25 @@ function createInput(o: Partial<CreateBookingInput> = {}): CreateBookingInput {
     source: 'DIRECT',
     addOnIds: [],
     ...o,
-  }
+  } as CreateBookingInput
+}
+
+// #464 2d.3: CLASS_COMBO submit input — the renter books a class at a location,
+// no concrete car (the operator assigns one on/before pickup). Mirrors createInput
+// but on the CLASS_COMBO branch of the discriminated union.
+function comboInput(o: Partial<CreateBookingInput> = {}): CreateBookingInput {
+  return {
+    fulfillmentMode: 'CLASS_COMBO',
+    classId: '',
+    pickupLocationId: '',
+    dropoffLocationId: '',
+    renterId: RENTER,
+    startAt: START,
+    endAt: END,
+    source: 'DIRECT',
+    addOnIds: [],
+    ...o,
+  } as CreateBookingInput
 }
 
 // Resolve the real seeded location id (InMemory repos assign UUIDs) and align
@@ -240,6 +301,98 @@ describe('BookingService.create — past-start floor (#954)', () => {
       }),
       NOW,
     )
+    expect(result.ok).toBe(true)
+  })
+})
+
+describe('BookingService.create — vehicle-block guard (#1101)', () => {
+  // Seeded location turnaround is 2880m (48h), so a [START, END] rental occupies
+  // [2026-07-02, 2026-07-06) once the dropoff tail is added.
+  function scheduleBlock(h: Harness, vehicleId: string, startAt: Date, endAt: Date) {
+    return h.vehicleBlockRepo.create({
+      operatorId: OP_A,
+      vehicleId,
+      startAt,
+      endAt,
+      kind: 'MAINTENANCE',
+      reason: 'scheduled service',
+      notes: null,
+      createdBy: 'op-user',
+    })
+  }
+
+  function book(h: Harness, vehicleId: string, locationId: string) {
+    return h.service.create(
+      renterCtx,
+      createInput({
+        requestedVehicleId: vehicleId,
+        pickupLocationId: locationId,
+        dropoffLocationId: locationId,
+        startAt: START,
+        endAt: END,
+      }),
+      NOW,
+    )
+  }
+
+  it('rejects a booking that overlaps a block on the rental window (409 VEHICLE_BLOCKED)', async () => {
+    const h = await setup()
+    const { vehicleId, locationId } = await seedReady(h)
+    await scheduleBlock(
+      h,
+      vehicleId,
+      new Date('2026-07-02T12:00:00Z'),
+      new Date('2026-07-03T00:00:00Z'),
+    )
+
+    const result = await book(h, vehicleId, locationId)
+
+    expect(result.ok).toBe(false)
+    expect(result.status).toBe(409)
+    if (!result.ok) expect(result.code).toBe('VEHICLE_BLOCKED')
+  })
+
+  it('rejects a booking when the block only overlaps the dropoff turnaround tail', async () => {
+    const h = await setup()
+    const { vehicleId, locationId } = await seedReady(h)
+    // Between END (07-04) and effectiveEndAt (07-06) — outside the raw rental,
+    // inside the turnaround-inclusive window the guard compares against.
+    await scheduleBlock(
+      h,
+      vehicleId,
+      new Date('2026-07-05T00:00:00Z'),
+      new Date('2026-07-05T12:00:00Z'),
+    )
+
+    const result = await book(h, vehicleId, locationId)
+
+    expect(result.ok).toBe(false)
+    expect(result.status).toBe(409)
+    if (!result.ok) expect(result.code).toBe('VEHICLE_BLOCKED')
+  })
+
+  it('allows a booking when the block sits entirely after the turnaround window', async () => {
+    const h = await setup()
+    const { vehicleId, locationId } = await seedReady(h)
+    await scheduleBlock(
+      h,
+      vehicleId,
+      new Date('2026-07-07T00:00:00Z'),
+      new Date('2026-07-08T00:00:00Z'),
+    )
+
+    const result = await book(h, vehicleId, locationId)
+
+    expect(result.ok).toBe(true)
+  })
+
+  it('allows a booking when the block ends exactly at the rental start (half-open)', async () => {
+    const h = await setup()
+    const { vehicleId, locationId } = await seedReady(h)
+    await scheduleBlock(h, vehicleId, new Date('2026-07-01T12:00:00Z'), START)
+
+    const result = await book(h, vehicleId, locationId)
+
     expect(result.ok).toBe(true)
   })
 })
@@ -445,6 +598,40 @@ describe('BookingService.create — single-transaction submit (#392 §4)', () =>
     // Mutation guard (§9 item 20): a 60-min result MUST fail this assertion.
     expect(result.booking.effectiveEndAt.getTime() - END.getTime()).toBe(TURNAROUND_MS)
     expect(result.booking.effectiveEndAt.getTime() - END.getTime()).not.toBe(60 * 60 * 1000)
+  })
+
+  it('one-way booking: effectiveEndAt follows the DROPOFF location turnaround, not the pickup (#1023)', async () => {
+    const h = await setup()
+    const { vehicleId, locationId } = await seedReady(h) // pickup = vehicle's storefront (2880)
+    // A different same-operator location to return the car to, with a turnaround
+    // distinct from the pickup's 2880 so a pickup-derived result is unambiguous.
+    const ONE_WAY_TURNAROUND_MIN = 1440
+    const dropoff = await h.repos.locationRepo.create({
+      operatorId: OP_A,
+      name: 'Kyoto Return',
+      address: '4-5-6 Kyoto',
+      operatingHours: null,
+      timezone: 'Asia/Tokyo',
+      defaultTurnaroundMinutes: ONE_WAY_TURNAROUND_MIN,
+      status: 'ACTIVE',
+    } as Parameters<typeof h.repos.locationRepo.create>[0])
+
+    const result = await h.service.create(
+      renterCtx,
+      createInput({
+        requestedVehicleId: vehicleId,
+        pickupLocationId: locationId,
+        dropoffLocationId: dropoff.id,
+      }),
+      NOW,
+    )
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+    expect(result.booking.effectiveEndAt.getTime() - END.getTime()).toBe(
+      ONE_WAY_TURNAROUND_MIN * 60 * 1000,
+    )
+    // Mutation guard: must NOT be the pickup location's 2880 turnaround.
+    expect(result.booking.effectiveEndAt.getTime() - END.getTime()).not.toBe(TURNAROUND_MS)
   })
 
   it('snapshots the selected active insurance option and adds its daily price to totalPrice', async () => {
@@ -764,9 +951,11 @@ describe('BookingService.create — single-transaction submit (#392 §4)', () =>
       assignedVehicleId: 'other-veh',
       pickupLocationId: locationId,
       dropoffLocationId: locationId,
-      startAt: START,
-      endAt: END,
-      effectiveEndAt: new Date(END.getTime() + TURNAROUND_MS),
+      // #464: far-future window so this row owns the booking_code without
+      // consuming the class unit the new (overlapping) booking needs.
+      startAt: new Date(START.getTime() + 60 * 24 * 60 * 60 * 1000),
+      endAt: new Date(END.getTime() + 60 * 24 * 60 * 60 * 1000),
+      effectiveEndAt: new Date(END.getTime() + 60 * 24 * 60 * 60 * 1000 + TURNAROUND_MS),
       status: 'CONFIRMED',
       source: 'DIRECT',
       bookingCode: 'COLLIDE1',
@@ -808,9 +997,11 @@ describe('BookingService.create — single-transaction submit (#392 §4)', () =>
       assignedVehicleId: 'other-veh',
       pickupLocationId: locationId,
       dropoffLocationId: locationId,
-      startAt: START,
-      endAt: END,
-      effectiveEndAt: new Date(END.getTime() + TURNAROUND_MS),
+      // #464: far-future window so this row owns the booking_code without
+      // consuming the class unit the new (overlapping) booking needs.
+      startAt: new Date(START.getTime() + 60 * 24 * 60 * 60 * 1000),
+      endAt: new Date(END.getTime() + 60 * 24 * 60 * 60 * 1000),
+      effectiveEndAt: new Date(END.getTime() + 60 * 24 * 60 * 60 * 1000 + TURNAROUND_MS),
       status: 'CONFIRMED',
       source: 'DIRECT',
       bookingCode: 'DUP00001',
@@ -854,6 +1045,333 @@ describe('BookingService.create — single-transaction submit (#392 §4)', () =>
     expect(result.ok).toBe(false)
     if (result.ok) return
     expect(result.status).toBe(400)
+  })
+})
+
+describe('BookingService.create — CLASS_COMBO (#464 2d.3)', () => {
+  // Build on seedReady (vehicle + location wired), then attach a fresh class
+  // to the seeded vehicle and publish an ACTIVE class rate plan for the
+  // (operator, class, pickupLocation) triple. The returned ids are what the
+  // combo submit reads.
+  async function seedComboReady(
+    h: Harness,
+    opts: { dayRateJpy?: number; classOperatorId?: string } = {},
+  ): Promise<{ classId: string; locationId: string; vehicleId: string }> {
+    const { vehicleId, locationId } = await seedReady(h)
+    const klass = await h.repos.vehicleClassRepo.create({
+      operatorId: opts.classOperatorId ?? OP_A,
+      name: 'Compact',
+      slug: 'compact',
+      description: null,
+      photos: [],
+      seats: 5,
+      luggageCapacity: 2,
+      transmission: 'AUTO',
+      fuelType: null,
+      acrissCode: null,
+      sortOrder: 0,
+      status: 'ACTIVE',
+    })
+    // Wire the seeded vehicle into the new class so countClassCapacity counts
+    // it as supply for the (op, class, loc) triple.
+    const veh = await h.repos.vehicleRepo.findById(SYSTEM_CONTEXT, vehicleId)
+    ;(veh as Vehicle).classId = klass.id
+    await h.repos.classRatePlanRepo.create({
+      operatorId: OP_A,
+      classId: klass.id,
+      pickupLocationId: locationId,
+      dayRateJpy: opts.dayRateJpy ?? 8000,
+      isActive: true,
+      label: null,
+    })
+    return { classId: klass.id, locationId, vehicleId }
+  }
+
+  it('creates a CLASS_COMBO booking with null vehicle ids + priced off the rate plan', async () => {
+    const h = await setup()
+    const { classId, locationId } = await seedComboReady(h, { dayRateJpy: 8000 })
+
+    const result = await h.service.create(
+      renterCtx,
+      comboInput({
+        classId,
+        pickupLocationId: locationId,
+        dropoffLocationId: locationId,
+      }),
+      NOW,
+    )
+
+    expect(result.ok).toBe(true)
+    if (!result.ok) throw new Error(result.error.toString())
+    expect(result.booking.fulfillmentMode).toBe('CLASS_COMBO')
+    expect(result.booking.requestedVehicleId).toBeNull()
+    expect(result.booking.assignedVehicleId).toBeNull()
+    expect(result.booking.classId).toBe(classId)
+    // 8000 yen/day × 2-day rental = 16000.
+    expect(result.booking.totalPrice).toBe(16000)
+
+    // BOOKING_CREATED event mirrors the discriminator + null vehicle ids.
+    expect(h.events).toHaveLength(1)
+    expect(h.events[0]!.payload).toMatchObject({
+      type: 'BOOKING_CREATED',
+      fulfillmentMode: 'CLASS_COMBO',
+      requestedVehicleId: null,
+      assignedVehicleId: null,
+      classId,
+      totalPrice: 16000,
+    })
+  })
+
+  // Maintainability review 2026-06-24 finding #11: cross-PR drift between
+  // #1028 (SPECIFIC turnaround follows dropoff) and #1035 (CLASS_COMBO landed
+  // after, still keyed off pickup). The DB trigger overwrites the persisted
+  // value with the dropoff-derived one, so data wasn't corrupted, but the
+  // service-returned booking and the persisted row disagreed on
+  // `effectiveEndAt` until the next reload. Mirrors the analogous SPECIFIC
+  // test ("one-way booking: effectiveEndAt follows the DROPOFF location
+  // turnaround, not the pickup (#1023)") so the two paths can't drift again.
+  it('one-way CLASS_COMBO: effectiveEndAt follows the DROPOFF location turnaround, not the pickup', async () => {
+    const h = await setup()
+    const { classId, locationId } = await seedComboReady(h)
+    const ONE_WAY_TURNAROUND_MIN = 1440
+    const dropoff = await h.repos.locationRepo.create({
+      operatorId: OP_A,
+      name: 'Combo Kyoto Return',
+      address: '7-8-9 Kyoto',
+      operatingHours: null,
+      timezone: 'Asia/Tokyo',
+      defaultTurnaroundMinutes: ONE_WAY_TURNAROUND_MIN,
+      status: 'ACTIVE',
+    } as Parameters<typeof h.repos.locationRepo.create>[0])
+
+    const result = await h.service.create(
+      renterCtx,
+      comboInput({
+        classId,
+        pickupLocationId: locationId,
+        dropoffLocationId: dropoff.id,
+      }),
+      NOW,
+    )
+
+    expect(result.ok).toBe(true)
+    if (!result.ok) throw new Error(result.error.toString())
+    expect(result.booking.effectiveEndAt.getTime() - END.getTime()).toBe(
+      ONE_WAY_TURNAROUND_MIN * 60 * 1000,
+    )
+    // Mutation guard: must NOT be the pickup location's 2880 turnaround.
+    expect(result.booking.effectiveEndAt.getTime() - END.getTime()).not.toBe(TURNAROUND_MS)
+  })
+
+  it('rejects with NO_COMBO_RATE_SET when the operator has not published a rate plan', async () => {
+    const h = await setup()
+    const { vehicleId, locationId } = await seedReady(h)
+    const klass = await h.repos.vehicleClassRepo.create({
+      operatorId: OP_A,
+      name: 'NoRate',
+      slug: 'norate',
+      description: null,
+      photos: [],
+      seats: 5,
+      luggageCapacity: 2,
+      transmission: 'AUTO',
+      fuelType: null,
+      acrissCode: null,
+      sortOrder: 0,
+      status: 'ACTIVE',
+    })
+    const veh = await h.repos.vehicleRepo.findById(SYSTEM_CONTEXT, vehicleId)
+    ;(veh as Vehicle).classId = klass.id
+
+    const result = await h.service.create(
+      renterCtx,
+      comboInput({
+        classId: klass.id,
+        pickupLocationId: locationId,
+        dropoffLocationId: locationId,
+      }),
+      NOW,
+    )
+
+    expect(result.ok).toBe(false)
+    if (result.ok) return
+    expect(result.status).toBe(400)
+    expect(result.code).toBe('NO_COMBO_RATE_SET')
+  })
+
+  it('rejects when the pickup location does not exist', async () => {
+    const h = await setup()
+    const { classId } = await seedComboReady(h)
+    const result = await h.service.create(
+      renterCtx,
+      comboInput({
+        classId,
+        pickupLocationId: '00000000-0000-4000-8000-000000000099',
+        dropoffLocationId: '00000000-0000-4000-8000-000000000099',
+      }),
+      NOW,
+    )
+    expect(result.ok).toBe(false)
+    if (result.ok) return
+    expect(result.status).toBe(400)
+    expect(result.error).toBe('Pickup location is not available')
+  })
+
+  it('rejects when the class belongs to a different operator than the pickup location', async () => {
+    const h = await setup()
+    const { locationId } = await seedReady(h)
+    // Class owned by OP_B; pickup location owned by OP_A. A forged classId from
+    // another tenant must not pass the in-tx ownership gate (#464 plan §2d.3).
+    const foreign = await h.repos.vehicleClassRepo.create({
+      operatorId: OP_B,
+      name: 'Foreign',
+      slug: 'foreign',
+      description: null,
+      photos: [],
+      seats: 5,
+      luggageCapacity: 2,
+      transmission: 'AUTO',
+      fuelType: null,
+      acrissCode: null,
+      sortOrder: 0,
+      status: 'ACTIVE',
+    })
+    const result = await h.service.create(
+      renterCtx,
+      comboInput({
+        classId: foreign.id,
+        pickupLocationId: locationId,
+        dropoffLocationId: locationId,
+      }),
+      NOW,
+    )
+    expect(result.ok).toBe(false)
+    if (result.ok) return
+    expect(result.status).toBe(400)
+    expect(result.error).toBe('Vehicle class is not available')
+  })
+
+  // Plan §2d.3 P1 invariant: demand counts SPECIFIC occupants of the same
+  // (op, class, loc) triple, so a single car booked SPECIFIC by another renter
+  // sells out the combo even though no other CLASS_COMBO exists. Without this
+  // pin the contract is invisible — a regression that drops the SPECIFIC ↔
+  // combo coupling would silently double-book the class.
+  it('counts an overlapping SPECIFIC booking as combo demand → 409 CLASS_COMBO_SOLD_OUT', async () => {
+    const h = await setup()
+    const { classId, locationId, vehicleId } = await seedComboReady(h)
+
+    const existing = await h.service.create(
+      renterCtx,
+      createInput({
+        requestedVehicleId: vehicleId,
+        pickupLocationId: locationId,
+        dropoffLocationId: locationId,
+      }),
+      NOW,
+    )
+    expect(existing.ok).toBe(true)
+
+    const result = await h.service.create(
+      renterCtx,
+      comboInput({
+        classId,
+        pickupLocationId: locationId,
+        dropoffLocationId: locationId,
+      }),
+      NOW,
+    )
+    expect(result.ok).toBe(false)
+    if (result.ok) return
+    expect(result.status).toBe(409)
+    expect(result.code).toBe('CLASS_COMBO_SOLD_OUT')
+  })
+
+  // #464: mirror of the test above. The per-vehicle exclusion constraint skips
+  // NULL assignedVehicleId, so a CLASS_COMBO float is invisible to it. Without
+  // lifting the class-capacity gate onto the SPECIFIC path too, a SPECIFIC create
+  // can grab the very car a float already reserved → overbook.
+  it('rejects a SPECIFIC create when a CLASS_COMBO float holds the last class unit → 409', async () => {
+    const h = await setup()
+    const { classId, locationId, vehicleId } = await seedComboReady(h)
+    await h.repos.bookingRepo.create(
+      SYSTEM_CONTEXT,
+      bookingRow({
+        classId,
+        pickupLocationId: locationId,
+        dropoffLocationId: locationId,
+        requestedVehicleId: null,
+        assignedVehicleId: null,
+        fulfillmentMode: 'CLASS_COMBO',
+        bookingCode: 'FLOAT001',
+      }),
+    )
+    const result = await h.service.create(
+      renterCtx,
+      createInput({
+        requestedVehicleId: vehicleId,
+        pickupLocationId: locationId,
+        dropoffLocationId: locationId,
+      }),
+      NOW,
+    )
+    expect(result.ok).toBe(false)
+    if (result.ok) return
+    expect(result.status).toBe(409)
+    expect(result.code).toBe('CLASS_COMBO_SOLD_OUT')
+  })
+
+  // #1141: a blocked car is not real class supply. Block the ONLY class car in
+  // the dropoff turnaround tail [END, effectiveEndAt) — outside the raw rental,
+  // inside the occupancy window capacity counts against. If the capacity guard
+  // used input.endAt (not effectiveEndAt) for the block window, this tail block
+  // would be missed and the float admitted with no assignable car. Guards the
+  // exact arg (effectiveEndAt) that a repo-level test cannot pin at the caller.
+  it('rejects a CLASS_COMBO when the only class car is blocked in the turnaround tail → 409', async () => {
+    const h = await setup()
+    const { classId, locationId, vehicleId } = await seedComboReady(h)
+    // Between END (07-04) and effectiveEndAt (07-06) — the turnaround tail.
+    await h.vehicleBlockRepo.create({
+      operatorId: OP_A,
+      vehicleId,
+      startAt: new Date('2026-07-05T00:00:00Z'),
+      endAt: new Date('2026-07-05T12:00:00Z'),
+      kind: 'MAINTENANCE',
+      reason: 'scheduled service',
+      notes: null,
+      createdBy: 'op-user',
+    })
+
+    const result = await h.service.create(
+      renterCtx,
+      comboInput({ classId, pickupLocationId: locationId, dropoffLocationId: locationId }),
+      NOW,
+    )
+    expect(result.ok).toBe(false)
+    if (result.ok) return
+    expect(result.status).toBe(409)
+    expect(result.code).toBe('CLASS_COMBO_SOLD_OUT')
+  })
+
+  // #464 / #954: combos have no per-vehicle rules, but the universal past-start
+  // floor must still fire (checkRentalRules with all class rules null).
+  it('rejects a CLASS_COMBO whose start is in the past → 400 RENTAL_RULE_START_IN_PAST', async () => {
+    const h = await setup()
+    const { classId, locationId } = await seedComboReady(h)
+    const result = await h.service.create(
+      renterCtx,
+      comboInput({
+        classId,
+        pickupLocationId: locationId,
+        dropoffLocationId: locationId,
+        startAt: new Date(NOW.getTime() - 2 * 60 * 60 * 1000), // 2h before now
+        endAt: END,
+      }),
+      NOW,
+    )
+    expect(result.ok).toBe(false)
+    if (result.ok) return
+    expect(result.status).toBe(400)
+    expect(result.code).toBe('RENTAL_RULE_START_IN_PAST')
   })
 })
 
@@ -988,6 +1506,14 @@ async function setupSub(
     vehicleData({ classId: classA.id, pickupLocationId: location.id, dailyRateJpy: 10000 }),
   )
 
+  const vehicleBlockRepo = new InMemoryVehicleBlockRepository()
+  const availabilityRepo = new InMemoryAvailabilityRepository(
+    vehicleRepo,
+    bookingRepo,
+    vehicleBlockRepo,
+  )
+  const classRatePlanRepo = new InMemoryClassRatePlanRepository()
+
   const repos: TransactionRepos = {
     vehicleRepo,
     maintenanceLogRepo,
@@ -998,6 +1524,10 @@ async function setupSub(
     addOnRepo,
     feeScheduleRepo,
     userRepo,
+    availabilityRepo,
+    classRatePlanRepo,
+    vehicleClassRepo,
+    vehicleBlockRepo,
   }
   const runInTransaction: RunInTransaction = async (fn) => fn(repos)
   const service = new BookingService(
@@ -1523,5 +2053,162 @@ describe('BookingService — renter lifecycle notifications (#664)', () => {
     const result = await h.service.substitute(opCtxB, h.bookingId, replacement.id, null)
     expect(result.ok).toBe(false)
     expect(run).not.toHaveBeenCalled()
+  })
+})
+
+// #851 Slice 3: the cancel tx commits the durable settlement state, and the eager
+// post-commit fire (best-effort) kicks the refund. The settlement decision is the
+// product money policy (design §money): UNPAID→ADVISORY, paid+refundable→REFUND_DUE,
+// paid full-tier→CAPTURED; operator cancel is fee-free → full-total REFUND_DUE.
+describe('BookingService cancel/updateStatus — refund settlement + eager fire (#851 Slice 3)', () => {
+  const H = 60 * 60 * 1000
+  // A CONFIRMED booking on the seeded 10000/day vehicle, ready to cancel. The
+  // start offset picks the cancellation tier the test needs.
+  async function createConfirmed(h: Harness, startAt: Date, endAt: Date): Promise<Booking> {
+    const { vehicleId, locationId } = await seedReady(h)
+    const created = await h.service.create(
+      renterCtx,
+      createInput({
+        requestedVehicleId: vehicleId,
+        pickupLocationId: locationId,
+        dropoffLocationId: locationId,
+        startAt,
+        endAt,
+      }),
+      NOW,
+    )
+    if (!created.ok) throw new Error('createConfirmed: seed booking failed')
+    return created.booking
+  }
+  const lowTier = (h: Harness) =>
+    createConfirmed(h, new Date(NOW.getTime() + 60 * H), new Date(NOW.getTime() + 108 * H))
+
+  it('PAID renter cancel in a refundable tier commits REFUND_DUE and eagerly initiates the refundAmount', async () => {
+    const refunds = new FakeRefundCoordinator()
+    refunds.paid = true
+    const h = await setup({ codes: ['REFUND01'], refundInitiator: refunds })
+    const booking = await lowTier(h) // 60h out → LOW tier, 70% refundable
+
+    const res = await h.service.cancel(renterCtx, booking.id, null, NOW)
+
+    expect(res.ok).toBe(true)
+    if (!res.ok) return
+    expect(res.cancellation.tier).toBe('LOW')
+    expect(res.booking.cancellationFeeSettlement).toBe('REFUND_DUE')
+    // Persisted on the row, not just the returned object.
+    expect(h.bookingStore.get(booking.id)?.cancellationFeeSettlement).toBe('REFUND_DUE')
+    // Eager fire: exactly the tiered refundAmount the renter is owed.
+    expect(refunds.initiateCalls).toEqual([
+      { bookingId: booking.id, amountJpy: res.cancellation.refundAmount },
+    ])
+  })
+
+  it('PAID renter cancel in the FULL tier (nothing refundable) commits CAPTURED and never initiates a refund', async () => {
+    const refunds = new FakeRefundCoordinator()
+    refunds.paid = true
+    const h = await setup({ codes: ['CAPTURE1'], refundInitiator: refunds })
+    // 12h out → FULL tier (100% fee) → refundAmount 0.
+    const booking = await createConfirmed(
+      h,
+      new Date(NOW.getTime() + 12 * H),
+      new Date(NOW.getTime() + 36 * H),
+    )
+
+    const res = await h.service.cancel(renterCtx, booking.id, null, NOW)
+
+    expect(res.ok).toBe(true)
+    if (!res.ok) return
+    expect(res.cancellation.tier).toBe('FULL')
+    expect(res.cancellation.refundAmount).toBe(0)
+    expect(res.booking.cancellationFeeSettlement).toBe('CAPTURED')
+    expect(refunds.initiateCalls).toEqual([])
+  })
+
+  it('UNPAID renter cancel stays ADVISORY and never touches Stripe', async () => {
+    const refunds = new FakeRefundCoordinator() // paid stays false
+    const h = await setup({ codes: ['ADVISRY1'], refundInitiator: refunds })
+    const booking = await lowTier(h)
+
+    const res = await h.service.cancel(renterCtx, booking.id, null, NOW)
+
+    expect(res.ok).toBe(true)
+    if (!res.ok) return
+    expect(res.booking.cancellationFeeSettlement).toBe('ADVISORY')
+    expect(refunds.initiateCalls).toEqual([])
+  })
+
+  it('PAID operator cancel (updateStatus → CANCELLED) commits REFUND_DUE and eagerly refunds the FULL total', async () => {
+    const refunds = new FakeRefundCoordinator()
+    refunds.paid = true
+    const h = await setup({ codes: ['OPREFUND'], refundInitiator: refunds })
+    const booking = await lowTier(h) // 2-day rental → totalPrice 20000
+    await h.service.updateStatus(opCtxA, booking.id, 'ACTIVE')
+
+    const res = await h.service.updateStatus(opCtxA, booking.id, 'CANCELLED')
+
+    expect(res.ok).toBe(true)
+    if (!res.ok) return
+    expect(res.booking.cancellationFeeSettlement).toBe('REFUND_DUE')
+    expect(h.bookingStore.get(booking.id)?.cancellationFeeSettlement).toBe('REFUND_DUE')
+    // Operator fault → full total refunded (fee-free), not a tiered amount.
+    expect(refunds.initiateCalls).toEqual([{ bookingId: booking.id, amountJpy: 20000 }])
+  })
+
+  it('UNPAID operator cancel stays ADVISORY and never touches Stripe', async () => {
+    const refunds = new FakeRefundCoordinator()
+    const h = await setup({ codes: ['OPADVISY'], refundInitiator: refunds })
+    const booking = await lowTier(h)
+    await h.service.updateStatus(opCtxA, booking.id, 'ACTIVE')
+
+    const res = await h.service.updateStatus(opCtxA, booking.id, 'CANCELLED')
+
+    expect(res.ok).toBe(true)
+    if (!res.ok) return
+    expect(res.booking.cancellationFeeSettlement).toBe('ADVISORY')
+    expect(refunds.initiateCalls).toEqual([])
+  })
+
+  it('a throwing eager refund never rolls back the cancel — the booking stays durably REFUND_DUE for the reconciler', async () => {
+    const refunds = new FakeRefundCoordinator()
+    refunds.paid = true
+    refunds.failNext = true // initiate throws
+    const h = await setup({ codes: ['EAGERERR'], refundInitiator: refunds })
+    const booking = await lowTier(h)
+
+    const res = await h.service.cancel(renterCtx, booking.id, null, NOW)
+
+    // The cancel still commits; the durable REFUND_DUE row is the reconciler's queue.
+    expect(res.ok).toBe(true)
+    if (!res.ok) return
+    expect(h.bookingStore.get(booking.id)?.cancellationFeeSettlement).toBe('REFUND_DUE')
+    expect(refunds.initiateCalls).toHaveLength(1)
+  })
+
+  // #1056 follow-up — the eager fire must key off the COMMITTED settlement, not the
+  // pre-tx `owesRefund`. If the in-tx REFUND_DUE write no-ops (booking wasn't ADVISORY),
+  // the status still flips to CANCELLED but nothing is owed via this path, so Stripe must
+  // NOT be touched (else a refund is issued for a booking the reconciler can't see — it
+  // isn't REFUND_DUE). Pre-seeding a non-ADVISORY settlement exercises the otherwise-
+  // unreachable no-op branch.
+  it('operator cancel does NOT eager-fire when the REFUND_DUE commit no-ops (settlement already non-ADVISORY)', async () => {
+    const refunds = new FakeRefundCoordinator()
+    refunds.paid = true
+    const h = await setup({ codes: ['NOOPGATE'], refundInitiator: refunds })
+    const booking = await lowTier(h)
+    await h.service.updateStatus(opCtxA, booking.id, 'ACTIVE')
+    // Force the guarded REFUND_DUE write to no-op: the booking is no longer ADVISORY.
+    const seeded = h.bookingStore.get(booking.id)
+    if (!seeded) throw new Error('seed missing')
+    h.bookingStore.set(booking.id, { ...seeded, cancellationFeeSettlement: 'CAPTURED' })
+
+    const res = await h.service.updateStatus(opCtxA, booking.id, 'CANCELLED')
+
+    expect(res.ok).toBe(true)
+    if (!res.ok) return
+    // Status still transitions; settlement stays CAPTURED (the REFUND_DUE write no-op'd).
+    expect(res.booking.status).toBe('CANCELLED')
+    expect(res.booking.cancellationFeeSettlement).toBe('CAPTURED')
+    // The eager refund must NOT fire — nothing was committed REFUND_DUE for this path.
+    expect(refunds.initiateCalls).toEqual([])
   })
 })

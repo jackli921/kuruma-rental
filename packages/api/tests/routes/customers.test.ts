@@ -1,5 +1,6 @@
 import { Hono } from 'hono'
 import { beforeEach, describe, expect, it } from 'vitest'
+import { InMemoryBookingRepository } from '../../src/repositories/in-memory/booking'
 import { InMemoryCustomerRepository } from '../../src/repositories/in-memory/customer'
 import { InMemoryUserRepository } from '../../src/repositories/in-memory/user'
 import { createCustomerRoutes } from '../../src/routes/customers'
@@ -47,18 +48,21 @@ function setup({
   users = [] as User[],
   bookings = [] as Booking[],
   asRole = 'PLATFORM_ADMIN' as const,
+  operatorId,
 }: {
   users?: User[]
   bookings?: Booking[]
-  asRole?: 'PLATFORM_ADMIN' | 'RENTER'
+  asRole?: 'PLATFORM_ADMIN' | 'RENTER' | 'OPERATOR_OWNER' | 'OPERATOR_STAFF'
+  operatorId?: string
 } = {}) {
   const userStore = new Map(users.map((u) => [u.id, u]))
   const bookingStore = new Map(bookings.map((b) => [b.id, b]))
   const customerRepo = new InMemoryCustomerRepository(userStore, bookingStore)
   const userRepo = new InMemoryUserRepository(userStore)
-  const service = new CustomerService(customerRepo, userRepo)
+  const bookingRepo = new InMemoryBookingRepository(bookingStore)
+  const service = new CustomerService(customerRepo, userRepo, bookingRepo)
   app = new Hono()
-  app.use('*', testAuthMiddleware(ADMIN, asRole))
+  app.use('*', testAuthMiddleware(ADMIN, asRole, operatorId))
   app.route('/', createCustomerRoutes(service))
   return { customerRepo, userRepo, service }
 }
@@ -348,6 +352,61 @@ describe('GET /customers/search', () => {
     expect(res.status).toBe(200)
     const body = await res.json()
     expect(body.data).toEqual([])
+  })
+
+  // L7: operator carve-out for /customers/search lives on the handler, not on a
+  // path-string `path.endsWith()` match. An OPERATOR_OWNER with a tenant must be
+  // able to reach search; the same caller must NOT reach the cross-operator list,
+  // detail, or quick-create routes. Mutation proof: if the carve-out is restored
+  // as `path.endsWith(...)`, a future `/customers/search-*` would silently inherit
+  // the operator path — these tests bind the policy to the route.
+  it('admits OPERATOR_OWNER with a tenant on /customers/search (200, tenant-scoped result) — L7', async () => {
+    setup({
+      users: seed(),
+      asRole: 'OPERATOR_OWNER',
+      operatorId: '00000000-0000-4000-8000-0000000000aa',
+    })
+    const res = await app.request('/customers/search?q=tanaka')
+    expect(res.status).toBe(200)
+    // Empty because the tenant has no prior bookings with `tanaka` — locks in
+    // CustomerService.search's per-operator scoping. A regression that returned
+    // the cross-operator matches would surface here, not silently pass on 200.
+    const body = await res.json()
+    expect(body.data).toEqual([])
+  })
+
+  it('rejects OPERATOR_OWNER on /customers list (403) — L7', async () => {
+    setup({
+      users: seed(),
+      asRole: 'OPERATOR_OWNER',
+      operatorId: '00000000-0000-4000-8000-0000000000aa',
+    })
+    const res = await app.request('/customers')
+    expect(res.status).toBe(403)
+  })
+
+  it('rejects OPERATOR_OWNER on /customers/:id (403) — L7', async () => {
+    setup({
+      users: seed(),
+      asRole: 'OPERATOR_OWNER',
+      operatorId: '00000000-0000-4000-8000-0000000000aa',
+    })
+    const res = await app.request('/customers/00000000-0000-4000-8000-0000000000ff')
+    expect(res.status).toBe(403)
+  })
+
+  it('rejects OPERATOR_OWNER on /customers/quick-create (403) — L7', async () => {
+    setup({
+      users: seed(),
+      asRole: 'OPERATOR_OWNER',
+      operatorId: '00000000-0000-4000-8000-0000000000aa',
+    })
+    const res = await app.request('/customers/quick-create', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: 'X', email: 'x@example.com' }),
+    })
+    expect(res.status).toBe(403)
   })
 })
 

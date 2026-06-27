@@ -241,6 +241,33 @@ export function bookingEventsQueryOptions(id: string) {
   })
 }
 
+// #464: operator worklist — CLASS_COMBO float bookings still awaiting a concrete
+// car (status CONFIRMED or ACTIVE, assignedVehicleId null). The key is shared with
+// AssignVehicleDialog's invalidation target so a successful assign removes the
+// booking from this list in one cache-invalidation call.
+export const NEEDS_ASSIGNMENT_QUERY_KEY = ['operator-bookings', 'needs-assignment'] as const
+
+export async function fetchNeedsAssignment(): Promise<RawOperatorBooking[]> {
+  // `expand=renter` is supported alongside `needsAssignment=true` (the route
+  // applies all filters before the expansion join), so renter name/email are
+  // included when the user table has them. The rawOperatorBookingSchema already
+  // carries the optional renter block, so no new schema is needed here.
+  const sp = new URLSearchParams({ needsAssignment: 'true', expand: 'renter' })
+  const res = await fetch(`${getApiBaseUrl()}/bookings?${sp.toString()}`, {
+    credentials: 'include',
+  })
+  return unwrap(res, rawOperatorBookingSchema.array())
+}
+
+export function needsAssignmentQueryOptions() {
+  return queryOptions({
+    queryKey: NEEDS_ASSIGNMENT_QUERY_KEY,
+    queryFn: fetchNeedsAssignment,
+    refetchOnWindowFocus: true,
+    staleTime: 30_000,
+  })
+}
+
 // #616: the stable prefix every operator-bookings query is keyed under. A write
 // invalidates THIS key; React Query's prefix match cascades to the calendar,
 // detail, events and substitution-candidates entries in one call, so no mutation
@@ -273,6 +300,27 @@ export function substitutionCandidatesQueryOptions(id: string) {
     queryKey: ['operator-bookings', 'substitution-candidates', id],
     queryFn: () => fetchSubstitutionCandidates(id),
   })
+}
+
+// #464: assign a concrete vehicle to a CLASS_COMBO float booking. The server
+// enforces same-operator / same-pickup-location / same-ACRISS / AVAILABLE /
+// road-legal — the candidate set comes from substitution-candidates. A
+// VEHICLE_ASSIGNED audit event is appended; the booking transitions from a
+// float to a fully-assigned car. CSRF-gated (cookie-authed POST).
+export async function assignVehicle(
+  bookingId: string,
+  vehicleId: string,
+  reason: string | null,
+  csrfToken: string,
+): Promise<BookingDto> {
+  const body = reason != null ? { vehicleId, reason } : { vehicleId }
+  const res = await fetch(`${getApiBaseUrl()}/bookings/${encodeURIComponent(bookingId)}/assign`, {
+    method: 'POST',
+    credentials: 'include',
+    headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrfToken },
+    body: JSON.stringify(body),
+  })
+  return unwrap(res, bookingDtoSchema)
 }
 
 // --- Status mutations (cookie-based, CSRF-gated) ----------------------------

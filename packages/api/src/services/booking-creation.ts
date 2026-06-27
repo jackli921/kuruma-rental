@@ -12,15 +12,18 @@ import type {
   TransactionRepos,
   UserRepository,
 } from '../repositories/types'
+import type { Location, Vehicle } from '../stores'
+import { resolveBookingActor } from './booking-actor'
 import type { BookingPostCommitDispatcher } from './booking-post-commit-dispatcher'
 import { MS_PER_MINUTE, composeBookingTotal, rentalDays } from './booking-pricing-helpers'
 import type {
   BookingVerificationGate,
   CreateBookingInput,
+  CreateBookingRequest,
   CreateBookingResult,
 } from './booking-types'
 
-// Location-only turnaround fallback when a pickup location has no value set
+// Location-only turnaround fallback when the dropoff location has no value set
 // (§5.3, proposal §9 item 20). The legacy 60-min vehicle buffer is GONE — a
 // 60-min result is a regression the turnaround test pins against.
 const DEFAULT_TURNAROUND_MINUTES = 2880 // 48h
@@ -45,6 +48,8 @@ export class BookingCreationService {
     private readonly userRepo?: UserRepository,
     // Single post-commit seam (#393, TODO #300): ensureThread + notifications,
     // each caught-and-logged. Replaces the inline ensureThread calls.
+    // Optional is a TEST-ONLY seam: prod always wires it (createApp/index.ts);
+    // omitting it silently disables ALL post-commit effects (threads + emails).
     private readonly postCommit?: BookingPostCommitDispatcher,
     // Injectable so the collision-retry path is deterministically testable.
     private readonly generateCode: () => string = generateBookingCode,
@@ -55,9 +60,26 @@ export class BookingCreationService {
 
   async create(
     ctx: CallerContext,
-    input: CreateBookingInput,
+    rawInput: CreateBookingRequest,
     now: Date = new Date(),
   ): Promise<CreateBookingResult> {
+    // #1108 (audit M4): resolve the actor (renter / source / walk-in) from the
+    // caller's role HERE — the route forwards raw input and no longer rewrites it.
+    // The normalized command carries the resolved trio; every read past this
+    // point (renter scope authz, verification gate, submitInTx) sees it. A renter
+    // who supplied a walkInCustomer has it dropped (only manual bookers may
+    // register one), so strip it before re-attaching the resolved value.
+    const actor = resolveBookingActor(ctx, rawInput)
+    const { walkInCustomer: _rawWalkIn, ...rawRest } = rawInput
+    const input: CreateBookingInput = actor.walkInCustomer
+      ? {
+          ...rawRest,
+          renterId: actor.renterId,
+          source: actor.source,
+          walkInCustomer: actor.walkInCustomer,
+        }
+      : { ...rawRest, renterId: actor.renterId, source: actor.source }
+
     // Resolve the booking's renter (#314, #589). Three cases:
     //  - WALK-IN (1c): the operator registers a brand-new customer inline.
     //    createWalkInRenter ALWAYS makes a fresh renter (never deduped by phone),
@@ -166,6 +188,35 @@ export class BookingCreationService {
     throw lastErr
   }
 
+  // Both submit paths (SPECIFIC, CLASS_COMBO) must derive `effectiveEndAt`
+  // from the DROPOFF location's turnaround and produce the SAME value the DB
+  // trigger compute_effective_end_at() (migration 0069) will overwrite on
+  // insert. A drift between the two means the API response and the persisted
+  // row disagree on `effectiveEndAt` until the next reload (maintainability
+  // review 2026-06-24, finding #11). Single helper = single seam to keep them
+  // in sync; the trigger-vs-helper parity test pins it.
+  private async resolveDropoffEffectiveEnd(
+    repos: TransactionRepos,
+    operatorId: string,
+    pickup: Location,
+    dropoffLocationId: string,
+    endAt: Date,
+  ): Promise<
+    | { ok: true; dropoff: Location; effectiveEndAt: Date }
+    | { ok: false; status: 400; error: string }
+  > {
+    const dropoff =
+      dropoffLocationId === pickup.id
+        ? pickup
+        : await repos.locationRepo.findById(SYSTEM_CONTEXT, dropoffLocationId)
+    if (!dropoff || dropoff.operatorId !== operatorId) {
+      return { ok: false, status: 400, error: 'Dropoff location is not available' }
+    }
+    const turnaroundMinutes = dropoff.defaultTurnaroundMinutes ?? DEFAULT_TURNAROUND_MINUTES
+    const effectiveEndAt = new Date(endAt.getTime() + turnaroundMinutes * MS_PER_MINUTE)
+    return { ok: true, dropoff, effectiveEndAt }
+  }
+
   // The atomic decision-and-record (FC/IS: the decision; ensureThread is the
   // imperative shell). Resolution reads run as SYSTEM_CONTEXT — these are
   // internal pricing/snapshot reads, and insurance/fee reads reject RENTER
@@ -182,6 +233,9 @@ export class BookingCreationService {
     now: Date,
     repos: TransactionRepos,
   ): Promise<CreateBookingResult> {
+    if (input.fulfillmentMode === 'CLASS_COMBO') {
+      return this.submitComboInTx(ctx, input, renterId, now, repos)
+    }
     const vehicle = await repos.vehicleRepo.findById(SYSTEM_CONTEXT, input.requestedVehicleId)
     if (!vehicle) {
       return { ok: false, status: 400, error: 'Vehicle not found' }
@@ -237,19 +291,112 @@ export class BookingCreationService {
       return { ok: false, status: 400, error: 'Pickup location does not match the vehicle' }
     }
 
-    // Turnaround is location-only (§5.3): pickup location's default, 48h fallback.
     const pickup = await repos.locationRepo.findById(SYSTEM_CONTEXT, input.pickupLocationId)
     if (!pickup || pickup.operatorId !== operatorId) {
       return { ok: false, status: 400, error: 'Pickup location is not available' }
     }
-    if (input.dropoffLocationId !== input.pickupLocationId) {
-      const dropoff = await repos.locationRepo.findById(SYSTEM_CONTEXT, input.dropoffLocationId)
-      if (!dropoff || dropoff.operatorId !== operatorId) {
-        return { ok: false, status: 400, error: 'Dropoff location is not available' }
+    const eff = await this.resolveDropoffEffectiveEnd(
+      repos,
+      operatorId,
+      pickup,
+      input.dropoffLocationId,
+      input.endAt,
+    )
+    if (!eff.ok) return eff
+    const { effectiveEndAt } = eff
+
+    // #464: a SPECIFIC booking also consumes a class unit. A CLASS_COMBO float
+    // (null assignedVehicleId) is invisible to the per-vehicle exclusion
+    // constraint (booking.ts), so without this gate a SPECIFIC create could grab
+    // the last car a float already reserved. Same advisory lock + demand/capacity
+    // gate as the combo path; the exclusion constraint stays the per-car backstop.
+    const releaseLock = await repos.availabilityRepo.lockComboCapacity(
+      operatorId,
+      classId,
+      input.pickupLocationId,
+    )
+    try {
+      return await this.submitSpecificInTxLocked(
+        ctx,
+        input,
+        renterId,
+        now,
+        repos,
+        vehicle,
+        operatorId,
+        classId,
+        assignedVehicleId,
+        effectiveEndAt,
+      )
+    } finally {
+      releaseLock()
+    }
+  }
+
+  private async submitSpecificInTxLocked(
+    ctx: CallerContext,
+    input: CreateBookingInput & { fulfillmentMode: 'SPECIFIC' },
+    renterId: string | null,
+    now: Date,
+    repos: TransactionRepos,
+    vehicle: Vehicle,
+    operatorId: string,
+    classId: string,
+    assignedVehicleId: string,
+    effectiveEndAt: Date,
+  ): Promise<CreateBookingResult> {
+    // #1101: reject a booking that lands on a scheduled block (maintenance /
+    // out-of-service / manual hold) on the assigned car. Compared against
+    // [startAt, effectiveEndAt) — the SAME turnaround-inclusive window as the
+    // booking exclusion — so a block can't be slipped into a car's dropoff tail
+    // (must-fix #1). Booking-vs-block is a service-level NOT EXISTS because a
+    // single GiST EXCLUDE can't span bookings + vehicle_blocks; the residual
+    // schedule-during-checkout race is tiny + operator-recoverable at this scale
+    // (documented PR follow-up). CLASS_COMBO has no car at book time, so this
+    // guard is SPECIFIC-only at book time; the operator assign/substitute path
+    // runs the same block check (#1152).
+    const overlappingBlocks = await repos.vehicleBlockRepo.findOverlapping(
+      assignedVehicleId,
+      input.startAt,
+      effectiveEndAt,
+    )
+    if (overlappingBlocks.length > 0) {
+      return {
+        ok: false,
+        status: 409,
+        error: 'Vehicle is blocked (maintenance or hold) for the requested time range',
+        code: 'VEHICLE_BLOCKED',
       }
     }
-    const turnaroundMinutes = pickup.defaultTurnaroundMinutes ?? DEFAULT_TURNAROUND_MINUTES
-    const effectiveEndAt = new Date(input.endAt.getTime() + turnaroundMinutes * MS_PER_MINUTE)
+
+    // Demand counts SPECIFIC occupancy + floats on the (op, class, loc) triple;
+    // capacity is the road-legal supply at the requested return. demand >= capacity
+    // means every unit is already claimed → reject before insert. (The exclusion
+    // constraint below still rejects a double-booked specific car while capacity
+    // remains — e.g. a multi-car class where only this car is taken.)
+    const demand = await repos.availabilityRepo.countClassDemand(
+      operatorId,
+      classId,
+      input.pickupLocationId,
+      input.startAt,
+      effectiveEndAt,
+    )
+    const capacity = await repos.availabilityRepo.countClassCapacity(
+      operatorId,
+      classId,
+      input.pickupLocationId,
+      input.startAt,
+      effectiveEndAt,
+      input.endAt,
+    )
+    if (demand >= capacity) {
+      return {
+        ok: false,
+        status: 409,
+        error: 'No cars left in this class at this location for the requested window',
+        code: 'CLASS_COMBO_SOLD_OUT',
+      }
+    }
 
     // Price off the ASSIGNED vehicle's rates — never class-level (#406), never
     // client-supplied (#74), non-null on every submit (#429 backfill guard).
@@ -388,6 +535,256 @@ export class BookingCreationService {
         assignedVehicleId,
         classId,
         fulfillmentMode: 'SPECIFIC', // #463: mirror the booking's discriminator in the audit snapshot
+        startAt: input.startAt.toISOString(),
+        endAt: input.endAt.toISOString(),
+        totalPrice,
+        insuranceSnapshot,
+        feeSnapshot,
+        addOnSnapshot,
+      },
+    })
+
+    return { ok: true, booking }
+  }
+
+  // #464 2d.3: CLASS_COMBO submit — the renter books a class at a pickup
+  // location, no car selected at book time. The operator assigns a concrete
+  // vehicle on/before pickup (substitute path). Priced off the active class
+  // rate plan, NOT per-car (proposal §5.1). Demand/capacity are checked in-tx
+  // so a concurrent SPECIFIC submit on the same (op, class, loc) can't slip a
+  // car under the gate; slice 2d.4 adds the advisory lock that fully
+  // serializes the demand → capacity → insert window.
+  private async submitComboInTx(
+    ctx: CallerContext,
+    input: CreateBookingInput & { fulfillmentMode: 'CLASS_COMBO' },
+    renterId: string | null,
+    now: Date,
+    repos: TransactionRepos,
+  ): Promise<CreateBookingResult> {
+    // The pickup location anchors the booking's operator + the (op, class, loc)
+    // triple every other read keys off (a forged classId from another tenant
+    // gets rejected at the class-belongs-to-operator gate below).
+    const pickup = await repos.locationRepo.findById(SYSTEM_CONTEXT, input.pickupLocationId)
+    if (!pickup) {
+      return { ok: false, status: 400, error: 'Pickup location is not available' }
+    }
+    const operatorId = pickup.operatorId
+    const classId = input.classId
+
+    const klass = await repos.vehicleClassRepo.findById(SYSTEM_CONTEXT, classId)
+    if (!klass || klass.operatorId !== operatorId) {
+      return { ok: false, status: 400, error: 'Vehicle class is not available' }
+    }
+
+    // #464: a combo has no per-vehicle rules (no car at book time), but the
+    // universal past-start floor (#954) still applies. checkRentalRules with all
+    // class rules null fires only RENTAL_RULE_START_IN_PAST — ignoring min/max/
+    // advance — so a start already gone is rejected on this path too.
+    const ruleCheck = checkRentalRules(
+      { minRentalHours: null, maxRentalHours: null, advanceBookingHours: null },
+      input.startAt,
+      input.endAt,
+      now,
+    )
+    if (!ruleCheck.ok) {
+      return {
+        ok: false,
+        status: 400,
+        error: 'Booking violates a rental rule',
+        code: ruleCheck.code,
+        details: { required: ruleCheck.required, actual: ruleCheck.actual },
+      }
+    }
+
+    const eff = await this.resolveDropoffEffectiveEnd(
+      repos,
+      operatorId,
+      pickup,
+      input.dropoffLocationId,
+      input.endAt,
+    )
+    if (!eff.ok) return eff
+    const { effectiveEndAt } = eff
+
+    // #464 2d.4: serialize concurrent CLASS_COMBO submits on this triple.
+    // Drizzle's pg_advisory_xact_lock auto-releases at tx end (the returned
+    // release is a no-op); InMemory's promise-chain release fires in the
+    // finally so the next waiter advances. Held around demand → capacity →
+    // insert so a parallel submit can't read demand BEFORE our insert lands.
+    const releaseLock = await repos.availabilityRepo.lockComboCapacity(
+      operatorId,
+      classId,
+      input.pickupLocationId,
+    )
+    try {
+      return await this.submitComboInTxLocked(
+        ctx,
+        input,
+        renterId,
+        now,
+        repos,
+        operatorId,
+        classId,
+        effectiveEndAt,
+      )
+    } finally {
+      releaseLock()
+    }
+  }
+
+  private async submitComboInTxLocked(
+    ctx: CallerContext,
+    input: CreateBookingInput & { fulfillmentMode: 'CLASS_COMBO' },
+    renterId: string | null,
+    now: Date,
+    repos: TransactionRepos,
+    operatorId: string,
+    classId: string,
+    effectiveEndAt: Date,
+  ): Promise<CreateBookingResult> {
+    // Demand counts BOTH consumers of the class fleet (SPECIFIC bookings on
+    // any car in the triple PLUS floating combos) — countClassDemand keys on
+    // (operator, class, location), not on assignedVehicleId. Capacity is the
+    // road-legal supply at the requested return.
+    const demand = await repos.availabilityRepo.countClassDemand(
+      operatorId,
+      classId,
+      input.pickupLocationId,
+      input.startAt,
+      effectiveEndAt,
+    )
+    const capacity = await repos.availabilityRepo.countClassCapacity(
+      operatorId,
+      classId,
+      input.pickupLocationId,
+      input.startAt,
+      effectiveEndAt,
+      input.endAt,
+    )
+    if (demand >= capacity) {
+      return {
+        ok: false,
+        status: 409,
+        error: 'No cars left in this class at this location for the requested window',
+        code: 'CLASS_COMBO_SOLD_OUT',
+      }
+    }
+
+    // Priced off the operator's active rate plan for this (class, location).
+    // No plan / inactive plan ⇒ the operator hasn't published a combo deal yet.
+    const ratePlan = await repos.classRatePlanRepo.findActiveRate(
+      operatorId,
+      classId,
+      input.pickupLocationId,
+    )
+    if (!ratePlan) {
+      return {
+        ok: false,
+        status: 400,
+        error: 'No active class rate plan for this combo',
+        code: 'NO_COMBO_RATE_SET',
+      }
+    }
+    const days = rentalDays(input.startAt, input.endAt)
+    const basePrice = ratePlan.dayRateJpy * days
+
+    let insuranceOptionId: string | null = null
+    let insuranceSnapshot: InsuranceSnapshot | null = null
+    if (input.insuranceOptionId) {
+      const opt = await repos.insuranceOptionRepo.findById(SYSTEM_CONTEXT, input.insuranceOptionId)
+      if (!opt || opt.operatorId !== operatorId || opt.status !== 'ACTIVE') {
+        return { ok: false, status: 400, error: 'Insurance option is not available' }
+      }
+      insuranceOptionId = opt.id
+      insuranceSnapshot = {
+        insuranceOptionId: opt.id,
+        name: opt.name,
+        dailyPriceJpy: opt.dailyPriceJpy,
+        deductibleJpy: opt.deductibleJpy,
+      }
+    }
+
+    const fees = await repos.feeScheduleRepo.findAll(SYSTEM_CONTEXT, {
+      operatorId,
+      status: 'ACTIVE',
+    })
+    const feeSnapshot = fees
+      .filter((f) => f.vehicleClassId === null || f.vehicleClassId === classId)
+      .map((f) => ({
+        feeType: f.feeType,
+        unit: f.unit,
+        amountJpy: f.amountJpy,
+        vehicleClassId: f.vehicleClassId,
+      }))
+
+    const addOnSnapshot: AddOnSnapshot[] = []
+    if (input.addOnIds.length > 0) {
+      const available = await repos.addOnRepo.findActiveByOperator(operatorId)
+      const availableById = new Map(available.map((a) => [a.id, a]))
+      for (const addOnId of new Set(input.addOnIds)) {
+        const addOn = availableById.get(addOnId)
+        if (!addOn) return { ok: false, status: 400, error: 'Add-on is not available' }
+        addOnSnapshot.push({ addOnId: addOn.id, name: addOn.name, priceJpy: addOn.priceJpy })
+      }
+    }
+
+    const totalPrice = composeBookingTotal({
+      baseJpy: basePrice,
+      insurancePerDayJpy: insuranceSnapshot?.dailyPriceJpy ?? 0,
+      days,
+      addOns: addOnSnapshot,
+    })
+
+    const bookingCode = this.generateCode()
+
+    const bookingRenterId = input.walkInCustomer
+      ? (await repos.userRepo.createWalkInRenter(input.walkInCustomer)).id
+      : renterId
+    if (bookingRenterId === null) {
+      throw new Error('booking submit: renterId unresolved (non-walk-in)')
+    }
+
+    const booking = await repos.bookingRepo.create(ctx, {
+      operatorId,
+      renterId: bookingRenterId,
+      classId,
+      // CLASS_COMBO floats: neither id is set at book time. The operator stamps
+      // assignedVehicleId on/before pickup via the substitute path (#464 slice 3).
+      requestedVehicleId: null,
+      assignedVehicleId: null,
+      pickupLocationId: input.pickupLocationId,
+      dropoffLocationId: input.dropoffLocationId,
+      startAt: input.startAt,
+      endAt: input.endAt,
+      effectiveEndAt,
+      status: 'CONFIRMED',
+      source: input.source,
+      fulfillmentMode: 'CLASS_COMBO',
+      bookingCode,
+      insuranceOptionId,
+      insuranceSnapshot,
+      feeSnapshot,
+      addOnSnapshot,
+      externalId: input.externalId ?? null,
+      notes: input.notes ?? null,
+      totalPrice,
+      cancellationFee: null,
+      cancelledAt: null,
+      idempotencyKey: input.idempotencyKey ?? null,
+      disclaimerAcknowledgedAt: input.disclaimerAccepted ? now : null,
+      disclaimerTermsVersion: input.disclaimerAccepted ? DISCLAIMER_TERMS_VERSION : null,
+    })
+
+    await repos.bookingEventRepo.append(ctx, {
+      bookingId: booking.id,
+      type: 'BOOKING_CREATED',
+      actorId: ctx.userId,
+      payload: {
+        type: 'BOOKING_CREATED',
+        requestedVehicleId: null,
+        assignedVehicleId: null,
+        classId,
+        fulfillmentMode: 'CLASS_COMBO',
         startAt: input.startAt.toISOString(),
         endAt: input.endAt.toISOString(),
         totalPrice,

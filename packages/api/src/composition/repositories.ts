@@ -13,6 +13,7 @@ import {
   DrizzleAvailabilityRepository,
   DrizzleBookingEventRepository,
   DrizzleBookingRepository,
+  DrizzleClassRatePlanRepository,
   DrizzleComplianceAlertLogRepository,
   DrizzleCustomerRepository,
   DrizzleFeeScheduleRepository,
@@ -27,25 +28,31 @@ import {
   DrizzleOverviewRepository,
   DrizzlePaymentAnomalyRepository,
   DrizzlePaymentEventRepository,
+  DrizzlePaymentRefundRepository,
   DrizzleProviderInviteRepository,
+  DrizzleRefundReconcilerRepository,
   DrizzleRegionRepository,
   DrizzleRenterDocumentRepository,
+  DrizzleReviewRepository,
   DrizzleStatsRepository,
   DrizzleStorefrontRepository,
   DrizzleThreadRepository,
   DrizzleUserRepository,
+  DrizzleVehicleBlockRepository,
   DrizzleVehicleClassRepository,
   DrizzleVehicleDetailRepository,
   DrizzleVehicleRepository,
   createDrizzleOperatorGrant,
   createDrizzleTransaction,
 } from '../repositories/drizzle'
+import { DrizzleConsentRepository } from '../repositories/drizzle/consent'
 import {
   InMemoryAddOnRepository,
   InMemoryAuditLogRepository,
   InMemoryAvailabilityRepository,
   InMemoryBookingEventRepository,
   InMemoryBookingRepository,
+  InMemoryClassRatePlanRepository,
   InMemoryComplianceAlertLogRepository,
   InMemoryCustomerRepository,
   InMemoryDocumentStorage,
@@ -61,17 +68,22 @@ import {
   InMemoryOverviewRepository,
   InMemoryPaymentAnomalyRepository,
   InMemoryPaymentEventRepository,
+  InMemoryPaymentRefundRepository,
   InMemoryProviderInviteRepository,
+  InMemoryRefundReconcilerRepository,
   InMemoryRegionRepository,
   InMemoryRenterDocumentRepository,
+  InMemoryReviewRepository,
   InMemoryStatsRepository,
   InMemoryStorefrontRepository,
   InMemoryThreadRepository,
   InMemoryUserRepository,
+  InMemoryVehicleBlockRepository,
   InMemoryVehicleClassRepository,
   InMemoryVehicleRepository,
 } from '../repositories/in-memory'
 import { InMemoryVehicleDetailRepository } from '../repositories/in-memory-vehicle-detail'
+import { InMemoryConsentRepository } from '../repositories/in-memory/consent'
 import { InMemoryPhotoStorage } from '../repositories/in-memory/photo-storage'
 import { R2DocumentStorage } from '../repositories/r2-document-storage'
 import { type R2BucketLike, R2PhotoStorage } from '../repositories/r2-photo-storage'
@@ -81,7 +93,9 @@ import type {
   AvailabilityRepository,
   BookingEventRepository,
   BookingRepository,
+  ClassRatePlanRepository,
   ComplianceAlertLogRepository,
+  ConsentRepository,
   CustomerRepository,
   DocumentStorage,
   FeeScheduleRepository,
@@ -96,20 +110,25 @@ import type {
   OverviewRepository,
   PaymentAnomalyRepository,
   PaymentEventRepository,
+  PaymentRefundRepository,
   PhotoStorage,
   ProviderInviteRepository,
+  RefundReconcilerRepository,
   RegionRepository,
   RenterDocumentRepository,
+  ReviewRepository,
   RunInTransaction,
   RunOperatorGrant,
   StatsRepository,
   StorefrontRepository,
   ThreadRepository,
   UserRepository,
+  VehicleBlockRepository,
   VehicleClassRepository,
   VehicleDetailRepository,
   VehicleRepository,
 } from '../repositories/types'
+import type { Booking, PaymentRefund } from '../stores'
 
 /**
  * Fail-loud config invariant (#967): when the public photos bucket binding is
@@ -154,6 +173,7 @@ export type Repos = {
   threadRepo: ThreadRepository
   messageRepo: MessageRepository
   maintenanceLogRepo: MaintenanceLogRepository
+  vehicleBlockRepo: VehicleBlockRepository
   photoStorage: PhotoStorage
   renterDocumentRepo: RenterDocumentRepository
   documentStorage: DocumentStorage
@@ -163,16 +183,21 @@ export type Repos = {
   insuranceOptionRepo: InsuranceOptionRepository
   addOnRepo: AddOnRepository
   feeScheduleRepo: FeeScheduleRepository
+  classRatePlanRepo: ClassRatePlanRepository
   notificationLogRepo: NotificationLogRepository
   complianceAlertLogRepo: ComplianceAlertLogRepository
   storefrontRepo: StorefrontRepository
   regionRepo: RegionRepository
   paymentEventRepo: PaymentEventRepository
+  paymentRefundRepo: PaymentRefundRepository
+  refundReconcilerRepo: RefundReconcilerRepository
   paymentAnomalyRepo: PaymentAnomalyRepository
   providerInviteRepo: ProviderInviteRepository
   operatorMembershipRepo: OperatorMembershipRepository
   auditLogRepo: AuditLogRepository
   bookingEventRepo: BookingEventRepository
+  consentRepo: ConsentRepository
+  reviewRepo: ReviewRepository
   runInTransaction: RunInTransaction
   runOperatorGrant: RunOperatorGrant
   // Public R2 bucket base for vehicle photos (#879). Threaded to VehicleService
@@ -192,6 +217,10 @@ export function buildOverrideRepos(overrides: AppOverrides): Repos {
   const { vehicleRepo, bookingRepo, availabilityRepo } = overrides
   const vehicleClassRepo = overrides.vehicleClassRepo ?? new InMemoryVehicleClassRepository()
   const maintenanceLogRepo = overrides.maintenanceLogRepo ?? new InMemoryMaintenanceLogRepository()
+  // #1101: a test that exercises block-aware availability passes the SAME
+  // instance both here AND to the availabilityRepo it constructs (mirrors the
+  // bookingRepo sharing pattern); absent ⇒ a fresh empty store (no blocks).
+  const vehicleBlockRepo = overrides.vehicleBlockRepo ?? new InMemoryVehicleBlockRepository()
   const bookingEventRepo = new InMemoryBookingEventRepository()
   const userRepo = overrides.userRepo ?? new InMemoryUserRepository()
   const locationRepo = overrides.locationRepo ?? new InMemoryLocationRepository()
@@ -199,6 +228,7 @@ export function buildOverrideRepos(overrides: AppOverrides): Repos {
     overrides.insuranceOptionRepo ?? new InMemoryInsuranceOptionRepository()
   const addOnRepo = overrides.addOnRepo ?? new InMemoryAddOnRepository()
   const feeScheduleRepo = overrides.feeScheduleRepo ?? new InMemoryFeeScheduleRepository()
+  const classRatePlanRepo = overrides.classRatePlanRepo ?? new InMemoryClassRatePlanRepository()
   const runInTransaction: RunInTransaction = async (fn) =>
     fn({
       vehicleRepo,
@@ -210,6 +240,13 @@ export function buildOverrideRepos(overrides: AppOverrides): Repos {
       addOnRepo,
       feeScheduleRepo,
       userRepo,
+      // #464 2d.1: InMemory has no real transaction isolation (JS event loop is
+      // single-threaded), so we hand the existing singleton instances through —
+      // mirrors the existing pattern for vehicleRepo / bookingRepo above.
+      availabilityRepo,
+      classRatePlanRepo,
+      vehicleClassRepo,
+      vehicleBlockRepo,
     })
   const fleetOverviewRepo =
     overrides.fleetOverviewRepo ??
@@ -237,11 +274,19 @@ export function buildOverrideRepos(overrides: AppOverrides): Repos {
     overrides.storefrontRepo ?? new InMemoryStorefrontRepository(locationRepo, operatorRepo)
   const regionRepo = overrides.regionRepo ?? new InMemoryRegionRepository()
   const paymentEventRepo = overrides.paymentEventRepo ?? new InMemoryPaymentEventRepository()
+  const paymentRefundRepo = overrides.paymentRefundRepo ?? new InMemoryPaymentRefundRepository()
+  // The reconciler scan spans bookings ⋈ payment_refunds; an override path can't
+  // introspect arbitrary injected repos' stores, so default to an empty scan —
+  // a test exercising the cron injects its own (mirrors paymentRefundRepo above).
+  const refundReconcilerRepo =
+    overrides.refundReconcilerRepo ?? new InMemoryRefundReconcilerRepository(new Map(), new Map())
   const paymentAnomalyRepo = overrides.paymentAnomalyRepo ?? new InMemoryPaymentAnomalyRepository()
   const providerInviteRepo = overrides.providerInviteRepo ?? new InMemoryProviderInviteRepository()
   const operatorMembershipRepo =
     overrides.operatorMembershipRepo ?? new InMemoryOperatorMembershipRepository()
   const auditLogRepo = new InMemoryAuditLogRepository()
+  const consentRepo = overrides.consentRepo ?? new InMemoryConsentRepository()
+  const reviewRepo = overrides.reviewRepo ?? new InMemoryReviewRepository()
   const runOperatorGrant: RunOperatorGrant = (fn) =>
     fn({ memberships: operatorMembershipRepo, users: userRepo, invites: providerInviteRepo })
   return {
@@ -257,6 +302,7 @@ export function buildOverrideRepos(overrides: AppOverrides): Repos {
     threadRepo,
     messageRepo,
     maintenanceLogRepo,
+    vehicleBlockRepo,
     photoStorage,
     renterDocumentRepo,
     documentStorage,
@@ -266,16 +312,21 @@ export function buildOverrideRepos(overrides: AppOverrides): Repos {
     insuranceOptionRepo,
     addOnRepo,
     feeScheduleRepo,
+    classRatePlanRepo,
     notificationLogRepo,
     complianceAlertLogRepo,
     storefrontRepo,
     regionRepo,
     paymentEventRepo,
+    paymentRefundRepo,
+    refundReconcilerRepo,
     paymentAnomalyRepo,
     providerInviteRepo,
     operatorMembershipRepo,
     auditLogRepo,
     bookingEventRepo,
+    consentRepo,
+    reviewRepo,
     runInTransaction,
     runOperatorGrant,
     photosPublicUrl: process.env.VEHICLE_PHOTOS_PUBLIC_URL ?? '',
@@ -357,6 +408,7 @@ export function buildDrizzleRepos(opts?: { db?: Db; runTx?: RunTx }): Repos {
     threadRepo: new DrizzleThreadRepository(db, tx),
     messageRepo: new DrizzleMessageRepository(db, tx),
     maintenanceLogRepo: new DrizzleMaintenanceLogRepository(db),
+    vehicleBlockRepo: new DrizzleVehicleBlockRepository(db),
     photoStorage,
     renterDocumentRepo: new DrizzleRenterDocumentRepository(db),
     documentStorage,
@@ -366,16 +418,21 @@ export function buildDrizzleRepos(opts?: { db?: Db; runTx?: RunTx }): Repos {
     insuranceOptionRepo: new DrizzleInsuranceOptionRepository(db),
     addOnRepo: new DrizzleAddOnRepository(db),
     feeScheduleRepo: new DrizzleFeeScheduleRepository(db),
+    classRatePlanRepo: new DrizzleClassRatePlanRepository(db),
     notificationLogRepo: new DrizzleNotificationLogRepository(db),
     complianceAlertLogRepo: new DrizzleComplianceAlertLogRepository(db),
     storefrontRepo: new DrizzleStorefrontRepository(db),
     regionRepo: new DrizzleRegionRepository(db),
     paymentEventRepo: new DrizzlePaymentEventRepository(db),
+    paymentRefundRepo: new DrizzlePaymentRefundRepository(db),
+    refundReconcilerRepo: new DrizzleRefundReconcilerRepository(db),
     paymentAnomalyRepo: new DrizzlePaymentAnomalyRepository(db),
     providerInviteRepo,
     operatorMembershipRepo,
     auditLogRepo,
     bookingEventRepo: new DrizzleBookingEventRepository(db),
+    consentRepo: new DrizzleConsentRepository(db),
+    reviewRepo: new DrizzleReviewRepository(db),
     runInTransaction: createDrizzleTransaction(tx, decodePhotos, encodePhotos),
     // Real interactive tx (#493): membership INSERT first so the partial-unique-
     // active index aborts the whole grant on a concurrent double-accept.
@@ -392,7 +449,11 @@ export function buildDrizzleRepos(opts?: { db?: Db; runTx?: RunTx }): Repos {
  */
 export function buildInMemoryRepos(): Repos {
   const vehicleRepo = new InMemoryVehicleRepository()
-  const bookingRepo = new InMemoryBookingRepository()
+  // Booking + refund stores are shared so the reconciler scan (below) joins them
+  // exactly as the Drizzle LEFT JOIN does — local-dev parity for the #851 cron.
+  const bookingStore = new Map<string, Booking>()
+  const refundStore = new Map<string, PaymentRefund>()
+  const bookingRepo = new InMemoryBookingRepository(bookingStore)
   const maintenanceLogRepo = new InMemoryMaintenanceLogRepository()
   const bookingEventRepo = new InMemoryBookingEventRepository()
   const userRepo = new InMemoryUserRepository()
@@ -400,6 +461,7 @@ export function buildInMemoryRepos(): Repos {
   const insuranceOptionRepo = new InMemoryInsuranceOptionRepository()
   const addOnRepo = new InMemoryAddOnRepository()
   const feeScheduleRepo = new InMemoryFeeScheduleRepository()
+  const classRatePlanRepo = new InMemoryClassRatePlanRepository()
   const operatorRepo = new InMemoryOperatorRepository()
   const operatorMembershipRepo = new InMemoryOperatorMembershipRepository()
   const providerInviteRepo = new InMemoryProviderInviteRepository()
@@ -407,7 +469,16 @@ export function buildInMemoryRepos(): Repos {
   // messageRepo wraps the SAME threadRepo instance so reads see threads the
   // message path created (shared in-memory state — matches the prod seam).
   const threadRepo = new InMemoryThreadRepository()
-  const availabilityRepo = new InMemoryAvailabilityRepository(vehicleRepo, bookingRepo)
+  // #1101: one shared block store so availability subtraction sees blocks the
+  // (slice-5) blocks route created — same instance into both the bundle and the
+  // availability repo (mirrors the bookingRepo wiring above).
+  const vehicleBlockRepo = new InMemoryVehicleBlockRepository()
+  const availabilityRepo = new InMemoryAvailabilityRepository(
+    vehicleRepo,
+    bookingRepo,
+    vehicleBlockRepo,
+  )
+  const vehicleClassRepo = new InMemoryVehicleClassRepository()
   const runInTransaction: RunInTransaction = async (fn) =>
     fn({
       vehicleRepo,
@@ -419,11 +490,17 @@ export function buildInMemoryRepos(): Repos {
       addOnRepo,
       feeScheduleRepo,
       userRepo,
+      // #464 2d.1: InMemory has no real transaction isolation (JS event loop is
+      // single-threaded), so we hand the existing singleton instances through.
+      availabilityRepo,
+      classRatePlanRepo,
+      vehicleClassRepo,
+      vehicleBlockRepo,
     })
   const runOperatorGrant: RunOperatorGrant = (fn) =>
     fn({ memberships: operatorMembershipRepo, users: userRepo, invites: providerInviteRepo })
   return {
-    vehicleClassRepo: new InMemoryVehicleClassRepository(),
+    vehicleClassRepo,
     vehicleRepo,
     bookingRepo,
     availabilityRepo,
@@ -445,6 +522,7 @@ export function buildInMemoryRepos(): Repos {
     threadRepo,
     messageRepo: new InMemoryMessageRepository(threadRepo),
     maintenanceLogRepo,
+    vehicleBlockRepo,
     photoStorage: new InMemoryPhotoStorage(),
     renterDocumentRepo: new InMemoryRenterDocumentRepository(),
     documentStorage: new InMemoryDocumentStorage(),
@@ -454,16 +532,21 @@ export function buildInMemoryRepos(): Repos {
     insuranceOptionRepo,
     addOnRepo,
     feeScheduleRepo,
+    classRatePlanRepo,
     notificationLogRepo: new InMemoryNotificationLogRepository(),
     complianceAlertLogRepo: new InMemoryComplianceAlertLogRepository(),
     storefrontRepo: new InMemoryStorefrontRepository(locationRepo, operatorRepo),
     regionRepo: new InMemoryRegionRepository(),
     paymentEventRepo: new InMemoryPaymentEventRepository(),
+    paymentRefundRepo: new InMemoryPaymentRefundRepository(refundStore),
+    refundReconcilerRepo: new InMemoryRefundReconcilerRepository(bookingStore, refundStore),
     paymentAnomalyRepo: new InMemoryPaymentAnomalyRepository(),
     providerInviteRepo,
     operatorMembershipRepo,
     auditLogRepo,
     bookingEventRepo,
+    consentRepo: new InMemoryConsentRepository(),
+    reviewRepo: new InMemoryReviewRepository(),
     runInTransaction,
     runOperatorGrant,
     photosPublicUrl: process.env.VEHICLE_PHOTOS_PUBLIC_URL ?? '',
