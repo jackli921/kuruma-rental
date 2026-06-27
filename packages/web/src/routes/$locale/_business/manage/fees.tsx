@@ -30,7 +30,9 @@ export const Route = createFileRoute('/$locale/_business/manage/fees')({
   component: OperatorFeesRoute,
 })
 
-function OperatorFeesRoute() {
+// Exported so a route-level test can pin the P1b read-only override (the
+// `feesScope` junction below); the file route mounts it as the component.
+export function OperatorFeesRoute() {
   const t = useTranslations('business.fees')
   const scope = useOperatorScope()
   const { data: session } = useSession()
