@@ -631,6 +631,13 @@
       "when": 1782536589596,
       "tag": "0089_reviews_reseal_subject_per_booking",
       "breakpoints": true
+    },
+    {
+      "idx": 90,
+      "version": "7",
+      "when": 1782578077368,
+      "tag": "0090_drop_redundant_review_bookingid_idx",
+      "breakpoints": true
     }
   ]
 }
