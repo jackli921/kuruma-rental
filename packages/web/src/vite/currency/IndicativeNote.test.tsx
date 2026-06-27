@@ -52,6 +52,15 @@ describe('IndicativeNote', () => {
     expect(glyph?.textContent).toContain('≈ $181')
   })
 
+  it('keeps the converted figure after the ≈ so a cell parser reading yen-before-≈ is unaffected', async () => {
+    // Mirrors the real-DB E2E yen() helper, which reads the authoritative JPY as the
+    // text BEFORE the first ≈. Nothing the note contributes ahead of the glyph may carry
+    // digits, or the indicative figure concatenates onto the yen total (regression #1209).
+    const { container } = renderInProvider(<IndicativeNote jpy={27000} />, 'en')
+    await waitFor(() => expect(screen.getByText(/≈ \$181/)).toBeTruthy())
+    expect((container.textContent ?? '').split('≈')[0]).not.toMatch(/\d/)
+  })
+
   it('renders nothing for a JPY display currency so the caller shows JPY alone', async () => {
     localStorage.setItem('kuruma-display-currency', 'JPY')
     const { container } = renderInProvider(<IndicativeNote jpy={27000} />, 'ja')

@@ -23,12 +23,15 @@ export function IndicativeNote({
   if (!indicative) return null
   return (
     <span className={cn('block font-normal text-muted-foreground text-xs', className)}>
-      {/* Screen readers get the spelled-out word; the ≈ glyph (which assistive tech
-          reads as "almost equal to" or skips) is hidden so the figure isn't doubled. */}
+      {/* The visible ≈ figure comes FIRST, the screen-reader phrase second. The ≈ glyph
+          (read as "almost equal to" or skipped) is aria-hidden so SR hears the spelled-out
+          word exactly once. Order is load-bearing: a cell parser that splits on ≈ to read
+          the authoritative JPY (real-DB E2E `yen()`) must see no converted digits BEFORE
+          the glyph, so the sr-only figure must not precede it. */}
+      <span aria-hidden="true">≈ {indicative}</span>
       <span className="sr-only">
         {t('approximately')} {indicative}
       </span>
-      <span aria-hidden="true">≈ {indicative}</span>
     </span>
   )
 }

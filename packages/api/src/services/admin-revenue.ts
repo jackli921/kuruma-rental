@@ -5,7 +5,8 @@ import type { OperatorRepository, PaymentEventRepository } from '../repositories
 
 /**
  * Platform-admin partner revenue report (#462). Imperative shell: it gates the
- * caller (only STAFF/ADMIN/PLATFORM_ADMIN — never OPERATOR_*), fetches the
+ * caller (only PLATFORM_ADMIN — never OPERATOR_*; legacy STAFF/ADMIN lost
+ * platform access in #487), fetches the
  * successful payments and operators, and hands them to the pure
  * {@link aggregateRevenueByPartner} core. `requirePlatformRead` lives here (not
  * only at the route) so the gate travels with the business logic — the payment

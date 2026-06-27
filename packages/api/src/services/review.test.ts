@@ -293,6 +293,43 @@ describe('ReviewService — double-blind reveal on read', () => {
   })
 })
 
+describe('ReviewService.submit — reveal on write (#1195)', () => {
+  // settleReveal must run on submit, not only on a later getForBooking read. These assert the
+  // PERSISTED state directly (no read-repair) — a 3rd-party/API-only submitter never re-reads,
+  // and slice-5 aggregates filter publishedAt, so an unread both-submitted pair would undercount.
+  it('publishes BOTH sides the moment the second party submits — without any read', async () => {
+    const { service, reviewRepo } = makeHarness()
+    await service.submit(renterCtx, submitInput(), NOW) // renter -> operator (first, stays hidden)
+    const second = await service.submit(operatorCtx, submitInput({ subject: 'RENTER' }), NOW)
+
+    const persisted = await reviewRepo.findByBookingId(BOOKING_ID)
+    expect(persisted).toHaveLength(2)
+    expect(persisted.find((r) => r.authorRole === 'RENTER')?.publishedAt).toEqual(NOW)
+    expect(persisted.find((r) => r.authorRole === 'OPERATOR')?.publishedAt).toEqual(NOW)
+    // The submit response is honest about the post-settle publish.
+    expect(second.ok && second.review.publishedAt).toEqual(NOW)
+  })
+
+  it('keeps a lone first submitter hidden in the window — double-blind preserved', async () => {
+    const { service, reviewRepo } = makeHarness()
+    const first = await service.submit(renterCtx, submitInput(), NOW)
+
+    const persisted = await reviewRepo.findByBookingId(BOOKING_ID)
+    expect(persisted).toHaveLength(1)
+    expect(persisted[0]?.publishedAt).toBeNull()
+    expect(first.ok && first.review.publishedAt).toBeNull()
+  })
+
+  it('publishes the lone review on submit once the window has already elapsed', async () => {
+    const { service, reviewRepo } = makeHarness()
+    const only = await service.submit(renterCtx, submitInput(), AFTER_DEADLINE)
+
+    const persisted = await reviewRepo.findByBookingId(BOOKING_ID)
+    expect(persisted[0]?.publishedAt).toEqual(AFTER_DEADLINE)
+    expect(only.ok && only.review.publishedAt).toEqual(AFTER_DEADLINE)
+  })
+})
+
 describe('ReviewService — one review per operator (#1158)', () => {
   // A SECOND active staff member of the same operator. The operator->renter review
   // represents the operator (the tenant), not the individual staff user, so the first

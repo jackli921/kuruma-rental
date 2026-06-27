@@ -17,7 +17,7 @@ export function businessGuard(session: Session | null): GuardResult {
 }
 
 // A *tenant-scoped* operator session carries an operatorId (#521); bypass business
-// roles (PLATFORM_ADMIN, legacy STAFF/ADMIN) do not. This mirrors the API's read scope
+// roles (PLATFORM_ADMIN) do not. This mirrors the API's read scope
 // (`operatorReadScope(ctx).kind !== 'all'`) and gates the operator-portal write
 // affordances (Add/Edit/Archive) because those forms carry no operator picker: a write
 // needs a single target tenant, which only an operator session supplies. It is
@@ -42,6 +42,6 @@ export function adminGuard(session: Session | null): GuardResult {
   if (!session) return { type: 'login' }
   // Narrower than businessGuard: tenant-scoped OPERATOR_* roles clear the business
   // gate but must NOT reach the cross-tenant /admin portal (#462 §2.3). Legacy
-  // STAFF/ADMIN are still admitted (platform-roles.ts) until #487 revokes them.
+  // STAFF/ADMIN were revoked from platform access in #487 (platform-roles.ts).
   return isPlatformAdmin(session.user.role) ? { type: 'allow' } : { type: 'forbidden' }
 }

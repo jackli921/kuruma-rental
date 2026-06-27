@@ -34,6 +34,30 @@ describe('isStaleOperatorSession', () => {
     ).toBe(true)
   })
 
+  it('is stale when the operator ITSELF was deactivated, even though role + operatorId still match (#1088)', () => {
+    // Operator-level cascade (distinct from #939 per-member deactivation): the member's
+    // users row is UNCHANGED (still OPERATOR_STAFF + op_best), but the whole operator was
+    // soft-deactivated. The boundary enriches the projection with the operator's
+    // deactivatedAt so every member is revoked on their next request.
+    expect(
+      isStaleOperatorSession(staffToken, {
+        role: 'OPERATOR_STAFF',
+        operatorId: 'op_best',
+        operatorDeactivatedAt: new Date('2026-06-26T00:00:00.000Z'),
+      }),
+    ).toBe(true)
+  })
+
+  it('is fresh when the operator is active (operatorDeactivatedAt null) and the projection matches (#1088)', () => {
+    expect(
+      isStaleOperatorSession(staffToken, {
+        role: 'OPERATOR_STAFF',
+        operatorId: 'op_best',
+        operatorDeactivatedAt: null,
+      }),
+    ).toBe(false)
+  })
+
   it('does not flag a missing projection row (deactivation keeps the row; hard-delete is out of scope)', () => {
     // clearOperatorAccess never deletes — a deactivated member still has a row
     // (caught by the mismatch cases above). A truly absent row is a hard-deleted

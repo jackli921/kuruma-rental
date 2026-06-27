@@ -19,10 +19,13 @@ export interface OperatorSessionClaims {
 }
 
 /** The authoritative users-projection fields the JWT was minted from. Mirrors the
- *  `User` row shape (`operatorId` optional/nullable for renters + admins). */
+ *  `User` row shape (`operatorId` optional/nullable for renters + admins), plus the
+ *  member's operator `deactivatedAt` — enriched by the boundary (#1088), not a users
+ *  column — so an operator-level deactivation cascades to every member. */
 export interface UserProjection {
   readonly role: UserRole
   readonly operatorId?: string | null
+  readonly operatorDeactivatedAt?: Date | null
 }
 
 /**
@@ -47,5 +50,9 @@ export function isStaleOperatorSession(
   // branch — it must fail CLOSED for deleted operators.
   if (!projection) return false
   if (projection.role !== claims.role) return true
+  // #1088 operator-level cascade: the member projection can still match (role +
+  // operatorId unchanged) yet the whole operator was soft-deactivated. Revoke the
+  // token so every member of a deactivated operator must re-auth on next request.
+  if (projection.operatorDeactivatedAt != null) return true
   return (projection.operatorId ?? undefined) !== claims.operatorId
 }

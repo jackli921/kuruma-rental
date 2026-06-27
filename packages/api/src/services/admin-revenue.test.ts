@@ -11,7 +11,15 @@ const OP_B = 'operator-bbbbbbbb'
 const ADMIN: CallerContext = { userId: 'admin-user', role: 'PLATFORM_ADMIN' }
 
 function operator(id: string, name: string, slug: string): Operator {
-  return { id, name, slug, preAuthHandoffUrl: null, createdAt: new Date(), updatedAt: new Date() }
+  return {
+    id,
+    name,
+    slug,
+    preAuthHandoffUrl: null,
+    createdAt: new Date(),
+    updatedAt: new Date(),
+    deactivatedAt: null,
+  }
 }
 
 function payment(
