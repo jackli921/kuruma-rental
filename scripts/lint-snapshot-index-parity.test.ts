@@ -5,9 +5,11 @@ import { afterEach, beforeEach, describe, expect, test } from 'vitest'
 import {
   findDrift,
   findStaleBaseline,
+  isSnapshotShape,
   parseCreatedIndexes,
   parseDroppedColumns,
   parseDroppedIndexes,
+  readLatestSnapshot,
   readLiveMigrationIndexes,
 } from './lint-snapshot-index-parity'
 
@@ -250,5 +252,188 @@ describe('findStaleBaseline', () => {
     const snapshot = { tables: { 'public.accounts': { indexes: {} } } }
     const baseline = new Set(['accounts.idx_accounts_userId'])
     expect(findStaleBaseline(migrations, snapshot, baseline)).toEqual([])
+  })
+})
+
+// --- #1167 parser hardening ---
+
+describe('parseDroppedColumns — ALTER TABLE ONLY', () => {
+  // pg_dump emits `ALTER TABLE ONLY` for tables that have inheritance children
+  // (`ONLY` skips recursion into children). Common in hand-SQL when porting
+  // pg_dump output.
+  test('handles ALTER TABLE ONLY', () => {
+    expect(parseDroppedColumns('ALTER TABLE ONLY "t" DROP COLUMN "c";')).toEqual([
+      { table: 't', column: 'c' },
+    ])
+  })
+})
+
+describe('parser — schema-qualified identifiers', () => {
+  // pg_dump and many hand-SQL forms write `"public"."t"`. Today the regex skips
+  // them, so a cascade on such a table would not retire indexes.
+  test('parseCreatedIndexes handles "public"."t"', () => {
+    const sql = 'CREATE INDEX "idx_x" ON "public"."t" ("c");'
+    expect(parseCreatedIndexes(sql)).toEqual([{ table: 't', name: 'idx_x', columns: ['c'] }])
+  })
+
+  test('parseCreatedIndexes handles schema-qualified UNQUOTED ident', () => {
+    expect(parseCreatedIndexes('CREATE INDEX idx_x ON public.t (c);')).toEqual([
+      { table: 't', name: 'idx_x', columns: ['c'] },
+    ])
+  })
+
+  test('parseDroppedColumns handles "public"."t"', () => {
+    expect(parseDroppedColumns('ALTER TABLE "public"."t" DROP COLUMN "c";')).toEqual([
+      { table: 't', column: 'c' },
+    ])
+  })
+})
+
+describe('parseDroppedColumns — compound ALTER TABLE actions', () => {
+  // Postgres allows multiple actions in a single ALTER TABLE separated by `,`.
+  // pg_dump emits this shape. The regex used to match only the first DROP COLUMN.
+  test('captures every DROP COLUMN in a compound statement', () => {
+    const sql =
+      'ALTER TABLE "t" DROP CONSTRAINT "fk_x", DROP COLUMN "a", ADD COLUMN "d" text, DROP COLUMN "b";'
+    expect(parseDroppedColumns(sql)).toEqual([
+      { table: 't', column: 'a' },
+      { table: 't', column: 'b' },
+    ])
+  })
+
+  test('compound DROP COLUMN cascades into all covered indexes', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'snapshot-lint-compound-'))
+    try {
+      writeFileSync(
+        join(dir, '0001_create.sql'),
+        'CREATE INDEX "idx_a" ON "t" ("a");\nCREATE INDEX "idx_b" ON "t" ("b");\nCREATE INDEX "idx_c" ON "t" ("c");',
+      )
+      writeFileSync(join(dir, '0002_drop.sql'), 'ALTER TABLE "t" DROP COLUMN "a", DROP COLUMN "b";')
+      expect(readLiveMigrationIndexes(dir).map((i) => i.name)).toEqual(['idx_c'])
+    } finally {
+      rmSync(dir, { recursive: true, force: true })
+    }
+  })
+})
+
+describe('parseCreatedIndexes — expression indexes and opclass', () => {
+  // Today `([^)]+)` stops at the inner `)` of `lower(email)`, mangling the
+  // column list and losing the underlying column reference. Same for opclass
+  // syntax `(col gin_trgm_ops)` — the opclass leaks into the column name.
+  test('extracts underlying column from an expression index', () => {
+    const sql = 'CREATE INDEX "idx_x" ON "t" (lower("email"));'
+    const [parsed] = parseCreatedIndexes(sql)
+    expect(parsed?.name).toBe('idx_x')
+    expect(parsed?.table).toBe('t')
+    expect(parsed?.columns).toContain('email')
+  })
+
+  test('strips opclass name from the column list', () => {
+    const sql = 'CREATE INDEX "idx_x" ON "t" ("col" gin_trgm_ops);'
+    const [parsed] = parseCreatedIndexes(sql)
+    expect(parsed?.columns).toEqual(['col'])
+  })
+
+  test('expression index cascade: dropping the underlying column drops the index', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'snapshot-lint-expr-'))
+    try {
+      writeFileSync(
+        join(dir, '0001_create.sql'),
+        'CREATE INDEX "idx_lower_email" ON "users" (lower("email"));',
+      )
+      writeFileSync(join(dir, '0002_drop.sql'), 'ALTER TABLE "users" DROP COLUMN "email";')
+      expect(readLiveMigrationIndexes(dir)).toEqual([])
+    } finally {
+      rmSync(dir, { recursive: true, force: true })
+    }
+  })
+
+  test('preserves a column-list followed by a WHERE clause', () => {
+    // Regression seal: balanced-paren scan must not greedily eat the WHERE.
+    const sql = 'CREATE UNIQUE INDEX "idx_x" ON "t" ("a", "b") WHERE ("a" IS NOT NULL);'
+    expect(parseCreatedIndexes(sql)).toEqual([{ table: 't', name: 'idx_x', columns: ['a', 'b'] }])
+  })
+})
+
+describe('readLiveMigrationIndexes — cascade visits every entry', () => {
+  // Regression seal for the map-iteration idiom: a single DROP COLUMN that
+  // cascades into multiple indexes must drop all of them, in any order.
+  test('cascades a single DROP COLUMN into multiple covering indexes', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'snapshot-lint-cascade-'))
+    try {
+      writeFileSync(
+        join(dir, '0001_create.sql'),
+        [
+          'CREATE INDEX "idx_a" ON "t" ("a", "shared");',
+          'CREATE INDEX "idx_b" ON "t" ("shared");',
+          'CREATE INDEX "idx_c" ON "t" ("shared", "c");',
+          'CREATE INDEX "idx_other" ON "t" ("a");',
+        ].join('\n'),
+      )
+      writeFileSync(join(dir, '0002_drop.sql'), 'ALTER TABLE "t" DROP COLUMN "shared";')
+      expect(readLiveMigrationIndexes(dir).map((i) => i.name)).toEqual(['idx_other'])
+    } finally {
+      rmSync(dir, { recursive: true, force: true })
+    }
+  })
+})
+
+describe('isSnapshotShape — runtime guard for the snapshot JSON', () => {
+  test('accepts an empty object', () => {
+    expect(isSnapshotShape({})).toBe(true)
+  })
+
+  test('accepts the canonical shape', () => {
+    expect(
+      isSnapshotShape({ tables: { 'public.t': { indexes: { idx_x: { name: '...' } } } } }),
+    ).toBe(true)
+  })
+
+  test('accepts a table with no indexes key', () => {
+    expect(isSnapshotShape({ tables: { 'public.t': {} } })).toBe(true)
+  })
+
+  test('rejects null', () => {
+    expect(isSnapshotShape(null)).toBe(false)
+  })
+
+  test('rejects an array at the top level', () => {
+    expect(isSnapshotShape([])).toBe(false)
+  })
+
+  test('rejects tables as a non-object', () => {
+    expect(isSnapshotShape({ tables: 'oops' })).toBe(false)
+  })
+
+  test('rejects a table value that is a primitive', () => {
+    expect(isSnapshotShape({ tables: { t: 'oops' } })).toBe(false)
+  })
+
+  test('rejects indexes as a non-object', () => {
+    expect(isSnapshotShape({ tables: { t: { indexes: 'oops' } } })).toBe(false)
+  })
+})
+
+describe('readLatestSnapshot — applies the shape guard', () => {
+  let dir: string
+  beforeEach(() => {
+    dir = mkdtempSync(join(tmpdir(), 'snapshot-shape-'))
+  })
+  afterEach(() => {
+    rmSync(dir, { recursive: true, force: true })
+  })
+
+  test('returns the parsed snapshot for a valid file', () => {
+    writeFileSync(
+      join(dir, '0001_snapshot.json'),
+      JSON.stringify({ tables: { 'public.t': { indexes: { idx_x: {} } } } }),
+    )
+    const snap = readLatestSnapshot(dir)
+    expect(snap.tables?.['public.t']?.indexes).toHaveProperty('idx_x')
+  })
+
+  test('throws when the JSON does not match the snapshot shape', () => {
+    writeFileSync(join(dir, '0001_snapshot.json'), JSON.stringify([1, 2, 3]))
+    expect(() => readLatestSnapshot(dir)).toThrow(/snapshot shape/i)
   })
 })
