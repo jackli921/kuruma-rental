@@ -9,6 +9,7 @@ import { DrizzleFeeScheduleRepository } from './fee-schedule'
 import { DrizzleInsuranceOptionRepository } from './insurance-option'
 import { DrizzleLocationRepository } from './location'
 import { DrizzleMaintenanceLogRepository } from './maintenance-log'
+import { DrizzleOperatorRepository } from './operator'
 import {
   type PhotoDecoder,
   type PhotoEncoder,
@@ -60,6 +61,9 @@ export function createDrizzleTransaction(
         // #1101: tx-bound so the booking-vs-block NOT EXISTS reads the same
         // point-in-time snapshot as the insert that follows it.
         vehicleBlockRepo: new DrizzleVehicleBlockRepository(txDb),
+        // #1206: tx-bound so the deactivated-operator guard reads the operator at
+        // the same point-in-time snapshot as the booking insert that follows it.
+        operatorRepo: new DrizzleOperatorRepository(txDb),
       })
     })
 }
