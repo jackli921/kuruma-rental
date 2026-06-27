@@ -47,6 +47,10 @@ export function AdminSidebar() {
         <Link
           to="/$locale"
           params={{ locale }}
+          // Exact, or TanStack's default prefix match makes `/$locale` active on
+          // every `/$locale/admin/*` route — auto-stamping `aria-current="page"`
+          // (and the active styling) onto this escape hatch on every admin page.
+          activeOptions={{ exact: true }}
           className={`${LINK_CLASSNAME} text-muted-foreground md:mb-1 md:border-b md:border-sidebar-border md:pb-3 md:rounded-b-none`}
         >
           <ArrowLeft className="size-5" />
