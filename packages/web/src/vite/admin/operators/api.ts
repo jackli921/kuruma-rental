@@ -32,6 +32,17 @@ export type OperatorAdminRow = z.infer<typeof operatorAdminRowSchema>
 
 const operatorsResponseSchema = z.array(operatorAdminRowSchema)
 
+// The create / edit / deactivate / reactivate writes each return a different
+// operator projection (Operator, OperatorProfile, OperatorStatus), but the UI
+// discards the body and refetches. Validate the identity fields all three share
+// so seam drift (a renamed/missing id|name|slug) still fails loudly (#711/#784);
+// Zod strips the per-projection extras (deactivatedAt, preAuthHandoffUrl, ...).
+export const operatorWriteAckSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  slug: z.string(),
+})
+
 // Returned once by `POST /admin/provider-invites`: the plaintext token + its
 // shareable link (only the sha256 hash is persisted server-side, never the token).
 export const createdInviteSchema = z.object({
@@ -71,7 +82,7 @@ export async function createOperator(params: {
     headers: jsonHeaders(csrfToken),
     body: JSON.stringify(body),
   })
-  await unwrap(res)
+  await unwrap(res, operatorWriteAckSchema)
 }
 
 export async function editOperator(params: {
@@ -88,7 +99,7 @@ export async function editOperator(params: {
     headers: jsonHeaders(csrfToken),
     body: JSON.stringify(body),
   })
-  await unwrap(res)
+  await unwrap(res, operatorWriteAckSchema)
 }
 
 export async function mintProviderInvite(params: {
@@ -116,7 +127,7 @@ async function toggleOperatorActive(
     `${getApiBaseUrl()}/admin/operators/${encodeURIComponent(id)}/${action}`,
     { method: 'POST', credentials: 'include', headers: { 'X-CSRF-Token': csrfToken } },
   )
-  await unwrap(res)
+  await unwrap(res, operatorWriteAckSchema)
 }
 
 export const deactivateOperator = (params: { id: string; csrfToken: string }) =>

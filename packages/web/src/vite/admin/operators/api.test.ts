@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { createdInviteSchema, operatorAdminRowSchema } from './api'
+import { createdInviteSchema, operatorAdminRowSchema, operatorWriteAckSchema } from './api'
 
 // The wire contract for the platform-admin operator directory (#1088). The API
 // returns Date columns, but `c.json` serialises them to ISO strings, so the
@@ -47,5 +47,28 @@ describe('createdInviteSchema', () => {
       expiresAt: '2026-07-01T00:00:00.000Z',
     }
     expect(createdInviteSchema.safeParse(withoutToken).success).toBe(false)
+  })
+})
+
+describe('operatorWriteAckSchema', () => {
+  it('keeps the identity fields shared by every write projection and strips the rest', () => {
+    const richResponse = {
+      id: 'op_1',
+      name: 'Kanata Cars',
+      slug: 'kanata-cars',
+      deactivatedAt: '2026-06-20T09:30:00.000Z',
+      preAuthHandoffUrl: 'https://example.com/handoff',
+    }
+    expect(operatorWriteAckSchema.parse(richResponse)).toEqual({
+      id: 'op_1',
+      name: 'Kanata Cars',
+      slug: 'kanata-cars',
+    })
+  })
+
+  it('rejects a write response missing id (seam drift guard)', () => {
+    expect(
+      operatorWriteAckSchema.safeParse({ name: 'Kanata Cars', slug: 'kanata-cars' }).success,
+    ).toBe(false)
   })
 })
