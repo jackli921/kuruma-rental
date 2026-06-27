@@ -1,12 +1,12 @@
 import { buttonVariants } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
-import { isRenterDocumentsEnabled } from '@/vite/config/features'
 import { useUnreadBadge } from '@/vite/messaging/unread-badge'
 import { LocaleSwitcher } from '@/vite/nav/LocaleSwitcher'
 import { MobileMenu, type NavItem } from '@/vite/nav/MobileMenu'
 import { NavBadge } from '@/vite/nav/NavBadge'
 import { NavbarClient } from '@/vite/nav/NavbarClient'
 import { visibleBusinessNavItems } from '@/vite/nav/business-nav-items'
+import { visibleRenterNavItems } from '@/vite/nav/renter-nav-items'
 import { useNewBookingsBadge } from '@/vite/operator-bookings/useNewBookingsBadge'
 import { useSession } from '@/vite/session'
 import { getViewMode, isBusiness } from '@/vite/view-mode'
@@ -15,10 +15,12 @@ import { Car } from 'lucide-react'
 import { useLocale, useTranslations } from 'use-intl'
 
 // Client navbar (the SPA reads the session via useSession, not server auth()).
-// Renter nav (#543): Browse is public (any renter-view session); My Bookings and
-// Documents are personal "my data" pages, so they are gated on the actual RENTER
-// role — NOT viewMode. An operator who switches to renter view must not see them,
-// or they would drift to tenant data (view state is not authorization state).
+// Renter nav (#543): Browse is public (any renter-view session). My Bookings and
+// Documents are personal "my data" pages gated on the actual RENTER role; Messages
+// is a post-MVP feature gated by the admin-bypass rule (hidden in beta, shown to the
+// platform admin for owner preview). That per-item split lives in renter-nav-items.ts
+// so the gating is unit-tested without rendering. View state is not authorization
+// state — an operator in renter view sees neither My Bookings nor Documents.
 export function Navbar() {
   const { data: session } = useSession()
   const t = useTranslations('nav')
@@ -37,28 +39,6 @@ export function Navbar() {
   // unlike the operator badge); only scanned in renter view.
   const { count: unreadMessages } = useUnreadBadge({ userId: session?.user?.id, enabled: isRenter })
 
-  const renterNavItems: readonly NavItem[] = isRenter
-    ? [
-        { to: '/$locale/bookings', label: t('myBookings') },
-        {
-          to: '/$locale/messages',
-          label: t('messages'),
-          // exactOptionalPropertyTypes: only attach the badge when there is one.
-          ...(unreadMessages > 0
-            ? {
-                badge: unreadMessages,
-                badgeLabel: t('unreadMessages', { count: unreadMessages }),
-              }
-            : {}),
-        },
-        // Documents (IDP upload, #459) is gated OFF for the beta demo: the
-        // instant-book flow no longer requires it. See vite/config/features.ts.
-        ...(isRenterDocumentsEnabled()
-          ? [{ to: '/$locale/documents' as const, label: t('documents') }]
-          : []),
-      ]
-    : []
-
   const navItems: readonly NavItem[] = isBusinessView
     ? visibleBusinessNavItems().map((item) => ({
         to: item.to,
@@ -69,7 +49,20 @@ export function Navbar() {
           : {}),
       }))
     : session?.user
-      ? [{ to: '/$locale/search', label: t('browse') }, ...renterNavItems]
+      ? [
+          { to: '/$locale/search', label: t('browse') },
+          ...visibleRenterNavItems(role).map((item) => ({
+            to: item.to,
+            label: t(item.labelKey),
+            // exactOptionalPropertyTypes: only attach the badge when there is one.
+            ...(item.to === '/$locale/messages' && unreadMessages > 0
+              ? {
+                  badge: unreadMessages,
+                  badgeLabel: t('unreadMessages', { count: unreadMessages }),
+                }
+              : {}),
+          })),
+        ]
       : []
 
   return (
