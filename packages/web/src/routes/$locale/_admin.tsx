@@ -5,7 +5,7 @@ import { sessionQueryOptions } from '@/vite/session'
 import { Outlet, createFileRoute, redirect } from '@tanstack/react-router'
 
 // Platform admin layout guard (#462 §2.3, ported from the frozen Next.js
-// `(admin)/layout.tsx`): admits PLATFORM_ADMIN + legacy STAFF/ADMIN only.
+// `(admin)/layout.tsx`): admits PLATFORM_ADMIN only (legacy STAFF/ADMIN revoked in #487).
 // Wrong role -> silent redirect to landing; signed-out -> login with returnTo.
 export const Route = createFileRoute('/$locale/_admin')({
   beforeLoad: async ({ context, params, location }) => {
