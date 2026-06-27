@@ -2,7 +2,11 @@ import { useLayoutPreference } from '@/vite/LayoutPreferenceProvider'
 import { canPickOperatorContext } from '@/vite/guards'
 import { BusinessSidebar } from '@/vite/nav/BusinessSidebar'
 import { shouldShowBusinessSidebar } from '@/vite/nav/business-sidebar-visibility'
-import { OperatorContextPicker, operatorsQueryOptions } from '@/vite/operator-context'
+import {
+  OperatorContextPicker,
+  operatorsQueryOptions,
+  useIsOperatorContextRoute,
+} from '@/vite/operator-context'
 import { useSession } from '@/vite/session'
 import { readViewCookie } from '@/vite/view-mode'
 import { useQuery } from '@tanstack/react-query'
@@ -17,13 +21,18 @@ export function BusinessLayout({ children }: { readonly children: ReactNode }) {
   const { preference } = useLayoutPreference()
   const { data: session } = useSession()
   // PLATFORM_ADMIN only: the picker lets the lone uniformly-cross-tenant role choose
-  // which operator the console operates as. `enabled` gates the fetch so other roles
-  // never hit GET /operators; the hook itself stays unconditional (hooks rule).
+  // which operator the console operates as. It is shown ONLY on routes that thread
+  // `?operator` into their reads (staged rollout) — on other business pages the param
+  // is retained silently but the page is unscoped, so the picker would lie about scope.
+  // Both hooks stay unconditional (hooks rule); the booleans combine in a const.
   const canPick = canPickOperatorContext(session ?? null)
-  const { data: operators } = useQuery({ ...operatorsQueryOptions(), enabled: canPick })
+  const isOperatorContextRoute = useIsOperatorContextRoute()
+  const showPicker = canPick && isOperatorContextRoute
+  // `enabled` gates the fetch so we never hit GET /operators when the picker is hidden.
+  const { data: operators } = useQuery({ ...operatorsQueryOptions(), enabled: showPicker })
   const showSidebar = shouldShowBusinessSidebar(preference, session?.user?.role, readViewCookie())
 
-  const picker = canPick ? <OperatorContextPicker operators={operators ?? []} /> : null
+  const picker = showPicker ? <OperatorContextPicker operators={operators ?? []} /> : null
 
   if (!showSidebar) {
     return (

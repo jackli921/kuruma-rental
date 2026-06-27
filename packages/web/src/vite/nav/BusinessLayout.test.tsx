@@ -15,6 +15,10 @@ import en from '../../../messages/en.json'
 const h = vi.hoisted(() => ({
   role: 'OPERATOR_OWNER' as UserRole | undefined,
   operatorId: undefined as string | undefined,
+  // The active route id the layout's useIsOperatorContextRoute hook reads. Defaults
+  // to a route that honors ?operator (add-ons) so picker tests aren't route-gated;
+  // the unsupported-route test flips it to dashboard.
+  routeId: '/$locale/_business/manage/add-ons' as string,
 }))
 
 vi.mock('@/vite/session', () => ({
@@ -30,6 +34,10 @@ vi.mock('@tanstack/react-router', () => ({
     useSearch: () => ({ operator: undefined }),
     useNavigate: () => () => {},
   }),
+  // useIsOperatorContextRoute reads the active match chain to decide whether the
+  // current route honors ?operator; feed it the route id under test.
+  useRouterState: ({ select }: { select: (s: { matches: { routeId: string }[] }) => unknown }) =>
+    select({ matches: [{ routeId: '/$locale/_business' }, { routeId: h.routeId }] }),
 }))
 vi.mock('@/vite/config/features', () => ({
   isOperatorTeamEnabled: () => true,
@@ -77,6 +85,7 @@ describe('BusinessLayout', () => {
     document.cookie = 'kuruma-view=; path=/; max-age=0'
     h.role = 'OPERATOR_OWNER'
     h.operatorId = undefined
+    h.routeId = '/$locale/_business/manage/add-ons'
   })
 
   it('renders the operator sidebar beside the page when the operator prefers the sidebar', () => {
@@ -101,9 +110,15 @@ describe('BusinessLayout', () => {
     expect(screen.queryByText('PAGE CONTENT')).not.toBeNull()
   })
 
-  it('shows the operator picker for a PLATFORM_ADMIN', () => {
+  it('shows the operator picker for a PLATFORM_ADMIN on a route that honors ?operator', () => {
     renderBusinessLayout({ role: 'PLATFORM_ADMIN' })
     expect(screen.getByLabelText('Operator')).not.toBeNull()
+  })
+
+  it('hides the operator picker for a PLATFORM_ADMIN on a route that does not honor ?operator', () => {
+    h.routeId = '/$locale/_business/dashboard'
+    renderBusinessLayout({ role: 'PLATFORM_ADMIN' })
+    expect(screen.queryByLabelText('Operator')).toBeNull()
   })
 
   it('hides the operator picker for an operator session', () => {

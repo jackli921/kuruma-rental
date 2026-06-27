@@ -1,10 +1,20 @@
 import { renderHook } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { buildScopeParam, parseOperatorSearch, useSetOperatorContext } from './operator-context'
+import {
+  buildScopeParam,
+  parseOperatorSearch,
+  useIsOperatorContextRoute,
+  useSetOperatorContext,
+} from './operator-context'
 
-const h = vi.hoisted(() => ({ navigate: vi.fn() }))
+const h = vi.hoisted(() => ({
+  navigate: vi.fn(),
+  matches: [] as { routeId: string }[],
+}))
 vi.mock('@tanstack/react-router', () => ({
   getRouteApi: () => ({ useNavigate: () => h.navigate }),
+  useRouterState: ({ select }: { select: (s: { matches: { routeId: string }[] }) => unknown }) =>
+    select({ matches: h.matches }),
 }))
 
 describe('buildScopeParam', () => {
@@ -56,5 +66,22 @@ describe('useSetOperatorContext', () => {
     const next = h.navigate.mock.calls.at(-1)?.[0].search({ operator: 'op_1' })
     expect('operator' in next).toBe(true)
     expect(next.operator).toBeUndefined()
+  })
+})
+
+describe('useIsOperatorContextRoute', () => {
+  it('is true when a supported manage route is in the active match chain', () => {
+    h.matches = [
+      { routeId: '/$locale/_business' },
+      { routeId: '/$locale/_business/manage/add-ons' },
+    ]
+    const { result } = renderHook(() => useIsOperatorContextRoute())
+    expect(result.current).toBe(true)
+  })
+
+  it('is false on an unscoped business route that does not honor ?operator', () => {
+    h.matches = [{ routeId: '/$locale/_business' }, { routeId: '/$locale/_business/dashboard' }]
+    const { result } = renderHook(() => useIsOperatorContextRoute())
+    expect(result.current).toBe(false)
   })
 })

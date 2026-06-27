@@ -1,7 +1,7 @@
 import { canWriteAsOperator, isCrossOperatorReader } from '@/vite/guards'
 import { useSession } from '@/vite/session'
 import { useQuery } from '@tanstack/react-query'
-import { getRouteApi } from '@tanstack/react-router'
+import { getRouteApi, useRouterState } from '@tanstack/react-router'
 import { operatorsQueryOptions } from './api'
 
 // The query fragment a config-list read appends: a specific operator when picked,
@@ -72,3 +72,23 @@ export function useOperatorScope(): OperatorScope {
 
 // Create bodies for a picker-admin carry the picked operatorId; operator sessions omit it.
 export type WithOperatorId<T> = T & { operatorId?: string }
+
+// Routes whose loaders/components actually thread `?operator` into their reads
+// (Slice 1). The picker is shown ONLY on these — on other business pages the
+// param is retained silently but the page is unscoped, so showing the picker
+// there would misrepresent data scope. Each later slice (settings, classes/fleet,
+// dashboard, bookings, team) adds its route id here as it lands.
+export const OPERATOR_CONTEXT_ROUTE_IDS: ReadonlySet<string> = new Set([
+  '/$locale/_business/manage/add-ons',
+  '/$locale/_business/manage/fees',
+  '/$locale/_business/manage/insurance',
+  '/$locale/_business/manage/locations',
+])
+
+// True when the active route is one that honors `?operator` (a descendant match
+// counts, so any of the supported manage pages returns true). Reads the router's
+// match chain so the picker can be hidden where the param would lie about scope.
+export function useIsOperatorContextRoute(): boolean {
+  const matches = useRouterState({ select: (s) => s.matches })
+  return matches.some((m) => OPERATOR_CONTEXT_ROUTE_IDS.has(m.routeId))
+}

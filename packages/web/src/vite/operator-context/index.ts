@@ -6,8 +6,10 @@ export { fetchOperators, operatorsQueryOptions, type OperatorSummary } from './a
 export { OperatorContextPicker } from './OperatorContextPicker'
 export {
   buildScopeParam,
+  OPERATOR_CONTEXT_ROUTE_IDS,
   type OperatorScope,
   parseOperatorSearch,
+  useIsOperatorContextRoute,
   useOperatorContext,
   useOperatorScope,
   type WithOperatorId,
