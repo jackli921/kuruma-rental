@@ -18,3 +18,10 @@ export function useOperatorContext(): { pickedOperatorId: string | undefined } {
   const { operator } = businessRoute.useSearch()
   return { pickedOperatorId: operator }
 }
+
+// Route-scoped navigate for the `_business` subtree. Scoping is load-bearing: an
+// unscoped `useNavigate()` can't infer the target search shape, so its search-reducer
+// return type collapses to `never`. Bound to the same route api as the search read.
+export function useOperatorContextNavigate() {
+  return businessRoute.useNavigate()
+}
