@@ -1,5 +1,6 @@
 import { buttonVariants } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
+import { IndicativeNote } from '@/vite/currency'
 import { carryForwardFilters } from '@/vite/storefronts/params'
 import type {
   ClassComboSearchResult,
@@ -9,7 +10,7 @@ import type {
 import { Link } from '@tanstack/react-router'
 import { Car, MapPin, Navigation, Settings2, Users } from 'lucide-react'
 import { useTranslations } from 'use-intl'
-import { resultPriceLabel } from './result'
+import { resultPriceJpy, resultPriceLabel } from './result'
 
 interface SearchResultRowProps {
   readonly item: SearchResultItem
@@ -145,6 +146,7 @@ function SpecificRow({
   const t = useTranslations('search')
   const transmissionLabel = item.transmission === 'AUTO' ? t('auto') : t('manual')
   const priceLabel = resultPriceLabel(item, t)
+  const priceJpy = resultPriceJpy(item)
 
   return (
     <article className="flex gap-4 rounded-xl border border-border bg-card p-4 shadow-sm">
@@ -173,7 +175,10 @@ function SpecificRow({
         </div>
 
         <div className="mt-auto flex items-end justify-between gap-2 pt-1">
-          <p className="text-base font-semibold text-foreground">{priceLabel}</p>
+          <div>
+            <p className="text-base font-semibold text-foreground">{priceLabel}</p>
+            {priceJpy != null && <IndicativeNote jpy={priceJpy} />}
+          </div>
           <RowDetailCta
             locale={locale}
             locationId={item.location.locationId}
@@ -210,6 +215,7 @@ function ComboRow({
 }: RowCardProps<ClassComboSearchResult>) {
   const t = useTranslations('search')
   const priceLabel = resultPriceLabel(item, t)
+  const priceJpy = resultPriceJpy(item)
 
   return (
     <article className="flex gap-4 rounded-xl border border-border bg-card p-4 shadow-sm">
@@ -240,7 +246,10 @@ function ComboRow({
         <p className="text-xs text-muted-foreground">{t('comboHint')}</p>
 
         <div className="mt-auto flex items-end justify-between gap-2 pt-1">
-          <p className="text-base font-semibold text-foreground">{priceLabel}</p>
+          <div>
+            <p className="text-base font-semibold text-foreground">{priceLabel}</p>
+            {priceJpy != null && <IndicativeNote jpy={priceJpy} />}
+          </div>
           <RowDetailCta
             locale={locale}
             locationId={item.location.locationId}

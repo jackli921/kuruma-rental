@@ -42,6 +42,7 @@
     "./types/consent-governance": "./src/types/consent-governance.ts",
     "./lib/bound-fetch": "./src/lib/bound-fetch.ts",
     "./lib/cancellation-policy": "./src/lib/cancellation-policy.ts",
+    "./lib/indicative-price": "./src/lib/indicative-price.ts",
     "./lib/error-codes": "./src/lib/error-codes.ts",
     "./lib/commission": "./src/lib/commission.ts",
     "./lib/admin-revenue": "./src/lib/admin-revenue.ts",
