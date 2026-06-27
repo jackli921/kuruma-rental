@@ -150,7 +150,12 @@ export function requireAuth(): MiddlewareHandler {
  *  so a read route never breaks if `PLATFORM_ROLES` ever widens past PLATFORM_ADMIN. */
 export function requirePlatformMember(): MiddlewareHandler {
   return async (c: Context, next) => {
-    requirePlatformRead(toCallerContext(requireUser(c)))
+    // Fail-closed and ordering-independent (#1228): if this ever runs without a
+    // preceding requireAuth, surface 401 (mirroring requireAuth's own no-user
+    // branch) instead of letting requireUser's plain Error fall through to 500.
+    const user = getUser(c)
+    if (!user) return fail(c, 'Unauthorized', 401)
+    requirePlatformRead(toCallerContext(user))
     return next()
   }
 }
