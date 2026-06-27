@@ -19,11 +19,14 @@ export class DrizzleOverviewRepository implements OverviewRepository {
 
   async getOperatorOverview(ctx: CallerContext, now: Date): Promise<OperatorOverview> {
     // Defence-in-depth (mirrors insurance/fees repos): reject RENTER/PARTNER
-    // here too, since bookingReadScope maps PARTNER to `all` — without this seal
-    // a PARTNER bypassing the route would read every operator's counts.
+    // here too — without this seal a non-operator bypassing the route would read
+    // operator counts. Only the admin tier (`all`) and OPERATOR_* (`operator`)
+    // own an operator overview; `partner` is a channel, not an operator (#1119).
     requireManagementRead(ctx)
     const scope = bookingReadScope(ctx)
-    if (scope.kind === 'none' || scope.kind === 'renter') return { ...ZERO }
+    if (scope.kind === 'none' || scope.kind === 'renter' || scope.kind === 'partner') {
+      return { ...ZERO }
+    }
     const opId = scope.kind === 'operator' ? scope.operatorId : undefined
 
     const bookingOp = opId ? eq(bookings.operatorId, opId) : undefined
