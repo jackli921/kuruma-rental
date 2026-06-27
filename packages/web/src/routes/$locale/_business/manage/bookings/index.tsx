@@ -2,9 +2,9 @@ import { Button } from '@/components/ui/button'
 import { PageSkeleton } from '@/vite/PageSkeleton'
 import { isOperatorManualBookingEnabled } from '@/vite/config/features'
 import { isOperatorSession } from '@/vite/guards'
+import { FleetTimeline } from '@/vite/operator-bookings'
 import { BookingsCalendar } from '@/vite/operator-bookings/BookingsCalendar'
 import { CalendarSidebar } from '@/vite/operator-bookings/CalendarSidebar'
-import { FleetTimeline } from '@/vite/operator-bookings/FleetTimeline'
 import { ManualBookingDialog } from '@/vite/operator-bookings/ManualBookingDialog'
 import {
   operatorCalendarQueryOptions,
