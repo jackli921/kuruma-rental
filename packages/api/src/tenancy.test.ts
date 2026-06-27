@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { CallerContext } from './middleware/auth'
-import { bookingReadScope } from './tenancy'
+import { bookingReadScope, vehicleBlockReadScope } from './tenancy'
 
 describe('bookingReadScope', () => {
   it('scopes a PARTNER to its own channel (source=TRIP_COM), not all bookings', () => {
@@ -27,5 +27,29 @@ describe('bookingReadScope', () => {
   it('scopes a RENTER to their own bookings', () => {
     const renter: CallerContext = { userId: 'r1', role: 'RENTER' }
     expect(bookingReadScope(renter)).toEqual({ kind: 'renter', renterId: 'r1' })
+  })
+})
+
+describe('vehicleBlockReadScope', () => {
+  it('returns all for a bypass caller (PLATFORM_ADMIN)', () => {
+    const admin: CallerContext = { userId: 'admin', role: 'PLATFORM_ADMIN', bypassScope: true }
+    expect(vehicleBlockReadScope(admin)).toEqual({ kind: 'all' })
+  })
+
+  it('returns operator for an OPERATOR_* caller with operatorId', () => {
+    const op: CallerContext = { userId: 'u1', role: 'OPERATOR_OWNER', operatorId: 'op-1' }
+    expect(vehicleBlockReadScope(op)).toEqual({ kind: 'operator', operatorId: 'op-1' })
+  })
+
+  it('returns none for an OPERATOR_* caller missing operatorId (fail-closed)', () => {
+    const op: CallerContext = { userId: 'u1', role: 'OPERATOR_STAFF' }
+    expect(vehicleBlockReadScope(op)).toEqual({ kind: 'none' })
+  })
+
+  it('returns none for an in-gate non-bypass non-operator (legacy STAFF/ADMIN)', () => {
+    const staff: CallerContext = { userId: 's1', role: 'STAFF', bypassScope: false }
+    const admin: CallerContext = { userId: 'a1', role: 'ADMIN', bypassScope: false }
+    expect(vehicleBlockReadScope(staff)).toEqual({ kind: 'none' })
+    expect(vehicleBlockReadScope(admin)).toEqual({ kind: 'none' })
   })
 })
