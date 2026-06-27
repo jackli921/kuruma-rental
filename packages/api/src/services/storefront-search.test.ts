@@ -191,8 +191,15 @@ class RecordingAvailabilityRepository implements AvailabilityRepository {
   ) {
     return this.inner.countClassDemand(operatorId, classId, pickupLocationId, from, to)
   }
-  countClassCapacity(operatorId: string, classId: string, pickupLocationId: string, asOf: Date) {
-    return this.inner.countClassCapacity(operatorId, classId, pickupLocationId, asOf)
+  countClassCapacity(
+    operatorId: string,
+    classId: string,
+    pickupLocationId: string,
+    from: Date,
+    to: Date,
+    asOf: Date,
+  ) {
+    return this.inner.countClassCapacity(operatorId, classId, pickupLocationId, from, to, asOf)
   }
   lockComboCapacity(operatorId: string, classId: string, pickupLocationId: string) {
     return this.inner.lockComboCapacity(operatorId, classId, pickupLocationId)
