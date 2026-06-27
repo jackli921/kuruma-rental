@@ -136,9 +136,12 @@ export class DrizzleVehicleRepository implements VehicleRepository {
     threshold.setUTCDate(threshold.getUTCDate() + EXPIRY_SOON_DAYS)
     const thresholdIso = threshold.toISOString().slice(0, 10)
 
-    const needsDoc = (c: SQLWrapper) => sql`(${c} is null or ${c} < ${today})`
+    // Cast the date-string params to `date` explicitly rather than leaning on
+    // Postgres param-OID inference — the same driver-robustness the booking
+    // cutoff applies (#1120), and consistent with its sibling read.
+    const needsDoc = (c: SQLWrapper) => sql`(${c} is null or ${c} < ${today}::date)`
     const soon = (c: SQLWrapper) =>
-      sql`(${c} is not null and ${c} >= ${today} and ${c} <= ${thresholdIso})`
+      sql`(${c} is not null and ${c} >= ${today}::date and ${c} <= ${thresholdIso}::date)`
     const needing = sql`(${needsDoc(vehicles.shakenExpiryDate)} or ${needsDoc(vehicles.insuranceExpiryDate)})`
     const expiring = sql`(not ${needing} and (${soon(vehicles.shakenExpiryDate)} or ${soon(vehicles.insuranceExpiryDate)}))`
 

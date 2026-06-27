@@ -53,7 +53,6 @@ import type {
   ThreadParticipant,
   User,
   Vehicle,
-  VehicleClass,
 } from '../stores'
 // Imported (not just re-exported) because the RepoBundle below references it locally.
 import type { AdminBookingFilters } from './types-admin-booking'
@@ -758,19 +757,9 @@ export interface MaintenanceLogRepository {
 // the file-size cap (same split as types-review / types-fee-schedule).
 export type { VehicleBlockRepository } from './types-vehicle-block'
 
-export interface VehicleClassFilters {
-  status?: 'ACTIVE' | 'ARCHIVED'
-  includeArchived?: boolean
-}
-
-export interface VehicleClassRepository {
-  findAll(ctx: CallerContext, filters?: VehicleClassFilters): Promise<VehicleClass[]>
-  findById(ctx: CallerContext, id: string): Promise<VehicleClass | undefined>
-  findBySlug(ctx: CallerContext, slug: string): Promise<VehicleClass | undefined>
-  create(data: Omit<VehicleClass, 'id' | 'createdAt' | 'updatedAt'>): Promise<VehicleClass>
-  update(id: string, data: Partial<VehicleClass>): Promise<VehicleClass | undefined>
-  archive(id: string): Promise<VehicleClass | undefined>
-}
+// VehicleClassRepository lives in ./types-vehicle-class to keep this barrel under
+// the file-size cap (same split as types-vehicle-block above).
+export type { VehicleClassFilters, VehicleClassRepository } from './types-vehicle-class'
 
 // Fee-schedule contract lives in its own module (file-size cap, #978); re-exported.
 export type { FeeScheduleFilters, FeeScheduleRepository } from './types-fee-schedule'
