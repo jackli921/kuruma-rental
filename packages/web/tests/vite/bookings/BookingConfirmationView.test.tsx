@@ -8,6 +8,7 @@ import type { ReactNode } from 'react'
 import { IntlProvider } from 'use-intl'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import en from '../../../messages/en.json'
+import { renderWithUsdIndicative } from '../../support/currency'
 
 vi.mock('@tanstack/react-router', () => ({
   Link: ({
@@ -170,6 +171,20 @@ describe('BookingConfirmationView', () => {
   it('omits the price breakdown when the total price is unknown', () => {
     renderView(makeBooking({ totalPrice: null }))
     expect(screen.queryByText('Price breakdown')).not.toBeInTheDocument()
+  })
+
+  // #1070: the confirmed total is the one money figure that carries an indicative note.
+  it('converts the booking total for the indicative note', async () => {
+    renderWithUsdIndicative(
+      <BookingConfirmationView
+        booking={makeBooking({ totalPrice: 30000 })}
+        vehicleClass={null}
+        csrfToken="csrf-tok"
+        threadId={null}
+      />,
+    )
+    // 30,000 -> $201
+    expect(await screen.findByText(/≈ \$201/)).toBeTruthy()
   })
 
   it('renders the operator pre-auth handoff link when present', () => {

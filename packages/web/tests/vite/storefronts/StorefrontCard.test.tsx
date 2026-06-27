@@ -5,6 +5,7 @@ import type { ReactNode } from 'react'
 import { IntlProvider } from 'use-intl'
 import { describe, expect, it, vi } from 'vitest'
 import en from '../../../messages/en.json'
+import { renderWithUsdIndicative } from '../../support/currency'
 
 vi.mock('@tanstack/react-router', () => ({
   Link: ({
@@ -121,5 +122,18 @@ describe('StorefrontCard', () => {
   it('shows a store/location placeholder with an accessible label instead of a car photo (#955)', () => {
     renderCard(makeStorefront({ representativePhotos: ['/photos/car.jpg'] }))
     expect(screen.getByRole('img', { name: 'Store location' })).toBeInTheDocument()
+  })
+
+  // #1070: the storefront's daily from-price carries an indicative conversion.
+  it('converts the from-price for the indicative note', async () => {
+    renderWithUsdIndicative(
+      <StorefrontCard
+        storefront={makeStorefront({ fromDailyPriceJpy: 30000 })}
+        from="2026-07-01T10:00"
+        to="2026-07-03T10:00"
+      />,
+    )
+    // 30,000 -> $201
+    expect(await screen.findByText(/≈ \$201/)).toBeTruthy()
   })
 })
