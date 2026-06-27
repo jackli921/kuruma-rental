@@ -21,7 +21,7 @@ export type FeeScheduleResult =
  * absent; every field is optional because a PATCH is partial.
  */
 export type FeeScheduleUpdate = Partial<
-  Pick<FeeSchedule, 'vehicleClassId' | 'feeType' | 'unit' | 'amountJpy' | 'status'>
+  Pick<FeeSchedule, 'vehicleClassId' | 'feeType' | 'unit' | 'amountJpy'>
 >
 
 const DUPLICATE_SCOPE_MESSAGE =

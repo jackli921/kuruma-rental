@@ -280,6 +280,23 @@ describe('check-import-boundaries — routes must not import persistence entitie
     expect(violations[0]).toMatchObject({ line: 1, rule: expect.stringMatching(STORES_RULE) })
   })
 
+  it('flags an inline type-position import (Partial<import("../stores").X>) — the vehicle-classes bypass', () => {
+    // The original from-only rule + the import-line prefilter let this slip: the
+    // line starts with `stripUndefined(`, not `import `, and carries no `from`.
+    const violations = checkContent(
+      'routes/vehicle-classes.ts',
+      "        stripUndefined(parsed.data) as Partial<import('../stores').VehicleClass>,",
+    )
+    expect(violations).toHaveLength(1)
+    expect(violations[0]).toMatchObject({ line: 1, rule: expect.stringMatching(STORES_RULE) })
+  })
+
+  it('flags a dynamic import() of ../stores in a route', () => {
+    const violations = checkContent('routes/add-ons.ts', "const s = await import('../stores')")
+    expect(violations).toHaveLength(1)
+    expect(violations[0]).toMatchObject({ rule: expect.stringMatching(STORES_RULE) })
+  })
+
   it('allows a SERVICE to import entity types from ../stores (only routes are blocked)', () => {
     expect(
       checkContent('services/fee-schedule.ts', "import type { FeeSchedule } from '../stores'"),

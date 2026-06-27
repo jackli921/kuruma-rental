@@ -18,7 +18,7 @@ export type InsuranceOptionResult =
  * are absent.
  */
 export type InsuranceOptionUpdate = Partial<
-  Pick<InsuranceOption, 'name' | 'description' | 'dailyPriceJpy' | 'deductibleJpy' | 'status'>
+  Pick<InsuranceOption, 'name' | 'description' | 'dailyPriceJpy' | 'deductibleJpy'>
 >
 
 const DUPLICATE_NAME_MESSAGE = 'An insurance option with this name already exists'

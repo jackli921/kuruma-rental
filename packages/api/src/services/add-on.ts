@@ -10,7 +10,7 @@ export type AddOnResult = { ok: true; option: AddOn } | { ok: false; error: stri
  * an intent DTO instead of the persistence entity (#1213 — routes never import
  * from ../stores). Server-derived columns (id/operatorId/timestamps) are absent.
  */
-export type AddOnUpdate = Partial<Pick<AddOn, 'name' | 'description' | 'priceJpy' | 'status'>>
+export type AddOnUpdate = Partial<Pick<AddOn, 'name' | 'description' | 'priceJpy'>>
 
 const DUPLICATE_NAME_MESSAGE = 'An add-on with this name already exists'
 const NOT_FOUND_MESSAGE = 'Add-on not found'
