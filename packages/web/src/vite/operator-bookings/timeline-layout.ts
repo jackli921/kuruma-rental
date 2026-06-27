@@ -14,6 +14,19 @@ export const UNASSIGNED_GROUP_ID = '__unassigned__'
  *  turnaround tail (`endAt → effectiveEndAt`, the off-fleet cleaning gap). */
 export type TimelineBand = 'booked' | 'turnaround'
 
+/** The turnaround tail's bar id is `${bookingId}${TURNAROUND_SUFFIX}`. Both the
+ *  encode (here) and the click-time decode (`bookingIdFromTimelineItem`) read this
+ *  one constant — the lib hands the bar id back on click, not the bookingId, so the
+ *  two halves of this contract must never drift. */
+export const TURNAROUND_SUFFIX = '::turnaround'
+
+/** The booking a clicked timeline bar belongs to — strips the turnaround tail's id
+ *  suffix so clicking either band opens the same trip. Pure; lives with its encode
+ *  sibling so the suffix contract has a single source of truth. */
+export function bookingIdFromTimelineItem(itemId: string): string {
+  return itemId.endsWith(TURNAROUND_SUFFIX) ? itemId.slice(0, -TURNAROUND_SUFFIX.length) : itemId
+}
+
 /** One vehicle row (or the Unassigned row). */
 export interface TimelineGroup {
   id: string
@@ -69,7 +82,7 @@ export function buildTimelineLayout({
 }: BuildTimelineArgs): TimelineLayout {
   const fleetIds = new Set(vehicles.map((v) => v.id))
   const items: TimelineItem[] = []
-  let unassignedUsed = false
+  let hasUnassignedRow = false
 
   for (const r of rows) {
     // A row with no assigned car — or one whose assigned car is not in the fleet
@@ -93,7 +106,7 @@ export function buildTimelineLayout({
         band: 'booked',
         status: r.status,
       })
-      if (group === UNASSIGNED_GROUP_ID) unassignedUsed = true
+      if (group === UNASSIGNED_GROUP_ID) hasUnassignedRow = true
     }
 
     // The turnaround tail exists only when the off-fleet window extends past the
@@ -103,7 +116,7 @@ export function buildTimelineLayout({
       const tail = clampBand(endMs, effEndMs, from, to)
       if (tail) {
         items.push({
-          id: `${r.id}::turnaround`,
+          id: `${r.id}${TURNAROUND_SUFFIX}`,
           bookingId: r.id,
           group,
           title,
@@ -112,13 +125,13 @@ export function buildTimelineLayout({
           band: 'turnaround',
           status: r.status,
         })
-        if (group === UNASSIGNED_GROUP_ID) unassignedUsed = true
+        if (group === UNASSIGNED_GROUP_ID) hasUnassignedRow = true
       }
     }
   }
 
   const groups: TimelineGroup[] = vehicles.map((v) => ({ id: v.id, title: v.name }))
-  if (unassignedUsed) groups.push({ id: UNASSIGNED_GROUP_ID, title: unassignedLabel })
+  if (hasUnassignedRow) groups.push({ id: UNASSIGNED_GROUP_ID, title: unassignedLabel })
 
   return { groups, items }
 }

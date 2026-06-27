@@ -8,7 +8,10 @@ import {
   calendarRange,
   shiftCalendarDate,
 } from '@/vite/operator-bookings/calendar-events'
-import { buildTimelineLayout } from '@/vite/operator-bookings/timeline-layout'
+import {
+  bookingIdFromTimelineItem,
+  buildTimelineLayout,
+} from '@/vite/operator-bookings/timeline-layout'
 import { addDays, startOfDay } from 'date-fns'
 import { useCallback, useMemo } from 'react'
 import Timeline, {
@@ -35,17 +38,6 @@ interface FleetTimelineProps {
   readonly onViewChange: (view: CalendarView) => void
   readonly onDateChange: (date: Date) => void
   readonly onSelectEvent: (bookingId: string) => void
-}
-
-// A booking spans up to two bars: the booked window (`id` = bookingId) and the
-// turnaround tail (`id` = `${bookingId}::turnaround`). Both resolve to one booking.
-const TURNAROUND_SUFFIX = '::turnaround'
-
-/** The booking a clicked timeline bar belongs to — strips the turnaround tail's
- *  id suffix so clicking either band opens the same trip. */
-export function bookingIdFromTimelineItem(itemId: Id): string {
-  const id = String(itemId)
-  return id.endsWith(TURNAROUND_SUFFIX) ? id.slice(0, -TURNAROUND_SUFFIX.length) : id
 }
 
 export function FleetTimeline({
@@ -120,7 +112,7 @@ export function FleetTimeline({
   // Both events fire on a bar click (select first, click on a re-click); wire both
   // so a single click always opens the trip, regardless of selection state.
   const handleItemSelect = useCallback(
-    (itemId: Id) => onSelectEvent(bookingIdFromTimelineItem(itemId)),
+    (itemId: Id) => onSelectEvent(bookingIdFromTimelineItem(String(itemId))),
     [onSelectEvent],
   )
 

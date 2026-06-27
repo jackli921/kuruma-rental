@@ -3,7 +3,7 @@ import { fireEvent, render, screen } from '@testing-library/react'
 import { IntlProvider } from 'use-intl'
 import { describe, expect, it, vi } from 'vitest'
 import en from '../../../messages/en.json'
-import { FleetTimeline, bookingIdFromTimelineItem } from './FleetTimeline'
+import { FleetTimeline } from './FleetTimeline'
 import type { CalendarBookingRow } from './api'
 
 const VEHICLES = [
@@ -41,20 +41,6 @@ function renderTimeline(rows: CalendarBookingRow[], onSelectEvent: (id: string) 
     </IntlProvider>,
   )
 }
-
-describe('bookingIdFromTimelineItem', () => {
-  it('returns the id unchanged for a booked-band bar', () => {
-    expect(bookingIdFromTimelineItem('booking-123')).toBe('booking-123')
-  })
-
-  it('strips the ::turnaround suffix so the tail opens the same booking', () => {
-    expect(bookingIdFromTimelineItem('booking-123::turnaround')).toBe('booking-123')
-  })
-
-  it('does not strip an interior ::turnaround that is not the suffix', () => {
-    expect(bookingIdFromTimelineItem('a::turnaround::b')).toBe('a::turnaround::b')
-  })
-})
 
 describe('FleetTimeline', () => {
   it('renders a row per fleet vehicle', () => {

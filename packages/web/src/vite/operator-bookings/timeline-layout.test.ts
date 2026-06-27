@@ -1,6 +1,10 @@
 import type { CalendarBookingRow } from '@/vite/operator-bookings/api'
 import { describe, expect, it } from 'vitest'
-import { UNASSIGNED_GROUP_ID, buildTimelineLayout } from './timeline-layout'
+import {
+  UNASSIGNED_GROUP_ID,
+  bookingIdFromTimelineItem,
+  buildTimelineLayout,
+} from './timeline-layout'
 
 // Window: 2027-01-10 .. 2027-01-24 (14 days) in epoch ms.
 const FROM = Date.UTC(2027, 0, 10)
@@ -117,5 +121,32 @@ describe('buildTimelineLayout', () => {
     expect(items[0]?.title).toBe('x@y.z')
     const { items: i2 } = build([row({ renterName: null, renterEmail: null })])
     expect(i2[0]?.title).toBe('KUR-1')
+  })
+})
+
+describe('bookingIdFromTimelineItem', () => {
+  it('returns the id unchanged for a booked-band bar', () => {
+    expect(bookingIdFromTimelineItem('booking-123')).toBe('booking-123')
+  })
+
+  it('strips the ::turnaround suffix so the tail opens the same booking', () => {
+    expect(bookingIdFromTimelineItem('booking-123::turnaround')).toBe('booking-123')
+  })
+
+  it('does not strip an interior ::turnaround that is not the suffix', () => {
+    expect(bookingIdFromTimelineItem('a::turnaround::b')).toBe('a::turnaround::b')
+  })
+
+  it('round-trips the build-time encode: the tail item id decodes to its bookingId', () => {
+    // Pin the encode/decode contract end-to-end so the shared suffix can't drift:
+    // a booking with a turnaround tail emits a `::turnaround` item whose id decodes
+    // back to the original booking id.
+    const { items } = build([
+      row({ id: 'bk9', endAt: iso(2027, 1, 14), effectiveEndAt: iso(2027, 1, 15) }),
+    ])
+    const tail = items.find((i) => i.band === 'turnaround')
+    expect(tail).toBeDefined()
+    expect(tail?.id).not.toBe('bk9') // it carries the suffix
+    expect(bookingIdFromTimelineItem(tail!.id)).toBe('bk9')
   })
 })
