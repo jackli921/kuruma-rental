@@ -536,7 +536,7 @@ describe('DrizzleAvailabilityRepository', () => {
       capVehicleIds.length = 0
     })
 
-    it('counts AVAILABLE + MAINTENANCE road-legal vehicles, excludes RETIRED', async () => {
+    it('counts only AVAILABLE road-legal vehicles, excludes MAINTENANCE and RETIRED (#1193)', async () => {
       const available = await createTestVehicle({
         name: 'Cap A',
         status: 'AVAILABLE',
@@ -565,7 +565,9 @@ describe('DrizzleAvailabilityRepository', () => {
         ASOF,
         ASOF,
       )
-      expect(count).toBe(2)
+      // Only the AVAILABLE car is assignable; MAINTENANCE and RETIRED both fail
+      // the assign gate, so counting them would overbook the float (#1193).
+      expect(count).toBe(1)
     })
 
     it('excludes vehicles whose shaken/insurance certificate has lapsed at asOf', async () => {
