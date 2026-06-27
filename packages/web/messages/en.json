@@ -1257,7 +1257,8 @@
       "anomalies": "Payment Anomalies",
       "documents": "Documents",
       "governance": "Consent governance",
-      "customers": "Customers"
+      "customers": "Customers",
+      "backToSite": "Back to site"
     },
     "home": {
       "title": "Platform Admin",
