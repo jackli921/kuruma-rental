@@ -9,7 +9,6 @@ import {
   text,
   timestamp,
   unique,
-  uniqueIndex,
 } from 'drizzle-orm/pg-core'
 import { REVIEW_AUTHOR_ROLES, REVIEW_MODERATION_STATUSES, REVIEW_SUBJECTS } from '../enums'
 import { operators, users } from './auth'
@@ -77,16 +76,12 @@ export const reviews = pgTable(
     updatedAt: timestamp('updatedAt', { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [
-    // Exactly one review per author per booking per subject — edit-until-published, never re-insert.
-    unique('reviews_author_subject_per_booking_unique').on(t.bookingId, t.authorUserId, t.subject),
-    // One operator-side review per booking, keyed on the TENANT not the staff user (#1158):
-    // the operator->renter review represents the operator, so the first staff member to submit
-    // speaks for it. A partial unique index (OPERATOR rows only) seals (booking, operator, subject)
-    // so two staff of one operator can't double-review one booking and skew slice-5 aggregates.
-    // The renter side stays governed by the per-author unique above (there is only ever one renter).
-    uniqueIndex('reviews_operator_subject_per_booking_unique')
-      .on(t.bookingId, t.operatorId, t.subject)
-      .where(sql`${t.authorRole} = 'OPERATOR'`),
+    // One review per booking per subject — the single seal for all three sides (#1201).
+    // subject is CHECK-sealed to the author side (reviews_subject_pairing_chk), so this is
+    // provably one operator->renter, one renter->operator, one renter->vehicle per booking
+    // WITHOUT depending on the denormalized operatorId. There is exactly one renter per
+    // booking, and the first staff member to submit speaks for the operator (#1158).
+    unique('reviews_subject_per_booking_unique').on(t.bookingId, t.subject),
     check('reviews_overall_range_chk', sql`${t.overall} BETWEEN 1 AND 5`),
     // Operators review ONLY renters; renters review the operator or a vehicle (never a renter).
     check(
@@ -106,8 +101,11 @@ export const reviews = pgTable(
       'reviews_class_subject_chk',
       sql`${t.subjectClassId} IS NULL OR ${t.subject} = 'VEHICLE'`,
     ),
-    // FK-covering + read indexes (lint:fk-indexes treats every FK column as needing
-    // its own index — the unique's leading-column prefix doesn't satisfy the gate).
+    // FK-covering + read indexes (lint:fk-indexes wants every FK column to have its own
+    // index). idx_reviews_bookingId is query-redundant with the reseal's (bookingId, subject)
+    // unique — bookingId is its leading column, so it already serves findByBookingId — but the
+    // lint parser only reads CREATE INDEX, not the ALTER ... ADD CONSTRAINT a unique() emits, so
+    // it can't see the seal as FK cover. Kept to satisfy the gate; dropping it is tracked separately.
     index('idx_reviews_bookingId').on(t.bookingId),
     index('idx_reviews_authorUserId').on(t.authorUserId),
     // operatorId FK cover + the slice-5 published-aggregate scan.

@@ -1,5 +1,6 @@
 import { unwrap } from '@/lib/api-error'
 import { getApiBaseUrl } from '@/vite/api-base'
+import { buildScopeParam } from '@/vite/operator-context'
 import { FEE_SCHEDULE_STATUSES, FEE_TYPES, FEE_UNITS } from '@kuruma/shared/enums'
 import type { FeeScheduleData } from '@kuruma/shared/types/fee-schedule'
 import type {
@@ -38,19 +39,26 @@ export type { FeeScheduleData }
 
 export const FEE_QUERY_KEY = ['operator-fees'] as const
 
-// Management lists archived rows too (badged + restorable), so the fetch is
-// parameterless and the query key stays stable for invalidation.
-export async function fetchFeeSchedules(): Promise<FeeScheduleData[]> {
-  const res = await fetch(`${getApiBaseUrl()}/fee-schedules?includeArchived=true`, {
-    credentials: 'include',
-  })
+// Management always lists archived rows too (badged + restorable). The scope
+// param is `operatorId=<picked>` when an admin has picked a tenant, else
+// `includeAll=true` (the bypass-role read default that an operator session
+// ignores — it auto-scopes server-side). The bare read previously sent NO scope
+// param, which 400'd a PLATFORM_ADMIN's cross-operator read (the #529 lesson).
+export async function fetchFeeSchedules(pickedOperatorId?: string): Promise<FeeScheduleData[]> {
+  const res = await fetch(
+    `${getApiBaseUrl()}/fee-schedules?includeArchived=true&${buildScopeParam(pickedOperatorId)}`,
+    { credentials: 'include' },
+  )
   return unwrap(res, feeScheduleSchema.array())
 }
 
-export function feeSchedulesQueryOptions() {
+// The picked operator id is part of the cache key so switching context refetches
+// (and never serves another tenant's cached list). Optional param keeps any
+// no-arg caller working.
+export function feeSchedulesQueryOptions(pickedOperatorId?: string) {
   return queryOptions({
-    queryKey: FEE_QUERY_KEY,
-    queryFn: fetchFeeSchedules,
+    queryKey: [...FEE_QUERY_KEY, pickedOperatorId ?? 'all'] as const,
+    queryFn: () => fetchFeeSchedules(pickedOperatorId),
   })
 }
 

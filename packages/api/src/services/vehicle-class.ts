@@ -15,6 +15,30 @@ export type CreateResult =
 
 export type UpdateResult = CreateResult
 
+/**
+ * The writable surface of a vehicle-class PATCH. Owned by the service so the
+ * route passes an intent DTO instead of the persistence entity (#1213 — routes
+ * never import from ../stores). Mirrors `updateVehicleClassSchema`: server-derived
+ * (id/timestamps) and non-patchable (operatorId, status — status moves via
+ * archive()) columns are absent; every field is optional because a PATCH is partial.
+ */
+export type VehicleClassUpdate = Partial<
+  Pick<
+    VehicleClass,
+    | 'name'
+    | 'slug'
+    | 'description'
+    | 'photos'
+    | 'seats'
+    | 'luggageCapacity'
+    | 'luggageSize'
+    | 'transmission'
+    | 'fuelType'
+    | 'acrissCode'
+    | 'sortOrder'
+  >
+>
+
 export type ArchiveResult =
   | { ok: true; vehicleClass: VehicleClass }
   | {
@@ -84,7 +108,7 @@ export class VehicleClassService {
     return { ok: true, vehicleClass }
   }
 
-  async update(ctx: CallerContext, id: string, data: Partial<VehicleClass>): Promise<UpdateResult> {
+  async update(ctx: CallerContext, id: string, data: VehicleClassUpdate): Promise<UpdateResult> {
     const foreign = this.rejectForeignPhotos(data.photos)
     if (foreign) return foreign
 

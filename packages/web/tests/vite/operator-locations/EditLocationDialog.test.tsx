@@ -9,6 +9,12 @@ import { IntlProvider } from 'use-intl'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import enMessages from '../../../messages/en.json'
 
+// csrfToken is supplied without a real auth flow; the dialog must thread it into
+// the update call so the csrf() middleware admits the cookie write.
+vi.mock('@/vite/session', () => ({
+  useSession: () => ({ data: { csrfToken: 'test-csrf' } }),
+}))
+
 vi.mock('@/vite/operator-locations/api', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@/vite/operator-locations/api')>()
   return { ...actual, updateLocation: vi.fn() }
@@ -74,6 +80,8 @@ describe('EditLocationDialog', () => {
     await waitFor(() => expect(updateLocation).toHaveBeenCalledTimes(1))
     expect(updateLocation.mock.calls[0][0]).toBe('loc_1')
     expect(updateLocation.mock.calls[0][1]).toMatchObject({ name: 'Namba Annex' })
+    // The session's CSRF token is threaded as the 3rd arg (id, body, token).
+    expect(updateLocation.mock.calls[0][2]).toBe('test-csrf')
     expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: LOCATIONS_QUERY_KEY })
     await waitFor(() => expect(onOpenChange).toHaveBeenCalledWith(false))
   })

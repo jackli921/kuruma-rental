@@ -44,6 +44,8 @@ Use them instead of manual `c.json({ success: true/false, ... })` construction.
 
 Enforced by `bun run --filter @kuruma/api lint:boundaries` (CI step) — which also flags any `new Drizzle*`/`new InMemory*` construction outside the composition root and the sanctioned `*-transaction.ts` factories.
 
+**Platform-admin surfaces MUST mount under `/admin/*` (#1164, #1228).** The structural read-floor `requirePlatformMember()` (mounted once as `app.use('/admin/*', requireAuth())` → `app.use('/admin/*', requirePlatformMember())` in `index.ts`) is **path-prefix-bound**: it only protects routes under that prefix. A platform route mounted anywhere else inherits NO structural authz and relies solely on its in-body `requirePlatform*` call — one forgotten call = an open admin surface. So: register every platform-admin router under `/admin/*`, never a sibling prefix. The per-handler `requirePlatform*` gates stay as defense-in-depth (and carry the stricter write-only `requirePlatformAdmin` distinction).
+
 ## Commands
 
 | Task | Command |

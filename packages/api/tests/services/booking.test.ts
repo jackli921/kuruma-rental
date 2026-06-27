@@ -17,6 +17,7 @@ import {
   InMemoryInsuranceOptionRepository,
   InMemoryLocationRepository,
   InMemoryMaintenanceLogRepository,
+  InMemoryOperatorRepository,
   InMemoryRenterDocumentRepository,
   InMemoryUserRepository,
   InMemoryVehicleBlockRepository,
@@ -39,7 +40,7 @@ import type { CancellationRefundCoordinator } from '../../src/services/booking-l
 import type { BookingPostCommitDispatcher } from '../../src/services/booking-post-commit-dispatcher'
 import { documentVerificationGate } from '../../src/services/document-verification-gate'
 import { RenterDocumentService } from '../../src/services/renter-document'
-import type { Booking, BookingEvent, User, Vehicle, VehicleClass } from '../../src/stores'
+import type { Booking, BookingEvent, Operator, User, Vehicle, VehicleClass } from '../../src/stores'
 
 const OP_A = 'op-a'
 const OP_B = 'op-b'
@@ -92,7 +93,32 @@ interface Harness {
   // #1101: exposed concrete (repos.vehicleBlockRepo is the read-only Pick) so a
   // test can schedule a block and assert the booking-vs-block guard.
   vehicleBlockRepo: InMemoryVehicleBlockRepository
+  // #1206: exposed concrete (repos.operatorRepo is the read-only Pick) so a test
+  // can deactivate/reactivate the seeded operator and assert the booking guard.
+  operatorRepo: InMemoryOperatorRepository
   generate: { mock: ReturnType<typeof vi.fn> }
+}
+
+// #1206: an InMemoryOperatorRepository pre-seeded with OP_A active. Both harnesses
+// share it so existing create paths still pass the new operator-active guard; the
+// guard tests flip deactivatedAt on the exposed concrete repo.
+function seedOperatorRepo(): InMemoryOperatorRepository {
+  return new InMemoryOperatorRepository(
+    new Map<string, Operator>([
+      [
+        OP_A,
+        {
+          id: OP_A,
+          slug: 'op-a',
+          name: 'Op A',
+          preAuthHandoffUrl: null,
+          createdAt: NOW,
+          updatedAt: NOW,
+          deactivatedAt: null,
+        },
+      ],
+    ]),
+  )
 }
 
 // Wires all seven in-memory repos behind a pass-through runInTransaction (the
@@ -160,6 +186,11 @@ async function setup(
     ]),
   )
 
+  // #1206: the booking guard loads the vehicle's operator and rejects a
+  // deactivated one. Seed OP_A active so every existing create path still passes;
+  // the new guard tests flip deactivatedAt via the exposed concrete repo.
+  const operatorRepo = seedOperatorRepo()
+
   const vehicle = await vehicleRepo.create(SYSTEM_CONTEXT, vehicleData())
   await locationRepo.create({
     operatorId: OP_A,
@@ -187,6 +218,7 @@ async function setup(
     classRatePlanRepo,
     vehicleClassRepo,
     vehicleBlockRepo,
+    operatorRepo,
   }
   const runInTransaction: RunInTransaction = async (fn) => fn(repos)
 
@@ -216,6 +248,7 @@ async function setup(
     events,
     vehicleId: vehicle.id,
     vehicleBlockRepo,
+    operatorRepo,
     generate: { mock: generateMock },
   }
 }
@@ -301,6 +334,54 @@ describe('BookingService.create — past-start floor (#954)', () => {
       }),
       NOW,
     )
+    expect(result.ok).toBe(true)
+  })
+})
+
+describe('BookingService.create — deactivated-operator guard (#1206)', () => {
+  // A soft-deactivated operator (operators.deactivatedAt set) stops taking NEW
+  // bookings across every create path; reactivation (deactivatedAt -> null) re-allows.
+  const bookSeeded = (h: Harness, vehicleId: string, locationId: string) =>
+    h.service.create(
+      renterCtx,
+      createInput({
+        requestedVehicleId: vehicleId,
+        pickupLocationId: locationId,
+        dropoffLocationId: locationId,
+      }),
+      NOW,
+    )
+
+  it('rejects a booking against a deactivated operator (409 OPERATOR_DEACTIVATED)', async () => {
+    const h = await setup()
+    const { vehicleId, locationId } = await seedReady(h)
+    await h.operatorRepo.update(OP_A, { deactivatedAt: new Date(), updatedAt: new Date() })
+
+    const result = await bookSeeded(h, vehicleId, locationId)
+
+    expect(result.ok).toBe(false)
+    expect(result.status).toBe(409)
+    if (!result.ok) expect(result.code).toBe('OPERATOR_DEACTIVATED')
+  })
+
+  it('still accepts a booking against an active operator', async () => {
+    const h = await setup()
+    const { vehicleId, locationId } = await seedReady(h)
+
+    const result = await bookSeeded(h, vehicleId, locationId)
+
+    expect(result.ok).toBe(true)
+  })
+
+  it('re-allows booking after the operator is reactivated (deactivatedAt -> null)', async () => {
+    const h = await setup()
+    const { vehicleId, locationId } = await seedReady(h)
+    await h.operatorRepo.update(OP_A, { deactivatedAt: new Date(), updatedAt: new Date() })
+    expect((await bookSeeded(h, vehicleId, locationId)).ok).toBe(false)
+
+    await h.operatorRepo.update(OP_A, { deactivatedAt: null, updatedAt: new Date() })
+
+    const result = await bookSeeded(h, vehicleId, locationId)
     expect(result.ok).toBe(true)
   })
 })
@@ -1122,6 +1203,24 @@ describe('BookingService.create — CLASS_COMBO (#464 2d.3)', () => {
     })
   })
 
+  // #1206: the deactivated-operator guard covers the CLASS_COMBO create path too
+  // (operatorId resolved from the pickup location), not just SPECIFIC.
+  it('rejects a CLASS_COMBO booking against a deactivated operator (409 OPERATOR_DEACTIVATED)', async () => {
+    const h = await setup()
+    const { classId, locationId } = await seedComboReady(h)
+    await h.operatorRepo.update(OP_A, { deactivatedAt: new Date(), updatedAt: new Date() })
+
+    const result = await h.service.create(
+      renterCtx,
+      comboInput({ classId, pickupLocationId: locationId, dropoffLocationId: locationId }),
+      NOW,
+    )
+
+    expect(result.ok).toBe(false)
+    expect(result.status).toBe(409)
+    if (!result.ok) expect(result.code).toBe('OPERATOR_DEACTIVATED')
+  })
+
   // Maintainability review 2026-06-24 finding #11: cross-PR drift between
   // #1028 (SPECIFIC turnaround follows dropoff) and #1035 (CLASS_COMBO landed
   // after, still keyed off pickup). The DB trigger overwrites the persisted
@@ -1373,6 +1472,133 @@ describe('BookingService.create — CLASS_COMBO (#464 2d.3)', () => {
     expect(result.status).toBe(400)
     expect(result.code).toBe('RENTAL_RULE_START_IN_PAST')
   })
+
+  // #1109 (audit M1): the snapshot+insert tail is duplicated across submit modes.
+  // A fee/insurance/add-on fix landed on one path silently mis-prices the other —
+  // and it's money. This pins structural parity between the two persisted snapshot
+  // shapes for an equivalent fixture, so any drift introduced by an extraction
+  // (or any future divergence) fails loudly.
+  it('SPECIFIC and CLASS_COMBO produce structurally identical fee/insurance/add-on snapshots for an equivalent fixture (#1109)', async () => {
+    // Two bookings → need two distinct codes (the default mock generator's
+    // fallback returns "GEN00001" every call once the queue is exhausted).
+    const h = await setup({ codes: ['SPEC1', 'COMBO1'] })
+    // dayRateJpy matches the seeded vehicle's dailyRateJpy so basePrice agrees
+    // between the two paths (10000 × 2 days = 20000).
+    const { classId, locationId, vehicleId } = await seedComboReady(h, { dayRateJpy: 10000 })
+
+    const insurance = await h.repos.insuranceOptionRepo.create({
+      operatorId: OP_A,
+      name: 'Premium',
+      description: null,
+      dailyPriceJpy: 2000,
+      deductibleJpy: 150000,
+      status: 'ACTIVE',
+    } as Parameters<typeof h.repos.insuranceOptionRepo.create>[0])
+
+    const addOn = await h.repos.addOnRepo.create({
+      operatorId: OP_A,
+      name: 'Baby seat',
+      description: null,
+      priceJpy: 1100,
+      status: 'ACTIVE',
+    } as Parameters<typeof h.repos.addOnRepo.create>[0])
+
+    // One operator-wide + one class-specific fee → both bookings pick up both
+    // entries (covers the filter branch shared by the snapshot tail).
+    await h.repos.feeScheduleRepo.create({
+      operatorId: OP_A,
+      vehicleClassId: null,
+      feeType: 'CLEANING_FLAT',
+      unit: 'FLAT',
+      amountJpy: 3000,
+      status: 'ACTIVE',
+    } as Parameters<typeof h.repos.feeScheduleRepo.create>[0])
+    await h.repos.feeScheduleRepo.create({
+      operatorId: OP_A,
+      vehicleClassId: classId,
+      feeType: 'OVERTIME_HOURLY',
+      unit: 'PER_HOUR',
+      amountJpy: 500,
+      status: 'ACTIVE',
+    } as Parameters<typeof h.repos.feeScheduleRepo.create>[0])
+
+    // Non-overlapping windows so SPECIFIC's exclusion and CLASS_COMBO's
+    // demand>=capacity guard both admit. Identical 2-day length.
+    const SPECIFIC_START = new Date('2026-07-02T00:00:00Z')
+    const SPECIFIC_END = new Date('2026-07-04T00:00:00Z')
+    const COMBO_START = new Date('2026-07-10T00:00:00Z')
+    const COMBO_END = new Date('2026-07-12T00:00:00Z')
+
+    const sResult = await h.service.create(
+      renterCtx,
+      createInput({
+        requestedVehicleId: vehicleId,
+        pickupLocationId: locationId,
+        dropoffLocationId: locationId,
+        insuranceOptionId: insurance.id,
+        addOnIds: [addOn.id],
+        startAt: SPECIFIC_START,
+        endAt: SPECIFIC_END,
+      }),
+      NOW,
+    )
+    expect(sResult.ok).toBe(true)
+    if (!sResult.ok) throw new Error(sResult.error.toString())
+
+    const cResult = await h.service.create(
+      renterCtx,
+      comboInput({
+        classId,
+        pickupLocationId: locationId,
+        dropoffLocationId: locationId,
+        insuranceOptionId: insurance.id,
+        addOnIds: [addOn.id],
+        startAt: COMBO_START,
+        endAt: COMBO_END,
+      }),
+      NOW,
+    )
+    expect(cResult.ok).toBe(true)
+    if (!cResult.ok) throw new Error(cResult.error.toString())
+
+    const s = sResult.booking
+    const c = cResult.booking
+
+    // Structural parity: every snapshot field on the COMBO booking equals its
+    // SPECIFIC counterpart. toEqual is deep-equal (mutation-resistant — flips
+    // on a key reorder, an added field, or a numeric drift).
+    expect(c.insuranceSnapshot).toEqual(s.insuranceSnapshot)
+    expect(c.feeSnapshot).toEqual(s.feeSnapshot)
+    expect(c.addOnSnapshot).toEqual(s.addOnSnapshot)
+    expect(c.totalPrice).toBe(s.totalPrice)
+    // 2 days × (10000 base + 2000 insurance) + 1100 add-on = 25100.
+    expect(s.totalPrice).toBe(25100)
+
+    // The BOOKING_CREATED audit payload also mirrors the snapshots (the audit
+    // trail keys off it, e.g. for fee disputes). Pin event-payload parity too,
+    // so a field dropped from one path's append() call can't slip past the
+    // booking-row parity assertions above.
+    const [sEvent] = await h.repos.bookingEventRepo.findByBookingId(SYSTEM_CONTEXT, s.id)
+    const [cEvent] = await h.repos.bookingEventRepo.findByBookingId(SYSTEM_CONTEXT, c.id)
+    expect(sEvent?.type).toBe('BOOKING_CREATED')
+    expect(cEvent?.type).toBe('BOOKING_CREATED')
+    expect(cEvent?.payload).toMatchObject({
+      type: 'BOOKING_CREATED',
+      classId: s.classId,
+      insuranceSnapshot: s.insuranceSnapshot,
+      feeSnapshot: s.feeSnapshot,
+      addOnSnapshot: s.addOnSnapshot,
+      totalPrice: s.totalPrice,
+    })
+    expect(sEvent?.payload).toMatchObject({
+      type: 'BOOKING_CREATED',
+      classId: s.classId,
+      insuranceSnapshot: s.insuranceSnapshot,
+      feeSnapshot: s.feeSnapshot,
+      addOnSnapshot: s.addOnSnapshot,
+      totalPrice: s.totalPrice,
+    })
+  })
 })
 
 // ---- Substitution (#392 §5.5) ----
@@ -1513,6 +1739,7 @@ async function setupSub(
     vehicleBlockRepo,
   )
   const classRatePlanRepo = new InMemoryClassRatePlanRepository()
+  const operatorRepo = seedOperatorRepo()
 
   const repos: TransactionRepos = {
     vehicleRepo,
@@ -1528,6 +1755,7 @@ async function setupSub(
     classRatePlanRepo,
     vehicleClassRepo,
     vehicleBlockRepo,
+    operatorRepo,
   }
   const runInTransaction: RunInTransaction = async (fn) => fn(repos)
   const service = new BookingService(

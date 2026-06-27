@@ -881,6 +881,10 @@
       },
       "loadError": "无法加载您的团队",
       "retry": "重试"
+    },
+    "operatorContext": {
+      "label": "运营商",
+      "all": "所有运营商"
     }
   },
   "messaging": {

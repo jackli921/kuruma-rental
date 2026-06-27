@@ -12,8 +12,7 @@ import {
   toCallerContext,
 } from '../middleware/auth'
 import type { InsuranceOptionFilters } from '../services/filters'
-import type { InsuranceOptionService } from '../services/insurance-option'
-import type { InsuranceOption } from '../stores'
+import type { InsuranceOptionService, InsuranceOptionUpdate } from '../services/insurance-option'
 import type { ResolveWriteOperatorId } from '../tenancy'
 import { fail, ok, parseBody, parseId, parseScopedCreate, stripUndefined } from './helpers'
 
@@ -102,7 +101,7 @@ export function createInsuranceOptionRoutes(
       const result = await service.update(
         toCallerContext(user),
         idResult.id,
-        stripUndefined(parsed.data) as Partial<InsuranceOption>,
+        stripUndefined(parsed.data) as InsuranceOptionUpdate,
       )
       if (!result.ok) return fail(c, result.error, result.status)
       return ok(c, result.option)

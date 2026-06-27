@@ -6,13 +6,7 @@ import {
 } from '@kuruma/shared/lib/review-reveal'
 import type { EditReviewInput, SubmitReviewInput } from '@kuruma/shared/validators/review'
 import { type CallerContext, SYSTEM_CONTEXT } from '../middleware/auth'
-import {
-  PG_ERROR,
-  REVIEWS_AUTHOR_SUBJECT_CONSTRAINT,
-  REVIEWS_OPERATOR_SUBJECT_CONSTRAINT,
-  pgConstraintName,
-  pgErrorCode,
-} from '../pg-errors'
+import { PG_ERROR, REVIEWS_SUBJECT_CONSTRAINT, pgConstraintName, pgErrorCode } from '../pg-errors'
 import type {
   BookingEventRepository,
   BookingRepository,
@@ -173,12 +167,11 @@ export class ReviewService {
       const review = (await this.reviewRepo.findById(inserted.id)) ?? inserted
       return { ok: true, review }
     } catch (err) {
-      // Either seal trips ALREADY_REVIEWED: the per-author one (a resubmit of the same
-      // subject) or the per-operator one (#1158 — a colleague already spoke for the operator).
+      // The single seal trips ALREADY_REVIEWED: a resubmit of the same (booking, subject)
+      // by the renter, or a colleague already speaking for the operator (#1158/#1201).
       if (
         pgErrorCode(err) === PG_ERROR.UNIQUE_VIOLATION &&
-        (pgConstraintName(err) === REVIEWS_AUTHOR_SUBJECT_CONSTRAINT ||
-          pgConstraintName(err) === REVIEWS_OPERATOR_SUBJECT_CONSTRAINT)
+        pgConstraintName(err) === REVIEWS_SUBJECT_CONSTRAINT
       ) {
         return fail(409, 'ALREADY_REVIEWED')
       }

@@ -12,6 +12,7 @@ import {
   createDrizzleTransaction,
 } from '../../src/repositories/drizzle'
 import { BookingService } from '../../src/services/booking'
+import { VehicleBlockService } from '../../src/services/vehicle-block'
 import {
   cleanupBookings,
   cleanupLocations,
@@ -45,6 +46,15 @@ const service = new BookingService(
   undefined,
   vehicleClassRepo,
 )
+
+// #1196: the reverse guard runs the Drizzle findActiveOverlappingForVehicle SQL
+// against real pg — proving the tstzrange overlap matches the in-memory adapter.
+const vehicleBlockService = new VehicleBlockService(vehicleRepo, blockRepo, bookingRepo)
+const opCtx: CallerContext = {
+  userId: 'op-user',
+  role: 'OPERATOR_OWNER',
+  operatorId: BEST_CAR_RENTAL_OPERATOR_ID,
+}
 
 // 60-minute turnaround so effectiveEndAt = endAt + 1h, giving a small tail the
 // block guard must also defend (must-fix #1).
@@ -194,5 +204,57 @@ describe('booking-vs-block guard (real pg, #1101)', () => {
 
     expect(res.ok).toBe(true)
     if (res.ok) createdBookingIds.push(res.booking.id)
+  })
+})
+
+describe('block-vs-booking guard (real pg, #1196)', () => {
+  it('rejects a block scheduled over a CONFIRMED booking on the rental window (409 BLOCK_BOOKING_CONFLICT)', async () => {
+    const vehicleId = await seedVehicle('Block Over Booking Car 1')
+    const booked = await bookVehicle(vehicleId)
+    expect(booked.ok).toBe(true)
+    if (booked.ok) createdBookingIds.push(booked.booking.id)
+
+    const res = await vehicleBlockService.createBlock(opCtx, vehicleId, {
+      kind: 'MAINTENANCE',
+      reason: 'in-shop',
+      startAt: '2027-10-01T12:00:00.000Z',
+      endAt: '2027-10-01T18:00:00.000Z',
+    })
+
+    expect(res).toMatchObject({ ok: false, status: 409, code: 'BLOCK_BOOKING_CONFLICT' })
+  })
+
+  it('rejects a block that overlaps only the booking dropoff turnaround tail', async () => {
+    const vehicleId = await seedVehicle('Block Over Booking Car 2')
+    const booked = await bookVehicle(vehicleId)
+    expect(booked.ok).toBe(true)
+    if (booked.ok) createdBookingIds.push(booked.booking.id)
+
+    // endAt 09:00, effectiveEndAt 10:00 (60-min turnaround); 09:30–09:45 is the tail.
+    const res = await vehicleBlockService.createBlock(opCtx, vehicleId, {
+      kind: 'MAINTENANCE',
+      reason: 'tail',
+      startAt: '2027-10-02T09:30:00.000Z',
+      endAt: '2027-10-02T09:45:00.000Z',
+    })
+
+    expect(res).toMatchObject({ ok: false, status: 409, code: 'BLOCK_BOOKING_CONFLICT' })
+  })
+
+  it('allows a block entirely after the booking turnaround window', async () => {
+    const vehicleId = await seedVehicle('Block Over Booking Car 3')
+    const booked = await bookVehicle(vehicleId)
+    expect(booked.ok).toBe(true)
+    if (booked.ok) createdBookingIds.push(booked.booking.id)
+
+    const res = await vehicleBlockService.createBlock(opCtx, vehicleId, {
+      kind: 'MAINTENANCE',
+      reason: 'later',
+      startAt: '2027-10-05T00:00:00.000Z',
+      endAt: '2027-10-05T06:00:00.000Z',
+    })
+
+    expect(res.ok).toBe(true)
+    if (res.ok) createdBlockIds.push(res.block.id)
   })
 })

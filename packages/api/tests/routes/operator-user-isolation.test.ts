@@ -5,12 +5,13 @@ import { SYSTEM_CONTEXT } from '../../src/middleware/auth'
 import { InMemoryAvailabilityRepository } from '../../src/repositories/in-memory/availability'
 import { InMemoryBookingRepository } from '../../src/repositories/in-memory/booking'
 import { InMemoryLocationRepository } from '../../src/repositories/in-memory/location'
+import { InMemoryOperatorRepository } from '../../src/repositories/in-memory/operator'
 import { InMemoryThreadRepository } from '../../src/repositories/in-memory/thread'
 import { InMemoryUserRepository } from '../../src/repositories/in-memory/user'
 import { InMemoryVehicleRepository } from '../../src/repositories/in-memory/vehicle'
 import { InMemoryVehicleBlockRepository } from '../../src/repositories/in-memory/vehicle-block'
 import { InMemoryVehicleClassRepository } from '../../src/repositories/in-memory/vehicle-class'
-import type { Location, User, Vehicle, VehicleClass } from '../../src/stores'
+import type { Location, Operator, User, Vehicle, VehicleClass } from '../../src/stores'
 import { TEST_AUTH_SECRET, setupAuthEnv } from '../helpers/auth'
 import { bookingInput } from '../helpers/booking'
 
@@ -177,6 +178,25 @@ describe('#396 — OPERATOR_* cannot enumerate users via any current ingress', (
       new InMemoryVehicleBlockRepository(),
     )
 
+    // #1206: the booking guard loads the vehicle's operator; seed OPERATOR_ID
+    // active so the operator/walk-in manual-booking create paths pass the guard.
+    const operatorRepo = new InMemoryOperatorRepository(
+      new Map<string, Operator>([
+        [
+          OPERATOR_ID,
+          {
+            id: OPERATOR_ID,
+            slug: 'op-396',
+            name: 'Operator 396',
+            preAuthHandoffUrl: null,
+            createdAt: new Date(),
+            updatedAt: new Date(),
+            deactivatedAt: null,
+          },
+        ],
+      ]),
+    )
+
     app = createApp({
       vehicleRepo,
       bookingRepo,
@@ -185,6 +205,7 @@ describe('#396 — OPERATOR_* cannot enumerate users via any current ingress', (
       vehicleClassRepo,
       threadRepo,
       locationRepo,
+      operatorRepo,
     })
   })
 
