@@ -18,7 +18,15 @@ const OP_A = 'operator-aaaaaaaa'
 const OP_B = 'operator-bbbbbbbb'
 
 function operator(id: string, name: string, slug: string): Operator {
-  return { id, name, slug, preAuthHandoffUrl: null, createdAt: new Date(), updatedAt: new Date() }
+  return {
+    id,
+    name,
+    slug,
+    preAuthHandoffUrl: null,
+    createdAt: new Date(),
+    updatedAt: new Date(),
+    deactivatedAt: null,
+  }
 }
 
 function payment(grossJpy: number): PaymentEvent {

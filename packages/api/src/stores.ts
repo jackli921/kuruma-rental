@@ -353,6 +353,9 @@ export interface Operator {
   preAuthHandoffUrl: string | null
   createdAt: Date
   updatedAt: Date
+  // #1088: soft-deactivation. NULL = active; set = deactivated (hidden from
+  // storefront/search, blocks new bookings). `active` is derived, never stored.
+  deactivatedAt: Date | null
 }
 
 export interface Location {

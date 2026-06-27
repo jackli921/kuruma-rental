@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'vitest'
 import { type CallerContext, ForbiddenError, SYSTEM_CONTEXT } from '../../src/middleware/auth'
 import { InMemoryOperatorRepository } from '../../src/repositories/in-memory'
+import type { VehicleRepository } from '../../src/repositories/types'
 import { type OperatorProfileAuditEvent, OperatorService } from '../../src/services/operator'
 
 const ownerCtx: CallerContext = {
@@ -10,10 +11,21 @@ const ownerCtx: CallerContext = {
   bypassScope: false,
 }
 
-function makeService() {
+const adminCtx: CallerContext = {
+  userId: 'admin',
+  role: 'PLATFORM_ADMIN',
+  bypassScope: true,
+}
+
+// The 3rd ctor arg is narrowed to the single VehicleRepository method the service
+// uses (#1088 fleetCount). A controllable stub keeps these unit tests off the heavy
+// Vehicle fixture and lets each test drive the count map directly.
+function makeService(
+  countByOperator: VehicleRepository['countByOperator'] = async () => new Map(),
+) {
   const repo = new InMemoryOperatorRepository()
   const events: OperatorProfileAuditEvent[] = []
-  const service = new OperatorService(repo, (e) => events.push(e))
+  const service = new OperatorService(repo, (e) => events.push(e), { countByOperator })
   return { repo, service, events }
 }
 
@@ -293,5 +305,64 @@ describe('OperatorService.update', () => {
       await service.update(ctxA, b.id, { preAuthHandoffUrl: 'https://hijack.example' }),
     ).toBeUndefined()
     expect(events).toEqual([])
+  })
+})
+
+describe('OperatorService.listForAdmin (#1088)', () => {
+  test('platform-admin sees EVERY operator (incl deactivated), with fleetCount (0 when none)', async () => {
+    const counts = new Map<string, number>()
+    const { repo, service } = makeService(
+      async (ids) =>
+        new Map(
+          ids.flatMap((id) => (counts.has(id) ? [[id, counts.get(id) as number] as const] : [])),
+        ),
+    )
+    const acme = await repo.create({ name: 'Acme', slug: 'acme', preAuthHandoffUrl: null })
+    const beta = await repo.create({ name: 'Beta', slug: 'beta', preAuthHandoffUrl: null })
+    await repo.update(beta.id, {
+      deactivatedAt: new Date('2026-06-26T00:00:00.000Z'),
+      updatedAt: new Date(),
+    })
+    counts.set(acme.id, 2) // beta intentionally absent -> exercises the `?? 0` default
+
+    const rows = await service.listForAdmin(adminCtx)
+
+    expect(rows.map((r) => r.name)).toEqual(['Acme', 'Beta']) // ALL operators, sorted by name
+    expect(rows.find((r) => r.id === acme.id)).toMatchObject({ deactivatedAt: null, fleetCount: 2 })
+    const betaRow = rows.find((r) => r.id === beta.id)
+    expect(betaRow?.deactivatedAt).toBeInstanceOf(Date) // a deactivated tenant stays listed
+    expect(betaRow?.fleetCount).toBe(0) // missing from the count map -> default 0, not undefined
+  })
+
+  test('rejects a non-platform-admin caller (defence-in-depth re-assert)', async () => {
+    const { service } = makeService()
+    await expect(service.listForAdmin(ownerCtx)).rejects.toThrow(ForbiddenError)
+  })
+})
+
+describe('OperatorService deactivate/reactivate (#1088)', () => {
+  test('deactivate sets deactivatedAt; reactivate clears it (persisted both ways)', async () => {
+    const { repo, service } = makeService()
+    const op = await repo.create({ name: 'Toggle', slug: 'toggle', preAuthHandoffUrl: null })
+
+    const off = await service.deactivate(adminCtx, op.id)
+    expect(off?.deactivatedAt).toBeInstanceOf(Date)
+    expect((await repo.findById(op.id))?.deactivatedAt).toBeInstanceOf(Date)
+
+    const on = await service.reactivate(adminCtx, op.id)
+    expect(on?.deactivatedAt).toBeNull()
+    expect((await repo.findById(op.id))?.deactivatedAt).toBeNull()
+  })
+
+  test('returns undefined for an unknown operator so the route 404s', async () => {
+    const { service } = makeService()
+    expect(await service.deactivate(adminCtx, 'op_missing')).toBeUndefined()
+    expect(await service.reactivate(adminCtx, 'op_missing')).toBeUndefined()
+  })
+
+  test('rejects a non-platform-admin caller on both verbs', async () => {
+    const { service } = makeService()
+    await expect(service.deactivate(ownerCtx, 'op_1')).rejects.toThrow(ForbiddenError)
+    await expect(service.reactivate(ownerCtx, 'op_1')).rejects.toThrow(ForbiddenError)
   })
 })
