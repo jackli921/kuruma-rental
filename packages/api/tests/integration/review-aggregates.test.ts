@@ -72,10 +72,12 @@ function reviewRow(
 }
 
 describe('DrizzleReviewRepository aggregates (#1085, real pg)', () => {
-  it('aggregateByOperator: groups by operatorId, drops unpublished + HIDDEN', async () => {
-    // Two published+visible rows for the same operator (different authors), plus a
-    // still-hidden row (publishedAt:null) and a HIDDEN row — the latter two must
-    // not enter the sum/count.
+  it('aggregateByOperator: only OPERATOR-subject rows count; drops VEHICLE + unpublished + HIDDEN', async () => {
+    // One published+visible OPERATOR row (counts) + one published+visible VEHICLE
+    // row on the SAME operator (must NOT count — `operatorId` is denormalized on
+    // every review, so without the subject filter the operator rating would
+    // ingest renters' vehicle scores). Plus a still-hidden row and a HIDDEN row,
+    // both also denied.
     await db.insert(reviews).values([
       reviewRow({ overall: 5 }),
       reviewRow({
@@ -101,7 +103,9 @@ describe('DrizzleReviewRepository aggregates (#1085, real pg)', () => {
     ])
     const repo = new DrizzleReviewRepository(db)
     const out = await repo.aggregateByOperator([operatorId])
-    expect(out.get(operatorId)).toEqual({ sum: 8, count: 2 })
+    // Only the OPERATOR-subject row (overall=5) counts. A regression that drops
+    // the subject filter would land at {sum:8,count:2} (5+3 from VEHICLE).
+    expect(out.get(operatorId)).toEqual({ sum: 5, count: 1 })
   })
 
   it('aggregateByVehicle: keys on subjectVehicleId; only VEHICLE rows count', async () => {

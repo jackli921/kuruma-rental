@@ -181,6 +181,30 @@ describe('InMemoryReviewRepository — aggregates (#1085)', () => {
     expect(out.has('op_unrated')).toBe(false)
   })
 
+  it('aggregateByOperator drops VEHICLE-subject rows even on the same operatorId (no pollution)', async () => {
+    const repo = new InMemoryReviewRepository()
+    // operatorId is denormalized on EVERY row (it's the booking's operator), so
+    // a VEHICLE-subject review for `op_1`'s booking shares its operatorId. Without
+    // the subject filter this row would inflate the operator's public rating.
+    await repo.insert(
+      publishedOperatorReview({ bookingId: 'bk_a', operatorId: 'op_1', overall: 5 }),
+    )
+    await repo.insert(
+      vehicleReview({
+        bookingId: 'bk_a',
+        operatorId: 'op_1',
+        subjectVehicleId: 'veh_1',
+        subjectClassId: 'cls_1',
+        overall: 1,
+        authorUserId: 'user_renter_2',
+      }),
+    )
+    const out = await repo.aggregateByOperator(['op_1'])
+    // Mutation-resistant: a regression that drops the subject filter lands at
+    // {sum:6,count:2}. The OPERATOR-only row (overall=5) is the sole contributor.
+    expect(out.get('op_1')).toEqual({ sum: 5, count: 1 })
+  })
+
   it('aggregateByVehicle keys on subjectVehicleId, skips non-vehicle reviews', async () => {
     const repo = new InMemoryReviewRepository()
     // An OPERATOR review whose operatorId happens to equal a vehicle id must NOT count.

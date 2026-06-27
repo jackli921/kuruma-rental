@@ -98,7 +98,13 @@ export class InMemoryReviewRepository implements ReviewRepository {
   }
 
   async aggregateByOperator(operatorIds: readonly string[]) {
-    return this.aggregate(operatorIds, (r) => r.operatorId)
+    // Filter to subject='OPERATOR' — the operatorId column is denormalized on
+    // EVERY row (it's the booking's operator), so a renter's VEHICLE review or
+    // an operator's RENTER review would pollute the operator's public rating
+    // without this guard. Vehicle/class paths don't need a mirror filter: their
+    // key columns (subjectVehicleId/subjectClassId) are null on non-VEHICLE rows
+    // and the `key === null` drop already excludes them.
+    return this.aggregate(operatorIds, (r) => (r.subject === 'OPERATOR' ? r.operatorId : null))
   }
 
   async aggregateByVehicle(vehicleIds: readonly string[]) {

@@ -79,7 +79,12 @@ export class DrizzleReviewRepository implements ReviewRepository {
   }
 
   async aggregateByOperator(operatorIds: readonly string[]) {
-    return this.aggregate(operatorIds, reviews.operatorId)
+    // `operatorId` is denormalized onto EVERY review (the booking's operator),
+    // so without `subject='OPERATOR'` a VEHICLE review (or an operator→RENTER
+    // review) would pollute the public storefront operator rating. The vehicle
+    // and class paths are inherently scoped — their key columns are null on
+    // non-VEHICLE rows and the planner drops them via `inArray` + `groupBy`.
+    return this.aggregate(operatorIds, reviews.operatorId, eq(reviews.subject, 'OPERATOR'))
   }
 
   async aggregateByVehicle(vehicleIds: readonly string[]) {
@@ -98,6 +103,7 @@ export class DrizzleReviewRepository implements ReviewRepository {
   private async aggregate(
     ids: readonly string[],
     key: PgColumn,
+    extraWhere?: ReturnType<typeof eq>,
   ): Promise<Map<string, { sum: number; count: number }>> {
     const out = new Map<string, { sum: number; count: number }>()
     if (ids.length === 0) return out
@@ -109,6 +115,7 @@ export class DrizzleReviewRepository implements ReviewRepository {
           inArray(key, ids as string[]),
           isNotNull(reviews.publishedAt),
           eq(reviews.moderationStatus, 'VISIBLE'),
+          extraWhere,
         ),
       )
       .groupBy(key)
