@@ -15,6 +15,7 @@ import {
   InMemoryInsuranceOptionRepository,
   InMemoryLocationRepository,
   InMemoryMaintenanceLogRepository,
+  InMemoryOperatorRepository,
   InMemoryUserRepository,
   InMemoryVehicleBlockRepository,
   InMemoryVehicleClassRepository,
@@ -30,7 +31,7 @@ import { BookingService } from '../../src/services/booking'
 import { BookingPostCommitDispatcher } from '../../src/services/booking-post-commit-dispatcher'
 import type { CreateBookingInput } from '../../src/services/booking-types'
 import { makeEnsureThread } from '../../src/services/ensure-thread'
-import type { Booking, Thread, User, Vehicle } from '../../src/stores'
+import type { Booking, Operator, Thread, User, Vehicle } from '../../src/stores'
 
 const RENTER = '00000000-0000-4000-8000-0000000000a1'
 const STAFF = '00000000-0000-4000-8000-0000000000b1'
@@ -170,6 +171,24 @@ async function makeService(threadRepo?: ThreadRepository, staffUserId?: string) 
     ],
   ])
   const userRepo = new InMemoryUserRepository(userStore)
+  // #1206: the booking guard loads the vehicle's operator; seed OP active so the
+  // create paths this suite exercises pass the guard.
+  const operatorRepo = new InMemoryOperatorRepository(
+    new Map<string, Operator>([
+      [
+        OP,
+        {
+          id: OP,
+          slug: 'op-thread',
+          name: 'Op Thread',
+          preAuthHandoffUrl: null,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+          deactivatedAt: null,
+        },
+      ],
+    ]),
+  )
 
   const repos: TransactionRepos = {
     vehicleRepo,
@@ -185,6 +204,7 @@ async function makeService(threadRepo?: ThreadRepository, staffUserId?: string) 
     classRatePlanRepo,
     vehicleClassRepo,
     vehicleBlockRepo,
+    operatorRepo,
   }
   const runInTransaction: RunInTransaction = async (fn) => fn(repos)
 

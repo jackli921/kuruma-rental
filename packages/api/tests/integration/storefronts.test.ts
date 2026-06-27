@@ -215,6 +215,25 @@ describe('DrizzleStorefrontRepository.findActiveStorefronts (#391)', () => {
     })
     expect(result.map((s) => s.id)).toEqual([namba.id])
   })
+
+  // #1206: a soft-deactivated operator (operators.deactivatedAt set) is pulled off
+  // the public storefront — the INNER-join now filters isNull(deactivatedAt) — while
+  // active operators stay visible; reactivation (deactivatedAt -> null) restores it.
+  it('hides a deactivated operator’s storefronts and restores them on reactivation', async () => {
+    await db.update(operators).set({ deactivatedAt: new Date() }).where(eq(operators.id, opAId))
+    try {
+      const hidden = await storefrontRepo.findActiveStorefronts(PUBLIC_CONTEXT)
+      const hiddenIds = hidden.map((s) => s.id)
+      expect(hiddenIds).not.toContain(namba.id)
+      // The other operator (B / Gion) is untouched by A's deactivation.
+      expect(hiddenIds).toContain(gion.id)
+    } finally {
+      await db.update(operators).set({ deactivatedAt: null }).where(eq(operators.id, opAId))
+    }
+
+    const restored = await storefrontRepo.findActiveStorefronts(PUBLIC_CONTEXT)
+    expect(restored.map((s) => s.id)).toContain(namba.id)
+  })
 })
 
 describe('DrizzleAvailabilityRepository.findAvailableVehicles — storefront filters (#391)', () => {
