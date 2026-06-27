@@ -1280,6 +1280,19 @@
         "deactivating": "停用中…",
         "reactivating": "重新启用中…"
       },
+      "summary": {
+        "subtitle": "该运营方的车队合规与预订情况。",
+        "vehicleCount": "车队",
+        "needingDocs": "需补充文件",
+        "expiringSoon": "即将到期",
+        "totalBookings": "预订总数",
+        "upcomingBookings": "即将到来的预订",
+        "lastAlert": "最近合规提醒",
+        "never": "从未",
+        "back": "返回运营方列表",
+        "retry": "重试",
+        "loadError": "无法加载该运营方的概览。"
+      },
       "createDialog": {
         "title": "创建运营商",
         "subtitle": "向平台添加新的运营商。Slug 由名称自动生成。",

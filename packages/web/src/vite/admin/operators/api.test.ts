@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest'
-import { createdInviteSchema, operatorAdminRowSchema, operatorWriteAckSchema } from './api'
+import {
+  createdInviteSchema,
+  operatorAdminRowSchema,
+  operatorSummarySchema,
+  operatorWriteAckSchema,
+} from './api'
 
 // The wire contract for the platform-admin operator directory (#1088). The API
 // returns Date columns, but `c.json` serialises them to ISO strings, so the
@@ -47,6 +52,33 @@ describe('createdInviteSchema', () => {
       expiresAt: '2026-07-01T00:00:00.000Z',
     }
     expect(createdInviteSchema.safeParse(withoutToken).success).toBe(false)
+  })
+})
+
+describe('operatorSummarySchema', () => {
+  const summary = {
+    operatorId: 'op_1',
+    name: 'Kanata Cars',
+    vehicleCount: 12,
+    vehiclesNeedingDocs: 2,
+    vehiclesExpiringSoon: 1,
+    totalBookings: 40,
+    upcomingBookings: 5,
+    lastComplianceAlertAt: '2026-06-20T09:30:00.000Z',
+  }
+
+  it('parses a summary with an ISO-string lastComplianceAlertAt', () => {
+    expect(operatorSummarySchema.parse(summary)).toEqual(summary)
+  })
+
+  it('parses a never-alerted summary (null lastComplianceAlertAt)', () => {
+    const row = { ...summary, lastComplianceAlertAt: null }
+    expect(operatorSummarySchema.parse(row).lastComplianceAlertAt).toBeNull()
+  })
+
+  it('rejects a summary missing vehiclesNeedingDocs (drift guard)', () => {
+    const { vehiclesNeedingDocs: _drop, ...withoutField } = summary
+    expect(operatorSummarySchema.safeParse(withoutField).success).toBe(false)
   })
 })
 
