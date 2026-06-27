@@ -12,6 +12,7 @@ import {
   InMemoryInsuranceOptionRepository,
   InMemoryLocationRepository,
   InMemoryMaintenanceLogRepository,
+  InMemoryOperatorRepository,
   InMemoryUserRepository,
   InMemoryVehicleBlockRepository,
   InMemoryVehicleClassRepository,
@@ -20,7 +21,7 @@ import {
 import type { RunInTransaction, TransactionRepos } from '../../src/repositories/types'
 import { createBookingRoutes } from '../../src/routes/bookings'
 import { BookingService } from '../../src/services/booking'
-import type { Location, User, Vehicle, VehicleClass } from '../../src/stores'
+import type { Location, Operator, User, Vehicle, VehicleClass } from '../../src/stores'
 import { testAuthMiddleware } from '../helpers/auth'
 import { bookingInput } from '../helpers/booking'
 import { makeInertConsentGate } from '../helpers/consent'
@@ -195,6 +196,25 @@ describe('Booking Routes', () => {
     seededVehicleId = v1.id
     seededVehicle2Id = v2.id
 
+    // #1206: the booking guard loads the vehicle's operator; seed OPERATOR active
+    // so the route's create paths pass the guard.
+    const operatorRepo = new InMemoryOperatorRepository(
+      new Map<string, Operator>([
+        [
+          OPERATOR,
+          {
+            id: OPERATOR,
+            slug: 'op-bookings-test',
+            name: 'Bookings Test Operator',
+            preAuthHandoffUrl: null,
+            createdAt: new Date(),
+            updatedAt: new Date(),
+            deactivatedAt: null,
+          },
+        ],
+      ]),
+    )
+
     const repos: TransactionRepos = {
       vehicleRepo,
       maintenanceLogRepo: new InMemoryMaintenanceLogRepository(),
@@ -209,6 +229,7 @@ describe('Booking Routes', () => {
       classRatePlanRepo,
       vehicleClassRepo,
       vehicleBlockRepo,
+      operatorRepo,
     }
     const runInTransaction: RunInTransaction = async (fn) => fn(repos)
 

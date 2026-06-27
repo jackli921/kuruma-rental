@@ -229,6 +229,9 @@ export function buildOverrideRepos(overrides: AppOverrides): Repos {
   const addOnRepo = overrides.addOnRepo ?? new InMemoryAddOnRepository()
   const feeScheduleRepo = overrides.feeScheduleRepo ?? new InMemoryFeeScheduleRepository()
   const classRatePlanRepo = overrides.classRatePlanRepo ?? new InMemoryClassRatePlanRepository()
+  // #1206: declared ahead of runInTransaction so the bundle closure captures it
+  // (the deactivated-operator booking guard reads operatorRepo.findById in-tx).
+  const operatorRepo = overrides.operatorRepo ?? new InMemoryOperatorRepository()
   const runInTransaction: RunInTransaction = async (fn) =>
     fn({
       vehicleRepo,
@@ -247,6 +250,8 @@ export function buildOverrideRepos(overrides: AppOverrides): Repos {
       classRatePlanRepo,
       vehicleClassRepo,
       vehicleBlockRepo,
+      // #1206: the deactivated-operator booking guard reads this in-tx.
+      operatorRepo,
     })
   const fleetOverviewRepo =
     overrides.fleetOverviewRepo ??
@@ -265,7 +270,6 @@ export function buildOverrideRepos(overrides: AppOverrides): Repos {
   const documentStorage = overrides.documentStorage ?? new InMemoryDocumentStorage()
   const customerRepo =
     overrides.customerRepo ?? new InMemoryCustomerRepository(new Map(), new Map())
-  const operatorRepo = overrides.operatorRepo ?? new InMemoryOperatorRepository()
   const notificationLogRepo =
     overrides.notificationLogRepo ?? new InMemoryNotificationLogRepository()
   const complianceAlertLogRepo =
@@ -496,6 +500,8 @@ export function buildInMemoryRepos(): Repos {
       classRatePlanRepo,
       vehicleClassRepo,
       vehicleBlockRepo,
+      // #1206: the deactivated-operator booking guard reads this in-tx.
+      operatorRepo,
     })
   const runOperatorGrant: RunOperatorGrant = (fn) =>
     fn({ memberships: operatorMembershipRepo, users: userRepo, invites: providerInviteRepo })

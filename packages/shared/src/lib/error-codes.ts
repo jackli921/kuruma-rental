@@ -17,6 +17,10 @@ export const ERROR_CODES = [
   'INVALID_VEHICLE_CLASS',
   'CLASS_HAS_ACTIVE_BOOKINGS',
   'LOCATION_HAS_ACTIVE_BOOKINGS',
+  // #1206: a booking is attempted against a soft-deactivated operator
+  // (operators.deactivatedAt set); booking create 409s — the operator is not
+  // accepting new bookings. Laundered onto the envelope via CreateBookingResult.code.
+  'OPERATOR_DEACTIVATED',
   // #464: a CLASS_COMBO booking is accepted by the validator but combo creation
   // (inventory guard + rate-plan pricing) is not yet built — POST /bookings 501s.
   'NOT_IMPLEMENTED',
