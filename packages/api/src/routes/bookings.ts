@@ -9,7 +9,6 @@ import {
 import { Hono } from 'hono'
 import {
   MANAGEMENT_READ_ROLES,
-  STAFF_ROLES,
   isOperatorRole,
   requireUser,
   toCallerContext,
@@ -149,19 +148,11 @@ export function createBookingRoutes(service: BookingService, consentGate: Consen
       const parsed = await parseBody(c, createBookingSchema)
       if (!parsed.ok) return parsed.response
 
-      // #589: STAFF and OPERATOR_* are "manual bookers" — they may book on behalf
-      // of a renter (renterId) and set source=MANUAL. An operator's renterId is
-      // authorized in the service against its OWN customer scope (renters with a
-      // prior booking with it), scope-first so it never probes the user table for
-      // an arbitrary id — preserving the #396/#475 enumeration defense
-      // (operator-user-isolation.test.ts). Everyone else books as themselves with
-      // source forced to DIRECT (no advance-booking-hours bypass via MANUAL).
-      const isManualBooker = STAFF_ROLES.has(ctx.role) || isOperatorRole(ctx.role)
-      // #589 1c: only manual bookers may register a walk-in customer inline; a
-      // renter's walkInCustomer is ignored (they book as themselves).
-      const walkInCustomer = isManualBooker ? parsed.data.walkInCustomer : undefined
-      const renterId = isManualBooker && parsed.data.renterId ? parsed.data.renterId : ctx.userId
-      const source = isManualBooker ? parsed.data.source : 'DIRECT'
+      // #1108 (audit M4): actor resolution — who may book on behalf of whom and
+      // force source=MANUAL — is domain authz and now lives in the service
+      // (resolveBookingActor, called by BookingCreationService.create). The route
+      // forwards parsed.data untouched. It may still REJECT on role below (the
+      // disclaimer + consent gates); it no longer REWRITES the payload by role.
 
       // #613: a renter self-serve booking must accept the liability disclaimer
       // (免责声明) at checkout — the IDP/license must be valid at pickup or the
@@ -199,13 +190,14 @@ export function createBookingRoutes(service: BookingService, consentGate: Consen
         dropoffLocationId: parsed.data.dropoffLocationId,
         insuranceOptionId: parsed.data.insuranceOptionId ?? null,
         addOnIds: parsed.data.addOnIds,
-        renterId,
-        // #589 1c: include walkInCustomer only when present, never as explicit
-        // undefined (exactOptionalPropertyTypes); the service prefers it over renterId.
-        ...(walkInCustomer ? { walkInCustomer } : {}),
+        // #1108: forward identity fields RAW — resolveBookingActor (service-side)
+        // derives the concrete renterId / source / walk-in from the caller role.
+        // Omit absent optionals (exactOptionalPropertyTypes).
+        ...(parsed.data.renterId ? { renterId: parsed.data.renterId } : {}),
+        ...(parsed.data.walkInCustomer ? { walkInCustomer: parsed.data.walkInCustomer } : {}),
         startAt: new Date(parsed.data.startAt),
         endAt: new Date(parsed.data.endAt),
-        source,
+        source: parsed.data.source,
         externalId: parsed.data.externalId ?? null,
         notes: parsed.data.notes ?? null,
         idempotencyKey: parsed.data.idempotencyKey ?? null,
