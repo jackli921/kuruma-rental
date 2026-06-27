@@ -315,4 +315,18 @@ describe('OperatorBookingsRoute blocks layer (#1101)', () => {
       'veh-2',
     )
   })
+
+  it('keeps the Schedule affordance on a calendar view where a block is visible', () => {
+    vi.stubEnv('VITE_FEATURE_OPERATOR_BLOCKS', 'true')
+    searchState.value = { view: 'week', date: ANCHOR }
+    renderRoute(operatorSession, blocksFleet)
+    expect(screen.getByRole('button', { name: B.scheduleAction })).toBeInTheDocument()
+  })
+
+  it('hides the Schedule affordance on the default timeline view (a created block renders no band there)', () => {
+    vi.stubEnv('VITE_FEATURE_OPERATOR_BLOCKS', 'true')
+    searchState.value = { view: 'timeline', date: ANCHOR }
+    renderRoute(operatorSession, blocksFleet)
+    expect(screen.queryByRole('button', { name: B.scheduleAction })).not.toBeInTheDocument()
+  })
 })

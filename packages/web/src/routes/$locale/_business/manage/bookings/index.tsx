@@ -132,6 +132,12 @@ export function OperatorBookingsRoute() {
   const view = viewParam ?? DEFAULT_VIEW
   const anchorDate = useMemo(() => parseCalendarDate(date), [date])
   const { from, to } = calendarRange(view, anchorDate)
+
+  // Block bands render only on the calendar (day/week/month) views — the fleet
+  // timeline shows bookings only (block bands on the timeline is a follow-up). So the
+  // Schedule affordance is offered only where a created block becomes visible:
+  // inviting a create on the timeline (the default view) would refetch into nothing.
+  const canScheduleBlock = canManageBlocks && view !== 'timeline'
   const { data: bookings } = useSuspenseQuery(operatorCalendarQueryOptions(from, to))
   const { data: vehicles } = useSuspenseQuery(operatorCalendarVehiclesQueryOptions())
 
@@ -260,7 +266,7 @@ export function OperatorBookingsRoute() {
             <p className="mt-2 text-lg text-muted-foreground">{t('subtitle')}</p>
           </div>
           <div className="flex gap-2">
-            {canManageBlocks && (
+            {canScheduleBlock && (
               <Button type="button" variant="outline" onClick={handleOpenScheduleBlock}>
                 {t('blocks.scheduleAction')}
               </Button>
