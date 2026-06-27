@@ -4,9 +4,10 @@ import { and, asc, eq, sql } from 'drizzle-orm'
 import {
   type CallerContext,
   PRIVILEGED_ROLES,
-  rejectOperatorContextUntilScoped,
+  requireOperatorScope,
 } from '../../middleware/auth'
 import type { Message } from '../../stores'
+import { threadReadScope } from '../../tenancy'
 import type { MessageRepository } from '../types'
 import { type Db, messageColumns, normaliseMessage } from './shared'
 
@@ -19,26 +20,37 @@ export class DrizzleMessageRepository implements MessageRepository {
   ) {}
 
   async findById(ctx: CallerContext, id: string): Promise<Message | undefined> {
-    rejectOperatorContextUntilScoped(ctx, 'MessageRepository')
-    // Non-privileged callers only see messages in threads they participate in.
-    // Use a join rather than two round-trips so the filter runs server-side.
-    const query = this.db
-      .select(messageColumns)
-      .from(messages)
-      .where(eq(messages.id, id))
+    // A message is visible iff its thread is — scope by the thread's tenant
+    // (#1205). Joins keep the filter server-side.
+    const scope = threadReadScope(ctx)
+    if (scope.kind === 'none') return undefined
 
-    if (!PRIVILEGED_ROLES.has(ctx.role)) {
+    if (scope.kind === 'all') {
       const [row] = (await this.db
         .select(messageColumns)
         .from(messages)
-        .innerJoin(threadParticipants, eq(threadParticipants.threadId, messages.threadId))
+        .where(eq(messages.id, id))) as Array<Parameters<typeof normaliseMessage>[0]>
+      return row ? normaliseMessage(row) : undefined
+    }
+
+    if (scope.kind === 'operator') {
+      const [row] = (await this.db
+        .select(messageColumns)
+        .from(messages)
+        .innerJoin(threads, eq(threads.id, messages.threadId))
         .where(
-          and(eq(messages.id, id), eq(threadParticipants.userId, ctx.userId)),
+          and(eq(messages.id, id), eq(threads.operatorId, scope.operatorId)),
         )) as Array<Parameters<typeof normaliseMessage>[0]>
       return row ? normaliseMessage(row) : undefined
     }
 
-    const [row] = (await query) as Array<Parameters<typeof normaliseMessage>[0]>
+    const [row] = (await this.db
+      .select(messageColumns)
+      .from(messages)
+      .innerJoin(threadParticipants, eq(threadParticipants.threadId, messages.threadId))
+      .where(
+        and(eq(messages.id, id), eq(threadParticipants.userId, scope.userId)),
+      )) as Array<Parameters<typeof normaliseMessage>[0]>
     return row ? normaliseMessage(row) : undefined
   }
 
@@ -74,7 +86,6 @@ export class DrizzleMessageRepository implements MessageRepository {
   }
 
   async findByIdempotencyKey(ctx: CallerContext, key: string): Promise<Message | undefined> {
-    rejectOperatorContextUntilScoped(ctx, 'MessageRepository')
     // CallerContext scoping (issue #328): the key is sender-owned, so
     // non-privileged callers only match messages they themselves sent.
     // Privileged roles bypass the sender filter.
@@ -97,7 +108,7 @@ export class DrizzleMessageRepository implements MessageRepository {
     content: string,
     idempotencyKey?: string | null,
   ): Promise<Message> {
-    rejectOperatorContextUntilScoped(ctx, 'MessageRepository')
+    requireOperatorScope(ctx)
     return this.runTransaction(async (tx) => {
       const [inserted] = (await tx
         .insert(messages)
@@ -126,14 +137,22 @@ export class DrizzleMessageRepository implements MessageRepository {
   }
 
   async findByThreadId(ctx: CallerContext, threadId: string): Promise<Message[]> {
-    rejectOperatorContextUntilScoped(ctx, 'MessageRepository')
-    // CallerContext scoping: verify non-privileged caller is a thread participant
-    if (!PRIVILEGED_ROLES.has(ctx.role)) {
+    // Gate the listing by the thread's read scope (#1205): an operator must own
+    // the thread's tenant; a renter must participate; admin sees all.
+    const scope = threadReadScope(ctx)
+    if (scope.kind === 'none') return []
+    if (scope.kind === 'operator') {
+      const [owned] = await this.db
+        .select({ id: threads.id })
+        .from(threads)
+        .where(and(eq(threads.id, threadId), eq(threads.operatorId, scope.operatorId)))
+      if (!owned) return []
+    } else if (scope.kind === 'participant') {
       const [participation] = await this.db
         .select({ threadId: threadParticipants.threadId })
         .from(threadParticipants)
         .where(
-          and(eq(threadParticipants.threadId, threadId), eq(threadParticipants.userId, ctx.userId)),
+          and(eq(threadParticipants.threadId, threadId), eq(threadParticipants.userId, scope.userId)),
         )
       if (!participation) return []
     }

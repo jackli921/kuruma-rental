@@ -145,18 +145,6 @@ export function requireOperatorScope(ctx: CallerContext): void {
 }
 
 /**
- * Fail-closed guard for repos NOT yet operator-scoped in this slice. An
- * OPERATOR_* caller hitting such a repo is rejected with a specific message
- * rather than silently falling through to a global-bypass path (plan v2 P1a).
- * Legacy STAFF/ADMIN, PARTNER, PLATFORM_ADMIN, and RENTER paths are unaffected.
- */
-export function rejectOperatorContextUntilScoped(ctx: CallerContext, repoName: string): void {
-  if (OPERATOR_ROLES.has(ctx.role)) {
-    throw new ForbiddenError(`${repoName} not yet operator-scoped`)
-  }
-}
-
-/**
  * Guard for platform-admin-only paths (operator bootstrap, proposal §9 item 23).
  * Only PLATFORM_ADMIN passes — legacy STAFF/ADMIN do NOT, since operator
  * creation is a platform-governance action, not a fleet-management one.

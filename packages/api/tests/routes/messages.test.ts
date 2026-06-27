@@ -12,13 +12,16 @@ const U1 = '00000000-0000-4000-8000-0000000000a1'
 const U2 = '00000000-0000-4000-8000-0000000000a2'
 const U3 = '00000000-0000-4000-8000-0000000000a3'
 
+type TestRole = 'RENTER' | 'PLATFORM_ADMIN' | 'OPERATOR_OWNER' | 'OPERATOR_STAFF'
+
 let threadRepo: InMemoryThreadRepository
 let messageRepo: InMemoryMessageRepository
 
-/** Create a Hono app authenticated as the given user. */
-function appAs(userId: string, role: 'RENTER' | 'PLATFORM_ADMIN' = 'RENTER'): Hono {
+/** Create a Hono app authenticated as the given user. Pass `operatorId` to
+ *  simulate a tenant-scoped OPERATOR_* caller. */
+function appAs(userId: string, role: TestRole = 'RENTER', operatorId?: string): Hono {
   const a = new Hono()
-  a.use('*', testAuthMiddleware(userId, role))
+  a.use('*', testAuthMiddleware(userId, role, operatorId))
   a.route('/', createMessageRoutes(new MessageService(threadRepo, messageRepo)))
   return a
 }
@@ -328,6 +331,68 @@ describe('Message Routes', () => {
         body: JSON.stringify({ userId: U3 }),
       })
       expect(res.status).toBe(404)
+    })
+  })
+
+  // #1205 slice 2: the operator un-gate. Threads carry a server-derived
+  // operatorId (set by ensureThread, never the request body); an OPERATOR_*
+  // caller may read/reply only its own tenant's threads. Exploit path under
+  // test: operator B must get a 404 — never a 200 read or a 201 reply — on
+  // operator A's thread. Threads are seeded via the repo directly because the
+  // caller-facing POST /threads always leaves operatorId null.
+  describe('operator tenant scoping (#1205)', () => {
+    const OP_A = 'op-aaaa'
+    const OP_B = 'op-bbbb'
+    const STAFF_A = U1
+    const STAFF_B = U3
+    const RENTER = U2
+
+    const SYSTEM = { userId: 'system', role: 'PLATFORM_ADMIN', bypassScope: true } as const
+
+    async function seedThread(operatorId: string): Promise<string> {
+      const t = await threadRepo.create(SYSTEM, 'booking-x', [RENTER], null, operatorId)
+      return t.id
+    }
+
+    it('operator can read its own tenant thread', async () => {
+      const id = await seedThread(OP_A)
+      const res = await appAs(STAFF_A, 'OPERATOR_OWNER', OP_A).request(`/threads/${id}`)
+      expect(res.status).toBe(200)
+    })
+
+    it('LEAK: operator cannot read another tenant’s thread (404)', async () => {
+      const id = await seedThread(OP_A)
+      const res = await appAs(STAFF_B, 'OPERATOR_OWNER', OP_B).request(`/threads/${id}`)
+      expect(res.status).toBe(404)
+    })
+
+    it('operator can reply in its own tenant thread (senderId = staff)', async () => {
+      const id = await seedThread(OP_A)
+      const res = await appAs(STAFF_A, 'OPERATOR_OWNER', OP_A).request(`/threads/${id}/messages`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ content: 'How can I help?' }),
+      })
+      expect(res.status).toBe(201)
+      expect((await res.json()).data.senderId).toBe(STAFF_A)
+    })
+
+    it('LEAK: operator cannot reply in another tenant’s thread (404)', async () => {
+      const id = await seedThread(OP_A)
+      const res = await appAs(STAFF_B, 'OPERATOR_OWNER', OP_B).request(`/threads/${id}/messages`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ content: 'Snooping reply' }),
+      })
+      expect(res.status).toBe(404)
+    })
+
+    it('GET /threads lists only the operator’s own tenant threads', async () => {
+      await seedThread(OP_A)
+      await seedThread(OP_B)
+      const res = await appAs(STAFF_A, 'OPERATOR_OWNER', OP_A).request('/threads')
+      const body = await res.json()
+      expect(body.data).toHaveLength(1)
     })
   })
 

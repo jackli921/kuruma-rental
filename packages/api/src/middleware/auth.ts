@@ -35,7 +35,6 @@ export {
   NotFoundError,
   OperatorRequiredError,
   ScopeRequiredError,
-  rejectOperatorContextUntilScoped,
   requireFleetWriteScope,
   requireManagementRead,
   requireOperatorOwnerWrite,

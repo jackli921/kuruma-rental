@@ -3,6 +3,7 @@ import {
   type CallerContext,
   ForbiddenError,
   OperatorRequiredError,
+  PRIVILEGED_ROLES,
   ScopeRequiredError,
   isOperatorRole,
 } from './middleware/auth'
@@ -131,6 +132,35 @@ export function bookingReadScope(ctx: CallerContext): BookingReadScope {
     return ctx.operatorId ? { kind: 'operator', operatorId: ctx.operatorId } : { kind: 'none' }
   }
   return { kind: 'renter', renterId: ctx.userId }
+}
+
+/**
+ * How a thread/message read is scoped (#1205). Threads are private, like bookings
+ * (not the public catalog), but scoped by *participant membership* for renters
+ * rather than by an owner id:
+ * - `all`         — PLATFORM_ADMIN only. Gated on `PRIVILEGED_ROLES`, NOT
+ *                   `ctx.bypassScope`: a PARTNER carries `bypassScope` for
+ *                   bookings/user-search, but must NOT read operators' threads —
+ *                   gating on bypassScope here would re-open the leak #1168 closed.
+ * - `operator`    — OPERATOR_* caller: only threads where `operatorId` matches.
+ *                   Replaces the fail-closed `rejectOperatorContextUntilScoped`
+ *                   gate that un-gated the operator side (#1205, slice 2).
+ * - `participant` — every other caller (RENTER / PARTNER / legacy): only threads
+ *                   they participate in. Unchanged from before.
+ * - `none`        — OPERATOR_* missing operatorId: fail-closed (read nothing).
+ */
+export type ThreadReadScope =
+  | { kind: 'all' }
+  | { kind: 'operator'; operatorId: string }
+  | { kind: 'participant'; userId: string }
+  | { kind: 'none' }
+
+export function threadReadScope(ctx: CallerContext): ThreadReadScope {
+  if (PRIVILEGED_ROLES.has(ctx.role)) return { kind: 'all' }
+  if (isOperatorRole(ctx.role)) {
+    return ctx.operatorId ? { kind: 'operator', operatorId: ctx.operatorId } : { kind: 'none' }
+  }
+  return { kind: 'participant', userId: ctx.userId }
 }
 
 /**

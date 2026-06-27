@@ -1,10 +1,7 @@
-import {
-  type CallerContext,
-  PRIVILEGED_ROLES,
-  rejectOperatorContextUntilScoped,
-} from '../../middleware/auth'
+import { type CallerContext, requireOperatorScope } from '../../middleware/auth'
 import { PG_ERROR } from '../../pg-errors'
 import type { Message, Thread, ThreadParticipant } from '../../stores'
+import { threadReadScope } from '../../tenancy'
 import type { ThreadRepository } from '../types'
 
 export class InMemoryThreadRepository implements ThreadRepository {
@@ -15,16 +12,20 @@ export class InMemoryThreadRepository implements ThreadRepository {
   async findAll(
     ctx: CallerContext,
   ): Promise<Array<Thread & { participants: ThreadParticipant[]; lastMessage: Message | null }>> {
-    rejectOperatorContextUntilScoped(ctx, 'ThreadRepository')
+    const scope = threadReadScope(ctx)
+    if (scope.kind === 'none') return []
     let filteredThreads: Thread[]
 
-    if (PRIVILEGED_ROLES.has(ctx.role)) {
+    if (scope.kind === 'all') {
       filteredThreads = [...this.threads.values()]
+    } else if (scope.kind === 'operator') {
+      filteredThreads = [...this.threads.values()].filter((t) => t.operatorId === scope.operatorId)
     } else {
-      const userParticipations = [...this.participants.values()].filter(
-        (p) => p.userId === ctx.userId,
+      const threadIds = new Set(
+        [...this.participants.values()]
+          .filter((p) => p.userId === scope.userId)
+          .map((p) => p.threadId),
       )
-      const threadIds = new Set(userParticipations.map((p) => p.threadId))
       filteredThreads = [...this.threads.values()].filter((t) => threadIds.has(t.id))
     }
 
@@ -45,15 +46,12 @@ export class InMemoryThreadRepository implements ThreadRepository {
     ctx: CallerContext,
     id: string,
   ): Promise<(Thread & { participants: ThreadParticipant[]; messages: Message[] }) | undefined> {
-    rejectOperatorContextUntilScoped(ctx, 'ThreadRepository')
     const thread = this.threads.get(id)
     if (!thread) return undefined
 
     const threadParticipants = [...this.participants.values()].filter((p) => p.threadId === id)
 
-    // CallerContext scoping: non-privileged non-participants get undefined
-    const isParticipant = threadParticipants.some((p) => p.userId === ctx.userId)
-    if (!isParticipant && !PRIVILEGED_ROLES.has(ctx.role)) return undefined
+    if (!this.isVisible(ctx, thread, threadParticipants)) return undefined
 
     const threadMessages = [...this.messages.values()]
       .filter((m) => m.threadId === id)
@@ -63,16 +61,13 @@ export class InMemoryThreadRepository implements ThreadRepository {
   }
 
   async findByIdempotencyKey(ctx: CallerContext, key: string): Promise<Thread | undefined> {
-    rejectOperatorContextUntilScoped(ctx, 'ThreadRepository')
-    // CallerContext scoping (issue #328): non-privileged callers only match
-    // threads they participate in. Privileged roles see all.
+    // CallerContext scoping (issue #328 + #1205): callers only match threads
+    // visible under their read scope — admin sees all, an operator only its own
+    // tenant, a renter only threads they participate in.
     for (const thread of this.threads.values()) {
       if (thread.idempotencyKey !== key) continue
-      if (PRIVILEGED_ROLES.has(ctx.role)) return thread
-      const isParticipant = [...this.participants.values()].some(
-        (p) => p.threadId === thread.id && p.userId === ctx.userId,
-      )
-      if (isParticipant) return thread
+      const participants = [...this.participants.values()].filter((p) => p.threadId === thread.id)
+      if (this.isVisible(ctx, thread, participants)) return thread
     }
     return undefined
   }
@@ -84,7 +79,7 @@ export class InMemoryThreadRepository implements ThreadRepository {
     idempotencyKey?: string | null,
     operatorId?: string | null,
   ): Promise<Thread> {
-    rejectOperatorContextUntilScoped(ctx, 'ThreadRepository')
+    requireOperatorScope(ctx)
     if (idempotencyKey) {
       for (const existing of this.threads.values()) {
         if (existing.idempotencyKey === idempotencyKey) {
@@ -120,12 +115,30 @@ export class InMemoryThreadRepository implements ThreadRepository {
   }
 
   async markAsRead(ctx: CallerContext, threadId: string): Promise<void> {
-    rejectOperatorContextUntilScoped(ctx, 'ThreadRepository')
+    requireOperatorScope(ctx)
     for (const [key, p] of this.participants) {
       if (p.threadId === threadId && p.userId === ctx.userId) {
         this.participants.set(key, { ...p, unreadCount: 0 })
       }
     }
+  }
+
+  // Is a single thread visible to the caller under its read scope? Exhaustive on
+  // the union (#1205) so a new scope kind can't silently leak another tenant's
+  // thread: admin sees all, an operator only its tenant, a renter only threads
+  // it participates in, a tokenless operator nothing.
+  private isVisible(
+    ctx: CallerContext,
+    thread: Thread,
+    participants: ThreadParticipant[],
+  ): boolean {
+    const scope = threadReadScope(ctx)
+    if (scope.kind === 'none') return false
+    if (scope.kind === 'all') return true
+    if (scope.kind === 'operator') return thread.operatorId === scope.operatorId
+    if (scope.kind === 'participant') return participants.some((p) => p.userId === scope.userId)
+    scope satisfies never
+    return false
   }
 
   // Exposed for InMemoryMessageRepository to add messages
