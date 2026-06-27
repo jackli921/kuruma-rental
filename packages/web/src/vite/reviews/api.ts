@@ -24,6 +24,12 @@ export const RENTER_OPERATOR_DIMENSIONS = [
 ] as const
 export type RenterOperatorDimension = (typeof RENTER_OPERATOR_DIMENSIONS)[number]
 
+// #1084: operator→renter sub-dimensions (slice-2 service DIRECTION map). All optional.
+// The operator only ever rates the RENTER subject, so there is no subject selector — just
+// these three dims plus the required overall.
+export const OPERATOR_RENTER_DIMENSIONS = ['communication', 'cleanliness', 'ruleAdherence'] as const
+export type OperatorRenterDimension = (typeof OPERATOR_RENTER_DIMENSIONS)[number]
+
 // JSON-serialized review (#1082) as the renter read model sees it. A lean subset of
 // the API entity — enough to decide which subjects remain unreviewed and to show a
 // submitted rating; zod strips the rest of the row at the seam.
@@ -49,12 +55,14 @@ const reviewDtoSchema = z.object({
   publishedAt: z.string().nullable(),
 }) satisfies z.ZodType<ReviewDto>
 
-// What the renter submits for ONE subject. The server derives operatorId, authorRole,
+// What a participant submits for ONE subject. The server derives operatorId, authorRole,
 // and the reveal window — none are client fields. `subRatings` is sent only when
-// non-empty (a vehicle review carries none); `comment` only when non-blank.
+// non-empty (a vehicle review carries none); `comment` only when non-blank. `subject`
+// spans the full set so the operator side (#1084) can submit RENTER through the same
+// seam; the server's DIRECTION map rejects any caller/subject mismatch.
 export interface SubmitReviewInput {
   bookingId: string
-  subject: RenterReviewSubject
+  subject: ReviewSubject
   overall: number
   subRatings?: Record<string, number>
   comment?: string | null
@@ -117,4 +125,12 @@ export function renterReviewedSubjects(reviews: readonly ReviewDto[]): ReviewSub
 // The renter-review subjects still missing for a booking (form order preserved).
 export function pendingReviewSubjects(reviewed: readonly ReviewSubject[]): RenterReviewSubject[] {
   return RENTER_REVIEW_SUBJECTS.filter((s) => !reviewed.includes(s))
+}
+
+// #1084/#1158: whether the operator side has already reviewed this booking. The
+// operator→renter review is the TENANT's, not a staff member's, so ANY OPERATOR-role
+// row settles it — the API surfaces a colleague's still-hidden row to operator staff,
+// so the rate-renter prompt hides once any staff member has reviewed.
+export function operatorReviewedRenter(reviews: readonly ReviewDto[]): boolean {
+  return reviews.some((r) => r.authorRole === 'OPERATOR')
 }
