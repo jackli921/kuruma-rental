@@ -1,3 +1,4 @@
+import type { OperatorScope } from '@/vite/operator-context'
 import { OperatorFeesView } from '@/vite/operator-fees/OperatorFeesView'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { cleanup, render, screen, within } from '@testing-library/react'
@@ -17,6 +18,16 @@ function wrapper({ children }: { children: ReactNode }) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
   return <QueryClientProvider client={client}>{children}</QueryClientProvider>
 }
+
+// Default scope is read-only with no labels; each test overrides the bits it
+// exercises. Mirrors the add-ons view-test helper.
+const scope = (over: Partial<OperatorScope> = {}): OperatorScope => ({
+  pickedOperatorId: undefined,
+  canWrite: false,
+  showOperator: false,
+  operatorNameById: new Map(),
+  ...over,
+})
 
 const classId = '11111111-1111-4111-8111-111111111111'
 const classes = [{ id: classId, name: 'Compact' }]
@@ -44,15 +55,22 @@ afterEach(() => cleanup())
 
 describe('OperatorFeesView', () => {
   it('renders a row per fee with its type and status', () => {
-    render(<OperatorFeesView fees={[operatorWideFee]} classes={classes} />, { wrapper })
+    render(<OperatorFeesView fees={[operatorWideFee]} classes={classes} scope={scope()} />, {
+      wrapper,
+    })
     expect(screen.getByRole('heading', { name: 'type.CLEANING_FLAT' })).toBeInTheDocument()
     expect(screen.getByText('ACTIVE')).toBeInTheDocument()
   })
 
   it('resolves a scoped fee to its class name and an unscoped fee to operator-wide', () => {
-    render(<OperatorFeesView fees={[operatorWideFee, classScopedFee]} classes={classes} />, {
-      wrapper,
-    })
+    render(
+      <OperatorFeesView
+        fees={[operatorWideFee, classScopedFee]}
+        classes={classes}
+        scope={scope()}
+      />,
+      { wrapper },
+    )
     // class-scoped fee shows the resolved class name from the scoped class list
     expect(screen.getByText('Compact')).toBeInTheDocument()
     // operator-wide fee (vehicleClassId null) shows the operator-wide label
@@ -60,22 +78,29 @@ describe('OperatorFeesView', () => {
   })
 
   it('shows the empty state when there are no fees', () => {
-    render(<OperatorFeesView fees={[]} classes={classes} />, { wrapper })
+    render(<OperatorFeesView fees={[]} classes={classes} scope={scope()} />, { wrapper })
     expect(screen.getByText('empty')).toBeInTheDocument()
     expect(screen.queryByRole('heading')).not.toBeInTheDocument()
   })
 
   it('sorts fees by type ascending', () => {
-    render(<OperatorFeesView fees={[classScopedFee, operatorWideFee]} classes={classes} />, {
-      wrapper,
-    })
+    render(
+      <OperatorFeesView
+        fees={[classScopedFee, operatorWideFee]}
+        classes={classes}
+        scope={scope()}
+      />,
+      { wrapper },
+    )
     const headings = screen.getAllByRole('heading').map((h) => h.textContent)
     expect(headings).toEqual(['type.CLEANING_FLAT', 'type.OVERTIME_HOURLY'])
   })
 
   it('opens the Add dialog (renders the fee form) when Add is clicked', async () => {
     const user = userEvent.setup()
-    render(<OperatorFeesView fees={[]} classes={classes} />, { wrapper })
+    render(<OperatorFeesView fees={[]} classes={classes} scope={scope({ canWrite: true })} />, {
+      wrapper,
+    })
 
     expect(screen.queryByLabelText('form.feeType')).not.toBeInTheDocument()
     await user.click(screen.getByRole('button', { name: 'addFee' }))
@@ -86,7 +111,57 @@ describe('OperatorFeesView', () => {
 
   it('disables the archive action for an already-archived fee', () => {
     const archived = { ...operatorWideFee, id: 'arch', status: 'ARCHIVED' as const }
-    render(<OperatorFeesView fees={[archived]} classes={classes} />, { wrapper })
+    render(
+      <OperatorFeesView fees={[archived]} classes={classes} scope={scope({ canWrite: true })} />,
+      { wrapper },
+    )
     expect(screen.getByRole('button', { name: 'archiveAction' })).toBeDisabled()
+  })
+
+  it('all-mode: shows the operator label and hides the Add button (read-only)', () => {
+    render(
+      <OperatorFeesView
+        fees={[operatorWideFee]}
+        classes={classes}
+        scope={scope({ showOperator: true, operatorNameById: new Map([['op_1', 'Sakura']]) })}
+      />,
+      { wrapper },
+    )
+    expect(screen.getByText('Sakura')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'addFee' })).not.toBeInTheDocument()
+  })
+
+  it('operator-write mode: shows the Add button and no operator label', () => {
+    render(
+      <OperatorFeesView
+        fees={[operatorWideFee]}
+        classes={classes}
+        scope={scope({ canWrite: true })}
+      />,
+      { wrapper },
+    )
+    expect(screen.getByRole('button', { name: 'addFee' })).toBeInTheDocument()
+    expect(screen.queryByLabelText(/^Operator:/)).not.toBeInTheDocument()
+  })
+
+  it('read-only mode hides the per-row Edit/Archive affordances', () => {
+    render(<OperatorFeesView fees={[operatorWideFee]} classes={classes} scope={scope()} />, {
+      wrapper,
+    })
+    expect(screen.queryByRole('button', { name: 'editFee' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'archiveAction' })).not.toBeInTheDocument()
+  })
+
+  it('write mode shows the per-row Edit/Archive affordances', () => {
+    render(
+      <OperatorFeesView
+        fees={[operatorWideFee]}
+        classes={classes}
+        scope={scope({ canWrite: true })}
+      />,
+      { wrapper },
+    )
+    expect(screen.getByRole('button', { name: 'editFee' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'archiveAction' })).toBeInTheDocument()
   })
 })

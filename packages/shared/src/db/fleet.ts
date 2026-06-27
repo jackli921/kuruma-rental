@@ -223,13 +223,15 @@ export const maintenanceLogs = pgTable(
 // [startAt, endAt) window — maintenance, out-of-service, or a manual operator
 // hold. Unlike maintenance_logs (reactive, cost-tracking, welded to the binary
 // vehicle.status=MAINTENANCE toggle), a block is forward-looking and is the
-// availability primitive: a CONFIRMED/ACTIVE booking cannot overlap one. The
-// block-vs-block guarantee is the `vehicle_blocks_no_overlap` GiST EXCLUDE
+// availability primitive: a CONFIRMED/ACTIVE booking and a block cannot overlap.
+// The block-vs-block guarantee is the `vehicle_blocks_no_overlap` GiST EXCLUDE
 // constraint added in a custom migration (EXCLUDE is not expressible in the
 // drizzle table builder — same pattern as bookings_no_overlap). Booking-vs-block
-// is enforced in the service layer (a NOT EXISTS at booking create and on
-// operator assign/substitute, #1152), since a single EXCLUDE index cannot span
-// two tables.
+// is enforced in the service layer in BOTH directions, since a single EXCLUDE
+// index cannot span two tables: a booking landing on a block is rejected at
+// booking create + operator assign/substitute (#1152), and a block scheduled
+// over a live booking is rejected at block create (#1196) — both over the same
+// turnaround-inclusive window.
 export const vehicleBlocks = pgTable(
   'vehicle_blocks',
   {

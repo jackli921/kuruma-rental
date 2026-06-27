@@ -12,6 +12,7 @@ import {
   updateLocation,
 } from '@/vite/operator-locations/api'
 import { regionsQueryOptions } from '@/vite/regions/regions-api'
+import { useSession } from '@/vite/session'
 import type { UpdateLocationInput } from '@kuruma/shared/validators/location'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useTranslations } from 'use-intl'
@@ -28,9 +29,10 @@ interface EditLocationDialogProps {
 export function EditLocationDialog({ location, onOpenChange }: EditLocationDialogProps) {
   const t = useTranslations('business.locations')
   const queryClient = useQueryClient()
+  const csrfToken = useSession().data?.csrfToken ?? ''
   const { data: regions } = useQuery(regionsQueryOptions())
   const mutation = useMutation({
-    mutationFn: (data: UpdateLocationInput) => updateLocation(location?.id ?? '', data),
+    mutationFn: (data: UpdateLocationInput) => updateLocation(location?.id ?? '', data, csrfToken),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: LOCATIONS_QUERY_KEY })
       onOpenChange(false)

@@ -2,7 +2,12 @@ import type { ErrorCode } from '@kuruma/shared/lib/error-codes'
 import type { CreateVehicleBlockInput } from '@kuruma/shared/validators/vehicle-block'
 import { type CallerContext, requireFleetWriteScope } from '../middleware/auth'
 import { PG_ERROR, VEHICLE_BLOCKS_OVERLAP, pgConstraintName, pgErrorCode } from '../pg-errors'
-import type { VehicleBlock, VehicleBlockRepository, VehicleRepository } from '../repositories/types'
+import type {
+  BookingRepository,
+  VehicleBlock,
+  VehicleBlockRepository,
+  VehicleRepository,
+} from '../repositories/types'
 
 export type VehicleBlockResult =
   | { ok: true; block: VehicleBlock }
@@ -11,6 +16,8 @@ export type VehicleBlockResult =
 const VEHICLE_NOT_FOUND_MESSAGE = 'Vehicle not found'
 const BLOCK_NOT_FOUND_MESSAGE = 'Block not found'
 const OVERLAP_MESSAGE = 'This vehicle is already blocked for an overlapping window'
+const BOOKING_CONFLICT_MESSAGE =
+  'This vehicle has a confirmed or active booking in the requested window'
 
 // The GiST EXCLUDE is named `vehicle_blocks_no_overlap`; match the name (not the
 // bare 23P01) so a block-vs-block clash is told apart from any other exclusion.
@@ -34,6 +41,10 @@ export class VehicleBlockService {
   constructor(
     private readonly vehicleRepo: VehicleRepository,
     private readonly vehicleBlockRepo: VehicleBlockRepository,
+    // #1196: narrow read port (ISP) for the reverse block→booking guard. Only the
+    // overlap lookup is needed, so the service can't reach into the rest of the
+    // booking repo; the composition root injects the concrete BookingRepository.
+    private readonly bookingRepo: Pick<BookingRepository, 'findActiveOverlappingForVehicle'>,
   ) {}
 
   async createBlock(
@@ -45,6 +56,26 @@ export class VehicleBlockService {
 
     const vehicle = await this.vehicleRepo.findById(ctx, vehicleId)
     if (!vehicle) return { ok: false, error: VEHICLE_NOT_FOUND_MESSAGE, status: 404 }
+
+    // #1196: reject a block that would silently take a car off the calendar while
+    // a CONFIRMED/ACTIVE booking still holds it — the reverse of the booking→block
+    // VEHICLE_BLOCKED guard, over the same turnaround-inclusive window. Like that
+    // guard, this is a service-level NOT EXISTS (no single GiST EXCLUDE can span
+    // bookings + vehicle_blocks); the residual schedule-during-checkout race is the
+    // same tiny, operator-recoverable one documented on the booking side.
+    const bookingConflicts = await this.bookingRepo.findActiveOverlappingForVehicle(
+      vehicle.id,
+      new Date(input.startAt),
+      new Date(input.endAt),
+    )
+    if (bookingConflicts.length > 0) {
+      return {
+        ok: false,
+        error: BOOKING_CONFLICT_MESSAGE,
+        status: 409,
+        code: 'BLOCK_BOOKING_CONFLICT' satisfies ErrorCode,
+      }
+    }
 
     try {
       const block = await this.vehicleBlockRepo.create({
@@ -92,5 +123,14 @@ export class VehicleBlockService {
     const removed = await this.vehicleBlockRepo.delete(blockId, vehicle.operatorId)
     if (!removed) return { ok: false, error: BLOCK_NOT_FOUND_MESSAGE, status: 404 }
     return { ok: true, block: removed }
+  }
+
+  /**
+   * Fleet-wide read for the operator calendar. Row-scope is enforced in the repo
+   * via `vehicleBlockReadScope(ctx)` (operator → own tenant, admin → all, else →
+   * []), so this is a thin delegation — no separate scope check to drift.
+   */
+  async listBlocks(ctx: CallerContext, from: Date, to: Date): Promise<VehicleBlock[]> {
+    return this.vehicleBlockRepo.findOverlappingInRange(ctx, from, to)
   }
 }

@@ -351,8 +351,7 @@ describe('ReviewService — one review per operator (#1158)', () => {
     expect((await service.submit(operatorCtx, submitInput({ subject: 'RENTER' }), NOW)).ok).toBe(
       true,
     )
-    // Different authorUserId, same operator: the author-subject seal would let this through,
-    // so the operator-subject partial seal must be what trips here.
+    // Different authorUserId, same booking+subject: the single (bookingId, subject) seal traps this.
     expect(await service.submit(operatorCtx2, submitInput({ subject: 'RENTER' }), NOW)).toEqual({
       ok: false,
       status: 409,

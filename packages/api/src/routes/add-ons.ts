@@ -11,9 +11,8 @@ import {
   requireUser,
   toCallerContext,
 } from '../middleware/auth'
-import type { AddOnService } from '../services/add-on'
+import type { AddOnService, AddOnUpdate } from '../services/add-on'
 import type { AddOnFilters } from '../services/filters'
-import type { AddOn } from '../stores'
 import type { ResolveWriteOperatorId } from '../tenancy'
 import { fail, ok, parseBody, parseId, parseScopedCreate, stripUndefined } from './helpers'
 
@@ -101,7 +100,7 @@ export function createAddOnRoutes(
       const result = await service.update(
         toCallerContext(user),
         idResult.id,
-        stripUndefined(parsed.data) as Partial<AddOn>,
+        stripUndefined(parsed.data) as AddOnUpdate,
       )
       if (!result.ok) return fail(c, result.error, result.status)
       return ok(c, result.option)

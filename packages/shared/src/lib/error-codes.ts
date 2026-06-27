@@ -17,6 +17,10 @@ export const ERROR_CODES = [
   'INVALID_VEHICLE_CLASS',
   'CLASS_HAS_ACTIVE_BOOKINGS',
   'LOCATION_HAS_ACTIVE_BOOKINGS',
+  // #1206: a booking is attempted against a soft-deactivated operator
+  // (operators.deactivatedAt set); booking create 409s — the operator is not
+  // accepting new bookings. Laundered onto the envelope via CreateBookingResult.code.
+  'OPERATOR_DEACTIVATED',
   // #464: a CLASS_COMBO booking is accepted by the validator but combo creation
   // (inventory guard + rate-plan pricing) is not yet built — POST /bookings 501s.
   'NOT_IMPLEMENTED',
@@ -49,6 +53,11 @@ export const ERROR_CODES = [
   // existing block on the same car (the vehicle_blocks_no_overlap GiST EXCLUDE);
   // block create 409s. Distinct from VEHICLE_BLOCKED (a booking hitting a block).
   'VEHICLE_BLOCK_OVERLAP',
+  // #1196: an operator schedules a vehicle block whose window overlaps a
+  // CONFIRMED/ACTIVE booking on the same car (turnaround-inclusive) — the reverse
+  // of VEHICLE_BLOCKED. Block create 409s rather than silently taking a car with a
+  // live booking off the calendar (the renter still shows up).
+  'BLOCK_BOOKING_CONFLICT',
   // #464 assign: operator assigns a concrete car to a CLASS_COMBO float.
   //  NOT_A_COMBO         — target booking is not a CLASS_COMBO (e.g. a SPECIFIC booking)
   //  INVALID_STATUS      — booking is in a terminal status (CANCELLED / COMPLETED)

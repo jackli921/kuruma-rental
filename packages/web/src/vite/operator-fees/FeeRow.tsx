@@ -1,3 +1,4 @@
+import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { formatJpy } from '@/lib/format'
 import { FeeScheduleStatusBadge } from '@/vite/operator-fees/FeeScheduleStatusBadge'
@@ -9,11 +10,14 @@ interface FeeRowProps {
   fee: FeeScheduleData
   /** Resolved class name (null = operator-wide). */
   className: string | null
+  canWrite: boolean
+  /** All-mode operator label (cross-tenant read); undefined hides the badge. */
+  operatorName?: string | undefined
   onEdit: (f: FeeScheduleData) => void
   onArchive: (f: FeeScheduleData) => void
 }
 
-export function FeeRow({ fee, className, onEdit, onArchive }: FeeRowProps) {
+export function FeeRow({ fee, className, canWrite, operatorName, onEdit, onArchive }: FeeRowProps) {
   const t = useTranslations('business.fees')
 
   return (
@@ -22,6 +26,11 @@ export function FeeRow({ fee, className, onEdit, onArchive }: FeeRowProps) {
         <div className="flex items-center gap-2 flex-wrap">
           <h3 className="text-lg font-medium truncate">{t(`type.${fee.feeType}`)}</h3>
           <FeeScheduleStatusBadge status={fee.status} />
+          {operatorName && (
+            <Badge variant="secondary" aria-label={`Operator: ${operatorName}`}>
+              {operatorName}
+            </Badge>
+          )}
         </div>
         <div className="mt-2 flex flex-wrap gap-x-6 gap-y-1 text-sm text-muted-foreground">
           <span className="font-medium text-foreground">
@@ -32,20 +41,22 @@ export function FeeRow({ fee, className, onEdit, onArchive }: FeeRowProps) {
         </div>
       </div>
 
-      <div className="flex items-center gap-1 shrink-0">
-        <Button variant="ghost" size="icon" onClick={() => onEdit(fee)} aria-label={t('editFee')}>
-          <Pencil className="size-4" />
-        </Button>
-        <Button
-          variant="ghost"
-          size="icon"
-          onClick={() => onArchive(fee)}
-          aria-label={t('archiveAction')}
-          disabled={fee.status === 'ARCHIVED'}
-        >
-          <Trash2 className="size-4" />
-        </Button>
-      </div>
+      {canWrite ? (
+        <div className="flex items-center gap-1 shrink-0">
+          <Button variant="ghost" size="icon" onClick={() => onEdit(fee)} aria-label={t('editFee')}>
+            <Pencil className="size-4" />
+          </Button>
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={() => onArchive(fee)}
+            aria-label={t('archiveAction')}
+            disabled={fee.status === 'ARCHIVED'}
+          >
+            <Trash2 className="size-4" />
+          </Button>
+        </div>
+      ) : null}
     </div>
   )
 }

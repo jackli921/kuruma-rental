@@ -15,15 +15,19 @@
 // clearing an ineligible one is a refused car at the counter — the exact failure
 // this feature exists to prevent. Err toward the warning.
 //
-// Sources (lists change rarely; re-verify against Japan's NPA list when amending):
-//   - Translation-required set (7): JAF published list — Switzerland, Germany,
-//     France, Belgium, Monaco, Slovenia, Taiwan.
-//   - IDP-accepted set: Japan-accepted 1949 Geneva Convention parties, cross-checked
-//     across Japan-operational sources (JAF, ToCoo, kart.st, niconico). Vietnam is
-//     DELIBERATELY EXCLUDED — sources conflict (it is a 1968 Vienna party; Japan
-//     guidance commonly rejects its IDP), so per the safe-fail rule it warns.
-//     The full set must be reconciled against the NPA "List of Contracting States
-//     to the Geneva Convention" before slice 2 surfaces this to renters.
+// Sources (PRIMARY — re-verify HERE when amending, NOT against rental-site aggregators):
+//   - Who Japan accepts (operational truth): Tokyo Metropolitan Police (Keishicho),
+//     https://www.keishicho.metro.tokyo.lg.jp/menkyo/menkyo/kokugai/kokugai04.html
+//     (as of 2026-06-12). KEY NUANCE: being a 1949 party is NOT sufficient — Japan also
+//     publishes a list of 1949 parties that do NOT issue a Geneva-FORMAT IDP (e.g. Russia
+//     issues a 1968-Vienna-format permit), whose IDP is NOT valid in Japan. Those are
+//     excluded from IDP_OK: the 3 with a translation arrangement (FR/BE/MC) sit in the
+//     translation set; the rest classify NOT_ELIGIBLE.
+//   - Who is a 1949 party (treaty status): UN Treaty Collection, chapter XI-B-1,
+//     https://treaties.un.org/Pages/ViewDetailsV.aspx?src=TREATY&mtdsg_no=XI-B-1&chapter=11
+//   - Vietnam is DELIBERATELY EXCLUDED (disputed; safe-fail to a warning).
+//   - Aggregators (JAF mirrors, ToCoo, kart.st, niconico) reproduce the raw parties
+//     roster and omit the exclusion overlay — they are what caused the original drift (#1194).
 
 export const ELIGIBILITY_CLASSES = [
   'IDP_OK',
@@ -34,9 +38,11 @@ export const ELIGIBILITY_CLASSES = [
 
 export type EligibilityClass = (typeof ELIGIBILITY_CLASSES)[number]
 
-// The 7 jurisdictions whose home licenses need a JAF/embassy Japanese translation,
-// NOT a Geneva IDP. This is the binding rule even for the four that are also Geneva
-// parties (FR/BE/MC/SI), so this set is checked FIRST. ISO 3166-1 alpha-2.
+// Jurisdictions Japan accepts only via a JAF/embassy Japanese translation, NOT a Geneva
+// IDP. FR/BE/MC are 1949 parties that do NOT issue a Geneva-format IDP, so they are
+// excluded from IDP_OK. This set is checked FIRST, so the translation rule wins for any
+// code also in IDP_OK — currently only SI, whose translation-set membership is being
+// re-verified (#1194 follow-up). ISO 3166-1 alpha-2.
 // Exported for the contract test that pins the full membership (data IS the feature).
 export const TRANSLATION_REQUIRED_COUNTRIES: ReadonlySet<string> = new Set([
   'CH',
@@ -48,112 +54,97 @@ export const TRANSLATION_REQUIRED_COUNTRIES: ReadonlySet<string> = new Set([
   'TW',
 ])
 
-// Japan-accepted 1949 Geneva Convention parties — Japan accepts an IDP issued by
-// these. ISO 3166-1 alpha-2. FR/BE/MC/SI also appear here, but the translation rule
-// above wins. Vietnam is deliberately excluded (see header). (101 entries.)
-// Exported for the contract test that pins the full membership.
+// 1949 Geneva Convention parties whose Geneva-FORMAT IDP Japan actually honours.
+// ISO 3166-1 alpha-2, sorted. = (UN list of 1949 parties) MINUS Japan's published
+// "Geneva party that does NOT issue a Geneva-format IDP" exclusion list (see header)
+// MINUS Vietnam (disputed). SI also appears in the translation set, where the
+// translation rule wins. Exported for the contract test that pins membership. (85 entries.)
 export const IDP_OK_COUNTRIES: ReadonlySet<string> = new Set([
-  'AL',
-  'DZ',
+  'AE',
   'AR',
-  'AU',
   'AT',
-  'BD',
+  'AU',
   'BB',
-  'BE',
-  'BJ',
-  'BW',
-  'BN',
-  'BG',
   'BF',
-  'KH',
+  'BJ',
+  'BN',
   'CA',
+  'CD',
   'CF',
-  'CL',
   'CG',
-  'CI',
-  'HR',
-  'CU',
+  'CL',
   'CY',
   'CZ',
-  'CD',
   'DK',
   'DO',
+  'DZ',
   'EC',
-  'EG',
   'EE',
-  'FJ',
+  'EG',
+  'ES',
   'FI',
-  'FR',
+  'FJ',
+  'GB',
   'GE',
-  'GH',
   'GR',
   'GT',
+  'HR',
   'HT',
-  'VA',
   'HU',
-  'IS',
-  'IN',
   'IE',
   'IL',
+  'IN',
+  'IS',
   'IT',
   'JM',
-  'JP',
   'JO',
+  'JP',
   'KG',
+  'KH',
+  'KR',
   'LA',
   'LB',
+  'LK',
   'LS',
-  'LI',
   'LT',
   'LU',
+  'MA',
   'MG',
-  'MW',
-  'MY',
   'ML',
   'MT',
-  'MC',
-  'ME',
-  'MA',
+  'MW',
+  'MY',
   'NA',
-  'NL',
-  'NZ',
   'NE',
   'NG',
+  'NL',
   'NO',
-  'PG',
-  'PY',
+  'NZ',
   'PE',
+  'PG',
   'PH',
   'PL',
   'PT',
+  'PY',
   'RO',
-  'RU',
-  'RW',
+  'SE',
+  'SG',
+  'SI',
+  'SK',
+  'SL',
   'SM',
   'SN',
-  'RS',
-  'SL',
-  'SG',
-  'SK',
-  'SI',
-  'ZA',
-  'KR',
-  'ES',
-  'LK',
-  'SE',
   'SY',
-  'TH',
   'TG',
-  'TT',
+  'TH',
   'TN',
   'TR',
+  'TT',
   'UG',
-  'AE',
-  'GB',
   'US',
+  'VA',
   'VE',
-  'ZW',
+  'ZA',
 ])
 
 const ALPHA2 = /^[A-Z]{2}$/
@@ -185,10 +176,17 @@ function isRecognizedCountry(code: string): boolean {
 }
 
 /**
- * Classify a license-issuing jurisdiction into the document a foreign driver needs
- * to drive in Japan. Pure and total — never throws; empty/malformed/unassigned input
- * is `UNKNOWN`. The translation-required set is checked before the Geneva IDP set so
- * the binding rule wins for the jurisdictions on both (FR/BE/MC/SI).
+ * Classify a license-issuing jurisdiction into the document a foreign driver needs to
+ * drive in Japan. Never throws; empty/malformed/unassigned input is `UNKNOWN`.
+ *
+ * Determinism: the IDP_OK / TRANSLATION_REQUIRED classification is fully data-driven and
+ * deterministic. The residual NOT_ELIGIBLE-vs-UNKNOWN split relies on `Intl.DisplayNames`,
+ * whose recognized-region set is ICU-version-dependent (Bun vs workerd), so that one
+ * boundary can differ across runtimes. Back it with an explicit ISO-3166-1 set before
+ * slice 2 branches on the distinction (#1194 follow-up).
+ *
+ * The translation set is checked before IDP_OK so the translation rule wins for any code
+ * in both (currently only SI).
  *
  * @param countryCode ISO 3166-1 alpha-2 of the license-issuing jurisdiction (any case).
  */

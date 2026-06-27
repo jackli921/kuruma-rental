@@ -8,6 +8,7 @@ import type {
   LocationRepository,
   MaintenanceLogRepository,
   OperatorMembershipRepository,
+  OperatorRepository,
   ProviderInviteRepository,
   UserRepository,
   VehicleBlockRepository,
@@ -46,6 +47,10 @@ export interface TransactionRepos {
   // booking that lands on a scheduled maintenance/hold window (a single GiST
   // EXCLUDE can't span bookings + vehicle_blocks). Read-only here.
   vehicleBlockRepo: Pick<VehicleBlockRepository, 'findOverlapping'>
+  // #1206: a soft-deactivated operator (operators.deactivatedAt set) stops taking
+  // NEW bookings — every create path loads the vehicle's/location's operator in-tx
+  // and rejects when it's gone or deactivated. Read-only (findById) here.
+  operatorRepo: Pick<OperatorRepository, 'findById'>
 }
 
 export type RunInTransaction = <T>(fn: (repos: TransactionRepos) => Promise<T>) => Promise<T>

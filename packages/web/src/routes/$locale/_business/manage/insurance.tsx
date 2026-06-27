@@ -1,4 +1,5 @@
 import { PageSkeleton } from '@/vite/PageSkeleton'
+import { useOperatorScope } from '@/vite/operator-context'
 import { OperatorInsuranceView } from '@/vite/operator-insurance/OperatorInsuranceView'
 import { insuranceOptionsQueryOptions } from '@/vite/operator-insurance/api'
 import { useSuspenseQuery } from '@tanstack/react-query'
@@ -6,12 +7,19 @@ import { type ErrorComponentProps, createFileRoute, useRouter } from '@tanstack/
 import { useTranslations } from 'use-intl'
 
 // Operator insurance-option management (#530). URL `/<locale>/manage/insurance`
-// — behind the `_business` guard, so only business roles reach it; tenant
-// scoping is server-side (CallerContext), the client passes no operatorId. The
-// loader prefetches into the query cache (no FOUC); the component reads the same
-// options via useSuspenseQuery and the CRUD dialogs invalidate the shared key.
+// — behind the `_business` guard, so only business roles reach it. Tenant scoping
+// is server-side (CallerContext): an operator session auto-scopes; a cross-operator
+// reader sees all tenants (read-only); a platform admin who has picked a tenant via
+// the operator context picker scopes to it and may write. The `operator` search param
+// (read via loaderDeps so a context switch refetches) selects the picked tenant; the
+// loader prefetches that scoped list into the cache (no FOUC) and the component reads
+// it back, while the CRUD dialogs invalidate the shared key prefix.
 export const Route = createFileRoute('/$locale/_business/manage/insurance')({
-  loader: ({ context }) => context.queryClient.ensureQueryData(insuranceOptionsQueryOptions()),
+  loaderDeps: ({ search }: { search: { operator?: string | undefined } }) => ({
+    operator: search.operator,
+  }),
+  loader: ({ context, deps }) =>
+    context.queryClient.ensureQueryData(insuranceOptionsQueryOptions(deps.operator)),
   pendingComponent: PageSkeleton,
   errorComponent: OperatorInsuranceError,
   component: OperatorInsuranceRoute,
@@ -19,7 +27,8 @@ export const Route = createFileRoute('/$locale/_business/manage/insurance')({
 
 function OperatorInsuranceRoute() {
   const t = useTranslations('business.insurance')
-  const { data: options } = useSuspenseQuery(insuranceOptionsQueryOptions())
+  const scope = useOperatorScope()
+  const { data: options } = useSuspenseQuery(insuranceOptionsQueryOptions(scope.pickedOperatorId))
 
   return (
     <main className="flex-1 px-4 py-10 sm:px-6 lg:px-8">
@@ -28,7 +37,7 @@ function OperatorInsuranceRoute() {
           <h1 className="text-3xl font-bold tracking-tight sm:text-4xl">{t('title')}</h1>
           <p className="mt-2 text-lg text-muted-foreground">{t('subtitle')}</p>
         </header>
-        <OperatorInsuranceView options={options} />
+        <OperatorInsuranceView options={options} scope={scope} />
       </div>
     </main>
   )

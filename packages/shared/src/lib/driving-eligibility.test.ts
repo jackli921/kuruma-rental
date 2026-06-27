@@ -33,28 +33,21 @@ describe('country reference data — full membership pinned', () => {
     ])
   })
 
-  it('IDP_OK is the pinned 101-country Japan-accepted Geneva set (Vietnam excluded)', () => {
+  it('IDP_OK is the pinned 85-country Japan-accepted Geneva set (Keishicho-excluded + Vietnam removed)', () => {
     const expected = [
       'AE',
-      'AL',
       'AR',
       'AT',
       'AU',
       'BB',
-      'BD',
-      'BE',
       'BF',
-      'BG',
       'BJ',
       'BN',
-      'BW',
       'CA',
       'CD',
       'CF',
       'CG',
-      'CI',
       'CL',
-      'CU',
       'CY',
       'CZ',
       'DK',
@@ -66,10 +59,8 @@ describe('country reference data — full membership pinned', () => {
       'ES',
       'FI',
       'FJ',
-      'FR',
       'GB',
       'GE',
-      'GH',
       'GR',
       'GT',
       'HR',
@@ -88,16 +79,13 @@ describe('country reference data — full membership pinned', () => {
       'KR',
       'LA',
       'LB',
-      'LI',
       'LK',
       'LS',
       'LT',
       'LU',
       'MA',
-      'ME',
       'MG',
       'ML',
-      'MC',
       'MT',
       'MW',
       'MY',
@@ -114,9 +102,6 @@ describe('country reference data — full membership pinned', () => {
       'PT',
       'PY',
       'RO',
-      'RS',
-      'RU',
-      'RW',
       'SE',
       'SG',
       'SI',
@@ -135,19 +120,45 @@ describe('country reference data — full membership pinned', () => {
       'VA',
       'VE',
       'ZA',
-      'ZW',
     ]
     expect([...IDP_OK_COUNTRIES].sort()).toEqual(expected.sort())
-    expect(IDP_OK_COUNTRIES.size).toBe(101)
+    expect(IDP_OK_COUNTRIES.size).toBe(85)
   })
 
-  it('the only overlap between the two sets is FR/BE/MC/SI', () => {
+  it('the only overlap between the two sets is SI (Slovenia)', () => {
+    // FR/BE/MC left IDP_OK (their IDPs are not Geneva-format → not valid in Japan);
+    // SI is the lone remaining dual-member (its translation-set membership is being
+    // re-verified separately — see #1194 follow-up).
     const overlap = [...IDP_OK_COUNTRIES].filter((c) => TRANSLATION_REQUIRED_COUNTRIES.has(c))
-    expect(overlap.sort()).toEqual(['BE', 'FR', 'MC', 'SI'])
+    expect(overlap.sort()).toEqual(['SI'])
   })
 
   it('known not-accepted origins are absent from IDP_OK', () => {
-    for (const code of ['VN', 'CN', 'ID', 'DE', 'CH', 'TW']) {
+    for (const code of [
+      'VN',
+      'CN',
+      'ID',
+      'DE',
+      'CH',
+      'TW',
+      // Keishicho "Geneva parties that do NOT issue Geneva-format IDPs" — invalid in Japan:
+      'FR',
+      'BE',
+      'MC',
+      'AL',
+      'BD',
+      'BG',
+      'BW',
+      'CI',
+      'CU',
+      'GH',
+      'LI',
+      'ME',
+      'RS',
+      'RU',
+      'RW',
+      'ZW',
+    ]) {
       expect(IDP_OK_COUNTRIES.has(code)).toBe(false)
     }
   })
@@ -163,9 +174,10 @@ describe('classifyDrivingEligibility — translation-required (JAF) jurisdiction
     },
   )
 
-  it('the translation rule wins for jurisdictions that are ALSO Geneva parties (FR/BE/MC/SI precedence)', () => {
-    // France, Belgium, Monaco and Slovenia are 1949 Geneva contracting parties,
-    // but Japan binds them to the translation path — translation must be checked first.
+  it('the translation path applies to FR/BE/MC/SI (translation checked before IDP_OK)', () => {
+    // All four are 1949 Geneva parties bound to the translation path. FR/BE/MC are no
+    // longer in IDP_OK (their IDPs are not Geneva-format); SI remains in both, so the
+    // translation-first precedence still governs it.
     for (const code of ['FR', 'BE', 'MC', 'SI']) {
       expect(classifyDrivingEligibility(code)).toBe('TRANSLATION_REQUIRED')
     }
@@ -187,6 +199,20 @@ describe('classifyDrivingEligibility — recognized but neither list', () => {
   // and Vietnam (disputed → safe-fail to a "verify before booking" warning).
   it.each(['CN', 'BR', 'ID', 'MX', 'SA', 'VN'])(
     '%s is a recognized country on neither list -> NOT_ELIGIBLE',
+    (code) => {
+      expect(classifyDrivingEligibility(code)).toBe('NOT_ELIGIBLE')
+    },
+  )
+})
+
+describe('classifyDrivingEligibility — 1949 parties that issue non-Geneva-format IDPs', () => {
+  // These ARE 1949 Geneva Convention parties, but Japan (Tokyo Metropolitan Police,
+  // 2026-06-12) lists them as NOT issuing Geneva-FORMAT IDPs, so their IDP is not
+  // valid for driving in Japan, and they have no translation arrangement (unlike
+  // FR/BE/MC) — the renter must convert to a JP licence. Classify NOT_ELIGIBLE.
+  // RU (Russia) is the case reported in #1194.
+  it.each(['RU', 'AL', 'BD', 'BG', 'BW', 'CI', 'CU', 'GH', 'LI', 'ME', 'RS', 'RW', 'ZW'])(
+    '%s is a 1949 party whose IDP Japan does not accept -> NOT_ELIGIBLE',
     (code) => {
       expect(classifyDrivingEligibility(code)).toBe('NOT_ELIGIBLE')
     },

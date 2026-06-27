@@ -13,7 +13,7 @@ import {
   toCallerContext,
 } from '../middleware/auth'
 import { PG_ERROR, pgErrorCode } from '../pg-errors'
-import type { VehicleClassService } from '../services/vehicle-class'
+import type { VehicleClassService, VehicleClassUpdate } from '../services/vehicle-class'
 import type { VehicleClassAvailabilityService } from '../services/vehicle-class-availability'
 import type { ResolveWriteOperatorId } from '../tenancy'
 import {
@@ -175,7 +175,7 @@ export function createVehicleClassRoutes(
         const result = await service.update(
           toCallerContext(user),
           idResult.id,
-          stripUndefined(parsed.data) as Partial<import('../stores').VehicleClass>,
+          stripUndefined(parsed.data) as VehicleClassUpdate,
         )
         if (!result.ok) return fail(c, result.error, result.status)
         return ok(c, result.vehicleClass)
