@@ -11,6 +11,7 @@ import {
   resolveEmailSender,
   resolveGeocoder,
   resolveGoogleOAuthConfig,
+  resolveOperatorAlertEmail,
   resolvePaymentGateway,
 } from './composition/services'
 import { setupGlobalHandlers } from './error-handlers'
@@ -545,10 +546,7 @@ function resolveNotificationDispatcher(
     emailSender,
     {
       ...resolveEmailConfig(),
-      fallbackOperatorEmail:
-        process.env.OPERATOR_ALERT_FALLBACK_EMAIL ??
-        process.env.EMAIL_REPLY_TO ??
-        process.env.EMAIL_FROM,
+      fallbackOperatorEmail: resolveOperatorAlertEmail(),
       // #960: empty string (WEB_ORIGIN unset) -> the dispatcher omits the deep link.
       webBaseUrl,
     },

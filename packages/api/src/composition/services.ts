@@ -137,6 +137,20 @@ export function resolveEmailConfig(): { emailFrom: string; emailReplyTo: string 
 }
 
 /**
+ * The operator-alert fallback inbox (#960): the address the notification
+ * dispatcher falls back to when no operator-specific recipient resolves. Prefers
+ * an explicit OPERATOR_ALERT_FALLBACK_EMAIL, then the reply-to, then the from
+ * envelope — undefined only when none is set (the dispatcher then has no inbox).
+ */
+export function resolveOperatorAlertEmail(): string | undefined {
+  return (
+    process.env.OPERATOR_ALERT_FALLBACK_EMAIL ??
+    process.env.EMAIL_REPLY_TO ??
+    process.env.EMAIL_FROM
+  )
+}
+
+/**
  * Resolve the forward geocoder stack (#531/#574/#601): disabled by default (a
  * null stub that reports every address un-geocodable) unless BOTH a User-Agent
  * and an endpoint are set; prod = LocationIQ (Nominatim-compatible, +

@@ -9,6 +9,7 @@ import {
   resolveEmailSender,
   resolveGeocoder,
   resolveGoogleOAuthConfig,
+  resolveOperatorAlertEmail,
   resolvePaymentGateway,
 } from './services'
 
@@ -25,6 +26,7 @@ const RESOLVER_ENV_KEYS = [
   'RESEND_API_KEY',
   'EMAIL_FROM',
   'EMAIL_REPLY_TO',
+  'OPERATOR_ALERT_FALLBACK_EMAIL',
   'STRIPE_SECRET_KEY',
   'STRIPE_WEBHOOK_SECRET',
   'NOMINATIM_USER_AGENT',
@@ -132,11 +134,16 @@ describe('resolvePaymentGateway', () => {
     expect(resolvePaymentGateway()).toBeInstanceOf(StripePaymentGateway)
   })
 
-  test('production without secrets yields a sentinel that throws on checkout', async () => {
+  test('production without secrets yields a sentinel where every method throws', async () => {
     process.env.NODE_ENV = 'production'
-    await expect(resolvePaymentGateway().createCheckoutSession(checkoutParams)).rejects.toThrow(
-      'STRIPE_SECRET_KEY / STRIPE_WEBHOOK_SECRET not configured',
-    )
+    const gateway = resolvePaymentGateway() as unknown as Record<string, () => Promise<unknown>>
+    const methods = Object.values(gateway)
+    expect(methods).toHaveLength(5)
+    for (const call of methods) {
+      await expect(call()).rejects.toThrow(
+        'STRIPE_SECRET_KEY / STRIPE_WEBHOOK_SECRET not configured',
+      )
+    }
   })
 
   test('dev without secrets stubs checkout (echoes successUrl) but throws on refund', async () => {
@@ -159,8 +166,35 @@ describe('resolveGeocoder', () => {
     expect(inner).toHaveBeenCalledWith('Osaka')
   })
 
+  test('a present geocode limiter throttles every lookup through the rate binding', async () => {
+    const limit = vi.fn(async () => ({ success: true }))
+    const inner = vi.fn(async () => ({ status: 'notFound' as const }))
+    await resolveGeocoder(ov({ geocoder: { geocode: inner }, geocodeLimiter: { limit } })).geocode(
+      'Osaka',
+    )
+    expect(limit).toHaveBeenCalledWith({ key: 'geocode:global' })
+    expect(inner).toHaveBeenCalledWith('Osaka')
+  })
+
   test('no provider env yields a disabled geocoder that reports every address un-geocodable', async () => {
     await expect(resolveGeocoder().geocode('Osaka')).resolves.toEqual({ status: 'notFound' })
+  })
+})
+
+describe('resolveOperatorAlertEmail', () => {
+  test('prefers the explicit fallback inbox over the envelope addresses', () => {
+    process.env.OPERATOR_ALERT_FALLBACK_EMAIL = 'alerts@op.com'
+    process.env.EMAIL_REPLY_TO = 'reply@op.com'
+    process.env.EMAIL_FROM = 'from@op.com'
+    expect(resolveOperatorAlertEmail()).toBe('alerts@op.com')
+  })
+
+  test('falls back to reply-to, then from, then undefined', () => {
+    expect(resolveOperatorAlertEmail()).toBeUndefined()
+    process.env.EMAIL_FROM = 'from@op.com'
+    expect(resolveOperatorAlertEmail()).toBe('from@op.com')
+    process.env.EMAIL_REPLY_TO = 'reply@op.com'
+    expect(resolveOperatorAlertEmail()).toBe('reply@op.com')
   })
 })
 
