@@ -4,10 +4,11 @@ import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest'
 import {
   PG_ERROR,
   REVIEWS_AUTHOR_SUBJECT_CONSTRAINT,
+  REVIEWS_OPERATOR_SUBJECT_CONSTRAINT,
   pgConstraintName,
   pgErrorCode,
 } from '../../src/pg-errors'
-import { type SeededBooking, createSeededBooking } from './booking-factory'
+import { type SeededBooking, createSeededBooking, seedRenter } from './booking-factory'
 import { db } from './setup'
 
 // #1067 slice 1: the reviews row-shape invariants live in Postgres, not service
@@ -104,6 +105,25 @@ describe('reviews table constraints (#1067, real pg)', () => {
     ).not.toBeNull()
     expect(pgErrorCode(err)).toBe(PG_ERROR.UNIQUE_VIOLATION)
     expect(pgConstraintName(err)).toBe(REVIEWS_AUTHOR_SUBJECT_CONSTRAINT)
+  })
+
+  it('rejects a 2nd operator->renter review by a different staff member of the same operator (#1158)', async () => {
+    // Two distinct staff users of the SAME operator. The author-subject seal keys on
+    // authorUserId so it would let the second through — the operator-subject PARTIAL unique
+    // index (WHERE authorRole='OPERATOR') is what must trip, keyed on the tenant not the user.
+    const staffA = await seedRenter('review-op-a')
+    const staffB = await seedRenter('review-op-b')
+    expect(
+      await insertReview({ authorRole: 'OPERATOR', subject: 'RENTER', authorUserId: staffA }),
+    ).toBeNull()
+    const err = await insertReview({
+      authorRole: 'OPERATOR',
+      subject: 'RENTER',
+      authorUserId: staffB,
+    })
+    expect(err, 'one operator-side review per booking, keyed on the operator').not.toBeNull()
+    expect(pgErrorCode(err)).toBe(PG_ERROR.UNIQUE_VIOLATION)
+    expect(pgConstraintName(err)).toBe(REVIEWS_OPERATOR_SUBJECT_CONSTRAINT)
   })
 
   it('rejects an operator reviewing a non-renter subject (reviews_subject_pairing_chk)', async () => {
