@@ -1,4 +1,6 @@
 import { PG_ERROR, VEHICLE_BLOCKS_OVERLAP } from '../../pg-errors'
+import type { CallerContext } from '../../middleware/auth'
+import { vehicleBlockReadScope } from '../../tenancy'
 import type { VehicleBlock } from '../../stores'
 import type { VehicleBlockRepository } from '../types'
 
@@ -48,6 +50,21 @@ export class InMemoryVehicleBlockRepository implements VehicleBlockRepository {
     // overlap — mirrors the GiST `&&` on tstzrange and the booking exclusion.
     return [...this.store.values()].filter(
       (b) => b.vehicleId === vehicleId && b.startAt < to && b.endAt > from,
+    )
+  }
+
+  async findOverlappingInRange(
+    ctx: CallerContext,
+    from: Date,
+    to: Date,
+  ): Promise<VehicleBlock[]> {
+    const scope = vehicleBlockReadScope(ctx)
+    if (scope.kind === 'none') return []
+    return [...this.store.values()].filter(
+      (b) =>
+        b.startAt < to &&
+        b.endAt > from &&
+        (scope.kind === 'operator' ? b.operatorId === scope.operatorId : true),
     )
   }
 
