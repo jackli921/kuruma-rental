@@ -1519,5 +1519,31 @@
       "continue": "继续",
       "toPayment": "继续支付"
     }
+  },
+  "reviews": {
+    "prompt": {
+      "cta": "撰写评价",
+      "title": "评价您的行程",
+      "description": "预订 {code} 的体验如何？您的反馈将帮助其他旅行者。"
+    },
+    "form": {
+      "subject": {
+        "OPERATOR": "运营商",
+        "VEHICLE": "车辆"
+      },
+      "overall": "总体评分",
+      "starLabel": "{n} 星",
+      "dimension": {
+        "cleanliness": "清洁度",
+        "accuracy": "准确性",
+        "communication": "沟通",
+        "value": "性价比"
+      },
+      "commentLabel": "关于{subject}的评论",
+      "commentPlaceholder": "分享您的体验详情(可选)",
+      "submit": "提交评价",
+      "pending": "提交中…",
+      "error": "出现错误，请重试。"
+    }
   }
 }

@@ -3,8 +3,9 @@ import { MyBookingsView } from '@/vite/bookings/MyBookingsView'
 import { myBookingsQueryOptions } from '@/vite/bookings/api'
 import { threadsQueryOptions } from '@/vite/messaging/api'
 import { indexThreadIdsByBooking } from '@/vite/messaging/booking-threads'
+import { renterReviewedSubjects, reviewsForBookingQueryOptions } from '@/vite/reviews'
 import { sessionQueryOptions } from '@/vite/session'
-import { useQuery, useSuspenseQuery } from '@tanstack/react-query'
+import { useQueries, useQuery, useSuspenseQuery } from '@tanstack/react-query'
 import {
   type ErrorComponentProps,
   createFileRoute,
@@ -50,6 +51,20 @@ function MyBookingsRoute() {
   const { data: threads } = useQuery(threadsQueryOptions())
   const threadIdByBooking = threads ? indexThreadIdsByBooking(threads) : {}
 
+  // #1083: resolve each COMPLETED booking's reviews without blocking the list (the
+  // post-trip prompt appears once its query lands). One light read per completed
+  // trip — renter scale; aligned to `completed` by index.
+  const completed = bookings.filter((b) => b.status === 'COMPLETED')
+  const reviewQueries = useQueries({
+    queries: completed.map((b) => reviewsForBookingQueryOptions(b.id)),
+  })
+  const reviewedSubjectsByBooking = Object.fromEntries(
+    completed.flatMap((b, i) => {
+      const data = reviewQueries[i]?.data
+      return data ? [[b.id, renterReviewedSubjects(data)] as const] : []
+    }),
+  )
+
   return (
     <main className="flex-1 px-4 py-10 sm:px-6 lg:px-8">
       <div className="mx-auto max-w-3xl">
@@ -57,7 +72,12 @@ function MyBookingsRoute() {
           <h1 className="text-3xl font-bold tracking-tight sm:text-4xl">{t('title')}</h1>
           <p className="mt-2 text-lg text-muted-foreground">{t('subtitle')}</p>
         </header>
-        <MyBookingsView bookings={bookings} locale={locale} threadIdByBooking={threadIdByBooking} />
+        <MyBookingsView
+          bookings={bookings}
+          locale={locale}
+          threadIdByBooking={threadIdByBooking}
+          reviewedSubjectsByBooking={reviewedSubjectsByBooking}
+        />
       </div>
     </main>
   )

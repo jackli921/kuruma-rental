@@ -1519,5 +1519,31 @@
       "continue": "Continue",
       "toPayment": "Continue to payment"
     }
+  },
+  "reviews": {
+    "prompt": {
+      "cta": "Leave a review",
+      "title": "Review your trip",
+      "description": "How was booking {code}? Your feedback helps fellow travelers."
+    },
+    "form": {
+      "subject": {
+        "OPERATOR": "The operator",
+        "VEHICLE": "The vehicle"
+      },
+      "overall": "Overall rating",
+      "starLabel": "{n} stars",
+      "dimension": {
+        "cleanliness": "Cleanliness",
+        "accuracy": "Accuracy",
+        "communication": "Communication",
+        "value": "Value"
+      },
+      "commentLabel": "Comment about {subject}",
+      "commentPlaceholder": "Share details of your experience (optional)",
+      "submit": "Submit review",
+      "pending": "Submitting…",
+      "error": "Something went wrong. Please try again."
+    }
   }
 }

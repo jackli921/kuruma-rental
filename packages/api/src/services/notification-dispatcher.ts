@@ -12,6 +12,7 @@ import type { EmailSender } from './email/email-sender'
 import { renderOperatorAlert } from './email/templates/operator-alert'
 import { renderRenterCancellation } from './email/templates/renter-cancellation'
 import { renderRenterConfirmation } from './email/templates/renter-confirmation'
+import { renderRenterReviewPrompt } from './email/templates/renter-review-prompt'
 import { renderRenterStatusUpdate } from './email/templates/renter-status-update'
 import { renderRenterSubstitution } from './email/templates/renter-substitution'
 import type { ResolveOperatorRecipients } from './operator-recipients'
@@ -35,7 +36,8 @@ export const TRIGGER_KINDS: Record<LifecycleTrigger, Kind[]> = {
   SUBSTITUTED: ['RENTER_SUBSTITUTION'],
   CANCELLED: ['RENTER_CANCELLATION'],
   ACTIVATED: ['RENTER_TRIP_STARTED'],
-  COMPLETED: ['RENTER_TRIP_COMPLETED'],
+  // #1083: completion sends the trip-completed notice AND the review prompt.
+  COMPLETED: ['RENTER_TRIP_COMPLETED', 'RENTER_REVIEW_PROMPT'],
 }
 
 // The booking relations a notification email can render. Everything else a
@@ -57,6 +59,8 @@ export const RELATIONS_BY_KIND: Record<Kind, ReadonlySet<NotificationRelation>> 
   RENTER_TRIP_STARTED: new Set(['vehicle', 'pickup', 'dropoff']),
   RENTER_TRIP_COMPLETED: new Set(['vehicle', 'pickup', 'dropoff']),
   OPERATOR_BOOKING_ALERT: new Set(['vehicle', 'pickup', 'dropoff']),
+  // Snapshot-only: booking code + period + a CTA back to My Bookings. Zero reads.
+  RENTER_REVIEW_PROMPT: new Set(),
 }
 
 const DEFAULT_OPERATOR_LOCALE = 'ja' // §12.2
@@ -344,6 +348,23 @@ export class NotificationDispatcher {
             locale,
           ),
         )
+      case 'RENTER_REVIEW_PROMPT': {
+        // Deep link to the renter's My Bookings list, where the review prompt lives.
+        // Trailing slash stripped so a misconfigured WEB_ORIGIN can't emit `//{locale}`.
+        const base = this.config.webBaseUrl?.replace(/\/+$/, '')
+        const reviewUrl = base ? `${base}/${locale}/bookings` : null
+        return envelope(
+          renderRenterReviewPrompt(
+            {
+              bookingCode: booking.bookingCode,
+              startAt: booking.startAt,
+              endAt: booking.endAt,
+              reviewUrl,
+            },
+            locale,
+          ),
+        )
+      }
       case 'OPERATOR_BOOKING_ALERT': {
         const [renter] = await this.userRepo.findByIds([booking.renterId])
         // Strip a trailing slash so a misconfigured WEB_ORIGIN can't emit a

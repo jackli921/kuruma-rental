@@ -72,6 +72,10 @@ const renter: Session = {
   user: { id: 'u2', role: 'RENTER', name: 'Ben', email: 'ben@example.com' },
   csrfToken: 'csrf-2',
 }
+const platformAdmin: Session = {
+  user: { id: 'u3', role: 'PLATFORM_ADMIN', name: 'Owner', email: 'owner@example.com' },
+  csrfToken: 'csrf-3',
+}
 
 function renderNavbar(data: Session | undefined) {
   mockUseSession.mockReturnValue({ data } as unknown as ReturnType<typeof useSession>)
@@ -191,9 +195,10 @@ describe('Navbar', () => {
   it('shows Browse, My Bookings, and Documents (no business markers) for a signed-in renter', () => {
     // Even with a non-zero count, the operator badge is gated to business view.
     mockUseBadge.mockReturnValue({ count: 5 })
-    // Documents is a post-MVP add-on gated behind a flag; enable it so this
-    // "full renter nav" assertion sees it (the OFF case is its own test below).
+    // Documents and Messages are post-MVP add-ons gated behind flags; enable both so
+    // this "full renter nav" assertion sees them (the beta-OFF case is its own test).
     vi.stubEnv('VITE_FEATURE_RENTER_DOCUMENTS', 'true')
+    vi.stubEnv('VITE_FEATURE_MESSAGING', 'true')
     const { container } = renderNavbar(renter)
     expect(screen.getByText('Browse').closest('a')).toHaveAttribute('data-to', '/$locale/search')
     expect(screen.getByText('My Bookings').closest('a')).toHaveAttribute(
@@ -220,18 +225,23 @@ describe('Navbar', () => {
     expect(screen.getByTestId('mobile-menu')).toHaveAttribute('data-nav-count', '4')
   })
 
-  it('hides Documents in the beta MVP demo (renter-documents flag off)', () => {
+  it('hides Documents and Messages for a renter in the beta MVP demo (both post-MVP flags off)', () => {
     renderNavbar(renter)
     expect(screen.getByText('Browse')).toBeInTheDocument()
     expect(screen.getByText('My Bookings')).toBeInTheDocument()
-    // Messages stays — it is not gated behind the documents flag (#1032).
-    expect(screen.getByText('Messages')).toBeInTheDocument()
-    // The orphaned IDP-upload page is filtered out — Browse + My Bookings + Messages.
+    // Beta ships both add-ons OFF: the orphaned IDP-upload page (#459) and in-app
+    // messaging (#1032) are filtered out for a renter. Only the owner (PLATFORM_ADMIN)
+    // sees Messages, via the admin bypass — its own test below.
     expect(screen.queryByText('Documents')).toBeNull()
-    expect(screen.getByTestId('mobile-menu')).toHaveAttribute('data-nav-count', '3')
+    expect(screen.queryByText('Messages')).toBeNull()
+    // Browse + My Bookings only.
+    expect(screen.getByTestId('mobile-menu')).toHaveAttribute('data-nav-count', '2')
   })
 
   it('rides the unread-message count onto the Messages item as a red dot (#1032)', () => {
+    // Messaging is a post-MVP add-on; enable it so the renter sees the Messages item
+    // and its unread badge (hidden in default beta — see the beta-demo test above).
+    vi.stubEnv('VITE_FEATURE_MESSAGING', 'true')
     mockUnread.mockReturnValue({ count: 4 })
     renderNavbar(renter)
     const messagesLink = screen.getByText('Messages').closest('a') as HTMLElement
@@ -240,6 +250,23 @@ describe('Navbar', () => {
     expect(badge).toHaveAttribute('aria-label', '4 unread messages')
     // The dot is unique to Messages (no operator badge in renter view).
     expect(screen.getAllByRole('status')).toHaveLength(1)
+  })
+
+  it('shows Messages to the platform admin in renter view even with messaging hidden in beta (owner preview bypass)', () => {
+    // The owner previews post-MVP features on live beta: the messaging flag is OFF,
+    // but the admin bypass surfaces Messages. They must switch to renter view (Messages
+    // lives in the renter nav). My Bookings/Documents stay renter-only and must NOT
+    // appear — the bypass is visibility for the gated feature, not a renter promotion.
+    document.cookie = 'kuruma-view=renter; path=/'
+    renderNavbar(platformAdmin)
+    expect(screen.getByText('Messages').closest('a')).toHaveAttribute(
+      'data-to',
+      '/$locale/messages',
+    )
+    expect(screen.queryByText('My Bookings')).toBeNull()
+    expect(screen.queryByText('Documents')).toBeNull()
+    // Browse + Messages only.
+    expect(screen.getByTestId('mobile-menu')).toHaveAttribute('data-nav-count', '2')
   })
 
   it('hides My Bookings/Documents for an operator in renter view — gating is by role, not view (P1, AC6)', () => {

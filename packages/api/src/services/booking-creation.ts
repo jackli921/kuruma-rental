@@ -353,7 +353,8 @@ export class BookingCreationService {
     // single GiST EXCLUDE can't span bookings + vehicle_blocks; the residual
     // schedule-during-checkout race is tiny + operator-recoverable at this scale
     // (documented PR follow-up). CLASS_COMBO has no car at book time, so this
-    // guard is SPECIFIC-only; the operator assign/substitute path re-checks.
+    // guard is SPECIFIC-only at book time; the operator assign/substitute path
+    // runs the same block check (#1152).
     const overlappingBlocks = await repos.vehicleBlockRepo.findOverlapping(
       assignedVehicleId,
       input.startAt,
