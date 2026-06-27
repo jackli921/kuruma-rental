@@ -161,10 +161,13 @@ export class InMemoryAvailabilityRepository implements AvailabilityRepository {
     to: Date,
     asOf: Date,
   ): Promise<number> {
-    // #464 2d.2: road-legal supply side of the combo guard. RETIRED is the
-    // permanent fleet exit (never counts); MAINTENANCE is temporary and still
-    // belongs to the class fleet (counts). Doc-validity uses the same JST
-    // clock as findAvailableVehicles (§4 "one clock").
+    // #464 2d.2 / #1193: road-legal supply side of the combo guard. Counts only
+    // status === 'AVAILABLE' — the exact predicate the assign gate enforces
+    // (booking-lifecycle.ts rejects non-AVAILABLE). RETIRED (permanent exit) and
+    // MAINTENANCE (temporary, but unassignable and with no known return date)
+    // both fail that gate; counting either admits a float with no assignable car
+    // → overbook at pickup. Doc-validity uses the same JST clock as
+    // findAvailableVehicles (§4 "one clock").
     const { data: vehicles } = await this.vehicleRepo.findAll(SYSTEM_CONTEXT, {})
     const asOfIso = jstDateString(asOf)
     const roadLegal = vehicles.filter(
@@ -172,7 +175,7 @@ export class InMemoryAvailabilityRepository implements AvailabilityRepository {
         v.operatorId === operatorId &&
         v.classId === classId &&
         v.pickupLocationId === pickupLocationId &&
-        v.status !== 'RETIRED' &&
+        v.status === 'AVAILABLE' &&
         isRoadLegal(v, asOfIso),
     )
 

@@ -353,9 +353,10 @@ describe('InMemoryAvailabilityRepository.countClassDemand (#464)', () => {
 })
 
 // #464 slice 2d.2: countClassCapacity is the road-legal supply side of the
-// combo guard. RETIRED is the permanent fleet exit (never counts);
-// MAINTENANCE is temporary (still belongs to the class fleet, counts) — same
-// stance the existing #916 compliance gate takes for findAvailableVehicles.
+// combo guard. It must count only what the assign gate will accept — i.e.
+// status === 'AVAILABLE'. RETIRED (permanent exit) and MAINTENANCE (temporary,
+// unassignable) both fail that gate, so neither counts: counting a car the
+// assign step rejects is a guaranteed combo overbook at pickup (#1193).
 describe('InMemoryAvailabilityRepository.countClassCapacity (#464 slice 2d.2)', () => {
   const capacity = () =>
     availabilityRepo.countClassCapacity('op_a', 'class_compact', 'loc_osaka', FROM, TO, TO)
@@ -365,9 +366,9 @@ describe('InMemoryAvailabilityRepository.countClassCapacity (#464 slice 2d.2)', 
     expect(await capacity()).toBe(1)
   })
 
-  it('counts a MAINTENANCE vehicle (temporary state, still class fleet)', async () => {
+  it('excludes a MAINTENANCE vehicle (unassignable — assign gate rejects non-AVAILABLE, #1193)', async () => {
     await makeVehicle({ status: 'MAINTENANCE' })
-    expect(await capacity()).toBe(1)
+    expect(await capacity()).toBe(0)
   })
 
   it('excludes a RETIRED vehicle (permanent fleet exit)', async () => {
