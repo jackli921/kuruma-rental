@@ -52,6 +52,15 @@ describe('fetchAddOns', () => {
     expect(url).not.toContain('operatorId')
   })
 
+  it('scopes the read to operatorId (dropping includeAll) but keeps includeArchived when an admin picks a tenant', async () => {
+    fetchMock.mockResolvedValue(jsonResponse({ success: true, data: [] }))
+    await fetchAddOns('op_9')
+    const [url] = fetchMock.mock.calls[0] as [string, RequestInit]
+    expect(url).toContain('operatorId=op_9')
+    expect(url).not.toContain('includeAll')
+    expect(url).toContain('includeArchived=true')
+  })
+
   it('throws an ApiError carrying the status on a failure envelope', async () => {
     fetchMock.mockResolvedValue(jsonResponse({ success: false, error: 'Forbidden' }, 403))
     await expect(fetchAddOns()).rejects.toThrow('Forbidden')
@@ -132,8 +141,13 @@ describe('archiveAddOn', () => {
 })
 
 describe('addOnsQueryOptions', () => {
-  it('exposes the stable ADDON_QUERY_KEY so writes can invalidate it', () => {
+  it('exposes the stable ADDON_QUERY_KEY prefix so writes can invalidate every scope', () => {
+    // ADDON_QUERY_KEY is the prefix; the per-scope key appends the picked operator
+    // (or 'all') so switching context refetches without serving another tenant's
+    // cached list. A prefix invalidate (invalidateQueries({ queryKey: ADDON_QUERY_KEY }))
+    // still clears all scopes.
     expect(ADDON_QUERY_KEY).toEqual(['operator-add-ons'])
-    expect(addOnsQueryOptions().queryKey).toEqual(['operator-add-ons'])
+    expect(addOnsQueryOptions().queryKey).toEqual(['operator-add-ons', 'all'])
+    expect(addOnsQueryOptions('op_9').queryKey).toEqual(['operator-add-ons', 'op_9'])
   })
 })

@@ -35,22 +35,32 @@ const option = {
 }
 
 describe('fetchInsuranceOptions', () => {
-  it('GETs /api/insurance-options?includeArchived=true with credentials and unwraps the array', async () => {
+  it('GETs /api/insurance-options?includeArchived=true&includeAll=true with credentials and unwraps the array', async () => {
     fetchMock.mockResolvedValue(jsonResponse({ success: true, data: [option] }))
 
     const result = await fetchInsuranceOptions()
 
-    expect(fetchMock).toHaveBeenCalledWith('/api/insurance-options?includeArchived=true', {
-      credentials: 'include',
-    })
+    expect(fetchMock).toHaveBeenCalledWith(
+      '/api/insurance-options?includeArchived=true&includeAll=true',
+      { credentials: 'include' },
+    )
     expect(result).toEqual([option])
   })
 
-  it('sends NO operatorId — the cookie session scopes the read server-side', async () => {
+  it('sends NO operatorId — the cookie session scopes the read, includeAll only unblocks bypass roles (#529)', async () => {
     fetchMock.mockResolvedValue(jsonResponse({ success: true, data: [] }))
     await fetchInsuranceOptions()
     const [url] = fetchMock.mock.calls[0] as [string, RequestInit]
     expect(url).not.toContain('operatorId')
+  })
+
+  it('scopes the read to operatorId (dropping includeAll) but keeps includeArchived when an admin picks a tenant', async () => {
+    fetchMock.mockResolvedValue(jsonResponse({ success: true, data: [] }))
+    await fetchInsuranceOptions('op_9')
+    const [url] = fetchMock.mock.calls[0] as [string, RequestInit]
+    expect(url).toContain('operatorId=op_9')
+    expect(url).not.toContain('includeAll')
+    expect(url).toContain('includeArchived=true')
   })
 
   it('throws an ApiError carrying the status on a failure envelope', async () => {
@@ -140,8 +150,13 @@ describe('archiveInsuranceOption', () => {
 })
 
 describe('insuranceOptionsQueryOptions', () => {
-  it('exposes the stable INSURANCE_QUERY_KEY so writes can invalidate it', () => {
+  it('exposes the stable INSURANCE_QUERY_KEY prefix so writes can invalidate every scope', () => {
+    // INSURANCE_QUERY_KEY is the prefix; the per-scope key appends the picked
+    // operator (or 'all') so switching context refetches without serving another
+    // tenant's cached list. A prefix invalidate
+    // (invalidateQueries({ queryKey: INSURANCE_QUERY_KEY })) still clears all scopes.
     expect(INSURANCE_QUERY_KEY).toEqual(['operator-insurance'])
-    expect(insuranceOptionsQueryOptions().queryKey).toEqual(['operator-insurance'])
+    expect(insuranceOptionsQueryOptions().queryKey).toEqual(['operator-insurance', 'all'])
+    expect(insuranceOptionsQueryOptions('op_9').queryKey).toEqual(['operator-insurance', 'op_9'])
   })
 })

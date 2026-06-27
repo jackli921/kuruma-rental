@@ -1,3 +1,4 @@
+import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { formatJpy } from '@/lib/format'
 import { InsuranceStatusBadge } from '@/vite/operator-insurance/InsuranceStatusBadge'
@@ -7,11 +8,19 @@ import { useTranslations } from 'use-intl'
 
 interface InsuranceRowProps {
   option: InsuranceOptionData
+  canWrite: boolean
+  operatorName?: string | undefined
   onEdit: (o: InsuranceOptionData) => void
   onArchive: (o: InsuranceOptionData) => void
 }
 
-export function InsuranceRow({ option: o, onEdit, onArchive }: InsuranceRowProps) {
+export function InsuranceRow({
+  option: o,
+  canWrite,
+  operatorName,
+  onEdit,
+  onArchive,
+}: InsuranceRowProps) {
   const t = useTranslations('business.insurance')
   const dailyPrice = formatJpy(o.dailyPriceJpy)
   const deductible = o.deductibleJpy != null ? formatJpy(o.deductibleJpy) : null
@@ -22,6 +31,11 @@ export function InsuranceRow({ option: o, onEdit, onArchive }: InsuranceRowProps
         <div className="flex items-center gap-2 flex-wrap">
           <h3 className="text-lg font-medium truncate">{o.name}</h3>
           <InsuranceStatusBadge status={o.status} />
+          {operatorName && (
+            <Badge variant="secondary" aria-label={`Operator: ${operatorName}`}>
+              {operatorName}
+            </Badge>
+          )}
         </div>
         {o.description && (
           <p className="mt-1 text-sm text-muted-foreground line-clamp-2">{o.description}</p>
@@ -39,20 +53,27 @@ export function InsuranceRow({ option: o, onEdit, onArchive }: InsuranceRowProps
         </div>
       </div>
 
-      <div className="flex items-center gap-1 shrink-0">
-        <Button variant="ghost" size="icon" onClick={() => onEdit(o)} aria-label={t('editOption')}>
-          <Pencil className="size-4" />
-        </Button>
-        <Button
-          variant="ghost"
-          size="icon"
-          onClick={() => onArchive(o)}
-          aria-label={t('archiveAction')}
-          disabled={o.status === 'ARCHIVED'}
-        >
-          <Trash2 className="size-4" />
-        </Button>
-      </div>
+      {canWrite ? (
+        <div className="flex items-center gap-1 shrink-0">
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={() => onEdit(o)}
+            aria-label={t('editOption')}
+          >
+            <Pencil className="size-4" />
+          </Button>
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={() => onArchive(o)}
+            aria-label={t('archiveAction')}
+            disabled={o.status === 'ARCHIVED'}
+          >
+            <Trash2 className="size-4" />
+          </Button>
+        </div>
+      ) : null}
     </div>
   )
 }
