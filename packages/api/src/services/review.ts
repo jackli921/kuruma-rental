@@ -161,7 +161,16 @@ export class ReviewService {
     }
 
     try {
-      const review = await this.reviewRepo.insert(newReview)
+      const inserted = await this.reviewRepo.insert(newReview)
+      // Reveal on write, not only on read (#1195): if this submit completes a pair — or the
+      // 14-day window has already elapsed — publish both sides now, so API-only/3rd-party
+      // submitters (no refetch) and slice-5 aggregates (which filter publishedAt) don't wait
+      // for a later getForBooking or the daily sweep. Idempotent (publishMany is first-write-
+      // wins) and double-blind-safe: decideReveal still gates on counterpart-submitted-or-
+      // elapsed, so a lone first submitter inside the window stays hidden. Re-read so the
+      // response reflects the post-settle publishedAt.
+      await this.settleReveal(booking.id, now)
+      const review = (await this.reviewRepo.findById(inserted.id)) ?? inserted
       return { ok: true, review }
     } catch (err) {
       // Either seal trips ALREADY_REVIEWED: the per-author one (a resubmit of the same
