@@ -32,6 +32,16 @@ describe('formatIndicativePrice', () => {
     expect(formatIndicativePrice(0, 'USD', 0.0067)).toBe('$0')
   })
 
+  test('rounds half away from zero (pins halfExpand, not halfEven)', () => {
+    expect(formatIndicativePrice(13, 'USD', 0.5)).toBe('$7') // 6.5 → 7
+  })
+
+  test('treats the currency code case-insensitively (Intl canonicalizes too)', () => {
+    expect(formatIndicativePrice(10000, 'usd', 0.0067)).toBe('$67')
+    // 'jpy' must hit the JPY self-conversion guard, not render a converted ¥ figure
+    expect(formatIndicativePrice(10000, 'jpy', 0.0067)).toBeNull()
+  })
+
   test('returns null when the chosen currency is JPY (no self-conversion)', () => {
     expect(formatIndicativePrice(10000, 'JPY', 1)).toBeNull()
   })

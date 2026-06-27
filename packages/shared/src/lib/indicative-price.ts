@@ -25,13 +25,18 @@ export function formatIndicativePrice(
   currency: string,
   rate: number | null | undefined,
 ): string | null {
-  if (currency === 'JPY' || !CURRENCY_CODE.test(currency)) return null
+  // Canonicalize before guarding: `Intl.NumberFormat` uppercases the code
+  // internally, so an uppercase-only `=== 'JPY'` check on the raw input would let
+  // a lowercase `'jpy'` slip through and render a converted ¥ figure next to the
+  // authoritative JPY amount — the opposite of the JPY self-conversion guard.
+  const code = currency.toUpperCase()
+  if (code === 'JPY' || !CURRENCY_CODE.test(code)) return null
   if (rate == null || !Number.isFinite(rate) || rate <= 0) return null
   if (!Number.isFinite(jpy)) return null
 
   return new Intl.NumberFormat(INDICATIVE_LOCALE, {
     style: 'currency',
-    currency,
+    currency: code,
     maximumFractionDigits: 0,
   }).format(jpy * rate)
 }
