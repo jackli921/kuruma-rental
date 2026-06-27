@@ -1,5 +1,6 @@
 import { buttonVariants } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
+import { IndicativeNote } from '@/vite/currency'
 import { PhotoGallery } from '@/vite/storefronts/PhotoGallery'
 import type { AvailableVehicleData } from '@/vite/storefronts/api'
 import { Link } from '@tanstack/react-router'
@@ -33,6 +34,7 @@ export function AvailableVehicleCard({ vehicle, locationId, from, to }: Availabl
       : vehicle.hourlyRateJpy != null
         ? t('fromHourly', { price: vehicle.hourlyRateJpy.toLocaleString('en-US') })
         : t('noPrice')
+  const fromPriceJpy = vehicle.dailyRateJpy ?? vehicle.hourlyRateJpy ?? null
 
   return (
     <div className="flex flex-col overflow-hidden rounded-xl border border-border bg-card shadow-sm">
@@ -58,7 +60,10 @@ export function AvailableVehicleCard({ vehicle, locationId, from, to }: Availabl
             </span>
           )}
         </div>
-        <p className="mt-auto pt-1 text-base font-semibold text-foreground">{priceLabel}</p>
+        <div className="mt-auto pt-1">
+          <p className="text-base font-semibold text-foreground">{priceLabel}</p>
+          {fromPriceJpy != null && <IndicativeNote jpy={fromPriceJpy} />}
+        </div>
         <Link
           to="/$locale/bookings/new"
           params={{ locale }}
