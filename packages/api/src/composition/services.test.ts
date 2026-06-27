@@ -166,7 +166,7 @@ describe('resolveGeocoder', () => {
     expect(inner).toHaveBeenCalledWith('Osaka')
   })
 
-  test('a present geocode limiter throttles every lookup through the rate binding', async () => {
+  test('a present geocode limiter is consulted (keyed global) before delegating the lookup', async () => {
     const limit = vi.fn(async () => ({ success: true }))
     const inner = vi.fn(async () => ({ status: 'notFound' as const }))
     await resolveGeocoder(ov({ geocoder: { geocode: inner }, geocodeLimiter: { limit } })).geocode(
