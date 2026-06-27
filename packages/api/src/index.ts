@@ -51,6 +51,7 @@ import { createPaymentRoutes } from './routes/payments'
 import { createProviderInviteRoutes } from './routes/provider-invites'
 import { rateLimitByIp } from './routes/rate-limit'
 import { createRegionRoutes } from './routes/regions'
+import { createReviewAggregateRoutes } from './routes/review-aggregates'
 import { createReviewRoutes } from './routes/reviews'
 import { createFlatSearchRoutes } from './routes/search'
 import { createStatsRoutes } from './routes/stats'
@@ -105,6 +106,7 @@ import { PaymentService } from './services/payment/payment'
 import { ProviderInviteService } from './services/provider-invite'
 import { RenterDocumentService } from './services/renter-document'
 import { ReviewService } from './services/review'
+import { ReviewAggregateService } from './services/review-aggregate'
 import { StorefrontDetailService } from './services/storefront-detail'
 import { StorefrontSearchService } from './services/storefront-search'
 import { createTranslationProvider } from './services/translation-provider-factory'
@@ -446,6 +448,7 @@ export function createApp(overrides?: AppOverrides, repos: Repos = buildRepos(ov
     bookingEventRepo,
     operatorMembershipRepo,
   )
+  const reviewAggregateService = new ReviewAggregateService(reviewRepo)
 
   // Chain .route() calls so TypeScript infers the full route type tree.
   // hc<AppType> needs this to produce typed client methods.
@@ -496,6 +499,7 @@ export function createApp(overrides?: AppOverrides, repos: Repos = buildRepos(ov
     .route('/', createVehicleBlockRoutes(vehicleBlockService))
     .route('/', createBookingRoutes(bookingService, consentGate))
     .route('/', createReviewRoutes(reviewService))
+    .route('/', createReviewAggregateRoutes(reviewAggregateService, publicCatalogLimiter))
     .route('/', createPaymentRoutes(paymentService))
     .route('/', createAvailabilityRoutes(availabilityService))
     .route('/', createStatsRoutes(statsRepo))
