@@ -61,9 +61,11 @@ describe('CurrencySelector trigger', () => {
     expect(screen.getByRole('button').textContent).toContain('CNY')
   })
 
-  it('carries a translated accessible label so the icon-only trigger is named', () => {
+  it('names the trigger with the translated label AND the visible code (WCAG 2.5.3)', () => {
     renderSelector('en')
-    expect(screen.getByRole('button').getAttribute('aria-label')).toBe(en.currency.label)
+    const label = screen.getByRole('button').getAttribute('aria-label') ?? ''
+    expect(label).toContain(en.currency.label)
+    expect(label).toContain('USD')
   })
 
   it('opens to the disclaimer, every currency option in order, the as-of date, and switches on click', async () => {
