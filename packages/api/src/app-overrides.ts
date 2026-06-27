@@ -38,6 +38,7 @@ import type {
   VehicleRepository,
 } from './repositories/types'
 import type { EmailSender } from './services/email/email-sender'
+import type { FxRateCache, FxRateProvider } from './services/fx/types'
 import type { GeocodeCache, Geocoder } from './services/geocoding/types'
 import type { PaymentGateway } from './services/payment/payment-gateway'
 
@@ -102,6 +103,13 @@ export type AppOverrides = {
   // Over-limit ⇒ the geocoder skips the lookup (#574). Inject a deny-binding in
   // tests; absent ⇒ the globalThis-resolved GEOCODE_LIMITER (or unthrottled dev).
   geocodeLimiter?: RateLimitBinding
+  // Inject a fake indicative-FX provider in tests (proves a provider swap touches
+  // only here); absent ⇒ the StaticFxRateProvider snapshot (#1070).
+  fxRateProvider?: FxRateProvider
+  // Inject a fake FX cache in tests; absent ⇒ the Workers KV cache (when the
+  // FX_RATE_CACHE binding exists) or an in-process slot. Wraps the provider so the
+  // upstream is hit at most once per day (#1070).
+  fxRateCache?: FxRateCache
   // Injected Google OAuth runtime (provider + account store). Integration tests
   // pass a fake so the callback can be exercised without a live Google/DB.
   googleAuthRuntime?: GoogleAuthRuntime

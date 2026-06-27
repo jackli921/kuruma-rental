@@ -5,6 +5,7 @@ import { cors } from 'hono/cors'
 import type { AppOverrides } from './app-overrides'
 import type { GoogleOAuthConfig } from './auth/google'
 import { isStaleOperatorSession } from './auth/session-freshness'
+import { buildFxRateProvider } from './composition/fx'
 import { type Repos, buildRepos } from './composition/repositories'
 import { setupGlobalHandlers } from './error-handlers'
 import { parseBoolFlag } from './lib/parse-bool-flag'
@@ -27,6 +28,7 @@ import { createCustomerRoutes } from './routes/customers'
 import { createDocumentRoutes } from './routes/documents'
 import { createFeeScheduleRoutes } from './routes/fee-schedules'
 import { createFleetOverviewRoutes } from './routes/fleet-overview'
+import { createFxRoutes } from './routes/fx'
 import health from './routes/health'
 import { createInsuranceOptionRoutes } from './routes/insurance-options'
 import { createLocationRoutes } from './routes/locations'
@@ -214,6 +216,10 @@ export function createApp(overrides?: AppOverrides, repos: Repos = buildRepos(ov
       return kv ? new KvGeocodeCache(kv) : new InMemoryGeocodeCache()
     })()
   const cachedGeocoder: Geocoder = new CachingGeocoder(geocoder, geocodeCache)
+
+  // Indicative FX rates (#1070): static snapshot → daily cache → KV/in-process,
+  // built in composition/fx.ts (index.ts is at its size cap). Display-only.
+  const fxRateProvider = buildFxRateProvider(overrides)
 
   // In-app Stripe payment (#461). Real gateway when BOTH secrets are set; in
   // production without them a sentinel throws on first use (not at boot, so
@@ -509,6 +515,7 @@ export function createApp(overrides?: AppOverrides, repos: Repos = buildRepos(ov
     .route('/', createFlatSearchRoutes(flatSearchService, publicCatalogLimiter))
     .route('/', createProviderInviteRoutes(providerInviteService, publicCatalogLimiter))
     .route('/', createRegionRoutes(regionRepo))
+    .route('/', createFxRoutes(fxRateProvider))
     .route('/', createVehicleRoutes(vehicleService, maintenanceService))
     .route(
       '/',

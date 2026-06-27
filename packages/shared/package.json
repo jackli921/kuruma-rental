@@ -25,6 +25,7 @@
     "./types/payment-anomaly": "./src/types/payment-anomaly.ts",
     "./types/api-response": "./src/types/api-response.ts",
     "./types/fleet": "./src/types/fleet.ts",
+    "./types/fx": "./src/types/fx.ts",
     "./types/vehicle": "./src/types/vehicle.ts",
     "./types/vehicle-detail": "./src/types/vehicle-detail.ts",
     "./types/maintenance-log": "./src/types/maintenance-log.ts",
