@@ -1,6 +1,7 @@
 import { Link } from '@tanstack/react-router'
 import {
   AlertTriangle,
+  ArrowLeft,
   Banknote,
   CalendarCheck,
   FileCheck,
@@ -41,6 +42,16 @@ export function AdminSidebar() {
       className="flex md:flex-col w-full md:w-56 shrink-0 border-b md:border-b-0 md:border-r border-sidebar-border bg-sidebar"
     >
       <nav className="flex flex-row md:flex-col gap-1 p-3 overflow-x-auto">
+        {/* Escape hatch: on /admin the global nav links are CSS-hidden, so without
+            this the only way back to the customer site is the easily-missed logo. */}
+        <Link
+          to="/$locale"
+          params={{ locale }}
+          className={`${LINK_CLASSNAME} text-muted-foreground md:mb-1 md:border-b md:border-sidebar-border md:pb-3 md:rounded-b-none`}
+        >
+          <ArrowLeft className="size-5" />
+          {t('nav.backToSite')}
+        </Link>
         {SIDEBAR_ITEMS.map(({ to, icon: Icon, labelKey }) => (
           <Link
             key={to}

@@ -1,4 +1,9 @@
 {
+  "currency": {
+    "label": "表示通貨",
+    "disclaimer": "目安です — ご請求は日本円（JPY）です",
+    "asOf": "レート基準日 {date}"
+  },
   "consent": {
     "title": "続行するにはご確認のうえ同意してください",
     "intro": "Kuruma を引き続きご利用いただくには、以下をご確認のうえ同意してください。",
@@ -1252,7 +1257,8 @@
       "anomalies": "決済の異常",
       "documents": "書類",
       "governance": "同意ガバナンス",
-      "customers": "顧客"
+      "customers": "顧客",
+      "backToSite": "サイトに戻る"
     },
     "home": {
       "title": "プラットフォーム管理",

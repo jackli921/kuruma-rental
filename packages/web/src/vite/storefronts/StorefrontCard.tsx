@@ -1,3 +1,4 @@
+import { IndicativeNote } from '@/vite/currency'
 import { ClassSummaryBadges } from '@/vite/storefronts/ClassSummaryBadges'
 import type { StorefrontCardData } from '@/vite/storefronts/api'
 import { carryForwardFilters } from '@/vite/storefronts/params'
@@ -44,6 +45,8 @@ export function StorefrontCard({
       : storefront.fromHourlyPriceJpy != null
         ? t('fromHourly', { price: storefront.fromHourlyPriceJpy.toLocaleString('en-US') })
         : t('noPrice')
+  // The "from" JPY figure the indicative note converts (daily preferred, else hourly).
+  const fromPriceJpy = storefront.fromDailyPriceJpy ?? storefront.fromHourlyPriceJpy ?? null
 
   return (
     <Link
@@ -90,7 +93,10 @@ export function StorefrontCard({
           <Clock className="size-3.5 shrink-0" />
           {t('turnaround', { hours: turnaroundHours(storefront.turnaroundMinutes) })}
         </p>
-        <p className="mt-auto text-base font-semibold text-foreground">{priceLabel}</p>
+        <div className="mt-auto">
+          <p className="text-base font-semibold text-foreground">{priceLabel}</p>
+          {fromPriceJpy != null && <IndicativeNote jpy={fromPriceJpy} />}
+        </div>
       </div>
     </Link>
   )

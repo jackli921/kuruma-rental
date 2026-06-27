@@ -1,4 +1,9 @@
 {
+  "currency": {
+    "label": "Display currency",
+    "disclaimer": "Indicative only — you're charged in JPY",
+    "asOf": "Rates as of {date}"
+  },
   "consent": {
     "title": "Please review and accept to continue",
     "intro": "To keep using Kuruma, review and accept the following.",
@@ -1252,7 +1257,8 @@
       "anomalies": "Payment Anomalies",
       "documents": "Documents",
       "governance": "Consent governance",
-      "customers": "Customers"
+      "customers": "Customers",
+      "backToSite": "Back to site"
     },
     "home": {
       "title": "Platform Admin",

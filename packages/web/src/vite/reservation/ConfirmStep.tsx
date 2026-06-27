@@ -1,5 +1,6 @@
 import { formatJpy } from '@/lib/format'
 import { isCancellationEnabled } from '@/vite/config/features'
+import { IndicativeNote, useIndicative } from '@/vite/currency'
 import { useTranslations } from 'use-intl'
 import { CancellationPolicy } from './CancellationPolicy'
 import type { ReservationAddOn } from './api'
@@ -27,6 +28,10 @@ export function ConfirmStep({
   pickupAt,
 }: ConfirmStepProps) {
   const t = useTranslations('reservation')
+  const tCurrency = useTranslations('currency')
+  const { format: indicativeOf } = useIndicative()
+  // The charge is always JPY; only flag that when a converted figure is on screen.
+  const showCurrencyDisclaimer = indicativeOf(estimate.totalJpy) !== null
 
   return (
     <section className="space-y-4">
@@ -56,9 +61,15 @@ export function ConfirmStep({
 
         <div className="flex items-center justify-between gap-4 p-4 font-semibold">
           <dt>{t('confirm.total')}</dt>
-          <dd>{formatJpy(estimate.totalJpy)}</dd>
+          <dd className="text-right">
+            {formatJpy(estimate.totalJpy)}
+            <IndicativeNote jpy={estimate.totalJpy} />
+          </dd>
         </div>
       </dl>
+      {showCurrencyDisclaimer && (
+        <p className="text-xs text-muted-foreground">{tCurrency('disclaimer')}</p>
+      )}
       <p className="text-sm text-muted-foreground">{t('confirm.note')}</p>
       {/* #937: self-cancel is gated for the beta demo (#868), so don't advertise the
           tiered policy at checkout when the feature is OFF — it would promise a flow

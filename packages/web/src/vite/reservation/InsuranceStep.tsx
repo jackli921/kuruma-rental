@@ -1,4 +1,5 @@
 import { formatJpy } from '@/lib/format'
+import { IndicativeNote } from '@/vite/currency'
 import { useTranslations } from 'use-intl'
 import type { ReservationInsuranceOption } from './api'
 
@@ -66,8 +67,9 @@ export function InsuranceStep({ options, selectedId, onSelect }: InsuranceStepPr
                   {deductibleLabel(option.deductibleJpy)}
                 </span>
               </span>
-              <span className="font-medium">
+              <span className="text-right font-medium">
                 {t('insurance.perDay', { price: formatJpy(option.dailyPriceJpy) })}
+                <IndicativeNote jpy={option.dailyPriceJpy} />
               </span>
             </label>
           </li>

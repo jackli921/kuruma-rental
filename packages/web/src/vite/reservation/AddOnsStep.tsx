@@ -1,4 +1,5 @@
 import { formatJpy } from '@/lib/format'
+import { IndicativeNote } from '@/vite/currency'
 import { useTranslations } from 'use-intl'
 import type { ReservationAddOn } from './api'
 
@@ -45,8 +46,9 @@ export function AddOnsStep({ addOns, selectedIds, onToggle }: AddOnsStepProps) {
                   <span className="block text-sm text-muted-foreground">{addOn.description}</span>
                 ) : null}
               </span>
-              <span className="font-medium">
+              <span className="text-right font-medium">
                 {t('addOns.price', { price: formatJpy(addOn.priceJpy) })}
+                <IndicativeNote jpy={addOn.priceJpy} />
               </span>
             </label>
           </li>
