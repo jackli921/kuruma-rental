@@ -17,7 +17,11 @@ import {
 } from './composition/services'
 import { setupGlobalHandlers } from './error-handlers'
 import { parseBoolFlag } from './lib/parse-bool-flag'
-import { provideOperatorSessionRevocation, requireAuth } from './middleware/auth'
+import {
+  provideOperatorSessionRevocation,
+  requireAuth,
+  requirePlatformMember,
+} from './middleware/auth'
 import { csrf } from './middleware/csrf'
 import { structuredLogger } from './middleware/logger'
 import { requestId } from './middleware/request-id'
@@ -333,6 +337,10 @@ export function createApp(overrides?: AppOverrides, repos: Repos = buildRepos(ov
   app.use('/customers', requireAuth())
   app.use('/users/*', requireAuth())
   app.use('/admin/*', requireAuth())
+  // Structural role gate (#1164): the whole /admin/* surface is platform-tier only,
+  // so a future sibling route that forgets its in-body requirePlatform* call is still
+  // authz-protected. Per-handler gates remain as defense-in-depth. Authn before authz.
+  app.use('/admin/*', requirePlatformMember())
   app.use('/documents/*', requireAuth())
   app.use('/documents', requireAuth())
   // locations + operators are auth-gated inside their factories (no public
