@@ -54,14 +54,21 @@ describe('canonical role sets (#487 prep — single source of truth)', () => {
     expect(BUSINESS_ROLES.has('OPERATOR_STAFF')).toBe(true)
   })
 
-  it('SCOPE_BYPASS_ROLES and PRIVILEGED_ROLES = PARTNER + PLATFORM_ADMIN — legacy STAFF/ADMIN revoked (#487), distinct instances', () => {
-    const expected = ['PARTNER', 'PLATFORM_ADMIN']
-    expect(members(SCOPE_BYPASS_ROLES)).toEqual(expected)
-    expect(members(PRIVILEGED_ROLES)).toEqual(expected)
-    // #487 dropped legacy STAFF/ADMIN from cross-tenant bypass + privileged reads;
-    // PARTNER (Trip.com) stays. Same members today, but kept as distinct instances
-    // because they gate different things (bypass flag vs direct cross-tenant reads)
-    // and may still diverge later (e.g. PARTNER dropped for message threads).
+  it('SCOPE_BYPASS_ROLES = PARTNER + PLATFORM_ADMIN — PARTNER keeps the bypass flag (its bookings are scoped per-consumer, #1119)', () => {
+    expect(members(SCOPE_BYPASS_ROLES)).toEqual(['PARTNER', 'PLATFORM_ADMIN'])
+  })
+
+  it('PRIVILEGED_ROLES = PLATFORM_ADMIN only — PARTNER dropped (#1168), the divergence #487 anticipated', () => {
+    // #1168: PARTNER (Trip.com) is a booking channel with no cross-tenant
+    // private-data use case. It was conflated with the platform admin tier in
+    // PRIVILEGED_ROLES, which gated full reads of messages, threads, and the user
+    // directory — a reachable cross-tenant leak (those routes gate on requireUser
+    // only). PARTNER's one cross-tenant read, its own bookings, is scoped in
+    // bookingReadScope (#1119) via the still-PARTNER SCOPE_BYPASS_ROLES, NOT here.
+    expect(members(PRIVILEGED_ROLES)).toEqual(['PLATFORM_ADMIN'])
+    expect(PRIVILEGED_ROLES.has('PARTNER')).toBe(false)
+    expect(SCOPE_BYPASS_ROLES.has('PARTNER')).toBe(true)
+    // Still distinct instances — now with genuinely different membership.
     expect(SCOPE_BYPASS_ROLES).not.toBe(PRIVILEGED_ROLES)
   })
 

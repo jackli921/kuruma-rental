@@ -1,5 +1,6 @@
 import type { Customer, CustomerSort, CustomerWithBookings } from '@kuruma/shared/types/customer'
 import type { CallerContext } from '../auth/context'
+import { PRIVILEGED_ROLES } from '../middleware/auth'
 import type {
   BookingRepository,
   CustomerListFilters,
@@ -23,8 +24,9 @@ export interface CustomerListQuery {
  * customers if widened. search() is the ONE operator-reachable method: it threads
  * CallerContext and scopes an OPERATOR_* caller to renters within its own tenant
  * boundary (those with a prior booking with it), so manual-booking can't become a
- * global user-enumeration vector (#396/#475). Bypass roles still search the full
- * user table. The route gate (routes/customers.ts) mirrors this split.
+ * global user-enumeration vector (#396/#475). Only PRIVILEGED_ROLES (PLATFORM_ADMIN
+ * since #1168) search the full user table — PARTNER does NOT, even though it carries
+ * bypassScope. The route gate (routes/customers.ts) mirrors this split.
  */
 export class CustomerService {
   constructor(
@@ -56,8 +58,12 @@ export class CustomerService {
 
   async search(query: string, ctx: CallerContext): Promise<User[]> {
     const matches = await this.userRepo.search(query)
-    // Bypass roles (PLATFORM_ADMIN/PARTNER) search the full user table.
-    if (ctx.bypassScope) return matches
+    // Only the privileged platform tier searches the full user table. Gated on
+    // PRIVILEGED_ROLES (PLATFORM_ADMIN-only since #1168), NOT the coarse
+    // `bypassScope` flag — that also carries PARTNER, which must never enumerate
+    // the cross-tenant directory. The route already 403s PARTNER (#1116); this is
+    // the service-layer seal (defense-in-depth, mirrors #1119).
+    if (PRIVILEGED_ROLES.has(ctx.role)) return matches
     // An operator only resolves renters within its own tenant boundary — those
     // with a prior booking with it — so manual-booking can't enumerate the global
     // user table (#396/#475). Fail closed if somehow operator-less.
