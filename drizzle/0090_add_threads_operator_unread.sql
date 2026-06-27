@@ -1,0 +1,1 @@
+ALTER TABLE "threads" ADD COLUMN "operatorUnreadCount" integer DEFAULT 0 NOT NULL;

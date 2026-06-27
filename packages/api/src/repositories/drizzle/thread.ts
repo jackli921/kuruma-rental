@@ -212,10 +212,21 @@ export class DrizzleThreadRepository implements ThreadRepository {
 
   async markAsRead(ctx: CallerContext, threadId: string): Promise<void> {
     requireOperatorScope(ctx)
-    // CallerContext: only mark the caller's own participation as read
-    await this.db
-      .update(threadParticipants)
-      .set({ unreadCount: 0 })
-      .where(and(eq(threadParticipants.threadId, threadId), eq(threadParticipants.userId, ctx.userId)))
+    const scope = threadReadScope(ctx)
+    if (scope.kind === 'participant') {
+      // Renter side: only mark the caller's own participation as read.
+      await this.db
+        .update(threadParticipants)
+        .set({ unreadCount: 0 })
+        .where(
+          and(eq(threadParticipants.threadId, threadId), eq(threadParticipants.userId, ctx.userId)),
+        )
+      return
+    }
+    // Operator/admin side: zero the thread's tenant-level unread (#1205 slice 3).
+    // An operator may only clear its own tenant's thread; admin (`all`) any.
+    const conditions = [eq(threads.id, threadId)]
+    if (scope.kind === 'operator') conditions.push(eq(threads.operatorId, scope.operatorId))
+    await this.db.update(threads).set({ operatorUnreadCount: 0 }).where(and(...conditions))
   }
 }

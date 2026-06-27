@@ -1,6 +1,7 @@
 import { type CallerContext, PRIVILEGED_ROLES, requireOperatorScope } from '../../middleware/auth'
 import { PG_ERROR } from '../../pg-errors'
 import type { Message } from '../../stores'
+import { threadReadScope } from '../../tenancy'
 import type { MessageRepository } from '../types'
 import type { InMemoryThreadRepository } from './thread'
 
@@ -68,7 +69,11 @@ export class InMemoryMessageRepository implements MessageRepository {
       idempotencyKey: idempotencyKey ?? null,
       createdAt: new Date(),
     }
-    this.threadRepo._addMessage(message)
+    // A renter send (participant scope) bumps the operator's tenant-level unread;
+    // an operator/admin reply does not. The renter's own per-participant unread is
+    // bumped for all non-sender participants inside _addMessage.
+    const isRenterSend = threadReadScope(ctx).kind === 'participant'
+    this.threadRepo._addMessage(message, isRenterSend)
 
     if (idempotencyKey) {
       this.idempotencyIndex.set(idempotencyKey, message)

@@ -130,7 +130,20 @@ export class DrizzleMessageRepository implements MessageRepository {
           ),
         )
 
-      await tx.update(threads).set({ updatedAt: sql`now()` }).where(eq(threads.id, threadId))
+      // A renter send (participant scope) also bumps the operator's tenant-level
+      // unread (#1205 slice 3); an operator/admin reply only touches updatedAt.
+      const isRenterSend = threadReadScope(ctx).kind === 'participant'
+      await tx
+        .update(threads)
+        .set(
+          isRenterSend
+            ? {
+                updatedAt: sql`now()`,
+                operatorUnreadCount: sql`${threads.operatorUnreadCount} + 1`,
+              }
+            : { updatedAt: sql`now()` },
+        )
+        .where(eq(threads.id, threadId))
 
       return normaliseMessage(inserted)
     })

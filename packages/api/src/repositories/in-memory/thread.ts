@@ -95,6 +95,7 @@ export class InMemoryThreadRepository implements ThreadRepository {
       id: crypto.randomUUID(),
       bookingId,
       operatorId: operatorId ?? null,
+      operatorUnreadCount: 0,
       idempotencyKey: idempotencyKey ?? null,
       createdAt: now,
       updatedAt: now,
@@ -116,11 +117,22 @@ export class InMemoryThreadRepository implements ThreadRepository {
 
   async markAsRead(ctx: CallerContext, threadId: string): Promise<void> {
     requireOperatorScope(ctx)
-    for (const [key, p] of this.participants) {
-      if (p.threadId === threadId && p.userId === ctx.userId) {
-        this.participants.set(key, { ...p, unreadCount: 0 })
+    const scope = threadReadScope(ctx)
+    if (scope.kind === 'participant') {
+      // Renter side: zero only the caller's own participation.
+      for (const [key, p] of this.participants) {
+        if (p.threadId === threadId && p.userId === ctx.userId) {
+          this.participants.set(key, { ...p, unreadCount: 0 })
+        }
       }
+      return
     }
+    // Operator/admin side: zero the thread's tenant-level unread. An operator may
+    // only clear its own tenant's thread; admin (`all`) clears any.
+    const thread = this.threads.get(threadId)
+    if (!thread) return
+    if (scope.kind === 'operator' && thread.operatorId !== scope.operatorId) return
+    this.threads.set(thread.id, { ...thread, operatorUnreadCount: 0 })
   }
 
   // Is a single thread visible to the caller under its read scope? Exhaustive on
@@ -142,12 +154,22 @@ export class InMemoryThreadRepository implements ThreadRepository {
   }
 
   // Exposed for InMemoryMessageRepository to add messages
-  _addMessage(message: Message): void {
+  _addMessage(message: Message, isRenterSend = false): void {
     this.messages.set(message.id, message)
     // Increment unread count for all participants except sender
     for (const [key, p] of this.participants) {
       if (p.threadId === message.threadId && p.userId !== message.senderId) {
         this.participants.set(key, { ...p, unreadCount: p.unreadCount + 1 })
+      }
+    }
+    // A renter send also bumps the operator's tenant-level unread (#1205 slice 3).
+    if (isRenterSend) {
+      const thread = this.threads.get(message.threadId)
+      if (thread) {
+        this.threads.set(thread.id, {
+          ...thread,
+          operatorUnreadCount: thread.operatorUnreadCount + 1,
+        })
       }
     }
   }
