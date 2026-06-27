@@ -14,7 +14,14 @@ interface CurrencyContextValue {
 
 const STORAGE_KEY = 'kuruma-display-currency'
 
-const CurrencyContext = createContext<CurrencyContextValue | null>(null)
+// Default to JPY / no rates so a consumer rendered outside the provider degrades to
+// JPY-only display rather than throwing (mirrors LayoutPreferenceProvider). This is
+// a display-only enhancement — a missing provider must never break a price.
+const CurrencyContext = createContext<CurrencyContextValue>({
+  currency: 'JPY',
+  setCurrency: () => {},
+  rates: undefined,
+})
 
 // Read synchronously at init so a consumer never renders the locale default first
 // and flips to the stored choice after mount. Client-only SPA, so no SSR hydration
@@ -44,9 +51,7 @@ export function CurrencyProvider({ children }: { readonly children: React.ReactN
 }
 
 export function useCurrency(): CurrencyContextValue {
-  const ctx = useContext(CurrencyContext)
-  if (!ctx) throw new Error('useCurrency must be used within a CurrencyProvider')
-  return ctx
+  return useContext(CurrencyContext)
 }
 
 /**

@@ -5,7 +5,7 @@ import type { ReactNode } from 'react'
 import { IntlProvider } from 'use-intl'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { CurrencyProvider } from './CurrencyProvider'
-import { IndicativePrice } from './IndicativePrice'
+import { IndicativeNote } from './IndicativeNote'
 
 const rates: FxRates = { base: 'JPY', asOf: '2026-06-01', rates: { USD: 0.0067 } }
 
@@ -33,23 +33,22 @@ function renderInProvider(ui: ReactNode, locale = 'en') {
   )
 }
 
-describe('IndicativePrice', () => {
-  it('always shows the authoritative JPY figure', () => {
-    // Assert on the grouped digits, not the ¥ glyph — the ICU yen sign differs
-    // between runtimes (half- vs full-width), but the figure does not.
-    const { container } = renderInProvider(<IndicativePrice jpy={27000} />, 'en')
-    expect(container.textContent).toContain('27,000')
-  })
-
-  it('appends the indicative converted figure once rates load (USD)', async () => {
-    renderInProvider(<IndicativePrice jpy={27000} />, 'en')
+describe('IndicativeNote', () => {
+  it('shows the indicative converted figure once rates load (USD)', async () => {
+    renderInProvider(<IndicativeNote jpy={27000} />, 'en')
+    // 27000 * 0.0067 = 180.9 -> "$181"
     await waitFor(() => expect(screen.getByText(/≈ \$181/)).toBeTruthy())
   })
 
-  it('shows JPY alone — no indicative figure — for a JPY display currency', async () => {
+  it('renders nothing for a JPY display currency so the caller shows JPY alone', async () => {
     localStorage.setItem('kuruma-display-currency', 'JPY')
-    renderInProvider(<IndicativePrice jpy={27000} />, 'ja')
+    const { container } = renderInProvider(<IndicativeNote jpy={27000} />, 'ja')
     await waitFor(() => expect(fetchMock).toHaveBeenCalled())
-    expect(screen.queryByText(/≈/)).toBeNull()
+    expect(container.textContent).toBe('')
+  })
+
+  it('renders nothing when used outside a provider — degrades to JPY-only, never throws', () => {
+    const { container } = render(<IndicativeNote jpy={27000} />)
+    expect(container.textContent).toBe('')
   })
 })

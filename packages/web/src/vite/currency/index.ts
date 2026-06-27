@@ -2,5 +2,5 @@
 // display. The JPY price stays authoritative everywhere; these add a ballpark.
 export { CurrencyProvider, useCurrency, useIndicative } from './CurrencyProvider'
 export { CurrencySelector } from './CurrencySelector'
-export { IndicativePrice } from './IndicativePrice'
+export { IndicativeNote } from './IndicativeNote'
 export { defaultCurrencyForLocale } from './default-currency'
