@@ -1,6 +1,7 @@
 import { paymentAnomalies } from '@kuruma/shared/db/schema'
-import { and, count, eq, isNotNull, isNull } from 'drizzle-orm'
+import { and, count, desc, eq, isNotNull, isNull } from 'drizzle-orm'
 import type { PaymentAnomaly } from '../../stores'
+import { PAYMENT_ANOMALY_LIST_LIMIT } from '../types-payment'
 import type {
   NewPaymentAnomaly,
   PaymentAnomalyRepository,
@@ -27,6 +28,8 @@ export class DrizzlePaymentAnomalyRepository implements PaymentAnomalyRepository
       .select(paymentAnomalyColumns)
       .from(paymentAnomalies)
       .where(isNull(paymentAnomalies.resolvedAt))
+      .orderBy(desc(paymentAnomalies.createdAt))
+      .limit(PAYMENT_ANOMALY_LIST_LIMIT)
     return rows.map(toPaymentAnomaly)
   }
 
@@ -44,6 +47,8 @@ export class DrizzlePaymentAnomalyRepository implements PaymentAnomalyRepository
       .select(paymentAnomalyColumns)
       .from(paymentAnomalies)
       .where(isNotNull(paymentAnomalies.resolvedAt))
+      .orderBy(desc(paymentAnomalies.createdAt))
+      .limit(PAYMENT_ANOMALY_LIST_LIMIT)
     return rows.map(toPaymentAnomaly)
   }
 
