@@ -101,8 +101,11 @@ export const reviews = pgTable(
       'reviews_class_subject_chk',
       sql`${t.subjectClassId} IS NULL OR ${t.subject} = 'VEHICLE'`,
     ),
-    // FK-covering + read indexes (lint:fk-indexes treats every FK column as needing
-    // its own index — the unique's leading-column prefix doesn't satisfy the gate).
+    // FK-covering + read indexes (lint:fk-indexes wants every FK column to have its own
+    // index). idx_reviews_bookingId is query-redundant with the reseal's (bookingId, subject)
+    // unique — bookingId is its leading column, so it already serves findByBookingId — but the
+    // lint parser only reads CREATE INDEX, not the ALTER ... ADD CONSTRAINT a unique() emits, so
+    // it can't see the seal as FK cover. Kept to satisfy the gate; dropping it is tracked separately.
     index('idx_reviews_bookingId').on(t.bookingId),
     index('idx_reviews_authorUserId').on(t.authorUserId),
     // operatorId FK cover + the slice-5 published-aggregate scan.
