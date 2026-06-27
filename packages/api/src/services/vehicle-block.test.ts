@@ -1,20 +1,68 @@
 import type { CreateVehicleBlockInput } from '@kuruma/shared/validators/vehicle-block'
 import { beforeEach, describe, expect, it } from 'vitest'
 import { type CallerContext, SYSTEM_CONTEXT } from '../middleware/auth'
+import { InMemoryBookingRepository } from '../repositories/in-memory/booking'
 import { InMemoryVehicleRepository } from '../repositories/in-memory/vehicle'
 import { InMemoryVehicleBlockRepository } from '../repositories/in-memory/vehicle-block'
-import type { Vehicle } from '../stores'
+import type { Booking, Vehicle } from '../stores'
 import { VehicleBlockService } from './vehicle-block'
 
 let vehicleRepo: InMemoryVehicleRepository
 let blockRepo: InMemoryVehicleBlockRepository
+let bookingRepo: InMemoryBookingRepository
 let service: VehicleBlockService
 
 beforeEach(() => {
   vehicleRepo = new InMemoryVehicleRepository()
   blockRepo = new InMemoryVehicleBlockRepository()
-  service = new VehicleBlockService(vehicleRepo, blockRepo)
+  bookingRepo = new InMemoryBookingRepository()
+  service = new VehicleBlockService(vehicleRepo, blockRepo, bookingRepo)
 })
+
+// A complete Booking with sane defaults; tests override only the fields the
+// reverse block→booking guard keys on (assignedVehicleId, status, the window).
+function makeBooking(overrides: Partial<Booking>): Booking {
+  return {
+    id: crypto.randomUUID(),
+    operatorId: 'op_a',
+    renterId: 'renter_1',
+    classId: 'class_1',
+    requestedVehicleId: null,
+    assignedVehicleId: null,
+    pickupLocationId: 'loc_1',
+    dropoffLocationId: 'loc_1',
+    startAt: new Date('2026-07-01T09:00:00.000Z'),
+    endAt: new Date('2026-07-01T17:00:00.000Z'),
+    effectiveEndAt: new Date('2026-07-01T17:00:00.000Z'),
+    status: 'CONFIRMED',
+    source: 'DIRECT',
+    fulfillmentMode: 'SPECIFIC',
+    bookingCode: 'TESTBK01',
+    insuranceOptionId: null,
+    insuranceSnapshot: null,
+    feeSnapshot: [],
+    addOnSnapshot: [],
+    externalId: null,
+    notes: null,
+    totalPrice: null,
+    cancellationFee: null,
+    cancellationFeeSettlement: 'ADVISORY',
+    cancelledAt: null,
+    idempotencyKey: null,
+    disclaimerAcknowledgedAt: null,
+    disclaimerTermsVersion: null,
+    createdAt: new Date('2026-06-01T00:00:00.000Z'),
+    updatedAt: new Date('2026-06-01T00:00:00.000Z'),
+    ...overrides,
+  }
+}
+
+// A service whose booking repo is pre-seeded with the given bookings, so the
+// reverse guard sees a live booking on the car. Other repos stay shared/empty.
+function serviceWithBookings(bookings: Booking[]): VehicleBlockService {
+  const seeded = new InMemoryBookingRepository(new Map(bookings.map((b) => [b.id, b])))
+  return new VehicleBlockService(vehicleRepo, blockRepo, seeded)
+}
 
 function ctxFor(operatorId: string): CallerContext {
   return { userId: `user_${operatorId}`, role: 'OPERATOR_OWNER', operatorId }
@@ -129,6 +177,98 @@ describe('VehicleBlockService.createBlock', () => {
     await expect(service.createBlock(renter, vehicle.id, blockInput())).rejects.toThrow(
       'fleet write scope required',
     )
+  })
+})
+
+describe('VehicleBlockService.createBlock — reverse block→booking guard (#1196)', () => {
+  it('returns 409 BLOCK_BOOKING_CONFLICT when a CONFIRMED booking overlaps the block window', async () => {
+    const vehicle = await seedVehicle('op_a')
+    // booking 08:00–12:00 overlaps the default block 09:00–17:00 on the same car.
+    const booking = makeBooking({
+      assignedVehicleId: vehicle.id,
+      startAt: new Date('2026-07-01T08:00:00.000Z'),
+      endAt: new Date('2026-07-01T12:00:00.000Z'),
+      effectiveEndAt: new Date('2026-07-01T12:00:00.000Z'),
+    })
+    const svc = serviceWithBookings([booking])
+
+    const result = await svc.createBlock(ctxFor('op_a'), vehicle.id, blockInput())
+
+    expect(result).toMatchObject({ ok: false, status: 409, code: 'BLOCK_BOOKING_CONFLICT' })
+  })
+
+  it('returns 409 BLOCK_BOOKING_CONFLICT when an ACTIVE booking overlaps the block window', async () => {
+    const vehicle = await seedVehicle('op_a')
+    // ACTIVE is the other blocking status; a mutation dropping it must fail this.
+    const booking = makeBooking({
+      assignedVehicleId: vehicle.id,
+      status: 'ACTIVE',
+      startAt: new Date('2026-07-01T08:00:00.000Z'),
+      endAt: new Date('2026-07-01T12:00:00.000Z'),
+      effectiveEndAt: new Date('2026-07-01T12:00:00.000Z'),
+    })
+    const svc = serviceWithBookings([booking])
+
+    const result = await svc.createBlock(ctxFor('op_a'), vehicle.id, blockInput())
+
+    expect(result).toMatchObject({ ok: false, status: 409, code: 'BLOCK_BOOKING_CONFLICT' })
+  })
+
+  it('rejects a block that lands only in the booking dropoff turnaround tail (effectiveEndAt)', async () => {
+    const vehicle = await seedVehicle('op_a')
+    // ends 17:00 but effectiveEndAt 18:00 (1h turnaround); block 17:30–17:45 sits in the tail.
+    const booking = makeBooking({
+      assignedVehicleId: vehicle.id,
+      startAt: new Date('2026-07-01T09:00:00.000Z'),
+      endAt: new Date('2026-07-01T17:00:00.000Z'),
+      effectiveEndAt: new Date('2026-07-01T18:00:00.000Z'),
+    })
+    const svc = serviceWithBookings([booking])
+
+    const result = await svc.createBlock(
+      ctxFor('op_a'),
+      vehicle.id,
+      blockInput({ startAt: '2026-07-01T17:30:00.000Z', endAt: '2026-07-01T17:45:00.000Z' }),
+    )
+
+    expect(result).toMatchObject({ ok: false, status: 409, code: 'BLOCK_BOOKING_CONFLICT' })
+  })
+
+  it('allows the block when the only overlapping booking is CANCELLED (not a blocking status)', async () => {
+    const vehicle = await seedVehicle('op_a')
+    const booking = makeBooking({ assignedVehicleId: vehicle.id, status: 'CANCELLED' })
+    const svc = serviceWithBookings([booking])
+
+    const result = await svc.createBlock(ctxFor('op_a'), vehicle.id, blockInput())
+
+    expect(result.ok).toBe(true)
+  })
+
+  it('allows a block adjacent to a booking (block.startAt === booking.effectiveEndAt — half-open)', async () => {
+    const vehicle = await seedVehicle('op_a')
+    const booking = makeBooking({
+      assignedVehicleId: vehicle.id,
+      startAt: new Date('2026-07-01T00:00:00.000Z'),
+      endAt: new Date('2026-07-01T09:00:00.000Z'),
+      effectiveEndAt: new Date('2026-07-01T09:00:00.000Z'),
+    })
+    const svc = serviceWithBookings([booking])
+
+    // default block starts 09:00 — exactly the booking's effectiveEndAt, so no overlap.
+    const result = await svc.createBlock(ctxFor('op_a'), vehicle.id, blockInput())
+
+    expect(result.ok).toBe(true)
+  })
+
+  it('allows the block when the overlapping booking is on a different vehicle', async () => {
+    const vehicle = await seedVehicle('op_a')
+    const other = await seedVehicle('op_a')
+    const booking = makeBooking({ assignedVehicleId: other.id })
+    const svc = serviceWithBookings([booking])
+
+    const result = await svc.createBlock(ctxFor('op_a'), vehicle.id, blockInput())
+
+    expect(result.ok).toBe(true)
   })
 })
 

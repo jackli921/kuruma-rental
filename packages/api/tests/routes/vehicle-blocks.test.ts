@@ -2,6 +2,7 @@ import { Hono } from 'hono'
 import { beforeEach, describe, expect, it } from 'vitest'
 import { SYSTEM_CONTEXT, type UserRole } from '../../src/middleware/auth'
 import {
+  InMemoryBookingRepository,
   InMemoryVehicleBlockRepository,
   InMemoryVehicleRepository,
 } from '../../src/repositories/in-memory'
@@ -50,11 +51,15 @@ const validBody = {
 
 let vehicleRepo: InMemoryVehicleRepository
 let blockRepo: InMemoryVehicleBlockRepository
+let bookingRepo: InMemoryBookingRepository
 
 function appAs(role: UserRole, operatorId?: string): Hono {
   const a = new Hono()
   a.use('*', testAuthMiddleware('caller', role, operatorId))
-  a.route('/', createVehicleBlockRoutes(new VehicleBlockService(vehicleRepo, blockRepo)))
+  a.route(
+    '/',
+    createVehicleBlockRoutes(new VehicleBlockService(vehicleRepo, blockRepo, bookingRepo)),
+  )
   return a
 }
 
@@ -69,6 +74,7 @@ function postBlock(app: Hono, vehicleId: string, body: unknown = validBody) {
 beforeEach(() => {
   vehicleRepo = new InMemoryVehicleRepository()
   blockRepo = new InMemoryVehicleBlockRepository()
+  bookingRepo = new InMemoryBookingRepository()
 })
 
 describe('POST /vehicles/:vehicleId/blocks', () => {
