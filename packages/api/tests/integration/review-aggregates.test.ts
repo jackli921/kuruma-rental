@@ -19,6 +19,7 @@ let renterId: string
 let vehicleId: string
 let classId: string
 let secondRenterId: string
+let thirdRenterId: string
 
 beforeAll(async () => {
   seeded = await createSeededBooking({ prefix: 'review-agg' })
@@ -31,6 +32,13 @@ beforeAll(async () => {
   // else (the per-author seal would reject a same-author second row in the same
   // subject), which makes the sum/count assertion non-trivial.
   secondRenterId = await seedRenter('review-agg-2')
+  // A THIRD renter: the aggregateByOperator scenario exercises BOTH a still-hidden
+  // (publishedAt:null) row AND a moderator-hidden (HIDDEN) row for the same VEHICLE
+  // subject. With only two renters they'd collide on the
+  // `(bookingId,authorUserId,subject)` UNIQUE seal at insert time — the test code
+  // would never reach the aggregate scan. Distinct authors keep every fixture row
+  // schema-legal while still proving the predicate drops both rows.
+  thirdRenterId = await seedRenter('review-agg-3')
 })
 
 afterEach(async () => {
@@ -79,9 +87,11 @@ describe('DrizzleReviewRepository aggregates (#1085, real pg)', () => {
       }),
       // hidden: still in the double-blind window
       reviewRow({ authorUserId: secondRenterId, overall: 1, publishedAt: null }),
-      // moderator-hidden published row — slice 6 forward-compat
+      // moderator-hidden published row — slice 6 forward-compat. Uses a third
+      // author so the seal `(bookingId,authorUserId,subject)` stays unique vs
+      // row 2's VEHICLE row (same subject + booking, different author).
       reviewRow({
-        authorUserId: secondRenterId,
+        authorUserId: thirdRenterId,
         subject: 'VEHICLE',
         subjectVehicleId: vehicleId,
         subjectClassId: classId,
