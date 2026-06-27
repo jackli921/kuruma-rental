@@ -195,6 +195,30 @@ export class DrizzleBookingRepository implements BookingRepository {
     return row?.value ?? 0
   }
 
+  // #1196: reverse of the booking→block guard. Same `tstzrange && tstzrange`
+  // overlap the bookings_no_overlap exclusion rides on, so the half-open,
+  // turnaround-inclusive [startAt, effectiveEndAt) window matches the in-memory
+  // adapter exactly. Unscoped — the vehicle is already tenant-resolved by the caller.
+  async findActiveOverlappingForVehicle(
+    vehicleId: string,
+    from: Date,
+    to: Date,
+  ): Promise<Booking[]> {
+    const fromIso = from.toISOString()
+    const toIso = to.toISOString()
+    const rows = await this.db
+      .select(bookingColumns)
+      .from(bookings)
+      .where(
+        and(
+          eq(bookings.assignedVehicleId, vehicleId),
+          inArray(bookings.status, ['CONFIRMED', 'ACTIVE'] as const),
+          sql`tstzrange("startAt", "effectiveEndAt") && tstzrange(${fromIso}::timestamptz, ${toIso}::timestamptz)`,
+        ),
+      )
+    return rows.map(toBooking)
+  }
+
   async countActiveForLocation(locationId: string): Promise<number> {
     const [row] = await this.db
       .select({ value: count() })

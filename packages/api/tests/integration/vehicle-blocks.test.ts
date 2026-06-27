@@ -7,6 +7,7 @@ import { SYSTEM_CONTEXT } from '../../src/middleware/auth'
 import { pgConstraintName, pgErrorCode } from '../../src/pg-errors'
 import {
   DrizzleAvailabilityRepository,
+  DrizzleBookingRepository,
   DrizzleVehicleBlockRepository,
   DrizzleVehicleRepository,
 } from '../../src/repositories/drizzle'
@@ -285,7 +286,11 @@ describe('vehicle_blocks availability subtraction', () => {
 // (VEHICLE_BLOCK_OVERLAP). vehicleA persists from the first beforeAll; the
 // top-level afterEach cleans every block this describe creates.
 describe('VehicleBlockService against Postgres', () => {
-  const service = new VehicleBlockService(vehicleRepo, new DrizzleVehicleBlockRepository(db))
+  const service = new VehicleBlockService(
+    vehicleRepo,
+    new DrizzleVehicleBlockRepository(db),
+    new DrizzleBookingRepository(db),
+  )
 
   function input(startAt: Date, endAt: Date) {
     return {
