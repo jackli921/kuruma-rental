@@ -15,11 +15,16 @@ const c = enMessages.bookings.operator.newBooking
 // Render the route component outside a RouterProvider: stub createFileRoute
 // (Route.useParams/useSearch/useNavigate) + useRouter, and seed the suspense
 // calendar reads + session from cache. Mirrors TripDetailRoute.test.tsx.
+// The route's search params, mutable so a test can drop `view` to exercise the
+// default (timeline) landing view. vi.hoisted so the hoisted vi.mock factory reads it.
+const searchState = vi.hoisted(() => ({
+  value: { view: 'week', date: '2026-07-01' } as { view?: string; date?: string },
+}))
 vi.mock('@tanstack/react-router', async () => ({
   ...(await vi.importActual<typeof import('@tanstack/react-router')>('@tanstack/react-router')),
   createFileRoute: () => () => ({
     useParams: () => ({ locale: 'en' }),
-    useSearch: () => ({ view: 'week', date: '2026-07-01' }),
+    useSearch: () => searchState.value,
     useNavigate: () => vi.fn(),
   }),
   useRouter: () => ({ invalidate: vi.fn() }),
@@ -41,7 +46,11 @@ vi.mock('react-big-calendar', async (importOriginal) => ({
 }))
 
 const ANCHOR = '2026-07-01'
-const { from, to } = calendarRange('week', parseCalendarDate(ANCHOR))
+// Seed both the week range (the explicit-view tests) and the timeline range (the
+// default landing view) for the same anchor day, so whichever view the component
+// resolves reads from cache (staleTime ∞ → no fetch).
+const weekRange = calendarRange('week', parseCalendarDate(ANCHOR))
+const timelineRange = calendarRange('timeline', parseCalendarDate(ANCHOR))
 
 const operatorSession: Session = {
   user: { id: 'u', role: 'OPERATOR_OWNER', operatorId: 'op_1', operatorSlug: 'acme' },
@@ -83,7 +92,14 @@ function renderRoute(
     defaultOptions: { queries: { staleTime: Number.POSITIVE_INFINITY, retry: false } },
   })
   queryClient.setQueryData(['session'], session)
-  queryClient.setQueryData(api.operatorCalendarQueryOptions(from, to).queryKey, [])
+  queryClient.setQueryData(
+    api.operatorCalendarQueryOptions(weekRange.from, weekRange.to).queryKey,
+    [],
+  )
+  queryClient.setQueryData(
+    api.operatorCalendarQueryOptions(timelineRange.from, timelineRange.to).queryKey,
+    [],
+  )
   queryClient.setQueryData(api.operatorCalendarVehiclesQueryOptions().queryKey, vehicles)
   // The dialog reads pickup/return stores lazily on open; seed them (default []) so
   // the test stays hermetic (staleTime is infinite, so no network fetch fires).
@@ -102,6 +118,7 @@ function renderRoute(
 // asserts the affordance disappears entirely.
 beforeEach(() => {
   vi.stubEnv('VITE_FEATURE_OPERATOR_MANUAL_BOOKING', 'true')
+  searchState.value = { view: 'week', date: '2026-07-01' }
 })
 
 afterEach(() => {
@@ -162,5 +179,19 @@ describe('OperatorBookingsRoute manual-booking affordance (#589 1d)', () => {
     expect(await screen.findByRole('heading', { name: c.dialogTitle })).toBeInTheDocument()
     expect(screen.getByLabelText(c.startLabel)).toHaveValue('2026-07-01T10:00')
     expect(screen.getByLabelText(c.endLabel)).toHaveValue('2026-07-03T10:00')
+  })
+})
+
+describe('OperatorBookingsRoute default view (#1100)', () => {
+  it('lands on the fleet timeline board when no view param is present', () => {
+    searchState.value = { date: ANCHOR } // view omitted -> DEFAULT_VIEW = 'timeline'
+    renderRoute(operatorSession)
+    // FleetTimeline owns its toolbar (rendered outside the mocked rbc Calendar); its
+    // active "Timeline" button is proof the timeline board mounted, not the week grid.
+    expect(
+      screen.getByRole('button', { name: enMessages.business.bookings.calendar.views.timeline }),
+    ).toBeInTheDocument()
+    // The rbc <Calendar> (day/week/month) never mounted, so it captured no props.
+    expect(calendarProps).toEqual({})
   })
 })
