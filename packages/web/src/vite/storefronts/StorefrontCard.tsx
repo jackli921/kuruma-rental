@@ -1,4 +1,5 @@
 import { IndicativeNote } from '@/vite/currency'
+import { type AggregateEntry, RatingBadge } from '@/vite/reviews'
 import { ClassSummaryBadges } from '@/vite/storefronts/ClassSummaryBadges'
 import type { StorefrontCardData } from '@/vite/storefronts/api'
 import { carryForwardFilters } from '@/vite/storefronts/params'
@@ -19,6 +20,9 @@ interface StorefrontCardProps {
   readonly region?: string | undefined
   /** Great-circle km from the search anchor (#840); null/absent hides the label. */
   readonly distanceKm?: number | null
+  /** #1085 slice 5: the operator's review aggregate. `undefined` = batch in
+   *  flight (skeleton), `null` = no published reviews, entry = ★ avg (count). */
+  readonly operatorRating?: AggregateEntry | null | undefined
 }
 
 /**
@@ -35,6 +39,7 @@ export function StorefrontCard({
   pickupLocationId,
   region,
   distanceKm,
+  operatorRating,
 }: StorefrontCardProps) {
   const t = useTranslations('search')
   const locale = useLocale()
@@ -77,7 +82,10 @@ export function StorefrontCard({
       <div className="flex flex-1 flex-col gap-3 p-5">
         <div>
           <p className="text-xs font-medium text-muted-foreground">{storefront.operatorName}</p>
-          <h2 className="text-lg font-semibold leading-tight">{storefront.name}</h2>
+          <div className="mt-0.5">
+            <RatingBadge entry={operatorRating} />
+          </div>
+          <h2 className="mt-1 text-lg font-semibold leading-tight">{storefront.name}</h2>
           <p className="mt-1 flex items-center gap-1 text-sm text-muted-foreground">
             <MapPin className="size-3.5 shrink-0" />
             <span className="line-clamp-1">{storefront.address}</span>

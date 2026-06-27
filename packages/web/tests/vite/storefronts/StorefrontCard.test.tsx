@@ -51,7 +51,11 @@ function makeStorefront(overrides: Partial<StorefrontCardData> = {}): Storefront
 
 function renderCard(
   storefront: StorefrontCardData,
-  extra: { distanceKm?: number | null; region?: string } = {},
+  extra: {
+    distanceKm?: number | null
+    region?: string
+    operatorRating?: { avg: number; count: number } | null
+  } = {},
 ) {
   return render(
     <IntlProvider locale="en" messages={en}>
@@ -121,5 +125,27 @@ describe('StorefrontCard', () => {
   it('shows a store/location placeholder with an accessible label instead of a car photo (#955)', () => {
     renderCard(makeStorefront({ representativePhotos: ['/photos/car.jpg'] }))
     expect(screen.getByRole('img', { name: 'Store location' })).toBeInTheDocument()
+  })
+
+  it('renders a skeleton operator-rating badge while the parent batch is in flight (#1085)', () => {
+    // Default — no operatorRating prop ⇒ `undefined` ⇒ skeleton, not "no reviews".
+    renderCard(makeStorefront())
+    expect(screen.getByTestId('rating-badge-skeleton')).toBeInTheDocument()
+    expect(screen.queryByText(/no reviews/i)).toBeNull()
+  })
+
+  it('renders the operator rating once the batch resolves (#1085)', () => {
+    renderCard(makeStorefront(), { operatorRating: { avg: 4.7, count: 23 } })
+    // Pin the exact glyph + count so a regression to "(23 reviews)" or omitting
+    // the star fails. The a11y label is the spelled-out form.
+    expect(screen.getByText('★ 4.7 (23)')).toBeInTheDocument()
+    expect(screen.getByLabelText('4.7 stars, 23 reviews')).toBeInTheDocument()
+  })
+
+  it('renders the "no reviews yet" badge when the batch returns null for this operator (#1085)', () => {
+    renderCard(makeStorefront(), { operatorRating: null })
+    expect(screen.getByLabelText('No reviews yet')).toBeInTheDocument()
+    // null is distinct from in-flight — skeleton MUST NOT also be present.
+    expect(screen.queryByTestId('rating-badge-skeleton')).toBeNull()
   })
 })
