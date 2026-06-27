@@ -1,5 +1,5 @@
 import { operators } from '@kuruma/shared/db/schema'
-import { asc, count, eq } from 'drizzle-orm'
+import { asc, count, eq, isNull } from 'drizzle-orm'
 import type { Operator } from '../../stores'
 import type { OperatorRepository, OperatorUpdatePatch } from '../types'
 import type { Db } from './shared'
@@ -20,10 +20,13 @@ export class DrizzleOperatorRepository implements OperatorRepository {
     return this.db.select().from(operators).orderBy(asc(operators.name))
   }
 
-  // #1087 platform overview: COUNT(operators). TODO(#1088): narrow to active
-  // (deactivatedAt IS NULL) once that column lands.
+  // #1087 platform overview — #1088 narrowed it to active operators only
+  // (deactivatedAt IS NULL), so a deactivated tenant drops out of the KPI.
   async count(): Promise<number> {
-    const [row] = await this.db.select({ value: count() }).from(operators)
+    const [row] = await this.db
+      .select({ value: count() })
+      .from(operators)
+      .where(isNull(operators.deactivatedAt))
     return row?.value ?? 0
   }
 

@@ -178,10 +178,13 @@ export class DrizzleAvailabilityRepository implements AvailabilityRepository {
     to: Date,
     asOf: Date,
   ): Promise<number> {
-    // #464 2d.2: road-legal supply side of the combo guard. status<>'RETIRED'
-    // (RETIRED = permanent fleet exit) and both certificates cover THROUGH the
-    // JST asOf day — same NULL≠current handling as findAvailableVehicles
-    // (NULL >= date is NULL, excluded).
+    // #464 2d.2 / #1193: road-legal supply side of the combo guard. Counts only
+    // status = 'AVAILABLE' — the exact predicate the assign gate enforces, and
+    // the same one findAvailableVehicles uses. RETIRED (permanent exit) and
+    // MAINTENANCE (temporary, unassignable, no known return) both fail it;
+    // counting either admits a float with no assignable car → overbook. Both
+    // certificates must cover THROUGH the JST asOf day — same NULL≠current
+    // handling as findAvailableVehicles (NULL >= date is NULL, excluded).
     const asOfIso = jstDateString(asOf)
     const fromIso = from.toISOString()
     const toIso = to.toISOString()
@@ -193,7 +196,7 @@ export class DrizzleAvailabilityRepository implements AvailabilityRepository {
           eq(vehicles.operatorId, operatorId),
           eq(vehicles.classId, classId),
           eq(vehicles.pickupLocationId, pickupLocationId),
-          sql`${vehicles.status} <> 'RETIRED'`,
+          eq(vehicles.status, 'AVAILABLE'),
           sql`${vehicles.shakenExpiryDate} >= ${asOfIso}::date AND ${vehicles.insuranceExpiryDate} >= ${asOfIso}::date`,
           // #1141: subtract cars scheduled off for the demand window — a block
           // overlapping [from, to) makes the car unavailable, so it is not real

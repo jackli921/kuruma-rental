@@ -11,6 +11,10 @@ let repo: InMemoryOperatorRepository
 let opA: { id: string; slug: string }
 let opB: { id: string; slug: string }
 
+// These business-tier /operators routes never read fleetCount; the #1088 3rd ctor
+// arg is satisfied with an empty-count stub so the service constructs faithfully.
+const noFleet = { countByOperator: async () => new Map<string, number>() }
+
 beforeEach(async () => {
   repo = new InMemoryOperatorRepository()
   opA = await repo.create({
@@ -25,7 +29,7 @@ function mountFor(role: UserRole, operatorId?: string) {
   const app = new Hono()
   setupGlobalHandlers(app)
   app.use('*', testAuthMiddleware(`${role}-user`, role, operatorId))
-  app.route('/', createOperatorRoutes(new OperatorService(repo, () => {})))
+  app.route('/', createOperatorRoutes(new OperatorService(repo, () => {}, noFleet)))
   return app
 }
 
@@ -59,7 +63,7 @@ describe('GET /operators (list)', () => {
   it('returns 401 when unauthenticated', async () => {
     const app = new Hono()
     setupGlobalHandlers(app)
-    app.route('/', createOperatorRoutes(new OperatorService(repo, () => {})))
+    app.route('/', createOperatorRoutes(new OperatorService(repo, () => {}, noFleet)))
     expect((await app.request('/operators')).status).toBe(401)
   })
 })
@@ -143,7 +147,7 @@ describe('GET /operators/by-slug/:slug', () => {
 describe('Operator routes — auth', () => {
   it('401 when unauthenticated', async () => {
     const app = new Hono()
-    app.route('/', createOperatorRoutes(new OperatorService(repo, () => {})))
+    app.route('/', createOperatorRoutes(new OperatorService(repo, () => {}, noFleet)))
     expect((await app.request(`/operators/${opA.id}`)).status).toBe(401)
   })
 })
@@ -228,7 +232,7 @@ describe('PATCH /operators/:id', () => {
   it('returns 401 when unauthenticated', async () => {
     const app = new Hono()
     setupGlobalHandlers(app)
-    app.route('/', createOperatorRoutes(new OperatorService(repo, () => {})))
+    app.route('/', createOperatorRoutes(new OperatorService(repo, () => {}, noFleet)))
     expect((await patchReq(app, opA.id, { name: 'X' })).status).toBe(401)
   })
 })

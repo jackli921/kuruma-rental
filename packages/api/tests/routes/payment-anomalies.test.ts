@@ -122,3 +122,39 @@ describe('PaymentAnomalyService — defence-in-depth seal', () => {
     },
   )
 })
+
+describe('PaymentAnomalyService — wire projection lives in the service (#1164)', () => {
+  // The entity->wire projection moved out of the route into the service. Pin it at
+  // the service boundary so reverting it (service returning the persistence entity)
+  // fails here even if a route happened to re-project. Mutation-resistant: a Date
+  // createdAt or a leaked internal column trips these.
+  it('listUnresolved returns ISO-string views, not Date entities', async () => {
+    const service = new PaymentAnomalyService(seeded())
+    const views = await service.listUnresolved({ userId: 'platform', role: 'PLATFORM_ADMIN' })
+    expect(views).toHaveLength(1)
+    const view = views[0]
+    if (!view) throw new Error('expected one unresolved view')
+    expect(typeof view.createdAt).toBe('string')
+    expect(view.createdAt).toBe('2026-06-10T03:00:00.000Z')
+    expect(view.resolvedAt).toBeNull()
+    expect('stripeCheckoutSessionId' in view).toBe(false)
+    expect('resolvedBy' in view).toBe(false)
+  })
+
+  it('resolve returns a projected view with the ISO resolvedAt set', async () => {
+    const repo = seeded()
+    const service = new PaymentAnomalyService(repo)
+    const [unresolved] = await service.listUnresolved({ userId: 'p', role: 'PLATFORM_ADMIN' })
+    if (!unresolved) throw new Error('expected an unresolved anomaly to resolve')
+    const view = await service.resolve(
+      { userId: 'p', role: 'PLATFORM_ADMIN' },
+      unresolved.id,
+      'CONFIRMED_INTENDED',
+      'looks fine',
+    )
+    expect(view.resolution).toBe('CONFIRMED_INTENDED')
+    expect(view.note).toBe('looks fine')
+    expect(typeof view.resolvedAt).toBe('string')
+    expect('resolvedBy' in view).toBe(false)
+  })
+})
