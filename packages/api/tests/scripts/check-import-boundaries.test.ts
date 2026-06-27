@@ -250,3 +250,71 @@ describe('check-import-boundaries — #692 sanctioned thin-read enforcement', ()
     expect(violations[0]).toMatchObject({ rule: expect.stringMatching(TYPES_RULE) })
   })
 })
+
+describe('check-import-boundaries — routes must not import persistence entities from ../stores (#1213)', () => {
+  // stores.ts is the types-only persistence-entity barrel ("the shared contract
+  // between repositories and routes"). A route gets an already-projected DTO from
+  // its service, so an entity import is a toView/cast leak that belongs in the
+  // service — the #1164 payment-anomalies fix, now enforced rather than manual.
+  const STORES_RULE = /Routes must not import persistence entity types from \.\.\/stores/
+
+  it('flags a route importing an entity type from ../stores', () => {
+    const violations = checkContent(
+      'routes/fee-schedules.ts',
+      "import type { FeeSchedule } from '../stores'",
+    )
+    expect(violations).toHaveLength(1)
+    expect(violations[0]).toMatchObject({
+      file: 'routes/fee-schedules.ts',
+      line: 1,
+      rule: expect.stringMatching(STORES_RULE),
+    })
+  })
+
+  it('flags a formatter-wrapped (multiline) ../stores entity import in a route', () => {
+    const content = ['import type {', '  AddOn,', "} from '../stores'"].join('\n')
+
+    const violations = checkContent('routes/add-ons.ts', content)
+
+    expect(violations).toHaveLength(1)
+    expect(violations[0]).toMatchObject({ line: 1, rule: expect.stringMatching(STORES_RULE) })
+  })
+
+  it('flags an inline type-position import (Partial<import("../stores").X>) — the vehicle-classes bypass', () => {
+    // The original from-only rule + the import-line prefilter let this slip: the
+    // line starts with `stripUndefined(`, not `import `, and carries no `from`.
+    const violations = checkContent(
+      'routes/vehicle-classes.ts',
+      "        stripUndefined(parsed.data) as Partial<import('../stores').VehicleClass>,",
+    )
+    expect(violations).toHaveLength(1)
+    expect(violations[0]).toMatchObject({ line: 1, rule: expect.stringMatching(STORES_RULE) })
+  })
+
+  it('flags a dynamic import() of ../stores in a route', () => {
+    const violations = checkContent('routes/add-ons.ts', "const s = await import('../stores')")
+    expect(violations).toHaveLength(1)
+    expect(violations[0]).toMatchObject({ rule: expect.stringMatching(STORES_RULE) })
+  })
+
+  it('allows a SERVICE to import entity types from ../stores (only routes are blocked)', () => {
+    expect(
+      checkContent('services/fee-schedule.ts', "import type { FeeSchedule } from '../stores'"),
+    ).toEqual([])
+  })
+
+  it('does not flag a route importing a projected DTO type from its service', () => {
+    expect(
+      checkContent(
+        'routes/fee-schedules.ts',
+        "import type { FeeScheduleUpdate } from '../services/fee-schedule'",
+      ),
+    ).toEqual([])
+  })
+
+  it('exempts test files from the ../stores rule', () => {
+    expect(
+      checkContent('routes/fee-schedules.test.ts', "import type { FeeSchedule } from '../stores'"),
+    ).toEqual([])
+  })
+})
