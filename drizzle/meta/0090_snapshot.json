@@ -1,6 +1,6 @@
 {
-  "id": "3fdf3b80-2466-4ad7-8a4d-c0810c0c986e",
-  "prevId": "3eaceceb-22c3-48a5-a012-d9618d5a8736",
+  "id": "08f319e4-3de5-4155-9233-12f572dc0a3f",
+  "prevId": "0635f1fa-6e32-4b27-8abd-eaab00c0f997",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -4977,34 +4977,6 @@
         }
       },
       "indexes": {
-        "reviews_operator_subject_per_booking_unique": {
-          "name": "reviews_operator_subject_per_booking_unique",
-          "columns": [
-            {
-              "expression": "bookingId",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "operatorId",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "subject",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": true,
-          "where": "\"reviews\".\"authorRole\" = 'OPERATOR'",
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
         "idx_reviews_bookingId": {
           "name": "idx_reviews_bookingId",
           "columns": [
@@ -5172,12 +5144,11 @@
       },
       "compositePrimaryKeys": {},
       "uniqueConstraints": {
-        "reviews_author_subject_per_booking_unique": {
-          "name": "reviews_author_subject_per_booking_unique",
+        "reviews_subject_per_booking_unique": {
+          "name": "reviews_subject_per_booking_unique",
           "nullsNotDistinct": false,
           "columns": [
             "bookingId",
-            "authorUserId",
             "subject"
           ]
         }
