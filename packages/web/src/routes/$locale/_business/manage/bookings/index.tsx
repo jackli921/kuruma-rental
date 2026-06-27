@@ -33,7 +33,7 @@ interface BookingsCalendarSearch {
   date?: string | undefined
 }
 
-const DEFAULT_VIEW: CalendarView = 'week'
+const DEFAULT_VIEW: CalendarView = 'timeline'
 
 // Operator booking *calendar* (#525). URL `/<locale>/manage/bookings`, behind the
 // `_business` guard; tenant scoping is server-side (CallerContext), so the client

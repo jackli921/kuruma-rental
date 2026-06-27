@@ -100,12 +100,10 @@ function iso(from: Date, to: Date): { from: string; to: string } {
 
 const VIEW_SET = new Set<CalendarView>(['timeline', 'day', 'week', 'month'])
 
-// NOTE (#1100 in progress): the default flips to 'timeline' in the same commit
-// that lands FleetTimeline + the route render + the test updates (must-fix #5 —
-// flip + tests together). Kept at 'week' here so the suite stays green until then.
-/** Narrow an untrusted `?view=` param to one of our views, defaulting to week. */
+/** Narrow an untrusted `?view=` param to one of our views, defaulting to the
+ *  fleet timeline — the operator planning board is the landing view (#1100). */
 export function parseCalendarView(value?: string | undefined): CalendarView {
-  return value && VIEW_SET.has(value as CalendarView) ? (value as CalendarView) : 'week'
+  return value && VIEW_SET.has(value as CalendarView) ? (value as CalendarView) : 'timeline'
 }
 
 const DATE_FMT = 'yyyy-MM-dd'
