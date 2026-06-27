@@ -397,10 +397,6 @@ describe('DrizzleVehicleBlockRepository.findOverlappingInRange scoping', () => {
     scopeBlockIds.push(block.id)
   })
 
-  afterEach(async () => {
-    // scopeBlockIds are cleaned up in afterAll to persist across the 4 assertions
-  })
-
   afterAll(async () => {
     if (scopeBlockIds.length > 0) {
       await db.delete(vehicleBlocks).where(inArray(vehicleBlocks.id, scopeBlockIds))
@@ -425,8 +421,14 @@ describe('DrizzleVehicleBlockRepository.findOverlappingInRange scoping', () => {
     expect(hits).toEqual([])
   })
 
-  it('non-overlapping window returns [] even for matching operator', async () => {
+  it('non-overlapping window excludes the seeded block even for matching operator', async () => {
     const hits = await blockRepo.findOverlappingInRange(opCtx, NON_OVERLAP_FROM, NON_OVERLAP_TO)
+    expect(hits.map((b) => b.id)).not.toContain(scopeBlockId)
+  })
+
+  it('none scope (RENTER caller) returns [] even within the window', async () => {
+    const renterCtx: CallerContext = { userId: 'r1', role: 'RENTER' }
+    const hits = await blockRepo.findOverlappingInRange(renterCtx, FROM, TO)
     expect(hits).toEqual([])
   })
 })
