@@ -26,6 +26,7 @@ import { createAddOnRoutes } from './routes/add-ons'
 import { createAdminRoutes } from './routes/admin'
 import { createAdminBookingRoutes } from './routes/admin-bookings'
 import { createAdminConsentRoutes } from './routes/admin-consent'
+import { createAdminOperatorRoutes } from './routes/admin-operators'
 import { createAdminOverviewRoutes } from './routes/admin-overview'
 import { createAdminRevenueRoutes } from './routes/admin-revenue'
 import { createAuthRoutes } from './routes/auth'
@@ -300,9 +301,21 @@ export function createApp(overrides?: AppOverrides, repos: Repos = buildRepos(ov
   // the check reaches all operator-reachable routes.
   app.use(
     '*',
-    provideOperatorSessionRevocation(async (user) =>
-      isStaleOperatorSession(user, (await userRepo.findByIds([user.id]))[0]),
-    ),
+    provideOperatorSessionRevocation(async (user) => {
+      const projection = (await userRepo.findByIds([user.id]))[0]
+      // #1088 operator-level cascade: enrich the projection with the member's
+      // operator deactivation so soft-deactivating a whole operator revokes every
+      // member (their users row stays intact). One PK lookup, gated to projections
+      // that still carry an operatorId; only operator-role tokens reach this check.
+      const operatorDeactivatedAt =
+        projection?.operatorId != null
+          ? ((await operatorRepo.findById(projection.operatorId))?.deactivatedAt ?? null)
+          : null
+      return isStaleOperatorSession(
+        user,
+        projection ? { ...projection, operatorDeactivatedAt } : undefined,
+      )
+    }),
   )
 
   // Auth middleware on all protected paths.
@@ -410,7 +423,7 @@ export function createApp(overrides?: AppOverrides, repos: Repos = buildRepos(ov
   )
   const paymentAnomalyService = new PaymentAnomalyService(paymentAnomalyRepo)
   const vehicleDetailService = new VehicleDetailService(vehicleDetailRepo)
-  const operatorService = new OperatorService(operatorRepo, recordAudit)
+  const operatorService = new OperatorService(operatorRepo, recordAudit, vehicleRepo)
   // #407: the write-operator resolver is a pure policy function — sole-operator
   // inference is retired, so it no longer needs an operator lookup.
   const resolveWriteOperatorId: ResolveWriteOperatorId = (ctx, inputOperatorId) =>
@@ -502,6 +515,7 @@ export function createApp(overrides?: AppOverrides, repos: Repos = buildRepos(ov
     .route('/', createOverviewRoutes(overviewService))
     .route('/', createAdminRevenueRoutes(adminRevenueService))
     .route('/', createAdminBookingRoutes(adminBookingService))
+    .route('/', createAdminOperatorRoutes(operatorService))
     .route('/', createAdminOverviewRoutes(adminOverviewService))
     .route('/', createPaymentAnomalyRoutes(paymentAnomalyService))
     .route('/', createMessageRoutes(messageService))
