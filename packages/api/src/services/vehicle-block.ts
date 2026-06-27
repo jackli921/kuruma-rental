@@ -93,4 +93,13 @@ export class VehicleBlockService {
     if (!removed) return { ok: false, error: BLOCK_NOT_FOUND_MESSAGE, status: 404 }
     return { ok: true, block: removed }
   }
+
+  /**
+   * Fleet-wide read for the operator calendar. Row-scope is enforced in the repo
+   * via `vehicleBlockReadScope(ctx)` (operator → own tenant, admin → all, else →
+   * []), so this is a thin delegation — no separate scope check to drift.
+   */
+  async listBlocks(ctx: CallerContext, from: Date, to: Date): Promise<VehicleBlock[]> {
+    return this.vehicleBlockRepo.findOverlappingInRange(ctx, from, to)
+  }
 }

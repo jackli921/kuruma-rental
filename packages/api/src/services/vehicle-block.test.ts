@@ -132,6 +132,42 @@ describe('VehicleBlockService.createBlock', () => {
   })
 })
 
+describe('VehicleBlockService.listBlocks', () => {
+  it('operator caller sees only its own blocks in the window', async () => {
+    const vA = await seedVehicle('op_a')
+    const vB = await seedVehicle('op_b')
+    await blockRepo.create({
+      operatorId: 'op_a',
+      vehicleId: vA.id,
+      startAt: new Date('2026-07-01T09:00:00Z'),
+      endAt: new Date('2026-07-01T17:00:00Z'),
+      kind: 'MAINTENANCE',
+      reason: 'x',
+      notes: null,
+      createdBy: 'u',
+    })
+    await blockRepo.create({
+      operatorId: 'op_b',
+      vehicleId: vB.id,
+      startAt: new Date('2026-07-01T09:00:00Z'),
+      endAt: new Date('2026-07-01T17:00:00Z'),
+      kind: 'MAINTENANCE',
+      reason: 'y',
+      notes: null,
+      createdBy: 'u',
+    })
+    const from = new Date('2026-07-01T00:00:00Z')
+    const to = new Date('2026-07-02T00:00:00Z')
+
+    const own = await service.listBlocks(ctxFor('op_a'), from, to)
+    expect(own.map((b) => b.operatorId)).toEqual(['op_a'])
+
+    const admin: CallerContext = { userId: 'admin', role: 'PLATFORM_ADMIN', bypassScope: true }
+    const all = await service.listBlocks(admin, from, to)
+    expect(all.map((b) => b.operatorId).sort()).toEqual(['op_a', 'op_b'])
+  })
+})
+
 describe('VehicleBlockService.deleteBlock', () => {
   it('removes a block the operator owns', async () => {
     const vehicle = await seedVehicle('op_a')
