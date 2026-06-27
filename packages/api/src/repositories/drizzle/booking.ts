@@ -42,13 +42,17 @@ export class DrizzleBookingRepository implements BookingRepository {
     operatorId: string,
     now: Date,
   ): Promise<OperatorBookingCounts> {
+    // Pass the cutoff as an ISO string (cast to timestamptz) rather than a raw
+    // Date: a bare Date interpolated into a `sql` FILTER fragment is driver-
+    // dependent to bind, so we mirror countComplianceForOperator's string params.
+    const nowIso = now.toISOString()
     const [row] = await this.db
       .select({
         total: sql<number>`count(*) filter (where ${bookings.status} <> 'CANCELLED')`.mapWith(
           Number,
         ),
         upcoming:
-          sql<number>`count(*) filter (where ${bookings.status} in ('CONFIRMED', 'ACTIVE') and ${bookings.startAt} >= ${now})`.mapWith(
+          sql<number>`count(*) filter (where ${bookings.status} in ('CONFIRMED', 'ACTIVE') and ${bookings.startAt} >= ${nowIso}::timestamptz)`.mapWith(
             Number,
           ),
       })
