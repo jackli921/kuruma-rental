@@ -76,8 +76,13 @@ export const reviews = pgTable(
     updatedAt: timestamp('updatedAt', { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [
-    // Exactly one review per author per booking per subject — edit-until-published, never re-insert.
-    unique('reviews_author_subject_per_booking_unique').on(t.bookingId, t.authorUserId, t.subject),
+    // Exactly one review per booking per subject — edit-until-published, never re-insert.
+    // subject IS the side (reviews_subject_pairing_chk ties OPERATOR-author <=> RENTER-subject),
+    // and there is one operator + one renter per booking, so (bookingId, subject) seals BOTH
+    // sides: a second staffer's operator-side review collides instead of double-counting slice-5
+    // aggregates (#1158). Keyed on the independent columns only — NOT the denormalized operatorId
+    // — so a writer with a wrong operatorId can't slip a duplicate past the seal.
+    unique('reviews_subject_per_booking_unique').on(t.bookingId, t.subject),
     check('reviews_overall_range_chk', sql`${t.overall} BETWEEN 1 AND 5`),
     // Operators review ONLY renters; renters review the operator or a vehicle (never a renter).
     check(

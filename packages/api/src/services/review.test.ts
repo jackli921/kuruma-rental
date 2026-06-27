@@ -244,6 +244,29 @@ describe('ReviewService.submit — dimensions + dedup', () => {
       error: 'ALREADY_REVIEWED',
     })
   })
+
+  it('rejects a second operator-side review of one booking by a DIFFERENT staff member of the same operator (#1158, per-operator seal)', async () => {
+    // Two ACTIVE staff of one operator. The operator side is the operator entity,
+    // not the individual staffer: only one OPERATOR->RENTER review per booking,
+    // whoever submits it — else slice-5 aggregates double-count the operator.
+    const secondStaffCtx: CallerContext = {
+      userId: 'opuser-2',
+      role: 'OPERATOR_STAFF',
+      operatorId: OPERATOR_ID,
+      bypassScope: false,
+    }
+    const { service } = makeHarness({
+      memberships: [activeMembership(), { ...activeMembership(), id: 'mem-2', userId: 'opuser-2' }],
+    })
+    expect((await service.submit(operatorCtx, submitInput({ subject: 'RENTER' }), NOW)).ok).toBe(
+      true,
+    )
+    expect(await service.submit(secondStaffCtx, submitInput({ subject: 'RENTER' }), NOW)).toEqual({
+      ok: false,
+      status: 409,
+      error: 'ALREADY_REVIEWED',
+    })
+  })
 })
 
 describe('ReviewService — double-blind reveal on read', () => {

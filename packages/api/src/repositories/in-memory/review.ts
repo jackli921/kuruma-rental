@@ -1,4 +1,4 @@
-import { PG_ERROR, REVIEWS_AUTHOR_SUBJECT_CONSTRAINT } from '../../pg-errors'
+import { PG_ERROR, REVIEWS_SUBJECT_CONSTRAINT } from '../../pg-errors'
 import type { Review } from '../../stores'
 import type { NewReview, ReviewEdit, ReviewRepository } from '../types'
 
@@ -23,15 +23,13 @@ export class InMemoryReviewRepository implements ReviewRepository {
   }
 
   async insert(data: NewReview): Promise<Review> {
-    // The one-per-author-per-subject seal: a renter still reviews OPERATOR and
-    // VEHICLE separately, but never the same (booking, author, subject) twice.
+    // The one-per-subject-per-booking seal (#1158): a renter still reviews OPERATOR
+    // and VEHICLE separately, but the same (booking, subject) never repeats — so two
+    // staff of one operator can't both review a booking (subject=RENTER is their side).
     const clash = [...this.store.values()].some(
-      (r) =>
-        r.bookingId === data.bookingId &&
-        r.authorUserId === data.authorUserId &&
-        r.subject === data.subject,
+      (r) => r.bookingId === data.bookingId && r.subject === data.subject,
     )
-    if (clash) throw uniqueViolation(REVIEWS_AUTHOR_SUBJECT_CONSTRAINT)
+    if (clash) throw uniqueViolation(REVIEWS_SUBJECT_CONSTRAINT)
     const now = new Date()
     const review: Review = { ...data, id: crypto.randomUUID(), createdAt: now, updatedAt: now }
     this.store.set(review.id, review)

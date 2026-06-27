@@ -15,8 +15,8 @@ export type ReviewEdit = Pick<Review, 'overall' | 'subRatings' | 'comment'>
  *  top of this contract. */
 export interface ReviewRepository {
   // Persist a submitted review. Throws a PG-shaped UNIQUE_VIOLATION (with
-  // `constraint_name === REVIEWS_AUTHOR_SUBJECT_CONSTRAINT`) when the same
-  // (bookingId, authorUserId, subject) already exists, so the service can tell a
+  // `constraint_name === REVIEWS_SUBJECT_CONSTRAINT`) when the same
+  // (bookingId, subject) already exists, so the service can tell a
   // resubmission (edit the hidden row) apart from a first submit. See pg-errors.
   insert(review: NewReview): Promise<Review>
   // A single review by id, or undefined. The edit path loads the row first to re-check

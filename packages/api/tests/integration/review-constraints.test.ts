@@ -3,12 +3,12 @@ import { eq } from 'drizzle-orm'
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest'
 import {
   PG_ERROR,
-  REVIEWS_AUTHOR_SUBJECT_CONSTRAINT,
+  REVIEWS_SUBJECT_CONSTRAINT,
   pgConstraintName,
   pgErrorCode,
 } from '../../src/pg-errors'
-import { type SeededBooking, createSeededBooking } from './booking-factory'
-import { db } from './setup'
+import { type SeededBooking, createSeededBooking, seedRenter } from './booking-factory'
+import { cleanupUsers, db } from './setup'
 
 // #1067 slice 1: the reviews row-shape invariants live in Postgres, not service
 // promises. Inserts DIRECTLY via db.insert (NOT a repo) so the Postgres-emitted
@@ -21,6 +21,9 @@ let operatorId: string
 let renterId: string
 let vehicleId: string
 let classId: string
+// Extra users seeded inside individual cases (e.g. a 2nd operator staffer); torn
+// down in afterAll AFTER their reviews are gone, since reviews.authorUserId is restrict.
+const extraUserIds: string[] = []
 
 beforeAll(async () => {
   seeded = await createSeededBooking({ prefix: 'review-chk' })
@@ -32,8 +35,8 @@ beforeAll(async () => {
 })
 
 afterEach(async () => {
-  // The (bookingId, authorUserId, subject) unique allows one row per triple; clear
-  // them between cases so each starts clean and the asserted seal is what trips.
+  // The (bookingId, subject) unique allows one row per pair; clear them between
+  // cases so each starts clean and the asserted seal is what trips.
   await db.delete(reviews).where(eq(reviews.bookingId, bookingId))
 })
 
@@ -41,6 +44,9 @@ afterAll(async () => {
   // reviews.bookingId is ON DELETE restrict — drop our rows before the factory
   // tears the booking down, or its cleanup 23503s.
   await db.delete(reviews).where(eq(reviews.bookingId, bookingId))
+  // Extra staffers are referenced only by the now-deleted reviews, so they're safe
+  // to remove here (after the reviews delete above, before the booking teardown).
+  if (extraUserIds.length > 0) await cleanupUsers(extraUserIds)
   await seeded.cleanup()
 })
 
@@ -95,15 +101,27 @@ describe('reviews table constraints (#1067, real pg)', () => {
     ).toBeNull()
   })
 
-  it('rejects a duplicate (bookingId, authorUserId, subject) with the unique seal', async () => {
+  it('rejects a duplicate (bookingId, subject) with the unique seal', async () => {
     expect(await insertReview()).toBeNull()
     const err = await insertReview()
-    expect(
-      err,
-      'a second review for the same author+booking+subject must be rejected',
-    ).not.toBeNull()
+    expect(err, 'a second review for the same booking+subject must be rejected').not.toBeNull()
     expect(pgErrorCode(err)).toBe(PG_ERROR.UNIQUE_VIOLATION)
-    expect(pgConstraintName(err)).toBe(REVIEWS_AUTHOR_SUBJECT_CONSTRAINT)
+    expect(pgConstraintName(err)).toBe(REVIEWS_SUBJECT_CONSTRAINT)
+  })
+
+  it('rejects a 2nd operator-side review of one booking by a DIFFERENT staff user (#1158 per-side seal)', async () => {
+    // The seal keys on (bookingId, subject), not authorUserId: two distinct staff
+    // users submitting OPERATOR -> RENTER (subject=RENTER, the operator side) for one
+    // booking must collide, so slice-5 aggregates can't double-count the operator side.
+    const staffA = await seedRenter('review-staffA')
+    const staffB = await seedRenter('review-staffB')
+    extraUserIds.push(staffA, staffB)
+    const opSide = { authorRole: 'OPERATOR', subject: 'RENTER' } as const
+    expect(await insertReview({ ...opSide, authorUserId: staffA })).toBeNull()
+    const err = await insertReview({ ...opSide, authorUserId: staffB })
+    expect(err, 'two staff of one operator must not both review one booking').not.toBeNull()
+    expect(pgErrorCode(err)).toBe(PG_ERROR.UNIQUE_VIOLATION)
+    expect(pgConstraintName(err)).toBe(REVIEWS_SUBJECT_CONSTRAINT)
   })
 
   it('rejects an operator reviewing a non-renter subject (reviews_subject_pairing_chk)', async () => {

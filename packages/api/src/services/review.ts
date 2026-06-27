@@ -6,12 +6,7 @@ import {
 } from '@kuruma/shared/lib/review-reveal'
 import type { EditReviewInput, SubmitReviewInput } from '@kuruma/shared/validators/review'
 import { type CallerContext, SYSTEM_CONTEXT } from '../middleware/auth'
-import {
-  PG_ERROR,
-  REVIEWS_AUTHOR_SUBJECT_CONSTRAINT,
-  pgConstraintName,
-  pgErrorCode,
-} from '../pg-errors'
+import { PG_ERROR, REVIEWS_SUBJECT_CONSTRAINT, pgConstraintName, pgErrorCode } from '../pg-errors'
 import type {
   BookingEventRepository,
   BookingRepository,
@@ -165,7 +160,7 @@ export class ReviewService {
     } catch (err) {
       if (
         pgErrorCode(err) === PG_ERROR.UNIQUE_VIOLATION &&
-        pgConstraintName(err) === REVIEWS_AUTHOR_SUBJECT_CONSTRAINT
+        pgConstraintName(err) === REVIEWS_SUBJECT_CONSTRAINT
       ) {
         return fail(409, 'ALREADY_REVIEWED')
       }
