@@ -1,18 +1,30 @@
 import { Button } from '@/components/ui/button'
 import { PageSkeleton } from '@/vite/PageSkeleton'
-import { isOperatorManualBookingEnabled } from '@/vite/config/features'
-import { isOperatorSession } from '@/vite/guards'
-import { FleetTimeline } from '@/vite/operator-bookings'
-import { BookingsCalendar } from '@/vite/operator-bookings/BookingsCalendar'
-import { CalendarSidebar } from '@/vite/operator-bookings/CalendarSidebar'
-import { ManualBookingDialog } from '@/vite/operator-bookings/ManualBookingDialog'
 import {
+  isOperatorBlocksEnabled,
+  isOperatorManualBookingEnabled,
+  isVisibleToViewer,
+} from '@/vite/config'
+import { isOperatorSession } from '@/vite/guards'
+import {
+  BlockDetailDialog,
+  BlockLegend,
+  BookingsCalendar,
+  CalendarSidebar,
+  FleetTimeline,
+  ManualBookingDialog,
+  ScheduleBlockDialog,
+} from '@/vite/operator-bookings'
+import {
+  operatorCalendarBlocksQueryOptions,
   operatorCalendarQueryOptions,
   operatorCalendarVehiclesQueryOptions,
 } from '@/vite/operator-bookings/api'
 import {
+  type BlockCalendarEvent,
   type CalendarItem,
   type CalendarView,
+  blocksToCalendarEvents,
   calendarRange,
   fleetToResources,
   formatCalendarDate,
@@ -87,6 +99,22 @@ export function OperatorBookingsRoute() {
   // flag AND the operator-session permission. OFF in the beta demo (flag unset).
   const canManualBook = isOperatorManualBookingEnabled() && isOperatorSession(session ?? null)
 
+  // #1101 scheduled blocks. Visibility (read + the detail dialog) follows the
+  // beta gate with the platform-admin preview bypass; management (schedule + delete)
+  // additionally requires a tenant-scoped operator session — the write API admits a
+  // platform admin (operatorId derived from the vehicle), so this affordance gate is
+  // what keeps an admin preview read-only. Mirrors `canManualBook`.
+  const canViewBlocks = isVisibleToViewer(isOperatorBlocksEnabled(), session?.user.role)
+  const canManageBlocks = canViewBlocks && isOperatorSession(session ?? null)
+
+  // Block dialogs: a schedule (create) form and a click-to-view detail. The schedule
+  // slot prefill carries the clicked vehicle + range; the detail dialog is keyed on
+  // the selected block.
+  const [scheduleBlockOpen, setScheduleBlockOpen] = useState(false)
+  const [blockSlotRange, setBlockSlotRange] = useState<{ start: Date; end: Date } | null>(null)
+  const [blockSlotVehicleId, setBlockSlotVehicleId] = useState<string | undefined>(undefined)
+  const [selectedBlock, setSelectedBlock] = useState<BlockCalendarEvent | null>(null)
+
   // The dialog's pickup/return store list — fetched for operators (the only role
   // that can manual-book), so it's ready the moment they open the dialog and a
   // read-only viewer never pays for it.
@@ -107,8 +135,23 @@ export function OperatorBookingsRoute() {
   const { data: bookings } = useSuspenseQuery(operatorCalendarQueryOptions(from, to))
   const { data: vehicles } = useSuspenseQuery(operatorCalendarVehiclesQueryOptions())
 
+  // Blocks are an additive layer (not in the suspense loader): a non-suspense query
+  // that degrades to empty on error/disabled, so a blocks-read failure never blanks
+  // the whole calendar (the coupling that broke the portal when it read fleet-overview).
+  const { data: blocks } = useQuery({
+    ...operatorCalendarBlocksQueryOptions(from, to),
+    enabled: canViewBlocks,
+  })
+
   const events = useMemo(() => toCalendarEvents(bookings), [bookings])
+  const blockEvents = useMemo(
+    () => (canViewBlocks ? blocksToCalendarEvents(blocks ?? []) : []),
+    [canViewBlocks, blocks],
+  )
+  // One union list across the vehicle axis: bookings (status-colored) + block bands.
+  const items = useMemo<CalendarItem[]>(() => [...events, ...blockEvents], [events, blockEvents])
   const resources = useMemo(() => fleetToResources(vehicles), [vehicles])
+  const vehiclesById = useMemo(() => new Map(vehicles.map((v) => [v.id, v.name])), [vehicles])
   const manualBookingLocations = useMemo(
     () => (locationRows ?? []).map((l) => ({ id: l.id, name: l.name })),
     [locationRows],
@@ -116,7 +159,7 @@ export function OperatorBookingsRoute() {
 
   const vehicleIds = useMemo(() => vehicles.map((v) => v.id), [vehicles])
   const filters = useCalendarFilters(vehicleIds)
-  const visibleEvents = useMemo(() => filters.filterEvents(events), [filters, events])
+  const visibleEvents = useMemo(() => filters.filterEvents(items), [filters, items])
   const visibleResources = useMemo(() => filters.filterResources(resources), [filters, resources])
 
   // The timeline renders fleet ROWS from the raw booking rows (not rbc events), so
@@ -151,19 +194,29 @@ export function OperatorBookingsRoute() {
     [navigate],
   )
 
-  const handleSelectEvent = useCallback(
-    (item: CalendarItem) => {
-      // #1101: dispatch by type. A booking navigates to its detail; the block branch
-      // (open BlockDetailDialog) lands with the blocks layer in B5 — until then only
-      // bookings appear on the calendar, so this is total for the current item set.
-      if (item.type === 'booking') {
-        navigate({
-          to: '/$locale/manage/bookings/$bookingId',
-          params: { locale, bookingId: item.id },
-        })
-      }
+  // The timeline emits a bare booking id; the calendar emits a CalendarItem it must
+  // dispatch by type. Share one navigate-to-booking so both land on the same detail.
+  const navigateToBooking = useCallback(
+    (bookingId: string) => {
+      navigate({
+        to: '/$locale/manage/bookings/$bookingId',
+        params: { locale, bookingId },
+      })
     },
     [navigate, locale],
+  )
+
+  const handleSelectEvent = useCallback(
+    (item: CalendarItem) => {
+      // #1101: dispatch by the discriminant. A booking navigates to its detail page;
+      // a block opens the block-detail dialog (view + delete).
+      if (item.type === 'booking') {
+        navigateToBooking(item.id)
+      } else {
+        setSelectedBlock(item)
+      }
+    },
+    [navigateToBooking],
   )
 
   // Both the header button and a calendar slot-click open the dialog; a slot also
@@ -173,6 +226,31 @@ export function OperatorBookingsRoute() {
     setBookingDialogOpen(true)
   }, [])
 
+  // The header button opens the schedule dialog with no prefill (vehicle defaults to
+  // the first car, empty range).
+  const handleOpenScheduleBlock = useCallback(() => {
+    setBlockSlotRange(null)
+    setBlockSlotVehicleId(undefined)
+    setScheduleBlockOpen(true)
+  }, [])
+
+  // Slot-select precedence (one gesture, two possible dialogs): manual-booking keeps
+  // the empty-slot drag when enabled (zero regression); otherwise a block-manager's
+  // slot prefills the schedule dialog with the clicked vehicle + range. Read-only
+  // viewers get neither (onSelectSlot omitted below), keeping the calendar view-only.
+  const handleSelectSlot = useCallback(
+    (range: { start: Date; end: Date; resourceId?: string }) => {
+      if (canManualBook) {
+        handleOpenManualBooking({ start: range.start, end: range.end })
+      } else if (canManageBlocks) {
+        setBlockSlotRange({ start: range.start, end: range.end })
+        setBlockSlotVehicleId(range.resourceId)
+        setScheduleBlockOpen(true)
+      }
+    },
+    [canManualBook, canManageBlocks, handleOpenManualBooking],
+  )
+
   return (
     <main className="flex-1 px-4 py-10 sm:px-6 lg:px-8">
       <div className="mx-auto max-w-7xl">
@@ -181,11 +259,18 @@ export function OperatorBookingsRoute() {
             <h1 className="text-3xl font-bold tracking-tight sm:text-4xl">{t('title')}</h1>
             <p className="mt-2 text-lg text-muted-foreground">{t('subtitle')}</p>
           </div>
-          {canManualBook && (
-            <Button type="button" onClick={() => handleOpenManualBooking()}>
-              {t('newBooking.action')}
-            </Button>
-          )}
+          <div className="flex gap-2">
+            {canManageBlocks && (
+              <Button type="button" variant="outline" onClick={handleOpenScheduleBlock}>
+                {t('blocks.scheduleAction')}
+              </Button>
+            )}
+            {canManualBook && (
+              <Button type="button" onClick={() => handleOpenManualBooking()}>
+                {t('newBooking.action')}
+              </Button>
+            )}
+          </div>
         </header>
         <div className="flex gap-6">
           <CalendarSidebar vehicles={vehicles} filters={filters} />
@@ -198,20 +283,23 @@ export function OperatorBookingsRoute() {
                 locale={locale}
                 onViewChange={handleViewChange}
                 onDateChange={handleDateChange}
-                onSelectEvent={handleSelectEvent}
+                onSelectEvent={navigateToBooking}
               />
             ) : (
-              <BookingsCalendar
-                events={visibleEvents}
-                resources={visibleResources}
-                view={view}
-                date={anchorDate}
-                locale={locale}
-                onViewChange={handleViewChange}
-                onDateChange={handleDateChange}
-                onSelectEvent={handleSelectEvent}
-                onSelectSlot={canManualBook ? handleOpenManualBooking : undefined}
-              />
+              <>
+                {canViewBlocks && <BlockLegend />}
+                <BookingsCalendar
+                  events={visibleEvents}
+                  resources={visibleResources}
+                  view={view}
+                  date={anchorDate}
+                  locale={locale}
+                  onViewChange={handleViewChange}
+                  onDateChange={handleDateChange}
+                  onSelectEvent={handleSelectEvent}
+                  onSelectSlot={canManualBook || canManageBlocks ? handleSelectSlot : undefined}
+                />
+              </>
             )}
           </div>
         </div>
@@ -224,6 +312,27 @@ export function OperatorBookingsRoute() {
           locations={manualBookingLocations}
           csrfToken={session?.csrfToken ?? ''}
           initialRange={slotRange ?? undefined}
+        />
+      )}
+      {canManageBlocks && (
+        <ScheduleBlockDialog
+          open={scheduleBlockOpen}
+          onOpenChange={setScheduleBlockOpen}
+          vehicles={vehicles}
+          csrfToken={session?.csrfToken ?? ''}
+          initialVehicleId={blockSlotVehicleId}
+          initialRange={blockSlotRange ?? undefined}
+        />
+      )}
+      {canViewBlocks && (
+        <BlockDetailDialog
+          key={selectedBlock?.id ?? 'closed'}
+          block={selectedBlock}
+          onClose={() => setSelectedBlock(null)}
+          vehicleName={selectedBlock ? (vehiclesById.get(selectedBlock.resourceId) ?? null) : null}
+          canManage={canManageBlocks}
+          csrfToken={session?.csrfToken ?? ''}
+          locale={locale}
         />
       )}
     </main>
