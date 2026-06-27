@@ -1474,6 +1474,31 @@ describe('BookingService.create — CLASS_COMBO (#464 2d.3)', () => {
     expect(c.totalPrice).toBe(s.totalPrice)
     // 2 days × (10000 base + 2000 insurance) + 1100 add-on = 25100.
     expect(s.totalPrice).toBe(25100)
+
+    // The BOOKING_CREATED audit payload also mirrors the snapshots (the audit
+    // trail keys off it, e.g. for fee disputes). Pin event-payload parity too,
+    // so a field dropped from one path's append() call can't slip past the
+    // booking-row parity assertions above.
+    const [sEvent] = await h.repos.bookingEventRepo.findByBookingId(SYSTEM_CONTEXT, s.id)
+    const [cEvent] = await h.repos.bookingEventRepo.findByBookingId(SYSTEM_CONTEXT, c.id)
+    expect(sEvent?.type).toBe('BOOKING_CREATED')
+    expect(cEvent?.type).toBe('BOOKING_CREATED')
+    expect(cEvent?.payload).toMatchObject({
+      type: 'BOOKING_CREATED',
+      classId: s.classId,
+      insuranceSnapshot: s.insuranceSnapshot,
+      feeSnapshot: s.feeSnapshot,
+      addOnSnapshot: s.addOnSnapshot,
+      totalPrice: s.totalPrice,
+    })
+    expect(sEvent?.payload).toMatchObject({
+      type: 'BOOKING_CREATED',
+      classId: s.classId,
+      insuranceSnapshot: s.insuranceSnapshot,
+      feeSnapshot: s.feeSnapshot,
+      addOnSnapshot: s.addOnSnapshot,
+      totalPrice: s.totalPrice,
+    })
   })
 })
 
