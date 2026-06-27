@@ -36,6 +36,15 @@ export class InMemoryComplianceAlertLogRepository implements ComplianceAlertLogR
     return keys
   }
 
+  async latestSentAtForOperator(operatorId: string): Promise<Date | null> {
+    let latest: Date | null = null
+    for (const row of this.store.values()) {
+      if (row.operatorId !== operatorId) continue
+      if (latest === null || row.sentAt.getTime() > latest.getTime()) latest = row.sentAt
+    }
+    return latest
+  }
+
   async recordMany(alerts: RecordComplianceAlert[]): Promise<void> {
     for (const data of alerts) {
       const key = complianceAlertKey(data.vehicleId, data.documentType, data.thresholdBand)

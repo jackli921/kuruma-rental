@@ -3,6 +3,7 @@ import { type SQL, and, count, desc, eq, ilike, inArray, isNull, lt, or, sql } f
 import { type CallerContext, ForbiddenError } from '../../middleware/auth'
 import type { Booking } from '../../stores'
 import { bookingReadScope } from '../../tenancy'
+import type { OperatorBookingCounts } from '@kuruma/shared/types/operator-summary'
 import type { AdminBookingFilters, BookingFilters, BookingRepository } from '../types'
 import { type Db, bookingColumns, toBooking } from './shared'
 
@@ -32,6 +33,28 @@ export class DrizzleBookingRepository implements BookingRepository {
       .from(bookings)
       .where(eq(bookings.operatorId, operatorId))
     return rows.map((r) => r.renterId)
+  }
+
+  // #1120 admin operator summary: total (non-CANCELLED) and upcoming
+  // (CONFIRMED/ACTIVE, future startAt) booking counts for one operator, in one
+  // query. Mirrors the in-memory and operator-overview semantics.
+  async countBookingsForOperator(
+    operatorId: string,
+    now: Date,
+  ): Promise<OperatorBookingCounts> {
+    const [row] = await this.db
+      .select({
+        total: sql<number>`count(*) filter (where ${bookings.status} <> 'CANCELLED')`.mapWith(
+          Number,
+        ),
+        upcoming:
+          sql<number>`count(*) filter (where ${bookings.status} in ('CONFIRMED', 'ACTIVE') and ${bookings.startAt} >= ${now})`.mapWith(
+            Number,
+          ),
+      })
+      .from(bookings)
+      .where(eq(bookings.operatorId, operatorId))
+    return { total: row?.total ?? 0, upcoming: row?.upcoming ?? 0 }
   }
 
   async findAll(ctx: CallerContext, filters?: BookingFilters): Promise<Booking[]> {

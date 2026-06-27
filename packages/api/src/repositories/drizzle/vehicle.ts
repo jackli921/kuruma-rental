@@ -1,5 +1,8 @@
 import { vehicles } from '@kuruma/shared/db/schema'
-import { type SQL, and, count, eq, inArray, ne, sql } from 'drizzle-orm'
+import { EXPIRY_SOON_DAYS } from '@kuruma/shared/lib/expiry'
+import { jstDateString } from '@kuruma/shared/lib/compliance'
+import type { VehicleComplianceCounts } from '@kuruma/shared/types/operator-summary'
+import { type SQL, type SQLWrapper, and, count, eq, inArray, ne, sql } from 'drizzle-orm'
 import { type CallerContext, requireFleetWriteScope } from '../../middleware/auth'
 import type { Vehicle } from '../../stores'
 import { operatorReadScope } from '../../tenancy'
@@ -117,6 +120,41 @@ export class DrizzleVehicleRepository implements VehicleRepository {
       .where(and(inArray(vehicles.operatorId, operatorIds), ne(vehicles.status, 'RETIRED')))
       .groupBy(vehicles.operatorId)
     return new Map(rows.map((r) => [r.operatorId, r.value]))
+  }
+
+  // #1120: per-operator compliance roll-up over the live fleet, in one query.
+  // The date boundaries mirror `computeExpiryStatus` exactly (today = JST calendar
+  // day of `asOf`; soon-window = today + EXPIRY_SOON_DAYS) so the SQL buckets and
+  // the in-memory impl stay behaviourally identical, and the two attention buckets
+  // are kept mutually exclusive (needing-docs excludes expiring-soon).
+  async countComplianceForOperator(
+    operatorId: string,
+    asOf: Date,
+  ): Promise<VehicleComplianceCounts> {
+    const today = jstDateString(asOf)
+    const threshold = new Date(today)
+    threshold.setUTCDate(threshold.getUTCDate() + EXPIRY_SOON_DAYS)
+    const thresholdIso = threshold.toISOString().slice(0, 10)
+
+    const needsDoc = (c: SQLWrapper) => sql`(${c} is null or ${c} < ${today})`
+    const soon = (c: SQLWrapper) =>
+      sql`(${c} is not null and ${c} >= ${today} and ${c} <= ${thresholdIso})`
+    const needing = sql`(${needsDoc(vehicles.shakenExpiryDate)} or ${needsDoc(vehicles.insuranceExpiryDate)})`
+    const expiring = sql`(not ${needing} and (${soon(vehicles.shakenExpiryDate)} or ${soon(vehicles.insuranceExpiryDate)}))`
+
+    const [row] = await this.db
+      .select({
+        total: count(),
+        needingDocs: sql<number>`count(*) filter (where ${needing})`.mapWith(Number),
+        expiringSoon: sql<number>`count(*) filter (where ${expiring})`.mapWith(Number),
+      })
+      .from(vehicles)
+      .where(and(eq(vehicles.operatorId, operatorId), ne(vehicles.status, 'RETIRED')))
+    return {
+      total: row?.total ?? 0,
+      needingDocs: row?.needingDocs ?? 0,
+      expiringSoon: row?.expiringSoon ?? 0,
+    }
   }
 
   async create(

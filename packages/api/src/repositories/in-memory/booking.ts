@@ -1,3 +1,4 @@
+import type { OperatorBookingCounts } from '@kuruma/shared/types/operator-summary'
 import { type CallerContext, ForbiddenError } from '../../middleware/auth'
 import { BOOKING_CODE_CONSTRAINT, IDEMPOTENCY_CONSTRAINT, PG_ERROR } from '../../pg-errors'
 import type { Booking } from '../../stores'
@@ -213,6 +214,21 @@ export class InMemoryBookingRepository implements BookingRepository {
   // #1087: platform-overview total booking count across all operators (unscoped).
   async count(): Promise<number> {
     return this.store.size
+  }
+
+  // #1120 admin operator summary: mirrors the operator-overview booking semantics
+  // for one admin-named operator — total excludes CANCELLED; upcoming is a
+  // CONFIRMED/ACTIVE booking whose pickup is still in the future.
+  async countBookingsForOperator(operatorId: string, now: Date): Promise<OperatorBookingCounts> {
+    let total = 0
+    let upcoming = 0
+    for (const b of this.store.values()) {
+      if (b.operatorId !== operatorId) continue
+      if (b.status === 'CANCELLED') continue
+      total++
+      if (BLOCKING_STATUSES.has(b.status) && b.startAt.getTime() >= now.getTime()) upcoming++
+    }
+    return { total, upcoming }
   }
 
   async countActiveForVehicles(vehicleIds: string[]): Promise<number> {
