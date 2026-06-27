@@ -1257,7 +1257,8 @@
       "anomalies": "決済の異常",
       "documents": "書類",
       "governance": "同意ガバナンス",
-      "customers": "顧客"
+      "customers": "顧客",
+      "backToSite": "サイトに戻る"
     },
     "home": {
       "title": "プラットフォーム管理",

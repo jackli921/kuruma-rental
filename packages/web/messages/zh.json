@@ -1257,7 +1257,8 @@
       "anomalies": "支付异常",
       "documents": "证件",
       "governance": "同意治理",
-      "customers": "客户"
+      "customers": "客户",
+      "backToSite": "返回网站"
     },
     "home": {
       "title": "平台管理",
