@@ -39,6 +39,37 @@ export function operatorReadScope(ctx: CallerContext): OperatorReadScope {
 }
 
 /**
+ * #1101: row-scope for the fleet-wide blocks read. Blocks are operator-internal
+ * management data, so the route gates MANAGEMENT_READ_ROLES (RENTER/PARTNER → 403
+ * before this runs). This resolver must be TOTAL over the gate's admitted set and
+ * fail closed: MANAGEMENT_READ_ROLES (= BUSINESS_ROLES) also admits legacy
+ * STAFF/ADMIN, and #487 removed them from SCOPE_BYPASS_ROLES, so they are neither
+ * bypass nor isOperatorRole — they must read nothing. Do NOT copy
+ * `operatorReadScope` (`!isOperatorRole → all`): that catalog pattern would leak
+ * cross-tenant blocks to a legacy admin.
+ *
+ * PARTNER is branched to `none` BEFORE the bypass check (mirroring
+ * `bookingReadScope`): a PARTNER key carries `bypassScope: true` via
+ * SCOPE_BYPASS_ROLES, so a bypass-first resolver would hand Trip.com every
+ * operator's blocks. The route gate 403s PARTNER today, but encoding the denial
+ * here makes the resolver safe to reuse on a future route without the leak
+ * shipping silently.
+ */
+export type VehicleBlockReadScope =
+  | { kind: 'all' }
+  | { kind: 'operator'; operatorId: string }
+  | { kind: 'none' }
+
+export function vehicleBlockReadScope(ctx: CallerContext): VehicleBlockReadScope {
+  if (ctx.role === 'PARTNER') return { kind: 'none' } // never expose internal blocks to a channel
+  if (ctx.bypassScope) return { kind: 'all' }
+  if (isOperatorRole(ctx.role)) {
+    return ctx.operatorId ? { kind: 'operator', operatorId: ctx.operatorId } : { kind: 'none' }
+  }
+  return { kind: 'none' } // in-gate but neither bypass nor tenant: read nothing
+}
+
+/**
  * The two transport-supplied knobs a cross-operator list read carries: an explicit
  * target `operatorId`, or `includeAll` to opt into reading every tenant at once.
  */
