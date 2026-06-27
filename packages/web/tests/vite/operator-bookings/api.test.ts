@@ -249,6 +249,7 @@ describe('fetchCalendarBookings', () => {
         bookingCode: 'ABCD2345',
         status: 'CONFIRMED',
         startAt: '2026-07-01T01:00:00.000Z',
+        endAt: '2026-07-03T01:00:00.000Z',
         effectiveEndAt: '2026-07-03T02:00:00.000Z',
         vehicleId: 'veh-1',
         renterName: 'Jane',
@@ -299,6 +300,28 @@ describe('fetchCalendarBookings', () => {
     )
 
     await expect(fetchCalendarBookings('a', 'b')).rejects.toBeInstanceOf(ApiError)
+  })
+
+  it('follows the cursor across pages so >100 bookings are never silently dropped (#1100 #2)', async () => {
+    // 130 bookings (a 50-car fleet over a multi-day window) span two pages. The old
+    // single-fetch + 100-cap returned only the first page with no signal.
+    const page1 = Array.from({ length: 100 }, (_, i) => calendarRaw({ id: `bk-${i}` }))
+    const page2 = Array.from({ length: 30 }, (_, i) => calendarRaw({ id: `bk-${100 + i}` }))
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(jsonResponse({ success: true, data: page1, nextCursor: 'cursor-2' }))
+      .mockResolvedValueOnce(jsonResponse({ success: true, data: page2, nextCursor: null }))
+    vi.stubGlobal('fetch', fetchMock)
+
+    const rows = await fetchCalendarBookings('a', 'b')
+
+    expect(fetchMock).toHaveBeenCalledTimes(2)
+    // The second request echoed the cursor the first page returned.
+    expect(
+      new URL(fetchMock.mock.calls[1]![0] as string, 'http://x').searchParams.get('cursor'),
+    ).toBe('cursor-2')
+    // Every booking survived, in order — none dropped at the page boundary.
+    expect(rows.map((r) => r.id)).toEqual(Array.from({ length: 130 }, (_, i) => `bk-${i}`))
   })
 })
 
