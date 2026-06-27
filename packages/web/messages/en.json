@@ -249,6 +249,7 @@
         "previous": "Previous",
         "next": "Next",
         "views": {
+          "timeline": "Timeline",
           "day": "Day",
           "week": "Week",
           "month": "Month"
@@ -256,6 +257,7 @@
         "noEventsInRange": "No bookings in this range",
         "showMore": "+{count} more",
         "viewFullDetails": "View full details",
+        "unassigned": "Unassigned",
         "sidebar": {
           "title": "Filters",
           "vehicles": {
@@ -1637,6 +1639,7 @@
   },
   "currency": {
     "label": "Display currency",
+    "approximately": "approximately",
     "disclaimer": "Indicative only — you're charged in JPY",
     "asOf": "Rates as of {date}"
   }

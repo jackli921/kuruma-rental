@@ -5,6 +5,7 @@ import type { ReactNode } from 'react'
 import { IntlProvider } from 'use-intl'
 import { describe, expect, it, vi } from 'vitest'
 import en from '../../../messages/en.json'
+import { renderWithUsdIndicative } from '../../support/currency'
 
 vi.mock('@tanstack/react-router', () => ({
   Link: ({
@@ -127,8 +128,18 @@ describe('StorefrontCard', () => {
     expect(screen.getByRole('img', { name: 'Store location' })).toBeInTheDocument()
   })
 
+  it('converts the from-price for the indicative note', async () => {
+    renderWithUsdIndicative(
+      <StorefrontCard
+        storefront={makeStorefront({ fromDailyPriceJpy: 30000 })}
+        from="2026-07-01T10:00"
+        to="2026-07-03T10:00"
+      />,
+    )
+    expect(await screen.findByText(/≈ \$201/)).toBeTruthy()
+  })
+
   it('renders a skeleton operator-rating badge while the parent batch is in flight (#1085)', () => {
-    // Default — no operatorRating prop ⇒ `undefined` ⇒ skeleton, not "no reviews".
     renderCard(makeStorefront())
     expect(screen.getByTestId('rating-badge-skeleton')).toBeInTheDocument()
     expect(screen.queryByText(/no reviews/i)).toBeNull()
@@ -136,8 +147,6 @@ describe('StorefrontCard', () => {
 
   it('renders the operator rating once the batch resolves (#1085)', () => {
     renderCard(makeStorefront(), { operatorRating: { avg: 4.7, count: 23 } })
-    // Pin the exact glyph + count so a regression to "(23 reviews)" or omitting
-    // the star fails. The a11y label is the spelled-out form.
     expect(screen.getByText('★ 4.7 (23)')).toBeInTheDocument()
     expect(screen.getByLabelText('4.7 stars, 23 reviews')).toBeInTheDocument()
   })
@@ -145,7 +154,6 @@ describe('StorefrontCard', () => {
   it('renders the "no reviews yet" badge when the batch returns null for this operator (#1085)', () => {
     renderCard(makeStorefront(), { operatorRating: null })
     expect(screen.getByLabelText('No reviews yet')).toBeInTheDocument()
-    // null is distinct from in-flight — skeleton MUST NOT also be present.
     expect(screen.queryByTestId('rating-badge-skeleton')).toBeNull()
   })
 })

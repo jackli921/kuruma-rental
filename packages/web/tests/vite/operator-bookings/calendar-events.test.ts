@@ -79,6 +79,15 @@ describe('calendarRange', () => {
     return { from: new Date(from), to: new Date(to) }
   }
 
+  it('spans a fixed 14-day planning window from the anchor day in timeline view', () => {
+    const { from, to } = span('timeline')
+    expect(from.getHours()).toBe(0) // anchored at local midnight of the anchor day
+    expect(from.getTime()).toBeLessThanOrEqual(anchor.getTime())
+    const days = (to.getTime() - from.getTime()) / DAY_MS
+    expect(days).toBeGreaterThanOrEqual(13.9) // ~14 days (DST-tolerant), not 13 or 15
+    expect(days).toBeLessThanOrEqual(14.1)
+  })
+
   it('spans the anchor day in day view (~24h, containing the anchor)', () => {
     const { from, to } = span('day')
     expect(from.getTime()).toBeLessThanOrEqual(anchor.getTime())
@@ -103,11 +112,13 @@ describe('calendarRange', () => {
 })
 
 describe('parseCalendarView', () => {
-  it('keeps a valid view and defaults anything else to week', () => {
+  it('keeps a valid view and defaults anything else to the timeline board', () => {
+    expect(parseCalendarView('timeline')).toBe('timeline')
     expect(parseCalendarView('day')).toBe('day')
+    expect(parseCalendarView('week')).toBe('week')
     expect(parseCalendarView('month')).toBe('month')
-    expect(parseCalendarView('agenda')).toBe('week') // a real rbc view we do not offer
-    expect(parseCalendarView(undefined)).toBe('week')
+    expect(parseCalendarView('agenda')).toBe('timeline') // a real rbc view we do not offer
+    expect(parseCalendarView(undefined)).toBe('timeline')
   })
 })
 

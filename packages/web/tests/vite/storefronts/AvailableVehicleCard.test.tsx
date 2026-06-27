@@ -5,6 +5,7 @@ import type { ReactNode } from 'react'
 import { IntlProvider } from 'use-intl'
 import { describe, expect, it, vi } from 'vitest'
 import en from '../../../messages/en.json'
+import { renderWithUsdIndicative } from '../../support/currency'
 
 vi.mock('@tanstack/react-router', () => ({
   Link: ({
@@ -116,8 +117,19 @@ describe('AvailableVehicleCard', () => {
     expect(screen.getByText('1 bag')).toBeInTheDocument()
   })
 
+  it('converts the from-price for the indicative note', async () => {
+    renderWithUsdIndicative(
+      <AvailableVehicleCard
+        vehicle={makeVehicle({ dailyRateJpy: 30000 })}
+        locationId="loc-1"
+        from="2026-07-01T10:00"
+        to="2026-07-03T10:00"
+      />,
+    )
+    expect(await screen.findByText(/≈ \$201/)).toBeTruthy()
+  })
+
   it('renders a skeleton class-rating badge while the parent batch is in flight (#1085)', () => {
-    // Default — classId='cls-compact', no classRating prop ⇒ undefined ⇒ skeleton.
     renderCard()
     expect(screen.getByTestId('rating-badge-skeleton')).toBeInTheDocument()
   })
@@ -130,8 +142,6 @@ describe('AvailableVehicleCard', () => {
 
   it('renders no class badge AT ALL when classId is null (#1085 — distinct from rated-zero)', () => {
     renderCard(makeVehicle({ classId: null, classLabel: '' }))
-    // Neither skeleton nor "no reviews" copy — the parent suppresses the entire
-    // line. The card still shows the vehicle name.
     expect(screen.queryByTestId('rating-badge-skeleton')).toBeNull()
     expect(screen.queryByText(/no reviews/i)).toBeNull()
     expect(screen.queryByLabelText(/stars,/)).toBeNull()
