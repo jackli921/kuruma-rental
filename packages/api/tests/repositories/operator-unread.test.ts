@@ -68,3 +68,37 @@ describe('operator unread counter (InMemory)', () => {
     expect(await operatorUnread()).toBe(1)
   })
 })
+
+// #1205 slice 4: create() surfaces the post-bump operator-unread state so the
+// service can fire the OPERATOR_NEW_MESSAGE email on the 0->1 transition without a
+// read-then-check race. The repo reports STATE (count); the service owns the policy
+// (count === 1 ⟺ the window opened).
+describe('operator-unread transition signal from create() (InMemory)', () => {
+  it('returns the post-bump state on the first renter send into a booking+operator thread', async () => {
+    const { message, operatorUnread } = await messageRepo.create(renterCtx(RENTER), threadId, 'hi')
+    expect(message.content).toBe('hi')
+    expect(operatorUnread).toEqual({ operatorId: OP, bookingId: 'booking-a', unreadCount: 1 })
+  })
+
+  it('returns the running count on subsequent renter sends (service decides 0->1 via === 1)', async () => {
+    await messageRepo.create(renterCtx(RENTER), threadId, 'hi')
+    const { operatorUnread } = await messageRepo.create(renterCtx(RENTER), threadId, 'again')
+    expect(operatorUnread).toEqual({ operatorId: OP, bookingId: 'booking-a', unreadCount: 2 })
+  })
+
+  it('returns null operatorUnread on an operator reply (no email trigger)', async () => {
+    await messageRepo.create(renterCtx(RENTER), threadId, 'hi')
+    const { operatorUnread } = await messageRepo.create(
+      opCtx(STAFF, OP),
+      threadId,
+      'how can I help?',
+    )
+    expect(operatorUnread).toBeNull()
+  })
+
+  it('returns null when the thread has no operator/booking (a bookingless thread)', async () => {
+    const bareThreadId = (await threadRepo.create(ADMIN, null, [RENTER], null, null)).id
+    const { operatorUnread } = await messageRepo.create(renterCtx(RENTER), bareThreadId, 'hi')
+    expect(operatorUnread).toBeNull()
+  })
+})

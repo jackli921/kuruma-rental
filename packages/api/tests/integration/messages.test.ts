@@ -200,7 +200,7 @@ describe('DrizzleMessageRepository', () => {
       createdUserIds.push(alice!, bob!)
 
       const thread = await threadRepo.create(ctx(alice!), null, [alice!, bob!])
-      const message = await messageRepo.create(ctx(alice!), thread.id, 'hello world')
+      const { message } = await messageRepo.create(ctx(alice!), thread.id, 'hello world')
 
       expect(message.id).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/)
       expect(message.threadId).toBe(thread.id)
@@ -216,7 +216,7 @@ describe('DrizzleMessageRepository', () => {
       createdUserIds.push(alice!, bob!)
 
       const thread = await threadRepo.create(ctx(alice!), null, [alice!, bob!])
-      const message = await messageRepo.create(ctx(alice!), thread.id, 'hello')
+      const { message } = await messageRepo.create(ctx(alice!), thread.id, 'hello')
 
       // The legacy text column silently accepted invalid JSON (every later read
       // then threw on the ::jsonb cast). The jsonb column rejects it at the write

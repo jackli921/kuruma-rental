@@ -2,7 +2,7 @@ import { type CallerContext, PRIVILEGED_ROLES, requireOperatorScope } from '../.
 import { PG_ERROR } from '../../pg-errors'
 import type { Message } from '../../stores'
 import { threadReadScope } from '../../tenancy'
-import type { MessageRepository } from '../types'
+import type { MessageCreateResult, MessageRepository } from '../types'
 import type { InMemoryThreadRepository } from './thread'
 
 export class InMemoryMessageRepository implements MessageRepository {
@@ -51,7 +51,7 @@ export class InMemoryMessageRepository implements MessageRepository {
     threadId: string,
     content: string,
     idempotencyKey?: string | null,
-  ): Promise<Message> {
+  ): Promise<MessageCreateResult> {
     requireOperatorScope(ctx)
     if (idempotencyKey && this.idempotencyIndex.has(idempotencyKey)) {
       const err = new Error('unique_idempotency_key violation') as Error & { code: string }
@@ -71,15 +71,16 @@ export class InMemoryMessageRepository implements MessageRepository {
     }
     // A renter send (participant scope) bumps the operator's tenant-level unread;
     // an operator/admin reply does not. The renter's own per-participant unread is
-    // bumped for all non-sender participants inside _addMessage.
+    // bumped for all non-sender participants inside _addMessage, which also returns
+    // the post-bump operator-unread state (the 0->1 email trigger signal, #1205 s4).
     const isRenterSend = threadReadScope(ctx).kind === 'participant'
-    this.threadRepo._addMessage(message, isRenterSend)
+    const operatorUnread = this.threadRepo._addMessage(message, isRenterSend)
 
     if (idempotencyKey) {
       this.idempotencyIndex.set(idempotencyKey, message)
     }
 
-    return message
+    return { message, operatorUnread }
   }
 
   async findByThreadId(ctx: CallerContext, threadId: string): Promise<Message[]> {

@@ -2,7 +2,7 @@ import { type CallerContext, requireOperatorScope } from '../../middleware/auth'
 import { PG_ERROR } from '../../pg-errors'
 import type { Message, Thread, ThreadParticipant } from '../../stores'
 import { threadReadScope } from '../../tenancy'
-import type { ThreadRepository } from '../types'
+import type { OperatorUnreadTransition, ThreadRepository } from '../types'
 
 export class InMemoryThreadRepository implements ThreadRepository {
   private readonly threads = new Map<string, Thread>()
@@ -153,8 +153,10 @@ export class InMemoryThreadRepository implements ThreadRepository {
     return false
   }
 
-  // Exposed for InMemoryMessageRepository to add messages
-  _addMessage(message: Message, isRenterSend = false): void {
+  // Exposed for InMemoryMessageRepository to add messages. Returns the post-bump
+  // operator-unread state when a renter send raised a booking+operator thread's
+  // tenant counter (#1205 slice 4) — the 0->1 email trigger signal — else null.
+  _addMessage(message: Message, isRenterSend = false): OperatorUnreadTransition | null {
     this.messages.set(message.id, message)
     // Increment unread count for all participants except sender
     for (const [key, p] of this.participants) {
@@ -162,16 +164,15 @@ export class InMemoryThreadRepository implements ThreadRepository {
         this.participants.set(key, { ...p, unreadCount: p.unreadCount + 1 })
       }
     }
-    // A renter send also bumps the operator's tenant-level unread (#1205 slice 3).
-    if (isRenterSend) {
-      const thread = this.threads.get(message.threadId)
-      if (thread) {
-        this.threads.set(thread.id, {
-          ...thread,
-          operatorUnreadCount: thread.operatorUnreadCount + 1,
-        })
-      }
-    }
+    // Only a renter send bumps the operator's tenant-level unread (#1205 slice 3).
+    if (!isRenterSend) return null
+    const thread = this.threads.get(message.threadId)
+    if (!thread) return null
+    const unreadCount = thread.operatorUnreadCount + 1
+    this.threads.set(thread.id, { ...thread, operatorUnreadCount: unreadCount })
+    // The email needs both notNull keys; a bookingless thread bumps but never fires.
+    if (!thread.operatorId || !thread.bookingId) return null
+    return { operatorId: thread.operatorId, bookingId: thread.bookingId, unreadCount }
   }
 
   _getMessage(id: string): Message | undefined {

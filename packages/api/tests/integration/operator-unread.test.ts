@@ -76,4 +76,24 @@ describe('operator unread counter (Drizzle / real pg)', () => {
     await threadRepo.markAsRead(opCtx(staff, op), threadId)
     expect(await operatorUnread()).toBe(0)
   })
+
+  // #1205 slice 4: create() RETURNING surfaces the post-bump state. This thread has
+  // a real operatorId but NO bookingId, so the counter bumps yet the signal is null
+  // (the email needs both notNull keys) — proving the drizzle RETURNING + guard
+  // against real SQL without a full booking fixture.
+  it('returns null operatorUnread for a bookingless thread, though the counter bumps', async () => {
+    const { operatorUnread: signal } = await messageRepo.create(renterCtx(renter), threadId, 'hi')
+    expect(signal).toBeNull()
+    expect(await operatorUnread()).toBe(1)
+  })
+
+  it('returns null operatorUnread on an operator reply', async () => {
+    await messageRepo.create(renterCtx(renter), threadId, 'hi')
+    const { operatorUnread: signal } = await messageRepo.create(
+      opCtx(staff, op),
+      threadId,
+      'how can I help?',
+    )
+    expect(signal).toBeNull()
+  })
 })

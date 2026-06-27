@@ -2,7 +2,11 @@ import type { CreateThreadInput } from '@kuruma/shared/validators/message'
 import type { CallerContext } from '../middleware/auth'
 import { PRIVILEGED_ROLES } from '../middleware/auth'
 import { PG_ERROR, pgErrorCode } from '../pg-errors'
-import type { MessageRepository, ThreadRepository } from '../repositories/types'
+import type {
+  MessageCreateResult,
+  MessageRepository,
+  ThreadRepository,
+} from '../repositories/types'
 import type { Message, Thread } from '../stores'
 
 type ThreadListItem = Awaited<ReturnType<ThreadRepository['findAll']>>[number]
@@ -75,12 +79,17 @@ export class MessageService {
     content: string,
     idempotencyKey: string | null,
   ): Promise<{ message: Message; status: 200 | 201 }> {
-    const { record, status } = await idempotentCreate(
+    // create() returns the message plus the post-bump operator-unread state; an
+    // idempotent replay (the find arm) has no transition, so wrap it as null.
+    const { record, status } = await idempotentCreate<MessageCreateResult>(
       idempotencyKey,
-      (k) => this.messageRepo.findByIdempotencyKey(ctx, k),
+      async (k) => {
+        const found = await this.messageRepo.findByIdempotencyKey(ctx, k)
+        return found ? { message: found, operatorUnread: null } : undefined
+      },
       () => this.messageRepo.create(ctx, threadId, content, idempotencyKey),
     )
-    return { message: record, status }
+    return { message: record.message, status }
   }
 
   async markRead(ctx: CallerContext, threadId: string): Promise<MarkReadResult> {

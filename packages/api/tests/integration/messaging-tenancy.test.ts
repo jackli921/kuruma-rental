@@ -51,8 +51,8 @@ beforeEach(async () => {
 
   threadA = (await threadRepo.create(ADMIN, null, [renterA], null, opA)).id
   threadB = (await threadRepo.create(ADMIN, null, [renterB], null, opB)).id
-  msgAId = (await messageRepo.create(renterCtx(renterA), threadA, 'hi from A')).id
-  msgBId = (await messageRepo.create(renterCtx(renterB), threadB, 'hi from B')).id
+  msgAId = (await messageRepo.create(renterCtx(renterA), threadA, 'hi from A')).message.id
+  msgBId = (await messageRepo.create(renterCtx(renterB), threadB, 'hi from B')).message.id
 })
 
 afterEach(async () => {
@@ -123,7 +123,11 @@ describe('operator message scoping (Drizzle)', () => {
   })
 
   it('operator A can reply in its own thread; renter unread bumps', async () => {
-    const reply = await messageRepo.create(opCtx(staffA, opA), threadA, 'operator reply')
+    const { message: reply } = await messageRepo.create(
+      opCtx(staffA, opA),
+      threadA,
+      'operator reply',
+    )
     expect(reply.senderId).toBe(staffA)
 
     const found = await threadRepo.findById(ADMIN, threadA)

@@ -688,6 +688,27 @@ export interface ThreadRepository {
   markAsRead(ctx: CallerContext, threadId: string): Promise<void>
 }
 
+/**
+ * #1205 slice 4: the post-bump operator-unread state a renter send produced,
+ * surfaced from create() so the service fires the OPERATOR_NEW_MESSAGE email on
+ * the 0->1 transition without a read-then-check race (two concurrent renter sends
+ * would both read the settled count and miss the window). Non-null ONLY when the
+ * send bumped a booking+operator thread's tenant unread; `unreadCount` is the
+ * post-bump value and `=== 1` is exactly the 0->1 transition. bookingId/operatorId
+ * are both required (notification_log needs both notNull), so a thread missing
+ * either yields null even though the counter still incremented.
+ */
+export interface OperatorUnreadTransition {
+  operatorId: string
+  bookingId: string
+  unreadCount: number
+}
+
+export interface MessageCreateResult {
+  message: Message
+  operatorUnread: OperatorUnreadTransition | null
+}
+
 export interface MessageRepository {
   /**
    * Find a message by id, scoped to the caller. Non-privileged callers
@@ -707,7 +728,7 @@ export interface MessageRepository {
     threadId: string,
     content: string,
     idempotencyKey?: string | null,
-  ): Promise<Message>
+  ): Promise<MessageCreateResult>
   findByThreadId(ctx: CallerContext, threadId: string): Promise<Message[]>
   /**
    * Merge a single language translation into the message's `translations`

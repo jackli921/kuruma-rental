@@ -8,7 +8,7 @@ import {
 } from '../../middleware/auth'
 import type { Message } from '../../stores'
 import { threadReadScope } from '../../tenancy'
-import type { MessageRepository } from '../types'
+import type { MessageCreateResult, MessageRepository } from '../types'
 import { type Db, messageColumns, normaliseMessage } from './shared'
 
 export class DrizzleMessageRepository implements MessageRepository {
@@ -107,7 +107,7 @@ export class DrizzleMessageRepository implements MessageRepository {
     threadId: string,
     content: string,
     idempotencyKey?: string | null,
-  ): Promise<Message> {
+  ): Promise<MessageCreateResult> {
     requireOperatorScope(ctx)
     return this.runTransaction(async (tx) => {
       const [inserted] = (await tx
@@ -132,8 +132,10 @@ export class DrizzleMessageRepository implements MessageRepository {
 
       // A renter send (participant scope) also bumps the operator's tenant-level
       // unread (#1205 slice 3); an operator/admin reply only touches updatedAt.
+      // RETURNING the post-bump row makes the 0->1 transition (unreadCount === 1)
+      // race-free — no separate read another concurrent send could settle (#1205 s4).
       const isRenterSend = threadReadScope(ctx).kind === 'participant'
-      await tx
+      const [updatedThread] = await tx
         .update(threads)
         .set(
           isRenterSend
@@ -144,8 +146,24 @@ export class DrizzleMessageRepository implements MessageRepository {
             : { updatedAt: sql`now()` },
         )
         .where(eq(threads.id, threadId))
+        .returning({
+          operatorId: threads.operatorId,
+          bookingId: threads.bookingId,
+          operatorUnreadCount: threads.operatorUnreadCount,
+        })
 
-      return normaliseMessage(inserted)
+      // Non-null only when the bump landed on a booking+operator thread (the email
+      // needs both notNull keys); otherwise the counter still moved but nothing fires.
+      const operatorUnread =
+        isRenterSend && updatedThread?.operatorId && updatedThread.bookingId
+          ? {
+              operatorId: updatedThread.operatorId,
+              bookingId: updatedThread.bookingId,
+              unreadCount: updatedThread.operatorUnreadCount,
+            }
+          : null
+
+      return { message: normaliseMessage(inserted), operatorUnread }
     })
   }
 

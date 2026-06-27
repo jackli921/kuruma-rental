@@ -29,7 +29,11 @@ beforeEach(async () => {
   threadRepo = new InMemoryThreadRepository()
   messageRepo = new InMemoryMessageRepository(threadRepo)
   const thread = await threadRepo.create({ userId: 'u1', role: 'RENTER' }, null, ['u1', 'u2'])
-  const msg = await messageRepo.create({ userId: 'u1', role: 'RENTER' }, thread.id, 'こんにちは')
+  const { message: msg } = await messageRepo.create(
+    { userId: 'u1', role: 'RENTER' },
+    thread.id,
+    'こんにちは',
+  )
   messageId = msg.id
 })
 

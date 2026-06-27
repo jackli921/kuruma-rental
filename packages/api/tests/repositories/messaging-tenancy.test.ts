@@ -42,8 +42,8 @@ beforeEach(async () => {
   // does, server-side). operatorId is the tenant boundary under test.
   threadA = await threadRepo.create(ADMIN, 'booking-a', [RENTER_A], null, OP_A)
   threadB = await threadRepo.create(ADMIN, 'booking-b', [RENTER_B], null, OP_B)
-  msgAId = (await messageRepo.create(renterCtx(RENTER_A), threadA.id, 'hi from A')).id
-  msgBId = (await messageRepo.create(renterCtx(RENTER_B), threadB.id, 'hi from B')).id
+  msgAId = (await messageRepo.create(renterCtx(RENTER_A), threadA.id, 'hi from A')).message.id
+  msgBId = (await messageRepo.create(renterCtx(RENTER_B), threadB.id, 'hi from B')).message.id
 })
 
 describe('operator thread scoping (InMemory)', () => {
@@ -112,7 +112,11 @@ describe('operator message scoping (InMemory)', () => {
   })
 
   it('operator A can reply in its own thread; renter unread bumps', async () => {
-    const reply = await messageRepo.create(opCtx(STAFF_A, OP_A), threadA.id, 'operator reply')
+    const { message: reply } = await messageRepo.create(
+      opCtx(STAFF_A, OP_A),
+      threadA.id,
+      'operator reply',
+    )
     expect(reply.senderId).toBe(STAFF_A)
 
     const found = await threadRepo.findById(ADMIN, threadA.id)
