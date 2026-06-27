@@ -1,12 +1,13 @@
 import { buttonVariants } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
+import { IndicativeNote } from '@/vite/currency'
 import { carryForwardFilters } from '@/vite/storefronts/params'
 import type { SearchResultItem } from '@kuruma/shared/types/search-result'
 import { Link } from '@tanstack/react-router'
 import { Car, ChevronLeft, ChevronRight, Navigation } from 'lucide-react'
 import { useState } from 'react'
 import { useTranslations } from 'use-intl'
-import { resultPriceLabel, resultTitle } from './result'
+import { resultPriceJpy, resultPriceLabel, resultTitle } from './result'
 
 interface MapPopupCarouselProps {
   /** Every car at the selected pickup location (the map's co-located group). The
@@ -58,6 +59,7 @@ export function MapPopupCarousel({
 
   const photo = current.photos[0]
   const title = resultTitle(current)
+  const priceJpy = resultPriceJpy(current)
   // A combo's badge marks the deal — the class label is already the title, so
   // repeating it as a badge would read twice. SPECIFIC keeps its class badge.
   // Switched (vs ternary) so a future `kind` is a tsc error here — the web ships
@@ -134,7 +136,10 @@ export function MapPopupCarousel({
             {badge}
           </span>
         </div>
-        <p className="font-medium text-foreground">{resultPriceLabel(current, t)}</p>
+        <div>
+          <p className="font-medium text-foreground">{resultPriceLabel(current, t)}</p>
+          {priceJpy != null && <IndicativeNote jpy={priceJpy} />}
+        </div>
         {current.kind === 'CLASS_COMBO' && (
           <p className="text-xs text-muted-foreground">
             {t('available', { count: current.availableCount })}

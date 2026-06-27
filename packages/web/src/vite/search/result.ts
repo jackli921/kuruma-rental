@@ -42,6 +42,14 @@ export function resultTitle(item: SearchResultItem): string {
   }
 }
 
+/** The JPY figure an indicative-price note converts for a result row: the daily
+ *  rate (preferred) else hourly, or null for price-on-request. Mirrors
+ *  `resultPriceLabel`'s daily-over-hourly preference so the `≈` note matches the
+ *  label it sits beneath. */
+export function resultPriceJpy(item: SearchResultItem): number | null {
+  return item.dailyRateJpy ?? item.hourlyRateJpy ?? null
+}
+
 /** "From ¥X / day" (or hourly, or price-on-request) — shared by the list row and
  *  the map popup so they never drift. `t` is the use-intl translator. */
 export function resultPriceLabel(item: SearchResultItem, t: Translate): string {
