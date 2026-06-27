@@ -26,7 +26,9 @@
 //     are DELIBERATELY EXCLUDED — both are 1968 Vienna parties, NOT 1949 Geneva, so Japan
 //     does not accept their IDP (#1194); per safe-fail they classify NOT_ELIGIBLE. Georgia
 //     (GE) and Kyrgyzstan (KG) were verified as genuine 1949 Geneva parties (2026-06,
-//     UN Treaty Collection) and are retained.
+//     UN Treaty Collection) and are retained. The FULL set beyond these spot-checks is
+//     NOT yet reconciled entry-by-entry against the NPA list — do that before slice 2
+//     surfaces a clearing verdict to renters (a wrong IDP_OK clears an ineligible driver).
 
 export const ELIGIBILITY_CLASSES = [
   'IDP_OK',
