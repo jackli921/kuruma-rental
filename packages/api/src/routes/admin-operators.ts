@@ -12,10 +12,11 @@ import { fail, ok } from './helpers'
  * callers, `requirePlatformAdmin` narrows to PLATFORM_ADMIN (OPERATOR_* / RENTER /
  * PARTNER → 403), and the service re-asserts the gate as defence-in-depth.
  *
- * Deactivate/reactivate are soft (toggle `operators.deactivatedAt`): the operator
- * is hidden from storefront/search and blocked from new bookings, while existing
- * bookings + history are untouched. Members of a deactivated operator are revoked
- * on their next request via the #939 session-freshness cascade.
+ * Deactivate/reactivate are soft (toggle `operators.deactivatedAt`). Today this
+ * enforces session revocation ONLY: members of a deactivated operator go stale on
+ * their next request via the #939 session-freshness cascade. Storefront/search
+ * hiding and new-booking blocking are NOT yet wired up — tracked in #1206. Existing
+ * bookings + history are untouched.
  */
 export function createAdminOperatorRoutes(service: OperatorService) {
   const app = new Hono()

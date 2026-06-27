@@ -137,9 +137,10 @@ export class OperatorService {
 
   /**
    * Soft-deactivate an operator (#1088). Platform-admin only. Sets
-   * `deactivatedAt` (hides from storefront/search, blocks new bookings; existing
-   * bookings + history untouched). Members go stale on their next request via the
-   * #939 freshness path. Returns the updated row, or undefined when no such id (404).
+   * `deactivatedAt`. Today this enforces session revocation ONLY — members go stale
+   * on their next request via the #939 freshness path. Storefront/search hiding and
+   * new-booking blocking are NOT yet implemented (tracked in #1206); existing
+   * bookings + history are untouched. Returns the updated row, or undefined (404).
    */
   async deactivate(ctx: CallerContext, id: string): Promise<OperatorStatus | undefined> {
     requirePlatformAdmin(ctx)
