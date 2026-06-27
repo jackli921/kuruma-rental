@@ -1,11 +1,16 @@
 import { ApiError, unwrap } from '@/lib/api-error'
 import { getApiBaseUrl } from '@/vite/api-base'
+import { type WithOperatorId, buildScopeParam } from '@/vite/operator-context'
 import { COORDINATE_SOURCES, LOCATION_STATUSES } from '@kuruma/shared/enums'
 import type { ApiResponse } from '@kuruma/shared/types/api-response'
 import type { LocationOperatingHours } from '@kuruma/shared/types/location'
 import type { CreateLocationInput, UpdateLocationInput } from '@kuruma/shared/validators/location'
 import { queryOptions } from '@tanstack/react-query'
 import { z } from 'zod'
+
+// Canonical write types come from @kuruma/shared so the form/dialog stay in
+// lockstep with the Zod validators rather than drifting a parallel copy.
+export type { CreateLocationInput, UpdateLocationInput }
 
 // #529: operator locations/storefronts management — Vite port of the frozen
 // `modules/locations` admin. Cookie-based and operator-scoped server-side (the
@@ -58,26 +63,33 @@ const locationSchema = z.object({
 
 export const LOCATIONS_QUERY_KEY = ['operator-locations'] as const
 
-export async function fetchOperatorLocations(): Promise<OperatorLocation[]> {
+export async function fetchOperatorLocations(
+  pickedOperatorId?: string,
+): Promise<OperatorLocation[]> {
   // includeArchived=true so the owner sees soft-archived rows (muted badge) and
   // can tell why a name is taken; archiving frees the name for active inventory.
   //
-  // includeAll=true (#435): the `_business` guard admits bypass-scope roles
+  // The scope param is `operatorId=<picked>` when an admin has picked a tenant,
+  // else `includeAll=true` (#435): the `_business` guard admits bypass-scope roles
   // (STAFF/ADMIN/PLATFORM_ADMIN) too, and GET /locations 400s for them unless
   // they opt into a cross-operator read — without this they'd hit the load-error
   // state. Operator-scoped callers auto-scope server-side via the session cookie
-  // and the API IGNORES this flag for them, so it's safe to always send (the
+  // and the API IGNORES the flag for them, so it's safe to always send (the
   // client still names no operatorId, so an operator's read stays tenant-scoped).
-  const res = await fetch(`${getApiBaseUrl()}/locations?includeArchived=true&includeAll=true`, {
-    credentials: 'include',
-  })
+  const res = await fetch(
+    `${getApiBaseUrl()}/locations?includeArchived=true&${buildScopeParam(pickedOperatorId)}`,
+    { credentials: 'include' },
+  )
   return unwrap(res, locationSchema.array())
 }
 
-export function operatorLocationsQueryOptions() {
+// The picked operator id is part of the cache key so switching context refetches
+// (and never serves another tenant's cached list). Optional param keeps any
+// no-arg caller working.
+export function operatorLocationsQueryOptions(pickedOperatorId?: string) {
   return queryOptions({
-    queryKey: LOCATIONS_QUERY_KEY,
-    queryFn: fetchOperatorLocations,
+    queryKey: [...LOCATIONS_QUERY_KEY, pickedOperatorId ?? 'all'] as const,
+    queryFn: () => fetchOperatorLocations(pickedOperatorId),
   })
 }
 
@@ -100,7 +112,12 @@ async function writeJson(
   return unwrap(res, locationSchema)
 }
 
-export function createLocation(data: CreateLocationInput): Promise<OperatorLocation> {
+// A platform admin operating as a picked tenant names the target operator in the
+// body (the server's platform-admin create schema requires it); an operator
+// session omits it and is auto-scoped server-side. PATCH/DELETE are id-scoped.
+export function createLocation(
+  data: WithOperatorId<CreateLocationInput>,
+): Promise<OperatorLocation> {
   return writeJson('/locations', 'POST', data)
 }
 

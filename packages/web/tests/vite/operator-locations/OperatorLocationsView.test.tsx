@@ -1,12 +1,58 @@
+import type { OperatorScope } from '@/vite/operator-context'
 import { OperatorLocationsView } from '@/vite/operator-locations/OperatorLocationsView'
 import type { OperatorLocation } from '@/vite/operator-locations/api'
-import { render, screen } from '@testing-library/react'
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { cleanup, render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
+import type { ReactNode } from 'react'
 import { IntlProvider } from 'use-intl'
-import { describe, expect, it, vi } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import enMessages from '../../../messages/en.json'
 
 const en = enMessages.business.locations
+
+// The view owns the add/edit dialogs, which read the regions cascade on mount;
+// stub the query so it resolves to an empty list without a network round-trip.
+vi.mock('@/vite/regions/regions-api', () => ({
+  regionsQueryOptions: () => ({ queryKey: ['regions'], queryFn: async () => [] }),
+}))
+
+// These cover the view's rendering mechanics (rows, empty, hours, pin/status
+// badges, Add dialog) AND the operator-context scope behavior (all-mode labels,
+// read-only gating, scoped-write affordances) — the single home for the locations
+// view tests. A writable scope keeps the Add/Edit/Archive affordances visible.
+const writeScope: OperatorScope = {
+  pickedOperatorId: undefined,
+  canWrite: true,
+  showOperator: false,
+  operatorNameById: new Map(),
+}
+
+// All-mode: a cross-operator reader with no picked operator. Read-only, with the
+// per-row operator label turned on so the mixed-tenant list is legible.
+const allModeScope: OperatorScope = {
+  pickedOperatorId: undefined,
+  canWrite: false,
+  showOperator: true,
+  operatorNameById: new Map([['op_1', 'Sakura']]),
+}
+
+// Scoped write: an operator session (or an admin who picked a tenant). Write
+// affordances visible, no operator label.
+const scopedWriteScope: OperatorScope = {
+  pickedOperatorId: 'op_9',
+  canWrite: true,
+  showOperator: false,
+  operatorNameById: new Map(),
+}
+
+// Read-only: a cross-operator reader (or any caller without write rights).
+const readOnlyScope: OperatorScope = {
+  pickedOperatorId: undefined,
+  canWrite: false,
+  showOperator: false,
+  operatorNameById: new Map(),
+}
 
 function location(overrides: Partial<OperatorLocation> = {}): OperatorLocation {
   return {
@@ -19,28 +65,28 @@ function location(overrides: Partial<OperatorLocation> = {}): OperatorLocation {
     defaultTurnaroundMinutes: 2880,
     status: 'ACTIVE',
     coordinateSource: 'GEOCODED',
+    regionId: null,
     createdAt: '2026-01-01T00:00:00.000Z',
     updatedAt: '2026-01-01T00:00:00.000Z',
     ...overrides,
   }
 }
 
-function renderView(
-  locations: OperatorLocation[],
-  handlers: {
-    onEdit?: (l: OperatorLocation) => void
-    onArchive?: (l: OperatorLocation) => void
-  } = {},
-) {
-  const onEdit = handlers.onEdit ?? vi.fn()
-  const onArchive = handlers.onArchive ?? vi.fn()
-  render(
-    <IntlProvider locale="en" messages={enMessages}>
-      <OperatorLocationsView locations={locations} onEdit={onEdit} onArchive={onArchive} />
-    </IntlProvider>,
-  )
-  return { onEdit, onArchive }
+function renderView(locations: OperatorLocation[], scope: OperatorScope = writeScope) {
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+  function wrapper({ children }: { children: ReactNode }) {
+    return (
+      <QueryClientProvider client={client}>
+        <IntlProvider locale="en" messages={enMessages}>
+          {children}
+        </IntlProvider>
+      </QueryClientProvider>
+    )
+  }
+  return render(<OperatorLocationsView locations={locations} scope={scope} />, { wrapper })
 }
+
+afterEach(() => cleanup())
 
 describe('OperatorLocationsView', () => {
   it('shows the empty state when there are no locations', () => {
@@ -79,20 +125,15 @@ describe('OperatorLocationsView', () => {
     expect(screen.getAllByTestId('location-row')).toHaveLength(2)
   })
 
-  it('calls onEdit with the location when the edit button is clicked', async () => {
+  it('opens the Add dialog (renders the location form) when Add is clicked', async () => {
     const user = userEvent.setup()
-    const { onEdit } = renderView([location()])
-    await user.click(screen.getByRole('button', { name: en.editLocation }))
-    expect(onEdit).toHaveBeenCalledWith(
-      expect.objectContaining({ id: 'loc_1', name: 'Namba Branch' }),
-    )
-  })
+    renderView([])
 
-  it('calls onArchive with the location when the archive button is clicked', async () => {
-    const user = userEvent.setup()
-    const { onArchive } = renderView([location()])
-    await user.click(screen.getByRole('button', { name: en.archiveAction }))
-    expect(onArchive).toHaveBeenCalledWith(expect.objectContaining({ id: 'loc_1' }))
+    expect(screen.queryByLabelText(en.form.name)).not.toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: en.addLocation }))
+
+    const dialog = await screen.findByRole('dialog')
+    expect(within(dialog).getByLabelText(en.form.name)).toBeInTheDocument()
   })
 
   it('disables the archive button for an archived location', () => {
@@ -119,12 +160,20 @@ describe('OperatorLocationsView', () => {
     },
   )
 
-  it('omits the edit/archive row actions in read-only mode (no handlers — bypass roles)', () => {
-    render(
-      <IntlProvider locale="en" messages={enMessages}>
-        <OperatorLocationsView locations={[location()]} />
-      </IntlProvider>,
-    )
+  it('all-mode: shows the operator label and hides the Add button (read-only)', () => {
+    renderView([location()], allModeScope)
+    expect(screen.getByText('Sakura')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: en.addLocation })).not.toBeInTheDocument()
+  })
+
+  it('scoped-write mode: shows the Add button and no operator label', () => {
+    renderView([location()], scopedWriteScope)
+    expect(screen.getByRole('button', { name: en.addLocation })).toBeInTheDocument()
+    expect(screen.queryByLabelText(/^Operator:/)).not.toBeInTheDocument()
+  })
+
+  it('read-only mode hides the per-row Edit/Archive affordances', () => {
+    renderView([location()], readOnlyScope)
     expect(screen.getByTestId('location-row')).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: en.editLocation })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: en.archiveAction })).not.toBeInTheDocument()

@@ -1,8 +1,10 @@
 import { ApiError, ParseError } from '@/lib/api-error'
 import {
+  LOCATIONS_QUERY_KEY,
   LocationArchiveBlockedError,
   archiveLocation,
   fetchOperatorLocations,
+  operatorLocationsQueryOptions,
 } from '@/vite/operator-locations/api'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
@@ -57,6 +59,19 @@ describe('fetchOperatorLocations', () => {
     expect(fetchSpy.mock.calls[0]?.[1]).toMatchObject({ credentials: 'include' })
   })
 
+  it('scopes the read to operatorId (dropping includeAll) but keeps includeArchived when an admin picks a tenant', async () => {
+    const fetchSpy = vi
+      .spyOn(globalThis, 'fetch')
+      .mockResolvedValue(jsonResponse({ success: true, data: [] }))
+
+    await fetchOperatorLocations('op_9')
+
+    const url = String(fetchSpy.mock.calls[0]?.[0])
+    expect(url).toContain('operatorId=op_9')
+    expect(url).not.toContain('includeAll')
+    expect(url).toContain('includeArchived=true')
+  })
+
   it('strips the wire latitude/longitude the projection deliberately omits (#711)', async () => {
     // The API row carries lat/lng (#531); the DTO omits them until a map view
     // needs them. The schema is non-strict, so those keys are dropped at the seam.
@@ -72,6 +87,17 @@ describe('fetchOperatorLocations', () => {
       jsonResponse({ success: true, data: [{ ...location, defaultTurnaroundMinutes: 'oops' }] }),
     )
     await expect(fetchOperatorLocations()).rejects.toBeInstanceOf(ParseError)
+  })
+})
+
+describe('operatorLocationsQueryOptions', () => {
+  it('exposes the stable LOCATIONS_QUERY_KEY prefix so writes can invalidate every scope', () => {
+    // LOCATIONS_QUERY_KEY is the prefix; the per-scope key appends the picked
+    // operator (or 'all') so switching context refetches without serving another
+    // tenant's cached list. A prefix invalidate still clears all scopes.
+    expect(LOCATIONS_QUERY_KEY).toEqual(['operator-locations'])
+    expect(operatorLocationsQueryOptions().queryKey).toEqual(['operator-locations', 'all'])
+    expect(operatorLocationsQueryOptions('op_9').queryKey).toEqual(['operator-locations', 'op_9'])
   })
 })
 

@@ -18,7 +18,7 @@ vi.mock('@/vite/operator-locations/api', async (importOriginal) => {
 const createLocation = vi.mocked(api.createLocation)
 const en = enMessages.business.locations
 
-function renderDialog() {
+function renderDialog(pickedOperatorId?: string) {
   const onOpenChange = vi.fn()
   const client = new QueryClient({
     defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
@@ -27,7 +27,7 @@ function renderDialog() {
   render(
     <QueryClientProvider client={client}>
       <IntlProvider locale="en" messages={enMessages}>
-        <AddLocationDialog open onOpenChange={onOpenChange} />
+        <AddLocationDialog open onOpenChange={onOpenChange} pickedOperatorId={pickedOperatorId} />
       </IntlProvider>
     </QueryClientProvider>,
   )
@@ -59,6 +59,36 @@ describe('AddLocationDialog', () => {
     })
     expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: LOCATIONS_QUERY_KEY })
     await waitFor(() => expect(onOpenChange).toHaveBeenCalledWith(false))
+  })
+
+  it('merges the picked operatorId into the create body when an admin picked a tenant (P1a)', async () => {
+    createLocation.mockResolvedValue({ id: 'loc_new' } as never)
+    const user = userEvent.setup()
+    renderDialog('op_9')
+
+    await user.type(screen.getByLabelText(en.form.name), 'Namba Branch')
+    await user.type(screen.getByLabelText(en.form.address), '1-2-3 Namba, Chuo-ku, Osaka')
+    await user.click(screen.getByRole('button', { name: en.form.save }))
+
+    await waitFor(() => expect(createLocation).toHaveBeenCalledTimes(1))
+    expect(createLocation.mock.calls[0][0]).toMatchObject({
+      name: 'Namba Branch',
+      operatorId: 'op_9',
+    })
+  })
+
+  it('omits operatorId when no operator is picked (operator session auto-scopes) (P1a)', async () => {
+    createLocation.mockResolvedValue({ id: 'loc_new' } as never)
+    const user = userEvent.setup()
+    renderDialog()
+
+    await user.type(screen.getByLabelText(en.form.name), 'Namba Branch')
+    await user.type(screen.getByLabelText(en.form.address), '1-2-3 Namba, Chuo-ku, Osaka')
+    await user.click(screen.getByRole('button', { name: en.form.save }))
+
+    await waitFor(() => expect(createLocation).toHaveBeenCalledTimes(1))
+    expect(createLocation.mock.calls[0][0]).not.toHaveProperty('operatorId')
+    expect(createLocation.mock.calls[0][0]).toMatchObject({ name: 'Namba Branch' })
   })
 
   it('surfaces a duplicate-name 409 inline and keeps the dialog open', async () => {
