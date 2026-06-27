@@ -19,7 +19,7 @@ import { BookingQueryService, type BookingWithOperator } from './booking-query'
 import type {
   BookingVerificationGate,
   CancelResult,
-  CreateBookingInput,
+  CreateBookingRequest,
   CreateBookingResult,
   StatusTransitionResult,
   SubstituteResult,
@@ -33,6 +33,7 @@ export type {
   BookingVerificationGate,
   CancelResult,
   CreateBookingInput,
+  CreateBookingRequest,
   CreateBookingResult,
   StatusTransitionResult,
   SubstituteResult,
@@ -158,7 +159,7 @@ export class BookingService {
 
   create(
     ctx: CallerContext,
-    input: CreateBookingInput,
+    input: CreateBookingRequest,
     now: Date = new Date(),
   ): Promise<CreateBookingResult> {
     return this.creation.create(ctx, input, now)
