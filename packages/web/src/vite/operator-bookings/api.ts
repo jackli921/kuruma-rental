@@ -60,6 +60,10 @@ export interface CalendarBookingRow {
   bookingCode: string
   status: OperatorBookingStatus
   startAt: string
+  // The booked end (pickup→dropoff). The timeline renders [startAt, endAt] as the
+  // solid "booked" band and [endAt, effectiveEndAt] as a lighter turnaround band,
+  // so both bounds are carried (#1100). Plans #1101/#1102 also need this.
+  endAt: string
   effectiveEndAt: string
   // The fulfilling car's id (resource-column key). Null for a class-only booking
   // not yet assigned a vehicle — such a booking has no column to live in.
@@ -79,6 +83,7 @@ function toCalendarRow(b: RawOperatorBooking): CalendarBookingRow {
     bookingCode: b.bookingCode,
     status: b.status,
     startAt: b.startAt,
+    endAt: b.endAt,
     effectiveEndAt: b.effectiveEndAt ?? b.endAt,
     vehicleId: b.assignedVehicleId ?? null,
     renterName: b.renter?.name ?? null,
