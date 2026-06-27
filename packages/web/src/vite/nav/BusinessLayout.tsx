@@ -1,8 +1,11 @@
 import { useLayoutPreference } from '@/vite/LayoutPreferenceProvider'
+import { canPickOperatorContext } from '@/vite/guards'
 import { BusinessSidebar } from '@/vite/nav/BusinessSidebar'
 import { shouldShowBusinessSidebar } from '@/vite/nav/business-sidebar-visibility'
+import { OperatorContextPicker, operatorsQueryOptions } from '@/vite/operator-context'
 import { useSession } from '@/vite/session'
 import { readViewCookie } from '@/vite/view-mode'
+import { useQuery } from '@tanstack/react-query'
 import type { ReactNode } from 'react'
 
 // The consumer that was missing in the Vite migration (#966): reads the layout
@@ -13,14 +16,31 @@ import type { ReactNode } from 'react'
 export function BusinessLayout({ children }: { readonly children: ReactNode }) {
   const { preference } = useLayoutPreference()
   const { data: session } = useSession()
+  // PLATFORM_ADMIN only: the picker lets the lone uniformly-cross-tenant role choose
+  // which operator the console operates as. `enabled` gates the fetch so other roles
+  // never hit GET /operators; the hook itself stays unconditional (hooks rule).
+  const canPick = canPickOperatorContext(session ?? null)
+  const { data: operators } = useQuery({ ...operatorsQueryOptions(), enabled: canPick })
   const showSidebar = shouldShowBusinessSidebar(preference, session?.user?.role, readViewCookie())
 
-  if (!showSidebar) return <>{children}</>
+  const picker = canPick ? <OperatorContextPicker operators={operators ?? []} /> : null
+
+  if (!showSidebar) {
+    return (
+      <>
+        {picker}
+        {children}
+      </>
+    )
+  }
 
   return (
-    <div className="flex flex-col md:flex-row flex-1">
-      <BusinessSidebar />
-      <main className="flex-1 min-w-0">{children}</main>
-    </div>
+    <>
+      {picker}
+      <div className="flex flex-col md:flex-row flex-1">
+        <BusinessSidebar />
+        <main className="flex-1 min-w-0">{children}</main>
+      </div>
+    </>
   )
 }
