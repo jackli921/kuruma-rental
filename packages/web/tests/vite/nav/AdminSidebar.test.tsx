@@ -43,6 +43,11 @@ describe('AdminSidebar', () => {
     )
   })
 
+  it('renders a Back to site link to the marketplace home so the admin can leave the portal', () => {
+    renderSidebar()
+    expect(screen.getByText('Back to site').closest('a')).toHaveAttribute('data-to', '/$locale')
+  })
+
   it('marks its root with data-admin-sidebar so the global nav is suppressed', () => {
     // globals.css: `:root:has([data-admin-sidebar]) [data-global-nav]` is hidden.
     // Without this marker the always-mounted <Navbar/> double-renders on /admin.
