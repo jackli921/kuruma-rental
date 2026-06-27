@@ -2,6 +2,7 @@ import { Button } from '@/components/ui/button'
 import { PageSkeleton } from '@/vite/PageSkeleton'
 import { isOperatorManualBookingEnabled } from '@/vite/config/features'
 import { isOperatorSession } from '@/vite/guards'
+import { FleetTimeline } from '@/vite/operator-bookings'
 import { BookingsCalendar } from '@/vite/operator-bookings/BookingsCalendar'
 import { CalendarSidebar } from '@/vite/operator-bookings/CalendarSidebar'
 import { ManualBookingDialog } from '@/vite/operator-bookings/ManualBookingDialog'
@@ -32,7 +33,7 @@ interface BookingsCalendarSearch {
   date?: string | undefined
 }
 
-const DEFAULT_VIEW: CalendarView = 'week'
+const DEFAULT_VIEW: CalendarView = 'timeline'
 
 // Operator booking *calendar* (#525). URL `/<locale>/manage/bookings`, behind the
 // `_business` guard; tenant scoping is server-side (CallerContext), so the client
@@ -117,6 +118,24 @@ export function OperatorBookingsRoute() {
   const visibleEvents = useMemo(() => filters.filterEvents(events), [filters, events])
   const visibleResources = useMemo(() => filters.filterResources(resources), [filters, resources])
 
+  // The timeline renders fleet ROWS from the raw booking rows (not rbc events), so
+  // it applies the same sidebar filters here: drop status-hidden bookings and those
+  // on a hidden vehicle, but keep class-only floats (null vehicle → Unassigned row)
+  // whenever their status is checked.
+  const timelineRows = useMemo(
+    () =>
+      bookings.filter(
+        (b) =>
+          filters.isStatusChecked(b.status) &&
+          (b.vehicleId == null || filters.isVehicleChecked(b.vehicleId)),
+      ),
+    [bookings, filters],
+  )
+  const timelineVehicles = useMemo(
+    () => vehicles.filter((v) => filters.isVehicleChecked(v.id)),
+    [vehicles, filters],
+  )
+
   const handleViewChange = useCallback(
     (next: CalendarView) => {
       navigate({ search: (prev) => ({ ...prev, view: next }) })
@@ -162,17 +181,29 @@ export function OperatorBookingsRoute() {
         <div className="flex gap-6">
           <CalendarSidebar vehicles={vehicles} filters={filters} />
           <div className="min-w-0 flex-1">
-            <BookingsCalendar
-              events={visibleEvents}
-              resources={visibleResources}
-              view={view}
-              date={anchorDate}
-              locale={locale}
-              onViewChange={handleViewChange}
-              onDateChange={handleDateChange}
-              onSelectEvent={handleSelectEvent}
-              onSelectSlot={canManualBook ? handleOpenManualBooking : undefined}
-            />
+            {view === 'timeline' ? (
+              <FleetTimeline
+                rows={timelineRows}
+                vehicles={timelineVehicles}
+                date={anchorDate}
+                locale={locale}
+                onViewChange={handleViewChange}
+                onDateChange={handleDateChange}
+                onSelectEvent={handleSelectEvent}
+              />
+            ) : (
+              <BookingsCalendar
+                events={visibleEvents}
+                resources={visibleResources}
+                view={view}
+                date={anchorDate}
+                locale={locale}
+                onViewChange={handleViewChange}
+                onDateChange={handleDateChange}
+                onSelectEvent={handleSelectEvent}
+                onSelectSlot={canManualBook ? handleOpenManualBooking : undefined}
+              />
+            )}
           </div>
         </div>
       </div>

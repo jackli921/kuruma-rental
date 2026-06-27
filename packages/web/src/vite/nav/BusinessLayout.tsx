@@ -1,8 +1,15 @@
 import { useLayoutPreference } from '@/vite/LayoutPreferenceProvider'
+import { canPickOperatorContext } from '@/vite/guards'
 import { BusinessSidebar } from '@/vite/nav/BusinessSidebar'
 import { shouldShowBusinessSidebar } from '@/vite/nav/business-sidebar-visibility'
+import {
+  OperatorContextPicker,
+  operatorsQueryOptions,
+  useIsOperatorContextRoute,
+} from '@/vite/operator-context'
 import { useSession } from '@/vite/session'
 import { readViewCookie } from '@/vite/view-mode'
+import { useQuery } from '@tanstack/react-query'
 import type { ReactNode } from 'react'
 
 // The consumer that was missing in the Vite migration (#966): reads the layout
@@ -13,14 +20,36 @@ import type { ReactNode } from 'react'
 export function BusinessLayout({ children }: { readonly children: ReactNode }) {
   const { preference } = useLayoutPreference()
   const { data: session } = useSession()
+  // PLATFORM_ADMIN only: the picker lets the lone uniformly-cross-tenant role choose
+  // which operator the console operates as. It is shown ONLY on routes that thread
+  // `?operator` into their reads (staged rollout) — on other business pages the param
+  // is retained silently but the page is unscoped, so the picker would lie about scope.
+  // Both hooks stay unconditional (hooks rule); the booleans combine in a const.
+  const canPick = canPickOperatorContext(session ?? null)
+  const isOperatorContextRoute = useIsOperatorContextRoute()
+  const showPicker = canPick && isOperatorContextRoute
+  // `enabled` gates the fetch so we never hit GET /operators when the picker is hidden.
+  const { data: operators } = useQuery({ ...operatorsQueryOptions(), enabled: showPicker })
   const showSidebar = shouldShowBusinessSidebar(preference, session?.user?.role, readViewCookie())
 
-  if (!showSidebar) return <>{children}</>
+  const picker = showPicker ? <OperatorContextPicker operators={operators ?? []} /> : null
+
+  if (!showSidebar) {
+    return (
+      <>
+        {picker}
+        {children}
+      </>
+    )
+  }
 
   return (
-    <div className="flex flex-col md:flex-row flex-1">
-      <BusinessSidebar />
-      <main className="flex-1 min-w-0">{children}</main>
-    </div>
+    <>
+      {picker}
+      <div className="flex flex-col md:flex-row flex-1">
+        <BusinessSidebar />
+        <main className="flex-1 min-w-0">{children}</main>
+      </div>
+    </>
   )
 }

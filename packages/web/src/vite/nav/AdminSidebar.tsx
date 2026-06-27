@@ -3,6 +3,7 @@ import {
   AlertTriangle,
   ArrowLeft,
   Banknote,
+  Building2,
   CalendarCheck,
   FileCheck,
   LayoutDashboard,
@@ -11,8 +12,11 @@ import {
 } from 'lucide-react'
 import { useLocale, useTranslations } from 'use-intl'
 
-const SIDEBAR_ITEMS = [
+// Exported so the active-state test can derive its router tree from the single
+// source of truth — a hard-coded copy there silently rots when an item is added.
+export const SIDEBAR_ITEMS = [
   { to: '/$locale/admin', icon: LayoutDashboard, labelKey: 'nav.overview' },
+  { to: '/$locale/admin/operators', icon: Building2, labelKey: 'nav.operators' },
   { to: '/$locale/admin/bookings', icon: CalendarCheck, labelKey: 'nav.bookings' },
   { to: '/$locale/admin/revenue', icon: Banknote, labelKey: 'nav.revenue' },
   { to: '/$locale/admin/anomalies', icon: AlertTriangle, labelKey: 'nav.anomalies' },
@@ -22,8 +26,8 @@ const SIDEBAR_ITEMS = [
 ] as const
 
 // Single static className; active state is the `aria-current="page"` attribute
-// (set by TanStack's activeProps) + the `aria-[current=page]:*` Tailwind variants.
-// SPA has no SSR, so the Next.js `mounted` hydration guard (#25) is unnecessary.
+// (auto-set by TanStack on the active <Link>) + the `aria-[current=page]:*`
+// Tailwind variants. SPA has no SSR, so the Next.js `mounted` guard (#25) is gone.
 const LINK_CLASSNAME =
   'flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors ' +
   'text-sidebar-foreground hover:bg-sidebar-accent/50 ' +
@@ -47,6 +51,10 @@ export function AdminSidebar() {
         <Link
           to="/$locale"
           params={{ locale }}
+          // Exact, or TanStack's default prefix match makes `/$locale` active on
+          // every `/$locale/admin/*` route — auto-stamping `aria-current="page"`
+          // (and the active styling) onto this escape hatch on every admin page.
+          activeOptions={{ exact: true }}
           className={`${LINK_CLASSNAME} text-muted-foreground md:mb-1 md:border-b md:border-sidebar-border md:pb-3 md:rounded-b-none`}
         >
           <ArrowLeft className="size-5" />
@@ -58,8 +66,8 @@ export function AdminSidebar() {
             to={to}
             params={{ locale }}
             // Exact: the index link (/admin) must not stay active on /admin/revenue.
+            // (TanStack auto-applies aria-current="page" to the active link.)
             activeOptions={{ exact: true }}
-            activeProps={{ 'aria-current': 'page' }}
             className={LINK_CLASSNAME}
           >
             <Icon className="size-5" />

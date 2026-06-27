@@ -8,6 +8,7 @@ import {
   fetchBookingEvents,
   fetchCalendarBookings,
   fetchCalendarVehicles,
+  fetchNeedsAssignment,
   fetchOperatorBookingDetail,
   fetchSubstitutionCandidates,
   operatorBookingDetailQueryOptions,
@@ -187,6 +188,70 @@ describe('fetchBookingEvents', () => {
 
     await expect(fetchBookingEvents('bk-1')).rejects.toBeInstanceOf(ApiError)
   })
+
+  // #1198: every discriminated-union arm needs a `.parse` round-trip — the
+  // output-covariant `satisfies z.ZodType` does NOT prove a wrong arm is caught
+  // (that hole shipped the original VEHICLE_ASSIGNED ParseError, #464).
+  it('parses a VEHICLE_SUBSTITUTED event payload through the schema', async () => {
+    const substituted = eventRaw({
+      type: 'VEHICLE_SUBSTITUTED',
+      payload: {
+        type: 'VEHICLE_SUBSTITUTED',
+        fromVehicleId: 'veh-old',
+        toVehicleId: 'veh-new',
+        reason: 'mechanical fault',
+      },
+    })
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => jsonResponse({ success: true, data: [substituted] })),
+    )
+
+    const events = await fetchBookingEvents('bk-1')
+
+    expect(events).toEqual([substituted])
+  })
+
+  it('parses a legacy BOOKING_CANCELLED payload missing cancellationReason -> defaults to null', async () => {
+    // Pre-#868 rows carry no cancellationReason key; the schema's `.default(null)`
+    // is load-bearing — without it the whole timeline ParseErrors for old
+    // cancelled bookings. Assert the default actually applies.
+    const legacyCancelled = eventRaw({
+      type: 'BOOKING_CANCELLED',
+      payload: {
+        type: 'BOOKING_CANCELLED',
+        cancellationFee: 5000,
+        cancelledAt: '2026-07-01T02:00:00.000Z',
+      },
+    })
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => jsonResponse({ success: true, data: [legacyCancelled] })),
+    )
+
+    const [event] = await fetchBookingEvents('bk-1')
+
+    expect(event?.payload).toEqual({
+      type: 'BOOKING_CANCELLED',
+      cancellationFee: 5000,
+      cancelledAt: '2026-07-01T02:00:00.000Z',
+      cancellationReason: null,
+    })
+  })
+})
+
+describe('fetchNeedsAssignment', () => {
+  it('requests a full page (limit=100) so the worklist is not truncated at the default 20 (#1197)', async () => {
+    const fetchMock = vi.fn(async () => jsonResponse({ success: true, data: [] }))
+    vi.stubGlobal('fetch', fetchMock)
+
+    await fetchNeedsAssignment()
+
+    const url = new URL(fetchMock.mock.calls[0]![0] as string, 'http://x')
+    expect(url.pathname).toBe('/api/bookings')
+    expect(url.searchParams.get('needsAssignment')).toBe('true')
+    expect(url.searchParams.get('limit')).toBe('100')
+  })
 })
 
 describe('bookingEventsQueryOptions', () => {
@@ -249,6 +314,7 @@ describe('fetchCalendarBookings', () => {
         bookingCode: 'ABCD2345',
         status: 'CONFIRMED',
         startAt: '2026-07-01T01:00:00.000Z',
+        endAt: '2026-07-03T01:00:00.000Z',
         effectiveEndAt: '2026-07-03T02:00:00.000Z',
         vehicleId: 'veh-1',
         renterName: 'Jane',
@@ -299,6 +365,28 @@ describe('fetchCalendarBookings', () => {
     )
 
     await expect(fetchCalendarBookings('a', 'b')).rejects.toBeInstanceOf(ApiError)
+  })
+
+  it('follows the cursor across pages so >100 bookings are never silently dropped (#1100 #2)', async () => {
+    // 130 bookings (a 50-car fleet over a multi-day window) span two pages. The old
+    // single-fetch + 100-cap returned only the first page with no signal.
+    const page1 = Array.from({ length: 100 }, (_, i) => calendarRaw({ id: `bk-${i}` }))
+    const page2 = Array.from({ length: 30 }, (_, i) => calendarRaw({ id: `bk-${100 + i}` }))
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(jsonResponse({ success: true, data: page1, nextCursor: 'cursor-2' }))
+      .mockResolvedValueOnce(jsonResponse({ success: true, data: page2, nextCursor: null }))
+    vi.stubGlobal('fetch', fetchMock)
+
+    const rows = await fetchCalendarBookings('a', 'b')
+
+    expect(fetchMock).toHaveBeenCalledTimes(2)
+    // The second request echoed the cursor the first page returned.
+    expect(
+      new URL(fetchMock.mock.calls[1]![0] as string, 'http://x').searchParams.get('cursor'),
+    ).toBe('cursor-2')
+    // Every booking survived, in order — none dropped at the page boundary.
+    expect(rows.map((r) => r.id)).toEqual(Array.from({ length: 130 }, (_, i) => `bk-${i}`))
   })
 })
 

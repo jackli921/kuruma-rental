@@ -1,9 +1,4 @@
 {
-  "currency": {
-    "label": "Display currency",
-    "disclaimer": "Indicative only — you're charged in JPY",
-    "asOf": "Rates as of {date}"
-  },
   "consent": {
     "title": "Please review and accept to continue",
     "intro": "To keep using Kuruma, review and accept the following.",
@@ -254,6 +249,7 @@
         "previous": "Previous",
         "next": "Next",
         "views": {
+          "timeline": "Timeline",
           "day": "Day",
           "week": "Week",
           "month": "Month"
@@ -261,6 +257,7 @@
         "noEventsInRange": "No bookings in this range",
         "showMore": "+{count} more",
         "viewFullDetails": "View full details",
+        "unassigned": "Unassigned",
         "sidebar": {
           "title": "Filters",
           "vehicles": {
@@ -884,6 +881,10 @@
       },
       "loadError": "Couldn't load your team",
       "retry": "Try again"
+    },
+    "operatorContext": {
+      "label": "Operator",
+      "all": "All operators"
     }
   },
   "messaging": {
@@ -1258,7 +1259,72 @@
       "documents": "Documents",
       "governance": "Consent governance",
       "customers": "Customers",
+      "operators": "Operators",
       "backToSite": "Back to site"
+    },
+    "operators": {
+      "title": "Operators",
+      "subtitle": "Every operator on the platform — create, invite staff, rename, and deactivate.",
+      "empty": "No operators yet.",
+      "loadError": "Couldn't load operators.",
+      "retry": "Retry",
+      "create": "Create operator",
+      "colName": "Operator",
+      "colFleet": "Fleet",
+      "colStatus": "Status",
+      "colCreated": "Created",
+      "colActions": "Actions",
+      "status": {
+        "active": "Active",
+        "deactivated": "Deactivated"
+      },
+      "row": {
+        "invite": "Invite staff",
+        "edit": "Rename",
+        "deactivate": "Deactivate",
+        "reactivate": "Reactivate",
+        "deactivating": "Deactivating…",
+        "reactivating": "Reactivating…"
+      },
+      "createDialog": {
+        "title": "Create operator",
+        "subtitle": "Add a new operator to the platform. The slug is derived from the name.",
+        "nameLabel": "Name",
+        "namePlaceholder": "e.g. Kanata Cars",
+        "handoffLabel": "Pre-auth handoff URL (optional)",
+        "handoffPlaceholder": "https://…",
+        "cancel": "Cancel",
+        "submit": "Create",
+        "submitting": "Creating…"
+      },
+      "editDialog": {
+        "title": "Rename operator",
+        "subtitle": "Update the operator's display name. The slug is unchanged.",
+        "nameLabel": "Name",
+        "cancel": "Cancel",
+        "submit": "Save",
+        "submitting": "Saving…"
+      },
+      "inviteDialog": {
+        "title": "Invite a team member",
+        "subtitle": "Mint a one-time invite link for {operator}.",
+        "emailLabel": "Email",
+        "emailPlaceholder": "person@example.com",
+        "roleLabel": "Role",
+        "role": {
+          "OPERATOR_OWNER": "Owner",
+          "OPERATOR_STAFF": "Staff"
+        },
+        "cancel": "Cancel",
+        "submit": "Create invite",
+        "submitting": "Creating…",
+        "successTitle": "Invite link ready",
+        "successSubtitle": "Copy this link now — it is shown only once.",
+        "urlLabel": "Invite link",
+        "copy": "Copy",
+        "copied": "Copied",
+        "done": "Done"
+      }
     },
     "home": {
       "title": "Platform Admin",
@@ -1550,6 +1616,30 @@
       "submit": "Submit review",
       "pending": "Submitting…",
       "error": "Something went wrong. Please try again."
+    },
+    "operatorPanel": {
+      "cta": "Rate this renter",
+      "title": "Rate your renter",
+      "description": "How was your guest on booking {code}?",
+      "overall": "Overall rating",
+      "starLabel": "{n} stars",
+      "dimension": {
+        "communication": "Communication",
+        "cleanliness": "Cleanliness",
+        "ruleAdherence": "Rule adherence"
+      },
+      "commentLabel": "Comment about this renter",
+      "commentPlaceholder": "Share details of the rental (optional)",
+      "submit": "Submit review",
+      "pending": "Submitting…",
+      "error": "Something went wrong. Please try again.",
+      "reviewed": "You've reviewed this renter."
     }
+  },
+  "currency": {
+    "label": "Display currency",
+    "approximately": "approximately",
+    "disclaimer": "Indicative only — you're charged in JPY",
+    "asOf": "Rates as of {date}"
   }
 }

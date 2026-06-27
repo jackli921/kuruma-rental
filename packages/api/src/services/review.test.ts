@@ -293,6 +293,97 @@ describe('ReviewService — double-blind reveal on read', () => {
   })
 })
 
+describe('ReviewService.submit — reveal on write (#1195)', () => {
+  // settleReveal must run on submit, not only on a later getForBooking read. These assert the
+  // PERSISTED state directly (no read-repair) — a 3rd-party/API-only submitter never re-reads,
+  // and slice-5 aggregates filter publishedAt, so an unread both-submitted pair would undercount.
+  it('publishes BOTH sides the moment the second party submits — without any read', async () => {
+    const { service, reviewRepo } = makeHarness()
+    await service.submit(renterCtx, submitInput(), NOW) // renter -> operator (first, stays hidden)
+    const second = await service.submit(operatorCtx, submitInput({ subject: 'RENTER' }), NOW)
+
+    const persisted = await reviewRepo.findByBookingId(BOOKING_ID)
+    expect(persisted).toHaveLength(2)
+    expect(persisted.find((r) => r.authorRole === 'RENTER')?.publishedAt).toEqual(NOW)
+    expect(persisted.find((r) => r.authorRole === 'OPERATOR')?.publishedAt).toEqual(NOW)
+    // The submit response is honest about the post-settle publish.
+    expect(second.ok && second.review.publishedAt).toEqual(NOW)
+  })
+
+  it('keeps a lone first submitter hidden in the window — double-blind preserved', async () => {
+    const { service, reviewRepo } = makeHarness()
+    const first = await service.submit(renterCtx, submitInput(), NOW)
+
+    const persisted = await reviewRepo.findByBookingId(BOOKING_ID)
+    expect(persisted).toHaveLength(1)
+    expect(persisted[0]?.publishedAt).toBeNull()
+    expect(first.ok && first.review.publishedAt).toBeNull()
+  })
+
+  it('publishes the lone review on submit once the window has already elapsed', async () => {
+    const { service, reviewRepo } = makeHarness()
+    const only = await service.submit(renterCtx, submitInput(), AFTER_DEADLINE)
+
+    const persisted = await reviewRepo.findByBookingId(BOOKING_ID)
+    expect(persisted[0]?.publishedAt).toEqual(AFTER_DEADLINE)
+    expect(only.ok && only.review.publishedAt).toEqual(AFTER_DEADLINE)
+  })
+})
+
+describe('ReviewService — one review per operator (#1158)', () => {
+  // A SECOND active staff member of the same operator. The operator->renter review
+  // represents the operator (the tenant), not the individual staff user, so the first
+  // to submit speaks for it — a colleague must not be able to add a second.
+  const OP_USER_ID_2 = 'opuser-2'
+  const operatorCtx2: CallerContext = {
+    userId: OP_USER_ID_2,
+    role: 'OPERATOR_STAFF',
+    operatorId: OPERATOR_ID,
+    bypassScope: false,
+  }
+  const twoStaff = (): OperatorMembership[] => [
+    activeMembership(),
+    { ...activeMembership(), id: 'mem-2', userId: OP_USER_ID_2 },
+  ]
+
+  it('rejects a second operator->renter review by a DIFFERENT staff member with 409 ALREADY_REVIEWED', async () => {
+    const { service } = makeHarness({ memberships: twoStaff() })
+    expect((await service.submit(operatorCtx, submitInput({ subject: 'RENTER' }), NOW)).ok).toBe(
+      true,
+    )
+    // Different authorUserId, same booking+subject: the single (bookingId, subject) seal traps this.
+    expect(await service.submit(operatorCtx2, submitInput({ subject: 'RENTER' }), NOW)).toEqual({
+      ok: false,
+      status: 409,
+      error: 'ALREADY_REVIEWED',
+    })
+  })
+
+  it('shows an operator staff member their colleague’s still-hidden operator->renter review', async () => {
+    const { service } = makeHarness({ memberships: twoStaff() })
+    await service.submit(operatorCtx, submitInput({ subject: 'RENTER' }), NOW) // staff A, hidden
+
+    // Same operator = same tenant: staff B sees their operator's OWN side even before reveal,
+    // so the portal can hide the rate-renter prompt once any colleague has reviewed (#1158).
+    const staffBView = await service.getForBooking(operatorCtx2, BOOKING_ID, NOW)
+    if (!staffBView.ok) throw new Error('expected ok')
+    expect(staffBView.reviews).toHaveLength(1)
+    expect(staffBView.reviews[0]?.authorRole).toBe('OPERATOR')
+    expect(staffBView.reviews[0]?.publishedAt).toBeNull()
+  })
+
+  it('does NOT leak the operator’s still-hidden review to the renter (double-blind intact)', async () => {
+    const { service } = makeHarness()
+    await service.submit(operatorCtx, submitInput({ subject: 'RENTER' }), NOW) // operator, hidden
+
+    // The widening that lets staff see their own side must stay operator-only: the renter
+    // still sees nothing until the operator's review publishes.
+    const renterView = await service.getForBooking(renterCtx, BOOKING_ID, NOW)
+    if (!renterView.ok) throw new Error('expected ok')
+    expect(renterView.reviews).toHaveLength(0)
+  })
+})
+
 describe('ReviewService.edit — until published', () => {
   it('edits a still-hidden review in place', async () => {
     const { service } = makeHarness()

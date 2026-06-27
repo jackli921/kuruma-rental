@@ -12,6 +12,7 @@ interface CalendarToolbarProps {
 }
 
 const VIEW_KEYS: Record<CalendarView, string> = {
+  timeline: 'views.timeline',
   day: 'views.day',
   week: 'views.week',
   month: 'views.month',

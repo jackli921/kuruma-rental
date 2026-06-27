@@ -1,3 +1,4 @@
+import type { CallerContext } from '../middleware/auth'
 import type { VehicleBlock } from '../stores'
 
 /**
@@ -18,6 +19,10 @@ export interface VehicleBlockRepository {
    *  on both ends — adjacent windows (block.endAt === from) do NOT overlap,
    *  matching the GiST `&&` on tstzrange and the booking exclusion. */
   findOverlapping(vehicleId: string, from: Date, to: Date): Promise<VehicleBlock[]>
+  /** Fleet-wide blocks whose [startAt, endAt) overlaps [from, to), row-scoped by
+   *  `vehicleBlockReadScope(ctx)` — `all` (admin) spans operators, `operator`
+   *  filters to the tenant, `none` returns []. Powers the operator calendar read. */
+  findOverlappingInRange(ctx: CallerContext, from: Date, to: Date): Promise<VehicleBlock[]>
   /** Operator-scoped hard delete (defence-in-depth, must-fix #4): returns the
    *  removed block, or undefined when no block with that id belongs to the
    *  operator (unknown id OR another tenant's block). */

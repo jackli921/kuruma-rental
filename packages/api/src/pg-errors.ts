@@ -90,13 +90,15 @@ export const PAYMENT_EVENT_ONE_SUCCESS_CONSTRAINT = 'payment_events_one_success_
 export const PAYMENT_REFUND_STRIPE_REFUND_CONSTRAINT = 'payment_refunds_stripeRefundId_unique'
 
 /**
- * reviews unique seal (#1067): one review per author per booking per subject. A
- * 23505 on this name means the same side re-submitted the same subject — the
- * submission service edits the existing hidden row instead of inserting a second
- * (a renter still reviews OPERATOR and VEHICLE separately — different subjects).
- * Matching by name keeps this apart from any future reviews unique.
+ * The single reviews seal (#1201): UNIQUE (bookingId, subject). subject is CHECK-sealed to
+ * the author side (reviews_subject_pairing_chk: authorRole='OPERATOR' ⇔ subject='RENTER') and
+ * there is one renter per booking, so this is one operator->renter + one renter->operator +
+ * one renter->vehicle per booking WITHOUT trusting the denormalized operatorId. Replaces the
+ * old per-author + per-operator pair (#1067/#1158). A 23505 on this name means that side
+ * already reviewed this booking — the submission service maps it to 409 ALREADY_REVIEWED
+ * (a resubmit edits the hidden row) rather than surfacing a 500.
  */
-export const REVIEWS_AUTHOR_SUBJECT_CONSTRAINT = 'reviews_author_subject_per_booking_unique'
+export const REVIEWS_SUBJECT_CONSTRAINT = 'reviews_subject_per_booking_unique'
 
 /**
  * Partial unique index on provider_invites (operatorId, email) WHERE status=

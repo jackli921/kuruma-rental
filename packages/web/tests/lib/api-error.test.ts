@@ -4,6 +4,7 @@ import {
   ParseError,
   operatorRequiredCode,
   unwrap,
+  unwrapPage,
 } from '@/lib/api-error'
 import { describe, expect, it } from 'vitest'
 import { z } from 'zod'
@@ -94,6 +95,37 @@ describe('unwrap with a Zod schema', () => {
   it('passes data through unchanged when no schema is supplied (back-compat)', async () => {
     const res = jsonResponse({ success: true, data: { anything: true } }, 200)
     await expect(unwrap(res)).resolves.toEqual({ anything: true })
+  })
+})
+
+describe('unwrapPage', () => {
+  const rowsSchema = z.array(z.object({ id: z.string() }))
+
+  it('returns the parsed data and the envelope nextCursor', async () => {
+    const res = jsonResponse(
+      { success: true, data: [{ id: 'a' }, { id: 'b' }], nextCursor: 'eyJrIjoiYiJ9' },
+      200,
+    )
+    await expect(unwrapPage(res, rowsSchema)).resolves.toEqual({
+      data: [{ id: 'a' }, { id: 'b' }],
+      nextCursor: 'eyJrIjoiYiJ9',
+    })
+  })
+
+  it('reports nextCursor as null on the last page (no cursor in the envelope)', async () => {
+    const res = jsonResponse({ success: true, data: [{ id: 'a' }] }, 200)
+    const page = await unwrapPage(res, rowsSchema)
+    expect(page.nextCursor).toBeNull()
+  })
+
+  it('throws a ParseError when the page data drifts from the schema', async () => {
+    const res = jsonResponse({ success: true, data: [{ code: 'a' }], nextCursor: null }, 200)
+    await expect(unwrapPage(res, rowsSchema)).rejects.toBeInstanceOf(ParseError)
+  })
+
+  it('throws an ApiError on a failure envelope', async () => {
+    const res = jsonResponse({ success: false, error: 'boom' }, 500)
+    await expect(unwrapPage(res, rowsSchema)).rejects.toMatchObject({ status: 500 })
   })
 })
 

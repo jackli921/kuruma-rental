@@ -12,6 +12,7 @@ import { ERROR_CODES } from './error-codes'
 describe('ERROR_CODES', () => {
   test('is the exhaustive set of envelope failure codes the API emits', () => {
     expect([...ERROR_CODES].sort()).toEqual([
+      'BLOCK_BOOKING_CONFLICT',
       'CLASS_COMBO_SOLD_OUT',
       'CLASS_HAS_ACTIVE_BOOKINGS',
       'CONSENT_REQUIRED',
@@ -24,6 +25,7 @@ describe('ERROR_CODES', () => {
       'NOT_IMPLEMENTED',
       'NO_COMBO_RATE_SET',
       'NO_RATES_SET',
+      'OPERATOR_DEACTIVATED',
       'OPERATOR_REQUIRED',
       'RENTAL_RULE_ADVANCE_BOOKING',
       'RENTAL_RULE_MAX_DURATION',

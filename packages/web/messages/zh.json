@@ -1,9 +1,4 @@
 {
-  "currency": {
-    "label": "显示货币",
-    "disclaimer": "仅供参考 — 实际以日元（JPY）结算",
-    "asOf": "汇率基准日 {date}"
-  },
   "consent": {
     "title": "请阅读并同意后继续",
     "intro": "为继续使用 Kuruma，请阅读并同意以下内容。",
@@ -254,6 +249,7 @@
         "previous": "上一页",
         "next": "下一页",
         "views": {
+          "timeline": "时间线",
           "day": "日",
           "week": "周",
           "month": "月"
@@ -261,6 +257,7 @@
         "noEventsInRange": "该时段暂无预订",
         "showMore": "+{count}条",
         "viewFullDetails": "查看详情",
+        "unassigned": "未分配",
         "sidebar": {
           "title": "筛选",
           "vehicles": {
@@ -884,6 +881,10 @@
       },
       "loadError": "无法加载您的团队",
       "retry": "重试"
+    },
+    "operatorContext": {
+      "label": "运营商",
+      "all": "所有运营商"
     }
   },
   "messaging": {
@@ -1258,7 +1259,72 @@
       "documents": "证件",
       "governance": "同意治理",
       "customers": "客户",
+      "operators": "运营商",
       "backToSite": "返回网站"
+    },
+    "operators": {
+      "title": "运营商",
+      "subtitle": "平台上的所有运营商 — 创建、邀请员工、重命名和停用。",
+      "empty": "暂无运营商。",
+      "loadError": "无法加载运营商。",
+      "retry": "重试",
+      "create": "创建运营商",
+      "colName": "运营商",
+      "colFleet": "车队",
+      "colStatus": "状态",
+      "colCreated": "创建时间",
+      "colActions": "操作",
+      "status": {
+        "active": "启用",
+        "deactivated": "已停用"
+      },
+      "row": {
+        "invite": "邀请员工",
+        "edit": "重命名",
+        "deactivate": "停用",
+        "reactivate": "重新启用",
+        "deactivating": "停用中…",
+        "reactivating": "重新启用中…"
+      },
+      "createDialog": {
+        "title": "创建运营商",
+        "subtitle": "向平台添加新的运营商。Slug 由名称自动生成。",
+        "nameLabel": "名称",
+        "namePlaceholder": "例如：Kanata Cars",
+        "handoffLabel": "预授权交接 URL（可选）",
+        "handoffPlaceholder": "https://…",
+        "cancel": "取消",
+        "submit": "创建",
+        "submitting": "创建中…"
+      },
+      "editDialog": {
+        "title": "重命名运营商",
+        "subtitle": "更新运营商的显示名称。Slug 保持不变。",
+        "nameLabel": "名称",
+        "cancel": "取消",
+        "submit": "保存",
+        "submitting": "保存中…"
+      },
+      "inviteDialog": {
+        "title": "邀请团队成员",
+        "subtitle": "为 {operator} 生成一次性邀请链接。",
+        "emailLabel": "邮箱",
+        "emailPlaceholder": "person@example.com",
+        "roleLabel": "角色",
+        "role": {
+          "OPERATOR_OWNER": "所有者",
+          "OPERATOR_STAFF": "员工"
+        },
+        "cancel": "取消",
+        "submit": "创建邀请",
+        "submitting": "创建中…",
+        "successTitle": "邀请链接已就绪",
+        "successSubtitle": "请立即复制 — 此链接仅显示一次。",
+        "urlLabel": "邀请链接",
+        "copy": "复制",
+        "copied": "已复制",
+        "done": "完成"
+      }
     },
     "home": {
       "title": "平台管理",
@@ -1550,6 +1616,30 @@
       "submit": "提交评价",
       "pending": "提交中…",
       "error": "出现错误，请重试。"
+    },
+    "operatorPanel": {
+      "cta": "评价该租客",
+      "title": "评价您的租客",
+      "description": "预订 {code} 的租客体验如何？",
+      "overall": "总体评分",
+      "starLabel": "{n} 星",
+      "dimension": {
+        "communication": "沟通",
+        "cleanliness": "整洁度",
+        "ruleAdherence": "规则遵守"
+      },
+      "commentLabel": "关于该租客的评论",
+      "commentPlaceholder": "分享租赁体验详情(可选)",
+      "submit": "提交评价",
+      "pending": "提交中…",
+      "error": "出现错误，请重试。",
+      "reviewed": "您已评价该租客。"
     }
+  },
+  "currency": {
+    "label": "显示货币",
+    "approximately": "约",
+    "disclaimer": "仅供参考 — 实际以日元（JPY）结算",
+    "asOf": "汇率基准日 {date}"
   }
 }

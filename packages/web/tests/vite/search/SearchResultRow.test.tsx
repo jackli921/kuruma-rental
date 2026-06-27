@@ -9,6 +9,7 @@ import type { ReactNode } from 'react'
 import { IntlProvider } from 'use-intl'
 import { describe, expect, it, vi } from 'vitest'
 import en from '../../../messages/en.json'
+import { renderWithUsdIndicative } from '../../support/currency'
 
 // The detail CTA is a TanStack Link (#885 slice 1b); stub it as a plain anchor
 // so the row renders without a RouterProvider, exposing its target + carried
@@ -235,6 +236,42 @@ describe('SearchResultRow', () => {
         region: 'namba',
         pickupLocationId: 'loc_x',
       })
+    })
+  })
+
+  // #1070: both row variants carry an indicative conversion of their displayed price.
+  describe('indicative price', () => {
+    it('converts the SPECIFIC row daily price for the indicative note', async () => {
+      renderWithUsdIndicative(
+        <SearchResultRow
+          item={makeSpecific({ dailyRateJpy: 30000 })}
+          locale="en"
+          from="2026-07-01T10:00"
+          to="2026-07-04T10:00"
+          classFilter={undefined}
+          pickupLocationId={undefined}
+          region={undefined}
+          geoLabel={null}
+        />,
+      )
+      // 30,000 -> $201
+      expect(await screen.findByText(/≈ \$201/)).toBeTruthy()
+    })
+
+    it('converts the CLASS_COMBO row daily price for the indicative note', async () => {
+      renderWithUsdIndicative(
+        <SearchResultRow
+          item={makeCombo({ dailyRateJpy: 30000 })}
+          locale="en"
+          from="2026-07-01T10:00"
+          to="2026-07-04T10:00"
+          classFilter={undefined}
+          pickupLocationId={undefined}
+          region={undefined}
+          geoLabel={null}
+        />,
+      )
+      expect(await screen.findByText(/≈ \$201/)).toBeTruthy()
     })
   })
 })

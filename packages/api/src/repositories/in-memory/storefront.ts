@@ -39,8 +39,12 @@ export class InMemoryStorefrontRepository implements StorefrontRepository {
     const joined = await Promise.all(
       locations.map(async (location) => {
         const operator = await this.operatorRepo.findById(location.operatorId)
-        // Orphan location (operator gone) is not a usable storefront card.
-        return operator ? { ...location, operatorName: operator.name } : null
+        // Orphan location (operator gone) is not a usable storefront card; #1206:
+        // a soft-deactivated operator (deactivatedAt set) is pulled off the public
+        // storefront too. `== null` mirrors the Drizzle `isNull` in the JOIN repo.
+        return operator && operator.deactivatedAt == null
+          ? { ...location, operatorName: operator.name }
+          : null
       }),
     )
     return joined.filter((s): s is Storefront => s !== null)

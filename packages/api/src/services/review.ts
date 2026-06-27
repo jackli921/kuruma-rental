@@ -6,12 +6,7 @@ import {
 } from '@kuruma/shared/lib/review-reveal'
 import type { EditReviewInput, SubmitReviewInput } from '@kuruma/shared/validators/review'
 import { type CallerContext, SYSTEM_CONTEXT } from '../middleware/auth'
-import {
-  PG_ERROR,
-  REVIEWS_AUTHOR_SUBJECT_CONSTRAINT,
-  pgConstraintName,
-  pgErrorCode,
-} from '../pg-errors'
+import { PG_ERROR, REVIEWS_SUBJECT_CONSTRAINT, pgConstraintName, pgErrorCode } from '../pg-errors'
 import type {
   BookingEventRepository,
   BookingRepository,
@@ -160,12 +155,23 @@ export class ReviewService {
     }
 
     try {
-      const review = await this.reviewRepo.insert(newReview)
+      const inserted = await this.reviewRepo.insert(newReview)
+      // Reveal on write, not only on read (#1195): if this submit completes a pair — or the
+      // 14-day window has already elapsed — publish both sides now, so API-only/3rd-party
+      // submitters (no refetch) and slice-5 aggregates (which filter publishedAt) don't wait
+      // for a later getForBooking or the daily sweep. Idempotent (publishMany is first-write-
+      // wins) and double-blind-safe: decideReveal still gates on counterpart-submitted-or-
+      // elapsed, so a lone first submitter inside the window stays hidden. Re-read so the
+      // response reflects the post-settle publishedAt.
+      await this.settleReveal(booking.id, now)
+      const review = (await this.reviewRepo.findById(inserted.id)) ?? inserted
       return { ok: true, review }
     } catch (err) {
+      // The single seal trips ALREADY_REVIEWED: a resubmit of the same (booking, subject)
+      // by the renter, or a colleague already speaking for the operator (#1158/#1201).
       if (
         pgErrorCode(err) === PG_ERROR.UNIQUE_VIOLATION &&
-        pgConstraintName(err) === REVIEWS_AUTHOR_SUBJECT_CONSTRAINT
+        pgConstraintName(err) === REVIEWS_SUBJECT_CONSTRAINT
       ) {
         return fail(409, 'ALREADY_REVIEWED')
       }
@@ -223,12 +229,23 @@ export class ReviewService {
   async getForBooking(ctx: CallerContext, bookingId: string, now: Date): Promise<GetReviewsResult> {
     const booking = await this.bookingRepo.findById(SYSTEM_CONTEXT, bookingId)
     if (!booking) return fail(404, 'BOOKING_NOT_FOUND')
-    if (!(await this.resolveRole(ctx, booking))) return fail(403, 'NOT_A_PARTICIPANT')
+    const role = await this.resolveRole(ctx, booking)
+    if (!role) return fail(403, 'NOT_A_PARTICIPANT')
 
     await this.settleReveal(bookingId, now)
     const reviews = await this.reviewRepo.findByBookingId(bookingId)
-    // The reader always sees their own rows; a counterparty row only once published.
-    const visible = reviews.filter((r) => r.authorUserId === ctx.userId || r.publishedAt !== null)
+    // The reader always sees their own rows; a counterparty row only once published. An
+    // OPERATOR reader additionally sees their operator's OWN side even while hidden /
+    // authored by a colleague (#1158): the operator->renter review is the tenant's, not
+    // the staff member's, so a colleague's pending row must hide the rate-renter prompt.
+    // All OPERATOR rows for a booking share its operatorId, so this never reveals the
+    // renter's still-hidden side — the renter↔operator double-blind stays intact.
+    const visible = reviews.filter(
+      (r) =>
+        r.authorUserId === ctx.userId ||
+        r.publishedAt !== null ||
+        (role === 'OPERATOR' && r.authorRole === 'OPERATOR'),
+    )
     return { ok: true, reviews: visible }
   }
 

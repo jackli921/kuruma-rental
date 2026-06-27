@@ -1,17 +1,24 @@
 import { PageSkeleton } from '@/vite/PageSkeleton'
 import { OperatorAddOnsView } from '@/vite/operator-add-ons/OperatorAddOnsView'
 import { addOnsQueryOptions } from '@/vite/operator-add-ons/api'
+import { useOperatorScope } from '@/vite/operator-context'
 import { useSuspenseQuery } from '@tanstack/react-query'
 import { type ErrorComponentProps, createFileRoute, useRouter } from '@tanstack/react-router'
 import { useTranslations } from 'use-intl'
 
 // Operator add-on management (#585). URL `/<locale>/manage/add-ons` — behind the
-// `_business` guard, so only business roles reach it; tenant scoping is
-// server-side (CallerContext), the client passes no operatorId. The loader
-// prefetches into the query cache (no FOUC); the component reads the same list
-// via useSuspenseQuery and the CRUD dialogs invalidate the shared key.
+// `_business` guard, so only business roles reach it. Tenant scoping is server-side
+// (CallerContext): an operator session auto-scopes; a cross-operator reader sees all
+// tenants (read-only); a platform admin who has picked a tenant via the operator
+// context picker scopes to it and may write. The `operator` search param (read via
+// loaderDeps so a context switch refetches) selects the picked tenant; the loader
+// prefetches that scoped list into the cache (no FOUC) and the component reads it back.
 export const Route = createFileRoute('/$locale/_business/manage/add-ons')({
-  loader: ({ context }) => context.queryClient.ensureQueryData(addOnsQueryOptions()),
+  loaderDeps: ({ search }: { search: { operator?: string | undefined } }) => ({
+    operator: search.operator,
+  }),
+  loader: ({ context, deps }) =>
+    context.queryClient.ensureQueryData(addOnsQueryOptions(deps.operator)),
   pendingComponent: PageSkeleton,
   errorComponent: OperatorAddOnsError,
   component: OperatorAddOnsRoute,
@@ -19,7 +26,8 @@ export const Route = createFileRoute('/$locale/_business/manage/add-ons')({
 
 function OperatorAddOnsRoute() {
   const t = useTranslations('business.addOns')
-  const { data: addOns } = useSuspenseQuery(addOnsQueryOptions())
+  const scope = useOperatorScope()
+  const { data: addOns } = useSuspenseQuery(addOnsQueryOptions(scope.pickedOperatorId))
 
   return (
     <main className="flex-1 px-4 py-10 sm:px-6 lg:px-8">
@@ -28,7 +36,7 @@ function OperatorAddOnsRoute() {
           <h1 className="text-3xl font-bold tracking-tight sm:text-4xl">{t('title')}</h1>
           <p className="mt-2 text-lg text-muted-foreground">{t('subtitle')}</p>
         </header>
-        <OperatorAddOnsView addOns={addOns} />
+        <OperatorAddOnsView addOns={addOns} scope={scope} />
       </div>
     </main>
   )

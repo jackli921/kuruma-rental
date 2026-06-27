@@ -85,4 +85,31 @@ describe('InMemoryStorefrontRepository.findActiveStorefronts (#391)', () => {
 
     expect(result).toEqual([])
   })
+
+  // #1206: a soft-deactivated operator (operators.deactivatedAt set) is pulled
+  // off the public storefront — its cards must never surface to a renter — while
+  // active operators are untouched; reactivation (deactivatedAt -> null) restores them.
+  it('hides a deactivated operator’s storefronts, leaving active operators visible', async () => {
+    const best = await makeOperator('Best Car Rental', 'best')
+    const kyoto = await makeOperator('Kyoto Wheels', 'kyoto')
+    await locationRepo.create(locationInput({ operatorId: best.id, name: 'Namba' }))
+    await locationRepo.create(locationInput({ operatorId: kyoto.id, name: 'Gion' }))
+    await operatorRepo.update(best.id, { deactivatedAt: new Date(), updatedAt: new Date() })
+
+    const result = await storefrontRepo.findActiveStorefronts(PUBLIC_CONTEXT)
+
+    expect(result.map((s) => s.name)).toEqual(['Gion'])
+  })
+
+  it('restores a reactivated operator’s storefronts (deactivatedAt -> null)', async () => {
+    const best = await makeOperator('Best Car Rental', 'best')
+    await locationRepo.create(locationInput({ operatorId: best.id, name: 'Namba' }))
+    await operatorRepo.update(best.id, { deactivatedAt: new Date(), updatedAt: new Date() })
+    expect(await storefrontRepo.findActiveStorefronts(PUBLIC_CONTEXT)).toEqual([])
+
+    await operatorRepo.update(best.id, { deactivatedAt: null, updatedAt: new Date() })
+
+    const result = await storefrontRepo.findActiveStorefronts(PUBLIC_CONTEXT)
+    expect(result.map((s) => s.name)).toEqual(['Namba'])
+  })
 })

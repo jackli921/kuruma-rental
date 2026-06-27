@@ -1,13 +1,14 @@
+import { SECOND_OPERATOR_ID } from '@kuruma/shared/db/constants'
 import { reviews } from '@kuruma/shared/db/schema'
 import { eq } from 'drizzle-orm'
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest'
 import {
   PG_ERROR,
-  REVIEWS_AUTHOR_SUBJECT_CONSTRAINT,
+  REVIEWS_SUBJECT_CONSTRAINT,
   pgConstraintName,
   pgErrorCode,
 } from '../../src/pg-errors'
-import { type SeededBooking, createSeededBooking } from './booking-factory'
+import { type SeededBooking, createSeededBooking, seedRenter } from './booking-factory'
 import { db } from './setup'
 
 // #1067 slice 1: the reviews row-shape invariants live in Postgres, not service
@@ -32,8 +33,8 @@ beforeAll(async () => {
 })
 
 afterEach(async () => {
-  // The (bookingId, authorUserId, subject) unique allows one row per triple; clear
-  // them between cases so each starts clean and the asserted seal is what trips.
+  // The (bookingId, subject) unique allows one row per pair; clear them between cases
+  // so each starts clean and the asserted seal is what trips.
   await db.delete(reviews).where(eq(reviews.bookingId, bookingId))
 })
 
@@ -95,15 +96,52 @@ describe('reviews table constraints (#1067, real pg)', () => {
     ).toBeNull()
   })
 
-  it('rejects a duplicate (bookingId, authorUserId, subject) with the unique seal', async () => {
+  it('rejects a duplicate (bookingId, subject) — the single reseal (#1201)', async () => {
     expect(await insertReview()).toBeNull()
     const err = await insertReview()
-    expect(
-      err,
-      'a second review for the same author+booking+subject must be rejected',
-    ).not.toBeNull()
+    expect(err, 'a second review for the same booking+subject must be rejected').not.toBeNull()
     expect(pgErrorCode(err)).toBe(PG_ERROR.UNIQUE_VIOLATION)
-    expect(pgConstraintName(err)).toBe(REVIEWS_AUTHOR_SUBJECT_CONSTRAINT)
+    expect(pgConstraintName(err)).toBe(REVIEWS_SUBJECT_CONSTRAINT)
+  })
+
+  it('rejects a 2nd operator->renter review by a different staff member of the same operator (#1158)', async () => {
+    // Two distinct staff users of the SAME operator. The (bookingId, subject) unique
+    // seals one operator->renter review per booking regardless of which staff member submits.
+    const staffA = await seedRenter('review-op-a')
+    const staffB = await seedRenter('review-op-b')
+    expect(
+      await insertReview({ authorRole: 'OPERATOR', subject: 'RENTER', authorUserId: staffA }),
+    ).toBeNull()
+    const err = await insertReview({
+      authorRole: 'OPERATOR',
+      subject: 'RENTER',
+      authorUserId: staffB,
+    })
+    expect(err, 'one operator-side review per booking, keyed on the operator').not.toBeNull()
+    expect(pgErrorCode(err)).toBe(PG_ERROR.UNIQUE_VIOLATION)
+    expect(pgConstraintName(err)).toBe(REVIEWS_SUBJECT_CONSTRAINT)
+  })
+
+  it('seals operator->renter on (bookingId, subject) regardless of operatorId (#1201)', async () => {
+    // The denormalized operatorId is NOT part of the seal anymore. A 2nd operator->renter
+    // review carrying a DIFFERENT (still FK-valid) operatorId must still be rejected — proving
+    // a writer setting a wrong operatorId can no longer slip a duplicate past the seal.
+    // SECOND_OPERATOR_ID is FK-seeded in global-setup.ts so the row is genuinely FK-valid and
+    // reaches the unique check (the 23505 fires before the FK is even evaluated).
+    const staffA = await seedRenter('review-indep-a')
+    const staffB = await seedRenter('review-indep-b')
+    expect(
+      await insertReview({ authorRole: 'OPERATOR', subject: 'RENTER', authorUserId: staffA }),
+    ).toBeNull()
+    const err = await insertReview({
+      authorRole: 'OPERATOR',
+      subject: 'RENTER',
+      authorUserId: staffB,
+      operatorId: SECOND_OPERATOR_ID,
+    })
+    expect(err, 'a wrong operatorId must not unlock a 2nd operator review').not.toBeNull()
+    expect(pgErrorCode(err)).toBe(PG_ERROR.UNIQUE_VIOLATION)
+    expect(pgConstraintName(err)).toBe(REVIEWS_SUBJECT_CONSTRAINT)
   })
 
   it('rejects an operator reviewing a non-renter subject (reviews_subject_pairing_chk)', async () => {

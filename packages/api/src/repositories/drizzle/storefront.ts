@@ -1,5 +1,5 @@
 import { locations, operators } from '@kuruma/shared/db/schema'
-import { type SQL, and, asc, eq, inArray } from 'drizzle-orm'
+import { type SQL, and, asc, eq, inArray, isNull } from 'drizzle-orm'
 import type { CallerContext } from '../../middleware/auth'
 import { operatorReadScope } from '../../tenancy'
 import type { Storefront, StorefrontFilters, StorefrontRepository } from '../types'
@@ -23,7 +23,10 @@ export class DrizzleStorefrontRepository implements StorefrontRepository {
     const scope = operatorReadScope(ctx)
     if (scope.kind === 'none') return []
 
-    const conditions: SQL[] = [eq(locations.status, 'ACTIVE')]
+    // #1206: a soft-deactivated operator (operators.deactivatedAt set) is pulled
+    // off the public storefront — its cards must never surface to a renter. The
+    // INNER-join already drops orphan locations; this drops deactivated tenants too.
+    const conditions: SQL[] = [eq(locations.status, 'ACTIVE'), isNull(operators.deactivatedAt)]
     if (scope.kind === 'operator') conditions.push(eq(locations.operatorId, scope.operatorId))
     if (filters?.pickupLocationId) conditions.push(eq(locations.id, filters.pickupLocationId))
     // #394: an empty regionIds set means "no region matched" -> no storefronts.

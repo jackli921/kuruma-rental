@@ -1,3 +1,4 @@
+import { readLocalStorage, writeLocalStorage } from '@/lib/safe-storage'
 import type { LayoutPreference } from '@/vite/nav/business-sidebar-visibility'
 import { createContext, useCallback, useContext, useMemo, useState } from 'react'
 
@@ -19,7 +20,7 @@ const LayoutPreferenceContext = createContext<LayoutPreferenceContextValue>({
 // consumes the preference. Safe because this is a client-only SPA render (no SSR,
 // so no hydration mismatch).
 function readStoredPreference(): LayoutPreference {
-  const stored = localStorage.getItem(STORAGE_KEY)
+  const stored = readLocalStorage(STORAGE_KEY)
   return stored === 'sidebar' || stored === 'topnav' ? stored : DEFAULT_PREFERENCE
 }
 
@@ -29,7 +30,7 @@ export function LayoutPreferenceProvider({ children }: { readonly children: Reac
   const toggle = useCallback(() => {
     setPreference((prev) => {
       const next = prev === 'sidebar' ? 'topnav' : 'sidebar'
-      localStorage.setItem(STORAGE_KEY, next)
+      writeLocalStorage(STORAGE_KEY, next)
       return next
     })
   }, [])

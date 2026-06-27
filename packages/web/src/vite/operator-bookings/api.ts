@@ -1,4 +1,4 @@
-import { unwrap } from '@/lib/api-error'
+import { unwrap, unwrapPage } from '@/lib/api-error'
 import { getApiBaseUrl } from '@/vite/api-base'
 import { type BookingDto, bookingDtoSchema } from '@/vite/bookings/api'
 import type { BookingStatus } from '@kuruma/shared/enums'
@@ -60,6 +60,10 @@ export interface CalendarBookingRow {
   bookingCode: string
   status: OperatorBookingStatus
   startAt: string
+  // The booked end (pickup→dropoff). The timeline renders [startAt, endAt] as the
+  // solid "booked" band and [endAt, effectiveEndAt] as a lighter turnaround band,
+  // so both bounds are carried (#1100). Plans #1101/#1102 also need this.
+  endAt: string
   effectiveEndAt: string
   // The fulfilling car's id (resource-column key). Null for a class-only booking
   // not yet assigned a vehicle — such a booking has no column to live in.
@@ -69,9 +73,15 @@ export interface CalendarBookingRow {
   totalPrice: number | null
 }
 
-// Pull a generous page (the API caps `limit` at 100); a single range fetch keeps
-// the calendar a pure function of [from, to]. Deeper paging is a later concern.
+// The API caps `limit` at 100. A 50-car fleet over a multi-day window routinely
+// holds more than one page of (range-overlapping) bookings, so a single fetch
+// silently dropped bars off the timeline (#1100 #2 — the biggest correctness
+// risk). The calendar now follows the cursor to completion instead.
 const CALENDAR_PAGE_LIMIT = 100
+// Safety bound on the cursor walk: ~50 cars × a few weeks is a few hundred rows;
+// 100 pages (10k rows) is far beyond any real fleet+window. Hitting it means a
+// cursor bug or an absurd range — throw loudly rather than truncate silently.
+const MAX_CALENDAR_PAGES = 100
 
 function toCalendarRow(b: RawOperatorBooking): CalendarBookingRow {
   return {
@@ -79,6 +89,7 @@ function toCalendarRow(b: RawOperatorBooking): CalendarBookingRow {
     bookingCode: b.bookingCode,
     status: b.status,
     startAt: b.startAt,
+    endAt: b.endAt,
     effectiveEndAt: b.effectiveEndAt ?? b.endAt,
     vehicleId: b.assignedVehicleId ?? null,
     renterName: b.renter?.name ?? null,
@@ -91,19 +102,30 @@ export async function fetchCalendarBookings(
   from: string,
   to: string,
 ): Promise<CalendarBookingRow[]> {
-  // `expand=renter` only: the event title needs the renter, but the vehicle
-  // *name* comes from the fleet resource list — events bind to columns by id.
-  const sp = new URLSearchParams({
-    from,
-    to,
-    expand: 'renter',
-    limit: String(CALENDAR_PAGE_LIMIT),
-  })
-  const res = await fetch(`${getApiBaseUrl()}/bookings?${sp.toString()}`, {
-    credentials: 'include',
-  })
-  const data = await unwrap(res, rawOperatorBookingSchema.array())
-  return data.map(toCalendarRow)
+  // Follow the cursor to the end so no booking is dropped (#1100 #2). `expand=renter`
+  // only: the event title needs the renter, but the vehicle *name* comes from the
+  // fleet resource list — events bind to columns by id.
+  const rows: RawOperatorBooking[] = []
+  let cursor: string | null = null
+  for (let page = 0; page < MAX_CALENDAR_PAGES; page++) {
+    const sp = new URLSearchParams({
+      from,
+      to,
+      expand: 'renter',
+      limit: String(CALENDAR_PAGE_LIMIT),
+    })
+    if (cursor) sp.set('cursor', cursor)
+    const res = await fetch(`${getApiBaseUrl()}/bookings?${sp.toString()}`, {
+      credentials: 'include',
+    })
+    const { data, nextCursor } = await unwrapPage(res, rawOperatorBookingSchema.array())
+    rows.push(...data)
+    cursor = nextCursor
+    if (!cursor) return rows.map(toCalendarRow)
+  }
+  throw new Error(
+    `Calendar pagination exceeded ${MAX_CALENDAR_PAGES} pages for [${from}, ${to}] — refusing to truncate silently`,
+  )
 }
 
 export function operatorCalendarQueryOptions(from: string, to: string) {
@@ -247,12 +269,21 @@ export function bookingEventsQueryOptions(id: string) {
 // booking from this list in one cache-invalidation call.
 export const NEEDS_ASSIGNMENT_QUERY_KEY = ['operator-bookings', 'needs-assignment'] as const
 
+// #1197: pull a full page (the API caps `limit` at 100). Without an explicit
+// limit the route defaults to 20 and unwrap() drops `nextCursor`, so an operator
+// with >20 unassigned floats would silently see only 20 on this action worklist.
+const NEEDS_ASSIGNMENT_PAGE_LIMIT = 100
+
 export async function fetchNeedsAssignment(): Promise<RawOperatorBooking[]> {
   // `expand=renter` is supported alongside `needsAssignment=true` (the route
   // applies all filters before the expansion join), so renter name/email are
   // included when the user table has them. The rawOperatorBookingSchema already
   // carries the optional renter block, so no new schema is needed here.
-  const sp = new URLSearchParams({ needsAssignment: 'true', expand: 'renter' })
+  const sp = new URLSearchParams({
+    needsAssignment: 'true',
+    expand: 'renter',
+    limit: String(NEEDS_ASSIGNMENT_PAGE_LIMIT),
+  })
   const res = await fetch(`${getApiBaseUrl()}/bookings?${sp.toString()}`, {
     credentials: 'include',
   })

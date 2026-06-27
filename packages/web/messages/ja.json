@@ -1,9 +1,4 @@
 {
-  "currency": {
-    "label": "表示通貨",
-    "disclaimer": "目安です — ご請求は日本円（JPY）です",
-    "asOf": "レート基準日 {date}"
-  },
   "consent": {
     "title": "続行するにはご確認のうえ同意してください",
     "intro": "Kuruma を引き続きご利用いただくには、以下をご確認のうえ同意してください。",
@@ -254,6 +249,7 @@
         "previous": "前へ",
         "next": "次へ",
         "views": {
+          "timeline": "タイムライン",
           "day": "日",
           "week": "週",
           "month": "月"
@@ -261,6 +257,7 @@
         "noEventsInRange": "この期間に予約はありません",
         "showMore": "+{count}件",
         "viewFullDetails": "詳細を表示",
+        "unassigned": "車両未割当",
         "sidebar": {
           "title": "フィルター",
           "vehicles": {
@@ -884,6 +881,10 @@
       },
       "loadError": "チームを読み込めませんでした",
       "retry": "再試行"
+    },
+    "operatorContext": {
+      "label": "事業者",
+      "all": "すべての事業者"
     }
   },
   "messaging": {
@@ -1258,7 +1259,72 @@
       "documents": "書類",
       "governance": "同意ガバナンス",
       "customers": "顧客",
+      "operators": "事業者",
       "backToSite": "サイトに戻る"
+    },
+    "operators": {
+      "title": "事業者",
+      "subtitle": "プラットフォーム上のすべての事業者 — 作成、スタッフ招待、名称変更、無効化。",
+      "empty": "事業者がまだありません。",
+      "loadError": "事業者を読み込めませんでした。",
+      "retry": "再試行",
+      "create": "事業者を作成",
+      "colName": "事業者",
+      "colFleet": "車両数",
+      "colStatus": "ステータス",
+      "colCreated": "作成日",
+      "colActions": "操作",
+      "status": {
+        "active": "有効",
+        "deactivated": "無効"
+      },
+      "row": {
+        "invite": "スタッフを招待",
+        "edit": "名称変更",
+        "deactivate": "無効化",
+        "reactivate": "再有効化",
+        "deactivating": "無効化中…",
+        "reactivating": "再有効化中…"
+      },
+      "createDialog": {
+        "title": "事業者を作成",
+        "subtitle": "新しい事業者をプラットフォームに追加します。スラッグは名前から自動生成されます。",
+        "nameLabel": "名前",
+        "namePlaceholder": "例：Kanata Cars",
+        "handoffLabel": "事前認証ハンドオフURL（任意）",
+        "handoffPlaceholder": "https://…",
+        "cancel": "キャンセル",
+        "submit": "作成",
+        "submitting": "作成中…"
+      },
+      "editDialog": {
+        "title": "事業者の名称変更",
+        "subtitle": "事業者の表示名を更新します。スラッグは変更されません。",
+        "nameLabel": "名前",
+        "cancel": "キャンセル",
+        "submit": "保存",
+        "submitting": "保存中…"
+      },
+      "inviteDialog": {
+        "title": "メンバーを招待",
+        "subtitle": "{operator} の一回限りの招待リンクを発行します。",
+        "emailLabel": "メールアドレス",
+        "emailPlaceholder": "person@example.com",
+        "roleLabel": "役割",
+        "role": {
+          "OPERATOR_OWNER": "オーナー",
+          "OPERATOR_STAFF": "スタッフ"
+        },
+        "cancel": "キャンセル",
+        "submit": "招待を作成",
+        "submitting": "作成中…",
+        "successTitle": "招待リンクの準備ができました",
+        "successSubtitle": "今すぐコピーしてください — このリンクは一度だけ表示されます。",
+        "urlLabel": "招待リンク",
+        "copy": "コピー",
+        "copied": "コピーしました",
+        "done": "完了"
+      }
     },
     "home": {
       "title": "プラットフォーム管理",
@@ -1550,6 +1616,30 @@
       "submit": "レビューを送信",
       "pending": "送信中…",
       "error": "エラーが発生しました。もう一度お試しください。"
+    },
+    "operatorPanel": {
+      "cta": "この利用者を評価",
+      "title": "利用者を評価する",
+      "description": "ご予約 {code} のお客様はいかがでしたか?",
+      "overall": "総合評価",
+      "starLabel": "星{n}つ",
+      "dimension": {
+        "communication": "コミュニケーション",
+        "cleanliness": "清潔さ",
+        "ruleAdherence": "ルールの遵守"
+      },
+      "commentLabel": "この利用者についてのコメント",
+      "commentPlaceholder": "貸出の詳細をご記入ください(任意)",
+      "submit": "レビューを送信",
+      "pending": "送信中…",
+      "error": "エラーが発生しました。もう一度お試しください。",
+      "reviewed": "この利用者を評価済みです。"
     }
+  },
+  "currency": {
+    "label": "表示通貨",
+    "approximately": "約",
+    "disclaimer": "目安です — ご請求は日本円（JPY）です",
+    "asOf": "レート基準日 {date}"
   }
 }

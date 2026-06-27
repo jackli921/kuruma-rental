@@ -17,7 +17,11 @@ export const FX_RATES_QUERY_KEY = ['fx', 'rates'] as const
 const fxRatesSchema = z.object({
   base: z.literal('JPY'),
   asOf: z.string(),
-  rates: z.record(z.string(), z.number()),
+  // A JPY→currency multiplier is always positive; rejecting 0/negative here fails the
+  // whole snapshot loudly (UI degrades to JPY-only) as defense-in-depth —
+  // formatIndicativePrice also guards per-currency (`rate <= 0 → null`), so this only
+  // hardens the seam, it isn't the sole guard. (z.number() already rejects NaN/Infinity.)
+  rates: z.record(z.string(), z.number().positive()),
 }) satisfies z.ZodType<FxRates>
 
 export async function fetchFxRates(): Promise<FxRates> {

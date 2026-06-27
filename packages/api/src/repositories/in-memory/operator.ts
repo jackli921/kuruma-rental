@@ -19,10 +19,17 @@ export class InMemoryOperatorRepository implements OperatorRepository {
     return [...this.store.values()].sort((a, b) => a.name.localeCompare(b.name))
   }
 
-  // #1087: platform-overview COUNT(operators). TODO(#1088): filter active once
-  // the deactivatedAt column lands.
+  // #1087 platform-overview COUNT — #1088 narrowed it to active operators only
+  // (deactivatedAt IS NULL), so a deactivated tenant drops out of the KPI. `== null`
+  // is the faithful mirror of Postgres `isNull`: identical for real rows (always
+  // null | Date), and it also treats the JS-only `undefined` a loose test fixture
+  // may leave off as active, since "no deactivation timestamp" means active.
   async count(): Promise<number> {
-    return this.store.size
+    let active = 0
+    for (const op of this.store.values()) {
+      if (op.deactivatedAt == null) active++
+    }
+    return active
   }
 
   async findById(id: string): Promise<Operator | undefined> {
@@ -47,6 +54,7 @@ export class InMemoryOperatorRepository implements OperatorRepository {
       ...data,
       createdAt: now,
       updatedAt: now,
+      deactivatedAt: null,
     }
     this.store.set(operator.id, operator)
     return operator
