@@ -1,18 +1,18 @@
 import { PageSkeleton } from '@/vite/PageSkeleton'
-import { OperatorCreateDialog } from '@/vite/admin/operators/OperatorCreateDialog'
-import { OperatorEditDialog } from '@/vite/admin/operators/OperatorEditDialog'
-import { OperatorsView } from '@/vite/admin/operators/OperatorsView'
-import { ProviderInviteDialog } from '@/vite/admin/operators/ProviderInviteDialog'
 import {
   OPERATORS_QUERY_KEY,
   type OperatorAdminRow,
+  OperatorCreateDialog,
+  OperatorEditDialog,
+  OperatorsView,
+  ProviderInviteDialog,
   createOperator,
   deactivateOperator,
   editOperator,
   mintProviderInvite,
   operatorsQueryOptions,
   reactivateOperator,
-} from '@/vite/admin/operators/api'
+} from '@/vite/admin/operators'
 import { useSession } from '@/vite/session'
 import type { OperatorRole } from '@kuruma/shared/enums'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
