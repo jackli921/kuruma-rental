@@ -108,7 +108,15 @@ const FUNCTION_NAMES = new Set([
  *  Handles: bare `"col"` / `col`, opclass suffix (`"col" gin_trgm_ops`),
  *  ASC/DESC + NULLS FIRST/LAST, and function calls (`lower("email")`).
  *  Returns the underlying column references so a later DROP COLUMN cascade
- *  can match them. */
+ *  can match them.
+ *
+ *  Known limitation: the token regex pulls every identifier and filters only
+ *  the keyword / function sets above. Inside an expression we may emit SQL
+ *  keywords this set doesn't know (`FROM`, `FOR`, `AS`, `CASE`, …). This is
+ *  harmless unless a real column shares one of those names AND it's later
+ *  dropped — in which case we'd over-cascade and silently retire the index
+ *  in the lint's view. No such collision exists in the current tree. Extend
+ *  the keyword sets (or move to a real expression parser) if one appears. */
 function extractColumnsFromTerm(term: string): string[] {
   // Strip opclass suffix: a trailing `\w+_ops` / `\w+_pattern_ops` token
   // (gin_trgm_ops, text_pattern_ops, varchar_pattern_ops, jsonb_path_ops, ...).
@@ -205,7 +213,13 @@ export function parseDroppedIndexes(sql: string): string[] {
 export function parseDroppedColumns(sql: string): DroppedColumn[] {
   const cleaned = sql.replace(/--[^\n]*/g, '')
   // Capture (table, action-list) per ALTER TABLE statement, then scan the
-  // action list for every DROP COLUMN.
+  // action list for every DROP COLUMN. The `[^;]+` action capture is not
+  // quote-aware: an embedded `;` inside a string literal (e.g. an
+  // `ADD COLUMN ... DEFAULT 'foo;bar'`) would truncate the actions and lose
+  // a trailing DROP. We accept that under-capture because the failure mode
+  // is loud (the un-cascaded index stays surfaced as drift in the lint), not
+  // silent — switch to a real SQL tokenizer if you ever need the opposite
+  // bias.
   const stmtRe = new RegExp(
     String.raw`alter\s+table\s+(?:only\s+)?${SCHEMA_PREFIX}(?:"([^"]+)"|(\w+))\s+([^;]+)`,
     'gi',

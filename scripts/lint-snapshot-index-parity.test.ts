@@ -405,6 +405,10 @@ describe('isSnapshotShape — runtime guard for the snapshot JSON', () => {
     expect(isSnapshotShape({ tables: 'oops' })).toBe(false)
   })
 
+  test('rejects tables as null', () => {
+    expect(isSnapshotShape({ tables: null })).toBe(false)
+  })
+
   test('rejects a table value that is a primitive', () => {
     expect(isSnapshotShape({ tables: { t: 'oops' } })).toBe(false)
   })
