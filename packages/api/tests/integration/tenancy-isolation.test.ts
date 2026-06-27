@@ -84,6 +84,7 @@ describe('booking repo is operator-scoped (Drizzle, real Postgres)', () => {
   let vehicleAId: string
   let locationAId: string
   let bookingAId: string
+  let bookingTripId: string
 
   const ctxFor = (operatorId: string): CallerContext => ({
     userId: 'owner',
@@ -174,6 +175,26 @@ describe('booking repo is operator-scoped (Drizzle, real Postgres)', () => {
       }),
     )
     bookingAId = bookingA.id
+    // A Trip.com-sourced booking on the SAME operator, on the same car at a
+    // non-overlapping time (so the exclusion constraint stays satisfied). A
+    // PARTNER must see THIS one but not the DIRECT bookingA above (#1119).
+    const bookingTrip = await bookingRepo.create(
+      SYSTEM_CONTEXT,
+      bookingInput({
+        operatorId: opAId,
+        renterId,
+        classId: classAId,
+        requestedVehicleId: vehicleAId,
+        assignedVehicleId: vehicleAId,
+        pickupLocationId: locationAId,
+        dropoffLocationId: locationAId,
+        startAt: new Date('2027-09-05T10:00:00Z'),
+        endAt: new Date('2027-09-05T14:00:00Z'),
+        status: 'CONFIRMED',
+        source: 'TRIP_COM',
+      }),
+    )
+    bookingTripId = bookingTrip.id
   })
 
   afterAll(async () => {
@@ -195,6 +216,23 @@ describe('booking repo is operator-scoped (Drizzle, real Postgres)', () => {
   it('operator findById cannot reach another tenant booking', async () => {
     expect(await bookingRepo.findById(ctxFor(opAId), bookingAId)).toMatchObject({ id: bookingAId })
     expect(await bookingRepo.findById(ctxFor(opBId), bookingAId)).toBeUndefined()
+  })
+
+  // #1119: a Trip.com PARTNER key reads only its own channel (source=TRIP_COM),
+  // never an operator's DIRECT booking — even though it bypasses scope elsewhere.
+  const partnerCtx: CallerContext = { userId: 'trip-com', role: 'PARTNER', bypassScope: true }
+
+  it('a PARTNER reads its TRIP_COM booking but not the operator DIRECT booking', async () => {
+    const ids = (await bookingRepo.findAll(partnerCtx)).map((b) => b.id)
+    expect(ids).toContain(bookingTripId)
+    expect(ids).not.toContain(bookingAId)
+  })
+
+  it('a PARTNER findById cannot reach a DIRECT booking', async () => {
+    expect(await bookingRepo.findById(partnerCtx, bookingTripId)).toMatchObject({
+      id: bookingTripId,
+    })
+    expect(await bookingRepo.findById(partnerCtx, bookingAId)).toBeUndefined()
   })
 
   it('operator cannot create a booking for another operator', async () => {

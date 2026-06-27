@@ -5,6 +5,8 @@ import type { RenterCancellationData } from '../../../src/services/email/templat
 import { renderRenterCancellation } from '../../../src/services/email/templates/renter-cancellation'
 import type { RenterConfirmationData } from '../../../src/services/email/templates/renter-confirmation'
 import { renderRenterConfirmation } from '../../../src/services/email/templates/renter-confirmation'
+import type { RenterReviewPromptData } from '../../../src/services/email/templates/renter-review-prompt'
+import { renderRenterReviewPrompt } from '../../../src/services/email/templates/renter-review-prompt'
 import type { RenterStatusUpdateData } from '../../../src/services/email/templates/renter-status-update'
 import { renderRenterStatusUpdate } from '../../../src/services/email/templates/renter-status-update'
 
@@ -224,6 +226,45 @@ describe('renderRenterStatusUpdate', () => {
 
   it('falls back to the en subject for an unknown locale', () => {
     expect(renderRenterStatusUpdate(baseStatus, 'fr').subject).toContain('Trip started')
+  })
+})
+
+describe('renderRenterReviewPrompt', () => {
+  const basePrompt: RenterReviewPromptData = {
+    bookingCode: 'RVEW1234',
+    startAt: new Date('2026-07-01T10:00:00Z'),
+    endAt: new Date('2026-07-03T18:00:00Z'),
+    reviewUrl: 'https://app.kuruma.jp/en/bookings',
+  }
+
+  it('localizes a distinct subject for en/ja/zh and appends the booking code', () => {
+    const en = renderRenterReviewPrompt(basePrompt, 'en').subject
+    const ja = renderRenterReviewPrompt(basePrompt, 'ja').subject
+    const zh = renderRenterReviewPrompt(basePrompt, 'zh').subject
+    expect(en).toContain('RVEW1234')
+    expect(ja).toContain('RVEW1234')
+    expect(zh).toContain('RVEW1234')
+    // mutation-resistant: the three locales are genuinely different strings
+    expect(new Set([en, ja, zh]).size).toBe(3)
+  })
+
+  it('renders the review CTA link in html and text when reviewUrl is present', () => {
+    const { html, text } = renderRenterReviewPrompt(basePrompt, 'en')
+    expect(html).toContain('href="https://app.kuruma.jp/en/bookings"')
+    expect(text).toContain('https://app.kuruma.jp/en/bookings')
+    expect(html).toContain('RVEW1234')
+    expect(html).not.toMatch(UUID_RE)
+  })
+
+  it('omits the CTA entirely when reviewUrl is null but still names the booking', () => {
+    const { subject, html } = renderRenterReviewPrompt({ ...basePrompt, reviewUrl: null }, 'en')
+    expect(subject).toContain('RVEW1234')
+    expect(html).not.toContain('href=')
+  })
+
+  it('falls back to the en subject for an unknown locale', () => {
+    const en = renderRenterReviewPrompt(basePrompt, 'en').subject
+    expect(renderRenterReviewPrompt(basePrompt, 'fr').subject).toBe(en)
   })
 })
 
