@@ -7,12 +7,38 @@ import type { ReactNode } from 'react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 // These cover the view's rendering mechanics (rows, empty, sort, dialog, archive
-// gating); operator-context scope behavior (labels, read-only) lives in the
-// colocated src/vite/operator-add-ons/OperatorAddOnsView.test.tsx. A writable
-// scope keeps the original Add/Edit/Archive affordances visible.
+// gating) AND the operator-context scope behavior (all-mode labels, read-only
+// gating, scoped-write affordances) — this is the single home for the add-ons
+// view tests. A writable scope keeps the Add/Edit/Archive affordances visible.
 const writeScope: OperatorScope = {
   pickedOperatorId: undefined,
   canWrite: true,
+  showOperator: false,
+  operatorNameById: new Map(),
+}
+
+// All-mode: a cross-operator reader with no picked operator. Read-only, with the
+// per-row operator label turned on so the mixed-tenant list is legible.
+const allModeScope: OperatorScope = {
+  pickedOperatorId: undefined,
+  canWrite: false,
+  showOperator: true,
+  operatorNameById: new Map([['op_1', 'Sakura']]),
+}
+
+// Scoped write: an operator session (or an admin who picked a tenant). Write
+// affordances visible, no operator label.
+const scopedWriteScope: OperatorScope = {
+  pickedOperatorId: 'op_9',
+  canWrite: true,
+  showOperator: false,
+  operatorNameById: new Map(),
+}
+
+// Read-only: a cross-operator reader (or any caller without write rights).
+const readOnlyScope: OperatorScope = {
+  pickedOperatorId: undefined,
+  canWrite: false,
   showOperator: false,
   operatorNameById: new Map(),
 }
@@ -81,5 +107,23 @@ describe('OperatorAddOnsView', () => {
     const archived = { ...addOn, id: 'arch', name: 'Old extra', status: 'ARCHIVED' as const }
     render(<OperatorAddOnsView addOns={[archived]} scope={writeScope} />, { wrapper })
     expect(screen.getByRole('button', { name: 'archiveAction' })).toBeDisabled()
+  })
+
+  it('all-mode: shows the operator label and hides the Add button (read-only)', () => {
+    render(<OperatorAddOnsView addOns={[addOn]} scope={allModeScope} />, { wrapper })
+    expect(screen.getByText('Sakura')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'addOption' })).not.toBeInTheDocument()
+  })
+
+  it('scoped-write mode: shows the Add button and no operator label', () => {
+    render(<OperatorAddOnsView addOns={[addOn]} scope={scopedWriteScope} />, { wrapper })
+    expect(screen.getByRole('button', { name: 'addOption' })).toBeInTheDocument()
+    expect(screen.queryByLabelText(/^Operator:/)).not.toBeInTheDocument()
+  })
+
+  it('read-only mode hides the per-row Edit/Archive affordances', () => {
+    render(<OperatorAddOnsView addOns={[addOn]} scope={readOnlyScope} />, { wrapper })
+    expect(screen.queryByRole('button', { name: 'editOption' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'archiveAction' })).not.toBeInTheDocument()
   })
 })

@@ -52,6 +52,15 @@ describe('fetchAddOns', () => {
     expect(url).not.toContain('operatorId')
   })
 
+  it('scopes the read to operatorId (dropping includeAll) but keeps includeArchived when an admin picks a tenant', async () => {
+    fetchMock.mockResolvedValue(jsonResponse({ success: true, data: [] }))
+    await fetchAddOns('op_9')
+    const [url] = fetchMock.mock.calls[0] as [string, RequestInit]
+    expect(url).toContain('operatorId=op_9')
+    expect(url).not.toContain('includeAll')
+    expect(url).toContain('includeArchived=true')
+  })
+
   it('throws an ApiError carrying the status on a failure envelope', async () => {
     fetchMock.mockResolvedValue(jsonResponse({ success: false, error: 'Forbidden' }, 403))
     await expect(fetchAddOns()).rejects.toThrow('Forbidden')

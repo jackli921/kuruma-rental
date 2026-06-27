@@ -1,10 +1,10 @@
+import { AddAddOnDialog } from '@/vite/operator-add-ons/AddAddOnDialog'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import type { ReactNode } from 'react'
 import { IntlProvider } from 'use-intl'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import en from '../../../messages/en.json'
-import { AddAddOnDialog } from './AddAddOnDialog'
 
 // csrfToken is supplied without a real auth flow; the merge under test is the
 // dialog's, not the session's.
