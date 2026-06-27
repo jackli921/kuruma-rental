@@ -99,6 +99,15 @@ export const PAYMENT_REFUND_STRIPE_REFUND_CONSTRAINT = 'payment_refunds_stripeRe
 export const REVIEWS_AUTHOR_SUBJECT_CONSTRAINT = 'reviews_author_subject_per_booking_unique'
 
 /**
+ * Partial unique index on reviews (bookingId, operatorId, subject) WHERE authorRole=
+ * 'OPERATOR' (#1084 / #1158). One operator-side review per booking keyed on the tenant,
+ * not the staff user — so a 23505 on this name means a colleague of the same operator
+ * already reviewed this booking, translated (like the author-subject seal) to a 409
+ * ALREADY_REVIEWED rather than surfacing as a 500.
+ */
+export const REVIEWS_OPERATOR_SUBJECT_CONSTRAINT = 'reviews_operator_subject_per_booking_unique'
+
+/**
  * Partial unique index on provider_invites (operatorId, email) WHERE status=
  * 'PENDING' (#904 slice 2). At most one live invite per operator+email; REVOKED/
  * ACCEPTED rows free the slot so a re-invite works. A 23505 on this name means the
