@@ -212,6 +212,10 @@ export const maintenanceLogs = pgTable(
   },
   (table) => [
     check('maintenance_cost_non_negative', sql`${table.costJpy} IS NULL OR ${table.costJpy} >= 0`),
+    // FK index — exists in prod via 0020_add-maintenance-logs-vehicle-index.sql
+    // but was never echoed here, so the snapshot didn't carry it and a future
+    // `drizzle-kit pull` would silently drop it. Codified per #1172/#1150.
+    index('idx_maintenance_logs_vehicleId').on(table.vehicleId),
   ],
 )
 

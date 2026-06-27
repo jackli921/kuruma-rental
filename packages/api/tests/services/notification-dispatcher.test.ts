@@ -486,7 +486,9 @@ describe('NotificationDispatcher', () => {
       )
       expect((await kindsFor('CANCELLED')).rows.map((r) => r.kind)).toEqual(['RENTER_CANCELLATION'])
       expect((await kindsFor('ACTIVATED')).rows.map((r) => r.kind)).toEqual(['RENTER_TRIP_STARTED'])
-      expect((await kindsFor('COMPLETED')).rows.map((r) => r.kind)).toEqual([
+      // #1083: COMPLETED now also fans out the post-trip review prompt.
+      expect((await kindsFor('COMPLETED')).rows.map((r) => r.kind).sort()).toEqual([
+        'RENTER_REVIEW_PROMPT',
         'RENTER_TRIP_COMPLETED',
       ])
     })
@@ -506,15 +508,18 @@ describe('NotificationDispatcher', () => {
       await dispatcher.dispatch(booking, 'ACTIVATED')
       await dispatcher.dispatch(booking, 'COMPLETED')
       const rows = await logRepo.findAll({ userId: 'x', role: 'PLATFORM_ADMIN', bypassScope: true })
+      // #1083: COMPLETED fans out RENTER_TRIP_COMPLETED + RENTER_REVIEW_PROMPT.
       expect(rows.map((r) => r.kind).sort()).toEqual([
+        'RENTER_REVIEW_PROMPT',
         'RENTER_TRIP_COMPLETED',
         'RENTER_TRIP_STARTED',
       ])
       expect(rows.map((r) => r.idempotencyKey).sort()).toEqual([
+        `notify:${booking.id}:RENTER_REVIEW_PROMPT`,
         `notify:${booking.id}:RENTER_TRIP_COMPLETED`,
         `notify:${booking.id}:RENTER_TRIP_STARTED`,
       ])
-      expect(sender.send as ReturnType<typeof vi.fn>).toHaveBeenCalledTimes(2)
+      expect(sender.send as ReturnType<typeof vi.fn>).toHaveBeenCalledTimes(3)
     })
 
     // #1114/#1151: `buildMessage` once eager-fetched operator+vehicle+pickup+dropoff
@@ -551,6 +556,7 @@ describe('NotificationDispatcher', () => {
         RENTER_TRIP_STARTED: ['vehicle', 'pickup', 'dropoff'],
         RENTER_TRIP_COMPLETED: ['vehicle', 'pickup', 'dropoff'],
         OPERATOR_BOOKING_ALERT: ['vehicle', 'pickup', 'dropoff'],
+        RENTER_REVIEW_PROMPT: [], // snapshot-only: code + period + CTA, no relations
       }
 
       function buildInstrumented() {

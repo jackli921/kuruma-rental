@@ -123,6 +123,7 @@ describe('schema exports', () => {
       'RENTER_CANCELLATION',
       'RENTER_TRIP_STARTED',
       'RENTER_TRIP_COMPLETED',
+      'RENTER_REVIEW_PROMPT',
     ])
   })
 

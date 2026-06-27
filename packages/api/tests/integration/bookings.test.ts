@@ -592,6 +592,39 @@ describe('POST /bookings via HTTP (real Postgres)', () => {
     expect(secondBody.error).toMatch(/already booked|No cars left/i)
   })
 
+  it('GET /bookings hides an operator DIRECT booking from a PARTNER key (#1119)', async () => {
+    // A renter books a DIRECT (source defaults to DIRECT) booking on Best Car
+    // Rental. A Trip.com PARTNER key calling the SAME endpoint must NOT see it —
+    // it reads only its own channel (source=TRIP_COM). Closes the cross-tenant
+    // leak where `bypassScope` mapped PARTNER to an unrestricted `all` read.
+    const created = await app.request('/bookings', {
+      method: 'POST',
+      headers: { ...headers, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        requestedVehicleId: httpVehicle.id,
+        pickupLocationId: testLocationId,
+        dropoffLocationId: testLocationId,
+        startAt: '2027-05-01T10:00:00Z',
+        endAt: '2027-05-01T14:00:00Z',
+        source: 'DIRECT',
+        disclaimerAccepted: true,
+      }),
+    })
+    expect(created.status).toBe(201)
+    const directId = (await created.json()).data.id
+    httpBookingIds.push(directId)
+
+    // The owning renter CAN see it — proves the row exists and is readable, so the
+    // PARTNER's absence below is scoping, not a missing booking.
+    const ownerView = await app.request('/bookings', { headers })
+    expect((await ownerView.json()).data.map((b: { id: string }) => b.id)).toContain(directId)
+
+    const partnerHeaders = await authHeaders({ sub: crypto.randomUUID(), role: 'PARTNER' })
+    const partnerView = await app.request('/bookings', { headers: partnerHeaders })
+    expect(partnerView.status).toBe(200)
+    expect((await partnerView.json()).data.map((b: { id: string }) => b.id)).not.toContain(directId)
+  })
+
   it('rejects a cross-operator dropoff with 400 (#882 same-operator one-way guardrail)', async () => {
     // #882: one-way rentals are SAME-operator only. A dropoff at ANOTHER
     // operator's location must be rejected — there is no shared rule/custody/

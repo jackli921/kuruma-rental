@@ -189,21 +189,12 @@ export function findStaleBaseline(
  * Drain each via a codification PR: add an inline `.index(...)` / `.uniqueIndex(...)`
  * to the table's schema module, then `CREATE INDEX IF NOT EXISTS` migration.
  *
- * SHRINK this set when codifying — never grow it. New drift = a missing schema
- * declaration on a new migration, and that should fail the lint immediately.
+ * Empty after #1171 / #1172 / #1173 drained the original 5 entries from the
+ * audit M7 sweep. SHRINK this set when codifying — never grow it. New drift =
+ * a missing schema declaration on a new migration, and that should fail the
+ * lint immediately, not be silenced here.
  */
-export const BASELINE: ReadonlySet<string> = new Set([
-  // Three bookings indexes — all hand-SQL, none yet mirrored in
-  // packages/shared/src/db/booking.ts (codify in #1173):
-  // - 0010_add-fk-indexes.sql created idx_bookings_renterId
-  // - 0014_add-bookings-status-index.sql created idx_bookings_status
-  // - 0012_idempotency-unique-index.sql created bookings_idempotency_key (partial unique)
-  'bookings.idx_bookings_renterId',
-  'bookings.idx_bookings_status',
-  'bookings.bookings_idempotency_key',
-  // Created by 0020_add-maintenance-logs-vehicle-index.sql (codify in #1172).
-  'maintenance_logs.idx_maintenance_logs_vehicleId',
-])
+export const BASELINE: ReadonlySet<string> = new Set()
 
 async function main(): Promise<void> {
   const root = new URL('..', import.meta.url).pathname
