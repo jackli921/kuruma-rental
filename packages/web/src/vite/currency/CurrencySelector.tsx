@@ -33,7 +33,14 @@ export function CurrencySelector() {
     <DropdownMenu>
       <DropdownMenuTrigger
         render={
-          <Button variant="ghost" size="sm" className="gap-1.5" aria-label={t('label')}>
+          <Button
+            variant="ghost"
+            size="sm"
+            className="gap-1.5"
+            // Include the visible code so the accessible name contains the on-screen
+            // label (WCAG 2.5.3 Label in Name) — a voice-control "click USD" matches.
+            aria-label={`${t('label')}: ${currency}`}
+          >
             <Coins className="size-4" />
             <span className="hidden sm:inline">{currency}</span>
           </Button>
