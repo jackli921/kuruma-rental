@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import type { OperatorAlertData } from '../../../src/services/email/templates/operator-alert'
 import { renderOperatorAlert } from '../../../src/services/email/templates/operator-alert'
+import type { OperatorNewMessageData } from '../../../src/services/email/templates/operator-new-message'
+import { renderOperatorNewMessage } from '../../../src/services/email/templates/operator-new-message'
 import type { RenterCancellationData } from '../../../src/services/email/templates/renter-cancellation'
 import { renderRenterCancellation } from '../../../src/services/email/templates/renter-cancellation'
 import type { RenterConfirmationData } from '../../../src/services/email/templates/renter-confirmation'
@@ -305,5 +307,44 @@ describe('renderRenterCancellation', () => {
 
   it('falls back to the en subject for an unknown locale', () => {
     expect(renderRenterCancellation(baseCancel, 'fr').subject).toContain('Booking cancelled')
+  })
+})
+
+describe('renderOperatorNewMessage', () => {
+  const base: OperatorNewMessageData = {
+    renterName: 'Jane Traveler',
+    manageUrl: 'https://app.kuruma.jp/ja/manage/messages/thread-xyz',
+  }
+
+  it('localizes a distinct subject for en/ja/zh', () => {
+    const en = renderOperatorNewMessage(base, 'en').subject
+    const ja = renderOperatorNewMessage(base, 'ja').subject
+    const zh = renderOperatorNewMessage(base, 'zh').subject
+    expect(new Set([en, ja, zh]).size).toBe(3)
+  })
+
+  it('names the renter and links to the thread in html and text when manageUrl is present', () => {
+    const { html, text } = renderOperatorNewMessage(base, 'ja')
+    expect(html).toContain('Jane Traveler')
+    expect(text).toContain('Jane Traveler')
+    expect(html).toContain('href="https://app.kuruma.jp/ja/manage/messages/thread-xyz"')
+    expect(text).toContain('https://app.kuruma.jp/ja/manage/messages/thread-xyz')
+  })
+
+  it('omits the CTA entirely when manageUrl is null but still alerts', () => {
+    const { html, text } = renderOperatorNewMessage({ ...base, manageUrl: null }, 'en')
+    expect(html).not.toContain('href=')
+    expect(text).not.toContain('https://')
+    expect(html).toContain('Jane Traveler')
+  })
+
+  it('renders an em dash for the renter when the name is unknown', () => {
+    const { html } = renderOperatorNewMessage({ ...base, renterName: null }, 'en')
+    expect(html).toContain('—')
+  })
+
+  it('falls back to the en subject for an unknown locale', () => {
+    const en = renderOperatorNewMessage(base, 'en').subject
+    expect(renderOperatorNewMessage(base, 'fr').subject).toBe(en)
   })
 })
