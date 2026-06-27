@@ -247,12 +247,21 @@ export function bookingEventsQueryOptions(id: string) {
 // booking from this list in one cache-invalidation call.
 export const NEEDS_ASSIGNMENT_QUERY_KEY = ['operator-bookings', 'needs-assignment'] as const
 
+// #1197: pull a full page (the API caps `limit` at 100). Without an explicit
+// limit the route defaults to 20 and unwrap() drops `nextCursor`, so an operator
+// with >20 unassigned floats would silently see only 20 on this action worklist.
+const NEEDS_ASSIGNMENT_PAGE_LIMIT = 100
+
 export async function fetchNeedsAssignment(): Promise<RawOperatorBooking[]> {
   // `expand=renter` is supported alongside `needsAssignment=true` (the route
   // applies all filters before the expansion join), so renter name/email are
   // included when the user table has them. The rawOperatorBookingSchema already
   // carries the optional renter block, so no new schema is needed here.
-  const sp = new URLSearchParams({ needsAssignment: 'true', expand: 'renter' })
+  const sp = new URLSearchParams({
+    needsAssignment: 'true',
+    expand: 'renter',
+    limit: String(NEEDS_ASSIGNMENT_PAGE_LIMIT),
+  })
   const res = await fetch(`${getApiBaseUrl()}/bookings?${sp.toString()}`, {
     credentials: 'include',
   })
