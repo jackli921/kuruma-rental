@@ -10,13 +10,29 @@ import { useTranslations } from 'use-intl'
 
 interface OperatorAddOnsViewProps {
   readonly addOns: readonly AddOnData[]
+  readonly canWrite: boolean
+  readonly showOperator: boolean
+  readonly operatorNameById: ReadonlyMap<string, string>
+  readonly pickedOperatorId?: string | undefined
 }
 
 // Controlled list + empty state. The route owns the loader / useSuspenseQuery
 // and the pending/error boundaries (FC/IS — the shell does I/O, this renders).
 // The Add/Edit/Archive dialogs own their own write mutations and invalidate the
 // route's ADDON_QUERY_KEY on success, so the prefetched list refetches.
-export function OperatorAddOnsView({ addOns }: OperatorAddOnsViewProps) {
+//
+// In all-mode (a cross-operator reader with no picked operator) the page is
+// read-only: `canWrite` is false so no write affordances render, and
+// `showOperator` turns on the per-row operator label so the mixed-tenant list is
+// legible. A scoped write (operator session, or admin who picked a tenant) shows
+// the Add/Edit/Archive controls and threads `pickedOperatorId` into the create.
+export function OperatorAddOnsView({
+  addOns,
+  canWrite,
+  showOperator,
+  operatorNameById,
+  pickedOperatorId,
+}: OperatorAddOnsViewProps) {
   const t = useTranslations('business.addOns')
   const [showAdd, setShowAdd] = useState(false)
   const [editing, setEditing] = useState<AddOnData | null>(null)
@@ -27,12 +43,14 @@ export function OperatorAddOnsView({ addOns }: OperatorAddOnsViewProps) {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-end">
-        <Button onClick={() => setShowAdd(true)}>
-          <Plus className="size-4 mr-1.5" />
-          {t('addOption')}
-        </Button>
-      </div>
+      {canWrite && (
+        <div className="flex items-center justify-end">
+          <Button onClick={() => setShowAdd(true)}>
+            <Plus className="size-4 mr-1.5" />
+            {t('addOption')}
+          </Button>
+        </div>
+      )}
 
       {sorted.length === 0 ? (
         <div className="text-center py-20">
@@ -42,14 +60,29 @@ export function OperatorAddOnsView({ addOns }: OperatorAddOnsViewProps) {
       ) : (
         <div className="space-y-3">
           {sorted.map((a) => (
-            <AddOnRow key={a.id} addOn={a} onEdit={setEditing} onArchive={setArchiving} />
+            <AddOnRow
+              key={a.id}
+              addOn={a}
+              canWrite={canWrite}
+              operatorName={showOperator ? operatorNameById.get(a.operatorId) : undefined}
+              onEdit={setEditing}
+              onArchive={setArchiving}
+            />
           ))}
         </div>
       )}
 
-      <AddAddOnDialog open={showAdd} onOpenChange={setShowAdd} />
-      <EditAddOnDialog addOn={editing} onOpenChange={() => setEditing(null)} />
-      <AddOnArchiveDialog addOn={archiving} onOpenChange={() => setArchiving(null)} />
+      {canWrite ? (
+        <>
+          <AddAddOnDialog
+            open={showAdd}
+            onOpenChange={setShowAdd}
+            pickedOperatorId={pickedOperatorId}
+          />
+          <EditAddOnDialog addOn={editing} onOpenChange={() => setEditing(null)} />
+          <AddOnArchiveDialog addOn={archiving} onOpenChange={() => setArchiving(null)} />
+        </>
+      ) : null}
     </div>
   )
 }

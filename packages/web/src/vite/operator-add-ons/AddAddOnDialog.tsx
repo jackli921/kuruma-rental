@@ -14,15 +14,19 @@ import { useTranslations } from 'use-intl'
 interface AddAddOnDialogProps {
   open: boolean
   onOpenChange: (open: boolean) => void
+  // Set when a platform admin has picked a tenant. Merged into the create body so
+  // the server's platformAdminCreateAddOnSchema (which requires operatorId) is
+  // satisfied; an operator session leaves this undefined and is auto-scoped.
+  pickedOperatorId?: string | undefined
 }
 
-export function AddAddOnDialog({ open, onOpenChange }: AddAddOnDialogProps) {
+export function AddAddOnDialog({ open, onOpenChange, pickedOperatorId }: AddAddOnDialogProps) {
   const t = useTranslations('business.addOns')
   const queryClient = useQueryClient()
   const csrfToken = useSession().data?.csrfToken ?? ''
 
   const { mutateAsync, isPending, error, reset } = useMutation({
-    mutationFn: (data: CreateAddOnInput) => createAddOn(data, csrfToken),
+    mutationFn: (data: CreateAddOnInput & { operatorId?: string }) => createAddOn(data, csrfToken),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ADDON_QUERY_KEY })
       onOpenChange(false)
@@ -48,7 +52,7 @@ export function AddAddOnDialog({ open, onOpenChange }: AddAddOnDialogProps) {
         )}
         <AddOnForm
           onSubmit={async (data) => {
-            await mutateAsync(data)
+            await mutateAsync(pickedOperatorId ? { ...data, operatorId: pickedOperatorId } : data)
           }}
           onCancel={() => handleOpenChange(false)}
           isSubmitting={isPending}

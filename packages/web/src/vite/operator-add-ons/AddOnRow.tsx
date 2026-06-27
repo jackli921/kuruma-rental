@@ -7,11 +7,13 @@ import { useTranslations } from 'use-intl'
 
 interface AddOnRowProps {
   addOn: AddOnData
+  canWrite: boolean
+  operatorName?: string | undefined
   onEdit: (a: AddOnData) => void
   onArchive: (a: AddOnData) => void
 }
 
-export function AddOnRow({ addOn: a, onEdit, onArchive }: AddOnRowProps) {
+export function AddOnRow({ addOn: a, canWrite, operatorName, onEdit, onArchive }: AddOnRowProps) {
   const t = useTranslations('business.addOns')
   const price = formatJpy(a.priceJpy)
 
@@ -21,6 +23,11 @@ export function AddOnRow({ addOn: a, onEdit, onArchive }: AddOnRowProps) {
         <div className="flex items-center gap-2 flex-wrap">
           <h3 className="text-lg font-medium truncate">{a.name}</h3>
           <AddOnStatusBadge status={a.status} />
+          {operatorName && (
+            <span className="rounded bg-muted px-2 py-0.5 text-xs font-medium text-muted-foreground">
+              {operatorName}
+            </span>
+          )}
         </div>
         {a.description && (
           <p className="mt-1 text-sm text-muted-foreground line-clamp-2">{a.description}</p>
@@ -34,20 +41,27 @@ export function AddOnRow({ addOn: a, onEdit, onArchive }: AddOnRowProps) {
         </div>
       </div>
 
-      <div className="flex items-center gap-1 shrink-0">
-        <Button variant="ghost" size="icon" onClick={() => onEdit(a)} aria-label={t('editOption')}>
-          <Pencil className="size-4" />
-        </Button>
-        <Button
-          variant="ghost"
-          size="icon"
-          onClick={() => onArchive(a)}
-          aria-label={t('archiveAction')}
-          disabled={a.status === 'ARCHIVED'}
-        >
-          <Trash2 className="size-4" />
-        </Button>
-      </div>
+      {canWrite ? (
+        <div className="flex items-center gap-1 shrink-0">
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={() => onEdit(a)}
+            aria-label={t('editOption')}
+          >
+            <Pencil className="size-4" />
+          </Button>
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={() => onArchive(a)}
+            aria-label={t('archiveAction')}
+            disabled={a.status === 'ARCHIVED'}
+          >
+            <Trash2 className="size-4" />
+          </Button>
+        </div>
+      ) : null}
     </div>
   )
 }
