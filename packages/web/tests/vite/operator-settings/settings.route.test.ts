@@ -32,3 +32,44 @@ describe('/manage/settings feature-flag guard', () => {
     expect(() => beforeLoad({ params: { locale: 'en' } })).not.toThrow()
   })
 })
+
+// The loader prefetches the EFFECTIVE operator's profile so the component's
+// useSuspenseQuery resolves without a FOUC. Effective id = own operatorId (operator
+// session) ?? deps.operator (bypass admin's pick) — the same resolution the
+// component uses (one derivation, two readers must stay in lockstep).
+const loader = Route.options.loader as (args: {
+  context: { queryClient: { ensureQueryData: ReturnType<typeof vi.fn> } }
+  deps: { operator: string | undefined }
+}) => Promise<unknown>
+const loaderDeps = Route.options.loaderDeps as (a: {
+  search: { operator?: string }
+}) => { operator?: string }
+
+describe('/manage/settings loader effective-id prefetch', () => {
+  it('threads the operator search param through loaderDeps', () => {
+    expect(loaderDeps({ search: { operator: 'op_9' } })).toEqual({ operator: 'op_9' })
+  })
+
+  it('prefetches the PICKED operator profile for a bypass admin (no own operatorId)', async () => {
+    const ensureQueryData = vi
+      .fn()
+      .mockResolvedValueOnce({ user: { id: 'u', role: 'PLATFORM_ADMIN' }, csrfToken: 't' }) // session
+      .mockResolvedValueOnce({}) // profile
+    await loader({ context: { queryClient: { ensureQueryData } }, deps: { operator: 'op_9' } })
+    const profileCall = ensureQueryData.mock.calls[1][0] as { queryKey: unknown }
+    expect(profileCall.queryKey).toEqual(['operator-profile', 'op_9'])
+  })
+
+  it("uses an operator session's own id and ignores a stray ?operator param", async () => {
+    const ensureQueryData = vi
+      .fn()
+      .mockResolvedValueOnce({
+        user: { id: 'u', role: 'OPERATOR_OWNER', operatorId: 'op_self' },
+        csrfToken: 't',
+      })
+      .mockResolvedValueOnce({})
+    await loader({ context: { queryClient: { ensureQueryData } }, deps: { operator: 'op_9' } })
+    const profileCall = ensureQueryData.mock.calls[1][0] as { queryKey: unknown }
+    expect(profileCall.queryKey).toEqual(['operator-profile', 'op_self'])
+  })
+})
