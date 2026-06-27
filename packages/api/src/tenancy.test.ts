@@ -52,4 +52,11 @@ describe('vehicleBlockReadScope', () => {
     expect(vehicleBlockReadScope(staff)).toEqual({ kind: 'none' })
     expect(vehicleBlockReadScope(admin)).toEqual({ kind: 'none' })
   })
+
+  it('returns none for a PARTNER despite its bypassScope (fail-closed before bypass)', () => {
+    // A Trip.com PARTNER key carries bypassScope=true via SCOPE_BYPASS_ROLES; a
+    // bypass-first resolver would leak every operator's blocks to the channel.
+    const partner: CallerContext = { userId: 'trip-com', role: 'PARTNER', bypassScope: true }
+    expect(vehicleBlockReadScope(partner)).toEqual({ kind: 'none' })
+  })
 })

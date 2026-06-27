@@ -47,6 +47,13 @@ export function operatorReadScope(ctx: CallerContext): OperatorReadScope {
  * bypass nor isOperatorRole — they must read nothing. Do NOT copy
  * `operatorReadScope` (`!isOperatorRole → all`): that catalog pattern would leak
  * cross-tenant blocks to a legacy admin.
+ *
+ * PARTNER is branched to `none` BEFORE the bypass check (mirroring
+ * `bookingReadScope`): a PARTNER key carries `bypassScope: true` via
+ * SCOPE_BYPASS_ROLES, so a bypass-first resolver would hand Trip.com every
+ * operator's blocks. The route gate 403s PARTNER today, but encoding the denial
+ * here makes the resolver safe to reuse on a future route without the leak
+ * shipping silently.
  */
 export type VehicleBlockReadScope =
   | { kind: 'all' }
@@ -54,6 +61,7 @@ export type VehicleBlockReadScope =
   | { kind: 'none' }
 
 export function vehicleBlockReadScope(ctx: CallerContext): VehicleBlockReadScope {
+  if (ctx.role === 'PARTNER') return { kind: 'none' } // never expose internal blocks to a channel
   if (ctx.bypassScope) return { kind: 'all' }
   if (isOperatorRole(ctx.role)) {
     return ctx.operatorId ? { kind: 'operator', operatorId: ctx.operatorId } : { kind: 'none' }
