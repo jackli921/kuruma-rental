@@ -2,6 +2,7 @@ import { BEST_CAR_RENTAL_OPERATOR_ID } from '@kuruma/shared/db/constants'
 import { vehicleBlocks } from '@kuruma/shared/db/schema'
 import { inArray } from 'drizzle-orm'
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest'
+import type { CallerContext } from '../../src/middleware/auth'
 import { SYSTEM_CONTEXT } from '../../src/middleware/auth'
 import { pgConstraintName, pgErrorCode } from '../../src/pg-errors'
 import {
@@ -322,5 +323,110 @@ describe('VehicleBlockService against Postgres', () => {
     )
 
     expect(overlap).toMatchObject({ ok: false, status: 409, code: 'VEHICLE_BLOCK_OVERLAP' })
+  })
+})
+
+// #1101 slice A (task 3): proves DrizzleVehicleBlockRepository.findOverlappingInRange
+// scopes rows correctly by vehicleBlockReadScope — all / operator / none — and by
+// the date window. Uses a dedicated vehicle so the results are isolated.
+describe('DrizzleVehicleBlockRepository.findOverlappingInRange scoping', () => {
+  const blockRepo = new DrizzleVehicleBlockRepository(db)
+
+  const FROM = new Date('2026-07-01T00:00:00Z')
+  const TO = new Date('2026-07-02T00:00:00Z')
+  const BLOCK_START = new Date('2026-07-01T09:00:00Z')
+  const BLOCK_END = new Date('2026-07-01T17:00:00Z')
+  const NON_OVERLAP_FROM = new Date('2026-08-01T00:00:00Z')
+  const NON_OVERLAP_TO = new Date('2026-08-02T00:00:00Z')
+
+  let scopeVehicleId: string
+  let scopeBlockId: string
+  const scopeVehicleIds: string[] = []
+  const scopeClassIds: string[] = []
+  const scopeLocationIds: string[] = []
+  const scopeBlockIds: string[] = []
+
+  const opCtx: CallerContext = {
+    userId: 'u-scope-test',
+    role: 'OPERATOR_OWNER',
+    operatorId: BEST_CAR_RENTAL_OPERATOR_ID,
+  }
+  const otherOpCtx: CallerContext = {
+    userId: 'u-scope-test',
+    role: 'OPERATOR_OWNER',
+    operatorId: '00000000-0000-0000-0000-000000000000',
+  }
+
+  beforeAll(async () => {
+    const klass = await seedVehicleClass('block-scope')
+    scopeClassIds.push(klass.id)
+    const location = await seedLocation('block-scope')
+    scopeLocationIds.push(location.id)
+
+    scopeVehicleId = (
+      await vehicleRepo.create(SYSTEM_CONTEXT, {
+        operatorId: BEST_CAR_RENTAL_OPERATOR_ID,
+        classId: klass.id,
+        pickupLocationId: location.id,
+        name: 'Scope Test Vehicle',
+        description: null,
+        seats: 5,
+        transmission: 'AUTO',
+        fuelType: null,
+        licensePlate: null,
+        status: 'AVAILABLE',
+        minRentalHours: null,
+        maxRentalHours: null,
+        advanceBookingHours: null,
+        dailyRateJpy: DEFAULT_DAILY_RATE_JPY,
+      })
+    ).id
+    scopeVehicleIds.push(scopeVehicleId)
+
+    const block = await blockRepo.create({
+      operatorId: BEST_CAR_RENTAL_OPERATOR_ID,
+      vehicleId: scopeVehicleId,
+      startAt: BLOCK_START,
+      endAt: BLOCK_END,
+      kind: 'MAINTENANCE',
+      reason: 'scope test block',
+      notes: null,
+      createdBy: 'system',
+    })
+    scopeBlockId = block.id
+    scopeBlockIds.push(block.id)
+  })
+
+  afterEach(async () => {
+    // scopeBlockIds are cleaned up in afterAll to persist across the 4 assertions
+  })
+
+  afterAll(async () => {
+    if (scopeBlockIds.length > 0) {
+      await db.delete(vehicleBlocks).where(inArray(vehicleBlocks.id, scopeBlockIds))
+    }
+    await cleanupVehicles(scopeVehicleIds)
+    await cleanupVehicleClasses(scopeClassIds)
+    await cleanupLocations(scopeLocationIds)
+  })
+
+  it('SYSTEM_CONTEXT (all scope) includes the block within the window', async () => {
+    const hits = await blockRepo.findOverlappingInRange(SYSTEM_CONTEXT, FROM, TO)
+    expect(hits.map((b) => b.id)).toContain(scopeBlockId)
+  })
+
+  it('matching operatorId (operator scope) includes the block', async () => {
+    const hits = await blockRepo.findOverlappingInRange(opCtx, FROM, TO)
+    expect(hits.map((b) => b.id)).toContain(scopeBlockId)
+  })
+
+  it('non-matching operatorId (operator scope) returns []', async () => {
+    const hits = await blockRepo.findOverlappingInRange(otherOpCtx, FROM, TO)
+    expect(hits).toEqual([])
+  })
+
+  it('non-overlapping window returns [] even for matching operator', async () => {
+    const hits = await blockRepo.findOverlappingInRange(opCtx, NON_OVERLAP_FROM, NON_OVERLAP_TO)
+    expect(hits).toEqual([])
   })
 })
