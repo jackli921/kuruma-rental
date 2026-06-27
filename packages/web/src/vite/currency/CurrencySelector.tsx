@@ -3,7 +3,6 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
-  DropdownMenuLabel,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import type { FxRates } from '@kuruma/shared/types/fx'
@@ -41,9 +40,11 @@ export function CurrencySelector() {
         }
       />
       <DropdownMenuContent align="end">
-        <DropdownMenuLabel className="font-normal text-muted-foreground text-xs">
+        {/* Non-interactive info rows: plain divs, not DropdownMenuLabel — base-ui's
+            GroupLabel must sit inside a Menu.Group and throws on open otherwise. */}
+        <div className="px-1.5 py-1 font-normal text-muted-foreground text-xs">
           {t('disclaimer')}
-        </DropdownMenuLabel>
+        </div>
         {options.map((code) => (
           <DropdownMenuItem
             key={code}
@@ -53,6 +54,11 @@ export function CurrencySelector() {
             {code}
           </DropdownMenuItem>
         ))}
+        {rates && (
+          <div className="px-1.5 py-1 font-normal text-muted-foreground text-xs">
+            {t('asOf', { date: rates.asOf })}
+          </div>
+        )}
       </DropdownMenuContent>
     </DropdownMenu>
   )

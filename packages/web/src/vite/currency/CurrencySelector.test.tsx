@@ -1,6 +1,6 @@
 import type { FxRates } from '@kuruma/shared/types/fx'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { render, screen } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { IntlProvider } from 'use-intl'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import en from '../../../messages/en.json'
@@ -64,5 +64,24 @@ describe('CurrencySelector trigger', () => {
   it('carries a translated accessible label so the icon-only trigger is named', () => {
     renderSelector('en')
     expect(screen.getByRole('button').getAttribute('aria-label')).toBe(en.currency.label)
+  })
+
+  it('opens to the disclaimer, every currency option in order, the as-of date, and switches on click', async () => {
+    renderSelector('en')
+    fireEvent.click(screen.getByRole('button'))
+
+    // The menu portals on open once rates have loaded — JPY first, then the snapshot.
+    await waitFor(() =>
+      expect(screen.getAllByRole('menuitem').map((el) => el.textContent)).toEqual([
+        'JPY',
+        'USD',
+        'CNY',
+      ]),
+    )
+    expect(screen.getByText(en.currency.disclaimer)).toBeTruthy()
+    expect(screen.getByText('Rates as of 2026-06-01')).toBeTruthy()
+
+    fireEvent.click(screen.getByRole('menuitem', { name: 'CNY' }))
+    expect(localStorage.getItem('kuruma-display-currency')).toBe('CNY')
   })
 })

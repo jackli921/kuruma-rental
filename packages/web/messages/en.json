@@ -1,7 +1,8 @@
 {
   "currency": {
     "label": "Display currency",
-    "disclaimer": "Indicative only — you're charged in JPY"
+    "disclaimer": "Indicative only — you're charged in JPY",
+    "asOf": "Rates as of {date}"
   },
   "consent": {
     "title": "Please review and accept to continue",
