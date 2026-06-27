@@ -1,3 +1,4 @@
+import { readLocalStorage, writeLocalStorage } from '@/lib/safe-storage'
 import { formatIndicativePrice } from '@kuruma/shared/lib/indicative-price'
 import type { FxRates } from '@kuruma/shared/types/fx'
 import { useQuery } from '@tanstack/react-query'
@@ -23,12 +24,12 @@ const CurrencyContext = createContext<CurrencyContextValue>({
   rates: undefined,
 })
 
-// Read synchronously at init so a consumer never renders the locale default first
-// and flips to the stored choice after mount. Client-only SPA, so no SSR hydration
-// mismatch (mirrors LayoutPreferenceProvider). Any stored 3-letter code is honoured;
-// `formatIndicativePrice` rejects malformed/absent rates, so a stale code is inert.
-function readStoredCurrency(fallback: string): string {
-  return localStorage.getItem(STORAGE_KEY) ?? fallback
+// The renter's explicitly-chosen code, read synchronously at init so a stored
+// choice never flashes the default first. Normalized to upper-case: rate keys are
+// upper-case and `formatIndicativePrice` canonicalizes, so a lower-case stored or
+// tampered value would otherwise silently miss its rate. `null` = no choice yet.
+function readStoredCurrency(): string | null {
+  return readLocalStorage(STORAGE_KEY)?.toUpperCase() ?? null
 }
 
 export function CurrencyProvider({ children }: { readonly children: React.ReactNode }) {
@@ -36,13 +37,16 @@ export function CurrencyProvider({ children }: { readonly children: React.ReactN
   // Display-only; a failed fetch (e.g. 503) leaves rates undefined and the whole
   // UI falls back to JPY-only — never a blocking error.
   const { data: rates } = useQuery(fxRatesQueryOptions())
-  const [currency, setCurrencyState] = useState(() =>
-    readStoredCurrency(defaultCurrencyForLocale(locale)),
-  )
+  const [stored, setStored] = useState(readStoredCurrency)
+  // An explicit choice wins; until then the currency is DERIVED from the locale
+  // every render, so switching language updates the indicative default instead of
+  // freezing it at the locale present on first mount.
+  const currency = stored ?? defaultCurrencyForLocale(locale)
 
   const setCurrency = useCallback((next: string) => {
-    localStorage.setItem(STORAGE_KEY, next)
-    setCurrencyState(next)
+    const code = next.toUpperCase()
+    writeLocalStorage(STORAGE_KEY, code)
+    setStored(code)
   }, [])
 
   const value = useMemo(() => ({ currency, setCurrency, rates }), [currency, setCurrency, rates])
