@@ -106,6 +106,19 @@ export class DrizzleVehicleRepository implements VehicleRepository {
     return row?.value ?? 0
   }
 
+  // #1088 admin operator list: live (non-RETIRED) fleet size per operator, in one
+  // grouped COUNT. Operators with no live vehicles are absent from the result —
+  // the caller defaults them to 0 — so the empty-input case skips the query.
+  async countByOperator(operatorIds: string[]): Promise<Map<string, number>> {
+    if (operatorIds.length === 0) return new Map()
+    const rows = await this.db
+      .select({ operatorId: vehicles.operatorId, value: count() })
+      .from(vehicles)
+      .where(and(inArray(vehicles.operatorId, operatorIds), ne(vehicles.status, 'RETIRED')))
+      .groupBy(vehicles.operatorId)
+    return new Map(rows.map((r) => [r.operatorId, r.value]))
+  }
+
   async create(
     ctx: CallerContext,
     data: Omit<Vehicle, 'id' | 'createdAt' | 'updatedAt'>,
