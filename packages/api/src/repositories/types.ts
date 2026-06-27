@@ -680,6 +680,10 @@ export interface ThreadRepository {
     bookingId: string | null,
     participantIds: string[],
     idempotencyKey?: string | null,
+    // Server-derived tenant owner (#1205). ensureThread passes booking.operatorId;
+    // the caller-facing path leaves it null — operatorId is NEVER read from a
+    // request body, so a caller can't assign a thread's tenant scope.
+    operatorId?: string | null,
   ): Promise<Thread>
   markAsRead(ctx: CallerContext, threadId: string): Promise<void>
 }

@@ -234,6 +234,9 @@ export interface PaymentAnomaly {
 export interface Thread {
   id: string
   bookingId: string | null
+  // Tenant owner, denormalized from the booking's operator (#1205). Null when the
+  // thread has no booking; the operator portal read-scopes on it.
+  operatorId: string | null
   idempotencyKey: string | null
   createdAt: Date
   updatedAt: Date

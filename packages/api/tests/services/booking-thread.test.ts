@@ -358,4 +358,25 @@ describe('BookingService.create — auto-thread on confirmation', () => {
     expect(logged).not.toContain('thread_autocreate_failed')
     errorSpy.mockRestore()
   })
+
+  it('stamps the thread with the booking operatorId so the operator portal can scope it (#1205)', async () => {
+    // The tenant boundary: operators read-scope threads by operatorId, so the
+    // auto-created thread MUST inherit its booking's operator. Server-derived
+    // here from the authoritative booking — never from a request body.
+    const realThreadRepo = new InMemoryThreadRepository()
+    const ensureThread = makeEnsureThread({ threadRepo: realThreadRepo, staffUserId: STAFF })
+    const booking = {
+      id: 'bk-1205-operator',
+      renterId: RENTER,
+      operatorId: 'op-acme',
+    } as unknown as Booking
+
+    await ensureThread(SYSTEM_CONTEXT, booking)
+
+    const thread = await realThreadRepo.findByIdempotencyKey(
+      SYSTEM_CONTEXT,
+      'booking:bk-1205-operator',
+    )
+    expect(thread?.operatorId).toBe('op-acme')
+  })
 })

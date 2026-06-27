@@ -160,12 +160,13 @@ export class DrizzleThreadRepository implements ThreadRepository {
     bookingId: string | null,
     participantIds: string[],
     idempotencyKey?: string | null,
+    operatorId?: string | null,
   ): Promise<Thread> {
     rejectOperatorContextUntilScoped(ctx, 'ThreadRepository')
     return this.runTransaction(async (tx) => {
       const [insertedThread] = (await tx
         .insert(threads)
-        .values({ bookingId, idempotencyKey: idempotencyKey ?? null })
+        .values({ bookingId, operatorId: operatorId ?? null, idempotencyKey: idempotencyKey ?? null })
         .returning(threadColumns)).map(toThread)
 
       if (!insertedThread) {

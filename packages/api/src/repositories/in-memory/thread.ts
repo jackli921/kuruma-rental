@@ -82,6 +82,7 @@ export class InMemoryThreadRepository implements ThreadRepository {
     bookingId: string | null,
     participantIds: string[],
     idempotencyKey?: string | null,
+    operatorId?: string | null,
   ): Promise<Thread> {
     rejectOperatorContextUntilScoped(ctx, 'ThreadRepository')
     if (idempotencyKey) {
@@ -98,6 +99,7 @@ export class InMemoryThreadRepository implements ThreadRepository {
     const thread: Thread = {
       id: crypto.randomUUID(),
       bookingId,
+      operatorId: operatorId ?? null,
       idempotencyKey: idempotencyKey ?? null,
       createdAt: now,
       updatedAt: now,

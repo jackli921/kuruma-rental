@@ -50,7 +50,16 @@ export class MessageService {
       idempotencyKey,
       (k) => this.threadRepo.findByIdempotencyKey(ctx, k),
       () =>
-        this.threadRepo.create(ctx, input.bookingId ?? null, input.participantIds, idempotencyKey),
+        // operatorId is intentionally NOT passed (#1205, review finding 1): the
+        // caller-facing path must never derive tenant scope from a request body.
+        // It stays null here; only ensureThread stamps it, from the booking.
+        this.threadRepo.create(
+          ctx,
+          input.bookingId ?? null,
+          input.participantIds,
+          idempotencyKey,
+          null,
+        ),
     )
     return { kind: 'created', thread: record, status }
   }
