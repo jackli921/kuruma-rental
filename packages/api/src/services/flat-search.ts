@@ -195,6 +195,8 @@ export class FlatSearchService {
         plan.operatorId,
         plan.classId,
         plan.pickupLocationId,
+        from,
+        to,
         to,
       ),
       this.availabilityRepo.countClassDemand(

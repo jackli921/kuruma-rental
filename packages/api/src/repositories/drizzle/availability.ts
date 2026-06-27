@@ -13,6 +13,20 @@ import {
   vehicleColumns,
 } from './shared'
 
+// #1101/#1141: a vehicle is off the calendar when a vehicle_blocks row overlaps
+// the requested window — half-open tstzrange overlap (a block ending exactly at
+// the window start does not overlap), correlated on vehicles.id. Single source
+// of the block-subtraction predicate shared by findAvailableVehicles and
+// countClassCapacity. checkVehicleAvailability needs the count (not existence),
+// so it keeps its own form.
+function blockOverlapNotExists(fromIso: string, toIso: string): SQL {
+  return sql`NOT EXISTS (
+        SELECT 1 FROM vehicle_blocks vb
+        WHERE vb."vehicleId" = ${vehicles.id}
+        AND tstzrange(vb."startAt", vb."endAt") && tstzrange(${fromIso}::timestamptz, ${toIso}::timestamptz)
+      )`
+}
+
 export class DrizzleAvailabilityRepository implements AvailabilityRepository {
   constructor(
     private readonly db: Db,
@@ -43,13 +57,8 @@ export class DrizzleAvailabilityRepository implements AvailabilityRepository {
           )`,
       // #1101: subtract scheduled blocks — a vehicle with a block overlapping the
       // requested window is off the calendar (maintenance / out-of-service /
-      // manual hold). Half-open tstzrange overlap, same shape as the booking
-      // guard above; mirrored by the in-memory path.
-      sql`NOT EXISTS (
-            SELECT 1 FROM vehicle_blocks vb
-            WHERE vb."vehicleId" = ${vehicles.id}
-            AND tstzrange(vb."startAt", vb."endAt") && tstzrange(${fromIso}::timestamptz, ${toIso}::timestamptz)
-          )`,
+      // manual hold); mirrored by the in-memory path.
+      blockOverlapNotExists(fromIso, toIso),
     ]
     // Storefront scope (#391): INNER match on the nullable pickupLocationId — a
     // vehicle with no assigned location matches no locationId, so it is
@@ -165,6 +174,8 @@ export class DrizzleAvailabilityRepository implements AvailabilityRepository {
     operatorId: string,
     classId: string,
     pickupLocationId: string,
+    from: Date,
+    to: Date,
     asOf: Date,
   ): Promise<number> {
     // #464 2d.2: road-legal supply side of the combo guard. status<>'RETIRED'
@@ -172,6 +183,8 @@ export class DrizzleAvailabilityRepository implements AvailabilityRepository {
     // JST asOf day — same NULL≠current handling as findAvailableVehicles
     // (NULL >= date is NULL, excluded).
     const asOfIso = jstDateString(asOf)
+    const fromIso = from.toISOString()
+    const toIso = to.toISOString()
     const [row] = await this.db
       .select({ count: sql<number>`count(*)::int` })
       .from(vehicles)
@@ -182,6 +195,11 @@ export class DrizzleAvailabilityRepository implements AvailabilityRepository {
           eq(vehicles.pickupLocationId, pickupLocationId),
           sql`${vehicles.status} <> 'RETIRED'`,
           sql`${vehicles.shakenExpiryDate} >= ${asOfIso}::date AND ${vehicles.insuranceExpiryDate} >= ${asOfIso}::date`,
+          // #1141: subtract cars scheduled off for the demand window — a block
+          // overlapping [from, to) makes the car unavailable, so it is not real
+          // class supply. Shares the predicate with findAvailableVehicles; the
+          // in-memory path mirrors it.
+          blockOverlapNotExists(fromIso, toIso),
         ),
       )
     return row?.count ?? 0

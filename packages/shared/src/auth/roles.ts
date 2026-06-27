@@ -88,15 +88,22 @@ export const OPERATOR_OWNER_WRITE_ROLES = union(MANAGEMENT_BASE_ROLES, roleSet('
  * `CallerContext.bypassScope`. NOTE (#1119): bookings are NO LONGER part of this
  * bypass for PARTNER — a Trip.com key reads only its own channel
  * (`bookingReadScope` -> `partner`, source=TRIP_COM), not operators' DIRECT
- * bookings. `bypassScope` still grants PARTNER cross-tenant reads of the
- * remaining surfaces it gates (e.g. user search in `customer.ts`); narrowing
- * those the same way is the tracked follow-up. A distinct instance from
- * {@link PRIVILEGED_ROLES} (same members) because the two gate different things.
+ * bookings. PARTNER stays in this set as a SCOPE-GATE marker (its presence tells
+ * `bookingReadScope` to take the per-source path), but it no longer unlocks any
+ * other cross-tenant private read: the directory/messaging surfaces now gate on
+ * {@link PRIVILEGED_ROLES} (PLATFORM_ADMIN-only since #1168), and `customer.ts`
+ * was switched to that predicate too. Distinct instance from PRIVILEGED_ROLES —
+ * the two now have genuinely different membership.
  */
 export const SCOPE_BYPASS_ROLES = roleSet('PARTNER', 'PLATFORM_ADMIN')
 
 /**
- * Roles permitted to read cross-tenant private data (message threads, user lists).
- * Platform tier PLUS PARTNER. Distinct instance from {@link SCOPE_BYPASS_ROLES}.
+ * Roles permitted to read cross-tenant PRIVATE data (message threads, message
+ * bodies, the user-id->name directory, the customer search table). PLATFORM_ADMIN
+ * ONLY. #1168 dropped PARTNER: a Trip.com booking channel has no private-data use
+ * case, and those routes gate on `requireUser` only — keeping PARTNER here let a
+ * partner key enumerate every tenant's threads and users (the leak class #1119
+ * closed for bookings). PARTNER's lone cross-tenant read, its own bookings, is
+ * scoped in `bookingReadScope` via {@link SCOPE_BYPASS_ROLES}, NOT here.
  */
-export const PRIVILEGED_ROLES = roleSet('PARTNER', 'PLATFORM_ADMIN')
+export const PRIVILEGED_ROLES = roleSet('PLATFORM_ADMIN')
