@@ -1568,6 +1568,11 @@
       "pending": "Submitting…",
       "error": "Something went wrong. Please try again.",
       "reviewed": "You've reviewed this renter."
+    },
+    "aggregate": {
+      "rating": "★ {avg} ({count})",
+      "noReviews": "No reviews yet",
+      "ratingAria": "{avg} stars, {count} reviews"
     }
   }
 }
