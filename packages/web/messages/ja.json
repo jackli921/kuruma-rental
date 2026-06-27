@@ -254,6 +254,7 @@
         "previous": "前へ",
         "next": "次へ",
         "views": {
+          "timeline": "タイムライン",
           "day": "日",
           "week": "週",
           "month": "月"
@@ -261,6 +262,7 @@
         "noEventsInRange": "この期間に予約はありません",
         "showMore": "+{count}件",
         "viewFullDetails": "詳細を表示",
+        "unassigned": "車両未割当",
         "sidebar": {
           "title": "フィルター",
           "vehicles": {
