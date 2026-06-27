@@ -59,13 +59,22 @@ Vertical slice with standalone value: the fleet's blocks become queryable.
 > type VehicleBlockReadScope =
 >   | { kind: 'all' }                         // PLATFORM_ADMIN (ctx.bypassScope) — cross-operator preview (#1161)
 >   | { kind: 'operator'; operatorId: string } // OPERATOR_* with operatorId — own tenant only
->   | { kind: 'none' }                         // OPERATOR_* missing operatorId — fail-closed, read nothing
+>   | { kind: 'none' }                         // anyone else in-gate — fail-closed, read nothing
 > ```
 
 1. **Scope resolver** — add `vehicleBlockReadScope(ctx): VehicleBlockReadScope` in `tenancy.ts` beside
-   `bookingReadScope`: `ctx.bypassScope → all`; `isOperatorRole && operatorId → operator`; operator
-   without operatorId → `none`. (RENTER/PARTNER never reach it — route-gated out.) Mirrors #1119's
-   `scope satisfies never` exhaustiveness guard.
+   `bookingReadScope`. **The resolver must be total over the gate's admitted set and fail closed** —
+   `MANAGEMENT_READ_ROLES` (= `BUSINESS_ROLES`) admits legacy `STAFF`/`ADMIN` too, and #487 removed them
+   from `SCOPE_BYPASS_ROLES`, so they pass the gate but are neither bypass nor `isOperatorRole`. Do **not**
+   copy `operatorReadScope` (`tenancy.ts:36`, `!isOperatorRole → all`) — that catalog pattern would hand
+   legacy admins a cross-tenant read. Explicit, fail-closed:
+   ```ts
+   if (ctx.bypassScope) return { kind: 'all' }
+   if (isOperatorRole(ctx.role))
+     return ctx.operatorId ? { kind: 'operator', operatorId: ctx.operatorId } : { kind: 'none' }
+   return { kind: 'none' } // in-gate but neither bypass nor tenant (legacy STAFF/ADMIN): read nothing
+   ```
+   (RENTER/PARTNER never reach it — route-gated out.) Repo consumer keeps a `scope satisfies never` guard.
 2. **Repo** — add `findOverlappingInRange(scope, from, to): Promise<VehicleBlock[]>` to
    `VehicleBlockRepository` (`types-vehicle-block.ts`), taking the scope union (not a bare operatorId):
    `all` → no operator filter; `operator` → `operatorId =`; `none` → `[]`. Implement in both
@@ -73,12 +82,16 @@ Vertical slice with standalone value: the fleet's blocks become queryable.
    `tstzrange(startAt,endAt) && tstzrange(from,to)` overlap (adjacent = no overlap; mirror `findOverlapping`).
 3. **Service** — `VehicleBlockService.listBlocks(ctx, from, to)`: resolve via `vehicleBlockReadScope(ctx)`,
    call `findOverlappingInRange(scope, from, to)`. Returns `VehicleBlock[]`.
-4. **Route** — `GET /blocks?from&to` (fleet-wide, root-mounted). Gate `MANAGEMENT_READ_ROLES.has(role)`
-   else 403 (mirror `routes/maintenance-logs.ts:13`); `parseDateRange` for the window; `ok([...blocks])`.
-   Wire in `index.ts`.
+4. **Route** — `GET /vehicle-blocks?from&to` (fleet-wide collection read; top-level resource, clearer than a
+   bare `/blocks` and unambiguous vs the `POST`/`DELETE /vehicles/:vehicleId/blocks` writes). Gate
+   `MANAGEMENT_READ_ROLES.has(role)` else 403 (mirror `routes/maintenance-logs.ts:13`). The time window is the
+   only bound (no limit/cursor), so make the range **required** — `parseDateRange(c, true)` → 400 when
+   `from`/`to` are missing, so no caller can trigger an all-time fleet-wide (or cross-operator) dump.
+   `ok([...blocks])`. Wire in `index.ts`.
 5. **Tests (TDD):** repo `findOverlappingInRange` for each scope arm (in-memory + real-pg parity);
    **service-level scoping** — admin (`all`) sees blocks across two operators, operator sees only its own,
-   operator-without-operatorId (`none`) sees nothing; route — happy path, RENTER/PARTNER → 403, bad range → 400.
+   operator-without-operatorId AND an in-gate non-bypass non-operator (legacy `STAFF`/`ADMIN`) both → `none`
+   (empty); route — happy path, RENTER/PARTNER → 403, missing/bad range → 400.
 
 ## Slice B — web UI (own PR), extends `operator-bookings`
 
@@ -94,7 +107,7 @@ Vertical slice with standalone value: the fleet's blocks become queryable.
 > ```
 > Every consumer switches on `type` at the boundary: styling, filtering, and click dispatch.
 
-6. **`api.ts`** — `fetchCalendarBlocks(from, to)` → `GET /blocks?from&to`, parsed by `calendarBlockSchema`;
+6. **`api.ts`** — `fetchCalendarBlocks(from, to)` → `GET /vehicle-blocks?from&to`, parsed by `calendarBlockSchema`;
    `operatorCalendarBlocksQueryOptions(from, to)` (queryKey `['operator-bookings','blocks',from,to]`);
    `createBlock(vehicleId, input, csrf)` → POST; `deleteBlock(vehicleId, blockId, csrf)` → DELETE. Mutations
    invalidate `OPERATOR_BOOKINGS_KEY` (prefix cascade covers calendar + blocks).
@@ -123,7 +136,9 @@ Vertical slice with standalone value: the fleet's blocks become queryable.
 15. **Tests:** transform unit (`blocksToCalendarEvents` keys/kind); **mixed `CalendarItem[]`** through
     `filterEvents` (status filter hides a booking but never a block) and `eventPropGetter` (block gets a
     kind class, booking a status class); **click dispatch** (block → dialog, booking → navigate); dialog
-    round-trip (create/delete → invalidate) with mocked api; feature-gate hides the layer for a non-admin when flag OFF.
+    round-trip (create/delete → invalidate) with mocked api; **feature-gate both halves** of
+    `isVisibleToViewer` (`feature-visibility.ts:16` = `flag || isPlatformAdmin(role)`): flag-OFF + non-admin →
+    hidden, AND flag-OFF + PLATFORM_ADMIN → visible (the admin-bypass half is the easy-to-regress one).
 
 ## Risks / notes
 
