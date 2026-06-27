@@ -1,6 +1,7 @@
 {
   "currency": {
     "label": "表示通貨",
+    "approximately": "約",
     "disclaimer": "目安です — ご請求は日本円（JPY）です",
     "asOf": "レート基準日 {date}"
   },

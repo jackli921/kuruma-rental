@@ -1,4 +1,5 @@
 import { cn } from '@/lib/utils'
+import { useTranslations } from 'use-intl'
 import { useIndicative } from './CurrencyProvider'
 
 /**
@@ -16,12 +17,18 @@ export function IndicativeNote({
   readonly jpy: number
   readonly className?: string
 }) {
+  const t = useTranslations('currency')
   const { format } = useIndicative()
   const indicative = format(jpy)
   if (!indicative) return null
   return (
     <span className={cn('block font-normal text-muted-foreground text-xs', className)}>
-      ≈ {indicative}
+      {/* Screen readers get the spelled-out word; the ≈ glyph (which assistive tech
+          reads as "almost equal to" or skips) is hidden so the figure isn't doubled. */}
+      <span className="sr-only">
+        {t('approximately')} {indicative}
+      </span>
+      <span aria-hidden="true">≈ {indicative}</span>
     </span>
   )
 }
