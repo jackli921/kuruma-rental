@@ -37,8 +37,8 @@ function toView(a: PaymentAnomaly): PaymentAnomalyView {
 
 /**
  * Platform-admin view of payment anomalies needing review (#508 P2). Imperative
- * shell: it gates the caller (only STAFF/ADMIN/PLATFORM_ADMIN — never OPERATOR_*)
- * then reads the unscoped repo. `requirePlatformRead` lives here (not only at the
+ * shell: it gates the caller (only PLATFORM_ADMIN — never OPERATOR_*; legacy
+ * STAFF/ADMIN lost platform access in #487) then reads the unscoped repo. `requirePlatformRead` lives here (not only at the
  * route) so the gate travels with the business logic — the repo's `listUnresolved`
  * is cross-operator, so this service is the authz chokepoint (mirrors #462 revenue).
  */
