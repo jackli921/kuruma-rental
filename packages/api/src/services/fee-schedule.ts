@@ -14,6 +14,16 @@ export type FeeScheduleResult =
   | { ok: true; feeSchedule: FeeSchedule }
   | { ok: false; error: string; status: number; code?: string }
 
+/**
+ * The writable surface of a fee-schedule PATCH. Owned by the service so a route
+ * passes an intent DTO instead of the persistence entity (#1213 — routes never
+ * import from ../stores). Server-derived columns (id/operatorId/timestamps) are
+ * absent; every field is optional because a PATCH is partial.
+ */
+export type FeeScheduleUpdate = Partial<
+  Pick<FeeSchedule, 'vehicleClassId' | 'feeType' | 'unit' | 'amountJpy' | 'status'>
+>
+
 const DUPLICATE_SCOPE_MESSAGE =
   'An active fee of this type already exists for this scope. Archive it first.'
 const NOT_FOUND_MESSAGE = 'Fee schedule not found'
@@ -94,7 +104,7 @@ export class FeeScheduleService {
   async update(
     ctx: CallerContext,
     id: string,
-    data: Partial<FeeSchedule>,
+    data: FeeScheduleUpdate,
   ): Promise<FeeScheduleResult> {
     const existing = await this.repo.findById(ctx, id)
     if (!existing) return { ok: false, error: NOT_FOUND_MESSAGE, status: 404 }

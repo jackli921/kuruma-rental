@@ -11,6 +11,16 @@ export type InsuranceOptionResult =
   | { ok: true; option: InsuranceOption }
   | { ok: false; error: string; status: number }
 
+/**
+ * The writable surface of an insurance-option PATCH. Owned by the service so a
+ * route passes an intent DTO instead of the persistence entity (#1213 — routes
+ * never import from ../stores). Server-derived columns (id/operatorId/timestamps)
+ * are absent.
+ */
+export type InsuranceOptionUpdate = Partial<
+  Pick<InsuranceOption, 'name' | 'description' | 'dailyPriceJpy' | 'deductibleJpy' | 'status'>
+>
+
 const DUPLICATE_NAME_MESSAGE = 'An insurance option with this name already exists'
 const NOT_FOUND_MESSAGE = 'Insurance option not found'
 
@@ -59,7 +69,7 @@ export class InsuranceOptionService {
   async update(
     ctx: CallerContext,
     id: string,
-    data: Partial<InsuranceOption>,
+    data: InsuranceOptionUpdate,
   ): Promise<InsuranceOptionResult> {
     // Caller-scoped existence check: an operator may only edit its own option.
     // A cross-tenant id reads as undefined here, so the write below never runs

@@ -5,6 +5,13 @@ import { type CrossOperatorRead, applyCrossOperatorReadScope } from '../tenancy'
 
 export type AddOnResult = { ok: true; option: AddOn } | { ok: false; error: string; status: number }
 
+/**
+ * The writable surface of an add-on PATCH. Owned by the service so a route passes
+ * an intent DTO instead of the persistence entity (#1213 — routes never import
+ * from ../stores). Server-derived columns (id/operatorId/timestamps) are absent.
+ */
+export type AddOnUpdate = Partial<Pick<AddOn, 'name' | 'description' | 'priceJpy' | 'status'>>
+
 const DUPLICATE_NAME_MESSAGE = 'An add-on with this name already exists'
 const NOT_FOUND_MESSAGE = 'Add-on not found'
 
@@ -50,7 +57,7 @@ export class AddOnService {
     }
   }
 
-  async update(ctx: CallerContext, id: string, data: Partial<AddOn>): Promise<AddOnResult> {
+  async update(ctx: CallerContext, id: string, data: AddOnUpdate): Promise<AddOnResult> {
     // Caller-scoped existence check: an operator may only edit its own add-on.
     // A cross-tenant id reads as undefined here, so the write below never runs
     // and the caller sees 404 (not 403 — no cross-tenant existence leak).
