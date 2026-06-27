@@ -17,6 +17,12 @@ vi.mock('@/vite/regions/regions-api', () => ({
   regionsQueryOptions: () => ({ queryKey: ['regions'], queryFn: async () => [] }),
 }))
 
+// The dialogs read the session for the CSRF token on mount; stub it so they don't
+// fire a real GET /auth/session round-trip in the view's render tests.
+vi.mock('@/vite/session', () => ({
+  useSession: () => ({ data: { csrfToken: 'test-csrf' } }),
+}))
+
 // These cover the view's rendering mechanics (rows, empty, hours, pin/status
 // badges, Add dialog) AND the operator-context scope behavior (all-mode labels,
 // read-only gating, scoped-write affordances) — the single home for the locations

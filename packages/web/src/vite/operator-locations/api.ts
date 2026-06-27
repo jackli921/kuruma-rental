@@ -93,20 +93,23 @@ export function operatorLocationsQueryOptions(pickedOperatorId?: string) {
   })
 }
 
-// --- Mutations (cookie-based; operator-scoped server-side) --------------------
-// The client never names a tenant — the session cookie scopes the write. unwrap
-// throws ApiError on a failure body, so a 409 duplicate name reaches the
-// dialog's useMutation onError with its message intact, mirroring operator-fleet.
+// --- Mutations (cookie-based, CSRF-gated; operator-scoped server-side) ---------
+// The global csrf() middleware rejects any cookie-authenticated mutation that
+// omits a matching X-CSRF-Token (middleware/csrf.ts), so every write threads the
+// session's csrfToken. The client never names a tenant — the session cookie
+// scopes the write. unwrap throws ApiError on a failure body, so a 409 duplicate
+// name reaches the dialog's useMutation onError with its message intact.
 
 async function writeJson(
   path: string,
   method: 'POST' | 'PATCH',
   body: unknown,
+  csrfToken: string,
 ): Promise<OperatorLocation> {
   const res = await fetch(`${getApiBaseUrl()}${path}`, {
     method,
     credentials: 'include',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrfToken },
     body: JSON.stringify(body),
   })
   return unwrap(res, locationSchema)
@@ -117,12 +120,17 @@ async function writeJson(
 // session omits it and is auto-scoped server-side. PATCH/DELETE are id-scoped.
 export function createLocation(
   data: WithOperatorId<CreateLocationInput>,
+  csrfToken: string,
 ): Promise<OperatorLocation> {
-  return writeJson('/locations', 'POST', data)
+  return writeJson('/locations', 'POST', data, csrfToken)
 }
 
-export function updateLocation(id: string, data: UpdateLocationInput): Promise<OperatorLocation> {
-  return writeJson(`/locations/${encodeURIComponent(id)}`, 'PATCH', data)
+export function updateLocation(
+  id: string,
+  data: UpdateLocationInput,
+  csrfToken: string,
+): Promise<OperatorLocation> {
+  return writeJson(`/locations/${encodeURIComponent(id)}`, 'PATCH', data, csrfToken)
 }
 
 /**
@@ -143,11 +151,14 @@ export class LocationArchiveBlockedError extends Error {
 
 // DELETE soft-archives (status -> ARCHIVED). The body is read once and routed:
 // the active-bookings 409 becomes a typed error carrying the count; anything
-// else collapses to the generic ApiError (same contract as `unwrap`).
-export async function archiveLocation(id: string): Promise<OperatorLocation> {
+// else collapses to the generic ApiError (same contract as `unwrap`). The CSRF
+// header still rides along because a cookie-authed DELETE is a mutation the guard
+// protects.
+export async function archiveLocation(id: string, csrfToken: string): Promise<OperatorLocation> {
   const res = await fetch(`${getApiBaseUrl()}/locations/${encodeURIComponent(id)}`, {
     method: 'DELETE',
     credentials: 'include',
+    headers: { 'X-CSRF-Token': csrfToken },
   })
   const body = (await res.json().catch(() => ({
     success: false as const,

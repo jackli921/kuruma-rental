@@ -13,6 +13,7 @@ import {
   createLocation,
 } from '@/vite/operator-locations/api'
 import { regionsQueryOptions } from '@/vite/regions/regions-api'
+import { useSession } from '@/vite/session'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useTranslations } from 'use-intl'
 
@@ -36,9 +37,10 @@ export function AddLocationDialog({
 }: AddLocationDialogProps) {
   const t = useTranslations('business.locations')
   const queryClient = useQueryClient()
+  const csrfToken = useSession().data?.csrfToken ?? ''
   const { data: regions } = useQuery(regionsQueryOptions())
   const mutation = useMutation({
-    mutationFn: (data: WithOperatorId<CreateLocationInput>) => createLocation(data),
+    mutationFn: (data: WithOperatorId<CreateLocationInput>) => createLocation(data, csrfToken),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: LOCATIONS_QUERY_KEY })
       onOpenChange(false)
