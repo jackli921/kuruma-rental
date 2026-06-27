@@ -33,7 +33,7 @@ describe('country reference data — full membership pinned', () => {
     ])
   })
 
-  it('IDP_OK is the pinned 101-country Japan-accepted Geneva set (Vietnam excluded)', () => {
+  it('IDP_OK is the pinned 100-country Japan-accepted Geneva set (Russia + Vietnam excluded)', () => {
     const expected = [
       'AE',
       'AL',
@@ -115,7 +115,6 @@ describe('country reference data — full membership pinned', () => {
       'PY',
       'RO',
       'RS',
-      'RU',
       'RW',
       'SE',
       'SG',
@@ -138,7 +137,7 @@ describe('country reference data — full membership pinned', () => {
       'ZW',
     ]
     expect([...IDP_OK_COUNTRIES].sort()).toEqual(expected.sort())
-    expect(IDP_OK_COUNTRIES.size).toBe(101)
+    expect(IDP_OK_COUNTRIES.size).toBe(100)
   })
 
   it('the only overlap between the two sets is FR/BE/MC/SI', () => {
@@ -184,8 +183,9 @@ describe('classifyDrivingEligibility — Geneva IDP jurisdictions', () => {
 describe('classifyDrivingEligibility — recognized but neither list', () => {
   // Real countries that are not Japan-accepted 1949 Geneva parties and not in the
   // translation set: China, Brazil (1968 Vienna), Indonesia, Mexico, Saudi Arabia,
-  // and Vietnam (disputed → safe-fail to a "verify before booking" warning).
-  it.each(['CN', 'BR', 'ID', 'MX', 'SA', 'VN'])(
+  // Russia (1968 Vienna, not Geneva — Japan rejects its IDP, #1194), and Vietnam
+  // (disputed → safe-fail to a "verify before booking" warning).
+  it.each(['CN', 'BR', 'ID', 'MX', 'SA', 'RU', 'VN'])(
     '%s is a recognized country on neither list -> NOT_ELIGIBLE',
     (code) => {
       expect(classifyDrivingEligibility(code)).toBe('NOT_ELIGIBLE')

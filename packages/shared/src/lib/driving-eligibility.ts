@@ -15,15 +15,18 @@
 // clearing an ineligible one is a refused car at the counter — the exact failure
 // this feature exists to prevent. Err toward the warning.
 //
-// Sources (lists change rarely; re-verify against Japan's NPA list when amending):
-//   - Translation-required set (7): JAF published list — Switzerland, Germany,
-//     France, Belgium, Monaco, Slovenia, Taiwan.
-//   - IDP-accepted set: Japan-accepted 1949 Geneva Convention parties, cross-checked
-//     across Japan-operational sources (JAF, ToCoo, kart.st, niconico). Vietnam is
-//     DELIBERATELY EXCLUDED — sources conflict (it is a 1968 Vienna party; Japan
-//     guidance commonly rejects its IDP), so per the safe-fail rule it warns.
-//     The full set must be reconciled against the NPA "List of Contracting States
-//     to the Geneva Convention" before slice 2 surfaces this to renters.
+// Sources (primary — re-verify when amending):
+//   - UN Treaty Collection, Convention on Road Traffic (Geneva 1949), participant list
+//     XI-B-1: https://treaties.un.org/pages/ViewDetailsV.aspx?mtdsg_no=XI-B-1&chapter=11
+//   - Japan NPA "List of Contracting States to the Geneva Convention" — the operational
+//     authority for which IDPs Japan accepts.
+//   - Translation-required set (7): JAF published list — Switzerland, Germany, France,
+//     Belgium, Monaco, Slovenia, Taiwan.
+//   - IDP-accepted set: Japan-accepted 1949 Geneva parties. Russia (RU) and Vietnam (VN)
+//     are DELIBERATELY EXCLUDED — both are 1968 Vienna parties, NOT 1949 Geneva, so Japan
+//     does not accept their IDP (#1194); per safe-fail they classify NOT_ELIGIBLE. Georgia
+//     (GE) and Kyrgyzstan (KG) were verified as genuine 1949 Geneva parties (2026-06,
+//     UN Treaty Collection) and are retained.
 
 export const ELIGIBILITY_CLASSES = [
   'IDP_OK',
@@ -50,7 +53,7 @@ export const TRANSLATION_REQUIRED_COUNTRIES: ReadonlySet<string> = new Set([
 
 // Japan-accepted 1949 Geneva Convention parties — Japan accepts an IDP issued by
 // these. ISO 3166-1 alpha-2. FR/BE/MC/SI also appear here, but the translation rule
-// above wins. Vietnam is deliberately excluded (see header). (101 entries.)
+// above wins. Russia and Vietnam are deliberately excluded (see header). (100 entries.)
 // Exported for the contract test that pins the full membership.
 export const IDP_OK_COUNTRIES: ReadonlySet<string> = new Set([
   'AL',
@@ -128,7 +131,6 @@ export const IDP_OK_COUNTRIES: ReadonlySet<string> = new Set([
   'PL',
   'PT',
   'RO',
-  'RU',
   'RW',
   'SM',
   'SN',
