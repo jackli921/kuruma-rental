@@ -11,9 +11,8 @@ import {
   requireUser,
   toCallerContext,
 } from '../middleware/auth'
-import type { FeeScheduleService } from '../services/fee-schedule'
+import type { FeeScheduleService, FeeScheduleUpdate } from '../services/fee-schedule'
 import type { FeeScheduleFilters } from '../services/filters'
-import type { FeeSchedule } from '../stores'
 import type { ResolveWriteOperatorId } from '../tenancy'
 import { fail, ok, parseBody, parseId, parseScopedCreate, stripUndefined } from './helpers'
 
@@ -110,7 +109,7 @@ export function createFeeScheduleRoutes(
       const result = await service.update(
         toCallerContext(user),
         idResult.id,
-        stripUndefined(parsed.data) as Partial<FeeSchedule>,
+        stripUndefined(parsed.data) as FeeScheduleUpdate,
       )
       if (!result.ok)
         return fail(c, result.error, result.status, result.code ? { code: result.code } : undefined)

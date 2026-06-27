@@ -249,6 +249,7 @@
         "previous": "上一页",
         "next": "下一页",
         "views": {
+          "timeline": "时间线",
           "day": "日",
           "week": "周",
           "month": "月"
@@ -256,6 +257,7 @@
         "noEventsInRange": "该时段暂无预订",
         "showMore": "+{count}条",
         "viewFullDetails": "查看详情",
+        "unassigned": "未分配",
         "sidebar": {
           "title": "筛选",
           "vehicles": {
@@ -879,6 +881,10 @@
       },
       "loadError": "无法加载您的团队",
       "retry": "重试"
+    },
+    "operatorContext": {
+      "label": "运营商",
+      "all": "所有运营商"
     }
   },
   "messaging": {
@@ -1632,6 +1638,7 @@
   },
   "currency": {
     "label": "显示货币",
+    "approximately": "约",
     "disclaimer": "仅供参考 — 实际以日元（JPY）结算",
     "asOf": "汇率基准日 {date}"
   }

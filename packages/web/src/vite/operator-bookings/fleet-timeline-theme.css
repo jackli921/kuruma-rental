@@ -1,0 +1,51 @@
+/* Scoped react-calendar-timeline theme for the #1100 fleet planning board.
+   The lib paints a default inline background on each .rct-item, so the
+   booking-status palette below (mirroring calendar-theme.css's rbc colors) uses
+   !important — overriding an inline style is the one case where it is warranted.
+   Bars carry STATUS_CLASS (rbc-event--*) + an optional fleet-bar--turnaround. */
+
+.rct-item {
+  border-radius: 4px !important;
+  border-width: 1px !important;
+  border-style: solid !important;
+  font-size: 0.75rem;
+  font-weight: 500;
+}
+
+.rct-item .rct-item-content {
+  padding: 0 6px;
+  line-height: 1.3;
+}
+
+/* Status-based bar colors — same tokens as the rbc calendar so the two views read
+   identically. */
+.rct-item.rbc-event--confirmed {
+  background-color: oklch(0.925 0.084 155.995) !important;
+  border-color: oklch(0.627 0.194 149.214) !important;
+  color: oklch(0.262 0.051 150.223) !important;
+}
+
+.rct-item.rbc-event--active {
+  background-color: oklch(0.932 0.032 255.585) !important;
+  border-color: oklch(0.588 0.158 241.966) !important;
+  color: oklch(0.282 0.091 267.935) !important;
+}
+
+.rct-item.rbc-event--completed {
+  background-color: oklch(0.928 0.006 264.531) !important;
+  border-color: oklch(0.551 0.027 264.364) !important;
+  color: oklch(0.371 0.013 285.805) !important;
+}
+
+.rct-item.rbc-event--cancelled {
+  background-color: oklch(0.936 0.032 17.717) !important;
+  border-color: oklch(0.637 0.237 25.331) !important;
+  color: oklch(0.258 0.092 26.042) !important;
+}
+
+/* Turnaround tail — the off-fleet cleaning gap. Lighter + dashed so it reads as
+   "not a booked slot" while keeping the status hue of its booking. */
+.rct-item.fleet-bar--turnaround {
+  opacity: 0.55;
+  border-style: dashed !important;
+}

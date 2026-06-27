@@ -17,6 +17,7 @@ import {
   InMemoryInsuranceOptionRepository,
   InMemoryLocationRepository,
   InMemoryMaintenanceLogRepository,
+  InMemoryOperatorRepository,
   InMemoryRenterDocumentRepository,
   InMemoryUserRepository,
   InMemoryVehicleBlockRepository,
@@ -39,7 +40,7 @@ import type { CancellationRefundCoordinator } from '../../src/services/booking-l
 import type { BookingPostCommitDispatcher } from '../../src/services/booking-post-commit-dispatcher'
 import { documentVerificationGate } from '../../src/services/document-verification-gate'
 import { RenterDocumentService } from '../../src/services/renter-document'
-import type { Booking, BookingEvent, User, Vehicle, VehicleClass } from '../../src/stores'
+import type { Booking, BookingEvent, Operator, User, Vehicle, VehicleClass } from '../../src/stores'
 
 const OP_A = 'op-a'
 const OP_B = 'op-b'
@@ -92,7 +93,32 @@ interface Harness {
   // #1101: exposed concrete (repos.vehicleBlockRepo is the read-only Pick) so a
   // test can schedule a block and assert the booking-vs-block guard.
   vehicleBlockRepo: InMemoryVehicleBlockRepository
+  // #1206: exposed concrete (repos.operatorRepo is the read-only Pick) so a test
+  // can deactivate/reactivate the seeded operator and assert the booking guard.
+  operatorRepo: InMemoryOperatorRepository
   generate: { mock: ReturnType<typeof vi.fn> }
+}
+
+// #1206: an InMemoryOperatorRepository pre-seeded with OP_A active. Both harnesses
+// share it so existing create paths still pass the new operator-active guard; the
+// guard tests flip deactivatedAt on the exposed concrete repo.
+function seedOperatorRepo(): InMemoryOperatorRepository {
+  return new InMemoryOperatorRepository(
+    new Map<string, Operator>([
+      [
+        OP_A,
+        {
+          id: OP_A,
+          slug: 'op-a',
+          name: 'Op A',
+          preAuthHandoffUrl: null,
+          createdAt: NOW,
+          updatedAt: NOW,
+          deactivatedAt: null,
+        },
+      ],
+    ]),
+  )
 }
 
 // Wires all seven in-memory repos behind a pass-through runInTransaction (the
@@ -160,6 +186,11 @@ async function setup(
     ]),
   )
 
+  // #1206: the booking guard loads the vehicle's operator and rejects a
+  // deactivated one. Seed OP_A active so every existing create path still passes;
+  // the new guard tests flip deactivatedAt via the exposed concrete repo.
+  const operatorRepo = seedOperatorRepo()
+
   const vehicle = await vehicleRepo.create(SYSTEM_CONTEXT, vehicleData())
   await locationRepo.create({
     operatorId: OP_A,
@@ -187,6 +218,7 @@ async function setup(
     classRatePlanRepo,
     vehicleClassRepo,
     vehicleBlockRepo,
+    operatorRepo,
   }
   const runInTransaction: RunInTransaction = async (fn) => fn(repos)
 
@@ -216,6 +248,7 @@ async function setup(
     events,
     vehicleId: vehicle.id,
     vehicleBlockRepo,
+    operatorRepo,
     generate: { mock: generateMock },
   }
 }
@@ -301,6 +334,54 @@ describe('BookingService.create — past-start floor (#954)', () => {
       }),
       NOW,
     )
+    expect(result.ok).toBe(true)
+  })
+})
+
+describe('BookingService.create — deactivated-operator guard (#1206)', () => {
+  // A soft-deactivated operator (operators.deactivatedAt set) stops taking NEW
+  // bookings across every create path; reactivation (deactivatedAt -> null) re-allows.
+  const bookSeeded = (h: Harness, vehicleId: string, locationId: string) =>
+    h.service.create(
+      renterCtx,
+      createInput({
+        requestedVehicleId: vehicleId,
+        pickupLocationId: locationId,
+        dropoffLocationId: locationId,
+      }),
+      NOW,
+    )
+
+  it('rejects a booking against a deactivated operator (409 OPERATOR_DEACTIVATED)', async () => {
+    const h = await setup()
+    const { vehicleId, locationId } = await seedReady(h)
+    await h.operatorRepo.update(OP_A, { deactivatedAt: new Date(), updatedAt: new Date() })
+
+    const result = await bookSeeded(h, vehicleId, locationId)
+
+    expect(result.ok).toBe(false)
+    expect(result.status).toBe(409)
+    if (!result.ok) expect(result.code).toBe('OPERATOR_DEACTIVATED')
+  })
+
+  it('still accepts a booking against an active operator', async () => {
+    const h = await setup()
+    const { vehicleId, locationId } = await seedReady(h)
+
+    const result = await bookSeeded(h, vehicleId, locationId)
+
+    expect(result.ok).toBe(true)
+  })
+
+  it('re-allows booking after the operator is reactivated (deactivatedAt -> null)', async () => {
+    const h = await setup()
+    const { vehicleId, locationId } = await seedReady(h)
+    await h.operatorRepo.update(OP_A, { deactivatedAt: new Date(), updatedAt: new Date() })
+    expect((await bookSeeded(h, vehicleId, locationId)).ok).toBe(false)
+
+    await h.operatorRepo.update(OP_A, { deactivatedAt: null, updatedAt: new Date() })
+
+    const result = await bookSeeded(h, vehicleId, locationId)
     expect(result.ok).toBe(true)
   })
 })
@@ -1122,6 +1203,24 @@ describe('BookingService.create — CLASS_COMBO (#464 2d.3)', () => {
     })
   })
 
+  // #1206: the deactivated-operator guard covers the CLASS_COMBO create path too
+  // (operatorId resolved from the pickup location), not just SPECIFIC.
+  it('rejects a CLASS_COMBO booking against a deactivated operator (409 OPERATOR_DEACTIVATED)', async () => {
+    const h = await setup()
+    const { classId, locationId } = await seedComboReady(h)
+    await h.operatorRepo.update(OP_A, { deactivatedAt: new Date(), updatedAt: new Date() })
+
+    const result = await h.service.create(
+      renterCtx,
+      comboInput({ classId, pickupLocationId: locationId, dropoffLocationId: locationId }),
+      NOW,
+    )
+
+    expect(result.ok).toBe(false)
+    expect(result.status).toBe(409)
+    if (!result.ok) expect(result.code).toBe('OPERATOR_DEACTIVATED')
+  })
+
   // Maintainability review 2026-06-24 finding #11: cross-PR drift between
   // #1028 (SPECIFIC turnaround follows dropoff) and #1035 (CLASS_COMBO landed
   // after, still keyed off pickup). The DB trigger overwrites the persisted
@@ -1640,6 +1739,7 @@ async function setupSub(
     vehicleBlockRepo,
   )
   const classRatePlanRepo = new InMemoryClassRatePlanRepository()
+  const operatorRepo = seedOperatorRepo()
 
   const repos: TransactionRepos = {
     vehicleRepo,
@@ -1655,6 +1755,7 @@ async function setupSub(
     classRatePlanRepo,
     vehicleClassRepo,
     vehicleBlockRepo,
+    operatorRepo,
   }
   const runInTransaction: RunInTransaction = async (fn) => fn(repos)
   const service = new BookingService(

@@ -149,6 +149,23 @@ export function checkContent(rel: string, content: string): Violation[] {
       })
     }
 
+    // Rule 1b (#1213): Routes must not import persistence entity types from the
+    // `../stores` barrel. stores.ts is the types-only data-layer contract; a route
+    // receives an already-projected DTO from its service, so an entity import is a
+    // toView/cast leak that belongs in the service (the #1164 payment-anomalies fix,
+    // now enforced rather than manual). Services/repositories may still use it.
+    // Runs BEFORE the non-import skip below and matches every form — static
+    // `from '../stores'`, dynamic/type-position `import('../stores')`, and re-exports
+    // — since a route bypassed the from-only check via `Partial<import('../stores').X>`.
+    if (isRoute && /(?:from\s+|import\s*\(\s*)['"]\.\.\/stores['"]/.test(trimmed)) {
+      violations.push({
+        file: rel,
+        line: i + 1,
+        text: trimmed,
+        rule: 'Routes must not import persistence entity types from ../stores; receive a projected type from the service layer instead.',
+      })
+    }
+
     // Skip non-import lines for the remaining rules
     if (!trimmed.startsWith('import ') && !trimmed.startsWith('import{')) continue
 

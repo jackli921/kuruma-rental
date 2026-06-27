@@ -9,6 +9,12 @@ import { IntlProvider } from 'use-intl'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import enMessages from '../../../messages/en.json'
 
+// csrfToken is supplied without a real auth flow; the dialog must thread it into
+// the archive call so the csrf() middleware admits the cookie DELETE.
+vi.mock('@/vite/session', () => ({
+  useSession: () => ({ data: { csrfToken: 'test-csrf' } }),
+}))
+
 vi.mock('@/vite/operator-locations/api', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@/vite/operator-locations/api')>()
   return { ...actual, archiveLocation: vi.fn() }
@@ -66,6 +72,9 @@ describe('ArchiveLocationDialog', () => {
     // the first positional rather than the whole call shape.
     await waitFor(() => expect(archiveLocation).toHaveBeenCalledTimes(1))
     expect(archiveLocation.mock.calls[0][0]).toBe('loc_1')
+    // The session's CSRF token is threaded as the 2nd arg, or the csrf() middleware
+    // would 403 the cookie DELETE.
+    expect(archiveLocation.mock.calls[0][1]).toBe('test-csrf')
     expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: LOCATIONS_QUERY_KEY })
     await waitFor(() => expect(onOpenChange).toHaveBeenCalledWith(false))
   })

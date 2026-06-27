@@ -38,6 +38,45 @@ export function isOperatorOwnerSession(session: Session | null): boolean {
   return session?.user.role === 'OPERATOR_OWNER'
 }
 
+// MAY pick an operator context and operate as it — the ONE capability behind the
+// picker (design §4.3). PLATFORM_ADMIN is the only role uniformly cross-tenant across
+// BOTH config and bookings, so it alone gets the picker; legacy STAFF/ADMIN are
+// cross-tenant on config but tenant-blind on bookings (`bypassScope`), so a picker
+// would mislead them. Reused for picker visibility AND the write gates (no drift).
+export function canPickOperatorContext(session: Session | null): boolean {
+  return Boolean(session) && isPlatformAdmin(session?.user.role)
+}
+
+// READS cross-operator — a business role with no operatorId (mirrors the API's
+// `operatorReadScope(ctx).kind === 'all'`). A DIFFERENT capability than picking
+// (read-all vs operate-as): it drives the read default (includeAll) + all-mode
+// labeling and keeps legacy STAFF/ADMIN's read-only cross-operator view working.
+export function isCrossOperatorReader(session: Session | null): boolean {
+  return isBusinessRole(session?.user.role) && !session?.user.operatorId
+}
+
+// Operate as a tenant: a real operator session, OR a picker-admin who has chosen one.
+export function canWriteAsOperator(
+  session: Session | null,
+  pickedOperatorId: string | undefined,
+): boolean {
+  return (
+    isOperatorSession(session) || (canPickOperatorContext(session) && Boolean(pickedOperatorId))
+  )
+}
+
+// Owner-tier writes (preAuthHandoffUrl, team invites): admin-as-operator outranks
+// owner (API-verified: OPERATOR_OWNER_WRITE_ROLES includes the platform tier).
+export function canWriteAsOperatorOwner(
+  session: Session | null,
+  pickedOperatorId: string | undefined,
+): boolean {
+  return (
+    isOperatorOwnerSession(session) ||
+    (canPickOperatorContext(session) && Boolean(pickedOperatorId))
+  )
+}
+
 export function adminGuard(session: Session | null): GuardResult {
   if (!session) return { type: 'login' }
   // Narrower than businessGuard: tenant-scoped OPERATOR_* roles clear the business

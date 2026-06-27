@@ -1,8 +1,14 @@
 import { createVehicleBlockSchema } from '@kuruma/shared/validators/vehicle-block'
 import { Hono } from 'hono'
-import { FLEET_WRITE_ROLES, requireAuth, requireUser, toCallerContext } from '../middleware/auth'
+import {
+  FLEET_WRITE_ROLES,
+  MANAGEMENT_READ_ROLES,
+  requireAuth,
+  requireUser,
+  toCallerContext,
+} from '../middleware/auth'
 import type { VehicleBlockService } from '../services/vehicle-block'
-import { fail, ok, parseBody, parseId } from './helpers'
+import { fail, ok, parseBody, parseDateRange, parseId } from './helpers'
 
 export function createVehicleBlockRoutes(service: VehicleBlockService) {
   const app = new Hono()
@@ -12,7 +18,24 @@ export function createVehicleBlockRoutes(service: VehicleBlockService) {
   app.use('/vehicles/:vehicleId/blocks', requireAuth())
   app.use('/vehicles/:vehicleId/blocks/*', requireAuth())
 
+  // The fleet-wide read lives at a top-level path, so it is NOT covered by the
+  // vehicle-scoped requireAuth above — guard it here (requireUser throws 500
+  // without it). Reads are management-tier (RENTER/PARTNER excluded at the gate).
+  app.use('/vehicle-blocks', requireAuth())
+
   return app
+    .get('/vehicle-blocks', async (c) => {
+      const user = requireUser(c)
+      if (!MANAGEMENT_READ_ROLES.has(user.role)) return fail(c, 'Forbidden', 403)
+
+      // The time window is the only bound (no limit/cursor), so require it: an
+      // omitted range must 400, never dump all-time fleet-wide (or cross-operator).
+      const range = parseDateRange(c, true)
+      if (!range.ok) return range.response
+
+      const blocks = await service.listBlocks(toCallerContext(user), range.from, range.to)
+      return ok(c, blocks)
+    })
     .post('/vehicles/:vehicleId/blocks', async (c) => {
       const user = requireUser(c)
       // Fleet writes admit STAFF roles AND tenant operators; RENTER / PARTNER are

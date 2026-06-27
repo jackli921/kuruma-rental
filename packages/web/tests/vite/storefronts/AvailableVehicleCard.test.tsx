@@ -5,6 +5,7 @@ import type { ReactNode } from 'react'
 import { IntlProvider } from 'use-intl'
 import { describe, expect, it, vi } from 'vitest'
 import en from '../../../messages/en.json'
+import { renderWithUsdIndicative } from '../../support/currency'
 
 vi.mock('@tanstack/react-router', () => ({
   Link: ({
@@ -109,5 +110,19 @@ describe('AvailableVehicleCard', () => {
   it('renders a singular bag label when capacity is one', () => {
     renderCard(makeVehicle({ luggageCapacity: 1, luggageSize: 'SMALL' }))
     expect(screen.getByText('1 bag')).toBeInTheDocument()
+  })
+
+  // #1070: the card's from-price carries an indicative conversion under a non-JPY display.
+  it('converts the from-price for the indicative note', async () => {
+    renderWithUsdIndicative(
+      <AvailableVehicleCard
+        vehicle={makeVehicle({ dailyRateJpy: 30000 })}
+        locationId="loc-1"
+        from="2026-07-01T10:00"
+        to="2026-07-03T10:00"
+      />,
+    )
+    // 30,000 -> $201
+    expect(await screen.findByText(/≈ \$201/)).toBeTruthy()
   })
 })

@@ -1,4 +1,5 @@
 import { Button } from '@/components/ui/button'
+import type { OperatorScope } from '@/vite/operator-context'
 import { AddInsuranceDialog } from '@/vite/operator-insurance/AddInsuranceDialog'
 import { EditInsuranceDialog } from '@/vite/operator-insurance/EditInsuranceDialog'
 import { InsuranceArchiveDialog } from '@/vite/operator-insurance/InsuranceArchiveDialog'
@@ -10,13 +11,21 @@ import { useTranslations } from 'use-intl'
 
 interface OperatorInsuranceViewProps {
   readonly options: readonly InsuranceOptionData[]
+  readonly scope: OperatorScope
 }
 
 // Controlled list + empty state. The route owns the loader / useSuspenseQuery
 // and the pending/error boundaries (FC/IS — the shell does I/O, this renders).
 // The Add/Edit/Archive dialogs own their own write mutations and invalidate the
 // route's INSURANCE_QUERY_KEY on success, so the prefetched list refetches.
-export function OperatorInsuranceView({ options }: OperatorInsuranceViewProps) {
+//
+// In all-mode (a cross-operator reader with no picked operator) the page is
+// read-only: `canWrite` is false so no write affordances render, and
+// `showOperator` turns on the per-row operator label so the mixed-tenant list is
+// legible. A scoped write (operator session, or admin who picked a tenant) shows
+// the Add/Edit/Archive controls and threads `pickedOperatorId` into the create.
+export function OperatorInsuranceView({ options, scope }: OperatorInsuranceViewProps) {
+  const { pickedOperatorId, canWrite, showOperator, operatorNameById } = scope
   const t = useTranslations('business.insurance')
   const [showAdd, setShowAdd] = useState(false)
   const [editing, setEditing] = useState<InsuranceOptionData | null>(null)
@@ -27,12 +36,14 @@ export function OperatorInsuranceView({ options }: OperatorInsuranceViewProps) {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-end">
-        <Button onClick={() => setShowAdd(true)}>
-          <Plus className="size-4 mr-1.5" />
-          {t('addOption')}
-        </Button>
-      </div>
+      {canWrite && (
+        <div className="flex items-center justify-end">
+          <Button onClick={() => setShowAdd(true)}>
+            <Plus className="size-4 mr-1.5" />
+            {t('addOption')}
+          </Button>
+        </div>
+      )}
 
       {sorted.length === 0 ? (
         <div className="text-center py-20">
@@ -42,14 +53,29 @@ export function OperatorInsuranceView({ options }: OperatorInsuranceViewProps) {
       ) : (
         <div className="space-y-3">
           {sorted.map((o) => (
-            <InsuranceRow key={o.id} option={o} onEdit={setEditing} onArchive={setArchiving} />
+            <InsuranceRow
+              key={o.id}
+              option={o}
+              canWrite={canWrite}
+              operatorName={showOperator ? operatorNameById.get(o.operatorId) : undefined}
+              onEdit={setEditing}
+              onArchive={setArchiving}
+            />
           ))}
         </div>
       )}
 
-      <AddInsuranceDialog open={showAdd} onOpenChange={setShowAdd} />
-      <EditInsuranceDialog option={editing} onOpenChange={() => setEditing(null)} />
-      <InsuranceArchiveDialog option={archiving} onOpenChange={() => setArchiving(null)} />
+      {canWrite ? (
+        <>
+          <AddInsuranceDialog
+            open={showAdd}
+            onOpenChange={setShowAdd}
+            pickedOperatorId={pickedOperatorId}
+          />
+          <EditInsuranceDialog option={editing} onOpenChange={() => setEditing(null)} />
+          <InsuranceArchiveDialog option={archiving} onOpenChange={() => setArchiving(null)} />
+        </>
+      ) : null}
     </div>
   )
 }

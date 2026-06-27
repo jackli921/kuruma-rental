@@ -1,5 +1,6 @@
 import type { CalendarBookingRow, OperatorBookingStatus } from '@/vite/operator-bookings/api'
 import {
+  addDays,
   endOfDay,
   endOfMonth,
   endOfWeek,
@@ -16,8 +17,15 @@ import {
 // renders; these decide the data shape). The component is framework code we don't
 // unit-test; these functions carry the logic that can actually break.
 
-/** The three calendar views the operator gets. A subset of rbc's `View`. */
-export type CalendarView = 'day' | 'week' | 'month'
+/** The operator calendar views. `timeline` is the fleet planning board (#1100),
+ *  its own component; the other three are rbc views (a subset of rbc's `View`). */
+export type CalendarView = 'timeline' | 'day' | 'week' | 'month'
+
+/** The view-switcher order. `timeline` leads — it is the operator default. */
+export const OPERATOR_VIEWS = ['timeline', 'day', 'week', 'month'] as const
+
+/** How many days the fleet timeline spans from its anchor day (#1100 AC: 14). */
+export const TIMELINE_SPAN_DAYS = 14
 
 /** One booking as react-big-calendar consumes it (events bind to columns by id). */
 export interface CalendarEvent {
@@ -64,9 +72,24 @@ const WEEK_OPTS = { weekStartsOn: 1 } as const
  * leading/trailing days of adjacent months still render.
  */
 export function calendarRange(view: CalendarView, date: Date): { from: string; to: string } {
+  // The timeline shows a fixed multi-day span from the anchor day (a planning
+  // board, not a calendar grid): [startOfDay(date), startOfDay(date)+14d).
+  if (view === 'timeline')
+    return iso(startOfDay(date), startOfDay(addDays(date, TIMELINE_SPAN_DAYS)))
   if (view === 'day') return iso(startOfDay(date), endOfDay(date))
   if (view === 'week') return iso(startOfWeek(date, WEEK_OPTS), endOfWeek(date, WEEK_OPTS))
   return iso(startOfWeek(startOfMonth(date), WEEK_OPTS), endOfWeek(endOfMonth(date), WEEK_OPTS))
+}
+
+/** Shift the anchor day one view-span back (`-1`) or forward (`+1`) — the unit is
+ *  the view's natural step (a day, a week, a month, or the timeline's 14 days). */
+export function shiftCalendarDate(view: CalendarView, date: Date, dir: -1 | 1): Date {
+  const next = new Date(date)
+  if (view === 'month') next.setMonth(next.getMonth() + dir)
+  else if (view === 'week') next.setDate(next.getDate() + dir * 7)
+  else if (view === 'timeline') next.setDate(next.getDate() + dir * TIMELINE_SPAN_DAYS)
+  else next.setDate(next.getDate() + dir)
+  return next
 }
 
 function iso(from: Date, to: Date): { from: string; to: string } {
@@ -75,11 +98,12 @@ function iso(from: Date, to: Date): { from: string; to: string } {
 
 // --- URL <-> calendar state (the route stores view/date as search params) ------
 
-const VIEW_SET = new Set<CalendarView>(['day', 'week', 'month'])
+const VIEW_SET = new Set<CalendarView>(['timeline', 'day', 'week', 'month'])
 
-/** Narrow an untrusted `?view=` param to one of our views, defaulting to week. */
+/** Narrow an untrusted `?view=` param to one of our views, defaulting to the
+ *  fleet timeline — the operator planning board is the landing view (#1100). */
 export function parseCalendarView(value?: string | undefined): CalendarView {
-  return value && VIEW_SET.has(value as CalendarView) ? (value as CalendarView) : 'week'
+  return value && VIEW_SET.has(value as CalendarView) ? (value as CalendarView) : 'timeline'
 }
 
 const DATE_FMT = 'yyyy-MM-dd'

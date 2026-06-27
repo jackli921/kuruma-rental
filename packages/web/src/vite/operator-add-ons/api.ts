@@ -1,5 +1,6 @@
 import { unwrap } from '@/lib/api-error'
 import { getApiBaseUrl } from '@/vite/api-base'
+import { type WithOperatorId, buildScopeParam } from '@/vite/operator-context'
 import { ADD_ON_STATUSES } from '@kuruma/shared/enums'
 import type { AddOnData } from '@kuruma/shared/types/add-on'
 import type { CreateAddOnInput, UpdateAddOnInput } from '@kuruma/shared/validators/add-on'
@@ -35,20 +36,24 @@ export type { AddOnData }
 
 export const ADDON_QUERY_KEY = ['operator-add-ons'] as const
 
-// Management always lists archived rows too (badged in the UI); `includeAll=true`
-// rides along for bypass-role sessions. Parameterless so the query key stays
-// stable for invalidation.
-export async function fetchAddOns(): Promise<AddOnData[]> {
-  const res = await fetch(`${getApiBaseUrl()}/add-ons?includeArchived=true&includeAll=true`, {
-    credentials: 'include',
-  })
+// Management always lists archived rows too (badged in the UI). The scope param
+// is `operatorId=<picked>` when an admin has picked a tenant, else `includeAll=true`
+// (the bypass-role read default; an operator session ignores it and auto-scopes).
+export async function fetchAddOns(pickedOperatorId?: string): Promise<AddOnData[]> {
+  const res = await fetch(
+    `${getApiBaseUrl()}/add-ons?includeArchived=true&${buildScopeParam(pickedOperatorId)}`,
+    { credentials: 'include' },
+  )
   return unwrap(res, addOnSchema.array())
 }
 
-export function addOnsQueryOptions() {
+// The picked operator id is part of the cache key so switching context refetches
+// (and never serves another tenant's cached list). Optional param keeps any
+// no-arg caller working.
+export function addOnsQueryOptions(pickedOperatorId?: string) {
   return queryOptions({
-    queryKey: ADDON_QUERY_KEY,
-    queryFn: fetchAddOns,
+    queryKey: [...ADDON_QUERY_KEY, pickedOperatorId ?? 'all'] as const,
+    queryFn: () => fetchAddOns(pickedOperatorId),
   })
 }
 
@@ -74,7 +79,13 @@ async function writeJson(
   return unwrap(res, addOnSchema)
 }
 
-export async function createAddOn(input: CreateAddOnInput, csrfToken: string): Promise<AddOnData> {
+// A platform admin operating as a picked tenant must name the target operator in
+// the body (platformAdminCreateAddOnSchema requires it); an operator session omits
+// it and is auto-scoped server-side. PATCH/DELETE are id-scoped and never carry it.
+export async function createAddOn(
+  input: WithOperatorId<CreateAddOnInput>,
+  csrfToken: string,
+): Promise<AddOnData> {
   return writeJson('/add-ons', 'POST', input, csrfToken)
 }
 

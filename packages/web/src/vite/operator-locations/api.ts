@@ -1,11 +1,16 @@
 import { ApiError, unwrap } from '@/lib/api-error'
 import { getApiBaseUrl } from '@/vite/api-base'
+import { type WithOperatorId, buildScopeParam } from '@/vite/operator-context'
 import { COORDINATE_SOURCES, LOCATION_STATUSES } from '@kuruma/shared/enums'
 import type { ApiResponse } from '@kuruma/shared/types/api-response'
 import type { LocationOperatingHours } from '@kuruma/shared/types/location'
 import type { CreateLocationInput, UpdateLocationInput } from '@kuruma/shared/validators/location'
 import { queryOptions } from '@tanstack/react-query'
 import { z } from 'zod'
+
+// Canonical write types come from @kuruma/shared so the form/dialog stay in
+// lockstep with the Zod validators rather than drifting a parallel copy.
+export type { CreateLocationInput, UpdateLocationInput }
 
 // #529: operator locations/storefronts management — Vite port of the frozen
 // `modules/locations` admin. Cookie-based and operator-scoped server-side (the
@@ -58,54 +63,74 @@ const locationSchema = z.object({
 
 export const LOCATIONS_QUERY_KEY = ['operator-locations'] as const
 
-export async function fetchOperatorLocations(): Promise<OperatorLocation[]> {
+export async function fetchOperatorLocations(
+  pickedOperatorId?: string,
+): Promise<OperatorLocation[]> {
   // includeArchived=true so the owner sees soft-archived rows (muted badge) and
   // can tell why a name is taken; archiving frees the name for active inventory.
   //
-  // includeAll=true (#435): the `_business` guard admits bypass-scope roles
+  // The scope param is `operatorId=<picked>` when an admin has picked a tenant,
+  // else `includeAll=true` (#435): the `_business` guard admits bypass-scope roles
   // (STAFF/ADMIN/PLATFORM_ADMIN) too, and GET /locations 400s for them unless
   // they opt into a cross-operator read — without this they'd hit the load-error
   // state. Operator-scoped callers auto-scope server-side via the session cookie
-  // and the API IGNORES this flag for them, so it's safe to always send (the
+  // and the API IGNORES the flag for them, so it's safe to always send (the
   // client still names no operatorId, so an operator's read stays tenant-scoped).
-  const res = await fetch(`${getApiBaseUrl()}/locations?includeArchived=true&includeAll=true`, {
-    credentials: 'include',
-  })
+  const res = await fetch(
+    `${getApiBaseUrl()}/locations?includeArchived=true&${buildScopeParam(pickedOperatorId)}`,
+    { credentials: 'include' },
+  )
   return unwrap(res, locationSchema.array())
 }
 
-export function operatorLocationsQueryOptions() {
+// The picked operator id is part of the cache key so switching context refetches
+// (and never serves another tenant's cached list). Optional param keeps any
+// no-arg caller working.
+export function operatorLocationsQueryOptions(pickedOperatorId?: string) {
   return queryOptions({
-    queryKey: LOCATIONS_QUERY_KEY,
-    queryFn: fetchOperatorLocations,
+    queryKey: [...LOCATIONS_QUERY_KEY, pickedOperatorId ?? 'all'] as const,
+    queryFn: () => fetchOperatorLocations(pickedOperatorId),
   })
 }
 
-// --- Mutations (cookie-based; operator-scoped server-side) --------------------
-// The client never names a tenant — the session cookie scopes the write. unwrap
-// throws ApiError on a failure body, so a 409 duplicate name reaches the
-// dialog's useMutation onError with its message intact, mirroring operator-fleet.
+// --- Mutations (cookie-based, CSRF-gated; operator-scoped server-side) ---------
+// The global csrf() middleware rejects any cookie-authenticated mutation that
+// omits a matching X-CSRF-Token (middleware/csrf.ts), so every write threads the
+// session's csrfToken. The client never names a tenant — the session cookie
+// scopes the write. unwrap throws ApiError on a failure body, so a 409 duplicate
+// name reaches the dialog's useMutation onError with its message intact.
 
 async function writeJson(
   path: string,
   method: 'POST' | 'PATCH',
   body: unknown,
+  csrfToken: string,
 ): Promise<OperatorLocation> {
   const res = await fetch(`${getApiBaseUrl()}${path}`, {
     method,
     credentials: 'include',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrfToken },
     body: JSON.stringify(body),
   })
   return unwrap(res, locationSchema)
 }
 
-export function createLocation(data: CreateLocationInput): Promise<OperatorLocation> {
-  return writeJson('/locations', 'POST', data)
+// A platform admin operating as a picked tenant names the target operator in the
+// body (the server's platform-admin create schema requires it); an operator
+// session omits it and is auto-scoped server-side. PATCH/DELETE are id-scoped.
+export function createLocation(
+  data: WithOperatorId<CreateLocationInput>,
+  csrfToken: string,
+): Promise<OperatorLocation> {
+  return writeJson('/locations', 'POST', data, csrfToken)
 }
 
-export function updateLocation(id: string, data: UpdateLocationInput): Promise<OperatorLocation> {
-  return writeJson(`/locations/${encodeURIComponent(id)}`, 'PATCH', data)
+export function updateLocation(
+  id: string,
+  data: UpdateLocationInput,
+  csrfToken: string,
+): Promise<OperatorLocation> {
+  return writeJson(`/locations/${encodeURIComponent(id)}`, 'PATCH', data, csrfToken)
 }
 
 /**
@@ -126,11 +151,14 @@ export class LocationArchiveBlockedError extends Error {
 
 // DELETE soft-archives (status -> ARCHIVED). The body is read once and routed:
 // the active-bookings 409 becomes a typed error carrying the count; anything
-// else collapses to the generic ApiError (same contract as `unwrap`).
-export async function archiveLocation(id: string): Promise<OperatorLocation> {
+// else collapses to the generic ApiError (same contract as `unwrap`). The CSRF
+// header still rides along because a cookie-authed DELETE is a mutation the guard
+// protects.
+export async function archiveLocation(id: string, csrfToken: string): Promise<OperatorLocation> {
   const res = await fetch(`${getApiBaseUrl()}/locations/${encodeURIComponent(id)}`, {
     method: 'DELETE',
     credentials: 'include',
+    headers: { 'X-CSRF-Token': csrfToken },
   })
   const body = (await res.json().catch(() => ({
     success: false as const,

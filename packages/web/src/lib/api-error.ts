@@ -79,6 +79,44 @@ export async function unwrap<T>(res: Response, schema?: z.ZodType<T>): Promise<T
   return parsed.data
 }
 
+/** A single page of a cursor-paginated read: the validated `data` plus the
+ *  `nextCursor` to follow (`null` on the last page). */
+export interface Page<T> {
+  data: T
+  nextCursor: string | null
+}
+
+/**
+ * Like {@link unwrap}, but also surfaces the `nextCursor` the list routes attach
+ * to the success envelope (`ok(c, data, 200, { nextCursor })`). `unwrap`
+ * deliberately drops it; callers that must read a *whole* result set (not just
+ * the first page) follow the cursor until it is null. The schema is required —
+ * paginated reads always validate `data` at the seam.
+ */
+export async function unwrapPage<T>(res: Response, schema: z.ZodType<T>): Promise<Page<T>> {
+  const body = (await res.json().catch(() => ({
+    success: false as const,
+    error: `Non-JSON response (HTTP ${res.status})`,
+  }))) as ApiResponse<T> & { nextCursor?: unknown }
+
+  if (!body.success) {
+    throw new ApiError(body.error ?? `HTTP ${res.status}`, res.status, body.code)
+  }
+
+  const parsed = schema.safeParse(body.data)
+  if (!parsed.success) {
+    throw new ParseError(
+      `API response body failed validation (HTTP ${res.status})`,
+      res.status,
+      parsed.error.issues,
+    )
+  }
+  // The cursor is meta, trusted-by-construction like the envelope; coerce a
+  // missing/non-string value (last page) to a definite null.
+  const nextCursor = typeof body.nextCursor === 'string' ? body.nextCursor : null
+  return { data: parsed.data, nextCursor }
+}
+
 export const OPERATOR_REQUIRED: ErrorCode = 'OPERATOR_REQUIRED'
 
 /** Envelope `code` the booking API returns when the #459 document-verification
