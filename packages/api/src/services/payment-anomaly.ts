@@ -1,4 +1,7 @@
-import type { PaymentAnomalyResolution } from '@kuruma/shared/types/payment-anomaly'
+import type {
+  PaymentAnomalyResolution,
+  PaymentAnomalyView,
+} from '@kuruma/shared/types/payment-anomaly'
 import {
   type CallerContext,
   NotFoundError,
@@ -7,6 +10,30 @@ import {
 } from '../middleware/auth'
 import type { PaymentAnomalyRepository } from '../repositories/types'
 import type { PaymentAnomaly } from '../stores'
+
+// Project a persisted anomaly onto the admin wire view (@kuruma/shared): drop the
+// internal checkout-session id (refunds are issued against the paymentIntent) and
+// `resolvedBy` (no user-join in v1), and serialize the timestamps as ISO. The
+// resolution audit fields are null exactly while the anomaly is unresolved. Lives
+// in the service (not the route) so the entity→wire boundary stays out of the
+// transport layer (#1164).
+function toView(a: PaymentAnomaly): PaymentAnomalyView {
+  return {
+    id: a.id,
+    kind: a.kind,
+    operatorId: a.operatorId,
+    bookingId: a.bookingId,
+    receivedAmountJpy: a.receivedAmountJpy,
+    expectedAmountJpy: a.expectedAmountJpy,
+    currency: a.currency,
+    stripeEventId: a.stripeEventId,
+    stripePaymentIntentId: a.stripePaymentIntentId,
+    createdAt: a.createdAt.toISOString(),
+    resolvedAt: a.resolvedAt ? a.resolvedAt.toISOString() : null,
+    resolution: a.resolution,
+    note: a.note,
+  }
+}
 
 /**
  * Platform-admin view of payment anomalies needing review (#508 P2). Imperative
@@ -18,14 +45,14 @@ import type { PaymentAnomaly } from '../stores'
 export class PaymentAnomalyService {
   constructor(private readonly anomalies: PaymentAnomalyRepository) {}
 
-  async listUnresolved(ctx: CallerContext): Promise<PaymentAnomaly[]> {
+  async listUnresolved(ctx: CallerContext): Promise<PaymentAnomalyView[]> {
     requirePlatformRead(ctx)
-    return this.anomalies.listUnresolved()
+    return (await this.anomalies.listUnresolved()).map(toView)
   }
 
-  async listResolved(ctx: CallerContext): Promise<PaymentAnomaly[]> {
+  async listResolved(ctx: CallerContext): Promise<PaymentAnomalyView[]> {
     requirePlatformRead(ctx)
-    return this.anomalies.listResolved()
+    return (await this.anomalies.listResolved()).map(toView)
   }
 
   /**
@@ -42,7 +69,7 @@ export class PaymentAnomalyService {
     id: string,
     resolution: PaymentAnomalyResolution,
     note: string | null,
-  ): Promise<PaymentAnomaly> {
+  ): Promise<PaymentAnomalyView> {
     requirePlatformAdmin(ctx)
     const resolved = await this.anomalies.resolve(id, {
       resolution,
@@ -50,6 +77,6 @@ export class PaymentAnomalyService {
       note,
     })
     if (!resolved) throw new NotFoundError('payment anomaly not found or already resolved')
-    return resolved
+    return toView(resolved)
   }
 }
