@@ -1,5 +1,6 @@
 import { buttonVariants } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
+import { CurrencySelector } from '@/vite/currency'
 import { useUnreadBadge } from '@/vite/messaging/unread-badge'
 import { LocaleSwitcher } from '@/vite/nav/LocaleSwitcher'
 import { MobileMenu, type NavItem } from '@/vite/nav/MobileMenu'
@@ -100,6 +101,7 @@ export function Navbar() {
           </nav>
 
           <div className="flex items-center gap-1">
+            <CurrencySelector />
             <LocaleSwitcher />
             <NavbarClient
               session={session ?? null}

@@ -1,4 +1,8 @@
 {
+  "currency": {
+    "label": "显示货币",
+    "disclaimer": "仅供参考 — 实际以日元（JPY）结算"
+  },
   "consent": {
     "title": "请阅读并同意后继续",
     "intro": "为继续使用 Kuruma，请阅读并同意以下内容。",
