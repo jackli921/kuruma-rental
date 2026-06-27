@@ -1,9 +1,4 @@
 {
-  "currency": {
-    "label": "表示通貨",
-    "disclaimer": "目安です — ご請求は日本円（JPY）です",
-    "asOf": "レート基準日 {date}"
-  },
   "consent": {
     "title": "続行するにはご確認のうえ同意してください",
     "intro": "Kuruma を引き続きご利用いただくには、以下をご確認のうえ同意してください。",
@@ -1258,7 +1253,72 @@
       "documents": "書類",
       "governance": "同意ガバナンス",
       "customers": "顧客",
+      "operators": "事業者",
       "backToSite": "サイトに戻る"
+    },
+    "operators": {
+      "title": "事業者",
+      "subtitle": "プラットフォーム上のすべての事業者 — 作成、スタッフ招待、名称変更、無効化。",
+      "empty": "事業者がまだありません。",
+      "loadError": "事業者を読み込めませんでした。",
+      "retry": "再試行",
+      "create": "事業者を作成",
+      "colName": "事業者",
+      "colFleet": "車両数",
+      "colStatus": "ステータス",
+      "colCreated": "作成日",
+      "colActions": "操作",
+      "status": {
+        "active": "有効",
+        "deactivated": "無効"
+      },
+      "row": {
+        "invite": "スタッフを招待",
+        "edit": "名称変更",
+        "deactivate": "無効化",
+        "reactivate": "再有効化",
+        "deactivating": "無効化中…",
+        "reactivating": "再有効化中…"
+      },
+      "createDialog": {
+        "title": "事業者を作成",
+        "subtitle": "新しい事業者をプラットフォームに追加します。スラッグは名前から自動生成されます。",
+        "nameLabel": "名前",
+        "namePlaceholder": "例：Kanata Cars",
+        "handoffLabel": "事前認証ハンドオフURL（任意）",
+        "handoffPlaceholder": "https://…",
+        "cancel": "キャンセル",
+        "submit": "作成",
+        "submitting": "作成中…"
+      },
+      "editDialog": {
+        "title": "事業者の名称変更",
+        "subtitle": "事業者の表示名を更新します。スラッグは変更されません。",
+        "nameLabel": "名前",
+        "cancel": "キャンセル",
+        "submit": "保存",
+        "submitting": "保存中…"
+      },
+      "inviteDialog": {
+        "title": "メンバーを招待",
+        "subtitle": "{operator} の一回限りの招待リンクを発行します。",
+        "emailLabel": "メールアドレス",
+        "emailPlaceholder": "person@example.com",
+        "roleLabel": "役割",
+        "role": {
+          "OPERATOR_OWNER": "オーナー",
+          "OPERATOR_STAFF": "スタッフ"
+        },
+        "cancel": "キャンセル",
+        "submit": "招待を作成",
+        "submitting": "作成中…",
+        "successTitle": "招待リンクの準備ができました",
+        "successSubtitle": "今すぐコピーしてください — このリンクは一度だけ表示されます。",
+        "urlLabel": "招待リンク",
+        "copy": "コピー",
+        "copied": "コピーしました",
+        "done": "完了"
+      }
     },
     "home": {
       "title": "プラットフォーム管理",
@@ -1574,5 +1634,10 @@
       "noReviews": "レビューはまだありません",
       "ratingAria": "{avg}つ星、{count}件のレビュー"
     }
+  },
+  "currency": {
+    "label": "表示通貨",
+    "disclaimer": "目安です — ご請求は日本円（JPY）です",
+    "asOf": "レート基準日 {date}"
   }
 }
