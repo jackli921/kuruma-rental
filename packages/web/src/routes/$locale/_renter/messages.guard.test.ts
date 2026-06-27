@@ -30,6 +30,15 @@ describe('messages route guard (admin bypass)', () => {
     }
   })
 
+  it('redirects a signed-out viewer (undefined role) home — fails safe, no bypass', async () => {
+    try {
+      await runGuard(undefined)
+      expect.unreachable('guard should have redirected the signed-out viewer')
+    } catch (error) {
+      expect(isRedirect(error)).toBe(true)
+    }
+  })
+
   it('admits the platform admin so the owner can preview on beta', async () => {
     await expect(runGuard('PLATFORM_ADMIN')).resolves.toBeUndefined()
   })

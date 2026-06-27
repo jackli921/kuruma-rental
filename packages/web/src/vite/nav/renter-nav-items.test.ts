@@ -31,4 +31,14 @@ describe('visibleRenterNavItems', () => {
     vi.stubEnv('VITE_FEATURE_MESSAGING', 'true')
     expect(tos('RENTER')).toEqual(['/$locale/bookings', '/$locale/messages'])
   })
+
+  it('shows a renter Documents once the documents flag is on (gated on the real renter role)', () => {
+    vi.stubEnv('VITE_FEATURE_RENTER_DOCUMENTS', 'true')
+    expect(tos('RENTER')).toEqual(['/$locale/bookings', '/$locale/documents'])
+  })
+
+  it('keeps Documents hidden from the admin even with the flag on — no bypass, it is renter-only "my data" (Messages still shows via bypass)', () => {
+    vi.stubEnv('VITE_FEATURE_RENTER_DOCUMENTS', 'true')
+    expect(tos('PLATFORM_ADMIN')).toEqual(['/$locale/messages'])
+  })
 })
