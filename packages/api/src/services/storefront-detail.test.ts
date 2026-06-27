@@ -218,6 +218,7 @@ describe('StorefrontDetailService.getDetail (#391)', () => {
 
     expect(data.storefront).toEqual({
       locationId: namba.id,
+      operatorId: op.id,
       name: 'Namba',
       address: '1-1 Namba, Osaka',
       operatorName: 'Best Car Rental',
@@ -225,6 +226,51 @@ describe('StorefrontDetailService.getDetail (#391)', () => {
       turnaroundMinutes: 60,
     })
     expect(data.vehicles).toEqual([])
+  })
+
+  it('exposes the owning operatorId on the storefront summary (#1085 slice 5)', async () => {
+    // Pins the producer line that copies storefront.operatorId across, so a
+    // future refactor that drops or renames the field fails here BEFORE the
+    // web RatingBadge silently stops fetching the operator aggregate.
+    const op = await makeOperator('Best Car Rental', 'best')
+    const compact = await makeClass({ operatorId: op.id })
+    const namba = await makeLocation({ operatorId: op.id, name: 'Namba' })
+    await makeVehicle({ operatorId: op.id, classId: compact.id, pickupLocationId: namba.id })
+
+    const data = await okData(
+      await service.getDetail(PUBLIC_CONTEXT, { locationId: namba.id, from: FROM, to: TO }),
+    )
+
+    expect(data.storefront.operatorId).toBe(op.id)
+  })
+
+  it('exposes the vehicle classId on each available vehicle (#1085 slice 5)', async () => {
+    // Classed and classless vehicles MUST both pin: an UI badge fetch keys
+    // off classId and renders nothing when null. A regression that null-fills
+    // a classed vehicle, or drops the field, must fail here.
+    const op = await makeOperator('Best Car Rental', 'best')
+    const compact = await makeClass({ operatorId: op.id })
+    const namba = await makeLocation({ operatorId: op.id, name: 'Namba' })
+    const classed = await makeVehicle({
+      operatorId: op.id,
+      classId: compact.id,
+      pickupLocationId: namba.id,
+      name: 'Yaris',
+    })
+    const classless = await makeVehicle({
+      operatorId: op.id,
+      classId: null,
+      pickupLocationId: namba.id,
+      name: 'Free Spirit',
+    })
+
+    const data = await okData(
+      await service.getDetail(PUBLIC_CONTEXT, { locationId: namba.id, from: FROM, to: TO }),
+    )
+
+    const byId = new Map(data.vehicles.map((v) => [v.id, v]))
+    expect(byId.get(classed.id)?.classId).toBe(compact.id)
+    expect(byId.get(classless.id)?.classId).toBeNull()
   })
 
   it('surfaces the location turnaround minutes on the storefront summary (#551)', async () => {

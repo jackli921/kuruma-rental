@@ -53,6 +53,10 @@ export const storefrontSearchResultSchema = z.object({
 
 const availableVehicleSchema = z.object({
   id: z.string(),
+  /** #1085 slice 5: vehicle's class id for the per-vehicle review-aggregate
+   *  fetch on the storefront detail page. Null when the vehicle has no class
+   *  (a classless vehicle gets no class-level badge — matches `classLabel: ''`). */
+  classId: z.string().nullable(),
   name: z.string(),
   make: z.string().nullable(),
   model: z.string().nullable(),
@@ -73,6 +77,9 @@ const availableVehicleSchema = z.object({
 
 const storefrontSummarySchema = z.object({
   locationId: z.string(),
+  /** #1085 slice 5: owning operator id, surfaced so the detail header can
+   *  fetch its operator-level review aggregate. Mirrors storefrontCardSchema. */
+  operatorId: z.string(),
   name: z.string(),
   address: z.string(),
   operatorName: z.string(),
