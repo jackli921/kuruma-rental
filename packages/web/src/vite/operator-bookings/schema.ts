@@ -11,6 +11,7 @@ import {
   BOOKING_FULFILLMENT_MODES,
   BOOKING_STATUSES,
   CANCELLATION_REASON_CODES,
+  VEHICLE_BLOCK_KINDS,
 } from '@kuruma/shared/enums'
 import { z } from 'zod'
 
@@ -62,6 +63,25 @@ export type RawOperatorBooking = z.infer<typeof rawOperatorBookingSchema>
  * non-strict, so the rest is stripped at the seam).
  */
 export const calendarVehicleRowSchema = z.object({ id: z.string(), name: z.string() })
+
+/**
+ * #1101 Slice B: one `GET /vehicle-blocks?from&to` item the operator calendar
+ * reads. Display fields only — `operatorId`, `createdBy`, `createdAt` are sent by
+ * the API but intentionally dropped (Zod objects are non-strict, so they strip at
+ * the seam): `createdBy` is a raw audit user id, not a display record (design P2,
+ * YAGNI). `kind` is pinned to the shared enum (SSoT). `vehicleId` doubles as the
+ * day-view resource-column key; `reason`/`notes` feed the block detail dialog.
+ */
+export const calendarBlockSchema = z.object({
+  id: z.string(),
+  vehicleId: z.string(),
+  startAt: z.string(),
+  endAt: z.string(),
+  kind: z.enum(VEHICLE_BLOCK_KINDS),
+  reason: z.string(),
+  notes: z.string().nullable(),
+})
+export type CalendarBlockRow = z.infer<typeof calendarBlockSchema>
 
 /**
  * `GET /bookings/:id?expand=vehicle,renter` — a superset of the renter BookingDto

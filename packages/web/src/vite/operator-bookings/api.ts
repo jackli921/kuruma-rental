@@ -2,13 +2,16 @@ import { unwrap, unwrapPage } from '@/lib/api-error'
 import { getApiBaseUrl } from '@/vite/api-base'
 import { type BookingDto, bookingDtoSchema } from '@/vite/bookings/api'
 import type { BookingStatus } from '@kuruma/shared/enums'
+import type { CreateVehicleBlockInput } from '@kuruma/shared/validators/vehicle-block'
 import { queryOptions } from '@tanstack/react-query'
 import {
   type BookingEventDto,
+  type CalendarBlockRow,
   type CustomerSearchResult,
   type OperatorBookingDetailDto,
   type RawOperatorBooking,
   bookingEventSchema,
+  calendarBlockSchema,
   calendarVehicleRowSchema,
   customerSearchResultSchema,
   operatorBookingDetailSchema,
@@ -172,6 +175,64 @@ export function operatorCalendarVehiclesQueryOptions() {
     queryKey: ['operator-bookings', 'calendar', 'vehicles'],
     queryFn: fetchCalendarVehicles,
   })
+}
+
+// --- #1101 Slice B: scheduled vehicle blocks ---------------------------------
+// The operator calendar reads fleet-wide blocks over a range (GET /vehicle-blocks,
+// gated MANAGEMENT_READ_ROLES, row-scoped in the repo — the client passes no
+// operatorId) and writes per-vehicle (POST/DELETE /vehicles/:id/blocks, operatorId
+// server-derived from the vehicle). The block DTO + its schema live in ./schema.
+export type { CalendarBlockRow }
+/** Create-block body — the shared validator's input (kind, reason, startAt, endAt, notes?). */
+export type CreateBlockInput = CreateVehicleBlockInput
+
+export async function fetchCalendarBlocks(from: string, to: string): Promise<CalendarBlockRow[]> {
+  const sp = new URLSearchParams({ from, to })
+  const res = await fetch(`${getApiBaseUrl()}/vehicle-blocks?${sp.toString()}`, {
+    credentials: 'include',
+  })
+  return unwrap(res, calendarBlockSchema.array())
+}
+
+export function operatorCalendarBlocksQueryOptions(from: string, to: string) {
+  return queryOptions({
+    queryKey: ['operator-bookings', 'blocks', from, to],
+    queryFn: () => fetchCalendarBlocks(from, to),
+  })
+}
+
+// Cookie-authed writes — CSRF-gated (the session token rides the write). Each
+// unwraps the affected block; the dialog invalidates OPERATOR_BOOKINGS_KEY so the
+// prefix cascade refreshes the calendar + blocks queries in one call. A 409
+// (block-vs-block overlap) surfaces as an ApiError for the dialog to translate.
+export async function createBlock(
+  vehicleId: string,
+  input: CreateBlockInput,
+  csrfToken: string,
+): Promise<CalendarBlockRow> {
+  const res = await fetch(`${getApiBaseUrl()}/vehicles/${encodeURIComponent(vehicleId)}/blocks`, {
+    method: 'POST',
+    credentials: 'include',
+    headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrfToken },
+    body: JSON.stringify(input),
+  })
+  return unwrap(res, calendarBlockSchema)
+}
+
+export async function deleteBlock(
+  vehicleId: string,
+  blockId: string,
+  csrfToken: string,
+): Promise<CalendarBlockRow> {
+  const res = await fetch(
+    `${getApiBaseUrl()}/vehicles/${encodeURIComponent(vehicleId)}/blocks/${encodeURIComponent(blockId)}`,
+    {
+      method: 'DELETE',
+      credentials: 'include',
+      headers: { 'X-CSRF-Token': csrfToken },
+    },
+  )
+  return unwrap(res, calendarBlockSchema)
 }
 
 // #549: the deep-linked trip-detail page has no list row, so it reads the single
