@@ -133,6 +133,58 @@ describe('POST /vehicles/:vehicleId/blocks', () => {
   })
 })
 
+const RANGE = '?from=2026-07-01T00:00:00.000Z&to=2026-07-02T00:00:00.000Z'
+
+function getBlocks(app: Hono, query = RANGE) {
+  return app.request(`/vehicle-blocks${query}`)
+}
+
+describe('GET /vehicle-blocks', () => {
+  it('returns the operator-scoped blocks in the window (200)', async () => {
+    const vehicle = await vehicleRepo.create(SYSTEM_CONTEXT, vehicleInput('op-a'))
+    await blockRepo.create({
+      operatorId: 'op-a',
+      vehicleId: vehicle.id,
+      startAt: new Date('2026-07-01T09:00:00Z'),
+      endAt: new Date('2026-07-01T17:00:00Z'),
+      kind: 'MAINTENANCE',
+      reason: 'shaken',
+      notes: null,
+      createdBy: 'u',
+    })
+    // A foreign-operator block in the same window: the response must still hold
+    // only op-a's block, proving the route wires the caller context through to
+    // the scoped service read (not a fleet-wide dump).
+    const foreignVehicle = await vehicleRepo.create(SYSTEM_CONTEXT, vehicleInput('op-b'))
+    await blockRepo.create({
+      operatorId: 'op-b',
+      vehicleId: foreignVehicle.id,
+      startAt: new Date('2026-07-01T09:00:00Z'),
+      endAt: new Date('2026-07-01T17:00:00Z'),
+      kind: 'MAINTENANCE',
+      reason: 'shaken',
+      notes: null,
+      createdBy: 'u',
+    })
+    const res = await getBlocks(appAs('OPERATOR_OWNER', 'op-a'))
+    expect(res.status).toBe(200)
+    const body = (await res.json()) as { success: boolean; data: Array<{ operatorId: string }> }
+    expect(body.success).toBe(true)
+    expect(body.data).toHaveLength(1)
+    expect(body.data[0]?.operatorId).toBe('op-a')
+  })
+
+  it('rejects RENTER and PARTNER with 403', async () => {
+    expect((await getBlocks(appAs('RENTER'))).status).toBe(403)
+    expect((await getBlocks(appAs('PARTNER'))).status).toBe(403)
+  })
+
+  it('returns 400 when from/to are missing', async () => {
+    const res = await getBlocks(appAs('OPERATOR_OWNER', 'op-a'), '')
+    expect(res.status).toBe(400)
+  })
+})
+
 describe('DELETE /vehicles/:vehicleId/blocks/:blockId', () => {
   async function seedBlock(operatorId: string): Promise<{ vehicleId: string; blockId: string }> {
     const vehicle = await vehicleRepo.create(SYSTEM_CONTEXT, vehicleInput(operatorId))
