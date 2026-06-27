@@ -11,6 +11,7 @@ import {
   operatorCalendarVehiclesQueryOptions,
 } from '@/vite/operator-bookings/api'
 import {
+  type CalendarItem,
   type CalendarView,
   calendarRange,
   fleetToResources,
@@ -151,8 +152,16 @@ export function OperatorBookingsRoute() {
   )
 
   const handleSelectEvent = useCallback(
-    (bookingId: string) => {
-      navigate({ to: '/$locale/manage/bookings/$bookingId', params: { locale, bookingId } })
+    (item: CalendarItem) => {
+      // #1101: dispatch by type. A booking navigates to its detail; the block branch
+      // (open BlockDetailDialog) lands with the blocks layer in B5 — until then only
+      // bookings appear on the calendar, so this is total for the current item set.
+      if (item.type === 'booking') {
+        navigate({
+          to: '/$locale/manage/bookings/$bookingId',
+          params: { locale, bookingId: item.id },
+        })
+      }
     },
     [navigate, locale],
   )

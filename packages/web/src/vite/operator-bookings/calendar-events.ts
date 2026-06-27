@@ -1,3 +1,4 @@
+import { BLOCK_KIND_CLASS, STATUS_CLASS } from '@/lib/event-colors'
 import type { CalendarBookingRow, OperatorBookingStatus } from '@/vite/operator-bookings/api'
 import type { CalendarBlockRow } from '@/vite/operator-bookings/schema'
 import type { VehicleBlockKind } from '@kuruma/shared/enums'
@@ -71,6 +72,13 @@ export interface BlockCalendarEvent {
 
 /** A single band on the operator calendar: a booking or a scheduled block. */
 export type CalendarItem = BookingCalendarEvent | BlockCalendarEvent
+
+/** The rbc band class for an item — its status color for a booking, its kind band
+ *  for a block. Pure switch on the discriminant, so the calendar shell's
+ *  `eventPropGetter` stays a one-liner. */
+export function calendarItemClassName(item: CalendarItem): string {
+  return item.type === 'booking' ? (STATUS_CLASS[item.status] ?? '') : BLOCK_KIND_CLASS[item.kind]
+}
 
 export function toCalendarEvents(rows: readonly CalendarBookingRow[]): BookingCalendarEvent[] {
   return rows.map((r) => ({

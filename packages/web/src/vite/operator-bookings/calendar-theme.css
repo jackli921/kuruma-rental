@@ -128,6 +128,51 @@
   color: oklch(0.258 0.092 26.042);
 }
 
+/* #1101 scheduled-block bands. A diagonal hatch + muted/dashed border reads as
+   clearly "not a booking" (bookings are flat status-colored fills); the per-kind
+   hue then distinguishes maintenance / out-of-service / manual holds. */
+.rbc-event--block-maintenance,
+.rbc-event--block-out-of-service,
+.rbc-event--block-manual {
+  border-style: dashed;
+  color: oklch(0.32 0.01 286);
+  background-color: oklch(0.95 0.004 286);
+}
+
+.rbc-event--block-maintenance {
+  border-color: oklch(0.62 0.13 75);
+  background-image: repeating-linear-gradient(
+    45deg,
+    oklch(0.92 0.06 80) 0,
+    oklch(0.92 0.06 80) 6px,
+    transparent 6px,
+    transparent 12px
+  );
+}
+
+.rbc-event--block-out-of-service {
+  border-color: oklch(0.58 0.16 28);
+  color: oklch(0.32 0.09 28);
+  background-image: repeating-linear-gradient(
+    45deg,
+    oklch(0.9 0.06 28) 0,
+    oklch(0.9 0.06 28) 6px,
+    transparent 6px,
+    transparent 12px
+  );
+}
+
+.rbc-event--block-manual {
+  border-color: oklch(0.55 0.02 286);
+  background-image: repeating-linear-gradient(
+    45deg,
+    oklch(0.88 0.005 286) 0,
+    oklch(0.88 0.005 286) 6px,
+    transparent 6px,
+    transparent 12px
+  );
+}
+
 /* Show more link (month view overflow) */
 .rbc-show-more {
   color: var(--color-primary);

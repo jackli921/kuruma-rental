@@ -2,7 +2,9 @@ import { describe, expect, it } from 'vitest'
 import {
   type BlockCalendarEvent,
   type BookingCalendarEvent,
+  type CalendarItem,
   blocksToCalendarEvents,
+  calendarItemClassName,
   toCalendarEvents,
 } from './calendar-events'
 import type { CalendarBlockRow } from './schema'
@@ -62,5 +64,36 @@ describe('blocksToCalendarEvents — maps blocks to the block arm', () => {
   it('carries no status field — a block is never a booking', () => {
     const [event] = blocksToCalendarEvents([block])
     expect('status' in (event ?? {})).toBe(false)
+  })
+})
+
+describe('calendarItemClassName — dispatches band styling on the discriminant', () => {
+  const bookingItem: CalendarItem = {
+    type: 'booking',
+    id: 'bk',
+    title: 'bk',
+    start: new Date(),
+    end: new Date(),
+    resourceId: 'veh',
+    status: 'CONFIRMED',
+  }
+  const blockItem: CalendarItem = {
+    type: 'block',
+    id: 'blk',
+    title: 'maint',
+    start: new Date(),
+    end: new Date(),
+    resourceId: 'veh',
+    kind: 'OUT_OF_SERVICE',
+    reason: 'maint',
+    notes: null,
+  }
+
+  it('gives a booking its status color class', () => {
+    expect(calendarItemClassName(bookingItem)).toBe('rbc-event--confirmed')
+  })
+
+  it('gives a block its per-kind band class (distinct from any status class)', () => {
+    expect(calendarItemClassName(blockItem)).toBe('rbc-event--block-out-of-service')
   })
 })
