@@ -85,7 +85,12 @@ describe('InMemoryVehicleBlockRepository', () => {
 
     it('all scope (admin) returns blocks across operators in the window', async () => {
       const a = await seed({ operatorId: 'op_a', startAt: hours(10), endAt: hours(20) })
-      const b = await seed({ operatorId: 'op_b', vehicleId: 'veh_b', startAt: hours(10), endAt: hours(20) })
+      const b = await seed({
+        operatorId: 'op_b',
+        vehicleId: 'veh_b',
+        startAt: hours(10),
+        endAt: hours(20),
+      })
       const hits = await repo.findOverlappingInRange(adminCtx, hours(0), hours(48))
       expect(new Set(hits)).toEqual(new Set([a, b]))
     })

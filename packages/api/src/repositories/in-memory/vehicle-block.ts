@@ -1,7 +1,7 @@
-import { PG_ERROR, VEHICLE_BLOCKS_OVERLAP } from '../../pg-errors'
 import type { CallerContext } from '../../middleware/auth'
-import { vehicleBlockReadScope } from '../../tenancy'
+import { PG_ERROR, VEHICLE_BLOCKS_OVERLAP } from '../../pg-errors'
 import type { VehicleBlock } from '../../stores'
+import { vehicleBlockReadScope } from '../../tenancy'
 import type { VehicleBlockRepository } from '../types'
 
 // Faithful mirror of the `vehicle_blocks_no_overlap` GiST EXCLUDE (#1101, same
@@ -53,11 +53,7 @@ export class InMemoryVehicleBlockRepository implements VehicleBlockRepository {
     )
   }
 
-  async findOverlappingInRange(
-    ctx: CallerContext,
-    from: Date,
-    to: Date,
-  ): Promise<VehicleBlock[]> {
+  async findOverlappingInRange(ctx: CallerContext, from: Date, to: Date): Promise<VehicleBlock[]> {
     const scope = vehicleBlockReadScope(ctx)
     if (scope.kind === 'none') return []
     return [...this.store.values()].filter(
