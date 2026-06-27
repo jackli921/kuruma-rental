@@ -1,10 +1,13 @@
+import { useOperatorUnreadBadge } from '@/vite/messaging'
 import { NavBadge } from '@/vite/nav/NavBadge'
 import { visibleBusinessNavItems } from '@/vite/nav/business-nav-items'
 import { useNewBookingsBadge } from '@/vite/operator-bookings/useNewBookingsBadge'
+import { useSession } from '@/vite/session'
 import { Link } from '@tanstack/react-router'
 import { useLocale, useTranslations } from 'use-intl'
 
 const BOOKINGS_TO = '/$locale/manage/bookings'
+const MESSAGES_TO = '/$locale/manage/messages'
 
 // Mirrors AdminSidebar's link styling. Active state is the `aria-current="page"`
 // attribute (set by activeProps) + the `aria-[current=page]:*` Tailwind variants;
@@ -21,9 +24,11 @@ const LINK_CLASSNAME =
 export function BusinessSidebar() {
   const t = useTranslations('nav')
   const locale = useLocale()
+  const { data: session } = useSession()
   // Always business view here: BusinessLayout only mounts this in business view,
-  // so the operator-scoped badge scan is safe to enable unconditionally.
+  // so the operator-scoped badge scans are safe to enable unconditionally.
   const { count: newBookingsCount } = useNewBookingsBadge({ enabled: true })
+  const { count: operatorUnread } = useOperatorUnreadBadge({ enabled: true })
 
   return (
     <aside
@@ -33,7 +38,7 @@ export function BusinessSidebar() {
       className="hidden md:flex md:flex-col w-56 shrink-0 border-r border-sidebar-border bg-sidebar"
     >
       <nav className="flex flex-col gap-1 p-3">
-        {visibleBusinessNavItems().map(({ to, labelKey }) => (
+        {visibleBusinessNavItems(session?.user?.role).map(({ to, labelKey }) => (
           <Link
             key={to}
             to={to}
@@ -50,6 +55,12 @@ export function BusinessSidebar() {
               <NavBadge
                 count={newBookingsCount}
                 label={t('newBookings', { count: newBookingsCount })}
+              />
+            ) : null}
+            {to === MESSAGES_TO && operatorUnread > 0 ? (
+              <NavBadge
+                count={operatorUnread}
+                label={t('unreadMessages', { count: operatorUnread })}
               />
             ) : null}
           </Link>

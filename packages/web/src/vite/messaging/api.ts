@@ -29,6 +29,9 @@ export interface ThreadParticipantDto {
 interface ThreadBase {
   id: string
   bookingId: string | null
+  // Operator-side unread (#1205 slice 3) — tenant-level, the operator inbox badge
+  // sums it (the renter side instead sums its own participant.unreadCount).
+  operatorUnreadCount: number
   createdAt: string
   updatedAt: string
   participants: ThreadParticipantDto[]
@@ -76,6 +79,7 @@ const participantSchema = z.object({
 const threadBase = {
   id: z.string(),
   bookingId: z.string().nullable(),
+  operatorUnreadCount: z.number(),
   createdAt: z.string(),
   updatedAt: z.string(),
   participants: z.array(participantSchema),

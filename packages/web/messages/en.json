@@ -891,6 +891,7 @@
       "emptyDescription": "Start a conversation or wait for a reply.",
       "unread": "{count} unread",
       "host": "Host",
+      "guest": "Guest",
       "loadError": "Couldn't load your messages",
       "retry": "Try again"
     },

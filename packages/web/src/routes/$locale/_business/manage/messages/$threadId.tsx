@@ -1,6 +1,6 @@
 import { PageSkeleton } from '@/vite/PageSkeleton'
-import { bookingByIdQueryOptions } from '@/vite/bookings/api'
-import { ConversationView, threadByIdQueryOptions, usersByIdsQueryOptions } from '@/vite/messaging'
+import { ConversationView, threadByIdQueryOptions } from '@/vite/messaging'
+import { operatorBookingDetailQueryOptions } from '@/vite/operator-bookings/api'
 import { sessionQueryOptions } from '@/vite/session'
 import { useQuery, useSuspenseQuery } from '@tanstack/react-query'
 import {
@@ -13,16 +13,15 @@ import {
 } from '@tanstack/react-router'
 import { useTranslations } from 'use-intl'
 
-// Conversation view (#1032). Gated by `_renter`. The loader guards the session,
-// resolves the thread (404 -> notFound, IDOR-safe at the API), and warms the
-// counterpart name + (if present) the booking so the cancelled-composer state
-// paints without a flash. The component reads the same caches via suspense/query
-// (no FOUC) and hands the resolved data to ConversationView. Mirrors the storefront
-// drill-down + My Bookings routes.
-export const Route = createFileRoute('/$locale/_renter/messages/$threadId')({
+// Operator conversation view (#1205 slice 3). Gated by `_business` + the
+// `manage/messages` visibility layer. The loader resolves the thread (404 ->
+// notFound, tenant-sealed at the API) and warms the booking so the renter name +
+// cancelled-composer state paint without a flash. Unlike the renter side it reads
+// the booking via the operator detail endpoint (which carries the renter block).
+export const Route = createFileRoute('/$locale/_business/manage/messages/$threadId')({
   loader: async ({ context, params, location }) => {
     const session = await context.queryClient.ensureQueryData(sessionQueryOptions())
-    // The parent `_renter` guard redirects an anonymous caller first; re-checking
+    // The parent `_business` guard redirects an anonymous caller first; re-checking
     // keeps the loader's return type honest and is a defensive backstop.
     if (!session) {
       throw redirect({
@@ -36,42 +35,33 @@ export const Route = createFileRoute('/$locale/_renter/messages/$threadId')({
     )
     if (!thread) throw notFound()
 
-    const counterpartId = thread.participants.find((p) => p.userId !== session.user.id)?.userId
-    await Promise.all([
-      counterpartId
-        ? context.queryClient.ensureQueryData(usersByIdsQueryOptions([counterpartId]))
-        : undefined,
-      thread.bookingId
-        ? context.queryClient.ensureQueryData(bookingByIdQueryOptions(thread.bookingId))
-        : undefined,
-    ])
+    if (thread.bookingId) {
+      await context.queryClient.ensureQueryData(operatorBookingDetailQueryOptions(thread.bookingId))
+    }
     return { currentUserId: session.user.id, csrfToken: session.csrfToken }
   },
   pendingComponent: PageSkeleton,
   errorComponent: ThreadError,
-  component: ThreadRoute,
+  component: OperatorThreadRoute,
 })
 
-function ThreadRoute() {
+function OperatorThreadRoute() {
   const t = useTranslations('messaging.thread')
   const tList = useTranslations('messaging.threadList')
   const { locale, threadId } = Route.useParams()
   const { currentUserId, csrfToken } = Route.useLoaderData()
   const { data: thread } = useSuspenseQuery(threadByIdQueryOptions(threadId))
 
-  // All hooks run unconditionally (optional-chained off `thread`) before the
-  // null guard, so a poll that resolves a since-deleted thread to null can't
-  // reorder the hook list.
-  const counterpartId = thread?.participants.find((p) => p.userId !== currentUserId)?.userId
-  const { data: users } = useQuery(usersByIdsQueryOptions(counterpartId ? [counterpartId] : []))
+  // All hooks run unconditionally (optional-chained off `thread`) before the null
+  // guard, so a poll resolving a since-deleted thread to null can't reorder hooks.
   const { data: booking } = useQuery({
-    ...bookingByIdQueryOptions(thread?.bookingId ?? ''),
+    ...operatorBookingDetailQueryOptions(thread?.bookingId ?? ''),
     enabled: thread?.bookingId != null,
   })
 
   if (!thread) return null
 
-  const counterpartName = users?.[0]?.name ?? tList('host')
+  const counterpartName = booking?.renter?.name ?? tList('guest')
   const isCancelled = booking?.status === 'CANCELLED'
 
   return (
@@ -79,7 +69,7 @@ function ThreadRoute() {
       <div className="mx-auto flex max-w-3xl flex-col gap-6">
         <header className="flex flex-col gap-2">
           <Link
-            to="/$locale/messages"
+            to="/$locale/manage/messages"
             params={{ locale }}
             className="text-sm text-muted-foreground hover:text-foreground"
           >

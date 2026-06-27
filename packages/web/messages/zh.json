@@ -891,6 +891,7 @@
       "emptyDescription": "开始对话或等待回复。",
       "unread": "{count} 条未读",
       "host": "房东",
+      "guest": "客人",
       "loadError": "无法加载您的消息",
       "retry": "重试"
     },
