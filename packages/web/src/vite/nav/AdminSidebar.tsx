@@ -2,6 +2,7 @@ import { Link } from '@tanstack/react-router'
 import {
   AlertTriangle,
   Banknote,
+  Building2,
   CalendarCheck,
   FileCheck,
   LayoutDashboard,
@@ -12,6 +13,7 @@ import { useLocale, useTranslations } from 'use-intl'
 
 const SIDEBAR_ITEMS = [
   { to: '/$locale/admin', icon: LayoutDashboard, labelKey: 'nav.overview' },
+  { to: '/$locale/admin/operators', icon: Building2, labelKey: 'nav.operators' },
   { to: '/$locale/admin/bookings', icon: CalendarCheck, labelKey: 'nav.bookings' },
   { to: '/$locale/admin/revenue', icon: Banknote, labelKey: 'nav.revenue' },
   { to: '/$locale/admin/anomalies', icon: AlertTriangle, labelKey: 'nav.anomalies' },
