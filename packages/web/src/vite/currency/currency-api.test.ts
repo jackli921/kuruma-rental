@@ -43,6 +43,15 @@ describe('fetchFxRates', () => {
     )
     await expect(fetchFxRates()).rejects.toBeInstanceOf(ApiError)
   })
+
+  it('rejects a non-positive rate at the seam so a 0/negative never yields a bogus figure', async () => {
+    // z.number() already rejects NaN/Infinity (verified), so .positive() is the only
+    // guard a JSON-carryable bad value (0 / negative) actually needs.
+    fetchMock.mockResolvedValue(
+      jsonResponse({ success: true, data: { ...rates, rates: { USD: 0 } } }),
+    )
+    await expect(fetchFxRates()).rejects.toBeInstanceOf(ParseError)
+  })
 })
 
 describe('fxRatesQueryOptions', () => {

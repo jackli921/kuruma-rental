@@ -8,6 +8,7 @@ import {
   fetchBookingEvents,
   fetchCalendarBookings,
   fetchCalendarVehicles,
+  fetchNeedsAssignment,
   fetchOperatorBookingDetail,
   fetchSubstitutionCandidates,
   operatorBookingDetailQueryOptions,
@@ -186,6 +187,70 @@ describe('fetchBookingEvents', () => {
     )
 
     await expect(fetchBookingEvents('bk-1')).rejects.toBeInstanceOf(ApiError)
+  })
+
+  // #1198: every discriminated-union arm needs a `.parse` round-trip — the
+  // output-covariant `satisfies z.ZodType` does NOT prove a wrong arm is caught
+  // (that hole shipped the original VEHICLE_ASSIGNED ParseError, #464).
+  it('parses a VEHICLE_SUBSTITUTED event payload through the schema', async () => {
+    const substituted = eventRaw({
+      type: 'VEHICLE_SUBSTITUTED',
+      payload: {
+        type: 'VEHICLE_SUBSTITUTED',
+        fromVehicleId: 'veh-old',
+        toVehicleId: 'veh-new',
+        reason: 'mechanical fault',
+      },
+    })
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => jsonResponse({ success: true, data: [substituted] })),
+    )
+
+    const events = await fetchBookingEvents('bk-1')
+
+    expect(events).toEqual([substituted])
+  })
+
+  it('parses a legacy BOOKING_CANCELLED payload missing cancellationReason -> defaults to null', async () => {
+    // Pre-#868 rows carry no cancellationReason key; the schema's `.default(null)`
+    // is load-bearing — without it the whole timeline ParseErrors for old
+    // cancelled bookings. Assert the default actually applies.
+    const legacyCancelled = eventRaw({
+      type: 'BOOKING_CANCELLED',
+      payload: {
+        type: 'BOOKING_CANCELLED',
+        cancellationFee: 5000,
+        cancelledAt: '2026-07-01T02:00:00.000Z',
+      },
+    })
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => jsonResponse({ success: true, data: [legacyCancelled] })),
+    )
+
+    const [event] = await fetchBookingEvents('bk-1')
+
+    expect(event?.payload).toEqual({
+      type: 'BOOKING_CANCELLED',
+      cancellationFee: 5000,
+      cancelledAt: '2026-07-01T02:00:00.000Z',
+      cancellationReason: null,
+    })
+  })
+})
+
+describe('fetchNeedsAssignment', () => {
+  it('requests a full page (limit=100) so the worklist is not truncated at the default 20 (#1197)', async () => {
+    const fetchMock = vi.fn(async () => jsonResponse({ success: true, data: [] }))
+    vi.stubGlobal('fetch', fetchMock)
+
+    await fetchNeedsAssignment()
+
+    const url = new URL(fetchMock.mock.calls[0]![0] as string, 'http://x')
+    expect(url.pathname).toBe('/api/bookings')
+    expect(url.searchParams.get('needsAssignment')).toBe('true')
+    expect(url.searchParams.get('limit')).toBe('100')
   })
 })
 

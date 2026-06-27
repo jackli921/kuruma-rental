@@ -1634,6 +1634,7 @@
   },
   "currency": {
     "label": "Display currency",
+    "approximately": "approximately",
     "disclaimer": "Indicative only — you're charged in JPY",
     "asOf": "Rates as of {date}"
   }

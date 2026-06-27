@@ -1,5 +1,7 @@
 import { vehicleBlocks } from '@kuruma/shared/db/schema'
-import { and, eq, sql } from 'drizzle-orm'
+import { and, eq, sql, type SQL } from 'drizzle-orm'
+import type { CallerContext } from '../../middleware/auth'
+import { vehicleBlockReadScope } from '../../tenancy'
 import type { VehicleBlock } from '../../stores'
 import type { VehicleBlockRepository } from '../types'
 import { type Db, toVehicleBlock, vehicleBlockColumns } from './shared'
@@ -48,6 +50,27 @@ export class DrizzleVehicleBlockRepository implements VehicleBlockRepository {
           sql`tstzrange("startAt", "endAt") && tstzrange(${fromIso}::timestamptz, ${toIso}::timestamptz)`,
         ),
       )
+    return rows.map(toVehicleBlock)
+  }
+
+  async findOverlappingInRange(
+    ctx: CallerContext,
+    from: Date,
+    to: Date,
+  ): Promise<VehicleBlock[]> {
+    const scope = vehicleBlockReadScope(ctx)
+    const conditions: SQL[] = [
+      sql`tstzrange("startAt", "endAt") && tstzrange(${from.toISOString()}::timestamptz, ${to.toISOString()}::timestamptz)`,
+    ]
+    if (scope.kind === 'operator') {
+      conditions.push(eq(vehicleBlocks.operatorId, scope.operatorId))
+    } else if (scope.kind === 'none') {
+      conditions.push(sql`false`)
+    }
+    const rows = await this.db
+      .select(vehicleBlockColumns)
+      .from(vehicleBlocks)
+      .where(and(...conditions))
     return rows.map(toVehicleBlock)
   }
 
