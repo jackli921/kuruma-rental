@@ -13,11 +13,13 @@ import type {
   UserRepository,
 } from '../repositories/types'
 import type { Location, Vehicle } from '../stores'
+import { resolveBookingActor } from './booking-actor'
 import type { BookingPostCommitDispatcher } from './booking-post-commit-dispatcher'
 import { MS_PER_MINUTE, composeBookingTotal, rentalDays } from './booking-pricing-helpers'
 import type {
   BookingVerificationGate,
   CreateBookingInput,
+  CreateBookingRequest,
   CreateBookingResult,
 } from './booking-types'
 
@@ -58,9 +60,26 @@ export class BookingCreationService {
 
   async create(
     ctx: CallerContext,
-    input: CreateBookingInput,
+    rawInput: CreateBookingRequest,
     now: Date = new Date(),
   ): Promise<CreateBookingResult> {
+    // #1108 (audit M4): resolve the actor (renter / source / walk-in) from the
+    // caller's role HERE — the route forwards raw input and no longer rewrites it.
+    // The normalized command carries the resolved trio; every read past this
+    // point (renter scope authz, verification gate, submitInTx) sees it. A renter
+    // who supplied a walkInCustomer has it dropped (only manual bookers may
+    // register one), so strip it before re-attaching the resolved value.
+    const actor = resolveBookingActor(ctx, rawInput)
+    const { walkInCustomer: _rawWalkIn, ...rawRest } = rawInput
+    const input: CreateBookingInput = actor.walkInCustomer
+      ? {
+          ...rawRest,
+          renterId: actor.renterId,
+          source: actor.source,
+          walkInCustomer: actor.walkInCustomer,
+        }
+      : { ...rawRest, renterId: actor.renterId, source: actor.source }
+
     // Resolve the booking's renter (#314, #589). Three cases:
     //  - WALK-IN (1c): the operator registers a brand-new customer inline.
     //    createWalkInRenter ALWAYS makes a fresh renter (never deduped by phone),
@@ -366,6 +385,8 @@ export class BookingCreationService {
       operatorId,
       classId,
       input.pickupLocationId,
+      input.startAt,
+      effectiveEndAt,
       input.endAt,
     )
     if (demand >= capacity) {
@@ -636,6 +657,8 @@ export class BookingCreationService {
       operatorId,
       classId,
       input.pickupLocationId,
+      input.startAt,
+      effectiveEndAt,
       input.endAt,
     )
     if (demand >= capacity) {

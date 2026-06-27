@@ -1320,6 +1320,38 @@ describe('BookingService.create — CLASS_COMBO (#464 2d.3)', () => {
     expect(result.code).toBe('CLASS_COMBO_SOLD_OUT')
   })
 
+  // #1141: a blocked car is not real class supply. Block the ONLY class car in
+  // the dropoff turnaround tail [END, effectiveEndAt) — outside the raw rental,
+  // inside the occupancy window capacity counts against. If the capacity guard
+  // used input.endAt (not effectiveEndAt) for the block window, this tail block
+  // would be missed and the float admitted with no assignable car. Guards the
+  // exact arg (effectiveEndAt) that a repo-level test cannot pin at the caller.
+  it('rejects a CLASS_COMBO when the only class car is blocked in the turnaround tail → 409', async () => {
+    const h = await setup()
+    const { classId, locationId, vehicleId } = await seedComboReady(h)
+    // Between END (07-04) and effectiveEndAt (07-06) — the turnaround tail.
+    await h.vehicleBlockRepo.create({
+      operatorId: OP_A,
+      vehicleId,
+      startAt: new Date('2026-07-05T00:00:00Z'),
+      endAt: new Date('2026-07-05T12:00:00Z'),
+      kind: 'MAINTENANCE',
+      reason: 'scheduled service',
+      notes: null,
+      createdBy: 'op-user',
+    })
+
+    const result = await h.service.create(
+      renterCtx,
+      comboInput({ classId, pickupLocationId: locationId, dropoffLocationId: locationId }),
+      NOW,
+    )
+    expect(result.ok).toBe(false)
+    if (result.ok) return
+    expect(result.status).toBe(409)
+    expect(result.code).toBe('CLASS_COMBO_SOLD_OUT')
+  })
+
   // #464 / #954: combos have no per-vehicle rules, but the universal past-start
   // floor must still fire (checkRentalRules with all class rules null).
   it('rejects a CLASS_COMBO whose start is in the past → 400 RENTAL_RULE_START_IN_PAST', async () => {

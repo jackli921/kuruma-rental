@@ -4,6 +4,15 @@ import type {
   PaymentAnomalyRepository,
   ResolvePaymentAnomalyInput,
 } from '../types'
+import { PAYMENT_ANOMALY_LIST_LIMIT } from '../types-payment'
+
+// Newest-first by createdAt, then cap — mirrors the Drizzle `ORDER BY createdAt
+// DESC LIMIT n` so both stores return the same bounded, ordered browse.
+function newestFirstCapped(rows: PaymentAnomaly[]): PaymentAnomaly[] {
+  return [...rows]
+    .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())
+    .slice(0, PAYMENT_ANOMALY_LIST_LIMIT)
+}
 
 export class InMemoryPaymentAnomalyRepository implements PaymentAnomalyRepository {
   private readonly store: Map<string, PaymentAnomaly>
@@ -31,7 +40,7 @@ export class InMemoryPaymentAnomalyRepository implements PaymentAnomalyRepositor
   }
 
   async listUnresolved(): Promise<PaymentAnomaly[]> {
-    return [...this.store.values()].filter((r) => r.resolvedAt === null)
+    return newestFirstCapped([...this.store.values()].filter((r) => r.resolvedAt === null))
   }
 
   // #1087: platform-overview open-anomaly KPI. Mirrors the Drizzle COUNT(* WHERE
@@ -45,7 +54,7 @@ export class InMemoryPaymentAnomalyRepository implements PaymentAnomalyRepositor
   }
 
   async listResolved(): Promise<PaymentAnomaly[]> {
-    return [...this.store.values()].filter((r) => r.resolvedAt !== null)
+    return newestFirstCapped([...this.store.values()].filter((r) => r.resolvedAt !== null))
   }
 
   // Guarded, write-once: mirrors the Drizzle `WHERE id AND resolvedAt IS NULL` so an
