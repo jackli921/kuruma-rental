@@ -1,6 +1,6 @@
 import { unwrap } from '@/lib/api-error'
 import { getApiBaseUrl } from '@/vite/api-base'
-import { buildScopeParam } from '@/vite/operator-context'
+import { type WithOperatorId, buildScopeParam } from '@/vite/operator-context'
 import { ADD_ON_STATUSES } from '@kuruma/shared/enums'
 import type { AddOnData } from '@kuruma/shared/types/add-on'
 import type { CreateAddOnInput, UpdateAddOnInput } from '@kuruma/shared/validators/add-on'
@@ -83,7 +83,7 @@ async function writeJson(
 // the body (platformAdminCreateAddOnSchema requires it); an operator session omits
 // it and is auto-scoped server-side. PATCH/DELETE are id-scoped and never carry it.
 export async function createAddOn(
-  input: CreateAddOnInput & { operatorId?: string },
+  input: WithOperatorId<CreateAddOnInput>,
   csrfToken: string,
 ): Promise<AddOnData> {
   return writeJson('/add-ons', 'POST', input, csrfToken)

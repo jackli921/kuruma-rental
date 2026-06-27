@@ -7,6 +7,7 @@ import {
 } from '@/components/ui/dialog'
 import { AddOnForm } from '@/vite/operator-add-ons/AddOnForm'
 import { ADDON_QUERY_KEY, type CreateAddOnInput, createAddOn } from '@/vite/operator-add-ons/api'
+import type { WithOperatorId } from '@/vite/operator-context'
 import { useSession } from '@/vite/session'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { useTranslations } from 'use-intl'
@@ -26,7 +27,7 @@ export function AddAddOnDialog({ open, onOpenChange, pickedOperatorId }: AddAddO
   const csrfToken = useSession().data?.csrfToken ?? ''
 
   const { mutateAsync, isPending, error, reset } = useMutation({
-    mutationFn: (data: CreateAddOnInput & { operatorId?: string }) => createAddOn(data, csrfToken),
+    mutationFn: (data: WithOperatorId<CreateAddOnInput>) => createAddOn(data, csrfToken),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ADDON_QUERY_KEY })
       onOpenChange(false)

@@ -1,12 +1,9 @@
 import { PageSkeleton } from '@/vite/PageSkeleton'
-import { canWriteAsOperator, isCrossOperatorReader } from '@/vite/guards'
 import { OperatorAddOnsView } from '@/vite/operator-add-ons/OperatorAddOnsView'
 import { addOnsQueryOptions } from '@/vite/operator-add-ons/api'
-import { operatorsQueryOptions, useOperatorContext } from '@/vite/operator-context'
-import { useSession } from '@/vite/session'
-import { useQuery, useSuspenseQuery } from '@tanstack/react-query'
+import { useOperatorScope } from '@/vite/operator-context'
+import { useSuspenseQuery } from '@tanstack/react-query'
 import { type ErrorComponentProps, createFileRoute, useRouter } from '@tanstack/react-router'
-import { useMemo } from 'react'
 import { useTranslations } from 'use-intl'
 
 // Operator add-on management (#585). URL `/<locale>/manage/add-ons` — behind the
@@ -29,21 +26,8 @@ export const Route = createFileRoute('/$locale/_business/manage/add-ons')({
 
 function OperatorAddOnsRoute() {
   const t = useTranslations('business.addOns')
-  const { pickedOperatorId } = useOperatorContext()
-  const { data: session } = useSession()
-  const { data: addOns } = useSuspenseQuery(addOnsQueryOptions(pickedOperatorId))
-
-  // Operator labels + the /operators fetch are for cross-operator readers in all-mode
-  // ONLY. A scoped operator session never reads cross-tenant (no labels, no fetch); a
-  // picked tenant is already single-tenant. Gating on isCrossOperatorReader (not just
-  // !pickedOperatorId) keeps a normal operator's experience unchanged (non-goal §).
-  const showOperator = isCrossOperatorReader(session ?? null) && !pickedOperatorId
-  const { data: operators } = useQuery({ ...operatorsQueryOptions(), enabled: showOperator })
-  const canWrite = canWriteAsOperator(session ?? null, pickedOperatorId)
-  const operatorNameById = useMemo(
-    () => new Map((operators ?? []).map((o) => [o.id, o.name])),
-    [operators],
-  )
+  const scope = useOperatorScope()
+  const { data: addOns } = useSuspenseQuery(addOnsQueryOptions(scope.pickedOperatorId))
 
   return (
     <main className="flex-1 px-4 py-10 sm:px-6 lg:px-8">
@@ -52,13 +36,7 @@ function OperatorAddOnsRoute() {
           <h1 className="text-3xl font-bold tracking-tight sm:text-4xl">{t('title')}</h1>
           <p className="mt-2 text-lg text-muted-foreground">{t('subtitle')}</p>
         </header>
-        <OperatorAddOnsView
-          addOns={addOns}
-          canWrite={canWrite}
-          showOperator={showOperator}
-          operatorNameById={operatorNameById}
-          pickedOperatorId={pickedOperatorId}
-        />
+        <OperatorAddOnsView addOns={addOns} scope={scope} />
       </div>
     </main>
   )

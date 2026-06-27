@@ -132,8 +132,13 @@ describe('archiveAddOn', () => {
 })
 
 describe('addOnsQueryOptions', () => {
-  it('exposes the stable ADDON_QUERY_KEY so writes can invalidate it', () => {
+  it('exposes the stable ADDON_QUERY_KEY prefix so writes can invalidate every scope', () => {
+    // ADDON_QUERY_KEY is the prefix; the per-scope key appends the picked operator
+    // (or 'all') so switching context refetches without serving another tenant's
+    // cached list. A prefix invalidate (invalidateQueries({ queryKey: ADDON_QUERY_KEY }))
+    // still clears all scopes.
     expect(ADDON_QUERY_KEY).toEqual(['operator-add-ons'])
-    expect(addOnsQueryOptions().queryKey).toEqual(['operator-add-ons'])
+    expect(addOnsQueryOptions().queryKey).toEqual(['operator-add-ons', 'all'])
+    expect(addOnsQueryOptions('op_9').queryKey).toEqual(['operator-add-ons', 'op_9'])
   })
 })

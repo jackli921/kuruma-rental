@@ -1,9 +1,21 @@
 import { OperatorAddOnsView } from '@/vite/operator-add-ons/OperatorAddOnsView'
+import type { OperatorScope } from '@/vite/operator-context'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { cleanup, render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import type { ReactNode } from 'react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
+
+// These cover the view's rendering mechanics (rows, empty, sort, dialog, archive
+// gating); operator-context scope behavior (labels, read-only) lives in the
+// colocated src/vite/operator-add-ons/OperatorAddOnsView.test.tsx. A writable
+// scope keeps the original Add/Edit/Archive affordances visible.
+const writeScope: OperatorScope = {
+  pickedOperatorId: undefined,
+  canWrite: true,
+  showOperator: false,
+  operatorNameById: new Map(),
+}
 
 vi.mock('use-intl', () => ({
   useTranslations: () => (key: string) => key,
@@ -33,7 +45,7 @@ afterEach(() => cleanup())
 
 describe('OperatorAddOnsView', () => {
   it('renders a row per add-on with its name and status badge', () => {
-    render(<OperatorAddOnsView addOns={[addOn]} />, { wrapper })
+    render(<OperatorAddOnsView addOns={[addOn]} scope={writeScope} />, { wrapper })
     expect(screen.getByRole('heading', { name: 'Child seat' })).toBeInTheDocument()
     expect(screen.getByText('ACTIVE')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'editOption' })).toBeInTheDocument()
@@ -41,7 +53,7 @@ describe('OperatorAddOnsView', () => {
   })
 
   it('shows the empty state when there are no add-ons', () => {
-    render(<OperatorAddOnsView addOns={[]} />, { wrapper })
+    render(<OperatorAddOnsView addOns={[]} scope={writeScope} />, { wrapper })
     expect(screen.getByText('empty')).toBeInTheDocument()
     expect(screen.queryByRole('heading')).not.toBeInTheDocument()
   })
@@ -49,14 +61,14 @@ describe('OperatorAddOnsView', () => {
   it('sorts add-ons by name ascending', () => {
     const b = { ...addOn, id: 'b', name: 'Bike rack' }
     const z = { ...addOn, id: 'z', name: 'Wi-Fi router' }
-    render(<OperatorAddOnsView addOns={[z, b]} />, { wrapper })
+    render(<OperatorAddOnsView addOns={[z, b]} scope={writeScope} />, { wrapper })
     const headings = screen.getAllByRole('heading').map((h) => h.textContent)
     expect(headings).toEqual(['Bike rack', 'Wi-Fi router'])
   })
 
   it('opens the Add dialog (renders the add-on form) when Add is clicked', async () => {
     const user = userEvent.setup()
-    render(<OperatorAddOnsView addOns={[]} />, { wrapper })
+    render(<OperatorAddOnsView addOns={[]} scope={writeScope} />, { wrapper })
 
     expect(screen.queryByLabelText('form.name')).not.toBeInTheDocument()
     await user.click(screen.getByRole('button', { name: 'addOption' }))
@@ -67,7 +79,7 @@ describe('OperatorAddOnsView', () => {
 
   it('disables the archive action for an already-archived add-on', () => {
     const archived = { ...addOn, id: 'arch', name: 'Old extra', status: 'ARCHIVED' as const }
-    render(<OperatorAddOnsView addOns={[archived]} />, { wrapper })
+    render(<OperatorAddOnsView addOns={[archived]} scope={writeScope} />, { wrapper })
     expect(screen.getByRole('button', { name: 'archiveAction' })).toBeDisabled()
   })
 })

@@ -4,4 +4,11 @@
 // (scripts/lint-module-boundaries.ts, docs/architecture/modules.md).
 export { fetchOperators, operatorsQueryOptions, type OperatorSummary } from './api'
 export { OperatorContextPicker } from './OperatorContextPicker'
-export { buildScopeParam, parseOperatorSearch, useOperatorContext } from './operator-context'
+export {
+  buildScopeParam,
+  type OperatorScope,
+  parseOperatorSearch,
+  useOperatorContext,
+  useOperatorScope,
+  type WithOperatorId,
+} from './operator-context'

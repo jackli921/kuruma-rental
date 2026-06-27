@@ -1,3 +1,4 @@
+import type { OperatorScope } from '@/vite/operator-context'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { render, screen } from '@testing-library/react'
 import { IntlProvider } from 'use-intl'
@@ -7,6 +8,8 @@ import { OperatorAddOnsView } from './OperatorAddOnsView'
 import type { AddOnData } from './api'
 
 const ADD_BUTTON = en.business.addOns.addOption
+const EDIT_ACTION = en.business.addOns.editOption
+const ARCHIVE_ACTION = en.business.addOns.archiveAction
 
 const row: AddOnData = {
   id: 'a1',
@@ -19,20 +22,21 @@ const row: AddOnData = {
   updatedAt: '2026-06-01T00:00:00.000Z',
 }
 
-type ViewProps = Parameters<typeof OperatorAddOnsView>[0]
-
-function renderView(over: Partial<ViewProps>) {
-  const props: ViewProps = {
-    addOns: [row],
+function scope(over: Partial<OperatorScope> = {}): OperatorScope {
+  return {
+    pickedOperatorId: undefined,
     canWrite: false,
     showOperator: false,
     operatorNameById: new Map(),
     ...over,
   }
+}
+
+function renderView(scopeValue: OperatorScope, addOns: readonly AddOnData[] = [row]) {
   render(
     <QueryClientProvider client={new QueryClient()}>
       <IntlProvider locale="en" messages={en}>
-        <OperatorAddOnsView {...props} />
+        <OperatorAddOnsView addOns={addOns} scope={scopeValue} />
       </IntlProvider>
     </QueryClientProvider>,
   )
@@ -40,23 +44,26 @@ function renderView(over: Partial<ViewProps>) {
 
 describe('OperatorAddOnsView', () => {
   it('all-mode: shows the operator label and hides the Add button (read-only)', () => {
-    renderView({
-      canWrite: false,
-      showOperator: true,
-      operatorNameById: new Map([['op_1', 'Sakura']]),
-    })
+    renderView(scope({ showOperator: true, operatorNameById: new Map([['op_1', 'Sakura']]) }))
     expect(screen.getByText('Sakura')).toBeTruthy()
     expect(screen.queryByRole('button', { name: ADD_BUTTON })).toBeNull()
   })
 
   it('scoped-write mode: shows the Add button and no operator label', () => {
-    renderView({
-      canWrite: true,
-      showOperator: false,
-      operatorNameById: new Map(),
-      pickedOperatorId: 'op_9',
-    })
+    renderView(scope({ canWrite: true, pickedOperatorId: 'op_9' }))
     expect(screen.getByRole('button', { name: ADD_BUTTON })).toBeTruthy()
     expect(screen.queryByText('Sakura')).toBeNull()
+  })
+
+  it('read-only mode hides the per-row Edit/Archive affordances', () => {
+    renderView(scope({ canWrite: false }))
+    expect(screen.queryByRole('button', { name: EDIT_ACTION })).toBeNull()
+    expect(screen.queryByRole('button', { name: ARCHIVE_ACTION })).toBeNull()
+  })
+
+  it('scoped-write mode exposes the per-row Edit/Archive affordances', () => {
+    renderView(scope({ canWrite: true, pickedOperatorId: 'op_9' }))
+    expect(screen.getByRole('button', { name: EDIT_ACTION })).toBeTruthy()
+    expect(screen.getByRole('button', { name: ARCHIVE_ACTION })).toBeTruthy()
   })
 })

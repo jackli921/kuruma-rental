@@ -4,16 +4,14 @@ import { AddOnArchiveDialog } from '@/vite/operator-add-ons/AddOnArchiveDialog'
 import { AddOnRow } from '@/vite/operator-add-ons/AddOnRow'
 import { EditAddOnDialog } from '@/vite/operator-add-ons/EditAddOnDialog'
 import type { AddOnData } from '@/vite/operator-add-ons/api'
+import type { OperatorScope } from '@/vite/operator-context'
 import { PackagePlus, Plus } from 'lucide-react'
 import { useMemo, useState } from 'react'
 import { useTranslations } from 'use-intl'
 
 interface OperatorAddOnsViewProps {
   readonly addOns: readonly AddOnData[]
-  readonly canWrite: boolean
-  readonly showOperator: boolean
-  readonly operatorNameById: ReadonlyMap<string, string>
-  readonly pickedOperatorId?: string | undefined
+  readonly scope: OperatorScope
 }
 
 // Controlled list + empty state. The route owns the loader / useSuspenseQuery
@@ -26,13 +24,8 @@ interface OperatorAddOnsViewProps {
 // `showOperator` turns on the per-row operator label so the mixed-tenant list is
 // legible. A scoped write (operator session, or admin who picked a tenant) shows
 // the Add/Edit/Archive controls and threads `pickedOperatorId` into the create.
-export function OperatorAddOnsView({
-  addOns,
-  canWrite,
-  showOperator,
-  operatorNameById,
-  pickedOperatorId,
-}: OperatorAddOnsViewProps) {
+export function OperatorAddOnsView({ addOns, scope }: OperatorAddOnsViewProps) {
+  const { pickedOperatorId, canWrite, showOperator, operatorNameById } = scope
   const t = useTranslations('business.addOns')
   const [showAdd, setShowAdd] = useState(false)
   const [editing, setEditing] = useState<AddOnData | null>(null)

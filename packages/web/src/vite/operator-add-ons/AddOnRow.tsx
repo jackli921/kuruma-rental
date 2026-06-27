@@ -1,3 +1,4 @@
+import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { formatJpy } from '@/lib/format'
 import { AddOnStatusBadge } from '@/vite/operator-add-ons/AddOnStatusBadge'
@@ -24,9 +25,9 @@ export function AddOnRow({ addOn: a, canWrite, operatorName, onEdit, onArchive }
           <h3 className="text-lg font-medium truncate">{a.name}</h3>
           <AddOnStatusBadge status={a.status} />
           {operatorName && (
-            <span className="rounded bg-muted px-2 py-0.5 text-xs font-medium text-muted-foreground">
+            <Badge variant="secondary" aria-label={`Operator: ${operatorName}`}>
               {operatorName}
-            </span>
+            </Badge>
           )}
         </div>
         {a.description && (

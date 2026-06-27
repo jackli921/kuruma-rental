@@ -1,4 +1,8 @@
+import { canWriteAsOperator, isCrossOperatorReader } from '@/vite/guards'
+import { useSession } from '@/vite/session'
+import { useQuery } from '@tanstack/react-query'
 import { getRouteApi } from '@tanstack/react-router'
+import { operatorsQueryOptions } from './api'
 
 // The query fragment a config-list read appends: a specific operator when picked,
 // otherwise `includeAll=true` (the bypass-role read default that satisfies the API's
@@ -44,3 +48,27 @@ export function useSetOperatorContext(): (operatorId: string | undefined) => voi
   return (operatorId) =>
     navigate({ search: (prev: Record<string, unknown>) => ({ ...prev, operator: operatorId }) })
 }
+
+// The operator-context scope a config page operates under, derived once from the
+// session + the picked operator. `showOperator` (all-mode labeling) and the
+// operators fetch are gated on `isCrossOperatorReader` — NOT `!pickedOperatorId` —
+// so a normal operator session never fetches /operators or sees labels.
+export interface OperatorScope {
+  readonly pickedOperatorId: string | undefined
+  readonly canWrite: boolean
+  readonly showOperator: boolean
+  readonly operatorNameById: ReadonlyMap<string, string>
+}
+
+export function useOperatorScope(): OperatorScope {
+  const { pickedOperatorId } = useOperatorContext()
+  const { data: session } = useSession()
+  const showOperator = isCrossOperatorReader(session ?? null) && !pickedOperatorId
+  const { data: operators } = useQuery({ ...operatorsQueryOptions(), enabled: showOperator })
+  const canWrite = canWriteAsOperator(session ?? null, pickedOperatorId)
+  const operatorNameById = new Map((operators ?? []).map((o) => [o.id, o.name]))
+  return { pickedOperatorId, canWrite, showOperator, operatorNameById }
+}
+
+// Create bodies for a picker-admin carry the picked operatorId; operator sessions omit it.
+export type WithOperatorId<T> = T & { operatorId?: string }
