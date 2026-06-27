@@ -1,4 +1,8 @@
-import { PG_ERROR, REVIEWS_AUTHOR_SUBJECT_CONSTRAINT } from '../../pg-errors'
+import {
+  PG_ERROR,
+  REVIEWS_AUTHOR_SUBJECT_CONSTRAINT,
+  REVIEWS_OPERATOR_SUBJECT_CONSTRAINT,
+} from '../../pg-errors'
 import type { Review } from '../../stores'
 import type { NewReview, ReviewEdit, ReviewRepository } from '../types'
 
@@ -25,13 +29,28 @@ export class InMemoryReviewRepository implements ReviewRepository {
   async insert(data: NewReview): Promise<Review> {
     // The one-per-author-per-subject seal: a renter still reviews OPERATOR and
     // VEHICLE separately, but never the same (booking, author, subject) twice.
-    const clash = [...this.store.values()].some(
+    const rows = [...this.store.values()]
+    const authorClash = rows.some(
       (r) =>
         r.bookingId === data.bookingId &&
         r.authorUserId === data.authorUserId &&
         r.subject === data.subject,
     )
-    if (clash) throw uniqueViolation(REVIEWS_AUTHOR_SUBJECT_CONSTRAINT)
+    if (authorClash) throw uniqueViolation(REVIEWS_AUTHOR_SUBJECT_CONSTRAINT)
+    // The one-per-OPERATOR seal (#1158): mirrors the partial unique index on
+    // (booking, operator, subject) WHERE authorRole='OPERATOR'. A colleague of the same
+    // operator (a different authorUserId, so the author seal above lets it through) must
+    // not be able to add a second operator->renter review for one booking.
+    const operatorClash =
+      data.authorRole === 'OPERATOR' &&
+      rows.some(
+        (r) =>
+          r.authorRole === 'OPERATOR' &&
+          r.bookingId === data.bookingId &&
+          r.operatorId === data.operatorId &&
+          r.subject === data.subject,
+      )
+    if (operatorClash) throw uniqueViolation(REVIEWS_OPERATOR_SUBJECT_CONSTRAINT)
     const now = new Date()
     const review: Review = { ...data, id: crypto.randomUUID(), createdAt: now, updatedAt: now }
     this.store.set(review.id, review)
