@@ -1632,6 +1632,7 @@
   },
   "currency": {
     "label": "显示货币",
+    "approximately": "约",
     "disclaimer": "仅供参考 — 实际以日元（JPY）结算",
     "asOf": "汇率基准日 {date}"
   }

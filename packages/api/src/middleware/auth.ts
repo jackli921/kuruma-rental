@@ -1,6 +1,8 @@
 import type { Context, MiddlewareHandler } from 'hono'
 import { getCookie } from 'hono/cookie'
 
+import { toCallerContext } from '../auth/context'
+import { requirePlatformRead } from '../auth/guards'
 import { SESSION_COOKIE, verifyApiKey, verifyJwt } from '../auth/jwt'
 import { type AuthUser, isAuthUser, isOperatorRole } from '../auth/roles'
 import { fail } from '../routes/helpers'
@@ -134,6 +136,21 @@ export function requireAuth(): MiddlewareHandler {
     if (await isOperatorSessionRevoked(c, user)) return fail(c, 'Unauthorized', 401)
 
     c.set('user', user)
+    return next()
+  }
+}
+
+/** Structural role gate for the whole `/admin/*` namespace (#1164). Mount it right
+ *  after `app.use('/admin/*', requireAuth())` so the user is already set; it rejects
+ *  any caller below the platform tier with 403 BEFORE the handler runs. This makes
+ *  the role gate structural rather than per-handler, so a future sibling admin route
+ *  that forgets its in-body `requirePlatform*` call is still authz-protected. The
+ *  per-handler gates stay as defense-in-depth (and carry the stricter write-only
+ *  `requirePlatformAdmin` distinction). Uses the platform-tier floor `requirePlatformRead`
+ *  so a read route never breaks if `PLATFORM_ROLES` ever widens past PLATFORM_ADMIN. */
+export function requirePlatformMember(): MiddlewareHandler {
+  return async (c: Context, next) => {
+    requirePlatformRead(toCallerContext(requireUser(c)))
     return next()
   }
 }

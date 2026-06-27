@@ -10,6 +10,7 @@ import type { ReactNode } from 'react'
 import { IntlProvider } from 'use-intl'
 import { describe, expect, it, vi } from 'vitest'
 import en from '../../../messages/en.json'
+import { renderWithUsdIndicative } from '../../support/currency'
 
 // Stub the router Link as a plain anchor so the carried search is inspectable
 // without a RouterProvider (mirrors SearchMapList.test.tsx).
@@ -206,5 +207,22 @@ describe('MapPopupCarousel', () => {
     expect(screen.getAllByText('Compact')).toHaveLength(1)
     expect(screen.getByText('Class deal')).toBeInTheDocument()
     expect(screen.getByText('3 cars available')).toBeInTheDocument()
+  })
+
+  // #1070: the visible slide's price carries an indicative conversion.
+  it('converts the current car price for the indicative note', async () => {
+    renderWithUsdIndicative(
+      <MapPopupCarousel
+        items={[{ ...carAt('v1', 'Toyota Yaris'), dailyRateJpy: 30000 }]}
+        locale="en"
+        from="2026-07-01T10:00"
+        to="2026-07-04T10:00"
+        classFilter={undefined}
+        region={undefined}
+        geoLabel={null}
+      />,
+    )
+    // 30,000 -> $201
+    expect(await screen.findByText(/≈ \$201/)).toBeTruthy()
   })
 })
