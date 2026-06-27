@@ -1,5 +1,6 @@
 import { reviews } from '@kuruma/shared/db/schema'
-import { and, asc, eq, inArray, isNull, lte } from 'drizzle-orm'
+import { and, asc, count, eq, inArray, isNotNull, isNull, lte, sum } from 'drizzle-orm'
+import type { PgColumn } from 'drizzle-orm/pg-core'
 import type { Review } from '../../stores'
 import type { NewReview, ReviewEdit, ReviewRepository } from '../types'
 import { type Db, reviewColumns, toReview } from './shared'
@@ -75,5 +76,49 @@ export class DrizzleReviewRepository implements ReviewRepository {
       .orderBy(asc(reviews.revealDeadlineAt))
       .limit(limit)
     return rows.map(toReview)
+  }
+
+  async aggregateByOperator(operatorIds: readonly string[]) {
+    return this.aggregate(operatorIds, reviews.operatorId)
+  }
+
+  async aggregateByVehicle(vehicleIds: readonly string[]) {
+    return this.aggregate(vehicleIds, reviews.subjectVehicleId)
+  }
+
+  async aggregateByClass(classIds: readonly string[]) {
+    return this.aggregate(classIds, reviews.subjectClassId)
+  }
+
+  // Shared aggregate scan (#1085): SUM(overall) + COUNT(*) per key over published+visible
+  // reviews whose key falls in `ids`. Ids with no matching rows stay absent from the Map
+  // — the service distinguishes "no reviews yet" from "rated zero" at the call site.
+  // The operator scan uses idx_reviews_operator_published end-to-end; vehicle and class
+  // use the FK-cover single-column indexes (perf follow-up filed; see slice 5 plan).
+  private async aggregate(
+    ids: readonly string[],
+    key: PgColumn,
+  ): Promise<Map<string, { sum: number; count: number }>> {
+    const out = new Map<string, { sum: number; count: number }>()
+    if (ids.length === 0) return out
+    const rows = await this.db
+      .select({ key, sum: sum(reviews.overall), count: count() })
+      .from(reviews)
+      .where(
+        and(
+          inArray(key, ids as string[]),
+          isNotNull(reviews.publishedAt),
+          eq(reviews.moderationStatus, 'VISIBLE'),
+        ),
+      )
+      .groupBy(key)
+    for (const row of rows) {
+      const k = row.key as string | null
+      if (k === null) continue
+      // sum() returns string | null in drizzle (numeric is bigint-safe); Number() is
+      // safe at our scale (overall is 1-5, rows in a single aggregate window <<= 2^53).
+      out.set(k, { sum: Number(row.sum ?? 0), count: Number(row.count) })
+    }
+    return out
   }
 }

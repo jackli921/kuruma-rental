@@ -96,4 +96,37 @@ export class InMemoryReviewRepository implements ReviewRepository {
       .sort((a, b) => a.revealDeadlineAt.getTime() - b.revealDeadlineAt.getTime())
       .slice(0, limit)
   }
+
+  async aggregateByOperator(operatorIds: readonly string[]) {
+    return this.aggregate(operatorIds, (r) => r.operatorId)
+  }
+
+  async aggregateByVehicle(vehicleIds: readonly string[]) {
+    return this.aggregate(vehicleIds, (r) => r.subjectVehicleId)
+  }
+
+  async aggregateByClass(classIds: readonly string[]) {
+    return this.aggregate(classIds, (r) => r.subjectClassId)
+  }
+
+  // Shared predicate (#1085): only published+visible reviews enter aggregates, so a
+  // hidden or still-double-blind row never skews a public storefront rating.
+  // Ids that match no published+visible row stay absent from the result Map.
+  private aggregate(
+    ids: readonly string[],
+    keyOf: (r: Review) => string | null,
+  ): Map<string, { sum: number; count: number }> {
+    const out = new Map<string, { sum: number; count: number }>()
+    if (ids.length === 0) return out
+    const idSet = new Set(ids)
+    for (const r of this.store.values()) {
+      if (r.publishedAt === null) continue
+      if (r.moderationStatus !== 'VISIBLE') continue
+      const key = keyOf(r)
+      if (key === null || !idSet.has(key)) continue
+      const prev = out.get(key) ?? { sum: 0, count: 0 }
+      out.set(key, { sum: prev.sum + r.overall, count: prev.count + 1 })
+    }
+    return out
+  }
 }

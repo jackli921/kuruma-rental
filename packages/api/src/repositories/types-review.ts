@@ -38,4 +38,21 @@ export interface ReviewRepository {
   // Sweep scan (slice 2). Hidden reviews past their window (`publishedAt IS NULL AND
   // revealDeadlineAt <= now`), oldest-deadline first, capped at `limit`.
   findRevealDue(now: Date, limit: number): Promise<Review[]>
+  // Aggregate scans (slice 5 #1085). Sum + count of overall ratings per subject id,
+  // over reviews that are BOTH published (`publishedAt IS NOT NULL`) AND visible
+  // (`moderationStatus = 'VISIBLE'`) so a hidden or still-double-blind row never
+  // skews a public storefront rating. Batched (single-id is a 1-element batch) so a
+  // search page's N storefront cards don't fan out into N queries. Empty ids -> empty
+  // Map, zero rows. Ids with no matching rows are ABSENT from the returned Map
+  // (not present as {sum:0,count:0}) — the service distinguishes "no reviews yet"
+  // from "rated zero" at the call site.
+  aggregateByOperator(
+    operatorIds: readonly string[],
+  ): Promise<Map<string, { sum: number; count: number }>>
+  aggregateByVehicle(
+    vehicleIds: readonly string[],
+  ): Promise<Map<string, { sum: number; count: number }>>
+  aggregateByClass(
+    classIds: readonly string[],
+  ): Promise<Map<string, { sum: number; count: number }>>
 }
