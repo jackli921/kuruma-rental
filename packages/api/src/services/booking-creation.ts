@@ -14,6 +14,7 @@ import type {
 } from '../repositories/types'
 import type { Location, Vehicle } from '../stores'
 import { resolveBookingActor } from './booking-actor'
+import { rejectIfOperatorDeactivated } from './booking-creation-operator-guard'
 import type { BookingPostCommitDispatcher } from './booking-post-commit-dispatcher'
 import { MS_PER_MINUTE, composeBookingTotal, rentalDays } from './booking-pricing-helpers'
 import type {
@@ -188,13 +189,10 @@ export class BookingCreationService {
     throw lastErr
   }
 
-  // Both submit paths (SPECIFIC, CLASS_COMBO) must derive `effectiveEndAt`
-  // from the DROPOFF location's turnaround and produce the SAME value the DB
-  // trigger compute_effective_end_at() (migration 0069) will overwrite on
-  // insert. A drift between the two means the API response and the persisted
-  // row disagree on `effectiveEndAt` until the next reload (maintainability
-  // review 2026-06-24, finding #11). Single helper = single seam to keep them
-  // in sync; the trigger-vs-helper parity test pins it.
+  // Single seam for `effectiveEndAt`: both submit paths derive it from the DROPOFF
+  // turnaround and MUST equal the DB trigger compute_effective_end_at() (migration
+  // 0069, maint review 2026-06-24 #11) — else API response and persisted row drift
+  // until reload. The trigger-vs-helper parity test pins it.
   private async resolveDropoffEffectiveEnd(
     repos: TransactionRepos,
     operatorId: string,
@@ -260,6 +258,8 @@ export class BookingCreationService {
       }
     }
     const operatorId = vehicle.operatorId
+    const operatorBlock = await rejectIfOperatorDeactivated(repos, operatorId)
+    if (operatorBlock) return operatorBlock
     const classId = vehicle.classId
     const assignedVehicleId = vehicle.id // server-derived = requested at submit
 
@@ -283,10 +283,9 @@ export class BookingCreationService {
       }
     }
 
-    // The car physically lives at its own storefront, so a booking can only pick
-    // it up there. Without this, a forged body could pair a vehicle with another
-    // of the operator's locations — the operator check below passes (same tenant)
-    // but the stamped pickup/turnaround would lie about where the car is (#392).
+    // The car lives at its own storefront, so pickup must match it — else a forged
+    // body could pair it with another of the operator's locations (same-tenant check
+    // still passes) and lie about where the car physically is (#392).
     if (vehicle.pickupLocationId !== input.pickupLocationId) {
       return { ok: false, status: 400, error: 'Pickup location does not match the vehicle' }
     }
@@ -569,6 +568,8 @@ export class BookingCreationService {
       return { ok: false, status: 400, error: 'Pickup location is not available' }
     }
     const operatorId = pickup.operatorId
+    const operatorBlock = await rejectIfOperatorDeactivated(repos, operatorId)
+    if (operatorBlock) return operatorBlock
     const classId = input.classId
 
     const klass = await repos.vehicleClassRepo.findById(SYSTEM_CONTEXT, classId)

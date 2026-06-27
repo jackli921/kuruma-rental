@@ -4,11 +4,12 @@ import { createApp } from '../../src/index'
 import { InMemoryAvailabilityRepository } from '../../src/repositories/in-memory/availability'
 import { InMemoryBookingRepository } from '../../src/repositories/in-memory/booking'
 import { InMemoryLocationRepository } from '../../src/repositories/in-memory/location'
+import { InMemoryOperatorRepository } from '../../src/repositories/in-memory/operator'
 import { InMemoryUserRepository } from '../../src/repositories/in-memory/user'
 import { InMemoryVehicleRepository } from '../../src/repositories/in-memory/vehicle'
 import { InMemoryVehicleBlockRepository } from '../../src/repositories/in-memory/vehicle-block'
 import { InMemoryVehicleClassRepository } from '../../src/repositories/in-memory/vehicle-class'
-import type { Location, User, Vehicle, VehicleClass } from '../../src/stores'
+import type { Location, Operator, User, Vehicle, VehicleClass } from '../../src/stores'
 
 const AUTH_SECRET = 'test-secret-for-manual-booking-tests'
 const OPERATOR = '00000000-0000-4000-8000-0000000000c1'
@@ -122,6 +123,25 @@ describe('Manual booking (platform-admin renterId override + advance rule skip)'
       new InMemoryVehicleBlockRepository(),
     )
 
+    // #1206: the booking guard loads the vehicle's operator; seed OPERATOR active
+    // so manual-booking create paths pass the guard.
+    const operatorRepo = new InMemoryOperatorRepository(
+      new Map<string, Operator>([
+        [
+          OPERATOR,
+          {
+            id: OPERATOR,
+            slug: 'op-manual-booking-test',
+            name: 'Manual Booking Operator',
+            preAuthHandoffUrl: null,
+            createdAt: new Date(),
+            updatedAt: new Date(),
+            deactivatedAt: null,
+          },
+        ],
+      ]),
+    )
+
     app = createApp({
       vehicleRepo,
       bookingRepo,
@@ -129,6 +149,7 @@ describe('Manual booking (platform-admin renterId override + advance rule skip)'
       userRepo,
       vehicleClassRepo,
       locationRepo,
+      operatorRepo,
     })
   })
 
