@@ -1584,5 +1584,31 @@
       "continue": "次へ",
       "toPayment": "お支払いへ進む"
     }
+  },
+  "reviews": {
+    "prompt": {
+      "cta": "レビューを書く",
+      "title": "旅行を評価する",
+      "description": "ご予約 {code} はいかがでしたか?あなたの声が他の旅行者の参考になります。"
+    },
+    "form": {
+      "subject": {
+        "OPERATOR": "オペレーター",
+        "VEHICLE": "車両"
+      },
+      "overall": "総合評価",
+      "starLabel": "星{n}つ",
+      "dimension": {
+        "cleanliness": "清潔さ",
+        "accuracy": "正確さ",
+        "communication": "コミュニケーション",
+        "value": "価格に見合う価値"
+      },
+      "commentLabel": "{subject}についてのコメント",
+      "commentPlaceholder": "ご利用体験の詳細をご記入ください(任意)",
+      "submit": "レビューを送信",
+      "pending": "送信中…",
+      "error": "エラーが発生しました。もう一度お試しください。"
+    }
   }
 }

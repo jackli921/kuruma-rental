@@ -30,8 +30,9 @@ export class UserDirectoryService {
   }
 
   /**
-   * The set of user ids the caller may resolve. Privileged roles (PARTNER/
-   * PLATFORM_ADMIN) resolve anyone; renters resolve only users they share a thread with.
+   * The set of user ids the caller may resolve. The privileged platform tier
+   * (PLATFORM_ADMIN — PARTNER was dropped in #1168) resolves anyone; renters
+   * resolve only users they share a thread with.
    */
   private async allowedUserIds(ctx: CallerContext): Promise<Set<string> | 'all'> {
     if (PRIVILEGED_ROLES.has(ctx.role)) return 'all'

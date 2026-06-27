@@ -1,5 +1,9 @@
 import { MyBookingsView } from '@/vite/bookings/MyBookingsView'
 import type { MyBookingRow } from '@/vite/bookings/api'
+import type { Session } from '@/vite/session'
+import { sessionQueryOptions } from '@/vite/session'
+import type { ReviewSubject } from '@kuruma/shared/enums'
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { render, screen, within } from '@testing-library/react'
 import type { ReactNode } from 'react'
 import { IntlProvider } from 'use-intl'
@@ -40,11 +44,28 @@ function makeRow(over: Partial<MyBookingRow> = {}): MyBookingRow {
   }
 }
 
-function renderView(bookings: MyBookingRow[], threadIdByBooking: Record<string, string> = {}) {
+const SESSION: Session = { user: { id: 'renter-1', role: 'RENTER' }, csrfToken: 'csrf-1' }
+
+function renderView(
+  bookings: MyBookingRow[],
+  threadIdByBooking: Record<string, string> = {},
+  reviewedSubjectsByBooking: Record<string, readonly ReviewSubject[]> = {},
+) {
+  const queryClient = new QueryClient({
+    defaultOptions: { queries: { retry: false, staleTime: Number.POSITIVE_INFINITY } },
+  })
+  queryClient.setQueryData(sessionQueryOptions().queryKey, SESSION)
   return render(
-    <IntlProvider locale="en" messages={en}>
-      <MyBookingsView bookings={bookings} locale="en" threadIdByBooking={threadIdByBooking} />
-    </IntlProvider>,
+    <QueryClientProvider client={queryClient}>
+      <IntlProvider locale="en" messages={en}>
+        <MyBookingsView
+          bookings={bookings}
+          locale="en"
+          threadIdByBooking={threadIdByBooking}
+          reviewedSubjectsByBooking={reviewedSubjectsByBooking}
+        />
+      </IntlProvider>
+    </QueryClientProvider>,
   )
 }
 
@@ -87,6 +108,27 @@ describe('MyBookingsView', () => {
   it('renders the per-status label for a cancelled booking', () => {
     renderView([makeRow({ status: 'CANCELLED' })])
     expect(screen.getByText('Cancelled')).toBeInTheDocument()
+  })
+
+  // #1083: the post-trip review prompt shows on a COMPLETED booking the renter
+  // hasn't fully reviewed, and stays hidden otherwise.
+  it('shows the review prompt on a COMPLETED booking with subjects still unreviewed', () => {
+    renderView([makeRow({ id: 'bk-9', status: 'COMPLETED' })], {}, { 'bk-9': [] })
+    expect(screen.getByRole('button', { name: en.reviews.prompt.cta })).toBeInTheDocument()
+  })
+
+  it('hides the review prompt once both subjects on a COMPLETED booking are reviewed', () => {
+    renderView(
+      [makeRow({ id: 'bk-9', status: 'COMPLETED' })],
+      {},
+      { 'bk-9': ['OPERATOR', 'VEHICLE'] },
+    )
+    expect(screen.queryByRole('button', { name: en.reviews.prompt.cta })).not.toBeInTheDocument()
+  })
+
+  it('never shows the review prompt on a non-COMPLETED booking', () => {
+    renderView([makeRow({ id: 'bk-9', status: 'CONFIRMED' })], {}, { 'bk-9': [] })
+    expect(screen.queryByRole('button', { name: en.reviews.prompt.cta })).not.toBeInTheDocument()
   })
 
   it('shows a friendly empty state with a Browse-cars CTA to search when there are none', () => {

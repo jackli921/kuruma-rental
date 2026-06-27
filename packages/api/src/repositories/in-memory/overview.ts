@@ -19,12 +19,16 @@ export class InMemoryOverviewRepository implements OverviewRepository {
 
   async getOperatorOverview(ctx: CallerContext, now: Date): Promise<OperatorOverview> {
     // Defence-in-depth (mirrors insurance/fees repos): reject RENTER/PARTNER
-    // here too, since bookingReadScope maps PARTNER to `all` — without this seal
-    // a PARTNER bypassing the route would read every operator's counts.
+    // here too — without this seal a non-operator bypassing the route would read
+    // operator counts. Only the admin tier (`all`) and OPERATOR_* (`operator`)
+    // own an operator overview.
     requireManagementRead(ctx)
     const scope = bookingReadScope(ctx)
-    // `none` (operator without operatorId) + `renter` never see operator data.
-    if (scope.kind === 'none' || scope.kind === 'renter') return { ...ZERO }
+    // `none` (operator without operatorId), `renter`, and `partner` (a channel,
+    // not an operator) never see operator data.
+    if (scope.kind === 'none' || scope.kind === 'renter' || scope.kind === 'partner') {
+      return { ...ZERO }
+    }
 
     const [vehiclePage, bookings] = await Promise.all([
       this.vehicleRepo.findAll(SYSTEM_CONTEXT, { status: 'AVAILABLE' }),

@@ -1,5 +1,5 @@
 {
-  "id": "a96de4ad-6054-4d29-ab44-2a2a844b1403",
+  "id": "0af9de0d-b0b9-41c8-962e-91d1c82786e8",
   "prevId": "9913b60f-aa9b-4ad5-a6ac-bc3895e6745c",
   "version": "7",
   "dialect": "postgresql",
@@ -381,7 +381,23 @@
           "notNull": false
         }
       },
-      "indexes": {},
+      "indexes": {
+        "idx_accounts_userId": {
+          "name": "idx_accounts_userId",
+          "columns": [
+            {
+              "expression": "userId",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
       "foreignKeys": {
         "accounts_userId_users_id_fk": {
           "name": "accounts_userId_users_id_fk",
@@ -452,12 +468,6 @@
           "primaryKey": false,
           "notNull": true,
           "default": "now()"
-        },
-        "deactivatedAt": {
-          "name": "deactivatedAt",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": false
         }
       },
       "indexes": {},

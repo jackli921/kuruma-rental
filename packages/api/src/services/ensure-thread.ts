@@ -1,3 +1,4 @@
+import { SYSTEM_CONTEXT } from '../middleware/auth'
 import type { CallerContext } from '../middleware/auth'
 import type { ThreadRepository } from '../repositories/types'
 import type { Booking } from '../stores'
@@ -21,7 +22,15 @@ export function makeEnsureThread(threading: BookingThreading): EnsureThread {
   return async (ctx, booking) => {
     const threadKey = `booking:${booking.id}`
     try {
-      const existing = await threading.threadRepo.findByIdempotencyKey(ctx, threadKey)
+      // The idempotency probe is infrastructure, not a caller-scoped read: it
+      // asks "does this booking's thread already exist?", so it MUST run under
+      // SYSTEM_CONTEXT. A caller who isn't a thread participant — a PARTNER
+      // (Trip.com) booking, or an operator manual booking, neither of which is
+      // in [renterId, staffUserId] — would otherwise miss an existing thread on
+      // replay and re-fire the insert into a benign-but-noisy UNIQUE_VIOLATION
+      // (worsened once #1168 dropped PARTNER from PRIVILEGED_ROLES). The create
+      // stays on the caller ctx; participants are fixed below regardless.
+      const existing = await threading.threadRepo.findByIdempotencyKey(SYSTEM_CONTEXT, threadKey)
       if (existing) return
       await threading.threadRepo.create(
         ctx,

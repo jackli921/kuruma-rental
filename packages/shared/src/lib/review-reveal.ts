@@ -5,6 +5,20 @@ import type { ReviewAuthorRole } from '../enums'
 // window sweep, plus slice 5's aggregates, all build on functions that are fully
 // unit-testable without a DB.
 
+/** The fixed double-blind window, identical for both sides (#1067): a review auto-
+ *  publishes this many days after the booking completes if the counterpart never
+ *  reciprocates. Snapshotted into each row's `revealDeadlineAt` at first submit. */
+export const REVIEW_WINDOW_DAYS = 14
+
+const MS_PER_DAY = 24 * 60 * 60 * 1000
+
+/** The instant a review stops being held for reciprocity: trip-completion time plus
+ *  the fixed window. Anchored to completion (not submit time) so a late first-submitter
+ *  still gets a deadline bounded by when the trip actually ended. Pure — no mutation. */
+export function computeRevealDeadline(completedAt: Date): Date {
+  return new Date(completedAt.getTime() + REVIEW_WINDOW_DAYS * MS_PER_DAY)
+}
+
 /** The reveal-relevant projection of a review row. */
 export interface RevealInput {
   readonly publishedAt: Date | null

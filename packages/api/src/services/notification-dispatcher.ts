@@ -12,6 +12,7 @@ import type { EmailSender } from './email/email-sender'
 import { renderOperatorAlert } from './email/templates/operator-alert'
 import { renderRenterCancellation } from './email/templates/renter-cancellation'
 import { renderRenterConfirmation } from './email/templates/renter-confirmation'
+import { renderRenterReviewPrompt } from './email/templates/renter-review-prompt'
 import { renderRenterStatusUpdate } from './email/templates/renter-status-update'
 import { renderRenterSubstitution } from './email/templates/renter-substitution'
 import type { ResolveOperatorRecipients } from './operator-recipients'
@@ -35,8 +36,33 @@ export const TRIGGER_KINDS: Record<LifecycleTrigger, Kind[]> = {
   SUBSTITUTED: ['RENTER_SUBSTITUTION'],
   CANCELLED: ['RENTER_CANCELLATION'],
   ACTIVATED: ['RENTER_TRIP_STARTED'],
-  COMPLETED: ['RENTER_TRIP_COMPLETED'],
+  // #1083: completion sends the trip-completed notice AND the review prompt.
+  COMPLETED: ['RENTER_TRIP_COMPLETED', 'RENTER_REVIEW_PROMPT'],
 }
+
+// The booking relations a notification email can render. Everything else a
+// template needs lives on the booking snapshot (codes, dates, prices, *_Snapshot).
+export type NotificationRelation = 'operator' | 'vehicle' | 'pickup' | 'dropoff'
+
+// #1151: each kind declares EXACTLY which relations its template renders, and
+// `loadRelations` reads only those — a snapshot-only kind pays zero repo reads.
+// The exhaustive `Record<Kind, ...>` makes a NEW kind compile-fail until it
+// declares its needs, so it can't silently default back to "load all four" and
+// re-create the wasted-read leak (#1114). The conformance test asserts these
+// sets stay equal to what each branch of `buildMessage` actually consumes.
+// `operator` is read only by the confirmation; the operator alert and the
+// renter status/substitution emails render from snapshot + vehicle/location only.
+export const RELATIONS_BY_KIND: Record<Kind, ReadonlySet<NotificationRelation>> = {
+  RENTER_CANCELLATION: new Set(),
+  RENTER_BOOKING_CONFIRM: new Set(['operator', 'vehicle', 'pickup', 'dropoff']),
+  RENTER_SUBSTITUTION: new Set(['vehicle', 'pickup', 'dropoff']),
+  RENTER_TRIP_STARTED: new Set(['vehicle', 'pickup', 'dropoff']),
+  RENTER_TRIP_COMPLETED: new Set(['vehicle', 'pickup', 'dropoff']),
+  OPERATOR_BOOKING_ALERT: new Set(['vehicle', 'pickup', 'dropoff']),
+  // Snapshot-only: booking code + period + a CTA back to My Bookings. Zero reads.
+  RENTER_REVIEW_PROMPT: new Set(),
+}
+
 const DEFAULT_OPERATOR_LOCALE = 'ja' // §12.2
 
 export interface NotificationDispatcherConfig {
@@ -203,17 +229,22 @@ export class NotificationDispatcher {
     return { to: fallback, recipient: fallback, locale: DEFAULT_OPERATOR_LOCALE }
   }
 
-  // Eager relations used by every kind EXCEPT RENTER_CANCELLATION (which renders
-  // from booking-snapshot fields alone). Pulled into its own method so the
-  // cancellation branch doesn't pay the 4 repo reads it never consumes (#1114).
-  private async loadRelations(booking: Booking) {
+  // Reads ONLY the relations in `required` (RELATIONS_BY_KIND[kind]) — every other
+  // entity stays undefined and its name field falls back to the snapshot id, which
+  // is never rendered by a kind that didn't declare it. A snapshot-only kind passes
+  // an empty set and issues zero repo reads (#1114, #1151).
+  private async loadRelations(booking: Booking, required: ReadonlySet<NotificationRelation>) {
     const [operator, vehicle, pickup, dropoff] = await Promise.all([
-      this.operatorRepo.findById(booking.operatorId),
-      booking.assignedVehicleId
+      required.has('operator') ? this.operatorRepo.findById(booking.operatorId) : undefined,
+      required.has('vehicle') && booking.assignedVehicleId
         ? this.vehicleRepo.findById(SYSTEM_CONTEXT, booking.assignedVehicleId)
-        : Promise.resolve(undefined),
-      this.locationRepo.findById(SYSTEM_CONTEXT, booking.pickupLocationId),
-      this.locationRepo.findById(SYSTEM_CONTEXT, booking.dropoffLocationId),
+        : undefined,
+      required.has('pickup')
+        ? this.locationRepo.findById(SYSTEM_CONTEXT, booking.pickupLocationId)
+        : undefined,
+      required.has('dropoff')
+        ? this.locationRepo.findById(SYSTEM_CONTEXT, booking.dropoffLocationId)
+        : undefined,
     ])
     const vehicleData = {
       name: vehicle?.name ?? 'Vehicle',
@@ -248,26 +279,26 @@ export class NotificationDispatcher {
       ...(replyTo ? { replyTo } : {}),
     })
 
-    // Branches that render purely from booking-snapshot fields short-circuit
-    // BEFORE the eager relation reads (#1114).
-    if (kind === 'RENTER_CANCELLATION') {
-      return envelope(
-        renderRenterCancellation(
-          {
-            bookingCode: booking.bookingCode,
-            startAt: booking.startAt,
-            endAt: booking.endAt,
-            cancellationFeeJpy: booking.cancellationFee,
-          },
-          locale,
-        ),
-      )
-    }
-
-    const { operator, vehicleData, pickupName, dropoffName, common } =
-      await this.loadRelations(booking)
+    // Reads only the relations this kind declares; a snapshot-only kind (e.g.
+    // RENTER_CANCELLATION, with an empty set) issues zero reads here (#1151).
+    const { operator, vehicleData, pickupName, dropoffName, common } = await this.loadRelations(
+      booking,
+      RELATIONS_BY_KIND[kind],
+    )
 
     switch (kind) {
+      case 'RENTER_CANCELLATION':
+        return envelope(
+          renderRenterCancellation(
+            {
+              bookingCode: booking.bookingCode,
+              startAt: booking.startAt,
+              endAt: booking.endAt,
+              cancellationFeeJpy: booking.cancellationFee,
+            },
+            locale,
+          ),
+        )
       case 'RENTER_BOOKING_CONFIRM':
         return envelope(
           renderRenterConfirmation(
@@ -317,8 +348,24 @@ export class NotificationDispatcher {
             locale,
           ),
         )
-      default: {
-        // OPERATOR_BOOKING_ALERT
+      case 'RENTER_REVIEW_PROMPT': {
+        // Deep link to the renter's My Bookings list, where the review prompt lives.
+        // Trailing slash stripped so a misconfigured WEB_ORIGIN can't emit `//{locale}`.
+        const base = this.config.webBaseUrl?.replace(/\/+$/, '')
+        const reviewUrl = base ? `${base}/${locale}/bookings` : null
+        return envelope(
+          renderRenterReviewPrompt(
+            {
+              bookingCode: booking.bookingCode,
+              startAt: booking.startAt,
+              endAt: booking.endAt,
+              reviewUrl,
+            },
+            locale,
+          ),
+        )
+      }
+      case 'OPERATOR_BOOKING_ALERT': {
         const [renter] = await this.userRepo.findByIds([booking.renterId])
         // Strip a trailing slash so a misconfigured WEB_ORIGIN can't emit a
         // `//{locale}` path that fails the SPA's `/$locale/...` route match.
@@ -345,6 +392,10 @@ export class NotificationDispatcher {
           ),
         )
       }
+      default:
+        // A new kind compile-fails here (and at RELATIONS_BY_KIND) until it
+        // declares both its render branch and its relation needs.
+        return kind satisfies never
     }
   }
 }

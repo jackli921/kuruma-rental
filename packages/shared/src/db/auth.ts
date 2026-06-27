@@ -72,7 +72,13 @@ export const accounts = pgTable(
     id_token: text('id_token'),
     session_state: text('session_state'),
   },
-  (account) => [primaryKey({ columns: [account.provider, account.providerAccountId] })],
+  (account) => [
+    primaryKey({ columns: [account.provider, account.providerAccountId] }),
+    // FK index — exists in prod via 0010_add-fk-indexes.sql but was never
+    // echoed in this declaration, so the snapshot didn't carry it and a future
+    // `drizzle-kit pull` would silently drop it. Codified per #1171/#1150.
+    index('idx_accounts_userId').on(account.userId),
+  ],
 )
 
 export type { Role } from '../enums'

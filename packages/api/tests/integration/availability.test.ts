@@ -1,5 +1,6 @@
 import { BEST_CAR_RENTAL_OPERATOR_ID } from '@kuruma/shared/db/constants'
-import { users } from '@kuruma/shared/db/schema'
+import { users, vehicleBlocks } from '@kuruma/shared/db/schema'
+import { inArray } from 'drizzle-orm'
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest'
 import { SYSTEM_CONTEXT } from '../../src/middleware/auth'
 import {
@@ -508,9 +509,13 @@ describe('DrizzleAvailabilityRepository', () => {
   // The local afterEach keeps each `it` independent.
   describe('countClassCapacity (#464 slice 2d.2)', () => {
     const ASOF = new Date('2026-08-01T14:00:00Z') // 2026-08-01 JST
+    // #1141: the demand window blocks are tested against. ASOF (the return)
+    // doubles as the window end, matching the caller in flat-search.
+    const WINDOW_FROM = new Date('2026-08-01T10:00:00Z')
     let capClassId: string
     let capLocationId: string
     const capVehicleIds: string[] = []
+    const capBlockIds: string[] = []
 
     beforeAll(async () => {
       const klass = await seedVehicleClass('avail-cap')
@@ -522,6 +527,11 @@ describe('DrizzleAvailabilityRepository', () => {
     })
 
     afterEach(async () => {
+      // Blocks FK vehicleId → vehicles; delete them before the vehicles.
+      if (capBlockIds.length > 0) {
+        await db.delete(vehicleBlocks).where(inArray(vehicleBlocks.id, capBlockIds))
+        capBlockIds.length = 0
+      }
       await cleanupVehicles(capVehicleIds)
       capVehicleIds.length = 0
     })
@@ -551,6 +561,8 @@ describe('DrizzleAvailabilityRepository', () => {
         BEST_CAR_RENTAL_OPERATOR_ID,
         capClassId,
         capLocationId,
+        WINDOW_FROM,
+        ASOF,
         ASOF,
       )
       expect(count).toBe(2)
@@ -574,6 +586,87 @@ describe('DrizzleAvailabilityRepository', () => {
         BEST_CAR_RENTAL_OPERATOR_ID,
         capClassId,
         capLocationId,
+        WINDOW_FROM,
+        ASOF,
+        ASOF,
+      )
+      expect(count).toBe(1)
+    })
+
+    // #1141: a road-legal car scheduled off for the demand window is not real
+    // supply. The NOT EXISTS vehicle_blocks subtraction is snapshot-invisible,
+    // so only a real-pg test proves the Drizzle path matches the in-memory one.
+    it('subtracts a road-legal car with a block overlapping the demand window', async () => {
+      const free = await createTestVehicle({
+        name: 'Cap Free',
+        classId: capClassId,
+        pickupLocationId: capLocationId,
+      })
+      const blocked = await createTestVehicle({
+        name: 'Cap Blocked',
+        classId: capClassId,
+        pickupLocationId: capLocationId,
+      })
+      capVehicleIds.push(free.id, blocked.id)
+
+      // 09:00–12:00 overlaps the [10:00, 14:00) window → blocked car drops out.
+      const blockId = crypto.randomUUID()
+      await db.insert(vehicleBlocks).values({
+        id: blockId,
+        operatorId: BEST_CAR_RENTAL_OPERATOR_ID,
+        vehicleId: blocked.id,
+        startAt: new Date('2026-08-01T09:00:00Z'),
+        endAt: new Date('2026-08-01T12:00:00Z'),
+        kind: 'MAINTENANCE',
+        reason: 'scheduled service',
+        notes: null,
+        createdBy: 'system',
+      })
+      capBlockIds.push(blockId)
+
+      const count = await availabilityRepo.countClassCapacity(
+        BEST_CAR_RENTAL_OPERATOR_ID,
+        capClassId,
+        capLocationId,
+        WINDOW_FROM,
+        ASOF,
+        ASOF,
+      )
+      expect(count).toBe(1)
+    })
+
+    // #1141 parity: the whole InMemory↔Drizzle mirror hinges on tstzrange `&&`
+    // excluding adjacency — a block ending EXACTLY at WINDOW_FROM does not
+    // overlap [WINDOW_FROM, ASOF), so the car still counts. Pins the half-open
+    // boundary on the real Postgres path, not just the in-memory one.
+    it('keeps a road-legal car whose block ends exactly at the window start (half-open)', async () => {
+      const adjacent = await createTestVehicle({
+        name: 'Cap Adjacent',
+        classId: capClassId,
+        pickupLocationId: capLocationId,
+      })
+      capVehicleIds.push(adjacent.id)
+
+      const blockId = crypto.randomUUID()
+      await db.insert(vehicleBlocks).values({
+        id: blockId,
+        operatorId: BEST_CAR_RENTAL_OPERATOR_ID,
+        vehicleId: adjacent.id,
+        startAt: new Date('2026-08-01T06:00:00Z'),
+        endAt: WINDOW_FROM, // ends exactly at the window start → no overlap
+        kind: 'MAINTENANCE',
+        reason: 'scheduled service',
+        notes: null,
+        createdBy: 'system',
+      })
+      capBlockIds.push(blockId)
+
+      const count = await availabilityRepo.countClassCapacity(
+        BEST_CAR_RENTAL_OPERATOR_ID,
+        capClassId,
+        capLocationId,
+        WINDOW_FROM,
+        ASOF,
         ASOF,
       )
       expect(count).toBe(1)
