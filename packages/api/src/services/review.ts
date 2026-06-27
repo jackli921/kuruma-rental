@@ -9,6 +9,7 @@ import { type CallerContext, SYSTEM_CONTEXT } from '../middleware/auth'
 import {
   PG_ERROR,
   REVIEWS_AUTHOR_SUBJECT_CONSTRAINT,
+  REVIEWS_OPERATOR_SUBJECT_CONSTRAINT,
   pgConstraintName,
   pgErrorCode,
 } from '../pg-errors'
@@ -163,9 +164,12 @@ export class ReviewService {
       const review = await this.reviewRepo.insert(newReview)
       return { ok: true, review }
     } catch (err) {
+      // Either seal trips ALREADY_REVIEWED: the per-author one (a resubmit of the same
+      // subject) or the per-operator one (#1158 — a colleague already spoke for the operator).
       if (
         pgErrorCode(err) === PG_ERROR.UNIQUE_VIOLATION &&
-        pgConstraintName(err) === REVIEWS_AUTHOR_SUBJECT_CONSTRAINT
+        (pgConstraintName(err) === REVIEWS_AUTHOR_SUBJECT_CONSTRAINT ||
+          pgConstraintName(err) === REVIEWS_OPERATOR_SUBJECT_CONSTRAINT)
       ) {
         return fail(409, 'ALREADY_REVIEWED')
       }
@@ -223,12 +227,23 @@ export class ReviewService {
   async getForBooking(ctx: CallerContext, bookingId: string, now: Date): Promise<GetReviewsResult> {
     const booking = await this.bookingRepo.findById(SYSTEM_CONTEXT, bookingId)
     if (!booking) return fail(404, 'BOOKING_NOT_FOUND')
-    if (!(await this.resolveRole(ctx, booking))) return fail(403, 'NOT_A_PARTICIPANT')
+    const role = await this.resolveRole(ctx, booking)
+    if (!role) return fail(403, 'NOT_A_PARTICIPANT')
 
     await this.settleReveal(bookingId, now)
     const reviews = await this.reviewRepo.findByBookingId(bookingId)
-    // The reader always sees their own rows; a counterparty row only once published.
-    const visible = reviews.filter((r) => r.authorUserId === ctx.userId || r.publishedAt !== null)
+    // The reader always sees their own rows; a counterparty row only once published. An
+    // OPERATOR reader additionally sees their operator's OWN side even while hidden /
+    // authored by a colleague (#1158): the operator->renter review is the tenant's, not
+    // the staff member's, so a colleague's pending row must hide the rate-renter prompt.
+    // All OPERATOR rows for a booking share its operatorId, so this never reveals the
+    // renter's still-hidden side — the renter↔operator double-blind stays intact.
+    const visible = reviews.filter(
+      (r) =>
+        r.authorUserId === ctx.userId ||
+        r.publishedAt !== null ||
+        (role === 'OPERATOR' && r.authorRole === 'OPERATOR'),
+    )
     return { ok: true, reviews: visible }
   }
 

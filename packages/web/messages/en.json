@@ -1550,6 +1550,24 @@
       "submit": "Submit review",
       "pending": "Submitting…",
       "error": "Something went wrong. Please try again."
+    },
+    "operatorPanel": {
+      "cta": "Rate this renter",
+      "title": "Rate your renter",
+      "description": "How was your guest on booking {code}?",
+      "overall": "Overall rating",
+      "starLabel": "{n} stars",
+      "dimension": {
+        "communication": "Communication",
+        "cleanliness": "Cleanliness",
+        "ruleAdherence": "Rule adherence"
+      },
+      "commentLabel": "Comment about this renter",
+      "commentPlaceholder": "Share details of the rental (optional)",
+      "submit": "Submit review",
+      "pending": "Submitting…",
+      "error": "Something went wrong. Please try again.",
+      "reviewed": "You've reviewed this renter."
     }
   }
 }
