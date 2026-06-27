@@ -48,6 +48,21 @@ async function operatorBearer(
   return { Authorization: `Bearer ${token}` }
 }
 
+async function partnerBearer(sub: string): Promise<Record<string, string>> {
+  // PARTNER (Trip.com) carries NO operatorId — it is a cross-channel booking
+  // caller, not a tenant. toCallerContext only attaches operatorId for
+  // OPERATOR_* roles, so this mirrors a real partner key.
+  const key = new TextEncoder().encode(TEST_AUTH_SECRET)
+  const token = await new SignJWT({ sub, role: 'PARTNER' })
+    .setProtectedHeader({ alg: 'HS256' })
+    .setIssuedAt()
+    .setExpirationTime('1h')
+    .setIssuer('kuruma-web')
+    .setAudience('kuruma-api')
+    .sign(key)
+  return { Authorization: `Bearer ${token}` }
+}
+
 function mkUser(id: string, role: User['role']): User {
   return {
     id,
@@ -460,5 +475,63 @@ describe('#396 — OPERATOR_* cannot enumerate users via any current ingress', (
     // The pre-existing phone holder is untouched.
     const [foreign] = await userRepo.findByIds([existing.id])
     expect(foreign?.name).toBe('Existing Person')
+  })
+})
+
+// #1168 — PARTNER (Trip.com) is a booking channel, NOT a cross-tenant private-data
+// reader. It was in PRIVILEGED_ROLES, which gated full reads of messages, threads,
+// and the user directory — and those routes gate on `requireUser` only, so a
+// partner key could enumerate every tenant's private data (the same leak class
+// #1119 closed for bookings). These pin that PARTNER now falls closed everywhere.
+describe('#1168 — PARTNER cannot read cross-tenant private data', () => {
+  const PARTNER_ID = '00000000-0000-4000-8000-0000000000aa'
+  const RENTER_A = '00000000-0000-4000-8000-0000000000a1'
+  const OPERATOR_B = '00000000-0000-4000-8000-0000000000b2'
+  let app: ReturnType<typeof createApp>
+  let threadId: string
+
+  beforeEach(async () => {
+    setupAuthEnv()
+    const userStore = new Map<string, User>([
+      [PARTNER_ID, mkUser(PARTNER_ID, 'PARTNER')],
+      [RENTER_A, mkUser(RENTER_A, 'RENTER')],
+      [OPERATOR_B, mkUser(OPERATOR_B, 'OPERATOR_OWNER')],
+    ])
+    const userRepo = new InMemoryUserRepository(userStore)
+    const threadRepo = new InMemoryThreadRepository()
+    // A renter<->operator thread the PARTNER is NOT a participant of.
+    const thread = await threadRepo.create(SYSTEM_CONTEXT, null, [RENTER_A, OPERATOR_B])
+    threadId = thread.id
+    app = createApp({ userRepo, threadRepo })
+  })
+
+  it('GET /threads returns no other tenant’s threads — empty, not the full table', async () => {
+    const res = await app.request('/threads', { headers: await partnerBearer(PARTNER_ID) })
+    expect(res.status).toBe(200)
+    const body = (await res.json()) as { data: unknown[] }
+    expect(body.data).toEqual([])
+  })
+
+  it('GET /threads/:id 404s a thread the PARTNER is not a participant of', async () => {
+    const res = await app.request(`/threads/${threadId}`, {
+      headers: await partnerBearer(PARTNER_ID),
+    })
+    expect(res.status).toBe(404)
+  })
+
+  it('GET /users resolves nothing — PARTNER is not a privileged name oracle', async () => {
+    const res = await app.request(`/users?ids=${RENTER_A},${OPERATOR_B}`, {
+      headers: await partnerBearer(PARTNER_ID),
+    })
+    expect(res.status).toBe(200)
+    const body = (await res.json()) as { data: { id: string }[] }
+    expect(body.data).toEqual([])
+  })
+
+  it('GET /customers/search is 403 — PARTNER is neither staff nor a tenant operator (#1116 route gate)', async () => {
+    const res = await app.request('/customers/search?q=User', {
+      headers: await partnerBearer(PARTNER_ID),
+    })
+    expect(res.status).toBe(403)
   })
 })
