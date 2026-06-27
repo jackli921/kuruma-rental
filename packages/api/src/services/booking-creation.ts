@@ -415,135 +415,23 @@ export class BookingCreationService {
         code: pricing.code,
       }
     }
-    // Selected insurance: snapshot the chosen ACTIVE option from THIS operator.
-    let insuranceOptionId: string | null = null
-    let insuranceSnapshot: InsuranceSnapshot | null = null
-    if (input.insuranceOptionId) {
-      const opt = await repos.insuranceOptionRepo.findById(SYSTEM_CONTEXT, input.insuranceOptionId)
-      if (!opt || opt.operatorId !== operatorId || opt.status !== 'ACTIVE') {
-        return { ok: false, status: 400, error: 'Insurance option is not available' }
-      }
-      insuranceOptionId = opt.id
-      insuranceSnapshot = {
-        insuranceOptionId: opt.id,
-        name: opt.name,
-        dailyPriceJpy: opt.dailyPriceJpy,
-        deductibleJpy: opt.deductibleJpy,
-      }
-    }
-
-    // Fee snapshot: this operator's ACTIVE fees that are operator-wide or match
-    // the booking's class. Locks the rate at booking time (§6.2, informational).
-    const fees = await repos.feeScheduleRepo.findAll(SYSTEM_CONTEXT, {
+    // #1109 (audit M1): the snapshot+insert tail is shared with CLASS_COMBO.
+    // Pricing (above) is mode-specific (per-car rate vs class rate plan); the
+    // rest — insurance/fee/add-on snapshot, total composition, renter mint,
+    // booking insert, BOOKING_CREATED event — is identical and lives in one
+    // seam. The booking.test.ts SPECIFIC vs CLASS_COMBO parity test pins it.
+    return this.snapshotAndInsert(ctx, repos, {
+      input,
       operatorId,
-      status: 'ACTIVE',
-    })
-    const feeSnapshot = fees
-      .filter((f) => f.vehicleClassId === null || f.vehicleClassId === classId)
-      .map((f) => ({
-        feeType: f.feeType,
-        unit: f.unit,
-        amountJpy: f.amountJpy,
-        vehicleClassId: f.vehicleClassId,
-      }))
-
-    // Selected paid add-ons (#460): each flat priceJpy is snapshotted here and
-    // folded into the total below via composeBookingTotal. One ACTIVE-only,
-    // this-operator read validates membership + tenant + active in a single
-    // query (a foreign/archived id is simply absent
-    // -> 400). De-dup so a repeated id is charged once (quantity is out of MVP).
-    const addOnSnapshot: AddOnSnapshot[] = []
-    if (input.addOnIds.length > 0) {
-      const available = await repos.addOnRepo.findActiveByOperator(operatorId)
-      const availableById = new Map(available.map((a) => [a.id, a]))
-      for (const addOnId of new Set(input.addOnIds)) {
-        const addOn = availableById.get(addOnId)
-        if (!addOn) return { ok: false, status: 400, error: 'Add-on is not available' }
-        addOnSnapshot.push({ addOnId: addOn.id, name: addOn.name, priceJpy: addOn.priceJpy })
-      }
-    }
-
-    // One composition for create AND substitute() — never hand-summed twice (#862).
-    const totalPrice = composeBookingTotal({
-      baseJpy: pricing.totalPriceJpy,
-      insurancePerDayJpy: insuranceSnapshot?.dailyPriceJpy ?? 0,
-      days: rentalDays(input.startAt, input.endAt),
-      addOns: addOnSnapshot,
-    })
-
-    const bookingCode = this.generateCode()
-
-    // #875: mint the walk-in renter HERE — past every validation `return` above (a
-    // return COMMITS the tx, so an earlier insert would orphan on a 400), and right
-    // before the booking insert whose 409 / booking_code-collision THROW rolls this
-    // back with it. Atomic: a failed attempt leaves no orphan customer.
-    const bookingRenterId = input.walkInCustomer
-      ? (await repos.userRepo.createWalkInRenter(input.walkInCustomer)).id
-      : renterId
-    if (bookingRenterId === null) {
-      // Invariant: a non-walk-in booking always resolves renterId in `create`.
-      throw new Error('booking submit: renterId unresolved (non-walk-in)')
-    }
-
-    // Insert FIRST: the exclusion / unique constraints fire here, BEFORE the
-    // event append, so a rolled-back insert leaves no orphan event (atomicity).
-    const booking = await repos.bookingRepo.create(ctx, {
-      operatorId,
-      renterId: bookingRenterId,
       classId,
-      requestedVehicleId: input.requestedVehicleId,
-      assignedVehicleId,
-      pickupLocationId: input.pickupLocationId,
-      dropoffLocationId: input.dropoffLocationId,
-      startAt: input.startAt,
-      endAt: input.endAt,
-      effectiveEndAt,
-      status: 'CONFIRMED',
-      source: input.source,
-      // #463: server-derived. Every pre-demo submit is SPECIFIC; CLASS_COMBO is #464.
+      basePriceJpy: pricing.totalPriceJpy,
       fulfillmentMode: 'SPECIFIC',
-      bookingCode,
-      insuranceOptionId,
-      insuranceSnapshot,
-      feeSnapshot,
-      addOnSnapshot,
-      externalId: input.externalId ?? null,
-      notes: input.notes ?? null,
-      totalPrice,
-      cancellationFee: null,
-      cancelledAt: null,
-      idempotencyKey: input.idempotencyKey ?? null,
-      // #613: stamp the liability-disclaimer consent server-side (never trust a
-      // client timestamp). Set only when the renter accepted; null for staff/
-      // manual bookings (the route exempts non-renter callers from the gate).
-      disclaimerAcknowledgedAt: input.disclaimerAccepted ? now : null,
-      disclaimerTermsVersion: input.disclaimerAccepted ? DISCLAIMER_TERMS_VERSION : null,
+      assignedVehicleId,
+      requestedVehicleId: input.requestedVehicleId,
+      effectiveEndAt,
+      renterId,
+      now,
     })
-
-    await repos.bookingEventRepo.append(ctx, {
-      bookingId: booking.id,
-      type: 'BOOKING_CREATED',
-      // The actor is who PERFORMED the booking (the authed caller), not the
-      // subject: a staff/manual booking records the staff member, not the
-      // customer. The renter lives in the booking row + payload. Mirrors
-      // VEHICLE_SUBSTITUTED, which also uses ctx.userId.
-      actorId: ctx.userId,
-      payload: {
-        type: 'BOOKING_CREATED',
-        requestedVehicleId: input.requestedVehicleId,
-        assignedVehicleId,
-        classId,
-        fulfillmentMode: 'SPECIFIC', // #463: mirror the booking's discriminator in the audit snapshot
-        startAt: input.startAt.toISOString(),
-        endAt: input.endAt.toISOString(),
-        totalPrice,
-        insuranceSnapshot,
-        feeSnapshot,
-        addOnSnapshot,
-      },
-    })
-
-    return { ok: true, booking }
   }
 
   // #464 2d.3: CLASS_COMBO submit — the renter books a class at a pickup
@@ -686,9 +574,66 @@ export class BookingCreationService {
         code: 'NO_COMBO_RATE_SET',
       }
     }
-    const days = rentalDays(input.startAt, input.endAt)
-    const basePrice = ratePlan.dayRateJpy * days
+    const basePrice = ratePlan.dayRateJpy * rentalDays(input.startAt, input.endAt)
 
+    // CLASS_COMBO floats: neither vehicle id is set at book time. The operator
+    // stamps assignedVehicleId on/before pickup via the substitute path
+    // (#464 slice 3). The rest of the snapshot+insert is shared with SPECIFIC.
+    return this.snapshotAndInsert(ctx, repos, {
+      input,
+      operatorId,
+      classId,
+      basePriceJpy: basePrice,
+      fulfillmentMode: 'CLASS_COMBO',
+      assignedVehicleId: null,
+      requestedVehicleId: null,
+      effectiveEndAt,
+      renterId,
+      now,
+    })
+  }
+
+  // #1109 (audit M1): the snapshot+insert tail shared by SPECIFIC and
+  // CLASS_COMBO. Both modes resolve insurance / fees / add-ons against the same
+  // operator-scoped reads, compose the same total, mint the walk-in renter
+  // (#875) past the last validation `return`, then INSERT-then-EVENT-append in
+  // tx order so a constraint failure rolls back atomically (no orphan event).
+  // The mode-specific bits — basePriceJpy and the three discriminator fields
+  // (fulfillmentMode, assignedVehicleId, requestedVehicleId) — are passed in.
+  // Parity is pinned by booking.test.ts (SPECIFIC vs CLASS_COMBO snapshot equality).
+  private async snapshotAndInsert(
+    ctx: CallerContext,
+    repos: TransactionRepos,
+    args: {
+      input: CreateBookingInput
+      operatorId: string
+      classId: string
+      basePriceJpy: number
+      fulfillmentMode: 'SPECIFIC' | 'CLASS_COMBO'
+      assignedVehicleId: string | null
+      requestedVehicleId: string | null
+      effectiveEndAt: Date
+      // Non-walk-in: the existing renter / self resolved in `create`. Walk-in
+      // (#875): null — the fresh renter is minted below, inside this tx, past
+      // every validation `return`.
+      renterId: string | null
+      now: Date
+    },
+  ): Promise<CreateBookingResult> {
+    const {
+      input,
+      operatorId,
+      classId,
+      basePriceJpy,
+      fulfillmentMode,
+      assignedVehicleId,
+      requestedVehicleId,
+      effectiveEndAt,
+      renterId,
+      now,
+    } = args
+
+    // Selected insurance: snapshot the chosen ACTIVE option from THIS operator.
     let insuranceOptionId: string | null = null
     let insuranceSnapshot: InsuranceSnapshot | null = null
     if (input.insuranceOptionId) {
@@ -705,6 +650,8 @@ export class BookingCreationService {
       }
     }
 
+    // Fee snapshot: this operator's ACTIVE fees that are operator-wide or match
+    // the booking's class. Locks the rate at booking time (§6.2, informational).
     const fees = await repos.feeScheduleRepo.findAll(SYSTEM_CONTEXT, {
       operatorId,
       status: 'ACTIVE',
@@ -718,6 +665,11 @@ export class BookingCreationService {
         vehicleClassId: f.vehicleClassId,
       }))
 
+    // Selected paid add-ons (#460): each flat priceJpy is snapshotted here and
+    // folded into the total below via composeBookingTotal. One ACTIVE-only,
+    // this-operator read validates membership + tenant + active in a single
+    // query (a foreign/archived id is simply absent -> 400). De-dup so a
+    // repeated id is charged once (quantity is out of MVP).
     const addOnSnapshot: AddOnSnapshot[] = []
     if (input.addOnIds.length > 0) {
       const available = await repos.addOnRepo.findActiveByOperator(operatorId)
@@ -729,30 +681,37 @@ export class BookingCreationService {
       }
     }
 
+    // One composition for create AND substitute() — never hand-summed twice (#862).
     const totalPrice = composeBookingTotal({
-      baseJpy: basePrice,
+      baseJpy: basePriceJpy,
       insurancePerDayJpy: insuranceSnapshot?.dailyPriceJpy ?? 0,
-      days,
+      days: rentalDays(input.startAt, input.endAt),
       addOns: addOnSnapshot,
     })
 
     const bookingCode = this.generateCode()
 
+    // #875: mint the walk-in renter HERE — past every validation `return` above
+    // (a return COMMITS the tx, so an earlier insert would orphan on a 400),
+    // and right before the booking insert whose 409 / booking_code-collision
+    // THROW rolls this back with it. Atomic: a failed attempt leaves no orphan
+    // customer.
     const bookingRenterId = input.walkInCustomer
       ? (await repos.userRepo.createWalkInRenter(input.walkInCustomer)).id
       : renterId
     if (bookingRenterId === null) {
+      // Invariant: a non-walk-in booking always resolves renterId in `create`.
       throw new Error('booking submit: renterId unresolved (non-walk-in)')
     }
 
+    // Insert FIRST: the exclusion / unique constraints fire here, BEFORE the
+    // event append, so a rolled-back insert leaves no orphan event (atomicity).
     const booking = await repos.bookingRepo.create(ctx, {
       operatorId,
       renterId: bookingRenterId,
       classId,
-      // CLASS_COMBO floats: neither id is set at book time. The operator stamps
-      // assignedVehicleId on/before pickup via the substitute path (#464 slice 3).
-      requestedVehicleId: null,
-      assignedVehicleId: null,
+      requestedVehicleId,
+      assignedVehicleId,
       pickupLocationId: input.pickupLocationId,
       dropoffLocationId: input.dropoffLocationId,
       startAt: input.startAt,
@@ -760,7 +719,8 @@ export class BookingCreationService {
       effectiveEndAt,
       status: 'CONFIRMED',
       source: input.source,
-      fulfillmentMode: 'CLASS_COMBO',
+      // #463: server-derived discriminator (SPECIFIC at MVP, CLASS_COMBO #464).
+      fulfillmentMode,
       bookingCode,
       insuranceOptionId,
       insuranceSnapshot,
@@ -772,6 +732,9 @@ export class BookingCreationService {
       cancellationFee: null,
       cancelledAt: null,
       idempotencyKey: input.idempotencyKey ?? null,
+      // #613: stamp the liability-disclaimer consent server-side (never trust a
+      // client timestamp). Set only when the renter accepted; null for staff/
+      // manual bookings (the route exempts non-renter callers from the gate).
       disclaimerAcknowledgedAt: input.disclaimerAccepted ? now : null,
       disclaimerTermsVersion: input.disclaimerAccepted ? DISCLAIMER_TERMS_VERSION : null,
     })
@@ -779,13 +742,17 @@ export class BookingCreationService {
     await repos.bookingEventRepo.append(ctx, {
       bookingId: booking.id,
       type: 'BOOKING_CREATED',
+      // The actor is who PERFORMED the booking (the authed caller), not the
+      // subject: a staff/manual booking records the staff member, not the
+      // customer. The renter lives in the booking row + payload. Mirrors
+      // VEHICLE_SUBSTITUTED, which also uses ctx.userId.
       actorId: ctx.userId,
       payload: {
         type: 'BOOKING_CREATED',
-        requestedVehicleId: null,
-        assignedVehicleId: null,
+        requestedVehicleId,
+        assignedVehicleId,
         classId,
-        fulfillmentMode: 'CLASS_COMBO',
+        fulfillmentMode, // #463: mirror the booking's discriminator in the audit snapshot
         startAt: input.startAt.toISOString(),
         endAt: input.endAt.toISOString(),
         totalPrice,

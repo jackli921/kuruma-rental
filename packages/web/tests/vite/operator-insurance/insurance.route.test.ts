@@ -5,19 +5,24 @@ import { describe, expect, it, vi } from 'vitest'
 
 // The loader's only job is to prefetch the insurance list into the query cache
 // so the component's useSuspenseQuery resolves without a FOUC. (The api helpers
-// it composes are covered in api.test.ts.)
+// it composes are covered in api.test.ts.) It reads the operator from loaderDeps so
+// a context switch refetches; with no operator picked the scoped key resolves to 'all'.
 const loader = Route.options.loader as (args: {
   context: { queryClient: { ensureQueryData: ReturnType<typeof vi.fn> } }
+  deps: { operator: string | undefined }
 }) => Promise<unknown>
 
 describe('insurance route loader', () => {
-  it('prefetches the operator-insurance list query', async () => {
+  it('prefetches the operator-insurance list query scoped to the picked operator', async () => {
     const ensureQueryData = vi.fn().mockResolvedValue([])
-    await loader({ context: { queryClient: { ensureQueryData } } })
+    await loader({
+      context: { queryClient: { ensureQueryData } },
+      deps: { operator: 'op_9' },
+    })
 
     expect(ensureQueryData).toHaveBeenCalledTimes(1)
     const options = ensureQueryData.mock.calls[0][0] as { queryKey: unknown }
-    expect(options.queryKey).toEqual(['operator-insurance'])
+    expect(options.queryKey).toEqual(['operator-insurance', 'op_9'])
   })
 })
 

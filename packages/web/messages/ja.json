@@ -881,6 +881,10 @@
       },
       "loadError": "チームを読み込めませんでした",
       "retry": "再試行"
+    },
+    "operatorContext": {
+      "label": "事業者",
+      "all": "すべての事業者"
     }
   },
   "messaging": {
