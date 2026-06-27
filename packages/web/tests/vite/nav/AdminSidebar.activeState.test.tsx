@@ -1,4 +1,4 @@
-import { AdminSidebar } from '@/vite/nav/AdminSidebar'
+import { AdminSidebar, SIDEBAR_ITEMS } from '@/vite/nav/AdminSidebar'
 import {
   RouterProvider,
   createMemoryHistory,
@@ -16,7 +16,13 @@ import en from '../../../messages/en.json'
 // <Link> is auto-given `aria-current="page"`, and a NON-exact match treats
 // `/$locale` as active on every `/$locale/admin/*` route. Without exact matching
 // the "Back to site" escape hatch lights up as the current section on every admin
-// page (and mis-announces itself to screen readers). Stubbed Link can't see this.
+// page (and mis-announces itself to screen readers). A stubbed Link can't see this.
+
+// Derive the admin route tree from SIDEBAR_ITEMS so it can never drift from the
+// real sidebar: `/$locale/admin` -> index route, `/$locale/admin/x` -> child `x`.
+const ADMIN_PREFIX = '/$locale/admin'
+const leafPath = (to: string) => to.slice(ADMIN_PREFIX.length).replace(/^\//, '') || '/'
+
 function renderAdminSidebarAt(pathname: string) {
   const rootRoute = createRootRoute()
   const localeRoute = createRoute({ getParentRoute: () => rootRoute, path: '$locale' })
@@ -25,15 +31,7 @@ function renderAdminSidebarAt(pathname: string) {
     createRoute({ getParentRoute: () => adminRoute, path, component: () => <AdminSidebar /> })
   const routeTree = rootRoute.addChildren([
     localeRoute.addChildren([
-      adminRoute.addChildren([
-        sidebarChild('/'),
-        sidebarChild('bookings'),
-        sidebarChild('revenue'),
-        sidebarChild('anomalies'),
-        sidebarChild('documents'),
-        sidebarChild('customers'),
-        sidebarChild('governance'),
-      ]),
+      adminRoute.addChildren(SIDEBAR_ITEMS.map((item) => sidebarChild(leafPath(item.to)))),
     ]),
   ])
   const router = createRouter({

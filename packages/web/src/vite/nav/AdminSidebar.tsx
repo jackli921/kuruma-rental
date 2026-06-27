@@ -12,7 +12,9 @@ import {
 } from 'lucide-react'
 import { useLocale, useTranslations } from 'use-intl'
 
-const SIDEBAR_ITEMS = [
+// Exported so the active-state test can derive its router tree from the single
+// source of truth — a hard-coded copy there silently rots when an item is added.
+export const SIDEBAR_ITEMS = [
   { to: '/$locale/admin', icon: LayoutDashboard, labelKey: 'nav.overview' },
   { to: '/$locale/admin/operators', icon: Building2, labelKey: 'nav.operators' },
   { to: '/$locale/admin/bookings', icon: CalendarCheck, labelKey: 'nav.bookings' },
@@ -24,8 +26,8 @@ const SIDEBAR_ITEMS = [
 ] as const
 
 // Single static className; active state is the `aria-current="page"` attribute
-// (set by TanStack's activeProps) + the `aria-[current=page]:*` Tailwind variants.
-// SPA has no SSR, so the Next.js `mounted` hydration guard (#25) is unnecessary.
+// (auto-set by TanStack on the active <Link>) + the `aria-[current=page]:*`
+// Tailwind variants. SPA has no SSR, so the Next.js `mounted` guard (#25) is gone.
 const LINK_CLASSNAME =
   'flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors ' +
   'text-sidebar-foreground hover:bg-sidebar-accent/50 ' +
@@ -64,8 +66,8 @@ export function AdminSidebar() {
             to={to}
             params={{ locale }}
             // Exact: the index link (/admin) must not stay active on /admin/revenue.
+            // (TanStack auto-applies aria-current="page" to the active link.)
             activeOptions={{ exact: true }}
-            activeProps={{ 'aria-current': 'page' }}
             className={LINK_CLASSNAME}
           >
             <Icon className="size-5" />
