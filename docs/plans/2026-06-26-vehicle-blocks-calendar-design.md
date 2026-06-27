@@ -75,13 +75,14 @@ Vertical slice with standalone value: the fleet's blocks become queryable.
    return { kind: 'none' } // in-gate but neither bypass nor tenant (legacy STAFF/ADMIN): read nothing
    ```
    (RENTER/PARTNER never reach it — route-gated out.) Repo consumer keeps a `scope satisfies never` guard.
-2. **Repo** — add `findOverlappingInRange(scope, from, to): Promise<VehicleBlock[]>` to
-   `VehicleBlockRepository` (`types-vehicle-block.ts`), taking the scope union (not a bare operatorId):
-   `all` → no operator filter; `operator` → `operatorId =`; `none` → `[]`. Implement in both
-   `in-memory/vehicle-block.ts` and `drizzle/vehicle-block.ts` with the half-open
-   `tstzrange(startAt,endAt) && tstzrange(from,to)` overlap (adjacent = no overlap; mirror `findOverlapping`).
-3. **Service** — `VehicleBlockService.listBlocks(ctx, from, to)`: resolve via `vehicleBlockReadScope(ctx)`,
-   call `findOverlappingInRange(scope, from, to)`. Returns `VehicleBlock[]`.
+2. **Repo** — add `findOverlappingInRange(ctx, from, to): Promise<VehicleBlock[]>` to
+   `VehicleBlockRepository` (`types-vehicle-block.ts`). Per the codebase convention (`in-memory/vehicle-class.ts`
+   imports `operatorReadScope` and resolves scope **inside** the repo), the method takes `ctx` and calls
+   `vehicleBlockReadScope(ctx)` itself: `all` → no operator filter; `operator` → `operatorId =`; `none` → `[]`
+   (Drizzle: `sql\`false\``). Implement in both `in-memory/vehicle-block.ts` and `drizzle/vehicle-block.ts` with
+   the half-open `tstzrange(startAt,endAt) && tstzrange(from,to)` overlap (adjacent = no overlap; mirror `findOverlapping`).
+3. **Service** — `VehicleBlockService.listBlocks(ctx, from, to)`: thin delegation to
+   `findOverlappingInRange(ctx, from, to)` (scope enforced in the repo). Returns `VehicleBlock[]`.
 4. **Route** — `GET /vehicle-blocks?from&to` (fleet-wide collection read; top-level resource, clearer than a
    bare `/blocks` and unambiguous vs the `POST`/`DELETE /vehicles/:vehicleId/blocks` writes). Gate
    `MANAGEMENT_READ_ROLES.has(role)` else 403 (mirror `routes/maintenance-logs.ts:13`). The time window is the
