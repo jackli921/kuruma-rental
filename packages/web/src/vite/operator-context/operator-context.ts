@@ -80,6 +80,7 @@ export type WithOperatorId<T> = T & { operatorId?: string }
 // dashboard, bookings, team) adds its route id here as it lands.
 export const OPERATOR_CONTEXT_ROUTE_IDS: ReadonlySet<string> = new Set([
   '/$locale/_business/manage/add-ons',
+  '/$locale/_business/manage/classes',
   '/$locale/_business/manage/fees',
   '/$locale/_business/manage/insurance',
   '/$locale/_business/manage/locations',

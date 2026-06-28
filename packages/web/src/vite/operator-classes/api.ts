@@ -1,5 +1,6 @@
 import { unwrap } from '@/lib/api-error'
 import { getApiBaseUrl } from '@/vite/api-base'
+import { buildScopeParam } from '@/vite/operator-context'
 import { LUGGAGE_SIZES, TRANSMISSIONS, VEHICLE_CLASS_STATUSES } from '@kuruma/shared/enums'
 import type {
   CreateVehicleClassInput,
@@ -57,22 +58,31 @@ export interface OperatorClassFilters {
 
 export async function fetchOperatorClasses(
   filters: OperatorClassFilters = {},
+  pickedOperatorId?: string,
 ): Promise<OperatorClass[]> {
   // includeArchived=true so the owner sees soft-deleted classes (muted badge)
   // and can tell why a slug is taken.
-  const qs = filters.includeArchived ? '?includeArchived=true' : ''
+  const params = [
+    filters.includeArchived ? 'includeArchived=true' : undefined,
+    buildScopeParam(pickedOperatorId),
+  ].filter((p): p is string => Boolean(p))
+  const qs = `?${params.join('&')}`
   const res = await fetch(`${getApiBaseUrl()}/vehicle-classes/manage${qs}`, {
     credentials: 'include',
   })
   return unwrap(res, operatorClassSchema.array())
 }
 
-export function operatorClassesQueryOptions(filters: OperatorClassFilters = {}) {
+export function operatorClassesQueryOptions(
+  filters: OperatorClassFilters = {},
+  pickedOperatorId?: string,
+) {
   return queryOptions({
     // Key on includeArchived so the active-only and with-archived views never
-    // collide on a stale cache entry.
-    queryKey: ['operator-classes', filters.includeArchived ?? false],
-    queryFn: () => fetchOperatorClasses(filters),
+    // collide, and on picked operator so context switches never serve another
+    // tenant's cached classes.
+    queryKey: ['operator-classes', filters.includeArchived ?? false, pickedOperatorId ?? 'all'],
+    queryFn: () => fetchOperatorClasses(filters, pickedOperatorId),
   })
 }
 
