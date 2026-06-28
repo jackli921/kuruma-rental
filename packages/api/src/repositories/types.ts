@@ -757,6 +757,7 @@ export interface MaintenanceLogRepository {
 export type { VehicleBlockRepository } from './types-vehicle-block'
 
 export interface VehicleClassFilters {
+  operatorId?: string
   status?: 'ACTIVE' | 'ARCHIVED'
   includeArchived?: boolean
 }

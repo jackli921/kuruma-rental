@@ -30,6 +30,9 @@ export class DrizzleVehicleClassRepository implements VehicleClassRepository {
     } else if (scope.kind === 'none') {
       conditions.push(sql`false`)
     }
+    if (filters?.operatorId) {
+      conditions.push(eq(vehicleClasses.operatorId, filters.operatorId))
+    }
 
     if (filters?.status) {
       conditions.push(eq(vehicleClasses.status, filters.status))

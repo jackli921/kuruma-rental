@@ -8,6 +8,7 @@ import type {
   VehicleRepository,
 } from '../repositories/types'
 import type { VehicleClass } from '../stores'
+import { type CrossOperatorRead, applyCrossOperatorReadScope } from '../tenancy'
 
 export type CreateResult =
   | { ok: true; vehicleClass: VehicleClass }
@@ -76,8 +77,17 @@ export class VehicleClassService {
     }
   }
 
-  async findAll(ctx: CallerContext, filters?: VehicleClassFilters): Promise<VehicleClass[]> {
-    return this.repo.findAll(ctx, filters)
+  async findPublicCatalog(ctx: CallerContext): Promise<VehicleClass[]> {
+    return this.repo.findAll(ctx)
+  }
+
+  async findAll(
+    ctx: CallerContext,
+    read: CrossOperatorRead,
+    filters: VehicleClassFilters = {},
+  ): Promise<VehicleClass[]> {
+    const scopedFilters = applyCrossOperatorReadScope(ctx, read, filters)
+    return this.repo.findAll(ctx, scopedFilters)
   }
 
   async findById(ctx: CallerContext, id: string): Promise<VehicleClass | undefined> {
