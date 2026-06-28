@@ -823,6 +823,8 @@
       "retry": "再試行",
       "saved": "設定を保存しました。",
       "noOperatorContext": "このページは単一の事業者プロフィールを編集します。事業者の管理は管理ポータルをご利用ください。",
+      "pickOperatorPrompt": "上部の選択メニューから事業者を選ぶと、その設定を表示・編集できます。",
+      "editingAs": "{name} の設定を編集中",
       "form": {
         "name": "事業者名",
         "namePlaceholder": "例：大阪レンタカー",

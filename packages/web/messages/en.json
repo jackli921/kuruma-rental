@@ -823,6 +823,8 @@
       "retry": "Try again",
       "saved": "Settings saved.",
       "noOperatorContext": "This page edits a single operator's profile. Use the admin portal to manage operators.",
+      "pickOperatorPrompt": "Select an operator from the picker above to view and edit its settings.",
+      "editingAs": "Editing settings for {name}",
       "form": {
         "name": "Business name",
         "namePlaceholder": "e.g. Osaka Car Rental",

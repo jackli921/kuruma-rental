@@ -93,4 +93,13 @@ describe('useIsOperatorContextRoute', () => {
     const { result } = renderHook(() => useIsOperatorContextRoute())
     expect(result.current).toBe(false)
   })
+
+  it('is true on the settings route (slice 2 honors ?operator)', () => {
+    h.matches = [
+      { routeId: '/$locale/_business' },
+      { routeId: '/$locale/_business/manage/settings' },
+    ]
+    const { result } = renderHook(() => useIsOperatorContextRoute())
+    expect(result.current).toBe(true)
+  })
 })

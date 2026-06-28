@@ -1,6 +1,7 @@
 import { PageSkeleton } from '@/vite/PageSkeleton'
 import { isOperatorSettingsEnabled } from '@/vite/config/features'
-import { isOperatorOwnerSession } from '@/vite/guards'
+import { canPickOperatorContext, canWriteAsOperatorOwner } from '@/vite/guards'
+import { useOperatorContext } from '@/vite/operator-context'
 import { SettingsForm } from '@/vite/operator-settings/SettingsForm'
 import {
   operatorProfileQueryKey,
@@ -33,9 +34,14 @@ export const Route = createFileRoute('/$locale/_business/manage/settings')({
       throw redirect({ to: '/$locale/manage/bookings', params: { locale: params.locale } })
     }
   },
-  loader: async ({ context }) => {
+  loaderDeps: ({ search }: { search: { operator?: string | undefined } }) => ({
+    operator: search.operator,
+  }),
+  loader: async ({ context, deps }) => {
     const session = await context.queryClient.ensureQueryData(sessionQueryOptions())
-    const operatorId = session?.user.operatorId
+    // Effective id: own operator session id wins; a bypass admin falls back to the
+    // picked param. Matches OperatorSettingsRoute exactly (one resolution, two readers).
+    const operatorId = session?.user.operatorId ?? deps.operator
     if (operatorId) {
       await context.queryClient.ensureQueryData(operatorProfileQueryOptions(operatorId))
     }
@@ -48,7 +54,11 @@ export const Route = createFileRoute('/$locale/_business/manage/settings')({
 export function OperatorSettingsRoute() {
   const t = useTranslations('business.settings')
   const { data: session } = useSuspenseQuery(sessionQueryOptions())
-  const operatorId = session?.user.operatorId
+  const { pickedOperatorId } = useOperatorContext()
+  // Effective operator id: a real operator session's own id always wins; a bypass
+  // admin falls back to the picked id. Mirrors the loader (must stay in lockstep).
+  const operatorId = session?.user.operatorId ?? pickedOperatorId
+  const canPick = canPickOperatorContext(session ?? null)
 
   return (
     <main className="flex-1 px-4 py-10 sm:px-6 lg:px-8">
@@ -57,14 +67,19 @@ export function OperatorSettingsRoute() {
           <h1 className="text-3xl font-bold tracking-tight sm:text-4xl">{t('title')}</h1>
           <p className="mt-2 text-lg text-muted-foreground">{t('subtitle')}</p>
         </header>
-        {operatorId ? (
+        {session && operatorId ? (
           <OperatorSettings
+            // Reset local saved/error state when the picker swaps tenants (architect M2).
+            key={operatorId}
             operatorId={operatorId}
             csrfToken={session.csrfToken}
-            canEditHandoff={isOperatorOwnerSession(session)}
+            canEditHandoff={canWriteAsOperatorOwner(session ?? null, pickedOperatorId)}
+            showOperatorBadge={canPick && Boolean(pickedOperatorId)}
           />
         ) : (
-          <p className="text-muted-foreground">{t('noOperatorContext')}</p>
+          <p className="text-muted-foreground">
+            {canPick ? t('pickOperatorPrompt') : t('noOperatorContext')}
+          </p>
         )}
       </div>
     </main>
@@ -75,10 +90,12 @@ function OperatorSettings({
   operatorId,
   csrfToken,
   canEditHandoff,
+  showOperatorBadge,
 }: {
   operatorId: string
   csrfToken: string
   canEditHandoff: boolean
+  showOperatorBadge: boolean
 }) {
   const t = useTranslations('business.settings')
   const queryClient = useQueryClient()
@@ -97,6 +114,11 @@ function OperatorSettings({
 
   return (
     <>
+      {showOperatorBadge && (
+        <p className="mb-4 inline-block rounded-full bg-muted px-3 py-1 text-sm text-muted-foreground">
+          {t('editingAs', { name: profile.name })}
+        </p>
+      )}
       {error && (
         <p className="text-sm text-destructive mb-4">
           {error instanceof Error ? error.message : String(error)}
