@@ -8,6 +8,7 @@ import {
   bulkUpdateVehicleStatus,
   createVehicle,
   fetchOperatorFleet,
+  fetchVehicleClassOptions,
   fetchVehicleDetail,
   retireVehicle,
   updateVehicle,
@@ -283,6 +284,21 @@ describe('fetchOperatorFleet (#711 response validation)', () => {
     )
 
     await expect(fetchOperatorFleet()).rejects.toBeInstanceOf(ParseError)
+  })
+})
+
+describe('fetchVehicleClassOptions', () => {
+  it('opts into the cross-operator class read so a bypass admin does not 400', async () => {
+    const fetchMock = vi.fn(async () => jsonResponse({ success: true, data: [] }))
+    vi.stubGlobal('fetch', fetchMock)
+
+    await fetchVehicleClassOptions()
+
+    const [url, init] = fetchMock.mock.calls[0]!
+    const parsed = new URL(url as string, 'http://x')
+    expect(parsed.pathname).toBe('/api/vehicle-classes/manage')
+    expect(parsed.searchParams.get('includeAll')).toBe('true')
+    expect((init as RequestInit).credentials).toBe('include')
   })
 })
 
