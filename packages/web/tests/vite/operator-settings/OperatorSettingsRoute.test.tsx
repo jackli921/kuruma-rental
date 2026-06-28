@@ -81,6 +81,16 @@ describe('OperatorSettingsRoute (#903)', () => {
     expect(handoff).not.toBeDisabled()
   })
 
+  it('ignores a stray ?operator pick for an operator session — own id wins', () => {
+    // Own operator session id must beat the picked id (operatorId ?? picked).
+    // Only OP_ID's profile is seeded, so if the operands were flipped the
+    // component would resolve op_foreign, suspend on the unseeded query and
+    // never render this name — pinning the trusted-id-wins precedence.
+    h.picked = 'op_foreign'
+    renderRoute(ownerSession)
+    expect(screen.getByLabelText(en.form.name)).toHaveValue('Acme Cars')
+  })
+
   it('disables the handoff URL and shows the owner-only note for OPERATOR_STAFF', () => {
     renderRoute(staffSession)
     expect(screen.getByLabelText(en.form.handoffUrl)).toBeDisabled()
