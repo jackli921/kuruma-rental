@@ -23,7 +23,7 @@ export const Route = createFileRoute('/$locale/_business/manage/fees')({
   loader: ({ context, deps }) =>
     Promise.all([
       context.queryClient.ensureQueryData(feeSchedulesQueryOptions(deps.operator)),
-      context.queryClient.ensureQueryData(operatorClassesQueryOptions()),
+      context.queryClient.ensureQueryData(operatorClassesQueryOptions({}, deps.operator)),
     ]),
   pendingComponent: PageSkeleton,
   errorComponent: OperatorFeesError,
@@ -37,13 +37,13 @@ export function OperatorFeesRoute() {
   const scope = useOperatorScope()
   const { data: session } = useSession()
   const { data: fees } = useSuspenseQuery(feeSchedulesQueryOptions(scope.pickedOperatorId))
-  const { data: classes } = useSuspenseQuery(operatorClassesQueryOptions())
+  const { data: classes } = useSuspenseQuery(
+    operatorClassesQueryOptions({}, scope.pickedOperatorId),
+  )
 
-  // P1b: picker-admins are read-only on fees until slice 3 scopes the class
-  // dropdown (/vehicle-classes/manage has no operatorId param yet, so a picked
-  // admin would see another tenant's classes and hit a composite-FK error on
-  // create). A real operator session writes under its own tenant as before, so
-  // override the scope's canWrite to operator-session-only here.
+  // Picker-admins stay read-only on fees in this slice. The class lookup is now
+  // scoped for display, but the fee create body still does not stamp the picked
+  // operatorId. A real operator session writes under its own tenant as before.
   const feesScope = { ...scope, canWrite: isOperatorSession(session ?? null) }
 
   return (

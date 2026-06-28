@@ -1,12 +1,11 @@
 import { Button } from '@/components/ui/button'
 import { PageSkeleton } from '@/vite/PageSkeleton'
-import { isOperatorSession } from '@/vite/guards'
 import { AddClassDialog } from '@/vite/operator-classes/AddClassDialog'
 import { DeleteClassDialog } from '@/vite/operator-classes/DeleteClassDialog'
 import { EditClassDialog } from '@/vite/operator-classes/EditClassDialog'
 import { OperatorClassesView } from '@/vite/operator-classes/OperatorClassesView'
 import { type OperatorClass, operatorClassesQueryOptions } from '@/vite/operator-classes/api'
-import { sessionQueryOptions } from '@/vite/session'
+import { useOperatorScope } from '@/vite/operator-context'
 import { useSuspenseQuery } from '@tanstack/react-query'
 import { type ErrorComponentProps, createFileRoute, useRouter } from '@tanstack/react-router'
 import { Plus } from 'lucide-react'
@@ -19,10 +18,14 @@ import { useTranslations } from 'use-intl'
 // `/vehicle-classes/manage` list). includeArchived:true so owners see their
 // soft-archived classes (muted badge). The loader prefetches into the query
 // cache (no FOUC); the component reads the same options via useSuspenseQuery.
-const classesQuery = operatorClassesQueryOptions({ includeArchived: true })
-
 export const Route = createFileRoute('/$locale/_business/manage/classes')({
-  loader: ({ context }) => context.queryClient.ensureQueryData(classesQuery),
+  loaderDeps: ({ search }: { search: { operator?: string | undefined } }) => ({
+    operator: search.operator,
+  }),
+  loader: ({ context, deps }) =>
+    context.queryClient.ensureQueryData(
+      operatorClassesQueryOptions({ includeArchived: true }, deps.operator),
+    ),
   pendingComponent: PageSkeleton,
   errorComponent: OperatorClassesError,
   component: OperatorClassesRoute,
@@ -30,17 +33,13 @@ export const Route = createFileRoute('/$locale/_business/manage/classes')({
 
 export function OperatorClassesRoute() {
   const t = useTranslations('business.classes')
-  const { data: classes } = useSuspenseQuery(classesQuery)
-  const { data: session } = useSuspenseQuery(sessionQueryOptions())
+  const scope = useOperatorScope()
+  const { data: classes } = useSuspenseQuery(
+    operatorClassesQueryOptions({ includeArchived: true }, scope.pickedOperatorId),
+  )
   const [showAdd, setShowAdd] = useState(false)
   const [editing, setEditing] = useState<OperatorClass | null>(null)
   const [deleting, setDeleting] = useState<OperatorClass | null>(null)
-
-  // Bypass roles (PLATFORM_ADMIN / legacy STAFF·ADMIN — no operatorId) read the
-  // operator-scoped list for oversight but cannot write: a create needs a single
-  // target tenant they don't carry, and the portal has no operator picker. So the
-  // page is read-only for them, mirroring locations (#583, #529 review pattern).
-  const canWrite = isOperatorSession(session)
 
   return (
     <main className="flex-1 px-4 py-10 sm:px-6 lg:px-8">
@@ -50,7 +49,7 @@ export function OperatorClassesRoute() {
             <h1 className="text-3xl font-bold tracking-tight sm:text-4xl">{t('title')}</h1>
             <p className="mt-2 text-lg text-muted-foreground">{t('subtitle')}</p>
           </div>
-          {canWrite && (
+          {scope.canWrite && (
             <Button onClick={() => setShowAdd(true)}>
               <Plus className="mr-1.5 size-4" />
               {t('addClass')}
@@ -59,13 +58,17 @@ export function OperatorClassesRoute() {
         </header>
         <OperatorClassesView
           classes={classes}
-          onEdit={canWrite ? setEditing : undefined}
-          onDelete={canWrite ? setDeleting : undefined}
+          onEdit={scope.canWrite ? setEditing : undefined}
+          onDelete={scope.canWrite ? setDeleting : undefined}
         />
       </div>
-      {canWrite && (
+      {scope.canWrite && (
         <>
-          <AddClassDialog open={showAdd} onOpenChange={setShowAdd} />
+          <AddClassDialog
+            open={showAdd}
+            onOpenChange={setShowAdd}
+            pickedOperatorId={scope.pickedOperatorId}
+          />
           <EditClassDialog
             vehicleClass={editing}
             onOpenChange={(open) => !open && setEditing(null)}

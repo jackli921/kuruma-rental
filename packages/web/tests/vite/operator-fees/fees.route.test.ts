@@ -7,9 +7,9 @@ import { describe, expect, it, vi } from 'vitest'
 // classes (#528) into the query cache, so the component's useSuspenseQuery
 // resolves without a FOUC and the class dropdown is fed scoped classes. It reads
 // the operator from loaderDeps so a context switch refetches; the fee key is
-// scoped to the picked operator (or 'all'). The class dropdown is NOT scoped by
-// the picker yet (slice 3), so it stays parameterless — which is why fees is
-// read-only for picker-admins until then.
+// scoped to the picked operator (or 'all'). The class dropdown uses the same
+// picked operator now that /vehicle-classes/manage accepts operatorId; fees
+// writes remain operator-session-only until create bodies stamp picked operatorId.
 const loaderDeps = Route.options.loaderDeps as (args: {
   search: { operator?: string | undefined }
 }) => { operator: string | undefined }
@@ -32,7 +32,7 @@ describe('fees route loader', () => {
     const keys = ensureQueryData.mock.calls.map((c) => (c[0] as { queryKey: unknown }).queryKey)
     expect(keys).toContainEqual(['operator-fees', 'op_9'])
     // The operator-scoped class endpoint (#528), NOT the public catalog.
-    expect(keys).toContainEqual(['operator-classes', false])
+    expect(keys).toContainEqual(['operator-classes', false, 'op_9'])
   })
 
   it('defaults the fee key to the all-scope when no operator is picked', async () => {
@@ -41,6 +41,7 @@ describe('fees route loader', () => {
 
     const keys = ensureQueryData.mock.calls.map((c) => (c[0] as { queryKey: unknown }).queryKey)
     expect(keys).toContainEqual(['operator-fees', 'all'])
+    expect(keys).toContainEqual(['operator-classes', false, 'all'])
   })
 })
 

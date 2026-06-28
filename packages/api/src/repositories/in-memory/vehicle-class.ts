@@ -16,9 +16,12 @@ export class InMemoryVehicleClassRepository implements VehicleClassRepository {
     const all = [...this.store.values()].filter((vc) =>
       scope.kind === 'operator' ? vc.operatorId === scope.operatorId : true,
     )
-    if (filters?.status) return all.filter((vc) => vc.status === filters.status)
-    if (filters?.includeArchived) return all
-    return all.filter((vc) => vc.status !== 'ARCHIVED')
+    const scoped = filters?.operatorId
+      ? all.filter((vc) => vc.operatorId === filters.operatorId)
+      : all
+    if (filters?.status) return scoped.filter((vc) => vc.status === filters.status)
+    if (filters?.includeArchived) return scoped
+    return scoped.filter((vc) => vc.status !== 'ARCHIVED')
   }
 
   async findById(ctx: CallerContext, id: string): Promise<VehicleClass | undefined> {

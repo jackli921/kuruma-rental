@@ -130,7 +130,7 @@ describe('Vehicle Class CRUD Routes', () => {
       const { data } = await createRes.json()
       await app.request(`/vehicle-classes/${data.id}`, { method: 'DELETE' }) // soft-archive
 
-      const res = await app.request('/vehicle-classes/manage?includeArchived=true')
+      const res = await app.request('/vehicle-classes/manage?includeArchived=true&includeAll=true')
       expect(res.status).toBe(200)
       const body = await res.json()
       expect(body.data).toHaveLength(1)
@@ -142,9 +142,34 @@ describe('Vehicle Class CRUD Routes', () => {
       const { data } = await createRes.json()
       await app.request(`/vehicle-classes/${data.id}`, { method: 'DELETE' })
 
-      const res = await app.request('/vehicle-classes/manage')
+      const res = await app.request('/vehicle-classes/manage?includeAll=true')
       const body = await res.json()
       expect(body.data).toEqual([])
+    })
+
+    it('requires bypass callers to choose operatorId or includeAll', async () => {
+      const repo = new InMemoryVehicleClassRepository()
+      const staff = mountFor(repo, 'STAFF')
+
+      const res = await staff.request('/vehicle-classes/manage?includeArchived=true')
+
+      expect(res.status).toBe(400)
+      expect((await res.json()).error).toBe(
+        'operatorId or includeAll=true is required for cross-operator reads',
+      )
+    })
+
+    it('scopes bypass callers to the requested operatorId', async () => {
+      const repo = new InMemoryVehicleClassRepository()
+      const staff = mountFor(repo, 'STAFF')
+      await postFor(staff, OP_A, 'a-compact')
+      await postFor(staff, OP_B, 'b-compact')
+
+      const res = await staff.request(`/vehicle-classes/manage?operatorId=${OP_B}`)
+
+      expect(res.status).toBe(200)
+      const body = await res.json()
+      expect(body.data.map((row: { slug: string }) => row.slug)).toEqual(['b-compact'])
     })
 
     it('scopes the list to the caller operator (tenant isolation)', async () => {
