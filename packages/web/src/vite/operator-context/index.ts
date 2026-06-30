@@ -3,6 +3,7 @@
 // internal modules — so the vite cross-feature reach-in ratchet stays flat
 // (scripts/lint-module-boundaries.ts, docs/architecture/modules.md).
 export { fetchOperators, operatorsQueryOptions, type OperatorSummary } from './api'
+export { OperatorBadge } from './OperatorBadge'
 export { OperatorContextPicker } from './OperatorContextPicker'
 export {
   buildScopeParam,
