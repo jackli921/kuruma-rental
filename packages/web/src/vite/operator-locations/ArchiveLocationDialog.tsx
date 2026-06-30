@@ -12,6 +12,7 @@ import {
   type OperatorLocation,
   archiveLocation,
 } from '@/vite/operator-locations/api'
+import { useSession } from '@/vite/session'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { useRef } from 'react'
 import { useTranslations } from 'use-intl'
@@ -28,8 +29,9 @@ interface ArchiveLocationDialogProps {
 export function ArchiveLocationDialog({ location, onOpenChange }: ArchiveLocationDialogProps) {
   const t = useTranslations('business.locations')
   const queryClient = useQueryClient()
+  const csrfToken = useSession().data?.csrfToken ?? ''
   const mutation = useMutation({
-    mutationFn: archiveLocation,
+    mutationFn: (id: string) => archiveLocation(id, csrfToken),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: LOCATIONS_QUERY_KEY })
       onOpenChange(false)

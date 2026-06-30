@@ -460,6 +460,12 @@ export interface BookingRepository {
    *  vehicle set. Used to guard operations that assume no live bookings exist
    *  for those vehicles — e.g. archiving a vehicle class. */
   countActiveForVehicles(vehicleIds: string[]): Promise<number>
+  /** #1196: CONFIRMED/ACTIVE bookings on `vehicleId` whose turnaround-inclusive
+   *  [startAt, effectiveEndAt) window overlaps [from, to). Mirrors
+   *  VehicleBlockRepository.findOverlapping for the REVERSE guard — VehicleBlockService
+   *  rejects a block scheduled over a live booking. Unscoped by design: the vehicle is
+   *  already tenant-resolved by the caller, and authz lives in the service. */
+  findActiveOverlappingForVehicle(vehicleId: string, from: Date, to: Date): Promise<Booking[]>
   /** Counts bookings in BLOCKING_STATUSES (CONFIRMED, ACTIVE) that reference the
    *  given location as pickup OR dropoff. Guards archiving a location still in
    *  live use (#412). */

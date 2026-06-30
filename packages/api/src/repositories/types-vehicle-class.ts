@@ -7,6 +7,7 @@ import type { VehicleClass } from '../stores'
  * types-review / types-fee-schedule); re-exported from `types.ts` for callers.
  */
 export interface VehicleClassFilters {
+  operatorId?: string
   status?: 'ACTIVE' | 'ARCHIVED'
   includeArchived?: boolean
 }

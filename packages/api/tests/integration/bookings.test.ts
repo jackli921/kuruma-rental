@@ -8,6 +8,7 @@ import {
   DrizzleAvailabilityRepository,
   DrizzleBookingRepository,
   DrizzleLocationRepository,
+  DrizzleOperatorRepository,
   DrizzleVehicleClassRepository,
   DrizzleVehicleRepository,
 } from '../../src/repositories/drizzle'
@@ -524,12 +525,16 @@ describe('POST /bookings via HTTP (real Postgres)', () => {
     // derive turnaround (services/booking.ts submitInTx). Inject the Drizzle
     // location repo so the tx sees the DB-seeded tenant location — otherwise the
     // override branch defaults to an empty in-memory repo and submit 400s.
+    // #1206: the deactivated-operator guard reads the operator in-tx too, so the
+    // Drizzle operator repo must be injected for the same reason (an empty
+    // in-memory default makes the guard 409 every booking).
     app = createApp({
       vehicleRepo: httpVehicleRepo,
       bookingRepo: httpBookingRepo,
       availabilityRepo: httpAvailabilityRepo,
       vehicleClassRepo: httpVehicleClassRepo,
       locationRepo: new DrizzleLocationRepository(db),
+      operatorRepo: new DrizzleOperatorRepository(db),
     })
     headers = await authHeaders({ sub: httpUser.id, role: 'RENTER' })
   })

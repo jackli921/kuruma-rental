@@ -83,6 +83,18 @@ export class InMemoryBookingRepository implements BookingRepository {
     return [...ids]
   }
 
+  // #1196: reuses the same pure overlap predicate the exclusion check rides on
+  // (assigned vehicle, BLOCKING_STATUSES, turnaround-inclusive [startAt,
+  // effectiveEndAt)) so the reverse block→booking guard is byte-for-byte the same
+  // window as the booking→block one. Unscoped — the caller resolved the vehicle.
+  async findActiveOverlappingForVehicle(
+    vehicleId: string,
+    from: Date,
+    to: Date,
+  ): Promise<Booking[]> {
+    return getConflictingBookings([...this.store.values()], vehicleId, from, to)
+  }
+
   private isVisible(ctx: CallerContext, booking: Booking): boolean {
     const scope = bookingReadScope(ctx)
     if (scope.kind === 'none') return false

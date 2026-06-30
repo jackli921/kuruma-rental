@@ -4,6 +4,7 @@ import { fireEvent, render, screen } from '@testing-library/react'
 import { IntlProvider } from 'use-intl'
 import { describe, expect, it, vi } from 'vitest'
 import en from '../../../messages/en.json'
+import { renderWithUsdIndicative } from '../../support/currency'
 
 const addOns: ReservationAddOn[] = [
   { id: 'a1', name: 'Baby seat', description: 'Rear-facing', priceJpy: 2000 },
@@ -44,5 +45,18 @@ describe('AddOnsStep', () => {
   it('shows the empty state when the store offers no add-ons', () => {
     renderStep({ addOns: [] })
     expect(screen.getByText('No extras are available at this store.')).toBeInTheDocument()
+  })
+
+  // #1070: each add-on line carries an indicative conversion of its per-rental price.
+  it('converts the add-on per-rental price for the indicative note', async () => {
+    renderWithUsdIndicative(
+      <AddOnsStep
+        addOns={[{ id: 'a1', name: 'Baby seat', description: null, priceJpy: 30000 }]}
+        selectedIds={[]}
+        onToggle={vi.fn()}
+      />,
+    )
+    // 30,000 -> $201
+    expect(await screen.findByText(/≈ \$201/)).toBeTruthy()
   })
 })

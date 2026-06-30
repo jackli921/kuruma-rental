@@ -4,6 +4,7 @@ import { fireEvent, render, screen } from '@testing-library/react'
 import { IntlProvider } from 'use-intl'
 import { describe, expect, it, vi } from 'vitest'
 import en from '../../../messages/en.json'
+import { renderWithUsdIndicative } from '../../support/currency'
 
 const options: ReservationInsuranceOption[] = [
   {
@@ -57,5 +58,27 @@ describe('InsuranceStep', () => {
     expect(
       screen.getByText('No insurance options are available at this store.'),
     ).toBeInTheDocument()
+  })
+
+  // #1070: the indicative note must convert the per-day price, not the deductible.
+  it('converts each option daily price — not the deductible — for the indicative note', async () => {
+    renderWithUsdIndicative(
+      <InsuranceStep
+        options={[
+          {
+            id: 'i1',
+            name: 'Full coverage',
+            description: null,
+            dailyPriceJpy: 30000,
+            deductibleJpy: 100000,
+          },
+        ]}
+        selectedId={null}
+        onSelect={vi.fn()}
+      />,
+    )
+    // 30,000/day -> $201; the deductible (100,000 -> $670) carries no note.
+    expect(await screen.findByText(/≈ \$201/)).toBeTruthy()
+    expect(screen.queryByText(/≈ \$670/)).toBeNull()
   })
 })

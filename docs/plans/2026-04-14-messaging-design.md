@@ -3,6 +3,14 @@
 > Fills gaps in the existing schema/API design (`2026-04-07-schema-api-design.md`).
 > Schema, API routes, validators, and translation model are already spec'd there — this doc covers UX decisions, thread lifecycle, notifications, RLS, and UI structure.
 
+> **Status (2026-06-27): partially built + gated off.** The renter side (auto-created
+> booking threads, inbox, thread view, reply composer, translation, first-unread email)
+> shipped under `#1032`. The **operator inbox was never built** and the feature is hidden
+> behind `VITE_FEATURE_MESSAGING` (beta shows it only to the platform admin via the `#1161`
+> bypass). This doc predates the **multi-tenant marketplace pivot** (`#385`), so three of
+> the original decisions below were single-owner assumptions — corrected inline and
+> summarised in **[Current State vs Remaining](#current-state-vs-remaining-2026-06-27)**.
+
 ## Decisions
 
 | Topic | Decision | Rationale |
@@ -15,7 +23,7 @@
 | Photos/attachments | Not in MVP | Not needed for basic coordination |
 | Message deletion | Not supported | Legal protection; Japan not subject to GDPR |
 | Thread cleanup | Scheduled deletion every few months/year | Future maintenance job, not MVP |
-| Staff assignment | `DEFAULT_STAFF_ID` env var | Single owner operation, no round-robin needed |
+| ~~Staff assignment~~ Operator participant | **CORRECTED (post-pivot):** the thread counterpart is the **booking's operator**, and **any staff of that operator** (`OPERATOR_OWNER`/`OPERATOR_STAFF`) can read & reply — operator-as-*org*, not a single user | The original `DEFAULT_STAFF_ID` env var (still wired at `index.ts:342`) hardcoded one global recipient — a single-tenant artifact that breaks in the marketplace. Resolve participants from `booking.operatorId`. Same operator-as-org call as reviews (`#1158`) — decide once for both |
 | Real-time delivery | Polling on page load / navigation | Not WebSocket — async message exchange, not live chat |
 | Rate limiting | 10 messages per minute per user | Service-layer check |
 
@@ -23,10 +31,16 @@
 
 ## Notification Strategy
 
+> **CORRECTED (post-pivot).** The original table assumed a single owner who lives in the
+> app daily and therefore needed no email. In the marketplace there are many operators
+> (not all in-app daily) **and the operator inbox does not exist yet**, so an operator who
+> only gets an in-app badge would never see a renter's message. Operators need an email
+> path too — at minimum first-unread, mirroring the renter side.
+
 | Sender | Recipient | Notification |
 |--------|-----------|-------------|
-| Renter sends message | Owner (staff) | **No email.** Unread badge in app sidebar only. Owner is in the app daily. |
-| Owner sends message | Renter | **Email on first unread only.** If `renterUnreadCount === 0` before increment, send one email. No email if they already have unread messages. |
+| Renter sends message | The booking's operator (any staff) | **Email on first unread** to the operator's notifiable address(es) + unread badge in the operator inbox. (Was "no email — owner's in the app daily"; no longer true with N operators and no operator inbox.) |
+| Operator sends message | Renter | **Email on first unread only.** If `renterUnreadCount === 0` before increment, send one email. No email if they already have unread messages. |
 
 Email contains: message preview (first 200 chars) + link to thread in app. No reply-by-email.
 
@@ -34,15 +48,20 @@ Email contains: message preview (first 200 chars) + link to thread in app. No re
 
 ---
 
-## Row-Level Security (Prerequisite)
+## Row-Level Security (NOT adopted — see correction)
 
-> This is a cross-cutting concern — not messaging-specific. Must be implemented as a foundational layer before messaging, and applied to all tenant-scoped tables (bookings, threads, messages).
+> **CORRECTED (2026-06-27): this prerequisite never happened, and messaging shipped without it.**
+> The codebase scopes tenancy at the **application layer** — `CallerContext` + `services/tenancy.ts`
+> + `bookingReadScope`, hardened by the security audits `#1119` / `#1124` — and there is **zero
+> Postgres RLS** in the schema (no `crudPolicy` / `authUid` / `pgPolicy` anywhere). Slice 0 below
+> was dropped. Treat the rest of this section as a **future defense-in-depth option**, not a
+> prerequisite or current reality.
 
-**Approach:** Postgres-level RLS via Drizzle + Neon. Strictly enforced at the DB layer so no application bug can leak data across renters.
+**Original approach (not implemented):** Postgres-level RLS via Drizzle + Neon, enforced at the DB layer so no application bug can leak data across renters.
 
-### Why Postgres RLS, not application-level scoping
+### Why Postgres RLS was proposed (and the trade-off we actually took)
 
-Application-level (`WHERE renterId = ?` in every repository method) relies on every query getting it right. One missed filter = data leak. Postgres RLS enforces at the DB engine level — even a buggy query returns zero unauthorized rows.
+Application-level (`WHERE renterId = ?` / operator scoping in every repository method) relies on every query getting it right; one missed filter = data leak — which the audits `#1119`/`#1124` did catch and fix. Postgres RLS would enforce at the DB engine level instead. We chose application-level scoping (simpler on Workers + neon-http, no per-connection JWT-claim wiring) and accept the audit burden. RLS remains available later as belt-and-suspenders.
 
 ### Tables requiring RLS policies
 
@@ -72,13 +91,13 @@ Staff/admin role bypasses policies (needs to see all threads/bookings).
 
 **Requires:** Setting JWT claims (`SET LOCAL request.jwt.claims = ...`) on each DB connection. Neon supports this natively in transactions.
 
-### Implementation order
+### Implementation order (if ever adopted as hardening)
 
-RLS must land before messaging. Suggested:
+~~RLS must land before messaging.~~ Messaging already shipped on app-level scoping. If RLS is added later as defense-in-depth:
 1. Define Postgres roles (`authenticated`, `staff`, `admin`) in schema
 2. Add RLS policies to `bookings` table first (existing, easy to test)
 3. Verify with integration tests (renter A cannot see renter B's bookings)
-4. Extend to `threads` and `messages` tables as part of messaging slices
+4. Extend to `threads` and `messages` tables
 
 ---
 
@@ -146,13 +165,30 @@ MVP concrete: `GoogleTranslationProvider`. Provider-agnostic — swap to DeepL, 
 
 ## Implementation Slices
 
-| Slice | Scope | Depends on |
-|-------|-------|------------|
-| 0 | **RLS foundation** — Postgres roles, policies on bookings table, JWT claim wiring | Nothing |
-| 1 | Schema migration: threads + messages tables with RLS policies | Slice 0 |
-| 2 | API: auto-create thread on booking confirmation + send/list messages | Slice 1 |
-| 3 | API: unread counts (atomic increment on send, reset on read) + inbox list | Slice 2 |
-| 4 | Web: thread view + compose input on booking detail page | Slice 2 |
-| 5 | Web: inbox page with unread badges (both renter + staff sides) | Slice 3 |
-| 6 | Translation: provider interface + Google concrete + translate endpoint | Slice 2 |
-| 7 | Email notification to renter on first unread message (Resend) | Slice 2 |
+| Slice | Scope | Status |
+|-------|-------|--------|
+| 0 | ~~RLS foundation~~ | **DROPPED** — app-level scoping shipped instead (see RLS section) |
+| 1 | Schema migration: threads + messages tables | ✅ shipped (`#1032`) — without RLS policies |
+| 2 | API: auto-create thread on booking confirmation + send/list messages | ✅ shipped — `ensureThread` in `booking-creation.ts` post-commit |
+| 3 | API: unread counts (atomic increment on send, reset on read) + inbox list | ✅ shipped |
+| 4 | Web: thread view + compose input | ✅ shipped (renter) — `ConversationView` + `MessageComposer` |
+| 5 | Web: inbox page with unread badges (both renter + **operator** sides) | ⚠️ **renter only** — operator inbox NOT built |
+| 6 | Translation: provider interface + Google concrete + translate endpoint | ✅ shipped — `message-translation.ts`, JSONB cache |
+| 7 | Email notification on first unread (Resend) | ✅ renter side; ⚠️ operator side needs it (see Notification correction) |
+
+---
+
+## Current State vs Remaining (2026-06-27)
+
+**Shipped & working (gated off via `VITE_FEATURE_MESSAGING`, hidden in beta per `#1161`):**
+- DB schema + API: `POST/GET /threads`, `POST /threads/:id/messages`, `/read`, translation. Tenancy scoped at the app layer.
+- Threads **auto-create on booking** (`ensureThread`, idempotent on `booking:<id>`) — so there is deliberately **no "start a conversation" button**; a thread exists once a booking does.
+- Renter inbox (`/messages`), thread view (`/messages/$threadId`), reply composer, unread badge, first-unread email, inline translation.
+
+**Remaining before this can ship (the un-gate work):**
+1. **Operator inbox** — `/manage/messages` + `business-nav-items` entry + thread view/composer. Today operators have **no UI** and would only learn of a message by email. This is the headline gap.
+2. **Multi-tenant participants** — replace `DEFAULT_STAFF_ID` (`index.ts:342`) with operator-derived participants; any staff of `booking.operatorId` can read/reply (operator-as-org; settle jointly with reviews `#1158`).
+3. **Operator notifications** — first-unread email to the operator (see Notification correction).
+4. *(Optional, later)* Postgres RLS as defense-in-depth; standalone pre-booking inquiries (still **out** — instant-book + FAQ make them low-value).
+
+Tracking issue: see follow-up filed against `#1032`.

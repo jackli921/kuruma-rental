@@ -223,15 +223,19 @@ export function vehicleRowFromDetail(d: VehicleDetailResponse): OperatorFleetVeh
 
 // Minimal class list for the Add/Edit form's class dropdown — kept here so the
 // form slice (#526 follow-up) reads it without touching the classes feature
-// (#528). Operator-scoped server-side.
+// (#528). Operator callers stay tenant-scoped server-side; a bypass admin must
+// explicitly opt into the cross-operator read.
 
 export async function fetchVehicleClassOptions(): Promise<VehicleClassOption[]> {
-  // `/manage` is the tenant-scoped, session-authed class list (#528). The public
+  // `/manage` is the session-authed class list (#528). The public
   // `/vehicle-classes` is PUBLIC_CONTEXT 'all'-scope — it would leak every
-  // operator's classes into this operator's own form dropdown. Depends on #528
-  // (the /manage route) being on trunk first. The schema strips the full class
-  // rows down to {id,name} for the dropdown.
-  const res = await fetch(`${getApiBaseUrl()}/vehicle-classes/manage`, { credentials: 'include' })
+  // operator's classes into this operator's own form dropdown. `includeAll=true`
+  // satisfies the private route's explicit cross-operator read contract for
+  // bypass roles (else they 400); OPERATOR_* callers stay scoped by the API.
+  // Fleet is not a picker route, so there is no `?operator` to honor here.
+  const res = await fetch(`${getApiBaseUrl()}/vehicle-classes/manage?includeAll=true`, {
+    credentials: 'include',
+  })
   return unwrap(res, vehicleClassOptionsListSchema)
 }
 

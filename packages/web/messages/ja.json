@@ -249,6 +249,7 @@
         "previous": "前へ",
         "next": "次へ",
         "views": {
+          "timeline": "タイムライン",
           "day": "日",
           "week": "週",
           "month": "月"
@@ -256,6 +257,7 @@
         "noEventsInRange": "この期間に予約はありません",
         "showMore": "+{count}件",
         "viewFullDetails": "詳細を表示",
+        "unassigned": "車両未割当",
         "sidebar": {
           "title": "フィルター",
           "vehicles": {
@@ -821,6 +823,8 @@
       "retry": "再試行",
       "saved": "設定を保存しました。",
       "noOperatorContext": "このページは単一の事業者プロフィールを編集します。事業者の管理は管理ポータルをご利用ください。",
+      "pickOperatorPrompt": "上部の選択メニューから事業者を選ぶと、その設定を表示・編集できます。",
+      "editingAs": "{name} の設定を編集中",
       "form": {
         "name": "事業者名",
         "namePlaceholder": "例：大阪レンタカー",
@@ -879,6 +883,10 @@
       },
       "loadError": "チームを読み込めませんでした",
       "retry": "再試行"
+    },
+    "operatorContext": {
+      "label": "事業者",
+      "all": "すべての事業者"
     }
   },
   "messaging": {
@@ -1645,6 +1653,7 @@
   },
   "currency": {
     "label": "表示通貨",
+    "approximately": "約",
     "disclaimer": "目安です — ご請求は日本円（JPY）です",
     "asOf": "レート基準日 {date}"
   }
