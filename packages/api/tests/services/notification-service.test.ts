@@ -275,4 +275,27 @@ describe('NotificationService', () => {
     const result = await service.resend(op1Ctx, seeded.id)
     expect(result).toMatchObject({ ok: false, status: 502 })
   })
+
+  // #1205 slice 4: the operator new-message alert is keyed by msg:<messageId>, and
+  // its resend args (thread/message/sender) live on no notification_log column — so
+  // it cannot be reconstructed through the booking resend path. Resend must refuse
+  // it (422) instead of mis-routing it through processOne (which would 500 on the
+  // exhaustive booking switch). The alert re-arms on the renter's next message.
+  it('refuses to resend an OPERATOR_NEW_MESSAGE row (not booking-reconstructable)', async () => {
+    const sender = { send: vi.fn(async () => ({ providerMessageId: 'msg-1' })) }
+    const { service, logRepo, booking } = build(sender)
+    const seeded = await logRepo.upsertQueued({
+      bookingId: booking.id,
+      operatorId: OP1,
+      kind: 'OPERATOR_NEW_MESSAGE',
+      recipient: 'owner@op.com',
+      locale: 'ja',
+      idempotencyKey: 'msg:m-1',
+    })
+    await logRepo.claim(seeded.id)
+    await logRepo.markFailed(seeded.id, 'earlier failure')
+    const result = await service.resend(op1Ctx, seeded.id)
+    expect(result).toEqual({ ok: false, status: 422, error: 'Notification is not resendable' })
+    expect(sender.send).not.toHaveBeenCalled()
+  })
 })
