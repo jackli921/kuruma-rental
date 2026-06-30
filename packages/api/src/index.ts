@@ -397,7 +397,12 @@ export function createApp(overrides?: AppOverrides, repos: Repos = buildRepos(ov
   )
   const availabilityService = new AvailabilityService(availabilityRepo)
   const customerService = new CustomerService(customerRepo, userRepo, bookingRepo)
-  const messageService = new MessageService(threadRepo, messageRepo)
+  // #1205: a renter's first unread message (the operator-unread 0->1 transition)
+  // fires the operator alert through the SAME dispatcher as booking notifications
+  // (idempotent per messageId, recipient-resolved to the operator member set).
+  const messageService = new MessageService(threadRepo, messageRepo, (args) =>
+    notificationDispatcher.dispatchOperatorNewMessage(args).then(() => undefined),
+  )
   // Default signing key resolves from CONSENT_SIGNING_KEY (absent ⇒ unsigned rows).
   const consentService = new ConsentService(consentRepo)
   // #877 2b: pure policy gate over the same re-consent query; renter booking

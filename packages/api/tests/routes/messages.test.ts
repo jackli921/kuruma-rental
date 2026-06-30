@@ -22,7 +22,9 @@ let messageRepo: InMemoryMessageRepository
 function appAs(userId: string, role: TestRole = 'RENTER', operatorId?: string): Hono {
   const a = new Hono()
   a.use('*', testAuthMiddleware(userId, role, operatorId))
-  a.route('/', createMessageRoutes(new MessageService(threadRepo, messageRepo)))
+  // The operator new-message alert (#1205) is exercised in message.test.ts; the
+  // route tests only assert HTTP behavior, so a no-op alert port keeps them focused.
+  a.route('/', createMessageRoutes(new MessageService(threadRepo, messageRepo, async () => {})))
   return a
 }
 
