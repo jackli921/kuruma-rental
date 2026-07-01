@@ -37,7 +37,7 @@ export function EditFeeDialog({ fee, onOpenChange, classes }: EditFeeDialogProps
 
   return (
     <Dialog open={fee !== null} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[90vh] overflow-y-auto">
+      <DialogContent>
         <DialogHeader>
           <DialogTitle>{t('editFee')}</DialogTitle>
           <DialogDescription>{fee ? t(`type.${fee.feeType}`) : ''}</DialogDescription>

@@ -1,13 +1,13 @@
 import { Button } from '@/components/ui/button'
-import { isCancellationEnabled } from '@/vite/config/features'
+import { useFeatureFlag } from '@/vite/config'
 import { isOperatorSession } from '@/vite/guards'
 import { CancelBookingDialog } from '@/vite/operator-bookings/CancelBookingDialog'
 import { SubstituteVehicleDialog } from '@/vite/operator-bookings/SubstituteVehicleDialog'
 import {
-  OPERATOR_BOOKINGS_KEY,
   type OperatorBookingDetailDto,
   type OperatorBookingStatus,
   type SubstitutionCandidate,
+  invalidateBookingCaches,
   updateBookingStatus,
 } from '@/vite/operator-bookings/api'
 import type { Session } from '@/vite/session'
@@ -55,12 +55,13 @@ export function BookingActionsPanel({
   candidatesError = false,
 }: BookingActionsPanelProps) {
   const t = useTranslations('bookings.operator.detail')
+  const cancellationEnabled = useFeatureFlag('CANCELLATION')
   const queryClient = useQueryClient()
   const csrfToken = session?.csrfToken ?? ''
 
   const statusMutation = useMutation({
     mutationFn: (next: OperatorBookingStatus) => updateBookingStatus(detail.id, next, csrfToken),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: OPERATOR_BOOKINGS_KEY }),
+    onSuccess: () => invalidateBookingCaches(queryClient),
   })
 
   if (!isOperatorSession(session)) return null
@@ -92,7 +93,7 @@ export function BookingActionsPanel({
           {/* Only CONFIRMED bookings can be cancelled — the server 409s any other
               status. An ACTIVE (picked-up) trip is past the cancellation window, so
               we hide the button rather than offer a dead-end action. */}
-          {isCancellationEnabled() && detail.status === 'CONFIRMED' && (
+          {cancellationEnabled && detail.status === 'CONFIRMED' && (
             <CancelBookingDialog bookingId={detail.id} csrfToken={csrfToken} />
           )}
         </div>

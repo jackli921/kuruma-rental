@@ -1,4 +1,4 @@
-import { formatJstDateTimeLocal, parseJstDateTimeLocal } from '@/lib/datetime'
+import { formatJstDateTimeLocal, formatJstTime, parseJstDateTimeLocal } from '@/lib/datetime'
 import { describe, expect, it } from 'vitest'
 
 describe('parseJstDateTimeLocal', () => {
@@ -61,5 +61,25 @@ describe('formatJstDateTimeLocal', () => {
     const original = new Date('2026-07-01T01:00:00Z') // 10:00 JST
     const roundTripped = parseJstDateTimeLocal(formatJstDateTimeLocal(original))
     expect(roundTripped.getTime()).toBe(original.getTime())
+  })
+})
+
+describe('formatJstTime', () => {
+  // 05:30Z == 14:30 Asia/Tokyo — a PM instant that renders differently per locale,
+  // so it proves the JST pin AND that the passed locale (not the ambient default)
+  // drives the clock convention. This is the DRY-consolidated version of the pin
+  // that was copy-pasted across TodayPanel + formatDateTime (#1308 recurrence guard).
+  const AT = '2026-06-30T05:30:00.000Z'
+
+  it('renders 24-hour time for ja at the JST wall clock', () => {
+    expect(formatJstTime(AT, 'ja')).toBe('14:30')
+  })
+
+  it('renders 12-hour time (AM/PM) for en at the JST wall clock', () => {
+    expect(formatJstTime(AT, 'en')).toMatch(/2:30\s?PM/i)
+  })
+
+  it('pins to Asia/Tokyo regardless of the instant offset (00:30Z == 09:30 JST)', () => {
+    expect(formatJstTime('2026-06-30T00:30:00.000Z', 'ja')).toBe('09:30')
   })
 })
