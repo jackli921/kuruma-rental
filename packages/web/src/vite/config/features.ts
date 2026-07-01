@@ -72,3 +72,15 @@ export function isReviewsEnabled(): boolean {
 export function isFleetTimelineEnabled(): boolean {
   return isEnabled(import.meta.env.VITE_FEATURE_FLEET_TIMELINE)
 }
+
+/**
+ * Multi-currency indicative display (#1070): the navbar display-currency picker
+ * and the "≈ $X" ballpark notes shown beneath the authoritative JPY price. Gated
+ * OFF for the beta MVP — every price shows JPY alone, exactly as before the feature
+ * landed. The JPY charge is always authoritative, so gating removes only the
+ * secondary conversion display, never a price. Straight flag (public renter pages
+ * carry no viewer role).
+ */
+export function isMultiCurrencyEnabled(): boolean {
+  return isEnabled(import.meta.env.VITE_FEATURE_MULTI_CURRENCY)
+}

@@ -5,6 +5,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
+import { isMultiCurrencyEnabled } from '@/vite/config'
 import type { FxRates } from '@kuruma/shared/types/fx'
 import { Coins } from 'lucide-react'
 import { useTranslations } from 'use-intl'
@@ -27,6 +28,11 @@ export function currencyOptions(rates: FxRates | undefined): string[] {
 export function CurrencySelector() {
   const { currency, setCurrency, rates } = useCurrency()
   const t = useTranslations('currency')
+
+  // Multi-currency gated off (#1070) → no display-currency picker; prices show JPY
+  // alone. After the hooks so rules-of-hooks stays satisfied.
+  if (!isMultiCurrencyEnabled()) return null
+
   const options = currencyOptions(rates)
 
   return (

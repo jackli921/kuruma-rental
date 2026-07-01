@@ -1,5 +1,7 @@
 import {
   isCancellationEnabled,
+  isFleetTimelineEnabled,
+  isMultiCurrencyEnabled,
   isOperatorManualBookingEnabled,
   isOperatorSettingsEnabled,
   isOperatorTeamEnabled,
@@ -18,6 +20,8 @@ const FLAGS = [
   { name: 'VITE_FEATURE_OPERATOR_SETTINGS', read: isOperatorSettingsEnabled },
   { name: 'VITE_FEATURE_RENTER_DOCUMENTS', read: isRenterDocumentsEnabled },
   { name: 'VITE_FEATURE_REVIEWS', read: isReviewsEnabled },
+  { name: 'VITE_FEATURE_FLEET_TIMELINE', read: isFleetTimelineEnabled },
+  { name: 'VITE_FEATURE_MULTI_CURRENCY', read: isMultiCurrencyEnabled },
 ] as const
 
 describe('post-MVP feature flags', () => {
