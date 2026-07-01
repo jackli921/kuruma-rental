@@ -14,6 +14,7 @@ import {
   type OperatorFleetVehicle,
   type PhotoDeleteResult,
   type PhotoUploadResult,
+  type PickupLocationOption,
   type VehicleClassOption,
   type VehicleDetailBookingDto,
   type VehicleDetailResponse,
@@ -22,6 +23,7 @@ import {
   operatorFleetListSchema,
   photoDeleteResultSchema,
   photoUploadResultSchema,
+  pickupLocationOptionsListSchema,
   vehicleClassOptionsListSchema,
   vehicleDetailResponseSchema,
   vehicleRowListSchema,
@@ -51,6 +53,7 @@ export type {
   OperatorFleetVehicle,
   PhotoDeleteResult,
   PhotoUploadResult,
+  PickupLocationOption,
   VehicleClassOption,
   VehicleDetailBookingDto,
   VehicleDetailResponse,
@@ -251,5 +254,29 @@ export function vehicleClassOptionsQueryOptions() {
   return queryOptions({
     queryKey: ['operator-fleet', 'class-options'],
     queryFn: fetchVehicleClassOptions,
+  })
+}
+
+// Minimal pickup-location list for the Add/Edit form's location dropdown (#1262).
+// Kept fleet-local (a direct fetch, not an `operator-locations` import) to stay
+// inside the web module boundary — mirrors fetchVehicleClassOptions above. The
+// session-authed `/locations` list is operator-scoped server-side; a UI-created
+// vehicle needs a pickupLocationId or it never surfaces in storefront search.
+export async function fetchPickupLocationOptions(): Promise<PickupLocationOption[]> {
+  // `includeArchived=true` keeps a since-archived *assigned* location resolvable
+  // for the edit fallback (the form filters to ACTIVE for selectable options).
+  // `includeAll=true` satisfies the private route's explicit cross-operator read
+  // contract for bypass roles (else they 400); OPERATOR_* callers stay scoped by
+  // the API and it ignores the flag. Fleet is not a picker route — no `?operator`.
+  const res = await fetch(`${getApiBaseUrl()}/locations?includeArchived=true&includeAll=true`, {
+    credentials: 'include',
+  })
+  return unwrap(res, pickupLocationOptionsListSchema)
+}
+
+export function pickupLocationOptionsQueryOptions() {
+  return queryOptions({
+    queryKey: ['operator-fleet', 'location-options'],
+    queryFn: fetchPickupLocationOptions,
   })
 }
