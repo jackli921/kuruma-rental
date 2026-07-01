@@ -80,9 +80,11 @@ export type WithOperatorId<T> = T & { operatorId?: string }
 // dashboard, bookings, team) adds its route id here as it lands.
 export const OPERATOR_CONTEXT_ROUTE_IDS: ReadonlySet<string> = new Set([
   '/$locale/_business/manage/add-ons',
+  '/$locale/_business/manage/classes',
   '/$locale/_business/manage/fees',
   '/$locale/_business/manage/insurance',
   '/$locale/_business/manage/locations',
+  '/$locale/_business/manage/settings', // slice 2 — picker honored on settings
 ])
 
 // True when the active route is one that honors `?operator` (a descendant match

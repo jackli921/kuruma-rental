@@ -42,32 +42,50 @@ const validClass = {
 }
 
 describe('operator-classes api', () => {
-  it('fetches the operator-scoped manage list with includeArchived + cookie auth', async () => {
+  it('fetches the manage list with includeArchived + includeAll + cookie auth', async () => {
     const rows = [{ ...validClass, status: 'ARCHIVED' as const }]
     const fetchMock = stubFetch({ success: true, data: rows })
 
     const result = await fetchOperatorClasses({ includeArchived: true })
 
-    expect(fetchMock).toHaveBeenCalledWith('/api/vehicle-classes/manage?includeArchived=true', {
-      credentials: 'include',
-    })
+    expect(fetchMock).toHaveBeenCalledWith(
+      '/api/vehicle-classes/manage?includeArchived=true&includeAll=true',
+      {
+        credentials: 'include',
+      },
+    )
     expect(result).toEqual(rows)
   })
 
-  it('omits the includeArchived param by default', async () => {
+  it('sends includeAll by default so bypass readers make an explicit all-operators choice', async () => {
     const fetchMock = stubFetch({ success: true, data: [] })
     await fetchOperatorClasses()
-    expect(fetchMock).toHaveBeenCalledWith('/api/vehicle-classes/manage', {
+    expect(fetchMock).toHaveBeenCalledWith('/api/vehicle-classes/manage?includeAll=true', {
       credentials: 'include',
     })
   })
 
-  it('keys queryOptions on includeArchived so archived/active views never collide', () => {
+  it('scopes the read to operatorId and drops includeAll when an admin picks a tenant', async () => {
+    const fetchMock = stubFetch({ success: true, data: [] })
+    await fetchOperatorClasses({ includeArchived: true }, 'op_9')
+
+    const [url] = fetchMock.mock.calls[0] as [string, RequestInit]
+    expect(url).toContain('operatorId=op_9')
+    expect(url).toContain('includeArchived=true')
+    expect(url).not.toContain('includeAll')
+  })
+
+  it('keys queryOptions on includeArchived and picked operator so scoped views never collide', () => {
     expect(operatorClassesQueryOptions({ includeArchived: true }).queryKey).toEqual([
       'operator-classes',
       true,
+      'all',
     ])
-    expect(operatorClassesQueryOptions().queryKey).toEqual(['operator-classes', false])
+    expect(operatorClassesQueryOptions({}, 'op_9').queryKey).toEqual([
+      'operator-classes',
+      false,
+      'op_9',
+    ])
   })
 
   it('create POSTs to the collection with cookie auth and JSON body', async () => {

@@ -13,6 +13,7 @@ import {
   toCallerContext,
 } from '../middleware/auth'
 import { PG_ERROR, pgErrorCode } from '../pg-errors'
+import type { VehicleClassFilters } from '../services/filters'
 import type { VehicleClassService, VehicleClassUpdate } from '../services/vehicle-class'
 import type { VehicleClassAvailabilityService } from '../services/vehicle-class-availability'
 import type { ResolveWriteOperatorId } from '../tenancy'
@@ -57,7 +58,7 @@ export function createVehicleClassRoutes(
         // includeArchived params are ignored here — archived inventory is never
         // publicly listable (#395). Admin-scoped archived views go through the
         // protected endpoints.
-        const classes = await service.findAll(PUBLIC_CONTEXT)
+        const classes = await service.findPublicCatalog(PUBLIC_CONTEXT)
         // Catalog changes minutes-to-hours, not per-request. 60s at the edge
         // cuts origin traffic ~95% while keeping propagation fast enough that
         // owner edits (rate change, name fix) are visible within a minute.
@@ -104,10 +105,18 @@ export function createVehicleClassRoutes(
         // non-operator 'all' scope would leak every tenant's classes + archived
         // rows to any cookie-authed caller hitting the source-agnostic API.
         requireManagementRead(ctx)
+        const filters: VehicleClassFilters = {}
+        const status = c.req.query('status')
+        if (status === 'ACTIVE' || status === 'ARCHIVED') filters.status = status
         const includeArchived = c.req.query('includeArchived') === 'true'
+        if (includeArchived) filters.includeArchived = true
         const classes = await service.findAll(
           ctx,
-          includeArchived ? { includeArchived } : undefined,
+          {
+            operatorId: c.req.query('operatorId'),
+            includeAll: c.req.query('includeAll') === 'true',
+          },
+          filters,
         )
         return ok(c, classes)
       })

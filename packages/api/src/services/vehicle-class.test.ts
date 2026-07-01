@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { SYSTEM_CONTEXT } from '../middleware/auth'
+import { SYSTEM_CONTEXT, ScopeRequiredError } from '../middleware/auth'
 import {
   InMemoryBookingRepository,
   InMemoryVehicleClassRepository,
@@ -97,5 +97,43 @@ describe('VehicleClassService — cross-tenant photo-spoof guard (#967)', () => 
     expect(result.ok).toBe(true)
     if (!result.ok) return
     expect(result.vehicleClass.photos).toEqual(['https://images.unsplash.com/photo-456?w=800'])
+  })
+})
+
+describe('VehicleClassService — cross-operator manage reads', () => {
+  it('requires a scope choice for all-scope callers', async () => {
+    const { service } = setup()
+
+    await expect(
+      service.findAll(SYSTEM_CONTEXT, { includeAll: false }, { includeArchived: true }),
+    ).rejects.toBeInstanceOf(ScopeRequiredError)
+  })
+
+  it('filters all-scope manage reads by the requested operator', async () => {
+    const { service } = setup()
+    await service.create(SYSTEM_CONTEXT, classData({ operatorId: 'op_a', slug: 'a-compact' }))
+    await service.create(SYSTEM_CONTEXT, classData({ operatorId: 'op_b', slug: 'b-compact' }))
+
+    const rows = await service.findAll(
+      SYSTEM_CONTEXT,
+      { operatorId: 'op_b', includeAll: false },
+      { includeArchived: true },
+    )
+
+    expect(rows.map((r) => r.slug)).toEqual(['b-compact'])
+  })
+
+  it('keeps explicit includeAll available for oversight reads', async () => {
+    const { service } = setup()
+    await service.create(SYSTEM_CONTEXT, classData({ operatorId: 'op_a', slug: 'a-compact' }))
+    await service.create(SYSTEM_CONTEXT, classData({ operatorId: 'op_b', slug: 'b-compact' }))
+
+    const rows = await service.findAll(
+      SYSTEM_CONTEXT,
+      { includeAll: true },
+      { includeArchived: true },
+    )
+
+    expect(rows.map((r) => r.slug).sort()).toEqual(['a-compact', 'b-compact'])
   })
 })

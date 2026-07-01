@@ -79,9 +79,27 @@ describe('useIsOperatorContextRoute', () => {
     expect(result.current).toBe(true)
   })
 
+  it('is true on the classes page because it honors ?operator', () => {
+    h.matches = [
+      { routeId: '/$locale/_business' },
+      { routeId: '/$locale/_business/manage/classes' },
+    ]
+    const { result } = renderHook(() => useIsOperatorContextRoute())
+    expect(result.current).toBe(true)
+  })
+
   it('is false on an unscoped business route that does not honor ?operator', () => {
     h.matches = [{ routeId: '/$locale/_business' }, { routeId: '/$locale/_business/dashboard' }]
     const { result } = renderHook(() => useIsOperatorContextRoute())
     expect(result.current).toBe(false)
+  })
+
+  it('is true on the settings route (slice 2 honors ?operator)', () => {
+    h.matches = [
+      { routeId: '/$locale/_business' },
+      { routeId: '/$locale/_business/manage/settings' },
+    ]
+    const { result } = renderHook(() => useIsOperatorContextRoute())
+    expect(result.current).toBe(true)
   })
 })

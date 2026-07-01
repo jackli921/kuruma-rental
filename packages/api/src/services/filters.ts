@@ -22,4 +22,5 @@ export type {
   InsuranceOptionFilters,
   LocationFilters,
   NotificationLogFilters,
+  VehicleClassFilters,
 } from '../repositories/types'

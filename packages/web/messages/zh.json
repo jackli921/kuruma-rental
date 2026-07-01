@@ -823,6 +823,8 @@
       "retry": "重试",
       "saved": "设置已保存。",
       "noOperatorContext": "此页面用于编辑单个运营商的资料。请使用管理门户来管理运营商。",
+      "pickOperatorPrompt": "请从上方的选择器中选择一个运营商，以查看并编辑其设置。",
+      "editingAs": "正在编辑 {name} 的设置",
       "form": {
         "name": "商家名称",
         "namePlaceholder": "例如：大阪租车",
@@ -884,7 +886,8 @@
     },
     "operatorContext": {
       "label": "运营商",
-      "all": "所有运营商"
+      "all": "所有运营商",
+      "badge": "运营商：{name}"
     }
   },
   "messaging": {
