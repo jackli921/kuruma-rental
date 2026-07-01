@@ -1,8 +1,9 @@
 import { Button } from '@/components/ui/button'
+import { formatJstTime } from '@/lib/datetime'
 import { isOperatorSession } from '@/vite/guards'
 import {
-  OPERATOR_BOOKINGS_KEY,
   type OperatorBookingStatus,
+  invalidateBookingCaches,
   updateBookingStatus,
 } from '@/vite/operator-bookings/api'
 import type { OperatorFleetVehicle } from '@/vite/operator-fleet/api'
@@ -13,7 +14,6 @@ import { Link } from '@tanstack/react-router'
 import { AlertTriangle, LogIn, LogOut, type LucideIcon } from 'lucide-react'
 import { useMemo } from 'react'
 import { useTranslations } from 'use-intl'
-import { OPERATOR_OVERVIEW_QUERY_KEY } from './api'
 
 interface TodayPanelProps {
   readonly today: TodayBuckets
@@ -40,19 +40,6 @@ interface SectionSpec {
   readonly emptyKey: 'emptyPickups' | 'emptyReturns' | 'emptyOverdue'
 }
 
-// The buckets are JST-day-scoped server-side (a row lands in "today" by its JST
-// calendar day), so pin the time to Asia/Tokyo — otherwise an off-JST viewer sees
-// a time (and apparent day) that disagrees with the bucket it sits in. Format in
-// the active locale so the clock convention (24h ja/zh vs 12h en) matches the rest
-// of the UI rather than following the viewer's browser default.
-function formatTime(iso: string, locale: string): string {
-  return new Date(iso).toLocaleTimeString(locale, {
-    hour: '2-digit',
-    minute: '2-digit',
-    timeZone: 'Asia/Tokyo',
-  })
-}
-
 // #1102: the operator's daily dispatch board — today's pickups, returns, and any
 // overdue vehicles, each a clickable row (deep-links to the trip detail) with a
 // one-click advance (mark picked-up / returned). Presentational: buckets + fleet
@@ -69,13 +56,11 @@ export function TodayPanel({ today, vehicles, session, locale }: TodayPanelProps
   const statusMutation = useMutation({
     mutationFn: ({ id, status }: { id: string; status: OperatorBookingStatus }) =>
       updateBookingStatus(id, status, csrfToken),
-    // The advance changes a booking's lifecycle status, so refresh the today
-    // buckets AND the operator-bookings prefix — whose documented cascade (#616)
-    // covers the calendar, list and detail entries in one call.
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: OPERATOR_OVERVIEW_QUERY_KEY })
-      queryClient.invalidateQueries({ queryKey: OPERATOR_BOOKINGS_KEY })
-    },
+    // The advance changes a booking's lifecycle status, so refresh both the
+    // dashboard overview (today buckets + counts) and the operator-bookings prefix
+    // — whose documented cascade (#616) covers the calendar, list and detail
+    // entries in one call. Both live behind invalidateBookingCaches (#1099 Theme 4).
+    onSuccess: () => invalidateBookingCaches(queryClient),
   })
 
   const vehicleNamesById = useMemo(() => new Map(vehicles.map((v) => [v.id, v.name])), [vehicles])
@@ -144,7 +129,7 @@ export function TodayPanel({ today, vehicles, session, locale }: TodayPanelProps
                     >
                       <span className="flex items-baseline gap-1.5">
                         <span className="font-medium tabular-nums">
-                          {formatTime(r[timeField], locale)}
+                          {formatJstTime(r[timeField], locale)}
                         </span>
                         <span className="truncate">{r.renterName ?? t('walkIn')}</span>
                       </span>

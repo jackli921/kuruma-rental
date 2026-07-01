@@ -140,7 +140,7 @@ describe('ManualBookingDialog', () => {
     })
   })
 
-  it('invalidates the operator-bookings queries and closes on success', async () => {
+  it('invalidates the booking + overview caches and closes on success', async () => {
     const user = userEvent.setup({ delay: null })
     const { onOpenChange, queryClient } = renderDialog({ initialRange })
     const invalidate = vi.spyOn(queryClient, 'invalidateQueries')
@@ -150,7 +150,10 @@ describe('ManualBookingDialog', () => {
     await user.click(screen.getByRole('button', { name: c.submit }))
 
     await waitFor(() => expect(onOpenChange).toHaveBeenCalledWith(false))
+    // invalidateBookingCaches: the new booking appears on the calendar (prefix
+    // cascade) and the dashboard overview counts refresh (#1099 Theme 4).
     expect(invalidate).toHaveBeenCalledWith({ queryKey: ['operator-bookings'] })
+    expect(invalidate).toHaveBeenCalledWith({ queryKey: ['operator-overview'] })
   })
 
   it('disables submit until vehicle, location, times, name and phone are all present', async () => {

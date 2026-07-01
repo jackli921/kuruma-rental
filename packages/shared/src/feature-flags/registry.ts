@@ -8,20 +8,59 @@
 // One row per existing VITE_FEATURE_* flag. VITE_SEARCH_MAP_ENABLED is not a
 // VITE_FEATURE_ flag and stays out of the runtime control plane.
 // See docs/plans/2026-06-30-runtime-feature-flags.md.
+//
+// `runtimeControlled` = at least one consumer reads the flag via useFeatureFlag(),
+// so a dashboard toggle takes effect live. Flip it to true in the same slice that
+// migrates the flag off the build-time isXEnabled() reader (#1322); the admin page
+// badges a not-yet-migrated flag as "build-time only" so its toggle isn't mistaken
+// for a no-op.
 export const FEATURE_FLAGS = {
-  CANCELLATION: { env: 'VITE_FEATURE_CANCELLATION', label: 'Self-service cancellation' },
+  CANCELLATION: {
+    env: 'VITE_FEATURE_CANCELLATION',
+    label: 'Self-service cancellation',
+    runtimeControlled: true,
+  },
   OPERATOR_MANUAL_BOOKING: {
     env: 'VITE_FEATURE_OPERATOR_MANUAL_BOOKING',
     label: 'Operator manual booking',
+    runtimeControlled: false,
   },
-  OPERATOR_TEAM: { env: 'VITE_FEATURE_OPERATOR_TEAM', label: 'Operator team management' },
-  OPERATOR_SETTINGS: { env: 'VITE_FEATURE_OPERATOR_SETTINGS', label: 'Operator settings' },
-  RENTER_DOCUMENTS: { env: 'VITE_FEATURE_RENTER_DOCUMENTS', label: 'Renter document upload' },
-  MESSAGING: { env: 'VITE_FEATURE_MESSAGING', label: 'Renter–operator messaging' },
-  OPERATOR_BLOCKS: { env: 'VITE_FEATURE_OPERATOR_BLOCKS', label: 'Maintenance blocks' },
-  REVIEWS: { env: 'VITE_FEATURE_REVIEWS', label: 'Reviews & ratings' },
-  FLEET_TIMELINE: { env: 'VITE_FEATURE_FLEET_TIMELINE', label: 'Fleet timeline board' },
-  MULTI_CURRENCY: { env: 'VITE_FEATURE_MULTI_CURRENCY', label: 'Multi-currency display' },
+  OPERATOR_TEAM: {
+    env: 'VITE_FEATURE_OPERATOR_TEAM',
+    label: 'Operator team management',
+    runtimeControlled: false,
+  },
+  OPERATOR_SETTINGS: {
+    env: 'VITE_FEATURE_OPERATOR_SETTINGS',
+    label: 'Operator settings',
+    runtimeControlled: false,
+  },
+  RENTER_DOCUMENTS: {
+    env: 'VITE_FEATURE_RENTER_DOCUMENTS',
+    label: 'Renter document upload',
+    runtimeControlled: false,
+  },
+  MESSAGING: {
+    env: 'VITE_FEATURE_MESSAGING',
+    label: 'Renter–operator messaging',
+    runtimeControlled: false,
+  },
+  OPERATOR_BLOCKS: {
+    env: 'VITE_FEATURE_OPERATOR_BLOCKS',
+    label: 'Maintenance blocks',
+    runtimeControlled: false,
+  },
+  REVIEWS: { env: 'VITE_FEATURE_REVIEWS', label: 'Reviews & ratings', runtimeControlled: true },
+  FLEET_TIMELINE: {
+    env: 'VITE_FEATURE_FLEET_TIMELINE',
+    label: 'Fleet timeline board',
+    runtimeControlled: false,
+  },
+  MULTI_CURRENCY: {
+    env: 'VITE_FEATURE_MULTI_CURRENCY',
+    label: 'Multi-currency display',
+    runtimeControlled: true,
+  },
 } as const
 
 export type FeatureFlagKey = keyof typeof FEATURE_FLAGS
