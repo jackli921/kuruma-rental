@@ -141,7 +141,7 @@ beforeAll(async () => {
   namba = await locationRepo.create(base(opAId, `Namba ${uniq}`))
   gion = await locationRepo.create(base(opBId, `Gion ${uniq}`))
   closed = await locationRepo.create(base(opAId, `Closed ${uniq}`))
-  await locationRepo.archive(closed.id)
+  await locationRepo.archive(SYSTEM_CONTEXT, closed.id)
 
   compactAId = await seedClass(opAId, 'Compact', 'CCAR')
   vanAId = await seedClass(opAId, 'Minivan', 'MVAR')

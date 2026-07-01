@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import { SYSTEM_CONTEXT } from '../../middleware/auth'
 import type { InsuranceOption } from '../../stores'
 import { InMemoryInsuranceOptionRepository } from './insurance-option'
 
@@ -18,7 +19,10 @@ describe('InMemoryInsuranceOptionRepository.update — operatorId is an immutabl
     const repo = new InMemoryInsuranceOptionRepository()
     const created = await repo.create(seed('op_a'))
 
-    const updated = await repo.update(created.id, { operatorId: 'op_b', dailyPriceJpy: 2000 })
+    const updated = await repo.update(SYSTEM_CONTEXT, created.id, {
+      operatorId: 'op_b',
+      dailyPriceJpy: 2000,
+    })
 
     expect(updated?.operatorId).toBe('op_a')
     expect(updated?.dailyPriceJpy).toBe(2000)

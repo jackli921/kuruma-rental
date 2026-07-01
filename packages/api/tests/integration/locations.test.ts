@@ -1,7 +1,7 @@
 import { locations, operators, regions } from '@kuruma/shared/db/schema'
 import { eq, inArray } from 'drizzle-orm'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
-import { type CallerContext, SYSTEM_CONTEXT } from '../../src/middleware/auth'
+import { type CallerContext, ForbiddenError, SYSTEM_CONTEXT } from '../../src/middleware/auth'
 import { pgErrorCode } from '../../src/pg-errors'
 import { DrizzleLocationRepository, DrizzleRegionRepository } from '../../src/repositories/drizzle'
 import { DrizzleBookingRepository } from '../../src/repositories/drizzle/booking'
@@ -155,7 +155,7 @@ describe('archiving a location frees its name for re-creation (#410)', () => {
 
   it('re-creates a name after the prior location is archived', async () => {
     const first = await repo.create(locationInput(opId, 'Dotonbori'))
-    await repo.archive(first.id)
+    await repo.archive(SYSTEM_CONTEXT, first.id)
     const second = await repo.create(locationInput(opId, 'Dotonbori'))
     expect(second.id).not.toBe(first.id)
     expect(second.status).toBe('ACTIVE')
@@ -169,10 +169,12 @@ describe('archiving a location frees its name for re-creation (#410)', () => {
   })
 })
 
-// Location writes (update/archive) take no ctx at the repo; the tenant seal
-// lives in LocationService via its caller-scoped findById. This probes that
-// seal against real Postgres: operator B must not mutate operator A's location.
-// Resolves to 404 (no cross-tenant existence leak), leaving the row untouched.
+// Location writes are tenant-scoped at BOTH layers now: LocationService gates
+// first via a caller-scoped findById, and the repo update/archive scope their
+// own WHERE (#1288). This probes the SERVICE seal against real Postgres:
+// operator B must not mutate operator A's location — resolves to 404 (no
+// cross-tenant existence leak), leaving the row untouched. The repo-level no-op
+// (bypassing the service) is proven separately below (#1288).
 describe('cross-operator location WRITE denial (service seal, #387)', () => {
   const repo = new DrizzleLocationRepository(db)
   // Geocoding is irrelevant to this tenant-seal probe; stub it (returns notFound).
@@ -260,7 +262,7 @@ describe('location update() cannot re-home a row across operators (#1279)', () =
   })
 
   it('ignores operatorId in the payload while applying other fields', async () => {
-    const updated = await repo.update(locationA.id, {
+    const updated = await repo.update(ctxFor(opAId), locationA.id, {
       operatorId: opBId,
       defaultTurnaroundMinutes: 60,
     })
@@ -270,5 +272,62 @@ describe('location update() cannot re-home a row across operators (#1279)', () =
     // Persisted, not just the returned row: re-read across tenants.
     const reread = await repo.findById(SYSTEM_CONTEXT, locationA.id)
     expect(reread?.operatorId).toBe(opAId)
+  })
+})
+
+// #1288: the repo update()/archive() scope their WHERE by tenant, so a caller
+// reaching the repo WITHOUT the service's findById guard (the IDOR vector this
+// closes) still can't mutate another operator's row. Probed directly at the repo
+// with a cross-tenant ctx against real Postgres: the write is a silent no-op
+// (undefined), the row untouched. The own-tenant case still succeeds.
+describe('location repo writes stay tenant-scoped when the service is bypassed (#1288)', () => {
+  const repo = new DrizzleLocationRepository(db)
+  const uniq = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
+  const opAId = `op_locws_a_${uniq}`
+  const opBId = `op_locws_b_${uniq}`
+  let locationA: Location
+
+  beforeAll(async () => {
+    await db.insert(operators).values([
+      { id: opAId, slug: `locws-a-${uniq}`, name: 'LocWS Operator A' },
+      { id: opBId, slug: `locws-b-${uniq}`, name: 'LocWS Operator B' },
+    ])
+    locationA = await repo.create(locationInput(opAId, 'Shinsaibashi'))
+  })
+
+  afterAll(async () => {
+    await db.delete(locations).where(inArray(locations.operatorId, [opAId, opBId]))
+    await db.delete(operators).where(inArray(operators.id, [opAId, opBId]))
+  })
+
+  it('operator B update() on operator A location is a no-op (undefined, row untouched)', async () => {
+    expect(await repo.update(ctxFor(opBId), locationA.id, { name: 'hijacked' })).toBeUndefined()
+    expect(await repo.findById(SYSTEM_CONTEXT, locationA.id)).toMatchObject({
+      name: 'Shinsaibashi',
+    })
+  })
+
+  it('operator B archive() on operator A location is a no-op (undefined, still ACTIVE)', async () => {
+    expect(await repo.archive(ctxFor(opBId), locationA.id)).toBeUndefined()
+    expect(await repo.findById(SYSTEM_CONTEXT, locationA.id)).toMatchObject({ status: 'ACTIVE' })
+  })
+
+  it('operator A can update its own location at the repo (own-tenant still works)', async () => {
+    const updated = await repo.update(ctxFor(opAId), locationA.id, {
+      defaultTurnaroundMinutes: 120,
+    })
+    expect(updated).toMatchObject({ id: locationA.id, defaultTurnaroundMinutes: 120 })
+  })
+
+  it('a RENTER write is Forbidden at the repo (fleet-write guard, mirrors vehicle.ts)', async () => {
+    const renter: CallerContext = { userId: 'r', role: 'RENTER', bypassScope: false }
+    await expect(repo.update(renter, locationA.id, { name: 'x' })).rejects.toBeInstanceOf(
+      ForbiddenError,
+    )
+    await expect(repo.archive(renter, locationA.id)).rejects.toBeInstanceOf(ForbiddenError)
+    // Row untouched by the rejected renter write (still the own-tenant value).
+    expect(await repo.findById(SYSTEM_CONTEXT, locationA.id)).toMatchObject({
+      defaultTurnaroundMinutes: 120,
+    })
   })
 })
