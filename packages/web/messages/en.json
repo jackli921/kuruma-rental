@@ -1260,7 +1260,8 @@
     "cta": {
       "heading": "Ready to explore Japan?",
       "description": "Browse our fleet and book your car in minutes. Free cancellation up to 72 hours before pickup.",
-      "button": "Find your car"
+      "button": "Find your car",
+      "operatorCta": "List your business"
     },
     "footer": {
       "copyright": "Kuruma Rental. All rights reserved.",

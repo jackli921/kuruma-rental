@@ -1260,7 +1260,8 @@
     "cta": {
       "heading": "准备探索日本了吗？",
       "description": "浏览车队，几分钟内预订。取车前72小时免费取消。",
-      "button": "找到您的车"
+      "button": "找到您的车",
+      "operatorCta": "登记您的业务"
     },
     "footer": {
       "copyright": "库鲁马租车 版权所有。",
