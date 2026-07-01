@@ -1,6 +1,6 @@
 {
-  "id": "a1e20bde-127d-4e8e-816f-06f238dd1300",
-  "prevId": "ab6345bb-ad49-41db-8566-7f1a46ba2082",
+  "id": "6b36f251-3535-48e7-bda3-a753e4f22ecb",
+  "prevId": "a1e20bde-127d-4e8e-816f-06f238dd1300",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -5244,6 +5244,44 @@
           "value": "\"reviews\".\"subjectClassId\" IS NULL OR \"reviews\".\"subject\" = 'VEHICLE'"
         }
       },
+      "isRLSEnabled": false
+    },
+    "public.feature_flags": {
+      "name": "feature_flags",
+      "schema": "",
+      "columns": {
+        "key": {
+          "name": "key",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "enabled": {
+          "name": "enabled",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "updatedAt": {
+          "name": "updatedAt",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updatedBy": {
+          "name": "updatedBy",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
       "isRLSEnabled": false
     }
   },

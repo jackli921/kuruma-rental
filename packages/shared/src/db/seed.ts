@@ -3,6 +3,7 @@ import type { getDb } from './index'
 import { parsePlatformAdminEmails } from './platform-admins'
 import {
   addOnOptions,
+  addOnTemplates,
   classRatePlans,
   consentDocuments,
   feeSchedules,
@@ -17,6 +18,7 @@ import {
 } from './schema'
 import {
   DEMO_ADD_ON_OPTIONS,
+  DEMO_ADD_ON_TEMPLATES,
   DEMO_CLASS_RATE_PLANS,
   DEMO_CONSENT_DOCUMENTS,
   DEMO_FEE_SCHEDULES,
@@ -288,6 +290,29 @@ export async function seed(db: ReturnType<typeof getDb>) {
           name: addOn.name,
           description: addOn.description,
           priceJpy: addOn.priceJpy,
+          updatedAt: now,
+        },
+      })
+  }
+
+  // 6c. Add-on templates (catalog i18n). Platform-owned, pre-translated names the
+  // operator picks from — global (no operatorId). The id is derived from the key
+  // so a re-seed upserts on the natural key (add_on_templates_key_unique).
+  console.log(`Seeding ${DEMO_ADD_ON_TEMPLATES.length} add-on templates...`)
+  for (const template of DEMO_ADD_ON_TEMPLATES) {
+    await db
+      .insert(addOnTemplates)
+      .values({
+        id: seedId(`tmpl_${template.key}`),
+        key: template.key,
+        name: template.name,
+        description: template.description,
+      })
+      .onConflictDoUpdate({
+        target: addOnTemplates.key,
+        set: {
+          name: template.name,
+          description: template.description,
           updatedAt: now,
         },
       })

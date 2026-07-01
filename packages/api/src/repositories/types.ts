@@ -158,8 +158,10 @@ export interface LocationRepository {
       regionId?: string | null
     },
   ): Promise<Location>
-  update(id: string, data: Partial<Location>): Promise<Location | undefined>
-  archive(id: string): Promise<Location | undefined>
+  // #1288: ctx-scoped writes — the tenant predicate is enforced in the WHERE
+  // clause (defense-in-depth behind the service's scoped findById).
+  update(ctx: CallerContext, id: string, data: Partial<Location>): Promise<Location | undefined>
+  archive(ctx: CallerContext, id: string): Promise<Location | undefined>
 }
 
 export interface InsuranceOptionFilters {
@@ -198,8 +200,12 @@ export interface InsuranceOptionRepository {
    */
   findActiveByOperator(operatorId: string): Promise<InsuranceOption[]>
   create(data: Omit<InsuranceOption, 'id' | 'createdAt' | 'updatedAt'>): Promise<InsuranceOption>
-  update(id: string, data: Partial<InsuranceOption>): Promise<InsuranceOption | undefined>
-  archive(id: string): Promise<InsuranceOption | undefined>
+  update(
+    ctx: CallerContext,
+    id: string,
+    data: Partial<InsuranceOption>,
+  ): Promise<InsuranceOption | undefined>
+  archive(ctx: CallerContext, id: string): Promise<InsuranceOption | undefined>
 }
 
 export interface AddOnFilters {
@@ -235,8 +241,8 @@ export interface AddOnRepository {
    */
   findActiveByOperator(operatorId: string): Promise<AddOn[]>
   create(data: Omit<AddOn, 'id' | 'createdAt' | 'updatedAt'>): Promise<AddOn>
-  update(id: string, data: Partial<AddOn>): Promise<AddOn | undefined>
-  archive(id: string): Promise<AddOn | undefined>
+  update(ctx: CallerContext, id: string, data: Partial<AddOn>): Promise<AddOn | undefined>
+  archive(ctx: CallerContext, id: string): Promise<AddOn | undefined>
 }
 
 // #521 provider authorization. Not ctx-scoped: the admin endpoint

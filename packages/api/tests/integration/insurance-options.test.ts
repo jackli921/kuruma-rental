@@ -138,7 +138,7 @@ describe('insurance-option FK + active-name uniqueness (Drizzle)', () => {
 
   it('archiving an option then creating a new one with the same name succeeds (name freed)', async () => {
     const created = await repo.create(optionInput(opAId, 'Seasonal'))
-    await repo.archive(created.id)
+    await repo.archive(ctxFor(opAId), created.id)
     const recreated = await repo.create(optionInput(opAId, 'Seasonal'))
     expect(recreated.name).toBe('Seasonal')
     expect(recreated.status).toBe('ACTIVE')
@@ -190,7 +190,10 @@ describe('cross-operator insurance-option WRITE denial (service seal, #404)', ()
   it('[#1271] a direct repo update cannot migrate the row to another operator', async () => {
     // Repo-layer anchor: even a caller that bypasses the service scope check (a
     // future second caller) cannot repoint operatorId via the update payload.
-    const updated = await repo.update(optionA.id, { operatorId: opBId, dailyPriceJpy: 4321 })
+    const updated = await repo.update(ctxFor(opAId), optionA.id, {
+      operatorId: opBId,
+      dailyPriceJpy: 4321,
+    })
     expect(updated?.operatorId).toBe(opAId)
     expect(updated?.dailyPriceJpy).toBe(4321)
     expect(await repo.findById(SYSTEM_CONTEXT, optionA.id)).toMatchObject({

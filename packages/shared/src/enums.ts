@@ -100,6 +100,16 @@ export type PaymentRefundStatus = (typeof PAYMENT_REFUND_STATUSES)[number]
 export const ADD_ON_STATUSES = ['ACTIVE', 'ARCHIVED'] as const
 export type AddOnStatus = (typeof ADD_ON_STATUSES)[number]
 
+// Lifecycle of a platform-owned catalog TEMPLATE (add_on_templates /
+// insurance_templates — the pre-translated names operators pick from; catalog
+// i18n). One status set shared by both template tables, distinct from the
+// operator-owned add_on_options/insurance_options status: a template is ACTIVE
+// (selectable) or ARCHIVED (superseded / minted from an un-translated legacy row,
+// hidden from the picker). ARCHIVED templates still resolve for bookings that
+// reference them, so this is not a hard delete.
+export const CATALOG_TEMPLATE_STATUSES = ['ACTIVE', 'ARCHIVED'] as const
+export type CatalogTemplateStatus = (typeof CATALOG_TEMPLATE_STATUSES)[number]
+
 export const DOCUMENT_TYPES = ['IDP', 'PASSPORT'] as const
 export type DocumentType = (typeof DOCUMENT_TYPES)[number]
 

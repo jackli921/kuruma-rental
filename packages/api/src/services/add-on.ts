@@ -74,7 +74,7 @@ export class AddOnService {
     }
 
     try {
-      const updated = await this.repo.update(id, data)
+      const updated = await this.repo.update(ctx, id, data)
       if (!updated) return { ok: false, error: NOT_FOUND_MESSAGE, status: 404 }
       return { ok: true, option: updated }
     } catch (err) {
@@ -91,7 +91,7 @@ export class AddOnService {
     const existing = await this.repo.findById(ctx, id)
     if (!existing) return { ok: false, error: NOT_FOUND_MESSAGE, status: 404 }
 
-    const archived = await this.repo.archive(id)
+    const archived = await this.repo.archive(ctx, id)
     if (!archived) return { ok: false, error: NOT_FOUND_MESSAGE, status: 404 }
     return { ok: true, option: archived }
   }
