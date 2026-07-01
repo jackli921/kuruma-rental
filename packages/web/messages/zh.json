@@ -205,6 +205,20 @@
         "action": "查看车队"
       }
     },
+    "today": {
+      "title": "今日",
+      "pickups": "取车",
+      "returns": "还车",
+      "overdue": "逾期",
+      "emptyPickups": "今日暂无取车安排。",
+      "emptyReturns": "今日暂无还车安排。",
+      "emptyOverdue": "没有逾期车辆。",
+      "markPickedUp": "标记为已取车",
+      "markReturned": "标记为已还车",
+      "walkIn": "到店客户",
+      "noVehicle": "未分配车辆",
+      "actionError": "更新失败，请重试。"
+    },
     "stats": {
       "totalBookings": "总预订数",
       "activeVehicles": "运营中车辆",
