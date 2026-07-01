@@ -1185,8 +1185,8 @@
       }
     },
     "featured": {
-      "heading": "热门车辆",
-      "subheading": "旅行者的热门之选",
+      "heading": "按类别浏览",
+      "subheading": "找到适合您旅程的车辆",
       "viewAll": "查看全部",
       "currency": "¥{price}",
       "perDay": "天"
@@ -1219,7 +1219,10 @@
     },
     "footer": {
       "copyright": "库鲁马租车 版权所有。",
-      "tagline": "日本大阪租车服务"
+      "tagline": "日本大阪租车服务",
+      "browse": "浏览车辆",
+      "categories": "车辆类别",
+      "signIn": "登录"
     }
   },
   "search": {

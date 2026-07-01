@@ -1185,8 +1185,8 @@
       }
     },
     "featured": {
-      "heading": "人気の車両",
-      "subheading": "旅行者に選ばれている車",
+      "heading": "カテゴリーから探す",
+      "subheading": "旅にぴったりの車を見つけましょう",
       "viewAll": "すべて見る",
       "currency": "¥{price}",
       "perDay": "日"
@@ -1219,7 +1219,10 @@
     },
     "footer": {
       "copyright": "クルマレンタル 全著作権所有。",
-      "tagline": "大阪のレンタカーサービス"
+      "tagline": "大阪のレンタカーサービス",
+      "browse": "車を探す",
+      "categories": "車両カテゴリー",
+      "signIn": "ログイン"
     }
   },
   "search": {

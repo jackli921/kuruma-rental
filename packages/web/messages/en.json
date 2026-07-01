@@ -1185,8 +1185,8 @@
       }
     },
     "featured": {
-      "heading": "Popular vehicles",
-      "subheading": "Hand-picked cars loved by travelers",
+      "heading": "Browse by category",
+      "subheading": "Find the right car for your trip",
       "viewAll": "View all",
       "currency": "¥{price}",
       "perDay": "day"
@@ -1219,7 +1219,10 @@
     },
     "footer": {
       "copyright": "Kuruma Rental. All rights reserved.",
-      "tagline": "Car rental in Osaka, Japan"
+      "tagline": "Car rental in Osaka, Japan",
+      "browse": "Browse cars",
+      "categories": "Vehicle categories",
+      "signIn": "Sign in"
     }
   },
   "search": {
