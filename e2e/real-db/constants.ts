@@ -27,3 +27,11 @@ export const ADMIN_SEED_EMAIL = 'platform-admin@kuruma.test'
 // minting inlined in mint-session.ts). Single source WITHIN e2e — change here.
 export const OPERATOR_SEED_EMAIL = 'owner@best-car-rental.local'
 export const RENTER_SEED_EMAIL = 'sarah@example.test'
+
+// Second seeded operator (Kansai Drive) — MIRRORS shared db/constants.ts
+// SECOND_OPERATOR_OWNER_EMAIL / SECOND_OPERATOR_NAME (seed-data/operators.ts §2),
+// re-declared here under the same Playwright-loader constraint as the personas
+// above. Used by tenant-isolation.auth.spec.ts as "operator B" — a distinct
+// tenant from Best Car Rental (operator A) that must never see A's data.
+export const SECOND_OPERATOR_SEED_EMAIL = 'owner@kansai-drive.example.test'
+export const SECOND_OPERATOR_OWNER_NAME = 'Kansai Drive Owner'
