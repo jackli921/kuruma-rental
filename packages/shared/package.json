@@ -41,6 +41,7 @@
     "./types/region": "./src/types/region.ts",
     "./types/fee-schedule": "./src/types/fee-schedule.ts",
     "./types/add-on": "./src/types/add-on.ts",
+    "./types/add-on-template": "./src/types/add-on-template.ts",
     "./types/insurance-option": "./src/types/insurance-option.ts",
     "./types/storefront": "./src/types/storefront.ts",
     "./types/operator-team": "./src/types/operator-team.ts",
