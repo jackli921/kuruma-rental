@@ -67,6 +67,28 @@ describe('findCsrfViolations', () => {
     expect(findCsrfViolations(src)).toEqual([])
   })
 
+  test('flags a dynamic `method: verb` cookie write missing the token', () => {
+    const src = lines(
+      '  const res = await fetch(`${base}${path}`, {',
+      '    method: verb,',
+      "    credentials: 'include',",
+      "    headers: { 'Content-Type': 'application/json' },",
+      '  })',
+    )
+    expect(findCsrfViolations(src)).toEqual([1])
+  })
+
+  test('does NOT flag a dynamic `method: verb` write that threads the token', () => {
+    const src = lines(
+      '  const res = await fetch(`${base}${path}`, {',
+      '    method: verb,',
+      "    credentials: 'include',",
+      '    headers: jsonHeaders(csrfToken),',
+      '  })',
+    )
+    expect(findCsrfViolations(src)).toEqual([])
+  })
+
   test('does NOT flag a write whose headers come from a helper threaded csrfToken', () => {
     // admin/operators + messaging spell it `headers: jsonHeaders(csrfToken)` — the
     // literal 'X-CSRF-Token' lives in the helper, but the token is demonstrably threaded.
@@ -168,17 +190,24 @@ describe('scanRoots', () => {
 
   test('reports prod .ts/.tsx violations and skips tests + credentialed reads', () => {
     const files = scanRoots(['packages/web/src'], cwd)
-      .map((v) => v.file)
+      .violations.map((v) => v.file)
       .sort()
     expect(files).toEqual(['packages/web/src/api.ts', 'packages/web/src/widget.tsx'])
   })
 
   test('returns the offending fetch line number', () => {
-    const v = scanRoots(['packages/web/src'], cwd).find((x) => x.file.endsWith('api.ts'))
+    const v = scanRoots(['packages/web/src'], cwd).violations.find((x) => x.file.endsWith('api.ts'))
     expect(v?.line).toBe(2)
   })
 
-  test('silently skips a root that does not exist', () => {
-    expect(scanRoots(['nope'], cwd)).toEqual([])
+  test('counts every prod file scanned (fail-closed signal)', () => {
+    // BAD api.ts + BAD widget.tsx + GOOD read.ts = 3 prod files; tests excluded.
+    expect(scanRoots(['packages/web/src'], cwd).scanned).toBe(3)
+  })
+
+  test('a root that does not exist yields no violations AND zero scanned', () => {
+    const result = scanRoots(['nope'], cwd)
+    expect(result.violations).toEqual([])
+    expect(result.scanned).toBe(0)
   })
 })

@@ -14,8 +14,10 @@
  * statically, in the spirit of `lint-fetch-binding.ts` (#887) and #1289.
  *
  * A "cookie write" here = a `fetch(...)` whose options object sets
- * `credentials: 'include'` AND a mutating `method` (a `'POST'|'PUT'|'PATCH'|'DELETE'`
- * literal, or the `method` shorthand a write helper forwards). Such a call must
+ * `credentials: 'include'` AND a mutating `method` — a `'POST'|'PUT'|'PATCH'|'DELETE'`
+ * literal, the `method` shorthand, or a `method` set to a variable (any form a write
+ * helper forwards the verb; only a literal `'GET'` and no-`method` reads are exempt).
+ * Such a call must
  * thread the token — either the literal `'X-CSRF-Token'` header inline, or the
  * canonical `csrfToken` identifier (some modules build headers with a
  * `jsonHeaders(csrfToken)` helper). Credentialed GET reads (no `method`) are
@@ -38,6 +40,12 @@ const CREDENTIALED = /credentials\s*:\s*['"]include['"]/
 const LITERAL_WRITE = /\bmethod\s*:\s*['"](?:POST|PUT|PATCH|DELETE)['"]/i
 // A write helper forwarding a `method` param as an object shorthand: `{ method, ... }`.
 const SHORTHAND_WRITE = /[{,]\s*method\s*[,}]/
+// A `method` set to an identifier (a variable/expression, not a quoted literal): a
+// generic `request(path, method, body)` helper forwards the verb this way. We can't
+// prove it isn't GET, so we treat it as write intent — over-approximating here only
+// risks flagging a (nonexistent) dynamic-method GET read, and every such call still
+// gets the token check. Reads in this codebase omit `method` entirely (default GET).
+const DYNAMIC_WRITE = /\bmethod\s*:\s*[A-Za-z_$]/
 const HAS_CSRF = /['"]x-csrf-token['"]/i
 // The canonical token identifier — covers `headers: jsonHeaders(csrfToken)`, where
 // the literal header name lives in the helper rather than the fetch call itself.
@@ -138,7 +146,8 @@ export function findCsrfViolations(source: string): number[] {
     if (close < 0) continue
     const segment = kept.slice(openParen, close + 1)
     if (!CREDENTIALED.test(segment)) continue
-    const isWrite = LITERAL_WRITE.test(segment) || SHORTHAND_WRITE.test(segment)
+    const isWrite =
+      LITERAL_WRITE.test(segment) || SHORTHAND_WRITE.test(segment) || DYNAMIC_WRITE.test(segment)
     if (!isWrite) continue
     if (HAS_CSRF.test(segment) || HAS_TOKEN_REF.test(segment)) continue
     offending.push(code.slice(0, start).split('\n').length)
@@ -166,8 +175,16 @@ export interface Violation {
   line: number
 }
 
-export function scanRoots(roots: readonly string[], cwd: string): Violation[] {
+export interface ScanResult {
+  violations: Violation[]
+  // How many prod source files were actually read. A regression guard that scans
+  // zero files (root moved/renamed) must fail closed, not report "all clean".
+  scanned: number
+}
+
+export function scanRoots(roots: readonly string[], cwd: string): ScanResult {
   const violations: Violation[] = []
+  let scanned = 0
   for (const root of roots) {
     const abs = join(cwd, root)
     let files: string[]
@@ -176,31 +193,39 @@ export function scanRoots(roots: readonly string[], cwd: string): Violation[] {
     } catch {
       continue // a root may not exist in every checkout — skip it
     }
+    scanned += files.length
     for (const file of files) {
       for (const line of findCsrfViolations(readFileSync(file, 'utf8'))) {
         violations.push({ file: relative(cwd, file), line })
       }
     }
   }
-  return violations
+  return { violations, scanned }
 }
 
 function main(): void {
   const cwd = new URL('..', import.meta.url).pathname
-  const violations = scanRoots(WRITE_ROOTS, cwd)
+  const { violations, scanned } = scanRoots(WRITE_ROOTS, cwd)
+  if (scanned === 0) {
+    console.error(
+      `[lint-csrf-on-writes] scanned 0 files under ${WRITE_ROOTS.join(', ')} — root moved or renamed?\nRefusing to pass: a guard that cannot reach its target must fail closed, not report clean.`,
+    )
+    process.exit(1)
+  }
   if (violations.length > 0) {
     console.error(
       `[lint-csrf-on-writes] ${violations.length} cookie write(s) missing X-CSRF-Token:`,
     )
     for (const v of violations) console.error(`  - ${v.file}:${v.line}`)
     console.error(
-      '\nThe API CSRF guard 403s any cookie write without a matching token.\n' +
-        "Thread the session token into the request headers: `'X-CSRF-Token': csrfToken`\n" +
-        '(csrfToken from `useSession().data?.csrfToken`), mirroring operator-fees/api.ts.',
+      '\nThe API CSRF guard 403s any cookie write without a matching token. Thread the session\n' +
+        'token (from `useSession().data?.csrfToken`) into the request headers — either inline\n' +
+        "(`'X-CSRF-Token': csrfToken`) or via a headers helper that names `csrfToken`, mirroring\n" +
+        'operator-fees/api.ts and admin/operators/api.ts.',
     )
     process.exit(1)
   }
-  console.log('[lint-csrf-on-writes] no cookie writes missing X-CSRF-Token')
+  console.log(`[lint-csrf-on-writes] no cookie writes missing X-CSRF-Token (${scanned} files)`)
 }
 
 if (import.meta.main) {
