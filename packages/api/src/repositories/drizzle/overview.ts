@@ -17,7 +17,11 @@ const ZERO: OperatorOverview = { totalBookings: 0, activeVehicles: 0, upcomingBo
 export class DrizzleOverviewRepository implements OverviewRepository {
   constructor(private readonly db: Db) {}
 
-  async getOperatorOverview(ctx: CallerContext, now: Date): Promise<OperatorOverview> {
+  async getOperatorOverview(
+    ctx: CallerContext,
+    now: Date,
+    operatorId?: string,
+  ): Promise<OperatorOverview> {
     // Defence-in-depth (mirrors insurance/fees repos): reject RENTER/PARTNER
     // here too — without this seal a non-operator bypassing the route would read
     // operator counts. Only the admin tier (`all`) and OPERATOR_* (`operator`)
@@ -27,7 +31,11 @@ export class DrizzleOverviewRepository implements OverviewRepository {
     if (scope.kind === 'none' || scope.kind === 'renter' || scope.kind === 'partner') {
       return { ...ZERO }
     }
-    const opId = scope.kind === 'operator' ? scope.operatorId : undefined
+    // `operator` keeps its own tenant; an `all` (bypass) caller may narrow to the
+    // picked operator (#407 slice 4) or, with no pick, aggregate every operator
+    // (undefined -> `and(undefined, ...)` drops the filter). The picker id is
+    // honored only here in the `all` branch, so it can never widen a tenant.
+    const opId = scope.kind === 'operator' ? scope.operatorId : operatorId
 
     const bookingOp = opId ? eq(bookings.operatorId, opId) : undefined
     const vehicleOp = opId ? eq(vehicles.operatorId, opId) : undefined

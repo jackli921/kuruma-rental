@@ -15,6 +15,11 @@ import { clampLimit, decodeCursor, encodeCursor } from './search-paging'
 
 export interface StorefrontSummary {
   locationId: string
+  /** #1085 slice 5: the owning operator's id, surfaced so the storefront
+   *  detail page can fetch its operator-level review aggregate by id (not
+   *  by the human-facing name). The operator that owns a public storefront
+   *  is itself public — same shape as `storefrontCardSchema.operatorId`. */
+  operatorId: string
   name: string
   address: string
   operatorName: string
@@ -32,6 +37,11 @@ export interface StorefrontSummary {
  */
 export interface AvailableVehicle {
   id: string
+  /** #1085 slice 5: the vehicle's class id, surfaced so the storefront detail
+   *  page can fetch a class-level review aggregate. `null` for vehicles with no
+   *  class (the same fallback `classLabel` flips to `''` for) — UI skips the
+   *  badge rather than rendering "no reviews" against a missing aggregate key. */
+  classId: string | null
   name: string
   make: string | null
   model: string | null
@@ -205,6 +215,7 @@ export class StorefrontDetailService {
       data: {
         storefront: {
           locationId: storefront.id,
+          operatorId: storefront.operatorId,
           name: storefront.name,
           address: storefront.address,
           operatorName: storefront.operatorName,
@@ -236,6 +247,7 @@ function toAvailableVehicle(vehicle: Vehicle, vc: VehicleClass | undefined): Ava
     : { luggageCapacity: vehicle.luggageCapacity, luggageSize: vehicle.luggageSize }
   return {
     id: vehicle.id,
+    classId: vehicle.classId,
     name: vehicle.name,
     make: vehicle.make,
     model: vehicle.model,

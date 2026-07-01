@@ -37,6 +37,7 @@ const fullCard: Record<string, unknown> = {
 
 const fullVehicle: Record<string, unknown> = {
   id: 'v1',
+  classId: 'cls1',
   name: 'Toyota Aqua',
   make: 'Toyota',
   model: 'Aqua',
@@ -55,6 +56,7 @@ const fullVehicle: Record<string, unknown> = {
 const fullDetail: Record<string, unknown> = {
   storefront: {
     locationId: 'loc1',
+    operatorId: 'op1',
     name: 'Namba Pickup',
     address: '1-1 Namba',
     operatorName: 'Osaka Cars',

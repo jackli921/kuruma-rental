@@ -1,6 +1,7 @@
 import { buttonVariants } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import { IndicativeNote } from '@/vite/currency'
+import { type AggregateEntry, RatingBadge } from '@/vite/reviews'
 import { PhotoGallery } from '@/vite/storefronts/PhotoGallery'
 import type { AvailableVehicleData } from '@/vite/storefronts/api'
 import { Link } from '@tanstack/react-router'
@@ -14,6 +15,10 @@ interface AvailableVehicleCardProps {
   /** Selected JST date range (datetime-local strings), carried into the wizard. */
   readonly from: string
   readonly to: string
+  /** #1085 slice 5: the vehicle-class review aggregate. Only meaningful when
+   *  `vehicle.classId !== null`; classless vehicles render no badge at all
+   *  (distinct from "rated zero reviews" — see plan §"P2 fix"). */
+  readonly classRating?: AggregateEntry | null | undefined
 }
 
 /**
@@ -22,7 +27,13 @@ interface AvailableVehicleCardProps {
  * carries the vehicle + storefront location + dates into the reservation wizard
  * (#460); the `_renter` guard there prompts login before booking.
  */
-export function AvailableVehicleCard({ vehicle, locationId, from, to }: AvailableVehicleCardProps) {
+export function AvailableVehicleCard({
+  vehicle,
+  locationId,
+  from,
+  to,
+  classRating,
+}: AvailableVehicleCardProps) {
   const t = useTranslations('search')
   const tSize = useTranslations('luggageSize')
   const locale = useLocale()
@@ -41,6 +52,15 @@ export function AvailableVehicleCard({ vehicle, locationId, from, to }: Availabl
       <PhotoGallery photos={vehicle.photos} alt={vehicle.name} />
       <div className="flex flex-1 flex-col gap-2 p-4">
         <h3 className="text-base font-semibold leading-tight">{vehicle.name}</h3>
+        {/* #1085 slice 5: class line with rating badge. Classless vehicles
+            (classId === null) render no class line at all — different from a
+            rated-zero class, which renders the line with "No reviews yet". */}
+        {vehicle.classId !== null && (
+          <div className="flex flex-wrap items-center gap-x-2 text-xs text-muted-foreground">
+            {vehicle.classLabel && <span>{vehicle.classLabel}</span>}
+            <RatingBadge entry={classRating} />
+          </div>
+        )}
         <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-muted-foreground">
           <span className="flex items-center gap-1.5">
             <Users className="size-4" />

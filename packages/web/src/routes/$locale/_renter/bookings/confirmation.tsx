@@ -1,7 +1,6 @@
 import { BookingConfirmationView } from '@/vite/bookings/BookingConfirmationView'
 import { bookingByIdQueryOptions } from '@/vite/bookings/api'
-import { threadsQueryOptions } from '@/vite/messaging/api'
-import { indexThreadIdsByBooking } from '@/vite/messaging/booking-threads'
+import { indexThreadIdsByBooking, threadsQueryOptions } from '@/vite/messaging'
 import { useSession } from '@/vite/session'
 import { classByIdQueryOptions } from '@/vite/vehicles/classes'
 import { useQuery, useSuspenseQuery } from '@tanstack/react-query'

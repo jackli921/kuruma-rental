@@ -16,6 +16,11 @@ export const notificationKindEnum = pgEnum('notification_kind', [
   // #1083: post-trip review prompt, fired on COMPLETED alongside the trip-completed
   // notice. Distinct kind so notify:<booking>:<kind> never collides between the two.
   'RENTER_REVIEW_PROMPT', // -> renter: rate the operator + vehicle after the trip
+  // #1205 slice 4: operator-facing alert that a renter sent the first unread
+  // message in a thread (the operator-unread 0->1 transition). NOT a booking
+  // lifecycle kind — dispatched by NotificationDispatcher.dispatchOperatorNewMessage,
+  // keyed by msg:<messageId>, never through the TRIGGER_KINDS booking path.
+  'OPERATOR_NEW_MESSAGE', // -> operator: a renter messaged you
 ])
 // SENDING is the in-flight lease between QUEUED and SENT/FAILED — it closes the
 // concurrent-send race (atomic claim, architect P1). Reclaimable ONLY after the

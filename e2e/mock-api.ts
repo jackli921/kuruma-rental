@@ -53,6 +53,10 @@ const TEST_STOREFRONT_CARD = {
 const TEST_STOREFRONT_DETAIL = {
   storefront: {
     locationId: TEST_STORE_ID,
+    // #1085 slice 5: storefront summary now carries operatorId so the detail
+    // header can fetch the operator review aggregate. The schema validator
+    // rejects the response if the key is missing.
+    operatorId: 'e2e-operator-1',
     name: 'Best Car Rental Osaka',
     address: '1-2-3 Namba, Chuo-ku, Osaka',
     operatorName: 'Best Car Rental',
@@ -65,6 +69,9 @@ const TEST_STOREFRONT_DETAIL = {
   vehicles: [
     {
       id: 'e2e-store-vehicle-1',
+      // #1085 slice 5: per-vehicle classId (nullable) feeds the class-rating
+      // batch fetch. Required by the schema, even when null.
+      classId: TEST_CLASS_ID,
       name: 'E2E Honda Fit',
       make: 'Honda',
       model: 'Fit',
@@ -81,6 +88,7 @@ const TEST_STOREFRONT_DETAIL = {
     },
     {
       id: 'e2e-store-vehicle-2',
+      classId: 'e2e-test-class-minivan',
       name: 'E2E Toyota Sienta',
       make: 'Toyota',
       model: 'Sienta',
@@ -304,6 +312,17 @@ Bun.serve({
     // Renter-facing active insurance for a storefront (public, #392).
     if (url.pathname === `/storefronts/${TEST_STORE_ID}/insurance-options`) {
       return ok(TEST_INSURANCE)
+    }
+
+    // #1085 slice 5: public review aggregates. The storefront grid + detail
+    // pages batch-fetch operator/vehicle/class ratings. We return null per
+    // requested id ("no reviews yet") so RatingBadge renders the muted copy
+    // and the e2e never depends on a populated review fixture.
+    if (url.pathname.startsWith('/reviews/aggregates/')) {
+      const ids = (url.searchParams.get('ids') ?? '').split(',').filter(Boolean)
+      const aggregates: Record<string, null> = {}
+      for (const id of ids) aggregates[id] = null
+      return ok({ aggregates })
     }
 
     // Create a booking (#392). The web sends the slice-6 contract; the server

@@ -3,4 +3,12 @@
 // its internals — see docs/architecture/modules.md.
 export { ReviewPrompt } from './ReviewPrompt'
 export { RateRenterPanel } from './RateRenterPanel'
-export { renterReviewedSubjects, reviewsForBookingQueryOptions } from './api'
+export { RatingBadge } from './RatingBadge'
+export {
+  type AggregateEntry,
+  type AggregateMap,
+  type AggregateSubjectKind,
+  renterReviewedSubjects,
+  reviewAggregatesQueryOptions,
+  reviewsForBookingQueryOptions,
+} from './api'
