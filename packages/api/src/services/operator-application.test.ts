@@ -1,6 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { ConflictError, NotFoundError } from '../auth/guards'
+import { InMemoryOperatorRepository } from '../repositories/in-memory/operator'
 import { InMemoryOperatorApplicationRepository } from '../repositories/in-memory/operator-application'
+import { InMemoryOperatorMembershipRepository } from '../repositories/in-memory/operator-membership'
+import { InMemoryProviderInviteRepository } from '../repositories/in-memory/provider-invite'
+import { InMemoryUserRepository } from '../repositories/in-memory/user'
+import type { ProviderInvite } from '../stores'
 import { OperatorApplicationService } from './operator-application'
 
 const input = {
@@ -124,9 +129,157 @@ describe('OperatorApplicationService.list + reject', () => {
   })
 })
 
+describe('OperatorApplicationService.approve', () => {
+  const base = {
+    businessName: 'Tokyo Wheels',
+    contactName: 'Hiroshi',
+    contactEmail: 'owner@example.com',
+    contactPhone: '+81 80 1234 5678',
+    serviceArea: 'Tokyo',
+    estimatedFleetSize: '6-20' as const,
+    website: null,
+    businessLicenseNumber: null,
+    businessType: null,
+    message: null,
+    submittedLocale: 'en' as const,
+  }
+
+  function setupApprove() {
+    const inviteStore = new Map<string, ProviderInvite>()
+    const applications = new InMemoryOperatorApplicationRepository()
+    const operators = new InMemoryOperatorRepository()
+    const invites = new InMemoryProviderInviteRepository(inviteStore)
+    const users = new InMemoryUserRepository()
+    const memberships = new InMemoryOperatorMembershipRepository()
+    const audit = vi.fn()
+
+    // Passthrough: no real transaction boundary in tests (single-threaded, no races).
+    const runOperatorApproval = <T>(
+      fn: (repos: {
+        users: typeof users
+        memberships: typeof memberships
+        invites: typeof invites
+        operators: typeof operators
+        applications: typeof applications
+      }) => Promise<T>,
+    ) => fn({ users, memberships, invites, operators, applications })
+
+    const service = new OperatorApplicationService(
+      applications,
+      audit,
+      runOperatorApproval,
+      'https://app.example.com',
+    )
+    return {
+      service,
+      repos: { applications, operators, invites, users, memberships, inviteStore },
+      audit,
+    }
+  }
+
+  it('provisions operator + invite and returns inviteUrl on first approval', async () => {
+    const { service, repos, audit } = setupApprove()
+    const { id } = await repos.applications.create(base)
+
+    const r = await service.approve(id, 'admin-1')
+
+    expect(r.inviteUrl).toMatch(/\/provider\/invite\//)
+
+    const operator = await repos.operators.findBySlug(r.operatorSlug)
+    expect(operator).toBeTruthy()
+    expect(operator?.name).toBe(base.businessName)
+
+    expect(repos.inviteStore.size).toBe(1)
+    const invite = [...repos.inviteStore.values()][0]
+    expect(invite).toMatchObject({
+      role: 'OPERATOR_OWNER',
+      email: 'owner@example.com',
+      invitedByUserId: 'admin-1',
+      acceptedByUserId: null,
+      status: 'PENDING',
+    })
+
+    const reloaded = await repos.applications.findById(id)
+    expect(reloaded).toMatchObject({ status: 'APPROVED', operatorId: r.operatorId })
+
+    const auditTypes = (audit.mock.calls as [{ type: string }][]).map(([e]) => e.type)
+    expect(auditTypes).toContain('PROVIDER_INVITE_CREATED')
+    expect(auditTypes).toContain('OPERATOR_APPLICATION_APPROVED')
+  })
+
+  it('is idempotency-safe: second approve on same id throws and creates no duplicates', async () => {
+    const { service, repos } = setupApprove()
+    const { id } = await repos.applications.create(base)
+
+    await service.approve(id, 'admin-1')
+    await expect(service.approve(id, 'admin-1')).rejects.toThrow(/already reviewed/)
+
+    expect(repos.inviteStore.size).toBe(1)
+    expect((await repos.operators.list()).length).toBe(1)
+  })
+
+  it('C1 — blocks approval when contactEmail already has an active membership', async () => {
+    const { service, repos } = setupApprove()
+    const { id } = await repos.applications.create(base)
+
+    // Seed an existing user + ACTIVE membership for the same email.
+    const existingUser = await repos.users.quickCreate({
+      name: 'Existing Owner',
+      email: base.contactEmail,
+      phone: null,
+      language: 'en',
+    })
+    const existingOperator = await repos.operators.create({
+      name: 'Old Co',
+      slug: 'old-co',
+      preAuthHandoffUrl: null,
+    })
+    await repos.memberships.create({
+      userId: existingUser.id,
+      operatorId: existingOperator.id,
+      role: 'OPERATOR_OWNER',
+      status: 'ACTIVE',
+    })
+
+    await expect(service.approve(id, 'admin-1')).rejects.toThrow(/already has/)
+    // No new operator should have been created beyond the pre-seeded one.
+    expect((await repos.operators.list()).length).toBe(1)
+  })
+
+  it('C1 — blocks approval when contactEmail already has a live pending invite', async () => {
+    const { service, repos } = setupApprove()
+    const { id } = await repos.applications.create(base)
+
+    // Seed a pending invite for the same email at a different operator.
+    const otherOperator = await repos.operators.create({
+      name: 'Other Co',
+      slug: 'other-co',
+      preAuthHandoffUrl: null,
+    })
+    // Manually insert a PENDING invite with a dummy tokenHash (not testing token generation here).
+    await repos.invites.create({
+      email: base.contactEmail,
+      operatorId: otherOperator.id,
+      role: 'OPERATOR_OWNER',
+      tokenHash: 'deadbeef'.repeat(8), // 64-char placeholder
+      status: 'PENDING',
+      expiresAt: new Date(Date.now() + 86_400_000),
+      invitedByUserId: 'some-admin',
+      acceptedByUserId: null,
+    })
+
+    await expect(service.approve(id, 'admin-1')).rejects.toThrow(/invited/)
+  })
+})
+
 function makeService(
   repo: InMemoryOperatorApplicationRepository,
   recordAudit: ReturnType<typeof vi.fn> = vi.fn(),
 ) {
-  return new OperatorApplicationService(repo, recordAudit)
+  // Provide a stub runOperatorApproval that throws if accidentally called in
+  // submit/reject tests — they don't need the approval transaction.
+  const stubRunApproval = () => {
+    throw new Error('runOperatorApproval called unexpectedly in non-approve test')
+  }
+  return new OperatorApplicationService(repo, recordAudit, stubRunApproval, '')
 }

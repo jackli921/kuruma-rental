@@ -181,6 +181,7 @@ export function createApp(overrides?: AppOverrides, repos: Repos = buildRepos(ov
     complianceAlertLogRepo,
     runInTransaction,
     runOperatorGrant,
+    runOperatorApproval,
     photosPublicUrl,
     googleAuthRuntime,
   } = repos
@@ -250,6 +251,8 @@ export function createApp(overrides?: AppOverrides, repos: Repos = buildRepos(ov
   const operatorApplicationService = new OperatorApplicationService(
     operatorApplicationRepo,
     recordAudit,
+    runOperatorApproval,
+    webBaseUrl,
   )
   // #904: operator self-service team page. Reuses providerInviteService to mint
   // (so the audit trail + TTL stay single-sourced); reads invites + members
