@@ -12,6 +12,7 @@ import { ConfirmStep } from './ConfirmStep'
 import { DateRangeStep } from './DateRangeStep'
 import { InsuranceStep } from './InsuranceStep'
 import { PaymentStep } from './PaymentStep'
+import { ReservationSummaryBar } from './ReservationSummaryBar'
 import type { ReservationAddOn, ReservationInsuranceOption } from './api'
 import { estimateReservation } from './pricing'
 
@@ -144,36 +145,41 @@ export function ReservationWizard({
       ) : null}
 
       {step !== 'payment' ? (
-        <div className="flex items-center justify-between gap-4">
-          {stepIndex > 0 ? (
-            <Button type="button" variant="outline" onClick={goBack}>
-              {t('nav.back')}
+        <ReservationSummaryBar
+          totalJpy={estimate.totalJpy}
+          back={
+            stepIndex > 0 ? (
+              <Button type="button" variant="outline" onClick={goBack}>
+                {t('nav.back')}
+              </Button>
+            ) : (
+              // First step has no in-wizard back; link out to the storefront the
+              // renter came from so they're never stranded (#962). from/to are Date
+              // objects, serialized to JST datetime-local so the storefront route's
+              // parseSearchRange accepts them (a raw Date becomes an ISO instant it
+              // rejects, redirecting to /search). Styled as a muted link mirroring
+              // StorefrontDetailView's back affordance.
+              <Link
+                to="/$locale/storefronts/$locationId"
+                params={{ locale, locationId }}
+                search={{
+                  from: formatJstDateTimeLocal(from),
+                  to: formatJstDateTimeLocal(to),
+                  ...carryForwardFilters({ class: classFilter, pickupLocationId, region }),
+                }}
+                className="inline-flex items-center gap-1.5 text-sm font-medium text-muted-foreground transition-colors hover:text-foreground"
+              >
+                <ArrowLeft className="size-4" />
+                {t('nav.backToListing')}
+              </Link>
+            )
+          }
+          next={
+            <Button type="button" onClick={goNext}>
+              {step === 'confirm' ? t('nav.toPayment') : t('nav.continue')}
             </Button>
-          ) : (
-            // First step has no in-wizard back; link out to the storefront the
-            // renter came from so they're never stranded (#962). from/to are Date
-            // objects, serialized to JST datetime-local so the storefront route's
-            // parseSearchRange accepts them (a raw Date becomes an ISO instant it
-            // rejects, redirecting to /search). Styled as a muted link mirroring
-            // StorefrontDetailView's back affordance.
-            <Link
-              to="/$locale/storefronts/$locationId"
-              params={{ locale, locationId }}
-              search={{
-                from: formatJstDateTimeLocal(from),
-                to: formatJstDateTimeLocal(to),
-                ...carryForwardFilters({ class: classFilter, pickupLocationId, region }),
-              }}
-              className="inline-flex items-center gap-1.5 text-sm font-medium text-muted-foreground transition-colors hover:text-foreground"
-            >
-              <ArrowLeft className="size-4" />
-              {t('nav.backToListing')}
-            </Link>
-          )}
-          <Button type="button" onClick={goNext}>
-            {step === 'confirm' ? t('nav.toPayment') : t('nav.continue')}
-          </Button>
-        </div>
+          }
+        />
       ) : null}
     </div>
   )
