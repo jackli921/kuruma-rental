@@ -32,10 +32,13 @@ import {
 // never imports the frozen Next module's `vehicle-api.ts`, which is hono-client +
 // Bearer-token) so it stays self-contained and cookie-based like the rest of the
 // shell. The list endpoint is operator-scoped server-side via the session cookie
-// (CallerContext), so this client passes NO operatorId — a cross-tenant read is
-// impossible from here by construction. Canonical write types come from
-// @kuruma/shared so the (#526 follow-up) forms stay in lockstep with the Zod
-// validators rather than drifting a parallel copy.
+// (CallerContext), so an operator session passes NO operatorId — a cross-tenant
+// read is impossible from here by construction. #407 slice 4: a PLATFORM_ADMIN
+// on the dashboard picker may narrow this aggregate to one operator by appending
+// `?operatorId=X` (sent ONLY when picked; the lenient endpoint ignores no-param =
+// aggregate). The /manage/fleet page is NOT a picker route and always passes none.
+// Canonical write types come from @kuruma/shared so the (#526 follow-up) forms
+// stay in lockstep with the Zod validators rather than drifting a parallel copy.
 
 export type { BulkVehicleStatus, CreateVehicleInput, UpdateVehicleInput, VehicleStatus }
 
@@ -57,17 +60,22 @@ export type {
 
 export const FLEET_QUERY_KEY = ['operator-fleet'] as const
 
-export async function fetchOperatorFleet(): Promise<OperatorFleetVehicle[]> {
-  const res = await fetch(`${getApiBaseUrl()}/vehicles/fleet-overview`, {
+export async function fetchOperatorFleet(
+  pickedOperatorId?: string,
+): Promise<OperatorFleetVehicle[]> {
+  const qs = pickedOperatorId ? `?operatorId=${encodeURIComponent(pickedOperatorId)}` : ''
+  const res = await fetch(`${getApiBaseUrl()}/vehicles/fleet-overview${qs}`, {
     credentials: 'include',
   })
   return unwrap(res, operatorFleetListSchema)
 }
 
-export function operatorFleetQueryOptions() {
+export function operatorFleetQueryOptions(pickedOperatorId?: string) {
   return queryOptions({
-    queryKey: FLEET_QUERY_KEY,
-    queryFn: fetchOperatorFleet,
+    // Key on the picked operator so a dashboard context switch never serves
+    // another tenant's cached fleet; unpicked (incl. /manage/fleet) shares 'all'.
+    queryKey: [...FLEET_QUERY_KEY, pickedOperatorId ?? 'all'],
+    queryFn: () => fetchOperatorFleet(pickedOperatorId),
   })
 }
 
