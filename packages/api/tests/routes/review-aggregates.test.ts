@@ -141,9 +141,13 @@ describe('GET /reviews/aggregates/vehicles', () => {
 
 describe('GET /reviews/aggregates/classes', () => {
   it('keys aggregates by subjectClassId (anonymous)', async () => {
+    // A class aggregate row is a VEHICLE review carrying its class tag — there is
+    // no 'CLASS' review subject (REVIEW_SUBJECTS = OPERATOR | VEHICLE | RENTER),
+    // and subjectClassId is only ever set alongside a subjectVehicleId in prod.
     await reviewRepo.insert(
       published({
-        subject: 'CLASS',
+        subject: 'VEHICLE',
+        subjectVehicleId: 'veh_1',
         subjectClassId: 'cls_1',
         overall: 5,
       }),
