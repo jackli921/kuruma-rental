@@ -21,6 +21,11 @@ describe('OperatorBadge', () => {
     expect(container).toBeEmptyDOMElement()
   })
 
+  it('renders nothing for an empty operator name (the guard hinges on this case)', () => {
+    const { container } = wrap(<OperatorBadge name="" />)
+    expect(container).toBeEmptyDOMElement()
+  })
+
   it('shows the operator name as visible text', () => {
     wrap(<OperatorBadge name="Sakura Rentals" />)
     expect(screen.getByText('Sakura Rentals')).toBeInTheDocument()

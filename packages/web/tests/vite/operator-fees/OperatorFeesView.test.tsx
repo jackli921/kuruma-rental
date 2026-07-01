@@ -136,12 +136,15 @@ describe('OperatorFeesView', () => {
       <OperatorFeesView
         fees={[operatorWideFee]}
         classes={classes}
-        scope={scope({ canWrite: true })}
+        scope={scope({ canWrite: true, operatorNameById: new Map([['op_1', 'Sakura']]) })}
       />,
       { wrapper },
     )
     expect(screen.getByRole('button', { name: 'addFee' })).toBeInTheDocument()
-    expect(screen.queryByLabelText(/^Operator:/)).not.toBeInTheDocument()
+    // showOperator:false must suppress the badge even when the name IS resolvable
+    // (op_1 -> Sakura). Asserting the name text, not the aria-label prefix, keeps
+    // this meaningful under the mocked translator (the prefix is mocked away).
+    expect(screen.queryByText('Sakura')).not.toBeInTheDocument()
   })
 
   it('read-only mode hides the per-row Edit/Archive affordances', () => {
