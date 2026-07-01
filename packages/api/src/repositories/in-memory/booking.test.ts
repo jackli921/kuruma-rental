@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { SYSTEM_CONTEXT } from '../../middleware/auth'
+import { type CallerContext, SYSTEM_CONTEXT } from '../../middleware/auth'
 import { PG_ERROR, pgConstraintName, pgErrorCode } from '../../pg-errors'
 import type { Booking } from '../../stores'
 import { InMemoryBookingRepository } from './booking'
@@ -151,6 +151,67 @@ describe('InMemoryBookingRepository — needsAssignment filter (#464)', () => {
     const returnedIds = results.map((b) => b.id).sort()
 
     expect(returnedIds).toEqual([floatConfirmed.id, floatActive.id].sort())
+  })
+})
+
+describe('InMemoryBookingRepository — bypass-gated operatorId narrowing (#1230 slice 5a)', () => {
+  const admin: CallerContext = { userId: 'admin', role: 'PLATFORM_ADMIN', bypassScope: true }
+  const operatorA: CallerContext = { userId: 'ua', role: 'OPERATOR_OWNER', operatorId: 'op-A' }
+  const renter: CallerContext = { userId: 'r1', role: 'RENTER' }
+
+  // Two bookings, one per operator, both owned by renter r1. Distinct vehicles +
+  // windows so neither the exclusion guard nor bookingCode uniqueness trips.
+  async function seedTwoOperators(repo: InMemoryBookingRepository) {
+    const a = await repo.create(
+      SYSTEM_CONTEXT,
+      confirmedInput({
+        operatorId: 'op-A',
+        renterId: 'r1',
+        assignedVehicleId: 'veh-A',
+        requestedVehicleId: 'veh-A',
+        bookingCode: 'BK-A',
+        startAt: new Date('2026-08-01T09:00:00Z'),
+        endAt: new Date('2026-08-01T17:00:00Z'),
+        effectiveEndAt: new Date('2026-08-01T17:00:00Z'),
+      }),
+    )
+    const b = await repo.create(
+      SYSTEM_CONTEXT,
+      confirmedInput({
+        operatorId: 'op-B',
+        renterId: 'r1',
+        assignedVehicleId: 'veh-B',
+        requestedVehicleId: 'veh-B',
+        bookingCode: 'BK-B',
+        startAt: new Date('2026-08-02T09:00:00Z'),
+        endAt: new Date('2026-08-02T17:00:00Z'),
+        effectiveEndAt: new Date('2026-08-02T17:00:00Z'),
+      }),
+    )
+    return { a, b }
+  }
+
+  it('narrows an all-scope admin to the requested operator', async () => {
+    const repo = new InMemoryBookingRepository()
+    const { a } = await seedTwoOperators(repo)
+    const results = await repo.findAll(admin, { operatorId: 'op-A' })
+    expect(results.map((x) => x.id)).toEqual([a.id])
+  })
+
+  it('ignores a foreign operatorId for a tenant-scoped operator (never widens across tenants)', async () => {
+    const repo = new InMemoryBookingRepository()
+    const { a } = await seedTwoOperators(repo)
+    // operatorA passes a foreign op-B; the scope clamp keeps them on op-A only.
+    const results = await repo.findAll(operatorA, { operatorId: 'op-B' })
+    expect(results.map((x) => x.id)).toEqual([a.id])
+  })
+
+  it('ignores operatorId for a renter (their private read is not narrowed)', async () => {
+    const repo = new InMemoryBookingRepository()
+    const { a, b } = await seedTwoOperators(repo)
+    // r1 owns both bookings; a stray operatorId must not narrow a non-bypass read.
+    const results = await repo.findAll(renter, { operatorId: 'op-A' })
+    expect(results.map((x) => x.id).sort()).toEqual([a.id, b.id].sort())
   })
 })
 

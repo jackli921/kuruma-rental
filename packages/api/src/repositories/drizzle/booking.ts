@@ -66,6 +66,13 @@ export class DrizzleBookingRepository implements BookingRepository {
     if (scoped === null) return []
     const conditions: SQL[] = [...scoped]
 
+    // #1230 slice 5a: a picker admin (all-scope) may narrow to one operator.
+    // Gated on the `all` branch (defense in depth) so a tenant/renter/partner
+    // scope ignores a stray operatorId — a foreign id can never widen (H2).
+    if (filters?.operatorId && bookingReadScope(ctx).kind === 'all') {
+      conditions.push(eq(bookings.operatorId, filters.operatorId))
+    }
+
     if (filters?.status) {
       conditions.push(eq(bookings.status, filters.status as Booking['status']))
     }
