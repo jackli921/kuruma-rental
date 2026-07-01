@@ -5,6 +5,7 @@ import { SYSTEM_CONTEXT } from '../../src/middleware/auth'
 import {
   InMemoryAvailabilityRepository,
   InMemoryBookingRepository,
+  InMemoryOperatorRepository,
   InMemoryVehicleBlockRepository,
   InMemoryVehicleRepository,
 } from '../../src/repositories/in-memory'
@@ -19,6 +20,7 @@ const AVAIL_QUERY = '/availability?from=2026-06-01T10:00:00Z&to=2026-06-01T14:00
 let app: Hono
 let vehicleRepo: InMemoryVehicleRepository
 let bookingRepo: InMemoryBookingRepository
+let operatorRepo: InMemoryOperatorRepository
 let availabilityRepo: InMemoryAvailabilityRepository
 
 async function createTestVehicle(
@@ -69,10 +71,12 @@ describe('Availability Routes', () => {
   beforeEach(() => {
     vehicleRepo = new InMemoryVehicleRepository()
     bookingRepo = new InMemoryBookingRepository()
+    operatorRepo = new InMemoryOperatorRepository()
     availabilityRepo = new InMemoryAvailabilityRepository(
       vehicleRepo,
       bookingRepo,
       new InMemoryVehicleBlockRepository(),
+      operatorRepo,
     )
     app = new Hono()
     app.use('*', testAuthMiddleware('staff-user', 'PLATFORM_ADMIN'))
@@ -213,6 +217,45 @@ describe('Availability Routes', () => {
       expect(body.success).toBe(true)
       expect(body.data).toHaveLength(1)
       expect(body.data[0].id).toBe(available.id)
+    })
+
+    it('excludes a soft-deactivated operator’s vehicles, keeping active operators visible (#1224)', async () => {
+      const active = await operatorRepo.create({
+        name: 'Active Cars',
+        slug: 'active-cars',
+        preAuthHandoffUrl: null,
+      })
+      const gone = await operatorRepo.create({
+        name: 'Gone Cars',
+        slug: 'gone-cars',
+        preAuthHandoffUrl: null,
+      })
+      const activeVehicle = await createTestVehicle({ name: 'Active Car', operatorId: active.id })
+      const deactivatedVehicle = await createTestVehicle({ name: 'Gone Car', operatorId: gone.id })
+      await operatorRepo.update(gone.id, { deactivatedAt: new Date(), updatedAt: new Date() })
+
+      const res = await app.request(AVAIL_QUERY)
+      expect(res.status).toBe(200)
+
+      const body = await res.json()
+      const ids = body.data.map((v: { id: string }) => v.id)
+      expect(ids).toContain(activeVehicle.id)
+      expect(ids).not.toContain(deactivatedVehicle.id)
+    })
+
+    it('restores a reactivated operator’s vehicles to /availability (deactivatedAt -> null) (#1224)', async () => {
+      const operator = await operatorRepo.create({
+        name: 'Toggling Cars',
+        slug: 'toggling-cars',
+        preAuthHandoffUrl: null,
+      })
+      const vehicle = await createTestVehicle({ operatorId: operator.id })
+      await operatorRepo.update(operator.id, { deactivatedAt: new Date(), updatedAt: new Date() })
+      await operatorRepo.update(operator.id, { deactivatedAt: null, updatedAt: new Date() })
+
+      const res = await app.request(AVAIL_QUERY)
+      const body = await res.json()
+      expect(body.data.map((v: { id: string }) => v.id)).toContain(vehicle.id)
     })
 
     it('returns 400 for missing query params', async () => {
