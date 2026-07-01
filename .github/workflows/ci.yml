@@ -40,6 +40,9 @@ jobs:
       - name: Check FK indexes
         run: bun run lint:fk-indexes
 
+      - name: Check operatorId tenant-anchor immutability
+        run: bun run lint:tenant-anchors
+
       - name: Check snapshot/index parity (hand-SQL drift)
         run: bun run lint:snapshot-index-parity
 
@@ -51,6 +54,9 @@ jobs:
 
       - name: Check global fetch is bound on runtime surfaces
         run: bun run lint:fetch-binding
+
+      - name: Check web cookie writes send the CSRF token
+        run: bun run lint:csrf-writes
 
       - name: Check unused deps and exports
         run: bun run lint:deps
