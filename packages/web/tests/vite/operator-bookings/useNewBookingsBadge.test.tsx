@@ -5,6 +5,14 @@ import { act, renderHook, waitFor } from '@testing-library/react'
 import type { ReactNode } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
+// The badge reads the picked operator via useOptionalPickedOperatorId (a router
+// hook). Stub it so the hook renders without a RouterProvider; a mutable ref lets
+// one case assert a picked operator narrows the scan. Default: no pick (undefined).
+const pickedRef = vi.hoisted(() => ({ value: undefined as string | undefined }))
+vi.mock('@/vite/operator-context', () => ({
+  useOptionalPickedOperatorId: () => pickedRef.value,
+}))
+
 const LAST_SEEN = '2026-06-13T00:00:00.000Z'
 
 function mockBookings(rows: { createdAt: string }[]) {
@@ -23,6 +31,7 @@ function makeWrapper(qc: QueryClient) {
 beforeEach(() => {
   window.localStorage.clear()
   window.localStorage.setItem(LAST_SEEN_STORAGE_KEY, LAST_SEEN)
+  pickedRef.value = undefined
 })
 
 afterEach(() => {
@@ -73,5 +82,17 @@ describe('useNewBookingsBadge', () => {
 
     await waitFor(() => expect(result.current.count).toBe(0))
     expect(fetchSpy).not.toHaveBeenCalled()
+  })
+
+  it('narrows the scan to the picked operator (picker admin)', async () => {
+    pickedRef.value = 'op_x'
+    const fetchSpy = mockBookings([{ createdAt: '2026-06-13T03:00:00.000Z' }])
+    vi.stubGlobal('fetch', fetchSpy)
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+    renderHook(() => useNewBookingsBadge({ enabled: true }), { wrapper: makeWrapper(qc) })
+
+    await waitFor(() => expect(fetchSpy).toHaveBeenCalled())
+    const [url] = fetchSpy.mock.calls[0] as [string]
+    expect(url).toContain('operatorId=op_x')
   })
 })

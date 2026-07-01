@@ -21,3 +21,28 @@ describe('buttonVariants', () => {
     }
   })
 })
+
+// #1298: no >=44px touch-target floor existed, so every CTA was sub-44px on
+// phones. The floor is a coarse-pointer opt-in (`@media (pointer: coarse)`) so
+// it lifts touch targets WITHOUT inflating compact desktop/operator controls,
+// whose density depends on the small fine-pointer heights.
+describe('buttonVariants touch-target floor (#1298)', () => {
+  const sizes = ['default', 'xs', 'sm', 'lg', 'icon', 'icon-xs', 'icon-sm', 'icon-lg'] as const
+
+  it('applies a >=44px min-height on coarse pointers for every size', () => {
+    for (const size of sizes) {
+      expect(buttonVariants({ size })).toContain('pointer-coarse:min-h-11')
+    }
+  })
+
+  it('gives square icon sizes a >=44px min-width too, so the tap area is 44x44', () => {
+    const iconSizes = ['icon', 'icon-xs', 'icon-sm', 'icon-lg'] as const
+    for (const size of iconSizes) {
+      expect(buttonVariants({ size })).toContain('pointer-coarse:min-w-11')
+    }
+  })
+
+  it('leaves compact fine-pointer density unchanged (default stays h-8)', () => {
+    expect(buttonVariants({ size: 'default' })).toContain('h-8')
+  })
+})

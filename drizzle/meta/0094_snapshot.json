@@ -1,5 +1,5 @@
 {
-  "id": "e24d1dd9-85e9-4be1-8220-ed02ce77c049",
+  "id": "6b36f251-3535-48e7-bda3-a753e4f22ecb",
   "prevId": "a1e20bde-127d-4e8e-816f-06f238dd1300",
   "version": "7",
   "dialect": "postgresql",
@@ -3979,18 +3979,6 @@
           "primaryKey": false,
           "notNull": false
         },
-        "templateId": {
-          "name": "templateId",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "descriptionOverride": {
-          "name": "descriptionOverride",
-          "type": "jsonb",
-          "primaryKey": false,
-          "notNull": false
-        },
         "priceJpy": {
           "name": "priceJpy",
           "type": "integer",
@@ -4057,43 +4045,6 @@
           "concurrently": false,
           "method": "btree",
           "with": {}
-        },
-        "idx_add_on_options_templateId": {
-          "name": "idx_add_on_options_templateId",
-          "columns": [
-            {
-              "expression": "templateId",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "add_on_options_active_template_unique": {
-          "name": "add_on_options_active_template_unique",
-          "columns": [
-            {
-              "expression": "operatorId",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "templateId",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": true,
-          "where": "status = 'ACTIVE'",
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
         }
       },
       "foreignKeys": {
@@ -4103,19 +4054,6 @@
           "tableTo": "operators",
           "columnsFrom": [
             "operatorId"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "restrict",
-          "onUpdate": "no action"
-        },
-        "add_on_options_templateId_add_on_templates_id_fk": {
-          "name": "add_on_options_templateId_add_on_templates_id_fk",
-          "tableFrom": "add_on_options",
-          "tableTo": "add_on_templates",
-          "columnsFrom": [
-            "templateId"
           ],
           "columnsTo": [
             "id"
@@ -5306,6 +5244,44 @@
           "value": "\"reviews\".\"subjectClassId\" IS NULL OR \"reviews\".\"subject\" = 'VEHICLE'"
         }
       },
+      "isRLSEnabled": false
+    },
+    "public.feature_flags": {
+      "name": "feature_flags",
+      "schema": "",
+      "columns": {
+        "key": {
+          "name": "key",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "enabled": {
+          "name": "enabled",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "updatedAt": {
+          "name": "updatedAt",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updatedBy": {
+          "name": "updatedBy",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
       "isRLSEnabled": false
     }
   },

@@ -325,6 +325,18 @@ Bun.serve({
       return ok({ aggregates })
     }
 
+    // Renter clickwrap consent status (#877). The confirmation page renders inside
+    // the `_renter` layout, whose ConsentGate reads this. No docs are published in
+    // the mock lane, so an EMPTY pending list means "nothing owed" and the gate
+    // falls straight through — mirroring beta/prod. Without this the gate's query
+    // just 404s (still passes, since undefined => children) but retries noisily.
+    if (url.pathname === '/consent/status') return ok([])
+
+    // Renter/operator messaging threads (#1032). The confirmation page resolves the
+    // booking's thread without blocking; an empty inbox keeps this newly-reached
+    // authenticated page quiet (no 404 retry storm) and renders no "Message host" link.
+    if (url.pathname === '/threads') return ok([])
+
     // Create a booking (#392). The web sends the slice-6 contract; the server
     // derives renterId/operatorId/snapshots. We reflect the chosen insurance so
     // the confirmation page can assert it.
@@ -363,6 +375,9 @@ Bun.serve({
             }
           : null,
         feeSnapshot: TEST_FEE_SNAPSHOT,
+        // Required by the web's bookingDtoSchema (#460). No add-ons in the fixture;
+        // an empty array keeps the confirmation page's validation green.
+        addOnSnapshot: [],
         totalPrice: null,
         externalId: null,
         notes: null,

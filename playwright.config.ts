@@ -33,6 +33,20 @@ export default defineConfig({
     {
       name: 'chromium',
       use: { ...devices['Desktop Chrome'] },
+      // Desktop specs only. A project-level testIgnore REPLACES the config-level
+      // one (Playwright overrides, not merges), so the real-db exclusion must be
+      // repeated here. The mobile lane is a distinct project (real iPhone WebKit)
+      // so a phone-specific regression can't hide behind desktop chrome.
+      testIgnore: ['**/real-db/**', '**/mobile/**'],
+    },
+    {
+      // Mobile UX hardening gate (#1294): real iPhone 13 (WebKit) so touch-target
+      // sizes and dvh/scroll behaviour are proven on the browser phones actually
+      // run, not desktop Chromium emulation. Wave 1 (#1298) seeds e2e/mobile/;
+      // B/C/D/E extend it.
+      name: 'mobile-safari',
+      use: { ...devices['iPhone 13'] },
+      testMatch: ['**/mobile/**'],
     },
   ],
 
@@ -54,6 +68,12 @@ export default defineConfig({
         // vite.config.mts `server.proxy`). Unlike the old Next middleware, the
         // SPA has no server-side auth import chain, so no AUTH_SECRET/DATABASE_URL.
         VITE_DEV_API_PROXY: MOCK_API_URL,
+        // Bake the self-cancellation feature ON (#868) so the confirmation page
+        // renders the tall CancelBookingDialog the mobile scroll spec drives
+        // (e2e/mobile/primitives.spec.ts). Beta builds ship it OFF; enabling it
+        // here only makes the dialog reachable and leaves every existing spec
+        // (none touch the renter confirmation page) unaffected.
+        VITE_FEATURE_CANCELLATION: 'true',
       },
     },
   ],

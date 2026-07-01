@@ -38,7 +38,7 @@ export function EditClassDialog({ vehicleClass, onOpenChange }: EditClassDialogP
 
   return (
     <Dialog open={vehicleClass !== null} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[90vh] overflow-y-auto">
+      <DialogContent>
         <DialogHeader>
           <DialogTitle>{t('editClass')}</DialogTitle>
           <DialogDescription>{vehicleClass?.name}</DialogDescription>

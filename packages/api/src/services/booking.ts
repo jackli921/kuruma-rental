@@ -115,29 +115,33 @@ export class BookingService {
   findAllPaginated(
     ctx: CallerContext,
     filters: BookingFilters,
+    requestedOperatorId?: string,
   ): Promise<{ data: Booking[]; nextCursor: string | null }> {
-    return this.query.findAllPaginated(ctx, filters)
+    return this.query.findAllPaginated(ctx, filters, requestedOperatorId)
   }
 
   findAllWithVehiclesPaginated(
     ctx: CallerContext,
     filters: BookingFilters,
+    requestedOperatorId?: string,
   ): ReturnType<BookingQueryService['findAllWithVehiclesPaginated']> {
-    return this.query.findAllWithVehiclesPaginated(ctx, filters)
+    return this.query.findAllWithVehiclesPaginated(ctx, filters, requestedOperatorId)
   }
 
   findAllWithRentersPaginated(
     ctx: CallerContext,
     filters: BookingFilters,
+    requestedOperatorId?: string,
   ): ReturnType<BookingQueryService['findAllWithRentersPaginated']> {
-    return this.query.findAllWithRentersPaginated(ctx, filters)
+    return this.query.findAllWithRentersPaginated(ctx, filters, requestedOperatorId)
   }
 
   findAllWithVehiclesAndRentersPaginated(
     ctx: CallerContext,
     filters: BookingFilters,
+    requestedOperatorId?: string,
   ): ReturnType<BookingQueryService['findAllWithVehiclesAndRentersPaginated']> {
-    return this.query.findAllWithVehiclesAndRentersPaginated(ctx, filters)
+    return this.query.findAllWithVehiclesAndRentersPaginated(ctx, filters, requestedOperatorId)
   }
 
   findById(ctx: CallerContext, id: string): Promise<BookingWithOperator | undefined> {
