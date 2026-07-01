@@ -1045,6 +1045,45 @@
         "customerChange": "Change",
         "customerUnnamed": "Unnamed customer"
       },
+      "blocks": {
+        "scheduleAction": "Schedule block",
+        "kinds": {
+          "MAINTENANCE": "Maintenance",
+          "OUT_OF_SERVICE": "Out of service",
+          "MANUAL": "Manual hold"
+        },
+        "legend": {
+          "title": "Scheduled blocks"
+        },
+        "schedule": {
+          "dialogTitle": "Schedule a block",
+          "dialogDescription": "Take a vehicle off the calendar for maintenance, an out-of-service period, or a manual hold. It can't be booked during this window.",
+          "vehicleLabel": "Vehicle",
+          "kindLabel": "Type",
+          "startLabel": "Start",
+          "endLabel": "End",
+          "reasonLabel": "Reason",
+          "reasonPlaceholder": "e.g. Oil change",
+          "notesLabel": "Notes (optional)",
+          "submit": "Schedule block",
+          "cancel": "Cancel",
+          "noVehicles": "Add at least one vehicle before scheduling a block.",
+          "overlapError": "This vehicle already has a block overlapping that window.",
+          "error": "Couldn't schedule the block. Please try again."
+        },
+        "detail": {
+          "dialogTitle": "Scheduled block",
+          "vehicleLabel": "Vehicle",
+          "kindLabel": "Type",
+          "windowLabel": "Window",
+          "reasonLabel": "Reason",
+          "notesLabel": "Notes",
+          "deleteAction": "Remove block",
+          "deleteConfirm": "Remove this block? The vehicle becomes bookable again for this window.",
+          "deleteError": "Couldn't remove the block. Please try again.",
+          "close": "Close"
+        }
+      },
       "title": "Bookings",
       "subtitle": "Reservations across your storefronts",
       "empty": "No bookings yet",
