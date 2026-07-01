@@ -7,7 +7,7 @@ import {
   DialogTitle,
   DialogTrigger,
 } from '@/components/ui/dialog'
-import { isReviewsEnabled } from '@/vite/config'
+import { useFeatureFlag } from '@/vite/config'
 import { ReviewForm } from '@/vite/reviews/ReviewForm'
 import { pendingReviewSubjects } from '@/vite/reviews/api'
 import { useSession } from '@/vite/session'
@@ -28,13 +28,14 @@ interface ReviewPromptProps {
 // ReviewForm for exactly the pending subjects.
 export function ReviewPrompt({ bookingId, bookingCode, reviewedSubjects }: ReviewPromptProps) {
   const t = useTranslations('reviews.prompt')
+  const reviewsEnabled = useFeatureFlag('REVIEWS')
   const { data: session } = useSession()
   const [open, setOpen] = useState(false)
   const pending = pendingReviewSubjects(reviewedSubjects)
 
   // Reviews gated off (#1083-1086) → no post-trip prompt. Placed with the other
-  // post-hooks guards so rules-of-hooks stays satisfied.
-  if (!isReviewsEnabled() || pending.length === 0 || !session) return null
+  // post-hooks guards so rules-of-hooks stays satisfied. Runtime-toggleable.
+  if (!reviewsEnabled || pending.length === 0 || !session) return null
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
