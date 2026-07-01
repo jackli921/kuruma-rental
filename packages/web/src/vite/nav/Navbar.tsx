@@ -1,5 +1,6 @@
 import { buttonVariants } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
+import { useViewMode } from '@/vite/ViewModeProvider'
 import { CurrencySelector } from '@/vite/currency'
 import { useOperatorUnreadBadge, useUnreadBadge } from '@/vite/messaging'
 import { LocaleSwitcher } from '@/vite/nav/LocaleSwitcher'
@@ -11,7 +12,7 @@ import { visibleRenterNavItems } from '@/vite/nav/renter-nav-items'
 import { useBusinessNavFlags, useRenterNavFlags } from '@/vite/nav/useNavFlags'
 import { useNewBookingsBadge } from '@/vite/operator-bookings/useNewBookingsBadge'
 import { useSession } from '@/vite/session'
-import { getViewMode, isBusiness } from '@/vite/view-mode'
+import { isBusiness } from '@/vite/view-mode'
 import { Link } from '@tanstack/react-router'
 import { Car } from 'lucide-react'
 import { useLocale, useTranslations } from 'use-intl'
@@ -30,7 +31,7 @@ export function Navbar() {
 
   const role = session?.user?.role
   const canSwitchView = isBusiness(role)
-  const viewMode = getViewMode(role)
+  const viewMode = useViewMode(role)
   const isRenter = role === 'RENTER'
 
   // #611: in-app "new order" alert. Only an operator (business view) scans for

@@ -26,7 +26,10 @@ export function StarRating({ name, label, value, onChange, starLabel }: StarRati
         {STARS.map((n) => (
           <label
             key={n}
-            className="cursor-pointer rounded p-0.5 focus-within:ring-2 focus-within:ring-ring"
+            // Compact on desktop (~24px), but a >=44px tap target on touch so the
+            // stars aren't a cramped hit-strip on a phone (#1301). The icon keeps its
+            // size-5 look; only the hit-area grows on coarse pointers.
+            className="flex cursor-pointer items-center justify-center rounded p-0.5 focus-within:ring-2 focus-within:ring-ring pointer-coarse:size-11"
           >
             <input
               type="radio"

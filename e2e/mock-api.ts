@@ -409,6 +409,25 @@ Bun.serve({
       return ok(booking)
     }
 
+    // Renter "My Bookings" list (#543). GET /bookings?expand=vehicle&renterId=self.
+    // The mobile trips spec (e2e/mobile/trips.spec.ts) reads this to prove the date
+    // range wraps instead of forcing horizontal overflow on a narrow card. The
+    // two-week span makes both endpoints format to full medium dates (~45 chars EN),
+    // the length that overflowed before #1301.
+    if (url.pathname === '/bookings' && req.method === 'GET') {
+      return ok([
+        {
+          id: 'e2e-trip-1',
+          bookingCode: 'E2ETRIP1',
+          status: 'CONFIRMED',
+          startAt: '2026-07-01T01:00:00.000Z',
+          endAt: '2026-07-14T01:00:00.000Z',
+          totalPrice: 54000,
+          vehicle: { name: 'Toyota Alphard Executive Lounge', photos: [] },
+        },
+      ])
+    }
+
     // Confirmation page re-fetch (#392). GET /bookings/:id.
     const bookingMatch = url.pathname.match(/^\/bookings\/([^/]+)$/)
     if (bookingMatch && req.method === 'GET') {

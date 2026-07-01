@@ -1,4 +1,5 @@
 import { LayoutPreferenceProvider } from '@/vite/LayoutPreferenceProvider'
+import { ViewModeProvider } from '@/vite/ViewModeProvider'
 import type { UserRole } from '@kuruma/shared/auth/roles'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { render, screen } from '@testing-library/react'
@@ -62,11 +63,13 @@ function renderLayout() {
   return render(
     <QueryClientProvider client={new QueryClient()}>
       <IntlProvider locale="en" messages={en}>
-        <LayoutPreferenceProvider>
-          <BusinessLayout>
-            <div>PAGE CONTENT</div>
-          </BusinessLayout>
-        </LayoutPreferenceProvider>
+        <ViewModeProvider>
+          <LayoutPreferenceProvider>
+            <BusinessLayout>
+              <div>PAGE CONTENT</div>
+            </BusinessLayout>
+          </LayoutPreferenceProvider>
+        </ViewModeProvider>
       </IntlProvider>
     </QueryClientProvider>,
   )

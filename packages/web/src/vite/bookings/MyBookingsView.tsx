@@ -74,8 +74,15 @@ export function MyBookingsView({
                   </span>
                 </div>
                 <span className="text-sm text-muted-foreground">{booking.vehicleName ?? '—'}</span>
-                <span className="text-sm whitespace-nowrap text-muted-foreground">
-                  {`${formatDateTime(booking.startAt, locale)} – ${formatDateTime(booking.endAt, locale)}`}
+                {/* Each datetime stays an unbreakable unit, but the row may wrap at
+                    the separator so a ~45-char EN range never forces the card to
+                    overflow horizontally on a narrow phone (#1301). */}
+                <span className="text-sm text-muted-foreground">
+                  <span className="whitespace-nowrap">
+                    {formatDateTime(booking.startAt, locale)}
+                  </span>
+                  {' – '}
+                  <span className="whitespace-nowrap">{formatDateTime(booking.endAt, locale)}</span>
                 </span>
               </div>
               <span className="text-right text-lg font-semibold tabular-nums">
