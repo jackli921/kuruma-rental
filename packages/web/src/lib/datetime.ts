@@ -39,3 +39,26 @@ export function formatJstDateTimeLocal(date: Date): string {
     `T${pad(jst.getUTCHours())}:${pad(jst.getUTCMinutes())}`
   )
 }
+
+/**
+ * The single IANA timezone every Kuruma display formatter pins to. The cars live
+ * in Osaka and the owner schedules in JST, while renters browse from other zones,
+ * so every user-facing date/time is shown at the Tokyo wall clock regardless of
+ * the browser's locale. Centralised here so the pin is defined once — a copy-pasted
+ * `timeZone: 'Asia/Tokyo'` that a new formatter forgot is what caused #1308.
+ */
+export const JST_TIME_ZONE = 'Asia/Tokyo'
+
+/**
+ * Format an instant (ISO string) as a time-of-day at the JST wall clock in the
+ * given locale — 24-hour for ja/zh, 12-hour (AM/PM) for en, matching the rest of
+ * the UI rather than the viewer's browser default. The JST pin means an off-Tokyo
+ * viewer still sees the time that agrees with the JST-day bucket the row sits in.
+ */
+export function formatJstTime(iso: string, locale: string): string {
+  return new Date(iso).toLocaleTimeString(locale, {
+    hour: '2-digit',
+    minute: '2-digit',
+    timeZone: JST_TIME_ZONE,
+  })
+}
