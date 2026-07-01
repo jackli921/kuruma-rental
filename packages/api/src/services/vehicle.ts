@@ -4,7 +4,7 @@ import type {
   CreateVehicleInput,
   UpdateVehicleInput,
 } from '@kuruma/shared/validators/vehicle'
-import type { CallerContext } from '../middleware/auth'
+import { type CallerContext, PRIVILEGED_ROLES } from '../middleware/auth'
 import {
   PG_ERROR,
   VEHICLES_CLASS_FK,
@@ -88,8 +88,20 @@ export class VehicleService {
     }
   }
 
-  async findAll(ctx: CallerContext, filters?: VehicleFilters): Promise<PaginatedResult<Vehicle>> {
-    return this.repo.findAll(ctx, filters)
+  async findAll(
+    ctx: CallerContext,
+    filters?: VehicleFilters,
+    requestedOperatorId?: string,
+  ): Promise<PaginatedResult<Vehicle>> {
+    // Picker narrow (#1230 slice 5b): the vehicle catalog is PUBLIC, so operatorReadScope
+    // maps renters/partners to `all` — keying the narrow off it would echo their
+    // ?operatorId= (the #1272 trap). Vehicles have no bypass-only read resolver, so gate
+    // the narrow on the platform tier explicitly here — the single enforcement point.
+    const narrowedOperatorId = PRIVILEGED_ROLES.has(ctx.role) ? requestedOperatorId : undefined
+    return this.repo.findAll(ctx, {
+      ...filters,
+      ...(narrowedOperatorId ? { operatorId: narrowedOperatorId } : {}),
+    })
   }
 
   async findById(ctx: CallerContext, id: string): Promise<Vehicle | undefined> {
