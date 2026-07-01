@@ -1632,6 +1632,9 @@
       "confirm": "确认",
       "payment": "支付"
     },
+    "summary": {
+      "total": "合计"
+    },
     "dates": {
       "heading": "您的租赁日期",
       "pickup": "取车",
