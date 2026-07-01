@@ -132,6 +132,12 @@ describe('StorefrontCard', () => {
     expect(screen.getByRole('img', { name: 'Store location' })).toBeInTheDocument()
   })
 
+  it('renders the store initials as a branded fallback tile instead of a generic glyph (#1302)', () => {
+    renderCard(makeStorefront({ name: 'Best Car Rental Osaka' }))
+    const tile = screen.getByRole('img', { name: 'Store location' })
+    expect(tile).toHaveTextContent('BC')
+  })
+
   it('converts the from-price for the indicative note', async () => {
     renderWithUsdIndicative(
       <StorefrontCard

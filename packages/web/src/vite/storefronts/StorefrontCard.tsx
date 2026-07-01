@@ -1,11 +1,12 @@
 import { IndicativeNote } from '@/vite/currency'
 import { type AggregateEntry, RatingBadge } from '@/vite/reviews'
 import { ClassSummaryBadges } from '@/vite/storefronts/ClassSummaryBadges'
+import { StoreMonogram } from '@/vite/storefronts/StoreMonogram'
 import type { StorefrontCardData } from '@/vite/storefronts/api'
 import { carryForwardFilters } from '@/vite/storefronts/params'
 import { turnaroundHours } from '@/vite/storefronts/turnaround'
 import { Link } from '@tanstack/react-router'
-import { Clock, MapPin, Store } from 'lucide-react'
+import { Clock, MapPin } from 'lucide-react'
 import { useLocale, useTranslations } from 'use-intl'
 
 interface StorefrontCardProps {
@@ -64,20 +65,14 @@ export function StorefrontCard({
       }}
       className="group flex flex-col overflow-hidden rounded-xl border border-border bg-card shadow-sm transition-shadow hover:shadow-md"
     >
-      <div className="aspect-[4/3] overflow-hidden bg-muted">
+      <div className="aspect-[4/3] overflow-hidden">
         {/*
           A storefront is a rental location, not a car: showing a vehicle photo here
           read as "this is the store" (#955). Until a real store image field exists,
-          show a location placeholder — a Store glyph, distinct from the PhotoGallery
-          Car fallback so it unambiguously signals "location".
+          show the store's own initials (#1302) — a deliberate branded tile rather
+          than the earlier generic glyph, which read as empty/unfinished on mobile.
         */}
-        <div
-          role="img"
-          aria-label={t('storeImagePlaceholder')}
-          className="flex h-full w-full items-center justify-center"
-        >
-          <Store className="size-12 text-muted-foreground/30" aria-hidden="true" />
-        </div>
+        <StoreMonogram name={storefront.name} label={t('storeImagePlaceholder')} />
       </div>
       <div className="flex flex-1 flex-col gap-3 p-5">
         <div>
