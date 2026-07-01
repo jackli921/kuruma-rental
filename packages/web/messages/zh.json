@@ -1344,6 +1344,9 @@
       "colState": "状态",
       "overridden": "已覆盖",
       "default": "默认",
+      "runtimeLive": "实时生效",
+      "runtimeBuildOnly": "仅构建时",
+      "buildOnlyHint": "此开关尚未接入运行时控制层，切换会保存但在其迁移上线前不会生效。",
       "toggleLabel": "切换{feature}",
       "loadError": "无法加载功能开关。",
       "retry": "重试"
@@ -1631,6 +1634,9 @@
       "insurance": "保险",
       "confirm": "确认",
       "payment": "支付"
+    },
+    "summary": {
+      "total": "合计"
     },
     "dates": {
       "heading": "您的租赁日期",

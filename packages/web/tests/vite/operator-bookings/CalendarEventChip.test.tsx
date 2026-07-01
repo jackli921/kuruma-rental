@@ -83,12 +83,31 @@ describe('CalendarEventChip', () => {
     expect(card()).toBeNull()
   })
 
-  it('closes a hover-opened card when the pointer leaves (not pinned)', () => {
+  it('closes a hover-opened card after the grace delay when the pointer leaves (not pinned)', () => {
     const trigger = renderChip()
     fireEvent.mouseEnter(trigger)
     act(() => vi.advanceTimersByTime(120))
     fireEvent.mouseLeave(trigger)
+    // The close is deferred by the grace window (so the pointer can reach the card),
+    // so the card is still up immediately after leaving...
+    expect(card()).toBeInTheDocument()
+    // ...and dismisses once the grace delay elapses with no re-entry.
+    act(() => vi.advanceTimersByTime(120))
     expect(card()).toBeNull()
+  })
+
+  it('keeps the card open (CTA reachable) when the pointer crosses onto the card', () => {
+    const trigger = renderChip()
+    fireEvent.mouseEnter(trigger)
+    act(() => vi.advanceTimersByTime(120))
+    fireEvent.mouseLeave(trigger) // starts the close grace timer
+    // The popup element carries the bridge's onMouseEnter (fire on it directly:
+    // React's synthetic mouseenter is not raised for a raw child mouseEnter in jsdom).
+    const popup = document.querySelector('[data-slot="popover-content"]')
+    expect(popup).not.toBeNull()
+    fireEvent.mouseEnter(popup as Element) // pointer reaches the card, cancels the close
+    act(() => vi.advanceTimersByTime(240)) // well past the grace delay
+    expect(card()).toBeInTheDocument()
   })
 
   it('pins on click so the card survives a subsequent mouseleave', () => {

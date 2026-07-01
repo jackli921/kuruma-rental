@@ -4,10 +4,10 @@ import { isOperatorSession } from '@/vite/guards'
 import { CancelBookingDialog } from '@/vite/operator-bookings/CancelBookingDialog'
 import { SubstituteVehicleDialog } from '@/vite/operator-bookings/SubstituteVehicleDialog'
 import {
-  OPERATOR_BOOKINGS_KEY,
   type OperatorBookingDetailDto,
   type OperatorBookingStatus,
   type SubstitutionCandidate,
+  invalidateBookingCaches,
   updateBookingStatus,
 } from '@/vite/operator-bookings/api'
 import type { Session } from '@/vite/session'
@@ -61,7 +61,7 @@ export function BookingActionsPanel({
 
   const statusMutation = useMutation({
     mutationFn: (next: OperatorBookingStatus) => updateBookingStatus(detail.id, next, csrfToken),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: OPERATOR_BOOKINGS_KEY }),
+    onSuccess: () => invalidateBookingCaches(queryClient),
   })
 
   if (!isOperatorSession(session)) return null
