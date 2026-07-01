@@ -80,16 +80,17 @@ export default defineConfig({
         VITE_DEV_API_PROXY: API_URL,
         // These real-DB specs exercise features the beta demo gates OFF —
         // cancellation (#868), operator manual booking (#589), team (#904),
-        // settings (#903) and reviews (#1083-1086). Enable them here so e2e
-        // covers the FULL product; the beta Pages build (deploy.yml) sets none
-        // of these, so the demo still hides them. Fail-safe-OFF default lives
-        // in vite/config/features.ts.
+        // settings (#903), reviews (#1083-1086) and the fleet timeline (#1100).
+        // Enable them here so e2e covers the FULL product; the beta Pages build
+        // (deploy.yml) sets none of these, so the demo still hides them.
+        // Fail-safe-OFF default lives in vite/config/features.ts.
         VITE_FEATURE_CANCELLATION: 'true',
         VITE_FEATURE_OPERATOR_MANUAL_BOOKING: 'true',
         VITE_FEATURE_OPERATOR_TEAM: 'true',
         VITE_FEATURE_OPERATOR_SETTINGS: 'true',
         VITE_FEATURE_RENTER_DOCUMENTS: 'true',
         VITE_FEATURE_REVIEWS: 'true',
+        VITE_FEATURE_FLEET_TIMELINE: 'true',
       },
     },
   ],

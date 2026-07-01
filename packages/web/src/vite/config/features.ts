@@ -61,3 +61,14 @@ export function isOperatorBlocksEnabled(): boolean {
 export function isReviewsEnabled(): boolean {
   return isEnabled(import.meta.env.VITE_FEATURE_REVIEWS)
 }
+
+/**
+ * Operator fleet-timeline planning board (#1100): the multi-day vehicle-vs-time
+ * grid and its default landing view. Gated OFF for the beta MVP — the operator
+ * calendar falls back to the week grid and the timeline view drops out of the
+ * view switcher. Straight flag; the calendar is operator-only, so the view set
+ * is uniformly on/off rather than per-viewer.
+ */
+export function isFleetTimelineEnabled(): boolean {
+  return isEnabled(import.meta.env.VITE_FEATURE_FLEET_TIMELINE)
+}

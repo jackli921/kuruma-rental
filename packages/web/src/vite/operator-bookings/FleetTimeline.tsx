@@ -3,9 +3,9 @@ import { CalendarToolbar } from '@/vite/operator-bookings/CalendarToolbar'
 import type { CalendarBookingRow } from '@/vite/operator-bookings/api'
 import {
   type CalendarView,
-  OPERATOR_VIEWS,
   TIMELINE_SPAN_DAYS,
   calendarRange,
+  operatorViews,
   shiftCalendarDate,
 } from '@/vite/operator-bookings/calendar-events'
 import {
@@ -133,7 +133,7 @@ export function FleetTimeline({
         view="timeline"
         onNavigate={handleNavigate}
         onView={onViewChange}
-        views={OPERATOR_VIEWS}
+        views={operatorViews()}
       />
       <Timeline
         groups={groups}
