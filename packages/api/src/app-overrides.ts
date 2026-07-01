@@ -106,6 +106,7 @@ export type AppOverrides = {
   photoUploadLimiter?: RateLimitBinding
   photoUploadUserLimiter?: RateLimitBinding
   publicCatalogLimiter?: RateLimitBinding
+  operatorApplicationLimiter?: RateLimitBinding
   // Over-limit ⇒ the geocoder skips the lookup (#574). Inject a deny-binding in
   // tests; absent ⇒ the globalThis-resolved GEOCODE_LIMITER (or unthrottled dev).
   geocodeLimiter?: RateLimitBinding
