@@ -17,6 +17,7 @@ interface ImportMetaEnv {
   readonly VITE_FEATURE_RENTER_DOCUMENTS?: string
   readonly VITE_FEATURE_MESSAGING?: string
   readonly VITE_FEATURE_OPERATOR_BLOCKS?: string
+  readonly VITE_FEATURE_REVIEWS?: string
   // Browser Sentry (#765). DSN absent → instrumentation is a no-op. Release is
   // injected by CI at build time; environment defaults to 'production'.
   readonly VITE_SENTRY_DSN?: string

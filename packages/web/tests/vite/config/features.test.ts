@@ -4,11 +4,12 @@ import {
   isOperatorSettingsEnabled,
   isOperatorTeamEnabled,
   isRenterDocumentsEnabled,
+  isReviewsEnabled,
 } from '@/vite/config/features'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 // Every post-MVP feature ships OFF for the beta demo and turns on only for the
-// exact string 'true'. One table drives all four so a newly added flag can't skip
+// exact string 'true'. One table drives them all so a newly added flag can't skip
 // the fail-safe (a billable feature leaking on by accident).
 const FLAGS = [
   { name: 'VITE_FEATURE_CANCELLATION', read: isCancellationEnabled },
@@ -16,6 +17,7 @@ const FLAGS = [
   { name: 'VITE_FEATURE_OPERATOR_TEAM', read: isOperatorTeamEnabled },
   { name: 'VITE_FEATURE_OPERATOR_SETTINGS', read: isOperatorSettingsEnabled },
   { name: 'VITE_FEATURE_RENTER_DOCUMENTS', read: isRenterDocumentsEnabled },
+  { name: 'VITE_FEATURE_REVIEWS', read: isReviewsEnabled },
 ] as const
 
 describe('post-MVP feature flags', () => {

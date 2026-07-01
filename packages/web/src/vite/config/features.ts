@@ -51,3 +51,13 @@ export function isMessagingEnabled(): boolean {
 export function isOperatorBlocksEnabled(): boolean {
   return isEnabled(import.meta.env.VITE_FEATURE_OPERATOR_BLOCKS)
 }
+
+/**
+ * Reviews (#1083-1086): renter post-trip prompt, operator rate-renter panel, and the
+ * public rating badges on storefront/vehicle cards. Straight flag (no admin-bypass
+ * preview) — the badges render on public pages that carry no viewer role, so the
+ * feature is uniformly on/off rather than per-viewer.
+ */
+export function isReviewsEnabled(): boolean {
+  return isEnabled(import.meta.env.VITE_FEATURE_REVIEWS)
+}

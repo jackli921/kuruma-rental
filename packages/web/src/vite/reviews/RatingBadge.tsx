@@ -1,4 +1,5 @@
 import { cn } from '@/lib/utils'
+import { isReviewsEnabled } from '@/vite/config'
 import type { AggregateEntry } from '@/vite/reviews/api'
 import { useTranslations } from 'use-intl'
 
@@ -16,6 +17,10 @@ interface RatingBadgeProps {
 export function RatingBadge({ entry, size = 'sm' }: RatingBadgeProps) {
   const t = useTranslations('reviews.aggregate')
   const textClass = cn('text-muted-foreground', size === 'sm' ? 'text-xs' : 'text-sm')
+
+  // Reviews gated off (#1083-1086): render nothing so no rating surfaces anywhere the
+  // badge is used (storefront + vehicle cards, storefront detail).
+  if (!isReviewsEnabled()) return null
 
   if (entry === undefined) {
     return (
