@@ -104,7 +104,9 @@ export class DrizzleVehicleClassRepository implements VehicleClassRepository {
     id: string,
     data: Partial<VehicleClass>,
   ): Promise<VehicleClass | undefined> {
-    const { id: _id, createdAt: _createdAt, ...fields } = data
+    // operatorId is an immutable tenant anchor (#1279): strip it like id so an
+    // update payload can never migrate the row to another operator.
+    const { id: _id, operatorId: _operatorId, createdAt: _createdAt, ...fields } = data
     // #879: re-encode an edited photos array; absent key leaves it untouched.
     const set =
       fields.photos === undefined
