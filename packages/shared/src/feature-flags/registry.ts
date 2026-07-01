@@ -28,22 +28,22 @@ export const FEATURE_FLAGS = {
   OPERATOR_TEAM: {
     env: 'VITE_FEATURE_OPERATOR_TEAM',
     label: 'Operator team management',
-    runtimeControlled: false,
+    runtimeControlled: true,
   },
   OPERATOR_SETTINGS: {
     env: 'VITE_FEATURE_OPERATOR_SETTINGS',
     label: 'Operator settings',
-    runtimeControlled: false,
+    runtimeControlled: true,
   },
   RENTER_DOCUMENTS: {
     env: 'VITE_FEATURE_RENTER_DOCUMENTS',
     label: 'Renter document upload',
-    runtimeControlled: false,
+    runtimeControlled: true,
   },
   MESSAGING: {
     env: 'VITE_FEATURE_MESSAGING',
     label: 'Renter–operator messaging',
-    runtimeControlled: false,
+    runtimeControlled: true,
   },
   OPERATOR_BLOCKS: {
     env: 'VITE_FEATURE_OPERATOR_BLOCKS',

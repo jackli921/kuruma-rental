@@ -1,6 +1,7 @@
 import {
   isCancellationEnabled,
   isFleetTimelineEnabled,
+  isMessagingEnabled,
   isMultiCurrencyEnabled,
   isOperatorBlocksEnabled,
   isOperatorManualBookingEnabled,
@@ -21,6 +22,7 @@ const FLAGS = [
   { name: 'VITE_FEATURE_OPERATOR_TEAM', read: isOperatorTeamEnabled },
   { name: 'VITE_FEATURE_OPERATOR_SETTINGS', read: isOperatorSettingsEnabled },
   { name: 'VITE_FEATURE_RENTER_DOCUMENTS', read: isRenterDocumentsEnabled },
+  { name: 'VITE_FEATURE_MESSAGING', read: isMessagingEnabled },
   { name: 'VITE_FEATURE_REVIEWS', read: isReviewsEnabled },
   { name: 'VITE_FEATURE_FLEET_TIMELINE', read: isFleetTimelineEnabled },
   { name: 'VITE_FEATURE_MULTI_CURRENCY', read: isMultiCurrencyEnabled },

@@ -8,8 +8,10 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import en from '../../../messages/en.json'
 
 // Drive the signed-in role through the session hook; the sidebar's own seams
-// (router Link, feature flags, badge query) are mocked so this exercises the
-// layout's wiring — preference + view-cookie → render/omit the sidebar.
+// (router Link, badge query) are mocked so this exercises the layout's wiring —
+// preference + view-cookie → render/omit the sidebar. Feature flags are left at
+// their build-time default (no provider -> useFeatureFlag reads the empty context),
+// which hides the gated nav items; these tests assert sidebar/picker, not those.
 // Typed as UserRole | undefined (not string) so a typo'd literal here fails to
 // compile — that's the whole point of #1111's narrowing (audit M6).
 const h = vi.hoisted(() => ({
@@ -39,11 +41,6 @@ vi.mock('@tanstack/react-router', () => ({
   // current route honors ?operator; feed it the route id under test.
   useRouterState: ({ select }: { select: (s: { matches: { routeId: string }[] }) => unknown }) =>
     select({ matches: [{ routeId: '/$locale/_business' }, { routeId: h.routeId }] }),
-}))
-vi.mock('@/vite/config/features', () => ({
-  isOperatorTeamEnabled: () => true,
-  isOperatorSettingsEnabled: () => true,
-  isMessagingEnabled: () => false,
 }))
 vi.mock('@/vite/operator-bookings/useNewBookingsBadge', () => ({
   useNewBookingsBadge: () => ({ count: 0 }),

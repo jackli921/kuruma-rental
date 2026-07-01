@@ -8,6 +8,7 @@ import { NavBadge } from '@/vite/nav/NavBadge'
 import { NavbarClient } from '@/vite/nav/NavbarClient'
 import { visibleBusinessNavItems } from '@/vite/nav/business-nav-items'
 import { visibleRenterNavItems } from '@/vite/nav/renter-nav-items'
+import { useBusinessNavFlags, useRenterNavFlags } from '@/vite/nav/useNavFlags'
 import { useNewBookingsBadge } from '@/vite/operator-bookings/useNewBookingsBadge'
 import { useSession } from '@/vite/session'
 import { getViewMode, isBusiness } from '@/vite/view-mode'
@@ -42,8 +43,13 @@ export function Navbar() {
   // #1205: operator unread-message badge — tenant-level, only scanned in business view.
   const { count: operatorUnread } = useOperatorUnreadBadge({ enabled: isBusinessView })
 
+  // #1322: nav visibility now reads the runtime-toggleable flags via useFeatureFlag,
+  // so a dashboard override hides/shows an item live (the routes still redirect too).
+  const businessNavFlags = useBusinessNavFlags()
+  const renterNavFlags = useRenterNavFlags()
+
   const navItems: readonly NavItem[] = isBusinessView
-    ? visibleBusinessNavItems(role).map((item) => ({
+    ? visibleBusinessNavItems(role, businessNavFlags).map((item) => ({
         to: item.to,
         label: t(item.labelKey),
         // exactOptionalPropertyTypes: only attach `badge` when there is one.
@@ -56,7 +62,7 @@ export function Navbar() {
     : session?.user
       ? [
           { to: '/$locale/search', label: t('browse') },
-          ...visibleRenterNavItems(role).map((item) => ({
+          ...visibleRenterNavItems(role, renterNavFlags).map((item) => ({
             to: item.to,
             label: t(item.labelKey),
             // exactOptionalPropertyTypes: only attach the badge when there is one.
