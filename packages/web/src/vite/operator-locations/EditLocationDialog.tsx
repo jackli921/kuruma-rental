@@ -46,7 +46,7 @@ export function EditLocationDialog({ location, onOpenChange }: EditLocationDialo
 
   return (
     <Dialog open={location !== null} onOpenChange={handleOpenChange}>
-      <DialogContent className="max-h-[90vh] overflow-y-auto">
+      <DialogContent>
         <DialogHeader>
           <DialogTitle>{t('editLocation')}</DialogTitle>
           <DialogDescription>{location?.name}</DialogDescription>

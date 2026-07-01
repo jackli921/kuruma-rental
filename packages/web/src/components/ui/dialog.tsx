@@ -50,14 +50,20 @@ function DialogContent({
       <DialogPrimitive.Popup
         data-slot="dialog-content"
         className={cn(
-          // #1298: cap height at 90dvh + scroll the body so a dialog taller than
-          // a small phone's viewport never clips its footer/submit out of reach.
-          'fixed top-1/2 left-1/2 z-50 grid max-h-[90dvh] w-full max-w-[calc(100%-2rem)] -translate-x-1/2 -translate-y-1/2 gap-4 overflow-y-auto rounded-xl bg-popover p-4 text-sm text-popover-foreground ring-1 ring-foreground/10 duration-100 outline-none sm:max-w-sm data-open:animate-in data-open:fade-in-0 data-open:zoom-in-95 data-closed:animate-out data-closed:fade-out-0 data-closed:zoom-out-95',
+          // #1298: cap height at 90dvh. The Popup itself does NOT scroll — the inner
+          // dialog-scroll region does — so the close button (and a short dialog's
+          // footer) stay pinned instead of scrolling away on a viewport-tall dialog.
+          // `overflow-hidden` clips the scroll region to the rounded corners.
+          'fixed top-1/2 left-1/2 z-50 flex max-h-[90dvh] w-full max-w-[calc(100%-2rem)] -translate-x-1/2 -translate-y-1/2 flex-col overflow-hidden rounded-xl bg-popover text-sm text-popover-foreground ring-1 ring-foreground/10 duration-100 outline-none sm:max-w-sm data-open:animate-in data-open:fade-in-0 data-open:zoom-in-95 data-closed:animate-out data-closed:fade-out-0 data-closed:zoom-out-95',
           className,
         )}
         {...props}
       >
-        {children}
+        {/* min-h-0 lets this flex child shrink below its content so overflow-y-auto
+            actually engages; p-4 + gap-4 carry the padding/spacing the Popup used to. */}
+        <div data-slot="dialog-scroll" className="grid min-h-0 gap-4 overflow-y-auto p-4">
+          {children}
+        </div>
         {showCloseButton && (
           <DialogPrimitive.Close
             data-slot="dialog-close"
