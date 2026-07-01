@@ -8,7 +8,7 @@ import {
   resolveFeatureFlag,
   useFeatureFlag,
 } from '@/vite/config'
-import { isOperatorSession } from '@/vite/guards'
+import { canWriteAsOperator } from '@/vite/guards'
 import {
   BlockDetailDialog,
   BlockLegend,
@@ -101,7 +101,7 @@ export const Route = createFileRoute('/$locale/_business/manage/bookings/')({
     const { from, to } = calendarRange(view, parseCalendarDate(deps.date))
     return Promise.all([
       context.queryClient.ensureQueryData(operatorCalendarQueryOptions(from, to, deps.operator)),
-      context.queryClient.ensureQueryData(operatorCalendarVehiclesQueryOptions()),
+      context.queryClient.ensureQueryData(operatorCalendarVehiclesQueryOptions(deps.operator)),
     ])
   },
   pendingComponent: PageSkeleton,
@@ -131,7 +131,8 @@ export function OperatorBookingsRoute() {
   // cross-tenant and get a view-only calendar). The API re-enforces this (#589 §4.3).
   // Manual/walk-in booking is a post-MVP add-on (#589): gated behind the feature
   // flag AND the operator-session permission. OFF in the beta demo (flag unset).
-  const canManualBook = isOperatorManualBookingEnabled() && isOperatorSession(session ?? null)
+  const canManualBook =
+    isOperatorManualBookingEnabled() && canWriteAsOperator(session ?? null, pickedOperatorId)
 
   // #1101 scheduled blocks. Visibility (read + the detail dialog) follows the
   // beta gate with the platform-admin preview bypass; management (schedule + delete)
@@ -139,7 +140,7 @@ export function OperatorBookingsRoute() {
   // platform admin (operatorId derived from the vehicle), so this affordance gate is
   // what keeps an admin preview read-only. Mirrors `canManualBook`.
   const canViewBlocks = isVisibleToViewer(isOperatorBlocksEnabled(), session?.user.role)
-  const canManageBlocks = canViewBlocks && isOperatorSession(session ?? null)
+  const canManageBlocks = canViewBlocks && canWriteAsOperator(session ?? null, pickedOperatorId)
 
   // Block dialogs: a schedule (create) form and a click-to-view detail. The schedule
   // slot prefill carries the clicked vehicle + range; the detail dialog is keyed on
@@ -153,7 +154,7 @@ export function OperatorBookingsRoute() {
   // that can manual-book), so it's ready the moment they open the dialog and a
   // read-only viewer never pays for it.
   const { data: locationRows } = useQuery({
-    ...operatorLocationsQueryOptions(),
+    ...operatorLocationsQueryOptions(pickedOperatorId),
     enabled: canManualBook,
   })
 
@@ -178,7 +179,9 @@ export function OperatorBookingsRoute() {
   const { data: bookings } = useSuspenseQuery(
     operatorCalendarQueryOptions(from, to, pickedOperatorId),
   )
-  const { data: vehicles } = useSuspenseQuery(operatorCalendarVehiclesQueryOptions())
+  const { data: vehicles } = useSuspenseQuery(
+    operatorCalendarVehiclesQueryOptions(pickedOperatorId),
+  )
 
   // Blocks are an additive layer (not in the suspense loader): a non-suspense query
   // that degrades to empty on error/disabled, so a blocks-read failure never blanks
@@ -186,7 +189,7 @@ export function OperatorBookingsRoute() {
   // Skipped on the timeline view — FleetTimeline renders no block bands (#1244), so
   // fetching them on the default landing view would be a wasted request.
   const { data: blocks } = useQuery({
-    ...operatorCalendarBlocksQueryOptions(from, to),
+    ...operatorCalendarBlocksQueryOptions(from, to, pickedOperatorId),
     enabled: canViewBlocks && view !== 'timeline',
   })
 

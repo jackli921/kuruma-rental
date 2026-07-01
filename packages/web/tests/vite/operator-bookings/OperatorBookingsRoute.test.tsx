@@ -23,6 +23,9 @@ const B = enMessages.bookings.operator.blocks
 const searchState = vi.hoisted(() => ({
   value: { view: 'week', date: '2026-07-01' } as { view?: string; date?: string },
 }))
+// #1230 slice 5b: the picked operator, mutable so a test can drive the picker-admin
+// write gates. Defaults to undefined (unpicked) so every pre-picker test is unchanged.
+const pickedOperator = vi.hoisted(() => ({ value: undefined as string | undefined }))
 // #1101: a shared navigate spy (hoisted so the mock factory can close over it)
 // lets the block-vs-booking click dispatch be asserted.
 const navigate = vi.hoisted(() => vi.fn())
@@ -36,7 +39,7 @@ vi.mock('@tanstack/react-router', async () => ({
   // useOperatorContext reads the `_business` layout search via getRouteApi. These
   // route tests predate the picker, so the operator is always unpicked (undefined).
   getRouteApi: () => ({
-    useSearch: () => ({ operator: undefined }),
+    useSearch: () => ({ operator: pickedOperator.value }),
     useNavigate: () => navigate,
   }),
   useRouter: () => ({ invalidate: vi.fn() }),
@@ -148,18 +151,19 @@ function renderRoute(
   // layer; seeding them lets a flag-on / admin-preview render show the band.
   for (const range of [weekRange, timelineRange]) {
     queryClient.setQueryData(
-      api.operatorCalendarQueryOptions(range.from, range.to).queryKey,
+      api.operatorCalendarQueryOptions(range.from, range.to, pickedOperator.value).queryKey,
       seed.bookings ?? [],
     )
     queryClient.setQueryData(
-      api.operatorCalendarBlocksQueryOptions(range.from, range.to).queryKey,
+      api.operatorCalendarBlocksQueryOptions(range.from, range.to, pickedOperator.value).queryKey,
       seed.blocks ?? [],
     )
   }
-  queryClient.setQueryData(api.operatorCalendarVehiclesQueryOptions().queryKey, vehicles)
-  // The dialog reads pickup/return stores lazily on open; seed them (default []) so
-  // the test stays hermetic (staleTime is infinite, so no network fetch fires).
-  queryClient.setQueryData(operatorLocationsQueryOptions().queryKey, locations)
+  queryClient.setQueryData(
+    api.operatorCalendarVehiclesQueryOptions(pickedOperator.value).queryKey,
+    vehicles,
+  )
+  queryClient.setQueryData(operatorLocationsQueryOptions(pickedOperator.value).queryKey, locations)
   render(
     <QueryClientProvider client={queryClient}>
       <IntlProvider locale="en" messages={enMessages}>
@@ -186,6 +190,7 @@ afterEach(() => {
   vi.restoreAllMocks()
   vi.unstubAllEnvs()
   calendarProps = {}
+  pickedOperator.value = undefined
 })
 
 describe('OperatorBookingsRoute manual-booking affordance (#589 1d)', () => {
@@ -204,6 +209,12 @@ describe('OperatorBookingsRoute manual-booking affordance (#589 1d)', () => {
   it('hides the New Booking button for a bypass (non-operator) session', () => {
     renderRoute(bypassSession)
     expect(screen.queryByRole('button', { name: c.action })).not.toBeInTheDocument()
+  })
+
+  it('shows New Booking to a bypass admin who has picked an operator (5b)', () => {
+    pickedOperator.value = 'op_1'
+    renderRoute(bypassSession, bookableVehicles, [nambaStore])
+    expect(screen.getByRole('button', { name: c.action })).toBeInTheDocument()
   })
 
   it('opens the manual-booking dialog when New Booking is clicked', async () => {
@@ -317,6 +328,12 @@ describe('OperatorBookingsRoute blocks layer (#1101)', () => {
     act(() => (calendarProps.onSelectEvent as (i: unknown) => void)(block))
     expect(screen.getByText(B.detail.dialogTitle)).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: B.detail.deleteAction })).not.toBeInTheDocument()
+  })
+
+  it('shows Schedule to a bypass admin who has picked an operator (5b)', () => {
+    pickedOperator.value = 'op_1'
+    renderRoute(bypassSession, blocksFleet, [], { blocks: [maintenanceBlock] })
+    expect(screen.getByRole('button', { name: B.scheduleAction })).toBeInTheDocument()
   })
 
   it('does not navigate on a calendar booking click (its chip Link owns it) but opens the detail dialog for a block', () => {
