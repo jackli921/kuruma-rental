@@ -62,6 +62,9 @@ export class InMemoryVehicleClassRepository implements VehicleClassRepository {
       ...existing,
       ...data,
       id: existing.id,
+      // operatorId is an immutable tenant anchor (#1279): pin it like id so an
+      // update payload can never migrate the row to another operator.
+      operatorId: existing.operatorId,
       createdAt: existing.createdAt,
       updatedAt: new Date(),
     }

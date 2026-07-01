@@ -232,3 +232,43 @@ describe('cross-operator location WRITE denial (service seal, #387)', () => {
     expect(res).toMatchObject({ ok: true, location: { name: 'Umeda HQ' } })
   })
 })
+
+// #1279: operatorId is an immutable tenant anchor. Even if a caller reaches the
+// repo with operatorId in the update payload (bypassing the service's DTO), the
+// write layer must strip it — a row can never be re-homed to another tenant.
+// Probed directly at repo.update because that is where the IDOR vector lives.
+describe('location update() cannot re-home a row across operators (#1279)', () => {
+  const repo = new DrizzleLocationRepository(db)
+  const uniq = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
+  const opAId = `op_locseal_a_${uniq}`
+  const opBId = `op_locseal_b_${uniq}`
+  let locationA: Location
+
+  beforeAll(async () => {
+    // Both operators exist so a failed strip would actually migrate the FK
+    // (surfacing the bug) rather than 23503-rejecting on a missing operator.
+    await db.insert(operators).values([
+      { id: opAId, slug: `locseal-a-${uniq}`, name: 'LocSeal Operator A' },
+      { id: opBId, slug: `locseal-b-${uniq}`, name: 'LocSeal Operator B' },
+    ])
+    locationA = await repo.create(locationInput(opAId, 'Tennoji'))
+  })
+
+  afterAll(async () => {
+    await db.delete(locations).where(inArray(locations.operatorId, [opAId, opBId]))
+    await db.delete(operators).where(inArray(operators.id, [opAId, opBId]))
+  })
+
+  it('ignores operatorId in the payload while applying other fields', async () => {
+    const updated = await repo.update(locationA.id, {
+      operatorId: opBId,
+      defaultTurnaroundMinutes: 60,
+    })
+    expect(updated?.operatorId).toBe(opAId)
+    expect(updated?.defaultTurnaroundMinutes).toBe(60)
+
+    // Persisted, not just the returned row: re-read across tenants.
+    const reread = await repo.findById(SYSTEM_CONTEXT, locationA.id)
+    expect(reread?.operatorId).toBe(opAId)
+  })
+})
