@@ -103,6 +103,11 @@ export class InMemoryAvailabilityRepository implements AvailabilityRepository {
   > {
     const vehicle = await this.vehicleRepo.findById(SYSTEM_CONTEXT, vehicleId)
     if (!vehicle) return undefined
+    // #1268: a soft-deactivated operator's car reads as not_found even on a targeted
+    // lookup — mirrors the findAvailableVehicles NOT EXISTS(operators … deactivatedAt)
+    // seam. An absent operator record (orphan) is kept, matching that predicate.
+    const operator = await this.operatorRepo.findById(vehicle.operatorId)
+    if (operator?.deactivatedAt != null) return undefined
 
     const allBookings = await this.bookingRepo.findAll(SYSTEM_CONTEXT)
     const conflicts = getConflictingBookings(allBookings, vehicle.id, from, to)
@@ -124,6 +129,11 @@ export class InMemoryAvailabilityRepository implements AvailabilityRepository {
     from: Date,
     to: Date,
   ): Promise<number> {
+    // #1268: keep the demand seam symmetric with capacity — a soft-deactivated
+    // operator contributes no demand either, so neither becomes a caller-dependent
+    // hole. Orphan operator keeps counting (parity with the correlated NOT EXISTS).
+    const operator = await this.operatorRepo.findById(operatorId)
+    if (operator?.deactivatedAt != null) return 0
     const allBookings = await this.bookingRepo.findAll(SYSTEM_CONTEXT)
     // Same blocking-status + half-open overlap as getConflictingBookings, but
     // keyed on the (operator, class, location) triple instead of a single car —
@@ -174,6 +184,12 @@ export class InMemoryAvailabilityRepository implements AvailabilityRepository {
     to: Date,
     asOf: Date,
   ): Promise<number> {
+    // #1268: a soft-deactivated operator produces zero real class supply — mirrors
+    // the Drizzle NOT EXISTS(operators … deactivatedAt) on countClassCapacity so the
+    // guarantee lives in the data. An absent operator (orphan) keeps counting, parity
+    // with the correlated NOT EXISTS.
+    const operator = await this.operatorRepo.findById(operatorId)
+    if (operator?.deactivatedAt != null) return 0
     // #464 2d.2 / #1193: road-legal supply side of the combo guard. Counts only
     // status === 'AVAILABLE' — the exact predicate the assign gate enforces
     // (booking-lifecycle.ts rejects non-AVAILABLE). RETIRED (permanent exit) and
