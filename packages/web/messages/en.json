@@ -1365,7 +1365,27 @@
       "customers": "Customers",
       "operators": "Operators",
       "featureFlags": "Feature flags",
-      "backToSite": "Back to site"
+      "backToSite": "Back to site",
+      "applications": "Applications"
+    },
+    "applications": {
+      "title": "Operator applications",
+      "subtitle": "Review and triage new operator onboarding requests.",
+      "empty": "No applications are awaiting review.",
+      "contactLabel": "Contact",
+      "emailLabel": "Email",
+      "phoneLabel": "Phone",
+      "serviceAreaLabel": "Service area",
+      "fleetSizeLabel": "Fleet size",
+      "businessTypeLabel": "Business type",
+      "websiteLabel": "Website",
+      "messageLabel": "Message",
+      "submittedLabel": "Submitted",
+      "reasonLabel": "Rejection reason",
+      "reject": "Reject",
+      "error": "Couldn't record the rejection. Try again.",
+      "loadError": "Couldn't load the applications queue.",
+      "retry": "Retry"
     },
     "featureFlags": {
       "title": "Feature flags",

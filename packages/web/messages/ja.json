@@ -1365,7 +1365,27 @@
       "customers": "顧客",
       "operators": "事業者",
       "featureFlags": "機能フラグ",
-      "backToSite": "サイトに戻る"
+      "backToSite": "サイトに戻る",
+      "applications": "申請"
+    },
+    "applications": {
+      "title": "事業者申請",
+      "subtitle": "新規事業者のオンボーディング申請を確認・対応します。",
+      "empty": "審査待ちの申請はありません。",
+      "contactLabel": "担当者",
+      "emailLabel": "メールアドレス",
+      "phoneLabel": "電話番号",
+      "serviceAreaLabel": "サービスエリア",
+      "fleetSizeLabel": "想定車両台数",
+      "businessTypeLabel": "事業形態",
+      "websiteLabel": "ウェブサイト",
+      "messageLabel": "メッセージ",
+      "submittedLabel": "申請日",
+      "reasonLabel": "却下理由",
+      "reject": "却下",
+      "error": "却下を記録できませんでした。もう一度お試しください。",
+      "loadError": "申請キューを読み込めませんでした。",
+      "retry": "再試行"
     },
     "featureFlags": {
       "title": "機能フラグ",

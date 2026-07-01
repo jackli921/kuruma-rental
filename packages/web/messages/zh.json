@@ -1365,7 +1365,27 @@
       "customers": "客户",
       "operators": "运营商",
       "featureFlags": "功能开关",
-      "backToSite": "返回网站"
+      "backToSite": "返回网站",
+      "applications": "申请"
+    },
+    "applications": {
+      "title": "运营商申请",
+      "subtitle": "审核并处理新运营商的入驻申请。",
+      "empty": "暂无待审核的申请。",
+      "contactLabel": "联系人",
+      "emailLabel": "电子邮箱",
+      "phoneLabel": "电话",
+      "serviceAreaLabel": "服务区域",
+      "fleetSizeLabel": "预计车队规模",
+      "businessTypeLabel": "经营类型",
+      "websiteLabel": "网站",
+      "messageLabel": "留言",
+      "submittedLabel": "提交日期",
+      "reasonLabel": "拒绝原因",
+      "reject": "拒绝",
+      "error": "无法记录拒绝操作，请重试。",
+      "loadError": "无法加载申请队列。",
+      "retry": "重试"
     },
     "featureFlags": {
       "title": "功能开关",
