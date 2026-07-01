@@ -13,6 +13,9 @@ const fetchMock = vi.fn()
 vi.stubGlobal('fetch', fetchMock)
 
 beforeEach(() => {
+  // Multi-currency (#1070) ships OFF in beta; the picker only renders when ON. The
+  // gated-off path is covered by its own test below.
+  vi.stubEnv('VITE_FEATURE_MULTI_CURRENCY', 'true')
   localStorage.clear()
   fetchMock.mockResolvedValue({
     ok: true,
@@ -20,7 +23,10 @@ beforeEach(() => {
     json: async () => ({ success: true, data: rates }),
   })
 })
-afterEach(() => fetchMock.mockReset())
+afterEach(() => {
+  fetchMock.mockReset()
+  vi.unstubAllEnvs()
+})
 
 describe('currencyOptions', () => {
   it('lists JPY first, then the fetched rate currencies in order', () => {
@@ -85,5 +91,13 @@ describe('CurrencySelector trigger', () => {
 
     fireEvent.click(screen.getByRole('menuitem', { name: 'CNY' }))
     expect(localStorage.getItem('kuruma-display-currency')).toBe('CNY')
+  })
+
+  it('renders nothing when multi-currency is gated off (#1070) — no picker at all', () => {
+    vi.stubEnv('VITE_FEATURE_MULTI_CURRENCY', undefined)
+    const { container } = renderSelector('en')
+    // The whole navbar control disappears; JPY prices stand alone with no chooser.
+    expect(screen.queryByRole('button')).toBeNull()
+    expect(container).toBeEmptyDOMElement()
   })
 })

@@ -416,6 +416,7 @@
         "pickupLocation": "取车地点",
         "pickupLocationNone": "无取车地点",
         "pickupLocationCurrent": "当前取车地点",
+        "pickupLocationEmptyHint": "请先创建取车地点，这样该车辆才能出现在搜索结果中。",
         "operator": "运营商",
         "operatorPlaceholder": "选择运营商",
         "operatorRequired": "请选择运营商以继续"

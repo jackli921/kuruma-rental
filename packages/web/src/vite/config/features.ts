@@ -51,3 +51,36 @@ export function isMessagingEnabled(): boolean {
 export function isOperatorBlocksEnabled(): boolean {
   return isEnabled(import.meta.env.VITE_FEATURE_OPERATOR_BLOCKS)
 }
+
+/**
+ * Reviews (#1083-1086): renter post-trip prompt, operator rate-renter panel, and the
+ * public rating badges on storefront/vehicle cards. Straight flag (no admin-bypass
+ * preview) — the badges render on public pages that carry no viewer role, so the
+ * feature is uniformly on/off rather than per-viewer.
+ */
+export function isReviewsEnabled(): boolean {
+  return isEnabled(import.meta.env.VITE_FEATURE_REVIEWS)
+}
+
+/**
+ * Operator fleet-timeline planning board (#1100): the multi-day vehicle-vs-time
+ * grid and its default landing view. Gated OFF for the beta MVP — the operator
+ * calendar falls back to the week grid and the timeline view drops out of the
+ * view switcher. Straight flag; the calendar is operator-only, so the view set
+ * is uniformly on/off rather than per-viewer.
+ */
+export function isFleetTimelineEnabled(): boolean {
+  return isEnabled(import.meta.env.VITE_FEATURE_FLEET_TIMELINE)
+}
+
+/**
+ * Multi-currency indicative display (#1070): the navbar display-currency picker
+ * and the "≈ $X" ballpark notes shown beneath the authoritative JPY price. Gated
+ * OFF for the beta MVP — every price shows JPY alone, exactly as before the feature
+ * landed. The JPY charge is always authoritative, so gating removes only the
+ * secondary conversion display, never a price. Straight flag (public renter pages
+ * carry no viewer role).
+ */
+export function isMultiCurrencyEnabled(): boolean {
+  return isEnabled(import.meta.env.VITE_FEATURE_MULTI_CURRENCY)
+}

@@ -52,6 +52,8 @@ function setStars(groupName: string, stars: number) {
 
 describe('RateRenterPanel', () => {
   beforeEach(() => {
+    // Reviews ships OFF for the beta MVP; the operator panel only renders where the flag is on.
+    vi.stubEnv('VITE_FEATURE_REVIEWS', 'true')
     vi.stubGlobal(
       'fetch',
       vi.fn(async () => ({
@@ -73,7 +75,18 @@ describe('RateRenterPanel', () => {
       })),
     )
   })
-  afterEach(() => vi.unstubAllGlobals())
+  afterEach(() => {
+    vi.unstubAllGlobals()
+    vi.unstubAllEnvs()
+  })
+
+  it('renders nothing when the reviews feature is gated off (#1083-1086)', () => {
+    vi.stubEnv('VITE_FEATURE_REVIEWS', undefined)
+    renderPanel([])
+    // Neither the rate CTA nor the "reviewed" line surfaces while gated off.
+    expect(screen.queryByRole('button', { name: p.cta })).not.toBeInTheDocument()
+    expect(screen.queryByText(p.reviewed)).not.toBeInTheDocument()
+  })
 
   it('shows the rate CTA when the operator has not yet reviewed the renter', () => {
     renderPanel([])

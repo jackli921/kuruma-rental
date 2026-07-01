@@ -3,7 +3,7 @@ import type { AvailableVehicleData } from '@/vite/storefronts/api'
 import { render, screen } from '@testing-library/react'
 import type { ReactNode } from 'react'
 import { IntlProvider } from 'use-intl'
-import { describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import en from '../../../messages/en.json'
 import { renderWithUsdIndicative } from '../../support/currency'
 
@@ -75,6 +75,18 @@ function renderCard(
 }
 
 describe('AvailableVehicleCard', () => {
+  // Reviews ships OFF for the beta MVP; the class-rating badge only renders where the flag is on.
+  beforeEach(() => vi.stubEnv('VITE_FEATURE_REVIEWS', 'true'))
+  afterEach(() => vi.unstubAllEnvs())
+
+  it('renders no class badge at all when the reviews feature is gated off (#1083-1086)', () => {
+    vi.stubEnv('VITE_FEATURE_REVIEWS', undefined)
+    renderCard(makeVehicle(), { classRating: { avg: 4.2, count: 8 } })
+    expect(screen.queryByText('★ 4.2 (8)')).toBeNull()
+    expect(screen.queryByTestId('rating-badge-skeleton')).toBeNull()
+    expect(screen.getByText('Toyota Aqua')).toBeInTheDocument()
+  })
+
   it('renders the vehicle name, seats, transmission, and daily price', () => {
     renderCard()
     expect(screen.getByText('Toyota Aqua')).toBeInTheDocument()
