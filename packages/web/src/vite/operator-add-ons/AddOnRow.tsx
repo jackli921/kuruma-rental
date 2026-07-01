@@ -1,8 +1,8 @@
-import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { formatJpy } from '@/lib/format'
 import { AddOnStatusBadge } from '@/vite/operator-add-ons/AddOnStatusBadge'
 import type { AddOnData } from '@/vite/operator-add-ons/api'
+import { OperatorBadge } from '@/vite/operator-context'
 import { Coins, Pencil, Trash2 } from 'lucide-react'
 import { useTranslations } from 'use-intl'
 
@@ -24,11 +24,7 @@ export function AddOnRow({ addOn: a, canWrite, operatorName, onEdit, onArchive }
         <div className="flex items-center gap-2 flex-wrap">
           <h3 className="text-lg font-medium truncate">{a.name}</h3>
           <AddOnStatusBadge status={a.status} />
-          {operatorName && (
-            <Badge variant="secondary" aria-label={`Operator: ${operatorName}`}>
-              {operatorName}
-            </Badge>
-          )}
+          <OperatorBadge name={operatorName} />
         </div>
         {a.description && (
           <p className="mt-1 text-sm text-muted-foreground line-clamp-2">{a.description}</p>

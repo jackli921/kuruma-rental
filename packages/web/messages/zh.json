@@ -886,7 +886,8 @@
     },
     "operatorContext": {
       "label": "运营商",
-      "all": "所有运营商"
+      "all": "所有运营商",
+      "badge": "运营商：{name}"
     }
   },
   "messaging": {

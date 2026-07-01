@@ -1,6 +1,6 @@
-import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { formatJpy } from '@/lib/format'
+import { OperatorBadge } from '@/vite/operator-context'
 import { FeeScheduleStatusBadge } from '@/vite/operator-fees/FeeScheduleStatusBadge'
 import type { FeeScheduleData } from '@/vite/operator-fees/api'
 import { Pencil, Trash2 } from 'lucide-react'
@@ -26,11 +26,7 @@ export function FeeRow({ fee, className, canWrite, operatorName, onEdit, onArchi
         <div className="flex items-center gap-2 flex-wrap">
           <h3 className="text-lg font-medium truncate">{t(`type.${fee.feeType}`)}</h3>
           <FeeScheduleStatusBadge status={fee.status} />
-          {operatorName && (
-            <Badge variant="secondary" aria-label={`Operator: ${operatorName}`}>
-              {operatorName}
-            </Badge>
-          )}
+          <OperatorBadge name={operatorName} />
         </div>
         <div className="mt-2 flex flex-wrap gap-x-6 gap-y-1 text-sm text-muted-foreground">
           <span className="font-medium text-foreground">
