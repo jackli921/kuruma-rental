@@ -26,7 +26,15 @@ type Kind = NotificationLog['kind']
 // message path), so excluding it here keeps the booking switch exhaustive (the
 // `satisfies never` still holds) and leaves RELATIONS_BY_KIND / EXPECTED_RENDERED a
 // clean 1:1 with the lifecycle templates — no "n/a" relation row for a non-booking kind.
-type BookingNotificationKind = Exclude<Kind, 'OPERATOR_NEW_MESSAGE'>
+export type BookingNotificationKind = Exclude<Kind, 'OPERATOR_NEW_MESSAGE'>
+
+// The #1125 retry sweep re-drives one (booking, kind) through processOne, which
+// only handles booking-lifecycle kinds. This guard lets the sweep exclude the
+// message-path kind — the runtime mirror of the `BookingNotificationKind` type,
+// single-sourced so a future non-booking kind is one edit away from correct.
+export function isBookingNotificationKind(kind: Kind): kind is BookingNotificationKind {
+  return kind !== 'OPERATOR_NEW_MESSAGE'
+}
 
 /**
  * #664: the booking lifecycle event that triggered a dispatch. `CREATED` fans

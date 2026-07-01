@@ -111,6 +111,21 @@ describe('NotificationRetryService.run (#1125 sweep)', () => {
     expect(summary).toEqual({ attempted: 2, sent: 1, failed: 0, skipped: 1 })
   })
 
+  // #1205 slice 4: OPERATOR_NEW_MESSAGE has NO booking-lifecycle redrive path —
+  // it is dispatched off the message path (keyed msg:<id>), and processOne only
+  // knows booking kinds. A FAILED alert row must be skipped by the sweep, not fed
+  // to the redriver (which would render against an absent RELATIONS_BY_KIND entry
+  // and throw, churning a duplicate orphan row while never retrying the email).
+  it('skips a FAILED OPERATOR_NEW_MESSAGE row without handing it to the booking redriver', async () => {
+    bookings.set('bk-msg', makeBooking('bk-msg'))
+    await seedFailed(logRepo, 'bk-msg', 'OPERATOR_NEW_MESSAGE')
+
+    const summary = await service.run({ limit: 10 })
+
+    expect(redriver.calls).toEqual([]) // never reached the booking redriver
+    expect(summary).toEqual({ attempted: 1, sent: 0, failed: 0, skipped: 1 })
+  })
+
   it('forwards the limit to findRetryable (only the oldest N are swept)', async () => {
     for (const id of ['a', 'b', 'c']) {
       bookings.set(id, makeBooking(id))

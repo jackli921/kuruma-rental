@@ -1,7 +1,8 @@
 import { SYSTEM_CONTEXT } from '../middleware/auth'
 import type { BookingRepository, NotificationLogRepository } from '../repositories/types'
-import type { Booking, NotificationLog } from '../stores'
-import type { DispatchOutcome } from './notification-dispatcher'
+import type { Booking } from '../stores'
+import type { BookingNotificationKind, DispatchOutcome } from './notification-dispatcher'
+import { isBookingNotificationKind } from './notification-dispatcher'
 
 /**
  * Per-run tally, logged like the other crons so a glance at the worker log answers
@@ -24,7 +25,7 @@ export interface NotificationRetrySummary {
  * (booking, kind), never the dispatcher's fan-out `dispatch`.
  */
 export interface NotificationRedriver {
-  processOne(booking: Booking, kind: NotificationLog['kind']): Promise<DispatchOutcome>
+  processOne(booking: Booking, kind: BookingNotificationKind): Promise<DispatchOutcome>
 }
 
 export interface NotificationRetryServiceDeps {
@@ -68,6 +69,14 @@ export class NotificationRetryService {
             id: row.id,
             bookingId: row.bookingId,
           })
+          skipped++
+          continue
+        }
+        if (!isBookingNotificationKind(row.kind)) {
+          // OPERATOR_NEW_MESSAGE (#1205) is dispatched off the message path
+          // (keyed msg:<id>), not the booking lifecycle — processOne can't render
+          // it. Mirror the resend guard and skip; the message-path send owns its
+          // own delivery. Retryable rows of this kind are inert here by design.
           skipped++
           continue
         }

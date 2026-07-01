@@ -210,6 +210,14 @@ the decisions above are signed off (the review reshaped D2/D3 and added D4/D5).
   `origin/develop` worktree and re-verify symbols before editing.
 - **Enum/column migration ordering.** Slices 1 + 4 each migrate — coordinate the migration
   numbers against develop's tail to avoid the `_journal.json` out-of-order skip (CLAUDE.md).
+- **Known limitation — `operatorUnreadCount` is a counter, not a watermark (accepted).**
+  `markAsRead` does a blind `set operatorUnreadCount = 0`. A renter send that lands between the
+  operator opening the inbox and clicking read is zeroed with it, so the badge can under-count by
+  one until the next send. Consequence is badge accuracy only: the message is intact and visible,
+  the counter never drifts negative or unbounded (only atomic `+1` bumps and `= 0` resets), and it
+  self-corrects on the next send (which also re-fires the 0->1 alert). A watermark (last-read-at +
+  `COUNT` of later messages) would be self-healing but adds a column and a per-inbox-load subquery —
+  unjustified at this volume. The simple counter is the deliberate choice (owner call).
 
 ## 5. Out of scope
 
