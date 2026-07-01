@@ -2,7 +2,11 @@ import { useSession } from '@/vite/session'
 import { useQuery } from '@tanstack/react-query'
 import { useTranslations } from 'use-intl'
 import { AssignVehicleDialog } from './AssignVehicleDialog'
-import { needsAssignmentQueryOptions, substitutionCandidatesQueryOptions } from './api'
+import {
+  NEEDS_ASSIGNMENT_PAGE_LIMIT,
+  needsAssignmentQueryOptions,
+  substitutionCandidatesQueryOptions,
+} from './api'
 import type { RawOperatorBooking } from './schema'
 
 // #464: per-float row that lazily loads substitution candidates. Candidates are
@@ -66,6 +70,13 @@ export function UnassignedFloatsList({
 
   const { data: floats = [] } = useQuery(needsAssignmentQueryOptions(pickedOperatorId))
 
+  // #1223/#1214: fetchNeedsAssignment pulls one capped page and drops nextCursor, so a
+  // full page means more floats may exist beyond it — the raw count would undercount.
+  // Signal it with a "100+" badge. Exact-100-but-not-capped is an accepted false
+  // positive at this scale (cheap over real pagination, per the issues).
+  const isCapped = floats.length === NEEDS_ASSIGNMENT_PAGE_LIMIT
+  const overflowLabel = t('overflowLabel', { limit: NEEDS_ASSIGNMENT_PAGE_LIMIT })
+
   // ACTIVE (pickup window started = overdue) sorts above CONFIRMED.
   const sorted = [...floats].sort((a, b) => {
     if (a.status === 'ACTIVE' && b.status !== 'ACTIVE') return -1
@@ -79,10 +90,11 @@ export function UnassignedFloatsList({
         <h3 className="text-xs font-medium text-muted-foreground">{t('title')}</h3>
         {floats.length > 0 && (
           <output
-            aria-label={`${floats.length} unassigned floats`}
-            className="inline-flex size-5 items-center justify-center rounded-full bg-destructive text-[10px] font-bold text-destructive-foreground"
+            aria-label={isCapped ? overflowLabel : `${floats.length} unassigned floats`}
+            title={isCapped ? overflowLabel : undefined}
+            className="inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-destructive px-1 text-[10px] font-bold text-destructive-foreground"
           >
-            {floats.length}
+            {isCapped ? `${NEEDS_ASSIGNMENT_PAGE_LIMIT}+` : floats.length}
           </output>
         )}
       </div>
