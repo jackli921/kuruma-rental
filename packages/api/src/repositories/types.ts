@@ -29,6 +29,10 @@ export type { Customer, CustomerSort, CustomerWithBookings } from '@kuruma/share
 import type { CoordinateSource } from '@kuruma/shared/db/schema'
 import type { Customer, CustomerSort, CustomerWithBookings } from '@kuruma/shared/types/customer'
 import type { FleetVehicleOverview } from '@kuruma/shared/types/fleet'
+import type {
+  OperatorBookingCounts,
+  VehicleComplianceCounts,
+} from '@kuruma/shared/types/operator-summary'
 import type { OperatorOverview } from '@kuruma/shared/types/overview'
 import type { DashboardStats } from '@kuruma/shared/types/stats'
 import type { VehicleDetail } from '@kuruma/shared/types/vehicle-detail'
@@ -40,16 +44,12 @@ import type {
   InsuranceOption,
   Location,
   MaintenanceLog,
-  Message,
   Operator,
   OperatorMembership,
   ProviderInvite,
   Region,
-  Thread,
-  ThreadParticipant,
   User,
   Vehicle,
-  VehicleClass,
 } from '../stores'
 // Imported (not just re-exported) because the RepoBundle below references it locally.
 import type { AdminBookingFilters } from './types-admin-booking'
@@ -319,6 +319,8 @@ export interface VehicleRepository {
   // the `fleetCount` column. Returns a Map keyed by operatorId; operators with no
   // live vehicles are absent (caller defaults to 0). Unscoped — authz in the service.
   countByOperator(operatorIds: string[]): Promise<Map<string, number>>
+  // #1120 admin summary: per-operator compliance roll-up over the live fleet (classified via the `computeExpiryStatus` seam); authz in OperatorSummaryService.
+  countComplianceForOperator(operatorId: string, asOf: Date): Promise<VehicleComplianceCounts>
   create(
     ctx: CallerContext,
     data: Omit<Vehicle, 'id' | 'createdAt' | 'updatedAt'>,
@@ -357,14 +359,14 @@ export interface VehicleRepository {
 // (vehicles + bookings + users.name) — following the same boundary as
 // AvailabilityRepository, which also reads vehicles + bookings.
 export interface FleetOverviewRepository {
-  // `now` is injected so time-based cutoffs (utilization window,
-  // current/upcoming filtering) live in callers, not infrastructure.
-  // Tests can pass a fixed Date without faking the global clock.
-  //
-  // `ctx` carries the caller's tenant scope (#594): OPERATOR_* see only their
-  // own vehicles; bypass roles (PLATFORM_ADMIN / legacy STAFF/ADMIN) see all.
-  // The route gates out RENTER/PARTNER before this is reached.
-  findFleetOverview(ctx: CallerContext, now: Date): Promise<FleetVehicleOverview[]>
+  // `now` is injected so time cutoffs live in callers; tests pass a fixed Date.
+  // `ctx` scopes the read (#594); `operatorId` (#407 slice 4, bypass-gated)
+  // narrows a bypass caller to one operator — see narrowReadToOperator.
+  findFleetOverview(
+    ctx: CallerContext,
+    now: Date,
+    operatorId?: string,
+  ): Promise<FleetVehicleOverview[]>
 }
 
 /**
@@ -471,6 +473,8 @@ export interface BookingRepository {
    *  it), never enumerate the global user table (#396/#475). operatorId comes
    *  from the caller's own validated context, never from client input. */
   listRenterIdsForOperator(operatorId: string): Promise<string[]>
+  // #1120 admin summary: total (non-CANCELLED) + upcoming (CONFIRMED/ACTIVE future) booking counts for one operator; authz in OperatorSummaryService.
+  countBookingsForOperator(operatorId: string, now: Date): Promise<OperatorBookingCounts>
   create(
     ctx: CallerContext,
     // cancellationFeeSettlement is server-derived (defaults 'ADVISORY', #868 3a),
@@ -528,7 +532,8 @@ export interface StatsRepository {
  * `now` is injected so "upcoming" is deterministic in tests.
  */
 export interface OverviewRepository {
-  getOperatorOverview(ctx: CallerContext, now: Date): Promise<OperatorOverview>
+  // `operatorId` (#407 slice 4, bypass-gated): narrows a bypass caller — see narrowReadToOperator.
+  getOperatorOverview(ctx: CallerContext, now: Date, operatorId?: string): Promise<OperatorOverview>
 }
 
 /**
@@ -666,64 +671,15 @@ export interface VehicleDetailRepository {
   ): Promise<VehicleDetail | undefined>
 }
 
-export interface ThreadRepository {
-  findAll(
-    ctx: CallerContext,
-  ): Promise<Array<Thread & { participants: ThreadParticipant[]; lastMessage: Message | null }>>
-  findById(
-    ctx: CallerContext,
-    id: string,
-  ): Promise<(Thread & { participants: ThreadParticipant[]; messages: Message[] }) | undefined>
-  /**
-   * Look up a thread by idempotency key scoped to the caller. Non-privileged
-   * callers only match threads where they are a participant. Prevents
-   * cross-tenant leakage when a client replays a key observed from another
-   * tenant (issue #328).
-   */
-  findByIdempotencyKey(ctx: CallerContext, key: string): Promise<Thread | undefined>
-  create(
-    ctx: CallerContext,
-    bookingId: string | null,
-    participantIds: string[],
-    idempotencyKey?: string | null,
-  ): Promise<Thread>
-  markAsRead(ctx: CallerContext, threadId: string): Promise<void>
-}
-
-export interface MessageRepository {
-  /**
-   * Find a message by id, scoped to the caller. Non-privileged callers
-   * only see messages in threads they participate in; others get
-   * `undefined`. Privileged roles (STAFF/ADMIN) bypass the scope.
-   */
-  findById(ctx: CallerContext, id: string): Promise<Message | undefined>
-  /**
-   * Look up a message by idempotency key scoped to the caller. The key is
-   * sender-owned: the lookup matches only messages where `senderId = ctx.userId`
-   * for non-privileged callers. Prevents cross-tenant leakage when a client
-   * replays a key observed from another sender (issue #328).
-   */
-  findByIdempotencyKey(ctx: CallerContext, key: string): Promise<Message | undefined>
-  create(
-    ctx: CallerContext,
-    threadId: string,
-    content: string,
-    idempotencyKey?: string | null,
-  ): Promise<Message>
-  findByThreadId(ctx: CallerContext, threadId: string): Promise<Message[]>
-  /**
-   * Merge a single language translation into the message's `translations`
-   * JSON map. If `detectedSourceLanguage` is provided, also update the
-   * message's `sourceLanguage` column (used when the original language
-   * was unknown at send time and the provider auto-detected it).
-   */
-  updateTranslation(
-    messageId: string,
-    language: string,
-    translatedText: string,
-    detectedSourceLanguage: string | null,
-  ): Promise<Message | undefined>
-}
+// Messaging bounded-context data access (#1032/#1205) lives in its own module to
+// keep this barrel under the file-size cap; re-exported for callers (mirrors the
+// notification / review / consent splits above).
+export type {
+  MessageCreateResult,
+  MessageRepository,
+  OperatorUnreadTransition,
+  ThreadRepository,
+} from './types-messaging'
 
 // Transaction-runner ports (#392 booking bundle + #521 operator-grant bundle)
 // live in ./types-transactions to keep this barrel under the file-size cap
@@ -756,20 +712,9 @@ export interface MaintenanceLogRepository {
 // the file-size cap (same split as types-review / types-fee-schedule).
 export type { VehicleBlockRepository } from './types-vehicle-block'
 
-export interface VehicleClassFilters {
-  operatorId?: string
-  status?: 'ACTIVE' | 'ARCHIVED'
-  includeArchived?: boolean
-}
-
-export interface VehicleClassRepository {
-  findAll(ctx: CallerContext, filters?: VehicleClassFilters): Promise<VehicleClass[]>
-  findById(ctx: CallerContext, id: string): Promise<VehicleClass | undefined>
-  findBySlug(ctx: CallerContext, slug: string): Promise<VehicleClass | undefined>
-  create(data: Omit<VehicleClass, 'id' | 'createdAt' | 'updatedAt'>): Promise<VehicleClass>
-  update(id: string, data: Partial<VehicleClass>): Promise<VehicleClass | undefined>
-  archive(id: string): Promise<VehicleClass | undefined>
-}
+// VehicleClassRepository lives in ./types-vehicle-class to keep this barrel under
+// the file-size cap (same split as types-vehicle-block above).
+export type { VehicleClassFilters, VehicleClassRepository } from './types-vehicle-class'
 
 // Fee-schedule contract lives in its own module (file-size cap, #978); re-exported.
 export type { FeeScheduleFilters, FeeScheduleRepository } from './types-fee-schedule'

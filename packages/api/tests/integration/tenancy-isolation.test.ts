@@ -1,4 +1,3 @@
-import { runTx } from '@kuruma/shared/db'
 import { bookings, operators, users, vehicleClasses, vehicles } from '@kuruma/shared/db/schema'
 import { eq, inArray } from 'drizzle-orm'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
@@ -6,8 +5,6 @@ import { type CallerContext, ForbiddenError, SYSTEM_CONTEXT } from '../../src/mi
 import { pgErrorCode } from '../../src/pg-errors'
 import {
   DrizzleBookingRepository,
-  DrizzleMessageRepository,
-  DrizzleThreadRepository,
   DrizzleVehicleClassRepository,
   DrizzleVehicleRepository,
 } from '../../src/repositories/drizzle'
@@ -20,52 +17,10 @@ import { DEFAULT_DAILY_RATE_JPY, cleanupLocations, db, seedLocation } from './se
 // tenant's vehicles, and repos not yet operator-scoped in slice 1 (#386) must
 // fail closed rather than leak across tenants. Exercised against real Postgres.
 
-const operatorCtx: CallerContext = {
-  userId: 'op-user',
-  role: 'OPERATOR_OWNER',
-  operatorId: 'op_a',
-  bypassScope: false,
-}
-
-type Invocation = readonly [method: string, run: () => Promise<unknown>]
-
-describe('message/thread repos reject OPERATOR_* until scoped (slice 7, Drizzle)', () => {
-  // runTx is inert here — every call below uses an OPERATOR_* ctx, which the
-  // repo rejects (rejectOperatorContextUntilScoped) before reaching the tx.
-  const thread = new DrizzleThreadRepository(db, runTx)
-  const message = new DrizzleMessageRepository(db, runTx)
-
-  const cases: ReadonlyArray<readonly [repoName: string, invocations: Invocation[]]> = [
-    [
-      'ThreadRepository',
-      [
-        ['findAll', () => thread.findAll(operatorCtx)],
-        ['findById', () => thread.findById(operatorCtx, 't1')],
-        ['findByIdempotencyKey', () => thread.findByIdempotencyKey(operatorCtx, 'k1')],
-        ['create', () => thread.create(operatorCtx, null, ['u1'])],
-        ['markAsRead', () => thread.markAsRead(operatorCtx, 't1')],
-      ],
-    ],
-    [
-      'MessageRepository',
-      [
-        ['findById', () => message.findById(operatorCtx, 'm1')],
-        ['findByIdempotencyKey', () => message.findByIdempotencyKey(operatorCtx, 'k1')],
-        ['create', () => message.create(operatorCtx, 't1', 'hi')],
-        ['findByThreadId', () => message.findByThreadId(operatorCtx, 't1')],
-      ],
-    ],
-  ]
-
-  for (const [repoName, invocations] of cases) {
-    describe(repoName, () => {
-      it.each(invocations)('%s throws ForbiddenError naming the repo', async (_method, run) => {
-        await expect(run()).rejects.toThrow(ForbiddenError)
-        await expect(run()).rejects.toThrow(`${repoName} not yet operator-scoped`)
-      })
-    })
-  }
-})
+// #1205 slice 2 supersedes the fail-closed contract that thread/message repos
+// used to enforce here (they rejected every OPERATOR_* caller). They are now
+// operator-scoped via `threadReadScope`; the cross-tenant seal is proven in
+// tests/integration/messaging-tenancy.test.ts (Drizzle) and the InMemory twin.
 
 // Slice 6 (#392) supersedes the slice-1 fail-closed contract for BookingRepository:
 // it is now operator-scoped (three-way bookingReadScope). Proven against real

@@ -39,6 +39,7 @@ vi.mock('@tanstack/react-router', () => ({
 function makeVehicle(overrides: Partial<AvailableVehicleData> = {}): AvailableVehicleData {
   return {
     id: 'v1',
+    classId: 'cls-compact',
     name: 'Toyota Aqua',
     make: 'Toyota',
     model: 'Aqua',
@@ -56,7 +57,10 @@ function makeVehicle(overrides: Partial<AvailableVehicleData> = {}): AvailableVe
   }
 }
 
-function renderCard(vehicle: AvailableVehicleData = makeVehicle()) {
+function renderCard(
+  vehicle: AvailableVehicleData = makeVehicle(),
+  extra: { classRating?: { avg: number; count: number } | null } = {},
+) {
   render(
     <IntlProvider locale="en" messages={en}>
       <AvailableVehicleCard
@@ -64,6 +68,7 @@ function renderCard(vehicle: AvailableVehicleData = makeVehicle()) {
         locationId="loc-1"
         from="2026-07-01T10:00"
         to="2026-07-03T10:00"
+        {...extra}
       />
     </IntlProvider>,
   )
@@ -112,7 +117,6 @@ describe('AvailableVehicleCard', () => {
     expect(screen.getByText('1 bag')).toBeInTheDocument()
   })
 
-  // #1070: the card's from-price carries an indicative conversion under a non-JPY display.
   it('converts the from-price for the indicative note', async () => {
     renderWithUsdIndicative(
       <AvailableVehicleCard
@@ -122,7 +126,25 @@ describe('AvailableVehicleCard', () => {
         to="2026-07-03T10:00"
       />,
     )
-    // 30,000 -> $201
     expect(await screen.findByText(/≈ \$201/)).toBeTruthy()
+  })
+
+  it('renders a skeleton class-rating badge while the parent batch is in flight (#1085)', () => {
+    renderCard()
+    expect(screen.getByTestId('rating-badge-skeleton')).toBeInTheDocument()
+  })
+
+  it('renders the class rating once the batch resolves (#1085)', () => {
+    renderCard(makeVehicle(), { classRating: { avg: 4.2, count: 8 } })
+    expect(screen.getByText('★ 4.2 (8)')).toBeInTheDocument()
+    expect(screen.getByLabelText('4.2 stars, 8 reviews')).toBeInTheDocument()
+  })
+
+  it('renders no class badge AT ALL when classId is null (#1085 — distinct from rated-zero)', () => {
+    renderCard(makeVehicle({ classId: null, classLabel: '' }))
+    expect(screen.queryByTestId('rating-badge-skeleton')).toBeNull()
+    expect(screen.queryByText(/no reviews/i)).toBeNull()
+    expect(screen.queryByLabelText(/stars,/)).toBeNull()
+    expect(screen.getByText('Toyota Aqua')).toBeInTheDocument()
   })
 })

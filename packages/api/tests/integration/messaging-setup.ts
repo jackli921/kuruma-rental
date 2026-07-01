@@ -3,11 +3,35 @@
 // shared across domain-specific setup files (messaging, vehicles pricing,
 // …). See issue #28 and #48.
 
-import { messages, threadParticipants, threads, users } from '@kuruma/shared/db/schema'
+import { messages, operators, threadParticipants, threads, users } from '@kuruma/shared/db/schema'
 import { inArray } from 'drizzle-orm'
 import { testDb } from './pg-test-client'
 
 export { testDb }
+
+/**
+ * Create real operators for the thread tenant FK (`threads.operatorId ->
+ * operators.id`, ON DELETE restrict). Returns ids in insert order. #1205.
+ */
+export async function createTestOperators(count: number): Promise<string[]> {
+  const seed = crypto.randomUUID()
+  const rows = Array.from({ length: count }, (_, i) => ({
+    slug: `test-op-${seed}-${i}`,
+    name: `Test Operator ${i}`,
+  }))
+  const inserted = await testDb.insert(operators).values(rows).returning({ id: operators.id })
+  return inserted.map((r) => r.id)
+}
+
+/**
+ * Drop operators by id. Call AFTER {@link cleanupMessaging} — the operatorId FK
+ * is ON DELETE restrict, so any thread referencing the operator must be gone
+ * first.
+ */
+export async function cleanupOperators(operatorIds: string[]): Promise<void> {
+  if (operatorIds.length === 0) return
+  await testDb.delete(operators).where(inArray(operators.id, operatorIds))
+}
 
 /**
  * Create real users for FK satisfaction. `thread_participants.userId` and

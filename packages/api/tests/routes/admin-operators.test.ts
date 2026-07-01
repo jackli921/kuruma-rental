@@ -32,6 +32,7 @@ function makeApp() {
     vehicleRepo,
     bookingRepo,
     new InMemoryVehicleBlockRepository(),
+    new InMemoryOperatorRepository(),
   )
   const operatorRepo = new InMemoryOperatorRepository()
   const app = createApp({ vehicleRepo, bookingRepo, availabilityRepo, operatorRepo })
@@ -207,6 +208,78 @@ describe('POST /admin/operators/:id/{deactivate,reactivate}', () => {
       headers: await bearer(ADMIN),
     })
     expect(res.status).toBe(404)
+  })
+})
+
+interface OperatorSummaryBody {
+  operatorId: string
+  name: string
+  vehicleCount: number
+  vehiclesNeedingDocs: number
+  vehiclesExpiringSoon: number
+  totalBookings: number
+  upcomingBookings: number
+  lastComplianceAlertAt: string | null
+}
+
+describe('GET /admin/operators/:id/summary (#1120)', () => {
+  let harness: ReturnType<typeof makeApp>
+
+  beforeEach(() => {
+    harness = makeApp()
+  })
+
+  for (const role of ['OPERATOR_OWNER', 'OPERATOR_STAFF', 'RENTER', 'PARTNER'] as const) {
+    test(`${role} is forbidden — the summary is platform-only (403)`, async () => {
+      const res = await harness.app.request('/admin/operators/op_x/summary', {
+        headers: await bearer({ sub: `u-${role}`, role, operatorId: 'op_x' }),
+      })
+      expect(res.status).toBe(403)
+    })
+  }
+
+  test('rejects an unauthenticated request (401)', async () => {
+    const res = await harness.app.request('/admin/operators/op_x/summary')
+    expect(res.status).toBe(401)
+  })
+
+  test('unknown operator id → 404', async () => {
+    const res = await harness.app.request('/admin/operators/op_missing/summary', {
+      headers: await bearer(ADMIN),
+    })
+    expect(res.status).toBe(404)
+  })
+
+  test('PLATFORM_ADMIN gets the per-operator roll-up over its live fleet', async () => {
+    const { id } = await createOperator(harness.app, 'Summary Co')
+    // both docs in-date → fine
+    await seedVehicle(harness.vehicleRepo, id, {
+      shakenExpiryDate: '2027-01-01',
+      insuranceExpiryDate: '2027-01-01',
+    })
+    // shaken missing (insurance fine) → UNKNOWN → needs docs
+    await seedVehicle(harness.vehicleRepo, id, {
+      shakenExpiryDate: null,
+      insuranceExpiryDate: '2027-01-01',
+    })
+    await seedVehicle(harness.vehicleRepo, id, { status: 'RETIRED' }) // excluded
+
+    const res = await harness.app.request(`/admin/operators/${id}/summary`, {
+      headers: await bearer(ADMIN),
+    })
+    expect(res.status).toBe(200)
+    const body = (await res.json()) as { success: boolean; data: OperatorSummaryBody }
+    expect(body.success).toBe(true)
+    expect(body.data).toEqual({
+      operatorId: id,
+      name: 'Summary Co',
+      vehicleCount: 2,
+      vehiclesNeedingDocs: 1,
+      vehiclesExpiringSoon: 0,
+      totalBookings: 0,
+      upcomingBookings: 0,
+      lastComplianceAlertAt: null,
+    })
   })
 })
 

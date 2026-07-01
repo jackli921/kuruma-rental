@@ -79,3 +79,164 @@ describe('InMemoryReviewRepository', () => {
     expect(await repo.findByBookingId('bk_1')).toHaveLength(2)
   })
 })
+
+// #1085 slice 5 aggregates. The InMemory predicate is the source of truth tests can
+// mutation-prove against (the Drizzle SQL mirrors the same predicate, locked by the
+// real-pg suite). Both impls return ABSENT entries — not {sum:0,count:0} — for ids
+// with no published+visible rows, so the service distinguishes "no reviews yet"
+// from "rated zero" at the call site.
+
+const PUBLISHED = new Date('2026-06-26T00:00:00Z')
+
+// A renter->OPERATOR review, published+visible, with a custom overall + per-row
+// override hooks for the aggregate predicate matrix.
+function publishedOperatorReview(overrides: Partial<NewReview> = {}): NewReview {
+  return renterReview({
+    publishedAt: PUBLISHED,
+    moderationStatus: 'VISIBLE',
+    ...overrides,
+  })
+}
+
+function vehicleReview(overrides: Partial<NewReview> = {}): NewReview {
+  return renterReview({
+    subject: 'VEHICLE',
+    subjectVehicleId: 'veh_1',
+    subjectClassId: 'cls_1',
+    publishedAt: PUBLISHED,
+    moderationStatus: 'VISIBLE',
+    ...overrides,
+  })
+}
+
+describe('InMemoryReviewRepository — aggregates (#1085)', () => {
+  it('empty ids returns an empty Map without scanning', async () => {
+    const repo = new InMemoryReviewRepository()
+    await repo.insert(publishedOperatorReview({ operatorId: 'op_1', overall: 5 }))
+    expect(await repo.aggregateByOperator([])).toEqual(new Map())
+    expect(await repo.aggregateByVehicle([])).toEqual(new Map())
+    expect(await repo.aggregateByClass([])).toEqual(new Map())
+  })
+
+  it('aggregateByOperator sums + counts published+visible rows per id', async () => {
+    const repo = new InMemoryReviewRepository()
+    await repo.insert(
+      publishedOperatorReview({ bookingId: 'bk_a', operatorId: 'op_1', overall: 5 }),
+    )
+    await repo.insert(
+      publishedOperatorReview({
+        bookingId: 'bk_b',
+        operatorId: 'op_1',
+        overall: 3,
+        authorUserId: 'user_renter_2',
+      }),
+    )
+    await repo.insert(
+      publishedOperatorReview({ bookingId: 'bk_c', operatorId: 'op_2', overall: 4 }),
+    )
+    const out = await repo.aggregateByOperator(['op_1', 'op_2'])
+    expect(out.get('op_1')).toEqual({ sum: 8, count: 2 })
+    expect(out.get('op_2')).toEqual({ sum: 4, count: 1 })
+  })
+
+  it('aggregateByOperator excludes unpublished and HIDDEN rows', async () => {
+    const repo = new InMemoryReviewRepository()
+    await repo.insert(
+      publishedOperatorReview({ bookingId: 'bk_a', operatorId: 'op_1', overall: 5 }),
+    )
+    // still-double-blind (slice 2 hidden)
+    await repo.insert(
+      publishedOperatorReview({
+        bookingId: 'bk_b',
+        operatorId: 'op_1',
+        overall: 1,
+        publishedAt: null,
+        authorUserId: 'user_renter_2',
+      }),
+    )
+    // moderator-hidden (slice 6 forward-compat)
+    await repo.insert(
+      publishedOperatorReview({
+        bookingId: 'bk_c',
+        operatorId: 'op_1',
+        overall: 1,
+        moderationStatus: 'HIDDEN',
+        authorUserId: 'user_renter_3',
+      }),
+    )
+    const out = await repo.aggregateByOperator(['op_1'])
+    expect(out.get('op_1')).toEqual({ sum: 5, count: 1 })
+  })
+
+  it('aggregateByOperator omits ids that have no published+visible rows', async () => {
+    const repo = new InMemoryReviewRepository()
+    await repo.insert(
+      publishedOperatorReview({ bookingId: 'bk_a', operatorId: 'op_1', overall: 5 }),
+    )
+    const out = await repo.aggregateByOperator(['op_1', 'op_unrated'])
+    expect(out.get('op_1')).toEqual({ sum: 5, count: 1 })
+    // The contract: absent, NOT {sum:0,count:0}. The service maps absent -> null
+    // so the UI can distinguish "no reviews yet" from "rated zero".
+    expect(out.has('op_unrated')).toBe(false)
+  })
+
+  it('aggregateByOperator drops VEHICLE-subject rows even on the same operatorId (no pollution)', async () => {
+    const repo = new InMemoryReviewRepository()
+    // operatorId is denormalized on EVERY row (it's the booking's operator), so
+    // a VEHICLE-subject review for `op_1`'s booking shares its operatorId. Without
+    // the subject filter this row would inflate the operator's public rating.
+    await repo.insert(
+      publishedOperatorReview({ bookingId: 'bk_a', operatorId: 'op_1', overall: 5 }),
+    )
+    await repo.insert(
+      vehicleReview({
+        bookingId: 'bk_a',
+        operatorId: 'op_1',
+        subjectVehicleId: 'veh_1',
+        subjectClassId: 'cls_1',
+        overall: 1,
+        authorUserId: 'user_renter_2',
+      }),
+    )
+    const out = await repo.aggregateByOperator(['op_1'])
+    // Mutation-resistant: a regression that drops the subject filter lands at
+    // {sum:6,count:2}. The OPERATOR-only row (overall=5) is the sole contributor.
+    expect(out.get('op_1')).toEqual({ sum: 5, count: 1 })
+  })
+
+  it('aggregateByVehicle keys on subjectVehicleId, skips non-vehicle reviews', async () => {
+    const repo = new InMemoryReviewRepository()
+    // An OPERATOR review whose operatorId happens to equal a vehicle id must NOT count.
+    await repo.insert(publishedOperatorReview({ operatorId: 'veh_1', overall: 1 }))
+    await repo.insert(vehicleReview({ bookingId: 'bk_v', subjectVehicleId: 'veh_1', overall: 4 }))
+    await repo.insert(
+      vehicleReview({
+        bookingId: 'bk_v2',
+        subjectVehicleId: 'veh_1',
+        overall: 2,
+        authorUserId: 'user_renter_2',
+      }),
+    )
+    const out = await repo.aggregateByVehicle(['veh_1'])
+    expect(out.get('veh_1')).toEqual({ sum: 6, count: 2 })
+  })
+
+  it('aggregateByClass keys on subjectClassId, skips reviews with null class', async () => {
+    const repo = new InMemoryReviewRepository()
+    // An unclassed vehicle review (class is null) must not pollute the aggregate.
+    await repo.insert(
+      vehicleReview({ bookingId: 'bk_unclassed', subjectClassId: null, overall: 1 }),
+    )
+    await repo.insert(vehicleReview({ bookingId: 'bk_c', subjectClassId: 'cls_1', overall: 5 }))
+    await repo.insert(
+      vehicleReview({
+        bookingId: 'bk_c2',
+        subjectClassId: 'cls_1',
+        overall: 4,
+        authorUserId: 'user_renter_2',
+      }),
+    )
+    const out = await repo.aggregateByClass(['cls_1'])
+    expect(out.get('cls_1')).toEqual({ sum: 9, count: 2 })
+  })
+})

@@ -1,5 +1,6 @@
 import { Button } from '@/components/ui/button'
 import { formatDateTime } from '@/lib/format'
+import { Link } from '@tanstack/react-router'
 import { useTranslations } from 'use-intl'
 import type { OperatorAdminRow } from './api'
 
@@ -47,7 +48,13 @@ export function OperatorRow({
   return (
     <tr className="border-border border-b last:border-0">
       <td className={cell}>
-        <div className="font-medium">{operator.name}</div>
+        <Link
+          to="/$locale/admin/operators/$operatorId"
+          params={{ locale, operatorId: operator.id }}
+          className="font-medium hover:underline"
+        >
+          {operator.name}
+        </Link>
         <div className="text-muted-foreground text-xs">{operator.slug}</div>
       </td>
       <td className={`${cell} text-right tabular-nums`}>{operator.fleetCount}</td>

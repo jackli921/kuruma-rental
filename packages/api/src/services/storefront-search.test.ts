@@ -61,6 +61,7 @@ beforeEach(() => {
     vehicleRepo,
     bookingRepo,
     new InMemoryVehicleBlockRepository(),
+    operatorRepo,
   )
   const regionRepo = new InMemoryRegionRepository(REGIONS)
   service = new StorefrontSearchService(storefrontRepo, availabilityRepo, classRepo, regionRepo)
@@ -490,6 +491,7 @@ describe('StorefrontSearchService.search region filter (#394)', () => {
         vehicleRepo,
         bookingRepo,
         new InMemoryVehicleBlockRepository(),
+        operatorRepo,
       ),
     )
     const scoped = new StorefrontSearchService(

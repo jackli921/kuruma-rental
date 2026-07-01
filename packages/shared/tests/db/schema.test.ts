@@ -124,6 +124,9 @@ describe('schema exports', () => {
       'RENTER_TRIP_STARTED',
       'RENTER_TRIP_COMPLETED',
       'RENTER_REVIEW_PROMPT',
+      // #1205 slice 4: operator-facing new-message alert (non-lifecycle kind,
+      // dispatched on the operator-unread 0->1 transition, not from a booking trigger).
+      'OPERATOR_NEW_MESSAGE',
     ])
   })
 

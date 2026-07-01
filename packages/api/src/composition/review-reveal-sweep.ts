@@ -23,6 +23,7 @@ export function buildReviewRevealSweep(
   const service = new ReviewService(
     repos.reviewRepo,
     repos.bookingRepo,
+    repos.vehicleRepo,
     repos.bookingEventRepo,
     repos.operatorMembershipRepo,
   )

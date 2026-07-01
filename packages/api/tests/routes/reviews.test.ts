@@ -4,9 +4,10 @@ import { InMemoryBookingRepository } from '../../src/repositories/in-memory/book
 import { InMemoryBookingEventRepository } from '../../src/repositories/in-memory/booking-event'
 import { InMemoryOperatorMembershipRepository } from '../../src/repositories/in-memory/operator-membership'
 import { InMemoryReviewRepository } from '../../src/repositories/in-memory/review'
+import { InMemoryVehicleRepository } from '../../src/repositories/in-memory/vehicle'
 import { createReviewRoutes } from '../../src/routes/reviews'
 import { ReviewService } from '../../src/services/review'
-import type { Booking, BookingEvent, OperatorMembership } from '../../src/stores'
+import type { Booking, BookingEvent, OperatorMembership, Vehicle } from '../../src/stores'
 import { testAuthMiddleware } from '../helpers/auth'
 
 // bookingId is UUID-validated at the route boundary, so it must be a real UUID.
@@ -24,6 +25,7 @@ const COMPLETED_AT = new Date()
 
 let reviewRepo: InMemoryReviewRepository
 let bookingRepo: InMemoryBookingRepository
+let vehicleRepo: InMemoryVehicleRepository
 let eventRepo: InMemoryBookingEventRepository
 let memberRepo: InMemoryOperatorMembershipRepository
 
@@ -69,6 +71,36 @@ const completionEvent: BookingEvent = {
   createdAt: COMPLETED_AT,
 }
 
+const vehicle: Vehicle = {
+  id: VEHICLE_ID,
+  operatorId: OPERATOR_ID,
+  classId: CLASS_ID,
+  pickupLocationId: 'loc-1',
+  name: 'Toyota Yaris',
+  description: null,
+  photos: [],
+  seats: 5,
+  luggageCapacity: null,
+  luggageSize: null,
+  transmission: 'AUTO',
+  fuelType: null,
+  licensePlate: null,
+  status: 'AVAILABLE',
+  minRentalHours: null,
+  maxRentalHours: null,
+  advanceBookingHours: null,
+  make: null,
+  model: null,
+  year: null,
+  color: null,
+  dailyRateJpy: 8000,
+  hourlyRateJpy: null,
+  shakenExpiryDate: null,
+  insuranceExpiryDate: null,
+  createdAt: new Date('2026-01-01T00:00:00Z'),
+  updatedAt: new Date('2026-01-01T00:00:00Z'),
+}
+
 const membership: OperatorMembership = {
   id: 'mem-1',
   userId: OP_USER_ID,
@@ -83,7 +115,9 @@ function routes(): Hono {
   const a = new Hono()
   return a.route(
     '/',
-    createReviewRoutes(new ReviewService(reviewRepo, bookingRepo, eventRepo, memberRepo)),
+    createReviewRoutes(
+      new ReviewService(reviewRepo, bookingRepo, vehicleRepo, eventRepo, memberRepo),
+    ),
   )
 }
 
@@ -104,6 +138,7 @@ function submit(app: Hono, subject: 'OPERATOR' | 'VEHICLE' | 'RENTER', extra: ob
 beforeEach(() => {
   reviewRepo = new InMemoryReviewRepository()
   bookingRepo = new InMemoryBookingRepository(new Map([[booking.id, booking]]))
+  vehicleRepo = new InMemoryVehicleRepository(new Map([[vehicle.id, vehicle]]))
   eventRepo = new InMemoryBookingEventRepository([completionEvent])
   memberRepo = new InMemoryOperatorMembershipRepository(new Map([[membership.id, membership]]))
 })

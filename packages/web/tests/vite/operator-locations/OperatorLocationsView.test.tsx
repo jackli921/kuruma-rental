@@ -173,9 +173,13 @@ describe('OperatorLocationsView', () => {
   })
 
   it('scoped-write mode: shows the Add button and no operator label', () => {
-    renderView([location()], scopedWriteScope)
+    // showOperator:false suppresses the badge even though op_1 -> Sakura resolves.
+    renderView([location()], {
+      ...scopedWriteScope,
+      operatorNameById: new Map([['op_1', 'Sakura']]),
+    })
     expect(screen.getByRole('button', { name: en.addLocation })).toBeInTheDocument()
-    expect(screen.queryByLabelText(/^Operator:/)).not.toBeInTheDocument()
+    expect(screen.queryByText('Sakura')).not.toBeInTheDocument()
   })
 
   it('read-only mode hides the per-row Edit/Archive affordances', () => {

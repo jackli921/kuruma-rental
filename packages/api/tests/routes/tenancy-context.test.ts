@@ -5,6 +5,7 @@ import { SYSTEM_CONTEXT } from '../../src/middleware/auth'
 import {
   InMemoryAvailabilityRepository,
   InMemoryBookingRepository,
+  InMemoryOperatorRepository,
   InMemoryVehicleBlockRepository,
   InMemoryVehicleRepository,
 } from '../../src/repositories/in-memory'
@@ -71,6 +72,7 @@ describe('operatorId flows from JWT into the request context', () => {
       vehicleRepo,
       bookingRepo,
       new InMemoryVehicleBlockRepository(),
+      new InMemoryOperatorRepository(),
     )
     const a = await vehicleRepo.create(SYSTEM_CONTEXT, vehicleFields('op_a', 'Car A'))
     const b = await vehicleRepo.create(SYSTEM_CONTEXT, vehicleFields('op_b', 'Car B'))

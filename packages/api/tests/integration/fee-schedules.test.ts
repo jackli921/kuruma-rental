@@ -305,4 +305,16 @@ describe('cross-operator fee-schedule WRITE denial (service seal)', () => {
     const res = await service.update(ctxFor(opAId), feeA.id, { amountJpy: 3500 })
     expect(res).toMatchObject({ ok: true, feeSchedule: { amountJpy: 3500 } })
   })
+
+  it('[#1271] a direct repo update cannot migrate the row to another operator', async () => {
+    // Repo-layer anchor: even a caller that bypasses the service scope check (a
+    // future second caller) cannot repoint operatorId via the update payload.
+    const updated = await repo.update(feeA.id, { operatorId: opBId, amountJpy: 4321 })
+    expect(updated?.operatorId).toBe(opAId)
+    expect(updated?.amountJpy).toBe(4321)
+    expect(await repo.findById(SYSTEM_CONTEXT, feeA.id)).toMatchObject({
+      operatorId: opAId,
+      amountJpy: 4321,
+    })
+  })
 })

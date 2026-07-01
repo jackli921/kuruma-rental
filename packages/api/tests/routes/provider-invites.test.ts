@@ -42,6 +42,7 @@ function makeApp() {
     vehicleRepo,
     bookingRepo,
     new InMemoryVehicleBlockRepository(),
+    new InMemoryOperatorRepository(),
   )
   const providerInviteRepo = new InMemoryProviderInviteRepository()
   const operatorRepo = new InMemoryOperatorRepository(new Map([[OPERATOR.id, OPERATOR]]))

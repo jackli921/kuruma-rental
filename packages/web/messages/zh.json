@@ -886,7 +886,8 @@
     },
     "operatorContext": {
       "label": "运营商",
-      "all": "所有运营商"
+      "all": "所有运营商",
+      "badge": "运营商：{name}"
     }
   },
   "messaging": {
@@ -897,6 +898,7 @@
       "emptyDescription": "开始对话或等待回复。",
       "unread": "{count} 条未读",
       "host": "房东",
+      "guest": "客人",
       "loadError": "无法加载您的消息",
       "retry": "重试"
     },
@@ -1043,6 +1045,45 @@
         "customerSelectedLabel": "已选客户",
         "customerChange": "更改",
         "customerUnnamed": "未命名客户"
+      },
+      "blocks": {
+        "scheduleAction": "安排封锁",
+        "kinds": {
+          "MAINTENANCE": "维护",
+          "OUT_OF_SERVICE": "停用",
+          "MANUAL": "手动保留"
+        },
+        "legend": {
+          "title": "已安排的封锁"
+        },
+        "schedule": {
+          "dialogTitle": "安排封锁",
+          "dialogDescription": "因维护、停用或手动保留将车辆从日历中移除。在此时间段内将无法被预订。",
+          "vehicleLabel": "车辆",
+          "kindLabel": "类型",
+          "startLabel": "开始",
+          "endLabel": "结束",
+          "reasonLabel": "原因",
+          "reasonPlaceholder": "例如：更换机油",
+          "notesLabel": "备注（可选）",
+          "submit": "安排封锁",
+          "cancel": "取消",
+          "noVehicles": "请先添加至少一辆车辆，然后再安排封锁。",
+          "overlapError": "该车辆在此时间段内已有重叠的封锁。",
+          "error": "无法安排封锁。请重试。"
+        },
+        "detail": {
+          "dialogTitle": "已安排的封锁",
+          "vehicleLabel": "车辆",
+          "kindLabel": "类型",
+          "windowLabel": "时间段",
+          "reasonLabel": "原因",
+          "notesLabel": "备注",
+          "deleteAction": "移除封锁",
+          "deleteConfirm": "移除此封锁？该车辆在此时间段内将重新可被预订。",
+          "deleteError": "无法移除封锁。请重试。",
+          "close": "关闭"
+        }
       },
       "title": "预订",
       "subtitle": "各门店的预订",
@@ -1287,6 +1328,19 @@
         "reactivate": "重新启用",
         "deactivating": "停用中…",
         "reactivating": "重新启用中…"
+      },
+      "summary": {
+        "subtitle": "该运营方的车队合规与预订情况。",
+        "vehicleCount": "车队",
+        "needingDocs": "需补充文件",
+        "expiringSoon": "即将到期",
+        "totalBookings": "预订总数",
+        "upcomingBookings": "即将到来的预订",
+        "lastAlert": "最近合规提醒",
+        "never": "从未",
+        "back": "返回运营方列表",
+        "retry": "重试",
+        "loadError": "无法加载该运营方的概览。"
       },
       "createDialog": {
         "title": "创建运营商",
@@ -1636,6 +1690,11 @@
       "pending": "提交中…",
       "error": "出现错误，请重试。",
       "reviewed": "您已评价该租客。"
+    },
+    "aggregate": {
+      "rating": "★ {avg}（{count}条）",
+      "noReviews": "暂无评价",
+      "ratingAria": "{avg}星，{count}条评价"
     }
   },
   "currency": {

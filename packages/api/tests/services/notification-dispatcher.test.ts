@@ -6,7 +6,7 @@ import { InMemoryOperatorMembershipRepository } from '../../src/repositories/in-
 import { InMemoryUserRepository } from '../../src/repositories/in-memory/user'
 import { MAX_NOTIFICATION_ATTEMPTS, SEND_LEASE_MS } from '../../src/repositories/types'
 import type { LocationRepository, VehicleRepository } from '../../src/repositories/types'
-import type { EmailSender } from '../../src/services/email/email-sender'
+import type { EmailMessage, EmailSender } from '../../src/services/email/email-sender'
 import {
   type LifecycleTrigger,
   NotificationDispatcher,
@@ -447,6 +447,87 @@ describe('NotificationDispatcher', () => {
     })
   })
 
+  // #1205 slice 4: the operator-facing "a renter messaged you" alert. Distinct from
+  // the booking-lifecycle path — it is keyed by msg:<messageId> (one alert per
+  // message, re-armed each new message), goes to the operator member set (bcc, like
+  // the booking alert), and is fired by MessageService only on the unread 0->1
+  // transition. The dispatcher itself stays idempotent per messageId.
+  describe('operator new-message dispatch (#1205)', () => {
+    const newMessageArgs = {
+      threadId: 'th-1',
+      bookingId: 'bk-1',
+      operatorId: OP,
+      messageId: 'm-1',
+      senderUserId: RENTER,
+    }
+
+    it('sends the operator-new-message alert to the operator members with a thread CTA', async () => {
+      const { dispatcher, logRepo, sender } = build({ webBaseUrl: 'https://app.kuruma.jp/' })
+      const outcome = await dispatcher.dispatchOperatorNewMessage(newMessageArgs)
+
+      expect(outcome.result).toBe('sent')
+      const sendMock = sender.send as ReturnType<typeof vi.fn>
+      expect(sendMock).toHaveBeenCalledTimes(1)
+      const msg = sendMock.mock.calls[0]![0] as EmailMessage
+      // Send-to-self envelope, members blind-copied (no teammate address disclosed).
+      expect(msg.to).toBe('noreply@bcr.jp')
+      expect(msg.bcc).toEqual(['owner@op.com'])
+      // Renter's name + a deep link straight to the conversation (trailing slash on
+      // WEB_ORIGIN normalized away; operator-default ja locale).
+      expect(msg.html).toContain('Jane')
+      expect(msg.html).toContain('https://app.kuruma.jp/ja/manage/messages/th-1')
+
+      const rows = await logRepo.findAll({ userId: 'x', role: 'PLATFORM_ADMIN', bypassScope: true })
+      expect(rows).toHaveLength(1)
+      expect(rows[0]!).toMatchObject({
+        kind: 'OPERATOR_NEW_MESSAGE',
+        status: 'SENT',
+        operatorId: OP,
+        bookingId: 'bk-1',
+        recipient: 'owner@op.com',
+        idempotencyKey: 'msg:m-1',
+      })
+    })
+
+    it('is idempotent per message — a replay of the same messageId does not resend', async () => {
+      const { dispatcher, sender } = build({ webBaseUrl: 'https://app.kuruma.jp' })
+      const first = await dispatcher.dispatchOperatorNewMessage(newMessageArgs)
+      const second = await dispatcher.dispatchOperatorNewMessage(newMessageArgs)
+
+      expect(first.result).toBe('sent')
+      expect(second.result).toBe('already_sent')
+      expect(sender.send as ReturnType<typeof vi.fn>).toHaveBeenCalledTimes(1) // not 2
+    })
+
+    it('re-arms for the next message — a new messageId sends a fresh alert', async () => {
+      const { dispatcher, logRepo, sender } = build({ webBaseUrl: 'https://app.kuruma.jp' })
+      await dispatcher.dispatchOperatorNewMessage(newMessageArgs)
+      await dispatcher.dispatchOperatorNewMessage({ ...newMessageArgs, messageId: 'm-2' })
+
+      expect(sender.send as ReturnType<typeof vi.fn>).toHaveBeenCalledTimes(2)
+      const rows = await logRepo.findAll({ userId: 'x', role: 'PLATFORM_ADMIN', bypassScope: true })
+      expect(rows.map((r) => r.idempotencyKey).sort()).toEqual(['msg:m-1', 'msg:m-2'])
+    })
+
+    it('records a terminal NO_RECIPIENT (separate key) when the operator has no members or fallback', async () => {
+      const { dispatcher, logRepo, sender } = build({
+        owners: [],
+        webBaseUrl: 'https://app.kuruma.jp',
+      })
+      const outcome = await dispatcher.dispatchOperatorNewMessage(newMessageArgs)
+
+      expect(outcome.result).toBe('no_recipient')
+      expect(sender.send as ReturnType<typeof vi.fn>).not.toHaveBeenCalled()
+      const rows = await logRepo.findAll({ userId: 'x', role: 'PLATFORM_ADMIN', bypassScope: true })
+      expect(rows).toHaveLength(1)
+      expect(rows[0]!).toMatchObject({
+        kind: 'OPERATOR_NEW_MESSAGE',
+        status: 'NO_RECIPIENT',
+        idempotencyKey: 'msg:m-1:no_recipient',
+      })
+    })
+  })
+
   // #664: the SAME dispatch path, fanned out by lifecycle trigger. CREATED keeps
   // the original two kinds; each operator action maps to exactly one renter kind.
   describe('lifecycle triggers (#664)', () => {
@@ -463,14 +544,23 @@ describe('NotificationDispatcher', () => {
     // kind that drifts from the enum is a runtime 22P02 invalid_enum_value on
     // insert. Asserting set-equality here (against the enum single source) makes
     // that drift fail in CI instead of in production.
-    it('emits exactly the notification_kind enum value set across all triggers (#710)', async () => {
+    it('emits exactly the booking-lifecycle notification_kind enum values across all triggers (#710)', async () => {
       const triggers = ['CREATED', 'SUBSTITUTED', 'CANCELLED', 'ACTIVATED', 'COMPLETED'] as const
       const emitted = new Set<string>()
       for (const trigger of triggers) {
         const { rows } = await kindsFor(trigger)
         for (const row of rows) emitted.add(row.kind)
       }
-      expect([...emitted].sort()).toEqual([...notificationKindEnum.enumValues].sort())
+      // #1205 slice 4: OPERATOR_NEW_MESSAGE is NOT a booking-lifecycle kind — it is
+      // emitted by dispatchOperatorNewMessage off the message path (keyed msg:<id>),
+      // never through a TRIGGER. Its reachability is pinned by the
+      // "operator new-message dispatch" suite, not here. Every OTHER enum value must
+      // still be reachable from some lifecycle trigger, so a renamed lifecycle kind
+      // that drifts from the enum still fails this assertion in CI.
+      const lifecycleKinds = notificationKindEnum.enumValues.filter(
+        (k) => k !== 'OPERATOR_NEW_MESSAGE',
+      )
+      expect([...emitted].sort()).toEqual([...lifecycleKinds].sort())
     })
 
     it('SUBSTITUTED dispatches exactly RENTER_SUBSTITUTION, sent once', async () => {

@@ -15,7 +15,10 @@ export function createReviewRoutes(service: ReviewService) {
   const app = new Hono()
 
   app.use('/reviews', requireAuth())
-  app.use('/reviews/*', requireAuth())
+  // Scoped to the single-segment :id path (PATCH /reviews/:id) — a broad
+  // `/reviews/*` would also gate sibling routers mounted on the same root,
+  // which the #1085 public aggregate reads at `/reviews/aggregates/*` rely on.
+  app.use('/reviews/:id', requireAuth())
   app.use('/bookings/:bookingId/reviews', requireAuth())
 
   return app

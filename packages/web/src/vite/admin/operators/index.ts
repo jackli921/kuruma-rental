@@ -7,5 +7,6 @@
 export { OperatorCreateDialog } from './OperatorCreateDialog'
 export { OperatorEditDialog } from './OperatorEditDialog'
 export { OperatorsView } from './OperatorsView'
+export { OperatorSummaryView } from './OperatorSummaryView'
 export { ProviderInviteDialog } from './ProviderInviteDialog'
 export * from './api'

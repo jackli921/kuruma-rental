@@ -56,6 +56,7 @@ import { createPaymentRoutes } from './routes/payments'
 import { createProviderInviteRoutes } from './routes/provider-invites'
 import { rateLimitByIp } from './routes/rate-limit'
 import { createRegionRoutes } from './routes/regions'
+import { createReviewAggregateRoutes } from './routes/review-aggregates'
 import { createReviewRoutes } from './routes/reviews'
 import { createFlatSearchRoutes } from './routes/search'
 import { createStatsRoutes } from './routes/stats'
@@ -102,6 +103,7 @@ import {
   makeResolveOperatorRecipients,
   makeResolveOperatorRecipientsBatch,
 } from './services/operator-recipients'
+import { OperatorSummaryService } from './services/operator-summary'
 import { OperatorTeamService } from './services/operator-team'
 import { OverviewService } from './services/overview'
 import { PaymentAnomalyService } from './services/payment-anomaly'
@@ -110,6 +112,7 @@ import { PaymentService } from './services/payment/payment'
 import { ProviderInviteService } from './services/provider-invite'
 import { RenterDocumentService } from './services/renter-document'
 import { ReviewService } from './services/review'
+import { ReviewAggregateService } from './services/review-aggregate'
 import { StorefrontDetailService } from './services/storefront-detail'
 import { StorefrontSearchService } from './services/storefront-search'
 import { createTranslationProvider } from './services/translation-provider-factory'
@@ -165,6 +168,7 @@ export function createApp(overrides?: AppOverrides, repos: Repos = buildRepos(ov
     reviewRepo,
     consentRepo,
     classRatePlanRepo,
+    complianceAlertLogRepo,
     runInTransaction,
     runOperatorGrant,
     photosPublicUrl,
@@ -356,6 +360,7 @@ export function createApp(overrides?: AppOverrides, repos: Repos = buildRepos(ov
     vehicleClassRepo,
     vehicleRepo,
     availabilityRepo,
+    operatorRepo,
   )
   // Messaging: if a staff user id is configured, every confirmed booking
   // auto-creates a renter/staff thread for coordination (design doc
@@ -397,7 +402,12 @@ export function createApp(overrides?: AppOverrides, repos: Repos = buildRepos(ov
   )
   const availabilityService = new AvailabilityService(availabilityRepo)
   const customerService = new CustomerService(customerRepo, userRepo, bookingRepo)
-  const messageService = new MessageService(threadRepo, messageRepo)
+  // #1205: a renter's first unread message (the operator-unread 0->1 transition)
+  // fires the operator alert through the SAME dispatcher as booking notifications
+  // (idempotent per messageId, recipient-resolved to the operator member set).
+  const messageService = new MessageService(threadRepo, messageRepo, (args) =>
+    notificationDispatcher.dispatchOperatorNewMessage(args).then(() => undefined),
+  )
   // Default signing key resolves from CONSENT_SIGNING_KEY (absent ⇒ unsigned rows).
   const consentService = new ConsentService(consentRepo)
   // #877 2b: pure policy gate over the same re-consent query; renter booking
@@ -432,6 +442,12 @@ export function createApp(overrides?: AppOverrides, repos: Repos = buildRepos(ov
   const paymentAnomalyService = new PaymentAnomalyService(paymentAnomalyRepo)
   const vehicleDetailService = new VehicleDetailService(vehicleDetailRepo)
   const operatorService = new OperatorService(operatorRepo, recordAudit, vehicleRepo)
+  const operatorSummaryService = new OperatorSummaryService(
+    operatorRepo,
+    vehicleRepo,
+    bookingRepo,
+    complianceAlertLogRepo,
+  )
   // #407: the write-operator resolver is a pure policy function — sole-operator
   // inference is retired, so it no longer needs an operator lookup.
   const resolveWriteOperatorId: ResolveWriteOperatorId = (ctx, inputOperatorId) =>
@@ -464,9 +480,11 @@ export function createApp(overrides?: AppOverrides, repos: Repos = buildRepos(ov
   const reviewService = new ReviewService(
     reviewRepo,
     bookingRepo,
+    vehicleRepo,
     bookingEventRepo,
     operatorMembershipRepo,
   )
+  const reviewAggregateService = new ReviewAggregateService(reviewRepo)
 
   // Chain .route() calls so TypeScript infers the full route type tree.
   // hc<AppType> needs this to produce typed client methods.
@@ -517,13 +535,14 @@ export function createApp(overrides?: AppOverrides, repos: Repos = buildRepos(ov
     .route('/', createVehicleBlockRoutes(vehicleBlockService))
     .route('/', createBookingRoutes(bookingService, consentGate))
     .route('/', createReviewRoutes(reviewService))
+    .route('/', createReviewAggregateRoutes(reviewAggregateService, publicCatalogLimiter))
     .route('/', createPaymentRoutes(paymentService))
     .route('/', createAvailabilityRoutes(availabilityService))
     .route('/', createStatsRoutes(statsRepo))
     .route('/', createOverviewRoutes(overviewService))
     .route('/', createAdminRevenueRoutes(adminRevenueService))
     .route('/', createAdminBookingRoutes(adminBookingService))
-    .route('/', createAdminOperatorRoutes(operatorService))
+    .route('/', createAdminOperatorRoutes(operatorService, operatorSummaryService))
     .route('/', createAdminOverviewRoutes(adminOverviewService))
     .route('/', createPaymentAnomalyRoutes(paymentAnomalyService))
     .route('/', createMessageRoutes(messageService))

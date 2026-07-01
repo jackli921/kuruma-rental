@@ -1,7 +1,6 @@
 import { PageSkeleton } from '@/vite/PageSkeleton'
 import { bookingByIdQueryOptions } from '@/vite/bookings/api'
-import { ConversationView } from '@/vite/messaging/ConversationView'
-import { threadByIdQueryOptions, usersByIdsQueryOptions } from '@/vite/messaging/api'
+import { ConversationView, threadByIdQueryOptions, usersByIdsQueryOptions } from '@/vite/messaging'
 import { sessionQueryOptions } from '@/vite/session'
 import { useQuery, useSuspenseQuery } from '@tanstack/react-query'
 import {

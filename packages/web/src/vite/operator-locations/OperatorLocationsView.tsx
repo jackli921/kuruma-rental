@@ -1,6 +1,5 @@
-import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import type { OperatorScope } from '@/vite/operator-context'
+import { OperatorBadge, type OperatorScope } from '@/vite/operator-context'
 import { AddLocationDialog } from '@/vite/operator-locations/AddLocationDialog'
 import { ArchiveLocationDialog } from '@/vite/operator-locations/ArchiveLocationDialog'
 import { EditLocationDialog } from '@/vite/operator-locations/EditLocationDialog'
@@ -114,11 +113,7 @@ function LocationRow({ location: l, canWrite, operatorName, onEdit, onArchive }:
           <h3 className="truncate text-lg font-medium">{l.name}</h3>
           <LocationStatusBadge status={l.status} />
           <LocationPinBadge coordinateSource={l.coordinateSource} />
-          {operatorName && (
-            <Badge variant="secondary" aria-label={`Operator: ${operatorName}`}>
-              {operatorName}
-            </Badge>
-          )}
+          <OperatorBadge name={operatorName} />
         </div>
         <p className="mt-1 flex items-center gap-1.5 text-sm text-muted-foreground">
           <MapPin className="size-3.5 shrink-0" />

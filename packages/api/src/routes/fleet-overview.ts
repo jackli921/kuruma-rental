@@ -14,7 +14,14 @@ export function createFleetOverviewRoutes(service: FleetOverviewService) {
     // tenant boundary (#386 F2 / #397).
     if (!MANAGEMENT_READ_ROLES.has(user.role)) return fail(c, 'Forbidden', 403)
 
-    const data = await service.findFleetOverview(toCallerContext(user))
+    // #407 slice 4: the operator-context picker narrows a bypass admin to one
+    // operator; the service bypass-gates it (undefined `now` = current clock).
+    const requestedOperatorId = c.req.query('operatorId')
+    const data = await service.findFleetOverview(
+      toCallerContext(user),
+      undefined,
+      requestedOperatorId,
+    )
     return ok(c, data)
   })
 }

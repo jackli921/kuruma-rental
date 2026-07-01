@@ -1,7 +1,9 @@
+import { RatingBadge, reviewAggregatesQueryOptions } from '@/vite/reviews'
 import { AvailableVehicleCard } from '@/vite/storefronts/AvailableVehicleCard'
 import type { StorefrontDetailData } from '@/vite/storefronts/api'
 import { carryForwardFilters } from '@/vite/storefronts/params'
 import { turnaroundHours } from '@/vite/storefronts/turnaround'
+import { useQuery } from '@tanstack/react-query'
 import { Link } from '@tanstack/react-router'
 import { ArrowLeft, Clock, MapPin } from 'lucide-react'
 import { useLocale, useTranslations } from 'use-intl'
@@ -36,6 +38,16 @@ export function StorefrontDetailView({
   const locale = useLocale()
   const { storefront, vehicles } = detail
 
+  // #1085 slice 5: one query for the storefront's operator badge + one batched
+  // query for every visible vehicle's class badge. The class fetch drops null
+  // classIds — those cards render no badge at all — and the queryOptions hook
+  // bypasses the network when the resulting set is empty.
+  const { data: operatorRatings } = useQuery(
+    reviewAggregatesQueryOptions('operators', [storefront.operatorId]),
+  )
+  const classIds = vehicles.map((v) => v.classId).filter((id): id is string => id !== null)
+  const { data: classRatings } = useQuery(reviewAggregatesQueryOptions('classes', classIds))
+
   return (
     <div className="mx-auto max-w-7xl">
       <Link
@@ -54,7 +66,10 @@ export function StorefrontDetailView({
 
       <header className="mb-8">
         <p className="text-sm font-medium text-muted-foreground">{storefront.operatorName}</p>
-        <h1 className="text-3xl font-bold tracking-tight sm:text-4xl">{storefront.name}</h1>
+        <div className="mt-1">
+          <RatingBadge entry={operatorRatings?.[storefront.operatorId]} size="md" />
+        </div>
+        <h1 className="mt-1 text-3xl font-bold tracking-tight sm:text-4xl">{storefront.name}</h1>
         <p className="mt-2 flex items-center gap-1.5 text-muted-foreground">
           <MapPin className="size-4 shrink-0" />
           {storefront.address}
@@ -77,6 +92,7 @@ export function StorefrontDetailView({
               locationId={storefront.locationId}
               from={from}
               to={to}
+              classRating={vehicle.classId !== null ? classRatings?.[vehicle.classId] : undefined}
             />
           ))}
         </div>

@@ -33,6 +33,7 @@ function thread(over: Partial<ThreadSummaryDto> = {}): ThreadSummaryDto {
   return {
     id: 'th_1',
     bookingId: 'bk_1',
+    operatorUnreadCount: 0,
     createdAt: '2026-06-22T00:00:00.000Z',
     updatedAt: '2026-06-23T01:00:00.000Z',
     participants: [

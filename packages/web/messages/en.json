@@ -886,7 +886,8 @@
     },
     "operatorContext": {
       "label": "Operator",
-      "all": "All operators"
+      "all": "All operators",
+      "badge": "Operator: {name}"
     }
   },
   "messaging": {
@@ -897,6 +898,7 @@
       "emptyDescription": "Start a conversation or wait for a reply.",
       "unread": "{count} unread",
       "host": "Host",
+      "guest": "Guest",
       "loadError": "Couldn't load your messages",
       "retry": "Try again"
     },
@@ -1043,6 +1045,45 @@
         "customerSelectedLabel": "Selected customer",
         "customerChange": "Change",
         "customerUnnamed": "Unnamed customer"
+      },
+      "blocks": {
+        "scheduleAction": "Schedule block",
+        "kinds": {
+          "MAINTENANCE": "Maintenance",
+          "OUT_OF_SERVICE": "Out of service",
+          "MANUAL": "Manual hold"
+        },
+        "legend": {
+          "title": "Scheduled blocks"
+        },
+        "schedule": {
+          "dialogTitle": "Schedule a block",
+          "dialogDescription": "Take a vehicle off the calendar for maintenance, an out-of-service period, or a manual hold. It can't be booked during this window.",
+          "vehicleLabel": "Vehicle",
+          "kindLabel": "Type",
+          "startLabel": "Start",
+          "endLabel": "End",
+          "reasonLabel": "Reason",
+          "reasonPlaceholder": "e.g. Oil change",
+          "notesLabel": "Notes (optional)",
+          "submit": "Schedule block",
+          "cancel": "Cancel",
+          "noVehicles": "Add at least one vehicle before scheduling a block.",
+          "overlapError": "This vehicle already has a block overlapping that window.",
+          "error": "Couldn't schedule the block. Please try again."
+        },
+        "detail": {
+          "dialogTitle": "Scheduled block",
+          "vehicleLabel": "Vehicle",
+          "kindLabel": "Type",
+          "windowLabel": "Window",
+          "reasonLabel": "Reason",
+          "notesLabel": "Notes",
+          "deleteAction": "Remove block",
+          "deleteConfirm": "Remove this block? The vehicle becomes bookable again for this window.",
+          "deleteError": "Couldn't remove the block. Please try again.",
+          "close": "Close"
+        }
       },
       "title": "Bookings",
       "subtitle": "Reservations across your storefronts",
@@ -1287,6 +1328,19 @@
         "reactivate": "Reactivate",
         "deactivating": "Deactivating…",
         "reactivating": "Reactivating…"
+      },
+      "summary": {
+        "subtitle": "Fleet compliance and booking activity for this operator.",
+        "vehicleCount": "Fleet",
+        "needingDocs": "Needs documents",
+        "expiringSoon": "Expiring soon",
+        "totalBookings": "Total bookings",
+        "upcomingBookings": "Upcoming bookings",
+        "lastAlert": "Last compliance alert",
+        "never": "Never",
+        "back": "Back to operators",
+        "loadError": "Couldn't load this operator's summary.",
+        "retry": "Retry"
       },
       "createDialog": {
         "title": "Create operator",
@@ -1636,6 +1690,11 @@
       "pending": "Submitting…",
       "error": "Something went wrong. Please try again.",
       "reviewed": "You've reviewed this renter."
+    },
+    "aggregate": {
+      "rating": "★ {avg} ({count})",
+      "noReviews": "No reviews yet",
+      "ratingAria": "{avg} stars, {count} reviews"
     }
   },
   "currency": {

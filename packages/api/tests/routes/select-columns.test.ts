@@ -4,6 +4,7 @@ import {
   InMemoryAvailabilityRepository,
   InMemoryBookingRepository,
   InMemoryLocationRepository,
+  InMemoryOperatorRepository,
   InMemoryStatsRepository,
   InMemoryVehicleBlockRepository,
   InMemoryVehicleClassRepository,
@@ -20,6 +21,7 @@ async function createTestApp() {
     vehicleRepo,
     bookingRepo,
     new InMemoryVehicleBlockRepository(),
+    new InMemoryOperatorRepository(),
   )
   const statsRepo = new InMemoryStatsRepository(vehicleRepo, bookingRepo)
   const vehicleClassRepo = new InMemoryVehicleClassRepository()
