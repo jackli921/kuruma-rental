@@ -219,6 +219,31 @@ describe('classifyDrivingEligibility — 1949 parties that issue non-Geneva-form
   )
 })
 
+describe('classifyDrivingEligibility — non-official codes ICU may recognize (#1216)', () => {
+  // The residual NOT_ELIGIBLE-vs-UNKNOWN split must be identical on every runtime.
+  // These alpha-2 codes are recognized by SOME ICU versions (Bun local, e.g.) but are
+  // NOT officially-assigned ISO 3166-1 countries — they are exceptionally-reserved
+  // unions/aliases or withdrawn historical codes — so no renter can hold a license
+  // from one. They must classify UNKNOWN deterministically, not follow ICU's
+  // runtime-dependent recognized-region set (workerd differs). This is the #1216 bug.
+  it.each([
+    'EU', // European Union (exceptionally reserved)
+    'UK', // alias for GB (exceptionally reserved; official code is GB)
+    'EZ', // Eurozone (exceptionally reserved)
+    'FX', // Metropolitan France (exceptionally reserved)
+    'IC', // Canary Islands (exceptionally reserved)
+    'AC', // Ascension Island (exceptionally reserved)
+    'AN', // Netherlands Antilles (withdrawn 2010)
+    'SU', // USSR (withdrawn)
+    'YU', // Yugoslavia (withdrawn)
+    'CS', // Serbia and Montenegro (withdrawn)
+    'ZR', // Zaire -> now CD (withdrawn)
+    'TP', // East Timor -> now TL (withdrawn)
+  ])('%s is not an officially-assigned country -> UNKNOWN', (code) => {
+    expect(classifyDrivingEligibility(code)).toBe('UNKNOWN')
+  })
+})
+
 describe('classifyDrivingEligibility — unknown / malformed input', () => {
   it.each(['', ' ', 'X', 'USA', '12', 'J1', 'XX', 'QZ', 'ZZ'])(
     '%j classifies as UNKNOWN',
