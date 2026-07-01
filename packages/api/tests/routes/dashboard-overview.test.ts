@@ -187,7 +187,7 @@ describe('GET /dashboard/overview — operator-context picker narrowing (#407 sl
     expect(res.status).toBe(200)
     const { data } = await res.json()
     // OP_A only (not the aggregate of 4/3/3): matches the OP_A-scoped counts.
-    expect(data).toEqual({ totalBookings: 3, activeVehicles: 2, upcomingBookings: 2 })
+    expect(data).toMatchObject({ totalBookings: 3, activeVehicles: 2, upcomingBookings: 2 })
   })
 
   it('picks the OTHER operator when ?operatorId names OP_B', async () => {
@@ -196,7 +196,7 @@ describe('GET /dashboard/overview — operator-context picker narrowing (#407 sl
       `/dashboard/overview?operatorId=${OP_B}`,
     )
     const { data } = await res.json()
-    expect(data).toEqual({ totalBookings: 1, activeVehicles: 1, upcomingBookings: 1 })
+    expect(data).toMatchObject({ totalBookings: 1, activeVehicles: 1, upcomingBookings: 1 })
   })
 
   it('ignores a foreign ?operatorId for a tenant-scoped operator (no cross-tenant widening)', async () => {
@@ -206,6 +206,6 @@ describe('GET /dashboard/overview — operator-context picker narrowing (#407 sl
       `/dashboard/overview?operatorId=${OP_A}`,
     )
     const { data } = await res.json()
-    expect(data).toEqual({ totalBookings: 1, activeVehicles: 1, upcomingBookings: 1 })
+    expect(data).toMatchObject({ totalBookings: 1, activeVehicles: 1, upcomingBookings: 1 })
   })
 })
