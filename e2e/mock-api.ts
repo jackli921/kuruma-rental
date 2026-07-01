@@ -274,11 +274,6 @@ Bun.serve({
 
     if (url.pathname === '/admin/revenue') return ok(TEST_ADMIN_REVENUE)
 
-    // Empty (but valid) operator directory: enough for the admin operators page
-    // to render its always-present "Create operator" header button, which the
-    // mobile dialog-scroll gate (#1298, e2e/mobile/) opens without seed data.
-    if (url.pathname === '/admin/operators') return ok([])
-
     if (url.pathname === '/vehicles') return ok([TEST_VEHICLE])
 
     // Mirror real contract: /availability requires from + to date range.

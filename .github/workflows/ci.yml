@@ -163,7 +163,11 @@ jobs:
         id: playwright-cache
         with:
           path: ~/.cache/ms-playwright
-          key: playwright-${{ runner.os }}-${{ hashFiles('bun.lock') }}
+          # `webkit` in the key: adding it to the install commands does not touch
+          # bun.lock (it ships inside @playwright/test), so without this suffix the
+          # old chromium-only cache restores as a HIT, skips the install, and the
+          # webkit binary is missing → every mobile-safari spec fails in CI (#1298).
+          key: playwright-webkit-${{ runner.os }}-${{ hashFiles('bun.lock') }}
 
       - name: Install Playwright browsers
         if: steps.playwright-cache.outputs.cache-hit != 'true'
@@ -232,7 +236,11 @@ jobs:
         id: playwright-cache
         with:
           path: ~/.cache/ms-playwright
-          key: playwright-${{ runner.os }}-${{ hashFiles('bun.lock') }}
+          # `webkit` in the key: adding it to the install commands does not touch
+          # bun.lock (it ships inside @playwright/test), so without this suffix the
+          # old chromium-only cache restores as a HIT, skips the install, and the
+          # webkit binary is missing → every mobile-safari spec fails in CI (#1298).
+          key: playwright-webkit-${{ runner.os }}-${{ hashFiles('bun.lock') }}
 
       - name: Install Playwright browsers
         if: steps.playwright-cache.outputs.cache-hit != 'true'
