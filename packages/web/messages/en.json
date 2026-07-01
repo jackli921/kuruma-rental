@@ -205,6 +205,20 @@
         "action": "Review fleet"
       }
     },
+    "today": {
+      "title": "Today",
+      "pickups": "Pickups",
+      "returns": "Returns",
+      "overdue": "Overdue",
+      "emptyPickups": "No pickups scheduled today.",
+      "emptyReturns": "No returns scheduled today.",
+      "emptyOverdue": "No overdue vehicles.",
+      "markPickedUp": "Mark picked up",
+      "markReturned": "Mark returned",
+      "walkIn": "Walk-in",
+      "noVehicle": "Vehicle unassigned",
+      "actionError": "Couldn't update the booking. Try again."
+    },
     "stats": {
       "totalBookings": "Total Bookings",
       "activeVehicles": "Active Vehicles",

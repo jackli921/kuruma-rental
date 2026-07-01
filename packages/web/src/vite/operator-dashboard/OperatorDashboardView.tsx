@@ -1,5 +1,7 @@
+import { TodayPanel } from '@/vite/operator-dashboard/TodayPanel'
 import { ComplianceBanner } from '@/vite/operator-fleet/ComplianceBanner'
 import type { OperatorFleetVehicle } from '@/vite/operator-fleet/api'
+import type { Session } from '@/vite/session'
 import type { OperatorOverview } from '@kuruma/shared/types/overview'
 import { Link } from '@tanstack/react-router'
 import { CalendarDays, CarFront, Clock } from 'lucide-react'
@@ -7,10 +9,13 @@ import { useTranslations } from 'use-intl'
 
 interface OperatorDashboardViewProps {
   readonly overview: OperatorOverview
-  // The operator's fleet, fed to the §5.5 compliance banner (#916). The route
-  // already warms this query for the Manage Fleet link, so reading it here is a
-  // cache hit, not a second round-trip.
+  // The operator's fleet, fed to the §5.5 compliance banner (#916) and the #1102
+  // Today panel (vehicle-name lookup). The route already warms this query for the
+  // Manage Fleet link, so reading it here is a cache hit, not a second round-trip.
   readonly vehicles: readonly OperatorFleetVehicle[]
+  // #1102: the Today panel's inline advance is a CSRF-gated write, so it needs the
+  // session token; the panel also gates itself to an operator session.
+  readonly session: Session | null
   readonly locale: string
 }
 
@@ -18,7 +23,12 @@ interface OperatorDashboardViewProps {
 // useSuspenseQuery and the pending/error boundaries; this stays a pure function
 // of the resolved counts so it is unit-testable (FC/IS — the shell does I/O,
 // this renders). All three figures are already operator-scoped by the API.
-export function OperatorDashboardView({ overview, vehicles, locale }: OperatorDashboardViewProps) {
+export function OperatorDashboardView({
+  overview,
+  vehicles,
+  session,
+  locale,
+}: OperatorDashboardViewProps) {
   const t = useTranslations('business')
 
   const tiles = [
@@ -34,6 +44,8 @@ export function OperatorDashboardView({ overview, vehicles, locale }: OperatorDa
         <p className="mt-1 text-muted-foreground">{t('dashboard.subtitle')}</p>
 
         <ComplianceBanner vehicles={vehicles} locale={locale} />
+
+        <TodayPanel today={overview.today} vehicles={vehicles} session={session} locale={locale} />
 
         <div className="mt-6 grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
           {tiles.map(({ label, icon: Icon, value }) => (
