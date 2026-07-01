@@ -1,3 +1,4 @@
+import { Button } from '@/components/ui/button'
 import { DocumentStatusBadge } from '@/vite/documents/DocumentStatusBadge'
 import { type DocumentType, myDocumentsQueryOptions, uploadDocument } from '@/vite/documents/api'
 import { useSession } from '@/vite/session'
@@ -87,13 +88,9 @@ export function DocumentUploadCard() {
           />
         </div>
 
-        <button
-          type="submit"
-          disabled={!file || mutation.isPending}
-          className="inline-flex items-center rounded-md bg-red-600 px-4 py-2 text-sm font-medium text-white disabled:cursor-not-allowed disabled:opacity-50"
-        >
+        <Button type="submit" disabled={!file || mutation.isPending}>
           {mutation.isPending ? t('uploading') : t('uploadButton')}
-        </button>
+        </Button>
 
         {mutation.isError && (
           <p role="alert" className="text-sm text-red-600">
