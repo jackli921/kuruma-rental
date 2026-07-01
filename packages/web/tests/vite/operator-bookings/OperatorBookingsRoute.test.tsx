@@ -287,7 +287,7 @@ describe('OperatorBookingsRoute blocks layer (#1101)', () => {
     expect(screen.queryByRole('button', { name: B.detail.deleteAction })).not.toBeInTheDocument()
   })
 
-  it('dispatches a clicked booking to its detail page and a clicked block to the detail dialog', () => {
+  it('does not navigate on a calendar booking click (its chip Link owns it) but opens the detail dialog for a block', () => {
     vi.stubEnv('VITE_FEATURE_OPERATOR_BLOCKS', 'true')
     renderRoute(operatorSession, blocksFleet, [], {
       bookings: [calendarBooking],
@@ -298,12 +298,12 @@ describe('OperatorBookingsRoute blocks layer (#1101)', () => {
     const booking = events.find((e) => e.type === 'booking')
     const block = events.find((e) => e.type === 'block')
 
+    // The CalendarEventChip's inner <Link> owns booking navigation now; rbc's
+    // event-click must be a no-op for a booking (navigating would defeat the pin).
     act(() => (calendarProps.onSelectEvent as (i: unknown) => void)(booking))
-    expect(navigate).toHaveBeenCalledWith({
-      to: '/$locale/manage/bookings/$bookingId',
-      params: { locale: 'en', bookingId: 'bk-1' },
-    })
+    expect(navigate).not.toHaveBeenCalled()
 
+    // A block still routes through the shared handler to open its detail dialog.
     act(() => (calendarProps.onSelectEvent as (i: unknown) => void)(block))
     expect(screen.getByText(B.detail.dialogTitle)).toBeInTheDocument()
   })
