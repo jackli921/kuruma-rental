@@ -1,5 +1,6 @@
+import type { OperatorApplicationStatus } from '@kuruma/shared/enums'
 import type { OperatorApplicationInput } from '@kuruma/shared/validators/operator-application'
-import { ConflictError } from '../auth/guards'
+import { ConflictError, NotFoundError } from '../auth/guards'
 import {
   OPERATOR_APPLICATION_EMAIL_CONSTRAINT,
   PG_ERROR,
@@ -25,12 +26,47 @@ export interface OperatorApplicationRejectedAuditEvent {
   readonly applicationId: string
 }
 
+// Narrow per-service audit port (mirrors RecordOperatorProfileAudit in operator.ts):
+// the injected sink accepts only THIS service's events, so the compiler rejects an
+// accidental emit of a foreign kind. The composition root's wider RecordAuditEvent
+// sink stays assignable to it (parameter contravariance).
+export type RecordOperatorApplicationAudit = (
+  event: OperatorApplicationApprovedAuditEvent | OperatorApplicationRejectedAuditEvent,
+) => void
+
 // The honeypot/consent fields are validated + stripped at the route boundary; the
 // service persists only the domain fields (contactEmail already lowercased by zod).
 type SubmitInput = Omit<OperatorApplicationInput, 'honeypot' | 'consent'>
 
 export class OperatorApplicationService {
-  constructor(private readonly repo: OperatorApplicationRepository) {}
+  constructor(
+    private readonly repo: OperatorApplicationRepository,
+    private readonly recordAudit: RecordOperatorApplicationAudit,
+  ) {}
+
+  async list(status?: OperatorApplicationStatus): Promise<OperatorApplication[]> {
+    return this.repo.list(status)
+  }
+
+  async reject(
+    id: string,
+    reviewerUserId: string,
+    rejectionReason: string,
+  ): Promise<OperatorApplication> {
+    const row = await this.repo.markRejectedIfPending(
+      id,
+      reviewerUserId,
+      new Date(),
+      rejectionReason,
+    )
+    if (!row) throw new NotFoundError('no pending application with that id')
+    this.recordAudit({
+      type: 'OPERATOR_APPLICATION_REJECTED',
+      actorUserId: reviewerUserId,
+      applicationId: id,
+    })
+    return row
+  }
 
   async submit(input: SubmitInput): Promise<Pick<OperatorApplication, 'id' | 'status'>> {
     try {
