@@ -30,6 +30,9 @@ describe('DrizzleOverviewRepository today buckets (real Postgres)', () => {
   const renterId = crypto.randomUUID()
   const NOW = new Date('2027-09-10T05:00:00.000Z')
   const createdLocationIds: string[] = []
+  // Captured from the overdue booking's seed so the overdue-row test can pin the
+  // exact assigned vehicle id rather than merely assert it is non-empty.
+  let odVehicleId = ''
   const code = (name: string) => `TB-${name}-${uniq}`
 
   const ctxFor = (operatorId: string): CallerContext => ({
@@ -125,7 +128,7 @@ describe('DrizzleOverviewRepository today buckets (real Postgres)', () => {
     })
     // overdue: ACTIVE, contractual endAt already past — even though the
     // effectiveEndAt turnaround tail is in the future. Must be OVERDUE, not return.
-    await mk(opAId, clsA.id, locA.id, {
+    odVehicleId = await mk(opAId, clsA.id, locA.id, {
       bookingCode: code('OD'),
       status: 'ACTIVE',
       startAt: new Date('2027-09-05T00:00:00Z'),
@@ -172,8 +175,8 @@ describe('DrizzleOverviewRepository today buckets (real Postgres)', () => {
       status: 'ACTIVE',
       renterName: 'Alice Tester',
       endAt: '2027-09-08T00:00:00.000Z',
+      vehicleId: odVehicleId,
     })
-    expect(od?.vehicleId).toMatch(/./)
   })
 
   it('scopes to the caller — operator A never sees operator B’s pickup', async () => {
@@ -187,5 +190,16 @@ describe('DrizzleOverviewRepository today buckets (real Postgres)', () => {
   it('bypass (SYSTEM_CONTEXT) sees operator B’s pickup across tenants', async () => {
     const { today } = await overviewRepo.getOperatorOverview(SYSTEM_CONTEXT, NOW)
     expect(today.pickups.map((r) => r.bookingCode)).toContain(code('OPB'))
+  })
+
+  // #407 slice 4 / #1272: an `all`-scope caller (the operator-context picker)
+  // narrows the cross-tenant aggregate to one operator via the 3rd arg — honored
+  // ONLY in the repo's `all` branch, so it selects operator B *exclusively*
+  // (operator A's today pickup drops out), and can never widen a tenant.
+  it('an all-scope caller narrowed to one operator sees only that operator', async () => {
+    const { today } = await overviewRepo.getOperatorOverview(SYSTEM_CONTEXT, NOW, opBId)
+    expect(today.pickups.map((r) => r.bookingCode)).toEqual([code('OPB')])
+    expect(today.returns).toEqual([])
+    expect(today.overdue).toEqual([])
   })
 })
