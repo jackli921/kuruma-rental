@@ -163,6 +163,20 @@ describe('CancelBookingDialog (renter, #856)', () => {
     expect(screen.getByRole('button', { name: c.confirm })).toBeInTheDocument()
   })
 
+  it('gives each cancel-reason radio a coarse-pointer touch row so it is tappable on a phone (#1301)', async () => {
+    // Regression pin: the reason radios were a 16px input in a ~20px row. Each row's
+    // <label> (the full-width tap target) must opt into the >=44px touch floor on
+    // coarse pointers; the mobile Playwright lane proves the resulting geometry.
+    const user = userEvent.setup()
+    renderDialog()
+    await user.click(screen.getByRole('button', { name: c.action }))
+    const radios = screen.getAllByRole('radio')
+    expect(radios).toHaveLength(Object.keys(c.reason.options).length)
+    for (const radio of radios) {
+      expect(radio.closest('label')?.className).toMatch(/pointer-coarse:/)
+    }
+  })
+
   it('fires exactly one cancel request when confirm is double-clicked before a re-render', async () => {
     const user = userEvent.setup()
     // Never resolves: the mutation stays in-flight. Both clicks land inside one

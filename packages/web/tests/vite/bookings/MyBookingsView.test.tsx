@@ -82,8 +82,11 @@ describe('MyBookingsView', () => {
     expect(within(row).getByText('Toyota Aqua')).toBeInTheDocument()
     expect(within(row).getByText('Confirmed')).toBeInTheDocument()
     expect(within(row).getByText('￥24,000')).toBeInTheDocument()
-    // medium dateStyle, Asia/Tokyo: 01:00Z -> Jul 1; 03 Jul 01:00Z -> Jul 3
-    expect(within(row).getByText(/Jul 1, 2026.*Jul 3, 2026/)).toBeInTheDocument()
+    // medium dateStyle, Asia/Tokyo: 01:00Z -> Jul 1; 03 Jul 01:00Z -> Jul 3. Each
+    // endpoint is its own whitespace-nowrap span (#1301) so the range can wrap at the
+    // separator without overflowing a narrow card — hence two matches, not one.
+    expect(within(row).getByText(/Jul 1, 2026/)).toBeInTheDocument()
+    expect(within(row).getByText(/Jul 3, 2026/)).toBeInTheDocument()
   })
 
   it('links each row to its confirmation page carrying the bookingId', () => {
