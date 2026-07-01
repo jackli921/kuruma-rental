@@ -79,6 +79,7 @@ export type WithOperatorId<T> = T & { operatorId?: string }
 // there would misrepresent data scope. Each later slice (settings, classes/fleet,
 // dashboard, bookings, team) adds its route id here as it lands.
 export const OPERATOR_CONTEXT_ROUTE_IDS: ReadonlySet<string> = new Set([
+  '/$locale/_business/dashboard', // slice 4 — overview + fleet-overview narrow to picked operator
   '/$locale/_business/manage/add-ons',
   '/$locale/_business/manage/classes',
   '/$locale/_business/manage/fees',

@@ -42,11 +42,37 @@ describe('fetchOperatorOverview', () => {
     )
     await expect(fetchOperatorOverview()).rejects.toBeInstanceOf(ParseError)
   })
+
+  it('appends ?operatorId only when an operator is picked (#407 bypass-admin narrowing)', async () => {
+    fetchMock.mockResolvedValue(jsonResponse({ success: true, data: overview }))
+
+    await fetchOperatorOverview('op_9')
+
+    expect(fetchMock).toHaveBeenCalledWith('/api/dashboard/overview?operatorId=op_9', {
+      credentials: 'include',
+    })
+  })
+
+  it('url-encodes the picked operator id', async () => {
+    fetchMock.mockResolvedValue(jsonResponse({ success: true, data: overview }))
+
+    await fetchOperatorOverview('a b/c')
+
+    const [url] = fetchMock.mock.calls[0] as [string]
+    expect(url).toBe('/api/dashboard/overview?operatorId=a%20b%2Fc')
+  })
 })
 
 describe('operatorOverviewQueryOptions', () => {
-  it('exposes the stable OPERATOR_OVERVIEW_QUERY_KEY for cache reuse', () => {
+  it('keys the cache by "all" when no operator is picked', () => {
     expect(OPERATOR_OVERVIEW_QUERY_KEY).toEqual(['operator-overview'])
-    expect(operatorOverviewQueryOptions().queryKey).toEqual(['operator-overview'])
+    expect(operatorOverviewQueryOptions().queryKey).toEqual([...OPERATOR_OVERVIEW_QUERY_KEY, 'all'])
+  })
+
+  it('keys the cache by the picked operator so a context switch never serves another tenant', () => {
+    expect(operatorOverviewQueryOptions('op_9').queryKey).toEqual([
+      ...OPERATOR_OVERVIEW_QUERY_KEY,
+      'op_9',
+    ])
   })
 })
