@@ -1,10 +1,10 @@
-import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
   fetchCalendarBookings,
   fetchNeedsAssignment,
   needsAssignmentQueryOptions,
   operatorCalendarQueryOptions,
-} from './api'
+} from '@/vite/operator-bookings/api'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 
 function jsonResponse(body: unknown, status = 200): Response {
   return { ok: status >= 200 && status < 300, status, json: async () => body } as Response

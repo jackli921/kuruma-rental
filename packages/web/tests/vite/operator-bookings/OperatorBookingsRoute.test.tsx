@@ -14,7 +14,8 @@ const c = enMessages.bookings.operator.newBooking
 const B = enMessages.bookings.operator.blocks
 
 // Render the route component outside a RouterProvider: stub createFileRoute
-// (Route.useParams/useSearch/useNavigate) + useRouter, and seed the suspense
+// (Route.useParams/useSearch/useNavigate), getRouteApi (the `_business` layout's
+// useSearch, read by useOperatorContext) + useRouter, and seed the suspense
 // calendar reads + session from cache. Mirrors TripDetailRoute.test.tsx.
 //
 // The route's search params, mutable so a test can drop `view` to exercise the
@@ -30,6 +31,12 @@ vi.mock('@tanstack/react-router', async () => ({
   createFileRoute: () => () => ({
     useParams: () => ({ locale: 'en' }),
     useSearch: () => searchState.value,
+    useNavigate: () => navigate,
+  }),
+  // useOperatorContext reads the `_business` layout search via getRouteApi. These
+  // route tests predate the picker, so the operator is always unpicked (undefined).
+  getRouteApi: () => ({
+    useSearch: () => ({ operator: undefined }),
     useNavigate: () => navigate,
   }),
   useRouter: () => ({ invalidate: vi.fn() }),

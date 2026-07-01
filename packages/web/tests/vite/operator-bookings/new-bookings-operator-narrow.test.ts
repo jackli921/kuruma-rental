@@ -1,9 +1,9 @@
-import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
   fetchNewOrderBookings,
   newOrderBookingsQueryOptions,
   newOrderScanQueryKey,
-} from './new-bookings'
+} from '@/vite/operator-bookings/new-bookings'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 
 function jsonResponse(body: unknown, status = 200): Response {
   return { ok: status >= 200 && status < 300, status, json: async () => body } as Response
