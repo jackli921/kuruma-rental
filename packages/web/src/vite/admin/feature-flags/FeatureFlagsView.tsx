@@ -9,6 +9,10 @@ export interface FeatureFlagRow {
   readonly effective: boolean
   /** True when a DB override is set (vs. following the build-time default). */
   readonly overridden: boolean
+  /** True once a consumer reads the flag via useFeatureFlag(), so its toggle takes
+   *  effect live; false = build-time only (the toggle persists but is inert until
+   *  that flag's runtime migration ships). Surfaced so a no-op toggle is honest. */
+  readonly runtimeControlled: boolean
 }
 
 interface FeatureFlagsViewProps {
@@ -54,8 +58,20 @@ export function FeatureFlagsView({ rows, pendingKey, onToggle }: FeatureFlagsVie
             {rows.map((row) => (
               <tr key={row.key} className="border-border border-b last:border-0">
                 <td className="px-3 py-3">
-                  <span className="font-medium">{row.label}</span>
-                  <span className="ml-2 text-muted-foreground text-xs">{row.key}</span>
+                  <div>
+                    <span className="font-medium">{row.label}</span>
+                    <span className="ml-2 text-muted-foreground text-xs">{row.key}</span>
+                  </div>
+                  <span
+                    className={`mt-1 inline-flex rounded-full px-2 py-0.5 text-xs ${
+                      row.runtimeControlled
+                        ? 'bg-emerald-500/10 text-emerald-600'
+                        : 'bg-amber-500/10 text-amber-600'
+                    }`}
+                    title={row.runtimeControlled ? undefined : t('buildOnlyHint')}
+                  >
+                    {row.runtimeControlled ? t('runtimeLive') : t('runtimeBuildOnly')}
+                  </span>
                 </td>
                 <td className="px-3 py-3">
                   <span
