@@ -2,6 +2,7 @@ import type { RateLimitBinding } from '@elithrar/workers-hono-rate-limit'
 import type { GoogleAuthRuntime } from './auth/google'
 import type {
   AddOnRepository,
+  AddOnTemplateRepository,
   AvailabilityRepository,
   BookingRepository,
   ClassRatePlanRepository,
@@ -70,6 +71,7 @@ export type AppOverrides = {
   locationRepo?: LocationRepository
   insuranceOptionRepo?: InsuranceOptionRepository
   addOnRepo?: AddOnRepository
+  addOnTemplateRepo?: AddOnTemplateRepository
   feeScheduleRepo?: FeeScheduleRepository
   classRatePlanRepo?: ClassRatePlanRepository
   notificationLogRepo?: NotificationLogRepository
