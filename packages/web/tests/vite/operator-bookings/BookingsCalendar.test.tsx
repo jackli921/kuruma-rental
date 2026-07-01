@@ -9,7 +9,7 @@ import { render, within } from '@testing-library/react'
 import type { ComponentType } from 'react'
 import type { EventProps, SlotInfo } from 'react-big-calendar'
 import { IntlProvider } from 'use-intl'
-import { describe, expect, it, vi } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import enMessages from '../../../messages/en.json'
 
 // Capture the props handed to react-big-calendar's <Calendar> so the slot-selection
@@ -73,6 +73,13 @@ describe('BookingsCalendar slot-selection seam (#589 1d)', () => {
 // A booking becomes the interactive chip; a block stays a plain, non-interactive band
 // whose click still flows through onSelectEvent to the block-detail dialog.
 describe('BookingsCalendar event rendering (quick-view chip vs block band)', () => {
+  // The quick-view chip (#1282) is gated by VITE_FEATURE_CALENDAR_QUICKVIEW; the
+  // chip tests below opt it on, and one asserts the flag-OFF fallback. Reset per test
+  // so a stub never leaks into the next.
+  afterEach(() => {
+    vi.unstubAllEnvs()
+  })
+
   const bookingItem: BookingCalendarEvent = {
     type: 'booking',
     id: 'bk-1',
@@ -120,7 +127,8 @@ describe('BookingsCalendar event rendering (quick-view chip vs block band)', () 
     expect(typeof (calendarProps.components as { event?: unknown }).event).toBe('function')
   })
 
-  it('renders a booking as the interactive quick-view chip (a button)', () => {
+  it('renders a booking as the interactive quick-view chip (a button) when the flag is ON', () => {
+    vi.stubEnv('VITE_FEATURE_CALENDAR_QUICKVIEW', 'true')
     const { container } = renderEvent(bookingItem)
     expect(within(container).getByRole('button', { name: /Jane Doe/ })).toBeInTheDocument()
   })
@@ -129,6 +137,13 @@ describe('BookingsCalendar event rendering (quick-view chip vs block band)', () 
     const { container } = renderEvent(blockItem)
     expect(within(container).queryByRole('button')).toBeNull()
     expect(within(container).getByText('Oil change')).toBeInTheDocument()
+  })
+
+  it('renders a booking as a plain band (no chip) when the quick-view flag is OFF (#1329)', () => {
+    vi.stubEnv('VITE_FEATURE_CALENDAR_QUICKVIEW', undefined)
+    const { container } = renderEvent(bookingItem)
+    expect(within(container).queryByRole('button')).toBeNull()
+    expect(within(container).getByText('Jane Doe')).toBeInTheDocument()
   })
 
   it('keeps onSelectEvent wired so a block click still reaches the detail dialog', () => {

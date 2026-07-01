@@ -61,6 +61,16 @@ export const FEATURE_FLAGS = {
     label: 'Multi-currency display',
     runtimeControlled: true,
   },
+  OPERATOR_TODAY: {
+    env: 'VITE_FEATURE_OPERATOR_TODAY',
+    label: 'Operator today panel',
+    runtimeControlled: false,
+  },
+  CALENDAR_QUICKVIEW: {
+    env: 'VITE_FEATURE_CALENDAR_QUICKVIEW',
+    label: 'Calendar quick-view',
+    runtimeControlled: false,
+  },
 } as const
 
 export type FeatureFlagKey = keyof typeof FEATURE_FLAGS

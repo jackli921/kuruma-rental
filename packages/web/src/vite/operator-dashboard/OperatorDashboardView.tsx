@@ -1,3 +1,4 @@
+import { isOperatorTodayEnabled } from '@/vite/config'
 import { TodayPanel } from '@/vite/operator-dashboard/TodayPanel'
 import { ComplianceBanner } from '@/vite/operator-fleet/ComplianceBanner'
 import type { OperatorFleetVehicle } from '@/vite/operator-fleet/api'
@@ -45,7 +46,16 @@ export function OperatorDashboardView({
 
         <ComplianceBanner vehicles={vehicles} locale={locale} />
 
-        <TodayPanel today={overview.today} vehicles={vehicles} session={session} locale={locale} />
+        {/* #1102 Today panel, gated OFF for the beta MVP (#1329). The panel also
+            self-gates to an operator session; this flag hides it entirely otherwise. */}
+        {isOperatorTodayEnabled() && (
+          <TodayPanel
+            today={overview.today}
+            vehicles={vehicles}
+            session={session}
+            locale={locale}
+          />
+        )}
 
         <div className="mt-6 grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
           {tiles.map(({ label, icon: Icon, value }) => (

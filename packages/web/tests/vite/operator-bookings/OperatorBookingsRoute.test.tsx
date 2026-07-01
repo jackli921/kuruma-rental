@@ -320,6 +320,9 @@ describe('OperatorBookingsRoute blocks layer (#1101)', () => {
   })
 
   it('does not navigate on a calendar booking click (its chip Link owns it) but opens the detail dialog for a block', () => {
+    // Chip ON is the precondition for "its Link owns navigation" (#1282); with it OFF
+    // the band click navigates instead — asserted by the #1329 sibling test below.
+    vi.stubEnv('VITE_FEATURE_CALENDAR_QUICKVIEW', 'true')
     vi.stubEnv('VITE_FEATURE_OPERATOR_BLOCKS', 'true')
     renderRoute(operatorSession, blocksFleet, [], {
       bookings: [calendarBooking],
@@ -338,6 +341,24 @@ describe('OperatorBookingsRoute blocks layer (#1101)', () => {
     // A block still routes through the shared handler to open its detail dialog.
     act(() => (calendarProps.onSelectEvent as (i: unknown) => void)(block))
     expect(screen.getByText(B.detail.dialogTitle)).toBeInTheDocument()
+  })
+
+  it('navigates to the booking detail on a calendar booking click when the quick-view chip is gated OFF (#1329)', () => {
+    // With the chip flag OFF the band is a plain, link-less span, so the pre-#1282
+    // baseline must be restored: the rbc event-click navigates to the detail page.
+    vi.stubEnv('VITE_FEATURE_CALENDAR_QUICKVIEW', undefined)
+    renderRoute(operatorSession, blocksFleet, [], { bookings: [calendarBooking] })
+
+    const booking = (calendarProps.events as { type: string; id: string }[]).find(
+      (e) => e.type === 'booking',
+    )
+    act(() => (calendarProps.onSelectEvent as (i: unknown) => void)(booking))
+    expect(navigate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        to: '/$locale/manage/bookings/$bookingId',
+        params: expect.objectContaining({ bookingId: 'bk-1' }),
+      }),
+    )
   })
 
   it('prefills the schedule dialog with the slot vehicle for a managing operator', async () => {
