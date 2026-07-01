@@ -4,6 +4,7 @@ import { SYSTEM_CONTEXT } from '../../src/middleware/auth'
 import {
   InMemoryAvailabilityRepository,
   InMemoryBookingRepository,
+  InMemoryOperatorRepository,
   InMemoryVehicleBlockRepository,
   InMemoryVehicleRepository,
 } from '../../src/repositories/in-memory'
@@ -59,6 +60,7 @@ function createTestApp() {
     vehicleRepo,
     bookingRepo,
     new InMemoryVehicleBlockRepository(),
+    new InMemoryOperatorRepository(),
   )
   const photoStorage = new InMemoryPhotoStorage()
 

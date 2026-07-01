@@ -4,6 +4,7 @@ import { createApp } from '../../src/index'
 import {
   InMemoryAvailabilityRepository,
   InMemoryBookingRepository,
+  InMemoryOperatorRepository,
   InMemoryRegionRepository,
   InMemoryVehicleBlockRepository,
   InMemoryVehicleRepository,
@@ -59,6 +60,7 @@ describe('Geocoder DI — provider swap touches only index.ts (#531)', () => {
       vehicleRepo,
       bookingRepo,
       new InMemoryVehicleBlockRepository(),
+      new InMemoryOperatorRepository(),
     )
     const geocode = vi.fn(
       async (): Promise<GeocodeOutcome> => ({ status: 'ok', lat: 34.6937, lng: 135.5023 }),
@@ -95,6 +97,7 @@ describe('Geocoder DI — provider swap touches only index.ts (#531)', () => {
       vehicleRepo,
       bookingRepo,
       new InMemoryVehicleBlockRepository(),
+      new InMemoryOperatorRepository(),
     )
     const geocode = vi.fn(
       async (): Promise<GeocodeOutcome> => ({ status: 'ok', lat: 34.6937, lng: 135.5023 }),
@@ -135,6 +138,7 @@ describe('Geocoder DI — provider swap touches only index.ts (#531)', () => {
       vehicleRepo,
       bookingRepo,
       new InMemoryVehicleBlockRepository(),
+      new InMemoryOperatorRepository(),
     )
     // The provider would FAIL — proving the GEOCODED result came from the cache.
     const geocode = vi.fn(async (): Promise<GeocodeOutcome> => ({ status: 'notFound' }))

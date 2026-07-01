@@ -1,6 +1,7 @@
 import { type CallerContext, SYSTEM_CONTEXT } from '../middleware/auth'
 import type {
   AvailabilityRepository,
+  OperatorRepository,
   VehicleClassRepository,
   VehicleRepository,
 } from '../repositories/types'
@@ -30,6 +31,9 @@ export class VehicleClassAvailabilityService {
     private readonly classRepo: VehicleClassRepository,
     private readonly vehicleRepo: VehicleRepository,
     private readonly availabilityRepo: AvailabilityRepository,
+    // #1224: to exclude a soft-deactivated operator's cars from BOTH counts, keeping
+    // totalCars consistent with availableCars (the seam already drops them).
+    private readonly operatorRepo: OperatorRepository,
   ) {}
 
   async getAvailabilityForClass(
@@ -48,7 +52,16 @@ export class VehicleClassAvailabilityService {
     const { data: vehicles } = await this.vehicleRepo.findAll(SYSTEM_CONTEXT, {
       status: 'AVAILABLE',
     })
-    const inClass = vehicles.filter((v) => v.classId === vc.id)
+    // #1224: a soft-deactivated operator is off the platform, so its cars count
+    // toward NEITHER the class total nor the available count — keeping both
+    // consistent with /availability, which drops them at the repo seam. One list()
+    // (operators are bounded tenants) instead of a per-car lookup avoids an N+1.
+    const deactivatedOperatorIds = new Set(
+      (await this.operatorRepo.list()).filter((o) => o.deactivatedAt != null).map((o) => o.id),
+    )
+    const inClass = vehicles.filter(
+      (v) => v.classId === vc.id && !deactivatedOperatorIds.has(v.operatorId),
+    )
     const totalCars = inClass.length
     if (totalCars === 0) {
       return { ok: true, data: { totalCars: 0, availableCars: 0, sampleAvailableVehicleIds: [] } }

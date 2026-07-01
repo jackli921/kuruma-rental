@@ -3,6 +3,7 @@ import { SYSTEM_CONTEXT } from '../../src/middleware/auth'
 import {
   InMemoryAvailabilityRepository,
   InMemoryBookingRepository,
+  InMemoryOperatorRepository,
   InMemoryVehicleBlockRepository,
   InMemoryVehicleRepository,
 } from '../../src/repositories/in-memory'
@@ -65,6 +66,7 @@ beforeEach(() => {
     vehicleRepo,
     bookingRepo,
     new InMemoryVehicleBlockRepository(),
+    new InMemoryOperatorRepository(),
   )
   service = new AvailabilityService(availabilityRepo)
 })

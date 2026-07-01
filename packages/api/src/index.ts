@@ -358,6 +358,7 @@ export function createApp(overrides?: AppOverrides, repos: Repos = buildRepos(ov
     vehicleClassRepo,
     vehicleRepo,
     availabilityRepo,
+    operatorRepo,
   )
   // Messaging: if a staff user id is configured, every confirmed booking
   // auto-creates a renter/staff thread for coordination (design doc

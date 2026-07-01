@@ -32,6 +32,7 @@ function makeApp() {
     vehicleRepo,
     bookingRepo,
     new InMemoryVehicleBlockRepository(),
+    new InMemoryOperatorRepository(),
   )
   const operatorRepo = new InMemoryOperatorRepository()
   const app = createApp({ vehicleRepo, bookingRepo, availabilityRepo, operatorRepo })

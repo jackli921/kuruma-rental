@@ -7,6 +7,7 @@ import type { Db } from '../repositories/drizzle'
 import {
   InMemoryAvailabilityRepository,
   InMemoryBookingRepository,
+  InMemoryOperatorRepository,
   InMemoryVehicleBlockRepository,
   InMemoryVehicleRepository,
 } from '../repositories/in-memory'
@@ -81,6 +82,7 @@ function minimalOverrides() {
     vehicleRepo,
     bookingRepo,
     new InMemoryVehicleBlockRepository(),
+    new InMemoryOperatorRepository(),
   )
   return { vehicleRepo, bookingRepo, availabilityRepo }
 }

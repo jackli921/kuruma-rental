@@ -93,6 +93,7 @@ describe('createApp wires operator-session revocation (#939)', () => {
       vehicleRepo,
       bookingRepo,
       new InMemoryVehicleBlockRepository(),
+      new InMemoryOperatorRepository(),
     )
     // operatorRepo backs /operators AND the #1088 operator-active freshness source.
     // Seeded with the member's operator (active) so the operator-deactivation cascade
