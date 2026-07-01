@@ -480,6 +480,7 @@ export function createApp(overrides?: AppOverrides, repos: Repos = buildRepos(ov
   const reviewService = new ReviewService(
     reviewRepo,
     bookingRepo,
+    vehicleRepo,
     bookingEventRepo,
     operatorMembershipRepo,
   )
