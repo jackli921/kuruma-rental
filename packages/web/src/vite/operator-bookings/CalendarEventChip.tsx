@@ -6,6 +6,13 @@ import { Link } from '@tanstack/react-router'
 import { useCallback, useEffect, useRef, useState } from 'react'
 
 const HOVER_OPEN_DELAY_MS = 120
+// Grace period after the pointer leaves the trigger (or the card) before a
+// hover-opened card dismisses. base-ui portals the card, so there is a physical
+// gap between the chip and the popup; without this delay the mouseleave fires
+// mid-transit and closes the card before the pointer can reach it — leaving the
+// "View full details" link unclickable on hover (#1099 quick-view MEDIUM). The
+// card's own onMouseEnter cancels the pending close, bridging the gap.
+const HOVER_CLOSE_DELAY_MS = 120
 // base-ui onOpenChange reasons that mean "the user dismissed the card". A
 // `trigger-press` close (toggle) is deliberately NOT here: a chip click only pins.
 // Typed off base-ui's reason union so a typo (which would silently fail *open* —
@@ -44,9 +51,18 @@ export function CalendarEventChip({ event, locale }: ChipProps) {
     openTimer.current = setTimeout(() => setHovering(true), HOVER_OPEN_DELAY_MS)
   }, [clearTimer])
 
+  // Leaving the trigger OR the card schedules a deferred close, so the pointer has
+  // a grace window to cross the gap onto the card (where handleCardEnter cancels it).
   const handleLeave = useCallback(() => {
     clearTimer()
-    setHovering(false)
+    openTimer.current = setTimeout(() => setHovering(false), HOVER_CLOSE_DELAY_MS)
+  }, [clearTimer])
+
+  // Pointer reached the portaled card: cancel the pending close and hold it open so
+  // its "View full details" link is reachable without first pinning (#1099).
+  const handleCardEnter = useCallback(() => {
+    clearTimer()
+    setHovering(true)
   }, [clearTimer])
 
   useEffect(() => clearTimer, [clearTimer])
@@ -72,7 +88,12 @@ export function CalendarEventChip({ event, locale }: ChipProps) {
       >
         {event.title}
       </PopoverTrigger>
-      <PopoverContent initialFocus={false} className="p-0">
+      <PopoverContent
+        initialFocus={false}
+        className="p-0"
+        onMouseEnter={handleCardEnter}
+        onMouseLeave={handleLeave}
+      >
         <Link
           to="/$locale/manage/bookings/$bookingId"
           params={{ locale, bookingId: event.id }}
