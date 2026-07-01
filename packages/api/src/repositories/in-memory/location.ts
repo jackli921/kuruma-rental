@@ -93,9 +93,18 @@ export class InMemoryLocationRepository implements LocationRepository {
     return location
   }
 
-  async update(id: string, data: Partial<Location>): Promise<Location | undefined> {
+  async update(
+    ctx: CallerContext,
+    id: string,
+    data: Partial<Location>,
+  ): Promise<Location | undefined> {
+    const scope = operatorReadScope(ctx)
+    if (scope.kind === 'none') return undefined
     const existing = this.store.get(id)
     if (!existing) return undefined
+    // #1288: tenant-scope the write so a caller reaching the repo without the
+    // service's findById guard can't mutate another operator's row by id.
+    if (scope.kind === 'operator' && existing.operatorId !== scope.operatorId) return undefined
 
     if (data.name !== undefined && data.name !== existing.name) {
       this.assertNameFree(existing.operatorId, data.name, id)
@@ -115,9 +124,13 @@ export class InMemoryLocationRepository implements LocationRepository {
     return updated
   }
 
-  async archive(id: string): Promise<Location | undefined> {
+  async archive(ctx: CallerContext, id: string): Promise<Location | undefined> {
+    const scope = operatorReadScope(ctx)
+    if (scope.kind === 'none') return undefined
     const existing = this.store.get(id)
     if (!existing) return undefined
+    // #1288: tenant-scope the archive (see update()).
+    if (scope.kind === 'operator' && existing.operatorId !== scope.operatorId) return undefined
 
     const archived: Location = { ...existing, status: 'ARCHIVED', updatedAt: new Date() }
     this.store.set(archived.id, archived)

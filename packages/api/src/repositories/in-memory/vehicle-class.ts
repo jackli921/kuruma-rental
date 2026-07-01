@@ -54,9 +54,18 @@ export class InMemoryVehicleClassRepository implements VehicleClassRepository {
     return vehicleClass
   }
 
-  async update(id: string, data: Partial<VehicleClass>): Promise<VehicleClass | undefined> {
+  async update(
+    ctx: CallerContext,
+    id: string,
+    data: Partial<VehicleClass>,
+  ): Promise<VehicleClass | undefined> {
+    const scope = operatorReadScope(ctx)
+    if (scope.kind === 'none') return undefined
     const existing = this.store.get(id)
     if (!existing) return undefined
+    // #1288: tenant-scope the write so a caller reaching the repo without the
+    // service's findById guard can't mutate another operator's row by id.
+    if (scope.kind === 'operator' && existing.operatorId !== scope.operatorId) return undefined
 
     const updated: VehicleClass = {
       ...existing,
@@ -72,9 +81,13 @@ export class InMemoryVehicleClassRepository implements VehicleClassRepository {
     return updated
   }
 
-  async archive(id: string): Promise<VehicleClass | undefined> {
+  async archive(ctx: CallerContext, id: string): Promise<VehicleClass | undefined> {
+    const scope = operatorReadScope(ctx)
+    if (scope.kind === 'none') return undefined
     const existing = this.store.get(id)
     if (!existing) return undefined
+    // #1288: tenant-scope the archive (see update()).
+    if (scope.kind === 'operator' && existing.operatorId !== scope.operatorId) return undefined
 
     const archived: VehicleClass = {
       ...existing,

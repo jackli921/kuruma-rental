@@ -51,7 +51,7 @@ describe('InMemoryFeeScheduleRepository — CRUD', () => {
 
   it('updates fields and preserves id/createdAt', async () => {
     const created = await repo.create(feeInput())
-    const updated = await repo.update(created.id, { amountJpy: 4500 })
+    const updated = await repo.update(ctxFor(opA), created.id, { amountJpy: 4500 })
     expect(updated!.amountJpy).toBe(4500)
     expect(updated!.id).toBe(created.id)
     expect(updated!.createdAt).toEqual(created.createdAt)
@@ -59,13 +59,13 @@ describe('InMemoryFeeScheduleRepository — CRUD', () => {
 
   it('archive sets status to ARCHIVED', async () => {
     const created = await repo.create(feeInput())
-    const archived = await repo.archive(created.id)
+    const archived = await repo.archive(ctxFor(opA), created.id)
     expect(archived!.status).toBe('ARCHIVED')
   })
 
   it('returns undefined updating/archiving a missing id', async () => {
-    expect(await repo.update('nope', { amountJpy: 1 })).toBeUndefined()
-    expect(await repo.archive('nope')).toBeUndefined()
+    expect(await repo.update(ctxFor(opA), 'nope', { amountJpy: 1 })).toBeUndefined()
+    expect(await repo.archive(ctxFor(opA), 'nope')).toBeUndefined()
   })
 })
 
@@ -113,7 +113,7 @@ describe('InMemoryFeeScheduleRepository — active-uniqueness seal (both partial
 
   it('archiving frees the slot — a re-created fee of the same scope succeeds', async () => {
     const first = await repo.create(feeInput({ feeType: 'CLEANING_FLAT', vehicleClassId: null }))
-    await repo.archive(first.id)
+    await repo.archive(ctxFor(opA), first.id)
     await expect(
       repo.create(feeInput({ feeType: 'CLEANING_FLAT', vehicleClassId: null })),
     ).resolves.toMatchObject({ feeType: 'CLEANING_FLAT', status: 'ACTIVE' })
@@ -153,7 +153,7 @@ describe('InMemoryFeeScheduleRepository — findActiveByScope', () => {
 
   it('ignores ARCHIVED rows', async () => {
     const created = await repo.create(feeInput({ feeType: 'CLEANING_FLAT', vehicleClassId: null }))
-    await repo.archive(created.id)
+    await repo.archive(ctxFor(opA), created.id)
     expect(await repo.findActiveByScope(opA, 'CLEANING_FLAT', null)).toBeUndefined()
   })
 
@@ -221,7 +221,7 @@ describe('InMemoryFeeScheduleRepository — operator-scoped reads + filters', ()
 
   it('excludes ARCHIVED by default, includes with includeArchived', async () => {
     const { repo, aWide } = await seed()
-    await repo.archive(aWide.id)
+    await repo.archive(ctxFor(opA), aWide.id)
     expect((await repo.findAll(ctxFor(opA))).map((f) => f.id)).not.toContain(aWide.id)
     expect((await repo.findAll(ctxFor(opA), { includeArchived: true })).map((f) => f.id)).toContain(
       aWide.id,

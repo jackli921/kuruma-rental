@@ -1,7 +1,12 @@
 import { describe, expect, it } from 'vitest'
 import { type CallerContext, ForbiddenError, SYSTEM_CONTEXT } from '../../src/middleware/auth'
+import { InMemoryAddOnRepository } from '../../src/repositories/in-memory/add-on'
 import { InMemoryBookingRepository } from '../../src/repositories/in-memory/booking'
+import { InMemoryFeeScheduleRepository } from '../../src/repositories/in-memory/fee-schedule'
+import { InMemoryInsuranceOptionRepository } from '../../src/repositories/in-memory/insurance-option'
+import { InMemoryLocationRepository } from '../../src/repositories/in-memory/location'
 import { InMemoryVehicleRepository } from '../../src/repositories/in-memory/vehicle'
+import { InMemoryVehicleClassRepository } from '../../src/repositories/in-memory/vehicle-class'
 import type { Vehicle } from '../../src/stores'
 import { bookingInput } from '../helpers/booking'
 
@@ -199,5 +204,390 @@ describe('VehicleRepository operator-scopes writes', () => {
     const { repo, a } = await seed()
     const noTenant: CallerContext = { userId: 'x', role: 'OPERATOR_OWNER', bypassScope: false }
     await expect(repo.update(noTenant, a.id, { name: 'x' })).rejects.toThrow(ForbiddenError)
+  })
+})
+
+// LocationRepository scopes writes too (#1288): update/archive scope their WHERE
+// by tenant, defense-in-depth behind the service's already-scoped findById. The
+// config repos DELIBERATELY diverge from VehicleRepository above: a config repo
+// is a pure data layer with no write guard, so a tenant-less operator (scope
+// 'none') NO-OPS its writes (→ undefined → service 404) rather than throwing —
+// mirroring its own fail-closed reads. A cross-tenant id is likewise a silent
+// no-op, never a leak.
+describe('LocationRepository operator-scopes writes (#1288)', () => {
+  const opA = 'op_a'
+  const opB = 'op_b'
+  const ctxFor = (operatorId: string): CallerContext => ({
+    userId: 'owner',
+    role: 'OPERATOR_OWNER',
+    operatorId,
+    bypassScope: false,
+  })
+  const noTenant: CallerContext = { userId: 'x', role: 'OPERATOR_OWNER', bypassScope: false }
+
+  const locationInput = (operatorId: string, name: string) => ({
+    operatorId,
+    name,
+    address: '1-2-3 Test',
+    operatingHours: null,
+    timezone: 'Asia/Tokyo',
+    defaultTurnaroundMinutes: 2880,
+    status: 'ACTIVE' as const,
+  })
+
+  const seed = async () => {
+    const repo = new InMemoryLocationRepository()
+    const a = await repo.create(locationInput(opA, 'A-Namba'))
+    const b = await repo.create(locationInput(opB, 'B-Umeda'))
+    return { repo, a, b }
+  }
+
+  it('update cannot reach another tenant location (no-op, not leak)', async () => {
+    const { repo, b } = await seed()
+    expect(await repo.update(ctxFor(opA), b.id, { name: 'hijacked' })).toBeUndefined()
+    expect(await repo.findById(SYSTEM_CONTEXT, b.id)).toMatchObject({ name: 'B-Umeda' })
+  })
+
+  it('update succeeds on the caller’s own tenant location', async () => {
+    const { repo, a } = await seed()
+    const updated = await repo.update(ctxFor(opA), a.id, { defaultTurnaroundMinutes: 3600 })
+    expect(updated).toMatchObject({ id: a.id, defaultTurnaroundMinutes: 3600 })
+  })
+
+  it('archive cannot reach another tenant location (no-op, not leak)', async () => {
+    const { repo, b } = await seed()
+    expect(await repo.archive(ctxFor(opA), b.id)).toBeUndefined()
+    expect(await repo.findById(SYSTEM_CONTEXT, b.id)).toMatchObject({ status: 'ACTIVE' })
+  })
+
+  it('archive succeeds on the caller’s own tenant location', async () => {
+    const { repo, a } = await seed()
+    expect(await repo.archive(ctxFor(opA), a.id)).toMatchObject({ id: a.id, status: 'ARCHIVED' })
+  })
+
+  it('a tenant-less operator no-ops writes (config repo has no write guard)', async () => {
+    const { repo, a } = await seed()
+    expect(await repo.update(noTenant, a.id, { name: 'x' })).toBeUndefined()
+    expect(await repo.archive(noTenant, a.id)).toBeUndefined()
+    // Row untouched: no rename, still ACTIVE.
+    expect(await repo.findById(SYSTEM_CONTEXT, a.id)).toMatchObject({
+      name: 'A-Namba',
+      status: 'ACTIVE',
+    })
+  })
+})
+
+// VehicleClassRepository scopes writes too (#1288), same config-repo shape as
+// LocationRepository above: cross-tenant update/archive is a silent no-op and a
+// tenant-less operator (scope 'none') no-ops rather than throwing. vehicle_class
+// is the FK parent of the fee-schedule composite FK, so its tenant is doubly
+// load-bearing — the #1279 operatorId strip and this #1288 WHERE-scope stack.
+describe('VehicleClassRepository operator-scopes writes (#1288)', () => {
+  const opA = 'op_a'
+  const opB = 'op_b'
+  const ctxFor = (operatorId: string): CallerContext => ({
+    userId: 'owner',
+    role: 'OPERATOR_OWNER',
+    operatorId,
+    bypassScope: false,
+  })
+  const noTenant: CallerContext = { userId: 'x', role: 'OPERATOR_OWNER', bypassScope: false }
+
+  const classInput = (operatorId: string, slug: string) => ({
+    operatorId,
+    name: 'Compact',
+    slug,
+    description: null,
+    photos: [],
+    seats: 5,
+    luggageCapacity: 2,
+    luggageSize: 'MEDIUM' as const,
+    transmission: 'AUTO' as const,
+    fuelType: null,
+    acrissCode: null,
+    sortOrder: 0,
+    status: 'ACTIVE' as const,
+  })
+
+  const seed = async () => {
+    const repo = new InMemoryVehicleClassRepository()
+    const a = await repo.create(classInput(opA, 'compact-a'))
+    const b = await repo.create(classInput(opB, 'compact-b'))
+    return { repo, a, b }
+  }
+
+  it('update cannot reach another tenant class (no-op, not leak)', async () => {
+    const { repo, b } = await seed()
+    expect(await repo.update(ctxFor(opA), b.id, { name: 'hijacked' })).toBeUndefined()
+    expect(await repo.findById(SYSTEM_CONTEXT, b.id)).toMatchObject({ name: 'Compact' })
+  })
+
+  it('update succeeds on the caller’s own tenant class', async () => {
+    const { repo, a } = await seed()
+    const updated = await repo.update(ctxFor(opA), a.id, { seats: 7 })
+    expect(updated).toMatchObject({ id: a.id, seats: 7 })
+  })
+
+  it('archive cannot reach another tenant class (no-op, not leak)', async () => {
+    const { repo, b } = await seed()
+    expect(await repo.archive(ctxFor(opA), b.id)).toBeUndefined()
+    expect(await repo.findById(SYSTEM_CONTEXT, b.id)).toMatchObject({ status: 'ACTIVE' })
+  })
+
+  it('archive succeeds on the caller’s own tenant class', async () => {
+    const { repo, a } = await seed()
+    expect(await repo.archive(ctxFor(opA), a.id)).toMatchObject({ id: a.id, status: 'ARCHIVED' })
+  })
+
+  it('a tenant-less operator no-ops writes (config repo has no write guard)', async () => {
+    const { repo, a } = await seed()
+    expect(await repo.update(noTenant, a.id, { name: 'x' })).toBeUndefined()
+    expect(await repo.archive(noTenant, a.id)).toBeUndefined()
+    expect(await repo.findById(SYSTEM_CONTEXT, a.id)).toMatchObject({
+      name: 'Compact',
+      status: 'ACTIVE',
+    })
+  })
+})
+
+// FeeScheduleRepository is PRIVATE config (unlike the public location/class
+// catalog): its reads already reject RENTER/PARTNER via requireManagementRead.
+// #1288 mirrors that on the WRITE path — update/archive reject RENTER/PARTNER
+// (else operatorReadScope maps them to {kind:'all'} → an unscoped write of any
+// operator's private fees) AND tenant-scope the row. So a service-bypassing
+// caller can neither cross tenants nor write private config as a renter.
+describe('FeeScheduleRepository operator-scopes + management-guards writes (#1288)', () => {
+  const opA = 'op_a'
+  const opB = 'op_b'
+  const ctxFor = (operatorId: string): CallerContext => ({
+    userId: 'owner',
+    role: 'OPERATOR_OWNER',
+    operatorId,
+    bypassScope: false,
+  })
+  const noTenant: CallerContext = { userId: 'x', role: 'OPERATOR_OWNER', bypassScope: false }
+  const renter: CallerContext = { userId: 'r', role: 'RENTER', bypassScope: false }
+  const partner: CallerContext = { userId: 'p', role: 'PARTNER', bypassScope: true }
+
+  const feeInput = (operatorId: string) => ({
+    operatorId,
+    vehicleClassId: null,
+    feeType: 'CLEANING_FLAT' as const,
+    unit: 'FLAT' as const,
+    amountJpy: 2000,
+    status: 'ACTIVE' as const,
+  })
+
+  const seed = async () => {
+    const repo = new InMemoryFeeScheduleRepository()
+    const a = await repo.create(feeInput(opA))
+    const b = await repo.create(feeInput(opB))
+    return { repo, a, b }
+  }
+
+  it('update cannot reach another tenant fee (no-op, not leak)', async () => {
+    const { repo, b } = await seed()
+    expect(await repo.update(ctxFor(opA), b.id, { amountJpy: 9999 })).toBeUndefined()
+    expect(await repo.findById(SYSTEM_CONTEXT, b.id)).toMatchObject({ amountJpy: 2000 })
+  })
+
+  it('update succeeds on the caller’s own tenant fee', async () => {
+    const { repo, a } = await seed()
+    const updated = await repo.update(ctxFor(opA), a.id, { amountJpy: 3600 })
+    expect(updated).toMatchObject({ id: a.id, amountJpy: 3600 })
+  })
+
+  it('archive cannot reach another tenant fee (no-op, not leak)', async () => {
+    const { repo, b } = await seed()
+    expect(await repo.archive(ctxFor(opA), b.id)).toBeUndefined()
+    expect(await repo.findById(SYSTEM_CONTEXT, b.id)).toMatchObject({ status: 'ACTIVE' })
+  })
+
+  it('archive succeeds on the caller’s own tenant fee', async () => {
+    const { repo, a } = await seed()
+    expect(await repo.archive(ctxFor(opA), a.id)).toMatchObject({ id: a.id, status: 'ARCHIVED' })
+  })
+
+  it('a tenant-less operator no-ops writes (config repo has no write guard)', async () => {
+    const { repo, a } = await seed()
+    expect(await repo.update(noTenant, a.id, { amountJpy: 1 })).toBeUndefined()
+    expect(await repo.archive(noTenant, a.id)).toBeUndefined()
+    expect(await repo.findById(SYSTEM_CONTEXT, a.id)).toMatchObject({
+      amountJpy: 2000,
+      status: 'ACTIVE',
+    })
+  })
+
+  it('RENTER writes are Forbidden (private config, mirrors the read guard)', async () => {
+    const { repo, a } = await seed()
+    await expect(repo.update(renter, a.id, { amountJpy: 1 })).rejects.toBeInstanceOf(ForbiddenError)
+    await expect(repo.archive(renter, a.id)).rejects.toBeInstanceOf(ForbiddenError)
+  })
+
+  it('PARTNER writes are Forbidden (private config, mirrors the read guard)', async () => {
+    const { repo, a } = await seed()
+    await expect(repo.update(partner, a.id, { amountJpy: 1 })).rejects.toBeInstanceOf(
+      ForbiddenError,
+    )
+    await expect(repo.archive(partner, a.id)).rejects.toBeInstanceOf(ForbiddenError)
+  })
+})
+
+// InsuranceOptionRepository is PRIVATE config too (#1288): update/archive reject
+// RENTER/PARTNER (else operatorReadScope maps them to {kind:'all'} → unscoped)
+// AND tenant-scope the row — same shape as FeeScheduleRepository above.
+describe('InsuranceOptionRepository operator-scopes + management-guards writes (#1288)', () => {
+  const opA = 'op_a'
+  const opB = 'op_b'
+  const ctxFor = (operatorId: string): CallerContext => ({
+    userId: 'owner',
+    role: 'OPERATOR_OWNER',
+    operatorId,
+    bypassScope: false,
+  })
+  const noTenant: CallerContext = { userId: 'x', role: 'OPERATOR_OWNER', bypassScope: false }
+  const renter: CallerContext = { userId: 'r', role: 'RENTER', bypassScope: false }
+  const partner: CallerContext = { userId: 'p', role: 'PARTNER', bypassScope: true }
+
+  const optionInput = (operatorId: string) => ({
+    operatorId,
+    name: 'CDW',
+    description: null,
+    dailyPriceJpy: 1500,
+    deductibleJpy: 150000,
+    status: 'ACTIVE' as const,
+  })
+
+  const seed = async () => {
+    const repo = new InMemoryInsuranceOptionRepository()
+    const a = await repo.create(optionInput(opA))
+    const b = await repo.create(optionInput(opB))
+    return { repo, a, b }
+  }
+
+  it('update cannot reach another tenant option (no-op, not leak)', async () => {
+    const { repo, b } = await seed()
+    expect(await repo.update(ctxFor(opA), b.id, { dailyPriceJpy: 9999 })).toBeUndefined()
+    expect(await repo.findById(SYSTEM_CONTEXT, b.id)).toMatchObject({ dailyPriceJpy: 1500 })
+  })
+
+  it('update succeeds on the caller’s own tenant option', async () => {
+    const { repo, a } = await seed()
+    const updated = await repo.update(ctxFor(opA), a.id, { dailyPriceJpy: 2600 })
+    expect(updated).toMatchObject({ id: a.id, dailyPriceJpy: 2600 })
+  })
+
+  it('archive cannot reach another tenant option (no-op, not leak)', async () => {
+    const { repo, b } = await seed()
+    expect(await repo.archive(ctxFor(opA), b.id)).toBeUndefined()
+    expect(await repo.findById(SYSTEM_CONTEXT, b.id)).toMatchObject({ status: 'ACTIVE' })
+  })
+
+  it('archive succeeds on the caller’s own tenant option', async () => {
+    const { repo, a } = await seed()
+    expect(await repo.archive(ctxFor(opA), a.id)).toMatchObject({ id: a.id, status: 'ARCHIVED' })
+  })
+
+  it('a tenant-less operator no-ops writes (config repo has no write guard)', async () => {
+    const { repo, a } = await seed()
+    expect(await repo.update(noTenant, a.id, { dailyPriceJpy: 1 })).toBeUndefined()
+    expect(await repo.archive(noTenant, a.id)).toBeUndefined()
+    expect(await repo.findById(SYSTEM_CONTEXT, a.id)).toMatchObject({
+      dailyPriceJpy: 1500,
+      status: 'ACTIVE',
+    })
+  })
+
+  it('RENTER writes are Forbidden (private config, mirrors the read guard)', async () => {
+    const { repo, a } = await seed()
+    await expect(repo.update(renter, a.id, { dailyPriceJpy: 1 })).rejects.toBeInstanceOf(
+      ForbiddenError,
+    )
+    await expect(repo.archive(renter, a.id)).rejects.toBeInstanceOf(ForbiddenError)
+  })
+
+  it('PARTNER writes are Forbidden (private config, mirrors the read guard)', async () => {
+    const { repo, a } = await seed()
+    await expect(repo.update(partner, a.id, { dailyPriceJpy: 1 })).rejects.toBeInstanceOf(
+      ForbiddenError,
+    )
+    await expect(repo.archive(partner, a.id)).rejects.toBeInstanceOf(ForbiddenError)
+  })
+})
+
+// AddOnRepository is PRIVATE config too (#1288): update/archive reject RENTER/
+// PARTNER (else operatorReadScope maps them to {kind:'all'} → unscoped) AND
+// tenant-scope the row — same shape as Fee/Insurance above.
+describe('AddOnRepository operator-scopes + management-guards writes (#1288)', () => {
+  const opA = 'op_a'
+  const opB = 'op_b'
+  const ctxFor = (operatorId: string): CallerContext => ({
+    userId: 'owner',
+    role: 'OPERATOR_OWNER',
+    operatorId,
+    bypassScope: false,
+  })
+  const noTenant: CallerContext = { userId: 'x', role: 'OPERATOR_OWNER', bypassScope: false }
+  const renter: CallerContext = { userId: 'r', role: 'RENTER', bypassScope: false }
+  const partner: CallerContext = { userId: 'p', role: 'PARTNER', bypassScope: true }
+
+  const addOnInput = (operatorId: string) => ({
+    operatorId,
+    name: 'Baby Seat',
+    description: null,
+    priceJpy: 1500,
+    status: 'ACTIVE' as const,
+  })
+
+  const seed = async () => {
+    const repo = new InMemoryAddOnRepository()
+    const a = await repo.create(addOnInput(opA))
+    const b = await repo.create(addOnInput(opB))
+    return { repo, a, b }
+  }
+
+  it('update cannot reach another tenant add-on (no-op, not leak)', async () => {
+    const { repo, b } = await seed()
+    expect(await repo.update(ctxFor(opA), b.id, { priceJpy: 9999 })).toBeUndefined()
+    expect(await repo.findById(SYSTEM_CONTEXT, b.id)).toMatchObject({ priceJpy: 1500 })
+  })
+
+  it('update succeeds on the caller’s own tenant add-on', async () => {
+    const { repo, a } = await seed()
+    const updated = await repo.update(ctxFor(opA), a.id, { priceJpy: 2600 })
+    expect(updated).toMatchObject({ id: a.id, priceJpy: 2600 })
+  })
+
+  it('archive cannot reach another tenant add-on (no-op, not leak)', async () => {
+    const { repo, b } = await seed()
+    expect(await repo.archive(ctxFor(opA), b.id)).toBeUndefined()
+    expect(await repo.findById(SYSTEM_CONTEXT, b.id)).toMatchObject({ status: 'ACTIVE' })
+  })
+
+  it('archive succeeds on the caller’s own tenant add-on', async () => {
+    const { repo, a } = await seed()
+    expect(await repo.archive(ctxFor(opA), a.id)).toMatchObject({ id: a.id, status: 'ARCHIVED' })
+  })
+
+  it('a tenant-less operator no-ops writes (config repo has no write guard)', async () => {
+    const { repo, a } = await seed()
+    expect(await repo.update(noTenant, a.id, { priceJpy: 1 })).toBeUndefined()
+    expect(await repo.archive(noTenant, a.id)).toBeUndefined()
+    expect(await repo.findById(SYSTEM_CONTEXT, a.id)).toMatchObject({
+      priceJpy: 1500,
+      status: 'ACTIVE',
+    })
+  })
+
+  it('RENTER writes are Forbidden (private config, mirrors the read guard)', async () => {
+    const { repo, a } = await seed()
+    await expect(repo.update(renter, a.id, { priceJpy: 1 })).rejects.toBeInstanceOf(ForbiddenError)
+    await expect(repo.archive(renter, a.id)).rejects.toBeInstanceOf(ForbiddenError)
+  })
+
+  it('PARTNER writes are Forbidden (private config, mirrors the read guard)', async () => {
+    const { repo, a } = await seed()
+    await expect(repo.update(partner, a.id, { priceJpy: 1 })).rejects.toBeInstanceOf(ForbiddenError)
+    await expect(repo.archive(partner, a.id)).rejects.toBeInstanceOf(ForbiddenError)
   })
 })

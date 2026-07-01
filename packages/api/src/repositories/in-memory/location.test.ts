@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import { SYSTEM_CONTEXT } from '../../middleware/auth'
 import type { Location } from '../../stores'
 import { InMemoryLocationRepository } from './location'
 
@@ -26,7 +27,7 @@ describe('InMemoryLocationRepository.update — operatorId is an immutable tenan
     const repo = new InMemoryLocationRepository()
     const created = await repo.create(seed('op_a'))
 
-    const updated = await repo.update(created.id, {
+    const updated = await repo.update(SYSTEM_CONTEXT, created.id, {
       operatorId: 'op_b',
       defaultTurnaroundMinutes: 60,
     })

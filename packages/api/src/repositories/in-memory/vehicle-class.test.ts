@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import { SYSTEM_CONTEXT } from '../../middleware/auth'
 import type { VehicleClass } from '../../stores'
 import { InMemoryVehicleClassRepository } from './vehicle-class'
 
@@ -27,7 +28,7 @@ describe('InMemoryVehicleClassRepository.update — operatorId is an immutable t
     const repo = new InMemoryVehicleClassRepository()
     const created = await repo.create(seed('op_a'))
 
-    const updated = await repo.update(created.id, { operatorId: 'op_b', seats: 7 })
+    const updated = await repo.update(SYSTEM_CONTEXT, created.id, { operatorId: 'op_b', seats: 7 })
 
     expect(updated?.operatorId).toBe('op_a')
     expect(updated?.seats).toBe(7)

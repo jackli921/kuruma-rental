@@ -1,15 +1,27 @@
-import { bookings, operators, users, vehicleClasses, vehicles } from '@kuruma/shared/db/schema'
+import {
+  addOnOptions,
+  bookings,
+  feeSchedules,
+  insuranceOptions,
+  operators,
+  users,
+  vehicleClasses,
+  vehicles,
+} from '@kuruma/shared/db/schema'
 import { eq, inArray } from 'drizzle-orm'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { type CallerContext, ForbiddenError, SYSTEM_CONTEXT } from '../../src/middleware/auth'
 import { pgErrorCode } from '../../src/pg-errors'
 import {
+  DrizzleAddOnRepository,
   DrizzleBookingRepository,
+  DrizzleFeeScheduleRepository,
+  DrizzleInsuranceOptionRepository,
   DrizzleVehicleClassRepository,
   DrizzleVehicleRepository,
 } from '../../src/repositories/drizzle'
 import { VehicleClassService } from '../../src/services/vehicle-class'
-import type { Vehicle, VehicleClass } from '../../src/stores'
+import type { AddOn, FeeSchedule, InsuranceOption, Vehicle, VehicleClass } from '../../src/stores'
 import { bookingInput } from '../helpers/booking'
 import { DEFAULT_DAILY_RATE_JPY, cleanupLocations, db, seedLocation } from './setup'
 
@@ -596,5 +608,265 @@ describe('cross-operator class WRITE denial (service seal, #397)', () => {
   it('operator A can update its own class', async () => {
     const res = await service.update(ctxFor(opAId), classA.id, { name: 'ClsW Class A v2' })
     expect(res).toMatchObject({ ok: true, vehicleClass: { name: 'ClsW Class A v2' } })
+  })
+})
+
+// #1288: the repo update()/archive() scope their WHERE by tenant, so a caller
+// reaching the repo WITHOUT the service's findById guard (the IDOR vector this
+// closes) still can't mutate another operator's class. Probed directly at the
+// repo against real Postgres: cross-tenant is a silent no-op (undefined), the
+// own-tenant write still succeeds.
+describe('class repo writes stay tenant-scoped when the service is bypassed (#1288)', () => {
+  const classRepo = new DrizzleVehicleClassRepository(db)
+  const uniq = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
+  const opAId = `op_clsws_a_${uniq}`
+  const opBId = `op_clsws_b_${uniq}`
+  const createdClassIds: string[] = []
+  let classA: VehicleClass
+
+  const ctxFor = (operatorId: string): CallerContext => ({
+    userId: 'owner',
+    role: 'OPERATOR_OWNER',
+    operatorId,
+    bypassScope: false,
+  })
+
+  beforeAll(async () => {
+    await db.insert(operators).values([
+      { id: opAId, slug: `clsws-a-${uniq}`, name: 'ClsWS Operator A' },
+      { id: opBId, slug: `clsws-b-${uniq}`, name: 'ClsWS Operator B' },
+    ])
+    classA = await classRepo.create({
+      operatorId: opAId,
+      name: 'ClsWS Class A',
+      slug: `clsws-a-${uniq}`,
+      description: null,
+      photos: [],
+      seats: 5,
+      luggageCapacity: 2,
+      transmission: 'AUTO',
+      fuelType: null,
+      dailyRateJpy: DEFAULT_DAILY_RATE_JPY,
+      hourlyRateJpy: null,
+      sortOrder: 0,
+      status: 'ACTIVE',
+    })
+    createdClassIds.push(classA.id)
+  })
+
+  afterAll(async () => {
+    if (createdClassIds.length > 0) {
+      await db.delete(vehicleClasses).where(inArray(vehicleClasses.id, createdClassIds))
+    }
+    await db.delete(operators).where(inArray(operators.id, [opAId, opBId]))
+  })
+
+  it('operator B update() on operator A class is a no-op (undefined, row untouched)', async () => {
+    expect(await classRepo.update(ctxFor(opBId), classA.id, { name: 'hijacked' })).toBeUndefined()
+    expect(await classRepo.findById(SYSTEM_CONTEXT, classA.id)).toMatchObject({
+      name: 'ClsWS Class A',
+    })
+  })
+
+  it('operator B archive() on operator A class is a no-op (undefined, still ACTIVE)', async () => {
+    expect(await classRepo.archive(ctxFor(opBId), classA.id)).toBeUndefined()
+    expect(await classRepo.findById(SYSTEM_CONTEXT, classA.id)).toMatchObject({ status: 'ACTIVE' })
+  })
+
+  it('operator A can update its own class at the repo (own-tenant still works)', async () => {
+    const updated = await classRepo.update(ctxFor(opAId), classA.id, { name: 'ClsWS Class A v2' })
+    expect(updated).toMatchObject({ id: classA.id, name: 'ClsWS Class A v2' })
+  })
+})
+
+// #1288: fee schedules are PRIVATE config, so the repo write path both
+// tenant-scopes the WHERE (cross-tenant = silent no-op) AND rejects RENTER/PARTNER
+// via requireManagementRead (else operatorReadScope maps them to {kind:'all'} → an
+// unscoped write of any operator's fees). Probed directly at the Drizzle repo
+// against real Postgres, bypassing the service's findById guard.
+describe('fee-schedule repo writes stay tenant-scoped + management-guarded when the service is bypassed (#1288)', () => {
+  const feeRepo = new DrizzleFeeScheduleRepository(db)
+  const uniq = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
+  const opAId = `op_feews_a_${uniq}`
+  const opBId = `op_feews_b_${uniq}`
+  let feeA: FeeSchedule
+
+  const ctxFor = (operatorId: string): CallerContext => ({
+    userId: 'owner',
+    role: 'OPERATOR_OWNER',
+    operatorId,
+    bypassScope: false,
+  })
+
+  beforeAll(async () => {
+    await db.insert(operators).values([
+      { id: opAId, slug: `feews-a-${uniq}`, name: 'FeeWS Operator A' },
+      { id: opBId, slug: `feews-b-${uniq}`, name: 'FeeWS Operator B' },
+    ])
+    feeA = await feeRepo.create({
+      operatorId: opAId,
+      vehicleClassId: null,
+      feeType: 'CLEANING_FLAT',
+      unit: 'FLAT',
+      amountJpy: 3000,
+      status: 'ACTIVE',
+    })
+  })
+
+  afterAll(async () => {
+    await db.delete(feeSchedules).where(inArray(feeSchedules.operatorId, [opAId, opBId]))
+    await db.delete(operators).where(inArray(operators.id, [opAId, opBId]))
+  })
+
+  it('operator B update() on operator A fee is a no-op (undefined, amount untouched)', async () => {
+    expect(await feeRepo.update(ctxFor(opBId), feeA.id, { amountJpy: 9999 })).toBeUndefined()
+    expect(await feeRepo.findById(SYSTEM_CONTEXT, feeA.id)).toMatchObject({ amountJpy: 3000 })
+  })
+
+  it('operator B archive() on operator A fee is a no-op (undefined, still ACTIVE)', async () => {
+    expect(await feeRepo.archive(ctxFor(opBId), feeA.id)).toBeUndefined()
+    expect(await feeRepo.findById(SYSTEM_CONTEXT, feeA.id)).toMatchObject({ status: 'ACTIVE' })
+  })
+
+  it('operator A can update its own fee at the repo (own-tenant still works)', async () => {
+    const updated = await feeRepo.update(ctxFor(opAId), feeA.id, { amountJpy: 3500 })
+    expect(updated).toMatchObject({ id: feeA.id, amountJpy: 3500 })
+  })
+
+  it('a RENTER write is Forbidden at the repo (private config, mirrors the read guard)', async () => {
+    const renter: CallerContext = { userId: 'r', role: 'RENTER', bypassScope: false }
+    await expect(feeRepo.update(renter, feeA.id, { amountJpy: 1 })).rejects.toBeInstanceOf(
+      ForbiddenError,
+    )
+    await expect(feeRepo.archive(renter, feeA.id)).rejects.toBeInstanceOf(ForbiddenError)
+    // The renter's rejected write left the amount at the previous test's value.
+    expect(await feeRepo.findById(SYSTEM_CONTEXT, feeA.id)).toMatchObject({ amountJpy: 3500 })
+  })
+})
+
+// #1288: insurance options are PRIVATE config, same shape as fee schedules above
+// — the repo write path tenant-scopes the WHERE AND management-guards RENTER/
+// PARTNER. Probed directly at the Drizzle repo against real Postgres.
+describe('insurance repo writes stay tenant-scoped + management-guarded when the service is bypassed (#1288)', () => {
+  const insRepo = new DrizzleInsuranceOptionRepository(db)
+  const uniq = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
+  const opAId = `op_insws_a_${uniq}`
+  const opBId = `op_insws_b_${uniq}`
+  let optionA: InsuranceOption
+
+  const ctxFor = (operatorId: string): CallerContext => ({
+    userId: 'owner',
+    role: 'OPERATOR_OWNER',
+    operatorId,
+    bypassScope: false,
+  })
+
+  beforeAll(async () => {
+    await db.insert(operators).values([
+      { id: opAId, slug: `insws-a-${uniq}`, name: 'InsWS Operator A' },
+      { id: opBId, slug: `insws-b-${uniq}`, name: 'InsWS Operator B' },
+    ])
+    optionA = await insRepo.create({
+      operatorId: opAId,
+      name: 'CDW',
+      description: null,
+      dailyPriceJpy: 1500,
+      deductibleJpy: 150000,
+      status: 'ACTIVE',
+    })
+  })
+
+  afterAll(async () => {
+    await db.delete(insuranceOptions).where(inArray(insuranceOptions.operatorId, [opAId, opBId]))
+    await db.delete(operators).where(inArray(operators.id, [opAId, opBId]))
+  })
+
+  it('operator B update() on operator A option is a no-op (undefined, price untouched)', async () => {
+    expect(await insRepo.update(ctxFor(opBId), optionA.id, { dailyPriceJpy: 9999 })).toBeUndefined()
+    expect(await insRepo.findById(SYSTEM_CONTEXT, optionA.id)).toMatchObject({
+      dailyPriceJpy: 1500,
+    })
+  })
+
+  it('operator B archive() on operator A option is a no-op (undefined, still ACTIVE)', async () => {
+    expect(await insRepo.archive(ctxFor(opBId), optionA.id)).toBeUndefined()
+    expect(await insRepo.findById(SYSTEM_CONTEXT, optionA.id)).toMatchObject({ status: 'ACTIVE' })
+  })
+
+  it('operator A can update its own option at the repo (own-tenant still works)', async () => {
+    const updated = await insRepo.update(ctxFor(opAId), optionA.id, { dailyPriceJpy: 2000 })
+    expect(updated).toMatchObject({ id: optionA.id, dailyPriceJpy: 2000 })
+  })
+
+  it('a RENTER write is Forbidden at the repo (private config, mirrors the read guard)', async () => {
+    const renter: CallerContext = { userId: 'r', role: 'RENTER', bypassScope: false }
+    await expect(insRepo.update(renter, optionA.id, { dailyPriceJpy: 1 })).rejects.toBeInstanceOf(
+      ForbiddenError,
+    )
+    await expect(insRepo.archive(renter, optionA.id)).rejects.toBeInstanceOf(ForbiddenError)
+    expect(await insRepo.findById(SYSTEM_CONTEXT, optionA.id)).toMatchObject({
+      dailyPriceJpy: 2000,
+    })
+  })
+})
+
+// #1288: add-ons are PRIVATE config, same shape as fee/insurance above — the repo
+// write path tenant-scopes the WHERE AND management-guards RENTER/PARTNER. Probed
+// directly at the Drizzle repo against real Postgres.
+describe('add-on repo writes stay tenant-scoped + management-guarded when the service is bypassed (#1288)', () => {
+  const addOnRepo = new DrizzleAddOnRepository(db)
+  const uniq = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
+  const opAId = `op_aows_a_${uniq}`
+  const opBId = `op_aows_b_${uniq}`
+  let addOnA: AddOn
+
+  const ctxFor = (operatorId: string): CallerContext => ({
+    userId: 'owner',
+    role: 'OPERATOR_OWNER',
+    operatorId,
+    bypassScope: false,
+  })
+
+  beforeAll(async () => {
+    await db.insert(operators).values([
+      { id: opAId, slug: `aows-a-${uniq}`, name: 'AOWS Operator A' },
+      { id: opBId, slug: `aows-b-${uniq}`, name: 'AOWS Operator B' },
+    ])
+    addOnA = await addOnRepo.create({
+      operatorId: opAId,
+      name: 'Baby Seat',
+      description: null,
+      priceJpy: 1500,
+      status: 'ACTIVE',
+    })
+  })
+
+  afterAll(async () => {
+    await db.delete(addOnOptions).where(inArray(addOnOptions.operatorId, [opAId, opBId]))
+    await db.delete(operators).where(inArray(operators.id, [opAId, opBId]))
+  })
+
+  it('operator B update() on operator A add-on is a no-op (undefined, price untouched)', async () => {
+    expect(await addOnRepo.update(ctxFor(opBId), addOnA.id, { priceJpy: 9999 })).toBeUndefined()
+    expect(await addOnRepo.findById(SYSTEM_CONTEXT, addOnA.id)).toMatchObject({ priceJpy: 1500 })
+  })
+
+  it('operator B archive() on operator A add-on is a no-op (undefined, still ACTIVE)', async () => {
+    expect(await addOnRepo.archive(ctxFor(opBId), addOnA.id)).toBeUndefined()
+    expect(await addOnRepo.findById(SYSTEM_CONTEXT, addOnA.id)).toMatchObject({ status: 'ACTIVE' })
+  })
+
+  it('operator A can update its own add-on at the repo (own-tenant still works)', async () => {
+    const updated = await addOnRepo.update(ctxFor(opAId), addOnA.id, { priceJpy: 2000 })
+    expect(updated).toMatchObject({ id: addOnA.id, priceJpy: 2000 })
+  })
+
+  it('a RENTER write is Forbidden at the repo (private config, mirrors the read guard)', async () => {
+    const renter: CallerContext = { userId: 'r', role: 'RENTER', bypassScope: false }
+    await expect(addOnRepo.update(renter, addOnA.id, { priceJpy: 1 })).rejects.toBeInstanceOf(
+      ForbiddenError,
+    )
+    await expect(addOnRepo.archive(renter, addOnA.id)).rejects.toBeInstanceOf(ForbiddenError)
+    expect(await addOnRepo.findById(SYSTEM_CONTEXT, addOnA.id)).toMatchObject({ priceJpy: 2000 })
   })
 })

@@ -60,7 +60,7 @@ describe('InMemoryLocationRepository', () => {
 
     it('frees an archived name for re-creation (#410, mirrors the partial index)', async () => {
       const first = await repo.create(locationInput({ operatorId: 'op_a', name: 'Namba' }))
-      await repo.archive(first.id)
+      await repo.archive(SYSTEM_CONTEXT, first.id)
       await expect(
         repo.create(locationInput({ operatorId: 'op_a', name: 'Namba' })),
       ).resolves.toMatchObject({ name: 'Namba', status: 'ACTIVE' })
@@ -117,7 +117,9 @@ describe('InMemoryLocationRepository', () => {
     it('modifies fields and preserves id/createdAt', async () => {
       const created = await repo.create(locationInput())
 
-      const updated = await repo.update(created.id, { defaultTurnaroundMinutes: 3600 })
+      const updated = await repo.update(SYSTEM_CONTEXT, created.id, {
+        defaultTurnaroundMinutes: 3600,
+      })
 
       expect(updated!.defaultTurnaroundMinutes).toBe(3600)
       expect(updated!.id).toBe(created.id)
@@ -125,13 +127,13 @@ describe('InMemoryLocationRepository', () => {
     })
 
     it('returns undefined for missing id', async () => {
-      expect(await repo.update('nonexistent', { name: 'Nope' })).toBeUndefined()
+      expect(await repo.update(SYSTEM_CONTEXT, 'nonexistent', { name: 'Nope' })).toBeUndefined()
     })
 
     it('throws a unique-violation when renaming onto another row in the same operator', async () => {
       const a = await repo.create(locationInput({ operatorId: 'op_a', name: 'Namba' }))
       await repo.create(locationInput({ operatorId: 'op_a', name: 'Umeda' }))
-      await expect(repo.update(a.id, { name: 'Umeda' })).rejects.toMatchObject({
+      await expect(repo.update(SYSTEM_CONTEXT, a.id, { name: 'Umeda' })).rejects.toMatchObject({
         code: PG_ERROR.UNIQUE_VIOLATION,
       })
     })
@@ -140,13 +142,13 @@ describe('InMemoryLocationRepository', () => {
   describe('archive', () => {
     it('sets status to ARCHIVED', async () => {
       const created = await repo.create(locationInput({ status: 'ACTIVE' }))
-      const archived = await repo.archive(created.id)
+      const archived = await repo.archive(SYSTEM_CONTEXT, created.id)
       expect(archived!.status).toBe('ARCHIVED')
       expect(archived!.id).toBe(created.id)
     })
 
     it('returns undefined for missing id', async () => {
-      expect(await repo.archive('nonexistent')).toBeUndefined()
+      expect(await repo.archive(SYSTEM_CONTEXT, 'nonexistent')).toBeUndefined()
     })
   })
 })
@@ -154,8 +156,10 @@ describe('InMemoryLocationRepository', () => {
 // Reads are operator-scoped (#387, mirroring #395 vehicle classes): an
 // OPERATOR_* caller sees only its own tenant's locations; bypass roles
 // (SYSTEM_CONTEXT) see across operators; a tenant-less operator fails closed.
-// Write isolation (cross-tenant update/archive) is enforced in LocationService
-// via a scoped findById, not here — repo writes are keyed by id only.
+// Writes are ALSO operator-scoped at the repo now (#1288): update/archive scope
+// their WHERE by tenant, so a caller skipping the service's findById guard still
+// can't mutate another operator's row. Those write-isolation cases live with the
+// other repos' in tenancy-guards.test.ts.
 describe('InMemoryLocationRepository operator-scopes reads', () => {
   const opA = 'op_a'
   const opB = 'op_b'

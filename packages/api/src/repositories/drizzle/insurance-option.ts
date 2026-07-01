@@ -108,26 +108,42 @@ export class DrizzleInsuranceOptionRepository implements InsuranceOptionReposito
   }
 
   async update(
+    ctx: CallerContext,
     id: string,
     data: Partial<InsuranceOption>,
   ): Promise<InsuranceOption | undefined> {
+    // Insurance is private config: reject RENTER/PARTNER at the repo, mirroring
+    // the read path — else operatorReadScope maps them to {kind:'all'} (unscoped).
+    requireManagementRead(ctx)
+    const scope = operatorReadScope(ctx)
+    if (scope.kind === 'none') return undefined
     // operatorId is an immutable tenant anchor (#1271): strip it like id so an
     // update payload can never migrate the row to another operator.
     const { id: _id, createdAt: _createdAt, operatorId: _operatorId, ...fields } = data
+    // #1288: scope the write by tenant so a caller reaching the repo without the
+    // service's findById guard can't mutate another operator's row by id.
+    const conditions = [eq(insuranceOptions.id, id)]
+    if (scope.kind === 'operator') conditions.push(eq(insuranceOptions.operatorId, scope.operatorId))
     const [updated] = await this.db
       .update(insuranceOptions)
       .set({ ...fields, updatedAt: sql`now()` })
-      .where(eq(insuranceOptions.id, id))
+      .where(and(...conditions))
       .returning()
 
     return updated ? toInsuranceOption(updated) : undefined
   }
 
-  async archive(id: string): Promise<InsuranceOption | undefined> {
+  async archive(ctx: CallerContext, id: string): Promise<InsuranceOption | undefined> {
+    requireManagementRead(ctx)
+    const scope = operatorReadScope(ctx)
+    if (scope.kind === 'none') return undefined
+    // #1288: tenant-scope the archive WHERE (see update()).
+    const conditions = [eq(insuranceOptions.id, id)]
+    if (scope.kind === 'operator') conditions.push(eq(insuranceOptions.operatorId, scope.operatorId))
     const [archived] = await this.db
       .update(insuranceOptions)
       .set({ status: 'ARCHIVED', updatedAt: sql`now()` })
-      .where(eq(insuranceOptions.id, id))
+      .where(and(...conditions))
       .returning()
 
     return archived ? toInsuranceOption(archived) : undefined

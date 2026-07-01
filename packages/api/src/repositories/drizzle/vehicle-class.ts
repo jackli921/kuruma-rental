@@ -101,9 +101,12 @@ export class DrizzleVehicleClassRepository implements VehicleClassRepository {
   }
 
   async update(
+    ctx: CallerContext,
     id: string,
     data: Partial<VehicleClass>,
   ): Promise<VehicleClass | undefined> {
+    const scope = operatorReadScope(ctx)
+    if (scope.kind === 'none') return undefined
     // operatorId is an immutable tenant anchor (#1279): strip it like id so an
     // update payload can never migrate the row to another operator.
     const { id: _id, operatorId: _operatorId, createdAt: _createdAt, ...fields } = data
@@ -112,20 +115,29 @@ export class DrizzleVehicleClassRepository implements VehicleClassRepository {
       fields.photos === undefined
         ? fields
         : { ...fields, photos: this.encodePhotos(fields.photos) }
+    // #1288: scope the write by tenant so a caller reaching the repo without the
+    // service's findById guard can't mutate another operator's row by id.
+    const conditions = [eq(vehicleClasses.id, id)]
+    if (scope.kind === 'operator') conditions.push(eq(vehicleClasses.operatorId, scope.operatorId))
     const [updated] = await this.db
       .update(vehicleClasses)
       .set({ ...set, updatedAt: sql`now()` })
-      .where(eq(vehicleClasses.id, id))
+      .where(and(...conditions))
       .returning()
 
     return updated ? toVehicleClass(updated, this.decodePhotos) : undefined
   }
 
-  async archive(id: string): Promise<VehicleClass | undefined> {
+  async archive(ctx: CallerContext, id: string): Promise<VehicleClass | undefined> {
+    const scope = operatorReadScope(ctx)
+    if (scope.kind === 'none') return undefined
+    // #1288: tenant-scope the archive WHERE (see update()).
+    const conditions = [eq(vehicleClasses.id, id)]
+    if (scope.kind === 'operator') conditions.push(eq(vehicleClasses.operatorId, scope.operatorId))
     const [archived] = await this.db
       .update(vehicleClasses)
       .set({ status: 'ARCHIVED', updatedAt: sql`now()` })
-      .where(eq(vehicleClasses.id, id))
+      .where(and(...conditions))
       .returning()
 
     return archived ? toVehicleClass(archived, this.decodePhotos) : undefined

@@ -170,7 +170,9 @@ describe('DrizzleVehicleClassRepository photo ref encoding (#879 Slice 3)', () =
     classIds.push(created.id)
     const key = `vehicles/class/${created.id}.jpg`
 
-    const updated = await classRepo.update(created.id, { photos: [`${BASE}/${key}`] })
+    const updated = await classRepo.update(SYSTEM_CONTEXT, created.id, {
+      photos: [`${BASE}/${key}`],
+    })
 
     expect(await rawClassPhotos(created.id)).toEqual([`r2:${key}`])
     expect(updated?.photos).toEqual([`${BASE}/${key}`])

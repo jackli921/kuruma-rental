@@ -104,24 +104,39 @@ export class DrizzleLocationRepository implements LocationRepository {
     return toLocation(inserted)
   }
 
-  async update(id: string, data: Partial<Location>): Promise<Location | undefined> {
+  async update(
+    ctx: CallerContext,
+    id: string,
+    data: Partial<Location>,
+  ): Promise<Location | undefined> {
+    const scope = operatorReadScope(ctx)
+    if (scope.kind === 'none') return undefined
     // operatorId is an immutable tenant anchor (#1279): strip it like id so an
     // update payload can never migrate the row to another operator.
     const { id: _id, operatorId: _operatorId, createdAt: _createdAt, ...fields } = data
+    // #1288: scope the write by tenant so a caller reaching the repo without the
+    // service's findById guard can't mutate another operator's row by id.
+    const conditions = [eq(locations.id, id)]
+    if (scope.kind === 'operator') conditions.push(eq(locations.operatorId, scope.operatorId))
     const [updated] = await this.db
       .update(locations)
       .set({ ...fields, updatedAt: sql`now()` })
-      .where(eq(locations.id, id))
+      .where(and(...conditions))
       .returning()
 
     return updated ? toLocation(updated) : undefined
   }
 
-  async archive(id: string): Promise<Location | undefined> {
+  async archive(ctx: CallerContext, id: string): Promise<Location | undefined> {
+    const scope = operatorReadScope(ctx)
+    if (scope.kind === 'none') return undefined
+    // #1288: tenant-scope the archive WHERE (see update()).
+    const conditions = [eq(locations.id, id)]
+    if (scope.kind === 'operator') conditions.push(eq(locations.operatorId, scope.operatorId))
     const [archived] = await this.db
       .update(locations)
       .set({ status: 'ARCHIVED', updatedAt: sql`now()` })
-      .where(eq(locations.id, id))
+      .where(and(...conditions))
       .returning()
 
     return archived ? toLocation(archived) : undefined
