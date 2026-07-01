@@ -81,3 +81,25 @@ export function isFleetTimelineEnabled(): boolean {
 export function isMultiCurrencyEnabled(): boolean {
   return isEnvTrue(import.meta.env.VITE_FEATURE_MULTI_CURRENCY)
 }
+
+/**
+ * Operator "Today" dispatch panel (#1102): the dashboard's pickups / returns /
+ * overdue board with one-click status advances. Shipped un-gated in #1099; gated
+ * OFF here for the beta MVP so the demo dashboard mirrors the contracted scope.
+ * Operator-only surface, so it is uniformly on/off. Build-time only for now
+ * (runtime migration tracked by #1322).
+ */
+export function isOperatorTodayEnabled(): boolean {
+  return isEnvTrue(import.meta.env.VITE_FEATURE_OPERATOR_TODAY)
+}
+
+/**
+ * Calendar booking quick-view chip (#1282): the hover-peek / click-pin popover on
+ * each operator booking band. Shipped un-gated in #1099; gated OFF here for the
+ * beta MVP — the calendar falls back to a plain, non-interactive booking band.
+ * Operator-only surface, so it is uniformly on/off. Build-time only for now
+ * (runtime migration tracked by #1322).
+ */
+export function isCalendarQuickViewEnabled(): boolean {
+  return isEnvTrue(import.meta.env.VITE_FEATURE_CALENDAR_QUICKVIEW)
+}
