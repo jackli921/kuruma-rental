@@ -1,7 +1,7 @@
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { NativeSelect } from '@/components/ui/native-select'
-import { SORT_OPTIONS, type SortOption, parsePriceMax } from '@/vite/storefronts/sort'
+import { SORT_OPTIONS, type SortOption, parsePriceMax, parseSort } from '@/vite/storefronts/sort'
 import { useTranslations } from 'use-intl'
 
 interface SearchResultControlsProps {
@@ -32,7 +32,10 @@ export function SearchResultControls({
         <NativeSelect
           id="search-sort"
           value={sort ?? 'nearest'}
-          onChange={(e) => onSortChange(e.currentTarget.value as SortOption)}
+          onChange={(e) => {
+            const next = parseSort(e.currentTarget.value)
+            if (next) onSortChange(next)
+          }}
           className="w-52"
         >
           {SORT_OPTIONS.map((option) => (

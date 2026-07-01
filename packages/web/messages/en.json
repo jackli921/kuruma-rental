@@ -1267,6 +1267,8 @@
     "turnaround": "~{hours}h turnaround between rentals",
     "distance": "~{km} km",
     "emptyTurnaroundHint": "Cars need preparation time between rentals, so they can be unavailable right after another booking. Try a later pickup date.",
+    "emptyPriceCap": "No cars fit your maximum daily price.",
+    "emptyPriceCapHint": "Try raising or clearing the price cap to see more stores.",
     "classCount": "{label} ×{count}",
     "seats": "{count} seats",
     "luggage": "{count, plural, one {# bag} other {# bags}}",

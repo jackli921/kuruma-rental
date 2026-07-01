@@ -1267,6 +1267,8 @@
     "turnaround": "两次租赁间隔约{hours}小时",
     "distance": "约{km} km",
     "emptyTurnaroundHint": "车辆在两次租赁之间需要准备时间，紧接着可能无法预订。请尝试选择较晚的取车日期。",
+    "emptyPriceCap": "没有符合您每日价格上限的车辆。",
+    "emptyPriceCapHint": "请提高或清除价格上限即可查看更多门店。",
     "classCount": "{label} {count}辆",
     "seats": "{count}座",
     "luggage": "行李{count}件",

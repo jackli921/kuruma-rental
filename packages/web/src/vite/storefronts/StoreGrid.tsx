@@ -58,14 +58,18 @@ export function StoreGrid({
   if (result === null) {
     return <p className="py-12 text-center text-muted-foreground">{t('needDates')}</p>
   }
-  // Empty covers both "no stores for these dates" and "the price cap filtered the
-  // page to nothing" — the ranked set is what the renter actually sees.
+  // A non-empty result that ranks to nothing was filtered out by the price cap
+  // (availability alone would return no stores at all) — point the renter at the
+  // cap sitting right above the grid, not at a later pickup date (#1291 review).
   if (ranked.length === 0) {
+    const cappedOut = priceMax != null && result.storefronts.length > 0
     return (
       <div className="flex flex-col items-center justify-center py-20 text-center">
         <Search className="mb-4 size-12 text-muted-foreground/30" />
-        <p className="text-lg text-muted-foreground">{t('empty')}</p>
-        <p className="mt-2 max-w-md text-sm text-muted-foreground/80">{t('emptyTurnaroundHint')}</p>
+        <p className="text-lg text-muted-foreground">{t(cappedOut ? 'emptyPriceCap' : 'empty')}</p>
+        <p className="mt-2 max-w-md text-sm text-muted-foreground/80">
+          {t(cappedOut ? 'emptyPriceCapHint' : 'emptyTurnaroundHint')}
+        </p>
       </div>
     )
   }
