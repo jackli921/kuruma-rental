@@ -29,6 +29,8 @@
 //   - Aggregators (JAF mirrors, ToCoo, kart.st, niconico) reproduce the raw parties
 //     roster and omit the exclusion overlay — they are what caused the original drift (#1194).
 
+import { ISO_3166_1_ALPHA_2 } from './iso-3166-1-alpha-2'
+
 export const ELIGIBILITY_CLASSES = [
   'IDP_OK',
   'TRANSLATION_REQUIRED',
@@ -149,41 +151,14 @@ export const IDP_OK_COUNTRIES: ReadonlySet<string> = new Set([
 
 const ALPHA2 = /^[A-Z]{2}$/
 
-// ISO 3166-1 alpha-2 user-assigned / reserved ranges — never a real country, so no
-// renter could legitimately hold a license from one. Reject these up front rather
-// than depend on an ICU display-label (ZZ in particular resolves to a generic label
-// instead of undefined, and that label is locale/version-dependent).
-function isUserAssignedCode(code: string): boolean {
-  return (
-    code === 'AA' ||
-    code === 'ZZ' ||
-    (code >= 'QM' && code <= 'QZ') ||
-    (code >= 'XA' && code <= 'XZ')
-  )
-}
-
-// ICU recognizes the assigned ISO 3166-1 regions; with `fallback: 'none'` an
-// unassigned code returns undefined and a structurally invalid one throws.
-const regionNames = new Intl.DisplayNames(['en'], { type: 'region', fallback: 'none' })
-
-function isRecognizedCountry(code: string): boolean {
-  if (isUserAssignedCode(code)) return false
-  try {
-    return regionNames.of(code) !== undefined
-  } catch {
-    return false
-  }
-}
-
 /**
  * Classify a license-issuing jurisdiction into the document a foreign driver needs to
  * drive in Japan. Never throws; empty/malformed/unassigned input is `UNKNOWN`.
  *
- * Determinism: the IDP_OK / TRANSLATION_REQUIRED classification is fully data-driven and
- * deterministic. The residual NOT_ELIGIBLE-vs-UNKNOWN split relies on `Intl.DisplayNames`,
- * whose recognized-region set is ICU-version-dependent (Bun vs workerd), so that one
- * boundary can differ across runtimes. Back it with an explicit ISO-3166-1 set before
- * slice 2 branches on the distinction (#1194 follow-up).
+ * Determinism: every classification is fully data-driven. The residual
+ * NOT_ELIGIBLE-vs-UNKNOWN split reads the explicit `ISO_3166_1_ALPHA_2` set (#1216),
+ * not `Intl.DisplayNames`, so the boundary is identical on Bun and workerd — a
+ * prerequisite for slice 2 rendering the two classes differently (#1069).
  *
  * The translation set is checked before IDP_OK so the translation rule wins for any code
  * in both (currently only SI).
@@ -195,5 +170,5 @@ export function classifyDrivingEligibility(countryCode: string): EligibilityClas
   if (!ALPHA2.test(code)) return 'UNKNOWN'
   if (TRANSLATION_REQUIRED_COUNTRIES.has(code)) return 'TRANSLATION_REQUIRED'
   if (IDP_OK_COUNTRIES.has(code)) return 'IDP_OK'
-  return isRecognizedCountry(code) ? 'NOT_ELIGIBLE' : 'UNKNOWN'
+  return ISO_3166_1_ALPHA_2.has(code) ? 'NOT_ELIGIBLE' : 'UNKNOWN'
 }
