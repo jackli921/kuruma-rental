@@ -666,6 +666,13 @@
       "when": 1782923899079,
       "tag": "0094_feature_flags",
       "breakpoints": true
+    },
+    {
+      "idx": 95,
+      "version": "7",
+      "when": 1782926827012,
+      "tag": "0095_add_review_subject_cover_indexes",
+      "breakpoints": true
     }
   ]
 }
