@@ -1,6 +1,7 @@
 import { unwrap } from '@/lib/api-error'
 import { getApiBaseUrl } from '@/vite/api-base'
-import type { OperatorOverview } from '@kuruma/shared/types/overview'
+import { BOOKING_STATUSES } from '@kuruma/shared/enums'
+import type { OperatorOverview, TodayBookingRow, TodayBuckets } from '@kuruma/shared/types/overview'
 import { queryOptions } from '@tanstack/react-query'
 import { z } from 'zod'
 
@@ -18,10 +19,29 @@ export const OPERATOR_OVERVIEW_QUERY_KEY = ['operator-overview'] as const
 // Network-seam validator for the dashboard overview (#711). Pinned to
 // OperatorOverview with `satisfies` so a renamed/added headline count fails to
 // compile. All three are required non-null numbers (the repo coalesces to 0).
+// #1102: one today-bucket row. Pinned to TodayBookingRow with `satisfies` so a
+// drifted field fails to compile. Dates are ISO strings on the wire.
+const todayBookingRowSchema = z.object({
+  id: z.string(),
+  bookingCode: z.string(),
+  status: z.enum(BOOKING_STATUSES),
+  startAt: z.string(),
+  endAt: z.string(),
+  vehicleId: z.string().nullable(),
+  renterName: z.string().nullable(),
+}) satisfies z.ZodType<TodayBookingRow>
+
+const todayBucketsSchema = z.object({
+  pickups: todayBookingRowSchema.array(),
+  returns: todayBookingRowSchema.array(),
+  overdue: todayBookingRowSchema.array(),
+}) satisfies z.ZodType<TodayBuckets>
+
 const operatorOverviewSchema = z.object({
   totalBookings: z.number(),
   activeVehicles: z.number(),
   upcomingBookings: z.number(),
+  today: todayBucketsSchema,
 }) satisfies z.ZodType<OperatorOverview>
 
 export async function fetchOperatorOverview(pickedOperatorId?: string): Promise<OperatorOverview> {
