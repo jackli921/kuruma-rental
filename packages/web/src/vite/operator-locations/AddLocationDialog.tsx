@@ -54,7 +54,7 @@ export function AddLocationDialog({
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
-      <DialogContent className="max-h-[90vh] overflow-y-auto">
+      <DialogContent>
         <DialogHeader>
           <DialogTitle>{t('addLocation')}</DialogTitle>
           <DialogDescription>{t('addSubtitle')}</DialogDescription>
