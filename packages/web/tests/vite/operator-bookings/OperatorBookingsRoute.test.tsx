@@ -157,6 +157,10 @@ function renderRoute(
 // asserts the affordance disappears entirely.
 beforeEach(() => {
   vi.stubEnv('VITE_FEATURE_OPERATOR_MANUAL_BOOKING', 'true')
+  // The fleet timeline (#1100) is the default landing view only while its flag is on;
+  // enable it so the existing view/blocks cases behave as the full product. The OFF
+  // case in the default-view describe asserts the fallback to the week grid.
+  vi.stubEnv('VITE_FEATURE_FLEET_TIMELINE', 'true')
   searchState.value = { view: 'week', date: '2026-07-01' }
   navigate.mockReset()
 })
@@ -222,6 +226,21 @@ describe('OperatorBookingsRoute manual-booking affordance (#589 1d)', () => {
   })
 })
 
+describe('OperatorBookingsRoute quick-view enrichment (#1099)', () => {
+  it('enriches calendar events with the assigned vehicle name (transform wiring)', () => {
+    // veh-1 -> 'Prius' in blocksFleet; the route resolves the name at transform time
+    // so the quick-view card renders it with no extra fetch.
+    renderRoute(operatorSession, blocksFleet, [], { bookings: [calendarBooking] })
+    const events = calendarProps.events as Array<{
+      id: string
+      type: string
+      vehicleName: string | null
+    }>
+    const booking = events.find((e) => e.type === 'booking')
+    expect(booking).toMatchObject({ id: 'bk-1', vehicleName: 'Prius' })
+  })
+})
+
 describe('OperatorBookingsRoute default view (#1100)', () => {
   it('lands on the fleet timeline board when no view param is present', () => {
     searchState.value = { date: ANCHOR } // view omitted -> DEFAULT_VIEW = 'timeline'
@@ -233,6 +252,18 @@ describe('OperatorBookingsRoute default view (#1100)', () => {
     ).toBeInTheDocument()
     // The rbc <Calendar> (day/week/month) never mounted, so it captured no props.
     expect(calendarProps).toEqual({})
+  })
+
+  it('lands on the week grid (not the timeline) when the fleet-timeline feature is gated off', () => {
+    vi.stubEnv('VITE_FEATURE_FLEET_TIMELINE', undefined)
+    searchState.value = { date: ANCHOR } // view omitted -> default, now the week grid
+    renderRoute(operatorSession)
+    // The rbc <Calendar> mounted in week view — the gated-off default is the grid, not the board.
+    expect(calendarProps.view).toBe('week')
+    // The timeline view dropped out of the switcher entirely.
+    expect(
+      screen.queryByRole('button', { name: enMessages.business.bookings.calendar.views.timeline }),
+    ).not.toBeInTheDocument()
   })
 })
 
@@ -272,7 +303,7 @@ describe('OperatorBookingsRoute blocks layer (#1101)', () => {
     expect(screen.queryByRole('button', { name: B.detail.deleteAction })).not.toBeInTheDocument()
   })
 
-  it('dispatches a clicked booking to its detail page and a clicked block to the detail dialog', () => {
+  it('does not navigate on a calendar booking click (its chip Link owns it) but opens the detail dialog for a block', () => {
     vi.stubEnv('VITE_FEATURE_OPERATOR_BLOCKS', 'true')
     renderRoute(operatorSession, blocksFleet, [], {
       bookings: [calendarBooking],
@@ -283,12 +314,12 @@ describe('OperatorBookingsRoute blocks layer (#1101)', () => {
     const booking = events.find((e) => e.type === 'booking')
     const block = events.find((e) => e.type === 'block')
 
+    // The CalendarEventChip's inner <Link> owns booking navigation now; rbc's
+    // event-click must be a no-op for a booking (navigating would defeat the pin).
     act(() => (calendarProps.onSelectEvent as (i: unknown) => void)(booking))
-    expect(navigate).toHaveBeenCalledWith({
-      to: '/$locale/manage/bookings/$bookingId',
-      params: { locale: 'en', bookingId: 'bk-1' },
-    })
+    expect(navigate).not.toHaveBeenCalled()
 
+    // A block still routes through the shared handler to open its detail dialog.
     act(() => (calendarProps.onSelectEvent as (i: unknown) => void)(block))
     expect(screen.getByText(B.detail.dialogTitle)).toBeInTheDocument()
   })

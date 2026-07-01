@@ -21,19 +21,15 @@ export type {
   Review,
 } from '../stores'
 export type { DashboardStats } from '@kuruma/shared/types/stats'
-export type { OperatorOverview } from '@kuruma/shared/types/overview'
-export type { FleetVehicleOverview, FleetBookingSummary } from '@kuruma/shared/types/fleet'
 export type { VehicleDetail } from '@kuruma/shared/types/vehicle-detail'
 export type { Customer, CustomerSort, CustomerWithBookings } from '@kuruma/shared/types/customer'
 
 import type { CoordinateSource } from '@kuruma/shared/db/schema'
 import type { Customer, CustomerSort, CustomerWithBookings } from '@kuruma/shared/types/customer'
-import type { FleetVehicleOverview } from '@kuruma/shared/types/fleet'
 import type {
   OperatorBookingCounts,
   VehicleComplianceCounts,
 } from '@kuruma/shared/types/operator-summary'
-import type { OperatorOverview } from '@kuruma/shared/types/overview'
 import type { DashboardStats } from '@kuruma/shared/types/stats'
 import type { VehicleDetail } from '@kuruma/shared/types/vehicle-detail'
 import type { OperatorRole } from '@kuruma/shared/validators/provider-invite'
@@ -162,8 +158,10 @@ export interface LocationRepository {
       regionId?: string | null
     },
   ): Promise<Location>
-  update(id: string, data: Partial<Location>): Promise<Location | undefined>
-  archive(id: string): Promise<Location | undefined>
+  // #1288: ctx-scoped writes — the tenant predicate is enforced in the WHERE
+  // clause (defense-in-depth behind the service's scoped findById).
+  update(ctx: CallerContext, id: string, data: Partial<Location>): Promise<Location | undefined>
+  archive(ctx: CallerContext, id: string): Promise<Location | undefined>
 }
 
 export interface InsuranceOptionFilters {
@@ -202,8 +200,12 @@ export interface InsuranceOptionRepository {
    */
   findActiveByOperator(operatorId: string): Promise<InsuranceOption[]>
   create(data: Omit<InsuranceOption, 'id' | 'createdAt' | 'updatedAt'>): Promise<InsuranceOption>
-  update(id: string, data: Partial<InsuranceOption>): Promise<InsuranceOption | undefined>
-  archive(id: string): Promise<InsuranceOption | undefined>
+  update(
+    ctx: CallerContext,
+    id: string,
+    data: Partial<InsuranceOption>,
+  ): Promise<InsuranceOption | undefined>
+  archive(ctx: CallerContext, id: string): Promise<InsuranceOption | undefined>
 }
 
 export interface AddOnFilters {
@@ -239,8 +241,8 @@ export interface AddOnRepository {
    */
   findActiveByOperator(operatorId: string): Promise<AddOn[]>
   create(data: Omit<AddOn, 'id' | 'createdAt' | 'updatedAt'>): Promise<AddOn>
-  update(id: string, data: Partial<AddOn>): Promise<AddOn | undefined>
-  archive(id: string): Promise<AddOn | undefined>
+  update(ctx: CallerContext, id: string, data: Partial<AddOn>): Promise<AddOn | undefined>
+  archive(ctx: CallerContext, id: string): Promise<AddOn | undefined>
 }
 
 // #521 provider authorization. Not ctx-scoped: the admin endpoint
@@ -348,25 +350,6 @@ export interface VehicleRepository {
     { outcome: 'ok'; vehicle: Vehicle } | { outcome: 'cap_exceeded' } | { outcome: 'not_found' }
   >
   removePhotoByUrl(ctx: CallerContext, id: string, url: string): Promise<Vehicle | undefined>
-}
-
-// Aggregated read for the owner-facing /manage/vehicles list. Enriches
-// each vehicle with utilization %, booking count, and current/next
-// booking state. Computed per-request — NOT denormalized into the
-// vehicles table. See issue #52 and @kuruma/shared/types/fleet.
-//
-// Split from VehicleRepository because it reads across multiple tables
-// (vehicles + bookings + users.name) — following the same boundary as
-// AvailabilityRepository, which also reads vehicles + bookings.
-export interface FleetOverviewRepository {
-  // `now` is injected so time cutoffs live in callers; tests pass a fixed Date.
-  // `ctx` scopes the read (#594); `operatorId` (#407 slice 4, bypass-gated)
-  // narrows a bypass caller to one operator — see narrowReadToOperator.
-  findFleetOverview(
-    ctx: CallerContext,
-    now: Date,
-    operatorId?: string,
-  ): Promise<FleetVehicleOverview[]>
 }
 
 /**
@@ -522,18 +505,6 @@ export interface BookingRepository {
 
 export interface StatsRepository {
   getDashboardStats(): Promise<DashboardStats>
-}
-
-/**
- * Operator-scoped dashboard counts (#524). `ctx` decides the tenant scope via
- * {@link bookingReadScope}: bypass roles aggregate across all operators, an
- * OPERATOR_* caller sees only its own tenant, and an operator missing its
- * operatorId fails closed to zeros (mirrors how its own bookings list behaves).
- * `now` is injected so "upcoming" is deterministic in tests.
- */
-export interface OverviewRepository {
-  // `operatorId` (#407 slice 4, bypass-gated): narrows a bypass caller — see narrowReadToOperator.
-  getOperatorOverview(ctx: CallerContext, now: Date, operatorId?: string): Promise<OperatorOverview>
 }
 
 /**
@@ -740,3 +711,19 @@ export type {
 // Reviews bounded-context data access (#1067 slice 1) lives in its own module;
 // re-exported for callers (mirrors the payment/consent split above).
 export type { NewReview, ReviewEdit, ReviewRepository } from './types-review'
+
+// Runtime feature-flag override store (platform control plane) lives in its own
+// module; re-exported for callers.
+export type { FeatureFlagRepository } from './types-feature-flags'
+
+// Dashboard overview + fleet-overview aggregate reads (#1265) live in their own
+// module to keep this barrel under the file-size cap; re-exported for callers.
+// The projection DTOs (OperatorOverview / FleetVehicleOverview / FleetBookingSummary)
+// ride along so the barrel keeps its historical surface.
+export type {
+  FleetBookingSummary,
+  FleetOverviewRepository,
+  FleetVehicleOverview,
+  OperatorOverview,
+  OverviewRepository,
+} from './types-overview'

@@ -14,6 +14,7 @@ import {
   type OperatorFleetVehicle,
   type PhotoDeleteResult,
   type PhotoUploadResult,
+  type PickupLocationOption,
   type VehicleClassOption,
   type VehicleDetailBookingDto,
   type VehicleDetailResponse,
@@ -22,6 +23,7 @@ import {
   operatorFleetListSchema,
   photoDeleteResultSchema,
   photoUploadResultSchema,
+  pickupLocationOptionsListSchema,
   vehicleClassOptionsListSchema,
   vehicleDetailResponseSchema,
   vehicleRowListSchema,
@@ -51,6 +53,7 @@ export type {
   OperatorFleetVehicle,
   PhotoDeleteResult,
   PhotoUploadResult,
+  PickupLocationOption,
   VehicleClassOption,
   VehicleDetailBookingDto,
   VehicleDetailResponse,
@@ -91,49 +94,79 @@ export function operatorFleetQueryOptions(pickedOperatorId?: string) {
 // every valid write. The four mutation `onSuccess` handlers ignore the result,
 // so narrowing the return type from `OperatorFleetVehicle` is consumer-safe.
 
+// Every fleet write is a cookie-authenticated mutation, so the double-submit CSRF
+// guard (api middleware/csrf.ts) requires the session's token echoed in the
+// `X-CSRF-Token` header — omitting it 403s "CSRF token mismatch". Callers read the
+// token from `useSession().data?.csrfToken` (mirrors operator-fees/locations, #1304).
 async function writeJson<T>(
   path: string,
   method: 'POST' | 'PATCH',
   body: unknown,
+  csrfToken: string,
   schema: ZodType<T>,
 ): Promise<T> {
   const res = await fetch(`${getApiBaseUrl()}${path}`, {
     method,
     credentials: 'include',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrfToken },
     body: JSON.stringify(body),
   })
   return unwrap(res, schema)
 }
 
-export function createVehicle(data: CreateVehicleInput): Promise<VehicleRow> {
-  return writeJson('/vehicles', 'POST', data, vehicleRowSchema)
+export function createVehicle(data: CreateVehicleInput, csrfToken: string): Promise<VehicleRow> {
+  return writeJson('/vehicles', 'POST', data, csrfToken, vehicleRowSchema)
 }
 
-export function updateVehicle(id: string, data: UpdateVehicleInput): Promise<VehicleRow> {
-  return writeJson(`/vehicles/${encodeURIComponent(id)}`, 'PATCH', data, vehicleRowSchema)
+export function updateVehicle(
+  id: string,
+  data: UpdateVehicleInput,
+  csrfToken: string,
+): Promise<VehicleRow> {
+  return writeJson(
+    `/vehicles/${encodeURIComponent(id)}`,
+    'PATCH',
+    data,
+    csrfToken,
+    vehicleRowSchema,
+  )
 }
 
 export function updateVehicleStatus(
   id: string,
   status: VehicleStatus,
+  csrfToken: string,
   reason?: string,
 ): Promise<VehicleRow> {
   const body = reason != null ? { status, reason } : { status }
-  return writeJson(`/vehicles/${encodeURIComponent(id)}/status`, 'PATCH', body, vehicleRowSchema)
+  return writeJson(
+    `/vehicles/${encodeURIComponent(id)}/status`,
+    'PATCH',
+    body,
+    csrfToken,
+    vehicleRowSchema,
+  )
 }
 
 export function bulkUpdateVehicleStatus(
   vehicleIds: string[],
   status: BulkVehicleStatus,
+  csrfToken: string,
 ): Promise<VehicleRow[]> {
-  return writeJson('/vehicles/bulk-status', 'PATCH', { vehicleIds, status }, vehicleRowListSchema)
+  return writeJson(
+    '/vehicles/bulk-status',
+    'PATCH',
+    { vehicleIds, status },
+    csrfToken,
+    vehicleRowListSchema,
+  )
 }
 
-export async function retireVehicle(id: string): Promise<VehicleRow> {
+export async function retireVehicle(id: string, csrfToken: string): Promise<VehicleRow> {
   const res = await fetch(`${getApiBaseUrl()}/vehicles/${encodeURIComponent(id)}`, {
     method: 'DELETE',
     credentials: 'include',
+    headers: { 'X-CSRF-Token': csrfToken },
   })
   return unwrap(res, vehicleRowSchema)
 }
@@ -141,12 +174,14 @@ export async function retireVehicle(id: string): Promise<VehicleRow> {
 export async function uploadVehiclePhotos(
   vehicleId: string,
   files: readonly File[],
+  csrfToken: string,
 ): Promise<PhotoUploadResult> {
   const formData = new FormData()
   for (const file of files) formData.append('file', file)
   const res = await fetch(`${getApiBaseUrl()}/vehicles/${encodeURIComponent(vehicleId)}/photos`, {
     method: 'POST',
     credentials: 'include',
+    headers: { 'X-CSRF-Token': csrfToken },
     body: formData,
   })
   return unwrap(res, photoUploadResultSchema)
@@ -155,9 +190,14 @@ export async function uploadVehiclePhotos(
 export async function deleteVehiclePhoto(
   vehicleId: string,
   photoUrl: string,
+  csrfToken: string,
 ): Promise<PhotoDeleteResult> {
   const url = `${getApiBaseUrl()}/vehicles/${encodeURIComponent(vehicleId)}/photos?url=${encodeURIComponent(photoUrl)}`
-  const res = await fetch(url, { method: 'DELETE', credentials: 'include' })
+  const res = await fetch(url, {
+    method: 'DELETE',
+    credentials: 'include',
+    headers: { 'X-CSRF-Token': csrfToken },
+  })
   return unwrap(res, photoDeleteResultSchema)
 }
 
@@ -251,5 +291,29 @@ export function vehicleClassOptionsQueryOptions() {
   return queryOptions({
     queryKey: ['operator-fleet', 'class-options'],
     queryFn: fetchVehicleClassOptions,
+  })
+}
+
+// Minimal pickup-location list for the Add/Edit form's location dropdown (#1262).
+// Kept fleet-local (a direct fetch, not an `operator-locations` import) to stay
+// inside the web module boundary — mirrors fetchVehicleClassOptions above. The
+// session-authed `/locations` list is operator-scoped server-side; a UI-created
+// vehicle needs a pickupLocationId or it never surfaces in storefront search.
+export async function fetchPickupLocationOptions(): Promise<PickupLocationOption[]> {
+  // `includeArchived=true` keeps a since-archived *assigned* location resolvable
+  // for the edit fallback (the form filters to ACTIVE for selectable options).
+  // `includeAll=true` satisfies the private route's explicit cross-operator read
+  // contract for bypass roles (else they 400); OPERATOR_* callers stay scoped by
+  // the API and it ignores the flag. Fleet is not a picker route — no `?operator`.
+  const res = await fetch(`${getApiBaseUrl()}/locations?includeArchived=true&includeAll=true`, {
+    credentials: 'include',
+  })
+  return unwrap(res, pickupLocationOptionsListSchema)
+}
+
+export function pickupLocationOptionsQueryOptions() {
+  return queryOptions({
+    queryKey: ['operator-fleet', 'location-options'],
+    queryFn: fetchPickupLocationOptions,
   })
 }

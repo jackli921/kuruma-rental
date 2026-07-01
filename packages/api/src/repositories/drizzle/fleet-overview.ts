@@ -2,9 +2,9 @@ import { bookings, users, vehicles } from '@kuruma/shared/db/schema'
 import type { FleetVehicleOverview } from '@kuruma/shared/types/fleet'
 import { and, inArray, ne, sql } from 'drizzle-orm'
 import { eq } from 'drizzle-orm'
-import type { CallerContext } from '../../middleware/auth'
+import { type CallerContext, requireManagementRead } from '../../middleware/auth'
 import type { Vehicle } from '../../stores'
-import { operatorReadScope } from '../../tenancy'
+import { bookingReadScope } from '../../tenancy'
 import type { FleetOverviewRepository } from '../types'
 import {
   type Db,
@@ -36,16 +36,21 @@ export class DrizzleFleetOverviewRepository implements FleetOverviewRepository {
   ): Promise<FleetVehicleOverview[]> {
     const windowStart = new Date(now.getTime() - UTILIZATION_WINDOW_MS)
 
-    // Tenant scope (#594): operators see only their own vehicles; bypass roles
-    // see all; a scoped caller with no tenant sees nothing. Mirrors
+    // Defence-in-depth (mirrors the overview repo): reject RENTER/PARTNER so a
+    // non-management caller bypassing the route gate reads no fleet.
+    requireManagementRead(ctx)
+    // #1273: scope from bookingReadScope — the SAME vocabulary the overview card
+    // uses — so the two dashboard reads agree. `none` (operator without tenant),
+    // `renter` (legacy STAFF/ADMIN post-#487), and `partner` (a channel, not an
+    // operator) see nothing, matching overview's zeros. Mirrors
     // DrizzleVehicleRepository.findAll — the repo is the tenant boundary.
     //
     // Picker narrowing (#407 slice 4): an `all` (bypass) caller who named an
     // operator is scoped to that operator; honored ONLY in the `all` branch, so a
     // foreign id can never widen a tenant. Bookings (round-trip 2) constrain to
     // these vehicle ids, so narrowing the vehicle query narrows both.
-    const scope = operatorReadScope(ctx)
-    if (scope.kind === 'none') return []
+    const scope = bookingReadScope(ctx)
+    if (scope.kind === 'none' || scope.kind === 'renter' || scope.kind === 'partner') return []
     const vehicleWhere =
       scope.kind === 'operator'
         ? eq(vehicles.operatorId, scope.operatorId)

@@ -26,6 +26,7 @@ import {
   type CalendarView,
   blocksToCalendarEvents,
   calendarRange,
+  defaultCalendarView,
   fleetToResources,
   formatCalendarDate,
   parseCalendarDate,
@@ -46,8 +47,6 @@ interface BookingsCalendarSearch {
   date?: string | undefined
 }
 
-const DEFAULT_VIEW: CalendarView = 'timeline'
-
 // Operator booking *calendar* (#525). URL `/<locale>/manage/bookings`, behind the
 // `_business` guard; tenant scoping is server-side (CallerContext), so the client
 // passes no operatorId. The view + anchor day live in the URL (`?view=&date=`) so
@@ -66,7 +65,7 @@ export const Route = createFileRoute('/$locale/_business/manage/bookings/')({
         ? formatCalendarDate(parseCalendarDate(search.date))
         : undefined,
   }),
-  loaderDeps: ({ search }) => ({ view: search.view ?? DEFAULT_VIEW, date: search.date }),
+  loaderDeps: ({ search }) => ({ view: search.view ?? defaultCalendarView(), date: search.date }),
   loader: ({ context, deps }) => {
     const { from, to } = calendarRange(deps.view, parseCalendarDate(deps.date))
     return Promise.all([
@@ -129,7 +128,7 @@ export function OperatorBookingsRoute() {
     markBookingsSeen(queryClient)
   }, [queryClient])
 
-  const view = viewParam ?? DEFAULT_VIEW
+  const view = viewParam ?? defaultCalendarView()
   const anchorDate = useMemo(() => parseCalendarDate(date), [date])
   const { from, to } = calendarRange(view, anchorDate)
 
@@ -151,7 +150,7 @@ export function OperatorBookingsRoute() {
     enabled: canViewBlocks && view !== 'timeline',
   })
 
-  const events = useMemo(() => toCalendarEvents(bookings), [bookings])
+  const events = useMemo(() => toCalendarEvents(bookings, vehicles), [bookings, vehicles])
   const blockEvents = useMemo(
     () => (canViewBlocks ? blocksToCalendarEvents(blocks ?? []) : []),
     [canViewBlocks, blocks],
@@ -214,18 +213,15 @@ export function OperatorBookingsRoute() {
     [navigate, locale],
   )
 
-  const handleSelectEvent = useCallback(
-    (item: CalendarItem) => {
-      // #1101: dispatch by the discriminant. A booking navigates to its detail page;
-      // a block opens the block-detail dialog (view + delete).
-      if (item.type === 'booking') {
-        navigateToBooking(item.id)
-      } else {
-        setSelectedBlock(item)
-      }
-    },
-    [navigateToBooking],
-  )
+  const handleSelectEvent = useCallback((item: CalendarItem) => {
+    // #1101: dispatch by the discriminant. A block opens its detail dialog (view +
+    // delete). A booking is handled by the CalendarEventChip's own popover
+    // (hover-peek / click-pin), whose inner <Link> owns navigation — so an rbc
+    // event-click is a no-op for bookings here; navigating would defeat the pin.
+    if (item.type === 'block') {
+      setSelectedBlock(item)
+    }
+  }, [])
 
   // Both the header button and a calendar slot-click open the dialog; a slot also
   // prefills the pickup/return range (the button opens an empty range).

@@ -39,6 +39,7 @@ import { createBookingRoutes } from './routes/bookings'
 import { createConsentRoutes } from './routes/consent'
 import { createCustomerRoutes } from './routes/customers'
 import { createDocumentRoutes } from './routes/documents'
+import { createFeatureFlagsRoutes } from './routes/feature-flags'
 import { createFeeScheduleRoutes } from './routes/fee-schedules'
 import { createFleetOverviewRoutes } from './routes/fleet-overview'
 import { createFxRoutes } from './routes/fx'
@@ -86,6 +87,7 @@ import { CustomerService } from './services/customer'
 import { documentVerificationGate } from './services/document-verification-gate'
 import type { EmailSender } from './services/email/email-sender'
 import { makeEnsureThread } from './services/ensure-thread'
+import { FeatureFlagsService } from './services/feature-flags'
 import { FeeScheduleService } from './services/fee-schedule'
 import { FlatSearchService } from './services/flat-search'
 import { FleetOverviewService } from './services/fleet-overview'
@@ -166,6 +168,7 @@ export function createApp(overrides?: AppOverrides, repos: Repos = buildRepos(ov
     auditLogRepo,
     bookingEventRepo,
     reviewRepo,
+    featureFlagRepo,
     consentRepo,
     classRatePlanRepo,
     complianceAlertLogRepo,
@@ -480,10 +483,12 @@ export function createApp(overrides?: AppOverrides, repos: Repos = buildRepos(ov
   const reviewService = new ReviewService(
     reviewRepo,
     bookingRepo,
+    vehicleRepo,
     bookingEventRepo,
     operatorMembershipRepo,
   )
   const reviewAggregateService = new ReviewAggregateService(reviewRepo)
+  const featureFlagsService = new FeatureFlagsService(featureFlagRepo)
 
   // Chain .route() calls so TypeScript infers the full route type tree.
   // hc<AppType> needs this to produce typed client methods.
@@ -542,6 +547,7 @@ export function createApp(overrides?: AppOverrides, repos: Repos = buildRepos(ov
     .route('/', createAdminRevenueRoutes(adminRevenueService))
     .route('/', createAdminBookingRoutes(adminBookingService))
     .route('/', createAdminOperatorRoutes(operatorService, operatorSummaryService))
+    .route('/', createFeatureFlagsRoutes(featureFlagsService))
     .route('/', createAdminOverviewRoutes(adminOverviewService))
     .route('/', createPaymentAnomalyRoutes(paymentAnomalyService))
     .route('/', createMessageRoutes(messageService))

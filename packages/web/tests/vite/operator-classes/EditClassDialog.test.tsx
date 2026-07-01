@@ -9,6 +9,12 @@ import { IntlProvider } from 'use-intl'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import en from '../../../messages/en.json'
 
+// The dialog reads the CSRF token from the session and forwards it to the update
+// call so the csrf() middleware admits the cookie write (#1304).
+vi.mock('@/vite/session', () => ({
+  useSession: () => ({ data: { csrfToken: 'test-csrf' } }),
+}))
+
 vi.mock('@/vite/operator-classes/api', () => ({ updateOperatorClass: vi.fn() }))
 
 function makeClass(over: Partial<OperatorClass> = {}): OperatorClass {
@@ -74,10 +80,11 @@ describe('EditClassDialog', () => {
     await user.click(screen.getByRole('button', { name: 'Save class' }))
 
     await waitFor(() => expect(updateOperatorClass).toHaveBeenCalledTimes(1))
-    // EditClassDialog calls updateOperatorClass(id, patch) directly — exactly two args.
+    // EditClassDialog calls updateOperatorClass(id, patch, csrfToken) directly.
     expect(updateOperatorClass).toHaveBeenCalledWith(
       'c-42',
       expect.objectContaining({ name: 'Compact Plus' }),
+      'test-csrf',
     )
     await waitFor(() => {
       expect(invalidate).toHaveBeenCalledWith({ queryKey: ['operator-classes'] })

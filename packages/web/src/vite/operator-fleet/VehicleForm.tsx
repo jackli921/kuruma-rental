@@ -7,10 +7,12 @@ import { Textarea } from '@/components/ui/textarea'
 import {
   FLEET_QUERY_KEY,
   type OperatorFleetVehicle,
+  type PickupLocationOption,
   type VehicleClassOption,
   createVehicle,
   updateVehicle,
 } from '@/vite/operator-fleet/api'
+import { useSession } from '@/vite/session'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { LUGGAGE_SIZES } from '@kuruma/shared/lib/luggage'
 import {
@@ -24,11 +26,12 @@ import { useTranslations } from 'use-intl'
 import type { z } from 'zod'
 
 // Controlled Add/Edit vehicle form for the Vite operator-fleet shell (#555).
-// Parent owns open/close and class fetching; this component owns only the field
-// state + the create/update mutation. Operator and pickup-location pickers from
-// the frozen Next form are intentionally omitted: the operator is derived from
-// the session cookie server-side (the client never names a tenant — see api.ts),
-// and locations are a later slice.
+// Parent owns open/close and option fetching; this component owns only the field
+// state + the create/update mutation. The operator picker stays omitted — the
+// tenant is derived from the session cookie server-side (the client never names a
+// tenant — see api.ts). The pickup-location picker (#1262) IS present: without a
+// pickupLocationId a UI-created vehicle never surfaces in storefront search, so
+// the location must be settable purely through the form.
 //
 // The `classOptions` prop is fed by the parent's vehicleClassOptionsQueryOptions(),
 // which reads the session-scoped /vehicle-classes/manage endpoint (#528) — the
@@ -50,6 +53,8 @@ interface VehicleFormProps {
   readonly vehicle: OperatorFleetVehicle | null
   /** Class options for the dropdown (parent fetches; cross-tenant until #528). */
   readonly classOptions: readonly VehicleClassOption[]
+  /** Pickup-location options (parent fetches; session-scoped, incl. archived). */
+  readonly locationOptions: readonly PickupLocationOption[]
   /** Called after a create/update mutation succeeds. */
   readonly onSaved: () => void
   /** Called when the user cancels without saving. */
@@ -84,6 +89,7 @@ function defaultsFromVehicle(vehicle: OperatorFleetVehicle | null): Partial<Vehi
       maxRentalHours: 72,
       advanceBookingHours: null,
       classId: null,
+      pickupLocationId: null,
       // Blank by default — both fields inherit the class luggage when null.
       luggageCapacity: null,
       luggageSize: null,
@@ -100,6 +106,7 @@ function defaultsFromVehicle(vehicle: OperatorFleetVehicle | null): Partial<Vehi
     licensePlate: vehicle.licensePlate ?? '',
     photos: vehicle.photos,
     classId: vehicle.classId,
+    pickupLocationId: vehicle.pickupLocationId,
     make: vehicle.make ?? '',
     model: vehicle.model ?? '',
     year: vehicle.year,
@@ -118,11 +125,19 @@ function defaultsFromVehicle(vehicle: OperatorFleetVehicle | null): Partial<Vehi
   }
 }
 
-export function VehicleForm({ vehicle, classOptions, onSaved, onCancel }: VehicleFormProps) {
+export function VehicleForm({
+  vehicle,
+  classOptions,
+  locationOptions,
+  onSaved,
+  onCancel,
+}: VehicleFormProps) {
   const t = useTranslations('business.vehicles.form')
   // Luggage-size option labels live under the top-level `luggageSize.*` namespace.
   const tLuggage = useTranslations('luggageSize')
   const queryClient = useQueryClient()
+  // Cookie-authed writes must echo the session CSRF token or the guard 403s (#1304).
+  const csrfToken = useSession().data?.csrfToken ?? ''
   const isEditMode = vehicle != null
 
   // A vehicle assigned to a since-archived class is absent from the active
@@ -132,6 +147,21 @@ export function VehicleForm({ vehicle, classOptions, onSaved, onCancel }: Vehicl
   const assignedClassId = vehicle?.classId ?? null
   const assignedClassMissing =
     assignedClassId != null && !classOptions.some((klass) => klass.id === assignedClassId)
+
+  // Only ACTIVE locations are selectable, but an edited vehicle may point at a
+  // since-archived location (filtered out of the selectable list yet still present
+  // because the parent fetches includeArchived=true). Preserve it as a labelled
+  // fallback option so a save never silently clears the pickupLocationId — the
+  // exact non-surfacing state #1262 exists to fix. Mirrors the "Current class"
+  // handling above, but we have the archived row's real name to show.
+  const assignedLocationId = vehicle?.pickupLocationId ?? null
+  const activeLocationOptions = locationOptions.filter((loc) => loc.status === 'ACTIVE')
+  const assignedLocationMissing =
+    assignedLocationId != null &&
+    !activeLocationOptions.some((loc) => loc.id === assignedLocationId)
+  const assignedLocationName =
+    locationOptions.find((loc) => loc.id === assignedLocationId)?.name ?? null
+  const hasSelectableLocation = activeLocationOptions.length > 0 || assignedLocationMissing
 
   const {
     register,
@@ -153,7 +183,7 @@ export function VehicleForm({ vehicle, classOptions, onSaved, onCancel }: Vehicl
 
   const mutation = useMutation({
     mutationFn: (data: CreateVehicleInput) =>
-      isEditMode ? updateVehicle(vehicle.id, data) : createVehicle(data),
+      isEditMode ? updateVehicle(vehicle.id, data, csrfToken) : createVehicle(data, csrfToken),
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: FLEET_QUERY_KEY })
       onSaved()
@@ -195,6 +225,33 @@ export function VehicleForm({ vehicle, classOptions, onSaved, onCancel }: Vehicl
               </option>
             ))}
           </NativeSelect>
+        </div>
+      )}
+
+      {hasSelectableLocation ? (
+        <div>
+          <Label htmlFor="pickupLocationId">{t('pickupLocation')}</Label>
+          <NativeSelect
+            id="pickupLocationId"
+            {...register('pickupLocationId', { setValueAs: emptyToNull })}
+          >
+            <option value="">{t('pickupLocationNone')}</option>
+            {assignedLocationMissing && assignedLocationId != null && (
+              <option value={assignedLocationId}>
+                {assignedLocationName ?? t('pickupLocationCurrent')}
+              </option>
+            )}
+            {activeLocationOptions.map((loc) => (
+              <option key={loc.id} value={loc.id}>
+                {loc.name}
+              </option>
+            ))}
+          </NativeSelect>
+        </div>
+      ) : (
+        <div>
+          <div className="text-sm font-medium">{t('pickupLocation')}</div>
+          <p className="mt-1 text-sm text-muted-foreground">{t('pickupLocationEmptyHint')}</p>
         </div>
       )}
 

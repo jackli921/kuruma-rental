@@ -1,6 +1,6 @@
 import { render, screen } from '@testing-library/react'
 import { IntlProvider } from 'use-intl'
-import { describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import en from '../../../messages/en.json'
 import { RatingBadge } from './RatingBadge'
 
@@ -13,6 +13,18 @@ function renderBadge(entry: Parameters<typeof RatingBadge>[0]['entry']) {
 }
 
 describe('RatingBadge (#1085 slice 5)', () => {
+  // Reviews ships OFF for the beta MVP; the badge only renders where the flag is on.
+  beforeEach(() => vi.stubEnv('VITE_FEATURE_REVIEWS', 'true'))
+  afterEach(() => vi.unstubAllEnvs())
+
+  it('renders nothing when the reviews feature is gated off (#1083-1086)', () => {
+    vi.stubEnv('VITE_FEATURE_REVIEWS', undefined)
+    const { container } = renderBadge({ avg: 4.5, count: 12 })
+    // A resolved rating would normally show the ★ glyph; gated off, no node at all.
+    expect(container.querySelector('span')).toBeNull()
+    expect(screen.queryByText('★ 4.5 (12)')).toBeNull()
+  })
+
   it('undefined → renders the loading skeleton (no aria text, no rating glyph)', () => {
     renderBadge(undefined)
     // Skeleton is decorative (no semantic role), pinned by data-testid so a

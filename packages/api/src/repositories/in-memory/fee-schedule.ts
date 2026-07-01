@@ -99,14 +99,30 @@ export class InMemoryFeeScheduleRepository implements FeeScheduleRepository {
     return fee
   }
 
-  async update(id: string, data: Partial<FeeSchedule>): Promise<FeeSchedule | undefined> {
+  async update(
+    ctx: CallerContext,
+    id: string,
+    data: Partial<FeeSchedule>,
+  ): Promise<FeeSchedule | undefined> {
+    // Fees are private config: reject RENTER/PARTNER at the repo, mirroring the
+    // read path — else operatorReadScope maps them to {kind:'all'} (unscoped).
+    requireManagementRead(ctx)
+    const scope = operatorReadScope(ctx)
+    if (scope.kind === 'none') return undefined
     const existing = this.store.get(id)
     if (!existing) return undefined
+    // #1288: tenant-scope the write so a caller reaching the repo without the
+    // service's findById guard can't mutate another operator's row by id.
+    if (scope.kind === 'operator' && existing.operatorId !== scope.operatorId) return undefined
 
     const merged: FeeSchedule = {
       ...existing,
       ...data,
       id: existing.id,
+      // operatorId is an immutable tenant anchor (#1271): pin it like id so an
+      // update payload can never migrate the row to another operator (which the
+      // composite FK to vehicleClasses also depends on).
+      operatorId: existing.operatorId,
       createdAt: existing.createdAt,
       updatedAt: new Date(),
     }
@@ -118,9 +134,14 @@ export class InMemoryFeeScheduleRepository implements FeeScheduleRepository {
     return merged
   }
 
-  async archive(id: string): Promise<FeeSchedule | undefined> {
+  async archive(ctx: CallerContext, id: string): Promise<FeeSchedule | undefined> {
+    requireManagementRead(ctx)
+    const scope = operatorReadScope(ctx)
+    if (scope.kind === 'none') return undefined
     const existing = this.store.get(id)
     if (!existing) return undefined
+    // #1288: tenant-scope the archive (see update()).
+    if (scope.kind === 'operator' && existing.operatorId !== scope.operatorId) return undefined
     const archived: FeeSchedule = { ...existing, status: 'ARCHIVED', updatedAt: new Date() }
     this.store.set(archived.id, archived)
     return archived

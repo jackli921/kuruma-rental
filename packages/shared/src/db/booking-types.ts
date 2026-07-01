@@ -5,6 +5,7 @@ import type {
   FeeType,
   FeeUnit,
 } from '../enums'
+import type { Locale } from '../i18n/locales'
 
 // ---- Slice 6 (#392) booking snapshot + event payload types ----
 // Snapshots lock rates at booking time; operator edits to the live
@@ -16,6 +17,12 @@ export type InsuranceSnapshot = {
   name: string
   dailyPriceJpy: number
   deductibleJpy: number | null
+  // Catalog i18n (slice 4 populates these; legacy snapshots omit them, hence
+  // optional). templateId = the platform template the option resolved from (null
+  // when the operator has no template link); nameLocale = the locale `name` was
+  // captured in, so a reader in another locale can re-resolve from the template.
+  templateId?: string | null
+  nameLocale?: Locale
 }
 
 export type FeeSnapshotItem = {
@@ -32,6 +39,12 @@ export type AddOnSnapshot = {
   addOnId: string
   name: string
   priceJpy: number
+  // Catalog i18n (slice 4 populates these; legacy snapshots omit them, hence
+  // optional). templateId = the platform template the add-on resolved from (null
+  // when the operator has no template link); nameLocale = the locale `name` was
+  // captured in, so a reader in another locale can re-resolve from the template.
+  templateId?: string | null
+  nameLocale?: Locale
 }
 
 export type BookingCreatedPayload = {

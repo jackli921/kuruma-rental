@@ -54,7 +54,7 @@ const NAMBA = {
   status: 'ACTIVE' as const,
 }
 
-function renderGrid(result: StorefrontSearchResultData | null, region?: string) {
+function renderGrid(result: StorefrontSearchResultData | null, region?: string, priceMax?: number) {
   const qc = new QueryClient({
     defaultOptions: { queries: { staleTime: Number.POSITIVE_INFINITY, retry: false } },
   })
@@ -62,7 +62,13 @@ function renderGrid(result: StorefrontSearchResultData | null, region?: string) 
   return render(
     <QueryClientProvider client={qc}>
       <IntlProvider locale="en" messages={en}>
-        <StoreGrid result={result} from="2026-07-01T10:00" to="2026-07-03T10:00" region={region} />
+        <StoreGrid
+          result={result}
+          from="2026-07-01T10:00"
+          to="2026-07-03T10:00"
+          region={region}
+          priceMax={priceMax}
+        />
       </IntlProvider>
     </QueryClientProvider>,
   )
@@ -98,6 +104,16 @@ describe('StoreGrid', () => {
   it('renders the empty state when the region subtree has no stores', () => {
     renderGrid({ storefronts: [], nextCursor: null }, 'namba')
     expect(screen.getByText(en.search.empty)).toBeInTheDocument()
+    expect(screen.queryByText(en.search.emptyPriceCap)).not.toBeInTheDocument()
+  })
+
+  it('shows the price-cap empty state, not the date hint, when the cap filters the page out (#1291)', () => {
+    // Stores exist for these dates (¥4500), but every one exceeds the ¥3000 cap, so
+    // the renter must be pointed at the cap above the grid — not told to try a later date.
+    renderGrid({ storefronts: [NEAR, FAR], nextCursor: null }, 'namba', 3000)
+    expect(screen.getByText(en.search.emptyPriceCap)).toBeInTheDocument()
+    expect(screen.getByText(en.search.emptyPriceCapHint)).toBeInTheDocument()
+    expect(screen.queryByText(en.search.emptyTurnaroundHint)).not.toBeInTheDocument()
   })
 
   it('prompts for dates when there is no result yet', () => {

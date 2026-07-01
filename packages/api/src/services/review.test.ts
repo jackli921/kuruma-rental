@@ -5,8 +5,10 @@ import { InMemoryBookingRepository } from '../repositories/in-memory/booking'
 import { InMemoryBookingEventRepository } from '../repositories/in-memory/booking-event'
 import { InMemoryOperatorMembershipRepository } from '../repositories/in-memory/operator-membership'
 import { InMemoryReviewRepository } from '../repositories/in-memory/review'
-import type { Booking, BookingEvent, OperatorMembership, Review } from '../stores'
+import { InMemoryVehicleRepository } from '../repositories/in-memory/vehicle'
+import type { Booking, BookingEvent, OperatorMembership, Review, Vehicle } from '../stores'
 import { ReviewService } from './review'
+import { ReviewAggregateService } from './review-aggregate'
 
 const OPERATOR_ID = 'op-1'
 const RENTER_ID = 'renter-1'
@@ -66,6 +68,39 @@ function makeBooking(overrides: Partial<Booking> = {}): Booking {
   }
 }
 
+function makeVehicle(overrides: Partial<Vehicle> = {}): Vehicle {
+  return {
+    id: VEHICLE_ID,
+    operatorId: OPERATOR_ID,
+    classId: CLASS_ID,
+    pickupLocationId: 'loc-1',
+    name: 'Toyota Yaris',
+    description: null,
+    photos: [],
+    seats: 5,
+    luggageCapacity: null,
+    luggageSize: null,
+    transmission: 'AUTO',
+    fuelType: null,
+    licensePlate: null,
+    status: 'AVAILABLE',
+    minRentalHours: null,
+    maxRentalHours: null,
+    advanceBookingHours: null,
+    make: null,
+    model: null,
+    year: null,
+    color: null,
+    dailyRateJpy: 8000,
+    hourlyRateJpy: null,
+    shakenExpiryDate: null,
+    insuranceExpiryDate: null,
+    createdAt: new Date('2026-01-01T00:00:00Z'),
+    updatedAt: new Date('2026-01-01T00:00:00Z'),
+    ...overrides,
+  }
+}
+
 function completionEvent(bookingId = BOOKING_ID, createdAt = COMPLETED_AT): BookingEvent {
   return {
     id: `evt-${bookingId}`,
@@ -100,15 +135,18 @@ function makeHarness(
     events?: BookingEvent[]
     memberships?: OperatorMembership[]
     reviews?: Review[]
+    vehicles?: Vehicle[]
   } = {},
 ): Harness {
   const bookingStore = new Map((opts.bookings ?? [makeBooking()]).map((b) => [b.id, b]))
   const memberStore = new Map((opts.memberships ?? [activeMembership()]).map((m) => [m.id, m]))
   const reviewStore = new Map((opts.reviews ?? []).map((r) => [r.id, r]))
+  const vehicleStore = new Map((opts.vehicles ?? [makeVehicle()]).map((v) => [v.id, v]))
   const reviewRepo = new InMemoryReviewRepository(reviewStore)
   const service = new ReviewService(
     reviewRepo,
     new InMemoryBookingRepository(bookingStore),
+    new InMemoryVehicleRepository(vehicleStore),
     new InMemoryBookingEventRepository(opts.events ?? [completionEvent()]),
     new InMemoryOperatorMembershipRepository(memberStore),
   )
@@ -157,6 +195,57 @@ describe('ReviewService.submit — derivation', () => {
     expect(result.review.authorRole).toBe('OPERATOR')
     expect(result.review.subject).toBe('RENTER')
     expect(result.review.subjectVehicleId).toBeNull()
+  })
+})
+
+describe('ReviewService.submit — VEHICLE class derived from the assigned car (#1270)', () => {
+  // Substitution / assignVehicle can swap in a same-ACRISS car of a DIFFERENT class without
+  // touching booking.classId. The review of the car actually driven must count under that
+  // car's real class (what the storefront badge reads), not the class originally booked.
+  const BOOKED_CLASS = 'class-booked'
+  const ACTUAL_CLASS = 'class-actual'
+  const SUB_VEHICLE = 'veh-sub'
+
+  const substitutedHarness = (subClassId: string | null) =>
+    makeHarness({
+      bookings: [makeBooking({ classId: BOOKED_CLASS, assignedVehicleId: SUB_VEHICLE })],
+      vehicles: [makeVehicle({ id: SUB_VEHICLE, classId: subClassId })],
+    })
+
+  it('keys subjectClassId to the assigned vehicle’s class, not the booked class', async () => {
+    const { service } = substitutedHarness(ACTUAL_CLASS)
+    const result = await service.submit(renterCtx, submitInput({ subject: 'VEHICLE' }), NOW)
+    if (!result.ok) throw new Error(`expected ok, got ${result.error}`)
+    expect(result.review.subjectVehicleId).toBe(SUB_VEHICLE)
+    expect(result.review.subjectClassId).toBe(ACTUAL_CLASS)
+  })
+
+  it('stores a null subjectClassId when the assigned car has no class', async () => {
+    const { service } = substitutedHarness(null)
+    const result = await service.submit(renterCtx, submitInput({ subject: 'VEHICLE' }), NOW)
+    if (!result.ok) throw new Error(`expected ok, got ${result.error}`)
+    expect(result.review.subjectVehicleId).toBe(SUB_VEHICLE)
+    expect(result.review.subjectClassId).toBeNull()
+  })
+
+  it('aggregates the review under the assigned car’s class — not the booked class', async () => {
+    const { service, reviewRepo } = substitutedHarness(ACTUAL_CLASS)
+    // Submit past the reveal window so the lone VEHICLE review publishes immediately (#1195),
+    // making it visible to the published+visible aggregate scan.
+    const submitted = await service.submit(
+      renterCtx,
+      submitInput({ subject: 'VEHICLE', overall: 4 }),
+      AFTER_DEADLINE,
+    )
+    if (!submitted.ok) throw new Error(`expected ok, got ${submitted.error}`)
+    expect(submitted.review.publishedAt).toEqual(AFTER_DEADLINE)
+
+    const aggregate = new ReviewAggregateService(reviewRepo)
+    expect(await aggregate.forClasses([ACTUAL_CLASS])).toEqual({
+      [ACTUAL_CLASS]: { avg: 4, count: 1 },
+    })
+    // The booked class must NOT absorb the review of a car that isn't in it.
+    expect(await aggregate.forClasses([BOOKED_CLASS])).toEqual({ [BOOKED_CLASS]: null })
   })
 })
 

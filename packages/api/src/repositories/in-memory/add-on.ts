@@ -85,9 +85,17 @@ export class InMemoryAddOnRepository implements AddOnRepository {
     return option
   }
 
-  async update(id: string, data: Partial<AddOn>): Promise<AddOn | undefined> {
+  async update(ctx: CallerContext, id: string, data: Partial<AddOn>): Promise<AddOn | undefined> {
+    // Add-ons are private config: reject RENTER/PARTNER at the repo, mirroring the
+    // read path — else operatorReadScope maps them to {kind:'all'} (unscoped).
+    requireManagementRead(ctx)
+    const scope = operatorReadScope(ctx)
+    if (scope.kind === 'none') return undefined
     const existing = this.store.get(id)
     if (!existing) return undefined
+    // #1288: tenant-scope the write so a caller reaching the repo without the
+    // service's findById guard can't mutate another operator's row by id.
+    if (scope.kind === 'operator' && existing.operatorId !== scope.operatorId) return undefined
 
     if (data.name !== undefined && data.name !== existing.name) {
       this.assertActiveNameFree(existing.operatorId, data.name, id)
@@ -97,6 +105,9 @@ export class InMemoryAddOnRepository implements AddOnRepository {
       ...existing,
       ...data,
       id: existing.id,
+      // operatorId is an immutable tenant anchor (#1271): pin it like id so an
+      // update payload can never migrate the row to another operator.
+      operatorId: existing.operatorId,
       createdAt: existing.createdAt,
       updatedAt: new Date(),
     }
@@ -104,9 +115,14 @@ export class InMemoryAddOnRepository implements AddOnRepository {
     return updated
   }
 
-  async archive(id: string): Promise<AddOn | undefined> {
+  async archive(ctx: CallerContext, id: string): Promise<AddOn | undefined> {
+    requireManagementRead(ctx)
+    const scope = operatorReadScope(ctx)
+    if (scope.kind === 'none') return undefined
     const existing = this.store.get(id)
     if (!existing) return undefined
+    // #1288: tenant-scope the archive (see update()).
+    if (scope.kind === 'operator' && existing.operatorId !== scope.operatorId) return undefined
 
     const archived: AddOn = { ...existing, status: 'ARCHIVED', updatedAt: new Date() }
     this.store.set(archived.id, archived)

@@ -13,6 +13,7 @@ import {
   FLEET_QUERY_KEY,
   bulkUpdateVehicleStatus,
 } from '@/vite/operator-fleet/api'
+import { useSession } from '@/vite/session'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { type ReactElement, useState } from 'react'
 import { useTranslations } from 'use-intl'
@@ -40,10 +41,13 @@ export function BulkActionBar({
 }: BulkActionBarProps): ReactElement | null {
   const t = useTranslations('business.vehicles')
   const queryClient = useQueryClient()
+  // Cookie writes need the double-submit CSRF token echoed in the header (#1304).
+  const csrfToken = useSession().data?.csrfToken ?? ''
   const [pendingStatus, setPendingStatus] = useState<BulkVehicleStatus | null>(null)
 
   const mutation = useMutation({
-    mutationFn: (status: BulkVehicleStatus) => bulkUpdateVehicleStatus(selectedIds, status),
+    mutationFn: (status: BulkVehicleStatus) =>
+      bulkUpdateVehicleStatus(selectedIds, status, csrfToken),
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: FLEET_QUERY_KEY })
       setPendingStatus(null)
