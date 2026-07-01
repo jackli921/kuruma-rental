@@ -117,9 +117,10 @@ export function OperatorBookingsRoute() {
 
   const queryClient = useQueryClient()
   const { data: session } = useSession()
-  // #1230 slice 5a: a picker admin narrows the calendar reads to the picked operator;
-  // undefined (no pick, or an operator session) leaves the read session-scoped. Write
-  // affordances below stay gated on isOperatorSession (slice 5b owns cross-tenant writes).
+  // #1230: a picker admin narrows the calendar reads to the picked operator; undefined
+  // (no pick, or an operator session) leaves the read session-scoped. Slice 5b threads
+  // the same pick into the write gates below (canWriteAsOperator), so a picked admin can
+  // write as that operator while an unpicked admin stays read-only.
   const { pickedOperatorId } = useOperatorContext()
   const [bookingDialogOpen, setBookingDialogOpen] = useState(false)
   // The clicked slot's range (null when opened from the header button), threaded to

@@ -36,8 +36,9 @@ vi.mock('@tanstack/react-router', async () => ({
     useSearch: () => searchState.value,
     useNavigate: () => navigate,
   }),
-  // useOperatorContext reads the `_business` layout search via getRouteApi. These
-  // route tests predate the picker, so the operator is always unpicked (undefined).
+  // useOperatorContext reads the `_business` layout search via getRouteApi. Defaults to
+  // undefined (unpicked) so pre-picker tests are unchanged; a test can set
+  // pickedOperator.value to drive the picker-admin write gates (5b).
   getRouteApi: () => ({
     useSearch: () => ({ operator: pickedOperator.value }),
     useNavigate: () => navigate,
