@@ -52,6 +52,9 @@ jobs:
       - name: Check global fetch is bound on runtime surfaces
         run: bun run lint:fetch-binding
 
+      - name: Check web cookie writes send the CSRF token
+        run: bun run lint:csrf-writes
+
       - name: Check unused deps and exports
         run: bun run lint:deps
         continue-on-error: true
