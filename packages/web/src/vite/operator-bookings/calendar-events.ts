@@ -1,4 +1,5 @@
 import { BLOCK_KIND_CLASS, STATUS_CLASS } from '@/lib/event-colors'
+import { isFleetTimelineEnabled } from '@/vite/config'
 import type { CalendarBookingRow, OperatorBookingStatus } from '@/vite/operator-bookings/api'
 import type { CalendarBlockRow } from '@/vite/operator-bookings/schema'
 import type { VehicleBlockKind } from '@kuruma/shared/enums'
@@ -24,8 +25,24 @@ import {
  *  its own component; the other three are rbc views (a subset of rbc's `View`). */
 export type CalendarView = 'timeline' | 'day' | 'week' | 'month'
 
-/** The view-switcher order. `timeline` leads — it is the operator default. */
+/** The full view-switcher order. `timeline` leads — the operator default when the
+ *  fleet-timeline feature is enabled (#1100). */
 export const OPERATOR_VIEWS = ['timeline', 'day', 'week', 'month'] as const
+
+/** The view set when the fleet timeline is gated off (#1100): the plain rbc grids. */
+const CALENDAR_VIEWS_NO_TIMELINE = ['day', 'week', 'month'] as const
+
+/** The views offered in the switcher, gated by the fleet-timeline flag. Off → the
+ *  timeline view drops out and only the day/week/month grids remain. */
+export function operatorViews(): readonly CalendarView[] {
+  return isFleetTimelineEnabled() ? OPERATOR_VIEWS : CALENDAR_VIEWS_NO_TIMELINE
+}
+
+/** The landing view: the fleet timeline board when enabled (#1100), else the week
+ *  grid — the natural default once the planning board is gated off. */
+export function defaultCalendarView(): CalendarView {
+  return isFleetTimelineEnabled() ? 'timeline' : 'week'
+}
 
 /** How many days the fleet timeline spans from its anchor day (#1100 AC: 14). */
 export const TIMELINE_SPAN_DAYS = 14
@@ -167,12 +184,14 @@ function iso(from: Date, to: Date): { from: string; to: string } {
 
 // --- URL <-> calendar state (the route stores view/date as search params) ------
 
-const VIEW_SET = new Set<CalendarView>(['timeline', 'day', 'week', 'month'])
-
-/** Narrow an untrusted `?view=` param to one of our views, defaulting to the
- *  fleet timeline — the operator planning board is the landing view (#1100). */
+/** Narrow an untrusted `?view=` param to a currently-offered view, defaulting to
+ *  the landing view. Validates against the flag-gated set, so a hand-typed
+ *  `?view=timeline` falls back to the week grid while the timeline is gated off. */
 export function parseCalendarView(value?: string | undefined): CalendarView {
-  return value && VIEW_SET.has(value as CalendarView) ? (value as CalendarView) : 'timeline'
+  const views = operatorViews()
+  return value && (views as readonly string[]).includes(value)
+    ? (value as CalendarView)
+    : defaultCalendarView()
 }
 
 const DATE_FMT = 'yyyy-MM-dd'

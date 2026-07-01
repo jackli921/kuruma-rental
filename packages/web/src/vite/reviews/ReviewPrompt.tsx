@@ -7,6 +7,7 @@ import {
   DialogTitle,
   DialogTrigger,
 } from '@/components/ui/dialog'
+import { isReviewsEnabled } from '@/vite/config'
 import { ReviewForm } from '@/vite/reviews/ReviewForm'
 import { pendingReviewSubjects } from '@/vite/reviews/api'
 import { useSession } from '@/vite/session'
@@ -31,7 +32,9 @@ export function ReviewPrompt({ bookingId, bookingCode, reviewedSubjects }: Revie
   const [open, setOpen] = useState(false)
   const pending = pendingReviewSubjects(reviewedSubjects)
 
-  if (pending.length === 0 || !session) return null
+  // Reviews gated off (#1083-1086) → no post-trip prompt. Placed with the other
+  // post-hooks guards so rules-of-hooks stays satisfied.
+  if (!isReviewsEnabled() || pending.length === 0 || !session) return null
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>

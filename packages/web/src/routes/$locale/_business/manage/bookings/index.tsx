@@ -26,6 +26,7 @@ import {
   type CalendarView,
   blocksToCalendarEvents,
   calendarRange,
+  defaultCalendarView,
   fleetToResources,
   formatCalendarDate,
   parseCalendarDate,
@@ -46,8 +47,6 @@ interface BookingsCalendarSearch {
   date?: string | undefined
 }
 
-const DEFAULT_VIEW: CalendarView = 'timeline'
-
 // Operator booking *calendar* (#525). URL `/<locale>/manage/bookings`, behind the
 // `_business` guard; tenant scoping is server-side (CallerContext), so the client
 // passes no operatorId. The view + anchor day live in the URL (`?view=&date=`) so
@@ -66,7 +65,7 @@ export const Route = createFileRoute('/$locale/_business/manage/bookings/')({
         ? formatCalendarDate(parseCalendarDate(search.date))
         : undefined,
   }),
-  loaderDeps: ({ search }) => ({ view: search.view ?? DEFAULT_VIEW, date: search.date }),
+  loaderDeps: ({ search }) => ({ view: search.view ?? defaultCalendarView(), date: search.date }),
   loader: ({ context, deps }) => {
     const { from, to } = calendarRange(deps.view, parseCalendarDate(deps.date))
     return Promise.all([
@@ -129,7 +128,7 @@ export function OperatorBookingsRoute() {
     markBookingsSeen(queryClient)
   }, [queryClient])
 
-  const view = viewParam ?? DEFAULT_VIEW
+  const view = viewParam ?? defaultCalendarView()
   const anchorDate = useMemo(() => parseCalendarDate(date), [date])
   const { from, to } = calendarRange(view, anchorDate)
 

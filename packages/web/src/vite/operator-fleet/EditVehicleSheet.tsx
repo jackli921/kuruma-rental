@@ -3,6 +3,7 @@ import { PhotoUpload } from '@/vite/operator-fleet/PhotoUpload'
 import { VehicleForm } from '@/vite/operator-fleet/VehicleForm'
 import {
   type OperatorFleetVehicle,
+  pickupLocationOptionsQueryOptions,
   vehicleClassOptionsQueryOptions,
 } from '@/vite/operator-fleet/api'
 import { useQuery } from '@tanstack/react-query'
@@ -21,14 +22,20 @@ interface EditVehicleSheetProps {
 
 // Slide-over host that composes the add/edit form with photo management (#560).
 // It owns no fleet state — the parent passes the target vehicle (null = create)
-// and the open flag. Class options are fetched lazily (only while open) and the
-// dropdown is hidden when empty (unless the edited vehicle's class was archived
-// and must be preserved — #456), so a failed/absent class list never blocks the
-// form. PhotoUpload renders in both modes: in create mode it shows its own
-// "save the vehicle first" hint, since photos attach to a persisted vehicle id.
+// and the open flag. Class and pickup-location options are fetched lazily (only
+// while open); the class dropdown is hidden when empty (unless the edited
+// vehicle's class was archived and must be preserved — #456), and the location
+// picker shows a "create a location first" hint when empty (#1262) so a failed or
+// absent list never blocks the form. PhotoUpload renders in both modes: in create
+// mode it shows its own "save the vehicle first" hint, since photos attach to a
+// persisted vehicle id.
 export function EditVehicleSheet({ open, vehicle, onOpenChange, onSaved }: EditVehicleSheetProps) {
   const t = useTranslations('business.vehicles')
   const { data: classOptions } = useQuery({ ...vehicleClassOptionsQueryOptions(), enabled: open })
+  const { data: locationOptions } = useQuery({
+    ...pickupLocationOptionsQueryOptions(),
+    enabled: open,
+  })
   const isEdit = vehicle != null
 
   return (
@@ -41,6 +48,7 @@ export function EditVehicleSheet({ open, vehicle, onOpenChange, onSaved }: EditV
           <VehicleForm
             vehicle={vehicle}
             classOptions={classOptions ?? []}
+            locationOptions={locationOptions ?? []}
             onSaved={onSaved}
             onCancel={() => onOpenChange(false)}
           />

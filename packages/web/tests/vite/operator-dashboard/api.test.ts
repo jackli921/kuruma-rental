@@ -20,10 +20,23 @@ vi.stubGlobal('fetch', fetchMock)
 
 afterEach(() => fetchMock.mockReset())
 
+const todayRow = {
+  id: 'bk_1',
+  bookingCode: 'BK-1',
+  status: 'CONFIRMED' as const,
+  startAt: '2026-06-30T00:30:00.000Z',
+  endAt: '2026-07-01T09:00:00.000Z',
+  vehicleId: 'veh_1',
+  renterName: 'Alice',
+}
+
 const overview: OperatorOverview = {
   totalBookings: 12,
   activeVehicles: 5,
   upcomingBookings: 3,
+  // #1102: one populated pickup row so the round-trip below proves the whole
+  // TodayBookingRow survives the network-seam schema, not just that `today` exists.
+  today: { pickups: [todayRow], returns: [], overdue: [] },
 }
 
 describe('fetchOperatorOverview', () => {
@@ -60,6 +73,17 @@ describe('fetchOperatorOverview', () => {
 
     const [url] = fetchMock.mock.calls[0] as [string]
     expect(url).toBe('/api/dashboard/overview?operatorId=a%20b%2Fc')
+  })
+
+  it('throws a ParseError when a today-bucket row drops a field (#1102 seam)', async () => {
+    const { bookingCode: _bookingCode, ...badRow } = todayRow
+    fetchMock.mockResolvedValue(
+      jsonResponse({
+        success: true,
+        data: { ...overview, today: { pickups: [badRow], returns: [], overdue: [] } },
+      }),
+    )
+    await expect(fetchOperatorOverview()).rejects.toBeInstanceOf(ParseError)
   })
 })
 

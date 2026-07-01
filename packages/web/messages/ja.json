@@ -205,6 +205,20 @@
         "action": "車両を確認"
       }
     },
+    "today": {
+      "title": "本日",
+      "pickups": "貸出",
+      "returns": "返却",
+      "overdue": "延滞",
+      "emptyPickups": "本日の貸出予定はありません。",
+      "emptyReturns": "本日の返却予定はありません。",
+      "emptyOverdue": "延滞中の車両はありません。",
+      "markPickedUp": "貸出済みにする",
+      "markReturned": "返却済みにする",
+      "walkIn": "当日客",
+      "noVehicle": "車両未割当",
+      "actionError": "更新できませんでした。もう一度お試しください。"
+    },
     "stats": {
       "totalBookings": "予約総数",
       "activeVehicles": "稼働中の車両",
@@ -416,6 +430,7 @@
         "pickupLocation": "受取場所",
         "pickupLocationNone": "受取場所なし",
         "pickupLocationCurrent": "現在の受取場所",
+        "pickupLocationEmptyHint": "この車両を検索に表示させるには、まず受取場所を作成してください。",
         "operator": "事業者",
         "operatorPlaceholder": "事業者を選択",
         "operatorRequired": "続行するには事業者を選択してください"
