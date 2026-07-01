@@ -26,6 +26,9 @@ import type {
   FeeUnit,
   InsuranceStatus,
   LocationStatus,
+  OperatorApplicationBusinessType,
+  OperatorApplicationFleetSize,
+  OperatorApplicationStatus,
   OperatorMembershipStatus,
   OperatorRole,
   PaymentEventStatus,
@@ -516,6 +519,34 @@ export interface ProviderInvite {
   expiresAt: Date
   invitedByUserId: string | null
   acceptedByUserId: string | null
+  createdAt: Date
+  updatedAt: Date
+}
+
+// #1277: self-serve operator registration. One row per application; status
+// drives the review lifecycle (PENDING -> APPROVED | REJECTED). The live-email
+// partial index (OPERATOR_APPLICATION_EMAIL_CONSTRAINT) blocks duplicate PENDING
+// submissions from the same address — the repository's `create` throws UNIQUE_VIOLATION
+// on conflict so the service can return 409.
+export interface OperatorApplication {
+  id: string
+  status: OperatorApplicationStatus
+  businessName: string
+  contactName: string
+  contactEmail: string
+  contactPhone: string
+  serviceArea: string
+  estimatedFleetSize: OperatorApplicationFleetSize
+  website: string | null
+  businessLicenseNumber: string | null
+  businessType: OperatorApplicationBusinessType | null
+  message: string | null
+  submittedLocale: string
+  operatorId: string | null
+  reviewedByUserId: string | null
+  reviewedAt: Date | null
+  reviewerNotes: string | null
+  rejectionReason: string | null
   createdAt: Date
   updatedAt: Date
 }
