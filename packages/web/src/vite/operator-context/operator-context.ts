@@ -46,8 +46,9 @@ export function useOptionalPickedOperatorId(): string | undefined {
   return useRouterState({
     select: (s) => {
       const match = s.matches.find((m) => m.routeId === '/$locale/_business')
-      const operator = (match?.search as { operator?: unknown } | undefined)?.operator
-      return typeof operator === 'string' && operator.length > 0 ? operator : undefined
+      // Reuse the pinned retain-vs-clear normalizer so the empty-string -> undefined
+      // rule lives in exactly one place (parseOperatorSearch).
+      return parseOperatorSearch((match?.search as Record<string, unknown>) ?? {}).operator
     },
   })
 }
