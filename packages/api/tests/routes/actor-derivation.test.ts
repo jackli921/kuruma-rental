@@ -5,6 +5,7 @@ import {
   InMemoryAvailabilityRepository,
   InMemoryBookingRepository,
   InMemoryLocationRepository,
+  InMemoryOperatorRepository,
   InMemoryVehicleBlockRepository,
   InMemoryVehicleClassRepository,
   InMemoryVehicleRepository,
@@ -26,6 +27,7 @@ async function createTestApp() {
     vehicleRepo,
     bookingRepo,
     new InMemoryVehicleBlockRepository(),
+    new InMemoryOperatorRepository(),
   )
   const vehicleClassRepo = new InMemoryVehicleClassRepository()
   // Issue #308: bookings require a classId. Seed a default class that

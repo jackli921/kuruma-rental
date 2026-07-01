@@ -1,5 +1,10 @@
 import { describe, expect, test } from 'bun:test'
-import { findUnindexedFks, parseMigrationIndexes } from './lint-fk-indexes'
+import {
+  findUnindexedFks,
+  foldIndexEvents,
+  parseMigrationEvents,
+  parseMigrationIndexes,
+} from './lint-fk-indexes'
 
 describe('parseMigrationIndexes', () => {
   test('parses CREATE INDEX on a single column', () => {
@@ -77,5 +82,102 @@ describe('findUnindexedFks', () => {
   test('honours explicit exemptions', () => {
     const missing = findUnindexedFks([{ table: 'x', column: 'y' }], [], [], new Set(['x.y']))
     expect(missing).toEqual([])
+  })
+})
+
+describe('parseMigrationEvents', () => {
+  test('captures a CREATE INDEX as a create event with its name', () => {
+    const sql = 'CREATE INDEX "idx_reviews_bookingId" ON "reviews" USING btree ("bookingId");'
+    expect(parseMigrationEvents(sql)).toEqual([
+      { kind: 'create', name: 'idx_reviews_bookingId', table: 'reviews', columns: ['bookingId'] },
+    ])
+  })
+
+  test('captures a DROP INDEX as a drop event with its name', () => {
+    expect(parseMigrationEvents('DROP INDEX "idx_reviews_bookingId";')).toEqual([
+      { kind: 'drop', name: 'idx_reviews_bookingId' },
+    ])
+  })
+
+  test('matches DROP INDEX with CONCURRENTLY / IF EXISTS and unquoted names', () => {
+    expect(parseMigrationEvents('DROP INDEX CONCURRENTLY IF EXISTS idx_foo;')).toEqual([
+      { kind: 'drop', name: 'idx_foo' },
+    ])
+  })
+
+  test('ignores DROP CONSTRAINT (constraint indexes were never tracked)', () => {
+    const sql = 'ALTER TABLE "reviews" DROP CONSTRAINT "reviews_subject_per_booking_unique";'
+    expect(parseMigrationEvents(sql)).toEqual([])
+  })
+
+  test('preserves source order across a drop-then-create in one migration (#1225 shape)', () => {
+    const sql = `
+      DROP INDEX "idx_reviews_bookingId";--> statement-breakpoint
+      CREATE UNIQUE INDEX "reviews_subject_per_booking_unique" ON "reviews" USING btree ("bookingId","subject");
+    `
+    expect(parseMigrationEvents(sql)).toEqual([
+      { kind: 'drop', name: 'idx_reviews_bookingId' },
+      {
+        kind: 'create',
+        name: 'reviews_subject_per_booking_unique',
+        table: 'reviews',
+        columns: ['bookingId', 'subject'],
+      },
+    ])
+  })
+
+  test('ignores the WHERE clause of a partial index when capturing columns', () => {
+    const sql =
+      'CREATE UNIQUE INDEX "u" ON "reviews" ("bookingId","subject") WHERE "moderationStatus" = \'APPROVED\';'
+    expect(parseMigrationEvents(sql)).toEqual([
+      { kind: 'create', name: 'u', table: 'reviews', columns: ['bookingId', 'subject'] },
+    ])
+  })
+})
+
+describe('foldIndexEvents', () => {
+  test('a create adds the index to the surviving set', () => {
+    expect(
+      foldIndexEvents([{ kind: 'create', name: 'i', table: 'reviews', columns: ['bookingId'] }]),
+    ).toEqual([{ table: 'reviews', columns: ['bookingId'] }])
+  })
+
+  test('a later drop removes a previously-created index (the regression guard)', () => {
+    expect(
+      foldIndexEvents([
+        { kind: 'create', name: 'idx_reviews_bookingId', table: 'reviews', columns: ['bookingId'] },
+        { kind: 'drop', name: 'idx_reviews_bookingId' },
+      ]),
+    ).toEqual([])
+  })
+
+  test('drop of a never-created name is a no-op', () => {
+    expect(foldIndexEvents([{ kind: 'drop', name: 'ghost' }])).toEqual([])
+  })
+
+  test('#1225: dropping idx_reviews_bookingId but adding the (bookingId,subject) uniqueIndex keeps bookingId covered', () => {
+    const surviving = foldIndexEvents([
+      { kind: 'create', name: 'idx_reviews_bookingId', table: 'reviews', columns: ['bookingId'] },
+      { kind: 'drop', name: 'idx_reviews_bookingId' },
+      {
+        kind: 'create',
+        name: 'reviews_subject_per_booking_unique',
+        table: 'reviews',
+        columns: ['bookingId', 'subject'],
+      },
+    ])
+    // idx_reviews_bookingId is gone, but the uniqueIndex still leads with bookingId.
+    expect(surviving).toEqual([{ table: 'reviews', columns: ['bookingId', 'subject'] }])
+    expect(findUnindexedFks([{ table: 'reviews', column: 'bookingId' }], [], surviving)).toEqual([])
+  })
+
+  test('#1225 without the replacement uniqueIndex leaves bookingId UNINDEXED (guard fires)', () => {
+    const surviving = foldIndexEvents([
+      { kind: 'create', name: 'idx_reviews_bookingId', table: 'reviews', columns: ['bookingId'] },
+      { kind: 'drop', name: 'idx_reviews_bookingId' },
+    ])
+    expect(findUnindexedFks([{ table: 'reviews', column: 'bookingId' }], [], surviving)).toEqual([
+      { table: 'reviews', column: 'bookingId' },
+    ])
   })
 })

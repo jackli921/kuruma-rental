@@ -481,6 +481,10 @@ export function buildInMemoryRepos(): Repos {
     vehicleRepo,
     bookingRepo,
     vehicleBlockRepo,
+    // #1224: SAME operatorRepo instance so an operator soft-deactivated via the
+    // admin route immediately drops off availability (shared in-memory state,
+    // mirrors the bookingRepo / vehicleBlockRepo wiring above).
+    operatorRepo,
   )
   const vehicleClassRepo = new InMemoryVehicleClassRepository()
   const runInTransaction: RunInTransaction = async (fn) =>

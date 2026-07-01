@@ -1690,6 +1690,11 @@
       "pending": "送信中…",
       "error": "エラーが発生しました。もう一度お試しください。",
       "reviewed": "この利用者を評価済みです。"
+    },
+    "aggregate": {
+      "rating": "★ {avg}({count}件)",
+      "noReviews": "レビューはまだありません",
+      "ratingAria": "{avg}つ星、{count}件のレビュー"
     }
   },
   "currency": {

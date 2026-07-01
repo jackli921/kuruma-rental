@@ -176,6 +176,7 @@ describe('#396 — OPERATOR_* cannot enumerate users via any current ingress', (
       vehicleRepo,
       bookingRepo,
       new InMemoryVehicleBlockRepository(),
+      new InMemoryOperatorRepository(),
     )
 
     // #1206: the booking guard loads the vehicle's operator; seed OPERATOR_ID
