@@ -28,8 +28,9 @@ vi.mock('@tanstack/react-router', () => ({
 vi.mock('@/vite/operator-bookings/useNewBookingsBadge', () => ({
   useNewBookingsBadge: () => ({ count: 0 }),
 }))
-vi.mock('@/vite/messaging/unread-badge', () => ({
+vi.mock('@/vite/messaging', () => ({
   useUnreadBadge: () => ({ count: 0 }),
+  useOperatorUnreadBadge: () => ({ count: 0 }),
 }))
 vi.mock('@/vite/currency', () => ({ CurrencySelector: () => null }))
 vi.mock('@/vite/nav/LocaleSwitcher', () => ({ LocaleSwitcher: () => null }))

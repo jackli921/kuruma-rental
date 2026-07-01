@@ -18,7 +18,8 @@ const h = vi.hoisted(() => ({
   operatorId: undefined as string | undefined,
   // The active route id the layout's useIsOperatorContextRoute hook reads. Defaults
   // to a route that honors ?operator (add-ons) so picker tests aren't route-gated;
-  // the unsupported-route test flips it to dashboard.
+  // the unsupported-route test flips it to team (an unscoped page — dashboard now
+  // honors ?operator as of slice 4).
   routeId: '/$locale/_business/manage/add-ons' as string,
 }))
 
@@ -43,9 +44,13 @@ vi.mock('@tanstack/react-router', () => ({
 vi.mock('@/vite/config/features', () => ({
   isOperatorTeamEnabled: () => true,
   isOperatorSettingsEnabled: () => true,
+  isMessagingEnabled: () => false,
 }))
 vi.mock('@/vite/operator-bookings/useNewBookingsBadge', () => ({
   useNewBookingsBadge: () => ({ count: 0 }),
+}))
+vi.mock('@/vite/messaging', () => ({
+  useOperatorUnreadBadge: () => ({ count: 0 }),
 }))
 // Stub the picker's option query so useQuery never hits the network.
 vi.mock('@/vite/operator-context/api', () => ({
@@ -119,7 +124,7 @@ describe('BusinessLayout', () => {
   })
 
   it('hides the operator picker for a PLATFORM_ADMIN on a route that does not honor ?operator', () => {
-    h.routeId = '/$locale/_business/dashboard'
+    h.routeId = '/$locale/_business/manage/team'
     renderBusinessLayout({ role: 'PLATFORM_ADMIN' })
     expect(screen.queryByLabelText('Operator')).toBeNull()
   })

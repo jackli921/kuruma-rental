@@ -52,7 +52,11 @@ function makeStorefront(overrides: Partial<StorefrontCardData> = {}): Storefront
 
 function renderCard(
   storefront: StorefrontCardData,
-  extra: { distanceKm?: number | null; region?: string } = {},
+  extra: {
+    distanceKm?: number | null
+    region?: string
+    operatorRating?: { avg: number; count: number } | null
+  } = {},
 ) {
   return render(
     <IntlProvider locale="en" messages={en}>
@@ -124,7 +128,6 @@ describe('StorefrontCard', () => {
     expect(screen.getByRole('img', { name: 'Store location' })).toBeInTheDocument()
   })
 
-  // #1070: the storefront's daily from-price carries an indicative conversion.
   it('converts the from-price for the indicative note', async () => {
     renderWithUsdIndicative(
       <StorefrontCard
@@ -133,7 +136,24 @@ describe('StorefrontCard', () => {
         to="2026-07-03T10:00"
       />,
     )
-    // 30,000 -> $201
     expect(await screen.findByText(/≈ \$201/)).toBeTruthy()
+  })
+
+  it('renders a skeleton operator-rating badge while the parent batch is in flight (#1085)', () => {
+    renderCard(makeStorefront())
+    expect(screen.getByTestId('rating-badge-skeleton')).toBeInTheDocument()
+    expect(screen.queryByText(/no reviews/i)).toBeNull()
+  })
+
+  it('renders the operator rating once the batch resolves (#1085)', () => {
+    renderCard(makeStorefront(), { operatorRating: { avg: 4.7, count: 23 } })
+    expect(screen.getByText('★ 4.7 (23)')).toBeInTheDocument()
+    expect(screen.getByLabelText('4.7 stars, 23 reviews')).toBeInTheDocument()
+  })
+
+  it('renders the "no reviews yet" badge when the batch returns null for this operator (#1085)', () => {
+    renderCard(makeStorefront(), { operatorRating: null })
+    expect(screen.getByLabelText('No reviews yet')).toBeInTheDocument()
+    expect(screen.queryByTestId('rating-badge-skeleton')).toBeNull()
   })
 })

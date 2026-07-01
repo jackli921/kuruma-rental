@@ -1,11 +1,8 @@
-import {
-  type CallerContext,
-  PRIVILEGED_ROLES,
-  rejectOperatorContextUntilScoped,
-} from '../../middleware/auth'
+import { type CallerContext, PRIVILEGED_ROLES, requireOperatorScope } from '../../middleware/auth'
 import { PG_ERROR } from '../../pg-errors'
 import type { Message } from '../../stores'
-import type { MessageRepository } from '../types'
+import { threadReadScope } from '../../tenancy'
+import type { MessageCreateResult, MessageRepository } from '../types'
 import type { InMemoryThreadRepository } from './thread'
 
 export class InMemoryMessageRepository implements MessageRepository {
@@ -14,17 +11,15 @@ export class InMemoryMessageRepository implements MessageRepository {
   constructor(private readonly threadRepo: InMemoryThreadRepository) {}
 
   async findById(ctx: CallerContext, id: string): Promise<Message | undefined> {
-    rejectOperatorContextUntilScoped(ctx, 'MessageRepository')
     const msg = this.threadRepo._getMessage(id)
     if (!msg) return undefined
-    if (PRIVILEGED_ROLES.has(ctx.role)) return msg
-    // Non-privileged: verify the caller is a participant of the message's thread.
+    // A message is visible iff its thread is — delegate scoping (admin/operator/
+    // participant) to the thread repo (#1205) rather than re-deriving it here.
     const thread = await this.threadRepo.findById(ctx, msg.threadId)
     return thread ? msg : undefined
   }
 
   async findByIdempotencyKey(ctx: CallerContext, key: string): Promise<Message | undefined> {
-    rejectOperatorContextUntilScoped(ctx, 'MessageRepository')
     // CallerContext scoping (issue #328): the key is sender-owned, so
     // non-privileged callers only match messages they themselves sent.
     const msg = this.idempotencyIndex.get(key)
@@ -56,8 +51,8 @@ export class InMemoryMessageRepository implements MessageRepository {
     threadId: string,
     content: string,
     idempotencyKey?: string | null,
-  ): Promise<Message> {
-    rejectOperatorContextUntilScoped(ctx, 'MessageRepository')
+  ): Promise<MessageCreateResult> {
+    requireOperatorScope(ctx)
     if (idempotencyKey && this.idempotencyIndex.has(idempotencyKey)) {
       const err = new Error('unique_idempotency_key violation') as Error & { code: string }
       err.code = PG_ERROR.UNIQUE_VIOLATION
@@ -74,17 +69,21 @@ export class InMemoryMessageRepository implements MessageRepository {
       idempotencyKey: idempotencyKey ?? null,
       createdAt: new Date(),
     }
-    this.threadRepo._addMessage(message)
+    // A renter send (participant scope) bumps the operator's tenant-level unread;
+    // an operator/admin reply does not. The renter's own per-participant unread is
+    // bumped for all non-sender participants inside _addMessage, which also returns
+    // the post-bump operator-unread state (the 0->1 email trigger signal, #1205 s4).
+    const isRenterSend = threadReadScope(ctx).kind === 'participant'
+    const operatorUnread = this.threadRepo._addMessage(message, isRenterSend)
 
     if (idempotencyKey) {
       this.idempotencyIndex.set(idempotencyKey, message)
     }
 
-    return message
+    return { message, operatorUnread }
   }
 
   async findByThreadId(ctx: CallerContext, threadId: string): Promise<Message[]> {
-    rejectOperatorContextUntilScoped(ctx, 'MessageRepository')
     const thread = await this.threadRepo.findById(ctx, threadId)
     return thread?.messages ?? []
   }

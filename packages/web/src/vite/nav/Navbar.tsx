@@ -2,7 +2,7 @@ import { buttonVariants } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import { useViewMode } from '@/vite/ViewModeProvider'
 import { CurrencySelector } from '@/vite/currency'
-import { useUnreadBadge } from '@/vite/messaging/unread-badge'
+import { useOperatorUnreadBadge, useUnreadBadge } from '@/vite/messaging'
 import { LocaleSwitcher } from '@/vite/nav/LocaleSwitcher'
 import { MobileMenu, type NavItem } from '@/vite/nav/MobileMenu'
 import { NavBadge } from '@/vite/nav/NavBadge'
@@ -40,15 +40,19 @@ export function Navbar() {
   // #1032: renter unread-message badge on the Messages nav item (server-tracked,
   // unlike the operator badge); only scanned in renter view.
   const { count: unreadMessages } = useUnreadBadge({ userId: session?.user?.id, enabled: isRenter })
+  // #1205: operator unread-message badge — tenant-level, only scanned in business view.
+  const { count: operatorUnread } = useOperatorUnreadBadge({ enabled: isBusinessView })
 
   const navItems: readonly NavItem[] = isBusinessView
-    ? visibleBusinessNavItems().map((item) => ({
+    ? visibleBusinessNavItems(role).map((item) => ({
         to: item.to,
         label: t(item.labelKey),
         // exactOptionalPropertyTypes: only attach `badge` when there is one.
         ...(item.to === '/$locale/manage/bookings' && newBookingsCount > 0
           ? { badge: newBookingsCount, badgeLabel: t('newBookings', { count: newBookingsCount }) }
-          : {}),
+          : item.to === '/$locale/manage/messages' && operatorUnread > 0
+            ? { badge: operatorUnread, badgeLabel: t('unreadMessages', { count: operatorUnread }) }
+            : {}),
       }))
     : session?.user
       ? [

@@ -1,5 +1,5 @@
 import { ViewModeProvider } from '@/vite/ViewModeProvider'
-import { useUnreadBadge } from '@/vite/messaging/unread-badge'
+import { useOperatorUnreadBadge, useUnreadBadge } from '@/vite/messaging'
 import type { NavItem } from '@/vite/nav/MobileMenu'
 import { Navbar } from '@/vite/nav/Navbar'
 import { businessNavItems } from '@/vite/nav/business-nav-items'
@@ -56,15 +56,18 @@ vi.mock('@/vite/nav/LocaleSwitcher', () => ({
 vi.mock('@/vite/operator-bookings/useNewBookingsBadge', () => ({
   useNewBookingsBadge: vi.fn(() => ({ count: 0 })),
 }))
-// #1032: the renter unread-message badge count is a data hook (it polls the
-// threads query); stub the count so the unit scope stays Navbar's derivation.
-vi.mock('@/vite/messaging/unread-badge', () => ({
+// #1032/#1205: the unread-message badge counts are data hooks (they poll the
+// threads query); stub them via the messaging barrel so the unit scope stays
+// Navbar's derivation and no real fetch fires.
+vi.mock('@/vite/messaging', () => ({
   useUnreadBadge: vi.fn(() => ({ count: 0 })),
+  useOperatorUnreadBadge: vi.fn(() => ({ count: 0 })),
 }))
 
 const mockUseSession = vi.mocked(useSession)
 const mockUseBadge = vi.mocked(useNewBookingsBadge)
 const mockUnread = vi.mocked(useUnreadBadge)
+const mockOperatorUnread = vi.mocked(useOperatorUnreadBadge)
 const business: Session = {
   user: { id: 'u1', role: 'OPERATOR_OWNER', name: 'Aiko', email: 'aiko@example.com' },
   csrfToken: 'csrf-1',
@@ -93,6 +96,7 @@ beforeEach(() => {
   vi.clearAllMocks()
   mockUseBadge.mockReturnValue({ count: 0 })
   mockUnread.mockReturnValue({ count: 0 })
+  mockOperatorUnread.mockReturnValue({ count: 0 })
   document.cookie = 'kuruma-view=; max-age=0; path=/'
 })
 
@@ -112,10 +116,11 @@ describe('Navbar', () => {
 
   it('shows the dashboard, operator bookings + fleet + classes + insurance links and business markers for a business user', () => {
     mockUseBadge.mockReturnValue({ count: 3 })
-    // Team + Settings are post-MVP add-ons gated behind feature flags; turn them
-    // on so this "full operator nav" assertion sees every route.
+    // Team + Settings + Messages are post-MVP add-ons gated behind feature flags;
+    // turn them on so this "full operator nav" assertion sees every route.
     vi.stubEnv('VITE_FEATURE_OPERATOR_TEAM', 'true')
     vi.stubEnv('VITE_FEATURE_OPERATOR_SETTINGS', 'true')
+    vi.stubEnv('VITE_FEATURE_MESSAGING', 'true')
     const { container } = renderNavbar(business)
     expect(screen.getByText('Dashboard').closest('a')).toHaveAttribute(
       'data-to',
@@ -154,6 +159,11 @@ describe('Navbar', () => {
       'data-to',
       '/$locale/manage/add-ons',
     )
+    // #1205: the operator Messages inbox, shown only because the flag above is on.
+    expect(screen.getByText('Messages').closest('a')).toHaveAttribute(
+      'data-to',
+      '/$locale/manage/messages',
+    )
     // #904 / #903: shown only because the flags above are on (full build).
     expect(screen.getByText('Team').closest('a')).toHaveAttribute('data-to', '/$locale/manage/team')
     expect(screen.getByText('Settings').closest('a')).toHaveAttribute(
@@ -186,12 +196,15 @@ describe('Navbar', () => {
     // The MVP operator routes still render…
     expect(screen.getByText('Dashboard')).toBeInTheDocument()
     expect(screen.getByText('Bookings')).toBeInTheDocument()
-    // …but the two add-on routes are filtered out of the rendered nav.
+    // …but the three post-MVP add-on routes are filtered out of the rendered nav.
+    // Messaging (#1205) is OFF in beta for an operator too (only the platform admin
+    // previews it), so it drops out alongside Team + Settings.
     expect(screen.queryByText('Team')).toBeNull()
     expect(screen.queryByText('Settings')).toBeNull()
+    expect(screen.queryByText('Messages')).toBeNull()
     expect(screen.getByTestId('mobile-menu')).toHaveAttribute(
       'data-nav-count',
-      String(businessNavItems.length - 2),
+      String(businessNavItems.length - 3),
     )
   })
 
@@ -252,6 +265,20 @@ describe('Navbar', () => {
     expect(badge).toHaveTextContent('4')
     expect(badge).toHaveAttribute('aria-label', '4 unread messages')
     // The dot is unique to Messages (no operator badge in renter view).
+    expect(screen.getAllByRole('status')).toHaveLength(1)
+  })
+
+  it('rides the operator unread count onto the business Messages item (#1205)', () => {
+    // Operator messaging is a post-MVP add-on; enable it so the business Messages
+    // item renders, then ride the tenant-level unread count onto it.
+    vi.stubEnv('VITE_FEATURE_MESSAGING', 'true')
+    mockOperatorUnread.mockReturnValue({ count: 7 })
+    renderNavbar(business)
+    const messagesLink = screen.getByText('Messages').closest('a') as HTMLElement
+    const badge = within(messagesLink).getByRole('status')
+    expect(badge).toHaveTextContent('7')
+    expect(badge).toHaveAttribute('aria-label', '7 unread messages')
+    // No renter unread badge in business view (its hook is gated to renter view).
     expect(screen.getAllByRole('status')).toHaveLength(1)
   })
 

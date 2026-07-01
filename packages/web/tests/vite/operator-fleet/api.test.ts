@@ -1,6 +1,7 @@
 import { ApiError, ParseError } from '@/lib/api-error'
 import {
   type CreateVehicleInput,
+  FLEET_QUERY_KEY,
   type OperatorFleetVehicle,
   type UpdateVehicleInput,
   type VehicleDetailResponse,
@@ -10,6 +11,7 @@ import {
   fetchOperatorFleet,
   fetchVehicleClassOptions,
   fetchVehicleDetail,
+  operatorFleetQueryOptions,
   retireVehicle,
   updateVehicle,
   updateVehicleStatus,
@@ -255,8 +257,21 @@ describe('fetchOperatorFleet (#711 response validation)', () => {
     await fetchOperatorFleet()
 
     const [url, init] = fetchMock.mock.calls[0]!
-    expect(new URL(url as string, 'http://x').pathname).toBe('/api/vehicles/fleet-overview')
+    const parsed = new URL(url as string, 'http://x')
+    expect(parsed.pathname).toBe('/api/vehicles/fleet-overview')
+    expect(parsed.searchParams.has('operatorId')).toBe(false)
     expect((init as RequestInit).credentials).toBe('include')
+  })
+
+  it('appends ?operatorId only when an operator is picked (#407 bypass-admin narrowing)', async () => {
+    const fetchMock = vi.fn(async () => jsonResponse({ success: true, data: [] }))
+    vi.stubGlobal('fetch', fetchMock)
+
+    await fetchOperatorFleet('op_9')
+
+    const parsed = new URL(fetchMock.mock.calls[0]![0] as string, 'http://x')
+    expect(parsed.pathname).toBe('/api/vehicles/fleet-overview')
+    expect(parsed.searchParams.get('operatorId')).toBe('op_9')
   })
 
   it('unwraps and validates the fleet list (enrichment carried through)', async () => {
@@ -284,6 +299,16 @@ describe('fetchOperatorFleet (#711 response validation)', () => {
     )
 
     await expect(fetchOperatorFleet()).rejects.toBeInstanceOf(ParseError)
+  })
+})
+
+describe('operatorFleetQueryOptions', () => {
+  it('keys the cache by "all" when no operator is picked (shared by /manage/fleet)', () => {
+    expect(operatorFleetQueryOptions().queryKey).toEqual([...FLEET_QUERY_KEY, 'all'])
+  })
+
+  it('keys the cache by the picked operator so a dashboard switch never serves another tenant', () => {
+    expect(operatorFleetQueryOptions('op_9').queryKey).toEqual([...FLEET_QUERY_KEY, 'op_9'])
   })
 })
 

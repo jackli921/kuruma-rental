@@ -288,4 +288,30 @@ describe('GET /vehicles/fleet-overview — operator scoping', () => {
     const res = await appAs('PARTNER').request('/vehicles/fleet-overview')
     expect(res.status).toBe(403)
   })
+
+  // #407 slice 4: the operator-context picker narrows a bypass admin to one
+  // operator; a tenant caller ignores a foreign ?operatorId (H2 invariant).
+  it('narrows a bypass admin to the picked operator via ?operatorId', async () => {
+    await vehicleRepo.create(SYSTEM_CONTEXT, vehicleInput({ name: 'A-Car', operatorId: 'op-a' }))
+    await vehicleRepo.create(SYSTEM_CONTEXT, vehicleInput({ name: 'B-Car', operatorId: 'op-b' }))
+
+    const res = await appAs('PLATFORM_ADMIN').request('/vehicles/fleet-overview?operatorId=op-a')
+
+    expect(res.status).toBe(200)
+    const body = (await res.json()) as { data: Array<{ name: string }> }
+    expect(body.data.map((v) => v.name)).toEqual(['A-Car'])
+  })
+
+  it('ignores a foreign ?operatorId for a tenant-scoped operator (no widening)', async () => {
+    await vehicleRepo.create(SYSTEM_CONTEXT, vehicleInput({ name: 'A-Car', operatorId: 'op-a' }))
+    await vehicleRepo.create(SYSTEM_CONTEXT, vehicleInput({ name: 'B-Car', operatorId: 'op-b' }))
+
+    const res = await appAs('OPERATOR_STAFF', 'op-b').request(
+      '/vehicles/fleet-overview?operatorId=op-a',
+    )
+
+    expect(res.status).toBe(200)
+    const body = (await res.json()) as { data: Array<{ name: string }> }
+    expect(body.data.map((v) => v.name)).toEqual(['B-Car'])
+  })
 })

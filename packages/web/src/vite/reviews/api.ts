@@ -134,3 +134,61 @@ export function pendingReviewSubjects(reviewed: readonly ReviewSubject[]): Rente
 export function operatorReviewedRenter(reviews: readonly ReviewDto[]): boolean {
   return reviews.some((r) => r.authorRole === 'OPERATOR')
 }
+
+// --- #1085 slice 5: public aggregate read surface --------------------------
+
+/** Public aggregate subject kinds — mirror the api `routes/review-aggregates.ts`
+ *  path segments so a typo here fails at the wire boundary, not in the URL. */
+export const AGGREGATE_SUBJECT_KINDS = ['operators', 'vehicles', 'classes'] as const
+export type AggregateSubjectKind = (typeof AGGREGATE_SUBJECT_KINDS)[number]
+
+/** Display-quality avg + count. `null` for an id that the caller named but has
+ *  no published+visible reviews yet — distinguishes "no reviews" from a 0 avg. */
+export interface AggregateEntry {
+  avg: number
+  count: number
+}
+export type AggregateMap = Record<string, AggregateEntry | null>
+
+const aggregateEntrySchema = z.object({
+  avg: z.number(),
+  count: z.number(),
+}) satisfies z.ZodType<AggregateEntry>
+
+const aggregateResponseSchema = z.object({
+  aggregates: z.record(z.string(), aggregateEntrySchema.nullable()),
+})
+
+/** Sort + dedupe so two callers asking for `[a,b]` and `[b,a]` share one cache
+ *  entry; the API dedupes server-side anyway, so this is purely a render-tier
+ *  cache-hit win. Returns a stable readonly tuple safe to use as a query key. */
+function normalizeAggregateIds(ids: readonly string[]): readonly string[] {
+  return Array.from(new Set(ids)).sort()
+}
+
+/** GET /reviews/aggregates/:kind?ids=… (public; no cookie needed). Empty `ids`
+ *  bypasses the network and returns `{}` so a render with no subjects to fetch
+ *  still resolves immediately — matches `queryOptions.enabled: false` below. */
+export async function fetchAggregates(
+  kind: AggregateSubjectKind,
+  ids: readonly string[],
+): Promise<AggregateMap> {
+  const normalized = normalizeAggregateIds(ids)
+  if (normalized.length === 0) return {}
+  const url = `${getApiBaseUrl()}/reviews/aggregates/${kind}?ids=${encodeURIComponent(normalized.join(','))}`
+  const res = await fetch(url, { credentials: 'include' })
+  const { aggregates } = await unwrap(res, aggregateResponseSchema)
+  return aggregates
+}
+
+/** TanStack Query options keyed on the (sorted+deduped) id set. Disabled when
+ *  no ids — the caller can pass a variable list without an explicit `enabled`
+ *  guard at the call site. */
+export function reviewAggregatesQueryOptions(kind: AggregateSubjectKind, ids: readonly string[]) {
+  const normalized = normalizeAggregateIds(ids)
+  return queryOptions({
+    queryKey: ['reviews', 'aggregates', kind, normalized] as const,
+    queryFn: () => fetchAggregates(kind, normalized),
+    enabled: normalized.length > 0,
+  })
+}
