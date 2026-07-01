@@ -14,6 +14,7 @@ import type {
   OperatorMembershipRepository,
   ReviewEdit,
   ReviewRepository,
+  VehicleRepository,
 } from '../repositories/types'
 import type { Booking, Review } from '../stores'
 
@@ -85,6 +86,7 @@ export class ReviewService {
   constructor(
     private readonly reviewRepo: ReviewRepository,
     private readonly bookingRepo: BookingRepository,
+    private readonly vehicleRepo: VehicleRepository,
     private readonly bookingEventRepo: BookingEventRepository,
     private readonly operatorMembershipRepo: OperatorMembershipRepository,
   ) {}
@@ -135,6 +137,17 @@ export class ReviewService {
     const completedAt = await this.findCompletedAt(booking.id)
     if (!completedAt) return fail(409, 'COMPLETION_TIME_UNKNOWN')
 
+    // Key the class to the car ACTUALLY driven, not booking.classId: substitution / assignVehicle
+    // can swap in a same-ACRISS car of a DIFFERENT class without touching booking.classId (#1270),
+    // and the storefront badge reads the vehicle's own class — so a class-X car's review must land
+    // under class X. Derive it from the assigned vehicle so subjectVehicleId and subjectClassId
+    // agree. Null when the car has no class (or, defensively, is gone): the one-way
+    // reviews_class_subject_chk permits a VEHICLE review with a null class.
+    const subjectClassId =
+      subjectVehicleId === null
+        ? null
+        : ((await this.vehicleRepo.findById(SYSTEM_CONTEXT, subjectVehicleId))?.classId ?? null)
+
     const newReview: NewReview = {
       bookingId: booking.id,
       operatorId: booking.operatorId,
@@ -142,9 +155,7 @@ export class ReviewService {
       authorRole: role,
       subject: input.subject,
       subjectVehicleId,
-      // A vehicle review carries the booking's class (substitution preserves it); the
-      // class CHECK is one-way so a non-vehicle review's null is fine.
-      subjectClassId: input.subject === 'VEHICLE' ? booking.classId : null,
+      subjectClassId,
       overall: input.overall,
       subRatings,
       comment: input.comment ?? null,

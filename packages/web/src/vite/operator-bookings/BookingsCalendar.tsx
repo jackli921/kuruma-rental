@@ -1,4 +1,5 @@
 import { localizer } from '@/lib/rbc-localizer'
+import { CalendarEventChip } from '@/vite/operator-bookings/CalendarEventChip'
 import { CalendarToolbar } from '@/vite/operator-bookings/CalendarToolbar'
 import {
   type CalendarItem,
@@ -9,7 +10,7 @@ import {
 } from '@/vite/operator-bookings/calendar-events'
 import { endOfWeek, startOfWeek } from 'date-fns'
 import { useCallback, useMemo } from 'react'
-import { Calendar, type SlotInfo, type View } from 'react-big-calendar'
+import { Calendar, type EventProps, type SlotInfo, type View } from 'react-big-calendar'
 import { useTranslations } from 'use-intl'
 import 'react-big-calendar/lib/css/react-big-calendar.css'
 import './calendar-theme.css'
@@ -18,9 +19,6 @@ import './calendar-theme.css'
 // component, not an rbc view) — typed as rbc's `View` so the Calendar prop checks.
 const RBC_VIEWS: View[] = ['day', 'week', 'month']
 const SCROLL_TO_TIME = new Date(1970, 0, 1, 8, 0, 0)
-// rbc's built-in toolbar is suppressed — we render CalendarToolbar ourselves so
-// navigation drives the URL (search params) rather than rbc's internal state.
-const CALENDAR_COMPONENTS = { toolbar: () => null } as const
 
 interface BookingsCalendarProps {
   // #1101: bookings AND scheduled blocks, on one vehicle axis (the discriminated union).
@@ -118,6 +116,27 @@ export function BookingsCalendar({
     [],
   )
 
+  // rbc renders each band through `components.event`. A booking becomes the
+  // interactive quick-view chip (hover-peek / click-pin); a block stays a plain band
+  // so its existing click -> block-detail-dialog path (onSelectEvent) is untouched.
+  // The toolbar is suppressed here — the route renders CalendarToolbar itself.
+  // Scale note: this mounts one base-ui Popover per booking band. Fine at this fleet
+  // size (day/week are sparse; the default timeline view uses no chips). If a dense
+  // month view ever regresses, hoist a single calendar-level Popover keyed to the
+  // hovered/pinned event id instead of one-per-event.
+  const components = useMemo(
+    () => ({
+      toolbar: () => null,
+      event: (props: EventProps<CalendarItem>) =>
+        props.event.type === 'booking' ? (
+          <CalendarEventChip event={props.event} locale={locale} />
+        ) : (
+          <span className="truncate">{props.event.title}</span>
+        ),
+    }),
+    [locale],
+  )
+
   const messages = useMemo(
     () => ({
       today: t('today'),
@@ -169,7 +188,7 @@ export function BookingsCalendar({
         scrollToTime={SCROLL_TO_TIME}
         style={calendarStyle}
         messages={messages}
-        components={CALENDAR_COMPONENTS}
+        components={components}
         popup
       />
     </div>

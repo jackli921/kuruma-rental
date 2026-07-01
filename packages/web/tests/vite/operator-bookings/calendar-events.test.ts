@@ -31,9 +31,14 @@ const row = (over: Partial<CalendarBookingRow> = {}): CalendarBookingRow => ({
   ...over,
 })
 
+const fleet = [
+  { id: 'veh-1', name: 'Toyota Aqua' },
+  { id: 'veh-2', name: 'Nissan Note' },
+]
+
 describe('toCalendarEvents', () => {
-  it('maps a row to an rbc event bound to its vehicle column, ending at the turnaround end', () => {
-    expect(toCalendarEvents([row()])).toEqual([
+  it('maps a row to an rbc event with the in-hand quick-view fields', () => {
+    expect(toCalendarEvents([row()], fleet)).toEqual([
       {
         // #1101: every booking event carries the discriminant so a block can never
         // be mistaken for one (and vice versa) at any consuming switch.
@@ -44,19 +49,32 @@ describe('toCalendarEvents', () => {
         end: new Date('2026-07-03T02:00:00.000Z'),
         resourceId: 'veh-1',
         status: 'CONFIRMED',
+        bookingCode: 'ABCD2345',
+        renterName: 'Jane',
+        renterEmail: 'jane@example.com',
+        vehicleName: 'Toyota Aqua',
+        totalPrice: 24000,
       },
     ])
   })
 
   it('titles by renterEmail when the name is null, then by bookingCode when both are null', () => {
-    expect(toCalendarEvents([row({ renterName: null })])[0]!.title).toBe('jane@example.com')
-    expect(toCalendarEvents([row({ renterName: null, renterEmail: null })])[0]!.title).toBe(
+    expect(toCalendarEvents([row({ renterName: null })], fleet)[0]!.title).toBe('jane@example.com')
+    expect(toCalendarEvents([row({ renterName: null, renterEmail: null })], fleet)[0]!.title).toBe(
       'ABCD2345',
     )
   })
 
-  it('binds an unassigned (class-only) booking to no column via an empty resourceId', () => {
-    expect(toCalendarEvents([row({ vehicleId: null })])[0]!.resourceId).toBe('')
+  it('resolves vehicleName from the fleet map and is null for an unassigned booking', () => {
+    expect(toCalendarEvents([row({ vehicleId: 'veh-2' })], fleet)[0]!.vehicleName).toBe(
+      'Nissan Note',
+    )
+    expect(toCalendarEvents([row({ vehicleId: null })], fleet)[0]!.vehicleName).toBeNull()
+    expect(toCalendarEvents([row({ vehicleId: null })], fleet)[0]!.resourceId).toBe('')
+  })
+
+  it('is null for a vehicleId absent from the fleet map (deleted car)', () => {
+    expect(toCalendarEvents([row({ vehicleId: 'gone' })], fleet)[0]!.vehicleName).toBeNull()
   })
 })
 
