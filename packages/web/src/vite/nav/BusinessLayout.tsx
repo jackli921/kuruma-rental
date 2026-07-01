@@ -1,4 +1,5 @@
 import { useLayoutPreference } from '@/vite/LayoutPreferenceProvider'
+import { useViewModeContext } from '@/vite/ViewModeProvider'
 import { canPickOperatorContext } from '@/vite/guards'
 import { BusinessSidebar } from '@/vite/nav/BusinessSidebar'
 import { shouldShowBusinessSidebar } from '@/vite/nav/business-sidebar-visibility'
@@ -8,7 +9,6 @@ import {
   useIsOperatorContextRoute,
 } from '@/vite/operator-context'
 import { useSession } from '@/vite/session'
-import { readViewCookie } from '@/vite/view-mode'
 import { useQuery } from '@tanstack/react-query'
 import type { ReactNode } from 'react'
 
@@ -30,7 +30,10 @@ export function BusinessLayout({ children }: { readonly children: ReactNode }) {
   const showPicker = canPick && isOperatorContextRoute
   // `enabled` gates the fetch so we never hit GET /operators when the picker is hidden.
   const { data: operators } = useQuery({ ...operatorsQueryOptions(), enabled: showPicker })
-  const showSidebar = shouldShowBusinessSidebar(preference, session?.user?.role, readViewCookie())
+  // storedView is the reactive `kuruma-view` value (#1274): switching to renter view
+  // drops the business sidebar in place instead of waiting for a full page reload.
+  const { storedView } = useViewModeContext()
+  const showSidebar = shouldShowBusinessSidebar(preference, session?.user?.role, storedView)
 
   const picker = showPicker ? <OperatorContextPicker operators={operators ?? []} /> : null
 

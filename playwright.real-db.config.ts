@@ -75,10 +75,11 @@ export default defineConfig({
         VITE_DEV_API_PROXY: API_URL,
         // These real-DB specs exercise features the beta demo gates OFF —
         // cancellation (#868), operator manual booking (#589), team (#904),
-        // settings (#903), reviews (#1083-1086), the fleet timeline (#1100) and
-        // multi-currency indicative display (#1070). Enable them here so e2e covers
-        // the FULL product; the beta Pages build (deploy.yml) sets none of these, so
-        // the demo still hides them. Fail-safe-OFF default lives in
+        // settings (#903), reviews (#1083-1086), the fleet timeline (#1100),
+        // multi-currency indicative display (#1070), the operator Today panel
+        // (#1102) and the calendar booking quick-view (#1282). Enable them here so
+        // e2e covers the FULL product; the beta Pages build (deploy.yml) sets none
+        // of these, so the demo still hides them. Fail-safe-OFF default lives in
         // vite/config/features.ts.
         VITE_FEATURE_CANCELLATION: 'true',
         VITE_FEATURE_OPERATOR_MANUAL_BOOKING: 'true',
@@ -88,6 +89,8 @@ export default defineConfig({
         VITE_FEATURE_REVIEWS: 'true',
         VITE_FEATURE_FLEET_TIMELINE: 'true',
         VITE_FEATURE_MULTI_CURRENCY: 'true',
+        VITE_FEATURE_OPERATOR_TODAY: 'true',
+        VITE_FEATURE_CALENDAR_QUICKVIEW: 'true',
       },
     },
   ],

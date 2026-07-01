@@ -2,6 +2,7 @@ import { Button } from '@/components/ui/button'
 import { PageSkeleton } from '@/vite/PageSkeleton'
 import {
   featureFlagsQueryOptions,
+  isCalendarQuickViewEnabled,
   isVisibleToViewer,
   resolveFeatureFlag,
   useFeatureFlag,
@@ -141,6 +142,11 @@ export function OperatorBookingsRoute() {
   const canViewBlocks = isVisibleToViewer(useFeatureFlag('OPERATOR_BLOCKS'), session?.user.role)
   const canManageBlocks = canViewBlocks && isOperatorSession(session ?? null)
 
+  // The booking quick-view chip (#1282) is gated OFF for the beta MVP (#1329). When
+  // off, a booking band is a plain link-less span, so booking navigation moves back
+  // to the rbc event-click (handleSelectEvent) — the pre-#1282 baseline.
+  const quickViewEnabled = isCalendarQuickViewEnabled()
+
   // Block dialogs: a schedule (create) form and a click-to-view detail. The schedule
   // slot prefill carries the clicked vehicle + range; the detail dialog is keyed on
   // the selected block.
@@ -253,15 +259,22 @@ export function OperatorBookingsRoute() {
     [navigate, locale],
   )
 
-  const handleSelectEvent = useCallback((item: CalendarItem) => {
-    // #1101: dispatch by the discriminant. A block opens its detail dialog (view +
-    // delete). A booking is handled by the CalendarEventChip's own popover
-    // (hover-peek / click-pin), whose inner <Link> owns navigation — so an rbc
-    // event-click is a no-op for bookings here; navigating would defeat the pin.
-    if (item.type === 'block') {
-      setSelectedBlock(item)
-    }
-  }, [])
+  const handleSelectEvent = useCallback(
+    (item: CalendarItem) => {
+      // #1101: dispatch by the discriminant. A block opens its detail dialog (view +
+      // delete).
+      if (item.type === 'block') {
+        setSelectedBlock(item)
+        return
+      }
+      // Booking: with the quick-view chip ON (#1282), its inner <Link> owns
+      // navigation and an rbc event-click must stay a no-op (navigating would defeat
+      // the pin). With the chip gated OFF (#1329) the band is link-less, so restore
+      // the pre-#1282 baseline — the click navigates to the booking detail.
+      if (!quickViewEnabled) navigateToBooking(item.id)
+    },
+    [quickViewEnabled, navigateToBooking],
+  )
 
   // Both the header button and a calendar slot-click open the dialog; a slot also
   // prefills the pickup/return range (the button opens an empty range).
