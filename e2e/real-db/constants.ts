@@ -34,4 +34,4 @@ export const RENTER_SEED_EMAIL = 'sarah@example.test'
 // above. Used by tenant-isolation.auth.spec.ts as "operator B" — a distinct
 // tenant from Best Car Rental (operator A) that must never see A's data.
 export const SECOND_OPERATOR_SEED_EMAIL = 'owner@kansai-drive.example.test'
-export const SECOND_OPERATOR_NAME = 'Kansai Drive'
+export const SECOND_OPERATOR_OWNER_NAME = 'Kansai Drive Owner'

@@ -1,6 +1,6 @@
 import type { APIRequestContext, BrowserContext } from '@playwright/test'
 import { expect, test } from '@playwright/test'
-import { SECOND_OPERATOR_NAME, SECOND_OPERATOR_SEED_EMAIL, STORAGE_STATE } from './constants'
+import { SECOND_OPERATOR_OWNER_NAME, SECOND_OPERATOR_SEED_EMAIL, STORAGE_STATE } from './constants'
 import { SESSION_COOKIE_NAME, mintOperatorSessionTokenFor } from './mint-session'
 
 // Tenant isolation (#1258): a signed-in operator must never reach another
@@ -12,29 +12,42 @@ import { SESSION_COOKIE_NAME, mintOperatorSessionTokenFor } from './mint-session
 // bookings + a fleet). B = Kansai Drive (the second seeded operator, minted at
 // runtime). A's row ids are re-minted on every seed, so the spec DISCOVERS them
 // through A's own tenant-scoped API rather than hardcoding, then proves B is
-// denied them at both layers:
-//   - API: GET the resource by A's id as B -> 403/404, and A's data never leaks.
-//   - UI: deep-link the resource as B -> tenant-sealed notFound() (bookings/
-//     $bookingId.tsx, fleet/$vehicleId.tsx), no A data on the page.
-// Each UI check is DIFFERENTIAL: the SAME url renders the resource for A (a
-// positive control) and not for B, so the B absence assertion cannot pass
-// trivially (e.g. from an unrelated load failure).
+// denied them across read (by-id + list), write, and UI surfaces.
+//
+// Two properties keep this from passing vacuously (a spec that green-lights a
+// broken isolation is worse than none):
+//   1. POSITIVE CONTROL FOR B — the first test proves B's session can read its
+//      OWN vehicle. A dead or mis-scoped B session (e.g. operatorId resolving to
+//      null -> a "none" read scope) would 404 on everything, so every "B denied
+//      A" assertion would pass while proving nothing. The positive control turns
+//      "B sees nothing" into "B sees only its own".
+//   2. UI checks WAIT FOR THE DENIAL — page.goto resolves on `load`, before the
+//      SPA route loader settles, so a bare `toHaveCount(0)` can pass on the
+//      skeleton regardless of isolation. Each UI test blocks on the detail
+//      API response and asserts it was 403/404 before checking the DOM.
+//
+// Scope: bookings + vehicles (the operator's core data). Customers/messages/team
+// are separate surfaces not covered here.
 
 const ONE_HOUR_S = 60 * 60
 
-interface ListRow {
+interface VehicleRow {
   readonly id: string
+  readonly name: string
+  readonly status: string
 }
 
-/** First row of a tenant-scoped `{ data: [...] }` list endpoint, or null. */
-async function firstRow<T extends ListRow>(
-  request: APIRequestContext,
-  path: string,
-): Promise<T | null> {
+interface BookingRow {
+  readonly id: string
+  readonly renter: { readonly name: string | null } | null
+}
+
+/** Rows of a tenant-scoped `{ data: [...] }` list endpoint (empty on non-200). */
+async function listRows<T>(request: APIRequestContext, path: string): Promise<T[]> {
   const res = await request.get(path)
-  if (!res.ok()) return null
-  const body = (await res.json()) as { data?: readonly T[] }
-  return body.data?.[0] ?? null
+  if (!res.ok()) return []
+  const body = (await res.json()) as { data?: unknown }
+  return Array.isArray(body.data) ? (body.data as T[]) : []
 }
 
 test.describe('tenant isolation: operator B cannot reach operator A data', () => {
@@ -44,9 +57,14 @@ test.describe('tenant isolation: operator B cannot reach operator A data', () =>
   let aRenterName: string
   let aVehicleId: string
   let aVehicleName: string
+  let aVehicleStatus: string
+  let bVehicleId: string
+  let bVehicleName: string
+  let bCsrf: string
 
   test.beforeAll(async ({ browser }, workerInfo) => {
-    const baseURL = workerInfo.project.use.baseURL as string
+    const baseURL = workerInfo.project.use.baseURL
+    if (!baseURL) throw new Error('playwright.real-db.config must define use.baseURL')
 
     // Operator A: reuse the minted project storageState (Best Car Rental owner).
     aContext = await browser.newContext({ storageState: STORAGE_STATE, baseURL })
@@ -57,7 +75,10 @@ test.describe('tenant isolation: operator B cannot reach operator A data', () =>
     await bContext.addCookies([
       {
         name: SESSION_COOKIE_NAME,
-        value: await mintOperatorSessionTokenFor(SECOND_OPERATOR_SEED_EMAIL, SECOND_OPERATOR_NAME),
+        value: await mintOperatorSessionTokenFor(
+          SECOND_OPERATOR_SEED_EMAIL,
+          SECOND_OPERATOR_OWNER_NAME,
+        ),
         domain: 'localhost',
         path: '/',
         httpOnly: true,
@@ -66,23 +87,42 @@ test.describe('tenant isolation: operator B cannot reach operator A data', () =>
       },
     ])
 
-    const booking = await firstRow<{ id: string; renter: { name: string | null } | null }>(
-      aContext.request,
-      '/api/bookings?expand=renter',
-    )
-    const vehicle = await firstRow<{ id: string; name: string }>(aContext.request, '/api/vehicles')
+    // Discover REAL ids through each operator's own tenant-scoped API. A booking
+    // may be a walk-in (renter = null), so pick the first with a named renter
+    // rather than index 0 — an index-0 null would trip the guard on valid seed.
+    const aBookings = await listRows<BookingRow>(aContext.request, '/api/bookings?expand=renter')
+    const aVehicles = await listRows<VehicleRow>(aContext.request, '/api/vehicles')
+    const bVehicles = await listRows<VehicleRow>(bContext.request, '/api/vehicles')
 
-    // Fail loudly, never skip: a seed that gives operator A no booking/vehicle
-    // would make every assertion below vacuously pass.
-    if (!booking?.id || !booking.renter?.name) {
+    const aBooking = aBookings.find((b) => b.renter?.name)
+    const aVehicle = aVehicles.find((v) => v.name)
+    const bVehicle = bVehicles.find((v) => v.name)
+
+    // Fail loudly, never skip: missing fixtures would make the assertions vacuous.
+    if (!aBooking?.renter?.name) {
       throw new Error('seed gap: operator A has no booking with a named renter to isolate')
     }
-    if (!vehicle?.id) throw new Error('seed gap: operator A has no vehicle to isolate')
+    if (!aVehicle) throw new Error('seed gap: operator A has no named vehicle to isolate')
+    if (!bVehicle) {
+      throw new Error(
+        'seed gap: operator B (Kansai Drive) has no named vehicle for its positive control',
+      )
+    }
 
-    aBookingId = booking.id
-    aRenterName = booking.renter.name
-    aVehicleId = vehicle.id
-    aVehicleName = vehicle.name
+    aBookingId = aBooking.id
+    aRenterName = aBooking.renter.name
+    aVehicleId = aVehicle.id
+    aVehicleName = aVehicle.name
+    aVehicleStatus = aVehicle.status
+    bVehicleId = bVehicle.id
+    bVehicleName = bVehicle.name
+
+    // CSRF token for B's write probe (double-submit: X-CSRF-Token must echo the
+    // session's `csrf` claim, which GET /auth/session exposes as csrfToken).
+    const bSession = await bContext.request.get('/auth/session')
+    const bSessionBody = (await bSession.json()) as { data?: { csrfToken?: string } }
+    bCsrf = bSessionBody.data?.csrfToken ?? ''
+    if (!bCsrf) throw new Error('could not resolve operator B CSRF token from /auth/session')
   })
 
   test.afterAll(async () => {
@@ -90,50 +130,94 @@ test.describe('tenant isolation: operator B cannot reach operator A data', () =>
     await bContext?.close()
   })
 
-  test('API: operator B is denied operator A booking by id', async () => {
-    const aRes = await aContext.request.get(`/api/bookings/${aBookingId}`)
-    expect(aRes.ok(), 'operator A can read its own booking').toBe(true)
-
-    const bRes = await bContext.request.get(`/api/bookings/${aBookingId}`)
-    expect([403, 404], `operator B must be denied A booking, got ${bRes.status()}`).toContain(
-      bRes.status(),
-    )
-    expect(await bRes.text(), 'denied response must not leak A renter').not.toContain(aRenterName)
+  test('positive control: operator B can read its OWN vehicle (session is live + scoped)', async () => {
+    const res = await bContext.request.get(`/api/vehicles/${bVehicleId}`)
+    expect(res.ok(), 'operator B must be able to read its own vehicle').toBe(true)
+    expect(await res.text(), 'B own-vehicle read returns its data').toContain(bVehicleName)
   })
 
-  test('API: operator B is denied operator A vehicle by id', async () => {
-    const aRes = await aContext.request.get(`/api/vehicles/${aVehicleId}`)
-    expect(aRes.ok(), 'operator A can read its own vehicle').toBe(true)
+  test('API read: operator B is denied operator A vehicle by id', async () => {
+    const res = await bContext.request.get(`/api/vehicles/${aVehicleId}`)
+    expect([403, 404], `operator B must be denied A vehicle, got ${res.status()}`).toContain(
+      res.status(),
+    )
+    expect(await res.text(), 'denied response must not leak A vehicle').not.toContain(aVehicleName)
+  })
 
-    const bRes = await bContext.request.get(`/api/vehicles/${aVehicleId}`)
-    expect([403, 404], `operator B must be denied A vehicle, got ${bRes.status()}`).toContain(
-      bRes.status(),
+  test('API read: operator B is denied operator A booking by id', async () => {
+    // expand=renter so that, IF isolation regressed to 200, the leaked body would
+    // actually embed the renter name and trip the not-toContain probe below.
+    const res = await bContext.request.get(`/api/bookings/${aBookingId}?expand=renter`)
+    expect([403, 404], `operator B must be denied A booking, got ${res.status()}`).toContain(
+      res.status(),
+    )
+    expect(await res.text(), 'denied response must not leak A renter').not.toContain(aRenterName)
+  })
+
+  test('API list: operator B vehicle list excludes operator A vehicles', async () => {
+    const rows = await listRows<VehicleRow>(bContext.request, '/api/vehicles')
+    expect(rows.length, 'operator B has its own fleet to list').toBeGreaterThan(0)
+    expect(
+      rows.map((v) => v.id),
+      "operator A's vehicle must not appear in B's fleet list",
+    ).not.toContain(aVehicleId)
+  })
+
+  test('API list: operator B booking list excludes operator A bookings', async () => {
+    const rows = await listRows<BookingRow>(bContext.request, '/api/bookings')
+    expect(
+      rows.map((b) => b.id),
+      "operator A's booking must not appear in B's booking list",
+    ).not.toContain(aBookingId)
+  })
+
+  test('API write: operator B cannot change operator A vehicle status', async () => {
+    const res = await bContext.request.patch(`/api/vehicles/${aVehicleId}/status`, {
+      headers: { 'X-CSRF-Token': bCsrf },
+      data: { status: 'MAINTENANCE', reason: 'e2e tenant-isolation write probe' },
+    })
+    expect(
+      [403, 404],
+      `operator B write to A vehicle must be denied, got ${res.status()}`,
+    ).toContain(res.status())
+
+    // The decisive proof: A's vehicle is untouched regardless of the status code.
+    const after = await aContext.request.get(`/api/vehicles/${aVehicleId}`)
+    expect(after.ok()).toBe(true)
+    const afterBody = (await after.json()) as { data?: { status?: string } }
+    expect(afterBody.data?.status, 'A vehicle status unchanged after B write attempt').toBe(
+      aVehicleStatus,
     )
   })
 
-  test('UI: A booking detail renders for A but not for B', async () => {
+  test('UI: A booking detail renders for A but B is denied', async () => {
     const aPage = await aContext.newPage()
     await aPage.goto(`/en/manage/bookings/${aBookingId}`)
     await expect(aPage.getByText(aRenterName).first()).toBeVisible() // positive control
     await aPage.close()
 
     const bPage = await bContext.newPage()
+    // Block on the tenant-sealed detail fetch (loader's expand=renter read) so the
+    // absence check runs against the settled notFound() page, not the skeleton.
+    const denied = bPage.waitForResponse(
+      (r) => r.url().includes(`/bookings/${aBookingId}`) && r.url().includes('expand'),
+    )
     await bPage.goto(`/en/manage/bookings/${aBookingId}`)
-    // B stays on the deep link (authed, not login-redirected) but sees no A data.
-    await expect(bPage).toHaveURL(new RegExp(`/manage/bookings/${aBookingId}$`))
+    expect([403, 404], 'B booking-detail API must be denied').toContain((await denied).status())
     await expect(bPage.getByText(aRenterName)).toHaveCount(0)
     await bPage.close()
   })
 
-  test('UI: A vehicle detail renders for A but not for B', async () => {
+  test('UI: A vehicle detail renders for A but B is denied', async () => {
     const aPage = await aContext.newPage()
     await aPage.goto(`/en/manage/fleet/${aVehicleId}`)
     await expect(aPage.getByText(aVehicleName).first()).toBeVisible() // positive control
     await aPage.close()
 
     const bPage = await bContext.newPage()
+    const denied = bPage.waitForResponse((r) => r.url().includes(`/vehicles/${aVehicleId}`))
     await bPage.goto(`/en/manage/fleet/${aVehicleId}`)
-    await expect(bPage).toHaveURL(new RegExp(`/manage/fleet/${aVehicleId}$`))
+    expect([403, 404], 'B vehicle-detail API must be denied').toContain((await denied).status())
     await expect(bPage.getByText(aVehicleName)).toHaveCount(0)
     await bPage.close()
   })
