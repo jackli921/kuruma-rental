@@ -3,6 +3,7 @@ import {
   isCancellationEnabled,
   isFleetTimelineEnabled,
   isMultiCurrencyEnabled,
+  isOperatorBlocksEnabled,
   isOperatorManualBookingEnabled,
   isOperatorSettingsEnabled,
   isOperatorTeamEnabled,
@@ -18,6 +19,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 const FLAGS = [
   { name: 'VITE_FEATURE_CANCELLATION', read: isCancellationEnabled },
   { name: 'VITE_FEATURE_OPERATOR_MANUAL_BOOKING', read: isOperatorManualBookingEnabled },
+  { name: 'VITE_FEATURE_OPERATOR_BLOCKS', read: isOperatorBlocksEnabled },
   { name: 'VITE_FEATURE_OPERATOR_TEAM', read: isOperatorTeamEnabled },
   { name: 'VITE_FEATURE_OPERATOR_SETTINGS', read: isOperatorSettingsEnabled },
   { name: 'VITE_FEATURE_RENTER_DOCUMENTS', read: isRenterDocumentsEnabled },

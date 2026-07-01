@@ -31,7 +31,14 @@ describe('feature flag registry', () => {
     // slice that migrates the flag (#1322) — the admin page badges the difference.
     const controlled = FEATURE_FLAG_KEYS.filter((k) => FEATURE_FLAGS[k].runtimeControlled)
     expect(new Set(controlled)).toEqual(
-      new Set(['MULTI_CURRENCY', 'REVIEWS', 'CANCELLATION', 'FLEET_TIMELINE']),
+      new Set([
+        'MULTI_CURRENCY',
+        'REVIEWS',
+        'CANCELLATION',
+        'FLEET_TIMELINE',
+        'OPERATOR_MANUAL_BOOKING',
+        'OPERATOR_BLOCKS',
+      ]),
     )
   })
 

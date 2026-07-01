@@ -3,8 +3,6 @@ import { PageSkeleton } from '@/vite/PageSkeleton'
 import {
   featureFlagsQueryOptions,
   isCalendarQuickViewEnabled,
-  isOperatorBlocksEnabled,
-  isOperatorManualBookingEnabled,
   isVisibleToViewer,
   resolveFeatureFlag,
   useFeatureFlag,
@@ -132,14 +130,16 @@ export function OperatorBookingsRoute() {
   // cross-tenant and get a view-only calendar). The API re-enforces this (#589 §4.3).
   // Manual/walk-in booking is a post-MVP add-on (#589): gated behind the feature
   // flag AND the operator-session permission. OFF in the beta demo (flag unset).
-  const canManualBook = isOperatorManualBookingEnabled() && isOperatorSession(session ?? null)
+  // The flag reads through useFeatureFlag so the /admin dashboard toggles it live (#1322).
+  const canManualBook =
+    useFeatureFlag('OPERATOR_MANUAL_BOOKING') && isOperatorSession(session ?? null)
 
   // #1101 scheduled blocks. Visibility (read + the detail dialog) follows the
   // beta gate with the platform-admin preview bypass; management (schedule + delete)
   // additionally requires a tenant-scoped operator session — the write API admits a
   // platform admin (operatorId derived from the vehicle), so this affordance gate is
   // what keeps an admin preview read-only. Mirrors `canManualBook`.
-  const canViewBlocks = isVisibleToViewer(isOperatorBlocksEnabled(), session?.user.role)
+  const canViewBlocks = isVisibleToViewer(useFeatureFlag('OPERATOR_BLOCKS'), session?.user.role)
   const canManageBlocks = canViewBlocks && isOperatorSession(session ?? null)
 
   // The booking quick-view chip (#1282) is gated OFF for the beta MVP (#1329). When
