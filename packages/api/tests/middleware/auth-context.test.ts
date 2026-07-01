@@ -4,7 +4,6 @@ import {
   type CallerContext,
   ForbiddenError,
   SYSTEM_CONTEXT,
-  rejectOperatorContextUntilScoped,
   requireFleetWriteScope,
   requireOperatorScope,
   toCallerContext,
@@ -125,43 +124,6 @@ describe('requireFleetWriteScope', () => {
   })
 })
 
-describe('rejectOperatorContextUntilScoped', () => {
-  test('throws ForbiddenError naming the repo for OPERATOR_OWNER', () => {
-    const ctx: CallerContext = {
-      userId: 'u',
-      role: 'OPERATOR_OWNER',
-      operatorId: 'op_1',
-      bypassScope: false,
-    }
-    expect(() => rejectOperatorContextUntilScoped(ctx, 'BookingRepository')).toThrow(ForbiddenError)
-    expect(() => rejectOperatorContextUntilScoped(ctx, 'BookingRepository')).toThrow(
-      'BookingRepository not yet operator-scoped',
-    )
-  })
-
-  test('throws for OPERATOR_STAFF', () => {
-    const ctx: CallerContext = {
-      userId: 'u',
-      role: 'OPERATOR_STAFF',
-      operatorId: 'op_1',
-      bypassScope: false,
-    }
-    expect(() => rejectOperatorContextUntilScoped(ctx, 'MessageRepository')).toThrow(ForbiddenError)
-  })
-
-  test('does NOT throw for legacy ADMIN (transition bypass preserved)', () => {
-    const ctx = toCallerContext(authUser({ role: 'ADMIN' }))
-    expect(() => rejectOperatorContextUntilScoped(ctx, 'BookingRepository')).not.toThrow()
-  })
-
-  test('does NOT throw for RENTER (renter paths unaffected)', () => {
-    const ctx = toCallerContext(authUser({ role: 'RENTER' }))
-    expect(() => rejectOperatorContextUntilScoped(ctx, 'BookingRepository')).not.toThrow()
-  })
-
-  test('does NOT throw for PLATFORM_ADMIN', () => {
-    expect(() =>
-      rejectOperatorContextUntilScoped(SYSTEM_CONTEXT, 'BookingRepository'),
-    ).not.toThrow()
-  })
-})
+// `rejectOperatorContextUntilScoped` was removed in #1205 slice 2 — the messaging
+// repos (its only callers) are now operator-scoped via `threadReadScope`. The
+// cross-tenant seal is covered by tests/{repositories,integration}/messaging-tenancy.test.ts.

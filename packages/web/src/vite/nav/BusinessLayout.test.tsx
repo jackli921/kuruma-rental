@@ -42,9 +42,13 @@ vi.mock('@tanstack/react-router', () => ({
 vi.mock('@/vite/config/features', () => ({
   isOperatorTeamEnabled: () => true,
   isOperatorSettingsEnabled: () => true,
+  isMessagingEnabled: () => false,
 }))
 vi.mock('@/vite/operator-bookings/useNewBookingsBadge', () => ({
   useNewBookingsBadge: () => ({ count: 0 }),
+}))
+vi.mock('@/vite/messaging', () => ({
+  useOperatorUnreadBadge: () => ({ count: 0 }),
 }))
 // Stub the picker's option query so useQuery never hits the network.
 vi.mock('@/vite/operator-context/api', () => ({

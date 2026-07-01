@@ -284,6 +284,8 @@ export const bookingEventColumns = {
 export const threadColumns = {
   id: threads.id,
   bookingId: threads.bookingId,
+  operatorId: threads.operatorId,
+  operatorUnreadCount: threads.operatorUnreadCount,
   idempotencyKey: threads.idempotencyKey,
   createdAt: threads.createdAt,
   updatedAt: threads.updatedAt,
@@ -655,6 +657,8 @@ export function toThread(r: ThreadRow): Thread {
   return {
     id: r.id,
     bookingId: r.bookingId,
+    operatorId: r.operatorId ?? null,
+    operatorUnreadCount: r.operatorUnreadCount,
     idempotencyKey: r.idempotencyKey ?? null,
     createdAt: r.createdAt,
     updatedAt: r.updatedAt,

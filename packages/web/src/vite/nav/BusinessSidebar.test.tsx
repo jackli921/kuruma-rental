@@ -9,6 +9,9 @@ import en from '../../../messages/en.json'
 const h = vi.hoisted(() => ({
   flags: { team: true, settings: true },
   badge: { count: 0 },
+  messaging: { enabled: false },
+  unread: { count: 0 },
+  role: 'OPERATOR_OWNER' as string | undefined,
 }))
 
 // The router <Link> is a navigation primitive — mock it to a plain anchor so the
@@ -25,8 +28,21 @@ vi.mock('@/vite/config/features', () => ({
   isOperatorSettingsEnabled: () => h.flags.settings,
 }))
 
+vi.mock('@/vite/config', () => ({
+  isMessagingEnabled: () => h.messaging.enabled,
+  isVisibleToViewer: (flag: boolean, role: string | undefined) => flag || role === 'PLATFORM_ADMIN',
+}))
+
+vi.mock('@/vite/session', () => ({
+  useSession: () => ({ data: { user: { role: h.role } } }),
+}))
+
 vi.mock('@/vite/operator-bookings/useNewBookingsBadge', () => ({
   useNewBookingsBadge: () => ({ count: h.badge.count }),
+}))
+
+vi.mock('@/vite/messaging', () => ({
+  useOperatorUnreadBadge: () => ({ count: h.unread.count }),
 }))
 
 import { BusinessSidebar } from './BusinessSidebar'
@@ -44,6 +60,9 @@ describe('BusinessSidebar', () => {
     h.flags.team = true
     h.flags.settings = true
     h.badge.count = 0
+    h.messaging.enabled = false
+    h.unread.count = 0
+    h.role = 'OPERATOR_OWNER'
   })
 
   it('emits the data-business-sidebar attribute the CSS hide rule depends on', () => {
@@ -91,5 +110,31 @@ describe('BusinessSidebar', () => {
     h.badge.count = 0
     renderSidebar()
     expect(screen.queryByRole('status')).toBeNull()
+  })
+
+  it('hides Messages for an operator while the messaging flag is off', () => {
+    renderSidebar()
+    expect(screen.queryByRole('link', { name: 'Messages' })).toBeNull()
+  })
+
+  it('shows Messages when the messaging flag is on', () => {
+    h.messaging.enabled = true
+    renderSidebar()
+    expect(screen.queryByRole('link', { name: 'Messages' })).not.toBeNull()
+  })
+
+  it('shows Messages to the platform admin even when the flag is off (owner preview)', () => {
+    h.role = 'PLATFORM_ADMIN'
+    renderSidebar()
+    expect(screen.queryByRole('link', { name: 'Messages' })).not.toBeNull()
+  })
+
+  it('shows the operator unread badge on Messages when positive', () => {
+    h.messaging.enabled = true
+    h.unread.count = 4
+    renderSidebar()
+    const badge = screen.getByRole('status')
+    expect(badge.textContent).toBe('4')
+    expect(badge.getAttribute('aria-label')).toBe('4 unread messages')
   })
 })

@@ -46,7 +46,7 @@ describe('POST /messages/:id/translate auth gate', () => {
       'renter-1',
       'u2',
     ])
-    const msg = await ctx.messageRepo.create(
+    const { message: msg } = await ctx.messageRepo.create(
       { userId: 'renter-1', role: 'RENTER' },
       thread.id,
       'こんにちは',

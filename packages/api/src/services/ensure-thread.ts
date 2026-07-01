@@ -37,6 +37,9 @@ export function makeEnsureThread(threading: BookingThreading): EnsureThread {
         booking.id,
         [booking.renterId, threading.staffUserId],
         threadKey,
+        // Tenant owner (#1205), server-derived from the authoritative booking so
+        // the operator portal can read-scope this thread by operatorId.
+        booking.operatorId,
       )
     } catch (err) {
       console.error(

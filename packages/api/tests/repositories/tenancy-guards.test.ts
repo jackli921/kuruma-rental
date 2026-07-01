@@ -1,24 +1,9 @@
 import { describe, expect, it } from 'vitest'
 import { type CallerContext, ForbiddenError, SYSTEM_CONTEXT } from '../../src/middleware/auth'
 import { InMemoryBookingRepository } from '../../src/repositories/in-memory/booking'
-import { InMemoryMessageRepository } from '../../src/repositories/in-memory/message'
-import { InMemoryThreadRepository } from '../../src/repositories/in-memory/thread'
 import { InMemoryVehicleRepository } from '../../src/repositories/in-memory/vehicle'
 import type { Vehicle } from '../../src/stores'
 import { bookingInput } from '../helpers/booking'
-
-// Repos NOT yet operator-scoped in slice 1 (#386) must fail closed for any
-// tenant-scoped caller rather than silently serving cross-tenant data. The
-// guard throws before any I/O, so the call arguments below are throwaway
-// stubs — only the OPERATOR_* context matters.
-const operatorCtx: CallerContext = {
-  userId: 'op-user',
-  role: 'OPERATOR_OWNER',
-  operatorId: 'op_a',
-  bypassScope: false,
-}
-
-type Invocation = readonly [method: string, run: () => Promise<unknown>]
 
 // Slice 6 (#392, proposal §6.2): BookingRepository is now operator-scoped via
 // the three-way bookingReadScope (renter-own / operator-own-tenant / bypass /
@@ -113,36 +98,11 @@ describe('BookingRepository operator-scopes reads and writes (#392)', () => {
   })
 })
 
-describe('ThreadRepository rejects OPERATOR_* until scoped', () => {
-  const repo = new InMemoryThreadRepository()
-  const invocations: Invocation[] = [
-    ['findAll', () => repo.findAll(operatorCtx)],
-    ['findById', () => repo.findById(operatorCtx, 't1')],
-    ['findByIdempotencyKey', () => repo.findByIdempotencyKey(operatorCtx, 'k1')],
-    ['create', () => repo.create(operatorCtx, null, ['u1'])],
-    ['markAsRead', () => repo.markAsRead(operatorCtx, 't1')],
-  ]
-
-  it.each(invocations)('%s throws ForbiddenError naming the repo', async (_method, run) => {
-    await expect(run()).rejects.toThrow(ForbiddenError)
-    await expect(run()).rejects.toThrow('ThreadRepository not yet operator-scoped')
-  })
-})
-
-describe('MessageRepository rejects OPERATOR_* until scoped', () => {
-  const repo = new InMemoryMessageRepository(new InMemoryThreadRepository())
-  const invocations: Invocation[] = [
-    ['findById', () => repo.findById(operatorCtx, 'm1')],
-    ['findByIdempotencyKey', () => repo.findByIdempotencyKey(operatorCtx, 'k1')],
-    ['create', () => repo.create(operatorCtx, 't1', 'hello')],
-    ['findByThreadId', () => repo.findByThreadId(operatorCtx, 't1')],
-  ]
-
-  it.each(invocations)('%s throws ForbiddenError naming the repo', async (_method, run) => {
-    await expect(run()).rejects.toThrow(ForbiddenError)
-    await expect(run()).rejects.toThrow('MessageRepository not yet operator-scoped')
-  })
-})
+// Thread/Message repositories became operator-scoped in #1205 slice 2 (the
+// `threadReadScope` replacing the old `rejectOperatorContextUntilScoped` gate).
+// The cross-tenant scoping contract now lives in messaging-tenancy.test.ts (and
+// the operator-unread counter in operator-unread.test.ts), so the obsolete
+// "rejects OPERATOR_* until scoped" blocks were removed here.
 
 // VehicleRepository IS operator-scoped (#386 F2). An OPERATOR_* caller must be
 // bounded to its own tenant on WRITES as well as reads — the repository, not the

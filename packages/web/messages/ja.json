@@ -898,6 +898,7 @@
       "emptyDescription": "会話を始めるか、返信をお待ちください。",
       "unread": "未読 {count} 件",
       "host": "ホスト",
+      "guest": "ゲスト",
       "loadError": "メッセージを読み込めませんでした",
       "retry": "再試行"
     },

@@ -54,6 +54,11 @@ export interface EmailStrings {
   reviewPromptTitle: string
   reviewPromptExplain: string
   reviewPromptCta: string
+  // #1205 slice 4 operator new-message alert (operator-facing, ja-first like the alert)
+  newMessageSubject: string
+  newMessageHeading: string
+  newMessageCtaTitle: string
+  newMessageCta: string
   // Fee-type display names
   feeLabels: Record<FeeType, string>
   // #916 §5.4 compliance digest (operator-facing fleet reminder)
@@ -108,6 +113,10 @@ const en: EmailStrings = {
   reviewPromptExplain:
     'Rate the operator and the vehicle. Reviews stay hidden until both sides submit or 14 days pass.',
   reviewPromptCta: 'Write a review',
+  newMessageSubject: 'New message from a renter',
+  newMessageHeading: 'A renter sent you a new message:',
+  newMessageCtaTitle: 'Reply to the renter',
+  newMessageCta: 'Open the conversation',
   feeLabels: {
     OVERTIME_HOURLY: 'Overtime (per hour)',
     CLEANING_FLAT: 'Cleaning',
@@ -172,6 +181,10 @@ const ja: EmailStrings = {
   reviewPromptExplain:
     'オペレーターと車両を評価してください。レビューは双方が投稿するか14日が経過するまで公開されません。',
   reviewPromptCta: 'レビューを書く',
+  newMessageSubject: '利用者から新しいメッセージが届きました',
+  newMessageHeading: '利用者から新しいメッセージが届きました:',
+  newMessageCtaTitle: '利用者に返信する',
+  newMessageCta: '会話を開く',
   feeLabels: {
     OVERTIME_HOURLY: '延長料金（1時間あたり）',
     CLEANING_FLAT: 'クリーニング',
@@ -234,6 +247,10 @@ const zh: EmailStrings = {
   reviewPromptTitle: '评价您的行程',
   reviewPromptExplain: '评价运营商和车辆。在双方都提交或14天后，评价才会公开。',
   reviewPromptCta: '撰写评价',
+  newMessageSubject: '租客发来新消息',
+  newMessageHeading: '租客给您发来一条新消息:',
+  newMessageCtaTitle: '回复租客',
+  newMessageCta: '打开对话',
   feeLabels: {
     OVERTIME_HOURLY: '超时费(每小时)',
     CLEANING_FLAT: '清洁费',
