@@ -87,6 +87,33 @@ It is a CI step (`.github/workflows/ci.yml`) and flags:
 
 `*.test.ts` files are exempt — they legitimately construct concretes to exercise DI.
 
+### Tenant read-scope helpers (`tenancy.ts`)
+
+Scoped reads are filtered by operator through helpers in `tenancy.ts`. Two
+adjudicate a cross-operator (`all`-scope) caller, and they are deliberately
+different — match the one to your read:
+
+- **Strict — `applyCrossOperatorReadScope` (config lists).** A bypass caller
+  must scope explicitly: it throws `ScopeRequiredError` (→ 400) when neither an
+  `operatorId` nor `includeAll` is supplied. Use for tenant-owned inventory
+  lists (add-ons, insurance, locations, vehicle classes) where "every operator
+  at once" is an opt-in, never the silent default.
+- **Lenient — `narrowReadToOperator` (aggregate reads).** A missing operatorId
+  is the legitimate "all operators" default (dashboard / fleet overview), so it
+  never throws; it only narrows when an id is present. It takes the read's
+  **scope resolver** as an argument and honors the requested id only when that
+  resolver returns `all`. Pass the vocabulary that matches the read's privacy
+  model: the private overview / fleet reads pass `bookingReadScope` (only a true
+  bypass admin is `all`; renter / partner / legacy STAFF/ADMIN map to non-`all`
+  kinds and drop their id), NOT `operatorReadScope` (the catalog vocabulary that
+  maps every non-operator role to `all`). A `bookingReadScope`-private endpoint
+  passes its own resolver, so the id can never leak across a vocabulary
+  mismatch (#1272).
+
+In both cases the repository re-clamps to the caller's own tenant, so these
+helpers only govern the `all` scope — a foreign `?operatorId=` can never widen a
+tenant-scoped caller (the H2 invariant).
+
 ---
 
 ## packages/web — feature folders + barrel imports

@@ -1,7 +1,7 @@
 import type { OperatorOverview } from '@kuruma/shared/types/overview'
 import type { CallerContext } from '../middleware/auth'
 import type { OverviewRepository } from '../repositories/types'
-import { narrowReadToOperator } from '../tenancy'
+import { bookingReadScope, narrowReadToOperator } from '../tenancy'
 
 /**
  * Thin service over {@link OverviewRepository} (#524). Its only job is to own
@@ -19,7 +19,12 @@ export class OverviewService {
   ): Promise<OperatorOverview> {
     // #407 slice 4: a bypass admin using the operator-context picker narrows the
     // cross-operator aggregate to one operator. narrowReadToOperator drops the id
-    // to undefined for any tenant-scoped caller, so a foreign id never widens.
-    return this.repo.getOperatorOverview(ctx, now, narrowReadToOperator(ctx, requestedOperatorId))
+    // to undefined for any non-`all` caller under bookingReadScope (this read's
+    // private-read vocabulary), so a renter/partner/tenant id never widens (#1272).
+    return this.repo.getOperatorOverview(
+      ctx,
+      now,
+      narrowReadToOperator(ctx, requestedOperatorId, bookingReadScope),
+    )
   }
 }
