@@ -186,4 +186,16 @@ describe('cross-operator insurance-option WRITE denial (service seal, #404)', ()
     const res = await service.update(ctxFor(opAId), optionA.id, { dailyPriceJpy: 2000 })
     expect(res).toMatchObject({ ok: true, option: { dailyPriceJpy: 2000 } })
   })
+
+  it('[#1271] a direct repo update cannot migrate the row to another operator', async () => {
+    // Repo-layer anchor: even a caller that bypasses the service scope check (a
+    // future second caller) cannot repoint operatorId via the update payload.
+    const updated = await repo.update(optionA.id, { operatorId: opBId, dailyPriceJpy: 4321 })
+    expect(updated?.operatorId).toBe(opAId)
+    expect(updated?.dailyPriceJpy).toBe(4321)
+    expect(await repo.findById(SYSTEM_CONTEXT, optionA.id)).toMatchObject({
+      operatorId: opAId,
+      dailyPriceJpy: 4321,
+    })
+  })
 })
