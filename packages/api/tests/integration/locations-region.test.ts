@@ -27,6 +27,9 @@ describe('locations region loop guard write-path (#651 Slice 2)', () => {
   const nambaId = crypto.randomUUID()
   const umedaId = crypto.randomUUID()
   const prefectureId = crypto.randomUUID()
+  // #1276: an assignable CITY is a valid terminal region (operator picks
+  // prefecture -> city and stops). The gate is assignable + ACTIVE, not type === AREA.
+  const cityId = crypto.randomUUID()
   // Mirror the demo geography so derivation reads against credible coords.
   const NAMBA = { latitude: 34.6627, longitude: 135.5012 }
   const UMEDA = { latitude: 34.7025, longitude: 135.4959 }
@@ -73,7 +76,7 @@ describe('locations region loop guard write-path (#651 Slice 2)', () => {
         assignable: true,
         ...UMEDA,
       },
-      // ...and one navigation-only PREFECTURE (assignable defaults false, no coords).
+      // ...one navigation-only PREFECTURE (assignable defaults false, no coords)...
       {
         id: prefectureId,
         parentId: null,
@@ -81,6 +84,17 @@ describe('locations region loop guard write-path (#651 Slice 2)', () => {
         nameJa: '大阪府',
         nameZh: '大阪府',
         type: 'PREFECTURE',
+      },
+      // ...and one assignable CITY under it (#1276), with no coords: selectable as a
+      // terminal region but excluded from coord-based nearest-area auto-derivation.
+      {
+        id: cityId,
+        parentId: prefectureId,
+        nameEn: 'Osaka City',
+        nameJa: '大阪市',
+        nameZh: '大阪市',
+        type: 'CITY',
+        assignable: true,
       },
     ])
     app = createApp({
@@ -98,7 +112,7 @@ describe('locations region loop guard write-path (#651 Slice 2)', () => {
   afterAll(async () => {
     // locations FK regions, so delete locations before regions.
     await db.delete(locations).where(inArray(locations.operatorId, [opId]))
-    await db.delete(regions).where(inArray(regions.id, [nambaId, umedaId, prefectureId]))
+    await db.delete(regions).where(inArray(regions.id, [nambaId, umedaId, prefectureId, cityId]))
     await db.delete(operators).where(inArray(operators.id, [opId]))
     await db.delete(users).where(inArray(users.id, [staffUserId]))
   })
@@ -120,6 +134,12 @@ describe('locations region loop guard write-path (#651 Slice 2)', () => {
     const res = await post(body())
     expect(res.status).toBe(201)
     expect((await res.json()).data.regionId).toBe(nambaId)
+  })
+
+  it('creates a location with a provided assignable CITY region (#1276)', async () => {
+    const res = await post(body({ regionId: cityId }))
+    expect(res.status).toBe(201)
+    expect((await res.json()).data.regionId).toBe(cityId)
   })
 
   it('derives the nearest assignable area when an ACTIVE create omits the region', async () => {
