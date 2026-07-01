@@ -100,7 +100,10 @@ export class DrizzleFeeScheduleRepository implements FeeScheduleRepository {
   }
 
   async update(id: string, data: Partial<FeeSchedule>): Promise<FeeSchedule | undefined> {
-    const { id: _id, createdAt: _createdAt, ...fields } = data
+    // operatorId is an immutable tenant anchor (#1271): strip it like id so an
+    // update payload can never migrate the row to another operator (which the
+    // composite FK to vehicleClasses also depends on).
+    const { id: _id, createdAt: _createdAt, operatorId: _operatorId, ...fields } = data
     const [updated] = await this.db
       .update(feeSchedules)
       .set({ ...fields, updatedAt: sql`now()` })
