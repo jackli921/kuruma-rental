@@ -5,9 +5,14 @@ import { queryOptions } from '@tanstack/react-query'
 import { z } from 'zod'
 
 // Operator dashboard overview (#524). Cookie-based (credentials: 'include') so
-// the tenant is derived server-side from the session — never a query param.
+// an operator session's tenant is derived server-side — never a query param.
 // Mirrors operator-fleet/api.ts; deliberately does NOT touch the frozen Next
 // `dashboard-stats.ts`, which hits the platform-wide X-API-Key /stats endpoint.
+//
+// #407 slice 4: a PLATFORM_ADMIN using the operator-context picker can narrow
+// this cross-operator aggregate to one operator by appending `?operatorId=X`.
+// Sent ONLY when an operator is picked — the endpoint is lenient (no param =
+// aggregate), so `includeAll` (buildScopeParam) would be ignored noise here.
 export const OPERATOR_OVERVIEW_QUERY_KEY = ['operator-overview'] as const
 
 // Network-seam validator for the dashboard overview (#711). Pinned to
@@ -19,16 +24,19 @@ const operatorOverviewSchema = z.object({
   upcomingBookings: z.number(),
 }) satisfies z.ZodType<OperatorOverview>
 
-export async function fetchOperatorOverview(): Promise<OperatorOverview> {
-  const res = await fetch(`${getApiBaseUrl()}/dashboard/overview`, {
+export async function fetchOperatorOverview(pickedOperatorId?: string): Promise<OperatorOverview> {
+  const qs = pickedOperatorId ? `?operatorId=${encodeURIComponent(pickedOperatorId)}` : ''
+  const res = await fetch(`${getApiBaseUrl()}/dashboard/overview${qs}`, {
     credentials: 'include',
   })
   return unwrap(res, operatorOverviewSchema)
 }
 
-export function operatorOverviewQueryOptions() {
+export function operatorOverviewQueryOptions(pickedOperatorId?: string) {
   return queryOptions({
-    queryKey: OPERATOR_OVERVIEW_QUERY_KEY,
-    queryFn: fetchOperatorOverview,
+    // Key on the picked operator so a context switch never serves another
+    // tenant's cached overview; unpicked collapses to a shared 'all' entry.
+    queryKey: [...OPERATOR_OVERVIEW_QUERY_KEY, pickedOperatorId ?? 'all'],
+    queryFn: () => fetchOperatorOverview(pickedOperatorId),
   })
 }

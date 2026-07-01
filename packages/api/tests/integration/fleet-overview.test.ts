@@ -5,6 +5,7 @@ import { type CallerContext, SYSTEM_CONTEXT } from '../../src/middleware/auth'
 import {
   DrizzleBookingRepository,
   DrizzleFleetOverviewRepository,
+  DrizzleOverviewRepository,
   DrizzleVehicleClassRepository,
   DrizzleVehicleRepository,
 } from '../../src/repositories/drizzle'
@@ -187,5 +188,37 @@ describe('fleet-overview is operator-scoped (Drizzle, real Postgres)', () => {
     const retired = rows.find((r) => r.id === retiredVehicleAId)
     expect(retired).toBeDefined()
     expect(retired!.status).toBe('RETIRED')
+  })
+
+  // #407 slice 4: the operator-context picker's bypass narrowing, exercised
+  // against real SQL so a wrong WHERE predicate cannot pass silently.
+  it('narrows a bypass caller to the picked operator (WHERE operatorId)', async () => {
+    const ids = (await fleetRepo.findFleetOverview(SYSTEM_CONTEXT, NOW, opAId)).map((r) => r.id)
+    expect(ids).toContain(vehicleAId)
+    expect(ids).not.toContain(vehicleBId)
+  })
+
+  it('ignores a foreign operatorId for a tenant caller (no cross-tenant widening)', async () => {
+    const rows = await fleetRepo.findFleetOverview(ctxFor(opBId), NOW, opAId)
+    expect(rows.length).toBeGreaterThan(0)
+    expect(rows.every((r) => r.operatorId === opBId)).toBe(true)
+  })
+
+  // Dashboard overview counts share the picker's bypass narrowing. Asserted
+  // against the same seeded tenants so a wrong count predicate cannot pass.
+  describe('dashboard overview narrowing (Drizzle, real Postgres)', () => {
+    const overviewRepo = new DrizzleOverviewRepository(db)
+
+    it('a bypass caller narrowed to an operator matches that operator’s own counts', async () => {
+      const aScoped = await overviewRepo.getOperatorOverview(ctxFor(opAId), NOW)
+      const bypassNarrowed = await overviewRepo.getOperatorOverview(SYSTEM_CONTEXT, NOW, opAId)
+      expect(bypassNarrowed).toEqual(aScoped)
+    })
+
+    it('a tenant caller ignores a foreign operatorId (counts unchanged)', async () => {
+      const bScoped = await overviewRepo.getOperatorOverview(ctxFor(opBId), NOW)
+      const bWithForeign = await overviewRepo.getOperatorOverview(ctxFor(opBId), NOW, opAId)
+      expect(bWithForeign).toEqual(bScoped)
+    })
   })
 })

@@ -1,4 +1,5 @@
 import { PageSkeleton } from '@/vite/PageSkeleton'
+import { useOperatorContext } from '@/vite/operator-context'
 import { OperatorDashboardView } from '@/vite/operator-dashboard/OperatorDashboardView'
 import { operatorOverviewQueryOptions } from '@/vite/operator-dashboard/api'
 import { operatorFleetQueryOptions } from '@/vite/operator-fleet/api'
@@ -11,11 +12,25 @@ import { useTranslations } from 'use-intl'
 // data: prefetch in the loader, read via useSuspenseQuery, render the pure view.
 // The loader also warms the fleet query so the §5.5 compliance banner (#916) can
 // count expiring shaken/insurance with no second loading state.
+//
+// #407 slice 4: a PLATFORM_ADMIN using the operator-context picker narrows both
+// reads to the picked operator. loaderDeps re-runs the loader when `?operator`
+// changes; the component reads the same picked id so the loader-warmed cache
+// entry and the useSuspenseQuery read share one key (no refetch, no FOUC).
+// INVARIANT: the loader (deps.operator) and the component (useOperatorContext →
+// the `_business` `operator` search param) MUST resolve the id from the SAME
+// validated source. They agree today because the dashboard adds no own
+// validateSearch and inherits `_business`'s. A dashboard-level search transform
+// would split the two keys and reintroduce a wrong-tenant flash — dashboard.route
+// test pins loaderDeps → the exact ensureQueryData keys to catch that.
 export const Route = createFileRoute('/$locale/_business/dashboard')({
-  loader: ({ context }) =>
+  loaderDeps: ({ search }: { search: { operator?: string | undefined } }) => ({
+    operator: search.operator,
+  }),
+  loader: ({ context, deps }) =>
     Promise.all([
-      context.queryClient.ensureQueryData(operatorOverviewQueryOptions()),
-      context.queryClient.ensureQueryData(operatorFleetQueryOptions()),
+      context.queryClient.ensureQueryData(operatorOverviewQueryOptions(deps.operator)),
+      context.queryClient.ensureQueryData(operatorFleetQueryOptions(deps.operator)),
     ]),
   pendingComponent: PageSkeleton,
   errorComponent: OperatorDashboardError,
@@ -24,8 +39,9 @@ export const Route = createFileRoute('/$locale/_business/dashboard')({
 
 function OperatorDashboardRoute() {
   const { locale } = Route.useParams()
-  const { data: overview } = useSuspenseQuery(operatorOverviewQueryOptions())
-  const { data: vehicles } = useSuspenseQuery(operatorFleetQueryOptions())
+  const { pickedOperatorId } = useOperatorContext()
+  const { data: overview } = useSuspenseQuery(operatorOverviewQueryOptions(pickedOperatorId))
+  const { data: vehicles } = useSuspenseQuery(operatorFleetQueryOptions(pickedOperatorId))
   return <OperatorDashboardView overview={overview} vehicles={vehicles} locale={locale} />
 }
 

@@ -88,8 +88,14 @@ describe('useIsOperatorContextRoute', () => {
     expect(result.current).toBe(true)
   })
 
-  it('is false on an unscoped business route that does not honor ?operator', () => {
+  it('is true on the dashboard route (slice 4 honors ?operator)', () => {
     h.matches = [{ routeId: '/$locale/_business' }, { routeId: '/$locale/_business/dashboard' }]
+    const { result } = renderHook(() => useIsOperatorContextRoute())
+    expect(result.current).toBe(true)
+  })
+
+  it('is false on an unscoped business route that does not honor ?operator', () => {
+    h.matches = [{ routeId: '/$locale/_business' }, { routeId: '/$locale/_business/manage/team' }]
     const { result } = renderHook(() => useIsOperatorContextRoute())
     expect(result.current).toBe(false)
   })
