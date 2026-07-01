@@ -37,6 +37,21 @@ export function useOperatorContext(): { pickedOperatorId: string | undefined } {
   return { pickedOperatorId: operator }
 }
 
+// Route-safe read of the picked operator id from ANYWHERE — including nav chrome
+// (Navbar) that also renders OUTSIDE the `_business` route in renter view, where
+// `useOperatorContext`'s route-scoped `businessRoute.useSearch()` would throw. Pulls
+// the id off the `_business` match's search when that route is active, else returns
+// undefined. Used by the new-bookings badge, which mounts in both nav surfaces.
+export function useOptionalPickedOperatorId(): string | undefined {
+  return useRouterState({
+    select: (s) => {
+      const match = s.matches.find((m) => m.routeId === '/$locale/_business')
+      const operator = (match?.search as { operator?: unknown } | undefined)?.operator
+      return typeof operator === 'string' && operator.length > 0 ? operator : undefined
+    },
+  })
+}
+
 // The single seam that mutates the operator context. The search reducer always
 // keeps the `operator` key present (`{ ...prev, operator }`) so passing `undefined`
 // is an explicit clear that survives retainSearchParams, while omitting the key
@@ -81,6 +96,7 @@ export type WithOperatorId<T> = T & { operatorId?: string }
 export const OPERATOR_CONTEXT_ROUTE_IDS: ReadonlySet<string> = new Set([
   '/$locale/_business/dashboard', // slice 4 — overview + fleet-overview narrow to picked operator
   '/$locale/_business/manage/add-ons',
+  '/$locale/_business/manage/bookings/', // slice 5a — bookings reads narrow to picked operator
   '/$locale/_business/manage/classes',
   '/$locale/_business/manage/fees',
   '/$locale/_business/manage/insurance',
