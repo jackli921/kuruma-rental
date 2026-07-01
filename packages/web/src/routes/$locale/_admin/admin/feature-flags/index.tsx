@@ -41,6 +41,7 @@ function FeatureFlagsRoute() {
     label: FEATURE_FLAGS[key].label,
     effective: map[key] ?? isBuildTimeEnabled(key),
     overridden: map[key] !== undefined,
+    runtimeControlled: FEATURE_FLAGS[key].runtimeControlled,
   }))
 
   const pendingKey = mutation.isPending ? (mutation.variables?.key ?? null) : null

@@ -25,6 +25,20 @@ describe('feature flag registry', () => {
     expect(new Set(envs).size).toBe(envs.length)
   })
 
+  it('marks exactly the runtime-migrated flags as runtimeControlled', () => {
+    // A flag is runtimeControlled once a consumer reads it via useFeatureFlag(),
+    // so a dashboard toggle actually takes effect. Flip this to true in the same
+    // slice that migrates the flag (#1322) — the admin page badges the difference.
+    const controlled = FEATURE_FLAG_KEYS.filter((k) => FEATURE_FLAGS[k].runtimeControlled)
+    expect(new Set(controlled)).toEqual(new Set(['MULTI_CURRENCY', 'REVIEWS', 'CANCELLATION']))
+  })
+
+  it('gives every flag an explicit boolean runtimeControlled (no accidental undefined)', () => {
+    for (const key of FEATURE_FLAG_KEYS) {
+      expect(typeof FEATURE_FLAGS[key].runtimeControlled).toBe('boolean')
+    }
+  })
+
   it('isFeatureFlagKey accepts a registered key and rejects anything else', () => {
     expect(isFeatureFlagKey('MULTI_CURRENCY')).toBe(true)
     expect(isFeatureFlagKey('DEFINITELY_NOT_A_FLAG')).toBe(false)

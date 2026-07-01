@@ -15,8 +15,7 @@ import { Textarea } from '@/components/ui/textarea'
 import {
   type SubstitutionCandidate,
   assignVehicle,
-  bookingEventsQueryOptions,
-  operatorBookingDetailQueryOptions,
+  invalidateBookingCaches,
 } from '@/vite/operator-bookings/api'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { type FormEvent, useState } from 'react'
@@ -39,12 +38,11 @@ interface AssignVehicleDialogProps {
 }
 
 // #464: assign a concrete vehicle to a CLASS_COMBO float booking. Mirrors
-// SubstituteVehicleDialog exactly; only the endpoint, copy and invalidation
-// target differ. On success it invalidates:
-//   • the booking detail (assigned vehicle changes)
-//   • the events query (VEHICLE_ASSIGNED audit row)
-//   • the needs-assignment worklist (booking no longer needs a car)
-//   • the calendar prefix (booking now occupies a vehicle column)
+// SubstituteVehicleDialog exactly; only the endpoint and copy differ. On success
+// it calls invalidateBookingCaches, whose operator-bookings prefix cascade covers
+// the detail (assigned vehicle changes), events (VEHICLE_ASSIGNED audit row),
+// needs-assignment worklist (booking no longer needs a car) and calendar (booking
+// now occupies a column) — plus the dashboard overview (#1099 Theme 4).
 // CSRF-gated; the session token rides the write.
 export function AssignVehicleDialog({
   bookingId,
@@ -64,14 +62,7 @@ export function AssignVehicleDialog({
   const mutation = useMutation({
     mutationFn: () => assignVehicle(bookingId, vehicleId, reason.trim() || null, csrfToken),
     onSuccess: () => {
-      queryClient.invalidateQueries({
-        queryKey: operatorBookingDetailQueryOptions(bookingId).queryKey,
-      })
-      queryClient.invalidateQueries({ queryKey: bookingEventsQueryOptions(bookingId).queryKey })
-      // Remove this booking from the needs-assignment worklist.
-      queryClient.invalidateQueries({ queryKey: ['operator-bookings', 'needs-assignment'] })
-      // Refresh all calendar views — the booking now has an assigned vehicle column.
-      queryClient.invalidateQueries({ queryKey: ['operator-bookings', 'calendar'] })
+      invalidateBookingCaches(queryClient)
       setOpen(false)
     },
   })
