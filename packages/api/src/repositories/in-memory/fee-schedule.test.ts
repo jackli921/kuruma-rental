@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import { SYSTEM_CONTEXT } from '../../middleware/auth'
 import type { FeeSchedule } from '../../stores'
 import { InMemoryFeeScheduleRepository } from './fee-schedule'
 
@@ -19,7 +20,10 @@ describe('InMemoryFeeScheduleRepository.update — operatorId is an immutable te
     const repo = new InMemoryFeeScheduleRepository()
     const created = await repo.create(seed('op_a'))
 
-    const updated = await repo.update(created.id, { operatorId: 'op_b', amountJpy: 3000 })
+    const updated = await repo.update(SYSTEM_CONTEXT, created.id, {
+      operatorId: 'op_b',
+      amountJpy: 3000,
+    })
 
     expect(updated?.operatorId).toBe('op_a')
     expect(updated?.amountJpy).toBe(3000)

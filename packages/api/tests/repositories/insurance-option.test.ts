@@ -63,7 +63,7 @@ describe('InMemoryInsuranceOptionRepository', () => {
 
     it('allows reusing a name freed by archiving (uniqueness is ACTIVE-only)', async () => {
       const first = await repo.create(optionInput({ operatorId: 'op_a', name: 'Premium' }))
-      await repo.archive(first.id)
+      await repo.archive(SYSTEM_CONTEXT, first.id)
       // The archived row no longer reserves the name.
       await expect(
         repo.create(optionInput({ operatorId: 'op_a', name: 'Premium' })),
@@ -79,7 +79,7 @@ describe('InMemoryInsuranceOptionRepository', () => {
 
     it('ignores an ARCHIVED row of the same name', async () => {
       const created = await repo.create(optionInput({ operatorId: 'op_a', name: 'Premium' }))
-      await repo.archive(created.id)
+      await repo.archive(SYSTEM_CONTEXT, created.id)
       expect(await repo.findActiveByOperatorAndName('op_a', 'Premium')).toBeUndefined()
     })
 
@@ -116,20 +116,20 @@ describe('InMemoryInsuranceOptionRepository', () => {
   describe('update', () => {
     it('modifies fields and preserves id/createdAt', async () => {
       const created = await repo.create(optionInput())
-      const updated = await repo.update(created.id, { dailyPriceJpy: 2500 })
+      const updated = await repo.update(SYSTEM_CONTEXT, created.id, { dailyPriceJpy: 2500 })
       expect(updated!.dailyPriceJpy).toBe(2500)
       expect(updated!.id).toBe(created.id)
       expect(updated!.createdAt).toEqual(created.createdAt)
     })
 
     it('returns undefined for a missing id', async () => {
-      expect(await repo.update('nonexistent', { name: 'Nope' })).toBeUndefined()
+      expect(await repo.update(SYSTEM_CONTEXT, 'nonexistent', { name: 'Nope' })).toBeUndefined()
     })
 
     it('throws a unique-violation when renaming onto another ACTIVE row in the same operator', async () => {
       const a = await repo.create(optionInput({ operatorId: 'op_a', name: 'Premium' }))
       await repo.create(optionInput({ operatorId: 'op_a', name: 'Standard' }))
-      await expect(repo.update(a.id, { name: 'Standard' })).rejects.toMatchObject({
+      await expect(repo.update(SYSTEM_CONTEXT, a.id, { name: 'Standard' })).rejects.toMatchObject({
         code: PG_ERROR.UNIQUE_VIOLATION,
       })
     })
@@ -138,13 +138,13 @@ describe('InMemoryInsuranceOptionRepository', () => {
   describe('archive', () => {
     it('sets status to ARCHIVED', async () => {
       const created = await repo.create(optionInput({ status: 'ACTIVE' }))
-      const archived = await repo.archive(created.id)
+      const archived = await repo.archive(SYSTEM_CONTEXT, created.id)
       expect(archived!.status).toBe('ARCHIVED')
       expect(archived!.id).toBe(created.id)
     })
 
     it('returns undefined for a missing id', async () => {
-      expect(await repo.archive('nonexistent')).toBeUndefined()
+      expect(await repo.archive(SYSTEM_CONTEXT, 'nonexistent')).toBeUndefined()
     })
   })
 })

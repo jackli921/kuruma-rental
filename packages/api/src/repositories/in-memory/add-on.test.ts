@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import { SYSTEM_CONTEXT } from '../../middleware/auth'
 import type { AddOn } from '../../stores'
 import { InMemoryAddOnRepository } from './add-on'
 
@@ -18,7 +19,10 @@ describe('InMemoryAddOnRepository.update — operatorId is an immutable tenant a
     const repo = new InMemoryAddOnRepository()
     const created = await repo.create(seed('op_a'))
 
-    const updated = await repo.update(created.id, { operatorId: 'op_b', priceJpy: 3000 })
+    const updated = await repo.update(SYSTEM_CONTEXT, created.id, {
+      operatorId: 'op_b',
+      priceJpy: 3000,
+    })
 
     expect(updated?.operatorId).toBe('op_a')
     expect(updated?.priceJpy).toBe(3000)

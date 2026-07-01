@@ -1,4 +1,4 @@
-import type { CallerContext } from '../../middleware/auth'
+import { type CallerContext, requireFleetWriteScope } from '../../middleware/auth'
 import type { VehicleClass } from '../../stores'
 import { operatorReadScope } from '../../tenancy'
 import type { VehicleClassFilters, VehicleClassRepository } from '../types'
@@ -54,9 +54,21 @@ export class InMemoryVehicleClassRepository implements VehicleClassRepository {
     return vehicleClass
   }
 
-  async update(id: string, data: Partial<VehicleClass>): Promise<VehicleClass | undefined> {
+  async update(
+    ctx: CallerContext,
+    id: string,
+    data: Partial<VehicleClass>,
+  ): Promise<VehicleClass | undefined> {
+    // #1288: reject non-fleet-write roles + fail closed on a tenant-less operator
+    // (mirrors vehicle.ts) — else a bypassing RENTER/PARTNER maps to {kind:'all'}
+    // and could write any operator's catalog.
+    requireFleetWriteScope(ctx)
+    const scope = operatorReadScope(ctx)
     const existing = this.store.get(id)
     if (!existing) return undefined
+    // #1288: tenant-scope the write so a caller reaching the repo without the
+    // service's findById guard can't mutate another operator's row by id.
+    if (scope.kind === 'operator' && existing.operatorId !== scope.operatorId) return undefined
 
     const updated: VehicleClass = {
       ...existing,
@@ -72,9 +84,13 @@ export class InMemoryVehicleClassRepository implements VehicleClassRepository {
     return updated
   }
 
-  async archive(id: string): Promise<VehicleClass | undefined> {
+  async archive(ctx: CallerContext, id: string): Promise<VehicleClass | undefined> {
+    requireFleetWriteScope(ctx)
+    const scope = operatorReadScope(ctx)
     const existing = this.store.get(id)
     if (!existing) return undefined
+    // #1288: tenant-scope the archive (see update()).
+    if (scope.kind === 'operator' && existing.operatorId !== scope.operatorId) return undefined
 
     const archived: VehicleClass = {
       ...existing,

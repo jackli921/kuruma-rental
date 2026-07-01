@@ -34,6 +34,10 @@ export interface FeeScheduleRepository {
     vehicleClassId: string | null,
   ): Promise<FeeSchedule | undefined>
   create(data: Omit<FeeSchedule, 'id' | 'createdAt' | 'updatedAt'>): Promise<FeeSchedule>
-  update(id: string, data: Partial<FeeSchedule>): Promise<FeeSchedule | undefined>
-  archive(id: string): Promise<FeeSchedule | undefined>
+  update(
+    ctx: CallerContext,
+    id: string,
+    data: Partial<FeeSchedule>,
+  ): Promise<FeeSchedule | undefined>
+  archive(ctx: CallerContext, id: string): Promise<FeeSchedule | undefined>
 }
