@@ -1,9 +1,12 @@
 import { Button } from '@/components/ui/button'
 import { PageSkeleton } from '@/vite/PageSkeleton'
 import {
+  featureFlagsQueryOptions,
   isOperatorBlocksEnabled,
   isOperatorManualBookingEnabled,
   isVisibleToViewer,
+  resolveFeatureFlag,
+  useFeatureFlag,
 } from '@/vite/config'
 import { isOperatorSession } from '@/vite/guards'
 import {
@@ -25,9 +28,9 @@ import {
   type CalendarView,
   blocksToCalendarEvents,
   calendarRange,
-  defaultCalendarView,
   fleetToResources,
   formatCalendarDate,
+  normalizeViewParam,
   parseCalendarDate,
   parseCalendarView,
   toCalendarEvents,
@@ -68,7 +71,10 @@ export const Route = createFileRoute('/$locale/_business/manage/bookings/')({
   // a known view and a canonical local day so the URL stays clean and the
   // loader/component agree on the fetched range.
   validateSearch: (search: Record<string, unknown>): BookingsCalendarSearch => ({
-    view: typeof search.view === 'string' ? parseCalendarView(search.view) : undefined,
+    // Flag-blind: validateSearch can't read the runtime overrides, so it only narrows
+    // to a KNOWN view string. The flag-aware resolution (drop `timeline` when off,
+    // pick the default) runs in the loader + component (#1322).
+    view: normalizeViewParam(search.view),
     date:
       typeof search.date === 'string'
         ? formatCalendarDate(parseCalendarDate(search.date))
@@ -81,12 +87,18 @@ export const Route = createFileRoute('/$locale/_business/manage/bookings/')({
   loaderDeps: ({
     search,
   }: { search: BookingsCalendarSearch & { operator?: string | undefined } }) => ({
-    view: search.view ?? defaultCalendarView(),
+    view: search.view,
     date: search.date,
     operator: search.operator,
   }),
-  loader: ({ context, deps }) => {
-    const { from, to } = calendarRange(deps.view, parseCalendarDate(deps.date))
+  loader: async ({ context, deps }) => {
+    // Warm the SAME range the component renders. The landing view depends on the
+    // now-runtime-toggleable fleet-timeline flag (#1322), so read its effective value
+    // from the overrides map (warmed app-wide by FeatureFlagsProvider) to match.
+    const overrides = await context.queryClient.ensureQueryData(featureFlagsQueryOptions())
+    const timelineEnabled = resolveFeatureFlag(overrides, 'FLEET_TIMELINE')
+    const view = parseCalendarView(deps.view, timelineEnabled)
+    const { from, to } = calendarRange(view, parseCalendarDate(deps.date))
     return Promise.all([
       context.queryClient.ensureQueryData(operatorCalendarQueryOptions(from, to, deps.operator)),
       context.queryClient.ensureQueryData(operatorCalendarVehiclesQueryOptions()),
@@ -151,7 +163,10 @@ export function OperatorBookingsRoute() {
     markBookingsSeen(queryClient, pickedOperatorId)
   }, [queryClient, pickedOperatorId])
 
-  const view = viewParam ?? defaultCalendarView()
+  // Resolve the effective view from the runtime-toggleable flag (#1322): an absent
+  // param or a stale `?view=timeline` while the timeline is off falls back to week.
+  const timelineEnabled = useFeatureFlag('FLEET_TIMELINE')
+  const view = parseCalendarView(viewParam, timelineEnabled)
   const anchorDate = useMemo(() => parseCalendarDate(date), [date])
   const { from, to } = calendarRange(view, anchorDate)
 

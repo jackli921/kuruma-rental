@@ -34,6 +34,17 @@ export function isBuildTimeEnabled(key: FeatureFlagKey): boolean {
   return BUILD_TIME_READERS[key]()
 }
 
+/**
+ * The effective value of a flag: a server override wins over the build-time
+ * default (`override ?? build-time ?? false`). Single source of truth for that
+ * rule — `useFeatureFlag` (live render), the admin switchboard, and route loaders
+ * that warm a flag-dependent prefetch all call this, so a warmed range can never
+ * drift from what the hook renders (#1322).
+ */
+export function resolveFeatureFlag(overrides: FeatureFlagOverrides, key: FeatureFlagKey): boolean {
+  return overrides[key] ?? isBuildTimeEnabled(key)
+}
+
 interface OverridesEnvelope {
   success?: boolean
   data?: { overrides?: Record<string, unknown> }

@@ -14,6 +14,7 @@ export type {
   Region,
   InsuranceOption,
   AddOn,
+  AddOnTemplate,
   FeeSchedule,
   PaymentEvent,
   RenterDocument,
@@ -36,6 +37,7 @@ import type { OperatorRole } from '@kuruma/shared/validators/provider-invite'
 import type { CallerContext } from '../middleware/auth'
 import type {
   AddOn,
+  AddOnTemplate,
   Booking,
   InsuranceOption,
   Location,
@@ -243,6 +245,17 @@ export interface AddOnRepository {
   create(data: Omit<AddOn, 'id' | 'createdAt' | 'updatedAt'>): Promise<AddOn>
   update(ctx: CallerContext, id: string, data: Partial<AddOn>): Promise<AddOn | undefined>
   archive(ctx: CallerContext, id: string): Promise<AddOn | undefined>
+}
+
+/**
+ * The platform-owned add-on TEMPLATE catalog (catalog i18n, epic #385). Global,
+ * not tenant-scoped — every operator picks from the same list — so NO ctx: a
+ * template carries no operator, and the read exposes only ACTIVE rows (a picker
+ * never offers a retired template). The service resolves each row's LocalizedText
+ * name to the caller locale before it reaches the wire.
+ */
+export interface AddOnTemplateRepository {
+  findActive(): Promise<AddOnTemplate[]>
 }
 
 // #521 provider authorization. Not ctx-scoped: the admin endpoint

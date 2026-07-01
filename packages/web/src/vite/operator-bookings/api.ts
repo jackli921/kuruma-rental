@@ -337,7 +337,7 @@ export const NEEDS_ASSIGNMENT_QUERY_KEY = ['operator-bookings', 'needs-assignmen
 // #1197: pull a full page (the API caps `limit` at 100). Without an explicit
 // limit the route defaults to 20 and unwrap() drops `nextCursor`, so an operator
 // with >20 unassigned floats would silently see only 20 on this action worklist.
-const NEEDS_ASSIGNMENT_PAGE_LIMIT = 100
+export const NEEDS_ASSIGNMENT_PAGE_LIMIT = 100
 
 export async function fetchNeedsAssignment(
   pickedOperatorId?: string,

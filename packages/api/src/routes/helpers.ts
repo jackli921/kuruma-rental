@@ -1,3 +1,4 @@
+import { DEFAULT_LOCALE, type Locale, SUPPORTED_LOCALES } from '@kuruma/shared/i18n/locales'
 import type { Context } from 'hono'
 import { z } from 'zod'
 import type { CallerContext } from '../middleware/auth'
@@ -168,6 +169,33 @@ export function parseId(c: Context, name = 'id'): ParseIdSuccess | ParseIdFailur
     return { ok: false, response: fail(c, `${name} must be a valid uuid`, 400) }
   }
   return { ok: true, id: result.data }
+}
+
+// --- Locale query helper ---
+
+const localeSchema = z.enum(SUPPORTED_LOCALES)
+
+type ParseLocaleSuccess = { ok: true; locale: Locale }
+type ParseLocaleFailure = { ok: false; response: Response }
+
+/**
+ * Resolve `?locale=` against SUPPORTED_LOCALES for a localized read. Absent ->
+ * DEFAULT_LOCALE; present-but-unknown -> 400, NEVER coerced to a default. The
+ * reject-not-coerce stance is deliberate (catalog i18n design §334): an
+ * unbounded/coerced locale on an edge-cacheable GET is a cache-flood vector, and
+ * silently serving English for `?locale=xx` would hide a caller bug.
+ */
+export function parseLocale(c: Context): ParseLocaleSuccess | ParseLocaleFailure {
+  const raw = c.req.query('locale')
+  if (raw === undefined) return { ok: true, locale: DEFAULT_LOCALE }
+  const result = localeSchema.safeParse(raw)
+  if (!result.success) {
+    return {
+      ok: false,
+      response: fail(c, `locale must be one of: ${SUPPORTED_LOCALES.join(', ')}`, 400),
+    }
+  }
+  return { ok: true, locale: result.data }
 }
 
 // --- Body parsing helpers ---

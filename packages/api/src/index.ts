@@ -26,6 +26,7 @@ import { csrf } from './middleware/csrf'
 import { structuredLogger } from './middleware/logger'
 import { requestId } from './middleware/request-id'
 import { observability } from './observability/middleware'
+import { createAddOnTemplateRoutes } from './routes/add-on-templates'
 import { createAddOnRoutes } from './routes/add-ons'
 import { createAdminRoutes } from './routes/admin'
 import { createAdminBookingRoutes } from './routes/admin-bookings'
@@ -70,6 +71,7 @@ import { createVehicleDetailRoutes } from './routes/vehicle-detail'
 import { createVehiclePhotoRoutes } from './routes/vehicle-photos'
 import { createVehicleRoutes } from './routes/vehicles'
 import { AddOnService } from './services/add-on'
+import { AddOnTemplateService } from './services/add-on-template'
 import { AdminBookingService } from './services/admin-booking'
 import { AdminOverviewService } from './services/admin-overview'
 import { AdminRevenueService } from './services/admin-revenue'
@@ -156,6 +158,7 @@ export function createApp(overrides?: AppOverrides, repos: Repos = buildRepos(ov
     locationRepo,
     insuranceOptionRepo,
     addOnRepo,
+    addOnTemplateRepo,
     feeScheduleRepo,
     notificationLogRepo,
     storefrontRepo,
@@ -459,6 +462,7 @@ export function createApp(overrides?: AppOverrides, repos: Repos = buildRepos(ov
   const locationService = new LocationService(locationRepo, bookingRepo, cachedGeocoder, regionRepo)
   const insuranceOptionService = new InsuranceOptionService(insuranceOptionRepo)
   const addOnService = new AddOnService(addOnRepo)
+  const addOnTemplateService = new AddOnTemplateService(addOnTemplateRepo)
   const feeScheduleService = new FeeScheduleService(feeScheduleRepo)
   const storefrontSearchService = new StorefrontSearchService(
     storefrontRepo,
@@ -563,6 +567,7 @@ export function createApp(overrides?: AppOverrides, repos: Repos = buildRepos(ov
     .route('/', createLocationRoutes(locationService, resolveWriteOperatorId))
     .route('/', createInsuranceOptionRoutes(insuranceOptionService, resolveWriteOperatorId))
     .route('/', createAddOnRoutes(addOnService, resolveWriteOperatorId))
+    .route('/', createAddOnTemplateRoutes(addOnTemplateService))
     .route('/', createFeeScheduleRoutes(feeScheduleService, resolveWriteOperatorId))
     .route('/', createNotificationRoutes(notificationService))
     .route('/', createOperatorRoutes(operatorService))
