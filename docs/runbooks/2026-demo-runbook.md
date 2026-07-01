@@ -129,5 +129,5 @@ operator `/manage/bookings`.
 
 - **Out of Path A scope:** the Stripe *pay* step and the admin *partner-revenue 4%* tab — #461 (live Stripe) / #462 (Vite admin portal).
 - **Local Postgres for this lane — #542 (done).** `db:seed:tcp` seeds over postgres-js/TCP and `pgConnectOptions` turns TLS off for localhost, so the lane runs against a disposable `postgres:16` with no Neon branch — `bun run test:e2e:real-db:local` (§3).
-- **CI gate — #445 (done).** The `e2e-real-db` job runs this lane against a fresh `postgres:16` service container (no Neon branch, no external secrets) and is a required check on `marketplace-pivot`.
+- **CI gate — #445 (done).** The `e2e-real-db` job runs this lane against a fresh `postgres:16` service container (no Neon branch, no external secrets) and is a required check on `develop` (the trunk; `marketplace-pivot` was retired to `develop`).
 - **Operator locations port — #529.** Re-enables `locations.auth.spec.ts` in this lane.

@@ -61,6 +61,12 @@ test.describe('operator locations (authenticated, real DB)', () => {
     const addDialog = page.getByRole('dialog')
     await addDialog.locator('#location-name').fill(name)
     await addDialog.locator('#location-address').fill('1-1 Test, Osaka')
+    // A synthetic address can't be geocoded, so the server can't auto-derive a
+    // region and rejects the create ("needs a region"). Pick one explicitly via the
+    // prefecture -> city -> area cascade; only the AREA level yields a regionId.
+    await addDialog.locator('#region-prefecture').selectOption({ label: 'Osaka' })
+    await addDialog.locator('#region-city').selectOption({ label: 'Osaka City' })
+    await addDialog.locator('#region-area').selectOption({ label: 'Namba' })
     await addDialog.getByRole('button', { name: 'Save location' }).click()
     await expect(page.getByRole('heading', { name, exact: true })).toBeVisible()
 

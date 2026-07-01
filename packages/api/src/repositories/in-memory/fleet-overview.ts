@@ -1,6 +1,6 @@
 import type { FleetVehicleOverview } from '@kuruma/shared/types/fleet'
-import type { CallerContext } from '../../middleware/auth'
-import { operatorReadScope } from '../../tenancy'
+import { type CallerContext, requireManagementRead } from '../../middleware/auth'
+import { bookingReadScope } from '../../tenancy'
 import type {
   BookingRepository,
   FleetOverviewRepository,
@@ -44,6 +44,16 @@ export class InMemoryFleetOverviewRepository implements FleetOverviewRepository 
   ): Promise<FleetVehicleOverview[]> {
     const windowStart = new Date(now.getTime() - UTILIZATION_WINDOW_HOURS * 60 * 60 * 1000)
 
+    // Defence-in-depth (mirrors the overview repo): reject RENTER/PARTNER here
+    // too, so a non-management caller bypassing the route gate reads no fleet.
+    requireManagementRead(ctx)
+    // #1273: scope from bookingReadScope, the SAME vocabulary the overview card
+    // uses, so the two dashboard reads agree. `none` (operator without operatorId),
+    // `renter` (legacy STAFF/ADMIN post-#487), and `partner` (a channel, not an
+    // operator) never see operator fleet — return empty, matching overview's zeros.
+    const scope = bookingReadScope(ctx)
+    if (scope.kind === 'none' || scope.kind === 'renter' || scope.kind === 'partner') return []
+
     // Scope BOTH reads to the caller's tenant (#594). VehicleRepository.findAll
     // and BookingRepository.findAll each apply their own operator scope, so an
     // OPERATOR_* caller never reads another tenant's rows (isolation at the read,
@@ -60,7 +70,7 @@ export class InMemoryFleetOverviewRepository implements FleetOverviewRepository 
     // its own vehicles above, so the filter is honored ONLY for `all` — a foreign
     // id can never widen a tenant, and bookings narrow with the vehicle set below.
     const vehicles =
-      operatorReadScope(ctx).kind === 'all' && operatorId
+      scope.kind === 'all' && operatorId
         ? allVehicles.filter((v) => v.operatorId === operatorId)
         : allVehicles
     const allBookings = await this.bookingRepo.findAll(ctx)

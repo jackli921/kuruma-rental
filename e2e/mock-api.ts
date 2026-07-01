@@ -156,9 +156,9 @@ const TEST_VEHICLE = {
   updatedAt: FROZEN_TIMESTAMP,
 }
 
-// Renter who books in the slice-6 E2E (#392). The forged session cookie's
-// subject MUST match this id, and POST /bookings stamps it as the renter so the
-// confirmation page's ownership check passes. Keep in sync with e2e/auth.ts.
+// Renter id stamped on POST /bookings responses so a mock booking's confirmation
+// ownership check passes. (The slice-6 booking spec that exercised this end to end
+// was retired in #1255 once the real-DB lane superseded it; the stub endpoint stays.)
 const TEST_RENTER_ID = 'e2e-renter-1'
 
 // The storefront operator's ACTIVE insurance options (#392). The booking form's

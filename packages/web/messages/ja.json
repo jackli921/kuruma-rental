@@ -430,6 +430,7 @@
         "pickupLocation": "受取場所",
         "pickupLocationNone": "受取場所なし",
         "pickupLocationCurrent": "現在の受取場所",
+        "pickupLocationEmptyHint": "この車両を検索に表示させるには、まず受取場所を作成してください。",
         "operator": "事業者",
         "operatorPlaceholder": "事業者を選択",
         "operatorRequired": "続行するには事業者を選択してください"
