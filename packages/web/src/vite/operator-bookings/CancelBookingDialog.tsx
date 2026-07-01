@@ -9,7 +9,7 @@ import {
   DialogTitle,
   DialogTrigger,
 } from '@/components/ui/dialog'
-import { OPERATOR_BOOKINGS_KEY, cancelBooking } from '@/vite/operator-bookings/api'
+import { cancelBooking, invalidateBookingCaches } from '@/vite/operator-bookings/api'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { useRef, useState } from 'react'
 import { useTranslations } from 'use-intl'
@@ -22,8 +22,9 @@ interface CancelBookingDialogProps {
 // #616: operator cancels a booking. The server applies the tiered cancellation
 // fee (72h free / 48h 30% / 24h 70% / same-day 100%) and appends a
 // BOOKING_CANCELLED audit event, so the action is irreversible and may charge the
-// renter — hence the confirmation gate. On success it invalidates the
-// operator-bookings prefix so the detail + timeline reflect the CANCELLED state.
+// renter — hence the confirmation gate. On success it calls
+// invalidateBookingCaches so the detail + timeline reflect the CANCELLED state and
+// the dashboard overview drops the trip (#1099 Theme 4).
 // CSRF-gated; the session token rides the write.
 export function CancelBookingDialog({ bookingId, csrfToken }: CancelBookingDialogProps) {
   const t = useTranslations('bookings.operator.detail.cancelBooking')
@@ -33,7 +34,7 @@ export function CancelBookingDialog({ bookingId, csrfToken }: CancelBookingDialo
   const mutation = useMutation({
     mutationFn: () => cancelBooking(bookingId, csrfToken),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: OPERATOR_BOOKINGS_KEY })
+      invalidateBookingCaches(queryClient)
       setOpen(false)
     },
   })

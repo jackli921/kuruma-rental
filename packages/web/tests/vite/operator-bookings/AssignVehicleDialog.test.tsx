@@ -1,20 +1,12 @@
 import { AssignVehicleDialog } from '@/vite/operator-bookings/AssignVehicleDialog'
 import * as api from '@/vite/operator-bookings/api'
-import {
-  type SubstitutionCandidate,
-  bookingEventsQueryOptions,
-  operatorBookingDetailQueryOptions,
-} from '@/vite/operator-bookings/api'
+import type { SubstitutionCandidate } from '@/vite/operator-bookings/api'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { IntlProvider } from 'use-intl'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import enMessages from '../../../messages/en.json'
-
-// needsAssignment query key — Task 10 (the worklist) will use the same key.
-const NEEDS_ASSIGNMENT_KEY = ['operator-bookings', 'needs-assignment'] as const
-const CALENDAR_KEY = ['operator-bookings', 'calendar'] as const
 
 const sub = enMessages.bookings.operator.detail.substitute
 const assign = enMessages.bookings.operator.detail.assign
@@ -70,7 +62,7 @@ describe('AssignVehicleDialog', () => {
     expect(screen.getByRole('button', { name: assign.submit })).toBeDisabled()
   })
 
-  it('submits the picked vehicle id + reason + csrf and invalidates the right query keys', async () => {
+  it('submits the picked vehicle id + reason + csrf and invalidates the booking + overview caches', async () => {
     const user = userEvent.setup()
     const spy = vi.spyOn(api, 'assignVehicle').mockResolvedValue({} as never)
     const queryClient = new QueryClient()
@@ -85,17 +77,11 @@ describe('AssignVehicleDialog', () => {
     await waitFor(() =>
       expect(spy).toHaveBeenCalledWith('bk-1', 'veh-3', 'pre-delivery check', 'csrf-tok'),
     )
-    // Booking detail + events (same as substitute dialog).
-    expect(invalidate).toHaveBeenCalledWith({
-      queryKey: operatorBookingDetailQueryOptions('bk-1').queryKey,
-    })
-    expect(invalidate).toHaveBeenCalledWith({
-      queryKey: bookingEventsQueryOptions('bk-1').queryKey,
-    })
-    // needsAssignment worklist — Task 10 reuses this exact key.
-    expect(invalidate).toHaveBeenCalledWith({ queryKey: NEEDS_ASSIGNMENT_KEY })
-    // Calendar — the booking now has an assigned vehicle; columns must refresh.
-    expect(invalidate).toHaveBeenCalledWith({ queryKey: CALENDAR_KEY })
+    // invalidateBookingCaches: the operator-bookings prefix cascade covers detail,
+    // events, the needs-assignment worklist and the calendar (the booking now owns a
+    // vehicle column); the overview prefix refreshes the dashboard (#1099 Theme 4).
+    expect(invalidate).toHaveBeenCalledWith({ queryKey: ['operator-bookings'] })
+    expect(invalidate).toHaveBeenCalledWith({ queryKey: ['operator-overview'] })
     // Dialog closes on success.
     await waitFor(() => expect(screen.queryByRole('combobox')).not.toBeInTheDocument())
   })
