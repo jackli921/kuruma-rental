@@ -18,6 +18,7 @@ import type {
   MaintenanceLogRepository,
   MessageRepository,
   NotificationLogRepository,
+  OperatorApplicationRepository,
   OperatorMembershipRepository,
   OperatorRepository,
   OverviewRepository,
@@ -87,6 +88,7 @@ export type AppOverrides = {
   consentRepo?: ConsentRepository
   reviewRepo?: ReviewRepository
   featureFlagRepo?: FeatureFlagRepository
+  operatorApplicationRepo?: OperatorApplicationRepository
   // Inject a fake outbound email port in tests; absent ⇒ the env-resolved
   // Resend/dev-stub/sentinel (resolveEmailSender). Shared by the booking
   // dispatcher and the #916 compliance digest.
