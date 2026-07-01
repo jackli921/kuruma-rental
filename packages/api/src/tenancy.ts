@@ -97,6 +97,27 @@ export function applyCrossOperatorReadScope<F extends { operatorId?: string }>(
 }
 
 /**
+ * Resolve a bypass-only operator narrowing for an aggregate read (#407, picker
+ * slice 4 — dashboard/fleet-overview). An `all`-scope caller (a bypass admin
+ * using the operator-context picker) may narrow a cross-operator aggregate to a
+ * single operator; every tenant-scoped caller ignores a requested operatorId, so
+ * a foreign `?operatorId=` can never widen their scope (the H2 invariant).
+ *
+ * Unlike {@link applyCrossOperatorReadScope}, a missing operatorId is NOT a 400:
+ * these reads default to "all operators", so the absence of a pick is the
+ * legitimate aggregate case. The strict config-list helper (throws
+ * ScopeRequiredError) and this lenient one are deliberately different — config
+ * lists were strict before the picker; these aggregate reads keep their working
+ * no-param contract and only add narrowing.
+ */
+export function narrowReadToOperator(
+  ctx: CallerContext,
+  requestedOperatorId: string | undefined,
+): string | undefined {
+  return operatorReadScope(ctx).kind === 'all' ? requestedOperatorId : undefined
+}
+
+/**
  * How a booking read is scoped (#392, proposal §6.2). Unlike the public vehicle
  * catalog (`operatorReadScope` maps renters to `all`), bookings are private:
  * - `all`      — the platform admin tier (PLATFORM_ADMIN). Gated on

@@ -362,14 +362,14 @@ export interface VehicleRepository {
 // (vehicles + bookings + users.name) — following the same boundary as
 // AvailabilityRepository, which also reads vehicles + bookings.
 export interface FleetOverviewRepository {
-  // `now` is injected so time-based cutoffs (utilization window,
-  // current/upcoming filtering) live in callers, not infrastructure.
-  // Tests can pass a fixed Date without faking the global clock.
-  //
-  // `ctx` carries the caller's tenant scope (#594): OPERATOR_* see only their
-  // own vehicles; bypass roles (PLATFORM_ADMIN / legacy STAFF/ADMIN) see all.
-  // The route gates out RENTER/PARTNER before this is reached.
-  findFleetOverview(ctx: CallerContext, now: Date): Promise<FleetVehicleOverview[]>
+  // `now` is injected so time cutoffs live in callers; tests pass a fixed Date.
+  // `ctx` scopes the read (#594); `operatorId` (#407 slice 4, bypass-gated)
+  // narrows a bypass caller to one operator — see narrowReadToOperator.
+  findFleetOverview(
+    ctx: CallerContext,
+    now: Date,
+    operatorId?: string,
+  ): Promise<FleetVehicleOverview[]>
 }
 
 /**
@@ -535,7 +535,8 @@ export interface StatsRepository {
  * `now` is injected so "upcoming" is deterministic in tests.
  */
 export interface OverviewRepository {
-  getOperatorOverview(ctx: CallerContext, now: Date): Promise<OperatorOverview>
+  // `operatorId` (#407 slice 4, bypass-gated): narrows a bypass caller — see narrowReadToOperator.
+  getOperatorOverview(ctx: CallerContext, now: Date, operatorId?: string): Promise<OperatorOverview>
 }
 
 /**

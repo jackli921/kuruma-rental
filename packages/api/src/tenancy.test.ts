@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { CallerContext } from './middleware/auth'
-import { bookingReadScope, vehicleBlockReadScope } from './tenancy'
+import { bookingReadScope, narrowReadToOperator, vehicleBlockReadScope } from './tenancy'
 
 describe('bookingReadScope', () => {
   it('scopes a PARTNER to its own channel (source=TRIP_COM), not all bookings', () => {
@@ -58,5 +58,30 @@ describe('vehicleBlockReadScope', () => {
     // bypass-first resolver would leak every operator's blocks to the channel.
     const partner: CallerContext = { userId: 'trip-com', role: 'PARTNER', bypassScope: true }
     expect(vehicleBlockReadScope(partner)).toEqual({ kind: 'none' })
+  })
+})
+
+describe('narrowReadToOperator', () => {
+  const admin: CallerContext = { userId: 'admin', role: 'PLATFORM_ADMIN', bypassScope: true }
+  const operator: CallerContext = { userId: 'u1', role: 'OPERATOR_OWNER', operatorId: 'op-self' }
+
+  it('narrows an all-scope caller to the requested operator', () => {
+    expect(narrowReadToOperator(admin, 'op-target')).toBe('op-target')
+  })
+
+  it('returns undefined for an all-scope caller who requests no operator (aggregate)', () => {
+    expect(narrowReadToOperator(admin, undefined)).toBeUndefined()
+  })
+
+  it('ignores a requested operatorId for a tenant-scoped caller (never widens across tenants)', () => {
+    // The H2 invariant: a foreign operatorId param must not let an OPERATOR_*
+    // caller read another tenant. Their own scope still applies at the repo.
+    expect(narrowReadToOperator(operator, 'op-other')).toBeUndefined()
+    expect(narrowReadToOperator(operator, 'op-self')).toBeUndefined()
+  })
+
+  it('returns undefined for an operator missing its operatorId (fail-closed)', () => {
+    const noOp: CallerContext = { userId: 'u2', role: 'OPERATOR_STAFF' }
+    expect(narrowReadToOperator(noOp, 'op-target')).toBeUndefined()
   })
 })

@@ -29,16 +29,29 @@ export class DrizzleFleetOverviewRepository implements FleetOverviewRepository {
     private readonly decodePhotos: PhotoDecoder = identityPhotoDecoder,
   ) {}
 
-  async findFleetOverview(ctx: CallerContext, now: Date): Promise<FleetVehicleOverview[]> {
+  async findFleetOverview(
+    ctx: CallerContext,
+    now: Date,
+    operatorId?: string,
+  ): Promise<FleetVehicleOverview[]> {
     const windowStart = new Date(now.getTime() - UTILIZATION_WINDOW_MS)
 
     // Tenant scope (#594): operators see only their own vehicles; bypass roles
     // see all; a scoped caller with no tenant sees nothing. Mirrors
     // DrizzleVehicleRepository.findAll — the repo is the tenant boundary.
+    //
+    // Picker narrowing (#407 slice 4): an `all` (bypass) caller who named an
+    // operator is scoped to that operator; honored ONLY in the `all` branch, so a
+    // foreign id can never widen a tenant. Bookings (round-trip 2) constrain to
+    // these vehicle ids, so narrowing the vehicle query narrows both.
     const scope = operatorReadScope(ctx)
     if (scope.kind === 'none') return []
     const vehicleWhere =
-      scope.kind === 'operator' ? eq(vehicles.operatorId, scope.operatorId) : undefined
+      scope.kind === 'operator'
+        ? eq(vehicles.operatorId, scope.operatorId)
+        : operatorId
+          ? eq(vehicles.operatorId, operatorId)
+          : undefined
 
     // Round-trip 1: this tenant's vehicles.
     const vehicleRows = (
