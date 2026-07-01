@@ -33,6 +33,20 @@ export default defineConfig({
     {
       name: 'chromium',
       use: { ...devices['Desktop Chrome'] },
+      // Desktop specs only. A project-level testIgnore REPLACES the config-level
+      // one (Playwright overrides, not merges), so the real-db exclusion must be
+      // repeated here. The mobile lane is a distinct project (real iPhone WebKit)
+      // so a phone-specific regression can't hide behind desktop chrome.
+      testIgnore: ['**/real-db/**', '**/mobile/**'],
+    },
+    {
+      // Mobile UX hardening gate (#1294): real iPhone 13 (WebKit) so touch-target
+      // sizes and dvh/scroll behaviour are proven on the browser phones actually
+      // run, not desktop Chromium emulation. Wave 1 (#1298) seeds e2e/mobile/;
+      // B/C/D/E extend it.
+      name: 'mobile-safari',
+      use: { ...devices['iPhone 13'] },
+      testMatch: ['**/mobile/**'],
     },
   ],
 

@@ -167,11 +167,11 @@ jobs:
 
       - name: Install Playwright browsers
         if: steps.playwright-cache.outputs.cache-hit != 'true'
-        run: bunx playwright install --with-deps chromium
+        run: bunx playwright install --with-deps chromium webkit
 
       - name: Install Playwright system deps
         if: steps.playwright-cache.outputs.cache-hit == 'true'
-        run: bunx playwright install-deps chromium
+        run: bunx playwright install-deps chromium webkit
 
       - name: Run E2E tests
         run: bun run test:e2e
@@ -236,11 +236,11 @@ jobs:
 
       - name: Install Playwright browsers
         if: steps.playwright-cache.outputs.cache-hit != 'true'
-        run: bunx playwright install --with-deps chromium
+        run: bunx playwright install --with-deps chromium webkit
 
       - name: Install Playwright system deps
         if: steps.playwright-cache.outputs.cache-hit == 'true'
-        run: bunx playwright install-deps chromium
+        run: bunx playwright install-deps chromium webkit
 
       - name: Apply all migrations against fresh Postgres
         run: bun run db:migrate
