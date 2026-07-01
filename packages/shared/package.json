@@ -77,6 +77,7 @@
     "./validators/fee-schedule": "./src/validators/fee-schedule.ts",
     "./validators/customer": "./src/validators/customer.ts",
     "./validators/operator": "./src/validators/operator.ts",
+    "./validators/operator-application": "./src/validators/operator-application.ts",
     "./validators/translation": "./src/validators/translation.ts",
     "./validators/document": "./src/validators/document.ts",
     "./validators/provider-invite": "./src/validators/provider-invite.ts",
