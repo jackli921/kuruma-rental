@@ -38,6 +38,7 @@ beforeEach(() => {
     vehicleRepo,
     bookingRepo,
     new InMemoryVehicleBlockRepository(),
+    operatorRepo,
   )
   service = new StorefrontDetailService(
     storefrontRepo,

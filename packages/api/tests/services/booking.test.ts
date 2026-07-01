@@ -167,6 +167,7 @@ async function setup(
     vehicleRepo,
     bookingRepo,
     vehicleBlockRepo,
+    new InMemoryOperatorRepository(),
   )
   const classRatePlanRepo = new InMemoryClassRatePlanRepository()
   const userRepo = new InMemoryUserRepository(
@@ -1737,6 +1738,7 @@ async function setupSub(
     vehicleRepo,
     bookingRepo,
     vehicleBlockRepo,
+    new InMemoryOperatorRepository(),
   )
   const classRatePlanRepo = new InMemoryClassRatePlanRepository()
   const operatorRepo = seedOperatorRepo()

@@ -127,6 +127,7 @@ async function makeService(threadRepo?: ThreadRepository, staffUserId?: string) 
     vehicleRepo,
     bookingRepo,
     vehicleBlockRepo,
+    new InMemoryOperatorRepository(),
   )
   const classRatePlanRepo = new InMemoryClassRatePlanRepository()
 

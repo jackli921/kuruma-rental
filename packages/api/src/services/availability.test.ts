@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { SYSTEM_CONTEXT } from '../middleware/auth'
 import { InMemoryAvailabilityRepository } from '../repositories/in-memory/availability'
 import { InMemoryBookingRepository } from '../repositories/in-memory/booking'
+import { InMemoryOperatorRepository } from '../repositories/in-memory/operator'
 import { InMemoryVehicleRepository } from '../repositories/in-memory/vehicle'
 import { InMemoryVehicleBlockRepository } from '../repositories/in-memory/vehicle-block'
 import type { Vehicle } from '../stores'
@@ -17,6 +18,7 @@ function setup() {
     vehicleRepo,
     bookingRepo,
     new InMemoryVehicleBlockRepository(),
+    new InMemoryOperatorRepository(),
   )
   const service = new AvailabilityService(repo)
   return { vehicleRepo, service }

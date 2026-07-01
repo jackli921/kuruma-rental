@@ -4,6 +4,7 @@ import { createApp } from '../../src/index'
 import {
   InMemoryAvailabilityRepository,
   InMemoryBookingRepository,
+  InMemoryOperatorRepository,
   InMemoryVehicleBlockRepository,
   InMemoryVehicleClassRepository,
   InMemoryVehicleRepository,
@@ -29,6 +30,7 @@ function createTestApp(opts?: { publicCatalogLimiter?: RateLimitBinding }) {
     vehicleRepo,
     bookingRepo,
     new InMemoryVehicleBlockRepository(),
+    new InMemoryOperatorRepository(),
   )
   const vehicleClassRepo = new InMemoryVehicleClassRepository()
   return {
