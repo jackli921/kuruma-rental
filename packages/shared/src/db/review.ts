@@ -110,6 +110,24 @@ export const reviews = pgTable(
     index('idx_reviews_operator_published').on(t.operatorId, t.publishedAt),
     index('idx_reviews_subject_vehicle').on(t.subjectVehicleId),
     index('idx_reviews_subject_class').on(t.subjectClassId),
+    // Slice-5 vehicle/class aggregate cover (#1220). The aggregate is
+    //   SELECT <key>, SUM(overall), COUNT(*) FROM reviews
+    //   WHERE <key> IN (...) AND publishedAt IS NOT NULL AND moderationStatus = 'VISIBLE' GROUP BY <key>
+    // The PARTIAL predicate prunes the btree to the published+visible slice, and `overall`
+    // rides as the trailing key column so SUM(overall)+COUNT(*) are answered by an Index
+    // Only Scan (Heap Fetches: 0) — measured ~80x fewer buffers at 50k rows/vehicle vs the
+    // single-column indexes, which force a heap fetch for `overall`. `overall` is a NOT NULL
+    // int4; making it a trailing key (vs an INCLUDE, which drizzle 0.45 can't express) keeps
+    // this fully in the schema DSL — no hand-SQL divergence — at a negligible size cost.
+    //
+    // The single-column idx_reviews_subject_{vehicle,class} above stay: they are the
+    // non-partial FK cover lint:fk-indexes requires (a partial index can't cover an FK).
+    index('idx_reviews_subject_vehicle_published')
+      .on(t.subjectVehicleId, t.publishedAt, t.overall)
+      .where(sql`${t.moderationStatus} = 'VISIBLE' AND ${t.publishedAt} IS NOT NULL`),
+    index('idx_reviews_subject_class_published')
+      .on(t.subjectClassId, t.publishedAt, t.overall)
+      .where(sql`${t.moderationStatus} = 'VISIBLE' AND ${t.publishedAt} IS NOT NULL`),
     // The sweep query (slice 2): reviews past their window still awaiting reveal.
     index('idx_reviews_reveal_due')
       .on(t.revealDeadlineAt)
