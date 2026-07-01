@@ -1328,6 +1328,19 @@
         "deactivating": "無効化中…",
         "reactivating": "再有効化中…"
       },
+      "summary": {
+        "subtitle": "この事業者の車両コンプライアンスと予約状況。",
+        "vehicleCount": "車両数",
+        "needingDocs": "書類対応が必要",
+        "expiringSoon": "まもなく期限切れ",
+        "totalBookings": "予約総数",
+        "upcomingBookings": "今後の予約",
+        "lastAlert": "最終コンプライアンス通知",
+        "never": "なし",
+        "back": "事業者一覧に戻る",
+        "loadError": "この事業者のサマリーを読み込めませんでした。",
+        "retry": "再試行"
+      },
       "createDialog": {
         "title": "事業者を作成",
         "subtitle": "新しい事業者をプラットフォームに追加します。スラッグは名前から自動生成されます。",

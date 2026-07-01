@@ -38,6 +38,7 @@
     "./types/insurance-option": "./src/types/insurance-option.ts",
     "./types/storefront": "./src/types/storefront.ts",
     "./types/operator-team": "./src/types/operator-team.ts",
+    "./types/operator-summary": "./src/types/operator-summary.ts",
     "./types/admin-booking": "./src/types/admin-booking.ts",
     "./types/consent-governance": "./src/types/consent-governance.ts",
     "./lib/bound-fetch": "./src/lib/bound-fetch.ts",

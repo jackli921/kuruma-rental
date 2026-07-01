@@ -28,6 +28,81 @@ function vehicleInput(overrides?: Partial<Vehicle>) {
   }
 }
 
+describe('VehicleRepository.countComplianceForOperator (#1120)', () => {
+  // asOf 2026-06-27 UTC -> JST 2026-06-27; EXPIRY_SOON window ends 2026-07-27.
+  const asOf = new Date('2026-06-27T00:00:00Z')
+
+  it('rolls the live fleet into mutually-exclusive needing/expiring buckets, scoped to the operator', async () => {
+    const repo = new InMemoryVehicleRepository()
+    const ok = { shakenExpiryDate: '2026-12-01', insuranceExpiryDate: '2026-12-01' }
+    // 5 live op-1 vehicles across every compliance state:
+    await repo.create(staffCtx, vehicleInput({ operatorId: 'op-1', status: 'AVAILABLE', ...ok })) // OK
+    await repo.create(
+      staffCtx,
+      vehicleInput({
+        operatorId: 'op-1',
+        status: 'AVAILABLE',
+        shakenExpiryDate: null,
+        insuranceExpiryDate: '2026-12-01',
+      }),
+    ) // missing shaken -> needingDocs
+    await repo.create(
+      staffCtx,
+      vehicleInput({
+        operatorId: 'op-1',
+        status: 'AVAILABLE',
+        shakenExpiryDate: '2026-12-01',
+        insuranceExpiryDate: '2026-06-01',
+      }),
+    ) // expired insurance -> needingDocs
+    await repo.create(
+      staffCtx,
+      vehicleInput({
+        operatorId: 'op-1',
+        status: 'AVAILABLE',
+        shakenExpiryDate: '2026-07-10',
+        insuranceExpiryDate: '2026-12-01',
+      }),
+    ) // shaken expiring soon -> expiringSoon
+    await repo.create(
+      staffCtx,
+      vehicleInput({
+        operatorId: 'op-1',
+        status: 'AVAILABLE',
+        shakenExpiryDate: '2026-07-10',
+        insuranceExpiryDate: '2026-05-01',
+      }),
+    ) // expiring soon AND expired -> needingDocs wins (mutual exclusion)
+    // Excluded rows:
+    await repo.create(
+      staffCtx,
+      vehicleInput({
+        operatorId: 'op-1',
+        status: 'RETIRED',
+        shakenExpiryDate: null,
+        insuranceExpiryDate: null,
+      }),
+    ) // retired
+    await repo.create(staffCtx, vehicleInput({ operatorId: 'op-2', status: 'AVAILABLE', ...ok })) // other operator
+
+    expect(await repo.countComplianceForOperator('op-1', asOf)).toEqual({
+      total: 5,
+      needingDocs: 3,
+      expiringSoon: 1,
+    })
+  })
+
+  it('returns all-zero for an operator with no live vehicles', async () => {
+    const repo = new InMemoryVehicleRepository()
+    await repo.create(staffCtx, vehicleInput({ operatorId: 'op-1', status: 'RETIRED' }))
+    expect(await repo.countComplianceForOperator('op-1', asOf)).toEqual({
+      total: 0,
+      needingDocs: 0,
+      expiringSoon: 0,
+    })
+  })
+})
+
 describe('VehicleRepository.findAll pagination', () => {
   let repo: InMemoryVehicleRepository
 

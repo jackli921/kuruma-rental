@@ -1,5 +1,5 @@
 import { complianceAlertLog } from '@kuruma/shared/db/schema'
-import { inArray } from 'drizzle-orm'
+import { eq, inArray, max } from 'drizzle-orm'
 import {
   type ComplianceAlertLogRepository,
   complianceAlertKey,
@@ -33,5 +33,15 @@ export class DrizzleComplianceAlertLogRepository implements ComplianceAlertLogRe
   async recordMany(alerts: RecordComplianceAlert[]): Promise<void> {
     if (alerts.length === 0) return
     await this.db.insert(complianceAlertLog).values(alerts).onConflictDoNothing()
+  }
+
+  // #1120: most recent alert instant for one operator (MAX at the DB layer), or
+  // null when the operator has never been alerted.
+  async latestSentAtForOperator(operatorId: string): Promise<Date | null> {
+    const [row] = await this.db
+      .select({ latest: max(complianceAlertLog.sentAt) })
+      .from(complianceAlertLog)
+      .where(eq(complianceAlertLog.operatorId, operatorId))
+    return row?.latest ?? null
   }
 }

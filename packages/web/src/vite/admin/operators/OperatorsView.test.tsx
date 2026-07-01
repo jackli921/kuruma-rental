@@ -1,9 +1,26 @@
 import { fireEvent, render, screen, within } from '@testing-library/react'
+import type { ReactNode } from 'react'
 import { IntlProvider } from 'use-intl'
 import { describe, expect, it, vi } from 'vitest'
 import en from '../../../../messages/en.json'
-import { OperatorsView } from './OperatorsView'
 import type { OperatorAdminRow } from './api'
+
+// OperatorRow links the operator name to its detail page; stub the router Link so
+// the pure view renders without a RouterProvider (repo test pattern), exposing the
+// target + params so navigation can be asserted.
+vi.mock('@tanstack/react-router', () => ({
+  Link: ({
+    children,
+    to,
+    params,
+  }: { children: ReactNode; to?: string; params?: Record<string, string> }) => (
+    <a href="#operator" data-to={to} data-operator-id={params?.operatorId}>
+      {children}
+    </a>
+  ),
+}))
+
+import { OperatorsView } from './OperatorsView'
 
 const row = (over: Partial<OperatorAdminRow> = {}): OperatorAdminRow => ({
   id: 'op_1',
@@ -55,6 +72,13 @@ describe('OperatorsView', () => {
     // An active operator offers Deactivate, not Reactivate.
     expect(cells.getByRole('button', { name: T.row.deactivate })).not.toBeNull()
     expect(cells.queryByRole('button', { name: T.row.reactivate })).toBeNull()
+  })
+
+  it('links the operator name to its detail page with the operator id', () => {
+    renderView({ operators: [row({ id: 'op_42', name: 'Kanata Cars' })] })
+    const link = screen.getByText('Kanata Cars').closest('a')
+    expect(link?.getAttribute('data-to')).toBe('/$locale/admin/operators/$operatorId')
+    expect(link?.getAttribute('data-operator-id')).toBe('op_42')
   })
 
   it('renders a deactivated operator with Deactivated status and a Reactivate action', () => {
