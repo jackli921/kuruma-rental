@@ -1,6 +1,6 @@
-import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { formatJpy } from '@/lib/format'
+import { OperatorBadge } from '@/vite/operator-context'
 import { InsuranceStatusBadge } from '@/vite/operator-insurance/InsuranceStatusBadge'
 import type { InsuranceOptionData } from '@/vite/operator-insurance/api'
 import { Coins, Pencil, ShieldCheck, Trash2 } from 'lucide-react'
@@ -31,11 +31,7 @@ export function InsuranceRow({
         <div className="flex items-center gap-2 flex-wrap">
           <h3 className="text-lg font-medium truncate">{o.name}</h3>
           <InsuranceStatusBadge status={o.status} />
-          {operatorName && (
-            <Badge variant="secondary" aria-label={`Operator: ${operatorName}`}>
-              {operatorName}
-            </Badge>
-          )}
+          <OperatorBadge name={operatorName} />
         </div>
         {o.description && (
           <p className="mt-1 text-sm text-muted-foreground line-clamp-2">{o.description}</p>
