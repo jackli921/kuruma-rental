@@ -1200,8 +1200,8 @@
       }
     },
     "featured": {
-      "heading": "热门车辆",
-      "subheading": "旅行者的热门之选",
+      "heading": "按类别浏览",
+      "subheading": "找到适合您旅程的车辆",
       "viewAll": "查看全部",
       "currency": "¥{price}",
       "perDay": "天"
@@ -1234,7 +1234,10 @@
     },
     "footer": {
       "copyright": "库鲁马租车 版权所有。",
-      "tagline": "日本大阪租车服务"
+      "tagline": "日本大阪租车服务",
+      "browse": "浏览车辆",
+      "categories": "车辆类别",
+      "signIn": "登录"
     }
   },
   "search": {
@@ -1246,6 +1249,16 @@
     "toLabel": "还车日期与时间",
     "submit": "搜索",
     "classFilterLabel": "车型类别",
+    "results": {
+      "sortLabel": "排序方式",
+      "sort": {
+        "nearest": "推荐",
+        "priceAsc": "价格：从低到高",
+        "priceDesc": "价格：从高到低"
+      },
+      "priceMaxLabel": "每日最高价",
+      "priceMaxPlaceholder": "不限"
+    },
     "picker": {
       "label": "取车与还车",
       "placeholder": "添加日期和时间",
@@ -1268,6 +1281,8 @@
     "turnaround": "两次租赁间隔约{hours}小时",
     "distance": "约{km} km",
     "emptyTurnaroundHint": "车辆在两次租赁之间需要准备时间，紧接着可能无法预订。请尝试选择较晚的取车日期。",
+    "emptyPriceCap": "没有符合您每日价格上限的车辆。",
+    "emptyPriceCapHint": "请提高或清除价格上限即可查看更多门店。",
     "classCount": "{label} {count}辆",
     "seats": "{count}座",
     "luggage": "行李{count}件",

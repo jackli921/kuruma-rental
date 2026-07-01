@@ -93,6 +93,9 @@ export function StorefrontDetailView({
               from={from}
               to={to}
               classRating={vehicle.classId !== null ? classRatings?.[vehicle.classId] : undefined}
+              classFilter={classFilter}
+              pickupLocationId={pickupLocationId}
+              region={region}
             />
           ))}
         </div>
