@@ -82,4 +82,9 @@ describe('VehicleService.findAll — privileged-tier picker narrow (#1230 slice 
     expect(total).toBe(1)
     expect(data.map((v) => v.operatorId)).toEqual(['op-A'])
   })
+
+  it('ignores an operatorId smuggled via the filters channel for a renter (gate is sole path)', async () => {
+    const { total } = await (await service()).findAll(renter, { operatorId: 'op-A' })
+    expect(total).toBe(2)
+  })
 })

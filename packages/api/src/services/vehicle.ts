@@ -97,9 +97,12 @@ export class VehicleService {
     // maps renters/partners to `all` — keying the narrow off it would echo their
     // ?operatorId= (the #1272 trap). Vehicles have no bypass-only read resolver, so gate
     // the narrow on the platform tier explicitly here — the single enforcement point.
+    // Strip any caller-supplied operatorId: the platform-tier gate below is the
+    // ONLY path that may narrow the public catalog (#1230 slice 5b review).
+    const { operatorId: _ignored, ...safeFilters } = filters ?? {}
     const narrowedOperatorId = PRIVILEGED_ROLES.has(ctx.role) ? requestedOperatorId : undefined
     return this.repo.findAll(ctx, {
-      ...filters,
+      ...safeFilters,
       ...(narrowedOperatorId ? { operatorId: narrowedOperatorId } : {}),
     })
   }

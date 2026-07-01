@@ -83,4 +83,15 @@ describe('vehicle-block findOverlappingInRange operator narrowing (#1230 slice 5
     expect(ops.has(opAId)).toBe(true)
     expect(ops.has(opBId)).toBe(true)
   })
+
+  it('a tenant operator cannot widen via a foreign operatorId (H2)', async () => {
+    const opB: CallerContext = {
+      userId: 'owner',
+      role: 'OPERATOR_OWNER',
+      operatorId: opBId,
+      bypassScope: false,
+    }
+    const rows = await blockRepo.findOverlappingInRange(opB, FROM, TO, opAId)
+    expect(rows.every((b) => b.operatorId === opBId)).toBe(true)
+  })
 })

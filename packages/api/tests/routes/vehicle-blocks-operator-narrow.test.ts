@@ -108,4 +108,10 @@ describe('GET /vehicle-blocks — picker operator narrowing (#1230 slice 5b)', (
     const body = (await res.json()) as { data: unknown[] }
     expect(body.data).toHaveLength(0)
   })
+
+  it('treats an empty ?operatorId= as no narrow (sees both operators)', async () => {
+    const res = await appAs('PLATFORM_ADMIN').request(`/vehicle-blocks${RANGE}&operatorId=`)
+    const body = (await res.json()) as { data: unknown[] }
+    expect(body.data).toHaveLength(2)
+  })
 })
