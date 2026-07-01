@@ -11,11 +11,12 @@ export default defineConfig({
   // with real servers + a seeded Neon branch. Exclude it here so the mock track
   // never tries to run those specs against the unauthenticated mock API.
   //
-  // The booking spec exercises the slice-6 flow not yet ported to the Vite shell —
-  // re-enable when that lands (#501). The admin-portal spec IS re-enabled here
-  // (#541): /admin is now served on Vite and mock-api.ts resolves a role from the
-  // `e2e-mock-role` cookie, so the authenticated guard cases run in the mock track.
-  testIgnore: ['**/real-db/**', '**/booking.spec.ts'],
+  // The slice-6 booking spec was retired in #1255: its journey is now proven end
+  // to end by the real-DB lane (e2e/real-db/marketplace-happy-path.auth.spec.ts).
+  // The admin-portal spec runs here (#541): /admin is served on Vite and
+  // mock-api.ts resolves a role from the `e2e-mock-role` cookie, so the
+  // authenticated guard cases run in the mock track.
+  testIgnore: ['**/real-db/**'],
   fullyParallel: true,
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 2 : 0,
