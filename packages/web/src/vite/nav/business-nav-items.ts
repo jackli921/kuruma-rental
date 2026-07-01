@@ -1,5 +1,4 @@
-import { isMessagingEnabled, isVisibleToViewer } from '@/vite/config'
-import { isOperatorSettingsEnabled, isOperatorTeamEnabled } from '@/vite/config/features'
+import { isVisibleToViewer } from '@/vite/config'
 import type { UserRole } from '@kuruma/shared/auth/roles'
 
 // Single source of truth for the business-view (operator) nav (#603). Both
@@ -29,6 +28,15 @@ export const businessNavItems = [
 // Derived so the union can never drift from the array above.
 export type BusinessNavTo = (typeof businessNavItems)[number]['to']
 
+// The effective (runtime-toggleable) values of the flags this nav gates on. The
+// component reads them with useFeatureFlag and passes them in, so this stays a pure
+// function — unit-testable without a provider and free of the build-time reader.
+export interface BusinessNavFlags {
+  readonly messaging: boolean
+  readonly operatorTeam: boolean
+  readonly operatorSettings: boolean
+}
+
 // Post-MVP routes the beta demo hides behind a feature flag (billable add-ons).
 // The array above stays the full source of truth so the `BusinessNavTo` union and
 // the nav-count test never drift; only the RENDERED list is filtered. The routes
@@ -36,14 +44,14 @@ export type BusinessNavTo = (typeof businessNavItems)[number]['to']
 // Messages is the post-MVP messaging feature: hidden in beta but shown to the
 // platform admin (owner preview via admin bypass), mirroring the renter side — so
 // its gate is role-aware (isVisibleToViewer), unlike the flag-only team/settings.
-const navItemGates: Partial<Record<BusinessNavTo, (role: UserRole | undefined) => boolean>> = {
-  '/$locale/manage/messages': (role) => isVisibleToViewer(isMessagingEnabled(), role),
-  '/$locale/manage/team': () => isOperatorTeamEnabled(),
-  '/$locale/manage/settings': () => isOperatorSettingsEnabled(),
-}
-
 export function visibleBusinessNavItems(
   role: UserRole | undefined,
+  flags: BusinessNavFlags,
 ): readonly (typeof businessNavItems)[number][] {
+  const navItemGates: Partial<Record<BusinessNavTo, (role: UserRole | undefined) => boolean>> = {
+    '/$locale/manage/messages': (r) => isVisibleToViewer(flags.messaging, r),
+    '/$locale/manage/team': () => flags.operatorTeam,
+    '/$locale/manage/settings': () => flags.operatorSettings,
+  }
   return businessNavItems.filter((item) => navItemGates[item.to]?.(role) ?? true)
 }

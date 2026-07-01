@@ -30,6 +30,8 @@ describe('feature flag registry', () => {
     // so a dashboard toggle actually takes effect. Flip this to true in the same
     // slice that migrates the flag (#1322) — the admin page badges the difference.
     const controlled = FEATURE_FLAG_KEYS.filter((k) => FEATURE_FLAGS[k].runtimeControlled)
+    // Every flag is migrated as of #1322 (PR3 finished the batch). A newly added,
+    // not-yet-migrated flag would be absent here and must be added on migration.
     expect(new Set(controlled)).toEqual(
       new Set([
         'MULTI_CURRENCY',
@@ -38,6 +40,10 @@ describe('feature flag registry', () => {
         'FLEET_TIMELINE',
         'OPERATOR_MANUAL_BOOKING',
         'OPERATOR_BLOCKS',
+        'OPERATOR_TEAM',
+        'OPERATOR_SETTINGS',
+        'RENTER_DOCUMENTS',
+        'MESSAGING',
       ]),
     )
   })

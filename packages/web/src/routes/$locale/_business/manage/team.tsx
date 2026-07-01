@@ -1,6 +1,6 @@
 import { Button } from '@/components/ui/button'
 import { PageSkeleton } from '@/vite/PageSkeleton'
-import { isOperatorTeamEnabled } from '@/vite/config/features'
+import { featureFlagsQueryOptions, resolveFeatureFlag } from '@/vite/config'
 import { isOperatorOwnerSession, isOperatorSession } from '@/vite/guards'
 import { DeactivateMemberDialog } from '@/vite/operator-team/DeactivateMemberDialog'
 import { InviteStaffDialog } from '@/vite/operator-team/InviteStaffDialog'
@@ -29,8 +29,11 @@ import { useTranslations } from 'use-intl'
 export const Route = createFileRoute('/$locale/_business/manage/team')({
   // Post-MVP feature (#904), hidden in the beta demo. The nav link is already
   // filtered out; this blocks a direct URL too, falling back to the bookings page.
-  beforeLoad: ({ params }) => {
-    if (!isOperatorTeamEnabled()) {
+  // Reads the runtime-toggleable flag (#1322): a dashboard override opens/closes the
+  // route live. resolveFeatureFlag = override ?? build-time env ?? false.
+  beforeLoad: async ({ context, params }) => {
+    const overrides = await context.queryClient.ensureQueryData(featureFlagsQueryOptions())
+    if (!resolveFeatureFlag(overrides, 'OPERATOR_TEAM')) {
       throw redirect({ to: '/$locale/manage/bookings', params: { locale: params.locale } })
     }
   },
