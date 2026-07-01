@@ -9,11 +9,16 @@ describe('DEMO_ADD_ON_TEMPLATES', () => {
   it('carries EVERY supported locale in both name and description (the completeness guard)', () => {
     // localizedTextSchema only REQUIRES `en`; a missing ja/zh would compile and
     // silently fall back to English at read time. This is the one test that makes
-    // a full translation mandatory for a shipped template.
+    // a full translation mandatory for a shipped template. Assert TRIMMED non-empty
+    // so a missing key (undefined), an empty string, or a whitespace-only value all
+    // fail — none of those is a real translation.
     for (const template of DEMO_ADD_ON_TEMPLATES) {
       for (const locale of SUPPORTED_LOCALES) {
-        expect(template.name[locale], `${template.key} name.${locale}`).toBeTruthy()
-        expect(template.description[locale], `${template.key} description.${locale}`).toBeTruthy()
+        expect(template.name[locale]?.trim(), `${template.key} name.${locale}`).toBeTruthy()
+        expect(
+          template.description[locale]?.trim(),
+          `${template.key} description.${locale}`,
+        ).toBeTruthy()
       }
     }
   })
