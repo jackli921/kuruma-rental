@@ -113,7 +113,10 @@ export function planCatalogBackfill(
   // every row needs a non-null templateId for the PR2 NOT NULL) and migrate a
   // customized description to a `{ en }` override.
   const stamps: RowStamp[] = nullRows.map((r) => {
-    const templateId = targetByRowId.get(r.id) as string
+    const templateId = targetByRowId.get(r.id)
+    if (templateId === undefined) {
+      throw new Error(`planCatalogBackfill: null-templateId row ${r.id} has no target template`)
+    }
     return {
       id: r.id,
       templateId,
@@ -141,7 +144,7 @@ function rankKeeperFirst(
     (a, b) =>
       Number(isCustomized(b)) - Number(isCustomized(a)) ||
       a.createdAt.getTime() - b.createdAt.getTime() ||
-      a.id.localeCompare(b.id),
+      compareById(a, b),
   )
 }
 
@@ -283,9 +286,16 @@ function operatorTemplateKey(operatorId: string, templateId: string): string {
   return `${operatorId}::${templateId}`
 }
 
+// Byte-wise id order for a stable, runtime-independent tiebreak. localeCompare is
+// ICU/locale-dependent and can differ across runtimes (Bun vs workerd, see #1216);
+// ids are opaque, so a raw code-unit compare is both correct and deterministic.
+function compareById(a: { id: string }, b: { id: string }): number {
+  return a.id < b.id ? -1 : a.id > b.id ? 1 : 0
+}
+
 function sortByCreatedAtThenId(rows: readonly AddOnRowFact[]): AddOnRowFact[] {
   return [...rows].sort(
-    (a, b) => a.createdAt.getTime() - b.createdAt.getTime() || a.id.localeCompare(b.id),
+    (a, b) => a.createdAt.getTime() - b.createdAt.getTime() || compareById(a, b),
   )
 }
 
