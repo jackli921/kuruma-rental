@@ -289,7 +289,8 @@
           "floats": {
             "title": "待分配车辆",
             "overdue": "已超时",
-            "empty": "暂无待分配的浮动预订"
+            "empty": "暂无待分配的浮动预订",
+            "overflowLabel": "至少 {limit} 项待分配（仅显示前 {limit} 项）"
           }
         }
       },

@@ -23,7 +23,7 @@ export const FEATURE_FLAGS = {
   OPERATOR_MANUAL_BOOKING: {
     env: 'VITE_FEATURE_OPERATOR_MANUAL_BOOKING',
     label: 'Operator manual booking',
-    runtimeControlled: false,
+    runtimeControlled: true,
   },
   OPERATOR_TEAM: {
     env: 'VITE_FEATURE_OPERATOR_TEAM',
@@ -48,7 +48,7 @@ export const FEATURE_FLAGS = {
   OPERATOR_BLOCKS: {
     env: 'VITE_FEATURE_OPERATOR_BLOCKS',
     label: 'Maintenance blocks',
-    runtimeControlled: false,
+    runtimeControlled: true,
   },
   REVIEWS: { env: 'VITE_FEATURE_REVIEWS', label: 'Reviews & ratings', runtimeControlled: true },
   FLEET_TIMELINE: {
