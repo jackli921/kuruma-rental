@@ -6,12 +6,13 @@ import { fail, ok } from './helpers'
 export function createFleetOverviewRoutes(service: FleetOverviewService) {
   return new Hono().get('/vehicles/fleet-overview', async (c) => {
     const user = requireUser(c)
-    // Admit STAFF roles AND tenant-scoped operators (#594); RENTER/PARTNER are
-    // rejected here BEFORE the repo's operatorReadScope runs (that helper maps a
-    // RENTER to {kind:'all'}, so without this gate a renter would read the whole
-    // cross-operator fleet). Operators are then bounded to their own tenant by
-    // the repository's operator predicate — the repo, not the route, is the
-    // tenant boundary (#386 F2 / #397).
+    // Admit MANAGEMENT_READ_ROLES (#594); RENTER/PARTNER are rejected here. The
+    // repo also fail-closes them (#1273: it reads bookingReadScope, under which
+    // RENTER/PARTNER never reach `all` and requireManagementRead throws) — this
+    // gate is the outer seal of that defense-in-depth, returning a clean 403
+    // rather than an empty 200. Operators are bounded to their own tenant by the
+    // repository's operator predicate — the repo, not the route, is the tenant
+    // boundary (#386 F2 / #397).
     if (!MANAGEMENT_READ_ROLES.has(user.role)) return fail(c, 'Forbidden', 403)
 
     // #407 slice 4: the operator-context picker narrows a bypass admin to one

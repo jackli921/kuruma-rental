@@ -183,6 +183,17 @@ describe('fleet-overview is operator-scoped (Drizzle, real Postgres)', () => {
     expect(ids).toContain(vehicleBId)
   })
 
+  // #1273: legacy STAFF/ADMIN resolve to `renter` under bookingReadScope, so the
+  // fleet card must read nothing — matching the overview card and the #487
+  // phase-out. Before the fix this SQL path used operatorReadScope (legacy ->
+  // `all`) and leaked the whole fleet; asserted against real Postgres.
+  it('a legacy STAFF/ADMIN sees nothing — parity with overview + in-memory', async () => {
+    const staff: CallerContext = { userId: 'legacy', role: 'STAFF', bypassScope: false }
+    const admin: CallerContext = { userId: 'legacy', role: 'ADMIN', bypassScope: false }
+    expect(await fleetRepo.findFleetOverview(staff, NOW)).toEqual([])
+    expect(await fleetRepo.findFleetOverview(admin, NOW)).toEqual([])
+  })
+
   it('includes the operator’s RETIRED vehicles (#600 — parity with in-memory)', async () => {
     const rows = await fleetRepo.findFleetOverview(ctxFor(opAId), NOW)
     const retired = rows.find((r) => r.id === retiredVehicleAId)
