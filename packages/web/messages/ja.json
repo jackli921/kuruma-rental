@@ -205,6 +205,20 @@
         "action": "車両を確認"
       }
     },
+    "today": {
+      "title": "本日",
+      "pickups": "貸出",
+      "returns": "返却",
+      "overdue": "延滞",
+      "emptyPickups": "本日の貸出予定はありません。",
+      "emptyReturns": "本日の返却予定はありません。",
+      "emptyOverdue": "延滞中の車両はありません。",
+      "markPickedUp": "貸出済みにする",
+      "markReturned": "返却済みにする",
+      "walkIn": "当日客",
+      "noVehicle": "車両未割当",
+      "actionError": "更新できませんでした。もう一度お試しください。"
+    },
     "stats": {
       "totalBookings": "予約総数",
       "activeVehicles": "稼働中の車両",
@@ -1186,8 +1200,8 @@
       }
     },
     "featured": {
-      "heading": "人気の車両",
-      "subheading": "旅行者に選ばれている車",
+      "heading": "カテゴリーから探す",
+      "subheading": "旅にぴったりの車を見つけましょう",
       "viewAll": "すべて見る",
       "currency": "¥{price}",
       "perDay": "日"
@@ -1220,7 +1234,10 @@
     },
     "footer": {
       "copyright": "クルマレンタル 全著作権所有。",
-      "tagline": "大阪のレンタカーサービス"
+      "tagline": "大阪のレンタカーサービス",
+      "browse": "車を探す",
+      "categories": "車両カテゴリー",
+      "signIn": "ログイン"
     }
   },
   "search": {
@@ -1232,6 +1249,16 @@
     "toLabel": "返却日時",
     "submit": "検索",
     "classFilterLabel": "車種クラス",
+    "results": {
+      "sortLabel": "並び替え",
+      "sort": {
+        "nearest": "おすすめ",
+        "priceAsc": "料金が安い順",
+        "priceDesc": "料金が高い順"
+      },
+      "priceMaxLabel": "1日の上限料金",
+      "priceMaxPlaceholder": "指定なし"
+    },
     "picker": {
       "label": "貸出・返却",
       "placeholder": "日時を追加",
@@ -1254,6 +1281,8 @@
     "turnaround": "貸出間隔 約{hours}時間",
     "distance": "約{km} km",
     "emptyTurnaroundHint": "車両は貸出の合間に準備時間が必要なため、直後はご利用いただけない場合があります。受け取り日を遅らせてお試しください。",
+    "emptyPriceCap": "上限価格に収まる車両はありません。",
+    "emptyPriceCapHint": "上限価格を上げるか解除すると、より多くの店舗が表示されます。",
     "classCount": "{label} {count}台",
     "seats": "{count}人乗り",
     "luggage": "荷物 {count}個",

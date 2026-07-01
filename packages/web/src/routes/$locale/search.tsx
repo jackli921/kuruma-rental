@@ -3,6 +3,7 @@ import { regionsQueryOptions } from '@/vite/regions/regions-api'
 import { SearchMap } from '@/vite/search/SearchMap'
 import { fetchSearchResults } from '@/vite/search/api'
 import { isSearchMapEnabled } from '@/vite/search/flags'
+import { SearchResultControls } from '@/vite/storefronts/SearchResultControls'
 import { StoreGrid } from '@/vite/storefronts/StoreGrid'
 import { StorefrontSearchForm } from '@/vite/storefronts/StorefrontSearchForm'
 import { fetchStorefronts } from '@/vite/storefronts/api'
@@ -11,6 +12,7 @@ import {
   parseSearchRange,
   searchRangeToSeed,
 } from '@/vite/storefronts/params'
+import { type SortOption, parsePriceMax, parseSort } from '@/vite/storefronts/sort'
 import { useQuery } from '@tanstack/react-query'
 import {
   type ErrorComponentProps,
@@ -34,6 +36,9 @@ interface StorefrontSearch {
   /** #651 Slice 3: region anchor as its stable slug (`?region=namba`). */
   region?: string | undefined
   class?: string | string[] | undefined
+  /** #1291: result ordering + daily-price cap, applied client-side per page. */
+  sort?: SortOption | undefined
+  priceMax?: number | undefined
 }
 
 function validateSearch(search: Record<string, unknown>): StorefrontSearch {
@@ -45,6 +50,8 @@ function validateSearch(search: Record<string, unknown>): StorefrontSearch {
     pickupLocationId: str(search.pickupLocationId),
     region: str(search.region),
     class: Array.isArray(cls) ? cls.filter((c): c is string => typeof c === 'string') : str(cls),
+    sort: parseSort(search.sort),
+    priceMax: parsePriceMax(search.priceMax),
   }
 }
 
@@ -137,8 +144,26 @@ function SearchError(_props: ErrorComponentProps) {
 export function StorefrontSearchRoute() {
   const t = useTranslations('search')
   const { locale } = Route.useParams()
-  const { from, to, class: classFilter, pickupLocationId, region } = Route.useSearch()
+  const {
+    from,
+    to,
+    class: classFilter,
+    pickupLocationId,
+    region,
+    sort,
+    priceMax,
+  } = Route.useSearch()
   const data = Route.useLoaderData()
+  const navigate = Route.useNavigate()
+  // Sort/price update only their own params via a functional updater, so dates,
+  // class, region and pickup are all preserved (#1291). `nearest` is the default,
+  // so it drops the param to keep the URL clean.
+  const handleSortChange = (next: SortOption): void => {
+    navigate({ search: (prev) => ({ ...prev, sort: next === 'nearest' ? undefined : next }) })
+  }
+  const handlePriceMaxChange = (next: number | undefined): void => {
+    navigate({ search: (prev) => ({ ...prev, priceMax: next }) })
+  }
   // Resolve the chosen region's center once from the edge-cached list (already
   // ensured by the loader) so the map can focus on the picked area (#840). The grid
   // resolves the same anchor internally for ranking — both share resolveRegionAnchor.
@@ -166,6 +191,8 @@ export function StorefrontSearchRoute() {
             classFilter={classFilter}
             pickupLocationId={pickupLocationId}
             region={region}
+            sort={sort}
+            priceMax={priceMax}
           />
         </div>
 
@@ -191,14 +218,26 @@ export function StorefrontSearchRoute() {
             region={region}
           />
         ) : (
-          <StoreGrid
-            result={data.storefronts}
-            from={from ?? ''}
-            to={to ?? ''}
-            classFilter={classFilter}
-            pickupLocationId={pickupLocationId}
-            region={region}
-          />
+          <>
+            <div className="mb-6">
+              <SearchResultControls
+                sort={sort}
+                priceMax={priceMax}
+                onSortChange={handleSortChange}
+                onPriceMaxChange={handlePriceMaxChange}
+              />
+            </div>
+            <StoreGrid
+              result={data.storefronts}
+              from={from ?? ''}
+              to={to ?? ''}
+              classFilter={classFilter}
+              pickupLocationId={pickupLocationId}
+              region={region}
+              sort={sort}
+              priceMax={priceMax}
+            />
+          </>
         )}
       </div>
     </main>
