@@ -11,7 +11,6 @@ import {
   BlockLegend,
   BookingsCalendar,
   CalendarSidebar,
-  FleetTimeline,
   ManualBookingDialog,
   ScheduleBlockDialog,
 } from '@/vite/operator-bookings'
@@ -40,8 +39,17 @@ import { operatorLocationsQueryOptions } from '@/vite/operator-locations/api'
 import { useSession } from '@/vite/session'
 import { useQuery, useQueryClient, useSuspenseQuery } from '@tanstack/react-query'
 import { type ErrorComponentProps, createFileRoute, useRouter } from '@tanstack/react-router'
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { Suspense, lazy, useCallback, useEffect, useMemo, useState } from 'react'
 import { useTranslations } from 'use-intl'
+
+// Code-split the fleet planning board: react-calendar-timeline + interactjs + their
+// CSS (~460KB gzipped) are only needed on the `timeline` view, which is behind the
+// VITE_FEATURE_FLEET_TIMELINE flag (off in beta). A static import shipped that lib
+// to every operator on the default month/week/day calendar; lazy() keeps it out of
+// the route's main chunk until the timeline view is actually selected (#1099).
+const FleetTimeline = lazy(() =>
+  import('@/vite/operator-bookings/FleetTimeline').then((m) => ({ default: m.FleetTimeline })),
+)
 
 interface BookingsCalendarSearch {
   view?: CalendarView | undefined
@@ -301,15 +309,21 @@ export function OperatorBookingsRoute() {
           />
           <div className="min-w-0 flex-1">
             {view === 'timeline' ? (
-              <FleetTimeline
-                rows={timelineRows}
-                vehicles={timelineVehicles}
-                date={anchorDate}
-                locale={locale}
-                onViewChange={handleViewChange}
-                onDateChange={handleDateChange}
-                onSelectEvent={navigateToBooking}
-              />
+              <Suspense
+                fallback={
+                  <div className="h-[600px] animate-pulse rounded-lg bg-muted" aria-hidden="true" />
+                }
+              >
+                <FleetTimeline
+                  rows={timelineRows}
+                  vehicles={timelineVehicles}
+                  date={anchorDate}
+                  locale={locale}
+                  onViewChange={handleViewChange}
+                  onDateChange={handleDateChange}
+                  onSelectEvent={navigateToBooking}
+                />
+              </Suspense>
             ) : (
               <>
                 {canViewBlocks && <BlockLegend />}

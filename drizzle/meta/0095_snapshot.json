@@ -1,5 +1,5 @@
 {
-  "id": "5ac500ba-b4d0-44b3-b7ee-1358892296ab",
+  "id": "5996478c-d438-46c1-9ca6-c9c74480922d",
   "prevId": "6b36f251-3535-48e7-bda3-a753e4f22ecb",
   "version": "7",
   "dialect": "postgresql",
@@ -3979,6 +3979,18 @@
           "primaryKey": false,
           "notNull": false
         },
+        "templateId": {
+          "name": "templateId",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "descriptionOverride": {
+          "name": "descriptionOverride",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": false
+        },
         "priceJpy": {
           "name": "priceJpy",
           "type": "integer",
@@ -4045,6 +4057,43 @@
           "concurrently": false,
           "method": "btree",
           "with": {}
+        },
+        "idx_add_on_options_templateId": {
+          "name": "idx_add_on_options_templateId",
+          "columns": [
+            {
+              "expression": "templateId",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "add_on_options_active_template_unique": {
+          "name": "add_on_options_active_template_unique",
+          "columns": [
+            {
+              "expression": "operatorId",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "templateId",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "where": "status = 'ACTIVE'",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
         }
       },
       "foreignKeys": {
@@ -4054,6 +4103,19 @@
           "tableTo": "operators",
           "columnsFrom": [
             "operatorId"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "add_on_options_templateId_add_on_templates_id_fk": {
+          "name": "add_on_options_templateId_add_on_templates_id_fk",
+          "tableFrom": "add_on_options",
+          "tableTo": "add_on_templates",
+          "columnsFrom": [
+            "templateId"
           ],
           "columnsTo": [
             "id"
@@ -5135,62 +5197,6 @@
             }
           ],
           "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "idx_reviews_subject_vehicle_published": {
-          "name": "idx_reviews_subject_vehicle_published",
-          "columns": [
-            {
-              "expression": "subjectVehicleId",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "publishedAt",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "overall",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "where": "\"reviews\".\"moderationStatus\" = 'VISIBLE' AND \"reviews\".\"publishedAt\" IS NOT NULL",
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "idx_reviews_subject_class_published": {
-          "name": "idx_reviews_subject_class_published",
-          "columns": [
-            {
-              "expression": "subjectClassId",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "publishedAt",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "overall",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "where": "\"reviews\".\"moderationStatus\" = 'VISIBLE' AND \"reviews\".\"publishedAt\" IS NOT NULL",
           "concurrently": false,
           "method": "btree",
           "with": {}

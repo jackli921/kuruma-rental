@@ -1344,6 +1344,9 @@
       "colState": "State",
       "overridden": "Overridden",
       "default": "Default",
+      "runtimeLive": "Live",
+      "runtimeBuildOnly": "Build-time only",
+      "buildOnlyHint": "This flag isn't wired to the runtime layer yet; toggling persists but has no effect until its migration ships.",
       "toggleLabel": "Toggle {feature}",
       "loadError": "Couldn't load feature flags.",
       "retry": "Retry"
