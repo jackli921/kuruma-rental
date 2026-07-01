@@ -12,7 +12,16 @@ import { z } from 'zod'
 
 export const LAST_SEEN_STORAGE_KEY = 'kuruma_bookings_last_seen_at'
 export const LAST_SEEN_QUERY_KEY = ['operator-bookings', 'last-seen-at'] as const
-export const NEW_ORDER_SCAN_QUERY_KEY = ['operator-bookings', 'new-order-scan'] as const
+
+// #1230 slice 5a: the scan is keyed by the picked operator (null = no pick) so a
+// picker admin switching operators gets that operator's own count instead of a
+// stale cross-operator cache hit. All entries share the `operator-bookings` prefix,
+// so a booking write's OPERATOR_BOOKINGS_KEY invalidation still cascades to every
+// per-operator scan. markBookingsSeen reads the SAME key, so the clear-on-visit
+// advances the right entry.
+export function newOrderScanQueryKey(pickedOperatorId: string | undefined) {
+  return ['operator-bookings', 'new-order-scan', pickedOperatorId ?? null] as const
+}
 
 // The badge only needs to count, so it pulls the newest page (the list is
 // ordered createdAt DESC, so recent orders are always on page 1) and reads just
@@ -38,10 +47,12 @@ export function countNewBookings(bookings: readonly NewOrderBooking[], lastSeenA
   return bookings.filter((b) => new Date(b.createdAt).getTime() > threshold).length
 }
 
-export async function fetchNewOrderBookings(): Promise<NewOrderBooking[]> {
-  // Operator-scoped server-side via the session cookie (CallerContext) — no
-  // operatorId is passed, so a cross-tenant read is impossible by construction.
+export async function fetchNewOrderBookings(pickedOperatorId?: string): Promise<NewOrderBooking[]> {
+  // Operator-scoped server-side via the session cookie (CallerContext). A picker
+  // admin (bypass) may narrow to one operator via `operatorId`; the API drops it
+  // for any non-bypass caller, so a cross-tenant read stays impossible (#1230 H2).
   const sp = new URLSearchParams({ status: 'CONFIRMED', limit: String(NEW_ORDER_SCAN_LIMIT) })
+  if (pickedOperatorId) sp.set('operatorId', pickedOperatorId)
   const res = await fetch(`${getApiBaseUrl()}/bookings?${sp.toString()}`, {
     credentials: 'include',
   })
@@ -50,10 +61,10 @@ export async function fetchNewOrderBookings(): Promise<NewOrderBooking[]> {
   return unwrap(res, newOrderBookingSchema.array())
 }
 
-export function newOrderBookingsQueryOptions(enabled: boolean) {
+export function newOrderBookingsQueryOptions(enabled: boolean, pickedOperatorId?: string) {
   return queryOptions({
-    queryKey: NEW_ORDER_SCAN_QUERY_KEY,
-    queryFn: fetchNewOrderBookings,
+    queryKey: newOrderScanQueryKey(pickedOperatorId),
+    queryFn: () => fetchNewOrderBookings(pickedOperatorId),
     enabled,
     refetchOnWindowFocus: true,
     refetchInterval: NEW_ORDER_REFETCH_MS,
@@ -94,8 +105,10 @@ export function lastSeenQueryOptions() {
  * createdAt DESC, so the head is the newest seen order; fall back to now only
  * when nothing has been scanned (no orders, or the scan hasn't loaded).
  */
-export function markBookingsSeen(queryClient: QueryClient): void {
-  const scanned = queryClient.getQueryData<NewOrderBooking[]>(NEW_ORDER_SCAN_QUERY_KEY)
+export function markBookingsSeen(queryClient: QueryClient, pickedOperatorId?: string): void {
+  const scanned = queryClient.getQueryData<NewOrderBooking[]>(
+    newOrderScanQueryKey(pickedOperatorId),
+  )
   const seenAt = scanned?.[0]?.createdAt ?? new Date().toISOString()
   window.localStorage.setItem(LAST_SEEN_STORAGE_KEY, seenAt)
   queryClient.setQueryData(LAST_SEEN_QUERY_KEY, seenAt)

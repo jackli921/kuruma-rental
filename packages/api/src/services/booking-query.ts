@@ -8,6 +8,7 @@ import type {
   VehicleRepository,
 } from '../repositories/types'
 import type { Booking, BookingEvent } from '../stores'
+import { bookingReadScope, narrowReadToOperator } from '../tenancy'
 
 /** Renter-safe operator projection attached to a single booking read (§4h). */
 export type BookingWithOperator = Booking & {
@@ -42,10 +43,22 @@ export class BookingQueryService {
   async findAllPaginated(
     ctx: CallerContext,
     filters: BookingFilters,
+    requestedOperatorId?: string,
   ): Promise<{ data: Booking[]; nextCursor: string | null }> {
     const limit = filters.limit ?? 20
-    // Overfetch by 1 to detect if more pages exist
-    const rows = await this.bookingRepo.findAll(ctx, { ...filters, limit: limit + 1 })
+    // #1230 slice 5a: a bypass admin using the operator-context picker narrows the
+    // cross-operator list to one operator. narrowReadToOperator drops the id to
+    // undefined for any non-`all` caller under bookingReadScope (this read's
+    // private-read vocabulary), so a renter/partner/tenant id never widens (#1272).
+    const operatorId = narrowReadToOperator(ctx, requestedOperatorId, bookingReadScope)
+    // Overfetch by 1 to detect if more pages exist. Spread operatorId only when
+    // present — BookingFilters.operatorId is strictly `string` under
+    // exactOptionalPropertyTypes, and the repo drops a missing id as "all operators".
+    const rows = await this.bookingRepo.findAll(ctx, {
+      ...filters,
+      ...(operatorId ? { operatorId } : {}),
+      limit: limit + 1,
+    })
     const hasMore = rows.length > limit
     const data = hasMore ? rows.slice(0, limit) : rows
     const last = data[data.length - 1]
@@ -56,11 +69,12 @@ export class BookingQueryService {
   async findAllWithVehiclesPaginated(
     ctx: CallerContext,
     filters: BookingFilters,
+    requestedOperatorId?: string,
   ): Promise<{
     data: (Booking & { vehicle?: { name: string; photos: string[] } | undefined })[]
     nextCursor: string | null
   }> {
-    const { data, nextCursor } = await this.findAllPaginated(ctx, filters)
+    const { data, nextCursor } = await this.findAllPaginated(ctx, filters, requestedOperatorId)
     if (!this.vehicleRepo) return { data, nextCursor }
 
     // The fulfilling car is the assigned vehicle (#392 — vehicleId is gone).
@@ -84,6 +98,7 @@ export class BookingQueryService {
   async findAllWithRentersPaginated(
     ctx: CallerContext,
     filters: BookingFilters,
+    requestedOperatorId?: string,
   ): Promise<{
     data: (Booking & {
       renter?:
@@ -92,7 +107,7 @@ export class BookingQueryService {
     })[]
     nextCursor: string | null
   }> {
-    const { data, nextCursor } = await this.findAllPaginated(ctx, filters)
+    const { data, nextCursor } = await this.findAllPaginated(ctx, filters, requestedOperatorId)
     if (!this.userRepo) return { data, nextCursor }
 
     const renterIds = [...new Set(data.map((b) => b.renterId))]
@@ -113,6 +128,7 @@ export class BookingQueryService {
   async findAllWithVehiclesAndRentersPaginated(
     ctx: CallerContext,
     filters: BookingFilters,
+    requestedOperatorId?: string,
   ): Promise<{
     data: (Booking & {
       vehicle?: { name: string; photos: string[] } | undefined
@@ -122,7 +138,7 @@ export class BookingQueryService {
     })[]
     nextCursor: string | null
   }> {
-    const { data, nextCursor } = await this.findAllPaginated(ctx, filters)
+    const { data, nextCursor } = await this.findAllPaginated(ctx, filters, requestedOperatorId)
 
     // #464: CLASS_COMBO floats have no assigned car (null) — exclude them from
     // the vehicle lookup; their `vehicle` field stays undefined.

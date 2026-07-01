@@ -418,6 +418,16 @@ export interface BookingFilters {
    *  need a vehicle assigned (fulfillmentMode='CLASS_COMBO' AND assignedVehicleId
    *  IS NULL AND status IN ('CONFIRMED','ACTIVE')). */
   needsAssignment?: boolean
+  /**
+   * #1230 slice 5a: the RESOLVED bypass-only tenant narrowing. Set only by
+   * `BookingQueryService`, which runs the raw `?operatorId=` through
+   * `narrowReadToOperator(ctx, id, bookingReadScope)` first — so it is present
+   * only for an `all`-scope (picker admin) caller and `undefined` for everyone
+   * else. `findAll` applies it ONLY inside the `bookingReadScope` `all` branch
+   * (defense in depth): a tenant/renter/partner scope ignores it, so a foreign
+   * id can never widen a private read (the H2 invariant).
+   */
+  operatorId?: string
 }
 
 export type { CallerContext } from '../middleware/auth'
@@ -711,6 +721,10 @@ export type {
 // Reviews bounded-context data access (#1067 slice 1) lives in its own module;
 // re-exported for callers (mirrors the payment/consent split above).
 export type { NewReview, ReviewEdit, ReviewRepository } from './types-review'
+
+// Runtime feature-flag override store (platform control plane) lives in its own
+// module; re-exported for callers.
+export type { FeatureFlagRepository } from './types-feature-flags'
 
 // Dashboard overview + fleet-overview aggregate reads (#1265) live in their own
 // module to keep this barrel under the file-size cap; re-exported for callers.
