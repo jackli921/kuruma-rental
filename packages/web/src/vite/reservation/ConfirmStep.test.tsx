@@ -14,6 +14,9 @@ const fetchMock = vi.fn()
 vi.stubGlobal('fetch', fetchMock)
 
 beforeEach(() => {
+  // Multi-currency (#1070) ships OFF in beta; the indicative total only shows when
+  // ON. The gated-off path is covered by its own test below.
+  vi.stubEnv('VITE_FEATURE_MULTI_CURRENCY', 'true')
   localStorage.clear()
   fetchMock.mockResolvedValue({
     ok: true,
@@ -21,7 +24,10 @@ beforeEach(() => {
     json: async () => ({ success: true, data: rates }),
   })
 })
-afterEach(() => fetchMock.mockReset())
+afterEach(() => {
+  fetchMock.mockReset()
+  vi.unstubAllEnvs()
+})
 
 // base 10,000 ≠ total 30,000 on purpose, so converting the WRONG field shows a
 // different figure: total -> $201, base -> $67.
@@ -56,5 +62,14 @@ describe('ConfirmStep indicative total', () => {
   it('shows the charged-in-JPY disclaimer while a converted figure is on screen', async () => {
     renderConfirm()
     await waitFor(() => expect(screen.getByText(en.currency.disclaimer)).toBeTruthy())
+  })
+
+  it('gated off (#1070) keeps the JPY total but drops the indicative note and disclaimer', async () => {
+    vi.stubEnv('VITE_FEATURE_MULTI_CURRENCY', undefined)
+    renderConfirm()
+    // The authoritative JPY total is untouched — gating removes only the ≈ display.
+    await waitFor(() => expect(screen.getByText('￥30,000')).toBeTruthy())
+    expect(screen.queryByText(/≈/)).toBeNull()
+    expect(screen.queryByText(en.currency.disclaimer)).toBeNull()
   })
 })

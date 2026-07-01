@@ -1,9 +1,10 @@
 import { Button } from '@/components/ui/button'
 import { PageSkeleton } from '@/vite/PageSkeleton'
 import {
-  isOperatorBlocksEnabled,
-  isOperatorManualBookingEnabled,
+  featureFlagsQueryOptions,
   isVisibleToViewer,
+  resolveFeatureFlag,
+  useFeatureFlag,
 } from '@/vite/config'
 import { isOperatorSession } from '@/vite/guards'
 import {
@@ -11,7 +12,6 @@ import {
   BlockLegend,
   BookingsCalendar,
   CalendarSidebar,
-  FleetTimeline,
   ManualBookingDialog,
   ScheduleBlockDialog,
 } from '@/vite/operator-bookings'
@@ -28,25 +28,34 @@ import {
   calendarRange,
   fleetToResources,
   formatCalendarDate,
+  normalizeViewParam,
   parseCalendarDate,
   parseCalendarView,
   toCalendarEvents,
 } from '@/vite/operator-bookings/calendar-events'
 import { markBookingsSeen } from '@/vite/operator-bookings/new-bookings'
 import { useCalendarFilters } from '@/vite/operator-bookings/useCalendarFilters'
+import { useOperatorContext } from '@/vite/operator-context'
 import { operatorLocationsQueryOptions } from '@/vite/operator-locations/api'
 import { useSession } from '@/vite/session'
 import { useQuery, useQueryClient, useSuspenseQuery } from '@tanstack/react-query'
 import { type ErrorComponentProps, createFileRoute, useRouter } from '@tanstack/react-router'
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { Suspense, lazy, useCallback, useEffect, useMemo, useState } from 'react'
 import { useTranslations } from 'use-intl'
+
+// Code-split the fleet planning board: react-calendar-timeline + interactjs + their
+// CSS (~460KB gzipped) are only needed on the `timeline` view, which is behind the
+// VITE_FEATURE_FLEET_TIMELINE flag (off in beta). A static import shipped that lib
+// to every operator on the default month/week/day calendar; lazy() keeps it out of
+// the route's main chunk until the timeline view is actually selected (#1099).
+const FleetTimeline = lazy(() =>
+  import('@/vite/operator-bookings/FleetTimeline').then((m) => ({ default: m.FleetTimeline })),
+)
 
 interface BookingsCalendarSearch {
   view?: CalendarView | undefined
   date?: string | undefined
 }
-
-const DEFAULT_VIEW: CalendarView = 'timeline'
 
 // Operator booking *calendar* (#525). URL `/<locale>/manage/bookings`, behind the
 // `_business` guard; tenant scoping is server-side (CallerContext), so the client
@@ -60,17 +69,36 @@ export const Route = createFileRoute('/$locale/_business/manage/bookings/')({
   // a known view and a canonical local day so the URL stays clean and the
   // loader/component agree on the fetched range.
   validateSearch: (search: Record<string, unknown>): BookingsCalendarSearch => ({
-    view: typeof search.view === 'string' ? parseCalendarView(search.view) : undefined,
+    // Flag-blind: validateSearch can't read the runtime overrides, so it only narrows
+    // to a KNOWN view string. The flag-aware resolution (drop `timeline` when off,
+    // pick the default) runs in the loader + component (#1322).
+    view: normalizeViewParam(search.view),
     date:
       typeof search.date === 'string'
         ? formatCalendarDate(parseCalendarDate(search.date))
         : undefined,
   }),
-  loaderDeps: ({ search }) => ({ view: search.view ?? DEFAULT_VIEW, date: search.date }),
-  loader: ({ context, deps }) => {
-    const { from, to } = calendarRange(deps.view, parseCalendarDate(deps.date))
+  // #1230 slice 5a: `operator` is inherited from the `_business` parent search (this
+  // route adds no own transform for it), so the loader can warm the picked-operator
+  // calendar entry — the component reads the SAME id via useOperatorContext, sharing
+  // one cache key (no wrong-tenant flash). Mirrors the dashboard route (slice 4).
+  loaderDeps: ({
+    search,
+  }: { search: BookingsCalendarSearch & { operator?: string | undefined } }) => ({
+    view: search.view,
+    date: search.date,
+    operator: search.operator,
+  }),
+  loader: async ({ context, deps }) => {
+    // Warm the SAME range the component renders. The landing view depends on the
+    // now-runtime-toggleable fleet-timeline flag (#1322), so read its effective value
+    // from the overrides map (warmed app-wide by FeatureFlagsProvider) to match.
+    const overrides = await context.queryClient.ensureQueryData(featureFlagsQueryOptions())
+    const timelineEnabled = resolveFeatureFlag(overrides, 'FLEET_TIMELINE')
+    const view = parseCalendarView(deps.view, timelineEnabled)
+    const { from, to } = calendarRange(view, parseCalendarDate(deps.date))
     return Promise.all([
-      context.queryClient.ensureQueryData(operatorCalendarQueryOptions(from, to)),
+      context.queryClient.ensureQueryData(operatorCalendarQueryOptions(from, to, deps.operator)),
       context.queryClient.ensureQueryData(operatorCalendarVehiclesQueryOptions()),
     ])
   },
@@ -87,6 +115,10 @@ export function OperatorBookingsRoute() {
 
   const queryClient = useQueryClient()
   const { data: session } = useSession()
+  // #1230 slice 5a: a picker admin narrows the calendar reads to the picked operator;
+  // undefined (no pick, or an operator session) leaves the read session-scoped. Write
+  // affordances below stay gated on isOperatorSession (slice 5b owns cross-tenant writes).
+  const { pickedOperatorId } = useOperatorContext()
   const [bookingDialogOpen, setBookingDialogOpen] = useState(false)
   // The clicked slot's range (null when opened from the header button), threaded to
   // the dialog so a slot-click prefills its pickup/return times.
@@ -97,14 +129,16 @@ export function OperatorBookingsRoute() {
   // cross-tenant and get a view-only calendar). The API re-enforces this (#589 §4.3).
   // Manual/walk-in booking is a post-MVP add-on (#589): gated behind the feature
   // flag AND the operator-session permission. OFF in the beta demo (flag unset).
-  const canManualBook = isOperatorManualBookingEnabled() && isOperatorSession(session ?? null)
+  // The flag reads through useFeatureFlag so the /admin dashboard toggles it live (#1322).
+  const canManualBook =
+    useFeatureFlag('OPERATOR_MANUAL_BOOKING') && isOperatorSession(session ?? null)
 
   // #1101 scheduled blocks. Visibility (read + the detail dialog) follows the
   // beta gate with the platform-admin preview bypass; management (schedule + delete)
   // additionally requires a tenant-scoped operator session — the write API admits a
   // platform admin (operatorId derived from the vehicle), so this affordance gate is
   // what keeps an admin preview read-only. Mirrors `canManualBook`.
-  const canViewBlocks = isVisibleToViewer(isOperatorBlocksEnabled(), session?.user.role)
+  const canViewBlocks = isVisibleToViewer(useFeatureFlag('OPERATOR_BLOCKS'), session?.user.role)
   const canManageBlocks = canViewBlocks && isOperatorSession(session ?? null)
 
   // Block dialogs: a schedule (create) form and a click-to-view detail. The schedule
@@ -126,10 +160,13 @@ export function OperatorBookingsRoute() {
   // #611: opening the orders list is "seeing" the new orders — clear the nav
   // red-dot badge (advance lastSeenAt to now) on every mount of this route.
   useEffect(() => {
-    markBookingsSeen(queryClient)
-  }, [queryClient])
+    markBookingsSeen(queryClient, pickedOperatorId)
+  }, [queryClient, pickedOperatorId])
 
-  const view = viewParam ?? DEFAULT_VIEW
+  // Resolve the effective view from the runtime-toggleable flag (#1322): an absent
+  // param or a stale `?view=timeline` while the timeline is off falls back to week.
+  const timelineEnabled = useFeatureFlag('FLEET_TIMELINE')
+  const view = parseCalendarView(viewParam, timelineEnabled)
   const anchorDate = useMemo(() => parseCalendarDate(date), [date])
   const { from, to } = calendarRange(view, anchorDate)
 
@@ -138,7 +175,9 @@ export function OperatorBookingsRoute() {
   // Schedule affordance is offered only where a created block becomes visible:
   // inviting a create on the timeline (the default view) would refetch into nothing.
   const canScheduleBlock = canManageBlocks && view !== 'timeline'
-  const { data: bookings } = useSuspenseQuery(operatorCalendarQueryOptions(from, to))
+  const { data: bookings } = useSuspenseQuery(
+    operatorCalendarQueryOptions(from, to, pickedOperatorId),
+  )
   const { data: vehicles } = useSuspenseQuery(operatorCalendarVehiclesQueryOptions())
 
   // Blocks are an additive layer (not in the suspense loader): a non-suspense query
@@ -151,7 +190,7 @@ export function OperatorBookingsRoute() {
     enabled: canViewBlocks && view !== 'timeline',
   })
 
-  const events = useMemo(() => toCalendarEvents(bookings), [bookings])
+  const events = useMemo(() => toCalendarEvents(bookings, vehicles), [bookings, vehicles])
   const blockEvents = useMemo(
     () => (canViewBlocks ? blocksToCalendarEvents(blocks ?? []) : []),
     [canViewBlocks, blocks],
@@ -214,18 +253,15 @@ export function OperatorBookingsRoute() {
     [navigate, locale],
   )
 
-  const handleSelectEvent = useCallback(
-    (item: CalendarItem) => {
-      // #1101: dispatch by the discriminant. A booking navigates to its detail page;
-      // a block opens the block-detail dialog (view + delete).
-      if (item.type === 'booking') {
-        navigateToBooking(item.id)
-      } else {
-        setSelectedBlock(item)
-      }
-    },
-    [navigateToBooking],
-  )
+  const handleSelectEvent = useCallback((item: CalendarItem) => {
+    // #1101: dispatch by the discriminant. A block opens its detail dialog (view +
+    // delete). A booking is handled by the CalendarEventChip's own popover
+    // (hover-peek / click-pin), whose inner <Link> owns navigation — so an rbc
+    // event-click is a no-op for bookings here; navigating would defeat the pin.
+    if (item.type === 'block') {
+      setSelectedBlock(item)
+    }
+  }, [])
 
   // Both the header button and a calendar slot-click open the dialog; a slot also
   // prefills the pickup/return range (the button opens an empty range).
@@ -281,18 +317,28 @@ export function OperatorBookingsRoute() {
           </div>
         </header>
         <div className="flex gap-6">
-          <CalendarSidebar vehicles={vehicles} filters={filters} />
+          <CalendarSidebar
+            vehicles={vehicles}
+            filters={filters}
+            pickedOperatorId={pickedOperatorId}
+          />
           <div className="min-w-0 flex-1">
             {view === 'timeline' ? (
-              <FleetTimeline
-                rows={timelineRows}
-                vehicles={timelineVehicles}
-                date={anchorDate}
-                locale={locale}
-                onViewChange={handleViewChange}
-                onDateChange={handleDateChange}
-                onSelectEvent={navigateToBooking}
-              />
+              <Suspense
+                fallback={
+                  <div className="h-[600px] animate-pulse rounded-lg bg-muted" aria-hidden="true" />
+                }
+              >
+                <FleetTimeline
+                  rows={timelineRows}
+                  vehicles={timelineVehicles}
+                  date={anchorDate}
+                  locale={locale}
+                  onViewChange={handleViewChange}
+                  onDateChange={handleDateChange}
+                  onSelectEvent={navigateToBooking}
+                />
+              </Suspense>
             ) : (
               <>
                 {canViewBlocks && <BlockLegend />}

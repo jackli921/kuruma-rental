@@ -1,6 +1,7 @@
 import { OperatorDashboardView } from '@/vite/operator-dashboard/OperatorDashboardView'
 import type { OperatorFleetVehicle } from '@/vite/operator-fleet/api'
 import type { OperatorOverview } from '@kuruma/shared/types/overview'
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { render, screen } from '@testing-library/react'
 import type { ReactNode } from 'react'
 import { IntlProvider } from 'use-intl'
@@ -21,6 +22,7 @@ const overview: OperatorOverview = {
   totalBookings: 12,
   activeVehicles: 5,
   upcomingBookings: 3,
+  today: { pickups: [], returns: [], overdue: [] },
 }
 
 function vehicle(overrides: Partial<OperatorFleetVehicle> = {}): OperatorFleetVehicle {
@@ -61,11 +63,18 @@ function vehicle(overrides: Partial<OperatorFleetVehicle> = {}): OperatorFleetVe
   }
 }
 
+// session=null: the #1102 Today panel gates itself off for a non-operator viewer,
+// so it renders nothing and stays clear of these tiles/compliance assertions. The
+// QueryClientProvider is still required — TodayPanel calls useQueryClient/useMutation
+// before its early return (rules of hooks).
 function renderDashboard(vehicles: OperatorFleetVehicle[]) {
+  const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
   return render(
-    <IntlProvider locale="en" messages={enMessages}>
-      <OperatorDashboardView overview={overview} vehicles={vehicles} locale="en" />
-    </IntlProvider>,
+    <QueryClientProvider client={queryClient}>
+      <IntlProvider locale="en" messages={enMessages}>
+        <OperatorDashboardView overview={overview} vehicles={vehicles} session={null} locale="en" />
+      </IntlProvider>
+    </QueryClientProvider>,
   )
 }
 

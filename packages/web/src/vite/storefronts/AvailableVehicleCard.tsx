@@ -4,6 +4,7 @@ import { IndicativeNote } from '@/vite/currency'
 import { type AggregateEntry, RatingBadge } from '@/vite/reviews'
 import { PhotoGallery } from '@/vite/storefronts/PhotoGallery'
 import type { AvailableVehicleData } from '@/vite/storefronts/api'
+import { carryForwardFilters } from '@/vite/storefronts/params'
 import { Link } from '@tanstack/react-router'
 import { Briefcase, Settings2, Users } from 'lucide-react'
 import { useLocale, useTranslations } from 'use-intl'
@@ -19,6 +20,11 @@ interface AvailableVehicleCardProps {
    *  `vehicle.classId !== null`; classless vehicles render no badge at all
    *  (distinct from "rated zero reviews" — see plan §"P2 fix"). */
   readonly classRating?: AggregateEntry | null | undefined
+  /** Active search filters carried into the booking wizard so backing out of it
+   *  returns to a listing that still has the renter's class/region/pickup (#1291). */
+  readonly classFilter?: string | string[] | undefined
+  readonly pickupLocationId?: string | undefined
+  readonly region?: string | undefined
 }
 
 /**
@@ -33,6 +39,9 @@ export function AvailableVehicleCard({
   from,
   to,
   classRating,
+  classFilter,
+  pickupLocationId,
+  region,
 }: AvailableVehicleCardProps) {
   const t = useTranslations('search')
   const tSize = useTranslations('luggageSize')
@@ -87,7 +96,13 @@ export function AvailableVehicleCard({
         <Link
           to="/$locale/bookings/new"
           params={{ locale }}
-          search={{ vehicleId: vehicle.id, locationId, from, to }}
+          search={{
+            vehicleId: vehicle.id,
+            locationId,
+            from,
+            to,
+            ...carryForwardFilters({ class: classFilter, pickupLocationId, region }),
+          }}
           className={cn(buttonVariants({ variant: 'default', size: 'sm' }), 'w-full')}
         >
           {t('detail.book')}

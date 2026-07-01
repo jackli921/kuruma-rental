@@ -6,7 +6,7 @@ import { CancelBookingDialog } from '@/vite/bookings/CancelBookingDialog'
 import { PreAuthHandoffCard } from '@/vite/bookings/PreAuthHandoffCard'
 import type { BookingDto } from '@/vite/bookings/api'
 import { buildStorefrontSearch } from '@/vite/bookings/storefront-link'
-import { isCancellationEnabled } from '@/vite/config/features'
+import { useFeatureFlag } from '@/vite/config'
 import { IndicativeNote, useIndicative } from '@/vite/currency'
 import { MessageHostLink } from '@/vite/messaging'
 import type { VehicleClassData } from '@/vite/vehicles/classes'
@@ -41,6 +41,7 @@ export function BookingConfirmationView({
   const tCurrency = useTranslations('currency')
   const locale = useLocale()
   const { format: indicativeOf } = useIndicative()
+  const cancellationEnabled = useFeatureFlag('CANCELLATION')
 
   // The base (vehicle-rental) charge is never stored — only composed into
   // totalPrice — so recover it via the documented inverse for the itemised
@@ -204,7 +205,7 @@ export function BookingConfirmationView({
       {/* #856: self-cancel is offered only for a CONFIRMED booking (an ACTIVE/
           COMPLETED/CANCELLED one is past the renter's reach) and only when a CSRF
           token is present to authorize the write. */}
-      {isCancellationEnabled() && booking.status === 'CONFIRMED' && csrfToken && (
+      {cancellationEnabled && booking.status === 'CONFIRMED' && csrfToken && (
         <div className="mt-8 flex justify-center border-t border-border pt-6">
           <CancelBookingDialog
             bookingId={booking.id}

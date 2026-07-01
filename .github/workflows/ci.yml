@@ -40,6 +40,9 @@ jobs:
       - name: Check FK indexes
         run: bun run lint:fk-indexes
 
+      - name: Check operatorId tenant-anchor immutability
+        run: bun run lint:tenant-anchors
+
       - name: Check snapshot/index parity (hand-SQL drift)
         run: bun run lint:snapshot-index-parity
 
@@ -51,6 +54,9 @@ jobs:
 
       - name: Check global fetch is bound on runtime surfaces
         run: bun run lint:fetch-binding
+
+      - name: Check web cookie writes send the CSRF token
+        run: bun run lint:csrf-writes
 
       - name: Check unused deps and exports
         run: bun run lint:deps
@@ -163,15 +169,19 @@ jobs:
         id: playwright-cache
         with:
           path: ~/.cache/ms-playwright
-          key: playwright-${{ runner.os }}-${{ hashFiles('bun.lock') }}
+          # `webkit` in the key: adding it to the install commands does not touch
+          # bun.lock (it ships inside @playwright/test), so without this suffix the
+          # old chromium-only cache restores as a HIT, skips the install, and the
+          # webkit binary is missing → every mobile-safari spec fails in CI (#1298).
+          key: playwright-webkit-${{ runner.os }}-${{ hashFiles('bun.lock') }}
 
       - name: Install Playwright browsers
         if: steps.playwright-cache.outputs.cache-hit != 'true'
-        run: bunx playwright install --with-deps chromium
+        run: bunx playwright install --with-deps chromium webkit
 
       - name: Install Playwright system deps
         if: steps.playwright-cache.outputs.cache-hit == 'true'
-        run: bunx playwright install-deps chromium
+        run: bunx playwright install-deps chromium webkit
 
       - name: Run E2E tests
         run: bun run test:e2e
@@ -232,15 +242,19 @@ jobs:
         id: playwright-cache
         with:
           path: ~/.cache/ms-playwright
-          key: playwright-${{ runner.os }}-${{ hashFiles('bun.lock') }}
+          # `webkit` in the key: adding it to the install commands does not touch
+          # bun.lock (it ships inside @playwright/test), so without this suffix the
+          # old chromium-only cache restores as a HIT, skips the install, and the
+          # webkit binary is missing → every mobile-safari spec fails in CI (#1298).
+          key: playwright-webkit-${{ runner.os }}-${{ hashFiles('bun.lock') }}
 
       - name: Install Playwright browsers
         if: steps.playwright-cache.outputs.cache-hit != 'true'
-        run: bunx playwright install --with-deps chromium
+        run: bunx playwright install --with-deps chromium webkit
 
       - name: Install Playwright system deps
         if: steps.playwright-cache.outputs.cache-hit == 'true'
-        run: bunx playwright install-deps chromium
+        run: bunx playwright install-deps chromium webkit
 
       - name: Apply all migrations against fresh Postgres
         run: bun run db:migrate

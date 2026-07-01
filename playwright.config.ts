@@ -11,11 +11,12 @@ export default defineConfig({
   // with real servers + a seeded Neon branch. Exclude it here so the mock track
   // never tries to run those specs against the unauthenticated mock API.
   //
-  // The booking spec exercises the slice-6 flow not yet ported to the Vite shell —
-  // re-enable when that lands (#501). The admin-portal spec IS re-enabled here
-  // (#541): /admin is now served on Vite and mock-api.ts resolves a role from the
-  // `e2e-mock-role` cookie, so the authenticated guard cases run in the mock track.
-  testIgnore: ['**/real-db/**', '**/booking.spec.ts'],
+  // The slice-6 booking spec was retired in #1255: its journey is now proven end
+  // to end by the real-DB lane (e2e/real-db/marketplace-happy-path.auth.spec.ts).
+  // The admin-portal spec runs here (#541): /admin is served on Vite and
+  // mock-api.ts resolves a role from the `e2e-mock-role` cookie, so the
+  // authenticated guard cases run in the mock track.
+  testIgnore: ['**/real-db/**'],
   fullyParallel: true,
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 2 : 0,
@@ -32,6 +33,20 @@ export default defineConfig({
     {
       name: 'chromium',
       use: { ...devices['Desktop Chrome'] },
+      // Desktop specs only. A project-level testIgnore REPLACES the config-level
+      // one (Playwright overrides, not merges), so the real-db exclusion must be
+      // repeated here. The mobile lane is a distinct project (real iPhone WebKit)
+      // so a phone-specific regression can't hide behind desktop chrome.
+      testIgnore: ['**/real-db/**', '**/mobile/**'],
+    },
+    {
+      // Mobile UX hardening gate (#1294): real iPhone 13 (WebKit) so touch-target
+      // sizes and dvh/scroll behaviour are proven on the browser phones actually
+      // run, not desktop Chromium emulation. Wave 1 (#1298) seeds e2e/mobile/;
+      // B/C/D/E extend it.
+      name: 'mobile-safari',
+      use: { ...devices['iPhone 13'] },
+      testMatch: ['**/mobile/**'],
     },
   ],
 
@@ -53,6 +68,12 @@ export default defineConfig({
         // vite.config.mts `server.proxy`). Unlike the old Next middleware, the
         // SPA has no server-side auth import chain, so no AUTH_SECRET/DATABASE_URL.
         VITE_DEV_API_PROXY: MOCK_API_URL,
+        // Bake the self-cancellation feature ON (#868) so the confirmation page
+        // renders the tall CancelBookingDialog the mobile scroll spec drives
+        // (e2e/mobile/primitives.spec.ts). Beta builds ship it OFF; enabling it
+        // here only makes the dialog reachable and leaves every existing spec
+        // (none touch the renter confirmation page) unaffected.
+        VITE_FEATURE_CANCELLATION: 'true',
       },
     },
   ],

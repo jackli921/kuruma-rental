@@ -257,4 +257,26 @@ describe('block-vs-booking guard (real pg, #1196)', () => {
     expect(res.ok).toBe(true)
     if (res.ok) createdBlockIds.push(res.block.id)
   })
+
+  it('allows a block whose start touches the booking effectiveEndAt exactly (half-open [), no overlap)', async () => {
+    const vehicleId = await seedVehicle('Block Over Booking Car 4')
+    const booked = await bookVehicle(vehicleId)
+    expect(booked.ok).toBe(true)
+    if (booked.ok) createdBookingIds.push(booked.booking.id)
+
+    // Booking endAt 09:00 + 60-min turnaround => effectiveEndAt 2027-10-02T10:00:00Z.
+    // A block starting at that exact instant shares only the closed-open boundary, so
+    // under `tstzrange [)` bounds the ranges do NOT overlap. Pins the boundary on real
+    // pg (the in-memory unit test covers it; #1232) so a switch to inclusive `[]` bounds
+    // would fail the e2e-real-db job, not slip through.
+    const res = await vehicleBlockService.createBlock(opCtx, vehicleId, {
+      kind: 'MAINTENANCE',
+      reason: 'adjacent',
+      startAt: '2027-10-02T10:00:00.000Z',
+      endAt: '2027-10-02T16:00:00.000Z',
+    })
+
+    expect(res.ok).toBe(true)
+    if (res.ok) createdBlockIds.push(res.block.id)
+  })
 })

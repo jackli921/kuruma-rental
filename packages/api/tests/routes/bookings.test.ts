@@ -363,6 +363,50 @@ describe('Booking Routes', () => {
       expect(body.data[0].renterId).toBe(USER1)
     })
 
+    it('narrows the list to one operator for a picker admin (?operatorId=)', async () => {
+      // #1230 slice 5a: the default app is a PLATFORM_ADMIN (bypassScope) using the
+      // operator-context picker. Two bookings under different operators; the picked
+      // operatorId must narrow the cross-operator list to just that operator's rows.
+      const OTHER_OPERATOR = '00000000-0000-4000-8000-0000000000c2'
+      await bookingRepo.create(
+        SYSTEM_CONTEXT,
+        bookingInput({
+          operatorId: OPERATOR,
+          classId: testClassId,
+          renterId: USER1,
+          requestedVehicleId: seededVehicleId,
+          assignedVehicleId: seededVehicleId,
+          pickupLocationId: locationId,
+          dropoffLocationId: locationId,
+          startAt: new Date('2026-08-01T09:00:00Z'),
+          endAt: new Date('2026-08-01T17:00:00Z'),
+          effectiveEndAt: new Date('2026-08-01T17:00:00Z'),
+        }),
+      )
+      await bookingRepo.create(
+        SYSTEM_CONTEXT,
+        bookingInput({
+          operatorId: OTHER_OPERATOR,
+          classId: testClassId,
+          renterId: USER1,
+          requestedVehicleId: seededVehicle2Id,
+          assignedVehicleId: seededVehicle2Id,
+          pickupLocationId: locationId,
+          dropoffLocationId: locationId,
+          startAt: new Date('2026-08-02T09:00:00Z'),
+          endAt: new Date('2026-08-02T17:00:00Z'),
+          effectiveEndAt: new Date('2026-08-02T17:00:00Z'),
+        }),
+      )
+
+      const res = await app.request(`/bookings?operatorId=${OPERATOR}`)
+      const body = await res.json()
+
+      expect(body.success).toBe(true)
+      expect(body.data).toHaveLength(1)
+      expect(body.data[0].operatorId).toBe(OPERATOR)
+    })
+
     it('filters by date range returning bookings that overlap', async () => {
       await createBooking()
 

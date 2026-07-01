@@ -3,6 +3,7 @@ import { useOperatorContext } from '@/vite/operator-context'
 import { OperatorDashboardView } from '@/vite/operator-dashboard/OperatorDashboardView'
 import { operatorOverviewQueryOptions } from '@/vite/operator-dashboard/api'
 import { operatorFleetQueryOptions } from '@/vite/operator-fleet/api'
+import { useSession } from '@/vite/session'
 import { useSuspenseQuery } from '@tanstack/react-query'
 import { type ErrorComponentProps, createFileRoute, useRouter } from '@tanstack/react-router'
 import { useTranslations } from 'use-intl'
@@ -42,7 +43,17 @@ function OperatorDashboardRoute() {
   const { pickedOperatorId } = useOperatorContext()
   const { data: overview } = useSuspenseQuery(operatorOverviewQueryOptions(pickedOperatorId))
   const { data: vehicles } = useSuspenseQuery(operatorFleetQueryOptions(pickedOperatorId))
-  return <OperatorDashboardView overview={overview} vehicles={vehicles} locale={locale} />
+  // The `_business` layout already resolved the session, so this is a cache read;
+  // the #1102 Today panel needs it for the CSRF token + its operator-only gate.
+  const { data: session } = useSession()
+  return (
+    <OperatorDashboardView
+      overview={overview}
+      vehicles={vehicles}
+      session={session ?? null}
+      locale={locale}
+    />
+  )
 }
 
 function OperatorDashboardError(_props: ErrorComponentProps) {

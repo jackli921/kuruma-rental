@@ -1,4 +1,9 @@
-import { BOOKING_SOURCES, TRANSMISSIONS, VEHICLE_STATUSES } from '@kuruma/shared/enums'
+import {
+  BOOKING_SOURCES,
+  LOCATION_STATUSES,
+  TRANSMISSIONS,
+  VEHICLE_STATUSES,
+} from '@kuruma/shared/enums'
 import { LUGGAGE_SIZES } from '@kuruma/shared/lib/luggage'
 import { z } from 'zod'
 
@@ -149,3 +154,19 @@ export const vehicleClassOptionSchema = z.object({
 export type VehicleClassOption = z.infer<typeof vehicleClassOptionSchema>
 
 export const vehicleClassOptionsListSchema = z.array(vehicleClassOptionSchema)
+
+/**
+ * Minimal pickup-location option for the Add/Edit form's location dropdown
+ * (#1262). Fed by the session-scoped `/locations` list; `status` is carried so
+ * the form can offer only ACTIVE locations while still preserving a
+ * since-archived assigned location as a labelled fallback (mirrors the archived
+ * "Current class" behaviour). Extra location fields are stripped by Zod.
+ */
+export const pickupLocationOptionSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  status: z.enum(LOCATION_STATUSES),
+})
+export type PickupLocationOption = z.infer<typeof pickupLocationOptionSchema>
+
+export const pickupLocationOptionsListSchema = z.array(pickupLocationOptionSchema)

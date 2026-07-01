@@ -4,7 +4,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { render, screen } from '@testing-library/react'
 import type { ReactNode } from 'react'
 import { IntlProvider } from 'use-intl'
-import { describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import en from '../../../messages/en.json'
 
 vi.mock('@tanstack/react-router', () => ({
@@ -99,6 +99,10 @@ function renderDetail(detail: StorefrontDetailData, extra: { region?: string } =
 }
 
 describe('StorefrontDetailView', () => {
+  // Reviews ships OFF for the beta MVP; rating badges only render where the flag is on.
+  beforeEach(() => vi.stubEnv('VITE_FEATURE_REVIEWS', 'true'))
+  afterEach(() => vi.unstubAllEnvs())
+
   it('renders the store header and a card per available vehicle', () => {
     renderDetail(makeDetail([makeVehicle(), makeVehicle({ id: 'v2', name: 'Suzuki Jimny' })]))
     expect(screen.getByText('Best Car Rental Osaka')).toBeInTheDocument()
@@ -165,5 +169,11 @@ describe('StorefrontDetailView', () => {
     // contributes nothing — that's the null-classId carve-out the plan calls out.
     const skeletons = screen.getAllByTestId('rating-badge-skeleton')
     expect(skeletons.length).toBe(2)
+  })
+
+  it('mounts no rating badges when the reviews feature is gated off (#1083-1086)', () => {
+    vi.stubEnv('VITE_FEATURE_REVIEWS', undefined)
+    renderDetail(makeDetail([makeVehicle({ id: 'v-classed', classId: 'cls-compact' })]))
+    expect(screen.queryByTestId('rating-badge-skeleton')).toBeNull()
   })
 })

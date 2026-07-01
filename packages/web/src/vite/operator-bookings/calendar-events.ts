@@ -24,8 +24,27 @@ import {
  *  its own component; the other three are rbc views (a subset of rbc's `View`). */
 export type CalendarView = 'timeline' | 'day' | 'week' | 'month'
 
-/** The view-switcher order. `timeline` leads — it is the operator default. */
+/** The full view-switcher order. `timeline` leads — the operator default when the
+ *  fleet-timeline feature is enabled (#1100). */
 export const OPERATOR_VIEWS = ['timeline', 'day', 'week', 'month'] as const
+
+/** The view set when the fleet timeline is gated off (#1100): the plain rbc grids. */
+const CALENDAR_VIEWS_NO_TIMELINE = ['day', 'week', 'month'] as const
+
+/** The views offered in the switcher, gated by the fleet-timeline flag. Off → the
+ *  timeline view drops out and only the day/week/month grids remain. Pure in the
+ *  flag: the caller (a component via useFeatureFlag, the loader via the runtime
+ *  overrides map) supplies the effective value so a dashboard toggle takes effect
+ *  live (#1322). */
+export function operatorViews(timelineEnabled: boolean): readonly CalendarView[] {
+  return timelineEnabled ? OPERATOR_VIEWS : CALENDAR_VIEWS_NO_TIMELINE
+}
+
+/** The landing view: the fleet timeline board when enabled (#1100), else the week
+ *  grid — the natural default once the planning board is gated off. */
+export function defaultCalendarView(timelineEnabled: boolean): CalendarView {
+  return timelineEnabled ? 'timeline' : 'week'
+}
 
 /** How many days the fleet timeline spans from its anchor day (#1100 AC: 14). */
 export const TIMELINE_SPAN_DAYS = 14
@@ -40,6 +59,12 @@ export interface CalendarEvent {
   // for a class-only booking with no assigned car: it has no column to live in.
   resourceId: string
   status: OperatorBookingStatus
+  // --- in-hand fields the quick-view card renders (self-describing event) ---
+  bookingCode: string
+  renterName: string | null
+  renterEmail: string | null
+  vehicleName: string | null
+  totalPrice: number | null
 }
 
 /** One vehicle column in day view. */
@@ -80,7 +105,11 @@ export function calendarItemClassName(item: CalendarItem): string {
   return item.type === 'booking' ? (STATUS_CLASS[item.status] ?? '') : BLOCK_KIND_CLASS[item.kind]
 }
 
-export function toCalendarEvents(rows: readonly CalendarBookingRow[]): BookingCalendarEvent[] {
+export function toCalendarEvents(
+  rows: readonly CalendarBookingRow[],
+  vehicles: readonly { id: string; name: string }[],
+): BookingCalendarEvent[] {
+  const nameById = new Map(vehicles.map((v) => [v.id, v.name]))
   return rows.map((r) => ({
     type: 'booking',
     id: r.id,
@@ -89,6 +118,11 @@ export function toCalendarEvents(rows: readonly CalendarBookingRow[]): BookingCa
     end: new Date(r.effectiveEndAt),
     resourceId: r.vehicleId ?? '',
     status: r.status,
+    bookingCode: r.bookingCode,
+    renterName: r.renterName,
+    renterEmail: r.renterEmail,
+    vehicleName: r.vehicleId ? (nameById.get(r.vehicleId) ?? null) : null,
+    totalPrice: r.totalPrice,
   }))
 }
 
@@ -152,12 +186,28 @@ function iso(from: Date, to: Date): { from: string; to: string } {
 
 // --- URL <-> calendar state (the route stores view/date as search params) ------
 
-const VIEW_SET = new Set<CalendarView>(['timeline', 'day', 'week', 'month'])
+/** Narrow an untrusted `?view=` param to a KNOWN view string (or undefined),
+ *  without applying the feature flag. The flag-blind pass runs in the route's
+ *  `validateSearch`, which has no access to the runtime overrides; the flag-aware
+ *  resolution below decides whether `timeline` is actually offered (#1322). */
+export function normalizeViewParam(value: unknown): CalendarView | undefined {
+  return typeof value === 'string' && (OPERATOR_VIEWS as readonly string[]).includes(value)
+    ? (value as CalendarView)
+    : undefined
+}
 
-/** Narrow an untrusted `?view=` param to one of our views, defaulting to the
- *  fleet timeline — the operator planning board is the landing view (#1100). */
-export function parseCalendarView(value?: string | undefined): CalendarView {
-  return value && VIEW_SET.has(value as CalendarView) ? (value as CalendarView) : 'timeline'
+/** Resolve a `?view=` value to a currently-offered view, defaulting to the landing
+ *  view. Validates against the flag-gated set, so a hand-typed `?view=timeline`
+ *  falls back to the week grid while the timeline is gated off (#1322: the caller
+ *  passes the effective flag). */
+export function parseCalendarView(
+  value: string | undefined,
+  timelineEnabled: boolean,
+): CalendarView {
+  const views = operatorViews(timelineEnabled)
+  return value && (views as readonly string[]).includes(value)
+    ? (value as CalendarView)
+    : defaultCalendarView(timelineEnabled)
 }
 
 const DATE_FMT = 'yyyy-MM-dd'

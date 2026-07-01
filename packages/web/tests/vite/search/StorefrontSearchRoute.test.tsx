@@ -1,17 +1,19 @@
 import { regionsQueryOptions } from '@/vite/regions/regions-api'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { render, screen } from '@testing-library/react'
+import { fireEvent, render, screen } from '@testing-library/react'
 import type { ReactNode } from 'react'
 import { IntlProvider } from 'use-intl'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import en from '../../../messages/en.json'
 
 // Mutable harness state, hoisted so the vi.mock factories below can read it. Each
-// test sets the build-time gate + the loader's resolved view, then renders.
+// test sets the build-time gate + the loader's resolved view, then renders. The
+// navigate spy captures the search updaters the sort/price controls push (#1291).
 const state = vi.hoisted(() => ({
   mapEnabled: false,
   view: 'stores' as 'stores' | 'map',
   region: undefined as string | undefined,
+  navigate: vi.fn(),
 }))
 
 // Drive the build-time gate directly (the route's single source of truth since
@@ -26,7 +28,8 @@ vi.mock('@/vite/search/flags', async () => ({
 const captured = vi.hoisted(() => ({ props: null as Record<string, unknown> | null }))
 
 // Stand in for the heavy views + form — their own tests cover internals; here we
-// only assert which view the route mounts and whether the toggle is gated.
+// only assert which view the route mounts and whether the toggle is gated. The
+// result controls (#1291) are left real so the sort/price → navigate wiring runs.
 vi.mock('@/vite/storefronts/StoreGrid', () => ({
   StoreGrid: () => <div data-testid="store-grid" />,
 }))
@@ -49,6 +52,7 @@ vi.mock('@tanstack/react-router', async () => ({
     useParams: () => ({ locale: 'en' }),
     useSearch: () => ({ from: '2026-07-01T10:00', to: '2026-07-03T10:00', region: state.region }),
     useLoaderData: () => ({ view: state.view, storefronts: null, flat: null }),
+    useNavigate: () => state.navigate,
   }),
   Link: ({
     to,
@@ -85,6 +89,7 @@ describe('StorefrontSearchRoute — results view gating (#885 slice 3b)', () => 
     state.mapEnabled = false
     state.view = 'stores'
     state.region = undefined
+    state.navigate.mockClear()
     captured.props = null
   })
 
@@ -144,5 +149,41 @@ describe('StorefrontSearchRoute — results view gating (#885 slice 3b)', () => 
     expect(Array.isArray(captured.props?.regions)).toBe(true)
     expect((captured.props?.regions as unknown[]).length).toBe(1)
     expect(captured.props?.geoAnchor).toEqual({ latitude: 34.6627, longitude: 135.5023 })
+  })
+
+  it('routes sort and price changes through functional updaters that preserve the other params (#1291)', () => {
+    // The grid path renders the real SearchResultControls; changing them must push a
+    // functional search updater that touches only its own param, so the active dates,
+    // class, region and pickup all survive the URL rewrite.
+    state.mapEnabled = false
+    state.view = 'stores'
+    renderRoute()
+
+    fireEvent.change(screen.getByLabelText(en.search.results.sortLabel), {
+      target: { value: 'priceAsc' },
+    })
+    fireEvent.change(screen.getByLabelText(en.search.results.priceMaxLabel), {
+      target: { value: '5000' },
+    })
+
+    expect(state.navigate).toHaveBeenCalledTimes(2)
+    const sortUpdater = state.navigate.mock.calls[0]?.[0]?.search as (
+      prev: Record<string, unknown>,
+    ) => Record<string, unknown>
+    const priceUpdater = state.navigate.mock.calls[1]?.[0]?.search as (
+      prev: Record<string, unknown>,
+    ) => Record<string, unknown>
+    expect(sortUpdater({ from: 'F', to: 'T', class: 'MCAR', region: 'namba' })).toEqual({
+      from: 'F',
+      to: 'T',
+      class: 'MCAR',
+      region: 'namba',
+      sort: 'priceAsc',
+    })
+    expect(priceUpdater({ from: 'F', class: 'MCAR' })).toEqual({
+      from: 'F',
+      class: 'MCAR',
+      priceMax: 5000,
+    })
   })
 })

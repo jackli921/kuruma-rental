@@ -3,6 +3,7 @@ import type { CallerContext } from './middleware/auth'
 import {
   bookingReadScope,
   narrowReadToOperator,
+  operatorReadScope,
   threadReadScope,
   vehicleBlockReadScope,
 } from './tenancy'
@@ -70,34 +71,59 @@ describe('narrowReadToOperator', () => {
   const admin: CallerContext = { userId: 'admin', role: 'PLATFORM_ADMIN', bypassScope: true }
   const operator: CallerContext = { userId: 'u1', role: 'OPERATOR_OWNER', operatorId: 'op-self' }
 
-  it('narrows an all-scope caller to the requested operator', () => {
-    expect(narrowReadToOperator(admin, 'op-target')).toBe('op-target')
+  it('narrows an all-scope caller to the requested operator (bookingReadScope)', () => {
+    expect(narrowReadToOperator(admin, 'op-target', bookingReadScope)).toBe('op-target')
   })
 
   it('returns undefined for an all-scope caller who requests no operator (aggregate)', () => {
-    expect(narrowReadToOperator(admin, undefined)).toBeUndefined()
+    expect(narrowReadToOperator(admin, undefined, bookingReadScope)).toBeUndefined()
   })
 
-  it('ignores a requested operatorId for a tenant-scoped caller (never widens across tenants)', () => {
+  it('drops a requested operatorId for a tenant-scoped caller (never widens across tenants)', () => {
     // The H2 invariant: a foreign operatorId param must not let an OPERATOR_*
     // caller read another tenant. Their own scope still applies at the repo.
-    expect(narrowReadToOperator(operator, 'op-other')).toBeUndefined()
-    expect(narrowReadToOperator(operator, 'op-self')).toBeUndefined()
+    expect(narrowReadToOperator(operator, 'op-other', bookingReadScope)).toBeUndefined()
+    expect(narrowReadToOperator(operator, 'op-self', bookingReadScope)).toBeUndefined()
   })
 
   it('returns undefined for an operator missing its operatorId (fail-closed)', () => {
     const noOp: CallerContext = { userId: 'u2', role: 'OPERATOR_STAFF' }
-    expect(narrowReadToOperator(noOp, 'op-target')).toBeUndefined()
+    expect(narrowReadToOperator(noOp, 'op-target', bookingReadScope)).toBeUndefined()
   })
 
-  it('ECHOES the requested id for a renter (operatorReadScope maps to all) — the route/repo, not this helper, gate it (#1272)', () => {
-    // The helper is an echo, not the scope gate: operatorReadScope maps every
-    // non-operator role to `all`, so a renter's requested id passes through here.
-    // Safe only because MANAGEMENT_READ_ROLES 403s renters at the route before the
-    // service runs. Pinned so a future bookingReadScope-private consumer that reuses
-    // this helper without re-clamping (the #1272 trap) fails loudly, not silently.
+  it('DROPS a renter requested id under bookingReadScope (private-read vocabulary)', () => {
+    // #1272: the helper no longer echoes non-bypass ids. bookingReadScope maps a
+    // renter to `renter` (not `all`), so the requested id drops here — closing the
+    // trap where a future bookingReadScope-private consumer reused this helper and
+    // silently leaked a renter's `?operatorId=` across tenants.
     const renter: CallerContext = { userId: 'r1', role: 'RENTER' }
-    expect(narrowReadToOperator(renter, 'op-target')).toBe('op-target')
+    expect(narrowReadToOperator(renter, 'op-target', bookingReadScope)).toBeUndefined()
+  })
+
+  it('DROPS a PARTNER channel requested id under bookingReadScope', () => {
+    // A Trip.com PARTNER key carries bypassScope=true; bookingReadScope maps it to
+    // `partner` (its own sourced bookings), NOT `all`, so the id drops.
+    const partner: CallerContext = { userId: 'trip-com', role: 'PARTNER', bypassScope: true }
+    expect(narrowReadToOperator(partner, 'op-target', bookingReadScope)).toBeUndefined()
+  })
+
+  it('DROPS legacy STAFF/ADMIN requested ids under bookingReadScope', () => {
+    // #487 removed legacy STAFF/ADMIN from the bypass set; bookingReadScope maps
+    // them to `renter`, so their requested id drops (parity with the overview repo,
+    // which already reads nothing for them).
+    const staff: CallerContext = { userId: 's1', role: 'STAFF', bypassScope: false }
+    const legacyAdmin: CallerContext = { userId: 'a1', role: 'ADMIN', bypassScope: false }
+    expect(narrowReadToOperator(staff, 'op-target', bookingReadScope)).toBeUndefined()
+    expect(narrowReadToOperator(legacyAdmin, 'op-target', bookingReadScope)).toBeUndefined()
+  })
+
+  it('HONORS the same renter id under operatorReadScope — the resolver picks the vocabulary', () => {
+    // The behavior is not hard-coded to one scope: passing the catalog vocabulary
+    // (operatorReadScope maps a renter to `all`) makes the id pass through. Callers
+    // choose the resolver that matches their read's privacy model; the aggregate
+    // reads pass bookingReadScope precisely so renter/partner ids drop.
+    const renter: CallerContext = { userId: 'r1', role: 'RENTER' }
+    expect(narrowReadToOperator(renter, 'op-target', operatorReadScope)).toBe('op-target')
   })
 })
 

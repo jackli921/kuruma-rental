@@ -36,7 +36,7 @@ export function EditAddOnDialog({ addOn, onOpenChange }: EditAddOnDialogProps) {
 
   return (
     <Dialog open={addOn !== null} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[90vh] overflow-y-auto">
+      <DialogContent>
         <DialogHeader>
           <DialogTitle>{t('editOption')}</DialogTitle>
           <DialogDescription>{addOn?.name}</DialogDescription>

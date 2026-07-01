@@ -66,7 +66,7 @@ function ConsentBlockingDialog({ pending, csrfToken }: ConsentBlockingDialogProp
 
   return (
     <Dialog open onOpenChange={() => {}}>
-      <DialogContent showCloseButton={false} className="max-h-[90vh] overflow-y-auto">
+      <DialogContent showCloseButton={false}>
         <DialogHeader>
           <DialogTitle>{t('title')}</DialogTitle>
           <DialogDescription>{t('intro')}</DialogDescription>

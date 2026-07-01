@@ -156,9 +156,9 @@ const TEST_VEHICLE = {
   updatedAt: FROZEN_TIMESTAMP,
 }
 
-// Renter who books in the slice-6 E2E (#392). The forged session cookie's
-// subject MUST match this id, and POST /bookings stamps it as the renter so the
-// confirmation page's ownership check passes. Keep in sync with e2e/auth.ts.
+// Renter id stamped on POST /bookings responses so a mock booking's confirmation
+// ownership check passes. (The slice-6 booking spec that exercised this end to end
+// was retired in #1255 once the real-DB lane superseded it; the stub endpoint stays.)
 const TEST_RENTER_ID = 'e2e-renter-1'
 
 // The storefront operator's ACTIVE insurance options (#392). The booking form's
@@ -177,6 +177,18 @@ const TEST_INSURANCE = [
     description: null,
     dailyPriceJpy: 3000,
     deductibleJpy: null,
+  },
+]
+
+// The storefront operator's ACTIVE add-ons (#460). The reservation wizard's
+// loader fetches these; a 404 would bounce the renter back to search, so the
+// mobile booking-wizard spec needs the endpoint served. Flat per-rental price.
+const TEST_ADD_ONS = [
+  {
+    id: 'e2e-addon-1',
+    name: 'Child seat',
+    description: 'Rear-facing infant seat.',
+    priceJpy: 2000,
   },
 ]
 
@@ -314,6 +326,12 @@ Bun.serve({
       return ok(TEST_INSURANCE)
     }
 
+    // Renter-facing active add-ons for a storefront (public, #460). The reservation
+    // wizard loader fetches this alongside insurance-options.
+    if (url.pathname === `/storefronts/${TEST_STORE_ID}/add-ons`) {
+      return ok(TEST_ADD_ONS)
+    }
+
     // #1085 slice 5: public review aggregates. The storefront grid + detail
     // pages batch-fetch operator/vehicle/class ratings. We return null per
     // requested id ("no reviews yet") so RatingBadge renders the muted copy
@@ -324,6 +342,18 @@ Bun.serve({
       for (const id of ids) aggregates[id] = null
       return ok({ aggregates })
     }
+
+    // Renter clickwrap consent status (#877). The confirmation page renders inside
+    // the `_renter` layout, whose ConsentGate reads this. No docs are published in
+    // the mock lane, so an EMPTY pending list means "nothing owed" and the gate
+    // falls straight through — mirroring beta/prod. Without this the gate's query
+    // just 404s (still passes, since undefined => children) but retries noisily.
+    if (url.pathname === '/consent/status') return ok([])
+
+    // Renter/operator messaging threads (#1032). The confirmation page resolves the
+    // booking's thread without blocking; an empty inbox keeps this newly-reached
+    // authenticated page quiet (no 404 retry storm) and renders no "Message host" link.
+    if (url.pathname === '/threads') return ok([])
 
     // Create a booking (#392). The web sends the slice-6 contract; the server
     // derives renterId/operatorId/snapshots. We reflect the chosen insurance so
@@ -363,6 +393,9 @@ Bun.serve({
             }
           : null,
         feeSnapshot: TEST_FEE_SNAPSHOT,
+        // Required by the web's bookingDtoSchema (#460). No add-ons in the fixture;
+        // an empty array keeps the confirmation page's validation green.
+        addOnSnapshot: [],
         totalPrice: null,
         externalId: null,
         notes: null,

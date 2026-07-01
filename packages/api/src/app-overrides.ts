@@ -2,6 +2,7 @@ import type { RateLimitBinding } from '@elithrar/workers-hono-rate-limit'
 import type { GoogleAuthRuntime } from './auth/google'
 import type {
   AddOnRepository,
+  AddOnTemplateRepository,
   AvailabilityRepository,
   BookingRepository,
   ClassRatePlanRepository,
@@ -9,6 +10,7 @@ import type {
   ConsentRepository,
   CustomerRepository,
   DocumentStorage,
+  FeatureFlagRepository,
   FeeScheduleRepository,
   FleetOverviewRepository,
   InsuranceOptionRepository,
@@ -69,6 +71,7 @@ export type AppOverrides = {
   locationRepo?: LocationRepository
   insuranceOptionRepo?: InsuranceOptionRepository
   addOnRepo?: AddOnRepository
+  addOnTemplateRepo?: AddOnTemplateRepository
   feeScheduleRepo?: FeeScheduleRepository
   classRatePlanRepo?: ClassRatePlanRepository
   notificationLogRepo?: NotificationLogRepository
@@ -83,6 +86,7 @@ export type AppOverrides = {
   operatorMembershipRepo?: OperatorMembershipRepository
   consentRepo?: ConsentRepository
   reviewRepo?: ReviewRepository
+  featureFlagRepo?: FeatureFlagRepository
   // Inject a fake outbound email port in tests; absent ⇒ the env-resolved
   // Resend/dev-stub/sentinel (resolveEmailSender). Shared by the booking
   // dispatcher and the #916 compliance digest.

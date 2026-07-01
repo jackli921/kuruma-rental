@@ -93,22 +93,39 @@ export class DrizzleAddOnRepository implements AddOnRepository {
     return toAddOn(inserted)
   }
 
-  async update(id: string, data: Partial<AddOn>): Promise<AddOn | undefined> {
-    const { id: _id, createdAt: _createdAt, ...fields } = data
+  async update(ctx: CallerContext, id: string, data: Partial<AddOn>): Promise<AddOn | undefined> {
+    // Add-ons are private config: reject RENTER/PARTNER at the repo, mirroring the
+    // read path — else operatorReadScope maps them to {kind:'all'} (unscoped).
+    requireManagementRead(ctx)
+    const scope = operatorReadScope(ctx)
+    if (scope.kind === 'none') return undefined
+    // operatorId is an immutable tenant anchor (#1271): strip it like id so an
+    // update payload can never migrate the row to another operator.
+    const { id: _id, createdAt: _createdAt, operatorId: _operatorId, ...fields } = data
+    // #1288: scope the write by tenant so a caller reaching the repo without the
+    // service's findById guard can't mutate another operator's row by id.
+    const conditions = [eq(addOnOptions.id, id)]
+    if (scope.kind === 'operator') conditions.push(eq(addOnOptions.operatorId, scope.operatorId))
     const [updated] = await this.db
       .update(addOnOptions)
       .set({ ...fields, updatedAt: sql`now()` })
-      .where(eq(addOnOptions.id, id))
+      .where(and(...conditions))
       .returning()
 
     return updated ? toAddOn(updated) : undefined
   }
 
-  async archive(id: string): Promise<AddOn | undefined> {
+  async archive(ctx: CallerContext, id: string): Promise<AddOn | undefined> {
+    requireManagementRead(ctx)
+    const scope = operatorReadScope(ctx)
+    if (scope.kind === 'none') return undefined
+    // #1288: tenant-scope the archive WHERE (see update()).
+    const conditions = [eq(addOnOptions.id, id)]
+    if (scope.kind === 'operator') conditions.push(eq(addOnOptions.operatorId, scope.operatorId))
     const [archived] = await this.db
       .update(addOnOptions)
       .set({ status: 'ARCHIVED', updatedAt: sql`now()` })
-      .where(eq(addOnOptions.id, id))
+      .where(and(...conditions))
       .returning()
 
     return archived ? toAddOn(archived) : undefined

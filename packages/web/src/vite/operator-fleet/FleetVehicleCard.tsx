@@ -1,3 +1,4 @@
+import { FleetEditButton } from '@/vite/operator-fleet/FleetEditButton'
 import { FleetRowActions } from '@/vite/operator-fleet/FleetRowActions'
 import type { OperatorFleetVehicle } from '@/vite/operator-fleet/api'
 import { ExpiryPill, StatusPill, priceLabel } from '@/vite/operator-fleet/cells'
@@ -80,7 +81,12 @@ export function FleetVehicleCard({
             <StatusPill status={vehicle.status} label={t(`status.${vehicle.status}`)} />
           </div>
         </div>
-        {canWrite && <FleetRowActions vehicle={vehicle} onEdit={onEdit} />}
+        {canWrite && (
+          <div className="inline-flex shrink-0 items-start gap-1">
+            <FleetEditButton onEdit={onEdit} />
+            <FleetRowActions vehicle={vehicle} onEdit={onEdit} />
+          </div>
+        )}
       </div>
 
       <div className="flex items-center justify-between text-sm">

@@ -1,7 +1,7 @@
 import type { CoordinateSource } from '@kuruma/shared/db/schema'
 import { locations } from '@kuruma/shared/db/schema'
 import { type SQL, and, asc, eq, ne, sql } from 'drizzle-orm'
-import type { CallerContext } from '../../middleware/auth'
+import { type CallerContext, requireFleetWriteScope } from '../../middleware/auth'
 import type { Location } from '../../stores'
 import { operatorReadScope } from '../../tenancy'
 import type { LocationFilters, LocationRepository } from '../types'
@@ -104,22 +104,42 @@ export class DrizzleLocationRepository implements LocationRepository {
     return toLocation(inserted)
   }
 
-  async update(id: string, data: Partial<Location>): Promise<Location | undefined> {
-    const { id: _id, createdAt: _createdAt, ...fields } = data
+  async update(
+    ctx: CallerContext,
+    id: string,
+    data: Partial<Location>,
+  ): Promise<Location | undefined> {
+    // #1288: reject non-fleet-write roles + fail closed on a tenant-less operator
+    // at the repo, mirroring vehicle.ts — else a bypassing RENTER/PARTNER maps to
+    // operatorReadScope {kind:'all'} and could write any operator's catalog.
+    requireFleetWriteScope(ctx)
+    const scope = operatorReadScope(ctx)
+    // operatorId is an immutable tenant anchor (#1279): strip it like id so an
+    // update payload can never migrate the row to another operator.
+    const { id: _id, operatorId: _operatorId, createdAt: _createdAt, ...fields } = data
+    // #1288: scope the write by tenant so a caller reaching the repo without the
+    // service's findById guard can't mutate another operator's row by id.
+    const conditions = [eq(locations.id, id)]
+    if (scope.kind === 'operator') conditions.push(eq(locations.operatorId, scope.operatorId))
     const [updated] = await this.db
       .update(locations)
       .set({ ...fields, updatedAt: sql`now()` })
-      .where(eq(locations.id, id))
+      .where(and(...conditions))
       .returning()
 
     return updated ? toLocation(updated) : undefined
   }
 
-  async archive(id: string): Promise<Location | undefined> {
+  async archive(ctx: CallerContext, id: string): Promise<Location | undefined> {
+    requireFleetWriteScope(ctx)
+    const scope = operatorReadScope(ctx)
+    // #1288: tenant-scope the archive WHERE (see update()).
+    const conditions = [eq(locations.id, id)]
+    if (scope.kind === 'operator') conditions.push(eq(locations.operatorId, scope.operatorId))
     const [archived] = await this.db
       .update(locations)
       .set({ status: 'ARCHIVED', updatedAt: sql`now()` })
-      .where(eq(locations.id, id))
+      .where(and(...conditions))
       .returning()
 
     return archived ? toLocation(archived) : undefined

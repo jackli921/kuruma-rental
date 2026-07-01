@@ -480,7 +480,7 @@ describe('getInsuranceOptions', () => {
     const loc = await makeLocation({ operatorId: op.id })
     await makeInsurance({ operatorId: op.id, name: 'Active CDW', dailyPriceJpy: 1000 })
     const archived = await makeInsurance({ operatorId: op.id, name: 'Old CDW', dailyPriceJpy: 800 })
-    await insuranceRepo.archive(archived.id)
+    await insuranceRepo.archive(SYSTEM_CONTEXT, archived.id)
 
     const result = await service.getInsuranceOptions(PUBLIC_CONTEXT, loc.id)
 
@@ -519,7 +519,7 @@ describe('getInsuranceOptions', () => {
   it('404s for an archived location', async () => {
     const op = await makeOperator('Op A', 'op-a')
     const loc = await makeLocation({ operatorId: op.id })
-    await locationRepo.archive(loc.id)
+    await locationRepo.archive(SYSTEM_CONTEXT, loc.id)
 
     const result = await service.getInsuranceOptions(PUBLIC_CONTEXT, loc.id)
     expect(result).toEqual({ ok: false, error: 'Storefront not found', status: 404 })
@@ -575,7 +575,7 @@ describe('getAddOns', () => {
     const loc = await makeLocation({ operatorId: op.id })
     await makeAddOn({ operatorId: op.id, name: 'Active Seat', priceJpy: 1000 })
     const archived = await makeAddOn({ operatorId: op.id, name: 'Old Seat', priceJpy: 800 })
-    await addOnRepo.archive(archived.id)
+    await addOnRepo.archive(SYSTEM_CONTEXT, archived.id)
 
     const result = await service.getAddOns(PUBLIC_CONTEXT, loc.id)
 
@@ -614,7 +614,7 @@ describe('getAddOns', () => {
   it('404s for an archived location', async () => {
     const op = await makeOperator('Op A', 'op-a')
     const loc = await makeLocation({ operatorId: op.id })
-    await locationRepo.archive(loc.id)
+    await locationRepo.archive(SYSTEM_CONTEXT, loc.id)
 
     const result = await service.getAddOns(PUBLIC_CONTEXT, loc.id)
     expect(result).toEqual({ ok: false, error: 'Storefront not found', status: 404 })

@@ -1,8 +1,10 @@
 import { OperatorBookingsRoute } from '@/routes/$locale/_business/manage/bookings/index'
+import { FeatureFlagsProvider } from '@/vite/config'
 import * as api from '@/vite/operator-bookings/api'
 import { calendarRange, parseCalendarDate } from '@/vite/operator-bookings/calendar-events'
 import { type OperatorLocation, operatorLocationsQueryOptions } from '@/vite/operator-locations/api'
 import type { Session } from '@/vite/session'
+import type { FeatureFlagOverrides } from '@kuruma/shared/feature-flags/registry'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { act, render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
@@ -14,7 +16,8 @@ const c = enMessages.bookings.operator.newBooking
 const B = enMessages.bookings.operator.blocks
 
 // Render the route component outside a RouterProvider: stub createFileRoute
-// (Route.useParams/useSearch/useNavigate) + useRouter, and seed the suspense
+// (Route.useParams/useSearch/useNavigate), getRouteApi (the `_business` layout's
+// useSearch, read by useOperatorContext) + useRouter, and seed the suspense
 // calendar reads + session from cache. Mirrors TripDetailRoute.test.tsx.
 //
 // The route's search params, mutable so a test can drop `view` to exercise the
@@ -30,6 +33,12 @@ vi.mock('@tanstack/react-router', async () => ({
   createFileRoute: () => () => ({
     useParams: () => ({ locale: 'en' }),
     useSearch: () => searchState.value,
+    useNavigate: () => navigate,
+  }),
+  // useOperatorContext reads the `_business` layout search via getRouteApi. These
+  // route tests predate the picker, so the operator is always unpicked (undefined).
+  getRouteApi: () => ({
+    useSearch: () => ({ operator: undefined }),
     useNavigate: () => navigate,
   }),
   useRouter: () => ({ invalidate: vi.fn() }),
@@ -48,6 +57,16 @@ vi.mock('react-big-calendar', async (importOriginal) => ({
     calendarProps = props
     return null
   },
+}))
+
+// #1331 fallout: FleetTimeline statically imports react-calendar-timeline + interactjs
+// (~460KB) and is lazy()-loaded by the route (#1099 code-split). Loading the real module
+// through Suspense races findByRole's poll on a cold CI runner -> an intermittent timeout.
+// Mock it to a light marker so the lazy import resolves deterministically; the default-view
+// test only needs to prove FleetTimeline (not the rbc week grid) mounted. FleetTimeline's
+// own toolbar/behavior stays covered by FleetTimeline.test.tsx.
+vi.mock('@/vite/operator-bookings/FleetTimeline', () => ({
+  FleetTimeline: () => <div data-testid="fleet-timeline" />,
 }))
 
 const ANCHOR = '2026-07-01'
@@ -120,11 +139,17 @@ function renderRoute(
   vehicles: api.CalendarVehicle[] = [],
   locations: OperatorLocation[] = [],
   seed: { bookings?: api.CalendarBookingRow[]; blocks?: api.CalendarBlockRow[] } = {},
+  overrides: FeatureFlagOverrides = {},
 ) {
   const queryClient = new QueryClient({
     defaultOptions: { queries: { staleTime: Number.POSITIVE_INFINITY, retry: false } },
   })
   queryClient.setQueryData(['session'], session)
+  // Seed the runtime override map so FeatureFlagsProvider reads it from cache (no
+  // network fetch). Empty by default -> every flag falls back to its build-time env,
+  // so the existing env-stub cases are unchanged; the runtime-toggle cases below pass
+  // an explicit override to prove it wins over the baked-in default (#1322).
+  queryClient.setQueryData(['feature-flags'], overrides)
   // Seed bookings + blocks for BOTH the week range (explicit-view tests) and the
   // timeline range (default landing view) so whichever view the component resolves
   // reads from cache (staleTime ∞ → no fetch). Blocks are an additive non-suspense
@@ -146,7 +171,9 @@ function renderRoute(
   render(
     <QueryClientProvider client={queryClient}>
       <IntlProvider locale="en" messages={enMessages}>
-        <OperatorBookingsRoute />
+        <FeatureFlagsProvider>
+          <OperatorBookingsRoute />
+        </FeatureFlagsProvider>
       </IntlProvider>
     </QueryClientProvider>,
   )
@@ -157,6 +184,10 @@ function renderRoute(
 // asserts the affordance disappears entirely.
 beforeEach(() => {
   vi.stubEnv('VITE_FEATURE_OPERATOR_MANUAL_BOOKING', 'true')
+  // The fleet timeline (#1100) is the default landing view only while its flag is on;
+  // enable it so the existing view/blocks cases behave as the full product. The OFF
+  // case in the default-view describe asserts the fallback to the week grid.
+  vi.stubEnv('VITE_FEATURE_FLEET_TIMELINE', 'true')
   searchState.value = { view: 'week', date: '2026-07-01' }
   navigate.mockReset()
 })
@@ -222,17 +253,43 @@ describe('OperatorBookingsRoute manual-booking affordance (#589 1d)', () => {
   })
 })
 
+describe('OperatorBookingsRoute quick-view enrichment (#1099)', () => {
+  it('enriches calendar events with the assigned vehicle name (transform wiring)', () => {
+    // veh-1 -> 'Prius' in blocksFleet; the route resolves the name at transform time
+    // so the quick-view card renders it with no extra fetch.
+    renderRoute(operatorSession, blocksFleet, [], { bookings: [calendarBooking] })
+    const events = calendarProps.events as Array<{
+      id: string
+      type: string
+      vehicleName: string | null
+    }>
+    const booking = events.find((e) => e.type === 'booking')
+    expect(booking).toMatchObject({ id: 'bk-1', vehicleName: 'Prius' })
+  })
+})
+
 describe('OperatorBookingsRoute default view (#1100)', () => {
-  it('lands on the fleet timeline board when no view param is present', () => {
+  it('lands on the fleet timeline board when no view param is present', async () => {
     searchState.value = { date: ANCHOR } // view omitted -> DEFAULT_VIEW = 'timeline'
     renderRoute(operatorSession)
-    // FleetTimeline owns its toolbar (rendered outside the mocked rbc Calendar); its
-    // active "Timeline" button is proof the timeline board mounted, not the week grid.
-    expect(
-      screen.getByRole('button', { name: enMessages.business.bookings.calendar.views.timeline }),
-    ).toBeInTheDocument()
+    // FleetTimeline is lazy-loaded (code-split, #1099) and mocked here to a marker
+    // (the real react-calendar-timeline lib makes the dynamic import flaky). Finding the
+    // marker proves the default view resolved to the timeline board, not the week grid.
+    expect(await screen.findByTestId('fleet-timeline')).toBeInTheDocument()
     // The rbc <Calendar> (day/week/month) never mounted, so it captured no props.
     expect(calendarProps).toEqual({})
+  })
+
+  it('lands on the week grid (not the timeline) when the fleet-timeline feature is gated off', () => {
+    vi.stubEnv('VITE_FEATURE_FLEET_TIMELINE', undefined)
+    searchState.value = { date: ANCHOR } // view omitted -> default, now the week grid
+    renderRoute(operatorSession)
+    // The rbc <Calendar> mounted in week view — the gated-off default is the grid, not the board.
+    expect(calendarProps.view).toBe('week')
+    // The timeline view dropped out of the switcher entirely.
+    expect(
+      screen.queryByRole('button', { name: enMessages.business.bookings.calendar.views.timeline }),
+    ).not.toBeInTheDocument()
   })
 })
 
@@ -272,7 +329,7 @@ describe('OperatorBookingsRoute blocks layer (#1101)', () => {
     expect(screen.queryByRole('button', { name: B.detail.deleteAction })).not.toBeInTheDocument()
   })
 
-  it('dispatches a clicked booking to its detail page and a clicked block to the detail dialog', () => {
+  it('does not navigate on a calendar booking click (its chip Link owns it) but opens the detail dialog for a block', () => {
     vi.stubEnv('VITE_FEATURE_OPERATOR_BLOCKS', 'true')
     renderRoute(operatorSession, blocksFleet, [], {
       bookings: [calendarBooking],
@@ -283,12 +340,12 @@ describe('OperatorBookingsRoute blocks layer (#1101)', () => {
     const booking = events.find((e) => e.type === 'booking')
     const block = events.find((e) => e.type === 'block')
 
+    // The CalendarEventChip's inner <Link> owns booking navigation now; rbc's
+    // event-click must be a no-op for a booking (navigating would defeat the pin).
     act(() => (calendarProps.onSelectEvent as (i: unknown) => void)(booking))
-    expect(navigate).toHaveBeenCalledWith({
-      to: '/$locale/manage/bookings/$bookingId',
-      params: { locale: 'en', bookingId: 'bk-1' },
-    })
+    expect(navigate).not.toHaveBeenCalled()
 
+    // A block still routes through the shared handler to open its detail dialog.
     act(() => (calendarProps.onSelectEvent as (i: unknown) => void)(block))
     expect(screen.getByText(B.detail.dialogTitle)).toBeInTheDocument()
   })
@@ -328,5 +385,48 @@ describe('OperatorBookingsRoute blocks layer (#1101)', () => {
     searchState.value = { view: 'timeline', date: ANCHOR }
     renderRoute(operatorSession, blocksFleet)
     expect(screen.queryByRole('button', { name: B.scheduleAction })).not.toBeInTheDocument()
+  })
+})
+
+// #1322: both affordances now read their flag through useFeatureFlag(), so a DB
+// override wins over the baked-in build-time env at the live UI. These pin the
+// override->env precedence (override ?? env) end-to-end through the route for an
+// operator session; the env-stub cases above stay green because an empty override
+// map falls through to the env, exactly as the hook's default context does.
+describe('OperatorBookingsRoute runtime feature-flag overrides (#1322)', () => {
+  it('a manual-booking override ON adds the New Booking button even when the build default is OFF', () => {
+    vi.stubEnv('VITE_FEATURE_OPERATOR_MANUAL_BOOKING', undefined)
+    renderRoute(operatorSession, [], [], {}, { OPERATOR_MANUAL_BOOKING: true })
+    expect(screen.getByRole('button', { name: c.action })).toBeInTheDocument()
+  })
+
+  it('a manual-booking override OFF drops the New Booking button even when the build default is ON', () => {
+    vi.stubEnv('VITE_FEATURE_OPERATOR_MANUAL_BOOKING', 'true')
+    renderRoute(operatorSession, [], [], {}, { OPERATOR_MANUAL_BOOKING: false })
+    expect(screen.queryByRole('button', { name: c.action })).not.toBeInTheDocument()
+  })
+
+  it('a blocks override ON reveals the block legend even when the build default is OFF', () => {
+    vi.stubEnv('VITE_FEATURE_OPERATOR_BLOCKS', undefined)
+    renderRoute(
+      operatorSession,
+      blocksFleet,
+      [],
+      { blocks: [maintenanceBlock] },
+      { OPERATOR_BLOCKS: true },
+    )
+    expect(screen.getByText(B.legend.title)).toBeInTheDocument()
+  })
+
+  it('a blocks override OFF hides the block legend even when the build default is ON', () => {
+    vi.stubEnv('VITE_FEATURE_OPERATOR_BLOCKS', 'true')
+    renderRoute(
+      operatorSession,
+      blocksFleet,
+      [],
+      { blocks: [maintenanceBlock] },
+      { OPERATOR_BLOCKS: false },
+    )
+    expect(screen.queryByText(B.legend.title)).not.toBeInTheDocument()
   })
 })

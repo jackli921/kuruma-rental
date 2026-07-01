@@ -1,4 +1,5 @@
 import { cn } from '@/lib/utils'
+import { useFeatureFlag } from '@/vite/config'
 import type { AggregateEntry } from '@/vite/reviews/api'
 import { useTranslations } from 'use-intl'
 
@@ -15,7 +16,12 @@ interface RatingBadgeProps {
 // each branch by exact text/role.
 export function RatingBadge({ entry, size = 'sm' }: RatingBadgeProps) {
   const t = useTranslations('reviews.aggregate')
+  const reviewsEnabled = useFeatureFlag('REVIEWS')
   const textClass = cn('text-muted-foreground', size === 'sm' ? 'text-xs' : 'text-sm')
+
+  // Reviews gated off (#1083-1086): render nothing so no rating surfaces anywhere the
+  // badge is used (storefront + vehicle cards, storefront detail). Runtime-toggleable.
+  if (!reviewsEnabled) return null
 
   if (entry === undefined) {
     return (

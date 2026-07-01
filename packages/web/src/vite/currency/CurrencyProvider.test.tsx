@@ -22,10 +22,16 @@ const fetchMock = vi.fn()
 vi.stubGlobal('fetch', fetchMock)
 
 beforeEach(() => {
+  // Multi-currency (#1070) ships OFF in beta; ON is the precondition for every
+  // conversion here. The gated-off path is covered by its own test below.
+  vi.stubEnv('VITE_FEATURE_MULTI_CURRENCY', 'true')
   localStorage.clear()
   fetchMock.mockResolvedValue(jsonResponse({ success: true, data: rates }))
 })
-afterEach(() => fetchMock.mockReset())
+afterEach(() => {
+  fetchMock.mockReset()
+  vi.unstubAllEnvs()
+})
 
 function renderInProvider(ui: ReactNode, locale = 'en') {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
@@ -155,5 +161,17 @@ describe('useIndicative', () => {
     }
     renderInProvider(<Probe />, 'en')
     await waitFor(() => expect(screen.getByTestId('ind').textContent).toBe('$181'))
+  })
+
+  it('gated off (#1070) returns null from format AND skips the FX fetch entirely', async () => {
+    vi.stubEnv('VITE_FEATURE_MULTI_CURRENCY', undefined)
+    function Probe() {
+      // USD would otherwise convert to "$181"; gated off it must show JPY alone.
+      return <span data-testid="ind">{useIndicative().format(27000) ?? 'none'}</span>
+    }
+    renderInProvider(<Probe />, 'en')
+    // No conversion, and no reason to pay for the snapshot — the query stays disabled.
+    await waitFor(() => expect(screen.getByTestId('ind').textContent).toBe('none'))
+    expect(fetchMock).not.toHaveBeenCalled()
   })
 })

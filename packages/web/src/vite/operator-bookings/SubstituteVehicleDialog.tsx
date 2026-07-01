@@ -14,8 +14,7 @@ import { NativeSelect } from '@/components/ui/native-select'
 import { Textarea } from '@/components/ui/textarea'
 import {
   type SubstitutionCandidate,
-  bookingEventsQueryOptions,
-  operatorBookingDetailQueryOptions,
+  invalidateBookingCaches,
   substituteBooking,
 } from '@/vite/operator-bookings/api'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
@@ -43,9 +42,12 @@ interface SubstituteVehicleDialogProps {
 // swaps the booking's assigned car for another AVAILABLE same-class, same-location
 // vehicle via POST /bookings/:id/substitute. The candidate list comes pre-matched
 // from the server (#616 endpoint), so the operator can never pick an invalid car.
-// On success it invalidates the detail (re-fetch the new vehicle) and events (the
-// appended VEHICLE_SUBSTITUTED audit row) queries — the timeline renders the
-// 系统留痕 automatically. CSRF-gated; the session token rides the write.
+// On success it calls invalidateBookingCaches, whose operator-bookings prefix
+// cascade refreshes the detail (new vehicle), events (VEHICLE_SUBSTITUTED audit
+// row) AND the calendar (the swap moves the booking to a new vehicle column —
+// previously forgotten, #1099 Theme 4 Bug 2), plus the dashboard overview. The
+// timeline renders the 系统留痕 automatically. CSRF-gated; the session token rides
+// the write.
 export function SubstituteVehicleDialog({
   bookingId,
   candidates,
@@ -61,10 +63,7 @@ export function SubstituteVehicleDialog({
   const mutation = useMutation({
     mutationFn: () => substituteBooking(bookingId, vehicleId, reason.trim() || null, csrfToken),
     onSuccess: () => {
-      queryClient.invalidateQueries({
-        queryKey: operatorBookingDetailQueryOptions(bookingId).queryKey,
-      })
-      queryClient.invalidateQueries({ queryKey: bookingEventsQueryOptions(bookingId).queryKey })
+      invalidateBookingCaches(queryClient)
       setOpen(false)
     },
   })

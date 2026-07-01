@@ -6,8 +6,11 @@ import {
   blocksToCalendarEvents,
   calendarItemClassName,
   calendarRange,
+  defaultCalendarView,
   fleetToResources,
   formatCalendarDate,
+  normalizeViewParam,
+  operatorViews,
   parseCalendarDate,
   parseCalendarView,
   toCalendarEvents,
@@ -31,9 +34,14 @@ const row = (over: Partial<CalendarBookingRow> = {}): CalendarBookingRow => ({
   ...over,
 })
 
+const fleet = [
+  { id: 'veh-1', name: 'Toyota Aqua' },
+  { id: 'veh-2', name: 'Nissan Note' },
+]
+
 describe('toCalendarEvents', () => {
-  it('maps a row to an rbc event bound to its vehicle column, ending at the turnaround end', () => {
-    expect(toCalendarEvents([row()])).toEqual([
+  it('maps a row to an rbc event with the in-hand quick-view fields', () => {
+    expect(toCalendarEvents([row()], fleet)).toEqual([
       {
         // #1101: every booking event carries the discriminant so a block can never
         // be mistaken for one (and vice versa) at any consuming switch.
@@ -44,19 +52,32 @@ describe('toCalendarEvents', () => {
         end: new Date('2026-07-03T02:00:00.000Z'),
         resourceId: 'veh-1',
         status: 'CONFIRMED',
+        bookingCode: 'ABCD2345',
+        renterName: 'Jane',
+        renterEmail: 'jane@example.com',
+        vehicleName: 'Toyota Aqua',
+        totalPrice: 24000,
       },
     ])
   })
 
   it('titles by renterEmail when the name is null, then by bookingCode when both are null', () => {
-    expect(toCalendarEvents([row({ renterName: null })])[0]!.title).toBe('jane@example.com')
-    expect(toCalendarEvents([row({ renterName: null, renterEmail: null })])[0]!.title).toBe(
+    expect(toCalendarEvents([row({ renterName: null })], fleet)[0]!.title).toBe('jane@example.com')
+    expect(toCalendarEvents([row({ renterName: null, renterEmail: null })], fleet)[0]!.title).toBe(
       'ABCD2345',
     )
   })
 
-  it('binds an unassigned (class-only) booking to no column via an empty resourceId', () => {
-    expect(toCalendarEvents([row({ vehicleId: null })])[0]!.resourceId).toBe('')
+  it('resolves vehicleName from the fleet map and is null for an unassigned booking', () => {
+    expect(toCalendarEvents([row({ vehicleId: 'veh-2' })], fleet)[0]!.vehicleName).toBe(
+      'Nissan Note',
+    )
+    expect(toCalendarEvents([row({ vehicleId: null })], fleet)[0]!.vehicleName).toBeNull()
+    expect(toCalendarEvents([row({ vehicleId: null })], fleet)[0]!.resourceId).toBe('')
+  })
+
+  it('is null for a vehicleId absent from the fleet map (deleted car)', () => {
+    expect(toCalendarEvents([row({ vehicleId: 'gone' })], fleet)[0]!.vehicleName).toBeNull()
   })
 })
 
@@ -119,14 +140,51 @@ describe('calendarRange', () => {
   })
 })
 
-describe('parseCalendarView', () => {
+describe('parseCalendarView (fleet timeline enabled)', () => {
+  // The timeline board (#1100) is the operator default only while its flag is on; the
+  // caller passes the effective value (#1322), so this is pure of the runtime env.
   it('keeps a valid view and defaults anything else to the timeline board', () => {
-    expect(parseCalendarView('timeline')).toBe('timeline')
-    expect(parseCalendarView('day')).toBe('day')
-    expect(parseCalendarView('week')).toBe('week')
-    expect(parseCalendarView('month')).toBe('month')
-    expect(parseCalendarView('agenda')).toBe('timeline') // a real rbc view we do not offer
-    expect(parseCalendarView(undefined)).toBe('timeline')
+    expect(parseCalendarView('timeline', true)).toBe('timeline')
+    expect(parseCalendarView('day', true)).toBe('day')
+    expect(parseCalendarView('week', true)).toBe('week')
+    expect(parseCalendarView('month', true)).toBe('month')
+    expect(parseCalendarView('agenda', true)).toBe('timeline') // a real rbc view we do not offer
+    expect(parseCalendarView(undefined, true)).toBe('timeline')
+  })
+})
+
+describe('fleet-timeline view gating (#1100)', () => {
+  it('enabled → timeline leads the switcher and is the landing default', () => {
+    expect(operatorViews(true)).toEqual(['timeline', 'day', 'week', 'month'])
+    expect(defaultCalendarView(true)).toBe('timeline')
+  })
+
+  it('gated off → the timeline view drops out and week becomes the default', () => {
+    expect(operatorViews(false)).toEqual(['day', 'week', 'month'])
+    expect(defaultCalendarView(false)).toBe('week')
+  })
+
+  it('gated off → a hand-typed ?view=timeline falls back to the week grid', () => {
+    expect(parseCalendarView('timeline', false)).toBe('week')
+    expect(parseCalendarView(undefined, false)).toBe('week')
+    // The remaining grids still parse through untouched.
+    expect(parseCalendarView('day', false)).toBe('day')
+    expect(parseCalendarView('month', false)).toBe('month')
+  })
+})
+
+describe('normalizeViewParam (flag-blind URL narrowing for validateSearch)', () => {
+  it('keeps any KNOWN view string, including timeline (the flag decides later)', () => {
+    expect(normalizeViewParam('timeline')).toBe('timeline')
+    expect(normalizeViewParam('day')).toBe('day')
+    expect(normalizeViewParam('week')).toBe('week')
+    expect(normalizeViewParam('month')).toBe('month')
+  })
+
+  it('drops an unknown or non-string value to undefined', () => {
+    expect(normalizeViewParam('agenda')).toBeUndefined()
+    expect(normalizeViewParam(undefined)).toBeUndefined()
+    expect(normalizeViewParam(42)).toBeUndefined()
   })
 })
 

@@ -1,5 +1,5 @@
 import type { CoordinateSource } from '@kuruma/shared/db/schema'
-import type { CallerContext } from '../../middleware/auth'
+import { type CallerContext, requireFleetWriteScope } from '../../middleware/auth'
 import { PG_ERROR } from '../../pg-errors'
 import type { Location } from '../../stores'
 import { operatorReadScope } from '../../tenancy'
@@ -93,9 +93,21 @@ export class InMemoryLocationRepository implements LocationRepository {
     return location
   }
 
-  async update(id: string, data: Partial<Location>): Promise<Location | undefined> {
+  async update(
+    ctx: CallerContext,
+    id: string,
+    data: Partial<Location>,
+  ): Promise<Location | undefined> {
+    // #1288: reject non-fleet-write roles + fail closed on a tenant-less operator
+    // (mirrors vehicle.ts) — else a bypassing RENTER/PARTNER maps to {kind:'all'}
+    // and could write any operator's catalog.
+    requireFleetWriteScope(ctx)
+    const scope = operatorReadScope(ctx)
     const existing = this.store.get(id)
     if (!existing) return undefined
+    // #1288: tenant-scope the write so a caller reaching the repo without the
+    // service's findById guard can't mutate another operator's row by id.
+    if (scope.kind === 'operator' && existing.operatorId !== scope.operatorId) return undefined
 
     if (data.name !== undefined && data.name !== existing.name) {
       this.assertNameFree(existing.operatorId, data.name, id)
@@ -105,6 +117,9 @@ export class InMemoryLocationRepository implements LocationRepository {
       ...existing,
       ...data,
       id: existing.id,
+      // operatorId is an immutable tenant anchor (#1279): pin it like id so an
+      // update payload can never migrate the row to another operator.
+      operatorId: existing.operatorId,
       createdAt: existing.createdAt,
       updatedAt: new Date(),
     }
@@ -112,9 +127,13 @@ export class InMemoryLocationRepository implements LocationRepository {
     return updated
   }
 
-  async archive(id: string): Promise<Location | undefined> {
+  async archive(ctx: CallerContext, id: string): Promise<Location | undefined> {
+    requireFleetWriteScope(ctx)
+    const scope = operatorReadScope(ctx)
     const existing = this.store.get(id)
     if (!existing) return undefined
+    // #1288: tenant-scope the archive (see update()).
+    if (scope.kind === 'operator' && existing.operatorId !== scope.operatorId) return undefined
 
     const archived: Location = { ...existing, status: 'ARCHIVED', updatedAt: new Date() }
     this.store.set(archived.id, archived)
