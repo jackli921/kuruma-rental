@@ -68,6 +68,12 @@ export default defineConfig({
         // vite.config.mts `server.proxy`). Unlike the old Next middleware, the
         // SPA has no server-side auth import chain, so no AUTH_SECRET/DATABASE_URL.
         VITE_DEV_API_PROXY: MOCK_API_URL,
+        // Bake the self-cancellation feature ON (#868) so the confirmation page
+        // renders the tall CancelBookingDialog the mobile scroll spec drives
+        // (e2e/mobile/primitives.spec.ts). Beta builds ship it OFF; enabling it
+        // here only makes the dialog reachable and leaves every existing spec
+        // (none touch the renter confirmation page) unaffected.
+        VITE_FEATURE_CANCELLATION: 'true',
       },
     },
   ],
