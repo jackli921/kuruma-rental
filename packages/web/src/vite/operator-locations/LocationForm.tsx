@@ -91,7 +91,8 @@ export function LocationForm(props: LocationFormProps) {
     )
   }
 
-  // The selected region (a deepest AREA id) or null; the cascade drives it via setValue.
+  // The selected region (an assignable CITY or deeper AREA id, #1276) or null; the
+  // cascade drives it via setValue.
   const regionId = watch('regionId') ?? null
 
   return (
