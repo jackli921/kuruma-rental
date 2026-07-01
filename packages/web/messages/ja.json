@@ -1636,6 +1636,9 @@
       "confirm": "確認",
       "payment": "お支払い"
     },
+    "summary": {
+      "total": "合計"
+    },
     "dates": {
       "heading": "レンタル日時",
       "pickup": "貸出",

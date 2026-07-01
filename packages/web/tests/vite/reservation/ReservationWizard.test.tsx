@@ -66,7 +66,9 @@ const insuranceOptions: ReservationInsuranceOption[] = [
   { id: 'i1', name: 'Full coverage', description: null, dailyPriceJpy: 1500, deductibleJpy: 0 },
 ]
 
-function renderWizard() {
+type WizardProps = Parameters<typeof ReservationWizard>[0]
+
+function renderWizard(over: Partial<WizardProps> = {}) {
   const client = new QueryClient({ defaultOptions: { mutations: { retry: false } } })
   return render(
     <QueryClientProvider client={client}>
@@ -79,6 +81,7 @@ function renderWizard() {
           insuranceOptions={insuranceOptions}
           from={jst('2026-07-01T10:00')}
           to={jst('2026-07-03T10:00')} // exactly 2 days
+          {...over}
         />
       </IntlProvider>
     </QueryClientProvider>,
@@ -105,6 +108,22 @@ describe('ReservationWizard', () => {
     expect(search).toMatchObject({ from: '2026-07-01T10:00', to: '2026-07-03T10:00' })
   })
 
+  it('carries the active storefront filters back to the listing (#962)', () => {
+    renderWizard({ classFilter: 'SUVR', region: 'namba', pickupLocationId: 'loc_9' })
+    const back = screen.getByRole('link', { name: 'Back to listing' })
+    const search = JSON.parse(back.getAttribute('data-search') ?? '{}')
+    expect(search).toMatchObject({ class: 'SUVR', region: 'namba', pickupLocationId: 'loc_9' })
+  })
+
+  it('omits storefront filters that were never set', () => {
+    renderWizard()
+    const back = screen.getByRole('link', { name: 'Back to listing' })
+    const search = JSON.parse(back.getAttribute('data-search') ?? '{}')
+    expect(search).not.toHaveProperty('class')
+    expect(search).not.toHaveProperty('region')
+    expect(search).not.toHaveProperty('pickupLocationId')
+  })
+
   it('walks dates -> add-ons -> insurance -> confirm, accumulating the running total', async () => {
     const user = userEvent.setup()
     renderWizard()
@@ -121,7 +140,9 @@ describe('ReservationWizard', () => {
     expect(screen.getByText('Review your booking')).toBeInTheDocument()
     // base 8000×2 = 16000, insurance 1500×2 = 3000, add-on 2000 -> 21000
     expect(screen.getByText('Estimated total')).toBeInTheDocument()
-    expect(screen.getByText('￥21,000')).toBeInTheDocument()
+    // ￥21,000 appears twice on Confirm: the breakdown total line and the sticky
+    // summary bar (#1299), which mirrors the same running total on every step.
+    expect(screen.getAllByText('￥21,000')).toHaveLength(2)
   })
 
   it('confirms without insurance when the renter declines coverage', async () => {
@@ -130,9 +151,30 @@ describe('ReservationWizard', () => {
     await user.click(screen.getByRole('button', { name: 'Continue' })) // add-ons
     await user.click(screen.getByRole('button', { name: 'Continue' })) // insurance (default: none)
     await user.click(screen.getByRole('button', { name: 'Continue' })) // confirm
-    // base only: 16000 shows on both the car-rental line and the total (nothing added)
-    expect(screen.getAllByText('￥16,000')).toHaveLength(2)
+    // base only (no insurance line added): 16000 shows three times — the car-rental
+    // line, the breakdown total, and the sticky summary bar (#1299).
+    expect(screen.getAllByText('￥16,000')).toHaveLength(3)
     expect(screen.getByText('Estimated total')).toBeInTheDocument()
+  })
+
+  it('surfaces the running total from the first step, not only on Confirm (#1299)', () => {
+    // Before #1299 the total reached only ConfirmStep (step 4). The sticky summary
+    // bar shows it immediately: base 8000×2 days = ￥16,000 on the dates step, where
+    // DateRangeStep itself renders no price, so the bar is the sole source.
+    renderWizard()
+    expect(screen.getByText('￥16,000')).toBeInTheDocument()
+  })
+
+  it('updates the running total the moment the renter toggles an add-on (#1299)', async () => {
+    // The conversion gap #1299 closes: on Add-ons the renter changes the price with
+    // no visible total until Confirm. The bar reflects base + add-on right away.
+    const user = userEvent.setup()
+    renderWizard()
+    expect(screen.getByText('￥16,000')).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'Continue' })) // add-ons
+    await user.click(screen.getByRole('checkbox', { name: /Baby seat/ }))
+    expect(screen.getByText('￥18,000')).toBeInTheDocument()
+    expect(screen.queryByText('￥16,000')).toBeNull()
   })
 
   it('reaches the instant-book submit step with a live Reserve action', async () => {

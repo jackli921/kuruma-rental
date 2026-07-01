@@ -180,6 +180,18 @@ const TEST_INSURANCE = [
   },
 ]
 
+// The storefront operator's ACTIVE add-ons (#460). The reservation wizard's
+// loader fetches these; a 404 would bounce the renter back to search, so the
+// mobile booking-wizard spec needs the endpoint served. Flat per-rental price.
+const TEST_ADD_ONS = [
+  {
+    id: 'e2e-addon-1',
+    name: 'Child seat',
+    description: 'Rear-facing infant seat.',
+    priceJpy: 2000,
+  },
+]
+
 // Snapshotted at booking time — drives the confirmation "potential additional
 // charges" block.
 const TEST_FEE_SNAPSHOT = [
@@ -312,6 +324,12 @@ Bun.serve({
     // Renter-facing active insurance for a storefront (public, #392).
     if (url.pathname === `/storefronts/${TEST_STORE_ID}/insurance-options`) {
       return ok(TEST_INSURANCE)
+    }
+
+    // Renter-facing active add-ons for a storefront (public, #460). The reservation
+    // wizard loader fetches this alongside insurance-options.
+    if (url.pathname === `/storefronts/${TEST_STORE_ID}/add-ons`) {
+      return ok(TEST_ADD_ONS)
     }
 
     // #1085 slice 5: public review aggregates. The storefront grid + detail

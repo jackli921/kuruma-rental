@@ -1636,6 +1636,9 @@
       "confirm": "Review",
       "payment": "Payment"
     },
+    "summary": {
+      "total": "Total"
+    },
     "dates": {
       "heading": "Your rental dates",
       "pickup": "Pickup",
