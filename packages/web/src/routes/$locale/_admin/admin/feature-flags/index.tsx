@@ -1,6 +1,6 @@
 import { PageSkeleton } from '@/vite/PageSkeleton'
 import { FeatureFlagsView, setFeatureFlag } from '@/vite/admin/feature-flags'
-import { featureFlagsQueryOptions, isBuildTimeEnabled } from '@/vite/config'
+import { featureFlagsQueryOptions, resolveFeatureFlag } from '@/vite/config'
 import { useSession } from '@/vite/session'
 import {
   FEATURE_FLAGS,
@@ -39,7 +39,7 @@ function FeatureFlagsRoute() {
   const rows = FEATURE_FLAG_KEYS.map((key) => ({
     key,
     label: FEATURE_FLAGS[key].label,
-    effective: map[key] ?? isBuildTimeEnabled(key),
+    effective: resolveFeatureFlag(map, key),
     overridden: map[key] !== undefined,
     runtimeControlled: FEATURE_FLAGS[key].runtimeControlled,
   }))
