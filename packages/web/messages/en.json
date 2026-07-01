@@ -1333,7 +1333,20 @@
       "governance": "Consent governance",
       "customers": "Customers",
       "operators": "Operators",
+      "featureFlags": "Feature flags",
       "backToSite": "Back to site"
+    },
+    "featureFlags": {
+      "title": "Feature flags",
+      "subtitle": "Toggle platform features live. Changes reach other users on their next page load.",
+      "colFeature": "Feature",
+      "colSource": "Source",
+      "colState": "State",
+      "overridden": "Overridden",
+      "default": "Default",
+      "toggleLabel": "Toggle {feature}",
+      "loadError": "Couldn't load feature flags.",
+      "retry": "Retry"
     },
     "operators": {
       "title": "Operators",

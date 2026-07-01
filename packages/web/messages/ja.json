@@ -1333,7 +1333,20 @@
       "governance": "同意ガバナンス",
       "customers": "顧客",
       "operators": "事業者",
+      "featureFlags": "機能フラグ",
       "backToSite": "サイトに戻る"
+    },
+    "featureFlags": {
+      "title": "機能フラグ",
+      "subtitle": "プラットフォームの機能をリアルタイムで切り替えます。他のユーザーには次回のページ読み込み時に反映されます。",
+      "colFeature": "機能",
+      "colSource": "ソース",
+      "colState": "状態",
+      "overridden": "上書き中",
+      "default": "デフォルト",
+      "toggleLabel": "{feature}を切り替え",
+      "loadError": "機能フラグを読み込めませんでした。",
+      "retry": "再試行"
     },
     "operators": {
       "title": "事業者",
