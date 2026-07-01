@@ -11,6 +11,12 @@ import { IntlProvider } from 'use-intl'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import enMessages from '../../../messages/en.json'
 
+// The form reads the CSRF token from the session and echoes it on the create/
+// update write (#1304); mock a fixed token so the payload assertions can pin it.
+vi.mock('@/vite/session', () => ({
+  useSession: () => ({ data: { csrfToken: 'test-csrf' } }),
+}))
+
 // Mock the data layer so submits don't hit the network and we can assert the
 // exact parsed payload each mutation receives.
 vi.mock('@/vite/operator-fleet/api', async (importOriginal) => {
@@ -151,6 +157,7 @@ describe('VehicleForm', () => {
         shakenExpiryDate: '2099-01-01',
         insuranceExpiryDate: '2099-01-01',
       }),
+      'test-csrf',
     )
   })
 
@@ -172,6 +179,7 @@ describe('VehicleForm', () => {
     expect(mockedUpdate).toHaveBeenCalledWith(
       'veh_1',
       expect.objectContaining({ name: 'Toyota Aqua G', dailyRateJpy: 6800 }),
+      'test-csrf',
     )
     expect(mockedCreate).not.toHaveBeenCalled()
   })
@@ -193,6 +201,7 @@ describe('VehicleForm', () => {
     expect(mockedUpdate).toHaveBeenCalledWith(
       'veh_1',
       expect.objectContaining({ name: 'Toyota Aqua Legacy' }),
+      'test-csrf',
     )
   })
 
@@ -249,6 +258,7 @@ describe('VehicleForm', () => {
     await waitFor(() => expect(mockedCreate).toHaveBeenCalledTimes(1))
     expect(mockedCreate).toHaveBeenCalledWith(
       expect.objectContaining({ luggageSize: 'LARGE', luggageCapacity: 3 }),
+      'test-csrf',
     )
   })
 
@@ -265,6 +275,7 @@ describe('VehicleForm', () => {
     await waitFor(() => expect(mockedCreate).toHaveBeenCalledTimes(1))
     expect(mockedCreate).toHaveBeenCalledWith(
       expect.objectContaining({ luggageSize: null, luggageCapacity: null }),
+      'test-csrf',
     )
   })
 
@@ -298,6 +309,7 @@ describe('VehicleForm', () => {
     expect(mockedUpdate).toHaveBeenCalledWith(
       'veh_1',
       expect.objectContaining({ classId: archivedClassId }),
+      'test-csrf',
     )
   })
 
@@ -329,6 +341,7 @@ describe('VehicleForm', () => {
     await waitFor(() => expect(mockedCreate).toHaveBeenCalledTimes(1))
     expect(mockedCreate).toHaveBeenCalledWith(
       expect.objectContaining({ pickupLocationId: OSAKA_LOCATION_ID }),
+      'test-csrf',
     )
   })
 
@@ -343,7 +356,10 @@ describe('VehicleForm', () => {
     await user.click(screen.getByRole('button', { name: en.save }))
 
     await waitFor(() => expect(mockedCreate).toHaveBeenCalledTimes(1))
-    expect(mockedCreate).toHaveBeenCalledWith(expect.objectContaining({ pickupLocationId: null }))
+    expect(mockedCreate).toHaveBeenCalledWith(
+      expect.objectContaining({ pickupLocationId: null }),
+      'test-csrf',
+    )
   })
 
   it('offers only ACTIVE locations as selectable options (#1262)', () => {
@@ -397,6 +413,7 @@ describe('VehicleForm', () => {
     expect(mockedUpdate).toHaveBeenCalledWith(
       'veh_1',
       expect.objectContaining({ pickupLocationId: archivedLocationId }),
+      'test-csrf',
     )
   })
 
@@ -423,6 +440,7 @@ describe('VehicleForm', () => {
     expect(mockedUpdate).toHaveBeenCalledWith(
       'veh_1',
       expect.objectContaining({ pickupLocationId: missingLocationId }),
+      'test-csrf',
     )
   })
 

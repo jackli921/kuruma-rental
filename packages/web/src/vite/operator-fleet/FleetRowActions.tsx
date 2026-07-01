@@ -23,6 +23,7 @@ import {
   retireVehicle,
   updateVehicleStatus,
 } from '@/vite/operator-fleet/api'
+import { useSession } from '@/vite/session'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { MoreHorizontal } from 'lucide-react'
 import { useState } from 'react'
@@ -44,6 +45,8 @@ export function FleetRowActions({ vehicle, onEdit }: FleetRowActionsProps) {
   const t = useTranslations('business.vehicles')
   const tFleet = useTranslations('business.vehicles.fleet')
   const queryClient = useQueryClient()
+  // Cookie writes need the double-submit CSRF token echoed in the header (#1304).
+  const csrfToken = useSession().data?.csrfToken ?? ''
   const [openDialog, setOpenDialog] = useState<OpenDialog>('none')
   const [reason, setReason] = useState('')
 
@@ -52,8 +55,8 @@ export function FleetRowActions({ vehicle, onEdit }: FleetRowActionsProps) {
   const statusMutation = useMutation({
     mutationFn: ({ status, reason }: { status: 'AVAILABLE' | 'MAINTENANCE'; reason?: string }) =>
       status === 'MAINTENANCE'
-        ? updateVehicleStatus(vehicle.id, status, reason)
-        : updateVehicleStatus(vehicle.id, status),
+        ? updateVehicleStatus(vehicle.id, status, csrfToken, reason)
+        : updateVehicleStatus(vehicle.id, status, csrfToken),
     onSuccess: () => {
       setOpenDialog('none')
       setReason('')
@@ -62,7 +65,7 @@ export function FleetRowActions({ vehicle, onEdit }: FleetRowActionsProps) {
   })
 
   const retireMutation = useMutation({
-    mutationFn: () => retireVehicle(vehicle.id),
+    mutationFn: () => retireVehicle(vehicle.id, csrfToken),
     onSuccess: () => {
       setOpenDialog('none')
       invalidateFleet()

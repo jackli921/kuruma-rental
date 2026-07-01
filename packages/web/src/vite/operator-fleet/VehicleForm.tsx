@@ -12,6 +12,7 @@ import {
   createVehicle,
   updateVehicle,
 } from '@/vite/operator-fleet/api'
+import { useSession } from '@/vite/session'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { LUGGAGE_SIZES } from '@kuruma/shared/lib/luggage'
 import {
@@ -135,6 +136,8 @@ export function VehicleForm({
   // Luggage-size option labels live under the top-level `luggageSize.*` namespace.
   const tLuggage = useTranslations('luggageSize')
   const queryClient = useQueryClient()
+  // Cookie-authed writes must echo the session CSRF token or the guard 403s (#1304).
+  const csrfToken = useSession().data?.csrfToken ?? ''
   const isEditMode = vehicle != null
 
   // A vehicle assigned to a since-archived class is absent from the active
@@ -180,7 +183,7 @@ export function VehicleForm({
 
   const mutation = useMutation({
     mutationFn: (data: CreateVehicleInput) =>
-      isEditMode ? updateVehicle(vehicle.id, data) : createVehicle(data),
+      isEditMode ? updateVehicle(vehicle.id, data, csrfToken) : createVehicle(data, csrfToken),
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: FLEET_QUERY_KEY })
       onSaved()
