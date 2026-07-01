@@ -19,10 +19,11 @@ import { useLocale, useTranslations } from 'use-intl'
 // The renter-selectable class filter chips: the 8-code MVP ACRISS subset (#388).
 // Values are the exact ACRISS codes the search API matches on, so a checked chip
 // becomes a `class` URL param the API + `carryForwardFilters` already understand.
-// Limitation: a URL-carried code OUTSIDE this subset (operator-custom, #388) has
-// no chip, so it is dropped on resubmit; direct navigation still honors it. Add a
-// chip source from the live class catalog when operator-custom codes ship.
+// A URL-carried code OUTSIDE this subset (operator-custom, #388) has no chip, so
+// it can't be re-checked; handleSubmit preserves such codes explicitly (#1291) so
+// re-submitting the form no longer silently drops them.
 const CLASS_CODES = Object.keys(ACRISS_CODES) as (keyof typeof ACRISS_CODES)[]
+const CHIP_CODES: ReadonlySet<string> = new Set(CLASS_CODES)
 
 interface StorefrontSearchFormProps {
   /** Wall-clock `datetime-local` strings (JST) to prefill from the URL. */
@@ -68,7 +69,11 @@ export function StorefrontSearchForm({
     e.preventDefault()
     if (!range) return
     // Repeatable `class` checkboxes → an ACRISS code array the API filters on.
-    const classes = new FormData(e.currentTarget).getAll('class').map(String)
+    const checked = new FormData(e.currentTarget).getAll('class').map(String)
+    // Operator-custom codes have no chip, so they can't be checked; carry the
+    // ones already in the filter forward so a re-submit doesn't drop them (#1291).
+    const preserved = selectedClasses.filter((code) => !CHIP_CODES.has(code))
+    const classes = [...checked, ...preserved]
     // Remember the range so the landing hero restores a refinement made here.
     persistSearchRange(range.from, range.to)
     navigate({
