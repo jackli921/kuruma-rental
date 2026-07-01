@@ -42,9 +42,11 @@ interface SectionSpec {
 
 // The buckets are JST-day-scoped server-side (a row lands in "today" by its JST
 // calendar day), so pin the time to Asia/Tokyo — otherwise an off-JST viewer sees
-// a time (and apparent day) that disagrees with the bucket it sits in.
-function formatTime(iso: string): string {
-  return new Date(iso).toLocaleTimeString([], {
+// a time (and apparent day) that disagrees with the bucket it sits in. Format in
+// the active locale so the clock convention (24h ja/zh vs 12h en) matches the rest
+// of the UI rather than following the viewer's browser default.
+function formatTime(iso: string, locale: string): string {
+  return new Date(iso).toLocaleTimeString(locale, {
     hour: '2-digit',
     minute: '2-digit',
     timeZone: 'Asia/Tokyo',
@@ -141,7 +143,9 @@ export function TodayPanel({ today, vehicles, session, locale }: TodayPanelProps
                       className="min-w-0 flex-1 text-sm hover:underline"
                     >
                       <span className="flex items-baseline gap-1.5">
-                        <span className="font-medium tabular-nums">{formatTime(r[timeField])}</span>
+                        <span className="font-medium tabular-nums">
+                          {formatTime(r[timeField], locale)}
+                        </span>
                         <span className="truncate">{r.renterName ?? t('walkIn')}</span>
                       </span>
                       <span className="block truncate text-xs text-muted-foreground">
