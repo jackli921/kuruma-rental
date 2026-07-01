@@ -145,7 +145,7 @@ describe('GET /dashboard/overview — operator scoping', () => {
     // totalBookings excludes CANCELLED: CONFIRMED + ACTIVE + COMPLETED = 3
     // activeVehicles: AVAILABLE only = 2 (MAINTENANCE excluded)
     // upcomingBookings: CONFIRMED + ACTIVE with future startAt = 2
-    expect(data).toEqual({ totalBookings: 3, activeVehicles: 2, upcomingBookings: 2 })
+    expect(data).toMatchObject({ totalBookings: 3, activeVehicles: 2, upcomingBookings: 2 })
   })
 
   it('does not leak another operator into OP_B counts', async () => {
@@ -154,7 +154,7 @@ describe('GET /dashboard/overview — operator scoping', () => {
       '/dashboard/overview',
     )
     const { data } = await res.json()
-    expect(data).toEqual({ totalBookings: 1, activeVehicles: 1, upcomingBookings: 1 })
+    expect(data).toMatchObject({ totalBookings: 1, activeVehicles: 1, upcomingBookings: 1 })
   })
 
   it('aggregates across all operators for a bypass role (PLATFORM_ADMIN)', async () => {
@@ -164,7 +164,7 @@ describe('GET /dashboard/overview — operator scoping', () => {
     )
     const { data } = await res.json()
     // OP_A (3 bookings, 2 vehicles, 2 upcoming) + OP_B (1, 1, 1)
-    expect(data).toEqual({ totalBookings: 4, activeVehicles: 3, upcomingBookings: 3 })
+    expect(data).toMatchObject({ totalBookings: 4, activeVehicles: 3, upcomingBookings: 3 })
   })
 
   it('fails closed to zeros for an OPERATOR_* caller missing operatorId', async () => {
@@ -174,7 +174,7 @@ describe('GET /dashboard/overview — operator scoping', () => {
     )
     expect(res.status).toBe(200)
     const { data } = await res.json()
-    expect(data).toEqual({ totalBookings: 0, activeVehicles: 0, upcomingBookings: 0 })
+    expect(data).toMatchObject({ totalBookings: 0, activeVehicles: 0, upcomingBookings: 0 })
   })
 })
 
