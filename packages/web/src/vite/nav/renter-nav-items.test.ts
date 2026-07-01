@@ -1,14 +1,13 @@
 import type { UserRole } from '@kuruma/shared/auth/roles'
-import { afterEach, describe, expect, it, vi } from 'vitest'
-import { visibleRenterNavItems } from './renter-nav-items'
+import { describe, expect, it } from 'vitest'
+import { type RenterNavFlags, visibleRenterNavItems } from './renter-nav-items'
 
-// `to` literals in render order, for compact truth-table assertions.
-const tos = (role: UserRole | undefined): readonly string[] =>
-  visibleRenterNavItems(role).map((item) => item.to)
-
-afterEach(() => {
-  vi.unstubAllEnvs()
-})
+// The gate is a pure function now (#1322): the effective flags are injected, so the
+// runtime-override wiring is proven at the component/route layer while this stays a
+// fast, provider-free truth table. Beta default = both flags off.
+const OFF: RenterNavFlags = { messaging: false, renterDocuments: false }
+const tos = (role: UserRole | undefined, flags: RenterNavFlags = OFF): readonly string[] =>
+  visibleRenterNavItems(role, flags).map((item) => item.to)
 
 describe('visibleRenterNavItems', () => {
   it('shows a renter only My Bookings in beta (messaging + documents flags off)', () => {
@@ -28,17 +27,22 @@ describe('visibleRenterNavItems', () => {
   })
 
   it('shows a renter Messages once the messaging flag is on', () => {
-    vi.stubEnv('VITE_FEATURE_MESSAGING', 'true')
-    expect(tos('RENTER')).toEqual(['/$locale/bookings', '/$locale/messages'])
+    expect(tos('RENTER', { messaging: true, renterDocuments: false })).toEqual([
+      '/$locale/bookings',
+      '/$locale/messages',
+    ])
   })
 
   it('shows a renter Documents once the documents flag is on (gated on the real renter role)', () => {
-    vi.stubEnv('VITE_FEATURE_RENTER_DOCUMENTS', 'true')
-    expect(tos('RENTER')).toEqual(['/$locale/bookings', '/$locale/documents'])
+    expect(tos('RENTER', { messaging: false, renterDocuments: true })).toEqual([
+      '/$locale/bookings',
+      '/$locale/documents',
+    ])
   })
 
   it('keeps Documents hidden from the admin even with the flag on — no bypass, it is renter-only "my data" (Messages still shows via bypass)', () => {
-    vi.stubEnv('VITE_FEATURE_RENTER_DOCUMENTS', 'true')
-    expect(tos('PLATFORM_ADMIN')).toEqual(['/$locale/messages'])
+    expect(tos('PLATFORM_ADMIN', { messaging: false, renterDocuments: true })).toEqual([
+      '/$locale/messages',
+    ])
   })
 })

@@ -1,8 +1,10 @@
 import { OperatorBookingsRoute } from '@/routes/$locale/_business/manage/bookings/index'
+import { FeatureFlagsProvider } from '@/vite/config'
 import * as api from '@/vite/operator-bookings/api'
 import { calendarRange, parseCalendarDate } from '@/vite/operator-bookings/calendar-events'
 import { type OperatorLocation, operatorLocationsQueryOptions } from '@/vite/operator-locations/api'
 import type { Session } from '@/vite/session'
+import type { FeatureFlagOverrides } from '@kuruma/shared/feature-flags/registry'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { act, render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
@@ -141,11 +143,17 @@ function renderRoute(
   vehicles: api.CalendarVehicle[] = [],
   locations: OperatorLocation[] = [],
   seed: { bookings?: api.CalendarBookingRow[]; blocks?: api.CalendarBlockRow[] } = {},
+  overrides: FeatureFlagOverrides = {},
 ) {
   const queryClient = new QueryClient({
     defaultOptions: { queries: { staleTime: Number.POSITIVE_INFINITY, retry: false } },
   })
   queryClient.setQueryData(['session'], session)
+  // Seed the runtime override map so FeatureFlagsProvider reads it from cache (no
+  // network fetch). Empty by default -> every flag falls back to its build-time env,
+  // so the existing env-stub cases are unchanged; the runtime-toggle cases below pass
+  // an explicit override to prove it wins over the baked-in default (#1322).
+  queryClient.setQueryData(['feature-flags'], overrides)
   // Seed bookings + blocks for BOTH the week range (explicit-view tests) and the
   // timeline range (default landing view) so whichever view the component resolves
   // reads from cache (staleTime ∞ → no fetch). Blocks are an additive non-suspense
@@ -168,7 +176,9 @@ function renderRoute(
   render(
     <QueryClientProvider client={queryClient}>
       <IntlProvider locale="en" messages={enMessages}>
-        <OperatorBookingsRoute />
+        <FeatureFlagsProvider>
+          <OperatorBookingsRoute />
+        </FeatureFlagsProvider>
       </IntlProvider>
     </QueryClientProvider>,
   )
@@ -338,6 +348,9 @@ describe('OperatorBookingsRoute blocks layer (#1101)', () => {
   })
 
   it('does not navigate on a calendar booking click (its chip Link owns it) but opens the detail dialog for a block', () => {
+    // Chip ON is the precondition for "its Link owns navigation" (#1282); with it OFF
+    // the band click navigates instead — asserted by the #1329 sibling test below.
+    vi.stubEnv('VITE_FEATURE_CALENDAR_QUICKVIEW', 'true')
     vi.stubEnv('VITE_FEATURE_OPERATOR_BLOCKS', 'true')
     renderRoute(operatorSession, blocksFleet, [], {
       bookings: [calendarBooking],
@@ -356,6 +369,24 @@ describe('OperatorBookingsRoute blocks layer (#1101)', () => {
     // A block still routes through the shared handler to open its detail dialog.
     act(() => (calendarProps.onSelectEvent as (i: unknown) => void)(block))
     expect(screen.getByText(B.detail.dialogTitle)).toBeInTheDocument()
+  })
+
+  it('navigates to the booking detail on a calendar booking click when the quick-view chip is gated OFF (#1329)', () => {
+    // With the chip flag OFF the band is a plain, link-less span, so the pre-#1282
+    // baseline must be restored: the rbc event-click navigates to the detail page.
+    vi.stubEnv('VITE_FEATURE_CALENDAR_QUICKVIEW', undefined)
+    renderRoute(operatorSession, blocksFleet, [], { bookings: [calendarBooking] })
+
+    const booking = (calendarProps.events as { type: string; id: string }[]).find(
+      (e) => e.type === 'booking',
+    )
+    act(() => (calendarProps.onSelectEvent as (i: unknown) => void)(booking))
+    expect(navigate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        to: '/$locale/manage/bookings/$bookingId',
+        params: expect.objectContaining({ bookingId: 'bk-1' }),
+      }),
+    )
   })
 
   it('prefills the schedule dialog with the slot vehicle for a managing operator', async () => {
@@ -393,5 +424,48 @@ describe('OperatorBookingsRoute blocks layer (#1101)', () => {
     searchState.value = { view: 'timeline', date: ANCHOR }
     renderRoute(operatorSession, blocksFleet)
     expect(screen.queryByRole('button', { name: B.scheduleAction })).not.toBeInTheDocument()
+  })
+})
+
+// #1322: both affordances now read their flag through useFeatureFlag(), so a DB
+// override wins over the baked-in build-time env at the live UI. These pin the
+// override->env precedence (override ?? env) end-to-end through the route for an
+// operator session; the env-stub cases above stay green because an empty override
+// map falls through to the env, exactly as the hook's default context does.
+describe('OperatorBookingsRoute runtime feature-flag overrides (#1322)', () => {
+  it('a manual-booking override ON adds the New Booking button even when the build default is OFF', () => {
+    vi.stubEnv('VITE_FEATURE_OPERATOR_MANUAL_BOOKING', undefined)
+    renderRoute(operatorSession, [], [], {}, { OPERATOR_MANUAL_BOOKING: true })
+    expect(screen.getByRole('button', { name: c.action })).toBeInTheDocument()
+  })
+
+  it('a manual-booking override OFF drops the New Booking button even when the build default is ON', () => {
+    vi.stubEnv('VITE_FEATURE_OPERATOR_MANUAL_BOOKING', 'true')
+    renderRoute(operatorSession, [], [], {}, { OPERATOR_MANUAL_BOOKING: false })
+    expect(screen.queryByRole('button', { name: c.action })).not.toBeInTheDocument()
+  })
+
+  it('a blocks override ON reveals the block legend even when the build default is OFF', () => {
+    vi.stubEnv('VITE_FEATURE_OPERATOR_BLOCKS', undefined)
+    renderRoute(
+      operatorSession,
+      blocksFleet,
+      [],
+      { blocks: [maintenanceBlock] },
+      { OPERATOR_BLOCKS: true },
+    )
+    expect(screen.getByText(B.legend.title)).toBeInTheDocument()
+  })
+
+  it('a blocks override OFF hides the block legend even when the build default is ON', () => {
+    vi.stubEnv('VITE_FEATURE_OPERATOR_BLOCKS', 'true')
+    renderRoute(
+      operatorSession,
+      blocksFleet,
+      [],
+      { blocks: [maintenanceBlock] },
+      { OPERATOR_BLOCKS: false },
+    )
+    expect(screen.queryByText(B.legend.title)).not.toBeInTheDocument()
   })
 })

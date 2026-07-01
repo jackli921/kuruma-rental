@@ -1,4 +1,4 @@
-import { isMessagingEnabled, isVisibleToViewer } from '@/vite/config'
+import { featureFlagsQueryOptions, isVisibleToViewer, resolveFeatureFlag } from '@/vite/config'
 import { sessionQueryOptions } from '@/vite/session'
 import { Outlet, createFileRoute, redirect } from '@tanstack/react-router'
 
@@ -10,9 +10,14 @@ import { Outlet, createFileRoute, redirect } from '@tanstack/react-router'
 // redirect pattern in `_admin.tsx`. Visibility only — the messaging API still enforces
 // its own per-participant access (design §2.1).
 export const Route = createFileRoute('/$locale/_renter/messages')({
+  // #1322: the messaging flag now reads the runtime override (a dashboard toggle
+  // opens/closes the route live); the admin-bypass visibility rule is unchanged.
   beforeLoad: async ({ context, params }) => {
-    const session = await context.queryClient.ensureQueryData(sessionQueryOptions())
-    if (!isVisibleToViewer(isMessagingEnabled(), session?.user?.role)) {
+    const [session, overrides] = await Promise.all([
+      context.queryClient.ensureQueryData(sessionQueryOptions()),
+      context.queryClient.ensureQueryData(featureFlagsQueryOptions()),
+    ])
+    if (!isVisibleToViewer(resolveFeatureFlag(overrides, 'MESSAGING'), session?.user?.role)) {
       throw redirect({ to: '/$locale', params: { locale: params.locale } })
     }
   },

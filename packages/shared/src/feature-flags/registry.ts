@@ -23,32 +23,32 @@ export const FEATURE_FLAGS = {
   OPERATOR_MANUAL_BOOKING: {
     env: 'VITE_FEATURE_OPERATOR_MANUAL_BOOKING',
     label: 'Operator manual booking',
-    runtimeControlled: false,
+    runtimeControlled: true,
   },
   OPERATOR_TEAM: {
     env: 'VITE_FEATURE_OPERATOR_TEAM',
     label: 'Operator team management',
-    runtimeControlled: false,
+    runtimeControlled: true,
   },
   OPERATOR_SETTINGS: {
     env: 'VITE_FEATURE_OPERATOR_SETTINGS',
     label: 'Operator settings',
-    runtimeControlled: false,
+    runtimeControlled: true,
   },
   RENTER_DOCUMENTS: {
     env: 'VITE_FEATURE_RENTER_DOCUMENTS',
     label: 'Renter document upload',
-    runtimeControlled: false,
+    runtimeControlled: true,
   },
   MESSAGING: {
     env: 'VITE_FEATURE_MESSAGING',
     label: 'Renter–operator messaging',
-    runtimeControlled: false,
+    runtimeControlled: true,
   },
   OPERATOR_BLOCKS: {
     env: 'VITE_FEATURE_OPERATOR_BLOCKS',
     label: 'Maintenance blocks',
-    runtimeControlled: false,
+    runtimeControlled: true,
   },
   REVIEWS: { env: 'VITE_FEATURE_REVIEWS', label: 'Reviews & ratings', runtimeControlled: true },
   FLEET_TIMELINE: {
@@ -60,6 +60,16 @@ export const FEATURE_FLAGS = {
     env: 'VITE_FEATURE_MULTI_CURRENCY',
     label: 'Multi-currency display',
     runtimeControlled: true,
+  },
+  OPERATOR_TODAY: {
+    env: 'VITE_FEATURE_OPERATOR_TODAY',
+    label: 'Operator today panel',
+    runtimeControlled: false,
+  },
+  CALENDAR_QUICKVIEW: {
+    env: 'VITE_FEATURE_CALENDAR_QUICKVIEW',
+    label: 'Calendar quick-view',
+    runtimeControlled: false,
   },
 } as const
 

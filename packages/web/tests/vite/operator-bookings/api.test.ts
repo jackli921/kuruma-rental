@@ -251,6 +251,9 @@ describe('fetchNeedsAssignment', () => {
     expect(url.pathname).toBe('/api/bookings')
     expect(url.searchParams.get('needsAssignment')).toBe('true')
     expect(url.searchParams.get('limit')).toBe('100')
+    // #1223: the FloatRow renter label depends on the renter expansion; pin it so a
+    // mutation dropping expand=renter is caught.
+    expect(url.searchParams.get('expand')).toBe('renter')
   })
 })
 

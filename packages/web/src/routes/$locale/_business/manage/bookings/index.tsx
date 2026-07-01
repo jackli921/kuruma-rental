@@ -2,8 +2,7 @@ import { Button } from '@/components/ui/button'
 import { PageSkeleton } from '@/vite/PageSkeleton'
 import {
   featureFlagsQueryOptions,
-  isOperatorBlocksEnabled,
-  isOperatorManualBookingEnabled,
+  isCalendarQuickViewEnabled,
   isVisibleToViewer,
   resolveFeatureFlag,
   useFeatureFlag,
@@ -132,16 +131,23 @@ export function OperatorBookingsRoute() {
   // cross-tenant and get a view-only calendar). The API re-enforces this (#589 §4.3).
   // Manual/walk-in booking is a post-MVP add-on (#589): gated behind the feature
   // flag AND the operator-session permission. OFF in the beta demo (flag unset).
+  // The flag reads through useFeatureFlag so the /admin dashboard toggles it live (#1322).
   const canManualBook =
-    isOperatorManualBookingEnabled() && canWriteAsOperator(session ?? null, pickedOperatorId)
+    useFeatureFlag('OPERATOR_MANUAL_BOOKING') &&
+    canWriteAsOperator(session ?? null, pickedOperatorId)
 
   // #1101 scheduled blocks. Visibility (read + the detail dialog) follows the
   // beta gate with the platform-admin preview bypass; management (schedule + delete)
   // additionally requires a tenant-scoped operator session — the write API admits a
   // platform admin (operatorId derived from the vehicle), so this affordance gate is
   // what keeps an admin preview read-only. Mirrors `canManualBook`.
-  const canViewBlocks = isVisibleToViewer(isOperatorBlocksEnabled(), session?.user.role)
+  const canViewBlocks = isVisibleToViewer(useFeatureFlag('OPERATOR_BLOCKS'), session?.user.role)
   const canManageBlocks = canViewBlocks && canWriteAsOperator(session ?? null, pickedOperatorId)
+
+  // The booking quick-view chip (#1282) is gated OFF for the beta MVP (#1329). When
+  // off, a booking band is a plain link-less span, so booking navigation moves back
+  // to the rbc event-click (handleSelectEvent) — the pre-#1282 baseline.
+  const quickViewEnabled = isCalendarQuickViewEnabled()
 
   // Block dialogs: a schedule (create) form and a click-to-view detail. The schedule
   // slot prefill carries the clicked vehicle + range; the detail dialog is keyed on
@@ -257,15 +263,22 @@ export function OperatorBookingsRoute() {
     [navigate, locale],
   )
 
-  const handleSelectEvent = useCallback((item: CalendarItem) => {
-    // #1101: dispatch by the discriminant. A block opens its detail dialog (view +
-    // delete). A booking is handled by the CalendarEventChip's own popover
-    // (hover-peek / click-pin), whose inner <Link> owns navigation — so an rbc
-    // event-click is a no-op for bookings here; navigating would defeat the pin.
-    if (item.type === 'block') {
-      setSelectedBlock(item)
-    }
-  }, [])
+  const handleSelectEvent = useCallback(
+    (item: CalendarItem) => {
+      // #1101: dispatch by the discriminant. A block opens its detail dialog (view +
+      // delete).
+      if (item.type === 'block') {
+        setSelectedBlock(item)
+        return
+      }
+      // Booking: with the quick-view chip ON (#1282), its inner <Link> owns
+      // navigation and an rbc event-click must stay a no-op (navigating would defeat
+      // the pin). With the chip gated OFF (#1329) the band is link-less, so restore
+      // the pre-#1282 baseline — the click navigates to the booking detail.
+      if (!quickViewEnabled) navigateToBooking(item.id)
+    },
+    [quickViewEnabled, navigateToBooking],
+  )
 
   // Both the header button and a calendar slot-click open the dialog; a slot also
   // prefills the pickup/return range (the button opens an empty range).
