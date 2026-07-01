@@ -65,13 +65,17 @@ function buckets(over: Partial<TodayBuckets> = {}): TodayBuckets {
   return { pickups: [], returns: [], overdue: [], ...over }
 }
 
-function renderPanel(today: TodayBuckets, session: Session | null = OPERATOR_SESSION) {
+function renderPanel(
+  today: TodayBuckets,
+  session: Session | null = OPERATOR_SESSION,
+  locale = 'en',
+) {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } })
   const invalidateSpy = vi.spyOn(qc, 'invalidateQueries')
   const view = render(
     <QueryClientProvider client={qc}>
       <IntlProvider locale="en" messages={en}>
-        <TodayPanel today={today} vehicles={VEHICLES} session={session} locale="en" />
+        <TodayPanel today={today} vehicles={VEHICLES} session={session} locale={locale} />
       </IntlProvider>
     </QueryClientProvider>,
   )
@@ -108,6 +112,23 @@ describe('TodayPanel', () => {
   it('falls back to the walk-in label when the renter name is null', () => {
     renderPanel(buckets({ pickups: [row({ id: 'bk2', renterName: null })] }))
     expect(screen.getByText(M.walkIn)).toBeTruthy()
+  })
+
+  it('formats each row time in the active locale at the JST wall-clock (24h for ja, 12h for en)', () => {
+    // 05:30Z == 14:30 Asia/Tokyo — a PM instant that renders differently per locale,
+    // so it proves formatTime honours the passed locale rather than the ambient default.
+    const at = '2026-06-30T05:30:00.000Z'
+    const ja = renderPanel(
+      buckets({ pickups: [row({ id: 'bk1', startAt: at })] }),
+      OPERATOR_SESSION,
+      'ja',
+    )
+    expect(screen.getByText('14:30')).toBeTruthy()
+    expect(screen.queryByText(/PM/i)).toBeNull()
+    ja.unmount()
+
+    renderPanel(buckets({ pickups: [row({ id: 'bk2', startAt: at })] }), OPERATOR_SESSION, 'en')
+    expect(screen.getByText(/2:30\s?PM/i)).toBeTruthy()
   })
 
   it('shows the per-bucket empty-state copy for buckets with no rows', () => {
