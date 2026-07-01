@@ -1,7 +1,12 @@
-// Public surface of the operator-bookings feature.
-// Routes import the fleet-timeline view from this barrel (`@/vite/operator-bookings`)
-// rather than reaching into the file directly — see scripts/lint-module-boundaries.ts
-// (#1110 ratchet). Only the newly-added FleetTimeline (#1100) is routed through the
-// barrel here; the feature's pre-existing deep imports are baseline debt to be drained
-// in a later pass, not in this view-only slice.
+// Barrel for the operator-bookings feature's UI surface. Cross-feature consumers
+// (the `/manage/bookings` route) import components via `@/vite/operator-bookings`
+// rather than reaching into individual files — the module-boundary rule (#1110;
+// docs/architecture/modules.md). Data/transform modules (api, calendar-events) keep
+// their own deep imports for now; this barrel covers the rendered components.
+export { BlockDetailDialog } from './BlockDetailDialog'
+export { BlockLegend } from './BlockLegend'
+export { BookingsCalendar } from './BookingsCalendar'
+export { CalendarSidebar } from './CalendarSidebar'
 export { FleetTimeline } from './FleetTimeline'
+export { ManualBookingDialog } from './ManualBookingDialog'
+export { ScheduleBlockDialog } from './ScheduleBlockDialog'

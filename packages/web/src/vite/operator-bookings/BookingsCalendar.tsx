@@ -1,11 +1,11 @@
-import { STATUS_CLASS } from '@/lib/event-colors'
 import { localizer } from '@/lib/rbc-localizer'
 import { CalendarToolbar } from '@/vite/operator-bookings/CalendarToolbar'
 import {
-  type CalendarEvent,
+  type CalendarItem,
   type CalendarResource,
   type CalendarView,
   OPERATOR_VIEWS,
+  calendarItemClassName,
 } from '@/vite/operator-bookings/calendar-events'
 import { endOfWeek, startOfWeek } from 'date-fns'
 import { useCallback, useMemo } from 'react'
@@ -23,7 +23,8 @@ const SCROLL_TO_TIME = new Date(1970, 0, 1, 8, 0, 0)
 const CALENDAR_COMPONENTS = { toolbar: () => null } as const
 
 interface BookingsCalendarProps {
-  readonly events: readonly CalendarEvent[]
+  // #1101: bookings AND scheduled blocks, on one vehicle axis (the discriminated union).
+  readonly events: readonly CalendarItem[]
   // Vehicle columns shown in day view; ignored by week/month.
   readonly resources: readonly CalendarResource[]
   readonly view: CalendarView
@@ -31,13 +32,16 @@ interface BookingsCalendarProps {
   readonly locale: string
   readonly onViewChange: (view: CalendarView) => void
   readonly onDateChange: (date: Date) => void
-  // Slice D wires this to the existing trip-detail page; Slice B just surfaces the
-  // clicked booking id.
-  readonly onSelectEvent: (bookingId: string) => void
-  // #589 1d: when provided, the calendar becomes selectable and a clicked time slot
-  // surfaces its range so the route can open the manual-booking dialog. Omitted for
-  // read-only viewers (non-operator sessions), keeping the calendar view-only.
-  readonly onSelectSlot?: ((range: { start: Date; end: Date }) => void) | undefined
+  // #1101: the clicked item (not a bare id) so the parent dispatches by `type` —
+  // a booking navigates to its detail, a block opens the block-detail dialog.
+  readonly onSelectEvent: (item: CalendarItem) => void
+  // #589 1d / #1101: when provided, the calendar is selectable and a clicked slot
+  // surfaces its range AND the resource-column vehicle (day view only — undefined in
+  // week/month) so the route can prefill the manual-booking or schedule-block dialog.
+  // Omitted for read-only viewers (non-operator sessions), keeping the calendar view-only.
+  readonly onSelectSlot?:
+    | ((range: { start: Date; end: Date; resourceId?: string }) => void)
+    | undefined
 }
 
 // Presentational calendar over the operator's bookings. State (view/date) is owned
@@ -93,17 +97,24 @@ export function BookingsCalendar({
   )
 
   const handleSelectEvent = useCallback(
-    (event: CalendarEvent) => onSelectEvent(event.id),
+    (item: CalendarItem) => onSelectEvent(item),
     [onSelectEvent],
   )
 
   const handleSelectSlot = useCallback(
-    (slot: SlotInfo) => onSelectSlot?.({ start: slot.start, end: slot.end }),
+    (slot: SlotInfo) =>
+      onSelectSlot?.({
+        start: slot.start,
+        end: slot.end,
+        // rbc only sets resourceId in the resource (day) view; week/month omit it —
+        // so omit the key entirely there (exactOptionalPropertyTypes rejects undefined).
+        ...(slot.resourceId != null ? { resourceId: String(slot.resourceId) } : {}),
+      }),
     [onSelectSlot],
   )
 
   const eventPropGetter = useCallback(
-    (event: CalendarEvent) => ({ className: STATUS_CLASS[event.status] ?? '' }),
+    (item: CalendarItem) => ({ className: calendarItemClassName(item) }),
     [],
   )
 

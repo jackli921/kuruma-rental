@@ -116,9 +116,11 @@ describe('OperatorAddOnsView', () => {
   })
 
   it('scoped-write mode: shows the Add button and no operator label', () => {
-    render(<OperatorAddOnsView addOns={[addOn]} scope={scopedWriteScope} />, { wrapper })
+    // showOperator:false suppresses the badge even though op_1 -> Sakura resolves.
+    const scope = { ...scopedWriteScope, operatorNameById: new Map([['op_1', 'Sakura']]) }
+    render(<OperatorAddOnsView addOns={[addOn]} scope={scope} />, { wrapper })
     expect(screen.getByRole('button', { name: 'addOption' })).toBeInTheDocument()
-    expect(screen.queryByLabelText(/^Operator:/)).not.toBeInTheDocument()
+    expect(screen.queryByText('Sakura')).not.toBeInTheDocument()
   })
 
   it('read-only mode hides the per-row Edit/Archive affordances', () => {

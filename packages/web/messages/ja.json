@@ -1046,6 +1046,45 @@
         "customerChange": "変更",
         "customerUnnamed": "名前なしのお客様"
       },
+      "blocks": {
+        "scheduleAction": "ブロックを設定",
+        "kinds": {
+          "MAINTENANCE": "メンテナンス",
+          "OUT_OF_SERVICE": "稼働停止",
+          "MANUAL": "手動ホールド"
+        },
+        "legend": {
+          "title": "設定済みブロック"
+        },
+        "schedule": {
+          "dialogTitle": "ブロックを設定",
+          "dialogDescription": "メンテナンス、稼働停止、手動ホールドのために車両をカレンダーから外します。この期間は予約できなくなります。",
+          "vehicleLabel": "車両",
+          "kindLabel": "種類",
+          "startLabel": "開始",
+          "endLabel": "終了",
+          "reasonLabel": "理由",
+          "reasonPlaceholder": "例：オイル交換",
+          "notesLabel": "メモ（任意）",
+          "submit": "ブロックを設定",
+          "cancel": "キャンセル",
+          "noVehicles": "ブロックを設定する前に車両を1台以上追加してください。",
+          "overlapError": "この車両には、その期間に重なる既存のブロックがあります。",
+          "error": "ブロックを設定できませんでした。もう一度お試しください。"
+        },
+        "detail": {
+          "dialogTitle": "設定済みブロック",
+          "vehicleLabel": "車両",
+          "kindLabel": "種類",
+          "windowLabel": "期間",
+          "reasonLabel": "理由",
+          "notesLabel": "メモ",
+          "deleteAction": "ブロックを削除",
+          "deleteConfirm": "このブロックを削除しますか？この期間、車両は再び予約可能になります。",
+          "deleteError": "ブロックを削除できませんでした。もう一度お試しください。",
+          "close": "閉じる"
+        }
+      },
       "title": "予約",
       "subtitle": "各店舗の予約状況",
       "empty": "予約はまだありません",
@@ -1289,6 +1328,19 @@
         "reactivate": "再有効化",
         "deactivating": "無効化中…",
         "reactivating": "再有効化中…"
+      },
+      "summary": {
+        "subtitle": "この事業者の車両コンプライアンスと予約状況。",
+        "vehicleCount": "車両数",
+        "needingDocs": "書類対応が必要",
+        "expiringSoon": "まもなく期限切れ",
+        "totalBookings": "予約総数",
+        "upcomingBookings": "今後の予約",
+        "lastAlert": "最終コンプライアンス通知",
+        "never": "なし",
+        "back": "事業者一覧に戻る",
+        "loadError": "この事業者のサマリーを読み込めませんでした。",
+        "retry": "再試行"
       },
       "createDialog": {
         "title": "事業者を作成",
