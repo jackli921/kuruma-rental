@@ -1,4 +1,5 @@
 import { STATUS_CLASS } from '@/lib/event-colors'
+import { useFeatureFlag } from '@/vite/config'
 import { CalendarToolbar } from '@/vite/operator-bookings/CalendarToolbar'
 import type { CalendarBookingRow } from '@/vite/operator-bookings/api'
 import {
@@ -51,6 +52,9 @@ export function FleetTimeline({
 }: FleetTimelineProps) {
   const t = useTranslations('business.bookings.calendar')
   const culture = locale === 'zh' ? 'zh-CN' : locale
+  // Shares the switcher with BookingsCalendar; the Timeline option follows the same
+  // runtime-toggleable flag (#1322) so both views agree on the offered set.
+  const timelineEnabled = useFeatureFlag('FLEET_TIMELINE')
 
   // The visible window is the SAME range the loader fetched (calendarRange), so the
   // board shows exactly the rows that were loaded — no off-by-one against the fetch.
@@ -133,7 +137,7 @@ export function FleetTimeline({
         view="timeline"
         onNavigate={handleNavigate}
         onView={onViewChange}
-        views={operatorViews()}
+        views={operatorViews(timelineEnabled)}
       />
       <Timeline
         groups={groups}
