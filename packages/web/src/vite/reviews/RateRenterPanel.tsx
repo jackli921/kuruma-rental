@@ -8,6 +8,7 @@ import {
   DialogTrigger,
 } from '@/components/ui/dialog'
 import { Textarea } from '@/components/ui/textarea'
+import { isReviewsEnabled } from '@/vite/config'
 import { StarRating } from '@/vite/reviews/StarRating'
 import {
   OPERATOR_RENTER_DIMENSIONS,
@@ -78,6 +79,10 @@ export function RateRenterPanel({ bookingId, bookingCode, csrfToken }: RateRente
   // in one frame would otherwise fire two submits (mirrors ReviewForm).
   const inFlightRef = useRef(false)
   if (!mutation.isPending && inFlightRef.current) inFlightRef.current = false
+
+  // Reviews gated off (#1083-1086) → operators can't rate renters. After all hooks
+  // so rules-of-hooks stays satisfied.
+  if (!isReviewsEnabled()) return null
 
   const ready = overall >= 1
   function handleSubmit() {
