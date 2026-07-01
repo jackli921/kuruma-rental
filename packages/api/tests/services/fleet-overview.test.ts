@@ -4,7 +4,7 @@
 // fail intermittently — so every assertion depends on the injected Date.
 
 import { describe, expect, it } from 'vitest'
-import { SYSTEM_CONTEXT } from '../../src/middleware/auth'
+import { type CallerContext, ForbiddenError, SYSTEM_CONTEXT } from '../../src/middleware/auth'
 import {
   InMemoryBookingRepository,
   InMemoryFleetOverviewRepository,
@@ -14,6 +14,7 @@ import {
 import { FleetOverviewService } from '../../src/services/fleet-overview'
 import type { Booking, Vehicle } from '../../src/stores'
 import { bookingInput } from '../helpers/booking'
+import { operatorCtx } from '../helpers/context'
 
 async function seedVehicle(
   repo: InMemoryVehicleRepository,
@@ -117,5 +118,54 @@ describe('FleetOverviewService — clock injection', () => {
       new Date('2026-05-02T00:00:00Z'),
     )
     expect(afterBooking[0]?.currentBooking).toBeNull()
+  })
+})
+
+// #1273: the two operator-dashboard cards must resolve read scope from the SAME
+// vocabulary. Overview scopes via bookingReadScope (legacy STAFF/ADMIN -> renter
+// -> zero); fleet-overview used to scope via operatorReadScope (legacy -> all ->
+// the whole fleet), so the cards disagreed for a legacy session. Reconciled onto
+// bookingReadScope: legacy STAFF/ADMIN now read nothing here too, matching both
+// the overview card and the vehicleBlockReadScope precedent (#487 phase-out).
+describe('FleetOverviewService — scope parity with the overview card (#1273)', () => {
+  const now = new Date('2026-05-01T00:00:00Z')
+
+  async function fleetWithOneVehiclePerOperator(): Promise<FleetOverviewService> {
+    const vehicleRepo = new InMemoryVehicleRepository()
+    const bookingRepo = new InMemoryBookingRepository()
+    await seedVehicle(vehicleRepo, { operatorId: 'op-a', name: 'A-car' })
+    await seedVehicle(vehicleRepo, { operatorId: 'op-b', name: 'B-car' })
+    return new FleetOverviewService(new InMemoryFleetOverviewRepository(vehicleRepo, bookingRepo))
+  }
+
+  it('returns [] for a legacy STAFF/ADMIN, matching overview (never the whole fleet)', async () => {
+    const service = await fleetWithOneVehiclePerOperator()
+    const staff: CallerContext = { userId: 'legacy', role: 'STAFF', bypassScope: false }
+    const admin: CallerContext = { userId: 'legacy', role: 'ADMIN', bypassScope: false }
+    expect(await service.findFleetOverview(staff, now)).toEqual([])
+    expect(await service.findFleetOverview(admin, now)).toEqual([])
+  })
+
+  it('rejects RENTER / PARTNER at the repo seal (defence-in-depth)', async () => {
+    const service = await fleetWithOneVehiclePerOperator()
+    const renter: CallerContext = { userId: 'r', role: 'RENTER', bypassScope: false }
+    const partner: CallerContext = { userId: 'trip', role: 'PARTNER', bypassScope: true }
+    await expect(service.findFleetOverview(renter, now)).rejects.toThrow(ForbiddenError)
+    await expect(service.findFleetOverview(partner, now)).rejects.toThrow(ForbiddenError)
+  })
+
+  it('scopes an OPERATOR_* caller to its own tenant fleet', async () => {
+    const service = await fleetWithOneVehiclePerOperator()
+    const rows = await service.findFleetOverview(operatorCtx('op-a'), now)
+    expect(rows.map((r) => r.operatorId)).toEqual(['op-a'])
+  })
+
+  it('aggregates all operators for a bypass admin, and narrows to a picked operator', async () => {
+    const service = await fleetWithOneVehiclePerOperator()
+    const admin: CallerContext = { userId: 'pa', role: 'PLATFORM_ADMIN', bypassScope: true }
+    const all = await service.findFleetOverview(admin, now)
+    expect(all.map((r) => r.operatorId).sort()).toEqual(['op-a', 'op-b'])
+    const narrowed = await service.findFleetOverview(admin, now, 'op-a')
+    expect(narrowed.map((r) => r.operatorId)).toEqual(['op-a'])
   })
 })

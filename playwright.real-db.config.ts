@@ -43,11 +43,6 @@ export default defineConfig({
     {
       name: 'authenticated-real-db',
       testMatch: /.*\.auth\.spec\.ts/,
-      // locations.auth.spec.ts drives the operator /manage/locations page, which
-      // only exists in the retired Next.js app — the Vite operator-locations port
-      // is #529 (epic #523). Re-enable it there. Until then this lane proves the
-      // #488 marketplace happy path against the shipped Vite UI.
-      testIgnore: ['**/locations.auth.spec.ts'],
       dependencies: ['setup'],
       use: { ...devices['Desktop Chrome'], storageState: STORAGE_STATE },
     },

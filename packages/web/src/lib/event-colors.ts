@@ -14,3 +14,13 @@ export const BLOCK_KIND_CLASS: Record<VehicleBlockKind, string> = {
   OUT_OF_SERVICE: 'rbc-event--block-out-of-service',
   MANUAL: 'rbc-event--block-manual',
 }
+
+// Tailwind dot color per status, shared by the calendar sidebar swatch and the
+// quick-view card dot. Tracks STATUS_CLASS / calendar-theme.css so a status's
+// color homes change together.
+export const STATUS_DOT: Record<BookingStatus, string> = {
+  CONFIRMED: 'bg-blue-500',
+  ACTIVE: 'bg-green-500',
+  COMPLETED: 'bg-gray-400',
+  CANCELLED: 'bg-red-500',
+}
