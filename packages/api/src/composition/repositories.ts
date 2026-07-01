@@ -9,6 +9,7 @@ import { DisabledPhotoStorage } from '../repositories/disabled-photo-storage'
 import {
   type Db,
   DrizzleAddOnRepository,
+  DrizzleAddOnTemplateRepository,
   DrizzleAuditLogRepository,
   DrizzleAvailabilityRepository,
   DrizzleBookingEventRepository,
@@ -49,6 +50,7 @@ import {
 import { DrizzleConsentRepository } from '../repositories/drizzle/consent'
 import {
   InMemoryAddOnRepository,
+  InMemoryAddOnTemplateRepository,
   InMemoryAuditLogRepository,
   InMemoryAvailabilityRepository,
   InMemoryBookingEventRepository,
@@ -91,6 +93,7 @@ import { R2DocumentStorage } from '../repositories/r2-document-storage'
 import { type R2BucketLike, R2PhotoStorage } from '../repositories/r2-photo-storage'
 import type {
   AddOnRepository,
+  AddOnTemplateRepository,
   AuditLogRepository,
   AvailabilityRepository,
   BookingEventRepository,
@@ -185,6 +188,7 @@ export type Repos = {
   locationRepo: LocationRepository
   insuranceOptionRepo: InsuranceOptionRepository
   addOnRepo: AddOnRepository
+  addOnTemplateRepo: AddOnTemplateRepository
   feeScheduleRepo: FeeScheduleRepository
   classRatePlanRepo: ClassRatePlanRepository
   notificationLogRepo: NotificationLogRepository
@@ -231,6 +235,7 @@ export function buildOverrideRepos(overrides: AppOverrides): Repos {
   const insuranceOptionRepo =
     overrides.insuranceOptionRepo ?? new InMemoryInsuranceOptionRepository()
   const addOnRepo = overrides.addOnRepo ?? new InMemoryAddOnRepository()
+  const addOnTemplateRepo = overrides.addOnTemplateRepo ?? new InMemoryAddOnTemplateRepository()
   const feeScheduleRepo = overrides.feeScheduleRepo ?? new InMemoryFeeScheduleRepository()
   const classRatePlanRepo = overrides.classRatePlanRepo ?? new InMemoryClassRatePlanRepository()
   // #1206: declared ahead of runInTransaction so the bundle closure captures it
@@ -320,6 +325,7 @@ export function buildOverrideRepos(overrides: AppOverrides): Repos {
     locationRepo,
     insuranceOptionRepo,
     addOnRepo,
+    addOnTemplateRepo,
     feeScheduleRepo,
     classRatePlanRepo,
     notificationLogRepo,
@@ -427,6 +433,7 @@ export function buildDrizzleRepos(opts?: { db?: Db; runTx?: RunTx }): Repos {
     locationRepo: new DrizzleLocationRepository(db),
     insuranceOptionRepo: new DrizzleInsuranceOptionRepository(db),
     addOnRepo: new DrizzleAddOnRepository(db),
+    addOnTemplateRepo: new DrizzleAddOnTemplateRepository(db),
     feeScheduleRepo: new DrizzleFeeScheduleRepository(db),
     classRatePlanRepo: new DrizzleClassRatePlanRepository(db),
     notificationLogRepo: new DrizzleNotificationLogRepository(db),
@@ -471,6 +478,7 @@ export function buildInMemoryRepos(): Repos {
   const locationRepo = new InMemoryLocationRepository()
   const insuranceOptionRepo = new InMemoryInsuranceOptionRepository()
   const addOnRepo = new InMemoryAddOnRepository()
+  const addOnTemplateRepo = new InMemoryAddOnTemplateRepository()
   const feeScheduleRepo = new InMemoryFeeScheduleRepository()
   const classRatePlanRepo = new InMemoryClassRatePlanRepository()
   const operatorRepo = new InMemoryOperatorRepository()
@@ -548,6 +556,7 @@ export function buildInMemoryRepos(): Repos {
     locationRepo,
     insuranceOptionRepo,
     addOnRepo,
+    addOnTemplateRepo,
     feeScheduleRepo,
     classRatePlanRepo,
     notificationLogRepo: new InMemoryNotificationLogRepository(),
