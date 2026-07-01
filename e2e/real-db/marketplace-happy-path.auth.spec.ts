@@ -127,13 +127,15 @@ test.describe('marketplace happy path — renter books, operator sees it (real D
       // the booking's far-future month (clear of the seeded ~-5..+7d bookings, so this
       // run's booking is the only event in view). Month view ignores the day-view
       // vehicle-resource columns, so the event renders regardless of car assignment.
-      // The event is titled with the renter; clicking it opens the trip detail, which
-      // carries the per-run unique reservation code — the token that ties it to THIS run.
+      // The event is a quick-view chip titled with the renter (#1099): clicking it
+      // pins a card, and the card is the Link that opens the trip detail — which
+      // carries the per-run unique reservation code, the token that ties it to THIS run.
       await page.goto('/en/manage/bookings?view=month&date=2026-07-15')
       await expect(page.getByRole('heading', { name: 'Bookings' })).toBeVisible()
-      const event = page.getByText(RENTER_NAME).first()
-      await expect(event).toBeVisible({ timeout: 20_000 })
-      await event.click()
+      const chip = page.getByRole('button', { name: new RegExp(RENTER_NAME) }).first()
+      await expect(chip).toBeVisible({ timeout: 20_000 })
+      await chip.click() // pins the quick-view card (the click no longer navigates)
+      await page.getByRole('link', { name: /View full details/ }).click()
       await expect(page).toHaveURL(new RegExp(`/manage/bookings/${UUID}`))
       await expect(page.getByText(bookingCode)).toBeVisible({ timeout: 20_000 })
     })

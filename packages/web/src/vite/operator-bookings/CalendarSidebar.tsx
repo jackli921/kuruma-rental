@@ -1,6 +1,6 @@
 import { Button } from '@/components/ui/button'
+import { STATUS_DOT } from '@/lib/event-colors'
 import { UnassignedFloatsList } from '@/vite/operator-bookings/UnassignedFloatsList'
-import type { OperatorBookingStatus } from '@/vite/operator-bookings/api'
 import type { CalendarFiltersApi } from '@/vite/operator-bookings/useCalendarFilters'
 import { BOOKING_STATUSES } from '@kuruma/shared/enums'
 import { useTranslations } from 'use-intl'
@@ -16,15 +16,6 @@ interface CalendarSidebarProps {
 }
 
 const STATUSES = BOOKING_STATUSES
-
-// Dot color tracks STATUS_CLASS / calendar-theme.css so the sidebar swatch stays
-// in sync with the calendar event color.
-const STATUS_DOT: Record<OperatorBookingStatus, string> = {
-  CONFIRMED: 'bg-blue-500',
-  ACTIVE: 'bg-green-500',
-  COMPLETED: 'bg-gray-400',
-  CANCELLED: 'bg-red-500',
-}
 
 // Presentational filter sidebar (#525 Slice C), driven entirely by the filters
 // API from useCalendarFilters. Hidden below md (the calendar takes the full width

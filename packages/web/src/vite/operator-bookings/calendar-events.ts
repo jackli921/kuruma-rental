@@ -40,6 +40,12 @@ export interface CalendarEvent {
   // for a class-only booking with no assigned car: it has no column to live in.
   resourceId: string
   status: OperatorBookingStatus
+  // --- in-hand fields the quick-view card renders (self-describing event) ---
+  bookingCode: string
+  renterName: string | null
+  renterEmail: string | null
+  vehicleName: string | null
+  totalPrice: number | null
 }
 
 /** One vehicle column in day view. */
@@ -80,7 +86,11 @@ export function calendarItemClassName(item: CalendarItem): string {
   return item.type === 'booking' ? (STATUS_CLASS[item.status] ?? '') : BLOCK_KIND_CLASS[item.kind]
 }
 
-export function toCalendarEvents(rows: readonly CalendarBookingRow[]): BookingCalendarEvent[] {
+export function toCalendarEvents(
+  rows: readonly CalendarBookingRow[],
+  vehicles: readonly { id: string; name: string }[],
+): BookingCalendarEvent[] {
+  const nameById = new Map(vehicles.map((v) => [v.id, v.name]))
   return rows.map((r) => ({
     type: 'booking',
     id: r.id,
@@ -89,6 +99,11 @@ export function toCalendarEvents(rows: readonly CalendarBookingRow[]): BookingCa
     end: new Date(r.effectiveEndAt),
     resourceId: r.vehicleId ?? '',
     status: r.status,
+    bookingCode: r.bookingCode,
+    renterName: r.renterName,
+    renterEmail: r.renterEmail,
+    vehicleName: r.vehicleId ? (nameById.get(r.vehicleId) ?? null) : null,
+    totalPrice: r.totalPrice,
   }))
 }
 

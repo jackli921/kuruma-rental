@@ -151,7 +151,7 @@ export function OperatorBookingsRoute() {
     enabled: canViewBlocks && view !== 'timeline',
   })
 
-  const events = useMemo(() => toCalendarEvents(bookings), [bookings])
+  const events = useMemo(() => toCalendarEvents(bookings, vehicles), [bookings, vehicles])
   const blockEvents = useMemo(
     () => (canViewBlocks ? blocksToCalendarEvents(blocks ?? []) : []),
     [canViewBlocks, blocks],
@@ -214,18 +214,15 @@ export function OperatorBookingsRoute() {
     [navigate, locale],
   )
 
-  const handleSelectEvent = useCallback(
-    (item: CalendarItem) => {
-      // #1101: dispatch by the discriminant. A booking navigates to its detail page;
-      // a block opens the block-detail dialog (view + delete).
-      if (item.type === 'booking') {
-        navigateToBooking(item.id)
-      } else {
-        setSelectedBlock(item)
-      }
-    },
-    [navigateToBooking],
-  )
+  const handleSelectEvent = useCallback((item: CalendarItem) => {
+    // #1101: dispatch by the discriminant. A block opens its detail dialog (view +
+    // delete). A booking is handled by the CalendarEventChip's own popover
+    // (hover-peek / click-pin), whose inner <Link> owns navigation — so an rbc
+    // event-click is a no-op for bookings here; navigating would defeat the pin.
+    if (item.type === 'block') {
+      setSelectedBlock(item)
+    }
+  }, [])
 
   // Both the header button and a calendar slot-click open the dialog; a slot also
   // prefills the pickup/return range (the button opens an empty range).
