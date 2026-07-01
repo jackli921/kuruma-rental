@@ -24,6 +24,7 @@
     "lint:i18n-parity": "bun run scripts/lint-i18n-parity.ts",
     "lint:unwrap-schema": "bun run scripts/lint-unwrap-schema.ts",
     "lint:fetch-binding": "bun run scripts/lint-fetch-binding.ts",
+    "lint:csrf-writes": "bun run scripts/lint-csrf-on-writes.ts",
     "lint:dist-size": "bun run scripts/lint-dist-size.ts",
     "lint:csp-hash": "bun run scripts/lint-csp-hash.ts",
     "lint:no-next-app": "bun run scripts/lint-no-next-app.ts",
