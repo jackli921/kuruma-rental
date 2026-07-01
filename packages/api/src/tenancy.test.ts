@@ -84,4 +84,14 @@ describe('narrowReadToOperator', () => {
     const noOp: CallerContext = { userId: 'u2', role: 'OPERATOR_STAFF' }
     expect(narrowReadToOperator(noOp, 'op-target')).toBeUndefined()
   })
+
+  it('ECHOES the requested id for a renter (operatorReadScope maps to all) — the route/repo, not this helper, gate it (#1272)', () => {
+    // The helper is an echo, not the scope gate: operatorReadScope maps every
+    // non-operator role to `all`, so a renter's requested id passes through here.
+    // Safe only because MANAGEMENT_READ_ROLES 403s renters at the route before the
+    // service runs. Pinned so a future bookingReadScope-private consumer that reuses
+    // this helper without re-clamping (the #1272 trap) fails loudly, not silently.
+    const renter: CallerContext = { userId: 'r1', role: 'RENTER' }
+    expect(narrowReadToOperator(renter, 'op-target')).toBe('op-target')
+  })
 })

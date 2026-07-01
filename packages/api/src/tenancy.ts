@@ -109,6 +109,15 @@ export function applyCrossOperatorReadScope<F extends { operatorId?: string }>(
  * ScopeRequiredError) and this lenient one are deliberately different — config
  * lists were strict before the picker; these aggregate reads keep their working
  * no-param contract and only add narrowing.
+ *
+ * AUTHORITY — this helper is an ECHO, not the scope gate. It reads
+ * `operatorReadScope`, which maps every non-operator role (incl. RENTER/PARTNER)
+ * to `all`, so it returns the requested id for those roles too. That is only safe
+ * because each consumer independently re-gates: the route (MANAGEMENT_READ_ROLES
+ * → 403) rejects renter/partner, and the repo re-clamps to its own tenant. A
+ * future `bookingReadScope`-private endpoint (slices 5a/5b/6) must NOT trust this
+ * id blindly — it must re-clamp with its own scope vocabulary, or the two
+ * vocabularies disagree and a private read leaks. Reconcile before then: #1272.
  */
 export function narrowReadToOperator(
   ctx: CallerContext,

@@ -17,6 +17,12 @@ import { useTranslations } from 'use-intl'
 // reads to the picked operator. loaderDeps re-runs the loader when `?operator`
 // changes; the component reads the same picked id so the loader-warmed cache
 // entry and the useSuspenseQuery read share one key (no refetch, no FOUC).
+// INVARIANT: the loader (deps.operator) and the component (useOperatorContext →
+// the `_business` `operator` search param) MUST resolve the id from the SAME
+// validated source. They agree today because the dashboard adds no own
+// validateSearch and inherits `_business`'s. A dashboard-level search transform
+// would split the two keys and reintroduce a wrong-tenant flash — dashboard.route
+// test pins loaderDeps → the exact ensureQueryData keys to catch that.
 export const Route = createFileRoute('/$locale/_business/dashboard')({
   loaderDeps: ({ search }: { search: { operator?: string | undefined } }) => ({
     operator: search.operator,
