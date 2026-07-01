@@ -3,6 +3,33 @@ import { type CallerContext, SYSTEM_CONTEXT } from '../../src/middleware/auth'
 import { BOOKING_CODE_CONSTRAINT, PG_ERROR } from '../../src/pg-errors'
 import { InMemoryBookingRepository } from '../../src/repositories/in-memory/booking'
 import type { Booking } from '../../src/stores'
+import { makeBooking } from '../helpers/booking'
+
+describe('BookingRepository.countBookingsForOperator (#1120)', () => {
+  const now = new Date('2026-06-27T00:00:00Z')
+  const future = new Date('2026-07-01T09:00:00Z')
+  const past = new Date('2026-06-01T09:00:00Z')
+
+  it('counts non-CANCELLED as total and future CONFIRMED/ACTIVE as upcoming, scoped to the operator', async () => {
+    const rows = [
+      makeBooking({ operatorId: 'op-1', status: 'CONFIRMED', startAt: future }), // total + upcoming
+      makeBooking({ operatorId: 'op-1', status: 'ACTIVE', startAt: future }), // total + upcoming
+      makeBooking({ operatorId: 'op-1', status: 'CONFIRMED', startAt: now }), // boundary: upcoming
+      makeBooking({ operatorId: 'op-1', status: 'CONFIRMED', startAt: past }), // total only (past)
+      makeBooking({ operatorId: 'op-1', status: 'COMPLETED', startAt: past }), // total only (not CONFIRMED/ACTIVE)
+      makeBooking({ operatorId: 'op-1', status: 'CANCELLED', startAt: future }), // excluded entirely
+      makeBooking({ operatorId: 'op-2', status: 'CONFIRMED', startAt: future }), // other operator
+    ]
+    const repo = new InMemoryBookingRepository(new Map(rows.map((b) => [b.id, b])))
+
+    expect(await repo.countBookingsForOperator('op-1', now)).toEqual({ total: 5, upcoming: 3 })
+  })
+
+  it('returns all-zero for an operator with no bookings', async () => {
+    const repo = new InMemoryBookingRepository()
+    expect(await repo.countBookingsForOperator('op-empty', now)).toEqual({ total: 0, upcoming: 0 })
+  })
+})
 
 type NewBooking = Omit<Booking, 'id' | 'createdAt' | 'updatedAt'>
 

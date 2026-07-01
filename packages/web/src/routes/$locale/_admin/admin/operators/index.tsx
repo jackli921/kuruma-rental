@@ -25,7 +25,7 @@ import { useTranslations } from 'use-intl'
 // the data + writes: prefetch the directory, then create / invite-staff / rename
 // / deactivate-reactivate through the dedicated `/admin/operators` surface. The
 // presentational view + dialogs are pure; this is the single smart container.
-export const Route = createFileRoute('/$locale/_admin/admin/operators')({
+export const Route = createFileRoute('/$locale/_admin/admin/operators/')({
   loader: ({ context }) => context.queryClient.ensureQueryData(operatorsQueryOptions()),
   pendingComponent: PageSkeleton,
   errorComponent: OperatorsError,

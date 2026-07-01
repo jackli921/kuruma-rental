@@ -32,4 +32,8 @@ export interface ComplianceAlertLogRepository {
   // per band) so a sent digest is sealed all-or-nothing, and a single write blip
   // can't cascade past the operator it hit (#1043).
   recordMany(alerts: RecordComplianceAlert[]): Promise<void>
+  // #1120 operator summary: the most recent `sentAt` among this operator's alerts,
+  // or null when the operator has never been alerted. MAX at the DB layer — never
+  // load-then-scan. Powers the "last compliance alert" field on the admin summary.
+  latestSentAtForOperator(operatorId: string): Promise<Date | null>
 }

@@ -29,6 +29,10 @@ export type { Customer, CustomerSort, CustomerWithBookings } from '@kuruma/share
 import type { CoordinateSource } from '@kuruma/shared/db/schema'
 import type { Customer, CustomerSort, CustomerWithBookings } from '@kuruma/shared/types/customer'
 import type { FleetVehicleOverview } from '@kuruma/shared/types/fleet'
+import type {
+  OperatorBookingCounts,
+  VehicleComplianceCounts,
+} from '@kuruma/shared/types/operator-summary'
 import type { OperatorOverview } from '@kuruma/shared/types/overview'
 import type { DashboardStats } from '@kuruma/shared/types/stats'
 import type { VehicleDetail } from '@kuruma/shared/types/vehicle-detail'
@@ -49,7 +53,6 @@ import type {
   ThreadParticipant,
   User,
   Vehicle,
-  VehicleClass,
 } from '../stores'
 // Imported (not just re-exported) because the RepoBundle below references it locally.
 import type { AdminBookingFilters } from './types-admin-booking'
@@ -319,6 +322,8 @@ export interface VehicleRepository {
   // the `fleetCount` column. Returns a Map keyed by operatorId; operators with no
   // live vehicles are absent (caller defaults to 0). Unscoped — authz in the service.
   countByOperator(operatorIds: string[]): Promise<Map<string, number>>
+  // #1120 admin summary: per-operator compliance roll-up over the live fleet (classified via the `computeExpiryStatus` seam); authz in OperatorSummaryService.
+  countComplianceForOperator(operatorId: string, asOf: Date): Promise<VehicleComplianceCounts>
   create(
     ctx: CallerContext,
     data: Omit<Vehicle, 'id' | 'createdAt' | 'updatedAt'>,
@@ -471,6 +476,8 @@ export interface BookingRepository {
    *  it), never enumerate the global user table (#396/#475). operatorId comes
    *  from the caller's own validated context, never from client input. */
   listRenterIdsForOperator(operatorId: string): Promise<string[]>
+  // #1120 admin summary: total (non-CANCELLED) + upcoming (CONFIRMED/ACTIVE future) booking counts for one operator; authz in OperatorSummaryService.
+  countBookingsForOperator(operatorId: string, now: Date): Promise<OperatorBookingCounts>
   create(
     ctx: CallerContext,
     // cancellationFeeSettlement is server-derived (defaults 'ADVISORY', #868 3a),
@@ -756,20 +763,9 @@ export interface MaintenanceLogRepository {
 // the file-size cap (same split as types-review / types-fee-schedule).
 export type { VehicleBlockRepository } from './types-vehicle-block'
 
-export interface VehicleClassFilters {
-  operatorId?: string
-  status?: 'ACTIVE' | 'ARCHIVED'
-  includeArchived?: boolean
-}
-
-export interface VehicleClassRepository {
-  findAll(ctx: CallerContext, filters?: VehicleClassFilters): Promise<VehicleClass[]>
-  findById(ctx: CallerContext, id: string): Promise<VehicleClass | undefined>
-  findBySlug(ctx: CallerContext, slug: string): Promise<VehicleClass | undefined>
-  create(data: Omit<VehicleClass, 'id' | 'createdAt' | 'updatedAt'>): Promise<VehicleClass>
-  update(id: string, data: Partial<VehicleClass>): Promise<VehicleClass | undefined>
-  archive(id: string): Promise<VehicleClass | undefined>
-}
+// VehicleClassRepository lives in ./types-vehicle-class to keep this barrel under
+// the file-size cap (same split as types-vehicle-block above).
+export type { VehicleClassFilters, VehicleClassRepository } from './types-vehicle-class'
 
 // Fee-schedule contract lives in its own module (file-size cap, #978); re-exported.
 export type { FeeScheduleFilters, FeeScheduleRepository } from './types-fee-schedule'
