@@ -222,6 +222,21 @@ describe('OperatorBookingsRoute manual-booking affordance (#589 1d)', () => {
   })
 })
 
+describe('OperatorBookingsRoute quick-view enrichment (#1099)', () => {
+  it('enriches calendar events with the assigned vehicle name (transform wiring)', () => {
+    // veh-1 -> 'Prius' in blocksFleet; the route resolves the name at transform time
+    // so the quick-view card renders it with no extra fetch.
+    renderRoute(operatorSession, blocksFleet, [], { bookings: [calendarBooking] })
+    const events = calendarProps.events as Array<{
+      id: string
+      type: string
+      vehicleName: string | null
+    }>
+    const booking = events.find((e) => e.type === 'booking')
+    expect(booking).toMatchObject({ id: 'bk-1', vehicleName: 'Prius' })
+  })
+})
+
 describe('OperatorBookingsRoute default view (#1100)', () => {
   it('lands on the fleet timeline board when no view param is present', () => {
     searchState.value = { date: ANCHOR } // view omitted -> DEFAULT_VIEW = 'timeline'

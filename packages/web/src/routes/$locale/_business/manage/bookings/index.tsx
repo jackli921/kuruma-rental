@@ -151,7 +151,7 @@ export function OperatorBookingsRoute() {
     enabled: canViewBlocks && view !== 'timeline',
   })
 
-  const events = useMemo(() => toCalendarEvents(bookings), [bookings])
+  const events = useMemo(() => toCalendarEvents(bookings, vehicles), [bookings, vehicles])
   const blockEvents = useMemo(
     () => (canViewBlocks ? blocksToCalendarEvents(blocks ?? []) : []),
     [canViewBlocks, blocks],
