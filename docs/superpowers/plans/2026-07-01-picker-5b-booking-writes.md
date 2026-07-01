@@ -101,13 +101,20 @@ describe('vehicle findAll operator narrowing (#1230 slice 5b, repo gate)', () =>
     expect(total).toBe(1)
     expect(data.map((v) => v.operatorId)).toEqual(['op-A'])
   })
+
+  it('a scoped operator with no operatorId (none scope) sees nothing', async () => {
+    const repo = await seedTwoOperators()
+    const noneCtx: CallerContext = { userId: 'no', role: 'OPERATOR_OWNER' }
+    const { total } = await repo.findAll(noneCtx, { operatorId: 'op-A' })
+    expect(total).toBe(0)
+  })
 })
 ```
 
 - [ ] **Step 2: Run test to verify it fails**
 
 Run: `cd packages/api && bunx vitest run tests/repositories/vehicle-operator-narrow.test.ts`
-Expected: FAIL — `VehicleFilters` has no `operatorId`, so the admin-narrow test sees both (total 2, not 1).
+Expected: FAIL — `VehicleFilters` has no `operatorId`, so the admin-narrow test sees both (total 2, not 1). (The `none`-scope test already passes — it documents existing fail-closed behavior.)
 
 - [ ] **Step 3: Add `operatorId` to `VehicleFilters`**
 
@@ -231,6 +238,13 @@ describe('VehicleService.findAll — privileged-tier picker narrow (#1230 slice 
   it('does NOT narrow a partner', async () => {
     const { total } = await (await service()).findAll(partner, {}, 'op-A')
     expect(total).toBe(2)
+  })
+
+  it('does NOT narrow legacy STAFF or ADMIN (not the platform tier)', async () => {
+    const staff: CallerContext = { userId: 's', role: 'STAFF' }
+    const legacyAdmin: CallerContext = { userId: 'a2', role: 'ADMIN' }
+    expect((await (await service()).findAll(staff, {}, 'op-A')).total).toBe(2)
+    expect((await (await service()).findAll(legacyAdmin, {}, 'op-A')).total).toBe(2)
   })
 
   it('a tenant operator cannot widen via a foreign operatorId', async () => {
@@ -360,6 +374,13 @@ describe('GET /vehicles — picker operator narrowing (#1230 slice 5b)', () => {
     expect(body.data).toHaveLength(2)
   })
 
+  it('ignores ?operatorId= for a tenant operator (its own scope wins)', async () => {
+    const res = await mountRead(await seedRepo(), 'OPERATOR_OWNER', OP_A).request(`/vehicles?operatorId=${OP_B}`)
+    const body = (await res.json()) as { data: Array<{ operatorId: string }> }
+    expect(body.data).toHaveLength(1)
+    expect(body.data[0]?.operatorId).toBe(OP_A)
+  })
+
   it('treats an empty ?operatorId= as no narrow', async () => {
     const res = await mountRead(await seedRepo(), 'PLATFORM_ADMIN').request('/vehicles?operatorId=')
     const body = (await res.json()) as { data: unknown[] }
@@ -436,6 +457,7 @@ describe('vehicle findAll operator narrowing (#1230 slice 5b, Drizzle, real Post
   const opAId = `veh_narrow_a_${uniq}`
   const opBId = `veh_narrow_b_${uniq}`
   let vehAId: string
+  let vehBId: string
 
   const admin: CallerContext = { userId: 'admin', role: 'PLATFORM_ADMIN', bypassScope: true }
   const opB: CallerContext = { userId: 'owner', role: 'OPERATOR_OWNER', operatorId: opBId, bypassScope: false }
@@ -457,7 +479,7 @@ describe('vehicle findAll operator narrowing (#1230 slice 5b, Drizzle, real Post
       { id: opBId, slug: `veh-narrow-b-${uniq}`, name: 'Veh Narrow B' },
     ])
     vehAId = await seedVehicle(opAId, 'Narrow Car A')
-    await seedVehicle(opBId, 'Narrow Car B')
+    vehBId = await seedVehicle(opBId, 'Narrow Car B')
   })
 
   afterAll(async () => {
@@ -465,10 +487,18 @@ describe('vehicle findAll operator narrowing (#1230 slice 5b, Drizzle, real Post
     await db.delete(operators).where(inArray(operators.id, [opAId, opBId]))
   })
 
+  it('an all-scope admin with no narrow sees both operators (control)', async () => {
+    const { data } = await repo.findAll(admin)
+    const ids = data.map((v) => v.id)
+    expect(ids).toContain(vehAId)
+    expect(ids).toContain(vehBId)
+  })
+
   it('an all-scope admin narrows to just the requested operator', async () => {
     const { data } = await repo.findAll(admin, { operatorId: opAId })
     const ids = data.map((v) => v.id)
     expect(ids).toContain(vehAId)
+    expect(ids).not.toContain(vehBId)
     expect(data.every((v) => v.operatorId === opAId)).toBe(true)
   })
 
@@ -1093,15 +1123,37 @@ export function operatorCalendarBlocksQueryOptions(from: string, to: string, pic
 }
 ```
 
+- [ ] **Step 4b: Update the existing query-key assertions the shape change breaks**
+
+The query keys now carry a trailing `pickedOperatorId ?? null` slot, so two existing assertions must be updated (they hard-code the old shorter keys).
+
+In `packages/web/tests/vite/operator-bookings/api.test.ts`, update the `operatorCalendarVehiclesQueryOptions` key assertion (around line 459-464):
+
+```typescript
+    expect(operatorCalendarVehiclesQueryOptions().queryKey).toEqual([
+      'operator-bookings',
+      'calendar',
+      'vehicles',
+      null,
+    ])
+```
+
+In `packages/web/tests/vite/operator-bookings/blocks-api.test.ts`, update the `operatorCalendarBlocksQueryOptions` key assertion (around line 107):
+
+```typescript
+    const opts = operatorCalendarBlocksQueryOptions('from-iso', 'to-iso')
+    expect(opts.queryKey).toEqual(['operator-bookings', 'blocks', 'from-iso', 'to-iso', null])
+```
+
 - [ ] **Step 5: Run tests to verify they pass**
 
 Run: `cd packages/web && bunx vitest run tests/vite/operator-bookings/api-operator-narrow.test.ts tests/vite/operator-bookings/blocks-api.test.ts tests/vite/operator-bookings/api.test.ts`
-Expected: PASS (the new 5 tests + existing suites — the added optional param is backward-compatible).
+Expected: PASS — the new 5 tests plus the two updated key assertions; the added optional param is otherwise backward-compatible.
 
 - [ ] **Step 6: Commit**
 
 ```bash
-git add packages/web/src/vite/operator-bookings/api.ts packages/web/tests/vite/operator-bookings/api-operator-narrow.test.ts
+git add packages/web/src/vite/operator-bookings/api.ts packages/web/tests/vite/operator-bookings/api-operator-narrow.test.ts packages/web/tests/vite/operator-bookings/api.test.ts packages/web/tests/vite/operator-bookings/blocks-api.test.ts
 git commit -m "feat(#1230): thread picked operator into web vehicles+blocks queries (5b)"
 ```
 
@@ -1132,10 +1184,35 @@ Change the `getRouteApi` mock (lines 38-41) to read it:
   }),
 ```
 
-Add a reset to the existing `afterEach` (find the `afterEach(` in the file and add this line inside it, alongside the existing resets):
+Add a reset to the existing `afterEach` (lines 175-179), so a picked test never leaks into the next:
 
 ```typescript
-    pickedOperator.value = undefined
+afterEach(() => {
+  vi.restoreAllMocks()
+  vi.unstubAllEnvs()
+  calendarProps = {}
+  pickedOperator.value = undefined
+})
+```
+
+Seed the picked keys in `renderRoute`. The helper (lines 139-152) currently seeds only the unpicked query keys; with a pick the route reads the picked keys and would suspend on a cache miss. Thread `pickedOperator.value` into all four seeds (default `undefined` keeps every existing test's key identical to today):
+
+```typescript
+  for (const range of [weekRange, timelineRange]) {
+    queryClient.setQueryData(
+      api.operatorCalendarQueryOptions(range.from, range.to, pickedOperator.value).queryKey,
+      seed.bookings ?? [],
+    )
+    queryClient.setQueryData(
+      api.operatorCalendarBlocksQueryOptions(range.from, range.to, pickedOperator.value).queryKey,
+      seed.blocks ?? [],
+    )
+  }
+  queryClient.setQueryData(
+    api.operatorCalendarVehiclesQueryOptions(pickedOperator.value).queryKey,
+    vehicles,
+  )
+  queryClient.setQueryData(operatorLocationsQueryOptions(pickedOperator.value).queryKey, locations)
 ```
 
 Then add two tests. Place the first inside the manual-booking `describe` (near the existing `renderRoute(bypassSession)` test at line 195), and the second inside the blocks `describe` (near line 293):
