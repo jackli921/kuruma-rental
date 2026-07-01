@@ -23,7 +23,10 @@ export function createOverviewRoutes(service: OverviewService) {
     const ctx = toCallerContext(requireUser(c))
     requireManagementRead(ctx)
 
-    const data = await service.getOverview(ctx)
+    // #407 slice 4: the operator-context picker narrows a bypass admin to one
+    // operator; the service bypass-gates it (undefined `now` = current clock).
+    const requestedOperatorId = c.req.query('operatorId')
+    const data = await service.getOverview(ctx, undefined, requestedOperatorId)
     return ok(c, data)
   })
 }

@@ -177,3 +177,35 @@ describe('GET /dashboard/overview — operator scoping', () => {
     expect(data).toEqual({ totalBookings: 0, activeVehicles: 0, upcomingBookings: 0 })
   })
 })
+
+describe('GET /dashboard/overview — operator-context picker narrowing (#407 slice 4)', () => {
+  it('narrows a bypass admin to the picked operator via ?operatorId', async () => {
+    const { vehicleRepo, bookingRepo } = await seeded()
+    const res = await mount(vehicleRepo, bookingRepo, 'PLATFORM_ADMIN').request(
+      `/dashboard/overview?operatorId=${OP_A}`,
+    )
+    expect(res.status).toBe(200)
+    const { data } = await res.json()
+    // OP_A only (not the aggregate of 4/3/3): matches the OP_A-scoped counts.
+    expect(data).toEqual({ totalBookings: 3, activeVehicles: 2, upcomingBookings: 2 })
+  })
+
+  it('picks the OTHER operator when ?operatorId names OP_B', async () => {
+    const { vehicleRepo, bookingRepo } = await seeded()
+    const res = await mount(vehicleRepo, bookingRepo, 'PLATFORM_ADMIN').request(
+      `/dashboard/overview?operatorId=${OP_B}`,
+    )
+    const { data } = await res.json()
+    expect(data).toEqual({ totalBookings: 1, activeVehicles: 1, upcomingBookings: 1 })
+  })
+
+  it('ignores a foreign ?operatorId for a tenant-scoped operator (no cross-tenant widening)', async () => {
+    // H2 invariant: an OPERATOR_STAFF of OP_B naming OP_A must still see only OP_B.
+    const { vehicleRepo, bookingRepo } = await seeded()
+    const res = await mount(vehicleRepo, bookingRepo, 'OPERATOR_STAFF', OP_B).request(
+      `/dashboard/overview?operatorId=${OP_A}`,
+    )
+    const { data } = await res.json()
+    expect(data).toEqual({ totalBookings: 1, activeVehicles: 1, upcomingBookings: 1 })
+  })
+})

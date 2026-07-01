@@ -17,7 +17,11 @@ export class InMemoryOverviewRepository implements OverviewRepository {
     private readonly bookingRepo: BookingRepository,
   ) {}
 
-  async getOperatorOverview(ctx: CallerContext, now: Date): Promise<OperatorOverview> {
+  async getOperatorOverview(
+    ctx: CallerContext,
+    now: Date,
+    operatorId?: string,
+  ): Promise<OperatorOverview> {
     // Defence-in-depth (mirrors insurance/fees repos): reject RENTER/PARTNER
     // here too — without this seal a non-operator bypassing the route would read
     // operator counts. Only the admin tier (`all`) and OPERATOR_* (`operator`)
@@ -35,8 +39,14 @@ export class InMemoryOverviewRepository implements OverviewRepository {
       this.bookingRepo.findAll(SYSTEM_CONTEXT),
     ])
 
-    const inScope = (operatorId: string | null) =>
-      scope.kind === 'all' || operatorId === scope.operatorId
+    // The picker's bypass narrowing (#407 slice 4): an `all` caller who named an
+    // operatorId aggregates just that operator; without a pick it stays the full
+    // cross-operator aggregate. Honored ONLY for `all` — a tenant caller keeps its
+    // own operatorId, so a foreign id can never widen it.
+    const inScope = (rowOperatorId: string | null) =>
+      scope.kind === 'all'
+        ? operatorId === undefined || rowOperatorId === operatorId
+        : rowOperatorId === scope.operatorId
 
     const owned = bookings.filter((b) => inScope(b.operatorId))
     return {
