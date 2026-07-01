@@ -9,6 +9,22 @@ import {
 import type { OperatorApplicationRepository } from '../repositories/types'
 import type { OperatorApplication } from '../stores'
 
+// #1277: audit events raised when a platform admin reviews a pending application.
+// Mirrors OperatorProfileAuditEvent in operator.ts: defined at the service that
+// raises them so the audit sink (audit.ts) imports from the source of truth.
+export interface OperatorApplicationApprovedAuditEvent {
+  readonly type: 'OPERATOR_APPLICATION_APPROVED'
+  readonly actorUserId: string
+  readonly operatorId: string
+  readonly applicationId: string
+}
+
+export interface OperatorApplicationRejectedAuditEvent {
+  readonly type: 'OPERATOR_APPLICATION_REJECTED'
+  readonly actorUserId: string
+  readonly applicationId: string
+}
+
 // The honeypot/consent fields are validated + stripped at the route boundary; the
 // service persists only the domain fields (contactEmail already lowercased by zod).
 type SubmitInput = Omit<OperatorApplicationInput, 'honeypot' | 'consent'>
