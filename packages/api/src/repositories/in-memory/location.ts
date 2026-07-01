@@ -105,7 +105,8 @@ export class InMemoryLocationRepository implements LocationRepository {
       ...existing,
       ...data,
       id: existing.id,
-      // #1279: operatorId is an immutable tenant anchor — pin it.
+      // operatorId is an immutable tenant anchor (#1279): pin it like id so an
+      // update payload can never migrate the row to another operator.
       operatorId: existing.operatorId,
       createdAt: existing.createdAt,
       updatedAt: new Date(),

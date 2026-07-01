@@ -105,8 +105,8 @@ export class DrizzleLocationRepository implements LocationRepository {
   }
 
   async update(id: string, data: Partial<Location>): Promise<Location | undefined> {
-    // #1279: operatorId is an immutable tenant anchor — strip it so an update
-    // payload can never re-home a location to another operator.
+    // operatorId is an immutable tenant anchor (#1279): strip it like id so an
+    // update payload can never migrate the row to another operator.
     const { id: _id, operatorId: _operatorId, createdAt: _createdAt, ...fields } = data
     const [updated] = await this.db
       .update(locations)
