@@ -37,25 +37,25 @@ interface ChipProps {
 export function CalendarEventChip({ event, locale }: ChipProps) {
   const [hovering, setHovering] = useState(false)
   const [pinned, setPinned] = useState(false)
-  const openTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const hoverTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const clearTimer = useCallback(() => {
-    if (openTimer.current) {
-      clearTimeout(openTimer.current)
-      openTimer.current = null
+    if (hoverTimer.current) {
+      clearTimeout(hoverTimer.current)
+      hoverTimer.current = null
     }
   }, [])
 
   const handleEnter = useCallback(() => {
     clearTimer()
-    openTimer.current = setTimeout(() => setHovering(true), HOVER_OPEN_DELAY_MS)
+    hoverTimer.current = setTimeout(() => setHovering(true), HOVER_OPEN_DELAY_MS)
   }, [clearTimer])
 
   // Leaving the trigger OR the card schedules a deferred close, so the pointer has
   // a grace window to cross the gap onto the card (where handleCardEnter cancels it).
   const handleLeave = useCallback(() => {
     clearTimer()
-    openTimer.current = setTimeout(() => setHovering(false), HOVER_CLOSE_DELAY_MS)
+    hoverTimer.current = setTimeout(() => setHovering(false), HOVER_CLOSE_DELAY_MS)
   }, [clearTimer])
 
   // Pointer reached the portaled card: cancel the pending close and hold it open so
