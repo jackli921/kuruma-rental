@@ -1,6 +1,6 @@
 {
-  "id": "ab6345bb-ad49-41db-8566-7f1a46ba2082",
-  "prevId": "08f319e4-3de5-4155-9233-12f572dc0a3f",
+  "id": "08f319e4-3de5-4155-9233-12f572dc0a3f",
+  "prevId": "5dc9a134-7474-40a2-8f45-5aebf64bf2cd",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -4977,17 +4977,23 @@
         }
       },
       "indexes": {
-        "idx_reviews_bookingId": {
-          "name": "idx_reviews_bookingId",
+        "reviews_subject_per_booking_unique": {
+          "name": "reviews_subject_per_booking_unique",
           "columns": [
             {
               "expression": "bookingId",
               "isExpression": false,
               "asc": true,
               "nulls": "last"
+            },
+            {
+              "expression": "subject",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
             }
           ],
-          "isUnique": false,
+          "isUnique": true,
           "concurrently": false,
           "method": "btree",
           "with": {}
@@ -5143,16 +5149,7 @@
         }
       },
       "compositePrimaryKeys": {},
-      "uniqueConstraints": {
-        "reviews_subject_per_booking_unique": {
-          "name": "reviews_subject_per_booking_unique",
-          "nullsNotDistinct": false,
-          "columns": [
-            "bookingId",
-            "subject"
-          ]
-        }
-      },
+      "uniqueConstraints": {},
       "policies": {},
       "checkConstraints": {
         "reviews_overall_range_chk": {
@@ -5399,8 +5396,7 @@
         "RENTER_CANCELLATION",
         "RENTER_TRIP_STARTED",
         "RENTER_TRIP_COMPLETED",
-        "RENTER_REVIEW_PROMPT",
-        "OPERATOR_NEW_MESSAGE"
+        "RENTER_REVIEW_PROMPT"
       ]
     },
     "public.notification_status": {

@@ -35,22 +35,32 @@ const fee = {
 }
 
 describe('fetchFeeSchedules', () => {
-  it('GETs /api/fee-schedules?includeArchived=true with credentials and unwraps the array', async () => {
+  it('GETs /api/fee-schedules?includeArchived=true&includeAll=true with credentials and unwraps the array', async () => {
     fetchMock.mockResolvedValue(jsonResponse({ success: true, data: [fee] }))
 
     const result = await fetchFeeSchedules()
 
-    expect(fetchMock).toHaveBeenCalledWith('/api/fee-schedules?includeArchived=true', {
-      credentials: 'include',
-    })
+    expect(fetchMock).toHaveBeenCalledWith(
+      '/api/fee-schedules?includeArchived=true&includeAll=true',
+      { credentials: 'include' },
+    )
     expect(result).toEqual([fee])
   })
 
-  it('sends NO operatorId — the cookie session scopes the read server-side', async () => {
+  it('sends NO operatorId — the cookie session scopes the read, includeAll only unblocks bypass roles (#529)', async () => {
     fetchMock.mockResolvedValue(jsonResponse({ success: true, data: [] }))
     await fetchFeeSchedules()
     const [url] = fetchMock.mock.calls[0] as [string, RequestInit]
     expect(url).not.toContain('operatorId')
+  })
+
+  it('scopes the read to operatorId (dropping includeAll) but keeps includeArchived when an admin picks a tenant', async () => {
+    fetchMock.mockResolvedValue(jsonResponse({ success: true, data: [] }))
+    await fetchFeeSchedules('op_9')
+    const [url] = fetchMock.mock.calls[0] as [string, RequestInit]
+    expect(url).toContain('operatorId=op_9')
+    expect(url).not.toContain('includeAll')
+    expect(url).toContain('includeArchived=true')
   })
 
   it('throws an ApiError carrying the status on a failure envelope', async () => {
@@ -138,8 +148,13 @@ describe('archiveFeeSchedule', () => {
 })
 
 describe('feeSchedulesQueryOptions', () => {
-  it('exposes the stable FEE_QUERY_KEY so writes can invalidate it', () => {
+  it('exposes the stable FEE_QUERY_KEY prefix so writes can invalidate every scope', () => {
+    // FEE_QUERY_KEY is the prefix; the per-scope key appends the picked operator
+    // (or 'all') so switching context refetches without serving another tenant's
+    // cached list. A prefix invalidate (invalidateQueries({ queryKey: FEE_QUERY_KEY }))
+    // still clears all scopes.
     expect(FEE_QUERY_KEY).toEqual(['operator-fees'])
-    expect(feeSchedulesQueryOptions().queryKey).toEqual(['operator-fees'])
+    expect(feeSchedulesQueryOptions().queryKey).toEqual(['operator-fees', 'all'])
+    expect(feeSchedulesQueryOptions('op_9').queryKey).toEqual(['operator-fees', 'op_9'])
   })
 })

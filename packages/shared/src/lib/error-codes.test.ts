@@ -12,6 +12,7 @@ import { ERROR_CODES } from './error-codes'
 describe('ERROR_CODES', () => {
   test('is the exhaustive set of envelope failure codes the API emits', () => {
     expect([...ERROR_CODES].sort()).toEqual([
+      'BLOCK_BOOKING_CONFLICT',
       'CLASS_COMBO_SOLD_OUT',
       'CLASS_HAS_ACTIVE_BOOKINGS',
       'CONSENT_REQUIRED',

@@ -635,15 +635,22 @@
     {
       "idx": 90,
       "version": "7",
-      "when": 1782578220330,
-      "tag": "0090_add_threads_operator_columns",
+      "when": 1782578077368,
+      "tag": "0090_drop_redundant_review_bookingid_idx",
       "breakpoints": true
     },
     {
       "idx": 91,
       "version": "7",
+      "when": 1782578220330,
+      "tag": "0091_add_threads_operator_columns",
+      "breakpoints": true
+    },
+    {
+      "idx": 92,
+      "version": "7",
       "when": 1782589042107,
-      "tag": "0091_add_operator_new_message_kind",
+      "tag": "0092_add_operator_new_message_kind",
       "breakpoints": true
     }
   ]

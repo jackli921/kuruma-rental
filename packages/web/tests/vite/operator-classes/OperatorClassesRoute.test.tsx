@@ -1,11 +1,13 @@
-import { OperatorClassesRoute } from '@/routes/$locale/_business/manage/classes'
+import { OperatorClassesRoute, Route } from '@/routes/$locale/_business/manage/classes'
 import { type OperatorClass, operatorClassesQueryOptions } from '@/vite/operator-classes/api'
-import type { Session } from '@/vite/session'
+import { useOperatorScope } from '@/vite/operator-context'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { render, screen } from '@testing-library/react'
 import { IntlProvider } from 'use-intl'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import enMessages from '../../../messages/en.json'
+
+vi.mock('@/vite/operator-context', () => ({ useOperatorScope: vi.fn() }))
 
 const en = enMessages.business.classes
 
@@ -30,26 +32,22 @@ function vehicleClass(): OperatorClass {
   }
 }
 
-const operatorSession: Session = {
-  user: { id: 'u', role: 'OPERATOR_OWNER', operatorId: 'op_1', operatorSlug: 'acme' },
-  csrfToken: 't',
-}
-
-const bypassSession: Session = {
-  user: { id: 'u', role: 'PLATFORM_ADMIN' },
-  csrfToken: 't',
-}
-
 // Seed both queries the route reads via useSuspenseQuery so they resolve from cache
 // (no fetch, no router needed). staleTime=Infinity suppresses a background refetch.
-function renderRoute(session: Session) {
+function renderRoute(scope: { pickedOperatorId?: string; canWrite: boolean }) {
+  vi.mocked(useOperatorScope).mockReturnValue({
+    pickedOperatorId: scope.pickedOperatorId,
+    canWrite: scope.canWrite,
+    showOperator: false,
+    operatorNameById: new Map(),
+  })
   const queryClient = new QueryClient({
     defaultOptions: { queries: { staleTime: Number.POSITIVE_INFINITY, retry: false } },
   })
-  queryClient.setQueryData(['session'], session)
-  queryClient.setQueryData(operatorClassesQueryOptions({ includeArchived: true }).queryKey, [
-    vehicleClass(),
-  ])
+  queryClient.setQueryData(
+    operatorClassesQueryOptions({ includeArchived: true }, scope.pickedOperatorId).queryKey,
+    [vehicleClass()],
+  )
   render(
     <QueryClientProvider client={queryClient}>
       <IntlProvider locale="en" messages={enMessages}>
@@ -61,17 +59,36 @@ function renderRoute(session: Session) {
 
 describe('OperatorClassesRoute write-affordance gating (#583)', () => {
   it('shows Add + row Edit/Delete for a tenant-scoped operator session', () => {
-    renderRoute(operatorSession)
+    renderRoute({ canWrite: true })
     expect(screen.getByRole('button', { name: en.addClass })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: en.editClass })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: en.deleteAction })).toBeInTheDocument()
   })
 
   it('hides Add + row actions for a bypass role with no operatorId, but still lists rows (read-only oversight)', () => {
-    renderRoute(bypassSession)
+    renderRoute({ canWrite: false })
     expect(screen.queryByRole('button', { name: en.addClass })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: en.editClass })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: en.deleteAction })).not.toBeInTheDocument()
     expect(screen.getByText('Compact')).toBeInTheDocument()
+  })
+})
+
+const loader = Route.options.loader as (args: {
+  context: { queryClient: { ensureQueryData: ReturnType<typeof vi.fn> } }
+  deps: { operator: string | undefined }
+}) => Promise<unknown>
+
+describe('OperatorClassesRoute loader', () => {
+  it('prefetches the classes list query scoped to the picked operator', async () => {
+    const ensureQueryData = vi.fn().mockResolvedValue([])
+
+    await loader({
+      context: { queryClient: { ensureQueryData } },
+      deps: { operator: 'op_9' },
+    })
+
+    const options = ensureQueryData.mock.calls[0]?.[0] as { queryKey: unknown }
+    expect(options.queryKey).toEqual(['operator-classes', true, 'op_9'])
   })
 })

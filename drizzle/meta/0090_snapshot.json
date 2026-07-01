@@ -1,5 +1,5 @@
 {
-  "id": "08f319e4-3de5-4155-9233-12f572dc0a3f",
+  "id": "5dc9a134-7474-40a2-8f45-5aebf64bf2cd",
   "prevId": "0635f1fa-6e32-4b27-8abd-eaab00c0f997",
   "version": "7",
   "dialect": "postgresql",
@@ -3441,19 +3441,6 @@
           "primaryKey": false,
           "notNull": false
         },
-        "operatorId": {
-          "name": "operatorId",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "operatorUnreadCount": {
-          "name": "operatorUnreadCount",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "default": 0
-        },
         "idempotencyKey": {
           "name": "idempotencyKey",
           "type": "text",
@@ -3481,21 +3468,6 @@
           "columns": [
             {
               "expression": "bookingId",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "idx_threads_operatorId": {
-          "name": "idx_threads_operatorId",
-          "columns": [
-            {
-              "expression": "operatorId",
               "isExpression": false,
               "asc": true,
               "nulls": "last"
@@ -3535,19 +3507,6 @@
             "id"
           ],
           "onDelete": "no action",
-          "onUpdate": "no action"
-        },
-        "threads_operatorId_operators_id_fk": {
-          "name": "threads_operatorId_operators_id_fk",
-          "tableFrom": "threads",
-          "tableTo": "operators",
-          "columnsFrom": [
-            "operatorId"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "restrict",
           "onUpdate": "no action"
         }
       },
@@ -4977,17 +4936,23 @@
         }
       },
       "indexes": {
-        "idx_reviews_bookingId": {
-          "name": "idx_reviews_bookingId",
+        "reviews_subject_per_booking_unique": {
+          "name": "reviews_subject_per_booking_unique",
           "columns": [
             {
               "expression": "bookingId",
               "isExpression": false,
               "asc": true,
               "nulls": "last"
+            },
+            {
+              "expression": "subject",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
             }
           ],
-          "isUnique": false,
+          "isUnique": true,
           "concurrently": false,
           "method": "btree",
           "with": {}
@@ -5143,16 +5108,7 @@
         }
       },
       "compositePrimaryKeys": {},
-      "uniqueConstraints": {
-        "reviews_subject_per_booking_unique": {
-          "name": "reviews_subject_per_booking_unique",
-          "nullsNotDistinct": false,
-          "columns": [
-            "bookingId",
-            "subject"
-          ]
-        }
-      },
+      "uniqueConstraints": {},
       "policies": {},
       "checkConstraints": {
         "reviews_overall_range_chk": {

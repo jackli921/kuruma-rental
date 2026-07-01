@@ -8,12 +8,37 @@ import type {
   VehicleRepository,
 } from '../repositories/types'
 import type { VehicleClass } from '../stores'
+import { type CrossOperatorRead, applyCrossOperatorReadScope } from '../tenancy'
 
 export type CreateResult =
   | { ok: true; vehicleClass: VehicleClass }
   | { ok: false; error: string; status: number }
 
 export type UpdateResult = CreateResult
+
+/**
+ * The writable surface of a vehicle-class PATCH. Owned by the service so the
+ * route passes an intent DTO instead of the persistence entity (#1213 — routes
+ * never import from ../stores). Mirrors `updateVehicleClassSchema`: server-derived
+ * (id/timestamps) and non-patchable (operatorId, status — status moves via
+ * archive()) columns are absent; every field is optional because a PATCH is partial.
+ */
+export type VehicleClassUpdate = Partial<
+  Pick<
+    VehicleClass,
+    | 'name'
+    | 'slug'
+    | 'description'
+    | 'photos'
+    | 'seats'
+    | 'luggageCapacity'
+    | 'luggageSize'
+    | 'transmission'
+    | 'fuelType'
+    | 'acrissCode'
+    | 'sortOrder'
+  >
+>
 
 export type ArchiveResult =
   | { ok: true; vehicleClass: VehicleClass }
@@ -52,8 +77,17 @@ export class VehicleClassService {
     }
   }
 
-  async findAll(ctx: CallerContext, filters?: VehicleClassFilters): Promise<VehicleClass[]> {
-    return this.repo.findAll(ctx, filters)
+  async findPublicCatalog(ctx: CallerContext): Promise<VehicleClass[]> {
+    return this.repo.findAll(ctx)
+  }
+
+  async findAll(
+    ctx: CallerContext,
+    read: CrossOperatorRead,
+    filters: VehicleClassFilters = {},
+  ): Promise<VehicleClass[]> {
+    const scopedFilters = applyCrossOperatorReadScope(ctx, read, filters)
+    return this.repo.findAll(ctx, scopedFilters)
   }
 
   async findById(ctx: CallerContext, id: string): Promise<VehicleClass | undefined> {
@@ -84,7 +118,7 @@ export class VehicleClassService {
     return { ok: true, vehicleClass }
   }
 
-  async update(ctx: CallerContext, id: string, data: Partial<VehicleClass>): Promise<UpdateResult> {
+  async update(ctx: CallerContext, id: string, data: VehicleClassUpdate): Promise<UpdateResult> {
     const foreign = this.rejectForeignPhotos(data.photos)
     if (foreign) return foreign
 

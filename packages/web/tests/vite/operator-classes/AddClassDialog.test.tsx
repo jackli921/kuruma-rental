@@ -10,7 +10,7 @@ import en from '../../../messages/en.json'
 
 vi.mock('@/vite/operator-classes/api', () => ({ createOperatorClass: vi.fn() }))
 
-function renderDialog() {
+function renderDialog(pickedOperatorId?: string) {
   const onOpenChange = vi.fn()
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
@@ -19,7 +19,7 @@ function renderDialog() {
   render(
     <QueryClientProvider client={queryClient}>
       <IntlProvider locale="en" messages={en}>
-        <AddClassDialog open onOpenChange={onOpenChange} />
+        <AddClassDialog open onOpenChange={onOpenChange} pickedOperatorId={pickedOperatorId} />
       </IntlProvider>
     </QueryClientProvider>,
   )
@@ -52,6 +52,18 @@ describe('AddClassDialog', () => {
       expect(invalidate).toHaveBeenCalledWith({ queryKey: ['operator-classes'] })
       expect(onOpenChange).toHaveBeenCalledWith(false)
     })
+  })
+
+  it('adds the picked operatorId to create bodies for platform-admin context', async () => {
+    vi.mocked(createOperatorClass).mockResolvedValue({ id: 'c1' } as never)
+    renderDialog('op_9')
+
+    await fillAndSubmit()
+
+    await waitFor(() => expect(createOperatorClass).toHaveBeenCalledTimes(1))
+    expect(vi.mocked(createOperatorClass).mock.calls[0]?.[0]).toEqual(
+      expect.objectContaining({ name: 'Compact', operatorId: 'op_9' }),
+    )
   })
 
   it('surfaces a slug collision (409) and keeps the dialog open', async () => {

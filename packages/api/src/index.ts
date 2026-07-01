@@ -421,7 +421,7 @@ export function createApp(overrides?: AppOverrides, repos: Repos = buildRepos(ov
     maintenanceLogRepo,
     runInTransaction,
   )
-  const vehicleBlockService = new VehicleBlockService(vehicleRepo, vehicleBlockRepo)
+  const vehicleBlockService = new VehicleBlockService(vehicleRepo, vehicleBlockRepo, bookingRepo)
   const fleetOverviewService = new FleetOverviewService(fleetOverviewRepo)
   const overviewService = new OverviewService(overviewRepo)
   const adminRevenueService = new AdminRevenueService(paymentEventRepo, operatorRepo)

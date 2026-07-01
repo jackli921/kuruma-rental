@@ -1,5 +1,6 @@
 import { unwrap } from '@/lib/api-error'
 import { getApiBaseUrl } from '@/vite/api-base'
+import { type WithOperatorId, buildScopeParam } from '@/vite/operator-context'
 import { INSURANCE_STATUSES } from '@kuruma/shared/enums'
 import type { InsuranceOptionData } from '@kuruma/shared/types/insurance-option'
 import type {
@@ -39,19 +40,28 @@ export type { InsuranceOptionData }
 
 export const INSURANCE_QUERY_KEY = ['operator-insurance'] as const
 
-// Management always lists archived rows too (badged + restorable in the UI), so
-// the fetch is parameterless and the query key stays stable for invalidation.
-export async function fetchInsuranceOptions(): Promise<InsuranceOptionData[]> {
-  const res = await fetch(`${getApiBaseUrl()}/insurance-options?includeArchived=true`, {
-    credentials: 'include',
-  })
+// Management always lists archived rows too (badged + restorable in the UI). The
+// scope param is `operatorId=<picked>` when an admin has picked a tenant, else
+// `includeAll=true` — the bypass-role read default that satisfies the API's
+// cross-operator guard (this is what clears the admin 400; the parameterless read
+// previously sent neither flag). An operator session ignores it and auto-scopes.
+export async function fetchInsuranceOptions(
+  pickedOperatorId?: string,
+): Promise<InsuranceOptionData[]> {
+  const res = await fetch(
+    `${getApiBaseUrl()}/insurance-options?includeArchived=true&${buildScopeParam(pickedOperatorId)}`,
+    { credentials: 'include' },
+  )
   return unwrap(res, insuranceOptionSchema.array())
 }
 
-export function insuranceOptionsQueryOptions() {
+// The picked operator id is part of the cache key so switching context refetches
+// (and never serves another tenant's cached list). Optional param keeps any
+// no-arg caller working.
+export function insuranceOptionsQueryOptions(pickedOperatorId?: string) {
   return queryOptions({
-    queryKey: INSURANCE_QUERY_KEY,
-    queryFn: fetchInsuranceOptions,
+    queryKey: [...INSURANCE_QUERY_KEY, pickedOperatorId ?? 'all'] as const,
+    queryFn: () => fetchInsuranceOptions(pickedOperatorId),
   })
 }
 
@@ -77,8 +87,11 @@ async function writeJson(
   return unwrap(res, insuranceOptionSchema)
 }
 
+// A platform admin operating as a picked tenant must name the target operator in
+// the body (the platform-admin create schema requires it); an operator session omits
+// it and is auto-scoped server-side. PATCH/DELETE are id-scoped and never carry it.
 export async function createInsuranceOption(
-  input: CreateInsuranceOptionInput,
+  input: WithOperatorId<CreateInsuranceOptionInput>,
   csrfToken: string,
 ): Promise<InsuranceOptionData> {
   return writeJson('/insurance-options', 'POST', input, csrfToken)

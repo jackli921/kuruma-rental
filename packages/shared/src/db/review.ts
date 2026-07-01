@@ -8,7 +8,7 @@ import {
   pgTable,
   text,
   timestamp,
-  unique,
+  uniqueIndex,
 } from 'drizzle-orm/pg-core'
 import { REVIEW_AUTHOR_ROLES, REVIEW_MODERATION_STATUSES, REVIEW_SUBJECTS } from '../enums'
 import { operators, users } from './auth'
@@ -81,7 +81,7 @@ export const reviews = pgTable(
     // provably one operator->renter, one renter->operator, one renter->vehicle per booking
     // WITHOUT depending on the denormalized operatorId. There is exactly one renter per
     // booking, and the first staff member to submit speaks for the operator (#1158).
-    unique('reviews_subject_per_booking_unique').on(t.bookingId, t.subject),
+    uniqueIndex('reviews_subject_per_booking_unique').on(t.bookingId, t.subject),
     check('reviews_overall_range_chk', sql`${t.overall} BETWEEN 1 AND 5`),
     // Operators review ONLY renters; renters review the operator or a vehicle (never a renter).
     check(
@@ -101,12 +101,10 @@ export const reviews = pgTable(
       'reviews_class_subject_chk',
       sql`${t.subjectClassId} IS NULL OR ${t.subject} = 'VEHICLE'`,
     ),
-    // FK-covering + read indexes (lint:fk-indexes wants every FK column to have its own
-    // index). idx_reviews_bookingId is query-redundant with the reseal's (bookingId, subject)
-    // unique — bookingId is its leading column, so it already serves findByBookingId — but the
-    // lint parser only reads CREATE INDEX, not the ALTER ... ADD CONSTRAINT a unique() emits, so
-    // it can't see the seal as FK cover. Kept to satisfy the gate; dropping it is tracked separately.
-    index('idx_reviews_bookingId').on(t.bookingId),
+    // FK-covering + read indexes (lint:fk-indexes wants every FK column to have its own index).
+    // bookingId's FK cover is the reseal uniqueIndex above: bookingId is its leading column, so it
+    // serves findByBookingId AND satisfies the lint (which reads CREATE [UNIQUE] INDEX). A separate
+    // idx_reviews_bookingId would be a redundant second btree on the same prefix — dropped in #1225.
     index('idx_reviews_authorUserId').on(t.authorUserId),
     // operatorId FK cover + the slice-5 published-aggregate scan.
     index('idx_reviews_operator_published').on(t.operatorId, t.publishedAt),
