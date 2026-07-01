@@ -45,6 +45,7 @@ import {
   DrizzleVehicleClassRepository,
   DrizzleVehicleDetailRepository,
   DrizzleVehicleRepository,
+  createDrizzleOperatorApproval,
   createDrizzleOperatorGrant,
   createDrizzleTransaction,
 } from '../repositories/drizzle'
@@ -127,6 +128,7 @@ import type {
   RenterDocumentRepository,
   ReviewRepository,
   RunInTransaction,
+  RunOperatorApproval,
   RunOperatorGrant,
   StatsRepository,
   StorefrontRepository,
@@ -212,6 +214,7 @@ export type Repos = {
   operatorApplicationRepo: OperatorApplicationRepository
   runInTransaction: RunInTransaction
   runOperatorGrant: RunOperatorGrant
+  runOperatorApproval: RunOperatorApproval
   // Public R2 bucket base for vehicle photos (#879). Threaded to VehicleService
   // as the anchor for the #967 cross-tenant photo-spoof guard. '' in dev/test
   // (no bucket) ⇒ the guard is inert, matching the no-op encode/decode there.
@@ -309,6 +312,14 @@ export function buildOverrideRepos(overrides: AppOverrides): Repos {
     overrides.operatorApplicationRepo ?? new InMemoryOperatorApplicationRepository()
   const runOperatorGrant: RunOperatorGrant = (fn) =>
     fn({ memberships: operatorMembershipRepo, users: userRepo, invites: providerInviteRepo })
+  const runOperatorApproval: RunOperatorApproval = (fn) =>
+    fn({
+      users: userRepo,
+      memberships: operatorMembershipRepo,
+      invites: providerInviteRepo,
+      operators: operatorRepo,
+      applications: operatorApplicationRepo,
+    })
   return {
     vehicleClassRepo,
     vehicleRepo,
@@ -352,6 +363,7 @@ export function buildOverrideRepos(overrides: AppOverrides): Repos {
     operatorApplicationRepo,
     runInTransaction,
     runOperatorGrant,
+    runOperatorApproval,
     photosPublicUrl: process.env.VEHICLE_PHOTOS_PUBLIC_URL ?? '',
     googleAuthRuntime: overrides.googleAuthRuntime,
   }
@@ -463,6 +475,7 @@ export function buildDrizzleRepos(opts?: { db?: Db; runTx?: RunTx }): Repos {
     // Real interactive tx (#493): membership INSERT first so the partial-unique-
     // active index aborts the whole grant on a concurrent double-accept.
     runOperatorGrant: createDrizzleOperatorGrant(tx),
+    runOperatorApproval: createDrizzleOperatorApproval(tx),
     photosPublicUrl,
     googleAuthRuntime,
   }
@@ -533,6 +546,14 @@ export function buildInMemoryRepos(): Repos {
   const operatorApplicationRepo = new InMemoryOperatorApplicationRepository()
   const runOperatorGrant: RunOperatorGrant = (fn) =>
     fn({ memberships: operatorMembershipRepo, users: userRepo, invites: providerInviteRepo })
+  const runOperatorApproval: RunOperatorApproval = (fn) =>
+    fn({
+      users: userRepo,
+      memberships: operatorMembershipRepo,
+      invites: providerInviteRepo,
+      operators: operatorRepo,
+      applications: operatorApplicationRepo,
+    })
   return {
     vehicleClassRepo,
     vehicleRepo,
@@ -586,6 +607,7 @@ export function buildInMemoryRepos(): Repos {
     operatorApplicationRepo,
     runInTransaction,
     runOperatorGrant,
+    runOperatorApproval,
     photosPublicUrl: process.env.VEHICLE_PHOTOS_PUBLIC_URL ?? '',
     googleAuthRuntime: undefined,
   }

@@ -72,6 +72,7 @@ const EXPECTED_KEY_MAP: Record<keyof Repos, true> = {
   operatorApplicationRepo: true,
   runInTransaction: true,
   runOperatorGrant: true,
+  runOperatorApproval: true,
   photosPublicUrl: true,
   googleAuthRuntime: true,
 }
