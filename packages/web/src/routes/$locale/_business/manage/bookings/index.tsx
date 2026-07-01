@@ -35,6 +35,7 @@ import {
 } from '@/vite/operator-bookings/calendar-events'
 import { markBookingsSeen } from '@/vite/operator-bookings/new-bookings'
 import { useCalendarFilters } from '@/vite/operator-bookings/useCalendarFilters'
+import { useOperatorContext } from '@/vite/operator-context'
 import { operatorLocationsQueryOptions } from '@/vite/operator-locations/api'
 import { useSession } from '@/vite/session'
 import { useQuery, useQueryClient, useSuspenseQuery } from '@tanstack/react-query'
@@ -65,11 +66,21 @@ export const Route = createFileRoute('/$locale/_business/manage/bookings/')({
         ? formatCalendarDate(parseCalendarDate(search.date))
         : undefined,
   }),
-  loaderDeps: ({ search }) => ({ view: search.view ?? defaultCalendarView(), date: search.date }),
+  // #1230 slice 5a: `operator` is inherited from the `_business` parent search (this
+  // route adds no own transform for it), so the loader can warm the picked-operator
+  // calendar entry — the component reads the SAME id via useOperatorContext, sharing
+  // one cache key (no wrong-tenant flash). Mirrors the dashboard route (slice 4).
+  loaderDeps: ({
+    search,
+  }: { search: BookingsCalendarSearch & { operator?: string | undefined } }) => ({
+    view: search.view ?? defaultCalendarView(),
+    date: search.date,
+    operator: search.operator,
+  }),
   loader: ({ context, deps }) => {
     const { from, to } = calendarRange(deps.view, parseCalendarDate(deps.date))
     return Promise.all([
-      context.queryClient.ensureQueryData(operatorCalendarQueryOptions(from, to)),
+      context.queryClient.ensureQueryData(operatorCalendarQueryOptions(from, to, deps.operator)),
       context.queryClient.ensureQueryData(operatorCalendarVehiclesQueryOptions()),
     ])
   },
@@ -86,6 +97,10 @@ export function OperatorBookingsRoute() {
 
   const queryClient = useQueryClient()
   const { data: session } = useSession()
+  // #1230 slice 5a: a picker admin narrows the calendar reads to the picked operator;
+  // undefined (no pick, or an operator session) leaves the read session-scoped. Write
+  // affordances below stay gated on isOperatorSession (slice 5b owns cross-tenant writes).
+  const { pickedOperatorId } = useOperatorContext()
   const [bookingDialogOpen, setBookingDialogOpen] = useState(false)
   // The clicked slot's range (null when opened from the header button), threaded to
   // the dialog so a slot-click prefills its pickup/return times.
@@ -125,8 +140,8 @@ export function OperatorBookingsRoute() {
   // #611: opening the orders list is "seeing" the new orders — clear the nav
   // red-dot badge (advance lastSeenAt to now) on every mount of this route.
   useEffect(() => {
-    markBookingsSeen(queryClient)
-  }, [queryClient])
+    markBookingsSeen(queryClient, pickedOperatorId)
+  }, [queryClient, pickedOperatorId])
 
   const view = viewParam ?? defaultCalendarView()
   const anchorDate = useMemo(() => parseCalendarDate(date), [date])
@@ -137,7 +152,9 @@ export function OperatorBookingsRoute() {
   // Schedule affordance is offered only where a created block becomes visible:
   // inviting a create on the timeline (the default view) would refetch into nothing.
   const canScheduleBlock = canManageBlocks && view !== 'timeline'
-  const { data: bookings } = useSuspenseQuery(operatorCalendarQueryOptions(from, to))
+  const { data: bookings } = useSuspenseQuery(
+    operatorCalendarQueryOptions(from, to, pickedOperatorId),
+  )
   const { data: vehicles } = useSuspenseQuery(operatorCalendarVehiclesQueryOptions())
 
   // Blocks are an additive layer (not in the suspense loader): a non-suspense query
@@ -277,7 +294,11 @@ export function OperatorBookingsRoute() {
           </div>
         </header>
         <div className="flex gap-6">
-          <CalendarSidebar vehicles={vehicles} filters={filters} />
+          <CalendarSidebar
+            vehicles={vehicles}
+            filters={filters}
+            pickedOperatorId={pickedOperatorId}
+          />
           <div className="min-w-0 flex-1">
             {view === 'timeline' ? (
               <FleetTimeline

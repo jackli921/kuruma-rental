@@ -35,7 +35,8 @@ function makeFloat(over: Partial<RawOperatorBooking> & { id: string }): RawOpera
 
 function makeQueryClient(floats: RawOperatorBooking[]) {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } })
-  qc.setQueryData(['operator-bookings', 'needs-assignment'], floats)
+  // #1230 slice 5a: the worklist key carries the picked operator (null = no pick).
+  qc.setQueryData(['operator-bookings', 'needs-assignment', null], floats)
   // Seed empty candidates for each float so the per-row substitution query
   // resolves immediately without a network call.
   for (const f of floats) {

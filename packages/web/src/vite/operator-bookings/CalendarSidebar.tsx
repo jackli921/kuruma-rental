@@ -13,6 +13,9 @@ interface SidebarVehicle {
 interface CalendarSidebarProps {
   readonly vehicles: readonly SidebarVehicle[]
   readonly filters: CalendarFiltersApi
+  // #1230 slice 5a: forwarded to the floats worklist so a picker admin narrows it
+  // to the picked operator. undefined = no pick / operator session.
+  readonly pickedOperatorId?: string | undefined
 }
 
 const STATUSES = BOOKING_STATUSES
@@ -20,7 +23,7 @@ const STATUSES = BOOKING_STATUSES
 // Presentational filter sidebar (#525 Slice C), driven entirely by the filters
 // API from useCalendarFilters. Hidden below md (the calendar takes the full width
 // on narrow screens).
-export function CalendarSidebar({ vehicles, filters }: CalendarSidebarProps) {
+export function CalendarSidebar({ vehicles, filters, pickedOperatorId }: CalendarSidebarProps) {
   const t = useTranslations('business.bookings.calendar.sidebar')
 
   return (
@@ -90,7 +93,7 @@ export function CalendarSidebar({ vehicles, filters }: CalendarSidebarProps) {
       {/* #464: unassigned CLASS_COMBO float worklist. Invalidated automatically
           when AssignVehicleDialog succeeds — the dialog already targets
           ['operator-bookings','needs-assignment']. */}
-      <UnassignedFloatsList />
+      <UnassignedFloatsList pickedOperatorId={pickedOperatorId} />
     </aside>
   )
 }
