@@ -3,6 +3,7 @@ import { render, screen, within } from '@testing-library/react'
 import { IntlProvider } from 'use-intl'
 import { describe, expect, it, vi } from 'vitest'
 import en from '../../../messages/en.json'
+import { NEEDS_ASSIGNMENT_PAGE_LIMIT } from './api'
 import type { RawOperatorBooking } from './schema'
 
 // Mock the session so csrfToken is available without a real auth flow.
@@ -88,6 +89,30 @@ describe('UnassignedFloatsList', () => {
     expect(within(items[0] as HTMLElement).getByText('ACTIVE01')).toBeTruthy()
     // Second item must contain the CONFIRMED booking code.
     expect(within(items[1] as HTMLElement).getByText('CONF001')).toBeTruthy()
+  })
+
+  it('shows the exact count in the badge when below the page limit', () => {
+    renderList([ACTIVE_FLOAT, CONFIRMED_FLOAT])
+    expect(screen.getByRole('status').textContent).toBe('2')
+  })
+
+  it('shows a "100+" overflow badge when the worklist is capped at the page limit (#1223/#1214)', () => {
+    // A capped page (floats.length === NEEDS_ASSIGNMENT_PAGE_LIMIT) means more floats
+    // may exist beyond the fetched page, so the raw count would silently undercount.
+    const capped = Array.from({ length: NEEDS_ASSIGNMENT_PAGE_LIMIT }, (_, i) =>
+      makeFloat({ id: `float-${i}`, bookingCode: `CAP${i}` }),
+    )
+    renderList(capped)
+    const badge = screen.getByRole('status')
+    expect(badge.textContent).toBe(`${NEEDS_ASSIGNMENT_PAGE_LIMIT}+`)
+    // The capped badge must carry the translated overflow label on BOTH the a11y
+    // affordance and the hover title (sighted users only see "100+").
+    const expectedLabel = en.business.bookings.calendar.sidebar.floats.overflowLabel.replaceAll(
+      '{limit}',
+      String(NEEDS_ASSIGNMENT_PAGE_LIMIT),
+    )
+    expect(badge.getAttribute('aria-label')).toBe(expectedLabel)
+    expect(badge.getAttribute('title')).toBe(expectedLabel)
   })
 
   it('renders the empty-state copy when there are no floats', () => {

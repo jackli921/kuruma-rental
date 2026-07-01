@@ -15,6 +15,7 @@ import type {
   BookingSource,
   BookingStatus,
   CancellationFeeSettlement,
+  CatalogTemplateStatus,
   ConsentDocStatus,
   ConsentMethod,
   ConsentType,
@@ -37,6 +38,7 @@ import type {
   VehicleBlockKind,
   VehicleClassStatus,
 } from '@kuruma/shared/enums'
+import type { LocalizedText } from '@kuruma/shared/i18n/localized-text'
 import type { ComplianceAlertBand, ComplianceDocumentType } from '@kuruma/shared/lib/compliance'
 import type { DocumentSnapshot } from '@kuruma/shared/lib/consent-canonical'
 import type { LuggageSize } from '@kuruma/shared/lib/luggage'
@@ -416,6 +418,24 @@ export interface AddOn {
   description: string | null
   priceJpy: number
   status: AddOnStatus
+  createdAt: Date
+  updatedAt: Date
+}
+
+/**
+ * Platform-owned, pre-translated add-on TEMPLATE (catalog i18n, epic #385).
+ * NO operatorId — the catalog is global, shared across every tenant (a picker,
+ * not tenant data). `key` = slugify(canonical English name), the stable join
+ * handle between an operator's legacy add-on and its template. `name` /
+ * `description` are LocalizedText {en, ja?, zh?} bundles resolved to the caller
+ * locale in the service layer; `description` is nullable in the DB.
+ */
+export interface AddOnTemplate {
+  id: string
+  key: string
+  name: LocalizedText
+  description: LocalizedText | null
+  status: CatalogTemplateStatus
   createdAt: Date
   updatedAt: Date
 }
